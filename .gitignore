@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Test / coverage
+coverage/
+coverage.lcov
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+.wrangler/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.swp
+*.swo
+*~
+
+# Debug / local artifacts
+.axis-*.png
+*.log
+.cache/
+.turbo/
+
+# Bun
+bun.lockb
+
+# Python helpers (if any local)
+__pycache__/
+*.pyc
+.venv/
+venv/

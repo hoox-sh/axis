@@ -1,8 +1,12 @@
-# frontend/ — AXIS (PWA)
+# AXIS
 
-**AXIS** (formerly SuperChart Lite) — open charting PWA for Pine Script™.
-**Installable PWA**, **fully pluggable**, runs against a local Flask backend,
+**AXIS** (formerly SuperChart Lite) — installable charting PWA for Pine Script™.
+
+**Installable PWA**, **fully pluggable**, runs against the local **[pyne](https://github.com/jango-blockchained/pyne)** Pro API,
 a Cloudflare Worker, or **fully offline** with the in-browser Pyodide engine.
+
+> Repository: [`jango-blockchained/axis`](https://github.com/jango-blockchained/axis) (private)  
+> Engine / API: [`jango-blockchained/pyne`](https://github.com/jango-blockchained/pyne)
 
 **Icons:** [Lucide](https://lucide.dev) via `lucide-solid` (tree-shakable stroke
 icons, ISC). Wrapper: `src/ui/icons.tsx`.
