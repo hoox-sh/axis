@@ -2,13 +2,13 @@
 
 Thanks for helping with **AXIS** — the charting PWA for Pine Script™ evaluation.
 
-## Sister repos
+## Sister repos & websites
 
-| Repo | Role |
-|------|------|
-| [pyne](https://github.com/jango-blockchained/pyne) | Pine Script™ Python toolchain + Pro API (`:5002`) |
-| [axis](https://github.com/jango-blockchained/axis) | This UI (Solid + Vite + CF Worker) |
-| [pyne-worker](https://github.com/jango-blockchained/pyne-worker) / [pine-worker](https://github.com/jango-blockchained/pine-worker) | Edge evaluators |
+| Product | Repo | Website |
+|---------|------|---------|
+| **HOOX** | [hoox](https://github.com/jango-blockchained/hoox) | [hoox.sh](https://hoox.sh) |
+| **PYNE** | [pyne](https://github.com/jango-blockchained/pyne) | [hoox.sh/pyne](https://hoox.sh/pyne) |
+| **AXIS** | [axis](https://github.com/jango-blockchained/axis) (this repo) | [hoox.sh/axis](https://hoox.sh/axis) |
 
 ## Setup
 

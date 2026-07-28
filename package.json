@@ -40,7 +40,7 @@
     "tailwindcss": "^4.1.0",
     "@tailwindcss/vite": "^4.1.0"
   },
-  "description": "AXIS \u2014 installable charting PWA for Pine Script (Solid + Vite + Cloudflare Worker)",
+  "description": "AXIS \u2014 installable charting PWA for Pine Script. Part of HOOX: hoox.sh/axis",
   "repository": {
     "type": "git",
     "url": "https://github.com/jango-blockchained/axis.git"
@@ -48,5 +48,5 @@
   "bugs": {
     "url": "https://github.com/jango-blockchained/axis/issues"
   },
-  "homepage": "https://github.com/jango-blockchained/axis#readme"
+  "homepage": "https://hoox.sh/axis"
 }

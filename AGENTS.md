@@ -40,9 +40,16 @@ cd worker && bun run dev # wrangler :8787
 - License headers / SPDX: **AGPL-3.0-or-later**, author **jango_blockchained**.
 - Worker bindings (`DB`, KV, etc.) are environment-specific — do not invent production IDs in docs without checking `worker/wrangler.toml`.
 
-## Sister projects
+## Sister projects & websites
 
-- **pyne** — parser, evaluator, Flask Pro API, LSP  
-- **pine-worker** / **pyne-worker** — edge evaluation  
+**Site:** [hoox.sh](https://hoox.sh)
+
+| Product | GitHub | Local path | Website |
+|---------|--------|------------|---------|
+| **HOOX** | [jango-blockchained/hoox](https://github.com/jango-blockchained/hoox) | `/home/jango/Git/hoox` | [hoox.sh](https://hoox.sh) · [docs.hoox.sh](https://docs.hoox.sh) |
+| **PYNE** | [jango-blockchained/pyne](https://github.com/jango-blockchained/pyne) | `/home/jango/Git/pynescript` | [hoox.sh/pyne](https://hoox.sh/pyne) · [docs](https://hoox.sh/pyne/docs) |
+| **AXIS** (this repo) | [jango-blockchained/axis](https://github.com/jango-blockchained/axis) | `/home/jango/Git/axis` | [hoox.sh/axis](https://hoox.sh/axis) · [docs](https://hoox.sh/axis/docs) |
+
+Also: `pine-worker` / `pyne-worker` for edge evaluation.
 
 Coordinate API contract changes with **pyne** (`backend/`).

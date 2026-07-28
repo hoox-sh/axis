@@ -2,11 +2,26 @@
 
 **AXIS** (formerly SuperChart Lite) — installable charting PWA for Pine Script™.
 
+**Website:** [hoox.sh/axis](https://hoox.sh/axis) · **Docs:** [hoox.sh/axis/docs](https://hoox.sh/axis/docs) · **Repo:** [jango-blockchained/axis](https://github.com/jango-blockchained/axis)
+
 **Installable PWA**, **fully pluggable**, runs against the local **[pyne](https://github.com/jango-blockchained/pyne)** Pro API,
 a Cloudflare Worker, or **fully offline** with the in-browser Pyodide engine.
 
-> Repository: [`jango-blockchained/axis`](https://github.com/jango-blockchained/axis) (private)  
-> Engine / API: [`jango-blockchained/pyne`](https://github.com/jango-blockchained/pyne)
+## Ecosystem
+
+Part of the **[HOOX](https://hoox.sh)** open trading stack:
+
+| Product | Role | Repo | Website |
+|---------|------|------|---------|
+| **HOOX** | Edge trading framework (Cloudflare Workers) | [jango-blockchained/hoox](https://github.com/jango-blockchained/hoox) | [hoox.sh](https://hoox.sh) · [docs](https://docs.hoox.sh) |
+| **PYNE** | Pine Script™ toolchain + Pro API (engine) | [jango-blockchained/pyne](https://github.com/jango-blockchained/pyne) | [hoox.sh/pyne](https://hoox.sh/pyne) · [docs](https://hoox.sh/pyne/docs) |
+| **AXIS** | Charting PWA (this repo) | [jango-blockchained/axis](https://github.com/jango-blockchained/axis) | [hoox.sh/axis](https://hoox.sh/axis) · [docs](https://hoox.sh/axis/docs) |
+
+```bash
+# Typical local trio
+make -C ../pynescript run   # pyne Pro API :5002
+bun run dev                 # this repo :3000
+```
 
 **Icons:** [Lucide](https://lucide.dev) via `lucide-solid` (tree-shakable stroke
 icons, ISC). Wrapper: `src/ui/icons.tsx`.
