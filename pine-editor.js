@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 // CodeMirror 6 Pine Script editor for SuperChart Lite.
 // Bare imports resolve via importmap in index.html so @lezer/highlight is a
 // single instance (required for tag-based syntax colors to work).

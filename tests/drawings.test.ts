@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 import { describe, expect, it } from 'bun:test';
 import { FIB_LEVELS, needsTwoPoints, toolLabel } from '../src/chart/drawing-types.ts';
 import { fibPrices as computeFib } from '../src/chart/drawing-layer.ts';

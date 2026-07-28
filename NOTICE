@@ -1,0 +1,22 @@
+AXIS — NOTICE
+=============
+
+Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+https://github.com/jango-blockchained/axis
+
+License
+-------
+This project is licensed under the GNU Affero General Public License
+**version 3 only** (SPDX: AGPL-3.0-only).
+
+Full text: LICENSE
+
+There is no AGPL version 4. Do not use AGPL-3.0-or-later for AXIS.
+
+Source files should carry:
+  SPDX-License-Identifier: AGPL-3.0-only
+
+Third-party marks
+-----------------
+Pine Script™ and TradingView® are trademarks of TradingView, Inc.
+Cloudflare® is a registered trademark of Cloudflare, Inc.

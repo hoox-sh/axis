@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/**
  * Local storage plugin + library service tests.
  * Uses localStorage fallback when IndexedDB is unavailable.
  * Run: `bun test frontend/tests/storage-local.test.ts`

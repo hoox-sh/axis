@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with pynescript.  If not, see <https://www.gnu.org/licenses/>.
 //
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 
 // Type definitions for the plugin modules. The plugins themselves are
 // `.js` so we declare their shapes here for TypeScript consumers

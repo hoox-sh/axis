@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/**
  * Stub ChartHost before importing modules that pull Solid UI (runner, multiplex, load-symbol).
  * Call `installChartHostMock()` at the top of the test file (before other app imports).
  */

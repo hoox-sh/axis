@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/**
  * Worker script library handler tests (in-memory backend).
  * Run from frontend/worker: `bun test tests/scripts.test.ts`
  * Or: `bun test frontend/worker/tests/scripts.test.ts`

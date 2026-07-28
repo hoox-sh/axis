@@ -37,7 +37,7 @@ cd worker && bun run dev # wrangler :8787
 
 - **Do not commit** `node_modules/`, `dist/`, `.wrangler/`, `.env`, coverage, or debug screenshots (`.axis-*.png`).
 - Keep API base URL configurable (default local pyne on `:5002`).
-- License headers / SPDX: **AGPL-3.0-or-later**, author **jango_blockchained**.
+- License headers / SPDX: **AGPL-3.0-only**, author **jango_blockchained**.
 - Worker bindings (`DB`, KV, etc.) are environment-specific — do not invent production IDs in docs without checking `worker/wrangler.toml`.
 
 ## Sister projects & websites

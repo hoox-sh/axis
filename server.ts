@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 // Bun static file server for the AXIS charting PWA.
 // `bun run frontend/server.ts` — serves frontend/ on http://localhost:8081.
 //

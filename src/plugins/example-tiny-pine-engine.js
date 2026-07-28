@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with pynescript.  If not, see <https://www.gnu.org/licenses/>.
 //
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 
 // Example plugin: a custom calculation engine that runs a tiny built-in
 // Pine-like DSL in the browser.  Useful for offline demos that don't need

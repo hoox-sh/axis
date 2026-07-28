@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with pynescript.  If not, see <https://www.gnu.org/licenses/>.
 //
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 
 // Binance REST source — klines via api.binance.com.
 // Falls back silently to a synthetic walk when the network is unavailable.

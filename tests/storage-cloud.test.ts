@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/**
  * Cloud storage plugin unit tests (mocked fetch).
  * Run: `bun test frontend/tests/storage-cloud.test.ts`
  */

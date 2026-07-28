@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/**
  * @critical AXIS product journeys — mock network only.
  */
 import { test, expect } from '@playwright/test';

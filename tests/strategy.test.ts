@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 // Strategy tester + event normalizer (parity API shape → closed trades / markers).
 
 import { describe, expect, it } from 'bun:test';

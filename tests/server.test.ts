@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 // End-to-end test of the Bun static file server.
 
 import { describe, expect, it, beforeAll, afterAll } from 'bun:test';

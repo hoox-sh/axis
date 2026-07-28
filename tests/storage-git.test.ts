@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/**
  * Git storage plugin tests (mocked GitHub Contents API).
  * Run: `bun test frontend/tests/storage-git.test.ts`
  */

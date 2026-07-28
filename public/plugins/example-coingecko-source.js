@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 // Example plugin: a custom historical source backed by the public
 // CoinGecko API.  Demonstrates the `Source` plugin contract.
 //

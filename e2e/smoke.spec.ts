@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/**
  * @smoke AXIS critical path — load app, mock source, mock /run, open Manager.
  */
 import { test, expect } from '@playwright/test';

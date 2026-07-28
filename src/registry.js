@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with pynescript.  If not, see <https://www.gnu.org/licenses/>.
 //
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 
 // Tiny plugin registry. All sources/streams/engines register through here.
 // A plugin is an object with `{ id, name, kind, description, ... }` where

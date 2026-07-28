@@ -1,3 +1,6 @@
+# Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # pynescript_runtime.py — runs Pine Script in the browser via Pyodide.
 # Loaded by the Pyodide engine in `src/engines/pyodide.js` after the
 # pynescript wheel is installed via micropip.

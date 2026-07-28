@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/**
  * Tests for the unified TypeScript plugin registry (PR1).
  * Run: `bun test frontend/tests/plugin-registry.test.ts`
  */

@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 // State tests — verify the central persisted state class (legacy path).
 
 import { describe, expect, it, beforeEach } from 'bun:test';

@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 // Live datastream that proxies through a Cloudflare Worker Durable Object.
 // The Worker hosts a `SessionDO` that opens one upstream Binance kline WS
 // per (symbol, interval) and fans it out to N clients.

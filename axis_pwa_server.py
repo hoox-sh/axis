@@ -1,3 +1,6 @@
+# Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 import os
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer

@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 // Minimal static server for AXIS dist/
 import { join, resolve } from "node:path";
 const ROOT = resolve(import.meta.dir, "dist");

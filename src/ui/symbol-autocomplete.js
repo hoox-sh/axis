@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with pynescript.  If not, see <https://www.gnu.org/licenses/>.
 //
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 
 // Symbol autocomplete.  Wraps the symbol <input> in a combo-box that
 // fetches /exchangeInfo from Binance (or any provider the user configures)

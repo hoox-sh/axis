@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 // Example plugin: a custom calculation engine that runs a tiny built-in
 // Pine-like DSL in the browser.  Useful for offline demos that don't need
 // the full pynescript runtime.

@@ -1,5 +1,9 @@
 #!/usr/bin/env bun
 /**
+ * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+/**
  * Parse Bun lcov and enforce minimum line coverage on scoped paths.
  *
  * Usage:
