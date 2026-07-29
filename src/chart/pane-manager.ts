@@ -19,7 +19,9 @@
 
 import {
   createSeriesMarkers,
+  LineStyle,
   type IChartApi,
+  type IPriceLine,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
   type SeriesMarker,
@@ -29,6 +31,7 @@ import {
   createBaseChart,
   createLineSeries,
   createAreaSeries,
+  createBgcolorSeries,
   PLOT_PALETTE,
   RIGHT_PRICE_SCALE_WIDTH,
   TV,
@@ -36,15 +39,38 @@ import {
 import type { Bar } from '../store/types';
 import { resizePane } from '../store';
 import type { TradeMarker } from '../results/events';
+import type { ShapeMarkerSpec } from '../results/plot-visuals';
+
+/** Overlay line from indicator runner (plot series or Pine hline). */
+export type OverlayLineSpec = {
+  name: string;
+  data: { time: number; value: number }[];
+  color?: string;
+  linewidth?: number;
+  /** plot (default) | hline — hlines use createPriceLine when possible */
+  kind?: 'plot' | 'hline';
+  /** Constant price for kind=hline (preferred over sampling data) */
+  price?: number;
+  linestyle?: string;
+};
 
 export interface ManagedPane {
   id: string;
   type: string;
   chart: IChartApi;
   series: Record<string, ISeriesApi<any>>;
+  /** Pine hline() price lines keyed by name (attached to a host series) */
+  priceLines: Record<string, { line: IPriceLine; host: ISeriesApi<any> }>;
   visible: boolean;
   label: string;
   resizeObserver: ResizeObserver | null;
+}
+
+function mapLineStyle(linestyle?: string): LineStyle {
+  const s = (linestyle || '').toLowerCase();
+  if (s.includes('dash')) return LineStyle.Dashed;
+  if (s.includes('dot')) return LineStyle.Dotted;
+  return LineStyle.Solid;
 }
 
 export class PaneManager {
@@ -53,6 +79,10 @@ export class PaneManager {
   private suppressSync = false;
   /** LWC v5 markers plugin attached to the price candle series */
   private candleMarkers: ISeriesMarkersPluginApi<any> | null = null;
+  /** Strategy entry/exit markers (merged with shape markers) */
+  private tradeMarkerList: SeriesMarker<UTCTimestamp>[] = [];
+  /** plotshape / plotchar markers (merged with trade markers) */
+  private shapeMarkerList: SeriesMarker<UTCTimestamp>[] = [];
   /** One-way range sync unsubscribers */
   private timeSyncUnsubs: Array<() => void> = [];
 
@@ -146,7 +176,16 @@ export class PaneManager {
     });
     ro.observe(div);
 
-    const pane: ManagedPane = { id, type, chart, series: {}, visible: true, label, resizeObserver: ro };
+    const pane: ManagedPane = {
+      id,
+      type,
+      chart,
+      series: {},
+      priceLines: {},
+      visible: true,
+      label,
+      resizeObserver: ro,
+    };
     this.panes.set(id, pane);
     this.alignRightScales();
 
@@ -352,30 +391,71 @@ export class PaneManager {
 
   /**
    * Attach or update entry/exit markers on the price candle series (LWC v5).
+   * Merges with plotshape markers so neither path wipes the other.
    */
   setTradeMarkers(markers: TradeMarker[]) {
-    const pricePane = this.panes.get('price');
-    const candle = pricePane?.series['candle'];
-    if (!candle) return;
-
-    const seriesMarkers: SeriesMarker<UTCTimestamp>[] = markers.map((m) => ({
+    this.tradeMarkerList = markers.map((m) => ({
       time: m.time as UTCTimestamp,
       position: m.position,
       color: m.color,
       shape: m.shape,
       text: m.text,
+      id: `trade_${m.time}_${m.text || ''}`,
     }));
+    this.applyCandleMarkers();
+  }
+
+  /**
+   * plotshape / plotchar markers — stored separately and merged with strategy markers.
+   */
+  setShapeMarkers(markers: ShapeMarkerSpec[] | TradeMarker[]) {
+    this.shapeMarkerList = markers.map((m, i) => ({
+      time: m.time as UTCTimestamp,
+      position: m.position,
+      color: m.color,
+      shape: m.shape,
+      text: m.text,
+      id: ('id' in m && m.id) || `shape_${m.time}_${i}`,
+    }));
+    this.applyCandleMarkers();
+  }
+
+  clearTradeMarkers() {
+    this.tradeMarkerList = [];
+    this.applyCandleMarkers();
+  }
+
+  clearShapeMarkers() {
+    this.shapeMarkerList = [];
+    this.applyCandleMarkers();
+  }
+
+  /** Merge trade + shape markers onto the candle series plugin. */
+  private applyCandleMarkers() {
+    const pricePane = this.panes.get('price');
+    const candle = pricePane?.series['candle'];
+    if (!candle) return;
+
+    // Prefer unique times: LWC historically collapsed same-time markers;
+    // keep last trade, then shapes can share via id when supported.
+    const byKey = new Map<string, SeriesMarker<UTCTimestamp>>();
+    for (const m of this.shapeMarkerList) {
+      const key = m.id || `s:${m.time}:${m.position}:${m.shape}`;
+      byKey.set(key, m);
+    }
+    for (const m of this.tradeMarkerList) {
+      // Trades win on exact same id collision; use time+text key
+      const key = m.id || `t:${m.time}:${m.text || ''}`;
+      byKey.set(key, m);
+    }
+    const seriesMarkers = Array.from(byKey.values()).sort(
+      (a, b) => (a.time as number) - (b.time as number),
+    );
 
     if (!this.candleMarkers) {
       this.candleMarkers = createSeriesMarkers(candle, seriesMarkers);
     } else {
       this.candleMarkers.setMarkers(seriesMarkers);
-    }
-  }
-
-  clearTradeMarkers() {
-    if (this.candleMarkers) {
-      this.candleMarkers.setMarkers([]);
     }
   }
 
@@ -512,21 +592,40 @@ export class PaneManager {
   removeOverlays(paneId: string) {
     const pane = this.panes.get(paneId);
     if (!pane) return;
-    const overlays = Object.keys(pane.series).filter((k) => k.startsWith('overlay_'));
+    const overlays = Object.keys(pane.series).filter(
+      (k) => k.startsWith('overlay_') || k.startsWith('bgcolor_'),
+    );
     for (const k of overlays) {
       try { pane.chart.removeSeries(pane.series[k]); } catch {}
       delete pane.series[k];
     }
+    for (const name of Object.keys(pane.priceLines)) {
+      const pl = pane.priceLines[name];
+      try {
+        pl.host.removePriceLine(pl.line);
+      } catch {
+        /* ignore */
+      }
+      delete pane.priceLines[name];
+    }
+  }
+
+  /** Prefer candle, else first non-overlay series, else any series (for createPriceLine host). */
+  private priceLineHost(pane: ManagedPane): ISeriesApi<any> | null {
+    if (pane.series['candle']) return pane.series['candle'];
+    for (const [k, s] of Object.entries(pane.series)) {
+      if (!k.startsWith('overlay_')) return s;
+    }
+    const first = Object.values(pane.series)[0];
+    return first ?? null;
   }
 
   /**
    * Update overlay lines in place when keys match — avoids destroy/recreate flash
    * during live re-runs. Removes only stale keys; creates missing ones.
+   * kind=hline → createPriceLine on host series (or constant line series fallback).
    */
-  syncOverlayLines(
-    paneId: string,
-    lines: Array<{ name: string; data: { time: number; value: number }[]; color?: string }>,
-  ) {
+  syncOverlayLines(paneId: string, lines: OverlayLineSpec[]) {
     const pane = this.panes.get(paneId);
     if (!pane) return;
 
@@ -538,10 +637,18 @@ export class PaneManager {
       savedRange = null;
     }
 
-    const want = new Set(lines.map((l) => `overlay_${l.name}`));
+    const plotLines = lines.filter((l) => l.kind !== 'hline');
+    const hLines = lines.filter((l) => l.kind === 'hline');
+
+    // Plot series keys we want to keep (hline may fall back to series too)
+    const wantSeries = new Set(plotLines.map((l) => `overlay_${l.name}`));
+    const wantPrice = new Set(hLines.map((l) => l.name));
+
     for (const k of Object.keys(pane.series)) {
       if (!k.startsWith('overlay_')) continue;
-      if (!want.has(k)) {
+      const name = k.slice('overlay_'.length);
+      // Keep overlay series if still wanted as plot or as hline fallback
+      if (!wantSeries.has(k) && !wantPrice.has(name)) {
         try {
           pane.chart.removeSeries(pane.series[k]);
         } catch {
@@ -551,25 +658,101 @@ export class PaneManager {
       }
     }
 
+    for (const name of Object.keys(pane.priceLines)) {
+      if (!wantPrice.has(name)) {
+        const pl = pane.priceLines[name];
+        try {
+          pl.host.removePriceLine(pl.line);
+        } catch {
+          /* ignore */
+        }
+        delete pane.priceLines[name];
+      }
+    }
+
     let colorIdx = 0;
-    for (const line of lines) {
+    for (const line of plotLines) {
       const key = `overlay_${line.name}`;
       const mapped = line.data.map((d) => ({ time: d.time as UTCTimestamp, value: d.value }));
       const existing = pane.series[key];
+      const lw = line.linewidth != null ? Math.max(1, Math.min(4, Math.round(line.linewidth))) : undefined;
       if (existing) {
         existing.setData(mapped);
-        if (line.color) {
-          try {
-            existing.applyOptions({ color: line.color });
-          } catch {
-            /* ignore */
-          }
+        try {
+          const opts: Record<string, unknown> = {};
+          if (line.color) opts.color = line.color;
+          if (lw != null) opts.lineWidth = lw;
+          if (Object.keys(opts).length) existing.applyOptions(opts);
+        } catch {
+          /* ignore */
         }
       } else {
         const c = line.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
-        const series = createLineSeries(pane.chart, line.name, c);
+        const series = createLineSeries(pane.chart, line.name, c, undefined, lw ?? 2);
         series.setData(mapped);
         pane.series[key] = series;
+      }
+      colorIdx += 1;
+    }
+
+    // hlines after plots so a host series exists on indicator panes
+    for (const line of hLines) {
+      let price = line.price;
+      if (price == null || !Number.isFinite(price)) {
+        const sample = line.data.find((d) => d != null && Number.isFinite(d.value));
+        price = sample?.value;
+      }
+      if (price == null || !Number.isFinite(price)) continue;
+
+      const c = line.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
+      const lw = Math.max(1, Math.min(4, Math.round(line.linewidth ?? 1))) as 1 | 2 | 3 | 4;
+      const host = this.priceLineHost(pane);
+      const existingPl = pane.priceLines[line.name];
+
+      if (host) {
+        // Drop any previous constant-line fallback series for this hline
+        const fallbackKey = `overlay_${line.name}`;
+        if (pane.series[fallbackKey]) {
+          try {
+            pane.chart.removeSeries(pane.series[fallbackKey]);
+          } catch {
+            /* ignore */
+          }
+          delete pane.series[fallbackKey];
+        }
+
+        const opts = {
+          price,
+          color: c,
+          lineWidth: lw,
+          lineStyle: mapLineStyle(line.linestyle),
+          axisLabelVisible: true,
+          title: line.name,
+        };
+        if (existingPl && existingPl.host === host) {
+          try {
+            existingPl.line.applyOptions(opts);
+          } catch {
+            /* ignore */
+          }
+        } else {
+          if (existingPl) {
+            try {
+              existingPl.host.removePriceLine(existingPl.line);
+            } catch {
+              /* ignore */
+            }
+          }
+          try {
+            const pl = host.createPriceLine(opts);
+            pane.priceLines[line.name] = { line: pl, host };
+          } catch {
+            // Fall through to constant series if createPriceLine unavailable (tests/mocks)
+            this._hlineAsSeries(pane, line, price, c, lw);
+          }
+        }
+      } else {
+        this._hlineAsSeries(pane, line, price, c, lw);
       }
       colorIdx += 1;
     }
@@ -584,6 +767,34 @@ export class PaneManager {
     this.alignRightScales();
   }
 
+  /** Fallback: render hline as a constant-value line series when no price-line host. */
+  private _hlineAsSeries(
+    pane: ManagedPane,
+    line: OverlayLineSpec,
+    price: number,
+    color: string,
+    lineWidth: number,
+  ) {
+    const key = `overlay_${line.name}`;
+    const mapped =
+      line.data.length > 0
+        ? line.data.map((d) => ({ time: d.time as UTCTimestamp, value: price }))
+        : [];
+    const existing = pane.series[key];
+    if (existing) {
+      if (mapped.length) existing.setData(mapped);
+      try {
+        existing.applyOptions({ color, lineWidth });
+      } catch {
+        /* ignore */
+      }
+    } else if (mapped.length) {
+      const series = createLineSeries(pane.chart, line.name, color, undefined, lineWidth);
+      series.setData(mapped);
+      pane.series[key] = series;
+    }
+  }
+
   addOverlayLine(paneId: string, name: string, data: { time: number; value: number }[], color?: string) {
     const pane = this.panes.get(paneId);
     if (!pane) return;
@@ -595,8 +806,81 @@ export class PaneManager {
     return series;
   }
 
+  /**
+   * Sync Pine bgcolor histogram bands on the price pane (behind candles).
+   * Empty list removes all bgcolor_* series.
+   */
+  syncBgcolorBands(
+    bands: Array<{ name: string; data: { time: number; value: number; color: string }[] }>,
+  ) {
+    const pane = this.panes.get('price');
+    if (!pane) return;
+
+    let savedRange: { from: number; to: number } | null = null;
+    try {
+      savedRange = pane.chart.timeScale().getVisibleLogicalRange();
+    } catch {
+      savedRange = null;
+    }
+
+    const want = new Set(bands.map((b) => `bgcolor_${b.name}`));
+    for (const k of Object.keys(pane.series)) {
+      if (!k.startsWith('bgcolor_')) continue;
+      if (!want.has(k)) {
+        try {
+          pane.chart.removeSeries(pane.series[k]);
+        } catch {
+          /* ignore */
+        }
+        delete pane.series[k];
+      }
+    }
+
+    for (const band of bands) {
+      const key = `bgcolor_${band.name}`;
+      const mapped = band.data.map((d) => ({
+        time: d.time as UTCTimestamp,
+        value: d.value,
+        color: d.color,
+      }));
+      const existing = pane.series[key];
+      if (existing) {
+        existing.setData(mapped);
+      } else {
+        const series = createBgcolorSeries(pane.chart);
+        series.setData(mapped);
+        pane.series[key] = series;
+        try {
+          series.setSeriesOrder(0);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    const candle = pane.series['candle'];
+    if (candle) {
+      try {
+        const order = candle.seriesOrder?.() ?? 1;
+        if (order < 1) candle.setSeriesOrder?.(1);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (savedRange) {
+      try {
+        pane.chart.timeScale().setVisibleLogicalRange(savedRange);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   dispose() {
     this.candleMarkers = null;
+    this.tradeMarkerList = [];
+    this.shapeMarkerList = [];
     for (const u of this.timeSyncUnsubs) {
       try {
         u();

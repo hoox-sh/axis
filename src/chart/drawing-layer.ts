@@ -260,7 +260,16 @@ export class DrawingLayer {
   }
 
   private toXY(p: Point): { x: number; y: number } | null {
-    const x = this.chart.timeScale().timeToCoordinate(p.time as UTCTimestamp);
+    // Interpret path uses unix seconds; compile-mode drawings often pass bar_index.
+    let x = this.chart.timeScale().timeToCoordinate(p.time as UTCTimestamp);
+    if (x == null && Number.isFinite(p.time)) {
+      // Fallback: treat value as logical bar index (bar_index / compile x1/left).
+      try {
+        x = this.chart.timeScale().logicalToCoordinate(p.time as never);
+      } catch {
+        x = null;
+      }
+    }
     const y = this.series.priceToCoordinate(p.price);
     if (x == null || y == null) return null;
     return { x, y };
@@ -553,6 +562,8 @@ export class DrawingLayer {
       let dPath = `M ${coords[0]!.x} ${coords[0]!.y}`;
       for (let i = 1; i < coords.length; i++) dPath += ` L ${coords[i]!.x} ${coords[i]!.y}`;
       if (d.closed) dPath += ' Z';
+      const dash =
+        d.style === 'dashed' ? '4 3' : d.style === 'dotted' ? '1 3' : undefined;
       el(g, 'path', {
         d: dPath,
         fill: d.closed ? d.bgcolor || 'rgba(147,159,255,0.06)' : 'none',
@@ -560,18 +571,36 @@ export class DrawingLayer {
         'stroke-width': String(d.width || 1.5),
         'stroke-linejoin': 'round',
         'pointer-events': pe,
-        ...(d.style === 'dashed' ? { 'stroke-dasharray': '4 3' } : {}),
+        ...(dash ? { 'stroke-dasharray': dash } : {}),
       });
       return;
     }
     if (d.type === 'line' && d.t2 != null && d.p2 != null) {
-      const a = this.toXY({ time: d.t1, price: d.p1 });
-      const b = this.toXY({ time: d.t2, price: d.p2 });
-      if (!a || !b) return;
       const ext = (d.extend || 'none').toLowerCase();
-      const { x1, y1, x2, y2 } = extendSegment(a.x, a.y, b.x, b.y, ext, this.host.clientWidth, this.host.clientHeight);
       const dash =
         d.style === 'dashed' ? '4 3' : d.style === 'dotted' ? '1 3' : undefined;
+      // Pine hline → full-width price level (matches user hline tool)
+      const isHline = d.id.startsWith('pine_hline_') || (d.p1 === d.p2 && ext === 'both');
+      if (isHline && d.p1 === d.p2) {
+        const y = this.series.priceToCoordinate(d.p1);
+        if (y != null) {
+          line(g, 0, y, this.host.clientWidth, y, d.color, d.width || 1.5, dash, pe);
+          if (d.text) label(g, 6, y - 4, d.text, d.color, 10);
+          return;
+        }
+      }
+      const a = this.toXY({ time: d.t1, price: d.p1 });
+      const b = this.toXY({ time: d.t2, price: d.p2 });
+      // Horizontal + extend with unmapped times → still paint a price level
+      if ((!a || !b) && d.p1 === d.p2 && ext !== 'none') {
+        const y = this.series.priceToCoordinate(d.p1);
+        if (y != null) {
+          line(g, 0, y, this.host.clientWidth, y, d.color, d.width || 1.5, dash, pe);
+          return;
+        }
+      }
+      if (!a || !b) return;
+      const { x1, y1, x2, y2 } = extendSegment(a.x, a.y, b.x, b.y, ext, this.host.clientWidth, this.host.clientHeight);
       line(g, x1, y1, x2, y2, d.color, d.width || 1.5, dash, pe);
       return;
     }
@@ -581,11 +610,13 @@ export class DrawingLayer {
       if (!a || !b) return;
       const x = Math.min(a.x, b.x);
       const y = Math.min(a.y, b.y);
+      const bw = Math.max(1, Math.abs(b.x - a.x));
+      const bh = Math.max(1, Math.abs(b.y - a.y));
       el(g, 'rect', {
         x: String(x),
         y: String(y),
-        width: String(Math.abs(b.x - a.x)),
-        height: String(Math.abs(b.y - a.y)),
+        width: String(bw),
+        height: String(bh),
         fill: d.bgcolor || 'rgba(147,159,255,0.08)',
         stroke: d.color,
         'stroke-width': String(d.width || 1),

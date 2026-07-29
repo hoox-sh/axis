@@ -57,6 +57,18 @@ describe('strategy extras', () => {
     expect(rep.trades[0].pnl).toBe(20);
   });
 
+  it('legacy close_all type closes all opens', () => {
+    const events = [
+      { time: 1, type: 'entry', dir: 'long', id: 'a', price: 10 },
+      { time: 2, type: 'entry', dir: 'short', id: 'b', price: 100 },
+      { time: 3, type: 'close_all', price: 90 },
+    ];
+    const rep = buildStrategyReport(events as never[]);
+    expect(rep.stats.trades).toBe(2);
+    // long 10→90 = +80; short 100→90 = +10
+    expect(rep.stats.totalPnl).toBe(90);
+  });
+
   it('skips events with missing time or non-finite price', () => {
     const events = [
       { type: 'entry', id: 'x', price: 10 },

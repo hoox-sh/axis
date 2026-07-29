@@ -121,6 +121,9 @@ export function normalizeStrategyEvent(
   const dir = String(r.dir ?? r.direction ?? '').toLowerCase() || undefined;
   const price = resolvePrice(r, opts.bars);
 
+  const fromEntry =
+    r.from_entry ?? r.fromEntry ?? r.entry_id ?? r.entryId ?? undefined;
+
   return {
     ...r,
     type: kind || undefined,
@@ -133,6 +136,8 @@ export function normalizeStrategyEvent(
     bar_index: typeof r.bar_index === 'number' ? r.bar_index : undefined,
     price,
     id: r.id != null ? String(r.id) : undefined,
+    // strategy.exit(id, from_entry) — keep entry key for pairing
+    from_entry: fromEntry != null ? String(fromEntry) : undefined,
   };
 }
 
@@ -168,23 +173,52 @@ const COLOR = {
   order: '#8b8e9c',
 };
 
+/** Kind rank so same-bar entry is processed before exit/close. */
+export function strategyEventKindRank(kind: string): number {
+  const k = kind.toLowerCase();
+  if (k.includes('entry') || k === 'long' || k === 'short') return 0;
+  if (k === 'order' || k.startsWith('cancel')) return 1;
+  if (k.includes('exit') || k.includes('close')) return 2;
+  return 3;
+}
+
+function timeOfEvent(ev: StrategyEvent): number | undefined {
+  if (typeof ev.time === 'number' && Number.isFinite(ev.time)) return ev.time;
+  if (typeof ev.bar_time === 'number' && Number.isFinite(ev.bar_time)) return ev.bar_time;
+  return undefined;
+}
+
+/** Entry id to match on exit/close: prefer from_entry / entry_id (strategy.exit). */
+export function resolveExitMatchId(ev: StrategyEvent): string {
+  const r = ev as Record<string, unknown>;
+  const from =
+    r.from_entry ?? r.fromEntry ?? r.entry_id ?? r.entryId ?? r.from_id ?? r.fromId;
+  if (from != null && String(from).length) return String(from);
+  if (ev.id != null && String(ev.id).length) return String(ev.id);
+  return '_default';
+}
+
 /**
  * Build LWC series markers from normalized strategy events.
  * Tracks open position dir so exits get a sensible arrow direction.
+ *
+ * LWC v5 createSeriesMarkers stacks multiple markers on the same bar —
+ * keep both same-bar entry and exit (do not collapse by time).
  */
 export function eventsToMarkers(events: StrategyEvent[]): TradeMarker[] {
   const openDir = new Map<string, string>();
   const markers: TradeMarker[] = [];
 
-  const timeOf = (ev: StrategyEvent) => {
-    if (typeof ev.time === 'number' && Number.isFinite(ev.time)) return ev.time;
-    if (typeof ev.bar_time === 'number' && Number.isFinite(ev.bar_time)) return ev.bar_time;
-    return undefined;
-  };
+  const sorted = events.slice().sort((a, b) => {
+    const dt = (timeOfEvent(a) || 0) - (timeOfEvent(b) || 0);
+    if (dt !== 0) return dt;
+    const ka = String(a.type || a.event || a.kind || '');
+    const kb = String(b.type || b.event || b.kind || '');
+    return strategyEventKindRank(ka) - strategyEventKindRank(kb);
+  });
 
-  const sorted = events.slice().sort((a, b) => (timeOf(a) || 0) - (timeOf(b) || 0));
   for (const ev of sorted) {
-    const t = timeOf(ev);
+    const t = timeOfEvent(ev);
     if (t === undefined || !Number.isFinite(t)) continue;
     const kind = String(ev.type || ev.event || ev.kind || '').toLowerCase();
     const id = String(ev.id || '');
@@ -201,29 +235,51 @@ export function eventsToMarkers(events: StrategyEvent[]): TradeMarker[] {
         text: id || (isShort ? 'S' : 'L'),
       });
     } else if (kind.includes('close') || kind.includes('exit')) {
-      const open = openDir.get(id || '_default') || openDir.get('_default') || dir || 'long';
-      const isShort = open.includes('short');
-      openDir.delete(id || '_default');
-      markers.push({
-        time: t,
-        position: isShort ? 'belowBar' : 'aboveBar',
-        color: COLOR.exit,
-        shape: isShort ? 'arrowUp' : 'arrowDown',
-        text: id || 'X',
-      });
+      const matchId = resolveExitMatchId(ev);
+      const isCloseAll = kind === 'close_all' || kind.includes('close_all') || kind === 'closeall';
+      if (isCloseAll && openDir.size > 0) {
+        // One exit marker; use first open dir for arrow sense, then clear all
+        const firstDir = openDir.values().next().value || dir || 'long';
+        const isShort = String(firstDir).includes('short');
+        openDir.clear();
+        markers.push({
+          time: t,
+          position: isShort ? 'belowBar' : 'aboveBar',
+          color: COLOR.exit,
+          shape: isShort ? 'arrowUp' : 'arrowDown',
+          text: id || 'X',
+        });
+      } else {
+        let open = openDir.get(matchId);
+        if (!open && openDir.size === 1) {
+          open = openDir.values().next().value;
+          openDir.clear();
+        } else if (open) {
+          openDir.delete(matchId);
+        } else if (!open) {
+          open = openDir.get(id || '_default') || openDir.get('_default') || dir || 'long';
+          openDir.delete(id || '_default');
+        }
+        const isShort = String(open).includes('short');
+        markers.push({
+          time: t,
+          position: isShort ? 'belowBar' : 'aboveBar',
+          color: COLOR.exit,
+          shape: isShort ? 'arrowUp' : 'arrowDown',
+          text: id || 'X',
+        });
+      }
     }
     // pending order / cancel skipped for chart noise
   }
 
-  // LWC requires unique times sorted ascending; collapse same-bar by keeping last
-  markers.sort((a, b) => a.time - b.time);
-  const byTime = new Map<number, TradeMarker>();
-  for (const m of markers) byTime.set(m.time, m);
-  return Array.from(byTime.values()).sort((a, b) => a.time - b.time);
+  // Keep all markers (incl. same-bar entry+exit); sort ascending for LWC
+  return markers.sort((a, b) => a.time - b.time || a.text.localeCompare(b.text));
 }
 
 /**
  * Equity curve from closed trades: initial capital + cumulative PnL at each exit.
+ * Same-bar exits are coalesced so LWC area series gets unique times.
  */
 export function buildEquityCurve(
   trades: { exitTime: number; pnl: number }[],
@@ -233,11 +289,16 @@ export function buildEquityCurve(
   const sorted = trades.slice().sort((a, b) => a.exitTime - b.exitTime);
   let equity = initialCapital;
   const points: { time: number; value: number }[] = [];
-  // Seed at first entry-ish: start flat at first exit-1 is awkward; just step at exits
   for (const t of sorted) {
     if (!Number.isFinite(t.exitTime)) continue;
     equity += t.pnl;
-    points.push({ time: t.exitTime, value: +equity.toFixed(2) });
+    const value = +equity.toFixed(2);
+    const last = points[points.length - 1];
+    if (last && last.time === t.exitTime) {
+      last.value = value;
+    } else {
+      points.push({ time: t.exitTime, value });
+    }
   }
   return points;
 }

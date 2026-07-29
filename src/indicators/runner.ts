@@ -33,6 +33,12 @@ import { getManager } from '../chart/manager-access';
 import { PLOT_PALETTE } from '../chart/series-factory';
 import { normalizeStrategyEvents, eventsToMarkers, buildEquityCurve } from '../results/events';
 import { buildStrategyReport } from '../results/strategy';
+import {
+  bgcolorSeriesToHistogramData,
+  shapeSeriesToMarkers,
+  splitSeriesByKind,
+  type PlotMetaEntry,
+} from '../results/plot-visuals';
 import { getActiveDrawingLayer } from '../chart/drawing-layer';
 import { getActiveEngine, getActiveEngineConfig } from '../plugins/active';
 import type { RunResult as EngineRunResult } from '../plugins/types';
@@ -47,6 +53,8 @@ export interface RunOptions {
   silent?: boolean;
   /** Open Results drawer after run (default true when not silent) */
   openResults?: boolean;
+  /** Pine input.* overrides keyed by title (Script Settings) */
+  inputs?: Record<string, unknown>;
 }
 
 export async function runScript(script: string, opts: RunOptions = {}): Promise<RunResult> {
@@ -70,10 +78,17 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     const timeoutMs = silent
       ? 60_000
       : Math.min(180_000, Math.max(90_000, 45_000 + (store.bars?.length || 0) * 40));
+    const inputs =
+      opts.inputs && Object.keys(opts.inputs).length
+        ? opts.inputs
+        : store.editorInputValues && Object.keys(store.editorInputValues).length
+          ? store.editorInputValues
+          : undefined;
     const result = await engine.run({
       script,
       bars: store.bars,
       config,
+      inputs,
       // Do not abort the whole run on a short timer while engine may still REST-fallback.
       // Engine uses its own AbortSignal.timeout for HTTP; pass undefined for max reliability.
       signal: undefined,
@@ -153,7 +168,15 @@ export async function runAndApply(
   const silent = !!opts.silent;
   const openResults = opts.openResults ?? !silent;
 
-  const result = await runScript(script, opts);
+  // Prefer explicit opts.inputs; else per-indicator saved values; else editor
+  let inputs = opts.inputs;
+  if (!inputs && indicatorId) {
+    const ind = store.scripts.find((s) => s.id === indicatorId);
+    if (ind?.inputValues && Object.keys(ind.inputValues).length) {
+      inputs = ind.inputValues;
+    }
+  }
+  const result = await runScript(script, { ...opts, inputs });
   setLastRun(result);
   if (openResults) {
     setStore('resultsPanel', 'open', true);
@@ -193,15 +216,13 @@ export async function runAndApply(
   }
 
   const ohlcvTimes = store.bars.map((b) => b.time);
-  const plotMeta = (result.meta?.plot_meta || {}) as Record<
-    string,
-    { title?: string; color?: string | null; linewidth?: number; index?: number }
-  >;
-  const seriesEntries = Object.entries(result.series || {}).filter(
-    ([k]) => !k.startsWith('__') && !k.startsWith('_'),
-  );
+  const plotMeta = (result.meta?.plot_meta || {}) as Record<string, PlotMetaEntry>;
+  const split = splitSeriesByKind(result.series || {}, plotMeta);
 
-  const toLineData = (arr: (number | null)[]) =>
+  // Line-like series only — bgcolor/plotshape handled below
+  const seriesEntries = split.lines.map((e) => [e.key, e.values] as const);
+
+  const toLineData = (arr: (number | null)[] | unknown[]) =>
     arr
       .map((v, i) => {
         const t = ohlcvTimes[i];
@@ -216,24 +237,70 @@ export async function runAndApply(
     name: string;
     data: { time: number; value: number }[];
     color?: string;
+    linewidth?: number;
+    kind?: 'plot' | 'hline';
+    price?: number;
+    linestyle?: string;
   }> = [];
   if (seriesEntries.length > 0) {
     let colorIdx = 0;
     for (const [k, arr] of seriesEntries) {
-      const data = toLineData(arr as (number | null)[]);
-      if (!data.length) continue;
-      const meta = plotMeta[k];
+      const meta = plotMeta[k] || {};
+      const kindRaw = String(meta?.kind || 'plot');
+      const isHline = kindRaw === 'hline';
+      const data = toLineData(arr);
+      // hline may still apply with price-only meta even if series is sparse
+      let price: number | undefined =
+        meta?.price != null && Number.isFinite(Number(meta.price))
+          ? Number(meta.price)
+          : undefined;
+      if (price == null && isHline && data.length) {
+        price = data[0]!.value;
+      }
+      if (!data.length && !(isHline && price != null)) continue;
       const color =
         (meta?.color && String(meta.color)) ||
         PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
       colorIdx += 1;
-      overlayLines.push({ name: k, data, color });
+      overlayLines.push({
+        name: k,
+        data,
+        color,
+        linewidth: meta?.linewidth != null ? Number(meta.linewidth) : undefined,
+        kind: isHline ? 'hline' : 'plot',
+        price,
+        linestyle: meta?.linestyle ? String(meta.linestyle) : undefined,
+      });
     }
   } else if (result.plots.length) {
-    const data = toLineData(result.plots as (number | null)[]);
-    if (data.length) overlayLines.push({ name: scriptName, data, color: PLOT_PALETTE[0] });
+    // Only use legacy plots[] when no series and no specialized kinds
+    if (!split.bgcolors.length && !split.shapes.length) {
+      const data = toLineData(result.plots as (number | null)[]);
+      if (data.length) overlayLines.push({ name: scriptName, data, color: PLOT_PALETTE[0] });
+    }
   }
   manager.syncOverlayLines(paneId, overlayLines);
+
+  // bgcolor → histogram underlay on price pane (always price; not indicator sub-pane)
+  const bgBands = split.bgcolors
+    .map(({ key, values, meta }) => ({
+      name: key,
+      data: bgcolorSeriesToHistogramData(ohlcvTimes, values, meta.color),
+    }))
+    .filter((b) => b.data.length > 0);
+  manager.syncBgcolorBands(bgBands);
+  if (bgBands.length && !silent) {
+    appendLog('ok', `bgcolor: ${bgBands.length} band series`, 'plot');
+  }
+
+  // plotshape / plotchar → markers (merged with strategy markers; never wipe trades)
+  const shapeMarkers = split.shapes.flatMap(({ key, values, meta }) =>
+    shapeSeriesToMarkers(ohlcvTimes, values, meta, { idPrefix: key }),
+  );
+  manager.setShapeMarkers(shapeMarkers);
+  if (shapeMarkers.length && !silent) {
+    appendLog('ok', `plotshape: ${shapeMarkers.length} marker(s)`, 'plot');
+  }
 
   // Non-overlay scripts must not leave series on the price pane
   if (!overlay && paneId !== 'price') {
@@ -283,8 +350,10 @@ export async function runAndApply(
         }
       }
     }
-  } else if (!silent) {
-    manager.hideEquityPane();
+  } else {
+    // No strategy events this run — clear trade markers only (shapes already set above)
+    manager.setTradeMarkers([]);
+    if (!silent) manager.hideEquityPane();
   }
 
   // Pine drawings: atomic replace (no clear→empty→set flash)
@@ -298,6 +367,14 @@ export async function runAndApply(
   } else if (!silent) {
     // Only clear on interactive full runs when engine returned none
     layer?.clearScriptDrawings();
+  }
+
+  // Capture engine-exported inputs into lastRun meta for Script Settings
+  const engineInputs =
+    (result as { inputs?: unknown }).inputs ??
+    result.meta?.inputs;
+  if (engineInputs && result.meta) {
+    result.meta = { ...result.meta, inputs: engineInputs };
   }
 
   if (indicatorId === undefined) {
@@ -316,7 +393,13 @@ export async function runAndApply(
     } else {
       plots[scriptName] = { color: PLOT_PALETTE[0] };
     }
-    addIndicator(scriptName, script, paneId, plots);
+    addIndicator(
+      scriptName,
+      script,
+      paneId,
+      plots,
+      inputs && Object.keys(inputs).length ? inputs : store.editorInputValues,
+    );
   }
 
   return result;

@@ -60,6 +60,7 @@ import {
   WifiOff,
   MoveUpRight,
   Layers,
+  Table2,
   type LucideProps,
 } from 'lucide-solid';
 
@@ -107,6 +108,8 @@ export const Icons = {
   ray: withDefaults(MoveUpRight),
   square: withDefaults(Square),
   fib: withDefaults(Layers),
+  layers: withDefaults(Layers),
+  table: withDefaults(Table2),
   ruler: withDefaults(Ruler),
   type: withDefaults(Type),
   trash: withDefaults(Trash2),

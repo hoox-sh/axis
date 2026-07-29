@@ -21,8 +21,10 @@ import { Component, Show, createEffect, createMemo, onMount, onCleanup, untrack 
 import { PaneManager } from './pane-manager';
 import { DrawingToolbar } from './DrawingToolbar';
 import { PineTableHud } from './PineTableHud';
-import { store } from '../store';
+import { store, setCrosshair } from '../store';
 import { HooxLoader } from '../ui/HooxLoader';
+import { DataViewPanel } from '../ui/DataViewPanel';
+import { LayerPanel } from '../ui/LayerPanel';
 import {
   getManager,
   setManager,
@@ -63,7 +65,35 @@ export const ChartHost: Component = () => {
       manager.createPane(pane.id, pane.type, pane.label || pane.type, pane.height || undefined);
     }
     manager.syncTimeScales();
-    manager.syncCrosshair(() => {});
+    manager.syncCrosshair((data) => {
+      const t =
+        data?.time != null && Number.isFinite(Number(data.time))
+          ? Number(data.time)
+          : null;
+      if (t == null) {
+        // Keep last bar when cursor leaves — Data Window stays useful
+        return;
+      }
+      const bars = store.bars;
+      let barIndex: number | null = null;
+      if (bars.length) {
+        const exact = bars.findIndex((b) => b.time === t);
+        barIndex = exact >= 0 ? exact : null;
+        if (barIndex == null) {
+          let best = 0;
+          let bestD = Infinity;
+          for (let i = 0; i < bars.length; i++) {
+            const d = Math.abs(bars[i]!.time - t);
+            if (d < bestD) {
+              bestD = d;
+              best = i;
+            }
+          }
+          barIndex = best;
+        }
+      }
+      setCrosshair(t, barIndex);
+    });
 
     if (store.bars.length) {
       setDataToChart(store.bars, { fit: true });
@@ -117,6 +147,8 @@ export const ChartHost: Component = () => {
         <DrawingToolbar />
         <PineTableHud />
       </Show>
+      <DataViewPanel />
+      <LayerPanel />
       <Show when={emptyHint()}>
         {(hint) => (
           <div class="absolute inset-0 flex flex-col items-center justify-center gap-2 z-[5] pointer-events-none px-6">

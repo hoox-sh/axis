@@ -87,6 +87,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
 
   if (clearMarkers) {
     manager.clearTradeMarkers();
+    manager.clearShapeMarkers?.();
   }
 
   if (pricePane && !pricePane.series['candle']) {

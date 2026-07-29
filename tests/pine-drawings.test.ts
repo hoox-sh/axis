@@ -4,7 +4,11 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { normalizeScriptDrawings } from '../src/chart/pine-drawings.ts';
+import {
+  normalizeExtend,
+  normalizeLineStyle,
+  normalizeScriptDrawings,
+} from '../src/chart/pine-drawings.ts';
 
 describe('normalizeScriptDrawings', () => {
   it('maps line/box/label API payloads', () => {
@@ -89,5 +93,117 @@ describe('normalizeScriptDrawings', () => {
     expect(list[2].text).toBe('lbl');
     expect(list[3].points).toHaveLength(2);
     expect(list[3].closed).toBe(true);
+  });
+
+  it('maps compile-mode kind keys (x1/y1, left/top, x/y, hline)', () => {
+    const list = normalizeScriptDrawings([
+      { kind: 'hline', bar: 0, price: 50, title: 'mid', color: '#787B86' },
+      {
+        kind: 'line',
+        bar: 0,
+        x1: 0,
+        y1: 100,
+        x2: 1,
+        y2: 105,
+        style: 'style_dotted',
+        extend: 'right',
+      },
+      {
+        kind: 'box',
+        bar: 0,
+        left: 0,
+        top: 110,
+        right: 2,
+        bottom: 90,
+        border_color: '#2962FF',
+        bgcolor: '#2962FF',
+      },
+      {
+        kind: 'label',
+        bar: 0,
+        x: 0,
+        y: 100,
+        text: 'hi',
+        color: '#2962FF',
+        textcolor: '#FFFFFF',
+      },
+      // non-geometry — ignored
+      { kind: 'bgcolor', bar: 0, color: 'red' },
+      { kind: 'plotshape', bar: 0, series: true },
+      { kind: 'fill', bar: 0 },
+      { kind: 'set', method: 'line.set_xy2', target: {}, bar: 1 },
+    ]);
+    expect(list.map((d) => d.type)).toEqual(['line', 'line', 'box', 'label']);
+    // hline → horizontal line
+    expect(list[0].id).toMatch(/^pine_hline_/);
+    expect(list[0].p1).toBe(50);
+    expect(list[0].p2).toBe(50);
+    expect(list[0].t1).toBe(0);
+    expect(list[0].extend).toBe('right');
+    expect(list[0].text).toBe('mid');
+    // line style stripped
+    expect(list[1].style).toBe('dotted');
+    expect(list[1].extend).toBe('right');
+    expect(list[1].t1).toBe(0);
+    expect(list[1].t2).toBe(1);
+    // box
+    expect(list[2].t1).toBe(0);
+    expect(list[2].t2).toBe(2);
+    expect(list[2].p1).toBe(110);
+    expect(list[2].p2).toBe(90);
+    expect(list[2].color).toBe('#2962FF');
+    // label
+    expect(list[3].t1).toBe(0);
+    expect(list[3].p1).toBe(100);
+    expect(list[3].text).toBe('hi');
+    expect(list[3].textcolor).toBe('#FFFFFF');
+  });
+
+  it('maps compile polyline arg0 ChartPoint-shaped points', () => {
+    const list = normalizeScriptDrawings([
+      {
+        kind: 'polyline',
+        bar: 0,
+        arg0: [
+          { x: 0, y: 100, index: 0, price: 100 },
+          { x: 1, y: 101, index: 1, price: 101 },
+          { x: 2 }, // incomplete
+        ],
+        closed: false,
+        color: '#0f0',
+      },
+    ]);
+    expect(list).toHaveLength(1);
+    expect(list[0].type).toBe('polyline');
+    expect(list[0].points).toEqual([
+      { time: 0, price: 100 },
+      { time: 1, price: 101 },
+    ]);
+  });
+
+  it('maps ray alias to line with extend right by default', () => {
+    const list = normalizeScriptDrawings([
+      { kind: 'ray', x1: 1, y1: 2, x2: 3, y2: 4 },
+    ]);
+    expect(list).toHaveLength(1);
+    expect(list[0].type).toBe('line');
+    expect(list[0].extend).toBe('right');
+  });
+});
+
+describe('normalizeLineStyle / normalizeExtend', () => {
+  it('strips Pine style prefixes', () => {
+    expect(normalizeLineStyle('style_dotted')).toBe('dotted');
+    expect(normalizeLineStyle('line.style_dashed')).toBe('dashed');
+    expect(normalizeLineStyle('hline.style_solid')).toBe('solid');
+    expect(normalizeLineStyle('plot.linestyle_dashed')).toBe('dashed');
+    expect(normalizeLineStyle(null)).toBe('solid');
+  });
+
+  it('normalizes extend constants', () => {
+    expect(normalizeExtend('extend.right')).toBe('right');
+    expect(normalizeExtend('both')).toBe('both');
+    expect(normalizeExtend('nope')).toBe('none');
+    expect(normalizeExtend(undefined, 'left')).toBe('left');
   });
 });

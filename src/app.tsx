@@ -25,6 +25,7 @@ import { ChartHost } from './chart/ChartHost';
 import { EditorPane } from './editor/EditorPane';
 import { IndicatorPanel } from './indicators/IndicatorPanel';
 import { SettingsDialog } from './ui/SettingsDialog';
+import { ScriptSettingsModal } from './ui/ScriptSettingsModal';
 import { ResultsPanel } from './ui/ResultsPanel';
 import { SystemLogs } from './ui/SystemLogs';
 import { PluginManager } from './ui/PluginManager';
@@ -195,7 +196,11 @@ export const App: Component = () => {
         <EditorPane
           editorRef={editorRef}
           onRun={(doc) => {
-            if (doc?.trim()) runAndApply(doc);
+            if (doc?.trim()) {
+              runAndApply(doc, undefined, {
+                inputs: store.editorInputValues || {},
+              });
+            }
           }}
         />
       </div>
@@ -205,6 +210,7 @@ export const App: Component = () => {
       <StatusBar />
 
       <SettingsDialog open={settingsOpen()} onClose={() => setSettingsOpen(false)} />
+      <ScriptSettingsModal />
       <PluginManager
         open={pluginsOpen()}
         onClose={() => setPluginsOpen(false)}

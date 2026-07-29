@@ -111,7 +111,7 @@ export const serverEngine: EnginePlugin = {
       return false;
     }
   },
-  async run({ script, bars, config, signal }) {
+  async run({ script, bars, config, inputs, signal }) {
     const endpoint = (
       (config?.endpoint as string) ||
       store.endpoint ||
@@ -126,6 +126,10 @@ export const serverEngine: EnginePlugin = {
       180_000,
       Math.max(90_000, 45_000 + (bars?.length || 0) * 40),
     );
+    const inputOverrides =
+      inputs && typeof inputs === 'object' && Object.keys(inputs).length
+        ? inputs
+        : undefined;
 
     // ── WSS-first path (short budget so REST still has time) ──────
     // Gunicorn default workers do NOT speak WebSocket — connect can hang then
@@ -144,6 +148,7 @@ export const serverEngine: EnginePlugin = {
               mode,
               // Always a string — API schema rejects null/omitted-as-null
               symbol: typeof store.symbol === 'string' && store.symbol ? store.symbol : 'CHART',
+              ...(inputOverrides ? { inputs: inputOverrides } : {}),
             },
             wsBudget,
           );
@@ -172,6 +177,7 @@ export const serverEngine: EnginePlugin = {
             series: (wsResult.series as Record<string, (number | null)[]>) || {},
             events: (wsResult.events as RunResult['events']) || [],
             drawings: (wsResult.drawings as RunResult['drawings']) || [],
+            inputs: (wsResult as { inputs?: unknown }).inputs,
             meta: {
               ms,
               transport: 'ws',
@@ -181,6 +187,7 @@ export const serverEngine: EnginePlugin = {
               overlay: wsOverlay !== false,
               script_name: wsName,
               plot_meta: wsResult.plot_meta || {},
+              inputs: (wsResult as { inputs?: unknown }).inputs,
             },
           } satisfies RunResult;
         }
@@ -202,7 +209,12 @@ export const serverEngine: EnginePlugin = {
       const res = await fetch(`${endpoint}/run?mode=${encodeURIComponent(mode)}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ script, data: bars, mode }),
+        body: JSON.stringify({
+          script,
+          data: bars,
+          mode,
+          ...(inputOverrides ? { inputs: inputOverrides } : {}),
+        }),
         signal: restSignal,
       });
       const text = await res.text();
@@ -241,6 +253,7 @@ export const serverEngine: EnginePlugin = {
         series: (payload.series as Record<string, (number | null)[]>) || {},
         events: (payload.events as RunResult['events']) || [],
         drawings: (payload.drawings as RunResult['drawings']) || [],
+        inputs: payload.inputs,
         meta: {
           ...(payload.meta || {}),
           ms: performance.now() - t0,
@@ -251,6 +264,7 @@ export const serverEngine: EnginePlugin = {
           overlay: restOverlay !== false,
           script_name: restName as string,
           plot_meta: payload.plot_meta || {},
+          inputs: payload.inputs,
         },
       } satisfies RunResult;
     } catch (err: unknown) {

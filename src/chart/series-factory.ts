@@ -171,10 +171,51 @@ export function createVolumeSeries(chart: IChartApi, paneIndex?: number): ISerie
   return series;
 }
 
-export function createLineSeries(chart: IChartApi, name: string, color: string, paneIndex?: number): ISeriesApi<'Line'> {
+/**
+ * Full-height histogram underlay for Pine bgcolor (separate scale, drawn behind candles).
+ * Data points use value=1 + per-bar color; null colors are omitted by the caller.
+ */
+export function createBgcolorSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Histogram'> {
+  const opts = {
+    priceScaleId: 'bgcolor',
+    lastValueVisible: false,
+    priceLineVisible: false,
+    base: 0,
+    priceFormat: { type: 'custom' as const, minMove: 1, formatter: () => '' },
+  };
+  const series =
+    paneIndex !== undefined
+      ? chart.addSeries(HistogramSeries, opts, paneIndex)
+      : chart.addSeries(HistogramSeries, opts);
+  try {
+    chart.priceScale('bgcolor').applyOptions({
+      visible: false,
+      borderVisible: false,
+      scaleMargins: { top: 0, bottom: 0 },
+    });
+  } catch {
+    /* ignore */
+  }
+  // Paint behind candle / overlay series when API is available (LWC v5)
+  try {
+    (series as ISeriesApi<'Histogram'> & { setSeriesOrder?: (n: number) => void }).setSeriesOrder?.(0);
+  } catch {
+    /* ignore */
+  }
+  return series;
+}
+
+export function createLineSeries(
+  chart: IChartApi,
+  name: string,
+  color: string,
+  paneIndex?: number,
+  lineWidth: number = 2,
+): ISeriesApi<'Line'> {
+  const lw = Math.max(1, Math.min(4, Math.round(lineWidth || 2))) as LineWidth;
   const opts = {
     color,
-    lineWidth: 2 as LineWidth,
+    lineWidth: lw,
     priceLineVisible: false,
     lastValueVisible: true,
     title: name,

@@ -19,6 +19,9 @@
 
 /**
  * Map Pro API / Runtime ``drawings`` payloads → SVG-friendly geometry.
+ *
+ * Accepts both interpret-path shapes (``type`` + ``t1``/``p1``/…) and
+ * compile-path ``__drawings`` events (``kind`` + ``x1``/``y1``/``left``/…).
  */
 
 export interface ScriptDrawing {
@@ -39,18 +42,57 @@ export interface ScriptDrawing {
   points?: Array<{ time: number; price: number }>;
 }
 
+/** Kinds that are not price-geometry (handled elsewhere or ignored). */
+const NON_GEOMETRY = new Set([
+  'bgcolor',
+  'barcolor',
+  'plotshape',
+  'plotchar',
+  'plotarrow',
+  'fill',
+  'set',
+  'table',
+  'linefill',
+]);
+
 function parsePolylinePoints(raw: unknown): Array<{ time: number; price: number }> {
   if (!Array.isArray(raw)) return [];
   const points: Array<{ time: number; price: number }> = [];
   for (const p of raw) {
     if (!p || typeof p !== 'object') continue;
     const pr = p as Record<string, unknown>;
-    const t = num(pr.time ?? pr.t);
+    // Interpret: time/t · Compile ChartPoint: x/index · price/p/y
+    const t = num(pr.time ?? pr.t ?? pr.x ?? pr.index);
     const price = num(pr.price ?? pr.p ?? pr.y);
     if (t == null || price == null) continue;
     points.push({ time: t, price });
   }
   return points;
+}
+
+/** Strip Pine prefixes: ``line.style_dashed`` / ``style_dotted`` → ``dashed``/``dotted``. */
+export function normalizeLineStyle(raw: unknown, fallback = 'solid'): string {
+  if (raw == null) return fallback;
+  let s = String(raw).toLowerCase().trim();
+  if (!s) return fallback;
+  // ``extend.right``-style or fully-qualified constants
+  s = s.replace(/^(line|hline|plot)\./, '');
+  s = s.replace(/^style_/, '');
+  s = s.replace(/^linestyle_/, '');
+  if (s.includes('dash')) return 'dashed';
+  if (s.includes('dot')) return 'dotted';
+  if (s.includes('arrow')) return 'arrow';
+  if (s === 'solid' || s === 'none') return s;
+  return s || fallback;
+}
+
+export function normalizeExtend(raw: unknown, fallback = 'none'): string {
+  if (raw == null) return fallback;
+  let s = String(raw).toLowerCase().trim();
+  if (!s) return fallback;
+  s = s.replace(/^extend\./, '');
+  if (s === 'left' || s === 'right' || s === 'both' || s === 'none') return s;
+  return fallback;
 }
 
 /** Normalize mixed API shapes into ScriptDrawing[]. */
@@ -61,11 +103,14 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const r = item as Record<string, unknown>;
-    const type = String(r.type || r.kind || '').toLowerCase();
+    const type = String(r.type || r.kind || '').toLowerCase().replace(/^drawing\./, '');
 
-    // Polylines often only carry `points` — handle before t1/p1 gate.
+    if (!type || NON_GEOMETRY.has(type)) continue;
+
+    // Polylines often only carry `points` (API) or `arg0` (compile fallback) —
+    // handle before t1/p1 gate.
     if (type === 'polyline') {
-      const points = parsePolylinePoints(r.points);
+      const points = parsePolylinePoints(r.points ?? r.arg0 ?? r.pts);
       if (points.length < 2) continue;
       out.push({
         id: `pine_poly_${i++}`,
@@ -77,21 +122,43 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
         color: str(r.color, '#939fff'),
         bgcolor: str(r.bgcolor, 'rgba(147,159,255,0.06)'),
         width: num(r.width) ?? 1,
-        style: str(r.style, 'solid'),
+        style: normalizeLineStyle(r.style, 'solid'),
         closed: Boolean(r.closed),
         points,
       });
       continue;
     }
 
-    const t1 = num(r.t1 ?? r.time ?? r.x1 ?? r.left ?? r.x);
+    // Compile-mode hline: price-only → full-width horizontal line.
+    if (type === 'hline' || type === 'horizontalline' || type === 'horizontal_line') {
+      const price = num(r.price ?? r.p1 ?? r.y ?? r.y1);
+      if (price == null) continue;
+      out.push({
+        id: `pine_hline_${i++}`,
+        type: 'line',
+        t1: num(r.t1 ?? r.x1 ?? r.bar) ?? 0,
+        p1: price,
+        t2: num(r.t2 ?? r.x2) ?? 1,
+        p2: price,
+        color: str(r.color, '#787B86'),
+        width: num(r.width) ?? 1,
+        style: normalizeLineStyle(r.style, 'solid'),
+        extend: normalizeExtend(r.extend, 'right'),
+        text: str(r.title ?? r.text, ''),
+      });
+      continue;
+    }
+
+    // Time/index: API t1/time · compile x1/left/x · bar index fallback
+    const t1 = num(r.t1 ?? r.time ?? r.x1 ?? r.left ?? r.x ?? r.bar);
     const p1 = num(r.p1 ?? r.price ?? r.y1 ?? r.top ?? r.y);
     if (t1 == null || p1 == null) continue;
 
-    if (type === 'line' || type === 'trend') {
+    if (type === 'line' || type === 'trend' || type === 'ray' || type === 'segment') {
       const t2 = num(r.t2 ?? r.x2 ?? r.right);
       const p2 = num(r.p2 ?? r.y2 ?? r.bottom);
       if (t2 == null || p2 == null) continue;
+      const extendDefault = type === 'ray' ? 'right' : 'none';
       out.push({
         id: `pine_line_${i++}`,
         type: 'line',
@@ -101,12 +168,12 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
         p2,
         color: str(r.color, '#939fff'),
         width: num(r.width) ?? 1,
-        style: str(r.style, 'solid'),
-        extend: str(r.extend, 'none'),
+        style: normalizeLineStyle(r.style, 'solid'),
+        extend: normalizeExtend(r.extend, extendDefault),
       });
       continue;
     }
-    if (type === 'box' || type === 'rect') {
+    if (type === 'box' || type === 'rect' || type === 'rectangle') {
       const t2 = num(r.t2 ?? r.x2 ?? r.right);
       const p2 = num(r.p2 ?? r.y2 ?? r.bottom);
       if (t2 == null || p2 == null) continue;
@@ -131,7 +198,7 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
         t1,
         p1,
         color: str(r.color, '#939fff'),
-        textcolor: str(r.textcolor, '#eceef4'),
+        textcolor: str(r.textcolor ?? r.text_color, '#eceef4'),
         text: str(r.text, ''),
       });
     }

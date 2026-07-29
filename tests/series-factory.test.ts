@@ -50,4 +50,17 @@ describe('series-factory', () => {
     expect(line).toBeDefined();
     expect(area).toBeDefined();
   });
+
+  it('createLineSeries accepts custom lineWidth', () => {
+    const chart = makeFakeChart();
+    const calls: unknown[] = [];
+    const orig = chart.addSeries.bind(chart);
+    chart.addSeries = ((type: unknown, opts?: unknown, paneIndex?: number) => {
+      calls.push(opts);
+      return orig(type, opts, paneIndex);
+    }) as typeof chart.addSeries;
+    createLineSeries(chart as never, 'wide', '#0f0', undefined, 4);
+    expect(calls.length).toBe(1);
+    expect((calls[0] as { lineWidth: number }).lineWidth).toBe(4);
+  });
 });

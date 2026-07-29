@@ -47,6 +47,8 @@ export interface Indicator {
   paneId: string;
   visible: boolean;
   plots: Record<string, { color: string }>;
+  /** Last-known input values keyed by title (Script Settings) */
+  inputValues?: Record<string, unknown>;
 }
 
 export type AppStatus = 'ready' | 'loading' | 'running' | 'error' | 'connected' | 'disconnected';
@@ -171,6 +173,22 @@ export interface AppState {
   editor: EditorLayoutState;
   watchlist: WatchlistState;
   indicatorPanel: { open: boolean; width: number };
+  /** Data Window (OHLCV + series at crosshair) */
+  dataViewPanel: { open: boolean; width: number };
+  /** Layers panel (panes / indicators / drawings visibility) */
+  layerPanel: { open: boolean; width: number };
+  /**
+   * Script Settings modal — shows ``input.*`` fields.
+   * indicatorId null = editor document (not yet an applied indicator).
+   */
+  scriptSettings: { open: boolean; indicatorId: string | null };
+  /** Input overrides for the docked editor doc (keyed by input title) */
+  editorInputValues: Record<string, unknown>;
+  /**
+   * Ephemeral crosshair position for Data Window (not persisted).
+   * time = bar time; barIndex = index into store.bars when known.
+   */
+  crosshair: { time: number | null; barIndex: number | null };
   /** Bottom results / export drawer */
   resultsPanel: { open: boolean; height: number };
   /** System log drawer (collapsed by default) */

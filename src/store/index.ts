@@ -87,6 +87,11 @@ const DEFAULTS: AppState = {
   editor: { open: true, width: 460, mode: 'docked' },
   watchlist: { open: true, width: 200, symbols: [...DEFAULT_WATCHLIST], refreshSec: 15 },
   indicatorPanel: { open: false, width: 224 },
+  dataViewPanel: { open: false, width: 220 },
+  layerPanel: { open: false, width: 220 },
+  scriptSettings: { open: false, indicatorId: null },
+  editorInputValues: {},
+  crosshair: { time: null, barIndex: null },
   resultsPanel: { open: false, height: 220 },
   logsPanel: { open: false, height: 160 },
   stream: { status: 'disconnected' },
@@ -180,6 +185,15 @@ function loadPersisted(): Partial<AppState> {
           ),
         },
         indicatorPanel: { ...DEFAULTS.indicatorPanel, ...parsed.indicatorPanel },
+        dataViewPanel: { ...DEFAULTS.dataViewPanel, ...parsed.dataViewPanel },
+        layerPanel: { ...DEFAULTS.layerPanel, ...parsed.layerPanel },
+        editorInputValues:
+          parsed.editorInputValues && typeof parsed.editorInputValues === 'object'
+            ? parsed.editorInputValues
+            : DEFAULTS.editorInputValues,
+        // Ephemeral UI — never hydrate open modals / crosshair from disk
+        scriptSettings: { open: false, indicatorId: null },
+        crosshair: { time: null, barIndex: null },
         resultsPanel: { ...DEFAULTS.resultsPanel, ...parsed.resultsPanel },
         logsPanel: { ...DEFAULTS.logsPanel, ...parsed.logsPanel, open: false },
         activePlugins: {
@@ -252,12 +266,14 @@ export function persist() {
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
     try {
-      // Omit bars + lastRun + logs + high-churn gens; keep only telemetry.hud prefs
+      // Omit bars + lastRun + logs + high-churn gens + ephemeral crosshair/modal
       const {
         bars: _b,
         lastRun: _r,
         logs: _l,
         chartDataGen: _g,
+        crosshair: _c,
+        scriptSettings: _ss,
         telemetry,
         ...rest
       } = store as AppState & {
@@ -265,6 +281,8 @@ export function persist() {
         lastRun: unknown;
         logs: unknown;
         chartDataGen?: unknown;
+        crosshair?: unknown;
+        scriptSettings?: unknown;
         telemetry?: AppState['telemetry'];
       };
       localStorage.setItem(
@@ -332,9 +350,26 @@ export function loadBars(bars: Bar[], symbol: string, interval: string, exchange
   persist();
 }
 
-export function addIndicator(name: string, code: string, paneId: string, plots: Record<string, { color: string }>) {
+export function addIndicator(
+  name: string,
+  code: string,
+  paneId: string,
+  plots: Record<string, { color: string }>,
+  inputValues?: Record<string, unknown>,
+) {
   const id = uid();
-  setStore('scripts', (s) => [...s, { id, name, code, paneId, visible: true, plots }]);
+  setStore('scripts', (s) => [
+    ...s,
+    {
+      id,
+      name,
+      code,
+      paneId,
+      visible: true,
+      plots,
+      inputValues: inputValues ? { ...inputValues } : undefined,
+    },
+  ]);
   persist();
   return id;
 }
@@ -497,6 +532,56 @@ export function setIndicatorPanelOpen(open: boolean) {
 
 export function toggleIndicatorPanel() {
   setStore('indicatorPanel', 'open', !store.indicatorPanel.open);
+  persist();
+}
+
+export function setDataViewPanelOpen(open: boolean) {
+  setStore('dataViewPanel', 'open', open);
+  persist();
+}
+
+export function toggleDataViewPanel() {
+  setStore('dataViewPanel', 'open', !store.dataViewPanel.open);
+  persist();
+}
+
+export function setLayerPanelOpen(open: boolean) {
+  setStore('layerPanel', 'open', open);
+  persist();
+}
+
+export function toggleLayerPanel() {
+  setStore('layerPanel', 'open', !store.layerPanel.open);
+  persist();
+}
+
+export function openScriptSettings(indicatorId: string | null = null) {
+  setStore('scriptSettings', { open: true, indicatorId });
+}
+
+export function closeScriptSettings() {
+  setStore('scriptSettings', { open: false, indicatorId: null });
+}
+
+/** Ephemeral — do not persist every crosshair move. */
+export function setCrosshair(time: number | null, barIndex: number | null = null) {
+  setStore('crosshair', { time, barIndex });
+}
+
+export function setEditorInputValues(values: Record<string, unknown>) {
+  setStore('editorInputValues', values);
+  persist();
+}
+
+export function setIndicatorInputValues(id: string, values: Record<string, unknown>) {
+  setStore('scripts', (s) =>
+    s.map((ind) => (ind.id === id ? { ...ind, inputValues: { ...values } } : ind)),
+  );
+  persist();
+}
+
+export function setPaneVisible(id: string, visible: boolean) {
+  setStore('panes', (p) => p.map((pane) => (pane.id === id ? { ...pane, visible } : pane)));
   persist();
 }
 

@@ -129,6 +129,8 @@ export interface RunResult {
   }>;
   /** Pine line/label/box objects from interpret runtime */
   drawings?: Array<Record<string, unknown>>;
+  /** Pine input.* declarations from last run (engine-exported) */
+  inputs?: Array<Record<string, unknown>> | unknown;
   error?: string;
   meta?: {
     mode?: string;
@@ -138,6 +140,7 @@ export interface RunResult {
     count?: number;
     overlay?: boolean;
     script_name?: string;
+    inputs?: unknown;
     [k: string]: unknown;
   };
 }
@@ -146,6 +149,8 @@ export interface EngineOpts {
   script: string;
   bars: Bar[];
   config?: Record<string, unknown>;
+  /** Pine input.* overrides keyed by title */
+  inputs?: Record<string, unknown>;
   signal?: AbortSignal;
 }
 

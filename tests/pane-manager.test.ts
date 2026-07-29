@@ -76,6 +76,8 @@ describe('PaneManager', () => {
       setData: () => {},
       applyOptions: () => {},
       priceScale: () => ({ applyOptions: () => {} }),
+      seriesOrder: () => 1,
+      setSeriesOrder: () => {},
     } as never;
     pm.setTradeMarkers([
       {
@@ -87,6 +89,61 @@ describe('PaneManager', () => {
       } as never,
     ]);
     pm.clearTradeMarkers();
+  });
+
+  it('setShapeMarkers and setTradeMarkers both apply without wipe', () => {
+    const p = pm.createPane('price', 'price', 'Price');
+    p.series['candle'] = {
+      setData: () => {},
+      applyOptions: () => {},
+      priceScale: () => ({ applyOptions: () => {} }),
+      seriesOrder: () => 1,
+      setSeriesOrder: () => {},
+    } as never;
+    pm.setShapeMarkers([
+      {
+        time: 1000,
+        position: 'aboveBar',
+        color: '#f00',
+        shape: 'circle',
+        text: 'S',
+        id: 's1',
+      },
+    ]);
+    pm.setTradeMarkers([
+      {
+        time: 2000,
+        position: 'belowBar',
+        color: '#0f0',
+        shape: 'arrowUp',
+        text: 'L',
+      } as never,
+    ]);
+    pm.clearShapeMarkers();
+    pm.clearTradeMarkers();
+  });
+
+  it('syncBgcolorBands creates bgcolor_ series', () => {
+    const p = pm.createPane('price', 'price', 'Price');
+    p.series['candle'] = {
+      setData: () => {},
+      applyOptions: () => {},
+      priceScale: () => ({ applyOptions: () => {} }),
+      seriesOrder: () => 1,
+      setSeriesOrder: () => {},
+    } as never;
+    pm.syncBgcolorBands([
+      {
+        name: 'up_bg',
+        data: [
+          { time: 1, value: 1, color: 'rgba(255,0,0,0.2)' },
+          { time: 2, value: 1, color: 'rgba(0,255,0,0.2)' },
+        ],
+      },
+    ]);
+    expect(p.series['bgcolor_up_bg']).toBeDefined();
+    pm.syncBgcolorBands([]);
+    expect(p.series['bgcolor_up_bg']).toBeUndefined();
   });
 
   it('scrollToTime centers panes', () => {

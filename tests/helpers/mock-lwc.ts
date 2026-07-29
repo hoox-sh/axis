@@ -9,11 +9,24 @@
 
 import { mock } from 'bun:test';
 
+export type FakePriceLine = {
+  applyOptions: (o: unknown) => void;
+  options: () => Record<string, unknown>;
+  _opts: Record<string, unknown>;
+};
+
 export type FakeSeries = {
   setData: (d: unknown) => void;
   applyOptions: (o: unknown) => void;
   priceScale: () => { applyOptions: (o: unknown) => void };
   setMarkers?: (m: unknown) => void;
+  createPriceLine: (opts: Record<string, unknown>) => FakePriceLine;
+  removePriceLine: (line: FakePriceLine) => void;
+  priceLines: () => FakePriceLine[];
+  _priceLines: FakePriceLine[];
+  seriesOrder: () => number;
+  setSeriesOrder: (n: number) => void;
+  _order: number;
 };
 
 export type FakeChart = {
@@ -38,10 +51,33 @@ export type FakeChart = {
 export function makeFakeChart(): FakeChart {
   const series: FakeSeries[] = [];
   const makeSeries = (): FakeSeries => {
+    const priceLines: FakePriceLine[] = [];
     const s: FakeSeries = {
       setData: () => {},
       applyOptions: () => {},
       priceScale: () => ({ applyOptions: () => {} }),
+      _priceLines: priceLines,
+      _order: series.length,
+      seriesOrder: () => s._order,
+      setSeriesOrder: (n: number) => {
+        s._order = n;
+      },
+      createPriceLine: (opts) => {
+        const pl: FakePriceLine = {
+          _opts: { ...opts },
+          applyOptions: (o) => {
+            Object.assign(pl._opts, o as object);
+          },
+          options: () => pl._opts,
+        };
+        priceLines.push(pl);
+        return pl;
+      },
+      removePriceLine: (line) => {
+        const i = priceLines.indexOf(line);
+        if (i >= 0) priceLines.splice(i, 1);
+      },
+      priceLines: () => priceLines.slice(),
     };
     series.push(s);
     return s;
@@ -85,6 +121,7 @@ export function installLightweightChartsMock() {
     }),
     ColorType: { Solid: 'solid' },
     CrosshairMode: { Normal: 0 },
+    LineStyle: { Solid: 0, Dotted: 1, Dashed: 2, LargeDashed: 3, SparseDotted: 4 },
     CandlestickSeries: 'CandlestickSeries',
     HistogramSeries: 'HistogramSeries',
     LineSeries: 'LineSeries',

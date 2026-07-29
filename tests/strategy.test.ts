@@ -162,6 +162,19 @@ describe('eventsToMarkers', () => {
     expect(markers[1].position).toBe('aboveBar');
   });
 
+  it('keeps both entry and exit markers on the same bar', () => {
+    // LWC v5 stacks same-time markers — do not collapse to last-only
+    const events = normalizeStrategyEvents([
+      { kind: 'entry', id: 'L', direction: 'long', bar_time: 10, ohlc: [1, 1, 1, 100] },
+      { kind: 'exit', id: 'X', from_entry: 'L', bar_time: 10, ohlc: [1, 1, 1, 101] },
+    ]);
+    const markers = eventsToMarkers(events);
+    expect(markers).toHaveLength(2);
+    expect(markers[0].shape).toBe('arrowUp');
+    expect(markers[1].shape).toBe('arrowDown');
+    expect(markers[0].time).toBe(markers[1].time);
+  });
+
   it('skips pending order events when includeOrders false', () => {
     const events = normalizeStrategyEvents(
       [
@@ -188,5 +201,120 @@ describe('buildEquityCurve', () => {
       { time: 2, value: 10010 },
       { time: 4, value: 10005 },
     ]);
+  });
+
+  it('coalesces same-bar exits into one equity point', () => {
+    const curve = buildEquityCurve(
+      [
+        { exitTime: 5, pnl: 10 },
+        { exitTime: 5, pnl: -3 },
+      ],
+      1000,
+    );
+    expect(curve).toEqual([{ time: 5, value: 1007 }]);
+  });
+});
+
+describe('pyne-shaped pairing gaps', () => {
+  it('pairs strategy.exit via from_entry when exit order id differs', () => {
+    // pyne: entry id="L"; exit id="TP" from_entry="L"
+    const events = [
+      {
+        kind: 'entry',
+        id: 'L',
+        direction: 'long',
+        bar_time: 100,
+        ohlc: [100, 101, 99, 100],
+      },
+      {
+        kind: 'entry',
+        id: 'S',
+        direction: 'short',
+        bar_time: 110,
+        ohlc: [200, 201, 199, 200],
+      },
+      {
+        kind: 'exit',
+        id: 'TP',
+        from_entry: 'L',
+        bar_time: 120,
+        ohlc: [110, 111, 109, 110],
+      },
+    ];
+    const r = buildStrategyReport(events as any);
+    expect(r.trades).toHaveLength(1);
+    expect(r.trades[0].id).toBe('L');
+    expect(r.trades[0].pnl).toBe(10);
+  });
+
+  it('pairs exit by sole open when exit id is order name (no from_entry)', () => {
+    // Real pyne event shape omits from_entry; sole open still pairs
+    const events = [
+      {
+        kind: 'entry',
+        id: 'L',
+        direction: 'long',
+        bar_time: 100,
+        ohlc: [50, 51, 49, 50],
+      },
+      {
+        kind: 'exit',
+        id: 'XL',
+        direction: null,
+        bar_time: 200,
+        ohlc: [55, 56, 54, 55],
+      },
+    ];
+    const r = buildStrategyReport(events as any);
+    expect(r.trades).toHaveLength(1);
+    expect(r.trades[0].pnl).toBe(5);
+  });
+
+  it('close_all flattens every open position', () => {
+    const events = [
+      { kind: 'entry', id: 'A', direction: 'long', bar_time: 1, ohlc: [10, 10, 10, 10] },
+      { kind: 'entry', id: 'B', direction: 'long', bar_time: 2, ohlc: [20, 20, 20, 20] },
+      { kind: 'close_all', id: null, bar_time: 3, ohlc: [25, 25, 25, 25] },
+    ];
+    const r = buildStrategyReport(events as any);
+    expect(r.trades).toHaveLength(2);
+    expect(r.stats.totalPnl).toBe(15 + 5);
+  });
+
+  it('pairs same-bar entry then exit (kind order)', () => {
+    const events = [
+      // exit listed first in payload — sort must still process entry first
+      { kind: 'exit', id: 'L', bar_time: 50, ohlc: [110, 110, 110, 110] },
+      { kind: 'entry', id: 'L', direction: 'long', bar_time: 50, ohlc: [100, 100, 100, 100] },
+    ];
+    const r = buildStrategyReport(events as any);
+    expect(r.trades).toHaveLength(1);
+    expect(r.trades[0].pnl).toBe(10);
+  });
+
+  it('aligns event seconds to ms bars for price + pairing', () => {
+    const bars = [
+      { time: 1_700_000_000_000, open: 1, high: 2, low: 0.5, close: 80 },
+      { time: 1_700_086_400_000, open: 1, high: 2, low: 0.5, close: 90 },
+    ];
+    const events = [
+      {
+        kind: 'entry',
+        id: 'A',
+        direction: 'long',
+        bar_time: 1_700_000_000,
+        ohlc: [0, 0, 0, 0],
+      },
+      {
+        kind: 'close',
+        id: 'A',
+        bar_time: 1_700_086_400,
+        ohlc: [0, 0, 0, 0],
+      },
+    ];
+    const r = buildStrategyReport(events as any, bars);
+    expect(r.trades).toHaveLength(1);
+    expect(r.trades[0].entry).toBe(80);
+    expect(r.trades[0].exit).toBe(90);
   });
 });

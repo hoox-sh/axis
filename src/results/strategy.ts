@@ -27,7 +27,11 @@
  */
 
 import type { Bar } from '../store/types';
-import { normalizeStrategyEvents } from './events';
+import {
+  normalizeStrategyEvents,
+  resolveExitMatchId,
+  strategyEventKindRank,
+} from './events';
 
 export interface StrategyEvent {
   time?: number;
@@ -41,6 +45,9 @@ export interface StrategyEvent {
   bar_time?: number;
   bar_index?: number;
   ohlc?: number[];
+  /** strategy.exit from_entry — preferred over exit order id when pairing */
+  from_entry?: string;
+  entry_id?: string;
   symbol?: string;
   [key: string]: unknown;
 }
@@ -77,13 +84,39 @@ export function buildStrategyReport(
   stats: StrategyStats;
 } {
   const normalized = normalizeStrategyEvents(events, { bars, includeOrders: true });
-  const sorted = normalized.slice().sort((a, b) => (a.time || 0) - (b.time || 0));
+  const sorted = normalized.slice().sort((a, b) => {
+    const dt = (a.time || 0) - (b.time || 0);
+    if (dt !== 0) return dt;
+    const ka = String(a.type || a.event || a.kind || '');
+    const kb = String(b.type || b.event || b.kind || '');
+    return strategyEventKindRank(ka) - strategyEventKindRank(kb);
+  });
   const open = new Map<string, { entry: number; time: number; dir: string }>();
   const trades: ClosedTrade[] = [];
 
+  const pushClosed = (
+    openId: string,
+    o: { entry: number; time: number; dir: string },
+    exitTime: number,
+    exitPrice: number,
+  ) => {
+    const pnl = (exitPrice - o.entry) * (o.dir.includes('short') ? -1 : 1);
+    const pnlPct = o.entry !== 0 ? pnl / o.entry : 0;
+    trades.push({
+      id: openId || '_default',
+      dir: o.dir,
+      entryTime: o.time,
+      entry: o.entry,
+      exitTime,
+      exit: exitPrice,
+      pnl,
+      pnlPct,
+    });
+  };
+
   for (const ev of sorted) {
     const t = ev.time;
-    let p = ev.price;
+    const p = ev.price;
     // Allow pairing even if price missing (use 0) — better to show a trade than drop it
     if (t === undefined || t === null || !Number.isFinite(Number(t))) continue;
     if (p === undefined || p === null || !Number.isFinite(Number(p))) {
@@ -93,7 +126,9 @@ export function buildStrategyReport(
     const kind = String(ev.type || ev.event || ev.kind || '').toLowerCase();
     const id = String(ev.id || '_default');
     if (kind.includes('entry') || kind === 'long' || kind === 'short') {
-      const dir = String(ev.dir || ev.direction || (kind === 'short' ? 'short' : 'long')).toLowerCase();
+      const dir = String(
+        ev.dir || ev.direction || (kind === 'short' ? 'short' : 'long'),
+      ).toLowerCase();
       open.set(id, { entry: Number(p), time: Number(t), dir });
     } else if (
       kind.includes('close') ||
@@ -101,28 +136,33 @@ export function buildStrategyReport(
       kind === 'closelong' ||
       kind === 'closeshort'
     ) {
-      // Prefer matching id; fall back to sole open trade if only one
-      let o = open.get(id);
+      const isCloseAll =
+        kind === 'close_all' || kind.includes('close_all') || kind === 'closeall';
+      if (isCloseAll) {
+        // strategy.close_all — flatten every open at this bar
+        for (const [openId, o] of open) {
+          pushClosed(openId, o, Number(t), Number(p));
+        }
+        open.clear();
+        continue;
+      }
+
+      // Prefer from_entry / entry_id (strategy.exit), then exit/close id,
+      // then sole open trade when only one position is live.
+      const matchId = resolveExitMatchId(ev);
+      let o = open.get(matchId);
+      let closedId = matchId;
+      if (!o && matchId !== id) {
+        o = open.get(id);
+        if (o) closedId = id;
+      }
       if (!o && open.size === 1) {
-        const only = open.keys().next().value as string;
-        o = open.get(only);
-        if (o) open.delete(only);
-      } else if (o) {
-        open.delete(id);
+        closedId = open.keys().next().value as string;
+        o = open.get(closedId);
       }
       if (o) {
-        const pnl = (Number(p) - o.entry) * (o.dir.includes('short') ? -1 : 1);
-        const pnlPct = o.entry !== 0 ? pnl / o.entry : 0;
-        trades.push({
-          id: id || '_default',
-          dir: o.dir,
-          entryTime: o.time,
-          entry: o.entry,
-          exitTime: Number(t),
-          exit: Number(p),
-          pnl,
-          pnlPct,
-        });
+        open.delete(closedId);
+        pushClosed(closedId, o, Number(t), Number(p));
       }
     }
   }

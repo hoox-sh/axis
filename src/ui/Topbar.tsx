@@ -28,6 +28,9 @@ import {
   setEditorMode,
   setActivePlugin,
   toggleIndicatorPanel,
+  toggleDataViewPanel,
+  toggleLayerPanel,
+  openScriptSettings,
 } from '../store';
 import { runAndApply } from '../indicators/runner';
 import { startLive, stopLive, listStreams, defaultStreamForSource } from '../streams/multiplex';
@@ -116,7 +119,9 @@ export const Topbar: Component<{
   const onRun = async () => {
     const doc = props.editorRef.getDoc();
     if (!doc?.trim()) return;
-    await runAndApply(doc);
+    await runAndApply(doc, undefined, {
+      inputs: store.editorInputValues || {},
+    });
   };
 
   const toggleLive = () => {
@@ -376,6 +381,45 @@ export const Topbar: Component<{
       >
         <Icons.activity size={13} />
         Indicators
+      </button>
+
+      <button
+        type="button"
+        class={`sc-btn sc-btn-ghost px-2 inline-flex items-center gap-1 ${
+          store.layerPanel.open ? 'text-accent' : ''
+        }`}
+        onClick={() => toggleLayerPanel()}
+        title="Layers — panes, scripts, drawings"
+        aria-pressed={store.layerPanel.open}
+        data-testid="axis-btn-layers"
+      >
+        <Icons.layers size={13} />
+        Layers
+      </button>
+
+      <button
+        type="button"
+        class={`sc-btn sc-btn-ghost px-2 inline-flex items-center gap-1 ${
+          store.dataViewPanel.open ? 'text-accent' : ''
+        }`}
+        onClick={() => toggleDataViewPanel()}
+        title="Data window — OHLCV & plot values at crosshair"
+        aria-pressed={store.dataViewPanel.open}
+        data-testid="axis-btn-dataview"
+      >
+        <Icons.table size={13} />
+        Data
+      </button>
+
+      <button
+        type="button"
+        class="sc-btn sc-btn-ghost px-2 inline-flex items-center gap-1"
+        onClick={() => openScriptSettings(null)}
+        title="Script settings — edit input.* parameters"
+        data-testid="axis-btn-script-settings"
+      >
+        <Icons.settings size={13} />
+        Inputs
       </button>
 
       <button

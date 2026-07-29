@@ -19,9 +19,10 @@
 
 import { Component, For, createSignal, Show } from 'solid-js';
 import type { Indicator } from '../store/types';
-import { toggleIndicator, removeIndicator, setIndicatorColor } from '../store';
+import { toggleIndicator, removeIndicator, setIndicatorColor, openScriptSettings } from '../store';
 import { getManager } from '../chart/manager-access';
 import { PLOT_PALETTE } from '../chart/series-factory';
+import { Icons } from '../ui/icons';
 
 interface Props {
   indicator: Indicator;
@@ -69,13 +70,24 @@ export const IndicatorCard: Component<Props> = (props) => {
           </button>
           <span class="text-xs font-semibold text-text truncate max-w-[120px]">{props.indicator.name}</span>
         </div>
-        <button
-          class="text-text-faint hover:text-red text-xs px-1 border-2 border-transparent hover:border-border"
-          onClick={remove}
-          title="Remove indicator"
-        >
-          ×
-        </button>
+        <div class="flex items-center gap-0.5 flex-shrink-0">
+          <button
+            type="button"
+            class="text-text-faint hover:text-accent text-xs px-1 border-2 border-transparent hover:border-border"
+            onClick={() => openScriptSettings(props.indicator.id)}
+            title="Script settings (inputs)"
+            data-testid="axis-indicator-settings"
+          >
+            <Icons.settings size={11} />
+          </button>
+          <button
+            class="text-text-faint hover:text-red text-xs px-1 border-2 border-transparent hover:border-border"
+            onClick={remove}
+            title="Remove indicator"
+          >
+            ×
+          </button>
+        </div>
       </div>
       <div class="flex flex-col gap-0.5">
         <For each={Object.entries(props.indicator.plots)}>
