@@ -339,6 +339,36 @@ export const SettingsDialog: Component<Props> = (props) => {
                     Test
                   </button>
                 </div>
+                <div class="flex flex-wrap gap-1 mt-0.5">
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-ghost px-1.5 py-0.5 text-[10px] font-mono"
+                    data-testid="axis-endpoint-preset-local"
+                    title="VPS (or any remote) AXIS UI + pyne on this PC — for Numba compile"
+                    onClick={() => {
+                      setEndpoint('http://127.0.0.1:5002');
+                      setEngine('server');
+                      setExecMode('compile');
+                      setPreferWs(true);
+                      setProbeMsg('');
+                    }}
+                  >
+                    Local pyne · compile
+                  </button>
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-ghost px-1.5 py-0.5 text-[10px] font-mono"
+                    data-testid="axis-endpoint-preset-vps"
+                    title="Demo API on the VPS (interpret/compile if numba installed there)"
+                    onClick={() => {
+                      setEndpoint('http://162.254.38.194:5002');
+                      setEngine('server');
+                      setProbeMsg('');
+                    }}
+                  >
+                    VPS pyne API
+                  </button>
+                </div>
                 <Show
                   when={(() => {
                     const ep = endpoint().trim().toLowerCase();
@@ -353,11 +383,23 @@ export const SettingsDialog: Component<Props> = (props) => {
                     return loop && remotePage;
                   })()}
                 >
-                  <p class="text-[10px] text-orange font-mono mt-0.5" data-testid="axis-endpoint-loopback-warn">
-                    Warning: Backend is loopback while AXIS is remote — Test hits{' '}
-                    <em>your PC</em>, not the VPS. Use{' '}
-                    <code class="text-text-dim">http://162.254.38.194:5002</code> for VPS pyne,
-                    or run pyne locally on :5002.
+                  <p
+                    class="text-[10px] text-orange font-mono mt-0.5 leading-relaxed"
+                    data-testid="axis-endpoint-loopback-warn"
+                  >
+                    <strong class="text-orange">VPS UI → local compile:</strong> Browser calls{' '}
+                    <em>this PC</em> at 127.0.0.1:5002 (not the VPS API). Checklist:
+                    <br />
+                    1) On PC: <code class="text-text-dim">pip install numba && make run</code> (pyne :5002)
+                    <br />
+                    2) Local CORS must allow this page origin (
+                    <code class="text-text-dim">
+                      {typeof location !== 'undefined' ? location.origin : '…'}
+                    </code>
+                    ) — latest pyne allows demo host by default, or{' '}
+                    <code class="text-text-dim">ALLOWED_ORIGINS=*</code>
+                    <br />
+                    3) Engine server · Mode compile · Test → then Save
                   </p>
                 </Show>
                 <Show when={probeMsg()}>
@@ -370,7 +412,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                   </p>
                 </Show>
                 <p class="text-[10px] text-text-faint mt-0.5">
-                  Used by the server engine and cloud script storage. CORS must allow this origin.
+                  Server engine + LSP (completion/hover) use this URL. Cross-origin needs CORS on
+                  pyne (page origin must be allowed).
                 </p>
               </div>
             </Show>
