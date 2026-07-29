@@ -84,6 +84,23 @@ describe('active config', () => {
     expect(cfg.endpoint).toBe('http://example.test:5002');
   });
 
+  it('surfaces execution mode and preferWs from pluginsConfig', () => {
+    setActivePlugin('engine', 'server');
+    setStore('pluginsConfig', {
+      'engine:server': { mode: 'compile', preferWs: false },
+    });
+    const cfg = getActiveEngineConfig();
+    expect(cfg.mode).toBe('compile');
+    expect(cfg.preferWs).toBe(false);
+    expect(cfg.endpoint).toBe('http://example.test:5002');
+  });
+
+  it('accepts auto execution mode', () => {
+    setActivePlugin('engine', 'server');
+    setStore('pluginsConfig', { 'engine:server': { mode: 'auto' } });
+    expect(getActiveEngineConfig().mode).toBe('auto');
+  });
+
   it('does not force endpoint for pyodide', () => {
     setActivePlugin('engine', 'pyodide');
     setStore('pluginsConfig', { 'engine:pyodide': { indexUrl: 'https://cdn.example/' } });

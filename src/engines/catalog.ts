@@ -74,9 +74,11 @@ export const serverEngine: EnginePlugin = {
     endpoint: { type: 'string', default: 'http://localhost:5002', label: 'Backend URL' },
     mode: {
       type: 'select',
-      options: ['interpret', 'compile'],
+      options: ['interpret', 'compile', 'auto'],
       default: 'interpret',
       label: 'Execution mode',
+      description:
+        'interpret = AST interpreter; compile = Numba/numpy path; auto = try compile, fall back to interpret',
     },
     preferWs: {
       type: 'boolean',

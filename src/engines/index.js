@@ -50,7 +50,19 @@ export const serverEngine = {
     description: 'Sends the script + bars to the configured backend (Flask or Cloudflare Worker) and renders its response.',
     configSchema: {
         endpoint: { type: 'string', default: 'http://localhost:5002', label: 'Backend URL' },
-        mode: { type: 'select', options: ['interpret', 'compile'], default: 'interpret', label: 'Execution mode' },
+        mode: {
+            type: 'select',
+            options: ['interpret', 'compile', 'auto'],
+            default: 'interpret',
+            label: 'Execution mode',
+            description:
+                'interpret = AST interpreter; compile = Numba/numpy path; auto = try compile, fall back to interpret',
+        },
+        preferWs: {
+            type: 'boolean',
+            default: true,
+            label: 'Prefer WebSocket (/ws/run)',
+        },
     },
     async isReady() {
         const state = getState();

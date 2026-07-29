@@ -26,11 +26,44 @@ import { listEngines } from '../engines/catalog';
 import { listStorages } from '../storage/catalog';
 import { CapabilityBadges, engineOptionLabel } from './plugin-badges';
 import { getEngine } from '../engines/catalog';
+import { pluginKey } from '../plugins/types';
 import {
   WATCHLIST_INTERVALS,
   WATCHLIST_REFRESH_OPTIONS,
 } from '../data/watchlist-tickers';
 import { loadSymbolData } from '../data/load-symbol';
+
+/** PYNE Runtime modes (server engine). */
+export type EngineExecMode = 'interpret' | 'compile' | 'auto';
+
+const EXEC_MODE_OPTIONS: { value: EngineExecMode; label: string; hint: string }[] = [
+  {
+    value: 'interpret',
+    label: 'Interpreter',
+    hint: 'AST walk — full language surface, slower on large history',
+  },
+  {
+    value: 'compile',
+    label: 'Compiler',
+    hint: 'Numba/numpy path — faster; some constructs stay object-mode',
+  },
+  {
+    value: 'auto',
+    label: 'Auto',
+    hint: 'Try compile first; fall back to interpret on failure',
+  },
+];
+
+function normalizeExecMode(raw: unknown, fallback: EngineExecMode = 'interpret'): EngineExecMode {
+  const s = String(raw || fallback);
+  if (s === 'compile' || s === 'auto' || s === 'interpret') return s;
+  return fallback;
+}
+
+function readEnginePluginConfig(engineId: string): Record<string, unknown> {
+  const pc = store.pluginsConfig || {};
+  return (pc[pluginKey('engine', engineId)] || pc[engineId] || {}) as Record<string, unknown>;
+}
 
 interface Props {
   open: boolean;
@@ -40,6 +73,8 @@ interface Props {
 export const SettingsDialog: Component<Props> = (props) => {
   const [endpoint, setEndpoint] = createSignal(store.endpoint);
   const [engine, setEngine] = createSignal(store.engine);
+  const [execMode, setExecMode] = createSignal<EngineExecMode>('interpret');
+  const [preferWs, setPreferWs] = createSignal(true);
   const [storage, setStorage] = createSignal(store.activePlugins?.storage || 'local');
   const [chartInterval, setChartInterval] = createSignal(store.interval);
   const [refreshSec, setRefreshSec] = createSignal(store.watchlist.refreshSec || 15);
@@ -60,11 +95,35 @@ export const SettingsDialog: Component<Props> = (props) => {
     const e = selectedEngine();
     return e?.id === 'server' || !!e?.configSchema?.endpoint;
   });
+  /** Server (and any engine with mode in configSchema) can pick interpret/compile/auto. */
+  const hasExecMode = createMemo(() => {
+    const schema = selectedEngine()?.configSchema;
+    return !!schema?.mode && schema.mode.type === 'select';
+  });
+  const hasPreferWs = createMemo(() => selectedEngine()?.configSchema?.preferWs?.type === 'boolean');
+  const execModeOptions = createMemo(() => {
+    const opts = selectedEngine()?.configSchema?.mode?.options;
+    if (!opts?.length) return EXEC_MODE_OPTIONS;
+    return EXEC_MODE_OPTIONS.filter((o) => opts.includes(o.value));
+  });
+  const execModeHint = createMemo(
+    () => EXEC_MODE_OPTIONS.find((o) => o.value === execMode())?.hint || '',
+  );
+
+  const hydrateEngineFields = (engineId: string) => {
+    const cfg = readEnginePluginConfig(engineId);
+    const schema = getEngine(engineId)?.configSchema;
+    const defaultMode = normalizeExecMode(schema?.mode?.default, 'interpret');
+    setExecMode(normalizeExecMode(cfg.mode, defaultMode));
+    if (typeof cfg.preferWs === 'boolean') setPreferWs(cfg.preferWs);
+    else setPreferWs(schema?.preferWs?.default !== false);
+  };
 
   createEffect(() => {
     if (props.open) {
       setEndpoint(store.endpoint);
       setEngine(store.engine);
+      hydrateEngineFields(store.engine);
       setStorage(store.activePlugins?.storage || 'local');
       setChartInterval(store.interval);
       setRefreshSec(store.watchlist.refreshSec || 15);
@@ -79,6 +138,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     const prevInterval = store.interval;
     const nextInterval = chartInterval().trim() || prevInterval;
     const nextRefresh = Math.min(120, Math.max(5, Math.round(Number(refreshSec()) || 15)));
+    const nextEngine = engine();
 
     setStore('endpoint', endpoint().trim());
     setStore('interval', nextInterval);
@@ -86,12 +146,24 @@ export const SettingsDialog: Component<Props> = (props) => {
     setStore('live', 'preferAfterLoad', preferAfterLoad());
     setStore('live', 'rerunOn', rerunOn());
     setStore('telemetry', 'hud', 'compact', hudCompact());
-    setActivePlugin('engine', engine());
+    setActivePlugin('engine', nextEngine);
     setActivePlugin('storage', storage());
+
+    // Persist engine execution mode / WS preference under pluginsConfig.engine:<id>
+    if (hasExecMode() || hasPreferWs()) {
+      const key = pluginKey('engine', nextEngine);
+      const prev = readEnginePluginConfig(nextEngine);
+      const nextCfg: Record<string, unknown> = { ...prev };
+      if (hasExecMode()) nextCfg.mode = execMode();
+      if (hasPreferWs()) nextCfg.preferWs = preferWs();
+      setStore('pluginsConfig', key, nextCfg);
+    }
+
     persist();
+    const modePart = hasExecMode() ? ` · mode=${execMode()}` : '';
     setStatus(
       'ready',
-      `Settings saved · ${nextInterval} · refresh ${nextRefresh}s · engine=${engine()} · live re-run=${rerunOn()}`,
+      `Settings saved · ${nextInterval} · refresh ${nextRefresh}s · engine=${nextEngine}${modePart} · live re-run=${rerunOn()}`,
     );
     // Reload chart bars if default interval changed
     if (nextInterval !== prevInterval && store.symbol) {
@@ -156,7 +228,11 @@ export const SettingsDialog: Component<Props> = (props) => {
                 id="axis-engine"
                 class="sc-input w-full"
                 value={engine()}
-                onChange={(e) => setEngine(e.currentTarget.value)}
+                onChange={(e) => {
+                  const id = e.currentTarget.value;
+                  setEngine(id);
+                  hydrateEngineFields(id);
+                }}
               >
                 <For each={engines()}>
                   {(en) => <option value={en.id}>{engineOptionLabel(en)}</option>}
@@ -174,6 +250,51 @@ export const SettingsDialog: Component<Props> = (props) => {
                 )}
               </Show>
             </div>
+
+            <Show when={hasExecMode()}>
+              <div class="flex flex-col gap-1">
+                <label
+                  class="text-[10px] text-text-dim uppercase tracking-wider"
+                  for="axis-exec-mode"
+                >
+                  Execution mode
+                </label>
+                <select
+                  id="axis-exec-mode"
+                  class="sc-input w-full"
+                  data-testid="axis-exec-mode"
+                  value={execMode()}
+                  onChange={(e) => setExecMode(normalizeExecMode(e.currentTarget.value))}
+                >
+                  <For each={execModeOptions()}>
+                    {(o) => <option value={o.value}>{o.label}</option>}
+                  </For>
+                </select>
+                <p class="text-[10px] text-text-faint mt-0.5">
+                  PYNE backend path for this engine. {execModeHint()}
+                </p>
+              </div>
+            </Show>
+
+            <Show when={hasPreferWs()}>
+              <label class="flex items-start gap-2 cursor-pointer" for="axis-prefer-ws">
+                <input
+                  id="axis-prefer-ws"
+                  type="checkbox"
+                  class="mt-0.5"
+                  data-testid="axis-prefer-ws"
+                  checked={preferWs()}
+                  onChange={(e) => setPreferWs(e.currentTarget.checked)}
+                />
+                <span>
+                  <span class="text-[12px] text-text">Prefer WebSocket run</span>
+                  <span class="block text-[10px] text-text-faint mt-0.5">
+                    Use <code class="font-mono">/ws/run</code> when the backend advertises it;
+                    fall back to REST <code class="font-mono">POST /run</code>.
+                  </span>
+                </span>
+              </label>
+            </Show>
 
             <Show when={needsEndpoint()}>
               <div class="flex flex-col gap-1">

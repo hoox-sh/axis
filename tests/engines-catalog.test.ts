@@ -47,22 +47,27 @@ describe('engines catalog', () => {
 
   it('server run success', async () => {
     restoreFetch = mockFetch(async (input) => {
-      expect(String(input)).toContain('/run');
+      const url = String(input);
+      expect(url).toContain('/run');
+      expect(url).toContain('mode=compile');
       return jsonResponse({
         status: 'success',
         plots: [1, 2, 3],
         series: { a: [1, 2, 3] },
         events: [],
         meta: { script_name: 't' },
+        mode: 'compile',
       });
     });
+    // preferWs: false forces REST so mockFetch is exercised (WS not mocked here)
     const r = await serverEngine.run({
       script: 'plot(close)',
       bars: SAMPLE_BARS,
-      config: { endpoint: 'http://engine.test:5002' },
+      config: { endpoint: 'http://engine.test:5002', mode: 'compile', preferWs: false },
     });
     expect(r.status).toBe('success');
     expect(r.plots).toEqual([1, 2, 3]);
+    expect(r.meta?.mode).toBe('compile');
   });
 
   it('server run error status', async () => {
@@ -72,10 +77,17 @@ describe('engines catalog', () => {
     const r = await serverEngine.run({
       script: 'bad',
       bars: SAMPLE_BARS,
-      config: { endpoint: 'http://engine.test:5002' },
+      config: { endpoint: 'http://engine.test:5002', preferWs: false },
     });
     expect(r.status).toBe('error');
     expect(r.error).toMatch(/bad pine|HTTP/);
+  });
+
+  it('server catalog exposes interpret|compile|auto modes', () => {
+    const mode = serverEngine.configSchema?.mode;
+    expect(mode?.type).toBe('select');
+    expect(mode?.options).toEqual(['interpret', 'compile', 'auto']);
+    expect(mode?.default).toBe('interpret');
   });
 
   it('server isReady probes root', async () => {

@@ -89,14 +89,24 @@ See [Script library](/axis/docs/enduser/guides/script-library). Manager hosts th
 
 | Field | Behavior |
 | --- | --- |
+| Engine | Registry engine list; labels via `engineOptionLabel` |
+| **Execution mode** | When the active engine exposes `configSchema.mode` (server): `interpret` \| `compile` \| `auto`. Stored in `pluginsConfig.engine:<id>.mode` and sent on each run (WS and REST). |
+| Prefer WebSocket run | Server engine: prefer `/ws/run` over REST when available |
 | Backend URL | Shown when engine is `server` or has `configSchema.endpoint` |
 | Test / Probe | `GET` health against endpoint; status message |
-| Engine | Registry engine list; labels via `engineOptionLabel` |
 | Storage | `local` \| `cloud` \| `git` |
 | Default interval | Updates store; may reload bars for current symbol |
 | Watchlist refresh | Clamp 5–120 seconds |
 
-Save persists via Solid store `persist()` into `pynescript.axis.v1`. Escape closes; Ctrl/Cmd+Enter saves.
+**Execution mode** maps to PYNE `Runtime.run(..., mode=…)`:
+
+| Mode | Behavior |
+| --- | --- |
+| `interpret` | Full AST interpreter (default) |
+| `compile` | Numba/numpy compiled path |
+| `auto` | Try compile; fall back to interpret on failure |
+
+The Connection HUD engine chip shows the selected mode. Save persists via Solid store `persist()` into `pynescript.axis.v1`. Escape closes; Ctrl/Cmd+Enter saves.
 
 **Pyodide engines** hide endpoint—calculation is same-origin assets, not Flask.
 
