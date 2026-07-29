@@ -6,7 +6,8 @@
 /* AXIS legacy shell — void pack (indigo) aligned with Solid path / landing */
 
 :root {
-    --radius: 2px;
+    --radius: 4px;
+    --radius-input: 6px;
     --bg-base: #0a0b10;
     --bg-panel: #111218;
     --bg-elev: #171821;
@@ -98,11 +99,12 @@ body {
     background-color: var(--bg-elev);
     color: var(--text);
     border: 1px solid var(--border);
-    border-radius: 2px;
-    padding: 4px 8px;
+    border-radius: var(--radius-input, 6px);
+    padding: 5px 10px;
     font-size: 12px;
     outline: none;
     min-width: 80px;
+    margin: 1px 0;
 }
 
 .topbar-input:focus,
@@ -355,10 +357,11 @@ body {
     width: 100%;
     background: transparent;
     border: 1px solid var(--border);
-    border-radius: 2px;
+    border-radius: var(--radius-input, 6px);
     color: var(--text-primary);
     font-size: 11px;
-    padding: 4px 6px;
+    padding: 6px 8px;
+    margin: 2px 0;
     outline: none;
 }
 
@@ -839,8 +842,9 @@ body {
     background: var(--bg-elev);
     color: var(--text);
     border: 1px solid var(--border);
-    border-radius: 2px;
-    padding: 6px 8px;
+    border-radius: var(--radius-input, 6px);
+    padding: 8px 12px;
+    margin: 2px 0;
     font-size: 13px;
     font-family: inherit;
     outline: none;

@@ -21,9 +21,8 @@
  * Floatable / dockable panel chrome with drag handle + skeleton preview.
  */
 
-import { Component, JSX, Show, createSignal, onCleanup } from 'solid-js';
+import { Component, For, JSX, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import {
-  store,
   getPanelChrome,
   setPanelOpen,
   setPanelDock,
@@ -79,6 +78,17 @@ export function getDragPreview() {
   return dragPreview;
 }
 
+const HOLD_MS = 280;
+const MOVE_PX = 6;
+
+const DOCK_MENU = [
+  { dock: 'left' as const, label: 'Dock left', Icon: Icons.panelLeft },
+  { dock: 'right' as const, label: 'Dock right', Icon: Icons.panelRight },
+  { dock: 'bottom' as const, label: 'Dock bottom', Icon: Icons.panelBottom },
+  { dock: 'float' as const, label: 'Float', Icon: Icons.square },
+  { dock: 'window' as const, label: 'New window', Icon: Icons.popout },
+];
+
 export const FloatableShell: Component<FloatableShellProps> = (props) => {
   const meta = () => PANEL_META[props.id];
   const chrome = () => getPanelChrome(props.id);
@@ -86,12 +96,18 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   const dock = () => chrome().dock;
   const isFloat = () => dock() === 'float' || dock() === 'window';
 
+  const [menuOpen, setMenuOpen] = createSignal(false);
+
   let rootEl: HTMLDivElement | undefined;
+  let menuWrapEl: HTMLDivElement | undefined;
   let drag: DragState | null = null;
+  let holdTimer: ReturnType<typeof setTimeout> | undefined;
+  let pendingDrag = false;
 
   const close = () => setPanelOpen(props.id, false);
 
   const setDock = (d: PanelDock) => {
+    setMenuOpen(false);
     setPanelDock(props.id, d);
     if (d === 'float') {
       // Seed float position near center-right if still at origin defaults
@@ -110,19 +126,16 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     }
   };
 
-  const onHandlePointerDown = (e: PointerEvent) => {
-    if (e.button !== 0) return;
-    const target = e.target as HTMLElement;
-    if (target.closest('button, a, input, select, textarea')) return;
-
+  const beginMoveDrag = (clientX: number, clientY: number) => {
+    setMenuOpen(false);
     const c = getPanelChrome(props.id);
     // Undock to float on drag from docked layout
     if (c.dock !== 'float' && c.dock !== 'window') {
       const rect = rootEl?.getBoundingClientRect();
       setPanelDock(props.id, 'float');
       setPanelGeometry(props.id, {
-        x: rect?.left ?? e.clientX - 40,
-        y: rect?.top ?? e.clientY - 12,
+        x: rect?.left ?? clientX - 40,
+        y: rect?.top ?? clientY - 12,
         w: rect?.width ?? c.w,
         h: rect?.height ?? c.h,
       });
@@ -132,16 +145,14 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     const cur = getPanelChrome(props.id);
     drag = {
       mode: 'move',
-      startX: e.clientX,
-      startY: e.clientY,
+      startX: clientX,
+      startY: clientY,
       origX: cur.x,
       origY: cur.y,
       origW: cur.w,
       origH: cur.h,
-      pointerId: e.pointerId,
+      pointerId: -1,
     };
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    e.preventDefault();
 
     const onMove = (ev: PointerEvent) => {
       if (!drag || drag.mode !== 'move') return;
@@ -181,11 +192,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       if (!drag) return;
       const zone = hitDropZone(ev.clientX, ev.clientY);
       const nextDock = dropZoneToDock(zone);
-      if (nextDock !== 'float') {
-        setPanelDock(props.id, nextDock);
-      } else {
-        setPanelDock(props.id, 'float');
-      }
+      setPanelDock(props.id, nextDock !== 'float' ? nextDock : 'float');
       drag = null;
       setDragPreview(null);
       window.removeEventListener('pointermove', onMove);
@@ -196,12 +203,85 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
-    onCleanup(() => {
+  };
+
+  /** Title bar: drag immediately (not hamburger / menu / close). */
+  const onHandlePointerDown = (e: PointerEvent) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, input, select, textarea, .axis-panel-menu')) return;
+    e.preventDefault();
+    beginMoveDrag(e.clientX, e.clientY);
+  };
+
+  /**
+   * Hamburger: click → expand dock menu; hold or drag → move panel.
+   */
+  const onHamburgerPointerDown = (e: PointerEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    pendingDrag = false;
+
+    const clearHold = () => {
+      if (holdTimer != null) {
+        clearTimeout(holdTimer);
+        holdTimer = undefined;
+      }
+    };
+
+    const startDrag = () => {
+      if (pendingDrag) return;
+      pendingDrag = true;
+      clearHold();
+      beginMoveDrag(startX, startY);
+    };
+
+    holdTimer = setTimeout(startDrag, HOLD_MS);
+
+    const onMove = (ev: PointerEvent) => {
+      if (pendingDrag) return;
+      if (Math.abs(ev.clientX - startX) > MOVE_PX || Math.abs(ev.clientY - startY) > MOVE_PX) {
+        startDrag();
+      }
+    };
+
+    const onUp = () => {
+      clearHold();
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
-    });
+      if (!pendingDrag) {
+        setMenuOpen((o) => !o);
+      }
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   };
+
+  // Close dock menu on outside click / Escape
+  onMount(() => {
+    const onDocPointerDown = (e: PointerEvent) => {
+      if (!menuOpen()) return;
+      const t = e.target as Node;
+      if (menuWrapEl && !menuWrapEl.contains(t)) setMenuOpen(false);
+    };
+    const onDocKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onDocPointerDown, true);
+    document.addEventListener('keydown', onDocKey);
+    onCleanup(() => {
+      document.removeEventListener('pointerdown', onDocPointerDown, true);
+      document.removeEventListener('keydown', onDocKey);
+      if (holdTimer != null) clearTimeout(holdTimer);
+    });
+  });
 
   const onResizePointerDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
@@ -286,65 +366,57 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
         if (isFloat()) bumpPanelZ(props.id);
       }}
     >
-      {/* Title bar / drag handle */}
+      {/* Title bar — drag on title; hamburger click = menu, hold = drag */}
       <div
-        class="axis-panel-handle sc-float-panel-header cursor-grab active:cursor-grabbing select-none"
+        class="axis-panel-handle sc-float-panel-header cursor-grab active:cursor-grabbing select-none relative"
         onPointerDown={onHandlePointerDown}
-        title="Drag to move · drop on edges to dock"
+        title="Drag title to move · drop on edges to dock"
       >
-        <span class="axis-panel-grip" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </span>
+        <div
+          class="axis-panel-menu relative flex-shrink-0"
+          ref={menuWrapEl}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            class={`sc-btn sc-btn-ghost px-1 ${menuOpen() ? 'text-accent' : ''}`}
+            title="Click: dock options · Hold: drag panel"
+            aria-label="Panel menu"
+            aria-expanded={menuOpen()}
+            aria-haspopup="menu"
+            onPointerDown={onHamburgerPointerDown}
+          >
+            <Icons.menu />
+          </button>
+          <Show when={menuOpen()}>
+            <div
+              class="axis-panel-menu-pop"
+              role="menu"
+              aria-label="Dock position"
+            >
+              <For each={DOCK_MENU}>
+                {(item) => {
+                  const ItemIcon = item.Icon;
+                  const active = () => dock() === item.dock;
+                  return (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      class={`axis-panel-menu-item ${active() ? 'is-active' : ''}`}
+                      onClick={() => setDock(item.dock)}
+                    >
+                      <ItemIcon />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                }}
+              </For>
+            </div>
+          </Show>
+        </div>
         <span class="flex-1 truncate min-w-0">{title()}</span>
         <Show when={props.headerExtra}>{props.headerExtra}</Show>
         <div class="flex items-center gap-0.5 flex-shrink-0" onPointerDown={(e) => e.stopPropagation()}>
-          <button
-            type="button"
-            class={`sc-btn sc-btn-ghost px-1 ${dock() === 'left' ? 'text-accent' : ''}`}
-            title="Dock left"
-            aria-label="Dock left"
-            onClick={() => setDock('left')}
-          >
-            <Icons.panelLeft />
-          </button>
-          <button
-            type="button"
-            class={`sc-btn sc-btn-ghost px-1 ${dock() === 'right' ? 'text-accent' : ''}`}
-            title="Dock right"
-            aria-label="Dock right"
-            onClick={() => setDock('right')}
-          >
-            <Icons.panelRight />
-          </button>
-          <button
-            type="button"
-            class={`sc-btn sc-btn-ghost px-1 ${dock() === 'bottom' ? 'text-accent' : ''}`}
-            title="Dock bottom"
-            aria-label="Dock bottom"
-            onClick={() => setDock('bottom')}
-          >
-            <Icons.panelBottom />
-          </button>
-          <button
-            type="button"
-            class={`sc-btn sc-btn-ghost px-1 ${dock() === 'float' ? 'text-accent' : ''}`}
-            title="Float"
-            aria-label="Float panel"
-            onClick={() => setDock('float')}
-          >
-            <Icons.square />
-          </button>
-          <button
-            type="button"
-            class={`sc-btn sc-btn-ghost px-1 ${dock() === 'window' ? 'text-accent' : ''}`}
-            title="Open in new window"
-            aria-label="New window"
-            onClick={() => setDock('window')}
-          >
-            <Icons.popout />
-          </button>
           <button
             type="button"
             class="sc-btn sc-btn-ghost px-1"

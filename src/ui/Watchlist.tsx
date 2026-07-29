@@ -24,37 +24,29 @@ import {
   persist,
   addWatchlistSymbol,
   removeWatchlistSymbol,
-  setWatchlistRefreshSec,
   isPanelOpen,
 } from '../store';
 import { loadSymbolData } from '../data/load-symbol';
-import {
-  fetchWatchlistTickers,
-  WATCHLIST_INTERVALS,
-  WATCHLIST_REFRESH_OPTIONS,
-  type WatchTicker,
-} from '../data/watchlist-tickers';
+import { fetchWatchlistTickers, type WatchTicker } from '../data/watchlist-tickers';
 import { FloatableShell } from './panels/FloatableShell';
 
 export const Watchlist: Component = () => {
   const [prices, setPrices] = createSignal<Record<string, WatchTicker>>({});
   const [addValue, setAddValue] = createSignal('');
-  const [refreshing, setRefreshing] = createSignal(false);
   let timer: ReturnType<typeof setInterval> | undefined;
 
   const fetchPrices = async () => {
     const symbols = store.watchlist.symbols;
     if (!symbols.length) return;
-    setRefreshing(true);
     try {
       const next = await fetchWatchlistTickers(symbols, store.source);
       setPrices(next);
-    } finally {
-      setRefreshing(false);
+    } catch {
+      /* keep last good quotes */
     }
   };
 
-  // Re-poll when symbols, source, or refresh interval change
+  // Re-poll when symbols, source, or refresh interval change (interval from Settings)
   createEffect(() => {
     const _syms = store.watchlist.symbols.join(',');
     const _src = store.source;
@@ -77,16 +69,6 @@ export const Watchlist: Component = () => {
     await loadSymbolData(sym, store.interval, store.source);
   };
 
-  const onInterval = async (iv: string) => {
-    if (iv === store.interval) return;
-    setStore('interval', iv);
-    persist();
-    // Reload chart for active symbol on the new interval
-    if (store.symbol) {
-      await loadSymbolData(store.symbol, iv, store.source);
-    }
-  };
-
   const onAdd = () => {
     let v = addValue().trim().toUpperCase();
     if (!v) return;
@@ -106,68 +88,9 @@ export const Watchlist: Component = () => {
           maximumFractionDigits: n < 1 ? 6 : 2,
         });
 
-  const sourceShort = () => {
-    const s = store.source || '';
-    if (s.includes('binance')) return 'BN';
-    if (s.includes('okx')) return 'OKX';
-    if (s.includes('bybit')) return 'BB';
-    if (s.includes('coinbase')) return 'CB';
-    if (s.includes('mock')) return 'MOCK';
-    if (s.includes('csv')) return 'CSV';
-    return s.slice(0, 6) || '—';
-  };
-
   return (
     <Show when={isPanelOpen('watchlist') || store.watchlist.open}>
-      <FloatableShell
-        id="watchlist"
-        testId="axis-watchlist"
-        headerExtra={
-          <span
-            class="text-[0.78em] font-mono text-text-faint px-1"
-            title={`Quotes from ${store.source}`}
-          >
-            {sourceShort()}
-            <button
-              type="button"
-              class="sc-btn sc-btn-ghost px-1 ml-0.5"
-              title="Refresh quotes"
-              disabled={refreshing()}
-              onClick={() => void fetchPrices()}
-            >
-              {refreshing() ? '…' : '↻'}
-            </button>
-          </span>
-        }
-      >
-        {/* Interval + quote refresh — compact controls */}
-        <div class="flex items-center gap-1 px-2 py-1 border-b border-border-soft flex-shrink-0">
-          <span class="text-[9px] text-text-faint uppercase tracking-wider shrink-0">TF</span>
-          <select
-            class="sc-input flex-1 text-[11px] py-0.5 min-w-0"
-            value={store.interval}
-            title="Chart interval · applies on symbol select"
-            onChange={(e) => void onInterval(e.currentTarget.value)}
-          >
-            <For each={[...WATCHLIST_INTERVALS]}>
-              {(i) => <option value={i}>{i}</option>}
-            </For>
-          </select>
-          <span class="text-[9px] text-text-faint uppercase tracking-wider shrink-0" title="Quote poll">
-            ↻
-          </span>
-          <select
-            class="sc-input w-[52px] text-[11px] py-0.5 shrink-0"
-            value={String(store.watchlist.refreshSec || 15)}
-            title="Watchlist quote refresh interval"
-            onChange={(e) => setWatchlistRefreshSec(Number(e.currentTarget.value))}
-          >
-            <For each={[...WATCHLIST_REFRESH_OPTIONS]}>
-              {(o) => <option value={o.value}>{o.label}</option>}
-            </For>
-          </select>
-        </div>
-
+      <FloatableShell id="watchlist" testId="axis-watchlist">
         <div class="flex-1 overflow-y-auto min-h-0">
           <For each={store.watchlist.symbols}>
             {(sym) => {
@@ -217,7 +140,7 @@ export const Watchlist: Component = () => {
           </For>
         </div>
 
-        <div class="border-t-2 border-border p-1.5 flex-shrink-0 flex flex-col gap-1">
+        <div class="border-t-2 border-border p-2 flex-shrink-0">
           <input
             class="sc-input w-full text-[11px]"
             placeholder="Add symbol… (BTC or BTCUSDT)"
@@ -227,12 +150,7 @@ export const Watchlist: Component = () => {
               if (e.key === 'Enter') onAdd();
             }}
           />
-          <div class="text-[9px] text-text-faint font-mono truncate" title={store.source}>
-            {store.interval} · {store.source}
-            {store.watchlist.refreshSec ? ` · ${store.watchlist.refreshSec}s` : ''}
-          </div>
         </div>
-
       </FloatableShell>
     </Show>
   );

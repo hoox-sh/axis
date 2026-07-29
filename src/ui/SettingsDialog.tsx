@@ -336,7 +336,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                 zoomed). Live preview — Save to keep.
               </p>
               <div
-                class="flex items-center gap-2 mt-0.5 p-2 bg-bg-elev border border-border-soft"
+                class="flex items-center gap-2 mt-0.5 p-2.5 bg-bg-elev border border-border-soft rounded-[var(--radius-sc)]"
                 aria-hidden="true"
               >
                 <button type="button" class="sc-btn sc-btn-primary">
@@ -353,7 +353,7 @@ export const SettingsDialog: Component<Props> = (props) => {
 
             <div class="sc-section">
               <div class="sc-section-title">Engine</div>
-            <div class="flex flex-col gap-1">
+            <div class="sc-field">
               <label class="sc-label" for="axis-engine">
                 Calculation engine
               </label>
@@ -385,7 +385,7 @@ export const SettingsDialog: Component<Props> = (props) => {
             </div>
 
             <Show when={hasExecMode()}>
-              <div class="flex flex-col gap-1" data-testid="axis-exec-mode-field">
+              <div class="sc-field" data-testid="axis-exec-mode-field">
                 <label
                   class="text-[10px] text-text-dim uppercase tracking-wider"
                   for="axis-exec-mode"
@@ -432,7 +432,7 @@ export const SettingsDialog: Component<Props> = (props) => {
             </Show>
 
             <Show when={needsEndpoint()}>
-              <div class="flex flex-col gap-1">
+              <div class="sc-field">
                 <label
                   class="text-[10px] text-text-dim uppercase tracking-wider"
                   for="axis-endpoint"
@@ -538,7 +538,7 @@ export const SettingsDialog: Component<Props> = (props) => {
               </div>
             </Show>
 
-            <div class="flex flex-col gap-1">
+            <div class="sc-field">
               <label class="text-[10px] text-text-dim uppercase tracking-wider" for="axis-storage">
                 Script storage
               </label>
@@ -568,7 +568,7 @@ export const SettingsDialog: Component<Props> = (props) => {
             <div class="sc-section">
               <div class="sc-section-title">Chart &amp; watchlist</div>
 
-              <div class="flex flex-col gap-1">
+              <div class="sc-field">
                 <label class="sc-label" for="axis-default-interval">
                   Default interval
                 </label>
@@ -608,7 +608,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                   </span>
                 </label>
 
-                <div class="flex flex-col gap-1">
+                <div class="sc-field">
                   <label
                     class="text-[10px] text-text-dim uppercase tracking-wider"
                     for="axis-rerun-on"
@@ -650,7 +650,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                 </label>
               </div>
 
-              <div class="flex flex-col gap-1">
+              <div class="sc-field">
                 <label
                   class="text-[10px] text-text-dim uppercase tracking-wider"
                   for="axis-watchlist-refresh"
@@ -669,7 +669,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                 </select>
                 <p class="text-[10px] text-text-faint mt-0.5">
                   How often the watchlist polls live prices (source-aware: Binance / OKX / Bybit /
-                  Coinbase). Also adjustable from the watchlist panel.
+                  Coinbase).
                 </p>
               </div>
             </div>

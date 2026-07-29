@@ -255,7 +255,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
 
   return (
     <div class="flex flex-col gap-3 text-[11px]">
-      <div class="flex flex-col gap-1">
+      <div class="sc-field">
         <label class="text-[10px] text-text-dim uppercase tracking-wider">Storage backend</label>
         <select
           class="sc-input"
@@ -276,7 +276,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
       </div>
 
       <Show when={isCloud()}>
-        <div class="border-2 border-border p-2 flex flex-col gap-1.5 bg-bg-elev">
+        <div class="border-2 border-border p-2.5 flex flex-col gap-2 bg-bg-elev rounded-[var(--radius-sc)]">
           <div class="text-[10px] text-text-dim uppercase tracking-wider">Cloud credentials</div>
           <input
             class="sc-input font-mono text-[11px]"
@@ -307,7 +307,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
       </Show>
 
       <Show when={isGit()}>
-        <div class="border-2 border-border p-2 flex flex-col gap-1.5 bg-bg-elev">
+        <div class="border-2 border-border p-2.5 flex flex-col gap-2 bg-bg-elev rounded-[var(--radius-sc)]">
           <div class="text-[10px] text-text-dim uppercase tracking-wider">Git repository</div>
           <select
             class="sc-input"
@@ -385,7 +385,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
         </div>
       </Show>
 
-      <div class="border-2 border-border p-2 flex flex-col gap-1.5 bg-bg-elev">
+      <div class="border-2 border-border p-2.5 flex flex-col gap-2 bg-bg-elev rounded-[var(--radius-sc)]">
         <div class="text-[10px] text-text-dim uppercase tracking-wider">Save current editor</div>
         <input
           class="sc-input"

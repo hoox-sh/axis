@@ -259,7 +259,7 @@ const InputField: Component<{
   const val = () => props.field.value ?? props.field.default;
 
   return (
-    <div class="flex flex-col gap-0.5">
+    <div class="sc-field">
       <label class="text-[11px] text-text-dim" for={id()} title={props.field.tooltip || undefined}>
         {props.field.title}
         <Show when={props.field.tooltip}>
@@ -305,7 +305,7 @@ const InputField: Component<{
           <input
             id={id()}
             type="color"
-            class="h-8 w-10 border-2 border-border bg-bg-elev cursor-pointer p-0"
+            class="h-8 w-10 border-2 border-border bg-bg-elev cursor-pointer p-0 rounded-[var(--radius-input)]"
             value={toHexColor(val())}
             onInput={(e) => props.onChange(e.currentTarget.value)}
           />
