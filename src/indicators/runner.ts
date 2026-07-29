@@ -319,25 +319,84 @@ export async function runAndApply(
   return result;
 }
 
+/** True if endpoint host is loopback (browser = this machine, not the VPS). */
+function endpointIsLoopback(endpoint: string): boolean {
+  try {
+    const u = new URL(endpoint.includes('://') ? endpoint : `http://${endpoint}`);
+    const h = u.hostname.toLowerCase();
+    return h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '0.0.0.0';
+  } catch {
+    return /localhost|127\.0\.0\.1/.test(endpoint);
+  }
+}
+
+/** Page is served from a non-loopback host (e.g. VPS demo). */
+function pageIsRemote(): boolean {
+  if (typeof location === 'undefined') return false;
+  const h = location.hostname.toLowerCase();
+  return h !== 'localhost' && h !== '127.0.0.1' && h !== '' && h !== '[::1]';
+}
+
 /** Probe Pro API health at current endpoint. */
 export async function probeEndpoint(endpoint?: string): Promise<{ ok: boolean; message: string }> {
-  const base = (endpoint || store.endpoint).replace(/\/$/, '');
+  const base = (endpoint || store.endpoint || '').replace(/\/$/, '');
+  if (!base) {
+    return { ok: false, message: 'No Backend URL set' };
+  }
+
+  const loopback = endpointIsLoopback(base);
+  const remotePage = pageIsRemote();
+
   try {
     const res = await fetch(`${base}/`, {
       method: 'GET',
       signal: AbortSignal.timeout(8_000),
+      mode: 'cors',
     });
-    if (!res.ok) return { ok: false, message: `HTTP ${res.status}` };
+    if (!res.ok) return { ok: false, message: `HTTP ${res.status} from ${base}` };
     const text = await res.text();
     let detail = `HTTP ${res.status}`;
     try {
-      const j = JSON.parse(text);
-      if (j.endpoints || j.status) detail = 'Pro API reachable';
+      const j = JSON.parse(text) as { endpoints?: unknown; status?: unknown; service?: string };
+      if (j.endpoints || j.status) {
+        detail = j.service ? `Pro API reachable (${j.service})` : 'Pro API reachable';
+      }
     } catch {
       /* plain text ok */
     }
+    if (loopback && remotePage) {
+      detail += ' · note: loopback API is on *this* PC, not the VPS';
+    }
     return { ok: true, message: detail };
   } catch (e: unknown) {
-    return { ok: false, message: e instanceof Error ? e.message : String(e) };
+    const raw = e instanceof Error ? e.message : String(e);
+    const isNet =
+      /networkerror|failed to fetch|load failed|network request failed/i.test(raw) ||
+      (e instanceof TypeError && /fetch/i.test(raw));
+
+    if (isNet && loopback) {
+      return {
+        ok: false,
+        message:
+          `Cannot reach ${base} (browser → this machine). ` +
+          (remotePage
+            ? 'AXIS is on a remote host: localhost is *your PC*, not the VPS. ' +
+              'Start local pyne on :5002, or set Backend URL to the VPS API ' +
+              '(e.g. http://162.254.38.194:5002).'
+            : 'Is pyne Pro API running? (cd pyne && make run)'),
+      };
+    }
+    if (isNet) {
+      return {
+        ok: false,
+        message:
+          `Cannot reach ${base}. Check: API process up, port open, firewall, ` +
+          `CORS ALLOWED_ORIGINS includes this page origin (${typeof location !== 'undefined' ? location.origin : '?'}).`,
+      };
+    }
+    if (/abort|timeout/i.test(raw)) {
+      return { ok: false, message: `Timeout probing ${base} (8s)` };
+    }
+    return { ok: false, message: raw };
   }
 }

@@ -339,9 +339,30 @@ export const SettingsDialog: Component<Props> = (props) => {
                     Test
                   </button>
                 </div>
+                <Show
+                  when={(() => {
+                    const ep = endpoint().trim().toLowerCase();
+                    const loop =
+                      ep.includes('localhost') ||
+                      ep.includes('127.0.0.1') ||
+                      ep.includes('0.0.0.0');
+                    const remotePage =
+                      typeof location !== 'undefined' &&
+                      location.hostname !== 'localhost' &&
+                      location.hostname !== '127.0.0.1';
+                    return loop && remotePage;
+                  })()}
+                >
+                  <p class="text-[10px] text-orange font-mono mt-0.5" data-testid="axis-endpoint-loopback-warn">
+                    Warning: Backend is loopback while AXIS is remote — Test hits{' '}
+                    <em>your PC</em>, not the VPS. Use{' '}
+                    <code class="text-text-dim">http://162.254.38.194:5002</code> for VPS pyne,
+                    or run pyne locally on :5002.
+                  </p>
+                </Show>
                 <Show when={probeMsg()}>
                   <p
-                    class={`text-[10px] font-mono mt-0.5 ${
+                    class={`text-[10px] font-mono mt-0.5 break-words ${
                       probeMsg().startsWith('✓') ? 'text-accent-2' : 'text-red'
                     }`}
                   >
