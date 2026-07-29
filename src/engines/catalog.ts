@@ -502,10 +502,10 @@ let registered = false;
 export function ensureEnginesRegistered(): void {
   if (registered) return;
   registered = true;
+  // Always (re)install built-ins so a dynamic plugin cannot leave a stale
+  // `server` entry without configSchema.mode (Settings hides Execution mode).
   for (const e of BUILTIN_ENGINES) {
-    if (!registry.getEngine(e.id)) {
-      registry.registerEngine(e);
-    }
+    registry.registerEngine(e);
   }
 }
 
@@ -523,6 +523,13 @@ export function registerDynamicEngine(engine: EnginePlugin): void {
   ensureEnginesRegistered();
   if (!engine?.id || engine.kind !== 'engine') throw new Error('Invalid engine plugin');
   if (typeof engine.run !== 'function') throw new Error('Engine must implement run()');
+  // Refuse to replace built-in server/pyodide (preserves Settings schema + run path)
+  const existing = registry.getEngine(engine.id);
+  if (existing?.builtIn && (engine.id === 'server' || engine.id === 'pyodide')) {
+    throw new Error(
+      `Cannot replace built-in engine "${engine.id}" — use a different plugin id`,
+    );
+  }
   registry.registerEngine({ ...engine, builtIn: engine.builtIn ?? false });
 }
 

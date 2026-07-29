@@ -95,16 +95,29 @@ export const SettingsDialog: Component<Props> = (props) => {
     const e = selectedEngine();
     return e?.id === 'server' || !!e?.configSchema?.endpoint;
   });
-  /** Server (and any engine with mode in configSchema) can pick interpret/compile/auto. */
+  /**
+   * Execution mode: always for built-in server/pyodide (by id), plus any engine
+   * that advertises configSchema.mode. Do not rely only on schema discovery —
+   * a dynamic plugin that clobbered `server` used to hide the control.
+   */
   const hasExecMode = createMemo(() => {
+    const id = engine() || selectedEngine()?.id || '';
+    if (id === 'server' || id === 'pyodide') return true;
     const schema = selectedEngine()?.configSchema;
-    return !!schema?.mode && schema.mode.type === 'select';
+    if (!schema?.mode) return false;
+    // Accept select schemas even if type string was lost on a shallow clone
+    return schema.mode.type === 'select' || Array.isArray(schema.mode.options);
   });
-  const hasPreferWs = createMemo(() => selectedEngine()?.configSchema?.preferWs?.type === 'boolean');
+  const hasPreferWs = createMemo(() => {
+    const id = engine() || selectedEngine()?.id || '';
+    if (id === 'server') return true;
+    return selectedEngine()?.configSchema?.preferWs?.type === 'boolean';
+  });
   const execModeOptions = createMemo(() => {
     const opts = selectedEngine()?.configSchema?.mode?.options;
     if (!opts?.length) return EXEC_MODE_OPTIONS;
-    return EXEC_MODE_OPTIONS.filter((o) => opts.includes(o.value));
+    const filtered = EXEC_MODE_OPTIONS.filter((o) => opts.includes(o.value));
+    return filtered.length ? filtered : EXEC_MODE_OPTIONS;
   });
   const execModeHint = createMemo(
     () => EXEC_MODE_OPTIONS.find((o) => o.value === execMode())?.hint || '',
@@ -252,7 +265,7 @@ export const SettingsDialog: Component<Props> = (props) => {
             </div>
 
             <Show when={hasExecMode()}>
-              <div class="flex flex-col gap-1">
+              <div class="flex flex-col gap-1" data-testid="axis-exec-mode-field">
                 <label
                   class="text-[10px] text-text-dim uppercase tracking-wider"
                   for="axis-exec-mode"
@@ -273,7 +286,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                 <p class="text-[10px] text-text-faint mt-0.5">
                   {engine() === 'pyodide'
                     ? `Browser path. ${execModeHint()} Pure Numba compile still needs the server engine.`
-                    : `Pro API path for this engine. ${execModeHint()}`}
+                    : `Pro API path (server engine). ${execModeHint()}`}
                 </p>
               </div>
             </Show>
