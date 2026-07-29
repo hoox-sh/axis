@@ -66,14 +66,17 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       detail: mode,
       error: null,
     });
+    // Outer budget must cover WS probe + REST fallback (engine manages sub-budgets).
     const timeoutMs = silent
-      ? 45_000
-      : Math.min(180_000, Math.max(60_000, 30_000 + (store.bars?.length || 0) * 80));
+      ? 60_000
+      : Math.min(180_000, Math.max(90_000, 45_000 + (store.bars?.length || 0) * 40));
     const result = await engine.run({
       script,
       bars: store.bars,
       config,
-      signal: AbortSignal.timeout(timeoutMs),
+      // Do not abort the whole run on a short timer while engine may still REST-fallback.
+      // Engine uses its own AbortSignal.timeout for HTTP; pass undefined for max reliability.
+      signal: undefined,
     });
     const ms = result.meta?.ms ?? performance.now() - t0;
     const runTransport =

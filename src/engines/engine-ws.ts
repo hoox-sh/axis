@@ -193,7 +193,9 @@ class EngineWsClient {
   }
 
   run(req: EngineWsRunRequest, timeoutMs: number): Promise<EngineWsResult> {
-    return this.ensureConnected().then(
+    // Fast-fail connect (gunicorn without a WS worker often 404/hangs here).
+    const connectMs = Math.min(4_000, Math.max(1_500, Math.floor(timeoutMs / 3)));
+    return this.ensureConnected(connectMs).then(
       () =>
         new Promise<EngineWsResult>((resolve, reject) => {
           if (!this.ws || this.ws.readyState !== 1) {
@@ -203,6 +205,13 @@ class EngineWsClient {
           const id = req.id || `r${++this.reqSeq}_${Date.now().toString(36)}`;
           const timer = setTimeout(() => {
             this.pending.delete(id);
+            // Mark dead so subsequent runs skip WS and go straight to REST.
+            this.dead = true;
+            try {
+              this.ws?.close();
+            } catch {
+              /* ignore */
+            }
             reject(new Error('WebSocket run timeout'));
           }, timeoutMs);
           this.pending.set(id, { resolve, reject, timer });

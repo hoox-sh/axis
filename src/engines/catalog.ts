@@ -121,17 +121,22 @@ export const serverEngine: EnginePlugin = {
     const mode = String(cfg.mode || 'interpret');
     const preferWs = cfg.preferWs !== false;
     const t0 = performance.now();
+    // Generous budget: compile + large OHLCV can exceed 30s on cold Numba.
     const timeoutMs = Math.min(
       180_000,
-      Math.max(60_000, 30_000 + (bars?.length || 0) * 80),
+      Math.max(90_000, 45_000 + (bars?.length || 0) * 40),
     );
 
-    // ── WSS-first path ────────────────────────────────────────────
+    // ── WSS-first path (short budget so REST still has time) ──────
+    // Gunicorn default workers do NOT speak WebSocket — connect can hang then
+    // burn the whole AbortSignal; REST fallback must get a *fresh* timeout.
     if (preferWs && typeof WebSocket !== 'undefined') {
       try {
         const { getEngineWsClient } = await import('./engine-ws');
         const client = getEngineWsClient(endpoint);
         if (!client.isDead) {
+          // Cap WS attempt so a dead /ws/run cannot exhaust the run budget.
+          const wsBudget = Math.min(20_000, Math.max(8_000, Math.floor(timeoutMs / 4)));
           const wsResult = await client.run(
             {
               script,
@@ -140,7 +145,7 @@ export const serverEngine: EnginePlugin = {
               // Always a string — API schema rejects null/omitted-as-null
               symbol: typeof store.symbol === 'string' && store.symbol ? store.symbol : 'CHART',
             },
-            timeoutMs,
+            wsBudget,
           );
           const ms = performance.now() - t0;
           if (wsResult.status === 'error') {
@@ -180,19 +185,25 @@ export const serverEngine: EnginePlugin = {
           } satisfies RunResult;
         }
       } catch {
-        // Fall through to REST
+        // Fall through to REST with a fresh timeout (see below).
       }
     }
 
     // ── REST fallback ─────────────────────────────────────────────
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     try {
+      // Never reuse a parent AbortSignal that already fired while WS was tried —
+      // browsers surface that as "The operation timed out." with no REST attempt.
+      const elapsed = performance.now() - t0;
+      const restBudget = Math.max(45_000, timeoutMs - elapsed);
+      const restSignal = AbortSignal.timeout(restBudget);
+      void signal; // engine-level cancel reserved; REST uses its own budget after WS
       // mode must be in the JSON body — Pro API validates body only (query is legacy).
       const res = await fetch(`${endpoint}/run?mode=${encodeURIComponent(mode)}`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ script, data: bars, mode }),
-        signal: signal ?? AbortSignal.timeout(timeoutMs),
+        signal: restSignal,
       });
       const text = await res.text();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
