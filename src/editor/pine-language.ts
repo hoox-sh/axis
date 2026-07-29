@@ -36,7 +36,8 @@ const pineParser: StreamParser<{ inComment: boolean }> = {
     if (stream.match(/\b(if|else|for|while|switch|true|false|na)\b/)) return 'controlKeyword';
     if (stream.match(/\b(var|varip|export|import|type|method|using)\b/)) return 'definitionKeyword';
     if (stream.match(/[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?/)) return 'number';
-    if (stream.match(/[A-Z][A-Z0-9_]+/)) return 'constantName';
+    // Use `atom` (valid stream highlight) — not `constantName` (unknown tag warning)
+    if (stream.match(/[A-Z][A-Z0-9_]+/)) return 'atom';
     if (stream.match(/[a-zA-Z_][a-zA-Z0-9_]*/)) return 'variableName';
     if (stream.match(/[+\-*/%=<>!&|^~?:]+/)) return 'operator';
     if (stream.match(/[{}()\[\],;.]/)) return 'punctuation';

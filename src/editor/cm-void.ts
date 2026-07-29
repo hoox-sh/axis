@@ -90,6 +90,11 @@ export const voidEditorTheme = EditorView.theme(
       backgroundColor: 'rgba(147, 159, 255, 0.18)',
       color: '#939fff',
     },
+    '.cm-tooltip.cm-tooltip-hover, .cm-tooltip .cm-pine-hover': {
+      backgroundColor: '#171821',
+      border: '2px solid #3a3d4a',
+      color: '#eceef4',
+    },
   },
   { dark: true },
 );
@@ -110,6 +115,8 @@ export const voidHighlightStyle = HighlightStyle.define([
   { tag: t.className, color: '#939fff' },
   { tag: t.meta, color: '#8b8e9c' },
   { tag: t.punctuation, color: '#8b8e9c' },
+  { tag: t.atom, color: '#e8a03a' },
+  { tag: t.namespace, color: '#8ec8d4' },
 ]);
 
 export const voidEditorExtensions = [

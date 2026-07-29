@@ -22,10 +22,10 @@ import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLi
 import { EditorState } from '@codemirror/state';
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
-import { autocompletion, completionKeymap } from '@codemirror/autocomplete';
 import { bracketMatching } from '@codemirror/language';
 import { pineScript } from './pine-language';
 import { voidEditorExtensions } from './cm-void';
+import { pineLspExtensions } from './pine-lsp';
 
 interface Props {
   initialDoc?: string;
@@ -63,9 +63,10 @@ export const PineEditor: Component<Props> = (props) => {
         highlightActiveLineGutter(),
         bracketMatching(),
         highlightSelectionMatches(),
-        autocompletion(),
+        // Pine LSP-lite: typing completion + hover docs (from pyne builtin metadata)
+        ...pineLspExtensions(),
         runKeymap,
-        keymap.of([...defaultKeymap, indentWithTab, ...searchKeymap, ...completionKeymap]),
+        keymap.of([...defaultKeymap, indentWithTab, ...searchKeymap]),
         pineScript,
         ...voidEditorExtensions,
         EditorView.updateListener.of((update) => {
