@@ -18,7 +18,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Component, For, createEffect, createSignal, Show, createMemo } from 'solid-js';
-import { store, setStore, persist, setStatus, setActivePlugin } from '../store';
+import {
+  store,
+  setStore,
+  persist,
+  setStatus,
+  setActivePlugin,
+  setUiScale,
+  clampUiScale,
+  UI_SCALE_MIN,
+  UI_SCALE_MAX,
+  UI_SCALE_STEP,
+  applyUiScale,
+} from '../store';
 import { Icons } from './icons';
 import { HooxLoader } from './HooxLoader';
 import { probeEndpoint } from '../indicators/runner';
@@ -32,6 +44,7 @@ import {
   WATCHLIST_REFRESH_OPTIONS,
 } from '../data/watchlist-tickers';
 import { loadSymbolData } from '../data/load-symbol';
+import { UI_SCALE_PRESETS, formatUiScalePct } from './ui-scale';
 
 /** PYNE Runtime modes (server engine). */
 export type EngineExecMode = 'interpret' | 'compile' | 'auto';
@@ -83,6 +96,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     store.live.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick',
   );
   const [hudCompact, setHudCompact] = createSignal(!!store.telemetry?.hud?.compact);
+  const [uiScale, setUiScaleLocal] = createSignal(clampUiScale(store.uiScale ?? 1));
   const [probing, setProbing] = createSignal(false);
   const [probeMsg, setProbeMsg] = createSignal('');
 
@@ -143,9 +157,17 @@ export const SettingsDialog: Component<Props> = (props) => {
       setPreferAfterLoad(!!store.live.preferAfterLoad);
       setRerunOn(store.live.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick');
       setHudCompact(!!store.telemetry?.hud?.compact);
+      setUiScaleLocal(clampUiScale(store.uiScale ?? 1));
       setProbeMsg('');
     }
   });
+
+  /** Live density preview while dragging (persists on Save or preset click). */
+  const previewScale = (raw: number) => {
+    const s = clampUiScale(raw);
+    setUiScaleLocal(s);
+    applyUiScale(s);
+  };
 
   const save = async () => {
     const prevInterval = store.interval;
@@ -159,6 +181,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     setStore('live', 'preferAfterLoad', preferAfterLoad());
     setStore('live', 'rerunOn', rerunOn());
     setStore('telemetry', 'hud', 'compact', hudCompact());
+    setUiScale(uiScale());
     setActivePlugin('engine', nextEngine);
     setActivePlugin('storage', storage());
 
@@ -186,12 +209,24 @@ export const SettingsDialog: Component<Props> = (props) => {
   };
 
   const onBackdrop = (e: MouseEvent) => {
-    if (e.target === e.currentTarget) props.onClose();
+    if (e.target === e.currentTarget) {
+      // Restore committed scale if user closed without Save after preview
+      applyUiScale(store.uiScale);
+      props.onClose();
+    }
   };
 
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') props.onClose();
+    if (e.key === 'Escape') {
+      applyUiScale(store.uiScale);
+      props.onClose();
+    }
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save();
+  };
+
+  const closeWithoutSave = () => {
+    applyUiScale(store.uiScale);
+    props.onClose();
   };
 
   const testEndpoint = async () => {
@@ -207,13 +242,13 @@ export const SettingsDialog: Component<Props> = (props) => {
   return (
     <Show when={props.open}>
       <div
-        class="fixed inset-0 bg-black/75 flex items-center justify-center z-[1000] p-4"
+        class="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000] p-4 backdrop-blur-[2px]"
         onClick={onBackdrop}
         onKeyDown={onKey}
         role="presentation"
       >
         <div
-          class="bg-bg-panel border-2 border-border w-[min(520px,calc(100vw-32px))] max-h-[calc(100vh-64px)] flex flex-col shadow-[0_16px_48px_rgba(0,0,0,0.6)] outline-none"
+          class="sc-dialog w-[min(540px,calc(100vw-32px))]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="axis-settings-title"
@@ -221,20 +256,105 @@ export const SettingsDialog: Component<Props> = (props) => {
           tabIndex={-1}
           ref={(el) => queueMicrotask(() => el?.focus())}
         >
-          <div class="h-0.5 w-full bg-accent flex-shrink-0" />
+          <div class="sc-dialog-accent" />
 
-          <div class="flex items-center justify-between px-3.5 py-2.5 border-b-2 border-border">
-            <span id="axis-settings-title" class="text-sm font-semibold text-text tracking-tight">
-              Settings
-            </span>
-            <button class="sc-btn sc-btn-ghost px-2" onClick={props.onClose} aria-label="Close">
-              <Icons.x size={14} />
+          <div class="sc-dialog-header">
+            <div class="min-w-0">
+              <div
+                id="axis-settings-title"
+                class="text-[0.95em] font-semibold text-text tracking-tight"
+              >
+                Settings
+              </div>
+              <div class="sc-hint mt-0">Engine · density · chart · live</div>
+            </div>
+            <button
+              type="button"
+              class="sc-btn sc-btn-ghost px-2"
+              onClick={closeWithoutSave}
+              aria-label="Close"
+            >
+              <Icons.x />
             </button>
           </div>
 
-          <div class="p-3.5 flex flex-col gap-3.5 overflow-auto">
+          <div class="sc-dialog-body">
+            {/* ── Appearance / density ─────────────────────────────── */}
+            <div class="flex flex-col gap-2" data-testid="axis-ui-scale-field">
+              <div class="sc-section-title">Appearance</div>
+              <div class="flex items-center justify-between gap-2">
+                <label class="sc-label" for="axis-ui-scale">
+                  UI scale
+                </label>
+                <span
+                  class="font-mono text-[0.85em] tabular-nums text-accent"
+                  data-testid="axis-ui-scale-value"
+                >
+                  {formatUiScalePct(uiScale())}
+                </span>
+              </div>
+              <input
+                id="axis-ui-scale"
+                class="sc-range"
+                type="range"
+                min={UI_SCALE_MIN}
+                max={UI_SCALE_MAX}
+                step={UI_SCALE_STEP}
+                value={uiScale()}
+                data-testid="axis-ui-scale"
+                aria-valuemin={UI_SCALE_MIN}
+                aria-valuemax={UI_SCALE_MAX}
+                aria-valuenow={uiScale()}
+                aria-label="UI scale"
+                onInput={(e) => previewScale(Number(e.currentTarget.value))}
+              />
+              <div class="flex justify-between text-[0.72em] text-text-faint font-mono tabular-nums">
+                <span>{formatUiScalePct(UI_SCALE_MIN)}</span>
+                <span>100%</span>
+                <span>{formatUiScalePct(UI_SCALE_MAX)}</span>
+              </div>
+              <div class="sc-chip-row" role="group" aria-label="Scale presets">
+                <For each={UI_SCALE_PRESETS}>
+                  {(p) => (
+                    <button
+                      type="button"
+                      class={`sc-chip ${Math.abs(uiScale() - p.value) < 0.01 ? 'is-active' : ''}`}
+                      aria-pressed={Math.abs(uiScale() - p.value) < 0.01}
+                      title={p.hint}
+                      onClick={() => {
+                        previewScale(p.value);
+                        setUiScale(p.value);
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  )}
+                </For>
+              </div>
+              <p class="sc-hint">
+                Scales text, icons, inputs, padding, and gaps. Chart candles stay sharp (canvas not
+                zoomed). Live preview — Save to keep.
+              </p>
+              <div
+                class="flex items-center gap-2 mt-0.5 p-2 bg-bg-elev border border-border-soft"
+                aria-hidden="true"
+              >
+                <button type="button" class="sc-btn sc-btn-primary">
+                  <Icons.play />
+                  Run
+                </button>
+                <button type="button" class="sc-btn sc-btn-ghost">
+                  <Icons.layers />
+                  Layers
+                </button>
+                <input class="sc-input min-w-0 flex-1 font-mono" value="BTCUSDT" readOnly />
+              </div>
+            </div>
+
+            <div class="sc-section">
+              <div class="sc-section-title">Engine</div>
             <div class="flex flex-col gap-1">
-              <label class="text-[10px] text-text-dim uppercase tracking-wider" for="axis-engine">
+              <label class="sc-label" for="axis-engine">
                 Calculation engine
               </label>
               <select
@@ -443,16 +563,13 @@ export const SettingsDialog: Component<Props> = (props) => {
               </p>
             </div>
 
-            <div class="border-t border-border-soft pt-3 flex flex-col gap-3">
-              <div class="text-[10px] text-text-dim uppercase tracking-wider font-semibold">
-                Chart &amp; watchlist
-              </div>
+            </div>
+
+            <div class="sc-section">
+              <div class="sc-section-title">Chart &amp; watchlist</div>
 
               <div class="flex flex-col gap-1">
-                <label
-                  class="text-[10px] text-text-dim uppercase tracking-wider"
-                  for="axis-default-interval"
-                >
+                <label class="sc-label" for="axis-default-interval">
                   Default interval
                 </label>
                 <select
@@ -471,10 +588,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                 </p>
               </div>
 
-              <div class="border-t border-border-soft pt-3 flex flex-col gap-3">
-                <div class="text-[10px] text-text-dim uppercase tracking-wider font-semibold">
-                  Live stream
-                </div>
+              <div class="sc-section !mt-0 !border-t-0 !pt-0">
+                <div class="sc-section-title">Live stream</div>
 
                 <label class="flex items-start gap-2 cursor-pointer" for="axis-prefer-live">
                   <input
@@ -560,17 +675,15 @@ export const SettingsDialog: Component<Props> = (props) => {
             </div>
           </div>
 
-          <div class="flex items-center gap-2 px-3.5 py-2.5 border-t-2 border-border bg-bg-base">
-            <div class="flex-1 text-[10px] text-text-faint font-mono truncate">AXIS · plugins</div>
-            <button type="button" class="sc-btn" onClick={props.onClose}>
+          <div class="sc-dialog-footer">
+            <div class="flex-1 text-[0.72em] text-text-faint font-mono truncate">
+              AXIS · scale {formatUiScalePct(uiScale())}
+            </div>
+            <button type="button" class="sc-btn" onClick={closeWithoutSave}>
               Cancel
             </button>
-            <button
-              type="button"
-              class="sc-btn sc-btn-primary inline-flex items-center gap-1"
-              onClick={save}
-            >
-              <Icons.check size={13} />
+            <button type="button" class="sc-btn sc-btn-primary" onClick={save}>
+              <Icons.check />
               Save
             </button>
           </div>

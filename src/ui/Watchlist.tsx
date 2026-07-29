@@ -24,9 +24,8 @@ import {
   persist,
   addWatchlistSymbol,
   removeWatchlistSymbol,
-  setWatchlistWidth,
-  setWatchlistOpen,
   setWatchlistRefreshSec,
+  isPanelOpen,
 } from '../store';
 import { loadSymbolData } from '../data/load-symbol';
 import {
@@ -35,7 +34,7 @@ import {
   WATCHLIST_REFRESH_OPTIONS,
   type WatchTicker,
 } from '../data/watchlist-tickers';
-import { ResizeHandle } from './ResizeHandle';
+import { FloatableShell } from './panels/FloatableShell';
 
 export const Watchlist: Component = () => {
   const [prices, setPrices] = createSignal<Record<string, WatchTicker>>({});
@@ -119,43 +118,28 @@ export const Watchlist: Component = () => {
   };
 
   return (
-    <Show when={store.watchlist.open}>
-      <aside
-        class="flex flex-col flex-shrink-0 bg-bg-panel border-r-2 border-border min-h-0 overflow-hidden relative"
-        style={{ width: `${store.watchlist.width}px` }}
-        data-testid="axis-watchlist"
-        aria-label="Watchlist"
-      >
-        <div class="flex items-center justify-between gap-1 px-2 py-1.5 border-b-2 border-border flex-shrink-0">
-          <span class="text-[10px] text-text-dim uppercase tracking-wider font-semibold">
-            Watchlist
-          </span>
-          <div class="flex items-center gap-0.5">
-            <span
-              class="text-[9px] font-mono text-text-faint px-1"
-              title={`Quotes from ${store.source}`}
-            >
-              {sourceShort()}
-            </span>
+    <Show when={isPanelOpen('watchlist') || store.watchlist.open}>
+      <FloatableShell
+        id="watchlist"
+        testId="axis-watchlist"
+        headerExtra={
+          <span
+            class="text-[0.78em] font-mono text-text-faint px-1"
+            title={`Quotes from ${store.source}`}
+          >
+            {sourceShort()}
             <button
               type="button"
-              class="sc-btn sc-btn-ghost px-1 text-[10px] leading-none"
+              class="sc-btn sc-btn-ghost px-1 ml-0.5"
               title="Refresh quotes"
               disabled={refreshing()}
               onClick={() => void fetchPrices()}
             >
               {refreshing() ? '…' : '↻'}
             </button>
-            <button
-              class="sc-btn sc-btn-ghost px-1.5 text-[11px] leading-none"
-              title="Collapse watchlist"
-              onClick={() => setWatchlistOpen(false)}
-            >
-              ‹
-            </button>
-          </div>
-        </div>
-
+          </span>
+        }
+      >
         {/* Interval + quote refresh — compact controls */}
         <div class="flex items-center gap-1 px-2 py-1 border-b border-border-soft flex-shrink-0">
           <span class="text-[9px] text-text-faint uppercase tracking-wider shrink-0">TF</span>
@@ -249,15 +233,7 @@ export const Watchlist: Component = () => {
           </div>
         </div>
 
-        <ResizeHandle
-          direction="grow-right"
-          getWidth={() => store.watchlist.width}
-          setWidth={setWatchlistWidth}
-          min={140}
-          max={360}
-          class="absolute top-0 right-0 bottom-0"
-        />
-      </aside>
+      </FloatableShell>
     </Show>
   );
 };

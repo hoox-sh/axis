@@ -19,13 +19,14 @@
 
 /**
  * Data Window — OHLCV + plot series values at the crosshair bar.
+ * Floatable / dockable via FloatableShell.
  */
 
 import { Component, For, Show, createMemo } from 'solid-js';
-import { store, setDataViewPanelOpen } from '../store';
+import { store, isPanelOpen } from '../store';
 import { buildDataViewRows } from '../results/dataview';
 import type { RunResult } from '../indicators/runner';
-import { Icons } from './icons';
+import { FloatableShell } from './panels/FloatableShell';
 
 export const DataViewPanel: Component = () => {
   const rows = createMemo(() => {
@@ -50,25 +51,9 @@ export const DataViewPanel: Component = () => {
   const seriesRows = createMemo(() => rows().filter((x) => x.group === 'series'));
 
   return (
-    <Show when={store.dataViewPanel.open}>
-      <aside
-        class="absolute top-2 right-2 z-30 flex flex-col bg-bg-panel/95 border-2 border-border shadow-[0_8px_28px_rgba(0,0,0,0.5)] backdrop-blur-sm max-h-[min(420px,70vh)] w-[220px] pointer-events-auto"
-        data-testid="axis-dataview"
-        aria-label="Data window"
-      >
-        <div class="flex items-center justify-between px-2 py-1.5 border-b-2 border-border text-[10px] text-text-dim uppercase tracking-wider font-semibold flex-shrink-0">
-          <span>Data window</span>
-          <button
-            type="button"
-            class="sc-btn sc-btn-ghost px-1.5"
-            title="Close data window"
-            aria-label="Close data window"
-            onClick={() => setDataViewPanelOpen(false)}
-          >
-            <Icons.x size={12} />
-          </button>
-        </div>
-        <div class="flex-1 overflow-y-auto min-h-0 text-[11px]">
+    <Show when={isPanelOpen('dataview') || store.dataViewPanel.open}>
+      <FloatableShell id="dataview" testId="axis-dataview">
+        <div class="flex-1 overflow-y-auto min-h-0 text-[0.85em]">
           <Show
             when={store.bars.length > 0}
             fallback={
@@ -87,20 +72,20 @@ export const DataViewPanel: Component = () => {
               </Section>
             </Show>
             <Show when={seriesRows().length === 0}>
-              <div class="px-2.5 py-2 text-text-faint text-[10px]">
+              <div class="px-2.5 py-2 text-text-faint text-[0.9em]">
                 Run a script to see plot values here.
               </div>
             </Show>
           </Show>
         </div>
-      </aside>
+      </FloatableShell>
     </Show>
   );
 };
 
 const Section: Component<{ label: string; children: any }> = (props) => (
   <div class="border-b border-border-soft last:border-0">
-    <div class="px-2.5 pt-1.5 pb-0.5 text-[9px] uppercase tracking-wider text-text-faint font-semibold">
+    <div class="px-2.5 pt-1.5 pb-0.5 text-[0.78em] uppercase tracking-wider text-text-faint font-semibold">
       {props.label}
     </div>
     <div class="pb-1">{props.children}</div>

@@ -18,13 +18,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Layers panel — show/hide panes, indicators, and clear drawings.
+ * Layers panel — panes, indicators, drawings. Floatable / dockable.
  */
 
 import { Component, For, Show } from 'solid-js';
 import {
   store,
-  setLayerPanelOpen,
+  isPanelOpen,
   setPaneVisible,
   toggleIndicator,
   removeIndicator,
@@ -33,6 +33,7 @@ import {
 } from '../store';
 import { getManager, getActiveDrawingLayer } from '../chart/manager-access';
 import { Icons } from './icons';
+import { FloatableShell } from './panels/FloatableShell';
 
 export const LayerPanel: Component = () => {
   const togglePane = (id: string, next: boolean) => {
@@ -44,7 +45,6 @@ export const LayerPanel: Component = () => {
     toggleIndicator(id);
     const manager = getManager();
     if (!manager) return;
-    // Hide: strip overlays; show: user re-runs (visibility flag for list)
     if (currentlyVisible) {
       try {
         manager.removeOverlays(paneId);
@@ -83,29 +83,9 @@ export const LayerPanel: Component = () => {
   };
 
   return (
-    <Show when={store.layerPanel.open}>
-      <aside
-        class="absolute bottom-12 left-2 z-30 flex flex-col bg-bg-panel/95 border-2 border-border shadow-[0_8px_28px_rgba(0,0,0,0.5)] backdrop-blur-sm max-h-[min(380px,60vh)] w-[220px] pointer-events-auto"
-        data-testid="axis-layers"
-        aria-label="Layers"
-      >
-        <div class="flex items-center justify-between px-2 py-1.5 border-b-2 border-border text-[10px] text-text-dim uppercase tracking-wider font-semibold flex-shrink-0">
-          <span class="inline-flex items-center gap-1">
-            <Icons.layers size={12} />
-            Layers
-          </span>
-          <button
-            type="button"
-            class="sc-btn sc-btn-ghost px-1.5"
-            title="Close layers"
-            aria-label="Close layers"
-            onClick={() => setLayerPanelOpen(false)}
-          >
-            <Icons.x size={12} />
-          </button>
-        </div>
-
-        <div class="flex-1 overflow-y-auto min-h-0 p-2 text-[11px] flex flex-col gap-2">
+    <Show when={isPanelOpen('layers') || store.layerPanel.open}>
+      <FloatableShell id="layers" testId="axis-layers">
+        <div class="flex-1 overflow-y-auto min-h-0 p-2 text-[0.85em] flex flex-col gap-2">
           <Section title="Panes">
             <For each={[...store.panes].sort((a, b) => a.order - b.order)}>
               {(pane) => (
@@ -148,7 +128,7 @@ export const LayerPanel: Component = () => {
               </span>
               <button
                 type="button"
-                class="sc-btn sc-btn-ghost px-1.5 text-[10px]"
+                class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
                 disabled={!store.drawings.length}
                 title="Clear user drawings"
                 onClick={onClearDrawings}
@@ -156,19 +136,19 @@ export const LayerPanel: Component = () => {
                 Clear
               </button>
             </div>
-            <div class="px-1 text-[10px] text-text-faint">
+            <div class="px-1 text-[0.85em] text-text-faint">
               Script drawings refresh on each run.
             </div>
           </Section>
         </div>
-      </aside>
+      </FloatableShell>
     </Show>
   );
 };
 
 const Section: Component<{ title: string; children: any }> = (props) => (
   <div>
-    <div class="text-[9px] uppercase tracking-wider text-text-faint font-semibold mb-1 px-0.5">
+    <div class="text-[0.78em] uppercase tracking-wider text-text-faint font-semibold mb-1 px-0.5">
       {props.title}
     </div>
     <div class="flex flex-col gap-0.5">{props.children}</div>
@@ -176,7 +156,7 @@ const Section: Component<{ title: string; children: any }> = (props) => (
 );
 
 const Empty: Component<{ children: any }> = (props) => (
-  <div class="text-text-faint italic px-1 py-1 text-[10px]">{props.children}</div>
+  <div class="text-text-faint italic px-1 py-1 text-[0.85em]">{props.children}</div>
 );
 
 const LayerRow: Component<{
@@ -191,7 +171,7 @@ const LayerRow: Component<{
   <div class="flex items-center gap-1.5 px-1 py-1 bg-bg-elev border border-border-soft hover:border-border">
     <button
       type="button"
-      class={`w-5 h-5 text-[10px] flex items-center justify-center border-2 flex-shrink-0 ${
+      class={`w-5 h-5 text-[0.75em] flex items-center justify-center border-2 flex-shrink-0 ${
         props.visible
           ? 'border-accent bg-accent/15 text-accent'
           : 'border-border bg-bg-hover text-text-dim'
@@ -205,7 +185,7 @@ const LayerRow: Component<{
     <div class="min-w-0 flex-1">
       <div class="text-text truncate font-medium leading-tight">{props.label}</div>
       <Show when={props.sub}>
-        <div class="text-[9px] text-text-faint font-mono truncate">{props.sub}</div>
+        <div class="text-[0.78em] text-text-faint font-mono truncate">{props.sub}</div>
       </Show>
     </div>
     <Show when={props.onSettings}>
@@ -215,7 +195,7 @@ const LayerRow: Component<{
         title="Script settings"
         onClick={props.onSettings}
       >
-        <Icons.settings size={11} />
+        <Icons.settings />
       </button>
     </Show>
     <Show when={props.onRemove}>
@@ -225,7 +205,7 @@ const LayerRow: Component<{
         title="Remove"
         onClick={props.onRemove}
       >
-        <Icons.x size={11} />
+        <Icons.x />
       </button>
     </Show>
   </div>

@@ -29,6 +29,8 @@ import { ScriptSettingsModal } from './ui/ScriptSettingsModal';
 import { ResultsPanel } from './ui/ResultsPanel';
 import { SystemLogs } from './ui/SystemLogs';
 import { PluginManager } from './ui/PluginManager';
+import { DataViewPanel } from './ui/DataViewPanel';
+import { LayerPanel } from './ui/LayerPanel';
 import { runAndApply } from './indicators/runner';
 import { registerBuiltins } from './plugins/bootstrap';
 import { restoreInstalledPlugins } from './plugins/loader';
@@ -42,7 +44,12 @@ import {
   setWatchlistOpen,
   saveEditorDoc,
   appendLog,
+  applyUiScale,
 } from './store';
+import {
+  PanelDragOverlay,
+  installPanelWindowBridge,
+} from './ui/panels/FloatableShell';
 import {
   bridgeSubscribe,
   bridgePublish,
@@ -64,8 +71,13 @@ export const App: Component = () => {
 
   onMount(() => {
     document.documentElement.setAttribute('data-theme', store.theme);
+    applyUiScale(store.uiScale);
     document.title = 'AXIS';
-    appendLog('ok', 'AXIS ready · void chrome · Lucide icons', 'boot');
+    appendLog(
+      'ok',
+      `AXIS ready · scale ${Math.round((store.uiScale || 1) * 100)}% · void chrome`,
+      'boot',
+    );
     restoreInstalledPlugins()
       .then(() => setCatalogTick((n) => n + 1))
       .catch(() => {});
@@ -139,7 +151,11 @@ export const App: Component = () => {
       }
     });
 
-    onCleanup(unsub);
+    const unsubPanelWin = installPanelWindowBridge();
+    onCleanup(() => {
+      unsub();
+      unsubPanelWin();
+    });
   });
 
   return (
@@ -162,8 +178,10 @@ export const App: Component = () => {
       />
 
       <div class="flex-1 flex min-h-0 overflow-hidden">
-        {/* Left: watchlist */}
+        {/* Dockable / floatable panels — shell decides dock vs fixed float */}
         <Watchlist />
+        <LayerPanel />
+        <DataViewPanel />
 
         {/* Center: chart */}
         <div class="flex-1 flex min-w-0 min-h-0 overflow-hidden bg-bg-base relative">
@@ -189,7 +207,6 @@ export const App: Component = () => {
           </Show>
         </div>
 
-        {/* Indicators list — sibling of chart/editor so it always gets full height */}
         <IndicatorPanel />
 
         {/* Right: editor (docked) */}
@@ -208,6 +225,9 @@ export const App: Component = () => {
       <ResultsPanel />
       <SystemLogs />
       <StatusBar />
+
+      {/* Skeleton ghost + dock zones while dragging a panel handle */}
+      <PanelDragOverlay />
 
       <SettingsDialog open={settingsOpen()} onClose={() => setSettingsOpen(false)} />
       <ScriptSettingsModal />

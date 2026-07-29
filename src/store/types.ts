@@ -170,6 +170,11 @@ export interface AppState {
   };
 
   theme: 'dark' | 'light';
+  /**
+   * UI density / chrome scale (text, icons, controls, gaps).
+   * 0.8–1.3, default 1. Applied as CSS ``--ui-scale`` on ``<html>``.
+   */
+  uiScale: number;
   editor: EditorLayoutState;
   watchlist: WatchlistState;
   indicatorPanel: { open: boolean; width: number };
@@ -209,4 +214,10 @@ export interface AppState {
 
   /** Connection / engine / datafeed telemetry (ephemeral) */
   telemetry: TelemetryState;
+
+  /**
+   * Dock / float / window chrome for side panels (persisted).
+   * See ``ui/panels/types.ts``.
+   */
+  panelChrome: import('../ui/panels/types').PanelChromeMap;
 }

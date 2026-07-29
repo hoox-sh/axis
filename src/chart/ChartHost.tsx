@@ -23,8 +23,6 @@ import { DrawingToolbar } from './DrawingToolbar';
 import { PineTableHud } from './PineTableHud';
 import { store, setCrosshair } from '../store';
 import { HooxLoader } from '../ui/HooxLoader';
-import { DataViewPanel } from '../ui/DataViewPanel';
-import { LayerPanel } from '../ui/LayerPanel';
 import {
   getManager,
   setManager,
@@ -147,8 +145,6 @@ export const ChartHost: Component = () => {
         <DrawingToolbar />
         <PineTableHud />
       </Show>
-      <DataViewPanel />
-      <LayerPanel />
       <Show when={emptyHint()}>
         {(hint) => (
           <div class="absolute inset-0 flex flex-col items-center justify-center gap-2 z-[5] pointer-events-none px-6">

@@ -22,8 +22,9 @@
  */
 
 import { Component, For, Show, createMemo, createSignal } from 'solid-js';
-import { store, setStore, persist } from '../store';
+import { store, isPanelOpen } from '../store';
 import type { RunResult } from '../indicators/runner';
+import { FloatableShell } from './panels/FloatableShell';
 import {
   buildStrategyReport,
   formatMoney,
@@ -165,29 +166,19 @@ export const ResultsPanel: Component = () => {
     downloadText(`axis-trades-${Date.now()}.csv`, tradesToCsv(rep.trades), 'text/csv');
   };
 
-  const setHeight = (h: number) => {
-    setStore('resultsPanel', 'height', h);
-    persist();
-  };
-
   return (
-    <Show when={store.resultsPanel.open}>
-      <div
-        class="flex flex-col border-t-2 border-border bg-bg-panel flex-shrink-0"
-        style={{ height: `${store.resultsPanel.height}px` }}
-        data-testid="axis-results"
-        role="region"
-        aria-label="Results"
-      >
-        {/* Header */}
-        <div class="flex items-center gap-2 px-2.5 py-1 border-b-2 border-border min-h-[28px]">
-          <span class="text-[11px] font-semibold text-text tracking-tight uppercase">Results</span>
-          <div class="flex items-center gap-0.5 ml-1">
+    <Show when={isPanelOpen('results') || store.resultsPanel.open}>
+      <FloatableShell
+        id="results"
+        testId="axis-results"
+        headerExtra={
+          <div class="flex items-center gap-0.5 flex-wrap">
             <For each={TABS}>
               {(t) => (
                 <button
-                  class={`sc-btn sc-btn-ghost px-2 py-0.5 text-[10px] ${
-                    tab() === t.id ? 'text-accent border-b-2 border-accent' : ''
+                  type="button"
+                  class={`sc-btn sc-btn-ghost px-1.5 py-0 text-[0.78em] ${
+                    tab() === t.id ? 'text-accent' : ''
                   }`}
                   onClick={() => setTab(t.id)}
                 >
@@ -196,12 +187,15 @@ export const ResultsPanel: Component = () => {
               )}
             </For>
           </div>
-          <div class="flex-1" />
+        }
+      >
+        <div class="flex items-center gap-1 px-2 py-1 border-b border-border-soft flex-shrink-0">
           <Show when={copied()}>
-            <span class="text-[10px] text-accent-2">Copied</span>
+            <span class="text-[0.78em] text-accent-2">Copied</span>
           </Show>
+          <div class="flex-1" />
           <button
-            class="sc-btn sc-btn-ghost px-2 text-[10px] inline-flex items-center gap-1"
+            class="sc-btn sc-btn-ghost px-2 text-[0.78em]"
             title="Copy current tab"
             onClick={() => {
               const r = result();
@@ -213,51 +207,31 @@ export const ResultsPanel: Component = () => {
               } else flashCopied(rawJson());
             }}
           >
-            <Icons.copy size={12} />
+            <Icons.copy />
             Copy
           </button>
           <button
-            class="sc-btn sc-btn-ghost px-2 text-[10px] inline-flex items-center gap-1"
+            class="sc-btn sc-btn-ghost px-2 text-[0.78em]"
             title="Export full run JSON"
             onClick={exportJson}
             disabled={!result()}
           >
-            <Icons.fileJson size={12} />
+            <Icons.fileJson />
             JSON
           </button>
           <button
-            class="sc-btn sc-btn-ghost px-2 text-[10px] inline-flex items-center gap-1"
+            class="sc-btn sc-btn-ghost px-2 text-[0.78em]"
             title="Export closed trades CSV"
             onClick={exportTradesCsv}
             disabled={!report()?.trades.length}
           >
-            <Icons.fileCsv size={12} />
+            <Icons.fileCsv />
             CSV
-          </button>
-          <select
-            class="sc-input text-[10px] py-0.5 min-w-0"
-            value={store.resultsPanel.height}
-            onChange={(e) => setHeight(Number(e.currentTarget.value))}
-            title="Panel height"
-          >
-            <option value={160}>S</option>
-            <option value={220}>M</option>
-            <option value={320}>L</option>
-          </select>
-          <button
-            class="sc-btn sc-btn-ghost px-2"
-            onClick={() => {
-              setStore('resultsPanel', 'open', false);
-              persist();
-            }}
-            aria-label="Close results"
-          >
-            <Icons.x size={14} />
           </button>
         </div>
 
         {/* Body */}
-        <div class="flex-1 min-h-0 overflow-auto p-2 text-[11px]">
+        <div class="flex-1 min-h-0 overflow-auto p-2 text-[0.85em]">
           <Show when={!result()}>
             <div class="text-text-faint uppercase tracking-wider text-[10px] p-3">
               Run a script to populate results
@@ -444,7 +418,7 @@ export const ResultsPanel: Component = () => {
             </pre>
           </Show>
         </div>
-      </div>
+      </FloatableShell>
     </Show>
   );
 };

@@ -34,6 +34,12 @@ import type {
   TelemetryState,
 } from './types';
 import { idlePlane, pushSample } from '../ui/telemetry';
+import {
+  defaultPanelChromeMap,
+  type PanelChrome,
+  type PanelDock,
+  type PanelId,
+} from '../ui/panels/types';
 
 // Stable ID generation — uses timestamp prefix + counter to survive reloads
 let idCounter = 0;
@@ -84,6 +90,7 @@ const DEFAULTS: AppState = {
     rerunOn: 'every-tick',
   },
   theme: 'dark',
+  uiScale: 1,
   editor: { open: true, width: 460, mode: 'docked' },
   watchlist: { open: true, width: 200, symbols: [...DEFAULT_WATCHLIST], refreshSec: 15 },
   indicatorPanel: { open: false, width: 224 },
@@ -111,6 +118,7 @@ const DEFAULTS: AppState = {
     lastTick: null,
     hud: { compact: false, overlay: false },
   },
+  panelChrome: defaultPanelChromeMap(),
 };
 
 function readLocalStorage(key: string): string | null {
@@ -173,6 +181,7 @@ function loadPersisted(): Partial<AppState> {
           rerunOn: parsed.live?.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick',
         },
         editor: { ...DEFAULTS.editor, ...parsed.editor },
+        uiScale: clampUiScale(parsed.uiScale ?? DEFAULTS.uiScale),
         watchlist: {
           ...DEFAULTS.watchlist,
           ...parsed.watchlist,
@@ -219,10 +228,68 @@ function loadPersisted(): Partial<AppState> {
         },
         drawingTool: 'cursor',
         drawings: Array.isArray(parsed.drawings) ? parsed.drawings : [],
+        panelChrome: mergePanelChrome(parsed.panelChrome, {
+          // Bridge legacy open/width into chrome on first load
+          watchlist: {
+            open: parsed.watchlist?.open ?? DEFAULTS.watchlist.open,
+            w: parsed.watchlist?.width ?? DEFAULTS.watchlist.width,
+          },
+          indicators: {
+            open: parsed.indicatorPanel?.open ?? DEFAULTS.indicatorPanel.open,
+            w: parsed.indicatorPanel?.width ?? DEFAULTS.indicatorPanel.width,
+          },
+          editor: {
+            open: parsed.editor?.open ?? DEFAULTS.editor.open,
+            w: parsed.editor?.width ?? DEFAULTS.editor.width,
+            dock: parsed.editor?.mode === 'popout' ? 'window' : 'right',
+          },
+          results: {
+            open: parsed.resultsPanel?.open ?? DEFAULTS.resultsPanel.open,
+            h: parsed.resultsPanel?.height ?? DEFAULTS.resultsPanel.height,
+          },
+          logs: {
+            open: false,
+            h: parsed.logsPanel?.height ?? DEFAULTS.logsPanel.height,
+          },
+          dataview: {
+            open: parsed.dataViewPanel?.open ?? false,
+            w: parsed.dataViewPanel?.width ?? 240,
+          },
+          layers: {
+            open: parsed.layerPanel?.open ?? false,
+            w: parsed.layerPanel?.width ?? 240,
+          },
+        }),
       };
     }
   } catch {}
   return {};
+}
+
+function mergePanelChrome(
+  raw: unknown,
+  legacy: Partial<Record<PanelId, Partial<PanelChrome>>>,
+): Record<PanelId, PanelChrome> {
+  const base = defaultPanelChromeMap();
+  const src =
+    raw && typeof raw === 'object' ? (raw as Partial<Record<PanelId, Partial<PanelChrome>>>) : {};
+  for (const id of Object.keys(base) as PanelId[]) {
+    const fromDisk = src[id] || {};
+    const fromLegacy = legacy[id] || {};
+    base[id] = {
+      ...base[id],
+      ...fromLegacy,
+      ...fromDisk,
+      open: typeof fromDisk.open === 'boolean' ? fromDisk.open : !!fromLegacy.open || base[id].open,
+      dock: (fromDisk.dock || fromLegacy.dock || base[id].dock) as PanelDock,
+      x: Number(fromDisk.x ?? fromLegacy.x ?? base[id].x) || base[id].x,
+      y: Number(fromDisk.y ?? fromLegacy.y ?? base[id].y) || base[id].y,
+      w: Number(fromDisk.w ?? fromLegacy.w ?? base[id].w) || base[id].w,
+      h: Number(fromDisk.h ?? fromLegacy.h ?? base[id].h) || base[id].h,
+      z: Number(fromDisk.z ?? fromLegacy.z ?? base[id].z) || base[id].z,
+    };
+  }
+  return base;
 }
 
 /** Keep flat source/engine/stream fields aligned with activePlugins */
@@ -260,6 +327,16 @@ export const [store, setStore] = createStore<AppState>({
   ...DEFAULTS,
   ...loadPersisted(),
 });
+
+// Apply theme + density as soon as the store hydrates (before first paint when possible)
+if (typeof document !== 'undefined') {
+  try {
+    document.documentElement.setAttribute('data-theme', store.theme || 'dark');
+    applyUiScale(store.uiScale);
+  } catch {
+    /* ignore */
+  }
+}
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 export function persist() {
@@ -489,6 +566,39 @@ export function toggleTheme() {
   persist();
 }
 
+/** UI chrome scale bounds (percent of default density). */
+export const UI_SCALE_MIN = 0.8;
+export const UI_SCALE_MAX = 1.3;
+export const UI_SCALE_STEP = 0.05;
+
+export function clampUiScale(raw: unknown): number {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n)) return 1;
+  // Snap to step for stable storage / slider
+  const stepped = Math.round(n / UI_SCALE_STEP) * UI_SCALE_STEP;
+  return Math.min(UI_SCALE_MAX, Math.max(UI_SCALE_MIN, Math.round(stepped * 100) / 100));
+}
+
+/** Write CSS custom properties used by chrome density. */
+export function applyUiScale(scale?: number) {
+  const s = clampUiScale(scale ?? store.uiScale ?? 1);
+  if (typeof document === 'undefined') return s;
+  const root = document.documentElement;
+  root.style.setProperty('--ui-scale', String(s));
+  root.setAttribute('data-ui-scale', s.toFixed(2));
+  // Base 13px · rem/em chrome tracks this; chart canvas stays independent
+  root.style.fontSize = `${(13 * s).toFixed(3)}px`;
+  return s;
+}
+
+/** Persist + apply UI scale (live preview friendly). */
+export function setUiScale(raw: number) {
+  const s = clampUiScale(raw);
+  setStore('uiScale', s);
+  applyUiScale(s);
+  persist();
+}
+
 /* ── Layout helpers ─────────────────────────────────────────────── */
 
 export function setEditorWidth(width: number) {
@@ -509,50 +619,149 @@ export function setIndicatorWidth(width: number) {
   persist();
 }
 
-export function setEditorOpen(open: boolean) {
-  setStore('editor', 'open', open);
-  persist();
-}
-
 export function setEditorMode(mode: EditorMode) {
   setStore('editor', 'mode', mode);
-  if (mode === 'popout') setStore('editor', 'open', false);
-  persist();
-}
-
-export function setWatchlistOpen(open: boolean) {
-  setStore('watchlist', 'open', open);
+  if (mode === 'popout') {
+    setStore('editor', 'open', false);
+    ensurePanelChrome();
+    setStore('panelChrome', 'editor', 'open', false);
+    setStore('panelChrome', 'editor', 'dock', 'window');
+  } else {
+    ensurePanelChrome();
+    setStore('panelChrome', 'editor', 'dock', 'right');
+  }
   persist();
 }
 
 export function setIndicatorPanelOpen(open: boolean) {
-  setStore('indicatorPanel', 'open', open);
-  persist();
+  setPanelOpen('indicators', open);
 }
 
 export function toggleIndicatorPanel() {
-  setStore('indicatorPanel', 'open', !store.indicatorPanel.open);
-  persist();
+  setPanelOpen('indicators', !isPanelOpen('indicators'));
 }
 
 export function setDataViewPanelOpen(open: boolean) {
-  setStore('dataViewPanel', 'open', open);
-  persist();
+  setPanelOpen('dataview', open);
 }
 
 export function toggleDataViewPanel() {
-  setStore('dataViewPanel', 'open', !store.dataViewPanel.open);
-  persist();
+  setPanelOpen('dataview', !isPanelOpen('dataview'));
 }
 
 export function setLayerPanelOpen(open: boolean) {
-  setStore('layerPanel', 'open', open);
-  persist();
+  setPanelOpen('layers', open);
 }
 
 export function toggleLayerPanel() {
-  setStore('layerPanel', 'open', !store.layerPanel.open);
+  setPanelOpen('layers', !isPanelOpen('layers'));
+}
+
+/* ── Panel chrome (dock / float / window) ───────────────────────── */
+
+export function getPanelChrome(id: PanelId): PanelChrome {
+  return store.panelChrome?.[id] || defaultPanelChromeMap()[id];
+}
+
+export function isPanelOpen(id: PanelId): boolean {
+  const chromeOpen = !!store.panelChrome?.[id]?.open;
+  switch (id) {
+    case 'watchlist':
+      return !!store.watchlist.open || chromeOpen;
+    case 'editor':
+      return (!!store.editor.open && store.editor.mode !== 'popout') || chromeOpen;
+    case 'indicators':
+      return !!store.indicatorPanel.open || chromeOpen;
+    case 'results':
+      return !!store.resultsPanel.open || chromeOpen;
+    case 'logs':
+      return !!store.logsPanel.open || chromeOpen;
+    case 'dataview':
+      return !!store.dataViewPanel.open || chromeOpen;
+    case 'layers':
+      return !!store.layerPanel.open || chromeOpen;
+    default:
+      return chromeOpen;
+  }
+}
+
+function syncLegacyOpen(id: PanelId, open: boolean) {
+  if (id === 'watchlist') setStore('watchlist', 'open', open);
+  else if (id === 'editor') setStore('editor', 'open', open);
+  else if (id === 'indicators') setStore('indicatorPanel', 'open', open);
+  else if (id === 'results') setStore('resultsPanel', 'open', open);
+  else if (id === 'logs') setStore('logsPanel', 'open', open);
+  else if (id === 'dataview') setStore('dataViewPanel', 'open', open);
+  else if (id === 'layers') setStore('layerPanel', 'open', open);
+}
+
+export function setPanelOpen(id: PanelId, open: boolean) {
+  ensurePanelChrome();
+  setStore('panelChrome', id, 'open', open);
+  syncLegacyOpen(id, open);
   persist();
+}
+
+export function setPanelDock(id: PanelId, dock: PanelDock) {
+  ensurePanelChrome();
+  setStore('panelChrome', id, 'dock', dock);
+  if (dock === 'window' && id === 'editor') {
+    setStore('editor', 'mode', 'popout');
+  } else if (id === 'editor' && dock !== 'window') {
+    setStore('editor', 'mode', 'docked');
+  }
+  if (dock === 'float' || dock === 'window') {
+    bumpPanelZ(id);
+  }
+  persist();
+}
+
+export function setPanelGeometry(
+  id: PanelId,
+  geo: Partial<Pick<PanelChrome, 'x' | 'y' | 'w' | 'h'>>,
+) {
+  ensurePanelChrome();
+  const cur = getPanelChrome(id);
+  if (geo.x != null) setStore('panelChrome', id, 'x', Math.round(geo.x));
+  if (geo.y != null) setStore('panelChrome', id, 'y', Math.round(geo.y));
+  if (geo.w != null) {
+    setStore('panelChrome', id, 'w', Math.round(geo.w));
+    if (id === 'watchlist') setStore('watchlist', 'width', Math.round(geo.w));
+    if (id === 'indicators') setStore('indicatorPanel', 'width', Math.round(geo.w));
+    if (id === 'editor') setStore('editor', 'width', Math.round(geo.w));
+    if (id === 'dataview') setStore('dataViewPanel', 'width', Math.round(geo.w));
+    if (id === 'layers') setStore('layerPanel', 'width', Math.round(geo.w));
+  }
+  if (geo.h != null) {
+    setStore('panelChrome', id, 'h', Math.round(geo.h));
+    if (id === 'results') setStore('resultsPanel', 'height', Math.round(geo.h));
+    if (id === 'logs') setStore('logsPanel', 'height', Math.round(geo.h));
+  }
+  void cur;
+  persist();
+}
+
+export function bumpPanelZ(id: PanelId) {
+  ensurePanelChrome();
+  const maxZ = Math.max(
+    20,
+    ...Object.values(store.panelChrome || {}).map((p) => Number(p?.z) || 20),
+  );
+  setStore('panelChrome', id, 'z', maxZ + 1);
+}
+
+function ensurePanelChrome() {
+  if (!store.panelChrome || !store.panelChrome.watchlist) {
+    setStore('panelChrome', defaultPanelChromeMap());
+  }
+}
+
+export function setWatchlistOpen(open: boolean) {
+  setPanelOpen('watchlist', open);
+}
+
+export function setEditorOpen(open: boolean) {
+  setPanelOpen('editor', open);
 }
 
 export function openScriptSettings(indicatorId: string | null = null) {

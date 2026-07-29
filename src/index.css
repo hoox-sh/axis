@@ -61,6 +61,27 @@
   --radius-3xl: 2px;
 }
 
+:root {
+  /* Density — set by applyUiScale(); 1 = default */
+  --ui-scale: 1;
+  --ui-font-base: 13px;
+  --ui-gap: 0.5em;
+  --ui-gap-sm: 0.35em;
+  --ui-gap-xs: 0.2em;
+  --ui-pad-x: 0.55em;
+  --ui-pad-y: 0.22em;
+  --ui-control-h: 1.85em;
+  --ui-icon: 1em;
+  --ui-label: 0.72em;
+  --ui-title: 0.85em;
+  --ui-panel-pad: 0.7em;
+  --ui-topbar-min-h: 2.65em;
+  --ui-statusbar-min-h: 1.9em;
+  --ui-shadow-panel: 0 8px 28px rgba(0, 0, 0, 0.48);
+  --ui-shadow-dialog: 0 16px 48px rgba(0, 0, 0, 0.6);
+  --ui-focus-ring: 0 0 0 2px color-mix(in oklch, oklch(0.74 0.16 277) 45%, transparent);
+}
+
 html,
 body {
   margin: 0;
@@ -70,8 +91,12 @@ body {
   background-color: var(--color-bg-base);
   color: var(--color-text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif;
-  font-size: 13px;
+  /* Base size is also written inline by applyUiScale for live updates */
+  font-size: calc(var(--ui-font-base) * var(--ui-scale));
   line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* Light theme — soft void lift (secondary priority) */
@@ -133,28 +158,30 @@ textarea {
   border-radius: var(--radius-sc);
 }
 
-/* Shared chrome helpers */
+/* Shared chrome helpers — em-based so --ui-scale / root font-size apply */
 .sc-input {
   background-color: var(--color-bg-elev);
   color: var(--color-text);
-  border: 2px solid var(--color-border);
+  border: var(--border-w) solid var(--color-border);
   border-radius: var(--radius-sc);
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
+  padding: var(--ui-pad-y) var(--ui-pad-x);
+  font-size: 0.92em;
+  min-height: var(--ui-control-h);
+  line-height: 1.25;
   outline: none;
+  box-sizing: border-box;
 }
 .sc-input:focus,
 .sc-input:focus-visible {
   border-color: var(--color-accent);
-  /* Void indigo keyboard ring — visible on void chrome */
-  box-shadow: 0 0 0 2px color-mix(in oklch, oklch(0.74 0.16 277) 45%, transparent);
+  box-shadow: var(--ui-focus-ring);
   outline: none;
 }
 
 /* Void indigo keyboard focus for buttons */
 .sc-btn:focus-visible {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px color-mix(in oklch, oklch(0.74 0.16 277) 45%, transparent);
+  box-shadow: var(--ui-focus-ring);
   outline: none;
 }
 
@@ -166,12 +193,20 @@ button.sc-btn:focus-visible {
 .sc-btn {
   background-color: var(--color-bg-elev);
   color: var(--color-text);
-  border: 2px solid var(--color-border);
+  border: var(--border-w) solid var(--color-border);
   border-radius: var(--radius-sc);
-  padding: 0.25rem 0.625rem;
-  font-size: 0.75rem;
+  padding: var(--ui-pad-y) calc(var(--ui-pad-x) * 1.15);
+  font-size: 0.92em;
+  min-height: var(--ui-control-h);
+  line-height: 1.2;
   cursor: pointer;
   font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+  box-sizing: border-box;
+  white-space: nowrap;
 }
 .sc-btn:hover {
   background-color: var(--color-bg-hover);
@@ -202,6 +237,198 @@ button.sc-btn:focus-visible {
   background-color: var(--color-bg-hover);
   color: var(--color-text);
   border-color: var(--color-border-soft);
+}
+
+/* Icon baseline — Lucide 1em tracks root font / density */
+.sc-icon {
+  flex-shrink: 0;
+  vertical-align: -0.125em;
+  display: inline-block;
+}
+
+/* Vertical rule between topbar groups */
+.sc-sep {
+  width: 1px;
+  align-self: stretch;
+  min-height: 1.25em;
+  margin: 0.15em 0.15em;
+  background: var(--color-border-soft);
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+/* Field labels in dialogs / forms */
+.sc-label {
+  font-size: var(--ui-label);
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.sc-hint {
+  font-size: 0.78em;
+  color: var(--color-text-faint);
+  line-height: 1.4;
+  margin-top: 0.2em;
+}
+
+.sc-section {
+  border-top: 1px solid var(--color-border-soft);
+  padding-top: 0.85em;
+  margin-top: 0.15em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75em;
+}
+
+.sc-section-title {
+  font-size: var(--ui-label);
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 650;
+}
+
+/* Floating chart overlays (Data window / Layers) */
+.sc-float-panel {
+  background: color-mix(in srgb, var(--color-bg-panel) 94%, transparent);
+  border: var(--border-w) solid var(--color-border);
+  border-radius: var(--radius-sc);
+  box-shadow: var(--ui-shadow-panel);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.sc-float-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4em;
+  padding: 0.45em 0.55em;
+  border-bottom: var(--border-w) solid var(--color-border);
+  font-size: var(--ui-label);
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 650;
+  flex-shrink: 0;
+}
+
+/* Range / density slider */
+.sc-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 0.35em;
+  border-radius: 999px;
+  background: var(--color-border-soft);
+  outline: none;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  margin: 0.45em 0;
+}
+.sc-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.05em;
+  height: 1.05em;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 2px solid color-mix(in srgb, var(--color-bg-panel) 40%, var(--color-accent));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 35%, transparent);
+  cursor: grab;
+}
+.sc-range::-moz-range-thumb {
+  width: 1.05em;
+  height: 1.05em;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 2px solid color-mix(in srgb, var(--color-bg-panel) 40%, var(--color-accent));
+  cursor: grab;
+}
+.sc-range:focus-visible {
+  box-shadow: var(--ui-focus-ring);
+}
+.sc-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px color-mix(in oklch, oklch(0.74 0.16 277) 35%, transparent);
+}
+
+/* Preset chip row */
+.sc-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+}
+.sc-chip {
+  font-size: 0.78em;
+  padding: 0.2em 0.55em;
+  border: var(--border-w) solid var(--color-border-soft);
+  border-radius: var(--radius-sc);
+  background: var(--color-bg-elev);
+  color: var(--color-text-dim);
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.3;
+}
+.sc-chip:hover {
+  border-color: var(--color-border);
+  color: var(--color-text);
+  background: var(--color-bg-hover);
+}
+.sc-chip[aria-pressed="true"],
+.sc-chip.is-active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-bg-elev));
+  font-weight: 600;
+}
+
+/* Dialog shell polish */
+.sc-dialog {
+  background: var(--color-bg-panel);
+  border: var(--border-w) solid var(--color-border);
+  border-radius: var(--radius-sc);
+  box-shadow: var(--ui-shadow-dialog);
+  outline: none;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 4em);
+}
+.sc-dialog-accent {
+  height: 2px;
+  width: 100%;
+  background: var(--color-accent);
+  flex-shrink: 0;
+}
+.sc-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75em;
+  padding: 0.65em 0.85em;
+  border-bottom: var(--border-w) solid var(--color-border);
+  flex-shrink: 0;
+}
+.sc-dialog-body {
+  padding: var(--ui-panel-pad) 0.9em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85em;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+.sc-dialog-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.6em 0.85em;
+  border-top: var(--border-w) solid var(--color-border);
+  background: var(--color-bg-base);
+  flex-shrink: 0;
 }
 
 /* Bordered panels / cards / dialogs — same minimal radius */
@@ -455,4 +682,210 @@ button.sc-btn:focus-visible {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border-width: 0;
+}
+
+/* ── Floatable / dockable panels ───────────────────────────────── */
+
+.axis-panel-shell {
+  background: var(--color-bg-panel);
+  border: var(--border-w) solid var(--color-border);
+  border-radius: var(--radius-sc);
+  min-width: 0;
+}
+
+.axis-panel-dock-left {
+  flex-shrink: 0;
+  border-top: none;
+  border-bottom: none;
+  border-left: none;
+  border-radius: 0;
+  z-index: 10;
+  position: relative;
+}
+
+.axis-panel-dock-right {
+  flex-shrink: 0;
+  border-top: none;
+  border-bottom: none;
+  border-right: none;
+  border-radius: 0;
+  z-index: 10;
+  position: relative;
+}
+
+.axis-panel-dock-bottom {
+  flex-shrink: 0;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  border-radius: 0;
+  width: 100%;
+}
+
+.axis-panel-float {
+  box-shadow: var(--ui-shadow-panel);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.axis-panel-handle {
+  gap: 0.35em;
+  user-select: none;
+  touch-action: none;
+}
+
+.axis-panel-grip {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  width: 10px;
+  flex-shrink: 0;
+  opacity: 0.55;
+}
+.axis-panel-grip span,
+.axis-panel-grip i {
+  display: block;
+  height: 2px;
+  width: 100%;
+  background: var(--color-text-faint);
+  border-radius: 1px;
+}
+.axis-panel-handle:hover .axis-panel-grip {
+  opacity: 0.95;
+}
+
+.axis-panel-body {
+  background: var(--color-bg-panel);
+}
+
+.axis-panel-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  z-index: 5;
+}
+.axis-panel-resize::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--color-border);
+  border-bottom: 2px solid var(--color-border);
+  opacity: 0.7;
+}
+.axis-panel-float:hover .axis-panel-resize::after {
+  border-color: var(--color-accent);
+  opacity: 1;
+}
+
+/* Drag overlay + skeleton */
+.axis-dock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  pointer-events: none;
+}
+
+.axis-dock-zone {
+  position: absolute;
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  border: 2px dashed color-mix(in srgb, var(--color-accent) 35%, transparent);
+  border-radius: var(--radius-sc);
+  opacity: 0.35;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+.axis-dock-zone.is-hot {
+  opacity: 1;
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 40%, transparent);
+}
+.axis-dock-zone-left {
+  left: 6px;
+  top: 48px;
+  bottom: 48px;
+  width: 14%;
+  max-width: 280px;
+}
+.axis-dock-zone-right {
+  right: 6px;
+  top: 48px;
+  bottom: 48px;
+  width: 14%;
+  max-width: 280px;
+}
+.axis-dock-zone-bottom {
+  left: 12%;
+  right: 12%;
+  bottom: 32px;
+  height: 18%;
+  max-height: 220px;
+}
+
+.axis-panel-skeleton {
+  position: absolute;
+  border: 2px dashed var(--color-accent);
+  border-radius: var(--radius-sc);
+  background: color-mix(in srgb, var(--color-bg-panel) 75%, transparent);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  animation: axis-sk-pulse 0.9s ease-in-out infinite alternate;
+}
+.axis-panel-skeleton-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.45em 0.55em;
+  border-bottom: 2px solid var(--color-border);
+  font-size: var(--ui-label);
+  color: var(--color-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 650;
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-bg-elev));
+}
+.axis-panel-skeleton-body {
+  flex: 1;
+  padding: 0.75em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45em;
+}
+.axis-sk-line {
+  height: 0.55em;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--color-border-soft) 0%,
+    var(--color-border) 50%,
+    var(--color-border-soft) 100%
+  );
+  background-size: 200% 100%;
+  animation: axis-sk-shimmer 1.1s linear infinite;
+}
+.axis-sk-block {
+  flex: 1;
+  min-height: 2.5em;
+  margin-top: 0.25em;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-border-soft) 70%, transparent);
+  border: 1px solid var(--color-border-soft);
+}
+
+@keyframes axis-sk-pulse {
+  from { opacity: 0.88; }
+  to { opacity: 1; }
+}
+@keyframes axis-sk-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
 }

@@ -1,0 +1,154 @@
+// Copyright (C) 2024-2026 jango_blockchained
+//
+// This file is part of pynescript.
+//
+// pynescript is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// pynescript is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with pynescript.  If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/** Dockable / floatable AXIS chrome panels */
+export type PanelId =
+  | 'watchlist'
+  | 'indicators'
+  | 'editor'
+  | 'results'
+  | 'logs'
+  | 'dataview'
+  | 'layers';
+
+/**
+ * Where a panel lives:
+ * - left / right / bottom — docked in layout slots
+ * - float — free window over the chart
+ * - window — browser popup (content portaled when possible)
+ */
+export type PanelDock = 'left' | 'right' | 'bottom' | 'float' | 'window';
+
+export interface PanelChrome {
+  open: boolean;
+  dock: PanelDock;
+  /** Float / window geometry (CSS px) */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Stacking order for float windows */
+  z: number;
+}
+
+export type PanelChromeMap = Record<PanelId, PanelChrome>;
+
+export const PANEL_META: Record<
+  PanelId,
+  { title: string; defaultDock: PanelDock; minW: number; minH: number; defaultW: number; defaultH: number }
+> = {
+  watchlist: {
+    title: 'Watchlist',
+    defaultDock: 'left',
+    minW: 160,
+    minH: 200,
+    defaultW: 200,
+    defaultH: 420,
+  },
+  indicators: {
+    title: 'Indicators',
+    defaultDock: 'right',
+    minW: 160,
+    minH: 200,
+    defaultW: 224,
+    defaultH: 420,
+  },
+  editor: {
+    title: 'Editor',
+    defaultDock: 'right',
+    minW: 280,
+    minH: 240,
+    defaultW: 460,
+    defaultH: 520,
+  },
+  results: {
+    title: 'Results',
+    defaultDock: 'bottom',
+    minW: 280,
+    minH: 120,
+    defaultW: 640,
+    defaultH: 220,
+  },
+  logs: {
+    title: 'Logs',
+    defaultDock: 'bottom',
+    minW: 280,
+    minH: 100,
+    defaultW: 640,
+    defaultH: 160,
+  },
+  dataview: {
+    title: 'Data window',
+    defaultDock: 'float',
+    minW: 180,
+    minH: 160,
+    defaultW: 240,
+    defaultH: 360,
+  },
+  layers: {
+    title: 'Layers',
+    defaultDock: 'float',
+    minW: 180,
+    minH: 160,
+    defaultW: 240,
+    defaultH: 340,
+  },
+};
+
+export type DropZone = 'left' | 'right' | 'bottom' | 'float' | null;
+
+export function defaultPanelChrome(id: PanelId, overrides?: Partial<PanelChrome>): PanelChrome {
+  const m = PANEL_META[id];
+  return {
+    open: false,
+    dock: m.defaultDock,
+    x: 48,
+    y: 48,
+    w: m.defaultW,
+    h: m.defaultH,
+    z: 20,
+    ...overrides,
+  };
+}
+
+export function defaultPanelChromeMap(): PanelChromeMap {
+  return {
+    watchlist: defaultPanelChrome('watchlist', { open: true, dock: 'left', w: 200 }),
+    indicators: defaultPanelChrome('indicators', { open: false, dock: 'right', w: 224 }),
+    editor: defaultPanelChrome('editor', { open: true, dock: 'right', w: 460 }),
+    results: defaultPanelChrome('results', { open: false, dock: 'bottom', h: 220 }),
+    logs: defaultPanelChrome('logs', { open: false, dock: 'bottom', h: 160 }),
+    dataview: defaultPanelChrome('dataview', {
+      open: false,
+      dock: 'float',
+      x: 72,
+      y: 56,
+      w: 240,
+      h: 380,
+    }),
+    layers: defaultPanelChrome('layers', {
+      open: false,
+      dock: 'float',
+      x: 24,
+      y: 200,
+      w: 240,
+      h: 340,
+    }),
+  };
+}

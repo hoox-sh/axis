@@ -43,6 +43,9 @@ import {
   Moon,
   MousePointer2,
   PanelRight,
+  PanelLeft,
+  PanelBottom,
+  GripVertical,
   Play,
   Ruler,
   Settings,
@@ -67,13 +70,20 @@ import {
 export type IconProps = LucideProps & { class?: string };
 
 const defaults: Partial<LucideProps> = {
-  size: 14,
+  // 1em tracks --ui-scale via root font-size (density slider)
+  size: '1em',
   strokeWidth: 2,
   absoluteStrokeWidth: false,
 };
 
 function withDefaults(Icon: Component<LucideProps>): Component<IconProps> {
-  return (props) => <Icon {...defaults} {...props} />;
+  return (props) => (
+    <Icon
+      {...defaults}
+      {...props}
+      class={`sc-icon ${props.class || ''}`.trim()}
+    />
+  );
 }
 
 export const Icons = {
@@ -83,6 +93,9 @@ export const Icons = {
   moon: withDefaults(Moon),
   list: withDefaults(List),
   panelRight: withDefaults(PanelRight),
+  panelLeft: withDefaults(PanelLeft),
+  panelBottom: withDefaults(PanelBottom),
+  grip: withDefaults(GripVertical),
   upload: withDefaults(Upload),
   download: withDefaults(Download),
   copy: withDefaults(Copy),

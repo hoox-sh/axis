@@ -47,7 +47,7 @@ export const StatusBar: Component = () => {
 
   return (
     <div
-      class="flex items-center gap-2 px-2.5 py-0.5 bg-bg-panel border-t-2 border-border text-[11px] text-text-dim min-h-[26px] flex-shrink-0 overflow-x-auto"
+      class="flex items-center gap-[var(--ui-gap-sm)] px-2.5 py-0.5 bg-bg-panel border-t-2 border-border text-[0.85em] text-text-dim min-h-[var(--ui-statusbar-min-h)] flex-shrink-0 overflow-x-auto"
       data-testid="axis-statusbar"
       role="status"
     >
@@ -64,15 +64,15 @@ export const StatusBar: Component = () => {
         {(store.status === 'running' || store.status === 'loading') && (
           <HooxLoader size="xs" class="flex-shrink-0" />
         )}
-        {store.status === 'error' && <Icons.alert size={12} class="text-red flex-shrink-0" />}
-        {store.status === 'ready' && <Icons.activity size={12} class="text-accent-2 flex-shrink-0" />}
+        {store.status === 'error' && <Icons.alert class="text-red flex-shrink-0" />}
+        {store.status === 'ready' && <Icons.activity class="text-accent-2 flex-shrink-0" />}
         <span class="truncate">{store.statusMessage}</span>
       </span>
 
       <Show when={strategySummary()}>
         {(stats) => (
           <span
-            class={`text-[10px] font-mono tracking-tight tabular-nums flex-shrink-0 ${
+            class={`text-[0.85em] font-mono tracking-tight tabular-nums flex-shrink-0 ${
               stats().totalPnl >= 0 ? 'text-accent-2' : 'text-red'
             }`}
             title="Closed trades from last run"
@@ -84,7 +84,7 @@ export const StatusBar: Component = () => {
 
       <button
         type="button"
-        class={`sc-btn sc-btn-ghost px-1.5 py-0 text-[10px] inline-flex items-center gap-1 flex-shrink-0 ${
+        class={`sc-btn sc-btn-ghost px-1.5 py-0 text-[0.85em] flex-shrink-0 ${
           store.logsPanel.open ? 'text-accent' : ''
         }`}
         title="Toggle system logs"
@@ -93,7 +93,7 @@ export const StatusBar: Component = () => {
           persist();
         }}
       >
-        <Icons.scrollText size={12} />
+        <Icons.scrollText />
         <span class="font-mono tabular-nums w-[2ch] text-right">{store.logs.length}</span>
       </button>
 

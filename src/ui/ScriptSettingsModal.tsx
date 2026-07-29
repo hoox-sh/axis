@@ -133,13 +133,13 @@ export const ScriptSettingsModal: Component = () => {
   return (
     <Show when={open()}>
       <div
-        class="fixed inset-0 bg-black/75 flex items-center justify-center z-[1000] p-4"
+        class="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000] p-4 backdrop-blur-[2px]"
         onClick={onBackdrop}
         onKeyDown={onKey}
         role="presentation"
       >
         <div
-          class="bg-bg-panel border-2 border-border w-[min(440px,calc(100vw-32px))] max-h-[calc(100vh-64px)] flex flex-col shadow-[0_16px_48px_rgba(0,0,0,0.6)] outline-none"
+          class="sc-dialog w-[min(440px,calc(100vw-32px))]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="axis-script-settings-title"
@@ -147,16 +147,16 @@ export const ScriptSettingsModal: Component = () => {
           tabIndex={-1}
           ref={(el) => queueMicrotask(() => el?.focus())}
         >
-          <div class="h-0.5 w-full bg-accent flex-shrink-0" />
-          <div class="flex items-center justify-between px-3.5 py-2.5 border-b-2 border-border">
+          <div class="sc-dialog-accent" />
+          <div class="sc-dialog-header">
             <div class="min-w-0">
               <div
                 id="axis-script-settings-title"
-                class="text-sm font-semibold text-text tracking-tight"
+                class="text-[0.95em] font-semibold text-text tracking-tight"
               >
                 Script settings
               </div>
-              <div class="text-[10px] text-text-faint truncate">
+              <div class="sc-hint truncate">
                 {target()?.name || 'Script'} · input parameters
               </div>
             </div>
@@ -166,11 +166,11 @@ export const ScriptSettingsModal: Component = () => {
               onClick={() => closeScriptSettings()}
               aria-label="Close"
             >
-              <Icons.x size={14} />
+              <Icons.x />
             </button>
           </div>
 
-          <div class="p-3.5 flex flex-col gap-3 overflow-auto flex-1 min-h-0">
+          <div class="sc-dialog-body">
             <Show
               when={fields().length > 0}
               fallback={
@@ -205,10 +205,10 @@ export const ScriptSettingsModal: Component = () => {
             </Show>
           </div>
 
-          <div class="flex items-center gap-2 px-3.5 py-2.5 border-t-2 border-border flex-shrink-0">
+          <div class="sc-dialog-footer">
             <button
               type="button"
-              class="sc-btn sc-btn-ghost text-[11px]"
+              class="sc-btn sc-btn-ghost"
               onClick={onReset}
               disabled={!fields().length || busy()}
             >
@@ -217,7 +217,7 @@ export const ScriptSettingsModal: Component = () => {
             <div class="flex-1" />
             <button
               type="button"
-              class="sc-btn sc-btn-ghost text-[11px]"
+              class="sc-btn sc-btn-ghost"
               onClick={() => closeScriptSettings()}
               disabled={busy()}
             >
@@ -225,7 +225,7 @@ export const ScriptSettingsModal: Component = () => {
             </button>
             <button
               type="button"
-              class="sc-btn text-[11px]"
+              class="sc-btn"
               onClick={() => void onApply(false)}
               disabled={busy()}
             >
@@ -233,13 +233,13 @@ export const ScriptSettingsModal: Component = () => {
             </button>
             <button
               type="button"
-              class="sc-btn sc-btn-primary text-[11px] inline-flex items-center gap-1"
+              class="sc-btn sc-btn-primary"
               onClick={() => void onApply(true)}
               disabled={busy() || !target()?.code?.trim()}
               data-testid="axis-script-settings-apply"
             >
-              <Show when={busy()} fallback={<Icons.play size={12} />}>
-                <Icons.loader size={12} class="animate-spin" />
+              <Show when={busy()} fallback={<Icons.play />}>
+                <Icons.loader class="animate-spin" />
               </Show>
               Apply &amp; run
             </button>

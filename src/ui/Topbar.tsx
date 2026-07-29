@@ -146,33 +146,39 @@ export const Topbar: Component<{
 
   return (
     <header
-      class="flex items-center gap-2.5 px-2.5 py-1 bg-bg-panel border-b-2 border-border flex-shrink-0 min-h-[36px] flex-wrap"
+      class="flex items-center gap-[var(--ui-gap-sm)] px-2.5 py-1 bg-bg-panel border-b-2 border-border flex-shrink-0 min-h-[var(--ui-topbar-min-h)] flex-wrap"
       data-testid="axis-topbar"
     >
       <div
-        class="flex items-center gap-1.5 mr-1.5 min-w-0"
+        class="flex items-center gap-1.5 mr-0.5 min-w-0"
         data-testid="axis-brand"
         title="HOOX · AXIS"
       >
         <HooxLogo size="xs" class="text-text flex-shrink-0" data-testid="axis-hoox-logo" />
-        <div class="font-semibold text-sm text-text tracking-tight leading-none">
+        <div class="font-semibold text-[1em] text-text tracking-tight leading-none">
           AXIS
-          <span class="text-text-faint font-normal text-[11px] ml-1.5">chart</span>
+          <span class="text-text-faint font-normal text-[0.78em] ml-1.5 tracking-wide">
+            chart
+          </span>
         </div>
       </div>
 
+      <span class="sc-sep" aria-hidden="true" />
+
       <button
-        class={`sc-btn sc-btn-ghost px-2 text-[11px] inline-flex items-center gap-1 ${store.watchlist.open ? 'text-accent' : ''}`}
+        class={`sc-btn sc-btn-ghost ${store.watchlist.open ? 'text-accent' : ''}`}
         onClick={props.onToggleWatchlist}
         title="Toggle watchlist"
       >
-        <Icons.list size={14} />
+        <Icons.list />
         List
       </button>
 
-      <label class="text-[10px] text-text-dim uppercase tracking-wider">Source</label>
+      <span class="sc-sep" aria-hidden="true" />
+
+      <label class="sc-label hidden sm:inline">Source</label>
       <select
-        class="sc-input min-w-[120px]"
+        class="sc-input min-w-[7.5em]"
         data-testid="axis-select-source"
         value={store.source}
         onChange={(e) => onSourceChange(e.currentTarget.value)}
@@ -183,11 +189,11 @@ export const Topbar: Component<{
 
       <Show when={store.source === 'csv-upload'}>
         <button
-          class="sc-btn sc-btn-ghost px-2 text-[11px] max-w-[160px] inline-flex items-center gap-1"
+          class="sc-btn sc-btn-ghost max-w-[12em]"
           title={uploadLabel() || 'Upload CSV or JSON OHLCV'}
           onClick={() => fileInput?.click()}
         >
-          <Icons.upload size={13} />
+          <Icons.upload />
           <span class="truncate">{uploadLabel() || 'Upload…'}</span>
         </button>
         <input
@@ -200,12 +206,12 @@ export const Topbar: Component<{
       </Show>
 
       <Show when={sourceNeedsSymbol()}>
-        <label class="text-[10px] text-text-dim uppercase tracking-wider" for="axis-symbol">
+        <label class="sc-label hidden sm:inline" for="axis-symbol">
           Symbol
         </label>
         <input
           id="axis-symbol"
-          class="sc-input min-w-[96px] font-mono uppercase focus-visible:border-accent"
+          class="sc-input min-w-[6.5em] font-mono uppercase"
           value={store.symbol}
           spellcheck={false}
           autocomplete="off"
@@ -225,12 +231,12 @@ export const Topbar: Component<{
       </Show>
 
       <Show when={store.source !== 'csv-upload'}>
-        <label class="text-[10px] text-text-dim uppercase tracking-wider" for="axis-interval">
+        <label class="sc-label hidden sm:inline" for="axis-interval">
           Interval
         </label>
         <select
           id="axis-interval"
-          class="sc-input min-w-[56px] focus-visible:border-accent"
+          class="sc-input min-w-[3.5em]"
           value={store.interval}
           title="Bar interval · reloads chart"
           onChange={(e) => {
@@ -248,7 +254,7 @@ export const Topbar: Component<{
       </Show>
 
       <button
-        class={`sc-btn inline-flex items-center gap-1 ${loading() ? 'opacity-50' : ''}`}
+        class={`sc-btn ${loading() ? 'opacity-50' : ''}`}
         onClick={loadHistorical}
         disabled={loading()}
         data-testid="axis-btn-load"
@@ -258,19 +264,20 @@ export const Topbar: Component<{
             : `Load bars from ${store.source}`
         }
       >
-        {loading() ? <HooxLoader size="xs" /> : <Icons.download size={13} />}
+        {loading() ? <HooxLoader size="xs" /> : <Icons.download />}
         {loading() ? 'Loading…' : 'Load'}
       </button>
 
-      <label class="text-[10px] text-text-dim uppercase tracking-wider">Engine</label>
+      <span class="sc-sep" aria-hidden="true" />
+
+      <label class="sc-label hidden sm:inline">Engine</label>
       <select
-        class="sc-input min-w-[120px] max-w-[180px]"
+        class="sc-input min-w-[7.5em] max-w-[12em]"
         data-testid="axis-select-engine"
         value={store.engine}
         onChange={(e) => {
           const id = e.currentTarget.value;
           setActivePlugin('engine', id);
-          // Kick self-hosted Pyodide load as soon as the user selects it
           if (id === 'pyodide') {
             void preloadPyodide();
           }
@@ -300,9 +307,9 @@ export const Topbar: Component<{
         </For>
       </select>
 
-      <label class="text-[10px] text-text-dim uppercase tracking-wider">Stream</label>
+      <label class="sc-label hidden sm:inline">Stream</label>
       <select
-        class="sc-input min-w-[110px]"
+        class="sc-input min-w-[7em]"
         value={store.live.streamId}
         disabled={store.live.active}
         onChange={(e) => {
@@ -314,43 +321,43 @@ export const Topbar: Component<{
       </select>
 
       <button
-        class={`sc-btn inline-flex items-center gap-1.5 ${
-          store.live.active ? 'border-accent-2 text-accent-2' : ''
-        }`}
+        class={`sc-btn ${store.live.active ? 'border-accent-2 text-accent-2' : ''}`}
         onClick={toggleLive}
         title={store.live.active ? 'Stop live stream' : 'Start live stream'}
       >
         {store.live.active ? (
-          <Icons.wifi size={13} class="text-accent-2" />
+          <Icons.wifi class="text-accent-2" />
         ) : (
-          <Icons.wifiOff size={13} />
+          <Icons.wifiOff />
         )}
-        {store.live.active ? 'Live' : 'Live'}
+        Live
       </button>
 
-      <div class="flex-1" />
+      <div class="flex-1 min-w-2" />
 
       <button
-        class="sc-btn sc-btn-primary inline-flex items-center gap-1"
+        class="sc-btn sc-btn-primary"
         onClick={onRun}
         data-testid="axis-btn-run"
         title="Run (or use detached editor)"
       >
-        <Icons.play size={13} />
+        <Icons.play />
         Run
       </button>
 
+      <span class="sc-sep" aria-hidden="true" />
+
       <button
-        class={`sc-btn sc-btn-ghost px-2 inline-flex items-center gap-1 ${
+        class={`sc-btn sc-btn-ghost ${
           store.editor.open && store.editor.mode === 'docked' ? 'text-accent' : ''
         }`}
         onClick={props.onToggleEditor}
         title="Toggle docked editor"
       >
-        <Icons.panelRight size={13} />
+        <Icons.panelRight />
         Editor
         {store.editor.mode === 'popout' && (
-          <span class="text-orange ml-0.5 text-[10px]">ext</span>
+          <span class="text-orange ml-0.5 text-[0.72em]">ext</span>
         )}
       </button>
 
@@ -359,71 +366,67 @@ export const Topbar: Component<{
         title="Detach editor to window"
         onClick={() => detachEditor('popup')}
       >
-        <Icons.popout size={13} />
+        <Icons.popout />
       </button>
       <button
         class="sc-btn sc-btn-ghost px-1.5"
         title="Open editor in new tab"
         onClick={() => detachEditor('tab')}
       >
-        <Icons.externalLink size={13} />
+        <Icons.externalLink />
       </button>
+
+      <span class="sc-sep" aria-hidden="true" />
 
       <button
         type="button"
-        class={`sc-btn sc-btn-ghost px-2 inline-flex items-center gap-1 ${
-          store.indicatorPanel.open ? 'text-accent' : ''
-        }`}
+        class={`sc-btn sc-btn-ghost ${store.indicatorPanel.open ? 'text-accent' : ''}`}
         onClick={() => toggleIndicatorPanel()}
         title="Toggle indicator list"
         aria-pressed={store.indicatorPanel.open}
         data-testid="axis-btn-indicators"
       >
-        <Icons.activity size={13} />
+        <Icons.activity />
         Indicators
       </button>
 
       <button
         type="button"
-        class={`sc-btn sc-btn-ghost px-2 inline-flex items-center gap-1 ${
-          store.layerPanel.open ? 'text-accent' : ''
-        }`}
+        class={`sc-btn sc-btn-ghost ${store.layerPanel.open ? 'text-accent' : ''}`}
         onClick={() => toggleLayerPanel()}
         title="Layers — panes, scripts, drawings"
         aria-pressed={store.layerPanel.open}
         data-testid="axis-btn-layers"
       >
-        <Icons.layers size={13} />
+        <Icons.layers />
         Layers
       </button>
 
       <button
         type="button"
-        class={`sc-btn sc-btn-ghost px-2 inline-flex items-center gap-1 ${
-          store.dataViewPanel.open ? 'text-accent' : ''
-        }`}
+        class={`sc-btn sc-btn-ghost ${store.dataViewPanel.open ? 'text-accent' : ''}`}
         onClick={() => toggleDataViewPanel()}
         title="Data window — OHLCV & plot values at crosshair"
         aria-pressed={store.dataViewPanel.open}
         data-testid="axis-btn-dataview"
       >
-        <Icons.table size={13} />
+        <Icons.table />
         Data
       </button>
 
       <button
         type="button"
-        class="sc-btn sc-btn-ghost px-2 inline-flex items-center gap-1"
+        class="sc-btn sc-btn-ghost"
         onClick={() => openScriptSettings(null)}
         title="Script settings — edit input.* parameters"
         data-testid="axis-btn-script-settings"
       >
-        <Icons.settings size={13} />
+        <Icons.settings />
         Inputs
       </button>
 
       <button
-        class={`sc-btn sc-btn-ghost px-2 inline-flex items-center gap-1 ${store.resultsPanel.open ? 'text-accent' : ''}`}
+        class={`sc-btn sc-btn-ghost ${store.resultsPanel.open ? 'text-accent' : ''}`}
         title="Results & export"
         data-testid="axis-btn-results"
         onClick={() => {
@@ -431,9 +434,11 @@ export const Topbar: Component<{
           persist();
         }}
       >
-        <Icons.scrollText size={13} />
+        <Icons.scrollText />
         Results
       </button>
+
+      <span class="sc-sep" aria-hidden="true" />
 
       <button
         class="sc-btn sc-btn-ghost px-2"
@@ -442,26 +447,26 @@ export const Topbar: Component<{
         data-testid="axis-btn-plugins"
         aria-label="Open plugin manager"
       >
-        <Icons.folder size={14} />
+        <Icons.folder />
       </button>
 
       <button
         class="sc-btn sc-btn-ghost px-2"
         onClick={props.onOpenSettings}
-        title="Settings"
+        title="Settings — density, engine, live"
         data-testid="axis-btn-settings"
         aria-label="Open settings"
       >
-        <Icons.settings size={14} />
+        <Icons.settings />
       </button>
 
       <button
-        class="sc-btn sc-btn-ghost px-2 focus-visible:border-accent"
+        class="sc-btn sc-btn-ghost px-2"
         onClick={toggleTheme}
         title={store.theme === 'dark' ? 'Switch to light (soft void lift)' : 'Switch to dark void'}
         aria-label="Toggle color theme"
       >
-        {store.theme === 'dark' ? <Icons.sun size={14} /> : <Icons.moon size={14} />}
+        {store.theme === 'dark' ? <Icons.sun /> : <Icons.moon />}
       </button>
     </header>
   );
