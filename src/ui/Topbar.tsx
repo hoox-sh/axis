@@ -266,9 +266,15 @@ export const Topbar: Component<{
           const id = e.currentTarget.value;
           setActivePlugin('engine', id);
           // Kick self-hosted Pyodide load as soon as the user selects it
-          if (id === 'pyodide') void preloadPyodide();
+          if (id === 'pyodide') {
+            void preloadPyodide();
+          }
         }}
-        title={engines().find((en) => en.id === store.engine)?.description || 'Calculation engine'}
+        title={
+          store.engine === 'pyodide'
+            ? 'Client-Side Pyodide — first load often 20–30s (wasm + micropip + wheel). Status bar shows progress.'
+            : engines().find((en) => en.id === store.engine)?.description || 'Calculation engine'
+        }
       >
         <For each={engines()}>
           {(en) => (

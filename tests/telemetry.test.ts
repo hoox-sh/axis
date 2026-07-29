@@ -28,7 +28,9 @@ describe('classifyTransport', () => {
   it('classifies source and engine', () => {
     expect(classifyTransport('source', 'binance-rest')).toBe('rest');
     expect(classifyTransport('source', 'mock-walk')).toBe('local');
-    expect(classifyTransport('engine', 'server')).toBe('rest');
+    // server prefers WS by default (Prefer WebSocket); REST when preferWs=false
+    expect(classifyTransport('engine', 'server')).toBe('ws');
+    expect(classifyTransport('engine', 'pyodide')).toBe('local');
     expect(classifyTransport('engine', 'pyodide', { offline: true })).toBe('local');
   });
 

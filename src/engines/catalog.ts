@@ -23,8 +23,9 @@
  */
 
 import type { EnginePlugin, RunResult } from '../plugins/types';
-import { store } from '../store';
+import { store, setTelemetryPlane, setTelemetryState, setStatus, appendLog } from '../store';
 import { registry } from '../plugins/registry';
+import { classifyTransport } from '../ui/telemetry';
 
 function resolveConfig(
   schema: EnginePlugin['configSchema'],
@@ -69,7 +70,8 @@ export const serverEngine: EnginePlugin = {
   builtIn: true,
   description:
     'Sends the script + bars to the configured backend (Flask or Cloudflare Worker). Prefers WebSocket /ws/run when available, falls back to POST /run.',
-  capabilities: { needsNetwork: true, transport: 'rest' },
+  // transport is dual (WS preferred, REST fallback) — classified via preferWs in telemetry
+  capabilities: { needsNetwork: true },
   configSchema: {
     endpoint: { type: 'string', default: 'http://localhost:5002', label: 'Backend URL' },
     mode: {
@@ -328,14 +330,58 @@ export function prefetchPyodideAssets(indexUrl?: string): void {
 /**
  * Preload full Pyodide + pynescript runtime in the background.
  * Safe to call multiple times; shares the same ensure promise.
+ * First cold load is often ~20–30s (wasm + micropip + wheels).
  */
 export function preloadPyodide(): Promise<unknown> {
   prefetchPyodideAssets();
-  return pyodideEngine._ensure().catch((err: unknown) => {
-    // Soft-fail: preload must not break the app if assets are missing
-    console.warn('[axis] pyodide preload failed', err);
-    return null;
-  });
+  const active = store.engine === 'pyodide' || store.activePlugins?.engine === 'pyodide';
+  if (!pyodideEngine._pyodide) {
+    setTelemetryPlane('engine', {
+      id: 'pyodide',
+      name: 'Client-Side (Pyodide)',
+      transport: 'local',
+      state: 'connecting',
+      detail: 'cold load ~20–30s (Pyodide + micropip + wheel)',
+      error: null,
+    });
+    if (active) {
+      setStatus(
+        'loading',
+        'Loading Pyodide runtime… ~20–30s first open (wasm + micropip + pynescript wheel)',
+      );
+    }
+  }
+  return pyodideEngine
+    ._ensure()
+    .then((py) => {
+      if (py) {
+        setTelemetryState('engine', 'open', {
+          id: 'pyodide',
+          name: 'Client-Side (Pyodide)',
+          transport: 'local',
+          detail: 'ready · local',
+          error: null,
+        });
+        if (active) {
+          setStatus('ready', 'Pyodide ready · offline evaluate available');
+          appendLog('ok', 'Pyodide runtime ready (~self-hosted)', 'pyodide');
+        }
+      }
+      return py;
+    })
+    .catch((err: unknown) => {
+      // Soft-fail: preload must not break the app if assets are missing
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[axis] pyodide preload failed', err);
+      setTelemetryState('engine', 'error', {
+        id: 'pyodide',
+        transport: 'local',
+        detail: 'load failed',
+        error: msg,
+      });
+      if (active) setStatus('error', `Pyodide load failed: ${msg}`);
+      return null;
+    });
 }
 
 export const pyodideEngine: EnginePlugin & {

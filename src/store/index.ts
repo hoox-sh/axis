@@ -100,7 +100,7 @@ const DEFAULTS: AppState = {
   telemetry: {
     source: idlePlane('binance-rest', 'Binance REST', 'rest'),
     stream: idlePlane('binance-ws', 'Binance WebSocket', 'ws'),
-    engine: idlePlane('server', 'Server-Side', 'rest'),
+    engine: idlePlane('server', 'Server-Side', 'ws'),
     storage: idlePlane('local', 'Local', 'local'),
     runLatencySamples: [],
     lastTick: null,
@@ -227,7 +227,16 @@ export function setActivePlugin(
       setStore('telemetry', 'stream', 'state', 'idle');
     }
     if (kind === 'engine') {
-      setStore('telemetry', 'engine', 'state', 'idle');
+      // Prefer idle/open state from loaders; reset error on switch
+      setStore('telemetry', 'engine', 'state', id === 'pyodide' ? 'connecting' : 'idle');
+      setStore('telemetry', 'engine', 'error', null);
+      setStore('telemetry', 'engine', 'detail', id === 'pyodide' ? 'select · will load ~20–30s' : undefined);
+      setStore(
+        'telemetry',
+        'engine',
+        'transport',
+        id === 'pyodide' ? 'local' : id === 'server' ? 'ws' : store.telemetry.engine.transport,
+      );
     }
   }
   persist();

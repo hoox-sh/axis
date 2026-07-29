@@ -20,6 +20,13 @@
 /**
  * AXIS Connection HUD — glanceable transport / engine / tick telemetry.
  * Composed into StatusBar; reads ephemeral store.telemetry.
+ *
+ * Chip roles:
+ * - LIVE: stream on/off
+ * - tick: last live price pulse (not the calculation engine)
+ * - MODE: interpret | compile | auto for the active engine
+ * - ENG (plane): engine id + **how the last run traveled** (WS / REST / LOCAL)
+ * - SRC / STR / STO: other plugin planes
  */
 
 import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
@@ -43,7 +50,7 @@ function PlaneChip(props: {
   const t = () => props.plane;
   return (
     <span
-      class="inline-flex items-center gap-1 px-1.5 py-0.5 border border-border-soft bg-bg-elev/60 max-w-[148px]"
+      class="inline-flex items-center gap-1 px-1.5 py-0.5 border border-border-soft bg-bg-elev/60 max-w-[160px] flex-shrink-0 h-[22px] box-border overflow-hidden"
       title={
         props.title ||
         `${props.label}: ${t().name} · ${transportLabel(t().transport)} · ${t().state}${
@@ -56,11 +63,15 @@ function PlaneChip(props: {
         class={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${connDotClass(t().state)}`}
         aria-hidden="true"
       />
-      <span class="text-[9px] font-mono uppercase text-text-faint tracking-wide">{props.label}</span>
-      <span class="text-[10px] font-mono text-text-dim truncate max-w-[52px]">{t().id}</span>
+      <span class="text-[9px] font-mono uppercase text-text-faint tracking-wide flex-shrink-0">
+        {props.label}
+      </span>
+      <span class="text-[10px] font-mono text-text-dim truncate max-w-[48px]">{t().id}</span>
       <TransportBadge transport={t().transport} />
       <Show when={t().latencyMs != null}>
-        <span class="text-[10px] font-mono tabular-nums text-text-faint">{formatLatency(t().latencyMs)}</span>
+        <span class="text-[10px] font-mono tabular-nums text-text-faint flex-shrink-0">
+          {formatLatency(t().latencyMs)}
+        </span>
       </Show>
     </span>
   );
@@ -82,7 +93,18 @@ function TransportBadge(props: { transport: TransportClass }) {
     }
   };
   return (
-    <span class={`px-1 py-px border text-[8px] font-mono leading-none ${color()}`}>
+    <span
+      class={`px-1 py-px border text-[8px] font-mono leading-none flex-shrink-0 ${color()}`}
+      title={
+        props.transport === 'ws'
+          ? 'Last / preferred path: WebSocket /ws/run'
+          : props.transport === 'rest'
+            ? 'Last / preferred path: REST POST /run'
+            : props.transport === 'local'
+              ? 'In-browser / local path (no network run)'
+              : transportLabel(props.transport)
+      }
+    >
       {transportLabel(props.transport)}
     </span>
   );
@@ -121,17 +143,17 @@ function TickPulse() {
 
   return (
     <span
-      class="inline-flex items-center gap-1 px-1.5 py-0.5 border border-border-soft font-mono text-[10px] h-[22px] box-border flex-shrink-0"
+      class="inline-flex items-center gap-1 px-1.5 py-0.5 border border-border-soft font-mono text-[10px] h-[22px] box-border flex-shrink-0 overflow-hidden relative"
       title={
         tick()
-          ? `Last tick ${tick()!.price} @ ${tick()!.time} (${formatTickAge(tick()!.at, now())})`
-          : 'No live ticks yet'
+          ? `Live market tick (stream price) — not the engine. ${tick()!.price} @ ${tick()!.time} (${formatTickAge(tick()!.at, now())})`
+          : 'No live ticks yet (enable Live stream)'
       }
       data-testid="axis-tick-indicator"
     >
-      {/* Fixed 8×8 box; ping is absolute and clipped so it cannot grow layout */}
+      {/* Fixed 8×8 box; ping clipped so it never overlaps MODE/ENG chips */}
       <span
-        class="relative w-2 h-2 flex-shrink-0 overflow-visible"
+        class="relative flex-shrink-0 overflow-hidden"
         style={{ width: '8px', height: '8px' }}
         aria-hidden="true"
       >
@@ -144,7 +166,7 @@ function TickPulse() {
         />
         <Show when={fresh()}>
           <span
-            class="absolute left-0 top-0 w-2 h-2 rounded-full bg-accent-2 animate-ping opacity-50 pointer-events-none"
+            class="absolute left-0 top-0 rounded-full bg-accent-2 animate-ping opacity-40 pointer-events-none"
             style={{ width: '8px', height: '8px' }}
           />
         </Show>
@@ -179,12 +201,19 @@ function LiveBadge() {
     return 'text-text-faint border-border';
   };
   return (
-    <span class={`px-1.5 py-0.5 border text-[9px] font-mono tracking-wider ${cls()}`} title="Live stream mode">
+    <span
+      class={`px-1.5 py-0.5 border text-[9px] font-mono tracking-wider flex-shrink-0 h-[22px] box-border inline-flex items-center ${cls()}`}
+      title="Live stream arm (market data), independent of calculation engine"
+    >
       {label()}
     </span>
   );
 }
 
+/**
+ * MODE chip — execution path (interpret / compile / auto) + engine id.
+ * Not the same as ENG plane transport (WS/REST).
+ */
 function EngineModeChip() {
   const meta = createMemo(() => {
     const eng = getEngine(store.engine);
@@ -192,27 +221,53 @@ function EngineModeChip() {
       (store.pluginsConfig?.[`engine:${store.engine}`]?.mode as string) ||
       (store.pluginsConfig?.[store.engine]?.mode as string) ||
       'interpret';
+    const tel = store.telemetry?.engine;
+    const loading =
+      store.engine === 'pyodide' &&
+      (tel?.state === 'connecting' || (!!tel?.detail && String(tel.detail).includes('load')));
     return {
       id: store.engine,
       name: eng?.name || store.engine,
       offline: !!eng?.capabilities?.offline,
       mode: String(mode),
-      latency: store.telemetry?.engine?.latencyMs ?? store.lastRunMs,
-      state: (store.telemetry?.engine?.state || 'idle') as ConnState,
+      latency: tel?.latencyMs ?? store.lastRunMs,
+      state: (tel?.state || 'idle') as ConnState,
+      loading,
+      detail: tel?.detail || '',
     };
   });
 
   return (
     <span
-      class="inline-flex items-center gap-1 px-1.5 py-0.5 border border-border-soft font-mono text-[10px]"
-      title={`${meta().name} · ${meta().mode} · ${formatLatency(meta().latency)}`}
+      class="inline-flex items-center gap-1 px-1.5 py-0.5 border border-border-soft font-mono text-[10px] h-[22px] box-border flex-shrink-0 overflow-hidden max-w-[200px]"
+      title={
+        meta().loading
+          ? `Pyodide cold start: ${meta().detail || '~20–30s'} — wasm, micropip, vendor wheels`
+          : `Execution MODE (not transport): ${meta().name} · mode=${meta().mode}. ` +
+            `Server uses Pro API; Pyodide runs in-browser. ` +
+            `WS/REST is shown on the ENG chip (how the last run was sent).`
+      }
       data-testid="axis-engine-chip"
     >
-      <span class={`w-1.5 h-1.5 rounded-full ${connDotClass(meta().state)}`} />
-      {meta().offline ? <Icons.activity size={11} class="text-accent-2" /> : <Icons.wifi size={11} class="text-accent-3" />}
-      <span class="truncate max-w-[72px]">{meta().id}</span>
-      <span class="text-[9px] text-text-faint uppercase">{meta().mode}</span>
-      <span class="tabular-nums text-text-dim">{formatLatency(meta().latency)}</span>
+      <span class={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${connDotClass(meta().state)}`} />
+      {meta().offline ? (
+        <Icons.activity size={11} class="text-accent-2 flex-shrink-0" />
+      ) : (
+        <Icons.wifi size={11} class="text-accent-3 flex-shrink-0" />
+      )}
+      <span class="text-[9px] text-text-faint uppercase flex-shrink-0">mode</span>
+      <span class="truncate max-w-[56px] text-text-dim">{meta().id}</span>
+      <Show
+        when={!meta().loading}
+        fallback={
+          <span class="text-[9px] text-orange uppercase truncate" data-testid="axis-pyodide-loading">
+            loading…
+          </span>
+        }
+      >
+        <span class="text-[9px] text-text-faint uppercase flex-shrink-0">{meta().mode}</span>
+      </Show>
+      <span class="tabular-nums text-text-dim flex-shrink-0">{formatLatency(meta().latency)}</span>
     </span>
   );
 }
@@ -223,16 +278,32 @@ function PairingWarn() {
     const expected = defaultStreamForSource(src);
     const actual = store.live.streamId || store.activePlugins?.stream;
     if (!actual || actual === expected) return null;
-    // mock/csv with mock-poll is fine; only warn venue mismatch
     if (src === 'mock-walk' || src === 'csv-upload') return null;
     return `Stream ${actual} ≠ default ${expected} for ${src}`;
   });
   return (
     <Show when={warn()}>
-      <span class="text-[9px] font-mono text-orange truncate max-w-[140px]" title={warn()!}>
+      <span class="text-[9px] font-mono text-orange truncate max-w-[140px] flex-shrink-0" title={warn()!}>
         ⚠ pair
       </span>
     </Show>
+  );
+}
+
+function engPlaneTitle(p: PlaneTelemetry): string {
+  const transportHint =
+    p.transport === 'ws'
+      ? 'WS = WebSocket /ws/run (preferred when Prefer WebSocket is on)'
+      : p.transport === 'rest'
+        ? 'REST = POST /run (fallback if WS fails or Prefer WebSocket is off)'
+        : p.transport === 'local'
+          ? 'LOCAL = in-browser Pyodide (no Pro API hop)'
+          : transportLabel(p.transport);
+  return (
+    `ENG plane (transport): ${p.name} · ${transportLabel(p.transport)} · ${p.state}. ` +
+    `${transportHint}. ` +
+    `Toggles when a run succeeds over WS vs falls back to REST. ` +
+    `Execution mode (interpret/compile) is on the MODE chip.`
   );
 }
 
@@ -242,7 +313,7 @@ export const ConnectionHud: Component = () => {
 
   return (
     <div
-      class="flex items-center gap-1.5 flex-nowrap min-w-0 flex-shrink-0"
+      class="flex items-center gap-1.5 flex-nowrap min-w-0 flex-shrink-0 overflow-hidden"
       data-testid="axis-connection-hud"
       role="status"
       aria-label="Connection status"
@@ -253,15 +324,36 @@ export const ConnectionHud: Component = () => {
       <Show when={!compact()}>
         <For
           each={[
-            { label: 'SRC', plane: () => tel()?.source },
-            { label: 'STR', plane: () => tel()?.stream },
-            { label: 'ENG', plane: () => tel()?.engine },
-            { label: 'STO', plane: () => tel()?.storage },
+            {
+              label: 'SRC',
+              plane: () => tel()?.source,
+              title: () => undefined as string | undefined,
+            },
+            {
+              label: 'STR',
+              plane: () => tel()?.stream,
+              title: () => undefined as string | undefined,
+            },
+            {
+              label: 'ENG',
+              plane: () => tel()?.engine,
+              title: () => {
+                const p = tel()?.engine;
+                return p ? engPlaneTitle(p) : undefined;
+              },
+            },
+            {
+              label: 'STO',
+              plane: () => tel()?.storage,
+              title: () => undefined as string | undefined,
+            },
           ]}
         >
           {(item) => (
             <Show when={item.plane()}>
-              {(p) => <PlaneChip label={item.label} plane={p()} />}
+              {(p) => (
+                <PlaneChip label={item.label} plane={p()} title={item.title?.()} />
+              )}
             </Show>
           )}
         </For>

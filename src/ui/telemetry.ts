@@ -23,6 +23,7 @@
 
 import type { ConnState, PlaneTelemetry, TransportClass } from '../store/types';
 import type { PluginCapabilities } from '../plugins/types';
+import { store } from '../store';
 
 export function idlePlane(
   id: string,
@@ -67,6 +68,15 @@ export function classifyTransport(
   }
   if (kind === 'engine') {
     if (lower.includes('pyodide') || lower.includes('local') || lower.includes('tiny')) return 'local';
+    // Server prefers /ws/run; actual run may fall back to REST (meta.transport).
+    // PreferWs defaults true — only report rest when user disabled WS preference.
+    if (lower === 'server' || lower.includes('server')) {
+      const cfg =
+        (store.pluginsConfig?.['engine:server'] as { preferWs?: boolean } | undefined) ||
+        (store.pluginsConfig?.server as { preferWs?: boolean } | undefined);
+      if (cfg?.preferWs === false) return 'rest';
+      return 'ws';
+    }
     return 'rest';
   }
   if (kind === 'storage') {
