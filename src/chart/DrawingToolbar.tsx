@@ -97,6 +97,7 @@ const GROUP_ICONS: Partial<Record<ToolGroupId, typeof Icons.cursor>> = {
 function syncLayerFromStore() {
   const layer = getActiveDrawingLayer();
   if (!layer) return;
+  // Prefer setters that no-op when unchanged (hideDrawings already does).
   layer.setMagnet(store.drawingUi.magnet);
   layer.setStayInMode(store.drawingUi.stayInMode);
   layer.setLockAll(store.drawingUi.lockAll);

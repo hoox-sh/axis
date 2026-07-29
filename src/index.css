@@ -534,16 +534,17 @@ button.sc-btn:focus-visible {
   transform-box: fill-box;
 }
 
-/* Accent edge — brand orange on loaders, soft text tint on mark */
+/* Accent edge — same family as mark (void indigo / currentColor); no orange */
 .hoox-logo .hoox-logo-accent,
 .hoox-logo path[data-accent] {
-  fill: var(--color-accent-3);
-  fill-opacity: 0.95;
-}
-
-.hoox-logo:not(.hoox-logo--loader) path[data-accent] {
   fill: currentColor;
   fill-opacity: 0.88;
+}
+
+.hoox-logo--loader .hoox-logo-accent,
+.hoox-logo--loader path[data-accent] {
+  fill: var(--color-accent);
+  fill-opacity: 0.95;
 }
 
 /* Continuous CRT path flicker (loader mode) — deliberately slow / ambient */
@@ -661,7 +662,8 @@ button.sc-btn:focus-visible {
 }
 
 .hoox-logo--loader path[data-accent] {
-  fill: var(--color-accent-3);
+  fill: var(--color-accent);
+  fill-opacity: 0.95;
   animation-name: hoox-path-flicker;
   animation-duration: 5.8s;
   animation-timing-function: ease-in-out;

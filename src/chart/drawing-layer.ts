@@ -132,6 +132,10 @@ export class DrawingLayer {
     lineStyle: 'solid',
     fillOpacity: 0.15,
   };
+  /** Coalesce pan/zoom redraws — avoid thrashing gScript replace on every frame. */
+  private redrawRaf = 0;
+  /** Skip setScriptDrawings when payload is unchanged (live silent re-runs). */
+  private lastScriptSig = '';
 
   /**
    * @param host - Price pane DOM element (positioning context; gets the SVG child)
@@ -216,6 +220,7 @@ export class DrawingLayer {
 
   /** Hide non-selected user drawings; re-paints the user group immediately. */
   setHideDrawings(on: boolean) {
+    if (this.hideDrawings === on) return;
     this.hideDrawings = on;
     this.redrawUser();
   }
@@ -279,15 +284,23 @@ export class DrawingLayer {
 
   /**
    * Pine line/label/box from last `/run` (not user-editable).
-   * Atomic group replace — build off-DOM then swap so live re-runs avoid a blank frame.
+   * Skips DOM rebuild when the payload signature matches the last apply — live
+   * silent re-runs were re-applying the same drawings every tick (hide/show flicker).
+   * Pan/zoom still re-projects via {@link scheduleRedraw}.
    */
   setScriptDrawings(raw: unknown[] | undefined | null) {
-    this.scriptDrawings = normalizeScriptDrawings(raw);
+    const next = normalizeScriptDrawings(raw);
+    const sig = scriptDrawingsSignature(next);
+    if (sig === this.lastScriptSig) return;
+    this.lastScriptSig = sig;
+    this.scriptDrawings = next;
     this.redrawScript();
   }
 
   clearScriptDrawings() {
+    if (!this.scriptDrawings.length && this.lastScriptSig === '') return;
     this.scriptDrawings = [];
+    this.lastScriptSig = '';
     this.redrawScript();
   }
 
@@ -358,6 +371,10 @@ export class DrawingLayer {
 
   /** Tear down listeners, SVG, and active singleton if this instance. */
   destroy() {
+    if (this.redrawRaf) {
+      cancelAnimationFrame(this.redrawRaf);
+      this.redrawRaf = 0;
+    }
     for (const u of this.unsubs) u();
     this.unsubs = [];
     this.ro?.disconnect();
@@ -400,7 +417,9 @@ export class DrawingLayer {
     this.unsubs.push(() => this.svg.removeEventListener('contextmenu', onCtx));
     this.unsubs.push(() => window.removeEventListener('keydown', onKey));
 
-    const subRange = () => this.redraw();
+    // Pan/zoom only — do NOT redraw on crosshair (that rebuilt pine SVG every
+    // mousemove and looked like hide/show flicker).
+    const subRange = () => this.scheduleRedraw();
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(subRange);
     this.unsubs.push(() => {
       try {
@@ -410,22 +429,19 @@ export class DrawingLayer {
       }
     });
 
-    // Crosshair move also shifts price labels when panning
-    const subCross = () => this.redraw();
-    this.chart.subscribeCrosshairMove(subCross);
-    this.unsubs.push(() => {
-      try {
-        this.chart.unsubscribeCrosshairMove(subCross);
-      } catch {
-        /* ignore */
-      }
-    });
-
     this.ro = new ResizeObserver(() => {
-      this.syncSize();
-      this.redraw();
+      this.scheduleRedraw();
     });
     this.ro.observe(this.host);
+  }
+
+  /** Coalesce high-frequency scale/resize events to one paint per frame. */
+  private scheduleRedraw() {
+    if (this.redrawRaf) return;
+    this.redrawRaf = requestAnimationFrame(() => {
+      this.redrawRaf = 0;
+      this.redraw();
+    });
   }
 
   private syncSize() {
@@ -762,23 +778,20 @@ export class DrawingLayer {
   }
 
   private redrawScriptInner() {
-    // Build off-DOM then swap once to avoid a blank frame during live re-runs
-    const next = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    next.setAttribute('class', 'axis-pine-drawings');
+    // Build off-DOM then atomically replace children on the stable <g>.
+    const tmp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     for (const sd of this.scriptDrawings) {
-      this.paintScriptDrawing(next, sd);
+      this.paintScriptDrawing(tmp, sd);
     }
-    this.gScript.replaceWith(next);
-    this.gScript = next;
+    this.gScript.replaceChildren(...Array.from(tmp.childNodes));
   }
 
   private redrawUserInner() {
-    const next = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    const tmp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     for (const d of this.drawings) {
-      this.paintDrawing(next, d, d.id === this.selectedId);
+      this.paintDrawing(tmp, d, d.id === this.selectedId);
     }
-    this.gDraw.replaceWith(next);
-    this.gDraw = next;
+    this.gDraw.replaceChildren(...Array.from(tmp.childNodes));
   }
 
   /** View-only paint for Pine line/box/label/polyline (`pointer-events: none`). */
@@ -1198,4 +1211,28 @@ export function fibPrices(p1: number, p2: number): number[] {
   const span = hi - lo || 1;
   const fromHigh = p1 >= p2;
   return FIB_LEVELS.map((lvl) => (fromHigh ? p1 - span * lvl : p1 + span * lvl));
+}
+
+/** Stable signature for script drawing payloads (skip no-op live re-applies). */
+function scriptDrawingsSignature(list: ScriptDrawing[]): string {
+  if (!list.length) return '';
+  try {
+    return JSON.stringify(
+      list.map((d) => ({
+        t: d.type,
+        id: d.id,
+        t1: d.t1,
+        p1: d.p1,
+        t2: d.t2,
+        p2: d.p2,
+        c: d.color,
+        n: d.points?.length,
+        tx: d.text,
+        ext: d.extend,
+        st: d.style,
+      })),
+    );
+  } catch {
+    return String(list.length);
+  }
 }
