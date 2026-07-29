@@ -431,12 +431,28 @@ export const pyodideEngine: EnginePlugin & {
     });
     return this._loadPromise;
   },
-  async run({ script, bars }) {
+  async run({ script, bars, config }) {
     const t0 = performance.now();
     try {
       const py = await this._ensure();
+      const cfg = resolveConfig(this.configSchema, { ...(config || {}), ...pyodidePluginConfig() });
+      // Execution mode may live on engine:server config; also honor engine:pyodide.mode
+      const mode = String(
+        (config as { mode?: string } | undefined)?.mode ||
+          (cfg as { mode?: string }).mode ||
+          (store.pluginsConfig?.['engine:server'] as { mode?: string } | undefined)?.mode ||
+          'interpret',
+      );
+      // Optional: load numpy for compile/object-mode (no-op if already present)
+      if (mode === 'compile' || mode === 'auto') {
+        try {
+          await py.loadPackage?.('numpy');
+        } catch {
+          /* interpret fallback handles missing numpy */
+        }
+      }
       const resultJson = py.runPython(
-        `run_script(${JSON.stringify(script)}, ${JSON.stringify(bars)})`,
+        `run_script(${JSON.stringify(script)}, ${JSON.stringify(bars)}, ${JSON.stringify(mode)})`,
       );
       const result = JSON.parse(resultJson) as RunResult & {
         overlay?: boolean;

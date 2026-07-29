@@ -101,6 +101,16 @@ run({ script, bars, config?, signal? }): Promise<RunResult>
 2. `loadPyodide({ indexURL })`.
 3. `micropip.install` same-origin `/vendor/pynescript-0.2.0-py3-none-any.whl` and antlr runtime wheel.
 4. Fetch `/pyodide/pynescript_runtime.py` and `runPythonAsync` it.
+
+**Refreshing the pyne wheel** (after pyne compiler/runtime changes):
+
+```bash
+# from axis repo — builds sibling ../pynescript (or PYNE_ROOT) and vendors the wheel
+./scripts/sync-pyne-wheel.sh
+bun run build
+```
+
+Keep the hard-coded wheel filename in `src/engines/catalog.ts` / `index.js` in sync if the package version changes. The browser bridge is interpret-first; `mode=compile`/`auto` uses the wheel’s `pynescript.compiler` when NumPy loads (object-mode works without Numba; pure-numeric compile still needs server/Numba).
 5. `run` calls `run_script(script, bars)` in Python and `JSON.parse`s the result.
 
 **Guards:** `assertZipAsset` rejects HTML SPA fallbacks (classic deploy footgun when `public/vendor` is missing from `dist/`).

@@ -2,16 +2,21 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 # pynescript_runtime.py — runs Pine Script in the browser via Pyodide.
-# Loaded by the Pyodide engine in `src/engines/pyodide.js` after the
-# pynescript wheel is installed via micropip.
+# Loaded by the Pyodide engine after the pynescript wheel is installed via
+# micropip from `/vendor/pynescript-*-py3-none-any.whl`.
 #
-# Mirrors the Flask backend's `Runtime().run()` (backend/runtime.py +
-# backend/evaluator.py + backend/series.py).  Exposes:
+# Refresh the wheel after pyne releases:
+#   ./scripts/sync-pyne-wheel.sh
 #
-#   run_script(script: str, bars: list[dict]) -> str  (JSON)
+# Mirrors the Flask backend's interpret loop (backend/runtime.py +
+# evaluator/series).  Exposes:
 #
-# Returns a JSON string with `status`, `plots`, `series`, `events`, `error`,
-# `meta` (mode, count, ms, script_id, run_id).
+#   run_script(script, bars, mode="interpret") -> JSON str
+#
+# ``mode``: interpret (default) | compile | auto.
+# Browser compile uses the wheel's ``pynescript.compiler`` when NumPy is
+# available; pure-numeric compile still needs Numba (not shipped in WASM),
+# so auto falls back to interpret. Object-mode compile can run without Numba.
 
 from __future__ import annotations
 
@@ -464,11 +469,132 @@ def _run_interpret(script: str, bars: list[dict]) -> dict:
     }
 
 
-def run_script(script: str, bars: list[dict]) -> str:
-    """Top-level entry.  Always returns a JSON string for the JS side."""
+def _json_safe_series(values) -> list:
+    """NaN/Inf → None so browser JSON.parse never sees bare NaN."""
+    if values is None:
+        return []
+    if hasattr(values, "tolist"):
+        values = values.tolist()
+    out = []
+    for x in values:
+        if x is None:
+            out.append(None)
+            continue
+        try:
+            if hasattr(x, "item"):
+                x = x.item()
+        except Exception:
+            pass
+        if isinstance(x, float) and (x != x or x in (float("inf"), float("-inf"))):
+            out.append(None)
+        elif isinstance(x, (int, float)):
+            out.append(float(x))
+        else:
+            out.append(x)
+    return out
+
+
+def _run_compiled(script: str, bars: list[dict]) -> dict:
+    """Numba/object compile path from the vendored pynescript wheel."""
+    import numpy as np
+    from pynescript.compiler.engine import compile_script
+
+    if not bars:
+        return {
+            "status": "success",
+            "plots": [],
+            "series": {},
+            "events": [],
+            "meta": {"mode": "compile", "count": 0},
+        }
+
+    t0 = time.perf_counter()
+    compiled = compile_script(script)
+    opens = [float(b.get("open", 0.0) or 0.0) for b in bars]
+    highs = [float(b.get("high", 0.0) or 0.0) for b in bars]
+    lows = [float(b.get("low", 0.0) or 0.0) for b in bars]
+    closes = [float(b.get("close", 0.0) or 0.0) for b in bars]
+    volumes = [float(b.get("volume", 1.0) or 1.0) for b in bars]
+    series_map = compiled.run(opens, highs, lows, closes, volumes)
+
+    drawings = []
+    events = []
+    if isinstance(series_map, dict):
+        drawings = series_map.pop("__drawings", []) or []
+        events = series_map.pop("__events", []) or []
+        for k in ("__position_size", "__netprofit", "__equity"):
+            series_map.pop(k, None)
+
+    json_series = {
+        str(k): _json_safe_series(v)
+        for k, v in (series_map or {}).items()
+        if not str(k).startswith("__")
+    }
+    plots_main = next(iter(json_series.values()), []) if json_series else []
+    script_id = hashlib.sha256(script.encode("utf-8")).hexdigest()[:16]
+    run_id = uuid.uuid4().hex[:12]
+
+    return {
+        "status": "success",
+        "plots": plots_main,
+        "series": json_series,
+        "events": events if isinstance(events, list) else [],
+        "drawings": drawings if isinstance(drawings, list) else [],
+        "overlay": True,
+        "script_name": "plot",
+        "meta": {
+            "mode": "compile",
+            "object_mode": bool(getattr(compiled, "object_mode", False)),
+            "count": len(bars),
+            "ms": (time.perf_counter() - t0) * 1000,
+            "script_id": script_id,
+            "run_id": run_id,
+            "overlay": True,
+            "script_name": "plot",
+        },
+    }
+
+
+def run_script(script: str, bars: list[dict], mode: str = "interpret") -> str:
+    """Top-level entry. Always returns a JSON string for the JS side.
+
+    ``mode`` is interpret|compile|auto (same semantics as the Pro API).
+    """
+    mode_norm = (mode or "interpret").strip().lower()
+    if mode_norm not in ("interpret", "compile", "auto"):
+        mode_norm = "interpret"
+
     try:
+        if mode_norm in ("compile", "auto"):
+            try:
+                out = _run_compiled(script, bars)
+                return json.dumps(out, allow_nan=False, default=str)
+            except Exception as compile_err:
+                if mode_norm == "compile":
+                    return json.dumps(
+                        {
+                            "status": "error",
+                            "plots": [],
+                            "series": {},
+                            "events": [],
+                            "error": (
+                                f"Compile mode unavailable in Pyodide: {compile_err}. "
+                                "Numeric compile needs Numba (server engine); "
+                                "object-mode needs NumPy. Use interpret or server."
+                            ),
+                            "meta": {"mode": "compile"},
+                        }
+                    )
+                # auto → interpret fallback
+                out = _run_interpret(script, bars)
+                if isinstance(out, dict):
+                    out.setdefault("meta", {})
+                    out["meta"]["auto_backend"] = "interpret"
+                    out["meta"]["compile_fallback_reason"] = str(compile_err)
+                return json.dumps(out, allow_nan=False, default=str)
+
         out = _run_interpret(script, bars)
-        return json.dumps(out, default=str)
+        return json.dumps(out, allow_nan=False, default=str)
     except Exception as e:
         return json.dumps(
             {
@@ -477,6 +603,6 @@ def run_script(script: str, bars: list[dict]) -> str:
                 "series": {},
                 "events": [],
                 "error": f"{type(e).__name__}: {e}",
-                "meta": {"mode": "interpret"},
+                "meta": {"mode": mode_norm},
             }
         )

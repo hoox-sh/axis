@@ -219,7 +219,13 @@ export const pyodideEngine = {
         const t0 = performance.now();
         try {
             const py = await this._ensure();
-            const resultJson = py.runPython(`run_script(${JSON.stringify(script)}, ${JSON.stringify(bars)})`);
+            const mode = String(config?.mode || 'interpret');
+            if (mode === 'compile' || mode === 'auto') {
+                try { await py.loadPackage?.('numpy'); } catch (_) { /* fallback */ }
+            }
+            const resultJson = py.runPython(
+                `run_script(${JSON.stringify(script)}, ${JSON.stringify(bars)}, ${JSON.stringify(mode)})`,
+            );
             const result = JSON.parse(resultJson);
             return { ...result, meta: { ...(result.meta || {}), ms: performance.now() - t0 } };
         } catch (err) {
