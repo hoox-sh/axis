@@ -99,6 +99,13 @@ describe('engines catalog', () => {
     expect(mode?.default).toBe('interpret');
   });
 
+  it('pyodide catalog also exposes execution mode (settings UI)', async () => {
+    const { pyodideEngine } = await import('../src/engines/catalog');
+    const mode = pyodideEngine.configSchema?.mode;
+    expect(mode?.type).toBe('select');
+    expect(mode?.options).toEqual(['interpret', 'compile', 'auto']);
+  });
+
   it('server isReady probes root', async () => {
     restoreFetch = mockFetch(async () => new Response('ok', { status: 200 }));
     expect(await serverEngine.isReady()).toBe(true);

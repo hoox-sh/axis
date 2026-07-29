@@ -122,6 +122,14 @@ export const pyodideEngine = {
     description: 'Self-hosted Pyodide (~14MB from this origin). Preloads on idle; no CDN required after deploy.',
     configSchema: {
         indexUrl: { type: 'string', default: '/pyodide/v0.26.2/', label: 'Pyodide index URL (self-hosted)' },
+        mode: {
+            type: 'select',
+            options: ['interpret', 'compile', 'auto'],
+            default: 'interpret',
+            label: 'Execution mode',
+            description:
+                'interpret = AST in browser; compile needs NumPy/object-mode; numeric Numba needs server engine',
+        },
     },
     _pyodide: null,
     _loadPromise: null,

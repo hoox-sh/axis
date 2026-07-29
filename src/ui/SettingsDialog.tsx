@@ -271,7 +271,9 @@ export const SettingsDialog: Component<Props> = (props) => {
                   </For>
                 </select>
                 <p class="text-[10px] text-text-faint mt-0.5">
-                  PYNE backend path for this engine. {execModeHint()}
+                  {engine() === 'pyodide'
+                    ? `Browser path. ${execModeHint()} Pure Numba compile still needs the server engine.`
+                    : `Pro API path for this engine. ${execModeHint()}`}
                 </p>
               </div>
             </Show>

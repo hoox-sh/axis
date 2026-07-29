@@ -356,6 +356,16 @@ export const pyodideEngine: EnginePlugin & {
       default: LOCAL_PYODIDE_INDEX,
       label: 'Pyodide index URL (default: self-hosted /pyodide/v0.26.2/)',
     },
+    // Same control as server — browser runtime accepts mode; pure Numba compile
+    // still needs the server engine (Numba is not available in Wasm).
+    mode: {
+      type: 'select',
+      options: ['interpret', 'compile', 'auto'],
+      default: 'interpret',
+      label: 'Execution mode',
+      description:
+        'interpret = AST in browser; compile/auto use pynescript.compiler when possible (object-mode without Numba; numeric Numba needs server)',
+    },
   },
   _pyodide: null,
   _loadPromise: null,
@@ -435,14 +445,11 @@ export const pyodideEngine: EnginePlugin & {
     const t0 = performance.now();
     try {
       const py = await this._ensure();
-      const cfg = resolveConfig(this.configSchema, { ...(config || {}), ...pyodidePluginConfig() });
-      // Execution mode may live on engine:server config; also honor engine:pyodide.mode
-      const mode = String(
-        (config as { mode?: string } | undefined)?.mode ||
-          (cfg as { mode?: string }).mode ||
-          (store.pluginsConfig?.['engine:server'] as { mode?: string } | undefined)?.mode ||
-          'interpret',
-      );
+      const cfg = resolveConfig(this.configSchema, {
+        ...pyodidePluginConfig(),
+        ...(config || {}),
+      });
+      const mode = String((cfg as { mode?: string }).mode || 'interpret');
       // Optional: load numpy for compile/object-mode (no-op if already present)
       if (mode === 'compile' || mode === 'auto') {
         try {
