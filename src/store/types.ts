@@ -95,6 +95,24 @@ export interface ActivePlugins {
 import type { Drawing, DrawingToolId } from '../chart/drawing-types';
 export type { Drawing, DrawingToolId };
 
+/** Default stroke/fill for newly placed drawings */
+export interface DrawingPrefs {
+  color: string;
+  width: number;
+  lineStyle: 'solid' | 'dashed' | 'dotted';
+  fillOpacity: number;
+}
+
+/** Drawing toolbar chrome + interaction prefs */
+export interface DrawingUi {
+  magnet: 'off' | 'weak' | 'strong';
+  stayInMode: boolean;
+  /** Last selected tool id per ToolGroupId (e.g. lines → ray) */
+  lastToolByGroup: Record<string, string>;
+  hideDrawings: boolean;
+  lockAll: boolean;
+}
+
 /** How a plane moves data (for Connection HUD badges). */
 export type TransportClass = 'ws' | 'rest' | 'local' | 'broker' | 'none';
 
@@ -211,6 +229,12 @@ export interface AppState {
   drawingTool: DrawingToolId;
   /** User chart drawings (persisted) */
   drawings: Drawing[];
+  /** Default style for new drawings (persisted) */
+  drawingPrefs: DrawingPrefs;
+  /** Toolbar / magnet / lock UI prefs (persisted) */
+  drawingUi: DrawingUi;
+  /** Currently selected drawing on chart (ephemeral — not hydrated) */
+  selectedDrawingId: string | null;
 
   /** Connection / engine / datafeed telemetry (ephemeral) */
   telemetry: TelemetryState;

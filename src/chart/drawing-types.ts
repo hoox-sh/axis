@@ -38,12 +38,36 @@ export interface Point {
   price: number;
 }
 
+export type DrawingLineStyle = 'solid' | 'dashed' | 'dotted';
+
 export interface DrawingBase {
   id: string;
   kind: DrawingKind;
   color: string;
   /** Optional user label */
   text?: string;
+  /** Stroke width (default 1.5) */
+  lineWidth?: number;
+  /** Stroke pattern */
+  lineStyle?: DrawingLineStyle;
+  /** Fill opacity 0–1 for shapes (rect) */
+  fillOpacity?: number;
+  /** When true, refuse drag/delete unless unlocked */
+  locked?: boolean;
+  /**
+   * Dual-shape fields from normalize (optional).
+   * Layer still paints via price/p1/p2; these keep style/points for future.
+   */
+  points?: Point[];
+  style?: {
+    color?: string;
+    width?: number;
+    lineStyle?: DrawingLineStyle;
+    opacity?: number;
+    extendRight?: boolean;
+    extendLeft?: boolean;
+  };
+  meta?: { text?: string; locked?: boolean; [key: string]: unknown };
 }
 
 export interface HLineDrawing extends DrawingBase {
@@ -72,6 +96,23 @@ export const DRAWING_COLORS = {
   measure: '#e8a03a',
   muted: 'rgba(147, 159, 255, 0.55)',
 } as const;
+
+/** Resolve paint style from dual legacy/unified drawing fields. */
+export function resolveDrawingStyle(d: DrawingBase): {
+  color: string;
+  width: number;
+  lineStyle: DrawingLineStyle;
+  fillOpacity: number;
+  locked: boolean;
+} {
+  return {
+    color: d.style?.color || d.color || DRAWING_COLORS.default,
+    width: d.style?.width ?? d.lineWidth ?? 1.5,
+    lineStyle: d.style?.lineStyle ?? d.lineStyle ?? 'solid',
+    fillOpacity: d.fillOpacity ?? 0.15,
+    locked: Boolean(d.locked ?? d.meta?.locked),
+  };
+}
 
 /** Fibonacci retracement ratios (price levels between p1→p2). */
 export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] as const;

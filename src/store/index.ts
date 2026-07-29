@@ -40,6 +40,7 @@ import {
   type PanelDock,
   type PanelId,
 } from '../ui/panels/types';
+import { normalizeUserDrawings } from '../chart/drawings/normalize';
 
 // Stable ID generation — uses timestamp prefix + counter to survive reloads
 let idCounter = 0;
@@ -109,6 +110,20 @@ const DEFAULTS: AppState = {
   logs: [],
   drawingTool: 'cursor',
   drawings: [],
+  drawingPrefs: {
+    color: '#939fff',
+    width: 1.5,
+    lineStyle: 'solid',
+    fillOpacity: 0.15,
+  },
+  drawingUi: {
+    magnet: 'off',
+    stayInMode: false,
+    lastToolByGroup: {},
+    hideDrawings: false,
+    lockAll: false,
+  },
+  selectedDrawingId: null,
   telemetry: {
     source: idlePlane('binance-rest', 'Binance REST', 'rest'),
     stream: idlePlane('binance-ws', 'Binance WebSocket', 'ws'),
@@ -227,7 +242,25 @@ function loadPersisted(): Partial<AppState> {
           },
         },
         drawingTool: 'cursor',
-        drawings: Array.isArray(parsed.drawings) ? parsed.drawings : [],
+        drawings: normalizeUserDrawings(parsed.drawings) as Drawing[],
+
+        drawingPrefs: {
+          ...DEFAULTS.drawingPrefs,
+          ...(parsed.drawingPrefs && typeof parsed.drawingPrefs === 'object'
+            ? parsed.drawingPrefs
+            : {}),
+        },
+        drawingUi: {
+          ...DEFAULTS.drawingUi,
+          ...(parsed.drawingUi && typeof parsed.drawingUi === 'object' ? parsed.drawingUi : {}),
+          lastToolByGroup:
+            parsed.drawingUi?.lastToolByGroup &&
+            typeof parsed.drawingUi.lastToolByGroup === 'object'
+              ? { ...parsed.drawingUi.lastToolByGroup }
+              : { ...DEFAULTS.drawingUi.lastToolByGroup },
+        },
+        // Ephemeral selection — never hydrate from disk
+        selectedDrawingId: null,
         panelChrome: mergePanelChrome(parsed.panelChrome, {
           // Bridge legacy open/width into chrome on first load
           watchlist: {
@@ -343,7 +376,7 @@ export function persist() {
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
     try {
-      // Omit bars + lastRun + logs + high-churn gens + ephemeral crosshair/modal
+      // Omit bars + lastRun + logs + high-churn gens + ephemeral crosshair/modal/selection
       const {
         bars: _b,
         lastRun: _r,
@@ -351,6 +384,7 @@ export function persist() {
         chartDataGen: _g,
         crosshair: _c,
         scriptSettings: _ss,
+        selectedDrawingId: _sel,
         telemetry,
         ...rest
       } = store as AppState & {
@@ -360,6 +394,7 @@ export function persist() {
         chartDataGen?: unknown;
         crosshair?: unknown;
         scriptSettings?: unknown;
+        selectedDrawingId?: unknown;
         telemetry?: AppState['telemetry'];
       };
       localStorage.setItem(
@@ -844,5 +879,31 @@ export function clearDrawings() {
 /** Sync store from layer after delete-selected (layer owns selection). */
 export function deleteSelectedDrawing(current: Drawing[]) {
   setStore('drawings', current);
+  persist();
+}
+
+export function setSelectedDrawingId(id: string | null) {
+  setStore('selectedDrawingId', id);
+}
+
+export function setDrawingPrefs(patch: Partial<AppState['drawingPrefs']>) {
+  setStore('drawingPrefs', { ...store.drawingPrefs, ...patch });
+  persist();
+}
+
+export function setDrawingUi(patch: Partial<AppState['drawingUi']>) {
+  const next = { ...store.drawingUi, ...patch };
+  if (patch.lastToolByGroup) {
+    next.lastToolByGroup = { ...store.drawingUi.lastToolByGroup, ...patch.lastToolByGroup };
+  }
+  setStore('drawingUi', next);
+  persist();
+}
+
+export function patchDrawing(id: string, patch: Partial<Drawing>) {
+  setStore(
+    'drawings',
+    store.drawings.map((d) => (d.id === id ? ({ ...d, ...patch } as Drawing) : d)),
+  );
   persist();
 }

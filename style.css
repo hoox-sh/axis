@@ -105,11 +105,14 @@ body {
     outline: none;
     min-width: 80px;
     margin: 1px 0;
+    box-shadow: none;
 }
 
 .topbar-input:focus,
 .topbar-select:focus {
     border-color: var(--accent);
+    box-shadow: none;
+    outline: none;
 }
 
 .topbar-input.api-key {
@@ -363,10 +366,13 @@ body {
     padding: 6px 8px;
     margin: 2px 0;
     outline: none;
+    box-shadow: none;
 }
 
 .watchlist-add-input:focus {
     border-color: var(--accent);
+    box-shadow: none;
+    outline: none;
 }
 
 .watchlist-add-input::placeholder {
@@ -848,10 +854,13 @@ body {
     font-size: 13px;
     font-family: inherit;
     outline: none;
+    box-shadow: none;
 }
 
 .settings-input:focus {
     border-color: var(--accent);
+    box-shadow: none;
+    outline: none;
 }
 
 .settings-help {

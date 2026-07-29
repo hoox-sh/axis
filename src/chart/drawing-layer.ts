@@ -27,13 +27,26 @@ import {
   DRAWING_COLORS,
   FIB_LEVELS,
   needsTwoPoints,
+  resolveDrawingStyle,
   type Drawing,
+  type DrawingLineStyle,
   type DrawingToolId,
   type Point,
 } from './drawing-types';
 import { normalizeScriptDrawings, type ScriptDrawing } from './pine-drawings';
+import { snapToBars, type BarLike, type MagnetMode } from './drawings/snap';
+import { strokeDashFor } from './drawings/svg-primitives';
 
 export type DrawingChangeHandler = (drawings: Drawing[]) => void;
+export type SelectionChangeHandler = (id: string | null) => void;
+export type ToolChangeHandler = (tool: DrawingToolId) => void;
+
+export type StylePrefs = {
+  color: string;
+  width: number;
+  lineStyle: DrawingLineStyle;
+  fillOpacity: number;
+};
 
 /** Active layer singleton for toolbar / external callers (avoids ChartHost cycles). */
 let activeLayer: DrawingLayer | null = null;
@@ -71,8 +84,21 @@ export class DrawingLayer {
   private drag: DragState | null = null;
   private didDrag = false;
   private onChange: DrawingChangeHandler | null = null;
+  private onSelectionChange: SelectionChangeHandler | null = null;
+  private onToolChange: ToolChangeHandler | null = null;
   private unsubs: Array<() => void> = [];
   private ro: ResizeObserver | null = null;
+  private barsProvider: (() => readonly BarLike[]) | null = null;
+  private magnet: MagnetMode = 'off';
+  private stayInMode = false;
+  private lockAll = false;
+  private hideDrawings = false;
+  private stylePrefs: StylePrefs = {
+    color: DRAWING_COLORS.default,
+    width: 1.5,
+    lineStyle: 'solid',
+    fillOpacity: 0.15,
+  };
 
   constructor(
     host: HTMLElement,
@@ -119,6 +145,62 @@ export class DrawingLayer {
     this.onChange = cb;
   }
 
+  setOnSelectionChange(cb: SelectionChangeHandler | null) {
+    this.onSelectionChange = cb;
+  }
+
+  setOnToolChange(cb: ToolChangeHandler | null) {
+    this.onToolChange = cb;
+  }
+
+  setBarsProvider(fn: (() => readonly BarLike[]) | null) {
+    this.barsProvider = fn;
+  }
+
+  setMagnet(mode: MagnetMode) {
+    this.magnet = mode;
+  }
+
+  setStayInMode(on: boolean) {
+    this.stayInMode = on;
+  }
+
+  setLockAll(on: boolean) {
+    this.lockAll = on;
+  }
+
+  setHideDrawings(on: boolean) {
+    this.hideDrawings = on;
+    this.redrawUser();
+  }
+
+  setStylePrefs(prefs: Partial<StylePrefs>) {
+    this.stylePrefs = { ...this.stylePrefs, ...prefs };
+  }
+
+  getSelectedId(): string | null {
+    return this.selectedId;
+  }
+
+  setSelectedId(id: string | null) {
+    this.selectedId = id;
+    this.onSelectionChange?.(id);
+    this.redrawUser();
+  }
+
+  /** Patch selected drawing style/geometry and emit. */
+  updateSelected(patch: Partial<Drawing>): boolean {
+    if (!this.selectedId) return false;
+    const idx = this.drawings.findIndex((d) => d.id === this.selectedId);
+    if (idx < 0) return false;
+    const cur = this.drawings[idx]!;
+    if (this.lockAll || resolveDrawingStyle(cur).locked) return false;
+    this.drawings[idx] = { ...cur, ...patch } as Drawing;
+    this.emit();
+    this.redrawUser();
+    return true;
+  }
+
   setTool(tool: DrawingToolId) {
     this.tool = tool;
     this.draft = null;
@@ -156,7 +238,7 @@ export class DrawingLayer {
 
   clearAll() {
     this.drawings = [];
-    this.selectedId = null;
+    this.setSelectedId(null);
     this.draft = null;
     this.drag = null;
     this.emit();
@@ -165,10 +247,40 @@ export class DrawingLayer {
 
   deleteSelected() {
     if (!this.selectedId) return;
+    const cur = this.drawings.find((d) => d.id === this.selectedId);
+    if (cur && (this.lockAll || resolveDrawingStyle(cur).locked)) return;
     this.drawings = this.drawings.filter((d) => d.id !== this.selectedId);
-    this.selectedId = null;
+    this.setSelectedId(null);
     this.emit();
     this.redraw();
+  }
+
+  private afterPlace() {
+    if (!this.stayInMode) {
+      this.setTool('cursor');
+      this.onToolChange?.('cursor');
+    }
+  }
+
+  private defaultColor(tool: DrawingToolId): string {
+    if (tool === 'measure') return DRAWING_COLORS.measure;
+    return this.stylePrefs.color || DRAWING_COLORS.default;
+  }
+
+  private applyCreateStyle<T extends Drawing>(d: T): T {
+    return {
+      ...d,
+      color: d.color || this.defaultColor(d.kind),
+      lineWidth: d.lineWidth ?? this.stylePrefs.width,
+      lineStyle: d.lineStyle ?? this.stylePrefs.lineStyle,
+      fillOpacity: d.fillOpacity ?? this.stylePrefs.fillOpacity,
+      style: {
+        color: d.color || this.defaultColor(d.kind),
+        width: d.lineWidth ?? this.stylePrefs.width,
+        lineStyle: d.lineStyle ?? this.stylePrefs.lineStyle,
+        opacity: 1,
+      },
+    };
   }
 
   destroy() {
@@ -256,7 +368,18 @@ export class DrawingLayer {
     if (time == null || price == null) return null;
     const t = typeof time === 'number' ? time : (time as { timestamp?: number }).timestamp;
     if (t == null || !Number.isFinite(t) || !Number.isFinite(price)) return null;
-    return { time: t as number, price };
+    const raw: Point = { time: t as number, price };
+    if (this.magnet === 'off' || !this.barsProvider) return raw;
+    const bars = this.barsProvider();
+    if (!bars?.length) return raw;
+    return snapToBars({
+      bars,
+      raw,
+      rawXY: { x, y },
+      priceToY: (p) => this.series.priceToCoordinate(p),
+      mode: this.magnet,
+      pixelTol: this.magnet === 'strong' ? 9999 : 10,
+    });
   }
 
   private toXY(p: Point): { x: number; y: number } | null {
@@ -279,7 +402,7 @@ export class DrawingLayer {
     if (e.key === 'Escape') {
       this.draft = null;
       this.gDraft.innerHTML = '';
-      this.selectedId = null;
+      this.setSelectedId(null);
       this.redraw();
     }
     if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedId) {
@@ -293,6 +416,7 @@ export class DrawingLayer {
 
   private handlePointerDown(e: PointerEvent) {
     if (this.tool !== 'cursor') return;
+    if (this.lockAll) return;
     const start = this.clientToPoint(e);
     if (!start) return;
     const handle = this.hitTestHandle(e);
@@ -300,9 +424,14 @@ export class DrawingLayer {
     if (!hit) return;
     const origin = this.drawings.find((d) => d.id === hit);
     if (!origin) return;
+    if (resolveDrawingStyle(origin).locked) {
+      this.setSelectedId(hit);
+      this.redraw();
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
-    this.selectedId = hit;
+    this.setSelectedId(hit);
     this.drag = {
       id: hit,
       start,
@@ -338,7 +467,7 @@ export class DrawingLayer {
     if (this.tool === 'cursor') {
       // Hit-test select (shapes have pointer-events; empty area doesn't fire)
       const hit = this.hitTest(e);
-      this.selectedId = hit;
+      this.setSelectedId(hit);
       this.redraw();
       return;
     }
@@ -347,29 +476,35 @@ export class DrawingLayer {
     if (!pt) return;
 
     if (this.tool === 'hline') {
-      this.drawings.push({
-        id: uid(),
-        kind: 'hline',
-        price: pt.price,
-        color: DRAWING_COLORS.default,
-      });
+      this.drawings.push(
+        this.applyCreateStyle({
+          id: uid(),
+          kind: 'hline',
+          price: pt.price,
+          color: this.defaultColor('hline'),
+        }),
+      );
       this.emit();
       this.redraw();
+      this.afterPlace();
       return;
     }
 
     if (this.tool === 'text') {
-      const label = window.prompt('Label text', 'Note');
-      if (label == null || !label.trim()) return;
-      this.drawings.push({
-        id: uid(),
-        kind: 'text',
-        p1: pt,
-        text: label.trim(),
-        color: DRAWING_COLORS.default,
-      });
+      const labelText = window.prompt('Label text', 'Note');
+      if (labelText == null || !labelText.trim()) return;
+      this.drawings.push(
+        this.applyCreateStyle({
+          id: uid(),
+          kind: 'text',
+          p1: pt,
+          text: labelText.trim(),
+          color: this.defaultColor('text'),
+        }),
+      );
       this.emit();
       this.redraw();
+      this.afterPlace();
       return;
     }
 
@@ -384,21 +519,18 @@ export class DrawingLayer {
       const p2 = pt;
       this.draft = null;
       this.gDraft.innerHTML = '';
-      const color =
-        this.tool === 'measure'
-          ? DRAWING_COLORS.measure
-          : this.tool === 'fib'
-            ? DRAWING_COLORS.default
-            : DRAWING_COLORS.default;
-      this.drawings.push({
-        id: uid(),
-        kind: this.tool as TwoPointKind,
-        p1,
-        p2,
-        color,
-      } as Drawing);
+      this.drawings.push(
+        this.applyCreateStyle({
+          id: uid(),
+          kind: this.tool as TwoPointKind,
+          p1,
+          p2,
+          color: this.defaultColor(this.tool),
+        } as Drawing),
+      );
       this.emit();
       this.redraw();
+      this.afterPlace();
     }
   }
 
@@ -650,9 +782,12 @@ export class DrawingLayer {
   }
 
   private paintDrawing(g: SVGGElement, d: Drawing, selected: boolean) {
-    const stroke = d.color || DRAWING_COLORS.default;
-    const sw = selected ? 2.5 : 1.5;
-    const dash = selected ? '4 3' : undefined;
+    if (this.hideDrawings && !selected) return;
+    const st = resolveDrawingStyle(d);
+    const stroke = st.color;
+    // Selection uses slightly thicker stroke; dash comes from user lineStyle (not selection)
+    const sw = selected ? st.width + 0.75 : st.width;
+    const dash = strokeDashFor(st.lineStyle, false);
 
     if (d.kind === 'hline') {
       const y = this.series.priceToCoordinate(d.price);
@@ -661,7 +796,6 @@ export class DrawingLayer {
       line(g, 0, y, w, y, stroke, sw, dash, 'stroke');
       label(g, 6, y - 4, d.price.toFixed(2), stroke);
       if (selected) {
-        // Mid handle for visual feedback
         circle(g, w / 2, y, 5, stroke, true);
       }
       return;
@@ -670,8 +804,7 @@ export class DrawingLayer {
     if (d.kind === 'text') {
       const c = this.toXY(d.p1);
       if (!c) return;
-      label(g, c.x + 4, c.y - 4, d.text || '', stroke, 12);
-      // anchor dot
+      label(g, c.x + 4, c.y - 4, d.text || d.meta?.text || '', stroke, 12);
       circle(g, c.x, c.y, selected ? 5 : 3, stroke, selected);
       return;
     }
@@ -705,7 +838,6 @@ export class DrawingLayer {
     }
 
     if (d.kind === 'ray') {
-      // Extend beyond p2 in the p1→p2 direction to the edge of the chart
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const w = this.host.clientWidth;
@@ -713,11 +845,9 @@ export class DrawingLayer {
       let extX = b.x;
       let extY = b.y;
       if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
-        // Scale to far edge
         const scale = 5000 / Math.max(Math.hypot(dx, dy), 0.001);
         extX = a.x + dx * scale;
         extY = a.y + dy * scale;
-        // Clamp roughly
         extX = Math.max(-w, Math.min(2 * w, extX));
         extY = Math.max(-h, Math.min(2 * h, extY));
       }
@@ -732,12 +862,14 @@ export class DrawingLayer {
       const y = Math.min(a.y, b.y);
       const rw = Math.abs(b.x - a.x);
       const rh = Math.abs(b.y - a.y);
+      const fo = Math.max(0, Math.min(1, st.fillOpacity));
       el(g, 'rect', {
         x: String(x),
         y: String(y),
         width: String(rw),
         height: String(rh),
-        fill: 'rgba(147, 159, 255, 0.08)',
+        fill: stroke,
+        'fill-opacity': String(fo),
         stroke,
         'stroke-width': String(sw),
         'pointer-events': 'all',
@@ -758,18 +890,20 @@ export class DrawingLayer {
       const x2 = Math.max(a.x, b.x);
       const right = Math.max(x2, this.host.clientWidth - 8);
       for (const lvl of FIB_LEVELS) {
-        // From high of range (standard retracement from p1 if p1 is high)
         const price =
           d.p1.price >= d.p2.price
             ? d.p1.price - span * lvl
             : d.p1.price + span * lvl;
         const y = this.series.priceToCoordinate(price);
         if (y == null) continue;
-        line(g, x1, y, right, y, stroke, 1, lvl === 0.5 ? undefined : '3 3');
+        line(g, x1, y, right, y, stroke, Math.max(1, sw - 0.5), lvl === 0.5 ? undefined : '3 3');
         label(g, right - 4, y - 3, `${(lvl * 100).toFixed(1)}%  ${price.toFixed(2)}`, stroke, 10, 'end');
       }
-      // Vertical spine
       line(g, a.x, a.y, b.x, b.y, DRAWING_COLORS.muted, 1, '2 2');
+      if (selected) {
+        circle(g, a.x, a.y, 5, stroke, true);
+        circle(g, b.x, b.y, 5, stroke, true);
+      }
     }
   }
 }

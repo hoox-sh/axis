@@ -655,7 +655,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                   class="text-[10px] text-text-dim uppercase tracking-wider"
                   for="axis-watchlist-refresh"
                 >
-                  Watchlist quote refresh
+                  Watchlist REST fallback
                 </label>
                 <select
                   id="axis-watchlist-refresh"
@@ -668,8 +668,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                   </For>
                 </select>
                 <p class="text-[10px] text-text-faint mt-0.5">
-                  How often the watchlist polls live prices (source-aware: Binance / OKX / Bybit /
-                  Coinbase).
+                  Used only when WebSocket quotes fail. While live, prices update on every exchange
+                  ticker tick (Binance / OKX / Bybit / Coinbase).
                 </p>
               </div>
             </div>

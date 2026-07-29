@@ -18,100 +18,474 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Floating left toolbar for interactive chart drawings.
+ * TV-style left drawing rail: tool groups + flyouts + floating style bar.
  */
 
-import { Component, For, Show } from 'solid-js';
-import { store, setDrawingTool, clearDrawings } from '../store';
-import type { DrawingToolId } from './drawing-types';
-import { toolLabel } from './drawing-types';
+import { Component, For, Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
+import {
+  store,
+  setDrawingTool,
+  clearDrawings,
+  setDrawingPrefs,
+  setDrawingUi,
+  patchDrawing,
+} from '../store';
+import type { DrawingToolId, DrawingLineStyle } from './drawing-types';
+import { toolLabel, resolveDrawingStyle, DRAWING_COLORS } from './drawing-types';
 import { Icons } from '../ui/icons';
 import { getActiveDrawingLayer } from './drawing-layer';
+import {
+  TOOL_GROUPS,
+  defaultToolForGroup,
+  groupForTool,
+  type ToolGroupId,
+} from './drawings/tool-catalog';
 
-const TOOLS: { id: DrawingToolId; title: string; icon: typeof Icons.cursor }[] = [
-  { id: 'cursor', title: 'Cursor (select)', icon: Icons.cursor },
-  { id: 'hline', title: 'Horizontal line', icon: Icons.minus },
-  { id: 'trend', title: 'Trend line', icon: Icons.trend },
-  { id: 'ray', title: 'Ray', icon: Icons.ray },
-  { id: 'rect', title: 'Rectangle', icon: Icons.square },
-  { id: 'fib', title: 'Fibonacci', icon: Icons.fib },
-  { id: 'measure', title: 'Measure', icon: Icons.ruler },
-  { id: 'text', title: 'Text note', icon: Icons.type },
-];
+const COLOR_PRESETS = [
+  DRAWING_COLORS.default,
+  DRAWING_COLORS.up,
+  DRAWING_COLORS.down,
+  DRAWING_COLORS.measure,
+  '#eceef4',
+  '#8b8e9c',
+] as const;
+
+const WIDTHS = [1, 1.5, 2, 3] as const;
+const LINE_STYLES: DrawingLineStyle[] = ['solid', 'dashed', 'dotted'];
+
+const TOOL_ICONS: Partial<Record<DrawingToolId, typeof Icons.cursor>> = {
+  cursor: Icons.cursor,
+  hline: Icons.minus,
+  trend: Icons.trend,
+  ray: Icons.ray,
+  rect: Icons.square,
+  fib: Icons.fib,
+  measure: Icons.ruler,
+  text: Icons.type,
+};
+
+const GROUP_ICONS: Partial<Record<ToolGroupId, typeof Icons.cursor>> = {
+  select: Icons.cursor,
+  lines: Icons.trend,
+  fib: Icons.fib,
+  shapes: Icons.shapes,
+  annotation: Icons.pencil,
+  measure: Icons.ruler,
+  trading: Icons.trend,
+  actions: Icons.settings,
+};
+
+function syncLayerFromStore() {
+  const layer = getActiveDrawingLayer();
+  if (!layer) return;
+  layer.setMagnet(store.drawingUi.magnet);
+  layer.setStayInMode(store.drawingUi.stayInMode);
+  layer.setLockAll(store.drawingUi.lockAll);
+  layer.setHideDrawings(store.drawingUi.hideDrawings);
+  layer.setStylePrefs({
+    color: store.drawingPrefs.color,
+    width: store.drawingPrefs.width,
+    lineStyle: store.drawingPrefs.lineStyle,
+    fillOpacity: store.drawingPrefs.fillOpacity,
+  });
+}
 
 export const DrawingToolbar: Component = () => {
   const active = () => store.drawingTool;
+  const [openGroup, setOpenGroup] = createSignal<ToolGroupId | null>(null);
 
-  const select = (id: DrawingToolId) => {
+  const selected = createMemo(() => {
+    const id = store.selectedDrawingId;
+    if (!id) return null;
+    return store.drawings.find((d) => d.id === id) ?? null;
+  });
+
+  const showStyleBar = () => active() !== 'cursor' || !!selected();
+
+  const styleTarget = createMemo(() => {
+    const sel = selected();
+    if (sel) {
+      const st = resolveDrawingStyle(sel);
+      return {
+        mode: 'selection' as const,
+        color: st.color,
+        width: st.width,
+        lineStyle: st.lineStyle,
+        fillOpacity: st.fillOpacity,
+        locked: st.locked,
+      };
+    }
+    return {
+      mode: 'defaults' as const,
+      color: store.drawingPrefs.color,
+      width: store.drawingPrefs.width,
+      lineStyle: store.drawingPrefs.lineStyle,
+      fillOpacity: store.drawingPrefs.fillOpacity,
+      locked: false,
+    };
+  });
+
+  createEffect(() => {
+    // Keep layer prefs in sync when store changes
+    void store.drawingUi.magnet;
+    void store.drawingUi.stayInMode;
+    void store.drawingUi.lockAll;
+    void store.drawingUi.hideDrawings;
+    void store.drawingPrefs.color;
+    void store.drawingPrefs.width;
+    void store.drawingPrefs.lineStyle;
+    void store.drawingPrefs.fillOpacity;
+    syncLayerFromStore();
+  });
+
+  // Close flyout on outside click / Escape
+  createEffect(() => {
+    if (!openGroup()) return;
+    const onDoc = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.('[data-drawing-flyout]') || t?.closest?.('[data-drawing-group]')) return;
+      setOpenGroup(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenGroup(null);
+    };
+    document.addEventListener('pointerdown', onDoc, true);
+    document.addEventListener('keydown', onKey);
+    onCleanup(() => {
+      document.removeEventListener('pointerdown', onDoc, true);
+      document.removeEventListener('keydown', onKey);
+    });
+  });
+
+  const selectTool = (id: DrawingToolId) => {
     setDrawingTool(id);
     getActiveDrawingLayer()?.setTool(id);
+    const g = groupForTool(id);
+    if (g) {
+      setDrawingUi({ lastToolByGroup: { [g.id]: id } });
+    }
+    setOpenGroup(null);
+    syncLayerFromStore();
   };
 
-  const iconPx = 20;
+  const onGroupClick = (groupId: ToolGroupId) => {
+    const g = TOOL_GROUPS.find((x) => x.id === groupId);
+    if (!g || !g.tools.length) return;
+    if (g.flyout) {
+      if (openGroup() === groupId) {
+        setOpenGroup(null);
+        return;
+      }
+      setOpenGroup(groupId);
+      return;
+    }
+    const last = store.drawingUi.lastToolByGroup[groupId] as DrawingToolId | undefined;
+    const tool =
+      last && g.tools.includes(last) ? last : defaultToolForGroup(groupId) || g.tools[0]!;
+    selectTool(tool);
+  };
+
+  const applyStyle = (patch: {
+    color?: string;
+    width?: number;
+    lineStyle?: DrawingLineStyle;
+    fillOpacity?: number;
+  }) => {
+    const sel = selected();
+    if (sel) {
+      const next = {
+        ...(patch.color != null ? { color: patch.color } : {}),
+        ...(patch.width != null ? { lineWidth: patch.width } : {}),
+        ...(patch.lineStyle != null ? { lineStyle: patch.lineStyle } : {}),
+        ...(patch.fillOpacity != null ? { fillOpacity: patch.fillOpacity } : {}),
+        style: {
+          ...(sel.style || {}),
+          ...(patch.color != null ? { color: patch.color } : {}),
+          ...(patch.width != null ? { width: patch.width } : {}),
+          ...(patch.lineStyle != null ? { lineStyle: patch.lineStyle } : {}),
+        },
+      };
+      patchDrawing(sel.id, next);
+      getActiveDrawingLayer()?.updateSelected(next);
+      return;
+    }
+    setDrawingPrefs(patch);
+    getActiveDrawingLayer()?.setStylePrefs(patch);
+  };
+
+  const iconPx = 18;
   const btnClass =
-    'sc-btn sc-btn-ghost w-10 h-10 min-w-10 min-h-10 p-0 flex items-center justify-center';
+    'sc-btn sc-btn-ghost w-9 h-9 min-w-9 min-h-9 p-0 flex items-center justify-center border border-transparent';
+
+  const railGroups = () =>
+    TOOL_GROUPS.filter((g) => g.id !== 'actions' && g.id !== 'trading' && g.tools.length > 0);
 
   return (
-    <div
-      class="absolute left-2 top-10 z-20 flex flex-col gap-1 p-1 bg-bg-panel/95 border-2 border-border shadow-lg"
-      role="toolbar"
-      aria-label="Drawing tools"
-      data-testid="axis-drawing-toolbar"
-    >
-      <For each={TOOLS}>
-        {(t) => {
-          const I = t.icon;
-          return (
-            <button
-              type="button"
-              class={`${btnClass} ${
-                active() === t.id ? 'bg-accent/15 text-accent border-accent' : 'text-text-dim'
-              }`}
-              title={toolLabel(t.id)}
-              aria-label={toolLabel(t.id)}
-              aria-pressed={active() === t.id}
-              onClick={() => select(t.id)}
-            >
-              <I size={iconPx} strokeWidth={2.25} />
-            </button>
-          );
-        }}
-      </For>
-
-      <div class="h-px bg-border my-0.5" />
-
-      <button
-        type="button"
-        class={`${btnClass} text-text-dim`}
-        title="Delete selected (Del)"
-        aria-label="Delete selected drawing"
-        onClick={() => {
-          getActiveDrawingLayer()?.deleteSelected();
-        }}
+    <div class="absolute left-2 top-10 z-20 flex items-start gap-1.5 pointer-events-none">
+      {/* Left rail */}
+      <div
+        class="pointer-events-auto flex flex-col gap-0.5 p-1 bg-bg-panel/95 border border-border rounded-[var(--radius-sc)]"
+        role="toolbar"
+        aria-label="Drawing tools"
+        aria-orientation="vertical"
+        data-testid="axis-drawing-toolbar"
       >
-        <Icons.trash size={iconPx} strokeWidth={2.25} />
-      </button>
-      <button
-        type="button"
-        class={`${btnClass} text-text-dim`}
-        title="Clear all drawings"
-        aria-label="Clear all drawings"
-        onClick={() => {
-          if (store.drawings.length && !confirm('Clear all drawings?')) return;
-          getActiveDrawingLayer()?.clearAll();
-          clearDrawings();
-        }}
-      >
-        <Icons.eraser size={iconPx} strokeWidth={2.25} />
-      </button>
+        <For each={railGroups()}>
+          {(g) => {
+            const primaryId = () => {
+              const last = store.drawingUi.lastToolByGroup[g.id] as DrawingToolId | undefined;
+              if (last && g.tools.includes(last)) return last;
+              return g.tools[0]!;
+            };
+            const GIcon = () => {
+              const tid = primaryId();
+              return TOOL_ICONS[tid] || GROUP_ICONS[g.id] || Icons.cursor;
+            };
+            const isActive = () => g.tools.includes(active());
+            return (
+              <div class="relative" data-drawing-group={g.id}>
+                <button
+                  type="button"
+                  class={`${btnClass} ${
+                    isActive() ? 'bg-accent/10 text-accent border-accent' : 'text-text-dim'
+                  }`}
+                  title={g.flyout ? `${g.label} · click for tools` : toolLabel(primaryId())}
+                  aria-label={g.label}
+                  aria-pressed={isActive()}
+                  aria-haspopup={g.flyout ? 'menu' : undefined}
+                  aria-expanded={g.flyout ? openGroup() === g.id : undefined}
+                  onClick={() => onGroupClick(g.id)}
+                >
+                  {(() => {
+                    const I = GIcon();
+                    return <I size={iconPx} strokeWidth={2.25} />;
+                  })()}
+                </button>
+                <Show when={g.flyout && openGroup() === g.id}>
+                  <div
+                    class="absolute left-full top-0 ml-1 min-w-[9.5em] p-1 flex flex-col gap-0.5 bg-bg-elev border border-border rounded-[var(--radius-input)] shadow-lg z-50"
+                    role="menu"
+                    data-drawing-flyout
+                  >
+                    <For each={g.tools}>
+                      {(tid) => {
+                        const I = TOOL_ICONS[tid] || Icons.cursor;
+                        return (
+                          <button
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={active() === tid}
+                            class={`flex items-center gap-2 w-full px-2 py-1.5 text-left text-[12px] rounded-[var(--radius-sm)] border-0 bg-transparent cursor-pointer font-inherit ${
+                              active() === tid
+                                ? 'text-accent bg-accent/10 font-semibold'
+                                : 'text-text-dim hover:bg-bg-hover hover:text-text'
+                            }`}
+                            onClick={() => selectTool(tid)}
+                          >
+                            <I size={15} strokeWidth={2.25} />
+                            <span>{toolLabel(tid)}</span>
+                          </button>
+                        );
+                      }}
+                    </For>
+                  </div>
+                </Show>
+              </div>
+            );
+          }}
+        </For>
 
-      <Show when={store.drawings.length > 0}>
-        <span
-          class="text-[10px] font-mono text-text-faint text-center py-0.5 tabular-nums"
-          title="Drawing count"
+        <div class="h-px bg-border-soft my-0.5" />
+
+        <button
+          type="button"
+          class={`${btnClass} ${store.drawingUi.magnet !== 'off' ? 'text-accent' : 'text-text-dim'}`}
+          title={`Magnet: ${store.drawingUi.magnet} (click to cycle)`}
+          aria-label="Magnet snap"
+          onClick={() => {
+            const order = ['off', 'weak', 'strong'] as const;
+            const i = order.indexOf(store.drawingUi.magnet);
+            const next = order[(i + 1) % order.length]!;
+            setDrawingUi({ magnet: next });
+            getActiveDrawingLayer()?.setMagnet(next);
+          }}
         >
-          {store.drawings.length}
-        </span>
+          <Icons.magnet size={iconPx} strokeWidth={2.25} />
+        </button>
+        <button
+          type="button"
+          class={`${btnClass} ${store.drawingUi.stayInMode ? 'text-accent' : 'text-text-dim'}`}
+          title="Stay in drawing mode"
+          aria-pressed={store.drawingUi.stayInMode}
+          onClick={() => {
+            const next = !store.drawingUi.stayInMode;
+            setDrawingUi({ stayInMode: next });
+            getActiveDrawingLayer()?.setStayInMode(next);
+          }}
+        >
+          <Icons.pin size={iconPx} strokeWidth={2.25} />
+        </button>
+        <button
+          type="button"
+          class={`${btnClass} ${store.drawingUi.lockAll ? 'text-accent' : 'text-text-dim'}`}
+          title="Lock all drawings"
+          aria-pressed={store.drawingUi.lockAll}
+          onClick={() => {
+            const next = !store.drawingUi.lockAll;
+            setDrawingUi({ lockAll: next });
+            getActiveDrawingLayer()?.setLockAll(next);
+          }}
+        >
+          {store.drawingUi.lockAll ? (
+            <Icons.lock size={iconPx} strokeWidth={2.25} />
+          ) : (
+            <Icons.unlock size={iconPx} strokeWidth={2.25} />
+          )}
+        </button>
+        <button
+          type="button"
+          class={`${btnClass} ${store.drawingUi.hideDrawings ? 'text-accent' : 'text-text-dim'}`}
+          title="Hide drawings"
+          aria-pressed={store.drawingUi.hideDrawings}
+          onClick={() => {
+            const next = !store.drawingUi.hideDrawings;
+            setDrawingUi({ hideDrawings: next });
+            getActiveDrawingLayer()?.setHideDrawings(next);
+          }}
+        >
+          <Icons.layers size={iconPx} strokeWidth={2.25} />
+        </button>
+
+        <div class="h-px bg-border-soft my-0.5" />
+
+        <button
+          type="button"
+          class={`${btnClass} text-text-dim`}
+          title="Delete selected (Del)"
+          aria-label="Delete selected drawing"
+          onClick={() => getActiveDrawingLayer()?.deleteSelected()}
+        >
+          <Icons.trash size={iconPx} strokeWidth={2.25} />
+        </button>
+        <button
+          type="button"
+          class={`${btnClass} text-text-dim`}
+          title="Clear all drawings"
+          aria-label="Clear all drawings"
+          onClick={() => {
+            if (store.drawings.length && !confirm('Clear all drawings?')) return;
+            getActiveDrawingLayer()?.clearAll();
+            clearDrawings();
+          }}
+        >
+          <Icons.eraser size={iconPx} strokeWidth={2.25} />
+        </button>
+
+        <Show when={store.drawings.length > 0}>
+          <span
+            class="text-[10px] font-mono text-text-faint text-center py-0.5 tabular-nums"
+            title="Drawing count"
+          >
+            {store.drawings.length}
+          </span>
+        </Show>
+      </div>
+
+      {/* Floating style bar */}
+      <Show when={showStyleBar()}>
+        <div
+          class="pointer-events-auto flex items-center gap-1 px-1.5 py-1 bg-bg-panel/95 border border-border rounded-[var(--radius-sc)]"
+          role="toolbar"
+          aria-label="Drawing style"
+          data-testid="axis-drawing-stylebar"
+        >
+          <For each={[...COLOR_PRESETS]}>
+            {(c) => (
+              <button
+                type="button"
+                class="w-5 h-5 rounded-sm border border-border-soft shrink-0 p-0 cursor-pointer"
+                style={{
+                  'background-color': c,
+                  'box-shadow':
+                    styleTarget().color.toLowerCase() === c.toLowerCase()
+                      ? 'inset 0 0 0 1px var(--color-accent)'
+                      : 'none',
+                }}
+                title={c}
+                aria-label={`Color ${c}`}
+                onClick={() => applyStyle({ color: c })}
+              />
+            )}
+          </For>
+
+          <span class="w-px h-5 bg-border-soft mx-0.5" />
+
+          <For each={[...WIDTHS]}>
+            {(w) => (
+              <button
+                type="button"
+                class={`${btnClass} !w-7 !h-7 !min-w-7 !min-h-7 text-[10px] font-mono ${
+                  Math.abs(styleTarget().width - w) < 0.01
+                    ? 'text-accent border-accent'
+                    : 'text-text-dim'
+                }`}
+                title={`Width ${w}`}
+                aria-pressed={Math.abs(styleTarget().width - w) < 0.01}
+                onClick={() => applyStyle({ width: w })}
+              >
+                {w === 1.5 ? '1½' : w}
+              </button>
+            )}
+          </For>
+
+          <span class="w-px h-5 bg-border-soft mx-0.5" />
+
+          <For each={LINE_STYLES}>
+            {(ls) => (
+              <button
+                type="button"
+                class={`${btnClass} !w-7 !h-7 !min-w-7 !min-h-7 ${
+                  styleTarget().lineStyle === ls ? 'text-accent border-accent' : 'text-text-dim'
+                }`}
+                title={ls}
+                aria-pressed={styleTarget().lineStyle === ls}
+                onClick={() => applyStyle({ lineStyle: ls })}
+              >
+                <span
+                  class="block w-4 border-t border-current"
+                  style={{
+                    'border-style':
+                      ls === 'dashed' ? 'dashed' : ls === 'dotted' ? 'dotted' : 'solid',
+                    'border-width': '0 0 2px 0',
+                  }}
+                />
+              </button>
+            )}
+          </For>
+
+          <Show when={active() === 'rect' || selected()?.kind === 'rect'}>
+            <span class="w-px h-5 bg-border-soft mx-0.5" />
+            <label class="flex items-center gap-1 text-[10px] text-text-faint px-0.5" title="Fill opacity">
+              <span>Fill</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                class="w-14 sc-range"
+                value={Math.round(styleTarget().fillOpacity * 100)}
+                onInput={(e) =>
+                  applyStyle({ fillOpacity: Number(e.currentTarget.value) / 100 })
+                }
+              />
+            </label>
+          </Show>
+
+          <Show when={styleTarget().mode === 'selection'}>
+            <span class="w-px h-5 bg-border-soft mx-0.5" />
+            <span class="text-[10px] text-text-faint px-1 uppercase tracking-wider">sel</span>
+          </Show>
+        </div>
       </Show>
     </div>
   );

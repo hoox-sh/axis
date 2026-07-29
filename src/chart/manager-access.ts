@@ -25,7 +25,12 @@
 import type { PaneManager } from './pane-manager';
 import { DrawingLayer } from './drawing-layer';
 import { createCandleSeries, createVolumeSeries, TV } from './series-factory';
-import { store, setDrawings } from '../store';
+import {
+  store,
+  setDrawings,
+  setSelectedDrawingId,
+  setDrawingTool,
+} from '../store';
 import type { Bar } from '../store/types';
 
 let manager: PaneManager | undefined;
@@ -62,6 +67,19 @@ function ensureDrawingLayer() {
     drawingLayer.setDrawings(store.drawings);
     drawingLayer.setTool(store.drawingTool);
     drawingLayer.setOnChange((list) => setDrawings(list));
+    drawingLayer.setBarsProvider(() => store.bars);
+    drawingLayer.setMagnet(store.drawingUi?.magnet ?? 'off');
+    drawingLayer.setStayInMode(!!store.drawingUi?.stayInMode);
+    drawingLayer.setLockAll(!!store.drawingUi?.lockAll);
+    drawingLayer.setHideDrawings(!!store.drawingUi?.hideDrawings);
+    drawingLayer.setStylePrefs({
+      color: store.drawingPrefs?.color ?? '#939fff',
+      width: store.drawingPrefs?.width ?? 1.5,
+      lineStyle: store.drawingPrefs?.lineStyle ?? 'solid',
+      fillOpacity: store.drawingPrefs?.fillOpacity ?? 0.15,
+    });
+    drawingLayer.setOnSelectionChange((id) => setSelectedDrawingId(id));
+    drawingLayer.setOnToolChange((tool) => setDrawingTool(tool));
   } catch {
     drawingLayer = undefined;
   }

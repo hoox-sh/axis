@@ -25,19 +25,31 @@ export interface WatchTicker {
   price: number;
   change: number; // %
   source?: string;
+  /** 24h open for local % recompute when WS only sends last */
+  open24h?: number;
+  updatedAt?: number;
 }
 
-function toUsdt(sym: string): string {
+/** Normalize to a USDT/USD/USDC pair symbol (e.g. BTC → BTCUSDT). */
+export function toUsdt(sym: string): string {
   const s = sym.toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (s.endsWith('USDT') || s.endsWith('USD') || s.endsWith('USDC')) return s;
   return `${s}USDT`;
 }
 
-function okxInst(sym: string): string {
+/** OKX spot instId from watchlist symbol. */
+export function okxInst(sym: string): string {
   const s = toUsdt(sym);
   if (s.endsWith('USDT')) return `${s.slice(0, -4)}-USDT`;
   if (s.endsWith('USD')) return `${s.slice(0, -3)}-USD`;
   return `${s}-USDT`;
+}
+
+/** Coinbase product id (BTC-USD). */
+export function coinbaseProduct(sym: string): string {
+  const s = toUsdt(sym);
+  const base = s.replace(/USDT$/, '').replace(/USDC$/, '').replace(/USD$/, '');
+  return `${base}-USD`;
 }
 
 /** Fetch 24h last + change for symbols using the active source when possible. */
@@ -79,14 +91,18 @@ async function fetchBinance(symbols: string[]): Promise<Record<string, WatchTick
     symbol: string;
     lastPrice: string;
     priceChangePercent: string;
+    openPrice?: string;
   }>;
   const next: Record<string, WatchTicker> = {};
   for (const t of data) {
     // Map back to original key if present
     const orig = symbols.find((s) => toUsdt(s) === t.symbol) || t.symbol;
+    const price = parseFloat(t.lastPrice);
+    const open = t.openPrice != null ? parseFloat(t.openPrice) : NaN;
     next[orig] = {
-      price: parseFloat(t.lastPrice),
+      price,
       change: parseFloat(t.priceChangePercent),
+      open24h: Number.isFinite(open) ? open : undefined,
       source: 'binance',
     };
   }
@@ -108,7 +124,12 @@ async function fetchOkx(symbols: string[]): Promise<Record<string, WatchTicker>>
     const last = parseFloat(t.last);
     const open = parseFloat(t.open24h || t.sodUtc0 || String(last));
     const change = open ? ((last - open) / open) * 100 : 0;
-    next[sym] = { price: last, change, source: 'okx' };
+    next[sym] = {
+      price: last,
+      change,
+      open24h: Number.isFinite(open) ? open : undefined,
+      source: 'okx',
+    };
   }
   return next;
 }
