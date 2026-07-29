@@ -32,9 +32,10 @@ describe('pine-lsp', () => {
     expect(w?.word).toContain('sma');
   });
 
-  it('completes top-level after prefix', () => {
+  it('completes top-level after prefix (local)', async () => {
+    const { pineCompleteLocal } = await import('../src/editor/pine-lsp');
     const state = EditorState.create({ doc: 'ind' });
-    const r = pineComplete({
+    const r = pineCompleteLocal({
       state,
       pos: 3,
       explicit: false,
@@ -48,10 +49,11 @@ describe('pine-lsp', () => {
     expect(labels.some((l) => String(l).startsWith('ind'))).toBe(true);
   });
 
-  it('completes module members after ta.', () => {
+  it('completes module members after ta. (local)', async () => {
+    const { pineCompleteLocal } = await import('../src/editor/pine-lsp');
     const doc = 'ta.';
     const state = EditorState.create({ doc });
-    const r = pineComplete({
+    const r = pineCompleteLocal({
       state,
       pos: 3,
       explicit: true,

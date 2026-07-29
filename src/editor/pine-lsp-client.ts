@@ -1,0 +1,116 @@
+// Copyright (C) 2024-2026 jango_blockchained
+//
+// This file is part of pynescript.
+//
+// pynescript is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// pynescript is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with pynescript.  If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * HTTP client for pyne Pro API LSP bridge (POST /lsp/completion, /lsp/hover).
+ * Used when AXIS engine is server and Backend URL points at local or remote pyne.
+ */
+
+import { store } from '../store';
+
+export type RemoteCompletionItem = {
+  label: string;
+  detail?: string;
+  documentation?: string;
+  insertText?: string;
+  insertTextFormat?: 'snippet' | 'plaintext' | string;
+  kind?: string;
+};
+
+export type RemoteHover = {
+  contents: string;
+  range?: {
+    start: { line: number; character: number };
+    end: { line: number; character: number };
+  } | null;
+};
+
+/** Prefer remote LSP when using server engine (local or VPS pyne). */
+export function shouldUseRemoteLsp(): boolean {
+  const eng = store.engine || store.activePlugins?.engine || '';
+  if (eng === 'pyodide') return false;
+  const ep = (store.endpoint || '').trim();
+  return ep.length > 0 && eng === 'server';
+}
+
+export function lspBaseUrl(): string {
+  return (store.endpoint || '').replace(/\/$/, '');
+}
+
+export async function fetchRemoteCompletion(opts: {
+  source: string;
+  line: number;
+  character: number;
+  signal?: AbortSignal;
+}): Promise<RemoteCompletionItem[] | null> {
+  const base = lspBaseUrl();
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}/lsp/completion`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source: opts.source,
+        line: opts.line,
+        character: opts.character,
+      }),
+      signal: opts.signal ?? AbortSignal.timeout(4_000),
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as {
+      status?: string;
+      items?: RemoteCompletionItem[];
+    };
+    if (j.status === 'error' || !Array.isArray(j.items)) return null;
+    return j.items;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchRemoteHover(opts: {
+  source: string;
+  line: number;
+  character: number;
+  signal?: AbortSignal;
+}): Promise<RemoteHover | null> {
+  const base = lspBaseUrl();
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}/lsp/hover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source: opts.source,
+        line: opts.line,
+        character: opts.character,
+      }),
+      signal: opts.signal ?? AbortSignal.timeout(4_000),
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as {
+      status?: string;
+      hover?: RemoteHover | null;
+    };
+    if (j.status === 'error' || !j.hover) return null;
+    return j.hover;
+  } catch {
+    return null;
+  }
+}

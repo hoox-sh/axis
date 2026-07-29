@@ -18,13 +18,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Client-side Pine “LSP-lite” for AXIS CodeMirror:
- * - completion (builtins + modules like ta. / math.)
- * - hover documentation
- *
- * Data is synced from pyne’s langserver builtin_metadata.json
- * (./scripts/sync-pine-builtins.sh). Not a full language server process —
- * works offline in the browser.
+ * Pine language intelligence for AXIS CodeMirror:
+ * - Prefer **remote LSP** via pyne Pro API (`POST /lsp/completion`, `/lsp/hover`)
+ *   when engine=server and Backend URL is set (local or VPS).
+ * - Fall back to **client metadata** (builtin_metadata.json) for pyodide / offline.
  */
 
 import {
@@ -35,9 +32,15 @@ import {
   type CompletionContext,
   type CompletionResult,
 } from '@codemirror/autocomplete';
-import { hoverTooltip, keymap, type Tooltip } from '@codemirror/view';
+import { hoverTooltip, keymap, type EditorView, type Tooltip } from '@codemirror/view';
 import { Extension } from '@codemirror/state';
 import builtinsJson from './data/pine-builtins.json';
+import {
+  fetchRemoteCompletion,
+  fetchRemoteHover,
+  shouldUseRemoteLsp,
+  type RemoteCompletionItem,
+} from './pine-lsp-client';
 
 export type BuiltinMeta = {
   label: string;
@@ -199,7 +202,8 @@ export function lookupBuiltin(name: string): BuiltinMeta | undefined {
   return undefined;
 }
 
-export function pineComplete(context: CompletionContext): CompletionResult | null {
+/** Local (metadata) completion — always available offline. */
+export function pineCompleteLocal(context: CompletionContext): CompletionResult | null {
   initIndex();
   const line = context.state.doc.lineAt(context.pos);
   const textBefore = line.text.slice(0, context.pos - line.from);
@@ -211,8 +215,7 @@ export function pineComplete(context: CompletionContext): CompletionResult | nul
     const memberPrefix = dot[2] || '';
     const members = BY_MODULE.get(mod);
     if (members?.length) {
-      const from =
-        context.pos - memberPrefix.length;
+      const from = context.pos - memberPrefix.length;
       const filtered = filterByPrefix(members, memberPrefix);
       if (!filtered.length && !context.explicit) return null;
       return {
@@ -230,7 +233,6 @@ export function pineComplete(context: CompletionContext): CompletionResult | nul
   if (prefix.length < 1 && !context.explicit) return null;
 
   const filtered = filterByPrefix(TOP_LEVEL, prefix);
-  // also offer full dotted names that start with prefix (ta.sm…)
   if (prefix.includes('.') || prefix.length >= 2) {
     for (const [name, meta] of BY_NAME) {
       if (name.includes('.') && name.toLowerCase().startsWith(prefix.toLowerCase())) {
@@ -249,6 +251,87 @@ export function pineComplete(context: CompletionContext): CompletionResult | nul
   };
 }
 
+function remoteItemToCompletion(item: RemoteCompletionItem, boost: number): Completion {
+  const label = item.label;
+  const insert = item.insertText || label;
+  const base: Completion = {
+    label,
+    detail: item.detail ? `${item.detail} · lsp` : 'lsp',
+    type: cmType(item.kind),
+    info: item.documentation || item.detail || undefined,
+    boost,
+  };
+  if (item.insertTextFormat === 'snippet' || insert.includes('${')) {
+    return snippetCompletion(insert, base);
+  }
+  if (insert.endsWith('(') || insert.includes('(')) {
+    return snippetCompletion(insert.includes('${') ? insert : `${label}(\${1})`, base);
+  }
+  return { ...base, apply: insert };
+}
+
+function completionFromPos(
+  context: CompletionContext,
+  options: Completion[],
+): CompletionResult | null {
+  if (!options.length) return null;
+  const word = context.matchBefore(/[A-Za-z_][\w.]*/);
+  const line = context.state.doc.lineAt(context.pos);
+  const textBefore = line.text.slice(0, context.pos - line.from);
+  const afterDot = /[A-Za-z_][\w]*\.\s*([A-Za-z_][\w]*)?$/.exec(textBefore);
+  let from = context.pos;
+  if (afterDot) {
+    const member = afterDot[1] || '';
+    from = context.pos - member.length;
+  } else if (word) {
+    from = word.from;
+  }
+  return { from, options, validFor: /^[\w.]*$/ };
+}
+
+/** Async completion: remote LSP first, then local metadata. */
+export async function pineComplete(
+  context: CompletionContext,
+): Promise<CompletionResult | null> {
+  if (shouldUseRemoteLsp() && !context.aborted) {
+    const line = context.state.doc.lineAt(context.pos);
+    const source = context.state.doc.toString();
+    const lineNo = line.number - 1; // CM is 1-based line.number
+    const character = context.pos - line.from;
+    const remote = await fetchRemoteCompletion({
+      source,
+      line: lineNo,
+      character,
+      signal: context.abortSignal ?? AbortSignal.timeout(4_000),
+    });
+    if (remote?.length) {
+      // After module prefix, server may return full "ta.sma" labels — strip for apply after dot
+      const textBefore = line.text.slice(0, context.pos - line.from);
+      const afterDot = /([A-Za-z_][\w]*)\.\s*([A-Za-z_][\w]*)?$/.exec(textBefore);
+      const options = remote.slice(0, 80).map((item, i) => {
+        let it = item;
+        if (afterDot && item.label.startsWith(`${afterDot[1]}.`)) {
+          const member = item.label.slice(afterDot[1]!.length + 1);
+          it = {
+            ...item,
+            label: member,
+            insertText: item.insertText?.startsWith(`${afterDot[1]}.`)
+              ? item.insertText.slice(afterDot[1]!.length + 1)
+              : member.includes('(')
+                ? item.insertText
+                : item.insertTextFormat === 'snippet'
+                  ? item.insertText
+                  : `${member}(\${1})`,
+          };
+        }
+        return remoteItemToCompletion(it, 100 - Math.min(i, 40));
+      });
+      return completionFromPos(context, options);
+    }
+  }
+  return pineCompleteLocal(context);
+}
+
 function hoverDocs(meta: BuiltinMeta): string {
   const parts: string[] = [];
   if (meta.detail) parts.push(meta.detail);
@@ -260,40 +343,26 @@ function hoverDocs(meta: BuiltinMeta): string {
   return parts.filter(Boolean).join('\n\n') || meta.label;
 }
 
-export function pineHover(view: { state: { doc: { sliceString: (a: number, b: number) => string; length: number } } }, pos: number): Tooltip | null {
-  initIndex();
-  const doc = view.state.doc;
-  const text = doc.sliceString(0, doc.length);
-  const hit = wordAt(text, pos);
-  if (!hit) return null;
-
-  // Prefer longest qualified name: ta.sma
-  let meta = lookupBuiltin(hit.word);
-  if (!meta && hit.word.includes('.')) {
-    meta = lookupBuiltin(hit.word.split('.').pop() || '');
-  }
-  if (!meta) return null;
-
-  const body = hoverDocs(meta);
+function makeHoverTooltip(from: number, to: number, title: string, body: string, badge?: string): Tooltip {
   return {
-    pos: hit.from,
-    end: hit.to,
+    pos: from,
+    end: to,
     above: true,
     create() {
       const dom = document.createElement('div');
       dom.className = 'cm-pine-hover';
       dom.style.cssText =
-        'padding:8px 10px;max-width:360px;font-size:12px;line-height:1.45;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;';
-      const title = document.createElement('div');
-      title.style.cssText = 'color:#939fff;font-weight:600;margin-bottom:4px;';
-      title.textContent = meta!.label + (meta!.detail ? '' : '');
-      dom.appendChild(title);
-      if (meta!.detail) {
-        const d = document.createElement('div');
-        d.style.cssText = 'color:#a7b4ff;margin-bottom:6px;';
-        d.textContent = meta!.detail;
-        dom.appendChild(d);
+        'padding:8px 10px;max-width:380px;font-size:12px;line-height:1.45;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;';
+      if (badge) {
+        const b = document.createElement('div');
+        b.style.cssText = 'color:#5c5f6e;font-size:10px;margin-bottom:4px;text-transform:uppercase;';
+        b.textContent = badge;
+        dom.appendChild(b);
       }
+      const t = document.createElement('div');
+      t.style.cssText = 'color:#939fff;font-weight:600;margin-bottom:4px;';
+      t.textContent = title;
+      dom.appendChild(t);
       const p = document.createElement('div');
       p.style.cssText = 'color:#c8cad4;';
       p.textContent = body;
@@ -303,7 +372,59 @@ export function pineHover(view: { state: { doc: { sliceString: (a: number, b: nu
   };
 }
 
-/** CodeMirror extensions: autocomplete + hover. */
+export function pineHoverLocal(
+  view: { state: { doc: { sliceString: (a: number, b: number) => string; length: number } } },
+  pos: number,
+): Tooltip | null {
+  initIndex();
+  const doc = view.state.doc;
+  const text = doc.sliceString(0, doc.length);
+  const hit = wordAt(text, pos);
+  if (!hit) return null;
+
+  let meta = lookupBuiltin(hit.word);
+  if (!meta && hit.word.includes('.')) {
+    meta = lookupBuiltin(hit.word.split('.').pop() || '');
+  }
+  if (!meta) return null;
+
+  return makeHoverTooltip(hit.from, hit.to, meta.label, hoverDocs(meta), 'local metadata');
+}
+
+/** Async hover: remote LSP markdown first, then local. */
+export async function pineHover(view: EditorView, pos: number): Promise<Tooltip | null> {
+  const doc = view.state.doc;
+  const text = doc.toString();
+  const hit = wordAt(text, pos);
+  if (!hit) return null;
+
+  if (shouldUseRemoteLsp()) {
+    const line = doc.lineAt(pos);
+    const remote = await fetchRemoteHover({
+      source: text,
+      line: line.number - 1,
+      character: pos - line.from,
+    });
+    if (remote?.contents) {
+      const from = remote.range
+        ? doc.line(remote.range.start.line + 1).from + remote.range.start.character
+        : hit.from;
+      const to = remote.range
+        ? doc.line(remote.range.end.line + 1).from + remote.range.end.character
+        : hit.to;
+      return makeHoverTooltip(
+        Math.max(0, from),
+        Math.min(doc.length, to),
+        hit.word,
+        remote.contents,
+        'pyne lsp',
+      );
+    }
+  }
+  return pineHoverLocal(view, pos);
+}
+
+/** CodeMirror extensions: autocomplete + hover (remote LSP + local fallback). */
 export function pineLspExtensions(): Extension[] {
   initIndex();
   return [
@@ -315,10 +436,7 @@ export function pineLspExtensions(): Extension[] {
       icons: true,
     }),
     keymap.of(completionKeymap),
-    hoverTooltip(
-      (view, pos) => pineHover(view as never, pos),
-      { hideOnChange: true },
-    ),
+    hoverTooltip((view, pos) => pineHover(view, pos), { hideOnChange: true }),
   ];
 }
 
