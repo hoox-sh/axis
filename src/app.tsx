@@ -72,12 +72,11 @@ export const App: Component = () => {
     if (!store.bars.length && store.source !== 'csv-upload') {
       void loadSymbolData(store.symbol, store.interval, store.source);
     }
-    // Pyodide: warm same-origin assets immediately; full init on idle (or ASAP if selected)
+    // Pyodide: warm same-origin assets immediately; full init on idle (or ASAP if selected).
+    // preloadPyodide only updates ENG HUD when pyodide is the active engine.
     prefetchPyodideAssets();
     const warmPyodide = () => {
-      void preloadPyodide().then((py) => {
-        if (py) appendLog('ok', 'Pyodide runtime ready (self-hosted)', 'pyodide');
-      });
+      void preloadPyodide();
     };
     if (store.engine === 'pyodide' || store.activePlugins?.engine === 'pyodide') {
       warmPyodide();

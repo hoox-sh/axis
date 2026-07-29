@@ -327,15 +327,24 @@ export function prefetchPyodideAssets(indexUrl?: string): void {
   }
 }
 
+/** True when the user-selected calculation engine is pyodide (not background warm). */
+function pyodideIsActiveEngine(): boolean {
+  return store.engine === 'pyodide' || store.activePlugins?.engine === 'pyodide';
+}
+
 /**
  * Preload full Pyodide + pynescript runtime in the background.
  * Safe to call multiple times; shares the same ensure promise.
  * First cold load is often ~20–30s (wasm + micropip + wheels).
+ *
+ * IMPORTANT: only update the ENG telemetry plane when Pyodide is the *active*
+ * engine. Background warm-up while MODE=server must not clobber ENG to pyodide.
  */
 export function preloadPyodide(): Promise<unknown> {
   prefetchPyodideAssets();
-  const active = store.engine === 'pyodide' || store.activePlugins?.engine === 'pyodide';
-  if (!pyodideEngine._pyodide) {
+  const reportHud = () => pyodideIsActiveEngine();
+
+  if (!pyodideEngine._pyodide && reportHud()) {
     setTelemetryPlane('engine', {
       id: 'pyodide',
       name: 'Client-Side (Pyodide)',
@@ -344,17 +353,15 @@ export function preloadPyodide(): Promise<unknown> {
       detail: 'cold load ~20–30s (Pyodide + micropip + wheel)',
       error: null,
     });
-    if (active) {
-      setStatus(
-        'loading',
-        'Loading Pyodide runtime… ~20–30s first open (wasm + micropip + pynescript wheel)',
-      );
-    }
+    setStatus(
+      'loading',
+      'Loading Pyodide runtime… ~20–30s first open (wasm + micropip + pynescript wheel)',
+    );
   }
   return pyodideEngine
     ._ensure()
     .then((py) => {
-      if (py) {
+      if (py && reportHud()) {
         setTelemetryState('engine', 'open', {
           id: 'pyodide',
           name: 'Client-Side (Pyodide)',
@@ -362,24 +369,26 @@ export function preloadPyodide(): Promise<unknown> {
           detail: 'ready · local',
           error: null,
         });
-        if (active) {
-          setStatus('ready', 'Pyodide ready · offline evaluate available');
-          appendLog('ok', 'Pyodide runtime ready (~self-hosted)', 'pyodide');
-        }
+        setStatus('ready', 'Pyodide ready · offline evaluate available');
+        appendLog('ok', 'Pyodide runtime ready (~self-hosted)', 'pyodide');
+      } else if (py && !reportHud()) {
+        // Background warm only — leave MODE/ENG (server etc.) alone
+        appendLog('ok', 'Pyodide runtime preloaded (background)', 'pyodide');
       }
       return py;
     })
     .catch((err: unknown) => {
-      // Soft-fail: preload must not break the app if assets are missing
       const msg = err instanceof Error ? err.message : String(err);
       console.warn('[axis] pyodide preload failed', err);
-      setTelemetryState('engine', 'error', {
-        id: 'pyodide',
-        transport: 'local',
-        detail: 'load failed',
-        error: msg,
-      });
-      if (active) setStatus('error', `Pyodide load failed: ${msg}`);
+      if (reportHud()) {
+        setTelemetryState('engine', 'error', {
+          id: 'pyodide',
+          transport: 'local',
+          detail: 'load failed',
+          error: msg,
+        });
+        setStatus('error', `Pyodide load failed: ${msg}`);
+      }
       return null;
     });
 }

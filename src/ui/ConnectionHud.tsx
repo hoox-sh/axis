@@ -300,16 +300,40 @@ function engPlaneTitle(p: PlaneTelemetry): string {
           ? 'LOCAL = in-browser Pyodide (no Pro API hop)'
           : transportLabel(p.transport);
   return (
-    `ENG plane (transport): ${p.name} · ${transportLabel(p.transport)} · ${p.state}. ` +
+    `ENG plane (active engine + transport): ${p.name} · ${transportLabel(p.transport)} · ${p.state}. ` +
     `${transportHint}. ` +
-    `Toggles when a run succeeds over WS vs falls back to REST. ` +
+    `Should match MODE chip engine id. WS/REST toggles on server runs; LOCAL when pyodide is selected. ` +
     `Execution mode (interpret/compile) is on the MODE chip.`
   );
+}
+
+/**
+ * ENG plane must track the *selected* engine (store.engine). Telemetry can lag
+ * after background Pyodide warm-up; overlay id/name/transport from selection.
+ */
+function resolvedEnginePlane(): PlaneTelemetry | undefined {
+  const raw = store.telemetry?.engine;
+  if (!raw) return undefined;
+  const id = store.engine || store.activePlugins?.engine || raw.id;
+  if (id === raw.id) return raw;
+  const eng = getEngine(id);
+  const transport: TransportClass =
+    id === 'pyodide' ? 'local' : id === 'server' ? (raw.transport === 'rest' ? 'rest' : 'ws') : raw.transport;
+  return {
+    ...raw,
+    id,
+    name: eng?.name || id,
+    transport,
+    // Don't keep pyodide "ready/loading" detail while MODE is server
+    detail: id === 'pyodide' ? raw.detail : raw.detail?.includes('load') ? undefined : raw.detail,
+    state: id === 'pyodide' ? raw.state : raw.state === 'connecting' && raw.id === 'pyodide' ? 'idle' : raw.state,
+  };
 }
 
 export const ConnectionHud: Component = () => {
   const tel = () => store.telemetry;
   const compact = () => tel()?.hud?.compact;
+  const engPlane = createMemo(() => resolvedEnginePlane());
 
   return (
     <div
@@ -336,9 +360,9 @@ export const ConnectionHud: Component = () => {
             },
             {
               label: 'ENG',
-              plane: () => tel()?.engine,
+              plane: () => engPlane(),
               title: () => {
-                const p = tel()?.engine;
+                const p = engPlane();
                 return p ? engPlaneTitle(p) : undefined;
               },
             },
