@@ -18,14 +18,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Shared git storage config resolution (GitHub + GitLab).
+ * Shared git storage config — types, defaults, path helpers, validation.
+ * Used by `git.ts` plugin and GitHub/GitLab adapters.
+ *
+ * Resolution order: call-site config → `pluginsConfig[storage:git]` / `git` →
+ * {@link DEFAULT_GIT_CONFIG}. Empty `apiBaseUrl` becomes api.github.com or
+ * gitlab.com/api/v4.
  */
 
 import { store } from '../store';
 import { pluginKey } from '../plugins/types';
 
+/** Host API family for the git storage plugin. */
 export type GitProvider = 'github' | 'gitlab';
 
+/** Normalized git library settings (token never logged by adapters). */
 export interface GitConfig {
   provider: GitProvider;
   apiBaseUrl: string;
@@ -35,11 +42,14 @@ export interface GitConfig {
   /** GitLab project path (group/repo) or numeric id — falls back to owner/repo */
   projectId: string;
   branch: string;
+  /** Repo subdirectory for index + `.pine` files (no leading/trailing slashes). */
   basePath: string;
   autoPush: boolean;
+  /** Supports `{{name}}` and `{{iso}}` placeholders. */
   commitMessageTemplate: string;
 }
 
+/** Factory defaults for git storage settings UI. */
 export const DEFAULT_GIT_CONFIG: GitConfig = {
   provider: 'github',
   apiBaseUrl: '',
@@ -53,6 +63,10 @@ export const DEFAULT_GIT_CONFIG: GitConfig = {
   commitMessageTemplate: 'chore(pine): save {{name}} @ {{iso}}',
 };
 
+/**
+ * Merge plugin config + store pluginsConfig into a full {@link GitConfig}.
+ * Fills default API base URL from provider when empty.
+ */
 export function resolveGitConfig(config?: Record<string, unknown>): GitConfig {
   const pc = store.pluginsConfig || {};
   const saved = (pc[pluginKey('storage', 'git')] || pc['git'] || {}) as Record<string, unknown>;
@@ -80,24 +94,32 @@ export function resolveGitConfig(config?: Record<string, unknown>): GitConfig {
   };
 }
 
+/** Expand `{{name}}` / `{{iso}}` in the commit message template. */
 export function formatCommitMessage(template: string, name: string): string {
   const iso = new Date().toISOString();
   return template.replace(/\{\{name\}\}/g, name).replace(/\{\{iso\}\}/g, iso);
 }
 
+/** `{basePath}/library` directory for scripts + index. */
 export function libraryDir(cfg: GitConfig): string {
   return `${cfg.basePath}/library`.replace(/\/+/g, '/');
 }
 
+/** Path to the library index JSON in the repo. */
 export function indexPath(cfg: GitConfig): string {
   return `${libraryDir(cfg)}/index.json`;
 }
 
+/** Path to a single script file; id sanitized for safe filenames. */
 export function scriptPath(cfg: GitConfig, id: string): string {
   const safe = id.replace(/[^a-zA-Z0-9._-]/g, '_');
   return `${libraryDir(cfg)}/${safe}.pine`;
 }
 
+/**
+ * Throw if token or repo identity is missing for the selected provider.
+ * Called by adapters before network I/O.
+ */
 export function assertGitConfig(cfg: GitConfig): void {
   if (!cfg.token) throw new Error('Git storage: PAT / token required');
   if (cfg.provider === 'github') {

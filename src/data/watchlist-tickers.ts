@@ -18,26 +18,53 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Watchlist ticker quotes — prefer the active historical source exchange.
+ * Watchlist REST 24h tickers — seed and fallback when live WS is unavailable.
+ *
+ * Complements `watchlist-live.ts` (WebSocket mux). The Watchlist panel uses this
+ * module to:
+ * 1. **Seed** prices immediately when the panel opens (before/while WS connects)
+ * 2. **Poll** on an interval only after WS fails or closes (`mode: rest`)
+ *
+ * Prefer the active historical source’s exchange when possible; unknown/failed
+ * non-Binance sources fall back to Binance USDT 24h stats.
+ *
+ * ## Venue strategies (REST)
+ *
+ * | Source id match | Endpoint / notes |
+ * |-----------------|------------------|
+ * | okx | Spot tickers list; match `okxInst` (`BTC-USDT`); change from open24h/sodUtc0 |
+ * | bybit | Spot tickers; `price24hPcnt` fraction → % |
+ * | coinbase | Per-product ticker + stats (capped at 12 symbols) |
+ * | mock | Deterministic seed + noise |
+ * | csv | Empty map (no live quotes) |
+ * | binance / default | `GET /api/v3/ticker/24hr?symbols=…` batch |
+ *
+ * Shared symbol helpers (`toUsdt`, `okxInst`, `coinbaseProduct`) are also used
+ * by the WS layer so REST and live keys stay aligned.
  */
 
+/** One row’s quote state as stored by the Watchlist UI. */
 export interface WatchTicker {
   price: number;
-  change: number; // %
+  /** 24h change in percent. */
+  change: number;
   source?: string;
-  /** 24h open for local % recompute when WS only sends last */
+  /** 24h open for local % recompute when WS only sends last. */
   open24h?: number;
   updatedAt?: number;
 }
 
-/** Normalize to a USDT/USD/USDC pair symbol (e.g. BTC → BTCUSDT). */
+/**
+ * Normalize to a USDT/USD/USDC pair symbol (e.g. `BTC` → `BTCUSDT`).
+ * Strips non-alphanumerics; leaves pairs that already end in quote assets alone.
+ */
 export function toUsdt(sym: string): string {
   const s = sym.toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (s.endsWith('USDT') || s.endsWith('USD') || s.endsWith('USDC')) return s;
   return `${s}USDT`;
 }
 
-/** OKX spot instId from watchlist symbol. */
+/** OKX spot `instId` from a watchlist symbol (`BTCUSDT` → `BTC-USDT`). */
 export function okxInst(sym: string): string {
   const s = toUsdt(sym);
   if (s.endsWith('USDT')) return `${s.slice(0, -4)}-USDT`;
@@ -45,14 +72,19 @@ export function okxInst(sym: string): string {
   return `${s}-USDT`;
 }
 
-/** Coinbase product id (BTC-USD). */
+/** Coinbase product id (`BTCUSDT` / `BTC` → `BTC-USD`). */
 export function coinbaseProduct(sym: string): string {
   const s = toUsdt(sym);
   const base = s.replace(/USDT$/, '').replace(/USDC$/, '').replace(/USD$/, '');
   return `${base}-USD`;
 }
 
-/** Fetch 24h last + change for symbols using the active source when possible. */
+/**
+ * Fetch 24h last + change for symbols using the active source when possible.
+ *
+ * Keys in the result prefer the original watchlist symbol strings. On failure
+ * for a non-Binance source, retries once via Binance (common USDT pairs).
+ */
 export async function fetchWatchlistTickers(
   symbols: string[],
   sourceId: string,
@@ -81,6 +113,7 @@ export async function fetchWatchlistTickers(
   }
 }
 
+/** Binance batch 24hr ticker; maps exchange `symbol` back to watchlist keys. */
 async function fetchBinance(symbols: string[]): Promise<Record<string, WatchTicker>> {
   const syms = symbols.map(toUsdt);
   const res = await fetch(
@@ -109,6 +142,10 @@ async function fetchBinance(symbols: string[]): Promise<Record<string, WatchTick
   return next;
 }
 
+/**
+ * OKX: full SPOT ticker list, filter by instId.
+ * Change = (last − open) / open × 100 using open24h or sodUtc0.
+ */
 async function fetchOkx(symbols: string[]): Promise<Record<string, WatchTicker>> {
   const res = await fetch('https://www.okx.com/api/v5/market/tickers?instType=SPOT');
   if (!res.ok) throw new Error(`okx ${res.status}`);
@@ -134,6 +171,7 @@ async function fetchOkx(symbols: string[]): Promise<Record<string, WatchTicker>>
   return next;
 }
 
+/** Bybit spot tickers; `price24hPcnt` is a fraction (0.01 = 1%). */
 async function fetchBybit(symbols: string[]): Promise<Record<string, WatchTicker>> {
   const res = await fetch('https://api.bybit.com/v5/market/tickers?category=spot');
   if (!res.ok) throw new Error(`bybit ${res.status}`);
@@ -155,6 +193,10 @@ async function fetchBybit(symbols: string[]): Promise<Record<string, WatchTicker
   return next;
 }
 
+/**
+ * Coinbase: parallel product ticker + 24h stats.
+ * Capped at 12 symbols to avoid request storms.
+ */
 async function fetchCoinbase(symbols: string[]): Promise<Record<string, WatchTicker>> {
   // Coinbase product ids like BTC-USD
   const next: Record<string, WatchTicker> = {};
@@ -190,6 +232,7 @@ async function fetchCoinbase(symbols: string[]): Promise<Record<string, WatchTic
   return next;
 }
 
+/** Synthetic quotes for mock source (no network). */
 function mockTickers(symbols: string[]): Record<string, WatchTicker> {
   const next: Record<string, WatchTicker> = {};
   for (const sym of symbols) {
@@ -201,8 +244,10 @@ function mockTickers(symbols: string[]): Record<string, WatchTicker> {
   return next;
 }
 
+/** Chart intervals offered when jumping from a watchlist row (UI constant). */
 export const WATCHLIST_INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d', '1w'] as const;
 
+/** REST fallback poll intervals (seconds) exposed in settings UI. */
 export const WATCHLIST_REFRESH_OPTIONS = [
   { value: 5, label: '5s' },
   { value: 15, label: '15s' },

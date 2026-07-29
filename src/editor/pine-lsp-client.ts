@@ -18,12 +18,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * HTTP client for pyne Pro API LSP bridge (POST /lsp/completion, /lsp/hover).
- * Used when AXIS engine is server and Backend URL points at local or remote pyne.
+ * HTTP client for the **pyne Pro API LSP bridge**.
+ *
+ * Endpoints (relative to `store.endpoint`):
+ * - `POST /lsp/completion` — `{ source, line, character }` → completion items
+ * - `POST /lsp/hover` — same position → markdown/plaintext hover
+ *
+ * Used when engine is `server` and Backend URL is set (local `:5002` or remote).
+ * Pyodide / offline mode falls back to client builtins in `pine-lsp`.
+ * Timeouts default to 4s; failures return `null` (caller uses local index).
+ *
+ * @module editor/pine-lsp-client
  */
 
 import { store } from '../store';
 
+/** One completion item from Pro API `/lsp/completion`. */
 export type RemoteCompletionItem = {
   label: string;
   detail?: string;
@@ -33,6 +43,7 @@ export type RemoteCompletionItem = {
   kind?: string;
 };
 
+/** Hover payload from Pro API `/lsp/hover`. */
 export type RemoteHover = {
   contents: string;
   range?: {
@@ -41,7 +52,10 @@ export type RemoteHover = {
   } | null;
 };
 
-/** Prefer remote LSP when using server engine (local or VPS pyne). */
+/**
+ * Prefer remote LSP when using server engine with a non-empty Backend URL.
+ * Returns false for pyodide (no network LSP).
+ */
 export function shouldUseRemoteLsp(): boolean {
   const eng = store.engine || store.activePlugins?.engine || '';
   if (eng === 'pyodide') return false;
@@ -49,10 +63,15 @@ export function shouldUseRemoteLsp(): boolean {
   return ep.length > 0 && eng === 'server';
 }
 
+/** Strip trailing slash from `store.endpoint` for LSP paths. */
 export function lspBaseUrl(): string {
   return (store.endpoint || '').replace(/\/$/, '');
 }
 
+/**
+ * Fetch completions from pyne. Returns `null` on network/HTTP/schema failure.
+ * Line/character are 0-based (CodeMirror / LSP convention).
+ */
 export async function fetchRemoteCompletion(opts: {
   source: string;
   line: number;

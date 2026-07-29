@@ -17,8 +17,19 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Binance REST source — klines via api.binance.com.
-// Falls back silently to a synthetic walk when the network is unavailable.
+/**
+ * Legacy historical source plugins (pre-Solid path).
+ *
+ * Prefer `src/sources/catalog.ts` for AXIS Solid UI. Each export is a
+ * source plugin with `fetchHistorical({ symbol, interval, config }) → Bar[]`.
+ *
+ * - **binanceRest** — `GET api.binance.com/api/v3/klines`; synthetic fallback on failure
+ * - **mockWalk** — offline random walk (optional Mulberry32 seed)
+ * - **csvUpload** — last uploaded bars (`setUploadedBars` or legacy state)
+ *
+ * @module sources/index (legacy)
+ * @see src/sources/catalog.ts
+ */
 
 function intervalToMs(iv) {
     const m = /^(\d+)([mhdw])$/.exec(iv || '');

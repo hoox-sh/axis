@@ -17,6 +17,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Root component for the **standalone editor window** (`?view=editor`).
+ *
+ * Syncs theme, publishes bridge hello/popout events, and forwards Run to the
+ * main chart window over BroadcastChannel (`run` / `run-status`). Document
+ * content is shared via localStorage + bridge `doc` messages.
+ *
+ * @module editor/EditorApp
+ */
+
 import { Component, createSignal, onMount, onCleanup } from 'solid-js';
 import { EditorPane } from './EditorPane';
 import {
@@ -27,10 +37,7 @@ import {
 } from './editor-bridge';
 import { store } from '../store';
 
-/**
- * Standalone editor window (?view=editor).
- * Run commands are forwarded to the main chart window via BroadcastChannel.
- */
+/** Pop-out / new-tab editor shell; does not host the chart. */
 export const EditorApp: Component = () => {
   const [runStatus, setRunStatus] = createSignal('');
   const editorRef: { getDoc: () => string; setDoc?: (doc: string) => void } = {

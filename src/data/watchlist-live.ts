@@ -19,27 +19,63 @@
 
 /**
  * Multi-symbol watchlist quote WebSocket multiplex.
- * Independent of chart kline streams (src/streams/multiplex.ts).
+ *
+ * Subscribes to last-price (+ 24h change where available) for many symbols on one
+ * or a few exchange WS connections. Independent of chart kline streams in
+ * `src/streams/multiplex.ts` — different product (ticker vs OHLCV), different
+ * lifecycle (panel open only), and separate reconnect handles.
+ *
+ * ## Venue strategies
+ *
+ * | Source id match | Transport |
+ * |-----------------|-----------|
+ * | binance (default), kraken | Binance combined stream: `wss://…/stream?streams=btcusdt@ticker/…` (chunked) |
+ * | okx | Single public WS; `subscribe` tickers by `instId` (batches of 20) |
+ * | bybit | Spot public WS; `subscribe` `tickers.SYMBOL` (batches of 10) |
+ * | coinbase | Exchange feed; one `ticker` channel over product_ids |
+ * | mock | Local random walk (~500ms), no network |
+ * | csv | No live quotes — status `mode: 'none'` |
+ *
+ * ## 24h change model
+ *
+ * - **Binance**: exchange `%` in `P`; open in `o` → both forwarded.
+ * - **OKX / Coinbase**: last + open24h (or sodUtc0); change = `(last−open)/open×100`.
+ * - **Bybit**: `price24hPcnt` is a fraction → ×100 for %; `prevPrice24h` as open.
+ * - UI may recompute change from retained `open24h` when a frame only has last
+ *   (see `mergeQuote` in Watchlist).
+ *
+ * ## Lifecycle
+ *
+ * Caller (`Watchlist.tsx`) starts on panel open / symbol or source change and
+ * must call `stop()` on cleanup. Each venue uses `openReconnectableWs` except
+ * mock (interval). Empty symbols or csv return a no-op handle immediately.
  */
 
 import { openReconnectableWs, type WsStatus } from '../streams/reconnect-ws';
 import { coinbaseProduct, okxInst, toUsdt } from './watchlist-tickers';
 
+/** Normalized quote pushed to the UI for one watchlist row. */
 export type QuoteUpdate = {
+  /** Original watchlist symbol key (not always exchange-native id). */
   symbol: string;
   price: number;
+  /** 24h change in percent when known. */
   change?: number;
+  /** 24h open — retained so later last-only updates can recompute %. */
   open24h?: number;
   source?: string;
 };
 
+/** Connection status plus transport mode for the watchlist badge. */
 export type QuoteMuxStatus = WsStatus & { mode?: 'ws' | 'mock' | 'none' };
 
+/** Disposable mux — always call `stop` when symbols/source change or panel closes. */
 export type QuoteMuxHandle = {
   stop: () => void;
 };
 
 export type StartWatchlistQuotesOpts = {
+  /** Active chart/history source id (e.g. `binance-rest`, `okx-…`). */
   sourceId: string;
   symbols: string[];
   onQuote: (u: QuoteUpdate) => void;
@@ -52,7 +88,10 @@ const BINANCE_CHUNK = 40;
 
 /**
  * Start live watchlist quotes for the given symbols/source.
- * Returns stop(); no-op when source has no WS (csv) or empty symbols.
+ *
+ * Routes by `sourceId` substring. Returns `{ stop }`; no-op when source has no
+ * WS (`csv`) or `symbols` is empty. Kraken (and unknown ids) fall through to
+ * Binance public tickers for quote coverage.
  */
 export function startWatchlistQuotes(opts: StartWatchlistQuotesOpts): QuoteMuxHandle {
   const symbols = opts.symbols.filter(Boolean);
@@ -81,6 +120,7 @@ export function startWatchlistQuotes(opts: StartWatchlistQuotesOpts): QuoteMuxHa
 
 // ── Symbol maps ────────────────────────────────────────────────────
 
+/** Map exchange stream/inst keys → original watchlist symbol strings. */
 function mapOrigByKey(
   symbols: string[],
   keyFn: (s: string) => string,
@@ -94,6 +134,10 @@ function mapOrigByKey(
 
 // ── Binance combined @ticker ───────────────────────────────────────
 
+/**
+ * Binance: one combined stream URL per chunk of `{symbol}@ticker` streams.
+ * Payload fields: `c` last, `P` 24h change %, `o` open.
+ */
 function startBinanceQuotes(
   symbols: string[],
   opts: StartWatchlistQuotesOpts,
@@ -155,6 +199,10 @@ function startBinanceQuotes(
 
 // ── OKX tickers ────────────────────────────────────────────────────
 
+/**
+ * OKX public WS: subscribe channel `tickers` per `instId` (e.g. `BTC-USDT`).
+ * Change derived from `open24h` / `sodUtc0` when present.
+ */
 function startOkxQuotes(
   symbols: string[],
   opts: StartWatchlistQuotesOpts,
@@ -215,6 +263,10 @@ function startOkxQuotes(
 
 // ── Bybit tickers ──────────────────────────────────────────────────
 
+/**
+ * Bybit spot public WS: topics `tickers.{USDT_PAIR}`.
+ * `price24hPcnt` is fractional; multiply by 100 for display percent.
+ */
 function startBybitQuotes(
   symbols: string[],
   opts: StartWatchlistQuotesOpts,
@@ -280,6 +332,10 @@ function startBybitQuotes(
 
 // ── Coinbase ticker ────────────────────────────────────────────────
 
+/**
+ * Coinbase Exchange WS: subscribe channel `ticker` for `BASE-USD` product ids.
+ * Change from `open_24h` when present.
+ */
 function startCoinbaseQuotes(
   symbols: string[],
   opts: StartWatchlistQuotesOpts,
@@ -337,6 +393,7 @@ function startCoinbaseQuotes(
 
 // ── Mock synthetic ─────────────────────────────────────────────────
 
+/** Deterministic-ish seed prices with random walk; status mode `mock`. */
 function startMockQuotes(
   symbols: string[],
   opts: StartWatchlistQuotesOpts,
@@ -376,7 +433,10 @@ function startMockQuotes(
   };
 }
 
-/** Exported for tests — parse a Binance combined ticker frame. */
+/**
+ * Exported for tests — parse a Binance combined ticker frame into a {@link QuoteUpdate}.
+ * Mirrors the live `onMessage` mapping without opening a socket.
+ */
 export function parseBinanceTickerMessage(
   raw: string,
   byStream: Map<string, string>,

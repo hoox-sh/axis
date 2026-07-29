@@ -17,6 +17,22 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Main AXIS product shell (Solid root when not in editor-popout view).
+ *
+ * ## Layout
+ * Topbar → flex row (watchlist / layers / dataview / chart / editor & indicators)
+ * → results drawer → system logs → status bar. Overlay: settings, plugins,
+ * script settings, panel drag ghost.
+ *
+ * ## Boot (`onMount`)
+ * - Theme + UI scale; restore dynamic plugins; optional default symbol load
+ * - Prefetch / idle-warm Pyodide assets
+ * - Subscribe to editor-bridge (popout run/doc/reattach) and panel window bridge
+ *
+ * Built-ins register at module load (`registerBuiltins`) before first paint.
+ */
+
 import { Component, createSignal, onMount, onCleanup, Show } from 'solid-js';
 import { Topbar } from './ui/Topbar';
 import { StatusBar } from './ui/StatusBar';
@@ -59,6 +75,7 @@ import {
 import { loadSymbolData } from './data/load-symbol';
 import { prefetchPyodideAssets, preloadPyodide } from './engines/catalog';
 
+/** Primary charting workspace component mounted by `index.tsx`. */
 export const App: Component = () => {
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [pluginsOpen, setPluginsOpen] = createSignal(false);

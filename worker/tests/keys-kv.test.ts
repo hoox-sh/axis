@@ -4,7 +4,8 @@
  */
 
 /**
- * Keys handler with mock KV + invalid tier.
+ * `/api/keys` with mock KV: create stores `key:…`, validate reads tier, rejects
+ * unknown keys and invalid tiers. Guards admin-gated minting + KV round-trip.
  */
 
 import { describe, expect, it } from 'bun:test';

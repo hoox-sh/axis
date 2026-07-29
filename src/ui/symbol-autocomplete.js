@@ -17,9 +17,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Symbol autocomplete.  Wraps the symbol <input> in a combo-box that
-// fetches /exchangeInfo from Binance (or any provider the user configures)
-// and offers fuzzy matches.  Cached for an hour in localStorage.
+/**
+ * @file Legacy symbol autocomplete for SuperChart top bar.
+ * Fetches Binance `/exchangeInfo`, fuzzy-matches, caches 1h in localStorage.
+ * Used by legacy topbar; Solid shell may use simpler inputs + watchlist.
+ */
 
 const CACHE_KEY = 'pynescript.superchart.symbols.v1';
 const CACHE_TTL_MS = 60 * 60 * 1000;
@@ -134,6 +136,11 @@ function position(input) {
     popover.style.width = `${r.width}px`;
 }
 
+/**
+ * Attach fuzzy symbol combo-box behaviour to an input element.
+ * @param {HTMLInputElement} input
+ * @param {(symbol: string) => void} [onPick]
+ */
 export async function attachSymbolAutocomplete(input, onPick) {
     inputEl = input;
     let symbols = loadCache();

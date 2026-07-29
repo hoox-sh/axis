@@ -18,7 +18,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Unified plugin registry — single source of truth for all plugin kinds.
+ * Unified **plugin registry** — single source of truth for all plugin kinds.
+ *
+ * Holds ordered maps of source / stream / engine / storage / component plugins.
+ * Built-ins register via catalog `ensure*Registered()`; dynamic plugins via
+ * `register*` or {@link PluginRegistry.register}. Built-in plugins cannot be
+ * unregistered unless `allowBuiltIn: true`.
+ *
+ * Subscribe with {@link PluginRegistry.on} for Settings / Manager refresh.
+ * Singleton: {@link registry}.
+ *
+ * @module plugins/registry
  */
 
 import type {

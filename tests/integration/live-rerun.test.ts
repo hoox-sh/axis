@@ -4,7 +4,8 @@
  */
 
 /**
- * Live re-run path: multiplex marks needsRerun and schedules silent runner.
+ * Integration: live multiplex marks needsRerun and schedules silent runner.
+ * Guards store flags + mocked engine without Solid chart host.
  */
 import './../setup';
 import { describe, expect, it, beforeEach, afterEach, mock } from 'bun:test';

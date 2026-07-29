@@ -18,19 +18,36 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * API key auth helpers for script library (and shared endpoints).
- * Reuses Pro API key shape (pn_…) and optional KV-backed validation.
+ * API key authentication for the script library and any shared Bearer endpoints.
+ *
+ * ## Key shape
+ * Production keys are `pn_` + 48 hex chars (24 random bytes), minted by `/api/keys`.
+ * Pro API keys use the same prefix so clients can reuse one credential.
+ *
+ * ## Validation order ({@link requireApiKey})
+ * 1. Extract Bearer or `?key=` ({@link extractBearer}).
+ * 2. If `API_KEYS` KV is bound → lookup `key:<token>`; reject unknown.
+ * 3. Else if `ALLOW_OPEN_KEYS` → accept any non-empty key (local demos).
+ * 4. Else accept only well-formed `pn_[a-f0-9]{48}` (dev without KV).
+ *
+ * ## Multi-tenant partition
+ * `userId` is a SHA-256 prefix of the raw key (32 hex chars). D1 rows and
+ * in-memory maps are keyed by `userId` so the raw secret never lands in SQL.
  */
 
 import type { Env } from './index';
 
+/** Authenticated caller after a successful {@link requireApiKey}. */
 export interface AuthContext {
+  /** Raw API key string as presented by the client. */
   key: string;
-  /** Stable partition id derived from the key (never the raw key in D1 if hashed). */
+  /** Stable partition id (SHA-256 hex prefix); used as D1 `user_id`. */
   userId: string;
+  /** Plan tier from KV record (`hobby` default when unbound / unparseable). */
   tier: string;
 }
 
+/** First 32 hex chars of SHA-256(key) — stable user partition without storing secrets. */
 async function hashKey(key: string): Promise<string> {
   const data = new TextEncoder().encode(key);
   const digest = await crypto.subtle.digest('SHA-256', data);
@@ -40,6 +57,10 @@ async function hashKey(key: string): Promise<string> {
     .slice(0, 32);
 }
 
+/**
+ * Pull API key from `Authorization: Bearer …` (preferred) or `?key=` query
+ * (handy for WebSocket / simple curl). Header wins when both present.
+ */
 export function extractBearer(req: Request): string {
   const auth = req.headers.get('Authorization') || '';
   const m = /^Bearer\s+(.+)$/i.exec(auth);
@@ -49,8 +70,9 @@ export function extractBearer(req: Request): string {
 }
 
 /**
- * Validate API key. When KV is unbound, accept well-formed `pn_` keys (dev)
- * or any non-empty key if `ALLOW_OPEN_KEYS=1` (local demos only).
+ * Validate the request's API key and return an {@link AuthContext}.
+ * On failure returns HTTP status + stable error `code` for JSON clients
+ * (`NO_KEY` | `INVALID_KEY`).
  */
 export async function requireApiKey(
   req: Request,
@@ -63,6 +85,7 @@ export async function requireApiKey(
 
   const kv = env.API_KEYS;
   if (kv) {
+    // Production path: only keys previously written by handleKeys create.
     const raw = await kv.get(`key:${key}`);
     if (!raw) {
       return { ok: false, status: 401, code: 'INVALID_KEY', message: 'unknown key' };
@@ -71,12 +94,12 @@ export async function requireApiKey(
     try {
       tier = (JSON.parse(raw) as { tier?: string }).tier || 'hobby';
     } catch {
-      /* ignore */
+      /* non-JSON KV value → default tier */
     }
     return { ok: true, ctx: { key, userId: await hashKey(key), tier } };
   }
 
-  // Dev without KV
+  // Dev without KV: open mode or shape-only validation.
   if (env.ALLOW_OPEN_KEYS === '1' || env.ALLOW_OPEN_KEYS === 'true') {
     return { ok: true, ctx: { key, userId: await hashKey(key), tier: 'hobby' } };
   }

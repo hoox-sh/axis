@@ -17,14 +17,18 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// LEGACY — SuperChart Lite / pre-Solid main entry.
-//
-// The product UI is the Vite + Solid app: `src/index.tsx` → `src/app.tsx`.
-// This file powers the old static shell only (tests/server, offline archives).
-// Do not add features here; extend ChartHost / Topbar / store instead.
-//
-// Wires the registry, state, top bar, editor, chart, results, status, and
-// the Service Worker. Everything is plugin-driven.
+/**
+ * LEGACY — SuperChart Lite / pre-Solid main entry.
+ *
+ * Product UI is Vite + Solid: `src/index.tsx` → `src/app.tsx`.
+ * This file powers the old static shell only (Bun static server tests,
+ * offline archives). **Do not add product features here** — extend ChartHost,
+ * Topbar, store, and plugins instead.
+ *
+ * Boot sequence: registry-bootstrap → initState → hash hydrate → topbar /
+ * editor / chart / results / watchlist → load + optional live stream.
+ * Demo scripts (`DEMOS`) seed the editor for offline demos.
+ */
 
 import './registry-bootstrap.js';
 import { initState, getState } from './state.js';

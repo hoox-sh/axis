@@ -4,7 +4,11 @@
  */
 
 /**
- * @critical AXIS product journeys — mock network only.
+ * @critical Playwright product journeys (mock network only).
+ *
+ * Guards end-to-end happy paths: load mock-walk → run → Results drawer with
+ * strategy events; other UI journeys as added. Stubs `/run` with sample
+ * plots/events and empty Binance REST so CI stays offline-safe.
  */
 import { test, expect } from '@playwright/test';
 

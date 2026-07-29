@@ -18,7 +18,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Collapsible system log strip — copyable, void chrome, Lucide icons.
+ * Collapsible system log strip above the status bar.
+ *
+ * Bound to `store.logs` / `logsPanel`; auto-scrolls when expanded.
+ * Copy-all formats TSV-like lines; clear empties the in-memory ring buffer.
  */
 
 import { Component, For, Show, createEffect, createSignal } from 'solid-js';
@@ -50,6 +53,7 @@ function logsAsText(logs: LogEntry[]): string {
     .join('\n');
 }
 
+/** Expandable log list with copy and clear controls. */
 export const SystemLogs: Component = () => {
   const [copied, setCopied] = createSignal(false);
   let listRef: HTMLDivElement | undefined;

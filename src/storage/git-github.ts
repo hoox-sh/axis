@@ -18,8 +18,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * GitHub Contents API adapter for script library files.
- * Each write is a commit on the configured branch (auto-push).
+ * GitHub Contents API adapter for the git storage plugin.
+ *
+ * Layout: `{basePath}/library/index.json` + `{id}.pine` files. Each put/delete
+ * is a commit on the configured branch (Contents API = auto-push).
+ * Library index is rewritten on every write/remove to keep metadata in sync.
  */
 
 import type { ScriptDocument, ScriptMeta } from '../plugins/types';
@@ -31,6 +34,7 @@ import {
   scriptPath,
 } from './git-config';
 
+/** On-disk library index committed alongside `.pine` files. */
 export interface IndexFile {
   version: 1;
   scripts: ScriptMeta[];
@@ -95,6 +99,7 @@ function repoPath(cfg: GitConfig, filePath: string): string {
   return `/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}/contents/${enc}`;
 }
 
+/** Fetch a file; returns null on 404. Content is UTF-8 decoded from base64. */
 export async function githubGetFile(
   cfg: GitConfig,
   filePath: string,
@@ -111,6 +116,7 @@ export async function githubGetFile(
   }
 }
 
+/** Create or update a file (pass previous `sha` for updates). */
 export async function githubPutFile(
   cfg: GitConfig,
   filePath: string,
@@ -136,6 +142,7 @@ export async function githubPutFile(
   };
 }
 
+/** Delete a file at the given blob sha. */
 export async function githubDeleteFile(
   cfg: GitConfig,
   filePath: string,
@@ -148,6 +155,7 @@ export async function githubDeleteFile(
   });
 }
 
+/** Read library index.json (empty index if missing/corrupt). */
 export async function githubReadIndex(cfg: GitConfig): Promise<{
   index: IndexFile;
   sha: string | null;
@@ -163,6 +171,7 @@ export async function githubReadIndex(cfg: GitConfig): Promise<{
   }
 }
 
+/** Commit library index.json; returns commit sha when available. */
 export async function githubWriteIndex(
   cfg: GitConfig,
   index: IndexFile,
@@ -173,11 +182,13 @@ export async function githubWriteIndex(
   return r.commitSha;
 }
 
+/** List scripts from the index, newest `updatedAt` first. */
 export async function githubList(cfg: GitConfig): Promise<ScriptMeta[]> {
   const { index } = await githubReadIndex(cfg);
   return [...index.scripts].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 }
 
+/** Read a script file + merge metadata from the index. */
 export async function githubRead(cfg: GitConfig, id: string): Promise<ScriptDocument> {
   const { index } = await githubReadIndex(cfg);
   const meta = index.scripts.find((s) => s.id === id);
@@ -197,6 +208,7 @@ export async function githubRead(cfg: GitConfig, id: string): Promise<ScriptDocu
   };
 }
 
+/** Write `.pine` body and upsert index entry (two commits). */
 export async function githubWrite(cfg: GitConfig, doc: ScriptDocument): Promise<ScriptMeta> {
   const now = Date.now();
   const path = doc.path || scriptPath(cfg, doc.id);
@@ -222,6 +234,7 @@ export async function githubWrite(cfg: GitConfig, doc: ScriptDocument): Promise<
   return meta;
 }
 
+/** Delete script file (if present) and drop index entry. */
 export async function githubRemove(cfg: GitConfig, id: string): Promise<void> {
   const { index, sha: indexSha } = await githubReadIndex(cfg);
   const meta = index.scripts.find((s) => s.id === id);
@@ -244,6 +257,7 @@ export async function githubRemove(cfg: GitConfig, id: string): Promise<void> {
   );
 }
 
+/** Probe repo access; returns connected=false with error message on failure. */
 export async function githubStatus(cfg: GitConfig): Promise<{
   connected: boolean;
   remote?: string;

@@ -17,9 +17,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Watchlist sidebar component.
-// Shows a list of symbols with live prices (fetched from Binance).
-// Clicking a symbol loads its chart data.
+/**
+ * @file Legacy SuperChart watchlist sidebar (vanilla DOM).
+ * Polls Binance tickers; click loads chart symbol. Prefer Solid `Watchlist.tsx`
+ * (WS-first quotes via watchlist-live).
+ */
 
 import { getState } from '../state.js';
 
@@ -122,6 +124,7 @@ function loadSymbols() {
     _symbols = [...DEFAULT_SYMBOLS];
 }
 
+/** Mount watchlist DOM, price poll timer, and sidebar toggle. */
 export function initWatchlist() {
     loadSymbols();
     renderWatchlist();
@@ -156,6 +159,7 @@ export function initWatchlist() {
     _timer = setInterval(fetchPrices, 30_000);
 }
 
+/** Stop the price poll timer. */
 export function destroyWatchlist() {
     if (_timer) { clearInterval(_timer); _timer = null; }
 }

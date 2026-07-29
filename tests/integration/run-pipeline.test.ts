@@ -4,7 +4,8 @@
  */
 
 /**
- * Engine active path → runScript with mocked /run.
+ * Integration: active engine path → runScript with mocked `/run`.
+ * Guards end-to-end store bars + engine selection without network.
  */
 
 import '../setup';

@@ -17,33 +17,52 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// /api/keys — minimal admin-only API key creation + listing.
-// Backed by KV when available, in-memory otherwise (for dev).
+/**
+ * `/api/keys` — mint and validate AXIS/Pro API keys.
+ *
+ * ## Actions
+ * - **Create** — `POST` or `?action=create` with JSON `{ tier? }`.
+ *   Requires `X-Admin-Token` matching `env.ADMIN_TOKEN`. Stores
+ *   `key:<pn_…>` in `API_KEYS` KV (1y TTL) when bound.
+ * - **Validate** — `GET` or `?action=validate` with Bearer / `?key=`.
+ *   Returns `{ tier, created_at }` from KV, or accepts well-formed `pn_`
+ *   keys when KV is unbound (dev).
+ *
+ * Key format: `pn_` + 48 lowercase hex (24 random bytes). Same shape as
+ * `requireApiKey` in `auth.ts` expects.
+ */
 
 import type { Env } from './index';
 
+/** Persisted KV payload for a minted API key. */
 interface KeyRecord {
     key: string;
     tier: 'free' | 'hobby' | 'pro' | 'team' | 'enterprise';
     createdAt: number;
 }
 
+/** Constant-time enough for a shared admin secret; empty ADMIN_TOKEN disables create. */
 function isAdmin(req: Request, env: Env): boolean {
     if (!env.ADMIN_TOKEN) return false;
     const header = req.headers.get('X-Admin-Token') ?? '';
     return header === env.ADMIN_TOKEN;
 }
 
+/** Cryptographically random `pn_` + 48 hex key. */
 function genKey(): string {
     const bytes = new Uint8Array(24);
     crypto.getRandomValues(bytes);
     return 'pn_' + Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * Route handler for `/api/keys`. `origin` is the resolved CORS origin from the entry fetch.
+ */
 export async function handleKeys(req: Request, env: Env, origin: string): Promise<Response> {
     const url = new URL(req.url);
     const kv = (env as unknown as { API_KEYS?: KVNamespace }).API_KEYS;
 
+    // --- Create ---
     if (url.searchParams.get('action') === 'create' || req.method === 'POST') {
         if (!isAdmin(req, env)) {
             return new Response(JSON.stringify({ status: 'error', code: 'FORBIDDEN', message: 'admin token required' }), {
@@ -64,6 +83,7 @@ export async function handleKeys(req: Request, env: Env, origin: string): Promis
         });
     }
 
+    // --- Validate ---
     if (url.searchParams.get('action') === 'validate' || req.method === 'GET') {
         const provided = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') || url.searchParams.get('key') || '';
         if (!provided) {
@@ -83,7 +103,7 @@ export async function handleKeys(req: Request, env: Env, origin: string): Promis
                 status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin },
             });
         }
-        // No KV bound: accept any well-formed key (dev-only).
+        // No KV bound: accept any well-formed key (dev-only; does not prove issuance).
         if (!/^pn_[a-f0-9]{48}$/.test(provided)) {
             return new Response(JSON.stringify({ status: 'error', code: 'INVALID_KEY', message: 'malformed key' }), {
                 status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin },

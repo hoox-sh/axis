@@ -4,7 +4,8 @@
  */
 
 /**
- * Dynamic plugin install from fixture URL → registry.
+ * Integration: dynamic plugin install from fixture file URL → registry.
+ * Guards fake-source/stream/engine install; rejects bad-no-export.
  */
 import './../setup';
 import { describe, expect, it, beforeEach } from 'bun:test';

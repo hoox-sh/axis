@@ -20,10 +20,15 @@
 /**
  * AXIS Connection HUD — ENG / RUN / MODE / PATH (+ SRC STR STO).
  *
- * ENG  local | remote
- * RUN  browser | server | worker
- * MODE interpret | compile | auto
- * PATH WS | REST (hidden for browser)
+ * Derived via {@link deriveHud} from engine plugin + endpoint + telemetry.
+ * Chips live in the status bar; compact mode collapses secondary chips.
+ *
+ * | Chip | Values |
+ * |------|--------|
+ * | ENG  | local \| remote |
+ * | RUN  | browser \| server \| worker |
+ * | MODE | interpret \| compile \| auto |
+ * | PATH | WS \| REST (hidden for browser-local) |
  *
  * Sticky info: hover opens panel; click pin (or chip) keeps it until Esc / outside.
  */
@@ -499,6 +504,7 @@ function PairingWarn() {
   );
 }
 
+/** Status-bar connection chips + sticky detail panel. */
 export const ConnectionHud: Component = () => {
   const snap = useHudSnapshot();
   const sticky = useStickyInfo();

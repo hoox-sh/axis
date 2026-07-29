@@ -17,6 +17,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Single indicator row in the Indicators panel.
+ *
+ * Shows name, visibility toggle, per-plot color pickers, script settings
+ * (Pine `input.*`), and remove. Remove also clears chart overlays / sub-pane
+ * via {@link PaneManager}.
+ *
+ * @module indicators/IndicatorCard
+ */
+
 import { Component, For, createSignal, Show } from 'solid-js';
 import type { Indicator } from '../store/types';
 import { toggleIndicator, removeIndicator, setIndicatorColor, openScriptSettings } from '../store';
@@ -28,6 +38,7 @@ interface Props {
   indicator: Indicator;
 }
 
+/** Card for one entry in `store.scripts`. */
 export const IndicatorCard: Component<Props> = (props) => {
   const [editingColor, setEditingColor] = createSignal<string | null>(null);
 

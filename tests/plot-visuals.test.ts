@@ -3,6 +3,11 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+/**
+ * Plot/series → chart visuals (histograms, shapes→markers, kind split).
+ * Invariant: truthy plot values and shape maps stay TV-compatible for PaneManager.
+ */
+
 import './setup';
 import { describe, expect, it } from 'bun:test';
 import {

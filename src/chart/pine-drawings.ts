@@ -18,12 +18,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Map Pro API / Runtime ``drawings`` payloads → SVG-friendly geometry.
+ * Map Pro API / runtime **`drawings`** payloads → SVG-friendly geometry.
  *
- * Accepts both interpret-path shapes (``type`` + ``t1``/``p1``/…) and
- * compile-path ``__drawings`` events (``kind`` + ``x1``/``y1``/``left``/…).
+ * Accepts both interpret-path shapes (`type` + `t1`/`p1`/…) and compile-path
+ * `__drawings` events (`kind` + `x1`/`y1`/`left`/…). Non-geometry kinds
+ * (bgcolor, plotshape, table, …) are filtered out — tables go to
+ * {@link PineTableHud}; shapes to markers via plot-visuals.
+ *
+ * Consumed by the drawing layer when applying script drawings after a run.
+ *
+ * @module chart/pine-drawings
  */
 
+/** Normalized Pine drawing for the SVG overlay. */
 export interface ScriptDrawing {
   id: string;
   type: 'line' | 'box' | 'label' | 'polyline';
@@ -86,6 +93,7 @@ export function normalizeLineStyle(raw: unknown, fallback = 'solid'): string {
   return s || fallback;
 }
 
+/** Normalize Pine `extend.*` constants to `left` | `right` | `both` | `none`. */
 export function normalizeExtend(raw: unknown, fallback = 'none'): string {
   if (raw == null) return fallback;
   let s = String(raw).toLowerCase().trim();
@@ -95,7 +103,10 @@ export function normalizeExtend(raw: unknown, fallback = 'none'): string {
   return fallback;
 }
 
-/** Normalize mixed API shapes into ScriptDrawing[]. */
+/**
+ * Normalize mixed interpret/compile drawing payloads into {@link ScriptDrawing}[].
+ * Skips non-geometry kinds (bgcolor, plotshape, table, …).
+ */
 export function normalizeScriptDrawings(raw: unknown[] | undefined | null): ScriptDrawing[] {
   if (!raw?.length) return [];
   const out: ScriptDrawing[] = [];

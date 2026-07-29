@@ -4,7 +4,8 @@
  */
 
 /**
- * Stream plugins + defaultStreamForSource.
+ * Stream plugins + `defaultStreamForSource` pairing with historical sources.
+ * Guards start/stop contracts with MockWebSocket where needed.
  */
 
 import './setup';

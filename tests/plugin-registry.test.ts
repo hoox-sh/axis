@@ -4,8 +4,8 @@
  */
 
 /**
- * Tests for the unified TypeScript plugin registry (PR1).
- * Run: `bun test frontend/tests/plugin-registry.test.ts`
+ * Unified TypeScript plugin registry (`src/plugins/registry.ts`).
+ * Guards kind-partitioned register/list/get and storage/component kinds.
  */
 
 import { describe, expect, it, beforeEach } from 'bun:test';

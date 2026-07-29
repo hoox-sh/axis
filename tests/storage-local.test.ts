@@ -4,9 +4,8 @@
  */
 
 /**
- * Local storage plugin + library service tests.
- * Uses localStorage fallback when IndexedDB is unavailable.
- * Run: `bun test frontend/tests/storage-local.test.ts`
+ * Local storage plugin + library service (localStorage fallback without IDB).
+ * Guards script CRUD round-trip and list ordering for offline library.
  */
 
 import { describe, expect, it, beforeEach } from 'bun:test';

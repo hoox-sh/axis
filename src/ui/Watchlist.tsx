@@ -17,6 +17,33 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Watchlist panel UI — multi-symbol quotes while the panel is open.
+ *
+ * Wrapped in {@link FloatableShell} (`id: watchlist`). Clicking a row loads
+ * that symbol’s chart via `loadSymbolData`. Add/remove symbols update the store.
+ *
+ * ## Quote lifecycle
+ *
+ * - **Panel closed** (or empty symbols): no WS, no REST poll (`quoteMode: off`).
+ * - **Panel open**: REST seed once, then WS-first via `startWatchlistQuotes`.
+ * - **WS open**: stop any REST interval; merge ticks into local `prices`.
+ * - **WS reconnecting**: keep last prices; do not start REST spam during backoff.
+ * - **WS closed / error** (and not `mode: none`): start REST poll at
+ *   `store.watchlist.refreshSec` (min 5s).
+ * - **csv / no-WS sources**: one REST seed only; mode `off` after seed.
+ *
+ * Effect deps: panel open, symbol list, active `store.source`, refresh interval.
+ * `onCleanup` always stops the mux and clears REST timers.
+ *
+ * ## open24h recompute
+ *
+ * `mergeQuote` keeps the last known 24h open. If a WS frame has last but no
+ * change %, change is recomputed as `(price − open24h) / open24h × 100`.
+ *
+ * Independent of chart kline streams — see `src/data/watchlist-live.ts`.
+ */
+
 import { Component, For, createSignal, createEffect, onCleanup, Show } from 'solid-js';
 import {
   store,
@@ -31,11 +58,17 @@ import { fetchWatchlistTickers, type WatchTicker } from '../data/watchlist-ticke
 import { startWatchlistQuotes } from '../data/watchlist-live';
 import { FloatableShell } from './panels/FloatableShell';
 
+/** Dockable multi-symbol quote list with WS/REST lifecycle (see module docs). */
 export const Watchlist: Component = () => {
   const [prices, setPrices] = createSignal<Record<string, WatchTicker>>({});
   const [addValue, setAddValue] = createSignal('');
+  /** `ws` live, `rest` polling fallback, `off` idle/closed/no transport. */
   const [quoteMode, setQuoteMode] = createSignal<'ws' | 'rest' | 'off'>('off');
 
+  /**
+   * Merge a partial quote into row state, retaining open24h and recomputing
+   * 24h % when the update only carries last price.
+   */
   const mergeQuote = (partial: {
     symbol: string;
     price: number;
@@ -162,12 +195,14 @@ export const Watchlist: Component = () => {
     });
   });
 
+  /** Select symbol as chart focus and load its history for the active source. */
   const select = async (sym: string) => {
     setStore('symbol', sym.toUpperCase());
     persist();
     await loadSymbolData(sym, store.interval, store.source);
   };
 
+  /** Add bare base (BTC) or full pair; bare alphanumerics get USDT suffix. */
   const onAdd = () => {
     let v = addValue().trim().toUpperCase();
     if (!v) return;

@@ -18,7 +18,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * HUD overlay for Pine ``table.*`` drawings (screen-space, not price scale).
+ * HUD overlay for Pine **`table.*`** drawings (screen-space, not price scale).
+ *
+ * Reads table objects from `store.lastRun` drawings / events and positions
+ * HTML tables over the chart (top-left, top-right, …). Independent of the
+ * SVG drawing layer used for line/box/label geometry.
+ *
+ * @module chart/PineTableHud
  */
 
 import { Component, For, Show, createMemo } from 'solid-js';

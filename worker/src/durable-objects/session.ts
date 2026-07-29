@@ -17,26 +17,43 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Durable Object: per-session WebSocket relay for live datastreams.
-//
-// A browser connects to /api/stream?symbol=…&interval=… and the Worker
-// pins a DO instance to that session. The DO opens a connection to the
-// configured upstream (Binance WS by default) and forwards each kline
-// message to the browser.  When the browser disconnects, the DO hibernates
-// and the upstream socket is released.
-//
-// In the future this DO can also fan-out a single upstream subscription to
-// many browsers (broadcast mode).
+/**
+ * Durable Object: per-session WebSocket relay for live market streams.
+ *
+ * ## Entry
+ * Browser hits Worker `GET /api/stream?session=&symbol=&interval=` (see
+ * `index.ts`). The Worker selects a DO via `idFromName(session)` and
+ * rewrites the request to `/ws` on this object.
+ *
+ * ## Behavior
+ * - Accepts browser WebSocket upgrades (`Upgrade: websocket`).
+ * - Opens one upstream Binance kline socket per DO (`@kline_<interval>`).
+ * - Forwards raw upstream frames to all connected clients (broadcast).
+ * - Client control messages (JSON):
+ *   - `{ action: "subscribe", symbol, interval }` — rebind upstream
+ *   - `{ action: "ping" }` → `{ action: "pong", t }`
+ * - When the last client disconnects, upstream is closed so the DO can
+ *   hibernate and release sockets.
+ *
+ * Future: multi-symbol fan-out / shared upstream across sessions.
+ */
 
 import type { Env } from '../index';
 
+/** In-memory session fields kept on the DO instance (not durable storage). */
 interface SessionState {
     symbol: string;
     interval: string;
+    /** Single upstream exchange WebSocket, or null when idle. */
     upstream: WebSocket | null;
+    /** Browser-side sockets accepted via `state.acceptWebSocket`. */
     clients: WebSocket[];
 }
 
+/**
+ * Cloudflare Durable Object class exported as `SessionDO` from the Worker.
+ * Bind via `wrangler.toml` `durable_objects` + migrations; namespace name `SESSIONS`.
+ */
 export class SessionDO {
     private state: DurableObjectState;
     private env: Env;
@@ -48,6 +65,10 @@ export class SessionDO {
         this.sess = { symbol: '', interval: '', upstream: null, clients: [] };
     }
 
+    /**
+     * Only `/ws` with WebSocket upgrade is supported. Query: `symbol`, `interval`.
+     * Returns 101 with the client half of a `WebSocketPair`.
+     */
     async fetch(req: Request): Promise<Response> {
         const url = new URL(req.url);
         if (url.pathname !== '/ws') {
@@ -65,6 +86,7 @@ export class SessionDO {
 
         const pair = new WebSocketPair();
         const [client, server] = [pair[0], pair[1]];
+        // Hibernation-friendly accept so CF can wake us on messages.
         this.state.acceptWebSocket(server);
         this.sess.clients.push(server);
         server.addEventListener('close', () => {
@@ -77,8 +99,8 @@ export class SessionDO {
         return new Response(null, { status: 101, webSocket: client });
     }
 
+    /** Hibernation API: client → DO control messages. */
     async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-        // Clients can send `{"action":"subscribe","symbol":"…","interval":"…"}`.
         try {
             const msg = JSON.parse(typeof message === 'string' ? message : new TextDecoder().decode(message));
             if (msg.action === 'subscribe' && (msg.symbol !== this.sess.symbol || msg.interval !== this.sess.interval)) {
@@ -102,6 +124,7 @@ export class SessionDO {
         try { ws.close(1011, 'upstream error'); } catch (_) { /* ignore */ }
     }
 
+    /** Open Binance kline WS if not already connected for current symbol/interval. */
     private ensureUpstream(): void {
         if (this.sess.upstream) return;
         const url = `wss://stream.binance.com:9443/ws/${this.sess.symbol.toLowerCase()}@kline_${this.sess.interval}`;
@@ -113,8 +136,7 @@ export class SessionDO {
                 this.broadcast(JSON.stringify({ type: 'status', state: 'closed' }));
             });
             upstream.addEventListener('message', (ev) => {
-                // Re-emit raw Binance kline payloads.  The browser fan-outs into
-                // OHLCV bars the same way it does when running off a direct WS.
+                // Raw Binance kline payloads — browser normalizes to OHLCV like direct WS.
                 this.broadcast(typeof ev.data === 'string' ? ev.data : new TextDecoder().decode(ev.data as ArrayBuffer));
             });
             this.sess.upstream = upstream;
@@ -123,6 +145,7 @@ export class SessionDO {
         }
     }
 
+    /** Tear down upstream when idle or on resubscribe. */
     private closeUpstream(): void {
         if (this.sess.upstream) {
             try { this.sess.upstream.close(); } catch (_) { /* ignore */ }
@@ -130,6 +153,7 @@ export class SessionDO {
         }
     }
 
+    /** Best-effort send to every accepted client socket. */
     private broadcast(payload: string): void {
         for (const c of this.sess.clients) {
             try { c.send(payload); } catch (_) { /* ignore */ }

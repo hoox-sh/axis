@@ -18,8 +18,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * GitLab Repository Files API adapter for script library files.
- * Each write is a commit on the configured branch.
+ * GitLab Repository Files API adapter for the git storage plugin.
+ *
+ * Same library layout as GitHub (`index.json` + `.pine` files). Auth via
+ * `PRIVATE-TOKEN` header. Project identity from `projectId` or `owner/repo`.
  */
 
 import type { ScriptDocument, ScriptMeta } from '../plugins/types';
@@ -87,6 +89,7 @@ function b64Decode(s: string): string {
   return new TextDecoder().decode(bytes);
 }
 
+/** Fetch a repository file; returns null on 404. */
 export async function gitlabGetFile(
   cfg: GitConfig,
   filePath: string,
@@ -106,6 +109,7 @@ export async function gitlabGetFile(
   }
 }
 
+/** Create (`POST`) or update (`PUT`) a text file on the branch. */
 export async function gitlabPutFile(
   cfg: GitConfig,
   filePath: string,
@@ -126,6 +130,7 @@ export async function gitlabPutFile(
   return { commitId: String(json.file_path ? json.commit_id || '' : json.commit_id || '') };
 }
 
+/** Delete a repository file with a commit message. */
 export async function gitlabDeleteFile(
   cfg: GitConfig,
   filePath: string,
@@ -140,6 +145,7 @@ export async function gitlabDeleteFile(
   });
 }
 
+/** Read library index.json; `exists` false when file is missing. */
 export async function gitlabReadIndex(cfg: GitConfig): Promise<{
   index: IndexFile;
   exists: boolean;
@@ -155,6 +161,7 @@ export async function gitlabReadIndex(cfg: GitConfig): Promise<{
   }
 }
 
+/** Commit library index.json (create vs update via `exists`). */
 export async function gitlabWriteIndex(
   cfg: GitConfig,
   index: IndexFile,
@@ -164,11 +171,13 @@ export async function gitlabWriteIndex(
   await gitlabPutFile(cfg, indexPath(cfg), JSON.stringify(index, null, 2) + '\n', message, exists);
 }
 
+/** List scripts from the index, newest first. */
 export async function gitlabList(cfg: GitConfig): Promise<ScriptMeta[]> {
   const { index } = await gitlabReadIndex(cfg);
   return [...index.scripts].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 }
 
+/** Read a script file + merge metadata from the index. */
 export async function gitlabRead(cfg: GitConfig, id: string): Promise<ScriptDocument> {
   const { index } = await gitlabReadIndex(cfg);
   const meta = index.scripts.find((s) => s.id === id);
@@ -188,6 +197,7 @@ export async function gitlabRead(cfg: GitConfig, id: string): Promise<ScriptDocu
   };
 }
 
+/** Write `.pine` body and upsert index entry. */
 export async function gitlabWrite(cfg: GitConfig, doc: ScriptDocument): Promise<ScriptMeta> {
   const now = Date.now();
   const path = doc.path || scriptPath(cfg, doc.id);
@@ -218,6 +228,7 @@ export async function gitlabWrite(cfg: GitConfig, doc: ScriptDocument): Promise<
   return meta;
 }
 
+/** Delete script file (if present) and drop index entry. */
 export async function gitlabRemove(cfg: GitConfig, id: string): Promise<void> {
   const { index, exists } = await gitlabReadIndex(cfg);
   const meta = index.scripts.find((s) => s.id === id);
@@ -241,6 +252,7 @@ export async function gitlabRemove(cfg: GitConfig, id: string): Promise<void> {
   }
 }
 
+/** Probe project access; returns connected=false with error on failure. */
 export async function gitlabStatus(cfg: GitConfig): Promise<{
   connected: boolean;
   remote?: string;

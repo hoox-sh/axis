@@ -3,6 +3,11 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+/**
+ * Drawing snap-to-bar helpers: nearest index + OHLC/time snap modes.
+ * Invariant: cursor maps to nearest bar time/price without inventing bars.
+ */
+
 import { describe, expect, it } from 'bun:test';
 import {
   findNearestBarIndex,

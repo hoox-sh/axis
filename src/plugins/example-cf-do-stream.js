@@ -17,16 +17,21 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Live datastream that proxies through a Cloudflare Worker Durable Object.
-// The Worker hosts a `SessionDO` that opens one upstream Binance kline WS
-// per (symbol, interval) and fans it out to N clients.
-//
-// This means: only ONE outbound connection to Binance per session, no
-// matter how many browser tabs are watching the same symbol.  Useful for
-// scaling past the ~5-connection per-domain browser limit on WS.
-//
-// Requires the endpoint to be set to a CF Worker URL that has the DO
-// binding enabled (see frontend/worker/wrangler.toml).
+/**
+ * Example **stream** plugin — Cloudflare Durable Object kline relay.
+ *
+ * The Worker hosts a Session DO that opens one upstream Binance kline WS
+ * per (symbol, interval) and fans bars out to N browser clients. Useful for
+ * scaling past the ~5 concurrent WS per-domain browser limit.
+ *
+ * Contract: `kind: 'stream'`, `start({ symbol, interval, onBar, … }) → stop()`.
+ * Config: `endpoint` = Worker `wss://` or `https://` URL (converted to WS).
+ * Socket path: `{endpoint}/api/stream?session=…&symbol=…&interval=…`.
+ *
+ * Requires a Worker with DO binding (see `worker/wrangler.toml`). Not a built-in.
+ *
+ * @module plugins/example-cf-do-stream
+ */
 
 const cfStream = {
     id: 'cf-do',

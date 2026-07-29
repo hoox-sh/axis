@@ -19,7 +19,15 @@
 
 /**
  * Unified interactive drawing model (D0 foundation).
- * Compatible with migration from legacy `drawing-types.ts` shapes.
+ *
+ * Defines the canonical chart-space entity shape (`Drawing` with `points[]`),
+ * tool ids, style/meta, interaction state, and legacy migration types.
+ * Compatible with shapes from legacy `drawing-types.ts`.
+ *
+ * Does **not**:
+ * - Render or hit-test (see geometry / svg-primitives / layer code)
+ * - Own DOM, LWC chart APIs, or persistence I/O
+ * - Represent Pine Script™ plot/line drawings (those are engine outputs)
  */
 
 // ── Geometry ────────────────────────────────────────────────────────────────
@@ -38,8 +46,10 @@ export type Point = ChartPoint;
 
 // ── Style ───────────────────────────────────────────────────────────────────
 
+/** SVG stroke pattern for lines (mapped via `strokeDashFor` in svg-primitives). */
 export type LineStyle = 'solid' | 'dashed' | 'dotted';
 
+/** Visual attributes shared by interactive drawings. */
 export interface DrawingStyle {
   color: string;
   width: number;
@@ -47,7 +57,9 @@ export interface DrawingStyle {
   /** Optional fill color (rects, channels, ellipses, fib zones). */
   fill?: string;
   opacity: number;
+  /** Extend the line left past the first anchor (trend/extend). */
   extendLeft: boolean;
+  /** Extend the line right past the last anchor (rays default true when hydrated). */
   extendRight: boolean;
   fontSize: number;
 }
@@ -57,6 +69,10 @@ export interface DrawingStyle {
 /**
  * Persisted drawing kinds (and tool-only `eraser`).
  * Extends the legacy set (`hline` | `trend` | `ray` | `rect` | `fib` | `measure` | `text`).
+ *
+ * Point arity is defined in `TOOL_SPECS` (`defaults.ts`): 1-point (hline, text, …),
+ * 2-point (trend, rect, fib, …), 3-point (channel, fibext), or open-ended `n`
+ * (polyline, path).
  */
 export type DrawingKind =
   | 'hline'
@@ -88,8 +104,13 @@ export type DrawingToolId = 'cursor' | DrawingKind;
 
 // ── Meta / entity ───────────────────────────────────────────────────────────
 
+/**
+ * Kind-specific extras that are not geometry or stroke style.
+ * Index signature allows forward-compatible keys without schema churn.
+ */
 export interface DrawingMeta {
   text?: string;
+  /** Override default fib ratios (see `FIB_LEVELS` / `FIB_EXT_LEVELS`). */
   fibLevels?: number[];
   locked?: boolean;
   arrowStart?: boolean;
@@ -99,7 +120,13 @@ export interface DrawingMeta {
   [key: string]: unknown;
 }
 
-/** Unified drawing entity — points + style + meta (migration target). */
+/**
+ * Unified drawing entity — points + style + meta (migration target).
+ *
+ * Geometry always lives in `points` (time/price). During migration, hydrate
+ * helpers may also attach legacy top-level `p1`/`p2`/`price`/`text`/`color`
+ * for layers that still read the dual shape — see `normalize.ts`.
+ */
 export interface Drawing {
   id: string;
   kind: DrawingKind;
@@ -112,14 +139,21 @@ export interface Drawing {
 
 // ── Tool specs ──────────────────────────────────────────────────────────────
 
-/** How many anchor points a tool needs (fixed or open-ended). */
+/**
+ * How many anchor points a tool needs before placement can finish.
+ * - `1` | `2` | `3` — fixed arity; last click commits the drawing
+ * - `'n'` — open-ended; commit via finish gesture (double-click / explicit finish)
+ */
 export type PointArity = 1 | 2 | 3 | 'n';
 
+/** Catalog entry describing placement rules for one {@link DrawingKind}. */
 export interface ToolSpec {
   kind: DrawingKind;
   arity: PointArity;
+  /** Minimum anchors when `arity` is `'n'` (typically 2). */
   minPoints?: number;
   maxPoints?: number;
+  /** When true, UI finishes N-point tools on double-click. */
   finishOnDoubleClick?: boolean;
   defaultStyle?: Partial<DrawingStyle>;
   label: string;
@@ -127,6 +161,10 @@ export interface ToolSpec {
 
 // ── Interaction / handles ───────────────────────────────────────────────────
 
+/**
+ * Hit-target id for move/resize.
+ * `body` moves the whole drawing; `price` is hline; `p1`/`p2`/`p3`/`pN` are anchors.
+ */
 export type HandleId =
   | 'body'
   | 'price'
@@ -136,6 +174,7 @@ export type HandleId =
   | `p${number}`
   | string;
 
+/** Interactive control point exposed for hit-testing and drag. */
 export interface Handle {
   id: HandleId;
   point: ChartPoint;
@@ -143,6 +182,10 @@ export interface Handle {
   cursor?: string;
 }
 
+/**
+ * Coarse draft lifecycle used by higher-level UI state (distinct from the
+ * pure `DraftPhase` discriminant in `draft.ts`).
+ */
 export type DraftPhase = 'idle' | 'placing' | 'preview' | 'complete';
 
 /** In-progress pointer drag of an existing drawing (or its handle). */
@@ -164,6 +207,17 @@ export interface DraftState {
   preview?: ChartPoint;
 }
 
+/**
+ * OHLC magnet strength for pointer → chart point conversion.
+ *
+ * - `'off'` — use raw time/price; no bar attraction
+ * - `'weak'` — snap only when pointer Y is within `pixelTol` of a target level;
+ *   searches nearest bar ± one neighbor
+ * - `'strong'` — always snap to the closest OHLC (or configured) level on the
+ *   nearest bar by time
+ *
+ * Implementation: {@link snapToBars} in `snap.ts`.
+ */
 export type MagnetMode = 'off' | 'weak' | 'strong';
 
 // ── Legacy shapes (pre-unified model) ───────────────────────────────────────

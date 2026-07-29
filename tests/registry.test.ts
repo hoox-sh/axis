@@ -3,8 +3,10 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-// Bun tests for the plugin registry.
-// Run with: `bun test frontend/tests/registry.test.ts`
+/**
+ * Legacy `registry.js` contracts: register/list/assert, loadPluginFromUrl,
+ * built-in sources/streams/engines shape. Run: `bun test tests/registry.test.ts`.
+ */
 
 import { describe, expect, it, beforeEach } from 'bun:test';
 import { registry, Registry } from '../src/registry.js';

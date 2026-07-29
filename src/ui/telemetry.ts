@@ -18,13 +18,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Transport classification + Connection HUD helpers.
+ * Transport classification + Connection HUD formatting helpers.
+ *
+ * Used by store DEFAULTS (`idlePlane`), loaders (`classifyTransport`), and
+ * HUD chips (`formatLatency`, `connDotClass`, …). Mostly pure; engine transport
+ * may read `store.pluginsConfig` for preferWs.
  */
 
 import type { ConnState, PlaneTelemetry, TransportClass } from '../store/types';
 import type { PluginCapabilities } from '../plugins/types';
 import { store } from '../store';
 
+/** Fresh idle plane telemetry (DEFAULTS / plugin switch). */
 export function idlePlane(
   id: string,
   name: string,
@@ -88,6 +93,7 @@ export function classifyTransport(
   return 'none';
 }
 
+/** Short uppercase transport badge text. */
 export function transportLabel(t: TransportClass): string {
   switch (t) {
     case 'ws':
@@ -103,6 +109,7 @@ export function transportLabel(t: TransportClass): string {
   }
 }
 
+/** Tailwind classes for the connection status dot. */
 export function connDotClass(state: ConnState): string {
   switch (state) {
     case 'open':
@@ -119,12 +126,14 @@ export function connDotClass(state: ConnState): string {
   }
 }
 
+/** Human latency for HUD chips (`42ms`, `1.2s`, or `—`). */
 export function formatLatency(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms)) return '—';
   if (ms < 1000) return `${Math.round(ms)}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+/** Relative age of last tick wall-clock (`now`, `5s`, `2m`). */
 export function formatTickAge(at: number | null | undefined, now = Date.now()): string {
   if (at == null) return '—';
   const sec = Math.max(0, (now - at) / 1000);
@@ -135,6 +144,7 @@ export function formatTickAge(at: number | null | undefined, now = Date.now()): 
 
 const MAX_SAMPLES = 24;
 
+/** Append a latency sample, keeping at most MAX_SAMPLES (newest last). */
 export function pushSample(samples: number[], ms: number): number[] {
   const next = samples.length >= MAX_SAMPLES ? samples.slice(samples.length - MAX_SAMPLES + 1) : samples.slice();
   next.push(ms);

@@ -4,7 +4,8 @@
  */
 
 /**
- * Built-in historical sources (mocked network).
+ * Built-in historical sources (Binance/OKX/etc + mock-walk) with mocked network.
+ * Guards bar shape, registry list, and empty/error HTTP handling.
  */
 
 import './setup';

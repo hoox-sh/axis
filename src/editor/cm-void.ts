@@ -17,11 +17,21 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * CodeMirror **void indigo** theme + highlight style for the Pine editor.
+ *
+ * Matches AXIS landing / `index.css` tokens (`#111218` canvas, `#939fff` accent).
+ * Export {@link voidEditorExtensions} (theme + syntax highlighting) for
+ * {@link PineEditor}.
+ *
+ * @module editor/cm-void
+ */
+
 import { EditorView } from '@codemirror/view';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 
-/** Void canvas CodeMirror theme — matches AXIS void indigo tokens */
+/** Void canvas CodeMirror theme — matches AXIS void indigo tokens. */
 export const voidEditorTheme = EditorView.theme(
   {
     '&': {
@@ -119,6 +129,7 @@ export const voidHighlightStyle = HighlightStyle.define([
   { tag: t.namespace, color: '#8ec8d4' },
 ]);
 
+/** Theme + syntax highlighting bundle for {@link PineEditor}. */
 export const voidEditorExtensions = [
   voidEditorTheme,
   syntaxHighlighting(voidHighlightStyle),

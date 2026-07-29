@@ -18,8 +18,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Dynamic plugin loader for AXIS.
- * Loads ES modules from URL; registers source/stream/engine plugins; persists URL list.
+ * **Dynamic plugin loader** — install source/stream/engine plugins from URL.
+ *
+ * Dynamic-imports ES modules from a URL (Vite-ignored). Persists the installed
+ * list under `localStorage` key {@link PLUGINS_KEY}. On boot, call
+ * {@link restoreInstalledPlugins} to re-import saved URLs.
+ *
+ * Supported kinds: `source`, `stream`, `engine`. Storage/component via URL
+ * are not supported yet. Rejects dangerous schemes (`javascript:`, etc.).
+ * Maps legacy `/src/plugins/…` paths to `/plugins/…` for production.
+ *
+ * Example plugins: `example-coingecko-source.js`, `example-cf-do-stream.js`,
+ * `example-tiny-pine-engine.js`.
+ *
+ * @module plugins/loader
  */
 
 import { registerDynamicSource, unregisterDynamicSource, listDynamicSourceIds } from '../sources/catalog';
@@ -29,9 +41,11 @@ import { ensureBuiltins } from './bootstrap';
 import { appendLog } from '../store';
 import type { EnginePlugin, SourcePlugin, StreamPlugin } from './types';
 
+/** localStorage key for installed plugin URL list. */
 export const PLUGINS_KEY = 'pynescript.axis.plugins.v1';
 const LEGACY_PLUGINS_KEY = 'pynescript.superchart.plugins.v1';
 
+/** One entry in the persisted install list. */
 export type InstalledPlugin = {
   url: string;
   id: string;

@@ -18,7 +18,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS results / export drawer — Trades, Strategy, Plots, Metrics, Raw + export.
+ * AXIS results / export drawer — Events, Strategy, Plots, Metrics, Raw.
+ *
+ * Reads `store.lastRun` (RunResult). Strategy tab uses `buildStrategyReport`;
+ * export helpers download CSV/JSON or copy raw payload. FloatableShell id
+ * `results` (typically docked bottom).
  */
 
 import { Component, For, Show, createMemo, createSignal } from 'solid-js';
@@ -67,6 +71,7 @@ async function copyText(text: string) {
   }
 }
 
+/** Bottom results drawer bound to the last script run. */
 export const ResultsPanel: Component = () => {
   const [tab, setTab] = createSignal<TabId>('events');
   const [copied, setCopied] = createSignal(false);

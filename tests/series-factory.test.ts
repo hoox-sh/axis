@@ -4,7 +4,8 @@
  */
 
 /**
- * series-factory with mocked lightweight-charts.
+ * series-factory: plot styles → LWC series options (mocked charts).
+ * Guards palette tokens, line/hist/area mapping, null-safe data.
  */
 
 import './setup';

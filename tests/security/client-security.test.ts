@@ -4,7 +4,8 @@
  */
 
 /**
- * Client-side security tests for AXIS plugins / storage.
+ * Client security: untrusted plugin install, storage path isolation, no secret leakage.
+ * Guards registry rejects bad modules; cloud/git configs do not embed tokens in ids.
  */
 
 import '../setup';

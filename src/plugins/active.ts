@@ -18,7 +18,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Resolve the currently selected source / stream / engine / storage plugins.
+ * Resolve the **currently selected** source / stream / engine / storage plugins.
+ *
+ * Reads ids from `store.activePlugins` with fallbacks to `store.source`,
+ * `store.live.streamId`, `store.engine`, then catalog defaults
+ * (`binance-rest`, `binance-ws`, `server`, `local`).
+ *
+ * Config merges `store.pluginsConfig['kind:id']` (and bare id) with
+ * `store.endpoint` for server engines.
+ *
+ * @module plugins/active
  */
 
 import { store } from '../store';

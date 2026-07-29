@@ -17,19 +17,31 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// URL hash state sync.
-// Reads state from the URL hash on load, and updates the hash when state
-// changes.  Enables shareable links with specific symbol/interval/script.
+/**
+ * Bidirectional URL hash ↔ legacy state sync for shareable chart links.
+ *
+ * On load, {@link applyHashState} hydrates `getState()` from `#symbol=…&…`.
+ * {@link watchHashState} listens for state `change` and debounced
+ * `history.replaceState` updates (no history spam). `_updating` prevents
+ * feedback loops when applying hash → assign → change → push.
+ *
+ * Script source is base64(+URI-encoded) and only embedded if short enough
+ * (&lt; 500 chars b64); total hash truncated at {@link MAX_HASH_LEN}.
+ */
 
 import { getState } from './state.js';
 
+/** Fields always mirrored into the hash when non-empty. */
 const HASH_KEYS = ['symbol', 'interval', 'engine', 'source', 'stream', 'timeRange'];
-const MAX_HASH_LEN = 2000; // browsers truncate very long URLs
+/** Browsers truncate very long URLs; keep head of the param string. */
+const MAX_HASH_LEN = 2000;
+/** Only these assign keys trigger a hash push (skip noise flushes). */
 const MEANINGFUL_FIELDS = new Set(['symbol', 'interval', 'engine', 'source', 'stream', 'timeRange', 'script', 'mode']);
 
+/** True while applying hash → state so pushHashState is skipped. */
 let _updating = false;
 
-/** Parse the URL hash into a state object. */
+/** Parse `location.hash` query form into a plain state partial. */
 function parseHash() {
     const hash = location.hash.slice(1);
     if (!hash) return {};
@@ -45,7 +57,7 @@ function parseHash() {
     return out;
 }
 
-/** Build a URL hash from current state. */
+/** Serialize current state into a hash query string (may omit long scripts). */
 function buildHash() {
     const state = getState();
     const params = new URLSearchParams();
@@ -53,7 +65,7 @@ function buildHash() {
         const v = state.get(k);
         if (v != null && v !== '') params.set(k, String(v));
     }
-    // Encode script (can be long) as base64
+    // Encode script (can be long) as base64; skip if too large for a share URL
     const script = state.get('script');
     if (script) {
         try {
@@ -65,7 +77,10 @@ function buildHash() {
     return s.length > MAX_HASH_LEN ? s.slice(0, MAX_HASH_LEN) : s;
 }
 
-/** Apply hash state to the app state (only on initial load). */
+/**
+ * One-shot hydrate from hash at boot.
+ * @returns {boolean} true if any hash keys were applied
+ */
 export function applyHashState() {
     const hashState = parseHash();
     if (Object.keys(hashState).length === 0) return false;
@@ -75,7 +90,7 @@ export function applyHashState() {
     return true;
 }
 
-/** Push current state to the URL hash (debounced). */
+/** Debounced push of current state into the URL hash. */
 let _pushTimer = null;
 export function pushHashState(e) {
     if (_updating) return;
@@ -94,10 +109,9 @@ export function pushHashState(e) {
     }, 300);
 }
 
-/** Listen for state changes and push to hash. */
+/** Subscribe state → hash and browser back/forward → state. */
 export function watchHashState() {
     getState().addEventListener('change', pushHashState);
-    // Also update on popstate (browser back/forward)
     window.addEventListener('popstate', () => {
         if (_updating) return;
         _updating = true;

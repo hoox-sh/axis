@@ -17,10 +17,24 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Live datastream plugins. All streams expose a `start({ symbol, interval,
-// onBar, onError, onStatus })` function that returns a `stop()` cleanup
-// function. The engine is responsible for connecting/disconnecting on
-// symbol/interval changes.
+/**
+ * Legacy live datastream plugins (pre-Solid path).
+ *
+ * Prefer `src/streams/catalog.ts` for AXIS Solid UI. All streams expose:
+ *
+ * ```
+ * start({ symbol, interval, onBar, onError, onStatus, config?, lastBar? }) → stop()
+ * ```
+ *
+ * The host is responsible for connecting/disconnecting on symbol/interval changes.
+ *
+ * - **binanceWs** — single-symbol kline WS (no reconnect helper)
+ * - **mockPoll** — synthetic bar walk for offline demos
+ * - **none** — no-op stream (historical only)
+ *
+ * @module streams/index (legacy)
+ * @see src/streams/catalog.ts
+ */
 
 function intervalToMs(iv) {
     const m = /^(\d+)([mhdw])$/.exec(iv || '');

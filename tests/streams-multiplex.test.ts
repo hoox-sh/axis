@@ -4,7 +4,8 @@
  */
 
 /**
- * Live multiplex start/stop.
+ * Live multiplex start/stop lifecycle on active stream plugins.
+ * Invariant: stop cleans handlers; restart does not leak prior sockets.
  */
 
 import './setup';

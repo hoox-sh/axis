@@ -17,6 +17,14 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Bottom status strip — Connection HUD (left) + status message + optional
+ * strategy PnL summary from `store.lastRun`.
+ *
+ * Mirrors `store.status` / `statusMessage`; shows HooxLoader while loading/running.
+ * Results/logs panel toggles live on the right when present in the layout.
+ */
+
 import { Component, Show, createMemo } from 'solid-js';
 import { store, setStore, persist } from '../store';
 import { Icons } from './icons';
@@ -34,6 +42,7 @@ const STATUS_COLORS: Record<string, string> = {
   disconnected: 'text-text-faint',
 };
 
+/** Fixed footer chrome under the workspace. */
 export const StatusBar: Component = () => {
   const color = () => STATUS_COLORS[store.status] || 'text-text-dim';
 

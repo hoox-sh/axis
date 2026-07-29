@@ -3,6 +3,11 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+/**
+ * Connection HUD pure model: local vs worker endpoints, exec mode, transport path.
+ * Invariant: `deriveHud` labels match endpoint classification for status UI.
+ */
+
 import { describe, expect, it } from 'bun:test';
 import {
   deriveHud,

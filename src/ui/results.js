@@ -17,7 +17,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Results panel — Trades & Events, Plots, Metrics, Raw JSON tabs.
+/**
+ * @file Legacy SuperChart results panel (vanilla DOM).
+ * Tabs: Trades & Events, Plots, Metrics, Raw JSON. Prefer Solid `ResultsPanel.tsx`.
+ */
 
 function el(id) { return document.getElementById(id); }
 
@@ -76,6 +79,7 @@ async function copyPanel(name) {
     } catch { /* no-op */ }
 }
 
+/** Cache results-panel DOM refs and wire tab + copy buttons. */
 export function initResults() {
     refs.trades = el('tab-trades');
     refs.strategy = el('tab-strategy');
@@ -231,6 +235,7 @@ function formatNum(n) {
     return n.toFixed(Math.abs(n) >= 100 ? 2 : 4);
 }
 
+/** Paint all result tabs from a run payload (trades, plots, metrics, raw). */
 export function renderResults(payload) {
     if (!refs.trades) initResults();
 

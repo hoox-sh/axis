@@ -17,6 +17,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Vite / PWA entry — mounts Solid into `#app`.
+ *
+ * Routes by URL via `isEditorView()`:
+ * - Editor popout → {@link EditorApp} (detached Pine editor)
+ * - Default → {@link App} (full chart workspace)
+ *
+ * Global styles: `./index.css` (Tailwind + void theme tokens).
+ */
+
 import { render } from 'solid-js/web';
 import { App } from './app';
 import { EditorApp } from './editor/EditorApp';

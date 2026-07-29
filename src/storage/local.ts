@@ -18,8 +18,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Built-in local storage plugin for user Pine scripts.
- * Primary: IndexedDB · Fallback: localStorage · Migrates legacy SuperChart library keys.
+ * Built-in **local** storage plugin for user Pine scripts.
+ *
+ * ## Backends (priority)
+ * 1. IndexedDB (`pynescript.axis.storage`) — scripts + KV (drafts)
+ * 2. localStorage JSON blob — when IDB unavailable
+ * 3. In-memory Map — tests / SSR
+ *
+ * One-shot migration pulls SuperChart library keys and legacy editor draft keys.
+ * Drafts also mirror to `pynescript.axis.editor.doc` for the editor bridge.
  */
 
 import type {
@@ -287,11 +294,15 @@ async function migrateOnce(): Promise<void> {
   }
 }
 
-/** Reset migration flag (tests). */
+/** @internal Reset migration flag (tests). */
 export function _resetLocalMigrationFlag() {
   migrated = false;
 }
 
+/**
+ * Local browser storage plugin (`id: local`).
+ * Implements list/read/write/remove, drafts, and getStatus.
+ */
 export const localStoragePlugin: StoragePlugin = {
   id: 'local',
   name: 'Local (this browser)',

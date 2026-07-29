@@ -4,7 +4,8 @@
  */
 
 /**
- * Library service roundtrip on local storage.
+ * Integration: library service save/list/load round-trip on local storage.
+ * Guards service façade over storage plugins for Script Library UI.
  */
 
 import '../setup';

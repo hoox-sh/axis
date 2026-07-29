@@ -18,9 +18,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS interactive drawing tools — chart annotations (not Pine label/line).
+ * AXIS interactive drawing model — chart annotations placed by the user.
+ *
+ * Distinct from Pine script drawings (`pine-drawings.ts` / `DrawingLayer` script
+ * group): these are editable, selectable, and persisted via the store.
+ *
+ * ## Dual field shape (legacy + unified)
+ * Runtime geometry uses kind-specific legacy fields (`price`, `p1`/`p2`). Style
+ * also lives on both flat fields (`color`, `lineWidth`, `lineStyle`) and a nested
+ * `style` object. Prefer {@link resolveDrawingStyle} for paint/lock reads so either
+ * form works; create/patch paths write both so older persisted drawings keep working.
  */
 
+/** Active toolbar tool (includes non-placing `cursor`). */
 export type DrawingToolId =
   | 'cursor'
   | 'hline'
@@ -31,34 +41,46 @@ export type DrawingToolId =
   | 'measure'
   | 'text';
 
+/** Placed drawing kinds only (excludes the select cursor). */
 export type DrawingKind = Exclude<DrawingToolId, 'cursor'>;
 
+/** Chart anchor in series space: unix seconds (or logical bar index for some script x). */
 export interface Point {
   time: number;
   price: number;
 }
 
+/** Stroke pattern for user drawings. */
 export type DrawingLineStyle = 'solid' | 'dashed' | 'dotted';
 
+/**
+ * Shared fields for every user drawing.
+ * Geometry is on the kind-specific interfaces; style uses dual legacy + `style`.
+ */
 export interface DrawingBase {
   id: string;
   kind: DrawingKind;
+  /** Legacy stroke color (also mirrored under `style.color` when created by the layer). */
   color: string;
-  /** Optional user label */
+  /** Optional user label (text tool also sets this as the visible string). */
   text?: string;
-  /** Stroke width (default 1.5) */
+  /** Legacy stroke width (default 1.5). Prefer `style.width` when both exist. */
   lineWidth?: number;
-  /** Stroke pattern */
+  /** Legacy stroke pattern. Prefer `style.lineStyle` when both exist. */
   lineStyle?: DrawingLineStyle;
-  /** Fill opacity 0–1 for shapes (rect) */
+  /** Fill opacity 0–1 for shapes (rect); not dual-mirrored into `style` today. */
   fillOpacity?: number;
-  /** When true, refuse drag/delete unless unlocked */
+  /** When true, layer refuses drag/delete (unless unlocked). Also read from `meta.locked`. */
   locked?: boolean;
   /**
-   * Dual-shape fields from normalize (optional).
-   * Layer still paints via price/p1/p2; these keep style/points for future.
+   * Optional dual-shape geometry from normalize / future unified model.
+   * Layer still paints via `price` / `p1` / `p2`; `points` is kept for round-trip.
    */
   points?: Point[];
+  /**
+   * Nested style (preferred when set). Created drawings mirror color/width/lineStyle
+   * here so consumers can migrate off flat fields gradually.
+   */
   style?: {
     color?: string;
     width?: number;
@@ -67,28 +89,34 @@ export interface DrawingBase {
     extendRight?: boolean;
     extendLeft?: boolean;
   };
+  /** Free-form metadata; `meta.locked` is treated like top-level `locked`. */
   meta?: { text?: string; locked?: boolean; [key: string]: unknown };
 }
 
+/** Full-width horizontal price level. */
 export interface HLineDrawing extends DrawingBase {
   kind: 'hline';
   price: number;
 }
 
+/** Two-anchor drawings: trend, ray, rect, fib retracement, measure ruler. */
 export interface TwoPointDrawing extends DrawingBase {
   kind: 'trend' | 'ray' | 'rect' | 'fib' | 'measure';
   p1: Point;
   p2: Point;
 }
 
+/** Point label with free text (prompted on place). */
 export interface TextDrawing extends DrawingBase {
   kind: 'text';
   p1: Point;
   text: string;
 }
 
+/** Discriminated union of user drawings stored in the app state. */
 export type Drawing = HLineDrawing | TwoPointDrawing | TextDrawing;
 
+/** Palette used by the toolbar presets and layer defaults. */
 export const DRAWING_COLORS = {
   default: '#939fff',
   up: '#5ecf8a',
@@ -97,7 +125,11 @@ export const DRAWING_COLORS = {
   muted: 'rgba(147, 159, 255, 0.55)',
 } as const;
 
-/** Resolve paint style from dual legacy/unified drawing fields. */
+/**
+ * Resolve paint + lock flags from dual legacy/unified drawing fields.
+ * Precedence: nested `style.*` → flat `color`/`lineWidth`/`lineStyle` → defaults.
+ * `locked` is true if either `d.locked` or `d.meta?.locked` is set.
+ */
 export function resolveDrawingStyle(d: DrawingBase): {
   color: string;
   width: number;
@@ -114,13 +146,15 @@ export function resolveDrawingStyle(d: DrawingBase): {
   };
 }
 
-/** Fibonacci retracement ratios (price levels between p1→p2). */
+/** Fibonacci retracement ratios painted between p1→p2 price span. */
 export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] as const;
 
+/** Tools that need two click anchors (draft → place) rather than one click. */
 export function needsTwoPoints(tool: DrawingToolId): boolean {
   return tool === 'trend' || tool === 'ray' || tool === 'rect' || tool === 'fib' || tool === 'measure';
 }
 
+/** Human-readable label for toolbar flyouts and titles. */
 export function toolLabel(tool: DrawingToolId): string {
   switch (tool) {
     case 'cursor':

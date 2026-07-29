@@ -3,6 +3,11 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+/**
+ * Smoke imports for chart/store modules in Bun (no DOM chart render).
+ * Guards: PaneManager export exists; Solid store defaults (symbol/interval/status).
+ */
+
 import { describe, it, expect } from 'bun:test';
 
 describe('PaneManager', () => {

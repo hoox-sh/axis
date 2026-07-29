@@ -17,14 +17,23 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Example plugin: a custom historical source backed by the public
-// CoinGecko API.  Demonstrates the `Source` plugin contract.
-//
-// To load this in the running PWA:
-//   1. Open Manager → Plugins tab.
-//   2. Paste the URL of this file (or use the Plugins README for self-
-//      hosting instructions).
-//   3. The new source appears in the Source dropdown.
+/**
+ * Example **source** plugin — public CoinGecko market chart API.
+ *
+ * Demonstrates the {@link SourcePlugin} contract: `kind: 'source'`,
+ * `fetchHistorical({ symbol, interval, config }) → Bar[]`.
+ *
+ * ## Load in the PWA
+ *
+ * 1. Manager → Plugins tab
+ * 2. Paste this file’s URL (e.g. `/plugins/example-coingecko-source.js`)
+ * 3. Source appears in the Source dropdown as **CoinGecko**
+ *
+ * Maps common tickers (BTC → bitcoin, …). Rate-limited (~10–30 calls/min).
+ * Not a built-in — install via the dynamic loader only.
+ *
+ * @module plugins/example-coingecko-source
+ */
 
 const COINGECKO_IDS = {
     BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'ripple',

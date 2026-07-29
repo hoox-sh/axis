@@ -18,10 +18,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS icon set — Lucide (https://lucide.dev)
+ * AXIS icon set — Lucide (https://lucide.dev) via `lucide-solid`.
  *
  * Why Lucide: tree-shakable stroke icons, consistent 24×24 grid, ISC license,
- * solid-js package (`lucide-solid`), strong default for modern UIs (shadcn, etc.).
+ * solid-js package, strong default for modern UIs (shadcn, etc.).
+ *
+ * Export `Icons` maps short product names → pre-sized components; prefer
+ * these over raw Lucide imports for consistent chrome density.
  */
 
 import type { Component, JSX } from 'solid-js';
@@ -99,6 +102,10 @@ function withDefaults(Icon: Component<LucideProps>): Component<IconProps> {
   );
 }
 
+/**
+ * Product icon map — prefer these over raw Lucide imports for consistent sizing.
+ * Keys match UI intent (play, magnet, panelLeft, …).
+ */
 export const Icons = {
   play: withDefaults(Play),
   settings: withDefaults(Settings),

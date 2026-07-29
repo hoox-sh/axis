@@ -19,7 +19,10 @@
 
 /**
  * High-level script library API used by UI and editor.
- * Always dual-writes drafts to the local storage plugin for crash recovery.
+ *
+ * Resolves the **active** storage plugin (`activePlugins.storage`); falls back
+ * to local. Drafts always dual-write to the local plugin for crash recovery
+ * even when git/cloud is selected (remotes typically skip draft commits).
  */
 
 import type { ScriptDocument, ScriptMeta, StoragePlugin, StorageStatus } from '../plugins/types';
@@ -29,6 +32,7 @@ import { getStorage } from './catalog';
 import { localStoragePlugin } from './local';
 import { appendLog } from '../store';
 
+/** Active storage or local fallback; throws only if nothing is available. */
 function requireActive(): StoragePlugin {
   ensureBuiltins();
   const p = getActiveStorage() || getStorage('local') || localStoragePlugin;
@@ -36,19 +40,26 @@ function requireActive(): StoragePlugin {
   return p;
 }
 
+/** Always the local plugin (for drafts / crash recovery). */
 function localAlways(): StoragePlugin {
   ensureBuiltins();
   return getStorage('local') || localStoragePlugin;
 }
 
+/** List script metadata from the active storage (optional name/path prefix). */
 export async function listScripts(prefix?: string): Promise<ScriptMeta[]> {
   return requireActive().list({ prefix });
 }
 
+/** Read full script document by id from active storage. */
 export async function readScript(id: string): Promise<ScriptDocument> {
   return requireActive().read(id);
 }
 
+/**
+ * Write/create a script on active storage; assigns id and stamps updatedAt.
+ * Logs success to the system log strip.
+ */
 export async function writeScript(
   doc: Omit<ScriptDocument, 'updatedAt' | 'revision'> &
     Partial<Pick<ScriptDocument, 'updatedAt' | 'revision' | 'createdAt'>>,
@@ -69,12 +80,16 @@ export async function writeScript(
   return meta;
 }
 
+/** Delete a script from active storage and log. */
 export async function removeScript(id: string): Promise<void> {
   await requireActive().remove(id);
   appendLog('info', `Deleted script ${id}`, 'library');
 }
 
-/** Debounced draft: always local + active storage if it supports drafts. */
+/**
+ * Persist editor draft: always local, plus active storage if it implements
+ * `saveDraft` (failures on remote are swallowed — local remains source of truth).
+ */
 export async function saveDraft(content: string, name?: string): Promise<void> {
   const payload = { content, name };
   await localAlways().saveDraft?.(payload);
@@ -88,6 +103,9 @@ export async function saveDraft(content: string, name?: string): Promise<void> {
   }
 }
 
+/**
+ * Load draft preferring local crash recovery, then active storage draft.
+ */
 export async function loadDraft(): Promise<{ content: string; name?: string } | null> {
   // Prefer local crash draft
   const local = await localAlways().loadDraft?.();
@@ -99,12 +117,14 @@ export async function loadDraft(): Promise<{ content: string; name?: string } | 
   return null;
 }
 
+/** Connection/status of the active storage plugin. */
 export async function getStorageStatus(): Promise<StorageStatus> {
   const p = requireActive();
   if (p.getStatus) return p.getStatus();
   return { connected: true };
 }
 
+/** Active storage plugin instance (or local fallback). */
 export function getActiveStoragePlugin(): StoragePlugin {
   return requireActive();
 }

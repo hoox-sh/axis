@@ -1,3 +1,5 @@
+# AXIS Worker deploy config (API + WS relay). Bindings map to Env in src/index.ts.
+# Docs-only notes: do not invent production IDs — use values from this file / CF dashboard.
 name = "pynescript-superchart"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]

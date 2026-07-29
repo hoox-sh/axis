@@ -4,7 +4,8 @@
  */
 
 /**
- * Additional stream plugins (okx/bybit/coinbase/kraken) with MockWebSocket.
+ * Extra exchange stream plugins (OKX/Bybit/Coinbase/Kraken) with MockWebSocket.
+ * Guards URL construction and kline/frame → bar mapping edges.
  */
 
 import './setup';

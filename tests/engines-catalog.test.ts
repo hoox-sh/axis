@@ -4,7 +4,8 @@
  */
 
 /**
- * Engine catalog — server success/error (mocked); isReady.
+ * Engine catalog: server success/error paths (mocked fetch) + isReady.
+ * Guards registration, dynamic engines, and error envelopes from `/run`.
  */
 
 import './setup';

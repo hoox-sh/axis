@@ -18,7 +18,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Pure geometry helpers for AXIS chart drawings (no DOM / LWC).
+ * Pure geometry helpers for AXIS chart drawings.
+ *
+ * Operates in pixel space (hit tests, ray extend) or time/price space
+ * (shift, fib, channel, ellipse). Used by paint and interaction layers.
+ *
+ * Does **not**:
+ * - Touch the DOM, SVG, or Lightweight Charts APIs
+ * - Own drawing entities or style (see `types` / `defaults`)
+ * - Compute Pine Script™ plot geometry
  */
 
 import { FIB_LEVELS } from '../drawing-types';
@@ -26,6 +34,10 @@ import { FIB_LEVELS } from '../drawing-types';
 /** Chart coordinate in time/price space. */
 export type ChartPoint = { time: number; price: number };
 
+/**
+ * How far to project a pixel segment past its anchors when painting rays
+ * and infinite lines (`extendSegment`).
+ */
 export type SegmentExtend = 'none' | 'left' | 'right' | 'both';
 
 /** Distance from point (px,py) to segment (x1,y1)–(x2,y2). */
@@ -137,9 +149,15 @@ export function resizePoint(pts: ChartPoint[], index: number, pt: ChartPoint): C
 }
 
 /**
- * Fibonacci retracement prices between two endpoints.
- * Same semantics as drawing-layer `fibPrices`: when p1 >= p2 levels run from high down;
- * otherwise from low up. Level 0 is at p1, level 1 at the far endpoint.
+ * Fibonacci **retracement** prices between two endpoints.
+ *
+ * Same semantics as drawing-layer `fibPrices`:
+ * - Span is `|p1 − p2|` (degenerate span treated as 1)
+ * - When `p1 >= p2`, levels run from high down; otherwise from low up
+ * - Level `0` lands on `p1`; level `1` on the far endpoint (full span)
+ *
+ * Default ratios: classic retracement set (`FIB_LEVELS`: 0 … 1).
+ * Contrast with {@link fibExtensionPrices}, which projects **beyond** 100%.
  */
 export function fibPrices(
   p1: number,
@@ -154,8 +172,15 @@ export function fibPrices(
 }
 
 /**
- * Fibonacci extension prices beyond the 100% retracement (far endpoint).
- * Level 0 lands on the 100% price; level 1 is another full span past it.
+ * Fibonacci **extension** prices beyond the 100% retracement (far endpoint).
+ *
+ * Uses the same span and direction rule as {@link fibPrices}, but each level
+ * is offset by an extra full span: `price = p1 ± span * (1 + lvl)`.
+ * - Level `0` lands on the 100% price (far endpoint of the base move)
+ * - Level `1` is another full span past that (200% of the move)
+ *
+ * Pass extension ratios (e.g. `FIB_EXT_LEVELS`) when you need 1.272 / 1.618 /
+ * 2.618 style projections rather than in-range retracement.
  */
 export function fibExtensionPrices(
   p1: number,

@@ -18,11 +18,28 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Parse user-uploaded OHLCV from CSV or JSON into Bar[].
+ * Parse user-uploaded OHLCV from CSV or JSON into {@link Bar}[].
  *
- * CSV: header optional; columns time,open,high,low,close[,volume]
- *   time = unix seconds, unix ms, or ISO date string
- * JSON: array of objects or array of [t,o,h,l,c,v?]
+ * Used by the file-upload UI before bars are stored via {@link setUploadedBars}
+ * and loaded through the `csv-upload` source.
+ *
+ * ## Formats
+ *
+ * **CSV** (header optional): `time,open,high,low,close[,volume]`
+ * - Separators: comma, semicolon, or tab; quoted fields supported
+ * - `time` = unix seconds, unix ms, or ISO date string
+ * - `#` comment lines ignored; rows sorted ascending by time
+ *
+ * **JSON**: array of objects, array of `[t,o,h,l,c,v?]`, or
+ * `{ bars|data|candles: [...] }`. Object keys are case-insensitive
+ * (`time`/`timestamp`/`date`, `open`/`o`, …).
+ *
+ * ## Public API
+ *
+ * - {@link parseOhlcvText} — string + optional file name hint
+ * - {@link parseOhlcvFile} — browser `File` helper
+ *
+ * @module data/parse-bars
  */
 
 import type { Bar } from '../store/types';
@@ -165,6 +182,11 @@ function parseJson(text: string): Bar[] {
   return bars;
 }
 
+/**
+ * Parse OHLCV from raw text. Format is inferred from `fileName` extension
+ * or content (`[` / `{` → JSON, else CSV).
+ * @throws If empty or no valid rows
+ */
 export function parseOhlcvText(text: string, fileName = ''): Bar[] {
   const trimmed = text.trim();
   if (!trimmed) throw new Error('File is empty');
@@ -178,6 +200,7 @@ export function parseOhlcvText(text: string, fileName = ''): Bar[] {
   return bars;
 }
 
+/** Read a browser File and parse via {@link parseOhlcvText}. */
 export async function parseOhlcvFile(file: File): Promise<Bar[]> {
   const text = await file.text();
   return parseOhlcvText(text, file.name);

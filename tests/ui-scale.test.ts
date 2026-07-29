@@ -1,6 +1,11 @@
 // Copyright (C) 2024-2026 jango_blockchained
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * UI scale clamp/presets/format helpers.
+ * Guards: invalid → 1.0; min/max bounds; percent display and preset steps.
+ */
+
 import { describe, expect, it } from 'bun:test';
 import {
   clampUiScale,

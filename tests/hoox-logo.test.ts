@@ -4,7 +4,7 @@
  */
 
 /**
- * HOOX logo size map + loader helpers.
+ * HOOX logo size token map (`xs`/`m`/`l` → px) for brand components.
  */
 
 import { describe, expect, it } from 'bun:test';

@@ -17,6 +17,14 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Panel chrome model — ids, dock targets, geometry, and default map.
+ *
+ * Persisted under `store.panelChrome`. Legacy flat flags (`watchlist.open`,
+ * etc.) are dual-written by store helpers. {@link FloatableShell} reads
+ * chrome; {@link drop-zones} maps pointer position → dock targets.
+ */
+
 /** Dockable / floatable AXIS chrome panels */
 export type PanelId =
   | 'watchlist'
@@ -35,6 +43,7 @@ export type PanelId =
  */
 export type PanelDock = 'left' | 'right' | 'bottom' | 'float' | 'window';
 
+/** Open state, dock target, and float geometry for one panel. */
 export interface PanelChrome {
   open: boolean;
   dock: PanelDock;
@@ -47,8 +56,13 @@ export interface PanelChrome {
   z: number;
 }
 
+/** Full chrome map keyed by {@link PanelId}. */
 export type PanelChromeMap = Record<PanelId, PanelChrome>;
 
+/**
+ * Static titles, default docks, and size constraints for each panel.
+ * Used by FloatableShell headers and default chrome factories.
+ */
 export const PANEL_META: Record<
   PanelId,
   { title: string; defaultDock: PanelDock; minW: number; minH: number; defaultW: number; defaultH: number }
@@ -111,8 +125,10 @@ export const PANEL_META: Record<
   },
 };
 
+/** Drag overlay target (null = no zone / invalid). */
 export type DropZone = 'left' | 'right' | 'bottom' | 'float' | null;
 
+/** Build default chrome for one panel (closed unless overrides say otherwise). */
 export function defaultPanelChrome(id: PanelId, overrides?: Partial<PanelChrome>): PanelChrome {
   const m = PANEL_META[id];
   return {
@@ -127,6 +143,10 @@ export function defaultPanelChrome(id: PanelId, overrides?: Partial<PanelChrome>
   };
 }
 
+/**
+ * Fresh chrome map for DEFAULTS / reset — watchlist+editor open by default;
+ * dataview/layers float closed.
+ */
 export function defaultPanelChromeMap(): PanelChromeMap {
   return {
     watchlist: defaultPanelChrome('watchlist', { open: true, dock: 'left', w: 200 }),

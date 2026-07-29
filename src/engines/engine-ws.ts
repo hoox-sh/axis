@@ -18,18 +18,39 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Persistent WebSocket client for PYNE Pro API `/ws/run`.
- * Prefer WSS when the HTTP endpoint is https; fall back handled by caller.
+ * Persistent WebSocket client for the **pyne Pro API** `/ws/run` endpoint.
+ *
+ * Used by {@link serverEngine} when `preferWs` is true. Converts an HTTP(S)
+ * backend URL to `ws(s)://host/ws/run`, keeps one socket per origin, and
+ * correlates run replies by request `id`. On connect/run timeout the client
+ * is marked **dead** so callers skip WS and fall through to REST.
+ *
+ * ## Frame protocol
+ *
+ * **Outbound** (client → server): JSON with `type: "run"`, `id`, `script`,
+ * `data` (bars array), `mode`, optional `symbol`.
+ *
+ * **Inbound**: result object with `status` / `plots` / `series` / `events`, or
+ * an error frame (`type: "error"`, `message`) / `type: "pong"`.
+ *
+ * Gunicorn workers without WS support often hang or 404 — connect budget is
+ * intentionally short so REST fallback still has time.
+ *
+ * @module engines/engine-ws
  */
 
+/** Payload sent on the `/ws/run` socket for one evaluation. */
 export type EngineWsRunRequest = {
   script: string;
+  /** OHLCV bars (same shape as REST `data`). */
   data: unknown[];
   mode?: string;
   symbol?: string;
+  /** Correlation id; auto-generated when omitted. */
   id?: string;
 };
 
+/** Normalized result from a WS run (or error frame). */
 export type EngineWsResult = {
   status: 'success' | 'error';
   plots?: unknown[];
@@ -48,7 +69,11 @@ export type EngineWsResult = {
   [k: string]: unknown;
 };
 
-/** http(s)://host:port → ws(s)://host:port/ws/run */
+/**
+ * Map an HTTP(S) engine endpoint to the WS run URL.
+ * Path on the endpoint is dropped so `http://host:5002/api` still targets
+ * origin-root `/ws/run` (Pro API convention).
+ */
 export function endpointToRunWsUrl(endpoint: string): string {
   const base = endpoint.replace(/\/$/, '');
   let u: URL;
@@ -262,6 +287,10 @@ class EngineWsClient {
 
 const clients = new Map<string, EngineWsClient>();
 
+/**
+ * Return a shared {@link EngineWsClient} for the given HTTP endpoint.
+ * Dead clients are discarded and replaced so a later retry can reconnect.
+ */
 export function getEngineWsClient(endpoint: string): EngineWsClient {
   const url = endpointToRunWsUrl(endpoint);
   let c = clients.get(url);
@@ -273,7 +302,10 @@ export function getEngineWsClient(endpoint: string): EngineWsClient {
   return c;
 }
 
-/** Probe whether /ws/run accepts a socket (short timeout). */
+/**
+ * Best-effort probe: open `/ws/run` briefly to warm the socket / detect WS support.
+ * Used after health check when the Pro API advertises `websocket: true`.
+ */
 export async function probeEngineWs(endpoint: string, timeoutMs = 4_000): Promise<boolean> {
   const client = getEngineWsClient(endpoint);
   if (client.isDead) return false;

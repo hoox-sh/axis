@@ -4,7 +4,8 @@
  */
 
 /**
- * PaneManager with mocked LWC + stub DOM.
+ * PaneManager with mocked lightweight-charts + document stub.
+ * Guards series create/update/clear and multi-pane wiring without real LWC.
  */
 
 import './setup';

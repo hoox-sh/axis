@@ -17,9 +17,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Type declarations for the frontend modules. Keeps the JS sources
-// loosely typed but gives test files and future plugin authors a
-// discoverable contract.
+/**
+ * Type contracts for the legacy plugin registry (`registry.js`).
+ * JS sources stay untyped at runtime; tests and plugin authors import these
+ * interfaces for IDE/TS checking. Solid-era plugins use `src/plugins/types.ts`.
+ */
 
 export interface Bar {
     time: number;

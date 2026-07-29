@@ -18,7 +18,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Layers panel — panes, indicators, drawings. Floatable / dockable.
+ * Layers panel — panes, indicators, user drawings visibility/management.
+ *
+ * Visibility toggles hit both store and chart manager / drawing layer.
+ * FloatableShell id `layers`. Script settings opens per applied indicator.
  */
 
 import { Component, For, Show } from 'solid-js';
@@ -35,6 +38,7 @@ import { getManager, getActiveDrawingLayer } from '../chart/manager-access';
 import { Icons } from './icons';
 import { FloatableShell } from './panels/FloatableShell';
 
+/** Pane / indicator / drawing visibility and remove actions. */
 export const LayerPanel: Component = () => {
   const togglePane = (id: string, next: boolean) => {
     setPaneVisible(id, next);

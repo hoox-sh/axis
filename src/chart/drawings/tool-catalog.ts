@@ -19,11 +19,25 @@
 
 /**
  * TV-style drawing toolbar catalog — groups, flyouts, last-tool defaults.
+ *
+ * Maps left-rail groups to {@link DrawingToolId} lists. UI uses this to:
+ * - Render group buttons in order
+ * - Decide whether a group opens a **flyout** (multi-tool picker) vs a
+ *   single-click activate
+ * - Resolve the default (primary) tool for a group: first entry in `tools`
+ *
+ * Flyout semantics:
+ * - `flyout: true` — group has (or expects) multiple tools; UI shows a
+ *   secondary menu / last-used tool on the rail icon
+ * - `flyout: false` — single-tool or empty placeholder groups; no flyout chrome
+ *
  * Implemented tools map to ``DrawingToolId``; future tools stay as comments.
+ * Does **not** render the toolbar, persist last-used tools, or activate tools.
  */
 
 import type { DrawingToolId } from '../drawing-types';
 
+/** Stable id for a left-rail toolbar group. */
 export type ToolGroupId =
   | 'select'
   | 'lines'
@@ -34,16 +48,27 @@ export type ToolGroupId =
   | 'trading'
   | 'actions';
 
+/**
+ * One toolbar group definition.
+ * `tools[0]` is the default primary tool when the group is non-empty.
+ */
 export interface ToolGroupDef {
   id: ToolGroupId;
   label: string;
   /** First entry is the default primary tool for the group. */
   tools: DrawingToolId[];
+  /**
+   * When true, the group supports a flyout of alternate tools (and typically
+   * remembers the last selected tool). Single-tool groups use `false`.
+   */
   flyout: boolean;
 }
 
 /**
  * Toolbar groups (left rail). Single-tool groups omit flyouts.
+ *
+ * Empty `tools` arrays (`trading`, `actions`) are reserved slots — wire UI
+ * affordances later without changing group order.
  *
  * Future (not in DrawingToolId yet — do not add until types exist):
  * - lines: parallel-channel, vertical-line, extended-line, info-line

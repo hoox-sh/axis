@@ -22,11 +22,18 @@
  * unified points-based Drawing model.
  *
  * Accepts:
- * 1) Legacy shapes (hline.price / two-point p1+p2 / text.p1)
- * 2) New shape { id, kind, points[], style?, meta? }
+ * 1) Legacy shapes (`hline.price` / two-point `p1`+`p2` / `text.p1`)
+ * 2) New shape `{ id, kind, points[], style?, meta? }`
  *
- * When `./types` + `./defaults` land, import from there; until then the
- * NewDrawing shape below is the canonical hydrate output.
+ * **Dual shape on output:** every successful hydrate returns a drawing that
+ * always has `points[]` (canonical), and also attaches legacy top-level fields
+ * (`price`, `p1`, `p2`, `text`, `color`) so current SVG paint/hit-test layers
+ * keep working until they fully migrate to `points[]`.
+ *
+ * Does **not**:
+ * - Validate the full extended {@link DrawingKind} set from `./types` yet
+ *   (only the legacy subset: hline, trend, ray, rect, fib, measure, text)
+ * - Touch DOM, LWC, or Pine Script™ plot objects
  */
 
 import {
@@ -53,7 +60,11 @@ export interface DrawingMeta {
   [key: string]: unknown;
 }
 
-/** Points-based user drawing (new unified shape). */
+/**
+ * Points-based user drawing (new unified shape).
+ * After {@link normalizeDrawing}, legacy mirror fields may also be present
+ * on the object (see {@link attachLegacyFields}).
+ */
 export interface Drawing {
   id: string;
   kind: DrawingKind;
@@ -72,6 +83,7 @@ const DEFAULT_WIDTH = 1.5;
 const DEFAULT_LINE_STYLE: DrawingLineStyle = 'solid';
 const DEFAULT_OPACITY = 1;
 
+/** Legacy kind set currently accepted by this normalizer. */
 const VALID_KINDS = new Set<DrawingKind>([
   'hline',
   'trend',
@@ -98,6 +110,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return v != null && typeof v === 'object' && !Array.isArray(v);
 }
 
+/** Coerce number | numeric string to a finite number; else null. */
 function asFiniteNumber(v: unknown): number | null {
   if (typeof v === 'number' && Number.isFinite(v)) return v;
   if (typeof v === 'string' && v.trim() !== '') {
@@ -107,6 +120,7 @@ function asFiniteNumber(v: unknown): number | null {
   return null;
 }
 
+/** Parse `{ time, price }` from unknown JSON; both must be finite. */
 function normalizePoint(raw: unknown): Point | null {
   if (!isRecord(raw)) return null;
   const time = asFiniteNumber(raw.time);
@@ -126,6 +140,9 @@ function minPointsFor(kind: DrawingKind): number {
   return 1;
 }
 
+/**
+ * Prefer top-level `text`, then `meta.text` (legacy stores either).
+ */
 function pickText(
   raw: Record<string, unknown>,
   meta: DrawingMeta | undefined,
@@ -135,6 +152,10 @@ function pickText(
   return undefined;
 }
 
+/**
+ * Merge nested `style` with legacy top-level color/width/etc.
+ * Rays default `extendRight: true` when unspecified.
+ */
 function buildStyle(
   kind: DrawingKind,
   raw: Record<string, unknown>,
@@ -189,7 +210,14 @@ function buildMeta(
 }
 
 /**
- * Collect points from new `points[]` or legacy p1/p2/price fields.
+ * Collect points from new `points[]` or legacy `p1`/`p2`/`price` fields.
+ *
+ * Preference order:
+ * 1. Non-empty `points[]` with enough valid anchors for `kind`
+ * 2. Kind-specific legacy fields:
+ *    - `hline` → `price` (or `p1.price`); synthetic `{ time: 0, price }`
+ *    - `text` → `p1`
+ *    - two-point kinds → `p1` + `p2`
  */
 function collectPoints(
   kind: DrawingKind,
@@ -231,6 +259,9 @@ function collectPoints(
 /**
  * Normalize one raw drawing (legacy or new) into the unified shape.
  * Returns null for invalid / unknown kinds.
+ *
+ * Output is dual-shaped: `points` + style/meta, plus legacy mirrors via
+ * {@link attachLegacyFields}.
  */
 export function normalizeDrawing(raw: unknown): Drawing | null {
   if (!isRecord(raw)) return null;
@@ -264,6 +295,15 @@ export function normalizeDrawing(raw: unknown): Drawing | null {
 
 /**
  * Attach legacy `price` / `p1` / `p2` / `text` / top-level `color` for the current SVG layer.
+ *
+ * Mirrors (in place, on the same object):
+ * - always: `color` ← `style.color`
+ * - hline: `price` ← `points[0].price`
+ * - text: `p1`, `text` ← first point + meta
+ * - ≥2 points: `p1`, `p2` (+ optional `text` from meta)
+ *
+ * Callers that only need the unified model may ignore the extra keys; they
+ * remain enumerable for layers that still read the pre-unified shape.
  */
 export function attachLegacyFields(d: Drawing): Drawing {
   const any = d as Drawing & Record<string, unknown>;

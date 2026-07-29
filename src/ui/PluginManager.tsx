@@ -18,7 +18,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS plugin manager — catalog by kind, install from URL, script library.
+ * AXIS plugin manager modal — catalog by kind, install from URL, script library.
+ *
+ * Tabs: **catalog** (built-in + installed), **install** (URL + examples),
+ * **library** (embeds {@link ScriptLibraryPanel}). Install calls
+ * `loadPluginFromUrl`; parent may pass `onChanged` to bump catalogTick.
  */
 
 import { Component, For, Show, createSignal, createMemo } from 'solid-js';
@@ -59,6 +63,7 @@ const EXAMPLES = [
 type TabId = 'catalog' | 'install' | 'library';
 type KindFilter = 'all' | 'source' | 'stream' | 'engine' | 'storage';
 
+/** Modal plugin catalog / install / library host. */
 export const PluginManager: Component<Props> = (props) => {
   const [url, setUrl] = createSignal('');
   const [busy, setBusy] = createSignal(false);

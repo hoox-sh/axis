@@ -4,7 +4,8 @@
  */
 
 /**
- * Active plugin resolution.
+ * Active plugin resolution from store (source/stream/engine ids → instances).
+ * Invariant: missing ids fall back to catalog defaults without throw.
  */
 
 import './setup';

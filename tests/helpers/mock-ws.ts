@@ -4,7 +4,12 @@
  */
 
 /**
- * Minimal WebSocket stub for stream plugin tests.
+ * Minimal WebSocket stub for stream / multiplex / reconnect tests.
+ *
+ * - Opens asynchronously (microtask) so `start()` can attach listeners first
+ * - {@link MockWebSocket.push} injects server messages
+ * - {@link MockWebSocket.install} swaps `globalThis.WebSocket` and returns restore
+ * - Tracks `instances` for asserting URLs and cleanup
  */
 
 type Handler = (ev: { data: string }) => void;

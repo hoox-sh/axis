@@ -17,12 +17,23 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Chart wrapper around lightweight-charts.
-// Supports a main price pane, a volume histogram sub-pane, an indicator
-// sub-pane (used for `overlay=false` plots), and an equity pane for the
-// strategy tester. Each pane gets its own `IChartApi` so the time scales
-// stay independent — main/indicator panes share a logical "time axis"
-// through `setVisibleRange` syncing.
+/**
+ * Legacy multi-pane chart wrapper around TradingView lightweight-charts.
+ *
+ * Panes (each a separate `IChartApi`):
+ * - **main** — candlesticks + overlay plots
+ * - **volume** — histogram
+ * - **indicator** — `overlay=false` Pine plots
+ * - **equity** — strategy tester equity curve
+ *
+ * Time scales are independent charts; main/indicator stay aligned via
+ * `setVisibleRange` sync. Crosshair data-window is DOM-based (fixed tooltip).
+ *
+ * Prefer `src/chart/ChartHost.tsx` + `pane-manager.ts` for the Solid app;
+ * this module powers `main.js` and older chart unit tests.
+ *
+ * Palette tokens align with `series-factory.ts` (AXIS void theme).
+ */
 
 // AXIS void palette (aligned with series-factory.ts)
 const TV = {
@@ -32,11 +43,13 @@ const TV = {
     up: '#5ecf8a',
     down: '#e85d4c',
 };
+/** Cycle colors for sequential overlay lines when plot style has none. */
 const PLOT_PALETTE = ['#939fff', '#8ef5a8', '#e8a03a', '#6ec8d4', '#a7b4ff', '#5ecf8a', '#e85d4c', '#8b8e9c'];
 
+/** ResizeObserver for pane containers (set in init). */
 let ro = null;
 
-// Pane state: each entry holds the lightweight-charts instance + helpers.
+/** Per-pane LWC instance + series handles used by public chart API. */
 const panes = {
     main: { chart: null, candle: null, overlays: [] },
     volume: { chart: null, hist: null },
@@ -45,7 +58,7 @@ const panes = {
 };
 
 // --- Data window (crosshair tooltip) ---
-// Maps series API objects → { name, color, pane } for the data window.
+/** series API object → { name, color, pane } for tooltip rows. */
 const _seriesLabels = new Map();
 
 function registerSeriesLabel(series, name, color, pane) {
@@ -183,6 +196,10 @@ function commonOptions() {
     };
 }
 
+/**
+ * Create all pane charts and wire crosshair data-window + time-scale sync.
+ * @param {{ mainEl: HTMLElement, volumeEl: HTMLElement, indicatorEl: HTMLElement, equityEl: HTMLElement }} els
+ */
 export function initChart({ mainEl, volumeEl, indicatorEl, equityEl }) {
     if (typeof LightweightCharts === 'undefined') throw new Error('lightweight-charts not loaded');
 
@@ -266,8 +283,12 @@ function fitAll() {
     }
 }
 
-// --- Data setters --------------------------------------------------------
+// --- Data setters (public API for main.js / results) ---------------------
 
+/**
+ * Replace candle + volume series. Times normalized to unix seconds.
+ * @returns {Array} normalized bars actually set on the chart
+ */
 export function setOhlcv(bars) {
     if (!panes.main.candle || !panes.volume.hist) return [];
     const norm = (b) => ({
@@ -286,6 +307,7 @@ export function setOhlcv(bars) {
     return data;
 }
 
+/** Live tick: LWC `update` on main candle + volume (swallows out-of-order errors). */
 export function appendBar(bar) {
     const t = typeof bar.time === 'number' ? bar.time : Math.floor(new Date(bar.time).getTime() / 1000);
     const point = { time: t, open: +bar.open, high: +bar.high, low: +bar.low, close: +bar.close };
@@ -299,11 +321,13 @@ export function appendBar(bar) {
     return point;
 }
 
+/** Strategy entry/exit markers on the main candle series. */
 export function setMarkers(markers) {
     if (!panes.main.candle) return;
     try { panes.main.candle.setMarkers(markers); } catch (err) { console.warn('[chart] setMarkers:', err.message); }
 }
 
+/** Remove plot overlay series (keeps candle/volume); hides indicator pane. */
 export function clearOverlays() {
     for (const pane of [panes.main, panes.indicator]) {
         for (const s of pane.overlays) {
@@ -320,6 +344,12 @@ export function clearOverlays() {
     setIndicatorVisible(false);
 }
 
+/**
+ * Add a named line overlay on main or indicator pane.
+ * @param {string} name series title (data-window label)
+ * @param {Array<{time:number,value:number}>} points
+ * @param {{ pane?: 'main'|'indicator', color?: string, lineWidth?: number }} [opts]
+ */
 export function addOverlayLine(name, points, opts = {}) {
     const target = opts.pane === 'indicator' && panes.indicator.chart ? panes.indicator : panes.main;
     if (target === panes.indicator) setIndicatorVisible(true);
@@ -333,11 +363,13 @@ export function addOverlayLine(name, points, opts = {}) {
     return series;
 }
 
+/** Show/hide equity DOM pane (strategy tester). */
 export function setEquityPane(visible) {
     const pane = document.getElementById('equity-pane');
     if (pane) pane.hidden = !visible;
 }
 
+/** Set equity area series data (equity chart is not time-synced to main). */
 export function setEquityCurve(points) {
     if (!panes.equity.area) return;
     try { panes.equity.area.setData(points); panes.equity.chart.timeScale().fitContent(); } catch (err) { console.warn('[chart] setEquityCurve:', err.message); }
@@ -359,9 +391,14 @@ function setIndicatorVisible(visible) {
 
 // --- Time scale helpers -------------------------------------------------
 
+/** Preset window lengths for topbar range buttons. */
 const RANGE_DAYS = { '1D': 1, '5D': 5, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 };
 const SEC_PER_DAY = 86400;
 
+/**
+ * Zoom main chart visible range: `ALL` | `YTD` | keys of RANGE_DAYS.
+ * Only the main pane is adjusted; volume/indicator follow via logical sync.
+ */
 export function setTimeRange(range) {
     if (!panes.main.chart) return;
     if (range === 'ALL') { panes.main.chart.timeScale().fitContent(); return; }

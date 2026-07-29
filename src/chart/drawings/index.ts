@@ -20,8 +20,16 @@
 /**
  * Interactive drawings package — D0 foundation barrel.
  *
+ * Re-exports the pure foundation for chart drawings:
+ * - **types / defaults** — unified model, palette, tool arities, fib levels
+ * - **normalize** — legacy ↔ dual-shape hydrate (`points` + `p1`/`p2`/`price`)
+ * - **geometry / coords / snap / draft** — hit math, LWC mapping, magnet, placement
+ * - **svg-primitives / tool-catalog** — overlay builders, toolbar groups
+ *
  * Later slices will re-export renderers, hit-testing, migration, and store
- * adapters from this entry. Only types + defaults are wired today.
+ * adapters from this entry.
+ *
+ * Does **not** mount UI, open WebSockets, or evaluate Pine Script™ drawings.
  */
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -77,6 +85,7 @@ export {
   normalizeUserDrawings,
   attachLegacyFields,
 } from './normalize';
+/** Drawing shape produced by `normalize` (local dual-shape interface). */
 export type { Drawing as NormalizedDrawing } from './normalize';
 
 export {
@@ -99,9 +108,11 @@ export type { CoordContext, ViewSize } from './coords';
 export { el, line, circle, label, strokeDashFor } from './svg-primitives';
 
 export { snapToBars, findNearestBarIndex } from './snap';
+/** Magnet mode from snap (aliased to avoid clashing with types.MagnetMode). */
 export type { MagnetMode as SnapMagnetMode, BarLike, SnapOptions } from './snap';
 
 export { createDraftController } from './draft';
+/** Draft controller phase (distinct from types.DraftPhase string union). */
 export type { DraftController, DraftPhase as DraftControllerPhase } from './draft';
 
 export {

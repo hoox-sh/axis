@@ -4,8 +4,8 @@
  */
 
 /**
- * Git storage plugin tests (mocked GitHub Contents API).
- * Run: `bun test frontend/tests/storage-git.test.ts`
+ * Git storage plugin (mocked GitHub Contents API).
+ * Guards path encoding, base64 content, and API error handling.
  */
 
 import { describe, expect, it, beforeEach, afterEach, mock } from 'bun:test';

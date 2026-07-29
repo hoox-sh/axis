@@ -17,18 +17,30 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Tiny plugin registry. All sources/streams/engines register through here.
-// A plugin is an object with `{ id, name, kind, description, ... }` where
-// `kind` is one of: 'source', 'stream', 'engine'.
+/**
+ * Legacy in-process plugin registry (pre-Solid path).
+ *
+ * All historical sources / live streams / Pine engines register here as
+ * plain objects with `{ id, name, kind, description, configSchema?, … }`.
+ * `kind` is `'source' | 'stream' | 'engine'`. Assert helpers enforce the
+ * minimum contract (`fetchHistorical` / `start` / `run`).
+ *
+ * Prefer `src/plugins/registry.ts` for the Vite + Solid app; this module
+ * remains for `main.js`, registry-bootstrap, and older unit tests.
+ * Types: `registry.d.ts`.
+ */
 
 class Registry {
     constructor() {
+        /** @type {Map<string, import('./registry').Source>} */
         this._sources = new Map();
+        /** @type {Map<string, import('./registry').Stream>} */
         this._streams = new Map();
+        /** @type {Map<string, import('./registry').Engine>} */
         this._engines = new Map();
     }
 
-    // --- Source ---
+    // --- Source (historical OHLCV) ---
     registerSource(source) {
         this._assertSource(source);
         this._sources.set(source.id, source);
@@ -37,7 +49,7 @@ class Registry {
     getSource(id) { return this._sources.get(id); }
     listSources() { return [...this._sources.values()]; }
 
-    // --- Stream ---
+    // --- Stream (live bars; start() returns stop fn) ---
     registerStream(stream) {
         this._assertStream(stream);
         this._streams.set(stream.id, stream);
@@ -46,7 +58,7 @@ class Registry {
     getStream(id) { return this._streams.get(id); }
     listStreams() { return [...this._streams.values()]; }
 
-    // --- Engine ---
+    // --- Engine (Pine run → plots/events) ---
     registerEngine(engine) {
         this._assertEngine(engine);
         this._engines.set(engine.id, engine);
@@ -56,7 +68,9 @@ class Registry {
     listEngines() { return [...this._engines.values()]; }
 
     // --- Bulk ---
+    /** Drop all plugins (tests). */
     clear() { this._sources.clear(); this._streams.clear(); this._engines.clear(); }
+    /** Lightweight catalog snapshot for Manager / UI without methods. */
     summary() {
         return {
             sources: this.listSources().map((s) => ({ id: s.id, name: s.name, description: s.description })),
@@ -85,11 +99,14 @@ class Registry {
     }
 }
 
+/** Process-wide singleton used by legacy bootstrap and tests. */
 export const registry = new Registry();
 export { Registry };
 
-// Allow plugins to be loaded later via dynamic import. Each entry is
-// { id, url } — url is an ES module that default-exports a plugin object.
+/**
+ * Dynamic-import a plugin module URL and register by `kind`.
+ * Module may `default`-export, export `plugin`, or export the object itself.
+ */
 export async function loadPluginFromUrl(url) {
     const mod = await import(/* @vite-ignore */ url);
     const plugin = mod.default || mod.plugin || mod;

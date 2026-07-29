@@ -4,7 +4,8 @@
  */
 
 /**
- * Live re-run debounce when indicators are visible.
+ * Live multiplex re-run debounce when indicators are visible.
+ * Invariant: bar updates schedule silent runner without double-firing storms.
  */
 
 import './setup';

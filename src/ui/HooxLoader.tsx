@@ -20,6 +20,7 @@
 /**
  * HOOX logo loader — CRT path flicker in three sizes (xs / m / l).
  * Effect inspired by hoox-landing-page logo-flicker + crt-flicker.
+ * Layouts: icon only, inline label, or stacked. Aliases: HooxLoaderXs/M/L.
  */
 
 import { Component, JSX, Show, splitProps } from 'solid-js';

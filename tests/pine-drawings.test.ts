@@ -3,6 +3,11 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+/**
+ * Pine engine drawing payloads → chart-layer shapes (line/box/label).
+ * Guards style/extend normalization and multi-object batch mapping.
+ */
+
 import { describe, expect, it } from 'bun:test';
 import {
   normalizeExtend,

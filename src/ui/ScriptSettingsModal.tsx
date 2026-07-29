@@ -18,7 +18,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Script Settings modal — edit Pine ``input.*`` values and re-run.
+ * Script Settings modal — edit Pine `input.*` values and re-run.
+ *
+ * Target is either an applied indicator (`scriptSettings.indicatorId`) or the
+ * docked editor document. Field defs from `resolveScriptInputs`; Apply writes
+ * overrides via store helpers and calls `runAndApply`.
  */
 
 import { Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
@@ -39,6 +43,7 @@ import { runAndApply } from '../indicators/runner';
 import type { RunResult } from '../indicators/runner';
 import { Icons } from './icons';
 
+/** Modal form for Pine inputs (editor doc or applied indicator). */
 export const ScriptSettingsModal: Component = () => {
   const open = () => store.scriptSettings.open;
   const indicatorId = () => store.scriptSettings.indicatorId;

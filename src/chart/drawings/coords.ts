@@ -19,23 +19,48 @@
 
 /**
  * Coordinate context for AXIS drawing tools.
- * Maps (time, price) ↔ SVG/screen coords via LWC timeScale + series price scale.
- * Unix time is tried first; logical bar index is the fallback (compile-mode bar_index).
+ *
+ * Maps (time, price) ↔ SVG/screen coords via Lightweight Charts timeScale +
+ * series price scale. Unix time is tried first; logical bar index is the
+ * fallback (compile-mode `bar_index` / Pine plot x coordinates).
+ *
+ * Does **not**:
+ * - Snap to OHLC (see `snap.ts`)
+ * - Render SVG or own drawing state
+ * - Interpret Pine Script™ plot series directly
  */
 
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 
+/** Pane pixel size used when extending rays / sizing hit areas. */
 export interface ViewSize {
   width: number;
   height: number;
 }
 
+/**
+ * Bound helpers for one chart + series pair.
+ * All methods may return `null` when the scale cannot resolve a coordinate
+ * (off-scale price, missing time, etc.).
+ */
 export interface CoordContext {
+  /** Chart point → SVG x/y (null if either axis fails). */
   toXY(p: { time: number; price: number }): { x: number; y: number } | null;
   priceToY(price: number): number | null;
+  /**
+   * Time → pixel X. Tries unix seconds first, then logical bar index.
+   */
   timeToX(time: number): number | null;
   size: ViewSize;
+  /**
+   * Unix time → logical index when resolvable; otherwise returns `time` if finite
+   * (already a bar_index-style logical).
+   */
   timeToLogical(time: number): number | null;
+  /**
+   * Pointer client coords + SVG bounding rect → chart time/price.
+   * Expects the SVG overlay to share the pane's coordinate origin.
+   */
   clientToPoint(
     clientX: number,
     clientY: number,

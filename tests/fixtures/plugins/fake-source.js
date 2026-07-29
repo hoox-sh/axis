@@ -3,7 +3,10 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-/** Test fixture source plugin (ES module). */
+/**
+ * Loader fixture: valid historical source (default export).
+ * Returns a single synthetic bar for install/registry tests.
+ */
 export default {
   id: 'test-fake-source',
   name: 'Fake Source',

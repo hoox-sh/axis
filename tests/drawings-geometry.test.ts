@@ -3,6 +3,11 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+/**
+ * Pure geometry for user drawings (hit-test, fib, channel, ray extend).
+ * Guards pixel/price math used by the drawing layer without mounting LWC.
+ */
+
 import { describe, expect, it } from 'bun:test';
 import { FIB_LEVELS } from '../src/chart/drawing-types.ts';
 import { fibPrices as layerFibPrices } from '../src/chart/drawing-layer.ts';

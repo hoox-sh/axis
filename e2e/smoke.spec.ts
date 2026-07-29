@@ -4,7 +4,13 @@
  */
 
 /**
- * @smoke AXIS critical path — load app, mock source, mock /run, open Manager.
+ * @smoke Playwright smoke for AXIS shell.
+ *
+ * Invariant: with `/run` and Binance REST mocked, the app boots (title, topbar,
+ * chart host), can load mock-walk bars, run the server engine, and open Manager.
+ * Network is fully stubbed — no real exchange or Pro API.
+ *
+ * Run: `bun run test:e2e:smoke`
  */
 import { test, expect } from '@playwright/test';
 

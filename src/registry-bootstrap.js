@@ -17,10 +17,18 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Registers the built-in sources/streams/engines with the registry. Adding
-// a new built-in = one import + one registerSource / registerStream /
-// registerEngine call here. Third-party plugins can be loaded later via
-// `registry.loadPluginFromUrl(url)`.
+/**
+ * Side-effect bootstrap: register built-in plugins on the legacy registry.
+ *
+ * Importing this module once (from `main.js`) fills sources/streams/engines.
+ * Idempotent via `registered` flag so tests can re-import safely.
+ *
+ * Adding a built-in = import + `registerSource|Stream|Engine` here.
+ * Third-party plugins: `loadPluginFromUrl(url)` on `registry.js` after load.
+ *
+ * Solid app uses `src/plugins/bootstrap.ts` instead; keep lists in sync when
+ * shipping new defaults.
+ */
 
 import { registry } from './registry.js';
 import { binanceRest, mockWalk, csvUpload } from './sources/index.js';
@@ -28,6 +36,8 @@ import { binanceWs, mockPoll, none } from './streams/index.js';
 import { serverEngine, pyodideEngine } from './engines/index.js';
 
 let registered = false;
+
+/** Register built-ins once per page/process lifetime. */
 export function registerBuiltins() {
     if (registered) return;
     registered = true;

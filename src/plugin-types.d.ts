@@ -17,9 +17,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Type definitions for the plugin modules. The plugins themselves are
-// `.js` so we declare their shapes here for TypeScript consumers
-// (registry, tests, future plugin authors).
+/**
+ * Ambient module typings for legacy `.js` plugin barrels under sources/,
+ * streams/, and engines/. Lets TS tests import `binanceRest` etc. without
+ * converting those packages to TypeScript.
+ */
 
 declare module '../src/sources/index.js' {
     export const binanceRest: import('../src/registry.js').Source;

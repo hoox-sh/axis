@@ -17,6 +17,18 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * CodeMirror 6 **stream language** for Pine Script syntax highlighting.
+ *
+ * Lightweight tokenizer (not a full grammar): comments, strings, keywords
+ * (`indicator`/`strategy`/`plot`/…), builtins (`ta`/`math`/`close`/…),
+ * control/definition keywords, numbers, operators. Used by {@link PineEditor}.
+ *
+ * Completions/hover live in `pine-lsp` (remote Pro API or local builtins).
+ *
+ * @module editor/pine-language
+ */
+
 import { StreamLanguage, StreamParser } from '@codemirror/language';
 
 const pineParser: StreamParser<{ inComment: boolean }> = {
@@ -46,4 +58,5 @@ const pineParser: StreamParser<{ inComment: boolean }> = {
   },
 };
 
+/** CodeMirror language support for Pine (`//@version=…` meta, plots, ta.*, …). */
 export const pineScript = StreamLanguage.define(pineParser);

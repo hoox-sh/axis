@@ -4,7 +4,8 @@
  */
 
 /**
- * Reconnectable WS helper + backoff math.
+ * Reconnectable WebSocket helper + exponential backoff math.
+ * Guards open/retry/cap and manual close cancels reconnect timers.
  */
 
 import { describe, expect, it, mock, beforeEach, afterEach } from 'bun:test';

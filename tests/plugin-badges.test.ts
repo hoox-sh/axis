@@ -4,8 +4,7 @@
  */
 
 /**
- * Capability badge helpers.
- * Run: `bun test frontend/tests/plugin-badges.test.ts`
+ * Plugin capability badge helpers (kind icons / labels for Manager UI).
  */
 
 import { describe, expect, it } from 'bun:test';

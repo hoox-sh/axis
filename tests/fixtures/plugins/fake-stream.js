@@ -3,7 +3,10 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-/** Test fixture stream plugin (ES module). */
+/**
+ * Loader fixture: valid live stream (default export).
+ * start() only toggles status open/closed — no real socket.
+ */
 export default {
   id: 'test-fake-stream',
   name: 'Fake Stream',

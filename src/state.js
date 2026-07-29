@@ -17,19 +17,29 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Central, persisted state for AXIS (formerly SuperChart Lite).
-// One source of truth — every UI module reads/writes through here.
-// Prefer Solid store (`src/store/`) for the Vite app; this module serves the legacy path.
+/**
+ * Central, localStorage-persisted state for the legacy AXIS shell.
+ *
+ * One source of truth for pre-Solid UI (`main.js`, topbar, settings, etc.):
+ * every module reads/writes via {@link getState} / `assign`. Emits
+ * `CustomEvent('change', { detail: partial })` on mutation.
+ *
+ * Prefer Solid `src/store/` for the Vite app; keep default keys aligned when
+ * adding settings so hash-sync and migrations stay coherent.
+ *
+ * Storage key `pynescript.axis.v1` migrates from SuperChart Lite keys on load.
+ */
 
 const STORAGE_KEY = 'pynescript.axis.v1';
+/** Older product names; content is copied into STORAGE_KEY once. */
 const LEGACY_STORAGE_KEYS = [
     'pynescript.superchart.v2',
     'pynescript.superchart.v1',
 ];
 
 const DEFAULT_STATE = Object.freeze({
-    endpoint: 'http://localhost:5002',
-    engine: 'server',           // 'server' | 'pyodide' | <custom>
+    endpoint: 'http://localhost:5002', // pyne Pro API / Worker base
+    engine: 'server',           // 'server' | 'pyodide' | <custom registry id>
     source: 'binance-rest',     // 'binance-rest' | 'mock-walk' | 'csv-upload' | <custom>
     stream: 'binance-ws',       // 'binance-ws' | 'mock-poll' | 'none' | <custom>
     symbol: 'BTCUSDT',
@@ -42,7 +52,8 @@ const DEFAULT_STATE = Object.freeze({
     timeRange: 'ALL',
 });
 
-let _savedData = null; // in-memory cache to avoid reading localStorage on every assign
+/** In-memory mirror of last successful load/save to avoid rereading localStorage. */
+let _savedData = null;
 
 function readKey(key) {
     try {
@@ -85,15 +96,24 @@ function save(partial) {
     } catch (_) { /* quota */ }
 }
 
+/**
+ * Immutable bag + EventTarget. Top-level object is frozen; nested plugin
+ * config objects are still mutable by reference — callers should replace via assign.
+ */
 class State extends EventTarget {
     constructor(initial = {}) {
         super();
         this._data = { ...DEFAULT_STATE, ...initial };
-        Object.freeze(this._data); // immutable at the top level; nested updates use assign()
+        Object.freeze(this._data);
     }
 
+    /** @param {string} [key] omit to get full data object */
     get(key) { return key ? this._data[key] : this._data; }
 
+    /**
+     * Merge `partial`, persist to localStorage, fire `change` with the partial.
+     * No-op on empty/null partial. Does not set `savedAt` (use {@link persist}).
+     */
     assign(partial) {
         if (!partial || typeof partial !== 'object' || !Object.keys(partial).length) return;
         const next = { ...this._data, ...partial };
@@ -102,9 +122,10 @@ class State extends EventTarget {
         this.dispatchEvent(new CustomEvent('change', { detail: partial }));
     }
 
+    /** Shallow copy of current fields (not frozen). */
     snapshot() { return { ...this._data }; }
 
-    /** Explicitly persist with savedAt timestamp (not triggered on every keystroke). */
+    /** Explicit save stamp for "user pressed Save" (not every keystroke). */
     persist() {
         const stamped = { ...this._data, savedAt: Date.now() };
         this._data = Object.freeze(stamped);
@@ -112,14 +133,17 @@ class State extends EventTarget {
     }
 }
 
+/** Singleton instance after {@link initState}; null before bootstrap. */
 let _state = null;
 export function getState() { return _state; }
+/** Create or return singleton, hydrating from localStorage once. */
 export function initState() {
     if (_state) return _state;
     const stored = load();
     _state = new State(stored || {});
     return _state;
 }
+/** Wipe storage keys and reinstall defaults (tests / factory reset). */
 export function resetState() {
     localStorage.removeItem(STORAGE_KEY);
     for (const legacy of LEGACY_STORAGE_KEYS) {

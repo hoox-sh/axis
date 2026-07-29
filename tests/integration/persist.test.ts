@@ -4,7 +4,8 @@
  */
 
 /**
- * Persist / hydrate shape for AXIS store key.
+ * Integration: persist/hydrate shape for the AXIS Solid store key.
+ * Guards field survival across setStore + reload from localStorage.
  */
 import './../setup';
 import { describe, expect, it, beforeEach } from 'bun:test';

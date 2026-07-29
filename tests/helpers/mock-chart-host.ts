@@ -4,12 +4,16 @@
  */
 
 /**
- * Stub ChartHost before importing modules that pull Solid UI (runner, multiplex, load-symbol).
- * Call `installChartHostMock()` at the top of the test file (before other app imports).
+ * Stub ChartHost before importing modules that pull Solid UI.
+ *
+ * Call {@link installChartHostMock} at the **top** of the test file (before
+ * runner / multiplex / load-symbol imports) so `getManager` / `setDataToChart`
+ * no-op and Solid components are not instantiated in Bun.
  */
 
 import { mock } from 'bun:test';
 
+/** mock.module ChartHost paths used by relative and package-style imports. */
 export function installChartHostMock() {
   mock.module('../../src/chart/ChartHost', () => ({
     getManager: () => undefined,

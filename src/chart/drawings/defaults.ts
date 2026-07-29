@@ -19,6 +19,9 @@
 
 /**
  * Default styles, palette, fib levels, and tool specs for interactive drawings.
+ *
+ * Pure data + small query helpers (`requiredPoints`, `toolLabel`). No DOM,
+ * no chart APIs, and no Pine Script™ plot defaults.
  */
 
 import type {
@@ -31,6 +34,7 @@ import type {
 
 // ── Palette (matches legacy `drawing-types.ts`) ─────────────────────────────
 
+/** Semantic stroke colors for drawings and measure/PnL cues. */
 export const DRAWING_COLORS = {
   default: '#939fff',
   up: '#5ecf8a',
@@ -43,6 +47,7 @@ export type DrawingColorKey = keyof typeof DRAWING_COLORS;
 
 // ── Default style ───────────────────────────────────────────────────────────
 
+/** Baseline {@link DrawingStyle} applied when a drawing omits style fields. */
 export const DEFAULT_STYLE: DrawingStyle = {
   color: DRAWING_COLORS.default,
   width: 1.5,
@@ -55,10 +60,18 @@ export const DEFAULT_STYLE: DrawingStyle = {
 
 // ── Fibonacci levels ────────────────────────────────────────────────────────
 
-/** Fibonacci retracement ratios (price levels between p1→p2). */
+/**
+ * Fibonacci **retracement** ratios between two anchors (p1 → p2).
+ * Used by `fib` tools and {@link fibPrices} in `geometry.ts`.
+ * Level `0` is at p1; level `1` is at the far endpoint (full span).
+ */
 export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] as const;
 
-/** Fibonacci extension ratios beyond the retracement range. */
+/**
+ * Fibonacci **extension** ratios projected beyond the retracement range.
+ * Used by `fibext` tools and extension price helpers.
+ * Unlike retracement, ratios can exceed `1` (e.g. 1.618, 2.618) past the 100% level.
+ */
 export const FIB_EXT_LEVELS = [0, 0.5, 1, 1.272, 1.618, 2, 2.618] as const;
 
 // ── Tool specs ──────────────────────────────────────────────────────────────
@@ -74,6 +87,11 @@ function spec(
 
 /**
  * Spec per {@link DrawingKind}: arity, label, and optional placement hints.
+ *
+ * Arity governs multi-click placement:
+ * - `1` / `2` / `3` — finish when that many anchors are collected
+ * - `'n'` — open-ended; `minPoints` + `finishOnDoubleClick` control commit
+ *
  * `cursor` is not a drawing kind — see {@link ALL_DRAWING_TOOLS}.
  */
 export const TOOL_SPECS: Record<DrawingKind, ToolSpec> = {
@@ -148,6 +166,7 @@ export function needsTwoPoints(tool: DrawingToolId): boolean {
   return TOOL_SPECS[tool].arity === 2;
 }
 
+/** Human-readable label for toolbar / tooltips. */
 export function toolLabel(tool: DrawingToolId): string {
   if (tool === 'cursor') return 'Cursor';
   return TOOL_SPECS[tool].label;

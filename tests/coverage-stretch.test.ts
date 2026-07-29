@@ -4,7 +4,8 @@
  */
 
 /**
- * Targeted coverage stretch for soft core modules (gate → 95%).
+ * Targeted coverage stretch for soft core modules (coverage gate ~95%).
+ * Exercises less-hit branches; not a product behavior suite.
  */
 import './setup';
 import { describe, expect, it, beforeEach, afterEach, mock } from 'bun:test';

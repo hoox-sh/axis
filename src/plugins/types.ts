@@ -18,13 +18,30 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Unified plugin contracts for AXIS (PR1).
- * All kinds share PluginBase; active selection lives in the Solid store.
+ * Unified **plugin contracts** for AXIS.
+ *
+ * All kinds share {@link PluginBase}. Active selection lives in the Solid store
+ * (`source` / `live.streamId` / `engine` / `activePlugins.*`); resolve at runtime
+ * via `plugins/active`. Built-ins register through catalogs under
+ * `sources/`, `streams/`, `engines/`, `storage/`.
+ *
+ * | Kind | Required method | Role |
+ * |------|-----------------|------|
+ * | `source` | `fetchHistorical` | Historical OHLCV |
+ * | `stream` | `start` → `stop` | Live bars |
+ * | `engine` | `isReady` + `run` | Pine evaluation |
+ * | `storage` | `list`/`read`/`write`/`remove` | Script library |
+ * | `component` | `mount` | UI slot (phase 2) |
+ *
+ * Dynamic URL plugins (`plugins/loader`) may install source/stream/engine only.
+ *
+ * @module plugins/types
  */
 
 import type { Bar } from '../store/types';
 import type { LogLevel } from '../store/types';
 
+/** Discriminant for registry maps and Settings UI. */
 export type PluginKind =
   | 'source'
   | 'stream'
@@ -32,6 +49,7 @@ export type PluginKind =
   | 'storage'
   | 'component';
 
+/** One settings field in a plugin `configSchema`. */
 export interface FieldSchema {
   type: 'string' | 'number' | 'boolean' | 'select';
   default?: string | number | boolean;
@@ -44,8 +62,10 @@ export interface FieldSchema {
   options?: string[];
 }
 
+/** Map of field id → schema; defaults merged at call sites. */
 export type ConfigSchema = Record<string, FieldSchema>;
 
+/** Capability flags for Connection HUD / offline gating. */
 export interface PluginCapabilities {
   offline?: boolean;
   needsAuth?: boolean;
@@ -55,6 +75,7 @@ export interface PluginCapabilities {
   transport?: 'ws' | 'rest' | 'local' | 'broker';
 }
 
+/** Shared fields on every plugin kind. */
 export interface PluginBase {
   id: string;
   name: string;
@@ -68,6 +89,7 @@ export interface PluginBase {
   dispose?(): Promise<void> | void;
 }
 
+/** Optional host context for future `init` hooks. */
 export interface PluginContext {
   getConfig(): Record<string, unknown>;
   setStatus(msg: string, level?: LogLevel): void;
@@ -76,13 +98,14 @@ export interface PluginContext {
   };
 }
 
-/** Registry key: `${kind}:${id}` */
+/** Registry / config key: `${kind}:${id}`. */
 export function pluginKey(kind: PluginKind, id: string): string {
   return `${kind}:${id}`;
 }
 
 // --- Source ---
 
+/** Arguments to {@link SourcePlugin.fetchHistorical}. */
 export interface SourceOpts {
   symbol: string;
   interval: string;
@@ -90,6 +113,10 @@ export interface SourceOpts {
   config?: Record<string, unknown>;
 }
 
+/**
+ * Historical data provider.
+ * Returns bars with `time` in unix seconds (callers may re-normalize).
+ */
 export interface SourcePlugin extends PluginBase {
   kind: 'source';
   fetchHistorical(opts: SourceOpts): Promise<Bar[]>;
@@ -98,6 +125,10 @@ export interface SourcePlugin extends PluginBase {
 
 // --- Stream ---
 
+/**
+ * Live stream start options.
+ * `start` must return a `stop()` cleanup; reconnect is plugin-internal.
+ */
 export interface StreamOpts {
   symbol: string;
   interval: string;
@@ -108,13 +139,21 @@ export interface StreamOpts {
   onStatus: (s: { state: 'open' | 'closed' | 'reconnecting' | string; url?: string; detail?: string }) => void;
 }
 
+/** Live OHLCV (or synthetic) feed. */
 export interface StreamPlugin extends PluginBase {
   kind: 'stream';
+  /** @returns stop/cleanup function */
   start(opts: StreamOpts): () => void;
 }
 
 // --- Engine ---
 
+/**
+ * Unified Pine evaluation result (server WS/REST, Pyodide, dynamic engines).
+ *
+ * Success payloads typically include `series` (named plots), optional
+ * `events` (strategy), `drawings` (line/box/label), and `meta.plot_meta`.
+ */
 export interface RunResult {
   status: 'success' | 'error';
   plots: (number | null)[];
@@ -140,11 +179,15 @@ export interface RunResult {
     count?: number;
     overlay?: boolean;
     script_name?: string;
+    /** transport used: `ws` | `rest` | `local` */
+    transport?: string;
+    plot_meta?: Record<string, unknown>;
     inputs?: unknown;
     [k: string]: unknown;
   };
 }
 
+/** Arguments to {@link EnginePlugin.run}. */
 export interface EngineOpts {
   script: string;
   bars: Bar[];
@@ -154,6 +197,10 @@ export interface EngineOpts {
   signal?: AbortSignal;
 }
 
+/**
+ * Pine calculation backend.
+ * `run` should never throw for script errors — return `status: 'error'`.
+ */
 export interface EnginePlugin extends PluginBase {
   kind: 'engine';
   isReady(): Promise<boolean>;

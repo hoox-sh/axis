@@ -17,15 +17,22 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Example plugin: a custom calculation engine that runs a tiny built-in
-// Pine-like DSL in the browser.  Useful for offline demos that don't need
-// the full pynescript runtime.
-//
-// Supports:
-//   • close, open, high, low, volume
-//   • sma(series, n), ema(series, n), rsi(series, n)
-//   • plot(value) → emits a line series
-//   • strategy.entry(id, dir) / strategy.close(id) → emits events
+/**
+ * Example **engine** plugin — tiny browser DSL (no full pyne runtime).
+ *
+ * Demonstrates the {@link EnginePlugin} contract: `kind: 'engine'`,
+ * `isReady()`, `run({ script, bars }) → RunResult`. Useful for offline demos.
+ *
+ * ## Supported subset
+ *
+ * - Series: `close`, `open`, `high`, `low`, `volume`
+ * - Indicators: `sma`, `ema`, `rsi`
+ * - Output: `plot(value)` → line series; `strategy.entry` / `strategy.close` → events
+ *
+ * Install via Manager → Plugins (dynamic URL). Not a built-in.
+ *
+ * @module plugins/example-tiny-pine-engine
+ */
 
 function sma(arr, n) {
     const out = new Array(arr.length).fill(NaN);

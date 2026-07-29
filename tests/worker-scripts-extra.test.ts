@@ -4,8 +4,8 @@
  */
 
 /**
- * Extra worker scripts coverage: POST create, conflict path already in scripts.test.
- * Run from frontend/: bun test tests/worker-scripts-extra.test.ts worker/tests/
+ * Extra Worker script-library cases from repo root (memory backend).
+ * Complements `worker/tests/scripts.test.ts` for create/revision edge paths.
  */
 
 import { describe, expect, it, beforeEach } from 'bun:test';

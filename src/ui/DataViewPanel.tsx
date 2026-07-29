@@ -19,7 +19,9 @@
 
 /**
  * Data Window — OHLCV + plot series values at the crosshair bar.
- * Floatable / dockable via FloatableShell.
+ *
+ * Rows from `buildDataViewRows` using `store.bars`, `store.crosshair`, and
+ * last-run series/plot_meta. FloatableShell id `dataview`.
  */
 
 import { Component, For, Show, createMemo } from 'solid-js';
@@ -28,6 +30,7 @@ import { buildDataViewRows } from '../results/dataview';
 import type { RunResult } from '../indicators/runner';
 import { FloatableShell } from './panels/FloatableShell';
 
+/** Crosshair-synced OHLCV / plot value inspector. */
 export const DataViewPanel: Component = () => {
   const rows = createMemo(() => {
     const r = store.lastRun as RunResult | null;

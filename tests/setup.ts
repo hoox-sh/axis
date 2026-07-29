@@ -4,8 +4,15 @@
  */
 
 /**
- * Shared AXIS test environment (localStorage + document stub).
- * Import first in suites that touch store/plugins/storage.
+ * Shared AXIS Bun test environment.
+ *
+ * Provides:
+ * - {@link MemoryStorage} / {@link installMemoryLocalStorage} — isolate persist keys
+ * - {@link installDocumentStub} — minimal DOM for theme, panes, panels
+ * - {@link installWindowStub} — `innerWidth` for responsive layout helpers
+ *
+ * Import first (side-effect installs via {@link installAxisTestEnv}) in suites
+ * that touch store, plugins, storage, or UI chrome.
  */
 
 export class MemoryStorage {

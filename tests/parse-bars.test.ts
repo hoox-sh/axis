@@ -4,7 +4,8 @@
  */
 
 /**
- * OHLCV parse helpers.
+ * OHLCV CSV/text parse helpers for upload source.
+ * Guards headerless/header rows, time formats, and empty/invalid lines.
  */
 
 import { describe, expect, it } from 'bun:test';

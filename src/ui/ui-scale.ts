@@ -18,9 +18,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * UI density presets for Settings (maps to store.uiScale).
+ * UI density presets for Settings (maps to `store.uiScale` / `applyUiScale`).
+ * Actual CSS application lives in the store; this module is presentation data.
  */
 
+/** Quick-pick scale values shown in Settings. */
 export const UI_SCALE_PRESETS: { label: string; value: number; hint: string }[] = [
   { label: 'Compact', value: 0.85, hint: 'Denser chrome' },
   { label: 'Default', value: 1, hint: 'Balanced' },
@@ -28,6 +30,7 @@ export const UI_SCALE_PRESETS: { label: string; value: number; hint: string }[] 
   { label: 'Large', value: 1.2, hint: 'Larger type & hits' },
 ];
 
+/** Format scale as percent string for labels (`100%`). */
 export function formatUiScalePct(scale: number): string {
   return `${Math.round(scale * 100)}%`;
 }

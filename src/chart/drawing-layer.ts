@@ -18,8 +18,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * SVG overlay drawing layer on the LWC price pane.
- * Converts pointer coords ↔ (time, price) via series/chart scales.
+ * SVG overlay drawing layer on the Lightweight Charts price pane.
+ *
+ * Hosts two independent content groups under one full-pane SVG:
+ * - **User group** (`gDraw` / draft): interactive annotations (trend, hline, fib, …)
+ * - **Pine script group** (`gScript`): view-only line/label/box from the last `/run`
+ *
+ * Pointer coords convert ↔ `(time, price)` via the chart time scale and candle
+ * series price scale. Interaction modes (magnet, lock, stay-in-mode, hide, style
+ * prefs) are set from the store / toolbar; geometry changes emit via `onChange`.
+ *
+ * Created by `ensureDrawingLayer` in `manager-access.ts`; exposed to the toolbar
+ * through the module singleton {@link getActiveDrawingLayer}.
  */
 
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
@@ -37,10 +47,14 @@ import { normalizeScriptDrawings, type ScriptDrawing } from './pine-drawings';
 import { snapToBars, type BarLike, type MagnetMode } from './drawings/snap';
 import { strokeDashFor } from './drawings/svg-primitives';
 
+/** Fired after user drawings change (place, drag end, delete, clear). */
 export type DrawingChangeHandler = (drawings: Drawing[]) => void;
+/** Fired when hit-test selection changes (including clear). */
 export type SelectionChangeHandler = (id: string | null) => void;
+/** Fired when the layer changes the tool (e.g. auto-cursor after place). */
 export type ToolChangeHandler = (tool: DrawingToolId) => void;
 
+/** Defaults applied to newly placed drawings (mirrors store `drawingPrefs`). */
 export type StylePrefs = {
   color: string;
   width: number;
@@ -48,9 +62,13 @@ export type StylePrefs = {
   fillOpacity: number;
 };
 
-/** Active layer singleton for toolbar / external callers (avoids ChartHost cycles). */
+/**
+ * Active layer singleton for toolbar / external callers.
+ * Avoids importing ChartHost (Solid) from pure chart modules; set in constructor, cleared in destroy.
+ */
 let activeLayer: DrawingLayer | null = null;
 
+/** Return the live price-pane drawing layer, if one is mounted. */
 export function getActiveDrawingLayer(): DrawingLayer | null {
   return activeLayer;
 }
@@ -59,6 +77,7 @@ function uid(): string {
   return `dw_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/** Drag handle mode: whole-body move or endpoint resize (`price` reserved). */
 type DragMode = 'move' | 'p1' | 'p2' | 'price';
 
 type DragState = {
@@ -68,13 +87,22 @@ type DragState = {
   mode: DragMode;
 };
 
+/**
+ * Full-pane SVG drawing controller for one LWC chart + candle series.
+ *
+ * Cursor tool: SVG `pointer-events: none` so empty areas pan/zoom LWC; painted
+ * shapes opt in. Place tools flip the SVG to `pointer-events: auto` + crosshair.
+ */
 export class DrawingLayer {
   private host: HTMLElement;
   private chart: IChartApi;
   private series: ISeriesApi<'Candlestick'>;
   private svg: SVGSVGElement;
+  /** View-only Pine drawings (z-order under user group). */
   private gScript: SVGGElement;
+  /** Editable user drawings. */
   private gDraw: SVGGElement;
+  /** In-progress two-point place preview. */
   private gDraft: SVGGElement;
   private tool: DrawingToolId = 'cursor';
   private drawings: Drawing[] = [];
@@ -82,16 +110,21 @@ export class DrawingLayer {
   private selectedId: string | null = null;
   private draft: { tool: DrawingToolId; p1?: Point; p2?: Point } | null = null;
   private drag: DragState | null = null;
+  /** Suppress click-after-drag so a completed move does not re-select/clear. */
   private didDrag = false;
   private onChange: DrawingChangeHandler | null = null;
   private onSelectionChange: SelectionChangeHandler | null = null;
   private onToolChange: ToolChangeHandler | null = null;
   private unsubs: Array<() => void> = [];
   private ro: ResizeObserver | null = null;
+  /** OHLCV for magnet snap; typically `() => store.bars`. */
   private barsProvider: (() => readonly BarLike[]) | null = null;
   private magnet: MagnetMode = 'off';
+  /** Keep place tool after each drawing when true; otherwise {@link afterPlace} → cursor. */
   private stayInMode = false;
+  /** Blocks all drag/resize and delete when true. */
   private lockAll = false;
+  /** Skip painting non-selected user drawings (selected still shown). */
   private hideDrawings = false;
   private stylePrefs: StylePrefs = {
     color: DRAWING_COLORS.default,
@@ -100,6 +133,11 @@ export class DrawingLayer {
     fillOpacity: 0.15,
   };
 
+  /**
+   * @param host - Price pane DOM element (positioning context; gets the SVG child)
+   * @param chart - LWC chart API (time scale + crosshair subscriptions)
+   * @param series - Candle series for price ↔ Y conversion
+   */
   constructor(
     host: HTMLElement,
     chart: IChartApi,
@@ -141,39 +179,48 @@ export class DrawingLayer {
     this.redraw();
   }
 
+  /** Persist / UI callback when the user drawing list changes. */
   setOnChange(cb: DrawingChangeHandler | null) {
     this.onChange = cb;
   }
 
+  /** Store selection for the floating style bar. */
   setOnSelectionChange(cb: SelectionChangeHandler | null) {
     this.onSelectionChange = cb;
   }
 
+  /** Store tool when the layer auto-switches (after place without stay-in-mode). */
   setOnToolChange(cb: ToolChangeHandler | null) {
     this.onToolChange = cb;
   }
 
+  /** Provide bar data for magnet snap in {@link clientToPoint}. */
   setBarsProvider(fn: (() => readonly BarLike[]) | null) {
     this.barsProvider = fn;
   }
 
+  /** Magnet mode: `off` | `weak` (10px) | `strong` (always snap when bars exist). */
   setMagnet(mode: MagnetMode) {
     this.magnet = mode;
   }
 
+  /** When true, remain on the place tool after each successful placement. */
   setStayInMode(on: boolean) {
     this.stayInMode = on;
   }
 
+  /** Global lock — drag start and delete no-op while on. */
   setLockAll(on: boolean) {
     this.lockAll = on;
   }
 
+  /** Hide non-selected user drawings; re-paints the user group immediately. */
   setHideDrawings(on: boolean) {
     this.hideDrawings = on;
     this.redrawUser();
   }
 
+  /** Merge defaults used by {@link applyCreateStyle} on next placement. */
   setStylePrefs(prefs: Partial<StylePrefs>) {
     this.stylePrefs = { ...this.stylePrefs, ...prefs };
   }
@@ -182,13 +229,17 @@ export class DrawingLayer {
     return this.selectedId;
   }
 
+  /** Select a drawing (or null); notifies store and re-paints handles. */
   setSelectedId(id: string | null) {
     this.selectedId = id;
     this.onSelectionChange?.(id);
     this.redrawUser();
   }
 
-  /** Patch selected drawing style/geometry and emit. */
+  /**
+   * Patch the selected drawing's style/geometry and emit.
+   * No-op (returns false) when nothing selected, missing id, lockAll, or per-drawing locked.
+   */
   updateSelected(patch: Partial<Drawing>): boolean {
     if (!this.selectedId) return false;
     const idx = this.drawings.findIndex((d) => d.id === this.selectedId);
@@ -201,6 +252,10 @@ export class DrawingLayer {
     return true;
   }
 
+  /**
+   * Switch tool; clears draft/drag. Place tools capture the full SVG surface;
+   * cursor restores `pointer-events: none` so only painted shapes receive hits.
+   */
   setTool(tool: DrawingToolId) {
     this.tool = tool;
     this.draft = null;
@@ -216,12 +271,16 @@ export class DrawingLayer {
     return this.tool;
   }
 
+  /** Replace user drawings from store (e.g. after load); does not emit. */
   setDrawings(drawings: Drawing[]) {
     this.drawings = drawings.slice();
     this.redrawUser();
   }
 
-  /** Pine line/label/box from last /run (not user-editable). Atomic replace — no empty frame. */
+  /**
+   * Pine line/label/box from last `/run` (not user-editable).
+   * Atomic group replace — build off-DOM then swap so live re-runs avoid a blank frame.
+   */
   setScriptDrawings(raw: unknown[] | undefined | null) {
     this.scriptDrawings = normalizeScriptDrawings(raw);
     this.redrawScript();
@@ -232,10 +291,12 @@ export class DrawingLayer {
     this.redrawScript();
   }
 
+  /** Shallow copy of current user drawings. */
   getDrawings(): Drawing[] {
     return this.drawings.slice();
   }
 
+  /** Remove all user drawings, clear selection/draft, emit. */
   clearAll() {
     this.drawings = [];
     this.setSelectedId(null);
@@ -245,6 +306,10 @@ export class DrawingLayer {
     this.redraw();
   }
 
+  /**
+   * Delete the selected user drawing if unlocked.
+   * Respects `lockAll` and per-drawing `locked` / `meta.locked`.
+   */
   deleteSelected() {
     if (!this.selectedId) return;
     const cur = this.drawings.find((d) => d.id === this.selectedId);
@@ -255,6 +320,10 @@ export class DrawingLayer {
     this.redraw();
   }
 
+  /**
+   * After a successful place: if stay-in-mode is off, switch to cursor and notify store.
+   * Does not implement undo/history.
+   */
   private afterPlace() {
     if (!this.stayInMode) {
       this.setTool('cursor');
@@ -267,6 +336,10 @@ export class DrawingLayer {
     return this.stylePrefs.color || DRAWING_COLORS.default;
   }
 
+  /**
+   * Dual-write create: set legacy flat fields (`color`, `lineWidth`, …) and nested
+   * `style` so both `resolveDrawingStyle` paths and older consumers work.
+   */
   private applyCreateStyle<T extends Drawing>(d: T): T {
     return {
       ...d,
@@ -283,6 +356,7 @@ export class DrawingLayer {
     };
   }
 
+  /** Tear down listeners, SVG, and active singleton if this instance. */
   destroy() {
     for (const u of this.unsubs) u();
     this.unsubs = [];
@@ -295,6 +369,7 @@ export class DrawingLayer {
     this.onChange?.(this.drawings.slice());
   }
 
+  /** Wire pointer/keyboard, range/crosshair re-paint, and host ResizeObserver. */
   private bindEvents() {
     const onClick = (e: MouseEvent) => this.handleClick(e);
     const onMove = (e: MouseEvent) => this.handleMove(e);
@@ -302,6 +377,7 @@ export class DrawingLayer {
     const onUp = (e: PointerEvent) => this.handlePointerUp(e);
     const onKey = (e: KeyboardEvent) => this.handleKey(e);
     const onCtx = (e: Event) => {
+      // Right-click cancels an in-progress draft while a place tool is active
       if (this.tool !== 'cursor') {
         e.preventDefault();
         this.draft = null;
@@ -359,6 +435,11 @@ export class DrawingLayer {
     this.svg.setAttribute('height', String(r.height));
   }
 
+  /**
+   * Map client pointer → series `(time, price)`, then optionally magnet-snap to bars.
+   * Returns null outside valid scales. Strong magnet uses a huge pixel tolerance so
+   * snap always applies when bars exist; weak uses 10px.
+   */
   private clientToPoint(e: MouseEvent): Point | null {
     const rect = this.svg.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -382,6 +463,10 @@ export class DrawingLayer {
     });
   }
 
+  /**
+   * Map series point → SVG pixel coords.
+   * Prefer unix-second time; if unmapped, fall back to logical bar index (compile x / bar_index).
+   */
   private toXY(p: Point): { x: number; y: number } | null {
     // Interpret path uses unix seconds; compile-mode drawings often pass bar_index.
     let x = this.chart.timeScale().timeToCoordinate(p.time as UTCTimestamp);
@@ -398,6 +483,7 @@ export class DrawingLayer {
     return { x, y };
   }
 
+  /** Escape cancels draft/selection; Delete/Backspace removes selected (not from inputs). */
   private handleKey(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       this.draft = null;
@@ -414,6 +500,10 @@ export class DrawingLayer {
     }
   }
 
+  /**
+   * Cursor-only drag start. `lockAll` blocks entirely; per-drawing locked still
+   * selects but does not begin a drag.
+   */
   private handlePointerDown(e: PointerEvent) {
     if (this.tool !== 'cursor') return;
     if (this.lockAll) return;
@@ -457,6 +547,10 @@ export class DrawingLayer {
     this.redraw();
   }
 
+  /**
+   * Place tools: one-click (hline/text) or two-click draft complete.
+   * Cursor: hit-test select. Post-drag clicks are swallowed via `didDrag`.
+   */
   private handleClick(e: MouseEvent) {
     if (this.didDrag) {
       this.didDrag = false;
@@ -534,6 +628,7 @@ export class DrawingLayer {
     }
   }
 
+  /** Drag-move/resize active drawing, or update two-point draft preview. */
   private handleMove(e: MouseEvent) {
     if (this.drag) {
       const pt = this.clientToPoint(e);
@@ -580,6 +675,7 @@ export class DrawingLayer {
     this.paintDrawing(this.gDraft, d, true);
   }
 
+  /** Endpoint handle hit for the selected drawing (move uses body hit-test). */
   private hitTestHandle(e: MouseEvent): { id: string; mode: DragMode } | null {
     if (!this.selectedId) return null;
     const d = this.drawings.find((x) => x.id === this.selectedId);
@@ -604,6 +700,7 @@ export class DrawingLayer {
     return null;
   }
 
+  /** Topmost user drawing under the pointer (reverse paint order). */
   private hitTest(e: MouseEvent): string | null {
     const rect = this.svg.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -653,7 +750,7 @@ export class DrawingLayer {
     this.redrawUserInner();
   }
 
-  /** Full redraw (range/crosshair) — both layers. */
+  /** Re-paint script group only (after setScriptDrawings). */
   private redrawScript() {
     this.syncSize();
     this.redrawScriptInner();
@@ -684,6 +781,7 @@ export class DrawingLayer {
     this.gDraw = next;
   }
 
+  /** View-only paint for Pine line/box/label/polyline (`pointer-events: none`). */
   private paintScriptDrawing(g: SVGGElement, d: ScriptDrawing) {
     const pe = 'none'; // script drawings are view-only
     if (d.type === 'polyline' && d.points?.length) {
@@ -781,6 +879,10 @@ export class DrawingLayer {
     }
   }
 
+  /**
+   * Paint one user drawing. When `hideDrawings` is on, non-selected shapes are skipped
+   * (selected still renders so the user can find/edit them).
+   */
   private paintDrawing(g: SVGGElement, d: Drawing, selected: boolean) {
     if (this.hideDrawings && !selected) return;
     const st = resolveDrawingStyle(d);
@@ -910,6 +1012,7 @@ export class DrawingLayer {
 
 type TwoPointKind = 'trend' | 'ray' | 'rect' | 'fib' | 'measure';
 
+/** Create an SVG element in the SVG namespace and append to `parent`. */
 function el(
   parent: SVGElement,
   name: string,
@@ -921,6 +1024,10 @@ function el(
   return node;
 }
 
+/**
+ * Stroke with an invisible wide hit-line under a visible stroke (hit vs paint split).
+ * Default `pointer-events: stroke` so empty space still pans LWC under cursor tool.
+ */
 function line(
   g: SVGElement,
   x1: number,
@@ -1081,7 +1188,10 @@ function barIndexApprox(chart: IChartApi, time: number): number {
   return logical ?? 0;
 }
 
-/** Pure helper for tests: fib prices between two endpoints */
+/**
+ * Pure helper for tests: Fibonacci level prices between two endpoints.
+ * Direction follows high→low when `p1 >= p2`, else low→high.
+ */
 export function fibPrices(p1: number, p2: number): number[] {
   const lo = Math.min(p1, p2);
   const hi = Math.max(p1, p2);

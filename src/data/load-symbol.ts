@@ -17,6 +17,21 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Load historical OHLCV for a symbol into the Solid store and chart.
+ *
+ * Resolves the {@link SourcePlugin} by id, calls `fetchHistorical`, normalizes
+ * bar times to **unix seconds**, then:
+ * 1. {@link loadBars} — store + exchange label
+ * 2. {@link setDataToChart} — Lightweight Charts candle series (`fit: true`)
+ * 3. Optionally {@link startLive} when `store.live.preferAfterLoad` is set
+ *
+ * Updates the `source` telemetry plane (connecting / open / error) and status bar.
+ *
+ * @module data/load-symbol
+ * @returns `true` on success, `false` on unknown source or fetch failure
+ */
+
 import { loadBars, setStatus, store, setTelemetryPlane, setTelemetryState } from '../store';
 import { getManager, setDataToChart } from '../chart/manager-access';
 import { getSource } from '../sources/catalog';
@@ -24,7 +39,13 @@ import { getUploadedFileName } from '../sources/upload-store';
 import { classifyTransport } from '../ui/telemetry';
 import { defaultStreamForSource } from '../streams/catalog';
 
-/** Fetch OHLCV via the active historical source and push into chart + store. */
+/**
+ * Fetch OHLCV via the given historical source and push into chart + store.
+ *
+ * @param symbol - Ticker (uppercased); defaults to `store.symbol`
+ * @param interval - AXIS interval string (`1m`…`1w`); defaults to `store.interval`
+ * @param sourceId - Source plugin id; defaults to `store.source`
+ */
 export async function loadSymbolData(
   symbol: string = store.symbol,
   interval: string = store.interval,

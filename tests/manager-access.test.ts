@@ -4,7 +4,8 @@
  */
 
 /**
- * manager-access setDataToChart / getManager without Solid.
+ * manager-access bridges (`setDataToChart` / `getManager`) without Solid ChartHost.
+ * Guards no-op when manager unset; mock host when installed.
  */
 
 import './setup';

@@ -3,6 +3,11 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+/**
+ * In-progress drawing draft state machine (`createDraftController`).
+ * Guards: idle → click phases, cancel, TOOL_SPECS completeness, commit payloads.
+ */
+
 import { describe, expect, it } from 'bun:test';
 import {
   createDraftController,

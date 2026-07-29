@@ -19,11 +19,13 @@
 
 /**
  * HOOX geometric brand mark (from hoox-landing-page).
- * Pure SVG + CSS — no GSAP dependency.
+ * Pure SVG + CSS — no GSAP dependency. Optional mount flicker for loaders.
+ * Sizes: xs / m / l presets or raw px via `HooxLogoSize`.
  */
 
 import { Component, JSX, onCleanup, onMount, splitProps } from 'solid-js';
 
+/** Preset or raw pixel size for the brand mark. */
 export type HooxLogoSize = 'xs' | 'm' | 'l' | number;
 
 const SIZE_PX: Record<'xs' | 'm' | 'l', number> = {
@@ -32,6 +34,7 @@ const SIZE_PX: Record<'xs' | 'm' | 'l', number> = {
   l: 40,
 };
 
+/** Resolve preset or numeric size to CSS px. */
 export function resolveLogoSize(size: HooxLogoSize = 'm'): number {
   return typeof size === 'number' ? size : SIZE_PX[size];
 }
@@ -159,6 +162,7 @@ function runHoverFlicker(svg: SVGSVGElement): Promise<void> {
   });
 }
 
+/** HOOX geometric SVG mark with optional continuous or hover flicker. */
 export const HooxLogo: Component<HooxLogoProps> = (props) => {
   const [local, rest] = splitProps(props, [
     'size',

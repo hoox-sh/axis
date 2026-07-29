@@ -4,8 +4,8 @@
  */
 
 /**
- * Cloud storage plugin unit tests (mocked fetch).
- * Run: `bun test frontend/tests/storage-cloud.test.ts`
+ * Cloud storage plugin (Worker `/api/scripts`) with mocked fetch.
+ * Guards list/get/put/delete auth headers and error status mapping.
  */
 
 import { describe, expect, it, beforeEach, afterEach, mock } from 'bun:test';

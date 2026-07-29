@@ -18,8 +18,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Register all built-in plugins with the unified registry.
- * Safe to call multiple times (idempotent).
+ * Register all **built-in** plugins with the unified registry.
+ *
+ * Idempotent: safe to call from app boot, plugin loader, and active resolvers.
+ * Covers sources, streams, engines, and storages (not dynamic URL plugins).
+ *
+ * @module plugins/bootstrap
  */
 
 import { ensureSourcesRegistered } from '../sources/catalog';
@@ -29,6 +33,7 @@ import { ensureStoragesRegistered } from '../storage/catalog';
 
 let done = false;
 
+/** Ensure built-in source/stream/engine/storage plugins are registered once. */
 export function ensureBuiltins(): void {
   if (done) return;
   ensureSourcesRegistered();
@@ -38,7 +43,7 @@ export function ensureBuiltins(): void {
   done = true;
 }
 
-/** Alias used at app entry */
+/** Alias used at app entry (`registerBuiltins()`). */
 export function registerBuiltins(): void {
   ensureBuiltins();
 }

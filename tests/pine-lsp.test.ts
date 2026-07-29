@@ -3,6 +3,11 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+/**
+ * Client Pine language helpers (builtins index, completion, word-at-cursor).
+ * Guards: metadata loads 100+ builtins; `ta.sma` / bare `sma` lookup; CM complete.
+ */
+
 import { describe, expect, it } from 'bun:test';
 import { EditorState } from '@codemirror/state';
 import {

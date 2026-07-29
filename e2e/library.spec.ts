@@ -4,7 +4,11 @@
  */
 
 /**
- * @critical Script library UI path.
+ * @critical Script library + Manager catalog UI.
+ *
+ * Guards: Plugin Manager → Script Library shows storage picker and save CTA;
+ * Catalog can activate Mock Walk (or leave a valid source selected). Does not
+ * hit real cloud/git backends — UI visibility only.
  */
 import { test, expect } from '@playwright/test';
 

@@ -17,6 +17,20 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Main workspace top bar — symbol, interval, source/stream/engine, load/run/live,
+ * upload, theme, and panel toggles (editor, watchlist, indicators, data window,
+ * layers, settings, plugins).
+ *
+ * ## Actions
+ * - **Load** → `loadSymbolData` (historical via active source)
+ * - **Run** → `runAndApply(editorRef.getDoc())`
+ * - **Live** → multiplex `startLive` / `stopLive`
+ * - **Popout editor** → `openEditorWindow` + shared doc bridge
+ *
+ * Plugin pickers re-read catalogs when `catalogTick` bumps (after plugin install).
+ */
+
 import { Component, For, Show, createMemo, createSignal } from 'solid-js';
 import {
   store,
@@ -48,6 +62,9 @@ import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
 
 const INTERVALS = [...WATCHLIST_INTERVALS];
 
+/**
+ * Workspace top chrome. Parent owns settings/plugins modals and editor ref.
+ */
 export const Topbar: Component<{
   onToggleEditor: () => void;
   onToggleWatchlist: () => void;

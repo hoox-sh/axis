@@ -18,8 +18,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Built-in git storage plugin — GitHub or GitLab.
- * Commits only on explicit write/remove (Save); drafts stay local (no remote commits).
+ * Built-in **git** storage plugin — GitHub or GitLab Contents/Files API.
+ *
+ * Explicit Save/Delete → commit (and push via host API). Drafts are **not**
+ * written remotely (local plugin handles crash recovery). Provider dispatch
+ * uses `resolveGitConfig` → `git-github` / `git-gitlab`.
  */
 
 import type {
@@ -33,6 +36,7 @@ import { resolveGitConfig } from './git-config';
 import * as gh from './git-github';
 import * as gl from './git-gitlab';
 
+/** Storage plugin `id: git` with configSchema for Provider Manager / Settings. */
 export const gitStoragePlugin: StoragePlugin = {
   id: 'git',
   name: 'Git (GitHub / GitLab)',
@@ -148,4 +152,5 @@ export const gitStoragePlugin: StoragePlugin = {
   },
 };
 
+/** Re-export script types for callers that only import git storage. */
 export type { ScriptMeta, ScriptDocument };

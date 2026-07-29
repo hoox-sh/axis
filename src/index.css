@@ -1,6 +1,10 @@
 /**
  * Copyright (c) 2026 HOOX · AXIS · jango-blockchained
  * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * AXIS global stylesheet: Tailwind v4 + void theme tokens, chrome density
+ * (`--ui-scale`), and product chrome (panels, buttons, loaders).
+ * Chart canvas sizing is mostly independent of root font-size.
  */
 
 @import "tailwindcss";

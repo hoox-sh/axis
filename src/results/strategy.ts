@@ -19,11 +19,21 @@
 
 /**
  * Strategy tester — pair entry/exit events into closed trades + summary stats.
- * Ported from legacy ui/results.js for AXIS Solid panel.
  *
- * Accepts both Pro API parity events (`kind`/`bar_time`/`direction`/`ohlc`)
- * and legacy UI fields (`type`/`time`/`dir`/`price`). Pass bars for price fill
- * when ohlc is empty.
+ * Ported from legacy `ui/results.js` for the AXIS Solid Results panel.
+ * Normalizes via {@link normalizeStrategyEvents}, sorts by time/kind rank, then
+ * pairs open positions with exits (`from_entry` preferred over order id).
+ *
+ * Accepts both Pro API parity events (`kind` / `bar_time` / `direction` / `ohlc`)
+ * and legacy UI fields (`type` / `time` / `dir` / `price`). Pass `bars` for
+ * price fill when `ohlc` is empty.
+ *
+ * ## Public API
+ *
+ * - {@link buildStrategyReport} → `{ trades, stats }`
+ * - Types: {@link StrategyEvent}, {@link ClosedTrade}, {@link StrategyStats}
+ *
+ * @module results/strategy
  */
 
 import type { Bar } from '../store/types';
@@ -33,6 +43,7 @@ import {
   strategyEventKindRank,
 } from './events';
 
+/** Loose event shape accepted before normalization. */
 export interface StrategyEvent {
   time?: number;
   price?: number;
@@ -52,6 +63,7 @@ export interface StrategyEvent {
   [key: string]: unknown;
 }
 
+/** One round-trip trade after entry/exit pairing. */
 export interface ClosedTrade {
   id: string;
   dir: string;
@@ -63,6 +75,7 @@ export interface ClosedTrade {
   pnlPct: number;
 }
 
+/** Aggregate metrics over {@link ClosedTrade}[]. */
 export interface StrategyStats {
   totalPnl: number;
   winRate: number;
@@ -76,6 +89,10 @@ export interface StrategyStats {
   trades: number;
 }
 
+/**
+ * Build closed trades and summary stats from raw engine/strategy events.
+ * @param bars - Optional OHLCV for price resolution when events lack price/ohlc
+ */
 export function buildStrategyReport(
   events: StrategyEvent[] | Record<string, unknown>[],
   bars?: Bar[],

@@ -18,10 +18,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Minimal IndexedDB helpers for AXIS script storage.
- * Falls back gracefully when IDB is unavailable (SSR / some test runners).
+ * Minimal IndexedDB helpers for AXIS script storage (local plugin).
+ * Promise wrappers around IDBRequest / transactions; `idbAvailable` gates SSR/tests.
  */
 
+/** True when the browser exposes a usable `indexedDB` global. */
 export function idbAvailable(): boolean {
   try {
     return typeof indexedDB !== 'undefined' && indexedDB !== null;
@@ -30,6 +31,10 @@ export function idbAvailable(): boolean {
   }
 }
 
+/**
+ * Open (or create/upgrade) a named database.
+ * @param onUpgrade called with the db and previous version during `onupgradeneeded`
+ */
 export function openDb(
   name: string,
   version: number,
@@ -52,6 +57,7 @@ export function openDb(
   });
 }
 
+/** Convert an IDBRequest into a Promise of its result. */
 export function idbReq<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
@@ -59,6 +65,7 @@ export function idbReq<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
+/** Resolve when a transaction completes; reject on error/abort. */
 export function idbTxDone(tx: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();

@@ -19,6 +19,10 @@
 
 /**
  * Script library UI — list / load / save / delete against the active storage plugin.
+ *
+ * Uses `storage/service` (listScripts, writeScript, …). Includes cloud/git
+ * credential mini-forms and import/export of the full library as JSON.
+ * Optional `getDoc` / `setDoc` wire the panel to the live editor document.
  */
 
 import { Component, For, Show, createSignal, createEffect } from 'solid-js';
@@ -65,12 +69,14 @@ function saveGitCfg(cfg: GitConfig) {
   persist();
 }
 
+/** Optional editor doc bridge and load callback. */
 export interface ScriptLibraryPanelProps {
   getDoc?: () => string;
   setDoc?: (doc: string, name?: string) => void;
   onLoaded?: (meta: ScriptMeta, content: string) => void;
 }
 
+/** Library browser for Plugin Manager (and any host that supplies doc IO). */
 export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) => {
   const [items, setItems] = createSignal<ScriptMeta[]>([]);
   const [busy, setBusy] = createSignal(false);

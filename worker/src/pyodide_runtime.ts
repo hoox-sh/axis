@@ -17,20 +17,31 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// In-Worker Python runtime via Pyodide.
-//
-// Status: scaffold only.  When `PYODIDE_IN_WORKER=enabled` is set, we lazy-
-// load Pyodide from R2 (or the jsDelivr CDN as a dev fallback), mount the
-// pynescript wheel from R2, and translate the `/api/run` request into a
-// `pynescript.backend.runtime.Runtime().run(script, bars)` call.
-//
-// Until the wheel upload pipeline is implemented (see RUNTIME.md), this
-// returns 503 with a clear hint.
+/**
+ * In-Worker Python runtime via Pyodide (scaffold).
+ *
+ * When `PYODIDE_IN_WORKER=enabled`, lazily loads Pyodide (CDN today; R2 /
+ * workerd-native in production), installs the pynescript wheel, and maps
+ * `/api/run` bodies to a Python `run_script(script, bars)` bridge.
+ *
+ * **Status:** boot path is wired; wheel install + `run_script` global are
+ * still stubs. Until `RUNTIME.md` upload pipeline ships, callers typically
+ * fall through to `EXTERNAL_BACKEND` after a soft failure, or receive an
+ * error-shaped JSON object from the catch path.
+ *
+ * Isolate-scoped `pyReady` memoizes the load promise across requests on the
+ * same Worker isolate (cold start still pays CDN cost once).
+ */
 
 import type { Env } from './index';
 
+/** Cached Pyodide bootstrap promise for this isolate (null until first attempt). */
 let pyReady: Promise<unknown> | null = null;
 
+/**
+ * Load Pyodide once per isolate. Production should swap CDN for workerd-native
+ * and mount the wheel from `env.BUNDLES` (R2).
+ */
 async function ensurePyodide(_env: Env): Promise<unknown> {
     if (pyReady) return pyReady;
     pyReady = (async () => {
@@ -52,6 +63,11 @@ async function ensurePyodide(_env: Env): Promise<unknown> {
     return pyReady;
 }
 
+/**
+ * Attempt an in-worker run. Returns `null` when the feature flag is off
+ * (caller should proxy). On runtime errors returns `{ status:'error', error }`
+ * so the HTTP layer can still 200 an error envelope (or the caller may proxy).
+ */
 export async function tryRunInWorker(script: string, bars: unknown[], env: Env): Promise<unknown | null> {
     if (env.PYODIDE_IN_WORKER !== 'enabled') return null;
     try {

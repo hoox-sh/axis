@@ -18,8 +18,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Parse Pine ``input.*`` declarations for the Script Settings modal.
- * Prefer engine-exported ``inputs`` when present; fall back to source parse.
+ * Parse Pine `input.*` declarations for the Script Settings modal.
+ *
+ * Prefer **engine-exported** `inputs` from the last run when present (more
+ * accurate defaults / types). Fall back to lightweight source regex parse for
+ * offline / pre-run UI.
+ *
+ * Supports `input.int|float|bool|string|color|source|timeframe|symbol|session|price|enum|text_area`
+ * and bare `input(...)`. Emits {@link ScriptInputDef} with stable `id` = title.
+ *
+ * @module results/script-inputs
  */
 
 export type ScriptInputType =
@@ -213,7 +221,8 @@ function mapType(kind: string | undefined): ScriptInputType {
 }
 
 /**
- * Parse ``input.*`` / ``input()`` calls from Pine source into field defs.
+ * Parse `input.*` / `input()` calls from Pine source into field defs.
+ * Prefer {@link resolveScriptInputs} which merges engine-exported inputs.
  */
 export function parseScriptInputs(source: string): ScriptInputDef[] {
   if (!source?.trim()) return [];

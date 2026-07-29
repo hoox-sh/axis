@@ -17,6 +17,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Imperative **CodeMirror 6** host for Pine Script.
+ *
+ * Mounts language (`pineScript`), void theme, LSP completions/hover, search,
+ * and Mod-Enter → {@link Props.onRun}. Exposes `getDoc` / `setDoc` via
+ * optional `editorRef` for parent panels and the cross-window bridge.
+ *
+ * @module editor/PineEditor
+ */
+
 import { Component, onMount, onCleanup } from 'solid-js';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
@@ -35,6 +45,7 @@ interface Props {
   editorRef?: { getDoc: () => string; setDoc?: (doc: string) => void };
 }
 
+/** Solid wrapper around a single CodeMirror EditorView instance. */
 export const PineEditor: Component<Props> = (props) => {
   let containerRef!: HTMLDivElement;
   let view: EditorView;

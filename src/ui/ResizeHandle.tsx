@@ -17,6 +17,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Vertical resize grip for docked side panels.
+ * Pointer capture + body cursor while dragging; clamps width via min/max.
+ * Direction encodes which way “grow” maps to clientX delta.
+ */
+
 import { Component, onCleanup } from 'solid-js';
 
 interface Props {

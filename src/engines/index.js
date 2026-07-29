@@ -17,18 +17,35 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Calculation engine plugins. Both engines expose the same interface:
-//   isReady() → Promise<boolean>
-//   run({ script, bars, config }) → Promise<RunResult>
-//
-// RunResult = {
-//   status: 'success' | 'error',
-//   plots: (number|null)[],
-//   series?: Record<string, (number|null)[]>,
-//   events: any[],
-//   error?: string,
-//   meta?: { mode?, script_id?, run_id?, ms? },
-// }
+/**
+ * Legacy calculation engine plugins (pre-Solid path).
+ *
+ * Prefer the TypeScript catalog at `src/engines/catalog.ts` for AXIS Solid UI.
+ * Both engines implement the same contract:
+ *
+ * ```
+ * isReady() → Promise<boolean>
+ * run({ script, bars, config }) → Promise<RunResult>
+ * ```
+ *
+ * RunResult shape:
+ * ```
+ * {
+ *   status: 'success' | 'error',
+ *   plots: (number|null)[],
+ *   series?: Record<string, (number|null)[]>,
+ *   events: any[],
+ *   error?: string,
+ *   meta?: { mode?, script_id?, run_id?, ms? },
+ * }
+ * ```
+ *
+ * - **serverEngine**: `POST {endpoint}/run` (Flask/Worker); uses legacy `state.js`.
+ * - **pyodideEngine**: self-hosted Pyodide + `/vendor` wheels + `pynescript_runtime.py`.
+ *
+ * @module engines/index (legacy)
+ * @see src/engines/catalog.ts
+ */
 
 import { getState } from '../state.js';
 

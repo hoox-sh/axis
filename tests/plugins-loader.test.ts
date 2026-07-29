@@ -4,7 +4,8 @@
  */
 
 /**
- * Dynamic plugin loader.
+ * Dynamic plugin loader: URL modules → registry registration.
+ * Guards valid fixtures install; bad-no-export rejects cleanly.
  */
 
 import './setup';

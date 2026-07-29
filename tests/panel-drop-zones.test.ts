@@ -1,6 +1,11 @@
 // Copyright (C) 2024-2026 jango_blockchained
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Floating panel drop-zone hit testing and dock mapping.
+ * Invariant: edge hits → dock side; center → float; chrome defaults for PANEL_META.
+ */
+
 import { describe, expect, it } from 'bun:test';
 import { hitDropZone, dropZoneToDock, skeletonSize } from '../src/ui/panels/drop-zones.ts';
 import { defaultPanelChromeMap, PANEL_META } from '../src/ui/panels/types.ts';

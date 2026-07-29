@@ -4,7 +4,8 @@
  */
 
 /**
- * Scripts handler D1 branches with a minimal mock DB.
+ * Script library D1 code paths with a minimal mock `D1Database`.
+ * Guards: list/get/put/delete/draft SQL branches and missing-table `NO_SCHEMA`.
  */
 
 import { describe, expect, it, beforeEach } from 'bun:test';

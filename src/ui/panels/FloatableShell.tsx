@@ -19,6 +19,14 @@
 
 /**
  * Floatable / dockable panel chrome with drag handle + skeleton preview.
+ *
+ * ## Lifecycle
+ * - Reads `getPanelChrome(id)`; header drag (hold ~280ms or move past threshold)
+ *   starts a global drag preview consumed by {@link PanelDragOverlay}.
+ * - Dock menu: left/right/bottom/float/window; window may call `onPopoutWindow`.
+ * - Float mode: free geometry via `setPanelGeometry` + `bumpPanelZ`.
+ *
+ * {@link installPanelWindowBridge} listens for companion-window reattach messages.
  */
 
 import { Component, For, JSX, Show, createSignal, onCleanup, onMount } from 'solid-js';
@@ -38,6 +46,7 @@ import {
 } from './types';
 import { dropZoneToDock, hitDropZone, skeletonSize } from './drop-zones';
 
+/** Props for a dockable panel wrapper (title falls back to PANEL_META). */
 export interface FloatableShellProps {
   id: PanelId;
   title?: string;
@@ -74,6 +83,7 @@ const [dragPreview, setDragPreview] = createSignal<{
   title: string;
 } | null>(null);
 
+/** Reactive accessor for the active panel drag ghost (null when idle). */
 export function getDragPreview() {
   return dragPreview;
 }
@@ -89,6 +99,10 @@ const DOCK_MENU = [
   { dock: 'window' as const, label: 'New window', Icon: Icons.popout },
 ];
 
+/**
+ * Panel chrome shell — docks into layout slots or floats with resize handles.
+ * When closed (`isPanelOpen` false), renders nothing.
+ */
 export const FloatableShell: Component<FloatableShellProps> = (props) => {
   const meta = () => PANEL_META[props.id];
   const chrome = () => getPanelChrome(props.id);
@@ -442,7 +456,10 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   );
 };
 
-/** Full-screen dock zone + skeleton ghost while dragging */
+/**
+ * Full-screen dock zone highlights + skeleton ghost while a panel is dragged.
+ * Mount once at the App root (above content).
+ */
 export const PanelDragOverlay: Component = () => {
   const preview = dragPreview;
   return (
@@ -546,7 +563,10 @@ function openCompanionWindow(id: PanelId, title: string) {
   }
 }
 
-/** Listen for reattach messages from companion windows */
+/**
+ * Listen for `axis-panel-reattach` / `axis-panel-window-closed` postMessages
+ * from companion popups. Returns an unsubscribe for `onCleanup`.
+ */
 export function installPanelWindowBridge() {
   const onMsg = (ev: MessageEvent) => {
     const d = ev.data;

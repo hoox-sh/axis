@@ -18,8 +18,36 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Built-in calculation engines for AXIS (Solid path).
- * Uses the Solid store for endpoint / config — not legacy state.js.
+ * Built-in **calculation engines** for the Solid AXIS path.
+ *
+ * Engines evaluate Pine Script against OHLCV bars and return a unified
+ * {@link RunResult} (plots, series, events, drawings, meta). Registration
+ * goes through {@link registry}; look up via {@link getEngine} / {@link listEngines}.
+ *
+ * ## Built-ins
+ *
+ * | id | Transport | Backend |
+ * |----|-----------|---------|
+ * | `server` | WebSocket `/ws/run` preferred, then `POST /run` | pyne Pro API (default `http://localhost:5002`) or Worker |
+ * | `pyodide` | In-browser | Self-hosted Pyodide + vendored `pynescript` wheel |
+ *
+ * ## `server` protocol
+ *
+ * - **WS**: `ws(s)://host/ws/run` frames `{ type: 'run', id, script, data, mode, symbol? }`.
+ * - **REST**: `POST {endpoint}/run?mode=…` with body `{ script, data, mode, inputs? }`.
+ * - Modes: `interpret` | `compile` | `auto` (body-validated; query is legacy).
+ * - NaN/Infinity in JSON are normalized client-side before parse.
+ *
+ * ## Public API
+ *
+ * - {@link serverEngine} / {@link pyodideEngine} — plugin instances
+ * - {@link ensureEnginesRegistered}, {@link getEngine}, {@link listEngines}
+ * - {@link registerDynamicEngine} / {@link unregisterDynamicEngine} — runtime plugins
+ * - {@link preloadPyodide}, {@link prefetchPyodideAssets} — cold-load helpers
+ *
+ * @module engines/catalog
+ * @see {@link EnginePlugin} in `plugins/types`
+ * @see {@link engine-ws} for the persistent WS client
  */
 
 import type { EnginePlugin, RunResult } from '../plugins/types';
@@ -315,7 +343,10 @@ function pyodidePluginConfig(): Record<string, unknown> {
   return (configs['engine:pyodide'] || configs.pyodide || {}) as Record<string, unknown>;
 }
 
-/** Prefetch core Pyodide assets into HTTP cache (wasm + stdlib are the heavy bits). */
+/**
+ * Prefetch core Pyodide assets into the HTTP cache (wasm + stdlib are heavy).
+ * Safe to call on idle; no-op outside the browser.
+ */
 export function prefetchPyodideAssets(indexUrl?: string): void {
   if (typeof document === 'undefined') return;
   const base = resolvePyodideIndexUrl(indexUrl);
@@ -577,6 +608,10 @@ export const BUILTIN_ENGINES: EnginePlugin[] = [serverEngine, pyodideEngine];
 
 let registered = false;
 
+/**
+ * Register built-in engines. Always re-installs so a dynamic plugin cannot
+ * leave a stale `server` entry without `configSchema.mode`.
+ */
 export function ensureEnginesRegistered(): void {
   if (registered) return;
   registered = true;
@@ -587,16 +622,21 @@ export function ensureEnginesRegistered(): void {
   }
 }
 
+/** Look up an engine by id (ensures built-ins are registered). */
 export function getEngine(id: string): EnginePlugin | undefined {
   ensureEnginesRegistered();
   return registry.getEngine(id);
 }
 
+/** All registered engines in registration order. */
 export function listEngines(): EnginePlugin[] {
   ensureEnginesRegistered();
   return registry.listEngines();
 }
 
+/**
+ * Register a runtime engine plugin. Cannot replace built-in `server` / `pyodide`.
+ */
 export function registerDynamicEngine(engine: EnginePlugin): void {
   ensureEnginesRegistered();
   if (!engine?.id || engine.kind !== 'engine') throw new Error('Invalid engine plugin');

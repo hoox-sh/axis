@@ -17,6 +17,34 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * **Indicator / strategy runner** — evaluate Pine via the active engine and
+ * apply results to chart panes, markers, equity, and script drawings.
+ *
+ * ## Flow
+ *
+ * 1. {@link runScript} — resolve {@link getActiveEngine}, call `engine.run`,
+ *    update engine telemetry / latency (no chart mutation).
+ * 2. {@link runAndApply} — then map result onto {@link PaneManager}:
+ *    - line/hline series from `series` + `plot_meta`
+ *    - bgcolor histograms, plotshape markers
+ *    - strategy trade markers + equity curve
+ *    - Pine line/box/label drawings via drawing layer
+ *    - optional new {@link addIndicator} entry when no `indicatorId`
+ *
+ * Overlay vs sub-pane follows `meta.overlay` (indicator default false,
+ * strategy default true; explicit `false` is never coerced true).
+ *
+ * Live path uses `silent: true` / `openResults: false` from stream multiplex.
+ *
+ * ## Public API
+ *
+ * - {@link runScript}, {@link runAndApply}, {@link probeEndpoint}
+ * - Types: {@link RunResult}, {@link RunOptions}
+ *
+ * @module indicators/runner
+ */
+
 import {
   store,
   setStore,
@@ -44,10 +72,12 @@ import { getActiveEngine, getActiveEngineConfig } from '../plugins/active';
 import type { RunResult as EngineRunResult } from '../plugins/types';
 import { classifyTransport } from '../ui/telemetry';
 
+/** Engine result with `series` always present (empty object if missing). */
 export type RunResult = EngineRunResult & {
   series: Record<string, (number | null)[]>;
 };
 
+/** Options shared by {@link runScript} and {@link runAndApply}. */
 export interface RunOptions {
   /** Quiet status bar / fewer log lines (live re-runs) */
   silent?: boolean;
@@ -57,6 +87,10 @@ export interface RunOptions {
   inputs?: Record<string, unknown>;
 }
 
+/**
+ * Execute Pine against `store.bars` via the active engine.
+ * Does not mutate chart series; use {@link runAndApply} for full apply.
+ */
 export async function runScript(script: string, opts: RunOptions = {}): Promise<RunResult> {
   const silent = !!opts.silent;
   if (!silent) setStatus('running', 'Executing Pine Script…');
@@ -423,7 +457,10 @@ function pageIsRemote(): boolean {
   return h !== 'localhost' && h !== '127.0.0.1' && h !== '' && h !== '[::1]';
 }
 
-/** Probe Pro API health at current endpoint. */
+/**
+ * Probe pyne Pro API health (`GET {endpoint}/`).
+ * Surfaces CORS/loopback/remote-host hints for Settings UI.
+ */
 export async function probeEndpoint(endpoint?: string): Promise<{ ok: boolean; message: string }> {
   const base = (endpoint || store.endpoint || '').replace(/\/$/, '');
   if (!base) {

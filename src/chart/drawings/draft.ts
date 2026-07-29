@@ -20,8 +20,21 @@
 /**
  * Multi-click draft controller for AXIS interactive drawings.
  *
- * Tracks placement of 1-, 2-, 3-, and N-point tools until the drawing is
- * finished (fixed arity on the last click, free-form via {@link DraftController.onFinish}).
+ * Pure state machine: tracks placement of 1-, 2-, 3-, and N-point tools until
+ * the drawing is finished. Fixed arity finishes on the last click; free-form
+ * (`arity: 'n'`) finishes via {@link DraftController.onFinish} once
+ * `minPoints` is satisfied.
+ *
+ * Arity summary:
+ * | Arity | Commit condition |
+ * |-------|------------------|
+ * | `1`   | First click |
+ * | `2`   | Second click |
+ * | `3`   | Third click |
+ * | `'n'` | Explicit `onFinish()` with ≥ `minPoints` (default 2) anchors |
+ *
+ * Does **not**: handle DOM events, magnet snap, SVG preview paint, or
+ * persist drawings (caller maps {@link DraftPayload} into a `Drawing`).
  */
 
 /** Chart time/price anchor used while drafting. */
@@ -30,9 +43,13 @@ export interface ChartPoint {
   price: number;
 }
 
-/** Fixed point count, or free-form (`'n'`) finished via `onFinish`. */
+/**
+ * Fixed point count, or free-form (`'n'`) finished via `onFinish`.
+ * Distinct from UI-facing `RequiredPoints` (`'multi'`) in `defaults.ts`.
+ */
 export type ToolArity = 1 | 2 | 3 | 'n';
 
+/** Placement rules for one tool kind known to this controller. */
 export interface ToolSpec {
   kind: string;
   arity: ToolArity;
@@ -40,29 +57,50 @@ export interface ToolSpec {
   minPoints?: number;
 }
 
+/**
+ * Controller phase (discriminated).
+ * - `idle` — no active tool placement
+ * - `placing` — collecting anchors; `hover` is the live pointer preview
+ */
 export type DraftPhase =
   | { status: 'idle' }
   | { status: 'placing'; kind: string; points: ChartPoint[]; hover: ChartPoint | null };
 
+/** Finished placement ready to become a persisted drawing. */
 export interface DraftPayload {
   kind: string;
   points: ChartPoint[];
 }
 
+/**
+ * Pure multi-click placement API.
+ * All returned point arrays are defensive copies.
+ */
 export interface DraftController {
   getPhase(): DraftPhase;
+  /** Start placing `kind` (must exist in the controller's tool specs). */
   begin(kind: string): void;
   cancel(): void;
-  /** Returns finished drawing payload or null if still placing. */
+  /**
+   * Commit one anchor. Returns a {@link DraftPayload} when fixed arity is met;
+   * always `null` for `'n'` tools (use {@link DraftController.onFinish}).
+   */
   onClick(pt: ChartPoint): DraftPayload | null;
+  /** Update hover preview without committing a point. */
   onMove(pt: ChartPoint): void;
-  /** Complete an N-point tool when `points.length >= minPoints`. */
+  /**
+   * Complete an N-point tool when `points.length >= minPoints`.
+   * No-op (returns null) for fixed-arity tools or idle phase.
+   */
   onFinish(): DraftPayload | null;
   /** Committed points plus hover (when set) for draft paint; null when idle. */
   previewPoints(): ChartPoint[] | null;
 }
 
-/** Default tool arities used when no custom specs are passed. */
+/**
+ * Default tool arities used when no custom specs are passed.
+ * Subset of product tools; extend via `createDraftController(specs)`.
+ */
 export const TOOL_SPECS: readonly ToolSpec[] = [
   { kind: 'hline', arity: 1 },
   { kind: 'text', arity: 1 },

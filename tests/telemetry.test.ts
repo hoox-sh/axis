@@ -4,7 +4,7 @@
  */
 
 /**
- * Transport classification + latency helpers for Connection HUD.
+ * Transport classification + latency helpers for Connection HUD telemetry.
  */
 
 import { describe, expect, it } from 'bun:test';

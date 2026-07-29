@@ -4,7 +4,8 @@
  */
 
 /**
- * GitLab storage adapter tests (mocked API).
+ * GitLab storage adapter (mocked Projects API).
+ * Guards list/get/put paths and token header usage vs GitHub adapter.
  */
 
 import './setup';

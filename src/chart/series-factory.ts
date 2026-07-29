@@ -17,6 +17,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Lightweight Charts **series factory** + AXIS void palette.
+ *
+ * Shared by {@link PaneManager}: base chart options, candlestick/line/area/
+ * histogram (bgcolor) series helpers, and brand colors ({@link TV},
+ * {@link PLOT_PALETTE}). Right price-scale width is fixed so panes align.
+ *
+ * @module chart/series-factory
+ */
+
 import {
   createChart,
   ColorType,
@@ -30,7 +40,7 @@ import {
   type LineWidth,
 } from 'lightweight-charts';
 
-/** Void canvas + void indigo brand — matches landing pack + index.css tokens */
+/** Void canvas + void indigo brand — matches landing pack + index.css tokens. */
 export const TV = {
   bg: '#0a0b10',
   panel: '#111218',
@@ -70,6 +80,10 @@ export const PLOT_PALETTE = [
  */
 export const RIGHT_PRICE_SCALE_WIDTH = 72;
 
+/**
+ * Create a themed LWC chart in `container` (void bg, crosshair, aligned
+ * right scale width). Optional `options` shallow-merged into chart options.
+ */
 export function createBaseChart(container: HTMLElement, options?: Record<string, unknown>): IChartApi {
   return createChart(container, {
     layout: {
@@ -125,6 +139,7 @@ export function createBaseChart(container: HTMLElement, options?: Record<string,
   });
 }
 
+/** Candlestick series with void up/down colors and aligned right scale. */
 export function createCandleSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Candlestick'> {
   const opts = {
     upColor: TV.up,
@@ -150,6 +165,7 @@ export function createCandleSeries(chart: IChartApi, paneIndex?: number): ISerie
   return series;
 }
 
+/** Volume histogram on the main right scale (aligned pane edges). */
 export function createVolumeSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Histogram'> {
   // Use the main right scale (same width as price pane) so chart edges align
   const opts = {
@@ -205,6 +221,7 @@ export function createBgcolorSeries(chart: IChartApi, paneIndex?: number): ISeri
   return series;
 }
 
+/** Plot / overlay line series with crosshair marker. */
 export function createLineSeries(
   chart: IChartApi,
   name: string,

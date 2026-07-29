@@ -4,7 +4,8 @@
  */
 
 /**
- * Worker auth helpers.
+ * Worker auth (`src/auth.ts`): Bearer/`?key=` extraction and `requireApiKey`.
+ * Guards: 401 without key; open-keys + `pn_` shape; stable 32-char hashed `userId`.
  */
 
 import { describe, expect, it } from 'bun:test';

@@ -18,7 +18,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Public entry for the AXIS plugin system.
+ * Public entry for the AXIS **plugin system**.
+ *
+ * Re-exports registry, bootstrap, active resolvers, dynamic loader, contracts,
+ * and storage helpers so consumers can `import from '…/plugins'`.
+ *
+ * @module plugins
  */
 
 export { registry, PluginRegistry } from './registry';

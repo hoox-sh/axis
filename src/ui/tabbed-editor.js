@@ -17,15 +17,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Multi-tab editor.  Wraps a single CodeMirror 6 EditorView that swaps its
-// `doc` whenever the user switches tabs.  Tabs are persisted to localStorage
-// as `{ id, name, content }` records.
-//
-// A few helpers on top of CM6:
-//   • Per-tab unsaved-state indicator (dot before the name).
-//   • Ctrl/Cmd+Alt+Left / Right to cycle tabs.
-//   • Right-click a tab to rename, duplicate, or delete it.
-//   • Drag-reorder is intentionally omitted for now.
+/**
+ * @file Legacy multi-tab CodeMirror 6 wrapper (SuperChart).
+ * Single EditorView swaps docs on tab change; tabs in localStorage as
+ * `{ id, name, content }`. Unsaved dots, Ctrl/Cmd+Alt Left/Right cycle,
+ * context menu rename/duplicate/delete. Prefer Solid `editor/` package in AXIS.
+ */
 
 import { initPineEditor, getScript, setScript } from '../../pine-editor.js';
 
@@ -47,6 +44,10 @@ function saveActive(id) {
 
 function genId() { return 't_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
+/**
+ * Multi-tab Pine editor host for the legacy shell.
+ * @param {{ parent: HTMLElement, onRun?: Function, onDocChange?: Function, onTabsChange?: Function, initialScript?: string }} opts
+ */
 export class TabbedEditor {
     constructor({ parent, onRun, onDocChange, onTabsChange, initialScript }) {
         this.parent = parent;

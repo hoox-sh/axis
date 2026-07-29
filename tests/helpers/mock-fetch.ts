@@ -4,7 +4,11 @@
  */
 
 /**
- * Install a fetch mock for the duration of a test; restore on dispose.
+ * Global `fetch` mock helpers for catalog/engine/storage tests.
+ *
+ * {@link mockFetch} installs a handler and returns a restore function —
+ * always call restore in `afterEach` to avoid cross-test leakage.
+ * {@link jsonResponse} builds a JSON `Response` with application/json.
  */
 
 export type FetchHandler = (
@@ -14,6 +18,10 @@ export type FetchHandler = (
 
 const originalFetch = globalThis.fetch;
 
+/**
+ * Replace `globalThis.fetch` with `handler`.
+ * @returns restore function that reinstalls the previous fetch
+ */
 export function mockFetch(handler: FetchHandler): () => void {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     return handler(input, init);
@@ -23,6 +31,7 @@ export function mockFetch(handler: FetchHandler): () => void {
   };
 }
 
+/** Convenience JSON response (default status 200). */
 export function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,

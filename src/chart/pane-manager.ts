@@ -17,6 +17,27 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * **PaneManager** — multi-pane Lightweight Charts orchestrator for AXIS.
+ *
+ * Owns one LWC chart per pane (`price`, `volume`, indicator sub-panes, equity).
+ * Syncs time scales and crosshair across panes; applies candle data, overlay
+ * lines, bgcolor bands, trade/shape markers, and equity curve.
+ *
+ * Primary consumer: {@link indicators/runner} via `getManager()` from
+ * `manager-access`. ChartHost creates the instance and registers it.
+ *
+ * ## Key methods
+ *
+ * - `createPane` / `destroyPane` / `getPane`
+ * - `setBars` / `appendBar` — OHLCV on price pane
+ * - `syncOverlayLines` / `syncBgcolorBands` — indicator apply (update-in-place)
+ * - `setTradeMarkers` / `setShapeMarkers` / `setEquityCurve`
+ * - `syncTimeScales` / `syncCrosshair`
+ *
+ * @module chart/pane-manager
+ */
+
 import {
   createSeriesMarkers,
   LineStyle,
@@ -54,6 +75,7 @@ export type OverlayLineSpec = {
   linestyle?: string;
 };
 
+/** One managed LWC chart + series map. */
 export interface ManagedPane {
   id: string;
   type: string;
@@ -73,6 +95,10 @@ function mapLineStyle(linestyle?: string): LineStyle {
   return LineStyle.Solid;
 }
 
+/**
+ * Multi-pane chart controller. Construct with the host element that will
+ * receive pane DOM nodes (typically ChartHost’s panes container).
+ */
 export class PaneManager {
   private panes: Map<string, ManagedPane> = new Map();
   private container: HTMLElement;

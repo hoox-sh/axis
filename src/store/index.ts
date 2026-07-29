@@ -17,6 +17,27 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * AXIS Solid store — createStore hydration, persistence, and mutation helpers.
+ *
+ * ## Lifecycle
+ * 1. `DEFAULTS` seed the shape; `loadPersisted()` merges localStorage
+ *    (`STORAGE_KEY`), migrating SuperChart keys once.
+ * 2. Ephemeral fields are forced off on hydrate (live, logs, bars, lastRun,
+ *    selection, open modals).
+ * 3. `persist()` debounces a write that **omits** bars, lastRun, logs,
+ *    crosshair, scriptSettings, selectedDrawingId, and full telemetry
+ *    (only `telemetry.hud` is kept).
+ *
+ * ## Data flow
+ * - Chart / loaders call `loadBars` / `appendBar` / `setStatus` / telemetry helpers.
+ * - UI panels use layout helpers (`setPanelOpen`, chrome, widths) and drawing
+ *   helpers; panel open state is dual-written to legacy flat flags + `panelChrome`.
+ * - Editor document body lives under `EDITOR_DOC_KEY` (separate from app JSON).
+ *
+ * Types: {@link ./types.ts}. Panel chrome shapes: `ui/panels/types`.
+ */
+
 import { createStore } from 'solid-js/store';
 import type {
   AppState,
@@ -46,7 +67,7 @@ import { normalizeUserDrawings } from '../chart/drawings/normalize';
 let idCounter = 0;
 const uid = () => `id_${Date.now()}_${++idCounter}`;
 
-/** Current AXIS storage key (was SuperChart). */
+/** Current AXIS app-state localStorage key (migrated from SuperChart). */
 export const STORAGE_KEY = 'pynescript.axis.v1';
 /** Legacy SuperChart keys — read once for migration. */
 const LEGACY_STORAGE_KEYS = [
@@ -54,6 +75,7 @@ const LEGACY_STORAGE_KEYS = [
   'pynescript.superchart.v1',
 ] as const;
 
+/** localStorage key for the docked/popout editor document body. */
 export const EDITOR_DOC_KEY = 'pynescript.axis.editor.doc';
 const LEGACY_EDITOR_DOC_KEYS = [
   'pynescript.superchart.editor.doc',
@@ -108,6 +130,7 @@ const DEFAULTS: AppState = {
   lastRunMs: null,
   lastRun: null,
   logs: [],
+  // Drawing integration — mirrored to DrawingLayer via manager-access / toolbar
   drawingTool: 'cursor',
   drawings: [],
   drawingPrefs: {
@@ -123,6 +146,7 @@ const DEFAULTS: AppState = {
     hideDrawings: false,
     lockAll: false,
   },
+  // Ephemeral selection — reset on hydrate
   selectedDrawingId: null,
   telemetry: {
     source: idlePlane('binance-rest', 'Binance REST', 'rest'),
@@ -241,6 +265,7 @@ function loadPersisted(): Partial<AppState> {
             ...(parsed.telemetry?.hud || {}),
           },
         },
+        // Drawing tool always starts as cursor; list normalized for dual legacy/style fields
         drawingTool: 'cursor',
         drawings: normalizeUserDrawings(parsed.drawings) as Drawing[],
 
@@ -325,7 +350,10 @@ function mergePanelChrome(
   return base;
 }
 
-/** Keep flat source/engine/stream fields aligned with activePlugins */
+/**
+ * Select an active plugin and keep flat legacy fields + telemetry plane ids aligned.
+ * Persists immediately. Engine switch resets engine telemetry (pyodide shows “connecting”).
+ */
 export function setActivePlugin(
   kind: 'source' | 'stream' | 'engine' | 'storage',
   id: string,
@@ -356,6 +384,10 @@ export function setActivePlugin(
   persist();
 }
 
+/**
+ * Reactive app state + setter. Hydrated once at module load from localStorage.
+ * Prefer domain helpers below for multi-field updates that must persist correctly.
+ */
 export const [store, setStore] = createStore<AppState>({
   ...DEFAULTS,
   ...loadPersisted(),
@@ -372,6 +404,12 @@ if (typeof document !== 'undefined') {
 }
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Debounced (~200ms) write of durable state to `STORAGE_KEY`.
+ * Omits bars, lastRun, logs, chartDataGen, crosshair, scriptSettings,
+ * selectedDrawingId, and full telemetry (keeps only `telemetry.hud`).
+ */
 export function persist() {
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
@@ -419,6 +457,7 @@ function statusToLevel(status: AppState['status']): LogLevel {
   return 'warn';
 }
 
+/** Append a system log entry (ring buffer, max 500). Not persisted. */
 export function appendLog(level: LogLevel, message: string, source = 'system') {
   const entry: LogEntry = {
     id: uid(),
@@ -433,10 +472,15 @@ export function appendLog(level: LogLevel, message: string, source = 'system') {
   });
 }
 
+/** Clear in-memory system logs. */
 export function clearLogs() {
   setStore('logs', []);
 }
 
+/**
+ * Store last indicator/strategy run payload for Results / Data View.
+ * Also updates `lastRunMs` from `result.meta.ms` when present.
+ */
 export function setLastRun(result: unknown) {
   setStore('lastRun', result as never);
   if (result && typeof result === 'object' && result !== null && 'meta' in result) {
@@ -445,6 +489,9 @@ export function setLastRun(result: unknown) {
   }
 }
 
+/**
+ * Set high-level status + optional message (also appends a log when message given).
+ */
 export function setStatus(status: AppState['status'], message?: string) {
   setStore('status', status);
   if (message !== undefined) {
@@ -453,6 +500,10 @@ export function setStatus(status: AppState['status'], message?: string) {
   }
 }
 
+/**
+ * Replace chart history (full load). Bumps `chartDataGen` so ChartHost rebinds series data.
+ * Persists symbol/interval/exchange; bars themselves are not written to localStorage.
+ */
 export function loadBars(bars: Bar[], symbol: string, interval: string, exchange: string) {
   setStore('bars', bars);
   setStore('chartDataGen', (g) => (typeof g === 'number' ? g + 1 : 1));
@@ -462,6 +513,7 @@ export function loadBars(bars: Bar[], symbol: string, interval: string, exchange
   persist();
 }
 
+/** Register an applied script on the chart; returns new indicator id. */
 export function addIndicator(
   name: string,
   code: string,
@@ -486,16 +538,19 @@ export function addIndicator(
   return id;
 }
 
+/** Remove an applied indicator from the store (caller should clear chart overlays). */
 export function removeIndicator(id: string) {
   setStore('scripts', (s) => s.filter((ind) => ind.id !== id));
   persist();
 }
 
+/** Toggle indicator visibility (plot paint gated by ChartHost / runner). */
 export function toggleIndicator(id: string) {
   setStore('scripts', (s) => s.map((ind) => ind.id === id ? { ...ind, visible: !ind.visible } : ind));
   persist();
 }
 
+/** Override a single plot series color for an applied indicator. */
 export function setIndicatorColor(id: string, plotName: string, color: string) {
   setStore('scripts', (s) => s.map((ind) =>
     ind.id === id ? { ...ind, plots: { ...ind.plots, [plotName]: { color } } } : ind
@@ -503,6 +558,7 @@ export function setIndicatorColor(id: string, plotName: string, color: string) {
   persist();
 }
 
+/** Append a chart pane and return its id. */
 export function addPane(type: Pane['type'], label?: string): string {
   const id = uid();
   const maxOrder = Math.max(...store.panes.map((p) => p.order), -1);
@@ -511,16 +567,19 @@ export function addPane(type: Pane['type'], label?: string): string {
   return id;
 }
 
+/** Drop a pane descriptor (caller destroys chart pane if needed). */
 export function removePane(id: string) {
   setStore('panes', (p) => p.filter((pane) => pane.id !== id));
   persist();
 }
 
+/** Set pane height in CSS px. */
 export function resizePane(id: string, height: number) {
   setStore('panes', (p) => p.map((pane) => pane.id === id ? { ...pane, height } : pane));
   persist();
 }
 
+/** Reorder panes by id list (sets `order` then sorts). */
 export function reorderPanes(orderedIds: string[]) {
   setStore('panes', (p) =>
     p.map((pane) => ({ ...pane, order: orderedIds.indexOf(pane.id) }))
@@ -549,6 +608,7 @@ export function appendBar(bar: Bar) {
   setStore('live', 'needsRerun', true);
 }
 
+/** Enable/disable live streaming preference (stream start/stop is elsewhere). */
 export function setLive(active: boolean) {
   setStore('live', 'active', active);
   persist();
@@ -556,8 +616,10 @@ export function setLive(active: boolean) {
 
 /* ── Telemetry helpers (ephemeral Connection HUD) ───────────────── */
 
+/** Telemetry plane keys under `store.telemetry`. */
 export type TelemetryPlane = keyof Pick<TelemetryState, 'source' | 'stream' | 'engine' | 'storage'>;
 
+/** Merge a partial update into one telemetry plane (ephemeral). */
 export function setTelemetryPlane(
   plane: TelemetryPlane,
   patch: Partial<PlaneTelemetry> & { id?: string; name?: string; transport?: TransportClass },
@@ -572,10 +634,12 @@ export function setTelemetryPlane(
   });
 }
 
+/** Set connection state on a plane; stamps `lastEventAt` unless overridden. */
 export function setTelemetryState(plane: TelemetryPlane, state: ConnState, extra?: Partial<PlaneTelemetry>) {
   setTelemetryPlane(plane, { state, ...extra, lastEventAt: extra?.lastEventAt ?? Date.now() });
 }
 
+/** Push a run-duration sample and mirror latency onto the engine plane. */
 export function recordRunLatency(ms: number) {
   if (!Number.isFinite(ms) || ms < 0) return;
   setStore('telemetry', 'runLatencySamples', (s) => pushSample(s || [], ms));
@@ -583,6 +647,7 @@ export function recordRunLatency(ms: number) {
   setStore('lastRunMs', ms);
 }
 
+/** Record last live tick price/time and bump stream `lastEventAt`. */
 export function noteTick(price: number, time: number) {
   const prev = store.telemetry?.lastTick?.price;
   let dir: 'up' | 'down' | 'flat' = 'flat';
@@ -594,6 +659,7 @@ export function noteTick(price: number, time: number) {
   setTelemetryPlane('stream', { lastEventAt: Date.now() });
 }
 
+/** Flip dark/light theme and update `data-theme` on `<html>`. */
 export function toggleTheme() {
   const next = store.theme === 'dark' ? 'light' : 'dark';
   setStore('theme', next);
@@ -606,6 +672,7 @@ export const UI_SCALE_MIN = 0.8;
 export const UI_SCALE_MAX = 1.3;
 export const UI_SCALE_STEP = 0.05;
 
+/** Clamp/snap UI scale into [UI_SCALE_MIN, UI_SCALE_MAX] at UI_SCALE_STEP. */
 export function clampUiScale(raw: unknown): number {
   const n = typeof raw === 'number' ? raw : Number(raw);
   if (!Number.isFinite(n)) return 1;
@@ -636,24 +703,31 @@ export function setUiScale(raw: number) {
 
 /* ── Layout helpers ─────────────────────────────────────────────── */
 
+/** Clamp and persist docked editor width (px). */
 export function setEditorWidth(width: number) {
   const w = Math.min(Math.max(width, 280), Math.floor(window.innerWidth * 0.8));
   setStore('editor', 'width', w);
   persist();
 }
 
+/** Clamp and persist watchlist width (px). */
 export function setWatchlistWidth(width: number) {
   const w = Math.min(Math.max(width, 140), 360);
   setStore('watchlist', 'width', w);
   persist();
 }
 
+/** Clamp and persist indicator panel width (px). */
 export function setIndicatorWidth(width: number) {
   const w = Math.min(Math.max(width, 160), 400);
   setStore('indicatorPanel', 'width', w);
   persist();
 }
 
+/**
+ * Docked vs popout editor mode. Popout closes docked chrome and sets
+ * `panelChrome.editor.dock = 'window'`; docked restores dock=right.
+ */
 export function setEditorMode(mode: EditorMode) {
   setStore('editor', 'mode', mode);
   if (mode === 'popout') {
@@ -668,36 +742,47 @@ export function setEditorMode(mode: EditorMode) {
   persist();
 }
 
+/** Open/close indicators panel (panelChrome + legacy flag). */
 export function setIndicatorPanelOpen(open: boolean) {
   setPanelOpen('indicators', open);
 }
 
+/** Toggle indicators panel visibility. */
 export function toggleIndicatorPanel() {
   setPanelOpen('indicators', !isPanelOpen('indicators'));
 }
 
+/** Open/close Data Window panel. */
 export function setDataViewPanelOpen(open: boolean) {
   setPanelOpen('dataview', open);
 }
 
+/** Toggle Data Window panel visibility. */
 export function toggleDataViewPanel() {
   setPanelOpen('dataview', !isPanelOpen('dataview'));
 }
 
+/** Open/close Layers panel. */
 export function setLayerPanelOpen(open: boolean) {
   setPanelOpen('layers', open);
 }
 
+/** Toggle Layers panel visibility. */
 export function toggleLayerPanel() {
   setPanelOpen('layers', !isPanelOpen('layers'));
 }
 
 /* ── Panel chrome (dock / float / window) ───────────────────────── */
 
+/** Read panel chrome (dock/geometry); falls back to defaults if missing. */
 export function getPanelChrome(id: PanelId): PanelChrome {
   return store.panelChrome?.[id] || defaultPanelChromeMap()[id];
 }
 
+/**
+ * Whether a panel should render. ORs `panelChrome[id].open` with the
+ * legacy flat open flag (and for editor, ignores open when mode is popout).
+ */
 export function isPanelOpen(id: PanelId): boolean {
   const chromeOpen = !!store.panelChrome?.[id]?.open;
   switch (id) {
@@ -730,6 +815,7 @@ function syncLegacyOpen(id: PanelId, open: boolean) {
   else if (id === 'layers') setStore('layerPanel', 'open', open);
 }
 
+/** Open/close a panel; dual-writes panelChrome and legacy flat flags. */
 export function setPanelOpen(id: PanelId, open: boolean) {
   ensurePanelChrome();
   setStore('panelChrome', id, 'open', open);
@@ -737,6 +823,10 @@ export function setPanelOpen(id: PanelId, open: boolean) {
   persist();
 }
 
+/**
+ * Change panel dock target. Editor `window` sets popout mode; other docks
+ * set docked. Float/window bump z-index for stacking.
+ */
 export function setPanelDock(id: PanelId, dock: PanelDock) {
   ensurePanelChrome();
   setStore('panelChrome', id, 'dock', dock);
@@ -751,6 +841,10 @@ export function setPanelDock(id: PanelId, dock: PanelDock) {
   persist();
 }
 
+/**
+ * Update float geometry and mirror width/height into legacy layout fields
+ * (watchlist/editor widths, results/logs heights, etc.).
+ */
 export function setPanelGeometry(
   id: PanelId,
   geo: Partial<Pick<PanelChrome, 'x' | 'y' | 'w' | 'h'>>,
@@ -776,6 +870,7 @@ export function setPanelGeometry(
   persist();
 }
 
+/** Bring a floating panel above peers by incrementing its z. */
 export function bumpPanelZ(id: PanelId) {
   ensurePanelChrome();
   const maxZ = Math.max(
@@ -791,18 +886,25 @@ function ensurePanelChrome() {
   }
 }
 
+/** Open/close watchlist panel. */
 export function setWatchlistOpen(open: boolean) {
   setPanelOpen('watchlist', open);
 }
 
+/** Open/close docked editor panel. */
 export function setEditorOpen(open: boolean) {
   setPanelOpen('editor', open);
 }
 
+/**
+ * Open Script Settings modal.
+ * @param indicatorId applied indicator id, or `null` for the editor document.
+ */
 export function openScriptSettings(indicatorId: string | null = null) {
   setStore('scriptSettings', { open: true, indicatorId });
 }
 
+/** Close Script Settings modal (ephemeral — not persisted). */
 export function closeScriptSettings() {
   setStore('scriptSettings', { open: false, indicatorId: null });
 }
@@ -812,11 +914,13 @@ export function setCrosshair(time: number | null, barIndex: number | null = null
   setStore('crosshair', { time, barIndex });
 }
 
+/** Persist input overrides for the docked editor document (not yet applied). */
 export function setEditorInputValues(values: Record<string, unknown>) {
   setStore('editorInputValues', values);
   persist();
 }
 
+/** Persist input overrides on an applied indicator. */
 export function setIndicatorInputValues(id: string, values: Record<string, unknown>) {
   setStore('scripts', (s) =>
     s.map((ind) => (ind.id === id ? { ...ind, inputValues: { ...values } } : ind)),
@@ -824,11 +928,13 @@ export function setIndicatorInputValues(id: string, values: Record<string, unkno
   persist();
 }
 
+/** Show/hide a chart pane (store only; ChartHost/manager apply visibility). */
 export function setPaneVisible(id: string, visible: boolean) {
   setStore('panes', (p) => p.map((pane) => (pane.id === id ? { ...pane, visible } : pane)));
   persist();
 }
 
+/** Append a unique uppercase symbol to the watchlist. */
 export function addWatchlistSymbol(symbol: string) {
   const sym = symbol.toUpperCase().trim();
   if (!sym || store.watchlist.symbols.includes(sym)) return;
@@ -836,6 +942,7 @@ export function addWatchlistSymbol(symbol: string) {
   persist();
 }
 
+/** Remove a symbol from the watchlist. */
 export function removeWatchlistSymbol(symbol: string) {
   setStore('watchlist', 'symbols', (s) => s.filter((x) => x !== symbol));
   persist();
@@ -848,6 +955,7 @@ export function setWatchlistRefreshSec(sec: number) {
   persist();
 }
 
+/** Persist editor document body under `EDITOR_DOC_KEY` (separate from app JSON). */
 export function saveEditorDoc(doc: string) {
   try {
     localStorage.setItem(EDITOR_DOC_KEY, doc);
@@ -856,41 +964,65 @@ export function saveEditorDoc(doc: string) {
   }
 }
 
+/** Load editor document body from localStorage (empty string if missing). */
 export function loadEditorDoc(): string {
   try { return localStorage.getItem(EDITOR_DOC_KEY) || ''; } catch { return ''; }
 }
 
+/**
+ * Set the active drawing tool (cursor or place tool).
+ * Persisted so the toolbar restores; layer may call this after place when stay-in-mode is off.
+ */
 export function setDrawingTool(tool: DrawingToolId) {
   setStore('drawingTool', tool);
   // tool choice is session-ish; still persist so toolbar restores
   persist();
 }
 
+/**
+ * Replace the full user-drawing list (layer `onChange`, imports, clear paths).
+ * Persisted. Does not touch Pine script drawings.
+ */
 export function setDrawings(drawings: Drawing[]) {
   setStore('drawings', drawings);
   persist();
 }
 
+/** Empty user drawings and persist (toolbar clear-all after confirm + layer.clearAll). */
 export function clearDrawings() {
   setStore('drawings', []);
   persist();
 }
 
-/** Sync store from layer after delete-selected (layer owns selection). */
+/**
+ * Sync store drawings from the layer after a layer-owned delete path.
+ * Selection is cleared on the layer side; this only writes the remaining list.
+ */
 export function deleteSelectedDrawing(current: Drawing[]) {
   setStore('drawings', current);
   persist();
 }
 
+/**
+ * Selection for the style bar / hit-test. Ephemeral — not persisted.
+ * Wired from layer `onSelectionChange`.
+ */
 export function setSelectedDrawingId(id: string | null) {
   setStore('selectedDrawingId', id);
 }
 
+/**
+ * Merge default stroke/fill prefs for new placements (and toolbar when no selection).
+ */
 export function setDrawingPrefs(patch: Partial<AppState['drawingPrefs']>) {
   setStore('drawingPrefs', { ...store.drawingPrefs, ...patch });
   persist();
 }
 
+/**
+ * Merge toolbar interaction prefs (magnet, stay-in-mode, lock-all, hide, lastToolByGroup).
+ * `lastToolByGroup` is deep-merged so one group update does not wipe others.
+ */
 export function setDrawingUi(patch: Partial<AppState['drawingUi']>) {
   const next = { ...store.drawingUi, ...patch };
   if (patch.lastToolByGroup) {
@@ -900,6 +1032,10 @@ export function setDrawingUi(patch: Partial<AppState['drawingUi']>) {
   persist();
 }
 
+/**
+ * Shallow-merge a patch onto one user drawing by id (style bar dual-field updates).
+ * Callers should dual-write legacy + `style` when changing paint props (see DrawingToolbar).
+ */
 export function patchDrawing(id: string, patch: Partial<Drawing>) {
   setStore(
     'drawings',

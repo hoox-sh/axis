@@ -17,6 +17,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Docked / standalone **editor chrome** around {@link TabbedEditor}.
+ *
+ * Handles run (default {@link runAndApply}), detach-to-popup via
+ * {@link openEditorWindow}, width resize, and open/close against the Solid store.
+ * Set `standalone` for the `?view=editor` window (simplified chrome).
+ *
+ * @module editor/EditorPane
+ */
+
 import { Component, Show } from 'solid-js';
 import { TabbedEditor } from './tabbed-editor';
 import {
@@ -37,6 +47,7 @@ interface Props {
   onRun?: (doc: string) => void;
 }
 
+/** Side panel or full-window shell for the multi-tab Pine editor. */
 export const EditorPane: Component<Props> = (props) => {
   const onRun = (doc: string) => {
     if (doc?.trim()) {

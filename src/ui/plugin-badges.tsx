@@ -18,7 +18,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Capability badges + labels for plugin catalog UI.
+ * Solid capability badges for plugin catalog / settings UI.
+ * Pure helpers re-exported from `plugin-badges-utils` (safe for unit tests).
  */
 
 import { Component, For, Show } from 'solid-js';
@@ -28,6 +29,9 @@ import { CAP_META, capabilityKeys, type CapKey } from './plugin-badges-utils';
 export type { CapKey };
 export { capabilityKeys, engineOptionLabel } from './plugin-badges-utils';
 
+/**
+ * Inline badge row: kind, built-in/plugin, and capability flags from CAP_META.
+ */
 export const CapabilityBadges: Component<{
   capabilities?: PluginCapabilities | null;
   builtIn?: boolean;

@@ -19,12 +19,23 @@
 
 /**
  * Low-level SVG primitives for AXIS chart drawings.
- * Browser-only (document + SVG namespace); no LWC imports.
+ *
+ * Browser-only (`document` + SVG namespace). Building blocks for the drawing
+ * overlay: create nodes, dual-stroke lines (hit + visible), handles, labels,
+ * and stroke-dash patterns that match the legacy drawing-layer.
+ *
+ * Does **not**:
+ * - Import Lightweight Charts or map time/price → pixels (see `coords.ts`)
+ * - Own drawing models, hit-test math, or tool selection
+ * - Render Pine Script™ plot drawings
  */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-/** Create an SVG element, set attributes, append to parent. */
+/**
+ * Create an SVG element in the standard SVG namespace, set attributes, append
+ * to `parent`. Returns the new node for further customization (e.g. text content).
+ */
 export function el(
   parent: SVGElement,
   name: string,
@@ -39,6 +50,7 @@ export function el(
 /**
  * Draw a line with a fat invisible hit stroke under a visible stroke.
  * Hit layer uses max(sw, 8) width at near-zero opacity for easier picking.
+ * Visible stroke has `pointer-events: none` so hits go to the fat layer.
  */
 export function line(
   g: SVGElement,
@@ -76,7 +88,10 @@ export function line(
   });
 }
 
-/** Circle (optional resize handle styling). */
+/**
+ * Circle marker. When `handle` is true, uses dark fill + stroke cursor for
+ * resize grips; otherwise a simple filled disc.
+ */
 export function circle(
   g: SVGElement,
   cx: number,
@@ -97,7 +112,7 @@ export function circle(
   });
 }
 
-/** Monospace text label (non-interactive). */
+/** Monospace text label (non-interactive; `pointer-events: none`). */
 export function label(
   g: SVGElement,
   x: number,
@@ -122,7 +137,9 @@ export function label(
 /**
  * Map line style (and optional selection) to SVG stroke-dasharray.
  * Matches patterns used in drawing-layer (dashed `4 3`, dotted `1 3`).
- * Selected solid lines get a dashed highlight.
+ * Selected solid lines get a dashed highlight so selection is visible.
+ *
+ * @returns `undefined` for unselected solid (no dash attribute).
  */
 export function strokeDashFor(
   lineStyle: 'solid' | 'dashed' | 'dotted' | undefined,

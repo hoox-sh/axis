@@ -17,6 +17,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Pointer → dock zone hit-testing for panel drag overlay.
+ * Outer ~14% of viewport edges map to left/right/bottom; center → float.
+ * Also provides skeleton sizes for the drag ghost.
+ */
+
 import type { DropZone, PanelDock } from './types';
 
 /** Edge hit fraction of viewport for dock zones */
@@ -41,6 +47,7 @@ export function hitDropZone(
   return 'float';
 }
 
+/** Map a drop zone to a durable {@link PanelDock} (null/float → float). */
 export function dropZoneToDock(zone: DropZone): PanelDock {
   if (zone === 'left' || zone === 'right' || zone === 'bottom') return zone;
   return 'float';

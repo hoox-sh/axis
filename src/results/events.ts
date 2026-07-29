@@ -18,10 +18,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Normalize Pro API / StrategyEvent parity payloads into the UI shape.
+ * Strategy event normalization + chart marker / equity helpers.
  *
- * Runtime emits: kind, direction, bar_time, bar_index, ohlc, id, qty, …
- * Legacy UI expected: type, dir, time, price, id.
+ * Bridges pyne Pro API / runtime parity payloads into the UI shape used by
+ * the strategy tester and Lightweight Charts markers.
+ *
+ * | Runtime field | UI field |
+ * |---------------|----------|
+ * | `kind` | `type` |
+ * | `direction` | `dir` |
+ * | `bar_time` | `time` |
+ * | `ohlc[3]` / bar close | `price` |
+ *
+ * Also exports {@link eventsToMarkers}, {@link buildEquityCurve}, exit-id
+ * matching, and kind rank for stable sort order.
+ *
+ * @module results/events
  */
 
 import type { Bar } from '../store/types';
@@ -141,6 +153,7 @@ export function normalizeStrategyEvent(
   };
 }
 
+/** Normalize an array of raw events; filters order noise when `includeOrders` is false. */
 export function normalizeStrategyEvents(
   events: unknown[] | undefined | null,
   opts: NormalizeOptions = {},

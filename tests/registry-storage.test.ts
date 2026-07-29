@@ -4,7 +4,8 @@
  */
 
 /**
- * Registry storage/component register + unregister.
+ * Registry storage + UI component plugin register/unregister.
+ * Guards kind isolation and summary after clear.
  */
 
 import './setup';

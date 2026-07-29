@@ -18,8 +18,31 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Built-in historical data sources for AXIS.
- * Definitions live here; registration + lookup go through the unified registry.
+ * Built-in **historical OHLCV sources** for AXIS.
+ *
+ * Each source implements {@link SourcePlugin}: `fetchHistorical({ symbol, interval, config })`
+ * → `Promise<Bar[]>`. Bars use **unix seconds** for `time`. Definitions live here;
+ * registration and lookup go through the unified {@link registry}.
+ *
+ * ## Built-ins (UI order)
+ *
+ * | id | Network | Notes |
+ * |----|---------|-------|
+ * | `binance-rest` | yes | `GET /api/v3/klines`; optional synthetic fallback |
+ * | `okx-rest` | yes | `GET /api/v5/market/candles` (BTCUSDT → BTC-USDT) |
+ * | `bybit-rest` | yes | Bybit v5 spot klines |
+ * | `coinbase-rest` | yes | Exchange candles (max ~300) |
+ * | `mock-walk` | no | Synthetic random walk; optional deterministic seed |
+ * | `csv-upload` | no | Last file from {@link upload-store} |
+ *
+ * ## Public API
+ *
+ * - Plugin constants: {@link binanceRest}, {@link okxRest}, {@link bybitRest}, …
+ * - {@link ensureSourcesRegistered}, {@link getSource}, {@link listSources}
+ * - {@link registerDynamicSource} / {@link unregisterDynamicSource} — URL plugins
+ *
+ * @module sources/catalog
+ * @see {@link SourcePlugin} in `plugins/types`
  */
 
 import type { Bar } from '../store/types';
@@ -364,6 +387,7 @@ export const BUILTIN_SOURCES: SourcePlugin[] = [
 
 let registered = false;
 
+/** Idempotent registration of {@link BUILTIN_SOURCES} into the unified registry. */
 export function ensureSourcesRegistered(): void {
   if (registered) return;
   registered = true;
@@ -374,17 +398,19 @@ export function ensureSourcesRegistered(): void {
   }
 }
 
+/** Look up a source by id (ensures built-ins are registered). */
 export function getSource(id: string): SourcePlugin | undefined {
   ensureSourcesRegistered();
   return registry.getSource(id);
 }
 
+/** All registered sources in registration order. */
 export function listSources(): SourcePlugin[] {
   ensureSourcesRegistered();
   return registry.listSources();
 }
 
-/** Register a runtime plugin source (D6). */
+/** Register a runtime plugin source (dynamic URL loader). */
 export function registerDynamicSource(source: SourcePlugin): void {
   ensureSourcesRegistered();
   if (!source?.id || source.kind !== 'source') {

@@ -1,6 +1,11 @@
 // Copyright (C) 2024-2026 jango_blockchained
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Pine `input.*` parsing/overrides + DataView row helpers.
+ * Guards: int/float/bool bounds, engine input normalize, bar-index lookup.
+ */
+
 import { describe, expect, it } from 'bun:test';
 import {
   parseScriptInputs,

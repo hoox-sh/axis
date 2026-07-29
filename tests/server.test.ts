@@ -3,7 +3,10 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-// End-to-end test of the Bun static file server.
+/**
+ * Bun static file server smoke (serves repo root HTML/assets on a test port).
+ * Guards 200 for index and MIME for JS — not the Vite app pipeline.
+ */
 
 import { describe, expect, it, beforeAll, afterAll } from 'bun:test';
 import { resolve, join } from 'node:path';

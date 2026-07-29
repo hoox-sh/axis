@@ -17,6 +17,30 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * **Live multiplex** — single active chart stream wired to store + chart + indicators.
+ *
+ * Owns at most one `StreamPlugin.start()` lifecycle. On each bar:
+ * 1. {@link appendBar} into the Solid store
+ * 2. {@link PaneManager.appendBar} for the price series
+ * 3. Debounced silent {@link runAndApply} for visible scripts (every tick /
+ *    closed bar / time advance, per `store.live.rerunOn`)
+ *
+ * Telemetry plane `stream` tracks connect/open/error; green status only after
+ * `onStatus({ state: 'open' })`.
+ *
+ * ## Public API
+ *
+ * - {@link startLive} / {@link stopLive} — primary controls (Topbar, Load auto-live)
+ * - {@link getAvailableStreams} — catalog listing for UI
+ * - Re-exports: {@link listStreams}, {@link defaultStreamForSource}, {@link StreamPlugin}
+ *
+ * Independent of watchlist quote mux (`data/watchlist-live`) — different product
+ * (OHLCV vs ticker) and lifecycle.
+ *
+ * @module streams/multiplex
+ */
+
 import type { Bar } from '../store/types';
 import {
   appendBar,
@@ -46,10 +70,16 @@ let currentStop: (() => void) | null = null;
 let rerunTimer: ReturnType<typeof setTimeout> | null = null;
 let rerunInFlight = false;
 
+/** Registered stream plugins (built-in + dynamic). */
 export function getAvailableStreams(): StreamPlugin[] {
   return listStreams();
 }
 
+/**
+ * Start (or restart) live updates for `symbol`/`interval` via the given stream.
+ * Stops any previous stream first. Resolves unknown ids via
+ * {@link defaultStreamForSource}.
+ */
 export function startLive(streamId: string, symbol: string, interval: string) {
   stopLive();
 
@@ -134,6 +164,10 @@ export function startLive(streamId: string, symbol: string, interval: string) {
   currentStop = stop;
 }
 
+/**
+ * Tear down the active stream, clear reconnect timers, and mark live inactive.
+ * Safe to call when no stream is running.
+ */
 export function stopLive() {
   const wasActive = store.live.active;
   // Mark inactive before stop() so reconnect closed callbacks don't fight UI state

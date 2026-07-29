@@ -17,10 +17,33 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// AXIS (pynescript charting PWA) — Cloudflare Worker.
-// Serves the JSON API used by the PWA.  Designed to run alongside the PWA
-// hosted on Cloudflare Pages (or any static host); CORS is wide-open for
-// the configured origin and for the local-dev `http://localhost:8081`.
+/**
+ * AXIS Cloudflare Worker entrypoint — JSON API + WebSocket relay for the charting PWA.
+ *
+ * Runs beside the static PWA (Cloudflare Pages or any static host). CORS echoes
+ * local-dev Origins (`localhost` / `127.0.0.1`) and otherwise uses `ALLOWED_ORIGIN`.
+ *
+ * ## Routes
+ * | Method / path        | Handler              | Auth / notes |
+ * |----------------------|----------------------|--------------|
+ * | GET `/`, `/health`   | health JSON          | public; reports D1/KV binding presence |
+ * | POST `/api/run`      | {@link handleRun}    | optional Bearer; proxies or Pyodide |
+ * | `/api/keys`          | {@link handleKeys}   | create needs `X-Admin-Token`; validate uses Bearer/`?key=` |
+ * | GET `/api/usage`     | stub usage           | public placeholder |
+ * | `/api/scripts…`      | {@link handleScripts}| Bearer API key; D1 or in-memory |
+ * | GET `/api/stream`    | SessionDO upgrade    | requires `SESSIONS` DO binding |
+ * | OPTIONS `*`          | CORS preflight       | 204 |
+ *
+ * ## Bindings (`Env`)
+ * - `API_KEYS` (KV) — key records `key:<token>` → `{ tier, createdAt, … }`
+ * - `USAGE` (KV) — per-key run counters (`usage:<token>`)
+ * - `DB` (D1) — user script library (see `schemas/scripts.sql`)
+ * - `BUNDLES` (R2) — reserved for Pyodide/pynescript wheels
+ * - `SESSIONS` (DO) — live kline fan-out ({@link SessionDO})
+ *
+ * Vars: `EXTERNAL_BACKEND`, `ALLOWED_ORIGIN`, `ADMIN_TOKEN`,
+ * `PYODIDE_IN_WORKER`, `ALLOW_OPEN_KEYS` (dev-only open auth).
+ */
 
 import { handleRun } from './runtime';
 import { handleKeys } from './keys';
@@ -29,20 +52,28 @@ import { SessionDO } from './durable-objects/session';
 
 export { SessionDO };
 
+/** Worker bindings and wrangler `[vars]` consumed by handlers. All optional for local stubs. */
 export interface Env {
-  // Bindings (commented out in wrangler.toml until you provision them).
+  /** KV: API key lookup (`key:<pn_…>` JSON). When unbound, dev accepts well-formed `pn_` keys. */
   API_KEYS?: KVNamespace;
+  /** KV: optional per-key `/api/run` call counter. */
   USAGE?: KVNamespace;
+  /** D1: scripts + script_drafts tables. When unbound, scripts use process memory. */
   DB?: D1Database;
+  /** R2: future pynescript wheel / bundle storage for in-worker Pyodide. */
   BUNDLES?: R2Bucket;
+  /** Durable Object namespace for `/api/stream` WebSocket sessions. */
   SESSIONS?: DurableObjectNamespace;
 
-  // Vars
+  /** Upstream Pine runtime base URL (e.g. local pyne `http://127.0.0.1:5002`). */
   EXTERNAL_BACKEND?: string;
+  /** Production browser origin for CORS when request Origin is not local-dev. */
   ALLOWED_ORIGIN?: string;
+  /** Shared secret for `/api/keys` create; compared to `X-Admin-Token`. */
   ADMIN_TOKEN?: string;
+  /** Set to `"enabled"` to attempt in-worker Pyodide before proxying. */
   PYODIDE_IN_WORKER?: string;
-  /** When "1", accept any non-empty Bearer key (local demos only). */
+  /** When `"1"` / `"true"`, accept any non-empty Bearer key (local demos only). */
   ALLOW_OPEN_KEYS?: string;
 }
 
@@ -63,7 +94,12 @@ const CORS_HEADERS = (origin: string): Record<string, string> => ({
  */
 const LOCAL_DEV_ORIGIN_RE = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i;
 
-/** Exported for unit tests. */
+/**
+ * Resolve `Access-Control-Allow-Origin` for this request.
+ * Local-dev Origins are echoed (credential-safe for Vite/wrangler); otherwise
+ * fall back to `env.ALLOWED_ORIGIN` or the production default.
+ * Exported for unit tests (`worker/tests/cors-origin.test.ts`).
+ */
 export function pickOrigin(req: Request, env: Env): string {
   const reqOrigin = req.headers.get('Origin') ?? '';
   if (reqOrigin && LOCAL_DEV_ORIGIN_RE.test(reqOrigin)) {
@@ -72,6 +108,7 @@ export function pickOrigin(req: Request, env: Env): string {
   return env.ALLOWED_ORIGIN || 'https://pynescript.ai';
 }
 
+/** JSON body + CORS headers shared by all non-stream routes. */
 function jsonResponse(body: unknown, init: ResponseInit, origin: string): Response {
   return new Response(JSON.stringify(body), {
     ...init,
@@ -84,6 +121,10 @@ function jsonResponse(body: unknown, init: ResponseInit, origin: string): Respon
 }
 
 export default {
+  /**
+   * Single `fetch` entry: CORS → stream DO upgrade → scripts → switch routes.
+   * Uncaught handler errors become `{ status:'error', code:'INTERNAL' }` 500s.
+   */
   async fetch(req: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const origin = pickOrigin(req, env);
     if (req.method === 'OPTIONS') {
@@ -92,7 +133,8 @@ export default {
 
     const url = new URL(req.url);
 
-    // WebSocket session relay: /api/stream → DO
+    // WebSocket session relay: /api/stream?session=&symbol=&interval= → SessionDO
+    // DO is named by `session` query (default "default"); request rewritten to /ws.
     if (url.pathname === '/api/stream') {
       if (!env.SESSIONS) {
         return jsonResponse(

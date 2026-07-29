@@ -3,6 +3,12 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+/**
+ * Watchlist live feeds (`src/data/watchlist-live.ts`).
+ * Guards Binance ticker frame parsing, no-op sources (empty/csv), combined-stream
+ * open path (MockWebSocket), and mock-walk tick generation.
+ */
+
 import { describe, expect, it, afterEach } from 'bun:test';
 import {
   parseBinanceTickerMessage,

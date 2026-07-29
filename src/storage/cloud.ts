@@ -18,8 +18,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Cloud storage plugin — AXIS Worker `/api/scripts` (D1 or in-memory).
- * Auth: Pro API keys via Authorization: Bearer.
+ * Built-in **cloud** storage plugin — AXIS Worker `/api/scripts` (D1 or memory).
+ *
+ * Config resolved from `pluginsConfig[storage:cloud]` / bare `cloud`, then
+ * `store.endpoint`. Auth: `Authorization: Bearer <apiKey>` (Pro keys).
+ * Optimistic concurrency via optional `If-Match` revision headers.
  */
 
 import type {
@@ -31,6 +34,7 @@ import type {
 import { store } from '../store';
 import { pluginKey } from '../plugins/types';
 
+/** Resolved cloud endpoint + API key (trailing slash stripped on endpoint). */
 export type CloudConfig = {
   endpoint: string;
   apiKey: string;
@@ -112,6 +116,10 @@ function docFromRemote(r: Record<string, unknown>): ScriptDocument {
   };
 }
 
+/**
+ * Cloud storage plugin (`id: cloud`) — REST against Worker `/api/scripts`.
+ * Config schema: Worker URL + API key.
+ */
 export const cloudStoragePlugin: StoragePlugin = {
   id: 'cloud',
   name: 'Cloud (Worker)',

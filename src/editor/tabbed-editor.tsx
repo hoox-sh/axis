@@ -17,12 +17,23 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Multi-tab Pine editor with demos, draft, and library save.
+ *
+ * Hosts one {@link PineEditor} for the active tab. Tabs track dirty state and
+ * optional `libraryId` when bound to storage. Includes demo scripts
+ * (RSI, MACD, …), draft load/save via storage service, and Run callback to parent.
+ *
+ * @module editor/tabbed-editor
+ */
+
 import { Component, For, createSignal, batch, onCleanup, onMount } from 'solid-js';
 import { PineEditor } from './PineEditor';
 import { store, loadEditorDoc, saveEditorDoc } from '../store';
 import { saveDraft, loadDraft, writeScript } from '../storage/service';
 import { setStatus } from '../store';
 
+/** One editor tab (in-memory until saved to library/draft). */
 interface Tab {
   id: string;
   name: string;
@@ -76,6 +87,7 @@ interface Props {
   };
 }
 
+/** Multi-tab editor UI with demos, draft autosave, and library integration. */
 export const TabbedEditor: Component<Props> = (props) => {
   const [tabs, setTabs] = createSignal<Tab[]>([newTab('Script 1', initialDoc())]);
   const [activeTab, setActiveTab] = createSignal(0);

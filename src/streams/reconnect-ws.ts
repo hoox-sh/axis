@@ -18,15 +18,26 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Reconnectable WebSocket with exponential backoff for AXIS venue streams.
+ * Reconnectable WebSocket with exponential backoff for AXIS venue streams
+ * and watchlist quote muxes.
+ *
+ * Shared by `streams/catalog` (kline feeds) and `data/watchlist-live` (tickers).
+ * On unexpected close, schedules reconnect until `maxAttempts` is exhausted,
+ * then fires `onError`. Explicit `stop()` closes without further attempts.
+ *
+ * Defaults: base 1s, max delay 30s, 8 attempts (`delay = min(max, base * 2^(n-1))`).
+ *
+ * @module streams/reconnect-ws
  */
 
+/** Status payload forwarded to stream/watchlist UI telemetry. */
 export type WsStatus = {
   state: 'open' | 'closed' | 'reconnecting' | string;
   url?: string;
   detail?: string;
 };
 
+/** Options for {@link openReconnectableWs}. */
 export interface ReconnectableWsOpts {
   url: string;
   /** Called after each successful open (re-subscribe here). */
@@ -42,7 +53,7 @@ export interface ReconnectableWsOpts {
 
 /**
  * Open a WebSocket that reconnects on unexpected close.
- * Returns a stop() that closes without further reconnect attempts.
+ * @returns `stop()` that closes without further reconnect attempts.
  */
 export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
   const maxAttempts = opts.maxAttempts ?? 8;

@@ -3,7 +3,10 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-/** Test fixture engine plugin (ES module). */
+/**
+ * Loader fixture: valid engine plugin (default export).
+ * `run` echoes bar closes as plots — used by plugin-install / loader tests.
+ */
 export default {
   id: 'test-fake-engine',
   name: 'Fake Engine',

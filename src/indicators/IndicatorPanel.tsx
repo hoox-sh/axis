@@ -17,11 +17,21 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Floatable **Indicators** panel listing all scripts applied via {@link runAndApply}.
+ *
+ * Renders when panel id `indicators` is open (or legacy `store.indicatorPanel.open`).
+ * Empty state prompts the user to run a Pine script.
+ *
+ * @module indicators/IndicatorPanel
+ */
+
 import { Component, For, Show } from 'solid-js';
 import { store, isPanelOpen } from '../store';
 import { IndicatorCard } from './IndicatorCard';
 import { FloatableShell } from '../ui/panels/FloatableShell';
 
+/** Shell + list of {@link IndicatorCard} for `store.scripts`. */
 export const IndicatorPanel: Component = () => {
   return (
     <Show when={isPanelOpen('indicators') || store.indicatorPanel.open}>

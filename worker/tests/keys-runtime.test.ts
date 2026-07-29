@@ -4,7 +4,8 @@
  */
 
 /**
- * Worker keys + run handler (mocked upstream).
+ * `/api/keys` + `/api/run` without full Worker fetch: admin forbid, validate
+ * shape, proxy to `EXTERNAL_BACKEND`, BAD_REQUEST validation, NO_BACKEND 503.
  */
 
 import { describe, expect, it, afterEach } from 'bun:test';

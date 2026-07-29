@@ -18,7 +18,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * TV-style left drawing rail: tool groups + flyouts + floating style bar.
+ * TV-like left drawing rail for AXIS charts.
+ *
+ * ## Layout
+ * - Vertical **tool groups** from {@link TOOL_GROUPS} (select / lines / fib / …)
+ * - Per-group **flyouts** when `g.flyout` is set; otherwise click activates last tool
+ * - Utility toggles: magnet (cycle), stay-in-mode, lock-all, hide drawings
+ * - Delete selected / clear all
+ * - Floating **style bar** (colors, width, line style, rect fill) when a place tool
+ *   is active or a drawing is selected
+ *
+ * ## Store ↔ layer sync
+ * Store owns persisted tool, drawings, prefs, and UI flags. The active
+ * {@link DrawingLayer} is reached via `getActiveDrawingLayer()` (singleton set when
+ * the layer constructs). Toolbar writes both sides on user actions; a reactive
+ * effect also pushes `drawingUi` / `drawingPrefs` into the layer when store changes.
+ * Style edits on a selection dual-write legacy flat fields + nested `style`.
  */
 
 import { Component, For, Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
@@ -75,6 +90,10 @@ const GROUP_ICONS: Partial<Record<ToolGroupId, typeof Icons.cursor>> = {
   actions: Icons.settings,
 };
 
+/**
+ * Push toolbar-relevant store fields onto the live layer (no-op if layer not ready).
+ * Called from the reactive effect and after tool selection.
+ */
 function syncLayerFromStore() {
   const layer = getActiveDrawingLayer();
   if (!layer) return;
@@ -90,8 +109,13 @@ function syncLayerFromStore() {
   });
 }
 
+/**
+ * Left-rail drawing chrome over the price pane.
+ * Mounted by the chart shell; expects `ensureDrawingLayer` to have run for full interactivity.
+ */
 export const DrawingToolbar: Component = () => {
   const active = () => store.drawingTool;
+  /** Which flyout menu is open (`null` = none). */
   const [openGroup, setOpenGroup] = createSignal<ToolGroupId | null>(null);
 
   const selected = createMemo(() => {
@@ -100,8 +124,13 @@ export const DrawingToolbar: Component = () => {
     return store.drawings.find((d) => d.id === id) ?? null;
   });
 
+  /** Style bar for place tools, or when something is selected under cursor. */
   const showStyleBar = () => active() !== 'cursor' || !!selected();
 
+  /**
+   * Controls target either the selected drawing's resolved style or store defaults
+   * for the next placement (`mode: 'defaults' | 'selection'`).
+   */
   const styleTarget = createMemo(() => {
     const sel = selected();
     if (sel) {
@@ -126,7 +155,7 @@ export const DrawingToolbar: Component = () => {
   });
 
   createEffect(() => {
-    // Keep layer prefs in sync when store changes
+    // Track each field so Solid re-runs when any drawingUi / drawingPrefs value changes.
     void store.drawingUi.magnet;
     void store.drawingUi.stayInMode;
     void store.drawingUi.lockAll;
@@ -157,6 +186,7 @@ export const DrawingToolbar: Component = () => {
     });
   });
 
+  /** Activate a tool in store + layer; remember it as the group's last tool. */
   const selectTool = (id: DrawingToolId) => {
     setDrawingTool(id);
     getActiveDrawingLayer()?.setTool(id);
@@ -168,6 +198,10 @@ export const DrawingToolbar: Component = () => {
     syncLayerFromStore();
   };
 
+  /**
+   * Group button: open/close flyout, or immediately select last/default tool
+   * for non-flyout groups (e.g. select → cursor).
+   */
   const onGroupClick = (groupId: ToolGroupId) => {
     const g = TOOL_GROUPS.find((x) => x.id === groupId);
     if (!g || !g.tools.length) return;
@@ -185,6 +219,10 @@ export const DrawingToolbar: Component = () => {
     selectTool(tool);
   };
 
+  /**
+   * Apply style either to the selected drawing (dual legacy + `style` patch)
+   * or to `drawingPrefs` for the next create. Always mirrors onto the layer.
+   */
   const applyStyle = (patch: {
     color?: string;
     width?: number;

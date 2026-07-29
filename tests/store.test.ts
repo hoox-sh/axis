@@ -4,8 +4,8 @@
  */
 
 /**
- * Solid store mutators + persist.
- * Run: bun test frontend/tests/store.test.ts
+ * Solid store mutators + localStorage persist/hydrate.
+ * Guards setActivePlugin, logs, lastRun, and persist round-trip on AXIS key.
  */
 
 import './setup';

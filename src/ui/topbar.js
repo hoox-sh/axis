@@ -17,9 +17,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Top bar wiring — symbols, intervals, engine/source/stream pickers, mode,
-// API key, upload, live, run, save, reset. Everything goes through the
-// registry + state — no hardcoded fetch.
+/**
+ * @file Legacy SuperChart top bar (vanilla DOM).
+ * Symbol/interval/source/engine pickers, load/run/live/upload/save/reset.
+ * Prefer Solid `Topbar.tsx` in the AXIS product shell; this remains for the
+ * legacy static entry (`main.js` / LEGACY.md).
+ */
 
 import { registry } from '../registry.js';
 import { getState } from '../state.js';
@@ -27,6 +30,10 @@ import { setStatus } from './status.js';
 
 const $ = (id) => document.getElementById(id);
 
+/**
+ * Wire top-bar DOM controls to callbacks + registry state.
+ * @param {object} handlers run/load/live/save/reset/upload hooks
+ */
 export function initTopbar({ onRun, onLoad, onUpload, onLiveToggle, onSave, onReset, onUploadFile }) {
     const els = {
         symbol: $('symbol-input'),
@@ -112,6 +119,7 @@ function setModeBadge(mode) {
     badge.classList.add(mode === 'cloud' ? 'mode-cloud' : 'mode-local');
 }
 
+/** Toggle the live button on-state indicator (dot + label). */
 export function setLiveIndicator(on) {
     const btn = $('live-btn');
     if (!btn) return;

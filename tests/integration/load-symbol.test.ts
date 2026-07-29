@@ -4,7 +4,8 @@
  */
 
 /**
- * loadSymbolData integration with mock-walk.
+ * Integration: `loadSymbolData` with mock-walk source (deterministic bars).
+ * Guards store bars length/shape after load without exchange HTTP.
  */
 
 import '../setup';

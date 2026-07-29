@@ -3,7 +3,10 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-// State tests — verify the central persisted state class (legacy path).
+/**
+ * Legacy `state.js` persistence: assign/change events, localStorage key,
+ * SuperChart migration keys, reset. Solid store is covered in store.test.ts.
+ */
 
 import { describe, expect, it, beforeEach } from 'bun:test';
 

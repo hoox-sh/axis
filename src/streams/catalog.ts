@@ -18,8 +18,38 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Live stream plugins for AXIS.
- * Definitions live here; registration + lookup go through the unified registry.
+ * Built-in **live OHLCV stream** plugins for AXIS.
+ *
+ * Each stream implements {@link StreamPlugin}: `start(opts) → stop()`.
+ * Live bars are normalized to unix-second `Bar` objects (optional `closed` flag).
+ * Venue sockets use {@link openReconnectableWs} with exponential backoff.
+ *
+ * ## Built-ins
+ *
+ * | id | Transport | Notes |
+ * |----|-----------|-------|
+ * | `binance-ws` | WS | `wss://stream.binance.com:9443/ws/{sym}@kline_{iv}` |
+ * | `okx-ws` | WS | business channel candle subscribe |
+ * | `bybit-ws` | WS | v5 public spot kline |
+ * | `coinbase-ws` | WS | ticker → interval-bucketed bars |
+ * | `kraken-ws` | WS | public OHLC channel |
+ * | `mock-poll` | local | synthetic ticks (pairs with `mock-walk` / CSV) |
+ *
+ * ## Lifecycle
+ *
+ * Caller (`streams/multiplex`) owns one active stream: call `start`, then
+ * `stop()` on symbol/interval change or Live off. Status states:
+ * `open` | `closed` | `reconnecting`.
+ *
+ * ## Public API
+ *
+ * - {@link ensureStreamsRegistered}, {@link getStream}, {@link listStreams}
+ * - {@link defaultStreamForSource} — map historical source → sensible stream
+ * - {@link registerDynamicStream} / {@link unregisterDynamicStream}
+ *
+ * @module streams/catalog
+ * @see {@link StreamPlugin} in `plugins/types`
+ * @see {@link startLive} in `streams/multiplex`
  */
 
 import type { Bar } from '../store/types';
@@ -417,6 +447,7 @@ export const BUILTIN_STREAMS: StreamPlugin[] = [
 
 let registered = false;
 
+/** Idempotent registration of {@link BUILTIN_STREAMS} into the unified registry. */
 export function ensureStreamsRegistered(): void {
   if (registered) return;
   registered = true;
@@ -427,16 +458,19 @@ export function ensureStreamsRegistered(): void {
   }
 }
 
+/** Look up a stream by id (ensures built-ins are registered). */
 export function getStream(id: string): StreamPlugin | undefined {
   ensureStreamsRegistered();
   return registry.getStream(id);
 }
 
+/** All registered streams in registration order. */
 export function listStreams(): StreamPlugin[] {
   ensureStreamsRegistered();
   return registry.listStreams();
 }
 
+/** Register a runtime stream plugin (dynamic URL loader). */
 export function registerDynamicStream(stream: StreamPlugin): void {
   ensureStreamsRegistered();
   if (!stream?.id || typeof stream.start !== 'function') throw new Error('Invalid stream plugin');

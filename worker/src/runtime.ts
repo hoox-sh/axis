@@ -17,30 +17,31 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// /api/run — accept Pine script + OHLCV bars, return plots + events.
-//
-// Three execution modes, in order of preference:
-//
-// 1. PYODIDE_IN_WORKER=enabled → run the script in-Worker via Pyodide (see
-//    pyodide_runtime.ts).  Requires the pynescript wheel to be in R2 or
-//    reachable over the network.
-//
-// 2. EXTERNAL_BACKEND set → proxy the request to the configured external
-//    backend (the local Flask server, another Worker, etc.).  This works
-//    today without any Python runtime on the Worker.
-//
-// 3. Neither set → 503 with a clear hint pointing at the env vars and
-//    worker/RUNTIME.md.
+/**
+ * `/api/run` — execute Pine against OHLCV bars; return plots + events.
+ *
+ * ## Execution preference
+ * 1. **In-worker Pyodide** when `PYODIDE_IN_WORKER=enabled` ({@link tryRunInWorker}).
+ *    Needs a pynescript wheel (R2 / network); see `worker/RUNTIME.md`.
+ * 2. **Proxy** to `EXTERNAL_BACKEND` + `/run` (local pyne Pro API, Flask, etc.).
+ * 3. **503 `NO_BACKEND`** if neither path is available / Pyodide fails open.
+ *
+ * Optional `Authorization: Bearer` increments `USAGE` KV (`usage:<key>`), 30d TTL.
+ * Body is validated once; the same parsed JSON is re-stringified for the proxy
+ * because `Request` bodies are single-shot streams.
+ */
 
 import type { Env } from './index';
 import { tryRunInWorker } from './pyodide_runtime';
 
+/** Client JSON body for `/api/run` (aligned with pyne Pro API). */
 interface RunRequest {
     script: string;
     data: Array<{ time: number | string; open: number; high: number; low: number; close: number; volume?: number }>;
     mode?: 'interpret' | 'compile';
 }
 
+/** Structural validation only — engines enforce bar shape and script syntax. */
 function validate(body: unknown): { ok: true; value: RunRequest } | { ok: false; err: string } {
     if (!body || typeof body !== 'object') return { ok: false, err: 'body must be a JSON object' };
     const b = body as Record<string, unknown>;
@@ -52,6 +53,7 @@ function validate(body: unknown): { ok: true; value: RunRequest } | { ok: false;
     return { ok: true, value: b as unknown as RunRequest };
 }
 
+/** POST JSON body to `${EXTERNAL_BACKEND}/run`, preserving upstream status + body. */
 async function proxyToExternal(bodyText: string, env: Env, origin: string): Promise<Response> {
     const target = env.EXTERNAL_BACKEND?.replace(/\/$/, '');
     if (!target) {
@@ -82,6 +84,10 @@ async function proxyToExternal(bodyText: string, env: Env, origin: string): Prom
     });
 }
 
+/**
+ * POST `/api/run` handler. Validates body, optionally meters usage, then
+ * Pyodide → external proxy fallback.
+ */
 export async function handleRun(req: Request, env: Env, origin: string): Promise<Response> {
     const body = await req.json().catch(() => null);
     const v = validate(body);
@@ -91,7 +97,7 @@ export async function handleRun(req: Request, env: Env, origin: string): Promise
         });
     }
 
-    // Increment usage meter (KV). Silently skip if KV not bound.
+    // Best-effort usage meter; failures/unbound KV must not block runs.
     const auth = req.headers.get('Authorization') ?? '';
     if (auth.startsWith('Bearer ') && (env as unknown as { USAGE?: KVNamespace }).USAGE) {
         const key = auth.slice(7).trim();
@@ -111,6 +117,6 @@ export async function handleRun(req: Request, env: Env, origin: string): Promise
         // Fall through to external if Pyodide failed to boot.
     }
 
-    // 2) External backend (reuse already-parsed body — Request body is a one-shot stream).
+    // 2) External backend (re-serialize parsed body — Request body is one-shot).
     return proxyToExternal(JSON.stringify(body), env, origin);
 }

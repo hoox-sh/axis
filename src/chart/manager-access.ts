@@ -20,6 +20,10 @@
 /**
  * Imperative chart manager access without Solid UI imports.
  * Lets runner / streams / load-symbol work in unit tests without Lucide/Solid DOM.
+ *
+ * Also owns **drawing-layer wiring**: lazily creates {@link DrawingLayer} on the
+ * price pane host (`#pane-price`) once the candle series exists, seeds it from
+ * store prefs, and bridges layer callbacks back into the store.
  */
 
 import type { PaneManager } from './pane-manager';
@@ -34,6 +38,7 @@ import {
 import type { Bar } from '../store/types';
 
 let manager: PaneManager | undefined;
+/** Module-local handle; constructor also registers the active singleton for the toolbar. */
 let drawingLayer: DrawingLayer | undefined;
 
 export function getManager(): PaneManager | undefined {
@@ -44,14 +49,34 @@ export function setManager(m: PaneManager | undefined) {
   manager = m;
 }
 
+/** Imperative access to the price-pane drawing overlay (if created). */
 export function getDrawingLayer(): DrawingLayer | undefined {
   return drawingLayer;
 }
 
+/** Replace or clear the module-local layer ref (e.g. on chart teardown). */
 export function setDrawingLayer(layer: DrawingLayer | undefined) {
   drawingLayer = layer;
 }
 
+/**
+ * Lazily construct {@link DrawingLayer} when chart infrastructure is ready.
+ *
+ * Preconditions (all required; silent no-op otherwise):
+ * - `manager` set and price pane has a candle series
+ * - DOM host `#pane-price` exists
+ * - `document.createElementNS` available (skipped under minimal happy-dom)
+ *
+ * Wiring on create:
+ * 1. Seed user drawings + active tool from store
+ * 2. `onChange` → `setDrawings` (persist user list after place/move/delete)
+ * 3. `barsProvider` → `store.bars` for magnet snap
+ * 4. Seed magnet / stay-in-mode / lock-all / hide + style prefs from store
+ * 5. `onSelectionChange` → `setSelectedDrawingId` (toolbar style bar)
+ * 6. `onToolChange` → `setDrawingTool` (layer auto-cursor after place when not stay-in-mode)
+ *
+ * Invoked from {@link setDataToChart} after OHLCV is applied so the overlay tracks reloads.
+ */
 function ensureDrawingLayer() {
   if (!manager || drawingLayer) return;
   const pricePane = manager.getPane('price');
@@ -64,10 +89,14 @@ function ensureDrawingLayer() {
 
   try {
     drawingLayer = new DrawingLayer(el, pricePane.chart, candle as never);
+    // Geometry + active tool from persisted / current store
     drawingLayer.setDrawings(store.drawings);
     drawingLayer.setTool(store.drawingTool);
+    // Layer → store: user drawing list after place, drag end, delete, clear
     drawingLayer.setOnChange((list) => setDrawings(list));
+    // Magnet snap needs live OHLCV (weak/strong modes)
     drawingLayer.setBarsProvider(() => store.bars);
+    // Interaction prefs (defaults match DrawingPrefs / DrawingUi when store partial)
     drawingLayer.setMagnet(store.drawingUi?.magnet ?? 'off');
     drawingLayer.setStayInMode(!!store.drawingUi?.stayInMode);
     drawingLayer.setLockAll(!!store.drawingUi?.lockAll);
@@ -78,6 +107,7 @@ function ensureDrawingLayer() {
       lineStyle: store.drawingPrefs?.lineStyle ?? 'solid',
       fillOpacity: store.drawingPrefs?.fillOpacity ?? 0.15,
     });
+    // Layer → store: selection + tool (toolbar style bar / afterPlace)
     drawingLayer.setOnSelectionChange((id) => setSelectedDrawingId(id));
     drawingLayer.setOnToolChange((tool) => setDrawingTool(tool));
   } catch {
@@ -146,8 +176,10 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
     );
   }
 
+  // Ensure overlay exists after candle series is ready; re-sync store drawings
   ensureDrawingLayer();
   drawingLayer?.setDrawings(store.drawings);
 }
 
+/** Re-export toolbar singleton (same instance as module-local `drawingLayer` when live). */
 export { getActiveDrawingLayer } from './drawing-layer';

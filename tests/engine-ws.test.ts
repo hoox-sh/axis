@@ -5,6 +5,7 @@
 
 /**
  * Engine WebSocket URL helper + client plumbing (mocked WS).
+ * Invariant: http(s)→ws(s) `/ws/run`; client reset between tests.
  */
 
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';

@@ -3,7 +3,10 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-// Strategy tester + event normalizer (parity API shape → closed trades / markers).
+/**
+ * Strategy tester + event normalizer: parity API events → closed trades,
+ * markers, equity curve. Guards report totals and entry/exit pairing.
+ */
 
 import { describe, expect, it } from 'bun:test';
 import { buildStrategyReport } from '../src/results/strategy.ts';

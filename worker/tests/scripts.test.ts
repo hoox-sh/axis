@@ -4,9 +4,9 @@
  */
 
 /**
- * Worker script library handler tests (in-memory backend).
- * Run from frontend/worker: `bun test tests/scripts.test.ts`
- * Or: `bun test frontend/worker/tests/scripts.test.ts`
+ * Script library handler (`handleScripts`) against in-memory backend.
+ * Guards CRUD, drafts, revision `CONFLICT` (If-Match), auth partition, 404/405.
+ * Run: `bun test worker/tests/scripts.test.ts` (from repo or worker/).
  */
 
 import { describe, expect, it, beforeEach } from 'bun:test';

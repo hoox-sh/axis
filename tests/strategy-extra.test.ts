@@ -4,7 +4,8 @@
  */
 
 /**
- * Extra strategy report branches.
+ * Extra strategy report branches (formatting, CSV export edge cases).
+ * Complements strategy.test.ts for coverage of money/pct/csv helpers.
  */
 
 import { describe, expect, it } from 'bun:test';

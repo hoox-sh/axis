@@ -17,10 +17,14 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Status bar — single set of helpers shared by every module.
+/**
+ * @file Legacy SuperChart status bar helpers (vanilla DOM).
+ * Prefer Solid `StatusBar.tsx` in AXIS. Shared by legacy modules via setStatus.
+ */
 
 const el = {};
 
+/** Cache status-bar DOM refs and wire copy-to-clipboard. */
 export function initStatus() {
     el.bar = document.getElementById('status-bar');
     el.text = document.getElementById('status-text');
@@ -52,6 +56,12 @@ function flashCopied(btn) {
     }, 1200);
 }
 
+/**
+ * Update status text/kind/meta on the legacy status bar.
+ * @param {string} text
+ * @param {'info'|'error'|'success'|'busy'} [kind='info']
+ * @param {string} [meta='']
+ */
 export function setStatus(text, kind = 'info', meta = '') {
     if (!el.text) initStatus();
     el.text.textContent = text;

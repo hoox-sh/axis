@@ -17,15 +17,15 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Generic settings dialog — reads any plugin's `configSchema` and renders
-// a form. Supports text, number, boolean, and select field types. Changes
-// are persisted to localStorage (keyed per plugin) and the plugin instance
-// is reloaded.
-//
-// Usage:
-//   import { openSettings } from './ui/settings.js';
-//   openSettings({ title: 'Binance REST', schema: binanceRest.configSchema,
-//                  current: cfg, onSave: (next) => { ... } });
+/**
+ * @file Legacy generic plugin settings dialog (vanilla DOM).
+ * Renders a form from any plugin `configSchema` (string/number/boolean/select).
+ * Prefer Solid `SettingsDialog.tsx` for app-level settings; this remains for
+ * per-plugin schema forms in the legacy shell.
+ *
+ * @example
+ * openSettings({ title: 'Binance REST', schema, current: cfg, onSave: (next) => {} });
+ */
 
 const FIELD_TEMPLATES = {
     string: (k, def, cur, s) => `
@@ -89,6 +89,10 @@ function collectForm(form) {
 
 let _backdrop = null;
 
+/**
+ * Open a modal form from a plugin configSchema.
+ * @param {{ title: string, schema: object, current?: object, onSave?: Function, onCancel?: Function }} opts
+ */
 export function openSettings({ title, schema, current, onSave, onCancel }) {
     closeSettings();
     const backdrop = document.createElement('div');
@@ -149,6 +153,7 @@ export function openSettings({ title, schema, current, onSave, onCancel }) {
     setTimeout(() => form.querySelector('input, select')?.focus(), 30);
 }
 
+/** Tear down the open settings backdrop if any. */
 export function closeSettings() {
     if (_backdrop) { _backdrop.remove(); _backdrop = null; }
 }

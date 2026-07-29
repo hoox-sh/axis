@@ -17,12 +17,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Manager dialog: shows installed plugins (built-in + user-loaded) and
-// the indicator library (user-saved scripts). Provides:
-//   - "Load plugin from URL" — calls registry.loadPluginFromUrl().
-//   - "Remove" for user-loaded plugins.
-//   - "Save current script" / "Load" / "Delete" for the script library.
-//   - "Export / Import library" as JSON.
+/**
+ * @file Legacy plugin + script-library manager dialog (vanilla DOM).
+ * Load plugin from URL, remove user plugins, save/load/delete scripts,
+ * export/import library JSON. Prefer Solid `PluginManager.tsx` + ScriptLibraryPanel.
+ */
 
 import { registry, loadPluginFromUrl } from '../registry.js';
 import { getState } from '../state.js';
@@ -311,15 +310,17 @@ function downloadJson(name, data) {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+/** Show the legacy manager dialog. */
 export function openManager() { open(); }
+/** Hide the legacy manager dialog. */
 export function closeManager() { close(); }
 
-// Theme switching — toggles the `data-theme` attribute on <html>. CSS
-// overrides follow the attribute selector.
+/** Apply `data-theme` on `<html>` (dark/light CSS attribute selectors). */
 export function applyTheme(theme) {
     document.documentElement.dataset.theme = theme || 'dark';
 }
 
+/** Restore theme + re-load previously installed plugins from localStorage. */
 export function initManager() {
     // Auto-restore the last theme.
     const last = (() => { try { return JSON.parse(localStorage.getItem('pynescript.superchart.v1') || '{}').theme; } catch (_) { return null; } })();

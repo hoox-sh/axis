@@ -3,9 +3,17 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+/**
+ * Deterministic OHLCV fixtures for unit/integration tests (no network).
+ * Bars are oldest → newest; prices walk slightly for strategy/event math.
+ */
+
 import type { Bar } from '../../src/store/types';
 
-/** Deterministic OHLCV sample (oldest → newest). */
+/**
+ * Build `n` bars starting at `startTime` (unix sec) with `step` between opens.
+ * Alternating up/down closes keep high/low valid without randomness.
+ */
 export function makeBars(n = 10, startTime = 1_700_000_000, step = 86_400): Bar[] {
   const out: Bar[] = [];
   let price = 100;

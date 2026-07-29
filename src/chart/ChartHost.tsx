@@ -17,6 +17,19 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Solid **chart host** — mounts {@link PaneManager}, drawing layer, and HUDs.
+ *
+ * Owns the imperative panes container (no Solid children inside that node).
+ * On mount: create PaneManager from `store.panes`, wire crosshair → store,
+ * and attach the drawing layer. Re-exports manager accessors for convenience.
+ *
+ * Empty-state overlay uses {@link HooxLoader} when bars are loading/missing.
+ * Children overlays: {@link DrawingToolbar}, {@link PineTableHud}.
+ *
+ * @module chart/ChartHost
+ */
+
 import { Component, Show, createEffect, createMemo, onMount, onCleanup, untrack } from 'solid-js';
 import { PaneManager } from './pane-manager';
 import { DrawingToolbar } from './DrawingToolbar';
@@ -42,6 +55,7 @@ export {
 /** Imperative chart mount only — never put Solid children inside this node. */
 let panesEl: HTMLDivElement | undefined;
 
+/** Main chart area: multi-pane LWC + drawing toolbar + Pine table HUD. */
 export const ChartHost: Component = () => {
   const emptyHint = createMemo(() => {
     if (store.bars.length > 0) return null;

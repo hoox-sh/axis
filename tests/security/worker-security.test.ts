@@ -4,7 +4,8 @@
  */
 
 /**
- * Worker auth isolation and abuse cases.
+ * Worker security: per-key script isolation, missing auth, admin key mint abuse.
+ * Invariant: user A cannot read user B library; open-keys still partitions by hash.
  */
 
 import { describe, expect, it, beforeEach } from 'bun:test';

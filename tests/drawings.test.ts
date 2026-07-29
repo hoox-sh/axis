@@ -3,6 +3,11 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+/**
+ * Drawing tool metadata: click counts (`needsTwoPoints`), labels, fib levels.
+ * Invariant: single-click tools (hline/text/cursor) vs multi-point geometry tools.
+ */
+
 import { describe, expect, it } from 'bun:test';
 import { FIB_LEVELS, needsTwoPoints, toolLabel } from '../src/chart/drawing-types.ts';
 import { fibPrices as computeFib } from '../src/chart/drawing-layer.ts';

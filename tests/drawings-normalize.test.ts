@@ -18,7 +18,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * User-drawing normalize (legacy localStorage shapes + points-based).
+ * User-drawing normalize: legacy localStorage shapes → points-based model.
+ * Guards migration of old hline/trend/rect fields and color defaults.
  */
 
 import { describe, expect, it } from 'bun:test';

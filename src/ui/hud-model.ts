@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Connection HUD model (P0).
+ * Connection HUD pure model — map engine plugin + endpoint → chip axes.
  *
  * Chip axes (no redundancy):
  * - ENG  local | remote     — topology (where calc lives)
@@ -27,6 +27,7 @@
  * - PATH WS | REST | —       — hop for remote/server/worker runs only
  *
  * Product names (pyne, pyodide, pyne-worker) live in sticky-info detail, not chip text.
+ * UI: `ConnectionHud.tsx`. No Solid dependency.
  */
 
 import type { ConnState, TransportClass } from '../store/types';
@@ -186,6 +187,7 @@ export function deriveHud(input: HudInput): HudSnapshot {
   };
 }
 
+/** Sticky-panel title/body copy for a chip given the current snapshot. */
 export function hudChipHelp(id: HudChipId, snap: HudSnapshot): { title: string; body: string } {
   switch (id) {
     case 'eng':

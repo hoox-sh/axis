@@ -18,7 +18,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Storage plugins catalog — registers built-ins with the unified registry.
+ * Storage plugin catalog — built-ins (local / cloud / git) + dynamic installs.
+ *
+ * Lazy-registers into the unified `plugins/registry` on first access so
+ * Plugin Manager and `storage/service` share one source of truth.
  */
 
 import type { StoragePlugin } from '../plugins/types';
@@ -27,6 +30,7 @@ import { localStoragePlugin } from './local';
 import { cloudStoragePlugin } from './cloud';
 import { gitStoragePlugin } from './git';
 
+/** Built-in storage plugins shipped with AXIS. */
 export const BUILTIN_STORAGES: StoragePlugin[] = [
   localStoragePlugin,
   cloudStoragePlugin,
@@ -35,6 +39,7 @@ export const BUILTIN_STORAGES: StoragePlugin[] = [
 
 let registered = false;
 
+/** Idempotent register of built-in storages into the plugin registry. */
 export function ensureStoragesRegistered(): void {
   if (registered) return;
   registered = true;
@@ -45,16 +50,22 @@ export function ensureStoragesRegistered(): void {
   }
 }
 
+/** Lookup a storage plugin by id (ensures built-ins are registered). */
 export function getStorage(id: string): StoragePlugin | undefined {
   ensureStoragesRegistered();
   return registry.getStorage(id);
 }
 
+/** List all registered storage plugins (built-in + dynamic). */
 export function listStorages(): StoragePlugin[] {
   ensureStoragesRegistered();
   return registry.listStorages();
 }
 
+/**
+ * Register a user-loaded storage plugin (must implement list/write at minimum).
+ * @throws if id/kind invalid or required methods missing
+ */
 export function registerDynamicStorage(plugin: StoragePlugin): void {
   ensureStoragesRegistered();
   if (!plugin?.id || plugin.kind !== 'storage') throw new Error('Invalid storage plugin');
@@ -64,12 +75,13 @@ export function registerDynamicStorage(plugin: StoragePlugin): void {
   registry.registerStorage({ ...plugin, builtIn: plugin.builtIn ?? false });
 }
 
+/** Unregister a dynamic storage plugin; returns whether it was present. */
 export function unregisterDynamicStorage(id: string): boolean {
   ensureStoragesRegistered();
   return registry.unregisterStorage(id);
 }
 
-/** @internal */
+/** @internal Test helper — allow re-registration of built-ins. */
 export function _resetStorageRegistrationFlag() {
   registered = false;
 }

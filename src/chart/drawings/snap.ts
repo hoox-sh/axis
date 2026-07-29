@@ -19,11 +19,24 @@
 
 /**
  * Magnet / snap-to-OHLC for AXIS interactive drawings.
- * Snaps a raw chart point to the nearest bar's OHLC (and optional HL2) levels.
+ *
+ * Snaps a raw chart point to the nearest bar's OHLC (and optional HL2) levels
+ * in pixel Y space, then returns the snapped time/price.
+ *
+ * Magnet modes:
+ * - `'off'` — return raw point unchanged
+ * - `'weak'` — consider nearest bar ±1 neighbor; snap only if best target is
+ *   within `pixelTol` (default 10px) of the pointer Y
+ * - `'strong'` — always snap to the closest target on the nearest bar by time
+ *
+ * Does **not**: own pointer events, render magnets UI, or call LWC directly
+ * (`priceToY` is injected by the caller).
  */
 
+/** Magnet strength; see module overview for off / weak / strong behavior. */
 export type MagnetMode = 'off' | 'weak' | 'strong';
 
+/** Minimal bar shape required for OHLC snapping (sorted ascending by `time`). */
 export interface BarLike {
   time: number;
   open: number;
@@ -32,6 +45,7 @@ export interface BarLike {
   close: number;
 }
 
+/** Price levels on a bar that can attract the pointer. */
 export type SnapTarget = 'open' | 'high' | 'low' | 'close' | 'hl2';
 
 export interface SnapOptions {
@@ -59,7 +73,10 @@ function targetPrice(bar: BarLike, target: SnapTarget): number {
   }
 }
 
-/** Nearest bar index by absolute time distance (bars assumed sorted ascending by time). */
+/**
+ * Nearest bar index by absolute time distance.
+ * Bars are assumed sorted ascending by `time`. Returns `-1` if empty.
+ */
 export function findNearestBarIndex(bars: readonly BarLike[], time: number): number {
   const n = bars.length;
   if (n === 0) return -1;
@@ -80,6 +97,14 @@ export function findNearestBarIndex(bars: readonly BarLike[], time: number): num
   return dHi <= dLo ? hi : lo;
 }
 
+/**
+ * Snap `raw` time/price toward bar OHLC levels under the active magnet mode.
+ *
+ * @param opts.rawXY - Pointer position in the same pixel space as `priceToY`
+ * @param opts.priceToY - Series price → Y (null skips that candidate)
+ * @param opts.timeToX - Reserved for future X-aware snapping; unused today
+ * @returns Snapped chart point, or a copy of `raw` when mode is off / no hit
+ */
 export function snapToBars(opts: {
   bars: readonly BarLike[];
   raw: { time: number; price: number };

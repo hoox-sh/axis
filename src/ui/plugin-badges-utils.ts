@@ -19,6 +19,7 @@
 
 /**
  * Pure helpers for plugin capability labels (no Solid JSX — safe for bun:test).
+ * Used by `plugin-badges.tsx` and plain `<select>` option labels.
  */
 
 import type { PluginBase, PluginCapabilities } from '../plugins/types';
@@ -26,6 +27,7 @@ import type { PluginBase, PluginCapabilities } from '../plugins/types';
 /** Boolean capability flags shown as badges (excludes transport string). */
 export type CapKey = 'offline' | 'needsNetwork' | 'needsAuth' | 'needsProxy';
 
+/** Display metadata for each capability badge. */
 export const CAP_META: Record<
   CapKey,
   { label: string; class: string; title: string }
@@ -52,11 +54,16 @@ export const CAP_META: Record<
   },
 };
 
+/** True capability keys present on a plugin (order follows CAP_META). */
 export function capabilityKeys(caps?: PluginCapabilities | null): CapKey[] {
   if (!caps) return [];
   return (Object.keys(CAP_META) as CapKey[]).filter((k) => !!caps[k]);
 }
 
+/**
+ * Human label for engine/source `<option>` text, e.g.
+ * `Server-Side [network] · plugin`.
+ */
 export function engineOptionLabel(p: PluginBase): string {
   const caps = capabilityKeys(p.capabilities);
   const tags = caps.length ? ` [${caps.join(', ')}]` : '';

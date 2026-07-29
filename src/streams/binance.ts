@@ -17,8 +17,23 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Minimal Binance kline WebSocket stream (no auto-reconnect).
+ *
+ * **Prefer** `streams/catalog.ts` → `binanceStream` for production AXIS:
+ * that path uses {@link openReconnectableWs} and the unified plugin registry.
+ * This module remains as a thin standalone reference / older import path.
+ *
+ * Contract: `start({ symbol, interval, onBar, onStatus, onError }) → stop()`.
+ * URL: `wss://stream.binance.com:9443/ws/{symbol}@kline_{interval}`.
+ *
+ * @module streams/binance
+ * @deprecated Use `binanceStream` from `streams/catalog` in new code.
+ */
+
 import type { Bar } from '../store/types';
 
+/** Local stream shape (subset of plugins/types StreamPlugin). */
 export interface StreamPlugin {
   id: string;
   name: string;
@@ -35,6 +50,7 @@ const INTERVAL_MAP: Record<string, string> = {
   '1m': '1m', '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h', '1d': '1d', '1w': '1w',
 };
 
+/** Single-symbol Binance public kline stream (no reconnect). */
 export const binanceStream: StreamPlugin = {
   id: 'binance-ws',
   name: 'Binance WebSocket',

@@ -4,7 +4,8 @@
  */
 
 /**
- * PaneManager.syncOverlayLines updates in place without destroy flash.
+ * PaneManager.syncOverlayLines updates series in place (no destroy flash).
+ * Guards price-line reuse when plot values change between runs.
  */
 
 import './setup';

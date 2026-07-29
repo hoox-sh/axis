@@ -18,13 +18,36 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * /api/scripts — user Pine script library.
- * Backed by D1 when bound; otherwise in-memory (wrangler dev without D1).
+ * `/api/scripts` — multi-tenant user Pine script library.
+ *
+ * ## Auth
+ * Every route requires {@link requireApiKey}. Rows are partitioned by
+ * `userId` (hashed key); clients never pass a user id.
+ *
+ * ## Storage
+ * - **D1** (`env.DB`) when bound — schema in `schemas/scripts.sql`.
+ * - **In-memory** Maps when unbound — per-isolate only (wrangler dev / tests).
+ *   Reset via {@link _clearMemScripts} in unit tests.
+ *
+ * ## Routes (after `/api/scripts`)
+ * | Method | Path        | Behavior |
+ * |--------|-------------|----------|
+ * | GET    | `/`         | List meta (no content), newest first |
+ * | POST   | `/`         | Create; optional client `id`, else `s_<base36>` |
+ * | GET    | `/:id`      | Full script + content |
+ * | PUT    | `/:id`      | Upsert; optional `If-Match` / body `revision` → 409 `CONFLICT` |
+ * | DELETE | `/:id`      | Remove; 404 if missing |
+ * | GET    | `/_draft`   | Autosave draft or `null` |
+ * | PUT    | `/_draft`   | Upsert draft content/name |
+ *
+ * Revisions are opaque (`rev_<time>_<rand>`). Optimistic concurrency uses
+ * `If-Match` header or `revision` field; mismatch returns remote revision.
  */
 
 import type { Env } from './index';
 import { requireApiKey } from './auth';
 
+/** Full D1 / memory row including Pine source text. */
 export interface ScriptRow {
   id: string;
   name: string;
@@ -36,6 +59,7 @@ export interface ScriptRow {
   updated_at: number;
 }
 
+/** List/meta projection without `content` (camelCase timestamps for clients). */
 export interface ScriptMeta {
   id: string;
   name: string;
@@ -46,8 +70,10 @@ export interface ScriptMeta {
   updatedAt: number;
 }
 
-// --- In-memory fallback (per isolate; fine for local dev) ---
+// --- In-memory fallback (per isolate; fine for local dev / unit tests) ---
+/** userId → (scriptId → row) */
 const memScripts = new Map<string, Map<string, ScriptRow>>();
+/** userId → single autosave draft */
 const memDrafts = new Map<string, { content: string; name?: string; updated_at: number }>();
 
 function memUser(userId: string): Map<string, ScriptRow> {
@@ -139,6 +165,7 @@ async function delD1(db: D1Database, userId: string, id: string): Promise<boolea
   return (r.meta?.changes ?? 0) > 0;
 }
 
+/** JSON response with CORS headers required by the PWA (includes If-Match for revisions). */
 function corsJson(body: unknown, status: number, origin: string): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -151,6 +178,10 @@ function corsJson(body: unknown, status: number, origin: string): Response {
   });
 }
 
+/**
+ * Dispatch `/api/scripts` and subpaths. `path` is the URL pathname (not full URL).
+ * Missing D1 schema surfaces as 503 `NO_SCHEMA` with a wrangler hint.
+ */
 export async function handleScripts(
   req: Request,
   env: Env,
@@ -165,14 +196,11 @@ export async function handleScripts(
   const db = env.DB;
   const url = new URL(req.url);
 
-  // /api/scripts or /api/scripts/
-  // /api/scripts/_draft
-  // /api/scripts/:id
-
+  // Path segments after /api/scripts: [], ['_draft'], or [':id']
   const rest = path.replace(/^\/api\/scripts\/?/, '');
   const parts = rest ? rest.split('/').filter(Boolean) : [];
 
-  // Draft
+  // --- Autosave draft (one per user) ---
   if (parts[0] === '_draft') {
     if (req.method === 'GET') {
       if (db) {
@@ -216,7 +244,7 @@ export async function handleScripts(
     return corsJson({ status: 'error', code: 'METHOD', message: 'GET or PUT required' }, 405, origin);
   }
 
-  // Collection
+  // --- Collection: list / create ---
   if (parts.length === 0) {
     if (req.method === 'GET') {
       if (db) {
@@ -266,7 +294,7 @@ export async function handleScripts(
     return corsJson({ status: 'error', code: 'METHOD', message: 'GET or POST required' }, 405, origin);
   }
 
-  // Item /api/scripts/:id
+  // --- Item /api/scripts/:id ---
   const id = decodeURIComponent(parts[0]);
 
   if (req.method === 'GET') {
@@ -348,7 +376,7 @@ export async function handleScripts(
   return corsJson({ status: 'error', code: 'METHOD', message: 'unsupported method' }, 405, origin);
 }
 
-/** Test helpers */
+/** Test-only: wipe isolate memory backends between cases. */
 export function _clearMemScripts() {
   memScripts.clear();
   memDrafts.clear();

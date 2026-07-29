@@ -18,10 +18,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Pine language intelligence for AXIS CodeMirror:
- * - Prefer **remote LSP** via pyne Pro API (`POST /lsp/completion`, `/lsp/hover`)
- *   when engine=server and Backend URL is set (local or VPS).
- * - Fall back to **client metadata** (builtin_metadata.json) for pyodide / offline.
+ * Pine **language intelligence** for AXIS CodeMirror (completions + hover).
+ *
+ * Strategy:
+ * 1. Prefer **remote LSP** via pyne Pro API (`POST /lsp/completion`, `/lsp/hover`)
+ *    when engine=`server` and Backend URL is set (local or VPS).
+ * 2. Fall back to **client metadata** from `data/pine-builtins.json` for
+ *    pyodide / offline / remote failure.
+ *
+ * Exports {@link pineLspExtensions} for mounting on {@link PineEditor}.
+ * Indexes builtins by top-level name, module members (`ta.sma`), and full name
+ * for hover tooltips.
+ *
+ * @module editor/pine-lsp
  */
 
 import {
@@ -42,6 +51,7 @@ import {
   type RemoteCompletionItem,
 } from './pine-lsp-client';
 
+/** One entry from the local Pine builtins catalog. */
 export type BuiltinMeta = {
   label: string;
   kind?: string;

@@ -18,11 +18,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Data Window rows: OHLCV + plot series at a bar index / time.
+ * **Data Window** row builder — OHLCV + plot series at a bar index / crosshair time.
+ *
+ * Pure helpers consumed by the Results / Data Window UI. Resolves the nearest
+ * bar via {@link barIndexAtTime}, formats numbers and UTC timestamps, and
+ * emits ordered {@link DataViewRow} groups (`ohlcv` | `series` | `meta`).
+ *
+ * @module results/dataview
  */
 
 import type { Bar } from '../store/types';
 
+/** One labeled value row in the Data Window panel. */
 export interface DataViewRow {
   key: string;
   label: string;

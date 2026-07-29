@@ -17,6 +17,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Crosshair sync is now integrated into PaneManager.syncCrosshair()
-// This module is kept for backwards compatibility but is no longer needed.
-// Use PaneManager.syncCrosshair() directly instead.
+/**
+ * @deprecated Crosshair sync is integrated into {@link PaneManager.syncCrosshair}.
+ * This module is kept for backwards-compatible imports only — it has no exports.
+ * Prefer wiring crosshair via PaneManager / ChartHost.
+ *
+ * @module chart/crosshair-sync
+ */

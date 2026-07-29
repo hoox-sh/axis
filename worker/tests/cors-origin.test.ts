@@ -3,6 +3,12 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+/**
+ * CORS origin selection (`pickOrigin` in `src/index.ts`).
+ * Invariant: localhost/127.0.0.1 any port echoed; `0.0.0.0` and unknown Origins
+ * fall back to `ALLOWED_ORIGIN` (never open reflection of arbitrary origins).
+ */
+
 import { describe, expect, it } from 'bun:test';
 import { pickOrigin } from '../src/index';
 

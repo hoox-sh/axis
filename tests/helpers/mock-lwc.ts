@@ -5,6 +5,11 @@
 
 /**
  * Minimal lightweight-charts mock for series-factory / PaneManager tests.
+ *
+ * {@link makeFakeChart} returns an in-memory chart with series, price lines,
+ * and timeScale stubs. {@link installLightweightChartsMock} uses `mock.module`
+ * so `import('lightweight-charts')` resolves without the real library
+ * (Bun unit tests have no canvas).
  */
 
 import { mock } from 'bun:test';

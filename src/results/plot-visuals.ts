@@ -18,7 +18,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Pure converters: pyne plot_meta.kind series → LWC overlay / markers / bgcolor.
+ * Pure converters: pyne `plot_meta.kind` series → Lightweight Charts overlays.
+ *
+ * The engine returns parallel `series` arrays and a `meta.plot_meta` map with
+ * `kind` (`plot` | `hline` | `bgcolor` | `plotshape` | `plotchar` | `plotarrow`).
+ * This module splits and converts those into line data, bgcolor histograms, and
+ * shape markers for {@link indicators/runner}.
+ *
+ * @module results/plot-visuals
  */
 
 export type PlotKind =

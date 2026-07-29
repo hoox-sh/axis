@@ -17,6 +17,15 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Application Settings modal — engine endpoint/mode, storage plugin, chart
+ * interval, live prefs (preferAfterLoad, rerunOn), HUD compact, UI scale.
+ *
+ * Local form state is seeded from `store` when opened; Save writes
+ * `pluginsConfig`, `activePlugins`, and layout prefs, then `persist()`.
+ * Endpoint **Probe** uses `probeEndpoint` without committing form values.
+ */
+
 import { Component, For, createEffect, createSignal, Show, createMemo } from 'solid-js';
 import {
   store,
@@ -46,7 +55,7 @@ import {
 import { loadSymbolData } from '../data/load-symbol';
 import { UI_SCALE_PRESETS, formatUiScalePct } from './ui-scale';
 
-/** PYNE Runtime modes (server engine). */
+/** PYNE Runtime modes for the server/worker engine plugin config. */
 export type EngineExecMode = 'interpret' | 'compile' | 'auto';
 
 const EXEC_MODE_OPTIONS: { value: EngineExecMode; label: string; hint: string }[] = [
@@ -83,6 +92,7 @@ interface Props {
   onClose: () => void;
 }
 
+/** Modal settings form; parent controls `open` / `onClose`. */
 export const SettingsDialog: Component<Props> = (props) => {
   const [endpoint, setEndpoint] = createSignal(store.endpoint);
   const [engine, setEngine] = createSignal(store.engine);

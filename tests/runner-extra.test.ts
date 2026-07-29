@@ -4,7 +4,8 @@
  */
 
 /**
- * Extra runner coverage (runAndApply without chart manager).
+ * Extra runner coverage: `runAndApply` without chart manager (headless path).
+ * Guards success/error status + store lastRun without LWC.
  */
 
 import './setup';
