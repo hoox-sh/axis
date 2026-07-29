@@ -272,13 +272,23 @@ export const Topbar: Component<{
         }}
         title={
           store.engine === 'pyodide'
-            ? 'Client-Side Pyodide — first load often 20–30s (wasm + micropip + wheel). Status bar shows progress.'
-            : engines().find((en) => en.id === store.engine)?.description || 'Calculation engine'
+            ? 'RUN=browser (Pyodide) · ENG=local — first load often 20–30s. HUD: ENG / RUN / MODE.'
+            : engines().find((en) => en.id === store.engine)?.description ||
+              'Calculation engine — maps to HUD ENG (local|remote) + RUN (browser|server|worker)'
         }
       >
         <For each={engines()}>
           {(en) => (
-            <option value={en.id} title={en.description}>
+            <option
+              value={en.id}
+              title={
+                en.id === 'pyodide'
+                  ? 'ENG local · RUN browser (Pyodide)'
+                  : en.id === 'server'
+                    ? 'ENG local|remote (from endpoint) · RUN server (or worker if URL is edge)'
+                    : en.description
+              }
+            >
               {engineOptionLabel(en)}
             </option>
           )}

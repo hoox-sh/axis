@@ -285,8 +285,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                 </select>
                 <p class="text-[10px] text-text-faint mt-0.5">
                   {engine() === 'pyodide'
-                    ? `Browser path. ${execModeHint()} Pure Numba compile still needs the server engine.`
-                    : `Pro API path (server engine). ${execModeHint()}`}
+                    ? `HUD: ENG local · RUN browser. ${execModeHint()} Numba compile needs RUN server (CPython).`
+                    : `HUD: ENG local|remote (from Backend URL) · RUN server (or worker if edge URL). ${execModeHint()}`}
                 </p>
               </div>
             </Show>

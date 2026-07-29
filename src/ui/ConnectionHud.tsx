@@ -18,120 +18,332 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS Connection HUD — glanceable transport / engine / tick telemetry.
- * Composed into StatusBar; reads ephemeral store.telemetry.
+ * AXIS Connection HUD — ENG / RUN / MODE / PATH (+ SRC STR STO).
  *
- * Chip roles:
- * - LIVE: stream on/off
- * - tick: last live price pulse (not the calculation engine)
- * - MODE: interpret | compile | auto for the active engine
- * - ENG (plane): engine id + **how the last run traveled** (WS / REST / LOCAL)
- * - SRC / STR / STO: other plugin planes
+ * ENG  local | remote
+ * RUN  browser | server | worker
+ * MODE interpret | compile | auto
+ * PATH WS | REST (hidden for browser)
+ *
+ * Sticky info: hover opens panel; click pin (or chip) keeps it until Esc / outside.
  */
 
-import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
-import { store } from '../store';
-import type { ConnState, PlaneTelemetry, TransportClass } from '../store/types';
 import {
-  connDotClass,
-  formatLatency,
-  formatTickAge,
-  transportLabel,
-} from './telemetry';
-import { Icons } from './icons';
-import { getEngine } from '../engines/catalog';
+  Component,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+} from 'solid-js';
+import { store, setStore, persist } from '../store';
+import type { PlaneTelemetry, TransportClass } from '../store/types';
+import { formatLatency, formatTickAge, transportLabel } from './telemetry';
+import {
+  deriveHud,
+  hudChipHelp,
+  type HudChipId,
+  type HudSnapshot,
+} from './hud-model';
 import { defaultStreamForSource } from '../streams/catalog';
+import { pluginKey } from '../plugins/types';
 
-function PlaneChip(props: {
-  label: string;
-  plane: PlaneTelemetry;
-  title?: string;
+function readEngineCfg(engineId: string): Record<string, unknown> {
+  const pc = store.pluginsConfig || {};
+  return (pc[pluginKey('engine', engineId)] || pc[engineId] || {}) as Record<string, unknown>;
+}
+
+function useHudSnapshot(): () => HudSnapshot {
+  return createMemo(() => {
+    const engineId = store.engine || store.activePlugins?.engine || 'server';
+    const cfg = readEngineCfg(engineId);
+    const tel = store.telemetry?.engine;
+    return deriveHud({
+      engineId,
+      endpoint: store.endpoint || '',
+      modeRaw: cfg.mode,
+      preferWs: cfg.preferWs !== false,
+      engineTransport: tel?.transport,
+      engineState: tel?.state,
+      latencyMs: tel?.latencyMs ?? store.lastRunMs,
+      detail: tel?.detail,
+      error: tel?.error,
+    });
+  });
+}
+
+// ── Sticky info panel ─────────────────────────────────────────────────
+
+function HudInfoPanel(props: {
+  chip: HudChipId;
+  snap: HudSnapshot;
+  pinned: boolean;
+  onClose: () => void;
+  onTogglePin: () => void;
+  /** Anchor element for fixed placement (avoids status-bar overflow clip). */
+  anchor: HTMLElement | null | undefined;
 }) {
-  const t = () => props.plane;
+  const help = () => hudChipHelp(props.chip, props.snap);
+  const pos = createMemo(() => {
+    const el = props.anchor;
+    if (!el || typeof el.getBoundingClientRect !== 'function') {
+      return { left: 8, bottom: 32 };
+    }
+    const r = el.getBoundingClientRect();
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - 328));
+    const bottom = Math.max(8, window.innerHeight - r.top + 6);
+    return { left, bottom };
+  });
+  return (
+    <div
+      class="fixed z-[300] w-[min(320px,calc(100vw-24px))] border-2 border-border bg-bg-panel shadow-[0_8px_24px_rgba(0,0,0,0.55)] p-2.5 text-left"
+      style={{ left: `${pos().left}px`, bottom: `${pos().bottom}px` }}
+      data-testid="axis-hud-info"
+      role="dialog"
+      aria-label={help().title}
+    >
+      <div class="flex items-start justify-between gap-2 mb-1.5">
+        <div class="text-[11px] font-semibold text-text tracking-tight">{help().title}</div>
+        <div class="flex items-center gap-1 flex-shrink-0">
+          <button
+            type="button"
+            class={`sc-btn sc-btn-ghost px-1.5 py-0 text-[9px] font-mono ${
+              props.pinned ? 'text-accent' : 'text-text-faint'
+            }`}
+            title={props.pinned ? 'Unpin (auto-hide on leave)' : 'Pin open'}
+            data-testid="axis-hud-pin"
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onTogglePin();
+            }}
+          >
+            {props.pinned ? 'pinned' : 'pin'}
+          </button>
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost px-1.5 py-0 text-[10px] text-text-faint"
+            aria-label="Close"
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onClose();
+            }}
+          >
+            ×
+          </button>
+        </div>
+      </div>
+      <p class="text-[10px] text-text-dim font-mono whitespace-pre-wrap leading-relaxed">
+        {help().body}
+      </p>
+      <div class="mt-2 pt-1.5 border-t border-border-soft grid grid-cols-2 gap-x-2 gap-y-0.5 text-[9px] font-mono text-text-faint">
+        <span>ENG {props.snap.eng}</span>
+        <span>RUN {props.snap.run}</span>
+        <span>MODE {props.snap.mode}</span>
+        <span>PATH {props.snap.showPath ? props.snap.path : '—'}</span>
+        <span class="col-span-2 truncate" title={props.snap.endpoint}>
+          ep {props.snap.endpoint}
+        </span>
+        <span class="col-span-2 truncate" title={props.snap.product}>
+          {props.snap.product}
+        </span>
+        <Show when={props.snap.error}>
+          <span class="col-span-2 text-red truncate">{props.snap.error}</span>
+        </Show>
+      </div>
+      <p class="mt-1.5 text-[9px] text-text-faint">
+        Hover for info · pin to keep · Esc closes
+      </p>
+    </div>
+  );
+}
+
+function useStickyInfo() {
+  const [openChip, setOpenChip] = createSignal<HudChipId | null>(null);
+  const [pinned, setPinned] = createSignal(false);
+  let leaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const clearLeave = () => {
+    if (leaveTimer) {
+      clearTimeout(leaveTimer);
+      leaveTimer = null;
+    }
+  };
+
+  const open = (id: HudChipId) => {
+    clearLeave();
+    setOpenChip(id);
+  };
+
+  const scheduleClose = () => {
+    if (pinned()) return;
+    clearLeave();
+    leaveTimer = setTimeout(() => setOpenChip(null), 220);
+  };
+
+  const close = () => {
+    clearLeave();
+    setPinned(false);
+    setOpenChip(null);
+  };
+
+  const togglePin = () => {
+    setPinned((p) => !p);
+  };
+
+  onMount(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    window.addEventListener('keydown', onKey);
+    onCleanup(() => {
+      window.removeEventListener('keydown', onKey);
+      clearLeave();
+    });
+  });
+
+  return { openChip, pinned, open, scheduleClose, close, togglePin, clearLeave };
+}
+
+// ── Chips ─────────────────────────────────────────────────────────────
+
+function ChipShell(props: {
+  id: HudChipId;
+  label: string;
+  value: string;
+  state?: 'idle' | 'ok' | 'warn' | 'err' | 'load';
+  monoValue?: boolean;
+  sticky: ReturnType<typeof useStickyInfo>;
+  snap: () => HudSnapshot;
+  extra?: string;
+  testId?: string;
+}) {
+  let anchor: HTMLSpanElement | undefined;
+  const dot = () => {
+    switch (props.state) {
+      case 'ok':
+        return 'bg-accent-2';
+      case 'warn':
+      case 'load':
+        return 'bg-orange animate-pulse';
+      case 'err':
+        return 'bg-red';
+      default:
+        return 'bg-border';
+    }
+  };
+  const active = () => props.sticky.openChip() === props.id;
+
   return (
     <span
-      class="inline-flex items-center gap-1 px-1.5 py-0.5 border border-border-soft bg-bg-elev/60 max-w-[160px] flex-shrink-0 h-[22px] box-border overflow-hidden"
-      title={
-        props.title ||
-        `${props.label}: ${t().name} · ${transportLabel(t().transport)} · ${t().state}${
-          t().detail ? ` · ${t().detail}` : ''
-        }${t().error ? ` · ${t().error}` : ''}`
-      }
-      data-plane={props.label.toLowerCase()}
+      ref={(el) => {
+        anchor = el;
+      }}
+      class={`relative inline-flex items-center gap-1 px-1.5 py-0.5 border h-[22px] box-border flex-shrink-0 overflow-hidden cursor-default select-none ${
+        active()
+          ? 'border-accent bg-accent/10'
+          : 'border-border-soft bg-bg-elev/60'
+      }`}
+      data-testid={props.testId || `axis-hud-${props.id}`}
+      data-hud-chip={props.id}
+      onMouseEnter={() => props.sticky.open(props.id)}
+      onMouseLeave={() => props.sticky.scheduleClose()}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (active() && props.sticky.pinned()) {
+          props.sticky.close();
+        } else {
+          props.sticky.open(props.id);
+          if (!props.sticky.pinned()) props.sticky.togglePin();
+        }
+      }}
     >
-      <span
-        class={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${connDotClass(t().state)}`}
-        aria-hidden="true"
-      />
+      <span class={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dot()}`} aria-hidden="true" />
       <span class="text-[9px] font-mono uppercase text-text-faint tracking-wide flex-shrink-0">
         {props.label}
       </span>
-      <span class="text-[10px] font-mono text-text-dim truncate max-w-[48px]">{t().id}</span>
-      <TransportBadge transport={t().transport} />
-      <Show when={t().latencyMs != null}>
-        <span class="text-[10px] font-mono tabular-nums text-text-faint flex-shrink-0">
-          {formatLatency(t().latencyMs)}
+      <span
+        class={`text-[10px] font-mono truncate max-w-[72px] ${
+          props.state === 'load' ? 'text-orange' : 'text-text'
+        }`}
+      >
+        {props.value}
+      </span>
+      <Show when={props.extra}>
+        <span class="text-[9px] font-mono text-text-faint tabular-nums flex-shrink-0">
+          {props.extra}
         </span>
+      </Show>
+      <Show when={active()}>
+        <div
+          onMouseEnter={() => props.sticky.clearLeave()}
+          onMouseLeave={() => props.sticky.scheduleClose()}
+        >
+          <HudInfoPanel
+            chip={props.id}
+            snap={props.snap()}
+            pinned={props.sticky.pinned()}
+            anchor={anchor}
+            onClose={() => props.sticky.close()}
+            onTogglePin={() => props.sticky.togglePin()}
+          />
+        </div>
       </Show>
     </span>
   );
 }
 
-function TransportBadge(props: { transport: TransportClass }) {
-  const color = () => {
-    switch (props.transport) {
-      case 'ws':
-        return 'border-accent-2/40 text-accent-2';
-      case 'rest':
-        return 'border-accent-3/40 text-accent-3';
-      case 'broker':
-        return 'border-accent/40 text-accent';
-      case 'local':
-        return 'border-border text-text-faint';
-      default:
-        return 'border-border text-text-faint';
-    }
-  };
+function PlaneChip(props: {
+  label: string;
+  plane: PlaneTelemetry;
+  id: HudChipId;
+  sticky: ReturnType<typeof useStickyInfo>;
+  snap: () => HudSnapshot;
+}) {
+  const t = () => props.plane;
   return (
-    <span
-      class={`px-1 py-px border text-[8px] font-mono leading-none flex-shrink-0 ${color()}`}
-      title={
-        props.transport === 'ws'
-          ? 'Last / preferred path: WebSocket /ws/run'
-          : props.transport === 'rest'
-            ? 'Last / preferred path: REST POST /run'
-            : props.transport === 'local'
-              ? 'In-browser / local path (no network run)'
-              : transportLabel(props.transport)
+    <ChipShell
+      id={props.id}
+      label={props.label}
+      value={t().id}
+      state={
+        t().state === 'error'
+          ? 'err'
+          : t().state === 'open'
+            ? 'ok'
+            : t().state === 'connecting'
+              ? 'load'
+              : 'idle'
       }
-    >
-      {transportLabel(props.transport)}
-    </span>
+      extra={transportLabel(t().transport as TransportClass)}
+      sticky={props.sticky}
+      snap={props.snap}
+      testId={`axis-hud-${props.id}`}
+    />
   );
 }
 
-function TickPulse() {
+function TickPulse(props: {
+  sticky: ReturnType<typeof useStickyInfo>;
+  snap: () => HudSnapshot;
+}) {
+  let anchor: HTMLSpanElement | undefined;
   const tick = () => store.telemetry?.lastTick;
   const [now, setNow] = createSignal(Date.now());
   onMount(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     onCleanup(() => clearInterval(id));
   });
-
   const fresh = () => {
     const t = tick();
-    if (!t) return false;
-    return now() - t.at < 2000;
+    return !!t && now() - t.at < 2000;
   };
-
   const dirColor = () => {
     const d = tick()?.dir;
     if (d === 'up') return 'text-accent-2';
     if (d === 'down') return 'text-red';
     return 'text-text-faint';
   };
-
-  /** Fixed-width price so digit changes don't resize the chip. */
   const priceText = () => {
     const t = tick();
     if (!t) return '—';
@@ -140,18 +352,26 @@ function TickPulse() {
       maximumFractionDigits: 2,
     });
   };
+  const active = () => props.sticky.openChip() === 'tick';
 
   return (
     <span
-      class="inline-flex items-center gap-1 px-1.5 py-0.5 border border-border-soft font-mono text-[10px] h-[22px] box-border flex-shrink-0 overflow-hidden relative"
-      title={
-        tick()
-          ? `Live market tick (stream price) — not the engine. ${tick()!.price} @ ${tick()!.time} (${formatTickAge(tick()!.at, now())})`
-          : 'No live ticks yet (enable Live stream)'
-      }
+      ref={(el) => {
+        anchor = el;
+      }}
+      class={`relative inline-flex items-center gap-1 px-1.5 py-0.5 border font-mono text-[10px] h-[22px] box-border flex-shrink-0 overflow-hidden cursor-default ${
+        active() ? 'border-accent bg-accent/10' : 'border-border-soft'
+      }`}
       data-testid="axis-tick-indicator"
+      data-hud-chip="tick"
+      onMouseEnter={() => props.sticky.open('tick')}
+      onMouseLeave={() => props.sticky.scheduleClose()}
+      onClick={(e) => {
+        e.stopPropagation();
+        props.sticky.open('tick');
+        if (!props.sticky.pinned()) props.sticky.togglePin();
+      }}
     >
-      {/* Fixed 8×8 box; ping clipped so it never overlaps MODE/ENG chips */}
       <span
         class="relative flex-shrink-0 overflow-hidden"
         style={{ width: '8px', height: '8px' }}
@@ -180,11 +400,30 @@ function TickPulse() {
       <span class="text-text-faint tabular-nums w-[3ch] flex-shrink-0 text-right">
         {tick() ? formatTickAge(tick()!.at, now()) : '—'}
       </span>
+      <Show when={active()}>
+        <div
+          onMouseEnter={() => props.sticky.clearLeave()}
+          onMouseLeave={() => props.sticky.scheduleClose()}
+        >
+          <HudInfoPanel
+            chip="tick"
+            snap={props.snap()}
+            pinned={props.sticky.pinned()}
+            anchor={anchor}
+            onClose={() => props.sticky.close()}
+            onTogglePin={() => props.sticky.togglePin()}
+          />
+        </div>
+      </Show>
     </span>
   );
 }
 
-function LiveBadge() {
+function LiveBadge(props: {
+  sticky: ReturnType<typeof useStickyInfo>;
+  snap: () => HudSnapshot;
+}) {
+  let anchor: HTMLSpanElement | undefined;
   const st = () => store.stream.status;
   const label = () => {
     if (!store.live.active) return 'OFF';
@@ -200,74 +439,41 @@ function LiveBadge() {
     if (st() === 'error') return 'text-red border-red/40';
     return 'text-text-faint border-border';
   };
+  const active = () => props.sticky.openChip() === 'live';
   return (
     <span
-      class={`px-1.5 py-0.5 border text-[9px] font-mono tracking-wider flex-shrink-0 h-[22px] box-border inline-flex items-center ${cls()}`}
-      title="Live stream arm (market data), independent of calculation engine"
+      ref={(el) => {
+        anchor = el;
+      }}
+      class={`relative px-1.5 py-0.5 border text-[9px] font-mono tracking-wider flex-shrink-0 h-[22px] box-border inline-flex items-center cursor-default ${cls()} ${
+        active() ? 'ring-1 ring-accent' : ''
+      }`}
+      data-hud-chip="live"
+      data-testid="axis-hud-live"
+      onMouseEnter={() => props.sticky.open('live')}
+      onMouseLeave={() => props.sticky.scheduleClose()}
+      onClick={(e) => {
+        e.stopPropagation();
+        props.sticky.open('live');
+        if (!props.sticky.pinned()) props.sticky.togglePin();
+      }}
     >
       {label()}
-    </span>
-  );
-}
-
-/**
- * MODE chip — execution path (interpret / compile / auto) + engine id.
- * Not the same as ENG plane transport (WS/REST).
- */
-function EngineModeChip() {
-  const meta = createMemo(() => {
-    const eng = getEngine(store.engine);
-    const mode =
-      (store.pluginsConfig?.[`engine:${store.engine}`]?.mode as string) ||
-      (store.pluginsConfig?.[store.engine]?.mode as string) ||
-      'interpret';
-    const tel = store.telemetry?.engine;
-    const loading =
-      store.engine === 'pyodide' &&
-      (tel?.state === 'connecting' || (!!tel?.detail && String(tel.detail).includes('load')));
-    return {
-      id: store.engine,
-      name: eng?.name || store.engine,
-      offline: !!eng?.capabilities?.offline,
-      mode: String(mode),
-      latency: tel?.latencyMs ?? store.lastRunMs,
-      state: (tel?.state || 'idle') as ConnState,
-      loading,
-      detail: tel?.detail || '',
-    };
-  });
-
-  return (
-    <span
-      class="inline-flex items-center gap-1 px-1.5 py-0.5 border border-border-soft font-mono text-[10px] h-[22px] box-border flex-shrink-0 overflow-hidden max-w-[200px]"
-      title={
-        meta().loading
-          ? `Pyodide cold start: ${meta().detail || '~20–30s'} — wasm, micropip, vendor wheels`
-          : `Execution MODE (not transport): ${meta().name} · mode=${meta().mode}. ` +
-            `Server uses Pro API; Pyodide runs in-browser. ` +
-            `WS/REST is shown on the ENG chip (how the last run was sent).`
-      }
-      data-testid="axis-engine-chip"
-    >
-      <span class={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${connDotClass(meta().state)}`} />
-      {meta().offline ? (
-        <Icons.activity size={11} class="text-accent-2 flex-shrink-0" />
-      ) : (
-        <Icons.wifi size={11} class="text-accent-3 flex-shrink-0" />
-      )}
-      <span class="text-[9px] text-text-faint uppercase flex-shrink-0">mode</span>
-      <span class="truncate max-w-[56px] text-text-dim">{meta().id}</span>
-      <Show
-        when={!meta().loading}
-        fallback={
-          <span class="text-[9px] text-orange uppercase truncate" data-testid="axis-pyodide-loading">
-            loading…
-          </span>
-        }
-      >
-        <span class="text-[9px] text-text-faint uppercase flex-shrink-0">{meta().mode}</span>
+      <Show when={active()}>
+        <div
+          onMouseEnter={() => props.sticky.clearLeave()}
+          onMouseLeave={() => props.sticky.scheduleClose()}
+        >
+          <HudInfoPanel
+            chip="live"
+            snap={props.snap()}
+            pinned={props.sticky.pinned()}
+            anchor={anchor}
+            onClose={() => props.sticky.close()}
+            onTogglePin={() => props.sticky.togglePin()}
+          />
+        </div>
       </Show>
-      <span class="tabular-nums text-text-dim flex-shrink-0">{formatLatency(meta().latency)}</span>
     </span>
   );
 }
@@ -283,106 +489,143 @@ function PairingWarn() {
   });
   return (
     <Show when={warn()}>
-      <span class="text-[9px] font-mono text-orange truncate max-w-[140px] flex-shrink-0" title={warn()!}>
+      <span
+        class="text-[9px] font-mono text-orange truncate max-w-[140px] flex-shrink-0"
+        title={warn()!}
+      >
         ⚠ pair
       </span>
     </Show>
   );
 }
 
-function engPlaneTitle(p: PlaneTelemetry): string {
-  const transportHint =
-    p.transport === 'ws'
-      ? 'WS = WebSocket /ws/run (preferred when Prefer WebSocket is on)'
-      : p.transport === 'rest'
-        ? 'REST = POST /run (fallback if WS fails or Prefer WebSocket is off)'
-        : p.transport === 'local'
-          ? 'LOCAL = in-browser Pyodide (no Pro API hop)'
-          : transportLabel(p.transport);
-  return (
-    `ENG plane (active engine + transport): ${p.name} · ${transportLabel(p.transport)} · ${p.state}. ` +
-    `${transportHint}. ` +
-    `Should match MODE chip engine id. WS/REST toggles on server runs; LOCAL when pyodide is selected. ` +
-    `Execution mode (interpret/compile) is on the MODE chip.`
-  );
-}
-
-/**
- * ENG plane must track the *selected* engine (store.engine). Telemetry can lag
- * after background Pyodide warm-up; overlay id/name/transport from selection.
- */
-function resolvedEnginePlane(): PlaneTelemetry | undefined {
-  const raw = store.telemetry?.engine;
-  if (!raw) return undefined;
-  const id = store.engine || store.activePlugins?.engine || raw.id;
-  if (id === raw.id) return raw;
-  const eng = getEngine(id);
-  const transport: TransportClass =
-    id === 'pyodide' ? 'local' : id === 'server' ? (raw.transport === 'rest' ? 'rest' : 'ws') : raw.transport;
-  return {
-    ...raw,
-    id,
-    name: eng?.name || id,
-    transport,
-    // Don't keep pyodide "ready/loading" detail while MODE is server
-    detail: id === 'pyodide' ? raw.detail : raw.detail?.includes('load') ? undefined : raw.detail,
-    state: id === 'pyodide' ? raw.state : raw.state === 'connecting' && raw.id === 'pyodide' ? 'idle' : raw.state,
-  };
-}
-
 export const ConnectionHud: Component = () => {
+  const snap = useHudSnapshot();
+  const sticky = useStickyInfo();
   const tel = () => store.telemetry;
   const compact = () => tel()?.hud?.compact;
-  const engPlane = createMemo(() => resolvedEnginePlane());
+
+  // Persist compact preference already exists; ensure hud object present
+  createEffect(() => {
+    void store.telemetry?.hud?.compact;
+  });
+
+  const engState = () => {
+    const s = snap();
+    if (s.error) return 'err' as const;
+    if (s.loading) return 'load' as const;
+    if (s.engineState === 'open') return 'ok' as const;
+    if (s.engineState === 'connecting') return 'load' as const;
+    return 'idle' as const;
+  };
 
   return (
     <div
-      class="flex items-center gap-1.5 flex-nowrap min-w-0 flex-shrink-0 overflow-hidden"
+      class="flex items-center gap-1.5 flex-nowrap min-w-0 flex-shrink-0 overflow-visible"
       data-testid="axis-connection-hud"
       role="status"
       aria-label="Connection status"
     >
-      <LiveBadge />
-      <TickPulse />
-      <EngineModeChip />
+      <LiveBadge sticky={sticky} snap={snap} />
+      <TickPulse sticky={sticky} snap={snap} />
+
+      {/* ENG local | remote */}
+      <ChipShell
+        id="eng"
+        label="eng"
+        value={snap().eng}
+        state={engState()}
+        sticky={sticky}
+        snap={snap}
+        testId="axis-hud-eng"
+      />
+
+      {/* RUN browser | server | worker */}
+      <ChipShell
+        id="run"
+        label="run"
+        value={snap().loading ? 'loading…' : snap().run}
+        state={snap().loading ? 'load' : engState()}
+        sticky={sticky}
+        snap={snap}
+        testId="axis-hud-run"
+      />
+
+      {/* MODE interpret | compile | auto */}
+      <ChipShell
+        id="mode"
+        label="mode"
+        value={snap().mode}
+        state={engState()}
+        extra={formatLatency(snap().latencyMs)}
+        sticky={sticky}
+        snap={snap}
+        testId="axis-engine-chip"
+      />
+
+      {/* PATH WS | REST — not for browser */}
+      <Show when={snap().showPath}>
+        <ChipShell
+          id="path"
+          label="path"
+          value={snap().path}
+          state={snap().path === 'WS' ? 'ok' : 'idle'}
+          sticky={sticky}
+          snap={snap}
+          testId="axis-hud-path"
+        />
+      </Show>
+
       <Show when={!compact()}>
-        <For
-          each={[
-            {
-              label: 'SRC',
-              plane: () => tel()?.source,
-              title: () => undefined as string | undefined,
-            },
-            {
-              label: 'STR',
-              plane: () => tel()?.stream,
-              title: () => undefined as string | undefined,
-            },
-            {
-              label: 'ENG',
-              plane: () => engPlane(),
-              title: () => {
-                const p = engPlane();
-                return p ? engPlaneTitle(p) : undefined;
-              },
-            },
-            {
-              label: 'STO',
-              plane: () => tel()?.storage,
-              title: () => undefined as string | undefined,
-            },
-          ]}
-        >
-          {(item) => (
-            <Show when={item.plane()}>
-              {(p) => (
-                <PlaneChip label={item.label} plane={p()} title={item.title?.()} />
-              )}
-            </Show>
+        <Show when={tel()?.source}>
+          {(p) => (
+            <PlaneChip
+              label="src"
+              plane={p()}
+              id="src"
+              sticky={sticky}
+              snap={snap}
+            />
           )}
-        </For>
+        </Show>
+        <Show when={tel()?.stream}>
+          {(p) => (
+            <PlaneChip
+              label="str"
+              plane={p()}
+              id="str"
+              sticky={sticky}
+              snap={snap}
+            />
+          )}
+        </Show>
+        <Show when={tel()?.storage}>
+          {(p) => (
+            <PlaneChip
+              label="sto"
+              plane={p()}
+              id="sto"
+              sticky={sticky}
+              snap={snap}
+            />
+          )}
+        </Show>
         <PairingWarn />
       </Show>
+
+      {/* Compact toggle (keeps SRC/STR/STO optional) */}
+      <button
+        type="button"
+        class="sc-btn sc-btn-ghost px-1 py-0 text-[9px] font-mono text-text-faint flex-shrink-0 h-[22px]"
+        title={compact() ? 'Expand SRC/STR/STO chips' : 'Compact HUD (hide SRC/STR/STO)'}
+        data-testid="axis-hud-compact"
+        onClick={() => {
+          setStore('telemetry', 'hud', 'compact', !compact());
+          persist();
+        }}
+      >
+        {compact() ? '···' : '·'}
+      </button>
     </div>
   );
 };
