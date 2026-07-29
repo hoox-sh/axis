@@ -85,8 +85,9 @@ export const serverEngine = {
         }
         const t0 = performance.now();
         try {
+            // mode must be in the JSON body — Pro API validates body only (query is legacy).
             const res = await fetch(`${cfg.endpoint}/run?mode=${encodeURIComponent(cfg.mode)}`, {
-                method: 'POST', headers, body: JSON.stringify({ script, data: bars }),
+                method: 'POST', headers, body: JSON.stringify({ script, data: bars, mode: cfg.mode }),
                 signal: AbortSignal.timeout(30_000),
             });
             const payload = await res.json().catch(() => ({ status: 'error', message: 'invalid JSON' }));

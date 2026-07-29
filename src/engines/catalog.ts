@@ -185,10 +185,11 @@ export const serverEngine: EnginePlugin = {
     // ── REST fallback ─────────────────────────────────────────────
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     try {
+      // mode must be in the JSON body — Pro API validates body only (query is legacy).
       const res = await fetch(`${endpoint}/run?mode=${encodeURIComponent(mode)}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ script, data: bars }),
+        body: JSON.stringify({ script, data: bars, mode }),
         signal: signal ?? AbortSignal.timeout(timeoutMs),
       });
       const payload = await res.json().catch(() => ({ status: 'error', message: 'invalid JSON' }));
