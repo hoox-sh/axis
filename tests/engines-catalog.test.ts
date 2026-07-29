@@ -46,10 +46,19 @@ describe('engines catalog', () => {
   });
 
   it('server run success', async () => {
-    restoreFetch = mockFetch(async (input) => {
+    restoreFetch = mockFetch(async (input, init) => {
       const url = String(input);
       expect(url).toContain('/run');
       expect(url).toContain('mode=compile');
+      // Pro API reads mode from the JSON body (query is legacy only)
+      const body = JSON.parse(String(init?.body || '{}')) as {
+        script?: string;
+        data?: unknown[];
+        mode?: string;
+      };
+      expect(body.mode).toBe('compile');
+      expect(body.script).toBe('plot(close)');
+      expect(Array.isArray(body.data)).toBe(true);
       return jsonResponse({
         status: 'success',
         plots: [1, 2, 3],
