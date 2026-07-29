@@ -400,24 +400,22 @@ export const pyodideEngine: EnginePlugin & {
 
       // Local wheels under /vendor (public/ → dist). Validate before micropip
       // so SPA HTML fallbacks surface as clear errors instead of BadZipFile.
+      //
+      // deps=false: the pynescript METADATA requires click/requests/tqdm (CLI/API),
+      // which are not needed for in-browser evaluate and are NOT vendored under
+      // /pyodide/v0.26.2/ — micropip would 404 them on the self-hosted index.
+      // Second positional arg alone is keep_going, not deps (micropip 0.6).
       const wheelUrl = `${origin}/vendor/pynescript-0.2.0-py3-none-any.whl`;
       const antlrUrl = `${origin}/vendor/antlr4_python3_runtime-4.13.2-py3-none-any.whl`;
       await assertZipAsset(wheelUrl, 'pynescript wheel');
+      await assertZipAsset(antlrUrl, 'antlr4 wheel');
       try {
-        await micropip.install(wheelUrl, false);
+        // antlr first so pynescript import can resolve
+        await micropip.install(antlrUrl, false, false);
+        await micropip.install(wheelUrl, false, false);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        throw new Error(`Failed to install pynescript wheel from ${wheelUrl}: ${msg}`);
-      }
-      try {
-        await assertZipAsset(antlrUrl, 'antlr4 wheel');
-        await micropip.install(antlrUrl, false);
-      } catch {
-        try {
-          await micropip.install('antlr4-python3-runtime>=4.13.1');
-        } catch {
-          /* may already be present via wheel deps */
-        }
+        throw new Error(`Failed to install browser wheels from ${origin}/vendor: ${msg}`);
       }
 
       const runtimeUrl = `${origin}/pyodide/pynescript_runtime.py`;

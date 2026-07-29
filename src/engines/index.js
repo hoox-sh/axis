@@ -185,20 +185,17 @@ export const pyodideEngine = {
                         `pynescript wheel returned HTML (SPA fallback) at ${wheelUrl} — deploy public/vendor into dist/`,
                     );
                 }
-                try {
-                    await micropip.install(wheelUrl, false);
-                } catch (e) {
-                    throw new Error(`Failed to load pynescript wheel from ${origin}: ${e.message}`);
-                }
+                // deps=false: do not pull click/requests/tqdm (not on self-hosted index)
                 try {
                     const antlrRes = await fetch(antlrUrl);
                     if (antlrRes.ok && !(antlrRes.headers.get('content-type') || '').includes('text/html')) {
-                        await micropip.install(antlrUrl, false);
+                        await micropip.install(antlrUrl, false, false);
                     } else {
-                        await micropip.install('antlr4-python3-runtime>=4.13.1');
+                        await micropip.install('antlr4-python3-runtime>=4.13.1', false, false);
                     }
+                    await micropip.install(wheelUrl, false, false);
                 } catch (e) {
-                    throw new Error(`Failed to install antlr4: ${e.message}. Check /vendor or internet.`);
+                    throw new Error(`Failed to load browser wheels from ${origin}: ${e.message}`);
                 }
 
                 self._emitProgress('Loading Pine runtime…');
