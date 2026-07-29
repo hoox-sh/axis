@@ -90,7 +90,15 @@ export const serverEngine = {
                 method: 'POST', headers, body: JSON.stringify({ script, data: bars, mode: cfg.mode }),
                 signal: AbortSignal.timeout(30_000),
             });
-            const payload = await res.json().catch(() => ({ status: 'error', message: 'invalid JSON' }));
+            const text = await res.text();
+            let payload;
+            try {
+                const cleaned = text.replace(/\bNaN\b/g, 'null').replace(/\b-?Infinity\b/g, 'null');
+                payload = JSON.parse(cleaned);
+            } catch {
+                const snippet = text.slice(0, 120).replace(/\s+/g, ' ');
+                payload = { status: 'error', message: `invalid JSON (HTTP ${res.status}${snippet ? `: ${snippet}` : ''})` };
+            }
             if (!res.ok || payload.status === 'error') {
                 return { status: 'error', plots: [], events: [], error: payload.message || `HTTP ${res.status}`, meta: { ms: performance.now() - t0 } };
             }

@@ -192,14 +192,29 @@ export const serverEngine: EnginePlugin = {
         body: JSON.stringify({ script, data: bars, mode }),
         signal: signal ?? AbortSignal.timeout(timeoutMs),
       });
-      const payload = await res.json().catch(() => ({ status: 'error', message: 'invalid JSON' }));
+      const text = await res.text();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let payload: any;
+      try {
+        // Python json.dumps can emit bare NaN; browsers reject that. Normalize first.
+        const cleaned = text
+          .replace(/\bNaN\b/g, 'null')
+          .replace(/\b-?Infinity\b/g, 'null');
+        payload = JSON.parse(cleaned);
+      } catch {
+        const snippet = text.slice(0, 120).replace(/\s+/g, ' ');
+        payload = {
+          status: 'error',
+          message: `invalid JSON (HTTP ${res.status}${snippet ? `: ${snippet}` : ''})`,
+        };
+      }
       if (!res.ok || payload.status === 'error') {
         return {
           status: 'error',
           plots: [],
           events: [],
           series: {},
-          error: payload.message || `HTTP ${res.status}`,
+          error: String(payload.message || payload.error || `HTTP ${res.status}`),
           meta: { ms: performance.now() - t0, transport: 'rest' },
         } satisfies RunResult;
       }
@@ -209,19 +224,19 @@ export const serverEngine: EnginePlugin = {
         payload.script_name || payload.meta?.script_name || 'plot';
       return {
         status: 'success',
-        plots: payload.plots || [],
-        series: payload.series || {},
-        events: payload.events || [],
-        drawings: payload.drawings || [],
+        plots: (payload.plots as (number | null)[]) || [],
+        series: (payload.series as Record<string, (number | null)[]>) || {},
+        events: (payload.events as RunResult['events']) || [],
+        drawings: (payload.drawings as RunResult['drawings']) || [],
         meta: {
           ...(payload.meta || {}),
           ms: performance.now() - t0,
           transport: 'rest',
-          mode: payload.mode,
-          script_id: payload.script_id,
-          run_id: payload.run_id,
+          mode: payload.mode as string | undefined,
+          script_id: payload.script_id as string | undefined,
+          run_id: payload.run_id as string | undefined,
           overlay: restOverlay !== false,
-          script_name: restName,
+          script_name: restName as string,
           plot_meta: payload.plot_meta || {},
         },
       } satisfies RunResult;
