@@ -54,14 +54,19 @@ const CORS_HEADERS = (origin: string): Record<string, string> => ({
   Vary: 'Origin',
 });
 
-function pickOrigin(req: Request, env: Env): string {
+/**
+ * Local-dev browser origins (Vite :3000, axis_pwa :8081, arbitrary ports).
+ * Match pyne Pro API default: ^https?://(localhost|127.0.0.1)(:\\d+)?$
+ *
+ * Do **not** allow `http://0.0.0.0:…` — browsers almost never send that Origin,
+ * and binding/listening on 0.0.0.0 is unrelated to CORS. Prefer localhost/127.0.0.1.
+ */
+const LOCAL_DEV_ORIGIN_RE = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i;
+
+/** Exported for unit tests. */
+export function pickOrigin(req: Request, env: Env): string {
   const reqOrigin = req.headers.get('Origin') ?? '';
-  if (
-    reqOrigin === 'http://localhost:8081' ||
-    reqOrigin === 'http://127.0.0.1:8081' ||
-    reqOrigin === 'http://localhost:3000' ||
-    reqOrigin === 'http://127.0.0.1:3000'
-  ) {
+  if (reqOrigin && LOCAL_DEV_ORIGIN_RE.test(reqOrigin)) {
     return reqOrigin;
   }
   return env.ALLOWED_ORIGIN || 'https://pynescript.ai';

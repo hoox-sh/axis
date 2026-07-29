@@ -46,15 +46,19 @@ flowchart TD
 
 From `frontend/worker/src/index.ts`:
 
-**Always echoed (dev allowlist):**
+**Always echoed (local-dev regex):**
 
-- `http://localhost:8081`
-- `http://127.0.0.1:8081`
-- `http://localhost:3000`
-- `http://127.0.0.1:3000`
+- Any `http://` or `https://` origin on **`localhost`** or **`127.0.0.1`**, optional port  
+  (e.g. Vite `:3000`, `axis_pwa_server` `:8081`, Playwright ephemeral ports)
 
-**Otherwise:** `env.ALLOWED_ORIGIN` or default `https://pynescript.ai`.
+**Not allowed (and not needed):**
 
+- `http://0.0.0.0:…` — browsers do not use `0.0.0.0` as a page origin in normal use;  
+  binding the server with `HOST=0.0.0.0` only means “listen on all interfaces,” not a CORS origin.
+
+**Otherwise:** `env.ALLOWED_ORIGIN` or default `https://pynescript.ai` (exact match).
+
+Localhost/127 allowlisting is **safe for CORS**: only pages actually served from those hosts present that `Origin`. A public site cannot forge `Origin: http://localhost:3000` in a real browser.
 **CORS headers applied:**
 
 ```

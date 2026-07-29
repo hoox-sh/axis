@@ -188,24 +188,36 @@ frontend/
 
 ## CORS (AXIS browser origin → Pro API)
 
-The Pro API (`backend/app.py`) uses `flask-cors` with origins from
-`ALLOWED_ORIGINS` (comma-separated). Defaults include
-`https://pynescript.ai`, `https://app.pynescript.ai`, and a localhost regex.
+CORS is enforced by the **API you call** (pyne Pro API or the AXIS Worker), not by the static AXIS PWA.
 
-For the public AXIS demo the VPS unit sets:
+### Pyne Pro API
+
+`backend/app.py` uses `flask-cors` with `ALLOWED_ORIGINS` (comma-separated). Defaults include
+`https://pynescript.ai`, `https://app.pynescript.ai`, and a **localhost/127.0.0.1 any-port** regex.
+
+| Origin style | Safe? | Notes |
+|--------------|-------|--------|
+| `localhost` / `127.0.0.1` (+ port) | Yes | Local AXIS / Vite; only your machine presents these Origins |
+| Public demo host (`http://VPS:8081`) | Yes if listed | Needed when UI is on VPS and API is elsewhere (or same box) |
+| `*` | Demo-only | Reflects any Origin — fine for a public demo, not for production secrets |
+| `0.0.0.0` | **Skip** | Not a normal browser Origin; listening on `0.0.0.0` ≠ CORS |
+
+For the public AXIS demo the VPS unit currently sets:
 
 ```ini
 # /etc/systemd/system/pynescript-api.service
 Environment=ALLOWED_ORIGINS=*
 ```
 
-That reflects any browser `Origin` (including `http://162.254.38.194:8081`).
-For production, prefer an explicit list, e.g.:
+Tighter production-style example (VPS UI + local dev):
 
 ```bash
 ALLOWED_ORIGINS=http://162.254.38.194:8081,https://your-pages-host.example,^https?://(localhost|127\.0\.0\.1)(:\d+)?$
 ```
 
+### AXIS Worker
+
+`worker/src/index.ts` `pickOrigin` echoes any `localhost` / `127.0.0.1` origin (any port); otherwise `ALLOWED_ORIGIN` env (single exact origin).
 Smoke:
 
 ```bash
