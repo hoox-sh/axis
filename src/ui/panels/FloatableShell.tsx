@@ -135,8 +135,12 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       bumpPanelZ(props.id);
     }
     if (d === 'window') {
-      props.onPopoutWindow?.();
-      openCompanionWindow(props.id, title());
+      // Custom popout (e.g. live Pine editor window) replaces the stub companion
+      if (props.onPopoutWindow) {
+        props.onPopoutWindow();
+      } else {
+        openCompanionWindow(props.id, title());
+      }
     }
   };
 

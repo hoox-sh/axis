@@ -91,7 +91,7 @@ type PineLogLine = { level?: string; message?: string; [k: string]: unknown };
 
 /**
  * Lift `meta.logs` / `meta.profile` onto top-level when engines only put them in meta.
- * Does not auto-open Pine Logs (callers may still open Results).
+ * Does not auto-open Scriptlogs (callers may still open Results).
  */
 function normalizeRunExtras(result: RunResult): RunResult {
   const meta = result.meta;
@@ -245,7 +245,7 @@ export async function runAndApply(
   if (openResults) {
     setStore('resultsPanel', 'open', true);
   }
-  // Do not auto-open Pine Logs aggressively; panel is user-toggled.
+  // Do not auto-open Scriptlogs aggressively; panel is user-toggled.
   if (result.status === 'error') return result;
 
   const manager = getManager();

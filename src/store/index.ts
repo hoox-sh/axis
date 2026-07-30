@@ -338,8 +338,14 @@ function mergePanelChrome(
   legacy: Partial<Record<PanelId, Partial<PanelChrome>>>,
 ): Record<PanelId, PanelChrome> {
   const base = defaultPanelChromeMap();
-  const src =
-    raw && typeof raw === 'object' ? (raw as Partial<Record<PanelId, Partial<PanelChrome>>>) : {};
+  const bag =
+    raw && typeof raw === 'object' ? ({ ...(raw as Record<string, unknown>) } as Record<string, unknown>) : {};
+  // Migrate pre-rename panel id `pinelogs` → `scriptlogs`
+  if (bag.pinelogs && !bag.scriptlogs) {
+    bag.scriptlogs = bag.pinelogs;
+  }
+  delete bag.pinelogs;
+  const src = bag as Partial<Record<PanelId, Partial<PanelChrome>>>;
   for (const id of Object.keys(base) as PanelId[]) {
     const fromDisk = src[id] || {};
     const fromLegacy = legacy[id] || {};
@@ -723,10 +729,12 @@ export function setUiScale(raw: number) {
 
 /* ── Layout helpers ─────────────────────────────────────────────── */
 
-/** Clamp and persist docked editor width (px). */
+/** Clamp and persist docked editor width (px); mirrors panelChrome.editor.w. */
 export function setEditorWidth(width: number) {
   const w = Math.min(Math.max(width, 280), Math.floor(window.innerWidth * 0.8));
   setStore('editor', 'width', w);
+  ensurePanelChrome();
+  setStore('panelChrome', 'editor', 'w', w);
   persist();
 }
 
@@ -792,14 +800,14 @@ export function toggleLayerPanel() {
   setPanelOpen('layers', !isPanelOpen('layers'));
 }
 
-/** Open/close Pine Logs panel (script `log.*` output — not system telemetry). */
-export function setPineLogsPanelOpen(open: boolean) {
-  setPanelOpen('pinelogs', open);
+/** Open/close Scriptlogs panel (script `log.*` output — not system telemetry). */
+export function setScriptLogsPanelOpen(open: boolean) {
+  setPanelOpen('scriptlogs', open);
 }
 
-/** Toggle Pine Logs panel visibility. */
-export function togglePineLogsPanel() {
-  setPanelOpen('pinelogs', !isPanelOpen('pinelogs'));
+/** Toggle Scriptlogs panel visibility. */
+export function toggleScriptLogsPanel() {
+  setPanelOpen('scriptlogs', !isPanelOpen('scriptlogs'));
 }
 
 /** Enable/disable editor profiler mode (persisted). */
@@ -838,7 +846,7 @@ export function isPanelOpen(id: PanelId): boolean {
       return !!store.resultsPanel.open || chromeOpen;
     case 'logs':
       return !!store.logsPanel.open || chromeOpen;
-    case 'pinelogs':
+    case 'scriptlogs':
       // Chrome-only (no legacy flat flag)
       return chromeOpen;
     case 'dataview':

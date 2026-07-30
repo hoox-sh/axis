@@ -44,7 +44,7 @@ import { SettingsDialog } from './ui/SettingsDialog';
 import { ScriptSettingsModal } from './ui/ScriptSettingsModal';
 import { ResultsPanel } from './ui/ResultsPanel';
 import { SystemLogs } from './ui/SystemLogs';
-import { PineLogsPanel } from './ui/PineLogsPanel';
+import { ScriptLogsPanel } from './ui/ScriptLogsPanel';
 import { PluginManager } from './ui/PluginManager';
 import { DataViewPanel } from './ui/DataViewPanel';
 import { LayerPanel } from './ui/LayerPanel';
@@ -241,7 +241,7 @@ export const App: Component = () => {
       </div>
 
       <ResultsPanel />
-      <PineLogsPanel />
+      <ScriptLogsPanel />
       <SystemLogs />
       <StatusBar />
 

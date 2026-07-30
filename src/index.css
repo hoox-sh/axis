@@ -741,6 +741,13 @@ button.sc-btn:focus-visible {
   position: relative;
 }
 
+/* Editor: CodeMirror needs a non-scrolling body so the pane owns height */
+.axis-panel-shell[data-panel-id='editor'] .axis-panel-body {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .axis-panel-dock-bottom {
   flex-shrink: 0;
   border-left: none;

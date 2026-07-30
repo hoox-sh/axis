@@ -18,32 +18,27 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * TradingView-style Pine Logs panel — `log.info` / `log.warning` / `log.error`
+ * Scriptlogs panel — `log.info` / `log.warning` / `log.error`
  * output from the last script run.
  *
  * Reads `store.lastRun` via {@link normalizePineLogs}. FloatableShell id
- * `pinelogs` (PanelId wiring lives elsewhere).
+ * `scriptlogs`.
  */
 
 import { Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { store, isPanelOpen } from '../store';
-import { normalizePineLogs } from '../results/pine-logs';
+import {
+  normalizePineLogs,
+  type PineLogEntry,
+  type PineLogLevel,
+} from '../results/pine-logs';
 import { FloatableShell } from './panels/FloatableShell';
 import { Icons } from './icons';
 
 /** Panel chrome id (see `PanelId` in panels/types). */
-const PANEL_ID = 'pinelogs' as const;
+const PANEL_ID = 'scriptlogs' as const;
 
-type LevelFilter = 'all' | 'info' | 'warning' | 'error';
-
-/** Flexible row shape until `pine-logs` exports stabilize. */
-type PineLogEntry = {
-  level?: string;
-  message?: string;
-  barIndex?: number | null;
-  bar_index?: number | null;
-  [k: string]: unknown;
-};
+type LevelFilter = 'all' | PineLogLevel;
 
 const FILTERS: { id: LevelFilter; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -74,7 +69,7 @@ function levelClass(level: unknown): string {
 }
 
 function barIndexOf(entry: PineLogEntry): number | null {
-  const v = entry.barIndex ?? entry.bar_index;
+  const v = entry.barIndex;
   if (typeof v === 'number' && Number.isFinite(v)) return v;
   return null;
 }
@@ -90,8 +85,8 @@ function logsAsText(entries: PineLogEntry[]): string {
   return entries.map(entryAsText).join('\n');
 }
 
-/** Floatable Pine `log.*` output from the last run. */
-export const PineLogsPanel: Component = () => {
+/** Floatable script `log.*` output from the last run (Scriptlogs). */
+export const ScriptLogsPanel: Component = () => {
   const [filter, setFilter] = createSignal<LevelFilter>('all');
   const [copied, setCopied] = createSignal(false);
   let listRef: HTMLDivElement | undefined;
@@ -102,8 +97,7 @@ export const PineLogsPanel: Component = () => {
     const r = store.lastRun;
     if (r == null) return [];
     try {
-      const out = normalizePineLogs(r as never) as PineLogEntry[] | null | undefined;
-      return Array.isArray(out) ? out : [];
+      return normalizePineLogs(r);
     } catch {
       return [];
     }
@@ -139,11 +133,11 @@ export const PineLogsPanel: Component = () => {
 
   return (
     <Show when={isPanelOpen(PANEL_ID)}>
-      <FloatableShell id={PANEL_ID} title="Pine Logs" testId="axis-pine-logs">
+      <FloatableShell id={PANEL_ID} title="Scriptlogs" testId="axis-scriptlogs">
         {/* Toolbar: level filters + count + copy */}
         <div
           class="flex items-center gap-1.5 px-2 py-1 border-b border-border-soft flex-shrink-0 flex-wrap"
-          data-testid="axis-pine-logs-toolbar"
+          data-testid="axis-scriptlogs-toolbar"
         >
           <div class="sc-chip-row" role="group" aria-label="Log level filter">
             <For each={FILTERS}>
@@ -152,7 +146,7 @@ export const PineLogsPanel: Component = () => {
                   type="button"
                   class={`sc-chip ${filter() === f.id ? 'is-active' : ''}`}
                   aria-pressed={filter() === f.id}
-                  data-testid={`axis-pine-logs-filter-${f.id}`}
+                  data-testid={`axis-scriptlogs-filter-${f.id}`}
                   onClick={() => setFilter(f.id)}
                 >
                   {f.label}
@@ -163,7 +157,7 @@ export const PineLogsPanel: Component = () => {
 
           <span
             class="text-[0.78em] text-text-faint font-mono tabular-nums"
-            data-testid="axis-pine-logs-count"
+            data-testid="axis-scriptlogs-count"
           >
             {filtered().length}
             <Show when={filter() !== 'all' && allEntries().length !== filtered().length}>
@@ -183,7 +177,7 @@ export const PineLogsPanel: Component = () => {
             type="button"
             class="sc-btn sc-btn-ghost px-1.5 py-0.5 text-[0.78em] inline-flex items-center gap-1"
             title="Copy filtered logs"
-            data-testid="axis-pine-logs-copy"
+            data-testid="axis-scriptlogs-copy"
             disabled={!filtered().length}
             onClick={() => void copyAll()}
           >
@@ -196,14 +190,14 @@ export const PineLogsPanel: Component = () => {
         <div
           ref={listRef}
           class="flex-1 min-h-0 overflow-y-auto font-mono text-[0.8em] bg-bg-base"
-          data-testid="axis-pine-logs-list"
+          data-testid="axis-scriptlogs-list"
         >
           <Show
             when={hasRun()}
             fallback={
               <div
                 class="p-3 text-text-faint italic text-[0.95em]"
-                data-testid="axis-pine-logs-empty"
+                data-testid="axis-scriptlogs-empty"
               >
                 Run a script that calls log.info / log.warning / log.error.
               </div>
@@ -214,9 +208,9 @@ export const PineLogsPanel: Component = () => {
               fallback={
                 <div
                   class="p-3 text-text-faint italic text-[0.95em]"
-                  data-testid="axis-pine-logs-empty"
+                  data-testid="axis-scriptlogs-empty"
                 >
-                  No Pine logs in the last run.
+                  No script logs in the last run.
                 </div>
               }
             >
@@ -235,7 +229,7 @@ export const PineLogsPanel: Component = () => {
                     return (
                       <div
                         class="group flex items-start gap-2 px-2 py-0.5 border-b border-border-soft/50 hover:bg-bg-hover/60"
-                        data-testid="axis-pine-logs-row"
+                        data-testid="axis-scriptlogs-row"
                         data-level={lvl()}
                         data-index={i()}
                       >

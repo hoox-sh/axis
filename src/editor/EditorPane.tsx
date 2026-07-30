@@ -18,11 +18,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Docked / standalone **editor chrome** around {@link TabbedEditor}.
+ * Dockable / floatable **editor chrome** around {@link TabbedEditor}.
  *
- * Handles run (default {@link runAndApply}), detach-to-popup via
- * {@link openEditorWindow}, width resize, and open/close against the Solid store.
- * Set `standalone` for the `?view=editor` window (simplified chrome).
+ * Uses {@link FloatableShell} for the same panel management as watchlist /
+ * layers (dock menu, float, drag-to-edge, close). Header extras host
+ * **Scriptlogs** and **Profiler** toggles (editor-owned tools, not topbar).
+ *
+ * Set `standalone` for the `?view=editor` popout window (simplified chrome).
  *
  * @module editor/EditorPane
  */
@@ -31,18 +33,20 @@ import { Component, Show } from 'solid-js';
 import { TabbedEditor } from './tabbed-editor';
 import {
   store,
-  setEditorOpen,
+  isPanelOpen,
   setEditorMode,
-  setEditorWidth,
+  toggleScriptLogsPanel,
+  toggleProfilerEnabled,
   saveEditorDoc,
 } from '../store';
-import { ResizeHandle } from '../ui/ResizeHandle';
+import { FloatableShell } from '../ui/panels/FloatableShell';
+import { Icons } from '../ui/icons';
 import { openEditorWindow, writeSharedDoc, bridgePublish } from './editor-bridge';
 import { runAndApply } from '../indicators/runner';
 
 interface Props {
   editorRef: { getDoc: () => string; setDoc?: (doc: string) => void };
-  /** When true, render as full-window editor (no resize handle / detach chrome simplified) */
+  /** When true, render as full-window editor (no floatable chrome) */
   standalone?: boolean;
   onRun?: (doc: string) => void;
 }
@@ -55,83 +59,86 @@ export const EditorPane: Component<Props> = (props) => {
     }
   };
 
-  const detachPopup = () => {
+  const popoutLiveEditor = (mode: 'popup' | 'tab' = 'popup') => {
     const doc = props.editorRef.getDoc?.() || '';
     writeSharedDoc(doc);
     saveEditorDoc(doc);
     setEditorMode('popout');
-    openEditorWindow('popup');
+    openEditorWindow(mode);
   };
 
-  const openTab = () => {
-    const doc = props.editorRef.getDoc?.() || '';
-    writeSharedDoc(doc);
-    saveEditorDoc(doc);
-    setEditorMode('popout');
-    openEditorWindow('tab');
-  };
-
-  const header = (
-    <div class="flex items-center gap-1 px-2 py-1 border-b-2 border-border bg-bg-base flex-shrink-0 min-h-[28px]">
-      <span class="text-[10px] text-text-dim uppercase tracking-wider font-semibold mr-auto">
-        Editor
-      </span>
-      <Show when={store.profilerEnabled}>
-        <span
-          class="text-[10px] font-mono text-accent px-1.5 py-0.5 rounded border border-accent/40 bg-accent/10 flex-shrink-0"
-          title="Profiler mode enabled (toggle from top bar)"
-          data-testid="axis-editor-profiler-chip"
-        >
-          Profiler
-          {store.lastRunMs != null ? ` · ${Math.round(store.lastRunMs)}ms` : ''}
-        </span>
-      </Show>
-      <Show when={!props.standalone}>
-        <button
-          class="sc-btn sc-btn-ghost px-1.5 text-[10px]"
-          title="Detach to floating window"
-          onClick={detachPopup}
-        >
-          ⧉ Detach
-        </button>
-        <button
-          class="sc-btn sc-btn-ghost px-1.5 text-[10px]"
-          title="Open editor in new tab"
-          onClick={openTab}
-        >
-          ↗ Tab
-        </button>
-        <button
-          class="sc-btn sc-btn-ghost px-1.5 text-[11px] leading-none"
-          title="Hide editor"
-          onClick={() => setEditorOpen(false)}
-        >
-          ›
-        </button>
-      </Show>
-      <Show when={props.standalone}>
-        <button
-          class="sc-btn sc-btn-ghost px-1.5 text-[10px]"
-          title="Reattach to main chart window"
-          onClick={() => {
-            const doc = props.editorRef.getDoc?.() || '';
-            writeSharedDoc(doc);
-            bridgePublish({ type: 'reattach' });
-            setTimeout(() => {
-              try { window.close(); } catch { /* tab may ignore */ }
-            }, 120);
-          }}
-        >
-          ⬅ Reattach
-        </button>
-      </Show>
+  const editorTools = (
+    <div
+      class="flex items-center gap-0.5 flex-shrink-0"
+      onPointerDown={(e) => e.stopPropagation()}
+      data-testid="axis-editor-tools"
+    >
+      <button
+        type="button"
+        class={`sc-btn sc-btn-ghost px-1.5 text-[10px] ${
+          isPanelOpen('scriptlogs') ? 'text-accent' : ''
+        }`}
+        title="Scriptlogs — script log.* output (not system telemetry)"
+        aria-pressed={isPanelOpen('scriptlogs')}
+        data-testid="axis-btn-scriptlogs"
+        onClick={() => toggleScriptLogsPanel()}
+      >
+        <Icons.scrollText size={12} />
+        Scriptlogs
+      </button>
+      <button
+        type="button"
+        class={`sc-btn sc-btn-ghost px-1.5 text-[10px] ${
+          store.profilerEnabled ? 'text-accent border-accent' : ''
+        }`}
+        title={
+          store.profilerEnabled
+            ? 'Profiler on — click to disable'
+            : 'Enable editor profiler mode'
+        }
+        aria-pressed={store.profilerEnabled}
+        data-testid="axis-btn-profiler"
+        onClick={() => toggleProfilerEnabled()}
+      >
+        <Icons.activity size={12} />
+        Profiler
+        <Show when={store.profilerEnabled && store.lastRunMs != null}>
+          <span class="font-mono opacity-80">
+            · {Math.round(store.lastRunMs!)}ms
+          </span>
+        </Show>
+      </button>
     </div>
   );
 
   if (props.standalone) {
     return (
-      <div class="flex flex-col h-full min-h-0 bg-bg-panel">
-        {header}
+      <div class="flex flex-col h-full min-h-0 bg-bg-panel" data-testid="axis-editor">
+        <div class="flex items-center gap-1 px-2 py-1 border-b-2 border-border bg-bg-base flex-shrink-0 min-h-[28px]">
+          <span class="text-[10px] text-text-dim uppercase tracking-wider font-semibold mr-auto">
+            Editor
+          </span>
+          {editorTools}
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost px-1.5 text-[10px]"
+            title="Reattach to main chart window"
+            onClick={() => {
+              const doc = props.editorRef.getDoc?.() || '';
+              writeSharedDoc(doc);
+              bridgePublish({ type: 'reattach' });
+              setTimeout(() => {
+                try {
+                  window.close();
+                } catch {
+                  /* tab may ignore */
+                }
+              }, 120);
+            }}
+          >
+            ⬅ Reattach
+          </button>
+        </div>
         <div class="flex-1 min-h-0 overflow-hidden">
           <TabbedEditor onRun={onRun} editorRef={props.editorRef} />
         </div>
@@ -140,21 +147,16 @@ export const EditorPane: Component<Props> = (props) => {
   }
 
   return (
-    <Show when={store.editor.open && store.editor.mode === 'docked'}>
-      <aside
-        class="flex flex-col flex-shrink-0 bg-bg-panel border-l-2 border-border min-h-0 overflow-hidden relative"
-        style={{ width: `${store.editor.width}px` }}
+    <Show when={isPanelOpen('editor') && store.editor.mode !== 'popout'}>
+      <FloatableShell
+        id="editor"
+        title="Editor"
+        testId="axis-editor"
+        class="min-h-0"
+        headerExtra={editorTools}
+        onPopoutWindow={() => popoutLiveEditor('popup')}
       >
-        <ResizeHandle
-          direction="grow-left"
-          getWidth={() => store.editor.width}
-          setWidth={setEditorWidth}
-          min={280}
-          max={Math.floor(window.innerWidth * 0.8)}
-          class="absolute top-0 left-0 bottom-0 z-20"
-        />
-        {header}
-        <div class="flex-1 min-h-0 overflow-hidden">
+        <div class="flex flex-col h-full min-h-0 overflow-hidden">
           <TabbedEditor
             onRun={onRun}
             editorRef={props.editorRef}
@@ -163,7 +165,7 @@ export const EditorPane: Component<Props> = (props) => {
             }}
           />
         </div>
-      </aside>
+      </FloatableShell>
     </Show>
   );
 };

@@ -110,13 +110,18 @@ App holds a mutable ref object `{ getDoc, setDoc?, loadLibraryDoc? }` populated 
 | Detached but no window | Popup blocked; allow popups; reattach |
 | Lost text on crash | editor.doc localStorage; library Save |
 
-## Profiler mode
+## Panel management + tools
 
-Topbar **Profiler** sets `store.profilerEnabled` (persisted). When on, the editor header shows last-run latency (`lastRunMs`); engines may also supply `profile.lines` for per-line % gutters. Details: [Debugging](/axis/docs/ui/debugging).
+The docked editor uses **FloatableShell** (same hamburger dock menu / float / drag as other panels). Header tools:
+
+- **Scriptlogs** — last-run `log.*` panel  
+- **Profiler** — sets `store.profilerEnabled` (persisted); shows last-run latency; engines may supply `profile.lines` for per-line % gutters  
+
+Details: [Debugging](/axis/docs/ui/debugging).
 
 ## See also
 
-- [Debugging](/axis/docs/ui/debugging) — Pine Logs + Profiler
+- [Debugging](/axis/docs/ui/debugging) — Scriptlogs + Profiler
 - [UI shell](/axis/docs/ui/ui-shell)
 - [Indicators](/axis/docs/ui/indicators)
 - [Script library](/axis/docs/enduser/guides/script-library)
