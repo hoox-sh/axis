@@ -124,6 +124,17 @@ export const ChartHost: Component = () => {
     });
   });
 
+  // Chart type change (candles / bars / line / Heikin-Ashi / …) — rebind series
+  // without bumping chartDataGen. Preserve viewport (fit: false).
+  createEffect(() => {
+    const type = store.chartType;
+    void type;
+    if (!getManager()) return;
+    untrack(() => {
+      if (store.bars.length) setDataToChart(store.bars, { fit: false, clearMarkers: false });
+    });
+  });
+
   // Keep tool in sync when store changes from toolbar
   createEffect(() => {
     const tool = store.drawingTool;

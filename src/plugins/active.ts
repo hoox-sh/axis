@@ -103,9 +103,10 @@ export function getActiveEngineConfig(): Record<string, unknown> {
   const base = pluginConfig('engine', getActiveEngineId());
   ensureBuiltins();
   const engine = registry.getEngine(getActiveEngineId());
-  // Surface store.endpoint when engine has an endpoint config field (server, etc.)
+  // store.endpoint is the Settings field of record — must win over a stale
+  // pluginsConfig.endpoint left over from older saves / presets.
   if (store.endpoint && (engine?.configSchema?.endpoint || getActiveEngineId() === 'server')) {
-    return { endpoint: store.endpoint, ...base };
+    return { ...base, endpoint: store.endpoint };
   }
   return base;
 }

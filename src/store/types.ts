@@ -226,6 +226,11 @@ export interface AppState {
    * ChartHost uses this so it does not full-setData on every tick.
    */
   chartDataGen: number;
+  /**
+   * Main price pane series style (candles, bars, line, Heikin-Ashi, …).
+   * Persisted; see `chart/chart-type.ts`.
+   */
+  chartType: import('../chart/chart-type').ChartType;
   symbol: string;
   interval: string;
   exchange: string;

@@ -38,7 +38,7 @@
  * Types: {@link ./types.ts}. Panel chrome shapes: `ui/panels/types`.
  */
 
-import { createStore } from 'solid-js/store';
+import { createStore, unwrap } from 'solid-js/store';
 import type {
   AppState,
   Bar,
@@ -62,6 +62,11 @@ import {
   type PanelId,
 } from '../ui/panels/types';
 import { normalizeUserDrawings } from '../chart/drawings/normalize';
+import {
+  DEFAULT_CHART_TYPE,
+  normalizeChartType,
+  type ChartType,
+} from '../chart/chart-type';
 
 // Stable ID generation — uses timestamp prefix + counter to survive reloads
 let idCounter = 0;
@@ -86,6 +91,7 @@ const DEFAULT_WATCHLIST = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'
 const DEFAULTS: AppState = {
   bars: [],
   chartDataGen: 0,
+  chartType: DEFAULT_CHART_TYPE,
   symbol: 'BTCUSDT',
   interval: '1d',
   exchange: 'binance',
@@ -211,6 +217,7 @@ function loadPersisted(): Partial<AppState> {
       return {
         ...DEFAULTS,
         ...parsed,
+        chartType: normalizeChartType(parsed.chartType),
         live: {
           ...DEFAULTS.live,
           ...parsed.live,
@@ -409,43 +416,48 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null;
  * Debounced (~200ms) write of durable state to `STORAGE_KEY`.
  * Omits bars, lastRun, logs, chartDataGen, crosshair, scriptSettings,
  * selectedDrawingId, and full telemetry (keeps only `telemetry.hud`).
+ *
+ * Uses {@link unwrap} so nested Solid store proxies serialize fully
+ * (plain destructure can drop nested updates under some paths).
  */
 export function persist() {
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
-    try {
-      // Omit bars + lastRun + logs + high-churn gens + ephemeral crosshair/modal/selection
-      const {
-        bars: _b,
-        lastRun: _r,
-        logs: _l,
-        chartDataGen: _g,
-        crosshair: _c,
-        scriptSettings: _ss,
-        selectedDrawingId: _sel,
-        telemetry,
-        ...rest
-      } = store as AppState & {
-        bars: unknown;
-        lastRun: unknown;
-        logs: unknown;
-        chartDataGen?: unknown;
-        crosshair?: unknown;
-        scriptSettings?: unknown;
-        selectedDrawingId?: unknown;
-        telemetry?: AppState['telemetry'];
-      };
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          ...rest,
-          telemetry: {
-            hud: telemetry?.hud || DEFAULTS.telemetry.hud,
-          },
-        }),
-      );
-    } catch {}
+    flushPersist();
   }, 200);
+}
+
+/** Immediate localStorage write (used after Settings save and tests). */
+export function flushPersist() {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+  try {
+    const plain = unwrap(store) as AppState;
+    const {
+      bars: _b,
+      lastRun: _r,
+      logs: _l,
+      chartDataGen: _g,
+      crosshair: _c,
+      scriptSettings: _ss,
+      selectedDrawingId: _sel,
+      telemetry,
+      ...rest
+    } = plain;
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...rest,
+        telemetry: {
+          hud: telemetry?.hud || DEFAULTS.telemetry.hud,
+        },
+      }),
+    );
+  } catch {
+    /* quota / private mode */
+  }
 }
 
 const MAX_LOGS = 500;
@@ -498,6 +510,12 @@ export function setStatus(status: AppState['status'], message?: string) {
     setStore('statusMessage', message);
     appendLog(statusToLevel(status), message, status);
   }
+}
+
+/** Persist main price pane chart style (candles, bars, line, Heikin-Ashi, …). */
+export function setChartType(type: ChartType | string) {
+  setStore('chartType', normalizeChartType(type));
+  persist();
 }
 
 /**

@@ -22,6 +22,7 @@ export type FakePriceLine = {
 
 export type FakeSeries = {
   setData: (d: unknown) => void;
+  update: (d: unknown) => void;
   applyOptions: (o: unknown) => void;
   priceScale: () => { applyOptions: (o: unknown) => void };
   setMarkers?: (m: unknown) => void;
@@ -32,10 +33,12 @@ export type FakeSeries = {
   seriesOrder: () => number;
   setSeriesOrder: (n: number) => void;
   _order: number;
+  _data: unknown;
 };
 
 export type FakeChart = {
   addSeries: (type: unknown, opts?: unknown, paneIndex?: number) => FakeSeries;
+  removeSeries: (series: FakeSeries) => void;
   applyOptions: (o: unknown) => void;
   remove: () => void;
   priceScale: (id: string) => { applyOptions: (o: unknown) => void };
@@ -58,7 +61,13 @@ export function makeFakeChart(): FakeChart {
   const makeSeries = (): FakeSeries => {
     const priceLines: FakePriceLine[] = [];
     const s: FakeSeries = {
-      setData: () => {},
+      _data: null,
+      setData: (d) => {
+        s._data = d;
+      },
+      update: (d) => {
+        s._data = d;
+      },
       applyOptions: () => {},
       priceScale: () => ({ applyOptions: () => {} }),
       _priceLines: priceLines,
@@ -91,6 +100,10 @@ export function makeFakeChart(): FakeChart {
   return {
     _series: series,
     addSeries: () => makeSeries(),
+    removeSeries: (ser) => {
+      const i = series.indexOf(ser);
+      if (i >= 0) series.splice(i, 1);
+    },
     applyOptions: () => {},
     remove: () => {},
     priceScale: () => ({ applyOptions: () => {} }),
@@ -128,6 +141,8 @@ export function installLightweightChartsMock() {
     CrosshairMode: { Normal: 0 },
     LineStyle: { Solid: 0, Dotted: 1, Dashed: 2, LargeDashed: 3, SparseDotted: 4 },
     CandlestickSeries: 'CandlestickSeries',
+    BarSeries: 'BarSeries',
+    BaselineSeries: 'BaselineSeries',
     HistogramSeries: 'HistogramSeries',
     LineSeries: 'LineSeries',
     AreaSeries: 'AreaSeries',

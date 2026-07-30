@@ -140,9 +140,11 @@ export const serverEngine: EnginePlugin = {
     }
   },
   async run({ script, bars, config, inputs, signal }) {
+    // Prefer store.endpoint (Settings) over plugin config so a stale
+    // pluginsConfig.endpoint cannot pin an old backend after Save.
     const endpoint = (
-      (config?.endpoint as string) ||
       store.endpoint ||
+      (config?.endpoint as string) ||
       (this.configSchema!.endpoint.default as string)
     ).replace(/\/$/, '');
     const cfg = resolveConfig(this.configSchema, { ...(config || {}), endpoint });

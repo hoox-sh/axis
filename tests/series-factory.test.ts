@@ -22,6 +22,12 @@ const {
   PLOT_PALETTE,
   createBaseChart,
   createCandleSeries,
+  createHollowCandleSeries,
+  createBarSeries,
+  createPriceLineSeries,
+  createPriceAreaSeries,
+  createPriceBaselineSeries,
+  createPriceSeries,
   createVolumeSeries,
   createLineSeries,
   createAreaSeries,
@@ -50,6 +56,26 @@ describe('series-factory', () => {
     expect(vol).toBeDefined();
     expect(line).toBeDefined();
     expect(area).toBeDefined();
+  });
+
+  it('createPriceSeries covers all chart types', () => {
+    const chart = makeFakeChart() as never;
+    for (const type of [
+      'candles',
+      'hollow',
+      'bars',
+      'line',
+      'area',
+      'baseline',
+      'heikinashi',
+    ] as const) {
+      expect(createPriceSeries(chart, type)).toBeDefined();
+    }
+    expect(createHollowCandleSeries(chart)).toBeDefined();
+    expect(createBarSeries(chart)).toBeDefined();
+    expect(createPriceLineSeries(chart)).toBeDefined();
+    expect(createPriceAreaSeries(chart)).toBeDefined();
+    expect(createPriceBaselineSeries(chart, undefined, 100)).toBeDefined();
   });
 
   it('createLineSeries accepts custom lineWidth', () => {

@@ -61,11 +61,18 @@ describe('manager-access', () => {
     panes.set('volume', { id: 'volume', series: {}, chart });
 
     let markersCleared = 0;
+    let priceType: string | null = null;
     setManager({
       getPane: (id: string) => panes.get(id),
       clearTradeMarkers: () => {
         markersCleared += 1;
       },
+      getPriceChartType: () => priceType,
+      setPriceChartType: (t: string) => {
+        priceType = t;
+      },
+      detachPriceMarkers: () => {},
+      reapplyPriceMarkers: () => {},
     } as never);
 
     setDataToChart([
@@ -75,6 +82,7 @@ describe('manager-access', () => {
     expect(panes.get('price')!.series['candle']).toBeDefined();
     expect(panes.get('volume')!.series['volume']).toBeDefined();
     expect(markersCleared).toBe(1);
+    expect(priceType).toBe('candles');
   });
 
   it('setDataToChart opts can skip fit and markers', () => {
@@ -93,11 +101,18 @@ describe('manager-access', () => {
     panes.set('volume', { id: 'volume', series: {}, chart });
 
     let markersCleared = 0;
+    let priceType: string | null = null;
     setManager({
       getPane: (id: string) => panes.get(id),
       clearTradeMarkers: () => {
         markersCleared += 1;
       },
+      getPriceChartType: () => priceType,
+      setPriceChartType: (t: string) => {
+        priceType = t;
+      },
+      detachPriceMarkers: () => {},
+      reapplyPriceMarkers: () => {},
     } as never);
 
     setDataToChart([{ time: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 }], {

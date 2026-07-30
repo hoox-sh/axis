@@ -21,16 +21,18 @@
  * Application Settings modal — engine endpoint/mode, storage plugin, chart
  * interval, live prefs (preferAfterLoad, rerunOn), HUD compact, UI scale.
  *
- * Local form state is seeded from `store` when opened; Save writes
- * `pluginsConfig`, `activePlugins`, and layout prefs, then `persist()`.
+ * Local form state is seeded from `store` when the dialog opens (not on every
+ * store mutation while open). Save snapshots form fields, writes
+ * `pluginsConfig` / `activePlugins` / layout prefs, then `flushPersist()`.
  * Endpoint **Probe** uses `probeEndpoint` without committing form values.
  */
 
-import { Component, For, createEffect, createSignal, Show, createMemo } from 'solid-js';
+import { Component, For, createEffect, createSignal, Show, createMemo, untrack } from 'solid-js';
+import { reconcile } from 'solid-js/store';
 import {
   store,
   setStore,
-  persist,
+  flushPersist,
   setStatus,
   setActivePlugin,
   setUiScale,
@@ -156,20 +158,29 @@ export const SettingsDialog: Component<Props> = (props) => {
     else setPreferWs(schema?.preferWs?.default !== false);
   };
 
-  createEffect(() => {
-    if (props.open) {
-      setEndpoint(store.endpoint);
-      setEngine(store.engine);
-      hydrateEngineFields(store.engine);
-      setStorage(store.activePlugins?.storage || 'local');
-      setChartInterval(store.interval);
-      setRefreshSec(store.watchlist.refreshSec || 15);
-      setPreferAfterLoad(!!store.live.preferAfterLoad);
-      setRerunOn(store.live.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick');
-      setHudCompact(!!store.telemetry?.hud?.compact);
-      setUiScaleLocal(clampUiScale(store.uiScale ?? 1));
-      setProbeMsg('');
+  /**
+   * Seed form only when the dialog *opens*. Do not re-read the store on every
+   * store mutation while open — Save calls setStore many times and a reactive
+   * hydrate would reset local signals mid-save (wrong values persisted).
+   */
+  createEffect((wasOpen?: boolean) => {
+    const isOpen = props.open;
+    if (isOpen && !wasOpen) {
+      untrack(() => {
+        setEndpoint(store.endpoint);
+        setEngine(store.engine);
+        hydrateEngineFields(store.engine);
+        setStorage(store.activePlugins?.storage || 'local');
+        setChartInterval(store.interval);
+        setRefreshSec(store.watchlist.refreshSec || 15);
+        setPreferAfterLoad(!!store.live.preferAfterLoad);
+        setRerunOn(store.live.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick');
+        setHudCompact(!!store.telemetry?.hud?.compact);
+        setUiScaleLocal(clampUiScale(store.uiScale ?? 1));
+        setProbeMsg('');
+      });
     }
+    return isOpen;
   });
 
   /** Live density preview while dragging (persists on Save or preset click). */
@@ -180,36 +191,56 @@ export const SettingsDialog: Component<Props> = (props) => {
   };
 
   const save = async () => {
+    // Snapshot every form field *before* any setStore. Mid-save store updates
+    // must not re-enter the hydrate effect or re-read stale signals.
     const prevInterval = store.interval;
     const nextInterval = chartInterval().trim() || prevInterval;
     const nextRefresh = Math.min(120, Math.max(5, Math.round(Number(refreshSec()) || 15)));
     const nextEngine = engine();
+    const nextEndpoint = endpoint().trim();
+    const nextStorage = storage();
+    const nextPreferAfterLoad = preferAfterLoad();
+    const nextRerunOn = rerunOn();
+    const nextHudCompact = hudCompact();
+    const nextUiScale = clampUiScale(uiScale());
+    const nextExecMode = execMode();
+    const nextPreferWs = preferWs();
+    const writeEndpoint = needsEndpoint();
+    const writeExecMode = hasExecMode();
+    const writePreferWs = hasPreferWs();
 
-    setStore('endpoint', endpoint().trim());
+    // Batch all durable fields before persist so one flush sees full state
+    setStore('endpoint', nextEndpoint);
     setStore('interval', nextInterval);
     setStore('watchlist', 'refreshSec', nextRefresh);
-    setStore('live', 'preferAfterLoad', preferAfterLoad());
-    setStore('live', 'rerunOn', rerunOn());
-    setStore('telemetry', 'hud', 'compact', hudCompact());
-    setUiScale(uiScale());
+    setStore('live', 'preferAfterLoad', nextPreferAfterLoad);
+    setStore('live', 'rerunOn', nextRerunOn);
+    setStore('telemetry', 'hud', 'compact', nextHudCompact);
+    setStore('uiScale', nextUiScale);
+    applyUiScale(nextUiScale);
+    // setActivePlugin keeps flat engine/source fields + telemetry planes aligned
     setActivePlugin('engine', nextEngine);
-    setActivePlugin('storage', storage());
+    setActivePlugin('storage', nextStorage);
 
-    // Persist engine execution mode / WS preference under pluginsConfig.engine:<id>
-    if (hasExecMode() || hasPreferWs()) {
+    // Always merge engine plugin config when any engine field is shown — include
+    // endpoint so pluginsConfig cannot keep a stale URL over store.endpoint.
+    if (writeEndpoint || writeExecMode || writePreferWs) {
       const key = pluginKey('engine', nextEngine);
       const prev = readEnginePluginConfig(nextEngine);
       const nextCfg: Record<string, unknown> = { ...prev };
-      if (hasExecMode()) nextCfg.mode = execMode();
-      if (hasPreferWs()) nextCfg.preferWs = preferWs();
-      setStore('pluginsConfig', key, nextCfg);
+      if (writeEndpoint) nextCfg.endpoint = nextEndpoint;
+      if (writeExecMode) nextCfg.mode = nextExecMode;
+      if (writePreferWs) nextCfg.preferWs = nextPreferWs;
+      // reconcile replaces nested keys (Solid merges plain objects / function returns)
+      setStore('pluginsConfig', key, reconcile(nextCfg));
     }
 
-    persist();
-    const modePart = hasExecMode() ? ` · mode=${execMode()}` : '';
+    // Write immediately so a quick reload cannot race the 200ms debounce
+    flushPersist();
+    const modePart = writeExecMode ? ` · mode=${nextExecMode}` : '';
     setStatus(
       'ready',
-      `Settings saved · ${nextInterval} · refresh ${nextRefresh}s · engine=${nextEngine}${modePart} · live re-run=${rerunOn()}`,
+      `Settings saved · ${nextInterval} · refresh ${nextRefresh}s · engine=${nextEngine}${modePart} · live re-run=${nextRerunOn}`,
     );
     // Reload chart bars if default interval changed
     if (nextInterval !== prevInterval && store.symbol) {
@@ -333,6 +364,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                       title={p.hint}
                       onClick={() => {
                         previewScale(p.value);
+                        // Preset click commits scale immediately (Save still needed for other fields)
                         setUiScale(p.value);
                       }}
                     >

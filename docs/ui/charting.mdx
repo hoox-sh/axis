@@ -62,12 +62,28 @@ flowchart TB
 
 | type | Typical series |
 | --- | --- |
-| `price` | Candles + overlay lines + markers + drawings |
+| `price` | Price series (style below) + overlay lines + markers + drawings |
 | `volume` | Histogram |
 | `indicator` | Non-overlay plots |
 | `equity` | Strategy equity curve |
 
 Defaults: price + volume. Indicator/equity created on demand.
+
+### Price chart styles (`store.chartType`)
+
+Topbar **Type** select (persisted). Implementation: `chart/chart-type.ts` + `createPriceSeries`.
+
+| `chartType` | Series | Notes |
+| --- | --- | --- |
+| `candles` | Candlestick | Japanese candles (default) |
+| `hollow` | Candlestick | Hollow body on up bars |
+| `bars` | Bar | Classic OHLC bars |
+| `heikinashi` | Candlestick | Heikin-Ashi transform of OHLCV |
+| `line` | Line | Close only |
+| `area` | Area | Close with fill |
+| `baseline` | Baseline | Close vs first-bar base |
+
+Series still live under pane key `candle` so markers, hlines, and the drawing layer keep a stable host. Changing type swaps the LWC series and rebinds data without a full history reload.
 
 ### Empty / status overlay
 

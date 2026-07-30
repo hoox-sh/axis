@@ -69,12 +69,13 @@ export interface CoordContext {
 }
 
 /**
- * Build a coord context bound to a chart + candlestick series.
+ * Build a coord context bound to a chart + price series.
+ * Any LWC series with price ↔ Y conversion works (candles, bars, line, …).
  * `getSize` is read on each `size` access so callers can track pane resize.
  */
 export function createCoordContext(
   chart: IChartApi,
-  series: ISeriesApi<'Candlestick'>,
+  series: ISeriesApi<any>,
   getSize: () => ViewSize,
 ): CoordContext {
   const timeToX = (time: number): number | null => {

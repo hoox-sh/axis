@@ -10,10 +10,12 @@
 
 import './setup';
 import { describe, expect, it, beforeEach } from 'bun:test';
+import { reconcile } from 'solid-js/store';
 import {
   store,
   setStore,
   persist,
+  flushPersist,
   setActivePlugin,
   appendLog,
   clearLogs,
@@ -302,5 +304,62 @@ describe('persist', () => {
     expect(parsed.bars).toBeUndefined();
     expect(parsed.logs).toBeUndefined();
     expect(parsed.lastRun).toBeUndefined();
+  });
+
+  it('flushPersist writes immediately (settings save path)', () => {
+    setStore('endpoint', 'http://127.0.0.1:5002');
+    setStore('interval', '15m');
+    setStore('uiScale', 1.15);
+    setStore('live', 'rerunOn', 'bar-close');
+    setStore(
+      'pluginsConfig',
+      'engine:server',
+      reconcile({
+        endpoint: 'http://127.0.0.1:5002',
+        mode: 'compile',
+        preferWs: true,
+      }),
+    );
+    flushPersist();
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+    expect(parsed.endpoint).toBe('http://127.0.0.1:5002');
+    expect(parsed.interval).toBe('15m');
+    expect(parsed.uiScale).toBe(1.15);
+    expect(parsed.live.rerunOn).toBe('bar-close');
+    expect(parsed.pluginsConfig['engine:server']).toEqual({
+      endpoint: 'http://127.0.0.1:5002',
+      mode: 'compile',
+      preferWs: true,
+    });
+  });
+
+  it('settings-like batch keeps mode when overwriting engine config', () => {
+    setStore('pluginsConfig', 'engine:server', {
+      endpoint: 'http://old:5002',
+      mode: 'interpret',
+      preferWs: false,
+      stale: true,
+    });
+    // Mimic SettingsDialog: snapshot then write mode=compile via reconcile replace
+    const nextMode = 'compile';
+    const nextEndpoint = 'http://127.0.0.1:5002';
+    setStore('endpoint', nextEndpoint);
+    setStore(
+      'pluginsConfig',
+      'engine:server',
+      reconcile({
+        endpoint: nextEndpoint,
+        mode: nextMode,
+        preferWs: true,
+      }),
+    );
+    flushPersist();
+    const cfg = store.pluginsConfig['engine:server'];
+    expect(cfg.mode).toBe('compile');
+    expect(cfg.endpoint).toBe('http://127.0.0.1:5002');
+    expect(cfg.preferWs).toBe(true);
+    expect(cfg.stale).toBeUndefined();
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+    expect(parsed.pluginsConfig['engine:server'].mode).toBe('compile');
   });
 });

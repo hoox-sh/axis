@@ -57,8 +57,15 @@ import {
   RIGHT_PRICE_SCALE_WIDTH,
   TV,
 } from './series-factory';
+import {
+  mapBarUpdate,
+  lastBarDirection,
+  normalizeChartType,
+  type ChartType,
+  DEFAULT_CHART_TYPE,
+} from './chart-type';
 import type { Bar } from '../store/types';
-import { resizePane } from '../store';
+import { resizePane, store } from '../store';
 import type { TradeMarker } from '../results/events';
 import type { ShapeMarkerSpec } from '../results/plot-visuals';
 
@@ -111,9 +118,29 @@ export class PaneManager {
   private shapeMarkerList: SeriesMarker<UTCTimestamp>[] = [];
   /** One-way range sync unsubscribers */
   private timeSyncUnsubs: Array<() => void> = [];
+  /** Active main price series style (tracks LWC series kind under key `candle`) */
+  private priceChartType: ChartType = DEFAULT_CHART_TYPE;
 
   constructor(container: HTMLElement) {
     this.container = container;
+  }
+
+  getPriceChartType(): ChartType {
+    return this.priceChartType;
+  }
+
+  setPriceChartType(type: ChartType) {
+    this.priceChartType = normalizeChartType(type);
+  }
+
+  /** Drop markers plugin handle before removing the host series (chart type switch). */
+  detachPriceMarkers() {
+    this.candleMarkers = null;
+  }
+
+  /** Re-bind markers after a new price series is created. */
+  reapplyPriceMarkers() {
+    this.applyCandleMarkers();
   }
 
   getPane(id: string): ManagedPane | undefined {
@@ -585,22 +612,40 @@ export class PaneManager {
     if (series) series.setData(data);
   }
 
+  /**
+   * Live bar update on price + volume panes.
+   * Uses `store.bars` (already updated by store.appendBar) for Heikin-Ashi /
+   * line styles that need prior bars. Falls back to the single `bar` when
+   * the store is empty (unit tests).
+   */
   appendBar(bar: Bar) {
     const pricePane = this.panes.get('price');
+    const chartType = normalizeChartType(store.chartType ?? this.priceChartType);
     if (pricePane?.series['candle']) {
-      pricePane.series['candle'].update({
-        time: bar.time as UTCTimestamp,
-        open: bar.open,
-        high: bar.high,
-        low: bar.low,
-        close: bar.close,
-      });
+      const bars =
+        store.bars?.length && store.bars[store.bars.length - 1]?.time === bar.time
+          ? store.bars
+          : store.bars?.length
+            ? [...store.bars.filter((b) => b.time !== bar.time), bar].sort(
+                (a, c) => a.time - c.time,
+              )
+            : [bar];
+      const point = mapBarUpdate(bars, chartType);
+      if (point) {
+        pricePane.series['candle'].update({
+          ...point,
+          time: point.time as UTCTimestamp,
+        } as never);
+      }
       // Tint last-price line to bar direction
       try {
-        const up = bar.close >= bar.open;
-        pricePane.series['candle'].applyOptions({
-          priceLineColor: up ? 'rgba(94, 207, 138, 0.55)' : 'rgba(232, 93, 76, 0.55)',
-        });
+        const dir = lastBarDirection(bars, chartType);
+        if (dir) {
+          pricePane.series['candle'].applyOptions({
+            priceLineColor:
+              dir === 'up' ? 'rgba(94, 207, 138, 0.55)' : 'rgba(232, 93, 76, 0.55)',
+          });
+        }
       } catch {
         /* ignore */
       }

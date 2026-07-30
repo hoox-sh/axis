@@ -28,7 +28,13 @@
 
 import type { PaneManager } from './pane-manager';
 import { DrawingLayer } from './drawing-layer';
-import { createCandleSeries, createVolumeSeries, TV } from './series-factory';
+import { createPriceSeries, createVolumeSeries, TV } from './series-factory';
+import {
+  mapBarsToPriceData,
+  lastBarDirection,
+  normalizeChartType,
+  type ChartType,
+} from './chart-type';
 import {
   store,
   setDrawings,
@@ -123,7 +129,45 @@ export type SetDataToChartOpts = {
 };
 
 /**
- * Full OHLCV replace for history loads / symbol changes.
+ * Ensure the price pane has a series matching `chartType`.
+ * Swaps LWC series when the style changes; rebinds markers + drawing layer.
+ */
+export function ensurePriceSeries(chartType?: ChartType): void {
+  if (!manager) return;
+  const type = normalizeChartType(chartType ?? store.chartType);
+  const pricePane = manager.getPane('price');
+  if (!pricePane) return;
+
+  const currentType = manager.getPriceChartType();
+  const existing = pricePane.series['candle'];
+  if (existing && currentType === type) return;
+
+  // Drop markers plugin before removing the host series
+  manager.detachPriceMarkers();
+
+  if (existing) {
+    try {
+      pricePane.chart.removeSeries(existing);
+    } catch {
+      /* ignore */
+    }
+    delete pricePane.series['candle'];
+  }
+
+  pricePane.series['candle'] = createPriceSeries(pricePane.chart, type);
+  manager.setPriceChartType(type);
+
+  // Drawing layer needs the new series for price ↔ Y
+  if (drawingLayer) {
+    drawingLayer.setSeries(pricePane.series['candle'] as never);
+  }
+
+  // Re-attach markers onto the new host series
+  manager.reapplyPriceMarkers();
+}
+
+/**
+ * Full OHLCV replace for history loads / symbol changes / chart-type switches.
  * Do **not** call this on every live tick — use PaneManager.appendBar instead.
  */
 export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
@@ -132,30 +176,34 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
   const clearMarkers = opts.clearMarkers !== false;
   const pricePane = manager.getPane('price');
   const volPane = manager.getPane('volume');
+  const chartType = normalizeChartType(store.chartType);
 
   if (clearMarkers) {
     manager.clearTradeMarkers();
     manager.clearShapeMarkers?.();
   }
 
-  if (pricePane && !pricePane.series['candle']) {
-    pricePane.series['candle'] = createCandleSeries(pricePane.chart);
-  }
+  ensurePriceSeries(chartType);
+
   if (pricePane?.series['candle']) {
-    pricePane.series['candle'].setData(
-      bars.map((b) => ({
-        time: b.time as never,
-        open: b.open,
-        high: b.high,
-        low: b.low,
-        close: b.close,
-      })),
-    );
-    const last = bars[bars.length - 1];
-    if (last) {
-      const up = last.close >= last.open;
+    const data = mapBarsToPriceData(bars, chartType);
+    pricePane.series['candle'].setData(data as never);
+
+    // Baseline: base at first bar close so early range splits meaningfully
+    if (chartType === 'baseline' && bars.length) {
+      try {
+        pricePane.series['candle'].applyOptions({
+          baseValue: { type: 'price', price: bars[0]!.close },
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const dir = lastBarDirection(bars, chartType);
+    if (dir) {
       pricePane.series['candle'].applyOptions({
-        priceLineColor: up ? TV.up : TV.down,
+        priceLineColor: dir === 'up' ? TV.up : TV.down,
       });
     }
     if (fit) {

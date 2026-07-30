@@ -88,7 +88,7 @@ type DragState = {
 };
 
 /**
- * Full-pane SVG drawing controller for one LWC chart + candle series.
+ * Full-pane SVG drawing controller for one LWC chart + price series.
  *
  * Cursor tool: SVG `pointer-events: none` so empty areas pan/zoom LWC; painted
  * shapes opt in. Place tools flip the SVG to `pointer-events: auto` + crosshair.
@@ -96,7 +96,8 @@ type DragState = {
 export class DrawingLayer {
   private host: HTMLElement;
   private chart: IChartApi;
-  private series: ISeriesApi<'Candlestick'>;
+  /** Price series host (candles, bars, line, …) for price ↔ Y conversion. */
+  private series: ISeriesApi<any>;
   private svg: SVGSVGElement;
   /** View-only Pine drawings (z-order under user group). */
   private gScript: SVGGElement;
@@ -140,12 +141,12 @@ export class DrawingLayer {
   /**
    * @param host - Price pane DOM element (positioning context; gets the SVG child)
    * @param chart - LWC chart API (time scale + crosshair subscriptions)
-   * @param series - Candle series for price ↔ Y conversion
+   * @param series - Price series for price ↔ Y conversion (any main series type)
    */
   constructor(
     host: HTMLElement,
     chart: IChartApi,
-    series: ISeriesApi<'Candlestick'>,
+    series: ISeriesApi<any>,
   ) {
     this.host = host;
     this.chart = chart;
@@ -228,6 +229,15 @@ export class DrawingLayer {
   /** Merge defaults used by {@link applyCreateStyle} on next placement. */
   setStylePrefs(prefs: Partial<StylePrefs>) {
     this.stylePrefs = { ...this.stylePrefs, ...prefs };
+  }
+
+  /**
+   * Swap the price series used for price ↔ Y (e.g. chart type change).
+   * Does not recreate the SVG overlay; re-paints with the new scale host.
+   */
+  setSeries(series: ISeriesApi<any>) {
+    this.series = series;
+    this.redraw();
   }
 
   getSelectedId(): string | null {

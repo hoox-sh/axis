@@ -38,6 +38,7 @@ import {
   setStatus,
   toggleTheme,
   persist,
+  setChartType,
   setEditorOpen,
   setEditorMode,
   setActivePlugin,
@@ -46,6 +47,7 @@ import {
   toggleLayerPanel,
   openScriptSettings,
 } from '../store';
+import { CHART_TYPES } from '../chart/chart-type';
 import { runAndApply } from '../indicators/runner';
 import { startLive, stopLive, listStreams, defaultStreamForSource } from '../streams/multiplex';
 import { loadSymbolData } from '../data/load-symbol';
@@ -269,6 +271,29 @@ export const Topbar: Component<{
           <For each={INTERVALS}>{(i) => <option value={i}>{i}</option>}</For>
         </select>
       </Show>
+
+      <label class="sc-label hidden sm:inline" for="axis-chart-type">
+        Type
+      </label>
+      <select
+        id="axis-chart-type"
+        class="sc-input min-w-[5.5em]"
+        data-testid="axis-select-chart-type"
+        value={store.chartType}
+        title={
+          CHART_TYPES.find((t) => t.id === store.chartType)?.description ||
+          'Price chart style'
+        }
+        onChange={(e) => setChartType(e.currentTarget.value)}
+      >
+        <For each={[...CHART_TYPES]}>
+          {(t) => (
+            <option value={t.id} title={t.description}>
+              {t.short}
+            </option>
+          )}
+        </For>
+      </select>
 
       <button
         class={`sc-btn ${loading() ? 'opacity-50' : ''}`}

@@ -20,9 +20,11 @@
 /**
  * Lightweight Charts **series factory** + AXIS void palette.
  *
- * Shared by {@link PaneManager}: base chart options, candlestick/line/area/
- * histogram (bgcolor) series helpers, and brand colors ({@link TV},
- * {@link PLOT_PALETTE}). Right price-scale width is fixed so panes align.
+ * Shared by {@link PaneManager}: base chart options, main price series for
+ * each {@link ChartType} (candles, hollow, bars, line, area, baseline,
+ * Heikin-Ashi host), overlay line/area, histogram (bgcolor) helpers, and
+ * brand colors ({@link TV}, {@link PLOT_PALETTE}). Right price-scale width
+ * is fixed so panes align.
  *
  * @module chart/series-factory
  */
@@ -32,13 +34,16 @@ import {
   ColorType,
   CrosshairMode,
   CandlestickSeries,
+  BarSeries,
   HistogramSeries,
   LineSeries,
   AreaSeries,
+  BaselineSeries,
   type IChartApi,
   type ISeriesApi,
   type LineWidth,
 } from 'lightweight-charts';
+import type { ChartType } from './chart-type';
 
 /** Void canvas + void indigo brand — matches landing pack + index.css tokens. */
 export const TV = {
@@ -139,30 +144,176 @@ export function createBaseChart(container: HTMLElement, options?: Record<string,
   });
 }
 
-/** Candlestick series with void up/down colors and aligned right scale. */
+const PRICE_SERIES_COMMON = {
+  lastValueVisible: true,
+  priceLineVisible: true,
+  priceLineColor: TV.indigoSoft,
+  priceLineWidth: 1 as LineWidth,
+  priceLineStyle: 2,
+};
+
+function alignRightScale(chart: IChartApi) {
+  chart.priceScale('right').applyOptions({
+    borderColor: TV.border,
+    textColor: TV.textDim,
+    minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
+  });
+}
+
+/** Japanese candlestick series with void up/down colors and aligned right scale. */
 export function createCandleSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Candlestick'> {
   const opts = {
+    ...PRICE_SERIES_COMMON,
     upColor: TV.up,
     downColor: TV.down,
     borderDownColor: TV.down,
     borderUpColor: TV.up,
     wickDownColor: TV.down,
     wickUpColor: TV.up,
-    lastValueVisible: true,
-    priceLineVisible: true,
-    priceLineColor: TV.indigoSoft,
-    priceLineWidth: 1 as LineWidth,
-    priceLineStyle: 2,
   };
   const series = paneIndex !== undefined
     ? chart.addSeries(CandlestickSeries, opts, paneIndex)
     : chart.addSeries(CandlestickSeries, opts);
-  chart.priceScale('right').applyOptions({
-    borderColor: TV.border,
-    textColor: TV.textDim,
-    minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
-  });
+  alignRightScale(chart);
   return series;
+}
+
+/**
+ * Hollow candlesticks: rising bars use a transparent body (outline only);
+ * falling bars stay filled. Same OHLC data as solid candles.
+ */
+export function createHollowCandleSeries(
+  chart: IChartApi,
+  paneIndex?: number,
+): ISeriesApi<'Candlestick'> {
+  const opts = {
+    ...PRICE_SERIES_COMMON,
+    upColor: 'rgba(0,0,0,0)',
+    downColor: TV.down,
+    borderVisible: true,
+    borderUpColor: TV.up,
+    borderDownColor: TV.down,
+    wickUpColor: TV.up,
+    wickDownColor: TV.down,
+  };
+  const series = paneIndex !== undefined
+    ? chart.addSeries(CandlestickSeries, opts, paneIndex)
+    : chart.addSeries(CandlestickSeries, opts);
+  alignRightScale(chart);
+  return series;
+}
+
+/** Classic OHLC bar series (open/high/low/close ticks). */
+export function createBarSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Bar'> {
+  const opts = {
+    ...PRICE_SERIES_COMMON,
+    upColor: TV.up,
+    downColor: TV.down,
+    openVisible: true,
+    thinBars: true,
+  };
+  const series = paneIndex !== undefined
+    ? chart.addSeries(BarSeries, opts, paneIndex)
+    : chart.addSeries(BarSeries, opts);
+  alignRightScale(chart);
+  return series;
+}
+
+/** Close-price line used as the main price series (not an overlay plot). */
+export function createPriceLineSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Line'> {
+  const opts = {
+    ...PRICE_SERIES_COMMON,
+    color: TV.indigo,
+    lineWidth: 2 as LineWidth,
+    crosshairMarkerVisible: true,
+    crosshairMarkerRadius: 3,
+    crosshairMarkerBorderColor: TV.bg,
+    crosshairMarkerBackgroundColor: TV.indigo,
+  };
+  const series = paneIndex !== undefined
+    ? chart.addSeries(LineSeries, opts, paneIndex)
+    : chart.addSeries(LineSeries, opts);
+  alignRightScale(chart);
+  return series;
+}
+
+/** Close-price area used as the main price series. */
+export function createPriceAreaSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Area'> {
+  const opts = {
+    ...PRICE_SERIES_COMMON,
+    lineColor: TV.indigo,
+    topColor: 'rgba(147, 159, 255, 0.28)',
+    bottomColor: 'rgba(147, 159, 255, 0.02)',
+    lineWidth: 2 as LineWidth,
+    crosshairMarkerVisible: true,
+    crosshairMarkerRadius: 3,
+    crosshairMarkerBorderColor: TV.bg,
+    crosshairMarkerBackgroundColor: TV.indigo,
+  };
+  const series = paneIndex !== undefined
+    ? chart.addSeries(AreaSeries, opts, paneIndex)
+    : chart.addSeries(AreaSeries, opts);
+  alignRightScale(chart);
+  return series;
+}
+
+/**
+ * Baseline series (close vs base price). Callers may later `applyOptions`
+ * with a better base (e.g. first bar close); default base is 0 until data lands.
+ */
+export function createPriceBaselineSeries(
+  chart: IChartApi,
+  paneIndex?: number,
+  basePrice = 0,
+): ISeriesApi<'Baseline'> {
+  const opts = {
+    ...PRICE_SERIES_COMMON,
+    baseValue: { type: 'price' as const, price: basePrice },
+    topLineColor: TV.up,
+    topFillColor1: 'rgba(94, 207, 138, 0.28)',
+    topFillColor2: 'rgba(94, 207, 138, 0.04)',
+    bottomLineColor: TV.down,
+    bottomFillColor1: 'rgba(232, 93, 76, 0.04)',
+    bottomFillColor2: 'rgba(232, 93, 76, 0.28)',
+    lineWidth: 2 as LineWidth,
+    crosshairMarkerVisible: true,
+    crosshairMarkerRadius: 3,
+    crosshairMarkerBorderColor: TV.bg,
+    crosshairMarkerBackgroundColor: TV.indigo,
+  };
+  const series = paneIndex !== undefined
+    ? chart.addSeries(BaselineSeries, opts, paneIndex)
+    : chart.addSeries(BaselineSeries, opts);
+  alignRightScale(chart);
+  return series;
+}
+
+/**
+ * Create the main price series for a {@link ChartType}.
+ * Series stay under the `candle` key in PaneManager for marker/overlay hosts.
+ */
+export function createPriceSeries(
+  chart: IChartApi,
+  type: ChartType,
+  paneIndex?: number,
+): ISeriesApi<any> {
+  switch (type) {
+    case 'hollow':
+      return createHollowCandleSeries(chart, paneIndex);
+    case 'bars':
+      return createBarSeries(chart, paneIndex);
+    case 'line':
+      return createPriceLineSeries(chart, paneIndex);
+    case 'area':
+      return createPriceAreaSeries(chart, paneIndex);
+    case 'baseline':
+      return createPriceBaselineSeries(chart, paneIndex);
+    case 'heikinashi':
+      return createCandleSeries(chart, paneIndex);
+    case 'candles':
+    default:
+      return createCandleSeries(chart, paneIndex);
+  }
 }
 
 /** Volume histogram on the main right scale (aligned pane edges). */
