@@ -113,6 +113,7 @@
               "ui/index",
               "ui/charting",
               "ui/editor",
+              "ui/debugging",
               "ui/ui-shell",
               "ui/indicators",
               "ui/results-and-strategy",

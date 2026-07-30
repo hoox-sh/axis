@@ -130,6 +130,7 @@ const DEFAULTS: AppState = {
   crosshair: { time: null, barIndex: null },
   resultsPanel: { open: false, height: 220 },
   logsPanel: { open: false, height: 160 },
+  profilerEnabled: false,
   stream: { status: 'disconnected' },
   status: 'ready',
   statusMessage: 'Ready.',
@@ -251,6 +252,7 @@ function loadPersisted(): Partial<AppState> {
         crosshair: { time: null, barIndex: null },
         resultsPanel: { ...DEFAULTS.resultsPanel, ...parsed.resultsPanel },
         logsPanel: { ...DEFAULTS.logsPanel, ...parsed.logsPanel, open: false },
+        profilerEnabled: !!parsed.profilerEnabled,
         activePlugins: {
           ...DEFAULTS.activePlugins,
           ...parsed.activePlugins,
@@ -790,6 +792,28 @@ export function toggleLayerPanel() {
   setPanelOpen('layers', !isPanelOpen('layers'));
 }
 
+/** Open/close Pine Logs panel (script `log.*` output — not system telemetry). */
+export function setPineLogsPanelOpen(open: boolean) {
+  setPanelOpen('pinelogs', open);
+}
+
+/** Toggle Pine Logs panel visibility. */
+export function togglePineLogsPanel() {
+  setPanelOpen('pinelogs', !isPanelOpen('pinelogs'));
+}
+
+/** Enable/disable editor profiler mode (persisted). */
+export function setProfilerEnabled(on: boolean) {
+  setStore('profilerEnabled', !!on);
+  persist();
+}
+
+/** Toggle editor profiler mode. */
+export function toggleProfilerEnabled() {
+  setStore('profilerEnabled', !store.profilerEnabled);
+  persist();
+}
+
 /* ── Panel chrome (dock / float / window) ───────────────────────── */
 
 /** Read panel chrome (dock/geometry); falls back to defaults if missing. */
@@ -814,12 +838,19 @@ export function isPanelOpen(id: PanelId): boolean {
       return !!store.resultsPanel.open || chromeOpen;
     case 'logs':
       return !!store.logsPanel.open || chromeOpen;
+    case 'pinelogs':
+      // Chrome-only (no legacy flat flag)
+      return chromeOpen;
     case 'dataview':
       return !!store.dataViewPanel.open || chromeOpen;
     case 'layers':
       return !!store.layerPanel.open || chromeOpen;
-    default:
+    default: {
+      // Exhaustiveness guard for future PanelId values
+      const _exhaustive: never = id;
+      void _exhaustive;
       return chromeOpen;
+    }
   }
 }
 

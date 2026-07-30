@@ -292,6 +292,11 @@ export interface AppState {
   resultsPanel: { open: boolean; height: number };
   /** System log drawer (collapsed by default) */
   logsPanel: { open: boolean; height: number };
+  /**
+   * Editor profiler mode — when on, engines may collect per-line timing and the
+   * editor chrome shows last-run latency. Persisted.
+   */
+  profilerEnabled: boolean;
   stream: { status: 'connected' | 'disconnected' | 'error' | 'connecting' };
   status: AppStatus;
   statusMessage: string;

@@ -76,6 +76,16 @@ export const EditorPane: Component<Props> = (props) => {
       <span class="text-[10px] text-text-dim uppercase tracking-wider font-semibold mr-auto">
         Editor
       </span>
+      <Show when={store.profilerEnabled}>
+        <span
+          class="text-[10px] font-mono text-accent px-1.5 py-0.5 rounded border border-accent/40 bg-accent/10 flex-shrink-0"
+          title="Profiler mode enabled (toggle from top bar)"
+          data-testid="axis-editor-profiler-chip"
+        >
+          Profiler
+          {store.lastRunMs != null ? ` · ${Math.round(store.lastRunMs)}ms` : ''}
+        </span>
+      </Show>
       <Show when={!props.standalone}>
         <button
           class="sc-btn sc-btn-ghost px-1.5 text-[10px]"

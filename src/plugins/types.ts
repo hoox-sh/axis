@@ -170,6 +170,16 @@ export interface RunResult {
   drawings?: Array<Record<string, unknown>>;
   /** Pine input.* declarations from last run (engine-exported) */
   inputs?: Array<Record<string, unknown>> | unknown;
+  /**
+   * Pine `log.*` / runtime log lines (also may appear under `meta.logs`).
+   * Normalized onto the top-level by the indicator runner when present in meta.
+   */
+  logs?: Array<{ level?: string; message?: string; [k: string]: unknown }>;
+  /**
+   * Optional profiler / timing payload (also may appear under `meta.profile`).
+   * Shape is engine-defined (line costs, totals, etc.).
+   */
+  profile?: Record<string, unknown>;
   error?: string;
   meta?: {
     mode?: string;
@@ -183,6 +193,8 @@ export interface RunResult {
     transport?: string;
     plot_meta?: Record<string, unknown>;
     inputs?: unknown;
+    logs?: Array<{ level?: string; message?: string; [k: string]: unknown }>;
+    profile?: Record<string, unknown>;
     [k: string]: unknown;
   };
 }

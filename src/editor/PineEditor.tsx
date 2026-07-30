@@ -27,7 +27,7 @@
  * @module editor/PineEditor
  */
 
-import { Component, onMount, onCleanup } from 'solid-js';
+import { Component, createEffect, onMount, onCleanup } from 'solid-js';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
@@ -36,6 +36,11 @@ import { bracketMatching } from '@codemirror/language';
 import { pineScript } from './pine-language';
 import { voidEditorExtensions } from './cm-void';
 import { pineLspExtensions } from './pine-lsp';
+import {
+  applyProfilerProfile,
+  profilerGutterExtension,
+} from './profiler-gutter';
+import type { RunProfile } from '../results/profiler';
 
 interface Props {
   initialDoc?: string;
@@ -43,12 +48,22 @@ interface Props {
   onRun?: () => void;
   height?: string;
   editorRef?: { getDoc: () => string; setDoc?: (doc: string) => void };
+  /**
+   * Optional run profile for Profiler-mode gutter (% / ms per line).
+   * Parent wires store → this prop; cleared with `null`.
+   */
+  profilerProfile?: RunProfile | null;
+  /**
+   * When `false`, clears profiler markers even if `profilerProfile` is set.
+   * Default: enabled whenever a profile is provided (extension always mounted).
+   */
+  profilerEnabled?: boolean;
 }
 
 /** Solid wrapper around a single CodeMirror EditorView instance. */
 export const PineEditor: Component<Props> = (props) => {
   let containerRef!: HTMLDivElement;
-  let view: EditorView;
+  let view: EditorView | undefined;
 
   const getDoc = () => view?.state.doc.toString() ?? '';
 
@@ -58,6 +73,13 @@ export const PineEditor: Component<Props> = (props) => {
         changes: { from: 0, to: view.state.doc.length, insert: doc },
       });
     }
+  };
+
+  const syncProfiler = () => {
+    if (!view) return;
+    const enabled = props.profilerEnabled !== false;
+    const profile = enabled ? (props.profilerProfile ?? null) : null;
+    applyProfilerProfile(view, profile);
   };
 
   onMount(() => {
@@ -76,6 +98,8 @@ export const PineEditor: Component<Props> = (props) => {
         highlightSelectionMatches(),
         // Pine LSP-lite: typing completion + hover docs (from pyne builtin metadata)
         ...pineLspExtensions(),
+        // Profiler gutter: always mounted; driven by setProfilerData effects
+        profilerGutterExtension(),
         runKeymap,
         keymap.of([...defaultKeymap, indentWithTab, ...searchKeymap]),
         pineScript,
@@ -91,6 +115,14 @@ export const PineEditor: Component<Props> = (props) => {
       props.editorRef.getDoc = getDoc;
       props.editorRef.setDoc = setDoc;
     }
+    syncProfiler();
+  });
+
+  createEffect(() => {
+    // Track profiler props; push into CM when they change after mount.
+    void props.profilerProfile;
+    void props.profilerEnabled;
+    syncProfiler();
   });
 
   onCleanup(() => view?.destroy());

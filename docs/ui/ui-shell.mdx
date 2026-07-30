@@ -104,10 +104,16 @@ Telemetry is ephemeral (`store.telemetry`); HUD compact mode and live prefs pers
 
 ## Logs
 
+### System Logs strip
+
 - `appendLog(level, message, source)`
 - Cap `MAX_LOGS` (500)
 - Not persisted
 - Boot messages, pyodide ready, live errors
+
+### Pine Logs & Profiler
+
+Script `log.*` output and editor line-timing live on a separate path — see [Debugging](/axis/docs/ui/debugging). Topbar **Pine Logs** / **Profiler** do not write into `store.logs`.
 
 ## Theming
 

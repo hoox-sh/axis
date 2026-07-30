@@ -21,6 +21,8 @@ import {
   clearLogs,
   setLastRun,
   setStatus,
+  setProfilerEnabled,
+  toggleProfilerEnabled,
   loadBars,
   addIndicator,
   removeIndicator,
@@ -137,6 +139,28 @@ describe('logs and status', () => {
   it('setLastRun captures meta.ms', () => {
     setLastRun({ status: 'success', plots: [], events: [], meta: { ms: 42.5 } });
     expect(store.lastRunMs).toBe(42.5);
+  });
+});
+
+describe('profilerEnabled', () => {
+  it('setProfilerEnabled and toggleProfilerEnabled', () => {
+    setProfilerEnabled(false);
+    expect(store.profilerEnabled).toBe(false);
+    setProfilerEnabled(true);
+    expect(store.profilerEnabled).toBe(true);
+    toggleProfilerEnabled();
+    expect(store.profilerEnabled).toBe(false);
+    toggleProfilerEnabled();
+    expect(store.profilerEnabled).toBe(true);
+  });
+
+  it('persists profilerEnabled flag', async () => {
+    setProfilerEnabled(true);
+    flushPersist();
+    const raw = localStorage.getItem(STORAGE_KEY);
+    expect(raw).toBeTruthy();
+    const parsed = JSON.parse(raw!);
+    expect(parsed.profilerEnabled).toBe(true);
   });
 });
 

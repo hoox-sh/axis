@@ -20,7 +20,7 @@
 /**
  * Main workspace top bar — symbol, interval, source/stream/engine, load/run/live,
  * upload, theme, and panel toggles (editor, watchlist, indicators, data window,
- * layers, settings, plugins).
+ * layers, pine logs, profiler, settings, plugins).
  *
  * ## Actions
  * - **Load** → `loadSymbolData` (historical via active source)
@@ -45,7 +45,10 @@ import {
   toggleIndicatorPanel,
   toggleDataViewPanel,
   toggleLayerPanel,
+  togglePineLogsPanel,
+  toggleProfilerEnabled,
   openScriptSettings,
+  isPanelOpen,
 } from '../store';
 import { CHART_TYPES } from '../chart/chart-type';
 import { runAndApply } from '../indicators/runner';
@@ -478,6 +481,34 @@ export const Topbar: Component<{
       >
         <Icons.scrollText />
         Results
+      </button>
+
+      <button
+        type="button"
+        class={`sc-btn sc-btn-ghost ${isPanelOpen('pinelogs') ? 'text-accent' : ''}`}
+        onClick={() => togglePineLogsPanel()}
+        title="Pine Logs — script log.* output (not system telemetry)"
+        aria-pressed={isPanelOpen('pinelogs')}
+        data-testid="axis-btn-pine-logs"
+      >
+        <Icons.panelBottom />
+        Pine Logs
+      </button>
+
+      <button
+        type="button"
+        class={`sc-btn sc-btn-ghost ${store.profilerEnabled ? 'text-accent border-accent' : ''}`}
+        onClick={() => toggleProfilerEnabled()}
+        title={
+          store.profilerEnabled
+            ? 'Profiler on — engines may collect timing; click to disable'
+            : 'Enable editor profiler mode'
+        }
+        aria-pressed={store.profilerEnabled}
+        data-testid="axis-btn-profiler"
+      >
+        <Icons.activity />
+        Profiler
       </button>
 
       <span class="sc-sep" aria-hidden="true" />

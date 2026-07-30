@@ -27,11 +27,12 @@
  * @module editor/tabbed-editor
  */
 
-import { Component, For, createSignal, batch, onCleanup, onMount } from 'solid-js';
+import { Component, For, createMemo, createSignal, batch, onCleanup, onMount } from 'solid-js';
 import { PineEditor } from './PineEditor';
 import { store, loadEditorDoc, saveEditorDoc } from '../store';
 import { saveDraft, loadDraft, writeScript } from '../storage/service';
 import { setStatus } from '../store';
+import { normalizeRunProfile, type RunProfile } from '../results/profiler';
 
 /** One editor tab (in-memory until saved to library/draft). */
 interface Tab {
@@ -92,6 +93,24 @@ export const TabbedEditor: Component<Props> = (props) => {
   const [tabs, setTabs] = createSignal<Tab[]>([newTab('Script 1', initialDoc())]);
   const [activeTab, setActiveTab] = createSignal(0);
   const [saving, setSaving] = createSignal(false);
+
+  /** Normalize last-run profile for the CM profiler gutter (null when off / empty). */
+  const profilerProfile = createMemo((): RunProfile | null => {
+    if (!store.profilerEnabled) return null;
+    const last = store.lastRun as {
+      profile?: unknown;
+      meta?: { profile?: unknown; ms?: number };
+      ms?: number;
+    } | null;
+    const raw = last?.profile ?? last?.meta?.profile ?? last;
+    const fallbackMs =
+      typeof store.lastRunMs === 'number'
+        ? store.lastRunMs
+        : typeof last?.meta?.ms === 'number'
+          ? last.meta.ms
+          : undefined;
+    return normalizeRunProfile(raw, fallbackMs);
+  });
 
   let draftTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -271,6 +290,8 @@ export const TabbedEditor: Component<Props> = (props) => {
             if (doc?.trim()) props.onRun?.(doc);
           }}
           editorRef={props.editorRef}
+          profilerEnabled={store.profilerEnabled}
+          profilerProfile={profilerProfile()}
         />
       </div>
     </div>

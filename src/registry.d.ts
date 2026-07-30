@@ -84,8 +84,19 @@ export interface RunResult {
     plots: (number | null)[];
     series?: Record<string, (number | null)[]>;
     events: Array<{ time: number; type: string; id?: string; price?: number; dir?: string; [k: string]: unknown }>;
+    logs?: Array<{ level?: string; message?: string; [k: string]: unknown }>;
+    profile?: Record<string, unknown>;
     error?: string;
-    meta?: { mode?: string; script_id?: string; run_id?: string; ms?: number; count?: number; [k: string]: unknown };
+    meta?: {
+        mode?: string;
+        script_id?: string;
+        run_id?: string;
+        ms?: number;
+        count?: number;
+        logs?: Array<{ level?: string; message?: string; [k: string]: unknown }>;
+        profile?: Record<string, unknown>;
+        [k: string]: unknown;
+    };
 }
 export interface EngineOpts {
     script: string;

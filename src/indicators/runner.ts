@@ -87,6 +87,30 @@ export interface RunOptions {
   inputs?: Record<string, unknown>;
 }
 
+type PineLogLine = { level?: string; message?: string; [k: string]: unknown };
+
+/**
+ * Lift `meta.logs` / `meta.profile` onto top-level when engines only put them in meta.
+ * Does not auto-open Pine Logs (callers may still open Results).
+ */
+function normalizeRunExtras(result: RunResult): RunResult {
+  const meta = result.meta;
+  let logs = result.logs;
+  if (!logs && meta && Array.isArray(meta.logs)) {
+    logs = meta.logs as PineLogLine[];
+  }
+  let profile = result.profile;
+  if (!profile && meta && meta.profile && typeof meta.profile === 'object') {
+    profile = meta.profile as Record<string, unknown>;
+  }
+  if (logs === result.logs && profile === result.profile) return result;
+  return {
+    ...result,
+    ...(logs ? { logs } : {}),
+    ...(profile ? { profile } : {}),
+  };
+}
+
 /**
  * Execute Pine against `store.bars` via the active engine.
  * Does not mutate chart series; use {@link runAndApply} for full apply.
@@ -97,9 +121,14 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
   const t0 = performance.now();
   try {
     const engine = getActiveEngine();
-    const config = getActiveEngineConfig();
+    const baseConfig = getActiveEngineConfig() || {};
+    // Hint engines to collect line timing when profiler mode is on (ignored if unsupported).
+    const config: Record<string, unknown> = {
+      ...baseConfig,
+      profiler: !!store.profilerEnabled,
+    };
     const transport = classifyTransport('engine', engine.id, engine.capabilities);
-    const mode = String(config?.mode || 'interpret');
+    const mode = String(config.mode || 'interpret');
     setTelemetryPlane('engine', {
       id: engine.id,
       name: engine.name,
@@ -210,11 +239,13 @@ export async function runAndApply(
       inputs = ind.inputValues;
     }
   }
-  const result = await runScript(script, { ...opts, inputs });
+  const raw = await runScript(script, { ...opts, inputs });
+  const result = normalizeRunExtras(raw);
   setLastRun(result);
   if (openResults) {
     setStore('resultsPanel', 'open', true);
   }
+  // Do not auto-open Pine Logs aggressively; panel is user-toggled.
   if (result.status === 'error') return result;
 
   const manager = getManager();

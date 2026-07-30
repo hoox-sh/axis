@@ -32,6 +32,7 @@ export type PanelId =
   | 'editor'
   | 'results'
   | 'logs'
+  | 'pinelogs'
   | 'dataview'
   | 'layers';
 
@@ -107,6 +108,14 @@ export const PANEL_META: Record<
     defaultW: 640,
     defaultH: 160,
   },
+  pinelogs: {
+    title: 'Pine Logs',
+    defaultDock: 'bottom',
+    minW: 280,
+    minH: 120,
+    defaultW: 640,
+    defaultH: 200,
+  },
   dataview: {
     title: 'Data window',
     defaultDock: 'float',
@@ -154,6 +163,7 @@ export function defaultPanelChromeMap(): PanelChromeMap {
     editor: defaultPanelChrome('editor', { open: true, dock: 'right', w: 460 }),
     results: defaultPanelChrome('results', { open: false, dock: 'bottom', h: 220 }),
     logs: defaultPanelChrome('logs', { open: false, dock: 'bottom', h: 160 }),
+    pinelogs: defaultPanelChrome('pinelogs', { open: false, dock: 'bottom', h: 200 }),
     dataview: defaultPanelChrome('dataview', {
       open: false,
       dock: 'float',
