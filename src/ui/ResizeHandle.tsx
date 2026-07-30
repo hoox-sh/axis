@@ -18,55 +18,88 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Vertical resize grip for docked side panels.
- * Pointer capture + body cursor while dragging; clamps width via min/max.
- * Direction encodes which way “grow” maps to clientX delta.
+ * Resize grip for docked panels (vertical or horizontal).
+ * Pointer capture + body cursor while dragging; clamps size via min/max.
+ * Direction encodes which way “grow” maps to client delta.
  */
 
 import { Component, onCleanup } from 'solid-js';
 
+export type ResizeDirection = 'grow-right' | 'grow-left' | 'grow-up' | 'grow-down';
+
 interface Props {
-  /** grow-right: drag right increases width (left-side panels)
-   *  grow-left:  drag left increases width (right-side panels) */
-  direction: 'grow-right' | 'grow-left';
-  getWidth: () => number;
-  setWidth: (width: number) => void;
+  /** grow-right: drag right increases size (left-side panels)
+   *  grow-left:  drag left increases size (right-side panels)
+   *  grow-up:    drag up increases size (bottom panels)
+   *  grow-down:  drag down increases size (top panels) */
+  direction: ResizeDirection;
+  getSize: () => number;
+  setSize: (size: number) => void;
   min?: number;
   max?: number;
   class?: string;
 }
 
+function isVertical(dir: ResizeDirection): boolean {
+  return dir === 'grow-right' || dir === 'grow-left';
+}
+
 /**
- * Vertical drag handle between panels. 2px interactive hit area with void indigo hover.
+ * Drag handle on a panel border. Thin hit strip with void indigo hover.
+ * Default min is 1px (border-width only).
  */
 export const ResizeHandle: Component<Props> = (props) => {
   let dragging = false;
-  let startX = 0;
-  let startW = 0;
+  let startPos = 0;
+  let startSize = 0;
 
   const onPointerDown = (e: PointerEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     dragging = true;
-    startX = e.clientX;
-    startW = props.getWidth();
+    startPos = isVertical(props.direction) ? e.clientX : e.clientY;
+    startSize = props.getSize();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    document.body.style.cursor = 'col-resize';
+    document.body.style.cursor = isVertical(props.direction) ? 'col-resize' : 'row-resize';
     document.body.style.userSelect = 'none';
   };
 
   const onPointerMove = (e: PointerEvent) => {
     if (!dragging) return;
-    const dx = e.clientX - startX;
-    const raw = props.direction === 'grow-right' ? startW + dx : startW - dx;
-    const min = props.min ?? 140;
-    const max = props.max ?? Math.floor(window.innerWidth * 0.8);
-    props.setWidth(Math.min(Math.max(raw, min), max));
+    const pos = isVertical(props.direction) ? e.clientX : e.clientY;
+    const delta = pos - startPos;
+    let raw: number;
+    switch (props.direction) {
+      case 'grow-right':
+        raw = startSize + delta;
+        break;
+      case 'grow-left':
+        raw = startSize - delta;
+        break;
+      case 'grow-down':
+        raw = startSize + delta;
+        break;
+      case 'grow-up':
+        raw = startSize - delta;
+        break;
+    }
+    const min = props.min ?? 1;
+    const max =
+      props.max ??
+      (isVertical(props.direction)
+        ? Math.floor(window.innerWidth * 0.9)
+        : Math.floor(window.innerHeight * 0.9));
+    props.setSize(Math.min(Math.max(raw, min), max));
   };
 
   const onPointerUp = (e: PointerEvent) => {
     if (!dragging) return;
     dragging = false;
-    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch {}
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* already released */
+    }
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
   };
@@ -76,11 +109,15 @@ export const ResizeHandle: Component<Props> = (props) => {
     document.body.style.userSelect = '';
   });
 
+  const orientation = () => (isVertical(props.direction) ? 'vertical' : 'horizontal');
+  const handleClass = () =>
+    isVertical(props.direction) ? 'sc-resize-handle' : 'sc-pane-resize-handle';
+
   return (
     <div
-      class={`sc-resize-handle ${props.class || ''}`}
+      class={`${handleClass()} ${props.class || ''}`}
       role="separator"
-      aria-orientation="vertical"
+      aria-orientation={orientation()}
       title="Drag to resize"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}

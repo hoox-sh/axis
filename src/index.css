@@ -755,6 +755,23 @@ button.sc-btn:focus-visible {
   border-bottom: none;
   border-radius: 0;
   width: 100%;
+  position: relative;
+}
+
+/* Absolute border resize strips — sit on the inner edge (shell is overflow:hidden) */
+.axis-panel-shell > .sc-resize-handle.absolute {
+  width: 6px;
+  margin: 0;
+  z-index: 40;
+}
+.axis-panel-shell > .sc-pane-resize-handle.absolute {
+  height: 6px;
+  margin: 0;
+  z-index: 40;
+}
+/* Hide decorative mid-line on panel edge handles (used for chart panes) */
+.axis-panel-shell > .sc-pane-resize-handle.absolute::after {
+  display: none;
 }
 
 .axis-panel-float {

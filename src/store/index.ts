@@ -729,26 +729,30 @@ export function setUiScale(raw: number) {
 
 /* ── Layout helpers ─────────────────────────────────────────────── */
 
-/** Clamp and persist docked editor width (px); mirrors panelChrome.editor.w. */
+/** Clamp and persist docked editor width (px); mirrors panelChrome.editor.w. Min 1px (border). */
 export function setEditorWidth(width: number) {
-  const w = Math.min(Math.max(width, 280), Math.floor(window.innerWidth * 0.8));
+  const w = Math.min(Math.max(width, 1), Math.floor(window.innerWidth * 0.9));
   setStore('editor', 'width', w);
   ensurePanelChrome();
   setStore('panelChrome', 'editor', 'w', w);
   persist();
 }
 
-/** Clamp and persist watchlist width (px). */
+/** Clamp and persist watchlist width (px). Min 1px (border). */
 export function setWatchlistWidth(width: number) {
-  const w = Math.min(Math.max(width, 140), 360);
+  const w = Math.min(Math.max(width, 1), Math.floor(window.innerWidth * 0.9));
   setStore('watchlist', 'width', w);
+  ensurePanelChrome();
+  setStore('panelChrome', 'watchlist', 'w', w);
   persist();
 }
 
-/** Clamp and persist indicator panel width (px). */
+/** Clamp and persist indicator panel width (px). Min 1px (border). */
 export function setIndicatorWidth(width: number) {
-  const w = Math.min(Math.max(width, 160), 400);
+  const w = Math.min(Math.max(width, 1), Math.floor(window.innerWidth * 0.9));
   setStore('indicatorPanel', 'width', w);
+  ensurePanelChrome();
+  setStore('panelChrome', 'indicators', 'w', w);
   persist();
 }
 
@@ -911,17 +915,20 @@ export function setPanelGeometry(
   if (geo.x != null) setStore('panelChrome', id, 'x', Math.round(geo.x));
   if (geo.y != null) setStore('panelChrome', id, 'y', Math.round(geo.y));
   if (geo.w != null) {
-    setStore('panelChrome', id, 'w', Math.round(geo.w));
-    if (id === 'watchlist') setStore('watchlist', 'width', Math.round(geo.w));
-    if (id === 'indicators') setStore('indicatorPanel', 'width', Math.round(geo.w));
-    if (id === 'editor') setStore('editor', 'width', Math.round(geo.w));
-    if (id === 'dataview') setStore('dataViewPanel', 'width', Math.round(geo.w));
-    if (id === 'layers') setStore('layerPanel', 'width', Math.round(geo.w));
+    // Min 1px — panel can shrink to the border
+    const w = Math.max(1, Math.round(geo.w));
+    setStore('panelChrome', id, 'w', w);
+    if (id === 'watchlist') setStore('watchlist', 'width', w);
+    if (id === 'indicators') setStore('indicatorPanel', 'width', w);
+    if (id === 'editor') setStore('editor', 'width', w);
+    if (id === 'dataview') setStore('dataViewPanel', 'width', w);
+    if (id === 'layers') setStore('layerPanel', 'width', w);
   }
   if (geo.h != null) {
-    setStore('panelChrome', id, 'h', Math.round(geo.h));
-    if (id === 'results') setStore('resultsPanel', 'height', Math.round(geo.h));
-    if (id === 'logs') setStore('logsPanel', 'height', Math.round(geo.h));
+    const h = Math.max(1, Math.round(geo.h));
+    setStore('panelChrome', id, 'h', h);
+    if (id === 'results') setStore('resultsPanel', 'height', h);
+    if (id === 'logs') setStore('logsPanel', 'height', h);
   }
   void cur;
   persist();

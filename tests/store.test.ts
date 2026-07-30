@@ -240,14 +240,20 @@ describe('panes', () => {
 describe('layout helpers', () => {
   it('clamps widths and toggles editor/watchlist', () => {
     setEditorWidth(100);
-    expect(store.editor.width).toBe(280);
+    expect(store.editor.width).toBe(100);
+    setEditorWidth(0);
+    expect(store.editor.width).toBe(1);
     setEditorWidth(99999);
-    expect(store.editor.width).toBeLessThanOrEqual(Math.floor(1280 * 0.8));
+    expect(store.editor.width).toBeLessThanOrEqual(Math.floor(1280 * 0.9));
 
     setWatchlistWidth(50);
-    expect(store.watchlist.width).toBe(140);
+    expect(store.watchlist.width).toBe(50);
+    setWatchlistWidth(0);
+    expect(store.watchlist.width).toBe(1);
     setIndicatorWidth(50);
-    expect(store.indicatorPanel.width).toBe(160);
+    expect(store.indicatorPanel.width).toBe(50);
+    setIndicatorWidth(0);
+    expect(store.indicatorPanel.width).toBe(1);
 
     setEditorOpen(false);
     expect(store.editor.open).toBe(false);

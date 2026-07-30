@@ -38,6 +38,7 @@ import {
   bumpPanelZ,
 } from '../../store';
 import { Icons } from '../icons';
+import { ResizeHandle } from '../ResizeHandle';
 import {
   PANEL_META,
   type PanelDock,
@@ -301,42 +302,79 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     });
   });
 
-  const onResizePointerDown = (e: PointerEvent) => {
-    if (e.button !== 0) return;
-    e.stopPropagation();
-    const cur = getPanelChrome(props.id);
-    if (cur.dock !== 'float' && cur.dock !== 'window') return;
-    drag = {
-      mode: 'resize',
-      startX: e.clientX,
-      startY: e.clientY,
-      origX: cur.x,
-      origY: cur.y,
-      origW: cur.w,
-      origH: cur.h,
-      pointerId: e.pointerId,
-    };
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-
-    const onMove = (ev: PointerEvent) => {
-      if (!drag || drag.mode !== 'resize') return;
-      const dx = ev.clientX - drag.startX;
-      const dy = ev.clientY - drag.startY;
+  /**
+   * Float/window border or corner resize.
+   * Edges: e | w | n | s | se (corner). Min size is panel border (1px).
+   * West/north also move x/y so the opposite edge stays fixed.
+   */
+  const onFloatResizePointerDown =
+    (edge: 'e' | 'w' | 'n' | 's' | 'se') => (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      e.preventDefault();
+      const cur = getPanelChrome(props.id);
+      if (cur.dock !== 'float' && cur.dock !== 'window') return;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const origX = cur.x;
+      const origY = cur.y;
+      const origW = cur.w;
+      const origH = cur.h;
       const minW = meta().minW;
       const minH = meta().minH;
-      setPanelGeometry(props.id, {
-        w: Math.max(minW, drag.origW + dx),
-        h: Math.max(minH, drag.origH + dy),
-      });
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+      document.body.style.userSelect = 'none';
+      const cursor =
+        edge === 'e' || edge === 'w'
+          ? 'col-resize'
+          : edge === 'n' || edge === 's'
+            ? 'row-resize'
+            : 'nwse-resize';
+      document.body.style.cursor = cursor;
+
+      const onMove = (ev: PointerEvent) => {
+        const dx = ev.clientX - startX;
+        const dy = ev.clientY - startY;
+        const geo: Partial<{ x: number; y: number; w: number; h: number }> = {};
+        if (edge === 'e' || edge === 'se') {
+          geo.w = Math.max(minW, origW + dx);
+        }
+        if (edge === 'w') {
+          const w = Math.max(minW, origW - dx);
+          geo.w = w;
+          geo.x = origX + (origW - w);
+        }
+        if (edge === 's' || edge === 'se') {
+          geo.h = Math.max(minH, origH + dy);
+        }
+        if (edge === 'n') {
+          const h = Math.max(minH, origH - dy);
+          geo.h = h;
+          geo.y = origY + (origH - h);
+        }
+        setPanelGeometry(props.id, geo);
+      };
+      const onUp = (ev: PointerEvent) => {
+        try {
+          (e.currentTarget as HTMLElement).releasePointerCapture?.(ev.pointerId);
+        } catch {
+          /* ignore */
+        }
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
     };
-    const onUp = () => {
-      drag = null;
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  };
+
+  const dockWidth = () => getPanelChrome(props.id).w;
+  const dockHeight = () => getPanelChrome(props.id).h;
+  const setDockWidth = (w: number) => setPanelGeometry(props.id, { w });
+  const setDockHeight = (h: number) => setPanelGeometry(props.id, { h });
 
   const shellStyle = (): JSX.CSSProperties => {
     const c = chrome();
@@ -449,11 +487,69 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
 
       <div class="flex-1 min-h-0 overflow-auto axis-panel-body">{props.children}</div>
 
+      {/* Docked: resize on the free border (min 1px) */}
+      <Show when={dock() === 'left'}>
+        <ResizeHandle
+          direction="grow-right"
+          getSize={dockWidth}
+          setSize={setDockWidth}
+          min={meta().minW}
+          class="absolute right-0 top-0 bottom-0"
+        />
+      </Show>
+      <Show when={dock() === 'right'}>
+        <ResizeHandle
+          direction="grow-left"
+          getSize={dockWidth}
+          setSize={setDockWidth}
+          min={meta().minW}
+          class="absolute left-0 top-0 bottom-0"
+        />
+      </Show>
+      <Show when={dock() === 'bottom'}>
+        <ResizeHandle
+          direction="grow-up"
+          getSize={dockHeight}
+          setSize={setDockHeight}
+          min={meta().minH}
+          class="absolute left-0 right-0 top-0"
+        />
+      </Show>
+
+      {/* Float: all borders + SE corner (min 1px) */}
       <Show when={isFloat()}>
+        <div
+          class="sc-resize-handle absolute right-0 top-0 bottom-3"
+          role="separator"
+          aria-orientation="vertical"
+          title="Drag to resize"
+          onPointerDown={onFloatResizePointerDown('e')}
+        />
+        <div
+          class="sc-resize-handle absolute left-0 top-0 bottom-0"
+          role="separator"
+          aria-orientation="vertical"
+          title="Drag to resize"
+          onPointerDown={onFloatResizePointerDown('w')}
+        />
+        <div
+          class="sc-pane-resize-handle absolute left-0 right-3 bottom-0"
+          role="separator"
+          aria-orientation="horizontal"
+          title="Drag to resize"
+          onPointerDown={onFloatResizePointerDown('s')}
+        />
+        <div
+          class="sc-pane-resize-handle absolute left-0 right-0 top-0"
+          role="separator"
+          aria-orientation="horizontal"
+          title="Drag to resize"
+          onPointerDown={onFloatResizePointerDown('n')}
+        />
         <div
           class="axis-panel-resize"
           title="Resize"
-          onPointerDown={onResizePointerDown}
+          onPointerDown={onFloatResizePointerDown('se')}
         />
       </Show>
     </div>

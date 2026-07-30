@@ -62,6 +62,7 @@ export type PanelChromeMap = Record<PanelId, PanelChrome>;
 
 /**
  * Static titles, default docks, and size constraints for each panel.
+ * minW/minH are 1px so panels can shrink to the border.
  * Used by FloatableShell headers and default chrome factories.
  */
 export const PANEL_META: Record<
@@ -71,64 +72,64 @@ export const PANEL_META: Record<
   watchlist: {
     title: 'Watchlist',
     defaultDock: 'left',
-    minW: 160,
-    minH: 200,
+    minW: 1,
+    minH: 1,
     defaultW: 200,
     defaultH: 420,
   },
   indicators: {
     title: 'Indicators',
     defaultDock: 'right',
-    minW: 160,
-    minH: 200,
+    minW: 1,
+    minH: 1,
     defaultW: 224,
     defaultH: 420,
   },
   editor: {
     title: 'Editor',
     defaultDock: 'right',
-    minW: 280,
-    minH: 240,
+    minW: 1,
+    minH: 1,
     defaultW: 460,
     defaultH: 520,
   },
   results: {
     title: 'Results',
     defaultDock: 'bottom',
-    minW: 280,
-    minH: 120,
+    minW: 1,
+    minH: 1,
     defaultW: 640,
     defaultH: 220,
   },
   logs: {
     title: 'Logs',
     defaultDock: 'bottom',
-    minW: 280,
-    minH: 100,
+    minW: 1,
+    minH: 1,
     defaultW: 640,
     defaultH: 160,
   },
   scriptlogs: {
     title: 'Scriptlogs',
     defaultDock: 'bottom',
-    minW: 280,
-    minH: 120,
+    minW: 1,
+    minH: 1,
     defaultW: 640,
     defaultH: 200,
   },
   dataview: {
     title: 'Data window',
     defaultDock: 'float',
-    minW: 180,
-    minH: 160,
+    minW: 1,
+    minH: 1,
     defaultW: 240,
     defaultH: 360,
   },
   layers: {
     title: 'Layers',
     defaultDock: 'float',
-    minW: 180,
-    minH: 160,
+    minW: 1,
+    minH: 1,
     defaultW: 240,
     defaultH: 340,
   },
