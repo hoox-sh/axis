@@ -226,17 +226,15 @@ export function normalizeRunProfile(raw: unknown, fallbackTotalMs?: number): Run
 
   let sumMs = 0;
   for (const s of byLine.values()) sumMs += s.ms;
-  const denom = totalMs != null && totalMs > 0 ? totalMs : sumMs > 0 ? sumMs : 0;
+
+  // Always recompute % from Σ line ms so gutter shares sum to ~100%.
+  // Do NOT use wall-clock total_ms (includes parse) or trust inbound pct —
+  // those can make one line show "99%" when it only cost 99ms of a 300ms body.
+  const lineDenom = sumMs > 0 ? sumMs : 0;
 
   const lines: ProfileLineStat[] = [];
   for (const [line, s] of byLine) {
-    let pct: number;
-    if (s.pct != null) {
-      // Accept fraction (0–1) or percent (0–100)
-      pct = s.pct >= 0 && s.pct <= 1 ? s.pct * 100 : s.pct;
-    } else {
-      pct = denom > 0 ? (s.ms / denom) * 100 : 0;
-    }
+    const pct = lineDenom > 0 ? (s.ms / lineDenom) * 100 : 0;
     lines.push({
       line,
       ms: s.ms,
@@ -284,10 +282,18 @@ export function profileLineMap(profile: RunProfile | null | undefined): Map<numb
         line: row.line,
         ms: prev.ms + row.ms,
         execs: prev.execs + row.execs,
-        pct: prev.pct + row.pct,
+        pct: 0, // recomputed below
       });
     } else {
       map.set(row.line, { ...row });
+    }
+  }
+  // Keep map pct consistent with Σ ms (same rule as normalizeRunProfile)
+  let sum = 0;
+  for (const s of map.values()) sum += s.ms;
+  if (sum > 0) {
+    for (const [line, s] of map) {
+      map.set(line, { ...s, pct: (s.ms / sum) * 100 });
     }
   }
   return map;

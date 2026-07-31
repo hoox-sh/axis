@@ -115,6 +115,30 @@ describe('normalizeRunProfile', () => {
     expect(p.lines).toHaveLength(1);
     expect(p.lines[0]).toMatchObject({ line: 4, ms: 25, execs: 3 });
   });
+
+  it('pct is share of Σ line ms (not wall total_ms / raw ms-as-percent)', () => {
+    // Regression: heavy lines had ms≈99 and total_ms≈100 → UI showed "99%"
+    // even though body cost was hundreds of ms across lines.
+    const p = normalizeRunProfile({
+      profile: {
+        total_ms: 100,
+        lines: [
+          { line: 20, ms: 6.9, execs: 50, pct: 6.9 },
+          { line: 28, ms: 99, execs: 50, pct: 99 },
+          { line: 33, ms: 71, execs: 50, pct: 71 },
+          { line: 38, ms: 52, execs: 50, pct: 52 },
+          { line: 46, ms: 82, execs: 50, pct: 82 },
+        ],
+      },
+    })!;
+    const sumPct = p.lines.reduce((a, l) => a + l.pct, 0);
+    expect(sumPct).toBeCloseTo(100, 4);
+    // Hot line is ~99/(6.9+99+71+52+82) ≈ 31.8%, not 99%
+    const hot = p.lines.find((l) => l.line === 28)!;
+    expect(hot.pct).toBeGreaterThan(25);
+    expect(hot.pct).toBeLessThan(40);
+    expect(hot.pct).not.toBeCloseTo(99, 0);
+  });
 });
 
 describe('profileLineMap', () => {

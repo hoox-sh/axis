@@ -70,12 +70,12 @@ function formatPct(pct: number): string {
   return `${Math.round(pct)}%`;
 }
 
-/** Tooltip: `Line N · X.X ms · Y execs · Z% of total` */
+/** Tooltip: `Line N · X.X ms · Y execs · Z% of body cost` */
 function markerTitle(lineNo: number, stat: ProfileLineStat): string {
   const ms = Number.isFinite(stat.ms) ? stat.ms.toFixed(1) : '0.0';
   const execs = Number.isFinite(stat.execs) ? Math.trunc(stat.execs) : 0;
   const pct = Number.isFinite(stat.pct) ? stat.pct.toFixed(1) : '0.0';
-  return `Line ${lineNo} · ${ms} ms · ${execs} execs · ${pct}% of total`;
+  return `Line ${lineNo} · ${ms} ms · ${execs} execs · ${pct}% of script body (Σ line cost)`;
 }
 
 class ProfilerPctMarker extends GutterMarker {
