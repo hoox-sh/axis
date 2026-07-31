@@ -171,14 +171,16 @@ export const serverEngine: EnginePlugin = {
         if (!client.isDead) {
           // Cap WS attempt so a dead /ws/run cannot exhaust the run budget.
           const wsBudget = Math.min(20_000, Math.max(8_000, Math.floor(timeoutMs / 4)));
+          const profilerOn = cfg.profiler === true;
           const wsResult = await client.run(
             {
               script,
               data: bars as unknown[],
-              mode,
+              mode: profilerOn ? 'interpret' : mode,
               // Always a string — API schema rejects null/omitted-as-null
               symbol: typeof store.symbol === 'string' && store.symbol ? store.symbol : 'CHART',
               ...(inputOverrides ? { inputs: inputOverrides } : {}),
+              ...(profilerOn ? { profiler: true } : {}),
             },
             wsBudget,
           );
@@ -201,6 +203,15 @@ export const serverEngine: EnginePlugin = {
             (wsResult.script_name as string) ||
             (wsResult.meta as { script_name?: string } | undefined)?.script_name ||
             'plot';
+          const wsProfile =
+            ((wsResult as { profile?: unknown }).profile ??
+              (wsResult.meta as { profile?: unknown } | undefined)?.profile) as
+              | Record<string, unknown>
+              | undefined;
+          const wsLogs = (
+            (wsResult as { logs?: unknown }).logs ??
+            (wsResult.meta as { logs?: unknown } | undefined)?.logs
+          ) as RunResult['logs'] | undefined;
           return {
             status: 'success',
             plots: (wsResult.plots as (number | null)[]) || [],
@@ -208,16 +219,20 @@ export const serverEngine: EnginePlugin = {
             events: (wsResult.events as RunResult['events']) || [],
             drawings: (wsResult.drawings as RunResult['drawings']) || [],
             inputs: (wsResult as { inputs?: unknown }).inputs,
+            ...(wsProfile ? { profile: wsProfile } : {}),
+            ...(Array.isArray(wsLogs) ? { logs: wsLogs } : {}),
             meta: {
               ms,
-              transport: 'ws',
-              mode: wsResult.mode || mode,
+              transport: 'ws' as const,
+              mode: (wsResult.mode || mode) as string,
               script_id: wsResult.script_id,
               run_id: wsResult.run_id,
               overlay: wsOverlay !== false,
               script_name: wsName,
-              plot_meta: wsResult.plot_meta || {},
+              plot_meta: (wsResult.plot_meta || {}) as Record<string, unknown>,
               inputs: (wsResult as { inputs?: unknown }).inputs,
+              ...(wsProfile ? { profile: wsProfile } : {}),
+              ...(Array.isArray(wsLogs) ? { logs: wsLogs } : {}),
             },
           } satisfies RunResult;
         }
@@ -236,14 +251,17 @@ export const serverEngine: EnginePlugin = {
       const restSignal = AbortSignal.timeout(restBudget);
       void signal; // engine-level cancel reserved; REST uses its own budget after WS
       // mode must be in the JSON body — Pro API validates body only (query is legacy).
-      const res = await fetch(`${endpoint}/run?mode=${encodeURIComponent(mode)}`, {
+      const profilerOn = cfg.profiler === true;
+      const restMode = profilerOn ? 'interpret' : mode;
+      const res = await fetch(`${endpoint}/run?mode=${encodeURIComponent(restMode)}`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
           script,
           data: bars,
-          mode,
+          mode: restMode,
           ...(inputOverrides ? { inputs: inputOverrides } : {}),
+          ...(profilerOn ? { profiler: true } : {}),
         }),
         signal: restSignal,
       });
@@ -277,6 +295,10 @@ export const serverEngine: EnginePlugin = {
         payload.overlay ?? payload.meta?.overlay ?? true;
       const restName =
         payload.script_name || payload.meta?.script_name || 'plot';
+      const restProfile = (payload.profile ?? payload.meta?.profile) as
+        | Record<string, unknown>
+        | undefined;
+      const restLogs = (payload.logs ?? payload.meta?.logs) as RunResult['logs'] | undefined;
       return {
         status: 'success',
         plots: (payload.plots as (number | null)[]) || [],
@@ -284,10 +306,12 @@ export const serverEngine: EnginePlugin = {
         events: (payload.events as RunResult['events']) || [],
         drawings: (payload.drawings as RunResult['drawings']) || [],
         inputs: payload.inputs,
+        ...(restProfile ? { profile: restProfile } : {}),
+        ...(Array.isArray(restLogs) ? { logs: restLogs } : {}),
         meta: {
           ...(payload.meta || {}),
           ms: performance.now() - t0,
-          transport: 'rest',
+          transport: 'rest' as const,
           mode: payload.mode as string | undefined,
           script_id: payload.script_id as string | undefined,
           run_id: payload.run_id as string | undefined,
@@ -295,6 +319,8 @@ export const serverEngine: EnginePlugin = {
           script_name: restName as string,
           plot_meta: payload.plot_meta || {},
           inputs: payload.inputs,
+          ...(restProfile ? { profile: restProfile } : {}),
+          ...(Array.isArray(restLogs) ? { logs: restLogs } : {}),
         },
       } satisfies RunResult;
     } catch (err: unknown) {

@@ -93,8 +93,8 @@ export const EditorPane: Component<Props> = (props) => {
         }`}
         title={
           store.profilerEnabled
-            ? 'Profiler on — click to disable'
-            : 'Enable editor profiler mode'
+            ? 'Profiler on — re-run script for line costs; click to disable'
+            : 'Enable profiler — then re-run for % cost gutter'
         }
         aria-pressed={store.profilerEnabled}
         data-testid="axis-btn-profiler"

@@ -46,6 +46,10 @@ export type EngineWsRunRequest = {
   data: unknown[];
   mode?: string;
   symbol?: string;
+  /** Pine input.* overrides keyed by title */
+  inputs?: Record<string, unknown>;
+  /** Collect per-line timings for AXIS profiler gutter */
+  profiler?: boolean;
   /** Correlation id; auto-generated when omitted. */
   id?: string;
 };
