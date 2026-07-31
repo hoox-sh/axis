@@ -353,7 +353,152 @@ function hoverDocs(meta: BuiltinMeta): string {
   return parts.filter(Boolean).join('\n\n') || meta.label;
 }
 
-function makeHoverTooltip(from: number, to: number, title: string, body: string, badge?: string): Tooltip {
+/** True when body looks like markdown (fences, bold, hr, lists). */
+export function looksLikeMarkdown(s: string): boolean {
+  return /```|\*\*[^*]+\*\*|^\s*---\s*$|^\s*#{1,3}\s|`[^`]+`/m.test(s);
+}
+
+/**
+ * Peel a leading single-line ```signature``` fence (common LSP hover shape).
+ * Multi-line fences stay in the body as examples.
+ */
+export function peelLeadingSignature(md: string): { signature: string | null; rest: string } {
+  const m = md.match(/^```(?:[\w.-]+)?[ \t]*\r?\n([^\r\n]+)\r?\n```[ \t]*\r?\n?/);
+  if (!m) return { signature: null, rest: md };
+  return { signature: m[1]!.trim(), rest: md.slice(m[0].length) };
+}
+
+/** Append text with light inline markdown: `code` and **bold**. */
+export function appendInlineMarkdown(parent: HTMLElement, text: string): void {
+  const re = /(\*\*[^*\n]+\*\*|`[^`\n]+`)/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) {
+      parent.appendChild(document.createTextNode(text.slice(last, m.index)));
+    }
+    const tok = m[1]!;
+    if (tok.startsWith('**') && tok.endsWith('**')) {
+      const strong = document.createElement('strong');
+      strong.className = 'cm-pine-hover-strong';
+      strong.textContent = tok.slice(2, -2);
+      parent.appendChild(strong);
+    } else if (tok.startsWith('`') && tok.endsWith('`')) {
+      const code = document.createElement('code');
+      code.className = 'cm-pine-hover-code-inline';
+      code.textContent = tok.slice(1, -1);
+      parent.appendChild(code);
+    } else {
+      parent.appendChild(document.createTextNode(tok));
+    }
+    last = m.index + tok.length;
+  }
+  if (last < text.length) {
+    parent.appendChild(document.createTextNode(text.slice(last)));
+  }
+}
+
+/**
+ * Render a subset of markdown used by pyne LSP hovers into `root`.
+ * Handles: fenced code, paragraphs, `---` rules, **bold**, inline `code`.
+ * Does **not** run HTML — all content is textContent-based (XSS-safe).
+ */
+export function renderHoverMarkdown(root: HTMLElement, md: string): void {
+  const src = md.replace(/\r\n/g, '\n').trim();
+  if (!src) return;
+
+  // Tokenize into blocks: fences vs prose
+  const fenceRe = /```([\w.-]*)[ \t]*\n([\s\S]*?)```/g;
+  type Block =
+    | { kind: 'code'; lang: string; code: string }
+    | { kind: 'prose'; text: string };
+  const blocks: Block[] = [];
+  let cursor = 0;
+  let fm: RegExpExecArray | null;
+  while ((fm = fenceRe.exec(src)) !== null) {
+    if (fm.index > cursor) {
+      blocks.push({ kind: 'prose', text: src.slice(cursor, fm.index) });
+    }
+    blocks.push({ kind: 'code', lang: fm[1] || '', code: fm[2]!.replace(/\n$/, '') });
+    cursor = fm.index + fm[0].length;
+  }
+  if (cursor < src.length) {
+    blocks.push({ kind: 'prose', text: src.slice(cursor) });
+  }
+
+  for (const block of blocks) {
+    if (block.kind === 'code') {
+      const pre = document.createElement('pre');
+      pre.className = 'cm-pine-hover-pre';
+      if (block.lang) pre.dataset.lang = block.lang;
+      const code = document.createElement('code');
+      code.className = 'cm-pine-hover-code-block';
+      code.textContent = block.code;
+      pre.appendChild(code);
+      root.appendChild(pre);
+      continue;
+    }
+
+    // Prose: split on blank lines / horizontal rules
+    const chunks = block.text.split(/\n{2,}/);
+    for (const chunk of chunks) {
+      const lines = chunk.split('\n').map((l) => l.trimEnd());
+      const nonEmpty = lines.filter((l) => l.trim().length > 0);
+      if (!nonEmpty.length) continue;
+
+      // Pure HR
+      if (nonEmpty.every((l) => /^---+$/.test(l.trim()))) {
+        const hr = document.createElement('hr');
+        hr.className = 'cm-pine-hover-hr';
+        root.appendChild(hr);
+        continue;
+      }
+
+      // Leading HR line then text
+      let start = 0;
+      if (/^---+$/.test(nonEmpty[0]!.trim())) {
+        const hr = document.createElement('hr');
+        hr.className = 'cm-pine-hover-hr';
+        root.appendChild(hr);
+        start = 1;
+      }
+      const rest = nonEmpty.slice(start);
+      if (!rest.length) continue;
+
+      // Headings (# Title)
+      if (/^#{1,3}\s+/.test(rest[0]!)) {
+        const level = rest[0]!.match(/^(#{1,3})\s+/)?.[1]?.length ?? 2;
+        const h = document.createElement(level <= 1 ? 'div' : 'div');
+        h.className = 'cm-pine-hover-heading';
+        appendInlineMarkdown(h, rest[0]!.replace(/^#{1,3}\s+/, ''));
+        root.appendChild(h);
+        if (rest.length > 1) {
+          const p = document.createElement('p');
+          p.className = 'cm-pine-hover-p';
+          appendInlineMarkdown(p, rest.slice(1).join(' '));
+          root.appendChild(p);
+        }
+        continue;
+      }
+
+      const p = document.createElement('p');
+      p.className = 'cm-pine-hover-p';
+      // Soft-wrap single newlines inside a paragraph as spaces
+      appendInlineMarkdown(p, rest.join(' ').replace(/[ \t]+/g, ' ').trim());
+      root.appendChild(p);
+    }
+  }
+}
+
+function makeHoverTooltip(
+  from: number,
+  to: number,
+  title: string,
+  body: string,
+  badge?: string,
+  opts?: { markdown?: boolean },
+): Tooltip {
+  const asMarkdown = opts?.markdown ?? looksLikeMarkdown(body);
   return {
     pos: from,
     end: to,
@@ -361,22 +506,50 @@ function makeHoverTooltip(from: number, to: number, title: string, body: string,
     create() {
       const dom = document.createElement('div');
       dom.className = 'cm-pine-hover';
-      dom.style.cssText =
-        'padding:8px 10px;max-width:380px;font-size:12px;line-height:1.45;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;';
+
       if (badge) {
         const b = document.createElement('div');
-        b.style.cssText = 'color:#5c5f6e;font-size:10px;margin-bottom:4px;text-transform:uppercase;';
+        b.className = 'cm-pine-hover-badge';
         b.textContent = badge;
         dom.appendChild(b);
       }
-      const t = document.createElement('div');
-      t.style.cssText = 'color:#939fff;font-weight:600;margin-bottom:4px;';
-      t.textContent = title;
-      dom.appendChild(t);
-      const p = document.createElement('div');
-      p.style.cssText = 'color:#c8cad4;';
-      p.textContent = body;
-      dom.appendChild(p);
+
+      let signature: string | null = null;
+      let bodyMd = body;
+      if (asMarkdown) {
+        const peeled = peelLeadingSignature(body);
+        signature = peeled.signature;
+        bodyMd = peeled.rest;
+      }
+
+      // Prefer LSP signature fence; fall back to symbol title
+      const headerText = signature || title;
+      if (headerText) {
+        const t = document.createElement('div');
+        t.className = signature ? 'cm-pine-hover-sig' : 'cm-pine-hover-title';
+        t.textContent = headerText;
+        dom.appendChild(t);
+      }
+
+      if (bodyMd.trim()) {
+        const content = document.createElement('div');
+        content.className = 'cm-pine-hover-body';
+        if (asMarkdown) {
+          renderHoverMarkdown(content, bodyMd);
+        } else {
+          // Plain docs: preserve paragraph breaks
+          for (const para of bodyMd.split(/\n{2,}/)) {
+            const text = para.trim();
+            if (!text) continue;
+            const p = document.createElement('p');
+            p.className = 'cm-pine-hover-p';
+            p.textContent = text;
+            content.appendChild(p);
+          }
+        }
+        if (content.childNodes.length) dom.appendChild(content);
+      }
+
       return { dom };
     },
   };
@@ -428,6 +601,7 @@ export async function pineHover(view: EditorView, pos: number): Promise<Tooltip 
         hit.word,
         remote.contents,
         'pyne lsp',
+        { markdown: true },
       );
     }
   }
