@@ -303,6 +303,18 @@ export interface AppState {
   lastRunMs: number | null;
   /** Last script run payload for Results panel (not always persisted fully) */
   lastRun: unknown | null;
+  /**
+   * Ephemeral last plot series per applied indicator (for cross-indicator
+   * `input.source` picks). Not persisted — rebuilt on re-run.
+   */
+  indicatorSeries: Record<
+    string,
+    {
+      name: string;
+      series: Record<string, (number | null)[]>;
+      titles?: Record<string, string>;
+    }
+  >;
   /** In-memory system logs (not persisted) */
   logs: LogEntry[];
 

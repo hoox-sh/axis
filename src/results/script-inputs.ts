@@ -45,6 +45,21 @@ export type ScriptInputType =
   | 'text'
   | 'unknown';
 
+/**
+ * Default dropdown for `input.source` (Pine Script™ / TradingView® parity).
+ * Used when the script does not pass an explicit `options=` list and when the
+ * engine export omits options.
+ */
+export const DEFAULT_SOURCE_OPTIONS = [
+  'open',
+  'high',
+  'low',
+  'close',
+  'hl2',
+  'hlc3',
+  'ohlc4',
+] as const;
+
 export interface ScriptInputDef {
   /** Stable key = title when set, else generated id */
   id: string;
@@ -59,6 +74,19 @@ export interface ScriptInputDef {
   group?: string | null;
   tooltip?: string | null;
   active?: boolean;
+}
+
+/** Ensure `source` inputs always expose the standard OHLC enum dropdown. */
+function withSourceDefaults(def: ScriptInputDef): ScriptInputDef {
+  if (def.type !== 'source') return def;
+  const options =
+    def.options?.length ? def.options : [...DEFAULT_SOURCE_OPTIONS];
+  const fallback = 'close';
+  const defaultVal =
+    def.default != null && def.default !== '' ? def.default : fallback;
+  const value =
+    def.value != null && def.value !== '' ? def.value : defaultVal;
+  return { ...def, options, default: defaultVal, value };
 }
 
 const CALL_RE =
@@ -243,7 +271,14 @@ export function parseScriptInputs(source: string): ScriptInputDef[] {
     const defRaw = kw(args, 'defval') ?? pos(args, 0);
     const titleRaw = kw(args, 'title') ?? pos(args, 1);
     const title = titleRaw ? String(parseLiteral(titleRaw) ?? unquote(titleRaw)) : '';
-    const defval = defRaw != null ? parseLiteral(defRaw) : type === 'bool' ? false : 0;
+    const defval =
+      defRaw != null
+        ? parseLiteral(defRaw)
+        : type === 'bool'
+          ? false
+          : type === 'source'
+            ? 'close'
+            : 0;
 
     let min: number | null | undefined;
     let max: number | null | undefined;
@@ -269,7 +304,9 @@ export function parseScriptInputs(source: string): ScriptInputDef[] {
     }
 
     if (type === 'string' || type === 'enum' || type === 'source') {
-      options = parseOptions(kw(args, 'options') ?? (type === 'enum' ? pos(args, 2) : undefined));
+      options = parseOptions(
+        kw(args, 'options') ?? (type === 'enum' ? pos(args, 2) : undefined),
+      );
     }
 
     const groupR = kw(args, 'group');
@@ -282,28 +319,30 @@ export function parseScriptInputs(source: string): ScriptInputDef[] {
     }
     seen.add(id);
 
-    out.push({
-      id,
-      title: title || id,
-      type: type === 'unknown' && typeof defval === 'boolean'
-        ? 'bool'
-        : type === 'unknown' && typeof defval === 'number'
-          ? Number.isInteger(defval)
-            ? 'int'
-            : 'float'
-          : type === 'unknown'
-            ? 'string'
-            : type,
-      default: defval,
-      value: defval,
-      min: min ?? null,
-      max: max ?? null,
-      step: step ?? null,
-      options,
-      group: groupR ? String(parseLiteral(groupR) ?? unquote(groupR)) : null,
-      tooltip: tooltipR ? String(parseLiteral(tooltipR) ?? unquote(tooltipR)) : null,
-      active: true,
-    });
+    out.push(
+      withSourceDefaults({
+        id,
+        title: title || id,
+        type: type === 'unknown' && typeof defval === 'boolean'
+          ? 'bool'
+          : type === 'unknown' && typeof defval === 'number'
+            ? Number.isInteger(defval)
+              ? 'int'
+              : 'float'
+            : type === 'unknown'
+              ? 'string'
+              : type,
+        default: defval,
+        value: defval,
+        min: min ?? null,
+        max: max ?? null,
+        step: step ?? null,
+        options,
+        group: groupR ? String(parseLiteral(groupR) ?? unquote(groupR)) : null,
+        tooltip: tooltipR ? String(parseLiteral(tooltipR) ?? unquote(tooltipR)) : null,
+        active: true,
+      }),
+    );
   }
   return out;
 }
@@ -323,20 +362,22 @@ export function normalizeEngineInputs(raw: unknown): ScriptInputDef[] {
     while (seen.has(id)) id = `${title}_${n++}`;
     seen.add(id);
     const type = mapType(String(r.type || 'unknown'));
-    out.push({
-      id,
-      title,
-      type,
-      default: r.default ?? r.defval ?? r.value,
-      value: r.value ?? r.default ?? r.defval,
-      min: r.min != null ? Number(r.min) : r.minval != null ? Number(r.minval) : null,
-      max: r.max != null ? Number(r.max) : r.maxval != null ? Number(r.maxval) : null,
-      step: r.step != null ? Number(r.step) : null,
-      options: Array.isArray(r.options) ? r.options.map(String) : undefined,
-      group: r.group != null ? String(r.group) : null,
-      tooltip: r.tooltip != null ? String(r.tooltip) : null,
-      active: r.active !== false,
-    });
+    out.push(
+      withSourceDefaults({
+        id,
+        title,
+        type,
+        default: r.default ?? r.defval ?? r.value,
+        value: r.value ?? r.default ?? r.defval,
+        min: r.min != null ? Number(r.min) : r.minval != null ? Number(r.minval) : null,
+        max: r.max != null ? Number(r.max) : r.maxval != null ? Number(r.maxval) : null,
+        step: r.step != null ? Number(r.step) : null,
+        options: Array.isArray(r.options) ? r.options.map(String) : undefined,
+        group: r.group != null ? String(r.group) : null,
+        tooltip: r.tooltip != null ? String(r.tooltip) : null,
+        active: r.active !== false,
+      }),
+    );
   }
   return out;
 }
@@ -357,16 +398,20 @@ export function resolveScriptInputs(
     const e = byTitle.get(s.title);
     if (!e) return s;
     byTitle.delete(s.title);
-    return {
+    // Prefer non-empty options from either side (engine may omit source enums)
+    const options =
+      e.options?.length ? e.options : s.options?.length ? s.options : undefined;
+    return withSourceDefaults({
       ...s,
       ...e,
       id: s.id,
       title: s.title,
+      options,
       value: e.value ?? s.value ?? s.default,
-    };
+    });
   });
-  for (const leftover of byTitle.values()) merged.push(leftover);
-  return merged;
+  for (const leftover of byTitle.values()) merged.push(withSourceDefaults(leftover));
+  return merged.map(withSourceDefaults);
 }
 
 /** Apply override map (keyed by title or id) onto defs for form initial values. */

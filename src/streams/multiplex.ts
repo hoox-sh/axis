@@ -55,6 +55,7 @@ import {
 } from '../store';
 import { getManager } from '../chart/manager-access';
 import { runAndApply } from '../indicators/runner';
+import { orderIndicatorsByPlotDeps } from '../results/plot-sources';
 import {
   getStream,
   listStreams,
@@ -200,8 +201,11 @@ function scheduleRerun() {
     rerunInFlight = true;
     setStore('live', 'needsRerun', false);
     try {
-      for (const ind of store.scripts) {
-        if (!ind.visible || !ind.code?.trim()) continue;
+      // Producers of plot sources before consumers (cross-indicator input.source)
+      const ordered = orderIndicatorsByPlotDeps(
+        store.scripts.filter((s) => s.visible && s.code?.trim()),
+      );
+      for (const ind of ordered) {
         await runAndApply(ind.code, ind.id, {
           silent: true,
           openResults: false,

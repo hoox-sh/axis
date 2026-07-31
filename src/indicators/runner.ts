@@ -52,11 +52,13 @@ import {
   addPane,
   setStatus,
   setLastRun,
+  setIndicatorSeries,
   appendLog,
   recordRunLatency,
   setTelemetryPlane,
   setTelemetryState,
 } from '../store';
+import { resolveInputSourceValues } from '../results/plot-sources';
 import { getManager } from '../chart/manager-access';
 import { PLOT_PALETTE } from '../chart/series-factory';
 import { normalizeStrategyEvents, eventsToMarkers, buildEquityCurve } from '../results/events';
@@ -141,12 +143,14 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     const timeoutMs = silent
       ? 60_000
       : Math.min(180_000, Math.max(90_000, 45_000 + (store.bars?.length || 0) * 40));
-    const inputs =
+    const rawInputs =
       opts.inputs && Object.keys(opts.inputs).length
         ? opts.inputs
         : store.editorInputValues && Object.keys(store.editorInputValues).length
           ? store.editorInputValues
           : undefined;
+    // Expand plot:<indicatorId>:<plotKey> refs → full series arrays for the engine
+    const inputs = resolveInputSourceValues(rawInputs, store.indicatorSeries);
     const result = await engine.run({
       script,
       bars: store.bars,
@@ -442,6 +446,16 @@ export async function runAndApply(
     result.meta = { ...result.meta, inputs: engineInputs };
   }
 
+  // Cache line plots for cross-indicator input.source (exclude hline-only noise)
+  const seriesForCache: Record<string, (number | null)[]> = {};
+  const titlesForCache: Record<string, string> = {};
+  for (const [k, arr] of seriesEntries) {
+    seriesForCache[k] = arr as (number | null)[];
+    const meta = plotMeta[k];
+    const title = meta?.title != null ? String(meta.title) : k;
+    titlesForCache[k] = title;
+  }
+
   if (indicatorId === undefined) {
     const plots: Record<string, { color: string }> = {};
     let colorIdx = 0;
@@ -458,13 +472,31 @@ export async function runAndApply(
     } else {
       plots[scriptName] = { color: PLOT_PALETTE[0] };
     }
-    addIndicator(
+    // Prefer original opts/editor overrides (plot refs), not engine-expanded arrays
+    const savedInputs =
+      opts.inputs && Object.keys(opts.inputs).length
+        ? opts.inputs
+        : store.editorInputValues;
+    const newId = addIndicator(
       scriptName,
       script,
       paneId,
       plots,
-      inputs && Object.keys(inputs).length ? inputs : store.editorInputValues,
+      savedInputs && Object.keys(savedInputs).length ? savedInputs : undefined,
     );
+    if (Object.keys(seriesForCache).length) {
+      setIndicatorSeries(newId, {
+        name: scriptName,
+        series: seriesForCache,
+        titles: titlesForCache,
+      });
+    }
+  } else if (Object.keys(seriesForCache).length) {
+    setIndicatorSeries(indicatorId, {
+      name: scriptName,
+      series: seriesForCache,
+      titles: titlesForCache,
+    });
   }
 
   return result;

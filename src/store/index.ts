@@ -136,6 +136,7 @@ const DEFAULTS: AppState = {
   statusMessage: 'Ready.',
   lastRunMs: null,
   lastRun: null,
+  indicatorSeries: {},
   logs: [],
   // Drawing integration — mirrored to DrawingLayer via manager-access / toolbar
   drawingTool: 'cursor',
@@ -262,8 +263,9 @@ function loadPersisted(): Partial<AppState> {
           storage: parsed.activePlugins?.storage || DEFAULTS.activePlugins.storage,
         },
         pluginsConfig: parsed.pluginsConfig || DEFAULTS.pluginsConfig,
-        // Do not hydrate lastRun / logs / telemetry / bars from storage
+        // Do not hydrate lastRun / logs / series cache / telemetry / bars from storage
         lastRun: null,
+        indicatorSeries: {},
         logs: [],
         bars: [],
         chartDataGen: 0,
@@ -451,6 +453,7 @@ export function flushPersist() {
       crosshair: _c,
       scriptSettings: _ss,
       selectedDrawingId: _sel,
+      indicatorSeries: _is,
       telemetry,
       ...rest
     } = plain;
@@ -567,7 +570,32 @@ export function addIndicator(
 /** Remove an applied indicator from the store (caller should clear chart overlays). */
 export function removeIndicator(id: string) {
   setStore('scripts', (s) => s.filter((ind) => ind.id !== id));
+  setStore('indicatorSeries', (cache) => {
+    if (!cache || !(id in cache)) return cache;
+    const next = { ...cache };
+    delete next[id];
+    return next;
+  });
   persist();
+}
+
+/**
+ * Cache last plot series for an applied indicator (cross-indicator sources).
+ * Ephemeral — not written to localStorage.
+ */
+export function setIndicatorSeries(
+  id: string,
+  payload: {
+    name: string;
+    series: Record<string, (number | null)[]>;
+    titles?: Record<string, string>;
+  },
+) {
+  setStore('indicatorSeries', id, {
+    name: payload.name,
+    series: payload.series,
+    titles: payload.titles,
+  });
 }
 
 /** Toggle indicator visibility (plot paint gated by ChartHost / runner). */

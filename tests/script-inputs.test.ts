@@ -58,6 +58,42 @@ plot(close)
     expect(n[0]!.default).toBe(3);
     expect(n[0]!.value).toBe(5);
   });
+
+  it('input.source gets default OHLC enums when options omitted', () => {
+    const src = `src = input.source(close, "Source")
+src2 = input.source(hlc3, title="Alt")
+`;
+    const defs = parseScriptInputs(src);
+    expect(defs.length).toBe(2);
+    expect(defs[0]!.type).toBe('source');
+    expect(defs[0]!.default).toBe('close');
+    expect(defs[0]!.options).toEqual([
+      'open',
+      'high',
+      'low',
+      'close',
+      'hl2',
+      'hlc3',
+      'ohlc4',
+    ]);
+    expect(defs[1]!.default).toBe('hlc3');
+    expect(defs[1]!.options?.includes('ohlc4')).toBe(true);
+  });
+
+  it('engine source without options still gets default enums', () => {
+    const n = normalizeEngineInputs([
+      { title: 'Source', type: 'source', default: 'close', value: 'close' },
+    ]);
+    expect(n[0]!.options).toEqual([
+      'open',
+      'high',
+      'low',
+      'close',
+      'hl2',
+      'hlc3',
+      'ohlc4',
+    ]);
+  });
 });
 
 describe('buildDataViewRows', () => {

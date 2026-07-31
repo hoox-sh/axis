@@ -39,6 +39,7 @@ import {
   overridesFromDefs,
   type ScriptInputDef,
 } from '../results/script-inputs';
+import { sourceOptionsWithPlots } from '../results/plot-sources';
 import { runAndApply } from '../indicators/runner';
 import type { RunResult } from '../indicators/runner';
 import { Icons } from './icons';
@@ -69,17 +70,38 @@ export const ScriptSettingsModal: Component = () => {
     };
   });
 
+  /** Labels for cross-indicator plot options (value → display). */
+  const [sourceLabels, setSourceLabels] = createSignal<Record<string, string>>({});
+
   createEffect(() => {
     if (!open()) return;
     const t = target();
     if (!t) {
       setFields([]);
+      setSourceLabels({});
       return;
     }
     const r = store.lastRun as RunResult | null;
     const engineInputs = r?.meta?.inputs ?? (r as { inputs?: unknown } | null)?.inputs;
     const defs = resolveScriptInputs(t.code, engineInputs);
-    setFields(applyInputOverrides(defs, t.values));
+    // Merge built-in OHLC + other indicators' plots into every source input
+    const { options: plotOpts, labels } = sourceOptionsWithPlots(
+      store.indicatorSeries,
+      indicatorId(),
+    );
+    setSourceLabels(labels);
+    const withPlots = defs.map((d) => {
+      if (d.type !== 'source') return d;
+      const opts = [...plotOpts];
+      // Keep a previously saved plot ref visible even if producer was removed
+      const cur = t.values[d.title] ?? t.values[d.id] ?? d.value;
+      if (typeof cur === 'string' && cur && !opts.includes(cur)) {
+        opts.push(cur);
+        labels[cur] = labels[cur] || cur;
+      }
+      return { ...d, options: opts };
+    });
+    setFields(applyInputOverrides(withPlots, t.values));
     setError('');
   });
 
@@ -195,6 +217,7 @@ export const ScriptSettingsModal: Component = () => {
                       {(field) => (
                         <InputField
                           field={field}
+                          optionLabels={sourceLabels()}
                           onChange={(v) => setFieldValue(field.id, v)}
                         />
                       )}
@@ -258,10 +281,13 @@ export const ScriptSettingsModal: Component = () => {
 const InputField: Component<{
   field: ScriptInputDef;
   onChange: (v: unknown) => void;
+  /** Optional display labels for option values (cross-indicator sources). */
+  optionLabels?: Record<string, string>;
 }> = (props) => {
   const id = () => `axis-in-${props.field.id}`;
   const t = () => props.field.type;
   const val = () => props.field.value ?? props.field.default;
+  const optLabel = (opt: string) => props.optionLabels?.[opt] || opt;
 
   return (
     <div class="sc-field">
@@ -334,7 +360,9 @@ const InputField: Component<{
           value={String(val() ?? '')}
           onChange={(e) => props.onChange(e.currentTarget.value)}
         >
-          <For each={props.field.options}>{(opt) => <option value={opt}>{opt}</option>}</For>
+          <For each={props.field.options}>
+            {(opt) => <option value={opt}>{optLabel(opt)}</option>}
+          </For>
         </select>
       </Show>
       <Show
