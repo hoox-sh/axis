@@ -256,6 +256,12 @@ class EngineWsClient {
             if (typeof req.symbol === 'string' && req.symbol.length) {
               frame.symbol = req.symbol;
             }
+            if (req.inputs && typeof req.inputs === 'object' && Object.keys(req.inputs).length) {
+              frame.inputs = req.inputs;
+            }
+            if (req.profiler === true) {
+              frame.profiler = true;
+            }
             this.ws.send(JSON.stringify(frame));
           } catch (e) {
             clearTimeout(timer);

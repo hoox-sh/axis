@@ -93,12 +93,23 @@ export const EditorPane: Component<Props> = (props) => {
         }`}
         title={
           store.profilerEnabled
-            ? 'Profiler on — re-run script for line costs; click to disable'
-            : 'Enable profiler — then re-run for % cost gutter'
+            ? 'Profiler on — line cost gutter; click to disable'
+            : 'Enable profiler and re-run for % cost gutter'
         }
         aria-pressed={store.profilerEnabled}
         data-testid="axis-btn-profiler"
-        onClick={() => toggleProfilerEnabled()}
+        onClick={() => {
+          const turningOn = !store.profilerEnabled;
+          toggleProfilerEnabled();
+          // Enabling without a fresh run never produces line stats — re-run now.
+          if (turningOn) {
+            const doc = props.editorRef.getDoc?.() || '';
+            if (doc.trim()) {
+              // Defer so store.profilerEnabled is true when runScript reads it.
+              queueMicrotask(() => onRun(doc));
+            }
+          }
+        }}
       >
         <Icons.activity size={12} />
         Profiler
