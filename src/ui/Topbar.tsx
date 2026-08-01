@@ -47,6 +47,7 @@ import {
   toggleLayerPanel,
   openScriptSettings,
   updateChartSlot,
+  isPanelOpen,
 } from '../store';
 import { CHART_TYPES } from '../chart/chart-type';
 import { runAndApply } from '../indicators/runner';
@@ -495,8 +496,8 @@ export const Topbar: Component<{
         type="button"
         class={`sc-btn sc-btn-ghost ${store.layerPanel.open ? 'text-accent' : ''}`}
         onClick={() => toggleLayerPanel()}
-        title="Layers — panes, scripts, drawings"
-        aria-pressed={store.layerPanel.open}
+        title="Layers — left slide-in: panes, scripts, drawings"
+        aria-pressed={isPanelOpen('layers') || store.layerPanel.open}
         data-testid="axis-btn-layers"
       >
         <Icons.layers />

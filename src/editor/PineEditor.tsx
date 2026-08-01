@@ -28,7 +28,13 @@
  */
 
 import { Component, createEffect, onMount, onCleanup } from 'solid-js';
-import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view';
+import {
+  EditorView,
+  keymap,
+  lineNumbers,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+} from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
@@ -41,6 +47,11 @@ import {
   profilerGutterExtension,
 } from './profiler-gutter';
 import type { RunProfile } from '../results/profiler';
+import {
+  applyInlineDebug,
+  inlineDebugExtension,
+  type InlineDebugAnnotation,
+} from './inline-debug';
 
 interface Props {
   initialDoc?: string;
@@ -58,6 +69,10 @@ interface Props {
    * Default: enabled whenever a profile is provided (extension always mounted).
    */
   profilerEnabled?: boolean;
+  /** Inline debug annotations (logs/errors on source lines). */
+  inlineDebug?: InlineDebugAnnotation[] | null;
+  /** When false, clears inline debug even if annotations provided. */
+  inlineDebugEnabled?: boolean;
 }
 
 /** Solid wrapper around a single CodeMirror EditorView instance. */
@@ -82,6 +97,13 @@ export const PineEditor: Component<Props> = (props) => {
     applyProfilerProfile(view, profile);
   };
 
+  const syncInlineDebug = () => {
+    if (!view) return;
+    const enabled = props.inlineDebugEnabled !== false;
+    const anns = enabled ? (props.inlineDebug ?? null) : null;
+    applyInlineDebug(view, anns && anns.length ? anns : null);
+  };
+
   onMount(() => {
     const runKeymap = keymap.of([{
       key: 'Mod-Enter',
@@ -94,12 +116,15 @@ export const PineEditor: Component<Props> = (props) => {
         lineNumbers(),
         highlightActiveLine(),
         highlightActiveLineGutter(),
+        EditorView.lineWrapping,
         bracketMatching(),
         highlightSelectionMatches(),
         // Pine LSP-lite: typing completion + hover docs (from pyne builtin metadata)
         ...pineLspExtensions(),
         // Profiler gutter: always mounted; driven by setProfilerData effects
         profilerGutterExtension(),
+        // Inline debug chips / line highlights (driven by applyInlineDebug)
+        inlineDebugExtension(),
         runKeymap,
         keymap.of([...defaultKeymap, indentWithTab, ...searchKeymap]),
         pineScript,
@@ -115,7 +140,12 @@ export const PineEditor: Component<Props> = (props) => {
       props.editorRef.getDoc = getDoc;
       props.editorRef.setDoc = setDoc;
     }
-    syncProfiler();
+    // Initial measure so wrapped lines + full-height host size correctly
+    queueMicrotask(() => {
+      view?.requestMeasure();
+      syncProfiler();
+      syncInlineDebug();
+    });
 
     // Re-measure when the float/dock shell resizes (portal host changes geometry)
     let ro: ResizeObserver | undefined;
@@ -139,11 +169,18 @@ export const PineEditor: Component<Props> = (props) => {
     syncProfiler();
   });
 
+  createEffect(() => {
+    void props.inlineDebug;
+    void props.inlineDebugEnabled;
+    syncInlineDebug();
+  });
+
   return (
     <div
       ref={containerRef!}
-      class="h-full overflow-hidden bg-bg-panel"
-      style={{ height: props.height || '100%' }}
+      class="axis-pine-editor absolute inset-0 overflow-hidden bg-bg-panel"
+      data-testid="axis-pine-editor"
+      style={props.height ? { height: props.height } : undefined}
     />
   );
 };

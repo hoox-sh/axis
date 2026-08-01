@@ -127,10 +127,10 @@ export const PANEL_META: Record<
   },
   layers: {
     title: 'Layers',
-    defaultDock: 'float',
+    defaultDock: 'left',
     minW: 1,
     minH: 1,
-    defaultW: 240,
+    defaultW: 260,
     defaultH: 340,
   },
 };
@@ -175,11 +175,8 @@ export function defaultPanelChromeMap(): PanelChromeMap {
     }),
     layers: defaultPanelChrome('layers', {
       open: false,
-      dock: 'float',
-      x: 24,
-      y: 200,
-      w: 240,
-      h: 340,
+      dock: 'left',
+      w: 260,
     }),
   };
 }

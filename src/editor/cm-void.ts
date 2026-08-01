@@ -36,6 +36,7 @@ export const voidEditorTheme = EditorView.theme(
   {
     '&': {
       height: '100%',
+      maxHeight: '100%',
       backgroundColor: '#111218',
       color: '#eceef4',
       fontSize: '13px',
@@ -43,9 +44,12 @@ export const voidEditorTheme = EditorView.theme(
     '.cm-scroller': {
       overflow: 'auto',
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+      height: '100%',
     },
     '.cm-content': {
       caretColor: '#939fff',
+      // Soft-wrap long Pine lines; gutter still tracks visual lines
+      minHeight: '100%',
     },
     '.cm-cursor, .cm-dropCursor': {
       borderLeftColor: '#939fff',

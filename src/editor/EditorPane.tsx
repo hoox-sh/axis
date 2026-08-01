@@ -37,6 +37,7 @@ import {
   setEditorMode,
   toggleScriptLogsPanel,
   toggleProfilerEnabled,
+  toggleInlineDebugEnabled,
   saveEditorDoc,
 } from '../store';
 import { FloatableShell } from '../ui/panels/FloatableShell';
@@ -118,6 +119,23 @@ export const EditorPane: Component<Props> = (props) => {
             · {Math.round(store.lastRunMs!)}ms
           </span>
         </Show>
+      </button>
+      <button
+        type="button"
+        class={`sc-btn sc-btn-ghost px-1.5 text-[10px] ${
+          store.inlineDebugEnabled ? 'text-accent border-accent' : ''
+        }`}
+        title={
+          store.inlineDebugEnabled
+            ? 'Inline debug on — end-of-line log/error chips from last run'
+            : 'Show last-run logs/errors inline on source lines (needs line refs)'
+        }
+        aria-pressed={store.inlineDebugEnabled}
+        data-testid="axis-btn-inline-debug"
+        onClick={() => toggleInlineDebugEnabled()}
+      >
+        <Icons.alert size={12} />
+        Debug
       </button>
     </div>
   );

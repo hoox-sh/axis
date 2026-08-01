@@ -157,6 +157,7 @@ const DEFAULTS: AppState = {
   resultsPanel: { open: false, height: 220 },
   logsPanel: { open: false, height: 160 },
   profilerEnabled: false,
+  inlineDebugEnabled: false,
   stream: { status: 'disconnected' },
   status: 'ready',
   statusMessage: 'Ready.',
@@ -289,6 +290,7 @@ function loadPersisted(): Partial<AppState> {
         resultsPanel: { ...DEFAULTS.resultsPanel, ...parsed.resultsPanel },
         logsPanel: { ...DEFAULTS.logsPanel, ...parsed.logsPanel, open: false },
         profilerEnabled: !!parsed.profilerEnabled,
+        inlineDebugEnabled: !!(parsed as { inlineDebugEnabled?: boolean }).inlineDebugEnabled,
         activePlugins: {
           ...DEFAULTS.activePlugins,
           ...parsed.activePlugins,
@@ -1142,14 +1144,17 @@ export function toggleDataViewPanel() {
   setPanelOpen('dataview', !isPanelOpen('dataview'));
 }
 
-/** Open/close Layers panel. */
+/** Open/close Layers (drawings) panel — docks left as a slide-in column. */
 export function setLayerPanelOpen(open: boolean) {
   setPanelOpen('layers', open);
+  if (open) setPanelDock('layers', 'left');
 }
 
-/** Toggle Layers panel visibility. */
+/** Toggle Layers panel — left slide-in when opening. */
 export function toggleLayerPanel() {
-  setPanelOpen('layers', !isPanelOpen('layers'));
+  const next = !isPanelOpen('layers');
+  setPanelOpen('layers', next);
+  if (next) setPanelDock('layers', 'left');
 }
 
 /** Open/close Scriptlogs panel (script `log.*` output — not system telemetry). */
@@ -1171,6 +1176,18 @@ export function setProfilerEnabled(on: boolean) {
 /** Toggle editor profiler mode. */
 export function toggleProfilerEnabled() {
   setStore('profilerEnabled', !store.profilerEnabled);
+  persist();
+}
+
+/** Enable/disable inline debug decorations (persisted). */
+export function setInlineDebugEnabled(on: boolean) {
+  setStore('inlineDebugEnabled', !!on);
+  persist();
+}
+
+/** Toggle inline debug mode (end-of-line log/error chips). */
+export function toggleInlineDebugEnabled() {
+  setStore('inlineDebugEnabled', !store.inlineDebugEnabled);
   persist();
 }
 

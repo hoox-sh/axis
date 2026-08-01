@@ -185,6 +185,24 @@ export const LayerPanel: Component = () => {
           </Section>
 
           <Section title="Drawings">
+            <div
+              class="flex items-center gap-2 px-1.5 py-1.5 mb-1 bg-bg-elev border border-border-soft"
+              data-testid="axis-layers-active-tool"
+            >
+              <span class="text-[0.78em] uppercase tracking-wider text-text-faint flex-shrink-0">
+                Tool
+              </span>
+              <span
+                class={`flex-1 truncate font-medium ${
+                  store.drawingTool !== 'cursor' ? 'text-accent' : 'text-text-dim'
+                }`}
+              >
+                {toolLabel(store.drawingTool)}
+              </span>
+              <Show when={store.selectedDrawingId}>
+                <span class="text-[0.78em] font-mono text-accent flex-shrink-0">sel</span>
+              </Show>
+            </div>
             <div class="flex items-center justify-between gap-2 px-1 py-0.5 mb-0.5">
               <span class="text-text-dim">
                 User drawings{' '}

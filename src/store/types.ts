@@ -302,6 +302,11 @@ export interface AppState {
    * editor chrome shows last-run latency. Persisted.
    */
   profilerEnabled: boolean;
+  /**
+   * Inline debug mode — end-of-line chips + line highlights from last-run
+   * logs / errors / diagnostics. Persisted.
+   */
+  inlineDebugEnabled: boolean;
   stream: { status: 'connected' | 'disconnected' | 'error' | 'connecting' };
   status: AppStatus;
   statusMessage: string;

@@ -27,12 +27,25 @@
  * @module editor/tabbed-editor
  */
 
-import { Component, For, createMemo, createSignal, batch, onCleanup, onMount } from 'solid-js';
+import { Component, For, createMemo, createSignal, batch, onCleanup, onMount, createEffect } from 'solid-js';
 import { PineEditor } from './PineEditor';
 import { store, loadEditorDoc, saveEditorDoc } from '../store';
 import { saveDraft, loadDraft, writeScript } from '../storage/service';
 import { setStatus } from '../store';
 import { normalizeRunProfile, type RunProfile } from '../results/profiler';
+import {
+  collectInlineDebugAnnotations,
+  type InlineDebugAnnotation,
+} from '../results/inline-debug';
+
+/** Lines / words / characters for the status strip. */
+export function countDocStats(doc: string): { lines: number; words: number; chars: number } {
+  const chars = doc.length;
+  const lines = doc.length === 0 ? 1 : doc.split(/\r\n|\r|\n/).length;
+  const trimmed = doc.trim();
+  const words = trimmed ? trimmed.split(/\s+/).length : 0;
+  return { lines, words, chars };
+}
 
 /** One editor tab (in-memory until saved to library/draft). */
 interface Tab {
@@ -112,15 +125,29 @@ export const TabbedEditor: Component<Props> = (props) => {
     return normalizeRunProfile(raw, fallbackMs);
   });
 
+  /** Last-run logs/errors mapped to source lines for inline chips. */
+  const inlineDebugAnns = createMemo((): InlineDebugAnnotation[] => {
+    if (!store.inlineDebugEnabled) return [];
+    return collectInlineDebugAnnotations(store.lastRun);
+  });
+
   let draftTimer: ReturnType<typeof setTimeout> | null = null;
+  const [stats, setStats] = createSignal(countDocStats(tabs()[0]?.doc || ''));
 
   const scheduleDraft = (doc: string, name?: string) => {
     saveEditorDoc(doc);
+    setStats(countDocStats(doc));
     if (draftTimer) clearTimeout(draftTimer);
     draftTimer = setTimeout(() => {
       void saveDraft(doc, name).catch(() => {});
     }, 400);
   };
+
+  // Refresh counters when switching tabs
+  createEffect(() => {
+    const doc = tabs()[activeTab()]?.doc ?? '';
+    setStats(countDocStats(doc));
+  });
 
   onMount(() => {
     // Prefer storage draft over empty first paint (async)
@@ -236,7 +263,7 @@ export const TabbedEditor: Component<Props> = (props) => {
   };
 
   return (
-    <div class="flex flex-col h-full min-h-0">
+    <div class="flex flex-col h-full min-h-0 flex-1">
       <div class="flex items-stretch bg-bg-base border-b-2 border-border overflow-x-auto flex-shrink-0">
         <For each={tabs()}>
           {(tab, idx) => (
@@ -292,7 +319,25 @@ export const TabbedEditor: Component<Props> = (props) => {
           editorRef={props.editorRef}
           profilerEnabled={store.profilerEnabled}
           profilerProfile={profilerProfile()}
+          inlineDebugEnabled={store.inlineDebugEnabled}
+          inlineDebug={inlineDebugAnns()}
         />
+      </div>
+      <div
+        class="flex-shrink-0 flex items-center gap-3 px-2 py-0.5 border-t-2 border-border bg-bg-base text-[10px] font-mono text-text-faint tabular-nums select-none"
+        data-testid="axis-editor-stats"
+        title="Document statistics (line wrap on)"
+      >
+        <span>
+          Ln <span class="text-text-dim">{stats().lines}</span>
+        </span>
+        <span>
+          Words <span class="text-text-dim">{stats().words}</span>
+        </span>
+        <span>
+          Chars <span class="text-text-dim">{stats().chars}</span>
+        </span>
+        <span class="ml-auto text-text-faint/80">wrap</span>
       </div>
     </div>
   );
