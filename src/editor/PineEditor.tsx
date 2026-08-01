@@ -56,6 +56,11 @@ import {
 interface Props {
   initialDoc?: string;
   onDocChange?: (doc: string) => void;
+  /**
+   * Cursor / selection head moved — 1-based line & column, plus absolute offset.
+   * Fires on selection changes (arrows, click, typing).
+   */
+  onCursorChange?: (pos: { line: number; col: number; offset: number }) => void;
   onRun?: () => void;
   height?: string;
   editorRef?: { getDoc: () => string; setDoc?: (doc: string) => void };
@@ -131,6 +136,15 @@ export const PineEditor: Component<Props> = (props) => {
         ...voidEditorExtensions,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) props.onDocChange?.(update.state.doc.toString());
+          if (update.selectionSet || update.docChanged) {
+            const head = update.state.selection.main.head;
+            const line = update.state.doc.lineAt(head);
+            props.onCursorChange?.({
+              line: line.number,
+              col: head - line.from + 1,
+              offset: head,
+            });
+          }
         }),
       ],
     });
@@ -145,6 +159,16 @@ export const PineEditor: Component<Props> = (props) => {
       view?.requestMeasure();
       syncProfiler();
       syncInlineDebug();
+      // Seed cursor stats (line 1, col 1) for the status strip
+      if (view && props.onCursorChange) {
+        const head = view.state.selection.main.head;
+        const line = view.state.doc.lineAt(head);
+        props.onCursorChange({
+          line: line.number,
+          col: head - line.from + 1,
+          offset: head,
+        });
+      }
     });
 
     // Re-measure when the float/dock shell resizes (portal host changes geometry)

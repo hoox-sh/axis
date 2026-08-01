@@ -49,6 +49,25 @@ export function countDocStats(doc: string): { lines: number; words: number; char
   return { lines, words, chars };
 }
 
+/** 1-based line / column at a document offset (CodeMirror `pos`). */
+export function cursorLineCol(
+  doc: string,
+  pos: number,
+): { line: number; col: number } {
+  const p = Math.max(0, Math.min(Math.floor(pos), doc.length));
+  let line = 1;
+  let col = 1;
+  for (let i = 0; i < p; i++) {
+    if (doc.charCodeAt(i) === 10 /* \n */) {
+      line += 1;
+      col = 1;
+    } else {
+      col += 1;
+    }
+  }
+  return { line, col };
+}
+
 /** One editor tab (in-memory until saved to library/draft). */
 interface Tab {
   id: string;
@@ -139,6 +158,8 @@ export const TabbedEditor: Component<Props> = (props) => {
 
   let draftTimer: ReturnType<typeof setTimeout> | null = null;
   const [stats, setStats] = createSignal(countDocStats(tabs()[0]?.doc || ''));
+  /** Cursor position in the active editor (1-based line / column). */
+  const [cursor, setCursor] = createSignal({ line: 1, col: 1 });
 
   const scheduleDraft = (doc: string, name?: string) => {
     saveEditorDoc(doc);
@@ -153,6 +174,8 @@ export const TabbedEditor: Component<Props> = (props) => {
   createEffect(() => {
     const doc = tabs()[activeTab()]?.doc ?? '';
     setStats(countDocStats(doc));
+    // Cursor resets to start of tab until CM reports the real head
+    setCursor({ line: 1, col: 1 });
   });
 
   onMount(() => {
@@ -324,6 +347,7 @@ export const TabbedEditor: Component<Props> = (props) => {
         <PineEditor
           initialDoc={tabs()[activeTab()]?.doc}
           onDocChange={onDocChange}
+          onCursorChange={(pos) => setCursor({ line: pos.line, col: pos.col })}
           onRun={() => {
             const doc = props.editorRef?.getDoc?.() || tabs()[activeTab()]?.doc;
             if (doc?.trim()) props.onRun?.(doc);
@@ -338,9 +362,15 @@ export const TabbedEditor: Component<Props> = (props) => {
       <div
         class="flex-shrink-0 flex items-center gap-3 px-2 py-0.5 border-t-2 border-border bg-bg-base text-[10px] font-mono text-text-faint tabular-nums select-none"
         data-testid="axis-editor-stats"
-        title="Document statistics (line wrap on)"
+        title="Document statistics · cursor position · line wrap on"
       >
-        <span>
+        <span data-testid="axis-editor-cursor" title="Cursor position (line : column)">
+          Pos{' '}
+          <span class="text-text-dim">
+            {cursor().line}:{cursor().col}
+          </span>
+        </span>
+        <span title="Total lines in document">
           Ln <span class="text-text-dim">{stats().lines}</span>
         </span>
         <span>
