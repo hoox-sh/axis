@@ -27,7 +27,7 @@
  * FloatableShell id `layers`. Script settings opens per applied indicator.
  */
 
-import { Component, For, Show } from 'solid-js';
+import { Component, For, Show, createSignal, createMemo } from 'solid-js';
 import {
   store,
   isPanelOpen,
@@ -40,8 +40,13 @@ import {
   setDrawingTool,
   deleteDrawing,
   patchDrawing,
+  setDrawings,
 } from '../store';
 import { getManager, getActiveDrawingLayer } from '../chart/manager-access';
+import {
+  volumeProfileEnabled,
+  toggleVolumeProfileEnabled,
+} from '../chart/volume-profile';
 import { Icons } from './icons';
 import { FloatableShell } from './panels/FloatableShell';
 import {
@@ -49,9 +54,36 @@ import {
   resolveDrawingStyle,
   type Drawing,
 } from '../chart/drawing-types';
+import {
+  listTemplates,
+  saveTemplate,
+  deleteTemplate,
+  getTemplate,
+  applyTemplateDrawings,
+  exportTemplateJson,
+  exportAllTemplatesJson,
+  importTemplates,
+  type DrawingTemplateSummary,
+  type LoadTemplateMode,
+} from '../chart/drawings/templates';
+import {
+  cloneDrawings,
+  drawingsForSymbol,
+  mergeDrawings,
+  tagDrawingsSymbol,
+} from '../chart/drawings/sync';
 
 /** Pane / indicator / drawing visibility and remove actions. */
 export const LayerPanel: Component = () => {
+  /** Bump to re-read localStorage template catalog. */
+  const [tplTick, setTplTick] = createSignal(0);
+  const templates = createMemo(() => {
+    void tplTick();
+    return listTemplates();
+  });
+
+  const refreshTemplates = () => setTplTick((n) => n + 1);
+
   const togglePane = (id: string, next: boolean) => {
     setPaneVisible(id, next);
     getManager()?.setVisible(id, next);
@@ -103,6 +135,45 @@ export const LayerPanel: Component = () => {
     syncLayerDrawings([]);
   };
 
+  /**
+   * Duplicate all user drawings with new ids (template-style).
+   * Drawings are already global across multi-chart slots; this clones in-place
+   * for templates / future per-slot copies — does not split by slot.
+   */
+  const onDuplicateDrawings = () => {
+    if (!store.drawings.length) return;
+    const clones = cloneDrawings(store.drawings, { symbol: store.symbol });
+    const next = mergeDrawings(store.drawings, clones, 'append');
+    setDrawings(next);
+    syncLayerDrawings(next);
+  };
+
+  /**
+   * Keep drawings for the active symbol only (untagged count as current).
+   * Drops drawings tagged for other symbols via `meta.symbol`.
+   */
+  const onKeepThisSymbol = () => {
+    if (!store.drawings.length) return;
+    const kept = drawingsForSymbol(store.drawings, store.symbol, {
+      includeUntagged: true,
+    });
+    if (kept.length === store.drawings.length) return;
+    setDrawings(kept);
+    setSelectedDrawingId(null);
+    syncLayerDrawings(kept);
+  };
+
+  /**
+   * Stamp `meta.symbol` on every drawing with the active chart symbol.
+   * Prepares the global list for symbol-scoped filter; still one shared list.
+   */
+  const onTagWithSymbol = () => {
+    if (!store.drawings.length) return;
+    const next = tagDrawingsSymbol(store.drawings, store.symbol);
+    setDrawings(next);
+    syncLayerDrawings(next);
+  };
+
   /** Select drawing in store + live layer (shows handles on chart). */
   const onSelectDrawing = (id: string) => {
     setSelectedDrawingId(id);
@@ -146,6 +217,80 @@ export const LayerPanel: Component = () => {
     }
   };
 
+  const onSaveTemplate = () => {
+    if (!store.drawings.length) return;
+    const name = window.prompt('Template name', `Pack ${templates().length + 1}`);
+    if (!name?.trim()) return;
+    saveTemplate(name.trim(), store.drawings, {
+      meta: {
+        symbol: store.symbol,
+        interval: store.interval,
+        exchange: store.exchange,
+      },
+    });
+    refreshTemplates();
+  };
+
+  const onLoadTemplate = (id: string, mode: LoadTemplateMode) => {
+    const tpl = getTemplate(id);
+    if (!tpl) return;
+    if (
+      mode === 'replace' &&
+      store.drawings.length &&
+      !confirm(`Replace ${store.drawings.length} drawing(s) with "${tpl.name}"?`)
+    ) {
+      return;
+    }
+    const next = applyTemplateDrawings(store.drawings, tpl, mode) as Drawing[];
+    setDrawings(next);
+    setSelectedDrawingId(null);
+    syncLayerDrawings(next);
+  };
+
+  const onDeleteTemplate = (id: string, name: string) => {
+    if (!confirm(`Delete template "${name}"?`)) return;
+    deleteTemplate(id);
+    refreshTemplates();
+  };
+
+  const onExportTemplate = (id: string) => {
+    const tpl = getTemplate(id);
+    if (!tpl) return;
+    const blob = new Blob([exportTemplateJson(tpl)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `axis-drawing-${tpl.name.replace(/[^\w.-]+/g, '_')}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const onExportAllTemplates = () => {
+    const blob = new Blob([exportAllTemplatesJson()], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'axis-drawing-templates.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const onImportTemplatesFile = async (e: Event) => {
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const n = importTemplates(text, { forceNewIds: true });
+      if (n === 0) {
+        window.alert('No templates found in file.');
+      }
+      refreshTemplates();
+    } catch (err: unknown) {
+      window.alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      input.value = '';
+    }
+  };
+
   return (
     <Show when={isPanelOpen('layers') || store.layerPanel.open}>
       <FloatableShell id="layers" testId="axis-layers">
@@ -162,6 +307,15 @@ export const LayerPanel: Component = () => {
                 />
               )}
             </For>
+          </Section>
+
+          <Section title="Overlays">
+            <LayerRow
+              label="Volume profile"
+              sub="OHLCV estimate · fixed range"
+              visible={volumeProfileEnabled()}
+              onToggle={() => toggleVolumeProfileEnabled()}
+            />
           </Section>
 
           <Section title="Indicators">
@@ -203,20 +357,56 @@ export const LayerPanel: Component = () => {
                 <span class="text-[0.78em] font-mono text-accent flex-shrink-0">sel</span>
               </Show>
             </div>
-            <div class="flex items-center justify-between gap-2 px-1 py-0.5 mb-0.5">
+            <div class="flex items-center justify-between gap-2 px-1 py-0.5 mb-0.5 flex-wrap">
               <span class="text-text-dim">
                 User drawings{' '}
                 <span class="text-text-faint font-mono">({store.drawings.length})</span>
               </span>
-              <button
-                type="button"
-                class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
-                disabled={!store.drawings.length}
-                title="Clear user drawings"
-                onClick={onClearDrawings}
-              >
-                Clear
-              </button>
+              <div class="flex items-center gap-1 flex-wrap justify-end">
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
+                  disabled={!store.drawings.length}
+                  title="Duplicate drawings with new IDs (template). User drawings are already shared across multi-chart slots."
+                  data-testid="axis-layers-duplicate-drawings"
+                  onClick={onDuplicateDrawings}
+                >
+                  Duplicate
+                </button>
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
+                  disabled={!store.drawings.length}
+                  title={`Keep only drawings for ${store.symbol} (untagged kept; other symbols removed)`}
+                  data-testid="axis-layers-keep-symbol"
+                  onClick={onKeepThisSymbol}
+                >
+                  This symbol
+                </button>
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
+                  disabled={!store.drawings.length}
+                  title={`Tag all drawings with symbol ${store.symbol} (sync label for layout / filter)`}
+                  data-testid="axis-layers-tag-symbol"
+                  onClick={onTagWithSymbol}
+                >
+                  Tag symbol
+                </button>
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
+                  disabled={!store.drawings.length}
+                  title="Clear user drawings"
+                  onClick={onClearDrawings}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div class="px-1 pb-1 text-[0.75em] text-text-faint leading-snug">
+              Drawings are global (shared across layout slots). Duplicate creates
+              new IDs; This symbol / Tag symbol use meta.symbol for filtering.
             </div>
             <Show
               when={store.drawings.length > 0}
@@ -300,6 +490,113 @@ export const LayerPanel: Component = () => {
             </Show>
             <div class="px-1 mt-1 text-[0.78em] text-text-faint">
               Script drawings refresh on each run (not listed).
+            </div>
+
+            {/* Drawing templates (analysis packs) */}
+            <div
+              class="mt-2 pt-2 border-t border-border-soft"
+              data-testid="axis-drawing-templates"
+            >
+              <div class="flex items-center justify-between gap-2 px-1 py-0.5 mb-0.5">
+                <span class="text-text-dim">
+                  Templates{' '}
+                  <span class="text-text-faint font-mono">({templates().length})</span>
+                </span>
+                <div class="flex items-center gap-1">
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
+                    disabled={!store.drawings.length}
+                    title="Save current drawings as a named template"
+                    data-testid="axis-tpl-save"
+                    onClick={onSaveTemplate}
+                  >
+                    Save
+                  </button>
+                  <label
+                    class="sc-btn sc-btn-ghost px-1.5 text-[0.85em] cursor-pointer"
+                    title="Import template JSON"
+                  >
+                    Import
+                    <input
+                      type="file"
+                      accept="application/json,.json"
+                      class="sr-only"
+                      data-testid="axis-tpl-import"
+                      onChange={onImportTemplatesFile}
+                    />
+                  </label>
+                  <Show when={templates().length > 0}>
+                    <button
+                      type="button"
+                      class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
+                      title="Export all templates as JSON"
+                      data-testid="axis-tpl-export-all"
+                      onClick={onExportAllTemplates}
+                    >
+                      Export
+                    </button>
+                  </Show>
+                </div>
+              </div>
+              <Show
+                when={templates().length > 0}
+                fallback={
+                  <Empty>No templates yet. Save drawings as an analysis pack.</Empty>
+                }
+              >
+                <For each={templates()}>
+                  {(t: DrawingTemplateSummary) => (
+                    <div
+                      class="flex items-center gap-1.5 px-1 py-1 bg-bg-elev border border-border-soft hover:border-border"
+                      data-template-id={t.id}
+                    >
+                      <div class="min-w-0 flex-1">
+                        <div class="text-text truncate font-medium leading-tight">
+                          {t.name}
+                        </div>
+                        <div class="text-[0.78em] text-text-faint font-mono truncate">
+                          {t.drawingCount} drawing{t.drawingCount === 1 ? '' : 's'}
+                          {t.meta?.symbol ? ` · ${t.meta.symbol}` : ''}
+                          {t.meta?.interval ? ` ${t.meta.interval}` : ''}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        class="sc-btn sc-btn-ghost px-1 text-[0.85em]"
+                        title="Replace current drawings with this template"
+                        onClick={() => onLoadTemplate(t.id, 'replace')}
+                      >
+                        Load
+                      </button>
+                      <button
+                        type="button"
+                        class="sc-btn sc-btn-ghost px-1 text-[0.85em]"
+                        title="Merge template drawings into current set"
+                        onClick={() => onLoadTemplate(t.id, 'merge')}
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        class="sc-btn sc-btn-ghost px-1 text-[0.85em]"
+                        title="Export this template as JSON"
+                        onClick={() => onExportTemplate(t.id)}
+                      >
+                        <Icons.download />
+                      </button>
+                      <button
+                        type="button"
+                        class="sc-btn sc-btn-ghost px-1 text-text-faint hover:text-red"
+                        title="Delete template"
+                        onClick={() => onDeleteTemplate(t.id, t.name)}
+                      >
+                        <Icons.x />
+                      </button>
+                    </div>
+                  )}
+                </For>
+              </Show>
             </div>
           </Section>
         </div>

@@ -59,4 +59,12 @@ describe('collectInlineDebugAnnotations', () => {
     expect(collapsed).toHaveLength(1);
     expect(collapsed[0]!.level).toBe('error');
   });
+
+  it('parses bar_index from log message for pin-able chips', () => {
+    const anns = collectInlineDebugAnnotations({
+      logs: [{ level: 'info', message: 'cross bar_index=44', line: 9 }],
+    });
+    const a = anns.find((x) => x.line === 9);
+    expect(a?.barIndex).toBe(44);
+  });
 });

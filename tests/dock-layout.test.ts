@@ -37,6 +37,7 @@ beforeEach(() => {
   setStore('indicatorPanel', { open: false, width: 224 });
   setStore('layerPanel', { open: false, width: 240 });
   setStore('dataViewPanel', { open: false, width: 240 });
+  setStore('alertsPanel', { open: false, width: 280 });
   setStore('resultsPanel', { open: false, height: 220 });
   setStore('logsPanel', { open: false, height: 160 });
 });

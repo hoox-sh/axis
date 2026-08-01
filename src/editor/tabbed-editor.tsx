@@ -37,6 +37,8 @@ import {
   collectInlineDebugAnnotations,
   type InlineDebugAnnotation,
 } from '../results/inline-debug';
+import { setDebugChipClickHandler } from './inline-debug';
+import { jumpToDebugPin } from '../chart/manager-access';
 
 /** Lines / words / characters for the status strip. */
 export function countDocStats(doc: string): { lines: number; words: number; chars: number } {
@@ -150,6 +152,12 @@ export const TabbedEditor: Component<Props> = (props) => {
   });
 
   onMount(() => {
+    // Click pin-able inline debug chips → crosshair + scroll to bar
+    setDebugChipClickHandler((detail) => {
+      jumpToDebugPin({ barIndex: detail.barIndex, time: detail.time });
+    });
+    onCleanup(() => setDebugChipClickHandler(null));
+
     // Prefer storage draft over empty first paint (async)
     void loadDraft().then((d) => {
       if (!d?.content?.trim()) return;

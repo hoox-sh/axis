@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Chart layout menu — grid mode (1 / 2H / 2V / 4) + named save/load.
+ * Chart layout menu — grid mode (1 / 2H / 2V / 4), one-click recipes, named save/load.
  *
  * @module ui/ChartLayoutMenu
  */
@@ -32,6 +32,11 @@ import {
   deleteChartLayout,
 } from '../store';
 import { CHART_GRID_MODES, type ChartGridMode } from '../chart/layout';
+import {
+  LAYOUT_RECIPES,
+  applyLayoutRecipe,
+  type LayoutRecipe,
+} from '../chart/layout-recipes';
 import { Icons } from './icons';
 import { loadSymbolData } from '../data/load-symbol';
 import { getSlotBars } from '../chart/chart-registry';
@@ -71,6 +76,19 @@ export const ChartLayoutMenu: Component = () => {
   const pickMode = (m: ChartGridMode) => {
     setChartGridMode(m);
     setOpen(false);
+  };
+
+  const pickRecipe = (recipe: LayoutRecipe) => {
+    applyLayoutRecipe(recipe, {
+      symbol: store.symbol,
+      interval: store.interval,
+      exchange: store.exchange,
+      chartType: store.chartType,
+    });
+    setOpen(false);
+    // Load bars for the focused slot (and empty siblings on focus)
+    const slot = store.chartLayout?.slots?.find((s) => s.id === store.chartLayout.activeId);
+    if (slot) void loadSymbolData(slot.symbol, slot.interval, store.source);
   };
 
   const onSave = () => {
@@ -134,6 +152,31 @@ export const ChartLayoutMenu: Component = () => {
           <p class="text-[10px] text-text-faint px-0.5 leading-snug">
             Click a chart to focus it. Topbar symbol / Load / Run apply to the active chart.
           </p>
+
+          <div class="border-t border-border-soft pt-2 mt-0.5">
+            <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5 mb-1">
+              Recipes
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <For each={[...LAYOUT_RECIPES]}>
+                {(r) => (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    class="sc-btn sc-btn-ghost justify-start text-left text-[11px] py-1.5"
+                    title={r.hint}
+                    data-testid={`axis-layout-recipe-${r.id}`}
+                    onClick={() => pickRecipe(r)}
+                  >
+                    <span class="truncate flex-1">{r.label}</span>
+                    <span class="font-mono text-[9px] text-text-faint ml-1 flex-shrink-0">
+                      {r.mode}
+                    </span>
+                  </button>
+                )}
+              </For>
+            </div>
+          </div>
 
           <div class="border-t border-border-soft pt-2 mt-0.5">
             <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5 mb-1">

@@ -24,7 +24,7 @@
  * Topbar → flex row (left dock | chart | right dock) → bottom dock → system
  * logs → status bar. Dock columns are portal hosts: open panels stack
  * **one below the other** on the same side. Overlay: settings, plugins,
- * script settings, panel drag ghost.
+ * script settings, command palette (⌘K), panel drag ghost.
  *
  * ## Boot (`onMount`)
  * - Theme + UI scale; restore dynamic plugins; optional default symbol load
@@ -49,6 +49,8 @@ import { ScriptLogsPanel } from './ui/ScriptLogsPanel';
 import { PluginManager } from './ui/PluginManager';
 import { DataViewPanel } from './ui/DataViewPanel';
 import { LayerPanel } from './ui/LayerPanel';
+import { AlertsPanel } from './ui/AlertsPanel';
+import { CommandPalette } from './ui/CommandPalette';
 import { runAndApply } from './indicators/runner';
 import { registerBuiltins } from './plugins/bootstrap';
 import { restoreInstalledPlugins } from './plugins/loader';
@@ -239,6 +241,7 @@ export const App: Component = () => {
       {/* Panel Solid trees (DOM portaled into dock columns / float root) */}
       <Watchlist />
       <LayerPanel />
+      <AlertsPanel />
       <DataViewPanel />
       <IndicatorPanel />
       <EditorPane
@@ -275,6 +278,13 @@ export const App: Component = () => {
           if (ref.loadLibraryDoc) ref.loadLibraryDoc(doc, name);
           else ref.setDoc?.(doc);
         }}
+      />
+
+      {/* Global ⌘K / Ctrl+K command palette */}
+      <CommandPalette
+        editorRef={editorRef}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenPlugins={() => setPluginsOpen(true)}
       />
     </div>
   );

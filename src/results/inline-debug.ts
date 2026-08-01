@@ -30,6 +30,7 @@
  */
 
 import { normalizePineLogs, type PineLogLevel } from './pine-logs';
+import { parseBarIndexFromText, parseTimeFromText, normalizePinTime } from './debug-pins';
 
 export type InlineDebugLevel = PineLogLevel | 'debug';
 
@@ -40,6 +41,8 @@ export interface InlineDebugAnnotation {
   level: InlineDebugLevel;
   message: string;
   barIndex?: number | null;
+  /** Optional bar time (unix seconds or ms) when engine provided it */
+  time?: number | null;
   /** Origin tag for tooltips */
   source?: 'log' | 'error' | 'diagnostic';
 }
@@ -117,7 +120,8 @@ export function collectInlineDebugAnnotations(lastRun: unknown): InlineDebugAnno
       line,
       level: levelFromPine(e.level),
       message: e.message,
-      barIndex: e.barIndex,
+      barIndex: e.barIndex ?? parseBarIndexFromText(e.message),
+      time: e.time ?? normalizePinTime(parseTimeFromText(e.message)),
       source: 'log',
     });
   }
@@ -149,7 +153,11 @@ export function collectInlineDebugAnnotations(lastRun: unknown): InlineDebugAnno
         line,
         level,
         message: message || `(${level})`,
-        barIndex: asFiniteNumber(item.barIndex ?? item.bar_index),
+        barIndex:
+          asFiniteNumber(item.barIndex ?? item.bar_index) ?? parseBarIndexFromText(message),
+        time:
+          asFiniteNumber(item.time ?? item.bar_time ?? item.barTime ?? item.ts) ??
+          normalizePinTime(parseTimeFromText(message)),
         source: 'log',
       });
     }
@@ -222,6 +230,7 @@ export function collapseAnnotationsByLine(
       level: better ? a.level : prev.level,
       message,
       barIndex: a.barIndex ?? prev.barIndex,
+      time: a.time ?? prev.time,
       source: better ? a.source : prev.source,
     });
   }

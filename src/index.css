@@ -1109,3 +1109,171 @@ body.axis-panel-dragging {
   0% { background-position: 100% 0; }
   100% { background-position: -100% 0; }
 }
+
+/* ── Alerts panel ───────────────────────────────────────────────── */
+.axis-alerts-label {
+  display: block;
+  font-size: 0.78em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-faint);
+  font-weight: 600;
+  margin-bottom: 0.15em;
+  padding-left: 0.1em;
+}
+.axis-alerts-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.axis-alerts-toolbar {
+  padding-bottom: 0.15em;
+  border-bottom: 1px solid var(--color-border-soft);
+  margin-bottom: 0.15em;
+}
+.axis-alerts-row {
+  transition: border-color 0.12s ease, opacity 0.12s ease;
+}
+.axis-alerts-row:hover {
+  border-color: var(--color-border);
+}
+.axis-alerts-status {
+  min-width: 0;
+}
+
+/* ── Command palette (⌘K / Ctrl+K) ───────────────────────────────── */
+.axis-cmd-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh 1rem 2rem;
+  background: color-mix(in srgb, #000 55%, transparent);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+.axis-cmd-palette {
+  width: min(560px, calc(100vw - 24px));
+  max-height: min(420px, calc(100vh - 16vh));
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+}
+.axis-cmd-palette-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.55em 0.75em;
+  border-bottom: var(--border-w) solid var(--color-border);
+  flex-shrink: 0;
+}
+.axis-cmd-palette-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--color-text);
+  font-size: 1.05em;
+  font-family: inherit;
+  padding: 0.25em 0;
+}
+.axis-cmd-palette-input::placeholder {
+  color: var(--color-text-faint);
+}
+.axis-cmd-palette-kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72em;
+  color: var(--color-text-faint);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  padding: 0.1em 0.4em;
+  background: var(--color-bg-elev);
+  text-transform: lowercase;
+}
+.axis-cmd-palette-list {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  max-height: 280px;
+  padding: 0.35em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+}
+.axis-cmd-palette-empty {
+  padding: 1.25em 0.75em;
+  text-align: center;
+  color: var(--color-text-faint);
+  font-size: 0.9em;
+}
+.axis-cmd-palette-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75em;
+  width: 100%;
+  text-align: left;
+  padding: 0.45em 0.6em;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+}
+.axis-cmd-palette-item:hover,
+.axis-cmd-palette-item.is-active {
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-bg-elev));
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  color: var(--color-text);
+}
+.axis-cmd-palette-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1em;
+  min-width: 0;
+}
+.axis-cmd-palette-item-title {
+  font-size: 0.92em;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.axis-cmd-palette-item-cat {
+  font-size: 0.72em;
+  color: var(--color-text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.axis-cmd-palette-item-shortcut {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72em;
+  color: var(--color-text-dim);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-xs);
+  padding: 0.05em 0.35em;
+  flex-shrink: 0;
+}
+.axis-cmd-palette-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75em 1em;
+  padding: 0.4em 0.75em;
+  border-top: var(--border-w) solid var(--color-border);
+  background: var(--color-bg-base);
+  font-size: 0.72em;
+  color: var(--color-text-faint);
+  flex-shrink: 0;
+}
+.axis-cmd-palette-footer kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  padding: 0 0.3em;
+  margin-right: 0.15em;
+  background: var(--color-bg-elev);
+  color: var(--color-text-dim);
+}

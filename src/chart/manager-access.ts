@@ -40,8 +40,15 @@ import {
   setDrawings,
   setSelectedDrawingId,
   setDrawingTool,
+  setCrosshair,
 } from '../store';
 import type { Bar } from '../store/types';
+import {
+  debugPinsToMarkers,
+  pinsFromLastRun,
+  resolveDebugPinTarget,
+  type DebugPin,
+} from '../results/debug-pins';
 import {
   getActiveManager,
   getActiveSlotId,
@@ -108,7 +115,9 @@ function ensureDrawingLayer() {
   const pricePane = mgr.getPane('price');
   const candle = pricePane?.series['candle'];
   if (!pricePane || !candle) return;
-  const paneElId = mgr.paneDomId('price');
+  // Real PaneManager exposes paneDomId; test doubles often omit it.
+  const paneElId =
+    typeof mgr.paneDomId === 'function' ? mgr.paneDomId('price') : 'pane-price';
   const el = typeof document !== 'undefined' ? document.getElementById(paneElId) : null;
   if (!el) return;
   // happy-dom / minimal test envs may lack createElementNS
@@ -206,6 +215,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
   if (clearMarkers) {
     mgr.clearTradeMarkers();
     mgr.clearShapeMarkers?.();
+    mgr.clearDebugPinMarkers?.();
   }
 
   ensurePriceSeries(chartType);
@@ -267,6 +277,40 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
   // (drawings only on the active multi-chart slot)
   ensureDrawingLayer();
   getDrawingLayer()?.setDrawings(store.drawings);
+}
+
+/**
+ * Apply or clear debug-pin markers on the active chart from `store.lastRun`.
+ * No-op when manager is missing; clears markers when disabled or empty.
+ */
+export function applyDebugPinsToChart(enabled?: boolean) {
+  const mgr = getManager();
+  if (!mgr) return;
+  const on = enabled ?? !!store.debugPinsEnabled;
+  if (!on || store.lastRun == null) {
+    mgr.clearDebugPinMarkers?.();
+    return;
+  }
+  const pins = pinsFromLastRun(store.lastRun, { bars: store.bars });
+  const markers = debugPinsToMarkers(pins, store.bars);
+  if (!markers.length) {
+    mgr.clearDebugPinMarkers?.();
+    return;
+  }
+  mgr.setDebugPinMarkers?.(markers);
+}
+
+/**
+ * Jump chart + Data Window crosshair to a debug pin / log bar.
+ * Resolves barIndex ↔ time via `store.bars` when one side is missing.
+ */
+export function jumpToDebugPin(pin: Pick<DebugPin, 'time' | 'barIndex'> | null | undefined) {
+  if (pin == null) return;
+  const { time, barIndex } = resolveDebugPinTarget(pin, store.bars);
+  setCrosshair(time, barIndex);
+  if (time != null && Number.isFinite(time)) {
+    getManager()?.scrollToTime(time);
+  }
 }
 
 /** Re-export toolbar singleton (DrawingLayer module active instance). */

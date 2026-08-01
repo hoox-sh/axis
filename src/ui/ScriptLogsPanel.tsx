@@ -32,6 +32,7 @@ import {
   type PineLogEntry,
   type PineLogLevel,
 } from '../results/pine-logs';
+import { jumpToDebugPin } from '../chart/manager-access';
 import { FloatableShell } from './panels/FloatableShell';
 import { Icons } from './icons';
 
@@ -226,15 +227,32 @@ export const ScriptLogsPanel: Component = () => {
                   {(entry, i) => {
                     const bi = () => barIndexOf(entry);
                     const lvl = () => normalizeLevel(entry.level);
+                    const jumpable = () => bi() != null || entry.time != null;
+                    const onJump = () => {
+                      if (!jumpable()) return;
+                      jumpToDebugPin({ barIndex: bi(), time: entry.time ?? null });
+                    };
                     return (
                       <div
-                        class="group flex items-start gap-2 px-2 py-0.5 border-b border-border-soft/50 hover:bg-bg-hover/60"
+                        class={`group flex items-start gap-2 px-2 py-0.5 border-b border-border-soft/50 hover:bg-bg-hover/60 ${
+                          jumpable() ? 'cursor-pointer' : ''
+                        }`}
                         data-testid="axis-scriptlogs-row"
                         data-level={lvl()}
                         data-index={i()}
+                        title={jumpable() ? 'Jump to bar on chart' : undefined}
+                        role={jumpable() ? 'button' : undefined}
+                        tabIndex={jumpable() ? 0 : undefined}
+                        onClick={onJump}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            onJump();
+                          }
+                        }}
                       >
                         <Show when={bi() != null}>
-                          <span class="text-text-faint w-12 flex-shrink-0 select-none tabular-nums text-right">
+                          <span class="text-text-faint w-12 flex-shrink-0 select-none tabular-nums text-right text-accent/80">
                             [{bi()}]
                           </span>
                         </Show>

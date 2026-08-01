@@ -50,33 +50,95 @@ export type { InlineDebugAnnotation };
 /** Push annotations (or null to clear). */
 export const setInlineDebugData = StateEffect.define<InlineDebugAnnotation[] | null>();
 
+/**
+ * Optional handler for chip clicks (jump to bar on chart).
+ * Wired by editor shell — avoids hard dependency on chart/store here.
+ */
+export type DebugChipClickDetail = {
+  line: number;
+  barIndex?: number | null;
+  time?: number | null;
+  message?: string;
+  level?: InlineDebugAnnotation['level'];
+};
+
+let debugChipClickHandler: ((detail: DebugChipClickDetail) => void) | null = null;
+
+/** Register (or clear with null) the chart jump handler for pin-able chips. */
+export function setDebugChipClickHandler(
+  handler: ((detail: DebugChipClickDetail) => void) | null,
+) {
+  debugChipClickHandler = handler;
+}
+
 class InlineDebugWidget extends WidgetType {
   constructor(
     readonly level: InlineDebugAnnotation['level'],
     readonly text: string,
     readonly title: string,
+    readonly line: number,
+    readonly barIndex?: number | null,
+    readonly time?: number | null,
+    readonly message?: string,
   ) {
     super();
+  }
+
+  get pinable() {
+    return this.barIndex != null || this.time != null;
   }
 
   eq(other: InlineDebugWidget) {
     return (
       other.level === this.level &&
       other.text === this.text &&
-      other.title === this.title
+      other.title === this.title &&
+      other.line === this.line &&
+      other.barIndex === this.barIndex &&
+      other.time === this.time &&
+      other.message === this.message
     );
   }
 
   toDOM() {
     const span = document.createElement('span');
-    span.className = `cm-inline-debug cm-inline-debug-${this.level}`;
+    span.className = `cm-inline-debug cm-inline-debug-${this.level}${
+      this.pinable ? ' cm-inline-debug-pinable' : ''
+    }`;
     span.textContent = this.text;
-    span.title = this.title;
+    span.title = this.pinable
+      ? `${this.title} · click to pin bar on chart`
+      : this.title;
+    if (this.pinable) {
+      span.setAttribute('role', 'button');
+      span.tabIndex = 0;
+      if (this.barIndex != null) span.dataset.barIndex = String(this.barIndex);
+      if (this.time != null) span.dataset.time = String(this.time);
+      span.dataset.line = String(this.line);
+      const fire = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        debugChipClickHandler?.({
+          line: this.line,
+          barIndex: this.barIndex,
+          time: this.time,
+          message: this.message,
+          level: this.level,
+        });
+      };
+      span.addEventListener('mousedown', fire);
+      span.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') fire(e);
+      });
+    }
     return span;
   }
 
-  ignoreEvent() {
-    return true;
+  /** Let pin-able chips receive click; others stay decoration-only. */
+  ignoreEvent(event: Event) {
+    if (!this.pinable) return true;
+    const t = event.type;
+    return t !== 'mousedown' && t !== 'click' && t !== 'keydown';
   }
 }
 
@@ -140,7 +202,15 @@ function buildDecorations(anns: InlineDebugAnnotation[], doc: Text): DecorationS
       line.to,
       line.to,
       Decoration.widget({
-        widget: new InlineDebugWidget(a.level, ` ${short}`, title),
+        widget: new InlineDebugWidget(
+          a.level,
+          ` ${short}`,
+          title,
+          a.line,
+          a.barIndex,
+          a.time,
+          a.message,
+        ),
         side: 1,
       }),
     );
@@ -201,6 +271,16 @@ export const inlineDebugTheme = EditorView.baseTheme({
     verticalAlign: 'middle',
     pointerEvents: 'none',
     whiteSpace: 'nowrap',
+  },
+  '.cm-inline-debug-pinable': {
+    pointerEvents: 'auto',
+    cursor: 'pointer',
+    textDecoration: 'underline dotted',
+    textUnderlineOffset: '2px',
+  },
+  '.cm-inline-debug-pinable:hover': {
+    opacity: '1',
+    filter: 'brightness(1.15)',
   },
   '.cm-inline-debug-info': {
     color: '#8b8e9c',

@@ -172,6 +172,38 @@ describe('PaneManager', () => {
     pm.clearTradeMarkers();
   });
 
+  it('setDebugPinMarkers merges with trade/shape and clear is independent', () => {
+    const p = pm.createPane('price', 'price', 'Price');
+    p.series['candle'] = {
+      setData: () => {},
+      applyOptions: () => {},
+      priceScale: () => ({ applyOptions: () => {} }),
+      seriesOrder: () => 1,
+      setSeriesOrder: () => {},
+    } as never;
+    pm.setDebugPinMarkers([
+      {
+        time: 500,
+        position: 'aboveBar',
+        color: '#939fff',
+        shape: 'circle',
+        text: 'L3',
+      },
+    ]);
+    pm.setTradeMarkers([
+      {
+        time: 1000,
+        position: 'belowBar',
+        color: '#0f0',
+        shape: 'arrowUp',
+        text: 'L',
+      } as never,
+    ]);
+    // Clearing trades must not require clearDebugPinMarkers
+    pm.clearTradeMarkers();
+    pm.clearDebugPinMarkers();
+  });
+
   it('syncBgcolorBands creates bgcolor_ series', () => {
     const p = pm.createPane('price', 'price', 'Price');
     p.series['candle'] = {

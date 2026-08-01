@@ -281,6 +281,8 @@ export interface AppState {
   dataViewPanel: { open: boolean; width: number };
   /** Layers panel (panes / indicators / drawings visibility) */
   layerPanel: { open: boolean; width: number };
+  /** Price alerts panel */
+  alertsPanel: { open: boolean; width: number };
   /**
    * Script Settings modal — shows ``input.*`` fields.
    * indicatorId null = editor document (not yet an applied indicator).
@@ -307,6 +309,11 @@ export interface AppState {
    * logs / errors / diagnostics. Persisted.
    */
   inlineDebugEnabled: boolean;
+  /**
+   * Show chart pins (series markers) for last-run logs that carry bar_index
+   * or time. Persisted. Independent of {@link inlineDebugEnabled}.
+   */
+  debugPinsEnabled: boolean;
   stream: { status: 'connected' | 'disconnected' | 'error' | 'connecting' };
   status: AppStatus;
   statusMessage: string;
@@ -367,4 +374,32 @@ export interface AppState {
   chartLayout: import('../chart/layout').ChartLayoutState;
   /** User-saved named layouts (grid + optional chrome snapshot). */
   savedLayouts: import('../chart/layout').SavedChartLayout[];
+
+  /**
+   * Second-symbol compare overlay (persisted prefs; bars/loading ephemeral).
+   * When enabled, ChartHost loads `symbol` via the active source and paints a
+   * line series aligned to the main bars (% or absolute).
+   */
+  compare: CompareState;
+}
+
+/** Compare-overlay preferences + ephemeral load state. */
+export interface CompareState {
+  /** Master switch — when false, clear series and free bars. */
+  enabled: boolean;
+  /** Compare ticker (uppercased). */
+  symbol: string;
+  /** percent = % change from first common bar; absolute = raw close. */
+  mode: 'percent' | 'absolute';
+  /**
+   * When true and mode is percent, also paint the main symbol as % change
+   * (dual % mode) on the shared scale.
+   */
+  normalizeMain: boolean;
+  /** Ephemeral compare OHLCV (not persisted). */
+  bars: Bar[];
+  /** Bumped when compare bars load or clear (ChartHost reactivity). */
+  gen: number;
+  loading: boolean;
+  error: string | null;
 }

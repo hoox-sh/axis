@@ -31,6 +31,8 @@
  * ## Public API
  *
  * - {@link buildStrategyReport} → `{ trades, stats }`
+ * - {@link buildCumulativeEquity} / {@link equityToSvgPolyline} — report UI curve
+ * - {@link tradesToCsv} — closed-trade export
  * - Types: {@link StrategyEvent}, {@link ClosedTrade}, {@link StrategyStats}
  *
  * @module results/strategy
@@ -244,8 +246,8 @@ export function tradesToCsv(trades: ClosedTrade[]): string {
   const header = 'id,dir,entry_time,entry,exit_time,exit,pnl,pnl_pct';
   const rows = trades.map((t) =>
     [
-      t.id,
-      t.dir,
+      csvCell(t.id),
+      csvCell(t.dir),
       t.entryTime,
       t.entry,
       t.exitTime,
@@ -255,4 +257,136 @@ export function tradesToCsv(trades: ClosedTrade[]): string {
     ].join(','),
   );
   return [header, ...rows].join('\n');
+}
+
+/** Escape a CSV field when it contains commas, quotes, or newlines. */
+function csvCell(v: string | number): string {
+  const s = String(v ?? '');
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+/** One step of cumulative equity after a closed trade. */
+export interface EquityStep {
+  /** 1-based trade ordinal after this close */
+  i: number;
+  /** Exit time of the trade (unix seconds or ms as stored) */
+  time: number;
+  /** Running cumulative PnL */
+  equity: number;
+  /** Running peak equity */
+  peak: number;
+  /** Absolute drawdown from peak (peak − equity, ≥ 0) */
+  drawdown: number;
+  /** Fractional drawdown (same formula as stats.maxDD) */
+  drawdownPct: number;
+}
+
+/**
+ * Walk closed trades in order and produce cumulative PnL + max-DD series.
+ * Pure helper for the Strategy report SVG (does not depend on chart capital).
+ */
+export function buildCumulativeEquity(trades: ClosedTrade[]): EquityStep[] {
+  if (!trades.length) return [];
+  // Preserve report order (already chronological from buildStrategyReport).
+  let equity = 0;
+  let peak = 0;
+  const out: EquityStep[] = [];
+  for (let idx = 0; idx < trades.length; idx++) {
+    const t = trades[idx]!;
+    equity += t.pnl;
+    if (equity > peak) peak = equity;
+    const drawdown = Math.max(0, peak - equity);
+    const drawdownPct = drawdown / Math.max(1, Math.abs(peak) + 1);
+    out.push({
+      i: idx + 1,
+      time: t.exitTime,
+      equity,
+      peak,
+      drawdown,
+      drawdownPct,
+    });
+  }
+  return out;
+}
+
+export interface SvgPolylineResult {
+  /** SVG `points` attribute value for a polyline */
+  points: string;
+  min: number;
+  max: number;
+  /** Zero-line Y in SVG coords, or null when zero is outside range */
+  zeroY: number | null;
+}
+
+/**
+ * Map a numeric series onto an SVG viewBox polyline.
+ * Prepends a synthetic origin (0) so a single trade still draws a segment.
+ *
+ * @param values - Cumulative equity samples (one per closed trade)
+ * @param width - SVG width
+ * @param height - SVG height
+ * @param pad - Inner padding (default 4)
+ */
+export function equityToSvgPolyline(
+  values: number[],
+  width: number,
+  height: number,
+  pad = 4,
+): SvgPolylineResult {
+  const w = Math.max(1, width);
+  const h = Math.max(1, height);
+  const p = Math.max(0, pad);
+  // Include baseline 0 so first trade has a rising/falling segment
+  const series = values.length ? [0, ...values] : [0];
+  let min = Math.min(...series);
+  let max = Math.max(...series);
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    min = 0;
+    max = 0;
+  }
+  // Flat line: expand range so we still get a centered horizontal
+  if (min === max) {
+    min -= 1;
+    max += 1;
+  }
+  const innerW = Math.max(1, w - p * 2);
+  const innerH = Math.max(1, h - p * 2);
+  const n = series.length;
+  const pts: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const x = p + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
+    const y = p + innerH - ((series[i]! - min) / (max - min)) * innerH;
+    pts.push(`${x.toFixed(2)},${y.toFixed(2)}`);
+  }
+  let zeroY: number | null = null;
+  if (min <= 0 && max >= 0) {
+    zeroY = p + innerH - ((0 - min) / (max - min)) * innerH;
+  }
+  return { points: pts.join(' '), min, max, zeroY };
+}
+
+/**
+ * Convenience: cumulative equity polyline + optional max-DD absolute series
+ * for overlay shading in the report SVG.
+ */
+export function buildEquitySvgSeries(
+  trades: ClosedTrade[],
+  width: number,
+  height: number,
+  pad = 4,
+): {
+  steps: EquityStep[];
+  equity: SvgPolylineResult;
+  /** Drawdown as negative values under zero (for optional fill) */
+  drawdown: SvgPolylineResult;
+} {
+  const steps = buildCumulativeEquity(trades);
+  const equityVals = steps.map((s) => s.equity);
+  const ddVals = steps.map((s) => -s.drawdown);
+  return {
+    steps,
+    equity: equityToSvgPolyline(equityVals, width, height, pad),
+    drawdown: equityToSvgPolyline(ddVals, width, height, pad),
+  };
 }

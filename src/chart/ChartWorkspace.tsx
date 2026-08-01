@@ -29,6 +29,7 @@ import { store, setActiveChartSlot } from '../store';
 import { gridClassForMode } from './layout';
 import { ChartHost } from './ChartHost';
 import { setActiveSlotId } from './chart-registry';
+import { BarReplayControls } from '../ui/BarReplayControls';
 
 /** Root chart area for the main app shell (replaces bare ChartHost). */
 export const ChartWorkspace: Component = () => {
@@ -44,46 +45,53 @@ export const ChartWorkspace: Component = () => {
 
   return (
     <div
-      class={`flex-1 min-h-0 min-w-0 grid gap-[2px] bg-border ${gridClassForMode(mode())}`}
-      data-axis-chart-workspace
-      data-layout-mode={mode()}
+      class="flex-1 min-h-0 min-w-0 relative flex flex-col"
+      data-axis-chart-workspace-wrap
     >
-      <For each={slots()}>
-        {(slot) => {
-          const isActive = () => activeId() === slot.id;
-          return (
-            <div
-              class={`min-h-0 min-w-0 flex flex-col relative overflow-hidden bg-bg-base ${
-                isActive() ? 'ring-1 ring-inset ring-accent/80' : 'ring-1 ring-inset ring-transparent'
-              }`}
-              data-chart-slot={slot.id}
-              data-active={isActive() ? '1' : '0'}
-              onPointerDown={() => {
-                if (!isActive()) setActiveChartSlot(slot.id);
-              }}
-            >
-              <div class="absolute top-1 left-1 z-20 pointer-events-none">
-                <span
-                  class={`text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 border ${
-                    isActive()
-                      ? 'bg-accent/20 border-accent text-accent'
-                      : 'bg-bg-panel/90 border-border text-text-faint'
-                  }`}
-                >
-                  {slot.symbol}
-                  <span class="opacity-70 ml-1">{slot.interval}</span>
-                </span>
+      <div
+        class={`flex-1 min-h-0 min-w-0 grid gap-[2px] bg-border ${gridClassForMode(mode())}`}
+        data-axis-chart-workspace
+        data-layout-mode={mode()}
+      >
+        <For each={slots()}>
+          {(slot) => {
+            const isActive = () => activeId() === slot.id;
+            return (
+              <div
+                class={`min-h-0 min-w-0 flex flex-col relative overflow-hidden bg-bg-base ${
+                  isActive() ? 'ring-1 ring-inset ring-accent/80' : 'ring-1 ring-inset ring-transparent'
+                }`}
+                data-chart-slot={slot.id}
+                data-active={isActive() ? '1' : '0'}
+                onPointerDown={() => {
+                  if (!isActive()) setActiveChartSlot(slot.id);
+                }}
+              >
+                <div class="absolute top-1 left-1 z-20 pointer-events-none">
+                  <span
+                    class={`text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 border ${
+                      isActive()
+                        ? 'bg-accent/20 border-accent text-accent'
+                        : 'bg-bg-panel/90 border-border text-text-faint'
+                    }`}
+                  >
+                    {slot.symbol}
+                    <span class="opacity-70 ml-1">{slot.interval}</span>
+                  </span>
+                </div>
+                <ChartHost
+                  slotId={slot.id}
+                  active={isActive()}
+                  symbol={slot.symbol}
+                  interval={slot.interval}
+                />
               </div>
-              <ChartHost
-                slotId={slot.id}
-                active={isActive()}
-                symbol={slot.symbol}
-                interval={slot.interval}
-              />
-            </div>
-          );
-        }}
-      </For>
+            );
+          }}
+        </For>
+      </div>
+      {/* Shared replay strip — only paints when a session is active */}
+      <BarReplayControls />
     </div>
   );
 };

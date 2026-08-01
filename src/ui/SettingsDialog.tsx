@@ -63,6 +63,7 @@ import {
 import { loadSymbolData, reloadChart } from '../data/load-symbol';
 import { getManager } from '../chart/manager-access';
 import { UI_SCALE_PRESETS, formatUiScalePct } from './ui-scale';
+import { WorkspaceSnapshotMenu } from './WorkspaceSnapshotMenu';
 
 /** PYNE Runtime modes for the server/worker engine plugin config. */
 export type EngineExecMode = 'interpret' | 'compile' | 'auto';
@@ -796,7 +797,8 @@ export const SettingsDialog: Component<Props> = (props) => {
               <div class="sc-section-title">Workspace</div>
               <p class="text-[10px] text-text-faint -mt-1">
                 Chart reload refetches OHLCV for the current symbol. UI reset restores panel layout
-                and density only.
+                and density only. Export / import captures a full chrome + drawings + scripts
+                snapshot (bars omitted).
               </p>
               <div class="flex flex-wrap gap-2">
                 <button
@@ -821,6 +823,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                   Reset UI layout
                 </button>
               </div>
+              <WorkspaceSnapshotMenu />
             </div>
           </div>
 

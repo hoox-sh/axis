@@ -23,6 +23,8 @@ import {
   setStatus,
   setProfilerEnabled,
   toggleProfilerEnabled,
+  setDebugPinsEnabled,
+  toggleDebugPinsEnabled,
   loadBars,
   addIndicator,
   removeIndicator,
@@ -173,6 +175,27 @@ describe('profilerEnabled', () => {
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(raw!);
     expect(parsed.profilerEnabled).toBe(true);
+  });
+});
+
+describe('debugPinsEnabled', () => {
+  it('setDebugPinsEnabled and toggleDebugPinsEnabled', () => {
+    setDebugPinsEnabled(false);
+    expect(store.debugPinsEnabled).toBe(false);
+    setDebugPinsEnabled(true);
+    expect(store.debugPinsEnabled).toBe(true);
+    toggleDebugPinsEnabled();
+    expect(store.debugPinsEnabled).toBe(false);
+    toggleDebugPinsEnabled();
+    expect(store.debugPinsEnabled).toBe(true);
+  });
+
+  it('persists debugPinsEnabled flag', () => {
+    setDebugPinsEnabled(true);
+    flushPersist();
+    const raw = localStorage.getItem(STORAGE_KEY);
+    expect(raw).toBeTruthy();
+    expect(JSON.parse(raw!).debugPinsEnabled).toBe(true);
   });
 });
 

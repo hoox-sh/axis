@@ -31,7 +31,14 @@ import { PaneManager } from './pane-manager';
 import { DrawingToolbar } from './DrawingToolbar';
 import { PineTableHud } from './PineTableHud';
 import { ChartScaleControls } from './ChartScaleControls';
-import { store, setCrosshair } from '../store';
+import { VolumeProfileOverlay } from '../ui/VolumeProfileOverlay';
+import {
+  store,
+  setCrosshair,
+  setCompareBars,
+  setCompareLoadState,
+  clearCompareBars,
+} from '../store';
 import { HooxLoader } from '../ui/HooxLoader';
 import {
   getManager,
@@ -40,6 +47,7 @@ import {
   setDrawingLayer,
   setDataToChart,
   getActiveDrawingLayer,
+  applyDebugPinsToChart,
 } from './manager-access';
 import {
   getSlotBars,
@@ -51,13 +59,35 @@ import {
   disposeSlotChart,
 } from './chart-registry';
 import { loadSymbolData } from '../data/load-symbol';
+import { getVisibleBars, isReplayActive } from './bar-replay';
+import {
+  applyCompareOverlay,
+  clearCompareOverlay,
+  fetchCompareBars,
+} from './compare-overlay';
 
 export {
   getManager,
   getDrawingLayer,
   setDataToChart,
   getActiveDrawingLayer,
+  applyDebugPinsToChart,
+  jumpToDebugPin,
 } from './manager-access';
+
+/** Helpers for consumers that need the scrubbed OHLCV prefix. */
+export {
+  getVisibleBars,
+  isReplayActive,
+  getReplayState,
+  startReplaySession,
+  stopReplaySession,
+} from './bar-replay';
+
+/** Bars to paint — full history, or prefix when bar replay is active. */
+function barsForPaint(full: typeof store.bars) {
+  return isReplayActive() ? getVisibleBars(full) : full;
+}
 
 export interface ChartHostProps {
   /** Multi-chart slot id (unique PaneManager host key). */
@@ -222,7 +252,8 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     if (!getManager()) return;
     untrack(() => {
       if (store.bars.length) {
-        setDataToChart(store.bars, { fit: true });
+        // Respect bar-replay cursor so reloads / paint paths don't flash full history
+        setDataToChart(barsForPaint(store.bars), { fit: !isReplayActive() });
         setSlotBars(slotId(), store.bars, false);
       }
     });
@@ -263,7 +294,9 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     void type;
     if (!getManager()) return;
     untrack(() => {
-      if (store.bars.length) setDataToChart(store.bars, { fit: false, clearMarkers: false });
+      if (store.bars.length) {
+        setDataToChart(barsForPaint(store.bars), { fit: false, clearMarkers: false });
+      }
     });
   });
 
@@ -279,6 +312,82 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     getDrawingLayer()?.setTool(tool);
   });
 
+  // Debug pins from last-run logs (bar_index / time) — markers on price series
+  createEffect(() => {
+    if (!isActive()) return;
+    void store.debugPinsEnabled;
+    void store.lastRun;
+    void store.chartDataGen;
+    void store.bars.length;
+    if (!getManager()) return;
+    untrack(() => applyDebugPinsToChart());
+  });
+
+  // Compare / second-symbol overlay (active slot only — multi-chart safe)
+  createEffect(() => {
+    if (!isActive()) return;
+    const enabled = store.compare?.enabled;
+    const mode = store.compare?.mode ?? 'percent';
+    const normalizeMain = !!store.compare?.normalizeMain;
+    const compareSym = store.compare?.symbol || '';
+    const compareBars = store.compare?.bars || [];
+    void store.compare?.gen;
+    void store.chartDataGen;
+    void store.bars.length;
+
+    const mgr = getManager() || localManager;
+    if (!mgr) return;
+
+    untrack(() => {
+      if (!enabled || !compareSym || !compareBars.length || !store.bars.length) {
+        clearCompareOverlay(mgr);
+        return;
+      }
+      applyCompareOverlay(mgr, {
+        mainBars: store.bars,
+        compareBars,
+        symbol: compareSym,
+        mode,
+        normalizeMain,
+      });
+    });
+  });
+
+  // Refetch compare when main interval/source/history reloads while enabled
+  createEffect(() => {
+    if (!isActive()) return;
+    if (!store.compare?.enabled) return;
+    const sym = (store.compare.symbol || '').trim().toUpperCase();
+    if (!sym) return;
+    const interval = store.interval;
+    const source = store.source;
+    void store.historyBars;
+    void store.chartDataGen;
+
+    let cancelled = false;
+    onCleanup(() => {
+      cancelled = true;
+    });
+
+    untrack(() => {
+      if (!store.bars.length) return;
+      if (sym === store.symbol.toUpperCase()) return;
+      setCompareLoadState({ loading: true, error: null });
+      void fetchCompareBars(sym, interval, source)
+        .then((bars) => {
+          if (cancelled) return;
+          if (!store.compare.enabled || store.compare.symbol.toUpperCase() !== sym) return;
+          setCompareBars(bars);
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          const msg = err instanceof Error ? err.message : String(err);
+          setCompareLoadState({ loading: false, error: msg });
+          clearCompareBars();
+        });
+    });
+  });
+
   onCleanup(() => {
     const id = slotId();
     if (isActive()) {
@@ -286,6 +395,11 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       if (layer) {
         layer.destroy();
         setDrawingLayer(undefined, id);
+      }
+      try {
+        clearCompareOverlay(localManager || getManager());
+      } catch {
+        /* ignore */
       }
     }
     disposeSlotChart(id);
@@ -312,6 +426,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       <Show when={isActive() && bars().length > 0}>
         <DrawingToolbar />
         <PineTableHud />
+        <VolumeProfileOverlay />
         <ChartScaleControls />
       </Show>
       <Show when={emptyHint()}>

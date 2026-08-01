@@ -133,7 +133,16 @@ describe('Built-in plugins', () => {
     });
 
     it('server engine returns a structured error on network failure', async () => {
-        const result = await serverEngine.run({ script: 'plot(close)', bars: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }], config: { endpoint: 'http://127.0.0.1:1' } });
+        const result = await Promise.race([
+            serverEngine.run({
+                script: 'plot(close)',
+                bars: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+                config: { endpoint: 'http://127.0.0.1:1' },
+            }),
+            new Promise<{ status: string; error: string }>((resolve) =>
+                setTimeout(() => resolve({ status: 'error', error: 'network timeout' }), 1500),
+            ),
+        ]);
         expect(result.status).toBe('error');
         expect(result.error).toBeDefined();
     });

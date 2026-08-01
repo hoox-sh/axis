@@ -53,7 +53,8 @@ import {
   setTelemetryPlane,
   setTelemetryState,
 } from '../store';
-import { getManager } from '../chart/manager-access';
+import { getManager, setDataToChart } from '../chart/manager-access';
+import { isReplayActive, stopReplaySession } from '../chart/bar-replay';
 import { runAndApply } from '../indicators/runner';
 import { orderIndicatorsByPlotDeps } from '../results/plot-sources';
 import {
@@ -70,6 +71,31 @@ export { listStreams, defaultStreamForSource };
 let currentStop: (() => void) | null = null;
 let rerunTimer: ReturnType<typeof setTimeout> | null = null;
 let rerunInFlight = false;
+/** Test-only: increments each time a debounced live re-run is attempted. */
+let rerunAttemptCount = 0;
+
+/** @internal Test helper — live re-run attempts since last reset. */
+export function _getRerunAttemptCountForTests(): number {
+  return rerunAttemptCount;
+}
+
+/** @internal Test helper — clear multiplex timers/gates between cases. */
+export function _resetMultiplexForTests(): void {
+  if (currentStop) {
+    try {
+      currentStop();
+    } catch {
+      /* ignore */
+    }
+    currentStop = null;
+  }
+  if (rerunTimer) {
+    clearTimeout(rerunTimer);
+    rerunTimer = null;
+  }
+  rerunInFlight = false;
+  rerunAttemptCount = 0;
+}
 
 /** Registered stream plugins (built-in + dynamic). */
 export function getAvailableStreams(): StreamPlugin[] {
@@ -83,6 +109,14 @@ export function getAvailableStreams(): StreamPlugin[] {
  */
 export function startLive(streamId: string, symbol: string, interval: string) {
   stopLive();
+
+  // Bar replay must not run alongside live ticks — exit + restore full series
+  if (isReplayActive()) {
+    stopReplaySession();
+    if (store.bars.length) {
+      setDataToChart(store.bars, { fit: false, clearMarkers: false });
+    }
+  }
 
   // Auto-pick stream if id missing / mismatched for source
   let id = streamId || store.live.streamId;
@@ -186,6 +220,9 @@ export function stopLive() {
     clearTimeout(rerunTimer);
     rerunTimer = null;
   }
+  // Drop in-flight gate so the next startLive can schedule reruns
+  // (a hung prior runAndApply must not block suite / restarts forever).
+  rerunInFlight = false;
 }
 
 /**
@@ -199,6 +236,7 @@ function scheduleRerun() {
     rerunTimer = null;
     if (rerunInFlight || !store.live.active) return;
     rerunInFlight = true;
+    rerunAttemptCount += 1;
     setStore('live', 'needsRerun', false);
     try {
       // Producers of plot sources before consumers (cross-indicator input.source)

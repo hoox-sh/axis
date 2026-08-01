@@ -87,40 +87,45 @@ describe('pine-lsp', () => {
   });
 
   it('renders markdown hover without raw fences', () => {
-    installMinimalDom();
-    const root = document.createElement('div');
-    renderHoverMarkdown(
-      root,
-      'Simple Moving Average\n\n---\n\n**Example:**\n```pinescript\nplot(ta.sma(close, 14))\n```\n\n**See also:** `ta.ema`, `ta.rma`\n',
-    );
-    const text = collectText(root);
-    expect(text).not.toContain('```');
-    expect(text).toContain('Simple Moving Average');
-    expect(text).toContain('plot(ta.sma(close, 14))');
-    expect(text).toContain('ta.ema');
-    expect(findByClass(root, 'cm-pine-hover-pre')).toBeTruthy();
-    expect(findByClass(root, 'cm-pine-hover-hr')).toBeTruthy();
-    const strongs = findAllByClass(root, 'cm-pine-hover-strong').map((n) => n.textContent);
-    expect(strongs).toContain('Example:');
-    expect(strongs).toContain('See also:');
-    expect(findAllByClass(root, 'cm-pine-hover-code-inline').length).toBeGreaterThanOrEqual(1);
+    const restore = installMinimalDom();
+    try {
+      const root = document.createElement('div');
+      renderHoverMarkdown(
+        root,
+        'Simple Moving Average\n\n---\n\n**Example:**\n```pinescript\nplot(ta.sma(close, 14))\n```\n\n**See also:** `ta.ema`, `ta.rma`\n',
+      );
+      const text = collectText(root);
+      expect(text).not.toContain('```');
+      expect(text).toContain('Simple Moving Average');
+      expect(text).toContain('plot(ta.sma(close, 14))');
+      expect(text).toContain('ta.ema');
+      expect(findByClass(root, 'cm-pine-hover-pre')).toBeTruthy();
+      expect(findByClass(root, 'cm-pine-hover-hr')).toBeTruthy();
+      const strongs = findAllByClass(root, 'cm-pine-hover-strong').map((n) => n.textContent);
+      expect(strongs).toContain('Example:');
+      expect(strongs).toContain('See also:');
+      expect(findAllByClass(root, 'cm-pine-hover-code-inline').length).toBeGreaterThanOrEqual(1);
+    } finally {
+      restore();
+    }
   });
 
   it('appendInlineMarkdown escapes as text nodes only', () => {
-    installMinimalDom();
-    const el = document.createElement('div');
-    appendInlineMarkdown(el, 'Use **bold** and `code` together');
-    expect(findByTag(el, 'strong')?.textContent).toBe('bold');
-    expect(findByTag(el, 'code')?.textContent).toBe('code');
-    expect(collectText(el)).toBe('Use bold and code together');
+    const restore = installMinimalDom();
+    try {
+      const el = document.createElement('div');
+      appendInlineMarkdown(el, 'Use **bold** and `code` together');
+      expect(findByTag(el, 'strong')?.textContent).toBe('bold');
+      expect(findByTag(el, 'code')?.textContent).toBe('code');
+      expect(collectText(el)).toBe('Use bold and code together');
+    } finally {
+      restore();
+    }
   });
 });
 
-/** Lightweight DOM for hover markdown tests (no browser). */
-function installMinimalDom() {
-  if (typeof document !== 'undefined' && (document as { __pineHoverDom?: boolean }).__pineHoverDom) {
-    return;
-  }
+/** Lightweight DOM for hover markdown tests (no browser). Restores prior document. */
+function installMinimalDom(): () => void {
   type NodeLike = {
     nodeType: number;
     tagName?: string;
@@ -150,14 +155,29 @@ function installMinimalDom() {
     };
     return el;
   };
+  const prev = globalThis.document;
   (globalThis as unknown as { document: unknown }).document = {
     __pineHoverDom: true,
+    documentElement: createEl('html'),
+    body: createEl('body'),
     createElement(tag: string) {
       return createEl(tag);
     },
     createTextNode(text: string) {
-      return { nodeType: 3, className: '', textContent: text, dataset: {}, childNodes: [], appendChild(c: NodeLike) { return c; } };
+      return {
+        nodeType: 3,
+        className: '',
+        textContent: text,
+        dataset: {},
+        childNodes: [],
+        appendChild(c: NodeLike) {
+          return c;
+        },
+      };
     },
+  };
+  return () => {
+    (globalThis as unknown as { document: typeof prev }).document = prev;
   };
 }
 

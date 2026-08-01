@@ -121,3 +121,61 @@ export {
   groupForTool,
 } from './tool-catalog';
 export type { ToolGroupId, ToolGroupDef } from './tool-catalog';
+
+// ── Copy / merge / symbol filter (multi-chart prep) ──────────────────────────
+export {
+  newDrawingId,
+  deepCloneDrawing,
+  cloneDrawing,
+  cloneDrawings,
+  drawingsForSymbol,
+  tagDrawingsSymbol,
+  mergeDrawings,
+  offsetDrawingGeometry,
+  cloneDrawingsOffset,
+} from './sync';
+export type {
+  DrawingSyncLike,
+  MergeDrawingsMode,
+  CloneDrawingsOptions,
+  DrawingsForSymbolOptions,
+  OffsetDrawingOptions,
+} from './sync';
+
+// ── Drawing templates (analysis packs) ──────────────────────────────────────
+export {
+  DRAWING_TEMPLATES_KEY,
+  TEMPLATE_FORMAT,
+  TEMPLATE_VERSION,
+  serializeDrawing,
+  serializeDrawings,
+  deserializeDrawing,
+  deserializeDrawings,
+  hydrateTemplateDrawings,
+  parseTemplateMeta,
+  parseTemplate,
+  createTemplate,
+  parseTemplatesStore,
+  applyTemplateDrawings,
+  loadTemplates,
+  saveTemplates,
+  listTemplates,
+  getTemplate,
+  saveTemplate,
+  deleteTemplate,
+  exportTemplateJson,
+  exportAllTemplatesJson,
+  parseImportPayload,
+  importTemplateJson,
+  importTemplates,
+} from './templates';
+export type {
+  DrawingTemplateMeta,
+  SerializedDrawing,
+  DrawingTemplate,
+  DrawingTemplatesStore,
+  DrawingTemplateSummary,
+  LoadTemplateMode,
+  DrawingTemplateExport,
+  DrawingTemplatesExport,
+} from './templates';

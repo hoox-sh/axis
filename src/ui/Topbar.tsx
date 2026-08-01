@@ -26,12 +26,13 @@
  * - **Load / Reload** → force `loadSymbolData` (historical via active source)
  * - **Run** → `runAndApply(editorRef.getDoc())`
  * - **Live** → multiplex `startLive` / `stopLive`
+ * - **Replay** → bar replay over loaded OHLCV (`startBarReplay` / `exitBarReplay`)
  * - **Popout editor** → `openEditorWindow` + shared doc bridge
  *
  * Plugin pickers re-read catalogs when `catalogTick` bumps (after plugin install).
  */
 
-import { Component, For, Show, createMemo, createSignal } from 'solid-js';
+import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import {
   store,
   setStore,
@@ -45,6 +46,7 @@ import {
   toggleIndicatorPanel,
   toggleDataViewPanel,
   toggleLayerPanel,
+  toggleAlertsPanel,
   openScriptSettings,
   updateChartSlot,
   isPanelOpen,
@@ -63,6 +65,9 @@ import { Icons } from './icons';
 import { HooxLogo } from './HooxLogo';
 import { HooxLoader } from './HooxLoader';
 import { ChartLayoutMenu } from './ChartLayoutMenu';
+import { CompareSymbolControl } from './CompareSymbolControl';
+import { startBarReplay, exitBarReplay } from './BarReplayControls';
+import { isReplayActive, subscribeReplay } from '../chart/bar-replay';
 import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
 
 const INTERVALS = [...WATCHLIST_INTERVALS];
@@ -93,10 +98,16 @@ export const Topbar: Component<{
   });
   const [loading, setLoading] = createSignal(false);
   const [uploadLabel, setUploadLabel] = createSignal(getUploadedFileName() || '');
+  const [replayOn, setReplayOn] = createSignal(isReplayActive());
   let fileInput: HTMLInputElement | undefined;
   /** Last symbol we successfully requested (avoids redundant blur reloads). */
   let lastLoadedSymbol = store.symbol;
   let lastLoadedInterval = store.interval;
+
+  onMount(() => {
+    const unsub = subscribeReplay((st) => setReplayOn(st.active));
+    onCleanup(unsub);
+  });
 
   const loadHistorical = async (opts?: { force?: boolean }) => {
     if (loading()) return;
@@ -166,11 +177,25 @@ export const Topbar: Component<{
   const toggleLive = () => {
     const next = !store.live.active;
     if (next) {
+      // Live and bar replay are mutually exclusive
+      if (isReplayActive()) exitBarReplay();
       const streamId = store.live.streamId || defaultStreamForSource(store.source);
       startLive(streamId, store.symbol, store.interval);
     } else {
       stopLive();
     }
+  };
+
+  const toggleReplay = () => {
+    if (isReplayActive()) {
+      exitBarReplay();
+      return;
+    }
+    if (store.bars.length <= 0) {
+      setStatus('error', 'Load bars before starting bar replay');
+      return;
+    }
+    startBarReplay();
   };
 
   const detachEditor = (mode: 'popup' | 'tab') => {
@@ -339,6 +364,8 @@ export const Topbar: Component<{
         </For>
       </select>
 
+      <CompareSymbolControl />
+
       <button
         class={`sc-btn ${loading() ? 'opacity-50' : ''}`}
         onClick={() => void loadHistorical({ force: true })}
@@ -431,6 +458,24 @@ export const Topbar: Component<{
         Live
       </button>
 
+      <button
+        type="button"
+        class={`sc-btn ${replayOn() ? 'border-accent text-accent' : 'sc-btn-ghost'}`}
+        onClick={toggleReplay}
+        disabled={!replayOn() && store.bars.length <= 0}
+        data-testid="axis-btn-bar-replay"
+        title={
+          replayOn()
+            ? 'Exit bar replay'
+            : store.bars.length <= 0
+              ? 'Load bars first to start bar replay'
+              : 'Start bar replay over loaded history'
+        }
+      >
+        <Icons.play />
+        Replay
+      </button>
+
       <div class="flex-1 min-w-2" />
 
       <ChartLayoutMenu />
@@ -502,6 +547,18 @@ export const Topbar: Component<{
       >
         <Icons.layers />
         Layers
+      </button>
+
+      <button
+        type="button"
+        class={`sc-btn sc-btn-ghost ${isPanelOpen('alerts') || store.alertsPanel.open ? 'text-accent' : ''}`}
+        onClick={() => toggleAlertsPanel()}
+        title="Price alerts — create, toggle, webhook"
+        aria-pressed={isPanelOpen('alerts') || store.alertsPanel.open}
+        data-testid="axis-btn-alerts"
+      >
+        <Icons.alert />
+        Alerts
       </button>
 
       <button

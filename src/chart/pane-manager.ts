@@ -144,6 +144,8 @@ export class PaneManager {
   private tradeMarkerList: SeriesMarker<UTCTimestamp>[] = [];
   /** plotshape / plotchar markers (merged with trade markers) */
   private shapeMarkerList: SeriesMarker<UTCTimestamp>[] = [];
+  /** Inline-debug / Pine log bar pins (merged with trade + shape markers) */
+  private debugPinMarkerList: SeriesMarker<UTCTimestamp>[] = [];
   /** Time-range sync unsubscribers (all panes ↔ all panes) */
   private timeSyncUnsubs: Array<() => void> = [];
   /** Crosshair multi-pane sync unsubscribers */
@@ -642,7 +644,28 @@ export class PaneManager {
     this.applyCandleMarkers();
   }
 
-  /** Merge trade + shape markers onto the candle series plugin. */
+  /**
+   * Debug pins from Pine logs / inline-debug chips — stored separately so
+   * strategy / plotshape updates do not wipe them.
+   */
+  setDebugPinMarkers(markers: ShapeMarkerSpec[] | TradeMarker[]) {
+    this.debugPinMarkerList = markers.map((m, i) => ({
+      time: m.time as UTCTimestamp,
+      position: m.position,
+      color: m.color,
+      shape: m.shape,
+      text: m.text,
+      id: ('id' in m && m.id) || `debug_${m.time}_${i}`,
+    }));
+    this.applyCandleMarkers();
+  }
+
+  clearDebugPinMarkers() {
+    this.debugPinMarkerList = [];
+    this.applyCandleMarkers();
+  }
+
+  /** Merge trade + shape + debug-pin markers onto the candle series plugin. */
   private applyCandleMarkers() {
     const pricePane = this.panes.get('price');
     const candle = pricePane?.series['candle'];
@@ -651,6 +674,10 @@ export class PaneManager {
     // Prefer unique times: LWC historically collapsed same-time markers;
     // keep last trade, then shapes can share via id when supported.
     const byKey = new Map<string, SeriesMarker<UTCTimestamp>>();
+    for (const m of this.debugPinMarkerList) {
+      const key = m.id || `d:${m.time}:${m.text || ''}`;
+      byKey.set(key, m);
+    }
     for (const m of this.shapeMarkerList) {
       const key = m.id || `s:${m.time}:${m.position}:${m.shape}`;
       byKey.set(key, m);

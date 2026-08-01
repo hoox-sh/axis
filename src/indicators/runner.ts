@@ -59,7 +59,7 @@ import {
   setTelemetryState,
 } from '../store';
 import { resolveInputSourceValues } from '../results/plot-sources';
-import { getManager } from '../chart/manager-access';
+import { getManager, applyDebugPinsToChart } from '../chart/manager-access';
 import { PLOT_PALETTE } from '../chart/series-factory';
 import { normalizeStrategyEvents, eventsToMarkers, buildEquityCurve } from '../results/events';
 import { buildStrategyReport } from '../results/strategy';
@@ -443,6 +443,9 @@ export async function runAndApply(
     manager.setTradeMarkers([]);
     if (!silent) manager.hideEquityPane();
   }
+
+  // Debug pins from logs (bar_index/time) — independent of trade/shape lists
+  applyDebugPinsToChart();
 
   // Pine drawings: atomic replace (no clear→empty→set flash).
   // GC trims each type to indicator()/strategy() max_*_count (default 50).

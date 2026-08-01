@@ -42,6 +42,7 @@ import { createStore, reconcile, unwrap } from 'solid-js/store';
 import type {
   AppState,
   Bar,
+  CompareState,
   Indicator,
   Pane,
   EditorMode,
@@ -151,6 +152,7 @@ const DEFAULTS: AppState = {
   indicatorPanel: { open: false, width: 224 },
   dataViewPanel: { open: false, width: 220 },
   layerPanel: { open: false, width: 220 },
+  alertsPanel: { open: false, width: 280 },
   scriptSettings: { open: false, indicatorId: null },
   editorInputValues: {},
   crosshair: { time: null, barIndex: null },
@@ -158,6 +160,7 @@ const DEFAULTS: AppState = {
   logsPanel: { open: false, height: 160 },
   profilerEnabled: false,
   inlineDebugEnabled: false,
+  debugPinsEnabled: false,
   stream: { status: 'disconnected' },
   status: 'ready',
   statusMessage: 'Ready.',
@@ -199,6 +202,16 @@ const DEFAULTS: AppState = {
     exchange: 'binance',
   }),
   savedLayouts: [],
+  compare: {
+    enabled: false,
+    symbol: '',
+    mode: 'percent',
+    normalizeMain: false,
+    bars: [],
+    gen: 0,
+    loading: false,
+    error: null,
+  },
 };
 
 function readLocalStorage(key: string): string | null {
@@ -280,6 +293,7 @@ function loadPersisted(): Partial<AppState> {
         indicatorPanel: { ...DEFAULTS.indicatorPanel, ...parsed.indicatorPanel },
         dataViewPanel: { ...DEFAULTS.dataViewPanel, ...parsed.dataViewPanel },
         layerPanel: { ...DEFAULTS.layerPanel, ...parsed.layerPanel },
+        alertsPanel: { ...DEFAULTS.alertsPanel, ...parsed.alertsPanel },
         editorInputValues:
           parsed.editorInputValues && typeof parsed.editorInputValues === 'object'
             ? parsed.editorInputValues
@@ -291,6 +305,7 @@ function loadPersisted(): Partial<AppState> {
         logsPanel: { ...DEFAULTS.logsPanel, ...parsed.logsPanel, open: false },
         profilerEnabled: !!parsed.profilerEnabled,
         inlineDebugEnabled: !!(parsed as { inlineDebugEnabled?: boolean }).inlineDebugEnabled,
+        debugPinsEnabled: !!(parsed as { debugPinsEnabled?: boolean }).debugPinsEnabled,
         activePlugins: {
           ...DEFAULTS.activePlugins,
           ...parsed.activePlugins,
@@ -365,6 +380,10 @@ function loadPersisted(): Partial<AppState> {
             open: parsed.layerPanel?.open ?? false,
             w: parsed.layerPanel?.width ?? 240,
           },
+          alerts: {
+            open: parsed.alertsPanel?.open ?? false,
+            w: parsed.alertsPanel?.width ?? 280,
+          },
         }),
         chartLayout: normalizeChartLayout(
           (parsed as { chartLayout?: ChartLayoutState }).chartLayout,
@@ -380,10 +399,28 @@ function loadPersisted(): Partial<AppState> {
               .filter((l) => l && typeof l === 'object' && typeof l.id === 'string')
               .slice(0, 40)
           : [],
+        compare: hydrateCompare(parsed.compare),
       };
     }
   } catch {}
   return {};
+}
+
+/** Restore durable compare prefs; always clear bars / loading / error. */
+function hydrateCompare(raw: unknown): CompareState {
+  const base = { ...DEFAULTS.compare };
+  if (!raw || typeof raw !== 'object') return base;
+  const c = raw as Partial<CompareState>;
+  return {
+    enabled: !!c.enabled,
+    symbol: typeof c.symbol === 'string' ? c.symbol.toUpperCase().trim() : '',
+    mode: c.mode === 'absolute' ? 'absolute' : 'percent',
+    normalizeMain: !!c.normalizeMain,
+    bars: [],
+    gen: 0,
+    loading: false,
+    error: null,
+  };
 }
 
 function mergePanelChrome(
@@ -476,7 +513,8 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null;
 /**
  * Debounced (~200ms) write of durable state to `STORAGE_KEY`.
  * Omits bars, lastRun, logs, chartDataGen, crosshair, scriptSettings,
- * selectedDrawingId, and full telemetry (keeps only `telemetry.hud`).
+ * selectedDrawingId, compare bars/loading, and full telemetry
+ * (keeps only `telemetry.hud` + durable compare prefs).
  *
  * Uses {@link unwrap} so nested Solid store proxies serialize fully
  * (plain destructure can drop nested updates under some paths).
@@ -505,6 +543,7 @@ export function flushPersist() {
       scriptSettings: _ss,
       selectedDrawingId: _sel,
       indicatorSeries: _is,
+      compare,
       telemetry,
       ...rest
     } = plain;
@@ -512,6 +551,13 @@ export function flushPersist() {
       STORAGE_KEY,
       JSON.stringify({
         ...rest,
+        // Durable compare prefs only — bars / loading / error stay session-local
+        compare: {
+          enabled: !!compare?.enabled,
+          symbol: (compare?.symbol || '').toUpperCase(),
+          mode: compare?.mode === 'absolute' ? 'absolute' : 'percent',
+          normalizeMain: !!compare?.normalizeMain,
+        },
         telemetry: {
           hud: telemetry?.hud || DEFAULTS.telemetry.hud,
         },
@@ -716,8 +762,10 @@ export function loadChartLayout(id: string): boolean {
   }
   if (found.theme === 'dark' || found.theme === 'light') {
     setStore('theme', found.theme);
-    if (typeof document !== 'undefined') {
-      document.documentElement.setAttribute('data-theme', found.theme);
+    try {
+      document?.documentElement?.setAttribute('data-theme', found.theme);
+    } catch {
+      /* test envs without full DOM */
     }
   }
   if (found.uiScale != null) {
@@ -972,7 +1020,11 @@ export function noteTick(price: number, time: number) {
 export function toggleTheme() {
   const next = store.theme === 'dark' ? 'light' : 'dark';
   setStore('theme', next);
-  document.documentElement.setAttribute('data-theme', next);
+  try {
+    document?.documentElement?.setAttribute('data-theme', next);
+  } catch {
+    /* test envs without full DOM */
+  }
   persist();
 }
 
@@ -1037,6 +1089,8 @@ export function resetUiLayout(): void {
   setStore('dataViewPanel', 'width', chrome.dataview.w);
   setStore('layerPanel', 'open', chrome.layers.open);
   setStore('layerPanel', 'width', chrome.layers.w);
+  setStore('alertsPanel', 'open', chrome.alerts.open);
+  setStore('alertsPanel', 'width', chrome.alerts.w);
   setStore('resultsPanel', 'open', chrome.results.open);
   setStore('resultsPanel', 'height', chrome.results.h);
   setStore('logsPanel', 'open', chrome.logs.open);
@@ -1157,6 +1211,16 @@ export function toggleLayerPanel() {
   if (next) setPanelDock('layers', 'left');
 }
 
+/** Open/close Alerts panel. */
+export function setAlertsPanelOpen(open: boolean) {
+  setPanelOpen('alerts', open);
+}
+
+/** Toggle Alerts panel visibility. */
+export function toggleAlertsPanel() {
+  setPanelOpen('alerts', !isPanelOpen('alerts'));
+}
+
 /** Open/close Scriptlogs panel (script `log.*` output — not system telemetry). */
 export function setScriptLogsPanelOpen(open: boolean) {
   setPanelOpen('scriptlogs', open);
@@ -1191,6 +1255,18 @@ export function toggleInlineDebugEnabled() {
   persist();
 }
 
+/** Enable/disable chart pins from last-run logs with bar_index/time. */
+export function setDebugPinsEnabled(on: boolean) {
+  setStore('debugPinsEnabled', !!on);
+  persist();
+}
+
+/** Toggle chart debug pins (markers on bars referenced by logs). */
+export function toggleDebugPinsEnabled() {
+  setStore('debugPinsEnabled', !store.debugPinsEnabled);
+  persist();
+}
+
 /* ── Panel chrome (dock / float / window) ───────────────────────── */
 
 /** Read panel chrome (dock/geometry); falls back to defaults if missing. */
@@ -1222,6 +1298,8 @@ export function isPanelOpen(id: PanelId): boolean {
       return !!store.dataViewPanel.open || chromeOpen;
     case 'layers':
       return !!store.layerPanel.open || chromeOpen;
+    case 'alerts':
+      return !!store.alertsPanel.open || chromeOpen;
     default: {
       // Exhaustiveness guard for future PanelId values
       const _exhaustive: never = id;
@@ -1239,6 +1317,7 @@ function syncLegacyOpen(id: PanelId, open: boolean) {
   else if (id === 'logs') setStore('logsPanel', 'open', open);
   else if (id === 'dataview') setStore('dataViewPanel', 'open', open);
   else if (id === 'layers') setStore('layerPanel', 'open', open);
+  else if (id === 'alerts') setStore('alertsPanel', 'open', open);
 }
 
 /** Open/close a panel; dual-writes panelChrome and legacy flat flags. */
@@ -1262,6 +1341,7 @@ const DOCK_STACK_IDS: PanelId[] = [
   'layers',
   'dataview',
   'indicators',
+  'alerts',
   'editor',
   'results',
   'logs',
@@ -1302,6 +1382,7 @@ function syncDockColumnWidth(dock: PanelDock, w: number) {
     if (pid === 'editor') setStore('editor', 'width', w);
     if (pid === 'dataview') setStore('dataViewPanel', 'width', w);
     if (pid === 'layers') setStore('layerPanel', 'width', w);
+    if (pid === 'alerts') setStore('alertsPanel', 'width', w);
   }
 }
 
@@ -1368,6 +1449,7 @@ export function setPanelGeometry(
       if (id === 'editor') setStore('editor', 'width', w);
       if (id === 'dataview') setStore('dataViewPanel', 'width', w);
       if (id === 'layers') setStore('layerPanel', 'width', w);
+      if (id === 'alerts') setStore('alertsPanel', 'width', w);
     }
   }
   if (geo.h != null) {
@@ -1462,6 +1544,68 @@ export function setWatchlistRefreshSec(sec: number) {
   const n = Math.min(120, Math.max(5, Math.round(Number(sec) || 15)));
   setStore('watchlist', 'refreshSec', n);
   persist();
+}
+
+/* ── Compare overlay ─────────────────────────────────────────────── */
+
+/**
+ * Enable/disable second-symbol compare. Clearing disables and drops bars.
+ * Does not fetch — ChartHost / CompareSymbolControl own loading.
+ */
+export function setCompareEnabled(enabled: boolean) {
+  setStore('compare', 'enabled', !!enabled);
+  if (!enabled) {
+    setStore('compare', 'bars', []);
+    setStore('compare', 'error', null);
+    setStore('compare', 'loading', false);
+    setStore('compare', 'gen', (g) => (typeof g === 'number' ? g + 1 : 1));
+  }
+  persist();
+}
+
+/** Update compare ticker (uppercased). Does not auto-fetch. */
+export function setCompareSymbol(symbol: string) {
+  setStore('compare', 'symbol', (symbol || '').toUpperCase().trim());
+  persist();
+}
+
+/** percent = % from first common bar; absolute = raw close on left scale. */
+export function setCompareMode(mode: 'percent' | 'absolute') {
+  setStore('compare', 'mode', mode === 'absolute' ? 'absolute' : 'percent');
+  persist();
+}
+
+/** Dual-% mode: also paint main closes as percent when mode is percent. */
+export function setCompareNormalizeMain(on: boolean) {
+  setStore('compare', 'normalizeMain', !!on);
+  persist();
+}
+
+/**
+ * Replace ephemeral compare bars (after fetch). Bumps `compare.gen`.
+ * Not persisted.
+ */
+export function setCompareBars(bars: Bar[]) {
+  setStore('compare', 'bars', bars);
+  setStore('compare', 'loading', false);
+  setStore('compare', 'error', null);
+  setStore('compare', 'gen', (g) => (typeof g === 'number' ? g + 1 : 1));
+}
+
+/** Mark compare fetch in flight / failed. */
+export function setCompareLoadState(
+  state: { loading?: boolean; error?: string | null },
+) {
+  if (state.loading !== undefined) setStore('compare', 'loading', state.loading);
+  if (state.error !== undefined) setStore('compare', 'error', state.error);
+}
+
+/** Clear compare series data without toggling the enabled pref. */
+export function clearCompareBars() {
+  setStore('compare', 'bars', []);
+  setStore('compare', 'loading', false);
+  setStore('compare', 'error', null);
+  setStore('compare', 'gen', (g) => (typeof g === 'number' ? g + 1 : 1));
 }
 
 /** Persist editor document body under `EDITOR_DOC_KEY` (separate from app JSON). */

@@ -44,6 +44,7 @@ import {
   setDrawingPrefs,
   setDrawingUi,
   patchDrawing,
+  setDrawings,
 } from '../store';
 import type { DrawingToolId, DrawingLineStyle } from './drawing-types';
 import { toolLabel, resolveDrawingStyle, DRAWING_COLORS } from './drawing-types';
@@ -55,6 +56,7 @@ import {
   groupForTool,
   type ToolGroupId,
 } from './drawings/tool-catalog';
+import { cloneDrawings, mergeDrawings } from './drawings/sync';
 
 const COLOR_PRESETS = [
   DRAWING_COLORS.default,
@@ -423,6 +425,23 @@ export const DrawingToolbar: Component = () => {
 
         <div class="h-px bg-border-soft my-0.5" />
 
+        <button
+          type="button"
+          class={`${btnClass} text-text-dim disabled:opacity-40`}
+          title="Duplicate all drawings with new IDs (template). Drawings are already shared across multi-chart slots."
+          aria-label="Duplicate drawings"
+          data-testid="axis-drawing-duplicate"
+          disabled={store.drawings.length === 0}
+          onClick={() => {
+            if (!store.drawings.length) return;
+            const clones = cloneDrawings(store.drawings, { symbol: store.symbol });
+            const next = mergeDrawings(store.drawings, clones, 'append');
+            setDrawings(next);
+            getActiveDrawingLayer()?.setDrawings(next);
+          }}
+        >
+          <Icons.copy size={iconPx} strokeWidth={2.25} />
+        </button>
         <button
           type="button"
           class={`${btnClass} text-text-dim disabled:opacity-40`}

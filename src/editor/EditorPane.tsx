@@ -38,6 +38,7 @@ import {
   toggleScriptLogsPanel,
   toggleProfilerEnabled,
   toggleInlineDebugEnabled,
+  toggleDebugPinsEnabled,
   saveEditorDoc,
 } from '../store';
 import { FloatableShell } from '../ui/panels/FloatableShell';
@@ -127,7 +128,7 @@ export const EditorPane: Component<Props> = (props) => {
         }`}
         title={
           store.inlineDebugEnabled
-            ? 'Inline debug on — end-of-line log/error chips from last run'
+            ? 'Inline debug on — end-of-line log/error chips from last run (click pin-able chips to jump to bar)'
             : 'Show last-run logs/errors inline on source lines (needs line refs)'
         }
         aria-pressed={store.inlineDebugEnabled}
@@ -136,6 +137,23 @@ export const EditorPane: Component<Props> = (props) => {
       >
         <Icons.alert size={12} />
         Debug
+      </button>
+      <button
+        type="button"
+        class={`sc-btn sc-btn-ghost px-1.5 text-[10px] ${
+          store.debugPinsEnabled ? 'text-accent border-accent' : ''
+        }`}
+        title={
+          store.debugPinsEnabled
+            ? 'Chart pins on — markers on bars referenced by last-run logs (bar_index/time)'
+            : 'Pin last-run log bars on the chart (needs bar_index or time in logs)'
+        }
+        aria-pressed={store.debugPinsEnabled}
+        data-testid="axis-btn-debug-pins"
+        onClick={() => toggleDebugPinsEnabled()}
+      >
+        <Icons.pin size={12} />
+        Pins
       </button>
     </div>
   );

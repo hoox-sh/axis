@@ -20,8 +20,9 @@
 /**
  * AXIS results / export drawer — Events, Strategy, Plots, Metrics, Raw.
  *
- * Reads `store.lastRun` (RunResult). Strategy tab uses `buildStrategyReport`;
- * export helpers download CSV/JSON or copy raw payload. FloatableShell id
+ * Reads `store.lastRun` (RunResult). Strategy tab uses `buildStrategyReport`
+ * + {@link StrategyReport} (stats, SVG equity, trades table, CSV).
+ * Export helpers download CSV/JSON or copy raw payload. FloatableShell id
  * `results` (typically docked bottom).
  */
 
@@ -33,7 +34,6 @@ import {
   buildStrategyReport,
   formatMoney,
   formatNum,
-  formatPct,
   tradesToCsv,
   type ClosedTrade,
   type StrategyEvent,
@@ -41,6 +41,7 @@ import {
 import { normalizeStrategyEvents } from '../results/events';
 import { getManager } from '../chart/manager-access';
 import { Icons } from './icons';
+import { StrategyReport } from './StrategyReport';
 
 type TabId = 'events' | 'strategy' | 'plots' | 'metrics' | 'raw';
 
@@ -284,104 +285,25 @@ export const ResultsPanel: Component = () => {
           </Show>
 
           <Show when={result() && tab() === 'strategy'}>
-            <Show
-              when={(report()?.stats.trades ?? 0) > 0}
-              fallback={
-                <div class="text-text-faint p-2">
-                  {(result()?.events?.length ?? 0) > 0
-                    ? 'Events present but no closed trades yet.'
-                    : 'No events. Strategy tester pairs entry/close events.'}
-                </div>
+            <StrategyReport
+              trades={report()?.trades ?? []}
+              stats={
+                report()?.stats ?? {
+                  totalPnl: 0,
+                  winRate: 0,
+                  profitFactor: 0,
+                  avgTrade: 0,
+                  avgWin: 0,
+                  avgLoss: 0,
+                  maxDD: 0,
+                  wins: 0,
+                  losses: 0,
+                  trades: 0,
+                }
               }
-            >
-              <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3">
-                <Metric
-                  label="Net P&L"
-                  value={formatMoney(report()!.stats.totalPnl)}
-                  tone={report()!.stats.totalPnl >= 0 ? 'pos' : 'neg'}
-                />
-                <Metric label="Win rate" value={`${report()!.stats.winRate.toFixed(1)}%`} />
-                <Metric label="# Trades" value={String(report()!.stats.trades)} />
-                <Metric
-                  label="Profit factor"
-                  value={
-                    Number.isFinite(report()!.stats.profitFactor)
-                      ? report()!.stats.profitFactor.toFixed(2)
-                      : '∞'
-                  }
-                />
-                <Metric
-                  label="Avg trade"
-                  value={formatMoney(report()!.stats.avgTrade)}
-                  tone={report()!.stats.avgTrade >= 0 ? 'pos' : 'neg'}
-                />
-                <Metric
-                  label="Max DD"
-                  value={`${(report()!.stats.maxDD * 100).toFixed(2)}%`}
-                  tone="neg"
-                />
-              </div>
-              <div class="overflow-auto border-2 border-border">
-                <table class="w-full text-left font-mono text-[10px]">
-                  <thead class="bg-bg-elev text-text-dim sticky top-0">
-                    <tr>
-                      <th class="px-2 py-1">ID</th>
-                      <th class="px-2 py-1">Dir</th>
-                      <th class="px-2 py-1">Entry</th>
-                      <th class="px-2 py-1">Exit</th>
-                      <th class="px-2 py-1">P&L</th>
-                      <th class="px-2 py-1">%</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <For each={report()!.trades}>
-                      {(t) => (
-                        <tr
-                          class="border-t border-border-soft cursor-pointer hover:bg-bg-hover/80 transition-colors"
-                          title="Jump to entry on chart"
-                          onClick={() => jumpToTrade(t, 'entry')}
-                        >
-                          <td class="px-2 py-0.5">{t.id}</td>
-                          <td class="px-2 py-0.5">{t.dir}</td>
-                          <td
-                            class="px-2 py-0.5 text-accent hover:underline"
-                            title="Jump to entry"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              jumpToTrade(t, 'entry');
-                            }}
-                          >
-                            {new Date(t.entryTime * 1000).toISOString().slice(0, 10)} @{' '}
-                            {t.entry.toFixed(2)}
-                          </td>
-                          <td
-                            class="px-2 py-0.5 hover:underline"
-                            title="Jump to exit"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              jumpToTrade(t, 'exit');
-                            }}
-                          >
-                            {new Date(t.exitTime * 1000).toISOString().slice(0, 10)} @{' '}
-                            {t.exit.toFixed(2)}
-                          </td>
-                          <td
-                            class={`px-2 py-0.5 ${t.pnl >= 0 ? 'text-accent-2' : 'text-red'}`}
-                          >
-                            {formatMoney(t.pnl)}
-                          </td>
-                          <td
-                            class={`px-2 py-0.5 ${t.pnlPct >= 0 ? 'text-accent-2' : 'text-red'}`}
-                          >
-                            {formatPct(t.pnlPct)}
-                          </td>
-                        </tr>
-                      )}
-                    </For>
-                  </tbody>
-                </table>
-              </div>
-            </Show>
+              hasEvents={(result()?.events?.length ?? 0) > 0}
+              onJumpToTrade={jumpToTrade}
+            />
           </Show>
 
           <Show when={result() && tab() === 'plots'}>
@@ -427,16 +349,3 @@ export const ResultsPanel: Component = () => {
     </Show>
   );
 };
-
-const Metric: Component<{ label: string; value: string; tone?: 'pos' | 'neg' }> = (props) => (
-  <div class="border-2 border-border bg-bg-elev px-2 py-1.5">
-    <div class="text-text-dim text-[10px] uppercase tracking-wider">{props.label}</div>
-    <div
-      class={`font-mono font-semibold mt-0.5 ${
-        props.tone === 'pos' ? 'text-accent-2' : props.tone === 'neg' ? 'text-red' : 'text-text'
-      }`}
-    >
-      {props.value}
-    </div>
-  </div>
-);
