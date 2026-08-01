@@ -178,9 +178,13 @@ export const PineEditor: Component<Props> = (props) => {
   return (
     <div
       ref={containerRef!}
-      class="axis-pine-editor absolute inset-0 overflow-hidden bg-bg-panel"
+      class="axis-pine-editor overflow-hidden bg-bg-panel"
       data-testid="axis-pine-editor"
-      style={props.height ? { height: props.height } : undefined}
+      style={
+        props.height
+          ? { height: props.height, position: 'relative' }
+          : undefined
+      }
     />
   );
 };
