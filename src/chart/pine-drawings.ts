@@ -25,6 +25,10 @@
  * (bgcolor, plotshape, table, …) are filtered out — tables go to
  * {@link PineTableHud}; shapes to markers via plot-visuals.
  *
+ * After normalize, {@link garbageCollectScriptDrawings} trims each type to the
+ * Pine declaration caps (`max_lines_count`, `max_labels_count`, …) — oldest
+ * first, matching TradingView garbage collection.
+ *
  * Consumed by the drawing layer when applying script drawings after a run.
  *
  * @module chart/pine-drawings
@@ -47,6 +51,171 @@ export interface ScriptDrawing {
   extend?: string;
   closed?: boolean;
   points?: Array<{ time: number; price: number }>;
+}
+
+/**
+ * Per-type caps from `indicator()` / `strategy()` declaration.
+ * TV defaults are 50; hard caps match the Pine reference (500 / 100).
+ */
+export interface DrawingLimits {
+  max_lines_count: number;
+  max_labels_count: number;
+  max_boxes_count: number;
+  max_polylines_count: number;
+}
+
+/** TradingView defaults when the declaration omits the kwargs. */
+export const DEFAULT_DRAWING_LIMITS: DrawingLimits = {
+  max_lines_count: 50,
+  max_labels_count: 50,
+  max_boxes_count: 50,
+  max_polylines_count: 50,
+};
+
+const LIMIT_CAPS: Record<keyof DrawingLimits, number> = {
+  max_lines_count: 500,
+  max_labels_count: 500,
+  max_boxes_count: 500,
+  max_polylines_count: 100,
+};
+
+function clampLimit(key: keyof DrawingLimits, n: number): number {
+  const cap = LIMIT_CAPS[key];
+  if (!Number.isFinite(n)) return DEFAULT_DRAWING_LIMITS[key];
+  return Math.min(cap, Math.max(1, Math.floor(n)));
+}
+
+function coerceLimit(raw: unknown, key: keyof DrawingLimits): number | undefined {
+  if (raw == null) return undefined;
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n)) return undefined;
+  return clampLimit(key, n);
+}
+
+/**
+ * Read `max_*_count` kwargs from Pine source (`indicator` / `strategy`).
+ * Best-effort regex — engine meta is preferred when available.
+ */
+export function parseDrawingLimitsFromScript(source: string | null | undefined): Partial<DrawingLimits> {
+  if (!source) return {};
+  const out: Partial<DrawingLimits> = {};
+  const keys: Array<keyof DrawingLimits> = [
+    'max_lines_count',
+    'max_labels_count',
+    'max_boxes_count',
+    'max_polylines_count',
+  ];
+  for (const key of keys) {
+    // `max_labels_count = 100` — skip full-line comments and trailing // comments.
+    const loose = new RegExp(`\\b${key}\\s*=\\s*(\\d+)`, 'i');
+    const lines = source.split(/\r?\n/);
+    let found: number | undefined;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('//')) continue;
+      const code = trimmed.replace(/\/\/.*$/, '');
+      const m = code.match(loose);
+      if (m) {
+        found = Number(m[1]);
+        break;
+      }
+    }
+    if (found != null) out[key] = clampLimit(key, found);
+  }
+  return out;
+}
+
+/**
+ * Resolve drawing caps: defaults ← script parse ← engine meta (highest priority).
+ */
+export function resolveDrawingLimits(
+  script?: string | null,
+  meta?: Record<string, unknown> | null,
+): DrawingLimits {
+  const fromScript = parseDrawingLimitsFromScript(script);
+  const base: DrawingLimits = {
+    ...DEFAULT_DRAWING_LIMITS,
+    ...fromScript,
+  };
+  if (!meta || typeof meta !== 'object') return base;
+
+  const pick = (key: keyof DrawingLimits): number => {
+    // Prefer top-level meta, then nested declaration/kwargs blobs if present.
+    const direct = coerceLimit(meta[key], key);
+    if (direct != null) return direct;
+    const decl = meta.declaration;
+    if (decl && typeof decl === 'object') {
+      const d = decl as Record<string, unknown>;
+      const fromDecl = coerceLimit(d[key], key);
+      if (fromDecl != null) return fromDecl;
+      const kw = d.kwargs;
+      if (kw && typeof kw === 'object') {
+        const fromKw = coerceLimit((kw as Record<string, unknown>)[key], key);
+        if (fromKw != null) return fromKw;
+      }
+    }
+    return base[key];
+  };
+
+  return {
+    max_lines_count: pick('max_lines_count'),
+    max_labels_count: pick('max_labels_count'),
+    max_boxes_count: pick('max_boxes_count'),
+    max_polylines_count: pick('max_polylines_count'),
+  };
+}
+
+/**
+ * Drop oldest drawings per type when over the declaration caps (TV GC).
+ * Assumes array order ≈ creation order (engine export / append order).
+ * Keeps relative order of surviving objects.
+ */
+export function garbageCollectScriptDrawings(
+  drawings: ScriptDrawing[],
+  limits: DrawingLimits = DEFAULT_DRAWING_LIMITS,
+): ScriptDrawing[] {
+  if (!drawings.length) return drawings;
+
+  const caps: Record<ScriptDrawing['type'], number> = {
+    line: clampLimit('max_lines_count', limits.max_lines_count),
+    label: clampLimit('max_labels_count', limits.max_labels_count),
+    box: clampLimit('max_boxes_count', limits.max_boxes_count),
+    polyline: clampLimit('max_polylines_count', limits.max_polylines_count),
+  };
+
+  const counts: Record<ScriptDrawing['type'], number> = {
+    line: 0,
+    label: 0,
+    box: 0,
+    polyline: 0,
+  };
+  for (const d of drawings) counts[d.type] += 1;
+
+  // How many of each type to skip from the front (oldest).
+  const skip: Record<ScriptDrawing['type'], number> = {
+    line: Math.max(0, counts.line - caps.line),
+    label: Math.max(0, counts.label - caps.label),
+    box: Math.max(0, counts.box - caps.box),
+    polyline: Math.max(0, counts.polyline - caps.polyline),
+  };
+
+  if (!skip.line && !skip.label && !skip.box && !skip.polyline) {
+    return drawings;
+  }
+
+  const seen: Record<ScriptDrawing['type'], number> = {
+    line: 0,
+    label: 0,
+    box: 0,
+    polyline: 0,
+  };
+  const out: ScriptDrawing[] = [];
+  for (const d of drawings) {
+    const n = seen[d.type]++;
+    if (n < skip[d.type]) continue; // garbage-collect oldest
+    out.push(d);
+  }
+  return out;
 }
 
 /** Kinds that are not price-geometry (handled elsewhere or ignored). */

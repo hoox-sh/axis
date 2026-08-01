@@ -70,6 +70,11 @@ import {
   type PlotMetaEntry,
 } from '../results/plot-visuals';
 import { getActiveDrawingLayer } from '../chart/drawing-layer';
+import {
+  garbageCollectScriptDrawings,
+  normalizeScriptDrawings,
+  resolveDrawingLimits,
+} from '../chart/pine-drawings';
 import { getActiveEngine, getActiveEngineConfig } from '../plugins/active';
 import type { RunResult as EngineRunResult } from '../plugins/types';
 import { classifyTransport } from '../ui/telemetry';
@@ -425,13 +430,27 @@ export async function runAndApply(
     if (!silent) manager.hideEquityPane();
   }
 
-  // Pine drawings: atomic replace (no clear→empty→set flash)
+  // Pine drawings: atomic replace (no clear→empty→set flash).
+  // GC trims each type to indicator()/strategy() max_*_count (default 50).
   const drawings = (result as RunResult & { drawings?: unknown[] }).drawings;
   const layer = getActiveDrawingLayer();
   if (drawings?.length) {
-    layer?.setScriptDrawings(drawings);
+    const limits = resolveDrawingLimits(
+      script,
+      (result.meta as Record<string, unknown> | undefined) ?? null,
+    );
+    layer?.setScriptDrawings(drawings, limits);
     if (!silent) {
-      appendLog('ok', `Pine drawings: ${drawings.length} object(s)`, 'drawings');
+      const normalized = normalizeScriptDrawings(drawings);
+      const kept = garbageCollectScriptDrawings(normalized, limits);
+      const dropped = normalized.length - kept.length;
+      appendLog(
+        'ok',
+        dropped > 0
+          ? `Pine drawings: ${kept.length} object(s) (${dropped} GC'd by max_*_count)`
+          : `Pine drawings: ${kept.length} object(s)`,
+        'drawings',
+      );
     }
   } else if (!silent) {
     // Only clear on interactive full runs when engine returned none

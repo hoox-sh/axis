@@ -10,9 +10,14 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
+  DEFAULT_DRAWING_LIMITS,
+  garbageCollectScriptDrawings,
   normalizeExtend,
   normalizeLineStyle,
   normalizeScriptDrawings,
+  parseDrawingLimitsFromScript,
+  resolveDrawingLimits,
+  type ScriptDrawing,
 } from '../src/chart/pine-drawings.ts';
 
 describe('normalizeScriptDrawings', () => {
@@ -210,5 +215,95 @@ describe('normalizeLineStyle / normalizeExtend', () => {
     expect(normalizeExtend('both')).toBe('both');
     expect(normalizeExtend('nope')).toBe('none');
     expect(normalizeExtend(undefined, 'left')).toBe('left');
+  });
+});
+
+function mk(
+  type: ScriptDrawing['type'],
+  i: number,
+): ScriptDrawing {
+  return {
+    id: `${type}_${i}`,
+    type,
+    t1: i,
+    p1: i,
+    ...(type === 'line' || type === 'box'
+      ? { t2: i + 1, p2: i + 1 }
+      : {}),
+    color: '#fff',
+  };
+}
+
+describe('drawing garbage collection', () => {
+  it('defaults match TradingView (50 per type)', () => {
+    expect(DEFAULT_DRAWING_LIMITS).toEqual({
+      max_lines_count: 50,
+      max_labels_count: 50,
+      max_boxes_count: 50,
+      max_polylines_count: 50,
+    });
+  });
+
+  it('parses max_*_count from indicator/strategy source', () => {
+    const src = `//@version=5
+indicator("Label limits example", max_labels_count=100, max_lines_count=10, overlay=true)
+label.new(bar_index, high, "x")
+`;
+    expect(parseDrawingLimitsFromScript(src)).toEqual({
+      max_labels_count: 100,
+      max_lines_count: 10,
+    });
+  });
+
+  it('ignores commented-out max_* kwargs', () => {
+    const src = `indicator("x")
+// max_labels_count=999
+label.new(bar_index, high, "x")
+`;
+    expect(parseDrawingLimitsFromScript(src)).toEqual({});
+  });
+
+  it('clamps to Pine hard caps', () => {
+    const src = 'indicator("x", max_labels_count=9999, max_polylines_count=500)';
+    const parsed = parseDrawingLimitsFromScript(src);
+    expect(parsed.max_labels_count).toBe(500);
+    expect(parsed.max_polylines_count).toBe(100);
+  });
+
+  it('resolveDrawingLimits prefers meta over script over defaults', () => {
+    const script = 'indicator("x", max_labels_count=20, max_lines_count=5)';
+    const meta = { max_labels_count: 7 };
+    expect(resolveDrawingLimits(script, meta)).toEqual({
+      max_lines_count: 5,
+      max_labels_count: 7,
+      max_boxes_count: 50,
+      max_polylines_count: 50,
+    });
+  });
+
+  it('drops oldest drawings per type when over cap', () => {
+    const labels = [mk('label', 0), mk('label', 1), mk('label', 2), mk('label', 3)];
+    const lines = [mk('line', 0), mk('line', 1)];
+    const mixed = [...labels, ...lines];
+    const kept = garbageCollectScriptDrawings(mixed, {
+      max_lines_count: 1,
+      max_labels_count: 2,
+      max_boxes_count: 50,
+      max_polylines_count: 50,
+    });
+    expect(kept.map((d) => d.id)).toEqual(['label_2', 'label_3', 'line_1']);
+  });
+
+  it('keeps all when under caps', () => {
+    const list = [mk('box', 0), mk('polyline', 1)];
+    expect(garbageCollectScriptDrawings(list, DEFAULT_DRAWING_LIMITS)).toEqual(list);
+  });
+
+  it('default 50 cap discards early labels in a long series', () => {
+    const many = Array.from({ length: 60 }, (_, i) => mk('label', i));
+    const kept = garbageCollectScriptDrawings(many);
+    expect(kept).toHaveLength(50);
+    expect(kept[0]!.id).toBe('label_10');
+    expect(kept[49]!.id).toBe('label_59');
   });
 });

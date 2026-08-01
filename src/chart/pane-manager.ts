@@ -41,10 +41,13 @@
 import {
   createSeriesMarkers,
   LineStyle,
+  MismatchDirection,
+  PriceScaleMode,
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
+  type MouseEventParams,
   type SeriesMarker,
   type UTCTimestamp,
 } from 'lightweight-charts';
@@ -116,13 +119,61 @@ export class PaneManager {
   private tradeMarkerList: SeriesMarker<UTCTimestamp>[] = [];
   /** plotshape / plotchar markers (merged with trade markers) */
   private shapeMarkerList: SeriesMarker<UTCTimestamp>[] = [];
-  /** One-way range sync unsubscribers */
+  /** Time-range sync unsubscribers (all panes ↔ all panes) */
   private timeSyncUnsubs: Array<() => void> = [];
+  /** Crosshair multi-pane sync unsubscribers */
+  private crosshairUnsubs: Array<() => void> = [];
+  /** Host callback for Data Window / store (set via {@link syncCrosshair}) */
+  private crosshairOnMove:
+    | ((data: {
+        time: any;
+        point: { x: number; y: number } | null;
+        seriesData: Map<ISeriesApi<any>, any>;
+      }) => void)
+    | null = null;
+  /** Guard re-entrant crosshair setCrosshairPosition loops */
+  private suppressCrosshair = false;
   /** Active main price series style (tracks LWC series kind under key `candle`) */
   private priceChartType: ChartType = DEFAULT_CHART_TYPE;
+  /** Price pane right-scale toggles (UI [A]/[L]) */
+  private priceAutoScale = true;
+  private priceLogScale = false;
 
   constructor(container: HTMLElement) {
     this.container = container;
+  }
+
+  /** Prefer main geometry series on a pane for crosshair anchoring. */
+  private primarySeries(pane: ManagedPane): ISeriesApi<any> | null {
+    const prefer = ['candle', 'volume', 'equity'] as const;
+    for (const k of prefer) {
+      if (pane.series[k]) return pane.series[k]!;
+    }
+    for (const [k, s] of Object.entries(pane.series)) {
+      if (k.startsWith('bgcolor')) continue;
+      if (s) return s;
+    }
+    const first = Object.values(pane.series)[0];
+    return first ?? null;
+  }
+
+  /** Extract a Y price from a candle/line/histogram data point. */
+  private static seriesPointPrice(data: unknown): number | null {
+    if (data == null || typeof data !== 'object') return null;
+    const d = data as Record<string, unknown>;
+    for (const k of ['value', 'close', 'high', 'low', 'open'] as const) {
+      const v = d[k];
+      if (typeof v === 'number' && Number.isFinite(v)) return v;
+    }
+    return null;
+  }
+
+  isPriceAutoScale(): boolean {
+    return this.priceAutoScale;
+  }
+
+  isPriceLogScale(): boolean {
+    return this.priceLogScale;
   }
 
   getPriceChartType(): ChartType {
@@ -178,17 +229,39 @@ export class PaneManager {
 
     this.container.appendChild(div);
 
+    const isSecondary = type !== 'price';
     const chart = createBaseChart(div, {
-      timeScale:
-        type === 'volume' || type === 'indicator' || type === 'equity'
-          ? {
-              visible: false,
-              borderColor: '#3a3d4a',
-              borderVisible: false,
-              shiftVisibleRangeOnNewBar: false,
-              allowShiftVisibleRangeOnWhitespaceReplacement: false,
-            }
-          : undefined,
+      // Secondary panes: no time axis / scrollbar; time range follows the price pane.
+      timeScale: isSecondary
+        ? {
+            visible: false,
+            borderVisible: false,
+            borderColor: TV.border,
+            timeVisible: false,
+            ticksVisible: false,
+            minimumHeight: 0,
+            shiftVisibleRangeOnNewBar: false,
+            allowShiftVisibleRangeOnWhitespaceReplacement: false,
+            rightBarStaysOnScroll: true,
+          }
+        : undefined,
+      // Lock horz scroll/zoom on volume/indicator/equity — price pane is the driver.
+      handleScroll: isSecondary
+        ? {
+            mouseWheel: false,
+            pressedMouseMove: false,
+            horzTouchDrag: false,
+            vertTouchDrag: false,
+          }
+        : { vertTouchDrag: true },
+      handleScale: isSecondary
+        ? {
+            mouseWheel: false,
+            pinch: false,
+            axisPressedMouseMove: { time: false, price: true },
+            axisDoubleClickReset: { time: false, price: true },
+          }
+        : undefined,
       rightPriceScale: {
         borderColor: TV.border,
         borderVisible: true,
@@ -225,6 +298,8 @@ export class PaneManager {
         } catch {
           /* ignore */
         }
+        // Keep secondary panes aligned after layout thrash
+        if (isSecondary) this.alignTimeRangesFromPrice();
       }
     });
     ro.observe(div);
@@ -241,6 +316,9 @@ export class PaneManager {
     };
     this.panes.set(id, pane);
     this.alignRightScales();
+    // Wire range + crosshair for every new pane (equity / indicator created late)
+    this.syncTimeScales();
+    this.rewireCrosshair();
 
     return pane;
   }
@@ -262,18 +340,27 @@ export class PaneManager {
     }
   }
 
-  destroyPane(id: string) {
+  destroyPane(id: string, opts?: { rewire?: boolean }) {
     const pane = this.panes.get(id);
     if (!pane) return;
     // Disconnect ResizeObserver to prevent memory leak
     if (pane.resizeObserver) {
       pane.resizeObserver.disconnect();
     }
-    pane.chart.remove();
+    try {
+      pane.chart.remove();
+    } catch {
+      /* ignore */
+    }
     const el = document.getElementById(`pane-${id}`);
     el?.remove();
     document.getElementById(`pane-handle-${id}`)?.remove();
     this.panes.delete(id);
+    // Re-wire remaining panes so sync handlers don't point at removed charts
+    if (opts?.rewire !== false) {
+      this.syncTimeScales();
+      this.rewireCrosshair();
+    }
   }
 
   /**
@@ -374,7 +461,10 @@ export class PaneManager {
     if (visible) {
       const rect = el?.getBoundingClientRect();
       if (rect) pane.chart.applyOptions({ width: rect.width, height: rect.height });
+      this.alignTimeRangesFromPrice();
     }
+    this.syncTimeScales();
+    this.rewireCrosshair();
   }
 
   setLabel(id: string, label: string) {
@@ -395,8 +485,12 @@ export class PaneManager {
     }
   }
 
+  /**
+   * Keep every pane on the same visible logical range.
+   * Price pane is the preferred driver (sub-panes have horz scroll disabled),
+   * but any pane that does emit a range change still propagates to the rest.
+   */
   syncTimeScales() {
-    // Clear previous subscriptions (createPane may call this repeatedly)
     for (const u of this.timeSyncUnsubs) {
       try {
         u();
@@ -406,19 +500,26 @@ export class PaneManager {
     }
     this.timeSyncUnsubs = [];
 
-    // Prefer price as the range source so all sub-panes match its logical range
     const panes = this.getAllPanes().filter((p) => p.visible);
-    if (panes.length < 2) return;
-    const src = (this.panes.get('price')?.visible ? this.panes.get('price') : panes[0])!.chart;
+    if (panes.length < 2) {
+      this.alignRightScales();
+      return;
+    }
 
-    for (const pane of panes) {
-      if (pane.chart === src) continue;
-      const target = pane.chart;
+    for (const srcPane of panes) {
+      const src = srcPane.chart;
       const handler = (range: { from: number; to: number } | null) => {
         if (this.suppressSync || !range) return;
         this.suppressSync = true;
         try {
-          target.timeScale().setVisibleLogicalRange(range);
+          for (const pane of this.getAllPanes()) {
+            if (!pane.visible || pane.chart === src) continue;
+            try {
+              pane.chart.timeScale().setVisibleLogicalRange(range);
+            } catch {
+              /* ignore per-pane */
+            }
+          }
         } finally {
           this.suppressSync = false;
         }
@@ -431,15 +532,38 @@ export class PaneManager {
           /* ignore */
         }
       });
-      // Initial align
-      try {
-        const cur = src.timeScale().getVisibleLogicalRange();
-        if (cur) target.timeScale().setVisibleLogicalRange(cur);
-      } catch {
-        /* ignore */
-      }
     }
+
+    this.alignTimeRangesFromPrice();
     this.alignRightScales();
+  }
+
+  /** Push the price pane logical range onto all other visible panes. */
+  alignTimeRangesFromPrice() {
+    const price =
+      this.panes.get('price')?.visible !== false ? this.panes.get('price') : null;
+    const src = price ?? this.getAllPanes().find((p) => p.visible);
+    if (!src) return;
+    let range: { from: number; to: number } | null = null;
+    try {
+      range = src.chart.timeScale().getVisibleLogicalRange();
+    } catch {
+      range = null;
+    }
+    if (!range) return;
+    this.suppressSync = true;
+    try {
+      for (const pane of this.getAllPanes()) {
+        if (!pane.visible || pane.chart === src.chart) continue;
+        try {
+          pane.chart.timeScale().setVisibleLogicalRange(range);
+        } catch {
+          /* ignore */
+        }
+      }
+    } finally {
+      this.suppressSync = false;
+    }
   }
 
   /**
@@ -573,6 +697,7 @@ export class PaneManager {
     pane.series['equity'].setData(
       points.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })),
     );
+    this.alignTimeRangesFromPrice();
   }
 
   hideEquityPane() {
@@ -588,21 +713,218 @@ export class PaneManager {
     this.setVisible('equity', false);
   }
 
-  syncCrosshair(onMove: (data: { time: any; point: { x: number; y: number } | null; seriesData: Map<ISeriesApi<any>, any> }) => void) {
+  /**
+   * Wire crosshair → Data Window callback and mirror the crosshair (vertical +
+   * horizontal) onto every other pane via {@link IChartApi.setCrosshairPosition}.
+   */
+  syncCrosshair(
+    onMove: (data: {
+      time: any;
+      point: { x: number; y: number } | null;
+      seriesData: Map<ISeriesApi<any>, any>;
+    }) => void,
+  ) {
+    this.crosshairOnMove = onMove;
+    this.rewireCrosshair();
+  }
+
+  private rewireCrosshair() {
+    for (const u of this.crosshairUnsubs) {
+      try {
+        u();
+      } catch {
+        /* ignore */
+      }
+    }
+    this.crosshairUnsubs = [];
+    if (!this.crosshairOnMove) return;
+
     for (const pane of this.getAllPanes()) {
-      pane.chart.subscribeCrosshairMove((param) => {
+      const handler = (param: MouseEventParams) => {
+        if (this.suppressCrosshair) return;
+
         if (!param.time || !param.point) {
-          onMove({ time: null, point: null, seriesData: new Map() });
+          this.suppressCrosshair = true;
+          try {
+            for (const other of this.getAllPanes()) {
+              if (other.chart === pane.chart) continue;
+              try {
+                other.chart.clearCrosshairPosition();
+              } catch {
+                /* ignore */
+              }
+            }
+          } finally {
+            this.suppressCrosshair = false;
+          }
+          this.crosshairOnMove?.({ time: null, point: null, seriesData: new Map() });
           return;
         }
-        onMove({ time: param.time, point: param.point, seriesData: param.seriesData as Map<ISeriesApi<any>, any> });
+
+        // Mirror onto all other panes
+        this.suppressCrosshair = true;
+        try {
+          for (const other of this.getAllPanes()) {
+            if (!other.visible || other.chart === pane.chart) continue;
+            this.applyCrosshairToPane(other, param);
+          }
+        } finally {
+          this.suppressCrosshair = false;
+        }
+
+        this.crosshairOnMove?.({
+          time: param.time,
+          point: param.point,
+          seriesData: param.seriesData as Map<ISeriesApi<any>, any>,
+        });
+      };
+
+      pane.chart.subscribeCrosshairMove(handler);
+      this.crosshairUnsubs.push(() => {
+        try {
+          pane.chart.unsubscribeCrosshairMove(handler);
+        } catch {
+          /* ignore */
+        }
       });
+    }
+  }
+
+  /**
+   * Place the crosshair on `target` at the same time as `param`, using a local
+   * series value for the horizontal arm when available.
+   */
+  private applyCrosshairToPane(target: ManagedPane, param: MouseEventParams) {
+    const series = this.primarySeries(target);
+    if (!series || param.time == null) return;
+
+    let price = PaneManager.seriesPointPrice(param.seriesData?.get(series));
+
+    if (price == null) {
+      try {
+        let logical: number | null = null;
+        if (param.point) {
+          logical = target.chart.timeScale().coordinateToLogical(param.point.x);
+        }
+        if (logical != null && typeof series.dataByIndex === 'function') {
+          const d = series.dataByIndex(
+            Math.round(logical),
+            MismatchDirection.NearestLeft,
+          );
+          price = PaneManager.seriesPointPrice(d);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (price == null) {
+      // Still show the vertical line: anchor to mid-plot or last known value
+      try {
+        const h =
+          typeof target.chart.paneSize === 'function'
+            ? target.chart.paneSize().height
+            : 0;
+        if (h > 0 && typeof series.coordinateToPrice === 'function') {
+          const mid = series.coordinateToPrice(h / 2);
+          if (typeof mid === 'number' && Number.isFinite(mid)) price = mid;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    if (price == null || !Number.isFinite(price)) price = 0;
+
+    try {
+      target.chart.setCrosshairPosition(price, param.time as UTCTimestamp, series);
+    } catch {
+      /* ignore */
     }
   }
 
   fitContent() {
     const pricePane = this.panes.get('price');
     if (pricePane) pricePane.chart.timeScale().fitContent();
+    // Sub-panes must inherit the fitted range (they do not fit independently)
+    this.alignTimeRangesFromPrice();
+  }
+
+  /**
+   * Force every visible pane to measure its host div and re-apply LWC size.
+   * Call after symbol/history reloads so a layout thrash (empty overlay, flex)
+   * does not leave a stale canvas size.
+   */
+  resizeAll() {
+    for (const pane of this.getAllPanes()) {
+      if (!pane.visible) continue;
+      const el = document.getElementById(`pane-${pane.id}`);
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        try {
+          pane.chart.applyOptions({ width: rect.width, height: rect.height });
+          pane.chart.priceScale('right').applyOptions({
+            minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    this.alignRightScales();
+  }
+
+  /** Apply auto / log mode to the main price pane right scale. */
+  applyPriceScaleOptions(opts: { autoScale?: boolean; logScale?: boolean }) {
+    if (opts.autoScale != null) this.priceAutoScale = !!opts.autoScale;
+    if (opts.logScale != null) this.priceLogScale = !!opts.logScale;
+    const pricePane = this.panes.get('price');
+    if (!pricePane) return;
+    try {
+      pricePane.chart.priceScale('right').applyOptions({
+        autoScale: this.priceAutoScale,
+        mode: this.priceLogScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** Toggle auto-scale on the price pane (TV [A]). Re-enabling also fits content. */
+  togglePriceAutoScale(): boolean {
+    this.applyPriceScaleOptions({ autoScale: !this.priceAutoScale });
+    if (this.priceAutoScale) {
+      this.fitContent();
+    }
+    return this.priceAutoScale;
+  }
+
+  /** Toggle logarithmic price scale (TV [L]). */
+  togglePriceLogScale(): boolean {
+    this.applyPriceScaleOptions({ logScale: !this.priceLogScale });
+    return this.priceLogScale;
+  }
+
+  /**
+   * After a full history replace (symbol / interval load): resize panes, re-enable
+   * auto-scale, fit time range, keep current log mode.
+   */
+  afterDataReload() {
+    this.resizeAll();
+    this.applyPriceScaleOptions({ autoScale: true });
+    this.fitContent();
+    this.alignTimeRangesFromPrice();
+    // Second pass after layout settles (empty-state flip / flex reflow)
+    const raf =
+      typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame
+        : (cb: FrameRequestCallback) => setTimeout(cb, 0) as unknown as number;
+    raf(() => {
+      this.resizeAll();
+      this.fitContent();
+      this.applyPriceScaleOptions({ autoScale: true });
+      this.alignTimeRangesFromPrice();
+    });
   }
 
   setData(paneId: string, seriesKey: string, data: any[]) {
@@ -952,6 +1274,15 @@ export class PaneManager {
     this.candleMarkers = null;
     this.tradeMarkerList = [];
     this.shapeMarkerList = [];
+    this.crosshairOnMove = null;
+    for (const u of this.crosshairUnsubs) {
+      try {
+        u();
+      } catch {
+        /* ignore */
+      }
+    }
+    this.crosshairUnsubs = [];
     for (const u of this.timeSyncUnsubs) {
       try {
         u();
@@ -960,8 +1291,8 @@ export class PaneManager {
       }
     }
     this.timeSyncUnsubs = [];
-    for (const pane of this.getAllPanes()) {
-      this.destroyPane(pane.id);
+    for (const id of [...this.panes.keys()]) {
+      this.destroyPane(id, { rewire: false });
     }
   }
 }

@@ -63,6 +63,54 @@ describe('PaneManager', () => {
     pm.createPane('price', 'price', 'Price');
     pm.createPane('volume', 'volume', 'Volume', 80);
     pm.syncTimeScales();
+    pm.alignTimeRangesFromPrice();
+  });
+
+  it('syncCrosshair wires all panes and mirrors position', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    const vol = pm.createPane('volume', 'volume', 'Volume', 80);
+    price.series['candle'] = {
+      setData: () => {},
+      dataByIndex: () => ({ close: 100 }),
+      coordinateToPrice: () => 100,
+    } as never;
+    vol.series['volume'] = {
+      setData: () => {},
+      dataByIndex: () => ({ value: 10 }),
+      coordinateToPrice: () => 10,
+    } as never;
+
+    let lastTime: unknown = undefined;
+    pm.syncCrosshair((data) => {
+      lastTime = data.time;
+    });
+
+    const handlers = (price.chart as unknown as { _crosshairHandlers: Array<(p: unknown) => void> })
+      ._crosshairHandlers;
+    expect(handlers.length).toBeGreaterThan(0);
+    handlers[0]!({
+      time: 1_700_000_000,
+      point: { x: 10, y: 20 },
+      seriesData: new Map(),
+    });
+    expect(lastTime).toBe(1_700_000_000);
+
+    handlers[0]!({ time: undefined, point: undefined, seriesData: new Map() });
+    // leaving the chart keeps Data Window (callback still fires null)
+    expect(lastTime).toBeNull();
+  });
+
+  it('price scale auto/log toggles and afterDataReload', () => {
+    pm.createPane('price', 'price', 'Price');
+    expect(pm.isPriceAutoScale()).toBe(true);
+    expect(pm.isPriceLogScale()).toBe(false);
+    expect(pm.togglePriceLogScale()).toBe(true);
+    expect(pm.isPriceLogScale()).toBe(true);
+    expect(pm.togglePriceAutoScale()).toBe(false);
+    expect(pm.isPriceAutoScale()).toBe(false);
+    expect(pm.togglePriceAutoScale()).toBe(true);
+    pm.afterDataReload();
+    expect(pm.isPriceAutoScale()).toBe(true);
   });
 
   it('clearTradeMarkers no-op without candle', () => {

@@ -32,12 +32,20 @@
  * @returns `true` on success, `false` on unknown source or fetch failure
  */
 
-import { loadBars, setStatus, store, setTelemetryPlane, setTelemetryState } from '../store';
+import {
+  clampHistoryBars,
+  loadBars,
+  setStatus,
+  store,
+  setTelemetryPlane,
+  setTelemetryState,
+} from '../store';
 import { getManager, setDataToChart } from '../chart/manager-access';
 import { getSource } from '../sources/catalog';
 import { getUploadedFileName } from '../sources/upload-store';
 import { classifyTransport } from '../ui/telemetry';
 import { defaultStreamForSource } from '../streams/catalog';
+import { pluginKey } from '../plugins/types';
 
 /**
  * Fetch OHLCV via the given historical source and push into chart + store.
@@ -76,10 +84,18 @@ export async function loadSymbolData(
   setStatus('loading', `Loading ${label} via ${source.name}…`);
   const t0 = performance.now();
   try {
+    // Global history depth (Settings) wins over per-source plugin config for limit
+    const limit = clampHistoryBars(store.historyBars);
+    const configs = store.pluginsConfig || {};
+    const sourceCfg =
+      configs[pluginKey('source', sourceId)] || configs[sourceId] || {};
     const bars = await source.fetchHistorical({
       symbol: sym,
       interval,
-      config: {},
+      config: {
+        ...sourceCfg,
+        limit,
+      },
     });
     if (!bars?.length) {
       throw new Error('Source returned no bars');

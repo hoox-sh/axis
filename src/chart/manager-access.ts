@@ -207,7 +207,16 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       });
     }
     if (fit) {
-      pricePane.chart.timeScale().fitContent();
+      // Symbol / history change: resize host canvases + fit + auto-scale
+      if (typeof manager.afterDataReload === 'function') {
+        manager.afterDataReload();
+      } else {
+        try {
+          pricePane.chart.timeScale().fitContent();
+        } catch {
+          /* ignore */
+        }
+      }
     }
   }
 
@@ -222,6 +231,11 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
         color: b.close >= b.open ? 'rgba(94, 207, 138, 0.45)' : 'rgba(232, 93, 76, 0.45)',
       })),
     );
+  }
+
+  // Volume/indicator setData can reset local logical range — re-lock to price
+  if (typeof manager.alignTimeRangesFromPrice === 'function') {
+    manager.alignTimeRangesFromPrice();
   }
 
   // Ensure overlay exists after candle series is ready; re-sync store drawings

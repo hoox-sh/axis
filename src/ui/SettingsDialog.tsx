@@ -19,7 +19,8 @@
 
 /**
  * Application Settings modal — engine endpoint/mode, storage plugin, chart
- * interval, live prefs (preferAfterLoad, rerunOn), HUD compact, UI scale.
+ * interval / history bars, live prefs (preferAfterLoad, rerunOn), HUD compact,
+ * UI scale.
  *
  * Local form state is seeded from `store` when the dialog opens (not on every
  * store mutation while open). Save snapshots form fields, writes
@@ -37,6 +38,10 @@ import {
   setActivePlugin,
   setUiScale,
   clampUiScale,
+  clampHistoryBars,
+  HISTORY_BARS_MIN,
+  HISTORY_BARS_MAX,
+  HISTORY_BARS_DEFAULT,
   UI_SCALE_MIN,
   UI_SCALE_MAX,
   UI_SCALE_STEP,
@@ -102,6 +107,9 @@ export const SettingsDialog: Component<Props> = (props) => {
   const [preferWs, setPreferWs] = createSignal(true);
   const [storage, setStorage] = createSignal(store.activePlugins?.storage || 'local');
   const [chartInterval, setChartInterval] = createSignal(store.interval);
+  const [historyBars, setHistoryBars] = createSignal(
+    clampHistoryBars(store.historyBars ?? HISTORY_BARS_DEFAULT),
+  );
   const [refreshSec, setRefreshSec] = createSignal(store.watchlist.refreshSec || 15);
   const [preferAfterLoad, setPreferAfterLoad] = createSignal(!!store.live.preferAfterLoad);
   const [rerunOn, setRerunOn] = createSignal<'every-tick' | 'bar-close'>(
@@ -172,6 +180,7 @@ export const SettingsDialog: Component<Props> = (props) => {
         hydrateEngineFields(store.engine);
         setStorage(store.activePlugins?.storage || 'local');
         setChartInterval(store.interval);
+        setHistoryBars(clampHistoryBars(store.historyBars ?? HISTORY_BARS_DEFAULT));
         setRefreshSec(store.watchlist.refreshSec || 15);
         setPreferAfterLoad(!!store.live.preferAfterLoad);
         setRerunOn(store.live.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick');
@@ -194,7 +203,9 @@ export const SettingsDialog: Component<Props> = (props) => {
     // Snapshot every form field *before* any setStore. Mid-save store updates
     // must not re-enter the hydrate effect or re-read stale signals.
     const prevInterval = store.interval;
+    const prevHistoryBars = clampHistoryBars(store.historyBars);
     const nextInterval = chartInterval().trim() || prevInterval;
+    const nextHistoryBars = clampHistoryBars(historyBars());
     const nextRefresh = Math.min(120, Math.max(5, Math.round(Number(refreshSec()) || 15)));
     const nextEngine = engine();
     const nextEndpoint = endpoint().trim();
@@ -212,6 +223,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     // Batch all durable fields before persist so one flush sees full state
     setStore('endpoint', nextEndpoint);
     setStore('interval', nextInterval);
+    setStore('historyBars', nextHistoryBars);
     setStore('watchlist', 'refreshSec', nextRefresh);
     setStore('live', 'preferAfterLoad', nextPreferAfterLoad);
     setStore('live', 'rerunOn', nextRerunOn);
@@ -240,10 +252,13 @@ export const SettingsDialog: Component<Props> = (props) => {
     const modePart = writeExecMode ? ` · mode=${nextExecMode}` : '';
     setStatus(
       'ready',
-      `Settings saved · ${nextInterval} · refresh ${nextRefresh}s · engine=${nextEngine}${modePart} · live re-run=${nextRerunOn}`,
+      `Settings saved · ${nextInterval} · ${nextHistoryBars} bars · refresh ${nextRefresh}s · engine=${nextEngine}${modePart} · live re-run=${nextRerunOn}`,
     );
-    // Reload chart bars if default interval changed
-    if (nextInterval !== prevInterval && store.symbol) {
+    // Reload chart when interval or history depth changes
+    if (
+      store.symbol &&
+      (nextInterval !== prevInterval || nextHistoryBars !== prevHistoryBars)
+    ) {
       void loadSymbolData(store.symbol, nextInterval, store.source);
     }
     props.onClose();
@@ -627,6 +642,30 @@ export const SettingsDialog: Component<Props> = (props) => {
                 <p class="text-[10px] text-text-faint mt-0.5">
                   Used when loading symbols from the watchlist and top bar. Changing this reloads
                   the active chart.
+                </p>
+              </div>
+
+              <div class="sc-field">
+                <label class="sc-label" for="axis-history-bars">
+                  Historical bars
+                </label>
+                <input
+                  id="axis-history-bars"
+                  type="number"
+                  class="sc-input w-full font-mono"
+                  min={HISTORY_BARS_MIN}
+                  max={HISTORY_BARS_MAX}
+                  step={50}
+                  value={historyBars()}
+                  onInput={(e) => setHistoryBars(Number(e.currentTarget.value))}
+                  onChange={(e) =>
+                    setHistoryBars(clampHistoryBars(e.currentTarget.value))
+                  }
+                />
+                <p class="text-[10px] text-text-faint mt-0.5">
+                  Bars requested on Load / symbol change ({HISTORY_BARS_MIN}–{HISTORY_BARS_MAX}).
+                  Default {HISTORY_BARS_DEFAULT}. Venues may return fewer (e.g. OKX max 300,
+                  Binance max 1000). Saved with your other settings.
                 </p>
               </div>
 

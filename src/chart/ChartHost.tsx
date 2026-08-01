@@ -34,6 +34,7 @@ import { Component, Show, createEffect, createMemo, onMount, onCleanup, untrack 
 import { PaneManager } from './pane-manager';
 import { DrawingToolbar } from './DrawingToolbar';
 import { PineTableHud } from './PineTableHud';
+import { ChartScaleControls } from './ChartScaleControls';
 import { store, setCrosshair } from '../store';
 import { HooxLoader } from '../ui/HooxLoader';
 import {
@@ -169,6 +170,7 @@ export const ChartHost: Component = () => {
       <Show when={store.bars.length > 0}>
         <DrawingToolbar />
         <PineTableHud />
+        <ChartScaleControls />
       </Show>
       <Show when={emptyHint()}>
         {(hint) => (

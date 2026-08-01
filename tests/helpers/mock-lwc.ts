@@ -32,6 +32,8 @@ export type FakeSeries = {
   _priceLines: FakePriceLine[];
   seriesOrder: () => number;
   setSeriesOrder: (n: number) => void;
+  dataByIndex: (i: number, dir?: number) => unknown;
+  coordinateToPrice: (y: number) => number | null;
   _order: number;
   _data: unknown;
 };
@@ -53,7 +55,12 @@ export type FakeChart = {
     coordinateToLogical: (c: number) => number | null;
   };
   subscribeCrosshairMove: (cb: (p: unknown) => void) => void;
+  unsubscribeCrosshairMove: (cb: (p: unknown) => void) => void;
+  setCrosshairPosition: (price: number, time: unknown, series: unknown) => void;
+  clearCrosshairPosition: () => void;
+  paneSize: () => { width: number; height: number };
   _series: FakeSeries[];
+  _crosshairHandlers: Array<(p: unknown) => void>;
 };
 
 export function makeFakeChart(): FakeChart {
@@ -92,13 +99,17 @@ export function makeFakeChart(): FakeChart {
         if (i >= 0) priceLines.splice(i, 1);
       },
       priceLines: () => priceLines.slice(),
+      dataByIndex: () => null,
+      coordinateToPrice: () => 1,
     };
     series.push(s);
     return s;
   };
   let rangeCb: ((r: unknown) => void) | null = null;
+  const crosshairHandlers: Array<(p: unknown) => void> = [];
   return {
     _series: series,
+    _crosshairHandlers: crosshairHandlers,
     addSeries: () => makeSeries(),
     removeSeries: (ser) => {
       const i = series.indexOf(ser);
@@ -121,7 +132,16 @@ export function makeFakeChart(): FakeChart {
       timeToCoordinate: () => 10,
       coordinateToLogical: () => 5,
     }),
-    subscribeCrosshairMove: () => {},
+    subscribeCrosshairMove: (cb) => {
+      crosshairHandlers.push(cb);
+    },
+    unsubscribeCrosshairMove: (cb) => {
+      const i = crosshairHandlers.indexOf(cb);
+      if (i >= 0) crosshairHandlers.splice(i, 1);
+    },
+    setCrosshairPosition: () => {},
+    clearCrosshairPosition: () => {},
+    paneSize: () => ({ width: 400, height: 200 }),
   };
 }
 
@@ -139,6 +159,8 @@ export function installLightweightChartsMock() {
     }),
     ColorType: { Solid: 'solid' },
     CrosshairMode: { Normal: 0 },
+    PriceScaleMode: { Normal: 0, Logarithmic: 1, Percentage: 2, IndexedTo100: 3 },
+    MismatchDirection: { NearestLeft: -1, None: 0, NearestRight: 1 },
     LineStyle: { Solid: 0, Dotted: 1, Dashed: 2, LargeDashed: 3, SparseDotted: 4 },
     CandlestickSeries: 'CandlestickSeries',
     BarSeries: 'BarSeries',

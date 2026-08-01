@@ -56,6 +56,10 @@ import {
   deleteSelectedDrawing,
   STORAGE_KEY,
   EDITOR_DOC_KEY,
+  clampHistoryBars,
+  HISTORY_BARS_DEFAULT,
+  HISTORY_BARS_MIN,
+  HISTORY_BARS_MAX,
 } from '../src/store';
 import { SAMPLE_BARS, makeBars } from './fixtures/bars';
 
@@ -295,6 +299,24 @@ describe('layout helpers', () => {
   it('setLive', () => {
     setLive(true);
     expect(store.live.active).toBe(true);
+  });
+});
+
+describe('historyBars', () => {
+  it('clampHistoryBars enforces bounds', () => {
+    expect(clampHistoryBars(undefined)).toBe(HISTORY_BARS_DEFAULT);
+    expect(clampHistoryBars(10)).toBe(HISTORY_BARS_MIN);
+    expect(clampHistoryBars(99999)).toBe(HISTORY_BARS_MAX);
+    expect(clampHistoryBars(750.6)).toBe(751);
+  });
+
+  it('persists historyBars', () => {
+    setStore('historyBars', clampHistoryBars(1000));
+    flushPersist();
+    const raw = localStorage.getItem(STORAGE_KEY);
+    expect(raw).toBeTruthy();
+    const parsed = JSON.parse(raw!);
+    expect(parsed.historyBars).toBe(1000);
   });
 });
 

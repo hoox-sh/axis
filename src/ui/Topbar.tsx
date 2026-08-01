@@ -91,12 +91,29 @@ export const Topbar: Component<{
   const [loading, setLoading] = createSignal(false);
   const [uploadLabel, setUploadLabel] = createSignal(getUploadedFileName() || '');
   let fileInput: HTMLInputElement | undefined;
+  /** Last symbol we successfully requested (avoids redundant blur reloads). */
+  let lastLoadedSymbol = store.symbol;
+  let lastLoadedInterval = store.interval;
 
-  const loadHistorical = async () => {
+  const loadHistorical = async (opts?: { force?: boolean }) => {
     if (loading()) return;
+    const sym = store.symbol.trim().toUpperCase();
+    if (!sym) return;
+    if (
+      !opts?.force &&
+      sym === lastLoadedSymbol &&
+      store.interval === lastLoadedInterval &&
+      store.bars.length > 0
+    ) {
+      return;
+    }
     setLoading(true);
     try {
-      await loadSymbolData(store.symbol, store.interval, store.source);
+      const ok = await loadSymbolData(sym, store.interval, store.source);
+      if (ok) {
+        lastLoadedSymbol = sym;
+        lastLoadedInterval = store.interval;
+      }
     } finally {
       setLoading(false);
     }
@@ -234,18 +251,34 @@ export const Topbar: Component<{
           value={store.symbol}
           spellcheck={false}
           autocomplete="off"
-          onChange={(e) => {
+          onInput={(e) => {
             setStore('symbol', e.currentTarget.value.toUpperCase());
+          }}
+          onChange={(e) => {
+            const next = e.currentTarget.value.toUpperCase().trim();
+            setStore('symbol', next);
             persist();
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') loadHistorical();
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              const next = e.currentTarget.value.toUpperCase().trim();
+              if (!next) return;
+              setStore('symbol', next);
+              persist();
+              // Force reload so re-Enter re-fetches + resizes even for same symbol
+              void loadHistorical({ force: true });
+            }
           }}
-          onBlur={() => {
-            // Reload if symbol was edited without Enter
-            if (store.symbol && store.bars.length === 0) void loadHistorical();
+          onBlur={(e) => {
+            const next = e.currentTarget.value.toUpperCase().trim();
+            if (!next) return;
+            setStore('symbol', next);
+            persist();
+            // Reload only when the symbol actually changed (interval already auto-loads)
+            void loadHistorical();
           }}
-          title="Symbol · Enter to load"
+          title="Symbol · Enter or leave field to load"
         />
       </Show>
 

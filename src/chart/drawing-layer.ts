@@ -43,7 +43,13 @@ import {
   type DrawingToolId,
   type Point,
 } from './drawing-types';
-import { normalizeScriptDrawings, type ScriptDrawing } from './pine-drawings';
+import {
+  DEFAULT_DRAWING_LIMITS,
+  garbageCollectScriptDrawings,
+  normalizeScriptDrawings,
+  type DrawingLimits,
+  type ScriptDrawing,
+} from './pine-drawings';
 import { snapToBars, type BarLike, type MagnetMode } from './drawings/snap';
 import { strokeDashFor } from './drawings/svg-primitives';
 
@@ -297,14 +303,24 @@ export class DrawingLayer {
    * Skips DOM rebuild when the payload signature matches the last apply — live
    * silent re-runs were re-applying the same drawings every tick (hide/show flicker).
    * Pan/zoom still re-projects via {@link scheduleRedraw}.
+   *
+   * Applies Pine garbage collection using `indicator()` / `strategy()` caps
+   * (`max_lines_count`, `max_labels_count`, `max_boxes_count`,
+   * `max_polylines_count`; default 50 each).
+   *
+   * @returns Number of drawings kept after normalize + GC.
    */
-  setScriptDrawings(raw: unknown[] | undefined | null) {
-    const next = normalizeScriptDrawings(raw);
+  setScriptDrawings(
+    raw: unknown[] | undefined | null,
+    limits: DrawingLimits = DEFAULT_DRAWING_LIMITS,
+  ): number {
+    const next = garbageCollectScriptDrawings(normalizeScriptDrawings(raw), limits);
     const sig = scriptDrawingsSignature(next);
-    if (sig === this.lastScriptSig) return;
+    if (sig === this.lastScriptSig) return this.scriptDrawings.length;
     this.lastScriptSig = sig;
     this.scriptDrawings = next;
     this.redrawScript();
+    return next.length;
   }
 
   clearScriptDrawings() {

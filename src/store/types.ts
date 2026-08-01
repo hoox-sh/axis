@@ -234,6 +234,11 @@ export interface AppState {
   symbol: string;
   interval: string;
   exchange: string;
+  /**
+   * How many historical OHLCV bars to request on Load / symbol change.
+   * Persisted. Sources may clamp further to venue max (e.g. Binance 1000).
+   */
+  historyBars: number;
   /** Historical data source plugin id (mirrors activePlugins.source) */
   source: SourceId;
   engine: string;

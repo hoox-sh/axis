@@ -88,6 +88,18 @@ const LEGACY_EDITOR_DOC_KEYS = [
 
 const DEFAULT_WATCHLIST = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
 
+/** Default / clamp bounds for {@link AppState.historyBars}. */
+export const HISTORY_BARS_DEFAULT = 500;
+export const HISTORY_BARS_MIN = 50;
+export const HISTORY_BARS_MAX = 5000;
+
+/** Clamp history bar count into a safe range for REST kline APIs. */
+export function clampHistoryBars(n: unknown): number {
+  const v = typeof n === 'number' ? n : Number(n);
+  if (!Number.isFinite(v)) return HISTORY_BARS_DEFAULT;
+  return Math.min(HISTORY_BARS_MAX, Math.max(HISTORY_BARS_MIN, Math.round(v)));
+}
+
 const DEFAULTS: AppState = {
   bars: [],
   chartDataGen: 0,
@@ -95,6 +107,7 @@ const DEFAULTS: AppState = {
   symbol: 'BTCUSDT',
   interval: '1d',
   exchange: 'binance',
+  historyBars: HISTORY_BARS_DEFAULT,
   source: 'binance-rest',
   engine: 'server',
   endpoint: 'http://162.254.38.194:5002',
@@ -220,6 +233,9 @@ function loadPersisted(): Partial<AppState> {
         ...DEFAULTS,
         ...parsed,
         chartType: normalizeChartType(parsed.chartType),
+        historyBars: clampHistoryBars(
+          parsed.historyBars ?? (parsed as { barLimit?: unknown }).barLimit ?? DEFAULTS.historyBars,
+        ),
         live: {
           ...DEFAULTS.live,
           ...parsed.live,
