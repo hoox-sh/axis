@@ -29,8 +29,19 @@
  * {@link installPanelWindowBridge} listens for companion-window reattach messages.
  */
 
-import { Component, For, JSX, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import {
+  Component,
+  For,
+  JSX,
+  Show,
+  createEffect,
+  createSignal,
+  onCleanup,
+  onMount,
+} from 'solid-js';
+import { Portal } from 'solid-js/web';
+import {
+  store,
   getPanelChrome,
   setPanelOpen,
   setPanelDock,
@@ -46,6 +57,13 @@ import {
   type DropZone,
 } from './types';
 import { dropZoneToDock, hitDropZone, skeletonSize } from './drop-zones';
+import {
+  dockHostElement,
+  dockStackCount,
+  dockStackCssOrder,
+  isLastInDockStack,
+  panelsOnDock,
+} from './dock-layout';
 
 /** Props for a dockable panel wrapper (title falls back to PANEL_META). */
 export interface FloatableShellProps {
@@ -102,7 +120,9 @@ const DOCK_MENU = [
 
 /**
  * Panel chrome shell — docks into layout slots or floats with resize handles.
- * When closed (`isPanelOpen` false), renders nothing.
+ * When closed (`isPanelOpen` false), parent renders nothing.
+ * Docked panels portal into `#axis-dock-{left,right,bottom}` so multiple
+ * panels on the same side stack **one below the other**.
  */
 export const FloatableShell: Component<FloatableShellProps> = (props) => {
   const meta = () => PANEL_META[props.id];
@@ -110,14 +130,40 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   const title = () => props.title || meta().title;
   const dock = () => chrome().dock;
   const isFloat = () => dock() === 'float' || dock() === 'window';
+  const stackN = () => {
+    // Track full chrome map so peer open/dock changes re-flex this shell
+    void store.panelChrome;
+    const d = dock();
+    if (d === 'float' || d === 'window') return 1;
+    return dockStackCount(d);
+  };
+  const stacked = () => stackN() > 1;
 
   const [menuOpen, setMenuOpen] = createSignal(false);
+  /** Portal host — resolved after mount so dock columns exist. */
+  const [mountEl, setMountEl] = createSignal<HTMLElement | null>(null);
 
   let rootEl: HTMLDivElement | undefined;
   let menuWrapEl: HTMLDivElement | undefined;
   let drag: DragState | null = null;
   let holdTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingDrag = false;
+
+  const resolveMount = () => {
+    setMountEl(dockHostElement(dock()));
+  };
+
+  onMount(() => {
+    resolveMount();
+    // Dock columns may paint one frame later on first boot
+    requestAnimationFrame(resolveMount);
+  });
+
+  // Re-portal when dock side changes
+  createEffect(() => {
+    void dock();
+    queueMicrotask(resolveMount);
+  });
 
   const close = () => setPanelOpen(props.id, false);
 
@@ -143,6 +189,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
         openCompanionWindow(props.id, title());
       }
     }
+    queueMicrotask(resolveMount);
   };
 
   const beginMoveDrag = (clientX: number, clientY: number) => {
@@ -376,9 +423,36 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   const setDockWidth = (w: number) => setPanelGeometry(props.id, { w });
   const setDockHeight = (h: number) => setPanelGeometry(props.id, { h });
 
+  /**
+   * Split height with the next panel in the stack (drag bottom edge).
+   * Transfers delta so total flex weight stays roughly constant.
+   */
+  const setStackedHeight = (nextH: number) => {
+    const d = dock();
+    if (d === 'float' || d === 'window') {
+      setPanelGeometry(props.id, { h: nextH });
+      return;
+    }
+    const list = panelsOnDock(d);
+    const i = list.indexOf(props.id);
+    const cur = getPanelChrome(props.id).h;
+    const clamped = Math.max(meta().minH, Math.round(nextH));
+    setPanelGeometry(props.id, { h: clamped });
+    const neighbor = i >= 0 ? list[i + 1] : undefined;
+    if (neighbor) {
+      const nCur = getPanelChrome(neighbor).h;
+      const delta = clamped - cur;
+      const nMeta = PANEL_META[neighbor];
+      setPanelGeometry(neighbor, {
+        h: Math.max(nMeta.minH, Math.round(nCur - delta)),
+      });
+    }
+  };
+
   const shellStyle = (): JSX.CSSProperties => {
     const c = chrome();
     const d = dock();
+    const order = dockStackCssOrder(props.id);
     if (d === 'float' || d === 'window') {
       return {
         position: 'fixed',
@@ -389,16 +463,30 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
         'z-index': String(c.z),
       };
     }
+    // Side docks: fill column width; stack with flex so 2+ sit one below the other
     if (d === 'left' || d === 'right') {
+      if (!stacked()) {
+        return {
+          width: '100%',
+          height: '100%',
+          flex: '1 1 auto',
+          order: String(order),
+        };
+      }
       return {
-        width: `${c.w}px`,
-        height: '100%',
+        width: '100%',
+        flex: `${Math.max(1, c.h)} 1 0`,
+        'min-height': `${meta().minH}px`,
+        height: 'auto',
+        order: String(order),
       };
     }
-    // bottom
+    // bottom: pixel heights (column has no fixed height; flex-grow would collapse)
     return {
       width: '100%',
-      height: `${c.h}px`,
+      height: `${Math.max(meta().minH, c.h)}px`,
+      flex: '0 0 auto',
+      order: String(order),
     };
   };
 
@@ -410,149 +498,175 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     return 'axis-panel-float sc-float-panel';
   };
 
+  const showSideWidthResize = () => dock() === 'left' || dock() === 'right';
+  const showBottomHeightResize = () => {
+    const d = dock();
+    if (d === 'bottom') return true;
+    // Stacked left/right: bottom edge resizes split (except last fills rest)
+    if ((d === 'left' || d === 'right') && stacked() && !isLastInDockStack(props.id, d)) {
+      return true;
+    }
+    return false;
+  };
+
   return (
-    <div
-      ref={rootEl}
-      class={`axis-panel-shell flex flex-col min-h-0 overflow-hidden ${dockClass()} ${props.class || ''}`}
-      style={shellStyle()}
-      data-panel-id={props.id}
-      data-panel-dock={dock()}
-      data-testid={props.testId}
-      onPointerDown={() => {
-        if (isFloat()) bumpPanelZ(props.id);
-      }}
-    >
-      {/* Title bar — drag on title; hamburger click = menu, hold = drag */}
-      <div
-        class="axis-panel-handle sc-float-panel-header cursor-grab active:cursor-grabbing select-none relative"
-        onPointerDown={onHandlePointerDown}
-        title="Drag title to move · drop on edges to dock"
-      >
-        <div
-          class="axis-panel-menu relative flex-shrink-0"
-          ref={menuWrapEl}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            class={`sc-btn sc-btn-ghost px-1 ${menuOpen() ? 'text-accent' : ''}`}
-            title="Click: dock options · Hold: drag panel"
-            aria-label="Panel menu"
-            aria-expanded={menuOpen()}
-            aria-haspopup="menu"
-            onPointerDown={onHamburgerPointerDown}
+    <Show when={mountEl()}>
+      {(el) => (
+        <Portal mount={el()}>
+          <div
+            ref={rootEl}
+            class={`axis-panel-shell flex flex-col min-h-0 overflow-hidden ${dockClass()} ${props.class || ''}`}
+            style={shellStyle()}
+            data-panel-id={props.id}
+            data-panel-dock={dock()}
+            data-panel-stacked={stacked() ? '1' : '0'}
+            data-testid={props.testId}
+            onPointerDown={() => {
+              if (isFloat()) bumpPanelZ(props.id);
+            }}
           >
-            <Icons.menu />
-          </button>
-          <Show when={menuOpen()}>
+            {/* Title bar — drag on title; hamburger click = menu, hold = drag */}
             <div
-              class="axis-panel-menu-pop"
-              role="menu"
-              aria-label="Dock position"
+              class="axis-panel-handle sc-float-panel-header cursor-grab active:cursor-grabbing select-none relative"
+              onPointerDown={onHandlePointerDown}
+              title="Drag title to move · drop on edges to dock"
             >
-              <For each={DOCK_MENU}>
-                {(item) => {
-                  const ItemIcon = item.Icon;
-                  const active = () => dock() === item.dock;
-                  return (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      class={`axis-panel-menu-item ${active() ? 'is-active' : ''}`}
-                      onClick={() => setDock(item.dock)}
-                    >
-                      <ItemIcon />
-                      <span>{item.label}</span>
-                    </button>
-                  );
-                }}
-              </For>
+              <div
+                class="axis-panel-menu relative flex-shrink-0"
+                ref={menuWrapEl}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  class={`sc-btn sc-btn-ghost px-1 ${menuOpen() ? 'text-accent' : ''}`}
+                  title="Click: dock options · Hold: drag panel"
+                  aria-label="Panel menu"
+                  aria-expanded={menuOpen()}
+                  aria-haspopup="menu"
+                  onPointerDown={onHamburgerPointerDown}
+                >
+                  <Icons.menu />
+                </button>
+                <Show when={menuOpen()}>
+                  <div
+                    class="axis-panel-menu-pop"
+                    role="menu"
+                    aria-label="Dock position"
+                  >
+                    <For each={DOCK_MENU}>
+                      {(item) => {
+                        const ItemIcon = item.Icon;
+                        const active = () => dock() === item.dock;
+                        return (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            class={`axis-panel-menu-item ${active() ? 'is-active' : ''}`}
+                            onClick={() => setDock(item.dock)}
+                          >
+                            <ItemIcon />
+                            <span>{item.label}</span>
+                          </button>
+                        );
+                      }}
+                    </For>
+                  </div>
+                </Show>
+              </div>
+              <span class="flex-1 truncate min-w-0">{title()}</span>
+              <Show when={props.headerExtra}>{props.headerExtra}</Show>
+              <div
+                class="flex items-center gap-0.5 flex-shrink-0"
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost px-1"
+                  title="Close"
+                  aria-label="Close panel"
+                  onClick={close}
+                >
+                  <Icons.x />
+                </button>
+              </div>
             </div>
-          </Show>
-        </div>
-        <span class="flex-1 truncate min-w-0">{title()}</span>
-        <Show when={props.headerExtra}>{props.headerExtra}</Show>
-        <div class="flex items-center gap-0.5 flex-shrink-0" onPointerDown={(e) => e.stopPropagation()}>
-          <button
-            type="button"
-            class="sc-btn sc-btn-ghost px-1"
-            title="Close"
-            aria-label="Close panel"
-            onClick={close}
-          >
-            <Icons.x />
-          </button>
-        </div>
-      </div>
 
-      <div class="flex-1 min-h-0 overflow-auto axis-panel-body">{props.children}</div>
+            <div class="flex-1 min-h-0 overflow-auto axis-panel-body">{props.children}</div>
 
-      {/* Docked: resize on the free border (min 1px) */}
-      <Show when={dock() === 'left'}>
-        <ResizeHandle
-          direction="grow-right"
-          getSize={dockWidth}
-          setSize={setDockWidth}
-          min={meta().minW}
-          class="absolute right-0 top-0 bottom-0"
-        />
-      </Show>
-      <Show when={dock() === 'right'}>
-        <ResizeHandle
-          direction="grow-left"
-          getSize={dockWidth}
-          setSize={setDockWidth}
-          min={meta().minW}
-          class="absolute left-0 top-0 bottom-0"
-        />
-      </Show>
-      <Show when={dock() === 'bottom'}>
-        <ResizeHandle
-          direction="grow-up"
-          getSize={dockHeight}
-          setSize={setDockHeight}
-          min={meta().minH}
-          class="absolute left-0 right-0 top-0"
-        />
-      </Show>
+            {/* Docked left/right: column width on free vertical edge */}
+            <Show when={showSideWidthResize() && dock() === 'left'}>
+              <ResizeHandle
+                direction="grow-right"
+                getSize={dockWidth}
+                setSize={setDockWidth}
+                min={meta().minW}
+                class="absolute right-0 top-0 bottom-0"
+              />
+            </Show>
+            <Show when={showSideWidthResize() && dock() === 'right'}>
+              <ResizeHandle
+                direction="grow-left"
+                getSize={dockWidth}
+                setSize={setDockWidth}
+                min={meta().minW}
+                class="absolute left-0 top-0 bottom-0"
+              />
+            </Show>
+            {/* Bottom dock top edge, or split between stacked side panels */}
+            <Show when={showBottomHeightResize()}>
+              <ResizeHandle
+                direction={dock() === 'bottom' ? 'grow-up' : 'grow-down'}
+                getSize={dockHeight}
+                setSize={dock() === 'bottom' ? setDockHeight : setStackedHeight}
+                min={meta().minH}
+                class={
+                  dock() === 'bottom'
+                    ? 'absolute left-0 right-0 top-0'
+                    : 'absolute left-0 right-0 bottom-0'
+                }
+              />
+            </Show>
 
-      {/* Float: all borders + SE corner (min 1px) */}
-      <Show when={isFloat()}>
-        <div
-          class="sc-resize-handle absolute right-0 top-0 bottom-3"
-          role="separator"
-          aria-orientation="vertical"
-          title="Drag to resize"
-          onPointerDown={onFloatResizePointerDown('e')}
-        />
-        <div
-          class="sc-resize-handle absolute left-0 top-0 bottom-0"
-          role="separator"
-          aria-orientation="vertical"
-          title="Drag to resize"
-          onPointerDown={onFloatResizePointerDown('w')}
-        />
-        <div
-          class="sc-pane-resize-handle absolute left-0 right-3 bottom-0"
-          role="separator"
-          aria-orientation="horizontal"
-          title="Drag to resize"
-          onPointerDown={onFloatResizePointerDown('s')}
-        />
-        <div
-          class="sc-pane-resize-handle absolute left-0 right-0 top-0"
-          role="separator"
-          aria-orientation="horizontal"
-          title="Drag to resize"
-          onPointerDown={onFloatResizePointerDown('n')}
-        />
-        <div
-          class="axis-panel-resize"
-          title="Resize"
-          onPointerDown={onFloatResizePointerDown('se')}
-        />
-      </Show>
-    </div>
+            {/* Float: all borders + SE corner (min 1px) */}
+            <Show when={isFloat()}>
+              <div
+                class="sc-resize-handle absolute right-0 top-0 bottom-3"
+                role="separator"
+                aria-orientation="vertical"
+                title="Drag to resize"
+                onPointerDown={onFloatResizePointerDown('e')}
+              />
+              <div
+                class="sc-resize-handle absolute left-0 top-0 bottom-0"
+                role="separator"
+                aria-orientation="vertical"
+                title="Drag to resize"
+                onPointerDown={onFloatResizePointerDown('w')}
+              />
+              <div
+                class="sc-pane-resize-handle absolute left-0 right-3 bottom-0"
+                role="separator"
+                aria-orientation="horizontal"
+                title="Drag to resize"
+                onPointerDown={onFloatResizePointerDown('s')}
+              />
+              <div
+                class="sc-pane-resize-handle absolute left-0 right-0 top-0"
+                role="separator"
+                aria-orientation="horizontal"
+                title="Drag to resize"
+                onPointerDown={onFloatResizePointerDown('n')}
+              />
+              <div
+                class="axis-panel-resize"
+                title="Resize"
+                onPointerDown={onFloatResizePointerDown('se')}
+              />
+            </Show>
+          </div>
+        </Portal>
+      )}
+    </Show>
   );
 };
 

@@ -925,15 +925,73 @@ export function setPanelOpen(id: PanelId, open: boolean) {
   ensurePanelChrome();
   setStore('panelChrome', id, 'open', open);
   syncLegacyOpen(id, open);
+  // Opening onto a shared side column stacks panels; rebalance flex heights
+  if (open) {
+    const dock = getPanelChrome(id).dock;
+    if (dock === 'left' || dock === 'right') {
+      rebalanceDockStack(dock);
+    }
+  }
   persist();
+}
+
+/** Stable stack order when several panels share left/right/bottom. */
+const DOCK_STACK_IDS: PanelId[] = [
+  'watchlist',
+  'layers',
+  'dataview',
+  'indicators',
+  'editor',
+  'results',
+  'logs',
+  'scriptlogs',
+];
+
+/** Open panel ids currently assigned to a side dock (stack order). */
+function openIdsOnDock(dock: PanelDock): PanelId[] {
+  if (dock === 'float' || dock === 'window') return [];
+  return DOCK_STACK_IDS.filter((pid) => {
+    if (!isPanelOpen(pid)) return false;
+    return store.panelChrome?.[pid]?.dock === dock;
+  });
+}
+
+/**
+ * Equalize flex height weights when 2+ panels share a **left/right** column
+ * so they stack one below the other with comparable space.
+ * Bottom docks keep their own pixel heights (column is content-sized).
+ */
+function rebalanceDockStack(dock: PanelDock) {
+  if (dock !== 'left' && dock !== 'right') return;
+  const ids = openIdsOnDock(dock);
+  if (ids.length < 2) return;
+  const weight = 100;
+  for (const pid of ids) {
+    setStore('panelChrome', pid, 'h', weight);
+  }
+}
+
+/** Keep left/right column width in sync across stacked peers. */
+function syncDockColumnWidth(dock: PanelDock, w: number) {
+  if (dock !== 'left' && dock !== 'right') return;
+  for (const pid of openIdsOnDock(dock)) {
+    setStore('panelChrome', pid, 'w', w);
+    if (pid === 'watchlist') setStore('watchlist', 'width', w);
+    if (pid === 'indicators') setStore('indicatorPanel', 'width', w);
+    if (pid === 'editor') setStore('editor', 'width', w);
+    if (pid === 'dataview') setStore('dataViewPanel', 'width', w);
+    if (pid === 'layers') setStore('layerPanel', 'width', w);
+  }
 }
 
 /**
  * Change panel dock target. Editor `window` sets popout mode; other docks
- * set docked. Float/window bump z-index for stacking.
+ * set docked. Float/window bump z-index for stacking. Side docks rebalance
+ * stack heights when multiple panels share a column.
  */
 export function setPanelDock(id: PanelId, dock: PanelDock) {
   ensurePanelChrome();
+  const prev = getPanelChrome(id).dock;
   setStore('panelChrome', id, 'dock', dock);
   if (dock === 'window' && id === 'editor') {
     setStore('editor', 'mode', 'popout');
@@ -942,6 +1000,20 @@ export function setPanelDock(id: PanelId, dock: PanelDock) {
   }
   if (dock === 'float' || dock === 'window') {
     bumpPanelZ(id);
+  } else {
+    // Match column width to peers already on this side
+    if (dock === 'left' || dock === 'right') {
+      const peers = openIdsOnDock(dock).filter((p) => p !== id);
+      if (peers.length) {
+        const peerW = getPanelChrome(peers[0]!).w;
+        setStore('panelChrome', id, 'w', peerW);
+      }
+    }
+    rebalanceDockStack(dock);
+  }
+  // Rebalance the side we left if others remain
+  if (prev !== dock && (prev === 'left' || prev === 'right' || prev === 'bottom')) {
+    rebalanceDockStack(prev);
   }
   persist();
 }
@@ -949,6 +1021,7 @@ export function setPanelDock(id: PanelId, dock: PanelDock) {
 /**
  * Update float geometry and mirror width/height into legacy layout fields
  * (watchlist/editor widths, results/logs heights, etc.).
+ * Width changes on left/right docks propagate to all stacked peers.
  */
 export function setPanelGeometry(
   id: PanelId,
@@ -961,12 +1034,17 @@ export function setPanelGeometry(
   if (geo.w != null) {
     // Min 1px — panel can shrink to the border
     const w = Math.max(1, Math.round(geo.w));
-    setStore('panelChrome', id, 'w', w);
-    if (id === 'watchlist') setStore('watchlist', 'width', w);
-    if (id === 'indicators') setStore('indicatorPanel', 'width', w);
-    if (id === 'editor') setStore('editor', 'width', w);
-    if (id === 'dataview') setStore('dataViewPanel', 'width', w);
-    if (id === 'layers') setStore('layerPanel', 'width', w);
+    const dock = cur.dock;
+    if (dock === 'left' || dock === 'right') {
+      syncDockColumnWidth(dock, w);
+    } else {
+      setStore('panelChrome', id, 'w', w);
+      if (id === 'watchlist') setStore('watchlist', 'width', w);
+      if (id === 'indicators') setStore('indicatorPanel', 'width', w);
+      if (id === 'editor') setStore('editor', 'width', w);
+      if (id === 'dataview') setStore('dataViewPanel', 'width', w);
+      if (id === 'layers') setStore('layerPanel', 'width', w);
+    }
   }
   if (geo.h != null) {
     const h = Math.max(1, Math.round(geo.h));
@@ -974,7 +1052,6 @@ export function setPanelGeometry(
     if (id === 'results') setStore('resultsPanel', 'height', h);
     if (id === 'logs') setStore('logsPanel', 'height', h);
   }
-  void cur;
   persist();
 }
 

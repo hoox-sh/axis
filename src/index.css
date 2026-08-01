@@ -712,6 +712,61 @@ button.sc-btn:focus-visible {
   border-width: 0;
 }
 
+/* ── Dock columns (portal hosts; stack panels one below the other) ─ */
+
+.axis-dock-col {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  z-index: 10;
+  overflow: hidden;
+}
+
+.axis-dock-col-left,
+.axis-dock-col-right {
+  height: 100%;
+  align-self: stretch;
+}
+
+.axis-dock-col-left {
+  border-right: var(--border-w) solid var(--color-border);
+}
+
+.axis-dock-col-right {
+  border-left: var(--border-w) solid var(--color-border);
+}
+
+.axis-dock-col-bottom {
+  width: 100%;
+  flex-shrink: 0;
+  border-top: var(--border-w) solid var(--color-border);
+}
+
+.axis-dock-col.is-empty {
+  display: none;
+  width: 0 !important;
+  height: 0 !important;
+  border: none !important;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.axis-float-root {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  z-index: 60;
+  pointer-events: none;
+}
+
+.axis-float-root > .axis-panel-shell {
+  pointer-events: auto;
+}
+
 /* ── Floatable / dockable panels ───────────────────────────────── */
 
 .axis-panel-shell {
@@ -739,6 +794,17 @@ button.sc-btn:focus-visible {
   border-radius: 0;
   z-index: 10;
   position: relative;
+}
+
+/* Stacked side panels share a column — no double outer border */
+.axis-dock-col > .axis-panel-dock-left,
+.axis-dock-col > .axis-panel-dock-right {
+  border-left: none;
+  border-right: none;
+}
+
+.axis-dock-col > .axis-panel-shell + .axis-panel-shell {
+  border-top: var(--border-w) solid var(--color-border);
 }
 
 /* Editor: CodeMirror needs a non-scrolling body so the pane owns height */

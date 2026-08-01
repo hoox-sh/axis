@@ -21,8 +21,9 @@
  * Main AXIS product shell (Solid root when not in editor-popout view).
  *
  * ## Layout
- * Topbar → flex row (watchlist / layers / dataview / chart / editor & indicators)
- * → results drawer → system logs → status bar. Overlay: settings, plugins,
+ * Topbar → flex row (left dock | chart | right dock) → bottom dock → system
+ * logs → status bar. Dock columns are portal hosts: open panels stack
+ * **one below the other** on the same side. Overlay: settings, plugins,
  * script settings, panel drag ghost.
  *
  * ## Boot (`onMount`)
@@ -67,6 +68,7 @@ import {
   PanelDragOverlay,
   installPanelWindowBridge,
 } from './ui/panels/FloatableShell';
+import { DockColumn, FloatRoot } from './ui/panels/DockColumn';
 import {
   bridgeSubscribe,
   bridgePublish,
@@ -196,12 +198,10 @@ export const App: Component = () => {
       />
 
       <div class="flex-1 flex min-h-0 overflow-hidden">
-        {/* Dockable / floatable panels — shell decides dock vs fixed float */}
-        <Watchlist />
-        <LayerPanel />
-        <DataViewPanel />
+        {/* Left dock column — panels portal in and stack vertically */}
+        <DockColumn side="left" />
 
-        {/* Center: chart */}
+        {/* Center: chart (+ panel components mount here, portal to docks) */}
         <div class="flex-1 flex min-w-0 min-h-0 overflow-hidden bg-bg-base relative">
           <ChartHost />
 
@@ -225,23 +225,34 @@ export const App: Component = () => {
           </Show>
         </div>
 
-        <IndicatorPanel />
-
-        {/* Right: editor (docked) */}
-        <EditorPane
-          editorRef={editorRef}
-          onRun={(doc) => {
-            if (doc?.trim()) {
-              runAndApply(doc, undefined, {
-                inputs: store.editorInputValues || {},
-              });
-            }
-          }}
-        />
+        {/* Right dock column — editor / indicators / etc. stack */}
+        <DockColumn side="right" />
       </div>
 
+      {/* Bottom dock — results / logs / scriptlogs stack one below the other */}
+      <DockColumn side="bottom" />
+
+      {/* Float portal host before panel trees so first paint can attach */}
+      <FloatRoot />
+
+      {/* Panel Solid trees (DOM portaled into dock columns / float root) */}
+      <Watchlist />
+      <LayerPanel />
+      <DataViewPanel />
+      <IndicatorPanel />
+      <EditorPane
+        editorRef={editorRef}
+        onRun={(doc) => {
+          if (doc?.trim()) {
+            runAndApply(doc, undefined, {
+              inputs: store.editorInputValues || {},
+            });
+          }
+        }}
+      />
       <ResultsPanel />
       <ScriptLogsPanel />
+
       <SystemLogs />
       <StatusBar />
 
