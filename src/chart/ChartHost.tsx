@@ -312,6 +312,22 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     getDrawingLayer()?.setTool(tool);
   });
 
+  // Pane corner badges track applied scripts (settings / eye / re-run / remove)
+  createEffect(() => {
+    if (!isActive()) return;
+    void store.scripts;
+    void store.panes;
+    const mgr = getManager() || localManager;
+    if (!mgr) return;
+    untrack(() => {
+      try {
+        mgr.refreshBadges?.();
+      } catch {
+        /* ignore */
+      }
+    });
+  });
+
   // Debug pins from last-run logs (bar_index / time) — markers on price series
   createEffect(() => {
     if (!isActive()) return;

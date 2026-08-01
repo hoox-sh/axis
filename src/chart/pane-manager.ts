@@ -71,6 +71,7 @@ import type { Bar } from '../store/types';
 import { resizePane, store } from '../store';
 import type { TradeMarker } from '../results/events';
 import type { ShapeMarkerSpec } from '../results/plot-visuals';
+import { mountPaneBadge, refreshPaneBadge, setPaneBadgeLabel } from './pane-badge';
 
 /**
  * One plot sample. Omit `value` (or leave undefined) for LWC whitespace so the
@@ -257,12 +258,10 @@ export class PaneManager {
     }
     div.style.minHeight = type === 'volume' ? '72px' : '48px';
     div.style.background = '#0a0b10';
+    div.dataset.paneType = type;
 
-    const labelEl = document.createElement('span');
-    labelEl.className =
-      'absolute top-1 left-2 text-[10px] text-text-dim uppercase tracking-wider z-10 pointer-events-none bg-bg-base/90 px-1.5 py-0.5 border border-border-soft';
-    labelEl.textContent = label;
-    div.appendChild(labelEl);
+    // Name badge + script action icons (settings / eye / re-run / remove)
+    mountPaneBadge(div, id, type, label);
 
     this.container.appendChild(div);
 
@@ -507,9 +506,15 @@ export class PaneManager {
   setLabel(id: string, label: string) {
     const pane = this.panes.get(id);
     if (pane) pane.label = label;
-    const el = document.getElementById(this.paneDomId(id));
-    const labelEl = el?.querySelector('span');
-    if (labelEl) labelEl.textContent = label;
+    setPaneBadgeLabel(id, label);
+  }
+
+  /** Rebuild script-action badges (after apply / toggle / remove). */
+  refreshBadges(paneId?: string) {
+    if (paneId) refreshPaneBadge(paneId);
+    else {
+      for (const id of this.panes.keys()) refreshPaneBadge(id);
+    }
   }
 
   resize(id: string, height: number) {

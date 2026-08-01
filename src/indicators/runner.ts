@@ -462,6 +462,13 @@ export async function runAndApply(
     }
   }
   manager.syncOverlayLines(paneId, overlayLines);
+  // Refresh corner badges (name + settings / eye / re-run / remove)
+  try {
+    manager.refreshBadges?.(paneId);
+    if (paneId !== 'price') manager.refreshBadges?.('price');
+  } catch {
+    /* ignore */
+  }
 
   // bgcolor → histogram underlay on price pane (always price; not indicator sub-pane)
   const bgBands = split.bgcolors
