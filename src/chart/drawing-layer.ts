@@ -626,6 +626,21 @@ export class DrawingLayer {
       return;
     }
 
+    if (this.tool === 'vline') {
+      this.drawings.push(
+        this.applyCreateStyle({
+          id: uid(),
+          kind: 'vline',
+          time: pt.time,
+          color: this.defaultColor('vline'),
+        }),
+      );
+      this.emit();
+      this.redraw();
+      this.afterPlace();
+      return;
+    }
+
     if (this.tool === 'text') {
       const labelText = window.prompt('Label text', 'Note');
       if (labelText == null || !labelText.trim()) return;
@@ -726,7 +741,7 @@ export class DrawingLayer {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     const tol = 10;
-    if (d.kind === 'hline') {
+    if (d.kind === 'hline' || d.kind === 'vline') {
       // No endpoint handles beyond body move
       return null;
     }
@@ -761,6 +776,11 @@ export class DrawingLayer {
       if (yy == null) return false;
       return Math.abs(y - yy) <= tol;
     }
+    if (d.kind === 'vline') {
+      const xx = this.chart.timeScale().timeToCoordinate(d.time as UTCTimestamp);
+      if (xx == null) return false;
+      return Math.abs(x - xx) <= tol;
+    }
     if (d.kind === 'text') {
       const c = this.toXY(d.p1);
       if (!c) return false;
@@ -769,19 +789,45 @@ export class DrawingLayer {
     const a = this.toXY(d.p1);
     const b = this.toXY(d.p2);
     if (!a || !b) return false;
-    if (d.kind === 'rect') {
+    if (d.kind === 'rect' || d.kind === 'ellipse') {
       const minX = Math.min(a.x, b.x) - tol;
       const maxX = Math.max(a.x, b.x) + tol;
       const minY = Math.min(a.y, b.y) - tol;
       const maxY = Math.max(a.y, b.y) + tol;
       const inside = x >= minX && x <= maxX && y >= minY && y <= maxY;
-      // Edge hit preferred
+      if (d.kind === 'ellipse') {
+        // Approximate edge hit via normalized ellipse equation
+        const cx = (a.x + b.x) / 2;
+        const cy = (a.y + b.y) / 2;
+        const rx = Math.max(1, Math.abs(b.x - a.x) / 2);
+        const ry = Math.max(1, Math.abs(b.y - a.y) / 2);
+        const nx = (x - cx) / rx;
+        const ny = (y - cy) / ry;
+        const r2 = nx * nx + ny * ny;
+        return Math.abs(r2 - 1) <= tol / Math.min(rx, ry) + 0.15 || (inside && r2 <= 1.05);
+      }
+      // Edge hit preferred for rect
       const onEdge =
         Math.abs(x - minX) <= tol ||
         Math.abs(x - maxX) <= tol ||
         Math.abs(y - minY) <= tol ||
         Math.abs(y - maxY) <= tol;
       return inside && onEdge;
+    }
+    if (d.kind === 'ray' || d.kind === 'extend') {
+      // Hit full painted ray/extend (not just p1–p2 segment)
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 1e-6) return Math.hypot(x - a.x, y - a.y) <= tol;
+      const scale = 5000 / len;
+      if (d.kind === 'ray') {
+        return distToSegment(x, y, a.x, a.y, a.x + dx * scale, a.y + dy * scale) <= tol;
+      }
+      return (
+        distToSegment(x, y, a.x - dx * scale, a.y - dy * scale, a.x + dx * scale, a.y + dy * scale) <=
+        tol
+      );
     }
     return distToSegment(x, y, a.x, a.y, b.x, b.y) <= tol;
   }
@@ -942,6 +988,17 @@ export class DrawingLayer {
       return;
     }
 
+    if (d.kind === 'vline') {
+      const x = this.chart.timeScale().timeToCoordinate(d.time as UTCTimestamp);
+      if (x == null) return;
+      const h = this.host.clientHeight;
+      line(g, x, 0, x, h, stroke, sw, dash, 'stroke');
+      if (selected) {
+        circle(g, x, h / 2, 5, stroke, true);
+      }
+      return;
+    }
+
     if (d.kind === 'text') {
       const c = this.toXY(d.p1);
       if (!c) return;
@@ -954,8 +1011,11 @@ export class DrawingLayer {
     const b = this.toXY(d.p2);
     if (!a || !b) return;
 
-    if (d.kind === 'trend' || d.kind === 'measure') {
+    if (d.kind === 'trend' || d.kind === 'measure' || d.kind === 'arrow') {
       line(g, a.x, a.y, b.x, b.y, stroke, sw, dash);
+      if (d.kind === 'arrow') {
+        paintArrowHead(g, a.x, a.y, b.x, b.y, stroke, Math.max(8, sw * 3));
+      }
       circle(g, a.x, a.y, selected ? 5 : 3, stroke, selected);
       circle(g, b.x, b.y, selected ? 5 : 3, stroke, selected);
       if (d.kind === 'measure') {
@@ -978,21 +1038,32 @@ export class DrawingLayer {
       return;
     }
 
-    if (d.kind === 'ray') {
+    if (d.kind === 'ray' || d.kind === 'extend') {
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const w = this.host.clientWidth;
       const h = this.host.clientHeight;
-      let extX = b.x;
-      let extY = b.y;
-      if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
-        const scale = 5000 / Math.max(Math.hypot(dx, dy), 0.001);
-        extX = a.x + dx * scale;
-        extY = a.y + dy * scale;
-        extX = Math.max(-w, Math.min(2 * w, extX));
-        extY = Math.max(-h, Math.min(2 * h, extY));
+      const len = Math.hypot(dx, dy);
+      const scale = len > 0.001 ? 5000 / len : 1;
+      let x1 = a.x;
+      let y1 = a.y;
+      let x2 = b.x;
+      let y2 = b.y;
+      if (d.kind === 'ray') {
+        x2 = a.x + dx * scale;
+        y2 = a.y + dy * scale;
+      } else {
+        // extend both directions through p1→p2
+        x1 = a.x - dx * scale;
+        y1 = a.y - dy * scale;
+        x2 = a.x + dx * scale;
+        y2 = a.y + dy * scale;
       }
-      line(g, a.x, a.y, extX, extY, stroke, sw, dash);
+      x1 = Math.max(-w, Math.min(2 * w, x1));
+      y1 = Math.max(-h, Math.min(2 * h, y1));
+      x2 = Math.max(-w, Math.min(2 * w, x2));
+      y2 = Math.max(-h, Math.min(2 * h, y2));
+      line(g, x1, y1, x2, y2, stroke, sw, dash);
       circle(g, a.x, a.y, selected ? 5 : 3, stroke, selected);
       circle(g, b.x, b.y, selected ? 5 : 3, stroke, selected);
       return;
@@ -1014,6 +1085,31 @@ export class DrawingLayer {
         stroke,
         'stroke-width': String(sw),
         'pointer-events': 'all',
+        ...(dash ? { 'stroke-dasharray': dash } : {}),
+      });
+      if (selected) {
+        circle(g, a.x, a.y, 5, stroke, true);
+        circle(g, b.x, b.y, 5, stroke, true);
+      }
+      return;
+    }
+
+    if (d.kind === 'ellipse') {
+      const cx = (a.x + b.x) / 2;
+      const cy = (a.y + b.y) / 2;
+      const rx = Math.max(1, Math.abs(b.x - a.x) / 2);
+      const ry = Math.max(1, Math.abs(b.y - a.y) / 2);
+      const fo = Math.max(0, Math.min(1, st.fillOpacity));
+      el(g, 'ellipse', {
+        cx: String(cx),
+        cy: String(cy),
+        rx: String(rx),
+        ry: String(ry),
+        fill: stroke,
+        'fill-opacity': String(fo),
+        stroke,
+        'stroke-width': String(sw),
+        'pointer-events': 'stroke',
         ...(dash ? { 'stroke-dasharray': dash } : {}),
       });
       if (selected) {
@@ -1049,7 +1145,15 @@ export class DrawingLayer {
   }
 }
 
-type TwoPointKind = 'trend' | 'ray' | 'rect' | 'fib' | 'measure';
+type TwoPointKind =
+  | 'trend'
+  | 'ray'
+  | 'extend'
+  | 'rect'
+  | 'ellipse'
+  | 'arrow'
+  | 'fib'
+  | 'measure';
 
 /** Create an SVG element in the SVG namespace and append to `parent`. */
 function el(
@@ -1155,6 +1259,9 @@ function resizeDrawing(origin: Drawing, mode: DragMode, pt: Point): Drawing {
   if (origin.kind === 'hline') {
     return { ...origin, price: pt.price };
   }
+  if (origin.kind === 'vline') {
+    return { ...origin, time: pt.time };
+  }
   if (origin.kind === 'text') {
     return { ...origin, p1: { ...pt } };
   }
@@ -1192,6 +1299,9 @@ function shiftDrawing(d: Drawing, dTime: number, dPrice: number): Drawing {
   if (d.kind === 'hline') {
     return { ...d, price: d.price + dPrice };
   }
+  if (d.kind === 'vline') {
+    return { ...d, time: d.time + dTime };
+  }
   if (d.kind === 'text') {
     return {
       ...d,
@@ -1203,6 +1313,33 @@ function shiftDrawing(d: Drawing, dTime: number, dPrice: number): Drawing {
     p1: { time: d.p1.time + dTime, price: d.p1.price + dPrice },
     p2: { time: d.p2.time + dTime, price: d.p2.price + dPrice },
   };
+}
+
+/** Triangle arrow head at (x2,y2) pointing from (x1,y1). */
+function paintArrowHead(
+  g: SVGElement,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  fill: string,
+  size: number,
+) {
+  const ang = Math.atan2(y2 - y1, x2 - x1);
+  const s = Math.max(6, size);
+  const a1 = ang + Math.PI * 0.82;
+  const a2 = ang - Math.PI * 0.82;
+  const p1x = x2 + Math.cos(a1) * s;
+  const p1y = y2 + Math.sin(a1) * s;
+  const p2x = x2 + Math.cos(a2) * s;
+  const p2y = y2 + Math.sin(a2) * s;
+  el(g, 'polygon', {
+    points: `${x2},${y2} ${p1x},${p1y} ${p2x},${p2y}`,
+    fill,
+    stroke: fill,
+    'stroke-width': '1',
+    'pointer-events': 'none',
+  });
 }
 
 function distToSegment(

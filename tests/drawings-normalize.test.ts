@@ -50,8 +50,21 @@ describe('normalizeDrawing — legacy shapes', () => {
     expect(d!.meta?.text).toBe('R1');
   });
 
+  it('vline: kind / time / color', () => {
+    const d = normalizeDrawing({
+      id: 'v1',
+      kind: 'vline',
+      color: '#00ff00',
+      time: 1_700_000_000,
+    });
+    expect(d).not.toBeNull();
+    expect(d!.kind).toBe('vline');
+    expect(d!.points[0]!.time).toBe(1_700_000_000);
+    expect((d as { time?: number }).time).toBe(1_700_000_000);
+  });
+
   it('two-point: trend / ray / rect / fib / measure preserve p1+p2', () => {
-    const kinds = ['trend', 'ray', 'rect', 'fib', 'measure'] as const;
+    const kinds = ['trend', 'ray', 'extend', 'rect', 'ellipse', 'arrow', 'fib', 'measure'] as const;
     const p1 = { time: 1_700_000_000, price: 100 };
     const p2 = { time: 1_700_000_600, price: 120 };
     for (const kind of kinds) {

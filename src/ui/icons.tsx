@@ -41,6 +41,9 @@ import {
   Copy,
   Download,
   Eraser,
+  Eye,
+  EyeOff,
+  GitCommitHorizontal,
   FileJson,
   FileSpreadsheet,
   FolderOpen,
@@ -81,6 +84,7 @@ import {
   WifiOff,
   MoveUpRight,
   Layers,
+  Slash,
   Table2,
   type LucideProps,
 } from 'lucide-solid';
@@ -145,7 +149,7 @@ export const Icons = {
   trend: withDefaults(TrendingUp),
   ray: withDefaults(MoveUpRight),
   square: withDefaults(Square),
-  fib: withDefaults(Layers),
+  fib: withDefaults(GitCommitHorizontal),
   layers: withDefaults(Layers),
   table: withDefaults(Table2),
   ruler: withDefaults(Ruler),
@@ -165,6 +169,10 @@ export const Icons = {
   palette: withDefaults(Palette),
   bringToFront: withDefaults(BringToFront),
   sendToBack: withDefaults(SendToBack),
+  eye: withDefaults(Eye),
+  eyeOff: withDefaults(EyeOff),
+  vline: withDefaults(Slash),
+  extend: withDefaults(MoveUpRight),
 };
 
 /** Inline icon row helper for buttons */

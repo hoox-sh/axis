@@ -34,9 +34,13 @@
 export type DrawingToolId =
   | 'cursor'
   | 'hline'
+  | 'vline'
   | 'trend'
   | 'ray'
+  | 'extend'
   | 'rect'
+  | 'ellipse'
+  | 'arrow'
   | 'fib'
   | 'measure'
   | 'text';
@@ -99,9 +103,15 @@ export interface HLineDrawing extends DrawingBase {
   price: number;
 }
 
-/** Two-anchor drawings: trend, ray, rect, fib retracement, measure ruler. */
+/** Full-height vertical time level. */
+export interface VLineDrawing extends DrawingBase {
+  kind: 'vline';
+  time: number;
+}
+
+/** Two-anchor drawings: lines, shapes, fib, measure. */
 export interface TwoPointDrawing extends DrawingBase {
-  kind: 'trend' | 'ray' | 'rect' | 'fib' | 'measure';
+  kind: 'trend' | 'ray' | 'extend' | 'rect' | 'ellipse' | 'arrow' | 'fib' | 'measure';
   p1: Point;
   p2: Point;
 }
@@ -114,7 +124,7 @@ export interface TextDrawing extends DrawingBase {
 }
 
 /** Discriminated union of user drawings stored in the app state. */
-export type Drawing = HLineDrawing | TwoPointDrawing | TextDrawing;
+export type Drawing = HLineDrawing | VLineDrawing | TwoPointDrawing | TextDrawing;
 
 /** Palette used by the toolbar presets and layer defaults. */
 export const DRAWING_COLORS = {
@@ -151,7 +161,16 @@ export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] as const;
 
 /** Tools that need two click anchors (draft → place) rather than one click. */
 export function needsTwoPoints(tool: DrawingToolId): boolean {
-  return tool === 'trend' || tool === 'ray' || tool === 'rect' || tool === 'fib' || tool === 'measure';
+  return (
+    tool === 'trend' ||
+    tool === 'ray' ||
+    tool === 'extend' ||
+    tool === 'rect' ||
+    tool === 'ellipse' ||
+    tool === 'arrow' ||
+    tool === 'fib' ||
+    tool === 'measure'
+  );
 }
 
 /** Human-readable label for toolbar flyouts and titles. */
@@ -161,12 +180,20 @@ export function toolLabel(tool: DrawingToolId): string {
       return 'Cursor';
     case 'hline':
       return 'Horizontal line';
+    case 'vline':
+      return 'Vertical line';
     case 'trend':
       return 'Trend line';
     case 'ray':
       return 'Ray';
+    case 'extend':
+      return 'Extended line';
     case 'rect':
       return 'Rectangle';
+    case 'ellipse':
+      return 'Ellipse';
+    case 'arrow':
+      return 'Arrow';
     case 'fib':
       return 'Fibonacci';
     case 'measure':

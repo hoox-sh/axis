@@ -71,9 +71,13 @@ const LINE_STYLES: DrawingLineStyle[] = ['solid', 'dashed', 'dotted'];
 const TOOL_ICONS: Partial<Record<DrawingToolId, typeof Icons.cursor>> = {
   cursor: Icons.cursor,
   hline: Icons.minus,
+  vline: Icons.vline,
   trend: Icons.trend,
   ray: Icons.ray,
+  extend: Icons.extend,
   rect: Icons.square,
+  ellipse: Icons.circle,
+  arrow: Icons.arrowUpRight,
   fib: Icons.fib,
   measure: Icons.ruler,
   text: Icons.type,
@@ -288,7 +292,11 @@ export const DrawingToolbar: Component = () => {
                   class={`${btnClass} ${
                     isActive() ? 'bg-accent/10 text-accent border-accent' : 'text-text-dim'
                   }`}
-                  title={g.flyout ? `${g.label} · click for tools` : toolLabel(primaryId())}
+                  title={
+                    g.flyout
+                      ? `${g.label} · ${toolLabel(primaryId())} · click for tools`
+                      : toolLabel(primaryId())
+                  }
                   aria-label={g.label}
                   aria-pressed={isActive()}
                   aria-haspopup={g.flyout ? 'menu' : undefined}
@@ -299,6 +307,11 @@ export const DrawingToolbar: Component = () => {
                     const I = GIcon();
                     return <I size={iconPx} strokeWidth={2.25} />;
                   })()}
+                  <Show when={g.flyout}>
+                    <span class="absolute right-0.5 bottom-0.5 text-text-faint opacity-80">
+                      <Icons.chevronRight size={8} strokeWidth={2.5} />
+                    </span>
+                  </Show>
                 </button>
                 <Show when={g.flyout && openGroup() === g.id}>
                   <div
@@ -338,9 +351,12 @@ export const DrawingToolbar: Component = () => {
 
         <button
           type="button"
-          class={`${btnClass} ${store.drawingUi.magnet !== 'off' ? 'text-accent' : 'text-text-dim'}`}
-          title={`Magnet: ${store.drawingUi.magnet} (click to cycle)`}
-          aria-label="Magnet snap"
+          class={`${btnClass} relative ${
+            store.drawingUi.magnet !== 'off' ? 'text-accent' : 'text-text-dim'
+          }`}
+          title={`Magnet: ${store.drawingUi.magnet} (click to cycle off → weak → strong)`}
+          aria-label={`Magnet snap: ${store.drawingUi.magnet}`}
+          aria-pressed={store.drawingUi.magnet !== 'off'}
           onClick={() => {
             const order = ['off', 'weak', 'strong'] as const;
             const i = order.indexOf(store.drawingUi.magnet);
@@ -350,6 +366,11 @@ export const DrawingToolbar: Component = () => {
           }}
         >
           <Icons.magnet size={iconPx} strokeWidth={2.25} />
+          <Show when={store.drawingUi.magnet === 'weak' || store.drawingUi.magnet === 'strong'}>
+            <span class="absolute -top-0.5 -right-0.5 text-[8px] font-mono font-bold leading-none text-accent">
+              {store.drawingUi.magnet === 'strong' ? 'S' : 'W'}
+            </span>
+          </Show>
         </button>
         <button
           type="button"
@@ -384,33 +405,40 @@ export const DrawingToolbar: Component = () => {
         <button
           type="button"
           class={`${btnClass} ${store.drawingUi.hideDrawings ? 'text-accent' : 'text-text-dim'}`}
-          title="Hide drawings"
+          title="Hide drawings (selected still visible)"
           aria-pressed={store.drawingUi.hideDrawings}
+          aria-label={store.drawingUi.hideDrawings ? 'Show drawings' : 'Hide drawings'}
           onClick={() => {
             const next = !store.drawingUi.hideDrawings;
             setDrawingUi({ hideDrawings: next });
             getActiveDrawingLayer()?.setHideDrawings(next);
           }}
         >
-          <Icons.layers size={iconPx} strokeWidth={2.25} />
+          {store.drawingUi.hideDrawings ? (
+            <Icons.eyeOff size={iconPx} strokeWidth={2.25} />
+          ) : (
+            <Icons.eye size={iconPx} strokeWidth={2.25} />
+          )}
         </button>
 
         <div class="h-px bg-border-soft my-0.5" />
 
         <button
           type="button"
-          class={`${btnClass} text-text-dim`}
-          title="Delete selected (Del)"
+          class={`${btnClass} text-text-dim disabled:opacity-40`}
+          title="Delete selected (Del / Backspace)"
           aria-label="Delete selected drawing"
+          disabled={!store.selectedDrawingId}
           onClick={() => getActiveDrawingLayer()?.deleteSelected()}
         >
           <Icons.trash size={iconPx} strokeWidth={2.25} />
         </button>
         <button
           type="button"
-          class={`${btnClass} text-text-dim`}
+          class={`${btnClass} text-text-dim disabled:opacity-40`}
           title="Clear all drawings"
           aria-label="Clear all drawings"
+          disabled={store.drawings.length === 0}
           onClick={() => {
             if (store.drawings.length && !confirm('Clear all drawings?')) return;
             getActiveDrawingLayer()?.clearAll();
@@ -502,7 +530,14 @@ export const DrawingToolbar: Component = () => {
             )}
           </For>
 
-          <Show when={active() === 'rect' || selected()?.kind === 'rect'}>
+          <Show
+            when={
+              active() === 'rect' ||
+              active() === 'ellipse' ||
+              selected()?.kind === 'rect' ||
+              selected()?.kind === 'ellipse'
+            }
+          >
             <span class="w-px h-5 bg-border-soft mx-0.5" />
             <label class="flex items-center gap-1 text-[10px] text-text-faint px-0.5" title="Fill opacity">
               <span>Fill</span>

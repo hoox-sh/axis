@@ -30,10 +30,8 @@
  * (`price`, `p1`, `p2`, `text`, `color`) so current SVG paint/hit-test layers
  * keep working until they fully migrate to `points[]`.
  *
- * Does **not**:
- * - Validate the full extended {@link DrawingKind} set from `./types` yet
- *   (only the legacy subset: hline, trend, ray, rect, fib, measure, text)
- * - Touch DOM, LWC, or Pine Script™ plot objects
+ * Accepts runtime kinds: hline, vline, trend, ray, extend, rect, ellipse,
+ * arrow, fib, measure, text. Does not touch DOM / LWC / Pine plots.
  */
 
 import {
@@ -83,12 +81,16 @@ const DEFAULT_WIDTH = 1.5;
 const DEFAULT_LINE_STYLE: DrawingLineStyle = 'solid';
 const DEFAULT_OPACITY = 1;
 
-/** Legacy kind set currently accepted by this normalizer. */
+/** Kind set currently accepted by this normalizer (must match runtime paint). */
 const VALID_KINDS = new Set<DrawingKind>([
   'hline',
+  'vline',
   'trend',
   'ray',
+  'extend',
   'rect',
+  'ellipse',
+  'arrow',
   'fib',
   'measure',
   'text',
@@ -97,7 +99,10 @@ const VALID_KINDS = new Set<DrawingKind>([
 const TWO_POINT_KINDS = new Set<DrawingKind>([
   'trend',
   'ray',
+  'extend',
   'rect',
+  'ellipse',
+  'arrow',
   'fib',
   'measure',
 ]);
@@ -135,7 +140,7 @@ function normalizeLineStyle(raw: unknown): DrawingLineStyle | null {
 }
 
 function minPointsFor(kind: DrawingKind): number {
-  if (kind === 'hline' || kind === 'text') return 1;
+  if (kind === 'hline' || kind === 'vline' || kind === 'text') return 1;
   if (TWO_POINT_KINDS.has(kind)) return 2;
   return 1;
 }
@@ -243,6 +248,19 @@ function collectPoints(
     return [{ time: 0, price }];
   }
 
+  if (kind === 'vline') {
+    const time =
+      asFiniteNumber(raw.time) ??
+      (isRecord(raw.p1) ? asFiniteNumber(raw.p1.time) : null);
+    if (time == null) return null;
+    // price unused for vline paint; placeholder for points model
+    const price =
+      asFiniteNumber(raw.price) ??
+      (isRecord(raw.p1) ? asFiniteNumber(raw.p1.price) : null) ??
+      0;
+    return [{ time, price }];
+  }
+
   if (kind === 'text') {
     const p1 = normalizePoint(raw.p1);
     if (!p1) return null;
@@ -310,6 +328,8 @@ export function attachLegacyFields(d: Drawing): Drawing {
   any.color = d.style.color;
   if (d.kind === 'hline' && d.points[0]) {
     any.price = d.points[0].price;
+  } else if (d.kind === 'vline' && d.points[0]) {
+    any.time = d.points[0].time;
   } else if (d.kind === 'text' && d.points[0]) {
     any.p1 = { ...d.points[0] };
     any.text = d.meta?.text ?? '';

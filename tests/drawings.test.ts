@@ -15,11 +15,15 @@ import { fibPrices as computeFib } from '../src/chart/drawing-layer.ts';
 describe('drawing tools helpers', () => {
   it('needsTwoPoints for multi-click tools', () => {
     expect(needsTwoPoints('hline')).toBe(false);
+    expect(needsTwoPoints('vline')).toBe(false);
     expect(needsTwoPoints('text')).toBe(false);
     expect(needsTwoPoints('cursor')).toBe(false);
     expect(needsTwoPoints('trend')).toBe(true);
     expect(needsTwoPoints('ray')).toBe(true);
+    expect(needsTwoPoints('extend')).toBe(true);
     expect(needsTwoPoints('rect')).toBe(true);
+    expect(needsTwoPoints('ellipse')).toBe(true);
+    expect(needsTwoPoints('arrow')).toBe(true);
     expect(needsTwoPoints('fib')).toBe(true);
     expect(needsTwoPoints('measure')).toBe(true);
   });
@@ -28,9 +32,13 @@ describe('drawing tools helpers', () => {
     const tools = [
       'cursor',
       'hline',
+      'vline',
       'trend',
       'ray',
+      'extend',
       'rect',
+      'ellipse',
+      'arrow',
       'fib',
       'measure',
       'text',
@@ -39,6 +47,8 @@ describe('drawing tools helpers', () => {
       expect(toolLabel(t).length).toBeGreaterThan(0);
     }
     expect(toolLabel('hline')).toMatch(/Horizontal/i);
+    expect(toolLabel('vline')).toMatch(/Vertical/i);
+    expect(toolLabel('extend')).toMatch(/Extended/i);
     expect(toolLabel('fib')).toMatch(/Fib/i);
   });
 
