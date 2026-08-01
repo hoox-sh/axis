@@ -97,6 +97,71 @@ export interface RunOptions {
 type PineLogLine = { level?: string; message?: string; [k: string]: unknown };
 
 /**
+ * Resolve Pine `overlay` for pane routing.
+ * - explicit false / 0 / "false" → sub-pane
+ * - explicit true → price pane
+ * - missing: indicator → sub-pane, strategy (or unknown) → price (TV default)
+ */
+export function resolveOverlayFlag(
+  overlayFlag: unknown,
+  scriptType?: string,
+): boolean {
+  if (overlayFlag === false || overlayFlag === 0 || overlayFlag === 'false') {
+    return false;
+  }
+  if (overlayFlag === true || overlayFlag === 1 || overlayFlag === 'true') {
+    return true;
+  }
+  const t = (scriptType || '').toLowerCase();
+  if (t === 'indicator' || t === 'library') return false;
+  // strategy / blank → overlay on price (TV strategy default)
+  return true;
+}
+
+/**
+ * True when finite plot samples sit on a scale that would vanish against
+ * typical price (e.g. RSI 0–100 or rsi*0.01 vs BTC).
+ */
+export function seriesWouldHideOnPrice(
+  seriesEntries: ReadonlyArray<readonly [string, unknown[]]>,
+  bars: ReadonlyArray<{ close?: number }>,
+): boolean {
+  let min = Infinity;
+  let max = -Infinity;
+  let n = 0;
+  for (const [, arr] of seriesEntries) {
+    if (!Array.isArray(arr)) continue;
+    for (const v of arr) {
+      if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+      if (v < min) min = v;
+      if (v > max) max = v;
+      n += 1;
+    }
+  }
+  if (n < 2 || !Number.isFinite(min) || !Number.isFinite(max)) return false;
+  const plotSpan = Math.max(Math.abs(max), Math.abs(min), max - min);
+  if (plotSpan <= 0) return false;
+
+  let priceRef = 0;
+  let pc = 0;
+  for (const b of bars) {
+    const c = b?.close;
+    if (typeof c === 'number' && Number.isFinite(c) && c > 0) {
+      priceRef += c;
+      pc += 1;
+    }
+  }
+  if (pc < 1) return false;
+  priceRef /= pc;
+
+  // Oscillator / normalized band: values stay within ~[-500, 5000] and are
+  // tiny vs average price (e.g. RSI*0.01 ≈ 0.5 on a 50k instrument).
+  const looksBounded = max <= 5000 && min >= -5000;
+  const tinyVsPrice = plotSpan < priceRef * 0.02 && Math.abs(max) < priceRef * 0.05;
+  return looksBounded && tinyVsPrice;
+}
+
+/**
  * Lift `meta.logs` / `meta.profile` onto top-level when engines only put them in meta.
  * Does not auto-open Scriptlogs (callers may still open Results).
  */
@@ -260,25 +325,54 @@ export async function runAndApply(
   const manager = getManager();
   if (!manager) return result;
 
-  // Pine: indicator defaults overlay=false; strategy defaults overlay=true.
-  // Explicit false must never be coerced to true.
-  const overlayFlag = result.meta?.overlay;
-  const overlay = overlayFlag !== false && overlayFlag !== 0 && overlayFlag !== 'false';
   const existing = indicatorId
     ? store.scripts.find((s) => s.id === indicatorId)
     : undefined;
   const scriptName = String(result.meta?.script_name || existing?.name || 'Indicator');
+  const scriptType = String(
+    (result.meta as { script_type?: string } | undefined)?.script_type ||
+      (result.meta as { kind?: string } | undefined)?.kind ||
+      '',
+  ).toLowerCase();
+
+  const ohlcvTimes = store.bars.map((b) => b.time);
+  const plotMeta = (result.meta?.plot_meta || {}) as Record<string, PlotMetaEntry>;
+  const split = splitSeriesByKind(result.series || {}, plotMeta);
+
+  // Line-like series only — bgcolor/plotshape handled below
+  const seriesEntries = split.lines.map((e) => [e.key, e.values] as const);
+
+  // Pine: indicator defaults overlay=false; strategy defaults overlay=true.
+  // Explicit false must never be coerced to true.
+  let overlay = resolveOverlayFlag(result.meta?.overlay, scriptType);
+
+  // Oscillator-scale plots (RSI, MACD, …) on the price pane are effectively
+  // invisible (values ~0–100 vs BTC price). Force a sub-pane so scripts show.
+  if (overlay && seriesWouldHideOnPrice(seriesEntries, store.bars)) {
+    overlay = false;
+    if (!silent) {
+      appendLog(
+        'info',
+        'Plot scale ≪ price — showing in sub-pane (declare overlay=false for oscillators)',
+        'plot',
+      );
+    }
+  }
+
   let paneId = 'price';
   if (!overlay) {
     paneId =
-      existing?.paneId && existing.paneId !== 'price' ? existing.paneId : 'indicator';
+      existing?.paneId && existing.paneId !== 'price' && existing.paneId !== 'volume'
+        ? existing.paneId
+        : 'indicator';
     if (!manager.getPane(paneId)) {
       // Keep store panes list in sync
-      if (!store.panes.some((p) => p.id === 'indicator')) {
+      if (!store.panes.some((p) => p.id === paneId)) {
         addPane('indicator', scriptName);
       }
-      manager.createPane('indicator', 'indicator', scriptName, 140);
+      // Prefer stable id `indicator` for the shared sub-pane
       paneId = 'indicator';
+      manager.createPane(paneId, 'indicator', scriptName, 140);
       manager.syncTimeScales();
     } else {
       try {
@@ -287,14 +381,14 @@ export async function runAndApply(
         /* ignore */
       }
     }
+  } else if (existing?.paneId && existing.paneId !== 'price' && existing.paneId !== 'volume') {
+    // Was a sub-pane script, now true overlay — clear stale series on old pane
+    try {
+      manager.removeOverlays(existing.paneId);
+    } catch {
+      /* ignore */
+    }
   }
-
-  const ohlcvTimes = store.bars.map((b) => b.time);
-  const plotMeta = (result.meta?.plot_meta || {}) as Record<string, PlotMetaEntry>;
-  const split = splitSeriesByKind(result.series || {}, plotMeta);
-
-  // Line-like series only — bgcolor/plotshape handled below
-  const seriesEntries = split.lines.map((e) => [e.key, e.values] as const);
 
   /**
    * Map engine series → LWC points. Keep **one point per OHLCV bar**.

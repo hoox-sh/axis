@@ -197,8 +197,7 @@ export const serverEngine: EnginePlugin = {
           }
           const wsOverlay =
             wsResult.overlay ??
-            (wsResult.meta as { overlay?: boolean } | undefined)?.overlay ??
-            true;
+            (wsResult.meta as { overlay?: boolean } | undefined)?.overlay;
           const wsName =
             (wsResult.script_name as string) ||
             (wsResult.meta as { script_name?: string } | undefined)?.script_name ||
@@ -212,6 +211,8 @@ export const serverEngine: EnginePlugin = {
             (wsResult as { logs?: unknown }).logs ??
             (wsResult.meta as { logs?: unknown } | undefined)?.logs
           ) as RunResult['logs'] | undefined;
+          const wsScriptType = (wsResult.meta as { script_type?: string } | undefined)
+            ?.script_type;
           return {
             status: 'success',
             plots: (wsResult.plots as (number | null)[]) || [],
@@ -222,14 +223,22 @@ export const serverEngine: EnginePlugin = {
             ...(wsProfile ? { profile: wsProfile } : {}),
             ...(Array.isArray(wsLogs) ? { logs: wsLogs } : {}),
             meta: {
+              ...(typeof wsResult.meta === 'object' && wsResult.meta ? wsResult.meta : {}),
               ms,
               transport: 'ws' as const,
               mode: (wsResult.mode || mode) as string,
               script_id: wsResult.script_id,
               run_id: wsResult.run_id,
-              overlay: wsOverlay !== false,
+              ...(wsOverlay !== undefined
+                ? { overlay: wsOverlay !== false && wsOverlay !== 0 }
+                : {}),
               script_name: wsName,
-              plot_meta: (wsResult.plot_meta || {}) as Record<string, unknown>,
+              ...(wsScriptType ? { script_type: wsScriptType } : {}),
+              plot_meta:
+                (wsResult.plot_meta as Record<string, unknown>) ||
+                (wsResult.meta as { plot_meta?: Record<string, unknown> } | undefined)
+                  ?.plot_meta ||
+                {},
               inputs: (wsResult as { inputs?: unknown }).inputs,
               ...(wsProfile ? { profile: wsProfile } : {}),
               ...(Array.isArray(wsLogs) ? { logs: wsLogs } : {}),
@@ -291,14 +300,20 @@ export const serverEngine: EnginePlugin = {
           meta: { ms: performance.now() - t0, transport: 'rest' },
         } satisfies RunResult;
       }
-      const restOverlay =
-        payload.overlay ?? payload.meta?.overlay ?? true;
+      // Prefer engine meta; do not force true — runner resolves indicator/strategy defaults.
+      const restOverlay = payload.overlay ?? payload.meta?.overlay;
       const restName =
         payload.script_name || payload.meta?.script_name || 'plot';
       const restProfile = (payload.profile ?? payload.meta?.profile) as
         | Record<string, unknown>
         | undefined;
       const restLogs = (payload.logs ?? payload.meta?.logs) as RunResult['logs'] | undefined;
+      const restScriptType =
+        payload.script_type ||
+        payload.meta?.script_type ||
+        (typeof restName === 'string' && /strategy/i.test(String(payload.meta?.kind || ''))
+          ? 'strategy'
+          : undefined);
       return {
         status: 'success',
         plots: (payload.plots as (number | null)[]) || [],
@@ -315,9 +330,10 @@ export const serverEngine: EnginePlugin = {
           mode: payload.mode as string | undefined,
           script_id: payload.script_id as string | undefined,
           run_id: payload.run_id as string | undefined,
-          overlay: restOverlay !== false,
+          ...(restOverlay !== undefined ? { overlay: restOverlay !== false && restOverlay !== 0 } : {}),
           script_name: restName as string,
-          plot_meta: payload.plot_meta || {},
+          ...(restScriptType ? { script_type: restScriptType } : {}),
+          plot_meta: payload.plot_meta || payload.meta?.plot_meta || {},
           inputs: payload.inputs,
           ...(restProfile ? { profile: restProfile } : {}),
           ...(Array.isArray(restLogs) ? { logs: restLogs } : {}),
@@ -602,8 +618,7 @@ export const pyodideEngine: EnginePlugin & {
         overlay?: boolean;
         script_name?: string;
       };
-      const overlay =
-        result.overlay ?? result.meta?.overlay ?? true;
+      const overlay = result.overlay ?? result.meta?.overlay;
       const scriptName =
         result.script_name || result.meta?.script_name || 'plot';
       return {
@@ -613,7 +628,9 @@ export const pyodideEngine: EnginePlugin & {
         meta: {
           ...(result.meta || {}),
           ms: performance.now() - t0,
-          overlay: overlay !== false,
+          ...(overlay !== undefined
+            ? { overlay: overlay !== false && overlay !== 0 }
+            : {}),
           script_name: scriptName,
           transport: 'local',
         },
