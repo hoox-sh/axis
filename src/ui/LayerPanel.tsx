@@ -20,7 +20,10 @@
 /**
  * Layers panel — panes, indicators, user drawings visibility/management.
  *
- * Visibility toggles hit both store and chart manager / drawing layer.
+ * User drawings are listed individually, selectable (syncs chart selection),
+ * hideable per-item, and removable. Visibility toggles hit both store and
+ * chart manager / drawing layer.
+ *
  * FloatableShell id `layers`. Script settings opens per applied indicator.
  */
 
@@ -33,10 +36,19 @@ import {
   removeIndicator,
   clearDrawings,
   openScriptSettings,
+  setSelectedDrawingId,
+  setDrawingTool,
+  deleteDrawing,
+  patchDrawing,
 } from '../store';
 import { getManager, getActiveDrawingLayer } from '../chart/manager-access';
 import { Icons } from './icons';
 import { FloatableShell } from './panels/FloatableShell';
+import {
+  toolLabel,
+  resolveDrawingStyle,
+  type Drawing,
+} from '../chart/drawing-types';
 
 /** Pane / indicator / drawing visibility and remove actions. */
 export const LayerPanel: Component = () => {
@@ -73,13 +85,61 @@ export const LayerPanel: Component = () => {
     removeIndicator(id);
   };
 
-  const onClearDrawings = () => {
-    if (store.drawings.length && !confirm('Clear all user drawings?')) return;
-    clearDrawings();
+  const syncLayerDrawings = (list: Drawing[]) => {
     const layer = getActiveDrawingLayer();
     if (layer) {
       try {
-        layer.setDrawings([]);
+        layer.setDrawings(list);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
+  const onClearDrawings = () => {
+    if (store.drawings.length && !confirm('Clear all user drawings?')) return;
+    clearDrawings();
+    setSelectedDrawingId(null);
+    syncLayerDrawings([]);
+  };
+
+  /** Select drawing in store + live layer (shows handles on chart). */
+  const onSelectDrawing = (id: string) => {
+    setSelectedDrawingId(id);
+    setDrawingTool('cursor');
+    const layer = getActiveDrawingLayer();
+    if (layer) {
+      try {
+        layer.setTool('cursor');
+        layer.setSelectedId(id);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
+  const onToggleDrawingVisible = (d: Drawing) => {
+    const hidden = !d.meta?.hidden;
+    const nextMeta = { ...(d.meta || {}), hidden };
+    patchDrawing(d.id, { meta: nextMeta } as Partial<Drawing>);
+    const nextList = store.drawings.map((x) =>
+      x.id === d.id ? ({ ...x, meta: nextMeta } as Drawing) : x,
+    );
+    syncLayerDrawings(nextList);
+    // Re-apply selection paint after hide toggle
+    if (store.selectedDrawingId === d.id) {
+      getActiveDrawingLayer()?.setSelectedId(d.id);
+    }
+  };
+
+  const onRemoveDrawing = (id: string) => {
+    deleteDrawing(id);
+    const layer = getActiveDrawingLayer();
+    if (layer) {
+      try {
+        const next = store.drawings.slice();
+        layer.setDrawings(next);
+        if (layer.getSelectedId() === id) layer.setSelectedId(null);
       } catch {
         /* ignore */
       }
@@ -125,7 +185,7 @@ export const LayerPanel: Component = () => {
           </Section>
 
           <Section title="Drawings">
-            <div class="flex items-center justify-between gap-2 px-1 py-0.5">
+            <div class="flex items-center justify-between gap-2 px-1 py-0.5 mb-0.5">
               <span class="text-text-dim">
                 User drawings{' '}
                 <span class="text-text-faint font-mono">({store.drawings.length})</span>
@@ -140,8 +200,88 @@ export const LayerPanel: Component = () => {
                 Clear
               </button>
             </div>
-            <div class="px-1 text-[0.85em] text-text-faint">
-              Script drawings refresh on each run.
+            <Show
+              when={store.drawings.length > 0}
+              fallback={
+                <Empty>No user drawings. Use the left tool rail to place shapes.</Empty>
+              }
+            >
+              <For each={store.drawings}>
+                {(d) => {
+                  const selected = () => store.selectedDrawingId === d.id;
+                  const visible = () => !d.meta?.hidden;
+                  const st = () => resolveDrawingStyle(d);
+                  return (
+                    <div
+                      class={`flex items-center gap-1.5 px-1 py-1 border cursor-pointer transition-colors ${
+                        selected()
+                          ? 'bg-accent/15 border-accent'
+                          : 'bg-bg-elev border-border-soft hover:border-border'
+                      }`}
+                      data-drawing-id={d.id}
+                      data-selected={selected() ? '1' : '0'}
+                      role="button"
+                      tabIndex={0}
+                      title="Click to select on chart"
+                      onClick={() => onSelectDrawing(d.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSelectDrawing(d.id);
+                        }
+                      }}
+                    >
+                      <button
+                        type="button"
+                        class={`w-5 h-5 text-[0.75em] flex items-center justify-center border-2 flex-shrink-0 ${
+                          visible()
+                            ? 'border-accent bg-accent/15 text-accent'
+                            : 'border-border bg-bg-hover text-text-dim'
+                        }`}
+                        title={visible() ? 'Hide' : 'Show'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleDrawingVisible(d);
+                        }}
+                      >
+                        {visible() ? '●' : '○'}
+                      </button>
+                      <span
+                        class="w-2.5 h-2.5 rounded-sm flex-shrink-0 border border-border-soft"
+                        style={{ background: st().color }}
+                        title={st().color}
+                      />
+                      <div class="min-w-0 flex-1">
+                        <div
+                          class={`truncate font-medium leading-tight ${
+                            selected() ? 'text-accent' : 'text-text'
+                          }`}
+                        >
+                          {drawingListLabel(d)}
+                        </div>
+                        <div class="text-[0.78em] text-text-faint font-mono truncate">
+                          {toolLabel(d.kind)}
+                          {st().locked ? ' · locked' : ''}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        class="sc-btn sc-btn-ghost px-1 text-text-faint hover:text-red"
+                        title="Remove drawing"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveDrawing(d.id);
+                        }}
+                      >
+                        <Icons.x />
+                      </button>
+                    </div>
+                  );
+                }}
+              </For>
+            </Show>
+            <div class="px-1 mt-1 text-[0.78em] text-text-faint">
+              Script drawings refresh on each run (not listed).
             </div>
           </Section>
         </div>
@@ -149,6 +289,45 @@ export const LayerPanel: Component = () => {
     </Show>
   );
 };
+
+/** Short human label for a drawing row. */
+function drawingListLabel(d: Drawing): string {
+  switch (d.kind) {
+    case 'hline':
+      return `H · ${Number(d.price).toFixed(2)}`;
+    case 'vline':
+      return `V · ${formatBarTime(d.time)}`;
+    case 'text':
+      return (d.text || d.meta?.text || 'Text').slice(0, 32);
+    case 'measure': {
+      const dp = d.p2.price - d.p1.price;
+      return `Δ ${dp >= 0 ? '+' : ''}${dp.toFixed(2)}`;
+    }
+    case 'fib':
+      return `Fib · ${Math.min(d.p1.price, d.p2.price).toFixed(0)}–${Math.max(d.p1.price, d.p2.price).toFixed(0)}`;
+    case 'trend':
+    case 'ray':
+    case 'extend':
+    case 'arrow':
+      return `${toolLabel(d.kind)} · ${d.p1.price.toFixed(1)}→${d.p2.price.toFixed(1)}`;
+    case 'rect':
+    case 'ellipse':
+      return toolLabel(d.kind);
+    default:
+      return toolLabel((d as Drawing).kind);
+  }
+}
+
+function formatBarTime(t: number): string {
+  if (!Number.isFinite(t)) return '—';
+  // unix seconds vs ms
+  const ms = t > 1e12 ? t : t * 1000;
+  try {
+    return new Date(ms).toISOString().slice(0, 16).replace('T', ' ');
+  } catch {
+    return String(t);
+  }
+}
 
 const Section: Component<{ title: string; children: any }> = (props) => (
   <div>

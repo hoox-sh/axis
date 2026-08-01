@@ -1495,8 +1495,18 @@ export function deleteSelectedDrawing(current: Drawing[]) {
   persist();
 }
 
+/** Remove one user drawing by id (Layers panel / external). */
+export function deleteDrawing(id: string) {
+  setStore(
+    'drawings',
+    store.drawings.filter((d) => d.id !== id),
+  );
+  if (store.selectedDrawingId === id) setStore('selectedDrawingId', null);
+  persist();
+}
+
 /**
- * Selection for the style bar / hit-test. Ephemeral — not persisted.
+ * Selection for the style bar / hit-test / Layers panel. Ephemeral — not persisted.
  * Wired from layer `onSelectionChange`.
  */
 export function setSelectedDrawingId(id: string | null) {

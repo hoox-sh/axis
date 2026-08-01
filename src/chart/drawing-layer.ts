@@ -970,6 +970,8 @@ export class DrawingLayer {
    */
   private paintDrawing(g: SVGGElement, d: Drawing, selected: boolean) {
     if (this.hideDrawings && !selected) return;
+    // Per-drawing hide from Layers panel (`meta.hidden`)
+    if (d.meta?.hidden && !selected) return;
     const st = resolveDrawingStyle(d);
     const stroke = st.color;
     // Selection uses slightly thicker stroke; dash comes from user lineStyle (not selection)
