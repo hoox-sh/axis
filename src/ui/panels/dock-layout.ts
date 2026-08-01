@@ -22,6 +22,10 @@
  * and shared column width. Used by {@link FloatableShell} (portal + flex stack)
  * and {@link DockColumn} hosts in the app shell.
  *
+ * Left/right multi-panel docks lay out **side-by-side** (row): e.g. indicators
+ * left of editor when both are open on the right. Bottom docks still stack
+ * vertically. {@link DOCK_STACK_ORDER} is start→end (left→right on side docks).
+ *
  * @module ui/panels/dock-layout
  */
 
@@ -29,7 +33,11 @@ import { store, isPanelOpen } from '../../store';
 import type { PanelChrome, PanelDock, PanelId } from './types';
 import { PANEL_META } from './types';
 
-/** Stable top→bottom (or start→end) order within a dock column. */
+/**
+ * Stable start→end order within a dock.
+ * Left/right: left→right (indicators before editor ⇒ indicators sit left of editor).
+ * Bottom: top→bottom.
+ */
 export const DOCK_STACK_ORDER: readonly PanelId[] = [
   'watchlist',
   'layers',
@@ -47,6 +55,9 @@ export function dockStackCssOrder(id: PanelId): number {
   const i = DOCK_STACK_ORDER.indexOf(id);
   return i >= 0 ? i + 1 : 99;
 }
+
+/** Max fraction of viewport for a side dock strip (sum of side-by-side panels). */
+export const DOCK_SIDE_MAX_VIEWPORT_FRAC = 0.72;
 
 /** DOM ids for dock portal hosts (must match app shell). */
 export const DOCK_HOST_IDS = {
@@ -89,16 +100,28 @@ export function dockStackCount(dock: PanelDock): number {
   return panelsOnDock(dock).length;
 }
 
-/** Shared width of a left/right dock column (max of open panel widths). */
+/**
+ * Width of a left/right dock strip.
+ * - 1 panel: that panel’s width
+ * - 2+ panels: **sum** of widths (side-by-side), capped to a viewport fraction
+ */
 export function dockColumnWidth(dock: 'left' | 'right'): number {
   const ids = panelsOnDock(dock);
   if (!ids.length) return 0;
-  let max = 0;
+  if (ids.length === 1) {
+    const id = ids[0]!;
+    return store.panelChrome?.[id]?.w ?? PANEL_META[id].defaultW;
+  }
+  let sum = 0;
   for (const id of ids) {
     const w = store.panelChrome?.[id]?.w ?? PANEL_META[id].defaultW;
-    if (w > max) max = w;
+    sum += Math.max(PANEL_META[id].minW || 1, w);
   }
-  return max || PANEL_META[ids[0]!].defaultW;
+  const cap =
+    typeof window !== 'undefined' && window.innerWidth > 0
+      ? Math.floor(window.innerWidth * DOCK_SIDE_MAX_VIEWPORT_FRAC)
+      : sum;
+  return Math.min(sum, cap) || PANEL_META[ids[0]!].defaultW;
 }
 
 /** Index of panel within its dock stack, or -1 if not stacked there. */

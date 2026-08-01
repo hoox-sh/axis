@@ -577,10 +577,12 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
         'pointer-events': 'auto',
       };
     }
-    // Side docks: flow in the dock column (never position:fixed — that overlays the chart)
-    // Editor always stretches to 100% of the column (CM needs a definite height chain).
+    // Side docks: flow in the dock column (never position:fixed — that overlays the chart).
+    // Multiple panels share the strip **side-by-side** (row): e.g. indicators | editor.
     if (d === 'left' || d === 'right') {
-      if (isEditor || !stacked()) {
+      const w = Math.max(meta().minW, c.w || meta().defaultW);
+      if (!stacked()) {
+        // Alone: fill the whole dock strip width + height
         return {
           position: 'relative',
           width: '100%',
@@ -593,12 +595,14 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
           'z-index': 'auto',
         };
       }
+      // Side-by-side: each panel keeps its own width; full strip height
       return {
         position: 'relative',
-        width: '100%',
-        flex: `${Math.max(1, c.h)} 1 0`,
-        'min-height': `${meta().minH}px`,
-        height: 'auto',
+        width: `${w}px`,
+        height: '100%',
+        flex: `0 0 ${w}px`,
+        'min-width': `${meta().minW}px`,
+        'min-height': '0',
         order: String(order),
         left: 'auto',
         top: 'auto',
@@ -646,10 +650,8 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     if (props.id === 'editor') return false;
     const d = dock();
     if (d === 'bottom') return true;
-    // Stacked left/right: bottom edge resizes split (except last fills rest)
-    if ((d === 'left' || d === 'right') && stacked() && !isLastInDockStack(props.id, d)) {
-      return true;
-    }
+    // Left/right multi-panel is side-by-side (row) — width handles only
+    if (d === 'left' || d === 'right') return false;
     return false;
   };
 

@@ -18,8 +18,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Empty portal host for a dock side. Width/visibility follow open panels
- * so multiple shells can stack in a flex column (one below the other).
+ * Empty portal host for a dock side. Width/visibility follow open panels.
+ * Left/right multi-panel: side-by-side (row). Bottom: vertical stack.
  *
  * @module ui/panels/DockColumn
  */

@@ -259,15 +259,332 @@ button.sc-btn:focus-visible {
   display: inline-block;
 }
 
-/* Vertical rule between topbar groups */
+/* Vertical rule between topbar / toolbar groups */
 .sc-sep {
   width: 1px;
-  align-self: stretch;
-  min-height: 1.25em;
-  margin: 0.15em 0.15em;
-  background: var(--color-border-soft);
+  align-self: center;
+  height: 1.55em;
+  min-height: 1.55em;
+  margin: 0 var(--ui-gap-xs);
+  background: color-mix(in srgb, var(--color-border) 48%, transparent);
   flex-shrink: 0;
-  opacity: 0.9;
+  opacity: 0.85;
+  border-radius: 1px;
+}
+
+/* ---------- Topbar chrome (density · groups · active · fields) ---------- */
+[data-testid="axis-topbar"] {
+  gap: var(--ui-gap-sm);
+  padding: 0.35em 0.7em;
+  row-gap: var(--ui-gap-xs);
+}
+
+/* Horizontal control clusters */
+.axis-tb-group,
+[data-tb-group] {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--ui-gap-sm);
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+/* Soft divider between adjacent groups */
+.axis-tb-group + .axis-tb-group,
+[data-tb-group] + [data-tb-group] {
+  margin-left: 0.1em;
+  padding-left: 0.5em;
+  border-left: 1px solid color-mix(in srgb, var(--color-border) 42%, transparent);
+}
+
+/* System cluster pins to the trailing edge */
+.axis-tb-group[data-tb-group="system"] {
+  margin-left: auto;
+}
+
+/* Taller, softer dividers inside the topbar (e.g. compare sub-sep) */
+[data-testid="axis-topbar"] .sc-sep {
+  height: 1.65em;
+  min-height: 1.65em;
+  margin: 0 calc(var(--ui-gap-xs) * 0.75);
+  background: color-mix(in srgb, var(--color-border) 40%, transparent);
+  opacity: 0.8;
+}
+
+/* Consistent control height + density */
+[data-testid="axis-topbar"] .sc-btn,
+[data-testid="axis-topbar"] .sc-input {
+  min-height: var(--ui-control-h);
+}
+
+[data-testid="axis-topbar"] .sc-btn {
+  gap: 0.4em;
+}
+
+/* Inline sc-label companions (fallback when not using TopbarField) */
+[data-testid="axis-topbar"] .sc-label {
+  margin-bottom: 0;
+  flex-shrink: 0;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Brand cluster */
+[data-testid="axis-topbar"] [data-testid="axis-brand"] {
+  gap: 0.45em;
+  margin-right: 0.05em;
+}
+
+/* Primary Run — stronger emphasis in the toolbar */
+[data-testid="axis-topbar"] .sc-btn-primary {
+  background-color: color-mix(in srgb, var(--color-accent) 26%, var(--color-bg-elev));
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+
+[data-testid="axis-topbar"] .sc-btn-primary:hover {
+  background-color: color-mix(in srgb, var(--color-accent-hover) 36%, var(--color-bg-elev));
+  border-color: var(--color-accent-hover);
+  color: var(--color-accent-hover);
+}
+
+[data-testid="axis-topbar"] .sc-btn-primary:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 22%, transparent),
+    0 0 0 1px color-mix(in oklch, oklch(0.74 0.16 277) 35%, transparent);
+}
+
+/* Icon-only compact chrome button (Reload, detach, system icons) */
+.sc-btn-icon {
+  padding-left: 0.45em;
+  padding-right: 0.45em;
+  min-width: var(--ui-control-h);
+  gap: 0;
+}
+
+/* Pressed / on state for panel toggles and mode buttons */
+.sc-btn.is-active,
+.sc-btn[aria-pressed="true"] {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 50%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-bg-elev));
+  font-weight: 600;
+}
+
+.sc-btn-ghost.is-active,
+.sc-btn-ghost[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border-soft));
+}
+
+.sc-btn.is-active:hover,
+.sc-btn[aria-pressed="true"]:hover,
+.sc-btn-ghost.is-active:hover,
+.sc-btn-ghost[aria-pressed="true"]:hover {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 65%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent) 20%, var(--color-bg-hover));
+}
+
+/* Live stream on — green accent-2 */
+.sc-btn.is-live-on {
+  color: var(--color-accent-2);
+  border-color: color-mix(in srgb, var(--color-accent-2) 52%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent-2) 12%, var(--color-bg-elev));
+  font-weight: 600;
+}
+
+.sc-btn.is-live-on:hover {
+  border-color: color-mix(in srgb, var(--color-accent-2) 70%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent-2) 18%, var(--color-bg-hover));
+}
+
+/* Bar replay on — primary accent */
+.sc-btn.is-replay-on {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 52%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-bg-elev));
+  font-weight: 600;
+}
+
+.sc-btn.is-replay-on:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent) 18%, var(--color-bg-hover));
+}
+
+/* Load / busy — keep height stable, softer wait state */
+.sc-btn.is-loading,
+.sc-btn[aria-busy="true"] {
+  cursor: wait;
+  opacity: 0.78;
+  color: var(--color-text-dim);
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border-soft));
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-bg-elev));
+}
+
+.sc-btn.is-loading:disabled,
+.sc-btn[aria-busy="true"]:disabled {
+  opacity: 0.78;
+}
+
+/* Integrated-label topbar fields — floating label on the border
+   Compact vs --ui-topbar-min-h; top margin clears the label chip. */
+.axis-tb-field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: min(var(--ui-control-h), calc(var(--ui-topbar-min-h) - 0.55em));
+  margin: 0.28em 0 0.05em;
+  padding: 0;
+  min-width: 4.5em;
+  background: var(--color-bg-elev);
+  border: var(--border-w-input) solid var(--color-border);
+  border-radius: var(--radius-input);
+  color: var(--color-text);
+  flex-shrink: 0;
+  max-width: 100%;
+  vertical-align: middle;
+  transition: border-color 0.12s ease;
+}
+
+.axis-tb-field-label {
+  position: absolute;
+  top: 0;
+  left: 0.4em;
+  transform: translateY(-50%);
+  z-index: 1;
+  padding: 0 0.32em;
+  font-size: 0.58em;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--color-text-faint);
+  /* Match topbar panel so the label appears to cut the border */
+  background: var(--color-bg-panel);
+  pointer-events: none;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.axis-tb-field:focus-within {
+  border-color: var(--color-accent);
+}
+
+.axis-tb-field:focus-within .axis-tb-field-label {
+  color: var(--color-accent);
+}
+
+.axis-tb-field--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.axis-tb-field--disabled .axis-tb-field-control {
+  cursor: not-allowed;
+}
+
+.axis-tb-field--select {
+  min-width: 5em;
+}
+
+.axis-tb-field--static {
+  background-color: color-mix(in srgb, var(--color-bg-elev) 70%, transparent);
+}
+
+.axis-tb-field-control {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: calc(var(--ui-control-h) - 0.12em);
+  margin: 0;
+  padding: 0.3em 0.55em 0.22em;
+  border: none;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.92em;
+  line-height: 1.25;
+  outline: none;
+  box-shadow: none;
+  box-sizing: border-box;
+}
+
+.axis-tb-field-control:focus,
+.axis-tb-field-control:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border: none;
+}
+
+/* Select caret + extra right padding so text clears the chevron */
+.axis-tb-field--select .axis-tb-field-control {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 1.5em;
+  cursor: pointer;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--color-text-dim) 50%),
+    linear-gradient(135deg, var(--color-text-dim) 50%, transparent 50%);
+  background-position:
+    calc(100% - 0.72em) 55%,
+    calc(100% - 0.48em) 55%;
+  background-size: 0.28em 0.28em, 0.28em 0.28em;
+  background-repeat: no-repeat;
+}
+
+.axis-tb-field--select:focus-within .axis-tb-field-control {
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--color-accent) 50%),
+    linear-gradient(135deg, var(--color-accent) 50%, transparent 50%);
+}
+
+/* Symbol / mono fields */
+.axis-tb-field--mono .axis-tb-field-control {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.axis-tb-field-control--static {
+  display: flex;
+  align-items: center;
+  cursor: default;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Less-critical button captions: hide below sm (icons remain) */
+@media (max-width: 639px) {
+  [data-testid="axis-topbar"] .axis-tb-btn-label {
+    display: none;
+  }
+
+  [data-testid="axis-topbar"] {
+    padding-inline: 0.45em;
+    gap: var(--ui-gap-xs);
+  }
+
+  [data-testid="axis-topbar"] .axis-tb-group,
+  [data-testid="axis-topbar"] [data-tb-group] {
+    gap: var(--ui-gap-xs);
+  }
+
+  .axis-tb-group + .axis-tb-group,
+  [data-tb-group] + [data-tb-group] {
+    padding-left: 0.35em;
+  }
+
+  [data-testid="axis-topbar"] .axis-tb-field {
+    min-width: 3.75em;
+  }
 }
 
 /* Field labels in dialogs / forms */
@@ -712,8 +1029,9 @@ button.sc-btn:focus-visible {
   border-width: 0;
 }
 
-/* ── Dock columns (portal hosts; stack panels one below the other) ─ */
-/* Columns sit in the app flex row/column so the chart gets remaining space. */
+/* ── Dock columns (portal hosts) ─ */
+/* Left/right multi-panel: side-by-side (row). Bottom: stack vertically.
+ * Columns sit in the app flex row so the chart gets remaining space. */
 
 .axis-dock-col {
   display: flex;
@@ -743,6 +1061,14 @@ button.sc-btn:focus-visible {
 .axis-dock-col-right {
   height: 100%;
   max-width: 50vw;
+}
+
+/* 2+ panels on a side dock: sit beside each other (indicators left of editor) */
+.axis-dock-col-left[data-dock-count]:not([data-dock-count='0']):not([data-dock-count='1']),
+.axis-dock-col-right[data-dock-count]:not([data-dock-count='0']):not([data-dock-count='1']) {
+  flex-direction: row;
+  align-items: stretch;
+  max-width: min(85vw, 1400px);
 }
 
 .axis-dock-col-left {
@@ -835,29 +1161,48 @@ body.axis-panel-dragging {
   position: relative;
 }
 
-/* Stacked side panels share a column — no double outer border */
+/* Side panels share a column — no double outer border on the strip edge */
 .axis-dock-col > .axis-panel-dock-left,
 .axis-dock-col > .axis-panel-dock-right {
   border-left: none;
   border-right: none;
 }
 
-.axis-dock-col > .axis-panel-shell + .axis-panel-shell {
+/* Vertical stack (bottom dock / single-column): separator between shells */
+.axis-dock-col-bottom .axis-panel-shell + .axis-panel-shell {
   border-top: var(--border-w) solid var(--color-border);
+}
+
+/* Side-by-side (2+ left/right): vertical separator between shells */
+.axis-dock-col-left[data-dock-count]:not([data-dock-count='1']) .axis-panel-shell + .axis-panel-shell,
+.axis-dock-col-right[data-dock-count]:not([data-dock-count='1']) .axis-panel-shell + .axis-panel-shell {
+  border-top: none;
+  border-left: var(--border-w) solid var(--color-border);
 }
 
 /* Editor: always fill available height (dock column or float chrome) */
 .axis-panel-shell[data-panel-id='editor'] {
   height: 100% !important;
   min-height: 0;
-  flex: 1 1 auto !important;
   display: flex;
   flex-direction: column;
+}
+/* Alone in dock strip: grow to fill width */
+.axis-dock-col[data-dock-count='1'] .axis-panel-shell[data-panel-id='editor'] {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+}
+/* Side-by-side: keep chrome width from inline style (do not stretch over siblings) */
+.axis-dock-col[data-dock-count]:not([data-dock-count='0']):not([data-dock-count='1'])
+  .axis-panel-shell[data-panel-id='editor'] {
+  flex: 0 0 auto !important;
+  max-width: none;
 }
 .axis-panel-shell[data-panel-id='editor'].axis-panel-float {
   /* float height is set inline to viewport remainder */
   flex: none !important;
   height: auto !important; /* use inline calc height from shellStyle */
+  width: auto !important;
 }
 /* CodeMirror needs a non-scrolling body so the pane owns height */
 .axis-panel-shell[data-panel-id='editor'] .axis-panel-body {
@@ -891,6 +1236,34 @@ body.axis-panel-dragging {
 }
 .axis-pine-editor .cm-scroller {
   min-height: 100%;
+}
+
+/* Debug pin jump flash (editor ↔ chart). Keyframes global so CM baseTheme can use the name. */
+@keyframes cm-debug-pin-flash-kf {
+  0% {
+    background-color: rgba(147, 159, 255, 0.42);
+  }
+  55% {
+    background-color: rgba(147, 159, 255, 0.18);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.axis-pine-editor .cm-debug-pin-flash {
+  animation: cm-debug-pin-flash-kf 0.7s ease-out;
+  background-color: rgba(147, 159, 255, 0.28);
+}
+
+/* Recommended line-length guide (see editor/column-ruler.ts) */
+.axis-pine-editor .cm-column-ruler {
+  position: absolute;
+  top: 0;
+  bottom: auto;
+  width: 0;
+  border-left: 1px dashed rgba(147, 159, 255, 0.25);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .axis-panel-dock-bottom {

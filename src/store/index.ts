@@ -161,6 +161,7 @@ const DEFAULTS: AppState = {
   profilerEnabled: false,
   inlineDebugEnabled: false,
   debugPinsEnabled: false,
+  editorRulerEnabled: true,
   stream: { status: 'disconnected' },
   status: 'ready',
   statusMessage: 'Ready.',
@@ -306,6 +307,10 @@ function loadPersisted(): Partial<AppState> {
         profilerEnabled: !!parsed.profilerEnabled,
         inlineDebugEnabled: !!(parsed as { inlineDebugEnabled?: boolean }).inlineDebugEnabled,
         debugPinsEnabled: !!(parsed as { debugPinsEnabled?: boolean }).debugPinsEnabled,
+        editorRulerEnabled:
+          typeof (parsed as { editorRulerEnabled?: boolean }).editorRulerEnabled === 'boolean'
+            ? !!(parsed as { editorRulerEnabled?: boolean }).editorRulerEnabled
+            : DEFAULTS.editorRulerEnabled,
         activePlugins: {
           ...DEFAULTS.activePlugins,
           ...parsed.activePlugins,
@@ -1292,6 +1297,18 @@ export function toggleDebugPinsEnabled() {
   persist();
 }
 
+/** Enable/disable editor column ruler (persisted; default on). */
+export function setEditorRulerEnabled(on: boolean) {
+  setStore('editorRulerEnabled', !!on);
+  persist();
+}
+
+/** Toggle the 80-column recommended line-length ruler in the Pine editor. */
+export function toggleEditorRulerEnabled() {
+  setStore('editorRulerEnabled', !store.editorRulerEnabled);
+  persist();
+}
+
 /* ── Panel chrome (dock / float / window) ───────────────────────── */
 
 /** Read panel chrome (dock/geometry); falls back to defaults if missing. */
@@ -1383,9 +1400,8 @@ function openIdsOnDock(dock: PanelDock): PanelId[] {
 }
 
 /**
- * Equalize flex height weights when 2+ panels share a **left/right** column
- * so they stack one below the other with comparable space.
- * Bottom docks keep their own pixel heights (column is content-sized).
+ * Side docks lay out side-by-side (independent widths). Height weights are
+ * equalized for chrome bookkeeping; shells use height:100% of the strip.
  */
 function rebalanceDockStack(dock: PanelDock) {
   if (dock !== 'left' && dock !== 'right') return;
@@ -1397,24 +1413,21 @@ function rebalanceDockStack(dock: PanelDock) {
   }
 }
 
-/** Keep left/right column width in sync across stacked peers. */
-function syncDockColumnWidth(dock: PanelDock, w: number) {
-  if (dock !== 'left' && dock !== 'right') return;
-  for (const pid of openIdsOnDock(dock)) {
-    setStore('panelChrome', pid, 'w', w);
-    if (pid === 'watchlist') setStore('watchlist', 'width', w);
-    if (pid === 'indicators') setStore('indicatorPanel', 'width', w);
-    if (pid === 'editor') setStore('editor', 'width', w);
-    if (pid === 'dataview') setStore('dataViewPanel', 'width', w);
-    if (pid === 'layers') setStore('layerPanel', 'width', w);
-    if (pid === 'alerts') setStore('alertsPanel', 'width', w);
-  }
+/** Mirror one panel’s width into legacy layout fields. */
+function mirrorPanelWidth(id: PanelId, w: number) {
+  setStore('panelChrome', id, 'w', w);
+  if (id === 'watchlist') setStore('watchlist', 'width', w);
+  if (id === 'indicators') setStore('indicatorPanel', 'width', w);
+  if (id === 'editor') setStore('editor', 'width', w);
+  if (id === 'dataview') setStore('dataViewPanel', 'width', w);
+  if (id === 'layers') setStore('layerPanel', 'width', w);
+  if (id === 'alerts') setStore('alertsPanel', 'width', w);
 }
 
 /**
  * Change panel dock target. Editor `window` sets popout mode; other docks
- * set docked. Float/window bump z-index for stacking. Side docks rebalance
- * stack heights when multiple panels share a column.
+ * set docked. Float/window bump z-index. Side docks keep independent widths
+ * (side-by-side strip).
  */
 export function setPanelDock(id: PanelId, dock: PanelDock) {
   ensurePanelChrome();
@@ -1428,17 +1441,9 @@ export function setPanelDock(id: PanelId, dock: PanelDock) {
   if (dock === 'float' || dock === 'window') {
     bumpPanelZ(id);
   } else {
-    // Match column width to peers already on this side
-    if (dock === 'left' || dock === 'right') {
-      const peers = openIdsOnDock(dock).filter((p) => p !== id);
-      if (peers.length) {
-        const peerW = getPanelChrome(peers[0]!).w;
-        setStore('panelChrome', id, 'w', peerW);
-      }
-    }
+    // Do not force-match peer widths — each panel keeps its own w
     rebalanceDockStack(dock);
   }
-  // Rebalance the side we left if others remain
   if (prev !== dock && (prev === 'left' || prev === 'right' || prev === 'bottom')) {
     rebalanceDockStack(prev);
   }
@@ -1446,9 +1451,8 @@ export function setPanelDock(id: PanelId, dock: PanelDock) {
 }
 
 /**
- * Update float geometry and mirror width/height into legacy layout fields
- * (watchlist/editor widths, results/logs heights, etc.).
- * Width changes on left/right docks propagate to all stacked peers.
+ * Update float geometry and mirror width/height into legacy layout fields.
+ * Left/right: each panel’s width is independent (side-by-side dock strip).
  *
  * @param opts.persist - set false while dragging to avoid localStorage thrash
  */
@@ -1458,24 +1462,11 @@ export function setPanelGeometry(
   opts?: { persist?: boolean },
 ) {
   ensurePanelChrome();
-  const cur = getPanelChrome(id);
   if (geo.x != null) setStore('panelChrome', id, 'x', Math.round(geo.x));
   if (geo.y != null) setStore('panelChrome', id, 'y', Math.round(geo.y));
   if (geo.w != null) {
-    // Min 1px — panel can shrink to the border
     const w = Math.max(1, Math.round(geo.w));
-    const dock = cur.dock;
-    if (dock === 'left' || dock === 'right') {
-      syncDockColumnWidth(dock, w);
-    } else {
-      setStore('panelChrome', id, 'w', w);
-      if (id === 'watchlist') setStore('watchlist', 'width', w);
-      if (id === 'indicators') setStore('indicatorPanel', 'width', w);
-      if (id === 'editor') setStore('editor', 'width', w);
-      if (id === 'dataview') setStore('dataViewPanel', 'width', w);
-      if (id === 'layers') setStore('layerPanel', 'width', w);
-      if (id === 'alerts') setStore('alertsPanel', 'width', w);
-    }
+    mirrorPanelWidth(id, w);
   }
   if (geo.h != null) {
     const h = Math.max(1, Math.round(geo.h));

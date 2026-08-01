@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Dock column stacking helpers — open panels share left/right and stack
- * top-to-bottom in DOCK_STACK_ORDER.
+ * Dock column helpers — open panels share left/right side-by-side
+ * (DOCK_STACK_ORDER is left→right); bottom stacks top→bottom.
  */
 
 import { describe, expect, it, beforeEach } from 'bun:test';
@@ -49,7 +49,7 @@ describe('panelsOnDock / stack order', () => {
     expect(dockColumnWidth('left')).toBe(0);
   });
 
-  it('stacks two left-docked panels in stable order', () => {
+  it('orders two left-docked panels start→end (side-by-side)', () => {
     setPanelDock('watchlist', 'left');
     setPanelOpen('watchlist', true);
     setPanelDock('layers', 'left');
@@ -60,6 +60,27 @@ describe('panelsOnDock / stack order', () => {
     expect(isLastInDockStack('layers', 'left')).toBe(true);
     expect(isLastInDockStack('watchlist', 'left')).toBe(false);
     expect(dockStackCssOrder('watchlist')).toBeLessThan(dockStackCssOrder('layers'));
+  });
+
+  it('sums widths for side-by-side right dock (indicators left of editor)', () => {
+    setPanelDock('indicators', 'right');
+    setPanelGeometry('indicators', { w: 224 });
+    setPanelOpen('indicators', true);
+    setPanelDock('editor', 'right');
+    setPanelGeometry('editor', { w: 460 });
+    setPanelOpen('editor', true);
+
+    expect(panelsOnDock('right')).toEqual(['indicators', 'editor']);
+    // indicators before editor in order ⇒ left of editor in a row
+    expect(dockStackCssOrder('indicators')).toBeLessThan(dockStackCssOrder('editor'));
+    expect(dockColumnWidth('right')).toBe(224 + 460);
+  });
+
+  it('single panel width is not summed', () => {
+    setPanelDock('editor', 'right');
+    setPanelGeometry('editor', { w: 460 });
+    setPanelOpen('editor', true);
+    expect(dockColumnWidth('right')).toBe(460);
   });
 
   it('ignores panels docked elsewhere', () => {
@@ -79,20 +100,23 @@ describe('panelsOnDock / stack order', () => {
   });
 });
 
-describe('shared column width', () => {
-  it('syncs width across left peers when one is resized', () => {
+describe('side-by-side column width', () => {
+  it('keeps independent widths when one peer is resized', () => {
     setPanelDock('watchlist', 'left');
+    setPanelGeometry('watchlist', { w: 200 });
     setPanelOpen('watchlist', true);
     setPanelDock('layers', 'left');
+    setPanelGeometry('layers', { w: 240 });
     setPanelOpen('layers', true);
 
     setPanelGeometry('watchlist', { w: 280 });
     expect(getPanelChrome('watchlist').w).toBe(280);
-    expect(getPanelChrome('layers').w).toBe(280);
-    expect(dockColumnWidth('left')).toBe(280);
+    // Peer keeps its own width (side-by-side, not shared strip width)
+    expect(getPanelChrome('layers').w).toBe(240);
+    expect(dockColumnWidth('left')).toBe(280 + 240);
   });
 
-  it('rebalances flex heights when a second panel docks left', () => {
+  it('rebalances height weights when a second panel docks left', () => {
     setPanelDock('watchlist', 'left');
     setPanelOpen('watchlist', true);
     setPanelGeometry('watchlist', { h: 400 });
@@ -100,7 +124,7 @@ describe('shared column width', () => {
     setPanelDock('layers', 'left');
     setPanelOpen('layers', true);
 
-    // Equal weights for flex stack
+    // Equal height weights (both full-height in a row; h is chrome weight)
     expect(getPanelChrome('watchlist').h).toBe(100);
     expect(getPanelChrome('layers').h).toBe(100);
   });
