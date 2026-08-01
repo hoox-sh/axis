@@ -189,13 +189,21 @@ export const Topbar: Component<{
   const toggleReplay = () => {
     if (isReplayActive()) {
       exitBarReplay();
+      setStatus('ready', 'Bar replay ended');
       return;
     }
     if (store.bars.length <= 0) {
       setStatus('error', 'Load bars before starting bar replay');
       return;
     }
-    startBarReplay();
+    if (!startBarReplay()) {
+      setStatus('error', 'Could not start bar replay');
+      return;
+    }
+    setStatus(
+      'ready',
+      'Bar replay · scrub/step to a start bar, then Play — or Play to run from the first bar',
+    );
   };
 
   const detachEditor = (mode: 'popup' | 'tab') => {

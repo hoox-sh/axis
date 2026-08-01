@@ -66,13 +66,26 @@ function normalizeSpeed(speed: number): number {
 
 /**
  * Start a replay session over `barsLength` historical bars.
- * Cursor begins at bar 0 (first bar only visible) so play walks forward.
+ *
+ * Cursor defaults to the **last** bar so the full history stays visible
+ * (one-candle zoom on enter is confusing). User scrubs/steps back to pick a
+ * start, then Play; pressing Play while already at the end restarts from bar 0.
+ *
+ * Pass `opts.cursorIndex` to override (e.g. 0 for “from start”).
  */
-export function createReplay(barsLength: number): ReplayState {
+export function createReplay(
+  barsLength: number,
+  opts?: { cursorIndex?: number },
+): ReplayState {
   const len = Math.max(0, Math.trunc(barsLength) || 0);
+  const defaultCursor = len > 0 ? len - 1 : 0;
+  const cursor =
+    opts?.cursorIndex != null
+      ? clampCursor(opts.cursorIndex, len)
+      : defaultCursor;
   return {
     active: true,
-    cursorIndex: len > 0 ? 0 : 0,
+    cursorIndex: cursor,
     speed: DEFAULT_SPEED,
     playing: false,
   };
@@ -114,14 +127,22 @@ export function step(
   return setCursor(state, state.cursorIndex + Math.trunc(delta), barsLength);
 }
 
-/** Begin auto-advance. No-op when inactive. At end of history stays paused. */
+/**
+ * Begin auto-advance. No-op when inactive.
+ * If the cursor is already on the last bar, restart from bar 0 and play
+ * (media-player style — avoids a dead Play button after enter-at-end).
+ */
 export function play(state: ReplayState, barsLength = Infinity): ReplayState {
   if (!state.active) return state;
   const last = Number.isFinite(barsLength)
     ? Math.max(0, Math.trunc(barsLength) - 1)
     : Number.POSITIVE_INFINITY;
   if (Number.isFinite(last) && state.cursorIndex >= last) {
-    return state.playing ? { ...state, playing: false } : state;
+    // At end: restart from first bar and play forward
+    if (last <= 0) {
+      return state.playing ? { ...state, playing: false } : state;
+    }
+    return { ...state, cursorIndex: 0, playing: true };
   }
   if (state.playing) return state;
   return { ...state, playing: true };
@@ -257,10 +278,16 @@ export function subscribeReplay(listener: ReplayListener): () => void {
   };
 }
 
-/** Enter replay over the given history length (cursor at first bar). */
-export function startReplaySession(barsLength: number): ReplayState {
+/**
+ * Enter replay over the given history length.
+ * Default cursor = last bar (full series visible). Pass `cursorIndex` to override.
+ */
+export function startReplaySession(
+  barsLength: number,
+  opts?: { cursorIndex?: number },
+): ReplayState {
   sessionBarsLength = Math.max(0, Math.trunc(barsLength) || 0);
-  return applySession(createReplay(sessionBarsLength));
+  return applySession(createReplay(sessionBarsLength, opts));
 }
 
 /** Exit replay session. */

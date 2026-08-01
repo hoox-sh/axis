@@ -47,12 +47,19 @@ beforeEach(() => {
 });
 
 describe('createReplay / idleReplay', () => {
-  it('starts active at first bar, not playing', () => {
+  it('starts active at last bar (full series visible), not playing', () => {
     const s = createReplay(sample.length);
     expect(s.active).toBe(true);
     expect(s.playing).toBe(false);
-    expect(s.cursorIndex).toBe(0);
+    expect(s.cursorIndex).toBe(sample.length - 1);
     expect(s.speed).toBe(1);
+    expect(visibleBars(sample, s)).toHaveLength(sample.length);
+  });
+
+  it('accepts explicit cursorIndex override (from start)', () => {
+    const s = createReplay(sample.length, { cursorIndex: 0 });
+    expect(s.cursorIndex).toBe(0);
+    expect(visibleBars(sample, s)).toHaveLength(1);
   });
 
   it('handles empty history', () => {
@@ -92,7 +99,7 @@ describe('setCursor', () => {
 
 describe('step', () => {
   it('steps forward and backward', () => {
-    let s = createReplay(5);
+    let s = createReplay(5, { cursorIndex: 0 });
     s = step(s, 1, 5);
     expect(s.cursorIndex).toBe(1);
     s = step(s, 2, 5);
@@ -102,7 +109,7 @@ describe('step', () => {
   });
 
   it('does not wrap past ends', () => {
-    let s = createReplay(5);
+    let s = createReplay(5, { cursorIndex: 0 });
     s = step(s, -5, 5);
     expect(s.cursorIndex).toBe(0);
     s = setCursor(s, 4, 5);
@@ -111,7 +118,7 @@ describe('step', () => {
   });
 
   it('no-op for zero / non-finite delta or inactive', () => {
-    const base = createReplay(5);
+    const base = createReplay(5, { cursorIndex: 2 });
     expect(step(base, 0, 5)).toBe(base);
     expect(step(base, Number.NaN, 5)).toBe(base);
     const idle = idleReplay();
@@ -121,27 +128,32 @@ describe('step', () => {
 
 describe('play / pause / stop', () => {
   it('play sets playing; pause clears it', () => {
-    let s = createReplay(5);
+    let s = createReplay(5, { cursorIndex: 0 });
     s = play(s, 5);
     expect(s.playing).toBe(true);
+    expect(s.cursorIndex).toBe(0);
     s = pause(s);
     expect(s.playing).toBe(false);
     expect(s.active).toBe(true);
   });
 
   it('play is no-op when already playing', () => {
-    let s = play(createReplay(5), 5);
+    let s = play(createReplay(5, { cursorIndex: 1 }), 5);
+    expect(s.playing).toBe(true);
     expect(play(s, 5)).toBe(s);
   });
 
-  it('play at last bar does not start', () => {
-    let s = setCursor(createReplay(5), 4, 5);
+  it('play at last bar restarts from first bar', () => {
+    // Default createReplay sits on last bar (full history visible)
+    let s = createReplay(5);
+    expect(s.cursorIndex).toBe(4);
     s = play(s, 5);
-    expect(s.playing).toBe(false);
+    expect(s.playing).toBe(true);
+    expect(s.cursorIndex).toBe(0);
   });
 
   it('stop exits replay', () => {
-    let s = play(createReplay(5), 5);
+    let s = play(createReplay(5, { cursorIndex: 0 }), 5);
     s = stop(s);
     expect(s.active).toBe(false);
     expect(s.playing).toBe(false);
@@ -172,7 +184,7 @@ describe('setSpeed', () => {
 
 describe('tick', () => {
   it('advances by speed while playing', () => {
-    let s = play(createReplay(5), 5);
+    let s = play(createReplay(5, { cursorIndex: 0 }), 5);
     s = tick(s, 5);
     expect(s.cursorIndex).toBe(1);
     s = setSpeed(s, 2);
@@ -193,7 +205,7 @@ describe('tick', () => {
   });
 
   it('does not advance when paused or inactive', () => {
-    const paused = createReplay(5);
+    const paused = createReplay(5); // last bar, not playing
     expect(tick(paused, 5)).toBe(paused);
     const idle = idleReplay();
     expect(tick(idle, 5)).toBe(idle);
@@ -218,13 +230,18 @@ describe('tick', () => {
 
 describe('visibleBars', () => {
   it('returns prefix through cursor when active', () => {
-    let s = createReplay(sample.length);
+    let s = createReplay(sample.length, { cursorIndex: 0 });
     expect(visibleBars(sample, s)).toHaveLength(1);
     expect(visibleBars(sample, s)[0]!.time).toBe(1);
     s = setCursor(s, 2, sample.length);
     const vis = visibleBars(sample, s);
     expect(vis).toHaveLength(3);
     expect(vis[2]!.time).toBe(3);
+  });
+
+  it('default start shows full history', () => {
+    const s = createReplay(sample.length);
+    expect(visibleBars(sample, s)).toHaveLength(sample.length);
   });
 
   it('returns full copy when inactive', () => {
@@ -241,7 +258,7 @@ describe('visibleBars', () => {
 
 describe('isAtStart / isAtEnd', () => {
   it('reports bounds', () => {
-    let s = createReplay(5);
+    let s = createReplay(5, { cursorIndex: 0 });
     expect(isAtStart(s)).toBe(true);
     expect(isAtEnd(s, 5)).toBe(false);
     s = setCursor(s, 4, 5);
@@ -256,14 +273,15 @@ describe('session helpers', () => {
     expect(isReplayActive()).toBe(false);
     startReplaySession(sample.length);
     expect(isReplayActive()).toBe(true);
-    expect(getReplayState().cursorIndex).toBe(0);
+    // Default: last bar so full series remains painted
+    expect(getReplayState().cursorIndex).toBe(sample.length - 1);
     expect(getReplayBarsLength()).toBe(5);
     stopReplaySession();
     expect(isReplayActive()).toBe(false);
   });
 
   it('getVisibleBars respects session', () => {
-    startReplaySession(sample.length);
+    startReplaySession(sample.length, { cursorIndex: 0 });
     expect(getVisibleBars(sample)).toHaveLength(1);
     updateReplaySession((st, len) => step(st, 2, len));
     expect(getVisibleBars(sample)).toHaveLength(3);
@@ -283,7 +301,7 @@ describe('session helpers', () => {
   it('subscribeReplay notifies on updates', () => {
     const seen: number[] = [];
     const unsub = subscribeReplay((st) => seen.push(st.cursorIndex));
-    startReplaySession(5);
+    startReplaySession(5, { cursorIndex: 0 });
     updateReplaySession((st, len) => step(st, 1, len));
     unsub();
     updateReplaySession((st, len) => step(st, 1, len));
@@ -293,8 +311,11 @@ describe('session helpers', () => {
   });
 
   it('play through end via ticks', () => {
+    // At end by default; Play restarts from 0 then ticks to the last bar
     startReplaySession(5);
     updateReplaySession((st, len) => play(st, len));
+    expect(getReplayState().cursorIndex).toBe(0);
+    expect(getReplayState().playing).toBe(true);
     for (let i = 0; i < 10; i++) {
       updateReplaySession((st, len) => tick(st, len));
     }

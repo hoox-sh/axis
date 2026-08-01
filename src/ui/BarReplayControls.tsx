@@ -73,11 +73,15 @@ function restoreFullChart() {
 /**
  * Start bar replay over currently loaded history.
  * Stops live streaming first so ticks cannot fight the scrubbed series.
+ *
+ * Enters with the **full** series visible (cursor on last bar). Scrub or step
+ * back to pick a start, then Play — or press Play to run from bar 0.
  */
 export function startBarReplay(): boolean {
   const n = store.bars.length;
   if (n <= 0) return false;
   if (store.live.active) stopLive();
+  // Last bar → all candles stay on screen (not a single first-bar zoom)
   startReplaySession(n);
   applyVisibleToChart(true);
   return true;
@@ -192,7 +196,10 @@ export const BarReplayControls: Component = () => {
         role="group"
         aria-label="Bar replay controls"
       >
-        <span class="text-[10px] font-mono uppercase tracking-wider text-accent px-1 select-none">
+        <span
+          class="text-[10px] font-mono uppercase tracking-wider text-accent px-1 select-none"
+          title="Scrub or step to a start bar, then Play. Play at the end restarts from bar 1."
+        >
           Replay
         </span>
 
