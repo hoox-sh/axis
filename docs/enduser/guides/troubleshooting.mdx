@@ -97,6 +97,17 @@ Probe: Settings → Test endpoint (health GET).
 | Git denied | Token scopes | PAT permissions |
 | Lost local scripts | Cleared site data | Import JSON backup |
 
+## Chart / editor (recent surfaces)
+
+| Symptom | Checks | Fix |
+| --- | --- | --- |
+| Indicator blank / missing on chart | Oscillator on price scale; wrong pane id | Prefer `overlay=false`; re-run; see [Indicators](/axis/docs/ui/indicators) |
+| Editor no lines / zero height | Dock height chain | Detach/reattach or toggle panel; editor should fill right strip |
+| Editor covers Indicators | Side-by-side dock | Both open on right → Indicators left of Editor; resize each panel |
+| Replay shows one candle only | Session start | Replay starts at **last bar** with full history; Play at end restarts from bar 0 |
+| No Debug chips / Pins | Toggles + log shape | Enable **Debug** / **Pins**; logs need `line` and/or `bar_index` — [Debugging](/axis/docs/ui/debugging) |
+| Completions thin | Builtins corpus | Re-sync `pine-builtins.json` from PYNE; optional remote LSP |
+
 ## Shell / PWA
 
 | Symptom | Checks | Fix |
@@ -105,6 +116,7 @@ Probe: Settings → Test endpoint (health GET).
 | State weird | `localStorage['pynescript.axis.v1']` | Export scripts; clear key; reload |
 | Plugin vanished | URL install list | Re-install URL |
 | Theme wrong | `data-theme` | Toggle theme once |
+| Lost multi-chart slots | `chartLayout` in store | Named layouts menu; re-apply recipe |
 
 ## Logging
 

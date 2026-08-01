@@ -30,12 +30,12 @@ description: "AXIS UI subsystem: chart host, editor, UI shell, indicators, resul
 
 | Subsystem | Responsibility |
 | --- | --- |
-| [Charting](/axis/docs/ui/charting) | lightweight-charts panes, drawings, crosshair |
-| [Editor](/axis/docs/ui/editor) | CodeMirror 6 Pine surface, dock/popout |
-| [Debugging](/axis/docs/ui/debugging) | Scriptlogs (`log.*`), Editor Profiler, vs System Logs |
-| [UI shell](/axis/docs/ui/ui-shell) | Topbar, watchlist, status, manager chrome |
-| [Indicators](/axis/docs/ui/indicators) | Run pipeline, overlay apply, indicator list |
-| [Results & strategy](/axis/docs/ui/results-and-strategy) | Event normalize, trades, export |
+| [Charting](/axis/docs/ui/charting) | Panes, multi-chart, replay, compare, drawings, badges |
+| [Editor](/axis/docs/ui/editor) | CM6, diagnostics, ruler, git bar, stats, dock/popout |
+| [Debugging](/axis/docs/ui/debugging) | Scriptlogs, Profiler, Debug chips, Pins, Problems |
+| [UI shell](/axis/docs/ui/ui-shell) | Topbar groups, docks side-by-side, palette, alerts |
+| [Indicators](/axis/docs/ui/indicators) | Run pipeline, overlay/sub-pane routing |
+| [Results & strategy](/axis/docs/ui/results-and-strategy) | Event normalize, trades, equity, export |
 | [Store](/axis/docs/ui/store) | Solid store, persistence, active plugins |
 
 ## Conceptual model
@@ -58,15 +58,17 @@ flowchart TB
 ## Interface surface (visual map)
 
 ```text
-┌─ Topbar ──────────────────────────────────────────────┐
-├─ Watchlist ─┬─ ChartHost + drawings ─┬─ Indicators ─┬─ Editor ─┤
-├─ Results drawer ──────────────────────────────────────┤
-├─ System logs ─────────────────────────────────────────┤
-└─ StatusBar ───────────────────────────────────────────┘
-   + Settings modal + Plugin Manager modal
+┌─ Topbar (grouped: market · data · compute · layout · panels · system) ─┐
+├─ left docks ─┬─ ChartHost (1–4 slots) + drawings ─┬─ right docks ─────┤
+│  watchlist   │  multi-pane + badges + replay       │  indicators|editor │
+│  layers …    │                                    │  (side-by-side)    │
+├─ Results / scriptlogs (bottom) ───────────────────────────────────────┤
+├─ System logs ─────────────────────────────────────────────────────────┤
+└─ StatusBar (connection HUD) ──────────────────────────────────────────┘
+   + Settings · Plugins · Command palette (⌘K)
 ```
 
-Implemented in `frontend/src/app.tsx`.
+Implemented in `src/app.tsx` (repo root product UI).
 
 ## Stack
 

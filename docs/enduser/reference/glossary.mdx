@@ -66,10 +66,29 @@ Terms as used in AXIS documentation and UI. Language runtime terms → [PYNE](/p
 | **Bar** | `{ time, open, high, low, close, volume? }` |
 | **Pane** | Chart strip: price, volume, indicator, equity. |
 | **Overlay** | Plot drawn on price pane (`meta.overlay !== false`). |
+| **Sub-pane** | Non-overlay indicator strip; stable store id `indicator`. |
 | **User drawing** | Interactive annotation tool geometry. |
 | **Script drawing** | Engine-emitted line/label/box objects. |
 | **Marker** | Trade/event marker on series. |
+| **Pane badge** | Corner chip with script actions (settings / eye / re-run / remove). |
+| **Multi-chart** | Grid layouts (1 / 2H / 2V / 4) with per-slot symbol/interval. |
+| **Bar Replay** | Scrub/play over loaded OHLCV without live stream. |
+| **Compare** | Second-symbol series overlaid on the price pane. |
+| **Volume profile** | OHLCV volume-at-price histogram (Layers). |
 | **Watchlist** | Side panel of symbols + quote refresh. |
+| **Layers** | Panel listing panes, indicators, and user drawings. |
+| **Alert** | Local price condition (+ optional webhook); Alerts panel. |
+
+## Editor & debug
+
+| Term | Definition |
+| --- | --- |
+| **Debug** | Inline end-of-line chips from last-run logs with line refs. |
+| **Pins** | Chart markers + 📍 gutter for logs with bar_index/time. |
+| **Problems** | Clickable list of engine diagnostics for the last run. |
+| **Ruler** | 80-character column guide in the Pine editor. |
+| **Command palette** | ⌘/Ctrl+K jump menu for panels, Run, toggles, git. |
+| **Git bar** | Pull/Push via active storage plugin (local/cloud/git). |
 
 ## Results
 
@@ -79,6 +98,7 @@ Terms as used in AXIS documentation and UI. Language runtime terms → [PYNE](/p
 | **Event** | Strategy/order/plot-adjacent event from engine. |
 | **Closed trade** | Paired entry/exit with PnL in the viewer. |
 | **Equity curve** | Cumulative PnL series derived from trades/events. |
+| **Scriptlogs** | Floatable panel of Pine `log.*` from last run (not System Logs). |
 
 ## Persistence
 

@@ -73,11 +73,19 @@ flowchart TB
 ### Overlay routing
 
 ```text
-overlay = result.meta.overlay !== false
-paneId  = overlay ? 'price' : 'indicator'
+overlay = resolveOverlayFlag(meta.overlay, script_type)
+  // explicit false → sub-pane
+  // explicit true  → price
+  // missing: indicator → sub-pane; strategy → price
+
+if overlay && seriesWouldHideOnPrice(plots, bars):
+  overlay = false   // RSI / scaled oscillators on BTC scale
+paneId = overlay ? 'price' : 'indicator'   // stable id `indicator`
 ```
 
-Non-overlay creates indicator pane if missing (`addPane` + manager `createPane`).
+Non-overlay ensures store + manager pane id **`indicator`** (not a random uid). Orphan empty indicator panes are cleaned up. After apply, sub-panes force autoScale / resize so lines paint on first run.
+
+Prefer `indicator(..., overlay=false)` and raw `plot(rsi)` for oscillators — not `strategy(..., overlay=true)` with `rsi * 0.01` on price.
 
 ### Series selection
 
@@ -85,9 +93,11 @@ Prefer `result.series` entries whose keys do not start with `_` / `__`. Fallback
 
 Colors: `plot_meta[k].color` or `PLOT_PALETTE[i]`.
 
-### Indicator panel
+### Indicator panel & pane badges
 
-Side list of `store.scripts` (`Indicator`: id, name, code, paneId, visible, plots). Visibility toggles affect display intent; re-run still engine-driven.
+- Side list of `store.scripts` (`Indicator`: id, name, code, paneId, visible, plots)  
+- Visibility toggles affect display; re-run is still engine-driven  
+- Chart pane chips mirror settings / eye / re-run / remove (see [Charting](/axis/docs/ui/charting))
 
 ## Active engine binding
 

@@ -31,8 +31,9 @@ Results UI turns opaque engine payloads into **operator-consumable tables, metri
 | Module | Role |
 | --- | --- |
 | `results/events.ts` | Normalize heterogeneous event shapes; markers; equity series |
-| `results/strategy.ts` | Pair trades; stats; CSV helpers |
+| `results/strategy.ts` | Pair trades; stats; equity SVG helpers; CSV |
 | `ui/ResultsPanel.tsx` | Tabs, export, jump-to-time |
+| `ui/StrategyReport.tsx` | Stats cards, equity curve, trades table, CSV |
 | `ui/StatusBar.tsx` | Compact trade summary |
 
 ## Conceptual model
@@ -80,7 +81,7 @@ Sketch (`buildStrategyReport`):
 | Metrics | meta + context + stats subset |
 | Raw | `JSON.stringify(lastRun)` |
 
-Interactions: copy, export, `scrollToTime` on trade rows.
+Interactions: copy, export, `scrollToTime` on trade rows. Scriptlogs / Debug **Pins** also jump the chart (`jumpToDebugPin`) when bar time/index is present — see [Debugging](/axis/docs/ui/debugging).
 
 ## Equity
 

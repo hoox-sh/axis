@@ -19,21 +19,27 @@
 
 ---
 title: "Editor"
-description: "AXIS Pine editor: CodeMirror 6, tabbed docs, docked vs popout modes, and the editor bridge."
+description: "AXIS Pine editor: CodeMirror 6, diagnostics, 80-col ruler, git sync, stats, docked vs popout, editor bridge."
 ---
 
 # Editor
 
-The editor is the **source axis of intent**: Pine text the operator authorizes the engine to run. It is not a language server host by default in the PWA path (LSP lives in the broader pynescript project).
+The editor is the **source axis of intent**: Pine text the operator authorizes the engine to run. Completion and hover can use local builtins metadata and optional remote LSP; **evaluation** is always an engine plugin.
 
 ## Abstract
 
 | Module | Role |
 | --- | --- |
-| `EditorPane.tsx` | Docked/standalone chrome, resize, detach |
-| `tabbed-editor.tsx` | Multi-tab document UX |
-| `PineEditor.tsx` | CM6 mount |
+| `EditorPane.tsx` | Docked/standalone chrome, header tools, detach |
+| `tabbed-editor.tsx` | Multi-tab docs, stats strip, Problems, git bar |
+| `PineEditor.tsx` | CM6 mount (extensions + view APIs) |
 | `pine-language.ts` | StreamLanguage / highlighting |
+| `pine-lsp.ts` + `data/pine-builtins.json` | Offline completion/hover corpus |
+| `column-ruler.ts` | 80-character guide line |
+| `diagnostics.ts` | Underlines, gutter, jump-to from last run |
+| `inline-debug.ts` | EOL chips, pin gutter, line flash |
+| `git-sync.ts` + `ui/EditorGitBar.tsx` | Pull / push / storage status |
+| `ui/EditorProblems.tsx` | Collapsible problems list |
 | `editor-bridge.ts` | Cross-window doc + run messages |
 | `cm-void.ts` | Void-theme CM styling |
 
@@ -59,48 +65,96 @@ sequenceDiagram
 
 ### Docked mode
 
-- Right column in `app.tsx` when `editor.open && mode === 'docked'`
-- Resize via `ResizeHandle` → `editor.width`
-- Hide chevron → `setEditorOpen(false)`
+- Right dock by default (`panelChrome.editor`); may sit **side-by-side** with other right panels (e.g. Indicators left of Editor)
+- FloatableShell: dock left/right/bottom, float, new window
 - Detach → popup or tab (`openEditorWindow`)
 
 ### Popout mode
 
 - Main shows “Editor detached” chip + **Reattach**
 - Shared doc key + bridge messages: `hello`, `doc`, `run`, `run-status`, `reattach`, `popout-opened`, `popout-closed`
-- Stale popout mode after reload: main waits for editor hello
 
 ### Run entry points
 
-- Editor Run control → `onRun(doc)` → `runAndApply`
-- Topbar Run uses same `editorRef.getDoc()`
+- Editor / topbar **Run** → `runAndApply(getDoc())`
 - Popout Run → bridge → main executes
+- Command palette: save library, git push/pull, jump to line, toggles
+
+### Header tools (`axis-editor-tools`)
+
+| Control | Effect |
+| --- | --- |
+| **Scriptlogs** | Open last-run `log.*` panel |
+| **Profiler** | `profilerEnabled` + optional line % gutter; re-run when enabling |
+| **Debug** | Inline end-of-line log/error chips (`inlineDebugEnabled`) |
+| **Pins** | Chart markers + 📍 gutter (`debugPinsEnabled`); **Alt+P** |
+| **Ruler** | 80-column guide (`editorRulerEnabled`) |
+
+Details: [Debugging](/axis/docs/ui/debugging).
+
+### Stats strip
+
+Bottom of tabbed editor (`data-testid="axis-editor-stats"`):
+
+| Field | Meaning |
+| --- | --- |
+| **Pos L:C** | Cursor line:column (1-based) |
+| **Ln** | Total lines in document |
+| **Words / Chars** | Document stats |
+| **Diagnostics badge** | Error/warning count from last run — click jumps to first |
+| **Problems** | Expand/collapse problems list |
+| **wrap** | Soft wrap is on |
+
+### Diagnostics & Problems
+
+After a run, `diagnosticsFromLastRun(lastRun, doc)` builds ranges from engine `error`, `meta.errors` / `diagnostics`, and error logs with line refs (`line 12:`, `L12:`, …).
+
+- CodeMirror: wavy underlines, severity gutter, hover tooltips  
+- **Problems** panel: clickable rows → `scrollToLine` / `jumpToDiagnostic`  
+- Unit tests: `tests/editor-diagnostics.test.ts`, `tests/editor-problems.test.ts`
+
+### 80-column ruler
+
+`columnRulerExtension` paints a dashed guide at character column **80** (measured via CM coords). Toggle **Ruler** or command palette “Toggle Editor Ruler”.
+
+### Git sync bar
+
+Tab toolbar **Pull / Push / status** (`EditorGitBar`):
+
+- Uses active **storage** plugin (`local` \| `cloud` \| `git`)  
+- Push → `writeScript` (git commits when storage is git)  
+- Pull → optional plugin `sync('pull')` + list/reload bound library id  
+- Config stays in Settings / Script Library (no second credentials UI)
+
+### Completion corpus
+
+`src/editor/data/pine-builtins.json` is synced from PYNE (`scripts/sync-pine-builtins.sh`). Offline completion/hover fall back to this catalog; optional remote LSP when the Pro API is available.
 
 ### Library load
 
-`loadLibraryDoc(doc, name)` (when provided on ref) injects storage reads without fighting CM transaction history poorly—panel calls through App wiring.
+`loadLibraryDoc(doc, name)` on `editorRef` injects storage reads into the active tab.
 
 ## Internals
 
 ### editorRef pattern
 
-App holds a mutable ref object `{ getDoc, setDoc?, loadLibraryDoc? }` populated by child mount—avoids over-reactive store writes on every keystroke for the full document (doc also optionally mirrored to `EDITOR_DOC_KEY`).
-
-### Language package
-
-`pine-language.ts` supplies CM language support sufficient for editing comfort; **semantic diagnostics** are not a substitute for engine errors (Results / status).
+App holds `{ getDoc, setDoc?, loadLibraryDoc?, scrollToLine?, jumpToDiagnostic?, getCursor? }` populated by CM mount—avoids full-doc store writes every keystroke (doc also mirrored to `EDITOR_DOC_KEY`).
 
 ### Persistence
 
-- Layout: `store.editor` in `pynescript.axis.v1`
-- Text: `pynescript.axis.editor.doc` (+ legacy migration)
+| Key / field | Role |
+| --- | --- |
+| `store.editor` + `panelChrome.editor` | Dock geometry, open, mode |
+| `pynescript.axis.editor.doc` | Draft text |
+| `profilerEnabled` / `inlineDebugEnabled` / `debugPinsEnabled` / `editorRulerEnabled` | Editor tools |
 
 ## Invariants
 
-1. Empty doc Run is no-op at topbar/editor handlers.  
+1. Empty doc Run is a no-op at topbar/editor handlers.  
 2. Popout does not own PaneManager.  
 3. Reattach restores shared doc into docked CM.  
-4. AXIS ≠ engine: editor never evaluates Pine itself.
+4. AXIS ≠ engine: editor never evaluates Pine itself.  
+5. Diagnostics/Debug/Pins read **last run** only — re-run after edits.
 
 ## Failure modes
 
@@ -108,20 +162,13 @@ App holds a mutable ref object `{ getDoc, setDoc?, loadLibraryDoc? }` populated 
 | --- | --- |
 | Two editors diverge | Prefer bridge doc events; reattach |
 | Detached but no window | Popup blocked; allow popups; reattach |
-| Lost text on crash | editor.doc localStorage; library Save |
-
-## Panel management + tools
-
-The docked editor uses **FloatableShell** (same hamburger dock menu / float / drag as other panels). Header tools:
-
-- **Scriptlogs** — last-run `log.*` panel  
-- **Profiler** — sets `store.profilerEnabled` (persisted); shows last-run latency; engines may supply `profile.lines` for per-line % gutters  
-
-Details: [Debugging](/axis/docs/ui/debugging).
+| Lost text on crash | editor.doc localStorage; library Save / git push |
+| Blank CM (no lines) | Dock column height chain; editor must fill strip |
+| No chips/pins | Enable Debug/Pins; logs need line and/or bar_index |
 
 ## See also
 
-- [Debugging](/axis/docs/ui/debugging) — Scriptlogs + Profiler
-- [UI shell](/axis/docs/ui/ui-shell)
-- [Indicators](/axis/docs/ui/indicators)
-- [Script library](/axis/docs/enduser/guides/script-library)
+- [Debugging](/axis/docs/ui/debugging) — Debug vs Pins, Scriptlogs, Profiler  
+- [UI shell](/axis/docs/ui/ui-shell) — Topbar, docks, command palette  
+- [Indicators](/axis/docs/ui/indicators)  
+- [Script library](/axis/docs/enduser/guides/script-library)  

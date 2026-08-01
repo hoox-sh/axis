@@ -68,10 +68,16 @@ flowchart TB
 | `status`, `statusMessage`, `lastRunMs` | yes* | UX; ok to restore |
 | `lastRun` | **no** | Forced null on hydrate |
 | `logs` | **no** | Forced empty |
-| `profilerEnabled` | yes | Editor profiler mode (line % when engine provides profile) |
-| `panelChrome.scriptlogs` | yes | Scriptlogs panel chrome (open starts closed on hydrate for strip logs) |
+| `profilerEnabled` | yes | Editor profiler (line % when engine provides profile) |
+| `inlineDebugEnabled` | yes | End-of-line Debug chips from last-run logs |
+| `debugPinsEnabled` | yes | Chart pin markers + editor pin gutter |
+| `editorRulerEnabled` | yes | 80-col guide (default **on**) |
+| `panelChrome` / `alertsPanel` / `layerPanel` / `dataViewPanel` | yes | Dock chrome (side-by-side left/right) |
+| `chartLayout` / `savedLayouts` | yes | Multi-chart grid + named layouts |
+| `compare` | prefs yes | Second-symbol overlay (bars ephemeral) |
 | `drawingTool` | reset cursor | On hydrate |
-| `drawings` | yes | User annotations |
+| `drawings` / `drawingPrefs` / `drawingUi` | yes | User annotations + toolbar prefs |
+| `selectedDrawingId` | **no** | Ephemeral selection |
 
 \*Status fields may restore but boot also appends fresh logs.
 

@@ -57,21 +57,57 @@ flowchart LR
 
 ## Topbar responsibilities
 
+Grouped left→right (`axis-tb-group`, `data-tb-group`):
+
+| Group | Contents |
+| --- | --- |
+| **brand** | Logo + AXIS |
+| **market** | Symbol, Interval, Type (`TopbarField`), Compare |
+| **data** | Source (+ CSV upload), Load, Reload (icon-only) |
+| **compute** | Engine, Stream, **Run** (primary), Live, Replay |
+| **layout** | Multi-chart layouts + recipes |
+| **panels** | List, Editor, Indicators, Layers, Alerts, Data, Inputs, Results |
+| **system** | Plugins, Settings, Theme (`margin-left: auto`) |
+
 | Control | Effect |
 | --- | --- |
-| Symbol / interval | Store + Load |
-| Source select | `setActivePlugin('source')` + default stream |
-| Stream select | `live.streamId` / active stream |
-| Engine select | Active engine (+ pyodide preload side effects) |
-| CSV file | `parseOhlcvFile` → upload-store → load |
-| Load | Historical fetch |
+| Symbol / interval | Store + Load (Enter / blur reload) |
+| Source / Stream / Engine | `setActivePlugin` + side effects |
+| Chart type | `setChartType` (candles, HA, …) |
+| Compare | Second-symbol overlay |
+| Load / Reload | Historical fetch |
 | Run | Editor doc → runAndApply |
-| Live | multiplex start/stop |
-| Editor / watchlist toggles | Layout flags |
+| Live | multiplex start/stop (stops Replay) |
+| Replay | Bar replay over loaded bars |
+| Panel toggles | `isPanelOpen` / dual-write chrome |
 | Settings / Plugins | Modal open |
 | Detach editor | Bridge + popout |
 
+Integrated labels: `ui/TopbarField.tsx` (`.axis-tb-field*`).  
 `catalogTick` forces memo re-list when plugins install/remove.
+
+### Command palette
+
+**Ctrl/Cmd+K** — `CommandPalette` + `command-registry.ts`: panels, theme, layouts, Run, symbol focus, editor toggles (ruler, debug, pins, profiler), jump to line, git push/pull, save library.
+
+### Alerts panel
+
+Dockable **Alerts** (`src/alerts/*` + `AlertsPanel.tsx`): local-first price alerts, webhook optional, list/create/toggle. Continuous server-side arming is not required for session use.
+
+### Workspace snapshots
+
+`storage/workspace-snapshot.ts` + optional chrome menus capture layout/plugin prefs for restore (distinct from OHLCV — bars still re-fetch on Load).
+
+### Panel docks (side-by-side)
+
+Left/right docks with **2+ open panels** lay out **horizontally** (row), not stacked under each other:
+
+- Example: **Indicators** left of **Editor** on the right strip  
+- Column width = **sum** of panel widths (capped)  
+- Each panel keeps its own width (resize handle on chart-facing edge)  
+- Bottom dock still stacks vertically  
+
+See `ui/panels/dock-layout.ts`, `FloatableShell.tsx`.
 
 ## Watchlist
 

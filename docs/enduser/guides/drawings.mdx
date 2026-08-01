@@ -51,14 +51,25 @@ flowchart TB
 | --- | --- | --- |
 | `cursor` | — | Select / pan mode (not a drawable) |
 | `hline` | hline | Horizontal price |
+| `vline` | vline | Vertical time |
 | `trend` | trend | Two points |
 | `ray` | ray | Two points (extends) |
+| `extend` | extend | Extended line |
 | `rect` | rect | Two corners |
+| `ellipse` | ellipse | Ellipse / oval |
+| `arrow` | arrow | Directional segment |
 | `fib` | fib | Two points; levels 0, 0.236, 0.382, 0.5, 0.618, 0.786, 1 |
 | `measure` | measure | Two points (delta readout) |
 | `text` | text | Anchor + label |
 
 Colors: default accent `#939fff`, up/down/measure variants in `DRAWING_COLORS`.
+
+### Layers & templates
+
+- **Layers** panel lists user drawings (select, hide, delete)  
+- **Templates**: save/load drawing packs (`axis.drawingTemplates.v1`)  
+- **Duplicate / tag symbol** helpers for multi-chart workflows  
+
 
 ## Interface surface
 

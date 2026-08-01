@@ -19,116 +19,108 @@
 
 ---
 title: "Debugging"
-description: "AXIS Scriptlogs panel and Editor Profiler: script log.* output, line % gutters, and how they differ from System Logs."
+description: "Scriptlogs, Profiler, Debug chips, chart Pins, diagnostics, and System Logs."
 ---
 
 # Debugging
 
-AXIS separates **script-authored diagnostics** (Pine `log.*` + optional engine line timing) from **shell telemetry** (load, stream, engine connection). This page covers **Scriptlogs**, Editor **Profiler** mode, and the System Logs strip.
+AXIS separates **script-authored diagnostics** (Pine `log.*`, engine errors, line timing) from **shell telemetry** (load, stream, engine connection).
 
 ## Abstract
 
 | Surface | Source of truth | Open / toggle |
 | --- | --- | --- |
-| **Scriptlogs** | `store.lastRun` → `normalizePineLogs` | Editor header **Scriptlogs** (`toggleScriptLogsPanel`) |
-| **Profiler** | `store.profilerEnabled` + `meta.profile` / `profile.lines` | Editor header **Profiler** (`toggleProfilerEnabled`) |
-| **System Logs** | `store.logs` ring buffer | Status bar / logs strip (`logsPanel`) |
+| **Scriptlogs** | `store.lastRun` → `normalizePineLogs` | Editor header **Scriptlogs** |
+| **Profiler** | `profilerEnabled` + `profile.lines` | Editor header **Profiler** |
+| **Debug** | `inlineDebugEnabled` + last-run logs with **line** | Editor header **Debug** |
+| **Pins** | `debugPinsEnabled` + logs with **bar_index / time** | Editor header **Pins** · **Alt+P** |
+| **Diagnostics / Problems** | Engine errors + line-mapped logs | Underlines + Problems list (always from last run) |
+| **System Logs** | `store.logs` ring buffer | Status bar / logs strip |
 
 | Module | Role |
 | --- | --- |
-| `ui/ScriptLogsPanel.tsx` | Floatable panel for last-run `log.*` lines |
-| `results/pine-logs.ts` | Normalize / filter / TSV export |
-| `results/profiler.ts` | Normalize engine profile → per-line % |
-| `editor/profiler-gutter.ts` | CodeMirror gutter chips (`N%`) |
-| `editor/EditorPane.tsx` | FloatableShell + Scriptlogs / Profiler header tools |
-| `ui/SystemLogs.tsx` | Shell event strip (not script logs) |
+| `ui/ScriptLogsPanel.tsx` | Floatable last-run `log.*` list |
+| `results/pine-logs.ts` | Normalize / filter / TSV |
+| `results/profiler.ts` | Line % profile |
+| `results/inline-debug.ts` | Annotations + pinable helpers |
+| `results/debug-pins.ts` | Bar pins, markers, `countDebugPins` |
+| `editor/inline-debug.ts` | CM chips, pin gutter, line flash |
+| `editor/diagnostics.ts` | Error underlines / gutter / jump |
+| `ui/EditorProblems.tsx` | Problems list UI |
+| `chart/manager-access.ts` | `applyDebugPinsToChart`, `jumpToDebugPin` |
 
 ## Conceptual model
 
 ```mermaid
 flowchart LR
-  PIN[Pine log.info / warning / error] --> ENG[Engine run]
-  ENG --> RR[RunResult logs + profile]
-  RR --> LR[setLastRun]
-  LR --> PL[Scriptlogs panel]
-  LR --> PR[normalizeRunProfile]
-  PR --> GUT[Editor gutter %]
-  APP[Load / stream / boot] --> SL[System Logs strip]
-  ED[Editor header] --> PL
-  ED --> PRF[profilerEnabled]
+  PIN[Pine log.* / errors] --> ENG[Engine run]
+  ENG --> RR[lastRun]
+  RR --> SL[Scriptlogs]
+  RR --> DBG[Debug chips]
+  RR --> PINZ[Pins + markers]
+  RR --> DIAG[Diagnostics / Problems]
+  RR --> PR[Profiler gutters]
+  APP[Load / stream / boot] --> SYS[System Logs]
 ```
 
-**Invariant:** Scriptlogs never write into `store.logs`. System Logs never display script `log.*` messages unless some other path explicitly `appendLog`s them.
+**Invariant:** Scriptlogs / Debug / Pins never write into `store.logs`.
+
+---
+
+## Debug vs Pins
+
+| | **Debug** | **Pins** |
+| --- | --- | --- |
+| **Question** | What happened on this **source line**? | Which **bar** was that on the chart? |
+| **Requires** | Line ref (`line 12:`, structured `line`, …) | `bar_index` and/or `time` / `bar_time` |
+| **UI** | End-of-line chips + optional level gutter | Chart circle markers + 📍 editor gutter |
+| **Click** | Pin-able chips jump if bar info present | Chip / 📍 / Scriptlogs → chart jump + line flash |
+| **Store** | `inlineDebugEnabled` | `debugPinsEnabled` |
+
+### Workflow
+
+1. Add `log.info` / `log.warning` / `log.error` (or rely on engine errors) with **line** and ideally **bar_index**.  
+2. **Run**.  
+3. Toggle **Debug** to see chips; **Pins** to mark bars (count shows on the Pins button).  
+4. Click a pin-able chip or 📍 → `jumpToDebugPin` (crosshair + scroll); source line flashes (`cm-debug-pin-flash`).
+
+Both can be on at once. Pins without Debug still show 📍 gutter and chart markers.
 
 ---
 
 ## Scriptlogs
 
-Panel for **script** logging from the last successful (or failed) run payload.
-
-### Pine API → panel
+Panel for **script** logging from the last run.
 
 | Pine call | Panel level |
 | --- | --- |
-| `log.info(...)` | `info` |
-| `log.warning(...)` | `warning` |
-| `log.error(...)` | `error` |
+| `log.info` | info |
+| `log.warning` | warning |
+| `log.error` | error |
 
-Engines may also emit aliases (`warn`, `err`, severities, tuples). Normalization maps those to the three levels above (`results/pine-logs.ts`).
-
-### How to open
-
-1. Open the **Editor** panel (topbar).
-2. Editor header → **Scriptlogs** (`data-testid="axis-btn-scriptlogs"`).
-3. Panel id `scriptlogs` (bottom dock by default; floatable via chrome).
-4. Store helpers: `toggleScriptLogsPanel()` / `setScriptLogsPanelOpen(open)`.
-
-The panel reads **`store.lastRun` only** — re-run the script after editing `log.*` calls.
-
-### What you see
-
-- Level filter chips: All / Info / Warning / Error  
-- Optional bar index when the engine attached one  
-- Copy filtered rows to clipboard  
-- Empty states: no run yet vs run with no logs  
-
-### Payload shapes accepted
-
-`normalizePineLogs` pulls arrays from, in order of discovery:
-
-- Top-level `logs` / `pine_logs` / `pineLogs` / `messages`
-- `meta.logs` (and nested `result` / `data`)
-
-Each item may be:
-
-- `{ level, message, barIndex?, time? }` (plus common aliases: `msg`, `severity`, `bar_index`, …)
-- Tuple `[level, message, …]`
-
-The runner lifts `meta.logs` onto top-level `logs` when present (`normalizeRunExtras` in `indicators/runner.ts`) so Results and Scriptlogs share one shape.
+Open: Editor → **Scriptlogs** (`axis-btn-scriptlogs`). Pin-able rows jump to the chart when bar time/index is known.
 
 ---
 
 ## Editor Profiler
 
-Toggle on the **editor header** (`data-testid="axis-btn-profiler"`). When enabled:
+Toggle **Profiler** (`axis-btn-profiler`):
 
-- Persisted as `store.profilerEnabled`
-- Runs may send `config.profiler: true` so engines can collect timing
-- Editor chip shows last run ms when known
-- CodeMirror gutter shows line `%` when `profile.lines` is non-empty
-
-Phase-only profiles (`total_ms`, `phases.parse_ms` / `eval_ms`, empty `lines`) still drive the header chip; gutters stay empty until the engine emits line stats.
+- Persists `profilerEnabled`  
+- May send `profiler: true` to the engine  
+- Header shows last-run ms  
+- Gutter shows line `%` when `profile.lines` is present  
 
 ---
 
-## Editor panel management
+## Diagnostics & Problems
 
-The editor uses the same **FloatableShell** chrome as other panels:
+Independent of Debug chips: structural **error reporting** from the run payload.
 
-- Hamburger menu: dock left / right / bottom / float / new window  
-- Drag title to float; drop on edge zones to dock  
-- Close control dual-writes `editor.open` + `panelChrome.editor`  
-- **New window** opens the live Pine editor popout (`?view=editor`), not a stub companion page  
+- Parses `error`, `meta.errors`, `diagnostics`, error-level logs  
+- CodeMirror underlines + severity gutter  
+- Stats strip badge (`axis-editor-diag-count`) and **Problems** list (`axis-editor-problems`)  
+- Click → jump to line/range  
 
 ---
 
@@ -137,11 +129,9 @@ The editor uses the same **FloatableShell** chrome as other panels:
 | | **Scriptlogs** | **System Logs** |
 | --- | --- | --- |
 | **Source** | Script `log.*` on last run | AXIS shell events |
-| **Store** | `lastRun.logs` | `store.logs` |
-| **UI** | Floatable **Scriptlogs** panel | Collapsible strip above the status bar |
-| **Open control** | Editor header **Scriptlogs** | Status bar log toggle / strip header |
-
-Use **Scriptlogs** when debugging script logic. Use **System Logs** when diagnosing AXIS connectivity, plugin install, or chart load.
+| **Store** | `lastRun` | `store.logs` |
+| **UI** | Floatable Scriptlogs | Strip above status bar |
+| **Control** | Editor header | Status bar |
 
 ---
 
@@ -149,22 +139,25 @@ Use **Scriptlogs** when debugging script logic. Use **System Logs** when diagnos
 
 | Key | Role |
 | --- | --- |
-| `panelChrome.scriptlogs` | open/dock/geometry for Scriptlogs |
-| `panelChrome.editor` | editor dock/geometry (FloatableShell) |
-| `profilerEnabled` | Profiler mode on/off |
+| `panelChrome.scriptlogs` / `editor` | Panel chrome |
+| `profilerEnabled` | Profiler |
+| `inlineDebugEnabled` | Debug chips |
+| `debugPinsEnabled` | Chart + pin gutter |
 
 | testid | Role |
 | --- | --- |
-| `axis-btn-scriptlogs` | Editor header open Scriptlogs |
-| `axis-btn-profiler` | Editor header Profiler toggle |
-| `axis-editor-tools` | Header tool group |
-| `axis-scriptlogs` | Panel shell |
-| `axis-scriptlogs-filter-*` | Level filters |
+| `axis-btn-scriptlogs` | Open Scriptlogs |
+| `axis-btn-profiler` | Profiler |
+| `axis-btn-inline-debug` | Debug |
+| `axis-btn-debug-pins` | Pins |
+| `axis-debug-pin-count` | Pin count |
+| `axis-editor-diag-count` | Diagnostics badge |
+| `axis-editor-problems` | Problems panel |
 
-Unit coverage: `tests/pine-logs.test.ts`, `tests/profiler.test.ts`.
+Unit coverage: `tests/pine-logs.test.ts`, `tests/profiler.test.ts`, `tests/inline-debug.test.ts`, `tests/debug-pins.test.ts`, `tests/editor-diagnostics.test.ts`.
 
-### Invariants
+## See also
 
-1. Scriptlogs ≠ System Logs (separate stores and UI).  
-2. Scriptlogs + Profiler controls live on the **editor**, not the topbar.  
-3. Editor shares FloatableShell panel management with other chrome panels.  
+- [Editor](/axis/docs/ui/editor)  
+- [Charting](/axis/docs/ui/charting) — markers and jump  
+- [UI shell](/axis/docs/ui/ui-shell)  

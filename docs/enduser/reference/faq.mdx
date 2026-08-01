@@ -88,6 +88,30 @@ Script drawings are cleared and re-applied each run. User toolbar drawings persi
 
 Editor bridge uses shared document storage + message bridge between windows. Use **Reattach** on the main AXIS if the popout closed uncleanly.
 
+### What is Debug vs Pins?
+
+| | **Debug** | **Pins** |
+| --- | --- | --- |
+| Shows | End-of-line chips in the editor | Markers on the chart + 📍 gutter |
+| Needs | Line reference in logs/errors | `bar_index` and/or bar time |
+| Toggle | Editor header **Debug** | **Pins** or **Alt+P** |
+
+Full workflow: [Debugging](/axis/docs/ui/debugging).
+
+### Multi-chart, Compare, Replay, Alerts?
+
+- **Layouts** topbar menu: 1 / 2H / 2V / 4 + named recipes  
+- **Compare**: second symbol overlay (% or absolute)  
+- **Replay**: scrub loaded history (starts with full history at last bar)  
+- **Alerts**: local price alerts panel (webhook optional)  
+- **⌘/Ctrl+K**: command palette (panels, Run, editor toggles, git)
+
+UI detail: [UI shell](/axis/docs/ui/ui-shell), [Charting](/axis/docs/ui/charting).
+
+### Why are Indicators next to the Editor?
+
+Left/right docks with multiple open panels lay out **side-by-side** (row), so Indicators can sit left of Editor on the right strip. Bottom dock still stacks.
+
 ## Ops
 
 ### What is `pynescript-superchart`?

@@ -95,13 +95,21 @@ mindmap
 
 | Feature | Primary paths |
 | --- | --- |
-| Entry | `frontend/src/index.tsx`, `app.tsx` |
-| Chart host | `frontend/src/chart/ChartHost.tsx`, `manager-access.ts`, `pane-manager.ts`, `series-factory.ts` |
-| Drawings | `frontend/src/chart/drawing-layer.ts`, `pine-drawings.ts` |
-| Editor | `frontend/src/editor/*` |
-| Results | `frontend/src/results/*`, `ui/ResultsPanel.tsx` |
-| Store | `frontend/src/store/index.ts`, `types.ts` |
-| Topbar / settings | `frontend/src/ui/Topbar.tsx`, `SettingsDialog.tsx` |
+| Entry | `src/index.tsx`, `src/app.tsx` |
+| Chart host | `src/chart/ChartHost.tsx`, `ChartWorkspace.tsx`, `pane-manager.ts`, `pane-badge.ts`, `series-factory.ts` |
+| Multi-chart / recipes | `src/chart/layout.ts`, `layout-recipes.ts`, `chart-registry.ts`, `ui/ChartLayoutMenu.tsx` |
+| Bar replay | `src/chart/bar-replay.ts`, `ui/BarReplayControls.tsx` |
+| Compare / volume profile | `src/chart/compare-overlay.ts`, `volume-profile.ts` |
+| Drawings | `src/chart/drawing-layer.ts`, `drawings/*`, `pine-drawings.ts`, `DrawingToolbar.tsx` |
+| Editor | `src/editor/*` (CM6, diagnostics, ruler, git-sync, inline-debug) |
+| Editor chrome | `ui/EditorGitBar.tsx`, `ui/EditorProblems.tsx` |
+| Alerts | `src/alerts/*`, `ui/AlertsPanel.tsx` |
+| Command palette | `ui/CommandPalette.tsx`, `command-registry.ts` |
+| Docks | `ui/panels/*` (side-by-side left/right) |
+| Results | `src/results/*`, `ui/ResultsPanel.tsx`, `StrategyReport.tsx` |
+| Store | `src/store/index.ts`, `types.ts` |
+| Topbar / settings | `ui/Topbar.tsx`, `TopbarField.tsx`, `SettingsDialog.tsx` |
+| Workspace snapshot | `src/storage/workspace-snapshot.ts` |
 
 ### Worker
 
