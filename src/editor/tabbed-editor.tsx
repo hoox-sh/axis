@@ -27,46 +27,36 @@
  * @module editor/tabbed-editor
  */
 
-import { Component, For, createMemo, createSignal, batch, onCleanup, onMount, createEffect } from 'solid-js';
-import { PineEditor } from './PineEditor';
-import { store, loadEditorDoc, saveEditorDoc } from '../store';
-import { saveDraft, loadDraft, writeScript } from '../storage/service';
-import { setStatus } from '../store';
+import { Component, For, Show, createMemo, createSignal, batch, onCleanup, onMount, createEffect } from 'solid-js';
+import { PineEditor, type PineEditorRef } from './PineEditor';
+import { store, loadEditorDoc, saveEditorDoc, setStatus, toggleDebugPinsEnabled } from '../store';
+import { saveDraft, loadDraft } from '../storage/service';
 import { normalizeRunProfile, type RunProfile } from '../results/profiler';
 import {
   collectInlineDebugAnnotations,
+  filterPinableAnnotations,
   type InlineDebugAnnotation,
 } from '../results/inline-debug';
 import { setDebugChipClickHandler } from './inline-debug';
 import { jumpToDebugPin } from '../chart/manager-access';
+import { EditorProblems } from '../ui/EditorProblems';
+import { countProblemsBySeverity } from '../ui/editor-problems';
+import { EditorGitBar } from '../ui/EditorGitBar';
+import {
+  getEditorStorageId,
+  isGitStorageActive,
+  pullLibrary,
+  pushScript,
+} from './git-sync';
+import {
+  countDiagnostics,
+  diagnosticsFromLastRun,
+  formatDiagnosticCount,
+  type EditorDiagnostic,
+} from './diagnostics';
+import { countDocStats, cursorLineCol } from './doc-stats';
 
-/** Lines / words / characters for the status strip. */
-export function countDocStats(doc: string): { lines: number; words: number; chars: number } {
-  const chars = doc.length;
-  const lines = doc.length === 0 ? 1 : doc.split(/\r\n|\r|\n/).length;
-  const trimmed = doc.trim();
-  const words = trimmed ? trimmed.split(/\s+/).length : 0;
-  return { lines, words, chars };
-}
-
-/** 1-based line / column at a document offset (CodeMirror `pos`). */
-export function cursorLineCol(
-  doc: string,
-  pos: number,
-): { line: number; col: number } {
-  const p = Math.max(0, Math.min(Math.floor(pos), doc.length));
-  let line = 1;
-  let col = 1;
-  for (let i = 0; i < p; i++) {
-    if (doc.charCodeAt(i) === 10 /* \n */) {
-      line += 1;
-      col = 1;
-    } else {
-      col += 1;
-    }
-  }
-  return { line, col };
-}
+export { countDocStats, cursorLineCol } from './doc-stats';
 
 /** One editor tab (in-memory until saved to library/draft). */
 interface Tab {
@@ -118,19 +108,13 @@ function initialDoc(): string {
 interface Props {
   onRun?: (doc: string) => void;
   onDocChange?: (doc: string) => void;
-  editorRef?: {
-    getDoc: () => string;
-    setDoc?: (doc: string) => void;
-    /** Load external library content into active tab */
-    loadLibraryDoc?: (doc: string, name?: string, libraryId?: string) => void;
-  };
+  editorRef?: PineEditorRef;
 }
 
 /** Multi-tab editor UI with demos, draft autosave, and library integration. */
 export const TabbedEditor: Component<Props> = (props) => {
   const [tabs, setTabs] = createSignal<Tab[]>([newTab('Script 1', initialDoc())]);
   const [activeTab, setActiveTab] = createSignal(0);
-  const [saving, setSaving] = createSignal(false);
 
   /** Normalize last-run profile for the CM profiler gutter (null when off / empty). */
   const profilerProfile = createMemo((): RunProfile | null => {
@@ -156,10 +140,45 @@ export const TabbedEditor: Component<Props> = (props) => {
     return collectInlineDebugAnnotations(store.lastRun);
   });
 
+  /**
+   * Pin-able source lines for the editor pin gutter (📍).
+   * Independent of inline debug chips — gated on `debugPinsEnabled`.
+   */
+  const debugPinAnns = createMemo((): InlineDebugAnnotation[] => {
+    if (!store.debugPinsEnabled) return [];
+    return filterPinableAnnotations(collectInlineDebugAnnotations(store.lastRun));
+  });
+
+  /**
+   * CM underlines / gutter diagnostics from last run + active doc
+   * (line → offset mapping uses current tab text).
+   */
+  const editorDiagnostics = createMemo((): EditorDiagnostic[] => {
+    void store.lastRun;
+    void tabs();
+    void activeTab();
+    const sourceDoc =
+      props.editorRef?.getDoc?.() || tabs()[activeTab()]?.doc || '';
+    return diagnosticsFromLastRun(store.lastRun, sourceDoc);
+  });
+
+  const diagCountLabel = createMemo(() => formatDiagnosticCount(editorDiagnostics()));
+  const problemCounts = createMemo(() => countProblemsBySeverity(editorDiagnostics()));
+  // Prefer diagnostics module counts when available (same totals)
+  const diagCounts = createMemo(() => countDiagnostics(editorDiagnostics()));
+
   let draftTimer: ReturnType<typeof setTimeout> | null = null;
   const [stats, setStats] = createSignal(countDocStats(tabs()[0]?.doc || ''));
   /** Cursor position in the active editor (1-based line / column). */
   const [cursor, setCursor] = createSignal({ line: 1, col: 1 });
+  /** Problems panel expanded under the editor. */
+  const [problemsOpen, setProblemsOpen] = createSignal(false);
+
+  // Auto-expand when new diagnostics appear after a run
+  createEffect(() => {
+    const n = editorDiagnostics().length;
+    if (n > 0) setProblemsOpen(true);
+  });
 
   const scheduleDraft = (doc: string, name?: string) => {
     saveEditorDoc(doc);
@@ -179,8 +198,10 @@ export const TabbedEditor: Component<Props> = (props) => {
   });
 
   onMount(() => {
-    // Click pin-able inline debug chips → crosshair + scroll to bar
+    // Click pin-able chips / pin gutter → crosshair + scroll to bar
+    // (line flash is handled inside editor/inline-debug firePinJump)
     setDebugChipClickHandler((detail) => {
+      // Line flash is applied inside editor/inline-debug firePinJump
       jumpToDebugPin({ barIndex: detail.barIndex, time: detail.time });
     });
     onCleanup(() => setDebugChipClickHandler(null));
@@ -216,6 +237,25 @@ export const TabbedEditor: Component<Props> = (props) => {
         scheduleDraft(doc, name);
       };
     }
+
+    // Command palette → Save to Library / Git Push / Git Pull
+    const onSaveLibrary = () => {
+      void saveActiveToLibrary();
+    };
+    const onGitPush = () => {
+      void saveActiveToLibrary();
+    };
+    const onGitPull = () => {
+      void pullActiveFromLibrary();
+    };
+    window.addEventListener('axis-editor-save-library', onSaveLibrary);
+    window.addEventListener('axis-editor-git-push', onGitPush);
+    window.addEventListener('axis-editor-git-pull', onGitPull);
+    onCleanup(() => {
+      window.removeEventListener('axis-editor-save-library', onSaveLibrary);
+      window.removeEventListener('axis-editor-git-push', onGitPush);
+      window.removeEventListener('axis-editor-git-pull', onGitPull);
+    });
   });
 
   onCleanup(() => {
@@ -267,34 +307,93 @@ export const TabbedEditor: Component<Props> = (props) => {
     scheduleDraft(doc, tabs()[activeTab()]?.name);
   };
 
+  const activeTabState = () => tabs()[activeTab()];
+
+  /** Persist active tab via storage (library write / git commit). */
   const saveActiveToLibrary = async () => {
-    const tab = tabs()[activeTab()];
+    const tab = activeTabState();
     const doc = props.editorRef?.getDoc?.() || tab?.doc || '';
     if (!doc.trim()) {
       setStatus('error', 'Editor is empty');
       return;
     }
     const name = tab?.name || 'Script';
-    setSaving(true);
     try {
-      const meta = await writeScript({
-        id: tab?.libraryId || `s_${Date.now().toString(36)}`,
+      const meta = await pushScript({
+        id: tab?.libraryId,
         name,
         content: doc,
       });
-      setTabs((t) =>
-        t.map((tb, i) =>
-          i === activeTab()
-            ? { ...tb, dirty: false, libraryId: meta.id, name: meta.name }
-            : tb,
-        ),
+      onGitPushSuccess(meta);
+      setStatus(
+        'ready',
+        isGitStorageActive()
+          ? `Committed & saved "${meta.name}" to git`
+          : `Saved "${meta.name}" → ${getEditorStorageId()}`,
       );
-      setStatus('ready', `Saved "${meta.name}"`);
     } catch (e: unknown) {
       setStatus('error', e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
     }
+  };
+
+  /** Pull / refresh bound library script from active storage. */
+  const pullActiveFromLibrary = async () => {
+    const tab = activeTabState();
+    try {
+      const result = await pullLibrary(tab?.libraryId);
+      if (result.sync && !result.sync.ok) {
+        setStatus('error', result.sync.message || 'Pull failed');
+        return;
+      }
+      if (result.doc && tab?.libraryId) {
+        onGitPullReload(result.doc.content, result.doc.name, result.doc.id);
+        setStatus(
+          'ready',
+          isGitStorageActive()
+            ? `Pulled "${result.doc.name}" from git (${result.list.length} script(s))`
+            : `Refreshed "${result.doc.name}" (${result.list.length} script(s))`,
+        );
+      } else {
+        setStatus(
+          'ready',
+          result.sync?.message ||
+            (isGitStorageActive()
+              ? `Pulled ${result.list.length} script(s) from git`
+              : `Library: ${result.list.length} script(s)`),
+        );
+      }
+    } catch (e: unknown) {
+      setStatus('error', e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const onGitPushSuccess = (meta: { id: string; name: string }) => {
+    setTabs((t) =>
+      t.map((tb, i) =>
+        i === activeTab()
+          ? { ...tb, dirty: false, libraryId: meta.id, name: meta.name }
+          : tb,
+      ),
+    );
+  };
+
+  const onGitPullReload = (doc: string, name?: string, libraryId?: string) => {
+    const idx = activeTab();
+    setTabs((t) =>
+      t.map((tab, i) =>
+        i === idx
+          ? {
+              ...tab,
+              doc,
+              name: name || tab.name,
+              dirty: false,
+              libraryId: libraryId ?? tab.libraryId,
+            }
+          : tab,
+      ),
+    );
+    props.editorRef?.setDoc?.(doc);
+    scheduleDraft(doc, name);
   };
 
   return (
@@ -334,14 +433,17 @@ export const TabbedEditor: Component<Props> = (props) => {
           +
         </button>
         <div class="flex-1" />
-        <button
-          class="sc-btn sc-btn-ghost px-2 text-[10px] m-0.5 self-center"
-          title={`Save to ${store.activePlugins?.storage || 'local'} library`}
-          disabled={saving()}
-          onClick={() => void saveActiveToLibrary()}
-        >
-          {saving() ? 'Saving…' : 'Save'}
-        </button>
+        <div class="self-center m-0.5">
+          <EditorGitBar
+            getDoc={() => props.editorRef?.getDoc?.() || activeTabState()?.doc || ''}
+            getName={() => activeTabState()?.name || 'Script'}
+            getLibraryId={() => activeTabState()?.libraryId}
+            dirty={() => !!activeTabState()?.dirty}
+            onPushSuccess={onGitPushSuccess}
+            onPullReload={onGitPullReload}
+            compact
+          />
+        </div>
       </div>
       <div class="flex-1 min-h-0 overflow-hidden relative">
         <PineEditor
@@ -357,8 +459,29 @@ export const TabbedEditor: Component<Props> = (props) => {
           profilerProfile={profilerProfile()}
           inlineDebugEnabled={store.inlineDebugEnabled}
           inlineDebug={inlineDebugAnns()}
+          debugPinsEnabled={store.debugPinsEnabled}
+          debugPins={debugPinAnns()}
+          onToggleDebugPins={() => toggleDebugPinsEnabled()}
+          diagnostics={editorDiagnostics()}
+          rulerEnabled={store.editorRulerEnabled}
         />
       </div>
+      <Show when={problemsOpen()}>
+        <EditorProblems
+          diagnostics={editorDiagnostics()}
+          onJump={(line) => {
+            const ref = props.editorRef;
+            // Prefer full diagnostic jump when we have a matching range
+            const match = editorDiagnostics().find((d) => d.line === line);
+            if (match && ref?.jumpToDiagnostic) {
+              ref.jumpToDiagnostic(match);
+              return;
+            }
+            if (ref?.scrollToLine) ref.scrollToLine(line);
+            else ref?.focusLine?.(line);
+          }}
+        />
+      </Show>
       <div
         class="flex-shrink-0 flex items-center gap-3 px-2 py-0.5 border-t-2 border-border bg-bg-base text-[10px] font-mono text-text-faint tabular-nums select-none"
         data-testid="axis-editor-stats"
@@ -379,6 +502,65 @@ export const TabbedEditor: Component<Props> = (props) => {
         <span>
           Chars <span class="text-text-dim">{stats().chars}</span>
         </span>
+        <button
+          type="button"
+          class={`ml-1 px-1.5 py-0 rounded border border-transparent hover:bg-bg-hover hover:text-text inline-flex items-center gap-1 ${
+            problemsOpen() ? 'text-accent border-border-soft bg-bg-hover' : ''
+          } ${
+            diagCounts().errors > 0
+              ? 'text-red'
+              : diagCounts().warnings > 0
+                ? 'text-orange'
+                : 'text-text-faint'
+          }`}
+          data-testid="axis-editor-problems-toggle"
+          title={
+            editorDiagnostics().length
+              ? `${diagCountLabel() || `${problemCounts().total} problem(s)`} — click to ${problemsOpen() ? 'hide' : 'show'} list`
+              : 'No problems from last run'
+          }
+          aria-pressed={problemsOpen()}
+          aria-expanded={problemsOpen()}
+          onClick={() => setProblemsOpen((o) => !o)}
+        >
+          Problems
+          <Show when={editorDiagnostics().length > 0}>
+            <span class="tabular-nums" data-testid="axis-editor-problems-badge">
+              {editorDiagnostics().length}
+            </span>
+          </Show>
+        </button>
+        <Show when={editorDiagnostics().length > 0}>
+          <button
+            type="button"
+            class={`px-1.5 py-0 rounded border border-transparent hover:bg-bg-hover inline-flex items-center gap-1 font-semibold ${
+              diagCounts().errors > 0
+                ? 'text-red'
+                : diagCounts().warnings > 0
+                  ? 'text-orange'
+                  : 'text-text-dim'
+            }`}
+            data-testid="axis-editor-diag-count"
+            title={`${diagCountLabel()} — jump to first`}
+            onClick={() => {
+              const diags = editorDiagnostics();
+              if (!diags.length) return;
+              const ref = props.editorRef;
+              const first =
+                diags.find((d) => d.severity === 'error') ??
+                diags.find((d) => d.severity === 'warning') ??
+                diags[0]!;
+              if (ref?.jumpToDiagnostic) {
+                ref.jumpToDiagnostic(first);
+                return;
+              }
+              if (ref?.scrollToLine) ref.scrollToLine(first.line);
+              else ref?.focusLine?.(first.line);
+            }}
+          >
+            {diagCountLabel()}
+          </button>
+        </Show>
         <span class="ml-auto text-text-faint/80">wrap</span>
       </div>
     </div>

@@ -14,6 +14,7 @@ import {
   pinsFromDebugEntries,
   debugPinsToMarkers,
   pinsFromLastRun,
+  countDebugPins,
   type DebugPin,
 } from '../src/results/debug-pins.ts';
 
@@ -21,9 +22,12 @@ describe('parseBarIndexFromText', () => {
   it('parses common bar_index patterns', () => {
     expect(parseBarIndexFromText('value at bar_index=12')).toBe(12);
     expect(parseBarIndexFromText('bar_index: 7 foo')).toBe(7);
+    expect(parseBarIndexFromText('bar_index 15')).toBe(15);
     expect(parseBarIndexFromText('barIndex=3')).toBe(3);
     expect(parseBarIndexFromText('[bar 5] signal')).toBe(5);
     expect(parseBarIndexFromText('bar: 9 closed')).toBe(9);
+    expect(parseBarIndexFromText('at bar 7 crossed')).toBe(7);
+    expect(parseBarIndexFromText('#bar:3 signal')).toBe(3);
     expect(parseBarIndexFromText('crossover @ 42')).toBe(42);
   });
 
@@ -222,5 +226,32 @@ describe('pinsFromLastRun', () => {
     );
     expect(pins).toHaveLength(1);
     expect(pins[0]).toMatchObject({ line: 3, barIndex: 7, label: 'L3' });
+  });
+
+  it('parses source line from free-text message when structured line missing', () => {
+    const pins = pinsFromDebugEntries([
+      { level: 'info', message: 'line 12: crossed bar_index=4' },
+    ]);
+    expect(pins).toHaveLength(1);
+    expect(pins[0]).toMatchObject({ line: 12, barIndex: 4, label: 'L12' });
+  });
+});
+
+describe('countDebugPins', () => {
+  it('counts pinable entries in last run', () => {
+    expect(
+      countDebugPins({
+        logs: [
+          { level: 'info', message: 'a', barIndex: 1 },
+          { level: 'error', message: 'no pin' },
+          { level: 'warning', message: 'b', bar_index: 2 },
+        ],
+      }),
+    ).toBe(2);
+  });
+
+  it('returns 0 for empty', () => {
+    expect(countDebugPins(null)).toBe(0);
+    expect(countDebugPins({})).toBe(0);
   });
 });

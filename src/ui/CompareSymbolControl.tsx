@@ -23,6 +23,8 @@
  * Loading is triggered on enable + Enter/blur when the symbol is set.
  * ChartHost paints the series from `store.compare` once bars arrive.
  *
+ * Visual language matches {@link TopbarField} / axis-tb chrome.
+ *
  * @module ui/CompareSymbolControl
  */
 
@@ -40,6 +42,7 @@ import {
 } from '../store';
 import { fetchCompareBars } from '../chart/compare-overlay';
 import { HooxLoader } from './HooxLoader';
+import { TopbarField } from './TopbarField';
 
 /**
  * Compact compare-symbol chrome for the workspace top bar.
@@ -101,29 +104,27 @@ export const CompareSymbolControl: Component = () => {
 
   return (
     <Show when={canCompare() || store.compare.enabled}>
-      <span class="sc-sep" aria-hidden="true" />
-      <label
-        class="sc-label hidden sm:inline flex items-center gap-1 cursor-pointer"
+      <button
+        type="button"
+        class={`sc-btn sc-btn-ghost ${store.compare.enabled ? 'is-active' : ''}`}
         title="Overlay another symbol for comparison"
+        aria-pressed={store.compare.enabled}
+        data-testid="axis-compare-enabled"
+        onClick={() => onToggle(!store.compare.enabled)}
       >
-        <input
-          type="checkbox"
-          class="accent-[var(--accent)]"
-          data-testid="axis-compare-enabled"
-          checked={store.compare.enabled}
-          onChange={(e) => onToggle(e.currentTarget.checked)}
-        />
-        <span>Compare</span>
-      </label>
+        Compare
+      </button>
       <Show when={store.compare.enabled}>
-        <input
+        <TopbarField
           id="axis-compare-symbol"
-          class="sc-input min-w-[6em] max-w-[8em] font-mono uppercase"
-          data-testid="axis-compare-symbol"
+          label="vs"
+          class="min-w-[6.5em] max-w-[8.5em]"
+          mono
+          testId="axis-compare-symbol"
           value={store.compare.symbol}
+          placeholder="ETHUSDT"
           spellcheck={false}
           autocomplete="off"
-          placeholder="ETHUSDT"
           title="Compare symbol · Enter to load"
           onInput={(e) => setCompareSymbol(e.currentTarget.value.toUpperCase())}
           onChange={(e) => commitSymbol(e.currentTarget.value, true)}
@@ -135,9 +136,11 @@ export const CompareSymbolControl: Component = () => {
           }}
           onBlur={(e) => commitSymbol(e.currentTarget.value, true)}
         />
-        <select
-          class="sc-input min-w-[3.5em]"
-          data-testid="axis-compare-mode"
+        <TopbarField
+          label="Scale"
+          variant="select"
+          class="min-w-[3.8em]"
+          testId="axis-compare-mode"
           value={store.compare.mode}
           title="Compare scale: percent change or absolute price"
           onChange={(e) => {
@@ -147,21 +150,20 @@ export const CompareSymbolControl: Component = () => {
         >
           <option value="percent">%</option>
           <option value="absolute">Abs</option>
-        </select>
+        </TopbarField>
         <Show when={store.compare.mode === 'percent'}>
-          <label
-            class="sc-label hidden md:inline flex items-center gap-1 cursor-pointer text-[0.85em]"
+          <button
+            type="button"
+            class={`sc-btn sc-btn-ghost text-[0.85em] hidden md:inline-flex ${
+              store.compare.normalizeMain ? 'is-active' : ''
+            }`}
             title="Also plot main symbol as % from the first common bar"
+            aria-pressed={store.compare.normalizeMain}
+            data-testid="axis-compare-normalize-main"
+            onClick={() => setCompareNormalizeMain(!store.compare.normalizeMain)}
           >
-            <input
-              type="checkbox"
-              class="accent-[var(--accent)]"
-              data-testid="axis-compare-normalize-main"
-              checked={store.compare.normalizeMain}
-              onChange={(e) => setCompareNormalizeMain(e.currentTarget.checked)}
-            />
-            <span>Dual %</span>
-          </label>
+            Dual %
+          </button>
         </Show>
         <Show when={store.compare.loading}>
           <HooxLoader size="xs" />

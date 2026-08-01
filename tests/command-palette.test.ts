@@ -157,9 +157,40 @@ describe('DEFAULT_COMMAND_SPECS', () => {
     }
   });
 
+  it('includes editor power command ids', () => {
+    const ids = new Set(DEFAULT_COMMAND_SPECS.map((c) => c.id));
+    for (const id of [
+      'editor.toggle-ruler',
+      'editor.toggle-inline-debug',
+      'editor.toggle-debug-pins',
+      'editor.toggle-profiler',
+      'editor.goto-line',
+      'editor.save-library',
+      'editor.focus',
+      'git.push',
+      'git.pull',
+    ]) {
+      expect(ids.has(id)).toBe(true);
+    }
+  });
+
   it('has unique ids', () => {
     const ids = DEFAULT_COMMAND_SPECS.map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('fuzzy keywords find ruler / debug / pin / problem / git', () => {
+    for (const [query, id] of [
+      ['ruler', 'editor.toggle-ruler'],
+      ['debug', 'editor.toggle-inline-debug'],
+      ['pin', 'editor.toggle-debug-pins'],
+      ['problem', 'editor.toggle-inline-debug'],
+      ['profiler', 'editor.toggle-profiler'],
+      ['git', 'git.push'],
+    ] as const) {
+      const ranked = filterCommands([...DEFAULT_COMMAND_SPECS], query);
+      expect(ranked.some((c) => c.id === id)).toBe(true);
+    }
   });
 });
 
@@ -186,6 +217,15 @@ describe('buildDefaultCommands', () => {
       openPlugins: noop,
       openScriptSettings: noop,
       resetUiLayout: noop,
+      toggleEditorRuler: noop,
+      toggleInlineDebug: noop,
+      toggleDebugPins: noop,
+      toggleProfiler: noop,
+      jumpToLine: noop,
+      saveToLibrary: noop,
+      focusEditor: noop,
+      gitPush: noop,
+      gitPull: noop,
     };
   };
 
@@ -206,16 +246,63 @@ describe('buildDefaultCommands', () => {
     const actions = stubActions();
     delete actions.openSettings;
     delete actions.toggleScriptLogs;
+    delete actions.toggleEditorRuler;
+    delete actions.gitPush;
+    delete actions.gitPull;
     const cmds = buildDefaultCommands(actions);
     const ids = new Set(cmds.map((c) => c.id));
     expect(ids.has('action.settings')).toBe(false);
     expect(ids.has('panel.scriptlogs')).toBe(false);
+    expect(ids.has('editor.toggle-ruler')).toBe(false);
+    expect(ids.has('git.push')).toBe(false);
+    expect(ids.has('git.pull')).toBe(false);
     expect(ids.has('panel.watchlist')).toBe(true);
+    // Core editor power commands remain when their handlers are present
+    expect(ids.has('editor.toggle-inline-debug')).toBe(true);
+    expect(ids.has('editor.goto-line')).toBe(true);
+    expect(ids.has('editor.save-library')).toBe(true);
+    expect(ids.has('editor.focus')).toBe(true);
+  });
+
+  it('wires editor power command handlers', () => {
+    const seen: string[] = [];
+    const actions = stubActions();
+    actions.toggleInlineDebug = () => {
+      seen.push('debug');
+    };
+    actions.toggleProfiler = () => {
+      seen.push('profiler');
+    };
+    actions.jumpToLine = () => {
+      seen.push('goto');
+    };
+    actions.saveToLibrary = () => {
+      seen.push('save');
+    };
+    const cmds = buildDefaultCommands(actions);
+    for (const id of [
+      'editor.toggle-inline-debug',
+      'editor.toggle-profiler',
+      'editor.goto-line',
+      'editor.save-library',
+    ]) {
+      const cmd = cmds.find((c) => c.id === id);
+      expect(cmd).toBeTruthy();
+      cmd!.run();
+    }
+    expect(seen).toEqual(['debug', 'profiler', 'goto', 'save']);
   });
 
   it('filtered default set still ranks panel toggles', () => {
     const cmds = buildDefaultCommands(stubActions());
     const ranked = filterCommands(cmds, 'layers');
     expect(ranked[0]?.id).toBe('panel.layers');
+  });
+
+  it('ranks editor ruler / git by keyword', () => {
+    const cmds = buildDefaultCommands(stubActions());
+    expect(filterCommands(cmds, 'ruler')[0]?.id).toBe('editor.toggle-ruler');
+    const gitRanked = filterCommands(cmds, 'git');
+    expect(gitRanked.some((c) => c.id === 'git.push' || c.id === 'git.pull')).toBe(true);
   });
 });

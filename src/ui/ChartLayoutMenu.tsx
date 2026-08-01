@@ -110,10 +110,11 @@ export const ChartLayoutMenu: Component = () => {
     <div class="relative" ref={rootEl} data-testid="axis-chart-layout-menu">
       <button
         type="button"
-        class={`sc-btn sc-btn-ghost ${open() ? 'text-accent' : ''}`}
+        class={`sc-btn sc-btn-ghost ${open() ? 'is-active' : ''}`}
         title="Chart layouts — multi-chart grid and saved layouts"
         aria-expanded={open()}
         aria-haspopup="menu"
+        aria-pressed={open()}
         data-testid="axis-btn-layouts"
         onClick={() => setOpen((o) => !o)}
       >

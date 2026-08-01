@@ -33,6 +33,8 @@ import {
   type PineLogLevel,
 } from '../results/pine-logs';
 import { jumpToDebugPin } from '../chart/manager-access';
+import { flashDebugPinLine } from '../editor/inline-debug';
+import { parseSourceLine } from '../results/inline-debug';
 import { FloatableShell } from './panels/FloatableShell';
 import { Icons } from './icons';
 
@@ -231,6 +233,13 @@ export const ScriptLogsPanel: Component = () => {
                     const onJump = () => {
                       if (!jumpable()) return;
                       jumpToDebugPin({ barIndex: bi(), time: entry.time ?? null });
+                      // Bidirectional: flash editor line when the log references one
+                      const line =
+                        parseSourceLine(entry.message) ??
+                        (typeof (entry as { line?: number }).line === 'number'
+                          ? (entry as { line?: number }).line!
+                          : null);
+                      if (line != null) flashDebugPinLine(line);
                     };
                     return (
                       <div

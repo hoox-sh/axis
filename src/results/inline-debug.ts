@@ -62,12 +62,14 @@ function asFiniteNumber(v: unknown): number | null {
 
 /**
  * Parse a 1-based source line from free text / engine messages.
- * Examples: `line 12`, `Line:12`, `:12:`, `L12`, `at 12:`, `(line 12)`.
+ * Examples: `line 12`, `Line:12`, `line #12`, `:12:`, `L12`, `L:12`,
+ * `at 12:`, `(line 12)`.
  */
 export function parseSourceLine(text: string): number | null {
   if (!text) return null;
   const patterns = [
-    /\bline\s*[:=]?\s*(\d+)\b/i,
+    /\bline\s*#?\s*[:=]?\s*(\d+)\b/i,
+    /\bL:(\d+)\b/,
     /\bL(\d+)\b/,
     /:(\d+):\d+/, // file:line:col
     /:(\d+)\b/, // trailing :12
@@ -82,6 +84,24 @@ export function parseSourceLine(text: string): number | null {
     }
   }
   return null;
+}
+
+/** True when an annotation can pin a chart bar (has bar_index and/or time). */
+export function isPinableAnnotation(
+  a: Pick<InlineDebugAnnotation, 'barIndex' | 'time'>,
+): boolean {
+  return a.barIndex != null || a.time != null;
+}
+
+/**
+ * Annotations that can pin a chart bar (bar_index and/or time present).
+ * Useful for editor pin gutters independent of severity chips.
+ */
+export function filterPinableAnnotations(
+  anns: ReadonlyArray<InlineDebugAnnotation> | null | undefined,
+): InlineDebugAnnotation[] {
+  if (!anns?.length) return [];
+  return anns.filter(isPinableAnnotation);
 }
 
 function lineFromRecord(item: Record<string, unknown>): number | null {

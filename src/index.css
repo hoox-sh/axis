@@ -390,28 +390,34 @@ button.sc-btn:focus-visible {
   background: color-mix(in srgb, var(--color-accent) 20%, var(--color-bg-hover));
 }
 
-/* Live stream on — green accent-2 */
-.sc-btn.is-live-on {
+/* Live stream on — green accent-2 (wins over generic aria-pressed) */
+.sc-btn.is-live-on,
+.sc-btn.is-live-on[aria-pressed="true"] {
   color: var(--color-accent-2);
   border-color: color-mix(in srgb, var(--color-accent-2) 52%, var(--color-border));
   background: color-mix(in srgb, var(--color-accent-2) 12%, var(--color-bg-elev));
   font-weight: 600;
 }
 
-.sc-btn.is-live-on:hover {
+.sc-btn.is-live-on:hover,
+.sc-btn.is-live-on[aria-pressed="true"]:hover {
+  color: var(--color-accent-2);
   border-color: color-mix(in srgb, var(--color-accent-2) 70%, var(--color-border));
   background: color-mix(in srgb, var(--color-accent-2) 18%, var(--color-bg-hover));
 }
 
-/* Bar replay on — primary accent */
-.sc-btn.is-replay-on {
+/* Bar replay on — primary accent (wins over generic aria-pressed) */
+.sc-btn.is-replay-on,
+.sc-btn.is-replay-on[aria-pressed="true"] {
   color: var(--color-accent);
   border-color: color-mix(in srgb, var(--color-accent) 52%, var(--color-border));
   background: color-mix(in srgb, var(--color-accent) 12%, var(--color-bg-elev));
   font-weight: 600;
 }
 
-.sc-btn.is-replay-on:hover {
+.sc-btn.is-replay-on:hover,
+.sc-btn.is-replay-on[aria-pressed="true"]:hover {
+  color: var(--color-accent);
   border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-border));
   background: color-mix(in srgb, var(--color-accent) 18%, var(--color-bg-hover));
 }

@@ -29,7 +29,7 @@
  * @module editor/EditorPane
  */
 
-import { Component, Show } from 'solid-js';
+import { Component, Show, createMemo, onMount, onCleanup } from 'solid-js';
 import { TabbedEditor } from './tabbed-editor';
 import {
   store,
@@ -39,12 +39,14 @@ import {
   toggleProfilerEnabled,
   toggleInlineDebugEnabled,
   toggleDebugPinsEnabled,
+  toggleEditorRulerEnabled,
   saveEditorDoc,
 } from '../store';
 import { FloatableShell } from '../ui/panels/FloatableShell';
 import { Icons } from '../ui/icons';
 import { openEditorWindow, writeSharedDoc, bridgePublish } from './editor-bridge';
 import { runAndApply } from '../indicators/runner';
+import { countDebugPins } from '../results/debug-pins';
 
 interface Props {
   editorRef: { getDoc: () => string; setDoc?: (doc: string) => void };
@@ -68,6 +70,31 @@ export const EditorPane: Component<Props> = (props) => {
     setEditorMode('popout');
     openEditorWindow(mode);
   };
+
+  /** Chart pin count from last run (shown next to Pins when enabled). */
+  const pinCount = createMemo(() => {
+    if (!store.debugPinsEnabled || store.lastRun == null) return 0;
+    return countDebugPins(store.lastRun, { bars: store.bars });
+  });
+
+  // Alt-P toggles pins when focus is outside CodeMirror (CM has its own Alt-p map).
+  onMount(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      if (e.key !== 'p' && e.key !== 'P') return;
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      // CM keymap owns Alt-P while the editor is focused — avoid double-toggle
+      if (t.closest?.('.cm-editor') || t.closest?.('.axis-pine-editor')) return;
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) {
+        return;
+      }
+      e.preventDefault();
+      toggleDebugPinsEnabled();
+    };
+    window.addEventListener('keydown', onKey);
+    onCleanup(() => window.removeEventListener('keydown', onKey));
+  });
 
   const editorTools = (
     <div
@@ -145,8 +172,8 @@ export const EditorPane: Component<Props> = (props) => {
         }`}
         title={
           store.debugPinsEnabled
-            ? 'Chart pins on — markers on bars referenced by last-run logs (bar_index/time)'
-            : 'Pin last-run log bars on the chart (needs bar_index or time in logs)'
+            ? 'Chart pins on — markers + editor pin gutter (Alt-P to toggle). Click 📍 / pin-able chips to jump.'
+            : 'Pin last-run log bars on the chart + editor gutter (needs bar_index or time). Alt-P'
         }
         aria-pressed={store.debugPinsEnabled}
         data-testid="axis-btn-debug-pins"
@@ -154,6 +181,28 @@ export const EditorPane: Component<Props> = (props) => {
       >
         <Icons.pin size={12} />
         Pins
+        <Show when={store.debugPinsEnabled}>
+          <span class="font-mono opacity-80" data-testid="axis-debug-pin-count">
+            · {pinCount()} {pinCount() === 1 ? 'pin' : 'pins'}
+          </span>
+        </Show>
+      </button>
+      <button
+        type="button"
+        class={`sc-btn sc-btn-ghost px-1.5 text-[10px] ${
+          store.editorRulerEnabled ? 'text-accent border-accent' : ''
+        }`}
+        title={
+          store.editorRulerEnabled
+            ? 'Column ruler on — 80-character recommended line length guide'
+            : 'Show 80-character recommended line length ruler'
+        }
+        aria-pressed={store.editorRulerEnabled}
+        data-testid="axis-btn-editor-ruler"
+        onClick={() => toggleEditorRulerEnabled()}
+      >
+        <Icons.ruler size={12} />
+        Ruler
       </button>
     </div>
   );

@@ -314,6 +314,11 @@ export interface AppState {
    * or time. Persisted. Independent of {@link inlineDebugEnabled}.
    */
   debugPinsEnabled: boolean;
+  /**
+   * Editor column ruler — vertical guide at the recommended line length
+   * (default 80 chars). Persisted. Default on.
+   */
+  editorRulerEnabled: boolean;
   stream: { status: 'connected' | 'disconnected' | 'error' | 'connecting' };
   status: AppStatus;
   statusMessage: string;

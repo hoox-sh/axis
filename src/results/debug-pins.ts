@@ -27,7 +27,11 @@
  */
 
 import { normalizePineLogs, type PineLogEntry, type PineLogLevel } from './pine-logs';
-import type { InlineDebugAnnotation, InlineDebugLevel } from './inline-debug';
+import {
+  parseSourceLine,
+  type InlineDebugAnnotation,
+  type InlineDebugLevel,
+} from './inline-debug';
 import type { TradeMarker } from './events';
 
 /** One chart pin derived from a log / inline-debug annotation. */
@@ -126,15 +130,19 @@ function levelOf(entry: DebugPinSource): InlineDebugLevel {
 
 /**
  * Parse a bar index from free-text log messages.
- * Examples: `bar_index=12`, `bar: 3`, `[bar 5]`, `barIndex: 9`, trailing `@42`.
+ * Examples: `bar_index=12`, `bar_index 12`, `bar: 3`, `[bar 5]`, `barIndex: 9`,
+ * `at bar 7`, `#bar:3`, trailing `@42`.
  * Returns null when absent or out of a sane range.
  */
 export function parseBarIndexFromText(text: string): number | null {
   if (!text) return null;
   const patterns = [
     /\bbar_index\s*[=:]\s*(-?\d+)\b/i,
+    /\bbar_index\s+(-?\d+)\b/i,
     /\bbarIndex\s*[=:]\s*(-?\d+)\b/,
     /\[bar\s*(-?\d+)\]/i,
+    /#bar\s*[=:]?\s*(-?\d+)\b/i,
+    /\bat\s+bar\s+(-?\d+)\b/i,
     /\bbar\s*[=:]\s*(-?\d+)\b/i,
     /@\s*(-?\d+)\s*$/,
   ];
@@ -275,7 +283,8 @@ export function pinsFromDebugEntries(
     if (barIndex == null) barIndex = parseBarIndexFromText(message);
     let time = normalizePinTime(structuredTime(entry));
     if (time == null) time = normalizePinTime(parseTimeFromText(message));
-    const line = structuredLine(entry);
+    // Prefer structured line; fall back to free-text "line N" / "L12" in message
+    const line = structuredLine(entry) ?? parseSourceLine(message);
     const level = levelOf(entry);
 
     if (barIndex == null && time == null && !includeLineOnly) continue;
@@ -398,4 +407,15 @@ export function pinsFromLastRun(
   }
 
   return pinsFromDebugEntries(sources, options);
+}
+
+/** Count chart-pinable entries in a last-run payload (for editor tool status). */
+export function countDebugPins(
+  lastRun: unknown,
+  options: PinsFromDebugOptions & {
+    annotations?: ReadonlyArray<InlineDebugAnnotation> | null;
+    fromLogs?: boolean;
+  } = {},
+): number {
+  return pinsFromLastRun(lastRun, options).length;
 }

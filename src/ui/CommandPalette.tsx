@@ -53,6 +53,10 @@ import {
   toggleLayerPanel,
   toggleAlertsPanel,
   toggleScriptLogsPanel,
+  toggleProfilerEnabled,
+  toggleInlineDebugEnabled,
+  toggleDebugPinsEnabled,
+  toggleEditorRulerEnabled,
   setChartGridMode,
   openScriptSettings,
   resetUiLayout,
@@ -68,6 +72,22 @@ import {
   filterCommands,
   type CommandDef,
 } from './command-registry';
+
+/** Optional host hooks (e.g. desktop shell git bridge). */
+type AxisHostWindow = Window & {
+  axisGitPush?: () => void | Promise<void>;
+  axisGitPull?: () => void | Promise<void>;
+};
+
+function emitWindowEvent(name: string, detail?: Record<string, unknown>) {
+  if (typeof window === 'undefined') return;
+  if (typeof window.dispatchEvent !== 'function') return;
+  try {
+    window.dispatchEvent(new CustomEvent(name, detail ? { detail } : undefined));
+  } catch {
+    /* test DOM without CustomEvent */
+  }
+}
 
 export type CommandPaletteProps = {
   /** Docked editor document accessor for Run Script. */
@@ -94,8 +114,11 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
   let inputEl: HTMLInputElement | undefined;
   let listEl: HTMLDivElement | undefined;
 
-  const commands = createMemo((): CommandDef[] =>
-    buildDefaultCommands({
+  const commands = createMemo((): CommandDef[] => {
+    const host =
+      typeof window !== 'undefined' ? (window as AxisHostWindow) : (undefined as AxisHostWindow | undefined);
+
+    return buildDefaultCommands({
       toggleWatchlist: () => setWatchlistOpen(!isPanelOpen('watchlist')),
       toggleEditor: () => {
         if (store.editor.mode === 'popout') {
@@ -160,8 +183,52 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       openPlugins: () => props.onOpenPlugins?.(),
       openScriptSettings: () => openScriptSettings(null),
       resetUiLayout: () => resetUiLayout(),
-    }),
-  );
+      // Editor power commands
+      toggleEditorRuler: () => toggleEditorRulerEnabled(),
+      toggleInlineDebug: () => toggleInlineDebugEnabled(),
+      toggleDebugPins: () => toggleDebugPinsEnabled(),
+      toggleProfiler: () => toggleProfilerEnabled(),
+      jumpToLine: () => {
+        const raw = window.prompt('Go to line', '1');
+        if (raw == null) return;
+        const line = Number.parseInt(String(raw).trim(), 10);
+        if (!Number.isFinite(line) || line < 1) return;
+        setEditorOpen(true);
+        emitWindowEvent('axis-editor-goto-line', { line });
+      },
+      saveToLibrary: () => {
+        setEditorOpen(true);
+        emitWindowEvent('axis-editor-save-library');
+      },
+      focusEditor: () => {
+        setEditorOpen(true);
+        queueMicrotask(() => {
+          const el =
+            document.querySelector<HTMLElement>('.axis-pine-editor .cm-content') ||
+            document.querySelector<HTMLElement>('.cm-content') ||
+            document.querySelector<HTMLElement>('[data-testid="axis-pine-editor"]');
+          el?.focus?.();
+        });
+      },
+      // Prefer host bridge when present; else fire editor events (EditorGitBar / tabbed-editor).
+      gitPush: () => {
+        if (typeof host?.axisGitPush === 'function') {
+          void host.axisGitPush();
+          return;
+        }
+        setEditorOpen(true);
+        emitWindowEvent('axis-editor-git-push');
+      },
+      gitPull: () => {
+        if (typeof host?.axisGitPull === 'function') {
+          void host.axisGitPull();
+          return;
+        }
+        setEditorOpen(true);
+        emitWindowEvent('axis-editor-git-pull');
+      },
+    });
+  });
 
   const results = createMemo(() => filterCommands(commands(), query()));
 

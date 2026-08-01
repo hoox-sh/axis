@@ -35,7 +35,7 @@ import {
   highlightActiveLine,
   highlightActiveLineGutter,
 } from '@codemirror/view';
-import { EditorState } from '@codemirror/state';
+import { EditorSelection, EditorState } from '@codemirror/state';
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { bracketMatching } from '@codemirror/language';
@@ -49,9 +49,43 @@ import {
 import type { RunProfile } from '../results/profiler';
 import {
   applyInlineDebug,
+  applyDebugPins,
   inlineDebugExtension,
+  registerDebugEditorView,
   type InlineDebugAnnotation,
 } from './inline-debug';
+import {
+  applyDiagnostics,
+  diagnosticsExtension,
+  jumpToDiagnostic,
+  type EditorDiagnostic,
+} from './diagnostics';
+import {
+  columnRulerExtension,
+  refreshColumnRuler,
+} from './column-ruler';
+
+/** Cursor position reported by {@link PineEditorRef.getCursor}. */
+export type PineEditorCursor = { line: number; col: number; offset: number };
+
+/**
+ * Imperative handle for parent panels (tabbed editor, bridge, problems jump).
+ * Methods beyond `getDoc` are assigned on mount by {@link PineEditor}.
+ */
+export type PineEditorRef = {
+  getDoc: () => string;
+  setDoc?: (doc: string) => void;
+  /** Move selection to 1-based line and scroll it into view. */
+  scrollToLine?: (line: number) => void;
+  /** Alias of {@link PineEditorRef.scrollToLine}. */
+  focusLine?: (line: number) => void;
+  /** Current selection head as 1-based line / column + absolute offset. */
+  getCursor?: () => PineEditorCursor;
+  /** Select + scroll to a diagnostic range (underlines / badge jump). */
+  jumpToDiagnostic?: (diag: EditorDiagnostic) => boolean;
+  /** Load external library content into active tab (set by TabbedEditor). */
+  loadLibraryDoc?: (doc: string, name?: string, libraryId?: string) => void;
+};
 
 interface Props {
   initialDoc?: string;
@@ -60,10 +94,10 @@ interface Props {
    * Cursor / selection head moved — 1-based line & column, plus absolute offset.
    * Fires on selection changes (arrows, click, typing).
    */
-  onCursorChange?: (pos: { line: number; col: number; offset: number }) => void;
+  onCursorChange?: (pos: PineEditorCursor) => void;
   onRun?: () => void;
   height?: string;
-  editorRef?: { getDoc: () => string; setDoc?: (doc: string) => void };
+  editorRef?: PineEditorRef;
   /**
    * Optional run profile for Profiler-mode gutter (% / ms per line).
    * Parent wires store → this prop; cleared with `null`.
@@ -78,6 +112,25 @@ interface Props {
   inlineDebug?: InlineDebugAnnotation[] | null;
   /** When false, clears inline debug even if annotations provided. */
   inlineDebugEnabled?: boolean;
+  /**
+   * Pin gutter annotations (lines with bar_index/time). Independent of
+   * {@link inlineDebugEnabled}; parent gates on `store.debugPinsEnabled`.
+   */
+  debugPins?: InlineDebugAnnotation[] | null;
+  /** When false, clears pin gutter even if `debugPins` provided. */
+  debugPinsEnabled?: boolean;
+  /** Optional Alt-P handler (toggle chart debug pins). */
+  onToggleDebugPins?: () => void;
+  /**
+   * Run-error / diagnostic underlines + gutter (always shown when provided).
+   * Parent typically computes via {@link diagnosticsFromLastRun}.
+   */
+  diagnostics?: EditorDiagnostic[] | null;
+  /**
+   * 80-column recommended line-length ruler. Extension always mounted;
+   * when false, the guide is hidden. Default true.
+   */
+  rulerEnabled?: boolean;
 }
 
 /** Solid wrapper around a single CodeMirror EditorView instance. */
@@ -95,6 +148,33 @@ export const PineEditor: Component<Props> = (props) => {
     }
   };
 
+  /** 1-based line → selection + scrollIntoView (clamped to document). */
+  const scrollToLine = (line: number) => {
+    if (!view) return;
+    const doc = view.state.doc;
+    if (doc.lines < 1) return;
+    const n = Number(line);
+    if (!Number.isFinite(n)) return;
+    const target = Math.max(1, Math.min(Math.trunc(n), doc.lines));
+    const lineObj = doc.line(target);
+    view.dispatch({
+      selection: EditorSelection.cursor(lineObj.from),
+      effects: EditorView.scrollIntoView(lineObj.from, { y: 'center' }),
+    });
+    view.focus();
+  };
+
+  const getCursor = (): PineEditorCursor => {
+    if (!view) return { line: 1, col: 1, offset: 0 };
+    const head = view.state.selection.main.head;
+    const line = view.state.doc.lineAt(head);
+    return {
+      line: line.number,
+      col: head - line.from + 1,
+      offset: head,
+    };
+  };
+
   const syncProfiler = () => {
     if (!view) return;
     const enabled = props.profilerEnabled !== false;
@@ -109,11 +189,43 @@ export const PineEditor: Component<Props> = (props) => {
     applyInlineDebug(view, anns && anns.length ? anns : null);
   };
 
+  const syncDebugPins = () => {
+    if (!view) return;
+    const enabled = props.debugPinsEnabled === true;
+    const anns = enabled ? (props.debugPins ?? null) : null;
+    applyDebugPins(view, anns && anns.length ? anns : null);
+  };
+
+  const syncDiagnostics = () => {
+    if (!view) return;
+    const diags = props.diagnostics ?? null;
+    applyDiagnostics(view, diags && diags.length ? diags : null);
+  };
+
+  const syncRuler = () => {
+    if (!view) return;
+    // Force plugin re-read of enabled() after Solid prop changes.
+    refreshColumnRuler(view);
+  };
+
   onMount(() => {
-    const runKeymap = keymap.of([{
-      key: 'Mod-Enter',
-      run: () => { props.onRun?.(); return true; },
-    }]);
+    const runKeymap = keymap.of([
+      {
+        key: 'Mod-Enter',
+        run: () => {
+          props.onRun?.();
+          return true;
+        },
+      },
+      {
+        key: 'Alt-p',
+        run: () => {
+          if (!props.onToggleDebugPins) return false;
+          props.onToggleDebugPins();
+          return true;
+        },
+      },
+    ]);
 
     const state = EditorState.create({
       doc: props.initialDoc ?? '',
@@ -128,8 +240,14 @@ export const PineEditor: Component<Props> = (props) => {
         ...pineLspExtensions(),
         // Profiler gutter: always mounted; driven by setProfilerData effects
         profilerGutterExtension(),
-        // Inline debug chips / line highlights (driven by applyInlineDebug)
+        // Inline debug chips / pin gutter / flash (driven by apply*)
         inlineDebugExtension(),
+        // Run-error underlines + gutter + hover (driven by applyDiagnostics)
+        diagnosticsExtension(),
+        // 80-col recommended line-length guide (toggle via rulerEnabled prop)
+        columnRulerExtension({
+          enabled: () => props.rulerEnabled !== false,
+        }),
         runKeymap,
         keymap.of([...defaultKeymap, indentWithTab, ...searchKeymap]),
         pineScript,
@@ -150,15 +268,26 @@ export const PineEditor: Component<Props> = (props) => {
     });
 
     view = new EditorView({ state, parent: containerRef });
+    registerDebugEditorView(view);
     if (props.editorRef) {
       props.editorRef.getDoc = getDoc;
       props.editorRef.setDoc = setDoc;
+      props.editorRef.scrollToLine = scrollToLine;
+      props.editorRef.focusLine = scrollToLine;
+      props.editorRef.getCursor = getCursor;
+      props.editorRef.jumpToDiagnostic = (diag: EditorDiagnostic) => {
+        if (!view) return false;
+        return jumpToDiagnostic(view, diag);
+      };
     }
     // Initial measure so wrapped lines + full-height host size correctly
     queueMicrotask(() => {
       view?.requestMeasure();
       syncProfiler();
       syncInlineDebug();
+      syncDebugPins();
+      syncDiagnostics();
+      syncRuler();
       // Seed cursor stats (line 1, col 1) for the status strip
       if (view && props.onCursorChange) {
         const head = view.state.selection.main.head;
@@ -171,6 +300,15 @@ export const PineEditor: Component<Props> = (props) => {
       }
     });
 
+    // Command palette → Jump to Line (`axis-editor-goto-line` detail.line)
+    const onGotoLine = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ line?: number }>).detail;
+      const line = detail?.line;
+      if (line == null) return;
+      scrollToLine(line);
+    };
+    window.addEventListener('axis-editor-goto-line', onGotoLine);
+
     // Re-measure when the float/dock shell resizes (portal host changes geometry)
     let ro: ResizeObserver | undefined;
     if (typeof ResizeObserver !== 'undefined') {
@@ -180,7 +318,9 @@ export const PineEditor: Component<Props> = (props) => {
       ro.observe(containerRef);
     }
     onCleanup(() => {
+      window.removeEventListener('axis-editor-goto-line', onGotoLine);
       ro?.disconnect();
+      if (view) registerDebugEditorView(null);
       view?.destroy();
       view = undefined;
     });
@@ -197,6 +337,22 @@ export const PineEditor: Component<Props> = (props) => {
     void props.inlineDebug;
     void props.inlineDebugEnabled;
     syncInlineDebug();
+  });
+
+  createEffect(() => {
+    void props.debugPins;
+    void props.debugPinsEnabled;
+    syncDebugPins();
+  });
+
+  createEffect(() => {
+    void props.diagnostics;
+    syncDiagnostics();
+  });
+
+  createEffect(() => {
+    void props.rulerEnabled;
+    syncRuler();
   });
 
   return (

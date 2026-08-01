@@ -10,15 +10,38 @@ import {
   parseSourceLine,
   collectInlineDebugAnnotations,
   collapseAnnotationsByLine,
+  isPinableAnnotation,
+  filterPinableAnnotations,
 } from '../src/results/inline-debug.ts';
 
 describe('parseSourceLine', () => {
   it('parses common patterns', () => {
     expect(parseSourceLine('error at line 12: bad')).toBe(12);
     expect(parseSourceLine('Line:7 foo')).toBe(7);
+    expect(parseSourceLine('line #9 oops')).toBe(9);
+    expect(parseSourceLine('L:4 value')).toBe(4);
     expect(parseSourceLine('script.pine:42:1 error')).toBe(42);
     expect(parseSourceLine('(line 3)')).toBe(3);
     expect(parseSourceLine('no line here')).toBeNull();
+  });
+});
+
+describe('isPinableAnnotation / filterPinableAnnotations', () => {
+  it('detects barIndex or time', () => {
+    expect(isPinableAnnotation({ barIndex: 1 })).toBe(true);
+    expect(isPinableAnnotation({ time: 1000 })).toBe(true);
+    expect(isPinableAnnotation({ barIndex: null, time: null })).toBe(false);
+    expect(isPinableAnnotation({})).toBe(false);
+  });
+
+  it('filters pinable list', () => {
+    const out = filterPinableAnnotations([
+      { line: 1, level: 'info', message: 'a', barIndex: 2 },
+      { line: 2, level: 'error', message: 'b' },
+      { line: 3, level: 'debug', message: 'c', time: 99 },
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out.map((a) => a.line)).toEqual([1, 3]);
   });
 });
 

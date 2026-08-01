@@ -78,6 +78,24 @@ export interface CommandActions {
   openPlugins?: () => void;
   openScriptSettings?: () => void;
   resetUiLayout?: () => void;
+  /** Column ruler in the Pine editor (optional; omitted when store lacks toggle). */
+  toggleEditorRuler?: () => void;
+  /** End-of-line log/error chips from last run. */
+  toggleInlineDebug?: () => void;
+  /** Chart markers for log bar_index/time pins. */
+  toggleDebugPins?: () => void;
+  /** Per-line % cost gutter (profiler mode). */
+  toggleProfiler?: () => void;
+  /** Prompt for line number → `axis-editor-goto-line`. */
+  jumpToLine?: () => void;
+  /** Persist active editor tab to the script library. */
+  saveToLibrary?: () => void | Promise<void>;
+  /** Focus (and soft-format) the docked CodeMirror surface. */
+  focusEditor?: () => void;
+  /** Host-injected git push (only when `window.axisGitPush` exists). */
+  gitPush?: () => void | Promise<void>;
+  /** Host-injected git pull (only when `window.axisGitPull` exists). */
+  gitPull?: () => void | Promise<void>;
 }
 
 /* ── Fuzzy scoring (pure) ─────────────────────────────────────────── */
@@ -328,6 +346,62 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     category: 'actions',
     keywords: ['factory', 'defaults', 'chrome', 'panels reset'],
   },
+  // Editor power tools
+  {
+    id: 'editor.toggle-ruler',
+    title: 'Toggle Editor Ruler',
+    category: 'actions',
+    keywords: ['ruler', 'column', 'guide', 'indent guide', '80'],
+  },
+  {
+    id: 'editor.toggle-inline-debug',
+    title: 'Toggle Inline Debug',
+    category: 'actions',
+    keywords: ['debug', 'inline', 'chips', 'log', 'problem', 'problems', 'diagnostics'],
+  },
+  {
+    id: 'editor.toggle-debug-pins',
+    title: 'Toggle Debug Pins',
+    category: 'actions',
+    keywords: ['debug', 'pin', 'pins', 'markers', 'bar_index', 'chart pins'],
+  },
+  {
+    id: 'editor.toggle-profiler',
+    title: 'Toggle Profiler',
+    category: 'actions',
+    keywords: ['profiler', 'profile', 'performance', 'cost', 'gutter', 'timing'],
+  },
+  {
+    id: 'editor.goto-line',
+    title: 'Jump to Line',
+    category: 'navigation',
+    keywords: ['goto', 'line', 'jump', 'go to', 'problem', 'navigate'],
+    shortcut: '⌥G',
+  },
+  {
+    id: 'editor.save-library',
+    title: 'Save to Library',
+    category: 'actions',
+    keywords: ['save', 'library', 'persist', 'commit', 'script', 'storage'],
+  },
+  {
+    id: 'editor.focus',
+    title: 'Focus Editor',
+    category: 'navigation',
+    keywords: ['format', 'focus', 'code', 'cursor', 'editor', 'cm'],
+  },
+  {
+    id: 'git.push',
+    title: 'Git Push',
+    category: 'actions',
+    keywords: ['git', 'push', 'remote', 'upload', 'commit push'],
+  },
+  {
+    id: 'git.pull',
+    title: 'Git Pull',
+    category: 'actions',
+    keywords: ['git', 'pull', 'fetch', 'remote', 'sync', 'download'],
+  },
 ] as const;
 
 /**
@@ -361,6 +435,15 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.openPlugins) byId.set('action.plugins', actions.openPlugins);
   if (actions.openScriptSettings) byId.set('action.script-settings', actions.openScriptSettings);
   if (actions.resetUiLayout) byId.set('action.reset-ui', actions.resetUiLayout);
+  if (actions.toggleEditorRuler) byId.set('editor.toggle-ruler', actions.toggleEditorRuler);
+  if (actions.toggleInlineDebug) byId.set('editor.toggle-inline-debug', actions.toggleInlineDebug);
+  if (actions.toggleDebugPins) byId.set('editor.toggle-debug-pins', actions.toggleDebugPins);
+  if (actions.toggleProfiler) byId.set('editor.toggle-profiler', actions.toggleProfiler);
+  if (actions.jumpToLine) byId.set('editor.goto-line', actions.jumpToLine);
+  if (actions.saveToLibrary) byId.set('editor.save-library', () => void actions.saveToLibrary?.());
+  if (actions.focusEditor) byId.set('editor.focus', actions.focusEditor);
+  if (actions.gitPush) byId.set('git.push', () => void actions.gitPush?.());
+  if (actions.gitPull) byId.set('git.pull', () => void actions.gitPull?.());
 
   const out: CommandDef[] = [];
   for (const spec of DEFAULT_COMMAND_SPECS) {

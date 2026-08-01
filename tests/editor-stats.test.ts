@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, it } from 'bun:test';
-import { countDocStats, cursorLineCol } from '../src/editor/tabbed-editor.tsx';
+import { countDocStats, cursorLineCol } from '../src/editor/doc-stats.ts';
 
 describe('countDocStats', () => {
   it('counts empty doc as 1 line, 0 words', () => {
