@@ -50,6 +50,7 @@ import {
   setStore,
   addIndicator,
   addPane,
+  removePane,
   setStatus,
   setLastRun,
   setIndicatorSeries,
@@ -361,17 +362,11 @@ export async function runAndApply(
 
   let paneId = 'price';
   if (!overlay) {
-    paneId =
-      existing?.paneId && existing.paneId !== 'price' && existing.paneId !== 'volume'
-        ? existing.paneId
-        : 'indicator';
+    // Always use the stable shared sub-pane id so store.panes, manager, and
+    // script.paneId stay aligned (random addPane ids left empty orphan panes).
+    paneId = 'indicator';
     if (!manager.getPane(paneId)) {
-      // Keep store panes list in sync
-      if (!store.panes.some((p) => p.id === paneId)) {
-        addPane('indicator', scriptName);
-      }
-      // Prefer stable id `indicator` for the shared sub-pane
-      paneId = 'indicator';
+      addPane('indicator', scriptName, { id: 'indicator', height: 140 });
       manager.createPane(paneId, 'indicator', scriptName, 140);
       manager.syncTimeScales();
     } else {
@@ -379,6 +374,36 @@ export async function runAndApply(
         manager.setLabel(paneId, scriptName);
       } catch {
         /* ignore */
+      }
+    }
+    // Drop orphan store panes (legacy random ids) left empty without a manager pane
+    for (const p of [...store.panes]) {
+      if (
+        p.type === 'indicator' &&
+        p.id !== 'indicator' &&
+        !manager.getPane(p.id) &&
+        !store.scripts.some((s) => s.paneId === p.id)
+      ) {
+        try {
+          removePane(p.id);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    // Also destroy orphan manager panes that have no scripts
+    for (const mp of manager.getAllPanes()) {
+      if (
+        mp.type === 'indicator' &&
+        mp.id !== 'indicator' &&
+        !store.scripts.some((s) => s.paneId === mp.id)
+      ) {
+        try {
+          manager.destroyPane(mp.id);
+          if (store.panes.some((p) => p.id === mp.id)) removePane(mp.id);
+        } catch {
+          /* ignore */
+        }
       }
     }
   } else if (existing?.paneId && existing.paneId !== 'price' && existing.paneId !== 'volume') {
@@ -401,12 +426,21 @@ export async function runAndApply(
     const n = ohlcvTimes.length;
     for (let i = 0; i < n; i++) {
       const t = ohlcvTimes[i];
-      if (t == null || !Number.isFinite(t)) continue;
-      const v = arr[i];
-      if (v != null && typeof v === 'number' && Number.isFinite(v) && !Number.isNaN(v)) {
-        out.push({ time: t as number, value: v });
+      if (t == null || !Number.isFinite(Number(t))) continue;
+      // Normalize seconds (LWC UTCTimestamp); ms → s if needed
+      const time = Number(t) > 1e12 ? Math.floor(Number(t) / 1000) : Math.floor(Number(t));
+      const raw = arr[i];
+      // Coerce string numerics from some engine payloads
+      const v =
+        typeof raw === 'number'
+          ? raw
+          : typeof raw === 'string' && raw.trim() !== '' && raw.toLowerCase() !== 'na'
+            ? Number(raw)
+            : null;
+      if (v != null && Number.isFinite(v) && !Number.isNaN(v)) {
+        out.push({ time, value: v });
       } else {
-        out.push({ time: t as number }); // whitespace
+        out.push({ time }); // whitespace
       }
     }
     return out;

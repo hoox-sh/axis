@@ -1230,6 +1230,41 @@ export class PaneManager {
     // so logical indices match (leading Pine `na` must not shrink the series).
     this.alignTimeRangesFromPrice();
     this.alignRightScales();
+
+    // Indicator / equity panes: ensure auto-scale + layout after first paint.
+    // Without this, a newly created sub-pane can stay blank (0 visible range /
+    // stale scale) even though setData succeeded.
+    if (paneId !== 'price' && paneId !== 'volume') {
+      try {
+        pane.chart.priceScale('right').applyOptions({ autoScale: true });
+      } catch {
+        /* ignore */
+      }
+      try {
+        const host = document.getElementById(this.paneDomId(paneId));
+        const rect = host?.getBoundingClientRect();
+        if (rect && rect.width > 0 && rect.height > 0) {
+          pane.chart.applyOptions({ width: rect.width, height: rect.height });
+        }
+      } catch {
+        /* ignore */
+      }
+      // If price range could not be copied yet, fit this pane so lines appear
+      if (paneId !== 'price') {
+        try {
+          const pr = this.panes.get('price')?.chart.timeScale().getVisibleLogicalRange();
+          if (!pr) {
+            pane.chart.timeScale().fitContent();
+          }
+        } catch {
+          try {
+            pane.chart.timeScale().fitContent();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    }
   }
 
   /** Fallback: render hline as a constant-value line series when no price-line host. */

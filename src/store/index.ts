@@ -915,11 +915,36 @@ export function setIndicatorColor(id: string, plotName: string, color: string) {
   persist();
 }
 
-/** Append a chart pane and return its id. */
-export function addPane(type: Pane['type'], label?: string): string {
-  const id = uid();
+/**
+ * Append a chart pane and return its id.
+ * Pass `opts.id` for a stable id (e.g. shared `'indicator'` sub-pane).
+ * If that id already exists, updates label/height and returns it.
+ */
+export function addPane(
+  type: Pane['type'],
+  label?: string,
+  opts?: { id?: string; height?: number },
+): string {
+  const preferred = opts?.id?.trim();
+  if (preferred) {
+    const existing = store.panes.find((p) => p.id === preferred);
+    if (existing) {
+      if (label && existing.label !== label) {
+        setStore('panes', (p) =>
+          p.map((pane) => (pane.id === preferred ? { ...pane, label } : pane)),
+        );
+        persist();
+      }
+      return preferred;
+    }
+  }
+  const id = preferred || uid();
   const maxOrder = Math.max(...store.panes.map((p) => p.order), -1);
-  setStore('panes', (p) => [...p, { id, type, height: 120, order: maxOrder + 1, visible: true, label }]);
+  const height = opts?.height != null ? opts.height : type === 'indicator' ? 140 : 120;
+  setStore('panes', (p) => [
+    ...p,
+    { id, type, height, order: maxOrder + 1, visible: true, label },
+  ]);
   persist();
   return id;
 }
