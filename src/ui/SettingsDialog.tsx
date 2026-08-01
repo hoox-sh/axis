@@ -20,7 +20,7 @@
 /**
  * Application Settings modal — engine endpoint/mode, storage plugin, chart
  * interval / history bars, live prefs (preferAfterLoad, rerunOn), HUD compact,
- * UI scale.
+ * UI scale, plus workspace actions (reload chart / reset UI layout).
  *
  * Local form state is seeded from `store` when the dialog opens (not on every
  * store mutation while open). Save snapshots form fields, writes
@@ -39,6 +39,7 @@ import {
   setUiScale,
   clampUiScale,
   clampHistoryBars,
+  resetUiLayout,
   HISTORY_BARS_MIN,
   HISTORY_BARS_MAX,
   HISTORY_BARS_DEFAULT,
@@ -59,7 +60,8 @@ import {
   WATCHLIST_INTERVALS,
   WATCHLIST_REFRESH_OPTIONS,
 } from '../data/watchlist-tickers';
-import { loadSymbolData } from '../data/load-symbol';
+import { loadSymbolData, reloadChart } from '../data/load-symbol';
+import { getManager } from '../chart/manager-access';
 import { UI_SCALE_PRESETS, formatUiScalePct } from './ui-scale';
 
 /** PYNE Runtime modes for the server/worker engine plugin config. */
@@ -118,6 +120,7 @@ export const SettingsDialog: Component<Props> = (props) => {
   const [hudCompact, setHudCompact] = createSignal(!!store.telemetry?.hud?.compact);
   const [uiScale, setUiScaleLocal] = createSignal(clampUiScale(store.uiScale ?? 1));
   const [probing, setProbing] = createSignal(false);
+  const [reloading, setReloading] = createSignal(false);
   const [probeMsg, setProbeMsg] = createSignal('');
 
   const engines = createMemo(() => listEngines());
@@ -295,6 +298,39 @@ export const SettingsDialog: Component<Props> = (props) => {
     else setStatus('error', `Endpoint failed · ${r.message}`);
   };
 
+  const onReloadChart = async () => {
+    if (reloading()) return;
+    setReloading(true);
+    try {
+      await reloadChart();
+    } finally {
+      setReloading(false);
+    }
+  };
+
+  const onResetUi = () => {
+    const ok =
+      typeof window !== 'undefined'
+        ? window.confirm(
+            'Reset UI layout to defaults?\n\n' +
+              'Restores panel docks, sizes, open/closed state, and UI scale.\n' +
+              'Does not clear chart data, scripts, drawings, or plugins.',
+          )
+        : true;
+    if (!ok) return;
+    resetUiLayout();
+    setUiScaleLocal(1);
+    setHudCompact(false);
+    // Chart panes may reflow after dock columns change
+    requestAnimationFrame(() => {
+      try {
+        getManager()?.resizeAll?.();
+      } catch {
+        /* ignore */
+      }
+    });
+  };
+
   return (
     <Show when={props.open}>
       <div
@@ -322,7 +358,7 @@ export const SettingsDialog: Component<Props> = (props) => {
               >
                 Settings
               </div>
-              <div class="sc-hint mt-0">Engine · density · chart · live</div>
+              <div class="sc-hint mt-0">Engine · density · chart · live · workspace</div>
             </div>
             <button
               type="button"
@@ -752,6 +788,38 @@ export const SettingsDialog: Component<Props> = (props) => {
                   Used only when WebSocket quotes fail. While live, prices update on every exchange
                   ticker tick (Binance / OKX / Bybit / Coinbase).
                 </p>
+              </div>
+            </div>
+
+            {/* ── Workspace actions ─────────────────────────────────── */}
+            <div class="flex flex-col gap-2 mt-3" data-testid="axis-settings-workspace">
+              <div class="sc-section-title">Workspace</div>
+              <p class="text-[10px] text-text-faint -mt-1">
+                Chart reload refetches OHLCV for the current symbol. UI reset restores panel layout
+                and density only.
+              </p>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class={`sc-btn ${reloading() ? 'opacity-50' : ''}`}
+                  data-testid="axis-settings-reload-chart"
+                  disabled={reloading()}
+                  title="Refetch bars for the current symbol / interval / source"
+                  onClick={() => void onReloadChart()}
+                >
+                  {reloading() ? <HooxLoader size="xs" /> : <Icons.refresh />}
+                  {reloading() ? 'Reloading…' : 'Reload chart'}
+                </button>
+                <button
+                  type="button"
+                  class="sc-btn"
+                  data-testid="axis-settings-reset-ui"
+                  title="Reset docks, panel sizes, and UI scale to factory defaults"
+                  onClick={onResetUi}
+                >
+                  <Icons.reset />
+                  Reset UI layout
+                </button>
               </div>
             </div>
           </div>

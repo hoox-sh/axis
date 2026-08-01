@@ -37,7 +37,11 @@ import {
   recordRunLatency,
   setLive,
   toggleTheme,
+  resetUiLayout,
   setEditorWidth,
+  setPanelDock,
+  setPanelOpen,
+  getPanelChrome,
   setWatchlistWidth,
   setIndicatorWidth,
   setEditorOpen,
@@ -294,6 +298,29 @@ describe('layout helpers', () => {
     expect(store.theme).not.toBe(before);
     toggleTheme();
     expect(store.theme).toBe(before);
+  });
+
+  it('resetUiLayout restores docks and scale without clearing market data', () => {
+    setStore('symbol', 'ETHUSDT');
+    setStore('uiScale', 1.2);
+    setStore('editor', 'width', 320);
+    setPanelDock('editor', 'left');
+    setPanelOpen('layers', true);
+    setPanelDock('layers', 'left');
+    setStore('watchlist', 'symbols', ['BTCUSDT', 'CUSTOMUSDT']);
+
+    resetUiLayout();
+
+    expect(store.symbol).toBe('ETHUSDT');
+    expect(store.uiScale).toBe(1);
+    expect(store.editor.open).toBe(true);
+    expect(store.editor.width).toBe(460);
+    expect(store.editor.mode).toBe('docked');
+    expect(getPanelChrome('editor').dock).toBe('right');
+    expect(getPanelChrome('watchlist').dock).toBe('left');
+    expect(getPanelChrome('layers').open).toBe(false);
+    expect(store.watchlist.symbols).toContain('CUSTOMUSDT');
+    expect(store.drawingTool).toBe('cursor');
   });
 
   it('setLive', () => {

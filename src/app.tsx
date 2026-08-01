@@ -197,11 +197,12 @@ export const App: Component = () => {
         editorRef={editorRef}
       />
 
-      <div class="flex-1 flex min-h-0 overflow-hidden">
+      {/* Main workspace: dock columns claim flex space; chart fills the middle */}
+      <div class="flex-1 flex min-h-0 min-w-0 overflow-hidden" data-axis-workspace>
         {/* Left dock column — panels portal in and stack vertically */}
         <DockColumn side="left" />
 
-        {/* Center: chart (+ panel components mount here, portal to docks) */}
+        {/* Center: chart shrinks when left/right columns open (not overlaid) */}
         <div class="flex-1 flex min-w-0 min-h-0 overflow-hidden bg-bg-base relative">
           <ChartHost />
 

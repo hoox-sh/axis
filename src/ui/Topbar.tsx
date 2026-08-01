@@ -23,7 +23,7 @@
  * layers, settings, plugins). Scriptlogs + Profiler live on the editor header.
  *
  * ## Actions
- * - **Load** → `loadSymbolData` (historical via active source)
+ * - **Load / Reload** → force `loadSymbolData` (historical via active source)
  * - **Run** → `runAndApply(editorRef.getDoc())`
  * - **Live** → multiplex `startLive` / `stopLive`
  * - **Popout editor** → `openEditorWindow` + shared doc bridge
@@ -330,7 +330,7 @@ export const Topbar: Component<{
 
       <button
         class={`sc-btn ${loading() ? 'opacity-50' : ''}`}
-        onClick={loadHistorical}
+        onClick={() => void loadHistorical({ force: true })}
         disabled={loading()}
         data-testid="axis-btn-load"
         title={
@@ -341,6 +341,18 @@ export const Topbar: Component<{
       >
         {loading() ? <HooxLoader size="xs" /> : <Icons.download />}
         {loading() ? 'Loading…' : 'Load'}
+      </button>
+      <button
+        type="button"
+        class={`sc-btn sc-btn-ghost ${loading() ? 'opacity-50' : ''}`}
+        onClick={() => void loadHistorical({ force: true })}
+        disabled={loading()}
+        data-testid="axis-btn-reload-chart"
+        title="Reload chart — refetch bars for the current symbol / interval"
+        aria-label="Reload chart"
+      >
+        {loading() ? <HooxLoader size="xs" /> : <Icons.refresh />}
+        <span class="hidden sm:inline">Reload</span>
       </button>
 
       <span class="sc-sep" aria-hidden="true" />

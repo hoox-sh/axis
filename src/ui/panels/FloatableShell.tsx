@@ -140,8 +140,14 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   const stacked = () => stackN() > 1;
 
   const [menuOpen, setMenuOpen] = createSignal(false);
-  /** Portal host — resolved after mount so dock columns exist. */
+  /**
+   * Portal host element. Updated when dock side changes.
+   * Boolean Show (not keyed on the element) so host switches move the
+   * portal without destroying CodeMirror / editor state mid-drag.
+   */
   const [mountEl, setMountEl] = createSignal<HTMLElement | null>(null);
+  /** True while title-drag is active — geometry writes skip persist. */
+  const [dragging, setDragging] = createSignal(false);
 
   let rootEl: HTMLDivElement | undefined;
   let menuWrapEl: HTMLDivElement | undefined;
@@ -150,35 +156,80 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   let pendingDrag = false;
 
   const resolveMount = () => {
-    setMountEl(dockHostElement(dock()));
+    const next = dockHostElement(dock());
+    // Only update when the host node actually changes (avoids Show thrash)
+    setMountEl((prev) => (prev === next ? prev : next));
   };
 
   onMount(() => {
     resolveMount();
     // Dock columns may paint one frame later on first boot
     requestAnimationFrame(resolveMount);
+    const onVis = () => {
+      // Safety: clear stuck body cursor/select if a drag was interrupted
+      if (!drag) {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    };
+    window.addEventListener('blur', onVis);
+    onCleanup(() => window.removeEventListener('blur', onVis));
   });
 
-  // Re-portal when dock side changes
+  // Re-portal when dock side changes (same component instance keeps children)
   createEffect(() => {
     void dock();
     queueMicrotask(resolveMount);
   });
 
+  const clearBodyDragStyles = () => {
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    document.body.classList.remove('axis-panel-dragging');
+  };
+
+  /** Notify chart host so LWC canvases shrink/grow with dock columns (not overlay). */
+  const requestChartReflow = () => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('axis-chart-reflow'));
+  };
+
   const close = () => setPanelOpen(props.id, false);
+
+  /** Ensure float chrome has on-screen geometry and usable size. */
+  const seedFloatGeometry = (fromRect?: DOMRect | null) => {
+    const m = meta();
+    const c = getPanelChrome(props.id);
+    const w = Math.max(
+      m.minW,
+      fromRect?.width ?? c.w ?? m.defaultW,
+      Math.min(m.defaultW, 320),
+    );
+    const h = Math.max(
+      m.minH,
+      fromRect?.height ?? c.h ?? m.defaultH,
+      Math.min(m.defaultH, 240),
+    );
+    const maxX = Math.max(0, window.innerWidth - Math.min(w, window.innerWidth));
+    const maxY = Math.max(0, window.innerHeight - Math.min(h, window.innerHeight));
+    let x = fromRect?.left ?? c.x;
+    let y = fromRect?.top ?? c.y;
+    // Default place center-right when still at origin
+    if (x < 8 && y < 8 && !fromRect) {
+      x = Math.max(24, window.innerWidth - w - 48);
+      y = 56;
+    }
+    x = Math.min(maxX, Math.max(0, x));
+    y = Math.min(maxY, Math.max(0, y));
+    setPanelGeometry(props.id, { x, y, w, h });
+  };
 
   const setDock = (d: PanelDock) => {
     setMenuOpen(false);
+    const rect = d === 'float' ? rootEl?.getBoundingClientRect() : null;
     setPanelDock(props.id, d);
     if (d === 'float') {
-      // Seed float position near center-right if still at origin defaults
-      const c = getPanelChrome(props.id);
-      if (c.x < 8 && c.y < 8) {
-        setPanelGeometry(props.id, {
-          x: Math.max(24, window.innerWidth - c.w - 48),
-          y: 56,
-        });
-      }
+      seedFloatGeometry(rect ?? null);
       bumpPanelZ(props.id);
     }
     if (d === 'window') {
@@ -189,22 +240,22 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
         openCompanionWindow(props.id, title());
       }
     }
-    queueMicrotask(resolveMount);
+    queueMicrotask(() => {
+      resolveMount();
+      requestChartReflow();
+    });
   };
 
   const beginMoveDrag = (clientX: number, clientY: number) => {
     setMenuOpen(false);
     const c = getPanelChrome(props.id);
-    // Undock to float on drag from docked layout
+    // Undock to float on drag from docked layout (one portal hop)
     if (c.dock !== 'float' && c.dock !== 'window') {
       const rect = rootEl?.getBoundingClientRect();
       setPanelDock(props.id, 'float');
-      setPanelGeometry(props.id, {
-        x: rect?.left ?? clientX - 40,
-        y: rect?.top ?? clientY - 12,
-        w: rect?.width ?? c.w,
-        h: rect?.height ?? c.h,
-      });
+      seedFloatGeometry(rect ?? null);
+      // Ensure portal host is float root before move events paint
+      resolveMount();
     }
     bumpPanelZ(props.id);
 
@@ -219,6 +270,22 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       origH: cur.h,
       pointerId: -1,
     };
+    setDragging(true);
+    document.body.classList.add('axis-panel-dragging');
+    document.body.style.userSelect = 'none';
+
+    const endDrag = () => {
+      drag = null;
+      setDragging(false);
+      setDragPreview(null);
+      clearBodyDragStyles();
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      // Persist final geometry once
+      const final = getPanelChrome(props.id);
+      setPanelGeometry(props.id, { x: final.x, y: final.y, w: final.w, h: final.h });
+    };
 
     const onMove = (ev: PointerEvent) => {
       if (!drag || drag.mode !== 'move') return;
@@ -226,7 +293,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       const dy = ev.clientY - drag.startY;
       const nx = Math.max(0, drag.origX + dx);
       const ny = Math.max(0, drag.origY + dy);
-      setPanelGeometry(props.id, { x: nx, y: ny });
+      setPanelGeometry(props.id, { x: nx, y: ny }, { persist: false });
 
       const zone = hitDropZone(ev.clientX, ev.clientY);
       const dockT = dropZoneToDock(zone);
@@ -258,12 +325,14 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       if (!drag) return;
       const zone = hitDropZone(ev.clientX, ev.clientY);
       const nextDock = dropZoneToDock(zone);
-      setPanelDock(props.id, nextDock !== 'float' ? nextDock : 'float');
-      drag = null;
-      setDragPreview(null);
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
+      if (nextDock !== 'float') {
+        setPanelDock(props.id, nextDock);
+      }
+      endDrag();
+      queueMicrotask(() => {
+        resolveMount();
+        requestChartReflow();
+      });
     };
 
     window.addEventListener('pointermove', onMove);
@@ -407,8 +476,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
         } catch {
           /* ignore */
         }
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
+        clearBodyDragStyles();
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', onUp);
         window.removeEventListener('pointercancel', onUp);
@@ -420,8 +488,14 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
 
   const dockWidth = () => getPanelChrome(props.id).w;
   const dockHeight = () => getPanelChrome(props.id).h;
-  const setDockWidth = (w: number) => setPanelGeometry(props.id, { w });
-  const setDockHeight = (h: number) => setPanelGeometry(props.id, { h });
+  const setDockWidth = (w: number) => {
+    setPanelGeometry(props.id, { w });
+    requestChartReflow();
+  };
+  const setDockHeight = (h: number) => {
+    setPanelGeometry(props.id, { h });
+    requestChartReflow();
+  };
 
   /**
    * Split height with the next panel in the stack (drag bottom edge).
@@ -454,39 +528,56 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     const d = dock();
     const order = dockStackCssOrder(props.id);
     if (d === 'float' || d === 'window') {
+      // Keep editor/CM usable: never allow collapsed float chrome
+      const w = Math.max(meta().minW, c.w || meta().defaultW);
+      const h = Math.max(meta().minH, c.h || meta().defaultH);
       return {
         position: 'fixed',
         left: `${c.x}px`,
         top: `${c.y}px`,
-        width: `${c.w}px`,
-        height: `${c.h}px`,
-        'z-index': String(c.z),
+        width: `${w}px`,
+        height: `${h}px`,
+        'z-index': String(Math.max(40, c.z || 20)),
+        'min-width': `${meta().minW}px`,
+        'min-height': `${Math.max(meta().minH, 120)}px`,
       };
     }
-    // Side docks: fill column width; stack with flex so 2+ sit one below the other
+    // Side docks: flow in the dock column (never position:fixed — that overlays the chart)
     if (d === 'left' || d === 'right') {
       if (!stacked()) {
         return {
+          position: 'relative',
           width: '100%',
           height: '100%',
           flex: '1 1 auto',
           order: String(order),
+          left: 'auto',
+          top: 'auto',
+          'z-index': 'auto',
         };
       }
       return {
+        position: 'relative',
         width: '100%',
         flex: `${Math.max(1, c.h)} 1 0`,
         'min-height': `${meta().minH}px`,
         height: 'auto',
         order: String(order),
+        left: 'auto',
+        top: 'auto',
+        'z-index': 'auto',
       };
     }
     // bottom: pixel heights (column has no fixed height; flex-grow would collapse)
     return {
+      position: 'relative',
       width: '100%',
       height: `${Math.max(meta().minH, c.h)}px`,
       flex: '0 0 auto',
       order: String(order),
+      left: 'auto',
+      top: 'auto',
+      'z-index': 'auto',
     };
   };
 
@@ -509,13 +600,14 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     return false;
   };
 
+  // Boolean Show (not keyed on HTMLElement) — host swaps must not remount children
   return (
-    <Show when={mountEl()}>
-      {(el) => (
-        <Portal mount={el()}>
+    <Show when={!!mountEl()}>
+      <Portal mount={mountEl()!}>
           <div
             ref={rootEl}
             class={`axis-panel-shell flex flex-col min-h-0 overflow-hidden ${dockClass()} ${props.class || ''}`}
+            classList={{ 'is-dragging': dragging() }}
             style={shellStyle()}
             data-panel-id={props.id}
             data-panel-dock={dock()}
@@ -664,8 +756,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
               />
             </Show>
           </div>
-        </Portal>
-      )}
+      </Portal>
     </Show>
   );
 };

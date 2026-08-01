@@ -38,7 +38,7 @@
  * Types: {@link ./types.ts}. Panel chrome shapes: `ui/panels/types`.
  */
 
-import { createStore, unwrap } from 'solid-js/store';
+import { createStore, reconcile, unwrap } from 'solid-js/store';
 import type {
   AppState,
   Bar,
@@ -756,6 +756,8 @@ export function applyUiScale(scale?: number) {
   const s = clampUiScale(scale ?? store.uiScale ?? 1);
   if (typeof document === 'undefined') return s;
   const root = document.documentElement;
+  // Guard incomplete test DOMs (happy-dom/jsdom stubs without CSSOM)
+  if (!root?.style || typeof root.style.setProperty !== 'function') return s;
   root.style.setProperty('--ui-scale', String(s));
   root.setAttribute('data-ui-scale', s.toFixed(2));
   // Base 13px · rem/em chrome tracks this; chart canvas stays independent
@@ -769,6 +771,71 @@ export function setUiScale(raw: number) {
   setStore('uiScale', s);
   applyUiScale(s);
   persist();
+}
+
+/**
+ * Reset workspace chrome to factory defaults without touching market data,
+ * scripts, plugins, endpoint, drawings, or watchlist symbols.
+ *
+ * Restores: panel docks/open/geometry, side-panel widths/heights, UI scale,
+ * HUD layout prefs, drawing toolbar chrome (tool → cursor), pane visibility.
+ */
+export function resetUiLayout(): void {
+  ensurePanelChrome();
+  // Fresh maps/arrays — DEFAULTS nested objects are shared with the live store
+  // (shallow-spread at createStore) and must not be read back as “defaults”.
+  const chrome = defaultPanelChromeMap();
+  setStore('panelChrome', reconcile(chrome));
+
+  setStore('editor', 'open', chrome.editor.open);
+  setStore('editor', 'width', chrome.editor.w);
+  setStore('editor', 'mode', 'docked');
+  setStore('watchlist', 'open', chrome.watchlist.open);
+  setStore('watchlist', 'width', chrome.watchlist.w);
+  setStore('indicatorPanel', 'open', chrome.indicators.open);
+  setStore('indicatorPanel', 'width', chrome.indicators.w);
+  setStore('dataViewPanel', 'open', chrome.dataview.open);
+  setStore('dataViewPanel', 'width', chrome.dataview.w);
+  setStore('layerPanel', 'open', chrome.layers.open);
+  setStore('layerPanel', 'width', chrome.layers.w);
+  setStore('resultsPanel', 'open', chrome.results.open);
+  setStore('resultsPanel', 'height', chrome.results.h);
+  setStore('logsPanel', 'open', chrome.logs.open);
+  setStore('logsPanel', 'height', chrome.logs.h);
+
+  setStore('uiScale', 1);
+  applyUiScale(1);
+
+  setStore('telemetry', 'hud', 'compact', false);
+  setStore('telemetry', 'hud', 'overlay', false);
+
+  setStore('drawingTool', 'cursor');
+  setStore('selectedDrawingId', null);
+  setStore('drawingUi', 'magnet', 'off');
+  setStore('drawingUi', 'stayInMode', false);
+  setStore('drawingUi', 'hideDrawings', false);
+  setStore('drawingUi', 'lockAll', false);
+  setStore('drawingUi', 'lastToolByGroup', reconcile({}));
+
+  // Chart pane strip (price + volume) — restore heights/visibility
+  setStore(
+    'panes',
+    reconcile([
+      { id: 'price', type: 'price' as const, height: 0, order: 0, visible: true, label: 'Price' },
+      {
+        id: 'volume',
+        type: 'volume' as const,
+        height: 120,
+        order: 1,
+        visible: true,
+        label: 'Volume',
+      },
+    ]),
+  );
+
+  flushPersist();
+  appendLog('ok', 'UI layout reset to defaults', 'ui');
+  setStatus('ready', 'UI layout reset to defaults');
 }
 
 /* ── Layout helpers ─────────────────────────────────────────────── */
@@ -1022,10 +1089,13 @@ export function setPanelDock(id: PanelId, dock: PanelDock) {
  * Update float geometry and mirror width/height into legacy layout fields
  * (watchlist/editor widths, results/logs heights, etc.).
  * Width changes on left/right docks propagate to all stacked peers.
+ *
+ * @param opts.persist - set false while dragging to avoid localStorage thrash
  */
 export function setPanelGeometry(
   id: PanelId,
   geo: Partial<Pick<PanelChrome, 'x' | 'y' | 'w' | 'h'>>,
+  opts?: { persist?: boolean },
 ) {
   ensurePanelChrome();
   const cur = getPanelChrome(id);
@@ -1052,7 +1122,7 @@ export function setPanelGeometry(
     if (id === 'results') setStore('resultsPanel', 'height', h);
     if (id === 'logs') setStore('logsPanel', 'height', h);
   }
-  persist();
+  if (opts?.persist !== false) persist();
 }
 
 /** Bring a floating panel above peers by incrementing its z. */

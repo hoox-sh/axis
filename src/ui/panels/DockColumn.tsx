@@ -40,6 +40,8 @@ const HOST: Record<Side, string> = {
 /**
  * Dock column host — children are portaled in by {@link FloatableShell}.
  * Always in the DOM (so portals can attach); collapses when empty.
+ * Width/height participate in the app flex layout so the chart area
+ * shrinks between columns instead of panels overlaying the plot.
  */
 export const DockColumn: Component<{ side: Side }> = (props) => {
   const ids = createMemo(() => {
@@ -53,6 +55,16 @@ export const DockColumn: Component<{ side: Side }> = (props) => {
     void store.panelChrome;
     return empty() ? 0 : dockColumnWidth(props.side);
   });
+  const bottomHeight = createMemo(() => {
+    if (props.side !== 'bottom' || empty()) return 0;
+    // Sum pixel heights of open bottom panels so the main row flex-shrinks
+    let sum = 0;
+    for (const id of ids()) {
+      const h = store.panelChrome?.[id]?.h;
+      sum += typeof h === 'number' && h > 0 ? h : 160;
+    }
+    return sum;
+  });
 
   return (
     <div
@@ -62,9 +74,11 @@ export const DockColumn: Component<{ side: Side }> = (props) => {
       data-dock={props.side}
       data-dock-count={ids().length}
       style={
-        props.side === 'bottom' || empty()
+        empty()
           ? undefined
-          : { width: `${width()}px` }
+          : props.side === 'bottom'
+            ? { height: `${bottomHeight()}px`, flex: '0 0 auto' }
+            : { width: `${width()}px`, flex: '0 0 auto' }
       }
     />
   );

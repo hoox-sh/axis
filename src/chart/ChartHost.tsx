@@ -56,8 +56,25 @@ export {
 /** Imperative chart mount only — never put Solid children inside this node. */
 let panesEl: HTMLDivElement | undefined;
 
+/** Debounced LWC remeasure after dock columns / window layout changes. */
+function scheduleChartReflow() {
+  const run = () => {
+    try {
+      getManager()?.resizeAll();
+    } catch {
+      /* ignore */
+    }
+  };
+  // Double rAF: wait for flex (dock column width/height) to settle
+  requestAnimationFrame(() => {
+    requestAnimationFrame(run);
+  });
+}
+
 /** Main chart area: multi-pane LWC + drawing toolbar + Pine table HUD. */
 export const ChartHost: Component = () => {
+  let hostEl: HTMLDivElement | undefined;
+
   const emptyHint = createMemo(() => {
     if (store.bars.length > 0) return null;
     if (store.status === 'loading') return { title: 'Loading market data…', sub: store.statusMessage || '' };
@@ -111,6 +128,23 @@ export const ChartHost: Component = () => {
     if (store.bars.length) {
       setDataToChart(store.bars, { fit: true });
     }
+
+    // Host size follows dock columns (left/right/bottom) — keep LWC canvases fitted
+    let ro: ResizeObserver | undefined;
+    if (hostEl && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => scheduleChartReflow());
+      ro.observe(hostEl);
+    }
+    const onWin = () => scheduleChartReflow();
+    window.addEventListener('resize', onWin);
+    // Custom event from dock width drag / panel dock changes
+    window.addEventListener('axis-chart-reflow', onWin);
+
+    onCleanup(() => {
+      ro?.disconnect();
+      window.removeEventListener('resize', onWin);
+      window.removeEventListener('axis-chart-reflow', onWin);
+    });
   });
 
   // Full history reloads only (loadBars bumps chartDataGen). Live ticks use
@@ -136,6 +170,19 @@ export const ChartHost: Component = () => {
     });
   });
 
+  // Dock open/close/side/size → flex columns change; reflow chart into remaining space
+  createEffect(() => {
+    void store.panelChrome;
+    void store.watchlist.open;
+    void store.editor.open;
+    void store.indicatorPanel.open;
+    void store.resultsPanel.open;
+    void store.logsPanel.open;
+    void store.dataViewPanel.open;
+    void store.layerPanel.open;
+    scheduleChartReflow();
+  });
+
   // Keep tool in sync when store changes from toolbar
   createEffect(() => {
     const tool = store.drawingTool;
@@ -159,12 +206,19 @@ export const ChartHost: Component = () => {
     // Outer shell owns Solid children (empty overlay). PaneManager only
     // mutates the inner ref node — Solid must never reconcile that subtree
     // or it wipes LWC canvases when the empty-state <Show> flips off.
-    <div class="flex-1 flex flex-col min-h-0 relative bg-bg-base">
+    // flex-1 min-w-0: shrink when left/right dock columns take space (not overlay).
+    <div
+      ref={(el) => {
+        hostEl = el;
+      }}
+      class="flex-1 flex flex-col min-h-0 min-w-0 relative bg-bg-base"
+      data-axis-chart-host
+    >
       <div
         ref={(el) => {
           panesEl = el;
         }}
-        class="flex-1 flex flex-col min-h-0"
+        class="flex-1 flex flex-col min-h-0 min-w-0 w-full"
         data-axis-panes
       />
       <Show when={store.bars.length > 0}>

@@ -157,3 +157,11 @@ export async function loadSymbolData(
     return false;
   }
 }
+
+/**
+ * Force-refetch the current symbol/interval/source and repaint the chart.
+ * Always hits the source (unlike topbar Load’s same-symbol skip path).
+ */
+export async function reloadChart(): Promise<boolean> {
+  return loadSymbolData(store.symbol, store.interval, store.source);
+}

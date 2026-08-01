@@ -713,22 +713,26 @@ button.sc-btn:focus-visible {
 }
 
 /* ── Dock columns (portal hosts; stack panels one below the other) ─ */
+/* Columns sit in the app flex row/column so the chart gets remaining space. */
 
 .axis-dock-col {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  flex-grow: 0;
   min-height: 0;
   min-width: 0;
   position: relative;
   z-index: 10;
   overflow: hidden;
+  /* Never cover the chart — flow layout only */
+  align-self: stretch;
 }
 
 .axis-dock-col-left,
 .axis-dock-col-right {
   height: 100%;
-  align-self: stretch;
+  max-width: 50vw;
 }
 
 .axis-dock-col-left {
@@ -742,29 +746,50 @@ button.sc-btn:focus-visible {
 .axis-dock-col-bottom {
   width: 100%;
   flex-shrink: 0;
+  max-height: 50vh;
   border-top: var(--border-w) solid var(--color-border);
 }
 
 .axis-dock-col.is-empty {
-  display: none;
+  /* Keep node for portals, but take no flex space */
+  display: flex;
   width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
   height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
   border: none !important;
   overflow: hidden;
   pointer-events: none;
+  flex: 0 0 0 !important;
+  opacity: 0;
 }
 
+/* Full-viewport host for position:fixed float panels (not clipped by flex overflow) */
 .axis-float-root {
-  position: absolute;
-  width: 0;
-  height: 0;
+  position: fixed;
+  inset: 0;
+  width: auto;
+  height: auto;
   overflow: visible;
-  z-index: 60;
+  z-index: 80;
   pointer-events: none;
 }
 
 .axis-float-root > .axis-panel-shell {
   pointer-events: auto;
+}
+
+/* While dragging a panel title — avoid text selection / iframe capture */
+body.axis-panel-dragging {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+.axis-panel-shell.is-dragging {
+  opacity: 0.92;
+  box-shadow: var(--ui-shadow-panel);
 }
 
 /* ── Floatable / dockable panels ───────────────────────────────── */

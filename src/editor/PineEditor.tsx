@@ -116,6 +116,20 @@ export const PineEditor: Component<Props> = (props) => {
       props.editorRef.setDoc = setDoc;
     }
     syncProfiler();
+
+    // Re-measure when the float/dock shell resizes (portal host changes geometry)
+    let ro: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        view?.requestMeasure();
+      });
+      ro.observe(containerRef);
+    }
+    onCleanup(() => {
+      ro?.disconnect();
+      view?.destroy();
+      view = undefined;
+    });
   });
 
   createEffect(() => {
@@ -125,7 +139,11 @@ export const PineEditor: Component<Props> = (props) => {
     syncProfiler();
   });
 
-  onCleanup(() => view?.destroy());
-
-  return <div ref={containerRef!} class="h-full overflow-hidden bg-bg-panel" style={{ height: props.height || '100%' }} />;
+  return (
+    <div
+      ref={containerRef!}
+      class="h-full overflow-hidden bg-bg-panel"
+      style={{ height: props.height || '100%' }}
+    />
+  );
 };
