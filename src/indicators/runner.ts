@@ -296,15 +296,27 @@ export async function runAndApply(
   // Line-like series only — bgcolor/plotshape handled below
   const seriesEntries = split.lines.map((e) => [e.key, e.values] as const);
 
-  const toLineData = (arr: (number | null)[] | unknown[]) =>
-    arr
-      .map((v, i) => {
-        const t = ohlcvTimes[i];
-        if (v == null || typeof v !== 'number' || isNaN(v)) return null;
-        if (t == null || !Number.isFinite(t)) return null;
-        return { time: t as number, value: v };
-      })
-      .filter(Boolean) as { time: number; value: number }[];
+  /**
+   * Map engine series → LWC points. Keep **one point per OHLCV bar**.
+   * Leading/trailing Pine `na` become whitespace `{ time }` (no value) so the
+   * indicator pane has the same logical bar count as price — otherwise
+   * multi-pane time sync leaves a permanent gap at the indicator start.
+   */
+  const toLineData = (arr: (number | null)[] | unknown[]) => {
+    const out: { time: number; value?: number }[] = [];
+    const n = ohlcvTimes.length;
+    for (let i = 0; i < n; i++) {
+      const t = ohlcvTimes[i];
+      if (t == null || !Number.isFinite(t)) continue;
+      const v = arr[i];
+      if (v != null && typeof v === 'number' && Number.isFinite(v) && !Number.isNaN(v)) {
+        out.push({ time: t as number, value: v });
+      } else {
+        out.push({ time: t as number }); // whitespace
+      }
+    }
+    return out;
+  };
 
   // Stable overlay sync: update-in-place when keys match (no remove→blank→add flash)
   const overlayLines: Array<{
@@ -331,7 +343,9 @@ export async function runAndApply(
       if (price == null && isHline && data.length) {
         price = data[0]!.value;
       }
-      if (!data.length && !(isHline && price != null)) continue;
+      // Need at least one real sample (or hline price); pure-whitespace series skip
+      const hasSample = data.some((d) => d.value != null && Number.isFinite(d.value));
+      if (!hasSample && !(isHline && price != null)) continue;
       const color =
         (meta?.color && String(meta.color)) ||
         PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];

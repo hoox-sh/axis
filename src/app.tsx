@@ -38,7 +38,7 @@ import { Component, createSignal, onMount, onCleanup, Show } from 'solid-js';
 import { Topbar } from './ui/Topbar';
 import { StatusBar } from './ui/StatusBar';
 import { Watchlist } from './ui/Watchlist';
-import { ChartHost } from './chart/ChartHost';
+import { ChartWorkspace } from './chart/ChartWorkspace';
 import { EditorPane } from './editor/EditorPane';
 import { IndicatorPanel } from './indicators/IndicatorPanel';
 import { SettingsDialog } from './ui/SettingsDialog';
@@ -204,7 +204,7 @@ export const App: Component = () => {
 
         {/* Center: chart shrinks when left/right columns open (not overlaid) */}
         <div class="flex-1 flex min-w-0 min-h-0 overflow-hidden bg-bg-base relative">
-          <ChartHost />
+          <ChartWorkspace />
 
           {/* Popout placeholder when editor is external */}
           <Show when={store.editor.mode === 'popout'}>

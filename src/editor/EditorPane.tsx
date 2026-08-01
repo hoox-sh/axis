@@ -163,11 +163,11 @@ export const EditorPane: Component<Props> = (props) => {
         id="editor"
         title="Editor"
         testId="axis-editor"
-        class="min-h-0"
+        class="min-h-0 h-full flex-1"
         headerExtra={editorTools}
         onPopoutWindow={() => popoutLiveEditor('popup')}
       >
-        <div class="flex flex-col h-full min-h-0 overflow-hidden">
+        <div class="flex flex-col h-full min-h-0 flex-1 overflow-hidden">
           <TabbedEditor
             onRun={onRun}
             editorRef={props.editorRef}

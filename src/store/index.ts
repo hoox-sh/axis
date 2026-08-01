@@ -61,6 +61,19 @@ import {
   type PanelDock,
   type PanelId,
 } from '../ui/panels/types';
+import {
+  defaultChartLayout,
+  normalizeChartLayout,
+  type ChartGridMode,
+  type ChartLayoutState,
+  type SavedChartLayout,
+} from '../chart/layout';
+import {
+  getActiveSlotId,
+  setActiveSlotId,
+  setSlotBars,
+  removeSlotRuntime,
+} from '../chart/chart-registry';
 import { normalizeUserDrawings } from '../chart/drawings/normalize';
 import {
   DEFAULT_CHART_TYPE,
@@ -179,6 +192,12 @@ const DEFAULTS: AppState = {
     hud: { compact: false, overlay: false },
   },
   panelChrome: defaultPanelChromeMap(),
+  chartLayout: defaultChartLayout({
+    symbol: 'BTCUSDT',
+    interval: '1d',
+    exchange: 'binance',
+  }),
+  savedLayouts: [],
 };
 
 function readLocalStorage(key: string): string | null {
@@ -345,6 +364,20 @@ function loadPersisted(): Partial<AppState> {
             w: parsed.layerPanel?.width ?? 240,
           },
         }),
+        chartLayout: normalizeChartLayout(
+          (parsed as { chartLayout?: ChartLayoutState }).chartLayout,
+          {
+            symbol: parsed.symbol || DEFAULTS.symbol,
+            interval: parsed.interval || DEFAULTS.interval,
+            exchange: parsed.exchange || DEFAULTS.exchange,
+            chartType: normalizeChartType(parsed.chartType),
+          },
+        ),
+        savedLayouts: Array.isArray((parsed as { savedLayouts?: unknown }).savedLayouts)
+          ? ((parsed as { savedLayouts: SavedChartLayout[] }).savedLayouts || [])
+              .filter((l) => l && typeof l === 'object' && typeof l.id === 'string')
+              .slice(0, 40)
+          : [],
       };
     }
   } catch {}
@@ -541,8 +574,201 @@ export function setStatus(status: AppState['status'], message?: string) {
 
 /** Persist main price pane chart style (candles, bars, line, Heikin-Ashi, …). */
 export function setChartType(type: ChartType | string) {
-  setStore('chartType', normalizeChartType(type));
+  const t = normalizeChartType(type);
+  setStore('chartType', t);
+  // Keep active multi-chart slot in sync
+  const layout = store.chartLayout;
+  if (layout?.activeId) {
+    const idx = layout.slots.findIndex((s) => s.id === layout.activeId);
+    if (idx >= 0) setStore('chartLayout', 'slots', idx, 'chartType', t);
+  }
   persist();
+}
+
+/* ── Multi-chart layouts ─────────────────────────────────────────── */
+
+/** Focus a grid slot — mirrors symbol/interval/chartType into flat store fields. */
+export function setActiveChartSlot(slotId: string) {
+  ensureChartLayout();
+  const layout = store.chartLayout;
+  const slot = layout.slots.find((s) => s.id === slotId);
+  if (!slot) return;
+  setStore('chartLayout', 'activeId', slotId);
+  setActiveSlotId(slotId);
+  setStore('symbol', slot.symbol);
+  setStore('interval', slot.interval);
+  setStore('exchange', slot.exchange);
+  setStore('chartType', normalizeChartType(slot.chartType));
+  persist();
+  emitWindowEvent('axis-chart-reflow');
+  // Auto-load history when focusing an empty slot
+  emitWindowEvent('axis-slot-activate', { slotId });
+}
+
+/** Change grid arrangement (1 / 2H / 2V / 4); preserves existing slots when possible. */
+export function setChartGridMode(mode: ChartGridMode) {
+  ensureChartLayout();
+  const prev = store.chartLayout;
+  const next = normalizeChartLayout(
+    { mode, activeId: prev.activeId, slots: prev.slots },
+    {
+      symbol: store.symbol,
+      interval: store.interval,
+      exchange: store.exchange,
+      chartType: store.chartType,
+    },
+  );
+  // Drop runtime for removed slots
+  const keep = new Set(next.slots.map((s) => s.id));
+  for (const s of prev.slots) {
+    if (!keep.has(s.id)) removeSlotRuntime(s.id);
+  }
+  setStore('chartLayout', next);
+  setActiveSlotId(next.activeId);
+  const active = next.slots.find((s) => s.id === next.activeId) || next.slots[0]!;
+  setStore('symbol', active.symbol);
+  setStore('interval', active.interval);
+  setStore('exchange', active.exchange);
+  setStore('chartType', normalizeChartType(active.chartType));
+  persist();
+  emitWindowEvent('axis-chart-reflow');
+}
+
+/** Update one slot's market fields (and flat store when it's active). */
+export function updateChartSlot(
+  slotId: string,
+  patch: Partial<{ symbol: string; interval: string; exchange: string; chartType: ChartType }>,
+) {
+  ensureChartLayout();
+  const idx = store.chartLayout.slots.findIndex((s) => s.id === slotId);
+  if (idx < 0) return;
+  if (patch.symbol != null) {
+    setStore('chartLayout', 'slots', idx, 'symbol', patch.symbol.toUpperCase());
+  }
+  if (patch.interval != null) setStore('chartLayout', 'slots', idx, 'interval', patch.interval);
+  if (patch.exchange != null) setStore('chartLayout', 'slots', idx, 'exchange', patch.exchange);
+  if (patch.chartType != null) {
+    setStore('chartLayout', 'slots', idx, 'chartType', normalizeChartType(patch.chartType));
+  }
+  if (store.chartLayout.activeId === slotId) {
+    if (patch.symbol != null) setStore('symbol', patch.symbol.toUpperCase());
+    if (patch.interval != null) setStore('interval', patch.interval);
+    if (patch.exchange != null) setStore('exchange', patch.exchange);
+    if (patch.chartType != null) setStore('chartType', normalizeChartType(patch.chartType));
+  }
+  persist();
+}
+
+/** Snapshot current grid (+ optional chrome) into savedLayouts. */
+export function saveChartLayout(name: string): SavedChartLayout {
+  ensureChartLayout();
+  const id = `lay_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  const snap: SavedChartLayout = {
+    id,
+    name: (name || 'Layout').trim() || 'Layout',
+    updatedAt: Date.now(),
+    chartLayout: JSON.parse(JSON.stringify(store.chartLayout)) as ChartLayoutState,
+    panelChrome: JSON.parse(JSON.stringify(store.panelChrome)) as typeof store.panelChrome,
+    panes: store.panes.map((p) => ({ ...p })),
+    theme: store.theme,
+    uiScale: store.uiScale,
+    historyBars: store.historyBars,
+  };
+  setStore('savedLayouts', (list) => [snap, ...(list || [])].slice(0, 40));
+  persist();
+  appendLog('ok', `Layout saved · ${snap.name}`, 'layout');
+  return snap;
+}
+
+/** Restore a named layout by id. */
+export function loadChartLayout(id: string): boolean {
+  ensureChartLayout();
+  const found = (store.savedLayouts || []).find((l) => l.id === id);
+  if (!found) return false;
+  const next = normalizeChartLayout(found.chartLayout, {
+    symbol: store.symbol,
+    interval: store.interval,
+    exchange: store.exchange,
+    chartType: store.chartType,
+  });
+  // Clear runtimes for slots that disappear
+  const keep = new Set(next.slots.map((s) => s.id));
+  for (const s of store.chartLayout.slots) {
+    if (!keep.has(s.id)) removeSlotRuntime(s.id);
+  }
+  setStore('chartLayout', next);
+  setActiveSlotId(next.activeId);
+  const active = next.slots.find((s) => s.id === next.activeId) || next.slots[0]!;
+  setStore('symbol', active.symbol);
+  setStore('interval', active.interval);
+  setStore('exchange', active.exchange);
+  setStore('chartType', normalizeChartType(active.chartType));
+  if (found.panelChrome) {
+    setStore('panelChrome', found.panelChrome);
+  }
+  if (found.panes?.length) {
+    setStore(
+      'panes',
+      found.panes.map((p) => ({ ...p })),
+    );
+  }
+  if (found.theme === 'dark' || found.theme === 'light') {
+    setStore('theme', found.theme);
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', found.theme);
+    }
+  }
+  if (found.uiScale != null) {
+    setUiScale(found.uiScale);
+  }
+  if (found.historyBars != null) {
+    setStore('historyBars', clampHistoryBars(found.historyBars));
+  }
+  persist();
+  appendLog('ok', `Layout loaded · ${found.name}`, 'layout');
+  emitWindowEvent('axis-chart-reflow');
+  return true;
+}
+
+/** Safe CustomEvent for test DOMs without dispatchEvent. */
+function emitWindowEvent(name: string, detail?: Record<string, unknown>) {
+  if (typeof window === 'undefined') return;
+  if (typeof window.dispatchEvent !== 'function') return;
+  try {
+    window.dispatchEvent(new CustomEvent(name, detail ? { detail } : undefined));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Delete a saved layout by id. */
+export function deleteChartLayout(id: string) {
+  setStore('savedLayouts', (list) => (list || []).filter((l) => l.id !== id));
+  persist();
+}
+
+function ensureChartLayout() {
+  if (!store.chartLayout?.slots?.length) {
+    setStore(
+      'chartLayout',
+      defaultChartLayout({
+        symbol: store.symbol,
+        interval: store.interval,
+        exchange: store.exchange,
+        chartType: store.chartType,
+      }),
+    );
+  }
+}
+
+// Boot: bind active multi-chart slot id for registry
+if (typeof window !== 'undefined') {
+  try {
+    const id = store.chartLayout?.activeId;
+    if (id) setActiveSlotId(id);
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
@@ -555,6 +781,17 @@ export function loadBars(bars: Bar[], symbol: string, interval: string, exchange
   setStore('symbol', symbol);
   setStore('interval', interval);
   setStore('exchange', exchange);
+  // Mirror into active multi-chart slot + runtime bar cache
+  const slotId = getActiveSlotId() || store.chartLayout?.activeId;
+  if (slotId) {
+    setSlotBars(slotId, bars, true);
+    const idx = store.chartLayout?.slots?.findIndex((s) => s.id === slotId) ?? -1;
+    if (idx >= 0) {
+      setStore('chartLayout', 'slots', idx, 'symbol', symbol);
+      setStore('chartLayout', 'slots', idx, 'interval', interval);
+      setStore('chartLayout', 'slots', idx, 'exchange', exchange);
+    }
+  }
   persist();
 }
 

@@ -46,6 +46,7 @@ import {
   toggleDataViewPanel,
   toggleLayerPanel,
   openScriptSettings,
+  updateChartSlot,
 } from '../store';
 import { CHART_TYPES } from '../chart/chart-type';
 import { runAndApply } from '../indicators/runner';
@@ -60,6 +61,7 @@ import { engineOptionLabel } from './plugin-badges';
 import { Icons } from './icons';
 import { HooxLogo } from './HooxLogo';
 import { HooxLoader } from './HooxLoader';
+import { ChartLayoutMenu } from './ChartLayoutMenu';
 import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
 
 const INTERVALS = [...WATCHLIST_INTERVALS];
@@ -257,6 +259,8 @@ export const Topbar: Component<{
           onChange={(e) => {
             const next = e.currentTarget.value.toUpperCase().trim();
             setStore('symbol', next);
+            const aid = store.chartLayout?.activeId;
+            if (aid) updateChartSlot(aid, { symbol: next });
             persist();
           }}
           onKeyDown={(e) => {
@@ -265,6 +269,8 @@ export const Topbar: Component<{
               const next = e.currentTarget.value.toUpperCase().trim();
               if (!next) return;
               setStore('symbol', next);
+              const aid = store.chartLayout?.activeId;
+              if (aid) updateChartSlot(aid, { symbol: next });
               persist();
               // Force reload so re-Enter re-fetches + resizes even for same symbol
               void loadHistorical({ force: true });
@@ -274,6 +280,8 @@ export const Topbar: Component<{
             const next = e.currentTarget.value.toUpperCase().trim();
             if (!next) return;
             setStore('symbol', next);
+            const aid = store.chartLayout?.activeId;
+            if (aid) updateChartSlot(aid, { symbol: next });
             persist();
             // Reload only when the symbol actually changed (interval already auto-loads)
             void loadHistorical();
@@ -294,6 +302,8 @@ export const Topbar: Component<{
           onChange={(e) => {
             const next = e.currentTarget.value;
             setStore('interval', next);
+            const aid = store.chartLayout?.activeId;
+            if (aid) updateChartSlot(aid, { interval: next });
             persist();
             // Auto-reload so interval changes always paint
             if (store.source !== 'csv-upload') {
@@ -421,6 +431,10 @@ export const Topbar: Component<{
       </button>
 
       <div class="flex-1 min-w-2" />
+
+      <ChartLayoutMenu />
+
+      <span class="sc-sep" aria-hidden="true" />
 
       <button
         class="sc-btn sc-btn-primary"

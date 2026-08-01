@@ -15,11 +15,13 @@ import {
   buildPlotVisuals,
   isActiveColor,
   isTruthyPlotValue,
+  lineSeriesToOverlayData,
   mapShapeLocation,
   mapShapeStyle,
   shapeSeriesToMarkers,
   splitSeriesByKind,
 } from '../src/results/plot-visuals';
+import { toLwcLineData } from '../src/chart/pane-manager';
 
 describe('isTruthyPlotValue', () => {
   it('treats true/non-zero as truthy', () => {
@@ -104,6 +106,30 @@ describe('mapShapeStyle / mapShapeLocation', () => {
   it('maps triangle down / abovebar', () => {
     expect(mapShapeStyle('shape.triangledown')).toBe('arrowDown');
     expect(mapShapeLocation('location.abovebar')).toBe('aboveBar');
+  });
+});
+
+describe('lineSeriesToOverlayData whitespace', () => {
+  it('keeps one point per bar time; leading na become whitespace', () => {
+    const times = [100, 200, 300, 400];
+    // SMA-style warmup: first two bars na
+    const values = [null, null, 1.5, 2.5];
+    const data = lineSeriesToOverlayData(times, values);
+    expect(data).toHaveLength(4);
+    expect(data[0]).toEqual({ time: 100 });
+    expect(data[1]).toEqual({ time: 200 });
+    expect(data[2]).toEqual({ time: 300, value: 1.5 });
+    expect(data[3]).toEqual({ time: 400, value: 2.5 });
+
+    const lwc = toLwcLineData(data);
+    expect(lwc).toHaveLength(4);
+    expect(lwc[0]).toEqual({ time: 100 });
+    expect(lwc[2]).toEqual({ time: 300, value: 1.5 });
+  });
+
+  it('pads to full times length when series is shorter', () => {
+    const data = lineSeriesToOverlayData([1, 2, 3], [9]);
+    expect(data).toEqual([{ time: 1, value: 9 }, { time: 2 }, { time: 3 }]);
   });
 });
 

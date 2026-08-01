@@ -42,17 +42,32 @@ import {
   setDrawingTool,
 } from '../store';
 import type { Bar } from '../store/types';
+import {
+  getActiveManager,
+  getActiveSlotId,
+  setSlotDrawingLayer,
+  setSlotManager,
+} from './chart-registry';
 
+/**
+ * Legacy module fallback when no multi-chart slot is active (unit tests).
+ * Prefer active-slot registry via {@link getManager}.
+ */
 let manager: PaneManager | undefined;
-/** Module-local handle; constructor also registers the active singleton for the toolbar. */
 let drawingLayer: DrawingLayer | undefined;
 
+/** Active chart manager (multi-chart) or legacy singleton. */
 export function getManager(): PaneManager | undefined {
-  return manager;
+  return getActiveManager() ?? manager;
 }
 
-export function setManager(m: PaneManager | undefined) {
-  manager = m;
+export function setManager(m: PaneManager | undefined, slotId?: string) {
+  const id = slotId || getActiveSlotId();
+  if (id) setSlotManager(id, m);
+  // Keep legacy pointer on active slot for tests / single-chart
+  if (!id || id === getActiveSlotId()) {
+    manager = m;
+  }
 }
 
 /** Imperative access to the price-pane drawing overlay (if created). */
@@ -61,8 +76,12 @@ export function getDrawingLayer(): DrawingLayer | undefined {
 }
 
 /** Replace or clear the module-local layer ref (e.g. on chart teardown). */
-export function setDrawingLayer(layer: DrawingLayer | undefined) {
-  drawingLayer = layer;
+export function setDrawingLayer(layer: DrawingLayer | undefined, slotId?: string) {
+  const id = slotId || getActiveSlotId();
+  if (id) setSlotDrawingLayer(id, layer);
+  if (!id || id === getActiveSlotId()) {
+    drawingLayer = layer;
+  }
 }
 
 /**
@@ -84,40 +103,43 @@ export function setDrawingLayer(layer: DrawingLayer | undefined) {
  * Invoked from {@link setDataToChart} after OHLCV is applied so the overlay tracks reloads.
  */
 function ensureDrawingLayer() {
-  if (!manager || drawingLayer) return;
-  const pricePane = manager.getPane('price');
+  const mgr = getManager();
+  if (!mgr || getDrawingLayer()) return;
+  const pricePane = mgr.getPane('price');
   const candle = pricePane?.series['candle'];
   if (!pricePane || !candle) return;
-  const el = typeof document !== 'undefined' ? document.getElementById('pane-price') : null;
+  const paneElId = mgr.paneDomId('price');
+  const el = typeof document !== 'undefined' ? document.getElementById(paneElId) : null;
   if (!el) return;
   // happy-dom / minimal test envs may lack createElementNS
   if (typeof document.createElementNS !== 'function') return;
 
   try {
-    drawingLayer = new DrawingLayer(el, pricePane.chart, candle as never);
+    const layer = new DrawingLayer(el, pricePane.chart, candle as never);
     // Geometry + active tool from persisted / current store
-    drawingLayer.setDrawings(store.drawings);
-    drawingLayer.setTool(store.drawingTool);
+    layer.setDrawings(store.drawings);
+    layer.setTool(store.drawingTool);
     // Layer → store: user drawing list after place, drag end, delete, clear
-    drawingLayer.setOnChange((list) => setDrawings(list));
+    layer.setOnChange((list) => setDrawings(list));
     // Magnet snap needs live OHLCV (weak/strong modes)
-    drawingLayer.setBarsProvider(() => store.bars);
+    layer.setBarsProvider(() => store.bars);
     // Interaction prefs (defaults match DrawingPrefs / DrawingUi when store partial)
-    drawingLayer.setMagnet(store.drawingUi?.magnet ?? 'off');
-    drawingLayer.setStayInMode(!!store.drawingUi?.stayInMode);
-    drawingLayer.setLockAll(!!store.drawingUi?.lockAll);
-    drawingLayer.setHideDrawings(!!store.drawingUi?.hideDrawings);
-    drawingLayer.setStylePrefs({
+    layer.setMagnet(store.drawingUi?.magnet ?? 'off');
+    layer.setStayInMode(!!store.drawingUi?.stayInMode);
+    layer.setLockAll(!!store.drawingUi?.lockAll);
+    layer.setHideDrawings(!!store.drawingUi?.hideDrawings);
+    layer.setStylePrefs({
       color: store.drawingPrefs?.color ?? '#939fff',
       width: store.drawingPrefs?.width ?? 1.5,
       lineStyle: store.drawingPrefs?.lineStyle ?? 'solid',
       fillOpacity: store.drawingPrefs?.fillOpacity ?? 0.15,
     });
     // Layer → store: selection + tool (toolbar style bar / afterPlace)
-    drawingLayer.setOnSelectionChange((id) => setSelectedDrawingId(id));
-    drawingLayer.setOnToolChange((tool) => setDrawingTool(tool));
+    layer.setOnSelectionChange((id) => setSelectedDrawingId(id));
+    layer.setOnToolChange((tool) => setDrawingTool(tool));
+    setDrawingLayer(layer);
   } catch {
-    drawingLayer = undefined;
+    setDrawingLayer(undefined);
   }
 }
 
@@ -133,17 +155,18 @@ export type SetDataToChartOpts = {
  * Swaps LWC series when the style changes; rebinds markers + drawing layer.
  */
 export function ensurePriceSeries(chartType?: ChartType): void {
-  if (!manager) return;
+  const mgr = getManager();
+  if (!mgr) return;
   const type = normalizeChartType(chartType ?? store.chartType);
-  const pricePane = manager.getPane('price');
+  const pricePane = mgr.getPane('price');
   if (!pricePane) return;
 
-  const currentType = manager.getPriceChartType();
+  const currentType = mgr.getPriceChartType();
   const existing = pricePane.series['candle'];
   if (existing && currentType === type) return;
 
   // Drop markers plugin before removing the host series
-  manager.detachPriceMarkers();
+  mgr.detachPriceMarkers();
 
   if (existing) {
     try {
@@ -155,15 +178,16 @@ export function ensurePriceSeries(chartType?: ChartType): void {
   }
 
   pricePane.series['candle'] = createPriceSeries(pricePane.chart, type);
-  manager.setPriceChartType(type);
+  mgr.setPriceChartType(type);
 
   // Drawing layer needs the new series for price ↔ Y
-  if (drawingLayer) {
-    drawingLayer.setSeries(pricePane.series['candle'] as never);
+  const layer = getDrawingLayer();
+  if (layer) {
+    layer.setSeries(pricePane.series['candle'] as never);
   }
 
   // Re-attach markers onto the new host series
-  manager.reapplyPriceMarkers();
+  mgr.reapplyPriceMarkers();
 }
 
 /**
@@ -171,16 +195,17 @@ export function ensurePriceSeries(chartType?: ChartType): void {
  * Do **not** call this on every live tick — use PaneManager.appendBar instead.
  */
 export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
-  if (!manager) return;
+  const mgr = getManager();
+  if (!mgr) return;
   const fit = opts.fit !== false;
   const clearMarkers = opts.clearMarkers !== false;
-  const pricePane = manager.getPane('price');
-  const volPane = manager.getPane('volume');
+  const pricePane = mgr.getPane('price');
+  const volPane = mgr.getPane('volume');
   const chartType = normalizeChartType(store.chartType);
 
   if (clearMarkers) {
-    manager.clearTradeMarkers();
-    manager.clearShapeMarkers?.();
+    mgr.clearTradeMarkers();
+    mgr.clearShapeMarkers?.();
   }
 
   ensurePriceSeries(chartType);
@@ -208,8 +233,8 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
     }
     if (fit) {
       // Symbol / history change: resize host canvases + fit + auto-scale
-      if (typeof manager.afterDataReload === 'function') {
-        manager.afterDataReload();
+      if (typeof mgr.afterDataReload === 'function') {
+        mgr.afterDataReload();
       } else {
         try {
           pricePane.chart.timeScale().fitContent();
@@ -234,14 +259,15 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
   }
 
   // Volume/indicator setData can reset local logical range — re-lock to price
-  if (typeof manager.alignTimeRangesFromPrice === 'function') {
-    manager.alignTimeRangesFromPrice();
+  if (typeof mgr.alignTimeRangesFromPrice === 'function') {
+    mgr.alignTimeRangesFromPrice();
   }
 
   // Ensure overlay exists after candle series is ready; re-sync store drawings
+  // (drawings only on the active multi-chart slot)
   ensureDrawingLayer();
-  drawingLayer?.setDrawings(store.drawings);
+  getDrawingLayer()?.setDrawings(store.drawings);
 }
 
-/** Re-export toolbar singleton (same instance as module-local `drawingLayer` when live). */
+/** Re-export toolbar singleton (DrawingLayer module active instance). */
 export { getActiveDrawingLayer } from './drawing-layer';

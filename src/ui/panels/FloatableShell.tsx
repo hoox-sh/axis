@@ -200,16 +200,24 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   const seedFloatGeometry = (fromRect?: DOMRect | null) => {
     const m = meta();
     const c = getPanelChrome(props.id);
+    const isEditor = props.id === 'editor';
     const w = Math.max(
       m.minW,
       fromRect?.width ?? c.w ?? m.defaultW,
       Math.min(m.defaultW, 320),
     );
-    const h = Math.max(
-      m.minH,
-      fromRect?.height ?? c.h ?? m.defaultH,
-      Math.min(m.defaultH, 240),
-    );
+    // Editor float: prefer full remaining viewport height
+    const topPad = 48;
+    const bottomPad = 36;
+    const y0 = fromRect?.top ?? (c.y > 8 ? c.y : topPad);
+    const fullH = Math.max(200, window.innerHeight - y0 - bottomPad);
+    const h = isEditor
+      ? fullH
+      : Math.max(
+          m.minH,
+          fromRect?.height ?? c.h ?? m.defaultH,
+          Math.min(m.defaultH, 240),
+        );
     const maxX = Math.max(0, window.innerWidth - Math.min(w, window.innerWidth));
     const maxY = Math.max(0, window.innerHeight - Math.min(h, window.innerHeight));
     let x = fromRect?.left ?? c.x;
@@ -217,11 +225,16 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     // Default place center-right when still at origin
     if (x < 8 && y < 8 && !fromRect) {
       x = Math.max(24, window.innerWidth - w - 48);
-      y = 56;
+      y = isEditor ? topPad : 56;
     }
     x = Math.min(maxX, Math.max(0, x));
-    y = Math.min(maxY, Math.max(0, y));
-    setPanelGeometry(props.id, { x, y, w, h });
+    y = isEditor ? Math.min(topPad + 8, Math.max(0, y)) : Math.min(maxY, Math.max(0, y));
+    setPanelGeometry(props.id, {
+      x,
+      y,
+      w,
+      h: isEditor ? Math.max(200, window.innerHeight - y - bottomPad) : h,
+    });
   };
 
   const setDock = (d: PanelDock) => {
@@ -527,29 +540,53 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     const c = chrome();
     const d = dock();
     const order = dockStackCssOrder(props.id);
+    const isEditor = props.id === 'editor';
+
     if (d === 'float' || d === 'window') {
-      // Keep editor/CM usable: never allow collapsed float chrome
+      // Keep editor/CM usable: never allow collapsed float chrome.
+      // pointer-events:auto is required — float root is pointer-events:none so
+      // empty overlay space clicks pass through; without this, CM is not editable
+      // and clicks hit the chart/topbar underneath.
       const w = Math.max(meta().minW, c.w || meta().defaultW);
+      // Editor float: always fill viewport under top edge (CSS tracks window resize)
+      const bottomPad = 36; // status / safe area
+      const top = Math.max(0, Math.min(c.y || 48, window.innerHeight - 160));
       const h = Math.max(meta().minH, c.h || meta().defaultH);
+      if (isEditor) {
+        return {
+          position: 'fixed',
+          left: `${c.x}px`,
+          top: `${top}px`,
+          width: `${w}px`,
+          height: `calc(100vh - ${top}px - ${bottomPad}px)`,
+          'z-index': String(Math.max(100, c.z || 20)),
+          'min-width': `${meta().minW}px`,
+          'min-height': '200px',
+          'pointer-events': 'auto',
+        };
+      }
       return {
         position: 'fixed',
         left: `${c.x}px`,
         top: `${c.y}px`,
         width: `${w}px`,
         height: `${h}px`,
-        'z-index': String(Math.max(40, c.z || 20)),
+        'z-index': String(Math.max(100, c.z || 20)),
         'min-width': `${meta().minW}px`,
         'min-height': `${Math.max(meta().minH, 120)}px`,
+        'pointer-events': 'auto',
       };
     }
     // Side docks: flow in the dock column (never position:fixed — that overlays the chart)
+    // Editor always stretches to 100% of the column (CM needs a definite height chain).
     if (d === 'left' || d === 'right') {
-      if (!stacked()) {
+      if (isEditor || !stacked()) {
         return {
           position: 'relative',
           width: '100%',
           height: '100%',
           flex: '1 1 auto',
+          'min-height': '0',
           order: String(order),
           left: 'auto',
           top: 'auto',
@@ -569,6 +606,20 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       };
     }
     // bottom: pixel heights (column has no fixed height; flex-grow would collapse)
+    // Editor docked bottom still fills the bottom column when alone / stacked
+    if (isEditor) {
+      return {
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        flex: '1 1 auto',
+        'min-height': `${Math.max(meta().minH, c.h, 200)}px`,
+        order: String(order),
+        left: 'auto',
+        top: 'auto',
+        'z-index': 'auto',
+      };
+    }
     return {
       position: 'relative',
       width: '100%',
@@ -591,6 +642,8 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
 
   const showSideWidthResize = () => dock() === 'left' || dock() === 'right';
   const showBottomHeightResize = () => {
+    // Editor always fills height — no vertical split handles
+    if (props.id === 'editor') return false;
     const d = dock();
     if (d === 'bottom') return true;
     // Stacked left/right: bottom edge resizes split (except last fills rest)
@@ -719,41 +772,43 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
               />
             </Show>
 
-            {/* Float: all borders + SE corner (min 1px) */}
+            {/* Float: borders. Editor keeps full viewport height — width-only resize. */}
             <Show when={isFloat()}>
               <div
-                class="sc-resize-handle absolute right-0 top-0 bottom-3"
+                class="sc-resize-handle absolute right-0 top-0 bottom-0"
                 role="separator"
                 aria-orientation="vertical"
-                title="Drag to resize"
+                title="Drag to resize width"
                 onPointerDown={onFloatResizePointerDown('e')}
               />
               <div
                 class="sc-resize-handle absolute left-0 top-0 bottom-0"
                 role="separator"
                 aria-orientation="vertical"
-                title="Drag to resize"
+                title="Drag to resize width"
                 onPointerDown={onFloatResizePointerDown('w')}
               />
-              <div
-                class="sc-pane-resize-handle absolute left-0 right-3 bottom-0"
-                role="separator"
-                aria-orientation="horizontal"
-                title="Drag to resize"
-                onPointerDown={onFloatResizePointerDown('s')}
-              />
-              <div
-                class="sc-pane-resize-handle absolute left-0 right-0 top-0"
-                role="separator"
-                aria-orientation="horizontal"
-                title="Drag to resize"
-                onPointerDown={onFloatResizePointerDown('n')}
-              />
-              <div
-                class="axis-panel-resize"
-                title="Resize"
-                onPointerDown={onFloatResizePointerDown('se')}
-              />
+              <Show when={props.id !== 'editor'}>
+                <div
+                  class="sc-pane-resize-handle absolute left-0 right-3 bottom-0"
+                  role="separator"
+                  aria-orientation="horizontal"
+                  title="Drag to resize"
+                  onPointerDown={onFloatResizePointerDown('s')}
+                />
+                <div
+                  class="sc-pane-resize-handle absolute left-0 right-0 top-0"
+                  role="separator"
+                  aria-orientation="horizontal"
+                  title="Drag to resize"
+                  onPointerDown={onFloatResizePointerDown('n')}
+                />
+                <div
+                  class="axis-panel-resize"
+                  title="Resize"
+                  onPointerDown={onFloatResizePointerDown('se')}
+                />
+              </Show>
             </Show>
           </div>
       </Portal>

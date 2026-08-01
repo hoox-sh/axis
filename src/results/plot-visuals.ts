@@ -55,7 +55,8 @@ export type SeriesMap = Record<string, unknown[] | (number | null)[]>;
 
 export interface LineOverlaySpec {
   name: string;
-  data: { time: number; value: number }[];
+  /** `value` omitted = LWC whitespace (keeps time-scale slot for multi-pane align) */
+  data: { time: number; value?: number }[];
   color?: string;
   kind: 'plot' | 'hline' | string;
 }
@@ -275,20 +276,25 @@ export function shapeSeriesToMarkers(
 }
 
 /**
- * Build line overlay specs from split line series + bar times.
+ * Build line overlay points from series + bar times.
+ * Emits one point per bar time; non-finite / null values become whitespace
+ * (`{ time }` only) so multi-pane logical ranges stay aligned with OHLCV.
  */
 export function lineSeriesToOverlayData(
   times: number[],
   values: unknown[],
-): { time: number; value: number }[] {
-  const out: { time: number; value: number }[] = [];
-  const n = Math.min(times.length, values.length);
+): { time: number; value?: number }[] {
+  const out: { time: number; value?: number }[] = [];
+  const n = times.length;
   for (let i = 0; i < n; i++) {
-    const v = values[i];
     const t = times[i];
-    if (v == null || typeof v !== 'number' || !Number.isFinite(v)) continue;
     if (t == null || !Number.isFinite(t)) continue;
-    out.push({ time: t, value: v });
+    const v = values[i];
+    if (v != null && typeof v === 'number' && Number.isFinite(v)) {
+      out.push({ time: t, value: v });
+    } else {
+      out.push({ time: t });
+    }
   }
   return out;
 }
@@ -311,7 +317,8 @@ export function buildPlotVisuals(
   let colorIdx = 0;
   for (const { key, values, meta } of split.lines) {
     const data = lineSeriesToOverlayData(times, values);
-    if (!data.length) continue;
+    // Skip series with no real samples (pure whitespace / empty)
+    if (!data.some((d) => d.value != null && Number.isFinite(d.value))) continue;
     const color =
       (meta.color && isActiveColor(meta.color) ? meta.color : null) ||
       palette[colorIdx % palette.length];

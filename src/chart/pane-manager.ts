@@ -72,10 +72,17 @@ import { resizePane, store } from '../store';
 import type { TradeMarker } from '../results/events';
 import type { ShapeMarkerSpec } from '../results/plot-visuals';
 
+/**
+ * One plot sample. Omit `value` (or leave undefined) for LWC whitespace so the
+ * point still occupies a time-scale slot — required for multi-pane logical
+ * range alignment when Pine returns leading `na` (indicator warmup).
+ */
+export type OverlayPoint = { time: number; value?: number };
+
 /** Overlay line from indicator runner (plot series or Pine hline). */
 export type OverlayLineSpec = {
   name: string;
-  data: { time: number; value: number }[];
+  data: OverlayPoint[];
   color?: string;
   linewidth?: number;
   /** plot (default) | hline — hlines use createPriceLine when possible */
@@ -84,6 +91,19 @@ export type OverlayLineSpec = {
   price?: number;
   linestyle?: string;
 };
+
+/** Map overlay points to LWC LineData | WhitespaceData. */
+export function toLwcLineData(
+  data: OverlayPoint[],
+): Array<{ time: UTCTimestamp; value: number } | { time: UTCTimestamp }> {
+  return data.map((d) => {
+    const time = d.time as UTCTimestamp;
+    if (d.value != null && Number.isFinite(d.value)) {
+      return { time, value: d.value };
+    }
+    return { time };
+  });
+}
 
 /** One managed LWC chart + series map. */
 export interface ManagedPane {
@@ -108,10 +128,15 @@ function mapLineStyle(linestyle?: string): LineStyle {
 /**
  * Multi-pane chart controller. Construct with the host element that will
  * receive pane DOM nodes (typically ChartHost’s panes container).
+ *
+ * @param hostKey - Unique prefix for multi-chart layouts so DOM ids
+ *   (`pane-{hostKey}-price`) do not collide across slots.
  */
 export class PaneManager {
   private panes: Map<string, ManagedPane> = new Map();
   private container: HTMLElement;
+  /** Slot / host id for unique pane DOM ids (empty = legacy `pane-price`). */
+  private hostKey: string;
   private suppressSync = false;
   /** LWC v5 markers plugin attached to the price candle series */
   private candleMarkers: ISeriesMarkersPluginApi<any> | null = null;
@@ -139,8 +164,18 @@ export class PaneManager {
   private priceAutoScale = true;
   private priceLogScale = false;
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, hostKey = '') {
     this.container = container;
+    this.hostKey = hostKey || '';
+  }
+
+  /** DOM id for a pane element (multi-chart safe). */
+  paneDomId(paneId: string): string {
+    return this.hostKey ? `pane-${this.hostKey}-${paneId}` : `pane-${paneId}`;
+  }
+
+  private handleDomId(belowId: string): string {
+    return this.hostKey ? `pane-handle-${this.hostKey}-${belowId}` : `pane-handle-${belowId}`;
   }
 
   /** Prefer main geometry series on a pane for crosshair anchoring. */
@@ -209,7 +244,7 @@ export class PaneManager {
     }
 
     const div = document.createElement('div');
-    div.id = `pane-${id}`;
+    div.id = this.paneDomId(id);
     div.className = 'relative';
     div.dataset.paneId = id;
     if (height) {
@@ -352,9 +387,9 @@ export class PaneManager {
     } catch {
       /* ignore */
     }
-    const el = document.getElementById(`pane-${id}`);
+    const el = document.getElementById(this.paneDomId(id));
     el?.remove();
-    document.getElementById(`pane-handle-${id}`)?.remove();
+    document.getElementById(this.handleDomId(id))?.remove();
     this.panes.delete(id);
     // Re-wire remaining panes so sync handlers don't point at removed charts
     if (opts?.rewire !== false) {
@@ -368,7 +403,7 @@ export class PaneManager {
    */
   private attachPaneResizeHandle(belowId: string) {
     const handle = document.createElement('div');
-    handle.id = `pane-handle-${belowId}`;
+    handle.id = this.handleDomId(belowId);
     handle.className = 'sc-pane-resize-handle';
     handle.title = 'Drag to resize panes';
     handle.setAttribute('role', 'separator');
@@ -383,7 +418,7 @@ export class PaneManager {
 
     handle.addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      belowEl = document.getElementById(`pane-${belowId}`);
+      belowEl = document.getElementById(this.paneDomId(belowId));
       // Previous sibling pane element (skip handles)
       let prev = handle.previousElementSibling as HTMLElement | null;
       while (prev && !prev.id?.startsWith('pane-')) {
@@ -456,7 +491,7 @@ export class PaneManager {
     const pane = this.panes.get(id);
     if (!pane) return;
     pane.visible = visible;
-    const el = document.getElementById(`pane-${id}`);
+    const el = document.getElementById(this.paneDomId(id));
     if (el) el.style.display = visible ? '' : 'none';
     if (visible) {
       const rect = el?.getBoundingClientRect();
@@ -470,13 +505,13 @@ export class PaneManager {
   setLabel(id: string, label: string) {
     const pane = this.panes.get(id);
     if (pane) pane.label = label;
-    const el = document.getElementById(`pane-${id}`);
+    const el = document.getElementById(this.paneDomId(id));
     const labelEl = el?.querySelector('span');
     if (labelEl) labelEl.textContent = label;
   }
 
   resize(id: string, height: number) {
-    const el = document.getElementById(`pane-${id}`);
+    const el = document.getElementById(this.paneDomId(id));
     if (el) el.style.height = `${height}px`;
     const pane = this.panes.get(id);
     if (pane) {
@@ -857,7 +892,7 @@ export class PaneManager {
   resizeAll() {
     for (const pane of this.getAllPanes()) {
       if (!pane.visible) continue;
-      const el = document.getElementById(`pane-${pane.id}`);
+      const el = document.getElementById(this.paneDomId(pane.id));
       if (!el) continue;
       const rect = el.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
@@ -1066,11 +1101,12 @@ export class PaneManager {
     let colorIdx = 0;
     for (const line of plotLines) {
       const key = `overlay_${line.name}`;
-      const mapped = line.data.map((d) => ({ time: d.time as UTCTimestamp, value: d.value }));
+      // Whitespace for na keeps logical indices aligned with the price pane
+      const mapped = toLwcLineData(line.data);
       const existing = pane.series[key];
       const lw = line.linewidth != null ? Math.max(1, Math.min(4, Math.round(line.linewidth))) : undefined;
       if (existing) {
-        existing.setData(mapped);
+        existing.setData(mapped as never);
         try {
           const opts: Record<string, unknown> = {};
           if (line.color) opts.color = line.color;
@@ -1082,7 +1118,7 @@ export class PaneManager {
       } else {
         const c = line.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
         const series = createLineSeries(pane.chart, line.name, c, undefined, lw ?? 2);
-        series.setData(mapped);
+        series.setData(mapped as never);
         pane.series[key] = series;
       }
       colorIdx += 1;
@@ -1150,13 +1186,17 @@ export class PaneManager {
       colorIdx += 1;
     }
 
-    if (savedRange) {
+    if (paneId === 'price' && savedRange) {
+      // Preserve price viewport on live re-runs, then push to sub-panes
       try {
         pane.chart.timeScale().setVisibleLogicalRange(savedRange);
       } catch {
         /* ignore */
       }
     }
+    // Secondary panes always follow price — requires whitespace-padded series
+    // so logical indices match (leading Pine `na` must not shrink the series).
+    this.alignTimeRangesFromPrice();
     this.alignRightScales();
   }
 

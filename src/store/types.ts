@@ -353,4 +353,13 @@ export interface AppState {
    * See ``ui/panels/types.ts``.
    */
   panelChrome: import('../ui/panels/types').PanelChromeMap;
+
+  /**
+   * Multi-chart grid (1 / 2H / 2V / 4) + active slot.
+   * Per-slot bars live in memory ({@link chart/chart-registry}); only slot
+   * descriptors are persisted. Active slot mirrors flat `symbol` / `interval`.
+   */
+  chartLayout: import('../chart/layout').ChartLayoutState;
+  /** User-saved named layouts (grid + optional chrome snapshot). */
+  savedLayouts: import('../chart/layout').SavedChartLayout[];
 }

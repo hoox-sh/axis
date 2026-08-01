@@ -38,6 +38,10 @@ import {
   setLive,
   toggleTheme,
   resetUiLayout,
+  setChartGridMode,
+  saveChartLayout,
+  loadChartLayout,
+  setActiveChartSlot,
   setEditorWidth,
   setPanelDock,
   setPanelOpen,
@@ -298,6 +302,25 @@ describe('layout helpers', () => {
     expect(store.theme).not.toBe(before);
     toggleTheme();
     expect(store.theme).toBe(before);
+  });
+
+  it('chart grid mode and saved layouts', () => {
+    setChartGridMode('2h');
+    expect(store.chartLayout.mode).toBe('2h');
+    expect(store.chartLayout.slots.length).toBe(2);
+    const second = store.chartLayout.slots[1]!;
+    setActiveChartSlot(second.id);
+    expect(store.chartLayout.activeId).toBe(second.id);
+    expect(store.symbol).toBe(second.symbol);
+
+    const snap = saveChartLayout('Test 2H');
+    expect(store.savedLayouts.some((l) => l.id === snap.id)).toBe(true);
+
+    setChartGridMode('1');
+    expect(store.chartLayout.slots.length).toBe(1);
+    expect(loadChartLayout(snap.id)).toBe(true);
+    expect(store.chartLayout.mode).toBe('2h');
+    expect(store.chartLayout.slots.length).toBe(2);
   });
 
   it('resetUiLayout restores docks and scale without clearing market data', () => {

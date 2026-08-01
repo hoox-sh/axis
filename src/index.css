@@ -766,7 +766,9 @@ button.sc-btn:focus-visible {
   opacity: 0;
 }
 
-/* Full-viewport host for position:fixed float panels (not clipped by flex overflow) */
+/* Full-viewport host for position:fixed float panels (not clipped by flex overflow).
+ * Root is pointer-events:none so empty space clicks pass through to the chart;
+ * shells (any depth — Solid Portal may insert markers) must re-enable hits. */
 .axis-float-root {
   position: fixed;
   inset: 0;
@@ -777,8 +779,10 @@ button.sc-btn:focus-visible {
   pointer-events: none;
 }
 
-.axis-float-root > .axis-panel-shell {
-  pointer-events: auto;
+.axis-float-root .axis-panel-shell,
+.axis-panel-shell.axis-panel-float,
+.axis-panel-shell.sc-float-panel {
+  pointer-events: auto !important;
 }
 
 /* While dragging a panel title — avoid text selection / iframe capture */
@@ -832,11 +836,29 @@ body.axis-panel-dragging {
   border-top: var(--border-w) solid var(--color-border);
 }
 
-/* Editor: CodeMirror needs a non-scrolling body so the pane owns height */
+/* Editor: always fill available height (dock column or float chrome) */
+.axis-panel-shell[data-panel-id='editor'] {
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.axis-panel-shell[data-panel-id='editor'].axis-panel-float {
+  /* float height is set inline to viewport remainder; still flex children */
+  flex: none;
+}
+/* CodeMirror needs a non-scrolling body so the pane owns height */
 .axis-panel-shell[data-panel-id='editor'] .axis-panel-body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+.axis-panel-shell[data-panel-id='editor'] .axis-panel-body > * {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
 }
 
 .axis-panel-dock-bottom {
