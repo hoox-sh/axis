@@ -10,7 +10,7 @@
 #   vendor/pynescript-<ver>-py3-none-any.whl         (legacy layout)
 #
 # Hardcoded install paths in src/engines/catalog.ts and index.js must match
-# the wheel filename (currently pynescript-0.2.0-py3-none-any.whl).
+# the wheel filename (currently pynescript-0.3.0-py3-none-any.whl).
 #
 # Copyright (C) 2024-2026 jango_blockchained
 # SPDX-License-Identifier: AGPL-3.0-only
@@ -37,23 +37,37 @@ fi
 echo "==> building wheel from ${PYNE_ROOT} (${PYTHON})"
 cd "${PYNE_ROOT}"
 "${PYTHON}" -m pip install -q build hatchling
-rm -f dist/pynescript-*.whl
+rm -f dist/pynescript-*.whl dist/hoox_pyne-*.whl
 "${PYTHON}" -m build --wheel
 
-WHEEL="$(ls -1 dist/pynescript-*-py3-none-any.whl | head -1)"
+# PyPI dist name is hoox-pyne; import package remains pynescript. Prefer either.
+# (Avoid bare globs under set -o pipefail — unmatched globs make `ls` exit 2.)
+WHEEL=""
+for candidate in dist/pynescript-*-py3-none-any.whl dist/hoox_pyne-*-py3-none-any.whl; do
+  if [[ -f "${candidate}" ]]; then
+    WHEEL="${candidate}"
+    break
+  fi
+done
 if [[ -z "${WHEEL}" || ! -f "${WHEEL}" ]]; then
   echo "error: no wheel produced under ${PYNE_ROOT}/dist" >&2
   exit 1
 fi
-BASE="$(basename "${WHEEL}")"
-echo "==> built ${BASE} ($(wc -c < "${WHEEL}" | tr -d ' ') bytes)"
+
+# Stable browser URL: always serve as pynescript-<ver>-py3-none-any.whl
+# (micropip installs by URL; filename need not match PyPI dist name).
+VER="$("${PYTHON}" -c "import pathlib,re; t=pathlib.Path('src/pynescript/__about__.py').read_text(); print(re.search(r'__version__\s*=\s*[\"\\']([^\"\\']+)', t).group(1))")"
+BASE="pynescript-${VER}-py3-none-any.whl"
+echo "==> built $(basename "${WHEEL}") → vendor as ${BASE} ($(wc -c < "${WHEEL}" | tr -d ' ') bytes)"
 
 mkdir -p "${ROOT}/public/vendor" "${ROOT}/vendor"
 cp -f "${WHEEL}" "${ROOT}/public/vendor/${BASE}"
 cp -f "${WHEEL}" "${ROOT}/vendor/${BASE}"
 
 # Drop stale alternate versions so dist/ does not serve two wheels
-find "${ROOT}/public/vendor" "${ROOT}/vendor" -maxdepth 1 -name 'pynescript-*-py3-none-any.whl' ! -name "${BASE}" -print -delete 2>/dev/null || true
+find "${ROOT}/public/vendor" "${ROOT}/vendor" -maxdepth 1 \
+  \( -name 'pynescript-*-py3-none-any.whl' -o -name 'hoox_pyne-*-py3-none-any.whl' \) \
+  ! -name "${BASE}" -print -delete 2>/dev/null || true
 
 # Spot-check compiler payload is present (not a stale thin wheel)
 if ! unzip -l "${ROOT}/public/vendor/${BASE}" | grep -q 'pynescript/compiler/numba_builtins.py'; then

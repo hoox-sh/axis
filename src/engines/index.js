@@ -189,7 +189,7 @@ export const pyodideEngine = {
 
                 self._emitProgress('Installing pynescript…');
                 const micropip = py.pyimport('micropip');
-                const wheelUrl = `${origin}/vendor/pynescript-0.2.0-py3-none-any.whl`;
+                const wheelUrl = `${origin}/vendor/pynescript-0.3.0-py3-none-any.whl`;
                 const antlrUrl = `${origin}/vendor/antlr4_python3_runtime-4.13.2-py3-none-any.whl`;
                 // Guard against SPA HTML fallback → micropip BadZipFile
                 const wheelRes = await fetch(wheelUrl);

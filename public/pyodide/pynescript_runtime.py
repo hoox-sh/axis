@@ -342,6 +342,15 @@ def _run_interpret(script: str, bars: list[dict]) -> dict:
 
     evaluator = CustomEvaluator(context=context)
 
+    # Fresh drawing registries so leftover labels/lines from prior runs
+    # do not leak into this response (DrawingRegistry is process-global).
+    try:
+        from pynescript.ast.evaluator.builtins.drawing import DrawingRegistry
+
+        DrawingRegistry.reset()
+    except Exception:
+        pass
+
     script_id = hashlib.sha256(script.encode("utf-8")).hexdigest()[:16]
     run_id = uuid.uuid4().hex[:12]
     t0 = time.perf_counter()
@@ -447,25 +456,44 @@ def _run_interpret(script: str, bars: list[dict]) -> dict:
             else:
                 overlay = script_type == "strategy"
 
+    # Drawing objects + max_*_count caps (AXIS client GC + registry GC in wheel)
+    drawings: list = []
+    drawing_limits: dict = {}
+    try:
+        from pynescript.ast.evaluator.builtins.drawing import DrawingRegistry
+
+        bar_times = [b.get("time", 0) for b in bars]
+        if not DrawingRegistry.is_empty():
+            drawings = DrawingRegistry.export_for_api(bar_times)
+        drawing_limits = DrawingRegistry.limits_dict()
+    except Exception:
+        drawings = []
+        drawing_limits = {}
+
+    meta: dict = {
+        "mode": "interpret",
+        "count": len(bars),
+        "ms": (time.perf_counter() - t0) * 1000,
+        "script_id": script_id,
+        "run_id": run_id,
+        "overlay": overlay,
+        "script_name": script_name,
+        "script_type": script_type,
+    }
+    if drawing_limits:
+        meta.update(drawing_limits)
+
     return {
         "status": "success",
         "plots": plots_main,
         "series": series,
         "events": all_events,
+        "drawings": drawings,
         "equity_curve": equity_curve,
         "overlay": overlay,
         "script_name": script_name,
         "script_type": script_type,
-        "meta": {
-            "mode": "interpret",
-            "count": len(bars),
-            "ms": (time.perf_counter() - t0) * 1000,
-            "script_id": script_id,
-            "run_id": run_id,
-            "overlay": overlay,
-            "script_name": script_name,
-            "script_type": script_type,
-        },
+        "meta": meta,
     }
 
 
@@ -525,6 +553,36 @@ def _run_compiled(script: str, bars: list[dict]) -> dict:
         for k in ("__position_size", "__netprofit", "__equity"):
             series_map.pop(k, None)
 
+    # Compile-path GC: trim append-only __drawings by declaration caps (defaults 50)
+    drawing_limits = {
+        "max_lines_count": 50,
+        "max_labels_count": 50,
+        "max_boxes_count": 50,
+        "max_polylines_count": 50,
+    }
+    try:
+        import re as _re
+        from pynescript.ast.evaluator.builtins.drawing import DrawingRegistry
+
+        _hard = {
+            "max_lines_count": 500,
+            "max_labels_count": 500,
+            "max_boxes_count": 500,
+            "max_polylines_count": 100,
+        }
+        for _key, _cap in _hard.items():
+            _m = _re.search(rf"\b{_key}\s*=\s*(\d+)", script or "")
+            if _m:
+                try:
+                    _n = int(_m.group(1))
+                    drawing_limits[_key] = max(1, min(_cap, _n))
+                except (TypeError, ValueError):
+                    pass
+        if isinstance(drawings, list) and drawings:
+            drawings = DrawingRegistry.gc_exported_drawings(drawings, drawing_limits)
+    except Exception:
+        pass
+
     json_series = {
         str(k): _json_safe_series(v)
         for k, v in (series_map or {}).items()
@@ -534,6 +592,11 @@ def _run_compiled(script: str, bars: list[dict]) -> dict:
     script_id = hashlib.sha256(script.encode("utf-8")).hexdigest()[:16]
     run_id = uuid.uuid4().hex[:12]
 
+    compile_meta = {
+        "mode": "compile",
+        **drawing_limits,
+    }
+    # preserve existing meta keys below via update pattern
     return {
         "status": "success",
         "plots": plots_main,
@@ -543,6 +606,7 @@ def _run_compiled(script: str, bars: list[dict]) -> dict:
         "overlay": True,
         "script_name": "plot",
         "meta": {
+            **compile_meta,
             "mode": "compile",
             "object_mode": bool(getattr(compiled, "object_mode", False)),
             "count": len(bars),
