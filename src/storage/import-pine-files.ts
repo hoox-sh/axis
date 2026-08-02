@@ -18,23 +18,32 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Import local `.pine` / `.pinescript` files into the active script library.
+ * Import local PYNE / Pine Script™ source files into the active script library.
+ *
+ * Accepted extensions (case-insensitive):
+ * - **`.pyne`** — preferred product extension (HOOX / PYNE / AXIS)
+ * - **`.pine`**, **`.pinescript`**, **`.pinev5`**, **`.pinev6`** — TradingView®
+ *   and legacy community exports
  *
  * Used by app-wide drag-and-drop and optional file-picker paths. Pure helpers
  * (`isPineFileName`, `scriptNameFromFileName`, `filterPineFiles`,
  * {@link sanitizePineSource}) are unit-tested; {@link importPineFiles} calls
  * {@link writeScript} for each accepted file.
  *
- * TradingView community scrapes often end with an `Expand (N lines)` UI stub
- * when the code panel was collapsed — that text is **not** Pine; we strip it
- * and surface a truncation warning (the missing lines were never in the file).
+ * TradingView® community scrapes often end with an `Expand (N lines)` UI stub
+ * when the code panel was collapsed — that text is **not** Pine Script™; we
+ * strip it and surface a truncation warning (the missing lines were never in
+ * the file).
  */
 
 import type { ScriptMeta } from '../plugins/types';
 import { writeScript } from './service';
 
-/** Extensions we treat as Pine Script source files. */
-const PINE_EXT = /\.(pine|pinescript)$/i;
+/**
+ * Extensions we treat as PYNE / Pine Script™ source files.
+ * Prefer `.pyne` for new HOOX stack work; keep `.pine*` for TV exports.
+ */
+const PINE_EXT = /\.(pyne|pine|pinescript|pinev5|pinev6)$/i;
 
 /**
  * TradingView community collapsed-code chrome, e.g. `Expand (132 lines)`.
@@ -49,14 +58,14 @@ const FENCE_RE = /^\s*```/;
 const UI_CHROME_RE =
   /^\s*(Copy(\s+code)?|Copied|Pine\s+Script\s*®?|Share|Open\s+in\s+editor)\s*$/i;
 
-/** True when a file name looks like a Pine Script source file. */
+/** True when a file name looks like a PYNE / Pine Script™ source file. */
 export function isPineFileName(name: string): boolean {
   return PINE_EXT.test(String(name || '').trim());
 }
 
 /**
  * Derive a library display name from a file path/name.
- * Strips directories and the `.pine` / `.pinescript` extension.
+ * Strips directories and known source extensions (`.pyne`, `.pine`, …).
  */
 export function scriptNameFromFileName(fileName: string): string {
   const base = String(fileName || '')

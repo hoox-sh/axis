@@ -172,4 +172,50 @@ describe('splitSeriesByKind + buildPlotVisuals', () => {
     expect(split.lines).toHaveLength(1);
     expect(split.bgcolors).toHaveLength(0);
   });
+
+  /**
+   * PYNE modern success payload: top-level `plots` is often `[null, …]` of bar
+   * length while real values live in named `series` + `meta.plot_meta`.
+   * Chart path must still emit overlay line data (runner prefers series first).
+   */
+  it('named series + plot_meta produce lines when legacy plots[] is all-null', () => {
+    const times = [1, 2, 3, 4, 5];
+    const plots = times.map(() => null);
+    const series = {
+      bgcolor: [null, null, null, null, null],
+      'EMAma Girang': [null, null, 84088.79, 84100.1, 84120.5],
+      'EMAma Muda': [null, 83000, 83100, 83200, 83300],
+      'EMAma Tua': [82000, 82100, 82200, 82300, 82400],
+    };
+    const plotMeta = {
+      bgcolor: { kind: 'bgcolor' as const, index: 0 },
+      'EMAma Girang': { kind: 'plot' as const, color: '#f23645', index: 1 },
+      'EMAma Muda': { kind: 'plot' as const, color: '#2962ff', index: 2 },
+      'EMAma Tua': { kind: 'plot' as const, color: '#ff9800', index: 3 },
+    };
+
+    expect(plots.length).toBe(times.length);
+    expect(plots.every((v) => v == null)).toBe(true);
+
+    const split = splitSeriesByKind(series, plotMeta);
+    // Runner: seriesEntries = split.lines — must be non-empty so legacy plots[] is ignored
+    expect(split.lines.map((l) => l.key).sort()).toEqual([
+      'EMAma Girang',
+      'EMAma Muda',
+      'EMAma Tua',
+    ]);
+    expect(split.bgcolors.map((b) => b.key)).toEqual(['bgcolor']);
+
+    const visuals = buildPlotVisuals(series, plotMeta, times);
+    expect(visuals.lines).toHaveLength(3);
+    const byName = Object.fromEntries(visuals.lines.map((l) => [l.name, l]));
+    expect(byName['EMAma Girang']!.color).toBe('#f23645');
+    expect(byName['EMAma Girang']!.data.filter((d) => d.value != null)).toHaveLength(3);
+    expect(byName['EMAma Muda']!.data.filter((d) => d.value != null)).toHaveLength(4);
+    expect(byName['EMAma Tua']!.data.filter((d) => d.value != null)).toHaveLength(5);
+    // Finite sample at last bar (overlay chart must not be empty)
+    expect(byName['EMAma Tua']!.data[4]).toEqual({ time: 5, value: 82400 });
+    // bgcolor all-null → no bands
+    expect(visuals.bgcolors).toHaveLength(0);
+  });
 });

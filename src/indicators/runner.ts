@@ -456,6 +456,8 @@ export async function runAndApply(
     price?: number;
     linestyle?: string;
   }> = [];
+  // Prefer named `series` + `meta.plot_meta` (PYNE modern). Top-level `plots[]`
+  // is often an all-null pad of bar length — never let that block named lines.
   if (seriesEntries.length > 0) {
     let colorIdx = 0;
     for (const [k, arr] of seriesEntries) {
@@ -489,10 +491,14 @@ export async function runAndApply(
       });
     }
   } else if (result.plots.length) {
-    // Only use legacy plots[] when no series and no specialized kinds
+    // Legacy single-array plots only when no named line series and no specialized kinds.
+    // Skip all-null pads (modern engines still send plots: [null, …]).
     if (!split.bgcolors.length && !split.shapes.length) {
       const data = toLineData(result.plots as (number | null)[]);
-      if (data.length) overlayLines.push({ name: scriptName, data, color: PLOT_PALETTE[0] });
+      const hasSample = data.some((d) => d.value != null && Number.isFinite(d.value));
+      if (hasSample) {
+        overlayLines.push({ name: scriptName, data, color: PLOT_PALETTE[0] });
+      }
     }
   }
   manager.syncOverlayLines(paneId, overlayLines);

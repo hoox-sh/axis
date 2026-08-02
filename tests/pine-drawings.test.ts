@@ -11,6 +11,8 @@
 import { describe, expect, it } from 'bun:test';
 import {
   DEFAULT_DRAWING_LIMITS,
+  clampScriptDrawingTimes,
+  clampTimeToLastBar,
   garbageCollectScriptDrawings,
   normalizeExtend,
   normalizeLineStyle,
@@ -305,5 +307,72 @@ label.new(bar_index, high, "x")
     expect(kept).toHaveLength(50);
     expect(kept[0]!.id).toBe('label_10');
     expect(kept[49]!.id).toBe('label_59');
+  });
+});
+
+describe('clampTimeToLastBar / clampScriptDrawingTimes', () => {
+  const last = 1_700_000_000;
+
+  it('clamps only times strictly past last bar', () => {
+    expect(clampTimeToLastBar(last + 3600, last)).toBe(last);
+    expect(clampTimeToLastBar(last, last)).toBe(last);
+    expect(clampTimeToLastBar(last - 60, last)).toBe(last - 60);
+  });
+
+  it('no-ops when lastBarTime is missing or non-finite', () => {
+    expect(clampTimeToLastBar(99, null)).toBe(99);
+    expect(clampTimeToLastBar(99, undefined)).toBe(99);
+    expect(clampTimeToLastBar(99, Number.NaN)).toBe(99);
+  });
+
+  it('clamps label/line/polyline future anchors without mutating inputs', () => {
+    const future = last + 86_400;
+    const raw: ScriptDrawing[] = [
+      {
+        id: 'l0',
+        type: 'label',
+        t1: future,
+        p1: 100,
+        color: '#f00',
+        text: 'Sleeping Mode',
+      },
+      {
+        id: 'ln',
+        type: 'line',
+        t1: last - 100,
+        p1: 1,
+        t2: future,
+        p2: 2,
+        color: '#0f0',
+      },
+      {
+        id: 'poly',
+        type: 'polyline',
+        t1: last - 10,
+        p1: 1,
+        t2: future,
+        p2: 2,
+        color: '#00f',
+        points: [
+          { time: last - 10, price: 1 },
+          { time: future, price: 2 },
+        ],
+      },
+    ];
+    const copy = structuredClone(raw);
+    const clamped = clampScriptDrawingTimes(raw, last);
+    expect(raw).toEqual(copy); // immutable
+    expect(clamped[0]!.t1).toBe(last);
+    expect(clamped[1]!.t1).toBe(last - 100);
+    expect(clamped[1]!.t2).toBe(last);
+    expect(clamped[2]!.points![1]!.time).toBe(last);
+    // In-range batch is identity
+    expect(clampScriptDrawingTimes(clamped, last)).toBe(clamped);
+  });
+
+  it('does not collapse bar_index-style times under a large lastBarTime', () => {
+    // Compile-path drawings use small integers; last bar is unix seconds.
+    expect(clampTimeToLastBar(42, last)).toBe(42);
+    expect(clampTimeToLastBar(500, last)).toBe(500);
   });
 });

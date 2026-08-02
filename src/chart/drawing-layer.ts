@@ -45,6 +45,7 @@ import {
 } from './drawing-types';
 import {
   DEFAULT_DRAWING_LIMITS,
+  clampTimeToLastBar,
   garbageCollectScriptDrawings,
   normalizeScriptDrawings,
   type DrawingLimits,
@@ -505,17 +506,31 @@ export class DrawingLayer {
     });
   }
 
+  /** Last OHLCV bar time from {@link barsProvider}, if available. */
+  private lastBarTime(): number | null {
+    const bars = this.barsProvider?.();
+    if (!bars?.length) return null;
+    const t = bars[bars.length - 1]!.time;
+    return Number.isFinite(t) ? t : null;
+  }
+
   /**
    * Map series point → SVG pixel coords.
    * Prefer unix-second time; if unmapped, fall back to logical bar index (compile x / bar_index).
+   *
+   * Future times (`t > lastBar`, e.g. `timenow` + `xloc.bar_time`) are clamped to
+   * the last bar so LWC can map them — otherwise exact `timeToCoordinate` misses
+   * and the bar-index fallback treats unix seconds as logical indices.
    */
   private toXY(p: Point): { x: number; y: number } | null {
+    // Clamp wall-clock times past series end (Pine labels at timenow, etc.).
+    const time = clampTimeToLastBar(p.time, this.lastBarTime());
     // Interpret path uses unix seconds; compile-mode drawings often pass bar_index.
-    let x = this.chart.timeScale().timeToCoordinate(p.time as UTCTimestamp);
-    if (x == null && Number.isFinite(p.time)) {
+    let x = this.chart.timeScale().timeToCoordinate(time as UTCTimestamp);
+    if (x == null && Number.isFinite(time)) {
       // Fallback: treat value as logical bar index (bar_index / compile x1/left).
       try {
-        x = this.chart.timeScale().logicalToCoordinate(p.time as never);
+        x = this.chart.timeScale().logicalToCoordinate(time as never);
       } catch {
         x = null;
       }

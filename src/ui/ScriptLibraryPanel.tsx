@@ -21,10 +21,11 @@
  * Script library UI — list / load / save / delete against the active storage plugin.
  *
  * Uses `storage/service` (listScripts, writeScript, …). Includes cloud/git
- * credential mini-forms and import/export (library JSON or `.pine` files).
+ * credential mini-forms and import/export (library JSON or `.pyne` / `.pine` files).
  * Optional `getDoc` / `setDoc` wire the panel to the live editor document.
  *
- * App-wide drag-and-drop of `.pine` files is handled in `app.tsx` (same import path).
+ * App-wide drag-and-drop of `.pyne` / `.pine` files is handled in `app.tsx`
+ * (same import path).
  */
 
 import { Component, For, Show, createSignal, createEffect } from 'solid-js';
@@ -252,7 +253,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
         total += await importLibraryJson(data, { forceNewIds: true });
       }
       if (!pineFiles.length && !jsonFiles.length) {
-        throw new Error('Choose .pine / .pinescript or library JSON files');
+        throw new Error('Choose .pyne / .pine / .pinescript or library JSON files');
       }
       if (total > 0) {
         setStatus('ready', `Imported ${total} script(s)`);
@@ -407,8 +408,8 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
             Save git settings
           </button>
           <p class="text-[9px] text-text-faint">
-            Save commits to <code class="font-mono">{gitBasePath() || 'pine-library'}/library/*.pine</code>{' '}
-            + <code class="font-mono">index.json</code>. Drafts stay local (no commit spam).
+            Save commits to <code class="font-mono">{gitBasePath() || 'pyne-library'}/library/*.pyne</code>{' '}
+            + <code class="font-mono">index.json</code> (legacy <code class="font-mono">.pine</code> paths still load). Drafts stay local (no commit spam).
             GitHub: contents write · GitLab: write_repository.
           </p>
         </div>
@@ -453,14 +454,14 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
         <button
           class="sc-btn sc-btn-ghost text-[10px]"
           onClick={() => fileInput?.click()}
-          title="Import .pine files or library JSON"
+          title="Import .pyne / .pine files or library JSON"
         >
           Import…
         </button>
         <input
           ref={fileInput}
           type="file"
-          accept="application/json,.json,.pine,.pinescript,text/plain"
+          accept="application/json,.json,.pyne,.pine,.pinescript,.pinev5,.pinev6,text/plain"
           multiple
           class="hidden"
           onChange={(e) => void onImportFile(e)}

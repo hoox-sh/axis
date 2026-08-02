@@ -29,6 +29,10 @@
  * Pine declaration caps (`max_lines_count`, `max_labels_count`, …) — oldest
  * first, matching TradingView garbage collection.
  *
+ * Future times (`t > last bar`, e.g. `timenow` + `xloc.bar_time`) are clamped
+ * at paint time via {@link clampTimeToLastBar} in the drawing layer so LWC can
+ * map them; see also {@link clampScriptDrawingTimes}.
+ *
  * Consumed by the drawing layer when applying script drawings after a run.
  *
  * @module chart/pine-drawings
@@ -270,6 +274,67 @@ export function normalizeExtend(raw: unknown, fallback = 'none'): string {
   s = s.replace(/^extend\./, '');
   if (s === 'left' || s === 'right' || s === 'both' || s === 'none') return s;
   return fallback;
+}
+
+/**
+ * Clamp a time anchor that lies strictly past the last bar to that bar's time.
+ *
+ * Pine scripts often place labels with `xloc.bar_time` + `timenow` (or other
+ * wall-clock times) beyond the series end. LWC `timeToCoordinate` only maps
+ * known bar times (`findNearest=false`), so future `t1` would miss and fall
+ * through to the bar-index logical fallback — treating unix seconds as indices
+ * and stacking/off-scaling the labels. Snapping to the last bar is a low-risk
+ * chart UX fix; it does not change Pine GC caps or engine payloads.
+ *
+ * @param t - Drawing time (unix seconds) or bar index
+ * @param lastBarTime - Last series bar time (unix seconds); null skips clamp
+ */
+export function clampTimeToLastBar(
+  t: number,
+  lastBarTime: number | null | undefined,
+): number {
+  if (lastBarTime == null || !Number.isFinite(lastBarTime) || !Number.isFinite(t)) {
+    return t;
+  }
+  return t > lastBarTime ? lastBarTime : t;
+}
+
+/**
+ * Clamp t1/t2/polyline point times past {@link lastBarTime} (immutable).
+ * No-op when lastBarTime is missing or nothing is in the future.
+ */
+export function clampScriptDrawingTimes(
+  drawings: ScriptDrawing[],
+  lastBarTime: number | null | undefined,
+): ScriptDrawing[] {
+  if (lastBarTime == null || !Number.isFinite(lastBarTime) || !drawings.length) {
+    return drawings;
+  }
+  let changed = false;
+  const out = drawings.map((d) => {
+    const t1 = clampTimeToLastBar(d.t1, lastBarTime);
+    const t2 = d.t2 != null ? clampTimeToLastBar(d.t2, lastBarTime) : d.t2;
+    let points = d.points;
+    if (points?.length) {
+      let ptsChanged = false;
+      const nextPts = points.map((p) => {
+        const time = clampTimeToLastBar(p.time, lastBarTime);
+        if (time !== p.time) {
+          ptsChanged = true;
+          return { ...p, time };
+        }
+        return p;
+      });
+      if (ptsChanged) points = nextPts;
+    }
+    if (t1 === d.t1 && t2 === d.t2 && points === d.points) return d;
+    changed = true;
+    const next: ScriptDrawing = { ...d, t1 };
+    if (t2 !== undefined) next.t2 = t2;
+    if (points !== d.points) next.points = points;
+    return next;
+  });
+  return changed ? out : drawings;
 }
 
 /**

@@ -27,6 +27,12 @@
  * Supports `input.int|float|bool|string|color|source|timeframe|symbol|session|price|enum|text_area`
  * and bare `input(...)`. Emits {@link ScriptInputDef} with stable `id` = title.
  *
+ * **Source recovery:** bare `input(close, "Source")` and engine rows that
+ * mis-type series defvals as float (resolved bar price) are coerced to
+ * `type: 'source'` with {@link DEFAULT_SOURCE_OPTIONS}. See
+ * {@link recoverSourceType} (client guard until pyne exports series inputs
+ * as `source`).
+ *
  * @module results/script-inputs
  */
 
@@ -60,6 +66,12 @@ export const DEFAULT_SOURCE_OPTIONS = [
   'ohlc4',
 ] as const;
 
+/** Built-in series tokens accepted as `input.source` defval (case-insensitive). */
+const SOURCE_SERIES_TOKENS = new Set<string>([
+  ...DEFAULT_SOURCE_OPTIONS,
+  'volume',
+]);
+
 export interface ScriptInputDef {
   /** Stable key = title when set, else generated id */
   id: string;
@@ -76,17 +88,134 @@ export interface ScriptInputDef {
   active?: boolean;
 }
 
+/** True when `v` is a built-in OHLC/series source name (not a bar price). */
+export function isSourceSeriesToken(v: unknown): boolean {
+  if (typeof v !== 'string') return false;
+  return SOURCE_SERIES_TOKENS.has(v.trim().toLowerCase());
+}
+
+/** True when value looks like a resolved bar number (e.g. engine sent close as "63210"). */
+function isResolvedNumeric(v: unknown): boolean {
+  if (typeof v === 'number' && Number.isFinite(v)) return true;
+  if (typeof v === 'string') {
+    const s = v.trim();
+    return s !== '' && /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(s);
+  }
+  return false;
+}
+
+/**
+ * Titles that typically label a series source selector in Pine.
+ * Avoids false positives like "Source Length" (period/int inputs).
+ */
+export function titleLooksLikeSourceSelector(title: string, id = ''): boolean {
+  for (const raw of [title, id]) {
+    const c = raw.trim().toLowerCase().replace(/_/g, ' ');
+    if (!c) continue;
+    if (c === 'source' || c === 'src' || c === 'price source' || c === 'pricesource') {
+      return true;
+    }
+    // "MA Source", "RSI Source", "src" — not "Source Length" / "source period"
+    if (/(^|[\s])source$/.test(c) && !/\b(length|period|mult|factor|size|count|offset)\b/.test(c)) {
+      return true;
+    }
+    if (/(^|[\s])src$/.test(c) && !/\b(length|period)\b/.test(c)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Normalize a source pick: keep series tokens / plot refs; reject bar prices.
+ */
+function coerceSourcePick(v: unknown, fallback: string): string {
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (!s) return fallback;
+    // Cross-indicator plot refs from plot-sources (keep as-is)
+    if (s.startsWith('plot:')) return s;
+    const lower = s.toLowerCase();
+    if (SOURCE_SERIES_TOKENS.has(lower)) return lower;
+    // Custom options may be free-form strings (not pure numbers)
+    if (!isResolvedNumeric(s)) return s;
+  }
+  if (isResolvedNumeric(v)) return fallback;
+  if (v == null || v === '') return fallback;
+  return fallback;
+}
+
 /** Ensure `source` inputs always expose the standard OHLC enum dropdown. */
 function withSourceDefaults(def: ScriptInputDef): ScriptInputDef {
   if (def.type !== 'source') return def;
   const options =
     def.options?.length ? def.options : [...DEFAULT_SOURCE_OPTIONS];
   const fallback = 'close';
-  const defaultVal =
-    def.default != null && def.default !== '' ? def.default : fallback;
-  const value =
-    def.value != null && def.value !== '' ? def.value : defaultVal;
-  return { ...def, options, default: defaultVal, value };
+  const defaultVal = coerceSourcePick(def.default, fallback);
+  const value = coerceSourcePick(
+    def.value != null && def.value !== '' ? def.value : defaultVal,
+    defaultVal,
+  );
+  return {
+    ...def,
+    options,
+    default: defaultVal,
+    value,
+    min: null,
+    max: null,
+    step: null,
+  };
+}
+
+/**
+ * Recover `type: 'source'` when the engine mis-types bare `input(close, "Source")`
+ * as float with a resolved bar value (e.g. default/value `"63210"`).
+ *
+ * Prefer engine `type: "source"` when pyne exports it correctly. This client
+ * guard covers untyped `input(series, title)` until pyne classifies series
+ * defvals as source (coordinate with pyne backend `inputs` meta).
+ */
+export function recoverSourceType(def: ScriptInputDef): ScriptInputDef {
+  if (def.type === 'source') return withSourceDefaults(def);
+
+  const defToken = isSourceSeriesToken(def.default);
+  const valToken = isSourceSeriesToken(def.value);
+
+  // Wrong type but series token preserved (open/high/low/close/…)
+  if (defToken || valToken) {
+    const token = String(defToken ? def.default : def.value)
+      .trim()
+      .toLowerCase();
+    return withSourceDefaults({
+      ...def,
+      type: 'source',
+      default: token,
+      value: valToken ? String(def.value).trim().toLowerCase() : token,
+    });
+  }
+
+  // float/int + Source-like title + numeric bar value (classic mis-export)
+  const numericish =
+    isResolvedNumeric(def.default) || isResolvedNumeric(def.value);
+  const scalarType =
+    def.type === 'float' ||
+    def.type === 'int' ||
+    def.type === 'unknown' ||
+    def.type === 'price';
+  if (
+    scalarType &&
+    numericish &&
+    titleLooksLikeSourceSelector(def.title, def.id)
+  ) {
+    return withSourceDefaults({
+      ...def,
+      type: 'source',
+      default: 'close',
+      value: 'close',
+    });
+  }
+
+  return def;
 }
 
 const CALL_RE =
@@ -319,21 +448,36 @@ export function parseScriptInputs(source: string): ScriptInputDef[] {
     }
     seen.add(id);
 
+    let resolvedType: ScriptInputType = type;
+    if (type === 'unknown') {
+      // Bare `input(close, "Source")` — series token → source (not string/float)
+      if (isSourceSeriesToken(defval) || (defRaw != null && isSourceSeriesToken(defRaw))) {
+        resolvedType = 'source';
+      } else if (typeof defval === 'boolean') {
+        resolvedType = 'bool';
+      } else if (typeof defval === 'number') {
+        resolvedType = Number.isInteger(defval) ? 'int' : 'float';
+      } else {
+        resolvedType = 'string';
+      }
+    }
+
+    const finalDefault =
+      resolvedType === 'source' && isSourceSeriesToken(defval)
+        ? String(defval).trim().toLowerCase()
+        : defval;
+
+    if (resolvedType === 'source' && !options?.length) {
+      options = parseOptions(kw(args, 'options'));
+    }
+
     out.push(
-      withSourceDefaults({
+      recoverSourceType({
         id,
         title: title || id,
-        type: type === 'unknown' && typeof defval === 'boolean'
-          ? 'bool'
-          : type === 'unknown' && typeof defval === 'number'
-            ? Number.isInteger(defval)
-              ? 'int'
-              : 'float'
-            : type === 'unknown'
-              ? 'string'
-              : type,
-        default: defval,
-        value: defval,
+        type: resolvedType,
+        default: finalDefault,
+        value: finalDefault,
         min: min ?? null,
         max: max ?? null,
         step: step ?? null,
@@ -363,7 +507,7 @@ export function normalizeEngineInputs(raw: unknown): ScriptInputDef[] {
     seen.add(id);
     const type = mapType(String(r.type || 'unknown'));
     out.push(
-      withSourceDefaults({
+      recoverSourceType({
         id,
         title,
         type,
@@ -384,6 +528,7 @@ export function normalizeEngineInputs(raw: unknown): ScriptInputDef[] {
 
 /**
  * Merge source parse + engine export; engine wins on type/min/max when titles match.
+ * Source type from either side is preserved when the other side mis-typed a series input.
  */
 export function resolveScriptInputs(
   source: string,
@@ -401,7 +546,43 @@ export function resolveScriptInputs(
     // Prefer non-empty options from either side (engine may omit source enums)
     const options =
       e.options?.length ? e.options : s.options?.length ? s.options : undefined;
-    return withSourceDefaults({
+
+    // Engine float + script source (or recovered): keep series selector UX
+    const preferSource =
+      s.type === 'source' ||
+      e.type === 'source' ||
+      (s.type !== 'source' &&
+        e.type !== 'source' &&
+        titleLooksLikeSourceSelector(s.title, s.id) &&
+        (isResolvedNumeric(e.value) || isResolvedNumeric(e.default)));
+
+    if (preferSource && (s.type === 'source' || e.type === 'source' || isResolvedNumeric(e.value) || isResolvedNumeric(e.default))) {
+      const tokenDefault = isSourceSeriesToken(s.default)
+        ? String(s.default).toLowerCase()
+        : isSourceSeriesToken(e.default)
+          ? String(e.default).toLowerCase()
+          : 'close';
+      const tokenValue = isSourceSeriesToken(e.value)
+        ? String(e.value).toLowerCase()
+        : isSourceSeriesToken(s.value)
+          ? String(s.value).toLowerCase()
+          : tokenDefault;
+      return recoverSourceType({
+        ...s,
+        ...e,
+        id: s.id,
+        title: s.title,
+        type: 'source',
+        default: tokenDefault,
+        value: tokenValue,
+        options,
+        min: null,
+        max: null,
+        step: null,
+      });
+    }
+
+    return recoverSourceType({
       ...s,
       ...e,
       id: s.id,
@@ -410,8 +591,8 @@ export function resolveScriptInputs(
       value: e.value ?? s.value ?? s.default,
     });
   });
-  for (const leftover of byTitle.values()) merged.push(withSourceDefaults(leftover));
-  return merged.map(withSourceDefaults);
+  for (const leftover of byTitle.values()) merged.push(recoverSourceType(leftover));
+  return merged.map(recoverSourceType);
 }
 
 /** Apply override map (keyed by title or id) onto defs for form initial values. */

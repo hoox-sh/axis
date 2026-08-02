@@ -30,6 +30,15 @@
  * | `bar_time` | `time` |
  * | `ohlc[3]` / bar close | `price` |
  *
+ * ## No-fill close telemetry
+ *
+ * Engines may emit a `kind: "close"` event for every `strategy.close(..., when=cond)`
+ * evaluation, including when `when` is false or the account is flat. Those
+ * payloads carry **`qty: 0`** (no real fill). {@link normalizeStrategyEvents}
+ * drops them so the strategy tester, event list, and chart markers stay free
+ * of thousands of phantom exits. Events with missing `qty` are kept for
+ * older payloads that omit the field on real fills.
+ *
  * Also exports {@link eventsToMarkers}, {@link buildEquityCurve}, exit-id
  * matching, and kind rank for stable sort order.
  *
@@ -42,7 +51,10 @@ import type { StrategyEvent } from './strategy';
 export interface NormalizeOptions {
   /** OHLCV bars for price lookup when event.ohlc is empty */
   bars?: Bar[];
-  /** Skip pending `order` / cancel noise for markers (default true for markers) */
+  /**
+   * When false, drop pending `order` / `cancel` / `cancel_all` (markers path).
+   * Default true so the Results event list still shows order telemetry.
+   */
   includeOrders?: boolean;
 }
 
@@ -135,6 +147,12 @@ export function normalizeStrategyEvent(
 
   const fromEntry =
     r.from_entry ?? r.fromEntry ?? r.entry_id ?? r.entryId ?? undefined;
+  const qty =
+    typeof r.qty === 'number' && Number.isFinite(r.qty)
+      ? r.qty
+      : r.qty != null && Number.isFinite(Number(r.qty))
+        ? Number(r.qty)
+        : undefined;
 
   return {
     ...r,
@@ -147,13 +165,38 @@ export function normalizeStrategyEvent(
     bar_time: typeof r.bar_time === 'number' ? alignTimeToBars(r.bar_time, opts.bars) : time,
     bar_index: typeof r.bar_index === 'number' ? r.bar_index : undefined,
     price,
+    qty,
     id: r.id != null ? String(r.id) : undefined,
     // strategy.exit(id, from_entry) — keep entry key for pairing
     from_entry: fromEntry != null ? String(fromEntry) : undefined,
   };
 }
 
-/** Normalize an array of raw events; filters order noise when `includeOrders` is false. */
+/**
+ * Engine no-fill close/exit: `strategy.close` / exit evaluated with no position
+ * or when=false. Explicit qty ≤ 0 means nothing filled — drop before pairing
+ * and markers. Missing qty is *not* treated as no-fill (legacy payloads).
+ */
+export function isNoFillCloseEvent(ev: StrategyEvent | Record<string, unknown>): boolean {
+  const kind = String(
+    (ev as StrategyEvent).type ||
+      (ev as StrategyEvent).kind ||
+      (ev as StrategyEvent).event ||
+      '',
+  ).toLowerCase();
+  const isCloseOrExit =
+    kind.includes('close') ||
+    kind.includes('exit') ||
+    kind === 'closelong' ||
+    kind === 'closeshort';
+  if (!isCloseOrExit) return false;
+  const raw = (ev as Record<string, unknown>).qty;
+  if (raw == null || raw === '') return false;
+  const qty = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(qty) && qty <= 0;
+}
+
+/** Normalize an array of raw events; filters order noise and no-fill closes. */
 export function normalizeStrategyEvents(
   events: unknown[] | undefined | null,
   opts: NormalizeOptions = {},
@@ -166,6 +209,9 @@ export function normalizeStrategyEvents(
     const n = normalizeStrategyEvent(ev as Record<string, unknown>, opts);
     const kind = String(n.type || n.kind || '').toLowerCase();
     if (!includeOrders && (kind === 'order' || kind.startsWith('cancel'))) continue;
+    // Drop strategy.close/exit telemetry with qty=0 (no real fill) so report,
+    // markers, and the Results event list stay free of phantom exits.
+    if (isNoFillCloseEvent(n)) continue;
     out.push(n);
   }
   return out;
@@ -248,9 +294,14 @@ export function eventsToMarkers(events: StrategyEvent[]): TradeMarker[] {
         text: id || (isShort ? 'S' : 'L'),
       });
     } else if (kind.includes('close') || kind.includes('exit')) {
+      // qty=0 no-fill (normalize usually drops these); never invent exit markers.
+      if (isNoFillCloseEvent(ev)) continue;
+      // Unpaired close spam without qty: skip when nothing is open.
+      if (openDir.size === 0) continue;
+
       const matchId = resolveExitMatchId(ev);
       const isCloseAll = kind === 'close_all' || kind.includes('close_all') || kind === 'closeall';
-      if (isCloseAll && openDir.size > 0) {
+      if (isCloseAll) {
         // One exit marker; use first open dir for arrow sense, then clear all
         const firstDir = openDir.values().next().value || dir || 'long';
         const isShort = String(firstDir).includes('short');
@@ -270,9 +321,11 @@ export function eventsToMarkers(events: StrategyEvent[]): TradeMarker[] {
         } else if (open) {
           openDir.delete(matchId);
         } else if (!open) {
-          open = openDir.get(id || '_default') || openDir.get('_default') || dir || 'long';
-          openDir.delete(id || '_default');
+          open = openDir.get(id || '_default') || openDir.get('_default');
+          if (open) openDir.delete(id || '_default');
         }
+        // No matching open → skip marker (do not invent long exits when flat)
+        if (!open) continue;
         const isShort = String(open).includes('short');
         markers.push({
           time: t,

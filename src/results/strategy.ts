@@ -26,7 +26,9 @@
  *
  * Accepts both Pro API parity events (`kind` / `bar_time` / `direction` / `ohlc`)
  * and legacy UI fields (`type` / `time` / `dir` / `price`). Pass `bars` for
- * price fill when `ohlc` is empty.
+ * price fill when `ohlc` is empty. Close/exit events with explicit **`qty: 0`**
+ * (no-fill `strategy.close` telemetry) are dropped in normalize so sole-open
+ * pairing cannot invent trades from spam.
  *
  * ## Public API
  *
@@ -58,6 +60,11 @@ export interface StrategyEvent {
   bar_time?: number;
   bar_index?: number;
   ohlc?: number[];
+  /**
+   * Filled quantity from the engine. Explicit `0` on close/exit means no fill
+   * (`strategy.close` when=false / flat) and is dropped by normalize.
+   */
+  qty?: number;
   /** strategy.exit from_entry — preferred over exit order id when pairing */
   from_entry?: string;
   entry_id?: string;

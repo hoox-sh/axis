@@ -32,8 +32,8 @@
  * - Subscribe to editor-bridge (popout run/doc/reattach) and panel window bridge
  *
  * ## Drag-and-drop
- * Dropping `.pine` / `.pinescript` files anywhere on the shell saves them to the
- * active script library and opens the first file in the editor.
+ * Dropping `.pyne` / `.pine` / `.pinescript` files anywhere on the shell saves
+ * them to the active script library and opens the first file in the editor.
  *
  * Built-ins register at module load (`registerBuiltins`) before first paint.
  */
@@ -326,8 +326,8 @@ export const App: Component = () => {
           .map((f) => f.name)
           .slice(0, 3)
           .join(', ');
-        setStatus('error', `Not a Pine script (need .pine / .pinescript): ${names}`);
-        appendLog('warn', `Ignored non-pine drop: ${names}`, 'library');
+        setStatus('error', `Not a PYNE script (need .pyne / .pine / .pinescript): ${names}`);
+        appendLog('warn', `Ignored non-script drop: ${names}`, 'library');
         return;
       }
       void handlePineImport(pine);
@@ -457,7 +457,7 @@ export const App: Component = () => {
         onOpenPlugins={() => setPluginsOpen(true)}
       />
 
-      {/* Drop .pine / .pinescript files anywhere → script library */}
+      {/* Drop .pyne / .pine / .pinescript files anywhere → script library */}
       <Show when={pineDropActive()}>
         <div
           class="absolute inset-0 z-[900] flex items-center justify-center pointer-events-none bg-void/75 backdrop-blur-[2px]"
@@ -469,7 +469,7 @@ export const App: Component = () => {
               Drop to add to script library
             </div>
             <div class="text-text-dim text-[11px] font-mono">
-              .pine · .pinescript
+              .pyne · .pine · .pinescript
             </div>
           </div>
         </div>

@@ -4,7 +4,7 @@
  */
 
 /**
- * Unit tests for .pine file → script library import helpers.
+ * Unit tests for .pyne / .pine file → script library import helpers.
  */
 
 import { describe, expect, it, beforeEach } from 'bun:test';
@@ -47,11 +47,15 @@ function fakeFile(name: string, content: string): File {
 }
 
 describe('isPineFileName', () => {
-  it('accepts .pine and .pinescript (case-insensitive)', () => {
+  it('accepts .pyne, .pine, and .pinescript (case-insensitive)', () => {
+    expect(isPineFileName('rsi.pyne')).toBe(true);
+    expect(isPineFileName('RSI.PYNE')).toBe(true);
     expect(isPineFileName('rsi.pine')).toBe(true);
     expect(isPineFileName('MACD.PINE')).toBe(true);
     expect(isPineFileName('x.pinescript')).toBe(true);
     expect(isPineFileName('Y.PineScript')).toBe(true);
+    expect(isPineFileName('v.pinev5')).toBe(true);
+    expect(isPineFileName('v.pinev6')).toBe(true);
   });
 
   it('rejects other extensions', () => {
@@ -64,6 +68,7 @@ describe('isPineFileName', () => {
 
 describe('scriptNameFromFileName', () => {
   it('strips path and extension', () => {
+    expect(scriptNameFromFileName('rsi.pyne')).toBe('rsi');
     expect(scriptNameFromFileName('rsi.pine')).toBe('rsi');
     expect(scriptNameFromFileName('/tmp/foo/bar.pinescript')).toBe('bar');
     expect(scriptNameFromFileName('C:\\lib\\MACD.PINE')).toBe('MACD');
@@ -71,20 +76,22 @@ describe('scriptNameFromFileName', () => {
 
   it('falls back when empty after strip', () => {
     expect(scriptNameFromFileName('.pine')).toBe('Imported');
+    expect(scriptNameFromFileName('.pyne')).toBe('Imported');
     expect(scriptNameFromFileName('')).toBe('Imported');
   });
 });
 
 describe('filterPineFiles', () => {
-  it('keeps only pine sources in order', () => {
+  it('keeps only pyne/pine sources in order', () => {
     const files = [
       fakeFile('a.json', '[]'),
+      fakeFile('rsi.pyne', 'plot(1)'),
       fakeFile('rsi.pine', 'plot(1)'),
       fakeFile('notes.txt', 'x'),
       fakeFile('macd.pinescript', 'plot(2)'),
     ];
     const out = filterPineFiles(files);
-    expect(out.map((f) => f.name)).toEqual(['rsi.pine', 'macd.pinescript']);
+    expect(out.map((f) => f.name)).toEqual(['rsi.pyne', 'rsi.pine', 'macd.pinescript']);
   });
 });
 
