@@ -36,7 +36,7 @@
  */
 
 // AXIS void palette (aligned with series-factory.ts)
-const TV = {
+const VOID = {
     bg: '#0a0b10',
     grid: 'rgba(140, 130, 180, 0.07)',
     text: '#c8cad4',
@@ -189,8 +189,8 @@ function wireDataWindow() {
 
 function commonOptions() {
     return {
-        layout: { background: { type: 'solid', color: TV.bg }, textColor: TV.text },
-        grid: { vertLines: { color: TV.grid }, horzLines: { color: TV.grid } },
+        layout: { background: { type: 'solid', color: VOID.bg }, textColor: VOID.text },
+        grid: { vertLines: { color: VOID.grid }, horzLines: { color: VOID.grid } },
         rightPriceScale: { borderColor: '#485c7b' },
         timeScale: { borderColor: '#485c7b', timeVisible: true, secondsVisible: false },
     };
@@ -209,10 +209,10 @@ export function initChart({ mainEl, volumeEl, indicatorEl, equityEl }) {
         crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
     });
     panes.main.candle = panes.main.chart.addCandlestickSeries({
-        upColor: TV.up, downColor: TV.down, borderDownColor: TV.down, borderUpColor: TV.up,
-        wickDownColor: TV.down, wickUpColor: TV.up,
+        upColor: VOID.up, downColor: VOID.down, borderDownColor: VOID.down, borderUpColor: VOID.up,
+        wickDownColor: VOID.down, wickUpColor: VOID.up,
     });
-    registerSeriesLabel(panes.main.candle, 'Price', TV.up, 'main');
+    registerSeriesLabel(panes.main.candle, 'Price', VOID.up, 'main');
 
     // Volume sub-pane
     panes.volume.chart = LightweightCharts.createChart(volumeEl, {
@@ -222,7 +222,7 @@ export function initChart({ mainEl, volumeEl, indicatorEl, equityEl }) {
     panes.volume.hist = panes.volume.chart.addHistogramSeries({
         priceFormat: { type: 'volume' },
         priceScaleId: '',
-        color: TV.up,
+        color: VOID.up,
     });
     panes.volume.hist.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
 

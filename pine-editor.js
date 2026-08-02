@@ -166,7 +166,7 @@ const pineLanguage = StreamLanguage.define({
     },
 });
 
-// High-contrast One-Dark-ish palette (TV dark bg)
+// High-contrast One-Dark-ish palette (void dark bg)
 const pineHighlight = HighlightStyle.define([
     { tag: tags.keyword, color: '#c678dd', fontWeight: '600' },
     { tag: tags.atom, color: '#d19a66' },

@@ -45,7 +45,7 @@ const EXPAND_STUB_RE = /^\s*Expand\s*\(\s*(\d+)\s*lines?\s*\)?\s*$/i;
 /** Markdown fence leftover from docs/community scrapes. */
 const FENCE_RE = /^\s*```/;
 
-/** Common TV / docs chrome lines after real pine. */
+/** Common TradingView community / docs chrome lines after real pine. */
 const UI_CHROME_RE =
   /^\s*(Copy(\s+code)?|Copied|Pine\s+Script\s*®?|Share|Open\s+in\s+editor)\s*$/i;
 
@@ -102,7 +102,7 @@ export function dataTransferHasPineFiles(dt: DataTransfer | null | undefined): b
   return types.includes('Files');
 }
 
-/** Result of stripping TV / docs chrome from raw file text. */
+/** Result of stripping TradingView community / docs chrome from raw file text. */
 export interface SanitizePineResult {
   /** Cleaned source ready for the library / editor. */
   content: string;
@@ -176,7 +176,7 @@ export interface ImportedPineScript {
   meta: ScriptMeta;
   /** Full file text as written to the library (use this to open editor tabs). */
   content: string;
-  /** Present when TV collapse chrome indicated missing lines. */
+  /** Present when TradingView community collapse chrome indicated missing lines. */
   missingLines?: number;
   warnings?: string[];
 }

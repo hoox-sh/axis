@@ -144,8 +144,8 @@ function open() {
                         <label class="settings-field">
                             <span class="settings-label">Theme</span>
                             <select class="settings-input" id="theme-select">
-                                <option value="dark">TV Dark (default)</option>
-                                <option value="light">TV Light</option>
+                                <option value="dark">Void Dark (default)</option>
+                                <option value="light">Light</option>
                             </select>
                         </label>
                     </div>

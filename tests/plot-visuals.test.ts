@@ -5,7 +5,7 @@
 
 /**
  * Plot/series → chart visuals (histograms, shapes→markers, kind split).
- * Invariant: truthy plot values and shape maps stay TV-compatible for PaneManager.
+ * Invariant: truthy plot values and shape maps stay chart-compatible for PaneManager.
  */
 
 import './setup';

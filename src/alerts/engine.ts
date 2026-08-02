@@ -102,7 +102,7 @@ export function crossesLevel(prev: number, price: number, level: number): boolea
 
   if (wasBelow && (nowAbove || nowEqual)) return true;
   if (wasAbove && (nowBelow || nowEqual)) return true;
-  // Was exactly on level: only fire if we leave and ... no — classic TV "crossing" fires when
+  // Was exactly on level: only fire if we leave and ... no — classic level-crossing fires when
   // moving through the level. Starting ON the level does not re-fire until we leave and re-cross.
   if (prev === level) return false;
   return false;

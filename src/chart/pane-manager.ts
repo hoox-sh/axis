@@ -58,7 +58,7 @@ import {
   createBgcolorSeries,
   PLOT_PALETTE,
   RIGHT_PRICE_SCALE_WIDTH,
-  TV,
+  VOID,
 } from './series-factory';
 import {
   mapBarUpdate,
@@ -272,7 +272,7 @@ export class PaneManager {
         ? {
             visible: false,
             borderVisible: false,
-            borderColor: TV.border,
+            borderColor: VOID.border,
             timeVisible: false,
             ticksVisible: false,
             minimumHeight: 0,
@@ -299,9 +299,9 @@ export class PaneManager {
           }
         : undefined,
       rightPriceScale: {
-        borderColor: TV.border,
+        borderColor: VOID.border,
         borderVisible: true,
-        textColor: TV.textDim,
+        textColor: VOID.textDim,
         minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
         scaleMargins:
           type === 'volume'
@@ -367,8 +367,8 @@ export class PaneManager {
         pane.chart.priceScale('right').applyOptions({
           minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
           borderVisible: true,
-          borderColor: TV.border,
-          textColor: TV.textDim,
+          borderColor: VOID.border,
+          textColor: VOID.textDim,
         });
       } catch {
         /* ignore */
@@ -752,12 +752,12 @@ export class PaneManager {
     let pane = this.panes.get('equity');
     if (!pane) {
       pane = this.createPane('equity', 'equity', 'Equity', 100);
-      pane.series['equity'] = createAreaSeries(pane.chart, 'Equity', TV.indigo);
+      pane.series['equity'] = createAreaSeries(pane.chart, 'Equity', VOID.indigo);
       this.syncTimeScales();
     } else {
       this.setVisible('equity', true);
       if (!pane.series['equity']) {
-        pane.series['equity'] = createAreaSeries(pane.chart, 'Equity', TV.indigo);
+        pane.series['equity'] = createAreaSeries(pane.chart, 'Equity', VOID.indigo);
       }
     }
 
@@ -957,7 +957,7 @@ export class PaneManager {
     }
   }
 
-  /** Toggle auto-scale on the price pane (TV [A]). Re-enabling also fits content. */
+  /** Toggle auto-scale on the price pane ([A]). Re-enabling also fits content. */
   togglePriceAutoScale(): boolean {
     this.applyPriceScaleOptions({ autoScale: !this.priceAutoScale });
     if (this.priceAutoScale) {
@@ -966,7 +966,7 @@ export class PaneManager {
     return this.priceAutoScale;
   }
 
-  /** Toggle logarithmic price scale (TV [L]). */
+  /** Toggle logarithmic price scale ([L]). */
   togglePriceLogScale(): boolean {
     this.applyPriceScaleOptions({ logScale: !this.priceLogScale });
     return this.priceLogScale;

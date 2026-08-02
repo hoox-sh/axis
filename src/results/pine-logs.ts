@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * TV-style Pine Logs helpers — normalize engine log payloads into a stable
+ * Pine Logs helpers — normalize engine log payloads into a stable
  * {@link PineLogEntry} list, filter by level, and export TSV for clipboard.
  *
  * Accepts top-level `logs`, `meta.logs`, arrays of `[level, msg]` tuples, or

@@ -18,7 +18,7 @@ beforeAll(() => {
 
 // Dynamic import after mock
 const {
-  TV,
+  VOID,
   PLOT_PALETTE,
   createBaseChart,
   createCandleSeries,
@@ -35,7 +35,7 @@ const {
 
 describe('series-factory', () => {
   it('exports brand tokens and palette', () => {
-    expect(TV.bg).toMatch(/^#/);
+    expect(VOID.bg).toMatch(/^#/);
     expect(PLOT_PALETTE.length).toBeGreaterThan(3);
   });
 

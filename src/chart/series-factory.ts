@@ -23,7 +23,7 @@
  * Shared by {@link PaneManager}: base chart options, main price series for
  * each {@link ChartType} (candles, hollow, bars, line, area, baseline,
  * Heikin-Ashi host), overlay line/area, histogram (bgcolor) helpers, and
- * brand colors ({@link TV}, {@link PLOT_PALETTE}). Right price-scale width
+ * brand colors ({@link VOID}, {@link PLOT_PALETTE}). Right price-scale width
  * is fixed so panes align.
  *
  * @module chart/series-factory
@@ -45,8 +45,14 @@ import {
 } from 'lightweight-charts';
 import type { ChartType } from './chart-type';
 
-/** Void canvas + void indigo brand — matches landing pack + index.css tokens. */
-export const TV = {
+/**
+ * AXIS **void** chart palette (brand tokens for Lightweight Charts).
+ *
+ * **Not a TradingView® or Pine API.** There is no `TV.set` / `TradingView.*`
+ * surface in AXIS. Prefer this name over the legacy `TV` alias so agents do
+ * not invent fictional `TV.*` chart APIs.
+ */
+export const VOID = {
   bg: '#0a0b10',
   panel: '#111218',
   elev: '#171821',
@@ -66,6 +72,12 @@ export const TV = {
   green: '#8ef5a8',
   orange: '#e8a03a',
 };
+
+/**
+ * @deprecated Use {@link VOID}. Kept as an alias only — **not** TradingView®.
+ * Do not add methods or treat as a runtime API.
+ */
+export const TV = VOID;
 
 /** Plot colors: void indigo, lightgreen, orange, then muted fillers */
 export const PLOT_PALETTE = [
@@ -92,29 +104,29 @@ export const RIGHT_PRICE_SCALE_WIDTH = 72;
 export function createBaseChart(container: HTMLElement, options?: Record<string, unknown>): IChartApi {
   return createChart(container, {
     layout: {
-      background: { type: ColorType.Solid, color: TV.bg },
-      textColor: TV.textDim,
+      background: { type: ColorType.Solid, color: VOID.bg },
+      textColor: VOID.textDim,
       fontSize: 11,
       attributionLogo: false,
     },
     grid: {
-      vertLines: { color: TV.grid },
-      horzLines: { color: TV.grid },
+      vertLines: { color: VOID.grid },
+      horzLines: { color: VOID.grid },
     },
     rightPriceScale: {
-      borderColor: TV.border,
+      borderColor: VOID.border,
       borderVisible: true,
-      textColor: TV.textDim,
+      textColor: VOID.textDim,
       entireTextOnly: false,
       minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
       scaleMargins: { top: 0.06, bottom: 0.06 },
     },
     leftPriceScale: {
       visible: false,
-      borderColor: TV.border,
+      borderColor: VOID.border,
     },
     timeScale: {
-      borderColor: TV.border,
+      borderColor: VOID.border,
       borderVisible: true,
       timeVisible: true,
       secondsVisible: false,
@@ -127,16 +139,16 @@ export function createBaseChart(container: HTMLElement, options?: Record<string,
     crosshair: {
       mode: CrosshairMode.Normal,
       vertLine: {
-        color: TV.indigoSoft,
+        color: VOID.indigoSoft,
         width: 1 as LineWidth,
         style: 2,
-        labelBackgroundColor: TV.elev,
+        labelBackgroundColor: VOID.elev,
       },
       horzLine: {
-        color: TV.indigoSoft,
+        color: VOID.indigoSoft,
         width: 1 as LineWidth,
         style: 2,
-        labelBackgroundColor: TV.elev,
+        labelBackgroundColor: VOID.elev,
       },
     },
     handleScroll: { vertTouchDrag: true },
@@ -147,15 +159,15 @@ export function createBaseChart(container: HTMLElement, options?: Record<string,
 const PRICE_SERIES_COMMON = {
   lastValueVisible: true,
   priceLineVisible: true,
-  priceLineColor: TV.indigoSoft,
+  priceLineColor: VOID.indigoSoft,
   priceLineWidth: 1 as LineWidth,
   priceLineStyle: 2,
 };
 
 function alignRightScale(chart: IChartApi) {
   chart.priceScale('right').applyOptions({
-    borderColor: TV.border,
-    textColor: TV.textDim,
+    borderColor: VOID.border,
+    textColor: VOID.textDim,
     minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
   });
 }
@@ -164,12 +176,12 @@ function alignRightScale(chart: IChartApi) {
 export function createCandleSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Candlestick'> {
   const opts = {
     ...PRICE_SERIES_COMMON,
-    upColor: TV.up,
-    downColor: TV.down,
-    borderDownColor: TV.down,
-    borderUpColor: TV.up,
-    wickDownColor: TV.down,
-    wickUpColor: TV.up,
+    upColor: VOID.up,
+    downColor: VOID.down,
+    borderDownColor: VOID.down,
+    borderUpColor: VOID.up,
+    wickDownColor: VOID.down,
+    wickUpColor: VOID.up,
   };
   const series = paneIndex !== undefined
     ? chart.addSeries(CandlestickSeries, opts, paneIndex)
@@ -189,12 +201,12 @@ export function createHollowCandleSeries(
   const opts = {
     ...PRICE_SERIES_COMMON,
     upColor: 'rgba(0,0,0,0)',
-    downColor: TV.down,
+    downColor: VOID.down,
     borderVisible: true,
-    borderUpColor: TV.up,
-    borderDownColor: TV.down,
-    wickUpColor: TV.up,
-    wickDownColor: TV.down,
+    borderUpColor: VOID.up,
+    borderDownColor: VOID.down,
+    wickUpColor: VOID.up,
+    wickDownColor: VOID.down,
   };
   const series = paneIndex !== undefined
     ? chart.addSeries(CandlestickSeries, opts, paneIndex)
@@ -207,8 +219,8 @@ export function createHollowCandleSeries(
 export function createBarSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Bar'> {
   const opts = {
     ...PRICE_SERIES_COMMON,
-    upColor: TV.up,
-    downColor: TV.down,
+    upColor: VOID.up,
+    downColor: VOID.down,
     openVisible: true,
     thinBars: true,
   };
@@ -223,12 +235,12 @@ export function createBarSeries(chart: IChartApi, paneIndex?: number): ISeriesAp
 export function createPriceLineSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Line'> {
   const opts = {
     ...PRICE_SERIES_COMMON,
-    color: TV.indigo,
+    color: VOID.indigo,
     lineWidth: 2 as LineWidth,
     crosshairMarkerVisible: true,
     crosshairMarkerRadius: 3,
-    crosshairMarkerBorderColor: TV.bg,
-    crosshairMarkerBackgroundColor: TV.indigo,
+    crosshairMarkerBorderColor: VOID.bg,
+    crosshairMarkerBackgroundColor: VOID.indigo,
   };
   const series = paneIndex !== undefined
     ? chart.addSeries(LineSeries, opts, paneIndex)
@@ -241,14 +253,14 @@ export function createPriceLineSeries(chart: IChartApi, paneIndex?: number): ISe
 export function createPriceAreaSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Area'> {
   const opts = {
     ...PRICE_SERIES_COMMON,
-    lineColor: TV.indigo,
+    lineColor: VOID.indigo,
     topColor: 'rgba(147, 159, 255, 0.28)',
     bottomColor: 'rgba(147, 159, 255, 0.02)',
     lineWidth: 2 as LineWidth,
     crosshairMarkerVisible: true,
     crosshairMarkerRadius: 3,
-    crosshairMarkerBorderColor: TV.bg,
-    crosshairMarkerBackgroundColor: TV.indigo,
+    crosshairMarkerBorderColor: VOID.bg,
+    crosshairMarkerBackgroundColor: VOID.indigo,
   };
   const series = paneIndex !== undefined
     ? chart.addSeries(AreaSeries, opts, paneIndex)
@@ -269,17 +281,17 @@ export function createPriceBaselineSeries(
   const opts = {
     ...PRICE_SERIES_COMMON,
     baseValue: { type: 'price' as const, price: basePrice },
-    topLineColor: TV.up,
+    topLineColor: VOID.up,
     topFillColor1: 'rgba(94, 207, 138, 0.28)',
     topFillColor2: 'rgba(94, 207, 138, 0.04)',
-    bottomLineColor: TV.down,
+    bottomLineColor: VOID.down,
     bottomFillColor1: 'rgba(232, 93, 76, 0.04)',
     bottomFillColor2: 'rgba(232, 93, 76, 0.28)',
     lineWidth: 2 as LineWidth,
     crosshairMarkerVisible: true,
     crosshairMarkerRadius: 3,
-    crosshairMarkerBorderColor: TV.bg,
-    crosshairMarkerBackgroundColor: TV.indigo,
+    crosshairMarkerBorderColor: VOID.bg,
+    crosshairMarkerBackgroundColor: VOID.indigo,
   };
   const series = paneIndex !== undefined
     ? chart.addSeries(BaselineSeries, opts, paneIndex)
@@ -331,8 +343,8 @@ export function createVolumeSeries(chart: IChartApi, paneIndex?: number): ISerie
   chart.priceScale('right').applyOptions({
     scaleMargins: { top: 0.12, bottom: 0.02 },
     borderVisible: true,
-    borderColor: TV.border,
-    textColor: TV.textDim,
+    borderColor: VOID.border,
+    textColor: VOID.textDim,
     minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
   });
   return series;
@@ -389,7 +401,7 @@ export function createLineSeries(
     title: name,
     crosshairMarkerVisible: true,
     crosshairMarkerRadius: 3,
-    crosshairMarkerBorderColor: TV.bg,
+    crosshairMarkerBorderColor: VOID.bg,
     crosshairMarkerBackgroundColor: color,
   };
   return paneIndex !== undefined
@@ -401,7 +413,7 @@ export function createLineSeries(
 export function createAreaSeries(
   chart: IChartApi,
   name: string,
-  color = TV.indigo,
+  color = VOID.indigo,
   paneIndex?: number,
 ): ISeriesApi<'Area'> {
   const opts = {
@@ -414,7 +426,7 @@ export function createAreaSeries(
     title: name,
     crosshairMarkerVisible: true,
     crosshairMarkerRadius: 3,
-    crosshairMarkerBorderColor: TV.bg,
+    crosshairMarkerBorderColor: VOID.bg,
     crosshairMarkerBackgroundColor: color,
   };
   return paneIndex !== undefined

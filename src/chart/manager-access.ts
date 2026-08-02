@@ -28,7 +28,7 @@
 
 import type { PaneManager } from './pane-manager';
 import { DrawingLayer } from './drawing-layer';
-import { createPriceSeries, createVolumeSeries, TV } from './series-factory';
+import { createPriceSeries, createVolumeSeries, VOID } from './series-factory';
 import {
   mapBarsToPriceData,
   lastBarDirection,
@@ -238,7 +238,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
     const dir = lastBarDirection(bars, chartType);
     if (dir) {
       pricePane.series['candle'].applyOptions({
-        priceLineColor: dir === 'up' ? TV.up : TV.down,
+        priceLineColor: dir === 'up' ? VOID.up : VOID.down,
       });
     }
     if (fit) {

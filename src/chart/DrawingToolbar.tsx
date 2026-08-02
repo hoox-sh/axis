@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * TV-like left drawing rail for AXIS charts.
+ * Chart-style left drawing rail for AXIS (UX parity with common charting UIs).
  *
  * ## Layout
  * - Vertical **tool groups** from {@link TOOL_GROUPS} (select / lines / fib / …)

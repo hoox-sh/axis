@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * TV-style price-scale toggles on the main chart (bottom-right of price pane):
+ * Price-scale toggles on the main chart (bottom-right of price pane):
  * **[A]** auto-scale · **[L]** logarithmic.
  *
  * @module chart/ChartScaleControls

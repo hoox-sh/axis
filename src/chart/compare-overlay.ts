@@ -30,7 +30,7 @@
 import type { ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 import type { Bar } from '../store/types';
 import type { PaneManager } from './pane-manager';
-import { createLineSeries, TV } from './series-factory';
+import { createLineSeries, VOID } from './series-factory';
 import { getSource } from '../sources/catalog';
 import { pluginKey } from '../plugins/types';
 import { clampHistoryBars, store } from '../store';
@@ -41,9 +41,9 @@ export const COMPARE_SERIES_KEY = 'compare';
 export const COMPARE_MAIN_PCT_KEY = 'compare_main_pct';
 
 /** Default stroke for the compare series (void orange). */
-export const COMPARE_COLOR = TV.orange;
+export const COMPARE_COLOR = VOID.orange;
 /** Main series % companion when dual-normalizing. */
-export const COMPARE_MAIN_PCT_COLOR = TV.indigo;
+export const COMPARE_MAIN_PCT_COLOR = VOID.indigo;
 
 /**
  * Built-in left price scale for absolute / solo-% compare so the main right
@@ -254,8 +254,8 @@ function configureCompareScale(
     pane.chart.priceScale(scaleId).applyOptions({
       visible: true,
       borderVisible: true,
-      borderColor: TV.border,
-      textColor: TV.textDim,
+      borderColor: VOID.border,
+      textColor: VOID.textDim,
       scaleMargins: { top: 0.08, bottom: 0.12 },
       entireTextOnly: false,
       minimumWidth: mode === 'percent' ? 56 : 72,

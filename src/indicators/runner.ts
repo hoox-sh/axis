@@ -101,7 +101,7 @@ type PineLogLine = { level?: string; message?: string; [k: string]: unknown };
  * Resolve Pine `overlay` for pane routing.
  * - explicit false / 0 / "false" → sub-pane
  * - explicit true → price pane
- * - missing: indicator → sub-pane, strategy (or unknown) → price (TV default)
+ * - missing: indicator → sub-pane, strategy (or unknown) → price (Pine default)
  */
 export function resolveOverlayFlag(
   overlayFlag: unknown,
@@ -115,7 +115,7 @@ export function resolveOverlayFlag(
   }
   const t = (scriptType || '').toLowerCase();
   if (t === 'indicator' || t === 'library') return false;
-  // strategy / blank → overlay on price (TV strategy default)
+  // strategy / blank → overlay on price (Pine strategy default)
   return true;
 }
 

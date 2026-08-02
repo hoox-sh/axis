@@ -55,7 +55,7 @@ export interface ScriptDrawing {
 
 /**
  * Per-type caps from `indicator()` / `strategy()` declaration.
- * TV defaults are 50; hard caps match the Pine reference (500 / 100).
+ * Pine Script™ defaults are 50; hard caps match the language reference (500 / 100).
  */
 export interface DrawingLimits {
   max_lines_count: number;
@@ -166,7 +166,7 @@ export function resolveDrawingLimits(
 }
 
 /**
- * Drop oldest drawings per type when over the declaration caps (TV GC).
+ * Drop oldest drawings per type when over the declaration caps (Pine GC parity).
  * Assumes array order ≈ creation order (engine export / append order).
  * Keeps relative order of surviving objects.
  */

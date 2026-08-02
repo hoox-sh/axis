@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * TV-style drawing toolbar catalog — groups, flyouts, last-tool defaults.
+ * Drawing toolbar catalog — groups, flyouts, last-tool defaults.
  *
  * Maps left-rail groups to {@link DrawingToolId} lists. UI uses this to:
  * - Render group buttons in order
