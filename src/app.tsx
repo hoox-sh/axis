@@ -84,11 +84,7 @@ import {
 } from './editor/editor-bridge';
 import { loadSymbolData } from './data/load-symbol';
 import { prefetchPyodideAssets, preloadPyodide } from './engines/catalog';
-import {
-  dataTransferHasPineFiles,
-  filterPineFiles,
-  importPineFiles,
-} from './storage/import-pine-files';
+import { filterPineFiles, importPineFiles } from './storage/import-pine-files';
 import { readScript } from './storage/service';
 
 /** Primary charting workspace component mounted by `index.tsx`. */
@@ -98,7 +94,6 @@ export const App: Component = () => {
   const [catalogTick, setCatalogTick] = createSignal(0);
   /** File drag-over highlight for .pine drop-to-library. */
   const [pineDropActive, setPineDropActive] = createSignal(false);
-  let pineDragDepth = 0;
 
   // Shared mutable ref — PineEditor populates getDoc/setDoc on mount
   const editorRef: {
@@ -107,96 +102,6 @@ export const App: Component = () => {
     loadLibraryDoc?: (doc: string, name?: string, libraryId?: string) => void;
   } = {
     getDoc: () => '',
-  };
-
-  const isFileDrag = (e: DragEvent) => {
-    const types = e.dataTransfer?.types;
-    if (!types) return false;
-    return Array.from(types).includes('Files');
-  };
-
-  const onPineDragEnter = (e: DragEvent) => {
-    if (!isFileDrag(e)) return;
-    e.preventDefault();
-    pineDragDepth += 1;
-    if (dataTransferHasPineFiles(e.dataTransfer)) {
-      setPineDropActive(true);
-    }
-  };
-
-  const onPineDragOver = (e: DragEvent) => {
-    if (!isFileDrag(e)) return;
-    // Always preventDefault on file drags so drop can fire; we filter on drop.
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-    if (!pineDropActive() && dataTransferHasPineFiles(e.dataTransfer)) {
-      setPineDropActive(true);
-    }
-  };
-
-  const onPineDragLeave = (e: DragEvent) => {
-    if (!isFileDrag(e)) return;
-    pineDragDepth = Math.max(0, pineDragDepth - 1);
-    if (pineDragDepth === 0) setPineDropActive(false);
-  };
-
-  const onPineDrop = (e: DragEvent) => {
-    if (!isFileDrag(e)) return;
-    const files = e.dataTransfer?.files;
-    const pine = files ? filterPineFiles(files) : [];
-    pineDragDepth = 0;
-    setPineDropActive(false);
-    if (!pine.length) return; // let non-pine drops pass (browser default)
-
-    e.preventDefault();
-    e.stopPropagation();
-    void (async () => {
-      try {
-        const result = await importPineFiles(pine);
-        const n = result.imported.length;
-        if (n > 0) {
-          const names = result.imported.map((m) => m.name).join(', ');
-          setStatus(
-            'ready',
-            n === 1
-              ? `Saved "${names}" to script library`
-              : `Saved ${n} scripts to library (${names})`,
-          );
-          appendLog(
-            'ok',
-            n === 1
-              ? `Imported pine file → library: ${names}`
-              : `Imported ${n} pine files → library`,
-            'library',
-          );
-          // Load first imported script into the editor
-          const first = result.imported[0]!;
-          try {
-            const doc = await readScript(first.id);
-            if (editorRef.loadLibraryDoc) {
-              editorRef.loadLibraryDoc(doc.content, doc.name, doc.id);
-            } else {
-              editorRef.setDoc?.(doc.content);
-            }
-            setEditorOpen(true);
-          } catch {
-            /* open is best-effort */
-          }
-        }
-        if (result.errors.length) {
-          const msg = result.errors.slice(0, 3).join('; ');
-          setStatus('error', `Pine import: ${msg}`);
-          appendLog('error', `Pine import errors: ${msg}`, 'library');
-        }
-        if (!n && !result.errors.length) {
-          setStatus('error', 'No Pine scripts found in drop');
-        }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        setStatus('error', `Pine import failed: ${msg}`);
-        appendLog('error', `Pine import failed: ${msg}`, 'library');
-      }
-    })();
   };
 
   onMount(() => {
@@ -282,20 +187,148 @@ export const App: Component = () => {
     });
 
     const unsubPanelWin = installPanelWindowBridge();
+
+    /**
+     * Window-level file drop (capture).
+     * Must always preventDefault on dragover+drop of Files — otherwise the
+     * browser navigates away and shows the raw file (default OS drop).
+     * JSX handlers on the root div are not enough: canvas / CodeMirror /
+     * portals often sit outside or swallow events.
+     */
+    const isFileDragEvent = (e: DragEvent): boolean => {
+      const dt = e.dataTransfer;
+      if (!dt) return false;
+      const types = dt.types;
+      if (types) {
+        // DOMStringList or string[] depending on engine
+        if (typeof (types as DOMStringList).contains === 'function') {
+          if ((types as DOMStringList).contains('Files')) return true;
+        }
+        for (let i = 0; i < types.length; i++) {
+          if (types[i] === 'Files') return true;
+        }
+      }
+      return !!(dt.files && dt.files.length > 0);
+    };
+
+    const handlePineImport = async (pine: File[]) => {
+      try {
+        const result = await importPineFiles(pine);
+        const n = result.imported.length;
+        if (n > 0) {
+          const names = result.imported.map((m) => m.name).join(', ');
+          setStatus(
+            'ready',
+            n === 1
+              ? `Saved "${names}" to script library`
+              : `Saved ${n} scripts to library (${names})`,
+          );
+          appendLog(
+            'ok',
+            n === 1
+              ? `Imported pine file → library: ${names}`
+              : `Imported ${n} pine files → library`,
+            'library',
+          );
+          const first = result.imported[0]!;
+          try {
+            const doc = await readScript(first.id);
+            if (editorRef.loadLibraryDoc) {
+              editorRef.loadLibraryDoc(doc.content, doc.name, doc.id);
+            } else {
+              editorRef.setDoc?.(doc.content);
+            }
+            setEditorOpen(true);
+          } catch {
+            /* open is best-effort */
+          }
+        }
+        if (result.errors.length) {
+          const msg = result.errors.slice(0, 3).join('; ');
+          setStatus('error', `Pine import: ${msg}`);
+          appendLog('error', `Pine import errors: ${msg}`, 'library');
+        }
+        if (!n && !result.errors.length) {
+          setStatus('error', 'No Pine scripts found in drop');
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setStatus('error', `Pine import failed: ${msg}`);
+        appendLog('error', `Pine import failed: ${msg}`, 'library');
+      }
+    };
+
+    const onWinDragEnter = (e: DragEvent) => {
+      if (!isFileDragEvent(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setPineDropActive(true);
+    };
+
+    const onWinDragOver = (e: DragEvent) => {
+      if (!isFileDragEvent(e)) return;
+      // Required every dragover tick — without this, drop never becomes a drop
+      // and the browser opens the file as a plain-text navigation.
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      if (!pineDropActive()) setPineDropActive(true);
+    };
+
+    const onWinDragLeave = (e: DragEvent) => {
+      if (!isFileDragEvent(e)) return;
+      // relatedTarget null ≈ left the window
+      const leavingWindow =
+        e.relatedTarget === null ||
+        e.clientX <= 0 ||
+        e.clientY <= 0 ||
+        e.clientX >= window.innerWidth ||
+        e.clientY >= window.innerHeight;
+      if (leavingWindow) setPineDropActive(false);
+    };
+
+    const onWinDrop = (e: DragEvent) => {
+      if (!isFileDragEvent(e)) return;
+      // Always cancel browser file-open navigation for any file drop on AXIS.
+      e.preventDefault();
+      e.stopPropagation();
+      setPineDropActive(false);
+
+      const files = e.dataTransfer?.files;
+      if (!files?.length) return;
+
+      const pine = filterPineFiles(files);
+      if (!pine.length) {
+        const names = Array.from(files)
+          .map((f) => f.name)
+          .slice(0, 3)
+          .join(', ');
+        setStatus('error', `Not a Pine script (need .pine / .pinescript): ${names}`);
+        appendLog('warn', `Ignored non-pine drop: ${names}`, 'library');
+        return;
+      }
+      void handlePineImport(pine);
+    };
+
+    // Capture phase so we run before canvas / CM / nested handlers.
+    const winOpts: AddEventListenerOptions = { capture: true };
+    window.addEventListener('dragenter', onWinDragEnter, winOpts);
+    window.addEventListener('dragover', onWinDragOver, winOpts);
+    window.addEventListener('dragleave', onWinDragLeave, winOpts);
+    window.addEventListener('drop', onWinDrop, winOpts);
+
     onCleanup(() => {
       unsub();
       unsubPanelWin();
+      window.removeEventListener('dragenter', onWinDragEnter, winOpts);
+      window.removeEventListener('dragover', onWinDragOver, winOpts);
+      window.removeEventListener('dragleave', onWinDragLeave, winOpts);
+      window.removeEventListener('drop', onWinDrop, winOpts);
     });
   });
 
   return (
-    <div
-      class="h-screen flex flex-col bg-bg-base text-text overflow-hidden relative"
-      onDragEnter={onPineDragEnter}
-      onDragOver={onPineDragOver}
-      onDragLeave={onPineDragLeave}
-      onDrop={onPineDrop}
-    >
+    <div class="h-screen flex flex-col bg-bg-base text-text overflow-hidden relative">
       <Topbar
         onToggleEditor={() => {
           if (store.editor.mode === 'popout') {
