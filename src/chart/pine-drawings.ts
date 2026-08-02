@@ -338,6 +338,44 @@ export function clampScriptDrawingTimes(
 }
 
 /**
+ * Collapse status-label stacks: when several **labels** share the same time and
+ * the same text (common after `label.new` + weak delete + future-time clamp to
+ * last bar), keep only the **last** of each group.
+ *
+ * Matches chart UX for scripts like:
+ * `lab = label.new(...); label.delete(lab[1])` — one live status chip, not 50
+ * stacked "Sleeping Mode" ghosts. Lines / boxes / polylines are untouched.
+ * Distinct texts at the same bar are kept (multi-label HUD).
+ */
+export function dedupeScriptLabelsAtSameTime(drawings: ScriptDrawing[]): ScriptDrawing[] {
+  if (drawings.length < 2) return drawings;
+
+  // Last occurrence wins per (t1, text) for labels only.
+  const lastByKey = new Map<string, number>();
+  for (let i = 0; i < drawings.length; i++) {
+    const d = drawings[i]!;
+    if (d.type !== 'label') continue;
+    const text = (d.text ?? '').trim();
+    const key = `${d.t1}\0${text}`;
+    lastByKey.set(key, i);
+  }
+  if (lastByKey.size === 0) return drawings;
+
+  const keepLabelIdx = new Set(lastByKey.values());
+  let dropped = 0;
+  const out: ScriptDrawing[] = [];
+  for (let i = 0; i < drawings.length; i++) {
+    const d = drawings[i]!;
+    if (d.type === 'label' && !keepLabelIdx.has(i)) {
+      dropped++;
+      continue;
+    }
+    out.push(d);
+  }
+  return dropped ? out : drawings;
+}
+
+/**
  * Normalize mixed interpret/compile drawing payloads into {@link ScriptDrawing}[].
  * Skips non-geometry kinds (bgcolor, plotshape, table, …).
  */

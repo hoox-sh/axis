@@ -46,6 +46,7 @@ import {
 import {
   DEFAULT_DRAWING_LIMITS,
   clampTimeToLastBar,
+  dedupeScriptLabelsAtSameTime,
   garbageCollectScriptDrawings,
   normalizeScriptDrawings,
   type DrawingLimits,
@@ -315,7 +316,12 @@ export class DrawingLayer {
     raw: unknown[] | undefined | null,
     limits: DrawingLimits = DEFAULT_DRAWING_LIMITS,
   ): number {
-    const next = garbageCollectScriptDrawings(normalizeScriptDrawings(raw), limits);
+    // Normalize → GC caps → collapse same-text label stacks (status labels).
+    // Future-time clamp is applied at paint (toXY) so we also dedupe by raw t1
+    // here; identical future anchors share one key and collapse to one chip.
+    const next = dedupeScriptLabelsAtSameTime(
+      garbageCollectScriptDrawings(normalizeScriptDrawings(raw), limits),
+    );
     const sig = scriptDrawingsSignature(next);
     if (sig === this.lastScriptSig) return this.scriptDrawings.length;
     this.lastScriptSig = sig;

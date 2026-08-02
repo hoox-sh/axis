@@ -13,6 +13,7 @@ import {
   DEFAULT_DRAWING_LIMITS,
   clampScriptDrawingTimes,
   clampTimeToLastBar,
+  dedupeScriptLabelsAtSameTime,
   garbageCollectScriptDrawings,
   normalizeExtend,
   normalizeLineStyle,
@@ -307,6 +308,45 @@ label.new(bar_index, high, "x")
     expect(kept).toHaveLength(50);
     expect(kept[0]!.id).toBe('label_10');
     expect(kept[49]!.id).toBe('label_59');
+  });
+});
+
+describe('dedupeScriptLabelsAtSameTime', () => {
+  it('keeps one label per (time, text) — last wins', () => {
+    const t = 1_700_000_000;
+    const labels: ScriptDrawing[] = Array.from({ length: 50 }, (_, i) => ({
+      id: `lab_${i}`,
+      type: 'label',
+      t1: t,
+      p1: 100 + i,
+      color: '#888',
+      text: 'Sleeping Mode',
+    }));
+    const kept = dedupeScriptLabelsAtSameTime(labels);
+    expect(kept).toHaveLength(1);
+    expect(kept[0]!.id).toBe('lab_49');
+    expect(kept[0]!.text).toBe('Sleeping Mode');
+  });
+
+  it('keeps distinct texts at the same time', () => {
+    const t = 1;
+    const list: ScriptDrawing[] = [
+      { id: 'a', type: 'label', t1: t, p1: 1, color: '#0', text: 'Long' },
+      { id: 'b', type: 'label', t1: t, p1: 2, color: '#0', text: 'Short' },
+      { id: 'c', type: 'label', t1: t, p1: 3, color: '#0', text: 'Long' },
+    ];
+    const kept = dedupeScriptLabelsAtSameTime(list);
+    expect(kept.map((d) => d.id).sort()).toEqual(['b', 'c']);
+  });
+
+  it('does not drop lines', () => {
+    const list: ScriptDrawing[] = [
+      { id: 'l', type: 'line', t1: 1, p1: 1, t2: 2, p2: 2, color: '#f00' },
+      { id: 'a', type: 'label', t1: 1, p1: 1, color: '#0', text: 'x' },
+      { id: 'b', type: 'label', t1: 1, p1: 2, color: '#0', text: 'x' },
+    ];
+    const kept = dedupeScriptLabelsAtSameTime(list);
+    expect(kept.map((d) => d.id)).toEqual(['l', 'b']);
   });
 });
 
