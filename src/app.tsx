@@ -31,6 +31,10 @@
  * - Prefetch / idle-warm Pyodide assets
  * - Subscribe to editor-bridge (popout run/doc/reattach) and panel window bridge
  *
+ * ## Drag-and-drop
+ * Dropping `.pine` / `.pinescript` files anywhere on the shell saves them to the
+ * active script library and opens the first file in the editor.
+ *
  * Built-ins register at module load (`registerBuiltins`) before first paint.
  */
 
@@ -65,6 +69,7 @@ import {
   saveEditorDoc,
   appendLog,
   applyUiScale,
+  setStatus,
 } from './store';
 import {
   PanelDragOverlay,
@@ -79,16 +84,119 @@ import {
 } from './editor/editor-bridge';
 import { loadSymbolData } from './data/load-symbol';
 import { prefetchPyodideAssets, preloadPyodide } from './engines/catalog';
+import {
+  dataTransferHasPineFiles,
+  filterPineFiles,
+  importPineFiles,
+} from './storage/import-pine-files';
+import { readScript } from './storage/service';
 
 /** Primary charting workspace component mounted by `index.tsx`. */
 export const App: Component = () => {
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [pluginsOpen, setPluginsOpen] = createSignal(false);
   const [catalogTick, setCatalogTick] = createSignal(0);
+  /** File drag-over highlight for .pine drop-to-library. */
+  const [pineDropActive, setPineDropActive] = createSignal(false);
+  let pineDragDepth = 0;
 
   // Shared mutable ref — PineEditor populates getDoc/setDoc on mount
-  const editorRef: { getDoc: () => string; setDoc?: (doc: string) => void } = {
+  const editorRef: {
+    getDoc: () => string;
+    setDoc?: (doc: string) => void;
+    loadLibraryDoc?: (doc: string, name?: string, libraryId?: string) => void;
+  } = {
     getDoc: () => '',
+  };
+
+  const isFileDrag = (e: DragEvent) => {
+    const types = e.dataTransfer?.types;
+    if (!types) return false;
+    return Array.from(types).includes('Files');
+  };
+
+  const onPineDragEnter = (e: DragEvent) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    pineDragDepth += 1;
+    if (dataTransferHasPineFiles(e.dataTransfer)) {
+      setPineDropActive(true);
+    }
+  };
+
+  const onPineDragOver = (e: DragEvent) => {
+    if (!isFileDrag(e)) return;
+    // Always preventDefault on file drags so drop can fire; we filter on drop.
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    if (!pineDropActive() && dataTransferHasPineFiles(e.dataTransfer)) {
+      setPineDropActive(true);
+    }
+  };
+
+  const onPineDragLeave = (e: DragEvent) => {
+    if (!isFileDrag(e)) return;
+    pineDragDepth = Math.max(0, pineDragDepth - 1);
+    if (pineDragDepth === 0) setPineDropActive(false);
+  };
+
+  const onPineDrop = (e: DragEvent) => {
+    if (!isFileDrag(e)) return;
+    const files = e.dataTransfer?.files;
+    const pine = files ? filterPineFiles(files) : [];
+    pineDragDepth = 0;
+    setPineDropActive(false);
+    if (!pine.length) return; // let non-pine drops pass (browser default)
+
+    e.preventDefault();
+    e.stopPropagation();
+    void (async () => {
+      try {
+        const result = await importPineFiles(pine);
+        const n = result.imported.length;
+        if (n > 0) {
+          const names = result.imported.map((m) => m.name).join(', ');
+          setStatus(
+            'ready',
+            n === 1
+              ? `Saved "${names}" to script library`
+              : `Saved ${n} scripts to library (${names})`,
+          );
+          appendLog(
+            'ok',
+            n === 1
+              ? `Imported pine file → library: ${names}`
+              : `Imported ${n} pine files → library`,
+            'library',
+          );
+          // Load first imported script into the editor
+          const first = result.imported[0]!;
+          try {
+            const doc = await readScript(first.id);
+            if (editorRef.loadLibraryDoc) {
+              editorRef.loadLibraryDoc(doc.content, doc.name, doc.id);
+            } else {
+              editorRef.setDoc?.(doc.content);
+            }
+            setEditorOpen(true);
+          } catch {
+            /* open is best-effort */
+          }
+        }
+        if (result.errors.length) {
+          const msg = result.errors.slice(0, 3).join('; ');
+          setStatus('error', `Pine import: ${msg}`);
+          appendLog('error', `Pine import errors: ${msg}`, 'library');
+        }
+        if (!n && !result.errors.length) {
+          setStatus('error', 'No Pine scripts found in drop');
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setStatus('error', `Pine import failed: ${msg}`);
+        appendLog('error', `Pine import failed: ${msg}`, 'library');
+      }
+    })();
   };
 
   onMount(() => {
@@ -181,7 +289,13 @@ export const App: Component = () => {
   });
 
   return (
-    <div class="h-screen flex flex-col bg-bg-base text-text overflow-hidden">
+    <div
+      class="h-screen flex flex-col bg-bg-base text-text overflow-hidden relative"
+      onDragEnter={onPineDragEnter}
+      onDragOver={onPineDragOver}
+      onDragLeave={onPineDragLeave}
+      onDrop={onPineDrop}
+    >
       <Topbar
         onToggleEditor={() => {
           if (store.editor.mode === 'popout') {
@@ -286,6 +400,24 @@ export const App: Component = () => {
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenPlugins={() => setPluginsOpen(true)}
       />
+
+      {/* Drop .pine / .pinescript files anywhere → script library */}
+      <Show when={pineDropActive()}>
+        <div
+          class="absolute inset-0 z-[900] flex items-center justify-center pointer-events-none bg-void/75 backdrop-blur-[2px]"
+          data-testid="axis-pine-drop-overlay"
+          aria-hidden="true"
+        >
+          <div class="border-2 border-dashed border-accent bg-bg-panel/95 px-8 py-6 text-center shadow-[0_8px_32px_rgba(0,0,0,0.5)] rounded-[var(--radius-sc)] max-w-md">
+            <div class="text-accent text-sm font-medium tracking-wide mb-1">
+              Drop to add to script library
+            </div>
+            <div class="text-text-dim text-[11px] font-mono">
+              .pine · .pinescript
+            </div>
+          </div>
+        </div>
+      </Show>
     </div>
   );
 };

@@ -21,8 +21,10 @@
  * Script library UI — list / load / save / delete against the active storage plugin.
  *
  * Uses `storage/service` (listScripts, writeScript, …). Includes cloud/git
- * credential mini-forms and import/export of the full library as JSON.
+ * credential mini-forms and import/export (library JSON or `.pine` files).
  * Optional `getDoc` / `setDoc` wire the panel to the live editor document.
+ *
+ * App-wide drag-and-drop of `.pine` files is handled in `app.tsx` (same import path).
  */
 
 import { Component, For, Show, createSignal, createEffect } from 'solid-js';
@@ -36,6 +38,7 @@ import {
   importLibraryJson,
   getStorageStatus,
 } from '../storage/service';
+import { importPineFiles, isPineFileName } from '../storage/import-pine-files';
 import { listStorages } from '../storage/catalog';
 import { setActivePlugin, store, setStore, persist, appendLog, setStatus } from '../store';
 import { pluginKey } from '../plugins/types';
@@ -226,15 +229,35 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
 
   const onImportFile = async (e: Event) => {
     const input = e.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
+    const files = input.files ? Array.from(input.files) : [];
+    if (!files.length) return;
     setBusy(true);
+    setError('');
     try {
-      const data = JSON.parse(await file.text());
-      if (!Array.isArray(data)) throw new Error('Expected a JSON array of scripts');
-      const n = await importLibraryJson(data, { forceNewIds: true });
-      setStatus('ready', `Imported ${n} script(s)`);
-      await refresh();
+      const pineFiles = files.filter((f) => isPineFileName(f.name));
+      const jsonFiles = files.filter(
+        (f) => !isPineFileName(f.name) && /\.json$/i.test(f.name),
+      );
+      let total = 0;
+      if (pineFiles.length) {
+        const result = await importPineFiles(pineFiles);
+        total += result.imported.length;
+        if (result.errors.length) {
+          setError(result.errors.slice(0, 3).join('; '));
+        }
+      }
+      for (const file of jsonFiles) {
+        const data = JSON.parse(await file.text());
+        if (!Array.isArray(data)) throw new Error(`${file.name}: expected a JSON array of scripts`);
+        total += await importLibraryJson(data, { forceNewIds: true });
+      }
+      if (!pineFiles.length && !jsonFiles.length) {
+        throw new Error('Choose .pine / .pinescript or library JSON files');
+      }
+      if (total > 0) {
+        setStatus('ready', `Imported ${total} script(s)`);
+        await refresh();
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -427,13 +450,18 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
         <button class="sc-btn sc-btn-ghost text-[10px]" onClick={() => void onExport()}>
           Export JSON
         </button>
-        <button class="sc-btn sc-btn-ghost text-[10px]" onClick={() => fileInput?.click()}>
+        <button
+          class="sc-btn sc-btn-ghost text-[10px]"
+          onClick={() => fileInput?.click()}
+          title="Import .pine files or library JSON"
+        >
           Import…
         </button>
         <input
           ref={fileInput}
           type="file"
-          accept="application/json,.json"
+          accept="application/json,.json,.pine,.pinescript,text/plain"
+          multiple
           class="hidden"
           onChange={(e) => void onImportFile(e)}
         />
