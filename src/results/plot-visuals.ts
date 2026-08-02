@@ -21,9 +21,10 @@
  * Pure converters: pyne `plot_meta.kind` series → Lightweight Charts overlays.
  *
  * The engine returns parallel `series` arrays and a `meta.plot_meta` map with
- * `kind` (`plot` | `hline` | `bgcolor` | `plotshape` | `plotchar` | `plotarrow`).
- * This module splits and converts those into line data, bgcolor histograms, and
- * shape markers for {@link indicators/runner}.
+ * `kind` (`plot` | `hline` | `bgcolor` | `fill` | `plotshape` | `plotchar` |
+ * `plotarrow`). This module splits and converts those into line data, bgcolor
+ * histograms, fill bands (plot1↔plot2), and shape markers for
+ * {@link indicators/runner}.
  *
  * @module results/plot-visuals
  */
@@ -32,6 +33,7 @@ export type PlotKind =
   | 'plot'
   | 'hline'
   | 'bgcolor'
+  | 'fill'
   | 'plotshape'
   | 'plotchar'
   | 'plotarrow'
@@ -49,6 +51,10 @@ export interface PlotMetaEntry {
   text?: string | null;
   char?: string | null;
   price?: number | null;
+  /** `fill(plot1, plot2, …)` — series title of first plot edge */
+  plot1?: string | null;
+  /** `fill(plot1, plot2, …)` — series title of second plot edge */
+  plot2?: string | null;
 }
 
 export type SeriesMap = Record<string, unknown[] | (number | null)[]>;
@@ -77,8 +83,23 @@ export interface ShapeMarkerSpec {
   id?: string;
 }
 
+/** Pine `fill(plot1, plot2, color=…)` band for SVG overlay. */
+export interface PlotFillBandSpec {
+  name: string;
+  /** Upper / first edge series (same length as lower; null = gap) */
+  upper: (number | null)[];
+  /** Lower / second edge series */
+  lower: (number | null)[];
+  /** Solid or per-bar colors (same length); constant color = length 1 or meta.color */
+  colors: (string | null)[];
+  color: string;
+  plot1: string;
+  plot2: string;
+}
+
 const DEFAULT_SHAPE_COLOR = '#939fff';
 const DEFAULT_BG_COLOR = 'rgba(147, 159, 255, 0.12)';
+const DEFAULT_FILL_COLOR = 'rgba(255, 82, 82, 0.2)';
 
 export function normalizePlotKind(kind?: string | null): string {
   const k = String(kind || 'plot').toLowerCase().trim();
@@ -94,6 +115,10 @@ export function isBgcolorKind(kind?: string | null): boolean {
   return normalizePlotKind(kind) === 'bgcolor';
 }
 
+export function isFillKind(kind?: string | null): boolean {
+  return normalizePlotKind(kind) === 'fill';
+}
+
 export function isShapeKind(kind?: string | null): boolean {
   const k = normalizePlotKind(kind);
   return k === 'plotshape' || k === 'plotchar' || k === 'plotarrow';
@@ -107,11 +132,13 @@ export function splitSeriesByKind(
   lines: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }>;
   bgcolors: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }>;
   shapes: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }>;
+  fills: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }>;
 } {
   const lines: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }> = [];
   const bgcolors: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }> = [];
   const shapes: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }> = [];
-  if (!series) return { lines, bgcolors, shapes };
+  const fills: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }> = [];
+  if (!series) return { lines, bgcolors, shapes, fills };
   const meta = plotMeta || {};
 
   for (const [key, arr] of Object.entries(series)) {
@@ -122,10 +149,74 @@ export function splitSeriesByKind(
     const entry = { key, values: arr as unknown[], meta: { ...m, kind } };
     if (isBgcolorKind(kind)) bgcolors.push(entry);
     else if (isShapeKind(kind)) shapes.push(entry);
+    else if (isFillKind(kind)) fills.push(entry);
     else if (isLinePlotKind(kind)) lines.push(entry);
     // unknown kinds skipped (future plotbar/plotcandle/…)
   }
-  return { lines, bgcolors, shapes };
+  return { lines, bgcolors, shapes, fills };
+}
+
+function asFiniteNumber(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && v.trim() !== '' && v.toLowerCase() !== 'na') {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/**
+ * Resolve Pine `fill` entries into upper/lower series bands for the chart.
+ * Requires `meta.plot1` / `meta.plot2` series titles (from plot handles).
+ */
+export function resolvePlotFillBands(
+  series: SeriesMap | undefined | null,
+  plotMeta: Record<string, PlotMetaEntry> | undefined | null,
+): PlotFillBandSpec[] {
+  if (!series) return [];
+  const split = splitSeriesByKind(series, plotMeta);
+  const out: PlotFillBandSpec[] = [];
+  for (const { key, values, meta } of split.fills) {
+    const p1 = meta.plot1 ? String(meta.plot1) : '';
+    const p2 = meta.plot2 ? String(meta.plot2) : '';
+    if (!p1 || !p2) continue;
+    const a = series[p1];
+    const b = series[p2];
+    if (!Array.isArray(a) || !Array.isArray(b)) continue;
+    const n = Math.max(a.length, b.length, values.length);
+    const upper: (number | null)[] = [];
+    const lower: (number | null)[] = [];
+    const colors: (string | null)[] = [];
+    const fallback =
+      (meta.color && isActiveColor(meta.color) ? meta.color.trim() : null) || DEFAULT_FILL_COLOR;
+    for (let i = 0; i < n; i++) {
+      upper.push(asFiniteNumber(a[i]));
+      lower.push(asFiniteNumber(b[i]));
+      const raw = values[i];
+      if (isActiveColor(raw)) colors.push(String(raw).trim());
+      else if (raw == null) colors.push(fallback);
+      else colors.push(fallback);
+    }
+    // Need at least one pair of finite edges
+    let ok = false;
+    for (let i = 0; i < n; i++) {
+      if (upper[i] != null && lower[i] != null) {
+        ok = true;
+        break;
+      }
+    }
+    if (!ok) continue;
+    out.push({
+      name: key,
+      upper,
+      lower,
+      colors,
+      color: fallback,
+      plot1: p1,
+      plot2: p2,
+    });
+  }
+  return out;
 }
 
 export function isTruthyPlotValue(v: unknown): boolean {
@@ -311,6 +402,7 @@ export function buildPlotVisuals(
   lines: LineOverlaySpec[];
   bgcolors: BgcolorBandSpec[];
   shapes: ShapeMarkerSpec[];
+  fills: PlotFillBandSpec[];
 } {
   const split = splitSeriesByKind(series, plotMeta);
   const lines: LineOverlaySpec[] = [];
@@ -347,5 +439,7 @@ export function buildPlotVisuals(
   // Stable sort for LWC
   shapes.sort((a, b) => a.time - b.time || (a.id || '').localeCompare(b.id || ''));
 
-  return { lines, bgcolors, shapes };
+  const fills = resolvePlotFillBands(series, plotMeta);
+
+  return { lines, bgcolors, shapes, fills };
 }

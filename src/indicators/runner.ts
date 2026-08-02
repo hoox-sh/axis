@@ -66,6 +66,7 @@ import { normalizeStrategyEvents, eventsToMarkers, buildEquityCurve } from '../r
 import { buildStrategyReport } from '../results/strategy';
 import {
   bgcolorSeriesToHistogramData,
+  resolvePlotFillBands,
   shapeSeriesToMarkers,
   splitSeriesByKind,
   type PlotMetaEntry,
@@ -520,6 +521,40 @@ export async function runAndApply(
   manager.syncBgcolorBands(bgBands);
   if (bgBands.length && !silent) {
     appendLog('ok', `bgcolor: ${bgBands.length} band series`, 'plot');
+  }
+
+  // fill(plot1, plot2, color=…) → SVG band between plot edges on price pane
+  const fillBands = resolvePlotFillBands(result.series || {}, plotMeta);
+  try {
+    const layer = getActiveDrawingLayer();
+    if (layer?.setPlotFills) {
+      if (fillBands.length) {
+        const times = ohlcvTimes.map((t) =>
+          Number(t) > 1e12 ? Math.floor(Number(t) / 1000) : Math.floor(Number(t)),
+        );
+        layer.setPlotFills(
+          fillBands.map((f) => ({
+            name: f.name,
+            times,
+            upper: f.upper,
+            lower: f.lower,
+            colors: f.colors,
+            color: f.color,
+          })),
+        );
+        if (!silent) {
+          appendLog(
+            'ok',
+            `fill: ${fillBands.map((f) => `${f.name}(${f.plot1}↔${f.plot2})`).join(', ')}`,
+            'plot',
+          );
+        }
+      } else {
+        layer.clearPlotFills?.();
+      }
+    }
+  } catch {
+    /* drawing layer optional in tests */
   }
 
   // plotshape / plotchar → markers (merged with strategy markers; never wipe trades)

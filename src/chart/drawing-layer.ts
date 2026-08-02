@@ -107,6 +107,8 @@ export class DrawingLayer {
   /** Price series host (candles, bars, line, …) for price ↔ Y conversion. */
   private series: ISeriesApi<any>;
   private svg: SVGSVGElement;
+  /** Pine `fill(plot1,plot2)` bands (under script line/label drawings). */
+  private gFill: SVGGElement;
   /** View-only Pine drawings (z-order under user group). */
   private gScript: SVGGElement;
   /** Editable user drawings. */
@@ -116,6 +118,18 @@ export class DrawingLayer {
   private tool: DrawingToolId = 'cursor';
   private drawings: Drawing[] = [];
   private scriptDrawings: ScriptDrawing[] = [];
+  /**
+   * Pine fill bands: upper/lower price series + color, projected to SVG on redraw.
+   * Populated by {@link setPlotFills} from runner after a successful `/run`.
+   */
+  private plotFills: Array<{
+    name: string;
+    times: number[];
+    upper: (number | null)[];
+    lower: (number | null)[];
+    colors: (string | null)[];
+    color: string;
+  }> = [];
   private selectedId: string | null = null;
   private draft: { tool: DrawingToolId; p1?: Point; p2?: Point } | null = null;
   private drag: DragState | null = null;
@@ -178,10 +192,14 @@ export class DrawingLayer {
       overflow: 'hidden',
     } as CSSStyleDeclaration);
 
+    this.gFill = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    this.gFill.setAttribute('class', 'axis-pine-fills');
     this.gScript = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     this.gScript.setAttribute('class', 'axis-pine-drawings');
     this.gDraw = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     this.gDraft = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    // Fills under lines/labels; user drawings on top
+    this.svg.appendChild(this.gFill);
     this.svg.appendChild(this.gScript);
     this.svg.appendChild(this.gDraw);
     this.svg.appendChild(this.gDraft);
@@ -335,6 +353,37 @@ export class DrawingLayer {
     this.scriptDrawings = [];
     this.lastScriptSig = '';
     this.redrawScript();
+  }
+
+  /**
+   * Pine `fill(plot1, plot2, color=…)` bands. Times align with OHLCV bars;
+   * upper/lower are price series (null = gap). Empty list clears.
+   */
+  setPlotFills(
+    fills: Array<{
+      name: string;
+      times: number[];
+      upper: (number | null)[];
+      lower: (number | null)[];
+      colors?: (string | null)[];
+      color?: string;
+    }>,
+  ) {
+    this.plotFills = (fills || []).map((f) => ({
+      name: f.name,
+      times: f.times,
+      upper: f.upper,
+      lower: f.lower,
+      colors: f.colors || [],
+      color: f.color || 'rgba(255, 82, 82, 0.2)',
+    }));
+    this.redrawFills();
+  }
+
+  clearPlotFills() {
+    if (!this.plotFills.length) return;
+    this.plotFills = [];
+    this.redrawFills();
   }
 
   /** Shallow copy of current user drawings. */
@@ -855,6 +904,7 @@ export class DrawingLayer {
 
   private redraw() {
     this.syncSize();
+    this.redrawFillsInner();
     this.redrawScriptInner();
     this.redrawUserInner();
   }
@@ -865,9 +915,22 @@ export class DrawingLayer {
     this.redrawScriptInner();
   }
 
+  private redrawFills() {
+    this.syncSize();
+    this.redrawFillsInner();
+  }
+
   private redrawUser() {
     this.syncSize();
     this.redrawUserInner();
+  }
+
+  private redrawFillsInner() {
+    const tmp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    for (const fill of this.plotFills) {
+      this.paintPlotFill(tmp, fill);
+    }
+    this.gFill.replaceChildren(...Array.from(tmp.childNodes));
   }
 
   private redrawScriptInner() {
@@ -877,6 +940,71 @@ export class DrawingLayer {
       this.paintScriptDrawing(tmp, sd);
     }
     this.gScript.replaceChildren(...Array.from(tmp.childNodes));
+  }
+
+  /**
+   * Paint a filled polygon between two plot edges (Pine fill).
+   * Walks upper L→R then lower R→L; skips bars where either edge is null.
+   */
+  private paintPlotFill(
+    g: SVGGElement,
+    fill: {
+      name: string;
+      times: number[];
+      upper: (number | null)[];
+      lower: (number | null)[];
+      colors: (string | null)[];
+      color: string;
+    },
+  ) {
+    const n = Math.min(fill.times.length, fill.upper.length, fill.lower.length);
+    if (n < 2) return;
+    // Segment into contiguous runs of finite pairs so na gaps split the band.
+    let runStart = -1;
+    const flush = (from: number, to: number) => {
+      if (to - from < 2) return; // need ≥2 samples (to exclusive)
+      const upperPts: { x: number; y: number }[] = [];
+      const lowerPts: { x: number; y: number }[] = [];
+      for (let i = from; i < to; i++) {
+        const t = fill.times[i]!;
+        const u = fill.upper[i]!;
+        const l = fill.lower[i]!;
+        const a = this.toXY({ time: t, price: u });
+        const b = this.toXY({ time: t, price: l });
+        if (!a || !b) continue;
+        upperPts.push(a);
+        lowerPts.push(b);
+      }
+      if (upperPts.length < 2) return;
+      let d = `M ${upperPts[0]!.x} ${upperPts[0]!.y}`;
+      for (let i = 1; i < upperPts.length; i++) d += ` L ${upperPts[i]!.x} ${upperPts[i]!.y}`;
+      for (let i = lowerPts.length - 1; i >= 0; i--) d += ` L ${lowerPts[i]!.x} ${lowerPts[i]!.y}`;
+      d += ' Z';
+      const c =
+        (fill.colors[from] && String(fill.colors[from])) ||
+        fill.color ||
+        'rgba(255, 82, 82, 0.2)';
+      el(g, 'path', {
+        d,
+        fill: c,
+        stroke: 'none',
+        'pointer-events': 'none',
+        'data-fill': fill.name,
+      });
+    };
+    for (let i = 0; i < n; i++) {
+      const ok =
+        fill.upper[i] != null &&
+        fill.lower[i] != null &&
+        Number.isFinite(fill.times[i]!);
+      if (ok) {
+        if (runStart < 0) runStart = i;
+      } else if (runStart >= 0) {
+        flush(runStart, i);
+        runStart = -1;
+      }
+    }
+    if (runStart >= 0) flush(runStart, n);
   }
 
   private redrawUserInner() {

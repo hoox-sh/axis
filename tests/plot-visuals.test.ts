@@ -18,6 +18,7 @@ import {
   lineSeriesToOverlayData,
   mapShapeLocation,
   mapShapeStyle,
+  resolvePlotFillBands,
   shapeSeriesToMarkers,
   splitSeriesByKind,
 } from '../src/results/plot-visuals';
@@ -217,5 +218,44 @@ describe('splitSeriesByKind + buildPlotVisuals', () => {
     expect(byName['EMAma Tua']!.data[4]).toEqual({ time: 5, value: 82400 });
     // bgcolor all-null → no bands
     expect(visuals.bgcolors).toHaveLength(0);
+  });
+
+  it('resolves fill(plot1, plot2) bands with color and edge series', () => {
+    const series = {
+      avg: [10, 11, 12, 13],
+      lp: [8, 9, 10, 11],
+      band: [
+        'rgba(255, 82, 82, 0.2)',
+        'rgba(255, 82, 82, 0.2)',
+        'rgba(255, 82, 82, 0.2)',
+        'rgba(255, 82, 82, 0.2)',
+      ],
+    };
+    const meta = {
+      avg: { kind: 'plot' as const, title: 'avg' },
+      lp: { kind: 'plot' as const, title: 'lp' },
+      band: {
+        kind: 'fill' as const,
+        title: 'band',
+        color: 'rgba(255, 82, 82, 0.2)',
+        plot1: 'avg',
+        plot2: 'lp',
+      },
+    };
+    const split = splitSeriesByKind(series, meta);
+    expect(split.fills.map((f) => f.key)).toEqual(['band']);
+    expect(split.lines.map((l) => l.key).sort()).toEqual(['avg', 'lp']);
+
+    const bands = resolvePlotFillBands(series, meta);
+    expect(bands).toHaveLength(1);
+    expect(bands[0]!.plot1).toBe('avg');
+    expect(bands[0]!.plot2).toBe('lp');
+    expect(bands[0]!.upper).toEqual([10, 11, 12, 13]);
+    expect(bands[0]!.lower).toEqual([8, 9, 10, 11]);
+    expect(bands[0]!.color).toContain('255, 82, 82');
+
+    const visuals = buildPlotVisuals(series, meta, [1, 2, 3, 4]);
+    expect(visuals.fills).toHaveLength(1);
+    expect(visuals.fills[0]!.name).toBe('band');
   });
 });
