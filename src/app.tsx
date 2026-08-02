@@ -258,6 +258,14 @@ export const App: Component = () => {
             /* open is best-effort */
           }
         }
+        if (result.warnings.length) {
+          const w = result.warnings[0]!;
+          // Truncation chrome is common for TV community copies — surface clearly
+          setStatus('error', w.length > 160 ? `${w.slice(0, 157)}…` : w);
+          for (const line of result.warnings.slice(0, 5)) {
+            appendLog('warn', line, 'library');
+          }
+        }
         if (result.errors.length) {
           const msg = result.errors.slice(0, 3).join('; ');
           setStatus('error', `Pine import: ${msg}`);

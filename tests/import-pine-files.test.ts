@@ -26,6 +26,7 @@ import {
   filterPineFiles,
   importPineFiles,
   dataTransferHasPineFiles,
+  sanitizePineSource,
 } from '../src/storage/import-pine-files';
 
 beforeEach(async () => {
@@ -150,11 +151,12 @@ describe('importPineFiles', () => {
   });
 
   it('preserves every line of a large script body', async () => {
-    const body = Array.from({ length: 400 }, (_, i) => `// line ${i + 1}`).join('\n');
+    const body = Array.from({ length: 400 }, (_, i) => `// line ${i + 1}`).join('\n') + '\n';
     const result = await importPineFiles([fakeFile('big.pine', body)]);
     expect(result.imported.length).toBe(1);
     expect(result.imported[0]!.content).toBe(body);
-    expect(result.imported[0]!.content.split('\n').length).toBe(400);
+    // trailing newline → 401 split parts with empty last; non-empty lines = 400
+    expect(result.imported[0]!.content.trimEnd().split('\n').length).toBe(400);
     const doc = await readScript(result.imported[0]!.meta.id);
     expect(doc.content).toBe(body);
   });
@@ -164,5 +166,42 @@ describe('importPineFiles', () => {
     expect(result.imported.length).toBe(0);
     expect(result.errors.length).toBe(1);
     expect(result.errors[0]).toContain('empty');
+  });
+
+  it('strips TradingView Expand (N lines) chrome and warns', async () => {
+    const body =
+      '//@version=5\nindicator("x")\nplot(close)\nExpand (132 lines)\n';
+    const result = await importPineFiles([fakeFile('tv.pine', body)]);
+    expect(result.imported.length).toBe(1);
+    expect(result.imported[0]!.content).not.toContain('Expand');
+    expect(result.imported[0]!.content).toContain('plot(close)');
+    expect(result.imported[0]!.missingLines).toBe(132);
+    expect(result.warnings.some((w) => w.includes('132'))).toBe(true);
+  });
+});
+
+describe('sanitizePineSource', () => {
+  it('removes Expand stub and reports missing line count', () => {
+    const r = sanitizePineSource(
+      '//@version=5\nindicator("A")\nplot(1)\nExpand (42 lines)\nCopy code\n',
+    );
+    expect(r.content).toBe('//@version=5\nindicator("A")\nplot(1)\n');
+    expect(r.missingLines).toBe(42);
+    expect(r.warnings.length).toBe(1);
+  });
+
+  it('leaves clean pine untouched', () => {
+    const src = '//@version=5\nindicator("ok")\nplot(close)\n';
+    const r = sanitizePineSource(src);
+    expect(r.content).toBe(src);
+    expect(r.missingLines).toBeUndefined();
+    expect(r.warnings).toEqual([]);
+  });
+
+  it('handles Expand without closing paren (bad scrape)', () => {
+    const r = sanitizePineSource('plot(1)\nExpand (10 lines\n');
+    expect(r.content).toContain('plot(1)');
+    expect(r.content).not.toMatch(/Expand/i);
+    expect(r.missingLines).toBe(10);
   });
 });

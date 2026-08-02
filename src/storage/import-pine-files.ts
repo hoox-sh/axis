@@ -21,8 +21,13 @@
  * Import local `.pine` / `.pinescript` files into the active script library.
  *
  * Used by app-wide drag-and-drop and optional file-picker paths. Pure helpers
- * (`isPineFileName`, `scriptNameFromFileName`, `filterPineFiles`) are unit-tested;
- * {@link importPineFiles} calls {@link writeScript} for each accepted file.
+ * (`isPineFileName`, `scriptNameFromFileName`, `filterPineFiles`,
+ * {@link sanitizePineSource}) are unit-tested; {@link importPineFiles} calls
+ * {@link writeScript} for each accepted file.
+ *
+ * TradingView community scrapes often end with an `Expand (N lines)` UI stub
+ * when the code panel was collapsed — that text is **not** Pine; we strip it
+ * and surface a truncation warning (the missing lines were never in the file).
  */
 
 import type { ScriptMeta } from '../plugins/types';
@@ -30,6 +35,19 @@ import { writeScript } from './service';
 
 /** Extensions we treat as Pine Script source files. */
 const PINE_EXT = /\.(pine|pinescript)$/i;
+
+/**
+ * TradingView community collapsed-code chrome, e.g. `Expand (132 lines)`.
+ * Closing `)` is sometimes missing in bad scrapes.
+ */
+const EXPAND_STUB_RE = /^\s*Expand\s*\(\s*(\d+)\s*lines?\s*\)?\s*$/i;
+
+/** Markdown fence leftover from docs/community scrapes. */
+const FENCE_RE = /^\s*```/;
+
+/** Common TV / docs chrome lines after real pine. */
+const UI_CHROME_RE =
+  /^\s*(Copy(\s+code)?|Copied|Pine\s+Script\s*®?|Share|Open\s+in\s+editor)\s*$/i;
 
 /** True when a file name looks like a Pine Script source file. */
 export function isPineFileName(name: string): boolean {
@@ -84,11 +102,83 @@ export function dataTransferHasPineFiles(dt: DataTransfer | null | undefined): b
   return types.includes('Files');
 }
 
+/** Result of stripping TV / docs chrome from raw file text. */
+export interface SanitizePineResult {
+  /** Cleaned source ready for the library / editor. */
+  content: string;
+  /**
+   * When the source ended with `Expand (N lines)`, N is the count of lines that
+   * were never copied (TradingView collapsed panel). The body is incomplete.
+   */
+  missingLines?: number;
+  /** Human-readable notes (truncation, chrome stripped, …). */
+  warnings: string[];
+}
+
+/**
+ * Strip TradingView / markdown chrome from a dropped Pine source.
+ *
+ * Most important: remove trailing `Expand (N lines)` UI stubs. That text is
+ * page chrome from a **collapsed** community code panel — the N lines were
+ * never in the file; we cannot recover them here.
+ */
+export function sanitizePineSource(raw: string): SanitizePineResult {
+  const warnings: string[] = [];
+  let missingLines: number | undefined;
+  const lines = String(raw ?? '').split(/\r?\n/);
+  const out: string[] = [];
+  let sawPine = false;
+
+  for (const line of lines) {
+    const expand = EXPAND_STUB_RE.exec(line);
+    if (expand) {
+      const n = Number(expand[1]);
+      if (Number.isFinite(n) && n > 0) missingLines = (missingLines ?? 0) + n;
+      // Drop the stub; stop so trailing page chrome cannot re-enter.
+      if (sawPine) break;
+      continue;
+    }
+
+    if (FENCE_RE.test(line)) {
+      if (sawPine) break;
+      continue;
+    }
+
+    if (sawPine && UI_CHROME_RE.test(line)) {
+      break;
+    }
+
+    out.push(line);
+    if (!sawPine && line.trim()) {
+      // Any non-empty kept line after leading chrome counts as body start
+      sawPine = true;
+    }
+  }
+
+  // Trim trailing blank lines introduced by strip
+  while (out.length && !out[out.length - 1]!.trim()) out.pop();
+  // Preserve a single trailing newline for editor friendliness
+  let content = out.join('\n');
+  if (content && !content.endsWith('\n')) content += '\n';
+
+  if (missingLines != null && missingLines > 0) {
+    warnings.push(
+      `Source looks truncated (TradingView “Expand (${missingLines} lines)” chrome). ` +
+        `Re-copy with the full script expanded on TradingView — those lines were never in the file.`,
+    );
+  }
+
+  return { content, missingLines, warnings };
+}
+
 /** One successfully imported script (meta + full source body). */
 export interface ImportedPineScript {
   meta: ScriptMeta;
   /** Full file text as written to the library (use this to open editor tabs). */
   content: string;
+  /** Present when TV collapse chrome indicated missing lines. */
+  missingLines?: number;
+  warnings?: string[];
 }
 
 export interface ImportPineResult {
@@ -96,6 +186,8 @@ export interface ImportPineResult {
   imported: ImportedPineScript[];
   /** Per-file error messages (e.g. read/write failures). */
   errors: string[];
+  /** Non-fatal warnings (truncation, chrome stripped, …). */
+  warnings: string[];
   /** Count of non-pine files skipped. */
   skipped: number;
 }
@@ -127,31 +219,49 @@ export async function importPineFiles(
   const skipped = all.length - pine.length;
   const imported: ImportedPineScript[] = [];
   const errors: string[] = [];
+  const warnings: string[] = [];
   const stamp = Date.now().toString(36);
 
   for (let i = 0; i < pine.length; i++) {
     const file = pine[i]!;
     const name = scriptNameFromFileName(file.name);
     try {
-      const content = await readFileAsText(file);
-      if (!content.trim()) {
+      const raw = await readFileAsText(file);
+      if (!raw.trim()) {
         errors.push(`${file.name}: empty file`);
         continue;
       }
+      const cleaned = sanitizePineSource(raw);
+      if (!cleaned.content.trim()) {
+        errors.push(`${file.name}: empty after removing page chrome`);
+        continue;
+      }
+      for (const w of cleaned.warnings) {
+        warnings.push(`${file.name}: ${w}`);
+      }
+      const desc =
+        cleaned.missingLines != null
+          ? `Imported from ${file.name} (truncated — missing ~${cleaned.missingLines} lines)`
+          : `Imported from ${file.name}`;
       const meta = await writeScript({
         // Unique even when many files import in the same millisecond
         id: `s_${stamp}_${i}_${Math.random().toString(36).slice(2, 8)}`,
         name,
-        content,
+        content: cleaned.content,
         path: file.name,
-        description: `Imported from ${file.name}`,
+        description: desc,
       });
-      imported.push({ meta, content });
+      imported.push({
+        meta,
+        content: cleaned.content,
+        missingLines: cleaned.missingLines,
+        warnings: cleaned.warnings,
+      });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       errors.push(`${file.name}: ${msg}`);
     }
   }
 
-  return { imported, errors, skipped };
+  return { imported, errors, warnings, skipped };
 }
