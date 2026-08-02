@@ -142,7 +142,7 @@ const DEFAULTS: AppState = {
     needsRerun: false,
     lastBarTime: 0,
     streamId: 'binance-ws',
-    preferAfterLoad: false,
+    preferAfterLoad: true,
     rerunOn: 'every-tick',
   },
   theme: 'dark',
@@ -275,7 +275,10 @@ function loadPersisted(): Partial<AppState> {
           ...parsed.live,
           // Never hydrate "live active" as running — user must re-enable
           active: false,
-          preferAfterLoad: !!parsed.live?.preferAfterLoad,
+          preferAfterLoad:
+            typeof parsed.live?.preferAfterLoad === 'boolean'
+              ? parsed.live.preferAfterLoad
+              : DEFAULTS.live.preferAfterLoad,
           rerunOn: parsed.live?.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick',
         },
         editor: { ...DEFAULTS.editor, ...parsed.editor },
@@ -1261,6 +1264,16 @@ export function toggleScriptLogsPanel() {
   setPanelOpen('scriptlogs', !isPanelOpen('scriptlogs'));
 }
 
+/** Open/close Script Library panel. */
+export function setLibraryPanelOpen(open: boolean) {
+  setPanelOpen('library', open);
+}
+
+/** Toggle Script Library panel visibility. */
+export function toggleLibraryPanel() {
+  setPanelOpen('library', !isPanelOpen('library'));
+}
+
 /** Enable/disable editor profiler mode (persisted). */
 export function setProfilerEnabled(on: boolean) {
   setStore('profilerEnabled', !!on);
@@ -1334,6 +1347,9 @@ export function isPanelOpen(id: PanelId): boolean {
     case 'logs':
       return !!store.logsPanel.open || chromeOpen;
     case 'scriptlogs':
+      // Chrome-only (no legacy flat flag)
+      return chromeOpen;
+    case 'library':
       // Chrome-only (no legacy flat flag)
       return chromeOpen;
     case 'dataview':

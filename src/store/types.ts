@@ -258,7 +258,7 @@ export interface AppState {
     streamId: string;
     /**
      * When true, successful Load auto-starts the paired live stream.
-     * Default false (no surprise sockets).
+     * Default true (live mode preferred after historical load).
      */
     preferAfterLoad: boolean;
     /**

@@ -67,6 +67,7 @@ export interface CommandActions {
   toggleDataView: () => void;
   toggleAlerts?: () => void;
   toggleScriptLogs?: () => void;
+  toggleLibrary?: () => void;
   toggleTheme: () => void;
   setChartGridMode: (mode: '1' | '2h' | '2v' | '4') => void;
   runScript: () => void | Promise<void>;
@@ -258,6 +259,12 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     category: 'panels',
     keywords: ['log.info', 'pine logs', 'script output'],
   },
+  {
+    id: 'panel.library',
+    title: 'Toggle Script Library',
+    category: 'panels',
+    keywords: ['library', 'scripts', 'save', 'load', 'storage', 'pine files'],
+  },
   // Theme
   {
     id: 'theme.toggle',
@@ -428,6 +435,7 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
 
   if (actions.toggleScriptLogs) byId.set('panel.scriptlogs', actions.toggleScriptLogs);
   if (actions.toggleAlerts) byId.set('panel.alerts', actions.toggleAlerts);
+  if (actions.toggleLibrary) byId.set('panel.library', actions.toggleLibrary);
   if (actions.loadSymbol) byId.set('action.load-symbol', () => void actions.loadSymbol?.());
   if (actions.reloadChart) byId.set('action.reload-chart', () => void actions.reloadChart?.());
   if (actions.toggleLive) byId.set('action.toggle-live', actions.toggleLive);

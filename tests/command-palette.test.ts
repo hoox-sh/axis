@@ -145,6 +145,7 @@ describe('DEFAULT_COMMAND_SPECS', () => {
       'panel.layers',
       'panel.indicators',
       'panel.dataview',
+      'panel.library',
       'theme.toggle',
       'chart.grid.1',
       'chart.grid.2h',

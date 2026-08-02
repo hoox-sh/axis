@@ -54,6 +54,7 @@ import { PluginManager } from './ui/PluginManager';
 import { DataViewPanel } from './ui/DataViewPanel';
 import { LayerPanel } from './ui/LayerPanel';
 import { AlertsPanel } from './ui/AlertsPanel';
+import { LibraryPanel } from './ui/ScriptLibraryPanel';
 import { CommandPalette } from './ui/CommandPalette';
 import { runAndApply } from './indicators/runner';
 import { registerBuiltins } from './plugins/bootstrap';
@@ -414,6 +415,17 @@ export const App: Component = () => {
       <AlertsPanel />
       <DataViewPanel />
       <IndicatorPanel />
+      <LibraryPanel
+        getDoc={() => editorRef.getDoc()}
+        setDoc={(doc, name) => {
+          const ref = editorRef as {
+            setDoc?: (d: string) => void;
+            loadLibraryDoc?: (d: string, n?: string) => void;
+          };
+          if (ref.loadLibraryDoc) ref.loadLibraryDoc(doc, name);
+          else ref.setDoc?.(doc);
+        }}
+      />
       <EditorPane
         editorRef={editorRef}
         onRun={(doc) => {

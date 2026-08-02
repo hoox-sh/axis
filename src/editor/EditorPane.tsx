@@ -22,7 +22,8 @@
  *
  * Uses {@link FloatableShell} for the same panel management as watchlist /
  * layers (dock menu, float, drag-to-edge, close). Header extras host
- * **Scriptlogs** and **Profiler** toggles (editor-owned tools, not topbar).
+ * **Run**, **open in new tab**, **Scriptlogs**, and **Profiler** (editor-owned
+ * tools — not topbar).
  *
  * Set `standalone` for the `?view=editor` popout window (simplified chrome).
  *
@@ -102,6 +103,32 @@ export const EditorPane: Component<Props> = (props) => {
       onPointerDown={(e) => e.stopPropagation()}
       data-testid="axis-editor-tools"
     >
+      <Show when={!props.standalone}>
+        <button
+          type="button"
+          class="sc-btn sc-btn-primary px-1.5 text-[10px]"
+          title="Run script against loaded bars"
+          data-testid="axis-editor-btn-run"
+          onClick={() => {
+            const doc = props.editorRef.getDoc?.() || '';
+            if (doc.trim()) onRun(doc);
+          }}
+        >
+          <Icons.play size={12} />
+          Run
+        </button>
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost px-1.5 text-[10px]"
+          title="Open editor in a new browser tab"
+          aria-label="Open editor in new tab"
+          data-testid="axis-editor-btn-new-tab"
+          onClick={() => popoutLiveEditor('tab')}
+        >
+          <Icons.externalLink size={12} />
+          New tab
+        </button>
+      </Show>
       <button
         type="button"
         class={`sc-btn sc-btn-ghost px-1.5 text-[10px] ${

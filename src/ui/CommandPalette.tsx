@@ -53,6 +53,7 @@ import {
   toggleLayerPanel,
   toggleAlertsPanel,
   toggleScriptLogsPanel,
+  toggleLibraryPanel,
   toggleProfilerEnabled,
   toggleInlineDebugEnabled,
   toggleDebugPinsEnabled,
@@ -140,6 +141,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       toggleDataView: () => toggleDataViewPanel(),
       toggleAlerts: () => toggleAlertsPanel(),
       toggleScriptLogs: () => toggleScriptLogsPanel(),
+      toggleLibrary: () => toggleLibraryPanel(),
       toggleTheme: () => toggleTheme(),
       setChartGridMode: (mode) => setChartGridMode(mode),
       runScript: async () => {

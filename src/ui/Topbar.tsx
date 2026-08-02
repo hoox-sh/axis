@@ -28,7 +28,7 @@
  * - **Data** — Source (+ CSV upload), Load, Reload
  * - **Compute** — Engine, Stream, Run, Live, Replay
  * - **Layout** — multi-chart layout menu
- * - **Panels** — List, Editor, Indicators, Layers, Alerts, Data, Inputs, Results
+ * - **Panels** — List, Editor, Library, Indicators, Layers, Alerts, Data, Inputs, Results
  * - **System** — Plugins, Settings, Theme (`ml-auto`)
  *
  * ## Actions
@@ -36,9 +36,9 @@
  * - **Run** → `runAndApply(editorRef.getDoc())`
  * - **Live** → multiplex `startLive` / `stopLive`
  * - **Replay** → bar replay over loaded OHLCV (`startBarReplay` / `exitBarReplay`)
- * - **Popout editor** → `openEditorWindow` + shared doc bridge
  *
  * Plugin pickers re-read catalogs when `catalogTick` bumps (after plugin install).
+ * Editor popout (new tab) lives on the editor panel chrome, not the topbar.
  */
 
 import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
@@ -49,8 +49,6 @@ import {
   toggleTheme,
   persist,
   setChartType,
-  setEditorOpen,
-  setEditorMode,
   setActivePlugin,
   toggleIndicatorPanel,
   toggleDataViewPanel,
@@ -59,13 +57,13 @@ import {
   openScriptSettings,
   updateChartSlot,
   isPanelOpen,
+  toggleLibraryPanel,
 } from '../store';
 import { CHART_TYPES } from '../chart/chart-type';
 import { runAndApply } from '../indicators/runner';
 import { startLive, stopLive, listStreams, defaultStreamForSource } from '../streams/multiplex';
 import { loadSymbolData } from '../data/load-symbol';
 import { parseOhlcvFile } from '../data/parse-bars';
-import { openEditorWindow, writeSharedDoc } from '../editor/editor-bridge';
 import { listSources } from '../sources/catalog';
 import { listEngines, preloadPyodide } from '../engines/catalog';
 import { setUploadedBars, getUploadedFileName } from '../sources/upload-store';
@@ -214,14 +212,6 @@ export const Topbar: Component<{
       'ready',
       'Bar replay · scrub/step to a start bar, then Play — or Play to run from the first bar',
     );
-  };
-
-  const detachEditor = (mode: 'popup' | 'tab') => {
-    const doc = props.editorRef.getDoc?.() || '';
-    writeSharedDoc(doc);
-    setEditorMode('popout');
-    setEditorOpen(false);
-    openEditorWindow(mode);
   };
 
   const sourceNeedsSymbol = () => store.source !== 'csv-upload' && store.source !== 'mock-walk';
@@ -547,21 +537,14 @@ export const Topbar: Component<{
 
         <button
           type="button"
-          class="sc-btn sc-btn-ghost sc-btn-icon"
-          title="Detach editor to window"
-          aria-label="Detach editor to window"
-          onClick={() => detachEditor('popup')}
+          class={`sc-btn sc-btn-ghost ${isPanelOpen('library') ? 'is-active' : ''}`}
+          onClick={() => toggleLibraryPanel()}
+          title="Script library — load / save Pine scripts"
+          aria-pressed={isPanelOpen('library')}
+          data-testid="axis-btn-library"
         >
-          <Icons.popout />
-        </button>
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost sc-btn-icon"
-          title="Open editor in new tab"
-          aria-label="Open editor in new tab"
-          onClick={() => detachEditor('tab')}
-        >
-          <Icons.externalLink />
+          <Icons.folder />
+          <span class="axis-tb-btn-label">Library</span>
         </button>
 
         <button

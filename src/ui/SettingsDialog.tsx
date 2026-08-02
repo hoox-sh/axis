@@ -720,8 +720,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                   <span>
                     <span class="text-[12px] text-text">Auto-start live after Load</span>
                     <span class="block text-[10px] text-text-faint mt-0.5">
-                      Prefer WebSocket feed immediately after historical REST load. Off by default
-                      to avoid surprise sockets.
+                      Prefer WebSocket feed immediately after historical REST load. On by default
+                      (live mode preferred).
                     </span>
                   </span>
                 </label>

@@ -24,6 +24,10 @@
  * credential mini-forms and import/export (library JSON or `.pyne` / `.pine` files).
  * Optional `getDoc` / `setDoc` wire the panel to the live editor document.
  *
+ * {@link LibraryPanel} docks the same content in a floatable chrome panel
+ * (topbar **Library**). Plugin Manager still embeds {@link ScriptLibraryPanel}
+ * content without chrome.
+ *
  * App-wide drag-and-drop of `.pyne` / `.pine` files is handled in `app.tsx`
  * (same import path).
  */
@@ -41,11 +45,20 @@ import {
 } from '../storage/service';
 import { importPineFiles, isPineFileName } from '../storage/import-pine-files';
 import { listStorages } from '../storage/catalog';
-import { setActivePlugin, store, setStore, persist, appendLog, setStatus } from '../store';
+import {
+  setActivePlugin,
+  store,
+  setStore,
+  persist,
+  appendLog,
+  setStatus,
+  isPanelOpen,
+} from '../store';
 import { pluginKey } from '../plugins/types';
 import { DEFAULT_GIT_CONFIG, type GitConfig } from '../storage/git-config';
 import { Icons } from './icons';
 import { HooxLoader } from './HooxLoader';
+import { FloatableShell } from './panels/FloatableShell';
 
 function cloudCfg(): { endpoint: string; apiKey: string } {
   const pc = store.pluginsConfig || {};
@@ -515,3 +528,21 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
     </div>
   );
 };
+
+/**
+ * Dockable / floatable Script Library panel (panel id `library`).
+ * Same body as Plugin Manager → Script Library, with FloatableShell chrome.
+ */
+export const LibraryPanel: Component<ScriptLibraryPanelProps> = (props) => (
+  <Show when={isPanelOpen('library')}>
+    <FloatableShell id="library" testId="axis-library">
+      <div class="flex-1 overflow-y-auto min-h-0 p-2">
+        <ScriptLibraryPanel
+          getDoc={props.getDoc}
+          setDoc={props.setDoc}
+          onLoaded={props.onLoaded}
+        />
+      </div>
+    </FloatableShell>
+  </Show>
+);

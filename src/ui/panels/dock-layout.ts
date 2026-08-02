@@ -44,6 +44,7 @@ export const DOCK_STACK_ORDER: readonly PanelId[] = [
   'dataview',
   'indicators',
   'alerts',
+  'library',
   'editor',
   'results',
   'logs',
