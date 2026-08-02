@@ -77,12 +77,12 @@ export const gitStoragePlugin: StoragePlugin = {
     branch: { type: 'string', default: 'main', label: 'Branch' },
     basePath: {
       type: 'string',
-      default: 'pine-library',
+      default: 'pyne-library',
       label: 'Base path in repo',
     },
     commitMessageTemplate: {
       type: 'string',
-      default: 'chore(pine): save {{name}} @ {{iso}}',
+      default: 'chore(pyne): save {{name}} @ {{iso}}',
       label: 'Commit message template',
     },
   },

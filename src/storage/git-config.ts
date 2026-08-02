@@ -42,7 +42,7 @@ export interface GitConfig {
   /** GitLab project path (group/repo) or numeric id — falls back to owner/repo */
   projectId: string;
   branch: string;
-  /** Repo subdirectory for index + `.pine` files (no leading/trailing slashes). */
+  /** Repo subdirectory for index + `.pyne` / `.pine` files (no leading/trailing slashes). */
   basePath: string;
   autoPush: boolean;
   /** Supports `{{name}}` and `{{iso}}` placeholders. */
@@ -58,7 +58,7 @@ export const DEFAULT_GIT_CONFIG: GitConfig = {
   repo: '',
   projectId: '',
   branch: 'main',
-  basePath: 'pine-library',
+  basePath: 'pyne-library',
   autoPush: true,
   commitMessageTemplate: 'chore(pine): save {{name}} @ {{iso}}',
 };
@@ -86,7 +86,7 @@ export function resolveGitConfig(config?: Record<string, unknown>): GitConfig {
     repo: String(merged.repo || ''),
     projectId: String(merged.projectId || ''),
     branch: String(merged.branch || 'main'),
-    basePath: String(merged.basePath || 'pine-library').replace(/^\/+|\/+$/g, ''),
+    basePath: String(merged.basePath || 'pyne-library').replace(/^\/+|\/+$/g, ''),
     autoPush: merged.autoPush !== false && merged.autoPush !== 'false',
     commitMessageTemplate: String(
       merged.commitMessageTemplate || DEFAULT_GIT_CONFIG.commitMessageTemplate,
@@ -110,10 +110,13 @@ export function indexPath(cfg: GitConfig): string {
   return `${libraryDir(cfg)}/index.json`;
 }
 
-/** Path to a single script file; id sanitized for safe filenames. */
+/**
+ * Path to a single script file; id sanitized for safe filenames.
+ * New commits use **`.pyne`**; indexes may still point at legacy `.pine` paths.
+ */
 export function scriptPath(cfg: GitConfig, id: string): string {
   const safe = id.replace(/[^a-zA-Z0-9._-]/g, '_');
-  return `${libraryDir(cfg)}/${safe}.pine`;
+  return `${libraryDir(cfg)}/${safe}.pyne`;
 }
 
 /**

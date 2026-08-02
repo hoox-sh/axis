@@ -149,7 +149,7 @@ describe('git-gitlab adapter', () => {
           status: 200,
         });
       }
-      if (method === 'GET' && url.includes('.pine')) {
+      if (method === 'GET' && (url.includes('.pyne') || url.includes('.pine'))) {
         return new Response(JSON.stringify({ encoding: 'text', content: 'x', blob_id: '1' }), {
           status: 200,
         });

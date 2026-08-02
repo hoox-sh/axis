@@ -276,7 +276,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
       repo: gitRepo().trim(),
       projectId: gitProjectId().trim(),
       branch: gitBranch().trim() || 'main',
-      basePath: gitBasePath().trim() || 'pine-library',
+      basePath: gitBasePath().trim() || 'pyne-library',
       autoPush: true,
       commitMessageTemplate: DEFAULT_GIT_CONFIG.commitMessageTemplate,
     });

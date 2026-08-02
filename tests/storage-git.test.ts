@@ -130,7 +130,7 @@ describe('storage-git plugin', () => {
         );
       }
 
-      if (method === 'GET' && url.includes('.pine')) {
+      if (method === 'GET' && (url.includes('.pyne') || url.includes('.pine'))) {
         return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 });
       }
 
@@ -162,7 +162,7 @@ describe('storage-git plugin', () => {
     );
     expect(meta.name).toBe('My Script');
     expect(meta.id).toBe('s_new');
-    expect(calls.some((c) => c.startsWith('PUT') && c.includes('.pine'))).toBe(true);
+    expect(calls.some((c) => c.startsWith('PUT') && (c.includes('.pyne') || c.includes('.pine')))).toBe(true);
     expect(calls.some((c) => c.startsWith('PUT') && c.includes('index.json'))).toBe(true);
   });
 
