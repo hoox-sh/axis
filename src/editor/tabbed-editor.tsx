@@ -219,22 +219,58 @@ export const TabbedEditor: Component<Props> = (props) => {
 
     if (props.editorRef) {
       props.editorRef.loadLibraryDoc = (doc: string, name?: string, libraryId?: string) => {
-        const idx = activeTab();
-        setTabs((t) =>
-          t.map((tab, i) =>
-            i === idx
-              ? {
-                  ...tab,
-                  doc,
-                  name: name || tab.name,
-                  dirty: false,
-                  libraryId,
-                }
-              : tab,
-          ),
+        props.editorRef?.loadLibraryDocs?.([{ content: doc, name, libraryId }]);
+      };
+
+      /**
+       * Open each imported script in its own tab.
+       * Replaces a single empty/demo tab; otherwise appends.
+       * Activates the first opened tab and loads full content into CM.
+       */
+      props.editorRef.loadLibraryDocs = (docs) => {
+        const items = (docs || []).filter((d) => d && typeof d.content === 'string');
+        if (!items.length) return;
+
+        // Snapshot current CM buffer into the active tab before we reshuffle
+        let prev = tabs();
+        if (props.editorRef?.getDoc) {
+          const currentDoc = props.editorRef.getDoc();
+          const idx = activeTab();
+          prev = prev.map((tab, i) => (i === idx ? { ...tab, doc: currentDoc } : tab));
+        }
+
+        const newTabs = items.map((d) =>
+          newTab(d.name || 'Imported', d.content, d.libraryId),
         );
-        props.editorRef?.setDoc?.(doc);
-        scheduleDraft(doc, name);
+
+        const onlyPlaceholder =
+          prev.length === 1 &&
+          !prev[0]!.libraryId &&
+          (!prev[0]!.doc.trim() ||
+            prev[0]!.doc === DEMOS['rsi-overlay'] ||
+            prev[0]!.doc === DEMOS.macd ||
+            prev[0]!.name === 'Script 1');
+
+        let nextTabs: Tab[];
+        let firstNewIdx: number;
+        if (onlyPlaceholder) {
+          nextTabs = newTabs;
+          firstNewIdx = 0;
+        } else {
+          firstNewIdx = prev.length;
+          nextTabs = [...prev, ...newTabs];
+        }
+
+        batch(() => {
+          setTabs(nextTabs);
+          setActiveTab(firstNewIdx);
+        });
+
+        const active = nextTabs[firstNewIdx]!;
+        // Full body from import — never re-read / never truncate
+        props.editorRef?.setDoc?.(active.doc);
+        scheduleDraft(active.doc, active.name);
+        setStats(countDocStats(active.doc));
       };
     }
 

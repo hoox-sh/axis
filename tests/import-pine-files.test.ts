@@ -135,7 +135,11 @@ describe('importPineFiles', () => {
     expect(result.imported.length).toBe(2);
     expect(result.skipped).toBe(1);
     expect(result.errors).toEqual([]);
-    expect(result.imported.map((m) => m.name).sort()).toEqual(['My RSI', 'macd']);
+    expect(result.imported.map((d) => d.meta.name).sort()).toEqual(['My RSI', 'macd']);
+    // Full body is returned with the import (no second read required for editor tabs)
+    expect(result.imported.find((d) => d.meta.name === 'My RSI')?.content).toContain(
+      'indicator("RSI")',
+    );
 
     const list = await listScripts();
     expect(list.length).toBe(2);
@@ -143,6 +147,16 @@ describe('importPineFiles', () => {
     expect(rsi).toBeTruthy();
     const doc = await readScript(rsi!.id);
     expect(doc.content).toContain('indicator("RSI")');
+  });
+
+  it('preserves every line of a large script body', async () => {
+    const body = Array.from({ length: 400 }, (_, i) => `// line ${i + 1}`).join('\n');
+    const result = await importPineFiles([fakeFile('big.pine', body)]);
+    expect(result.imported.length).toBe(1);
+    expect(result.imported[0]!.content).toBe(body);
+    expect(result.imported[0]!.content.split('\n').length).toBe(400);
+    const doc = await readScript(result.imported[0]!.meta.id);
+    expect(doc.content).toBe(body);
   });
 
   it('reports empty files as errors', async () => {

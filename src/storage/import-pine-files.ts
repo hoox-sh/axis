@@ -84,13 +84,33 @@ export function dataTransferHasPineFiles(dt: DataTransfer | null | undefined): b
   return types.includes('Files');
 }
 
+/** One successfully imported script (meta + full source body). */
+export interface ImportedPineScript {
+  meta: ScriptMeta;
+  /** Full file text as written to the library (use this to open editor tabs). */
+  content: string;
+}
+
 export interface ImportPineResult {
-  /** Successfully saved library metas (in file order). */
-  imported: ScriptMeta[];
+  /** Successfully saved scripts (in file order). */
+  imported: ImportedPineScript[];
   /** Per-file error messages (e.g. read/write failures). */
   errors: string[];
   /** Count of non-pine files skipped. */
   skipped: number;
+}
+
+/**
+ * Read a dropped/selected File as UTF-8 text.
+ * Uses TextDecoder so large scripts keep every line (no partial reads).
+ */
+export async function readFileAsText(file: File): Promise<string> {
+  // Prefer arrayBuffer + UTF-8 decode for full fidelity on large drops.
+  if (typeof file.arrayBuffer === 'function') {
+    const buf = await file.arrayBuffer();
+    return new TextDecoder('utf-8').decode(buf);
+  }
+  return file.text();
 }
 
 /**
@@ -105,26 +125,28 @@ export async function importPineFiles(
   const all = Array.from(files as ArrayLike<File>);
   const pine = filterPineFiles(all);
   const skipped = all.length - pine.length;
-  const imported: ScriptMeta[] = [];
+  const imported: ImportedPineScript[] = [];
   const errors: string[] = [];
+  const stamp = Date.now().toString(36);
 
   for (let i = 0; i < pine.length; i++) {
     const file = pine[i]!;
     const name = scriptNameFromFileName(file.name);
     try {
-      const content = await file.text();
+      const content = await readFileAsText(file);
       if (!content.trim()) {
         errors.push(`${file.name}: empty file`);
         continue;
       }
       const meta = await writeScript({
-        id: `s_${Date.now().toString(36)}_${i}`,
+        // Unique even when many files import in the same millisecond
+        id: `s_${stamp}_${i}_${Math.random().toString(36).slice(2, 8)}`,
         name,
         content,
         path: file.name,
         description: `Imported from ${file.name}`,
       });
-      imported.push(meta);
+      imported.push({ meta, content });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       errors.push(`${file.name}: ${msg}`);

@@ -85,6 +85,13 @@ export type PineEditorRef = {
   jumpToDiagnostic?: (diag: EditorDiagnostic) => boolean;
   /** Load external library content into active tab (set by TabbedEditor). */
   loadLibraryDoc?: (doc: string, name?: string, libraryId?: string) => void;
+  /**
+   * Open one or more library scripts as editor tabs (set by TabbedEditor).
+   * Used by multi-file drag-drop import.
+   */
+  loadLibraryDocs?: (
+    docs: Array<{ content: string; name?: string; libraryId?: string }>,
+  ) => void;
 };
 
 interface Props {

@@ -85,7 +85,6 @@ import {
 import { loadSymbolData } from './data/load-symbol';
 import { prefetchPyodideAssets, preloadPyodide } from './engines/catalog';
 import { filterPineFiles, importPineFiles } from './storage/import-pine-files';
-import { readScript } from './storage/service';
 
 /** Primary charting workspace component mounted by `index.tsx`. */
 export const App: Component = () => {
@@ -95,11 +94,14 @@ export const App: Component = () => {
   /** File drag-over highlight for .pine drop-to-library. */
   const [pineDropActive, setPineDropActive] = createSignal(false);
 
-  // Shared mutable ref — PineEditor populates getDoc/setDoc on mount
+  // Shared mutable ref — PineEditor / TabbedEditor populate on mount
   const editorRef: {
     getDoc: () => string;
     setDoc?: (doc: string) => void;
     loadLibraryDoc?: (doc: string, name?: string, libraryId?: string) => void;
+    loadLibraryDocs?: (
+      docs: Array<{ content: string; name?: string; libraryId?: string }>,
+    ) => void;
   } = {
     getDoc: () => '',
   };
@@ -216,27 +218,40 @@ export const App: Component = () => {
         const result = await importPineFiles(pine);
         const n = result.imported.length;
         if (n > 0) {
-          const names = result.imported.map((m) => m.name).join(', ');
+          const names = result.imported.map((d) => d.meta.name).join(', ');
+          const lineHint = result.imported
+            .map((d) => {
+              const lines = d.content.split(/\r?\n/).length;
+              return `${d.meta.name} (${lines} ln)`;
+            })
+            .join(', ');
           setStatus(
             'ready',
             n === 1
               ? `Saved "${names}" to script library`
-              : `Saved ${n} scripts to library (${names})`,
+              : `Saved ${n} scripts to library · opened ${n} tabs`,
           );
           appendLog(
             'ok',
             n === 1
-              ? `Imported pine file → library: ${names}`
-              : `Imported ${n} pine files → library`,
+              ? `Imported pine file → library: ${lineHint}`
+              : `Imported ${n} pine files → library + tabs: ${lineHint}`,
             'library',
           );
-          const first = result.imported[0]!;
+          // Open every imported script as its own editor tab (full body from import)
           try {
-            const doc = await readScript(first.id);
-            if (editorRef.loadLibraryDoc) {
-              editorRef.loadLibraryDoc(doc.content, doc.name, doc.id);
+            const docs = result.imported.map((d) => ({
+              content: d.content,
+              name: d.meta.name,
+              libraryId: d.meta.id,
+            }));
+            if (editorRef.loadLibraryDocs) {
+              editorRef.loadLibraryDocs(docs);
+            } else if (editorRef.loadLibraryDoc) {
+              const first = docs[0]!;
+              editorRef.loadLibraryDoc(first.content, first.name, first.libraryId);
             } else {
-              editorRef.setDoc?.(doc.content);
+              editorRef.setDoc?.(docs[0]!.content);
             }
             setEditorOpen(true);
           } catch {
