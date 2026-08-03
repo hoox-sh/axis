@@ -175,6 +175,8 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     for (const pane of store.panes) {
       manager.createPane(pane.id, pane.type, pane.label || pane.type, pane.height || undefined);
     }
+    // Apply persisted right-scale labels preference (chart [$] control)
+    manager.setPriceScaleLabelsVisible(store.priceScaleLabelsVisible !== false);
     manager.syncTimeScales();
     manager.syncCrosshair((data) => {
       if (!isActive()) return;

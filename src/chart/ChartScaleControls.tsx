@@ -19,31 +19,42 @@
 
 /**
  * Price-scale toggles on the main chart (bottom-right of price pane):
- * **[A]** auto-scale · **[L]** logarithmic.
+ * **[A]** auto-scale · **[L]** logarithmic · **[$]** right scale labels.
  *
  * @module chart/ChartScaleControls
  */
 
 import { Component, createEffect, createSignal, onMount, onCleanup } from 'solid-js';
-import { store } from '../store';
+import { store, setStore, persist } from '../store';
 import { getManager } from './manager-access';
 
 /**
- * Bottom-right [A]/[L] control cluster for the price pane.
+ * Bottom-right [A]/[L]/[$] control cluster for the price pane.
  * Syncs local active state from {@link PaneManager} when available.
  */
 export const ChartScaleControls: Component = () => {
   const [autoOn, setAutoOn] = createSignal(true);
   const [logOn, setLogOn] = createSignal(false);
+  const [labelsOn, setLabelsOn] = createSignal(true);
 
   const syncFromManager = () => {
     const m = getManager();
-    if (!m) return;
+    if (!m) {
+      // Fall back to persisted preference before manager is ready
+      setLabelsOn(store.priceScaleLabelsVisible !== false);
+      return;
+    }
     setAutoOn(m.isPriceAutoScale());
     setLogOn(m.isPriceLogScale());
+    setLabelsOn(m.isPriceScaleLabelsVisible());
   };
 
   onMount(() => {
+    // Apply persisted labels pref as soon as manager exists
+    const m = getManager();
+    if (m && store.priceScaleLabelsVisible === false) {
+      m.setPriceScaleLabelsVisible(false);
+    }
     syncFromManager();
     // Manager is created in ChartHost onMount — poll once after layout.
     const t = window.setTimeout(syncFromManager, 0);
@@ -56,6 +67,16 @@ export const ChartScaleControls: Component = () => {
     syncFromManager();
   });
 
+  // Keep manager in sync when store pref changes (Settings save, hydrate)
+  createEffect(() => {
+    const want = store.priceScaleLabelsVisible !== false;
+    const m = getManager();
+    if (m && m.isPriceScaleLabelsVisible() !== want) {
+      m.setPriceScaleLabelsVisible(want);
+    }
+    setLabelsOn(want);
+  });
+
   const onAuto = () => {
     const m = getManager();
     if (!m) return;
@@ -66,6 +87,19 @@ export const ChartScaleControls: Component = () => {
     const m = getManager();
     if (!m) return;
     setLogOn(m.togglePriceLogScale());
+  };
+
+  const onLabels = () => {
+    const m = getManager();
+    const next = m
+      ? m.togglePriceScaleLabelsVisible()
+      : !(store.priceScaleLabelsVisible !== false);
+    if (m == null) {
+      // Manager missing — still persist preference
+    }
+    setLabelsOn(next);
+    setStore('priceScaleLabelsVisible', next);
+    persist();
   };
 
   const btnClass = (active: boolean) =>
@@ -107,6 +141,17 @@ export const ChartScaleControls: Component = () => {
         onClick={onLog}
       >
         L
+      </button>
+      <button
+        type="button"
+        class={btnClass(labelsOn())}
+        title="Show right price scale labels ($)"
+        aria-pressed={labelsOn()}
+        aria-label="Price scale labels"
+        data-testid="axis-chart-scale-labels"
+        onClick={onLabels}
+      >
+        $
       </button>
     </div>
   );

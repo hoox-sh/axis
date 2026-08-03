@@ -125,7 +125,13 @@ export function normalizePlotsArray(plots: unknown): (number | null)[] {
   return plots.map((v) => coercePlotSample(v));
 }
 
-/** Ensure events is an array of objects with numeric time when possible. */
+/**
+ * Ensure events is an array of objects with numeric `time` when possible.
+ *
+ * Pyne / Pro API strategy payloads use **`bar_time`** (not `time`). Dropping
+ * those would empty Results, strategy markers, and the tester report.
+ * Accept either field; always surface a finite unix-seconds `time` for LWC.
+ */
 export function normalizeEventsArray(
   events: unknown,
 ): NonNullable<EngineRunResult['events']> {
@@ -134,12 +140,29 @@ export function normalizeEventsArray(
   for (const e of events) {
     if (!e || typeof e !== 'object') continue;
     const rec = e as Record<string, unknown>;
-    const time = normalizeBarTime(rec.time);
+    // Prefer explicit `time`, then parity `bar_time` (pyne StrategyEvent).
+    const time = normalizeBarTime(
+      rec.time != null && rec.time !== '' ? rec.time : rec.bar_time,
+    );
     if (time == null) continue;
+    const kindOrType =
+      rec.type != null && String(rec.type).length
+        ? String(rec.type)
+        : rec.kind != null && String(rec.kind).length
+          ? String(rec.kind)
+          : rec.event != null && String(rec.event).length
+            ? String(rec.event)
+            : 'unknown';
     out.push({
       ...rec,
       time,
-      type: rec.type != null ? String(rec.type) : 'unknown',
+      // Keep bar_time aligned (ms→s) so later normalizers stay consistent
+      bar_time:
+        rec.bar_time != null && Number.isFinite(Number(rec.bar_time))
+          ? (normalizeBarTime(rec.bar_time) ?? time)
+          : time,
+      type: kindOrType,
+      kind: rec.kind != null && String(rec.kind).length ? String(rec.kind) : kindOrType,
     });
   }
   return out;

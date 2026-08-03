@@ -59,8 +59,17 @@ export const IndicatorCard: Component<Props> = (props) => {
     setIndicatorColor(props.indicator.id, plotName, color);
     setEditingColor(null);
     const manager = getManager();
-    if (manager) {
-      manager.removeOverlays(props.indicator.paneId);
+    if (!manager) return;
+    // Apply in place on the live LWC series — do not wipe overlays (old path
+    // called removeOverlays and never re-painted, so colors never showed).
+    const applied = manager.setOverlayLineColor(
+      props.indicator.paneId,
+      plotName,
+      color,
+    );
+    // Shared sub-pane scripts / price overlays may live on price when overlay
+    if (!applied && props.indicator.paneId !== 'price') {
+      manager.setOverlayLineColor('price', plotName, color);
     }
   };
 

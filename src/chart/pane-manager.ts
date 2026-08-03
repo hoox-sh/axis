@@ -164,9 +164,11 @@ export class PaneManager {
   private suppressCrosshair = false;
   /** Active main price series style (tracks LWC series kind under key `candle`) */
   private priceChartType: ChartType = DEFAULT_CHART_TYPE;
-  /** Price pane right-scale toggles (UI [A]/[L]) */
+  /** Price pane right-scale toggles (UI [A]/[L]/[$]) */
   private priceAutoScale = true;
   private priceLogScale = false;
+  /** Right price-scale labels/axis visible (UI [$]). Default on. */
+  private priceScaleLabelsVisible = true;
 
   constructor(container: HTMLElement, hostKey = '') {
     this.container = container;
@@ -301,9 +303,10 @@ export class PaneManager {
         : undefined,
       rightPriceScale: {
         borderColor: VOID.border,
-        borderVisible: true,
+        borderVisible: this.priceScaleLabelsVisible,
         textColor: VOID.textDim,
-        minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
+        visible: this.priceScaleLabelsVisible,
+        minimumWidth: this.priceScaleLabelsVisible ? RIGHT_PRICE_SCALE_WIDTH : 0,
         scaleMargins:
           type === 'volume'
             ? { top: 0.12, bottom: 0.02 }
@@ -317,10 +320,7 @@ export class PaneManager {
 
     // Lock right scale width so all pane plot areas share the same right edge
     try {
-      chart.priceScale('right').applyOptions({
-        minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
-        borderVisible: true,
-      });
+      chart.priceScale('right').applyOptions(this.rightScaleLayoutOptions());
     } catch {
       /* ignore */
     }
@@ -329,9 +329,9 @@ export class PaneManager {
       const rect = div.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
         chart.applyOptions({ width: rect.width, height: rect.height });
-        // Re-assert scale width after resize (LWC may recompute)
+        // Re-assert scale width / visibility after resize (LWC may recompute)
         try {
-          chart.priceScale('right').applyOptions({ minimumWidth: RIGHT_PRICE_SCALE_WIDTH });
+          chart.priceScale('right').applyOptions(this.rightScaleLayoutOptions());
         } catch {
           /* ignore */
         }
@@ -360,17 +360,32 @@ export class PaneManager {
     return pane;
   }
 
+  /** Shared right-scale width/visibility options (labels on = fixed gutter). */
+  private rightScaleLayoutOptions(): {
+    visible: boolean;
+    minimumWidth: number;
+    borderVisible: boolean;
+    borderColor: string;
+    textColor: string;
+  } {
+    const labels = this.priceScaleLabelsVisible;
+    return {
+      visible: labels,
+      // Hidden: free the gutter so plot area uses full width
+      minimumWidth: labels ? RIGHT_PRICE_SCALE_WIDTH : 0,
+      borderVisible: labels,
+      borderColor: VOID.border,
+      textColor: VOID.textDim,
+    };
+  }
+
   /** Force identical right price-scale width on every pane (plot area alignment). */
   alignRightScales() {
+    const opts = this.rightScaleLayoutOptions();
     for (const pane of this.getAllPanes()) {
       if (!pane.visible) continue;
       try {
-        pane.chart.priceScale('right').applyOptions({
-          minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
-          borderVisible: true,
-          borderColor: VOID.border,
-          textColor: VOID.textDim,
-        });
+        pane.chart.priceScale('right').applyOptions(opts);
       } catch {
         /* ignore */
       }
@@ -931,9 +946,7 @@ export class PaneManager {
       if (rect.width > 0 && rect.height > 0) {
         try {
           pane.chart.applyOptions({ width: rect.width, height: rect.height });
-          pane.chart.priceScale('right').applyOptions({
-            minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
-          });
+          pane.chart.priceScale('right').applyOptions(this.rightScaleLayoutOptions());
         } catch {
           /* ignore */
         }
@@ -952,6 +965,7 @@ export class PaneManager {
       pricePane.chart.priceScale('right').applyOptions({
         autoScale: this.priceAutoScale,
         mode: this.priceLogScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
+        ...this.rightScaleLayoutOptions(),
       });
     } catch {
       /* ignore */
@@ -971,6 +985,55 @@ export class PaneManager {
   togglePriceLogScale(): boolean {
     this.applyPriceScaleOptions({ logScale: !this.priceLogScale });
     return this.priceLogScale;
+  }
+
+  isPriceScaleLabelsVisible(): boolean {
+    return this.priceScaleLabelsVisible;
+  }
+
+  /**
+   * Show/hide right price-scale labels (and the scale gutter) on every pane.
+   * Used by chart [$] control and Settings.
+   */
+  setPriceScaleLabelsVisible(visible: boolean): boolean {
+    this.priceScaleLabelsVisible = !!visible;
+    this.alignRightScales();
+    return this.priceScaleLabelsVisible;
+  }
+
+  /** Toggle right price-scale labels ([$]). */
+  togglePriceScaleLabelsVisible(): boolean {
+    return this.setPriceScaleLabelsVisible(!this.priceScaleLabelsVisible);
+  }
+
+  /**
+   * Apply a user color override to an overlay plot or hline on a pane.
+   * Returns true when a series/price-line was found and updated.
+   */
+  setOverlayLineColor(paneId: string, plotName: string, color: string): boolean {
+    const pane = this.panes.get(paneId);
+    if (!pane || !color) return false;
+    let ok = false;
+    const key = `overlay_${plotName}`;
+    const series = pane.series[key];
+    if (series) {
+      try {
+        series.applyOptions({ color });
+        ok = true;
+      } catch {
+        /* ignore */
+      }
+    }
+    const pl = pane.priceLines[plotName];
+    if (pl?.line) {
+      try {
+        pl.line.applyOptions({ color });
+        ok = true;
+      } catch {
+        /* ignore */
+      }
+    }
+    return ok;
   }
 
   /**

@@ -113,6 +113,28 @@ describe('PaneManager', () => {
     expect(pm.isPriceAutoScale()).toBe(true);
   });
 
+  it('price scale labels toggle and overlay color apply', () => {
+    const p = pm.createPane('price', 'price', 'Price');
+    expect(pm.isPriceScaleLabelsVisible()).toBe(true);
+    expect(pm.togglePriceScaleLabelsVisible()).toBe(false);
+    expect(pm.isPriceScaleLabelsVisible()).toBe(false);
+    expect(pm.setPriceScaleLabelsVisible(true)).toBe(true);
+
+    let applied: unknown;
+    p.series['overlay_Fast'] = {
+      setData: () => {},
+      applyOptions: (o: unknown) => {
+        applied = o;
+      },
+      priceScale: () => ({ applyOptions: () => {} }),
+      seriesOrder: () => 1,
+      setSeriesOrder: () => {},
+    } as never;
+    expect(pm.setOverlayLineColor('price', 'Fast', '#ff00aa')).toBe(true);
+    expect(applied).toEqual({ color: '#ff00aa' });
+    expect(pm.setOverlayLineColor('price', 'Missing', '#fff')).toBe(false);
+  });
+
   it('clearTradeMarkers no-op without candle', () => {
     pm.createPane('price', 'price', 'Price');
     pm.clearTradeMarkers();

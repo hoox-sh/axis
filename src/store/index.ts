@@ -119,6 +119,7 @@ const DEFAULTS: AppState = {
   bars: [],
   chartDataGen: 0,
   chartType: DEFAULT_CHART_TYPE,
+  priceScaleLabelsVisible: true,
   symbol: 'BTCUSDT',
   interval: '1d',
   exchange: 'binance',
@@ -290,6 +291,10 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       ...DEFAULTS,
       ...bag,
       chartType: normalizeChartType(bag.chartType),
+      priceScaleLabelsVisible:
+        typeof bag.priceScaleLabelsVisible === 'boolean'
+          ? bag.priceScaleLabelsVisible
+          : DEFAULTS.priceScaleLabelsVisible,
       historyBars: clampHistoryBars(
         bag.historyBars ?? (bag as { barLimit?: unknown }).barLimit ?? DEFAULTS.historyBars,
       ),

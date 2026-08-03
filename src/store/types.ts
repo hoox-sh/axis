@@ -231,6 +231,11 @@ export interface AppState {
    * Persisted; see `chart/chart-type.ts`.
    */
   chartType: import('../chart/chart-type').ChartType;
+  /**
+   * Right price-scale labels visible on all panes (chart [$] control).
+   * When false, the right gutter is collapsed. Persisted. Default true.
+   */
+  priceScaleLabelsVisible: boolean;
   symbol: string;
   interval: string;
   exchange: string;

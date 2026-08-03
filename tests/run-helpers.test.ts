@@ -142,6 +142,68 @@ describe('normalizeSeriesMap / plots / events', () => {
     expect(ev[0]!.time).toBe(100);
     expect(ev[1]!.time).toBe(1_700_000_000);
   });
+
+  it('keeps pyne parity events that only have bar_time (not time)', () => {
+    // Engine StrategyEvent.to_dict() emits bar_time — dropping these emptyed
+    // Results / chart markers / strategy report for every strategy run.
+    const ev = normalizeEventsArray([
+      {
+        kind: 'entry',
+        id: 'Long',
+        direction: 'long',
+        qty: 1,
+        bar_index: 33,
+        bar_time: 1_700_118_800,
+        ohlc: [100, 102, 99, 101],
+      },
+      {
+        kind: 'close',
+        id: 'Long',
+        qty: 1,
+        bar_time: 1_700_180_000,
+        ohlc: [110, 112, 109, 111],
+      },
+      {
+        kind: 'close',
+        id: 'X',
+        // no time and no bar_time → drop
+        qty: 0,
+      },
+    ]);
+    expect(ev).toHaveLength(2);
+    expect(ev[0]!.time).toBe(1_700_118_800);
+    expect(ev[0]!.type).toBe('entry');
+    expect(ev[0]!.kind).toBe('entry');
+    expect(ev[1]!.time).toBe(1_700_180_000);
+    expect(ev[1]!.type).toBe('close');
+  });
+
+  it('normalizeEngineResult preserves pyne strategy events for markers/report', () => {
+    const r = normalizeEngineResult({
+      status: 'success',
+      series: {},
+      events: [
+        {
+          kind: 'entry',
+          id: 'L',
+          direction: 'long',
+          qty: 1,
+          bar_time: 1_700_000_000,
+          ohlc: [1, 1, 1, 100],
+        },
+        {
+          kind: 'close',
+          id: 'L',
+          qty: 1,
+          bar_time: 1_700_000_100,
+          ohlc: [1, 1, 1, 110],
+        },
+      ],
+    });
+    expect(r.events).toHaveLength(2);
+    expect(r.events[0]!.time).toBe(1_700_000_000);
+    expect(String(r.events[0]!.type || r.events[0]!.kind)).toMatch(/entry/i);
+  });
 });
 
 describe('normalizeEngineResult', () => {

@@ -120,6 +120,9 @@ export const SettingsDialog: Component<Props> = (props) => {
   );
   const [hudCompact, setHudCompact] = createSignal(!!store.telemetry?.hud?.compact);
   const [uiScale, setUiScaleLocal] = createSignal(clampUiScale(store.uiScale ?? 1));
+  const [priceScaleLabels, setPriceScaleLabels] = createSignal(
+    store.priceScaleLabelsVisible !== false,
+  );
   const [probing, setProbing] = createSignal(false);
   const [reloading, setReloading] = createSignal(false);
   const [probeMsg, setProbeMsg] = createSignal('');
@@ -190,6 +193,7 @@ export const SettingsDialog: Component<Props> = (props) => {
         setRerunOn(store.live.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick');
         setHudCompact(!!store.telemetry?.hud?.compact);
         setUiScaleLocal(clampUiScale(store.uiScale ?? 1));
+        setPriceScaleLabels(store.priceScaleLabelsVisible !== false);
         setProbeMsg('');
       });
     }
@@ -218,6 +222,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     const nextRerunOn = rerunOn();
     const nextHudCompact = hudCompact();
     const nextUiScale = clampUiScale(uiScale());
+    const nextPriceScaleLabels = priceScaleLabels();
     const nextExecMode = execMode();
     const nextPreferWs = preferWs();
     const writeEndpoint = needsEndpoint();
@@ -233,6 +238,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     setStore('live', 'rerunOn', nextRerunOn);
     setStore('telemetry', 'hud', 'compact', nextHudCompact);
     setStore('uiScale', nextUiScale);
+    setStore('priceScaleLabelsVisible', nextPriceScaleLabels);
     applyUiScale(nextUiScale);
     // setActivePlugin keeps flat engine/source fields + telemetry planes aligned
     setActivePlugin('engine', nextEngine);
@@ -705,6 +711,27 @@ export const SettingsDialog: Component<Props> = (props) => {
                   Binance max 1000). Saved with your other settings.
                 </p>
               </div>
+
+              <label
+                class="flex items-start gap-2 cursor-pointer mb-3"
+                for="axis-price-scale-labels"
+              >
+                <input
+                  id="axis-price-scale-labels"
+                  type="checkbox"
+                  class="mt-0.5"
+                  checked={priceScaleLabels()}
+                  onChange={(e) => setPriceScaleLabels(e.currentTarget.checked)}
+                  data-testid="axis-settings-price-scale-labels"
+                />
+                <span>
+                  <span class="text-[12px] text-text">Right price scale labels</span>
+                  <span class="block text-[10px] text-text-faint mt-0.5">
+                    Show price numbers on the right axis. Same as the chart [$] control.
+                    Off collapses the gutter for more plot width.
+                  </span>
+                </span>
+              </label>
 
               <div class="sc-section !mt-0 !border-t-0 !pt-0">
                 <div class="sc-section-title">Live stream</div>

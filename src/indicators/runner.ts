@@ -598,6 +598,9 @@ export async function runAndApply(
   }> = [];
   // Prefer named `series` + `meta.plot_meta` (PYNE modern). Top-level `plots[]`
   // is often an all-null pad of bar length — never let that block named lines.
+  // User color overrides from Indicators panel (persisted on the script card)
+  const userPlotColors = existing?.plots || {};
+
   if (seriesEntries.length > 0) {
     let colorIdx = 0;
     for (const [k, arr] of seriesEntries) {
@@ -616,7 +619,10 @@ export async function runAndApply(
       }
       // Need at least one real sample (or hline price); pure-whitespace series skip
       if (!lineDataHasSample(data) && !(isHline && price != null)) continue;
+      // Prefer panel color override → Pine plot color → palette
+      const userColor = userPlotColors[k]?.color;
       const color =
+        (userColor && String(userColor)) ||
         (meta?.color && String(meta.color)) ||
         PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
       colorIdx += 1;
@@ -636,7 +642,14 @@ export async function runAndApply(
     if (!split.bgcolors.length && !split.shapes.length) {
       const data = toLineData(result.plots);
       if (lineDataHasSample(data)) {
-        overlayLines.push({ name: scriptName, data, color: PLOT_PALETTE[0] });
+        const userColor =
+          userPlotColors[scriptName]?.color ||
+          Object.values(userPlotColors)[0]?.color;
+        overlayLines.push({
+          name: scriptName,
+          data,
+          color: (userColor && String(userColor)) || PLOT_PALETTE[0],
+        });
       }
     }
   }
@@ -764,10 +777,12 @@ export async function runAndApply(
           }
         }
       }
-    } else {
-      // No strategy events this run — clear trade markers only (shapes already set above)
+    } else if (!silent) {
+      // Interactive run with no strategy events — clear trade markers / equity.
+      // Silent live re-runs of pure indicators must NOT wipe another script's
+      // strategy markers (multi-indicator live thrash).
       manager.setTradeMarkers([]);
-      if (!silent) manager.hideEquityPane();
+      manager.hideEquityPane();
     }
 
     // Debug pins from logs (bar_index/time) — independent of trade/shape lists
