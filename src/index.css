@@ -1376,6 +1376,34 @@ body.axis-panel-dragging {
   background: color-mix(in srgb, var(--color-accent) 12%, transparent);
   font-weight: 600;
 }
+.axis-panel-menu-sep {
+  height: 1px;
+  margin: 0.25em 0.35em;
+  background: var(--color-border);
+  flex-shrink: 0;
+}
+
+/* Editor header tools — icon-only, never wrap the title bar */
+.axis-editor-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.15em;
+  flex-shrink: 0;
+  min-width: 0;
+  max-width: 55%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.axis-editor-tools::-webkit-scrollbar {
+  display: none;
+}
+.axis-editor-tools .sc-btn {
+  flex-shrink: 0;
+  min-width: 1.65em;
+  padding-left: 0.3em;
+  padding-right: 0.3em;
+}
 
 .axis-panel-body {
   background: var(--color-bg-panel);

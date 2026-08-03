@@ -21,9 +21,9 @@
  * Dockable / floatable **editor chrome** around {@link TabbedEditor}.
  *
  * Uses {@link FloatableShell} for the same panel management as watchlist /
- * layers (dock menu, float, drag-to-edge, close). Header extras host
- * **Run**, **open in new tab**, **Scriptlogs**, and **Profiler** (editor-owned
- * tools — not topbar).
+ * layers (dock menu, float, drag-to-edge, close). Header tools are **icon-only**
+ * (Run, Scriptlogs, Profiler, Debug, Pins, Ruler). **Open in new tab** lives
+ * in the left hamburger menu with dock options.
  *
  * Set `standalone` for the `?view=editor` popout window (simplified chrome).
  *
@@ -97,17 +97,34 @@ export const EditorPane: Component<Props> = (props) => {
     onCleanup(() => window.removeEventListener('keydown', onKey));
   });
 
+  const profilerTitle = () => {
+    if (!store.profilerEnabled) return 'Enable profiler and re-run for % cost gutter';
+    const ms =
+      store.lastRunMs != null ? ` · last run ${Math.round(store.lastRunMs)}ms` : '';
+    return `Profiler on — line cost gutter; click to disable${ms}`;
+  };
+
+  const pinsTitle = () => {
+    if (!store.debugPinsEnabled) {
+      return 'Pin last-run log bars on the chart + editor gutter (needs bar_index or time). Alt-P';
+    }
+    const n = pinCount();
+    return `Chart pins on (${n} ${n === 1 ? 'pin' : 'pins'}) — markers + gutter (Alt-P). Click 📍 to jump.`;
+  };
+
+  /** Icon-only toolbar — labels live in title / aria-label to avoid header overflow. */
   const editorTools = (
     <div
-      class="flex items-center gap-0.5 flex-shrink-0"
+      class="axis-editor-tools"
       onPointerDown={(e) => e.stopPropagation()}
       data-testid="axis-editor-tools"
     >
       <Show when={!props.standalone}>
         <button
           type="button"
-          class="sc-btn sc-btn-primary px-1.5 text-[10px]"
+          class="sc-btn sc-btn-primary px-1"
           title="Run script against loaded bars"
+          aria-label="Run"
           data-testid="axis-editor-btn-run"
           onClick={() => {
             const doc = props.editorRef.getDoc?.() || '';
@@ -115,43 +132,28 @@ export const EditorPane: Component<Props> = (props) => {
           }}
         >
           <Icons.play size={12} />
-          Run
-        </button>
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost px-1.5 text-[10px]"
-          title="Open editor in a new browser tab"
-          aria-label="Open editor in new tab"
-          data-testid="axis-editor-btn-new-tab"
-          onClick={() => popoutLiveEditor('tab')}
-        >
-          <Icons.externalLink size={12} />
-          New tab
         </button>
       </Show>
       <button
         type="button"
-        class={`sc-btn sc-btn-ghost px-1.5 text-[10px] ${
+        class={`sc-btn sc-btn-ghost px-1 ${
           isPanelOpen('scriptlogs') ? 'text-accent' : ''
         }`}
         title="Scriptlogs — script log.* output (not system telemetry)"
+        aria-label="Scriptlogs"
         aria-pressed={isPanelOpen('scriptlogs')}
         data-testid="axis-btn-scriptlogs"
         onClick={() => toggleScriptLogsPanel()}
       >
         <Icons.scrollText size={12} />
-        Scriptlogs
       </button>
       <button
         type="button"
-        class={`sc-btn sc-btn-ghost px-1.5 text-[10px] ${
+        class={`sc-btn sc-btn-ghost px-1 ${
           store.profilerEnabled ? 'text-accent border-accent' : ''
         }`}
-        title={
-          store.profilerEnabled
-            ? 'Profiler on — line cost gutter; click to disable'
-            : 'Enable profiler and re-run for % cost gutter'
-        }
+        title={profilerTitle()}
+        aria-label="Profiler"
         aria-pressed={store.profilerEnabled}
         data-testid="axis-btn-profiler"
         onClick={() => {
@@ -168,16 +170,10 @@ export const EditorPane: Component<Props> = (props) => {
         }}
       >
         <Icons.activity size={12} />
-        Profiler
-        <Show when={store.profilerEnabled && store.lastRunMs != null}>
-          <span class="font-mono opacity-80">
-            · {Math.round(store.lastRunMs!)}ms
-          </span>
-        </Show>
       </button>
       <button
         type="button"
-        class={`sc-btn sc-btn-ghost px-1.5 text-[10px] ${
+        class={`sc-btn sc-btn-ghost px-1 ${
           store.inlineDebugEnabled ? 'text-accent border-accent' : ''
         }`}
         title={
@@ -185,38 +181,37 @@ export const EditorPane: Component<Props> = (props) => {
             ? 'Inline debug on — end-of-line log/error chips from last run (click pin-able chips to jump to bar)'
             : 'Show last-run logs/errors inline on source lines (needs line refs)'
         }
+        aria-label="Inline debug"
         aria-pressed={store.inlineDebugEnabled}
         data-testid="axis-btn-inline-debug"
         onClick={() => toggleInlineDebugEnabled()}
       >
         <Icons.alert size={12} />
-        Debug
       </button>
       <button
         type="button"
-        class={`sc-btn sc-btn-ghost px-1.5 text-[10px] ${
+        class={`sc-btn sc-btn-ghost px-1 ${
           store.debugPinsEnabled ? 'text-accent border-accent' : ''
         }`}
-        title={
-          store.debugPinsEnabled
-            ? 'Chart pins on — markers + editor pin gutter (Alt-P to toggle). Click 📍 / pin-able chips to jump.'
-            : 'Pin last-run log bars on the chart + editor gutter (needs bar_index or time). Alt-P'
-        }
+        title={pinsTitle()}
+        aria-label="Chart pins"
         aria-pressed={store.debugPinsEnabled}
         data-testid="axis-btn-debug-pins"
         onClick={() => toggleDebugPinsEnabled()}
       >
         <Icons.pin size={12} />
-        Pins
-        <Show when={store.debugPinsEnabled}>
-          <span class="font-mono opacity-80" data-testid="axis-debug-pin-count">
-            · {pinCount()} {pinCount() === 1 ? 'pin' : 'pins'}
+        <Show when={store.debugPinsEnabled && pinCount() > 0}>
+          <span
+            class="sr-only"
+            data-testid="axis-debug-pin-count"
+          >
+            {pinCount()} pins
           </span>
         </Show>
       </button>
       <button
         type="button"
-        class={`sc-btn sc-btn-ghost px-1.5 text-[10px] ${
+        class={`sc-btn sc-btn-ghost px-1 ${
           store.editorRulerEnabled ? 'text-accent border-accent' : ''
         }`}
         title={
@@ -224,14 +219,29 @@ export const EditorPane: Component<Props> = (props) => {
             ? 'Column ruler on — 80-character recommended line length guide'
             : 'Show 80-character recommended line length ruler'
         }
+        aria-label="Column ruler"
         aria-pressed={store.editorRulerEnabled}
         data-testid="axis-btn-editor-ruler"
         onClick={() => toggleEditorRulerEnabled()}
       >
         <Icons.ruler size={12} />
-        Ruler
       </button>
     </div>
+  );
+
+  /** Left hamburger: open editor in a full browser tab (dock items stay in shell). */
+  const editorMenuExtra = (
+    <button
+      type="button"
+      role="menuitem"
+      class="axis-panel-menu-item"
+      title="Open editor in a new browser tab"
+      data-testid="axis-editor-btn-new-tab"
+      onClick={() => popoutLiveEditor('tab')}
+    >
+      <Icons.externalLink size={14} />
+      <span>Open in new tab</span>
+    </button>
   );
 
   if (props.standalone) {
@@ -244,8 +254,9 @@ export const EditorPane: Component<Props> = (props) => {
           {editorTools}
           <button
             type="button"
-            class="sc-btn sc-btn-ghost px-1.5 text-[10px]"
+            class="sc-btn sc-btn-ghost px-1"
             title="Reattach to main chart window"
+            aria-label="Reattach to main chart window"
             onClick={() => {
               const doc = props.editorRef.getDoc?.() || '';
               writeSharedDoc(doc);
@@ -259,7 +270,7 @@ export const EditorPane: Component<Props> = (props) => {
               }, 120);
             }}
           >
-            ⬅ Reattach
+            <Icons.panelLeft size={12} />
           </button>
         </div>
         <div class="flex-1 min-h-0 overflow-hidden">
@@ -277,6 +288,7 @@ export const EditorPane: Component<Props> = (props) => {
         testId="axis-editor"
         class="min-h-0 h-full flex-1"
         headerExtra={editorTools}
+        menuExtra={editorMenuExtra}
         onPopoutWindow={() => popoutLiveEditor('popup')}
       >
         <div class="flex flex-col h-full min-h-0 flex-1 overflow-hidden">

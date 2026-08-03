@@ -70,8 +70,13 @@ export interface FloatableShellProps {
   id: PanelId;
   title?: string;
   children: JSX.Element;
-  /** Extra header actions */
+  /** Extra header actions (prefer icon-only so the title bar does not overflow) */
   headerExtra?: JSX.Element;
+  /**
+   * Extra items for the left hamburger menu (after dock options).
+   * Render buttons with `role="menuitem"` and class `axis-panel-menu-item`.
+   */
+  menuExtra?: JSX.Element;
   class?: string;
   /** Called when user chooses "new window" (shell still sets dock=window) */
   onPopoutWindow?: () => void;
@@ -698,7 +703,12 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                   <div
                     class="axis-panel-menu-pop"
                     role="menu"
-                    aria-label="Dock position"
+                    aria-label="Panel menu"
+                    onClick={(e) => {
+                      // Close after any menuitem action (dock items + menuExtra)
+                      const t = e.target as HTMLElement | null;
+                      if (t?.closest?.('[role="menuitem"]')) setMenuOpen(false);
+                    }}
                   >
                     <For each={DOCK_MENU}>
                       {(item) => {
@@ -717,6 +727,10 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                         );
                       }}
                     </For>
+                    <Show when={props.menuExtra}>
+                      <div class="axis-panel-menu-sep" role="separator" />
+                      {props.menuExtra}
+                    </Show>
                   </div>
                 </Show>
               </div>
