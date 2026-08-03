@@ -130,7 +130,7 @@ Vanilla `state.js` remains for legacy shell with the same storage key family. Pr
 
 1. Hydrate never restores `lastRun` or `logs`.  
 2. Persist strips `bars`.  
-3. Migration from SuperChart keys is read-repair ([state namespaces](/axis/docs/architecture/state-namespaces)).  
+3. Key migration is read-repair ([state namespaces](/axis/docs/architecture/state-namespaces)).  
 4. `pluginsConfig` keys prefer `` `${kind}:${id}` ``.  
 5. Store is not a plugin registry—ids must exist in registry to function at runtime.
 

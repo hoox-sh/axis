@@ -41,7 +41,6 @@ beforeEach(() => {
   _resetStorageRegistrationFlag();
   _resetBootstrapFlag();
   localStorage.removeItem(PLUGINS_KEY);
-  localStorage.removeItem('pynescript.superchart.plugins.v1');
   ensureBuiltins();
 });
 

@@ -5,7 +5,7 @@
 
 /**
  * Legacy `state.js` persistence: assign/change events, localStorage key,
- * SuperChart migration keys, reset. Solid store is covered in store.test.ts.
+ * v2→v1 migration, reset. Solid store is covered in store.test.ts.
  */
 
 import { describe, expect, it, beforeEach } from 'bun:test';
@@ -40,8 +40,8 @@ describe('State', () => {
         expect(s.get('engine')).toBe('pyodide');
     });
 
-    it('migrates SuperChart legacy key into AXIS key', async () => {
-        localStorage.setItem('pynescript.superchart.v1', JSON.stringify({ symbol: 'ETHUSDT', engine: 'pyodide' }));
+    it('migrates v2 key into v1 key', async () => {
+        localStorage.setItem('pynescript.axis.v2', JSON.stringify({ symbol: 'ETHUSDT', engine: 'pyodide' }));
         const { initState } = await import('../src/state.js?v=migrate');
         const s = initState();
         expect(s.get('symbol')).toBe('ETHUSDT');
@@ -63,14 +63,14 @@ describe('State', () => {
         expect(stored.symbol).toBe('SOLUSDT');
     });
 
-    it('resetState wipes AXIS + legacy keys and produces a fresh instance', async () => {
+    it('resetState wipes v1 + legacy v2 keys and produces a fresh instance', async () => {
         localStorage.setItem('pynescript.axis.v1', JSON.stringify({ symbol: 'DOGEUSDT' }));
-        localStorage.setItem('pynescript.superchart.v1', JSON.stringify({ symbol: 'OLD' }));
+        localStorage.setItem('pynescript.axis.v2', JSON.stringify({ symbol: 'OLD' }));
         const { initState, resetState, getState } = await import('../src/state.js?v=reset');
         initState();
         resetState();
         expect(localStorage.getItem('pynescript.axis.v1')).toBeNull();
-        expect(localStorage.getItem('pynescript.superchart.v1')).toBeNull();
+        expect(localStorage.getItem('pynescript.axis.v2')).toBeNull();
         expect(getState().get('symbol')).toBe('BTCUSDT');
     });
 

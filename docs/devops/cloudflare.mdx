@@ -19,7 +19,7 @@
 
 ---
 title: "Cloudflare deployment"
-description: "Pages + Worker for AXIS: frozen project pynescript-superchart, bindings, deploy order, EXTERNAL_BACKEND reality."
+description: "Pages + Worker for AXIS: frozen project pynescript-axis, bindings, deploy order, EXTERNAL_BACKEND reality."
 ---
 
 # Cloudflare deployment
@@ -33,7 +33,7 @@ Production AXIS on Cloudflare is a **split deploy**:
 | **Pages** | Static PWA (`frontend/dist`) |
 | **Worker** | JSON API + WebSocket (`frontend/worker`) |
 
-**Project id:** `pynescript-superchart` — frozen infrastructure name (dashboard, wrangler, CI). Do not rename without a full binding/domain migration.
+**Project id:** `pynescript-axis` — frozen infrastructure name (dashboard, wrangler, CI). Do not rename without a full binding/domain migration.
 
 **Evaluation truth:** Worker `/api/run` **proxies to `EXTERNAL_BACKEND`** unless the gated Pyodide path is fully implemented and enabled. You still need a Python host (VPS Flask, container, etc.) for real Pine fidelity today.
 
@@ -86,13 +86,13 @@ npx wrangler deploy
 cd frontend
 bun install
 bun run build
-npx wrangler pages deploy dist --project-name=pynescript-superchart
+npx wrangler pages deploy dist --project-name=pynescript-axis
 ```
 
 Worker package also defines:
 
 ```json
-"deploy:pages": "wrangler pages deploy ../dist --project-name=pynescript-superchart"
+"deploy:pages": "wrangler pages deploy ../dist --project-name=pynescript-axis"
 ```
 
 ### 5. Point the PWA

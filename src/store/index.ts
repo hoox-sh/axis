@@ -22,7 +22,7 @@
  *
  * ## Lifecycle
  * 1. `DEFAULTS` seed the shape; `loadPersisted()` merges localStorage
- *    (`STORAGE_KEY`), migrating SuperChart keys once.
+ *    (`STORAGE_KEY`).
  * 2. Ephemeral fields are forced off on hydrate (live, logs, bars, lastRun,
  *    selection, open modals).
  * 3. `persist()` debounces a write that **omits** bars, lastRun, logs,
@@ -86,20 +86,15 @@ import {
 let idCounter = 0;
 const uid = () => `id_${Date.now()}_${++idCounter}`;
 
-/** Current AXIS app-state localStorage key (migrated from SuperChart). */
+/** Current AXIS app-state localStorage key. */
 export const STORAGE_KEY = 'pynescript.axis.v1';
-/** Legacy SuperChart keys — read once for migration. */
+/** Older app-state keys — read once and write forward. */
 const LEGACY_STORAGE_KEYS = [
-  'pynescript.superchart.v2',
-  'pynescript.superchart.v1',
+  'pynescript.axis.v2',
 ] as const;
 
 /** localStorage key for the docked/popout editor document body. */
 export const EDITOR_DOC_KEY = 'pynescript.axis.editor.doc';
-const LEGACY_EDITOR_DOC_KEYS = [
-  'pynescript.superchart.editor.doc',
-] as const;
-
 const DEFAULT_WATCHLIST = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
 
 /** Default / clamp bounds for {@link AppState.historyBars}. */
@@ -223,7 +218,7 @@ function readLocalStorage(key: string): string | null {
   }
 }
 
-/** Prefer AXIS key; fall back to SuperChart keys and migrate. */
+/** Prefer current key; fall back to older keys and write forward. */
 function loadRawState(): string | null {
   const current = readLocalStorage(STORAGE_KEY);
   if (current) return current;
@@ -238,21 +233,6 @@ function loadRawState(): string | null {
   }
   return null;
 }
-
-function migrateEditorDoc() {
-  if (readLocalStorage(EDITOR_DOC_KEY)) return;
-  for (const legacy of LEGACY_EDITOR_DOC_KEYS) {
-    const raw = readLocalStorage(legacy);
-    if (raw) {
-      try {
-        localStorage.setItem(EDITOR_DOC_KEY, raw);
-      } catch {}
-      return;
-    }
-  }
-}
-
-migrateEditorDoc();
 
 function loadPersisted(): Partial<AppState> {
   try {

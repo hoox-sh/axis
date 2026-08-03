@@ -24,7 +24,7 @@ description: "ADR-001 through ADR-014 for AXIS: registry, AXIS≠engine, Solid+V
 
 # Architecture Decision Records
 
-Formal ADRs for AXIS (product + `frontend/`). Status values: **Accepted** unless noted. Dates are conceptual product epochs (SuperChart → AXIS), not git archaeology.
+Formal ADRs for AXIS (product + `frontend/`). Status values: **Accepted** unless noted. Dates are conceptual product epochs, not git archaeology.
 
 ## Index
 
@@ -37,7 +37,7 @@ Formal ADRs for AXIS (product + `frontend/`). Status values: **Accepted** unless
 | [ADR-005](#adr-005-declarative-configschema) | Declarative configSchema |
 | [ADR-006](#adr-006-url-loadable-plugins) | URL-loadable plugins |
 | [ADR-007](#adr-007-storage-as-a-plugin) | Storage as a plugin |
-| [ADR-008](#adr-008-frozen-cf-project-id) | Frozen CF project id `pynescript-superchart` |
+| [ADR-008](#adr-008-frozen-cf-project-id) | Frozen CF project id `pynescript-axis` |
 | [ADR-009](#adr-009-worker-proxies-first) | Worker proxies first |
 | [ADR-010](#adr-010-durable-object-stream-fan-out) | Durable Object stream fan-out |
 | [ADR-011](#adr-011-state-namespace-migration) | State namespace migration |
@@ -51,7 +51,7 @@ Formal ADRs for AXIS (product + `frontend/`). Status values: **Accepted** unless
 
 ### Context
 
-Early SuperChart registered sources/streams/engines in separate ad hoc maps. Operators and authors needed one mental model and one install path.
+Early AXIS registered sources/streams/engines in separate ad hoc maps. Operators and authors needed one mental model and one install path.
 
 ### Decision
 
@@ -185,7 +185,7 @@ Script library began as localStorage-only; cloud and git were bolted differently
 
 ---
 
-## ADR-008: Frozen CF project id `pynescript-superchart`
+## ADR-008: Frozen CF project id `pynescript-axis`
 
 ### Context
 
@@ -193,7 +193,7 @@ Renaming Cloudflare Pages/Worker projects severs KV/D1/R2 bindings, custom domai
 
 ### Decision
 
-**Keep infrastructure name `pynescript-superchart`.** Brand in UI/manifest/docs is AXIS. Health JSON may identify `pynescript-axis-worker`. Optional DNS aliases (`axis.*`) point at the same project without rename.
+**Keep infrastructure name `pynescript-axis`.** Brand in UI/manifest/docs is AXIS. Health JSON may identify `pynescript-axis-worker`. Optional DNS aliases (`axis.*`) point at the same project without rename.
 
 ### Consequences
 
@@ -243,11 +243,11 @@ N browser clients each opening venue WebSockets waste connections and risk rate 
 
 ### Context
 
-Rename SuperChart → AXIS would brick user layouts and libraries if keys changed hard.
+Hard-renaming storage namespaces would brick user layouts and libraries if keys changed hard.
 
 ### Decision
 
-Canonical key **`pynescript.axis.v1`**. On read, fall back to `pynescript.superchart.v2` / `v1` (and parallel library/editor keys), then **write forward** to AXIS keys. Do not keep dual-write forever.
+Canonical key **`pynescript.axis.v1`**. On read, fall back to `pynescript.axis.v2` (and parallel library/draft keys), then **write forward**. Do not keep dual-write forever.
 
 ### Consequences
 

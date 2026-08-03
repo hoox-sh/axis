@@ -19,7 +19,7 @@
 
 ---
 title: "Legacy shell"
-description: "Pre-Solid SuperChart static shell vs current AXIS product path — what to ignore and what still runs."
+description: "Pre-Solid static shell vs current AXIS product path — what to ignore and what still runs."
 ---
 
 # Legacy shell
@@ -50,7 +50,7 @@ flowchart LR
 | `frontend/server.ts` | Bun static server for old tree |
 | Root / frontend `sw.js` (static shell SW) | Service worker for old shell |
 
-Makefile `make run-frontend` still prints SuperChart Lite and runs `bun run frontend/server.ts` on `:8081` — useful for legacy debugging, **not** the Solid product path.
+Makefile `make run-frontend` still prints AXIS and runs `bun run frontend/server.ts` on `:8081` — useful for legacy debugging, **not** the Solid product path.
 
 ## What is current
 
@@ -66,13 +66,13 @@ Makefile `make run-frontend` still prints SuperChart Lite and runs `bun run fron
 
 | Residue | Handling |
 | --- | --- |
-| `pynescript.superchart.plugins.v1` | Loader still reads |
-| `pynescript.superchart.library.v1` | Local storage migrates |
-| `pynescript.superchart.editor.doc` | Draft migration |
-| CF project `pynescript-superchart` | **Frozen** name despite product rebrand |
-| Some docs/Makefile strings | Still say SuperChart Lite |
+| `pynescript.axis.plugins.v1` | Plugin install list |
+| `pynescript.axis.library.v1` | Library localStorage fallback |
+| `pynescript.axis.editor.doc` | Editor document backup |
+| CF project `pynescript-axis` | **Frozen** infrastructure id |
+| Some docs/Makefile strings | Current brand is AXIS |
 
-App state target namespace: `pynescript.axis.v1` (migrates from `pynescript.superchart.*`).
+App state namespace: `pynescript.axis.v1`.
 
 ## Invariants
 

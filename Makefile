@@ -55,7 +55,7 @@ build:
 
 pages-deploy:
 	bun run build
-	bunx --yes wrangler pages deploy dist --project-name=pynescript-superchart
+	bunx --yes wrangler pages deploy dist --project-name=pynescript-axis
 
 clean:
 	rm -rf dist coverage test-results playwright-report .wrangler

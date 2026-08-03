@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * @file Legacy SuperChart results panel (vanilla DOM).
+ * @file Legacy results panel (vanilla DOM).
  * Tabs: Trades & Events, Plots, Metrics, Raw JSON. Prefer Solid `ResultsPanel.tsx`.
  */
 

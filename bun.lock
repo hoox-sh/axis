@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "superchart-lite",
+      "name": "axis",
       "dependencies": {
         "@codemirror/autocomplete": "^6.18.0",
         "@codemirror/commands": "^6.7.0",

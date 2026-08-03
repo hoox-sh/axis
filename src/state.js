@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Central, localStorage-persisted state for the legacy AXIS shell.
+ * Central, localStorage-persisted state for the legacy shell.
  *
  * One source of truth for pre-Solid UI (`main.js`, topbar, settings, etc.):
  * every module reads/writes via {@link getState} / `assign`. Emits
@@ -27,14 +27,13 @@
  * Prefer Solid `src/store/` for the Vite app; keep default keys aligned when
  * adding settings so hash-sync and migrations stay coherent.
  *
- * Storage key `pynescript.axis.v1` migrates from SuperChart Lite keys on load.
+ * Storage key `pynescript.axis.v1`; older keys are copied forward on load.
  */
 
 const STORAGE_KEY = 'pynescript.axis.v1';
-/** Older product names; content is copied into STORAGE_KEY once. */
+/** Older app-state keys; content is copied into STORAGE_KEY once. */
 const LEGACY_STORAGE_KEYS = [
-    'pynescript.superchart.v2',
-    'pynescript.superchart.v1',
+    'pynescript.axis.v2',
 ];
 
 const DEFAULT_STATE = Object.freeze({

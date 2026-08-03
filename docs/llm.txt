@@ -31,7 +31,7 @@ description: "ADR-001 through ADR-014 for AXIS: registry, AXIS≠engine, Solid+V
 
 # Architecture Decision Records
 
-Formal ADRs for AXIS (product + `frontend/`). Status values: **Accepted** unless noted. Dates are conceptual product epochs (SuperChart → AXIS), not git archaeology.
+Formal ADRs for AXIS (product + `frontend/`). Status values: **Accepted** unless noted. Dates are conceptual product epochs, not git archaeology.
 
 ## Index
 
@@ -44,7 +44,7 @@ Formal ADRs for AXIS (product + `frontend/`). Status values: **Accepted** unless
 | [ADR-005](#adr-005-declarative-configschema) | Declarative configSchema |
 | [ADR-006](#adr-006-url-loadable-plugins) | URL-loadable plugins |
 | [ADR-007](#adr-007-storage-as-a-plugin) | Storage as a plugin |
-| [ADR-008](#adr-008-frozen-cf-project-id) | Frozen CF project id `pynescript-superchart` |
+| [ADR-008](#adr-008-frozen-cf-project-id) | Frozen CF project id `pynescript-axis` |
 | [ADR-009](#adr-009-worker-proxies-first) | Worker proxies first |
 | [ADR-010](#adr-010-durable-object-stream-fan-out) | Durable Object stream fan-out |
 | [ADR-011](#adr-011-state-namespace-migration) | State namespace migration |
@@ -58,7 +58,7 @@ Formal ADRs for AXIS (product + `frontend/`). Status values: **Accepted** unless
 
 ### Context
 
-Early SuperChart registered sources/streams/engines in separate ad hoc maps. Operators and authors needed one mental model and one install path.
+Early AXIS registered sources/streams/engines in separate ad hoc maps. Operators and authors needed one mental model and one install path.
 
 ### Decision
 
@@ -192,7 +192,7 @@ Script library began as localStorage-only; cloud and git were bolted differently
 
 ---
 
-## ADR-008: Frozen CF project id `pynescript-superchart`
+## ADR-008: Frozen CF project id `pynescript-axis`
 
 ### Context
 
@@ -200,7 +200,7 @@ Renaming Cloudflare Pages/Worker projects severs KV/D1/R2 bindings, custom domai
 
 ### Decision
 
-**Keep infrastructure name `pynescript-superchart`.** Brand in UI/manifest/docs is AXIS. Health JSON may identify `pynescript-axis-worker`. Optional DNS aliases (`axis.*`) point at the same project without rename.
+**Keep infrastructure name `pynescript-axis`.** Brand in UI/manifest/docs is AXIS. Health JSON may identify `pynescript-axis-worker`. Optional DNS aliases (`axis.*`) point at the same project without rename.
 
 ### Consequences
 
@@ -250,11 +250,11 @@ N browser clients each opening venue WebSockets waste connections and risk rate 
 
 ### Context
 
-Rename SuperChart → AXIS would brick user layouts and libraries if keys changed hard.
+Hard-renaming storage namespaces would brick user layouts and libraries if keys changed hard.
 
 ### Decision
 
-Canonical key **`pynescript.axis.v1`**. On read, fall back to `pynescript.superchart.v2` / `v1` (and parallel library/editor keys), then **write forward** to AXIS keys. Do not keep dual-write forever.
+Canonical key **`pynescript.axis.v1`**. On read, fall back to `pynescript.axis.v2` (and parallel library/draft keys), then **write forward**. Do not keep dual-write forever.
 
 ### Consequences
 
@@ -401,8 +401,8 @@ AXIS architecture is the discipline of **separable axes**—price history, live 
 ```text
 Contract namespace:  pynescript.axis.plugins.v1
 App state key:      pynescript.axis.v1
-Legacy prefixes:    pynescript.superchart.*
-CF project id:      pynescript-superchart   (frozen)
+App state prefix:   pynescript.axis.*
+CF project id:      pynescript-axis   (frozen)
 Health service id:  pynescript-axis-worker
 ```
 
@@ -526,7 +526,7 @@ Contract namespace conceptually: `pynescript.axis.plugins.v1` (fields: `id`, `na
 
 ## Edge plane (optional)
 
-Cloudflare project **`pynescript-superchart`**:
+Cloudflare project **`pynescript-axis`**:
 
 - Pages: static `dist/`  
 - Worker: `/api/run` proxy, keys/usage KV, scripts D1, stream DO fan-out  
@@ -537,7 +537,7 @@ Cloudflare project **`pynescript-superchart`**:
 1. AXIS ≠ engine  
 2. Bars/logs/lastRun not fully persisted  
 3. Storage and engine endpoints may coincide (Worker) but remain separate plugin roles  
-4. Legacy SuperChart keys migrate forward, never the reverse on write  
+4. Older keys migrate forward, never the reverse on write  
 
 ## Failure modes (architectural)
 
@@ -577,7 +577,7 @@ FILE: docs/architecture/state-namespaces.mdx
 
 ---
 title: "State namespaces"
-description: "AXIS persistence keys, SuperChart migration, pluginsConfig, editor docs, library IDB, and URL hash state."
+description: "AXIS persistence keys, key migration, pluginsConfig, editor docs, library IDB, and URL hash state."
 ---
 
 # State namespaces
@@ -600,7 +600,7 @@ Contract / product identifiers (not storage keys):
 
 ```text
 pynescript.axis.plugins.v1   # conceptual plugin contract id
-pynescript-superchart        # CF project id (infra)
+pynescript-axis        # CF project id (infra)
 ```
 
 ## Conceptual model
@@ -635,10 +635,9 @@ Debounced write (~200ms).
 Read order:
 
 1. `pynescript.axis.v1`
-2. else `pynescript.superchart.v2`
-3. else `pynescript.superchart.v1`
+2. else `pynescript.axis.v2`
 
-On legacy hit: copy forward into AXIS key. Editor doc migrates similarly from `pynescript.superchart.editor.doc`.
+On older-key hit: copy forward into `pynescript.axis.v1`.
 
 Legacy vanilla `state.js` uses the same STORAGE_KEY constant for the pre-Solid shell.
 
@@ -671,9 +670,9 @@ Popout mode uses `editor-bridge` + shared storage so detached windows share sour
 | Version | 1 |
 | Stores | `scripts`, `kv` |
 
-Migration flags (`pynescript.axis.library.migrated`) prevent re-import loops from SuperChart library keys:
+Migration flags (`pynescript.axis.library.migrated`) prevent re-import loops from older library keys:
 
-- `pynescript.superchart.library.v1`
+- `pynescript.axis.library.v1`
 - `pynescript.axis.library.legacy`
 
 ## Cloud / git (remote namespaces)
@@ -806,10 +805,10 @@ make run   # separate process
 ```bash
 cd frontend/worker && wrangler deploy
 cd frontend && bun run build
-wrangler pages deploy dist --project-name=pynescript-superchart
+wrangler pages deploy dist --project-name=pynescript-axis
 ```
 
-**Frozen id:** never rename `pynescript-superchart` lightly ([ADR-008](/axis/docs/architecture/adrs)).
+**Frozen id:** never rename `pynescript-axis` lightly ([ADR-008](/axis/docs/architecture/adrs)).
 
 AXIS config:
 
@@ -973,7 +972,7 @@ This SPA exception list exists because Pyodide + micropip die with opaque `BadZi
 
 ```bash
 cd frontend && bun run build
-wrangler pages deploy dist --project-name=pynescript-superchart
+wrangler pages deploy dist --project-name=pynescript-axis
 ```
 
 ## Worked example — static desk demo
@@ -1158,7 +1157,7 @@ FILE: docs/devops/cloudflare.mdx
 
 ---
 title: "Cloudflare deployment"
-description: "Pages + Worker for AXIS: frozen project pynescript-superchart, bindings, deploy order, EXTERNAL_BACKEND reality."
+description: "Pages + Worker for AXIS: frozen project pynescript-axis, bindings, deploy order, EXTERNAL_BACKEND reality."
 ---
 
 # Cloudflare deployment
@@ -1172,7 +1171,7 @@ Production AXIS on Cloudflare is a **split deploy**:
 | **Pages** | Static PWA (`frontend/dist`) |
 | **Worker** | JSON API + WebSocket (`frontend/worker`) |
 
-**Project id:** `pynescript-superchart` — frozen infrastructure name (dashboard, wrangler, CI). Do not rename without a full binding/domain migration.
+**Project id:** `pynescript-axis` — frozen infrastructure name (dashboard, wrangler, CI). Do not rename without a full binding/domain migration.
 
 **Evaluation truth:** Worker `/api/run` **proxies to `EXTERNAL_BACKEND`** unless the gated Pyodide path is fully implemented and enabled. You still need a Python host (VPS Flask, container, etc.) for real Pine fidelity today.
 
@@ -1216,13 +1215,13 @@ npx wrangler deploy
 cd frontend
 bun install
 bun run build
-npx wrangler pages deploy dist --project-name=pynescript-superchart
+npx wrangler pages deploy dist --project-name=pynescript-axis
 ```
 
 Worker package also defines:
 
 ```json
-"deploy:pages": "wrangler pages deploy ../dist --project-name=pynescript-superchart"
+"deploy:pages": "wrangler pages deploy ../dist --project-name=pynescript-axis"
 ```
 
 ### 5. Point the PWA
@@ -1339,10 +1338,10 @@ Scripts handler duplicates allow headers for consistency.
 
 ### Production implication
 
-If Pages is `https://pynescript-superchart.pages.dev` (example), set:
+If Pages is `https://pynescript-axis.pages.dev` (example), set:
 
 ```
-ALLOWED_ORIGIN = "https://pynescript-superchart.pages.dev"
+ALLOWED_ORIGIN = "https://pynescript-axis.pages.dev"
 ```
 
 or your custom domain. **Exact string match** — no wildcard logic in code.
@@ -1440,7 +1439,7 @@ Python evaluation for desk workflows still often uses the **Flask Pro API** (`ma
 | Dev + Flask | + `make run` | `:5002` |
 | Static dist | `bun run build` + `python axis_pwa_server.py` | `:8081` |
 | Worker | `cd frontend/worker && npm run dev` | `:8787` |
-| CF prod | Pages `pynescript-superchart` + Worker same name family | HTTPS |
+| CF prod | Pages `pynescript-axis` + Worker same name family | HTTPS |
 
 ## Page map
 
@@ -1457,7 +1456,7 @@ Python evaluation for desk workflows still often uses the **Flask Pro API** (`ma
 
 | Surface | Value |
 | --- | --- |
-| CF project | `pynescript-superchart` |
+| CF project | `pynescript-axis` |
 | Health service | `pynescript-axis-worker` |
 
 ## See also
@@ -1576,7 +1575,7 @@ Manager → Plugins → Load from URL.
 1. **CORS** — Flask must allow the Vite origin; Worker `pickOrigin` allows `:3000` and `:8081`.
 2. **Pyodide local** — needs vendor wheels under `public/` (copied to dist on build).
 3. **Two endpoints** — topbar endpoint for engine vs cloud storage plugin config can differ (Flask vs Worker).
-4. **Legacy Makefile message** still mentions SuperChart Lite and `:8081` Bun server.
+4. **Legacy Makefile message** still mentions AXIS and `:8081` Bun server.
 
 ## Failure modes
 
@@ -1875,7 +1874,7 @@ Dynamic plugins rehydrate from localStorage install list on boot (`restoreInstal
 
 **Setup**
 
-1. `wrangler dev` / deploy Worker project **`pynescript-superchart`** (frozen name).
+1. `wrangler dev` / deploy Worker project **`pynescript-axis`** (frozen name).
 2. Endpoint → Worker origin.
 3. Storage cloud → API key from admin `/api/keys`.
 4. Script Library uses cloud list/read/write; If-Match on concurrent writes.
@@ -2027,7 +2026,7 @@ npm install
 npm run dev           # wrangler :8787
 ```
 
-In AXIS Settings, set **Backend URL** to `http://127.0.0.1:8787` (or `/api` path as your Worker routes). Production project id is frozen as `pynescript-superchart`—see [topologies](/axis/docs/architecture/topologies).
+In AXIS Settings, set **Backend URL** to `http://127.0.0.1:8787` (or `/api` path as your Worker routes). Production project id is frozen as `pynescript-axis`—see [topologies](/axis/docs/architecture/topologies).
 
 ## CORS when using server engine
 
@@ -2593,7 +2592,7 @@ Status line: backend · remote · branch · connected · count.
 ## Local backend
 
 - DB name `pynescript.axis.storage` v1 stores `scripts` + `kv`
-- Legacy SuperChart library keys migrate once
+- Older library keys migrate once
 - Drafts: optional `saveDraft` / `loadDraft` without polluting remote backends
 - Works fully offline
 
@@ -3159,11 +3158,11 @@ Left/right docks with multiple open panels lay out **side-by-side** (row), so In
 
 ## Ops
 
-### What is `pynescript-superchart`?
+### What is `pynescript-axis`?
 
 Frozen Cloudflare project name. Renaming breaks bindings and CI. Brand is AXIS; infrastructure id stays.
 
-### Legacy SuperChart localStorage?
+### Legacy localStorage keys?
 
 Migrated automatically into `pynescript.axis.v1` and library keys. See [State namespaces](/axis/docs/architecture/state-namespaces).
 
@@ -3215,7 +3214,7 @@ Terms as used in AXIS documentation and UI. Language runtime terms → [PYNE](/p
 
 | Term | Definition |
 | --- | --- |
-| **AXIS** | Charting PWA product (formerly SuperChart Lite): chart, editor, panels, and store—not the language engine. |
+| **AXIS** | Charting PWA product : chart, editor, panels, and store—not the language engine. |
 | **UI track** | Docs track for presentation surfaces (chart host, editor, shell, store) under `/axis/docs/ui`. |
 | **PYNE** | Pine Script™ toolchain (parse/eval); engines embed or call it. |
 | **Active set** | Tuple `{ source, stream, engine, storage }` currently selected. |
@@ -3290,7 +3289,7 @@ Terms as used in AXIS documentation and UI. Language runtime terms → [PYNE](/p
 | Term | Definition |
 | --- | --- |
 | **`pynescript.axis.v1`** | Primary localStorage app state key. |
-| **`pynescript.superchart.*`** | Legacy keys; migrated on read. |
+| **`pynescript.axis.v2`** | Older app-state key; migrated on read. |
 | **pluginsConfig** | Per-plugin configuration map. |
 | **Library export** | JSON dump of storage documents. |
 
@@ -3298,7 +3297,7 @@ Terms as used in AXIS documentation and UI. Language runtime terms → [PYNE](/p
 
 | Term | Definition |
 | --- | --- |
-| **`pynescript-superchart`** | Frozen CF Wrangler/Pages project id. |
+| **`pynescript-axis`** | Frozen CF Wrangler/Pages project id. |
 | **`pynescript-axis-worker`** | Health JSON service identity. |
 | **void** | Brand pack / dark chrome aesthetic for AXIS docs/UI. |
 
@@ -3335,7 +3334,7 @@ description: "Open charting PWA — orthogonal sources, streams, engines, and st
 
 # AXIS Documentation
 
-**AXIS** (formerly SuperChart Lite) is an installable charting PWA that treats **price**, **time**, and **calculation** as separable axes. Sources load history. Streams advance the present. Engines evaluate Pine Script™ via **PYNE**. Storage keeps your script library. Compose any lawful combination without a proprietary charting host.
+**AXIS**  is an installable charting PWA that treats **price**, **time**, and **calculation** as separable axes. Sources load history. Streams advance the present. Engines evaluate Pine Script™ via **PYNE**. Storage keeps your script library. Compose any lawful combination without a proprietary charting host.
 
 _Pine Script™ and TradingView® are trademarks of TradingView, Inc. This project is independent and not affiliated with or endorsed by TradingView, Inc._
 
@@ -3370,7 +3369,7 @@ Formal active set:
 ```
 Active set = { source, stream, engine, storage }
 Contract namespace: pynescript.axis.plugins.v1
-App state: pynescript.axis.v1  (migrates from pynescript.superchart.*)
+App state: pynescript.axis.v1
 ```
 
 ## Compose in one glance
@@ -3388,7 +3387,7 @@ Full recipes: [Compose recipes](/axis/docs/enduser/getting-started/compose-recip
 
 | Surface | Value |
 | --- | --- |
-| CF Wrangler / Pages project | `pynescript-superchart` (frozen) |
+| CF Wrangler / Pages project | `pynescript-axis` (frozen) |
 | Health JSON service | `pynescript-axis-worker` |
 | Product brand | **AXIS** |
 
@@ -3709,7 +3708,7 @@ The loader (`frontend/src/plugins/loader.ts`) lets users install **third-party o
 | Key | Role |
 | --- | --- |
 | `pynescript.axis.plugins.v1` | Current |
-| `pynescript.superchart.plugins.v1` | Legacy read fallback |
+| `pynescript.axis.plugins.v1` | Installed plugin list |
 
 On boot, `restoreInstalledPlugins()` re-imports every saved URL.
 
@@ -4082,7 +4081,7 @@ Defaults when selection is missing (`active.ts`): source `binance-rest`, stream 
 3. **Built-ins resist casual unregister** — `unregister*(id)` returns `false` for `builtIn: true` unless `allowBuiltIn: true`.
 4. **Config keys** — prefer `pluginKey(kind, id)` → `` `${kind}:${id}` `` (e.g. `engine:server`).
 5. **Storage via URL is rejected** — dynamic loader refuses `kind: 'storage'` until a hardened path exists.
-6. **Legacy key migration** — installed plugins may still be read from `pynescript.superchart.plugins.v1`.
+6. **Install list persistence** — installed plugins are stored under `pynescript.axis.plugins.v1`.
 
 ## Compose recipes (plugin view)
 
@@ -4458,7 +4457,7 @@ Dynamic `kind: 'storage'` install via URL is **not supported** (`loader.ts` thro
 | --- | --- |
 | Primary | IndexedDB `pynescript.axis.storage` — stores `scripts`, `kv` |
 | Fallback | `localStorage` keys `pynescript.axis.library.v1`, draft keys |
-| Migration | Legacy SuperChart keys (`pynescript.superchart.library.v1`, editor docs) |
+| Migration | Older library keys (`pynescript.axis.library.v1`, editor docs) |
 | Memory | In-process maps when neither IDB nor LS exist (tests/SSR) |
 | Capabilities | Offline-friendly |
 
@@ -4833,15 +4832,15 @@ This atlas is a **path index** for AXIS. Use it to jump from a product feature t
 | `pynescript.axis.plugins.v1` | Installed dynamic plugins |
 | `pynescript.axis.library.v1` | Local library LS fallback |
 | `pynescript.axis.storage` | IDB database name |
-| `pynescript.axis.v1` | App state (target; migrates from superchart) |
-| `pynescript.superchart.*` | Legacy keys still read for migration |
+| `pynescript.axis.v1` | App state |
+| `pynescript.axis.v2` | Older app-state key (write-forward) |
 | Contract ns | `pynescript.axis.plugins.v1` (conceptual) |
 
 ## Infrastructure constants
 
 | Name | Value |
 | --- | --- |
-| CF project | `pynescript-superchart` |
+| CF project | `pynescript-axis` |
 | Health service | `pynescript-axis-worker` |
 | Pyodide version | `0.26.2` (self-hosted path) |
 
@@ -4873,7 +4872,7 @@ FILE: docs/reference/legacy-shell.mdx
 
 ---
 title: "Legacy shell"
-description: "Pre-Solid SuperChart static shell vs current AXIS product path — what to ignore and what still runs."
+description: "Pre-Solid static shell vs current AXIS product path — what to ignore and what still runs."
 ---
 
 # Legacy shell
@@ -4898,7 +4897,7 @@ Source of truth: `frontend/LEGACY.md`.
 | `frontend/server.ts` | Bun static server for old tree |
 | Root / frontend `sw.js` (static shell SW) | Service worker for old shell |
 
-Makefile `make run-frontend` still prints SuperChart Lite and runs `bun run frontend/server.ts` on `:8081` — useful for legacy debugging, **not** the Solid product path.
+Makefile `make run-frontend` still prints AXIS and runs `bun run frontend/server.ts` on `:8081` — useful for legacy debugging, **not** the Solid product path.
 
 ## What is current
 
@@ -4914,13 +4913,13 @@ Makefile `make run-frontend` still prints SuperChart Lite and runs `bun run fron
 
 | Residue | Handling |
 | --- | --- |
-| `pynescript.superchart.plugins.v1` | Loader still reads |
-| `pynescript.superchart.library.v1` | Local storage migrates |
-| `pynescript.superchart.editor.doc` | Draft migration |
-| CF project `pynescript-superchart` | **Frozen** name despite product rebrand |
-| Some docs/Makefile strings | Still say SuperChart Lite |
+| `pynescript.axis.plugins.v1` | Plugin install list |
+| `pynescript.axis.library.v1` | Library localStorage fallback |
+| `pynescript.axis.editor.doc` | Editor document backup |
+| CF project `pynescript-axis` | **Frozen** infrastructure id |
+| Some docs/Makefile strings | Current brand is AXIS |
 
-App state target namespace: `pynescript.axis.v1` (migrates from `pynescript.superchart.*`).
+App state namespace: `pynescript.axis.v1`.
 
 ## Invariants
 
@@ -6252,7 +6251,7 @@ Vanilla `state.js` remains for legacy shell with the same storage key family. Pr
 
 1. Hydrate never restores `lastRun` or `logs`.  
 2. Persist strips `bars`.  
-3. Migration from SuperChart keys is read-repair ([state namespaces](/axis/docs/architecture/state-namespaces)).  
+3. Key migration is read-repair ([state namespaces](/axis/docs/architecture/state-namespaces)).  
 4. `pluginsConfig` keys prefer `` `${kind}:${id}` ``.  
 5. Store is not a plugin registry—ids must exist in registry to function at runtime.
 
@@ -6616,7 +6615,7 @@ description: "wrangler.toml vars, KV, D1, R2, Durable Objects — provision once
 
 Bindings and vars for the AXIS Worker are declared in `frontend/worker/wrangler.toml`. Many production bindings ship **commented** so clone-and-dev does not require Cloudflare resources; `wrangler dev` synthesizes local substitutes where possible.
 
-**Project name is frozen:** `name = "pynescript-superchart"`.
+**Project name is frozen:** `name = "pynescript-axis"`.
 
 ## Conceptual model
 
@@ -6705,7 +6704,7 @@ Class: `SessionDO` exported from `src/index.ts`.
 | `compatibility_flags` | `nodejs_compat` |
 | `[observability]` | `enabled = true` |
 
-Static PWA assets are **not** served by this Worker in the documented split: **Pages** serves `dist/`, Worker serves API/WS. Project name for Pages deploy remains `pynescript-superchart`.
+Static PWA assets are **not** served by this Worker in the documented split: **Pages** serves `dist/`, Worker serves API/WS. Project name for Pages deploy remains `pynescript-axis`.
 
 ## Deploy commands
 
@@ -6715,7 +6714,7 @@ wrangler deploy
 
 # Pages (from frontend/)
 bun run build
-wrangler pages deploy dist --project-name=pynescript-superchart
+wrangler pages deploy dist --project-name=pynescript-axis
 # or npm run deploy:pages from worker package
 ```
 
@@ -7044,8 +7043,8 @@ The AXIS Cloudflare Worker (`frontend/worker/`) is the **edge data plane** for t
 
 | Surface | Value |
 | --- | --- |
-| Wrangler / Pages project | **`pynescript-superchart`** — **do not rename** lightly |
-| npm package | `pynescript-superchart-worker` |
+| Wrangler / Pages project | **`pynescript-axis`** — **do not rename** lightly |
+| npm package | `axis-worker` |
 | Health JSON `service` | `pynescript-axis-worker` |
 | Product brand | **AXIS** |
 

@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * @file Legacy SuperChart top bar (vanilla DOM).
+ * @file Legacy top bar (vanilla DOM).
  * Symbol/interval/source/engine pickers, load/run/live/upload/save/reset.
  * Prefer Solid `Topbar.tsx` in the AXIS product shell; this remains for the
  * legacy static entry (`main.js` / LEGACY.md).

@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * @file Legacy SuperChart status bar helpers (vanilla DOM).
+ * @file Legacy status bar helpers (vanilla DOM).
  * Prefer Solid `StatusBar.tsx` in AXIS. Shared by legacy modules via setStatus.
  */
 

@@ -28,7 +28,7 @@ description: "wrangler.toml vars, KV, D1, R2, Durable Objects — provision once
 
 Bindings and vars for the AXIS Worker are declared in `frontend/worker/wrangler.toml`. Many production bindings ship **commented** so clone-and-dev does not require Cloudflare resources; `wrangler dev` synthesizes local substitutes where possible.
 
-**Project name is frozen:** `name = "pynescript-superchart"`.
+**Project name is frozen:** `name = "pynescript-axis"`.
 
 ## Conceptual model
 
@@ -126,7 +126,7 @@ Class: `SessionDO` exported from `src/index.ts`.
 | `compatibility_flags` | `nodejs_compat` |
 | `[observability]` | `enabled = true` |
 
-Static PWA assets are **not** served by this Worker in the documented split: **Pages** serves `dist/`, Worker serves API/WS. Project name for Pages deploy remains `pynescript-superchart`.
+Static PWA assets are **not** served by this Worker in the documented split: **Pages** serves `dist/`, Worker serves API/WS. Project name for Pages deploy remains `pynescript-axis`.
 
 ## Deploy commands
 
@@ -136,7 +136,7 @@ wrangler deploy
 
 # Pages (from frontend/)
 bun run build
-wrangler pages deploy dist --project-name=pynescript-superchart
+wrangler pages deploy dist --project-name=pynescript-axis
 # or npm run deploy:pages from worker package
 ```
 

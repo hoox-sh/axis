@@ -125,7 +125,7 @@ Contract namespace conceptually: `pynescript.axis.plugins.v1` (fields: `id`, `na
 
 ## Edge plane (optional)
 
-Cloudflare project **`pynescript-superchart`**:
+Cloudflare project **`pynescript-axis`**:
 
 - Pages: static `dist/`  
 - Worker: `/api/run` proxy, keys/usage KV, scripts D1, stream DO fan-out  
@@ -136,7 +136,7 @@ Cloudflare project **`pynescript-superchart`**:
 1. AXIS ≠ engine  
 2. Bars/logs/lastRun not fully persisted  
 3. Storage and engine endpoints may coincide (Worker) but remain separate plugin roles  
-4. Legacy SuperChart keys migrate forward, never the reverse on write  
+4. Older keys migrate forward, never the reverse on write  
 
 ## Failure modes (architectural)
 

@@ -43,7 +43,6 @@ import type { EnginePlugin, SourcePlugin, StreamPlugin } from './types';
 
 /** localStorage key for installed plugin URL list. */
 export const PLUGINS_KEY = 'pynescript.axis.plugins.v1';
-const LEGACY_PLUGINS_KEY = 'pynescript.superchart.plugins.v1';
 
 /** One entry in the persisted install list. */
 export type InstalledPlugin = {
@@ -56,8 +55,7 @@ export type InstalledPlugin = {
 
 function readInstalled(): InstalledPlugin[] {
   try {
-    const raw =
-      localStorage.getItem(PLUGINS_KEY) || localStorage.getItem(LEGACY_PLUGINS_KEY);
+    const raw = localStorage.getItem(PLUGINS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];

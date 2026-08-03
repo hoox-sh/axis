@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * LEGACY — SuperChart Lite / pre-Solid main entry.
+ * LEGACY — pre-Solid main entry.
  *
  * Product UI is Vite + Solid: `src/index.tsx` → `src/app.tsx`.
  * This file powers the old static shell only (Bun static server tests,
@@ -373,7 +373,7 @@ function saveCurrent() {
 
 function resetAll() {
     if (!confirm('Reset saved state and clear editor?')) return;
-    localStorage.removeItem('pynescript.superchart.v1');
+    localStorage.removeItem('pynescript.axis.v1');
     setScript(DEMOS['rsi-overlay']);
     getState().assign({
         endpoint: 'http://localhost:5002',

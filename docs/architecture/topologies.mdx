@@ -75,7 +75,7 @@ make run   # separate process
 
 ```mermaid
 flowchart TB
-  U[Browser] --> P[CF Pages pynescript-superchart]
+  U[Browser] --> P[CF Pages pynescript-axis]
   U --> W[Worker same project]
   W -->|proxy /api/run| F[EXTERNAL_BACKEND Flask]
   W --> KV[KV keys/usage]
@@ -90,10 +90,10 @@ flowchart TB
 ```bash
 cd frontend/worker && wrangler deploy
 cd frontend && bun run build
-wrangler pages deploy dist --project-name=pynescript-superchart
+wrangler pages deploy dist --project-name=pynescript-axis
 ```
 
-**Frozen id:** never rename `pynescript-superchart` lightly ([ADR-008](/axis/docs/architecture/adrs)).
+**Frozen id:** never rename `pynescript-axis` lightly ([ADR-008](/axis/docs/architecture/adrs)).
 
 AXIS config:
 

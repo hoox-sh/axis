@@ -46,7 +46,7 @@ PWA loads them via dynamic `import()`.
 ## Auto-loading on startup
 
 The Manager tracks installed plugins in `localStorage` under
-`pynescript.axis.plugins.v1` (legacy: `pynescript.superchart.plugins.v1`). On startup, the PWA re-imports every
+`pynescript.axis.plugins.v1`. On startup, the PWA re-imports every
 URL in that list, so once you've added an example it'll be there next time
 you open the page.
 

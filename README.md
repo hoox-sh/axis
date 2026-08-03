@@ -1,6 +1,6 @@
 # AXIS
 
-**AXIS** (formerly SuperChart Lite) — installable charting PWA for Pine Script™.
+**AXIS**  — installable charting PWA for Pine Script™.
 
 **Website:** [hoox.sh/axis](https://hoox.sh/axis) · **Docs:** [hoox.sh/axis/docs](https://hoox.sh/axis/docs) · **Repo:** [jango-blockchained/axis](https://github.com/jango-blockchained/axis)
 
@@ -125,7 +125,7 @@ cd frontend && bun run dev
 ### Legacy static path (not recommended)
 
 `style.css`, `main.js`, `server.ts`, and root-level `index.html` without Vite
-are the pre-Solid SuperChart shell. They still use older TV-blue tokens in places
+are the pre-Solid shell. They still use older TV-blue tokens in places
 and are kept only for smoke tests / offline static serving. Prefer `bun run dev`
 or `dist/` from `bun run build`. Do not treat the legacy shell as the product UI.
 See **`LEGACY.md`**.
@@ -242,7 +242,7 @@ curl -sS -X POST http://162.254.38.194:5002/run \
 
 ## Persistence (localStorage)
 
-`pynescript.axis.v1` holds (migrates automatically from `pynescript.superchart.v*`):
+`pynescript.axis.v1` holds:
 
 | Field          | Purpose                              |
 |----------------|--------------------------------------|

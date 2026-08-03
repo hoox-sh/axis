@@ -25,7 +25,7 @@
  * 2. localStorage JSON blob — when IDB unavailable
  * 3. In-memory Map — tests / SSR
  *
- * One-shot migration pulls SuperChart library keys and legacy editor draft keys.
+ * One-shot migration imports older library/draft localStorage keys into IDB.
  * Drafts also mirror to `pynescript.axis.editor.doc` for the editor bridge.
  */
 
@@ -47,13 +47,11 @@ const LS_DRAFT = 'pynescript.axis.library.draft';
 const LS_MIGRATED = 'pynescript.axis.library.migrated';
 
 const LEGACY_LIBRARY_KEYS = [
-  'pynescript.superchart.library.v1',
   'pynescript.axis.library.legacy',
 ] as const;
 
 const LEGACY_DRAFT_KEYS = [
   'pynescript.axis.editor.doc',
-  'pynescript.superchart.editor.doc',
 ] as const;
 
 type KvValue =

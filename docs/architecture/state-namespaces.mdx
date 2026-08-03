@@ -19,7 +19,7 @@
 
 ---
 title: "State namespaces"
-description: "AXIS persistence keys, SuperChart migration, pluginsConfig, editor docs, library IDB, and URL hash state."
+description: "AXIS persistence keys, key migration, pluginsConfig, editor docs, library IDB, and URL hash state."
 ---
 
 # State namespaces
@@ -42,7 +42,7 @@ Contract / product identifiers (not storage keys):
 
 ```text
 pynescript.axis.plugins.v1   # conceptual plugin contract id
-pynescript-superchart        # CF project id (infra)
+pynescript-axis        # CF project id (infra)
 ```
 
 ## Conceptual model
@@ -63,7 +63,7 @@ flowchart TB
   UI --> BARS
   UI --> LR
   LIB[storage local] --> IDB
-  LEG[superchart.*] -->|migrate on read| LS
+  LEG[older keys] -->|migrate on read| LS
 ```
 
 ## App state key `pynescript.axis.v1`
@@ -94,10 +94,9 @@ Debounced write (~200ms).
 Read order:
 
 1. `pynescript.axis.v1`
-2. else `pynescript.superchart.v2`
-3. else `pynescript.superchart.v1`
+2. else `pynescript.axis.v2`
 
-On legacy hit: copy forward into AXIS key. Editor doc migrates similarly from `pynescript.superchart.editor.doc`.
+On older-key hit: copy forward into `pynescript.axis.v1`.
 
 Legacy vanilla `state.js` uses the same STORAGE_KEY constant for the pre-Solid shell.
 
@@ -130,9 +129,9 @@ Popout mode uses `editor-bridge` + shared storage so detached windows share sour
 | Version | 1 |
 | Stores | `scripts`, `kv` |
 
-Migration flags (`pynescript.axis.library.migrated`) prevent re-import loops from SuperChart library keys:
+Migration flags (`pynescript.axis.library.migrated`) prevent re-import loops from older library keys:
 
-- `pynescript.superchart.library.v1`
+- `pynescript.axis.library.v1`
 - `pynescript.axis.library.legacy`
 
 ## Cloud / git (remote namespaces)

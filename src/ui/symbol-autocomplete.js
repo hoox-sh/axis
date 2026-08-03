@@ -18,12 +18,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * @file Legacy symbol autocomplete for SuperChart top bar.
+ * @file Legacy symbol autocomplete for top bar.
  * Fetches Binance `/exchangeInfo`, fuzzy-matches, caches 1h in localStorage.
  * Used by legacy topbar; Solid shell may use simpler inputs + watchlist.
  */
 
-const CACHE_KEY = 'pynescript.superchart.symbols.v1';
+const CACHE_KEY = 'pynescript.axis.symbols.v1';
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const DEFAULT_BASE = 'https://api.binance.com';
 

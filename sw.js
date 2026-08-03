@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-/* SuperChart Lite — service worker.
+/* AXIS — service worker.
  *
  * Strategy:
  *   - App shell (HTML/CSS/JS at same origin) → cache-first, versioned cache.
@@ -18,8 +18,8 @@
  */
 
 const VERSION = 'v2';
-const SHELL_CACHE = `superchart-shell-${VERSION}`;
-const RUNTIME_CACHE = `superchart-runtime-${VERSION}`;
+const SHELL_CACHE = `axis-shell-${VERSION}`;
+const RUNTIME_CACHE = `axis-runtime-${VERSION}`;
 const SHELL_ASSETS = [
     './',
     './index.html',

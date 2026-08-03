@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * @file Legacy SuperChart watchlist sidebar (vanilla DOM).
+ * @file Legacy watchlist sidebar (vanilla DOM).
  * Polls Binance tickers; click loads chart symbol. Prefer Solid `Watchlist.tsx`
  * (WS-first quotes via watchlist-live).
  */

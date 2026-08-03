@@ -96,7 +96,7 @@ Defaults when selection is missing (`active.ts`): source `binance-rest`, stream 
 3. **Built-ins resist casual unregister** — `unregister*(id)` returns `false` for `builtIn: true` unless `allowBuiltIn: true`.
 4. **Config keys** — prefer `pluginKey(kind, id)` → `` `${kind}:${id}` `` (e.g. `engine:server`).
 5. **Storage via URL is rejected** — dynamic loader refuses `kind: 'storage'` until a hardened path exists.
-6. **Legacy key migration** — installed plugins may still be read from `pynescript.superchart.plugins.v1`.
+6. **Install list persistence** — installed plugins are stored under `pynescript.axis.plugins.v1`.
 
 ## Compose recipes (plugin view)
 

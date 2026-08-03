@@ -4,12 +4,12 @@
 
 | Surface | Value | Notes |
 |---------|--------|--------|
-| **Wrangler / Pages project** | `pynescript-superchart` | **Do not rename** in CF dashboard or `wrangler.toml` without migrating bindings, custom domains, and CI secrets. The CF project id is stable infrastructure. |
-| **npm package** | `pynescript-superchart-worker` | Internal; can lag display brand. |
+| **Wrangler / Pages project** | `pynescript-axis` | **Do not rename** in CF dashboard or `wrangler.toml` without migrating bindings, custom domains, and CI secrets. The CF project id is stable infrastructure. |
+| **npm package** | `axis-worker` | Internal; can lag display brand. |
 | **Health JSON `service`** | `pynescript-axis-worker` | User-facing API identity (already AXIS). |
 | **Product / UI brand** | **AXIS** | Manifest, titles, landing. |
 
-Optional later: add a CF **alias** or custom domain `axis.*` pointing at the same project — still leave the project name as `pynescript-superchart` so deploys and KV/D1 ids stay put.
+Optional later: add a CF **alias** or custom domain `axis.*` pointing at the same project — still leave the project name as `pynescript-axis` so deploys and KV/D1 ids stay put.
 
 ---
 
@@ -93,11 +93,11 @@ wrangler deploy
 # 3) Deploy the PWA as a Pages site (project name is intentional legacy id)
 cd ..
 bun run build   # produce frontend/dist
-wrangler pages deploy dist --project-name=pynescript-superchart
+wrangler pages deploy dist --project-name=pynescript-axis
 ```
 
 Prefer deploying **`dist/`** from the Vite Solid app, not the repo root
-(legacy `main.js` shell). Project name stays `pynescript-superchart` (see
+(legacy `main.js` shell). Project name stays `pynescript-axis` (see
 naming table above).
 
 After deployment, the PWA's `Endpoint` field should be set to the

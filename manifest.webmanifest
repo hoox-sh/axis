@@ -1,7 +1,7 @@
 {
     "name": "AXIS — open charting PWA",
     "short_name": "AXIS",
-    "description": "AXIS: open charting PWA for Pine Script™. Runs locally, on Cloudflare, or fully offline. (Formerly SuperChart.)",
+    "description": "AXIS: open charting PWA for Pine Script™. Runs locally, on Cloudflare, or fully offline. ",
     "start_url": "./",
     "scope": "./",
     "id": "/pynescript-axis",

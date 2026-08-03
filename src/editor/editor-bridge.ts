@@ -24,7 +24,6 @@
  * - **BroadcastChannel** {@link EDITOR_CHANNEL} (`axis-editor-v1`)
  * - **localStorage** shared doc (`EDITOR_DOC_KEY`) for persistence across reloads
  *
- * Dual-listens on the legacy SuperChart channel so open popouts keep working.
  * Messages: hello/ping/pong, doc sync, run + run-status, popout open/close, reattach.
  *
  * @module editor/editor-bridge
@@ -34,8 +33,6 @@ import { EDITOR_DOC_KEY } from '../store';
 
 /** BroadcastChannel name for AXIS editor ↔ main. */
 export const EDITOR_CHANNEL = 'axis-editor-v1';
-/** @deprecated SuperChart channel — dual-listen only */
-const LEGACY_EDITOR_CHANNEL = 'superchart-editor-v1';
 
 /** Discriminated union of bridge frames. */
 export type BridgeMessage =
@@ -52,7 +49,6 @@ export type BridgeMessage =
 type Handler = (msg: BridgeMessage) => void;
 
 let channel: BroadcastChannel | null = null;
-let legacyChannel: BroadcastChannel | null = null;
 const handlers = new Set<Handler>();
 
 function dispatch(msg: BridgeMessage) {
@@ -66,15 +62,6 @@ function ensureChannel(): BroadcastChannel | null {
     channel = new BroadcastChannel(EDITOR_CHANNEL);
     channel.onmessage = (ev: MessageEvent<BridgeMessage>) => dispatch(ev.data);
   }
-  // Dual-listen legacy SuperChart channel (read-only for migration)
-  if (!legacyChannel) {
-    try {
-      legacyChannel = new BroadcastChannel(LEGACY_EDITOR_CHANNEL);
-      legacyChannel.onmessage = (ev: MessageEvent<BridgeMessage>) => dispatch(ev.data);
-    } catch {
-      legacyChannel = null;
-    }
-  }
   return channel;
 }
 
@@ -85,7 +72,7 @@ export function bridgeSubscribe(handler: Handler): () => void {
   return () => handlers.delete(handler);
 }
 
-/** Publish on the AXIS channel (and not on the legacy channel). */
+/** Publish on the AXIS editor channel. */
 export function bridgePublish(msg: BridgeMessage) {
   const ch = ensureChannel();
   ch?.postMessage(msg);

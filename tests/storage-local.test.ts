@@ -97,14 +97,14 @@ describe('storage-local plugin', () => {
     expect(d?.content).toBe('plot(1)');
   });
 
-  it('migrates legacy superchart library once', async () => {
+  it('migrates legacy library key into IDB once', async () => {
     localStorage.setItem(
-      'pynescript.superchart.library.v1',
+      'pynescript.axis.library.legacy',
       JSON.stringify([
         {
           id: 'legacy1',
           name: 'Old Script',
-          description: 'from v1',
+          description: 'from legacy',
           script: 'plot(open)',
           savedAt: 1000,
         },

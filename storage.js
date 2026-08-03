@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-// localStorage persistence for SuperChart Lite
+// localStorage persistence for AXIS
 // Keys: script, symbol, interval, run mode, API key (local-only; not synced)
 
-const STORAGE_KEY = 'pynescript.superchart.v1';
+const STORAGE_KEY = 'pynescript.axis.v1';
 
 /**
  * @typedef {{
@@ -16,11 +16,11 @@ const STORAGE_KEY = 'pynescript.superchart.v1';
  *   mode?: 'local' | 'cloud',
  *   apiKey?: string,
  *   savedAt?: number,
- * }} SuperChartState
+ * }} AxisState
  */
 
 /**
- * @returns {SuperChartState | null}
+ * @returns {AxisState | null}
  */
 export function loadState() {
     try {
@@ -36,8 +36,8 @@ export function loadState() {
 }
 
 /**
- * @param {SuperChartState} partial
- * @returns {SuperChartState}
+ * @param {AxisState} partial
+ * @returns {AxisState}
  */
 export function saveState(partial = {}) {
     const prev = loadState() || {};
@@ -64,7 +64,7 @@ export function clearState() {
 
 /**
  * Debounced save helper.
- * @param {() => SuperChartState} getPartial
+ * @param {() => AxisState} getPartial
  * @param {number} [ms]
  */
 export function createAutoSaver(getPartial, ms = 800) {

@@ -151,15 +151,15 @@ mindmap
 | `pynescript.axis.plugins.v1` | Installed dynamic plugins |
 | `pynescript.axis.library.v1` | Local library LS fallback |
 | `pynescript.axis.storage` | IDB database name |
-| `pynescript.axis.v1` | App state (target; migrates from superchart) |
-| `pynescript.superchart.*` | Legacy keys still read for migration |
+| `pynescript.axis.v1` | App state |
+| `pynescript.axis.v2` | Older app-state key (write-forward) |
 | Contract ns | `pynescript.axis.plugins.v1` (conceptual) |
 
 ## Infrastructure constants
 
 | Name | Value |
 | --- | --- |
-| CF project | `pynescript-superchart` |
+| CF project | `pynescript-axis` |
 | Health service | `pynescript-axis-worker` |
 | Pyodide version | `0.26.2` (self-hosted path) |
 

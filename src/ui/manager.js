@@ -30,8 +30,8 @@ import { setStatus } from './status.js';
 
 let _backdrop = null;
 
-const LIBRARY_KEY = 'pynescript.superchart.library.v1';
-const PLUGINS_KEY = 'pynescript.superchart.plugins.v1';
+const LIBRARY_KEY = 'pynescript.axis.library.v1';
+const PLUGINS_KEY = 'pynescript.axis.plugins.v1';
 
 function loadLibrary() {
     try { return JSON.parse(localStorage.getItem(LIBRARY_KEY) || '[]'); } catch (_) { return []; }
@@ -323,7 +323,7 @@ export function applyTheme(theme) {
 /** Restore theme + re-load previously installed plugins from localStorage. */
 export function initManager() {
     // Auto-restore the last theme.
-    const last = (() => { try { return JSON.parse(localStorage.getItem('pynescript.superchart.v1') || '{}').theme; } catch (_) { return null; } })();
+    const last = (() => { try { return JSON.parse(localStorage.getItem('pynescript.axis.v1') || '{}').theme; } catch (_) { return null; } })();
     applyTheme(last || 'dark');
     // Auto-load any plugins the user previously installed.
     const installed = loadInstalledPlugins();

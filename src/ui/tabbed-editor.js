@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * @file Legacy multi-tab CodeMirror 6 wrapper (SuperChart).
+ * @file Legacy multi-tab CodeMirror 6 wrapper.
  * Single EditorView swaps docs on tab change; tabs in localStorage as
  * `{ id, name, content }`. Unsaved dots, Ctrl/Cmd+Alt Left/Right cycle,
  * context menu rename/duplicate/delete. Prefer Solid `editor/` package in AXIS.
@@ -26,8 +26,8 @@
 
 import { initPineEditor, getScript, setScript } from '../../pine-editor.js';
 
-const TABS_KEY = 'pynescript.superchart.tabs.v1';
-const ACTIVE_KEY = 'pynescript.superchart.active-tab.v1';
+const TABS_KEY = 'pynescript.axis.tabs.v1';
+const ACTIVE_KEY = 'pynescript.axis.active-tab.v1';
 
 function loadTabs() {
     try { return JSON.parse(localStorage.getItem(TABS_KEY) || '[]'); } catch (_) { return []; }

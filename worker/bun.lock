@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "pynescript-superchart-worker",
+      "name": "axis-worker",
       "dependencies": {
         "zod": "^3.23.0",
       },

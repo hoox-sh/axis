@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "deploy:pages": "wrangler pages deploy ../dist --project-name=pynescript-superchart",
+    "deploy:pages": "wrangler pages deploy ../dist --project-name=pynescript-axis",
     "tail": "wrangler tail",
     "typecheck": "tsc --noEmit"
   },
