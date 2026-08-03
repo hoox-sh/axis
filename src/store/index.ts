@@ -82,6 +82,16 @@ import {
   normalizeChartType,
   type ChartType,
 } from '../chart/chart-type';
+import {
+  defaultChartThemeState,
+  hydrateChartTheme,
+  withPreset,
+  withTokenOverride,
+  applyThemeToDocument,
+  getThemeManager,
+  type ChartThemeState,
+  type ThemeTokenValue,
+} from '../theme';
 
 // Stable ID generation — uses timestamp prefix + counter to survive reloads
 let idCounter = 0;
@@ -148,6 +158,7 @@ const DEFAULTS: AppState = {
     rerunOn: 'every-tick',
   },
   theme: 'dark',
+  chartTheme: defaultChartThemeState(),
   uiScale: 1,
   editor: { open: true, width: 460, mode: 'docked' },
   watchlist: { open: true, width: 200, symbols: [...DEFAULT_WATCHLIST], refreshSec: 15 },
@@ -199,7 +210,10 @@ const DEFAULTS: AppState = {
     runLatencySamples: [],
     lastTick: null,
     hud: { compact: false, overlay: false },
+    // Privacy: never prompt to share error data unless the user opts in
+    shareOnError: false,
   },
+  errorShareOffer: null,
   panelChrome: defaultPanelChromeMap(),
   chartLayout: defaultChartLayout({
     symbol: 'BTCUSDT',
@@ -314,6 +328,17 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         ...(bag.editor && typeof bag.editor === 'object' ? bag.editor : {}),
       },
       uiScale: clampUiScale(bag.uiScale ?? DEFAULTS.uiScale),
+      // Chart theme: hydrate when present; else default and sync base from chrome theme
+      chartTheme: (() => {
+        if (bag.chartTheme != null) {
+          return hydrateChartTheme(bag.chartTheme);
+        }
+        const chrome =
+          bag.theme === 'light' || bag.theme === 'dark' ? bag.theme : null;
+        if (chrome === 'light') return withPreset('void-light');
+        if (chrome === 'dark') return withPreset('void-dark');
+        return defaultChartThemeState();
+      })(),
       watchlist: {
         ...DEFAULTS.watchlist,
         ...(bag.watchlist && typeof bag.watchlist === 'object' ? bag.watchlist : {}),
@@ -408,7 +433,16 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
             ? (bag.telemetry as TelemetryState).hud
             : {}),
         },
+        // Opt-in error share prompt — default false unless explicitly true
+        shareOnError:
+          !!(
+            bag.telemetry &&
+            typeof bag.telemetry === 'object' &&
+            (bag.telemetry as TelemetryState).shareOnError === true
+          ),
       },
+      // Ephemeral error-share toast — never restore from disk
+      errorShareOffer: null,
       // Drawing tool always starts as cursor; list normalized for dual legacy/style fields
       drawingTool: 'cursor',
       drawings: normalizeUserDrawings(bag.drawings) as Drawing[],
@@ -675,12 +709,24 @@ export const [store, setStore] = createStore<AppState>({
 });
 
 // Apply theme + density as soon as the store hydrates (before first paint when possible)
-if (typeof document !== 'undefined') {
+{
+  const chartTheme = store.chartTheme || defaultChartThemeState();
   try {
-    document.documentElement.setAttribute('data-theme', store.theme || 'dark');
-    applyUiScale(store.uiScale);
+    applyThemeToDocument(chartTheme);
+    const tm = getThemeManager();
+    tm.setState(chartTheme);
   } catch {
     /* ignore */
+  }
+  if (typeof document !== 'undefined') {
+    try {
+      // Prefer chartTheme.base when present; fall back to chrome theme
+      const base = chartTheme.base || store.theme || 'dark';
+      document.documentElement.setAttribute('data-theme', base);
+      applyUiScale(store.uiScale);
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -723,6 +769,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     scriptSettings: _ss,
     selectedDrawingId: _sel,
     indicatorSeries: _is,
+    errorShareOffer: _eso,
     compare,
     telemetry,
     drawings,
@@ -741,6 +788,8 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     },
     telemetry: {
       hud: telemetry?.hud || DEFAULTS.telemetry.hud,
+      // Privacy default false when missing
+      shareOnError: telemetry?.shareOnError === true,
     },
   };
 
@@ -1212,13 +1261,19 @@ export function loadChartLayout(id: string): boolean {
       found.panes.map((p) => ({ ...p })),
     );
   }
-  if (found.theme === 'dark' || found.theme === 'light') {
+  const foundChartTheme = (found as { chartTheme?: unknown }).chartTheme;
+  if (foundChartTheme != null) {
+    const next = hydrateChartTheme(foundChartTheme);
+    setStore('chartTheme', next);
+    setStore('theme', next.base);
+    applyThemeToDocument(next);
+    getThemeManager().setState(next);
+  } else if (found.theme === 'dark' || found.theme === 'light') {
     setStore('theme', found.theme);
-    try {
-      document?.documentElement?.setAttribute('data-theme', found.theme);
-    } catch {
-      /* test envs without full DOM */
-    }
+    const chartTheme = withPreset(found.theme === 'light' ? 'void-light' : 'void-dark');
+    setStore('chartTheme', chartTheme);
+    applyThemeToDocument(chartTheme);
+    getThemeManager().setState(chartTheme);
   }
   if (found.uiScale != null) {
     setUiScale(found.uiScale);
@@ -1502,16 +1557,52 @@ export function noteTick(price: number, time: number) {
   setTelemetryPlane('stream', { lastEventAt: Date.now() });
 }
 
-/** Flip dark/light theme and update `data-theme` on `<html>`. */
+/** Flip dark/light theme and update chart theme + `data-theme` on `<html>`. */
 export function toggleTheme() {
   const next = store.theme === 'dark' ? 'light' : 'dark';
   setStore('theme', next);
-  try {
-    document?.documentElement?.setAttribute('data-theme', next);
-  } catch {
-    /* test envs without full DOM */
-  }
+  const presetId = next === 'light' ? 'void-light' : 'void-dark';
+  const chartTheme = withPreset(presetId);
+  setStore('chartTheme', chartTheme);
+  applyThemeToDocument(chartTheme);
+  getThemeManager().setState(chartTheme);
   persist();
+}
+
+/** Apply a named chart theme preset (void-dark, void-light, classic, …). */
+export function setChartThemePreset(presetId: string) {
+  const chartTheme = withPreset(presetId);
+  setStore('chartTheme', chartTheme);
+  setStore('theme', chartTheme.base);
+  applyThemeToDocument(chartTheme);
+  getThemeManager().setState(chartTheme);
+  persist();
+}
+
+/** Override one chart theme token (supports aliases like chart.bg_color). */
+export function setChartThemeToken(key: string, value: ThemeTokenValue) {
+  const next = withTokenOverride(store.chartTheme || defaultChartThemeState(), key, value);
+  setStore('chartTheme', next);
+  // keep chrome theme base in sync
+  setStore('theme', next.base);
+  applyThemeToDocument(next);
+  getThemeManager().setState(next);
+  persist();
+}
+
+/** Replace full chart theme state (from picker / import / layout restore). */
+export function setChartThemeState(state: ChartThemeState) {
+  const next = hydrateChartTheme(state);
+  setStore('chartTheme', next);
+  setStore('theme', next.base);
+  applyThemeToDocument(next);
+  getThemeManager().setState(next);
+  persist();
+}
+
+/** Reset overrides by re-applying the void preset for the current chrome theme. */
+export function resetChartTheme() {
+  setChartThemePreset(store.theme === 'light' ? 'void-light' : 'void-dark');
 }
 
 /** UI chrome scale bounds (percent of default density). */

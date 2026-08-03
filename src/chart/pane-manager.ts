@@ -73,6 +73,7 @@ import type { TradeMarker } from '../results/events';
 import type { ShapeMarkerSpec } from '../results/plot-visuals';
 import { mountPaneBadge, refreshPaneBadge, setPaneBadgeLabel } from './pane-badge';
 import { reportUiError } from '../ui/boot-errors';
+import { getThemeManager } from '../theme';
 
 /**
  * One plot sample. Omit `value` (or leave undefined) for LWC whitespace so the
@@ -169,6 +170,8 @@ export class PaneManager {
   private priceLogScale = false;
   /** Right price-scale labels/axis visible (UI [$]). Default on. */
   private priceScaleLabelsVisible = true;
+  /** ThemeManager chart unregister fns keyed by pane id */
+  private themeUnregs = new Map<string, () => void>();
 
   constructor(container: HTMLElement, hostKey = '') {
     this.container = container;
@@ -260,7 +263,7 @@ export class PaneManager {
       div.style.flex = '1 1 auto';
     }
     div.style.minHeight = type === 'volume' ? '72px' : '48px';
-    div.style.background = '#0a0b10';
+    div.style.background = getThemeManager().getColor('chart.bg_color') || '#0a0b10';
     div.dataset.paneType = type;
 
     // Name badge + script action icons (settings / eye / re-run / remove)
@@ -323,6 +326,15 @@ export class PaneManager {
       chart.priceScale('right').applyOptions(this.rightScaleLayoutOptions());
     } catch {
       /* ignore */
+    }
+
+    // Live theme updates for this LWC chart (price vs secondary panes)
+    try {
+      this.themeUnregs.get(id)?.();
+      const unreg = getThemeManager().registerChart(chart, { secondary: type !== 'price' });
+      this.themeUnregs.set(id, unreg);
+    } catch {
+      /* theme optional */
     }
 
     const ro = new ResizeObserver(() => {
@@ -399,6 +411,13 @@ export class PaneManager {
     if (pane.resizeObserver) {
       pane.resizeObserver.disconnect();
     }
+    // Unregister from ThemeManager before chart.remove()
+    try {
+      this.themeUnregs.get(id)?.();
+    } catch {
+      /* ignore */
+    }
+    this.themeUnregs.delete(id);
     try {
       pane.chart.remove();
     } catch {
@@ -412,6 +431,28 @@ export class PaneManager {
     if (opts?.rewire !== false) {
       this.syncTimeScales();
       this.rewireCrosshair();
+    }
+  }
+
+  /**
+   * Re-apply ThemeManager tokens to all pane charts and host div backgrounds.
+   * Price series are re-themed via the shared ThemeManager registry.
+   */
+  applyChartTheme(): void {
+    try {
+      getThemeManager().reapplyAll();
+    } catch {
+      /* theme optional */
+    }
+    let bg: string;
+    try {
+      bg = getThemeManager().getColor('chart.bg_color') || '#0a0b10';
+    } catch {
+      bg = '#0a0b10';
+    }
+    for (const pane of this.panes.values()) {
+      const el = document.getElementById(this.paneDomId(pane.id));
+      if (el) el.style.background = bg;
     }
   }
 
@@ -1095,9 +1136,9 @@ export class PaneManager {
         try {
           const dir = lastBarDirection(bars, chartType);
           if (dir) {
+            const voidLike = getThemeManager().getVoidLike();
             pricePane.series['candle'].applyOptions({
-              priceLineColor:
-                dir === 'up' ? 'rgba(94, 207, 138, 0.55)' : 'rgba(232, 93, 76, 0.55)',
+              priceLineColor: dir === 'up' ? voidLike.up : voidLike.down,
             });
           }
         } catch {
@@ -1106,13 +1147,11 @@ export class PaneManager {
       }
       const volPane = this.panes.get('volume');
       if (volPane?.series['volume']) {
+        const volColors = getThemeManager().getVolumeColors();
         volPane.series['volume'].update({
           time: bar.time as UTCTimestamp,
           value: bar.volume ?? 0,
-          color:
-            bar.close >= bar.open
-              ? 'rgba(94, 207, 138, 0.45)'
-              : 'rgba(232, 93, 76, 0.45)',
+          color: bar.close >= bar.open ? volColors.up : volColors.down,
         });
       }
     } catch (err: unknown) {

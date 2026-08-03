@@ -54,6 +54,13 @@ import {
 } from './pine-drawings';
 import { snapToBars, type BarLike, type MagnetMode } from './drawings/snap';
 import { strokeDashFor } from './drawings/svg-primitives';
+import {
+  DRAWING_FUTURE_BARS,
+  DRAWING_RIGHT_OFFSET_DEFAULT,
+  clampTimeToFutureHorizon,
+  logicalIndexToUnixTime,
+  unixTimeToLogicalIndex,
+} from './drawings/coords';
 
 /** Fired after user drawings change (place, drag end, delete, clear). */
 export type DrawingChangeHandler = (drawings: Drawing[]) => void;
@@ -206,6 +213,17 @@ export class DrawingLayer {
     host.appendChild(this.svg);
 
     this.bindEvents();
+    // Seed a small empty right margin so place tools can start past the last bar
+    try {
+      const cur = this.chart.timeScale().options().rightOffset ?? 0;
+      if (cur < DRAWING_RIGHT_OFFSET_DEFAULT) {
+        this.chart.timeScale().applyOptions({
+          rightOffset: DRAWING_RIGHT_OFFSET_DEFAULT,
+        });
+      }
+    } catch {
+      /* ignore */
+    }
     this.syncSize();
     this.redraw();
   }
@@ -535,22 +553,42 @@ export class DrawingLayer {
 
   /**
    * Map client pointer → series `(time, price)`, then optionally magnet-snap to bars.
-   * Returns null outside valid scales. Strong magnet uses a huge pixel tolerance so
-   * snap always applies when bars exist; weak uses 10px.
+   * Returns null outside valid scales. Past the last bar, extrapolates time via
+   * logical index (up to {@link DRAWING_FUTURE_BARS}). Strong magnet uses a huge
+   * pixel tolerance so snap always applies when bars exist; weak uses 10px.
    */
   private clientToPoint(e: MouseEvent): Point | null {
     const rect = this.svg.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    const time = this.chart.timeScale().coordinateToTime(x);
     const price = this.series.coordinateToPrice(y);
-    if (time == null || price == null) return null;
-    const t = typeof time === 'number' ? time : (time as { timestamp?: number }).timestamp;
-    if (t == null || !Number.isFinite(t) || !Number.isFinite(price)) return null;
+    if (price == null || !Number.isFinite(price)) return null;
+
+    let t: number | null = null;
+    const rawTime = this.chart.timeScale().coordinateToTime(x);
+    if (rawTime != null) {
+      t =
+        typeof rawTime === 'number'
+          ? rawTime
+          : (rawTime as { timestamp?: number }).timestamp ?? null;
+    }
+    // Empty right margin / future: coordinateToTime is null — use logical × period
+    const bars = this.barsProvider?.() ?? null;
+    if ((t == null || !Number.isFinite(t)) && bars?.length) {
+      const logical = this.chart.timeScale().coordinateToLogical(x);
+      if (logical != null && Number.isFinite(logical)) {
+        this.ensureRightOffsetForLogical(logical, bars.length);
+        t = logicalIndexToUnixTime(logical, bars, DRAWING_FUTURE_BARS);
+      }
+    }
+    if (t == null || !Number.isFinite(t)) return null;
+    if (bars?.length) t = clampTimeToFutureHorizon(t, bars, DRAWING_FUTURE_BARS);
+
     const raw: Point = { time: t as number, price };
-    if (this.magnet === 'off' || !this.barsProvider) return raw;
-    const bars = this.barsProvider();
-    if (!bars?.length) return raw;
+    // Magnet only snaps onto real bars — don't pull future anchors back to last OHLC
+    if (this.magnet === 'off' || !bars?.length) return raw;
+    const lastT = bars[bars.length - 1]!.time;
+    if (raw.time > lastT) return raw;
     return snapToBars({
       bars,
       raw,
@@ -570,26 +608,73 @@ export class DrawingLayer {
   }
 
   /**
-   * Map series point → SVG pixel coords.
-   * Prefer unix-second time; if unmapped, fall back to logical bar index (compile x / bar_index).
-   *
-   * Future times (`t > lastBar`, e.g. `timenow` + `xloc.bar_time`) are clamped to
-   * the last bar so LWC can map them — otherwise exact `timeToCoordinate` misses
-   * and the bar-index fallback treats unix seconds as logical indices.
+   * Grow LWC right whitespace so future logical indices stay mappable
+   * (up to {@link DRAWING_FUTURE_BARS}).
    */
-  private toXY(p: Point): { x: number; y: number } | null {
-    // Clamp wall-clock times past series end (Pine labels at timenow, etc.).
-    const time = clampTimeToLastBar(p.time, this.lastBarTime());
-    // Interpret path uses unix seconds; compile-mode drawings often pass bar_index.
-    let x = this.chart.timeScale().timeToCoordinate(time as UTCTimestamp);
-    if (x == null && Number.isFinite(time)) {
-      // Fallback: treat value as logical bar index (bar_index / compile x1/left).
+  private ensureRightOffsetForLogical(logical: number, barCount: number) {
+    if (!Number.isFinite(logical) || barCount <= 0) return;
+    const lastIdx = barCount - 1;
+    if (logical <= lastIdx) return;
+    const need = Math.min(
+      DRAWING_FUTURE_BARS,
+      Math.ceil(logical - lastIdx) + 2,
+    );
+    try {
+      const cur = this.chart.timeScale().options().rightOffset ?? 0;
+      if (need > cur) {
+        this.chart.timeScale().applyOptions({ rightOffset: need });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /**
+   * Time → pixel X (unix seconds first, then future logical extrapolation,
+   * then bare bar_index). Used by {@link toXY} and vline hit-test.
+   */
+  private timeToX(time: number, opts?: { clampToLastBar?: boolean }): number | null {
+    const bars = this.barsProvider?.() ?? null;
+    let t = time;
+    if (opts?.clampToLastBar) {
+      t = clampTimeToLastBar(t, this.lastBarTime());
+    }
+    let x = this.chart.timeScale().timeToCoordinate(t as UTCTimestamp);
+    if (x == null && Number.isFinite(t) && bars?.length) {
+      const logical = unixTimeToLogicalIndex(t, bars, DRAWING_FUTURE_BARS);
+      if (logical != null) {
+        this.ensureRightOffsetForLogical(logical, bars.length);
+        try {
+          x = this.chart.timeScale().logicalToCoordinate(logical as never);
+        } catch {
+          x = null;
+        }
+      }
+    }
+    if (x == null && Number.isFinite(t)) {
       try {
-        x = this.chart.timeScale().logicalToCoordinate(time as never);
+        x = this.chart.timeScale().logicalToCoordinate(t as never);
       } catch {
         x = null;
       }
     }
+    return x;
+  }
+
+  /**
+   * Map series point → SVG pixel coords.
+   * Prefer unix-second time; if unmapped (including future times past last bar),
+   * extrapolate via logical index. Compile-mode `bar_index` falls back last.
+   *
+   * User drawings may sit up to {@link DRAWING_FUTURE_BARS} past series end
+   * (default). Pass `clampToLastBar: true` for Pine script paint so `timenow`
+   * labels stay on the last bar.
+   */
+  private toXY(
+    p: Point,
+    opts?: { clampToLastBar?: boolean },
+  ): { x: number; y: number } | null {
+    const x = this.timeToX(p.time, opts);
     const y = this.series.priceToCoordinate(p.price);
     if (x == null || y == null) return null;
     return { x, y };
@@ -847,7 +932,8 @@ export class DrawingLayer {
       return Math.abs(y - yy) <= tol;
     }
     if (d.kind === 'vline') {
-      const xx = this.chart.timeScale().timeToCoordinate(d.time as UTCTimestamp);
+      // Future vlines: same X projection as paint (logical extrapolation)
+      const xx = this.timeToX(d.time);
       if (xx == null) return false;
       return Math.abs(x - xx) <= tol;
     }
@@ -1015,12 +1101,17 @@ export class DrawingLayer {
     this.gDraw.replaceChildren(...Array.from(tmp.childNodes));
   }
 
+  /** Script (Pine) paint uses last-bar clamp for future wall-clock times. */
+  private toXYScript(p: Point): { x: number; y: number } | null {
+    return this.toXY(p, { clampToLastBar: true });
+  }
+
   /** View-only paint for Pine line/box/label/polyline (`pointer-events: none`). */
   private paintScriptDrawing(g: SVGGElement, d: ScriptDrawing) {
     const pe = 'none'; // script drawings are view-only
     if (d.type === 'polyline' && d.points?.length) {
       const coords = d.points
-        .map((p) => this.toXY({ time: p.time, price: p.price }))
+        .map((p) => this.toXYScript({ time: p.time, price: p.price }))
         .filter(Boolean) as { x: number; y: number }[];
       if (coords.length < 2) return;
       let dPath = `M ${coords[0]!.x} ${coords[0]!.y}`;
@@ -1053,8 +1144,8 @@ export class DrawingLayer {
           return;
         }
       }
-      const a = this.toXY({ time: d.t1, price: d.p1 });
-      const b = this.toXY({ time: d.t2, price: d.p2 });
+      const a = this.toXYScript({ time: d.t1, price: d.p1 });
+      const b = this.toXYScript({ time: d.t2, price: d.p2 });
       // Horizontal + extend with unmapped times → still paint a price level
       if ((!a || !b) && d.p1 === d.p2 && ext !== 'none') {
         const y = this.series.priceToCoordinate(d.p1);
@@ -1069,8 +1160,8 @@ export class DrawingLayer {
       return;
     }
     if (d.type === 'box' && d.t2 != null && d.p2 != null) {
-      const a = this.toXY({ time: d.t1, price: d.p1 });
-      const b = this.toXY({ time: d.t2, price: d.p2 });
+      const a = this.toXYScript({ time: d.t1, price: d.p1 });
+      const b = this.toXYScript({ time: d.t2, price: d.p2 });
       if (!a || !b) return;
       const x = Math.min(a.x, b.x);
       const y = Math.min(a.y, b.y);
@@ -1090,7 +1181,7 @@ export class DrawingLayer {
       return;
     }
     if (d.type === 'label') {
-      const c = this.toXY({ time: d.t1, price: d.p1 });
+      const c = this.toXYScript({ time: d.t1, price: d.p1 });
       if (!c) return;
       // Bubble
       const text = d.text || '';
@@ -1140,7 +1231,7 @@ export class DrawingLayer {
     }
 
     if (d.kind === 'vline') {
-      const x = this.chart.timeScale().timeToCoordinate(d.time as UTCTimestamp);
+      const x = this.timeToX(d.time);
       if (x == null) return;
       const h = this.host.clientHeight;
       line(g, x, 0, x, h, stroke, sw, dash, 'stroke');

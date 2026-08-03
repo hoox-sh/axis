@@ -132,11 +132,17 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
   let oauthAbort: AbortController | null = null;
   let fileInput: HTMLInputElement | undefined;
 
-  /** Worker base for OAuth proxy — prefer cloud endpoint, else main API endpoint. */
+  /**
+   * OAuth device-flow proxy base.
+   * Prefer cloud Worker URL, else engine endpoint (Pro API :5002 or Worker :8787).
+   * Both host `/api/git/oauth/device/*` after the Pro API git_oauth blueprint.
+   */
   const oauthWorkerBase = () => {
     const cloud = cloudCfg().endpoint.replace(/\/$/, '');
     if (cloud) return cloud;
-    return String(store.endpoint || 'http://127.0.0.1:8787').replace(/\/$/, '');
+    const engine = String(store.endpoint || '').replace(/\/$/, '');
+    if (engine) return engine;
+    return 'http://127.0.0.1:8787';
   };
 
   const storages = () => listStorages();
@@ -668,11 +674,12 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
             Save git settings
           </button>
           <p class="text-[9px] text-text-faint m-0">
-            <strong>Connect</strong> uses OAuth device flow via the AXIS Worker (
-            <code class="font-mono">/api/git/oauth/…</code>
-            ). Set Worker env <code class="font-mono">GITHUB_OAUTH_CLIENT_ID</code> /{' '}
-            <code class="font-mono">GITLAB_OAUTH_CLIENT_ID</code> (public OAuth App id; enable Device
-            Flow on GitHub). Repo path:{' '}
+            <strong>Connect</strong> uses OAuth device flow via the Pro API or AXIS Worker (
+            <code class="font-mono">POST /api/git/oauth/device/start</code>
+            ). Set env <code class="font-mono">GITHUB_OAUTH_CLIENT_ID</code> /{' '}
+            <code class="font-mono">GITLAB_OAUTH_CLIENT_ID</code> on that host (public OAuth App id;
+            enable Device Flow on GitHub), or paste the client id under Advanced. Without OAuth,
+            paste a PAT instead. Repo path:{' '}
             <code class="font-mono">{gitBasePath() || 'pyne-library'}/library/*.pyne</code>. Drafts stay
             local.
           </p>

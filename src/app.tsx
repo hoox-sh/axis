@@ -57,6 +57,7 @@ import { AlertsPanel } from './ui/AlertsPanel';
 import { LibraryPanel } from './ui/ScriptLibraryPanel';
 import { CommandPalette } from './ui/CommandPalette';
 import { errorFallback } from './ui/ErrorFallback';
+import { ErrorShareToast } from './ui/ErrorShareToast';
 import { reportUiError } from './ui/boot-errors';
 import { runAndApply } from './indicators/runner';
 import { registerBuiltins } from './plugins/bootstrap';
@@ -491,6 +492,9 @@ export const App: Component = () => {
 
       <SystemLogs />
       <StatusBar />
+
+      {/* Opt-in error diagnostic share (telemetry.shareOnError) */}
+      <ErrorShareToast />
 
       {/* Skeleton ghost + dock zones while dragging a panel handle */}
       <PanelDragOverlay />

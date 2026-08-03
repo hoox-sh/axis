@@ -89,6 +89,23 @@
   --ui-shadow-dialog: 0 16px 48px rgba(0, 0, 0, 0.6);
   /* Keyboard focus — thin, no outer halo (inputs use border only) */
   --ui-focus-ring: 0 0 0 1px color-mix(in oklch, oklch(0.74 0.16 277) 40%, transparent);
+
+  /* Chart theme bridge — written by applyThemeToDocument (Theme Manager).
+     Defaults match void-dark / Pine chart.bg_color · chart.fg_color. */
+  --chart-bg: #0a0b10;
+  --chart-fg: #c8cad4;
+  --chart-panel: #111218;
+  --chart-elev: #171821;
+  --chart-bar-up: #5ecf8a;
+  --chart-bar-down: #e85d4c;
+  --chart-grid-vert: rgba(140, 130, 180, 0.07);
+  --chart-grid-horz: rgba(140, 130, 180, 0.07);
+  --chart-scale-border: #3a3d4a;
+  --chart-scale-text: #8b8e9c;
+  --chart-crosshair: rgba(147, 159, 255, 0.38);
+  --chart-accent: #939fff;
+  --chart-ui-up: #5ecf8a;
+  --chart-ui-down: #e85d4c;
 }
 
 html,

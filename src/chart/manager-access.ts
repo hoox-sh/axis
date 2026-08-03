@@ -28,7 +28,7 @@
 
 import type { PaneManager } from './pane-manager';
 import { DrawingLayer } from './drawing-layer';
-import { createPriceSeries, createVolumeSeries, VOID } from './series-factory';
+import { createPriceSeries, createVolumeSeries } from './series-factory';
 import {
   mapBarsToPriceData,
   lastBarDirection,
@@ -56,6 +56,7 @@ import {
   setSlotManager,
 } from './chart-registry';
 import { reportUiError } from '../ui/boot-errors';
+import { getThemeManager } from '../theme';
 
 /**
  * Legacy module fallback when no multi-chart slot is active (unit tests).
@@ -63,6 +64,8 @@ import { reportUiError } from '../ui/boot-errors';
  */
 let manager: PaneManager | undefined;
 let drawingLayer: DrawingLayer | undefined;
+/** ThemeManager unregister for the active price series */
+let priceSeriesThemeUnreg: (() => void) | undefined;
 
 /** Active chart manager (multi-chart) or legacy singleton. */
 export function getManager(): PaneManager | undefined {
@@ -180,6 +183,12 @@ export function ensurePriceSeries(chartType?: ChartType): void {
 
   if (existing) {
     try {
+      priceSeriesThemeUnreg?.();
+    } catch {
+      /* ignore */
+    }
+    priceSeriesThemeUnreg = undefined;
+    try {
       pricePane.chart.removeSeries(existing);
     } catch {
       /* ignore */
@@ -189,6 +198,15 @@ export function ensurePriceSeries(chartType?: ChartType): void {
 
   pricePane.series['candle'] = createPriceSeries(pricePane.chart, type);
   mgr.setPriceChartType(type);
+
+  try {
+    priceSeriesThemeUnreg = getThemeManager().registerPriceSeries(
+      pricePane.series['candle'],
+      type,
+    );
+  } catch {
+    priceSeriesThemeUnreg = undefined;
+  }
 
   // Drawing layer needs the new series for price ↔ Y
   const layer = getDrawingLayer();
@@ -251,8 +269,9 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       const dir = lastBarDirection(bars, chartType);
       if (dir) {
         try {
+          const voidLike = getThemeManager().getVoidLike();
           pricePane.series['candle'].applyOptions({
-            priceLineColor: dir === 'up' ? VOID.up : VOID.down,
+            priceLineColor: dir === 'up' ? voidLike.up : voidLike.down,
           });
         } catch {
           /* price line tint optional */
@@ -276,12 +295,12 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       volPane.series['volume'] = createVolumeSeries(volPane.chart);
     }
     if (volPane?.series['volume']) {
+      const volColors = getThemeManager().getVolumeColors();
       volPane.series['volume'].setData(
         bars.map((b) => ({
           time: b.time as never,
           value: b.volume ?? 0,
-          color:
-            b.close >= b.open ? 'rgba(94, 207, 138, 0.45)' : 'rgba(232, 93, 76, 0.45)',
+          color: b.close >= b.open ? volColors.up : volColors.down,
         })),
       );
     }

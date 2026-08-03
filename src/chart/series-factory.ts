@@ -24,7 +24,8 @@
  * each {@link ChartType} (candles, hollow, bars, line, area, baseline,
  * Heikin-Ashi host), overlay line/area, histogram (bgcolor) helpers, and
  * brand colors ({@link VOID}, {@link PLOT_PALETTE}). Right price-scale width
- * is fixed so panes align.
+ * is fixed so panes align. Colors resolve from the Theme Manager when
+ * available, falling back to {@link VOID} defaults.
  *
  * @module chart/series-factory
  */
@@ -44,6 +45,18 @@ import {
   type LineWidth,
 } from 'lightweight-charts';
 import type { ChartType } from './chart-type';
+import {
+  getThemeManager,
+  resolveTokens,
+  buildChartOptionsFromTokens,
+  buildCandleSeriesOptions,
+  buildBarSeriesOptions,
+  buildLineSeriesOptions,
+  buildAreaSeriesOptions,
+  buildBaselineSeriesOptions,
+  defaultChartThemeState,
+  type ThemeTokens,
+} from '../theme';
 
 /**
  * AXIS **void** chart palette (brand tokens for Lightweight Charts).
@@ -97,12 +110,55 @@ export const PLOT_PALETTE = [
  */
 export const RIGHT_PRICE_SCALE_WIDTH = 72;
 
+/** Current resolved theme tokens, or defaults when Theme Manager is unavailable. */
+function activeTokens(): ThemeTokens {
+  try {
+    return getThemeManager().getTokens();
+  } catch {
+    return resolveTokens(defaultChartThemeState());
+  }
+}
+
+/**
+ * VOID-compatible palette from the active theme (for callers that need live colors).
+ */
+export function getActiveChartPalette() {
+  return getThemeManager().getVoidLike();
+}
+
+/** Shallow-object deep merge; arrays and non-plain values replace. */
+function deepMerge(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...target };
+  for (const [key, value] of Object.entries(source)) {
+    const prev = out[key];
+    if (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      prev &&
+      typeof prev === 'object' &&
+      !Array.isArray(prev)
+    ) {
+      out[key] = deepMerge(prev as Record<string, unknown>, value as Record<string, unknown>);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
 /**
  * Create a themed LWC chart in `container` (void bg, crosshair, aligned
- * right scale width). Optional `options` shallow-merged into chart options.
+ * right scale width). Optional `options` deep-merged last so callers can override.
  */
 export function createBaseChart(container: HTMLElement, options?: Record<string, unknown>): IChartApi {
-  return createChart(container, {
+  const tokens = activeTokens();
+  const themeOpts = buildChartOptionsFromTokens(tokens);
+
+  const base: Record<string, unknown> = {
     layout: {
       background: { type: ColorType.Solid, color: VOID.bg },
       textColor: VOID.textDim,
@@ -131,6 +187,9 @@ export function createBaseChart(container: HTMLElement, options?: Record<string,
       timeVisible: true,
       secondsVisible: false,
       ticksVisible: true,
+      // Empty right margin so trendlines / drawings can start past the last bar.
+      // Drawing layer may grow this up to DRAWING_FUTURE_BARS (500) while placing.
+      rightOffset: 20,
       // Never auto-scroll when a live bar is appended / updated
       shiftVisibleRangeOnNewBar: false,
       allowShiftVisibleRangeOnWhitespaceReplacement: false,
@@ -152,36 +211,37 @@ export function createBaseChart(container: HTMLElement, options?: Record<string,
       },
     },
     handleScroll: { vertTouchDrag: true },
-    ...options,
-  });
+  };
+
+  const merged = deepMerge(deepMerge(base, themeOpts), options ?? {});
+  return createChart(container, merged);
 }
 
-const PRICE_SERIES_COMMON = {
-  lastValueVisible: true,
-  priceLineVisible: true,
-  priceLineColor: VOID.indigoSoft,
-  priceLineWidth: 1 as LineWidth,
-  priceLineStyle: 2,
-};
+function priceSeriesCommon(tokens: ThemeTokens) {
+  return {
+    lastValueVisible: true,
+    priceLineVisible: true,
+    priceLineColor: String(tokens['crosshair.color'] ?? VOID.indigoSoft),
+    priceLineWidth: 1 as LineWidth,
+    priceLineStyle: 2,
+  };
+}
 
 function alignRightScale(chart: IChartApi) {
+  const tokens = activeTokens();
   chart.priceScale('right').applyOptions({
-    borderColor: VOID.border,
-    textColor: VOID.textDim,
+    borderColor: String(tokens['scale.border'] ?? VOID.border),
+    textColor: String(tokens['scale.text'] ?? VOID.textDim),
     minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
   });
 }
 
 /** Japanese candlestick series with void up/down colors and aligned right scale. */
 export function createCandleSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Candlestick'> {
+  const tokens = activeTokens();
   const opts = {
-    ...PRICE_SERIES_COMMON,
-    upColor: VOID.up,
-    downColor: VOID.down,
-    borderDownColor: VOID.down,
-    borderUpColor: VOID.up,
-    wickDownColor: VOID.down,
-    wickUpColor: VOID.up,
+    ...priceSeriesCommon(tokens),
+    ...buildCandleSeriesOptions(tokens, { chartType: 'candles' }),
   };
   const series = paneIndex !== undefined
     ? chart.addSeries(CandlestickSeries, opts, paneIndex)
@@ -198,15 +258,10 @@ export function createHollowCandleSeries(
   chart: IChartApi,
   paneIndex?: number,
 ): ISeriesApi<'Candlestick'> {
+  const tokens = activeTokens();
   const opts = {
-    ...PRICE_SERIES_COMMON,
-    upColor: 'rgba(0,0,0,0)',
-    downColor: VOID.down,
-    borderVisible: true,
-    borderUpColor: VOID.up,
-    borderDownColor: VOID.down,
-    wickUpColor: VOID.up,
-    wickDownColor: VOID.down,
+    ...priceSeriesCommon(tokens),
+    ...buildCandleSeriesOptions(tokens, { chartType: 'hollow' }),
   };
   const series = paneIndex !== undefined
     ? chart.addSeries(CandlestickSeries, opts, paneIndex)
@@ -217,12 +272,10 @@ export function createHollowCandleSeries(
 
 /** Classic OHLC bar series (open/high/low/close ticks). */
 export function createBarSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Bar'> {
+  const tokens = activeTokens();
   const opts = {
-    ...PRICE_SERIES_COMMON,
-    upColor: VOID.up,
-    downColor: VOID.down,
-    openVisible: true,
-    thinBars: true,
+    ...priceSeriesCommon(tokens),
+    ...buildBarSeriesOptions(tokens),
   };
   const series = paneIndex !== undefined
     ? chart.addSeries(BarSeries, opts, paneIndex)
@@ -233,14 +286,12 @@ export function createBarSeries(chart: IChartApi, paneIndex?: number): ISeriesAp
 
 /** Close-price line used as the main price series (not an overlay plot). */
 export function createPriceLineSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Line'> {
+  const tokens = activeTokens();
   const opts = {
-    ...PRICE_SERIES_COMMON,
-    color: VOID.indigo,
-    lineWidth: 2 as LineWidth,
+    ...priceSeriesCommon(tokens),
+    ...buildLineSeriesOptions(tokens),
     crosshairMarkerVisible: true,
     crosshairMarkerRadius: 3,
-    crosshairMarkerBorderColor: VOID.bg,
-    crosshairMarkerBackgroundColor: VOID.indigo,
   };
   const series = paneIndex !== undefined
     ? chart.addSeries(LineSeries, opts, paneIndex)
@@ -251,16 +302,12 @@ export function createPriceLineSeries(chart: IChartApi, paneIndex?: number): ISe
 
 /** Close-price area used as the main price series. */
 export function createPriceAreaSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Area'> {
+  const tokens = activeTokens();
   const opts = {
-    ...PRICE_SERIES_COMMON,
-    lineColor: VOID.indigo,
-    topColor: 'rgba(147, 159, 255, 0.28)',
-    bottomColor: 'rgba(147, 159, 255, 0.02)',
-    lineWidth: 2 as LineWidth,
+    ...priceSeriesCommon(tokens),
+    ...buildAreaSeriesOptions(tokens),
     crosshairMarkerVisible: true,
     crosshairMarkerRadius: 3,
-    crosshairMarkerBorderColor: VOID.bg,
-    crosshairMarkerBackgroundColor: VOID.indigo,
   };
   const series = paneIndex !== undefined
     ? chart.addSeries(AreaSeries, opts, paneIndex)
@@ -278,20 +325,13 @@ export function createPriceBaselineSeries(
   paneIndex?: number,
   basePrice = 0,
 ): ISeriesApi<'Baseline'> {
+  const tokens = activeTokens();
   const opts = {
-    ...PRICE_SERIES_COMMON,
+    ...priceSeriesCommon(tokens),
+    ...buildBaselineSeriesOptions(tokens),
     baseValue: { type: 'price' as const, price: basePrice },
-    topLineColor: VOID.up,
-    topFillColor1: 'rgba(94, 207, 138, 0.28)',
-    topFillColor2: 'rgba(94, 207, 138, 0.04)',
-    bottomLineColor: VOID.down,
-    bottomFillColor1: 'rgba(232, 93, 76, 0.04)',
-    bottomFillColor2: 'rgba(232, 93, 76, 0.28)',
-    lineWidth: 2 as LineWidth,
     crosshairMarkerVisible: true,
     crosshairMarkerRadius: 3,
-    crosshairMarkerBorderColor: VOID.bg,
-    crosshairMarkerBackgroundColor: VOID.indigo,
   };
   const series = paneIndex !== undefined
     ? chart.addSeries(BaselineSeries, opts, paneIndex)
@@ -330,6 +370,7 @@ export function createPriceSeries(
 
 /** Volume histogram on the main right scale (aligned pane edges). */
 export function createVolumeSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Histogram'> {
+  const tokens = activeTokens();
   // Use the main right scale (same width as price pane) so chart edges align
   const opts = {
     priceFormat: { type: 'volume' as const },
@@ -343,8 +384,8 @@ export function createVolumeSeries(chart: IChartApi, paneIndex?: number): ISerie
   chart.priceScale('right').applyOptions({
     scaleMargins: { top: 0.12, bottom: 0.02 },
     borderVisible: true,
-    borderColor: VOID.border,
-    textColor: VOID.textDim,
+    borderColor: String(tokens['scale.border'] ?? VOID.border),
+    textColor: String(tokens['scale.text'] ?? VOID.textDim),
     minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
   });
   return series;
@@ -392,6 +433,8 @@ export function createLineSeries(
   paneIndex?: number,
   lineWidth: number = 2,
 ): ISeriesApi<'Line'> {
+  const tokens = activeTokens();
+  const bg = String(tokens['chart.bg_color'] ?? VOID.bg);
   const lw = Math.max(1, Math.min(4, Math.round(lineWidth || 2))) as LineWidth;
   const opts = {
     color,
@@ -401,7 +444,7 @@ export function createLineSeries(
     title: name,
     crosshairMarkerVisible: true,
     crosshairMarkerRadius: 3,
-    crosshairMarkerBorderColor: VOID.bg,
+    crosshairMarkerBorderColor: bg,
     crosshairMarkerBackgroundColor: color,
   };
   return paneIndex !== undefined
@@ -416,6 +459,8 @@ export function createAreaSeries(
   color = VOID.indigo,
   paneIndex?: number,
 ): ISeriesApi<'Area'> {
+  const tokens = activeTokens();
+  const bg = String(tokens['chart.bg_color'] ?? VOID.bg);
   const opts = {
     lineColor: color,
     topColor: 'rgba(147, 159, 255, 0.28)',
@@ -426,7 +471,7 @@ export function createAreaSeries(
     title: name,
     crosshairMarkerVisible: true,
     crosshairMarkerRadius: 3,
-    crosshairMarkerBorderColor: VOID.bg,
+    crosshairMarkerBorderColor: bg,
     crosshairMarkerBackgroundColor: color,
   };
   return paneIndex !== undefined

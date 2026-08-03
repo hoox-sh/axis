@@ -64,6 +64,7 @@ import { loadSymbolData, reloadChart } from '../data/load-symbol';
 import { getManager } from '../chart/manager-access';
 import { UI_SCALE_PRESETS, formatUiScalePct } from './ui-scale';
 import { WorkspaceSnapshotMenu } from './WorkspaceSnapshotMenu';
+import { ThemePanel } from './ThemePanel';
 
 /** PYNE Runtime modes for the server/worker engine plugin config. */
 export type EngineExecMode = 'interpret' | 'compile' | 'auto';
@@ -119,6 +120,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     store.live.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick',
   );
   const [hudCompact, setHudCompact] = createSignal(!!store.telemetry?.hud?.compact);
+  const [shareOnError, setShareOnError] = createSignal(!!store.telemetry?.shareOnError);
   const [uiScale, setUiScaleLocal] = createSignal(clampUiScale(store.uiScale ?? 1));
   const [priceScaleLabels, setPriceScaleLabels] = createSignal(
     store.priceScaleLabelsVisible !== false,
@@ -192,6 +194,7 @@ export const SettingsDialog: Component<Props> = (props) => {
         setPreferAfterLoad(!!store.live.preferAfterLoad);
         setRerunOn(store.live.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick');
         setHudCompact(!!store.telemetry?.hud?.compact);
+        setShareOnError(!!store.telemetry?.shareOnError);
         setUiScaleLocal(clampUiScale(store.uiScale ?? 1));
         setPriceScaleLabels(store.priceScaleLabelsVisible !== false);
         setProbeMsg('');
@@ -221,6 +224,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     const nextPreferAfterLoad = preferAfterLoad();
     const nextRerunOn = rerunOn();
     const nextHudCompact = hudCompact();
+    const nextShareOnError = shareOnError();
     const nextUiScale = clampUiScale(uiScale());
     const nextPriceScaleLabels = priceScaleLabels();
     const nextExecMode = execMode();
@@ -237,6 +241,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     setStore('live', 'preferAfterLoad', nextPreferAfterLoad);
     setStore('live', 'rerunOn', nextRerunOn);
     setStore('telemetry', 'hud', 'compact', nextHudCompact);
+    setStore('telemetry', 'shareOnError', nextShareOnError);
     setStore('uiScale', nextUiScale);
     setStore('priceScaleLabelsVisible', nextPriceScaleLabels);
     applyUiScale(nextUiScale);
@@ -449,6 +454,14 @@ export const SettingsDialog: Component<Props> = (props) => {
                 </button>
                 <input class="sc-input min-w-0 flex-1 font-mono" value="BTCUSDT" readOnly />
               </div>
+            </div>
+
+            <div class="sc-section" data-testid="axis-settings-theme">
+              <div class="sc-section-title">Chart theme</div>
+              <p class="sc-hint">
+                Bar colors, canvas background, grid — Pine chart.bg_color / chart.fg_color
+              </p>
+              <ThemePanel compact />
             </div>
 
             <div class="sc-section">
@@ -790,6 +803,28 @@ export const SettingsDialog: Component<Props> = (props) => {
                     <span class="text-[12px] text-text">Compact connection HUD</span>
                     <span class="block text-[10px] text-text-faint mt-0.5">
                       Hide SRC/STR/ENG/STO plane chips; keep Live · Tick · Engine latency.
+                    </span>
+                  </span>
+                </label>
+
+                <label
+                  class="flex items-start gap-2 cursor-pointer mt-2"
+                  for="axis-share-on-error"
+                >
+                  <input
+                    id="axis-share-on-error"
+                    type="checkbox"
+                    class="mt-0.5"
+                    checked={shareOnError()}
+                    onChange={(e) => setShareOnError(e.currentTarget.checked)}
+                    data-testid="axis-settings-share-on-error"
+                  />
+                  <span>
+                    <span class="text-[12px] text-text">Ask to share data on errors</span>
+                    <span class="block text-[10px] text-text-faint mt-0.5">
+                      Telemetry · off by default. When enabled, UI errors show a prompt to
+                      copy/download a redacted diagnostic (no bars, scripts, or secrets).
+                      Nothing is uploaded automatically.
                     </span>
                   </span>
                 </label>

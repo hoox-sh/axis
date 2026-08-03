@@ -48,6 +48,7 @@ import {
   setEditorOpen,
   setEditorMode,
   toggleTheme,
+  setChartThemePreset,
   toggleIndicatorPanel,
   toggleDataViewPanel,
   toggleLayerPanel,
@@ -143,6 +144,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       toggleScriptLogs: () => toggleScriptLogsPanel(),
       toggleLibrary: () => toggleLibraryPanel(),
       toggleTheme: () => toggleTheme(),
+      setChartThemePreset: (id) => setChartThemePreset(id),
       setChartGridMode: (mode) => setChartGridMode(mode),
       runScript: async () => {
         const doc = props.editorRef?.getDoc?.() || '';

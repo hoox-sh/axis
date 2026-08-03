@@ -28,6 +28,7 @@
  */
 
 import { appendLog, setStatus } from '../store';
+import { maybeOfferErrorShare } from './error-share';
 
 /** Coerce any thrown value to a short user-facing string. */
 export function formatErrorMessage(err: unknown, maxLen = 240): string {
@@ -91,6 +92,17 @@ export function reportUiError(err: unknown, opts: ReportUiErrorOpts = {}): void 
   appendLog('error', line, source);
   if (opts.status !== false) {
     setStatus('error', line.length > 140 ? `${line.slice(0, 137)}…` : line);
+  }
+  // Opt-in telemetry: may show a toast asking to copy/download a redacted
+  // diagnostic. No-op when shareOnError is false (default).
+  try {
+    maybeOfferErrorShare(err, {
+      source,
+      context: context || undefined,
+      throttleMs: Math.max(throttleMs, 15_000),
+    });
+  } catch {
+    /* never let share path break error reporting */
   }
 }
 

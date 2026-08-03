@@ -18,10 +18,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Data Window — OHLCV + plot series values at the crosshair bar.
+ * Data Window — OHLCV + plot series + drawing values at the crosshair bar.
  *
- * Rows from `buildDataViewRows` using `store.bars`, `store.crosshair`, and
- * last-run series/plot_meta. FloatableShell id `dataview`.
+ * Rows from `buildDataViewRows` using `store.bars`, `store.crosshair`,
+ * last-run series/plot_meta, and `store.drawings`. FloatableShell id `dataview`.
  */
 
 import { Component, For, Show, createMemo } from 'solid-js';
@@ -30,7 +30,7 @@ import { buildDataViewRows } from '../results/dataview';
 import type { RunResult } from '../indicators/runner';
 import { FloatableShell } from './panels/FloatableShell';
 
-/** Crosshair-synced OHLCV / plot value inspector. */
+/** Crosshair-synced OHLCV / plot / drawing value inspector. */
 export const DataViewPanel: Component = () => {
   const rows = createMemo(() => {
     const r = store.lastRun as RunResult | null;
@@ -38,6 +38,8 @@ export const DataViewPanel: Component = () => {
       string,
       { title?: string; color?: string | null; kind?: string }
     >;
+    // Depend on drawings so place/drag updates refresh values
+    void store.drawings;
     return buildDataViewRows({
       bars: store.bars,
       time: store.crosshair?.time,
@@ -46,12 +48,14 @@ export const DataViewPanel: Component = () => {
       interval: store.interval,
       series: (r?.series || {}) as Record<string, (number | null)[]>,
       plotMeta,
+      drawings: store.drawings,
     });
   });
 
   const metaRows = createMemo(() => rows().filter((x) => x.group === 'meta'));
   const ohlcvRows = createMemo(() => rows().filter((x) => x.group === 'ohlcv'));
   const seriesRows = createMemo(() => rows().filter((x) => x.group === 'series'));
+  const drawingRows = createMemo(() => rows().filter((x) => x.group === 'drawings'));
 
   return (
     <Show when={isPanelOpen('dataview') || store.dataViewPanel.open}>
@@ -74,9 +78,14 @@ export const DataViewPanel: Component = () => {
                 <For each={seriesRows()}>{(row) => <Row row={row} />}</For>
               </Section>
             </Show>
-            <Show when={seriesRows().length === 0}>
+            <Show when={drawingRows().length > 0}>
+              <Section label="Drawings">
+                <For each={drawingRows()}>{(row) => <Row row={row} />}</For>
+              </Section>
+            </Show>
+            <Show when={seriesRows().length === 0 && drawingRows().length === 0}>
               <div class="px-2.5 py-2 text-text-faint text-[0.9em]">
-                Run a script to see plot values here.
+                Run a script or place drawings to see values here.
               </div>
             </Show>
           </Show>

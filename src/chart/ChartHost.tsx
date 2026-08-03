@@ -177,6 +177,12 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     }
     // Apply persisted right-scale labels preference (chart [$] control)
     manager.setPriceScaleLabelsVisible(store.priceScaleLabelsVisible !== false);
+    // Seed theme tokens onto newly created pane charts / host backgrounds
+    try {
+      manager.applyChartTheme?.();
+    } catch {
+      /* theme optional */
+    }
     manager.syncTimeScales();
     manager.syncCrosshair((data) => {
       if (!isActive()) return;
@@ -350,6 +356,21 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     void store.panelChrome;
     void store.chartLayout?.mode;
     scheduleSlotReflow(slotId());
+  });
+
+  // Chart theme (preset / overrides) + document theme → re-apply LWC options
+  createEffect(() => {
+    const ct = store.chartTheme;
+    void ct?.presetId;
+    void JSON.stringify(ct?.overrides || {});
+    void store.theme;
+    untrack(() => {
+      try {
+        localManager?.applyChartTheme?.();
+      } catch {
+        /* theme optional */
+      }
+    });
   });
 
   createEffect(() => {

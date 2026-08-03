@@ -60,16 +60,71 @@ export type GitUserInfo = {
   htmlUrl?: string;
 };
 
-function workerBase(endpoint?: string): string {
+/**
+ * Hosts that can serve `/api/git/oauth/device/*`:
+ * - Cloudflare Worker (`workers.dev`, wrangler `:8787`)
+ * - PYNE Pro API (`:5002`) after `backend.api.git_oauth` is registered
+ * - Same-origin Pages when Worker routes are attached
+ */
+export function isOAuthProxyBase(endpoint: string): boolean {
+  const e = (endpoint || '').trim().toLowerCase();
+  if (!e) return false;
+  if (e.includes('workers.dev')) return true;
+  if (e.includes('pyne-worker') || e.includes('pine-worker')) return true;
+  try {
+    const u = new URL(e.includes('://') ? e : `http://${e}`);
+    if (u.port === '8787' || u.port === '5002') return true;
+    // Explicit path hint
+    if (/\/api\/?$/.test(u.pathname)) return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+/**
+ * Resolve base URL for device OAuth proxy.
+ * Prefer an explicit Worker / Pro API host; never invent forge hosts.
+ */
+export function resolveOAuthProxyBase(endpoint?: string): string {
   const raw = (endpoint || '').trim().replace(/\/$/, '');
   if (raw) return raw;
-  // Fall back to same origin (Pages + Worker route) or local wrangler
+  // Fall back to same origin (Pages + Worker route) or local wrangler / pro API
   if (typeof window !== 'undefined' && window.location?.origin) {
     const o = window.location.origin;
-    if (/localhost|127\.0\.0\.1/.test(o)) return 'http://127.0.0.1:8787';
+    if (/localhost|127\.0\.0\.1/.test(o)) {
+      // Prefer local Worker; Pro API is also fine if Worker is down
+      return 'http://127.0.0.1:8787';
+    }
+    // VPS static shell (:8081) has no /api — caller should pass engine endpoint
+    if (/:8081$/.test(o)) {
+      return 'http://127.0.0.1:5002';
+    }
     return o;
   }
   return 'http://127.0.0.1:8787';
+}
+
+function oauthErrorMessage(data: Record<string, unknown>, status: number, url: string): string {
+  const code = String(data.code || '');
+  const msg = String(
+    data.message || data.error_description || data.error || `HTTP ${status}`,
+  );
+  if (code === 'NOT_FOUND' || status === 404 || /not found/i.test(msg)) {
+    return (
+      `OAuth proxy missing at ${url.replace(/\/api\/git\/oauth.*/, '')} ` +
+      `(${msg}). Use AXIS Worker or Pro API with /api/git/oauth/device/*, ` +
+      `set GITHUB_OAUTH_CLIENT_ID / client id, or paste a PAT under Advanced.`
+    );
+  }
+  if (code === 'NO_CLIENT_ID') {
+    return (
+      msg +
+      ' Add the public OAuth App client id under Advanced, or set ' +
+      'GITHUB_OAUTH_CLIENT_ID / GITLAB_OAUTH_CLIENT_ID on the API host.'
+    );
+  }
+  return msg;
 }
 
 async function postJson<T>(
@@ -78,16 +133,23 @@ async function postJson<T>(
   body: Record<string, unknown>,
 ): Promise<T> {
   const url = `${base.replace(/\/$/, '')}${path}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    const m = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Cannot reach OAuth proxy at ${base} (${m}). Start the AXIS Worker ` +
+        `(:8787) or Pro API (:5002), or paste a PAT under Advanced.`,
+    );
+  }
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok || data.status === 'error') {
-    throw new Error(
-      String(data.message || data.error_description || data.error || `HTTP ${res.status}`),
-    );
+    throw new Error(oauthErrorMessage(data, res.status, url));
   }
   return data as T;
 }
@@ -101,7 +163,7 @@ export async function startDeviceFlow(opts: {
   clientId?: string;
   scope?: string;
 }): Promise<DeviceStartResult> {
-  const base = workerBase(opts.workerEndpoint);
+  const base = resolveOAuthProxyBase(opts.workerEndpoint);
   const data = await postJson<DeviceStartResult & { status?: string }>(
     base,
     '/api/git/oauth/device/start',
@@ -134,7 +196,7 @@ export async function pollDeviceFlow(opts: {
   workerEndpoint?: string;
   clientId?: string;
 }): Promise<DevicePollResult> {
-  const base = workerBase(opts.workerEndpoint);
+  const base = resolveOAuthProxyBase(opts.workerEndpoint);
   const data = await postJson<DevicePollResult & { access_token?: string; status?: string }>(
     base,
     '/api/git/oauth/device/poll',

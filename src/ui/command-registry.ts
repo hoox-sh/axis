@@ -69,6 +69,8 @@ export interface CommandActions {
   toggleScriptLogs?: () => void;
   toggleLibrary?: () => void;
   toggleTheme: () => void;
+  /** Apply a named chart theme preset (void-dark, classic, …). */
+  setChartThemePreset?: (presetId: string) => void;
   setChartGridMode: (mode: '1' | '2h' | '2v' | '4') => void;
   runScript: () => void | Promise<void>;
   focusSymbol: () => void;
@@ -272,6 +274,41 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     category: 'theme',
     keywords: ['dark', 'light', 'appearance', 'mode'],
   },
+  {
+    id: 'theme.chart',
+    title: 'Chart Theme…',
+    category: 'theme',
+    keywords: [
+      'chart theme',
+      'bar color',
+      'candle color',
+      'background',
+      'chart.bg_color',
+      'chart.fg_color',
+      'color_background',
+      'color_foreground',
+      'grid color',
+      'preset',
+    ],
+  },
+  {
+    id: 'theme.void-dark',
+    title: 'Theme: Void Dark',
+    category: 'theme',
+    keywords: ['void', 'dark', 'preset', 'chart.bg_color'],
+  },
+  {
+    id: 'theme.void-light',
+    title: 'Theme: Void Light',
+    category: 'theme',
+    keywords: ['void', 'light', 'preset'],
+  },
+  {
+    id: 'theme.classic',
+    title: 'Theme: Classic',
+    category: 'theme',
+    keywords: ['classic', 'green', 'red', 'preset'],
+  },
   // Chart grid
   {
     id: 'chart.grid.1',
@@ -439,7 +476,16 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.loadSymbol) byId.set('action.load-symbol', () => void actions.loadSymbol?.());
   if (actions.reloadChart) byId.set('action.reload-chart', () => void actions.reloadChart?.());
   if (actions.toggleLive) byId.set('action.toggle-live', actions.toggleLive);
-  if (actions.openSettings) byId.set('action.settings', actions.openSettings);
+  if (actions.openSettings) {
+    byId.set('action.settings', actions.openSettings);
+    // Chart Theme panel lives inside Settings → Appearance
+    byId.set('theme.chart', actions.openSettings);
+  }
+  if (actions.setChartThemePreset) {
+    byId.set('theme.void-dark', () => actions.setChartThemePreset?.('void-dark'));
+    byId.set('theme.void-light', () => actions.setChartThemePreset?.('void-light'));
+    byId.set('theme.classic', () => actions.setChartThemePreset?.('classic'));
+  }
   if (actions.openPlugins) byId.set('action.plugins', actions.openPlugins);
   if (actions.openScriptSettings) byId.set('action.script-settings', actions.openScriptSettings);
   if (actions.resetUiLayout) byId.set('action.reset-ui', actions.resetUiLayout);

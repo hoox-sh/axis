@@ -26,8 +26,9 @@
  * @module ui/ErrorFallback
  */
 
-import { Component, Show } from 'solid-js';
+import { Component, Show, createSignal } from 'solid-js';
 import { formatErrorMessage } from './boot-errors';
+import { exportErrorDiagnosticNow } from './error-share';
 
 export interface ErrorFallbackProps {
   error: unknown;
@@ -42,6 +43,7 @@ export interface ErrorFallbackProps {
 
 /** Void-theme recoverable error surface. */
 export const ErrorFallback: Component<ErrorFallbackProps> = (props) => {
+  const [exporting, setExporting] = createSignal(false);
   const variant = () => props.variant || 'page';
   const title = () =>
     props.title ||
@@ -50,6 +52,19 @@ export const ErrorFallback: Component<ErrorFallbackProps> = (props) => {
 
   const reload = () => {
     if (typeof location !== 'undefined') location.reload();
+  };
+
+  const share = async () => {
+    if (exporting()) return;
+    setExporting(true);
+    try {
+      await exportErrorDiagnosticNow(props.error, {
+        source: props.source || 'error-boundary',
+        context: title(),
+      });
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (variant() === 'inline') {
@@ -67,7 +82,7 @@ export const ErrorFallback: Component<ErrorFallbackProps> = (props) => {
         <p class="text-[11px] text-text-dim font-mono text-center max-w-md break-words">
           {message()}
         </p>
-        <div class="flex items-center gap-2 mt-1">
+        <div class="flex items-center gap-2 mt-1 flex-wrap justify-center">
           <Show when={props.reset}>
             <button
               type="button"
@@ -78,6 +93,15 @@ export const ErrorFallback: Component<ErrorFallbackProps> = (props) => {
               Retry
             </button>
           </Show>
+          <button
+            type="button"
+            class="sc-btn px-2.5 py-1 text-[11px]"
+            data-testid="axis-error-share"
+            onClick={() => void share()}
+            disabled={exporting()}
+          >
+            {exporting() ? 'Exporting…' : 'Share data'}
+          </button>
           <button
             type="button"
             class="sc-btn px-2.5 py-1 text-[11px]"
@@ -108,9 +132,9 @@ export const ErrorFallback: Component<ErrorFallbackProps> = (props) => {
       </p>
       <p class="text-[11px] text-text-faint text-center max-w-md">
         The workspace hit an unexpected error. Retry to remount, or reload the
-        page. Check System logs for details.
+        page. Share data exports a redacted diagnostic (no bars or scripts).
       </p>
-      <div class="flex items-center gap-2 mt-2">
+      <div class="flex items-center gap-2 mt-2 flex-wrap justify-center">
         <Show when={props.reset}>
           <button
             type="button"
@@ -121,6 +145,15 @@ export const ErrorFallback: Component<ErrorFallbackProps> = (props) => {
             Retry
           </button>
         </Show>
+        <button
+          type="button"
+          class="sc-btn px-3 py-1.5 text-[12px]"
+          data-testid="axis-error-share"
+          onClick={() => void share()}
+          disabled={exporting()}
+        >
+          {exporting() ? 'Exporting…' : 'Share data'}
+        </button>
         <button
           type="button"
           class="sc-btn px-3 py-1.5 text-[12px]"

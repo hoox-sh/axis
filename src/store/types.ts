@@ -136,7 +136,9 @@ export interface ActivePlugins {
 }
 
 import type { Drawing, DrawingToolId } from '../chart/drawing-types';
+import type { ChartThemeState } from '../theme';
 export type { Drawing, DrawingToolId };
+export type { ChartThemeState };
 
 /**
  * Default stroke/fill applied when the layer places a new drawing.
@@ -212,6 +214,11 @@ export interface TelemetryState {
   lastTick: TickTelemetry | null;
   /** Layout prefs (may be persisted via rest of store carefully) */
   hud: { compact: boolean; overlay: boolean };
+  /**
+   * When true, UI errors may prompt to copy/download a redacted diagnostic
+   * bundle. **Default false** — opt-in privacy. Persisted with hud.
+   */
+  shareOnError: boolean;
 }
 
 /**
@@ -274,6 +281,12 @@ export interface AppState {
   };
 
   theme: 'dark' | 'light';
+  /**
+   * Chart / canvas theme (presets + token overrides).
+   * Kept in sync with {@link theme} chrome base via store helpers.
+   * Persisted. See `src/theme/`.
+   */
+  chartTheme: ChartThemeState;
   /**
    * UI density / chrome scale (text, icons, controls, gaps).
    * 0.8–1.3, default 1. Applied as CSS ``--ui-scale`` on ``<html>``.
@@ -382,8 +395,18 @@ export interface AppState {
    */
   selectedDrawingId: string | null;
 
-  /** Connection / engine / datafeed telemetry (ephemeral) */
+  /** Connection / engine / datafeed telemetry (ephemeral planes; hud + shareOnError persist) */
   telemetry: TelemetryState;
+  /**
+   * Pending opt-in error diagnostic toast (ephemeral — never hydrated).
+   * Set by {@link maybeOfferErrorShare} when shareOnError is enabled.
+   */
+  errorShareOffer: {
+    id: string;
+    summary: string;
+    payload: Record<string, unknown>;
+    at: number;
+  } | null;
 
   /**
    * Dock / float / window chrome for side panels (persisted).

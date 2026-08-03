@@ -102,8 +102,16 @@ export {
   ellipseBBox,
 } from './geometry';
 
-export { createCoordContext } from './coords';
-export type { CoordContext, ViewSize } from './coords';
+export {
+  createCoordContext,
+  DRAWING_FUTURE_BARS,
+  DRAWING_RIGHT_OFFSET_DEFAULT,
+  estimateBarPeriod,
+  unixTimeToLogicalIndex,
+  logicalIndexToUnixTime,
+  clampTimeToFutureHorizon,
+} from './coords';
+export type { CoordContext, ViewSize, TimeBarLike, CreateCoordContextOpts } from './coords';
 
 export { el, line, circle, label, strokeDashFor } from './svg-primitives';
 

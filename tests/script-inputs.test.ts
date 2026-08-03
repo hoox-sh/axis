@@ -181,6 +181,7 @@ describe('buildDataViewRows', () => {
   const bars = [
     { time: 1000, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 },
     { time: 2000, open: 1.5, high: 3, low: 1, close: 2.5, volume: 20 },
+    { time: 3000, open: 2.5, high: 4, low: 2, close: 3.5, volume: 30 },
   ];
 
   it('resolves nearest bar and series', () => {
@@ -190,11 +191,60 @@ describe('buildDataViewRows', () => {
       time: 2000,
       symbol: 'BTCUSDT',
       interval: '1h',
-      series: { sma: [null, 2.1] },
+      series: { sma: [null, 2.1, 2.2] },
       plotMeta: { sma: { title: 'SMA', color: '#939fff' } },
     });
     expect(rows.find((r) => r.key === 'close')!.value).toContain('2.5');
     expect(rows.find((r) => r.key === 's_sma')!.label).toBe('SMA');
     expect(rows.find((r) => r.key === 'symbol')!.value).toBe('BTCUSDT');
+  });
+
+  it('includes drawing prices at crosshair time', () => {
+    const rows = buildDataViewRows({
+      bars,
+      time: 2000,
+      drawings: [
+        { id: 'h1', kind: 'hline', price: 42.5, color: '#5ecf8a' },
+        {
+          id: 't1',
+          kind: 'trend',
+          color: '#939fff',
+          p1: { time: 1000, price: 10 },
+          p2: { time: 3000, price: 30 },
+        },
+        {
+          id: 'r1',
+          kind: 'ray',
+          color: '#e8a03a',
+          p1: { time: 2000, price: 100 },
+          p2: { time: 3000, price: 110 },
+        },
+      ] as never,
+    });
+    const h = rows.find((r) => r.key === 'd_h1');
+    expect(h?.group).toBe('drawings');
+    expect(h?.value).toContain('42.5');
+    // mid trend: t=2000 is halfway 10→30 → 20
+    const tr = rows.find((r) => r.key === 'd_t1');
+    expect(tr?.value).toMatch(/20/);
+    // ray starts at 2000 → active
+    expect(rows.find((r) => r.key === 'd_r1')).toBeTruthy();
+  });
+
+  it('omits trend when crosshair is outside the segment', () => {
+    const rows = buildDataViewRows({
+      bars,
+      time: 1000,
+      drawings: [
+        {
+          id: 't1',
+          kind: 'trend',
+          color: '#fff',
+          p1: { time: 2000, price: 10 },
+          p2: { time: 3000, price: 30 },
+        },
+      ] as never,
+    });
+    expect(rows.find((r) => r.key === 'd_t1')).toBeUndefined();
   });
 });

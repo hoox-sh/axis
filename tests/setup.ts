@@ -51,10 +51,26 @@ export function installDocumentStub() {
   const attrs = new Map<string, string>();
   const nodes = new Map<string, FakeEl>();
 
+  class FakeStyle {
+    private props = new Map<string, string>();
+    setProperty(name: string, value: string) {
+      this.props.set(name, String(value));
+      (this as unknown as Record<string, string>)[name] = String(value);
+    }
+    getPropertyValue(name: string) {
+      return this.props.get(name) ?? '';
+    }
+    removeProperty(name: string) {
+      this.props.delete(name);
+      delete (this as unknown as Record<string, string>)[name];
+    }
+  }
+
   class FakeEl {
     id = '';
     className = '';
-    style: Record<string, string> = {};
+    style: FakeStyle & Record<string, string> = new FakeStyle() as FakeStyle &
+      Record<string, string>;
     dataset: Record<string, string> = {};
     textContent = '';
     children: FakeEl[] = [];
