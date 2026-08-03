@@ -72,6 +72,7 @@ import { resizePane, store } from '../store';
 import type { TradeMarker } from '../results/events';
 import type { ShapeMarkerSpec } from '../results/plot-visuals';
 import { mountPaneBadge, refreshPaneBadge, setPaneBadgeLabel } from './pane-badge';
+import { reportUiError } from '../ui/boot-errors';
 
 /**
  * One plot sample. Omit `value` (or leave undefined) for LWC whitespace so the
@@ -1008,43 +1009,56 @@ export class PaneManager {
    * the store is empty (unit tests).
    */
   appendBar(bar: Bar) {
-    const pricePane = this.panes.get('price');
-    const chartType = normalizeChartType(store.chartType ?? this.priceChartType);
-    if (pricePane?.series['candle']) {
-      const bars =
-        store.bars?.length && store.bars[store.bars.length - 1]?.time === bar.time
-          ? store.bars
-          : store.bars?.length
-            ? [...store.bars.filter((b) => b.time !== bar.time), bar].sort(
-                (a, c) => a.time - c.time,
-              )
-            : [bar];
-      const point = mapBarUpdate(bars, chartType);
-      if (point) {
-        pricePane.series['candle'].update({
-          ...point,
-          time: point.time as UTCTimestamp,
-        } as never);
-      }
-      // Tint last-price line to bar direction
-      try {
-        const dir = lastBarDirection(bars, chartType);
-        if (dir) {
-          pricePane.series['candle'].applyOptions({
-            priceLineColor:
-              dir === 'up' ? 'rgba(94, 207, 138, 0.55)' : 'rgba(232, 93, 76, 0.55)',
-          });
+    try {
+      const pricePane = this.panes.get('price');
+      const chartType = normalizeChartType(store.chartType ?? this.priceChartType);
+      if (pricePane?.series['candle']) {
+        const bars =
+          store.bars?.length && store.bars[store.bars.length - 1]?.time === bar.time
+            ? store.bars
+            : store.bars?.length
+              ? [...store.bars.filter((b) => b.time !== bar.time), bar].sort(
+                  (a, c) => a.time - c.time,
+                )
+              : [bar];
+        const point = mapBarUpdate(bars, chartType);
+        if (point) {
+          pricePane.series['candle'].update({
+            ...point,
+            time: point.time as UTCTimestamp,
+          } as never);
         }
-      } catch {
-        /* ignore */
+        // Tint last-price line to bar direction
+        try {
+          const dir = lastBarDirection(bars, chartType);
+          if (dir) {
+            pricePane.series['candle'].applyOptions({
+              priceLineColor:
+                dir === 'up' ? 'rgba(94, 207, 138, 0.55)' : 'rgba(232, 93, 76, 0.55)',
+            });
+          }
+        } catch {
+          /* price line tint optional */
+        }
       }
-    }
-    const volPane = this.panes.get('volume');
-    if (volPane?.series['volume']) {
-      volPane.series['volume'].update({
-        time: bar.time as UTCTimestamp,
-        value: bar.volume ?? 0,
-        color: bar.close >= bar.open ? 'rgba(94, 207, 138, 0.45)' : 'rgba(232, 93, 76, 0.45)',
+      const volPane = this.panes.get('volume');
+      if (volPane?.series['volume']) {
+        volPane.series['volume'].update({
+          time: bar.time as UTCTimestamp,
+          value: bar.volume ?? 0,
+          color:
+            bar.close >= bar.open
+              ? 'rgba(94, 207, 138, 0.45)'
+              : 'rgba(232, 93, 76, 0.45)',
+        });
+      }
+    } catch (err: unknown) {
+      // Live ticks must not tear down the Solid tree or flood the status bar
+      reportUiError(err, {
+        source: 'chart',
+        context: 'Live bar update failed',
+        status: true,
+        throttleMs: 4000,
       });
     }
   }

@@ -175,7 +175,7 @@ class EngineWsClient {
       ws.onclose = () => {
         this.ws = null;
         this.connectPromise = null;
-        // Reject all in-flight
+        // Reject all in-flight (premature or mid-run close)
         for (const [id, p] of this.pending) {
           clearTimeout(p.timer);
           p.reject(new Error('WebSocket closed'));
@@ -190,43 +190,71 @@ class EngineWsClient {
       };
 
       ws.onmessage = (ev) => {
-        try {
-          const msg = JSON.parse(String(ev.data)) as Record<string, unknown>;
-          if (msg.type === 'pong') return;
-          const id = msg.id != null ? String(msg.id) : '';
-          const pend = id ? this.pending.get(id) : undefined;
-          if (!pend) return;
-          clearTimeout(pend.timer);
-          this.pending.delete(id);
-          if (msg.type === 'error' || msg.status === 'error') {
-            pend.resolve({
-              status: 'error',
-              error: String(msg.message || msg.error || 'Engine error'),
-              code: msg.code as string | undefined,
-              transport: 'ws',
-            });
-            return;
-          }
-          pend.resolve({
-            ...(msg as EngineWsResult),
-            status: 'success',
-            transport: 'ws',
-          });
-        } catch {
-          /* ignore malformed */
-        }
+        this.handleMessage(ev?.data);
       };
     });
 
     return this.connectPromise;
   }
 
+  /**
+   * Parse one inbound frame. Malformed / non-object payloads are ignored so a
+   * single bad message does not tear down the socket; unmatched ids wait for
+   * timeout or a later correlated reply.
+   */
+  private handleMessage(data: unknown): void {
+    let raw: string;
+    try {
+      if (typeof data === 'string') {
+        raw = data;
+      } else if (data == null) {
+        return;
+      } else {
+        // Blob / ArrayBuffer rare for this API; coerce best-effort
+        raw = String(data);
+      }
+      if (!raw || !raw.trim()) return;
+      const msg = JSON.parse(raw) as unknown;
+      if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return;
+      const rec = msg as Record<string, unknown>;
+      if (rec.type === 'pong') return;
+      const id = rec.id != null ? String(rec.id) : '';
+      const pend = id ? this.pending.get(id) : undefined;
+      if (!pend) return;
+      clearTimeout(pend.timer);
+      this.pending.delete(id);
+      if (rec.type === 'error' || rec.status === 'error') {
+        pend.resolve({
+          status: 'error',
+          error: String(rec.message || rec.error || 'Engine error'),
+          code: rec.code as string | undefined,
+          transport: 'ws',
+        });
+        return;
+      }
+      pend.resolve({
+        ...(rec as EngineWsResult),
+        status: 'success',
+        transport: 'ws',
+      });
+    } catch {
+      /* ignore malformed JSON — pending wait for timeout / good frame */
+    }
+  }
+
   run(req: EngineWsRunRequest, timeoutMs: number): Promise<EngineWsResult> {
+    if (this.dead) {
+      return Promise.reject(new Error('WebSocket client marked dead'));
+    }
     // Fast-fail connect (gunicorn without a WS worker often 404/hangs here).
     const connectMs = Math.min(4_000, Math.max(1_500, Math.floor(timeoutMs / 3)));
     return this.ensureConnected(connectMs).then(
       () =>
         new Promise<EngineWsResult>((resolve, reject) => {
+          if (this.dead) {
+            reject(new Error('WebSocket client marked dead'));
+            return;
+          }
           if (!this.ws || this.ws.readyState !== 1) {
             reject(new Error('WebSocket not open'));
             return;

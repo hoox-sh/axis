@@ -487,9 +487,22 @@ function wireTimePresets() {
 }
 
 async function bootstrap() {
-    // Service worker (production only — skip on file:// or dev ports without HTTPS)
-    if ('serviceWorker' in navigator && location.protocol !== 'file:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-        try { await navigator.serviceWorker.register('./sw.js'); } catch (_) { /* ignore */ }
+    // Service worker (legacy shell). Product path: src/pwa/register-sw.ts via index.tsx.
+    // Skip file:// and local loopback so Vite/dev never fights the SW.
+    // Guard against double-register if both shells ever load in one page.
+    if (
+        'serviceWorker' in navigator &&
+        location.protocol !== 'file:' &&
+        location.hostname !== 'localhost' &&
+        location.hostname !== '127.0.0.1' &&
+        !window.__AXIS_SW_REGISTERED__
+    ) {
+        try {
+            window.__AXIS_SW_REGISTERED__ = true;
+            await navigator.serviceWorker.register('./sw.js', { scope: './', updateViaCache: 'none' });
+        } catch (_) {
+            window.__AXIS_SW_REGISTERED__ = false;
+        }
     }
 
     initState();

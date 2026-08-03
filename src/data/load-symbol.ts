@@ -21,15 +21,17 @@
  * Load historical OHLCV for a symbol into the Solid store and chart.
  *
  * Resolves the {@link SourcePlugin} by id, calls `fetchHistorical`, normalizes
- * bar times to **unix seconds**, then:
+ * bar times to **unix seconds** (drop partial/invalid OHLCV), then:
  * 1. {@link loadBars} — store + exchange label
  * 2. {@link setDataToChart} — Lightweight Charts candle series (`fit: true`)
  * 3. Optionally {@link startLive} when `store.live.preferAfterLoad` is set
  *
  * Updates the `source` telemetry plane (connecting / open / error) and status bar.
+ * Concurrent loads: only the newest request may mutate store/chart/status
+ * (stale completions return `false` without clobbering a later load).
  *
  * @module data/load-symbol
- * @returns `true` on success, `false` on unknown source or fetch failure
+ * @returns `true` on success, `false` on unknown source, fetch failure, or stale race
  */
 
 import {
@@ -46,6 +48,49 @@ import { getUploadedFileName } from '../sources/upload-store';
 import { classifyTransport } from '../ui/telemetry';
 import { defaultStreamForSource } from '../streams/catalog';
 import { pluginKey } from '../plugins/types';
+import { normalizeHistoricalBars } from './parse-bars';
+
+/**
+ * Monotonic generation for in-flight history loads.
+ * Incremented at the start of every {@link loadSymbolData}; completions with a
+ * lower id are ignored so mid-load symbol switches cannot race into the store.
+ */
+let loadGeneration = 0;
+
+/** @internal test helper — reset race token between suites */
+export function _resetLoadGeneration(): void {
+  loadGeneration = 0;
+}
+
+/** @internal test helper — current race token */
+export function _currentLoadGeneration(): number {
+  return loadGeneration;
+}
+
+function exchangeForSource(sourceId: string): string {
+  switch (sourceId) {
+    case 'binance-rest':
+      return 'binance';
+    case 'okx-rest':
+      return 'okx';
+    case 'bybit-rest':
+      return 'bybit';
+    case 'coinbase-rest':
+      return 'coinbase';
+    case 'mock-walk':
+      return 'mock';
+    case 'csv-upload':
+      return 'upload';
+    default:
+      return store.exchange;
+  }
+}
+
+function errMessage(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === 'string' && err) return err;
+  return 'Unknown load error';
+}
 
 /**
  * Fetch OHLCV via the given historical source and push into chart + store.
@@ -59,18 +104,35 @@ export async function loadSymbolData(
   interval: string = store.interval,
   sourceId: string = store.source,
 ): Promise<boolean> {
-  const sym = symbol.toUpperCase();
-  const source = getSource(sourceId);
+  const sym = String(symbol || '').trim().toUpperCase();
+  const iv = String(interval || store.interval || '1d');
+  const srcId = String(sourceId || store.source || '');
+
+  // Claim this load as the newest; any prior in-flight work becomes stale.
+  const gen = ++loadGeneration;
+
+  const source = getSource(srcId);
   if (!source) {
-    setStatus('error', `Unknown source: ${sourceId}`);
-    setTelemetryState('source', 'error', { error: `Unknown source: ${sourceId}` });
+    // Unknown source: only surface if we are still the active request
+    if (gen === loadGeneration) {
+      setStatus('error', `Unknown source: ${srcId}`);
+      setTelemetryState('source', 'error', { error: `Unknown source: ${srcId}` });
+    }
+    return false;
+  }
+
+  if (!sym) {
+    if (gen === loadGeneration) {
+      setStatus('error', 'Symbol required');
+      setTelemetryState('source', 'error', { error: 'Symbol required' });
+    }
     return false;
   }
 
   const label =
-    sourceId === 'csv-upload' && getUploadedFileName()
+    srcId === 'csv-upload' && getUploadedFileName()
       ? getUploadedFileName()!
-      : `${sym} ${interval}`;
+      : `${sym} ${iv}`;
 
   const transport = classifyTransport('source', source.id, source.capabilities);
   setTelemetryPlane('source', {
@@ -83,50 +145,64 @@ export async function loadSymbolData(
   });
   setStatus('loading', `Loading ${label} via ${source.name}…`);
   const t0 = performance.now();
+
+  const stillCurrent = () => gen === loadGeneration;
+
   try {
     // Global history depth (Settings) wins over per-source plugin config for limit
     const limit = clampHistoryBars(store.historyBars);
     const configs = store.pluginsConfig || {};
     const sourceCfg =
-      configs[pluginKey('source', sourceId)] || configs[sourceId] || {};
-    const bars = await source.fetchHistorical({
-      symbol: sym,
-      interval,
-      config: {
-        ...sourceCfg,
-        limit,
-      },
-    });
-    if (!bars?.length) {
+      configs[pluginKey('source', srcId)] || configs[srcId] || {};
+
+    let raw: unknown;
+    try {
+      raw = await source.fetchHistorical({
+        symbol: sym,
+        interval: iv,
+        config: {
+          ...sourceCfg,
+          limit,
+        },
+      });
+    } catch (fetchErr: unknown) {
+      // Plugin throw / network fail — rethrow into outer handler with clean message
+      throw fetchErr instanceof Error
+        ? fetchErr
+        : new Error(errMessage(fetchErr));
+    }
+
+    if (!stillCurrent()) {
+      // Newer load started while we were awaiting the source — drop result
+      return false;
+    }
+
+    if (raw == null || (Array.isArray(raw) && raw.length === 0)) {
       throw new Error('Source returned no bars');
     }
 
-    // Normalize times to seconds (defensive)
-    const normalized = bars.map((b) => ({
-      ...b,
-      time: b.time > 1e12 ? Math.floor(b.time / 1000) : b.time,
-    }));
+    const normalized = normalizeHistoricalBars(raw, { limit });
+    if (!normalized.length) {
+      throw new Error('Source returned no valid bars (empty / partial OHLCV / bad timestamps)');
+    }
 
-    const exchange =
-      sourceId === 'binance-rest'
-        ? 'binance'
-        : sourceId === 'okx-rest'
-          ? 'okx'
-          : sourceId === 'bybit-rest'
-            ? 'bybit'
-            : sourceId === 'coinbase-rest'
-              ? 'coinbase'
-              : sourceId === 'mock-walk'
-                ? 'mock'
-                : sourceId === 'csv-upload'
-                  ? 'upload'
-                  : store.exchange;
+    if (!stillCurrent()) return false;
 
-    loadBars(normalized, sym, interval, exchange);
+    const exchange = exchangeForSource(srcId);
+
+    loadBars(normalized, sym, iv, exchange);
     const manager = getManager();
     if (manager) {
-      setDataToChart(normalized, { fit: true });
+      try {
+        setDataToChart(normalized, { fit: true });
+      } catch (chartErr: unknown) {
+        // Chart paint failure should not leave status as "loading" forever
+        console.error('setDataToChart failed:', chartErr);
+      }
     }
+
+    if (!stillCurrent()) return false;
+
     const ms = performance.now() - t0;
     setTelemetryState('source', 'open', {
       latencyMs: ms,
@@ -137,17 +213,21 @@ export async function loadSymbolData(
 
     // Optional WSS-first: auto-start paired live stream after successful Load
     if (store.live.preferAfterLoad && !store.live.active) {
-      const streamId = store.live.streamId || defaultStreamForSource(sourceId);
+      const streamId = store.live.streamId || defaultStreamForSource(srcId);
       try {
         const { startLive } = await import('../streams/multiplex');
-        startLive(streamId, sym, interval);
+        if (stillCurrent()) {
+          startLive(streamId, sym, iv);
+        }
       } catch {
         /* ignore auto-live failures */
       }
     }
-    return true;
+    return stillCurrent();
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    // Stale failure must not overwrite a newer load's telemetry/status
+    if (!stillCurrent()) return false;
+    const msg = errMessage(err);
     console.error('Load failed:', err);
     setTelemetryState('source', 'error', {
       error: msg,

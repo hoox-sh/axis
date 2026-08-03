@@ -16,6 +16,13 @@ import {
   setStore,
   persist,
   flushPersist,
+  flushPersistIfPending,
+  isPersistPending,
+  isPersistQuotaExceeded,
+  resetPersistQuotaFlag,
+  isQuotaExceededError,
+  parsePersistedState,
+  loadRawState,
   setActivePlugin,
   appendLog,
   clearLogs,
@@ -30,6 +37,7 @@ import {
   removeIndicator,
   toggleIndicator,
   setIndicatorColor,
+  setIndicatorSeries,
   addPane,
   removePane,
   resizePane,
@@ -65,6 +73,7 @@ import {
   clearDrawings,
   deleteSelectedDrawing,
   STORAGE_KEY,
+  LEGACY_STORAGE_KEYS,
   EDITOR_DOC_KEY,
   clampHistoryBars,
   HISTORY_BARS_DEFAULT,
@@ -112,6 +121,7 @@ function resetStoreBasics() {
 
 beforeEach(() => {
   resetStoreBasics();
+  resetPersistQuotaFlag();
 });
 
 describe('setActivePlugin', () => {
@@ -431,6 +441,39 @@ describe('persist', () => {
     expect(parsed.lastRun).toBeUndefined();
   });
 
+  it('never persists bars, lastRun, logs, indicatorSeries, chartDataGen, selectedDrawingId', () => {
+    loadBars(makeBars(5), 'BTCUSDT', '1d', 'binance');
+    appendLog('error', 'ephemeral log');
+    setLastRun({ status: 'success', plots: [{ name: 'x' }], events: [] });
+    setIndicatorSeries('ind1', {
+      name: 'RSI',
+      series: { RSI: [1, 2, 3] },
+    });
+    setStore('selectedDrawingId', 'draw-1');
+    setStore('chartDataGen', 99);
+    setStore('crosshair', { time: 123, barIndex: 4 });
+    setStore('scriptSettings', { open: true, indicatorId: 'ind1' });
+
+    expect(flushPersist()).toBe(true);
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+
+    expect(parsed.bars).toBeUndefined();
+    expect(parsed.lastRun).toBeUndefined();
+    expect(parsed.logs).toBeUndefined();
+    expect(parsed.indicatorSeries).toBeUndefined();
+    expect(parsed.chartDataGen).toBeUndefined();
+    expect(parsed.selectedDrawingId).toBeUndefined();
+    expect(parsed.crosshair).toBeUndefined();
+    expect(parsed.scriptSettings).toBeUndefined();
+    // Only HUD layout from telemetry
+    expect(parsed.telemetry?.source).toBeUndefined();
+    expect(parsed.telemetry?.hud).toBeDefined();
+    // In-memory still holds ephemeral data
+    expect(store.bars.length).toBe(5);
+    expect(store.logs.length).toBeGreaterThan(0);
+    expect(store.lastRun).toBeTruthy();
+  });
+
   it('flushPersist writes immediately (settings save path)', () => {
     setStore('endpoint', 'http://127.0.0.1:5002');
     setStore('interval', '15m');
@@ -445,7 +488,7 @@ describe('persist', () => {
         preferWs: true,
       }),
     );
-    flushPersist();
+    expect(flushPersist()).toBe(true);
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
     expect(parsed.endpoint).toBe('http://127.0.0.1:5002');
     expect(parsed.interval).toBe('15m');
@@ -486,5 +529,151 @@ describe('persist', () => {
     expect(cfg.stale).toBeUndefined();
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
     expect(parsed.pluginsConfig['engine:server'].mode).toBe('compile');
+  });
+
+  it('flushPersistIfPending only writes when debounce is pending', async () => {
+    setStore('symbol', 'PENDING1');
+    expect(isPersistPending()).toBe(false);
+    expect(flushPersistIfPending()).toBe(false);
+
+    persist();
+    expect(isPersistPending()).toBe(true);
+    expect(flushPersistIfPending()).toBe(true);
+    expect(isPersistPending()).toBe(false);
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).symbol).toBe('PENDING1');
+
+    // Second call with nothing pending is a no-op
+    setStore('symbol', 'PENDING2');
+    expect(flushPersistIfPending()).toBe(false);
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).symbol).toBe('PENDING1');
+  });
+});
+
+describe('parsePersistedState / corrupt hydrate', () => {
+  it('returns null on corrupt JSON without throwing', () => {
+    expect(() => parsePersistedState('{not json')).not.toThrow();
+    expect(parsePersistedState('{not json')).toBeNull();
+    expect(parsePersistedState('')).toBeNull();
+    expect(parsePersistedState('null')).toBeNull();
+    expect(parsePersistedState('[]')).toBeNull();
+    expect(parsePersistedState('"string"')).toBeNull();
+    expect(parsePersistedState('42')).toBeNull();
+  });
+
+  it('strips ephemeral fields even if present in the blob', () => {
+    const raw = JSON.stringify({
+      symbol: 'ETHUSDT',
+      bars: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+      lastRun: { status: 'success' },
+      logs: [{ id: '1', message: 'x' }],
+      live: { active: true, streamId: 'mock-poll' },
+      selectedDrawingId: 'd1',
+      indicatorSeries: { a: {} },
+      chartDataGen: 9,
+      telemetry: {
+        source: { id: 'x', state: 'open' },
+        hud: { compact: true, overlay: false },
+      },
+    });
+    const overlay = parsePersistedState(raw);
+    expect(overlay).toBeTruthy();
+    expect(overlay!.symbol).toBe('ETHUSDT');
+    expect(overlay!.bars).toEqual([]);
+    expect(overlay!.lastRun).toBeNull();
+    expect(overlay!.logs).toEqual([]);
+    expect(overlay!.live?.active).toBe(false);
+    expect(overlay!.live?.streamId).toBe('mock-poll');
+    expect(overlay!.selectedDrawingId).toBeNull();
+    expect(overlay!.indicatorSeries).toEqual({});
+    expect(overlay!.chartDataGen).toBe(0);
+    expect(overlay!.telemetry?.hud?.compact).toBe(true);
+    // Full plane telemetry is not restored from disk
+    expect(overlay!.telemetry?.source?.state).not.toBe('open');
+  });
+
+  it('loadRawState write-forwards v2 → v1', () => {
+    localStorage.removeItem(STORAGE_KEY);
+    const legacyKey = LEGACY_STORAGE_KEYS[0];
+    const blob = JSON.stringify({ symbol: 'DOGEUSDT', engine: 'pyodide' });
+    localStorage.setItem(legacyKey, blob);
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+
+    const raw = loadRawState();
+    expect(raw).toBe(blob);
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(blob);
+  });
+
+  it('parsePersistedState accepts a v2-shaped payload', () => {
+    const overlay = parsePersistedState(
+      JSON.stringify({
+        symbol: 'SOLUSDT',
+        interval: '4h',
+        engine: 'pyodide',
+        activePlugins: { engine: 'pyodide', source: 'mock-walk' },
+      }),
+    );
+    expect(overlay?.symbol).toBe('SOLUSDT');
+    expect(overlay?.interval).toBe('4h');
+    expect(overlay?.activePlugins?.engine).toBe('pyodide');
+    expect(overlay?.engine).toBe('pyodide');
+  });
+});
+
+describe('QuotaExceededError handling', () => {
+  it('isQuotaExceededError recognizes common shapes', () => {
+    expect(isQuotaExceededError(null)).toBe(false);
+    expect(isQuotaExceededError({ name: 'QuotaExceededError' })).toBe(true);
+    expect(isQuotaExceededError({ name: 'NS_ERROR_DOM_QUOTA_REACHED' })).toBe(true);
+    expect(isQuotaExceededError({ code: 22 })).toBe(true);
+    expect(isQuotaExceededError({ code: 1014 })).toBe(true);
+    expect(isQuotaExceededError({ message: 'Quota exceeded' })).toBe(true);
+    expect(isQuotaExceededError({ name: 'TypeError' })).toBe(false);
+  });
+
+  it('flushPersist returns false and never throws when setItem always fails', () => {
+    const orig = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = () => {
+      const err = new DOMException('quota', 'QuotaExceededError');
+      throw err;
+    };
+    try {
+      setStore('symbol', 'QUOTA1');
+      expect(() => flushPersist()).not.toThrow();
+      expect(flushPersist()).toBe(false);
+      expect(isPersistQuotaExceeded()).toBe(true);
+      // App state still works in memory
+      expect(store.symbol).toBe('QUOTA1');
+    } finally {
+      localStorage.setItem = orig;
+    }
+  });
+
+  it('flushPersist retries slim payload after quota on full write', () => {
+    const orig = localStorage.setItem.bind(localStorage);
+    let calls = 0;
+    localStorage.setItem = (key: string, value: string) => {
+      calls++;
+      // Fail full payloads that include drawings; allow slim (empty drawings)
+      if (calls <= 2) {
+        // 1st full + 2nd full after legacy cleanup
+        const err = new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+        throw err;
+      }
+      orig(key, value);
+    };
+    try {
+      setDrawings([{ id: 'd-heavy' }] as never[]);
+      setStore('symbol', 'SLIMOK');
+      const ok = flushPersist();
+      expect(ok).toBe(true);
+      expect(isPersistQuotaExceeded()).toBe(true);
+      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+      expect(parsed.symbol).toBe('SLIMOK');
+      expect(parsed.drawings).toEqual([]);
+      // In-memory drawings preserved
+      expect(store.drawings).toHaveLength(1);
+    } finally {
+      localStorage.setItem = orig;
+    }
   });
 });

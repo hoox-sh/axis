@@ -308,12 +308,22 @@ export async function pineComplete(
     const source = context.state.doc.toString();
     const lineNo = line.number - 1; // CM is 1-based line.number
     const character = context.pos - line.from;
-    const remote = await fetchRemoteCompletion({
-      source,
-      line: lineNo,
-      character,
-      signal: context.abortSignal ?? AbortSignal.timeout(4_000),
-    });
+    // CompletionContext has .aborted + abort listeners, not AbortSignal
+    const ac = new AbortController();
+    const timeoutMs = 4_000;
+    const timer = setTimeout(() => ac.abort(), timeoutMs);
+    context.addEventListener('abort', () => ac.abort());
+    let remote: Awaited<ReturnType<typeof fetchRemoteCompletion>>;
+    try {
+      remote = await fetchRemoteCompletion({
+        source,
+        line: lineNo,
+        character,
+        signal: ac.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     if (remote?.length) {
       // After module prefix, server may return full "ta.sma" labels — strip for apply after dot
       const textBefore = line.text.slice(0, context.pos - line.from);

@@ -547,16 +547,22 @@ export function resolveScriptInputs(
     const options =
       e.options?.length ? e.options : s.options?.length ? s.options : undefined;
 
-    // Engine float + script source (or recovered): keep series selector UX
+    // Engine float + script source (or recovered): keep series selector UX.
+    // When neither side is already `source`, the third arm of the || is only
+    // reached after TS has narrowed both types away from `'source'` — do not
+    // re-check `!== 'source'` there (no-overlap under control-flow analysis).
+    const eitherIsSource = s.type === 'source' || e.type === 'source';
     const preferSource =
-      s.type === 'source' ||
-      e.type === 'source' ||
-      (s.type !== 'source' &&
-        e.type !== 'source' &&
-        titleLooksLikeSourceSelector(s.title, s.id) &&
+      eitherIsSource ||
+      (titleLooksLikeSourceSelector(s.title, s.id) &&
         (isResolvedNumeric(e.value) || isResolvedNumeric(e.default)));
 
-    if (preferSource && (s.type === 'source' || e.type === 'source' || isResolvedNumeric(e.value) || isResolvedNumeric(e.default))) {
+    if (
+      preferSource &&
+      (eitherIsSource ||
+        isResolvedNumeric(e.value) ||
+        isResolvedNumeric(e.default))
+    ) {
       const tokenDefault = isSourceSeriesToken(s.default)
         ? String(s.default).toLowerCase()
         : isSourceSeriesToken(e.default)

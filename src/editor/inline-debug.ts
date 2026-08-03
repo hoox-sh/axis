@@ -395,7 +395,7 @@ export const debugPinStateField = StateField.define<DebugPinState>({
     return anns.length ? { anns } : emptyPinState;
   },
   provide: (f) =>
-    EditorView.editorAttributes.from(f, (s) =>
+    EditorView.editorAttributes.from(f, (s): { [name: string]: string } =>
       s.anns.some(isPinableAnnotation) ? { class: 'cm-debug-pins-active' } : {},
     ),
 });

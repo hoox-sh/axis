@@ -18,10 +18,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Parse user-uploaded OHLCV from CSV or JSON into {@link Bar}[].
+ * Parse user-uploaded OHLCV from CSV or JSON into {@link Bar}[], and
+ * sanitize/normalize historical bars from any source.
  *
  * Used by the file-upload UI before bars are stored via {@link setUploadedBars}
- * and loaded through the `csv-upload` source.
+ * and loaded through the `csv-upload` source. {@link normalizeHistoricalBars}
+ * is also used by `load-symbol` after plugin fetch.
  *
  * ## Formats
  *
@@ -38,27 +40,51 @@
  *
  * - {@link parseOhlcvText} — string + optional file name hint
  * - {@link parseOhlcvFile} — browser `File` helper
+ * - {@link normalizeBarTime} — ms→seconds, reject non-finite / non-positive
+ * - {@link sanitizeBar} — single bar: finite OHLCV, mild high/low repair
+ * - {@link normalizeHistoricalBars} — array sanitize + sort + dedupe + limit
  *
  * @module data/parse-bars
  */
 
 import type { Bar } from '../store/types';
 
-function toUnixSeconds(raw: unknown): number | null {
+/** Unix seconds past ~year 2100 — reject clearly absurd post-normalize times. */
+const MAX_UNIX_SECONDS = 4_102_444_800;
+
+/**
+ * Coerce a raw timestamp to unix **seconds**.
+ * Accepts seconds, milliseconds (&gt;1e12), and drops non-finite / non-positive.
+ */
+export function normalizeBarTime(raw: unknown): number | null {
   if (raw == null || raw === '') return null;
-  if (typeof raw === 'number' && Number.isFinite(raw)) {
-    // ms if > year 2100 in seconds (~4e9)
-    return raw > 1e12 ? Math.floor(raw / 1000) : Math.floor(raw);
+  let n: number;
+  if (typeof raw === 'number') {
+    n = raw;
+  } else {
+    const s = String(raw).trim();
+    if (!s) return null;
+    if (/^\d+(\.\d+)?$/.test(s)) n = parseFloat(s);
+    else {
+      const ms = Date.parse(s);
+      if (Number.isNaN(ms)) return null;
+      n = ms; // Date.parse is ms → fold into ms branch below
+      // treat as ms always from Date.parse
+      const t = Math.floor(ms / 1000);
+      return t > 0 && t <= MAX_UNIX_SECONDS ? t : null;
+    }
   }
-  const s = String(raw).trim();
-  if (!s) return null;
-  if (/^\d+(\.\d+)?$/.test(s)) {
-    const n = parseFloat(s);
-    return n > 1e12 ? Math.floor(n / 1000) : Math.floor(n);
-  }
-  const ms = Date.parse(s);
-  if (!Number.isNaN(ms)) return Math.floor(ms / 1000);
-  return null;
+  if (!Number.isFinite(n)) return null;
+  // ms if larger than year ~2001 in ms-as-if-seconds threshold
+  let t = n > 1e12 ? Math.floor(n / 1000) : Math.floor(n);
+  // microsecond-ish leftovers
+  if (t > 1e12) t = Math.floor(t / 1000);
+  if (!Number.isFinite(t) || t <= 0 || t > MAX_UNIX_SECONDS) return null;
+  return t;
+}
+
+function toUnixSeconds(raw: unknown): number | null {
+  return normalizeBarTime(raw);
 }
 
 function num(raw: unknown): number | null {
@@ -67,19 +93,62 @@ function num(raw: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function rowToBar(row: Record<string, unknown> | unknown[]): Bar | null {
-  if (Array.isArray(row)) {
-    if (row.length < 5) return null;
-    const time = toUnixSeconds(row[0]);
-    const open = num(row[1]);
-    const high = num(row[2]);
-    const low = num(row[3]);
-    const close = num(row[4]);
-    const volume = row.length > 5 ? num(row[5]) ?? undefined : undefined;
+/**
+ * Repair mild OHLC inconsistencies (high below open/close, low above).
+ * Returns null if values are non-finite or still inverted after repair.
+ */
+function repairOhlc(
+  open: number,
+  high: number,
+  low: number,
+  close: number,
+): { open: number; high: number; low: number; close: number } | null {
+  if (
+    !Number.isFinite(open) ||
+    !Number.isFinite(high) ||
+    !Number.isFinite(low) ||
+    !Number.isFinite(close)
+  ) {
+    return null;
+  }
+  const maxOC = Math.max(open, close);
+  const minOC = Math.min(open, close);
+  let h = high < maxOC ? maxOC : high;
+  let l = low > minOC ? minOC : low;
+  if (h < l) {
+    // swap if fully inverted
+    const tmp = h;
+    h = l;
+    l = tmp;
+  }
+  if (h < l || !Number.isFinite(h) || !Number.isFinite(l)) return null;
+  return { open, high: h, low: l, close };
+}
+
+/**
+ * Sanitize one bar-like object into a chart-safe {@link Bar}, or null if
+ * time/OHLC is missing, non-finite, or unusable.
+ */
+export function sanitizeBar(raw: unknown): Bar | null {
+  if (raw == null || typeof raw !== 'object') return null;
+
+  if (Array.isArray(raw)) {
+    if (raw.length < 5) return null;
+    const time = toUnixSeconds(raw[0]);
+    const open = num(raw[1]);
+    const high = num(raw[2]);
+    const low = num(raw[3]);
+    const close = num(raw[4]);
     if (time == null || open == null || high == null || low == null || close == null) return null;
-    return { time, open, high, low, close, volume: volume ?? undefined };
+    const ohlc = repairOhlc(open, high, low, close);
+    if (!ohlc) return null;
+    const volume = raw.length > 5 ? num(raw[5]) : null;
+    const bar: Bar = { time, ...ohlc };
+    if (volume != null && volume >= 0) bar.volume = volume;
+    return bar;
   }
 
+  const row = raw as Record<string, unknown>;
   const lower: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(row)) lower[k.toLowerCase()] = v;
 
@@ -90,9 +159,54 @@ function rowToBar(row: Record<string, unknown> | unknown[]): Bar | null {
   const high = num(lower.high ?? lower.h);
   const low = num(lower.low ?? lower.l);
   const close = num(lower.close ?? lower.c);
-  const volume = num(lower.volume ?? lower.vol ?? lower.v) ?? undefined;
   if (time == null || open == null || high == null || low == null || close == null) return null;
-  return { time, open, high, low, close, volume };
+  const ohlc = repairOhlc(open, high, low, close);
+  if (!ohlc) return null;
+  const volRaw = num(lower.volume ?? lower.vol ?? lower.v);
+  const bar: Bar = { time, ...ohlc };
+  if (volRaw != null && volRaw >= 0) bar.volume = volRaw;
+  if (typeof lower.closed === 'boolean') bar.closed = lower.closed;
+  return bar;
+}
+
+/**
+ * Normalize a source/plugin bar list: drop invalid rows, ms→s, sort ascending,
+ * dedupe same timestamps (last wins), optionally keep the newest `limit` bars.
+ */
+export function normalizeHistoricalBars(
+  bars: unknown,
+  opts?: { limit?: number },
+): Bar[] {
+  if (!Array.isArray(bars) || bars.length === 0) return [];
+
+  const out: Bar[] = [];
+  for (const row of bars) {
+    const bar = sanitizeBar(row);
+    if (bar) out.push(bar);
+  }
+  if (!out.length) return [];
+
+  out.sort((a, b) => a.time - b.time);
+
+  // Dedupe identical open times — keep last (most recent write for that stamp)
+  const deduped: Bar[] = [];
+  for (const b of out) {
+    if (deduped.length && deduped[deduped.length - 1]!.time === b.time) {
+      deduped[deduped.length - 1] = b;
+    } else {
+      deduped.push(b);
+    }
+  }
+
+  const limit = opts?.limit;
+  if (typeof limit === 'number' && Number.isFinite(limit) && limit > 0 && deduped.length > limit) {
+    return deduped.slice(-Math.floor(limit));
+  }
+  return deduped;
+}
+
+function rowToBar(row: Record<string, unknown> | unknown[]): Bar | null {
+  return sanitizeBar(row);
 }
 
 function parseCsv(text: string): Bar[] {
@@ -131,9 +245,7 @@ function parseCsv(text: string): Bar[] {
     }
     if (bar) bars.push(bar);
   }
-  // Ensure ascending time
-  bars.sort((a, b) => a.time - b.time);
-  return bars;
+  return normalizeHistoricalBars(bars);
 }
 
 /** Minimal CSV split (handles quoted fields). */
@@ -173,13 +285,7 @@ function parseJson(text: string): Bar[] {
   if (!Array.isArray(rows)) {
     throw new Error('JSON must be an array of bars or { bars: [...] }');
   }
-  const bars: Bar[] = [];
-  for (const row of rows) {
-    const bar = rowToBar(row);
-    if (bar) bars.push(bar);
-  }
-  bars.sort((a, b) => a.time - b.time);
-  return bars;
+  return normalizeHistoricalBars(rows);
 }
 
 /**

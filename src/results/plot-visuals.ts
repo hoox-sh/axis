@@ -157,12 +157,36 @@ export function splitSeriesByKind(
 }
 
 function asFiniteNumber(v: unknown): number | null {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string' && v.trim() !== '' && v.toLowerCase() !== 'na') {
-    const n = Number(v);
+  // Keep in sync with indicators/run-helpers.coercePlotSample (local to avoid cycle)
+  if (v == null) return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'boolean') return null;
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (!s) return null;
+    const lower = s.toLowerCase();
+    if (
+      lower === 'na' ||
+      lower === 'nan' ||
+      lower === 'null' ||
+      lower === 'none' ||
+      lower === 'infinity' ||
+      lower === '+infinity' ||
+      lower === '-infinity'
+    ) {
+      return null;
+    }
+    const n = Number(s);
     return Number.isFinite(n) ? n : null;
   }
   return null;
+}
+
+function asBarTime(t: unknown): number | null {
+  if (t == null) return null;
+  const n = typeof t === 'number' ? t : Number(t);
+  if (!Number.isFinite(n)) return null;
+  return n > 1e12 ? Math.floor(n / 1000) : Math.floor(n);
 }
 
 /**
@@ -250,16 +274,18 @@ export function isActiveColor(v: unknown): v is string {
  * Transparent / null bars are omitted (no band).
  */
 export function bgcolorSeriesToHistogramData(
-  times: number[],
-  colors: unknown[],
+  times: number[] | ReadonlyArray<unknown>,
+  colors: unknown[] | unknown,
   fallbackColor?: string | null,
 ): { time: number; value: number; color: string }[] {
   const out: { time: number; value: number; color: string }[] = [];
-  const n = Math.min(times.length, colors.length);
+  if (!Array.isArray(times) || times.length === 0) return out;
+  const colorArr = Array.isArray(colors) ? colors : [];
+  const n = Math.min(times.length, colorArr.length);
   for (let i = 0; i < n; i++) {
-    const t = times[i];
-    if (t == null || !Number.isFinite(t)) continue;
-    const raw = colors[i];
+    const t = asBarTime(times[i]);
+    if (t == null) continue;
+    const raw = colorArr[i];
     let color: string | null = null;
     if (isActiveColor(raw)) color = raw.trim();
     else if (raw === true || (typeof raw === 'number' && raw !== 0 && Number.isFinite(raw))) {
@@ -326,13 +352,15 @@ export function mapShapeLocation(
  * Truthy condition series → LWC markers (one per active bar).
  */
 export function shapeSeriesToMarkers(
-  times: number[],
-  values: unknown[],
+  times: number[] | ReadonlyArray<unknown>,
+  values: unknown[] | unknown,
   meta: PlotMetaEntry = {},
   opts?: { idPrefix?: string },
 ): ShapeMarkerSpec[] {
   const out: ShapeMarkerSpec[] = [];
-  const n = Math.min(times.length, values.length);
+  if (!Array.isArray(times) || times.length === 0) return out;
+  const valArr = Array.isArray(values) ? values : [];
+  const n = Math.min(times.length, valArr.length);
   const color =
     (meta.color && isActiveColor(meta.color) ? meta.color : null) || DEFAULT_SHAPE_COLOR;
   const shape = mapShapeStyle(meta.style, meta.kind);
@@ -345,12 +373,12 @@ export function shapeSeriesToMarkers(
   const prefix = opts?.idPrefix || meta.title || 'shape';
 
   for (let i = 0; i < n; i++) {
-    if (!isTruthyPlotValue(values[i])) continue;
-    const t = times[i];
-    if (t == null || !Number.isFinite(t)) continue;
+    if (!isTruthyPlotValue(valArr[i])) continue;
+    const t = asBarTime(times[i]);
+    if (t == null) continue;
     // Per-bar color if series value is a color string (rare)
     let c = color;
-    const v = values[i];
+    const v = valArr[i];
     if (typeof v === 'string' && isActiveColor(v) && !/^(true|false)$/i.test(v)) {
       c = v.trim();
     }
@@ -368,24 +396,24 @@ export function shapeSeriesToMarkers(
 
 /**
  * Build line overlay points from series + bar times.
- * Emits one point per bar time; non-finite / null values become whitespace
- * (`{ time }` only) so multi-pane logical ranges stay aligned with OHLCV.
+ * Emits one point per bar time; non-finite / null / NaN / "na" / string
+ * non-numerics become whitespace (`{ time }` only) so multi-pane logical
+ * ranges stay aligned with OHLCV. String numerics and ms timestamps coerced.
+ * Safe when `times` or `values` is empty, shorter, or non-array-like.
  */
 export function lineSeriesToOverlayData(
-  times: number[],
-  values: unknown[],
+  times: number[] | ReadonlyArray<unknown>,
+  values: unknown[] | unknown,
 ): { time: number; value?: number }[] {
   const out: { time: number; value?: number }[] = [];
-  const n = times.length;
-  for (let i = 0; i < n; i++) {
-    const t = times[i];
-    if (t == null || !Number.isFinite(t)) continue;
-    const v = values[i];
-    if (v != null && typeof v === 'number' && Number.isFinite(v)) {
-      out.push({ time: t, value: v });
-    } else {
-      out.push({ time: t });
-    }
+  if (!Array.isArray(times) || times.length === 0) return out;
+  const arr = Array.isArray(values) ? values : [];
+  for (let i = 0; i < times.length; i++) {
+    const time = asBarTime(times[i]);
+    if (time == null) continue;
+    const v = asFiniteNumber(arr[i]);
+    if (v != null) out.push({ time, value: v });
+    else out.push({ time });
   }
   return out;
 }

@@ -65,6 +65,7 @@ import {
   clearCompareOverlay,
   fetchCompareBars,
 } from './compare-overlay';
+import { reportUiError } from '../ui/boot-errors';
 
 export {
   getManager,
@@ -103,11 +104,30 @@ function scheduleSlotReflow(slotId?: string) {
     try {
       if (slotId) getSlotManager(slotId)?.resizeAll();
       else getManager()?.resizeAll();
-    } catch {
-      /* ignore */
+    } catch (err: unknown) {
+      reportUiError(err, {
+        source: 'chart',
+        context: 'Chart reflow failed',
+        status: false,
+        throttleMs: 5000,
+      });
     }
   };
   requestAnimationFrame(() => requestAnimationFrame(run));
+}
+
+/** Paint path that never throws into Solid effects. */
+function safePaint(
+  bars: typeof store.bars,
+  opts: { fit?: boolean; clearMarkers?: boolean },
+  context: string,
+) {
+  try {
+    setDataToChart(bars, opts);
+  } catch (err: unknown) {
+    // setDataToChart already reports; keep a belt-and-suspenders boundary
+    reportUiError(err, { source: 'chart', context, status: true });
+  }
 }
 
 /** One chart cell: multi-pane LWC + optional drawing chrome when active. */
@@ -186,14 +206,14 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
 
     const existing = getSlotBars(id);
     if (existing.length) {
-      if (isActive()) setDataToChart(existing, { fit: true });
+      if (isActive()) safePaint(existing, { fit: true }, 'Initial chart paint');
       else {
         // Inactive: apply directly on this manager
         try {
           const prev = getManager();
           setActiveSlotId(id);
           setManager(manager, id);
-          setDataToChart(existing, { fit: true });
+          safePaint(existing, { fit: true }, 'Inactive slot paint');
           // restore previous active
           const activeId = store.chartLayout?.activeId;
           if (activeId && activeId !== id) {
@@ -203,18 +223,30 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
           } else if (prev) {
             setManager(prev);
           }
-        } catch {
-          /* ignore */
+        } catch (err: unknown) {
+          reportUiError(err, {
+            source: 'chart',
+            context: 'Inactive slot paint failed',
+            status: false,
+          });
         }
       }
     } else if (props.symbol && props.interval && !isActive()) {
       // Prefetch inactive slot history without stealing active focus
-      void loadSymbolData(props.symbol, props.interval, store.source).then((ok) => {
-        // loadSymbolData always writes to active — only use for active slot
-        void ok;
-      });
+      void loadSymbolData(props.symbol, props.interval, store.source)
+        .then((ok) => {
+          // loadSymbolData always writes to active — only use for active slot
+          void ok;
+        })
+        .catch((err: unknown) => {
+          reportUiError(err, {
+            source: 'data',
+            context: 'Slot prefetch failed',
+            status: false,
+          });
+        });
     } else if (isActive() && store.bars.length) {
-      setDataToChart(store.bars, { fit: true });
+      safePaint(store.bars, { fit: true }, 'Initial chart paint');
       setSlotBars(id, store.bars, false);
     }
 
@@ -253,7 +285,11 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     untrack(() => {
       if (store.bars.length) {
         // Respect bar-replay cursor so reloads / paint paths don't flash full history
-        setDataToChart(barsForPaint(store.bars), { fit: !isReplayActive() });
+        safePaint(
+          barsForPaint(store.bars),
+          { fit: !isReplayActive() },
+          'Chart data reload',
+        );
         setSlotBars(slotId(), store.bars, false);
       }
     });
@@ -274,7 +310,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
         if (price?.series['candle']) {
           setActiveSlotId(id);
           setManager(m, id);
-          setDataToChart(bl, { fit: false, clearMarkers: false });
+          safePaint(bl, { fit: false, clearMarkers: false }, 'Inactive slot re-paint');
           const aid = store.chartLayout?.activeId;
           if (aid && aid !== id) {
             setActiveSlotId(aid);
@@ -282,8 +318,12 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
             if (am) setManager(am, aid);
           }
         }
-      } catch {
-        /* ignore */
+      } catch (err: unknown) {
+        reportUiError(err, {
+          source: 'chart',
+          context: 'Inactive slot re-paint failed',
+          status: false,
+        });
       }
     });
   });
@@ -295,7 +335,11 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     if (!getManager()) return;
     untrack(() => {
       if (store.bars.length) {
-        setDataToChart(barsForPaint(store.bars), { fit: false, clearMarkers: false });
+        safePaint(
+          barsForPaint(store.bars),
+          { fit: false, clearMarkers: false },
+          'Chart type paint',
+        );
       }
     });
   });
@@ -322,8 +366,12 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     untrack(() => {
       try {
         mgr.refreshBadges?.();
-      } catch {
-        /* ignore */
+      } catch (err: unknown) {
+        reportUiError(err, {
+          source: 'chart',
+          context: 'Pane badge refresh failed',
+          status: false,
+        });
       }
     });
   });
@@ -355,17 +403,25 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     if (!mgr) return;
 
     untrack(() => {
-      if (!enabled || !compareSym || !compareBars.length || !store.bars.length) {
-        clearCompareOverlay(mgr);
-        return;
+      try {
+        if (!enabled || !compareSym || !compareBars.length || !store.bars.length) {
+          clearCompareOverlay(mgr);
+          return;
+        }
+        applyCompareOverlay(mgr, {
+          mainBars: store.bars,
+          compareBars,
+          symbol: compareSym,
+          mode,
+          normalizeMain,
+        });
+      } catch (err: unknown) {
+        reportUiError(err, {
+          source: 'chart',
+          context: 'Compare overlay failed',
+          status: true,
+        });
       }
-      applyCompareOverlay(mgr, {
-        mainBars: store.bars,
-        compareBars,
-        symbol: compareSym,
-        mode,
-        normalizeMain,
-      });
     });
   });
 

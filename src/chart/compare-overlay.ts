@@ -34,6 +34,7 @@ import { createLineSeries, VOID } from './series-factory';
 import { getSource } from '../sources/catalog';
 import { pluginKey } from '../plugins/types';
 import { clampHistoryBars, store } from '../store';
+import { normalizeHistoricalBars } from '../data/parse-bars';
 
 /** Line series key for the compare symbol (not under `overlay_`). */
 export const COMPARE_SERIES_KEY = 'compare';
@@ -369,8 +370,8 @@ export async function fetchCompareBars(
   });
   if (!bars?.length) throw new Error('Compare source returned no bars');
 
-  return bars.map((b) => ({
-    ...b,
-    time: b.time > 1e12 ? Math.floor(b.time / 1000) : b.time,
-  }));
+  // Same sanitize/limit path as load-symbol so partial OHLCV cannot poison compare
+  const normalized = normalizeHistoricalBars(bars, { limit });
+  if (!normalized.length) throw new Error('Compare source returned no valid bars');
+  return normalized;
 }

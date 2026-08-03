@@ -22,12 +22,13 @@
  *
  * ## Lifecycle
  * 1. `DEFAULTS` seed the shape; `loadPersisted()` merges localStorage
- *    (`STORAGE_KEY`).
+ *    (`STORAGE_KEY`). Corrupt JSON is dropped (never throws on boot).
  * 2. Ephemeral fields are forced off on hydrate (live, logs, bars, lastRun,
  *    selection, open modals).
  * 3. `persist()` debounces a write that **omits** bars, lastRun, logs,
  *    crosshair, scriptSettings, selectedDrawingId, and full telemetry
- *    (only `telemetry.hud` is kept).
+ *    (only `telemetry.hud` is kept). QuotaExceededError degrades to slim
+ *    write / in-memory only. Pending debounce flushes on beforeunload/pagehide.
  *
  * ## Data flow
  * - Chart / loaders call `loadBars` / `appendBar` / `setStatus` / telemetry helpers.
@@ -89,13 +90,18 @@ const uid = () => `id_${Date.now()}_${++idCounter}`;
 /** Current AXIS app-state localStorage key. */
 export const STORAGE_KEY = 'pynescript.axis.v1';
 /** Older app-state keys — read once and write forward. */
-const LEGACY_STORAGE_KEYS = [
+export const LEGACY_STORAGE_KEYS = [
   'pynescript.axis.v2',
 ] as const;
 
 /** localStorage key for the docked/popout editor document body. */
 export const EDITOR_DOC_KEY = 'pynescript.axis.editor.doc';
 const DEFAULT_WATCHLIST = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
+
+/** True after a QuotaExceededError (or equivalent) blocked a durable write this session. */
+let persistQuotaExceeded = false;
+/** One-shot console warning for quota / private-mode write failures. */
+let persistWriteWarned = false;
 
 /** Default / clamp bounds for {@link AppState.historyBars}. */
 export const HISTORY_BARS_DEFAULT = 500;
@@ -212,14 +218,27 @@ const DEFAULTS: AppState = {
 
 function readLocalStorage(key: string): string | null {
   try {
+    if (typeof localStorage === 'undefined' || localStorage == null) return null;
     return localStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
-/** Prefer current key; fall back to older keys and write forward. */
-function loadRawState(): string | null {
+function removeLocalStorage(key: string): void {
+  try {
+    if (typeof localStorage === 'undefined' || localStorage == null) return;
+    localStorage.removeItem(key);
+  } catch {
+    /* private mode / security */
+  }
+}
+
+/**
+ * Prefer current key; fall back to older keys and write forward to {@link STORAGE_KEY}.
+ * Never throws. Exported for tests (v2 → v1 migration).
+ */
+export function loadRawState(): string | null {
   const current = readLocalStorage(STORAGE_KEY);
   if (current) return current;
   for (const legacy of LEGACY_STORAGE_KEYS) {
@@ -227,171 +246,331 @@ function loadRawState(): string | null {
     if (raw) {
       try {
         localStorage.setItem(STORAGE_KEY, raw);
-      } catch {}
+      } catch {
+        /* quota — still return raw so hydrate can proceed in-memory */
+      }
       return raw;
     }
   }
   return null;
 }
 
-function loadPersisted(): Partial<AppState> {
+/**
+ * Pure parse of a localStorage JSON blob into a safe AppState overlay.
+ * Returns `null` on corrupt / non-object JSON. **Never throws.**
+ *
+ * Always forces ephemeral fields off (bars, lastRun, logs, live.active, …)
+ * even if they were written by an older client.
+ */
+export function parsePersistedState(raw: string): Partial<AppState> | null {
   try {
-    const raw = loadRawState();
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      const source = parsed.source || DEFAULTS.source;
-      const engine = parsed.engine || DEFAULTS.engine;
-      const streamId =
-        parsed.live?.streamId || parsed.activePlugins?.stream || DEFAULTS.live.streamId;
-      return {
-        ...DEFAULTS,
-        ...parsed,
-        chartType: normalizeChartType(parsed.chartType),
-        historyBars: clampHistoryBars(
-          parsed.historyBars ?? (parsed as { barLimit?: unknown }).barLimit ?? DEFAULTS.historyBars,
-        ),
-        live: {
-          ...DEFAULTS.live,
-          ...parsed.live,
-          // Never hydrate "live active" as running — user must re-enable
-          active: false,
-          preferAfterLoad:
-            typeof parsed.live?.preferAfterLoad === 'boolean'
-              ? parsed.live.preferAfterLoad
-              : DEFAULTS.live.preferAfterLoad,
-          rerunOn: parsed.live?.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick',
-        },
-        editor: { ...DEFAULTS.editor, ...parsed.editor },
-        uiScale: clampUiScale(parsed.uiScale ?? DEFAULTS.uiScale),
-        watchlist: {
-          ...DEFAULTS.watchlist,
-          ...parsed.watchlist,
-          symbols: parsed.watchlist?.symbols?.length
-            ? parsed.watchlist.symbols
-            : DEFAULTS.watchlist.symbols,
-          refreshSec: Math.min(
-            120,
-            Math.max(5, Number(parsed.watchlist?.refreshSec) || DEFAULTS.watchlist.refreshSec),
-          ),
-        },
-        indicatorPanel: { ...DEFAULTS.indicatorPanel, ...parsed.indicatorPanel },
-        dataViewPanel: { ...DEFAULTS.dataViewPanel, ...parsed.dataViewPanel },
-        layerPanel: { ...DEFAULTS.layerPanel, ...parsed.layerPanel },
-        alertsPanel: { ...DEFAULTS.alertsPanel, ...parsed.alertsPanel },
-        editorInputValues:
-          parsed.editorInputValues && typeof parsed.editorInputValues === 'object'
-            ? parsed.editorInputValues
-            : DEFAULTS.editorInputValues,
-        // Ephemeral UI — never hydrate open modals / crosshair from disk
-        scriptSettings: { open: false, indicatorId: null },
-        crosshair: { time: null, barIndex: null },
-        resultsPanel: { ...DEFAULTS.resultsPanel, ...parsed.resultsPanel },
-        logsPanel: { ...DEFAULTS.logsPanel, ...parsed.logsPanel, open: false },
-        profilerEnabled: !!parsed.profilerEnabled,
-        inlineDebugEnabled: !!(parsed as { inlineDebugEnabled?: boolean }).inlineDebugEnabled,
-        debugPinsEnabled: !!(parsed as { debugPinsEnabled?: boolean }).debugPinsEnabled,
-        editorRulerEnabled:
-          typeof (parsed as { editorRulerEnabled?: boolean }).editorRulerEnabled === 'boolean'
-            ? !!(parsed as { editorRulerEnabled?: boolean }).editorRulerEnabled
-            : DEFAULTS.editorRulerEnabled,
-        activePlugins: {
-          ...DEFAULTS.activePlugins,
-          ...parsed.activePlugins,
-          source: parsed.activePlugins?.source || source,
-          engine: parsed.activePlugins?.engine || engine,
-          stream: parsed.activePlugins?.stream || streamId,
-          storage: parsed.activePlugins?.storage || DEFAULTS.activePlugins.storage,
-        },
-        pluginsConfig: parsed.pluginsConfig || DEFAULTS.pluginsConfig,
-        // Do not hydrate lastRun / logs / series cache / telemetry / bars from storage
-        lastRun: null,
-        indicatorSeries: {},
-        logs: [],
-        bars: [],
-        chartDataGen: 0,
-        telemetry: {
-          ...DEFAULTS.telemetry,
-          hud: {
-            ...DEFAULTS.telemetry.hud,
-            ...(parsed.telemetry?.hud || {}),
-          },
-        },
-        // Drawing tool always starts as cursor; list normalized for dual legacy/style fields
-        drawingTool: 'cursor',
-        drawings: normalizeUserDrawings(parsed.drawings) as Drawing[],
+    if (typeof raw !== 'string' || !raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    // Only plain objects are durable app state (not arrays / primitives / null)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return null;
+    }
+    const bag = parsed as Record<string, unknown> & Partial<AppState>;
+    const source =
+      (typeof bag.source === 'string' && bag.source) || DEFAULTS.source;
+    const engine =
+      (typeof bag.engine === 'string' && bag.engine) || DEFAULTS.engine;
+    const liveBag =
+      bag.live && typeof bag.live === 'object' ? (bag.live as AppState['live']) : undefined;
+    const pluginsBag =
+      bag.activePlugins && typeof bag.activePlugins === 'object'
+        ? (bag.activePlugins as AppState['activePlugins'])
+        : undefined;
+    const streamId =
+      liveBag?.streamId || pluginsBag?.stream || DEFAULTS.live.streamId;
 
-        drawingPrefs: {
-          ...DEFAULTS.drawingPrefs,
-          ...(parsed.drawingPrefs && typeof parsed.drawingPrefs === 'object'
-            ? parsed.drawingPrefs
+    return {
+      ...DEFAULTS,
+      ...bag,
+      chartType: normalizeChartType(bag.chartType),
+      historyBars: clampHistoryBars(
+        bag.historyBars ?? (bag as { barLimit?: unknown }).barLimit ?? DEFAULTS.historyBars,
+      ),
+      live: {
+        ...DEFAULTS.live,
+        ...liveBag,
+        // Never hydrate "live active" as running — user must re-enable
+        active: false,
+        preferAfterLoad:
+          typeof liveBag?.preferAfterLoad === 'boolean'
+            ? liveBag.preferAfterLoad
+            : DEFAULTS.live.preferAfterLoad,
+        rerunOn: liveBag?.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick',
+      },
+      editor: {
+        ...DEFAULTS.editor,
+        ...(bag.editor && typeof bag.editor === 'object' ? bag.editor : {}),
+      },
+      uiScale: clampUiScale(bag.uiScale ?? DEFAULTS.uiScale),
+      watchlist: {
+        ...DEFAULTS.watchlist,
+        ...(bag.watchlist && typeof bag.watchlist === 'object' ? bag.watchlist : {}),
+        symbols:
+          bag.watchlist &&
+          typeof bag.watchlist === 'object' &&
+          Array.isArray((bag.watchlist as AppState['watchlist']).symbols) &&
+          (bag.watchlist as AppState['watchlist']).symbols.length
+            ? (bag.watchlist as AppState['watchlist']).symbols
+            : DEFAULTS.watchlist.symbols,
+        refreshSec: Math.min(
+          120,
+          Math.max(
+            5,
+            Number(
+              bag.watchlist && typeof bag.watchlist === 'object'
+                ? (bag.watchlist as AppState['watchlist']).refreshSec
+                : undefined,
+            ) || DEFAULTS.watchlist.refreshSec,
+          ),
+        ),
+      },
+      indicatorPanel: {
+        ...DEFAULTS.indicatorPanel,
+        ...(bag.indicatorPanel && typeof bag.indicatorPanel === 'object'
+          ? bag.indicatorPanel
+          : {}),
+      },
+      dataViewPanel: {
+        ...DEFAULTS.dataViewPanel,
+        ...(bag.dataViewPanel && typeof bag.dataViewPanel === 'object' ? bag.dataViewPanel : {}),
+      },
+      layerPanel: {
+        ...DEFAULTS.layerPanel,
+        ...(bag.layerPanel && typeof bag.layerPanel === 'object' ? bag.layerPanel : {}),
+      },
+      alertsPanel: {
+        ...DEFAULTS.alertsPanel,
+        ...(bag.alertsPanel && typeof bag.alertsPanel === 'object' ? bag.alertsPanel : {}),
+      },
+      editorInputValues:
+        bag.editorInputValues && typeof bag.editorInputValues === 'object'
+          ? (bag.editorInputValues as Record<string, unknown>)
+          : DEFAULTS.editorInputValues,
+      // Ephemeral UI — never hydrate open modals / crosshair from disk
+      scriptSettings: { open: false, indicatorId: null },
+      crosshair: { time: null, barIndex: null },
+      resultsPanel: {
+        ...DEFAULTS.resultsPanel,
+        ...(bag.resultsPanel && typeof bag.resultsPanel === 'object' ? bag.resultsPanel : {}),
+      },
+      logsPanel: {
+        ...DEFAULTS.logsPanel,
+        ...(bag.logsPanel && typeof bag.logsPanel === 'object' ? bag.logsPanel : {}),
+        open: false,
+      },
+      profilerEnabled: !!bag.profilerEnabled,
+      inlineDebugEnabled: !!(bag as { inlineDebugEnabled?: boolean }).inlineDebugEnabled,
+      debugPinsEnabled: !!(bag as { debugPinsEnabled?: boolean }).debugPinsEnabled,
+      editorRulerEnabled:
+        typeof (bag as { editorRulerEnabled?: boolean }).editorRulerEnabled === 'boolean'
+          ? !!(bag as { editorRulerEnabled?: boolean }).editorRulerEnabled
+          : DEFAULTS.editorRulerEnabled,
+      activePlugins: {
+        ...DEFAULTS.activePlugins,
+        ...pluginsBag,
+        source: pluginsBag?.source || source,
+        engine: pluginsBag?.engine || engine,
+        stream: pluginsBag?.stream || streamId,
+        storage: pluginsBag?.storage || DEFAULTS.activePlugins.storage,
+      },
+      pluginsConfig:
+        bag.pluginsConfig && typeof bag.pluginsConfig === 'object'
+          ? (bag.pluginsConfig as AppState['pluginsConfig'])
+          : DEFAULTS.pluginsConfig,
+      // Do not hydrate lastRun / logs / series cache / full telemetry / bars from storage
+      lastRun: null,
+      indicatorSeries: {},
+      logs: [],
+      bars: [],
+      chartDataGen: 0,
+      telemetry: {
+        ...DEFAULTS.telemetry,
+        hud: {
+          ...DEFAULTS.telemetry.hud,
+          ...(bag.telemetry &&
+          typeof bag.telemetry === 'object' &&
+          (bag.telemetry as TelemetryState).hud &&
+          typeof (bag.telemetry as TelemetryState).hud === 'object'
+            ? (bag.telemetry as TelemetryState).hud
             : {}),
         },
-        drawingUi: {
-          ...DEFAULTS.drawingUi,
-          ...(parsed.drawingUi && typeof parsed.drawingUi === 'object' ? parsed.drawingUi : {}),
-          lastToolByGroup:
-            parsed.drawingUi?.lastToolByGroup &&
-            typeof parsed.drawingUi.lastToolByGroup === 'object'
-              ? { ...parsed.drawingUi.lastToolByGroup }
-              : { ...DEFAULTS.drawingUi.lastToolByGroup },
+      },
+      // Drawing tool always starts as cursor; list normalized for dual legacy/style fields
+      drawingTool: 'cursor',
+      drawings: normalizeUserDrawings(bag.drawings) as Drawing[],
+
+      drawingPrefs: {
+        ...DEFAULTS.drawingPrefs,
+        ...(bag.drawingPrefs && typeof bag.drawingPrefs === 'object' ? bag.drawingPrefs : {}),
+      },
+      drawingUi: {
+        ...DEFAULTS.drawingUi,
+        ...(bag.drawingUi && typeof bag.drawingUi === 'object' ? bag.drawingUi : {}),
+        lastToolByGroup:
+          bag.drawingUi &&
+          typeof bag.drawingUi === 'object' &&
+          (bag.drawingUi as AppState['drawingUi']).lastToolByGroup &&
+          typeof (bag.drawingUi as AppState['drawingUi']).lastToolByGroup === 'object'
+            ? { ...(bag.drawingUi as AppState['drawingUi']).lastToolByGroup }
+            : { ...DEFAULTS.drawingUi.lastToolByGroup },
+      },
+      // Ephemeral selection — never hydrate from disk
+      selectedDrawingId: null,
+      panelChrome: mergePanelChrome(bag.panelChrome, {
+        // Bridge legacy open/width into chrome on first load
+        watchlist: {
+          open:
+            bag.watchlist && typeof bag.watchlist === 'object'
+              ? (bag.watchlist as AppState['watchlist']).open
+              : DEFAULTS.watchlist.open,
+          w:
+            bag.watchlist && typeof bag.watchlist === 'object'
+              ? (bag.watchlist as AppState['watchlist']).width
+              : DEFAULTS.watchlist.width,
         },
-        // Ephemeral selection — never hydrate from disk
-        selectedDrawingId: null,
-        panelChrome: mergePanelChrome(parsed.panelChrome, {
-          // Bridge legacy open/width into chrome on first load
-          watchlist: {
-            open: parsed.watchlist?.open ?? DEFAULTS.watchlist.open,
-            w: parsed.watchlist?.width ?? DEFAULTS.watchlist.width,
-          },
-          indicators: {
-            open: parsed.indicatorPanel?.open ?? DEFAULTS.indicatorPanel.open,
-            w: parsed.indicatorPanel?.width ?? DEFAULTS.indicatorPanel.width,
-          },
-          editor: {
-            open: parsed.editor?.open ?? DEFAULTS.editor.open,
-            w: parsed.editor?.width ?? DEFAULTS.editor.width,
-            dock: parsed.editor?.mode === 'popout' ? 'window' : 'right',
-          },
-          results: {
-            open: parsed.resultsPanel?.open ?? DEFAULTS.resultsPanel.open,
-            h: parsed.resultsPanel?.height ?? DEFAULTS.resultsPanel.height,
-          },
-          logs: {
-            open: false,
-            h: parsed.logsPanel?.height ?? DEFAULTS.logsPanel.height,
-          },
-          dataview: {
-            open: parsed.dataViewPanel?.open ?? false,
-            w: parsed.dataViewPanel?.width ?? 240,
-          },
-          layers: {
-            open: parsed.layerPanel?.open ?? false,
-            w: parsed.layerPanel?.width ?? 240,
-          },
-          alerts: {
-            open: parsed.alertsPanel?.open ?? false,
-            w: parsed.alertsPanel?.width ?? 280,
-          },
-        }),
-        chartLayout: normalizeChartLayout(
-          (parsed as { chartLayout?: ChartLayoutState }).chartLayout,
-          {
-            symbol: parsed.symbol || DEFAULTS.symbol,
-            interval: parsed.interval || DEFAULTS.interval,
-            exchange: parsed.exchange || DEFAULTS.exchange,
-            chartType: normalizeChartType(parsed.chartType),
-          },
-        ),
-        savedLayouts: Array.isArray((parsed as { savedLayouts?: unknown }).savedLayouts)
-          ? ((parsed as { savedLayouts: SavedChartLayout[] }).savedLayouts || [])
-              .filter((l) => l && typeof l === 'object' && typeof l.id === 'string')
-              .slice(0, 40)
-          : [],
-        compare: hydrateCompare(parsed.compare),
-      };
+        indicators: {
+          open:
+            bag.indicatorPanel && typeof bag.indicatorPanel === 'object'
+              ? (bag.indicatorPanel as AppState['indicatorPanel']).open
+              : DEFAULTS.indicatorPanel.open,
+          w:
+            bag.indicatorPanel && typeof bag.indicatorPanel === 'object'
+              ? (bag.indicatorPanel as AppState['indicatorPanel']).width
+              : DEFAULTS.indicatorPanel.width,
+        },
+        editor: {
+          open:
+            bag.editor && typeof bag.editor === 'object'
+              ? (bag.editor as AppState['editor']).open
+              : DEFAULTS.editor.open,
+          w:
+            bag.editor && typeof bag.editor === 'object'
+              ? (bag.editor as AppState['editor']).width
+              : DEFAULTS.editor.width,
+          dock:
+            bag.editor &&
+            typeof bag.editor === 'object' &&
+            (bag.editor as AppState['editor']).mode === 'popout'
+              ? 'window'
+              : 'right',
+        },
+        results: {
+          open:
+            bag.resultsPanel && typeof bag.resultsPanel === 'object'
+              ? (bag.resultsPanel as AppState['resultsPanel']).open
+              : DEFAULTS.resultsPanel.open,
+          h:
+            bag.resultsPanel && typeof bag.resultsPanel === 'object'
+              ? (bag.resultsPanel as AppState['resultsPanel']).height
+              : DEFAULTS.resultsPanel.height,
+        },
+        logs: {
+          open: false,
+          h:
+            bag.logsPanel && typeof bag.logsPanel === 'object'
+              ? (bag.logsPanel as AppState['logsPanel']).height
+              : DEFAULTS.logsPanel.height,
+        },
+        dataview: {
+          open:
+            bag.dataViewPanel && typeof bag.dataViewPanel === 'object'
+              ? !!(bag.dataViewPanel as AppState['dataViewPanel']).open
+              : false,
+          w:
+            bag.dataViewPanel && typeof bag.dataViewPanel === 'object'
+              ? (bag.dataViewPanel as AppState['dataViewPanel']).width
+              : 240,
+        },
+        layers: {
+          open:
+            bag.layerPanel && typeof bag.layerPanel === 'object'
+              ? !!(bag.layerPanel as AppState['layerPanel']).open
+              : false,
+          w:
+            bag.layerPanel && typeof bag.layerPanel === 'object'
+              ? (bag.layerPanel as AppState['layerPanel']).width
+              : 240,
+        },
+        alerts: {
+          open:
+            bag.alertsPanel && typeof bag.alertsPanel === 'object'
+              ? !!(bag.alertsPanel as AppState['alertsPanel']).open
+              : false,
+          w:
+            bag.alertsPanel && typeof bag.alertsPanel === 'object'
+              ? (bag.alertsPanel as AppState['alertsPanel']).width
+              : 280,
+        },
+      }),
+      chartLayout: normalizeChartLayout(
+        (bag as { chartLayout?: ChartLayoutState }).chartLayout,
+        {
+          symbol: (typeof bag.symbol === 'string' && bag.symbol) || DEFAULTS.symbol,
+          interval: (typeof bag.interval === 'string' && bag.interval) || DEFAULTS.interval,
+          exchange: (typeof bag.exchange === 'string' && bag.exchange) || DEFAULTS.exchange,
+          chartType: normalizeChartType(bag.chartType),
+        },
+      ),
+      savedLayouts: Array.isArray((bag as { savedLayouts?: unknown }).savedLayouts)
+        ? ((bag as { savedLayouts: SavedChartLayout[] }).savedLayouts || [])
+            .filter((l) => l && typeof l === 'object' && typeof l.id === 'string')
+            .slice(0, 40)
+        : [],
+      compare: hydrateCompare(bag.compare),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Hydrate durable fields from localStorage. Corrupt JSON is dropped (key cleared)
+ * and never throws — boot always gets defaults + any valid overlay.
+ */
+function loadPersisted(): Partial<AppState> {
+  try {
+    // Prefer v1 when it parses; if v1 is corrupt, try legacy keys before giving up.
+    const current = readLocalStorage(STORAGE_KEY);
+    if (current) {
+      const overlay = parsePersistedState(current);
+      if (overlay) return overlay;
+      // Corrupt v1 — clear so we do not keep failing on every reload
+      removeLocalStorage(STORAGE_KEY);
     }
-  } catch {}
+    for (const legacy of LEGACY_STORAGE_KEYS) {
+      const raw = readLocalStorage(legacy);
+      if (!raw) continue;
+      const overlay = parsePersistedState(raw);
+      if (overlay) {
+        try {
+          localStorage.setItem(STORAGE_KEY, raw);
+        } catch {
+          /* quota — in-memory hydrate still works */
+        }
+        return overlay;
+      }
+      removeLocalStorage(legacy);
+    }
+  } catch {
+    /* localStorage / parse — fall through to defaults */
+  }
   return {};
+}
+
+/** Whether the last durable write hit a storage quota error (session flag). */
+export function isPersistQuotaExceeded(): boolean {
+  return persistQuotaExceeded;
+}
+
+/** Test helper: clear the session quota flag. */
+export function resetPersistQuotaFlag(): void {
+  persistQuotaExceeded = false;
+  persistWriteWarned = false;
 }
 
 /** Restore durable compare prefs; always clear bars / loading / error. */
@@ -498,6 +677,96 @@ if (typeof document !== 'undefined') {
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** True while a debounced {@link persist} write is scheduled. */
+export function isPersistPending(): boolean {
+  return persistTimer != null;
+}
+
+/**
+ * Detect QuotaExceededError across browsers (DOMException name/code variants).
+ */
+export function isQuotaExceededError(err: unknown): boolean {
+  if (err == null || typeof err !== 'object') return false;
+  const e = err as { name?: string; code?: number; message?: string };
+  if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+    return true;
+  }
+  // Legacy WebKit / IE codes
+  if (e.code === 22 || e.code === 1014) return true;
+  if (typeof e.message === 'string' && /quota/i.test(e.message)) return true;
+  return false;
+}
+
+/**
+ * Build the durable JSON payload (omits bars, lastRun, logs, …).
+ * Pure-ish snapshot of current store — used by {@link flushPersist}.
+ */
+function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown> {
+  const plain = unwrap(store) as AppState;
+  const {
+    bars: _b,
+    lastRun: _r,
+    logs: _l,
+    chartDataGen: _g,
+    crosshair: _c,
+    scriptSettings: _ss,
+    selectedDrawingId: _sel,
+    indicatorSeries: _is,
+    compare,
+    telemetry,
+    drawings,
+    savedLayouts,
+    ...rest
+  } = plain;
+
+  const base: Record<string, unknown> = {
+    ...rest,
+    // Durable compare prefs only — bars / loading / error stay session-local
+    compare: {
+      enabled: !!compare?.enabled,
+      symbol: (compare?.symbol || '').toUpperCase(),
+      mode: compare?.mode === 'absolute' ? 'absolute' : 'percent',
+      normalizeMain: !!compare?.normalizeMain,
+    },
+    telemetry: {
+      hud: telemetry?.hud || DEFAULTS.telemetry.hud,
+    },
+  };
+
+  if (opts?.slim) {
+    // Smaller payload when full write hits quota — drop heavy arrays
+    base.drawings = [];
+    base.savedLayouts = [];
+  } else {
+    base.drawings = drawings;
+    base.savedLayouts = savedLayouts;
+  }
+
+  return base;
+}
+
+function warnPersistOnce(message: string): void {
+  if (persistWriteWarned) return;
+  persistWriteWarned = true;
+  try {
+    console.warn(message);
+  } catch {
+    /* ignore */
+  }
+}
+
+function trySetItem(key: string, value: string): { ok: true } | { ok: false; err: unknown } {
+  try {
+    if (typeof localStorage === 'undefined' || localStorage == null) {
+      return { ok: false, err: new Error('localStorage unavailable') };
+    }
+    localStorage.setItem(key, value);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, err };
+  }
+}
+
 /**
  * Debounced (~200ms) write of durable state to `STORAGE_KEY`.
  * Omits bars, lastRun, logs, chartDataGen, crosshair, scriptSettings,
@@ -506,6 +775,9 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null;
  *
  * Uses {@link unwrap} so nested Solid store proxies serialize fully
  * (plain destructure can drop nested updates under some paths).
+ *
+ * Pending writes are flushed on `beforeunload` / `pagehide` so a tab close
+ * does not drop the last debounced mutation.
  */
 export function persist() {
   if (persistTimer) clearTimeout(persistTimer);
@@ -514,47 +786,107 @@ export function persist() {
   }, 200);
 }
 
-/** Immediate localStorage write (used after Settings save and tests). */
-export function flushPersist() {
+/**
+ * Immediate localStorage write (Settings save, tests, unload flush).
+ * Never throws. Returns `true` on success, `false` on quota / private mode.
+ *
+ * On {@link QuotaExceededError}: drops legacy keys, retries; then writes a
+ * slim payload (no drawings/savedLayouts). Session keeps working in memory.
+ */
+export function flushPersist(): boolean {
   if (persistTimer) {
     clearTimeout(persistTimer);
     persistTimer = null;
   }
+
+  let payload: Record<string, unknown>;
   try {
-    const plain = unwrap(store) as AppState;
-    const {
-      bars: _b,
-      lastRun: _r,
-      logs: _l,
-      chartDataGen: _g,
-      crosshair: _c,
-      scriptSettings: _ss,
-      selectedDrawingId: _sel,
-      indicatorSeries: _is,
-      compare,
-      telemetry,
-      ...rest
-    } = plain;
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        ...rest,
-        // Durable compare prefs only — bars / loading / error stay session-local
-        compare: {
-          enabled: !!compare?.enabled,
-          symbol: (compare?.symbol || '').toUpperCase(),
-          mode: compare?.mode === 'absolute' ? 'absolute' : 'percent',
-          normalizeMain: !!compare?.normalizeMain,
-        },
-        telemetry: {
-          hud: telemetry?.hud || DEFAULTS.telemetry.hud,
-        },
-      }),
-    );
+    payload = buildPersistPayload();
   } catch {
-    /* quota / private mode */
+    return false;
+  }
+
+  let json: string;
+  try {
+    json = JSON.stringify(payload);
+  } catch {
+    return false;
+  }
+
+  let result = trySetItem(STORAGE_KEY, json);
+  if (result.ok) {
+    persistQuotaExceeded = false;
+    return true;
+  }
+
+  if (isQuotaExceededError(result.err)) {
+    // Free space from legacy keys and retry full payload
+    for (const legacy of LEGACY_STORAGE_KEYS) {
+      removeLocalStorage(legacy);
+    }
+    result = trySetItem(STORAGE_KEY, json);
+    if (result.ok) {
+      persistQuotaExceeded = false;
+      return true;
+    }
+
+    // Slim payload (omit drawings + saved layouts)
+    try {
+      const slimJson = JSON.stringify(buildPersistPayload({ slim: true }));
+      result = trySetItem(STORAGE_KEY, slimJson);
+      if (result.ok) {
+        persistQuotaExceeded = true;
+        warnPersistOnce(
+          '[axis] localStorage quota exceeded; persisted slim state (drawings/layouts omitted)',
+        );
+        return true;
+      }
+    } catch {
+      /* fall through */
+    }
+
+    persistQuotaExceeded = true;
+    warnPersistOnce(
+      '[axis] localStorage quota exceeded; durable persist skipped this session (in-memory only)',
+    );
+    return false;
+  }
+
+  // private mode / SecurityError / missing localStorage
+  warnPersistOnce('[axis] localStorage write failed; durable persist skipped this session');
+  return false;
+}
+
+/**
+ * Flush only when a debounced {@link persist} is pending.
+ * Used by `beforeunload` / `pagehide` so the last write is not lost.
+ * @returns `true` if a pending write was flushed successfully
+ */
+export function flushPersistIfPending(): boolean {
+  if (persistTimer == null) return false;
+  return flushPersist();
+}
+
+/** Register unload handlers so debounced persist does not lose the last write. */
+function installPersistFlushOnExit(): void {
+  if (typeof window === 'undefined') return;
+  if (typeof window.addEventListener !== 'function') return;
+  const onExit = () => {
+    try {
+      flushPersistIfPending();
+    } catch {
+      /* never block unload */
+    }
+  };
+  try {
+    window.addEventListener('beforeunload', onExit);
+    window.addEventListener('pagehide', onExit);
+  } catch {
+    /* ignore */
   }
 }
+
+installPersistFlushOnExit();
 
 const MAX_LOGS = 500;
 

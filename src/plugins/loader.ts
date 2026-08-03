@@ -25,8 +25,9 @@
  * {@link restoreInstalledPlugins} to re-import saved URLs.
  *
  * Supported kinds: `source`, `stream`, `engine`. Storage/component via URL
- * are not supported yet. Rejects dangerous schemes (`javascript:`, etc.).
- * Maps legacy `/src/plugins/…` paths to `/plugins/…` for production.
+ * are not supported yet. Rejects dangerous schemes (`javascript:`, HTML
+ * `data:` URLs, etc.). Maps legacy `/src/plugins/…` paths to `/plugins/…`
+ * for production.
  *
  * Example plugins: `example-coingecko-source.js`, `example-cf-do-stream.js`,
  * `example-tiny-pine-engine.js`.
@@ -53,12 +54,60 @@ export type InstalledPlugin = {
   description?: string;
 };
 
+/** Schemes never allowed for dynamic plugin import. */
+const BLOCKED_SCHEMES = new Set(['javascript', 'vbscript', 'livescript', 'mocha']);
+
+/** JS module MIME types permitted for `data:` plugin URLs (tests / inline). */
+const ALLOWED_DATA_JS_MIMES = new Set([
+  'text/javascript',
+  'application/javascript',
+  'text/ecmascript',
+  'application/ecmascript',
+  'module',
+]);
+
+/**
+ * Strip BOM / C0 controls / zero-width chars that can obfuscate schemes
+ * (e.g. `java\u0000script:` → `javascript:`).
+ */
+function normalizeForSchemeCheck(href: string): string {
+  return href
+    .replace(/^\uFEFF/, '')
+    .replace(/[\u0000-\u001F\u007F\u200B-\u200D\uFEFF]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function isInstalledPlugin(x: unknown): x is InstalledPlugin {
+  if (!x || typeof x !== 'object') return false;
+  const o = x as Record<string, unknown>;
+  return (
+    typeof o.url === 'string' &&
+    o.url.trim() !== '' &&
+    typeof o.id === 'string' &&
+    o.id.trim() !== '' &&
+    typeof o.kind === 'string' &&
+    o.kind.trim() !== ''
+  );
+}
+
+function sanitizeInstalledEntry(p: InstalledPlugin): InstalledPlugin {
+  return {
+    url: String(p.url).trim(),
+    id: String(p.id).trim(),
+    name: String(p.name || p.id).trim() || String(p.id).trim(),
+    kind: String(p.kind).trim(),
+    description: p.description != null ? String(p.description) : undefined,
+  };
+}
+
 function readInstalled(): InstalledPlugin[] {
   try {
     const raw = localStorage.getItem(PLUGINS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isInstalledPlugin).map(sanitizeInstalledEntry);
   } catch {
     return [];
   }
@@ -68,7 +117,18 @@ function writeInstalled(list: InstalledPlugin[]) {
   try {
     localStorage.setItem(PLUGINS_KEY, JSON.stringify(list));
   } catch {
-    /* ignore */
+    /* ignore quota / private mode */
+  }
+}
+
+function unregisterByKind(kind: string, id: string): void {
+  if (kind === 'source') unregisterDynamicSource(id);
+  else if (kind === 'stream') unregisterDynamicStream(id);
+  else if (kind === 'engine') unregisterDynamicEngine(id);
+  else {
+    unregisterDynamicSource(id);
+    unregisterDynamicStream(id);
+    unregisterDynamicEngine(id);
   }
 }
 
@@ -86,30 +146,51 @@ function asPlugin(mod: unknown): Record<string, unknown> | null {
 
 /** Map legacy Vite-dev paths to production static paths under public/plugins/. */
 export function normalizePluginUrl(url: string): string {
+  if (typeof url !== 'string') return '';
   let href = url.trim();
   if (!href) return href;
   // /src/plugins/foo.js → /plugins/foo.js (dev-only path never ships in dist)
   href = href.replace(/(^|\/)src\/plugins\//, '$1plugins/');
-  // Drop accidental example- prefix double paths
   return href;
 }
 
-/** Reject clearly dangerous URL schemes for dynamic import. */
+/**
+ * Reject clearly dangerous URL schemes for dynamic import.
+ * Allows relative / https / http / file / blob paths and `data:` only when the
+ * MIME type is a JavaScript module type (used in tests for inline fixtures).
+ */
 export function assertSafePluginUrl(href: string): void {
-  const lower = href.trim().toLowerCase();
+  if (typeof href !== 'string') throw new Error('URL required');
+  const trimmed = href.trim();
+  if (!trimmed) throw new Error('URL required');
+
+  const lower = normalizeForSchemeCheck(trimmed);
   if (!lower) throw new Error('URL required');
-  if (
-    lower.startsWith('javascript:') ||
-    lower.startsWith('vbscript:') ||
-    lower.startsWith('data:text/html')
-  ) {
+
+  const schemeMatch = /^([a-z][a-z0-9+.-]*)\s*:/.exec(lower);
+  if (!schemeMatch) {
+    // Relative path or protocol-relative — no executable scheme
+    return;
+  }
+
+  const scheme = schemeMatch[1];
+  if (BLOCKED_SCHEMES.has(scheme)) {
     throw new Error('Plugin URL scheme not allowed');
+  }
+
+  if (scheme === 'data') {
+    // data:[mime][;params][;base64],payload — only JS module mimes
+    const payload = lower.slice(schemeMatch[0].length).replace(/^\s+/, '');
+    const mime = (payload.split(/[;,]/, 1)[0] ?? '').trim();
+    if (!ALLOWED_DATA_JS_MIMES.has(mime)) {
+      throw new Error('Plugin URL scheme not allowed');
+    }
   }
 }
 
 export async function loadPluginFromUrl(url: string): Promise<InstalledPlugin> {
   ensureBuiltins();
-  const href = normalizePluginUrl(url);
+  const href = normalizePluginUrl(typeof url === 'string' ? url : '');
   if (!href) throw new Error('URL required');
   assertSafePluginUrl(href);
 
@@ -117,36 +198,56 @@ export async function loadPluginFromUrl(url: string): Promise<InstalledPlugin> {
   const p = asPlugin(mod);
   if (!p) throw new Error('Module did not export a plugin object');
 
-  const id = String(p.id || '');
-  const name = String(p.name || id);
-  const kind = String(p.kind || '');
+  const id = String(p.id || '').trim();
+  const name = String(p.name || id).trim() || id;
+  const kind = String(p.kind || '').trim();
   const description = p.description ? String(p.description) : '';
 
   if (!id || !kind) throw new Error('Plugin needs id and kind');
 
+  // Validate before registering so a reject never leaves a half-registered plugin
   if (kind === 'source') {
     if (typeof p.fetchHistorical !== 'function') {
       throw new Error('Source plugin needs fetchHistorical()');
     }
-    registerDynamicSource(p as unknown as SourcePlugin);
   } else if (kind === 'stream') {
     if (typeof p.start !== 'function') throw new Error('Stream plugin needs start()');
-    registerDynamicStream(p as unknown as StreamPlugin);
   } else if (kind === 'engine') {
     if (typeof p.run !== 'function') throw new Error('Engine plugin needs run()');
-    registerDynamicEngine(p as unknown as EnginePlugin);
   } else if (kind === 'storage') {
     throw new Error('Custom storage plugins via URL are not supported yet (use built-in local/cloud)');
   } else {
     throw new Error(`Unknown plugin kind: ${kind}`);
   }
 
-  const entry: InstalledPlugin = { url: href, id, name, kind, description };
-  const list = readInstalled().filter((x) => x.url !== href && !(x.kind === kind && x.id === id));
-  list.push(entry);
-  writeInstalled(list);
-  appendLog('ok', `Loaded plugin ${name} (${kind})`, 'plugins');
-  return entry;
+  let registered = false;
+  try {
+    if (kind === 'source') {
+      registerDynamicSource(p as unknown as SourcePlugin);
+    } else if (kind === 'stream') {
+      registerDynamicStream(p as unknown as StreamPlugin);
+    } else if (kind === 'engine') {
+      registerDynamicEngine(p as unknown as EnginePlugin);
+    }
+    registered = true;
+
+    const entry: InstalledPlugin = { url: href, id, name, kind, description };
+    const list = readInstalled().filter((x) => x.url !== href && !(x.kind === kind && x.id === id));
+    list.push(entry);
+    writeInstalled(list);
+    appendLog('ok', `Loaded plugin ${name} (${kind})`, 'plugins');
+    return entry;
+  } catch (e) {
+    // Roll back registry if register or post-register work failed
+    if (registered) {
+      try {
+        unregisterByKind(kind, id);
+      } catch {
+        /* best-effort cleanup */
+      }
+    }
+    throw e;
+  }
 }
 
 export function removePlugin(id: string, kind?: string) {
@@ -156,39 +257,43 @@ export function removePlugin(id: string, kind?: string) {
     : list.find((x) => x.id === id);
   const resolvedKind = kind || entry?.kind;
 
-  if (resolvedKind === 'source') unregisterDynamicSource(id);
-  else if (resolvedKind === 'stream') unregisterDynamicStream(id);
-  else if (resolvedKind === 'engine') unregisterDynamicEngine(id);
-  else {
-    // Kind unknown — try all
-    unregisterDynamicSource(id);
-    unregisterDynamicStream(id);
-    unregisterDynamicEngine(id);
-  }
+  if (resolvedKind) unregisterByKind(resolvedKind, id);
+  else unregisterByKind('', id);
 
-  writeInstalled(
-    list.filter((x) => !(x.id === id && (!kind || x.kind === kind))),
-  );
+  writeInstalled(list.filter((x) => !(x.id === id && (!kind || x.kind === kind))));
   appendLog('info', `Removed plugin ${id}`, 'plugins');
 }
 
-/** Re-import all saved plugin URLs (call on app boot). */
+/**
+ * Re-import all saved plugin URLs (call on app boot).
+ * Never throws: corrupt storage, invalid entries, and failed imports are logged.
+ */
 export async function restoreInstalledPlugins(): Promise<void> {
-  ensureBuiltins();
-  const list = readInstalled();
-  for (const item of list) {
-    try {
-      await loadPluginFromUrl(item.url);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      appendLog('error', `Failed to restore ${item.url}: ${msg}`, 'plugins');
+  try {
+    ensureBuiltins();
+    const list = readInstalled();
+    for (const item of list) {
+      try {
+        if (!item?.url || typeof item.url !== 'string') {
+          appendLog('error', 'Skipping invalid install entry (missing url)', 'plugins');
+          continue;
+        }
+        await loadPluginFromUrl(item.url);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const label = item && typeof item === 'object' && 'url' in item ? String(item.url) : '?';
+        appendLog('error', `Failed to restore ${label}: ${msg}`, 'plugins');
+      }
     }
-  }
-  if (list.length) {
-    appendLog(
-      'info',
-      `Restored ${list.length} installed plugin URL(s) (${listDynamicSourceIds().length} dynamic sources)`,
-      'plugins',
-    );
+    if (list.length) {
+      appendLog(
+        'info',
+        `Restored ${list.length} installed plugin URL(s) (${listDynamicSourceIds().length} dynamic sources)`,
+        'plugins',
+      );
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    appendLog('error', `restoreInstalledPlugins aborted: ${msg}`, 'plugins');
   }
 }

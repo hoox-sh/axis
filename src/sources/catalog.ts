@@ -48,6 +48,7 @@
 import type { Bar } from '../store/types';
 import type { ConfigSchema, SourcePlugin as UnifiedSourcePlugin } from '../plugins/types';
 import { registry } from '../plugins/registry';
+import { sanitizeBar } from '../data/parse-bars';
 import { getUploadedBars } from './upload-store';
 
 export type SourceConfigSchema = ConfigSchema;
@@ -77,6 +78,46 @@ function resolveConfig(
   }
   for (const [k, v] of Object.entries(config || {})) {
     if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Build a bar from venue fields; drop partial/NaN OHLCV so callers never see
+ * poison candles. `time` may be seconds or milliseconds.
+ */
+function barFromFields(
+  time: unknown,
+  open: unknown,
+  high: unknown,
+  low: unknown,
+  close: unknown,
+  volume?: unknown,
+): Bar | null {
+  return sanitizeBar({
+    time,
+    open: typeof open === 'string' ? parseFloat(open) : open,
+    high: typeof high === 'string' ? parseFloat(high) : high,
+    low: typeof low === 'string' ? parseFloat(low) : low,
+    close: typeof close === 'string' ? parseFloat(close) : close,
+    volume:
+      volume == null || volume === ''
+        ? undefined
+        : typeof volume === 'string'
+          ? parseFloat(volume)
+          : volume,
+  });
+}
+
+/** Map array of raw venue rows → valid bars only (order preserved). */
+function mapValidBars(
+  rows: unknown[],
+  mapRow: (row: unknown) => Bar | null,
+): Bar[] {
+  const out: Bar[] = [];
+  for (const row of rows) {
+    const b = mapRow(row);
+    if (b) out.push(b);
   }
   return out;
 }
@@ -132,14 +173,13 @@ export const binanceRest: SourcePlugin = {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (!Array.isArray(data) || !data.length) throw new Error('empty kline response');
-      return data.map((d: number[]) => ({
-        time: d[0] / 1000,
-        open: parseFloat(String(d[1])),
-        high: parseFloat(String(d[2])),
-        low: parseFloat(String(d[3])),
-        close: parseFloat(String(d[4])),
-        volume: parseFloat(String(d[5])),
-      }));
+      // Binance: [openTimeMs, o, h, l, c, volume, ...]
+      const bars = mapValidBars(data, (row) => {
+        if (!Array.isArray(row) || row.length < 5) return null;
+        return barFromFields(row[0], row[1], row[2], row[3], row[4], row[5]);
+      });
+      if (!bars.length) throw new Error('empty kline response');
+      return bars;
     } catch (err: unknown) {
       if (!cfg.fallback) throw err;
       const msg = err instanceof Error ? err.message : String(err);
@@ -277,16 +317,11 @@ export const okxRest: SourcePlugin = {
       throw new Error(json.msg || 'OKX empty response');
     }
     // OKX returns newest first: [ts, o, h, l, c, vol, ...]
-    const bars: Bar[] = json.data
-      .map((d: string[]) => ({
-        time: Math.floor(Number(d[0]) / 1000),
-        open: parseFloat(d[1]),
-        high: parseFloat(d[2]),
-        low: parseFloat(d[3]),
-        close: parseFloat(d[4]),
-        volume: parseFloat(d[5]),
-      }))
-      .reverse();
+    const newestFirst = mapValidBars(json.data, (row) => {
+      if (!Array.isArray(row) || row.length < 5) return null;
+      return barFromFields(row[0], row[1], row[2], row[3], row[4], row[5]);
+    });
+    const bars = newestFirst.reverse();
     if (!bars.length) throw new Error('OKX returned no candles');
     return bars;
   },
@@ -315,16 +350,11 @@ export const bybitRest: SourcePlugin = {
       throw new Error(json.retMsg || 'Bybit empty response');
     }
     // newest first
-    const bars: Bar[] = list
-      .map((d: string[]) => ({
-        time: Math.floor(Number(d[0]) / 1000),
-        open: parseFloat(d[1]),
-        high: parseFloat(d[2]),
-        low: parseFloat(d[3]),
-        close: parseFloat(d[4]),
-        volume: parseFloat(d[5]),
-      }))
-      .reverse();
+    const newestFirst = mapValidBars(list, (row) => {
+      if (!Array.isArray(row) || row.length < 5) return null;
+      return barFromFields(row[0], row[1], row[2], row[3], row[4], row[5]);
+    });
+    const bars = newestFirst.reverse();
     if (!bars.length) throw new Error('Bybit returned no candles');
     return bars;
   },
@@ -360,17 +390,13 @@ export const coinbaseRest: SourcePlugin = {
     if (!res.ok) throw new Error(`Coinbase HTTP ${res.status}`);
     const data = await res.json();
     if (!Array.isArray(data) || !data.length) throw new Error('Coinbase empty response');
-    // [time, low, high, open, close, volume] newest first
-    const bars: Bar[] = data
-      .map((d: number[]) => ({
-        time: Number(d[0]),
-        low: Number(d[1]),
-        high: Number(d[2]),
-        open: Number(d[3]),
-        close: Number(d[4]),
-        volume: Number(d[5]),
-      }))
-      .sort((a, b) => a.time - b.time);
+    // [time, low, high, open, close, volume] newest first — note field order
+    const bars = mapValidBars(data, (row) => {
+      if (!Array.isArray(row) || row.length < 5) return null;
+      // Coinbase: time, low, high, open, close, volume
+      return barFromFields(row[0], row[3], row[2], row[1], row[4], row[5]);
+    }).sort((a, b) => a.time - b.time);
+    if (!bars.length) throw new Error('Coinbase empty response');
     return bars;
   },
 };

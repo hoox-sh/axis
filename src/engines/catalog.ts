@@ -195,9 +195,10 @@ export const serverEngine: EnginePlugin = {
               meta: { ms, transport: 'ws' },
             } satisfies RunResult;
           }
-          const wsOverlay =
+          const wsOverlay = normalizeOverlayFlag(
             wsResult.overlay ??
-            (wsResult.meta as { overlay?: boolean } | undefined)?.overlay;
+              (wsResult.meta as { overlay?: unknown } | undefined)?.overlay,
+          );
           const wsName =
             (wsResult.script_name as string) ||
             (wsResult.meta as { script_name?: string } | undefined)?.script_name ||
@@ -229,9 +230,7 @@ export const serverEngine: EnginePlugin = {
               mode: (wsResult.mode || mode) as string,
               script_id: wsResult.script_id,
               run_id: wsResult.run_id,
-              ...(wsOverlay !== undefined
-                ? { overlay: wsOverlay !== false && wsOverlay !== 0 }
-                : {}),
+              ...(wsOverlay !== undefined ? { overlay: wsOverlay } : {}),
               script_name: wsName,
               ...(wsScriptType ? { script_type: wsScriptType } : {}),
               plot_meta:
@@ -255,10 +254,24 @@ export const serverEngine: EnginePlugin = {
     try {
       // Never reuse a parent AbortSignal that already fired while WS was tried —
       // browsers surface that as "The operation timed out." with no REST attempt.
+      // Still honour a *fresh* parent cancel after the REST attempt begins.
+      if (signal?.aborted) {
+        return {
+          status: 'error',
+          plots: [],
+          events: [],
+          series: {},
+          error: 'Aborted',
+          meta: { ms: performance.now() - t0, transport: 'rest' },
+        } satisfies RunResult;
+      }
       const elapsed = performance.now() - t0;
       const restBudget = Math.max(45_000, timeoutMs - elapsed);
-      const restSignal = AbortSignal.timeout(restBudget);
-      void signal; // engine-level cancel reserved; REST uses its own budget after WS
+      const restTimeout = AbortSignal.timeout(restBudget);
+      const restSignal =
+        signal && typeof AbortSignal.any === 'function'
+          ? AbortSignal.any([restTimeout, signal])
+          : restTimeout;
       // mode must be in the JSON body — Pro API validates body only (query is legacy).
       const profilerOn = cfg.profiler === true;
       const restMode = profilerOn ? 'interpret' : mode;
@@ -278,30 +291,52 @@ export const serverEngine: EnginePlugin = {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let payload: any;
       try {
+        // Empty body is not valid JSON for /run.
+        if (!text || !String(text).trim()) {
+          throw new SyntaxError('empty body');
+        }
         // Python json.dumps can emit bare NaN; browsers reject that. Normalize first.
         const cleaned = text
           .replace(/\bNaN\b/g, 'null')
           .replace(/\b-?Infinity\b/g, 'null');
         payload = JSON.parse(cleaned);
+        if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+          throw new SyntaxError('expected JSON object');
+        }
       } catch {
-        const snippet = text.slice(0, 120).replace(/\s+/g, ' ');
+        const snippet = text.slice(0, 120).replace(/\s+/g, ' ').trim();
         payload = {
           status: 'error',
           message: `invalid JSON (HTTP ${res.status}${snippet ? `: ${snippet}` : ''})`,
         };
       }
       if (!res.ok || payload.status === 'error') {
+        const httpHint =
+          res.status >= 500
+            ? `HTTP ${res.status}`
+            : res.status >= 400
+              ? `HTTP ${res.status}`
+              : '';
         return {
           status: 'error',
           plots: [],
           events: [],
           series: {},
-          error: String(payload.message || payload.error || `HTTP ${res.status}`),
-          meta: { ms: performance.now() - t0, transport: 'rest' },
+          error: String(
+            payload.message ||
+              payload.error ||
+              httpHint ||
+              `HTTP ${res.status}`,
+          ),
+          meta: {
+            ms: performance.now() - t0,
+            transport: 'rest',
+            http_status: res.status,
+          },
         } satisfies RunResult;
       }
       // Prefer engine meta; do not force true — runner resolves indicator/strategy defaults.
-      const restOverlay = payload.overlay ?? payload.meta?.overlay;
+      const restOverlay = normalizeOverlayFlag(payload.overlay ?? payload.meta?.overlay);
       const restName =
         payload.script_name || payload.meta?.script_name || 'plot';
       const restProfile = (payload.profile ?? payload.meta?.profile) as
@@ -330,7 +365,7 @@ export const serverEngine: EnginePlugin = {
           mode: payload.mode as string | undefined,
           script_id: payload.script_id as string | undefined,
           run_id: payload.run_id as string | undefined,
-          ...(restOverlay !== undefined ? { overlay: restOverlay !== false && restOverlay !== 0 } : {}),
+          ...(restOverlay !== undefined ? { overlay: restOverlay } : {}),
           script_name: restName as string,
           ...(restScriptType ? { script_type: restScriptType } : {}),
           plot_meta: payload.plot_meta || payload.meta?.plot_meta || {},
@@ -340,7 +375,17 @@ export const serverEngine: EnginePlugin = {
         },
       } satisfies RunResult;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const name = err instanceof Error ? err.name : '';
+      const raw = err instanceof Error ? err.message : String(err);
+      const aborted =
+        name === 'AbortError' ||
+        signal?.aborted ||
+        /abort(ed)?|timed?\s*out|TimeoutError/i.test(raw);
+      const msg = aborted
+        ? signal?.aborted
+          ? 'Aborted'
+          : raw || 'Request timed out'
+        : raw;
       return {
         status: 'error',
         plots: [],
@@ -353,12 +398,31 @@ export const serverEngine: EnginePlugin = {
   },
 };
 
+/**
+ * Narrow Pyodide surface used by the browser engine.
+ * micropip 0.6: `install(req, keep_going=False, deps=True, …)` — third arg is deps.
+ */
 type PyodideLike = {
   loadPackage: (name: string) => Promise<void>;
-  pyimport: (name: string) => { install: (url: string, keep?: boolean) => Promise<void> };
+  pyimport: (name: string) => {
+    install: (
+      url: string,
+      keepGoing?: boolean,
+      deps?: boolean,
+    ) => Promise<void>;
+  };
   runPythonAsync: (code: string) => Promise<void>;
   runPython: (code: string) => string;
 };
+
+/**
+ * Normalize engine `overlay` flags. Runtimes may send bool or 0/1.
+ * `undefined` means “not specified” (runner applies defaults).
+ */
+function normalizeOverlayFlag(v: unknown): boolean | undefined {
+  if (v === undefined || v === null) return undefined;
+  return v !== false && v !== 0 && v !== '0' && v !== 'false';
+}
 
 declare global {
   interface Window {
@@ -615,10 +679,10 @@ export const pyodideEngine: EnginePlugin & {
         `run_script(${JSON.stringify(script)}, ${JSON.stringify(bars)}, ${JSON.stringify(mode)})`,
       );
       const result = JSON.parse(resultJson) as RunResult & {
-        overlay?: boolean;
+        overlay?: unknown;
         script_name?: string;
       };
-      const overlay = result.overlay ?? result.meta?.overlay;
+      const overlay = normalizeOverlayFlag(result.overlay ?? result.meta?.overlay);
       const scriptName =
         result.script_name || result.meta?.script_name || 'plot';
       return {
@@ -628,9 +692,7 @@ export const pyodideEngine: EnginePlugin & {
         meta: {
           ...(result.meta || {}),
           ms: performance.now() - t0,
-          ...(overlay !== undefined
-            ? { overlay: overlay !== false && overlay !== 0 }
-            : {}),
+          ...(overlay !== undefined ? { overlay } : {}),
           script_name: scriptName,
           transport: 'local',
         },

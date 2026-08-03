@@ -29,6 +29,11 @@
  * Telemetry plane `stream` tracks connect/open/error; green status only after
  * `onStatus({ state: 'open' })`.
  *
+ * Lifecycle hardening:
+ * - Session epoch ignores stale callbacks after stop / restart
+ * - `stopLive` is re-entrant-safe and cancels reconnect timers via stream `stop()`
+ * - Stream hard errors keep error telemetry while clearing `live.active`
+ *
  * ## Public API
  *
  * - {@link startLive} / {@link stopLive} — primary controls (Topbar, Load auto-live)
@@ -68,7 +73,19 @@ import { classifyTransport } from '../ui/telemetry';
 export type { StreamPlugin };
 export { listStreams, defaultStreamForSource };
 
+/** How the live session ended (affects telemetry wipe). */
+export type StopLiveReason = 'user' | 'error' | 'restart';
+
+export type StopLiveOpts = {
+  /** `error` keeps stream error telemetry; `restart` is silent (startLive follows). */
+  reason?: StopLiveReason;
+  /** When reason is `error`, optional message for status / telemetry. */
+  error?: string;
+};
+
 let currentStop: (() => void) | null = null;
+/** Bumped on every start/stop so late callbacks from a prior session are ignored. */
+let liveEpoch = 0;
 let rerunTimer: ReturnType<typeof setTimeout> | null = null;
 let rerunInFlight = false;
 /** Test-only: increments each time a debounced live re-run is attempted. */
@@ -79,8 +96,14 @@ export function _getRerunAttemptCountForTests(): number {
   return rerunAttemptCount;
 }
 
+/** @internal Test helper — current live session epoch. */
+export function _getLiveEpochForTests(): number {
+  return liveEpoch;
+}
+
 /** @internal Test helper — clear multiplex timers/gates between cases. */
 export function _resetMultiplexForTests(): void {
+  liveEpoch += 1;
   if (currentStop) {
     try {
       currentStop();
@@ -104,11 +127,21 @@ export function getAvailableStreams(): StreamPlugin[] {
 
 /**
  * Start (or restart) live updates for `symbol`/`interval` via the given stream.
- * Stops any previous stream first. Resolves unknown ids via
- * {@link defaultStreamForSource}.
+ * Stops any previous stream first (including mid-reconnect). Resolves unknown
+ * ids via {@link defaultStreamForSource}.
+ *
+ * `symbol` / `interval` default to the current store values so callers can
+ * restart with a stream id only (e.g. tests, command palette).
  */
-export function startLive(streamId: string, symbol: string, interval: string) {
-  stopLive();
+export function startLive(
+  streamId: string,
+  symbol: string = store.symbol,
+  interval: string = store.interval,
+) {
+  // Tear down prior session (cancels reconnect timers / WS) without log noise
+  stopLive({ reason: 'restart' });
+
+  const epoch = ++liveEpoch;
 
   // Bar replay must not run alongside live ticks — exit + restore full series
   if (isReplayActive()) {
@@ -127,8 +160,13 @@ export function startLive(streamId: string, symbol: string, interval: string) {
   if (!stream) {
     setStatus('error', `Unknown stream: ${id}`);
     setTelemetryState('stream', 'error', { error: `Unknown stream: ${id}` });
+    setStore('stream', 'status', 'error');
+    setLive(false);
     return;
   }
+
+  const sym = symbol || store.symbol || 'BTCUSDT';
+  const iv = interval || store.interval || '1m';
 
   setStore('live', 'streamId', id);
   setStore('activePlugins', 'stream', id);
@@ -141,19 +179,23 @@ export function startLive(streamId: string, symbol: string, interval: string) {
     name: stream.name,
     transport,
     state: 'connecting',
-    detail: `${symbol} ${interval}`,
+    detail: `${sym} ${iv}`,
     error: null,
   });
-  appendLog('info', `Live start · ${stream.name} · ${symbol} ${interval}`, 'stream');
+  appendLog('info', `Live start · ${stream.name} · ${sym} ${iv}`, 'stream');
 
   const lastBar = store.bars.length ? store.bars[store.bars.length - 1] : null;
   let lastSeenBarTime = lastBar?.time ?? 0;
 
+  /** True only while this startLive session is still the active epoch. */
+  const isCurrent = () => liveEpoch === epoch && store.live.active;
+
   const stop = stream.start({
-    symbol,
-    interval,
+    symbol: sym,
+    interval: iv,
     lastBar,
     onBar: (bar: Bar) => {
+      if (!isCurrent()) return;
       // Strip ephemeral closed flag before store (optional field is fine to keep)
       appendBar(bar);
       const manager = getManager();
@@ -168,14 +210,17 @@ export function startLive(streamId: string, symbol: string, interval: string) {
       }
     },
     onStatus: (s) => {
+      if (liveEpoch !== epoch) return;
       if (s.state === 'open') {
+        if (!store.live.active) return;
         setStore('stream', 'status', 'connected');
         setTelemetryState('stream', 'open', {
-          detail: s.detail || s.url || `${symbol} ${interval}`,
+          detail: s.detail || s.url || `${sym} ${iv}`,
           error: null,
         });
         appendLog('ok', `Stream open${s.detail ? ` · ${s.detail}` : ''}`, 'stream');
       } else if (s.state === 'reconnecting') {
+        if (!store.live.active) return;
         setStore('stream', 'status', 'connecting');
         setTelemetryState('stream', 'degraded', { detail: s.detail || 'reconnecting' });
         appendLog('warn', `Stream reconnecting${s.detail ? ` · ${s.detail}` : ''}`, 'stream');
@@ -188,34 +233,67 @@ export function startLive(streamId: string, symbol: string, interval: string) {
       }
     },
     onError: (e) => {
-      appendLog('error', e.message || 'Stream error', 'stream');
-      setStore('stream', 'status', 'error');
-      setTelemetryState('stream', 'error', { error: e.message });
-      setStatus('error', `Live error: ${e.message}`);
-      stopLive();
+      if (liveEpoch !== epoch) return;
+      const msg = e?.message || 'Stream error';
+      appendLog('error', msg, 'stream');
+      setStatus('error', `Live error: ${msg}`);
+      // Preserve error telemetry/status while clearing live.active
+      stopLive({ reason: 'error', error: msg });
     },
   });
+
+  // If a nested stop/restart happened during start (unlikely), drop this stop
+  if (liveEpoch !== epoch) {
+    try {
+      stop();
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
 
   currentStop = stop;
 }
 
 /**
  * Tear down the active stream, clear reconnect timers, and mark live inactive.
- * Safe to call when no stream is running.
+ * Safe to call when no stream is running; re-entrant-safe.
  */
-export function stopLive() {
+export function stopLive(opts?: StopLiveOpts) {
+  const reason: StopLiveReason = opts?.reason ?? 'user';
   const wasActive = store.live.active;
+
+  // Invalidate session first so in-flight callbacks no-op
+  liveEpoch += 1;
+
   // Mark inactive before stop() so reconnect closed callbacks don't fight UI state
   setLive(false);
-  setStore('stream', 'status', 'disconnected');
-  setTelemetryState('stream', 'closed', { error: null });
-  if (currentStop) {
-    currentStop();
-    currentStop = null;
+
+  if (reason === 'error') {
+    const err = opts?.error || 'Stream error';
+    setStore('stream', 'status', 'error');
+    setTelemetryState('stream', 'error', { error: err });
+  } else if (reason === 'user') {
+    setStore('stream', 'status', 'disconnected');
+    setTelemetryState('stream', 'closed', { error: null });
   }
-  if (wasActive) {
+  // reason === 'restart': startLive overwrites status/telemetry immediately after
+
+  // Null before invoke so nested stopLive / onError re-entry is a no-op
+  const stop = currentStop;
+  currentStop = null;
+  if (stop) {
+    try {
+      stop();
+    } catch {
+      /* ignore plugin stop errors */
+    }
+  }
+
+  if (wasActive && reason === 'user') {
     appendLog('info', 'Live stopped', 'stream');
   }
+
   if (rerunTimer) {
     clearTimeout(rerunTimer);
     rerunTimer = null;
@@ -232,9 +310,10 @@ export function stopLive() {
 function scheduleRerun() {
   if (!store.scripts.some((s) => s.visible && s.code?.trim())) return;
   if (rerunTimer) return;
+  const epochAtSchedule = liveEpoch;
   rerunTimer = setTimeout(async () => {
     rerunTimer = null;
-    if (rerunInFlight || !store.live.active) return;
+    if (liveEpoch !== epochAtSchedule || rerunInFlight || !store.live.active) return;
     rerunInFlight = true;
     rerunAttemptCount += 1;
     setStore('live', 'needsRerun', false);
@@ -244,6 +323,7 @@ function scheduleRerun() {
         store.scripts.filter((s) => s.visible && s.code?.trim()),
       );
       for (const ind of ordered) {
+        if (liveEpoch !== epochAtSchedule || !store.live.active) break;
         await runAndApply(ind.code, ind.id, {
           silent: true,
           openResults: false,

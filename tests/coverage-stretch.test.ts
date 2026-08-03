@@ -51,7 +51,7 @@ import { _resetStreamRegistrationFlag } from '../src/streams/catalog';
 import { mockPollStream, registerDynamicStream, listStreams } from '../src/streams/catalog';
 import { _resetEngineRegistrationFlag } from '../src/engines/catalog';
 import { _resetStorageRegistrationFlag } from '../src/storage/catalog';
-import { setActivePlugin, setStore, loadBars } from '../src/store';
+import { setActivePlugin, setStore, loadBars, store } from '../src/store';
 import {
   setManager,
   setDataToChart,
@@ -181,6 +181,22 @@ describe('load-symbol stretch', () => {
 
     const bad = await loadSymbolData('X', '1m', 'no-such-source');
     expect(bad).toBe(false);
+  });
+
+  it('plugin throw sets telemetry error without rejecting', async () => {
+    const { registerDynamicSource } = await import('../src/sources/catalog');
+    registerDynamicSource({
+      id: 'boom-src',
+      name: 'Boom',
+      kind: 'source',
+      async fetchHistorical() {
+        throw new Error('upstream 502');
+      },
+    } as never);
+    const ok = await loadSymbolData('Z', '5m', 'boom-src');
+    expect(ok).toBe(false);
+    expect(store.status).toBe('error');
+    expect(store.telemetry.source.error).toMatch(/502/);
   });
 
   it('pushes to chart manager when present', async () => {

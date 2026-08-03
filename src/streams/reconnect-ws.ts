@@ -23,12 +23,20 @@
  *
  * Shared by `streams/catalog` (kline feeds) and `data/watchlist-live` (tickers).
  * On unexpected close, schedules reconnect until `maxAttempts` is exhausted,
- * then fires `onError`. Explicit `stop()` closes without further attempts.
+ * then fires `onError`. Explicit `stop()` closes without further attempts and
+ * is idempotent (safe to call more than once).
  *
  * Defaults: base 1s, max delay 30s, 8 attempts (`delay = min(max, base * 2^(n-1))`).
  *
  * @module streams/reconnect-ws
  */
+
+/** Default hard caps (exported for docs / tests). */
+export const RECONNECT_DEFAULTS = {
+  maxAttempts: 8,
+  baseDelayMs: 1_000,
+  maxDelayMs: 30_000,
+} as const;
 
 /** Status payload forwarded to stream/watchlist UI telemetry. */
 export type WsStatus = {
@@ -53,12 +61,12 @@ export interface ReconnectableWsOpts {
 
 /**
  * Open a WebSocket that reconnects on unexpected close.
- * @returns `stop()` that closes without further reconnect attempts.
+ * @returns `stop()` that closes without further reconnect attempts (idempotent).
  */
 export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
-  const maxAttempts = opts.maxAttempts ?? 8;
-  const baseDelayMs = opts.baseDelayMs ?? 1_000;
-  const maxDelayMs = opts.maxDelayMs ?? 30_000;
+  const maxAttempts = Math.max(0, opts.maxAttempts ?? RECONNECT_DEFAULTS.maxAttempts);
+  const baseDelayMs = Math.max(0, opts.baseDelayMs ?? RECONNECT_DEFAULTS.baseDelayMs);
+  const maxDelayMs = Math.max(baseDelayMs, opts.maxDelayMs ?? RECONNECT_DEFAULTS.maxDelayMs);
 
   let stopped = false;
   let ws: WebSocket | null = null;
@@ -73,23 +81,40 @@ export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
     }
   };
 
+  /** Detach listeners and close without triggering reconnect path. */
+  const detachAndClose = (sock: WebSocket | null) => {
+    if (!sock) return;
+    try {
+      sock.onclose = null;
+      sock.onerror = null;
+      sock.onmessage = null;
+      sock.onopen = null;
+      sock.close();
+    } catch {
+      /* ignore */
+    }
+  };
+
   const connect = () => {
     if (stopped) return;
     clearTimer();
+    // Drop any prior socket reference before constructing a new one
+    if (ws) {
+      detachAndClose(ws);
+      ws = null;
+    }
     try {
       ws = new WebSocket(opts.url);
     } catch (e) {
+      stopped = true;
       opts.onError(e instanceof Error ? e : new Error(String(e)));
       return;
     }
 
     ws.onopen = () => {
       if (stopped) {
-        try {
-          ws?.close();
-        } catch {
-          /* ignore */
-        }
+        detachAndClose(ws);
+        ws = null;
         return;
       }
       attempt = 0;
@@ -119,11 +144,12 @@ export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
     ws.onclose = () => {
       ws = null;
       if (stopped) {
-        opts.onStatus({ state: 'closed' });
         return;
       }
       attempt += 1;
       if (attempt > maxAttempts) {
+        // Terminal — no further reconnects; treat as stopped so stop() is a no-op
+        stopped = true;
         opts.onStatus({ state: 'closed', detail: 'reconnect exhausted' });
         opts.onError(
           new Error(
@@ -134,7 +160,7 @@ export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
         );
         return;
       }
-      const delay = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));
+      const delay = nextBackoffMs(attempt, baseDelayMs, maxDelayMs);
       opts.onStatus({
         state: 'reconnecting',
         url: opts.url,
@@ -147,31 +173,25 @@ export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
   connect();
 
   return () => {
+    if (stopped) return;
     stopped = true;
     clearTimer();
     const sock = ws;
     ws = null;
-    if (sock) {
-      try {
-        sock.onclose = null;
-        sock.onerror = null;
-        sock.onmessage = null;
-        sock.onopen = null;
-        sock.close();
-      } catch {
-        /* ignore */
-      }
-    }
+    detachAndClose(sock);
     opts.onStatus({ state: 'closed' });
   };
 }
 
-/** Compute next backoff delay (exported for unit tests). */
+/** Compute next backoff delay (exported for unit tests). Always capped at maxDelayMs. */
 export function nextBackoffMs(
   attempt: number,
-  baseDelayMs = 1_000,
-  maxDelayMs = 30_000,
+  baseDelayMs: number = RECONNECT_DEFAULTS.baseDelayMs,
+  maxDelayMs: number = RECONNECT_DEFAULTS.maxDelayMs,
 ): number {
-  if (attempt < 1) return baseDelayMs;
-  return Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));
+  if (attempt < 1) return Math.min(maxDelayMs, baseDelayMs);
+  // attempt 1 → base, 2 → 2*base, … always ≤ maxDelayMs
+  const raw = baseDelayMs * 2 ** (attempt - 1);
+  if (!Number.isFinite(raw) || raw < 0) return maxDelayMs;
+  return Math.min(maxDelayMs, raw);
 }

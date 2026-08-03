@@ -126,6 +126,7 @@ export const mockPollStream: StreamPlugin = {
   configSchema: {},
   start({ interval, onBar, onStatus, lastBar }) {
     const step = intervalToSec(interval);
+    let stopped = false;
     let cur: Bar = lastBar
       ? { ...lastBar }
       : {
@@ -140,6 +141,7 @@ export const mockPollStream: StreamPlugin = {
     onStatus({ state: 'open', detail: 'mock-poll' });
 
     const tick = () => {
+      if (stopped) return;
       const now = Math.floor(Date.now() / 1000);
       const slot = Math.floor(now / step) * step;
       const drift = (Math.random() - 0.48) * cur.close * 0.008;
@@ -167,12 +169,15 @@ export const mockPollStream: StreamPlugin = {
           closed: true,
         };
       }
+      if (stopped) return;
       onBar({ ...cur });
     };
 
     tick();
     const id = setInterval(tick, 1000);
     return () => {
+      if (stopped) return;
+      stopped = true;
       clearInterval(id);
       onStatus({ state: 'closed' });
     };

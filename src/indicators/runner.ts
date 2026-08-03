@@ -41,6 +41,11 @@
  *
  * - {@link runScript}, {@link runAndApply}, {@link probeEndpoint}
  * - Types: {@link RunResult}, {@link RunOptions}
+ * - Hardening helpers re-exported from {@link indicators/run-helpers}:
+ *   {@link formatRunError}, {@link normalizeEngineResult}, run epochs
+ *
+ * Concurrent runs use a monotonic epoch so stale completions never clobber
+ * `lastRun` / chart apply / status bar of a newer run.
  *
  * @module indicators/runner
  */
@@ -66,6 +71,7 @@ import { normalizeStrategyEvents, eventsToMarkers, buildEquityCurve } from '../r
 import { buildStrategyReport } from '../results/strategy';
 import {
   bgcolorSeriesToHistogramData,
+  lineSeriesToOverlayData,
   resolvePlotFillBands,
   shapeSeriesToMarkers,
   splitSeriesByKind,
@@ -80,11 +86,36 @@ import {
 import { getActiveEngine, getActiveEngineConfig } from '../plugins/active';
 import type { RunResult as EngineRunResult } from '../plugins/types';
 import { classifyTransport } from '../ui/telemetry';
+import { reportUiError } from '../ui/boot-errors';
+import {
+  beginRunEpoch,
+  formatRunError,
+  isRunEpochCurrent,
+  lineDataHasSample,
+  normalizeEngineResult,
+  type NormalizedRunResult,
+} from './run-helpers';
 
 /** Engine result with `series` always present (empty object if missing). */
 export type RunResult = EngineRunResult & {
   series: Record<string, (number | null)[]>;
+  plots: (number | null)[];
 };
+
+export type { NormalizedRunResult };
+export {
+  beginRunEpoch,
+  coercePlotSample,
+  currentRunEpoch,
+  formatRunError,
+  isRunEpochCurrent,
+  lineDataHasSample,
+  normalizeBarTime,
+  normalizeEngineResult,
+  normalizeSeriesMap,
+  seriesValuesToLineData,
+  _resetRunEpochForTests,
+} from './run-helpers';
 
 /** Options shared by {@link runScript} and {@link runAndApply}. */
 export interface RunOptions {
@@ -94,6 +125,16 @@ export interface RunOptions {
   openResults?: boolean;
   /** Pine input.* overrides keyed by title (Script Settings) */
   inputs?: Record<string, unknown>;
+  /**
+   * When false, do not advance the concurrent-run epoch (nested calls).
+   * Prefer {@link RunOptions.epoch} when nesting under {@link runAndApply}.
+   */
+  claimEpoch?: boolean;
+  /**
+   * Existing run epoch from {@link runAndApply}. When set, skip claiming a
+   * new epoch and use this for supersession checks (status / telemetry).
+   */
+  epoch?: number;
 }
 
 type PineLogLine = { level?: string; message?: string; [k: string]: unknown };
@@ -188,11 +229,42 @@ function normalizeRunExtras(result: RunResult): RunResult {
 /**
  * Execute Pine against `store.bars` via the active engine.
  * Does not mutate chart series; use {@link runAndApply} for full apply.
+ *
+ * Always returns a normalized {@link RunResult} (never throws). Empty bars,
+ * network/timeout/abort, and malformed engine payloads become `status: 'error'`
+ * with user-readable {@link formatRunError} messages.
  */
 export async function runScript(script: string, opts: RunOptions = {}): Promise<RunResult> {
   const silent = !!opts.silent;
+  // Prefer caller epoch (runAndApply); else claim unless claimEpoch: false.
+  const epoch =
+    opts.epoch != null
+      ? opts.epoch
+      : opts.claimEpoch === false
+        ? undefined
+        : beginRunEpoch();
   if (!silent) setStatus('running', 'Executing Pine Script…');
   const t0 = performance.now();
+
+  const bars = store.bars;
+  if (!Array.isArray(bars) || bars.length === 0) {
+    const msg = 'No bars loaded — load a symbol before running';
+    // Only touch status if this generation is still current
+    if (epoch == null || isRunEpochCurrent(epoch)) {
+      if (!silent) setStatus('error', msg);
+      else appendLog('error', `Live re-run: ${msg}`, 'live');
+      setTelemetryState('engine', 'error', { error: msg });
+    }
+    return {
+      status: 'error',
+      plots: [],
+      series: {},
+      events: [],
+      error: msg,
+      meta: { ms: 0 },
+    };
+  }
+
   try {
     const engine = getActiveEngine();
     const baseConfig = getActiveEngineConfig() || {};
@@ -211,10 +283,12 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       detail: mode,
       error: null,
     });
-    // Outer budget must cover WS probe + REST fallback (engine manages sub-budgets).
-    const timeoutMs = silent
+    // Soft outer budget for status messaging only — engines manage their own
+    // AbortSignal.timeout for HTTP (WS probe + REST fallback must not share a
+    // short parent abort). We still surface timeout wording via formatRunError.
+    void (silent
       ? 60_000
-      : Math.min(180_000, Math.max(90_000, 45_000 + (store.bars?.length || 0) * 40));
+      : Math.min(180_000, Math.max(90_000, 45_000 + bars.length * 40)));
     const rawInputs =
       opts.inputs && Object.keys(opts.inputs).length
         ? opts.inputs
@@ -223,16 +297,32 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
           : undefined;
     // Expand plot:<indicatorId>:<plotKey> refs → full series arrays for the engine
     const inputs = resolveInputSourceValues(rawInputs, store.indicatorSeries);
-    const result = await engine.run({
+    const rawResult = await engine.run({
       script,
-      bars: store.bars,
+      bars,
       config,
       inputs,
       // Do not abort the whole run on a short timer while engine may still REST-fallback.
       // Engine uses its own AbortSignal.timeout for HTTP; pass undefined for max reliability.
       signal: undefined,
     });
-    const ms = result.meta?.ms ?? performance.now() - t0;
+
+    const ms =
+      (typeof rawResult?.meta?.ms === 'number' && Number.isFinite(rawResult.meta.ms)
+        ? rawResult.meta.ms
+        : null) ?? performance.now() - t0;
+    // Normalize first so callers always get stable series/plots shapes
+    const result = normalizeEngineResult(rawResult, ms);
+    // Superseded by a newer run — keep payload, skip status/telemetry of the winner
+    if (epoch != null && !isRunEpochCurrent(epoch)) {
+      return {
+        ...result,
+        series: result.series || {},
+        plots: result.plots || [],
+        events: result.events || [],
+        meta: { ...result.meta, ms, superseded: true },
+      };
+    }
     const runTransport =
       result.meta?.transport === 'ws'
         ? 'ws'
@@ -241,7 +331,18 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
           : transport;
     recordRunLatency(ms);
     if (result.status === 'error') {
-      const msg = result.error || 'Engine error';
+      const msg = formatRunError(result.error || 'Engine error');
+      result.error = msg;
+      // Superseded: still return payload but do not clobber winner status bar
+      if (epoch != null && !isRunEpochCurrent(epoch)) {
+        return {
+          ...result,
+          series: result.series || {},
+          plots: result.plots || [],
+          events: result.events || [],
+          meta: { ...result.meta, ms, superseded: true },
+        };
+      }
       setTelemetryState('engine', 'error', {
         error: msg,
         latencyMs: ms,
@@ -253,8 +354,24 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       return {
         ...result,
         series: result.series || {},
+        plots: result.plots || [],
         events: result.events || [],
         meta: { ...result.meta, ms },
+      };
+    }
+    if (epoch != null && !isRunEpochCurrent(epoch)) {
+      return {
+        ...result,
+        series: result.series || {},
+        plots: result.plots || [],
+        events: result.events || [],
+        meta: {
+          ...result.meta,
+          ms,
+          overlay: result.meta?.overlay ?? true,
+          script_name: result.meta?.script_name || 'plot',
+          superseded: true,
+        },
       };
     }
     setTelemetryState('engine', 'open', {
@@ -267,6 +384,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     return {
       ...result,
       series: result.series || {},
+      plots: result.plots || [],
       events: result.events || [],
       meta: {
         ...result.meta,
@@ -276,9 +394,20 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       },
     };
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
     const ms = performance.now() - t0;
     recordRunLatency(ms);
+    // Superseded mid-flight: quiet return (winner owns status bar)
+    if (epoch != null && !isRunEpochCurrent(epoch)) {
+      return {
+        status: 'error',
+        plots: [],
+        series: {},
+        events: [],
+        error: 'Superseded by a newer run',
+        meta: { ms },
+      };
+    }
+    const msg = formatRunError(err);
     setTelemetryState('engine', 'error', { error: msg, latencyMs: ms });
     if (!silent) setStatus('error', msg);
     else appendLog('error', `Live re-run: ${msg}`, 'live');
@@ -298,6 +427,10 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
  * @param script - Pine Script source code
  * @param indicatorId - If provided, an existing indicator ID to update.
  * @param opts - silent / openResults for live path
+ *
+ * Concurrent runs: each call advances a run epoch; only the latest epoch
+ * may update `lastRun`, open Results, or mutate chart series — stale
+ * completions return their result with `meta.superseded: true` and no chart apply.
  */
 export async function runAndApply(
   script: string,
@@ -306,6 +439,7 @@ export async function runAndApply(
 ): Promise<RunResult> {
   const silent = !!opts.silent;
   const openResults = opts.openResults ?? !silent;
+  const epoch = beginRunEpoch();
 
   // Prefer explicit opts.inputs; else per-indicator saved values; else editor
   let inputs = opts.inputs;
@@ -315,8 +449,18 @@ export async function runAndApply(
       inputs = ind.inputValues;
     }
   }
-  const raw = await runScript(script, { ...opts, inputs });
+  // Pass epoch so nested runScript can skip status/telemetry if superseded mid-flight
+  const raw = await runScript(script, { ...opts, inputs, claimEpoch: false, epoch });
   const result = normalizeRunExtras(raw);
+
+  // Stale completion — never clobber newer lastRun / chart
+  if (!isRunEpochCurrent(epoch)) {
+    return {
+      ...result,
+      meta: { ...result.meta, superseded: true },
+    };
+  }
+
   setLastRun(result);
   if (openResults) {
     setStore('resultsPanel', 'open', true);
@@ -326,6 +470,14 @@ export async function runAndApply(
 
   const manager = getManager();
   if (!manager) return result;
+
+  // Re-check before chart mutation (manager work can be slow)
+  if (!isRunEpochCurrent(epoch)) {
+    return {
+      ...result,
+      meta: { ...result.meta, superseded: true },
+    };
+  }
 
   const existing = indicatorId
     ? store.scripts.find((s) => s.id === indicatorId)
@@ -337,9 +489,10 @@ export async function runAndApply(
       '',
   ).toLowerCase();
 
-  const ohlcvTimes = store.bars.map((b) => b.time);
+  const ohlcvTimes = (store.bars || []).map((b) => b?.time);
   const plotMeta = (result.meta?.plot_meta || {}) as Record<string, PlotMetaEntry>;
-  const split = splitSeriesByKind(result.series || {}, plotMeta);
+  const seriesMap = result.series || {};
+  const split = splitSeriesByKind(seriesMap, plotMeta);
 
   // Line-like series only — bgcolor/plotshape handled below
   const seriesEntries = split.lines.map((e) => [e.key, e.values] as const);
@@ -350,7 +503,7 @@ export async function runAndApply(
 
   // Oscillator-scale plots (RSI, MACD, …) on the price pane are effectively
   // invisible (values ~0–100 vs BTC price). Force a sub-pane so scripts show.
-  if (overlay && seriesWouldHideOnPrice(seriesEntries, store.bars)) {
+  if (overlay && seriesWouldHideOnPrice(seriesEntries, store.bars || [])) {
     overlay = false;
     if (!silent) {
       appendLog(
@@ -421,36 +574,16 @@ export async function runAndApply(
    * Leading/trailing Pine `na` become whitespace `{ time }` (no value) so the
    * indicator pane has the same logical bar count as price — otherwise
    * multi-pane time sync leaves a permanent gap at the indicator start.
+   * Null/NaN/undefined/string "na"/non-finite never produce a numeric value.
    */
-  const toLineData = (arr: (number | null)[] | unknown[]) => {
-    const out: { time: number; value?: number }[] = [];
-    const n = ohlcvTimes.length;
-    for (let i = 0; i < n; i++) {
-      const t = ohlcvTimes[i];
-      if (t == null || !Number.isFinite(Number(t))) continue;
-      // Normalize seconds (LWC UTCTimestamp); ms → s if needed
-      const time = Number(t) > 1e12 ? Math.floor(Number(t) / 1000) : Math.floor(Number(t));
-      const raw = arr[i];
-      // Coerce string numerics from some engine payloads
-      const v =
-        typeof raw === 'number'
-          ? raw
-          : typeof raw === 'string' && raw.trim() !== '' && raw.toLowerCase() !== 'na'
-            ? Number(raw)
-            : null;
-      if (v != null && Number.isFinite(v) && !Number.isNaN(v)) {
-        out.push({ time, value: v });
-      } else {
-        out.push({ time }); // whitespace
-      }
-    }
-    return out;
-  };
+  const toLineData = (arr: (number | null)[] | unknown[]) =>
+    lineSeriesToOverlayData(ohlcvTimes, arr);
 
   // Stable overlay sync: update-in-place when keys match (no remove→blank→add flash)
+  // value is optional — omit for LWC whitespace (Pine `na` / warmup)
   const overlayLines: Array<{
     name: string;
-    data: { time: number; value: number }[];
+    data: { time: number; value?: number }[];
     color?: string;
     linewidth?: number;
     kind?: 'plot' | 'hline';
@@ -472,11 +605,11 @@ export async function runAndApply(
           ? Number(meta.price)
           : undefined;
       if (price == null && isHline && data.length) {
-        price = data[0]!.value;
+        const first = data.find((d) => d.value != null && Number.isFinite(d.value));
+        if (first?.value != null) price = first.value;
       }
       // Need at least one real sample (or hline price); pure-whitespace series skip
-      const hasSample = data.some((d) => d.value != null && Number.isFinite(d.value));
-      if (!hasSample && !(isHline && price != null)) continue;
+      if (!lineDataHasSample(data) && !(isHline && price != null)) continue;
       const color =
         (meta?.color && String(meta.color)) ||
         PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
@@ -491,163 +624,198 @@ export async function runAndApply(
         linestyle: meta?.linestyle ? String(meta.linestyle) : undefined,
       });
     }
-  } else if (result.plots.length) {
+  } else if (Array.isArray(result.plots) && result.plots.length) {
     // Legacy single-array plots only when no named line series and no specialized kinds.
     // Skip all-null pads (modern engines still send plots: [null, …]).
     if (!split.bgcolors.length && !split.shapes.length) {
-      const data = toLineData(result.plots as (number | null)[]);
-      const hasSample = data.some((d) => d.value != null && Number.isFinite(d.value));
-      if (hasSample) {
+      const data = toLineData(result.plots);
+      if (lineDataHasSample(data)) {
         overlayLines.push({ name: scriptName, data, color: PLOT_PALETTE[0] });
       }
     }
   }
-  manager.syncOverlayLines(paneId, overlayLines);
-  // Refresh corner badges (name + settings / eye / re-run / remove)
-  try {
-    manager.refreshBadges?.(paneId);
-    if (paneId !== 'price') manager.refreshBadges?.('price');
-  } catch {
-    /* ignore */
+
+  // Empty bars / zero-length plots: still sync empty overlays so stale lines clear
+  if (!ohlcvTimes.length && !silent) {
+    appendLog('warn', 'Run finished with no bars — chart overlays cleared', 'plot');
   }
 
-  // bgcolor → histogram underlay on price pane (always price; not indicator sub-pane)
-  const bgBands = split.bgcolors
-    .map(({ key, values, meta }) => ({
-      name: key,
-      data: bgcolorSeriesToHistogramData(ohlcvTimes, values, meta.color),
-    }))
-    .filter((b) => b.data.length > 0);
-  manager.syncBgcolorBands(bgBands);
-  if (bgBands.length && !silent) {
-    appendLog('ok', `bgcolor: ${bgBands.length} band series`, 'plot');
-  }
-
-  // fill(plot1, plot2, color=…) → SVG band between plot edges on price pane
-  const fillBands = resolvePlotFillBands(result.series || {}, plotMeta);
+  // Chart series mutations isolated — LWC throws must not reject runAndApply
   try {
-    const layer = getActiveDrawingLayer();
-    if (layer?.setPlotFills) {
-      if (fillBands.length) {
-        const times = ohlcvTimes.map((t) =>
-          Number(t) > 1e12 ? Math.floor(Number(t) / 1000) : Math.floor(Number(t)),
-        );
-        layer.setPlotFills(
-          fillBands.map((f) => ({
-            name: f.name,
-            times,
-            upper: f.upper,
-            lower: f.lower,
-            colors: f.colors,
-            color: f.color,
-          })),
-        );
+    manager.syncOverlayLines(paneId, overlayLines);
+    // Refresh corner badges (name + settings / eye / re-run / remove)
+    try {
+      manager.refreshBadges?.(paneId);
+      if (paneId !== 'price') manager.refreshBadges?.('price');
+    } catch {
+      /* badges optional */
+    }
+
+    // bgcolor → histogram underlay on price pane (always price; not indicator sub-pane)
+    const bgBands = split.bgcolors
+      .map(({ key, values, meta }) => ({
+        name: key,
+        data: bgcolorSeriesToHistogramData(ohlcvTimes, values, meta.color),
+      }))
+      .filter((b) => b.data.length > 0);
+    manager.syncBgcolorBands(bgBands);
+    if (bgBands.length && !silent) {
+      appendLog('ok', `bgcolor: ${bgBands.length} band series`, 'plot');
+    }
+
+    // fill(plot1, plot2, color=…) → SVG band between plot edges on price pane
+    const fillBands = resolvePlotFillBands(result.series || {}, plotMeta);
+    try {
+      const layer = getActiveDrawingLayer();
+      if (layer?.setPlotFills) {
+        if (fillBands.length) {
+          const times = ohlcvTimes.map((t) =>
+            Number(t) > 1e12 ? Math.floor(Number(t) / 1000) : Math.floor(Number(t)),
+          );
+          layer.setPlotFills(
+            fillBands.map((f) => ({
+              name: f.name,
+              times,
+              upper: f.upper,
+              lower: f.lower,
+              colors: f.colors,
+              color: f.color,
+            })),
+          );
+          if (!silent) {
+            appendLog(
+              'ok',
+              `fill: ${fillBands.map((f) => `${f.name}(${f.plot1}↔${f.plot2})`).join(', ')}`,
+              'plot',
+            );
+          }
+        } else {
+          layer.clearPlotFills?.();
+        }
+      }
+    } catch {
+      /* drawing layer optional in tests */
+    }
+
+    // plotshape / plotchar → markers (merged with strategy markers; never wipe trades)
+    const shapeMarkers = split.shapes.flatMap(({ key, values, meta }) =>
+      shapeSeriesToMarkers(ohlcvTimes, values, meta, { idPrefix: key }),
+    );
+    manager.setShapeMarkers(shapeMarkers);
+    if (shapeMarkers.length && !silent) {
+      appendLog('ok', `plotshape: ${shapeMarkers.length} marker(s)`, 'plot');
+    }
+
+    // Non-overlay scripts must not leave series on the price pane
+    if (!overlay && paneId !== 'price') {
+      const pricePane = manager.getPane('price');
+      if (pricePane) {
+        for (const line of overlayLines) {
+          const key = `overlay_${line.name}`;
+          if (pricePane.series[key]) {
+            try {
+              pricePane.chart.removeSeries(pricePane.series[key]);
+            } catch {
+              /* ignore */
+            }
+            delete pricePane.series[key];
+          }
+        }
+      }
+    }
+
+    // Strategy: markers on price pane + equity curve
+    const events = result.events || [];
+    if (events.length) {
+      const normalized = normalizeStrategyEvents(events, {
+        bars: store.bars || [],
+        includeOrders: false,
+      });
+      const markers = eventsToMarkers(normalized);
+      manager.setTradeMarkers(markers);
+
+      const report = buildStrategyReport(events, store.bars || []);
+      if (report.trades.length) {
+        const equity = buildEquityCurve(report.trades, 10_000);
+        manager.setEquityCurve(equity);
         if (!silent) {
           appendLog(
             'ok',
-            `fill: ${fillBands.map((f) => `${f.name}(${f.plot1}↔${f.plot2})`).join(', ')}`,
-            'plot',
+            `Strategy: ${report.stats.trades} trades · net ${report.stats.totalPnl >= 0 ? '+' : ''}${report.stats.totalPnl.toFixed(2)} · ${markers.length} markers`,
+            'strategy',
           );
         }
       } else {
-        layer.clearPlotFills?.();
+        // Live silent re-runs: skip hide to avoid equity pane thrash
+        if (!silent) {
+          manager.hideEquityPane();
+          if (markers.length) {
+            appendLog(
+              'ok',
+              `Strategy events: ${events.length} · ${markers.length} markers`,
+              'strategy',
+            );
+          }
+        }
       }
+    } else {
+      // No strategy events this run — clear trade markers only (shapes already set above)
+      manager.setTradeMarkers([]);
+      if (!silent) manager.hideEquityPane();
+    }
+
+    // Debug pins from logs (bar_index/time) — independent of trade/shape lists
+    applyDebugPinsToChart();
+  } catch (e: unknown) {
+    const msg = formatRunError(e);
+    reportUiError(e, {
+      source: 'run',
+      context: 'Chart apply failed',
+      status: !silent,
+    });
+    if (silent) appendLog('error', `Chart apply failed: ${msg}`, 'live');
+    else if (store.status !== 'error') setStatus('error', `Chart apply failed: ${msg}`);
+  }
+
+  // Pine drawings: atomic replace (no clear→empty→set flash).
+  // GC trims each type to indicator()/strategy() max_*_count (default 50).
+  try {
+    const drawings = Array.isArray((result as RunResult & { drawings?: unknown[] }).drawings)
+      ? (result as RunResult & { drawings?: unknown[] }).drawings
+      : undefined;
+    const layer = getActiveDrawingLayer();
+    if (drawings?.length) {
+      const limits = resolveDrawingLimits(
+        script,
+        (result.meta as Record<string, unknown> | undefined) ?? null,
+      );
+      layer?.setScriptDrawings(drawings, limits);
+      if (!silent) {
+        const normalized = normalizeScriptDrawings(drawings);
+        const kept = garbageCollectScriptDrawings(normalized, limits);
+        const dropped = normalized.length - kept.length;
+        appendLog(
+          'ok',
+          dropped > 0
+            ? `Pine drawings: ${kept.length} object(s) (${dropped} GC'd by max_*_count)`
+            : `Pine drawings: ${kept.length} object(s)`,
+          'drawings',
+        );
+      }
+    } else if (!silent) {
+      // Only clear on interactive full runs when engine returned none
+      layer?.clearScriptDrawings();
     }
   } catch {
     /* drawing layer optional in tests */
   }
 
-  // plotshape / plotchar → markers (merged with strategy markers; never wipe trades)
-  const shapeMarkers = split.shapes.flatMap(({ key, values, meta }) =>
-    shapeSeriesToMarkers(ohlcvTimes, values, meta, { idPrefix: key }),
-  );
-  manager.setShapeMarkers(shapeMarkers);
-  if (shapeMarkers.length && !silent) {
-    appendLog('ok', `plotshape: ${shapeMarkers.length} marker(s)`, 'plot');
-  }
-
-  // Non-overlay scripts must not leave series on the price pane
-  if (!overlay && paneId !== 'price') {
-    const pricePane = manager.getPane('price');
-    if (pricePane) {
-      for (const line of overlayLines) {
-        const key = `overlay_${line.name}`;
-        if (pricePane.series[key]) {
-          try {
-            pricePane.chart.removeSeries(pricePane.series[key]);
-          } catch {
-            /* ignore */
-          }
-          delete pricePane.series[key];
-        }
-      }
-    }
-  }
-
-  // Strategy: markers on price pane + equity curve
-  const events = result.events || [];
-  if (events.length) {
-    const normalized = normalizeStrategyEvents(events, {
-      bars: store.bars,
-      includeOrders: false,
-    });
-    const markers = eventsToMarkers(normalized);
-    manager.setTradeMarkers(markers);
-
-    const report = buildStrategyReport(events, store.bars);
-    if (report.trades.length) {
-      const equity = buildEquityCurve(report.trades, 10_000);
-      manager.setEquityCurve(equity);
-      if (!silent) {
-        appendLog(
-          'ok',
-          `Strategy: ${report.stats.trades} trades · net ${report.stats.totalPnl >= 0 ? '+' : ''}${report.stats.totalPnl.toFixed(2)} · ${markers.length} markers`,
-          'strategy',
-        );
-      }
-    } else {
-      // Live silent re-runs: skip hide to avoid equity pane thrash
-      if (!silent) {
-        manager.hideEquityPane();
-        if (markers.length) {
-          appendLog('ok', `Strategy events: ${events.length} · ${markers.length} markers`, 'strategy');
-        }
-      }
-    }
-  } else {
-    // No strategy events this run — clear trade markers only (shapes already set above)
-    manager.setTradeMarkers([]);
-    if (!silent) manager.hideEquityPane();
-  }
-
-  // Debug pins from logs (bar_index/time) — independent of trade/shape lists
-  applyDebugPinsToChart();
-
-  // Pine drawings: atomic replace (no clear→empty→set flash).
-  // GC trims each type to indicator()/strategy() max_*_count (default 50).
-  const drawings = (result as RunResult & { drawings?: unknown[] }).drawings;
-  const layer = getActiveDrawingLayer();
-  if (drawings?.length) {
-    const limits = resolveDrawingLimits(
-      script,
-      (result.meta as Record<string, unknown> | undefined) ?? null,
-    );
-    layer?.setScriptDrawings(drawings, limits);
-    if (!silent) {
-      const normalized = normalizeScriptDrawings(drawings);
-      const kept = garbageCollectScriptDrawings(normalized, limits);
-      const dropped = normalized.length - kept.length;
-      appendLog(
-        'ok',
-        dropped > 0
-          ? `Pine drawings: ${kept.length} object(s) (${dropped} GC'd by max_*_count)`
-          : `Pine drawings: ${kept.length} object(s)`,
-        'drawings',
-      );
-    }
-  } else if (!silent) {
-    // Only clear on interactive full runs when engine returned none
-    layer?.clearScriptDrawings();
+  // Final epoch gate before store mutations (indicator list / series cache)
+  if (!isRunEpochCurrent(epoch)) {
+    return {
+      ...result,
+      meta: { ...result.meta, superseded: true },
+    };
   }
 
   // Capture engine-exported inputs into lastRun meta for Script Settings
@@ -662,7 +830,7 @@ export async function runAndApply(
   const seriesForCache: Record<string, (number | null)[]> = {};
   const titlesForCache: Record<string, string> = {};
   for (const [k, arr] of seriesEntries) {
-    seriesForCache[k] = arr as (number | null)[];
+    seriesForCache[k] = (Array.isArray(arr) ? arr : []) as (number | null)[];
     const meta = plotMeta[k];
     const title = meta?.title != null ? String(meta.title) : k;
     titlesForCache[k] = title;

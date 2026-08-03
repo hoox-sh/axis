@@ -55,6 +55,7 @@ import {
   setSlotDrawingLayer,
   setSlotManager,
 } from './chart-registry';
+import { reportUiError } from '../ui/boot-errors';
 
 /**
  * Legacy module fallback when no multi-chart slot is active (unit tests).
@@ -202,81 +203,117 @@ export function ensurePriceSeries(chartType?: ChartType): void {
 /**
  * Full OHLCV replace for history loads / symbol changes / chart-type switches.
  * Do **not** call this on every live tick — use PaneManager.appendBar instead.
+ *
+ * Series mutations are isolated: LWC failures are logged + status-bar surfaced
+ * instead of bubbling through Solid effects (which would unmount the tree).
  */
 export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
   const mgr = getManager();
   if (!mgr) return;
-  const fit = opts.fit !== false;
-  const clearMarkers = opts.clearMarkers !== false;
-  const pricePane = mgr.getPane('price');
-  const volPane = mgr.getPane('volume');
-  const chartType = normalizeChartType(store.chartType);
+  try {
+    const fit = opts.fit !== false;
+    const clearMarkers = opts.clearMarkers !== false;
+    const pricePane = mgr.getPane('price');
+    const volPane = mgr.getPane('volume');
+    const chartType = normalizeChartType(store.chartType);
 
-  if (clearMarkers) {
-    mgr.clearTradeMarkers();
-    mgr.clearShapeMarkers?.();
-    mgr.clearDebugPinMarkers?.();
-  }
-
-  ensurePriceSeries(chartType);
-
-  if (pricePane?.series['candle']) {
-    const data = mapBarsToPriceData(bars, chartType);
-    pricePane.series['candle'].setData(data as never);
-
-    // Baseline: base at first bar close so early range splits meaningfully
-    if (chartType === 'baseline' && bars.length) {
+    if (clearMarkers) {
       try {
-        pricePane.series['candle'].applyOptions({
-          baseValue: { type: 'price', price: bars[0]!.close },
+        mgr.clearTradeMarkers();
+        mgr.clearShapeMarkers?.();
+        mgr.clearDebugPinMarkers?.();
+      } catch (err: unknown) {
+        reportUiError(err, {
+          source: 'chart',
+          context: 'Clear markers failed',
+          status: false,
         });
-      } catch {
-        /* ignore */
       }
     }
 
-    const dir = lastBarDirection(bars, chartType);
-    if (dir) {
-      pricePane.series['candle'].applyOptions({
-        priceLineColor: dir === 'up' ? VOID.up : VOID.down,
-      });
-    }
-    if (fit) {
-      // Symbol / history change: resize host canvases + fit + auto-scale
-      if (typeof mgr.afterDataReload === 'function') {
-        mgr.afterDataReload();
-      } else {
+    ensurePriceSeries(chartType);
+
+    if (pricePane?.series['candle']) {
+      const data = mapBarsToPriceData(bars, chartType);
+      pricePane.series['candle'].setData(data as never);
+
+      // Baseline: base at first bar close so early range splits meaningfully
+      if (chartType === 'baseline' && bars.length) {
         try {
-          pricePane.chart.timeScale().fitContent();
+          pricePane.series['candle'].applyOptions({
+            baseValue: { type: 'price', price: bars[0]!.close },
+          });
         } catch {
-          /* ignore */
+          /* baseline option optional */
+        }
+      }
+
+      const dir = lastBarDirection(bars, chartType);
+      if (dir) {
+        try {
+          pricePane.series['candle'].applyOptions({
+            priceLineColor: dir === 'up' ? VOID.up : VOID.down,
+          });
+        } catch {
+          /* price line tint optional */
+        }
+      }
+      if (fit) {
+        // Symbol / history change: resize host canvases + fit + auto-scale
+        if (typeof mgr.afterDataReload === 'function') {
+          mgr.afterDataReload();
+        } else {
+          try {
+            pricePane.chart.timeScale().fitContent();
+          } catch {
+            /* fit optional */
+          }
         }
       }
     }
-  }
 
-  if (volPane && !volPane.series['volume']) {
-    volPane.series['volume'] = createVolumeSeries(volPane.chart);
-  }
-  if (volPane?.series['volume']) {
-    volPane.series['volume'].setData(
-      bars.map((b) => ({
-        time: b.time as never,
-        value: b.volume ?? 0,
-        color: b.close >= b.open ? 'rgba(94, 207, 138, 0.45)' : 'rgba(232, 93, 76, 0.45)',
-      })),
-    );
-  }
+    if (volPane && !volPane.series['volume']) {
+      volPane.series['volume'] = createVolumeSeries(volPane.chart);
+    }
+    if (volPane?.series['volume']) {
+      volPane.series['volume'].setData(
+        bars.map((b) => ({
+          time: b.time as never,
+          value: b.volume ?? 0,
+          color:
+            b.close >= b.open ? 'rgba(94, 207, 138, 0.45)' : 'rgba(232, 93, 76, 0.45)',
+        })),
+      );
+    }
 
-  // Volume/indicator setData can reset local logical range — re-lock to price
-  if (typeof mgr.alignTimeRangesFromPrice === 'function') {
-    mgr.alignTimeRangesFromPrice();
-  }
+    // Volume/indicator setData can reset local logical range — re-lock to price
+    if (typeof mgr.alignTimeRangesFromPrice === 'function') {
+      try {
+        mgr.alignTimeRangesFromPrice();
+      } catch {
+        /* align optional */
+      }
+    }
 
-  // Ensure overlay exists after candle series is ready; re-sync store drawings
-  // (drawings only on the active multi-chart slot)
-  ensureDrawingLayer();
-  getDrawingLayer()?.setDrawings(store.drawings);
+    // Ensure overlay exists after candle series is ready; re-sync store drawings
+    // (drawings only on the active multi-chart slot)
+    ensureDrawingLayer();
+    try {
+      getDrawingLayer()?.setDrawings(store.drawings);
+    } catch (err: unknown) {
+      reportUiError(err, {
+        source: 'chart',
+        context: 'Drawing layer sync failed',
+        status: false,
+      });
+    }
+  } catch (err: unknown) {
+    reportUiError(err, {
+      source: 'chart',
+      context: 'Chart series update failed',
+      status: true,
+    });
+  }
 }
 
 /**
@@ -286,18 +323,26 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
 export function applyDebugPinsToChart(enabled?: boolean) {
   const mgr = getManager();
   if (!mgr) return;
-  const on = enabled ?? !!store.debugPinsEnabled;
-  if (!on || store.lastRun == null) {
-    mgr.clearDebugPinMarkers?.();
-    return;
+  try {
+    const on = enabled ?? !!store.debugPinsEnabled;
+    if (!on || store.lastRun == null) {
+      mgr.clearDebugPinMarkers?.();
+      return;
+    }
+    const pins = pinsFromLastRun(store.lastRun, { bars: store.bars });
+    const markers = debugPinsToMarkers(pins, store.bars);
+    if (!markers.length) {
+      mgr.clearDebugPinMarkers?.();
+      return;
+    }
+    mgr.setDebugPinMarkers?.(markers);
+  } catch (err: unknown) {
+    reportUiError(err, {
+      source: 'chart',
+      context: 'Debug pin markers failed',
+      status: false,
+    });
   }
-  const pins = pinsFromLastRun(store.lastRun, { bars: store.bars });
-  const markers = debugPinsToMarkers(pins, store.bars);
-  if (!markers.length) {
-    mgr.clearDebugPinMarkers?.();
-    return;
-  }
-  mgr.setDebugPinMarkers?.(markers);
 }
 
 /**

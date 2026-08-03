@@ -1,0 +1,22 @@
+# Copyright (c) 2026 HOOX · AXIS · jango-blockchained
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Bun test config for AXIS.
+#
+# Bare `bun test` (no path args) discovers *.test.ts / *.spec.ts from the repo
+# root. Playwright specs under e2e/ use @playwright/test and must NOT run under
+# Bun — they throw "Playwright Test did not expect test.describe()…".
+#
+# Safe paths:
+#   bun run test       → tests/ + worker/tests/ (package.json)
+#   bun run test:unit  → tests/ only
+#   bun test           → same unit discovery after pathIgnorePatterns
+#   bun run test:e2e*  → Playwright via playwright.config.ts (not Bun)
+
+[test]
+# Exclude Playwright e2e from Bun discovery (matched dirs are pruned).
+pathIgnorePatterns = [
+  "e2e/**",
+  "playwright-report/**",
+  "test-results/**",
+]

@@ -167,8 +167,6 @@ export function mountPaneBadge(
   // Minimal test DOM stubs may lack querySelectorAll — guard
   if (typeof host.querySelectorAll === 'function') {
     host.querySelectorAll('.axis-pane-badge-root').forEach((n) => n.remove());
-  } else if (typeof (host as { children?: unknown[] }).children === 'object') {
-    /* ignore stub */
   }
 
   const root = document.createElement('div');

@@ -38,7 +38,7 @@
  * Built-ins register at module load (`registerBuiltins`) before first paint.
  */
 
-import { Component, createSignal, onMount, onCleanup, Show } from 'solid-js';
+import { Component, createSignal, onMount, onCleanup, Show, ErrorBoundary } from 'solid-js';
 import { Topbar } from './ui/Topbar';
 import { StatusBar } from './ui/StatusBar';
 import { Watchlist } from './ui/Watchlist';
@@ -56,6 +56,8 @@ import { LayerPanel } from './ui/LayerPanel';
 import { AlertsPanel } from './ui/AlertsPanel';
 import { LibraryPanel } from './ui/ScriptLibraryPanel';
 import { CommandPalette } from './ui/CommandPalette';
+import { errorFallback } from './ui/ErrorFallback';
+import { reportUiError } from './ui/boot-errors';
 import { runAndApply } from './indicators/runner';
 import { registerBuiltins } from './plugins/bootstrap';
 import { restoreInstalledPlugins } from './plugins/loader';
@@ -118,10 +120,22 @@ export const App: Component = () => {
     );
     restoreInstalledPlugins()
       .then(() => setCatalogTick((n) => n + 1))
-      .catch(() => {});
+      .catch((err: unknown) => {
+        reportUiError(err, {
+          source: 'plugins',
+          context: 'Plugin restore failed',
+          status: true,
+        });
+      });
     // Auto-load default symbol so the chart is not an empty void on first paint
     if (!store.bars.length && store.source !== 'csv-upload') {
-      void loadSymbolData(store.symbol, store.interval, store.source);
+      void loadSymbolData(store.symbol, store.interval, store.source).catch((err: unknown) => {
+        reportUiError(err, {
+          source: 'data',
+          context: 'Initial symbol load failed',
+          status: true,
+        });
+      });
     }
     // Pyodide: warm same-origin assets immediately; full init on idle (or ASAP if selected).
     // preloadPyodide only updates ENG HUD when pyodide is the active engine.
@@ -161,13 +175,27 @@ export const App: Component = () => {
       }
       if (msg.type === 'run') {
         // External editor requested a run — execute on main (has chart + bars)
-        runAndApply(msg.doc).then((result) => {
-          bridgePublish({
-            type: 'run-status',
-            status: result?.status || 'done',
-            message: result?.error || store.statusMessage,
+        void runAndApply(msg.doc)
+          .then((result) => {
+            bridgePublish({
+              type: 'run-status',
+              status: result?.status || 'done',
+              message: result?.error || store.statusMessage,
+            });
+          })
+          .catch((err: unknown) => {
+            const message = err instanceof Error ? err.message : String(err);
+            reportUiError(err, {
+              source: 'run',
+              context: 'Popout run failed',
+              status: true,
+            });
+            bridgePublish({
+              type: 'run-status',
+              status: 'error',
+              message,
+            });
           });
-        });
       }
       if (msg.type === 'doc') {
         saveEditorDoc(msg.doc);
@@ -203,9 +231,10 @@ export const App: Component = () => {
       if (!dt) return false;
       const types = dt.types;
       if (types) {
-        // DOMStringList or string[] depending on engine
-        if (typeof (types as DOMStringList).contains === 'function') {
-          if ((types as DOMStringList).contains('Files')) return true;
+        // DOMStringList (legacy) or readonly string[] — duck-type .contains
+        const withContains = types as { contains?: (s: string) => boolean };
+        if (typeof withContains.contains === 'function' && withContains.contains('Files')) {
+          return true;
         }
         for (let i = 0; i < types.length; i++) {
           if (types[i] === 'Files') return true;
@@ -375,9 +404,24 @@ export const App: Component = () => {
         {/* Left dock column — panels portal in and stack vertically */}
         <DockColumn side="left" />
 
-        {/* Center: chart shrinks when left/right columns open (not overlaid) */}
+        {/* Center: chart shrinks when left/right columns open (not overlaid).
+            Nested ErrorBoundary keeps topbar/status alive if chart host dies. */}
         <div class="flex-1 flex min-w-0 min-h-0 overflow-hidden bg-bg-base relative">
-          <ChartWorkspace />
+          <ErrorBoundary
+            fallback={errorFallback({
+              variant: 'inline',
+              source: 'chart',
+              title: 'Chart failed',
+              onError: (err) =>
+                reportUiError(err, {
+                  source: 'chart',
+                  context: 'Chart workspace error',
+                  status: true,
+                }),
+            })}
+          >
+            <ChartWorkspace />
+          </ErrorBoundary>
 
           {/* Popout placeholder when editor is external */}
           <Show when={store.editor.mode === 'popout'}>
@@ -430,8 +474,14 @@ export const App: Component = () => {
         editorRef={editorRef}
         onRun={(doc) => {
           if (doc?.trim()) {
-            runAndApply(doc, undefined, {
+            void runAndApply(doc, undefined, {
               inputs: store.editorInputValues || {},
+            }).catch((err: unknown) => {
+              reportUiError(err, {
+                source: 'run',
+                context: 'Run failed',
+                status: true,
+              });
             });
           }
         }}

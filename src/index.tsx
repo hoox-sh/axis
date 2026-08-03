@@ -25,19 +25,61 @@
  * - Default → {@link App} (full chart workspace)
  *
  * Global styles: `./index.css` (Tailwind + void theme tokens).
+ *
+ * Hardening: root {@link ErrorBoundary} + window unhandled error handlers so a
+ * render/boot throw does not leave a blank `#app` white screen.
  */
 
+import { ErrorBoundary } from 'solid-js';
 import { render } from 'solid-js/web';
 import { App } from './app';
 import { EditorApp } from './editor/EditorApp';
 import { isEditorView } from './editor/editor-bridge';
+import { registerAxisServiceWorker } from './pwa/register-sw';
+import { errorFallback } from './ui/ErrorFallback';
+import { installBootErrorHandlers, reportUiError } from './ui/boot-errors';
 import './index.css';
+
+// Catch async boot failures (plugin restore, dynamic imports, etc.)
+installBootErrorHandlers();
+
+// Production PWA only (skipped in Vite DEV). Idempotent — safe if called once.
+void registerAxisServiceWorker();
 
 const root = document.getElementById('app');
 if (root) {
-  if (isEditorView()) {
-    render(() => <EditorApp />, root);
+  const isEditor = isEditorView();
+  const fallback = errorFallback({
+    variant: 'page',
+    source: isEditor ? 'editor-root' : 'root',
+    title: isEditor ? 'Editor failed to load' : 'AXIS failed to load',
+    onError: (err) =>
+      reportUiError(err, {
+        source: isEditor ? 'editor' : 'boot',
+        context: 'UI render error',
+        status: true,
+      }),
+  });
+
+  if (isEditor) {
+    render(
+      () => (
+        <ErrorBoundary fallback={fallback}>
+          <EditorApp />
+        </ErrorBoundary>
+      ),
+      root,
+    );
   } else {
-    render(() => <App />, root);
+    render(
+      () => (
+        <ErrorBoundary fallback={fallback}>
+          <App />
+        </ErrorBoundary>
+      ),
+      root,
+    );
   }
+} else if (typeof console !== 'undefined' && console.error) {
+  console.error('[axis] #app root element missing — cannot mount');
 }

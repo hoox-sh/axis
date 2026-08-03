@@ -21,6 +21,7 @@ import { _resetStorageRegistrationFlag } from '../src/storage/catalog';
 import {
   PLUGINS_KEY,
   normalizePluginUrl,
+  assertSafePluginUrl,
   loadPluginFromUrl,
   removePlugin,
   getInstalledPlugins,
@@ -57,6 +58,24 @@ describe('normalizePluginUrl', () => {
   it('trims empty', () => {
     expect(normalizePluginUrl('  ')).toBe('');
   });
+
+  it('returns empty for non-string', () => {
+    expect(normalizePluginUrl(undefined as unknown as string)).toBe('');
+    expect(normalizePluginUrl(null as unknown as string)).toBe('');
+  });
+});
+
+describe('assertSafePluginUrl', () => {
+  it('blocks dangerous schemes', () => {
+    expect(() => assertSafePluginUrl('javascript:1')).toThrow(/not allowed/i);
+    expect(() => assertSafePluginUrl('data:text/html,x')).toThrow(/not allowed/i);
+    expect(() => assertSafePluginUrl('vbscript:1')).toThrow(/not allowed/i);
+  });
+
+  it('allows https and relative', () => {
+    expect(() => assertSafePluginUrl('https://cdn.example/p.js')).not.toThrow();
+    expect(() => assertSafePluginUrl('/plugins/p.js')).not.toThrow();
+  });
 });
 
 describe('loadPluginFromUrl', () => {
@@ -89,11 +108,18 @@ describe('loadPluginFromUrl', () => {
     await expect(loadPluginFromUrl('javascript:alert(1)')).rejects.toThrow(/not allowed/i);
   });
 
+  it('rejects data:text/html scheme', async () => {
+    await expect(
+      loadPluginFromUrl('data:text/html,<script>alert(1)</script>'),
+    ).rejects.toThrow(/not allowed/i);
+  });
+
   it('rejects storage kind via inline module', async () => {
-    // data URL with storage kind
     const code = `export default { id: 'x', name: 'X', kind: 'storage', list(){}, read(){}, write(){}, remove(){} }`;
     const url = `data:text/javascript,${encodeURIComponent(code)}`;
     await expect(loadPluginFromUrl(url)).rejects.toThrow(/storage/i);
+    expect(registry.getStorage('x')).toBeUndefined();
+    expect(getInstalledPlugins().some((p) => p.id === 'x')).toBe(false);
   });
 
   it('rejects unknown kind', async () => {
@@ -106,6 +132,24 @@ describe('loadPluginFromUrl', () => {
     const code = `export default { id: 'x', name: 'X', kind: 'source' }`;
     const url = `data:text/javascript,${encodeURIComponent(code)}`;
     await expect(loadPluginFromUrl(url)).rejects.toThrow(/fetchHistorical/);
+    expect(listDynamicSourceIds()).not.toContain('x');
+    expect(getInstalledPlugins().some((p) => p.id === 'x')).toBe(false);
+  });
+
+  it('rejects stream without start and leaves no registry entry', async () => {
+    const code = `export default { id: 'no-start', name: 'S', kind: 'stream' }`;
+    const url = `data:text/javascript,${encodeURIComponent(code)}`;
+    await expect(loadPluginFromUrl(url)).rejects.toThrow(/start/i);
+    expect(registry.getStream('no-start')).toBeUndefined();
+    expect(getInstalledPlugins().some((p) => p.id === 'no-start')).toBe(false);
+  });
+
+  it('rejects engine without run and leaves no registry entry', async () => {
+    const code = `export default { id: 'no-run', name: 'E', kind: 'engine' }`;
+    const url = `data:text/javascript,${encodeURIComponent(code)}`;
+    await expect(loadPluginFromUrl(url)).rejects.toThrow(/run/i);
+    expect(registry.getEngine('no-run')).toBeUndefined();
+    expect(getInstalledPlugins().some((p) => p.id === 'no-run')).toBe(false);
   });
 });
 
@@ -138,7 +182,30 @@ describe('removePlugin / restore', () => {
       JSON.stringify([{ url: 'file:///nonexistent-plugin-xyz.js', id: 'x', name: 'X', kind: 'source' }]),
     );
     await restoreInstalledPlugins();
-    // should not throw
-    expect(true).toBe(true);
+    // should not throw; failed URL not left half-registered
+    expect(listDynamicSourceIds()).not.toContain('x');
+  });
+
+  it('restore survives corrupt / mixed install list without throwing', async () => {
+    localStorage.setItem(
+      PLUGINS_KEY,
+      JSON.stringify([
+        null,
+        { url: 'javascript:alert(1)', id: 'evil', kind: 'source' },
+        { url: fileUrl('fake-source.js'), id: 'test-fake-source', name: 'Fake', kind: 'source' },
+        { broken: true },
+        99,
+      ]),
+    );
+    await expect(restoreInstalledPlugins()).resolves.toBeUndefined();
+    // Valid fixture still restored; dangerous / invalid skipped
+    expect(listDynamicSourceIds()).toContain('test-fake-source');
+    expect(listDynamicSourceIds()).not.toContain('evil');
+  });
+
+  it('restore with completely invalid JSON never throws', async () => {
+    localStorage.setItem(PLUGINS_KEY, '<<<not-json>>>');
+    await expect(restoreInstalledPlugins()).resolves.toBeUndefined();
+    expect(getInstalledPlugins()).toEqual([]);
   });
 });

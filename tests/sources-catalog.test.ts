@@ -96,6 +96,50 @@ describe('sources catalog', () => {
     expect(bars.length).toBeGreaterThan(0);
   });
 
+  it('binance-rest drops partial/NaN klines; throws when none valid', async () => {
+    restoreFetch = mockFetch(async () =>
+      jsonResponse([
+        [1_700_000_000_000, '10', '12', '9', '11', '100'],
+        [1_700_086_400_000, 'nan', '12', '9', '11', '100'], // poison open
+        [1_700_172_800_000, '11', '13', '10', '12', '200'],
+      ]),
+    );
+    const bars = await binanceRest.fetchHistorical({
+      symbol: 'BTCUSDT',
+      interval: '1d',
+      config: { fallback: false, limit: 10 },
+    });
+    expect(bars).toHaveLength(2);
+    expect(bars.every((b) => Number.isFinite(b.open))).toBe(true);
+
+    restoreFetch?.();
+    restoreFetch = mockFetch(async () =>
+      jsonResponse([
+        [1_700_000_000_000, 'nan', 'nan', 'nan', 'nan', '0'],
+      ]),
+    );
+    await expect(
+      binanceRest.fetchHistorical({
+        symbol: 'BTCUSDT',
+        interval: '1d',
+        config: { fallback: false },
+      }),
+    ).rejects.toThrow(/empty kline/i);
+  });
+
+  it('binance-rest rethrows network when fallback false', async () => {
+    restoreFetch = mockFetch(async () => {
+      throw new Error('ECONNRESET');
+    });
+    await expect(
+      binanceRest.fetchHistorical({
+        symbol: 'BTCUSDT',
+        interval: '1d',
+        config: { fallback: false },
+      }),
+    ).rejects.toThrow(/ECONNRESET/);
+  });
+
   it('okx-rest maps candles', async () => {
     restoreFetch = mockFetch(async () =>
       jsonResponse({
