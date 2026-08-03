@@ -20,10 +20,10 @@
 /**
  * AXIS results / export drawer — Events, Strategy, Plots, Metrics, Raw.
  *
- * Reads `store.lastRun` (RunResult). Strategy tab uses `buildStrategyReport`
- * + {@link StrategyReport} (stats, SVG equity, trades table, CSV).
- * Export helpers download CSV/JSON or copy raw payload. FloatableShell id
- * `results` (typically docked bottom).
+ * Reads focused `store.lastRun` (RunResult) via {@link ScriptRunSelect} /
+ * `resultsFocusId`. Per-script payloads live in `runResults` so multi-
+ * indicator live re-runs do not thrash the drawer. Strategy tab uses
+ * `buildStrategyReport` + {@link StrategyReport}. FloatableShell id `results`.
  */
 
 import { Component, For, Show, createMemo, createSignal } from 'solid-js';
@@ -42,6 +42,7 @@ import { normalizeStrategyEvents } from '../results/events';
 import { getManager } from '../chart/manager-access';
 import { Icons } from './icons';
 import { StrategyReport } from './StrategyReport';
+import { ScriptRunSelect } from './ScriptRunSelect';
 
 type TabId = 'events' | 'strategy' | 'plots' | 'metrics' | 'raw';
 
@@ -178,7 +179,8 @@ export const ResultsPanel: Component = () => {
         id="results"
         testId="axis-results"
         headerExtra={
-          <div class="flex items-center gap-0.5 flex-wrap">
+          <div class="flex items-center gap-0.5 flex-wrap min-w-0">
+            <ScriptRunSelect testId="axis-results-script" class="mr-1" />
             <For each={TABS}>
               {(t) => (
                 <button

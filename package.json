@@ -43,10 +43,10 @@
   "description": "AXIS — installable charting PWA for Pine Script. Part of HOOX: hoox.sh/axis",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jango-blockchained/axis.git"
+    "url": "https://github.com/hoox-sh/axis.git"
   },
   "bugs": {
-    "url": "https://github.com/jango-blockchained/axis/issues"
+    "url": "https://github.com/hoox-sh/axis/issues"
   },
   "homepage": "https://hoox.sh/axis"
 }

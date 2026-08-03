@@ -11,8 +11,8 @@ Installable AXIS for price and time. Orthogonal plugins: sources, streams, engin
 
 - [Marketing](https://hoox.sh/axis): Product landing
 - [Docs](https://hoox.sh/axis/docs): Full documentation hub
-- [Repository](https://github.com/jango-blockchained/pynescript): Source monorepo
-- [Docs tree](https://github.com/jango-blockchained/pynescript/tree/main/../axis/docs): MDX source of truth
+- [Repository](https://github.com/hoox-sh/pynescript): Source monorepo
+- [Docs tree](https://github.com/hoox-sh/pynescript/tree/main/../axis/docs): MDX source of truth
 - [llm.txt](https://hoox.sh/axis/docs/llm.txt): Full-corpus minified context
 - [llms.txt](https://hoox.sh/axis/docs/llms.txt): This file
 - [PYNE docs](https://hoox.sh/pyne/docs): Language runtime (separate product)

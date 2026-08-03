@@ -323,8 +323,23 @@ export interface AppState {
   status: AppStatus;
   statusMessage: string;
   lastRunMs: number | null;
-  /** Last script run payload for Results panel (not always persisted fully) */
+  /**
+   * Focused script run payload for Results / Scriptlogs / debug chrome.
+   * Always mirrors {@link runResults}[{@link resultsFocusId}] (or null).
+   * Not persisted.
+   */
   lastRun: unknown | null;
+  /**
+   * Per-script last engine payload (keyed by indicator id or
+   * {@link EDITOR_RUN_KEY}). Prevents multi-indicator live re-runs from
+   * thrashing Scriptlogs/Results. Ephemeral — not persisted.
+   */
+  runResults: Record<string, unknown>;
+  /**
+   * Which key in {@link runResults} is shown in Results / Scriptlogs.
+   * `null` until the first run (then auto-set). Ephemeral — not persisted.
+   */
+  resultsFocusId: string | null;
   /**
    * Ephemeral last plot series per applied indicator (for cross-indicator
    * `input.source` picks). Not persisted — rebuilt on re-run.

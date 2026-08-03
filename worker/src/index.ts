@@ -31,6 +31,7 @@
  * | `/api/keys`          | {@link handleKeys}   | create needs `X-Admin-Token`; validate uses Bearer/`?key=` |
  * | GET `/api/usage`     | stub usage           | public placeholder |
  * | `/api/scripts…`      | {@link handleScripts}| Bearer API key; D1 or in-memory |
+ * | `/api/git/oauth/…`   | {@link handleGitOAuth}| public; device-flow proxy (GitHub/GitLab) |
  * | GET `/api/stream`    | SessionDO upgrade    | requires `SESSIONS` DO binding |
  * | OPTIONS `*`          | CORS preflight       | 204 |
  *
@@ -48,6 +49,7 @@
 import { handleRun } from './runtime';
 import { handleKeys } from './keys';
 import { handleScripts } from './scripts';
+import { handleGitOAuth } from './git-oauth';
 import { SessionDO } from './durable-objects/session';
 
 export { SessionDO };
@@ -75,6 +77,10 @@ export interface Env {
   PYODIDE_IN_WORKER?: string;
   /** When `"1"` / `"true"`, accept any non-empty Bearer key (local demos only). */
   ALLOW_OPEN_KEYS?: string;
+  /** Public GitHub OAuth App client id (Device Flow enabled). */
+  GITHUB_OAUTH_CLIENT_ID?: string;
+  /** Public GitLab OAuth application id (device grant). */
+  GITLAB_OAUTH_CLIENT_ID?: string;
 }
 
 const CORS_HEADERS = (origin: string): Record<string, string> => ({
@@ -157,6 +163,11 @@ export default {
       // Script library: /api/scripts, /api/scripts/:id, /api/scripts/_draft
       if (url.pathname === '/api/scripts' || url.pathname.startsWith('/api/scripts/')) {
         return await handleScripts(req, env, origin, url.pathname);
+      }
+
+      // GitHub / GitLab device-flow OAuth proxy (no CORS on forge hosts)
+      if (url.pathname.startsWith('/api/git/oauth/')) {
+        return await handleGitOAuth(req, env, origin, url.pathname, CORS_HEADERS);
       }
 
       switch (url.pathname) {

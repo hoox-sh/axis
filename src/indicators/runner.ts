@@ -58,6 +58,7 @@ import {
   removePane,
   setStatus,
   setLastRun,
+  EDITOR_RUN_KEY,
   setIndicatorSeries,
   appendLog,
   recordRunLatency,
@@ -461,7 +462,12 @@ export async function runAndApply(
     };
   }
 
-  setLastRun(result);
+  // Per-script cache: silent multi-indicator live re-runs must not thrash
+  // Scriptlogs/Results (only the focused id updates store.lastRun).
+  setLastRun(result, {
+    scriptId: indicatorId ?? EDITOR_RUN_KEY,
+    focus: !silent,
+  });
   if (openResults) {
     setStore('resultsPanel', 'open', true);
   }

@@ -2,7 +2,7 @@ AXIS CONSOLIDATED DOCUMENTATION — LLM CONTEXT PACK
 Generated: 2026-08-03
 Source: ../axis/docs
 Public: https://hoox.sh/axis/docs
-Repository: https://github.com/jango-blockchained/pynescript
+Repository: https://github.com/hoox-sh/pynescript
 
 FILE: ../axis/docs/architecture/adrs.mdx
 Copyright (C) - jangoblockchained

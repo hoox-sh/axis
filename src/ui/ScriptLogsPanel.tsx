@@ -19,10 +19,12 @@
 
 /**
  * Scriptlogs panel — `log.info` / `log.warning` / `log.error`
- * output from the last script run.
+ * output from the focused script run.
  *
- * Reads `store.lastRun` via {@link normalizePineLogs}. FloatableShell id
- * `scriptlogs`.
+ * Reads `store.lastRun` (focused via {@link ScriptRunSelect} /
+ * `resultsFocusId`) via {@link normalizePineLogs}. Multi-indicator live
+ * re-runs keep per-script caches in `runResults` so the list does not thrash.
+ * FloatableShell id `scriptlogs`.
  */
 
 import { Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
@@ -37,6 +39,7 @@ import { flashDebugPinLine } from '../editor/inline-debug';
 import { parseSourceLine } from '../results/inline-debug';
 import { FloatableShell } from './panels/FloatableShell';
 import { Icons } from './icons';
+import { ScriptRunSelect } from './ScriptRunSelect';
 
 /** Panel chrome id (see `PanelId` in panels/types). */
 const PANEL_ID = 'scriptlogs' as const;
@@ -137,11 +140,13 @@ export const ScriptLogsPanel: Component = () => {
   return (
     <Show when={isPanelOpen(PANEL_ID)}>
       <FloatableShell id={PANEL_ID} title="Scriptlogs" testId="axis-scriptlogs">
-        {/* Toolbar: level filters + count + copy */}
+        {/* Toolbar: script picker + level filters + count + copy */}
         <div
           class="flex items-center gap-1.5 px-2 py-1 border-b border-border-soft flex-shrink-0 flex-wrap"
           data-testid="axis-scriptlogs-toolbar"
         >
+          <ScriptRunSelect testId="axis-scriptlogs-script" />
+
           <div class="sc-chip-row" role="group" aria-label="Log level filter">
             <For each={FILTERS}>
               {(f) => (

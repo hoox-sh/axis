@@ -47,6 +47,11 @@ export interface GitConfig {
   autoPush: boolean;
   /** Supports `{{name}}` and `{{iso}}` placeholders. */
   commitMessageTemplate: string;
+  /**
+   * Optional public OAuth App client id for device-flow Connect when the
+   * Worker env `GITHUB_OAUTH_CLIENT_ID` / `GITLAB_OAUTH_CLIENT_ID` is unset.
+   */
+  oauthClientId?: string;
 }
 
 /** Factory defaults for git storage settings UI. */

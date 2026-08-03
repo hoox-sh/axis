@@ -100,9 +100,9 @@ and this repo’s builtins — never invent “TV JS” APIs or invent Pine iden
 
 | Product | GitHub | Local path | Website |
 |---------|--------|------------|---------|
-| **HOOX** | [jango-blockchained/hoox](https://github.com/jango-blockchained/hoox) | `/home/jango/Git/hoox` | [hoox.sh](https://hoox.sh) · [docs.hoox.sh](https://docs.hoox.sh) |
-| **PYNE** | [jango-blockchained/pyne](https://github.com/jango-blockchained/pyne) | `/home/jango/Git/pynescript` | [hoox.sh/pyne](https://hoox.sh/pyne) · [docs](https://hoox.sh/pyne/docs) |
-| **AXIS** (this repo) | [jango-blockchained/axis](https://github.com/jango-blockchained/axis) | `/home/jango/Git/axis` | [hoox.sh/axis](https://hoox.sh/axis) · [docs](https://hoox.sh/axis/docs) |
+| **HOOX** | [hoox-sh/hoox](https://github.com/hoox-sh/hoox) | `/home/jango/Git/hoox` | [hoox.sh](https://hoox.sh) · [docs.hoox.sh](https://docs.hoox.sh) |
+| **PYNE** | [hoox-sh/pyne](https://github.com/hoox-sh/pyne) | `/home/jango/Git/pynescript` | [hoox.sh/pyne](https://hoox.sh/pyne) · [docs](https://hoox.sh/pyne/docs) |
+| **AXIS** (this repo) | [hoox-sh/axis](https://github.com/hoox-sh/axis) | `/home/jango/Git/axis` | [hoox.sh/axis](https://hoox.sh/axis) · [docs](https://hoox.sh/axis/docs) |
 
 Also: `pine-worker` / `pyne-worker` for edge evaluation.
 

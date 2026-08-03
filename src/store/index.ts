@@ -168,6 +168,8 @@ const DEFAULTS: AppState = {
   statusMessage: 'Ready.',
   lastRunMs: null,
   lastRun: null,
+  runResults: {},
+  resultsFocusId: null,
   indicatorSeries: {},
   logs: [],
   // Drawing integration — mirrored to DrawingLayer via manager-access / toolbar
@@ -382,8 +384,10 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         bag.pluginsConfig && typeof bag.pluginsConfig === 'object'
           ? (bag.pluginsConfig as AppState['pluginsConfig'])
           : DEFAULTS.pluginsConfig,
-      // Do not hydrate lastRun / logs / series cache / full telemetry / bars from storage
+      // Do not hydrate lastRun / runResults / logs / series cache / full telemetry / bars from storage
       lastRun: null,
+      runResults: {},
+      resultsFocusId: null,
       indicatorSeries: {},
       logs: [],
       bars: [],
@@ -706,6 +710,8 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
   const {
     bars: _b,
     lastRun: _r,
+    runResults: _rr,
+    resultsFocusId: _rf,
     logs: _l,
     chartDataGen: _g,
     crosshair: _c,
@@ -918,15 +924,136 @@ export function clearLogs() {
 }
 
 /**
- * Store last indicator/strategy run payload for Results / Data View.
- * Also updates `lastRunMs` from `result.meta.ms` when present.
+ * Key for editor/ad-hoc runs that are not yet an applied indicator.
+ * Used in {@link AppState.runResults} / {@link AppState.resultsFocusId}.
  */
-export function setLastRun(result: unknown) {
-  setStore('lastRun', result as never);
+export const EDITOR_RUN_KEY = '__editor__';
+
+export type SetLastRunOpts = {
+  /**
+   * Applied indicator id, or omit / null for the docked editor document
+   * ({@link EDITOR_RUN_KEY}).
+   */
+  scriptId?: string | null;
+  /**
+   * When true, switch Results/Scriptlogs focus to this script (user-initiated
+   * Run). Silent live re-runs pass false so other scripts do not thrash the UI.
+   */
+  focus?: boolean;
+};
+
+function applyLastRunMs(result: unknown) {
   if (result && typeof result === 'object' && result !== null && 'meta' in result) {
     const ms = (result as { meta?: { ms?: number } }).meta?.ms;
     if (typeof ms === 'number') setStore('lastRunMs', ms);
   }
+}
+
+/**
+ * Store an indicator/strategy run payload for Results / Scriptlogs / Data View.
+ *
+ * Always writes {@link AppState.runResults}[scriptId]. Updates focused
+ * {@link AppState.lastRun} only when this script is focused, or when
+ * `focus: true` / no focus yet (auto-select first run).
+ */
+export function setLastRun(result: unknown, opts: SetLastRunOpts = {}) {
+  const id =
+    typeof opts.scriptId === 'string' && opts.scriptId.trim()
+      ? opts.scriptId.trim()
+      : EDITOR_RUN_KEY;
+
+  if (result == null) {
+    const prev = { ...(store.runResults || {}) };
+    if (id in prev) {
+      delete prev[id];
+      // reconcile replaces keys (plain setStore merges nested objects)
+      setStore('runResults', reconcile(prev));
+    }
+    if (store.resultsFocusId === id) {
+      setResultsFocusId(Object.keys(prev).filter((k) => k !== id)[0] ?? null);
+    }
+    return;
+  }
+
+  setStore('runResults', id, result as never);
+
+  if (opts.focus || store.resultsFocusId == null) {
+    setStore('resultsFocusId', id);
+  }
+
+  if (store.resultsFocusId === id) {
+    setStore('lastRun', result as never);
+    applyLastRunMs(result);
+  }
+}
+
+/**
+ * Switch Results / Scriptlogs to a stored run (indicator id or
+ * {@link EDITOR_RUN_KEY}). No-op if the key has no payload yet (still updates
+ * focus so a later re-run fills the panel).
+ */
+export function setResultsFocusId(id: string | null) {
+  const key =
+    id == null || !String(id).trim() ? null : String(id).trim();
+  setStore('resultsFocusId', key);
+  if (key == null) {
+    setStore('lastRun', null);
+    setStore('lastRunMs', null);
+    return;
+  }
+  const payload = store.runResults?.[key] ?? null;
+  setStore('lastRun', payload as never);
+  if (payload) applyLastRunMs(payload);
+  else setStore('lastRunMs', null);
+}
+
+/** One option for the Results / Scriptlogs script picker. */
+export type RunResultOption = {
+  id: string;
+  label: string;
+  /** True when a run payload is cached for this id. */
+  hasResult: boolean;
+};
+
+/**
+ * Scripts available in the Results/Scriptlogs dropdown: applied indicators
+ * plus the editor run slot when present.
+ */
+export function listRunResultOptions(): RunResultOption[] {
+  const results = store.runResults || {};
+  const out: RunResultOption[] = [];
+  const seen = new Set<string>();
+
+  for (const ind of store.scripts || []) {
+    if (!ind?.id) continue;
+    seen.add(ind.id);
+    out.push({
+      id: ind.id,
+      label: ind.name || ind.id,
+      hasResult: ind.id in results,
+    });
+  }
+
+  if (EDITOR_RUN_KEY in results || store.resultsFocusId === EDITOR_RUN_KEY) {
+    out.unshift({
+      id: EDITOR_RUN_KEY,
+      label: 'Editor',
+      hasResult: EDITOR_RUN_KEY in results,
+    });
+    seen.add(EDITOR_RUN_KEY);
+  }
+
+  // Orphan keys (indicator removed but result still cached)
+  for (const key of Object.keys(results)) {
+    if (seen.has(key)) continue;
+    out.push({
+      id: key,
+      label: key === EDITOR_RUN_KEY ? 'Editor' : key,
+      hasResult: true,
+    });
+  }
+
+  return out;
 }
 
 /**
@@ -1199,6 +1326,15 @@ export function removeIndicator(id: string) {
     delete next[id];
     return next;
   });
+  // Drop cached run so Scriptlogs/Results cannot select a ghost script
+  const nextResults: Record<string, unknown> = { ...(store.runResults || {}) };
+  if (id in nextResults) {
+    delete nextResults[id];
+    setStore('runResults', reconcile(nextResults));
+  }
+  if (store.resultsFocusId === id) {
+    setResultsFocusId(Object.keys(nextResults)[0] ?? null);
+  }
   persist();
 }
 

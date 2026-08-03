@@ -56,6 +56,12 @@ import {
 } from '../store';
 import { pluginKey } from '../plugins/types';
 import { DEFAULT_GIT_CONFIG, type GitConfig } from '../storage/git-config';
+import {
+  fetchGitUser,
+  manualTokenCreateUrl,
+  startDeviceFlow,
+  waitForDeviceToken,
+} from '../storage/git-oauth';
 import { Icons } from './icons';
 import { HooxLoader } from './HooxLoader';
 import { FloatableShell } from './panels/FloatableShell';
@@ -113,8 +119,25 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
   const [gitBranch, setGitBranch] = createSignal(g0.branch);
   const [gitBasePath, setGitBasePath] = createSignal(g0.basePath);
   const [gitApiBase, setGitApiBase] = createSignal(g0.apiBaseUrl);
-
+  /** Optional public OAuth App client id (when Worker env not set). */
+  const [gitOAuthClientId, setGitOAuthClientId] = createSignal(
+    String(g0.oauthClientId || ''),
+  );
+  const [showGitAdvanced, setShowGitAdvanced] = createSignal(false);
+  const [oauthBusy, setOauthBusy] = createSignal(false);
+  const [oauthUserCode, setOauthUserCode] = createSignal('');
+  const [oauthVerifyUri, setOauthVerifyUri] = createSignal('');
+  const [oauthHint, setOauthHint] = createSignal('');
+  const [oauthLogin, setOauthLogin] = createSignal('');
+  let oauthAbort: AbortController | null = null;
   let fileInput: HTMLInputElement | undefined;
+
+  /** Worker base for OAuth proxy — prefer cloud endpoint, else main API endpoint. */
+  const oauthWorkerBase = () => {
+    const cloud = cloudCfg().endpoint.replace(/\/$/, '');
+    if (cloud) return cloud;
+    return String(store.endpoint || 'http://127.0.0.1:8787').replace(/\/$/, '');
+  };
 
   const storages = () => listStorages();
   const backend = () => store.activePlugins?.storage || 'local';
@@ -280,11 +303,12 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
     }
   };
 
-  const persistGit = () => {
+  const persistGit = (tokenOverride?: string) => {
+    const token = tokenOverride !== undefined ? tokenOverride : gitToken();
     saveGitCfg({
       provider: gitProvider(),
       apiBaseUrl: gitApiBase().trim(),
-      token: gitToken(),
+      token,
       owner: gitOwner().trim(),
       repo: gitRepo().trim(),
       projectId: gitProjectId().trim(),
@@ -292,8 +316,111 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
       basePath: gitBasePath().trim() || 'pyne-library',
       autoPush: true,
       commitMessageTemplate: DEFAULT_GIT_CONFIG.commitMessageTemplate,
-    });
+      ...(gitOAuthClientId().trim()
+        ? { oauthClientId: gitOAuthClientId().trim() }
+        : {}),
+    } as GitConfig);
     void refresh();
+  };
+
+  const cancelOauth = () => {
+    oauthAbort?.abort();
+    oauthAbort = null;
+    setOauthBusy(false);
+    setOauthUserCode('');
+    setOauthVerifyUri('');
+    setOauthHint('');
+  };
+
+  const disconnectGit = () => {
+    cancelOauth();
+    setGitToken('');
+    setOauthLogin('');
+    persistGit('');
+    setStatus('ready', 'Git account disconnected');
+  };
+
+  const connectGitOAuth = async () => {
+    cancelOauth();
+    setError('');
+    setOauthBusy(true);
+    setOauthHint('Starting device authorization…');
+    const ac = new AbortController();
+    oauthAbort = ac;
+    const provider = gitProvider();
+    try {
+      const started = await startDeviceFlow({
+        provider,
+        workerEndpoint: oauthWorkerBase(),
+        clientId: gitOAuthClientId().trim() || undefined,
+      });
+      if (ac.signal.aborted) return;
+      setOauthUserCode(started.user_code);
+      setOauthVerifyUri(
+        started.verification_uri_complete || started.verification_uri,
+      );
+      setOauthHint('Approve access in the browser, then return here.');
+      // Open verification page for the user
+      try {
+        window.open(
+          started.verification_uri_complete || started.verification_uri,
+          '_blank',
+          'noopener,noreferrer',
+        );
+      } catch {
+        /* popup blocked — user can click the link */
+      }
+
+      const token = await waitForDeviceToken({
+        provider,
+        deviceCode: started.device_code,
+        intervalSec: started.interval,
+        expiresInSec: started.expires_in,
+        workerEndpoint: oauthWorkerBase(),
+        clientId: gitOAuthClientId().trim() || undefined,
+        signal: ac.signal,
+        onTick: (info) => {
+          if (info.error === 'authorization_pending') {
+            setOauthHint('Waiting for approval…');
+          } else if (info.error === 'slow_down') {
+            setOauthHint('Polling slower (rate limit)…');
+          }
+        },
+      });
+
+      setGitToken(token);
+      let login = '';
+      try {
+        const user = await fetchGitUser(provider, token, gitApiBase().trim() || undefined);
+        if (user.login) {
+          login = user.login;
+          setOauthLogin(user.login);
+          if (!gitOwner().trim()) setGitOwner(user.login);
+        }
+      } catch {
+        /* token still valid even if /user fails */
+      }
+      persistGit(token);
+      setOauthHint('');
+      setOauthUserCode('');
+      setOauthVerifyUri('');
+      setStatus(
+        'ready',
+        `Connected to ${provider === 'github' ? 'GitHub' : 'GitLab'}${
+          login ? ` as ${login}` : ''
+        }`,
+      );
+      appendLog('ok', `Git OAuth connected (${provider})`, 'git');
+    } catch (e: unknown) {
+      if (ac.signal.aborted) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      setOauthHint('');
+      appendLog('error', `Git OAuth: ${msg}`, 'git');
+    } finally {
+      if (oauthAbort === ac) oauthAbort = null;
+      setOauthBusy(false);
+    }
   };
 
   return (
@@ -350,25 +477,105 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
       </Show>
 
       <Show when={isGit()}>
-        <div class="border-2 border-border p-2.5 flex flex-col gap-2 bg-bg-elev rounded-[var(--radius-sc)]">
+        <div
+          class="border-2 border-border p-2.5 flex flex-col gap-2 bg-bg-elev rounded-[var(--radius-sc)]"
+          data-testid="axis-git-settings"
+        >
           <div class="text-[10px] text-text-dim uppercase tracking-wider">Git repository</div>
           <select
             class="sc-input"
             value={gitProvider()}
-            onChange={(e) => setGitProvider(e.currentTarget.value as 'github' | 'gitlab')}
+            onChange={(e) => {
+              cancelOauth();
+              setGitProvider(e.currentTarget.value as 'github' | 'gitlab');
+            }}
+            data-testid="axis-git-provider"
           >
             <option value="github">GitHub</option>
             <option value="gitlab">GitLab</option>
           </select>
-          <input
-            class="sc-input font-mono text-[11px]"
-            type="password"
-            placeholder={gitProvider() === 'github' ? 'PAT (ghp_… / fine-grained)' : 'PAT (glpat-…)'}
-            value={gitToken()}
-            onInput={(e) => setGitToken(e.currentTarget.value)}
-            autocomplete="off"
-            spellcheck={false}
-          />
+
+          {/* OAuth connect */}
+          <div class="flex flex-col gap-1.5">
+            <Show
+              when={gitToken().trim()}
+              fallback={
+                <div class="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-primary text-[10px] inline-flex items-center gap-1"
+                    data-testid="axis-git-connect"
+                    disabled={oauthBusy() || busy()}
+                    onClick={() => void connectGitOAuth()}
+                    title="Authorize via device flow (Worker proxies forge OAuth)"
+                  >
+                    {oauthBusy() ? <HooxLoader size="xs" /> : <Icons.externalLink size={12} />}
+                    Connect with {gitProvider() === 'github' ? 'GitHub' : 'GitLab'}
+                  </button>
+                  <a
+                    class="sc-btn sc-btn-ghost text-[10px] inline-flex items-center gap-1 no-underline"
+                    href={manualTokenCreateUrl(gitProvider())}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Create a personal access token in the browser"
+                  >
+                    Create token…
+                  </a>
+                </div>
+              }
+            >
+              <div
+                class="flex items-center gap-2 flex-wrap text-[10px]"
+                data-testid="axis-git-connected"
+              >
+                <span class="text-accent-2 font-semibold">
+                  Connected
+                  <Show when={oauthLogin() || gitOwner()}>
+                    {' '}
+                    as {oauthLogin() || gitOwner()}
+                  </Show>
+                </span>
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost text-[10px]"
+                  data-testid="axis-git-disconnect"
+                  onClick={disconnectGit}
+                >
+                  Disconnect
+                </button>
+              </div>
+            </Show>
+
+            <Show when={oauthBusy() && oauthUserCode()}>
+              <div
+                class="border border-border-soft p-2 rounded-[var(--radius-sm)] bg-bg-base flex flex-col gap-1"
+                data-testid="axis-git-oauth-pending"
+              >
+                <p class="text-[10px] text-text-dim m-0">{oauthHint() || 'Waiting…'}</p>
+                <p class="m-0 font-mono text-[13px] text-accent tracking-widest">
+                  {oauthUserCode()}
+                </p>
+                <Show when={oauthVerifyUri()}>
+                  <a
+                    class="text-[10px] text-accent underline break-all"
+                    href={oauthVerifyUri()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open verification page
+                  </a>
+                </Show>
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost text-[10px] self-start"
+                  onClick={cancelOauth}
+                >
+                  Cancel
+                </button>
+              </div>
+            </Show>
+          </div>
+
           <div class="grid grid-cols-2 gap-1.5">
             <input
               class="sc-input font-mono text-[11px]"
@@ -376,6 +583,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
               value={gitOwner()}
               onInput={(e) => setGitOwner(e.currentTarget.value)}
               spellcheck={false}
+              data-testid="axis-git-owner"
             />
             <input
               class="sc-input font-mono text-[11px]"
@@ -383,6 +591,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
               value={gitRepo()}
               onInput={(e) => setGitRepo(e.currentTarget.value)}
               spellcheck={false}
+              data-testid="axis-git-repo"
             />
           </div>
           <Show when={gitProvider() === 'gitlab'}>
@@ -410,20 +619,62 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
               spellcheck={false}
             />
           </div>
-          <input
-            class="sc-input font-mono text-[11px]"
-            placeholder="API base (optional, self-hosted)"
-            value={gitApiBase()}
-            onInput={(e) => setGitApiBase(e.currentTarget.value)}
-            spellcheck={false}
-          />
-          <button class="sc-btn sc-btn-ghost text-[10px]" onClick={persistGit}>
+
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost text-[10px] self-start"
+            onClick={() => setShowGitAdvanced((v) => !v)}
+            aria-expanded={showGitAdvanced()}
+          >
+            {showGitAdvanced() ? 'Hide advanced' : 'Advanced (token / OAuth app)'}
+          </button>
+          <Show when={showGitAdvanced()}>
+            <input
+              class="sc-input font-mono text-[11px]"
+              type="password"
+              placeholder={
+                gitProvider() === 'github'
+                  ? 'PAT (ghp_… / fine-grained) — optional if connected'
+                  : 'PAT (glpat-…) — optional if connected'
+              }
+              value={gitToken()}
+              onInput={(e) => setGitToken(e.currentTarget.value)}
+              autocomplete="off"
+              spellcheck={false}
+              data-testid="axis-git-token"
+            />
+            <input
+              class="sc-input font-mono text-[11px]"
+              placeholder="OAuth App client id (optional if Worker env set)"
+              value={gitOAuthClientId()}
+              onInput={(e) => setGitOAuthClientId(e.currentTarget.value)}
+              spellcheck={false}
+              data-testid="axis-git-oauth-client-id"
+            />
+            <input
+              class="sc-input font-mono text-[11px]"
+              placeholder="API base (optional, self-hosted)"
+              value={gitApiBase()}
+              onInput={(e) => setGitApiBase(e.currentTarget.value)}
+              spellcheck={false}
+            />
+          </Show>
+
+          <button
+            class="sc-btn sc-btn-ghost text-[10px]"
+            onClick={() => persistGit()}
+            data-testid="axis-git-save"
+          >
             Save git settings
           </button>
-          <p class="text-[9px] text-text-faint">
-            Save commits to <code class="font-mono">{gitBasePath() || 'pyne-library'}/library/*.pyne</code>{' '}
-            + <code class="font-mono">index.json</code> (legacy <code class="font-mono">.pine</code> paths still load). Drafts stay local (no commit spam).
-            GitHub: contents write · GitLab: write_repository.
+          <p class="text-[9px] text-text-faint m-0">
+            <strong>Connect</strong> uses OAuth device flow via the AXIS Worker (
+            <code class="font-mono">/api/git/oauth/…</code>
+            ). Set Worker env <code class="font-mono">GITHUB_OAUTH_CLIENT_ID</code> /{' '}
+            <code class="font-mono">GITLAB_OAUTH_CLIENT_ID</code> (public OAuth App id; enable Device
+            Flow on GitHub). Repo path:{' '}
+            <code class="font-mono">{gitBasePath() || 'pyne-library'}/library/*.pyne</code>. Drafts stay
+            local.
           </p>
         </div>
       </Show>

@@ -6,9 +6,9 @@ Thanks for helping with **AXIS** — the charting PWA for Pine Script™ evaluat
 
 | Product | Repo | Website |
 |---------|------|---------|
-| **HOOX** | [hoox](https://github.com/jango-blockchained/hoox) | [hoox.sh](https://hoox.sh) |
-| **PYNE** | [pyne](https://github.com/jango-blockchained/pyne) | [hoox.sh/pyne](https://hoox.sh/pyne) |
-| **AXIS** | [axis](https://github.com/jango-blockchained/axis) (this repo) | [hoox.sh/axis](https://hoox.sh/axis) |
+| **HOOX** | [hoox](https://github.com/hoox-sh/hoox) | [hoox.sh](https://hoox.sh) |
+| **PYNE** | [pyne](https://github.com/hoox-sh/pyne) | [hoox.sh/pyne](https://hoox.sh/pyne) |
+| **AXIS** | [axis](https://github.com/hoox-sh/axis) (this repo) | [hoox.sh/axis](https://hoox.sh/axis) |
 
 ## Setup
 

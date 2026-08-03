@@ -58,3 +58,7 @@ ADMIN_TOKEN = ""
 PYODIDE_IN_WORKER = "disabled"
 # Local demos without KV: set to "1" to accept any Bearer key for /api/scripts
 ALLOW_OPEN_KEYS = "1"
+# Optional: OAuth App client ids for Connect with GitHub / GitLab (device flow).
+# Create an OAuth App, enable Device Flow (GitHub), leave secret unused.
+# GITHUB_OAUTH_CLIENT_ID = ""
+# GITLAB_OAUTH_CLIENT_ID = ""

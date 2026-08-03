@@ -2,9 +2,9 @@
 
 **AXIS**  — installable charting PWA for Pine Script™.
 
-**Website:** [hoox.sh/axis](https://hoox.sh/axis) · **Docs:** [hoox.sh/axis/docs](https://hoox.sh/axis/docs) · **Repo:** [jango-blockchained/axis](https://github.com/jango-blockchained/axis)
+**Website:** [hoox.sh/axis](https://hoox.sh/axis) · **Docs:** [hoox.sh/axis/docs](https://hoox.sh/axis/docs) · **Repo:** [hoox-sh/axis](https://github.com/hoox-sh/axis)
 
-**Installable PWA**, **fully pluggable**, runs against the local **[pyne](https://github.com/jango-blockchained/pyne)** Pro API,
+**Installable PWA**, **fully pluggable**, runs against the local **[pyne](https://github.com/hoox-sh/pyne)** Pro API,
 a Cloudflare Worker, or **fully offline** with the in-browser Pyodide engine.
 
 ## Ecosystem
@@ -13,9 +13,9 @@ Part of the **[HOOX](https://hoox.sh)** open trading stack:
 
 | Product | Role | Repo | Website |
 |---------|------|------|---------|
-| **HOOX** | Edge trading framework (Cloudflare Workers) | [jango-blockchained/hoox](https://github.com/jango-blockchained/hoox) | [hoox.sh](https://hoox.sh) · [docs](https://docs.hoox.sh) |
-| **PYNE** | Pine Script™ toolchain + Pro API (engine) | [jango-blockchained/pyne](https://github.com/jango-blockchained/pyne) | [hoox.sh/pyne](https://hoox.sh/pyne) · [docs](https://hoox.sh/pyne/docs) |
-| **AXIS** | Charting PWA (this repo) | [jango-blockchained/axis](https://github.com/jango-blockchained/axis) | [hoox.sh/axis](https://hoox.sh/axis) · [docs](https://hoox.sh/axis/docs) |
+| **HOOX** | Edge trading framework (Cloudflare Workers) | [hoox-sh/hoox](https://github.com/hoox-sh/hoox) | [hoox.sh](https://hoox.sh) · [docs](https://docs.hoox.sh) |
+| **PYNE** | Pine Script™ toolchain + Pro API (engine) | [hoox-sh/pyne](https://github.com/hoox-sh/pyne) | [hoox.sh/pyne](https://hoox.sh/pyne) · [docs](https://hoox.sh/pyne/docs) |
+| **AXIS** | Charting PWA (this repo) | [hoox-sh/axis](https://github.com/hoox-sh/axis) | [hoox.sh/axis](https://hoox.sh/axis) · [docs](https://hoox.sh/axis/docs) |
 
 ```bash
 # Typical local trio
