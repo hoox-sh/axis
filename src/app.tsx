@@ -45,7 +45,7 @@ import { Watchlist } from './ui/Watchlist';
 import { ChartWorkspace } from './chart/ChartWorkspace';
 import { EditorPane } from './editor/EditorPane';
 import { IndicatorPanel } from './indicators/IndicatorPanel';
-import { SettingsDialog } from './ui/SettingsDialog';
+import { SettingsDialog, type SettingsTabId } from './ui/SettingsDialog';
 import { ScriptSettingsModal } from './ui/ScriptSettingsModal';
 import { ResultsPanel } from './ui/ResultsPanel';
 import { SystemLogs } from './ui/SystemLogs';
@@ -93,6 +93,11 @@ import { filterPineFiles, importPineFiles } from './storage/import-pine-files';
 /** Primary charting workspace component mounted by `index.tsx`. */
 export const App: Component = () => {
   const [settingsOpen, setSettingsOpen] = createSignal(false);
+  const [settingsTab, setSettingsTab] = createSignal<SettingsTabId>('general');
+  const openSettings = (tab: SettingsTabId = 'general') => {
+    setSettingsTab(tab);
+    setSettingsOpen(true);
+  };
   const [pluginsOpen, setPluginsOpen] = createSignal(false);
   const [catalogTick, setCatalogTick] = createSignal(0);
   /** File drag-over highlight for .pine drop-to-library. */
@@ -394,7 +399,7 @@ export const App: Component = () => {
           setEditorOpen(!store.editor.open);
         }}
         onToggleWatchlist={() => setWatchlistOpen(!store.watchlist.open)}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => openSettings('general')}
         onOpenPlugins={() => setPluginsOpen(true)}
         catalogTick={catalogTick()}
         editorRef={editorRef}
@@ -499,7 +504,11 @@ export const App: Component = () => {
       {/* Skeleton ghost + dock zones while dragging a panel handle */}
       <PanelDragOverlay />
 
-      <SettingsDialog open={settingsOpen()} onClose={() => setSettingsOpen(false)} />
+      <SettingsDialog
+        open={settingsOpen()}
+        initialTab={settingsTab()}
+        onClose={() => setSettingsOpen(false)}
+      />
       <ScriptSettingsModal />
       <PluginManager
         open={pluginsOpen()}
@@ -519,7 +528,8 @@ export const App: Component = () => {
       {/* Global ⌘K / Ctrl+K command palette */}
       <CommandPalette
         editorRef={editorRef}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => openSettings('general')}
+        onOpenThemeSettings={() => openSettings('theme')}
         onOpenPlugins={() => setPluginsOpen(true)}
       />
 

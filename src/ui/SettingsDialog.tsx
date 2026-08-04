@@ -18,14 +18,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Application Settings modal — engine endpoint/mode, storage plugin, chart
- * interval / history bars, live prefs (preferAfterLoad, rerunOn), HUD compact,
- * UI scale, plus workspace actions (reload chart / reset UI layout).
+ * Application Settings modal — two tabs:
+ * - **General**: engine, storage, density, chart interval, live prefs, workspace
+ * - **Theme**: chart Theme Manager (bar colors, chart.bg_color / chart.fg_color, …)
  *
  * Local form state is seeded from `store` when the dialog opens (not on every
  * store mutation while open). Save snapshots form fields, writes
  * `pluginsConfig` / `activePlugins` / layout prefs, then `flushPersist()`.
- * Endpoint **Probe** uses `probeEndpoint` without committing form values.
+ * Theme applies live (no Save). Endpoint **Probe** uses `probeEndpoint`
+ * without committing form values.
+ *
+ * Optional `initialTab` focuses General or Theme when opening (e.g. command palette).
  */
 
 import { Component, For, createEffect, createSignal, Show, createMemo, untrack } from 'solid-js';
@@ -98,10 +101,19 @@ function readEnginePluginConfig(engineId: string): Record<string, unknown> {
   return (pc[pluginKey('engine', engineId)] || pc[engineId] || {}) as Record<string, unknown>;
 }
 
+export type SettingsTabId = 'general' | 'theme';
+
 interface Props {
   open: boolean;
   onClose: () => void;
+  /** Which tab to show when the dialog opens (default general). */
+  initialTab?: SettingsTabId;
 }
+
+const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
+  { id: 'general', label: 'General', hint: 'Engine · density · chart · live' },
+  { id: 'theme', label: 'Theme', hint: 'Bars · canvas · Pine chart.bg_color' },
+];
 
 /** Modal settings form; parent controls `open` / `onClose`. */
 export const SettingsDialog: Component<Props> = (props) => {
@@ -128,6 +140,7 @@ export const SettingsDialog: Component<Props> = (props) => {
   const [probing, setProbing] = createSignal(false);
   const [reloading, setReloading] = createSignal(false);
   const [probeMsg, setProbeMsg] = createSignal('');
+  const [tab, setTab] = createSignal<SettingsTabId>('general');
 
   const engines = createMemo(() => listEngines());
   const storages = createMemo(() => listStorages());
@@ -198,9 +211,17 @@ export const SettingsDialog: Component<Props> = (props) => {
         setUiScaleLocal(clampUiScale(store.uiScale ?? 1));
         setPriceScaleLabels(store.priceScaleLabelsVisible !== false);
         setProbeMsg('');
+        setTab(props.initialTab === 'theme' ? 'theme' : 'general');
       });
     }
     return isOpen;
+  });
+
+  // Live-switch tab when parent changes initialTab while already open
+  createEffect(() => {
+    if (!props.open) return;
+    const t = props.initialTab;
+    if (t === 'theme' || t === 'general') setTab(t);
   });
 
   /** Live density preview while dragging (persists on Save or preset click). */
@@ -352,7 +373,11 @@ export const SettingsDialog: Component<Props> = (props) => {
         role="presentation"
       >
         <div
-          class="sc-dialog w-[min(540px,calc(100vw-32px))]"
+          class={`sc-dialog ${
+            tab() === 'theme'
+              ? 'w-[min(620px,calc(100vw-32px))]'
+              : 'w-[min(540px,calc(100vw-32px))]'
+          }`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="axis-settings-title"
@@ -370,7 +395,10 @@ export const SettingsDialog: Component<Props> = (props) => {
               >
                 Settings
               </div>
-              <div class="sc-hint mt-0">Engine · density · chart · live · workspace</div>
+              <div class="sc-hint mt-0">
+                {SETTINGS_TABS.find((t) => t.id === tab())?.hint ||
+                  'Engine · density · chart · theme'}
+              </div>
             </div>
             <button
               type="button"
@@ -382,7 +410,62 @@ export const SettingsDialog: Component<Props> = (props) => {
             </button>
           </div>
 
+          {/* Tab strip — General vs Theme (theme lives only here) */}
+          <div
+            class="sc-chip-row px-3 pt-2 pb-0 border-b border-border-soft"
+            role="tablist"
+            aria-label="Settings sections"
+            data-testid="axis-settings-tabs"
+          >
+            <For each={SETTINGS_TABS}>
+              {(t) => (
+                <button
+                  type="button"
+                  role="tab"
+                  id={`axis-settings-tab-${t.id}`}
+                  aria-selected={tab() === t.id}
+                  aria-controls={`axis-settings-panel-${t.id}`}
+                  data-testid={`axis-settings-tab-${t.id}`}
+                  class={`sc-chip ${tab() === t.id ? 'is-active' : ''}`}
+                  onClick={() => setTab(t.id)}
+                >
+                  {t.label}
+                </button>
+              )}
+            </For>
+          </div>
+
           <div class="sc-dialog-body">
+            {/* ── Theme tab ─────────────────────────────────────────── */}
+            <Show when={tab() === 'theme'}>
+              <div
+                id="axis-settings-panel-theme"
+                role="tabpanel"
+                aria-labelledby="axis-settings-tab-theme"
+                data-testid="axis-settings-theme"
+                class="flex flex-col gap-2"
+              >
+                <div class="sc-section-title">Chart theme</div>
+                <p class="sc-hint mt-0">
+                  Presets and per-group colors (bars, grid, scales, volume). Pine host:{' '}
+                  <code class="font-mono text-[0.9em]">chart.bg_color</code> /{' '}
+                  <code class="font-mono text-[0.9em]">chart.fg_color</code>
+                  {' · '}
+                  aliases color_background / color_foreground. Changes apply live (no Save).
+                </p>
+                <ThemePanel />
+              </div>
+            </Show>
+
+            {/* ── General tab ───────────────────────────────────────── */}
+            <Show when={tab() === 'general'}>
+            <div
+              id="axis-settings-panel-general"
+              role="tabpanel"
+              aria-labelledby="axis-settings-tab-general"
+              data-testid="axis-settings-general"
+              class="flex flex-col gap-2"
+            >
             {/* ── Appearance / density ─────────────────────────────── */}
             <div class="flex flex-col gap-2" data-testid="axis-ui-scale-field">
               <div class="sc-section-title">Appearance</div>
@@ -454,14 +537,6 @@ export const SettingsDialog: Component<Props> = (props) => {
                 </button>
                 <input class="sc-input min-w-0 flex-1 font-mono" value="BTCUSDT" readOnly />
               </div>
-            </div>
-
-            <div class="sc-section" data-testid="axis-settings-theme">
-              <div class="sc-section-title">Chart theme</div>
-              <p class="sc-hint">
-                Bar colors, canvas background, grid — Pine chart.bg_color / chart.fg_color
-              </p>
-              <ThemePanel compact />
             </div>
 
             <div class="sc-section">
@@ -887,19 +962,25 @@ export const SettingsDialog: Component<Props> = (props) => {
               </div>
               <WorkspaceSnapshotMenu />
             </div>
+            </div>
+            </Show>
           </div>
 
           <div class="sc-dialog-footer">
             <div class="flex-1 text-[0.72em] text-text-faint font-mono truncate">
-              AXIS · scale {formatUiScalePct(uiScale())}
+              {tab() === 'theme'
+                ? 'Theme applies live · Save not required'
+                : `AXIS · scale ${formatUiScalePct(uiScale())}`}
             </div>
             <button type="button" class="sc-btn" onClick={closeWithoutSave}>
-              Cancel
+              {tab() === 'theme' ? 'Close' : 'Cancel'}
             </button>
-            <button type="button" class="sc-btn sc-btn-primary" onClick={save}>
-              <Icons.check />
-              Save
-            </button>
+            <Show when={tab() === 'general'}>
+              <button type="button" class="sc-btn sc-btn-primary" onClick={save}>
+                <Icons.check />
+                Save
+              </button>
+            </Show>
           </div>
         </div>
       </div>

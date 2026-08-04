@@ -95,6 +95,8 @@ export type CommandPaletteProps = {
   /** Docked editor document accessor for Run Script. */
   editorRef?: { getDoc: () => string };
   onOpenSettings?: () => void;
+  /** Open Settings → Theme tab (chart colors). */
+  onOpenThemeSettings?: () => void;
   onOpenPlugins?: () => void;
 };
 
@@ -184,6 +186,8 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
         }
       },
       openSettings: () => props.onOpenSettings?.(),
+      openThemeSettings: () =>
+        props.onOpenThemeSettings?.() ?? props.onOpenSettings?.(),
       openPlugins: () => props.onOpenPlugins?.(),
       openScriptSettings: () => openScriptSettings(null),
       resetUiLayout: () => resetUiLayout(),

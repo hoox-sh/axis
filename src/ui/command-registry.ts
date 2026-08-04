@@ -71,6 +71,8 @@ export interface CommandActions {
   toggleTheme: () => void;
   /** Apply a named chart theme preset (void-dark, classic, …). */
   setChartThemePreset?: (presetId: string) => void;
+  /** Open Settings on the Theme tab. */
+  openThemeSettings?: () => void;
   setChartGridMode: (mode: '1' | '2h' | '2v' | '4') => void;
   runScript: () => void | Promise<void>;
   focusSymbol: () => void;
@@ -478,7 +480,11 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.toggleLive) byId.set('action.toggle-live', actions.toggleLive);
   if (actions.openSettings) {
     byId.set('action.settings', actions.openSettings);
-    // Chart Theme panel lives inside Settings → Appearance
+  }
+  // Chart Theme → Settings Theme tab (prefer dedicated opener)
+  if (actions.openThemeSettings) {
+    byId.set('theme.chart', actions.openThemeSettings);
+  } else if (actions.openSettings) {
     byId.set('theme.chart', actions.openSettings);
   }
   if (actions.setChartThemePreset) {
