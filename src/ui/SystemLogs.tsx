@@ -28,6 +28,7 @@ import { Component, For, Show, createEffect, createSignal } from 'solid-js';
 import { store, setStore, persist, clearLogs } from '../store';
 import type { LogEntry } from '../store/types';
 import { Icons } from './icons';
+import { copyToClipboard } from './clipboard';
 
 function formatTs(ts: number): string {
   const d = new Date(ts);
@@ -71,27 +72,25 @@ export const SystemLogs: Component = () => {
     persist();
   };
 
+  const flashCopied = (ms = 1200) => {
+    setCopied(true);
+    setTimeout(() => setCopied(false), ms);
+  };
+
   const copyAll = async () => {
     const text = logsAsText(store.logs);
     if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } catch {
-      /* ignore */
-    }
+    if (await copyToClipboard(text)) flashCopied(1200);
   };
 
-  const copyLine = async (entry: LogEntry) => {
-    const text = `${formatTs(entry.ts)}\t${entry.level}\t${entry.message}`;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 800);
-    } catch {
-      /* ignore */
-    }
+  const copyLine = async (entry: LogEntry, e?: Event) => {
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
+    // Prefer the message alone for per-line copy (what users paste into chats);
+    // include level/source for multi-line dump via "Copy all".
+    const text = String(entry.message ?? '');
+    if (!text) return;
+    if (await copyToClipboard(text)) flashCopied(800);
   };
 
   const last = () => store.logs[store.logs.length - 1];
@@ -174,8 +173,8 @@ export const SystemLogs: Component = () => {
               {(entry) => (
                 <div
                   class="group flex items-start gap-2 px-2 py-0.5 border-b border-border-soft/50 hover:bg-bg-hover/60"
-                  onDblClick={() => copyLine(entry)}
-                  title="Double-click to copy line"
+                  onDblClick={(e) => void copyLine(entry, e)}
+                  title="Double-click to copy message"
                 >
                   <span class="text-text-faint w-[72px] flex-shrink-0 select-none">
                     {formatTs(entry.ts)}
@@ -193,9 +192,11 @@ export const SystemLogs: Component = () => {
                   </span>
                   <button
                     type="button"
-                    class="sc-btn sc-btn-ghost px-1 py-0 opacity-0 group-hover:opacity-100"
-                    title="Copy line"
-                    onClick={() => copyLine(entry)}
+                    class="sc-btn sc-btn-ghost px-1 py-0 opacity-40 group-hover:opacity-100 flex-shrink-0"
+                    title="Copy message to clipboard"
+                    data-testid="axis-log-copy-line"
+                    onClick={(e) => void copyLine(entry, e)}
+                    onPointerDown={(e) => e.stopPropagation()}
                   >
                     <Icons.copy size={11} />
                   </button>

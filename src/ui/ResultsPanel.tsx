@@ -51,6 +51,7 @@ import { getManager } from '../chart/manager-access';
 import { Icons } from './icons';
 import { StrategyReport } from './StrategyReport';
 import { ScriptRunSelect } from './ScriptRunSelect';
+import { copyToClipboard } from './clipboard';
 
 type TabId = 'events' | 'strategy' | 'plots' | 'metrics' | 'raw';
 
@@ -77,12 +78,7 @@ function downloadText(filename: string, text: string, mime = 'text/plain') {
 }
 
 async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
+  return copyToClipboard(text);
 }
 
 /** Bottom results drawer bound to the last script run. */

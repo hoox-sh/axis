@@ -40,6 +40,7 @@ import { parseSourceLine } from '../results/inline-debug';
 import { FloatableShell } from './panels/FloatableShell';
 import { Icons } from './icons';
 import { ScriptRunSelect } from './ScriptRunSelect';
+import { copyToClipboard } from './clipboard';
 
 /** Panel chrome id (see `PanelId` in panels/types). */
 const PANEL_ID = 'scriptlogs' as const;
@@ -125,16 +126,23 @@ export const ScriptLogsPanel: Component = () => {
     }
   });
 
+  const flashCopied = (ms = 1200) => {
+    setCopied(true);
+    setTimeout(() => setCopied(false), ms);
+  };
+
   const copyAll = async () => {
     const text = logsAsText(filtered());
     if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } catch {
-      /* ignore */
-    }
+    if (await copyToClipboard(text)) flashCopied(1200);
+  };
+
+  const copyLine = async (entry: PineLogEntry, e?: Event) => {
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
+    const text = String(entry.message ?? '');
+    if (!text) return;
+    if (await copyToClipboard(text)) flashCopied(800);
   };
 
   return (
@@ -280,6 +288,16 @@ export const ScriptLogsPanel: Component = () => {
                         >
                           {entry.message ?? ''}
                         </span>
+                        <button
+                          type="button"
+                          class="sc-btn sc-btn-ghost px-1 py-0 opacity-40 group-hover:opacity-100 flex-shrink-0"
+                          title="Copy message to clipboard"
+                          data-testid="axis-scriptlogs-copy-line"
+                          onClick={(e) => void copyLine(entry, e)}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          <Icons.copy size={11} />
+                        </button>
                       </div>
                     );
                   }}

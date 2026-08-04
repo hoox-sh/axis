@@ -35,6 +35,7 @@ import {
   setStatus,
 } from '../store';
 import type { LogEntry } from '../store/types';
+import { copyToClipboard } from './clipboard';
 
 /** App version stamped into diagnostic bundles (keep in sync with package.json). */
 export const AXIS_DIAGNOSTIC_VERSION = '2.0.0';
@@ -286,29 +287,7 @@ export function dismissErrorShareOffer(): void {
 }
 
 async function copyText(text: string): Promise<boolean> {
-  try {
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    /* fall through */
-  }
-  try {
-    if (typeof document === 'undefined') return false;
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.setAttribute('readonly', '');
-    ta.style.position = 'fixed';
-    ta.style.left = '-9999px';
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
+  return copyToClipboard(text);
 }
 
 function downloadJson(filename: string, text: string): void {
