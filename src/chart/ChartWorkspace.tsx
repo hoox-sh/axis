@@ -67,16 +67,19 @@ export const ChartWorkspace: Component = () => {
                   if (!isActive()) setActiveChartSlot(slot.id);
                 }}
               >
-                <div class="absolute top-1 left-1 z-20 pointer-events-none">
+                {/* Market title — sole top-left identity chip.
+                    Price pane badges (indicators) stack below via CSS offset;
+                    bare "PRICE" labels are suppressed to avoid triple-overlap. */}
+                <div
+                  class="absolute top-1 left-1.5 z-[21] pointer-events-none max-w-[min(100%-3rem,20rem)]"
+                  data-axis-slot-badge
+                >
                   <span
-                    class={`text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 border ${
-                      isActive()
-                        ? 'bg-accent/20 border-accent text-accent'
-                        : 'bg-bg-panel/90 border-border text-text-faint'
-                    }`}
+                    class={`axis-slot-badge ${isActive() ? 'is-active' : ''}`}
+                    title={`${slot.symbol} · ${slot.interval}`}
                   >
                     {slot.symbol}
-                    <span class="opacity-70 ml-1">{slot.interval}</span>
+                    <span class="axis-slot-tf">{slot.interval}</span>
                   </span>
                 </div>
                 <ChartHost

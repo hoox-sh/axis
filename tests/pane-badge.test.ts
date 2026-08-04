@@ -131,6 +131,21 @@ describe('mountPaneBadge', () => {
     }
   });
 
+  it('suppresses bare PRICE label on the price pane (slot badge owns title)', () => {
+    const { host, restore, findName, countRoots } = makeHost();
+    try {
+      const root = mountPaneBadge(host, 'price', 'price', 'Price');
+      expect(countRoots()).toBe(1);
+      expect(findName()).toBeFalsy();
+      expect(String(root.className)).toContain('is-empty');
+      expect((root as unknown as { dataset: Record<string, string> }).dataset.paneType).toBe(
+        'price',
+      );
+    } finally {
+      restore();
+    }
+  });
+
   it('renders settings / eye / re-run / remove for scripts on the pane', () => {
     const id = addIndicator('RSI', 'plot(close)', 'indicator', { plot: { color: '#fff' } });
     const { host, restore, findName, hasTestId } = makeHost();
@@ -142,6 +157,28 @@ describe('mountPaneBadge', () => {
       expect(hasTestId(`axis-pane-rerun-${id}`)).toBe(true);
       expect(hasTestId(`axis-pane-remove-${id}`)).toBe(true);
       expect(store.scripts.some((s) => s.id === id)).toBe(true);
+    } finally {
+      restore();
+      removeIndicator(id);
+    }
+  });
+
+  it('shows overlay scripts on price without a PRICE chip', () => {
+    const id = addIndicator('EMA', 'plot(close)', 'price', { plot: { color: '#fff' } });
+    // Force paneId price (addIndicator may use type as pane)
+    setStore('scripts', (list) =>
+      list.map((s) => (s.id === id ? { ...s, paneId: 'price' } : s)),
+    );
+    const { host, restore, findName, hasTestId, countRoots } = makeHost();
+    try {
+      const root = mountPaneBadge(host, 'price', 'price', 'Price');
+      expect(countRoots()).toBe(1);
+      expect(findName()).toBe('EMA');
+      expect(String(root.className)).not.toContain('is-empty');
+      expect(hasTestId(`axis-pane-settings-${id}`)).toBe(true);
+      // Only one name chip (script), not PRICE + script
+      const names = host.querySelectorAll('.axis-pane-badge-name');
+      expect(names.length).toBe(1);
     } finally {
       restore();
       removeIndicator(id);

@@ -22,6 +22,14 @@
  * re-run, remove). Imperative DOM so {@link PaneManager} can own chrome without
  * Solid mounts per pane.
  *
+ * Layout notes (avoid top-left pile-up):
+ * - Chart workspace owns the **symbol · interval** chip (`.axis-slot-badge`).
+ * - Price pane **never** shows a redundant "PRICE" label — that conflicted with
+ *   the slot chip and any overlay indicator chips.
+ * - Price pane script chips sit **below** the slot badge via CSS
+ *   (`.axis-pane-badge-root[data-pane-type="price"]`).
+ * - Volume / equity / indicator panes keep their own name chips at pane top.
+ *
  * @module chart/pane-badge
  */
 
@@ -169,17 +177,29 @@ export function mountPaneBadge(
     host.querySelectorAll('.axis-pane-badge-root').forEach((n) => n.remove());
   }
 
+  const scripts = scriptsOnPane(paneId);
+  const isPrice = paneType === 'price' || paneId === 'price';
+
   const root = document.createElement('div');
-  root.className = 'axis-pane-badge-root';
+  // Price pane with no scripts: empty root (hidden via CSS) — slot badge is the title
+  root.className =
+    isPrice && scripts.length === 0
+      ? 'axis-pane-badge-root is-empty'
+      : 'axis-pane-badge-root';
   if (root.dataset) {
     root.dataset.paneId = paneId;
     root.dataset.paneType = paneType;
   }
 
-  const scripts = scriptsOnPane(paneId);
-
   if (scripts.length === 0) {
-    // Built-in panes (price / volume / empty indicator) — name + optional hide
+    // Price pane: skip bare "PRICE" — workspace slot badge already shows
+    // symbol · interval. Empty root still marks the host for refresh.
+    if (isPrice) {
+      host.appendChild(root);
+      return root;
+    }
+
+    // Built-in panes (volume / equity / empty indicator) — name + optional hide
     const chip = document.createElement('div');
     chip.className = 'axis-pane-badge-chip';
     const name = document.createElement('span');
@@ -193,6 +213,7 @@ export function mountPaneBadge(
     }
     root.appendChild(chip);
   } else {
+    // Never prefix price with a "PRICE" chip — scripts only, stacked under slot badge
     for (const script of scripts) {
       const chip = document.createElement('div');
       chip.className = 'axis-pane-badge-chip';
@@ -200,7 +221,8 @@ export function mountPaneBadge(
       if (!script.visible) chip.classList.add('is-hidden-script');
 
       const name = document.createElement('span');
-      name.className = 'axis-pane-badge-name';
+      // is-script: keep author casing (RSI, Supertrend) — not full uppercase
+      name.className = 'axis-pane-badge-name is-script';
       name.textContent = script.name || label;
       name.title = script.name || label;
       chip.appendChild(name);

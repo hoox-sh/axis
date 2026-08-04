@@ -1557,6 +1557,42 @@ body.axis-panel-dragging {
   100% { background-position: -100% 0; }
 }
 
+/* ── Slot symbol · interval chip (ChartWorkspace) ───────────────── */
+/* Sits above price-pane script badges; single source for market title. */
+.axis-slot-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  max-width: min(100%, 20em);
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 650;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.3;
+  border-radius: 2px;
+  border: 1px solid var(--color-border-soft, #2a2d38);
+  background: color-mix(in srgb, var(--color-bg-base, #0a0b10) 92%, transparent);
+  color: var(--color-text-dim, #8b8e9c);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.axis-slot-badge.is-active {
+  border-color: color-mix(in srgb, var(--color-accent, #939fff) 55%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent, #939fff) 16%, var(--color-bg-base));
+  color: var(--color-accent, #939fff);
+}
+.axis-slot-badge .axis-slot-tf {
+  opacity: 0.72;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
 /* ── Pane corner badges (indicator name + script actions) ───────── */
 .axis-pane-badge-root {
   position: absolute;
@@ -1564,10 +1600,19 @@ body.axis-panel-dragging {
   left: 6px;
   z-index: 20;
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 3px;
   max-width: calc(100% - 48px);
   pointer-events: none;
+}
+/* Price pane sits under the workspace symbol · interval chip (slot chrome). */
+.axis-pane-badge-root[data-pane-type='price'] {
+  top: 28px;
+}
+.axis-pane-badge-root.is-empty {
+  display: none;
 }
 .axis-pane-badge-chip {
   pointer-events: auto;
@@ -1591,12 +1636,18 @@ body.axis-panel-dragging {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--color-text-dim, #8b8e9c);
-  max-width: 12em;
+  max-width: 14em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   user-select: none;
   padding-right: 2px;
+}
+/* Script titles: keep author casing (RSI, Supertrend, …) */
+.axis-pane-badge-name.is-script {
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-weight: 600;
 }
 .axis-pane-badge-btn {
   display: inline-flex;
