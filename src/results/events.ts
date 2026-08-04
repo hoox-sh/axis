@@ -284,12 +284,19 @@ const COLOR = {
   order: '#8b8e9c',
 };
 
-/** Kind rank so same-bar entry is processed before exit/close. */
+/**
+ * Kind rank for same-bar ordering.
+ *
+ * **Close/exit before entry** — required for position reverses:
+ * pyne emits `close` (flatten old) then `entry` (open opposite) on the same
+ * bar. Processing entry first opened the new id, then the close matched that
+ * new id at the same price → every reverse trade reported PnL 0.
+ */
 export function strategyEventKindRank(kind: string): number {
   const k = kind.toLowerCase();
-  if (k.includes('entry') || k === 'long' || k === 'short') return 0;
+  if (k.includes('exit') || k.includes('close')) return 0;
   if (k === 'order' || k.startsWith('cancel')) return 1;
-  if (k.includes('exit') || k.includes('close')) return 2;
+  if (k.includes('entry') || k === 'long' || k === 'short') return 2;
   return 3;
 }
 
@@ -320,13 +327,15 @@ export function eventsToMarkers(events: StrategyEvent[]): TradeMarker[] {
   const openDir = new Map<string, string>();
   const markers: TradeMarker[] = [];
 
-  const sorted = events.slice().sort((a, b) => {
-    const dt = (timeOfEvent(a) || 0) - (timeOfEvent(b) || 0);
-    if (dt !== 0) return dt;
-    const ka = String(a.type || a.event || a.kind || '');
-    const kb = String(b.type || b.event || b.kind || '');
-    return strategyEventKindRank(ka) - strategyEventKindRank(kb);
-  });
+  // Preserve engine order on a bar (close-then-entry for reverses)
+  const sorted = events
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => {
+      const dt = (timeOfEvent(a.e) || 0) - (timeOfEvent(b.e) || 0);
+      if (dt !== 0) return dt;
+      return a.i - b.i;
+    })
+    .map(({ e }) => e);
 
   for (const ev of sorted) {
     const t = timeOfEvent(ev);

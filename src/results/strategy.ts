@@ -41,11 +41,7 @@
  */
 
 import type { Bar } from '../store/types';
-import {
-  normalizeStrategyEvents,
-  resolveExitMatchId,
-  strategyEventKindRank,
-} from './events';
+import { normalizeStrategyEvents, resolveExitMatchId } from './events';
 
 /** Loose event shape accepted before normalization. */
 export interface StrategyEvent {
@@ -117,13 +113,17 @@ export function buildStrategyReport(
   stats: StrategyStats;
 } {
   const normalized = normalizeStrategyEvents(events, { bars, includeOrders: true });
-  const sorted = normalized.slice().sort((a, b) => {
-    const dt = (a.time || 0) - (b.time || 0);
-    if (dt !== 0) return dt;
-    const ka = String(a.type || a.event || a.kind || '');
-    const kb = String(b.type || b.event || b.kind || '');
-    return strategyEventKindRank(ka) - strategyEventKindRank(kb);
-  });
+  // Same-bar order must follow engine emission order (stable by original index).
+  // Pyne reverses emit close(old) then entry(new). Re-ranking entry before close
+  // made the close hit the new id at the same price → every flip trade PnL=0.
+  const sorted = normalized
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => {
+      const dt = (a.e.time || 0) - (b.e.time || 0);
+      if (dt !== 0) return dt;
+      return a.i - b.i;
+    })
+    .map(({ e }) => e);
   const open = new Map<
     string,
     { entry: number; time: number; dir: string; qty: number }
@@ -234,6 +234,8 @@ export function buildStrategyReport(
 
       // Prefer from_entry / entry_id (strategy.exit), then exit/close id,
       // then sole open trade when only one position is live.
+      // Reverse closes often stamp the *new* entry id (pyne) — sole-open and
+      // opposite-dir fallback recover the real open position.
       const matchId = resolveExitMatchId(ev);
       let o = open.get(matchId);
       let closedId = matchId;
@@ -244,6 +246,19 @@ export function buildStrategyReport(
       if (!o && open.size === 1) {
         closedId = open.keys().next().value as string;
         o = open.get(closedId);
+      }
+      // Reverse: close says id=newEntry but direction matches the open we flatten
+      if (!o && open.size > 0) {
+        const closeDir = String(ev.dir || ev.direction || '').toLowerCase();
+        if (closeDir === 'long' || closeDir === 'short') {
+          for (const [oid, oo] of open) {
+            if (oo.dir === closeDir || (closeDir.includes('short') && oo.dir.includes('short'))) {
+              o = oo;
+              closedId = oid;
+              break;
+            }
+          }
+        }
       }
       if (o) {
         open.delete(closedId);

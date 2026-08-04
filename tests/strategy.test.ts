@@ -504,11 +504,70 @@ describe('pyne-shaped pairing gaps', () => {
     expect(r.stats.totalPnl).toBe(15 + 5);
   });
 
-  it('pairs same-bar entry then exit (kind order)', () => {
+  it('pairs Long/Short reverse without zeroing PnL (close then entry same bar)', () => {
+    // Engine emission order on reverse: close(old id mislabeled as new id) + entry(new)
+    // Must close the sole open opposite position, not the brand-new entry.
     const events = [
-      // exit listed first in payload — sort must still process entry first
-      { kind: 'exit', id: 'L', bar_time: 50, ohlc: [110, 110, 110, 110] },
+      {
+        kind: 'entry',
+        id: 'Short',
+        direction: 'short',
+        qty: 0.1,
+        bar_time: 1000,
+        ohlc: [100, 101, 99, 100],
+      },
+      {
+        kind: 'close',
+        id: 'Long', // pyne stamps the *new* entry id on reverse close
+        direction: 'short',
+        qty: 0.1,
+        bar_time: 2000,
+        ohlc: [90, 91, 89, 90],
+        comment: 'reverse',
+      },
+      {
+        kind: 'entry',
+        id: 'Long',
+        direction: 'long',
+        qty: 0.1,
+        bar_time: 2000,
+        ohlc: [90, 91, 89, 90],
+      },
+      {
+        kind: 'close',
+        id: 'Short',
+        direction: 'long',
+        qty: 0.1,
+        bar_time: 3000,
+        ohlc: [95, 96, 94, 95],
+        comment: 'reverse',
+      },
+      {
+        kind: 'entry',
+        id: 'Short',
+        direction: 'short',
+        qty: 0.1,
+        bar_time: 3000,
+        ohlc: [95, 96, 94, 95],
+      },
+    ];
+    const r = buildStrategyReport(events as never[]);
+    expect(r.trades.length).toBeGreaterThanOrEqual(2);
+    // Short 100→90 = +10 * 0.1 = +1
+    expect(r.trades[0]!.dir).toBe('short');
+    expect(r.trades[0]!.pnl).toBeCloseTo(1, 8);
+    // Long 90→95 = +5 * 0.1 = +0.5
+    expect(r.trades[1]!.dir).toBe('long');
+    expect(r.trades[1]!.pnl).toBeCloseTo(0.5, 8);
+    expect(r.stats.totalPnl).toBeCloseTo(1.5, 8);
+    expect(r.stats.totalPnl).not.toBe(0);
+  });
+
+  it('pairs same-bar entry then exit (engine emission order)', () => {
+    // strategy.entry then strategy.close on the same bar → entry emitted first
+    const events = [
       { kind: 'entry', id: 'L', direction: 'long', bar_time: 50, ohlc: [100, 100, 100, 100] },
+      { kind: 'exit', id: 'L', bar_time: 50, ohlc: [110, 110, 110, 110] },
     ];
     const r = buildStrategyReport(events as any);
     expect(r.trades).toHaveLength(1);
