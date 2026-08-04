@@ -119,7 +119,7 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
             }
           />
           <Metric
-            label="Net P&L"
+            label="Net profit"
             value={formatMoney(props.stats.totalPnl)}
             tone={props.stats.totalPnl >= 0 ? 'pos' : 'neg'}
           />
@@ -212,6 +212,7 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
               <tr>
                 <th class="px-2 py-1">ID</th>
                 <th class="px-2 py-1">Dir</th>
+                <th class="px-2 py-1">Qty</th>
                 <th class="px-2 py-1">Entry time</th>
                 <th class="px-2 py-1">Entry</th>
                 <th class="px-2 py-1">Exit time</th>
@@ -230,6 +231,11 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
                   >
                     <td class="px-2 py-0.5 truncate max-w-[72px]">{t.id}</td>
                     <td class="px-2 py-0.5">{t.dir}</td>
+                    <td class="px-2 py-0.5 tabular-nums">
+                      {(t.qty ?? 1) % 1 === 0
+                        ? String(t.qty ?? 1)
+                        : (t.qty ?? 1).toFixed(4)}
+                    </td>
                     <td
                       class="px-2 py-0.5 text-accent hover:underline whitespace-nowrap"
                       title="Jump to entry"

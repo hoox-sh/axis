@@ -26,6 +26,7 @@ const sampleTrades = (): ClosedTrade[] => [
     entry: 100,
     exitTime: 200,
     exit: 110,
+    qty: 1,
     pnl: 10,
     pnlPct: 0.1,
   },
@@ -36,6 +37,7 @@ const sampleTrades = (): ClosedTrade[] => [
     entry: 110,
     exitTime: 400,
     exit: 100,
+    qty: 1,
     pnl: -10,
     pnlPct: -0.0909,
   },
@@ -46,6 +48,7 @@ const sampleTrades = (): ClosedTrade[] => [
     entry: 100,
     exitTime: 600,
     exit: 120,
+    qty: 1,
     pnl: 20,
     pnlPct: 0.2,
   },
@@ -156,9 +159,10 @@ describe('tradesToCsv', () => {
   it('exports header and rows', () => {
     const csv = tradesToCsv(sampleTrades());
     const lines = csv.split('\n');
-    expect(lines[0]).toBe('id,dir,entry_time,entry,exit_time,exit,pnl,pnl_pct');
+    expect(lines[0]).toBe('id,dir,qty,entry_time,entry,exit_time,exit,pnl,pnl_pct');
     expect(lines).toHaveLength(4);
-    expect(lines[1]).toContain('a,long,100,100,200,110,10,0.1');
+    // id,dir,qty,entry_time,entry,exit_time,exit,pnl,pnl_pct
+    expect(lines[1]).toContain('a,long,1,100,100,200,110,10,0.1');
   });
 
   it('escapes id/dir fields with commas and quotes', () => {
@@ -170,6 +174,7 @@ describe('tradesToCsv', () => {
         entry: 1,
         exitTime: 2,
         exit: 2,
+        qty: 1,
         pnl: 1,
         pnlPct: 1,
       },
@@ -180,6 +185,6 @@ describe('tradesToCsv', () => {
 
   it('returns header-only for empty trades', () => {
     const csv = tradesToCsv([]);
-    expect(csv).toBe('id,dir,entry_time,entry,exit_time,exit,pnl,pnl_pct');
+    expect(csv).toBe('id,dir,qty,entry_time,entry,exit_time,exit,pnl,pnl_pct');
   });
 });

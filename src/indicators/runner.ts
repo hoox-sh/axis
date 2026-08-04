@@ -743,8 +743,23 @@ export async function runAndApply(
       }
     }
 
-    // Strategy: markers on price pane + equity curve
+    // Strategy: markers on price pane + equity curve + tester stats
     const events = result.events || [];
+    const isStrategy =
+      scriptType === 'strategy' ||
+      events.some((e) => {
+        const k = String(
+          (e as { kind?: string; type?: string }).kind ||
+            (e as { type?: string }).type ||
+            '',
+        ).toLowerCase();
+        return (
+          k.includes('entry') ||
+          k.includes('exit') ||
+          k.includes('close') ||
+          k === 'order'
+        );
+      });
     if (events.length) {
       const normalized = normalizeStrategyEvents(events, {
         bars: store.bars || [],
@@ -760,18 +775,32 @@ export async function runAndApply(
         if (!silent) {
           appendLog(
             'ok',
-            `Strategy: ${report.stats.trades} trades · net ${report.stats.totalPnl >= 0 ? '+' : ''}${report.stats.totalPnl.toFixed(2)} · ${markers.length} markers`,
+            `Strategy: ${report.stats.trades} trades · net ${report.stats.totalPnl >= 0 ? '+' : ''}${report.stats.totalPnl.toFixed(2)} · win ${report.stats.winRate.toFixed(0)}% · ${markers.length} markers`,
             'strategy',
           );
+          // Surface the Strategy tester tab when this run produced closed trades
+          try {
+            setStore('resultsPanel', 'open', true);
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(
+                new CustomEvent('axis-results-tab', { detail: { tab: 'strategy' } }),
+              );
+            }
+          } catch {
+            /* optional UI hook */
+          }
         }
       } else {
         // Live silent re-runs: skip hide to avoid equity pane thrash
         if (!silent) {
           manager.hideEquityPane();
-          if (markers.length) {
+          if (markers.length || isStrategy) {
             appendLog(
               'ok',
-              `Strategy events: ${events.length} · ${markers.length} markers`,
+              `Strategy events: ${events.length} raw · ${normalized.length} fills · ${markers.length} markers` +
+                (report.trades.length === 0
+                  ? ' · no closed trades yet (need entry+exit pair)'
+                  : ''),
               'strategy',
             );
           }
@@ -781,6 +810,13 @@ export async function runAndApply(
       // Interactive run with no strategy events — clear trade markers / equity.
       // Silent live re-runs of pure indicators must NOT wipe another script's
       // strategy markers (multi-indicator live thrash).
+      if (isStrategy) {
+        appendLog(
+          'warn',
+          'Strategy run returned 0 events — broker never filled (check entry conditions / bars)',
+          'strategy',
+        );
+      }
       manager.setTradeMarkers([]);
       manager.hideEquityPane();
     }

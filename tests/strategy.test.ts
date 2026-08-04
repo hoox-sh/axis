@@ -106,6 +106,37 @@ describe('Strategy tester', () => {
     expect(r.trades[0].pnl).toBe(10);
   });
 
+  it('scales money PnL by fill qty (percent-of-equity / multi-contract)', () => {
+    const events = [
+      { time: 1, type: 'entry', id: 'L', dir: 'long', price: 100, qty: 2.5 },
+      { time: 2, type: 'close', id: 'L', price: 110, qty: 2.5 },
+    ];
+    const r = buildStrategyReport(events);
+    expect(r.trades).toHaveLength(1);
+    expect(r.trades[0]!.qty).toBe(2.5);
+    // (110-100) * 2.5 = 25
+    expect(r.trades[0]!.pnl).toBe(25);
+    // % is still price move only
+    expect(r.trades[0]!.pnlPct).toBeCloseTo(0.1);
+    expect(r.stats.totalPnl).toBe(25);
+  });
+
+  it('uses engine profit field when present on close', () => {
+    const events = [
+      { time: 1, kind: 'entry', id: 'L', direction: 'long', price: 100, qty: 1 },
+      {
+        time: 2,
+        kind: 'close',
+        id: 'L',
+        price: 110,
+        qty: 1,
+        profit: 42.5,
+      },
+    ];
+    const r = buildStrategyReport(events as never[]);
+    expect(r.trades[0]!.pnl).toBe(42.5);
+  });
+
   it('handles multiple trades and computes winRate + avg', () => {
     const events = [
       { time: 1, type: 'entry', id: 'A', dir: 'long', price: 100 },

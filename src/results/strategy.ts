@@ -80,7 +80,14 @@ export interface ClosedTrade {
   entry: number;
   exitTime: number;
   exit: number;
+  /** Filled quantity used for money PnL (defaults to 1 when engine omits qty). */
+  qty: number;
+  /**
+   * Money PnL: `(exit − entry) × qty × sign` (short sign −1).
+   * Matches pyne broker `(px − avg) * close_qty` for fixed contracts.
+   */
   pnl: number;
+  /** Fractional move vs entry price (independent of qty). */
   pnlPct: number;
 }
 
@@ -117,17 +124,49 @@ export function buildStrategyReport(
     const kb = String(b.type || b.event || b.kind || '');
     return strategyEventKindRank(ka) - strategyEventKindRank(kb);
   });
-  const open = new Map<string, { entry: number; time: number; dir: string }>();
+  const open = new Map<
+    string,
+    { entry: number; time: number; dir: string; qty: number }
+  >();
   const trades: ClosedTrade[] = [];
+
+  const eventQty = (ev: StrategyEvent, fallback = 1): number => {
+    // Prefer engine-filled qty; explicit 0 is no-fill (already filtered on closes).
+    const raw = (ev as Record<string, unknown>).qty;
+    if (raw == null || raw === '') return fallback;
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(n) || n === 0) return fallback;
+    return Math.abs(n);
+  };
+
+  /** Money PnL from prices + size. Optional engine `profit` wins when finite. */
+  const moneyPnl = (
+    o: { entry: number; dir: string; qty: number },
+    exitPrice: number,
+    closeQty: number,
+    engineProfit: unknown,
+  ): number => {
+    if (typeof engineProfit === 'number' && Number.isFinite(engineProfit)) {
+      return engineProfit;
+    }
+    const q = Number.isFinite(closeQty) && closeQty > 0 ? closeQty : o.qty || 1;
+    const sign = o.dir.includes('short') ? -1 : 1;
+    return (exitPrice - o.entry) * sign * q;
+  };
 
   const pushClosed = (
     openId: string,
-    o: { entry: number; time: number; dir: string },
+    o: { entry: number; time: number; dir: string; qty: number },
     exitTime: number,
     exitPrice: number,
+    closeQty: number,
+    engineProfit?: unknown,
   ) => {
-    const pnl = (exitPrice - o.entry) * (o.dir.includes('short') ? -1 : 1);
-    const pnlPct = o.entry !== 0 ? pnl / o.entry : 0;
+    const qty = Number.isFinite(closeQty) && closeQty > 0 ? closeQty : o.qty || 1;
+    const pnl = moneyPnl(o, exitPrice, qty, engineProfit);
+    // Percent is price move (qty-independent) so 10% long is always +0.10
+    const priceMove = (exitPrice - o.entry) * (o.dir.includes('short') ? -1 : 1);
+    const pnlPct = o.entry !== 0 ? priceMove / o.entry : 0;
     trades.push({
       id: openId || '_default',
       dir: o.dir,
@@ -135,6 +174,7 @@ export function buildStrategyReport(
       entry: o.entry,
       exitTime,
       exit: exitPrice,
+      qty,
       pnl,
       pnlPct,
     });
@@ -152,10 +192,20 @@ export function buildStrategyReport(
     const kind = String(ev.type || ev.event || ev.kind || '').toLowerCase();
     const id = String(ev.id || '_default');
     if (kind.includes('entry') || kind === 'long' || kind === 'short') {
-      const dir = String(
-        ev.dir || ev.direction || (kind === 'short' ? 'short' : 'long'),
-      ).toLowerCase();
-      open.set(id, { entry: Number(p), time: Number(t), dir });
+      const rawDir = String(ev.dir || ev.direction || '').toLowerCase();
+      // Guard String(null) → "null" if a caller bypasses normalize
+      const dir =
+        rawDir && rawDir !== 'null' && rawDir !== 'undefined'
+          ? rawDir
+          : kind === 'short' || rawDir.includes('short')
+            ? 'short'
+            : 'long';
+      open.set(id, {
+        entry: Number(p),
+        time: Number(t),
+        dir: dir.includes('short') ? 'short' : 'long',
+        qty: eventQty(ev, 1),
+      });
     } else if (
       kind.includes('close') ||
       kind.includes('exit') ||
@@ -164,10 +214,11 @@ export function buildStrategyReport(
     ) {
       const isCloseAll =
         kind === 'close_all' || kind.includes('close_all') || kind === 'closeall';
+      const engineProfit = (ev as Record<string, unknown>).profit;
       if (isCloseAll) {
         // strategy.close_all — flatten every open at this bar
         for (const [openId, o] of open) {
-          pushClosed(openId, o, Number(t), Number(p));
+          pushClosed(openId, o, Number(t), Number(p), o.qty, engineProfit);
         }
         open.clear();
         continue;
@@ -188,7 +239,9 @@ export function buildStrategyReport(
       }
       if (o) {
         open.delete(closedId);
-        pushClosed(closedId, o, Number(t), Number(p));
+        // Partial closes: use event qty when smaller than open; else full open qty
+        const cq = eventQty(ev, o.qty);
+        pushClosed(closedId, o, Number(t), Number(p), cq, engineProfit);
       }
     }
   }
@@ -250,11 +303,12 @@ export function formatNum(n: unknown): string {
 }
 
 export function tradesToCsv(trades: ClosedTrade[]): string {
-  const header = 'id,dir,entry_time,entry,exit_time,exit,pnl,pnl_pct';
+  const header = 'id,dir,qty,entry_time,entry,exit_time,exit,pnl,pnl_pct';
   const rows = trades.map((t) =>
     [
       csvCell(t.id),
       csvCell(t.dir),
+      t.qty ?? 1,
       t.entryTime,
       t.entry,
       t.exitTime,

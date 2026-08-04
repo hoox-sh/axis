@@ -101,12 +101,13 @@ describe('strategy extras', () => {
         entry: 100,
         exitTime: 2,
         exit: 110,
+        qty: 1,
         pnl: 10,
         pnlPct: 0.1,
       },
     ]);
     expect(csv.split('\n')).toHaveLength(2);
-    expect(csv).toContain('id,dir,entry_time');
-    expect(csv).toContain('a,long,1,100,2,110,10,0.1');
+    expect(csv).toContain('id,dir,qty,entry_time');
+    expect(csv).toContain('a,long,1,1,100,2,110,10,0.1');
   });
 });

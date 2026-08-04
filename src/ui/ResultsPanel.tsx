@@ -26,7 +26,15 @@
  * `buildStrategyReport` + {@link StrategyReport}. FloatableShell id `results`.
  */
 
-import { Component, For, Show, createMemo, createSignal } from 'solid-js';
+import {
+  Component,
+  For,
+  Show,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+} from 'solid-js';
 import { store, isPanelOpen } from '../store';
 import type { RunResult } from '../indicators/runner';
 import { FloatableShell } from './panels/FloatableShell';
@@ -54,6 +62,10 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'raw', label: 'Raw' },
 ];
 
+function isResultsTab(v: unknown): v is TabId {
+  return v === 'events' || v === 'strategy' || v === 'plots' || v === 'metrics' || v === 'raw';
+}
+
 function downloadText(filename: string, text: string, mime = 'text/plain') {
   const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -78,19 +90,30 @@ export const ResultsPanel: Component = () => {
   const [tab, setTab] = createSignal<TabId>('events');
   const [copied, setCopied] = createSignal(false);
 
+  // Runner dispatches this when a strategy closes trades so the Strategy tab is visible
+  onMount(() => {
+    const onTab = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ tab?: string }>).detail;
+      if (isResultsTab(detail?.tab)) setTab(detail.tab);
+    };
+    window.addEventListener('axis-results-tab', onTab);
+    onCleanup(() => window.removeEventListener('axis-results-tab', onTab));
+  });
+
   const result = () => store.lastRun as RunResult | null;
 
   const report = createMemo(() => {
     const r = result();
     if (!r) return null;
-    return buildStrategyReport((r.events || []) as StrategyEvent[], store.bars);
+    // Pass bars so ohlc-less / zero-ohlc events still resolve close prices
+    return buildStrategyReport((r.events || []) as StrategyEvent[], store.bars || []);
   });
 
   const normalizedEvents = createMemo(() => {
     const r = result();
     if (!r) return [] as StrategyEvent[];
     return normalizeStrategyEvents((r.events || []) as StrategyEvent[], {
-      bars: store.bars,
+      bars: store.bars || [],
       includeOrders: true,
     });
   });
@@ -303,7 +326,7 @@ export const ResultsPanel: Component = () => {
                   trades: 0,
                 }
               }
-              hasEvents={(result()?.events?.length ?? 0) > 0}
+              hasEvents={normalizedEvents().length > 0 || (result()?.events?.length ?? 0) > 0}
               onJumpToTrade={jumpToTrade}
             />
           </Show>
