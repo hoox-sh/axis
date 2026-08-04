@@ -1,0 +1,52 @@
+# Dependencies & build outputs
+node_modules
+dist
+build
+out
+coverage
+coverage.lcov
+.nyc_output
+test-results
+playwright-report
+blob-report
+.wrangler
+.turbo
+.cache
+
+# Git / IDE / OS
+.git
+.github
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# Tests & docs (not needed in runtime image)
+tests
+e2e
+docs
+test-results
+*.md
+!README.md
+!NOTICE
+!LICENSE
+
+# Local debug
+.axis-*.png
+*.log
+__pycache__
+*.pyc
+.venv
+venv
+
+# Worker (separate deploy path)
+worker/node_modules
+worker/.wrangler
+worker/dist

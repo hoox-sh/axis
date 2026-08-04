@@ -1,0 +1,54 @@
+# Copyright (C) 2024-2026 jango_blockchained
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Production overrides for AXIS compose.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile api up -d
+#
+# Prefers pre-built images when AXIS_IMAGE / PYNE_IMAGE are set (CI bake + pull).
+
+services:
+  pwa:
+    image: ${AXIS_IMAGE:-ghcr.io/hoox-sh/axis:pwa-latest}
+    build:
+      target: pwa
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+    pull_policy: ${PULL_POLICY:-missing}
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  api:
+    image: ${PYNE_IMAGE:-ghcr.io/hoox-sh/pynescript:api-latest}
+    build:
+      target: api
+    pull_policy: ${PULL_POLICY:-missing}
+    environment:
+      FLASK_ENV: production
+      FLASK_DEBUG: "0"
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://hoox.sh,https://hoox.sh/axis}
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  proxy:
+    image: ${AXIS_NGINX_IMAGE:-ghcr.io/hoox-sh/axis:pwa-nginx-latest}
+    pull_policy: ${PULL_POLICY:-missing}
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
