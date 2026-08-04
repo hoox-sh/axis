@@ -75,11 +75,22 @@ function barCloseAt(
   barIndex: number | undefined,
 ): number | undefined {
   if (!bars?.length) return undefined;
-  if (barTime != null && Number.isFinite(barTime)) {
+  // Prefer bar_index (pyne always stamps it; more reliable than a broken bar_time)
+  if (
+    barIndex != null &&
+    Number.isFinite(barIndex) &&
+    barIndex >= 0 &&
+    barIndex < bars.length
+  ) {
+    const c = bars[barIndex]!.close;
+    if (Number.isFinite(c)) return c;
+  }
+  // bar_time 0 is a missing/placeholder — do not snap every event to the first bar
+  if (barTime != null && Number.isFinite(barTime) && barTime !== 0) {
     const aligned = alignTimeToBars(barTime, bars);
     const byTime = bars.find((b) => b.time === aligned);
-    if (byTime) return byTime.close;
-    // nearest bar (1 day tolerance in same units)
+    if (byTime && Number.isFinite(byTime.close)) return byTime.close;
+    // nearest bar within 2× median span
     let best: Bar | undefined;
     let bestD = Infinity;
     for (const b of bars) {
@@ -89,10 +100,9 @@ function barCloseAt(
         best = b;
       }
     }
-    if (best && bestD < Math.abs(sampleSpan(bars)) * 2) return best.close;
-  }
-  if (barIndex != null && Number.isFinite(barIndex) && barIndex >= 0 && barIndex < bars.length) {
-    return bars[barIndex]!.close;
+    if (best && bestD < Math.abs(sampleSpan(bars)) * 2 && Number.isFinite(best.close)) {
+      return best.close;
+    }
   }
   return undefined;
 }
@@ -102,18 +112,46 @@ function sampleSpan(bars: Bar[]): number {
   return Math.abs(bars[1]!.time - bars[0]!.time) || 1;
 }
 
+/** Coerce a numeric field; reject non-finite and (by default) exact 0. */
+function finitePrice(v: unknown, allowZero = false): number | undefined {
+  if (v == null || v === '') return undefined;
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n)) return undefined;
+  if (!allowZero && n === 0) return undefined;
+  return n;
+}
+
+/**
+ * Resolve a fill/mark price from a raw strategy event.
+ * Prefer explicit fill fields, then OHLC close, then chart bars.
+ * Never let a placeholder `price: 0` shadow valid OHLC/bar data.
+ */
 function resolvePrice(raw: Record<string, unknown>, bars?: Bar[]): number | undefined {
-  if (typeof raw.price === 'number' && Number.isFinite(raw.price)) return raw.price;
+  // Named fill fields (some hosts / future engines)
+  for (const key of ['fill_price', 'avg_price', 'avgPrice', 'fillPrice'] as const) {
+    const p = finitePrice(raw[key]);
+    if (p != null) return p;
+  }
+
+  // Explicit price — but skip 0 so we can fall through to ohlc/bars
+  const explicit = finitePrice(raw.price);
+  if (explicit != null) return explicit;
 
   const ohlc = raw.ohlc;
   if (Array.isArray(ohlc) && ohlc.length >= 4) {
-    const close = Number(ohlc[3]);
-    if (Number.isFinite(close) && close !== 0) return close;
-    // Non-zero open/high/low also usable
+    // Prefer close (market fill at bar close under process_orders_on_close)
+    const close = finitePrice(ohlc[3]);
+    if (close != null) return close;
     for (const i of [0, 1, 2]) {
-      const v = Number(ohlc[i]);
-      if (Number.isFinite(v) && v !== 0) return v;
+      const v = finitePrice(ohlc[i]);
+      if (v != null) return v;
     }
+  }
+
+  // Limit/stop as last-resort fill marks (limit orders)
+  for (const key of ['limit', 'stop'] as const) {
+    const p = finitePrice(raw[key]);
+    if (p != null) return p;
   }
 
   const barTime =
@@ -121,9 +159,23 @@ function resolvePrice(raw: Record<string, unknown>, bars?: Bar[]): number | unde
       ? raw.bar_time
       : typeof raw.time === 'number'
         ? raw.time
+        : raw.bar_time != null
+          ? Number(raw.bar_time)
+          : raw.time != null
+            ? Number(raw.time)
+            : undefined;
+  const barIndexRaw = raw.bar_index ?? raw.barIndex;
+  const barIndex =
+    typeof barIndexRaw === 'number'
+      ? barIndexRaw
+      : barIndexRaw != null && Number.isFinite(Number(barIndexRaw))
+        ? Number(barIndexRaw)
         : undefined;
-  const barIndex = typeof raw.bar_index === 'number' ? raw.bar_index : undefined;
-  return barCloseAt(bars, barTime, barIndex);
+  return barCloseAt(
+    bars,
+    barTime != null && Number.isFinite(barTime) ? barTime : undefined,
+    barIndex,
+  );
 }
 
 /**

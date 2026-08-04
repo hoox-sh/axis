@@ -137,6 +137,82 @@ describe('Strategy tester', () => {
     expect(r.trades[0]!.pnl).toBe(42.5);
   });
 
+  it('ignores placeholder profit:0 when prices imply non-zero PnL', () => {
+    const events = [
+      { time: 1, kind: 'entry', id: 'L', direction: 'long', price: 100, qty: 2 },
+      {
+        time: 2,
+        kind: 'close',
+        id: 'L',
+        price: 110,
+        qty: 2,
+        profit: 0, // host placeholder — must not zero the trade
+      },
+    ];
+    const r = buildStrategyReport(events as never[]);
+    expect(r.trades).toHaveLength(1);
+    expect(r.trades[0]!.pnl).toBe(20); // (110-100)*2
+    expect(r.stats.totalPnl).toBe(20);
+    expect(r.stats.wins).toBe(1);
+  });
+
+  it('resolves price from ohlc when price:0 placeholder is set', () => {
+    const events = [
+      {
+        time: 1,
+        kind: 'entry',
+        id: 'L',
+        direction: 'long',
+        price: 0,
+        qty: 1,
+        ohlc: [99, 101, 98, 100],
+      },
+      {
+        time: 2,
+        kind: 'close',
+        id: 'L',
+        price: 0,
+        qty: 1,
+        ohlc: [109, 112, 108, 111],
+      },
+    ];
+    const r = buildStrategyReport(events as never[]);
+    expect(r.trades).toHaveLength(1);
+    expect(r.trades[0]!.entry).toBe(100);
+    expect(r.trades[0]!.exit).toBe(111);
+    expect(r.trades[0]!.pnl).toBe(11);
+  });
+
+  it('uses bar_index for price when ohlc missing (not bar_time 0 → first bar)', () => {
+    const bars = [
+      { time: 1000, open: 1, high: 2, low: 0.5, close: 10 },
+      { time: 2000, open: 1, high: 2, low: 0.5, close: 50 },
+      { time: 3000, open: 1, high: 2, low: 0.5, close: 80 },
+    ];
+    const events = [
+      {
+        kind: 'entry',
+        id: 'A',
+        direction: 'long',
+        qty: 1,
+        bar_index: 1,
+        bar_time: 0, // placeholder — must not snap to bars[0]
+      },
+      {
+        kind: 'close',
+        id: 'A',
+        qty: 1,
+        bar_index: 2,
+        bar_time: 0,
+      },
+    ];
+    const r = buildStrategyReport(events as never[], bars);
+    expect(r.trades).toHaveLength(1);
+    expect(r.trades[0]!.entry).toBe(50);
+    expect(r.trades[0]!.exit).toBe(80);
+    expect(r.trades[0]!.pnl).toBe(30);
+  });
+
   it('handles multiple trades and computes winRate + avg', () => {
     const events = [
       { time: 1, type: 'entry', id: 'A', dir: 'long', price: 100 },

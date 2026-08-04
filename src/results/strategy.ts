@@ -139,19 +139,27 @@ export function buildStrategyReport(
     return Math.abs(n);
   };
 
-  /** Money PnL from prices + size. Optional engine `profit` wins when finite. */
+  /**
+   * Money PnL from prices + size.
+   * Engine `profit` is used only when it is a non-zero finite number (some hosts
+   * stamp `profit: 0` as a placeholder, which previously zeroed every trade).
+   */
   const moneyPnl = (
     o: { entry: number; dir: string; qty: number },
     exitPrice: number,
     closeQty: number,
     engineProfit: unknown,
   ): number => {
-    if (typeof engineProfit === 'number' && Number.isFinite(engineProfit)) {
-      return engineProfit;
-    }
     const q = Number.isFinite(closeQty) && closeQty > 0 ? closeQty : o.qty || 1;
     const sign = o.dir.includes('short') ? -1 : 1;
-    return (exitPrice - o.entry) * sign * q;
+    const fromPrices = (exitPrice - o.entry) * sign * q;
+
+    if (typeof engineProfit === 'number' && Number.isFinite(engineProfit)) {
+      // Placeholder zero must not wipe a real price move
+      if (engineProfit === 0 && Math.abs(fromPrices) > 1e-12) return fromPrices;
+      return engineProfit;
+    }
+    return fromPrices;
   };
 
   const pushClosed = (
@@ -292,7 +300,12 @@ export function formatPct(n: number): string {
 
 export function formatMoney(n: number): string {
   if (!Number.isFinite(n)) return '—';
-  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}`;
+  const sign = n >= 0 ? '+' : '';
+  const abs = Math.abs(n);
+  // Small money PnL (fractional crypto size) — keep more precision so "+0.00" is not a lie
+  if (abs > 0 && abs < 0.01) return `${sign}${n.toFixed(4)}`;
+  if (abs > 0 && abs < 1) return `${sign}${n.toFixed(3)}`;
+  return `${sign}${n.toFixed(2)}`;
 }
 
 export function formatNum(n: unknown): string {
