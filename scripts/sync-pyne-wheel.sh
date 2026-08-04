@@ -55,7 +55,9 @@ if [[ -z "${WHEEL}" || ! -f "${WHEEL}" ]]; then
 fi
 
 # Stable browser URL: always serve as pynescript-<ver>-py3-none-any.whl
-# (micropip installs by URL; filename need not match PyPI dist name).
+# Micropip requires .dist-info directory name to match the wheel filename's
+# distribution segment (e.g. pynescript-0.3.0.dist-info). PyPI may build as
+# hoox_pyne / pyne — rewrite metadata when renaming (see rewrite_wheel_distinfo).
 VER="$("${PYTHON}" -c "import pathlib,re; t=pathlib.Path('src/pynescript/__about__.py').read_text(); print(re.search(r'__version__\s*=\s*[\"\\']([^\"\\']+)', t).group(1))")"
 BASE="pynescript-${VER}-py3-none-any.whl"
 echo "==> built $(basename "${WHEEL}") → vendor as ${BASE} ($(wc -c < "${WHEEL}" | tr -d ' ') bytes)"
@@ -64,14 +66,24 @@ mkdir -p "${ROOT}/public/vendor" "${ROOT}/vendor"
 cp -f "${WHEEL}" "${ROOT}/public/vendor/${BASE}"
 cp -f "${WHEEL}" "${ROOT}/vendor/${BASE}"
 
+# Align .dist-info with filename so micropip accepts the stable browser URL
+"${PYTHON}" "${ROOT}/scripts/rewrite_wheel_distinfo.py" \
+  "${ROOT}/public/vendor/${BASE}"
+cp -f "${ROOT}/public/vendor/${BASE}" "${ROOT}/vendor/${BASE}"
+
 # Drop stale alternate versions so dist/ does not serve two wheels
 find "${ROOT}/public/vendor" "${ROOT}/vendor" -maxdepth 1 \
-  \( -name 'pynescript-*-py3-none-any.whl' -o -name 'hoox_pyne-*-py3-none-any.whl' \) \
+  \( -name 'pynescript-*-py3-none-any.whl' -o -name 'hoox_pyne-*-py3-none-any.whl' -o -name 'pyne-*-py3-none-any.whl' \) \
   ! -name "${BASE}" -print -delete 2>/dev/null || true
 
 # Spot-check compiler payload is present (not a stale thin wheel)
 if ! unzip -l "${ROOT}/public/vendor/${BASE}" | grep -q 'pynescript/compiler/numba_builtins.py'; then
   echo "error: wheel missing compiler package" >&2
+  exit 1
+fi
+# Spot-check micropip naming constraint
+if ! unzip -l "${ROOT}/public/vendor/${BASE}" | grep -q "pynescript-${VER}.dist-info/"; then
+  echo "error: wheel .dist-info was not rewritten to pynescript-${VER}.dist-info" >&2
   exit 1
 fi
 NB_SIZE="$(unzip -l "${ROOT}/public/vendor/${BASE}" | awk '/numba_builtins\.py/{print $1; exit}')"
