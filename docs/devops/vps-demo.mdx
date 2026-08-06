@@ -65,10 +65,17 @@ axis.example.com {
 
 Then PWA endpoint = `https://axis.example.com` and the **server** engine posts to `/run` on the same host.
 
+### Production-like (axis.hoox.sh)
+
+- Cloudflare → VPS nginx `:443` (TLS)
+- nginx proxies SPA to static server and Pro API paths (`/run`, `/ws/`, `/health`,
+  `/lsp/`, …) to gunicorn `:5002`
+- PWA **Backend URL** = `https://axis.hoox.sh` (same origin — no mixed content)
+
 ### Minimal without TLS
 
 - Static `:8081`, Flask `:5002`
-- Set endpoint `http://VPS_IP:5002`
+- Prefer a hostname over raw IP when the page is HTTPS
 - Open firewall; accept CORS from static origin (configure Flask accordingly)
 
 ## Internals

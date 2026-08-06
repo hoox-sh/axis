@@ -142,7 +142,7 @@ const DEFAULTS: AppState = {
   historyBars: HISTORY_BARS_DEFAULT,
   source: 'binance-rest',
   engine: 'server',
-  endpoint: 'http://162.254.38.194:5002',
+  endpoint: 'https://axis.hoox.sh',
   activePlugins: {
     source: 'binance-rest',
     stream: 'binance-ws',
@@ -307,9 +307,19 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
     const streamId =
       liveBag?.streamId || pluginsBag?.stream || DEFAULTS.live.streamId;
 
+    // Legacy demo IP → same-origin HTTPS host (mixed content + CF edge)
+    const rawEndpoint =
+      typeof bag.endpoint === 'string' && bag.endpoint.trim()
+        ? bag.endpoint.trim()
+        : DEFAULTS.endpoint;
+    const endpoint = /^https?:\/\/162\.254\.38\.194(:5002)?\/?$/i.test(rawEndpoint)
+      ? 'https://axis.hoox.sh'
+      : rawEndpoint;
+
     return {
       ...DEFAULTS,
       ...bag,
+      endpoint,
       chartType: normalizeChartType(bag.chartType),
       priceScaleLabelsVisible:
         typeof bag.priceScaleLabelsVisible === 'boolean'

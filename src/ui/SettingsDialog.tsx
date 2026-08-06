@@ -693,14 +693,14 @@ export const SettingsDialog: Component<Props> = (props) => {
                     type="button"
                     class="sc-btn sc-btn-ghost px-1.5 py-0.5 text-[10px] font-mono"
                     data-testid="axis-endpoint-preset-vps"
-                    title="Demo API on the VPS (interpret/compile if numba installed there)"
+                    title="Same-origin Pro API on axis.hoox.sh (nginx → pyne :5002)"
                     onClick={() => {
-                      setEndpoint('http://162.254.38.194:5002');
+                      setEndpoint('https://axis.hoox.sh');
                       setEngine('server');
                       setProbeMsg('');
                     }}
                   >
-                    VPS pyne API
+                    axis.hoox.sh API
                   </button>
                 </div>
                 <Show

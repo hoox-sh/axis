@@ -119,20 +119,33 @@ export const serverEngine: EnginePlugin = {
   async isReady() {
     const endpoint = (store.endpoint || this.configSchema!.endpoint.default as string).replace(/\/$/, '');
     try {
-      const res = await fetch(`${endpoint}/`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(8_000),
-      });
-      if (!res.ok) return false;
-      // Best-effort warm WS when health advertises it
-      try {
-        const j = (await res.clone().json()) as { websocket?: boolean };
-        if (j.websocket) {
-          const { probeEngineWs } = await import('./engine-ws');
-          void probeEngineWs(endpoint, 3_000);
+      // Prefer /health: same-origin AXIS hosts serve the SPA on `/`.
+      let health: { websocket?: boolean } | null = null;
+      for (const path of ['/health', '/'] as const) {
+        const res = await fetch(`${endpoint}${path}`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (!res.ok) continue;
+        try {
+          const j = (await res.json()) as {
+            websocket?: boolean;
+            status?: unknown;
+            service?: string;
+            endpoints?: unknown;
+          };
+          if (j.endpoints || j.status || j.service || j.websocket != null) {
+            health = j;
+            break;
+          }
+        } catch {
+          /* HTML shell — try next */
         }
-      } catch {
-        /* health body optional */
+      }
+      if (!health) return false;
+      if (health.websocket) {
+        const { probeEngineWs } = await import('./engine-ws');
+        void probeEngineWs(endpoint, 3_000);
       }
       return true;
     } catch {

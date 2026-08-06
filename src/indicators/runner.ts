@@ -963,7 +963,9 @@ function pageIsRemote(): boolean {
 }
 
 /**
- * Probe pyne Pro API health (`GET {endpoint}/`).
+ * Probe pyne Pro API health.
+ * Prefer `GET {endpoint}/health` (same-origin SPA leaves `/` as the HTML shell),
+ * then fall back to `GET {endpoint}/` for standalone Flask hosts.
  * Surfaces CORS/loopback/remote-host hints for Settings UI.
  */
 export async function probeEndpoint(endpoint?: string): Promise<{ ok: boolean; message: string }> {
@@ -976,22 +978,48 @@ export async function probeEndpoint(endpoint?: string): Promise<{ ok: boolean; m
   const remotePage = pageIsRemote();
 
   try {
-    const res = await fetch(`${base}/`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(8_000),
-      mode: 'cors',
-    });
-    if (!res.ok) return { ok: false, message: `HTTP ${res.status} from ${base}` };
-    const text = await res.text();
-    let detail = `HTTP ${res.status}`;
-    try {
-      const j = JSON.parse(text) as { endpoints?: unknown; status?: unknown; service?: string };
-      if (j.endpoints || j.status) {
-        detail = j.service ? `Pro API reachable (${j.service})` : 'Pro API reachable';
+    let lastStatus = 0;
+    let detail = '';
+    let gotApiJson = false;
+
+    for (const path of ['/health', '/'] as const) {
+      const res = await fetch(`${base}${path}`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(8_000),
+        mode: 'cors',
+      });
+      lastStatus = res.status;
+      if (!res.ok) continue;
+      const text = await res.text();
+      detail = `HTTP ${res.status}`;
+      try {
+        const j = JSON.parse(text) as {
+          endpoints?: unknown;
+          status?: unknown;
+          service?: string;
+        };
+        if (j.endpoints || j.status || j.service) {
+          detail = j.service ? `Pro API reachable (${j.service})` : 'Pro API reachable';
+          gotApiJson = true;
+          break;
+        }
+      } catch {
+        /* HTML SPA shell or plain text — try next path */
       }
-    } catch {
-      /* plain text ok */
     }
+
+    if (!gotApiJson) {
+      if (lastStatus && lastStatus !== 200) {
+        return { ok: false, message: `HTTP ${lastStatus} from ${base}` };
+      }
+      return {
+        ok: false,
+        message:
+          `No Pro API health JSON at ${base}/health (or /). ` +
+          `If this is the AXIS host, nginx must proxy /run and /health to pyne.`,
+      };
+    }
+
     if (loopback && remotePage) {
       detail += ' · note: loopback API is on *this* PC, not the VPS';
     }
@@ -1009,8 +1037,8 @@ export async function probeEndpoint(endpoint?: string): Promise<{ ok: boolean; m
           `Cannot reach ${base} (browser → this machine). ` +
           (remotePage
             ? 'AXIS is on a remote host: localhost is *your PC*, not the VPS. ' +
-              'Start local pyne on :5002, or set Backend URL to the VPS API ' +
-              '(e.g. http://162.254.38.194:5002).'
+              'Start local pyne on :5002, or set Backend URL to https://axis.hoox.sh ' +
+              '(same-origin Pro API).'
             : 'Is pyne Pro API running? (cd pyne && make run)'),
       };
     }

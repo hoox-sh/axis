@@ -181,9 +181,9 @@ axis/                         (this repo root)
 
 - **Local Flask**: existing `make run` on `:5002`. PWA talks to it directly
   (CORS handled by the backend). Default endpoint is `http://localhost:5002`.
-- **VPS demo**: PWA `http://162.254.38.194:8081` · Pro API
-  `http://162.254.38.194:5002` (systemd `axis-pwa` + `pynescript-api`).
-  Solid store default endpoint points at that API host.
+- **VPS demo**: PWA + Pro API same-origin at `https://axis.hoox.sh`
+  (Cloudflare → nginx TLS → static `axis-pwa` + reverse-proxy `/run`/`/ws`/`/health`
+  to `pynescript-api` on `:5002`). Default store endpoint is `https://axis.hoox.sh`.
 - **Cloudflare Worker**: deploy `worker/` with `make deploy-cf`. The Worker
   exposes `/api/run`, `/api/stream`, `/api/keys`, etc. and proxies to the
   pynescript Python runtime via Pyodide on the Worker side. See
@@ -205,17 +205,14 @@ CORS is enforced by the **API you call** (pyne Pro API or the AXIS Worker), not 
 | `*` | Demo-only | Reflects any Origin — fine for a public demo, not for production secrets |
 | `0.0.0.0` | **Skip** | Not a normal browser Origin; listening on `0.0.0.0` ≠ CORS |
 
-For the public AXIS demo the VPS unit currently sets:
+Same-origin proxy (recommended): browser calls `https://axis.hoox.sh/run` — no CORS.
+Direct `:5002` is still fine for demos if `ALLOWED_ORIGINS` includes the page origin.
 
 ```ini
 # /etc/systemd/system/pynescript-api.service
 Environment=ALLOWED_ORIGINS=*
-```
-
-Tighter production-style example (VPS UI + local dev):
-
-```bash
-ALLOWED_ORIGINS=http://162.254.38.194:8081,https://your-pages-host.example,^https?://(localhost|127\.0\.0\.1)(:\d+)?$
+# or tighter:
+# Environment=ALLOWED_ORIGINS=https://axis.hoox.sh,^https?://(localhost|127\.0\.0\.1)(:\d+)?$
 ```
 
 ### AXIS Worker
@@ -224,14 +221,14 @@ ALLOWED_ORIGINS=http://162.254.38.194:8081,https://your-pages-host.example,^http
 Smoke:
 
 ```bash
-curl -sS -D- -o /dev/null -X OPTIONS http://162.254.38.194:5002/run \
-  -H "Origin: http://162.254.38.194:8081" \
+curl -sS -D- -o /dev/null -X OPTIONS https://axis.hoox.sh/run \
+  -H "Origin: https://axis.hoox.sh" \
   -H "Access-Control-Request-Method: POST"
 # expect Access-Control-Allow-Origin echoing the Origin
 
-curl -sS -X POST http://162.254.38.194:5002/run \
+curl -sS -X POST https://axis.hoox.sh/run \
   -H "Content-Type: application/json" \
-  -H "Origin: http://162.254.38.194:8081" \
+  -H "Origin: https://axis.hoox.sh" \
   -d '{"script":"//@version=5\nindicator(\"t\")\nplot(close)","data":[{"time":1,"open":1,"high":1,"low":1,"close":1,"volume":1}]}'
 ```
 
