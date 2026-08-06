@@ -116,7 +116,7 @@ let persistWriteWarned = false;
 /** Default / clamp bounds for {@link AppState.historyBars}. */
 export const HISTORY_BARS_DEFAULT = 500;
 export const HISTORY_BARS_MIN = 50;
-export const HISTORY_BARS_MAX = 5000;
+export const HISTORY_BARS_MAX = 100_000;
 
 /** Clamp history bar count into a safe range for REST kline APIs. */
 export function clampHistoryBars(n: unknown): number {
@@ -1539,8 +1539,11 @@ export function appendBar(bar: Bar) {
       next[next.length - 1] = bar;
       return next;
     }
-    // Cap history growth during long live sessions
-    const next = b.length > 5000 ? b.slice(b.length - 4000) : b.slice();
+    // Cap history growth during long live sessions (Settings HISTORY_BARS_MAX)
+    const next =
+      b.length >= HISTORY_BARS_MAX
+        ? b.slice(b.length - (HISTORY_BARS_MAX - 1))
+        : b.slice();
     next.push(bar);
     return next;
   });

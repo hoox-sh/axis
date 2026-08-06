@@ -389,7 +389,7 @@ describe('historyBars', () => {
   it('clampHistoryBars enforces bounds', () => {
     expect(clampHistoryBars(undefined)).toBe(HISTORY_BARS_DEFAULT);
     expect(clampHistoryBars(10)).toBe(HISTORY_BARS_MIN);
-    expect(clampHistoryBars(99999)).toBe(HISTORY_BARS_MAX);
+    expect(clampHistoryBars(999_999)).toBe(HISTORY_BARS_MAX);
     expect(clampHistoryBars(750.6)).toBe(751);
   });
 

@@ -172,7 +172,7 @@ describe('loadSymbolData', () => {
   });
 
   it('passes clamped limit into fetchHistorical config', async () => {
-    setStore('historyBars', 99999); // over max → clamp
+    setStore('historyBars', 999_999); // over max → clamp
     let seenLimit: unknown;
     registerDynamicSource(
       dynSource('limit-src', async ({ config }) => {
@@ -181,8 +181,8 @@ describe('loadSymbolData', () => {
       }),
     );
     await loadSymbolData('BTCUSDT', '1d', 'limit-src');
-    expect(seenLimit).toBe(clampHistoryBars(99999));
-    expect(seenLimit).toBeLessThanOrEqual(5000);
+    expect(seenLimit).toBe(clampHistoryBars(999_999));
+    expect(seenLimit).toBeLessThanOrEqual(100_000);
   });
 
   it('ignores stale completion when symbol switches mid-load', async () => {

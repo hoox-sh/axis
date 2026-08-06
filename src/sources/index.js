@@ -116,7 +116,7 @@ export const mockWalk = {
     configSchema: {
         seed: { type: 'number', default: 0, label: 'Seed (0 = random)' },
         startPrice: { type: 'number', default: 100, label: 'Start price' },
-        limit: { type: 'number', default: 500, min: 50, max: 5000, label: 'Bars' },
+        limit: { type: 'number', default: 500, min: 50, max: 100_000, label: 'Bars' },
     },
     async fetchHistorical({ interval, config }) {
         const cfg = resolveConfig(this.configSchema, config);

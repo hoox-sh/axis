@@ -33,7 +33,7 @@
 
 import { createStore, produce } from 'solid-js/store';
 import type { Bar } from '../store/types';
-import { clampHistoryBars, loadBars, store } from '../store';
+import { clampHistoryBars, HISTORY_BARS_MAX, loadBars, store } from '../store';
 import { pluginKey } from '../plugins/types';
 import type { SourcePlugin } from '../plugins/types';
 import { getManager, setDataToChart } from '../chart/manager-access';
@@ -760,7 +760,7 @@ export async function applyCachedToChart(
   if (!bars.length) return false;
 
   // Prefer full accumulated history; soft-clamp only if absurdly large for chart
-  const chartMax = Math.max(clampHistoryBars(store.historyBars), 5000);
+  const chartMax = Math.max(clampHistoryBars(store.historyBars), HISTORY_BARS_MAX);
   const painted = bars.length > chartMax ? bars.slice(bars.length - chartMax) : bars;
 
   const exchange = exchangeForSource(srcId);
