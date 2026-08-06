@@ -37,13 +37,17 @@ fi
 echo "==> building wheel from ${PYNE_ROOT} (${PYTHON})"
 cd "${PYNE_ROOT}"
 "${PYTHON}" -m pip install -q build hatchling
-rm -f dist/pynescript-*.whl dist/hoox_pyne-*.whl
+rm -f dist/pynescript-*.whl dist/hoox_pyne-*.whl dist/pyne-*.whl
 "${PYTHON}" -m build --wheel
 
-# PyPI dist name is hoox-pyne; import package remains pynescript. Prefer either.
+# PyPI dist name may be pyne / hoox_pyne / pynescript; import package remains pynescript.
 # (Avoid bare globs under set -o pipefail — unmatched globs make `ls` exit 2.)
 WHEEL=""
-for candidate in dist/pynescript-*-py3-none-any.whl dist/hoox_pyne-*-py3-none-any.whl; do
+for candidate in \
+  dist/pynescript-*-py3-none-any.whl \
+  dist/pyne-*-py3-none-any.whl \
+  dist/hoox_pyne-*-py3-none-any.whl
+do
   if [[ -f "${candidate}" ]]; then
     WHEEL="${candidate}"
     break
@@ -51,6 +55,7 @@ for candidate in dist/pynescript-*-py3-none-any.whl dist/hoox_pyne-*-py3-none-an
 done
 if [[ -z "${WHEEL}" || ! -f "${WHEEL}" ]]; then
   echo "error: no wheel produced under ${PYNE_ROOT}/dist" >&2
+  ls -la dist/ 2>/dev/null || true
   exit 1
 fi
 
