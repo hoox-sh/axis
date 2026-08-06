@@ -120,6 +120,60 @@ describe('data-source-manager', () => {
     expect(job!.oldestSec!).toBeLessThanOrEqual(now - 35);
   });
 
+  it('does not stop after one page when startTime would trap Binance-style APIs', async () => {
+    // Mimics Binance: startTime+endTime → first N bars from startTime only.
+    // Manager must walk with endTime alone so many pages fill now → past date.
+    const pageSize = 10;
+    let calls = 0;
+    let sawStartTime = false;
+    const src: SourcePlugin = {
+      id: 'binance-like',
+      name: 'Binance Like',
+      kind: 'source',
+      builtIn: false,
+      async fetchHistorical({ startTime, endTime, limit }) {
+        calls++;
+        if (typeof startTime === 'number' && startTime > 0) {
+          sawStartTime = true;
+          // Trap: return first N bars from startTime (would fake "complete")
+          const n = Math.min(pageSize, Number(limit) || pageSize);
+          const out: Bar[] = [];
+          for (let i = 0; i < n; i++) out.push(bar(Math.floor(startTime) + i));
+          return out;
+        }
+        const end =
+          typeof endTime === 'number' && endTime > 0
+            ? Math.floor(endTime)
+            : Math.floor(Date.now() / 1000);
+        const n = Math.min(pageSize, Number(limit) || pageSize);
+        const out: Bar[] = [];
+        for (let i = n - 1; i >= 0; i--) {
+          out.push(bar(end - i));
+        }
+        return out;
+      },
+    };
+    registry.registerSource(src);
+
+    const now = Math.floor(Date.now() / 1000);
+    const targetFrom = now - 45; // needs > pageSize bars → multi-page
+    const id = startBackfill({
+      sourceId: 'binance-like',
+      symbol: 'BTCUSDT',
+      interval: '1d',
+      targetFromSec: targetFrom,
+      targetToSec: now,
+    });
+
+    const job = await _waitForJob(id, 15_000);
+    expect(job!.status).toBe('complete');
+    // Must not pass startTime (that would complete in 1 page at target date)
+    expect(sawStartTime).toBe(false);
+    expect(job!.pagesFetched).toBeGreaterThan(1);
+    expect(job!.barsFetched).toBeGreaterThan(pageSize);
+    expect(job!.oldestSec!).toBeLessThanOrEqual(targetFrom);
+  });
+
   it('cancel stops a pending/running job', async () => {
     const src: SourcePlugin = {
       id: 'slow-src',

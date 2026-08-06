@@ -20,6 +20,11 @@
 /**
  * Background Data Source Manager — multi-page OHLCV backfill to a past date.
  *
+ * Walk-back pagination (newest → older):
+ * each page requests only `endTime` + `limit` (never `startTime` + `endTime`
+ * together — Binance-style APIs return the *first* N bars from startTime and
+ * would falsely complete after one page when the target date is far back).
+ *
  * All network pages, merges, and IDB writes run in detached async jobs.
  * UI handlers only enqueue / cancel; they never await the full backfill.
  * Chart paint is opt-in via {@link applyJobToChart} or `applyWhenComplete`.
@@ -351,10 +356,13 @@ async function runJob(j: InternalJob): Promise<void> {
     return;
   }
 
+  // Walk back from newest: first page uses targetTo; later pages use (oldest − 1)
   let cursorEnd =
     j.oldestSec != null && j.oldestSec < j.targetToSec
       ? j.oldestSec - 1
       : j.targetToSec;
+  /** Previous page’s oldest open — detect zero-progress repeats. */
+  let prevPageOldest: number | null = j.oldestSec;
 
   try {
     for (let page = 0; page < MAX_PAGES; page++) {
@@ -382,10 +390,13 @@ async function runJob(j: InternalJob): Promise<void> {
 
       let raw: unknown;
       try {
+        // Walk-back: ONLY endTime + limit.
+        // Passing startTime+endTime makes Binance (and similar) return the
+        // first N bars from startTime — one page looks “done” at the target
+        // date while everything after that window is still missing.
         raw = await source.fetchHistorical({
           symbol: j.symbol,
           interval: j.interval,
-          startTime: j.targetFromSec,
           endTime: cursorEnd,
           limit: pageLimit,
           signal: j.abort.signal,
@@ -404,11 +415,41 @@ async function runJob(j: InternalJob): Promise<void> {
         throw err;
       }
 
-      const pageBars = normalizeHistoricalBars(raw, { limit: pageLimit });
+      // Full page of raw bars; do not clamp with startTime here
+      const rawPage = normalizeHistoricalBars(raw, { limit: pageLimit });
       j.pagesFetched += 1;
 
-      if (!pageBars.length) {
+      if (!rawPage.length) {
         // Venue exhausted
+        setJobStatus(j, 'complete');
+        if (j.applyWhenComplete) void applyJobToChart(j.id);
+        return;
+      }
+
+      const rawOldest = rawPage[0]!.time;
+
+      // Keep only bars within the requested window (inclusive target)
+      // so overshoot past the past-date does not pollute the cache.
+      const pageBars = rawPage.filter(
+        (b) => b.time >= j.targetFromSec && b.time <= j.targetToSec + 86_400,
+      );
+      if (!pageBars.length) {
+        // Entire page older than target (or outside window) → reached past date
+        setJobStatus(j, 'complete');
+        if (j.applyWhenComplete) void applyJobToChart(j.id);
+        return;
+      }
+
+      const pageOldest = pageBars[0]!.time;
+
+      // No walk-back progress (venue keeps returning the same window)
+      if (prevPageOldest != null && rawOldest >= prevPageOldest) {
+        setJobStatus(j, 'complete');
+        if (j.applyWhenComplete) void applyJobToChart(j.id);
+        return;
+      }
+      // Page did not reach older than the cursor we asked for
+      if (rawOldest > cursorEnd) {
         setJobStatus(j, 'complete');
         if (j.applyWhenComplete) void applyJobToChart(j.id);
         return;
@@ -421,20 +462,19 @@ async function runJob(j: InternalJob): Promise<void> {
       j.updatedAt = Date.now();
       syncJob(j);
 
-      const pageOldest = pageBars[0]!.time;
-      // No progress → stop (same page repeating)
-      if (pageOldest >= cursorEnd) {
-        setJobStatus(j, 'complete');
-        if (j.applyWhenComplete) void applyJobToChart(j.id);
-        return;
-      }
-      cursorEnd = pageOldest - 1;
+      // Advance cursor from the *raw* oldest so we walk past filtered-out bars
+      prevPageOldest = rawOldest;
+      cursorEnd = rawOldest - 1;
 
-      if (pageOldest <= j.targetFromSec) {
+      if (pageOldest <= j.targetFromSec || rawOldest <= j.targetFromSec) {
         setJobStatus(j, 'complete');
         if (j.applyWhenComplete) void applyJobToChart(j.id);
         return;
       }
+
+      // Do not stop merely because rawPage.length < pageLimit — dynamic
+      // test sources and some venues return smaller pages while still
+      // having older history. Empty / no-progress / target checks cover end.
 
       await yieldGap();
     }
