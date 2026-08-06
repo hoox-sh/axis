@@ -43,6 +43,7 @@ describe('defaultStreamForSource', () => {
   it('maps sources to streams', () => {
     expect(defaultStreamForSource('mock-walk')).toBe('mock-poll');
     expect(defaultStreamForSource('csv-upload')).toBe('mock-poll');
+    expect(defaultStreamForSource('data-manager')).toBe('mock-poll');
     expect(defaultStreamForSource('okx-rest')).toBe('okx-ws');
     expect(defaultStreamForSource('bybit-rest')).toBe('bybit-ws');
     expect(defaultStreamForSource('coinbase-rest')).toBe('coinbase-ws');

@@ -8,6 +8,7 @@ import {
   findBarGaps,
   validateBarCoverage,
   mergeGaps,
+  buildCoverageMap,
 } from '../src/data/bars-gaps';
 import type { Bar } from '../src/store/types';
 
@@ -87,5 +88,28 @@ describe('bars-gaps', () => {
     expect(merged).toHaveLength(1);
     expect(merged[0]!.fromSec).toBe(0);
     expect(merged[0]!.toSec).toBe(200);
+  });
+
+  it('buildCoverageMap yields data and gap segments', () => {
+    const step = 86_400;
+    const from = 1_000_000_000;
+    const bars = [bar(from), bar(from + step), bar(from + 4 * step)];
+    const { segments, report } = buildCoverageMap(bars, from, from + 4 * step, '1d');
+    expect(report.complete).toBe(false);
+    expect(segments.some((s) => s.kind === 'data')).toBe(true);
+    expect(segments.some((s) => s.kind === 'gap')).toBe(true);
+    const w = segments.reduce((a, s) => a + s.weight, 0);
+    expect(w).toBeCloseTo(1, 5);
+  });
+
+  it('buildCoverageMap full dense series is single data segment', () => {
+    const step = 86_400;
+    const from = 1_000_000_000;
+    const bars: Bar[] = [];
+    for (let i = 0; i < 5; i++) bars.push(bar(from + i * step));
+    const { segments, report } = buildCoverageMap(bars, from, from + 4 * step, '1d');
+    expect(report.complete).toBe(true);
+    expect(segments).toHaveLength(1);
+    expect(segments[0]!.kind).toBe('data');
   });
 });

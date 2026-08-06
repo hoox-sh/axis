@@ -43,8 +43,10 @@ import {
   pastDateInputToSec,
   type DataSourceJob,
 } from '../data/data-source-manager';
+import { DATA_MANAGER_SOURCE_ID } from '../data/data-manager-source';
 import { Icons } from './icons';
 import { FloatableShell } from './panels/FloatableShell';
+import { CachedDatasetsModal } from './CachedDatasetsModal';
 
 function fmtTime(sec: number | null): string {
   if (sec == null || !Number.isFinite(sec)) return '—';
@@ -92,8 +94,10 @@ export const DataSourceManagerPanel: Component = () => {
   const [formError, setFormError] = createSignal('');
   const [formMsg, setFormMsg] = createSignal('');
   const [applyingId, setApplyingId] = createSignal<string | null>(null);
+  const [datasetsOpen, setDatasetsOpen] = createSignal(false);
 
-  const sources = () => listSources();
+  const sources = () =>
+    listSources().filter((s) => s.id !== DATA_MANAGER_SOURCE_ID);
 
   const onStart = (e?: Event) => {
     e?.preventDefault();
@@ -147,6 +151,22 @@ export const DataSourceManagerPanel: Component = () => {
             then <strong>validate</strong> the series and <strong>fill gaps</strong>.
             Chart and live streams stay free; use <em>Load to chart</em> when ready.
           </p>
+
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost w-full"
+            onClick={() => setDatasetsOpen(true)}
+            data-testid="axis-datasource-open-datasets"
+            title="Browse downloaded OHLCV datasets and coverage maps"
+          >
+            <Icons.layers />
+            <span>Cached datasets</span>
+          </button>
+
+          <CachedDatasetsModal
+            open={datasetsOpen()}
+            onClose={() => setDatasetsOpen(false)}
+          />
 
           <form
             class="flex flex-col gap-2 border border-[var(--border)] rounded p-2"

@@ -142,6 +142,99 @@ export async function getCachedRange(
   };
 }
 
+/** Lightweight list row for the Data Manager datasets browser. */
+export interface BarsCacheMeta {
+  key: string;
+  sourceId: string;
+  symbol: string;
+  interval: string;
+  count: number;
+  oldestSec: number | null;
+  newestSec: number | null;
+  updatedAt: number;
+}
+
+function metaFromRecord(rec: BarsCacheRecord): BarsCacheMeta {
+  const bars = rec.bars || [];
+  return {
+    key: rec.key,
+    sourceId: rec.sourceId,
+    symbol: rec.symbol,
+    interval: rec.interval,
+    count: bars.length,
+    oldestSec: bars.length ? bars[0]!.time : null,
+    newestSec: bars.length ? bars[bars.length - 1]!.time : null,
+    updatedAt: rec.updatedAt || 0,
+  };
+}
+
+/**
+ * List every cached series (memory + IndexedDB). Sorted newest-updated first.
+ * Does not clone bar arrays — only metadata for the datasets browser.
+ */
+export async function listCachedSeries(): Promise<BarsCacheMeta[]> {
+  const byKey = new Map<string, BarsCacheMeta>();
+
+  for (const rec of memory.values()) {
+    if (rec?.key) byKey.set(rec.key, metaFromRecord(rec));
+  }
+
+  if (idbAvailable()) {
+    try {
+      const db = await openBarsDb();
+      try {
+        const tx = db.transaction(STORE, 'readonly');
+        const all = (await idbReq(tx.objectStore(STORE).getAll())) as BarsCacheRecord[];
+        await idbTxDone(tx);
+        for (const rec of all || []) {
+          if (!rec?.key) continue;
+          // Prefer fresher of memory vs IDB
+          const existing = byKey.get(rec.key);
+          if (!existing || (rec.updatedAt || 0) >= (existing.updatedAt || 0)) {
+            byKey.set(rec.key, metaFromRecord(rec));
+          }
+        }
+      } finally {
+        db.close();
+      }
+    } catch {
+      /* memory-only */
+    }
+  }
+
+  return Array.from(byKey.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+}
+
+/** Read a full cache record (including bars) by source/symbol/interval. */
+export async function getCachedRecord(
+  sourceId: string,
+  symbol: string,
+  interval: string,
+): Promise<BarsCacheRecord | null> {
+  const key = barsCacheKey(sourceId, symbol, interval);
+  const mem = memory.get(key);
+  if (mem?.bars?.length) {
+    return { ...mem, bars: mem.bars.slice() };
+  }
+  if (!idbAvailable()) {
+    return mem ? { ...mem, bars: mem.bars?.slice() ?? [] } : null;
+  }
+  try {
+    const db = await openBarsDb();
+    try {
+      const tx = db.transaction(STORE, 'readonly');
+      const rec = (await idbReq(tx.objectStore(STORE).get(key))) as BarsCacheRecord | undefined;
+      await idbTxDone(tx);
+      if (!rec) return mem ? { ...mem, bars: mem.bars?.slice() ?? [] } : null;
+      return { ...rec, bars: rec.bars?.slice() ?? [] };
+    } finally {
+      db.close();
+    }
+  } catch {
+    return mem ? { ...mem, bars: mem.bars?.slice() ?? [] } : null;
+  }
+}
+
 /**
  * Merge `incoming` into the stored series and persist.
  * @returns the full merged series after write

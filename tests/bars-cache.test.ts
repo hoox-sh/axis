@@ -9,6 +9,8 @@ import {
   getCachedBars,
   putCachedBars,
   clearCachedBars,
+  listCachedSeries,
+  getCachedRecord,
   _resetBarsCacheForTests,
   BARS_CACHE_MAX,
 } from '../src/data/bars-cache';
@@ -60,5 +62,20 @@ describe('bars-cache', () => {
 
   it('exposes a finite max constant', () => {
     expect(BARS_CACHE_MAX).toBeGreaterThan(1000);
+  });
+
+  it('listCachedSeries returns metadata for stored series', async () => {
+    await putCachedBars('binance-rest', 'BTCUSDT', '1h', [bar(100), bar(200), bar(300)]);
+    await putCachedBars('mock-walk', 'ETHUSDT', '1d', [bar(50)]);
+    const list = await listCachedSeries();
+    expect(list.length).toBeGreaterThanOrEqual(2);
+    const btc = list.find((r) => r.symbol === 'BTCUSDT' && r.interval === '1h');
+    expect(btc?.count).toBe(3);
+    expect(btc?.oldestSec).toBe(100);
+    expect(btc?.newestSec).toBe(300);
+    expect(btc?.sourceId).toBe('binance-rest');
+
+    const rec = await getCachedRecord('binance-rest', 'BTCUSDT', '1h');
+    expect(rec?.bars).toHaveLength(3);
   });
 });

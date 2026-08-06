@@ -192,6 +192,94 @@ export function validateBarCoverage(
   };
 }
 
+/**
+ * Timeline segment for a data-complete map visualization.
+ * Covers [fromSec, toSec] either as contiguous data or as a gap.
+ */
+export interface CoverageSegment {
+  fromSec: number;
+  toSec: number;
+  kind: 'data' | 'gap';
+  /** Fraction of the total window width (0–1). */
+  weight: number;
+}
+
+/**
+ * Build ordered coverage segments across [fromSec, toSec] for the complete map UI.
+ * Empty window → single gap segment. Dense series → single data segment.
+ */
+export function buildCoverageMap(
+  bars: readonly Bar[],
+  fromSec: number,
+  toSec: number,
+  interval: string,
+  opts?: { gapFactor?: number },
+): { segments: CoverageSegment[]; report: CoverageReport } {
+  const from = Math.floor(fromSec);
+  const to = Math.floor(toSec);
+  const report = validateBarCoverage(bars, from, to, interval, opts);
+  const span = Math.max(1, to - from);
+  const gaps = report.gaps;
+
+  if (!report.barCount) {
+    return {
+      segments: [{ fromSec: from, toSec: to, kind: 'gap', weight: 1 }],
+      report,
+    };
+  }
+
+  if (!gaps.length) {
+    return {
+      segments: [{ fromSec: from, toSec: to, kind: 'data', weight: 1 }],
+      report,
+    };
+  }
+
+  // Walk window left→right alternating data / gap from gap list
+  const segments: CoverageSegment[] = [];
+  let cursor = from;
+  const sorted = gaps.slice().sort((a, b) => a.fromSec - b.fromSec);
+
+  for (const g of sorted) {
+    const gFrom = Math.max(from, g.fromSec);
+    const gTo = Math.min(to, g.toSec);
+    if (gTo < gFrom) continue;
+    if (gFrom > cursor) {
+      const dFrom = cursor;
+      const dTo = gFrom - 1;
+      if (dTo >= dFrom) {
+        segments.push({
+          fromSec: dFrom,
+          toSec: dTo,
+          kind: 'data',
+          weight: Math.max(0.002, (dTo - dFrom) / span),
+        });
+      }
+    }
+    segments.push({
+      fromSec: gFrom,
+      toSec: gTo,
+      kind: 'gap',
+      weight: Math.max(0.002, (gTo - gFrom) / span),
+    });
+    cursor = gTo + 1;
+  }
+  if (cursor <= to) {
+    segments.push({
+      fromSec: cursor,
+      toSec: to,
+      kind: 'data',
+      weight: Math.max(0.002, (to - cursor) / span),
+    });
+  }
+
+  // Normalize weights to sum ≈ 1
+  const sum = segments.reduce((a, s) => a + s.weight, 0) || 1;
+  for (const s of segments) s.weight = s.weight / sum;
+
+  return { segments, report };
+}
+
 /** Merge overlapping / adjacent gaps (after partial fills). */
 export function mergeGaps(gaps: BarGap[], stepSec: number): BarGap[] {
   if (!gaps.length) return [];

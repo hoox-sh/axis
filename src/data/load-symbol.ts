@@ -83,6 +83,8 @@ function exchangeForSource(sourceId: string): string {
       return 'mock';
     case 'csv-upload':
       return 'upload';
+    case 'data-manager':
+      return 'cache';
     default:
       return store.exchange;
   }

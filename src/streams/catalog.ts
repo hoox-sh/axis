@@ -502,7 +502,9 @@ export function listDynamicStreamIds(): string[] {
 
 /** Pick a sensible stream for the current historical source. */
 export function defaultStreamForSource(sourceId: string): string {
-  if (sourceId === 'mock-walk' || sourceId === 'csv-upload') return 'mock-poll';
+  if (sourceId === 'mock-walk' || sourceId === 'csv-upload' || sourceId === 'data-manager') {
+    return 'mock-poll';
+  }
   if (sourceId === 'okx-rest') return 'okx-ws';
   if (sourceId === 'bybit-rest') return 'bybit-ws';
   if (sourceId === 'coinbase-rest') return 'coinbase-ws';

@@ -68,6 +68,7 @@ import { parseOhlcvFile } from '../data/parse-bars';
 import { listSources } from '../sources/catalog';
 import { listEngines, preloadPyodide } from '../engines/catalog';
 import { setUploadedBars, getUploadedFileName } from '../sources/upload-store';
+import { DATA_MANAGER_SOURCE_ID } from '../data/data-manager-source';
 import { engineOptionLabel } from './plugin-badges';
 import { Icons } from './icons';
 import { HooxLogo } from './HooxLogo';
@@ -78,6 +79,7 @@ import { TopbarField } from './TopbarField';
 import { startBarReplay, exitBarReplay } from './BarReplayControls';
 import { isReplayActive, subscribeReplay } from '../chart/bar-replay';
 import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
+import { CachedDatasetsModal } from './CachedDatasetsModal';
 
 const INTERVALS = [...WATCHLIST_INTERVALS];
 
@@ -108,6 +110,7 @@ export const Topbar: Component<{
   const [loading, setLoading] = createSignal(false);
   const [uploadLabel, setUploadLabel] = createSignal(getUploadedFileName() || '');
   const [replayOn, setReplayOn] = createSignal(isReplayActive());
+  const [datasetsOpen, setDatasetsOpen] = createSignal(false);
   let fileInput: HTMLInputElement | undefined;
   /** Last symbol we successfully requested (avoids redundant blur reloads). */
   let lastLoadedSymbol = store.symbol;
@@ -150,6 +153,10 @@ export const Topbar: Component<{
     // CSV needs a file first — nudge the picker
     if (id === 'csv-upload' && !getUploadedFileName()) {
       fileInput?.click();
+    }
+    // Data Manager: open datasets browser to pick a cached series
+    if (id === DATA_MANAGER_SOURCE_ID) {
+      setDatasetsOpen(true);
     }
   };
 
@@ -369,6 +376,24 @@ export const Topbar: Component<{
           />
         </Show>
 
+        <Show when={store.source === DATA_MANAGER_SOURCE_ID}>
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost max-w-[12em]"
+            title="Browse cached datasets from the Data Source Manager"
+            onClick={() => setDatasetsOpen(true)}
+            data-testid="axis-btn-datasets"
+          >
+            <Icons.layers />
+            <span class="truncate axis-tb-btn-label">Datasets…</span>
+          </button>
+        </Show>
+
+        <CachedDatasetsModal
+          open={datasetsOpen()}
+          onClose={() => setDatasetsOpen(false)}
+        />
+
         <button
           type="button"
           class={`sc-btn ${loading() ? 'is-loading' : ''}`}
@@ -379,7 +404,9 @@ export const Topbar: Component<{
           title={
             store.source === 'csv-upload'
               ? 'Reload last uploaded file'
-              : `Load bars from ${store.source}`
+              : store.source === DATA_MANAGER_SOURCE_ID
+                ? 'Load bars from Data Manager cache'
+                : `Load bars from ${store.source}`
           }
         >
           {loading() ? <HooxLoader size="xs" /> : <Icons.download />}

@@ -49,6 +49,7 @@ describe('sources catalog', () => {
     const ids = listSources().map((s) => s.id);
     expect(ids).toContain('binance-rest');
     expect(ids).toContain('mock-walk');
+    expect(ids).toContain('data-manager');
     expect(getSource('mock-walk')?.name).toBe('Mock Walk');
   });
 

@@ -38,6 +38,7 @@ import { pluginKey } from '../plugins/types';
 import type { SourcePlugin } from '../plugins/types';
 import { getManager, setDataToChart } from '../chart/manager-access';
 import { getSource, sourcePageLimit } from '../sources/catalog';
+import { DATA_MANAGER_SOURCE_ID } from './data-manager-source';
 import { normalizeHistoricalBars } from './parse-bars';
 import { getCachedBars, putCachedBars } from './bars-cache';
 import {
@@ -234,6 +235,9 @@ export function startBackfill(opts: StartBackfillOpts = {}): string {
 
   if (!symbol) {
     throw new Error('Symbol required');
+  }
+  if (sourceId === DATA_MANAGER_SOURCE_ID) {
+    throw new Error('Data Manager is a cache reader — pick an exchange source to backfill');
   }
   if (!getSource(sourceId)) {
     throw new Error(`Unknown source: ${sourceId}`);
@@ -786,6 +790,8 @@ function exchangeForSource(sourceId: string): string {
       return 'mock';
     case 'csv-upload':
       return 'upload';
+    case 'data-manager':
+      return 'cache';
     default:
       return store.exchange;
   }

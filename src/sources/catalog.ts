@@ -34,6 +34,7 @@
  * | `coinbase-rest` | yes | Exchange candles (max ~300) |
  * | `mock-walk` | no | Synthetic random walk; optional deterministic seed |
  * | `csv-upload` | no | Last file from {@link upload-store} |
+ * | `data-manager` | no | Local bars-cache from Data Source Manager |
  *
  * ## Public API
  *
@@ -49,6 +50,11 @@ import type { Bar } from '../store/types';
 import type { ConfigSchema, SourcePlugin as UnifiedSourcePlugin } from '../plugins/types';
 import { registry } from '../plugins/registry';
 import { sanitizeBar } from '../data/parse-bars';
+import {
+  DATA_MANAGER_SOURCE_ID,
+  dataManagerLabel,
+  resolveDataManagerBars,
+} from '../data/data-manager-source';
 import { getUploadedBars } from './upload-store';
 
 export type SourceConfigSchema = ConfigSchema;
@@ -328,6 +334,32 @@ export const csvUpload: SourcePlugin = {
   },
 };
 
+/**
+ * Local OHLCV from the Data Source Manager bars-cache (IndexedDB / memory).
+ * Pick a series in the datasets browser, or Load uses the best match for
+ * the current symbol + interval.
+ */
+export const dataManagerSource: SourcePlugin = {
+  id: DATA_MANAGER_SOURCE_ID,
+  name: 'Data Manager (cache)',
+  kind: 'source',
+  builtIn: true,
+  description:
+    'Load OHLCV from the Data Source Manager local cache. Backfill offline series first, then select Load.',
+  capabilities: { offline: true },
+  configSchema: {},
+  async fetchHistorical({ symbol, interval }) {
+    const resolved = await resolveDataManagerBars(symbol, interval);
+    if (!resolved?.bars?.length) {
+      throw new Error(
+        'No cached dataset for this symbol. Open Data Source Manager → Datasets, or run a backfill first.',
+      );
+    }
+    void dataManagerLabel(resolved);
+    return resolved.bars;
+  },
+};
+
 /** Map AXIS intervals to OKX bar codes */
 function okxBar(interval: string): string {
   const m: Record<string, string> = {
@@ -507,6 +539,7 @@ export const BUILTIN_SOURCES: SourcePlugin[] = [
   coinbaseRest,
   mockWalk,
   csvUpload,
+  dataManagerSource,
 ];
 
 let registered = false;
