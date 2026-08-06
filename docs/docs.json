@@ -54,6 +54,7 @@
                 "group": "Guides",
                 "pages": [
                   "enduser/guides/manager-and-settings",
+                  "enduser/guides/data-source-manager",
                   "enduser/guides/script-library",
                   "enduser/guides/strategy-and-results",
                   "enduser/guides/drawings",

@@ -90,6 +90,7 @@ import {
 import { loadSymbolData } from './data/load-symbol';
 import { prefetchPyodideAssets, preloadPyodide } from './engines/catalog';
 import { filterPineFiles, importPineFiles } from './storage/import-pine-files';
+import { applyThemeToDocument } from './theme';
 
 /** Primary charting workspace component mounted by `index.tsx`. */
 export const App: Component = () => {
@@ -117,7 +118,8 @@ export const App: Component = () => {
   };
 
   onMount(() => {
-    document.documentElement.setAttribute('data-theme', store.theme);
+    // Full chrome + chart CSS vars (not only data-theme)
+    applyThemeToDocument(store.chartTheme);
     applyUiScale(store.uiScale);
     document.title = 'AXIS';
     appendLog(

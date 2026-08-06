@@ -36,6 +36,7 @@ import {
   readSharedDoc,
 } from './editor-bridge';
 import { store } from '../store';
+import { applyThemeToDocument } from '../theme';
 
 /** Pop-out / new-tab editor shell; does not host the chart. */
 export const EditorApp: Component = () => {
@@ -46,7 +47,7 @@ export const EditorApp: Component = () => {
 
   onMount(() => {
     document.title = 'AXIS · Editor';
-    document.documentElement.setAttribute('data-theme', store.theme);
+    applyThemeToDocument(store.chartTheme);
     bridgePublish({ type: 'hello', role: 'editor' });
     bridgePublish({ type: 'popout-opened' });
 

@@ -73,6 +73,11 @@ export interface FloatableShellProps {
   /** Extra header actions (prefer icon-only so the title bar does not overflow) */
   headerExtra?: JSX.Element;
   /**
+   * Actions rendered just before the close control (e.g. overflow ··· menu).
+   * Prefer icon-only; stop pointer propagation so they don’t start panel drag.
+   */
+  headerEnd?: JSX.Element;
+  /**
    * Extra items for the left hamburger menu (after dock options).
    * Render buttons with `role="menuitem"` and class `axis-panel-menu-item`.
    */
@@ -740,6 +745,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                 class="flex items-center gap-0.5 flex-shrink-0"
                 onPointerDown={(e) => e.stopPropagation()}
               >
+                <Show when={props.headerEnd}>{props.headerEnd}</Show>
                 <button
                   type="button"
                   class="sc-btn sc-btn-ghost px-1"

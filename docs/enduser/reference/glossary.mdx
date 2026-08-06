@@ -76,7 +76,11 @@ Terms as used in AXIS documentation and UI. Language runtime terms → [PYNE](/p
 | **Compare** | Second-symbol series overlaid on the price pane. |
 | **Volume profile** | OHLCV volume-at-price histogram (Layers). |
 | **Watchlist** | Side panel of symbols + quote refresh. |
-| **Layers** | Panel listing panes, indicators, and user drawings. |
+| **Scripts panel** | Applied indicators/strategies list (UI title **Scripts**; internal id `indicators`). |
+| **Layers** | Panel listing panes, scripts, and user drawings. |
+| **Data Source Manager** | Background multi-page OHLCV backfill to a past date + gap validation (`Data` panel). |
+| **Bars cache** | IndexedDB OHLCV store keyed by source/symbol/interval for the manager. |
+| **Chart theme preset** | Named token set (void, classic, mono, obsidian, …) for chart + chrome accents. |
 | **Alert** | Local price condition (+ optional webhook); Alerts panel. |
 
 ## Editor & debug

@@ -20,14 +20,13 @@
 /**
  * Background Data Source Manager — multi-page OHLCV backfill to a past date.
  *
- * Walk-back pagination (newest → older):
- * each page requests only `endTime` + `limit` (never `startTime` + `endTime`
- * together — Binance-style APIs return the *first* N bars from startTime and
- * would falsely complete after one page when the target date is far back).
+ * Phases:
+ * 1. **Backfill** — walk-back pagination (newest → older) with `endTime` + `limit`
+ *    only (never `startTime`+`endTime` together — Binance-style trap).
+ * 2. **Validate** — check the cached series is dense from target past date → end.
+ * 3. **Gap-fill** — download missing ranges, re-validate until complete or stuck.
  *
- * All network pages, merges, and IDB writes run in detached async jobs.
- * UI handlers only enqueue / cancel; they never await the full backfill.
- * Chart paint is opt-in via {@link applyJobToChart} or `applyWhenComplete`.
+ * All network work runs in detached async jobs (never blocks the chart path).
  *
  * @module data/data-source-manager
  */
@@ -36,10 +35,17 @@ import { createStore, produce } from 'solid-js/store';
 import type { Bar } from '../store/types';
 import { clampHistoryBars, loadBars, store } from '../store';
 import { pluginKey } from '../plugins/types';
+import type { SourcePlugin } from '../plugins/types';
 import { getManager, setDataToChart } from '../chart/manager-access';
 import { getSource, sourcePageLimit } from '../sources/catalog';
 import { normalizeHistoricalBars } from './parse-bars';
 import { getCachedBars, putCachedBars } from './bars-cache';
+import {
+  findBarGaps,
+  intervalToSec,
+  validateBarCoverage,
+  type BarGap,
+} from './bars-gaps';
 
 export type DataSourceJobStatus =
   | 'pending'
@@ -48,6 +54,8 @@ export type DataSourceJobStatus =
   | 'complete'
   | 'error'
   | 'cancelled';
+
+export type DataSourceJobPhase = 'backfill' | 'validate' | 'gapfill' | 'done';
 
 export interface DataSourceJob {
   id: string;
@@ -59,10 +67,18 @@ export interface DataSourceJob {
   /** Newest bound at enqueue time (unix sec). */
   targetToSec: number;
   status: DataSourceJobStatus;
+  /** Current work phase (UI). */
+  phase: DataSourceJobPhase;
   barsFetched: number;
   pagesFetched: number;
   oldestSec: number | null;
   newestSec: number | null;
+  /** Gaps detected on last validation. */
+  gapsFound: number;
+  /** Gaps successfully reduced / filled this run. */
+  gapsFilled: number;
+  /** True when series is contiguous from targetFrom → targetTo. */
+  datasetComplete: boolean;
   error: string | null;
   createdAt: number;
   updatedAt: number;
@@ -144,10 +160,14 @@ function publicJob(j: InternalJob): DataSourceJob {
     targetFromSec,
     targetToSec,
     status,
+    phase,
     barsFetched,
     pagesFetched,
     oldestSec,
     newestSec,
+    gapsFound,
+    gapsFilled,
+    datasetComplete,
     error,
     createdAt,
     updatedAt,
@@ -161,10 +181,14 @@ function publicJob(j: InternalJob): DataSourceJob {
     targetFromSec,
     targetToSec,
     status,
+    phase,
     barsFetched,
     pagesFetched,
     oldestSec,
     newestSec,
+    gapsFound,
+    gapsFilled,
+    datasetComplete,
     error,
     createdAt,
     updatedAt,
@@ -228,10 +252,14 @@ export function startBackfill(opts: StartBackfillOpts = {}): string {
     targetFromSec,
     targetToSec,
     status: 'pending',
+    phase: 'backfill',
     barsFetched: 0,
     pagesFetched: 0,
     oldestSec: null,
     newestSec: null,
+    gapsFound: 0,
+    gapsFilled: 0,
+    datasetComplete: false,
     error: null,
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -320,9 +348,213 @@ function pumpQueue(): void {
   }
 }
 
+async function refreshJobFromCache(j: InternalJob): Promise<Bar[]> {
+  try {
+    const cached = await getCachedBars(j.sourceId, j.symbol, j.interval);
+    if (cached.length) {
+      j.barsFetched = cached.length;
+      j.oldestSec = cached[0]!.time;
+      j.newestSec = cached[cached.length - 1]!.time;
+    } else {
+      j.barsFetched = 0;
+      j.oldestSec = null;
+      j.newestSec = null;
+    }
+    j.updatedAt = Date.now();
+    syncJob(j);
+    return cached;
+  } catch {
+    return [];
+  }
+}
+
+function sourceConfig(sourceId: string): Record<string, unknown> {
+  const configs = store.pluginsConfig || {};
+  return configs[pluginKey('source', sourceId)] || configs[sourceId] || {};
+}
+
+/** One walk-back page at endTime; merges into cache. Returns raw page oldest or null. */
+async function fetchWalkPage(
+  j: InternalJob,
+  source: SourcePlugin,
+  pageLimit: number,
+  cursorEnd: number,
+  windowFrom: number,
+  windowTo: number,
+): Promise<{ rawOldest: number; pageBars: Bar[] } | null> {
+  const raw = await source.fetchHistorical({
+    symbol: j.symbol,
+    interval: j.interval,
+    endTime: cursorEnd,
+    limit: pageLimit,
+    signal: j.abort.signal,
+    config: {
+      ...sourceConfig(j.sourceId),
+      limit: pageLimit,
+      fallback: false,
+    },
+  });
+  const rawPage = normalizeHistoricalBars(raw, { limit: pageLimit });
+  j.pagesFetched += 1;
+  if (!rawPage.length) return null;
+
+  const rawOldest = rawPage[0]!.time;
+  const pageBars = rawPage.filter((b) => b.time >= windowFrom && b.time <= windowTo + 86_400);
+  if (pageBars.length) {
+    const merged = await putCachedBars(j.sourceId, j.symbol, j.interval, pageBars);
+    j.barsFetched = merged.length;
+    j.oldestSec = merged[0]!.time;
+    j.newestSec = merged[merged.length - 1]!.time;
+    j.updatedAt = Date.now();
+    syncJob(j);
+  }
+  return { rawOldest, pageBars };
+}
+
+/**
+ * Walk-back from cursorEnd toward windowFrom until target reached, empty, or stalled.
+ * Always advances using the **raw** page oldest (not cache oldest) so we keep
+ * walking even when the cache already holds a far-past fragment.
+ */
+async function walkBackRange(
+  j: InternalJob,
+  source: SourcePlugin,
+  pageLimit: number,
+  windowFrom: number,
+  windowTo: number,
+  startCursorEnd: number,
+  maxPages: number,
+): Promise<'ok' | 'cancelled' | 'paused' | 'error'> {
+  let cursorEnd = startCursorEnd;
+  let prevPageOldest: number | null = null;
+  let pages = 0;
+
+  while (pages < maxPages) {
+    if (j.abort.signal.aborted) return 'cancelled';
+    if (j.paused) return 'paused';
+    if (j.barsFetched >= MAX_BARS_PER_JOB) return 'ok';
+
+    pages += 1;
+    let result: { rawOldest: number; pageBars: Bar[] } | null;
+    try {
+      result = await fetchWalkPage(j, source, pageLimit, cursorEnd, windowFrom, windowTo);
+    } catch (err: unknown) {
+      if (isAbortError(err) || j.abort.signal.aborted) return 'cancelled';
+      throw err;
+    }
+
+    if (!result) return 'ok'; // venue empty
+
+    const { rawOldest, pageBars } = result;
+    if (!pageBars.length) {
+      // Page entirely outside window — if raw is older than window, done for this range
+      if (rawOldest < windowFrom) return 'ok';
+      // otherwise try older cursor
+      if (prevPageOldest != null && rawOldest >= prevPageOldest) return 'ok';
+      prevPageOldest = rawOldest;
+      cursorEnd = rawOldest - 1;
+      await yieldGap();
+      continue;
+    }
+
+    if (prevPageOldest != null && rawOldest >= prevPageOldest) return 'ok';
+    if (rawOldest > cursorEnd) return 'ok';
+
+    prevPageOldest = rawOldest;
+    cursorEnd = rawOldest - 1;
+
+    if (rawOldest <= windowFrom) return 'ok';
+
+    // Early exit when the full window is already dense (resume of complete cache)
+    try {
+      const cached = await getCachedBars(j.sourceId, j.symbol, j.interval);
+      const report = validateBarCoverage(cached, windowFrom, windowTo, j.interval);
+      if (report.complete) return 'ok';
+    } catch {
+      /* ignore */
+    }
+
+    await yieldGap();
+  }
+  return 'ok';
+}
+
+async function fillGaps(
+  j: InternalJob,
+  source: SourcePlugin,
+  pageLimit: number,
+  gaps: BarGap[],
+): Promise<'ok' | 'cancelled' | 'paused' | 'error'> {
+  j.phase = 'gapfill';
+  j.updatedAt = Date.now();
+  syncJob(j);
+
+  const step = intervalToSec(j.interval);
+  let filled = 0;
+
+  for (const gap of gaps) {
+    if (j.abort.signal.aborted) return 'cancelled';
+    if (j.paused) return 'paused';
+
+    const before = (await getCachedBars(j.sourceId, j.symbol, j.interval)).length;
+    // Walk back inside the gap window (endTime only)
+    const outcome = await walkBackRange(
+      j,
+      source,
+      pageLimit,
+      gap.fromSec,
+      gap.toSec,
+      gap.toSec,
+      Math.min(MAX_PAGES, Math.ceil(gap.missingBars / Math.max(1, pageLimit)) + 4),
+    );
+    if (outcome !== 'ok') return outcome;
+
+    const after = (await getCachedBars(j.sourceId, j.symbol, j.interval)).length;
+    if (after > before) {
+      filled += 1;
+      j.gapsFilled = (j.gapsFilled || 0) + 1;
+      j.updatedAt = Date.now();
+      syncJob(j);
+    }
+    void step;
+    await yieldGap();
+  }
+  return 'ok';
+}
+
+/**
+ * True when cache still needs network work for [from, to]:
+ * - empty / missing ends
+ * - newest too old vs `to`
+ * - oldest too new vs `from`
+ * - any density gaps
+ */
+function needsNetworkBackfill(
+  cached: Bar[],
+  fromSec: number,
+  toSec: number,
+  interval: string,
+): boolean {
+  if (!cached.length) return true;
+  const report = validateBarCoverage(cached, fromSec, toSec, interval);
+  if (!report.complete) return true;
+  const step = intervalToSec(interval);
+  if (report.newestSec == null || toSec - report.newestSec > step * 1.5) return true;
+  if (report.oldestSec == null || report.oldestSec > fromSec + step * 1.5) return true;
+  // Density: far fewer bars than expected ⇒ incomplete even if gap finder missed
+  if (report.expectedBars > 0 && report.barCount < report.expectedBars * 0.85) {
+    return true;
+  }
+  return false;
+}
+
 async function runJob(j: InternalJob): Promise<void> {
   if (j.status === 'cancelled') return;
   setJobStatus(j, 'running');
+  j.phase = 'backfill';
+  j.pagesFetched = 0;
+  j.gapsFilled = 0;
+  syncJob(j);
 
   const source = getSource(j.sourceId);
   if (!source) {
@@ -331,156 +563,156 @@ async function runJob(j: InternalJob): Promise<void> {
   }
 
   const pageLimit = sourcePageLimit(j.sourceId);
-  const configs = store.pluginsConfig || {};
-  const sourceCfg =
-    configs[pluginKey('source', j.sourceId)] || configs[j.sourceId] || {};
+  const step = intervalToSec(j.interval);
 
-  // Seed progress from existing cache (resume-friendly)
   try {
-    const cached = await getCachedBars(j.sourceId, j.symbol, j.interval);
-    if (cached.length) {
-      j.barsFetched = cached.length;
-      j.oldestSec = cached[0]!.time;
-      j.newestSec = cached[cached.length - 1]!.time;
-      j.updatedAt = Date.now();
+    // Seed progress from existing cache (resume-friendly)
+    let cached = await refreshJobFromCache(j);
+
+    // Phase 1: ALWAYS walk from **now** (targetTo) back toward targetFrom when
+    // coverage is incomplete. Never start at cache.oldest − 1 only — that skips
+    // the recent side when the cache holds an old one-page fragment (e.g. 1000
+    // bars from 2020 with Pages:0 / Complete bug).
+    if (needsNetworkBackfill(cached, j.targetFromSec, j.targetToSec, j.interval)) {
+      j.phase = 'backfill';
       syncJob(j);
+      // Always begin at the newest bound so trailing holes get filled first.
+      const walk = await walkBackRange(
+        j,
+        source,
+        pageLimit,
+        j.targetFromSec,
+        j.targetToSec,
+        j.targetToSec,
+        MAX_PAGES,
+      );
+      if (walk === 'cancelled') {
+        setJobStatus(j, 'cancelled');
+        return;
+      }
+      if (walk === 'paused') {
+        setJobStatus(j, 'paused');
+        return;
+      }
+      cached = await refreshJobFromCache(j);
     }
-  } catch {
-    /* cache optional */
-  }
 
-  // Walk back: if we already have older bars than target, done
-  if (j.oldestSec != null && j.oldestSec <= j.targetFromSec) {
-    setJobStatus(j, 'complete');
-    if (j.applyWhenComplete) void applyJobToChart(j.id);
-    return;
-  }
-
-  // Walk back from newest: first page uses targetTo; later pages use (oldest − 1)
-  let cursorEnd =
-    j.oldestSec != null && j.oldestSec < j.targetToSec
-      ? j.oldestSec - 1
-      : j.targetToSec;
-  /** Previous page’s oldest open — detect zero-progress repeats. */
-  let prevPageOldest: number | null = j.oldestSec;
-
-  try {
-    for (let page = 0; page < MAX_PAGES; page++) {
-      // cancelBackfill aborts the controller; status is mirrored for UI
+    // Phase 2–3: validate coverage and fill remaining gaps
+    const MAX_GAP_ROUNDS = 6;
+    for (let round = 0; round < MAX_GAP_ROUNDS; round++) {
       if (j.abort.signal.aborted) {
         setJobStatus(j, 'cancelled');
         return;
       }
-      // Pause: exit runner; resumeBackfill re-queues (no dual runners)
       if (j.paused) {
         setJobStatus(j, 'paused');
         return;
       }
 
-      if (j.barsFetched >= MAX_BARS_PER_JOB) {
-        setJobStatus(j, 'complete');
-        if (j.applyWhenComplete) void applyJobToChart(j.id);
-        return;
-      }
-      if (j.oldestSec != null && j.oldestSec <= j.targetFromSec) {
-        setJobStatus(j, 'complete');
-        if (j.applyWhenComplete) void applyJobToChart(j.id);
-        return;
-      }
+      j.phase = 'validate';
+      syncJob(j);
 
-      let raw: unknown;
-      try {
-        // Walk-back: ONLY endTime + limit.
-        // Passing startTime+endTime makes Binance (and similar) return the
-        // first N bars from startTime — one page looks “done” at the target
-        // date while everything after that window is still missing.
-        raw = await source.fetchHistorical({
-          symbol: j.symbol,
-          interval: j.interval,
-          endTime: cursorEnd,
-          limit: pageLimit,
-          signal: j.abort.signal,
-          config: {
-            ...sourceCfg,
-            limit: pageLimit,
-            // Avoid synthetic fallback masking real gaps during backfill
-            fallback: false,
-          },
-        });
-      } catch (err: unknown) {
-        if (isAbortError(err) || j.abort.signal.aborted) {
-          setJobStatus(j, 'cancelled');
-          return;
-        }
-        throw err;
-      }
-
-      // Full page of raw bars; do not clamp with startTime here
-      const rawPage = normalizeHistoricalBars(raw, { limit: pageLimit });
-      j.pagesFetched += 1;
-
-      if (!rawPage.length) {
-        // Venue exhausted
-        setJobStatus(j, 'complete');
-        if (j.applyWhenComplete) void applyJobToChart(j.id);
-        return;
-      }
-
-      const rawOldest = rawPage[0]!.time;
-
-      // Keep only bars within the requested window (inclusive target)
-      // so overshoot past the past-date does not pollute the cache.
-      const pageBars = rawPage.filter(
-        (b) => b.time >= j.targetFromSec && b.time <= j.targetToSec + 86_400,
+      cached = await getCachedBars(j.sourceId, j.symbol, j.interval);
+      const report = validateBarCoverage(
+        cached,
+        j.targetFromSec,
+        j.targetToSec,
+        j.interval,
       );
-      if (!pageBars.length) {
-        // Entire page older than target (or outside window) → reached past date
-        setJobStatus(j, 'complete');
-        if (j.applyWhenComplete) void applyJobToChart(j.id);
-        return;
-      }
-
-      const pageOldest = pageBars[0]!.time;
-
-      // No walk-back progress (venue keeps returning the same window)
-      if (prevPageOldest != null && rawOldest >= prevPageOldest) {
-        setJobStatus(j, 'complete');
-        if (j.applyWhenComplete) void applyJobToChart(j.id);
-        return;
-      }
-      // Page did not reach older than the cursor we asked for
-      if (rawOldest > cursorEnd) {
-        setJobStatus(j, 'complete');
-        if (j.applyWhenComplete) void applyJobToChart(j.id);
-        return;
-      }
-
-      const merged = await putCachedBars(j.sourceId, j.symbol, j.interval, pageBars);
-      j.barsFetched = merged.length;
-      j.oldestSec = merged[0]!.time;
-      j.newestSec = merged[merged.length - 1]!.time;
+      j.gapsFound = report.gaps.length;
+      j.datasetComplete = report.complete;
+      j.barsFetched = report.barCount || cached.length;
+      j.oldestSec = report.oldestSec;
+      j.newestSec = report.newestSec;
       j.updatedAt = Date.now();
       syncJob(j);
 
-      // Advance cursor from the *raw* oldest so we walk past filtered-out bars
-      prevPageOldest = rawOldest;
-      cursorEnd = rawOldest - 1;
-
-      if (pageOldest <= j.targetFromSec || rawOldest <= j.targetFromSec) {
+      if (report.complete) {
+        j.phase = 'done';
         setJobStatus(j, 'complete');
         if (j.applyWhenComplete) void applyJobToChart(j.id);
         return;
       }
 
-      // Do not stop merely because rawPage.length < pageLimit — dynamic
-      // test sources and some venues return smaller pages while still
-      // having older history. Empty / no-progress / target checks cover end.
+      // No discrete gaps but still sparse — force another full walk from now
+      if (!report.gaps.length) {
+        if (
+          round < 2 &&
+          (report.barCount < report.expectedBars * 0.85 ||
+            report.newestSec == null ||
+            j.targetToSec - (report.newestSec ?? 0) > step * 1.5)
+        ) {
+          const walk = await walkBackRange(
+            j,
+            source,
+            pageLimit,
+            j.targetFromSec,
+            j.targetToSec,
+            j.targetToSec,
+            MAX_PAGES,
+          );
+          if (walk === 'cancelled') {
+            setJobStatus(j, 'cancelled');
+            return;
+          }
+          if (walk === 'paused') {
+            setJobStatus(j, 'paused');
+            return;
+          }
+          continue;
+        }
+        break;
+      }
 
-      await yieldGap();
+      // Prefer largest gaps first (trailing hole is usually biggest)
+      const gaps = report.gaps
+        .slice()
+        .sort((a, b) => b.missingBars - a.missingBars)
+        .slice(0, 48);
+      const fill = await fillGaps(j, source, pageLimit, gaps);
+      if (fill === 'cancelled') {
+        setJobStatus(j, 'cancelled');
+        return;
+      }
+      if (fill === 'paused') {
+        setJobStatus(j, 'paused');
+        return;
+      }
     }
 
-    // Hit page cap — treat as complete with partial history
-    setJobStatus(j, 'complete');
+    // Final validation
+    const finalCached = await getCachedBars(j.sourceId, j.symbol, j.interval);
+    const finalReport = validateBarCoverage(
+      finalCached,
+      j.targetFromSec,
+      j.targetToSec,
+      j.interval,
+    );
+    j.gapsFound = finalReport.gaps.length;
+    j.datasetComplete = finalReport.complete;
+    j.barsFetched = finalReport.barCount || finalCached.length;
+    j.oldestSec = finalReport.oldestSec;
+    j.newestSec = finalReport.newestSec;
+    j.phase = 'done';
+    j.updatedAt = Date.now();
+
+    if (finalReport.complete) {
+      setJobStatus(j, 'complete');
+    } else {
+      const n = finalReport.gaps.length;
+      const sparse =
+        finalReport.expectedBars > 0 &&
+        finalReport.barCount < finalReport.expectedBars * 0.85;
+      setJobStatus(
+        j,
+        'complete',
+        n > 0
+          ? `Partial: ${n} gap${n === 1 ? '' : 's'} remain (venue may lack data)`
+          : sparse
+            ? `Partial: ${finalReport.barCount}/${finalReport.expectedBars} bars`
+            : null,
+      );
+    }
     if (j.applyWhenComplete) void applyJobToChart(j.id);
   } catch (err: unknown) {
     if (isAbortError(err) || j.abort.signal.aborted) {
@@ -559,14 +791,25 @@ function exchangeForSource(sourceId: string): string {
   }
 }
 
-/** Progress 0–1 toward targetFrom (1 = reached or older). */
+/**
+ * Progress 0–1: primarily range coverage toward targetFrom; when gap-filling,
+ * blend in gap reduction so the bar does not sit at 100% with holes left.
+ */
 export function jobProgress(job: DataSourceJob): number {
-  if (job.status === 'complete') return 1;
+  if (job.status === 'complete' && job.datasetComplete) return 1;
   if (job.oldestSec == null) return 0;
   const span = job.targetToSec - job.targetFromSec;
-  if (span <= 0) return 1;
-  const covered = job.targetToSec - job.oldestSec;
-  return Math.min(1, Math.max(0, covered / span));
+  if (span <= 0) return job.datasetComplete ? 1 : 0.5;
+  const rangeCover = Math.min(1, Math.max(0, (job.targetToSec - job.oldestSec) / span));
+  if (job.phase === 'gapfill' || job.phase === 'validate') {
+    // Soften 100% while gaps remain
+    if (job.gapsFound > 0) {
+      const gapPenalty = Math.min(0.25, job.gapsFound * 0.03);
+      return Math.min(0.98, Math.max(0.5, rangeCover) * (1 - gapPenalty) + 0.5 * rangeCover);
+    }
+  }
+  if (job.status === 'complete') return job.datasetComplete ? 1 : Math.min(0.99, rangeCover);
+  return rangeCover;
 }
 
 /** Default past-date for the form: 90 days ago as YYYY-MM-DD. */

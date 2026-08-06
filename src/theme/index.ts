@@ -90,6 +90,7 @@ export {
 
 export {
   applyThemeToDocument,
+  buildChromeCssVars,
   buildChartOptionsFromTokens,
   applyThemeToChart,
   buildCandleSeriesOptions,

@@ -33,8 +33,8 @@ import type {
   ThemeTokens,
 } from './types';
 
-/** CSS custom properties written for chart + chrome bridge. */
-const CSS_VAR_MAP: Record<string, string> = {
+/** Chart-scoped CSS vars (bridge for canvas / series-factory helpers). */
+const CHART_CSS_VAR_MAP: Record<string, string> = {
   'chart.bg_color': '--chart-bg',
   'chart.fg_color': '--chart-fg',
   'chart.panel': '--chart-panel',
@@ -51,8 +51,87 @@ const CSS_VAR_MAP: Record<string, string> = {
   'ui.down': '--chart-ui-down',
 };
 
+function tok(tokens: ThemeTokens, key: string, fallback: string): string {
+  const v = tokens[key];
+  return v != null && String(v).trim() ? String(v) : fallback;
+}
+
+/**
+ * Map resolved theme tokens → full product chrome CSS variables
+ * (`--color-*` used by Tailwind / index.css) so presets recolor the whole UI.
+ */
+export function buildChromeCssVars(
+  tokens: ThemeTokens,
+  base: 'dark' | 'light',
+): Record<string, string> {
+  const bg = tok(tokens, 'chart.bg_color', base === 'light' ? '#f4f3f8' : '#0a0b10');
+  const panel = tok(tokens, 'chart.panel', base === 'light' ? '#ebeaf2' : '#111218');
+  const elev = tok(tokens, 'chart.elev', base === 'light' ? '#e0dfe8' : '#171821');
+  const fg = tok(tokens, 'chart.fg_color', base === 'light' ? '#1a1b24' : '#c8cad4');
+  const dim = tok(tokens, 'scale.text', base === 'light' ? '#5c5f6e' : '#8b8e9c');
+  const border = tok(tokens, 'scale.border', base === 'light' ? '#b8b6c4' : '#3a3d4a');
+  const accent = tok(tokens, 'ui.accent', base === 'light' ? '#5a6ad4' : '#939fff');
+  const up = tok(tokens, 'ui.up', tok(tokens, 'bar.up.color', '#5ecf8a'));
+  const down = tok(tokens, 'ui.down', tok(tokens, 'bar.down.color', '#e85d4c'));
+
+  // Primary body text: prefer slightly brighter than chart.fg for dark chrome
+  const text =
+    base === 'light'
+      ? fg
+      : tok(tokens, 'chart.fg_color', '#eceef4');
+
+  const mixBlack = base === 'light' ? '#0a0b10' : '#000000';
+  const mixWhite = base === 'light' ? '#ffffff' : '#ffffff';
+
+  return {
+    // Surfaces
+    '--color-void': bg,
+    '--color-bg-base': bg,
+    '--color-bg-panel': panel,
+    '--color-bg-elev': elev,
+    '--color-bg-hover': `color-mix(in srgb, ${elev} 72%, ${text} 28%)`,
+
+    // Edges
+    '--color-border': border,
+    '--color-border-soft': `color-mix(in srgb, ${border} 55%, ${bg} 45%)`,
+    '--color-border-focus': `color-mix(in srgb, ${accent} 65%, transparent)`,
+
+    // Text
+    '--color-text': text,
+    '--color-text-dim': dim,
+    '--color-text-faint': `color-mix(in srgb, ${dim} 70%, ${bg} 30%)`,
+
+    // Accents / signals
+    '--color-accent': accent,
+    '--color-accent-hover': `color-mix(in srgb, ${accent} 78%, ${
+      base === 'light' ? mixBlack : mixWhite
+    } 22%)`,
+    '--color-accent-2': up,
+    '--color-green': up,
+    '--color-red': down,
+    '--color-purple': accent,
+    // Warm warn — blend accent with a fixed amber so warn stays distinct
+    '--color-accent-3': `color-mix(in srgb, ${accent} 35%, #e8a03a 65%)`,
+    '--color-orange': `color-mix(in srgb, ${accent} 25%, #e8a03a 75%)`,
+    '--color-yellow': `color-mix(in srgb, ${accent} 20%, #e8a03a 80%)`,
+
+    // Focus / shadows track theme depth
+    '--ui-focus-ring': `0 0 0 1px color-mix(in srgb, ${accent} 40%, transparent)`,
+    '--ui-shadow-panel':
+      base === 'light'
+        ? '0 8px 28px rgba(20, 18, 40, 0.12)'
+        : '0 8px 28px rgba(0, 0, 0, 0.48)',
+    '--ui-shadow-dialog':
+      base === 'light'
+        ? '0 16px 48px rgba(20, 18, 40, 0.16)'
+        : '0 16px 48px rgba(0, 0, 0, 0.6)',
+  };
+}
+
 /**
  * Write theme CSS variables + `data-theme` on `<html>`.
+ * Updates both chart bridge vars and full chrome (`--color-*`) so presets
+ * recolor the entire app shell, not only the Lightweight Charts canvas.
  * Safe in non-DOM environments (tests).
  */
 export function applyThemeToDocument(
@@ -68,7 +147,9 @@ export function applyThemeToDocument(
   } catch {
     /* ignore */
   }
-  for (const [tokenKey, cssVar] of Object.entries(CSS_VAR_MAP)) {
+
+  // Chart bridge vars
+  for (const [tokenKey, cssVar] of Object.entries(CHART_CSS_VAR_MAP)) {
     const v = tokens[tokenKey];
     if (v == null) continue;
     try {
@@ -77,11 +158,23 @@ export function applyThemeToDocument(
       /* ignore */
     }
   }
+
+  // Full chrome / Tailwind color tokens
+  const chrome = buildChromeCssVars(tokens, base);
+  for (const [cssVar, value] of Object.entries(chrome)) {
+    try {
+      root.style.setProperty(cssVar, value);
+    } catch {
+      /* ignore */
+    }
+  }
+
   // Pine aliases as data attributes for tooling / pyne host bridge
   try {
     const pine = pineColorMap(tokens);
     root.dataset.chartBgColor = pine['chart.bg_color'];
     root.dataset.chartFgColor = pine['chart.fg_color'];
+    root.dataset.themePreset = state?.presetId || 'void-dark';
   } catch {
     /* ignore */
   }

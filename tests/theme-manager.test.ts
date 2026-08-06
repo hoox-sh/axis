@@ -324,7 +324,7 @@ describe('theme apply', () => {
     expect(noGrid.grid.vertLines.color).toBe('transparent');
   });
 
-  it('applyThemeToDocument sets data-theme and CSS vars', () => {
+  it('applyThemeToDocument sets data-theme, chart vars, and full chrome colors', () => {
     const state = withPreset('void-dark');
     applyThemeToDocument(state);
     const root = document.documentElement;
@@ -338,10 +338,32 @@ describe('theme apply', () => {
     expect(root.style.getPropertyValue('--chart-bar-up')).toBe(
       String(catalogDefaults()['bar.up.color']),
     );
+    // Full UI chrome bridge
+    expect(root.style.getPropertyValue('--color-bg-base')).toBe(
+      String(catalogDefaults()['chart.bg_color']),
+    );
+    expect(root.style.getPropertyValue('--color-bg-panel')).toBe(
+      String(catalogDefaults()['chart.panel']),
+    );
+    expect(root.style.getPropertyValue('--color-accent')).toBe(
+      String(catalogDefaults()['ui.accent']),
+    );
+    expect(root.style.getPropertyValue('--color-green')).toBe(
+      String(catalogDefaults()['ui.up']),
+    );
+    expect(root.style.getPropertyValue('--color-red')).toBe(
+      String(catalogDefaults()['ui.down']),
+    );
     expect(root.dataset.chartBgColor).toBe(String(catalogDefaults()['chart.bg_color']));
 
     applyThemeToDocument(withPreset('void-light'));
     expect(root.getAttribute('data-theme')).toBe('light');
+    expect(root.style.getPropertyValue('--color-bg-base')).toBe('#f4f3f8');
+
+    applyThemeToDocument(withPreset('obsidian'));
+    expect(root.getAttribute('data-theme')).toBe('dark');
+    expect(root.style.getPropertyValue('--color-bg-base')).toBe('#100e0c');
+    expect(root.style.getPropertyValue('--color-accent')).toBe('#c4a574');
   });
 
   it('pineHostColors returns bg_color, fg_color, color_background, color_foreground', () => {

@@ -18,22 +18,22 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 ---
-title: "Indicators"
-description: "AXIS indicator UI: runAndApply pipeline, active engine binding, overlay routing, and IndicatorPanel."
+title: "Scripts (indicators & strategies)"
+description: "AXIS applied-scripts UI: runAndApply pipeline, Scripts panel, overlay routing, and engine binding."
 ---
 
-# Indicators
+# Scripts (indicators & strategies)
 
-“Indicators” in AXIS terms means **scripts applied to the chart**, whether `indicator()` or `strategy()` in Pine. The module boundary is `indicators/runner.ts` plus list UI—not the PYNE evaluator.
+In AXIS, **scripts applied to the chart** may be Pine `indicator()` or `strategy()` definitions. The product panel is labeled **Scripts** (panel id remains `indicators` for workspace compatibility). The module boundary is `indicators/runner.ts` plus list UI—not the PYNE evaluator.
 
 ## Abstract
 
 | Piece | Role |
 | --- | --- |
 | `runScript` | Engine invocation + status/timeouts |
-| `runAndApply` | Chart + lastRun + results open |
+| `runAndApply` | Chart + lastRun + results open; may `addIndicator` |
 | `probeEndpoint` | Settings health check helper |
-| `IndicatorPanel` | List/toggle scripts in store |
+| **Scripts** panel (`IndicatorPanel`) | List / toggle / colors for `store.scripts` |
 | `IndicatorCard` | Per-script UI chrome |
 
 Language semantics: [PYNE runtime](/pyne/docs/runtime).

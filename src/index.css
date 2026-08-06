@@ -1430,14 +1430,37 @@ body.axis-panel-dragging {
   white-space: nowrap;
   /* Tighter corners than default sc-btn / --radius-input */
   border-radius: 2px;
+  /* No chrome border — active state is icon color only */
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
   /* Closed / slide-out timing (used when .is-label-open is removed) */
   transition:
     max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
     gap 0.36s cubic-bezier(0.4, 0, 0.2, 1),
     padding 0.36s cubic-bezier(0.4, 0, 0.2, 1),
-    background-color 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease;
+    color 0.15s ease;
+}
+/* Override sc-btn is-active / aria-pressed borders — color the icon only */
+.axis-editor-tools .axis-editor-tool-btn.is-tool-on,
+.axis-editor-tools .axis-editor-tool-btn.is-active,
+.axis-editor-tools .axis-editor-tool-btn[aria-pressed='true'] {
+  color: var(--color-accent) !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-weight: 600;
+}
+.axis-editor-tools .axis-editor-tool-btn:hover {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-bg-hover) 55%, transparent) !important;
+  border-color: transparent !important;
+}
+.axis-editor-tools .axis-editor-tool-btn.is-tool-on:hover,
+.axis-editor-tools .axis-editor-tool-btn[aria-pressed='true']:hover {
+  color: var(--color-accent) !important;
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent) !important;
+  border-color: transparent !important;
 }
 .axis-editor-tools .axis-editor-tool-btn.is-label-open {
   max-width: 11em;
@@ -1486,6 +1509,20 @@ body.axis-panel-dragging {
     max-width 0.36s cubic-bezier(0.22, 1, 0.36, 1),
     opacity 0.28s ease 0.04s,
     transform 0.36s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Editor right overflow menu (secondary tools) — open upward/down next to close */
+.axis-editor-overflow {
+  position: relative;
+}
+.axis-editor-overflow-btn {
+  border-color: transparent !important;
+  background: transparent !important;
+}
+.axis-editor-overflow-pop {
+  right: 0;
+  left: auto;
+  min-width: 11.5rem;
 }
 
 .axis-panel-body {

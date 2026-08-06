@@ -97,6 +97,10 @@ See [Script library](/axis/docs/enduser/guides/script-library). Manager hosts th
 | Storage | `local` \| `cloud` \| `git` |
 | Default interval | Updates store; may reload bars for current symbol |
 | Watchlist refresh | Clamp 5–120 seconds |
+| Chart theme | Preset picker (void / classic / mono / boutique dark & light) — see `src/theme/presets.ts` |
+| History bars | One-shot Load depth (venue may clamp further) |
+
+Deep multi-page history and gap repair live in the [Data Source Manager](/axis/docs/enduser/guides/data-source-manager), not Settings.
 
 **Execution mode** maps to PYNE `Runtime.run(..., mode=…)`:
 

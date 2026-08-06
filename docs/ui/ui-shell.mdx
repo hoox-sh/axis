@@ -64,9 +64,9 @@ Grouped left→right (`axis-tb-group`, `data-tb-group`):
 | **brand** | Logo + AXIS |
 | **market** | Symbol, Interval, Type (`TopbarField`), Compare |
 | **data** | Source (+ CSV upload), Load, Reload (icon-only) |
-| **compute** | Engine, Stream, **Run** (primary), Live, Replay |
+| **compute** | Engine, Stream, **Run**, Live, Replay |
 | **layout** | Multi-chart layouts + recipes |
-| **panels** | List, Editor, Indicators, Layers, Alerts, Data, Inputs, Results |
+| **panels** | List, Editor, Library, **Data** (Source Manager), **Scripts**, Layers, Alerts, Data window, Inputs, Results |
 | **system** | Plugins, Settings, Theme (`margin-left: auto`) |
 
 | Control | Effect |
@@ -75,9 +75,15 @@ Grouped left→right (`axis-tb-group`, `data-tb-group`):
 | Source / Stream / Engine | `setActivePlugin` + side effects |
 | Chart type | `setChartType` (candles, HA, …) |
 | Compare | Second-symbol overlay |
-| Load / Reload | Historical fetch |
-| Run | Editor doc → runAndApply |
+| Load / Reload | One-shot historical fetch → chart |
+| **Data** panel | [Data Source Manager](/axis/docs/enduser/guides/data-source-manager) — background deep history |
+| **Scripts** panel | Applied indicators/strategies list |
+| Run | Editor doc → `runAndApply`; **accent only while `status === 'running'`** |
 | Live | multiplex start/stop (stops Replay) |
+
+### Chart themes
+
+Settings / command palette expose **ten** curated presets (void dark/light, classic, mono, obsidian, graphite, pacific, dusk, porcelain, parchment). High-end soft surfaces — not neon high-contrast. See `src/theme/presets.ts`.
 | Replay | Bar replay over loaded bars |
 | Panel toggles | `isPanelOpen` / dual-write chrome |
 | Settings / Plugins | Modal open |

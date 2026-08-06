@@ -55,22 +55,30 @@ function fmtTime(sec: number | null): string {
   }
 }
 
-function statusLabel(s: DataSourceJob['status']): string {
-  switch (s) {
-    case 'pending':
-      return 'Queued';
-    case 'running':
-      return 'Running';
+function statusLabel(job: DataSourceJob): string {
+  if (job.status === 'running' || job.status === 'pending') {
+    switch (job.phase) {
+      case 'backfill':
+        return job.status === 'pending' ? 'Queued' : 'Backfilling';
+      case 'validate':
+        return 'Validating';
+      case 'gapfill':
+        return 'Filling gaps';
+      default:
+        return job.status === 'pending' ? 'Queued' : 'Running';
+    }
+  }
+  switch (job.status) {
     case 'paused':
       return 'Paused';
     case 'complete':
-      return 'Complete';
+      return job.datasetComplete ? 'Complete' : 'Partial';
     case 'error':
       return 'Error';
     case 'cancelled':
       return 'Cancelled';
     default:
-      return s;
+      return job.status;
   }
 }
 
@@ -135,7 +143,8 @@ export const DataSourceManagerPanel: Component = () => {
       <FloatableShell id="datasource" testId="axis-datasource">
         <div class="flex-1 overflow-y-auto min-h-0 p-2 flex flex-col gap-3 text-[0.82rem]">
           <p class="text-muted m-0 leading-snug">
-            Backfill OHLCV in the <strong>background</strong> down to a past date.
+            Backfill OHLCV in the <strong>background</strong> down to a past date,
+            then <strong>validate</strong> the series and <strong>fill gaps</strong>.
             Chart and live streams stay free; use <em>Load to chart</em> when ready.
           </p>
 
@@ -252,7 +261,7 @@ export const DataSourceManagerPanel: Component = () => {
                             {job.symbol} · {job.interval}
                           </div>
                           <div class="text-muted text-[0.72rem] truncate">
-                            {job.sourceId} · {statusLabel(job.status)}
+                            {job.sourceId} · {statusLabel(job)}
                           </div>
                         </div>
                         <span class="text-[0.72rem] text-muted shrink-0">{pct()}%</span>
@@ -275,7 +284,24 @@ export const DataSourceManagerPanel: Component = () => {
                         <span>Bars: {job.barsFetched}</span>
                         <span>Pages: {job.pagesFetched}</span>
                         <span>Oldest: {fmtTime(job.oldestSec)}</span>
-                        <span>Target: {fmtTime(job.targetFromSec)}</span>
+                        <span>Newest: {fmtTime(job.newestSec)}</span>
+                        <span>Past target: {fmtTime(job.targetFromSec)}</span>
+                        <span>End: {fmtTime(job.targetToSec)}</span>
+                        <span>
+                          Gaps:{' '}
+                          {job.gapsFound > 0
+                            ? `${job.gapsFound}${job.gapsFilled ? ` · filled ${job.gapsFilled}` : ''}`
+                            : job.datasetComplete
+                              ? 'none'
+                              : '—'}
+                        </span>
+                        <span>
+                          {job.datasetComplete
+                            ? 'Coverage: full'
+                            : job.status === 'complete'
+                              ? 'Coverage: partial'
+                              : `Phase: ${job.phase || '…'}`}
+                        </span>
                       </div>
 
                       <Show when={job.error}>

@@ -31,6 +31,8 @@ cd worker && bun run dev # wrangler :8787
 | Path | Role |
 |------|------|
 | `src/` | Product UI (Solid) — prefer this over legacy root JS |
+| `src/data/data-source-manager.ts` | Background OHLCV backfill + validate + gap-fill |
+| `src/theme/` | Chart theme catalog + curated presets |
 | `worker/` | Cloudflare Worker |
 | `tests/` | Bun unit tests |
 | `e2e/` | Playwright |

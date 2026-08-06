@@ -21,9 +21,10 @@
  * Dockable / floatable **editor chrome** around {@link TabbedEditor}.
  *
  * Uses {@link FloatableShell} for the same panel management as watchlist /
- * layers (dock menu, float, drag-to-edge, close). Header tools are compact
- * icons with **slide-in labels** on hover (Run, Scriptlogs, Profiler, Debug,
- * Pins, Ruler). **Open in new tab** lives in the left hamburger menu.
+ * layers (dock menu, float, drag-to-edge, close). Primary header tools:
+ * **Run**, **Scriptlogs**, **Profiler** (slide-in labels on hover). Secondary
+ * tools (inline debug, chart pins, column ruler) live in a **right hamburger**
+ * next to close. **Open in new tab** stays in the left dock menu.
  *
  * Set `standalone` for the `?view=editor` popout window (simplified chrome).
  *
@@ -154,6 +155,7 @@ export const EditorPane: Component<Props> = (props) => {
 
   onCleanup(() => clearLabelHideTimer());
 
+  /** Primary strip: Run · Logs · Profiler only. */
   const editorTools = (
     <div
       class="axis-editor-tools"
@@ -170,8 +172,6 @@ export const EditorPane: Component<Props> = (props) => {
               : 'Run script against loaded bars'
           }
           testId="axis-editor-btn-run"
-          /* Accent only while this run is executing — idle stays ghost */
-          primary={store.status === 'running'}
           pressed={store.status === 'running'}
           open={labelId() === 'run'}
           onShow={() => showToolLabel('run')}
@@ -187,7 +187,7 @@ export const EditorPane: Component<Props> = (props) => {
       </Show>
       <EditorToolBtn
         id="scriptlogs"
-        label="Scriptlogs"
+        label="Logs"
         title="Scriptlogs — script log.* output (not system telemetry)"
         testId="axis-btn-scriptlogs"
         pressed={isPanelOpen('scriptlogs')}
@@ -222,58 +222,6 @@ export const EditorPane: Component<Props> = (props) => {
       >
         <Icons.activity size={12} />
       </EditorToolBtn>
-      <EditorToolBtn
-        id="inline-debug"
-        label="Inline debug"
-        title={
-          store.inlineDebugEnabled
-            ? 'Inline debug on — end-of-line log/error chips from last run (click pin-able chips to jump to bar)'
-            : 'Show last-run logs/errors inline on source lines (needs line refs)'
-        }
-        testId="axis-btn-inline-debug"
-        pressed={store.inlineDebugEnabled}
-        open={labelId() === 'inline-debug'}
-        onShow={() => showToolLabel('inline-debug')}
-        onScheduleHide={() => scheduleHideToolLabel('inline-debug')}
-        onClick={() => toggleInlineDebugEnabled()}
-      >
-        <Icons.alert size={12} />
-      </EditorToolBtn>
-      <EditorToolBtn
-        id="debug-pins"
-        label="Chart pins"
-        title={pinsTitle()}
-        testId="axis-btn-debug-pins"
-        pressed={store.debugPinsEnabled}
-        open={labelId() === 'debug-pins'}
-        onShow={() => showToolLabel('debug-pins')}
-        onScheduleHide={() => scheduleHideToolLabel('debug-pins')}
-        onClick={() => toggleDebugPinsEnabled()}
-      >
-        <Icons.pin size={12} />
-        <Show when={store.debugPinsEnabled && pinCount() > 0}>
-          <span class="sr-only" data-testid="axis-debug-pin-count">
-            {pinCount()} pins
-          </span>
-        </Show>
-      </EditorToolBtn>
-      <EditorToolBtn
-        id="ruler"
-        label="Column ruler"
-        title={
-          store.editorRulerEnabled
-            ? 'Column ruler on — 80-character recommended line length guide'
-            : 'Show 80-character recommended line length ruler'
-        }
-        testId="axis-btn-editor-ruler"
-        pressed={store.editorRulerEnabled}
-        open={labelId() === 'ruler'}
-        onShow={() => showToolLabel('ruler')}
-        onScheduleHide={() => scheduleHideToolLabel('ruler')}
-        onClick={() => toggleEditorRulerEnabled()}
-      >
-        <Icons.ruler size={12} />
-      </EditorToolBtn>
     </div>
   );
 
@@ -292,6 +240,17 @@ export const EditorPane: Component<Props> = (props) => {
     </button>
   );
 
+  /** Right overflow (next to close): secondary editor tools. */
+  const editorOverflowMenu = () => (
+    <EditorOverflowMenu
+      pinCount={pinCount()}
+      onToggleInlineDebug={() => toggleInlineDebugEnabled()}
+      onTogglePins={() => toggleDebugPinsEnabled()}
+      onToggleRuler={() => toggleEditorRulerEnabled()}
+      pinsTitle={pinsTitle()}
+    />
+  );
+
   if (props.standalone) {
     return (
       <div class="flex flex-col h-full min-h-0 bg-bg-panel" data-testid="axis-editor">
@@ -300,6 +259,7 @@ export const EditorPane: Component<Props> = (props) => {
             Editor
           </span>
           {editorTools}
+          {editorOverflowMenu()}
           <button
             type="button"
             class="sc-btn sc-btn-ghost px-1"
@@ -336,6 +296,7 @@ export const EditorPane: Component<Props> = (props) => {
         testId="axis-editor"
         class="min-h-0 h-full flex-1"
         headerExtra={editorTools}
+        headerEnd={editorOverflowMenu()}
         menuExtra={editorMenuExtra}
         onPopoutWindow={() => popoutLiveEditor('popup')}
       >
@@ -353,13 +314,147 @@ export const EditorPane: Component<Props> = (props) => {
   );
 };
 
-/** Icon button with a label that slides in to the right when `open`. */
+/** Right-side hamburger: secondary editor tools (debug / pins / ruler). */
+const EditorOverflowMenu: Component<{
+  pinCount: number;
+  pinsTitle: string;
+  onToggleInlineDebug: () => void;
+  onTogglePins: () => void;
+  onToggleRuler: () => void;
+}> = (props) => {
+  const [open, setOpen] = createSignal(false);
+  let wrapEl: HTMLDivElement | undefined;
+
+  const close = () => setOpen(false);
+
+  onMount(() => {
+    const onDoc = (e: PointerEvent) => {
+      if (!open()) return;
+      const t = e.target as Node | null;
+      if (wrapEl && t && wrapEl.contains(t)) return;
+      close();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && open()) close();
+    };
+    document.addEventListener('pointerdown', onDoc, true);
+    document.addEventListener('keydown', onKey);
+    onCleanup(() => {
+      document.removeEventListener('pointerdown', onDoc, true);
+      document.removeEventListener('keydown', onKey);
+    });
+  });
+
+  return (
+    <div
+      class="axis-editor-overflow relative flex-shrink-0"
+      ref={(el) => {
+        wrapEl = el;
+      }}
+      data-testid="axis-editor-overflow"
+    >
+      <button
+        type="button"
+        class={`sc-btn sc-btn-ghost px-1 axis-editor-overflow-btn ${
+          open() ? 'text-accent' : ''
+        }`}
+        title="More editor tools"
+        aria-label="More editor tools"
+        aria-expanded={open()}
+        aria-haspopup="menu"
+        data-testid="axis-editor-overflow-btn"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Icons.menu size={14} />
+      </button>
+      <Show when={open()}>
+        <div
+          class="axis-panel-menu-pop axis-editor-overflow-pop"
+          role="menu"
+          aria-label="Editor tools"
+          onClick={(e) => {
+            const t = e.target as HTMLElement | null;
+            if (t?.closest?.('[role="menuitem"]')) close();
+          }}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            class={`axis-panel-menu-item ${
+              store.inlineDebugEnabled ? 'is-active' : ''
+            }`}
+            title={
+              store.inlineDebugEnabled
+                ? 'Inline debug on — end-of-line log/error chips from last run'
+                : 'Show last-run logs/errors inline on source lines'
+            }
+            data-testid="axis-btn-inline-debug"
+            onClick={() => props.onToggleInlineDebug()}
+          >
+            <Icons.alert size={14} />
+            <span>Inline debug</span>
+            <Show when={store.inlineDebugEnabled}>
+              <Icons.check size={12} class="ml-auto opacity-80" />
+            </Show>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class={`axis-panel-menu-item ${
+              store.debugPinsEnabled ? 'is-active' : ''
+            }`}
+            title={props.pinsTitle}
+            data-testid="axis-btn-debug-pins"
+            onClick={() => props.onTogglePins()}
+          >
+            <Icons.pin size={14} />
+            <span>
+              Chart pins
+              <Show when={store.debugPinsEnabled && props.pinCount > 0}>
+                <span class="text-text-faint ml-1" data-testid="axis-debug-pin-count">
+                  ({props.pinCount})
+                </span>
+              </Show>
+            </span>
+            <Show when={store.debugPinsEnabled}>
+              <Icons.check size={12} class="ml-auto opacity-80" />
+            </Show>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class={`axis-panel-menu-item ${
+              store.editorRulerEnabled ? 'is-active' : ''
+            }`}
+            title={
+              store.editorRulerEnabled
+                ? 'Column ruler on — 80-character recommended line length guide'
+                : 'Show 80-character recommended line length ruler'
+            }
+            data-testid="axis-btn-editor-ruler"
+            onClick={() => props.onToggleRuler()}
+          >
+            <Icons.ruler size={14} />
+            <span>Column ruler</span>
+            <Show when={store.editorRulerEnabled}>
+              <Icons.check size={12} class="ml-auto opacity-80" />
+            </Show>
+          </button>
+        </div>
+      </Show>
+    </div>
+  );
+};
+
+/**
+ * Icon button with a label that slides in to the right when `open`.
+ * Active/pressed state is **icon color only** (no border / fill chrome).
+ */
 const EditorToolBtn: Component<{
   id: string;
   label: string;
   title: string;
   testId?: string;
-  primary?: boolean;
   pressed?: boolean;
   open: boolean;
   onShow: () => void;
@@ -370,11 +465,9 @@ const EditorToolBtn: Component<{
   return (
     <button
       type="button"
-      class={`sc-btn axis-editor-tool-btn ${
-        props.primary ? 'sc-btn-primary' : 'sc-btn-ghost'
-      } ${props.pressed ? 'text-accent border-accent' : ''} ${
-        props.open ? 'is-label-open' : ''
-      }`}
+      class={`sc-btn sc-btn-ghost axis-editor-tool-btn ${
+        props.pressed ? 'is-tool-on' : ''
+      } ${props.open ? 'is-label-open' : ''}`}
       title={props.title}
       aria-label={props.label}
       aria-pressed={props.pressed}

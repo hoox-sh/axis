@@ -88,6 +88,9 @@ Legacy vanilla shell still uses `src/registry.js` (see LEGACY.md).
 | Kind   | id            | Source                           |
 |--------|---------------|----------------------------------|
 | Source | `binance-rest`| `https://api.binance.com/...`    |
+| Source | `okx-rest`    | OKX public candles               |
+| Source | `bybit-rest`  | Bybit v5 spot klines             |
+| Source | `coinbase-rest`| Coinbase Exchange candles       |
 | Source | `mock-walk`   | pure-synthetic random walk       |
 | Source | `csv-upload`  | user-uploaded file               |
 | Stream | `binance-ws`  | `wss://stream.binance.com/...`   |
@@ -96,38 +99,50 @@ Legacy vanilla shell still uses `src/registry.js` (see LEGACY.md).
 | Engine | `server`      | `POST {endpoint}/run`            |
 | Engine | `pyodide`     | in-browser Python (Pyodide)      |
 
-Add a new plugin: drop a file in `frontend/src/plugins/<id>.js` that
-default-exports the plugin object, then import + register it in
-`src/registry-bootstrap.js`. Or load at runtime from the DevTools console:
+Add a new plugin via the Plugin Manager **Install** tab (URL module), or
+register in TypeScript under `src/sources|streams|engines` and the unified
+`src/plugins/registry.ts`. Dynamic load:
 
-```js
-import { loadPluginFromUrl } from './src/registry.js';
+```ts
+import { loadPluginFromUrl } from './src/plugins/loader';
 await loadPluginFromUrl('https://example.com/my-plugin.js');
 ```
+
+## Product highlights
+
+| Surface | What it does |
+|---------|----------------|
+| **Topbar Load** | One-shot historical fetch (`historyBars` / venue page cap) into the chart |
+| **Data Sources** panel | Background multi-page **backfill** to a past date, **validate** density, **fill gaps**, durable IDB cache, optional Load to chart |
+| **Scripts** panel | Applied indicators/strategies (list, visibility, colors) — renamed from “Indicators” |
+| **Chart themes** | Ten curated high-end presets (void, classic, mono, obsidian, graphite, pacific, dusk, porcelain, parchment, …) — no neon high-contrast default |
+| **Run** | Accent color only while a run is executing (ghost when idle) |
+| **Library / Plugins / Settings** | Script storage, plugin catalog, engine endpoint |
+
+Docs: [Data Source Manager](https://hoox.sh/axis/docs/enduser/guides/data-source-manager) · [UI shell](https://hoox.sh/axis/docs/ui/ui-shell)
 
 ## Local dev
 
 **Primary path is Vite + Solid** (this is what ships on the VPS demo):
 
 ```bash
-cd frontend && bun install && bun run dev   # Vite on :3000 (proxies /run → :5002)
+bun install && bun run dev     # Vite on :3000 (proxies /run → :5002)
 # production: bun run build && python3 axis_pwa_server.py   # serves dist/ on :8081
 ```
 
 ```bash
-# Terminal 1 — backend
-make run              # Flask on :5002 (uses the existing pynescript runtime)
+# Terminal 1 — backend (pyne Pro API)
+# from the pynescript / pyne checkout:
+make run                       # Flask on :5002
 
-# Terminal 2 — PWA (Vite)
-cd frontend && bun run dev
+# Terminal 2 — AXIS PWA
+bun run dev
 ```
 
 ### Legacy static path (not recommended)
 
 `style.css`, `main.js`, `server.ts`, and root-level `index.html` without Vite
-are the pre-Solid shell. They still use older TV-blue tokens in places
-and are kept only for smoke tests / offline static serving. Prefer `bun run dev`
-or `dist/` from `bun run build`. Do not treat the legacy shell as the product UI.
+are the pre-Solid shell. Prefer `bun run dev` or `dist/` from `bun run build`.
 See **`LEGACY.md`**.
 
 For an **offline-first** demo: set `Source = Mock Walk`, `Stream = Mock Poll`,
@@ -136,42 +151,30 @@ For an **offline-first** demo: set `Source = Mock Walk`, `Stream = Mock Poll`,
 ## File map
 
 ```
-frontend/
-  index.html                  PWA shell
-  style.css                   TV-dark + light themes
-  manifest.webmanifest        PWA manifest (installable)
-  sw.js                       Service Worker (offline cache)
-  assets/
-    icon-192.png
-    icon-512.png
-    icon-maskable-512.png
-  pine-editor.js              CodeMirror 6 + Pine StreamLanguage
-  storage.js                  localStorage helpers (legacy)
+axis/                         (this repo root)
+  index.html                  Vite entry
+  public/                     PWA icons, manifest, example plugins, vendor wheels
   src/
-    main.js                   bootstrap, wires UI + registry
-    state.js                  central persisted state
-    registry.js               plugin registry + loadPluginFromUrl
-    registry-bootstrap.js     registers built-in plugins
-    chart.js                  lightweight-charts wrapper (main / volume / indicator / equity)
-    ui/
-      topbar.js               engine/source/stream/endpoint/symbol/...
-      results.js              5-tab results panel (Trades, Strategy, Plots, Metrics, Raw)
-      status.js               status bar
-      settings.js             generic configSchema-driven settings dialog
-      manager.js              plugin manager + script library + theme
-      symbol-autocomplete.js  Binance symbol autocomplete
-    sources/
-      index.js                binance-rest, mock-walk, csv-upload
-    streams/
-      index.js                binance-ws, mock-poll, none
-    engines/
-      index.js                server, pyodide (Python in browser)
-    plugins/                  example plugins (load via Manager)
-      example-coingecko-source.js   # also copied to public/plugins/ for prod
-      example-tiny-pine-engine.js
-      example-cf-do-stream.js
-      README.md               contract + how-to
-  worker/                     Cloudflare Pages + Worker (see worker/README.md)
+    app.tsx                   Solid shell: docks, panels, chart workspace
+    data/
+      load-symbol.ts          Topbar one-shot history → chart
+      data-source-manager.ts  Background backfill + validate + gap-fill jobs
+      bars-cache.ts           IDB OHLCV cache for manager
+      bars-gaps.ts            Series completeness / gap detection
+    theme/                    Chart theme catalog + 10 presets
+    sources/catalog.ts        binance / okx / bybit / coinbase / mock / csv
+    streams/                  Live multiplex + venue WS
+    engines/                  server + pyodide
+    indicators/               runAndApply + Scripts panel UI
+    editor/                   CM6 Pine editor, diagnostics, profiler, pins
+    chart/                    lightweight-charts host, drawings, replay
+    ui/                       Topbar, panels, command palette, settings
+    store/                    Solid app state + persistence
+    plugins/                  Unified registry contracts + loader
+  worker/                     Cloudflare Worker (API / DO / D1)
+  docs/                       Mintlify-style product docs (MDX)
+  tests/                      Bun unit + integration tests
+  e2e/                        Playwright
 ```
 
 ## Backend targets

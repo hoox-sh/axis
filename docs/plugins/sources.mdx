@@ -26,7 +26,7 @@ description: "Built-in historical data sources: venue REST, mock walk, CSV uploa
 
 ## Abstract
 
-A **source** loads a finite window of OHLCV bars for the chart and engine. Sources live in `frontend/src/sources/catalog.ts` and register into the unified registry via `ensureSourcesRegistered()`.
+A **source** loads a finite window of OHLCV bars for the chart and engine. Sources live in `src/sources/catalog.ts` and register into the unified registry via `ensureSourcesRegistered()`.
 
 ## Conceptual model
 
@@ -61,8 +61,25 @@ UI order is `BUILTIN_SOURCES` array order (Binance first).
 Every source implements `SourcePlugin` ([contracts](/axis/docs/plugins/contracts)):
 
 ```ts
-fetchHistorical({ symbol, interval, limit?, config? }): Promise<Bar[]>
+fetchHistorical({
+  symbol,
+  interval,
+  limit?,
+  startTime?,   // unix seconds (optional)
+  endTime?,     // unix seconds (optional) — walk-back pagination
+  signal?,      // AbortSignal for background jobs
+  config?,
+}): Promise<Bar[]>
 ```
+
+### One-shot Load vs Data Source Manager
+
+| Path | Behavior |
+| --- | --- |
+| `src/data/load-symbol.ts` | Single `fetchHistorical` (limit from Settings `historyBars`) → chart |
+| [Data Source Manager](/axis/docs/enduser/guides/data-source-manager) | Multi-page walk-back with **`endTime` only** per page, then **validate + gap-fill**, durable IDB cache |
+
+Do not pass `startTime` + `endTime` together when paginating on Binance-style venues: they return the *first* N bars from `startTime`, which can falsely complete a multi-year job in one page.
 
 ### Config highlights
 
@@ -90,10 +107,13 @@ fetchHistorical({ symbol, interval, limit?, config? }): Promise<Bar[]>
 
 | Path | Role |
 | --- | --- |
-| `frontend/src/sources/catalog.ts` | Definitions + register/list/get |
-| `frontend/src/sources/upload-store.ts` | In-memory last upload for `csv-upload` |
-| `frontend/src/data/load-symbol.ts` | App pipeline that calls active source |
-| `frontend/src/data/parse-bars.ts` | CSV/JSON normalization |
+| `src/sources/catalog.ts` | Definitions + register/list/get + `sourcePageLimit` |
+| `src/sources/upload-store.ts` | In-memory last upload for `csv-upload` |
+| `src/data/load-symbol.ts` | One-shot Load pipeline |
+| `src/data/data-source-manager.ts` | Background backfill + validate + gaps |
+| `src/data/bars-cache.ts` | IDB OHLCV cache for manager |
+| `src/data/bars-gaps.ts` | Coverage / gap detection |
+| `src/data/parse-bars.ts` | CSV/JSON normalization |
 
 ### Interval → venue codes
 

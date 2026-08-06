@@ -74,11 +74,14 @@ mindmap
 
 | Feature | Primary paths |
 | --- | --- |
-| Sources | `frontend/src/sources/catalog.ts`, `upload-store.ts` |
-| Streams | `frontend/src/streams/catalog.ts`, `multiplex.ts` |
-| Engines | `frontend/src/engines/catalog.ts` |
-| Load symbol | `frontend/src/data/load-symbol.ts`, `parse-bars.ts` |
-| Indicator run | `frontend/src/indicators/runner.ts` |
+| Sources | `src/sources/catalog.ts`, `upload-store.ts` |
+| Streams | `src/streams/catalog.ts`, `multiplex.ts` |
+| Engines | `src/engines/catalog.ts` |
+| Load symbol (one-shot) | `src/data/load-symbol.ts`, `parse-bars.ts` |
+| Data Source Manager | `src/data/data-source-manager.ts`, `bars-cache.ts`, `bars-gaps.ts`, `ui/DataSourceManagerPanel.tsx` |
+| Script run | `src/indicators/runner.ts` |
+| Scripts panel | `src/indicators/IndicatorPanel.tsx`, `IndicatorCard.tsx` |
+| Chart themes | `src/theme/presets.ts`, `catalog.ts`, `manager.ts`, `ui/ThemePanel.tsx` |
 
 ### Storage / library
 
