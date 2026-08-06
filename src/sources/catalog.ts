@@ -122,13 +122,25 @@ function mapValidBars(
   return out;
 }
 
-function synthesizeWalk(n: number, interval: string, start: number): Bar[] {
+/**
+ * Synthetic walk. When `endTimeSec` is set, the newest bar sits at that
+ * timestamp (walk-back pagination). Otherwise uses wall-clock now.
+ */
+function synthesizeWalk(
+  n: number,
+  interval: string,
+  start: number,
+  endTimeSec?: number,
+): Bar[] {
   const step = Math.floor(intervalToMs(interval) / 1000);
   const out: Bar[] = [];
   let price = start;
-  const now = Math.floor(Date.now() / 1000);
+  const end =
+    typeof endTimeSec === 'number' && Number.isFinite(endTimeSec) && endTimeSec > 0
+      ? Math.floor(endTimeSec)
+      : Math.floor(Date.now() / 1000);
   for (let i = n - 1; i >= 0; i--) {
-    const t = now - i * step;
+    const t = end - i * step;
     const drift = (Math.random() - 0.48) * price * 0.02;
     const open = price;
     const close = Math.max(0.01, price + drift);
@@ -147,6 +159,44 @@ function synthesizeWalk(n: number, interval: string, start: number): Bar[] {
   return out;
 }
 
+/** Prefer job AbortSignal; else a 15s timeout so hung venues cannot stall forever. */
+function fetchSignal(signal?: AbortSignal): AbortSignal {
+  if (signal) return signal;
+  return AbortSignal.timeout(15_000);
+}
+
+/** Append unix-sec bounds as venue ms query params when present. */
+function appendTimeParams(
+  params: URLSearchParams,
+  opts: { startTime?: number; endTime?: number },
+  mode: 'ms' | 'sec' = 'ms',
+): void {
+  const mult = mode === 'ms' ? 1000 : 1;
+  if (typeof opts.startTime === 'number' && Number.isFinite(opts.startTime) && opts.startTime > 0) {
+    params.set('startTime', String(Math.floor(opts.startTime * mult)));
+  }
+  if (typeof opts.endTime === 'number' && Number.isFinite(opts.endTime) && opts.endTime > 0) {
+    params.set('endTime', String(Math.floor(opts.endTime * mult)));
+  }
+}
+
+/** Page size caps used by the Data Source Manager walk-back loop. */
+export function sourcePageLimit(sourceId: string): number {
+  switch (sourceId) {
+    case 'okx-rest':
+      return 300;
+    case 'coinbase-rest':
+      return 280;
+    case 'binance-rest':
+    case 'bybit-rest':
+      return 1000;
+    case 'mock-walk':
+      return 1000;
+    default:
+      return 500;
+  }
+}
+
 export const binanceRest: SourcePlugin = {
   id: 'binance-rest',
   name: 'Binance REST',
@@ -160,15 +210,21 @@ export const binanceRest: SourcePlugin = {
     limit: { type: 'number', default: 500, min: 50, max: 1000, label: 'Bars' },
     fallback: { type: 'boolean', default: true, label: 'Synthesize on failure' },
   },
-  async fetchHistorical({ symbol, interval, config }) {
+  async fetchHistorical({ symbol, interval, config, startTime, endTime, signal }) {
     const cfg = resolveConfig(this.configSchema, config);
     const baseUrl = String(cfg.baseUrl || 'https://api.binance.com');
-    const limit = Number(cfg.limit) || 500;
-    const url = `${baseUrl}/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`;
+    const limit = Math.min(1000, Number(cfg.limit) || 500);
+    const params = new URLSearchParams({
+      symbol: String(symbol || '').toUpperCase(),
+      interval: String(interval || '1d'),
+      limit: String(limit),
+    });
+    appendTimeParams(params, { startTime, endTime }, 'ms');
+    const url = `${baseUrl}/api/v3/klines?${params}`;
     try {
       const res = await fetch(url, {
         cache: 'no-store',
-        signal: AbortSignal.timeout(15_000),
+        signal: fetchSignal(signal),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -181,10 +237,11 @@ export const binanceRest: SourcePlugin = {
       if (!bars.length) throw new Error('empty kline response');
       return bars;
     } catch (err: unknown) {
+      if (signal?.aborted) throw err;
       if (!cfg.fallback) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[binance-rest] Network error, falling back to synthetic data: ${msg}`);
-      return synthesizeWalk(limit || 200, interval, 100);
+      return synthesizeWalk(limit || 200, interval, 100, endTime);
     }
   },
 };
@@ -201,11 +258,23 @@ export const mockWalk: SourcePlugin = {
     startPrice: { type: 'number', default: 100, label: 'Start price' },
     limit: { type: 'number', default: 500, min: 50, max: 5000, label: 'Bars' },
   },
-  async fetchHistorical({ interval, config }) {
+  async fetchHistorical({ interval, config, endTime, startTime }) {
     const cfg = resolveConfig(this.configSchema, config);
     const limit = Number(cfg.limit) || 500;
     const startPrice = Number(cfg.startPrice) || 100;
     const seed = Number(cfg.seed) || 0;
+    const endSec =
+      typeof endTime === 'number' && Number.isFinite(endTime) && endTime > 0
+        ? Math.floor(endTime)
+        : Math.floor(Date.now() / 1000);
+    // Optional window: clamp bar count so walk-back pages do not overshoot startTime
+    let pageLimit = limit;
+    if (typeof startTime === 'number' && Number.isFinite(startTime) && startTime > 0) {
+      const step = Math.floor(intervalToMs(interval) / 1000) || 1;
+      const spanBars = Math.floor((endSec - Math.floor(startTime)) / step) + 1;
+      if (spanBars > 0) pageLimit = Math.min(limit, spanBars);
+      if (pageLimit <= 0) return [];
+    }
     if (seed) {
       let s = seed >>> 0;
       const rand = () => {
@@ -217,10 +286,9 @@ export const mockWalk: SourcePlugin = {
       };
       const out: Bar[] = [];
       const step = Math.floor(intervalToMs(interval) / 1000);
-      const now = Math.floor(Date.now() / 1000);
       let price = startPrice;
-      for (let i = limit - 1; i >= 0; i--) {
-        const t = now - i * step;
+      for (let i = pageLimit - 1; i >= 0; i--) {
+        const t = endSec - i * step;
         const drift = (rand() - 0.48) * price * 0.02;
         const open = price;
         const close = Math.max(0.01, price + drift);
@@ -238,7 +306,7 @@ export const mockWalk: SourcePlugin = {
       }
       return out;
     }
-    return synthesizeWalk(limit, interval, startPrice);
+    return synthesizeWalk(pageLimit, interval, startPrice, endSec);
   },
 };
 
@@ -305,12 +373,21 @@ export const okxRest: SourcePlugin = {
   configSchema: {
     limit: { type: 'number', default: 300, min: 50, max: 300, label: 'Bars' },
   },
-  async fetchHistorical({ symbol, interval, config }) {
+  async fetchHistorical({ symbol, interval, config, endTime, signal }) {
     const cfg = resolveConfig(this.configSchema, config);
     const limit = Math.min(300, Number(cfg.limit) || 300);
     const instId = dashPair(symbol, 'USDT');
-    const url = `https://www.okx.com/api/v5/market/candles?instId=${encodeURIComponent(instId)}&bar=${okxBar(interval)}&limit=${limit}`;
-    const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(15_000) });
+    const params = new URLSearchParams({
+      instId,
+      bar: okxBar(interval),
+      limit: String(limit),
+    });
+    // OKX: `after` = older pagination cursor (request data older than this ts ms)
+    if (typeof endTime === 'number' && Number.isFinite(endTime) && endTime > 0) {
+      params.set('after', String(Math.floor(endTime * 1000)));
+    }
+    const url = `https://www.okx.com/api/v5/market/candles?${params}`;
+    const res = await fetch(url, { cache: 'no-store', signal: fetchSignal(signal) });
     if (!res.ok) throw new Error(`OKX HTTP ${res.status}`);
     const json = await res.json();
     if (json.code !== '0' || !Array.isArray(json.data)) {
@@ -337,12 +414,24 @@ export const bybitRest: SourcePlugin = {
   configSchema: {
     limit: { type: 'number', default: 500, min: 50, max: 1000, label: 'Bars' },
   },
-  async fetchHistorical({ symbol, interval, config }) {
+  async fetchHistorical({ symbol, interval, config, startTime, endTime, signal }) {
     const cfg = resolveConfig(this.configSchema, config);
-    const limit = Number(cfg.limit) || 500;
+    const limit = Math.min(1000, Number(cfg.limit) || 500);
     const sym = symbol.toUpperCase().replace(/[-_/]/g, '');
-    const url = `https://api.bybit.com/v5/market/kline?category=spot&symbol=${encodeURIComponent(sym)}&interval=${bybitInterval(interval)}&limit=${limit}`;
-    const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(15_000) });
+    const params = new URLSearchParams({
+      category: 'spot',
+      symbol: sym,
+      interval: bybitInterval(interval),
+      limit: String(limit),
+    });
+    if (typeof startTime === 'number' && Number.isFinite(startTime) && startTime > 0) {
+      params.set('start', String(Math.floor(startTime * 1000)));
+    }
+    if (typeof endTime === 'number' && Number.isFinite(endTime) && endTime > 0) {
+      params.set('end', String(Math.floor(endTime * 1000)));
+    }
+    const url = `https://api.bybit.com/v5/market/kline?${params}`;
+    const res = await fetch(url, { cache: 'no-store', signal: fetchSignal(signal) });
     if (!res.ok) throw new Error(`Bybit HTTP ${res.status}`);
     const json = await res.json();
     const list = json?.result?.list;
@@ -370,7 +459,7 @@ export const coinbaseRest: SourcePlugin = {
   configSchema: {
     granularity: { type: 'number', default: 0, label: 'Override granularity (sec, 0=auto)' },
   },
-  async fetchHistorical({ symbol, interval }) {
+  async fetchHistorical({ symbol, interval, startTime, endTime, signal, config }) {
     const product = dashPair(symbol.replace(/USDT$/i, 'USD'), 'USD');
     const granMap: Record<string, number> = {
       '1m': 60,
@@ -382,11 +471,20 @@ export const coinbaseRest: SourcePlugin = {
       '1w': 604800,
     };
     const gran = granMap[interval] || 86400;
-    // Coinbase returns max 300 candles; request last window
-    const end = Math.floor(Date.now() / 1000);
-    const start = end - gran * 280;
-    const url = `https://api.exchange.coinbase.com/products/${encodeURIComponent(product)}/candles?granularity=${gran}&start=${new Date(start * 1000).toISOString()}&end=${new Date(end * 1000).toISOString()}`;
-    const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(15_000) });
+    // Coinbase returns max ~300 candles; request a window ending at endTime
+    const end =
+      typeof endTime === 'number' && Number.isFinite(endTime) && endTime > 0
+        ? Math.floor(endTime)
+        : Math.floor(Date.now() / 1000);
+    const start =
+      typeof startTime === 'number' && Number.isFinite(startTime) && startTime > 0
+        ? Math.floor(startTime)
+        : end - gran * 280;
+    // Cap span so we stay within venue page size
+    const cappedStart = Math.max(start, end - gran * 280);
+    const url = `https://api.exchange.coinbase.com/products/${encodeURIComponent(product)}/candles?granularity=${gran}&start=${new Date(cappedStart * 1000).toISOString()}&end=${new Date(end * 1000).toISOString()}`;
+    void config;
+    const res = await fetch(url, { cache: 'no-store', signal: fetchSignal(signal) });
     if (!res.ok) throw new Error(`Coinbase HTTP ${res.status}`);
     const data = await res.json();
     if (!Array.isArray(data) || !data.length) throw new Error('Coinbase empty response');

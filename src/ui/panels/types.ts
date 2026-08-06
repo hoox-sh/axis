@@ -36,7 +36,8 @@ export type PanelId =
   | 'dataview'
   | 'layers'
   | 'alerts'
-  | 'library';
+  | 'library'
+  | 'datasource';
 
 /**
  * Where a panel lives:
@@ -151,6 +152,14 @@ export const PANEL_META: Record<
     defaultW: 300,
     defaultH: 480,
   },
+  datasource: {
+    title: 'Data Sources',
+    defaultDock: 'right',
+    minW: 1,
+    minH: 1,
+    defaultW: 320,
+    defaultH: 520,
+  },
 };
 
 /** Drag overlay target (null = no zone / invalid). */
@@ -205,6 +214,11 @@ export function defaultPanelChromeMap(): PanelChromeMap {
       open: false,
       dock: 'right',
       w: 300,
+    }),
+    datasource: defaultPanelChrome('datasource', {
+      open: false,
+      dock: 'right',
+      w: 320,
     }),
   };
 }

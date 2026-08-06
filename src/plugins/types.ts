@@ -110,6 +110,19 @@ export interface SourceOpts {
   symbol: string;
   interval: string;
   limit?: number;
+  /**
+   * Inclusive lower bound (unix **seconds**). Optional — venues map to
+   * startTime / start / after as appropriate. Pagination is owned by the
+   * Data Source Manager; plugins still return a single page.
+   */
+  startTime?: number;
+  /**
+   * Inclusive upper bound (unix **seconds**). Optional — used for walk-back
+   * pagination (`endTime` / `before` / `end`).
+   */
+  endTime?: number;
+  /** Abort in-flight HTTP when the background job is cancelled. */
+  signal?: AbortSignal;
   config?: Record<string, unknown>;
 }
 

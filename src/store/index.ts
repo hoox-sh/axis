@@ -1850,6 +1850,16 @@ export function toggleLibraryPanel() {
   setPanelOpen('library', !isPanelOpen('library'));
 }
 
+/** Open/close Data Source Manager panel. */
+export function setDataSourcePanelOpen(open: boolean) {
+  setPanelOpen('datasource', open);
+}
+
+/** Toggle Data Source Manager panel visibility. */
+export function toggleDataSourcePanel() {
+  setPanelOpen('datasource', !isPanelOpen('datasource'));
+}
+
 /** Enable/disable editor profiler mode (persisted). */
 export function setProfilerEnabled(on: boolean) {
   setStore('profilerEnabled', !!on);
@@ -1928,6 +1938,9 @@ export function isPanelOpen(id: PanelId): boolean {
     case 'library':
       // Chrome-only (no legacy flat flag)
       return chromeOpen;
+    case 'datasource':
+      // Chrome-only (no legacy flat flag)
+      return chromeOpen;
     case 'dataview':
       return !!store.dataViewPanel.open || chromeOpen;
     case 'layers':
@@ -1976,6 +1989,8 @@ const DOCK_STACK_IDS: PanelId[] = [
   'dataview',
   'indicators',
   'alerts',
+  'library',
+  'datasource',
   'editor',
   'results',
   'logs',
@@ -2082,6 +2097,14 @@ export function bumpPanelZ(id: PanelId) {
 function ensurePanelChrome() {
   if (!store.panelChrome || !store.panelChrome.watchlist) {
     setStore('panelChrome', defaultPanelChromeMap());
+    return;
+  }
+  // Fill missing PanelIds (e.g. new panels after upgrade) without clobbering geometry
+  const defaults = defaultPanelChromeMap();
+  for (const id of Object.keys(defaults) as PanelId[]) {
+    if (!store.panelChrome[id]) {
+      setStore('panelChrome', id, defaults[id]);
+    }
   }
 }
 

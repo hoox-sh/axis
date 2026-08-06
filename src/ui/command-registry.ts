@@ -68,6 +68,7 @@ export interface CommandActions {
   toggleAlerts?: () => void;
   toggleScriptLogs?: () => void;
   toggleLibrary?: () => void;
+  toggleDataSource?: () => void;
   toggleTheme: () => void;
   /** Apply a named chart theme preset (void-dark, classic, …). */
   setChartThemePreset?: (presetId: string) => void;
@@ -268,6 +269,22 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     title: 'Toggle Script Library',
     category: 'panels',
     keywords: ['library', 'scripts', 'save', 'load', 'storage', 'pine files'],
+  },
+  {
+    id: 'panel.datasource',
+    title: 'Toggle Data Source Manager',
+    category: 'panels',
+    keywords: [
+      'data source',
+      'datasource',
+      'backfill',
+      'history',
+      'ohlcv',
+      'accumulate',
+      'exchange',
+      'symbol',
+      'timeframe',
+    ],
   },
   // Theme
   {
@@ -475,6 +492,7 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.toggleScriptLogs) byId.set('panel.scriptlogs', actions.toggleScriptLogs);
   if (actions.toggleAlerts) byId.set('panel.alerts', actions.toggleAlerts);
   if (actions.toggleLibrary) byId.set('panel.library', actions.toggleLibrary);
+  if (actions.toggleDataSource) byId.set('panel.datasource', actions.toggleDataSource);
   if (actions.loadSymbol) byId.set('action.load-symbol', () => void actions.loadSymbol?.());
   if (actions.reloadChart) byId.set('action.reload-chart', () => void actions.reloadChart?.());
   if (actions.toggleLive) byId.set('action.toggle-live', actions.toggleLive);

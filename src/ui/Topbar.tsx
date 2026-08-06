@@ -58,6 +58,7 @@ import {
   updateChartSlot,
   isPanelOpen,
   toggleLibraryPanel,
+  toggleDataSourcePanel,
 } from '../store';
 import { CHART_TYPES } from '../chart/chart-type';
 import { runAndApply } from '../indicators/runner';
@@ -545,6 +546,18 @@ export const Topbar: Component<{
         >
           <Icons.folder />
           <span class="axis-tb-btn-label">Library</span>
+        </button>
+
+        <button
+          type="button"
+          class={`sc-btn sc-btn-ghost ${isPanelOpen('datasource') ? 'is-active' : ''}`}
+          onClick={() => toggleDataSourcePanel()}
+          title="Data Source Manager — background OHLCV backfill"
+          aria-pressed={isPanelOpen('datasource')}
+          data-testid="axis-btn-datasource"
+        >
+          <Icons.download />
+          <span class="axis-tb-btn-label">Data</span>
         </button>
 
         <button
