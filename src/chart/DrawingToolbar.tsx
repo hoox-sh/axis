@@ -266,13 +266,9 @@ export const DrawingToolbar: Component = () => {
   const railGroups = () =>
     TOOL_GROUPS.filter((g) => g.id !== 'actions' && g.id !== 'trading' && g.tools.length > 0);
 
+  // top-14 clears symbol chip + script badge row; badges are offset right of the
+  // rail so they stay clear of this ChartHost-sibling toolbar/style bar.
   return (
-    {/*
-      top-14 clears the symbol chip + script badge row (price pane badges sit at
-      top-left next to the slot badge). z-20 keeps the rail above chart series
-      but below float panels; badges are offset right of this rail so they stay
-      clickable (toolbar is a ChartHost sibling painted over the pane tree).
-    */}
     <div class="absolute left-2 top-14 z-20 flex items-start gap-1.5 pointer-events-none">
       {/* Left rail */}
       <div
