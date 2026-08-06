@@ -64,18 +64,44 @@ export type GitUserInfo = {
  * Hosts that can serve `/api/git/oauth/device/*`:
  * - Cloudflare Worker (`workers.dev`, wrangler `:8787`)
  * - PYNE Pro API (`:5002`) after `backend.api.git_oauth` is registered
- * - Same-origin Pages when Worker routes are attached
+ * - Same-origin Pages / product hosts when Worker routes are attached
+ * - Explicit product hosts (hoox.sh, pynescript.ai)
+ *
+ * Never accepts forge hosts (github.com / gitlab.com) as the proxy.
  */
-export function isOAuthProxyBase(endpoint: string): boolean {
+export function isOAuthProxyBase(
+  endpoint: string,
+  opts?: { sameOrigin?: string },
+): boolean {
   const e = (endpoint || '').trim().toLowerCase();
   if (!e) return false;
+  // Forges are never OAuth proxies for AXIS
+  if (e.includes('github.com') || e.includes('gitlab.com')) return false;
+
   if (e.includes('workers.dev')) return true;
   if (e.includes('pyne-worker') || e.includes('pine-worker')) return true;
+  if (e.includes('hoox.sh') || e.includes('pynescript.ai') || e.includes('pynescript.online')) {
+    return true;
+  }
+
   try {
     const u = new URL(e.includes('://') ? e : `http://${e}`);
     if (u.port === '8787' || u.port === '5002') return true;
-    // Explicit path hint
     if (/\/api\/?$/.test(u.pathname)) return true;
+
+    const same = (opts?.sameOrigin || '').trim();
+    if (same) {
+      try {
+        const s = new URL(same.includes('://') ? same : `https://${same}`);
+        if (u.origin === s.origin) return true;
+      } catch {
+        /* ignore */
+      }
+    }
+    // Same-origin browser page (Pages + Worker route)
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      if (u.origin === window.location.origin) return true;
+    }
   } catch {
     /* ignore */
   }
@@ -96,13 +122,62 @@ export function resolveOAuthProxyBase(endpoint?: string): string {
       // Prefer local Worker; Pro API is also fine if Worker is down
       return 'http://127.0.0.1:8787';
     }
-    // VPS static shell (:8081) has no /api — caller should pass engine endpoint
-    if (/:8081$/.test(o)) {
+    // VPS static shell (:8080/:8081) has no /api — caller should pass engine endpoint
+    if (/:(8080|8081)$/.test(o)) {
       return 'http://127.0.0.1:5002';
     }
     return o;
   }
   return 'http://127.0.0.1:8787';
+}
+
+/** Default device-login pages when proxy URI is missing or untrusted. */
+export function defaultVerificationUri(provider: GitProvider): string {
+  return provider === 'gitlab'
+    ? 'https://gitlab.com/-/profile/personal_access_tokens'
+    : 'https://github.com/login/device';
+}
+
+/**
+ * Allowlist forge verification URLs before `window.open` / anchor href.
+ * Returns null when the URI must not be opened (phishing risk).
+ */
+export function sanitizeVerificationUri(
+  uri: string,
+  provider: GitProvider,
+): string | null {
+  const raw = String(uri || '').trim();
+  if (!raw) return null;
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+  // Prefer https for public forges
+  const host = u.hostname.toLowerCase();
+  if (provider === 'github') {
+    if (host === 'github.com' || host === 'www.github.com') return u.toString();
+    return null;
+  }
+  // GitLab.com or self-hosted only if https and not a random host — default.com only
+  if (host === 'gitlab.com' || host.endsWith('.gitlab.com')) return u.toString();
+  return null;
+}
+
+function requireTrustedProxy(base: string): string {
+  const sameOrigin =
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : undefined;
+  if (!isOAuthProxyBase(base, { sameOrigin })) {
+    throw new Error(
+      `OAuth proxy is not trusted: ${base}. Use AXIS Worker, Pro API (:5002), ` +
+        `same-origin /api, or paste a PAT under Advanced.`,
+    );
+  }
+  return base.replace(/\/$/, '');
 }
 
 function oauthErrorMessage(data: Record<string, unknown>, status: number, url: string): string {
@@ -163,7 +238,7 @@ export async function startDeviceFlow(opts: {
   clientId?: string;
   scope?: string;
 }): Promise<DeviceStartResult> {
-  const base = resolveOAuthProxyBase(opts.workerEndpoint);
+  const base = requireTrustedProxy(resolveOAuthProxyBase(opts.workerEndpoint));
   const data = await postJson<DeviceStartResult & { status?: string }>(
     base,
     '/api/git/oauth/device/start',
@@ -176,14 +251,22 @@ export async function startDeviceFlow(opts: {
   if (!data.device_code || !data.user_code) {
     throw new Error('Device flow start returned incomplete payload');
   }
+  const rawUri = String(data.verification_uri || '');
+  const rawComplete = data.verification_uri_complete
+    ? String(data.verification_uri_complete)
+    : undefined;
+  const safeUri =
+    sanitizeVerificationUri(rawUri, opts.provider) ||
+    defaultVerificationUri(opts.provider);
+  const safeComplete = rawComplete
+    ? sanitizeVerificationUri(rawComplete, opts.provider) || undefined
+    : undefined;
   return {
     provider: opts.provider,
     device_code: String(data.device_code),
     user_code: String(data.user_code),
-    verification_uri: String(data.verification_uri || ''),
-    verification_uri_complete: data.verification_uri_complete
-      ? String(data.verification_uri_complete)
-      : undefined,
+    verification_uri: safeUri,
+    verification_uri_complete: safeComplete,
     expires_in: Number(data.expires_in) || 900,
     interval: Math.max(1, Number(data.interval) || 5),
   };
@@ -196,7 +279,7 @@ export async function pollDeviceFlow(opts: {
   workerEndpoint?: string;
   clientId?: string;
 }): Promise<DevicePollResult> {
-  const base = resolveOAuthProxyBase(opts.workerEndpoint);
+  const base = requireTrustedProxy(resolveOAuthProxyBase(opts.workerEndpoint));
   const data = await postJson<DevicePollResult & { access_token?: string; status?: string }>(
     base,
     '/api/git/oauth/device/poll',

@@ -20,23 +20,50 @@
 /**
  * GitLab Repository Files API adapter for the git storage plugin.
  *
- * Same library layout as GitHub (`index.json` + `.pine` files). Auth via
- * `PRIVATE-TOKEN` header. Project identity from `projectId` or `owner/repo`.
+ * Same library layout as GitHub (`index.json` + `.pyne` / legacy `.pine`).
+ * Auth: `PRIVATE-TOKEN` for PATs (`glpat-…`); `Authorization: Bearer` for
+ * OAuth device-flow tokens (both sent when not a classic PAT).
+ * Project identity from `projectId` or `owner/repo`.
  */
 
 import type { ScriptDocument, ScriptMeta } from '../plugins/types';
 import {
   type GitConfig,
+  GitIndexCorruptError,
   assertGitConfig,
+  assertSafeRepoPath,
   formatCommitMessage,
   indexPath,
+  resolveScriptRepoPath,
   scriptPath,
 } from './git-config';
 import type { IndexFile } from './git-github';
 
+const INDEX_WRITE_RETRIES = 3;
+
 function projectRef(cfg: GitConfig): string {
-  if (cfg.projectId) return encodeURIComponent(cfg.projectId);
-  return encodeURIComponent(`${cfg.owner}/${cfg.repo}`);
+  // Prefer raw group/project; encode once. If already %-encoded, decode first.
+  const raw = cfg.projectId
+    ? cfg.projectId.includes('%')
+      ? decodeURIComponent(cfg.projectId)
+      : cfg.projectId
+    : `${cfg.owner}/${cfg.repo}`;
+  return encodeURIComponent(raw);
+}
+
+/** Auth headers for PAT vs OAuth access tokens. */
+function gitlabAuthHeaders(token: string): Record<string, string> {
+  const t = String(token || '');
+  // Personal access tokens (classic + glpat-) use PRIVATE-TOKEN
+  if (t.startsWith('glpat-') || t.startsWith('gloas-')) {
+    return { 'PRIVATE-TOKEN': t };
+  }
+  // OAuth device-flow / app tokens: Bearer is required; keep PRIVATE-TOKEN
+  // as a fallback for unprefixed PATs some instances still accept.
+  return {
+    Authorization: `Bearer ${t}`,
+    'PRIVATE-TOKEN': t,
+  };
 }
 
 function fileUrl(cfg: GitConfig, filePath: string): string {
@@ -51,13 +78,9 @@ async function gl(
 ): Promise<{ status: number; json: Record<string, unknown> }> {
   assertGitConfig(cfg);
   const headers: Record<string, string> = {
-    'PRIVATE-TOKEN': cfg.token,
+    ...gitlabAuthHeaders(cfg.token),
     ...(init.headers as Record<string, string> | undefined),
   };
-  // Also support OAuth-style tokens
-  if (cfg.token.startsWith('glpat-') || cfg.token.length > 20) {
-    headers['PRIVATE-TOKEN'] = cfg.token;
-  }
   if (init.body && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
   }
@@ -127,7 +150,7 @@ export async function gitlabPutFile(
     method: exists ? 'PUT' : 'POST',
     body: JSON.stringify(body),
   });
-  return { commitId: String(json.file_path ? json.commit_id || '' : json.commit_id || '') };
+  return { commitId: String(json.commit_id || '') };
 }
 
 /** Delete a repository file with a commit message. */
@@ -146,18 +169,25 @@ export async function gitlabDeleteFile(
 }
 
 /** Read library index.json; `exists` false when file is missing. */
-export async function gitlabReadIndex(cfg: GitConfig): Promise<{
+export async function gitlabReadIndex(
+  cfg: GitConfig,
+  opts?: { forWrite?: boolean },
+): Promise<{
   index: IndexFile;
   exists: boolean;
+  corrupt?: boolean;
 }> {
   const file = await gitlabGetFile(cfg, indexPath(cfg));
   if (!file) return { index: { version: 1, scripts: [] }, exists: false };
   try {
     const parsed = JSON.parse(file.content) as IndexFile;
-    if (!parsed.scripts) parsed.scripts = [];
+    if (!Array.isArray(parsed.scripts)) parsed.scripts = [];
     return { index: parsed, exists: true };
   } catch {
-    return { index: { version: 1, scripts: [] }, exists: true };
+    if (opts?.forWrite) {
+      throw new GitIndexCorruptError();
+    }
+    return { index: { version: 1, scripts: [] }, exists: false, corrupt: true };
   }
 }
 
@@ -171,6 +201,40 @@ export async function gitlabWriteIndex(
   await gitlabPutFile(cfg, indexPath(cfg), JSON.stringify(index, null, 2) + '\n', message, exists);
 }
 
+async function gitlabUpsertIndexEntry(
+  cfg: GitConfig,
+  apply: (index: IndexFile) => void,
+  message: string,
+  context: { scriptCommitted: boolean; scriptPath?: string },
+): Promise<void> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < INDEX_WRITE_RETRIES; attempt++) {
+    try {
+      const { index, exists } = await gitlabReadIndex(cfg, { forWrite: true });
+      apply(index);
+      await gitlabWriteIndex(cfg, index, exists, message);
+      return;
+    } catch (e: unknown) {
+      lastErr = e;
+      const status = (e as { status?: number }).status;
+      // GitLab may return 400/409 on race; retry re-read
+      if ((status === 400 || status === 409 || status === 422) && attempt < INDEX_WRITE_RETRIES - 1) {
+        continue;
+      }
+      break;
+    }
+  }
+  const base = lastErr instanceof Error ? lastErr.message : String(lastErr);
+  if (context.scriptCommitted) {
+    throw new Error(
+      `${base} — script file was committed` +
+        (context.scriptPath ? ` (${context.scriptPath})` : '') +
+        ' but index update failed; retry Save or fix library/index.json',
+    );
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(base);
+}
+
 /** List scripts from the index, newest first. */
 export async function gitlabList(cfg: GitConfig): Promise<ScriptMeta[]> {
   const { index } = await gitlabReadIndex(cfg);
@@ -181,7 +245,10 @@ export async function gitlabList(cfg: GitConfig): Promise<ScriptMeta[]> {
 export async function gitlabRead(cfg: GitConfig, id: string): Promise<ScriptDocument> {
   const { index } = await gitlabReadIndex(cfg);
   const meta = index.scripts.find((s) => s.id === id);
-  const path = meta?.path || scriptPath(cfg, id);
+  const path = resolveScriptRepoPath(cfg, {
+    id,
+    indexPath: meta?.path,
+  });
   const file = await gitlabGetFile(cfg, path);
   if (!file) throw new Error(`Script not found in repo: ${id}`);
   return {
@@ -197,59 +264,76 @@ export async function gitlabRead(cfg: GitConfig, id: string): Promise<ScriptDocu
   };
 }
 
-/** Write `.pine` body and upsert index entry. */
+/** Write script body and upsert index entry. */
 export async function gitlabWrite(cfg: GitConfig, doc: ScriptDocument): Promise<ScriptMeta> {
   const now = Date.now();
-  const path = doc.path || scriptPath(cfg, doc.id);
+  const { index: preIndex } = await gitlabReadIndex(cfg, { forWrite: true });
+  const prevMeta = preIndex.scripts.find((s) => s.id === doc.id);
+  const path = resolveScriptRepoPath(cfg, {
+    id: doc.id,
+    docPath: doc.path,
+    indexPath: prevMeta?.path,
+  });
+  assertSafeRepoPath(cfg, path);
+
   const existing = await gitlabGetFile(cfg, path);
   const msg = formatCommitMessage(cfg.commitMessageTemplate, doc.name);
   const put = await gitlabPutFile(cfg, path, doc.content, msg, !!existing);
 
-  const { index, exists } = await gitlabReadIndex(cfg);
-  const prev = index.scripts.find((s) => s.id === doc.id);
-  const meta: ScriptMeta = {
+  let meta: ScriptMeta = {
     id: doc.id,
     name: doc.name,
     description: doc.description,
     path,
     updatedAt: now,
-    createdAt: prev?.createdAt || doc.createdAt || now,
+    createdAt: prevMeta?.createdAt || doc.createdAt || now,
     revision: put.commitId || `gl-${now}`,
     tags: doc.tags,
   };
-  index.scripts = index.scripts.filter((s) => s.id !== doc.id);
-  index.scripts.push(meta);
-  await gitlabWriteIndex(
+
+  await gitlabUpsertIndexEntry(
     cfg,
-    index,
-    exists,
+    (index) => {
+      const prev = index.scripts.find((s) => s.id === doc.id);
+      meta = {
+        ...meta,
+        createdAt: prev?.createdAt || meta.createdAt,
+      };
+      index.scripts = index.scripts.filter((s) => s.id !== doc.id);
+      index.scripts.push(meta);
+    },
     formatCommitMessage(cfg.commitMessageTemplate, `index ${doc.name}`),
+    { scriptCommitted: true, scriptPath: path },
   );
   return meta;
 }
 
 /** Delete script file (if present) and drop index entry. */
 export async function gitlabRemove(cfg: GitConfig, id: string): Promise<void> {
-  const { index, exists } = await gitlabReadIndex(cfg);
+  const { index } = await gitlabReadIndex(cfg, { forWrite: true });
   const meta = index.scripts.find((s) => s.id === id);
-  const path = meta?.path || scriptPath(cfg, id);
+  const path = resolveScriptRepoPath(cfg, {
+    id,
+    indexPath: meta?.path,
+  });
   const file = await gitlabGetFile(cfg, path);
+  let deleted = false;
   if (file) {
     await gitlabDeleteFile(
       cfg,
       path,
       formatCommitMessage(cfg.commitMessageTemplate, `delete ${meta?.name || id}`),
     );
+    deleted = true;
   }
-  index.scripts = index.scripts.filter((s) => s.id !== id);
-  if (exists || index.scripts.length) {
-    await gitlabWriteIndex(
-      cfg,
-      index,
-      exists,
-      formatCommitMessage(cfg.commitMessageTemplate, `index remove ${id}`),
-    );
-  }
+  await gitlabUpsertIndexEntry(
+    cfg,
+    (idx) => {
+      idx.scripts = idx.scripts.filter((s) => s.id !== id);
+    },
+    formatCommitMessage(cfg.commitMessageTemplate, `index remove ${id}`),
+    { scriptCommitted: deleted, scriptPath: path },
+  );
 }
 
 /** Probe project access; returns connected=false with error on failure. */

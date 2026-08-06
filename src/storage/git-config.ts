@@ -69,6 +69,21 @@ export const DEFAULT_GIT_CONFIG: GitConfig = {
 };
 
 /**
+ * Sanitize repo base path: strip slashes, reject `.` / `..` segments.
+ * Falls back to default when empty or invalid.
+ */
+export function sanitizeBasePath(raw: string): string {
+  const parts = String(raw || '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '')
+    .split('/')
+    .filter(Boolean);
+  if (!parts.length) return DEFAULT_GIT_CONFIG.basePath;
+  if (parts.some((p) => p === '.' || p === '..')) return DEFAULT_GIT_CONFIG.basePath;
+  return parts.join('/');
+}
+
+/**
  * Merge plugin config + store pluginsConfig into a full {@link GitConfig}.
  * Fills default API base URL from provider when empty.
  */
@@ -83,6 +98,8 @@ export function resolveGitConfig(config?: Record<string, unknown>): GitConfig {
     apiBaseUrl = provider === 'gitlab' ? 'https://gitlab.com/api/v4' : 'https://api.github.com';
   }
 
+  const oauthClientId = String(merged.oauthClientId || '').trim();
+
   return {
     provider,
     apiBaseUrl,
@@ -91,11 +108,12 @@ export function resolveGitConfig(config?: Record<string, unknown>): GitConfig {
     repo: String(merged.repo || ''),
     projectId: String(merged.projectId || ''),
     branch: String(merged.branch || 'main'),
-    basePath: String(merged.basePath || 'pyne-library').replace(/^\/+|\/+$/g, ''),
+    basePath: sanitizeBasePath(String(merged.basePath || DEFAULT_GIT_CONFIG.basePath)),
     autoPush: merged.autoPush !== false && merged.autoPush !== 'false',
     commitMessageTemplate: String(
       merged.commitMessageTemplate || DEFAULT_GIT_CONFIG.commitMessageTemplate,
     ),
+    ...(oauthClientId ? { oauthClientId } : {}),
   };
 }
 
@@ -122,6 +140,72 @@ export function indexPath(cfg: GitConfig): string {
 export function scriptPath(cfg: GitConfig, id: string): string {
   const safe = id.replace(/[^a-zA-Z0-9._-]/g, '_');
   return `${libraryDir(cfg)}/${safe}.pyne`;
+}
+
+/**
+ * Normalize a repo-relative path (forward slashes, no leading slash).
+ * Rejects empty, absolute, and `..` / `.` segments.
+ */
+export function normalizeRepoPath(path: string): string {
+  const p = String(path || '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/\/+/g, '/');
+  if (!p) throw new Error('Git storage: empty path');
+  const parts = p.split('/').filter(Boolean);
+  if (!parts.length || parts.some((seg) => seg === '.' || seg === '..')) {
+    throw new Error(`Git storage: unsafe path "${path}"`);
+  }
+  return parts.join('/');
+}
+
+/**
+ * Ensure `path` is under `{basePath}/library` (or is that directory).
+ * @returns normalized path
+ */
+export function assertSafeRepoPath(cfg: GitConfig, path: string): string {
+  const p = normalizeRepoPath(path);
+  const lib = libraryDir(cfg);
+  if (p === lib || p.startsWith(`${lib}/`)) return p;
+  throw new Error(
+    `Git storage: path must be under ${lib}/ (got "${path}")`,
+  );
+}
+
+/**
+ * Resolve the repo path for a script write/read.
+ *
+ * Order: safe full `docPath` → safe index `meta.path` → {@link scriptPath}.
+ * Bare filenames (no `/`) are ignored so imports cannot land at repo root.
+ */
+export function resolveScriptRepoPath(
+  cfg: GitConfig,
+  opts: { id: string; docPath?: string | null; indexPath?: string | null },
+): string {
+  for (const candidate of [opts.docPath, opts.indexPath]) {
+    if (!candidate || !String(candidate).trim()) continue;
+    const raw = String(candidate).trim();
+    // Bare filename only — not a repo-relative path
+    if (!raw.includes('/') && !raw.includes('\\')) continue;
+    try {
+      return assertSafeRepoPath(cfg, raw);
+    } catch {
+      /* try next */
+    }
+  }
+  return scriptPath(cfg, opts.id);
+}
+
+/** Thrown when index.json exists but is not valid JSON — refuse overwrite. */
+export class GitIndexCorruptError extends Error {
+  readonly code = 'GIT_INDEX_CORRUPT';
+  constructor(message?: string) {
+    super(
+      message ||
+        'Git storage: library index.json is corrupt — refuse to overwrite. Fix or replace the index in the repo.',
+    );
+    this.name = 'GitIndexCorruptError';
+  }
 }
 
 /**

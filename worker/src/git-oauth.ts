@@ -44,6 +44,38 @@ export type GitOAuthProvider = 'github' | 'gitlab';
 const GITHUB_SCOPE = 'repo read:user';
 const GITLAB_SCOPE = 'api';
 
+// ── Simple in-memory rate limit (per isolate; best-effort on edge) ──
+// Prevents casual abuse of the public device-flow relay.
+const rateBuckets = new Map<string, { count: number; windowStart: number }>();
+
+function clientIp(req: Request): string {
+  return (
+    req.headers.get('cf-connecting-ip') ||
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    'unknown'
+  );
+}
+
+/**
+ * @returns true if the request is allowed
+ */
+function allowRate(key: string, limit: number, windowMs: number): boolean {
+  const now = Date.now();
+  const b = rateBuckets.get(key);
+  if (!b || now - b.windowStart > windowMs) {
+    rateBuckets.set(key, { count: 1, windowStart: now });
+    // Opportunistic prune when map grows large
+    if (rateBuckets.size > 5000) {
+      for (const [k, v] of rateBuckets) {
+        if (now - v.windowStart > windowMs * 2) rateBuckets.delete(k);
+      }
+    }
+    return true;
+  }
+  b.count += 1;
+  return b.count <= limit;
+}
+
 function json(
   body: unknown,
   init: ResponseInit,
@@ -206,12 +238,12 @@ async function pollDevice(
       `GitLab token poll failed: ${String(data.error_description || data.error || res.status)}`,
     );
   }
+  // Do not forward refresh_token — client never stores it; reduces secret surface
   return {
     status: 'success',
     access_token: data.access_token,
     token_type: data.token_type || 'bearer',
     scope: data.scope,
-    refresh_token: data.refresh_token,
     provider: 'gitlab',
   };
 }
@@ -230,6 +262,27 @@ export async function handleGitOAuth(
     return json(
       { status: 'error', code: 'METHOD', message: 'POST required' },
       { status: 405 },
+      origin,
+      cors,
+    );
+  }
+
+  const ip = clientIp(req);
+  // start is stricter (burns forge rate limits); poll is looser
+  const isStart = pathname.endsWith('/start');
+  const isPoll = pathname.endsWith('/poll');
+  if (isStart && !allowRate(`oauth:start:${ip}`, 20, 60_000)) {
+    return json(
+      { status: 'error', code: 'RATE_LIMIT', message: 'Too many OAuth start requests' },
+      { status: 429 },
+      origin,
+      cors,
+    );
+  }
+  if (isPoll && !allowRate(`oauth:poll:${ip}`, 120, 60_000)) {
+    return json(
+      { status: 'error', code: 'RATE_LIMIT', message: 'Too many OAuth poll requests' },
+      { status: 429 },
       origin,
       cors,
     );
@@ -257,15 +310,15 @@ export async function handleGitOAuth(
   }
 
   try {
-    if (pathname.endsWith('/start')) {
-      const scope =
-        String(body.scope || '').trim() ||
-        (provider === 'gitlab' ? GITLAB_SCOPE : GITHUB_SCOPE);
+    if (isStart) {
+      // Ignore client-supplied scope — fixed least-privilege defaults only
+      // (still shown on the forge consent screen).
+      const scope = provider === 'gitlab' ? GITLAB_SCOPE : GITHUB_SCOPE;
       const started = await startDevice(provider, clientId, scope);
       return json({ status: 'success', ...started }, { status: 200 }, origin, cors);
     }
 
-    if (pathname.endsWith('/poll')) {
+    if (isPoll) {
       const deviceCode = String(body.device_code || body.deviceCode || '').trim();
       if (!deviceCode) {
         return json(
@@ -276,6 +329,10 @@ export async function handleGitOAuth(
         );
       }
       const polled = await pollDevice(provider, clientId, deviceCode);
+      // Never return refresh_token even if an adapter re-adds it later
+      if (polled && typeof polled === 'object' && 'refresh_token' in polled) {
+        delete (polled as { refresh_token?: string }).refresh_token;
+      }
       return json(polled, { status: 200 }, origin, cors);
     }
 

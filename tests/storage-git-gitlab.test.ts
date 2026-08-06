@@ -28,7 +28,7 @@ const CFG = {
   token: 'glpat-testtoken00000000',
   owner: 'acme',
   repo: 'pines',
-  projectId: 'acme%2Fpines',
+  projectId: 'acme/pines',
   branch: 'main',
   basePath: 'pine-library',
   autoPush: true,

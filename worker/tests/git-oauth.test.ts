@@ -144,4 +144,79 @@ describe('handleGitOAuth', () => {
     expect(j.status).toBe('success');
     expect(j.access_token).toBe('gho_secret');
   });
+
+  it('gitlab poll strips refresh_token from response', async () => {
+    // @ts-expect-error test override
+    globalThis.fetch = mock(async () =>
+      new Response(
+        JSON.stringify({
+          access_token: 'gl_oauth_token',
+          refresh_token: 'should-not-leak',
+          token_type: 'bearer',
+          scope: 'api',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const res = await handleGitOAuth(
+      new Request('http://x/api/git/oauth/device/poll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'gitlab',
+          device_code: 'dev123',
+          clientId: 'appid',
+        }),
+      }),
+      {},
+      'http://localhost:3000',
+      '/api/git/oauth/device/poll',
+      cors,
+    );
+    const j = (await res.json()) as {
+      status?: string;
+      access_token?: string;
+      refresh_token?: string;
+    };
+    expect(j.status).toBe('success');
+    expect(j.access_token).toBe('gl_oauth_token');
+    expect(j.refresh_token).toBeUndefined();
+  });
+
+  it('ignores client-supplied scope on start (fixed defaults)', async () => {
+    let bodySeen = '';
+    // @ts-expect-error test override
+    globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      bodySeen = String(init?.body || '');
+      return new Response(
+        JSON.stringify({
+          device_code: 'd',
+          user_code: 'U',
+          verification_uri: 'https://github.com/login/device',
+          expires_in: 900,
+          interval: 5,
+        }),
+        { status: 200 },
+      );
+    });
+
+    await handleGitOAuth(
+      new Request('http://x/api/git/oauth/device/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'github',
+          clientId: 'Iv1.x',
+          scope: 'admin:org delete_repo',
+        }),
+      }),
+      {},
+      'http://localhost:3000',
+      '/api/git/oauth/device/start',
+      cors,
+    );
+    expect(bodySeen).toContain('repo');
+    expect(bodySeen).not.toContain('delete_repo');
+  });
 });

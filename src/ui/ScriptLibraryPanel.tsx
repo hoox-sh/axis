@@ -58,7 +58,10 @@ import { pluginKey } from '../plugins/types';
 import { DEFAULT_GIT_CONFIG, type GitConfig } from '../storage/git-config';
 import {
   fetchGitUser,
+  isOAuthProxyBase,
   manualTokenCreateUrl,
+  resolveOAuthProxyBase,
+  sanitizeVerificationUri,
   startDeviceFlow,
   waitForDeviceToken,
 } from '../storage/git-oauth';
@@ -134,15 +137,21 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
 
   /**
    * OAuth device-flow proxy base.
-   * Prefer cloud Worker URL, else engine endpoint (Pro API :5002 or Worker :8787).
-   * Both host `/api/git/oauth/device/*` after the Pro API git_oauth blueprint.
+   * Prefer trusted cloud Worker / engine / same-origin; never send device codes
+   * to an arbitrary untrusted host (enforced again in startDeviceFlow).
    */
   const oauthWorkerBase = () => {
     const cloud = cloudCfg().endpoint.replace(/\/$/, '');
-    if (cloud) return cloud;
     const engine = String(store.endpoint || '').replace(/\/$/, '');
-    if (engine) return engine;
-    return 'http://127.0.0.1:8787';
+    const sameOrigin =
+      typeof window !== 'undefined' ? window.location.origin : '';
+    for (const candidate of [cloud, engine, sameOrigin]) {
+      if (!candidate) continue;
+      if (isOAuthProxyBase(candidate, { sameOrigin })) {
+        return resolveOAuthProxyBase(candidate);
+      }
+    }
+    return resolveOAuthProxyBase();
   };
 
   const storages = () => listStorages();
@@ -362,17 +371,19 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
       });
       if (ac.signal.aborted) return;
       setOauthUserCode(started.user_code);
-      setOauthVerifyUri(
-        started.verification_uri_complete || started.verification_uri,
-      );
+      const verifyRaw =
+        started.verification_uri_complete || started.verification_uri;
+      // startDeviceFlow already sanitizes; belt-and-suspenders for open/href
+      const verifySafe =
+        sanitizeVerificationUri(verifyRaw, provider) ||
+        started.verification_uri;
+      setOauthVerifyUri(verifySafe);
       setOauthHint('Approve access in the browser, then return here.');
-      // Open verification page for the user
+      // Open verification page for the user (allowlisted hosts only)
       try {
-        window.open(
-          started.verification_uri_complete || started.verification_uri,
-          '_blank',
-          'noopener,noreferrer',
-        );
+        if (verifySafe) {
+          window.open(verifySafe, '_blank', 'noopener,noreferrer');
+        }
       } catch {
         /* popup blocked — user can click the link */
       }

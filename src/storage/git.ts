@@ -82,7 +82,7 @@ export const gitStoragePlugin: StoragePlugin = {
     },
     commitMessageTemplate: {
       type: 'string',
-      default: 'chore(pyne): save {{name}} @ {{iso}}',
+      default: 'chore(pine): save {{name}} @ {{iso}}',
       label: 'Commit message template',
     },
   },

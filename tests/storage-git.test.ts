@@ -69,6 +69,142 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
+describe('storage-git integrity', () => {
+  it('refuses write when index.json is corrupt', async () => {
+    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('index.json')) {
+        return new Response(
+          JSON.stringify({
+            type: 'file',
+            content: b64('{not-json'),
+            sha: 'badsha',
+            encoding: 'base64',
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ message: 'not found' }), { status: 404 });
+    }) as unknown as typeof fetch;
+
+    await expect(
+      gitStoragePlugin.write(
+        {
+          id: 's1',
+          name: 'X',
+          content: '// @version=5\nindicator("x")\n',
+          updatedAt: Date.now(),
+        },
+        { ...CFG },
+      ),
+    ).rejects.toThrow(/corrupt/i);
+  });
+
+  it('keeps legacy .pine path on re-save when index has it', async () => {
+    const index = {
+      version: 1,
+      scripts: [
+        {
+          id: 's1',
+          name: 'RSI',
+          path: 'pine-library/library/s1.pine',
+          updatedAt: 100,
+          createdAt: 50,
+        },
+      ],
+    };
+    const puts: string[] = [];
+    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'GET' && url.includes('index.json')) {
+        return new Response(
+          JSON.stringify({
+            type: 'file',
+            content: b64(JSON.stringify(index)),
+            sha: 'idx1',
+            encoding: 'base64',
+          }),
+          { status: 200 },
+        );
+      }
+      if (method === 'GET' && url.includes('s1.pine')) {
+        return new Response(
+          JSON.stringify({
+            type: 'file',
+            content: b64('// old'),
+            sha: 'filesha',
+            encoding: 'base64',
+          }),
+          { status: 200 },
+        );
+      }
+      if (method === 'PUT') {
+        puts.push(url);
+        return new Response(
+          JSON.stringify({
+            content: { sha: 'newsha' },
+            commit: { sha: 'c1' },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ message: 'not found' }), { status: 404 });
+    }) as unknown as typeof fetch;
+
+    const meta = await gitStoragePlugin.write(
+      {
+        id: 's1',
+        name: 'RSI',
+        content: '// @version=5\nindicator("RSI")\n',
+        updatedAt: Date.now(),
+      },
+      { ...CFG },
+    );
+    expect(meta.path).toBe('pine-library/library/s1.pine');
+    expect(puts.some((u) => u.includes('s1.pine'))).toBe(true);
+    expect(puts.some((u) => u.includes('s1.pyne'))).toBe(false);
+  });
+
+  it('ignores bare import path (no root write)', async () => {
+    const puts: string[] = [];
+    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'GET' && url.includes('index.json')) {
+        return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 });
+      }
+      if (method === 'GET') {
+        return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 });
+      }
+      if (method === 'PUT') {
+        puts.push(decodeURIComponent(url));
+        return new Response(
+          JSON.stringify({
+            content: { sha: 'n' },
+            commit: { sha: 'c' },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response('{}', { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const meta = await gitStoragePlugin.write(
+      {
+        id: 'imp1',
+        name: 'RSI',
+        path: 'RSI.pine', // bare filename from import
+        content: '//x',
+        updatedAt: Date.now(),
+      },
+      { ...CFG },
+    );
+    expect(meta.path).toBe('pine-library/library/imp1.pyne');
+    expect(puts.some((u) => u.includes('/RSI.pine') && !u.includes('library'))).toBe(false);
+  });
+});
+
 describe('storage-git plugin', () => {
   it('is registered as built-in', () => {
     expect(listStorages().map((s) => s.id)).toContain('git');
