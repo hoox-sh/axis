@@ -131,6 +131,11 @@ const DEFAULTS: AppState = {
   chartType: DEFAULT_CHART_TYPE,
   priceScaleLabelsVisible: true,
   lastValueLabelsVisible: true,
+  strategyUi: {
+    slippageNextOpen: false,
+    invertTradeLabels: false,
+    exactOnCandle: true,
+  },
   symbol: 'BTCUSDT',
   interval: '1d',
   exchange: 'binance',
@@ -314,6 +319,28 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         typeof bag.lastValueLabelsVisible === 'boolean'
           ? bag.lastValueLabelsVisible
           : DEFAULTS.lastValueLabelsVisible,
+      strategyUi: {
+        ...DEFAULTS.strategyUi,
+        ...(bag.strategyUi && typeof bag.strategyUi === 'object'
+          ? {
+              slippageNextOpen:
+                typeof (bag.strategyUi as AppState['strategyUi']).slippageNextOpen ===
+                'boolean'
+                  ? (bag.strategyUi as AppState['strategyUi']).slippageNextOpen
+                  : DEFAULTS.strategyUi.slippageNextOpen,
+              invertTradeLabels:
+                typeof (bag.strategyUi as AppState['strategyUi']).invertTradeLabels ===
+                'boolean'
+                  ? (bag.strategyUi as AppState['strategyUi']).invertTradeLabels
+                  : DEFAULTS.strategyUi.invertTradeLabels,
+              exactOnCandle:
+                typeof (bag.strategyUi as AppState['strategyUi']).exactOnCandle ===
+                'boolean'
+                  ? (bag.strategyUi as AppState['strategyUi']).exactOnCandle
+                  : DEFAULTS.strategyUi.exactOnCandle,
+            }
+          : {}),
+      },
       historyBars: clampHistoryBars(
         bag.historyBars ?? (bag as { barLimit?: unknown }).barLimit ?? DEFAULTS.historyBars,
       ),
@@ -2229,6 +2256,16 @@ export function setDrawings(drawings: Drawing[]) {
  */
 export function clearDrawings() {
   setStore('drawings', []);
+  persist();
+}
+
+/** Merge strategy UI prefs (fill model, marker labels) and persist. */
+export function setStrategyUi(patch: Partial<AppState['strategyUi']>) {
+  setStore('strategyUi', {
+    ...DEFAULTS.strategyUi,
+    ...(store.strategyUi || {}),
+    ...patch,
+  });
   persist();
 }
 

@@ -56,6 +56,32 @@ export interface NormalizeOptions {
    * Default true so the Results event list still shows order telemetry.
    */
   includeOrders?: boolean;
+  /**
+   * Fill model after normalize (historical + live default: bar close).
+   * When `next_open` (slippage), entry/exit move to the **next** bar’s open.
+   */
+  fillMode?: StrategyFillMode;
+}
+
+/**
+ * Where strategy fills are assumed to occur on the chart.
+ * - `close` — signal bar close (default; process-on-close style)
+ * - `next_open` — next bar open (slippage / classic next-bar fill)
+ */
+export type StrategyFillMode = 'close' | 'next_open';
+
+/** Marker placement prefs for {@link eventsToMarkers}. */
+export interface EventsToMarkersOptions {
+  /**
+   * Invert vertical labels: long entries/exits flip above↔below vs default.
+   * Default false: long entry below, short entry above; exits opposite.
+   */
+  invertLabels?: boolean;
+  /**
+   * Place a mark on the candle body (`inBar` circle) at the fill bar.
+   * Default true. When false, only outside arrows are used.
+   */
+  exactOnCandle?: boolean;
 }
 
 /** Align event times with chart bar units (sec vs ms). */
@@ -266,7 +292,106 @@ export function normalizeStrategyEvents(
     if (isNoFillCloseEvent(n)) continue;
     out.push(n);
   }
+  const mode = opts.fillMode ?? 'close';
+  if (opts.bars?.length && (mode === 'close' || mode === 'next_open')) {
+    return applyStrategyFills(out, opts.bars, mode);
+  }
   return out;
+}
+
+/**
+ * Resolve signal bar index for an event (bar_index preferred, else time match).
+ * Nearest-bar fallback only when within 2× median bar span (avoids snapping
+ * unrelated times onto bar 0 and wiping OHLC-derived prices).
+ */
+export function signalBarIndex(ev: StrategyEvent, bars: Bar[]): number | null {
+  if (!bars.length) return null;
+  if (
+    ev.bar_index != null &&
+    Number.isFinite(ev.bar_index) &&
+    ev.bar_index >= 0 &&
+    ev.bar_index < bars.length
+  ) {
+    return Math.trunc(ev.bar_index);
+  }
+  const t = timeOfEvent(ev);
+  if (t == null || !Number.isFinite(t)) return null;
+  const aligned = alignTimeToBars(t, bars);
+  const exact = bars.findIndex((b) => b.time === aligned);
+  if (exact >= 0) return exact;
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < bars.length; i++) {
+    const d = Math.abs(bars[i]!.time - aligned);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  const span = Math.abs(sampleSpan(bars));
+  if (bestD > span * 2) return null;
+  return best;
+}
+
+function isFillKind(kind: string): boolean {
+  return (
+    kind.includes('entry') ||
+    kind.includes('exit') ||
+    kind.includes('close') ||
+    kind === 'long' ||
+    kind === 'short'
+  );
+}
+
+/**
+ * Apply fill model to entry/exit events using chart OHLCV.
+ *
+ * - **close** (default): fill at signal bar **close**, mark that bar.
+ * - **next_open** (slippage): fill at **next** bar **open**, mark the next bar.
+ *   On the last bar (no next open yet — live forming candle), keep close fill.
+ */
+export function applyStrategyFills(
+  events: StrategyEvent[],
+  bars: Bar[],
+  mode: StrategyFillMode = 'close',
+): StrategyEvent[] {
+  if (!events.length || !bars.length) return events;
+  return events.map((ev) => {
+    const kind = String(ev.type || ev.kind || ev.event || '').toLowerCase();
+    if (!isFillKind(kind)) return ev;
+    if (isNoFillCloseEvent(ev)) return ev;
+
+    const idx = signalBarIndex(ev, bars);
+    if (idx == null) return ev;
+    const signal = bars[idx]!;
+
+    if (mode === 'next_open' && idx + 1 < bars.length) {
+      const next = bars[idx + 1]!;
+      return {
+        ...ev,
+        time: next.time,
+        bar_time: next.time,
+        bar_index: idx + 1,
+        price: next.open,
+        /** Original signal bar (for debugging / UI). */
+        signal_bar_index: idx,
+        signal_time: signal.time,
+        fill_mode: 'next_open',
+      };
+    }
+
+    // close (default) or next_open with no next bar yet
+    return {
+      ...ev,
+      time: signal.time,
+      bar_time: signal.time,
+      bar_index: idx,
+      price: signal.close,
+      signal_bar_index: idx,
+      signal_time: signal.time,
+      fill_mode: mode === 'next_open' ? 'close_fallback' : 'close',
+    };
+  });
 }
 
 export interface TradeMarker {
@@ -317,13 +442,87 @@ export function resolveExitMatchId(ev: StrategyEvent): string {
 }
 
 /**
+ * Side positions for entry/exit labels.
+ * Default: long entry **below**, short entry **above**; exits opposite.
+ * When `invert`, long entry **above**, short entry **below**.
+ */
+export function tradeLabelPosition(
+  kind: 'entry' | 'exit',
+  isShort: boolean,
+  invert = false,
+): 'aboveBar' | 'belowBar' {
+  // Base (invert=false): long entry below, short entry above; exit flips
+  let below: boolean;
+  if (kind === 'entry') {
+    below = !isShort; // long → below, short → above
+  } else {
+    below = isShort; // long exit above, short exit below
+  }
+  if (invert) below = !below;
+  return below ? 'belowBar' : 'aboveBar';
+}
+
+function pushTradeMarkers(
+  markers: TradeMarker[],
+  opts: {
+    time: number;
+    kind: 'entry' | 'exit';
+    isShort: boolean;
+    color: string;
+    text: string;
+    invertLabels: boolean;
+    exactOnCandle: boolean;
+  },
+) {
+  const { time, kind, isShort, color, text, invertLabels, exactOnCandle } = opts;
+  const arrowUp = kind === 'entry' ? !isShort : isShort;
+  const sidePos = tradeLabelPosition(kind, isShort, invertLabels);
+
+  if (exactOnCandle) {
+    // Exact mark on the candle body (fill bar)
+    markers.push({
+      time,
+      position: 'inBar',
+      color,
+      shape: 'circle',
+      text,
+    });
+    // Directional side arrow without text (label already on circle)
+    markers.push({
+      time,
+      position: sidePos,
+      color,
+      shape: arrowUp ? 'arrowUp' : 'arrowDown',
+      text: '',
+    });
+  } else {
+    markers.push({
+      time,
+      position: sidePos,
+      color,
+      shape: arrowUp ? 'arrowUp' : 'arrowDown',
+      text,
+    });
+  }
+}
+
+/**
  * Build LWC series markers from normalized strategy events.
  * Tracks open position dir so exits get a sensible arrow direction.
  *
  * LWC v5 createSeriesMarkers stacks multiple markers on the same bar —
  * keep both same-bar entry and exit (do not collapse by time).
+ *
+ * Prefer passing events already run through {@link applyStrategyFills}
+ * (or {@link normalizeStrategyEvents} with `fillMode`) so times/prices match
+ * close vs next-open fill model.
  */
-export function eventsToMarkers(events: StrategyEvent[]): TradeMarker[] {
+export function eventsToMarkers(
+  events: StrategyEvent[],
+  opts: EventsToMarkersOptions = {},
+): TradeMarker[] {
+  const invertLabels = !!opts.invertLabels;
+  const exactOnCandle = opts.exactOnCandle !== false; // default on
   const openDir = new Map<string, string>();
   const markers: TradeMarker[] = [];
 
@@ -347,12 +546,14 @@ export function eventsToMarkers(events: StrategyEvent[]): TradeMarker[] {
     if (kind.includes('entry')) {
       const isShort = dir.includes('short');
       openDir.set(id || '_default', isShort ? 'short' : 'long');
-      markers.push({
+      pushTradeMarkers(markers, {
         time: t,
-        position: isShort ? 'aboveBar' : 'belowBar',
+        kind: 'entry',
+        isShort,
         color: isShort ? COLOR.shortEntry : COLOR.longEntry,
-        shape: isShort ? 'arrowDown' : 'arrowUp',
         text: id || (isShort ? 'S' : 'L'),
+        invertLabels,
+        exactOnCandle,
       });
     } else if (kind.includes('close') || kind.includes('exit')) {
       // qty=0 no-fill (normalize usually drops these); never invent exit markers.
@@ -367,12 +568,14 @@ export function eventsToMarkers(events: StrategyEvent[]): TradeMarker[] {
         const firstDir = openDir.values().next().value || dir || 'long';
         const isShort = String(firstDir).includes('short');
         openDir.clear();
-        markers.push({
+        pushTradeMarkers(markers, {
           time: t,
-          position: isShort ? 'belowBar' : 'aboveBar',
+          kind: 'exit',
+          isShort,
           color: COLOR.exit,
-          shape: isShort ? 'arrowUp' : 'arrowDown',
           text: id || 'X',
+          invertLabels,
+          exactOnCandle,
         });
       } else {
         let open = openDir.get(matchId);
@@ -388,12 +591,14 @@ export function eventsToMarkers(events: StrategyEvent[]): TradeMarker[] {
         // No matching open → skip marker (do not invent long exits when flat)
         if (!open) continue;
         const isShort = String(open).includes('short');
-        markers.push({
+        pushTradeMarkers(markers, {
           time: t,
-          position: isShort ? 'belowBar' : 'aboveBar',
+          kind: 'exit',
+          isShort,
           color: COLOR.exit,
-          shape: isShort ? 'arrowUp' : 'arrowDown',
           text: id || 'X',
+          invertLabels,
+          exactOnCandle,
         });
       }
     }
@@ -401,7 +606,9 @@ export function eventsToMarkers(events: StrategyEvent[]): TradeMarker[] {
   }
 
   // Keep all markers (incl. same-bar entry+exit); sort ascending for LWC
-  return markers.sort((a, b) => a.time - b.time || a.text.localeCompare(b.text));
+  return markers.sort(
+    (a, b) => a.time - b.time || a.position.localeCompare(b.position) || a.text.localeCompare(b.text),
+  );
 }
 
 /**

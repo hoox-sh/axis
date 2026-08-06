@@ -142,10 +142,13 @@ describe('events stretch', () => {
   });
 
   it('markers short entry and bar_time-only events', () => {
-    const markers = eventsToMarkers([
-      { kind: 'entry', type: 'entry', id: 'S', dir: 'short', bar_time: 10 },
-      { kind: 'exit', type: 'exit', id: 'S', bar_time: 20 },
-    ] as never[]);
+    const markers = eventsToMarkers(
+      [
+        { kind: 'entry', type: 'entry', id: 'S', dir: 'short', bar_time: 10 },
+        { kind: 'exit', type: 'exit', id: 'S', bar_time: 20 },
+      ] as never[],
+      { exactOnCandle: false },
+    );
     expect(markers).toHaveLength(2);
     expect(markers[0]!.shape).toBe('arrowDown');
     expect(markers[1]!.shape).toBe('arrowUp');

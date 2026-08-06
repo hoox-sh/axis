@@ -249,6 +249,27 @@ export interface AppState {
    * Persisted. Default true.
    */
   lastValueLabelsVisible: boolean;
+  /**
+   * Strategy tester + chart trade-marker prefs (persisted).
+   * Fills default to signal-bar **close**; slippage uses next bar **open**.
+   */
+  strategyUi: {
+    /**
+     * When true, entry/exit fills shift to the **next bar open** (slippage).
+     * When false (default), fills use the signal bar **close** (historical + live).
+     */
+    slippageNextOpen: boolean;
+    /**
+     * Invert long/short label sides: long above / short below (entries)
+     * instead of long below / short above.
+     */
+    invertTradeLabels: boolean;
+    /**
+     * Place an exact `inBar` circle on the fill candle (plus side arrows).
+     * Default true.
+     */
+    exactOnCandle: boolean;
+  };
   symbol: string;
   interval: string;
   exchange: string;

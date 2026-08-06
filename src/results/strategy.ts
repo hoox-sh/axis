@@ -41,7 +41,11 @@
  */
 
 import type { Bar } from '../store/types';
-import { normalizeStrategyEvents, resolveExitMatchId } from './events';
+import {
+  normalizeStrategyEvents,
+  resolveExitMatchId,
+  type StrategyFillMode,
+} from './events';
 
 /** Loose event shape accepted before normalization. */
 export interface StrategyEvent {
@@ -101,18 +105,32 @@ export interface StrategyStats {
   trades: number;
 }
 
+export interface BuildStrategyReportOptions {
+  /**
+   * Fill model: `close` (default, signal bar close) or `next_open` (slippage →
+   * next bar open). Applied when `bars` are provided.
+   */
+  fillMode?: StrategyFillMode;
+}
+
 /**
  * Build closed trades and summary stats from raw engine/strategy events.
  * @param bars - Optional OHLCV for price resolution when events lack price/ohlc
+ * @param opts - Fill model prefs (close vs next-open slippage)
  */
 export function buildStrategyReport(
   events: StrategyEvent[] | Record<string, unknown>[],
   bars?: Bar[],
+  opts: BuildStrategyReportOptions = {},
 ): {
   trades: ClosedTrade[];
   stats: StrategyStats;
 } {
-  const normalized = normalizeStrategyEvents(events, { bars, includeOrders: true });
+  const normalized = normalizeStrategyEvents(events, {
+    bars,
+    includeOrders: true,
+    fillMode: opts.fillMode ?? 'close',
+  });
   // Same-bar order must follow engine emission order (stable by original index).
   // Pyne reverses emit close(old) then entry(new). Re-ranking entry before close
   // made the close hit the new id at the same price → every flip trade PnL=0.

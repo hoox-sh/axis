@@ -768,14 +768,19 @@ export async function runAndApply(
       /* equity pane optional */
     }
     if (events.length) {
+      const fillMode = store.strategyUi?.slippageNextOpen ? 'next_open' : 'close';
       const normalized = normalizeStrategyEvents(events, {
         bars: store.bars || [],
         includeOrders: false,
+        fillMode,
       });
-      const markers = eventsToMarkers(normalized);
+      const markers = eventsToMarkers(normalized, {
+        invertLabels: !!store.strategyUi?.invertTradeLabels,
+        exactOnCandle: store.strategyUi?.exactOnCandle !== false,
+      });
       manager.setTradeMarkers(markers);
 
-      const report = buildStrategyReport(events, store.bars || []);
+      const report = buildStrategyReport(events, store.bars || [], { fillMode });
       if (report.trades.length) {
         if (!silent) {
           appendLog(

@@ -17,6 +17,9 @@ import {
   isNoFillCloseEvent,
 } from '../src/results/events.ts';
 
+/** Arrow-only markers (no inBar circles) for length/shape assertions. */
+const ARROW_ONLY = { exactOnCandle: false } as const;
+
 describe('Strategy tester', () => {
   it('returns no trades for an empty event list', () => {
     const r = buildStrategyReport([]);
@@ -265,12 +268,32 @@ describe('eventsToMarkers', () => {
       { kind: 'entry', id: 'L', direction: 'long', bar_time: 10, ohlc: [1, 1, 1, 100] },
       { kind: 'close', id: 'L', bar_time: 20, ohlc: [1, 1, 1, 110] },
     ]);
-    const markers = eventsToMarkers(events);
+    const markers = eventsToMarkers(events, ARROW_ONLY);
     expect(markers).toHaveLength(2);
     expect(markers[0].shape).toBe('arrowUp');
     expect(markers[0].position).toBe('belowBar');
     expect(markers[1].shape).toBe('arrowDown');
     expect(markers[1].position).toBe('aboveBar');
+  });
+
+  it('inverts long/short label sides when requested', () => {
+    const events = normalizeStrategyEvents([
+      { kind: 'entry', id: 'L', direction: 'long', bar_time: 10, ohlc: [1, 1, 1, 100] },
+      { kind: 'close', id: 'L', bar_time: 20, ohlc: [1, 1, 1, 110] },
+    ]);
+    const markers = eventsToMarkers(events, { ...ARROW_ONLY, invertLabels: true });
+    expect(markers[0]!.position).toBe('aboveBar'); // long entry inverted
+    expect(markers[1]!.position).toBe('belowBar'); // long exit inverted
+  });
+
+  it('exact on candle adds inBar circle plus side arrow', () => {
+    const events = normalizeStrategyEvents([
+      { kind: 'entry', id: 'L', direction: 'long', bar_time: 10, ohlc: [1, 1, 1, 100] },
+    ]);
+    const markers = eventsToMarkers(events, { exactOnCandle: true });
+    expect(markers).toHaveLength(2);
+    expect(markers.some((m) => m.position === 'inBar' && m.shape === 'circle')).toBe(true);
+    expect(markers.some((m) => m.shape === 'arrowUp')).toBe(true);
   });
 
   it('keeps both entry and exit markers on the same bar', () => {
@@ -279,10 +302,9 @@ describe('eventsToMarkers', () => {
       { kind: 'entry', id: 'L', direction: 'long', bar_time: 10, ohlc: [1, 1, 1, 100] },
       { kind: 'exit', id: 'X', from_entry: 'L', bar_time: 10, ohlc: [1, 1, 1, 101] },
     ]);
-    const markers = eventsToMarkers(events);
+    const markers = eventsToMarkers(events, ARROW_ONLY);
     expect(markers).toHaveLength(2);
-    expect(markers[0].shape).toBe('arrowUp');
-    expect(markers[1].shape).toBe('arrowDown');
+    expect(markers.map((m) => m.shape).sort()).toEqual(['arrowDown', 'arrowUp']);
     expect(markers[0].time).toBe(markers[1].time);
   });
 
@@ -295,7 +317,7 @@ describe('eventsToMarkers', () => {
       { includeOrders: false },
     );
     expect(events.every((e) => e.type !== 'order')).toBe(true);
-    expect(eventsToMarkers(events)).toHaveLength(1);
+    expect(eventsToMarkers(events, ARROW_ONLY)).toHaveLength(1);
   });
 
   it('does not draw markers for cancel / cancel_all (markers path)', () => {
@@ -324,7 +346,7 @@ describe('eventsToMarkers', () => {
       { includeOrders: false },
     );
     expect(events.map((e) => e.kind)).toEqual(['entry']);
-    const markers = eventsToMarkers(events);
+    const markers = eventsToMarkers(events, ARROW_ONLY);
     expect(markers).toHaveLength(1);
     expect(markers[0]!.shape).toBe('arrowUp');
     expect(markers[0]!.text).toBe('L');
@@ -391,7 +413,7 @@ describe('eventsToMarkers', () => {
     expect(events.map((e) => e.kind)).toEqual(['entry', 'close']);
     expect(events.every((e) => e.qty !== 0)).toBe(true);
 
-    const markers = eventsToMarkers(events);
+    const markers = eventsToMarkers(events, ARROW_ONLY);
     expect(markers).toHaveLength(2);
     expect(markers[0]!.shape).toBe('arrowUp');
     expect(markers[1]!.shape).toBe('arrowDown');
@@ -402,12 +424,104 @@ describe('eventsToMarkers', () => {
   });
 
   it('eventsToMarkers skips qty=0 close even if normalize was skipped', () => {
-    const markers = eventsToMarkers([
-      { kind: 'entry', type: 'entry', id: 'L', dir: 'long', time: 1, qty: 1 },
-      { kind: 'close', type: 'close', id: 'L', time: 2, qty: 0 },
-    ] as never[]);
+    const markers = eventsToMarkers(
+      [
+        { kind: 'entry', type: 'entry', id: 'L', dir: 'long', time: 1, qty: 1 },
+        { kind: 'close', type: 'close', id: 'L', time: 2, qty: 0 },
+      ] as never[],
+      ARROW_ONLY,
+    );
     expect(markers).toHaveLength(1);
     expect(markers[0]!.shape).toBe('arrowUp');
+  });
+});
+
+describe('strategy fill model (close vs next open)', () => {
+  const bars = [
+    { time: 1000, open: 10, high: 12, low: 9, close: 11 },
+    { time: 1060, open: 11.5, high: 13, low: 11, close: 12 },
+    { time: 1120, open: 12, high: 14, low: 12, close: 13 },
+  ];
+
+  it('default close fill uses signal bar close', () => {
+    const events = normalizeStrategyEvents(
+      [
+        {
+          kind: 'entry',
+          id: 'L',
+          direction: 'long',
+          bar_index: 0,
+          bar_time: 1000,
+          ohlc: [10, 12, 9, 11],
+        },
+        {
+          kind: 'close',
+          id: 'L',
+          bar_index: 1,
+          bar_time: 1060,
+          ohlc: [11.5, 13, 11, 12],
+        },
+      ],
+      { bars, fillMode: 'close' },
+    );
+    expect(events[0]!.price).toBe(11);
+    expect(events[0]!.time).toBe(1000);
+    expect(events[1]!.price).toBe(12);
+    expect(events[1]!.time).toBe(1060);
+    const r = buildStrategyReport(
+      [
+        {
+          kind: 'entry',
+          id: 'L',
+          direction: 'long',
+          bar_index: 0,
+          bar_time: 1000,
+          ohlc: [10, 12, 9, 11],
+        },
+        {
+          kind: 'close',
+          id: 'L',
+          bar_index: 1,
+          bar_time: 1060,
+          ohlc: [11.5, 13, 11, 12],
+        },
+      ] as any,
+      bars,
+      { fillMode: 'close' },
+    );
+    expect(r.trades[0]!.entry).toBe(11);
+    expect(r.trades[0]!.exit).toBe(12);
+  });
+
+  it('slippage next_open moves fill to next bar open', () => {
+    const events = normalizeStrategyEvents(
+      [
+        {
+          kind: 'entry',
+          id: 'L',
+          direction: 'long',
+          bar_index: 0,
+          bar_time: 1000,
+          ohlc: [10, 12, 9, 11],
+        },
+        {
+          kind: 'close',
+          id: 'L',
+          bar_index: 1,
+          bar_time: 1060,
+          ohlc: [11.5, 13, 11, 12],
+        },
+      ],
+      { bars, fillMode: 'next_open' },
+    );
+    // entry on bar0 → fill bar1 open 11.5
+    expect(events[0]!.price).toBe(11.5);
+    expect(events[0]!.time).toBe(1060);
+    expect(events[0]!.bar_index).toBe(1);
+    // exit on bar1 → fill bar2 open 12
+    expect(events[1]!.price).toBe(12);
+    expect(events[1]!.time).toBe(1120);
+    expect(events[1]!.bar_index).toBe(2);
   });
 });
 
@@ -742,7 +856,7 @@ describe('no-fill strategy.close spam (qty=0)', () => {
       },
       closeSpamEvent(4, 'EX Long', 1200),
     ]);
-    const markers = eventsToMarkers(events);
+    const markers = eventsToMarkers(events, ARROW_ONLY);
     expect(markers).toHaveLength(2);
     expect(markers[0]!.shape).toBe('arrowUp');
     expect(markers[1]!.shape).toBe('arrowDown');

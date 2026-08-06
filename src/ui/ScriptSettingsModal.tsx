@@ -23,9 +23,22 @@
  * Target is either an applied indicator (`scriptSettings.indicatorId`) or the
  * docked editor document. Field defs from `resolveScriptInputs`; Apply writes
  * overrides via store helpers and calls `runAndApply`.
+ *
+ * **Focus / value stability:** fields are seeded only when the modal opens or
+ * the target indicator changes — not on every `lastRun` / live tick. Number
+ * fields keep a local string draft so mid-edit re-renders do not reset focus.
  */
 
-import { Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import {
+  Component,
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  untrack,
+} from 'solid-js';
 import {
   store,
   closeScriptSettings,
@@ -52,48 +65,54 @@ export const ScriptSettingsModal: Component = () => {
   const [fields, setFields] = createSignal<ScriptInputDef[]>([]);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
+  /** Labels for cross-indicator plot options (value → display). */
+  const [sourceLabels, setSourceLabels] = createSignal<Record<string, string>>({});
 
-  const target = createMemo(() => {
+  /**
+   * Seed key for the open session: only re-build field list when the modal
+   * opens or the target script changes — never on lastRun / live series ticks.
+   */
+  let seededKey = '';
+
+  const targetMeta = createMemo(() => {
     const id = indicatorId();
     if (id) {
       const ind = store.scripts.find((s) => s.id === id);
-      return ind
-        ? { kind: 'indicator' as const, name: ind.name, code: ind.code, values: ind.inputValues || {} }
-        : null;
+      if (!ind) return null;
+      return {
+        kind: 'indicator' as const,
+        id,
+        name: ind.name,
+        code: ind.code,
+        values: ind.inputValues || {},
+      };
     }
-    const code = loadEditorDoc() || '';
     return {
       kind: 'editor' as const,
+      id: 'editor',
       name: 'Editor script',
-      code,
+      code: loadEditorDoc() || '',
       values: store.editorInputValues || {},
     };
   });
 
-  /** Labels for cross-indicator plot options (value → display). */
-  const [sourceLabels, setSourceLabels] = createSignal<Record<string, string>>({});
-
-  createEffect(() => {
-    if (!open()) return;
-    const t = target();
+  const seedFields = () => {
+    const t = untrack(() => targetMeta());
     if (!t) {
       setFields([]);
       setSourceLabels({});
       return;
     }
-    const r = store.lastRun as RunResult | null;
+    // Snapshot engine inputs / plot series once at seed — do not track live updates
+    const r = untrack(() => store.lastRun as RunResult | null);
     const engineInputs = r?.meta?.inputs ?? (r as { inputs?: unknown } | null)?.inputs;
     const defs = resolveScriptInputs(t.code, engineInputs);
-    // Merge built-in OHLC + other indicators' plots into every source input
-    const { options: plotOpts, labels } = sourceOptionsWithPlots(
-      store.indicatorSeries,
-      indicatorId(),
-    );
-    setSourceLabels(labels);
+    const seriesSnap = untrack(() => store.indicatorSeries);
+    const { options: plotOpts, labels } = sourceOptionsWithPlots(seriesSnap, indicatorId());
+    setSourceLabels({ ...labels });
     const withPlots = defs.map((d) => {
       if (d.type !== 'source') return d;
       const opts = [...plotOpts];
-      // Keep a previously saved plot ref visible even if producer was removed
       const cur = t.values[d.title] ?? t.values[d.id] ?? d.value;
       if (typeof cur === 'string' && cur && !opts.includes(cur)) {
         opts.push(cur);
@@ -101,8 +120,21 @@ export const ScriptSettingsModal: Component = () => {
       }
       return { ...d, options: opts };
     });
+    setSourceLabels({ ...labels });
     setFields(applyInputOverrides(withPlots, t.values));
     setError('');
+  };
+
+  // Seed only on open / target change (not on every store tick)
+  createEffect(() => {
+    if (!open()) {
+      seededKey = '';
+      return;
+    }
+    const key = indicatorId() ?? 'editor';
+    if (seededKey === key) return;
+    seededKey = key;
+    seedFields();
   });
 
   const groups = createMemo(() => {
@@ -127,12 +159,20 @@ export const ScriptSettingsModal: Component = () => {
     if (e.key === 'Escape') closeScriptSettings();
   };
 
+  // Escape while modal open (dialog itself may not hold focus)
+  createEffect(() => {
+    if (!open()) return;
+    const handler = (e: KeyboardEvent) => onKey(e);
+    window.addEventListener('keydown', handler);
+    onCleanup(() => window.removeEventListener('keydown', handler));
+  });
+
   const onApply = async (andRun: boolean) => {
-    const t = target();
+    const t = untrack(() => targetMeta());
     if (!t) return;
     const overrides = overridesFromDefs(fields());
-    if (t.kind === 'indicator' && indicatorId()) {
-      setIndicatorInputValues(indicatorId()!, overrides);
+    if (t.kind === 'indicator' && t.id) {
+      setIndicatorInputValues(t.id, overrides);
     } else {
       setEditorInputValues(overrides);
     }
@@ -143,7 +183,7 @@ export const ScriptSettingsModal: Component = () => {
     setBusy(true);
     setError('');
     try {
-      const id = indicatorId() || undefined;
+      const id = t.kind === 'indicator' ? t.id : undefined;
       await runAndApply(t.code, id, { inputs: overrides });
       closeScriptSettings();
     } catch (err: unknown) {
@@ -162,7 +202,6 @@ export const ScriptSettingsModal: Component = () => {
       <div
         class="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000] p-4 backdrop-blur-[2px]"
         onClick={onBackdrop}
-        onKeyDown={onKey}
         role="presentation"
       >
         <div
@@ -172,7 +211,6 @@ export const ScriptSettingsModal: Component = () => {
           aria-labelledby="axis-script-settings-title"
           data-testid="axis-script-settings"
           tabIndex={-1}
-          ref={(el) => queueMicrotask(() => el?.focus())}
         >
           <div class="sc-dialog-accent" />
           <div class="sc-dialog-header">
@@ -184,7 +222,7 @@ export const ScriptSettingsModal: Component = () => {
                 Script settings
               </div>
               <div class="sc-hint truncate">
-                {target()?.name || 'Script'} · input parameters
+                {targetMeta()?.name || 'Script'} · input parameters
               </div>
             </div>
             <button
@@ -263,7 +301,7 @@ export const ScriptSettingsModal: Component = () => {
               type="button"
               class="sc-btn sc-btn-primary"
               onClick={() => void onApply(true)}
-              disabled={busy() || !target()?.code?.trim()}
+              disabled={busy() || !targetMeta()?.code?.trim()}
               data-testid="axis-script-settings-apply"
             >
               <Show when={busy()} fallback={<Icons.play />}>
@@ -289,8 +327,42 @@ const InputField: Component<{
   const val = () => props.field.value ?? props.field.default;
   const optLabel = (opt: string) => props.optionLabels?.[opt] || opt;
 
+  // Local drafts so parent re-renders do not clobber caret while focused
+  const [numDraft, setNumDraft] = createSignal<string | null>(null);
+  const [textDraft, setTextDraft] = createSignal<string | null>(null);
+  const [numFocused, setNumFocused] = createSignal(false);
+  const [textFocused, setTextFocused] = createSignal(false);
+
+  // When not focused, sync display from parent (reset / external update)
+  createEffect(() => {
+    void props.field.value;
+    void props.field.default;
+    if (!numFocused()) setNumDraft(null);
+    if (!textFocused()) setTextDraft(null);
+  });
+
+  const numDisplay = () => {
+    if (numFocused() && numDraft() != null) return numDraft()!;
+    const v = val();
+    return v == null ? '' : String(v);
+  };
+
+  const textDisplay = () => {
+    if (textFocused() && textDraft() != null) return textDraft()!;
+    return String(val() ?? '');
+  };
+
+  const commitNumber = (raw: string) => {
+    if (raw.trim() === '') {
+      props.onChange(props.field.default);
+      return;
+    }
+    const n = t() === 'int' ? parseInt(raw, 10) : parseFloat(raw);
+    props.onChange(Number.isFinite(n) ? n : props.field.default);
+  };
+
   return (
-    <div class="sc-field">
+    <div class="sc-field" data-input-id={props.field.id}>
       <label class="text-[11px] text-text-dim" for={id()} title={props.field.tooltip || undefined}>
         {props.field.title}
         <Show when={props.field.tooltip}>
@@ -316,18 +388,33 @@ const InputField: Component<{
           id={id()}
           type="number"
           class="sc-input w-full"
-          value={val() == null ? '' : String(val())}
+          value={numDisplay()}
           min={props.field.min ?? undefined}
           max={props.field.max ?? undefined}
           step={props.field.step ?? (t() === 'int' ? 1 : 'any')}
+          onFocus={(e) => {
+            setNumFocused(true);
+            setNumDraft(e.currentTarget.value);
+          }}
           onInput={(e) => {
             const raw = e.currentTarget.value;
-            if (raw === '') {
-              props.onChange(props.field.default);
-              return;
-            }
+            setNumDraft(raw);
+            // Commit finite numbers so Apply works without blur; leave empty
+            // as draft only so clearing the field does not jump to default.
+            if (raw.trim() === '') return;
             const n = t() === 'int' ? parseInt(raw, 10) : parseFloat(raw);
-            props.onChange(Number.isFinite(n) ? n : props.field.default);
+            if (Number.isFinite(n)) props.onChange(n);
+          }}
+          onChange={(e) => commitNumber(e.currentTarget.value)}
+          onBlur={(e) => {
+            commitNumber(e.currentTarget.value);
+            setNumFocused(false);
+            setNumDraft(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.currentTarget.blur();
+            }
           }}
         />
       </Show>
@@ -343,8 +430,19 @@ const InputField: Component<{
           <input
             type="text"
             class="sc-input flex-1 font-mono text-[11px]"
-            value={String(val() ?? '')}
-            onInput={(e) => props.onChange(e.currentTarget.value)}
+            value={textDisplay()}
+            onFocus={(e) => {
+              setTextFocused(true);
+              setTextDraft(e.currentTarget.value);
+            }}
+            onInput={(e) => {
+              setTextDraft(e.currentTarget.value);
+              props.onChange(e.currentTarget.value);
+            }}
+            onBlur={() => {
+              setTextFocused(false);
+              setTextDraft(null);
+            }}
           />
         </div>
       </Show>
@@ -382,8 +480,19 @@ const InputField: Component<{
           id={id()}
           type="text"
           class="sc-input w-full"
-          value={String(val() ?? '')}
-          onInput={(e) => props.onChange(e.currentTarget.value)}
+          value={textDisplay()}
+          onFocus={(e) => {
+            setTextFocused(true);
+            setTextDraft(e.currentTarget.value);
+          }}
+          onInput={(e) => {
+            setTextDraft(e.currentTarget.value);
+            props.onChange(e.currentTarget.value);
+          }}
+          onBlur={() => {
+            setTextFocused(false);
+            setTextDraft(null);
+          }}
         />
       </Show>
     </div>

@@ -140,6 +140,15 @@ export const SettingsDialog: Component<Props> = (props) => {
   const [lastValueLabels, setLastValueLabels] = createSignal(
     store.lastValueLabelsVisible !== false,
   );
+  const [slippageNextOpen, setSlippageNextOpen] = createSignal(
+    !!store.strategyUi?.slippageNextOpen,
+  );
+  const [invertTradeLabels, setInvertTradeLabels] = createSignal(
+    !!store.strategyUi?.invertTradeLabels,
+  );
+  const [exactOnCandle, setExactOnCandle] = createSignal(
+    store.strategyUi?.exactOnCandle !== false,
+  );
   const [probing, setProbing] = createSignal(false);
   const [reloading, setReloading] = createSignal(false);
   const [probeMsg, setProbeMsg] = createSignal('');
@@ -214,6 +223,9 @@ export const SettingsDialog: Component<Props> = (props) => {
         setUiScaleLocal(clampUiScale(store.uiScale ?? 1));
         setPriceScaleLabels(store.priceScaleLabelsVisible !== false);
         setLastValueLabels(store.lastValueLabelsVisible !== false);
+        setSlippageNextOpen(!!store.strategyUi?.slippageNextOpen);
+        setInvertTradeLabels(!!store.strategyUi?.invertTradeLabels);
+        setExactOnCandle(store.strategyUi?.exactOnCandle !== false);
         setProbeMsg('');
         setTab(props.initialTab === 'theme' ? 'theme' : 'general');
       });
@@ -253,6 +265,9 @@ export const SettingsDialog: Component<Props> = (props) => {
     const nextUiScale = clampUiScale(uiScale());
     const nextPriceScaleLabels = priceScaleLabels();
     const nextLastValueLabels = lastValueLabels();
+    const nextSlippage = slippageNextOpen();
+    const nextInvertLabels = invertTradeLabels();
+    const nextExactMarks = exactOnCandle();
     const nextExecMode = execMode();
     const nextPreferWs = preferWs();
     const writeEndpoint = needsEndpoint();
@@ -271,6 +286,11 @@ export const SettingsDialog: Component<Props> = (props) => {
     setStore('uiScale', nextUiScale);
     setStore('priceScaleLabelsVisible', nextPriceScaleLabels);
     setStore('lastValueLabelsVisible', nextLastValueLabels);
+    setStore('strategyUi', {
+      slippageNextOpen: nextSlippage,
+      invertTradeLabels: nextInvertLabels,
+      exactOnCandle: nextExactMarks,
+    });
     applyUiScale(nextUiScale);
     // setActivePlugin keeps flat engine/source fields + telemetry planes aligned
     setActivePlugin('engine', nextEngine);
@@ -847,6 +867,74 @@ export const SettingsDialog: Component<Props> = (props) => {
                   </span>
                 </span>
               </label>
+
+              <div class="sc-section !mt-0 !border-t-0 !pt-0 mb-3">
+                <div class="sc-section-title">Strategy fills & marks</div>
+                <p class="text-[10px] text-text-faint mb-2">
+                  Historical and live default: execute on signal bar close. Slippage
+                  shifts the fill to the next bar open. Marker options also live on the
+                  Results → Strategy tab.
+                </p>
+                <label
+                  class="flex items-start gap-2 cursor-pointer mb-2"
+                  for="axis-strategy-slippage"
+                >
+                  <input
+                    id="axis-strategy-slippage"
+                    type="checkbox"
+                    class="mt-0.5"
+                    checked={slippageNextOpen()}
+                    onChange={(e) => setSlippageNextOpen(e.currentTarget.checked)}
+                    data-testid="axis-settings-strategy-slippage"
+                  />
+                  <span>
+                    <span class="text-[12px] text-text">Slippage → next bar open</span>
+                    <span class="block text-[10px] text-text-faint mt-0.5">
+                      Off = fill at signal candle close. On = fill at next candle open
+                      (mark moves to that bar).
+                    </span>
+                  </span>
+                </label>
+                <label
+                  class="flex items-start gap-2 cursor-pointer mb-2"
+                  for="axis-strategy-invert-labels"
+                >
+                  <input
+                    id="axis-strategy-invert-labels"
+                    type="checkbox"
+                    class="mt-0.5"
+                    checked={invertTradeLabels()}
+                    onChange={(e) => setInvertTradeLabels(e.currentTarget.checked)}
+                    data-testid="axis-settings-strategy-invert-labels"
+                  />
+                  <span>
+                    <span class="text-[12px] text-text">Invert long / short labels</span>
+                    <span class="block text-[10px] text-text-faint mt-0.5">
+                      Default: long entry below, short above. Invert puts long above and
+                      short below.
+                    </span>
+                  </span>
+                </label>
+                <label
+                  class="flex items-start gap-2 cursor-pointer mb-2"
+                  for="axis-strategy-exact-marks"
+                >
+                  <input
+                    id="axis-strategy-exact-marks"
+                    type="checkbox"
+                    class="mt-0.5"
+                    checked={exactOnCandle()}
+                    onChange={(e) => setExactOnCandle(e.currentTarget.checked)}
+                    data-testid="axis-settings-strategy-exact-marks"
+                  />
+                  <span>
+                    <span class="text-[12px] text-text">Exact marks on candle</span>
+                    <span class="block text-[10px] text-text-faint mt-0.5">
+                      Circle on the fill bar body plus directional side arrows.
+                    </span>
+                  </span>
+                </label>
+              </div>
 
               <div class="sc-section !mt-0 !border-t-0 !pt-0">
                 <div class="sc-section-title">Live stream</div>

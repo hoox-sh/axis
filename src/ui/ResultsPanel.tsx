@@ -35,7 +35,7 @@ import {
   onCleanup,
   onMount,
 } from 'solid-js';
-import { store, isPanelOpen } from '../store';
+import { store, isPanelOpen, setStrategyUi } from '../store';
 import type { RunResult } from '../indicators/runner';
 import { FloatableShell } from './panels/FloatableShell';
 import {
@@ -46,7 +46,7 @@ import {
   type ClosedTrade,
   type StrategyEvent,
 } from '../results/strategy';
-import { normalizeStrategyEvents } from '../results/events';
+import { eventsToMarkers, normalizeStrategyEvents } from '../results/events';
 import { getManager } from '../chart/manager-access';
 import { Icons } from './icons';
 import { StrategyReport } from './StrategyReport';
@@ -98,21 +98,46 @@ export const ResultsPanel: Component = () => {
 
   const result = () => store.lastRun as RunResult | null;
 
+  const fillMode = () =>
+    store.strategyUi?.slippageNextOpen ? ('next_open' as const) : ('close' as const);
+
   const report = createMemo(() => {
     const r = result();
     if (!r) return null;
     // Pass bars so ohlc-less / zero-ohlc events still resolve close prices
-    return buildStrategyReport((r.events || []) as StrategyEvent[], store.bars || []);
+    void store.strategyUi?.slippageNextOpen;
+    return buildStrategyReport((r.events || []) as StrategyEvent[], store.bars || [], {
+      fillMode: fillMode(),
+    });
   });
 
   const normalizedEvents = createMemo(() => {
     const r = result();
     if (!r) return [] as StrategyEvent[];
+    void store.strategyUi?.slippageNextOpen;
     return normalizeStrategyEvents((r.events || []) as StrategyEvent[], {
       bars: store.bars || [],
       includeOrders: true,
+      fillMode: fillMode(),
     });
   });
+
+  /** Re-paint chart trade markers when strategy UI prefs change (no re-run). */
+  const reapplyTradeMarkers = () => {
+    const r = result();
+    const mgr = getManager();
+    if (!r?.events?.length || !mgr) return;
+    const normalized = normalizeStrategyEvents((r.events || []) as StrategyEvent[], {
+      bars: store.bars || [],
+      includeOrders: false,
+      fillMode: fillMode(),
+    });
+    const markers = eventsToMarkers(normalized, {
+      invertLabels: !!store.strategyUi?.invertTradeLabels,
+      exactOnCandle: store.strategyUi?.exactOnCandle !== false,
+    });
+    mgr.setTradeMarkers(markers);
+  };
 
   function jumpToTrade(trade: ClosedTrade, which: 'entry' | 'exit' = 'entry') {
     const t = which === 'exit' ? trade.exitTime : trade.entryTime;
@@ -324,6 +349,13 @@ export const ResultsPanel: Component = () => {
               }
               hasEvents={normalizedEvents().length > 0 || (result()?.events?.length ?? 0) > 0}
               onJumpToTrade={jumpToTrade}
+              slippageNextOpen={!!store.strategyUi?.slippageNextOpen}
+              invertTradeLabels={!!store.strategyUi?.invertTradeLabels}
+              exactOnCandle={store.strategyUi?.exactOnCandle !== false}
+              onStrategyUiChange={(patch) => {
+                setStrategyUi(patch);
+                reapplyTradeMarkers();
+              }}
             />
           </Show>
 

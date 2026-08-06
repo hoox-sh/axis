@@ -66,6 +66,18 @@ export type StrategyReportProps = {
   onJumpToTrade?: (trade: ClosedTrade, which: 'entry' | 'exit') => void;
   /** Empty-state hint when events exist but no closed trades. */
   hasEvents?: boolean;
+  /** Slippage: fill at next bar open instead of signal close. */
+  slippageNextOpen?: boolean;
+  /** Invert long/short marker sides. */
+  invertTradeLabels?: boolean;
+  /** Exact in-bar circle marks on fill candles. */
+  exactOnCandle?: boolean;
+  /** Persist strategy UI prefs and re-apply chart markers. */
+  onStrategyUiChange?: (patch: {
+    slippageNextOpen?: boolean;
+    invertTradeLabels?: boolean;
+    exactOnCandle?: boolean;
+  }) => void;
 };
 
 /** Polished strategy tester panel for the Results Strategy tab. */
@@ -88,18 +100,75 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
     downloadText(`axis-trades-${Date.now()}.csv`, tradesToCsv(props.trades), 'text/csv');
   };
 
+  const fillHint = () =>
+    props.slippageNextOpen
+      ? 'Fills at next bar open (slippage)'
+      : 'Fills at signal bar close (default)';
+
   return (
-    <Show
-      when={hasTrades()}
-      fallback={
-        <div class="text-text-faint p-2" data-testid="axis-strategy-empty">
-          {props.hasEvents
-            ? 'Events present but no closed trades yet.'
-            : 'No events. Strategy tester pairs entry/close events.'}
-        </div>
-      }
-    >
-      <div class="flex flex-col gap-3 min-h-0" data-testid="axis-strategy-report">
+    <div class="flex flex-col gap-3 min-h-0" data-testid="axis-strategy-report">
+      {/* Fill / marker options (apply without re-run) */}
+      <div
+        class="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px]"
+        data-testid="axis-strategy-fill-opts"
+      >
+        <span class="text-text-faint uppercase tracking-wider text-[10px]">Marks</span>
+        <label class="inline-flex items-center gap-1.5 cursor-pointer text-text-dim" title={fillHint()}>
+          <input
+            type="checkbox"
+            class="accent-[var(--color-accent)]"
+            checked={!!props.slippageNextOpen}
+            data-testid="axis-strategy-slippage"
+            onChange={(e) =>
+              props.onStrategyUiChange?.({ slippageNextOpen: e.currentTarget.checked })
+            }
+          />
+          Slippage → next open
+        </label>
+        <label
+          class="inline-flex items-center gap-1.5 cursor-pointer text-text-dim"
+          title="Long labels above, short below (swap default sides)"
+        >
+          <input
+            type="checkbox"
+            class="accent-[var(--color-accent)]"
+            checked={!!props.invertTradeLabels}
+            data-testid="axis-strategy-invert-labels"
+            onChange={(e) =>
+              props.onStrategyUiChange?.({ invertTradeLabels: e.currentTarget.checked })
+            }
+          />
+          Invert long/short labels
+        </label>
+        <label
+          class="inline-flex items-center gap-1.5 cursor-pointer text-text-dim"
+          title="Circle mark on the fill candle body"
+        >
+          <input
+            type="checkbox"
+            class="accent-[var(--color-accent)]"
+            checked={props.exactOnCandle !== false}
+            data-testid="axis-strategy-exact-marks"
+            onChange={(e) =>
+              props.onStrategyUiChange?.({ exactOnCandle: e.currentTarget.checked })
+            }
+          />
+          Exact on candle
+        </label>
+        <span class="text-text-faint text-[10px] font-mono">{fillHint()}</span>
+      </div>
+
+      <Show
+        when={hasTrades()}
+        fallback={
+          <div class="text-text-faint p-2" data-testid="axis-strategy-empty">
+            {props.hasEvents
+              ? 'Events present but no closed trades yet.'
+              : 'No events. Strategy tester pairs entry/close events.'}
+          </div>
+        }
+      >
+      <div class="flex flex-col gap-3 min-h-0">
         {/* Stats cards */}
         <div class="grid grid-cols-3 sm:grid-cols-6 gap-2" data-testid="axis-strategy-stats">
           <Metric
@@ -279,7 +348,8 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
           </table>
         </div>
       </div>
-    </Show>
+      </Show>
+    </div>
   );
 };
 
