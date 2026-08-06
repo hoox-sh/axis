@@ -28,7 +28,7 @@
  * - **Data** — Source (+ CSV upload), Load, Reload
  * - **Compute** — Engine, Stream, Run, Live, Replay
  * - **Layout** — multi-chart layout menu
- * - **Panels** — List, Editor, Library, Indicators, Layers, Alerts, Data, Inputs, Results
+ * - **Panels** — List, Editor, Library, Scripts, Layers, Alerts, Data, Inputs, Results
  * - **System** — Plugins, Settings, Theme (`ml-auto`)
  *
  * ## Actions
@@ -176,6 +176,7 @@ export const Topbar: Component<{
   };
 
   const onRun = async () => {
+    if (store.status === 'running') return;
     const doc = props.editorRef.getDoc();
     if (!doc?.trim()) return;
     await runAndApply(doc, undefined, {
@@ -452,16 +453,21 @@ export const Topbar: Component<{
           <For each={streams()}>{(s) => <option value={s.id}>{s.name}</option>}</For>
         </TopbarField>
 
-        {/* Action cluster: Run (primary) · Live · Replay */}
+        {/* Action cluster: Run · Live · Replay — Run is accent only while executing */}
         <button
           type="button"
-          class="sc-btn sc-btn-primary"
+          class={`sc-btn ${store.status === 'running' ? 'sc-btn-primary is-active' : 'sc-btn-ghost'}`}
           onClick={onRun}
           data-testid="axis-btn-run"
-          title="Run script against loaded bars (or use detached editor)"
+          aria-busy={store.status === 'running'}
+          title={
+            store.status === 'running'
+              ? 'Running…'
+              : 'Run script against loaded bars (or use detached editor)'
+          }
         >
           <Icons.play />
-          Run
+          <span class="axis-tb-btn-label">{store.status === 'running' ? 'Running…' : 'Run'}</span>
         </button>
 
         <button
@@ -564,12 +570,12 @@ export const Topbar: Component<{
           type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('indicators') || store.indicatorPanel.open ? 'is-active' : ''}`}
           onClick={() => toggleIndicatorPanel()}
-          title="Toggle indicator list"
+          title="Toggle scripts list — applied Pine indicators & strategies"
           aria-pressed={isPanelOpen('indicators') || store.indicatorPanel.open}
           data-testid="axis-btn-indicators"
         >
           <Icons.activity />
-          <span class="axis-tb-btn-label">Indicators</span>
+          <span class="axis-tb-btn-label">Scripts</span>
         </button>
 
         <button

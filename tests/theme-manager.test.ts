@@ -112,10 +112,16 @@ describe('theme catalog', () => {
 });
 
 describe('theme presets', () => {
-  it('listPresets length >= 4', () => {
+  it('listPresets is 10 curated high-end presets', () => {
     const list = listPresets();
-    expect(list.length).toBeGreaterThanOrEqual(4);
+    expect(list.length).toBe(10);
     expect(list.length).toBe(THEME_PRESETS.length);
+    const ids = list.map((p) => p.id);
+    expect(ids).toContain('void-dark');
+    expect(ids).toContain('obsidian');
+    expect(ids).toContain('porcelain');
+    // No neon high-contrast preset
+    expect(ids).not.toContain('high-contrast');
   });
 
   it("getPreset('void-dark') / unknown falls back", () => {

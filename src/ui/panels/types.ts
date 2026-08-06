@@ -81,7 +81,7 @@ export const PANEL_META: Record<
     defaultH: 420,
   },
   indicators: {
-    title: 'Indicators',
+    title: 'Scripts',
     defaultDock: 'right',
     minW: 1,
     minH: 1,

@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Floatable **Indicators** panel listing all scripts applied via {@link runAndApply}.
+ * Floatable **Scripts** panel listing all scripts applied via {@link runAndApply}.
  *
  * Renders when panel id `indicators` is open (or legacy `store.indicatorPanel.open`).
  * Empty state prompts the user to run a Pine script.
@@ -41,9 +41,9 @@ export const IndicatorPanel: Component = () => {
             when={store.scripts.length > 0}
             fallback={
               <div class="text-text-faint text-[0.85em] italic p-2">
-                No indicators running.
+                No scripts applied.
                 <div class="mt-2 not-italic text-text-dim normal-case tracking-normal">
-                  Run a Pine script to list plots here. Toggle visibility and colors per series.
+                  Run a Pine script to list it here. Toggle visibility and colors per series.
                 </div>
               </div>
             }

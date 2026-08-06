@@ -163,14 +163,21 @@ export const EditorPane: Component<Props> = (props) => {
       <Show when={!props.standalone}>
         <EditorToolBtn
           id="run"
-          label="Run"
-          title="Run script against loaded bars"
+          label={store.status === 'running' ? 'Running…' : 'Run'}
+          title={
+            store.status === 'running'
+              ? 'Script is running…'
+              : 'Run script against loaded bars'
+          }
           testId="axis-editor-btn-run"
-          primary
+          /* Accent only while this run is executing — idle stays ghost */
+          primary={store.status === 'running'}
+          pressed={store.status === 'running'}
           open={labelId() === 'run'}
           onShow={() => showToolLabel('run')}
           onScheduleHide={() => scheduleHideToolLabel('run')}
           onClick={() => {
+            if (store.status === 'running') return;
             const doc = props.editorRef.getDoc?.() || '';
             if (doc.trim()) onRun(doc);
           }}

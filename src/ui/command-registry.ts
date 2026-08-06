@@ -242,9 +242,9 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
   },
   {
     id: 'panel.indicators',
-    title: 'Toggle Indicators',
+    title: 'Toggle Scripts',
     category: 'panels',
-    keywords: ['scripts', 'applied', 'indicator list'],
+    keywords: ['scripts', 'applied', 'indicator list', 'indicators', 'strategies'],
   },
   {
     id: 'panel.dataview',
@@ -326,7 +326,49 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     id: 'theme.classic',
     title: 'Theme: Classic',
     category: 'theme',
-    keywords: ['classic', 'green', 'red', 'preset'],
+    keywords: ['classic', 'green', 'red', 'teal', 'preset'],
+  },
+  {
+    id: 'theme.mono',
+    title: 'Theme: Mono',
+    category: 'theme',
+    keywords: ['mono', 'gray', 'graphite', 'focus', 'preset'],
+  },
+  {
+    id: 'theme.obsidian',
+    title: 'Theme: Obsidian',
+    category: 'theme',
+    keywords: ['obsidian', 'luxury', 'gold', 'sage', 'warm dark', 'preset'],
+  },
+  {
+    id: 'theme.graphite',
+    title: 'Theme: Graphite',
+    category: 'theme',
+    keywords: ['graphite', 'industrial', 'teal', 'cool dark', 'preset'],
+  },
+  {
+    id: 'theme.pacific',
+    title: 'Theme: Pacific',
+    category: 'theme',
+    keywords: ['pacific', 'ocean', 'teal', 'cyan', 'clay', 'preset'],
+  },
+  {
+    id: 'theme.dusk',
+    title: 'Theme: Dusk',
+    category: 'theme',
+    keywords: ['dusk', 'twilight', 'violet', 'lilac', 'preset'],
+  },
+  {
+    id: 'theme.porcelain',
+    title: 'Theme: Porcelain',
+    category: 'theme',
+    keywords: ['porcelain', 'light', 'pearl', 'day', 'preset'],
+  },
+  {
+    id: 'theme.parchment',
+    title: 'Theme: Parchment',
+    category: 'theme',
+    keywords: ['parchment', 'paper', 'warm light', 'ivory', 'preset'],
   },
   // Chart grid
   {
@@ -509,6 +551,13 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
     byId.set('theme.void-dark', () => actions.setChartThemePreset?.('void-dark'));
     byId.set('theme.void-light', () => actions.setChartThemePreset?.('void-light'));
     byId.set('theme.classic', () => actions.setChartThemePreset?.('classic'));
+    byId.set('theme.mono', () => actions.setChartThemePreset?.('mono'));
+    byId.set('theme.obsidian', () => actions.setChartThemePreset?.('obsidian'));
+    byId.set('theme.graphite', () => actions.setChartThemePreset?.('graphite'));
+    byId.set('theme.pacific', () => actions.setChartThemePreset?.('pacific'));
+    byId.set('theme.dusk', () => actions.setChartThemePreset?.('dusk'));
+    byId.set('theme.porcelain', () => actions.setChartThemePreset?.('porcelain'));
+    byId.set('theme.parchment', () => actions.setChartThemePreset?.('parchment'));
   }
   if (actions.openPlugins) byId.set('action.plugins', actions.openPlugins);
   if (actions.openScriptSettings) byId.set('action.script-settings', actions.openScriptSettings);

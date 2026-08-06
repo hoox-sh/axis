@@ -53,7 +53,7 @@ test.describe('AXIS critical journeys @critical', () => {
     await expect(page.getByText('Strategy').first()).toBeVisible();
   });
 
-  test('Results toggle and Indicators panel', async ({ page }) => {
+  test('Results toggle and Scripts panel', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('axis-btn-results').click();
     await expect(page.getByTestId('axis-results')).toBeVisible();

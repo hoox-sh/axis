@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Single indicator row in the Indicators panel.
+ * Single applied-script row in the Scripts panel.
  *
  * Shows name, visibility toggle, per-plot color pickers, script settings
  * (Pine `input.*`), and remove. Remove also clears chart overlays / sub-pane

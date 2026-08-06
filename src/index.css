@@ -1428,16 +1428,30 @@ body.axis-panel-dragging {
   padding: 0 0.3em;
   overflow: hidden;
   white-space: nowrap;
+  /* Tighter corners than default sc-btn / --radius-input */
+  border-radius: 2px;
+  /* Closed / slide-out timing (used when .is-label-open is removed) */
   transition:
-    max-width 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-    gap 0.18s ease,
-    padding 0.18s ease;
+    max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    gap 0.36s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.36s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 .axis-editor-tools .axis-editor-tool-btn.is-label-open {
   max-width: 11em;
   gap: 0.35em;
   padding-left: 0.35em;
   padding-right: 0.5em;
+  /* Open / slide-in: slightly snappier ease-out */
+  transition:
+    max-width 0.36s cubic-bezier(0.22, 1, 0.36, 1),
+    gap 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    padding 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 .axis-editor-tool-icon {
   display: inline-flex;
@@ -1456,16 +1470,22 @@ body.axis-panel-dragging {
   font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1;
-  transform: translateX(-4px);
+  transform: translateX(-6px);
+  /* Slide-out: fade a bit earlier than width collapse */
   transition:
-    max-width 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.16s ease,
-    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.22s ease,
+    transform 0.36s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .axis-editor-tool-btn.is-label-open .axis-editor-tool-label {
   max-width: 9em;
   opacity: 1;
   transform: translateX(0);
+  /* Slide-in: width leads slightly, text fades in with soft ease-out */
+  transition:
+    max-width 0.36s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.28s ease 0.04s,
+    transform 0.36s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .axis-panel-body {

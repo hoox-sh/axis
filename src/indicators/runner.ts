@@ -598,7 +598,7 @@ export async function runAndApply(
   }> = [];
   // Prefer named `series` + `meta.plot_meta` (PYNE modern). Top-level `plots[]`
   // is often an all-null pad of bar length — never let that block named lines.
-  // User color overrides from Indicators panel (persisted on the script card)
+  // User color overrides from Scripts panel (persisted on the script card)
   const userPlotColors = existing?.plots || {};
 
   if (seriesEntries.length > 0) {

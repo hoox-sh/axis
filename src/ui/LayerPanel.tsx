@@ -349,7 +349,7 @@ export const LayerPanel: Component = () => {
             />
           </Section>
 
-          <Section title="Indicators">
+          <Section title="Scripts">
             <Show
               when={store.scripts.length > 0}
               fallback={<Empty>No scripts on chart. Run Pine to add layers.</Empty>}

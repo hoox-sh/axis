@@ -52,7 +52,9 @@ export const EditorApp: Component = () => {
 
     const unsub = bridgeSubscribe((msg) => {
       if (msg.type === 'run-status') {
-        setRunStatus(`${msg.status}: ${msg.message}`);
+        // Keep a short "running…" token while the main window is busy
+        if (msg.status === 'running') setRunStatus('running…');
+        else setRunStatus(`${msg.status}: ${msg.message}`);
       }
       if (msg.type === 'doc' && editorRef.setDoc) {
         // Only apply if different to avoid cursor jumps on echo
@@ -85,6 +87,9 @@ export const EditorApp: Component = () => {
     bridgePublish({ type: 'run', doc });
   };
 
+  const isRunBusy = () =>
+    runStatus().startsWith('running') || runStatus() === 'running…';
+
   return (
     <div class="h-screen flex flex-col bg-bg-base text-text overflow-hidden">
       <div class="flex items-center gap-2 px-2.5 py-1 bg-bg-panel border-b-2 border-border min-h-[32px] flex-shrink-0">
@@ -94,13 +99,15 @@ export const EditorApp: Component = () => {
         </span>
         <span class="text-[10px] text-text-faint font-mono truncate flex-1">{runStatus()}</span>
         <button
-          class="sc-btn sc-btn-primary"
+          class={`sc-btn ${isRunBusy() ? 'sc-btn-primary is-active' : 'sc-btn-ghost'}`}
+          aria-busy={isRunBusy()}
           onClick={() => {
+            if (isRunBusy()) return;
             const doc = editorRef.getDoc() || readSharedDoc();
             if (doc.trim()) onRun(doc);
           }}
         >
-          ▶ Run
+          {isRunBusy() ? '▶ Running…' : '▶ Run'}
         </button>
       </div>
       <div class="flex-1 min-h-0 overflow-hidden">
