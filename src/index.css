@@ -1400,14 +1400,14 @@ body.axis-panel-dragging {
   flex-shrink: 0;
 }
 
-/* Editor header tools — icon-only, never wrap the title bar */
+/* Editor header tools — icons with slide-in labels on hover */
 .axis-editor-tools {
   display: flex;
   align-items: center;
   gap: 0.15em;
   flex-shrink: 0;
   min-width: 0;
-  max-width: 55%;
+  max-width: min(70%, 28rem);
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -1415,11 +1415,57 @@ body.axis-panel-dragging {
 .axis-editor-tools::-webkit-scrollbar {
   display: none;
 }
-.axis-editor-tools .sc-btn {
+.axis-editor-tools .axis-editor-tool-btn {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
   min-width: 1.65em;
-  padding-left: 0.3em;
-  padding-right: 0.3em;
+  max-width: 1.65em;
+  height: 1.65em;
+  min-height: 1.65em;
+  padding: 0 0.3em;
+  overflow: hidden;
+  white-space: nowrap;
+  transition:
+    max-width 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    gap 0.18s ease,
+    padding 0.18s ease;
+}
+.axis-editor-tools .axis-editor-tool-btn.is-label-open {
+  max-width: 11em;
+  gap: 0.35em;
+  padding-left: 0.35em;
+  padding-right: 0.5em;
+}
+.axis-editor-tool-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.05em;
+  height: 1.05em;
+}
+.axis-editor-tool-label {
+  display: inline-block;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  transform: translateX(-4px);
+  transition:
+    max-width 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.16s ease,
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.axis-editor-tool-btn.is-label-open .axis-editor-tool-label {
+  max-width: 9em;
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .axis-panel-body {
