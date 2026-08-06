@@ -22,6 +22,8 @@ import {
   isAtEnd,
   isAtStart,
   REPLAY_SPEEDS,
+  speedToBarsPerSec,
+  formatReplaySpeedLabel,
   startReplaySession,
   stopReplaySession,
   getReplayState,
@@ -179,6 +181,17 @@ describe('setSpeed', () => {
 
   it('exposes default REPLAY_SPEEDS', () => {
     expect([...REPLAY_SPEEDS]).toEqual([1, 2, 5, 10]);
+  });
+
+  it('formats speed as bars per second', () => {
+    // REPLAY_TICK_MS = 200 → 5 ticks/s
+    expect(speedToBarsPerSec(1)).toBe(5);
+    expect(speedToBarsPerSec(2)).toBe(10);
+    expect(speedToBarsPerSec(5)).toBe(25);
+    expect(speedToBarsPerSec(10)).toBe(50);
+    expect(formatReplaySpeedLabel(1)).toBe('5 bars/s');
+    expect(formatReplaySpeedLabel(2)).toBe('10 bars/s');
+    expect(formatReplaySpeedLabel(1, 250)).toBe('4 bars/s');
   });
 });
 

@@ -155,6 +155,15 @@ export const voidEditorTheme = EditorView.theme(
       flexDirection: 'column',
       gap: '6px',
     },
+    '.cm-pine-hover-list': {
+      margin: '0.35em 0 0',
+      padding: '0 0 0 1.1em',
+      listStyle: 'disc',
+    },
+    '.cm-pine-hover-li': {
+      margin: '0.15em 0',
+      lineHeight: '1.4',
+    },
     '.cm-pine-hover-p': {
       margin: '0',
       color: '#c8cad4',

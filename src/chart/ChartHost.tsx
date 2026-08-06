@@ -175,8 +175,9 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     for (const pane of store.panes) {
       manager.createPane(pane.id, pane.type, pane.label || pane.type, pane.height || undefined);
     }
-    // Apply persisted right-scale labels preference (chart [$] control)
+    // Apply persisted right-scale + series-name label prefs (chart [$] / [N])
     manager.setPriceScaleLabelsVisible(store.priceScaleLabelsVisible !== false);
+    manager.setLastValueLabelsVisible(store.lastValueLabelsVisible !== false);
     // Seed theme tokens onto newly created pane charts / host backgrounds
     try {
       manager.applyChartTheme?.();
@@ -190,7 +191,11 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
         data?.time != null && Number.isFinite(Number(data.time))
           ? Number(data.time)
           : null;
-      if (t == null) return;
+      // Pointer left the chart: clear so Data Window falls back to last (live) bar
+      if (t == null) {
+        setCrosshair(null, null);
+        return;
+      }
       const bl = bars();
       let barIndex: number | null = null;
       if (bl.length) {

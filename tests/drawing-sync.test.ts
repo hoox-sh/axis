@@ -14,8 +14,10 @@ import {
   cloneDrawings,
   cloneDrawingsOffset,
   deepCloneDrawing,
+  drawingsExceptSymbol,
   drawingsForSymbol,
   mergeDrawings,
+  mergeLayerDrawingsForSymbol,
   newDrawingId,
   offsetDrawingGeometry,
   tagDrawingsSymbol,
@@ -241,6 +243,65 @@ describe('drawing sync helpers', () => {
       ];
       const kept = drawingsForSymbol(list, 'BTCUSDT', { includeUntagged: true });
       expect(kept.map((d) => d.id)).toEqual(['a', 'c']);
+    });
+  });
+
+  describe('mergeLayerDrawingsForSymbol', () => {
+    const all = [
+      hline('btc-a', 1, 'BTCUSDT'),
+      hline('eth-a', 2, 'ETHUSDT'),
+      hline('untagged', 3),
+      hline('btc-b', 4, 'BTCUSDT'),
+    ];
+
+    it('replaces active-symbol drawings and keeps other symbols', () => {
+      const layer = [hline('btc-new', 99)];
+      const out = mergeLayerDrawingsForSymbol(all, 'BTCUSDT', layer);
+      expect(out.map((d) => d.id).sort()).toEqual(['btc-new', 'eth-a'].sort());
+      expect(out.find((d) => d.id === 'btc-new')?.meta?.symbol).toBe('BTCUSDT');
+      expect(out.find((d) => d.id === 'eth-a')?.meta?.symbol).toBe('ETHUSDT');
+      // untagged was on the BTC view — dropped unless still on layer
+      expect(out.some((d) => d.id === 'untagged')).toBe(false);
+      // prior BTC drawings replaced
+      expect(out.some((d) => d.id === 'btc-a')).toBe(false);
+    });
+
+    it('clear (empty layer) keeps only other symbols', () => {
+      const out = mergeLayerDrawingsForSymbol(all, 'BTCUSDT', []);
+      expect(out.map((d) => d.id)).toEqual(['eth-a']);
+    });
+
+    it('stamps untagged layer drawings with the active symbol', () => {
+      const layer = [hline('from-layer', 10)]; // no meta.symbol
+      const out = mergeLayerDrawingsForSymbol([hline('eth', 1, 'ETHUSDT')], 'SOLUSDT', layer);
+      expect(out).toHaveLength(2);
+      expect(out.find((d) => d.id === 'from-layer')?.meta?.symbol).toBe('SOLUSDT');
+      expect(out.find((d) => d.id === 'eth')?.meta?.symbol).toBe('ETHUSDT');
+    });
+
+    it('does not mutate inputs', () => {
+      const layer = [hline('x', 1)];
+      mergeLayerDrawingsForSymbol(all, 'BTCUSDT', layer);
+      expect(all).toHaveLength(4);
+      expect(layer[0]!.meta?.symbol).toBeUndefined();
+    });
+  });
+
+  describe('drawingsExceptSymbol', () => {
+    it('keeps other symbols and drops untagged when includeUntagged', () => {
+      const list = [
+        hline('a', 1, 'BTCUSDT'),
+        hline('b', 2, 'ETHUSDT'),
+        hline('c', 3),
+      ];
+      const rest = drawingsExceptSymbol(list, 'BTCUSDT', { includeUntagged: true });
+      expect(rest.map((d) => d.id)).toEqual(['b']);
+    });
+
+    it('keeps untagged when includeUntagged is false', () => {
+      const list = [hline('a', 1, 'BTCUSDT'), hline('c', 3)];
+      const rest = drawingsExceptSymbol(list, 'BTCUSDT', { includeUntagged: false });
+      expect(rest.map((d) => d.id)).toEqual(['c']);
     });
   });
 });

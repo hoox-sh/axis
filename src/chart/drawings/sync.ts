@@ -18,18 +18,23 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Drawing copy / merge helpers for multi-chart layouts.
+ * Drawing copy / merge helpers for multi-chart layouts and per-symbol anchoring.
  *
- * ## Architecture (current)
- * User drawings live in a **single global** `store.drawings` list. Multi-chart
- * uses {@link chart-registry} for per-slot managers/bars, but only the **active**
- * slot mounts a `DrawingLayer` and paints user drawings (see `manager-access`,
+ * ## Architecture
+ * User drawings live in a **single global** `store.drawings` list, but each
+ * drawing is **anchored to a symbol** via `meta.symbol`. Multi-chart uses
+ * {@link chart-registry} for per-slot managers/bars; only the **active** slot
+ * mounts a `DrawingLayer` and paints user drawings (see `manager-access`,
  * `ChartHost`). Inactive slots are view-only.
  *
- * So drawings are already “shared” across layout slots — there is no per-slot
- * drawing store yet. These pure helpers:
+ * Symbol scoping:
+ * - New placements stamp `meta.symbol` from the active chart symbol
+ * - Layer displays {@link drawingsForSymbol} for the active symbol
+ * - Layer `onChange` uses {@link mergeLayerDrawingsForSymbol} so other
+ *   symbols’ drawings are preserved in the store
+ *
+ * Pure helpers also:
  * - **clone** drawings with fresh ids (template / duplicate)
- * - **filter** by optional `meta.symbol` (future per-slot / multi-symbol)
  * - **merge** lists (`replace` | `append`) when syncing templates
  * - **offset** geometry for future per-slot clones on different series
  *
@@ -163,7 +168,7 @@ export function drawingsForSymbol<T extends DrawingSyncLike>(
 
 /**
  * Stamp `meta.symbol` on every drawing (deep clones; inputs unchanged).
- * Useful when preparing a global list for future per-symbol filtering.
+ * Useful when preparing a global list for per-symbol filtering.
  */
 export function tagDrawingsSymbol<T extends DrawingSyncLike>(
   drawings: readonly T[],
@@ -175,6 +180,83 @@ export function tagDrawingsSymbol<T extends DrawingSyncLike>(
     const copy = deepCloneDrawing(d);
     copy.meta = { ...(copy.meta || {}), symbol: sym };
     return copy;
+  });
+}
+
+/**
+ * Options for {@link mergeLayerDrawingsForSymbol}.
+ */
+export interface MergeLayerDrawingsOptions {
+  /**
+   * When true (default), untagged drawings are treated as belonging to the
+   * active symbol view — they are replaced by the layer list (and stamped).
+   * When false, untagged drawings stay in the global list unchanged.
+   */
+  includeUntagged?: boolean;
+}
+
+/**
+ * Merge the layer’s visible drawing list for `symbol` back into the full store list.
+ *
+ * - Keeps drawings tagged for **other** symbols
+ * - Drops prior drawings for `symbol` (and untagged when `includeUntagged`)
+ * - Stamps every layer drawing with `meta.symbol = symbol`
+ *
+ * Used by DrawingLayer `onChange` so place/move/delete/clear on the active
+ * symbol never wipe drawings belonging to other symbols.
+ */
+export function mergeLayerDrawingsForSymbol<T extends DrawingSyncLike>(
+  all: readonly T[],
+  symbol: string,
+  layerList: readonly T[],
+  opts?: MergeLayerDrawingsOptions,
+): T[] {
+  const want = normalizeSymbol(symbol);
+  const includeUntagged = opts?.includeUntagged !== false;
+
+  const others: T[] = [];
+  for (const d of all ?? []) {
+    const s = readingSymbol(d);
+    if (s == null) {
+      if (!includeUntagged) others.push(deepCloneDrawing(d));
+      continue;
+    }
+    if (!want || s !== want) {
+      others.push(deepCloneDrawing(d));
+    }
+  }
+
+  if (!want) {
+    // No active symbol — treat layer list as the full replacement of untagged/global
+    return (layerList ?? []).map((d) => deepCloneDrawing(d));
+  }
+
+  const stamped = (layerList ?? []).map((d) => {
+    const copy = deepCloneDrawing(d);
+    copy.meta = { ...(copy.meta || {}), symbol: want };
+    return copy;
+  });
+
+  return [...others, ...stamped];
+}
+
+/**
+ * Drawings that should **not** be shown/edited for `symbol`
+ * (inverse of {@link drawingsForSymbol} for clear / keep-others paths).
+ */
+export function drawingsExceptSymbol<T extends DrawingSyncLike>(
+  drawings: readonly T[],
+  symbol: string,
+  opts?: DrawingsForSymbolOptions,
+): T[] {
+  if (!drawings?.length) return [];
+  const want = normalizeSymbol(symbol);
+  if (!want) return drawings.map((d) => deepCloneDrawing(d));
+  const includeUntagged = !!opts?.includeUntagged;
+  return drawings.filter((d) => {
+    const s = readingSymbol(d);
+    if (s == null) return !includeUntagged;
+    return s !== want;
   });
 }
 

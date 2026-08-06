@@ -149,6 +149,11 @@ export class DrawingLayer {
   private ro: ResizeObserver | null = null;
   /** OHLCV for magnet snap; typically `() => store.bars`. */
   private barsProvider: (() => readonly BarLike[]) | null = null;
+  /**
+   * Active chart symbol for anchoring new placements (`meta.symbol`).
+   * Typically `() => store.symbol`. Empty/null skips stamping.
+   */
+  private symbolProvider: (() => string) | null = null;
   private magnet: MagnetMode = 'off';
   /** Keep place tool after each drawing when true; otherwise {@link afterPlace} → cursor. */
   private stayInMode = false;
@@ -246,6 +251,14 @@ export class DrawingLayer {
   /** Provide bar data for magnet snap in {@link clientToPoint}. */
   setBarsProvider(fn: (() => readonly BarLike[]) | null) {
     this.barsProvider = fn;
+  }
+
+  /**
+   * Provide the active chart symbol so new placements stamp `meta.symbol`.
+   * Drawings are filtered per-symbol in store/layer sync (manager-access).
+   */
+  setSymbolProvider(fn: (() => string) | null) {
+    this.symbolProvider = fn;
   }
 
   /** Magnet mode: `off` | `weak` (10px) | `strong` (always snap when bars exist). */
@@ -452,8 +465,16 @@ export class DrawingLayer {
   /**
    * Dual-write create: set legacy flat fields (`color`, `lineWidth`, …) and nested
    * `style` so both `resolveDrawingStyle` paths and older consumers work.
+   * Also stamps `meta.symbol` from {@link setSymbolProvider} when available.
    */
   private applyCreateStyle<T extends Drawing>(d: T): T {
+    const sym = String(this.symbolProvider?.() || '')
+      .trim()
+      .toUpperCase();
+    const meta = {
+      ...(d.meta || {}),
+      ...(sym ? { symbol: sym } : {}),
+    };
     return {
       ...d,
       color: d.color || this.defaultColor(d.kind),
@@ -466,6 +487,7 @@ export class DrawingLayer {
         lineStyle: d.lineStyle ?? this.stylePrefs.lineStyle,
         opacity: 1,
       },
+      meta: Object.keys(meta).length ? meta : d.meta,
     };
   }
 

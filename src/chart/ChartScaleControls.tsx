@@ -19,7 +19,8 @@
 
 /**
  * Price-scale toggles on the main chart (bottom-right of price pane):
- * **[A]** auto-scale · **[L]** logarithmic · **[$]** right scale labels.
+ * **[A]** auto-scale · **[L]** logarithmic · **[$]** right scale labels ·
+ * **[N]** series last-value / name labels.
  *
  * @module chart/ChartScaleControls
  */
@@ -29,31 +30,35 @@ import { store, setStore, persist } from '../store';
 import { getManager } from './manager-access';
 
 /**
- * Bottom-right [A]/[L]/[$] control cluster for the price pane.
+ * Bottom-right [A]/[L]/[$]/[N] control cluster for the price pane.
  * Syncs local active state from {@link PaneManager} when available.
  */
 export const ChartScaleControls: Component = () => {
   const [autoOn, setAutoOn] = createSignal(true);
   const [logOn, setLogOn] = createSignal(false);
   const [labelsOn, setLabelsOn] = createSignal(true);
+  const [namesOn, setNamesOn] = createSignal(true);
 
   const syncFromManager = () => {
     const m = getManager();
     if (!m) {
       // Fall back to persisted preference before manager is ready
       setLabelsOn(store.priceScaleLabelsVisible !== false);
+      setNamesOn(store.lastValueLabelsVisible !== false);
       return;
     }
     setAutoOn(m.isPriceAutoScale());
     setLogOn(m.isPriceLogScale());
     setLabelsOn(m.isPriceScaleLabelsVisible());
+    setNamesOn(m.isLastValueLabelsVisible());
   };
 
   onMount(() => {
-    // Apply persisted labels pref as soon as manager exists
+    // Apply persisted label prefs as soon as manager exists
     const m = getManager();
-    if (m && store.priceScaleLabelsVisible === false) {
-      m.setPriceScaleLabelsVisible(false);
+    if (m) {
+      if (store.priceScaleLabelsVisible === false) m.setPriceScaleLabelsVisible(false);
+      if (store.lastValueLabelsVisible === false) m.setLastValueLabelsVisible(false);
     }
     syncFromManager();
     // Manager is created in ChartHost onMount — poll once after layout.
@@ -77,6 +82,15 @@ export const ChartScaleControls: Component = () => {
     setLabelsOn(want);
   });
 
+  createEffect(() => {
+    const want = store.lastValueLabelsVisible !== false;
+    const m = getManager();
+    if (m && m.isLastValueLabelsVisible() !== want) {
+      m.setLastValueLabelsVisible(want);
+    }
+    setNamesOn(want);
+  });
+
   const onAuto = () => {
     const m = getManager();
     if (!m) return;
@@ -94,11 +108,18 @@ export const ChartScaleControls: Component = () => {
     const next = m
       ? m.togglePriceScaleLabelsVisible()
       : !(store.priceScaleLabelsVisible !== false);
-    if (m == null) {
-      // Manager missing — still persist preference
-    }
     setLabelsOn(next);
     setStore('priceScaleLabelsVisible', next);
+    persist();
+  };
+
+  const onNames = () => {
+    const m = getManager();
+    const next = m
+      ? m.toggleLastValueLabelsVisible()
+      : !(store.lastValueLabelsVisible !== false);
+    setNamesOn(next);
+    setStore('lastValueLabelsVisible', next);
     persist();
   };
 
@@ -152,6 +173,17 @@ export const ChartScaleControls: Component = () => {
         onClick={onLabels}
       >
         $
+      </button>
+      <button
+        type="button"
+        class={btnClass(namesOn())}
+        title="Show series last-value / name labels on the right (N)"
+        aria-pressed={namesOn()}
+        aria-label="Series name labels"
+        data-testid="axis-chart-scale-names"
+        onClick={onNames}
+      >
+        N
       </button>
     </div>
   );

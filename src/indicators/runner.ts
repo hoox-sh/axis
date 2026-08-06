@@ -19,7 +19,7 @@
 
 /**
  * **Indicator / strategy runner** — evaluate Pine via the active engine and
- * apply results to chart panes, markers, equity, and script drawings.
+ * apply results to chart panes, markers, and script drawings.
  *
  * ## Flow
  *
@@ -28,7 +28,7 @@
  * 2. {@link runAndApply} — then map result onto {@link PaneManager}:
  *    - line/hline series from `series` + `plot_meta`
  *    - bgcolor histograms, plotshape markers
- *    - strategy trade markers + equity curve
+ *    - strategy trade markers (equity curve stays in Results → Strategy panel)
  *    - Pine line/box/label drawings via drawing layer
  *    - optional new {@link addIndicator} entry when no `indicatorId`
  *
@@ -68,7 +68,7 @@ import {
 import { resolveInputSourceValues } from '../results/plot-sources';
 import { getManager, applyDebugPinsToChart } from '../chart/manager-access';
 import { PLOT_PALETTE } from '../chart/series-factory';
-import { normalizeStrategyEvents, eventsToMarkers, buildEquityCurve } from '../results/events';
+import { normalizeStrategyEvents, eventsToMarkers } from '../results/events';
 import { buildStrategyReport } from '../results/strategy';
 import {
   bgcolorSeriesToHistogramData,
@@ -743,7 +743,8 @@ export async function runAndApply(
       }
     }
 
-    // Strategy: markers on price pane + equity curve + tester stats
+    // Strategy: trade markers on price pane + report stats.
+    // Equity curve is rendered in Results → Strategy only (no main-chart equity pane).
     const events = result.events || [];
     const isStrategy =
       scriptType === 'strategy' ||
@@ -760,6 +761,12 @@ export async function runAndApply(
           k === 'order'
         );
       });
+    // Hide any leftover main-chart equity pane from older sessions / builds
+    try {
+      manager.hideEquityPane?.();
+    } catch {
+      /* equity pane optional */
+    }
     if (events.length) {
       const normalized = normalizeStrategyEvents(events, {
         bars: store.bars || [],
@@ -770,8 +777,6 @@ export async function runAndApply(
 
       const report = buildStrategyReport(events, store.bars || []);
       if (report.trades.length) {
-        const equity = buildEquityCurve(report.trades, 10_000);
-        manager.setEquityCurve(equity);
         if (!silent) {
           appendLog(
             'ok',
@@ -790,24 +795,20 @@ export async function runAndApply(
             /* optional UI hook */
           }
         }
-      } else {
-        // Live silent re-runs: skip hide to avoid equity pane thrash
-        if (!silent) {
-          manager.hideEquityPane();
-          if (markers.length || isStrategy) {
-            appendLog(
-              'ok',
-              `Strategy events: ${events.length} raw · ${normalized.length} fills · ${markers.length} markers` +
-                (report.trades.length === 0
-                  ? ' · no closed trades yet (need entry+exit pair)'
-                  : ''),
-              'strategy',
-            );
-          }
+      } else if (!silent) {
+        if (markers.length || isStrategy) {
+          appendLog(
+            'ok',
+            `Strategy events: ${events.length} raw · ${normalized.length} fills · ${markers.length} markers` +
+              (report.trades.length === 0
+                ? ' · no closed trades yet (need entry+exit pair)'
+                : ''),
+            'strategy',
+          );
         }
       }
     } else if (!silent) {
-      // Interactive run with no strategy events — clear trade markers / equity.
+      // Interactive run with no strategy events — clear trade markers.
       // Silent live re-runs of pure indicators must NOT wipe another script's
       // strategy markers (multi-indicator live thrash).
       if (isStrategy) {
@@ -818,7 +819,6 @@ export async function runAndApply(
         );
       }
       manager.setTradeMarkers([]);
-      manager.hideEquityPane();
     }
 
     // Debug pins from logs (bar_index/time) — independent of trade/shape lists

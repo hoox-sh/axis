@@ -34,6 +34,32 @@ describe('pine-lsp', () => {
     expect(bare || full).toBeTruthy();
   });
 
+  it('hover prefers local //@function annotations over missing builtins', async () => {
+    const { pineHoverLocal } = await import('../src/editor/pine-lsp');
+    const src = `//@function Demo helper with **bold**.
+//@param n Size.
+//@returns Doubled value.
+demo(n) => n * 2
+plot(demo(2))
+`;
+    const pos = src.indexOf('demo(2)') + 2;
+    const tip = pineHoverLocal(
+      { state: { doc: { sliceString: (a: number, b: number) => src.slice(a, b), length: src.length } } },
+      pos,
+    );
+    expect(tip).toBeTruthy();
+    // create() builds DOM — ensure it is a hover for our annotation
+    const restore = installMinimalDom();
+    try {
+      const built = tip!.create(null as never);
+      const text = collectText(built.dom);
+      expect(text).toContain('Demo helper');
+      expect(text).toMatch(/n|Size|Doubled/i);
+    } finally {
+      restore();
+    }
+  });
+
   it('wordAt finds qualified names', () => {
     const src = 'plot(ta.sma(close, 14))';
     const i = src.indexOf('sma') + 1;

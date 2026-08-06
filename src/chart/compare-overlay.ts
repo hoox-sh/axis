@@ -216,13 +216,20 @@ function ensureCompareLine(
   priceScaleId: string,
 ): ISeriesApi<'Line'> {
   const existing = pane.series[key] as ISeriesApi<'Line'> | undefined;
+  // Respect chart [N] last-value / name label preference
+  let lastValueVisible = true;
+  try {
+    lastValueVisible = store.lastValueLabelsVisible !== false;
+  } catch {
+    lastValueVisible = true;
+  }
   if (existing) {
     try {
       existing.applyOptions({
         color,
         title,
         priceScaleId,
-        lastValueVisible: true,
+        lastValueVisible,
         priceLineVisible: false,
       });
     } catch {
@@ -234,7 +241,7 @@ function ensureCompareLine(
   try {
     series.applyOptions({
       priceScaleId,
-      lastValueVisible: true,
+      lastValueVisible,
       priceLineVisible: false,
       title,
       color,

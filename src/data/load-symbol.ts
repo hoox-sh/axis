@@ -23,8 +23,10 @@
  * Resolves the {@link SourcePlugin} by id, calls `fetchHistorical`, normalizes
  * bar times to **unix seconds** (drop partial/invalid OHLCV), then:
  * 1. {@link loadBars} — store + exchange label
- * 2. {@link setDataToChart} — Lightweight Charts candle series (`fit: true`)
- * 3. Optionally {@link startLive} when `store.live.preferAfterLoad` is set
+ * 2. {@link setDataToChart} — full chart refresh (`fit: true`): OHLCV, clear
+ *    markers / Pine drawings / indicator overlays, re-sync **per-symbol** user drawings
+ * 3. Restart live stream when already active, or start when `preferAfterLoad`
+ * 4. Silently re-run visible indicators on the new bars
  *
  * Updates the `source` telemetry plane (connecting / open / error) and status bar.
  * Concurrent loads: only the newest request may mutate store/chart/status
@@ -148,6 +150,20 @@ export async function loadSymbolData(
 
   const stillCurrent = () => gen === loadGeneration;
 
+  // Full refresh: pause live during history fetch so old-symbol ticks cannot
+  // race into store.bars / chart while the new series is loading. Restart after
+  // success when live was on or preferAfterLoad is set.
+  const wasLive = !!store.live.active;
+  const restartLiveAfter = wasLive || !!store.live.preferAfterLoad;
+  if (wasLive) {
+    try {
+      const { stopLive } = await import('../streams/multiplex');
+      if (stillCurrent()) stopLive({ reason: 'restart' });
+    } catch {
+      /* ignore */
+    }
+  }
+
   try {
     // Global history depth (Settings) wins over per-source plugin config for limit
     const limit = clampHistoryBars(store.historyBars);
@@ -194,6 +210,7 @@ export async function loadSymbolData(
     const manager = getManager();
     if (manager) {
       try {
+        // fit:true → full chart refresh (markers, Pine drawings, overlays, per-symbol user drawings)
         setDataToChart(normalized, { fit: true });
       } catch (chartErr: unknown) {
         // Chart paint failure should not leave status as "loading" forever
@@ -211,8 +228,8 @@ export async function loadSymbolData(
     });
     setStatus('ready', `Loaded ${normalized.length} bars · ${source.name}`);
 
-    // Optional WSS-first: auto-start paired live stream after successful Load
-    if (store.live.preferAfterLoad && !store.live.active) {
+    // Restart / auto-start live on the new ticker after a full history paint
+    if (restartLiveAfter) {
       const streamId = store.live.streamId || defaultStreamForSource(srcId);
       try {
         const { startLive } = await import('../streams/multiplex');
@@ -220,9 +237,30 @@ export async function loadSymbolData(
           startLive(streamId, sym, iv);
         }
       } catch {
-        /* ignore auto-live failures */
+        /* ignore live restart failures */
       }
     }
+
+    // Re-apply visible indicators/strategies on the new OHLCV (silent)
+    if (stillCurrent() && store.scripts.some((s) => s.visible && s.code?.trim())) {
+      try {
+        const { runAndApply } = await import('../indicators/runner');
+        const { orderIndicatorsByPlotDeps } = await import('../results/plot-sources');
+        const ordered = orderIndicatorsByPlotDeps(
+          store.scripts.filter((s) => s.visible && s.code?.trim()),
+        );
+        for (const ind of ordered) {
+          if (!stillCurrent()) break;
+          await runAndApply(ind.code, ind.id, {
+            silent: true,
+            openResults: false,
+          });
+        }
+      } catch {
+        /* re-run optional — user can re-run manually */
+      }
+    }
+
     return stillCurrent();
   } catch (err: unknown) {
     // Stale failure must not overwrite a newer load's telemetry/status

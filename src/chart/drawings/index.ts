@@ -137,8 +137,10 @@ export {
   cloneDrawing,
   cloneDrawings,
   drawingsForSymbol,
+  drawingsExceptSymbol,
   tagDrawingsSymbol,
   mergeDrawings,
+  mergeLayerDrawingsForSymbol,
   offsetDrawingGeometry,
   cloneDrawingsOffset,
 } from './sync';
@@ -147,6 +149,7 @@ export type {
   MergeDrawingsMode,
   CloneDrawingsOptions,
   DrawingsForSymbolOptions,
+  MergeLayerDrawingsOptions,
   OffsetDrawingOptions,
 } from './sync';
 

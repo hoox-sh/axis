@@ -39,8 +39,8 @@
 import { Component, For, Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
 import {
   store,
+  clearDrawingsForSymbol,
   setDrawingTool,
-  clearDrawings,
   setDrawingPrefs,
   setDrawingUi,
   patchDrawing,
@@ -50,6 +50,7 @@ import type { DrawingToolId, DrawingLineStyle } from './drawing-types';
 import { toolLabel, resolveDrawingStyle, DRAWING_COLORS } from './drawing-types';
 import { Icons } from '../ui/icons';
 import { getActiveDrawingLayer } from './drawing-layer';
+import { visibleDrawingsForActiveSymbol } from './manager-access';
 import {
   TOOL_GROUPS,
   defaultToolForGroup,
@@ -428,16 +429,19 @@ export const DrawingToolbar: Component = () => {
         <button
           type="button"
           class={`${btnClass} text-text-dim disabled:opacity-40`}
-          title="Duplicate all drawings with new IDs (template). Drawings are already shared across multi-chart slots."
+          title={`Duplicate drawings for ${store.symbol} with new IDs`}
           aria-label="Duplicate drawings"
           data-testid="axis-drawing-duplicate"
-          disabled={store.drawings.length === 0}
+          disabled={visibleDrawingsForActiveSymbol().length === 0}
           onClick={() => {
-            if (!store.drawings.length) return;
-            const clones = cloneDrawings(store.drawings, { symbol: store.symbol });
+            const visible = visibleDrawingsForActiveSymbol();
+            if (!visible.length) return;
+            const clones = cloneDrawings(visible, { symbol: store.symbol });
             const next = mergeDrawings(store.drawings, clones, 'append');
             setDrawings(next);
-            getActiveDrawingLayer()?.setDrawings(next);
+            getActiveDrawingLayer()?.setDrawings(
+              visibleDrawingsForActiveSymbol(store.symbol),
+            );
           }}
         >
           <Icons.copy size={iconPx} strokeWidth={2.25} />
@@ -455,24 +459,27 @@ export const DrawingToolbar: Component = () => {
         <button
           type="button"
           class={`${btnClass} text-text-dim disabled:opacity-40`}
-          title="Clear all drawings"
-          aria-label="Clear all drawings"
-          disabled={store.drawings.length === 0}
+          title={`Clear drawings for ${store.symbol}`}
+          aria-label="Clear drawings for symbol"
+          disabled={visibleDrawingsForActiveSymbol().length === 0}
           onClick={() => {
-            if (store.drawings.length && !confirm('Clear all drawings?')) return;
+            const n = visibleDrawingsForActiveSymbol().length;
+            if (n && !confirm(`Clear drawings for ${store.symbol}?`)) return;
+            // clearAll emits [] → onChange merges (other symbols kept); also
+            // update store directly so UI stays correct if layer is missing
             getActiveDrawingLayer()?.clearAll();
-            clearDrawings();
+            clearDrawingsForSymbol(store.symbol);
           }}
         >
           <Icons.eraser size={iconPx} strokeWidth={2.25} />
         </button>
 
-        <Show when={store.drawings.length > 0}>
+        <Show when={visibleDrawingsForActiveSymbol().length > 0}>
           <span
             class="text-[10px] font-mono text-text-faint text-center py-0.5 tabular-nums"
-            title="Drawing count"
+            title={`Drawings for ${store.symbol}`}
           >
-            {store.drawings.length}
+            {visibleDrawingsForActiveSymbol().length}
           </span>
         </Show>
       </div>

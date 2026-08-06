@@ -34,7 +34,7 @@ import {
   setPaneVisible,
   toggleIndicator,
   removeIndicator,
-  clearDrawings,
+  clearDrawingsForSymbol,
   openScriptSettings,
   setSelectedDrawingId,
   setDrawingTool,
@@ -42,7 +42,11 @@ import {
   patchDrawing,
   setDrawings,
 } from '../store';
-import { getManager, getActiveDrawingLayer } from '../chart/manager-access';
+import {
+  getManager,
+  getActiveDrawingLayer,
+  visibleDrawingsForActiveSymbol,
+} from '../chart/manager-access';
 import {
   volumeProfileEnabled,
   toggleVolumeProfileEnabled,
@@ -70,6 +74,7 @@ import {
   cloneDrawings,
   drawingsForSymbol,
   mergeDrawings,
+  mergeLayerDrawingsForSymbol,
   tagDrawingsSymbol,
 } from '../chart/drawings/sync';
 
@@ -81,6 +86,11 @@ export const LayerPanel: Component = () => {
     void tplTick();
     return listTemplates();
   });
+
+  /** Drawings for the active chart symbol (plus untagged legacy). */
+  const symbolDrawings = createMemo(() =>
+    visibleDrawingsForActiveSymbol(store.symbol),
+  );
 
   const refreshTemplates = () => setTplTick((n) => n + 1);
 
@@ -117,6 +127,7 @@ export const LayerPanel: Component = () => {
     removeIndicator(id);
   };
 
+  /** Push the active-symbol list to the layer (never the full multi-symbol store). */
   const syncLayerDrawings = (list: Drawing[]) => {
     const layer = getActiveDrawingLayer();
     if (layer) {
@@ -129,23 +140,29 @@ export const LayerPanel: Component = () => {
   };
 
   const onClearDrawings = () => {
-    if (store.drawings.length && !confirm('Clear all user drawings?')) return;
-    clearDrawings();
+    const visible = symbolDrawings();
+    if (
+      visible.length &&
+      !confirm(`Clear drawings for ${store.symbol || 'this symbol'}?`)
+    ) {
+      return;
+    }
+    clearDrawingsForSymbol(store.symbol);
     setSelectedDrawingId(null);
     syncLayerDrawings([]);
   };
 
   /**
-   * Duplicate all user drawings with new ids (template-style).
-   * Drawings are already global across multi-chart slots; this clones in-place
-   * for templates / future per-slot copies — does not split by slot.
+   * Duplicate drawings for the active symbol with new ids (template-style).
+   * Clones are stamped with the current symbol and merged into the full store.
    */
   const onDuplicateDrawings = () => {
-    if (!store.drawings.length) return;
-    const clones = cloneDrawings(store.drawings, { symbol: store.symbol });
+    const visible = symbolDrawings();
+    if (!visible.length) return;
+    const clones = cloneDrawings(visible, { symbol: store.symbol });
     const next = mergeDrawings(store.drawings, clones, 'append');
     setDrawings(next);
-    syncLayerDrawings(next);
+    syncLayerDrawings(visibleDrawingsForActiveSymbol(store.symbol));
   };
 
   /**
@@ -158,20 +175,20 @@ export const LayerPanel: Component = () => {
       includeUntagged: true,
     });
     if (kept.length === store.drawings.length) return;
-    setDrawings(kept);
+    setDrawings(kept as Drawing[]);
     setSelectedDrawingId(null);
-    syncLayerDrawings(kept);
+    syncLayerDrawings(kept as Drawing[]);
   };
 
   /**
    * Stamp `meta.symbol` on every drawing with the active chart symbol.
-   * Prepares the global list for symbol-scoped filter; still one shared list.
+   * Migrates untagged legacy drawings onto the current ticker.
    */
   const onTagWithSymbol = () => {
     if (!store.drawings.length) return;
-    const next = tagDrawingsSymbol(store.drawings, store.symbol);
+    const next = tagDrawingsSymbol(store.drawings, store.symbol) as Drawing[];
     setDrawings(next);
-    syncLayerDrawings(next);
+    syncLayerDrawings(visibleDrawingsForActiveSymbol(store.symbol));
   };
 
   /** Select drawing in store + live layer (shows handles on chart). */
@@ -193,10 +210,12 @@ export const LayerPanel: Component = () => {
     const hidden = !d.meta?.hidden;
     const nextMeta = { ...(d.meta || {}), hidden };
     patchDrawing(d.id, { meta: nextMeta } as Partial<Drawing>);
-    const nextList = store.drawings.map((x) =>
-      x.id === d.id ? ({ ...x, meta: nextMeta } as Drawing) : x,
+    // Layer only paints the active symbol’s drawings
+    syncLayerDrawings(
+      visibleDrawingsForActiveSymbol(store.symbol).map((x) =>
+        x.id === d.id ? ({ ...x, meta: nextMeta } as Drawing) : x,
+      ),
     );
-    syncLayerDrawings(nextList);
     // Re-apply selection paint after hide toggle
     if (store.selectedDrawingId === d.id) {
       getActiveDrawingLayer()?.setSelectedId(d.id);
@@ -208,8 +227,7 @@ export const LayerPanel: Component = () => {
     const layer = getActiveDrawingLayer();
     if (layer) {
       try {
-        const next = store.drawings.slice();
-        layer.setDrawings(next);
+        layer.setDrawings(visibleDrawingsForActiveSymbol(store.symbol));
         if (layer.getSelectedId() === id) layer.setSelectedId(null);
       } catch {
         /* ignore */
@@ -218,10 +236,11 @@ export const LayerPanel: Component = () => {
   };
 
   const onSaveTemplate = () => {
-    if (!store.drawings.length) return;
+    const visible = symbolDrawings();
+    if (!visible.length) return;
     const name = window.prompt('Template name', `Pack ${templates().length + 1}`);
     if (!name?.trim()) return;
-    saveTemplate(name.trim(), store.drawings, {
+    saveTemplate(name.trim(), visible, {
       meta: {
         symbol: store.symbol,
         interval: store.interval,
@@ -234,17 +253,29 @@ export const LayerPanel: Component = () => {
   const onLoadTemplate = (id: string, mode: LoadTemplateMode) => {
     const tpl = getTemplate(id);
     if (!tpl) return;
+    const visible = symbolDrawings();
     if (
       mode === 'replace' &&
-      store.drawings.length &&
-      !confirm(`Replace ${store.drawings.length} drawing(s) with "${tpl.name}"?`)
+      visible.length &&
+      !confirm(
+        `Replace ${visible.length} drawing(s) for ${store.symbol} with "${tpl.name}"?`,
+      )
     ) {
       return;
     }
-    const next = applyTemplateDrawings(store.drawings, tpl, mode) as Drawing[];
+    // Apply template against the active-symbol subset, then merge back so
+    // other symbols keep their drawings.
+    const applied = applyTemplateDrawings(visible, tpl, mode) as Drawing[];
+    const stamped = tagDrawingsSymbol(applied, store.symbol) as Drawing[];
+    const next = mergeLayerDrawingsForSymbol(
+      store.drawings,
+      store.symbol,
+      stamped,
+      { includeUntagged: true },
+    ) as Drawing[];
     setDrawings(next);
     setSelectedDrawingId(null);
-    syncLayerDrawings(next);
+    syncLayerDrawings(visibleDrawingsForActiveSymbol(store.symbol));
   };
 
   const onDeleteTemplate = (id: string, name: string) => {
@@ -359,15 +390,21 @@ export const LayerPanel: Component = () => {
             </div>
             <div class="flex items-center justify-between gap-2 px-1 py-0.5 mb-0.5 flex-wrap">
               <span class="text-text-dim">
-                User drawings{' '}
-                <span class="text-text-faint font-mono">({store.drawings.length})</span>
+                {store.symbol || 'Symbol'}{' '}
+                <span class="text-text-faint font-mono">
+                  ({symbolDrawings().length}
+                  {store.drawings.length !== symbolDrawings().length
+                    ? ` / ${store.drawings.length}`
+                    : ''}
+                  )
+                </span>
               </span>
               <div class="flex items-center gap-1 flex-wrap justify-end">
                 <button
                   type="button"
                   class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
-                  disabled={!store.drawings.length}
-                  title="Duplicate drawings with new IDs (template). User drawings are already shared across multi-chart slots."
+                  disabled={!symbolDrawings().length}
+                  title={`Duplicate drawings for ${store.symbol} with new IDs`}
                   data-testid="axis-layers-duplicate-drawings"
                   onClick={onDuplicateDrawings}
                 >
@@ -387,7 +424,7 @@ export const LayerPanel: Component = () => {
                   type="button"
                   class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
                   disabled={!store.drawings.length}
-                  title={`Tag all drawings with symbol ${store.symbol} (sync label for layout / filter)`}
+                  title={`Tag all drawings with symbol ${store.symbol}`}
                   data-testid="axis-layers-tag-symbol"
                   onClick={onTagWithSymbol}
                 >
@@ -396,8 +433,8 @@ export const LayerPanel: Component = () => {
                 <button
                   type="button"
                   class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
-                  disabled={!store.drawings.length}
-                  title="Clear user drawings"
+                  disabled={!symbolDrawings().length}
+                  title={`Clear drawings for ${store.symbol}`}
                   onClick={onClearDrawings}
                 >
                   Clear
@@ -405,16 +442,20 @@ export const LayerPanel: Component = () => {
               </div>
             </div>
             <div class="px-1 pb-1 text-[0.75em] text-text-faint leading-snug">
-              Drawings are global (shared across layout slots). Duplicate creates
-              new IDs; This symbol / Tag symbol use meta.symbol for filtering.
+              Drawings are anchored to the chart symbol ({store.symbol || '—'}).
+              Other symbols keep their own drawings. Tag symbol migrates untagged
+              legacy items onto the current ticker.
             </div>
             <Show
-              when={store.drawings.length > 0}
+              when={symbolDrawings().length > 0}
               fallback={
-                <Empty>No user drawings. Use the left tool rail to place shapes.</Empty>
+                <Empty>
+                  No drawings for {store.symbol || 'this symbol'}. Use the left
+                  tool rail to place shapes.
+                </Empty>
               }
             >
-              <For each={store.drawings}>
+              <For each={symbolDrawings()}>
                 {(d) => {
                   const selected = () => store.selectedDrawingId === d.id;
                   const visible = () => !d.meta?.hidden;
@@ -506,8 +547,8 @@ export const LayerPanel: Component = () => {
                   <button
                     type="button"
                     class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
-                    disabled={!store.drawings.length}
-                    title="Save current drawings as a named template"
+                    disabled={!symbolDrawings().length}
+                    title={`Save drawings for ${store.symbol} as a named template`}
                     data-testid="axis-tpl-save"
                     onClick={onSaveTemplate}
                   >

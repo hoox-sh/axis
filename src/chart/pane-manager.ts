@@ -32,7 +32,7 @@
  * - `createPane` / `destroyPane` / `getPane`
  * - `setBars` / `appendBar` — OHLCV on price pane
  * - `syncOverlayLines` / `syncBgcolorBands` — indicator apply (update-in-place)
- * - `setTradeMarkers` / `setShapeMarkers` / `setEquityCurve`
+ * - `setTradeMarkers` / `setShapeMarkers` / `setEquityCurve` (legacy; strategy equity is Results panel only)
  * - `syncTimeScales` / `syncCrosshair`
  *
  * @module chart/pane-manager
@@ -153,6 +153,17 @@ export class PaneManager {
   private timeSyncUnsubs: Array<() => void> = [];
   /** Crosshair multi-pane sync unsubscribers */
   private crosshairUnsubs: Array<() => void> = [];
+  /** DOM pointer listeners for hover tracking (container + per-pane) */
+  private pointerUnsubs: Array<() => void> = [];
+  /**
+   * Whether the pointer is over this manager’s pane container.
+   * `null` = unknown (unit tests / no pointer events yet) — accept all moves.
+   * `true` = user is hovering; only the hovered pane may drive sync.
+   * `false` = pointer outside; ignore data-driven crosshair re-fires.
+   */
+  private pointerInside: boolean | null = null;
+  /** Pane id last entered by the pointer (while {@link pointerInside}). */
+  private hoveredPaneId: string | null = null;
   /** Host callback for Data Window / store (set via {@link syncCrosshair}) */
   private crosshairOnMove:
     | ((data: {
@@ -170,12 +181,66 @@ export class PaneManager {
   private priceLogScale = false;
   /** Right price-scale labels/axis visible (UI [$]). Default on. */
   private priceScaleLabelsVisible = true;
+  /**
+   * Series last-value labels (price + name) on the right scale (UI [N]).
+   * Default on. Independent of {@link priceScaleLabelsVisible}.
+   */
+  private lastValueLabelsVisible = true;
   /** ThemeManager chart unregister fns keyed by pane id */
   private themeUnregs = new Map<string, () => void>();
 
   constructor(container: HTMLElement, hostKey = '') {
     this.container = container;
     this.hostKey = hostKey || '';
+    this.bindPointerHoverTracking();
+  }
+
+  /**
+   * Track whether the user is hovering the chart so live series updates cannot
+   * snap the crosshair to last price while the pointer is over a pane.
+   * LWC re-fires `subscribeCrosshairMove` on every `setData`/`update` via
+   * `updateCrosshair`; secondary panes then used to call `setCrosshairPosition`
+   * on price and pin the horizontal line to close.
+   */
+  private bindPointerHoverTracking() {
+    if (typeof this.container?.addEventListener !== 'function') return;
+
+    const onEnter = () => {
+      this.pointerInside = true;
+    };
+    const onLeave = () => {
+      this.pointerInside = false;
+      this.hoveredPaneId = null;
+      // Clear mirrored crosshairs on other panes; store clears via leave event
+      this.clearMirroredCrosshairs();
+      this.crosshairOnMove?.({ time: null, point: null, seriesData: new Map() });
+    };
+    this.container.addEventListener('pointerenter', onEnter);
+    this.container.addEventListener('pointerleave', onLeave);
+    this.pointerUnsubs.push(() => {
+      try {
+        this.container.removeEventListener('pointerenter', onEnter);
+        this.container.removeEventListener('pointerleave', onLeave);
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
+  /** Clear crosshair on every pane without firing host callbacks. */
+  private clearMirroredCrosshairs() {
+    this.suppressCrosshair = true;
+    try {
+      for (const other of this.getAllPanes()) {
+        try {
+          other.chart.clearCrosshairPosition();
+        } catch {
+          /* ignore */
+        }
+      }
+    } finally {
+      this.suppressCrosshair = false;
+    }
   }
 
   /** DOM id for a pane element (multi-chart safe). */
@@ -270,6 +335,22 @@ export class PaneManager {
     mountPaneBadge(div, id, type, label);
 
     this.container.appendChild(div);
+
+    // Hover ownership for crosshair: only this pane drives multi-pane sync
+    if (typeof div.addEventListener === 'function') {
+      const onPaneEnter = () => {
+        this.pointerInside = true;
+        this.hoveredPaneId = id;
+      };
+      div.addEventListener('pointerenter', onPaneEnter);
+      this.pointerUnsubs.push(() => {
+        try {
+          div.removeEventListener('pointerenter', onPaneEnter);
+        } catch {
+          /* ignore */
+        }
+      });
+    }
 
     const isSecondary = type !== 'price';
     const chart = createBaseChart(div, {
@@ -797,8 +878,11 @@ export class PaneManager {
   }
 
   /**
-   * Show / hide equity pane and set area series data.
+   * Legacy: show / hide a main-chart equity pane and set area series data.
    * Creates the pane on first use (height 100px).
+   *
+   * **Not used by strategy runs** — equity lives in Results → Strategy
+   * ({@link ui/StrategyReport}). Prefer {@link hideEquityPane} to clear leftovers.
    */
   setEquityCurve(points: { time: number; value: number }[]) {
     if (!points.length) {
@@ -840,6 +924,12 @@ export class PaneManager {
   /**
    * Wire crosshair → Data Window callback and mirror the crosshair (vertical +
    * horizontal) onto every other pane via {@link IChartApi.setCrosshairPosition}.
+   *
+   * **Hover-aware:** LWC re-fires crosshair on every series update. We only
+   * drive sync / store updates from the pane under the pointer so live ticks
+   * cannot snap the crosshair to last price while the user is inspecting bars.
+   * When the pointer is outside the chart, Data Window falls back to the last
+   * bar (live) via a null crosshair time.
    */
   syncCrosshair(
     onMove: (data: {
@@ -867,6 +957,7 @@ export class PaneManager {
       const handler = (param: MouseEventParams) => {
         if (this.suppressCrosshair) return;
 
+        // Leave / outside plot: clear mirrors + host. Also accept when not hovering.
         if (!param.time || !param.point) {
           this.suppressCrosshair = true;
           try {
@@ -885,15 +976,41 @@ export class PaneManager {
           return;
         }
 
-        // Mirror onto all other panes
-        this.suppressCrosshair = true;
-        try {
-          for (const other of this.getAllPanes()) {
-            if (!other.visible || other.chart === pane.chart) continue;
-            this.applyCrosshairToPane(other, param);
+        // Pointer is outside the chart container: ignore data-driven re-fires
+        // (series update → updateCrosshair) so we don't snap to current price.
+        if (this.pointerInside === false) {
+          return;
+        }
+
+        // While hovering, only the pane under the mouse may drive multi-pane
+        // sync. Secondary panes still re-fire on their own series updates.
+        if (
+          this.pointerInside === true &&
+          this.hoveredPaneId &&
+          pane.id !== this.hoveredPaneId
+        ) {
+          return;
+        }
+
+        // Real pointer moves (and unknown/test mode) prefer sourceEvent when present.
+        // Data-driven re-fires pass no sourceEvent — if we already know we're
+        // hovering this pane, still update Data Window OHLC for the locked bar
+        // index but do NOT re-apply setCrosshairPosition (would pin Y to close).
+        const isDataDriven =
+          this.pointerInside === true &&
+          (param as MouseEventParams & { sourceEvent?: unknown }).sourceEvent == null;
+
+        if (!isDataDriven) {
+          // Mirror onto all other panes (user pointer move)
+          this.suppressCrosshair = true;
+          try {
+            for (const other of this.getAllPanes()) {
+              if (!other.visible || other.chart === pane.chart) continue;
+              this.applyCrosshairToPane(other, param);
+            }
+          } finally {
+            this.suppressCrosshair = false;
           }
-        } finally {
-          this.suppressCrosshair = false;
         }
 
         this.crosshairOnMove?.({
@@ -1045,6 +1162,52 @@ export class PaneManager {
   /** Toggle right price-scale labels ([$]). */
   togglePriceScaleLabelsVisible(): boolean {
     return this.setPriceScaleLabelsVisible(!this.priceScaleLabelsVisible);
+  }
+
+  isLastValueLabelsVisible(): boolean {
+    return this.lastValueLabelsVisible;
+  }
+
+  /**
+   * Show/hide series last-value labels (price + series name) on every pane.
+   * Affects candle/volume/overlay series and hline axis labels.
+   * Used by chart [N] control and Settings.
+   */
+  setLastValueLabelsVisible(visible: boolean): boolean {
+    this.lastValueLabelsVisible = !!visible;
+    this.applyLastValueLabelsToAllSeries();
+    return this.lastValueLabelsVisible;
+  }
+
+  /** Toggle series last-value / name labels ([N]). */
+  toggleLastValueLabelsVisible(): boolean {
+    return this.setLastValueLabelsVisible(!this.lastValueLabelsVisible);
+  }
+
+  /**
+   * Apply {@link lastValueLabelsVisible} to all series and hline price-lines.
+   * Skips bgcolor underlays (always unlabeled).
+   */
+  applyLastValueLabelsToAllSeries() {
+    const on = this.lastValueLabelsVisible;
+    for (const pane of this.getAllPanes()) {
+      for (const [key, series] of Object.entries(pane.series)) {
+        if (!series) continue;
+        if (key.startsWith('bgcolor_')) continue;
+        try {
+          series.applyOptions({ lastValueVisible: on });
+        } catch {
+          /* ignore */
+        }
+      }
+      for (const pl of Object.values(pane.priceLines)) {
+        try {
+          pl.line.applyOptions({ axisLabelVisible: on });
+        } catch {
+          /* ignore */
+        }
+      }
+    }
   }
 
   /**
@@ -1256,16 +1419,23 @@ export class PaneManager {
       if (existing) {
         existing.setData(mapped as never);
         try {
-          const opts: Record<string, unknown> = {};
+          const opts: Record<string, unknown> = {
+            lastValueVisible: this.lastValueLabelsVisible,
+          };
           if (line.color) opts.color = line.color;
           if (lw != null) opts.lineWidth = lw;
-          if (Object.keys(opts).length) existing.applyOptions(opts);
+          existing.applyOptions(opts);
         } catch {
           /* ignore */
         }
       } else {
         const c = line.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
         const series = createLineSeries(pane.chart, line.name, c, undefined, lw ?? 2);
+        try {
+          series.applyOptions({ lastValueVisible: this.lastValueLabelsVisible });
+        } catch {
+          /* ignore */
+        }
         series.setData(mapped as never);
         pane.series[key] = series;
       }
@@ -1303,7 +1473,7 @@ export class PaneManager {
           color: c,
           lineWidth: lw,
           lineStyle: mapLineStyle(line.linestyle),
-          axisLabelVisible: true,
+          axisLabelVisible: this.lastValueLabelsVisible,
           title: line.name,
         };
         if (existingPl && existingPl.host === host) {
@@ -1498,6 +1668,8 @@ export class PaneManager {
     this.tradeMarkerList = [];
     this.shapeMarkerList = [];
     this.crosshairOnMove = null;
+    this.pointerInside = null;
+    this.hoveredPaneId = null;
     for (const u of this.crosshairUnsubs) {
       try {
         u();
@@ -1506,6 +1678,14 @@ export class PaneManager {
       }
     }
     this.crosshairUnsubs = [];
+    for (const u of this.pointerUnsubs) {
+      try {
+        u();
+      } catch {
+        /* ignore */
+      }
+    }
+    this.pointerUnsubs = [];
     for (const u of this.timeSyncUnsubs) {
       try {
         u();

@@ -243,6 +243,12 @@ export interface AppState {
    * When false, the right gutter is collapsed. Persisted. Default true.
    */
   priceScaleLabelsVisible: boolean;
+  /**
+   * Series last-value labels (price + series name) on the right scale.
+   * Chart [N] control. Independent of {@link priceScaleLabelsVisible}.
+   * Persisted. Default true.
+   */
+  lastValueLabelsVisible: boolean;
   symbol: string;
   interval: string;
   exchange: string;

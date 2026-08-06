@@ -137,6 +137,9 @@ export const SettingsDialog: Component<Props> = (props) => {
   const [priceScaleLabels, setPriceScaleLabels] = createSignal(
     store.priceScaleLabelsVisible !== false,
   );
+  const [lastValueLabels, setLastValueLabels] = createSignal(
+    store.lastValueLabelsVisible !== false,
+  );
   const [probing, setProbing] = createSignal(false);
   const [reloading, setReloading] = createSignal(false);
   const [probeMsg, setProbeMsg] = createSignal('');
@@ -210,6 +213,7 @@ export const SettingsDialog: Component<Props> = (props) => {
         setShareOnError(!!store.telemetry?.shareOnError);
         setUiScaleLocal(clampUiScale(store.uiScale ?? 1));
         setPriceScaleLabels(store.priceScaleLabelsVisible !== false);
+        setLastValueLabels(store.lastValueLabelsVisible !== false);
         setProbeMsg('');
         setTab(props.initialTab === 'theme' ? 'theme' : 'general');
       });
@@ -248,6 +252,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     const nextShareOnError = shareOnError();
     const nextUiScale = clampUiScale(uiScale());
     const nextPriceScaleLabels = priceScaleLabels();
+    const nextLastValueLabels = lastValueLabels();
     const nextExecMode = execMode();
     const nextPreferWs = preferWs();
     const writeEndpoint = needsEndpoint();
@@ -265,6 +270,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     setStore('telemetry', 'shareOnError', nextShareOnError);
     setStore('uiScale', nextUiScale);
     setStore('priceScaleLabelsVisible', nextPriceScaleLabels);
+    setStore('lastValueLabelsVisible', nextLastValueLabels);
     applyUiScale(nextUiScale);
     // setActivePlugin keeps flat engine/source fields + telemetry planes aligned
     setActivePlugin('engine', nextEngine);
@@ -817,6 +823,27 @@ export const SettingsDialog: Component<Props> = (props) => {
                   <span class="block text-[10px] text-text-faint mt-0.5">
                     Show price numbers on the right axis. Same as the chart [$] control.
                     Off collapses the gutter for more plot width.
+                  </span>
+                </span>
+              </label>
+
+              <label
+                class="flex items-start gap-2 cursor-pointer mb-3"
+                for="axis-last-value-labels"
+              >
+                <input
+                  id="axis-last-value-labels"
+                  type="checkbox"
+                  class="mt-0.5"
+                  checked={lastValueLabels()}
+                  onChange={(e) => setLastValueLabels(e.currentTarget.checked)}
+                  data-testid="axis-settings-last-value-labels"
+                />
+                <span>
+                  <span class="text-[12px] text-text">Series name / last-value labels</span>
+                  <span class="block text-[10px] text-text-faint mt-0.5">
+                    Show series titles and last prices on the right scale (plots, volume,
+                    hlines). Same as the chart [N] control. Independent of [$].
                   </span>
                 </span>
               </label>

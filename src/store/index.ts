@@ -130,6 +130,7 @@ const DEFAULTS: AppState = {
   chartDataGen: 0,
   chartType: DEFAULT_CHART_TYPE,
   priceScaleLabelsVisible: true,
+  lastValueLabelsVisible: true,
   symbol: 'BTCUSDT',
   interval: '1d',
   exchange: 'binance',
@@ -309,6 +310,10 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         typeof bag.priceScaleLabelsVisible === 'boolean'
           ? bag.priceScaleLabelsVisible
           : DEFAULTS.priceScaleLabelsVisible,
+      lastValueLabelsVisible:
+        typeof bag.lastValueLabelsVisible === 'boolean'
+          ? bag.lastValueLabelsVisible
+          : DEFAULTS.lastValueLabelsVisible,
       historyBars: clampHistoryBars(
         bag.historyBars ?? (bag as { barLimit?: unknown }).barLimit ?? DEFAULTS.historyBars,
       ),
@@ -2209,17 +2214,52 @@ export function setDrawingTool(tool: DrawingToolId) {
 }
 
 /**
- * Replace the full user-drawing list (layer `onChange`, imports, clear paths).
+ * Replace the full user-drawing list (layer `onChange` merge, imports, clear paths).
  * Persisted. Does not touch Pine script drawings.
+ * Prefer layer `onChange` / symbol-scoped helpers so multi-symbol drawings stay intact.
  */
 export function setDrawings(drawings: Drawing[]) {
   setStore('drawings', drawings);
   persist();
 }
 
-/** Empty user drawings and persist (toolbar clear-all after confirm + layer.clearAll). */
+/**
+ * Empty **all** user drawings and persist.
+ * Prefer {@link clearDrawingsForSymbol} for toolbar clear (keeps other symbols).
+ */
 export function clearDrawings() {
   setStore('drawings', []);
+  persist();
+}
+
+/**
+ * Remove drawings for one symbol (and untagged legacy when clearing the active view).
+ * Other symbols’ drawings are preserved.
+ */
+export function clearDrawingsForSymbol(symbol: string = store.symbol) {
+  const want = String(symbol || '')
+    .trim()
+    .toUpperCase();
+  if (!want) {
+    clearDrawings();
+    return;
+  }
+  setStore(
+    'drawings',
+    store.drawings.filter((d) => {
+      const s =
+        d.meta?.symbol != null && d.meta.symbol !== ''
+          ? String(d.meta.symbol).trim().toUpperCase()
+          : null;
+      // Untagged show on every symbol view — clear them with the active clear
+      if (s == null) return false;
+      return s !== want;
+    }),
+  );
+  if (store.selectedDrawingId) {
+    const still = store.drawings.some((d) => d.id === store.selectedDrawingId);
+    if (!still) setStore('selectedDrawingId', null);
+  }
   persist();
 }
 

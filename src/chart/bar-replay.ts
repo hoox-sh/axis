@@ -35,18 +35,37 @@ export interface ReplayState {
   cursorIndex: number;
   /**
    * Advance rate for {@link tick} while playing.
-   * Integer ≥ 1: bars advanced per tick (1 = 1×, 2 = 2×, …).
+   * Integer ≥ 1: bars advanced per wall-clock tick ({@link REPLAY_TICK_MS}).
+   * UI shows this as bars/sec via {@link speedToBarsPerSec}.
    */
   speed: number;
   /** Auto-advance via {@link tick} when true. */
   playing: boolean;
 }
 
-/** Default play speeds exposed to UI (bars per tick). */
+/** Default play speeds exposed to UI (bars advanced per {@link REPLAY_TICK_MS} tick). */
 export const REPLAY_SPEEDS = [1, 2, 5, 10] as const;
 
-/** Base wall-clock ms between ticks at 1× (UI timer). */
+/** Base wall-clock ms between play ticks (UI timer). */
 export const REPLAY_TICK_MS = 200;
+
+/**
+ * Convert internal speed (bars per tick) to bars per second for UI labels.
+ * @example speed 1 @ 200ms tick → 5 bars/s
+ */
+export function speedToBarsPerSec(speed: number, tickMs: number = REPLAY_TICK_MS): number {
+  const s = Number.isFinite(speed) && speed > 0 ? speed : 1;
+  const ms = Number.isFinite(tickMs) && tickMs > 0 ? tickMs : REPLAY_TICK_MS;
+  return (s * 1000) / ms;
+}
+
+/** Compact UI label, e.g. `5 bars/s`. */
+export function formatReplaySpeedLabel(speed: number, tickMs: number = REPLAY_TICK_MS): string {
+  const bps = speedToBarsPerSec(speed, tickMs);
+  // Prefer integers when the math is exact; else one decimal
+  const n = Number.isInteger(bps) ? String(bps) : bps.toFixed(1);
+  return `${n} bars/s`;
+}
 
 const DEFAULT_SPEED = 1;
 
@@ -159,7 +178,7 @@ export function stop(_state?: ReplayState): ReplayState {
   return idleReplay();
 }
 
-/** Change play speed (bars per tick). No-op when inactive. */
+/** Change play speed (bars per {@link REPLAY_TICK_MS} tick). No-op when inactive. */
 export function setSpeed(state: ReplayState, speed: number): ReplayState {
   if (!state.active) return state;
   const next = normalizeSpeed(speed);

@@ -96,8 +96,70 @@ describe('PaneManager', () => {
     expect(lastTime).toBe(1_700_000_000);
 
     handlers[0]!({ time: undefined, point: undefined, seriesData: new Map() });
-    // leaving the chart keeps Data Window (callback still fires null)
+    // leaving the chart clears Data Window crosshair (callback fires null → last bar fallback)
     expect(lastTime).toBeNull();
+  });
+
+  it('syncCrosshair ignores data-driven moves from non-hovered panes', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    const vol = pm.createPane('volume', 'volume', 'Volume', 80);
+    price.series['candle'] = {
+      setData: () => {},
+      dataByIndex: () => ({ close: 100 }),
+      coordinateToPrice: () => 100,
+    } as never;
+    vol.series['volume'] = {
+      setData: () => {},
+      dataByIndex: () => ({ value: 10 }),
+      coordinateToPrice: () => 10,
+    } as never;
+
+    let calls = 0;
+    let lastTime: unknown = undefined;
+    pm.syncCrosshair((data) => {
+      calls += 1;
+      lastTime = data.time;
+    });
+
+    // Simulate pointer over price pane only
+    (pm as unknown as { pointerInside: boolean; hoveredPaneId: string }).pointerInside = true;
+    (pm as unknown as { hoveredPaneId: string }).hoveredPaneId = 'price';
+
+    const priceHandlers = (
+      price.chart as unknown as { _crosshairHandlers: Array<(p: unknown) => void> }
+    )._crosshairHandlers;
+    const volHandlers = (
+      vol.chart as unknown as { _crosshairHandlers: Array<(p: unknown) => void> }
+    )._crosshairHandlers;
+
+    // User move on price (sourceEvent present) → accepted
+    priceHandlers[0]!({
+      time: 1_700_000_000,
+      point: { x: 10, y: 20 },
+      seriesData: new Map(),
+      sourceEvent: { clientX: 1, clientY: 2 },
+    });
+    expect(lastTime).toBe(1_700_000_000);
+    expect(calls).toBe(1);
+
+    // Live series update re-fire on volume (no sourceEvent, not hovered) → ignored
+    volHandlers[0]!({
+      time: 1_700_000_100,
+      point: { x: 11, y: 21 },
+      seriesData: new Map(),
+    });
+    expect(lastTime).toBe(1_700_000_000);
+    expect(calls).toBe(1);
+
+    // Outside chart: data-driven re-fire ignored
+    (pm as unknown as { pointerInside: boolean }).pointerInside = false;
+    priceHandlers[0]!({
+      time: 1_700_000_200,
+      point: { x: 12, y: 22 },
+      seriesData: new Map(),
+    });
+    expect(lastTime).toBe(1_700_000_000);
+    expect(calls).toBe(1);
   });
 
   it('price scale auto/log toggles and afterDataReload', () => {
@@ -111,6 +173,21 @@ describe('PaneManager', () => {
     expect(pm.togglePriceAutoScale()).toBe(true);
     pm.afterDataReload();
     expect(pm.isPriceAutoScale()).toBe(true);
+  });
+
+  it('last value labels toggle applies to series', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    let lastVal: boolean | undefined;
+    price.series['candle'] = {
+      applyOptions: (o: { lastValueVisible?: boolean }) => {
+        if (o.lastValueVisible != null) lastVal = o.lastValueVisible;
+      },
+    } as never;
+    expect(pm.isLastValueLabelsVisible()).toBe(true);
+    expect(pm.setLastValueLabelsVisible(false)).toBe(false);
+    expect(lastVal).toBe(false);
+    expect(pm.toggleLastValueLabelsVisible()).toBe(true);
+    expect(lastVal).toBe(true);
   });
 
   it('price scale labels toggle and overlay color apply', () => {

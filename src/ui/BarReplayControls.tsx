@@ -38,6 +38,7 @@ import { setDataToChart } from '../chart/manager-access';
 import {
   REPLAY_SPEEDS,
   REPLAY_TICK_MS,
+  formatReplaySpeedLabel,
   getReplayState,
   getVisibleBars,
   isReplayActive,
@@ -249,14 +250,16 @@ export const BarReplayControls: Component = () => {
         </label>
         <select
           id="axis-bar-replay-speed"
-          class="sc-input min-w-[3.5em] text-[11px]"
+          class="sc-input min-w-[5.5em] text-[11px]"
           data-testid="axis-bar-replay-speed"
           value={String(st().speed)}
-          title="Bars advanced per tick"
+          title="Replay speed in bars per second"
           onChange={(e) => onSpeed(Number(e.currentTarget.value))}
         >
           <For each={[...REPLAY_SPEEDS]}>
-            {(sp) => <option value={String(sp)}>{sp}×</option>}
+            {(sp) => (
+              <option value={String(sp)}>{formatReplaySpeedLabel(sp)}</option>
+            )}
           </For>
         </select>
 

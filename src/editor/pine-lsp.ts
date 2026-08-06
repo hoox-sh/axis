@@ -23,7 +23,9 @@
  * Strategy:
  * 1. Prefer **remote LSP** via pyne Pro API (`POST /lsp/completion`, `/lsp/hover`)
  *    when engine=`server` and Backend URL is set (local or VPS).
- * 2. Fall back to **client metadata** from `data/pine-builtins.json` for
+ * 2. Fall back to **local doc annotations** in the open buffer
+ *    (`//@function`, `//@param`, `//@returns`, `//@type`, …) rendered as markdown.
+ * 3. Fall back to **client metadata** from `data/pine-builtins.json` for
  *    pyodide / offline / remote failure.
  *
  * Exports {@link pineLspExtensions} for mounting on {@link PineEditor}.
@@ -50,6 +52,11 @@ import {
   shouldUseRemoteLsp,
   type RemoteCompletionItem,
 } from './pine-lsp-client';
+import {
+  formatPineDocMarkdown,
+  lookupPineDoc,
+  parsePineDocAnnotations,
+} from './pine-doc-annotations';
 
 /** One entry from the local Pine builtins catalog. */
 export type BuiltinMeta = {
@@ -217,6 +224,7 @@ export function pineCompleteLocal(context: CompletionContext): CompletionResult 
   initIndex();
   const line = context.state.doc.lineAt(context.pos);
   const textBefore = line.text.slice(0, context.pos - line.from);
+  const fullSource = context.state.doc.toString();
 
   // module.member after dot
   const dot = textBefore.match(/([A-Za-z_][\w]*)\.\s*([A-Za-z_][\w]*)?$/);
@@ -251,6 +259,23 @@ export function pineCompleteLocal(context: CompletionContext): CompletionResult 
         }
       }
     }
+  }
+
+  // User-defined symbols with //@function etc. in this buffer
+  const localDocs = parsePineDocAnnotations(fullSource);
+  for (const [name, entry] of localDocs) {
+    if (entry.kind === 'description') continue;
+    if (prefix && !name.toLowerCase().startsWith(prefix.toLowerCase())) continue;
+    if (filtered.some((f) => f.label === name)) continue;
+    filtered.unshift({
+      label: name,
+      kind: entry.kind === 'function' ? 'function' : entry.kind === 'type' ? 'type' : 'variable',
+      detail: entry.signature || entry.kind,
+      brief: entry.description.slice(0, 120),
+      documentation: formatPineDocMarkdown(entry),
+      snippet: entry.kind === 'function' ? `${name}(\${1})` : undefined,
+      category: 'local',
+    });
   }
 
   if (!filtered.length) return null;
@@ -477,8 +502,7 @@ export function renderHoverMarkdown(root: HTMLElement, md: string): void {
 
       // Headings (# Title)
       if (/^#{1,3}\s+/.test(rest[0]!)) {
-        const level = rest[0]!.match(/^(#{1,3})\s+/)?.[1]?.length ?? 2;
-        const h = document.createElement(level <= 1 ? 'div' : 'div');
+        const h = document.createElement('div');
         h.className = 'cm-pine-hover-heading';
         appendInlineMarkdown(h, rest[0]!.replace(/^#{1,3}\s+/, ''));
         root.appendChild(h);
@@ -488,6 +512,20 @@ export function renderHoverMarkdown(root: HTMLElement, md: string): void {
           appendInlineMarkdown(p, rest.slice(1).join(' '));
           root.appendChild(p);
         }
+        continue;
+      }
+
+      // Bullet / numbered lists (library doc @param blocks, etc.)
+      if (rest.every((l) => /^([-*+]|\d+\.)\s+/.test(l.trim()))) {
+        const ul = document.createElement('ul');
+        ul.className = 'cm-pine-hover-list';
+        for (const l of rest) {
+          const li = document.createElement('li');
+          li.className = 'cm-pine-hover-li';
+          appendInlineMarkdown(li, l.trim().replace(/^([-*+]|\d+\.)\s+/, ''));
+          ul.appendChild(li);
+        }
+        root.appendChild(ul);
         continue;
       }
 
@@ -574,6 +612,22 @@ export function pineHoverLocal(
   const text = doc.sliceString(0, doc.length);
   const hit = wordAt(text, pos);
   if (!hit) return null;
+
+  // User / library annotations in the open document (//@function, //@param, …)
+  const localDoc = lookupPineDoc(text, hit.word);
+  if (localDoc && localDoc.kind !== 'description') {
+    const md = formatPineDocMarkdown(localDoc);
+    if (md) {
+      return makeHoverTooltip(
+        hit.from,
+        hit.to,
+        localDoc.signature || localDoc.name,
+        md,
+        'doc annotations',
+        { markdown: true },
+      );
+    }
+  }
 
   let meta = lookupBuiltin(hit.word);
   if (!meta && hit.word.includes('.')) {

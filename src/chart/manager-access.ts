@@ -42,7 +42,7 @@ import {
   setDrawingTool,
   setCrosshair,
 } from '../store';
-import type { Bar } from '../store/types';
+import type { Bar, Drawing } from '../store/types';
 import {
   debugPinsToMarkers,
   pinsFromLastRun,
@@ -57,6 +57,89 @@ import {
 } from './chart-registry';
 import { reportUiError } from '../ui/boot-errors';
 import { getThemeManager } from '../theme';
+import {
+  drawingsForSymbol,
+  mergeLayerDrawingsForSymbol,
+} from './drawings/sync';
+
+/**
+ * User drawings visible on the active chart for the current symbol.
+ * Includes untagged (legacy) drawings so pre-anchoring data still paints.
+ */
+export function visibleDrawingsForActiveSymbol(
+  symbol: string = store.symbol,
+): Drawing[] {
+  return drawingsForSymbol(store.drawings, symbol, {
+    includeUntagged: true,
+  }) as Drawing[];
+}
+
+/**
+ * Layer → store bridge: merge the layer’s list into the full multi-symbol store
+ * so place/edit/clear on the active symbol never drops other symbols’ drawings.
+ */
+function onLayerDrawingsChange(list: Drawing[]) {
+  const merged = mergeLayerDrawingsForSymbol(
+    store.drawings,
+    store.symbol,
+    list,
+    { includeUntagged: true },
+  ) as Drawing[];
+  setDrawings(merged);
+}
+
+/**
+ * Full-history paint path: drop Pine script drawings, plot fills, and indicator
+ * overlays so a symbol/interval change does not leave stale series on screen.
+ * User drawings are re-synced separately (per-symbol filter).
+ */
+function clearChartScriptState(mgr: PaneManager, layer: DrawingLayer | undefined) {
+  try {
+    layer?.clearScriptDrawings?.();
+  } catch {
+    /* optional */
+  }
+  try {
+    layer?.clearPlotFills?.();
+  } catch {
+    /* optional */
+  }
+  try {
+    if (typeof mgr.getAllPanes === 'function') {
+      for (const p of mgr.getAllPanes()) {
+        try {
+          mgr.removeOverlays?.(p.id);
+        } catch {
+          /* ignore */
+        }
+      }
+    } else {
+      // Fallback when getAllPanes is missing (tests / older doubles)
+      for (const id of ['price', 'volume', 'equity'] as const) {
+        try {
+          mgr.removeOverlays?.(id);
+        } catch {
+          /* ignore */
+        }
+      }
+      for (const pane of store.panes || []) {
+        if (!pane?.id) continue;
+        try {
+          mgr.removeOverlays?.(pane.id);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  } catch {
+    /* overlays optional */
+  }
+  try {
+    mgr.hideEquityPane?.();
+  } catch {
+    /* equity optional */
+  }
+}
 
 /**
  * Legacy module fallback when no multi-chart slot is active (unit tests).
@@ -104,12 +187,13 @@ export function setDrawingLayer(layer: DrawingLayer | undefined, slotId?: string
  * - `document.createElementNS` available (skipped under minimal happy-dom)
  *
  * Wiring on create:
- * 1. Seed user drawings + active tool from store
- * 2. `onChange` → `setDrawings` (persist user list after place/move/delete)
+ * 1. Seed **symbol-filtered** user drawings + active tool from store
+ * 2. `onChange` → {@link onLayerDrawingsChange} (merge into multi-symbol store)
  * 3. `barsProvider` → `store.bars` for magnet snap
- * 4. Seed magnet / stay-in-mode / lock-all / hide + style prefs from store
- * 5. `onSelectionChange` → `setSelectedDrawingId` (toolbar style bar)
- * 6. `onToolChange` → `setDrawingTool` (layer auto-cursor after place when not stay-in-mode)
+ * 4. `symbolProvider` → `store.symbol` so new placements stamp `meta.symbol`
+ * 5. Seed magnet / stay-in-mode / lock-all / hide + style prefs from store
+ * 6. `onSelectionChange` → `setSelectedDrawingId` (toolbar style bar)
+ * 7. `onToolChange` → `setDrawingTool` (layer auto-cursor after place when not stay-in-mode)
  *
  * Invoked from {@link setDataToChart} after OHLCV is applied so the overlay tracks reloads.
  */
@@ -129,13 +213,15 @@ function ensureDrawingLayer() {
 
   try {
     const layer = new DrawingLayer(el, pricePane.chart, candle as never);
-    // Geometry + active tool from persisted / current store
-    layer.setDrawings(store.drawings);
+    // Geometry for the active symbol only (+ untagged legacy)
+    layer.setDrawings(visibleDrawingsForActiveSymbol());
     layer.setTool(store.drawingTool);
-    // Layer → store: user drawing list after place, drag end, delete, clear
-    layer.setOnChange((list) => setDrawings(list));
+    // Layer → store: merge per-symbol so other tickers keep their drawings
+    layer.setOnChange((list) => onLayerDrawingsChange(list));
     // Magnet snap needs live OHLCV (weak/strong modes)
     layer.setBarsProvider(() => store.bars);
+    // Anchor new placements to the active chart symbol
+    layer.setSymbolProvider(() => store.symbol);
     // Interaction prefs (defaults match DrawingPrefs / DrawingUi when store partial)
     layer.setMagnet(store.drawingUi?.magnet ?? 'off');
     layer.setStayInMode(!!store.drawingUi?.stayInMode);
@@ -208,6 +294,15 @@ export function ensurePriceSeries(chartType?: ChartType): void {
     priceSeriesThemeUnreg = undefined;
   }
 
+  // Respect chart [N] last-value / name labels pref on the new series
+  try {
+    pricePane.series['candle'].applyOptions({
+      lastValueVisible: store.lastValueLabelsVisible !== false,
+    });
+  } catch {
+    /* ignore */
+  }
+
   // Drawing layer needs the new series for price ↔ Y
   const layer = getDrawingLayer();
   if (layer) {
@@ -221,6 +316,12 @@ export function ensurePriceSeries(chartType?: ChartType): void {
 /**
  * Full OHLCV replace for history loads / symbol changes / chart-type switches.
  * Do **not** call this on every live tick — use PaneManager.appendBar instead.
+ *
+ * When `fit` is true (default — full loads / symbol change):
+ * - Clears trade/shape/debug markers
+ * - Clears Pine script drawings, plot fills, indicator overlays, equity
+ * - Re-syncs **symbol-filtered** user drawings onto the layer
+ * - Fits time scale + auto-scale via {@link PaneManager.afterDataReload}
  *
  * Series mutations are isolated: LWC failures are logged + status-bar surfaced
  * instead of bubbling through Solid effects (which would unmount the tree).
@@ -246,6 +347,18 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
           context: 'Clear markers failed',
           status: false,
         });
+      }
+    }
+
+    // Full history replace (symbol / interval): wipe script visuals before paint
+    if (fit) {
+      clearChartScriptState(mgr, getDrawingLayer());
+      // Drop selection that may point at a drawing not on the new symbol
+      setSelectedDrawingId(null);
+      try {
+        getDrawingLayer()?.setSelectedId?.(null);
+      } catch {
+        /* optional */
       }
     }
 
@@ -303,6 +416,13 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
           color: b.close >= b.open ? volColors.up : volColors.down,
         })),
       );
+      try {
+        volPane.series['volume'].applyOptions({
+          lastValueVisible: store.lastValueLabelsVisible !== false,
+        });
+      } catch {
+        /* ignore */
+      }
     }
 
     // Volume/indicator setData can reset local logical range — re-lock to price
@@ -314,11 +434,18 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       }
     }
 
-    // Ensure overlay exists after candle series is ready; re-sync store drawings
-    // (drawings only on the active multi-chart slot)
+    // Re-assert series name / last-value labels after series create/paint
+    try {
+      mgr.applyLastValueLabelsToAllSeries?.();
+    } catch {
+      /* optional */
+    }
+
+    // Ensure overlay exists after candle series is ready; re-sync **per-symbol**
+    // user drawings (drawings only on the active multi-chart slot)
     ensureDrawingLayer();
     try {
-      getDrawingLayer()?.setDrawings(store.drawings);
+      getDrawingLayer()?.setDrawings(visibleDrawingsForActiveSymbol());
     } catch (err: unknown) {
       reportUiError(err, {
         source: 'chart',

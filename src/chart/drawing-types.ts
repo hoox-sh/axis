@@ -93,8 +93,21 @@ export interface DrawingBase {
     extendRight?: boolean;
     extendLeft?: boolean;
   };
-  /** Free-form metadata; `meta.locked` is treated like top-level `locked`. */
-  meta?: { text?: string; locked?: boolean; [key: string]: unknown };
+  /**
+   * Free-form metadata.
+   * - `meta.locked` is treated like top-level `locked`
+   * - `meta.symbol` anchors the drawing to a chart symbol (uppercased ticker);
+   *   the layer only paints drawings for the active symbol (plus untagged legacy)
+   * - `meta.hidden` hides the drawing in the layer / Layers panel
+   */
+  meta?: {
+    text?: string;
+    locked?: boolean;
+    /** Uppercased ticker this drawing belongs to (e.g. `BTCUSDT`). */
+    symbol?: string;
+    hidden?: boolean;
+    [key: string]: unknown;
+  };
 }
 
 /** Full-width horizontal price level. */
