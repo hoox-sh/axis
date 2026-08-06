@@ -23,6 +23,8 @@ blob-report/
 !.env.example
 *.pem
 .wrangler/
+# Local Worker deploy config (copy from worker/wrangler.toml.example)
+worker/wrangler.toml
 
 # Editors / OS
 .DS_Store

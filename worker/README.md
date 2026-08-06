@@ -28,10 +28,15 @@ This Worker provides the **production backend** for the PWA. It can:
 ## Local dev
 
 ```bash
-cd frontend/worker
-npm install
-npm run dev      # starts wrangler dev on http://127.0.0.1:8787
+cd worker
+cp wrangler.toml.example wrangler.toml   # gitignored local config
+# edit D1 id, ALLOWED_ORIGIN, GITHUB_OAUTH_CLIENT_ID, …
+bun install   # or npm install
+bun run dev   # wrangler dev on http://127.0.0.1:8787
 ```
+
+`wrangler.toml` is **gitignored** — only `wrangler.toml.example` is committed.
+Copy the example once per machine and fill in bindings / OAuth client ids.
 
 The PWA's `endpoint` input can be pointed at this URL for an end-to-end
 local stack.
@@ -53,7 +58,7 @@ wrangler r2 bucket create indicator-bundles
 wrangler deploy
 ```
 
-Paste the returned IDs into `wrangler.toml`.
+Paste the returned IDs into your local `wrangler.toml` (from the example).
 
 ## Endpoints
 
