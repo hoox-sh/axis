@@ -26,8 +26,9 @@
  * - Chart workspace owns the **symbol · interval** chip (`.axis-slot-badge`).
  * - Price pane **never** shows a redundant "PRICE" label — that conflicted with
  *   the slot chip and any overlay indicator chips.
- * - Price pane script chips sit **below** the slot badge via CSS
- *   (`.axis-pane-badge-root[data-pane-type="price"]`).
+ * - Price pane script chips sit on the **top row**, offset **right of the drawing
+ *   tool rail** (`.axis-pane-badge-root[data-pane-type="price"]`) so they are not
+ *   covered by the DrawingToolbar / style bar (ChartHost sibling, higher paint).
  * - Volume / equity / indicator panes keep their own name chips at pane top.
  *
  * @module chart/pane-badge

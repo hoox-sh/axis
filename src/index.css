@@ -1598,7 +1598,10 @@ body.axis-panel-dragging {
   position: absolute;
   top: 4px;
   left: 6px;
-  z-index: 20;
+  /* Above DrawingToolbar (z-20) stacking: badges live in the pane, toolbar is a
+     ChartHost sibling painted later — keep badges clear of the tool rail via
+     offset on price, and a high z-index for non-price panes. */
+  z-index: 30;
   display: flex;
   flex-direction: column;
   flex-wrap: nowrap;
@@ -1607,9 +1610,16 @@ body.axis-panel-dragging {
   max-width: calc(100% - 48px);
   pointer-events: none;
 }
-/* Price pane sits under the workspace symbol · interval chip (slot chrome). */
+/*
+ * Price pane: same top row as the symbol · interval chip, offset right so we
+ * clear both the chip and the drawing tool rail / style bar (toolbar is a
+ * ChartHost sibling painted over the pane — offset is required, not only z-index).
+ * DrawingToolbar uses `top-14` so multi-row script stacks stay above the rail.
+ */
 .axis-pane-badge-root[data-pane-type='price'] {
-  top: 28px;
+  top: 4px;
+  left: 7.25rem;
+  max-width: min(22rem, calc(100% - 8.5rem));
 }
 .axis-pane-badge-root.is-empty {
   display: none;

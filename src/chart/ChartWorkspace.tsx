@@ -68,10 +68,10 @@ export const ChartWorkspace: Component = () => {
                 }}
               >
                 {/* Market title — sole top-left identity chip.
-                    Price pane badges (indicators) stack below via CSS offset;
-                    bare "PRICE" labels are suppressed to avoid triple-overlap. */}
+                    Price pane script badges sit on the same top row, offset right
+                    of the drawing rail (see index.css). Bare "PRICE" suppressed. */}
                 <div
-                  class="absolute top-1 left-1.5 z-[21] pointer-events-none max-w-[min(100%-3rem,20rem)]"
+                  class="absolute top-1 left-1.5 z-[32] pointer-events-none max-w-[min(100%-3rem,20rem)]"
                   data-axis-slot-badge
                 >
                   <span
