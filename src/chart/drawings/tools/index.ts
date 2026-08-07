@@ -28,6 +28,12 @@ import './shapes';
 import './measure-trading';
 import './annotation';
 import './patterns';
+import './gann';
+import './fib-extra';
+import './shapes-extra';
+import './patterns-extra';
+import './annotation-extra';
+import './trading-extra';
 
 export {
   registerToolHandler,

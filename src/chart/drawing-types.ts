@@ -47,27 +47,44 @@ export type DrawingToolId =
   | 'trendAngle'
   | 'channel'
   | 'pitchfork'
+  | 'gannFan'
+  | 'gannBox'
+  | 'gannSquare'
   | 'rect'
+  | 'rotatedRect'
   | 'ellipse'
   | 'arrow'
+  | 'arrowMarkUp'
+  | 'arrowMarkDown'
   | 'triangle'
   | 'polyline'
   | 'path'
+  | 'arc'
+  | 'curve'
   | 'brush'
   | 'highlighter'
   | 'fib'
   | 'fibext'
   | 'fibtime'
   | 'fibchannel'
+  | 'fibArc'
+  | 'fibWedge'
+  | 'fibCircles'
   | 'measure'
   | 'dateRange'
   | 'priceRange'
+  | 'datePriceRange'
   | 'text'
   | 'priceLabel'
   | 'callout'
   | 'note'
+  | 'flag'
+  | 'anchoredText'
   | 'long'
   | 'short'
+  | 'forecast'
+  | 'xabcd'
+  | 'headShoulders'
   | 'eraser';
 
 /** Placed drawing kinds only (excludes select cursor and eraser). */
@@ -157,14 +174,24 @@ export interface TwoPointDrawing extends DrawingBase {
     | 'infoLine'
     | 'trendAngle'
     | 'rect'
+    | 'rotatedRect'
     | 'ellipse'
     | 'arrow'
+    | 'arc'
+    | 'curve'
     | 'fib'
     | 'fibtime'
+    | 'fibArc'
+    | 'fibCircles'
+    | 'gannFan'
+    | 'gannBox'
+    | 'gannSquare'
     | 'measure'
     | 'dateRange'
     | 'priceRange'
+    | 'datePriceRange'
     | 'callout'
+    | 'forecast'
     | 'long'
     | 'short';
   p1: Point;
@@ -178,11 +205,14 @@ export interface MultiPointDrawing extends DrawingBase {
     | 'pitchfork'
     | 'fibext'
     | 'fibchannel'
+    | 'fibWedge'
     | 'triangle'
     | 'polyline'
     | 'path'
     | 'brush'
-    | 'highlighter';
+    | 'highlighter'
+    | 'xabcd'
+    | 'headShoulders';
   /** Primary anchors (also mirrored to p1/p2 when length ≥ 2 for legacy paths). */
   points: Point[];
   p1?: Point;
@@ -192,7 +222,15 @@ export interface MultiPointDrawing extends DrawingBase {
 
 /** Point label with free text (prompted on place). */
 export interface TextDrawing extends DrawingBase {
-  kind: 'text' | 'priceLabel' | 'note' | 'crossline';
+  kind:
+    | 'text'
+    | 'priceLabel'
+    | 'note'
+    | 'crossline'
+    | 'flag'
+    | 'anchoredText'
+    | 'arrowMarkUp'
+    | 'arrowMarkDown';
   p1: Point;
   text: string;
 }
@@ -253,7 +291,11 @@ export function toolArity(tool: DrawingToolId): 0 | 1 | 2 | 3 | 'n' {
     tool === 'text' ||
     tool === 'priceLabel' ||
     tool === 'note' ||
-    tool === 'crossline'
+    tool === 'crossline' ||
+    tool === 'flag' ||
+    tool === 'anchoredText' ||
+    tool === 'arrowMarkUp' ||
+    tool === 'arrowMarkDown'
   ) {
     return 1;
   }
@@ -262,6 +304,7 @@ export function toolArity(tool: DrawingToolId): 0 | 1 | 2 | 3 | 'n' {
     tool === 'pitchfork' ||
     tool === 'fibext' ||
     tool === 'fibchannel' ||
+    tool === 'fibWedge' ||
     tool === 'triangle'
   ) {
     return 3;
@@ -270,7 +313,9 @@ export function toolArity(tool: DrawingToolId): 0 | 1 | 2 | 3 | 'n' {
     tool === 'polyline' ||
     tool === 'path' ||
     tool === 'brush' ||
-    tool === 'highlighter'
+    tool === 'highlighter' ||
+    tool === 'xabcd' ||
+    tool === 'headShoulders'
   ) {
     return 'n';
   }
@@ -319,18 +364,34 @@ export function toolLabel(tool: DrawingToolId): string {
       return 'Parallel channel';
     case 'pitchfork':
       return 'Pitchfork';
+    case 'gannFan':
+      return 'Gann fan';
+    case 'gannBox':
+      return 'Gann box';
+    case 'gannSquare':
+      return 'Gann square';
     case 'rect':
       return 'Rectangle';
+    case 'rotatedRect':
+      return 'Rotated rectangle';
     case 'ellipse':
       return 'Ellipse';
     case 'arrow':
       return 'Arrow';
+    case 'arrowMarkUp':
+      return 'Arrow mark up';
+    case 'arrowMarkDown':
+      return 'Arrow mark down';
     case 'triangle':
       return 'Triangle';
     case 'polyline':
       return 'Polyline';
     case 'path':
       return 'Path';
+    case 'arc':
+      return 'Arc';
+    case 'curve':
+      return 'Curve';
     case 'brush':
       return 'Brush';
     case 'highlighter':
@@ -343,12 +404,20 @@ export function toolLabel(tool: DrawingToolId): string {
       return 'Fib time zones';
     case 'fibchannel':
       return 'Fib channel';
+    case 'fibArc':
+      return 'Fib arc';
+    case 'fibWedge':
+      return 'Fib wedge';
+    case 'fibCircles':
+      return 'Fib circles';
     case 'measure':
       return 'Measure';
     case 'dateRange':
       return 'Date range';
     case 'priceRange':
       return 'Price range';
+    case 'datePriceRange':
+      return 'Date + price range';
     case 'text':
       return 'Text';
     case 'priceLabel':
@@ -357,10 +426,20 @@ export function toolLabel(tool: DrawingToolId): string {
       return 'Callout';
     case 'note':
       return 'Note';
+    case 'flag':
+      return 'Flag';
+    case 'anchoredText':
+      return 'Anchored text';
     case 'long':
       return 'Long position';
     case 'short':
       return 'Short position';
+    case 'forecast':
+      return 'Forecast';
+    case 'xabcd':
+      return 'XABCD pattern';
+    case 'headShoulders':
+      return 'Head & shoulders';
     case 'eraser':
       return 'Eraser';
   }
