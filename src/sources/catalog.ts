@@ -53,8 +53,11 @@ import { sanitizeBar } from '../data/parse-bars';
 import {
   DATA_MANAGER_SOURCE_ID,
   dataManagerLabel,
+  getDataManagerSelection,
   resolveDataManagerBars,
 } from '../data/data-manager-source';
+import { sliceBarsForLoad } from '../data/bars-cache';
+import { expandCachedSeriesToNow } from '../data/expand-cache';
 import { getUploadedBars } from './upload-store';
 
 export type SourceConfigSchema = ConfigSchema;
@@ -336,8 +339,8 @@ export const csvUpload: SourcePlugin = {
 
 /**
  * Local OHLCV from the Data Source Manager bars-cache (IndexedDB / memory).
- * Pick a series in the datasets browser, or Load uses the best match for
- * the current symbol + interval.
+ * Pick a series in the Dataset manager (optional date range / max bars), or
+ * Load uses the best match for the current symbol + interval.
  */
 export const dataManagerSource: SourcePlugin = {
   id: DATA_MANAGER_SOURCE_ID,
@@ -345,18 +348,42 @@ export const dataManagerSource: SourcePlugin = {
   kind: 'source',
   builtIn: true,
   description:
-    'Load OHLCV from the Data Source Manager local cache. Backfill offline series first, then select Load.',
-  capabilities: { offline: true },
+    'Load OHLCV from the Data Source Manager local cache, then auto-fill the gap to now via the venue REST source. Live uses the matching exchange stream and expands the dataset.',
+  // Offline cache read; network used only to close cache→now when venue is available
+  capabilities: { offline: true, needsNetwork: true },
   configSchema: {},
-  async fetchHistorical({ symbol, interval }) {
+  async fetchHistorical({ symbol, interval, signal }) {
     const resolved = await resolveDataManagerBars(symbol, interval);
     if (!resolved?.bars?.length) {
       throw new Error(
-        'No cached dataset for this symbol. Open Data Source Manager → Datasets, or run a backfill first.',
+        'No cached dataset for this symbol. Open Data Source Manager → Dataset manager, or run a backfill first.',
       );
     }
     void dataManagerLabel(resolved);
-    return resolved.bars;
+
+    // Close gap from cache newest → now; merge into bars-cache (dataset expands)
+    let bars = resolved.bars;
+    try {
+      const exp = await expandCachedSeriesToNow(
+        resolved.sourceId,
+        resolved.symbol,
+        resolved.interval,
+        { signal },
+      );
+      if (exp.bars.length) bars = exp.bars;
+    } catch {
+      /* keep cached bars if expand fails (offline) */
+    }
+
+    // Honour from + maxBars from selection; open upper bound after expand
+    const sel = getDataManagerSelection();
+    if (sel && (sel.fromSec != null || sel.maxBars != null)) {
+      bars = sliceBarsForLoad(bars, {
+        fromSec: sel.fromSec,
+        maxBars: sel.maxBars,
+      });
+    }
+    return bars;
   },
 };
 

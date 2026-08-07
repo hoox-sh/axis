@@ -31,13 +31,15 @@ import {
   barsCacheKey,
   getCachedBars,
   listCachedSeries,
+  sliceBarsForLoad,
+  type BarLoadWindow,
   type BarsCacheMeta,
 } from './bars-cache';
 
 /** Source plugin id registered in the sources catalog. */
 export const DATA_MANAGER_SOURCE_ID = 'data-manager';
 
-export interface DataManagerSelection {
+export interface DataManagerSelection extends BarLoadWindow {
   sourceId: string;
   symbol: string;
   interval: string;
@@ -45,16 +47,30 @@ export interface DataManagerSelection {
 
 let selection: DataManagerSelection | null = null;
 
+function normalizeWindow(w?: BarLoadWindow | null): BarLoadWindow {
+  if (!w) return {};
+  return {
+    fromSec: w.fromSec ?? null,
+    toSec: w.toSec ?? null,
+    maxBars: w.maxBars ?? null,
+  };
+}
+
 /** Remember which cache entry the Data Manager source should load. */
 export function setDataManagerSelection(
   sourceId: string,
   symbol: string,
   interval: string,
+  window?: BarLoadWindow | null,
 ): void {
+  const win = normalizeWindow(window);
   selection = {
     sourceId: String(sourceId || '').trim(),
     symbol: String(symbol || '').trim().toUpperCase(),
     interval: String(interval || '').trim(),
+    fromSec: win.fromSec,
+    toSec: win.toSec,
+    maxBars: win.maxBars,
   };
 }
 
@@ -75,12 +91,24 @@ export interface ResolvedCacheSeries {
   meta?: BarsCacheMeta;
 }
 
+function windowFromSelection(sel: DataManagerSelection | null): BarLoadWindow | null {
+  if (!sel) return null;
+  if (sel.fromSec == null && sel.toSec == null && sel.maxBars == null) return null;
+  return {
+    fromSec: sel.fromSec,
+    toSec: sel.toSec,
+    maxBars: sel.maxBars,
+  };
+}
+
 /**
  * Resolve bars for the Data Manager source.
  *
  * 1. Explicit selection (from datasets modal) when it has bars
  * 2. Best match for requested symbol + interval (most bars)
  * 3. Best match for symbol alone (any interval) if still empty
+ *
+ * Honours optional load window (date range / max bars) on the selection.
  */
 export async function resolveDataManagerBars(
   symbol: string,
@@ -92,8 +120,10 @@ export async function resolveDataManagerBars(
   if (selection?.sourceId) {
     const sSym = selection.symbol || sym;
     const sIv = selection.interval || iv;
-    const bars = await getCachedBars(selection.sourceId, sSym, sIv);
-    if (bars.length) {
+    const raw = await getCachedBars(selection.sourceId, sSym, sIv);
+    if (raw.length) {
+      const bars = sliceBarsForLoad(raw, windowFromSelection(selection));
+      if (!bars.length) return null;
       return {
         sourceId: selection.sourceId,
         symbol: sSym,
@@ -118,11 +148,24 @@ export async function resolveDataManagerBars(
 
   if (!pick) return null;
 
-  const bars = await getCachedBars(pick.sourceId, pick.symbol, pick.interval);
-  if (!bars.length) return null;
+  const raw = await getCachedBars(pick.sourceId, pick.symbol, pick.interval);
+  if (!raw.length) return null;
 
-  // Stick selection so subsequent reloads stay on the same series
-  setDataManagerSelection(pick.sourceId, pick.symbol, pick.interval);
+  // Stick series selection (preserve any prior load window if same key)
+  const sameKey =
+    selection &&
+    selection.sourceId === pick.sourceId &&
+    selection.symbol === pick.symbol &&
+    selection.interval === pick.interval;
+  setDataManagerSelection(
+    pick.sourceId,
+    pick.symbol,
+    pick.interval,
+    sameKey ? windowFromSelection(selection) : null,
+  );
+
+  const bars = sliceBarsForLoad(raw, windowFromSelection(selection));
+  if (!bars.length) return null;
 
   return {
     sourceId: pick.sourceId,

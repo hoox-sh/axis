@@ -68,6 +68,7 @@ import {
   defaultStreamForSource,
   type StreamPlugin,
 } from './catalog';
+import { noteDataManagerLiveBar } from '../data/expand-cache';
 import { classifyTransport } from '../ui/telemetry';
 
 export type { StreamPlugin };
@@ -201,6 +202,9 @@ export function startLive(
       const manager = getManager();
       if (manager) manager.appendBar(bar);
       noteTick(bar.close, bar.time);
+
+      // Data Manager: grow the underlying bars-cache dataset with live ticks
+      noteDataManagerLiveBar(bar);
 
       const timeAdvanced = lastSeenBarTime > 0 && bar.time > lastSeenBarTime;
       lastSeenBarTime = bar.time;

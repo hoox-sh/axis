@@ -55,6 +55,7 @@
 import type { Bar } from '../store/types';
 import type { StreamPlugin as UnifiedStreamPlugin } from '../plugins/types';
 import { registry } from '../plugins/registry';
+import { getDataManagerSelection } from '../data/data-manager-source';
 import { openReconnectableWs } from './reconnect-ws';
 
 /** @deprecated Prefer importing StreamPlugin from plugins/types */
@@ -502,8 +503,19 @@ export function listDynamicStreamIds(): string[] {
 
 /** Pick a sensible stream for the current historical source. */
 export function defaultStreamForSource(sourceId: string): string {
-  if (sourceId === 'mock-walk' || sourceId === 'csv-upload' || sourceId === 'data-manager') {
+  if (sourceId === 'mock-walk' || sourceId === 'csv-upload') {
     return 'mock-poll';
+  }
+  // Data Manager is a cache front-end: stream should match the *venue* series,
+  // not mock-poll (live candles from the exchange that produced the dataset).
+  if (sourceId === 'data-manager') {
+    const sel = getDataManagerSelection();
+    const venue = sel?.sourceId ? String(sel.sourceId) : '';
+    if (venue && venue !== 'data-manager' && venue !== 'csv-upload') {
+      return defaultStreamForSource(venue);
+    }
+    // Prefer a real venue WS over synthetic mock when no selection yet
+    return 'binance-ws';
   }
   if (sourceId === 'okx-rest') return 'okx-ws';
   if (sourceId === 'bybit-rest') return 'bybit-ws';

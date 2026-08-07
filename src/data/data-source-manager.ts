@@ -40,7 +40,12 @@ import { getManager, setDataToChart } from '../chart/manager-access';
 import { getSource, sourcePageLimit } from '../sources/catalog';
 import { DATA_MANAGER_SOURCE_ID } from './data-manager-source';
 import { normalizeHistoricalBars } from './parse-bars';
-import { getCachedBars, putCachedBars } from './bars-cache';
+import {
+  getCachedBars,
+  putCachedBars,
+  sliceBarsForLoad,
+  type BarLoadWindow,
+} from './bars-cache';
 import {
   findBarGaps,
   intervalToSec,
@@ -731,25 +736,41 @@ async function runJob(j: InternalJob): Promise<void> {
  * Load cached bars for a job (or key) onto the chart.
  * Does **not** re-run the network backfill.
  */
-export async function applyJobToChart(jobId: string): Promise<boolean> {
+export async function applyJobToChart(
+  jobId: string,
+  window?: BarLoadWindow | null,
+): Promise<boolean> {
   const j = internals.get(jobId);
   const meta = j || managerState.jobs.find((x) => x.id === jobId);
   if (!meta) return false;
-  return applyCachedToChart(meta.sourceId, meta.symbol, meta.interval);
+  return applyCachedToChart(meta.sourceId, meta.symbol, meta.interval, window);
 }
 
 /**
  * Paint chart from bars-cache for source/symbol/interval.
- * Uses full cache when available; clamps only if empty of extras needed.
+ *
+ * Closes the gap from cache newest → now via the venue REST source (dataset
+ * expands in bars-cache), then optional {@link BarLoadWindow} trims by from /
+ * maxBars before the chart soft-clamp. Upper date bound is opened so the
+ * expanded tail reaches the chart.
  */
 export async function applyCachedToChart(
   sourceId: string,
   symbol: string,
   interval: string,
+  window?: BarLoadWindow | null,
 ): Promise<boolean> {
   const sym = String(symbol || '').trim().toUpperCase();
   const iv = String(interval || store.interval || '1d');
   const srcId = String(sourceId || store.source || '');
+
+  // Expand dataset toward now (venue REST) before painting
+  try {
+    const { expandCachedSeriesToNow } = await import('./expand-cache');
+    await expandCachedSeriesToNow(srcId, sym, iv);
+  } catch (err) {
+    console.warn('[applyCachedToChart] expand to now failed', err);
+  }
 
   let bars: Bar[];
   try {
@@ -757,6 +778,17 @@ export async function applyCachedToChart(
   } catch {
     bars = [];
   }
+  if (!bars.length) return false;
+
+  // Honour from + maxBars; drop toSec so newly filled bars are included
+  const loadWin: BarLoadWindow | null = window
+    ? {
+        fromSec: window.fromSec,
+        toSec: null,
+        maxBars: window.maxBars,
+      }
+    : null;
+  bars = sliceBarsForLoad(bars, loadWin);
   if (!bars.length) return false;
 
   // Prefer full accumulated history; soft-clamp only if absurdly large for chart
@@ -833,6 +865,23 @@ export function pastDateInputToSec(value: string): number | null {
   if (!m) return null;
   const t = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 1000;
   return Number.isFinite(t) ? t : null;
+}
+
+/** Parse `YYYY-MM-DD` → inclusive end of that UTC day (23:59:59). */
+export function dateInputToEndSec(value: string): number | null {
+  const start = pastDateInputToSec(value);
+  if (start == null) return null;
+  return start + 86_400 - 1;
+}
+
+/** Format unix sec → `YYYY-MM-DD` (UTC) for `<input type="date">`. */
+export function secToDateInput(sec: number | null | undefined): string {
+  if (sec == null || !Number.isFinite(sec)) return '';
+  try {
+    return new Date(sec * 1000).toISOString().slice(0, 10);
+  } catch {
+    return '';
+  }
 }
 
 /** @internal test helper */

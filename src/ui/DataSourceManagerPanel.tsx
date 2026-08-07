@@ -22,11 +22,12 @@
  *
  * Form (symbol / source / interval / past date) only starts jobs; all fetch
  * work runs in {@link data-source-manager}. Chart paint is opt-in per job.
+ * Opens the Dataset manager for filtered browse + date-range / max-bars load.
  *
  * FloatableShell id `datasource`.
  */
 
-import { Component, For, Show, createSignal } from 'solid-js';
+import { Component, For, Show, createMemo, createSignal } from 'solid-js';
 import { store, isPanelOpen } from '../store';
 import { listSources } from '../sources/catalog';
 import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
@@ -84,6 +85,25 @@ function statusLabel(job: DataSourceJob): string {
   }
 }
 
+type JobFilter = 'all' | 'active' | 'done' | 'error';
+
+function jobMatchesFilter(job: DataSourceJob, filter: JobFilter): boolean {
+  switch (filter) {
+    case 'active':
+      return (
+        job.status === 'running' ||
+        job.status === 'pending' ||
+        job.status === 'paused'
+      );
+    case 'done':
+      return job.status === 'complete' || job.status === 'cancelled';
+    case 'error':
+      return job.status === 'error';
+    default:
+      return true;
+  }
+}
+
 /** Dockable / floatable Data Source Manager. */
 export const DataSourceManagerPanel: Component = () => {
   const [symbol, setSymbol] = createSignal(store.symbol || 'BTCUSDT');
@@ -95,9 +115,22 @@ export const DataSourceManagerPanel: Component = () => {
   const [formMsg, setFormMsg] = createSignal('');
   const [applyingId, setApplyingId] = createSignal<string | null>(null);
   const [datasetsOpen, setDatasetsOpen] = createSignal(false);
+  const [jobFilter, setJobFilter] = createSignal<JobFilter>('all');
+  const [jobQuery, setJobQuery] = createSignal('');
 
   const sources = () =>
     listSources().filter((s) => s.id !== DATA_MANAGER_SOURCE_ID);
+
+  const filteredJobs = createMemo(() => {
+    const f = jobFilter();
+    const q = jobQuery().trim().toLowerCase();
+    return dataSourceManagerState.jobs.filter((job) => {
+      if (!jobMatchesFilter(job, f)) return false;
+      if (!q) return true;
+      const hay = `${job.symbol} ${job.interval} ${job.sourceId} ${job.status}`.toLowerCase();
+      return q.split(/\s+/).filter(Boolean).every((tok) => hay.includes(tok));
+    });
+  });
 
   const onStart = (e?: Event) => {
     e?.preventDefault();
@@ -149,7 +182,8 @@ export const DataSourceManagerPanel: Component = () => {
           <p class="text-muted m-0 leading-snug">
             Backfill OHLCV in the <strong>background</strong> down to a past date,
             then <strong>validate</strong> the series and <strong>fill gaps</strong>.
-            Chart and live streams stay free; use <em>Load to chart</em> when ready.
+            Chart and live streams stay free; open the{' '}
+            <em>Dataset manager</em> to load a date range or max bars.
           </p>
 
           <button
@@ -157,10 +191,10 @@ export const DataSourceManagerPanel: Component = () => {
             class="sc-btn sc-btn-ghost w-full"
             onClick={() => setDatasetsOpen(true)}
             data-testid="axis-datasource-open-datasets"
-            title="Browse downloaded OHLCV datasets and coverage maps"
+            title="Browse cached OHLCV, filter the table, load date range or max bars"
           >
             <Icons.layers />
-            <span>Cached datasets</span>
+            <span>Dataset manager</span>
           </button>
 
           <CachedDatasetsModal
@@ -259,146 +293,205 @@ export const DataSourceManagerPanel: Component = () => {
           </form>
 
           <div class="flex flex-col gap-2" data-testid="axis-datasource-jobs">
-            <div class="text-muted text-[0.72rem] uppercase tracking-wide">Jobs</div>
+            <div class="flex items-center justify-between gap-2">
+              <div class="text-muted text-[0.72rem] uppercase tracking-wide">Jobs</div>
+              <Show when={dataSourceManagerState.jobs.length}>
+                <span class="text-[0.68rem] text-muted tabular-nums">
+                  {filteredJobs().length}
+                  {filteredJobs().length !== dataSourceManagerState.jobs.length
+                    ? ` / ${dataSourceManagerState.jobs.length}`
+                    : ''}
+                </span>
+              </Show>
+            </div>
+
+            <Show when={dataSourceManagerState.jobs.length}>
+              <div
+                class="flex flex-col gap-1.5"
+                data-testid="axis-datasource-jobs-filters"
+              >
+                <input
+                  type="search"
+                  class="sc-input"
+                  placeholder="Filter jobs…"
+                  value={jobQuery()}
+                  onInput={(e) => setJobQuery(e.currentTarget.value)}
+                  data-testid="axis-datasource-jobs-query"
+                  autocomplete="off"
+                  spellcheck={false}
+                />
+                <div class="flex flex-wrap gap-1">
+                  <For
+                    each={
+                      [
+                        ['all', 'All'],
+                        ['active', 'Active'],
+                        ['done', 'Done'],
+                        ['error', 'Error'],
+                      ] as const
+                    }
+                  >
+                    {([id, label]) => (
+                      <button
+                        type="button"
+                        class={`sc-btn sc-btn-sm ${
+                          jobFilter() === id ? 'sc-btn-primary' : 'sc-btn-ghost'
+                        }`}
+                        onClick={() => setJobFilter(id)}
+                        data-testid={`axis-datasource-jobs-filter-${id}`}
+                      >
+                        {label}
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </div>
+            </Show>
+
             <Show
               when={dataSourceManagerState.jobs.length}
               fallback={
                 <div class="text-muted text-[0.78rem] py-2">No jobs yet.</div>
               }
             >
-              <For each={dataSourceManagerState.jobs}>
-                {(job) => {
-                  const pct = () => Math.round(jobProgress(job) * 100);
-                  return (
-                    <div
-                      class="border border-[var(--border)] rounded p-2 flex flex-col gap-1.5"
-                      data-testid={`axis-datasource-job-${job.id}`}
-                      data-status={job.status}
-                    >
-                      <div class="flex items-start justify-between gap-2">
-                        <div class="min-w-0">
-                          <div class="font-medium truncate">
-                            {job.symbol} · {job.interval}
-                          </div>
-                          <div class="text-muted text-[0.72rem] truncate">
-                            {job.sourceId} · {statusLabel(job)}
-                          </div>
-                        </div>
-                        <span class="text-[0.72rem] text-muted shrink-0">{pct()}%</span>
-                      </div>
-
+              <Show
+                when={filteredJobs().length}
+                fallback={
+                  <div class="text-muted text-[0.78rem] py-2">
+                    No jobs match the current filter.
+                  </div>
+                }
+              >
+                <For each={filteredJobs()}>
+                  {(job) => {
+                    const pct = () => Math.round(jobProgress(job) * 100);
+                    return (
                       <div
-                        class="h-1.5 rounded bg-[var(--border)] overflow-hidden"
-                        role="progressbar"
-                        aria-valuenow={pct()}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
+                        class="border border-[var(--border)] rounded p-2 flex flex-col gap-1.5"
+                        data-testid={`axis-datasource-job-${job.id}`}
+                        data-status={job.status}
                       >
+                        <div class="flex items-start justify-between gap-2">
+                          <div class="min-w-0">
+                            <div class="font-medium truncate">
+                              {job.symbol} · {job.interval}
+                            </div>
+                            <div class="text-muted text-[0.72rem] truncate">
+                              {job.sourceId} · {statusLabel(job)}
+                            </div>
+                          </div>
+                          <span class="text-[0.72rem] text-muted shrink-0">{pct()}%</span>
+                        </div>
+
                         <div
-                          class="h-full bg-[var(--accent,var(--indigo,#6366f1))] transition-[width] duration-200"
-                          style={{ width: `${pct()}%` }}
-                        />
-                      </div>
-
-                      <div class="text-[0.72rem] text-muted grid grid-cols-2 gap-x-2">
-                        <span>Bars: {job.barsFetched}</span>
-                        <span>Pages: {job.pagesFetched}</span>
-                        <span>Oldest: {fmtTime(job.oldestSec)}</span>
-                        <span>Newest: {fmtTime(job.newestSec)}</span>
-                        <span>Past target: {fmtTime(job.targetFromSec)}</span>
-                        <span>End: {fmtTime(job.targetToSec)}</span>
-                        <span>
-                          Gaps:{' '}
-                          {job.gapsFound > 0
-                            ? `${job.gapsFound}${job.gapsFilled ? ` · filled ${job.gapsFilled}` : ''}`
-                            : job.datasetComplete
-                              ? 'none'
-                              : '—'}
-                        </span>
-                        <span>
-                          {job.datasetComplete
-                            ? 'Coverage: full'
-                            : job.status === 'complete'
-                              ? 'Coverage: partial'
-                              : `Phase: ${job.phase || '…'}`}
-                        </span>
-                      </div>
-
-                      <Show when={job.error}>
-                        <div class="text-red text-[0.72rem]">{job.error}</div>
-                      </Show>
-
-                      <div class="flex flex-wrap gap-1 mt-0.5">
-                        <Show when={job.status === 'running' || job.status === 'pending'}>
-                          <button
-                            type="button"
-                            class="sc-btn sc-btn-ghost sc-btn-sm"
-                            onClick={() => pauseBackfill(job.id)}
-                          >
-                            Pause
-                          </button>
-                          <button
-                            type="button"
-                            class="sc-btn sc-btn-ghost sc-btn-sm"
-                            onClick={() => cancelBackfill(job.id)}
-                          >
-                            Cancel
-                          </button>
-                        </Show>
-                        <Show when={job.status === 'paused'}>
-                          <button
-                            type="button"
-                            class="sc-btn sc-btn-ghost sc-btn-sm"
-                            onClick={() => resumeBackfill(job.id)}
-                          >
-                            Resume
-                          </button>
-                          <button
-                            type="button"
-                            class="sc-btn sc-btn-ghost sc-btn-sm"
-                            onClick={() => cancelBackfill(job.id)}
-                          >
-                            Cancel
-                          </button>
-                        </Show>
-                        <Show
-                          when={
-                            job.status === 'complete' ||
-                            job.barsFetched > 0
-                          }
+                          class="h-1.5 rounded bg-[var(--border)] overflow-hidden"
+                          role="progressbar"
+                          aria-valuenow={pct()}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
                         >
-                          <button
-                            type="button"
-                            class="sc-btn sc-btn-ghost sc-btn-sm"
-                            disabled={applyingId() === job.id}
-                            onClick={() => void onApply(job.id)}
-                            data-testid={`axis-datasource-apply-${job.id}`}
-                          >
-                            <Icons.download />
-                            <span>Load to chart</span>
-                          </button>
+                          <div
+                            class="h-full bg-[var(--accent,var(--indigo,#6366f1))] transition-[width] duration-200"
+                            style={{ width: `${pct()}%` }}
+                          />
+                        </div>
+
+                        <div class="text-[0.72rem] text-muted grid grid-cols-2 gap-x-2">
+                          <span>Bars: {job.barsFetched}</span>
+                          <span>Pages: {job.pagesFetched}</span>
+                          <span>Oldest: {fmtTime(job.oldestSec)}</span>
+                          <span>Newest: {fmtTime(job.newestSec)}</span>
+                          <span>Past target: {fmtTime(job.targetFromSec)}</span>
+                          <span>End: {fmtTime(job.targetToSec)}</span>
+                          <span>
+                            Gaps:{' '}
+                            {job.gapsFound > 0
+                              ? `${job.gapsFound}${job.gapsFilled ? ` · filled ${job.gapsFilled}` : ''}`
+                              : job.datasetComplete
+                                ? 'none'
+                                : '—'}
+                          </span>
+                          <span>
+                            {job.datasetComplete
+                              ? 'Coverage: full'
+                              : job.status === 'complete'
+                                ? 'Coverage: partial'
+                                : `Phase: ${job.phase || '…'}`}
+                          </span>
+                        </div>
+
+                        <Show when={job.error}>
+                          <div class="text-red text-[0.72rem]">{job.error}</div>
                         </Show>
-                        <Show
-                          when={
-                            job.status === 'complete' ||
-                            job.status === 'error' ||
-                            job.status === 'cancelled'
-                          }
-                        >
-                          <button
-                            type="button"
-                            class="sc-btn sc-btn-ghost sc-btn-sm"
-                            onClick={() => dismissJob(job.id)}
-                            title="Remove from list"
+
+                        <div class="flex flex-wrap gap-1 mt-0.5">
+                          <Show when={job.status === 'running' || job.status === 'pending'}>
+                            <button
+                              type="button"
+                              class="sc-btn sc-btn-ghost sc-btn-sm"
+                              onClick={() => pauseBackfill(job.id)}
+                            >
+                              Pause
+                            </button>
+                            <button
+                              type="button"
+                              class="sc-btn sc-btn-ghost sc-btn-sm"
+                              onClick={() => cancelBackfill(job.id)}
+                            >
+                              Cancel
+                            </button>
+                          </Show>
+                          <Show when={job.status === 'paused'}>
+                            <button
+                              type="button"
+                              class="sc-btn sc-btn-ghost sc-btn-sm"
+                              onClick={() => resumeBackfill(job.id)}
+                            >
+                              Resume
+                            </button>
+                            <button
+                              type="button"
+                              class="sc-btn sc-btn-ghost sc-btn-sm"
+                              onClick={() => cancelBackfill(job.id)}
+                            >
+                              Cancel
+                            </button>
+                          </Show>
+                          <Show when={job.status === 'complete' || job.barsFetched > 0}>
+                            <button
+                              type="button"
+                              class="sc-btn sc-btn-ghost sc-btn-sm"
+                              disabled={applyingId() === job.id}
+                              onClick={() => void onApply(job.id)}
+                              data-testid={`axis-datasource-apply-${job.id}`}
+                              title="Load full cached series (use Dataset manager for date range / max bars)"
+                            >
+                              <Icons.download />
+                              <span>Load to chart</span>
+                            </button>
+                          </Show>
+                          <Show
+                            when={
+                              job.status === 'complete' ||
+                              job.status === 'error' ||
+                              job.status === 'cancelled'
+                            }
                           >
-                            <Icons.x />
-                          </button>
-                        </Show>
+                            <button
+                              type="button"
+                              class="sc-btn sc-btn-ghost sc-btn-sm"
+                              onClick={() => dismissJob(job.id)}
+                              title="Remove from list"
+                            >
+                              <Icons.x />
+                            </button>
+                          </Show>
+                        </div>
                       </div>
-                    </div>
-                  );
-                }}
-              </For>
+                    );
+                  }}
+                </For>
+              </Show>
             </Show>
           </div>
         </div>

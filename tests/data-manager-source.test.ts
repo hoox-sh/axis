@@ -48,6 +48,24 @@ describe('data-manager source', () => {
     expect(getDataManagerSelection()?.sourceId).toBe('binance-rest');
   });
 
+  it('resolve honours load window on selection', async () => {
+    await putCachedBars('binance-rest', 'BTCUSDT', '1h', [
+      bar(100),
+      bar(200),
+      bar(300),
+      bar(400),
+      bar(500),
+    ]);
+    setDataManagerSelection('binance-rest', 'BTCUSDT', '1h', {
+      fromSec: 200,
+      toSec: 400,
+      maxBars: 2,
+    });
+    const resolved = await resolveDataManagerBars('BTCUSDT', '1h');
+    expect(resolved?.bars.map((b) => b.time)).toEqual([300, 400]);
+    expect(getDataManagerSelection()?.maxBars).toBe(2);
+  });
+
   it('resolve falls back to largest matching series', async () => {
     await putCachedBars('binance-rest', 'ETHUSDT', '1d', [bar(1)]);
     await putCachedBars('okx-rest', 'ETHUSDT', '1d', [bar(1), bar(2), bar(3)]);
@@ -64,10 +82,17 @@ describe('data-manager source', () => {
   });
 
   it('fetchHistorical returns cached bars', async () => {
-    await putCachedBars('binance-rest', 'SOLUSDT', '4h', [bar(10), bar(20)]);
-    setDataManagerSelection('binance-rest', 'SOLUSDT', '4h');
+    // Use mock-walk so expand-to-now does not hit a real venue network
+    const now = Math.floor(Date.now() / 1000);
+    const step = 4 * 3600;
+    await putCachedBars('mock-walk', 'SOLUSDT', '4h', [
+      bar(now - step * 2),
+      bar(now - step),
+    ]);
+    setDataManagerSelection('mock-walk', 'SOLUSDT', '4h');
     const src = getSource(DATA_MANAGER_SOURCE_ID)!;
     const bars = await src.fetchHistorical({ symbol: 'SOLUSDT', interval: '4h' });
-    expect(bars).toHaveLength(2);
+    // At least the cached bars; expand may append toward now
+    expect(bars.length).toBeGreaterThanOrEqual(2);
   });
 });

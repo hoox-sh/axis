@@ -11,6 +11,8 @@ import {
   clearCachedBars,
   listCachedSeries,
   getCachedRecord,
+  sliceBarsForLoad,
+  countBarsForLoad,
   _resetBarsCacheForTests,
   BARS_CACHE_MAX,
 } from '../src/data/bars-cache';
@@ -77,5 +79,19 @@ describe('bars-cache', () => {
 
     const rec = await getCachedRecord('binance-rest', 'BTCUSDT', '1h');
     expect(rec?.bars).toHaveLength(3);
+  });
+
+  it('sliceBarsForLoad filters by date range and maxBars', () => {
+    const bars = [bar(100), bar(200), bar(300), bar(400), bar(500)];
+    expect(sliceBarsForLoad(bars, { fromSec: 200, toSec: 400 }).map((b) => b.time)).toEqual([
+      200, 300, 400,
+    ]);
+    expect(sliceBarsForLoad(bars, { maxBars: 2 }).map((b) => b.time)).toEqual([400, 500]);
+    expect(
+      sliceBarsForLoad(bars, { fromSec: 100, toSec: 500, maxBars: 2 }).map((b) => b.time),
+    ).toEqual([400, 500]);
+    expect(sliceBarsForLoad(bars, null)).toHaveLength(5);
+    expect(countBarsForLoad(bars, { fromSec: 250, toSec: 450 })).toBe(2);
+    expect(countBarsForLoad(bars, { maxBars: 3 })).toBe(3);
   });
 });

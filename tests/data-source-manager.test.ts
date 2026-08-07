@@ -8,6 +8,8 @@ import {
   dismissJob,
   jobProgress,
   pastDateInputToSec,
+  dateInputToEndSec,
+  secToDateInput,
   defaultPastDateInput,
   _resetDataSourceManagerForTests,
   _waitForJob,
@@ -47,6 +49,10 @@ describe('data-source-manager', () => {
     expect(pastDateInputToSec('2024-01-15')).toBe(Date.UTC(2024, 0, 15) / 1000);
     expect(pastDateInputToSec('bad')).toBeNull();
     expect(defaultPastDateInput()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(dateInputToEndSec('2024-01-15')).toBe(
+      Date.UTC(2024, 0, 15) / 1000 + 86_400 - 1,
+    );
+    expect(secToDateInput(Date.UTC(2024, 5, 1) / 1000)).toBe('2024-06-01');
   });
 
   it('startBackfill returns id immediately and completes with mock-walk', async () => {

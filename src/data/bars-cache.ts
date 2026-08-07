@@ -46,6 +46,81 @@ export interface BarsCacheRecord {
   updatedAt: number;
 }
 
+/**
+ * Optional window when loading a cached series onto the chart.
+ * Applied in order: date range (inclusive) → maxBars (keep newest).
+ */
+export interface BarLoadWindow {
+  /** Inclusive lower bound (unix seconds). */
+  fromSec?: number | null;
+  /** Inclusive upper bound (unix seconds). */
+  toSec?: number | null;
+  /** Keep at most this many bars after the date filter (newest). */
+  maxBars?: number | null;
+}
+
+/**
+ * Slice a sorted bar series by optional date range and max bar count.
+ * Empty / invalid bounds are ignored. Does not mutate the input array.
+ */
+export function sliceBarsForLoad(bars: Bar[], window?: BarLoadWindow | null): Bar[] {
+  if (!bars?.length) return [];
+  if (!window) return bars.slice();
+
+  const from =
+    window.fromSec != null && Number.isFinite(window.fromSec) ? window.fromSec : null;
+  const to = window.toSec != null && Number.isFinite(window.toSec) ? window.toSec : null;
+  const max =
+    window.maxBars != null && Number.isFinite(window.maxBars) && window.maxBars > 0
+      ? Math.floor(window.maxBars)
+      : null;
+
+  let out = bars;
+  if (from != null || to != null) {
+    out = bars.filter((b) => {
+      if (!b || !Number.isFinite(b.time)) return false;
+      if (from != null && b.time < from) return false;
+      if (to != null && b.time > to) return false;
+      return true;
+    });
+  } else {
+    out = bars.slice();
+  }
+
+  if (max != null && out.length > max) {
+    out = out.slice(out.length - max);
+  }
+  return out;
+}
+
+/** Count bars that would remain after {@link sliceBarsForLoad} without allocating. */
+export function countBarsForLoad(bars: Bar[], window?: BarLoadWindow | null): number {
+  if (!bars?.length) return 0;
+  if (!window) return bars.length;
+
+  const from =
+    window.fromSec != null && Number.isFinite(window.fromSec) ? window.fromSec : null;
+  const to = window.toSec != null && Number.isFinite(window.toSec) ? window.toSec : null;
+  const max =
+    window.maxBars != null && Number.isFinite(window.maxBars) && window.maxBars > 0
+      ? Math.floor(window.maxBars)
+      : null;
+
+  let n = 0;
+  if (from == null && to == null) {
+    n = bars.length;
+  } else {
+    for (const b of bars) {
+      if (!b || !Number.isFinite(b.time)) continue;
+      if (from != null && b.time < from) continue;
+      if (to != null && b.time > to) continue;
+      n++;
+    }
+  }
+  if (max != null && n > max) return max;
+  return n;
+}
+
 /** Build cache key from source / symbol / interval. */
 export function barsCacheKey(sourceId: string, symbol: string, interval: string): string {
   const src = String(sourceId || '').trim();
