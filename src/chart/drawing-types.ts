@@ -30,23 +30,41 @@
  * form works; create/patch paths write both so older persisted drawings keep working.
  */
 
-/** Active toolbar tool (includes non-placing `cursor`). */
+/**
+ * Active toolbar tool (includes non-placing `cursor` / `eraser`).
+ * Extended toward platform drawing parity (lines, fib, shapes, measure, trading).
+ */
 export type DrawingToolId =
   | 'cursor'
   | 'hline'
   | 'vline'
+  | 'hray'
   | 'trend'
   | 'ray'
   | 'extend'
+  | 'infoLine'
+  | 'channel'
   | 'rect'
   | 'ellipse'
   | 'arrow'
+  | 'triangle'
+  | 'polyline'
+  | 'path'
   | 'fib'
+  | 'fibext'
+  | 'fibtime'
+  | 'fibchannel'
   | 'measure'
-  | 'text';
+  | 'dateRange'
+  | 'priceRange'
+  | 'text'
+  | 'priceLabel'
+  | 'long'
+  | 'short'
+  | 'eraser';
 
-/** Placed drawing kinds only (excludes the select cursor). */
-export type DrawingKind = Exclude<DrawingToolId, 'cursor'>;
+/** Placed drawing kinds only (excludes select cursor and eraser). */
+export type DrawingKind = Exclude<DrawingToolId, 'cursor' | 'eraser'>;
 
 /** Chart anchor in series space: unix seconds (or logical bar index for some script x). */
 export interface Point {
@@ -122,22 +140,52 @@ export interface VLineDrawing extends DrawingBase {
   time: number;
 }
 
-/** Two-anchor drawings: lines, shapes, fib, measure. */
+/** Two-anchor drawings: lines, shapes, fib, measure, positions. */
 export interface TwoPointDrawing extends DrawingBase {
-  kind: 'trend' | 'ray' | 'extend' | 'rect' | 'ellipse' | 'arrow' | 'fib' | 'measure';
+  kind:
+    | 'trend'
+    | 'ray'
+    | 'extend'
+    | 'hray'
+    | 'infoLine'
+    | 'rect'
+    | 'ellipse'
+    | 'arrow'
+    | 'fib'
+    | 'fibtime'
+    | 'measure'
+    | 'dateRange'
+    | 'priceRange'
+    | 'long'
+    | 'short';
   p1: Point;
   p2: Point;
 }
 
+/** Three-or-more anchor drawings (channel, fib extension, polyline, …). */
+export interface MultiPointDrawing extends DrawingBase {
+  kind: 'channel' | 'fibext' | 'fibchannel' | 'triangle' | 'polyline' | 'path';
+  /** Primary anchors (also mirrored to p1/p2 when length ≥ 2 for legacy paths). */
+  points: Point[];
+  p1?: Point;
+  p2?: Point;
+  p3?: Point;
+}
+
 /** Point label with free text (prompted on place). */
 export interface TextDrawing extends DrawingBase {
-  kind: 'text';
+  kind: 'text' | 'priceLabel';
   p1: Point;
   text: string;
 }
 
 /** Discriminated union of user drawings stored in the app state. */
-export type Drawing = HLineDrawing | VLineDrawing | TwoPointDrawing | TextDrawing;
+export type Drawing =
+  | HLineDrawing
+  | VLineDrawing
+  | TwoPointDrawing
+  | MultiPointDrawing
+  | TextDrawing;
 
 /** Palette used by the toolbar presets and layer defaults. */
 export const DRAWING_COLORS = {
@@ -172,18 +220,48 @@ export function resolveDrawingStyle(d: DrawingBase): {
 /** Fibonacci retracement ratios painted between p1→p2 price span. */
 export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] as const;
 
+/** Fibonacci extension ratios projected beyond the base move. */
+export const FIB_EXT_LEVELS = [0, 0.5, 1, 1.272, 1.618, 2, 2.618] as const;
+
+/**
+ * Placement arity for a tool.
+ * `0` = non-placing (cursor/eraser), `n` = open polyline (double-click finish).
+ */
+export function toolArity(tool: DrawingToolId): 0 | 1 | 2 | 3 | 'n' {
+  if (tool === 'cursor' || tool === 'eraser') return 0;
+  if (
+    tool === 'hline' ||
+    tool === 'vline' ||
+    tool === 'text' ||
+    tool === 'priceLabel'
+  ) {
+    return 1;
+  }
+  if (
+    tool === 'channel' ||
+    tool === 'fibext' ||
+    tool === 'fibchannel' ||
+    tool === 'triangle'
+  ) {
+    return 3;
+  }
+  if (tool === 'polyline' || tool === 'path') return 'n';
+  return 2;
+}
+
 /** Tools that need two click anchors (draft → place) rather than one click. */
 export function needsTwoPoints(tool: DrawingToolId): boolean {
-  return (
-    tool === 'trend' ||
-    tool === 'ray' ||
-    tool === 'extend' ||
-    tool === 'rect' ||
-    tool === 'ellipse' ||
-    tool === 'arrow' ||
-    tool === 'fib' ||
-    tool === 'measure'
-  );
+  return toolArity(tool) === 2;
+}
+
+/** Tools that need three click anchors. */
+export function needsThreePoints(tool: DrawingToolId): boolean {
+  return toolArity(tool) === 3;
+}
+
+/** Open-ended multi-click tools (finish on double-click). */
+export function needsNPoints(tool: DrawingToolId): boolean {
+  return toolArity(tool) === 'n';
 }
 
 /** Human-readable label for toolbar flyouts and titles. */
@@ -195,23 +273,53 @@ export function toolLabel(tool: DrawingToolId): string {
       return 'Horizontal line';
     case 'vline':
       return 'Vertical line';
+    case 'hray':
+      return 'Horizontal ray';
     case 'trend':
       return 'Trend line';
     case 'ray':
       return 'Ray';
     case 'extend':
       return 'Extended line';
+    case 'infoLine':
+      return 'Info line';
+    case 'channel':
+      return 'Parallel channel';
     case 'rect':
       return 'Rectangle';
     case 'ellipse':
       return 'Ellipse';
     case 'arrow':
       return 'Arrow';
+    case 'triangle':
+      return 'Triangle';
+    case 'polyline':
+      return 'Polyline';
+    case 'path':
+      return 'Path';
     case 'fib':
-      return 'Fibonacci';
+      return 'Fib retracement';
+    case 'fibext':
+      return 'Fib extension';
+    case 'fibtime':
+      return 'Fib time zones';
+    case 'fibchannel':
+      return 'Fib channel';
     case 'measure':
       return 'Measure';
+    case 'dateRange':
+      return 'Date range';
+    case 'priceRange':
+      return 'Price range';
     case 'text':
       return 'Text';
+    case 'priceLabel':
+      return 'Price label';
+    case 'long':
+      return 'Long position';
+    case 'short':
+      return 'Short position';
+    case 'eraser':
+      return 'Eraser';
   }
 }

@@ -9,8 +9,21 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { FIB_LEVELS, needsTwoPoints, toolLabel } from '../src/chart/drawing-types.ts';
+import {
+  FIB_LEVELS,
+  needsNPoints,
+  needsThreePoints,
+  needsTwoPoints,
+  toolArity,
+  toolLabel,
+  type DrawingToolId,
+} from '../src/chart/drawing-types.ts';
 import { fibPrices as computeFib } from '../src/chart/drawing-layer.ts';
+import {
+  getToolHandler,
+  listToolHandlers,
+} from '../src/chart/drawings/tools';
+import { TOOL_GROUPS } from '../src/chart/drawings/tool-catalog.ts';
 
 describe('drawing tools helpers', () => {
   it('needsTwoPoints for multi-click tools', () => {
@@ -26,23 +39,43 @@ describe('drawing tools helpers', () => {
     expect(needsTwoPoints('arrow')).toBe(true);
     expect(needsTwoPoints('fib')).toBe(true);
     expect(needsTwoPoints('measure')).toBe(true);
+    expect(needsTwoPoints('long')).toBe(true);
+    expect(needsThreePoints('channel')).toBe(true);
+    expect(needsThreePoints('fibext')).toBe(true);
+    expect(needsNPoints('polyline')).toBe(true);
+    expect(toolArity('eraser')).toBe(0);
   });
 
   it('toolLabel covers all tools', () => {
-    const tools = [
+    const tools: DrawingToolId[] = [
       'cursor',
       'hline',
       'vline',
+      'hray',
       'trend',
       'ray',
       'extend',
+      'infoLine',
+      'channel',
       'rect',
       'ellipse',
       'arrow',
+      'triangle',
+      'polyline',
+      'path',
       'fib',
+      'fibext',
+      'fibtime',
+      'fibchannel',
       'measure',
+      'dateRange',
+      'priceRange',
       'text',
-    ] as const;
+      'priceLabel',
+      'long',
+      'short',
+      'eraser',
+    ];
     for (const t of tools) {
       expect(toolLabel(t).length).toBeGreaterThan(0);
     }
@@ -50,6 +83,26 @@ describe('drawing tools helpers', () => {
     expect(toolLabel('vline')).toMatch(/Vertical/i);
     expect(toolLabel('extend')).toMatch(/Extended/i);
     expect(toolLabel('fib')).toMatch(/Fib/i);
+    expect(toolLabel('channel')).toMatch(/channel/i);
+  });
+
+  it('registers extended tool handlers', () => {
+    const ids = listToolHandlers().map((h) => h.id);
+    expect(ids).toContain('channel');
+    expect(ids).toContain('fibext');
+    expect(ids).toContain('long');
+    expect(ids).toContain('polyline');
+    expect(getToolHandler('channel')?.arity).toBe(3);
+    expect(getToolHandler('polyline')?.create?.([{ time: 1, price: 1 }, { time: 2, price: 2 }], '#fff')).toBeTruthy();
+  });
+
+  it('toolbar catalog exposes parity packs', () => {
+    const all = TOOL_GROUPS.flatMap((g) => g.tools);
+    expect(all).toContain('channel');
+    expect(all).toContain('fibext');
+    expect(all).toContain('long');
+    expect(all).toContain('dateRange');
+    expect(all).toContain('eraser');
   });
 
   it('fibPrices from high to low (retracement)', () => {

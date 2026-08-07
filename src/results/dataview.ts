@@ -206,9 +206,9 @@ export function rowsForDrawingAtTime(
     return out;
   }
 
-  // Two-point tools
-  const p1 = d.p1;
-  const p2 = d.p2;
+  // Two-point / multi-point tools
+  const p1 = 'p1' in d ? d.p1 : 'points' in d ? d.points?.[0] : undefined;
+  const p2 = 'p2' in d ? d.p2 : 'points' in d ? d.points?.[1] : undefined;
   if (!p1 || !p2) return out;
 
   if (d.kind === 'rect' || d.kind === 'ellipse') {

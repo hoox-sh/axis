@@ -67,60 +67,51 @@ export interface ToolGroupDef {
 /**
  * Toolbar groups (left rail). Single-tool groups omit flyouts.
  *
- * Empty `tools` arrays (`trading`, `actions`) are reserved slots — wire UI
- * affordances later without changing group order.
- *
- * Future (not in DrawingToolId yet — do not add until types exist):
- * - lines: parallel-channel, vertical-line, extended-line, info-line
- * - fib: fib-extension, fib-channel, fib-time
- * - shapes: circle, triangle, path, polyline, arrow, brush
- * - annotation: callout, price-note, anchored-text, pin
- * - measure: date-range, price-range, long-position, short-position
- * - trading: long-position, short-position, order, forecast
- * - actions: remove-selected, remove-all, hide-all, lock-all, magnet, stay-in-mode
+ * Actions group stays empty — utilities (magnet, lock, erase) live as
+ * dedicated rail toggles in DrawingToolbar.
  */
 export const TOOL_GROUPS: ToolGroupDef[] = [
   {
     id: 'select',
     label: 'Select',
-    tools: ['cursor'],
-    flyout: false,
+    tools: ['cursor', 'eraser'],
+    flyout: true,
   },
   {
     id: 'lines',
     label: 'Lines',
-    tools: ['trend', 'ray', 'extend', 'hline', 'vline'],
+    tools: ['trend', 'ray', 'extend', 'infoLine', 'hline', 'hray', 'vline', 'channel'],
     flyout: true,
   },
   {
     id: 'fib',
     label: 'Fibonacci',
-    tools: ['fib'],
-    flyout: false,
+    tools: ['fib', 'fibext', 'fibtime', 'fibchannel'],
+    flyout: true,
   },
   {
     id: 'shapes',
     label: 'Shapes',
-    tools: ['rect', 'ellipse', 'arrow'],
+    tools: ['rect', 'ellipse', 'triangle', 'arrow', 'polyline', 'path'],
     flyout: true,
   },
   {
     id: 'annotation',
     label: 'Annotation',
-    tools: ['text'],
-    flyout: false,
+    tools: ['text', 'priceLabel'],
+    flyout: true,
   },
   {
     id: 'measure',
     label: 'Measure',
-    tools: ['measure'],
-    flyout: false,
+    tools: ['measure', 'dateRange', 'priceRange'],
+    flyout: true,
   },
   {
     id: 'trading',
     label: 'Trading',
-    tools: [],
-    flyout: false,
+    tools: ['long', 'short'],
+    flyout: true,
   },
   {
     id: 'actions',

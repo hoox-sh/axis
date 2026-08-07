@@ -36,8 +36,11 @@ import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 import {
   DRAWING_COLORS,
   FIB_LEVELS,
+  needsNPoints,
+  needsThreePoints,
   needsTwoPoints,
   resolveDrawingStyle,
+  toolArity,
   type Drawing,
   type DrawingLineStyle,
   type DrawingToolId,
@@ -61,6 +64,13 @@ import {
   logicalIndexToUnixTime,
   unixTimeToLogicalIndex,
 } from './drawings/coords';
+import {
+  getToolHandler,
+  type ToolHitCtx,
+  type ToolViewCtx,
+} from './drawings/tools';
+// Register extended tool handlers (side effects)
+import './drawings/tools';
 
 /** Fired after user drawings change (place, drag end, delete, clear). */
 export type DrawingChangeHandler = (drawings: Drawing[]) => void;
@@ -138,7 +148,8 @@ export class DrawingLayer {
     color: string;
   }> = [];
   private selectedId: string | null = null;
-  private draft: { tool: DrawingToolId; p1?: Point; p2?: Point } | null = null;
+  /** In-progress multi-click placement (1/2/3/n anchors). */
+  private draft: { tool: DrawingToolId; points: Point[] } | null = null;
   private drag: DragState | null = null;
   /** Suppress click-after-drag so a completed move does not re-select/clear. */
   private didDrag = false;
@@ -335,7 +346,8 @@ export class DrawingLayer {
     this.gDraft.innerHTML = '';
     // Drawing tools capture full surface; cursor only hits painted shapes
     this.svg.style.pointerEvents = tool === 'cursor' ? 'none' : 'auto';
-    this.svg.style.cursor = tool === 'cursor' ? 'default' : 'crosshair';
+    this.svg.style.cursor =
+      tool === 'cursor' ? 'default' : tool === 'eraser' ? 'cell' : 'crosshair';
     this.redraw();
   }
 
@@ -525,6 +537,7 @@ export class DrawingLayer {
     };
 
     this.svg.addEventListener('click', onClick);
+    this.svg.addEventListener('dblclick', this.handleDblClick);
     this.svg.addEventListener('pointerdown', onDown);
     this.svg.addEventListener('pointermove', onMove);
     window.addEventListener('pointermove', onMove);
@@ -532,6 +545,7 @@ export class DrawingLayer {
     this.svg.addEventListener('contextmenu', onCtx);
     window.addEventListener('keydown', onKey);
     this.unsubs.push(() => this.svg.removeEventListener('click', onClick));
+    this.unsubs.push(() => this.svg.removeEventListener('dblclick', this.handleDblClick));
     this.unsubs.push(() => this.svg.removeEventListener('pointerdown', onDown));
     this.unsubs.push(() => this.svg.removeEventListener('pointermove', onMove));
     this.unsubs.push(() => window.removeEventListener('pointermove', onMove));
@@ -767,7 +781,7 @@ export class DrawingLayer {
   }
 
   /**
-   * Place tools: one-click (hline/text) or two-click draft complete.
+   * Place tools: one-click / multi-click draft / eraser.
    * Cursor: hit-test select. Post-drag clicks are swallowed via `didDrag`.
    */
   private handleClick(e: MouseEvent) {
@@ -782,6 +796,18 @@ export class DrawingLayer {
       const hit = this.hitTest(e);
       this.setSelectedId(hit);
       this.redraw();
+      return;
+    }
+
+    if (this.tool === 'eraser') {
+      if (this.lockAll) return;
+      const hit = this.hitTest(e);
+      if (hit) {
+        this.drawings = this.drawings.filter((d) => d.id !== hit);
+        if (this.selectedId === hit) this.setSelectedId(null);
+        this.emit();
+        this.redraw();
+      }
       return;
     }
 
@@ -836,30 +862,85 @@ export class DrawingLayer {
       return;
     }
 
-    if (needsTwoPoints(this.tool)) {
-      if (!this.draft || this.draft.tool !== this.tool || !this.draft.p1) {
-        this.draft = { tool: this.tool, p1: pt };
+    // Registered 1-point tools (e.g. priceLabel)
+    const handler = getToolHandler(this.tool);
+    const arity = toolArity(this.tool);
+    if (arity === 1 && handler?.create) {
+      const created = handler.create([pt], this.defaultColor(this.tool));
+      if (created) {
+        created.id = uid();
+        this.drawings.push(this.applyCreateStyle(created));
+        this.emit();
+        this.redraw();
+        this.afterPlace();
+      }
+      return;
+    }
+
+    // Multi-click tools: 2 / 3 / n
+    if (needsTwoPoints(this.tool) || needsThreePoints(this.tool) || needsNPoints(this.tool)) {
+      if (!this.draft || this.draft.tool !== this.tool) {
+        this.draft = { tool: this.tool, points: [pt] };
         this.renderDraft(pt);
         return;
       }
-      // second point
-      const p1 = this.draft.p1;
-      const p2 = pt;
+      this.draft.points.push(pt);
+      const need = toolArity(this.tool);
+      const n = this.draft.points.length;
+
+      // Open-ended: keep collecting until double-click
+      if (need === 'n') {
+        this.renderDraft(pt);
+        return;
+      }
+
+      const target = need === 3 ? 3 : 2;
+      if (n < target) {
+        this.renderDraft(pt);
+        return;
+      }
+
+      this.commitDraftPoints(this.draft.points);
+    }
+  }
+
+  /** Finish open-ended polyline/path on double-click. */
+  private handleDblClick = (e: MouseEvent) => {
+    if (!this.draft || !needsNPoints(this.draft.tool)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const pts = this.draft.points;
+    if (pts.length < 2) {
       this.draft = null;
       this.gDraft.innerHTML = '';
-      this.drawings.push(
-        this.applyCreateStyle({
-          id: uid(),
-          kind: this.tool as TwoPointKind,
-          p1,
-          p2,
-          color: this.defaultColor(this.tool),
-        } as Drawing),
-      );
-      this.emit();
-      this.redraw();
-      this.afterPlace();
+      return;
     }
+    this.commitDraftPoints(pts);
+  };
+
+  private commitDraftPoints(points: Point[]) {
+    const tool = (this.draft?.tool || this.tool) as DrawingToolId;
+    this.draft = null;
+    this.gDraft.innerHTML = '';
+    const handler = getToolHandler(tool);
+    let drawing: Drawing | null = null;
+    if (handler?.create) {
+      drawing = handler.create(points, this.defaultColor(tool));
+    } else if (points.length >= 2 && needsTwoPoints(tool)) {
+      drawing = {
+        id: '',
+        kind: tool as TwoPointKind,
+        p1: points[0]!,
+        p2: points[1]!,
+        color: this.defaultColor(tool),
+      } as Drawing;
+    }
+    if (!drawing) return;
+    drawing.id = uid();
+    this.drawings.push(this.applyCreateStyle(drawing));
+    this.emit();
+    this.redraw();
+    this.afterPlace();
   }
 
   /** Drag-move/resize active drawing, or update two-point draft preview. */
@@ -883,30 +964,70 @@ export class DrawingLayer {
       }
       return;
     }
-    if (!this.draft?.p1) return;
+    if (!this.draft?.points?.length) return;
     const pt = this.clientToPoint(e);
     if (!pt) return;
     this.renderDraft(pt);
   }
 
-  private renderDraft(p2: Point) {
+  private renderDraft(hover: Point) {
     this.gDraft.innerHTML = '';
-    if (!this.draft?.p1) return;
-    const d: Drawing = needsTwoPoints(this.draft.tool)
-      ? ({
-          id: 'draft',
-          kind: this.draft.tool as TwoPointKind,
-          p1: this.draft.p1,
-          p2,
-          color: DRAWING_COLORS.muted,
-        } as Drawing)
-      : {
-          id: 'draft',
-          kind: 'hline',
-          price: p2.price,
-          color: DRAWING_COLORS.muted,
-        };
-    this.paintDrawing(this.gDraft, d, true);
+    if (!this.draft?.points?.length) return;
+    const points = [...this.draft.points, hover];
+    const handler = getToolHandler(this.draft.tool);
+    const ctx = this.makeViewCtx(this.gDraft, DRAWING_COLORS.muted, 1.25, undefined, 0.1, true);
+    if (handler?.paintDraft) {
+      handler.paintDraft(points, ctx);
+      return;
+    }
+    if (handler?.create && points.length >= (typeof handler.arity === 'number' ? handler.arity : 2)) {
+      const d = handler.create(points, DRAWING_COLORS.muted);
+      if (d) {
+        d.id = 'draft';
+        this.paintDrawing(this.gDraft, d, true);
+        return;
+      }
+    }
+    // Fallback: two-point line preview
+    if (points.length >= 2) {
+      const d: Drawing = {
+        id: 'draft',
+        kind: (needsTwoPoints(this.draft.tool) ? this.draft.tool : 'trend') as TwoPointKind,
+        p1: points[0]!,
+        p2: points[points.length - 1]!,
+        color: DRAWING_COLORS.muted,
+      } as Drawing;
+      this.paintDrawing(this.gDraft, d, true);
+    }
+  }
+
+  /** Build paint helpers bound to a target SVG group. */
+  private makeViewCtx(
+    g: SVGGElement,
+    stroke: string,
+    sw: number,
+    dash: string | undefined,
+    fillOpacity: number,
+    selected: boolean,
+  ): ToolViewCtx {
+    return {
+      toXY: (p) => this.toXY(p),
+      timeToX: (t) => this.timeToX(t),
+      priceToY: (price) => this.series.priceToCoordinate(price) as number | null,
+      width: this.host.clientWidth,
+      height: this.host.clientHeight,
+      el: (name, attrs) => el(g, name, attrs),
+      line: (x1, y1, x2, y2, s, w, dsh, pe) => line(g, x1, y1, x2, y2, s, w, dsh, pe),
+      circle: (x, y, r, s, filled) => circle(g, x, y, r, s, filled),
+      label: (x, y, text, fill, size, anchor) =>
+        label(g, x, y, text, fill, size, anchor || 'start'),
+      stroke,
+      strokeWidth: sw,
+      dash,
+      fillOpacity,
+      selected,
+      barIndexApprox: (time) => barIndexApprox(this.chart, time),
+    };
   }
 
   /** Endpoint handle hit for the selected drawing (move uses body hit-test). */
@@ -922,11 +1043,19 @@ export class DrawingLayer {
       // No endpoint handles beyond body move
       return null;
     }
-    if (d.kind === 'text') {
+    if (d.kind === 'text' || d.kind === 'priceLabel') {
       const c = this.toXY(d.p1);
       if (c && Math.hypot(x - c.x, y - c.y) <= tol) return { id: d.id, mode: 'p1' };
       return null;
     }
+    if ('points' in d && Array.isArray(d.points) && d.points[0] && d.points[1]) {
+      const a = this.toXY(d.points[0]);
+      const b = this.toXY(d.points[1]);
+      if (a && Math.hypot(x - a.x, y - a.y) <= tol) return { id: d.id, mode: 'p1' };
+      if (b && Math.hypot(x - b.x, y - b.y) <= tol) return { id: d.id, mode: 'p2' };
+      return null;
+    }
+    if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
     const a = this.toXY(d.p1);
     const b = this.toXY(d.p2);
     if (a && Math.hypot(x - a.x, y - a.y) <= tol) return { id: d.id, mode: 'p1' };
@@ -948,6 +1077,20 @@ export class DrawingLayer {
   }
 
   private nearDrawing(d: Drawing, x: number, y: number, tol: number): boolean {
+    const handler = getToolHandler(d.kind);
+    if (handler?.hit) {
+      const ctx: ToolHitCtx = {
+        x,
+        y,
+        tol,
+        toXY: (p) => this.toXY(p),
+        timeToX: (t) => this.timeToX(t),
+        priceToY: (price) => this.series.priceToCoordinate(price) as number | null,
+        width: this.host.clientWidth,
+        height: this.host.clientHeight,
+      };
+      return handler.hit(d, ctx);
+    }
     if (d.kind === 'hline') {
       const yy = this.series.priceToCoordinate(d.price);
       if (yy == null) return false;
@@ -959,11 +1102,12 @@ export class DrawingLayer {
       if (xx == null) return false;
       return Math.abs(x - xx) <= tol;
     }
-    if (d.kind === 'text') {
+    if (d.kind === 'text' || d.kind === 'priceLabel') {
       const c = this.toXY(d.p1);
       if (!c) return false;
       return Math.hypot(x - c.x, y - c.y) <= 16;
     }
+    if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return false;
     const a = this.toXY(d.p1);
     const b = this.toXY(d.p2);
     if (!a || !b) return false;
@@ -1271,8 +1415,18 @@ export class DrawingLayer {
       return;
     }
 
-    const a = this.toXY(d.p1);
-    const b = this.toXY(d.p2);
+    // Extended tools (channel, fibext, polyline, long/short, …) — may lack p1/p2
+    {
+      const handler = getToolHandler(d.kind);
+      if (handler?.paint) {
+        const ctx = this.makeViewCtx(g, stroke, sw, dash || undefined, st.fillOpacity, selected);
+        handler.paint(d, ctx);
+        return;
+      }
+    }
+
+    const a = this.toXY((d as { p1?: Point }).p1!);
+    const b = this.toXY((d as { p2?: Point }).p2!);
     if (!a || !b) return;
 
     if (d.kind === 'trend' || d.kind === 'measure' || d.kind === 'arrow') {
@@ -1526,14 +1680,26 @@ function resizeDrawing(origin: Drawing, mode: DragMode, pt: Point): Drawing {
   if (origin.kind === 'vline') {
     return { ...origin, time: pt.time };
   }
-  if (origin.kind === 'text') {
-    return { ...origin, p1: { ...pt } };
+  if (origin.kind === 'text' || origin.kind === 'priceLabel') {
+    return { ...origin, p1: { ...pt } } as Drawing;
   }
-  if (mode === 'p1') {
-    return { ...origin, p1: { ...pt } };
+  if ('points' in origin && Array.isArray(origin.points) && origin.points.length) {
+    const points = origin.points.slice();
+    if (mode === 'p1' && points[0]) points[0] = { ...pt };
+    else if (mode === 'p2' && points[1]) points[1] = { ...pt };
+    return {
+      ...origin,
+      points,
+      p1: points[0],
+      p2: points[1] ?? points[0],
+      p3: points[2],
+    } as Drawing;
   }
-  if (mode === 'p2') {
-    return { ...origin, p2: { ...pt } };
+  if (mode === 'p1' && 'p1' in origin) {
+    return { ...origin, p1: { ...pt } } as Drawing;
+  }
+  if (mode === 'p2' && 'p2' in origin) {
+    return { ...origin, p2: { ...pt } } as Drawing;
   }
   return origin;
 }
@@ -1566,17 +1732,33 @@ function shiftDrawing(d: Drawing, dTime: number, dPrice: number): Drawing {
   if (d.kind === 'vline') {
     return { ...d, time: d.time + dTime };
   }
-  if (d.kind === 'text') {
+  if (d.kind === 'text' || d.kind === 'priceLabel') {
     return {
       ...d,
       p1: { time: d.p1.time + dTime, price: d.p1.price + dPrice },
     };
   }
-  return {
-    ...d,
-    p1: { time: d.p1.time + dTime, price: d.p1.price + dPrice },
-    p2: { time: d.p2.time + dTime, price: d.p2.price + dPrice },
-  };
+  if ('points' in d && Array.isArray(d.points) && d.points.length) {
+    const points = d.points.map((p) => ({
+      time: p.time + dTime,
+      price: p.price + dPrice,
+    }));
+    return {
+      ...d,
+      points,
+      p1: points[0],
+      p2: points[1] ?? points[0],
+      p3: points[2],
+    } as Drawing;
+  }
+  if ('p1' in d && 'p2' in d && d.p1 && d.p2) {
+    return {
+      ...d,
+      p1: { time: d.p1.time + dTime, price: d.p1.price + dPrice },
+      p2: { time: d.p2.time + dTime, price: d.p2.price + dPrice },
+    } as Drawing;
+  }
+  return d;
 }
 
 /** Triangle arrow head at (x2,y2) pointing from (x1,y1). */

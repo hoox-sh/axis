@@ -73,17 +73,32 @@ const LINE_STYLES: DrawingLineStyle[] = ['solid', 'dashed', 'dotted'];
 
 const TOOL_ICONS: Partial<Record<DrawingToolId, typeof Icons.cursor>> = {
   cursor: Icons.cursor,
+  eraser: Icons.eraser,
   hline: Icons.minus,
+  hray: Icons.minus,
   vline: Icons.vline,
   trend: Icons.trend,
   ray: Icons.ray,
   extend: Icons.extend,
+  infoLine: Icons.trend,
+  channel: Icons.layers,
   rect: Icons.square,
   ellipse: Icons.circle,
+  triangle: Icons.shapes,
   arrow: Icons.arrowUpRight,
+  polyline: Icons.trend,
+  path: Icons.pencil,
   fib: Icons.fib,
+  fibext: Icons.fib,
+  fibtime: Icons.fib,
+  fibchannel: Icons.fib,
   measure: Icons.ruler,
+  dateRange: Icons.ruler,
+  priceRange: Icons.ruler,
   text: Icons.type,
+  priceLabel: Icons.pin,
+  long: Icons.arrowUpRight,
+  short: Icons.arrowUpRight,
 };
 
 const GROUP_ICONS: Partial<Record<ToolGroupId, typeof Icons.cursor>> = {
@@ -264,7 +279,7 @@ export const DrawingToolbar: Component = () => {
     'sc-btn sc-btn-ghost w-9 h-9 min-w-9 min-h-9 p-0 flex items-center justify-center border border-transparent';
 
   const railGroups = () =>
-    TOOL_GROUPS.filter((g) => g.id !== 'actions' && g.id !== 'trading' && g.tools.length > 0);
+    TOOL_GROUPS.filter((g) => g.id !== 'actions' && g.tools.length > 0);
 
   // top-14 clears symbol chip + script badge row; badges are offset right of the
   // rail so they stay clear of this ChartHost-sibling toolbar/style bar.

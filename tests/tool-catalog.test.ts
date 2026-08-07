@@ -45,7 +45,7 @@ describe('tool-catalog', () => {
   it('defaultToolForGroup and groupForTool', () => {
     expect(defaultToolForGroup('lines')).toBe('trend');
     expect(defaultToolForGroup('shapes')).toBe('rect');
-    expect(defaultToolForGroup('trading')).toBeNull();
+    expect(defaultToolForGroup('trading')).toBe('long');
     expect(groupForTool('vline')?.id).toBe('lines');
     expect(groupForTool('ellipse')?.id).toBe('shapes');
     expect(groupForTool('extend')?.flyout).toBe(true);
