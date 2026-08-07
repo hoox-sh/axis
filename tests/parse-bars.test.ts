@@ -208,4 +208,25 @@ describe('normalizeHistoricalBars', () => {
     expect(bars.every((b) => b.time < 1e12)).toBe(true);
     expect(bars[0]!.time).toBe(1_700_000_000);
   });
+
+  it('unwraps common API envelopes and never throws on junk', () => {
+    const wrapped = normalizeHistoricalBars({
+      bars: [{ time: 1700000000, open: 1, high: 2, low: 0.5, close: 1.5 }],
+    });
+    expect(wrapped).toHaveLength(1);
+    expect(wrapped[0]!.close).toBe(1.5);
+
+    const nested = normalizeHistoricalBars({
+      result: { list: [[1700000100, 2, 3, 1, 2.5]] },
+    });
+    expect(nested).toHaveLength(1);
+
+    expect(normalizeHistoricalBars('not-bars')).toEqual([]);
+    expect(normalizeHistoricalBars(42)).toEqual([]);
+    expect(normalizeHistoricalBars({ klines: null })).toEqual([]);
+  });
+
+  it('throws clear error on invalid JSON text', () => {
+    expect(() => parseOhlcvText('{not json', 'x.json')).toThrow(/Invalid JSON/i);
+  });
 });

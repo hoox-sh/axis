@@ -12,12 +12,13 @@
 import type { Drawing, MultiPointDrawing, Point } from '../../drawing-types';
 import { distToSegment, nearPoint } from '../geometry';
 import { registerToolHandler, type ToolHitCtx, type ToolViewCtx } from './registry';
+import { clampStrokeWidth, sanitizePoints, sanitizeStrokeColor } from './safe';
 
 const XABCD_LABELS = ['X', 'A', 'B', 'C', 'D'] as const;
 
 function pts(d: Drawing): Point[] {
   if ('points' in d && Array.isArray((d as MultiPointDrawing).points)) {
-    return (d as MultiPointDrawing).points;
+    return sanitizePoints((d as MultiPointDrawing).points);
   }
   return [];
 }
@@ -49,7 +50,7 @@ function paintOpenPoly(
     d,
     fill: 'none',
     stroke: ctx.stroke,
-    'stroke-width': String(opts?.width ?? ctx.strokeWidth),
+    'stroke-width': String(clampStrokeWidth(opts?.width ?? ctx.strokeWidth)),
     'pointer-events': 'stroke',
     ...(opts?.dash || ctx.dash
       ? { 'stroke-dasharray': opts?.dash ?? ctx.dash! }
@@ -174,25 +175,28 @@ registerToolHandler({
   arity: 'n',
   minPoints: 5,
   create(points, color) {
-    if (points.length < 5) return null;
-    const five = points.slice(0, 5);
+    const p = sanitizePoints(points);
+    if (p.length < 5) return null;
+    const five = p.slice(0, 5);
     return {
       id: '',
       kind: 'xabcd',
       points: five,
       p1: five[0]!,
       p2: five[4]!,
-      color,
+      color: sanitizeStrokeColor(color),
     } as MultiPointDrawing;
   },
   paint(d, ctx) {
+    if (d.kind !== 'xabcd') return;
     paintXabcd(pts(d), ctx);
   },
   hit(d, ctx) {
+    if (d.kind !== 'xabcd') return false;
     return hitOpenPoly(pts(d).slice(0, 5), ctx);
   },
   paintDraft(points, ctx) {
-    paintXabcd(points.slice(0, 5), ctx);
+    paintXabcd(sanitizePoints(points).slice(0, 5), ctx);
   },
 });
 
@@ -241,24 +245,27 @@ registerToolHandler({
   arity: 'n',
   minPoints: 5,
   create(points, color) {
-    if (points.length < 5) return null;
-    const five = points.slice(0, 5);
+    const p = sanitizePoints(points);
+    if (p.length < 5) return null;
+    const five = p.slice(0, 5);
     return {
       id: '',
       kind: 'headShoulders',
       points: five,
       p1: five[0]!,
       p2: five[4]!,
-      color,
+      color: sanitizeStrokeColor(color),
     } as MultiPointDrawing;
   },
   paint(d, ctx) {
+    if (d.kind !== 'headShoulders') return;
     paintHeadShoulders(pts(d), ctx);
   },
   hit(d, ctx) {
+    if (d.kind !== 'headShoulders') return false;
     return hitHeadShoulders(pts(d), ctx);
   },
   paintDraft(points, ctx) {
-    paintHeadShoulders(points.slice(0, 5), ctx);
+    paintHeadShoulders(sanitizePoints(points).slice(0, 5), ctx);
   },
 });

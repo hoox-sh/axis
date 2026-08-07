@@ -11,9 +11,18 @@
 import type { Drawing, Point, TwoPointDrawing } from '../../drawing-types';
 import { distToSegment, nearPoint } from '../geometry';
 import { registerToolHandler, type ToolHitCtx, type ToolViewCtx } from './registry';
+import {
+  clampOpacity,
+  clampStrokeWidth,
+  isFinitePoint,
+  sanitizePoints,
+  sanitizeStrokeColor,
+} from './safe';
 
-function asTwo(d: Drawing): TwoPointDrawing | null {
+function asTwo(d: Drawing, kind?: TwoPointDrawing['kind']): TwoPointDrawing | null {
+  if (kind && d.kind !== kind) return null;
   if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
+  if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return null;
   return d as TwoPointDrawing;
 }
 
@@ -22,8 +31,9 @@ type XY = { x: number; y: number };
 function twoXY(
   d: Drawing,
   toXY: (p: Point) => XY | null,
+  kind?: TwoPointDrawing['kind'],
 ): { a: XY; b: XY } | null {
-  const t = asTwo(d);
+  const t = asTwo(d, kind);
   if (!t) return null;
   const a = toXY(t.p1);
   const b = toXY(t.p2);
@@ -32,13 +42,14 @@ function twoXY(
 }
 
 function createTwo(kind: TwoPointDrawing['kind'], points: Point[], color: string): TwoPointDrawing | null {
-  if (points.length < 2) return null;
+  const pts = sanitizePoints(points);
+  if (pts.length < 2) return null;
   return {
     id: '',
     kind,
-    p1: points[0]!,
-    p2: points[1]!,
-    color,
+    p1: pts[0]!,
+    p2: pts[1]!,
+    color: sanitizeStrokeColor(color),
     fillOpacity: 0.12,
   };
 }
@@ -174,9 +185,9 @@ function paintRotatedRect(a: XY, b: XY, ctx: ToolViewCtx): void {
   ctx.el('path', {
     d,
     fill: ctx.stroke,
-    'fill-opacity': String(ctx.fillOpacity),
+    'fill-opacity': String(clampOpacity(ctx.fillOpacity, 0.12)),
     stroke: ctx.stroke,
-    'stroke-width': String(ctx.strokeWidth),
+    'stroke-width': String(clampStrokeWidth(ctx.strokeWidth)),
     'pointer-events': 'all',
     ...(ctx.dash ? { 'stroke-dasharray': ctx.dash } : {}),
   });
@@ -197,19 +208,20 @@ registerToolHandler({
     return createTwo('rotatedRect', points, color);
   },
   paint(d, ctx) {
-    const ab = twoXY(d, ctx.toXY);
+    const ab = twoXY(d, ctx.toXY, 'rotatedRect');
     if (!ab) return;
     paintRotatedRect(ab.a, ab.b, ctx);
   },
   hit(d, ctx) {
-    const ab = twoXY(d, ctx.toXY);
+    const ab = twoXY(d, ctx.toXY, 'rotatedRect');
     if (!ab) return false;
     return hitRotatedRect(ab.a, ab.b, ctx);
   },
   paintDraft(points, ctx) {
-    if (points.length < 2) return;
-    const a = ctx.toXY(points[0]!);
-    const b = ctx.toXY(points[points.length - 1]!);
+    const pts = sanitizePoints(points);
+    if (pts.length < 2) return;
+    const a = ctx.toXY(pts[0]!);
+    const b = ctx.toXY(pts[pts.length - 1]!);
     if (!a || !b) return;
     paintRotatedRect(a, b, ctx);
   },
@@ -222,7 +234,7 @@ function paintArc(a: XY, b: XY, ctx: ToolViewCtx): void {
     d: arcPathD(a, b),
     fill: 'none',
     stroke: ctx.stroke,
-    'stroke-width': String(ctx.strokeWidth),
+    'stroke-width': String(clampStrokeWidth(ctx.strokeWidth)),
     'stroke-linecap': 'round',
     'pointer-events': 'stroke',
     ...(ctx.dash ? { 'stroke-dasharray': ctx.dash } : {}),
@@ -242,19 +254,20 @@ registerToolHandler({
     return createTwo('arc', points, color);
   },
   paint(d, ctx) {
-    const ab = twoXY(d, ctx.toXY);
+    const ab = twoXY(d, ctx.toXY, 'arc');
     if (!ab) return;
     paintArc(ab.a, ab.b, ctx);
   },
   hit(d, ctx) {
-    const ab = twoXY(d, ctx.toXY);
+    const ab = twoXY(d, ctx.toXY, 'arc');
     if (!ab) return false;
     return hitArc(ab.a, ab.b, ctx);
   },
   paintDraft(points, ctx) {
-    if (points.length < 2) return;
-    const a = ctx.toXY(points[0]!);
-    const b = ctx.toXY(points[points.length - 1]!);
+    const pts = sanitizePoints(points);
+    if (pts.length < 2) return;
+    const a = ctx.toXY(pts[0]!);
+    const b = ctx.toXY(pts[pts.length - 1]!);
     if (!a || !b) return;
     paintArc(a, b, ctx);
   },
@@ -267,7 +280,7 @@ function paintCurve(a: XY, b: XY, ctx: ToolViewCtx): void {
     d: curvePathD(a, b),
     fill: 'none',
     stroke: ctx.stroke,
-    'stroke-width': String(ctx.strokeWidth),
+    'stroke-width': String(clampStrokeWidth(ctx.strokeWidth)),
     'stroke-linecap': 'round',
     'stroke-linejoin': 'round',
     'pointer-events': 'stroke',
@@ -288,19 +301,20 @@ registerToolHandler({
     return createTwo('curve', points, color);
   },
   paint(d, ctx) {
-    const ab = twoXY(d, ctx.toXY);
+    const ab = twoXY(d, ctx.toXY, 'curve');
     if (!ab) return;
     paintCurve(ab.a, ab.b, ctx);
   },
   hit(d, ctx) {
-    const ab = twoXY(d, ctx.toXY);
+    const ab = twoXY(d, ctx.toXY, 'curve');
     if (!ab) return false;
     return hitCurve(ab.a, ab.b, ctx);
   },
   paintDraft(points, ctx) {
-    if (points.length < 2) return;
-    const a = ctx.toXY(points[0]!);
-    const b = ctx.toXY(points[points.length - 1]!);
+    const pts = sanitizePoints(points);
+    if (pts.length < 2) return;
+    const a = ctx.toXY(pts[0]!);
+    const b = ctx.toXY(pts[pts.length - 1]!);
     if (!a || !b) return;
     paintCurve(a, b, ctx);
   },

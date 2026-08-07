@@ -49,6 +49,15 @@ describe('bars-gaps', () => {
     expect(gaps[0]!.missingBars).toBeGreaterThan(1);
   });
 
+  it('findBarGaps / validateBarCoverage tolerate null bars and bad bounds', () => {
+    expect(findBarGaps(null as never, 1000, 1300, '1m')).toHaveLength(1);
+    expect(findBarGaps(undefined as never, 1000, 1300, '1m')).toHaveLength(1);
+    expect(findBarGaps([], NaN, 1000, '1m')).toEqual([]);
+    const report = validateBarCoverage(null as never, 1000, 1300, '1m');
+    expect(report.barCount).toBe(0);
+    expect(report.complete).toBe(false);
+  });
+
   it('findBarGaps leading and trailing', () => {
     // Window 0..300 step 60; only mid bars
     const bars = [bar(120), bar(180)];

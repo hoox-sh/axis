@@ -113,6 +113,21 @@ export interface BuildStrategyReportOptions {
   fillMode?: StrategyFillMode;
 }
 
+function emptyStats(): StrategyStats {
+  return {
+    totalPnl: 0,
+    winRate: 0,
+    profitFactor: 0,
+    avgTrade: 0,
+    avgWin: 0,
+    avgLoss: 0,
+    maxDD: 0,
+    wins: 0,
+    losses: 0,
+    trades: 0,
+  };
+}
+
 /**
  * Build closed trades and summary stats from raw engine/strategy events.
  * @param bars - Optional OHLCV for price resolution when events lack price/ohlc
@@ -126,6 +141,13 @@ export function buildStrategyReport(
   trades: ClosedTrade[];
   stats: StrategyStats;
 } {
+  // Defensive: never throw on garbage engine payloads (runner applies report in UI path)
+  if (!Array.isArray(events)) {
+    return {
+      trades: [],
+      stats: emptyStats(),
+    };
+  }
   const normalized = normalizeStrategyEvents(events, {
     bars,
     includeOrders: true,

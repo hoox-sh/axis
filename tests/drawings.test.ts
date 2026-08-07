@@ -14,6 +14,7 @@ import {
   needsNPoints,
   needsThreePoints,
   needsTwoPoints,
+  resolveDrawingStyle,
   toolArity,
   toolLabel,
   type DrawingToolId,
@@ -144,5 +145,35 @@ describe('drawing tools helpers', () => {
     const levels = computeFib(0, 100);
     expect(levels[0]).toBeCloseTo(0);
     expect(levels[levels.length - 1]).toBeCloseTo(100);
+  });
+});
+
+describe('drawing layer placement guards', () => {
+  it('n-point tools expose minPoints and create null for too few points', () => {
+    const poly = getToolHandler('polyline');
+    expect(poly?.minPoints).toBe(2);
+    expect(poly?.create?.([{ time: 1, price: 1 }], '#fff')).toBeNull();
+    const ok = poly?.create?.(
+      [
+        { time: 1, price: 1 },
+        { time: 2, price: 2 },
+      ],
+      '#fff',
+    );
+    expect(ok?.kind).toBe('polyline');
+  });
+
+  it('resolveDrawingStyle.locked reads dual lock fields (eraser / delete gate)', () => {
+    expect(
+      resolveDrawingStyle({ id: 'a', kind: 'hline', color: '#fff', locked: true } as never).locked,
+    ).toBe(true);
+    expect(
+      resolveDrawingStyle({
+        id: 'b',
+        kind: 'hline',
+        color: '#fff',
+        meta: { locked: true },
+      } as never).locked,
+    ).toBe(true);
   });
 });

@@ -621,11 +621,13 @@ export function buildEquityCurve(
 ): { time: number; value: number }[] {
   if (!trades.length) return [];
   const sorted = trades.slice().sort((a, b) => a.exitTime - b.exitTime);
-  let equity = initialCapital;
+  let equity = Number.isFinite(initialCapital) ? initialCapital : 10_000;
   const points: { time: number; value: number }[] = [];
   for (const t of sorted) {
     if (!Number.isFinite(t.exitTime)) continue;
-    equity += t.pnl;
+    const pnl = typeof t.pnl === 'number' && Number.isFinite(t.pnl) ? t.pnl : 0;
+    equity += pnl;
+    if (!Number.isFinite(equity)) equity = 0;
     const value = +equity.toFixed(2);
     const last = points[points.length - 1];
     if (last && last.time === t.exitTime) {

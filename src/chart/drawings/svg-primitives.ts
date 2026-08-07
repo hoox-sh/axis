@@ -33,8 +33,19 @@
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /**
+ * Finite number → attribute string. Rejects NaN / Infinity so SVG never gets
+ * `x="NaN"` geometry (invisible/broken paint, noisy layout).
+ */
+export function finiteAttr(n: unknown): string | null {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+  return String(n);
+}
+
+/**
  * Create an SVG element in the standard SVG namespace, set attributes, append
  * to `parent`. Returns the new node for further customization (e.g. text content).
+ * Attribute values are coerced with String(); callers should pass finite number
+ * strings for geometry (see {@link finiteAttr}).
  */
 export function el(
   parent: SVGElement,
@@ -42,7 +53,10 @@ export function el(
   attrs: Record<string, string>,
 ): SVGElement {
   const node = document.createElementNS(SVG_NS, name);
-  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null) continue;
+    node.setAttribute(k, String(v));
+  }
   parent.appendChild(node);
   return node;
 }
@@ -51,6 +65,7 @@ export function el(
  * Draw a line with a fat invisible hit stroke under a visible stroke.
  * Hit layer uses max(sw, 8) width at near-zero opacity for easier picking.
  * Visible stroke has `pointer-events: none` so hits go to the fat layer.
+ * No-ops when any endpoint is non-finite.
  */
 export function line(
   g: SVGElement,
@@ -63,25 +78,34 @@ export function line(
   dash?: string,
   pointerEvents = 'stroke',
 ): void {
+  const ax = finiteAttr(x1);
+  const ay = finiteAttr(y1);
+  const bx = finiteAttr(x2);
+  const by = finiteAttr(y2);
+  if (ax == null || ay == null || bx == null || by == null) return;
+
+  const strokeW = Number.isFinite(sw) && sw > 0 ? sw : 1.5;
+  const hitW = Math.max(strokeW, 8);
+
   el(g, 'line', {
-    x1: String(x1),
-    y1: String(y1),
-    x2: String(x2),
-    y2: String(y2),
-    stroke,
-    'stroke-width': String(Math.max(sw, 8)), // wider hit area
+    x1: ax,
+    y1: ay,
+    x2: bx,
+    y2: by,
+    stroke: stroke || '#939fff',
+    'stroke-width': String(hitW), // wider hit area
     'stroke-opacity': '0.01',
     'pointer-events': pointerEvents,
     'stroke-linecap': 'round',
   });
   // visible stroke on top
   el(g, 'line', {
-    x1: String(x1),
-    y1: String(y1),
-    x2: String(x2),
-    y2: String(y2),
-    stroke,
-    'stroke-width': String(sw),
+    x1: ax,
+    y1: ay,
+    x2: bx,
+    y2: by,
+    stroke: stroke || '#939fff',
+    'stroke-width': String(strokeW),
     'stroke-linecap': 'round',
     'pointer-events': 'none',
     ...(dash ? { 'stroke-dasharray': dash } : {}),
@@ -91,6 +115,7 @@ export function line(
 /**
  * Circle marker. When `handle` is true, uses dark fill + stroke cursor for
  * resize grips; otherwise a simple filled disc.
+ * No-ops when center/radius is non-finite.
  */
 export function circle(
   g: SVGElement,
@@ -100,12 +125,17 @@ export function circle(
   stroke: string,
   handle = false,
 ): void {
+  const acx = finiteAttr(cx);
+  const acy = finiteAttr(cy);
+  const ar = finiteAttr(Number.isFinite(r) && r >= 0 ? r : NaN);
+  if (acx == null || acy == null || ar == null) return;
+
   el(g, 'circle', {
-    cx: String(cx),
-    cy: String(cy),
-    r: String(r),
-    fill: handle ? '#0a0b10' : stroke,
-    stroke: handle ? stroke : '#0a0b10',
+    cx: acx,
+    cy: acy,
+    r: ar,
+    fill: handle ? '#0a0b10' : stroke || '#939fff',
+    stroke: handle ? stroke || '#939fff' : '#0a0b10',
     'stroke-width': handle ? '2' : '1',
     'pointer-events': 'auto',
     ...(handle ? { cursor: 'nwse-resize' } : {}),
@@ -122,16 +152,21 @@ export function label(
   size = 11,
   anchor: 'start' | 'end' | 'middle' = 'start',
 ): void {
+  const ax = finiteAttr(x);
+  const ay = finiteAttr(y);
+  if (ax == null || ay == null) return;
+  const fontSize = Number.isFinite(size) && size > 0 ? size : 11;
+
   const t = el(g, 'text', {
-    x: String(x),
-    y: String(y),
-    fill,
-    'font-size': String(size),
+    x: ax,
+    y: ay,
+    fill: fill || '#939fff',
+    'font-size': String(fontSize),
     'font-family': 'ui-monospace, SFMono-Regular, Menlo, monospace',
     'text-anchor': anchor,
     'pointer-events': 'none',
   });
-  t.textContent = text;
+  t.textContent = text == null ? '' : String(text);
 }
 
 /**

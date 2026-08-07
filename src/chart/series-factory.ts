@@ -156,7 +156,12 @@ function deepMerge(
  */
 export function createBaseChart(container: HTMLElement, options?: Record<string, unknown>): IChartApi {
   const tokens = activeTokens();
-  const themeOpts = buildChartOptionsFromTokens(tokens);
+  let themeOpts: Record<string, unknown> = {};
+  try {
+    themeOpts = buildChartOptionsFromTokens(tokens) as Record<string, unknown>;
+  } catch {
+    themeOpts = {};
+  }
 
   const base: Record<string, unknown> = {
     layout: {
@@ -228,12 +233,16 @@ function priceSeriesCommon(tokens: ThemeTokens) {
 }
 
 function alignRightScale(chart: IChartApi) {
-  const tokens = activeTokens();
-  chart.priceScale('right').applyOptions({
-    borderColor: String(tokens['scale.border'] ?? VOID.border),
-    textColor: String(tokens['scale.text'] ?? VOID.textDim),
-    minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
-  });
+  try {
+    const tokens = activeTokens();
+    chart.priceScale('right').applyOptions({
+      borderColor: String(tokens['scale.border'] ?? VOID.border),
+      textColor: String(tokens['scale.text'] ?? VOID.textDim),
+      minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
+    });
+  } catch {
+    /* disposed chart / missing scale */
+  }
 }
 
 /** Japanese candlestick series with void up/down colors and aligned right scale. */
@@ -381,13 +390,17 @@ export function createVolumeSeries(chart: IChartApi, paneIndex?: number): ISerie
   const series = paneIndex !== undefined
     ? chart.addSeries(HistogramSeries, opts, paneIndex)
     : chart.addSeries(HistogramSeries, opts);
-  chart.priceScale('right').applyOptions({
-    scaleMargins: { top: 0.12, bottom: 0.02 },
-    borderVisible: true,
-    borderColor: String(tokens['scale.border'] ?? VOID.border),
-    textColor: String(tokens['scale.text'] ?? VOID.textDim),
-    minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
-  });
+  try {
+    chart.priceScale('right').applyOptions({
+      scaleMargins: { top: 0.12, bottom: 0.02 },
+      borderVisible: true,
+      borderColor: String(tokens['scale.border'] ?? VOID.border),
+      textColor: String(tokens['scale.text'] ?? VOID.textDim),
+      minimumWidth: RIGHT_PRICE_SCALE_WIDTH,
+    });
+  } catch {
+    /* disposed chart */
+  }
   return series;
 }
 

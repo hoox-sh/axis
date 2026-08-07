@@ -115,9 +115,10 @@ describe('expand-cache', () => {
     setActivePlugin('source', DATA_MANAGER_SOURCE_ID);
     setStore('source', DATA_MANAGER_SOURCE_ID);
 
-    noteDataManagerLiveBar(bar(1120, 55));
-    // putCachedBars is async fire-and-forget — wait a tick
-    await new Promise((r) => setTimeout(r, 20));
+    // closed:true flushes immediately (open-bar path is debounced)
+    noteDataManagerLiveBar({ ...bar(1120, 55), closed: true });
+    // putCachedBars is async fire-and-forget — wait a few ticks
+    await new Promise((r) => setTimeout(r, 40));
 
     const cached = await getCachedBars('binance-rest', 'SOLUSDT', '1m');
     expect(cached.map((b) => b.time)).toContain(1120);

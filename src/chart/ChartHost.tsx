@@ -53,6 +53,7 @@ import {
   getSlotBars,
   getSlotChartDataGen,
   getSlotManager,
+  getActiveSlotId,
   setActiveSlotId,
   setSlotBars,
   setSlotManager,
@@ -99,23 +100,6 @@ export interface ChartHostProps {
   interval?: string;
 }
 
-function scheduleSlotReflow(slotId?: string) {
-  const run = () => {
-    try {
-      if (slotId) getSlotManager(slotId)?.resizeAll();
-      else getManager()?.resizeAll();
-    } catch (err: unknown) {
-      reportUiError(err, {
-        source: 'chart',
-        context: 'Chart reflow failed',
-        status: false,
-        throttleMs: 5000,
-      });
-    }
-  };
-  requestAnimationFrame(() => requestAnimationFrame(run));
-}
-
 /** Paint path that never throws into Solid effects. */
 function safePaint(
   bars: typeof store.bars,
@@ -135,9 +119,51 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
   let hostEl: HTMLDivElement | undefined;
   let panesEl: HTMLDivElement | undefined;
   let localManager: PaneManager | undefined;
+  /** False after host teardown — drops late rAF / RO callbacks. */
+  let alive = true;
+  /** Coalesced double-rAF reflow handles (cancelled on unmount). */
+  let reflowRafOuter = 0;
+  let reflowRafInner = 0;
 
   const slotId = () => props.slotId || 'main';
   const isActive = () => props.active !== false;
+
+  const scheduleReflow = () => {
+    if (!alive) return;
+    // Coalesce resize storms (panel chrome, RO, window) into one double-rAF
+    if (reflowRafOuter || reflowRafInner) return;
+    reflowRafOuter = requestAnimationFrame(() => {
+      reflowRafOuter = 0;
+      if (!alive) return;
+      reflowRafInner = requestAnimationFrame(() => {
+        reflowRafInner = 0;
+        if (!alive) return;
+        try {
+          // Prefer the instance this host owns — avoids resizing a recreated
+          // slot manager after unmount, and skips disposed globals.
+          (localManager || getSlotManager(slotId()) || getManager())?.resizeAll();
+        } catch (err: unknown) {
+          reportUiError(err, {
+            source: 'chart',
+            context: 'Chart reflow failed',
+            status: false,
+            throttleMs: 5000,
+          });
+        }
+      });
+    });
+  };
+
+  const cancelReflow = () => {
+    if (reflowRafOuter) {
+      cancelAnimationFrame(reflowRafOuter);
+      reflowRafOuter = 0;
+    }
+    if (reflowRafInner) {
+      cancelAnimationFrame(reflowRafInner);
+      reflowRafInner = 0;
+    }
+  };
 
   const bars = createMemo(() => {
     const id = slotId();
@@ -165,57 +191,97 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
   onMount(() => {
     if (!panesEl) return;
     const id = slotId();
+    alive = true;
     if (isActive()) setActiveSlotId(id);
 
-    const manager = new PaneManager(panesEl, id === 'main' ? '' : id);
+    let manager: PaneManager;
+    try {
+      manager = new PaneManager(panesEl, id === 'main' ? '' : id);
+    } catch (err: unknown) {
+      reportUiError(err, {
+        source: 'chart',
+        context: 'Chart mount failed',
+        status: true,
+      });
+      return;
+    }
     localManager = manager;
     setSlotManager(id, manager);
     if (isActive()) setManager(manager, id);
 
     for (const pane of store.panes) {
-      manager.createPane(pane.id, pane.type, pane.label || pane.type, pane.height || undefined);
+      try {
+        manager.createPane(
+          pane.id,
+          pane.type,
+          pane.label || pane.type,
+          pane.height || undefined,
+        );
+      } catch (err: unknown) {
+        reportUiError(err, {
+          source: 'chart',
+          context: `Pane create failed (${pane.id})`,
+          status: false,
+        });
+      }
     }
     // Apply persisted right-scale + series-name label prefs (chart [$] / [N])
-    manager.setPriceScaleLabelsVisible(store.priceScaleLabelsVisible !== false);
-    manager.setLastValueLabelsVisible(store.lastValueLabelsVisible !== false);
+    try {
+      manager.setPriceScaleLabelsVisible(store.priceScaleLabelsVisible !== false);
+      manager.setLastValueLabelsVisible(store.lastValueLabelsVisible !== false);
+    } catch {
+      /* label prefs optional */
+    }
     // Seed theme tokens onto newly created pane charts / host backgrounds
     try {
       manager.applyChartTheme?.();
     } catch {
       /* theme optional */
     }
-    manager.syncTimeScales();
-    manager.syncCrosshair((data) => {
-      if (!isActive()) return;
-      const t =
-        data?.time != null && Number.isFinite(Number(data.time))
-          ? Number(data.time)
-          : null;
-      // Pointer left the chart: clear so Data Window falls back to last (live) bar
-      if (t == null) {
-        setCrosshair(null, null);
-        return;
-      }
-      const bl = bars();
-      let barIndex: number | null = null;
-      if (bl.length) {
-        const exact = bl.findIndex((b) => b.time === t);
-        barIndex = exact >= 0 ? exact : null;
-        if (barIndex == null) {
-          let best = 0;
-          let bestD = Infinity;
-          for (let i = 0; i < bl.length; i++) {
-            const d = Math.abs(bl[i]!.time - t);
-            if (d < bestD) {
-              bestD = d;
-              best = i;
-            }
-          }
-          barIndex = best;
+    try {
+      manager.syncTimeScales();
+    } catch {
+      /* sync optional */
+    }
+    try {
+      manager.syncCrosshair((data) => {
+        if (!alive || !isActive()) return;
+        const t =
+          data?.time != null && Number.isFinite(Number(data.time))
+            ? Number(data.time)
+            : null;
+        // Pointer left the chart: clear so Data Window falls back to last (live) bar
+        if (t == null) {
+          setCrosshair(null, null);
+          return;
         }
-      }
-      setCrosshair(t, barIndex);
-    });
+        const bl = bars();
+        let barIndex: number | null = null;
+        if (bl.length) {
+          const exact = bl.findIndex((b) => b.time === t);
+          barIndex = exact >= 0 ? exact : null;
+          if (barIndex == null) {
+            let best = 0;
+            let bestD = Infinity;
+            for (let i = 0; i < bl.length; i++) {
+              const d = Math.abs(bl[i]!.time - t);
+              if (d < bestD) {
+                bestD = d;
+                best = i;
+              }
+            }
+            barIndex = best;
+          }
+        }
+        setCrosshair(t, barIndex);
+      });
+    } catch (err: unknown) {
+      reportUiError(err, {
+        source: 'chart',
+        context: 'Crosshair sync failed',
+        status: false,
+      });
+    }
 
     const existing = getSlotBars(id);
     if (existing.length) {
@@ -223,17 +289,20 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       else {
         // Inactive: apply directly on this manager
         try {
+          if (!alive) return;
           const prev = getManager();
+          const prevActiveId =
+            store.chartLayout?.activeId || getActiveSlotId() || null;
           setActiveSlotId(id);
           setManager(manager, id);
           safePaint(existing, { fit: true }, 'Inactive slot paint');
-          // restore previous active
-          const activeId = store.chartLayout?.activeId;
+          // restore previous active (layout wins; fall back to pre-steal id)
+          const activeId = store.chartLayout?.activeId || prevActiveId;
           if (activeId && activeId !== id) {
             setActiveSlotId(activeId);
             const am = getSlotManager(activeId);
             if (am) setManager(am, activeId);
-          } else if (prev) {
+          } else if (prev && prev !== manager) {
             setManager(prev);
           }
         } catch (err: unknown) {
@@ -246,12 +315,16 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       }
     } else if (props.symbol && props.interval && !isActive()) {
       // Prefetch inactive slot history without stealing active focus
-      void loadSymbolData(props.symbol, props.interval, store.source)
+      const sym = props.symbol;
+      const iv = props.interval;
+      void loadSymbolData(sym, iv, store.source)
         .then((ok) => {
           // loadSymbolData always writes to active — only use for active slot
+          if (!alive) return;
           void ok;
         })
         .catch((err: unknown) => {
+          if (!alive) return;
           reportUiError(err, {
             source: 'data',
             context: 'Slot prefetch failed',
@@ -265,10 +338,14 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
 
     let ro: ResizeObserver | undefined;
     if (hostEl && typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(() => scheduleSlotReflow(id));
+      ro = new ResizeObserver(() => {
+        if (alive) scheduleReflow();
+      });
       ro.observe(hostEl);
     }
-    const onWin = () => scheduleSlotReflow(id);
+    const onWin = () => {
+      if (alive) scheduleReflow();
+    };
     window.addEventListener('resize', onWin);
     window.addEventListener('axis-chart-reflow', onWin);
 
@@ -291,40 +368,43 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
 
   // Full history reloads for active slot (store.chartDataGen)
   createEffect(() => {
-    if (!isActive()) return;
+    if (!alive || !isActive()) return;
     const gen = store.chartDataGen;
     void gen;
+    // setDataToChart paints via getManager() — require active binding
     if (!getManager()) return;
     untrack(() => {
-      if (store.bars.length) {
-        // Respect bar-replay cursor so reloads / paint paths don't flash full history
-        safePaint(
-          barsForPaint(store.bars),
-          { fit: !isReplayActive() },
-          'Chart data reload',
-        );
-        setSlotBars(slotId(), store.bars, false);
-      }
+      if (!alive || !store.bars.length) return;
+      // Respect bar-replay cursor so reloads / paint paths don't flash full history
+      safePaint(
+        barsForPaint(store.bars),
+        { fit: !isReplayActive() },
+        'Chart data reload',
+      );
+      setSlotBars(slotId(), store.bars, false);
     });
   });
 
   // Inactive slots: react to their runtime gen if we bump it later
   createEffect(() => {
-    if (isActive()) return;
+    if (!alive || isActive()) return;
     const id = slotId();
     void getSlotChartDataGen(id);
     const bl = getSlotBars(id);
-    const m = getSlotManager(id);
+    const m = localManager || getSlotManager(id);
     if (!m || !bl.length) return;
     // lightweight re-apply without stealing active manager for long
     untrack(() => {
+      if (!alive) return;
       try {
         const price = m.getPane('price');
         if (price?.series['candle']) {
+          const prevActiveId =
+            store.chartLayout?.activeId || getActiveSlotId() || null;
           setActiveSlotId(id);
           setManager(m, id);
           safePaint(bl, { fit: false, clearMarkers: false }, 'Inactive slot re-paint');
-          const aid = store.chartLayout?.activeId;
+          const aid = store.chartLayout?.activeId || prevActiveId;
           if (aid && aid !== id) {
             setActiveSlotId(aid);
             const am = getSlotManager(aid);
@@ -342,25 +422,24 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
   });
 
   createEffect(() => {
-    if (!isActive()) return;
+    if (!alive || !isActive()) return;
     const type = store.chartType;
     void type;
     if (!getManager()) return;
     untrack(() => {
-      if (store.bars.length) {
-        safePaint(
-          barsForPaint(store.bars),
-          { fit: false, clearMarkers: false },
-          'Chart type paint',
-        );
-      }
+      if (!alive || !store.bars.length) return;
+      safePaint(
+        barsForPaint(store.bars),
+        { fit: false, clearMarkers: false },
+        'Chart type paint',
+      );
     });
   });
 
   createEffect(() => {
     void store.panelChrome;
     void store.chartLayout?.mode;
-    scheduleSlotReflow(slotId());
+    scheduleReflow();
   });
 
   // Chart theme (preset / overrides) + document theme → re-apply LWC options
@@ -381,7 +460,15 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
   createEffect(() => {
     if (!isActive()) return;
     const tool = store.drawingTool;
-    getDrawingLayer()?.setTool(tool);
+    try {
+      getDrawingLayer()?.setTool(tool);
+    } catch (err: unknown) {
+      reportUiError(err, {
+        source: 'chart',
+        context: 'Drawing tool apply failed',
+        status: false,
+      });
+    }
   });
 
   // Pane corner badges track applied scripts (settings / eye / re-run / remove)
@@ -412,12 +499,23 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     void store.chartDataGen;
     void store.bars.length;
     if (!getManager()) return;
-    untrack(() => applyDebugPinsToChart());
+    untrack(() => {
+      try {
+        applyDebugPinsToChart();
+      } catch (err: unknown) {
+        // applyDebugPinsToChart already reports; boundary for unexpected throws
+        reportUiError(err, {
+          source: 'chart',
+          context: 'Debug pins effect failed',
+          status: false,
+        });
+      }
+    });
   });
 
   // Compare / second-symbol overlay (active slot only — multi-chart safe)
   createEffect(() => {
-    if (!isActive()) return;
+    if (!alive || !isActive()) return;
     const enabled = store.compare?.enabled;
     const mode = store.compare?.mode ?? 'percent';
     const normalizeMain = !!store.compare?.normalizeMain;
@@ -427,10 +525,11 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     void store.chartDataGen;
     void store.bars.length;
 
-    const mgr = getManager() || localManager;
+    const mgr = localManager || getManager();
     if (!mgr) return;
 
     untrack(() => {
+      if (!alive) return;
       try {
         if (!enabled || !compareSym || !compareBars.length || !store.bars.length) {
           clearCompareOverlay(mgr);
@@ -455,7 +554,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
 
   // Refetch compare when main interval/source/history reloads while enabled
   createEffect(() => {
-    if (!isActive()) return;
+    if (!alive || !isActive()) return;
     if (!store.compare?.enabled) return;
     const sym = (store.compare.symbol || '').trim().toUpperCase();
     if (!sym) return;
@@ -470,17 +569,17 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     });
 
     untrack(() => {
-      if (!store.bars.length) return;
+      if (!alive || !store.bars.length) return;
       if (sym === store.symbol.toUpperCase()) return;
       setCompareLoadState({ loading: true, error: null });
       void fetchCompareBars(sym, interval, source)
         .then((bars) => {
-          if (cancelled) return;
+          if (cancelled || !alive) return;
           if (!store.compare.enabled || store.compare.symbol.toUpperCase() !== sym) return;
           setCompareBars(bars);
         })
         .catch((err: unknown) => {
-          if (cancelled) return;
+          if (cancelled || !alive) return;
           const msg = err instanceof Error ? err.message : String(err);
           setCompareLoadState({ loading: false, error: msg });
           clearCompareBars();
@@ -490,19 +589,44 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
 
   onCleanup(() => {
     const id = slotId();
-    if (isActive()) {
-      const layer = getDrawingLayer();
-      if (layer) {
-        layer.destroy();
-        setDrawingLayer(undefined, id);
+    const owned = localManager;
+    alive = false;
+    cancelReflow();
+
+    // Optional subsystems first (need live LWC charts).
+    try {
+      if (isActive() || getActiveSlotId() === id) {
+        const layer = getDrawingLayer();
+        if (layer) {
+          try {
+            layer.destroy();
+          } catch {
+            /* ignore */
+          }
+          setDrawingLayer(undefined, id);
+        }
       }
       try {
-        clearCompareOverlay(localManager || getManager());
+        clearCompareOverlay(owned);
       } catch {
         /* ignore */
       }
+    } catch {
+      /* ignore */
     }
+
+    // disposeSlotChart nulls the registry entry *before* calling dispose(), so
+    // getSlotManager is already clean mid-teardown. Clear legacy/theme after.
     disposeSlotChart(id);
+    // Drop getManager() module fallback when this host owned the active manager
+    // (avoids zombie after activeSlotId is later cleared).
+    if (
+      getActiveSlotId() === id ||
+      isActive() ||
+      (owned != null && getManager() === owned)
+    ) {
+      setManager(undefined, id);
+    }
     localManager = undefined;
   });
 

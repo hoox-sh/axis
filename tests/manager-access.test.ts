@@ -129,4 +129,27 @@ describe('manager-access', () => {
     expect(getDrawingLayer()).toBeDefined();
     setDrawingLayer(undefined);
   });
+
+  it('getManager does not return stale legacy when active slot is empty', async () => {
+    const { setActiveSlotId, setSlotManager, getSlotManager } = await import(
+      '../src/chart/chart-registry'
+    );
+    const el = document.createElement('div') as unknown as HTMLElement;
+    const chart = createBaseChart(el);
+    const fake = {
+      getPane: () => undefined,
+      clearTradeMarkers: () => {},
+      chart,
+    };
+    setActiveSlotId('slot-zombie');
+    setManager(fake as never, 'slot-zombie');
+    expect(getManager()).toBe(fake);
+    // Simulate disposeSlotChart: null registry but leave module legacy dirty
+    setSlotManager('slot-zombie', undefined);
+    expect(getSlotManager('slot-zombie')).toBeUndefined();
+    // Must not fall through to disposed legacy while slot id is still active
+    expect(getManager()).toBeUndefined();
+    setManager(undefined, 'slot-zombie');
+    setActiveSlotId(null);
+  });
 });

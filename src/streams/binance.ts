@@ -56,26 +56,90 @@ export const binanceStream: StreamPlugin = {
   name: 'Binance WebSocket',
   start({ symbol, interval, onBar, onStatus, onError }) {
     const wsInterval = INTERVAL_MAP[interval] || interval;
-    const url = `wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@kline_${wsInterval}`;
-    const ws = new WebSocket(url);
+    const sym = String(symbol || '').toLowerCase();
+    const url = `wss://stream.binance.com:9443/ws/${sym}@kline_${wsInterval}`;
+    let stopped = false;
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(url);
+    } catch (e) {
+      onError(e instanceof Error ? e : new Error(String(e)));
+      return () => {};
+    }
 
-    ws.onopen = () => onStatus({ state: 'open' });
-    ws.onerror = () => onError(new Error('WebSocket error'));
-    ws.onclose = () => onStatus({ state: 'closed' });
-
-    ws.onmessage = (e) => {
+    ws.onopen = () => {
+      if (stopped) return;
       try {
-        const data = JSON.parse(e.data);
-        const k = data.k;
-        if (!k) return;
-        const bar: Bar = {
-          time: Math.floor(k.t / 1000),
-          open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v,
-        };
-        onBar(bar);
-      } catch {}
+        onStatus({ state: 'open' });
+      } catch {
+        /* ignore */
+      }
+    };
+    ws.onerror = () => {
+      if (stopped) return;
+      try {
+        onError(new Error('WebSocket error'));
+      } catch {
+        /* ignore */
+      }
+    };
+    ws.onclose = () => {
+      if (stopped) return;
+      try {
+        onStatus({ state: 'closed' });
+      } catch {
+        /* ignore */
+      }
     };
 
-    return () => ws.close();
+    ws.onmessage = (e) => {
+      if (stopped) return;
+      try {
+        const data = JSON.parse(e.data as string);
+        const k = data?.k;
+        if (!k) return;
+        const time = Math.floor(Number(k.t) / 1000);
+        const open = +k.o;
+        const high = +k.h;
+        const low = +k.l;
+        const close = +k.c;
+        const volume = +k.v;
+        if (
+          !Number.isFinite(time) ||
+          time <= 0 ||
+          !Number.isFinite(open) ||
+          !Number.isFinite(high) ||
+          !Number.isFinite(low) ||
+          !Number.isFinite(close)
+        ) {
+          return;
+        }
+        const bar: Bar = {
+          time,
+          open,
+          high,
+          low,
+          close,
+          volume: Number.isFinite(volume) && volume >= 0 ? volume : undefined,
+        };
+        onBar(bar);
+      } catch {
+        /* ignore malformed frames */
+      }
+    };
+
+    return () => {
+      if (stopped) return;
+      stopped = true;
+      try {
+        ws.onclose = null;
+        ws.onerror = null;
+        ws.onmessage = null;
+        ws.onopen = null;
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+    };
   },
 };

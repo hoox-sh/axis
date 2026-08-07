@@ -432,6 +432,10 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
  * Concurrent runs: each call advances a run epoch; only the latest epoch
  * may update `lastRun`, open Results, or mutate chart series — stale
  * completions return their result with `meta.superseded: true` and no chart apply.
+ *
+ * **Never rejects** — engine failures, disposed charts, and LWC throws become
+ * `status: 'error'` or logged apply failures so `void runAndApply(...)` call
+ * sites cannot produce unhandled rejections.
  */
 export async function runAndApply(
   script: string,
@@ -442,6 +446,40 @@ export async function runAndApply(
   const openResults = opts.openResults ?? !silent;
   const epoch = beginRunEpoch();
 
+  try {
+    return await runAndApplyInner(script, indicatorId, opts, epoch, silent, openResults);
+  } catch (e: unknown) {
+    // Last-resort fence: callers use void runAndApply / fire-and-forget.
+    const msg = formatRunError(e);
+    if (isRunEpochCurrent(epoch)) {
+      reportUiError(e, {
+        source: 'run',
+        context: 'Run apply failed',
+        status: !silent,
+      });
+      if (silent) appendLog('error', `Run apply failed: ${msg}`, 'live');
+      else if (store.status !== 'error') setStatus('error', msg);
+    }
+    const superseded = !isRunEpochCurrent(epoch);
+    return {
+      status: 'error',
+      plots: [],
+      series: {},
+      events: [],
+      error: msg,
+      meta: superseded ? { superseded: true } : {},
+    };
+  }
+}
+
+async function runAndApplyInner(
+  script: string,
+  indicatorId: string | undefined,
+  opts: RunOptions,
+  epoch: number,
+  silent: boolean,
+  openResults: boolean,
+): Promise<RunResult> {
   // Prefer explicit opts.inputs; else per-indicator saved values; else editor
   let inputs = opts.inputs;
   if (!inputs && indicatorId) {
@@ -525,46 +563,56 @@ export async function runAndApply(
     // Always use the stable shared sub-pane id so store.panes, manager, and
     // script.paneId stay aligned (random addPane ids left empty orphan panes).
     paneId = 'indicator';
-    if (!manager.getPane(paneId)) {
-      addPane('indicator', scriptName, { id: 'indicator', height: 140 });
-      manager.createPane(paneId, 'indicator', scriptName, 140);
-      manager.syncTimeScales();
-    } else {
-      try {
-        manager.setLabel(paneId, scriptName);
-      } catch {
-        /* ignore */
-      }
-    }
-    // Drop orphan store panes (legacy random ids) left empty without a manager pane
-    for (const p of [...store.panes]) {
-      if (
-        p.type === 'indicator' &&
-        p.id !== 'indicator' &&
-        !manager.getPane(p.id) &&
-        !store.scripts.some((s) => s.paneId === p.id)
-      ) {
+    try {
+      if (!manager.getPane(paneId)) {
+        addPane('indicator', scriptName, { id: 'indicator', height: 140 });
+        manager.createPane(paneId, 'indicator', scriptName, 140);
+        manager.syncTimeScales();
+      } else {
         try {
-          removePane(p.id);
+          manager.setLabel(paneId, scriptName);
         } catch {
           /* ignore */
         }
       }
-    }
-    // Also destroy orphan manager panes that have no scripts
-    for (const mp of manager.getAllPanes()) {
-      if (
-        mp.type === 'indicator' &&
-        mp.id !== 'indicator' &&
-        !store.scripts.some((s) => s.paneId === mp.id)
-      ) {
-        try {
-          manager.destroyPane(mp.id);
-          if (store.panes.some((p) => p.id === mp.id)) removePane(mp.id);
-        } catch {
-          /* ignore */
+      // Drop orphan store panes (legacy random ids) left empty without a manager pane
+      for (const p of [...store.panes]) {
+        if (
+          p.type === 'indicator' &&
+          p.id !== 'indicator' &&
+          !manager.getPane(p.id) &&
+          !store.scripts.some((s) => s.paneId === p.id)
+        ) {
+          try {
+            removePane(p.id);
+          } catch {
+            /* ignore */
+          }
         }
       }
+      // Also destroy orphan manager panes that have no scripts
+      for (const mp of manager.getAllPanes()) {
+        if (
+          mp.type === 'indicator' &&
+          mp.id !== 'indicator' &&
+          !store.scripts.some((s) => s.paneId === mp.id)
+        ) {
+          try {
+            manager.destroyPane(mp.id);
+            if (store.panes.some((p) => p.id === mp.id)) removePane(mp.id);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    } catch (e: unknown) {
+      // Chart disposed / host unmounted mid-apply — fall back to price if present
+      reportUiError(e, {
+        source: 'run',
+        context: 'Indicator pane setup failed',
+        status: false,
+      });
+      paneId = manager.getPane('price') ? 'price' : paneId;
     }
   } else if (existing?.paneId && existing.paneId !== 'price' && existing.paneId !== 'volume') {
     // Was a sub-pane script, now true overlay — clear stale series on old pane
@@ -604,6 +652,13 @@ export async function runAndApply(
   if (seriesEntries.length > 0) {
     let colorIdx = 0;
     for (const [k, arr] of seriesEntries) {
+      // Large multi-plot payloads: bail early if a newer run won
+      if (!isRunEpochCurrent(epoch)) {
+        return {
+          ...result,
+          meta: { ...result.meta, superseded: true },
+        };
+      }
       const meta = plotMeta[k] || {};
       const kindRaw = String(meta?.kind || 'plot');
       const isHline = kindRaw === 'hline';
@@ -659,175 +714,207 @@ export async function runAndApply(
     appendLog('warn', 'Run finished with no bars — chart overlays cleared', 'plot');
   }
 
-  // Chart series mutations isolated — LWC throws must not reject runAndApply
+  // Stale after building large overlay payloads — skip LWC mutations
+  if (!isRunEpochCurrent(epoch)) {
+    return {
+      ...result,
+      meta: { ...result.meta, superseded: true },
+    };
+  }
+
+  // Chart series mutations isolated — LWC throws / disposed panes must not reject
   try {
-    manager.syncOverlayLines(paneId, overlayLines);
-    // Refresh corner badges (name + settings / eye / re-run / remove)
-    try {
-      manager.refreshBadges?.(paneId);
-      if (paneId !== 'price') manager.refreshBadges?.('price');
-    } catch {
-      /* badges optional */
+    if (!isRunEpochCurrent(epoch)) {
+      return {
+        ...result,
+        meta: { ...result.meta, superseded: true },
+      };
     }
-
-    // bgcolor → histogram underlay on price pane (always price; not indicator sub-pane)
-    const bgBands = split.bgcolors
-      .map(({ key, values, meta }) => ({
-        name: key,
-        data: bgcolorSeriesToHistogramData(ohlcvTimes, values, meta.color),
-      }))
-      .filter((b) => b.data.length > 0);
-    manager.syncBgcolorBands(bgBands);
-    if (bgBands.length && !silent) {
-      appendLog('ok', `bgcolor: ${bgBands.length} band series`, 'plot');
-    }
-
-    // fill(plot1, plot2, color=…) → SVG band between plot edges on price pane
-    const fillBands = resolvePlotFillBands(result.series || {}, plotMeta);
-    try {
-      const layer = getActiveDrawingLayer();
-      if (layer?.setPlotFills) {
-        if (fillBands.length) {
-          const times = ohlcvTimes.map((t) =>
-            Number(t) > 1e12 ? Math.floor(Number(t) / 1000) : Math.floor(Number(t)),
-          );
-          layer.setPlotFills(
-            fillBands.map((f) => ({
-              name: f.name,
-              times,
-              upper: f.upper,
-              lower: f.lower,
-              colors: f.colors,
-              color: f.color,
-            })),
-          );
-          if (!silent) {
-            appendLog(
-              'ok',
-              `fill: ${fillBands.map((f) => `${f.name}(${f.plot1}↔${f.plot2})`).join(', ')}`,
-              'plot',
-            );
-          }
-        } else {
-          layer.clearPlotFills?.();
-        }
-      }
-    } catch {
-      /* drawing layer optional in tests */
-    }
-
-    // plotshape / plotchar → markers (merged with strategy markers; never wipe trades)
-    const shapeMarkers = split.shapes.flatMap(({ key, values, meta }) =>
-      shapeSeriesToMarkers(ohlcvTimes, values, meta, { idPrefix: key }),
-    );
-    manager.setShapeMarkers(shapeMarkers);
-    if (shapeMarkers.length && !silent) {
-      appendLog('ok', `plotshape: ${shapeMarkers.length} marker(s)`, 'plot');
-    }
-
-    // Non-overlay scripts must not leave series on the price pane
-    if (!overlay && paneId !== 'price') {
-      const pricePane = manager.getPane('price');
-      if (pricePane) {
-        for (const line of overlayLines) {
-          const key = `overlay_${line.name}`;
-          if (pricePane.series[key]) {
-            try {
-              pricePane.chart.removeSeries(pricePane.series[key]);
-            } catch {
-              /* ignore */
-            }
-            delete pricePane.series[key];
-          }
-        }
-      }
-    }
-
-    // Strategy: trade markers on price pane + report stats.
-    // Equity curve is rendered in Results → Strategy only (no main-chart equity pane).
-    const events = result.events || [];
-    const isStrategy =
-      scriptType === 'strategy' ||
-      events.some((e) => {
-        const k = String(
-          (e as { kind?: string; type?: string }).kind ||
-            (e as { type?: string }).type ||
-            '',
-        ).toLowerCase();
-        return (
-          k.includes('entry') ||
-          k.includes('exit') ||
-          k.includes('close') ||
-          k === 'order'
+    if (!manager.getPane(paneId)) {
+      if (!silent) {
+        appendLog(
+          'warn',
+          `Chart pane "${paneId}" missing — skipped plot apply (chart disposed?)`,
+          'plot',
         );
-      });
-    // Hide any leftover main-chart equity pane from older sessions / builds
-    try {
-      manager.hideEquityPane?.();
-    } catch {
-      /* equity pane optional */
-    }
-    if (events.length) {
-      const fillMode = store.strategyUi?.slippageNextOpen ? 'next_open' : 'close';
-      const normalized = normalizeStrategyEvents(events, {
-        bars: store.bars || [],
-        includeOrders: false,
-        fillMode,
-      });
-      const markers = eventsToMarkers(normalized, {
-        invertLabels: !!store.strategyUi?.invertTradeLabels,
-        exactOnCandle: store.strategyUi?.exactOnCandle !== false,
-      });
-      manager.setTradeMarkers(markers);
+      }
+    } else {
+      manager.syncOverlayLines(paneId, overlayLines);
+      // Refresh corner badges (name + settings / eye / re-run / remove)
+      try {
+        manager.refreshBadges?.(paneId);
+        if (paneId !== 'price') manager.refreshBadges?.('price');
+      } catch {
+        /* badges optional */
+      }
 
-      const report = buildStrategyReport(events, store.bars || [], { fillMode });
-      if (report.trades.length) {
-        if (!silent) {
-          appendLog(
-            'ok',
-            `Strategy: ${report.stats.trades} trades · net ${report.stats.totalPnl >= 0 ? '+' : ''}${report.stats.totalPnl.toFixed(2)} · win ${report.stats.winRate.toFixed(0)}% · ${markers.length} markers`,
-            'strategy',
-          );
-          // Surface the Strategy tester tab when this run produced closed trades
-          try {
-            setStore('resultsPanel', 'open', true);
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(
-                new CustomEvent('axis-results-tab', { detail: { tab: 'strategy' } }),
+      // bgcolor → histogram underlay on price pane (always price; not indicator sub-pane)
+      const bgBands = split.bgcolors
+        .map(({ key, values, meta }) => ({
+          name: key,
+          data: bgcolorSeriesToHistogramData(ohlcvTimes, values, meta.color),
+        }))
+        .filter((b) => b.data.length > 0);
+      manager.syncBgcolorBands(bgBands);
+      if (bgBands.length && !silent) {
+        appendLog('ok', `bgcolor: ${bgBands.length} band series`, 'plot');
+      }
+
+      // fill(plot1, plot2, color=…) → SVG band between plot edges on price pane
+      const fillBands = resolvePlotFillBands(result.series || {}, plotMeta);
+      try {
+        const layer = getActiveDrawingLayer();
+        if (layer?.setPlotFills) {
+          if (fillBands.length) {
+            const times: number[] = new Array(ohlcvTimes.length);
+            let tn = 0;
+            for (let i = 0; i < ohlcvTimes.length; i++) {
+              const t = ohlcvTimes[i];
+              const n = typeof t === 'number' ? t : Number(t);
+              if (!Number.isFinite(n)) continue;
+              times[tn++] = n > 1e12 ? Math.floor(n / 1000) : Math.floor(n);
+            }
+            times.length = tn;
+            layer.setPlotFills(
+              fillBands.map((f) => ({
+                name: f.name,
+                times,
+                upper: f.upper,
+                lower: f.lower,
+                colors: f.colors,
+                color: f.color,
+              })),
+            );
+            if (!silent) {
+              appendLog(
+                'ok',
+                `fill: ${fillBands.map((f) => `${f.name}(${f.plot1}↔${f.plot2})`).join(', ')}`,
+                'plot',
               );
             }
-          } catch {
-            /* optional UI hook */
+          } else {
+            layer.clearPlotFills?.();
+          }
+        }
+      } catch {
+        /* drawing layer optional in tests */
+      }
+
+      // plotshape / plotchar → markers (merged with strategy markers; never wipe trades)
+      const shapeMarkers = split.shapes.flatMap(({ key, values, meta }) =>
+        shapeSeriesToMarkers(ohlcvTimes, values, meta, { idPrefix: key }),
+      );
+      manager.setShapeMarkers(shapeMarkers);
+      if (shapeMarkers.length && !silent) {
+        appendLog('ok', `plotshape: ${shapeMarkers.length} marker(s)`, 'plot');
+      }
+
+      // Non-overlay scripts must not leave series on the price pane
+      if (!overlay && paneId !== 'price') {
+        const pricePane = manager.getPane('price');
+        if (pricePane) {
+          for (const line of overlayLines) {
+            const key = `overlay_${line.name}`;
+            if (pricePane.series[key]) {
+              try {
+                pricePane.chart.removeSeries(pricePane.series[key]);
+              } catch {
+                /* ignore */
+              }
+              delete pricePane.series[key];
+            }
+          }
+        }
+      }
+
+      // Strategy: trade markers on price pane + report stats.
+      // Equity curve is rendered in Results → Strategy only (no main-chart equity pane).
+      const events = result.events || [];
+      const isStrategy =
+        scriptType === 'strategy' ||
+        events.some((e) => {
+          const k = String(
+            (e as { kind?: string; type?: string }).kind ||
+              (e as { type?: string }).type ||
+              '',
+          ).toLowerCase();
+          return (
+            k.includes('entry') ||
+            k.includes('exit') ||
+            k.includes('close') ||
+            k === 'order'
+          );
+        });
+      // Hide any leftover main-chart equity pane from older sessions / builds
+      try {
+        manager.hideEquityPane?.();
+      } catch {
+        /* equity pane optional */
+      }
+      if (events.length) {
+        const fillMode = store.strategyUi?.slippageNextOpen ? 'next_open' : 'close';
+        const normalized = normalizeStrategyEvents(events, {
+          bars: store.bars || [],
+          includeOrders: false,
+          fillMode,
+        });
+        const markers = eventsToMarkers(normalized, {
+          invertLabels: !!store.strategyUi?.invertTradeLabels,
+          exactOnCandle: store.strategyUi?.exactOnCandle !== false,
+        });
+        manager.setTradeMarkers(markers);
+
+        const report = buildStrategyReport(events, store.bars || [], { fillMode });
+        if (report.trades.length) {
+          if (!silent) {
+            const net = Number.isFinite(report.stats.totalPnl) ? report.stats.totalPnl : 0;
+            const wr = Number.isFinite(report.stats.winRate) ? report.stats.winRate : 0;
+            appendLog(
+              'ok',
+              `Strategy: ${report.stats.trades} trades · net ${net >= 0 ? '+' : ''}${net.toFixed(2)} · win ${wr.toFixed(0)}% · ${markers.length} markers`,
+              'strategy',
+            );
+            // Surface the Strategy tester tab when this run produced closed trades
+            try {
+              setStore('resultsPanel', 'open', true);
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('axis-results-tab', { detail: { tab: 'strategy' } }),
+                );
+              }
+            } catch {
+              /* optional UI hook */
+            }
+          }
+        } else if (!silent) {
+          if (markers.length || isStrategy) {
+            appendLog(
+              'ok',
+              `Strategy events: ${events.length} raw · ${normalized.length} fills · ${markers.length} markers` +
+                (report.trades.length === 0
+                  ? ' · no closed trades yet (need entry+exit pair)'
+                  : ''),
+              'strategy',
+            );
           }
         }
       } else if (!silent) {
-        if (markers.length || isStrategy) {
+        // Interactive run with no strategy events — clear trade markers.
+        // Silent live re-runs of pure indicators must NOT wipe another script's
+        // strategy markers (multi-indicator live thrash).
+        if (isStrategy) {
           appendLog(
-            'ok',
-            `Strategy events: ${events.length} raw · ${normalized.length} fills · ${markers.length} markers` +
-              (report.trades.length === 0
-                ? ' · no closed trades yet (need entry+exit pair)'
-                : ''),
+            'warn',
+            'Strategy run returned 0 events — broker never filled (check entry conditions / bars)',
             'strategy',
           );
         }
+        manager.setTradeMarkers([]);
       }
-    } else if (!silent) {
-      // Interactive run with no strategy events — clear trade markers.
-      // Silent live re-runs of pure indicators must NOT wipe another script's
-      // strategy markers (multi-indicator live thrash).
-      if (isStrategy) {
-        appendLog(
-          'warn',
-          'Strategy run returned 0 events — broker never filled (check entry conditions / bars)',
-          'strategy',
-        );
-      }
-      manager.setTradeMarkers([]);
-    }
 
-    // Debug pins from logs (bar_index/time) — independent of trade/shape lists
-    applyDebugPinsToChart();
+      // Debug pins from logs (bar_index/time) — independent of trade/shape lists
+      applyDebugPinsToChart();
+    }
   } catch (e: unknown) {
     const msg = formatRunError(e);
     reportUiError(e, {
@@ -841,35 +928,38 @@ export async function runAndApply(
 
   // Pine drawings: atomic replace (no clear→empty→set flash).
   // GC trims each type to indicator()/strategy() max_*_count (default 50).
-  try {
-    const drawings = Array.isArray((result as RunResult & { drawings?: unknown[] }).drawings)
-      ? (result as RunResult & { drawings?: unknown[] }).drawings
-      : undefined;
-    const layer = getActiveDrawingLayer();
-    if (drawings?.length) {
-      const limits = resolveDrawingLimits(
-        script,
-        (result.meta as Record<string, unknown> | undefined) ?? null,
-      );
-      layer?.setScriptDrawings(drawings, limits);
-      if (!silent) {
-        const normalized = normalizeScriptDrawings(drawings);
-        const kept = garbageCollectScriptDrawings(normalized, limits);
-        const dropped = normalized.length - kept.length;
-        appendLog(
-          'ok',
-          dropped > 0
-            ? `Pine drawings: ${kept.length} object(s) (${dropped} GC'd by max_*_count)`
-            : `Pine drawings: ${kept.length} object(s)`,
-          'drawings',
+  // Skip when superseded so a stale run cannot wipe fresher drawings.
+  if (isRunEpochCurrent(epoch)) {
+    try {
+      const drawings = Array.isArray((result as RunResult & { drawings?: unknown[] }).drawings)
+        ? (result as RunResult & { drawings?: unknown[] }).drawings
+        : undefined;
+      const layer = getActiveDrawingLayer();
+      if (drawings?.length) {
+        const limits = resolveDrawingLimits(
+          script,
+          (result.meta as Record<string, unknown> | undefined) ?? null,
         );
+        layer?.setScriptDrawings(drawings, limits);
+        if (!silent) {
+          const normalized = normalizeScriptDrawings(drawings);
+          const kept = garbageCollectScriptDrawings(normalized, limits);
+          const dropped = normalized.length - kept.length;
+          appendLog(
+            'ok',
+            dropped > 0
+              ? `Pine drawings: ${kept.length} object(s) (${dropped} GC'd by max_*_count)`
+              : `Pine drawings: ${kept.length} object(s)`,
+            'drawings',
+          );
+        }
+      } else if (!silent) {
+        // Only clear on interactive full runs when engine returned none
+        layer?.clearScriptDrawings();
       }
-    } else if (!silent) {
-      // Only clear on interactive full runs when engine returned none
-      layer?.clearScriptDrawings();
+    } catch {
+      /* drawing layer optional in tests */
     }
-  } catch {
-    /* drawing layer optional in tests */
   }
 
   // Final epoch gate before store mutations (indicator list / series cache)
@@ -898,46 +988,54 @@ export async function runAndApply(
     titlesForCache[k] = title;
   }
 
-  if (indicatorId === undefined) {
-    const plots: Record<string, { color: string }> = {};
-    let colorIdx = 0;
-    if (seriesEntries.length) {
-      for (const [k] of seriesEntries) {
-        const meta = plotMeta[k];
-        plots[k] = {
-          color:
-            (meta?.color && String(meta.color)) ||
-            PLOT_PALETTE[colorIdx % PLOT_PALETTE.length],
-        };
-        colorIdx += 1;
+  try {
+    if (indicatorId === undefined) {
+      const plots: Record<string, { color: string }> = {};
+      let colorIdx = 0;
+      if (seriesEntries.length) {
+        for (const [k] of seriesEntries) {
+          const meta = plotMeta[k];
+          plots[k] = {
+            color:
+              (meta?.color && String(meta.color)) ||
+              PLOT_PALETTE[colorIdx % PLOT_PALETTE.length],
+          };
+          colorIdx += 1;
+        }
+      } else {
+        plots[scriptName] = { color: PLOT_PALETTE[0] };
       }
-    } else {
-      plots[scriptName] = { color: PLOT_PALETTE[0] };
-    }
-    // Prefer original opts/editor overrides (plot refs), not engine-expanded arrays
-    const savedInputs =
-      opts.inputs && Object.keys(opts.inputs).length
-        ? opts.inputs
-        : store.editorInputValues;
-    const newId = addIndicator(
-      scriptName,
-      script,
-      paneId,
-      plots,
-      savedInputs && Object.keys(savedInputs).length ? savedInputs : undefined,
-    );
-    if (Object.keys(seriesForCache).length) {
-      setIndicatorSeries(newId, {
+      // Prefer original opts/editor overrides (plot refs), not engine-expanded arrays
+      const savedInputs =
+        opts.inputs && Object.keys(opts.inputs).length
+          ? opts.inputs
+          : store.editorInputValues;
+      const newId = addIndicator(
+        scriptName,
+        script,
+        paneId,
+        plots,
+        savedInputs && Object.keys(savedInputs).length ? savedInputs : undefined,
+      );
+      if (Object.keys(seriesForCache).length) {
+        setIndicatorSeries(newId, {
+          name: scriptName,
+          series: seriesForCache,
+          titles: titlesForCache,
+        });
+      }
+    } else if (Object.keys(seriesForCache).length) {
+      setIndicatorSeries(indicatorId, {
         name: scriptName,
         series: seriesForCache,
         titles: titlesForCache,
       });
     }
-  } else if (Object.keys(seriesForCache).length) {
-    setIndicatorSeries(indicatorId, {
-      name: scriptName,
-      series: seriesForCache,
-      titles: titlesForCache,
+  } catch (e: unknown) {
+    reportUiError(e, {
+      source: 'run',
+      context: 'Indicator store update failed',
+      status: false,
     });
   }
 

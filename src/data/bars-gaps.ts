@@ -92,12 +92,14 @@ export function findBarGaps(
   const step = intervalToSec(interval);
   const gapFactor = opts?.gapFactor ?? 1.5;
   const threshold = step * gapFactor;
+  if (!Number.isFinite(fromSec) || !Number.isFinite(toSec)) return [];
   const from = Math.floor(fromSec);
   const to = Math.floor(toSec);
   if (to < from) return [];
 
-  // Bars inside window, sorted unique
-  const inWin = bars
+  // Bars inside window, sorted unique (null/non-array → empty, no throw)
+  const list = Array.isArray(bars) ? bars : [];
+  const inWin = list
     .filter((b) => b && Number.isFinite(b.time) && b.time >= from && b.time <= to)
     .slice()
     .sort((a, b) => a.time - b.time);
@@ -169,14 +171,25 @@ export function validateBarCoverage(
   opts?: { gapFactor?: number },
 ): CoverageReport {
   const step = intervalToSec(interval);
+  if (!Number.isFinite(fromSec) || !Number.isFinite(toSec)) {
+    return {
+      barCount: 0,
+      oldestSec: null,
+      newestSec: null,
+      expectedBars: 0,
+      gaps: [],
+      complete: false,
+    };
+  }
   const from = Math.floor(fromSec);
   const to = Math.floor(toSec);
-  const inWin = bars
+  const list = Array.isArray(bars) ? bars : [];
+  const inWin = list
     .filter((b) => b && Number.isFinite(b.time) && b.time >= from && b.time <= to)
     .slice()
     .sort((a, b) => a.time - b.time);
 
-  const gaps = findBarGaps(bars, from, to, interval, opts);
+  const gaps = findBarGaps(list, from, to, interval, opts);
   const expectedBars = to >= from ? Math.floor((to - from) / step) + 1 : 0;
   // Density floor: gap finder can miss pathological cases; require ~85% of expected
   const denseEnough =
@@ -282,15 +295,16 @@ export function buildCoverageMap(
 
 /** Merge overlapping / adjacent gaps (after partial fills). */
 export function mergeGaps(gaps: BarGap[], stepSec: number): BarGap[] {
-  if (!gaps.length) return [];
+  if (!Array.isArray(gaps) || !gaps.length) return [];
+  const step = Number.isFinite(stepSec) && stepSec > 0 ? stepSec : 1;
   const sorted = gaps.slice().sort((a, b) => a.fromSec - b.fromSec);
   const out: BarGap[] = [];
   let cur = { ...sorted[0]! };
   for (let i = 1; i < sorted.length; i++) {
     const g = sorted[i]!;
-    if (g.fromSec <= cur.toSec + stepSec) {
+    if (g.fromSec <= cur.toSec + step) {
       cur.toSec = Math.max(cur.toSec, g.toSec);
-      cur.missingBars = Math.floor((cur.toSec - cur.fromSec) / stepSec) + 1;
+      cur.missingBars = Math.floor((cur.toSec - cur.fromSec) / step) + 1;
     } else {
       out.push(cur);
       cur = { ...g };

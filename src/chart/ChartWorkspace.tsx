@@ -55,6 +55,9 @@ export const ChartWorkspace: Component = () => {
       >
         <For each={slots()}>
           {(slot) => {
+            // Stable per-slot host: Solid reuses by list index; slot.id is the
+            // PaneManager key. Layout mode changes that keep the same slot id
+            // must not remount LWC (ChartHost only mounts once per host instance).
             const isActive = () => activeId() === slot.id;
             return (
               <div
@@ -64,7 +67,13 @@ export const ChartWorkspace: Component = () => {
                 data-chart-slot={slot.id}
                 data-active={isActive() ? '1' : '0'}
                 onPointerDown={() => {
-                  if (!isActive()) setActiveChartSlot(slot.id);
+                  if (!isActive()) {
+                    try {
+                      setActiveChartSlot(slot.id);
+                    } catch {
+                      /* store update must not kill workspace */
+                    }
+                  }
                 }}
               >
                 {/* Market title — sole top-left identity chip.

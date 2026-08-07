@@ -15,15 +15,18 @@ import {
 } from '../../drawing-types';
 import { channelEdges, distToSegment, fibExtensionPrices, fibPrices } from '../geometry';
 import { registerToolHandler } from './registry';
+import { isFinitePoint, sanitizePoints, sanitizeStrokeColor } from './safe';
 
-function asTwo(d: Drawing): TwoPointDrawing | null {
+function asTwo(d: Drawing, kind?: TwoPointDrawing['kind']): TwoPointDrawing | null {
+  if (kind && d.kind !== kind) return null;
   if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
+  if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return null;
   return d as TwoPointDrawing;
 }
 
 function pts(d: Drawing): Point[] {
   if ('points' in d && Array.isArray((d as MultiPointDrawing).points)) {
-    return (d as MultiPointDrawing).points;
+    return sanitizePoints((d as MultiPointDrawing).points);
   }
   const t = asTwo(d);
   return t ? [t.p1, t.p2] : [];
@@ -36,18 +39,20 @@ registerToolHandler({
   label: 'Fib extension',
   arity: 3,
   create(points, color) {
-    if (points.length < 3) return null;
+    const p = sanitizePoints(points);
+    if (p.length < 3) return null;
     return {
       id: '',
       kind: 'fibext',
-      points: points.slice(0, 3),
-      p1: points[0]!,
-      p2: points[1]!,
-      p3: points[2]!,
-      color,
+      points: p.slice(0, 3),
+      p1: p[0]!,
+      p2: p[1]!,
+      p3: p[2]!,
+      color: sanitizeStrokeColor(color),
     } as MultiPointDrawing;
   },
   paint(d, ctx) {
+    if (d.kind !== 'fibext') return;
     const p = pts(d);
     if (p.length < 3) return;
     const [a, b, c] = p;
@@ -76,6 +81,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
+    if (d.kind !== 'fibext') return false;
     const p = pts(d);
     if (p.length < 3) return false;
     for (let i = 0; i < 3; i++) {
@@ -109,17 +115,18 @@ registerToolHandler({
   label: 'Fib time zones',
   arity: 2,
   create(points, color) {
-    if (points.length < 2) return null;
+    const p = sanitizePoints(points);
+    if (p.length < 2) return null;
     return {
       id: '',
       kind: 'fibtime',
-      p1: points[0]!,
-      p2: points[1]!,
-      color,
+      p1: p[0]!,
+      p2: p[1]!,
+      color: sanitizeStrokeColor(color),
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'fibtime');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -139,7 +146,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'fibtime');
     if (!t) return false;
     const dt = t.p2.time - t.p1.time || 1;
     for (const lvl of [0, 1, 1.618, 2.618, 3.618, 4.236]) {
@@ -157,19 +164,21 @@ registerToolHandler({
   label: 'Fib channel',
   arity: 3,
   create(points, color) {
-    if (points.length < 3) return null;
+    const p = sanitizePoints(points);
+    if (p.length < 3) return null;
     return {
       id: '',
       kind: 'fibchannel',
-      points: points.slice(0, 3),
-      p1: points[0]!,
-      p2: points[1]!,
-      p3: points[2]!,
-      color,
+      points: p.slice(0, 3),
+      p1: p[0]!,
+      p2: p[1]!,
+      p3: p[2]!,
+      color: sanitizeStrokeColor(color),
       fillOpacity: 0.06,
     } as MultiPointDrawing;
   },
   paint(d, ctx) {
+    if (d.kind !== 'fibchannel') return;
     const p = pts(d);
     if (p.length < 3) return;
     const edges = channelEdges(p[0]!, p[1]!, p[2]!);
@@ -196,6 +205,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
+    if (d.kind !== 'fibchannel') return false;
     const p = pts(d);
     if (p.length < 3) return false;
     const edges = channelEdges(p[0]!, p[1]!, p[2]!);

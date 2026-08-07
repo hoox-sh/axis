@@ -15,15 +15,41 @@ import type {
 } from '../../drawing-types';
 import { distToSegment, extendSegment, nearPoint } from '../geometry';
 import { registerToolHandler, type ToolViewCtx } from './registry';
+import {
+  DRAWING_POINTS_MAX,
+  clampOpacity,
+  clampStrokeWidth,
+  isFinitePoint,
+  sanitizeDrawingText,
+  sanitizePoints,
+  sanitizeStrokeColor,
+  safePrompt,
+} from './safe';
 
-function asTwo(d: Drawing): TwoPointDrawing | null {
+/** Cap selection handles on long freehand strokes (DOM thrash guard). */
+const SELECTED_HANDLES_MAX = 48;
+
+/** Evenly sample up to `max` indices including first and last. */
+function sampleHandleIndices(len: number, max: number): number[] {
+  if (len <= 0) return [];
+  if (len <= max) return Array.from({ length: len }, (_, i) => i);
+  const out: number[] = [];
+  for (let i = 0; i < max; i++) {
+    out.push(Math.round((i * (len - 1)) / (max - 1)));
+  }
+  return out;
+}
+
+function asTwo(d: Drawing, kind?: TwoPointDrawing['kind']): TwoPointDrawing | null {
+  if (kind && d.kind !== kind) return null;
   if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
+  if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return null;
   return d as TwoPointDrawing;
 }
 
 function pts(d: Drawing): Point[] {
   if ('points' in d && Array.isArray((d as MultiPointDrawing).points)) {
-    return (d as MultiPointDrawing).points;
+    return sanitizePoints((d as MultiPointDrawing).points);
   }
   return [];
 }
@@ -35,17 +61,19 @@ registerToolHandler({
   label: 'Cross line',
   arity: 1,
   create(points, color) {
-    if (!points[0]) return null;
+    const p = sanitizePoints(points);
+    if (!p[0]) return null;
     return {
       id: '',
       kind: 'crossline',
-      p1: points[0],
-      text: points[0].price.toFixed(2),
-      color,
+      p1: p[0],
+      text: p[0].price.toFixed(2),
+      color: sanitizeStrokeColor(color),
     } as TextDrawing;
   },
   paint(d, ctx) {
     if (d.kind !== 'crossline') return;
+    if (!isFinitePoint(d.p1)) return;
     const c = ctx.toXY(d.p1);
     if (!c) return;
     ctx.line(0, c.y, ctx.width, c.y, ctx.stroke, ctx.strokeWidth, ctx.dash);
@@ -55,6 +83,7 @@ registerToolHandler({
   },
   hit(d, ctx) {
     if (d.kind !== 'crossline') return false;
+    if (!isFinitePoint(d.p1)) return false;
     const c = ctx.toXY(d.p1);
     if (!c) return false;
     return Math.abs(ctx.y - c.y) <= ctx.tol || Math.abs(ctx.x - c.x) <= ctx.tol;
@@ -68,11 +97,18 @@ registerToolHandler({
   label: 'Trend angle',
   arity: 2,
   create(points, color) {
-    if (points.length < 2) return null;
-    return { id: '', kind: 'trendAngle', p1: points[0]!, p2: points[1]!, color };
+    const p = sanitizePoints(points);
+    if (p.length < 2) return null;
+    return {
+      id: '',
+      kind: 'trendAngle',
+      p1: p[0]!,
+      p2: p[1]!,
+      color: sanitizeStrokeColor(color),
+    };
   },
   paint(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'trendAngle');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -86,7 +122,7 @@ registerToolHandler({
     ctx.circle(b.x, b.y, ctx.selected ? 5 : 3, ctx.stroke, ctx.selected);
   },
   hit(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'trendAngle');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -102,18 +138,20 @@ registerToolHandler({
   label: 'Pitchfork',
   arity: 3,
   create(points, color) {
-    if (points.length < 3) return null;
+    const p = sanitizePoints(points);
+    if (p.length < 3) return null;
     return {
       id: '',
       kind: 'pitchfork',
-      points: points.slice(0, 3),
-      p1: points[0]!,
-      p2: points[1]!,
-      p3: points[2]!,
-      color,
+      points: p.slice(0, 3),
+      p1: p[0]!,
+      p2: p[1]!,
+      p3: p[2]!,
+      color: sanitizeStrokeColor(color),
     } as MultiPointDrawing;
   },
   paint(d, ctx) {
+    if (d.kind !== 'pitchfork') return;
     const p = pts(d);
     if (p.length < 3) return;
     const a = ctx.toXY(p[0]!);
@@ -150,6 +188,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
+    if (d.kind !== 'pitchfork') return false;
     const p = pts(d);
     if (p.length < 3) return false;
     const a = ctx.toXY(p[0]!);
@@ -172,28 +211,28 @@ registerToolHandler({
   label: 'Callout',
   arity: 2,
   create(points, color) {
-    if (points.length < 2) return null;
-    const text =
-      typeof window !== 'undefined'
-        ? window.prompt('Callout text', 'Note') || 'Note'
-        : 'Note';
+    const p = sanitizePoints(points);
+    if (p.length < 2) return null;
+    const text = safePrompt('Callout text', 'Note');
     return {
       id: '',
       kind: 'callout',
-      p1: points[0]!,
-      p2: points[1]!,
-      color,
-      text: text.trim() || 'Note',
-      meta: { text: text.trim() || 'Note' },
+      p1: p[0]!,
+      p2: p[1]!,
+      color: sanitizeStrokeColor(color),
+      text,
+      meta: { text },
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'callout');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
     if (!a || !b) return;
-    const text = (d as TwoPointDrawing & { text?: string }).text || d.meta?.text || 'Note';
+    const text =
+      sanitizeDrawingText((d as TwoPointDrawing & { text?: string }).text || d.meta?.text || 'Note') ||
+      'Note';
     const padX = 8;
     const padY = 6;
     const tw = Math.max(48, String(text).length * 7 + padX * 2);
@@ -210,20 +249,21 @@ registerToolHandler({
       rx: '4',
       fill: '#12141c',
       stroke: ctx.stroke,
-      'stroke-width': String(ctx.strokeWidth),
+      'stroke-width': String(clampStrokeWidth(ctx.strokeWidth)),
       'pointer-events': 'all',
     });
     ctx.label(bx + padX, by + th - padY, String(text), ctx.stroke, 11);
     ctx.circle(a.x, a.y, ctx.selected ? 5 : 3, ctx.stroke, true);
   },
   hit(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'callout');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
     if (!a || !b) return false;
     if (nearPoint(ctx.x, ctx.y, a.x, a.y, ctx.tol + 4)) return true;
-    const text = (d as TwoPointDrawing & { text?: string }).text || 'Note';
+    const text =
+      sanitizeDrawingText((d as TwoPointDrawing & { text?: string }).text || 'Note') || 'Note';
     const tw = Math.max(48, String(text).length * 7 + 16);
     const th = 22;
     return (
@@ -242,24 +282,23 @@ registerToolHandler({
   label: 'Note',
   arity: 1,
   create(points, color) {
-    if (!points[0]) return null;
-    const text =
-      typeof window !== 'undefined'
-        ? window.prompt('Note text', 'Note') || 'Note'
-        : 'Note';
+    const p = sanitizePoints(points);
+    if (!p[0]) return null;
+    const text = safePrompt('Note text', 'Note');
     return {
       id: '',
       kind: 'note',
-      p1: points[0],
-      text: text.trim() || 'Note',
-      color,
+      p1: p[0],
+      text,
+      color: sanitizeStrokeColor(color),
     } as TextDrawing;
   },
   paint(d, ctx) {
     if (d.kind !== 'note') return;
+    if (!isFinitePoint(d.p1)) return;
     const c = ctx.toXY(d.p1);
     if (!c) return;
-    const text = d.text || d.meta?.text || 'Note';
+    const text = sanitizeDrawingText(d.text || d.meta?.text || 'Note') || 'Note';
     const tw = Math.max(40, String(text).length * 7 + 16);
     const th = 20;
     ctx.el('rect', {
@@ -278,6 +317,7 @@ registerToolHandler({
   },
   hit(d, ctx) {
     if (d.kind !== 'note') return false;
+    if (!isFinitePoint(d.p1)) return false;
     const c = ctx.toXY(d.p1);
     if (!c) return false;
     return nearPoint(ctx.x, ctx.y, c.x, c.y, ctx.tol + 12);
@@ -293,20 +333,24 @@ function paintStroke(
 ) {
   const xys = points.map((p) => ctx.toXY(p)).filter(Boolean) as { x: number; y: number }[];
   if (xys.length < 2) return;
+  const sw = clampStrokeWidth(opts.width, 3);
   let d = `M ${xys[0]!.x} ${xys[0]!.y}`;
   for (let i = 1; i < xys.length; i++) d += ` L ${xys[i]!.x} ${xys[i]!.y}`;
   ctx.el('path', {
     d,
     fill: 'none',
     stroke: ctx.stroke,
-    'stroke-width': String(opts.width),
+    'stroke-width': String(sw),
     'stroke-opacity': opts.opacity,
     'stroke-linecap': opts.round ? 'round' : 'butt',
     'stroke-linejoin': opts.round ? 'round' : 'miter',
     'pointer-events': 'stroke',
   });
   if (ctx.selected) {
-    for (const p of xys) ctx.circle(p.x, p.y, 3, ctx.stroke, true);
+    for (const i of sampleHandleIndices(xys.length, SELECTED_HANDLES_MAX)) {
+      const p = xys[i]!;
+      ctx.circle(p.x, p.y, 3, ctx.stroke, true);
+    }
   }
 }
 
@@ -329,29 +373,36 @@ registerToolHandler({
   arity: 'n',
   minPoints: 2,
   create(points, color) {
-    if (points.length < 2) return null;
+    const p = sanitizePoints(points, DRAWING_POINTS_MAX);
+    if (p.length < 2) return null;
     return {
       id: '',
       kind: 'brush',
-      points: points.slice(),
-      p1: points[0]!,
-      p2: points[points.length - 1]!,
-      color,
+      points: p,
+      p1: p[0]!,
+      p2: p[p.length - 1]!,
+      color: sanitizeStrokeColor(color),
       lineWidth: 3,
     } as MultiPointDrawing;
   },
   paint(d, ctx) {
+    if (d.kind !== 'brush') return;
     paintStroke(pts(d), ctx, {
-      width: Math.max(3, ctx.strokeWidth + 1.5),
+      width: Math.max(3, clampStrokeWidth(ctx.strokeWidth) + 1.5),
       opacity: '0.95',
       round: true,
     });
   },
   hit(d, ctx) {
+    if (d.kind !== 'brush') return false;
     return hitStroke(pts(d), ctx);
   },
   paintDraft(points, ctx) {
-    paintStroke(points, ctx, { width: 3, opacity: '0.7', round: true });
+    paintStroke(sanitizePoints(points, DRAWING_POINTS_MAX), ctx, {
+      width: 3,
+      opacity: '0.7',
+      round: true,
+    });
   },
 });
 
@@ -361,29 +412,37 @@ registerToolHandler({
   arity: 'n',
   minPoints: 2,
   create(points, color) {
-    if (points.length < 2) return null;
+    const p = sanitizePoints(points, DRAWING_POINTS_MAX);
+    if (p.length < 2) return null;
     return {
       id: '',
       kind: 'highlighter',
-      points: points.slice(),
-      p1: points[0]!,
-      p2: points[points.length - 1]!,
-      color,
+      points: p,
+      p1: p[0]!,
+      p2: p[p.length - 1]!,
+      color: sanitizeStrokeColor(color),
       lineWidth: 12,
       fillOpacity: 0.35,
     } as MultiPointDrawing;
   },
   paint(d, ctx) {
+    if (d.kind !== 'highlighter') return;
+    const fo = clampOpacity(ctx.fillOpacity, 0.35);
     paintStroke(pts(d), ctx, {
-      width: Math.max(10, ctx.strokeWidth * 6),
-      opacity: String(Math.min(0.45, Math.max(0.2, ctx.fillOpacity + 0.15))),
+      width: Math.max(10, clampStrokeWidth(ctx.strokeWidth) * 6),
+      opacity: String(Math.min(0.45, Math.max(0.2, fo + 0.15))),
       round: true,
     });
   },
   hit(d, ctx) {
+    if (d.kind !== 'highlighter') return false;
     return hitStroke(pts(d), ctx);
   },
   paintDraft(points, ctx) {
-    paintStroke(points, ctx, { width: 12, opacity: '0.3', round: true });
+    paintStroke(sanitizePoints(points, DRAWING_POINTS_MAX), ctx, {
+      width: 12,
+      opacity: '0.3',
+      round: true,
+    });
   },
 });

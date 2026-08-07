@@ -48,6 +48,24 @@ describe('bars-cache', () => {
     expect(m[3]!.time).toBe(7);
   });
 
+  it('mergeAndCap single-bar hot path updates last / appends / drops junk', () => {
+    const existing = [bar(1, 10), bar(2, 20)];
+    const updated = mergeAndCap(existing, [bar(2, 99)]);
+    expect(updated).toHaveLength(2);
+    expect(updated[1]!.close).toBe(99);
+    // must not mutate input
+    expect(existing[1]!.close).toBe(20);
+
+    const appended = mergeAndCap(existing, [bar(3, 30)], 100);
+    expect(appended.map((b) => b.time)).toEqual([1, 2, 3]);
+
+    const junk = mergeAndCap(existing, [{ time: NaN, open: 1, high: 1, low: 1, close: 1 } as never]);
+    expect(junk).toHaveLength(2);
+    expect(junk[1]!.close).toBe(20);
+
+    expect(mergeAndCap(existing, null as never)).toHaveLength(2);
+  });
+
   it('put/get/clear round-trip in memory', async () => {
     await putCachedBars('mock-walk', 'TEST', '1d', [bar(100), bar(200)]);
     const got = await getCachedBars('mock-walk', 'TEST', '1d');

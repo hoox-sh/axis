@@ -95,18 +95,24 @@ export function getSlotChartDataGen(slotId: string): number {
 export function disposeSlotChart(slotId: string) {
   const r = runtimes.get(slotId);
   if (!r) return;
-  try {
-    r.drawingLayer?.destroy();
-  } catch {
-    /* ignore */
-  }
+  const layer = r.drawingLayer;
   r.drawingLayer = undefined;
-  try {
-    r.manager?.dispose();
-  } catch {
-    /* ignore */
+  if (layer) {
+    try {
+      layer.destroy();
+    } catch {
+      /* ignore */
+    }
   }
+  const mgr = r.manager;
   r.manager = undefined;
+  if (mgr) {
+    try {
+      mgr.dispose();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /** Drop runtime entirely (slot removed from layout). */

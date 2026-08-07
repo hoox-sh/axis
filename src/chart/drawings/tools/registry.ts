@@ -105,8 +105,57 @@ export interface ToolHandler {
 
 const handlers = new Map<string, ToolHandler>();
 
+/**
+ * Register a tool handler. Paint/hit/create are wrapped so a single tool
+ * throw cannot take down the whole drawing layer.
+ */
 export function registerToolHandler(h: ToolHandler): void {
-  handlers.set(h.id, h);
+  if (!h || !h.id) return;
+  const paint = h.paint;
+  const hit = h.hit;
+  const create = h.create;
+  const paintDraft = h.paintDraft;
+  handlers.set(h.id, {
+    ...h,
+    paint: paint
+      ? (d, ctx) => {
+          try {
+            paint(d, ctx);
+          } catch (err) {
+            console.warn(`[drawings] paint ${h.id} failed`, err);
+          }
+        }
+      : undefined,
+    hit: hit
+      ? (d, ctx) => {
+          try {
+            return hit(d, ctx);
+          } catch (err) {
+            console.warn(`[drawings] hit ${h.id} failed`, err);
+            return false;
+          }
+        }
+      : undefined,
+    create: create
+      ? (points, color) => {
+          try {
+            return create(points, color);
+          } catch (err) {
+            console.warn(`[drawings] create ${h.id} failed`, err);
+            return null;
+          }
+        }
+      : undefined,
+    paintDraft: paintDraft
+      ? (points, ctx) => {
+          try {
+            paintDraft(points, ctx);
+          } catch (err) {
+            console.warn(`[drawings] paintDraft ${h.id} failed`, err);
+          }
+        }
+      : undefined,
+  });
 }
 
 export function getToolHandler(id: string): ToolHandler | undefined {
@@ -136,7 +185,14 @@ export function toolArity(tool: DrawingToolId): PointArity | 0 {
   ) {
     return 3;
   }
-  if (tool === 'polyline' || tool === 'path' || tool === 'brush' || tool === 'highlighter') {
+  if (
+    tool === 'polyline' ||
+    tool === 'path' ||
+    tool === 'brush' ||
+    tool === 'highlighter' ||
+    tool === 'xabcd' ||
+    tool === 'headShoulders'
+  ) {
     return 'n';
   }
   return 2;

@@ -32,7 +32,7 @@ import type { Bar } from '../store/types';
 import type { SourcePlugin } from '../plugins/types';
 import { pluginKey } from '../plugins/types';
 import { store } from '../store';
-import { normalizeHistoricalBars } from './parse-bars';
+import { normalizeHistoricalBars, sanitizeBar } from './parse-bars';
 import { getCachedBars, putCachedBars } from './bars-cache';
 import { intervalToSec } from './bars-gaps';
 import {
@@ -45,6 +45,12 @@ const MAX_EXPAND_PAGES = 40;
 
 /** Default wall-clock budget for an expand pass (ms). */
 const DEFAULT_EXPAND_BUDGET_MS = 25_000;
+
+/** Debounce live cache writes so open-bar ticks do not thrash IDB every frame. */
+const LIVE_CACHE_DEBOUNCE_MS = 750;
+
+const liveWriteTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const livePendingBars = new Map<string, Bar>();
 
 /** Sources that cannot fill a network gap. */
 const OFFLINE_SOURCES = new Set([
@@ -270,9 +276,11 @@ export async function expandCachedSeriesToNow(
 /**
  * Persist a live bar into the Data Manager selection’s cache (dataset expand).
  * Fire-and-forget; safe to call on every tick (merge by time).
+ * Debounced so open-bar updates do not rewrite the full series every frame.
  */
 export function noteDataManagerLiveBar(bar: Bar): void {
-  if (!bar || !Number.isFinite(bar.time)) return;
+  const clean = sanitizeBar(bar);
+  if (!clean) return;
   // Only when chart source is Data Manager (or selection is active with that source)
   if (store.source !== DATA_MANAGER_SOURCE_ID && store.activePlugins?.source !== DATA_MANAGER_SOURCE_ID) {
     return;
@@ -281,16 +289,33 @@ export function noteDataManagerLiveBar(bar: Bar): void {
   if (!sel?.sourceId || !sel.symbol || !sel.interval) return;
   if (!canExpandFromSource(sel.sourceId) && sel.sourceId === 'csv-upload') return;
 
-  void putCachedBars(sel.sourceId, sel.symbol, sel.interval, [
-    {
-      time: bar.time,
-      open: bar.open,
-      high: bar.high,
-      low: bar.low,
-      close: bar.close,
-      volume: bar.volume,
-    },
-  ]).catch(() => {
-    /* cache write best-effort */
-  });
+  const key = `${sel.sourceId}|${sel.symbol}|${sel.interval}`;
+  livePendingBars.set(key, clean);
+
+  // Closed bars flush promptly; open-bar ticks coalesce under the debounce window
+  const delay = clean.closed ? 0 : LIVE_CACHE_DEBOUNCE_MS;
+  const existing = liveWriteTimers.get(key);
+  if (existing != null) {
+    if (delay > 0) return; // already scheduled
+    clearTimeout(existing);
+    liveWriteTimers.delete(key);
+  }
+
+  const timer = setTimeout(() => {
+    liveWriteTimers.delete(key);
+    const pending = livePendingBars.get(key);
+    livePendingBars.delete(key);
+    if (!pending) return;
+    void putCachedBars(sel.sourceId, sel.symbol, sel.interval, [pending]).catch(() => {
+      /* cache write best-effort */
+    });
+  }, delay);
+  liveWriteTimers.set(key, timer);
+}
+
+/** @internal test helper — flush pending live cache writes and clear timers. */
+export function _flushDataManagerLiveBarForTests(): void {
+  for (const t of liveWriteTimers.values()) clearTimeout(t);
+  liveWriteTimers.clear();
+  livePendingBars.clear();
 }

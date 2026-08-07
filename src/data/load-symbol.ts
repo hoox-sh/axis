@@ -195,13 +195,14 @@ export async function loadSymbolData(
       return false;
     }
 
-    if (raw == null || (Array.isArray(raw) && raw.length === 0)) {
-      throw new Error('Source returned no bars');
-    }
-
+    // normalizeHistoricalBars never throws; unwraps envelopes + drops bad rows
     const normalized = normalizeHistoricalBars(raw, { limit });
     if (!normalized.length) {
-      throw new Error('Source returned no valid bars (empty / partial OHLCV / bad timestamps)');
+      throw new Error(
+        raw == null || (Array.isArray(raw) && raw.length === 0)
+          ? 'Source returned no bars'
+          : 'Source returned no valid bars (empty / partial OHLCV / bad timestamps)',
+      );
     }
 
     if (!stillCurrent()) return false;

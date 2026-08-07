@@ -278,10 +278,11 @@ export function bgcolorSeriesToHistogramData(
   colors: unknown[] | unknown,
   fallbackColor?: string | null,
 ): { time: number; value: number; color: string }[] {
-  const out: { time: number; value: number; color: string }[] = [];
-  if (!Array.isArray(times) || times.length === 0) return out;
+  if (!Array.isArray(times) || times.length === 0) return [];
   const colorArr = Array.isArray(colors) ? colors : [];
   const n = Math.min(times.length, colorArr.length);
+  // Sparse (most bars transparent) — grow from empty but cap initial capacity
+  const out: { time: number; value: number; color: string }[] = [];
   for (let i = 0; i < n; i++) {
     const t = asBarTime(times[i]);
     if (t == null) continue;
@@ -400,21 +401,27 @@ export function shapeSeriesToMarkers(
  * non-numerics become whitespace (`{ time }` only) so multi-pane logical
  * ranges stay aligned with OHLCV. String numerics and ms timestamps coerced.
  * Safe when `times` or `values` is empty, shorter, or non-array-like.
+ *
+ * Pre-sizes the output for large OHLCV windows (10k–100k bars) to avoid
+ * repeated array growth during indicator apply.
  */
 export function lineSeriesToOverlayData(
   times: number[] | ReadonlyArray<unknown>,
   values: unknown[] | unknown,
 ): { time: number; value?: number }[] {
-  const out: { time: number; value?: number }[] = [];
-  if (!Array.isArray(times) || times.length === 0) return out;
+  if (!Array.isArray(times) || times.length === 0) return [];
   const arr = Array.isArray(values) ? values : [];
+  // Most bar times are finite; pre-size then trim if any skipped
+  const out: { time: number; value?: number }[] = new Array(times.length);
+  let n = 0;
   for (let i = 0; i < times.length; i++) {
     const time = asBarTime(times[i]);
     if (time == null) continue;
     const v = asFiniteNumber(arr[i]);
-    if (v != null) out.push({ time, value: v });
-    else out.push({ time });
+    if (v != null) out[n++] = { time, value: v };
+    else out[n++] = { time };
   }
+  out.length = n;
   return out;
 }
 

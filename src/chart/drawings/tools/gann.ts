@@ -11,6 +11,13 @@
 import type { Drawing, Point, TwoPointDrawing } from '../../drawing-types';
 import { distToSegment, extendSegment, nearRectEdge } from '../geometry';
 import { registerToolHandler, type ToolHitCtx, type ToolViewCtx } from './registry';
+import {
+  clampOpacity,
+  clampStrokeWidth,
+  isFinitePoint,
+  sanitizePoints,
+  sanitizeStrokeColor,
+} from './safe';
 
 /** Classic Gann angle ratios (time × price) relative to the 1×1 baseline. */
 const GANN_RATIOS: readonly { t: number; p: number; label: string }[] = [
@@ -26,8 +33,10 @@ const GANN_RATIOS: readonly { t: number; p: number; label: string }[] = [
 /** Internal grid fractions for Gann box (excludes outer 0/1 edges). */
 const BOX_GRID = [0.25, 0.5, 0.75] as const;
 
-function asTwo(d: Drawing): TwoPointDrawing | null {
+function asTwo(d: Drawing, kind?: TwoPointDrawing['kind']): TwoPointDrawing | null {
+  if (kind && d.kind !== kind) return null;
   if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
+  if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return null;
   return d as TwoPointDrawing;
 }
 
@@ -37,13 +46,14 @@ function twoPoint(
   color: string,
   extra?: Partial<TwoPointDrawing>,
 ): TwoPointDrawing | null {
-  if (points.length < 2) return null;
+  const pts = sanitizePoints(points);
+  if (pts.length < 2) return null;
   return {
     id: '',
     kind,
-    p1: points[0]!,
-    p2: points[1]!,
-    color,
+    p1: pts[0]!,
+    p2: pts[1]!,
+    color: sanitizeStrokeColor(color),
     ...extra,
   };
 }
@@ -90,7 +100,7 @@ registerToolHandler({
     return twoPoint('gannFan', points, color);
   },
   paint(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'gannFan');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -125,7 +135,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'gannFan');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -138,9 +148,10 @@ registerToolHandler({
     return best <= ctx.tol;
   },
   paintDraft(points, ctx) {
-    if (points.length < 2) return;
-    const a = ctx.toXY(points[0]!);
-    const b = ctx.toXY(points[1]!);
+    const pts = sanitizePoints(points);
+    if (pts.length < 2) return;
+    const a = ctx.toXY(pts[0]!);
+    const b = ctx.toXY(pts[1]!);
     if (!a || !b) return;
     for (const r of fanRaySegments(a, b, ctx.width, ctx.height)) {
       ctx.line(r.x1, r.y1, r.x2, r.y2, ctx.stroke, ctx.strokeWidth, '4 4');
@@ -170,7 +181,7 @@ registerToolHandler({
     return twoPoint('gannBox', points, color, { fillOpacity: 0.08 });
   },
   paint(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'gannBox');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -178,6 +189,8 @@ registerToolHandler({
     const { x1, y1, x2, y2 } = boxCorners(a, b);
     const w = x2 - x1;
     const h = y2 - y1;
+    const sw = clampStrokeWidth(ctx.strokeWidth);
+    const fo = clampOpacity(ctx.fillOpacity, 0.08);
     // Fill
     ctx.el('rect', {
       x: String(x1),
@@ -185,7 +198,7 @@ registerToolHandler({
       width: String(Math.max(1, w)),
       height: String(Math.max(1, h)),
       fill: ctx.stroke,
-      'fill-opacity': String(Math.min(0.2, Math.max(0.04, ctx.fillOpacity))),
+      'fill-opacity': String(Math.min(0.2, Math.max(0.04, fo))),
       stroke: 'none',
       'pointer-events': 'none',
     });
@@ -197,7 +210,7 @@ registerToolHandler({
       height: String(Math.max(1, h)),
       fill: 'none',
       stroke: ctx.stroke,
-      'stroke-width': String(ctx.strokeWidth),
+      'stroke-width': String(sw),
       'pointer-events': 'stroke',
       ...(ctx.dash ? { 'stroke-dasharray': ctx.dash } : {}),
     });
@@ -206,9 +219,9 @@ registerToolHandler({
       const x = x1 + w * f;
       const y = y1 + h * f;
       const dash = f === 0.5 ? undefined : '3 3';
-      const sw = f === 0.5 ? ctx.strokeWidth : Math.max(1, ctx.strokeWidth - 0.5);
-      ctx.line(x, y1, x, y2, ctx.stroke, sw, dash);
-      ctx.line(x1, y, x2, y, ctx.stroke, sw, dash);
+      const gridSw = f === 0.5 ? sw : Math.max(1, sw - 0.5);
+      ctx.line(x, y1, x, y2, ctx.stroke, gridSw, dash);
+      ctx.line(x1, y, x2, y, ctx.stroke, gridSw, dash);
     }
     if (ctx.selected) {
       ctx.circle(a.x, a.y, 5, ctx.stroke, true);
@@ -216,7 +229,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'gannBox');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -234,9 +247,10 @@ registerToolHandler({
     return false;
   },
   paintDraft(points, ctx) {
-    if (points.length < 2) return;
-    const a = ctx.toXY(points[0]!);
-    const b = ctx.toXY(points[1]!);
+    const pts = sanitizePoints(points);
+    if (pts.length < 2) return;
+    const a = ctx.toXY(pts[0]!);
+    const b = ctx.toXY(pts[1]!);
     if (!a || !b) return;
     const { x1, y1, x2, y2 } = boxCorners(a, b);
     ctx.el('rect', {
@@ -305,7 +319,7 @@ registerToolHandler({
     return twoPoint('gannSquare', points, color, { fillOpacity: 0.06 });
   },
   paint(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'gannSquare');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -314,6 +328,8 @@ registerToolHandler({
     const minX = Math.min(sq.x1, sq.x2);
     const minY = Math.min(sq.y1, sq.y2);
     const side = sq.side;
+    const sw = clampStrokeWidth(ctx.strokeWidth);
+    const fo = clampOpacity(ctx.fillOpacity, 0.06);
     // Fill
     ctx.el('rect', {
       x: String(minX),
@@ -321,7 +337,7 @@ registerToolHandler({
       width: String(side),
       height: String(side),
       fill: ctx.stroke,
-      'fill-opacity': String(Math.min(0.15, Math.max(0.03, ctx.fillOpacity))),
+      'fill-opacity': String(Math.min(0.15, Math.max(0.03, fo))),
       stroke: 'none',
       'pointer-events': 'none',
     });
@@ -333,13 +349,13 @@ registerToolHandler({
       height: String(side),
       fill: 'none',
       stroke: ctx.stroke,
-      'stroke-width': String(ctx.strokeWidth),
+      'stroke-width': String(sw),
       'pointer-events': 'stroke',
       ...(ctx.dash ? { 'stroke-dasharray': ctx.dash } : {}),
     });
     // Diagonals
-    ctx.line(sq.x1, sq.y1, sq.x2, sq.y2, ctx.stroke, Math.max(1, ctx.strokeWidth - 0.25), '3 3');
-    ctx.line(sq.x2, sq.y1, sq.x1, sq.y2, ctx.stroke, Math.max(1, ctx.strokeWidth - 0.25), '3 3');
+    ctx.line(sq.x1, sq.y1, sq.x2, sq.y2, ctx.stroke, Math.max(1, sw - 0.25), '3 3');
+    ctx.line(sq.x2, sq.y1, sq.x1, sq.y2, ctx.stroke, Math.max(1, sw - 0.25), '3 3');
     if (ctx.selected) {
       ctx.circle(a.x, a.y, 5, ctx.stroke, true);
       // Far corner of the square (pixel-sized)
@@ -347,7 +363,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'gannSquare');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -359,9 +375,10 @@ registerToolHandler({
     return false;
   },
   paintDraft(points, ctx) {
-    if (points.length < 2) return;
-    const a = ctx.toXY(points[0]!);
-    const b = ctx.toXY(points[1]!);
+    const pts = sanitizePoints(points);
+    if (pts.length < 2) return;
+    const a = ctx.toXY(pts[0]!);
+    const b = ctx.toXY(pts[1]!);
     if (!a || !b) return;
     const sq = squarePixelCorners(a, b);
     const minX = Math.min(sq.x1, sq.x2);

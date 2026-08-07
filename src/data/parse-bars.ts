@@ -132,57 +132,93 @@ function repairOhlc(
 export function sanitizeBar(raw: unknown): Bar | null {
   if (raw == null || typeof raw !== 'object') return null;
 
-  if (Array.isArray(raw)) {
-    if (raw.length < 5) return null;
-    const time = toUnixSeconds(raw[0]);
-    const open = num(raw[1]);
-    const high = num(raw[2]);
-    const low = num(raw[3]);
-    const close = num(raw[4]);
+  try {
+    if (Array.isArray(raw)) {
+      if (raw.length < 5) return null;
+      const time = toUnixSeconds(raw[0]);
+      const open = num(raw[1]);
+      const high = num(raw[2]);
+      const low = num(raw[3]);
+      const close = num(raw[4]);
+      if (time == null || open == null || high == null || low == null || close == null) return null;
+      const ohlc = repairOhlc(open, high, low, close);
+      if (!ohlc) return null;
+      const volume = raw.length > 5 ? num(raw[5]) : null;
+      const bar: Bar = { time, ...ohlc };
+      if (volume != null && volume >= 0) bar.volume = volume;
+      return bar;
+    }
+
+    const row = raw as Record<string, unknown>;
+    const lower: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(row)) {
+      if (typeof k === 'string') lower[k.toLowerCase()] = v;
+    }
+
+    const time = toUnixSeconds(
+      lower.time ?? lower.timestamp ?? lower.date ?? lower.datetime ?? lower.t,
+    );
+    const open = num(lower.open ?? lower.o);
+    const high = num(lower.high ?? lower.h);
+    const low = num(lower.low ?? lower.l);
+    const close = num(lower.close ?? lower.c);
     if (time == null || open == null || high == null || low == null || close == null) return null;
     const ohlc = repairOhlc(open, high, low, close);
     if (!ohlc) return null;
-    const volume = raw.length > 5 ? num(raw[5]) : null;
+    const volRaw = num(lower.volume ?? lower.vol ?? lower.v);
     const bar: Bar = { time, ...ohlc };
-    if (volume != null && volume >= 0) bar.volume = volume;
+    if (volRaw != null && volRaw >= 0) bar.volume = volRaw;
+    if (typeof lower.closed === 'boolean') bar.closed = lower.closed;
     return bar;
+  } catch {
+    return null;
   }
+}
 
-  const row = raw as Record<string, unknown>;
-  const lower: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(row)) lower[k.toLowerCase()] = v;
-
-  const time = toUnixSeconds(
-    lower.time ?? lower.timestamp ?? lower.date ?? lower.datetime ?? lower.t,
-  );
-  const open = num(lower.open ?? lower.o);
-  const high = num(lower.high ?? lower.h);
-  const low = num(lower.low ?? lower.l);
-  const close = num(lower.close ?? lower.c);
-  if (time == null || open == null || high == null || low == null || close == null) return null;
-  const ohlc = repairOhlc(open, high, low, close);
-  if (!ohlc) return null;
-  const volRaw = num(lower.volume ?? lower.vol ?? lower.v);
-  const bar: Bar = { time, ...ohlc };
-  if (volRaw != null && volRaw >= 0) bar.volume = volRaw;
-  if (typeof lower.closed === 'boolean') bar.closed = lower.closed;
-  return bar;
+/**
+ * Unwrap common API envelopes so partial/malformed payloads do not throw.
+ * Accepts a bare array or `{ bars|data|candles|klines|result: [...] }`.
+ */
+function coerceBarList(bars: unknown): unknown[] | null {
+  if (bars == null) return null;
+  if (Array.isArray(bars)) return bars;
+  if (typeof bars !== 'object') return null;
+  try {
+    const o = bars as Record<string, unknown>;
+    const nested = o.bars ?? o.data ?? o.candles ?? o.klines ?? o.result;
+    if (Array.isArray(nested)) return nested;
+    // One more level: { result: { list: [...] } } (Bybit-style leftovers)
+    if (nested != null && typeof nested === 'object' && !Array.isArray(nested)) {
+      const inner = nested as Record<string, unknown>;
+      const list = inner.list ?? inner.bars ?? inner.data;
+      if (Array.isArray(list)) return list;
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 /**
  * Normalize a source/plugin bar list: drop invalid rows, ms→s, sort ascending,
  * dedupe same timestamps (last wins), optionally keep the newest `limit` bars.
+ * Never throws — bad payloads yield `[]`.
  */
 export function normalizeHistoricalBars(
   bars: unknown,
   opts?: { limit?: number },
 ): Bar[] {
-  if (!Array.isArray(bars) || bars.length === 0) return [];
+  const rows = coerceBarList(bars);
+  if (!rows || rows.length === 0) return [];
 
   const out: Bar[] = [];
-  for (const row of bars) {
-    const bar = sanitizeBar(row);
-    if (bar) out.push(bar);
+  for (const row of rows) {
+    try {
+      const bar = sanitizeBar(row);
+      if (bar) out.push(bar);
+    } catch {
+      /* skip poison row */
+    }
   }
   if (!out.length) return [];
 
@@ -280,9 +316,15 @@ function splitCsvLine(line: string): string[] {
 }
 
 function parseJson(text: string): Bar[] {
-  const data = JSON.parse(text);
-  const rows = Array.isArray(data) ? data : data?.bars ?? data?.data ?? data?.candles;
-  if (!Array.isArray(rows)) {
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`Invalid JSON: ${msg}`);
+  }
+  const rows = coerceBarList(data);
+  if (!rows) {
     throw new Error('JSON must be an array of bars or { bars: [...] }');
   }
   return normalizeHistoricalBars(rows);
@@ -294,12 +336,26 @@ function parseJson(text: string): Bar[] {
  * @throws If empty or no valid rows
  */
 export function parseOhlcvText(text: string, fileName = ''): Bar[] {
+  if (text == null || typeof text !== 'string') {
+    throw new Error('File is empty');
+  }
   const trimmed = text.trim();
   if (!trimmed) throw new Error('File is empty');
-  const lower = fileName.toLowerCase();
+  const lower = String(fileName || '').toLowerCase();
   const asJson =
     lower.endsWith('.json') || trimmed.startsWith('[') || trimmed.startsWith('{');
-  const bars = asJson ? parseJson(trimmed) : parseCsv(trimmed);
+  let bars: Bar[];
+  try {
+    bars = asJson ? parseJson(trimmed) : parseCsv(trimmed);
+  } catch (e: unknown) {
+    // Re-throw structured parse errors; wrap unexpected ones
+    if (e instanceof Error && /empty|No valid|Invalid JSON|JSON must/i.test(e.message)) {
+      throw e;
+    }
+    throw new Error(
+      e instanceof Error ? e.message : `Parse failed: ${String(e)}`,
+    );
+  }
   if (!bars.length) {
     throw new Error('No valid OHLCV rows found (need time,open,high,low,close)');
   }

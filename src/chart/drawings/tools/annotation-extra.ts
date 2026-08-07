@@ -9,20 +9,18 @@
 import { DRAWING_COLORS, type Drawing, type TextDrawing } from '../../drawing-types';
 import { nearPoint } from '../geometry';
 import { registerToolHandler, type ToolViewCtx } from './registry';
+import {
+  isFinitePoint,
+  sanitizeDrawingText,
+  sanitizePoints,
+  sanitizeStrokeColor,
+  safePrompt,
+} from './safe';
 
 function asText(d: Drawing, kind: TextDrawing['kind']): TextDrawing | null {
   if (d.kind !== kind) return null;
+  if (!('p1' in d) || !d.p1 || !isFinitePoint(d.p1)) return null;
   return d as TextDrawing;
-}
-
-function promptText(label: string, fallback: string): string {
-  if (typeof window !== 'undefined' && typeof window.prompt === 'function') {
-    const v = window.prompt(label, fallback);
-    if (v == null) return fallback;
-    const t = v.trim();
-    return t || fallback;
-  }
-  return fallback;
 }
 
 // ── Flag (pin + small flag; optional meta/text label) ───────────────────────
@@ -32,13 +30,14 @@ registerToolHandler({
   label: 'Flag',
   arity: 1,
   create(points, color) {
-    if (!points[0]) return null;
+    const pts = sanitizePoints(points);
+    if (!pts[0]) return null;
     return {
       id: '',
       kind: 'flag',
-      p1: points[0],
+      p1: pts[0],
       text: '',
-      color,
+      color: sanitizeStrokeColor(color),
     } as TextDrawing;
   },
   paint(d, ctx) {
@@ -63,9 +62,9 @@ registerToolHandler({
     });
     // Base pin
     ctx.circle(c.x, c.y, ctx.selected ? 5 : 3, stroke, true);
-    const text = td.text || td.meta?.text;
+    const text = sanitizeDrawingText(td.text || td.meta?.text);
     if (text) {
-      ctx.label(c.x + 6, c.y - stemH - 4, String(text), stroke, 10);
+      ctx.label(c.x + 6, c.y - stemH - 4, text, stroke, 10);
     }
   },
   hit(d, ctx) {
@@ -89,14 +88,15 @@ registerToolHandler({
   label: 'Anchored text',
   arity: 1,
   create(points, color) {
-    if (!points[0]) return null;
-    const text = promptText('Anchored text', 'Text');
+    const pts = sanitizePoints(points);
+    if (!pts[0]) return null;
+    const text = safePrompt('Anchored text', 'Text');
     return {
       id: '',
       kind: 'anchoredText',
-      p1: points[0],
+      p1: pts[0],
       text,
-      color,
+      color: sanitizeStrokeColor(color),
       meta: { text },
     } as TextDrawing;
   },
@@ -105,7 +105,7 @@ registerToolHandler({
     if (!td) return;
     const c = ctx.toXY(td.p1);
     if (!c) return;
-    const text = td.text || td.meta?.text || 'Text';
+    const text = sanitizeDrawingText(td.text || td.meta?.text || 'Text') || 'Text';
     const padX = 6;
     const padY = 3;
     const approxW = Math.max(40, String(text).length * 7 + padX * 2);
@@ -175,13 +175,14 @@ registerToolHandler({
   label: 'Arrow mark up',
   arity: 1,
   create(points, color) {
-    if (!points[0]) return null;
+    const pts = sanitizePoints(points);
+    if (!pts[0]) return null;
     return {
       id: '',
       kind: 'arrowMarkUp',
-      p1: points[0],
+      p1: pts[0],
       text: '',
-      color: color || DRAWING_COLORS.up,
+      color: sanitizeStrokeColor(color, DRAWING_COLORS.up),
     } as TextDrawing;
   },
   paint(d, ctx) {
@@ -208,13 +209,14 @@ registerToolHandler({
   label: 'Arrow mark down',
   arity: 1,
   create(points, color) {
-    if (!points[0]) return null;
+    const pts = sanitizePoints(points);
+    if (!pts[0]) return null;
     return {
       id: '',
       kind: 'arrowMarkDown',
-      p1: points[0],
+      p1: pts[0],
       text: '',
-      color: color || DRAWING_COLORS.down,
+      color: sanitizeStrokeColor(color, DRAWING_COLORS.down),
     } as TextDrawing;
   },
   paint(d, ctx) {

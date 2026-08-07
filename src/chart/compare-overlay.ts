@@ -318,9 +318,15 @@ export function applyCompareOverlay(
     mode === 'percent' ? `${opts.symbol} %` : opts.symbol;
 
   const series = ensureCompareLine(pane, COMPARE_SERIES_KEY, title, color, scaleId);
-  series.setData(
-    compare.map((d) => ({ time: d.time as UTCTimestamp, value: d.value })),
-  );
+  // Finite-only line data — LWC rejects NaN/Infinity
+  const compareData = compare
+    .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
+    .map((d) => ({ time: d.time as UTCTimestamp, value: d.value }));
+  try {
+    series.setData(compareData);
+  } catch {
+    /* disposed / thrash */
+  }
 
   if (normalizeMain && mainPercent.length) {
     const mainSeries = ensureCompareLine(
@@ -330,9 +336,14 @@ export function applyCompareOverlay(
       COMPARE_MAIN_PCT_COLOR,
       scaleId,
     );
-    mainSeries.setData(
-      mainPercent.map((d) => ({ time: d.time as UTCTimestamp, value: d.value })),
-    );
+    const mainData = mainPercent
+      .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
+      .map((d) => ({ time: d.time as UTCTimestamp, value: d.value }));
+    try {
+      mainSeries.setData(mainData);
+    } catch {
+      /* disposed / thrash */
+    }
   } else {
     const extra = pane.series[COMPARE_MAIN_PCT_KEY];
     if (extra) {

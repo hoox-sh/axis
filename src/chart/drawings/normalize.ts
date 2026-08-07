@@ -30,8 +30,8 @@
  * (`price`, `p1`, `p2`, `text`, `color`) so current SVG paint/hit-test layers
  * keep working until they fully migrate to `points[]`.
  *
- * Accepts runtime kinds: hline, vline, trend, ray, extend, rect, ellipse,
- * arrow, fib, measure, text. Does not touch DOM / LWC / Pine plots.
+ * Accepts every {@link DrawingKind} (placed tools). Tool-only ids (`cursor`,
+ * `eraser`) are rejected. Does not touch DOM / LWC / Pine plots.
  */
 
 import {
@@ -39,6 +39,33 @@ import {
   type DrawingKind,
   type Point,
 } from '../drawing-types';
+import {
+  DRAWING_POINTS_MAX,
+  DRAWING_TEXT_MAX,
+  clampOpacity,
+  clampStrokeWidth,
+  sanitizeDrawingText,
+  sanitizePoints,
+  sanitizeStrokeColor,
+} from './tools/safe';
+
+/** Cap persisted drawing list length (import / localStorage hydrate). */
+export const DRAWING_LIST_MAX = 2_000;
+
+/** Cap drawing id string length. */
+const DRAWING_ID_MAX = 128;
+
+/** Max extra meta keys (excluding text) kept from garbage JSON. */
+const META_KEYS_MAX = 16;
+
+/** Max meta key name length. */
+const META_KEY_MAX = 32;
+
+/** Reject dangerous / non-identifier meta keys. */
+const META_KEY_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+/** Max points array indices scanned when filtering invalid anchors. */
+const POINTS_SCAN_MAX = DRAWING_POINTS_MAX * 4;
 
 // ── Unified model (matches planned ./types) ──────────────────────────────
 
@@ -81,30 +108,143 @@ const DEFAULT_WIDTH = 1.5;
 const DEFAULT_LINE_STYLE: DrawingLineStyle = 'solid';
 const DEFAULT_OPACITY = 1;
 
-/** Kind set currently accepted by this normalizer (must match runtime paint). */
+/**
+ * Every persistable {@link DrawingKind}.
+ * Excludes tool-only ids: `cursor` / `eraser` (not DrawingKind / not stored).
+ */
 const VALID_KINDS = new Set<DrawingKind>([
+  // 1-point
   'hline',
   'vline',
+  'text',
+  'priceLabel',
+  'note',
+  'crossline',
+  'flag',
+  'anchoredText',
+  'arrowMarkUp',
+  'arrowMarkDown',
+  // 2-point
   'trend',
   'ray',
   'extend',
+  'hray',
+  'infoLine',
+  'trendAngle',
   'rect',
+  'rotatedRect',
   'ellipse',
   'arrow',
+  'arc',
+  'curve',
   'fib',
+  'fibtime',
+  'fibArc',
+  'fibCircles',
+  'gannFan',
+  'gannBox',
+  'gannSquare',
   'measure',
+  'dateRange',
+  'priceRange',
+  'datePriceRange',
+  'callout',
+  'forecast',
+  'long',
+  'short',
+  // 3-point
+  'channel',
+  'pitchfork',
+  'fibext',
+  'fibchannel',
+  'fibWedge',
+  'triangle',
+  // multi / open-ended
+  'polyline',
+  'path',
+  'brush',
+  'highlighter',
+  'xabcd',
+  'headShoulders',
+]);
+
+/** Single-anchor kinds (price/time level, labels, marks). */
+const ONE_POINT_KINDS = new Set<DrawingKind>([
+  'hline',
+  'vline',
   'text',
+  'priceLabel',
+  'note',
+  'crossline',
+  'flag',
+  'anchoredText',
+  'arrowMarkUp',
+  'arrowMarkDown',
+]);
+
+/** Label-like 1-pt kinds that use `p1` + text (not hline/vline special fields). */
+const TEXT_LIKE_KINDS = new Set<DrawingKind>([
+  'text',
+  'priceLabel',
+  'note',
+  'crossline',
+  'flag',
+  'anchoredText',
+  'arrowMarkUp',
+  'arrowMarkDown',
 ]);
 
 const TWO_POINT_KINDS = new Set<DrawingKind>([
   'trend',
   'ray',
   'extend',
+  'hray',
+  'infoLine',
+  'trendAngle',
   'rect',
+  'rotatedRect',
   'ellipse',
   'arrow',
+  'arc',
+  'curve',
   'fib',
+  'fibtime',
+  'fibArc',
+  'fibCircles',
+  'gannFan',
+  'gannBox',
+  'gannSquare',
   'measure',
+  'dateRange',
+  'priceRange',
+  'datePriceRange',
+  'callout',
+  'forecast',
+  'long',
+  'short',
+]);
+
+/** Exactly three anchors required to place. */
+const THREE_POINT_KINDS = new Set<DrawingKind>([
+  'channel',
+  'pitchfork',
+  'fibext',
+  'fibchannel',
+  'fibWedge',
+  'triangle',
+]);
+
+/**
+ * Open-ended multi-anchor kinds (double-click finish).
+ * Min hydrate count is 2 (polyline/path floor); more points kept up to cap.
+ */
+const MULTI_POINT_KINDS = new Set<DrawingKind>([
+  'polyline',
+  'path',
+  'brush',
+  'highlighter',
+  'xabcd',
+  'headShoulders',
 ]);
 
 function genId(): string {
@@ -125,7 +265,7 @@ function asFiniteNumber(v: unknown): number | null {
   return null;
 }
 
-/** Parse `{ time, price }` from unknown JSON; both must be finite. */
+/** Parse `{ time, price }` from unknown JSON; both must be finite (rejects NaN/Infinity). */
 function normalizePoint(raw: unknown): Point | null {
   if (!isRecord(raw)) return null;
   const time = asFiniteNumber(raw.time);
@@ -140,51 +280,64 @@ function normalizeLineStyle(raw: unknown): DrawingLineStyle | null {
 }
 
 function minPointsFor(kind: DrawingKind): number {
-  if (kind === 'hline' || kind === 'vline' || kind === 'text') return 1;
+  if (ONE_POINT_KINDS.has(kind)) return 1;
   if (TWO_POINT_KINDS.has(kind)) return 2;
+  if (THREE_POINT_KINDS.has(kind)) return 3;
+  if (MULTI_POINT_KINDS.has(kind)) return 2;
   return 1;
 }
 
 /**
  * Prefer top-level `text`, then `meta.text` (legacy stores either).
+ * Sanitized + length-capped.
  */
 function pickText(
   raw: Record<string, unknown>,
   meta: DrawingMeta | undefined,
 ): string | undefined {
-  if (typeof raw.text === 'string' && raw.text.length > 0) return raw.text;
-  if (meta && typeof meta.text === 'string' && meta.text.length > 0) return meta.text;
-  return undefined;
+  let candidate: unknown;
+  if (typeof raw.text === 'string' && raw.text.length > 0) candidate = raw.text;
+  else if (meta && typeof meta.text === 'string' && meta.text.length > 0) {
+    candidate = meta.text;
+  } else {
+    return undefined;
+  }
+  const cleaned = sanitizeDrawingText(candidate, DRAWING_TEXT_MAX);
+  return cleaned.length > 0 ? cleaned : undefined;
 }
 
 /**
  * Merge nested `style` with legacy top-level color/width/etc.
  * Rays default `extendRight: true` when unspecified.
+ * Color is stroke-safe; width/opacity clamped for paint.
  */
 function buildStyle(
   kind: DrawingKind,
   raw: Record<string, unknown>,
   styleRaw: Record<string, unknown> | undefined,
 ): DrawingStyle {
-  const color =
+  const colorRaw =
     (typeof styleRaw?.color === 'string' && styleRaw.color) ||
     (typeof raw.color === 'string' && raw.color) ||
     DEFAULT_COLOR;
+  const color = sanitizeStrokeColor(colorRaw, DEFAULT_COLOR);
 
-  const width =
-    asFiniteNumber(styleRaw?.width) ??
-    asFiniteNumber(raw.width) ??
-    DEFAULT_WIDTH;
+  const width = clampStrokeWidth(
+    asFiniteNumber(styleRaw?.width) ?? asFiniteNumber(raw.width) ?? DEFAULT_WIDTH,
+    DEFAULT_WIDTH,
+  );
 
   const lineStyle =
     normalizeLineStyle(styleRaw?.lineStyle) ??
     normalizeLineStyle(raw.lineStyle) ??
     DEFAULT_LINE_STYLE;
 
-  const opacity =
+  const opacity = clampOpacity(
     asFiniteNumber(styleRaw?.opacity) ??
-    asFiniteNumber(raw.opacity) ??
-    DEFAULT_OPACITY;
+      asFiniteNumber(raw.opacity) ??
+      DEFAULT_OPACITY,
+    DEFAULT_OPACITY,
+  );
 
   const style: DrawingStyle = {
     color,
@@ -203,40 +356,79 @@ function buildStyle(
   return style;
 }
 
+/** Keep only plain JSON scalars on meta (no nested objects / prototype keys). */
+function sanitizeMetaScalar(v: unknown): string | number | boolean | undefined {
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const cleaned = sanitizeDrawingText(v, DRAWING_TEXT_MAX);
+    return cleaned.length > 0 ? cleaned : undefined;
+  }
+  return undefined;
+}
+
 function buildMeta(
   raw: Record<string, unknown>,
   text: string | undefined,
 ): DrawingMeta | undefined {
-  const base = isRecord(raw.meta) ? { ...(raw.meta as DrawingMeta) } : {};
-  if (text != null) base.text = text;
+  const base: DrawingMeta = {};
+  if (isRecord(raw.meta)) {
+    let kept = 0;
+    // Object.keys skips non-enumerable; never use Object.assign on untrusted meta
+    // (assign can trigger __proto__ pollution on some engines).
+    for (const key of Object.keys(raw.meta)) {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+        continue;
+      }
+      if (key === 'text') continue; // applied below from pickText / sanitized path
+      if (key.length === 0 || key.length > META_KEY_MAX || !META_KEY_RE.test(key)) {
+        continue;
+      }
+      const val = sanitizeMetaScalar(raw.meta[key]);
+      if (val === undefined) continue;
+      base[key] = val;
+      kept += 1;
+      if (kept >= META_KEYS_MAX) break;
+    }
+  }
+  if (text != null) {
+    base.text = text;
+  }
   // Drop empty meta
   if (Object.keys(base).length === 0) return undefined;
   return base;
 }
 
 /**
- * Collect points from new `points[]` or legacy `p1`/`p2`/`price` fields.
+ * Collect points from new `points[]` or legacy `p1`/`p2`/`p3`/`price` fields.
  *
  * Preference order:
- * 1. Non-empty `points[]` with enough valid anchors for `kind`
+ * 1. Non-empty `points[]` with enough valid anchors for `kind` (capped)
  * 2. Kind-specific legacy fields:
  *    - `hline` → `price` (or `p1.price`); synthetic `{ time: 0, price }`
- *    - `text` → `p1`
+ *    - `vline` → `time` (or `p1.time`)
+ *    - text-like 1-pt → `p1`
  *    - two-point kinds → `p1` + `p2`
+ *    - three-point kinds → `p1` + `p2` + `p3`
+ *    - multi → `p1` + `p2` (+ optional further via points[])
  */
 function collectPoints(
   kind: DrawingKind,
   raw: Record<string, unknown>,
 ): Point[] | null {
-  // Prefer points[] when present and non-empty
+  const need = minPointsFor(kind);
+
+  // Prefer points[] when present and non-empty — filter NaN/Infinity, cap length.
+  // Single pass with scan cap: avoid map/filter allocating full huge arrays.
   if (Array.isArray(raw.points) && raw.points.length > 0) {
     const pts: Point[] = [];
-    for (const p of raw.points) {
-      const np = normalizePoint(p);
-      if (np) pts.push(np);
+    const scanLimit = Math.min(raw.points.length, POINTS_SCAN_MAX);
+    for (let i = 0; i < scanLimit && pts.length < DRAWING_POINTS_MAX; i++) {
+      const p = normalizePoint(raw.points[i]);
+      if (p) pts.push(p);
     }
-    if (pts.length >= minPointsFor(kind)) return pts;
-    // fall through to legacy fields if points were invalid
+    if (pts.length >= need) return pts;
+    // fall through to legacy fields if points were invalid / too few
   }
 
   if (kind === 'hline') {
@@ -261,17 +453,27 @@ function collectPoints(
     return [{ time, price }];
   }
 
-  if (kind === 'text') {
+  if (TEXT_LIKE_KINDS.has(kind)) {
     const p1 = normalizePoint(raw.p1);
     if (!p1) return null;
     return [p1];
   }
 
-  // two-point kinds
+  // Multi / three / two-point: assemble from p1, p2, p3…
+  const legacy: Point[] = [];
   const p1 = normalizePoint(raw.p1);
   const p2 = normalizePoint(raw.p2);
-  if (!p1 || !p2) return null;
-  return [p1, p2];
+  const p3 = normalizePoint(raw.p3);
+  if (p1) legacy.push(p1);
+  if (p2) legacy.push(p2);
+  if (p3) legacy.push(p3);
+
+  // Some multi drawings may only have p1/p2 on disk; still accept if enough
+  if (legacy.length >= need) {
+    return sanitizePoints(legacy, DRAWING_POINTS_MAX);
+  }
+
+  return null;
 }
 
 /**
@@ -293,16 +495,20 @@ export function normalizeDrawing(raw: unknown): Drawing | null {
   const points = collectPoints(kind, raw);
   if (!points) return null;
 
-  const id =
+  let id =
     typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : genId();
+  if (id.length > DRAWING_ID_MAX) id = id.slice(0, DRAWING_ID_MAX);
 
   const styleIn = isRecord(raw.style) ? raw.style : undefined;
   const style = buildStyle(kind, raw, styleIn);
 
   const metaIn = isRecord(raw.meta) ? (raw.meta as DrawingMeta) : undefined;
   const text = pickText(raw, metaIn);
-  // Text drawings always carry a label in meta (empty string if absent).
-  const meta = buildMeta(raw, text ?? (kind === 'text' ? '' : undefined));
+  // Text-like drawings always carry a label in meta (empty string if absent).
+  const meta = buildMeta(
+    raw,
+    text ?? (TEXT_LIKE_KINDS.has(kind) ? '' : undefined),
+  );
 
   const out: Drawing = { id, kind, points, style };
   if (meta) out.meta = meta;
@@ -312,13 +518,14 @@ export function normalizeDrawing(raw: unknown): Drawing | null {
 }
 
 /**
- * Attach legacy `price` / `p1` / `p2` / `text` / top-level `color` for the current SVG layer.
+ * Attach legacy `price` / `p1` / `p2` / `p3` / `text` / top-level `color` for the current SVG layer.
  *
  * Mirrors (in place, on the same object):
  * - always: `color` ← `style.color`
  * - hline: `price` ← `points[0].price`
- * - text: `p1`, `text` ← first point + meta
- * - ≥2 points: `p1`, `p2` (+ optional `text` from meta)
+ * - vline: `time` ← `points[0].time`
+ * - text-like 1-pt: `p1`, `text` ← first point + meta
+ * - ≥2 points: `p1`, `p2` (+ `p3` when ≥3; optional `text` from meta)
  *
  * Callers that only need the unified model may ignore the extra keys; they
  * remain enumerable for layers that still read the pre-unified shape.
@@ -330,12 +537,15 @@ export function attachLegacyFields(d: Drawing): Drawing {
     any.price = d.points[0].price;
   } else if (d.kind === 'vline' && d.points[0]) {
     any.time = d.points[0].time;
-  } else if (d.kind === 'text' && d.points[0]) {
+  } else if (TEXT_LIKE_KINDS.has(d.kind) && d.points[0]) {
     any.p1 = { ...d.points[0] };
     any.text = d.meta?.text ?? '';
   } else if (d.points.length >= 2) {
     any.p1 = { ...d.points[0]! };
     any.p2 = { ...d.points[1]! };
+    if (d.points.length >= 3) {
+      any.p3 = { ...d.points[2]! };
+    }
     if (d.meta?.text) any.text = d.meta.text;
   }
   return d;
@@ -343,12 +553,13 @@ export function attachLegacyFields(d: Drawing): Drawing {
 
 /**
  * Normalize a persisted drawings array. Non-arrays → []. Invalid entries dropped.
+ * Caps at {@link DRAWING_LIST_MAX} valid drawings (O(n) scan, early stop).
  */
 export function normalizeUserDrawings(raw: unknown): Drawing[] {
   if (!Array.isArray(raw)) return [];
   const out: Drawing[] = [];
-  for (const item of raw) {
-    const d = normalizeDrawing(item);
+  for (let i = 0; i < raw.length && out.length < DRAWING_LIST_MAX; i++) {
+    const d = normalizeDrawing(raw[i]);
     if (d) out.push(d);
   }
   return out;

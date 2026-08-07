@@ -415,4 +415,96 @@ describe('clampTimeToLastBar / clampScriptDrawingTimes', () => {
     expect(clampTimeToLastBar(42, last)).toBe(42);
     expect(clampTimeToLastBar(500, last)).toBe(500);
   });
+
+  it('snaps non-finite times to last bar when known, else 0', () => {
+    expect(clampTimeToLastBar(Number.NaN, last)).toBe(last);
+    expect(clampTimeToLastBar(Number.POSITIVE_INFINITY, last)).toBe(last);
+    expect(clampTimeToLastBar(Number.NaN, null)).toBe(0);
+  });
+
+  it('drops non-finite polyline vertices', () => {
+    const raw: ScriptDrawing[] = [
+      {
+        id: 'poly',
+        type: 'polyline',
+        t1: last - 10,
+        p1: 1,
+        t2: last,
+        p2: 2,
+        color: '#00f',
+        points: [
+          { time: last - 10, price: 1 },
+          { time: last, price: Number.NaN },
+          { time: last + 1, price: 2 },
+        ],
+      },
+    ];
+    const clamped = clampScriptDrawingTimes(raw, last);
+    expect(clamped[0]!.points).toEqual([
+      { time: last - 10, price: 1 },
+      { time: last, price: 2 },
+    ]);
+  });
+});
+
+describe('normalizeScriptDrawings hardening', () => {
+  it('hard-caps labels at language max (500) and keeps newest', () => {
+    const raw = Array.from({ length: 600 }, (_, i) => ({
+      type: 'label',
+      t1: i,
+      p1: i,
+      text: `L${i}`,
+    }));
+    const list = normalizeScriptDrawings(raw);
+    expect(list).toHaveLength(500);
+    expect(list[0]!.t1).toBe(100);
+    expect(list[499]!.t1).toBe(599);
+  });
+
+  it('caps polyline points and rejects non-finite coords', () => {
+    const pts = Array.from({ length: 3_000 }, (_, i) => ({ time: i, price: i }));
+    pts.push({ time: Number.NaN as unknown as number, price: 1 });
+    const list = normalizeScriptDrawings([
+      { type: 'polyline', points: pts, color: '#0f0' },
+      { type: 'line', t1: Number.NaN, p1: 1, t2: 2, p2: 3 },
+      { type: 'label', t1: 1, p1: Number.POSITIVE_INFINITY, text: 'x' },
+    ]);
+    expect(list).toHaveLength(1);
+    expect(list[0]!.type).toBe('polyline');
+    expect(list[0]!.points!.length).toBe(2_000);
+  });
+
+  it('sanitizes text length and hostile colors', () => {
+    const huge = 'x'.repeat(500);
+    const list = normalizeScriptDrawings([
+      {
+        type: 'label',
+        t1: 1,
+        p1: 2,
+        text: huge,
+        color: 'url(javascript:alert(1))',
+        textcolor: '#fff',
+      },
+    ]);
+    expect(list).toHaveLength(1);
+    expect(list[0]!.text!.length).toBeLessThanOrEqual(200);
+    expect(list[0]!.color).toBe('#939fff'); // fallback
+  });
+
+  it('clamps extreme stroke widths', () => {
+    const list = normalizeScriptDrawings([
+      { type: 'line', t1: 1, p1: 1, t2: 2, p2: 2, width: 9999 },
+      { type: 'line', t1: 1, p1: 1, t2: 2, p2: 2, width: -5 },
+    ]);
+    expect(list[0]!.width).toBe(32);
+    expect(list[1]!.width).toBe(0.5);
+  });
+
+  it('garbageCollect tolerates nullish limits and non-array input', () => {
+    expect(garbageCollectScriptDrawings(null as unknown as ScriptDrawing[])).toEqual([]);
+    const one = [mk('label', 0)];
+    expect(
+      garbageCollectScriptDrawings(one, undefined as unknown as typeof DEFAULT_DRAWING_LIMITS),
+    ).toEqual(one);
+  });
 });

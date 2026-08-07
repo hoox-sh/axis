@@ -77,21 +77,24 @@ export function normalizeBarTime(t: unknown): number | null {
  * Map OHLCV times + parallel series values → line points.
  * One point per valid time; non-finite samples become whitespace `{ time }`.
  * Safe with empty arrays, sparse series, NaN, string numerics, ms times.
+ * Pre-sizes for large bar windows to keep apply cheap.
  */
 export function seriesValuesToLineData(
   times: ReadonlyArray<unknown>,
   values: unknown,
 ): { time: number; value?: number }[] {
-  const out: { time: number; value?: number }[] = [];
-  if (!Array.isArray(times) || times.length === 0) return out;
+  if (!Array.isArray(times) || times.length === 0) return [];
   const arr = Array.isArray(values) ? values : [];
+  const out: { time: number; value?: number }[] = new Array(times.length);
+  let n = 0;
   for (let i = 0; i < times.length; i++) {
     const time = normalizeBarTime(times[i]);
     if (time == null) continue;
     const v = coercePlotSample(arr[i]);
-    if (v != null) out.push({ time, value: v });
-    else out.push({ time });
+    if (v != null) out[n++] = { time, value: v };
+    else out[n++] = { time };
   }
+  out.length = n;
   return out;
 }
 

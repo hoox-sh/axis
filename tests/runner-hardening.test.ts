@@ -169,6 +169,45 @@ describe('runAndApply concurrent supersession', () => {
   });
 });
 
+describe('runAndApply never rejects', () => {
+  it('returns error result when engine throws (no unhandled rejection)', async () => {
+    restoreFetch = mockFetch(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    // Must settle without rejecting — void fire-and-forget call sites rely on this
+    const settled = await Promise.allSettled([
+      runAndApply('plot(close)', undefined, { silent: true, openResults: false }),
+    ]);
+    expect(settled[0]?.status).toBe('fulfilled');
+    if (settled[0]?.status === 'fulfilled') {
+      expect(settled[0].value.status).toBe('error');
+      expect(settled[0].value.error).toMatch(/Cannot reach|Failed to fetch|engine/i);
+    }
+  });
+
+  it('headless success (no manager) still fulfills with series', async () => {
+    restoreFetch = mockFetch(async () =>
+      jsonResponse({
+        status: 'success',
+        plots: SAMPLE_BARS.map(() => 1),
+        series: {
+          plot: SAMPLE_BARS.map((_, i) => (i % 2 === 0 ? NaN : 2.5)),
+        },
+        events: [],
+        meta: { script_name: 'headless', overlay: true },
+      }),
+    );
+    const r = await runAndApply('plot(close)', undefined, {
+      silent: true,
+      openResults: false,
+    });
+    expect(r.status).toBe('success');
+    // Non-finite samples coerced at normalize
+    expect(r.series.plot?.[0]).toBeNull();
+    expect(r.series.plot?.[1]).toBe(2.5);
+  });
+});
+
 describe('lineSeriesToOverlayData hardening (plot-visuals)', () => {
   it('never emits NaN values', () => {
     const data = lineSeriesToOverlayData(
@@ -188,5 +227,19 @@ describe('lineSeriesToOverlayData hardening (plot-visuals)', () => {
 
   it('handles empty times', () => {
     expect(lineSeriesToOverlayData([], [1, 2])).toEqual([]);
+  });
+
+  it('pre-sized large arrays stay finite and dense', () => {
+    const n = 5_000;
+    const times = Array.from({ length: n }, (_, i) => 1_000 + i);
+    const values = Array.from({ length: n }, (_, i) =>
+      i % 100 === 0 ? NaN : i % 7 === 0 ? Infinity : i * 0.1,
+    );
+    const data = lineSeriesToOverlayData(times, values);
+    expect(data.length).toBe(n);
+    expect(data.every((d) => d.value === undefined || Number.isFinite(d.value!))).toBe(true);
+    // Sample: first bar NaN → whitespace; second finite
+    expect(data[0]).toEqual({ time: 1000 });
+    expect(data[1]?.value).toBe(0.1);
   });
 });

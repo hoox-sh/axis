@@ -52,6 +52,7 @@ import {
 import {
   getActiveManager,
   getActiveSlotId,
+  getSlotDrawingLayer,
   setSlotDrawingLayer,
   setSlotManager,
 } from './chart-registry';
@@ -150,9 +151,18 @@ let drawingLayer: DrawingLayer | undefined;
 /** ThemeManager unregister for the active price series */
 let priceSeriesThemeUnreg: (() => void) | undefined;
 
-/** Active chart manager (multi-chart) or legacy singleton. */
+/**
+ * Active chart manager (multi-chart) or legacy singleton.
+ * Never returns a disposed/stale legacy pointer while a multi-chart slot is
+ * active — after slot teardown {@link getActiveManager} is undefined and we
+ * must not fall through to a zombie `manager` ref.
+ */
 export function getManager(): PaneManager | undefined {
-  return getActiveManager() ?? manager;
+  const active = getActiveManager();
+  if (active) return active;
+  // Slot id set but manager already disposed (or not yet mounted)
+  if (getActiveSlotId()) return undefined;
+  return manager;
 }
 
 export function setManager(m: PaneManager | undefined, slotId?: string) {
@@ -160,12 +170,28 @@ export function setManager(m: PaneManager | undefined, slotId?: string) {
   if (id) setSlotManager(id, m);
   // Keep legacy pointer on active slot for tests / single-chart
   if (!id || id === getActiveSlotId()) {
+    if (m === undefined && manager !== undefined) {
+      // Active manager cleared — drop theme subscription so reapplyAll cannot
+      // touch a series whose chart was removed.
+      try {
+        priceSeriesThemeUnreg?.();
+      } catch {
+        /* ignore */
+      }
+      priceSeriesThemeUnreg = undefined;
+    }
     manager = m;
   }
 }
 
-/** Imperative access to the price-pane drawing overlay (if created). */
+/**
+ * Imperative access to the price-pane drawing overlay (if created).
+ * Prefers the active multi-chart registry entry; falls back to module ref
+ * (ensureDrawingLayer race + unit tests without a slot id).
+ */
 export function getDrawingLayer(): DrawingLayer | undefined {
+  const id = getActiveSlotId();
+  if (id) return getSlotDrawingLayer(id) ?? drawingLayer;
   return drawingLayer;
 }
 
@@ -256,61 +282,78 @@ export type SetDataToChartOpts = {
 export function ensurePriceSeries(chartType?: ChartType): void {
   const mgr = getManager();
   if (!mgr) return;
-  const type = normalizeChartType(chartType ?? store.chartType);
-  const pricePane = mgr.getPane('price');
-  if (!pricePane) return;
+  try {
+    const type = normalizeChartType(chartType ?? store.chartType);
+    const pricePane = mgr.getPane('price');
+    if (!pricePane?.chart) return;
 
-  const currentType = mgr.getPriceChartType();
-  const existing = pricePane.series['candle'];
-  if (existing && currentType === type) return;
+    const currentType = mgr.getPriceChartType();
+    const existing = pricePane.series['candle'];
+    if (existing && currentType === type) return;
 
-  // Drop markers plugin before removing the host series
-  mgr.detachPriceMarkers();
-
-  if (existing) {
+    // Drop markers plugin before removing the host series
     try {
-      priceSeriesThemeUnreg?.();
+      mgr.detachPriceMarkers();
+    } catch {
+      /* markers optional */
+    }
+
+    if (existing) {
+      try {
+        priceSeriesThemeUnreg?.();
+      } catch {
+        /* ignore */
+      }
+      priceSeriesThemeUnreg = undefined;
+      try {
+        pricePane.chart.removeSeries(existing);
+      } catch {
+        /* ignore */
+      }
+      delete pricePane.series['candle'];
+    }
+
+    pricePane.series['candle'] = createPriceSeries(pricePane.chart, type);
+    mgr.setPriceChartType(type);
+
+    try {
+      priceSeriesThemeUnreg = getThemeManager().registerPriceSeries(
+        pricePane.series['candle'],
+        type,
+      );
+    } catch {
+      priceSeriesThemeUnreg = undefined;
+    }
+
+    // Respect chart [N] last-value / name labels pref on the new series
+    try {
+      pricePane.series['candle'].applyOptions({
+        lastValueVisible: store.lastValueLabelsVisible !== false,
+      });
     } catch {
       /* ignore */
     }
-    priceSeriesThemeUnreg = undefined;
+
+    // Drawing layer needs the new series for price ↔ Y
     try {
-      pricePane.chart.removeSeries(existing);
+      getDrawingLayer()?.setSeries(pricePane.series['candle'] as never);
     } catch {
-      /* ignore */
+      /* layer optional */
     }
-    delete pricePane.series['candle'];
-  }
 
-  pricePane.series['candle'] = createPriceSeries(pricePane.chart, type);
-  mgr.setPriceChartType(type);
-
-  try {
-    priceSeriesThemeUnreg = getThemeManager().registerPriceSeries(
-      pricePane.series['candle'],
-      type,
-    );
-  } catch {
-    priceSeriesThemeUnreg = undefined;
-  }
-
-  // Respect chart [N] last-value / name labels pref on the new series
-  try {
-    pricePane.series['candle'].applyOptions({
-      lastValueVisible: store.lastValueLabelsVisible !== false,
+    // Re-attach markers onto the new host series
+    try {
+      mgr.reapplyPriceMarkers();
+    } catch {
+      /* markers optional */
+    }
+  } catch (err: unknown) {
+    reportUiError(err, {
+      source: 'chart',
+      context: 'Price series ensure failed',
+      status: false,
     });
-  } catch {
-    /* ignore */
   }
-
-  // Drawing layer needs the new series for price ↔ Y
-  const layer = getDrawingLayer();
-  if (layer) {
-    layer.setSeries(pricePane.series['candle'] as never);
-  }
-
-  // Re-attach markers onto the new host series
-  mgr.reapplyPriceMarkers();
 }
 
 /**

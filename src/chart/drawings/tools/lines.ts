@@ -9,9 +9,12 @@
 import type { Drawing, MultiPointDrawing, Point, TwoPointDrawing } from '../../drawing-types';
 import { channelEdges, distToSegment, extendSegment } from '../geometry';
 import { registerToolHandler, type ToolHitCtx, type ToolViewCtx } from './registry';
+import { isFinitePoint, sanitizePoints, sanitizeStrokeColor } from './safe';
 
-function asTwo(d: Drawing): TwoPointDrawing | null {
+function asTwo(d: Drawing, kind?: TwoPointDrawing['kind']): TwoPointDrawing | null {
+  if (kind && d.kind !== kind) return null;
   if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
+  if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return null;
   return d as TwoPointDrawing;
 }
 
@@ -22,7 +25,7 @@ function asMulti(d: Drawing): MultiPointDrawing | null {
 
 function pointsOf(d: Drawing): Point[] {
   const m = asMulti(d);
-  if (m?.points?.length) return m.points;
+  if (m?.points?.length) return sanitizePoints(m.points);
   const t = asTwo(d);
   if (t) return [t.p1, t.p2];
   return [];
@@ -35,19 +38,20 @@ registerToolHandler({
   label: 'Horizontal ray',
   arity: 2,
   create(points, color) {
-    if (points.length < 2) return null;
-    const p1 = points[0]!;
-    const p2 = points[1]!;
+    const pts = sanitizePoints(points);
+    if (pts.length < 2) return null;
+    const p1 = pts[0]!;
+    const p2 = pts[1]!;
     return {
       id: '',
       kind: 'hray',
       p1: { time: p1.time, price: p1.price },
       p2: { time: p2.time, price: p1.price },
-      color,
+      color: sanitizeStrokeColor(color),
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'hray');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     if (!a) return;
@@ -58,7 +62,7 @@ registerToolHandler({
     if (ctx.selected) ctx.circle(a.x, a.y, 5, ctx.stroke, true);
   },
   hit(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'hray');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     if (!a) return false;
@@ -75,28 +79,35 @@ registerToolHandler({
   label: 'Info line',
   arity: 2,
   create(points, color) {
-    if (points.length < 2) return null;
+    const pts = sanitizePoints(points);
+    if (pts.length < 2) return null;
     return {
       id: '',
       kind: 'infoLine',
-      p1: points[0]!,
-      p2: points[1]!,
-      color,
+      p1: pts[0]!,
+      p2: pts[1]!,
+      color: sanitizeStrokeColor(color),
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'infoLine');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
     if (!a || !b) return;
     ctx.line(a.x, a.y, b.x, b.y, ctx.stroke, ctx.strokeWidth, ctx.dash);
     const dPrice = t.p2.price - t.p1.price;
-    const pct = t.p1.price !== 0 ? (dPrice / t.p1.price) * 100 : 0;
-    const bars =
-      ctx.barIndexApprox != null
-        ? Math.abs(ctx.barIndexApprox(t.p1.time) - ctx.barIndexApprox(t.p2.time))
-        : 0;
+    const denom = t.p1.price || 1;
+    const pct = (dPrice / denom) * 100;
+    let bars = 0;
+    if (ctx.barIndexApprox != null) {
+      try {
+        const n = Math.abs(ctx.barIndexApprox(t.p1.time) - ctx.barIndexApprox(t.p2.time));
+        if (Number.isFinite(n)) bars = n;
+      } catch {
+        bars = 0;
+      }
+    }
     const midX = (a.x + b.x) / 2;
     const midY = (a.y + b.y) / 2;
     ctx.label(
@@ -110,7 +121,7 @@ registerToolHandler({
     ctx.circle(b.x, b.y, ctx.selected ? 5 : 3, ctx.stroke, ctx.selected);
   },
   hit(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'infoLine');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -126,8 +137,9 @@ registerToolHandler({
   label: 'Parallel channel',
   arity: 3,
   create(points, color) {
-    if (points.length < 3) return null;
-    const [p1, p2, p3] = points;
+    const pts = sanitizePoints(points);
+    if (pts.length < 3) return null;
+    const [p1, p2, p3] = pts;
     return {
       id: '',
       kind: 'channel',
@@ -135,11 +147,12 @@ registerToolHandler({
       p1: p1!,
       p2: p2!,
       p3: p3!,
-      color,
+      color: sanitizeStrokeColor(color),
       fillOpacity: 0.08,
     } as MultiPointDrawing;
   },
   paint(d, ctx) {
+    if (d.kind !== 'channel') return;
     const pts = pointsOf(d);
     if (pts.length < 3) return;
     const edges = channelEdges(pts[0]!, pts[1]!, pts[2]!);
@@ -172,6 +185,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
+    if (d.kind !== 'channel') return false;
     const pts = pointsOf(d);
     if (pts.length < 3) return false;
     const edges = channelEdges(pts[0]!, pts[1]!, pts[2]!);
@@ -188,12 +202,13 @@ registerToolHandler({
     );
   },
   paintDraft(points, ctx) {
-    if (points.length < 2) return;
-    const a = ctx.toXY(points[0]!);
-    const b = ctx.toXY(points[1]!);
+    const pts = sanitizePoints(points);
+    if (pts.length < 2) return;
+    const a = ctx.toXY(pts[0]!);
+    const b = ctx.toXY(pts[1]!);
     if (a && b) ctx.line(a.x, a.y, b.x, b.y, ctx.stroke, ctx.strokeWidth, '4 4');
-    if (points.length >= 3) {
-      const edges = channelEdges(points[0]!, points[1]!, points[2]!);
+    if (pts.length >= 3) {
+      const edges = channelEdges(pts[0]!, pts[1]!, pts[2]!);
       const b1 = ctx.toXY(edges.b1);
       const b2 = ctx.toXY(edges.b2);
       if (b1 && b2) ctx.line(b1.x, b1.y, b2.x, b2.y, ctx.stroke, ctx.strokeWidth, '4 4');

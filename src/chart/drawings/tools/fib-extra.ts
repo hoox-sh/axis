@@ -14,15 +14,18 @@ import {
 } from '../../drawing-types';
 import { distToSegment, extendSegment, nearPoint } from '../geometry';
 import { registerToolHandler, type ToolViewCtx } from './registry';
+import { clampStrokeWidth, isFinitePoint, sanitizePoints, sanitizeStrokeColor } from './safe';
 
-function asTwo(d: Drawing): TwoPointDrawing | null {
+function asTwo(d: Drawing, kind?: TwoPointDrawing['kind']): TwoPointDrawing | null {
+  if (kind && d.kind !== kind) return null;
   if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
+  if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return null;
   return d as TwoPointDrawing;
 }
 
 function pts(d: Drawing): Point[] {
   if ('points' in d && Array.isArray((d as MultiPointDrawing).points)) {
-    return (d as MultiPointDrawing).points;
+    return sanitizePoints((d as MultiPointDrawing).points);
   }
   const t = asTwo(d);
   return t ? [t.p1, t.p2] : [];
@@ -30,7 +33,8 @@ function pts(d: Drawing): Point[] {
 
 /** SVG arc path: semicircle centered at (cx,cy) facing `angle` (rad), radius r. */
 function semiArcPath(cx: number, cy: number, r: number, angle: number): string {
-  if (r <= 0) return '';
+  if (!(r > 0) || !Number.isFinite(r) || !Number.isFinite(angle)) return '';
+  if (!Number.isFinite(cx) || !Number.isFinite(cy)) return '';
   const a0 = angle - Math.PI / 2;
   const a1 = angle + Math.PI / 2;
   const x0 = cx + r * Math.cos(a0);
@@ -42,10 +46,11 @@ function semiArcPath(cx: number, cy: number, r: number, angle: number): string {
 }
 
 function strokeAttrs(ctx: ToolViewCtx, dashed?: boolean): Record<string, string> {
+  const sw = clampStrokeWidth(ctx.strokeWidth);
   const attrs: Record<string, string> = {
     fill: 'none',
     stroke: ctx.stroke,
-    'stroke-width': String(Math.max(1, ctx.strokeWidth - (dashed ? 0.5 : 0))),
+    'stroke-width': String(Math.max(1, sw - (dashed ? 0.5 : 0))),
     'pointer-events': 'stroke',
   };
   if (dashed || ctx.dash) {
@@ -61,17 +66,18 @@ registerToolHandler({
   label: 'Fib arc',
   arity: 2,
   create(points, color) {
-    if (points.length < 2) return null;
+    const p = sanitizePoints(points);
+    if (p.length < 2) return null;
     return {
       id: '',
       kind: 'fibArc',
-      p1: points[0]!,
-      p2: points[1]!,
-      color,
+      p1: p[0]!,
+      p2: p[1]!,
+      color: sanitizeStrokeColor(color),
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'fibArc');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -100,7 +106,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'fibArc');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -124,18 +130,20 @@ registerToolHandler({
   label: 'Fib wedge',
   arity: 3,
   create(points, color) {
-    if (points.length < 3) return null;
+    const p = sanitizePoints(points);
+    if (p.length < 3) return null;
     return {
       id: '',
       kind: 'fibWedge',
-      points: points.slice(0, 3),
-      p1: points[0]!,
-      p2: points[1]!,
-      p3: points[2]!,
-      color,
+      points: p.slice(0, 3),
+      p1: p[0]!,
+      p2: p[1]!,
+      p3: p[2]!,
+      color: sanitizeStrokeColor(color),
     } as MultiPointDrawing;
   },
   paint(d, ctx) {
+    if (d.kind !== 'fibWedge') return;
     const p = pts(d);
     if (p.length < 3) return;
     const a = ctx.toXY(p[0]!);
@@ -194,6 +202,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
+    if (d.kind !== 'fibWedge') return false;
     const p = pts(d);
     if (p.length < 3) return false;
     const a = ctx.toXY(p[0]!);
@@ -217,17 +226,18 @@ registerToolHandler({
   label: 'Fib circles',
   arity: 2,
   create(points, color) {
-    if (points.length < 2) return null;
+    const p = sanitizePoints(points);
+    if (p.length < 2) return null;
     return {
       id: '',
       kind: 'fibCircles',
-      p1: points[0]!,
-      p2: points[1]!,
-      color,
+      p1: p[0]!,
+      p2: p[1]!,
+      color: sanitizeStrokeColor(color),
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'fibCircles');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -254,7 +264,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'fibCircles');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);

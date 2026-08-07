@@ -69,8 +69,20 @@ import {
   type ToolHitCtx,
   type ToolViewCtx,
 } from './drawings/tools';
+import {
+  clampStrokeWidth,
+  isFinitePoint,
+  sanitizeDrawingText,
+  sanitizePoints,
+  sanitizeStrokeColor,
+} from './drawings/tools/safe';
 // Register extended tool handlers (side effects)
 import './drawings/tools';
+
+/** True when `n` is a finite number (SVG attrs / LWC coords). */
+function isFiniteNum(n: unknown): n is number {
+  return typeof n === 'number' && Number.isFinite(n);
+}
 
 /** Fired after user drawings change (place, drag end, delete, clear). */
 export type DrawingChangeHandler = (drawings: Drawing[]) => void;
@@ -314,6 +326,7 @@ export class DrawingLayer {
 
   /** Select a drawing (or null); notifies store and re-paints handles. */
   setSelectedId(id: string | null) {
+    if (this.selectedId === id) return;
     this.selectedId = id;
     this.onSelectionChange?.(id);
     this.redrawUser();
@@ -343,12 +356,13 @@ export class DrawingLayer {
     this.tool = tool;
     this.draft = null;
     this.drag = null;
-    this.gDraft.innerHTML = '';
+    this.clearDraftDom();
     // Drawing tools capture full surface; cursor only hits painted shapes
     this.svg.style.pointerEvents = tool === 'cursor' ? 'none' : 'auto';
     this.svg.style.cursor =
       tool === 'cursor' ? 'default' : tool === 'eraser' ? 'cell' : 'crosshair';
-    this.redraw();
+    // Tool switch does not change scales — only user handles/draft matter
+    this.redrawUser();
   }
 
   getTool(): DrawingToolId {
@@ -437,11 +451,13 @@ export class DrawingLayer {
   /** Remove all user drawings, clear selection/draft, emit. */
   clearAll() {
     this.drawings = [];
-    this.setSelectedId(null);
     this.draft = null;
     this.drag = null;
+    this.clearDraftDom();
+    this.setSelectedId(null);
     this.emit();
-    this.redraw();
+    // setSelectedId may no-op when already null — always clear user group
+    this.redrawUser();
   }
 
   /**
@@ -455,7 +471,7 @@ export class DrawingLayer {
     this.drawings = this.drawings.filter((d) => d.id !== this.selectedId);
     this.setSelectedId(null);
     this.emit();
-    this.redraw();
+    // Selection clear already re-painted user group
   }
 
   /**
@@ -480,21 +496,28 @@ export class DrawingLayer {
    * Also stamps `meta.symbol` from {@link setSymbolProvider} when available.
    */
   private applyCreateStyle<T extends Drawing>(d: T): T {
+    const fallback = this.defaultColor(d.kind);
+    const color = sanitizeStrokeColor(d.color || fallback, fallback);
     const sym = String(this.symbolProvider?.() || '')
       .trim()
       .toUpperCase();
-    const meta = {
-      ...(d.meta || {}),
-      ...(sym ? { symbol: sym } : {}),
-    };
+    const meta: NonNullable<Drawing['meta']> = { ...(d.meta || {}) };
+    if (sym) {
+      meta.symbol = sym;
+    } else if (meta.symbol != null) {
+      const s = String(meta.symbol).trim().toUpperCase();
+      if (s) meta.symbol = s;
+      else delete meta.symbol;
+    }
     return {
       ...d,
-      color: d.color || this.defaultColor(d.kind),
+      id: d.id || uid(),
+      color,
       lineWidth: d.lineWidth ?? this.stylePrefs.width,
       lineStyle: d.lineStyle ?? this.stylePrefs.lineStyle,
       fillOpacity: d.fillOpacity ?? this.stylePrefs.fillOpacity,
       style: {
-        color: d.color || this.defaultColor(d.kind),
+        color,
         width: d.lineWidth ?? this.stylePrefs.width,
         lineStyle: d.lineStyle ?? this.stylePrefs.lineStyle,
         opacity: 1,
@@ -532,7 +555,7 @@ export class DrawingLayer {
       if (this.tool !== 'cursor') {
         e.preventDefault();
         this.draft = null;
-        this.gDraft.innerHTML = '';
+        this.clearDraftDom();
       }
     };
 
@@ -576,15 +599,29 @@ export class DrawingLayer {
     if (this.redrawRaf) return;
     this.redrawRaf = requestAnimationFrame(() => {
       this.redrawRaf = 0;
+      // Skip work while the host is hidden (tab/panel collapsed)
+      if (this.host.clientWidth <= 0 || this.host.clientHeight <= 0) return;
       this.redraw();
     });
   }
 
+  /** Drop draft SVG without touching gDraw/gScript (avoids full-layer thrash). */
+  private clearDraftDom() {
+    try {
+      this.gDraft.replaceChildren();
+    } catch {
+      this.gDraft.innerHTML = '';
+    }
+  }
+
   private syncSize() {
     const r = this.host.getBoundingClientRect();
-    this.svg.setAttribute('viewBox', `0 0 ${r.width} ${r.height}`);
-    this.svg.setAttribute('width', String(r.width));
-    this.svg.setAttribute('height', String(r.height));
+    const w = r.width;
+    const h = r.height;
+    if (!isFiniteNum(w) || !isFiniteNum(h) || w < 0 || h < 0) return;
+    this.svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    this.svg.setAttribute('width', String(w));
+    this.svg.setAttribute('height', String(h));
   }
 
   /**
@@ -594,45 +631,58 @@ export class DrawingLayer {
    * pixel tolerance so snap always applies when bars exist; weak uses 10px.
    */
   private clientToPoint(e: MouseEvent): Point | null {
-    const rect = this.svg.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const price = this.series.coordinateToPrice(y);
-    if (price == null || !Number.isFinite(price)) return null;
+    try {
+      const rect = this.svg.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      if (!isFiniteNum(x) || !isFiniteNum(y)) return null;
+      const price = this.series.coordinateToPrice(y);
+      if (price == null || !Number.isFinite(price)) return null;
 
-    let t: number | null = null;
-    const rawTime = this.chart.timeScale().coordinateToTime(x);
-    if (rawTime != null) {
-      t =
-        typeof rawTime === 'number'
-          ? rawTime
-          : (rawTime as { timestamp?: number }).timestamp ?? null;
-    }
-    // Empty right margin / future: coordinateToTime is null — use logical × period
-    const bars = this.barsProvider?.() ?? null;
-    if ((t == null || !Number.isFinite(t)) && bars?.length) {
-      const logical = this.chart.timeScale().coordinateToLogical(x);
-      if (logical != null && Number.isFinite(logical)) {
-        this.ensureRightOffsetForLogical(logical, bars.length);
-        t = logicalIndexToUnixTime(logical, bars, DRAWING_FUTURE_BARS);
+      let t: number | null = null;
+      const rawTime = this.chart.timeScale().coordinateToTime(x);
+      if (rawTime != null) {
+        t =
+          typeof rawTime === 'number'
+            ? rawTime
+            : (rawTime as { timestamp?: number }).timestamp ?? null;
       }
-    }
-    if (t == null || !Number.isFinite(t)) return null;
-    if (bars?.length) t = clampTimeToFutureHorizon(t, bars, DRAWING_FUTURE_BARS);
+      // Empty right margin / future: coordinateToTime is null — use logical × period
+      const bars = this.barsProvider?.() ?? null;
+      if ((t == null || !Number.isFinite(t)) && bars?.length) {
+        const logical = this.chart.timeScale().coordinateToLogical(x);
+        if (logical != null && Number.isFinite(logical)) {
+          this.ensureRightOffsetForLogical(logical, bars.length);
+          t = logicalIndexToUnixTime(logical, bars, DRAWING_FUTURE_BARS);
+        }
+      }
+      if (t == null || !Number.isFinite(t)) return null;
+      if (bars?.length) t = clampTimeToFutureHorizon(t, bars, DRAWING_FUTURE_BARS);
+      if (t == null || !Number.isFinite(t)) return null;
 
-    const raw: Point = { time: t as number, price };
-    // Magnet only snaps onto real bars — don't pull future anchors back to last OHLC
-    if (this.magnet === 'off' || !bars?.length) return raw;
-    const lastT = bars[bars.length - 1]!.time;
-    if (raw.time > lastT) return raw;
-    return snapToBars({
-      bars,
-      raw,
-      rawXY: { x, y },
-      priceToY: (p) => this.series.priceToCoordinate(p),
-      mode: this.magnet,
-      pixelTol: this.magnet === 'strong' ? 9999 : 10,
-    });
+      const raw: Point = { time: t as number, price };
+      // Magnet only snaps onto real bars — don't pull future anchors back to last OHLC
+      if (this.magnet === 'off' || !bars?.length) return raw;
+      const lastT = bars[bars.length - 1]!.time;
+      if (raw.time > lastT) return raw;
+      const snapped = snapToBars({
+        bars,
+        raw,
+        rawXY: { x, y },
+        priceToY: (p) => {
+          try {
+            return this.series.priceToCoordinate(p);
+          } catch {
+            return null;
+          }
+        },
+        mode: this.magnet,
+        pixelTol: this.magnet === 'strong' ? 9999 : 10,
+      });
+      return snapped && isFinitePoint(snapped) ? snapped : raw;
+    } catch {
+      return null;
+    }
   }
 
   /** Last OHLCV bar time from {@link barsProvider}, if available. */
@@ -670,31 +720,42 @@ export class DrawingLayer {
    * then bare bar_index). Used by {@link toXY} and vline hit-test.
    */
   private timeToX(time: number, opts?: { clampToLastBar?: boolean }): number | null {
-    const bars = this.barsProvider?.() ?? null;
-    let t = time;
-    if (opts?.clampToLastBar) {
-      t = clampTimeToLastBar(t, this.lastBarTime());
-    }
-    let x = this.chart.timeScale().timeToCoordinate(t as UTCTimestamp);
-    if (x == null && Number.isFinite(t) && bars?.length) {
-      const logical = unixTimeToLogicalIndex(t, bars, DRAWING_FUTURE_BARS);
-      if (logical != null) {
-        this.ensureRightOffsetForLogical(logical, bars.length);
+    if (!Number.isFinite(time)) return null;
+    try {
+      const bars = this.barsProvider?.() ?? null;
+      let t = time;
+      if (opts?.clampToLastBar) {
+        t = clampTimeToLastBar(t, this.lastBarTime());
+      }
+      if (!Number.isFinite(t)) return null;
+      let x: number | null = null;
+      try {
+        x = this.chart.timeScale().timeToCoordinate(t as UTCTimestamp);
+      } catch {
+        x = null;
+      }
+      if (x == null && bars?.length) {
+        const logical = unixTimeToLogicalIndex(t, bars, DRAWING_FUTURE_BARS);
+        if (logical != null) {
+          this.ensureRightOffsetForLogical(logical, bars.length);
+          try {
+            x = this.chart.timeScale().logicalToCoordinate(logical as never);
+          } catch {
+            x = null;
+          }
+        }
+      }
+      if (x == null) {
         try {
-          x = this.chart.timeScale().logicalToCoordinate(logical as never);
+          x = this.chart.timeScale().logicalToCoordinate(t as never);
         } catch {
           x = null;
         }
       }
+      return isFiniteNum(x) ? x : null;
+    } catch {
+      return null;
     }
-    if (x == null && Number.isFinite(t)) {
-      try {
-        x = this.chart.timeScale().logicalToCoordinate(t as never);
-      } catch {
-        x = null;
-      }
-    }
-    return x;
   }
 
   /**
@@ -710,19 +771,23 @@ export class DrawingLayer {
     p: Point,
     opts?: { clampToLastBar?: boolean },
   ): { x: number; y: number } | null {
-    const x = this.timeToX(p.time, opts);
-    const y = this.series.priceToCoordinate(p.price);
-    if (x == null || y == null) return null;
-    return { x, y };
+    if (!p || !isFinitePoint(p)) return null;
+    try {
+      const x = this.timeToX(p.time, opts);
+      const y = this.series.priceToCoordinate(p.price);
+      if (x == null || y == null || !isFiniteNum(x) || !isFiniteNum(y)) return null;
+      return { x, y };
+    } catch {
+      return null;
+    }
   }
 
   /** Escape cancels draft/selection; Delete/Backspace removes selected (not from inputs). */
   private handleKey(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       this.draft = null;
-      this.gDraft.innerHTML = '';
+      this.clearDraftDom();
       this.setSelectedId(null);
-      this.redraw();
     }
     if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedId) {
       // Don't steal from inputs
@@ -741,7 +806,7 @@ export class DrawingLayer {
     if (this.tool !== 'cursor') return;
     if (this.lockAll) return;
     const start = this.clientToPoint(e);
-    if (!start) return;
+    if (!start || !isFinitePoint(start)) return;
     const handle = this.hitTestHandle(e);
     const hit = handle?.id ?? this.hitTest(e);
     if (!hit) return;
@@ -749,22 +814,31 @@ export class DrawingLayer {
     if (!origin) return;
     if (resolveDrawingStyle(origin).locked) {
       this.setSelectedId(hit);
-      this.redraw();
       return;
     }
     e.preventDefault();
     e.stopPropagation();
     this.setSelectedId(hit);
+    let cloned: Drawing;
+    try {
+      cloned = structuredClone(origin) as Drawing;
+    } catch {
+      cloned = { ...origin } as Drawing;
+    }
     this.drag = {
       id: hit,
       start,
-      origin: structuredClone(origin) as Drawing,
+      origin: cloned,
       mode: handle?.mode ?? 'move',
     };
     this.didDrag = false;
     this.svg.style.pointerEvents = 'auto';
-    this.svg.setPointerCapture?.(e.pointerId);
-    this.redraw();
+    try {
+      this.svg.setPointerCapture?.(e.pointerId);
+    } catch {
+      /* ignore capture failures */
+    }
+    // setSelectedId already re-painted user group
   }
 
   private handlePointerUp(e: PointerEvent) {
@@ -777,7 +851,8 @@ export class DrawingLayer {
     if (this.didDrag) this.emit();
     this.drag = null;
     this.svg.style.pointerEvents = this.tool === 'cursor' ? 'none' : 'auto';
-    this.redraw();
+    // Geometry may have changed; user layer only (scales unchanged)
+    this.redrawUser();
   }
 
   /**
@@ -795,24 +870,24 @@ export class DrawingLayer {
       // Hit-test select (shapes have pointer-events; empty area doesn't fire)
       const hit = this.hitTest(e);
       this.setSelectedId(hit);
-      this.redraw();
       return;
     }
 
     if (this.tool === 'eraser') {
       if (this.lockAll) return;
       const hit = this.hitTest(e);
-      if (hit) {
-        this.drawings = this.drawings.filter((d) => d.id !== hit);
-        if (this.selectedId === hit) this.setSelectedId(null);
-        this.emit();
-        this.redraw();
-      }
+      if (!hit) return;
+      const target = this.drawings.find((d) => d.id === hit);
+      if (target && resolveDrawingStyle(target).locked) return;
+      this.drawings = this.drawings.filter((d) => d.id !== hit);
+      if (this.selectedId === hit) this.setSelectedId(null);
+      else this.redrawUser();
+      this.emit();
       return;
     }
 
     const pt = this.clientToPoint(e);
-    if (!pt) return;
+    if (!pt || !isFinitePoint(pt)) return;
 
     if (this.tool === 'hline') {
       this.drawings.push(
@@ -824,7 +899,7 @@ export class DrawingLayer {
         }),
       );
       this.emit();
-      this.redraw();
+      this.redrawUser();
       this.afterPlace();
       return;
     }
@@ -839,25 +914,27 @@ export class DrawingLayer {
         }),
       );
       this.emit();
-      this.redraw();
+      this.redrawUser();
       this.afterPlace();
       return;
     }
 
     if (this.tool === 'text') {
       const labelText = window.prompt('Label text', 'Note');
-      if (labelText == null || !labelText.trim()) return;
+      if (labelText == null) return;
+      const text = sanitizeDrawingText(labelText);
+      if (!text) return;
       this.drawings.push(
         this.applyCreateStyle({
           id: uid(),
           kind: 'text',
           p1: pt,
-          text: labelText.trim(),
+          text,
           color: this.defaultColor('text'),
         }),
       );
       this.emit();
-      this.redraw();
+      this.redrawUser();
       this.afterPlace();
       return;
     }
@@ -871,7 +948,7 @@ export class DrawingLayer {
         created.id = uid();
         this.drawings.push(this.applyCreateStyle(created));
         this.emit();
-        this.redraw();
+        this.redrawUser();
         this.afterPlace();
       }
       return;
@@ -885,10 +962,12 @@ export class DrawingLayer {
         return;
       }
       this.draft.points.push(pt);
+      // Drop any non-finite anchors that may have snuck into the draft
+      this.draft.points = sanitizePoints(this.draft.points);
       const need = toolArity(this.tool);
       const n = this.draft.points.length;
 
-      // Open-ended: keep collecting until double-click
+      // Open-ended: keep collecting until double-click (even when >= minPoints)
       if (need === 'n') {
         this.renderDraft(pt);
         return;
@@ -909,37 +988,48 @@ export class DrawingLayer {
     if (!this.draft || !needsNPoints(this.draft.tool)) return;
     e.preventDefault();
     e.stopPropagation();
-    const pts = this.draft.points;
-    if (pts.length < 2) {
+    const handler = getToolHandler(this.draft.tool);
+    const minPts = Math.max(handler?.minPoints ?? 2, 2);
+    const pts = sanitizePoints(this.draft.points);
+    if (pts.length < minPts) {
       this.draft = null;
-      this.gDraft.innerHTML = '';
+      this.clearDraftDom();
       return;
     }
     this.commitDraftPoints(pts);
   };
 
   private commitDraftPoints(points: Point[]) {
+    // Snapshot tool before clearing draft (double-free safe: draft null once)
     const tool = (this.draft?.tool || this.tool) as DrawingToolId;
     this.draft = null;
-    this.gDraft.innerHTML = '';
+    this.clearDraftDom();
+    const clean = sanitizePoints(points);
     const handler = getToolHandler(tool);
+    const arity = toolArity(tool);
+    const minPts =
+      handler?.minPoints ??
+      (arity === 3 ? 3 : arity === 1 ? 1 : 2);
+    if (clean.length < minPts) return;
+
     let drawing: Drawing | null = null;
     if (handler?.create) {
-      drawing = handler.create(points, this.defaultColor(tool));
-    } else if (points.length >= 2 && needsTwoPoints(tool)) {
+      drawing = handler.create(clean, this.defaultColor(tool));
+    } else if (clean.length >= 2 && needsTwoPoints(tool)) {
       drawing = {
-        id: '',
+        id: uid(),
         kind: tool as TwoPointKind,
-        p1: points[0]!,
-        p2: points[1]!,
+        p1: clean[0]!,
+        p2: clean[1]!,
         color: this.defaultColor(tool),
       } as Drawing;
     }
+    // create() may return null for invalid geometry — never push empty shells
     if (!drawing) return;
-    drawing.id = uid();
+    drawing.id = drawing.id || uid();
     this.drawings.push(this.applyCreateStyle(drawing));
     this.emit();
-    this.redraw();
+    this.redrawUser();
     this.afterPlace();
   }
 
@@ -947,9 +1037,10 @@ export class DrawingLayer {
   private handleMove(e: MouseEvent) {
     if (this.drag) {
       const pt = this.clientToPoint(e);
-      if (!pt) return;
+      if (!pt || !isFinitePoint(pt)) return;
       const dTime = pt.time - this.drag.start.time;
       const dPrice = pt.price - this.drag.start.price;
+      if (!Number.isFinite(dTime) || !Number.isFinite(dPrice)) return;
       if (Math.abs(dTime) > 0 || Math.abs(dPrice) > 1e-12) this.didDrag = true;
       let next: Drawing;
       if (this.drag.mode === 'move') {
@@ -960,44 +1051,54 @@ export class DrawingLayer {
       const idx = this.drawings.findIndex((d) => d.id === this.drag!.id);
       if (idx >= 0) {
         this.drawings[idx] = next;
-        this.redraw();
+        // Drag is user-only; never rebuild script/fills every mousemove
+        this.redrawUser();
       }
       return;
     }
     if (!this.draft?.points?.length) return;
     const pt = this.clientToPoint(e);
-    if (!pt) return;
+    if (!pt || !isFinitePoint(pt)) return;
     this.renderDraft(pt);
   }
 
   private renderDraft(hover: Point) {
-    this.gDraft.innerHTML = '';
+    this.clearDraftDom();
     if (!this.draft?.points?.length) return;
-    const points = [...this.draft.points, hover];
+    if (!isFinitePoint(hover)) return;
+    // Sanitize anchors once for paint (hover appended after)
+    const anchors = sanitizePoints(this.draft.points);
+    if (!anchors.length) return;
+    const points = [...anchors, hover];
     const handler = getToolHandler(this.draft.tool);
-    const ctx = this.makeViewCtx(this.gDraft, DRAWING_COLORS.muted, 1.25, undefined, 0.1, true);
-    if (handler?.paintDraft) {
-      handler.paintDraft(points, ctx);
-      return;
-    }
-    if (handler?.create && points.length >= (typeof handler.arity === 'number' ? handler.arity : 2)) {
-      const d = handler.create(points, DRAWING_COLORS.muted);
-      if (d) {
-        d.id = 'draft';
-        this.paintDrawing(this.gDraft, d, true);
+    try {
+      const ctx = this.makeViewCtx(this.gDraft, DRAWING_COLORS.muted, 1.25, undefined, 0.1, true);
+      if (handler?.paintDraft) {
+        handler.paintDraft(points, ctx);
         return;
       }
-    }
-    // Fallback: two-point line preview
-    if (points.length >= 2) {
-      const d: Drawing = {
-        id: 'draft',
-        kind: (needsTwoPoints(this.draft.tool) ? this.draft.tool : 'trend') as TwoPointKind,
-        p1: points[0]!,
-        p2: points[points.length - 1]!,
-        color: DRAWING_COLORS.muted,
-      } as Drawing;
-      this.paintDrawing(this.gDraft, d, true);
+      if (handler?.create && points.length >= (typeof handler.arity === 'number' ? handler.arity : 2)) {
+        const d = handler.create(points, DRAWING_COLORS.muted);
+        if (d) {
+          d.id = 'draft';
+          this.paintDrawing(this.gDraft, d, true);
+          return;
+        }
+      }
+      // Fallback: two-point line preview
+      if (points.length >= 2) {
+        const d: Drawing = {
+          id: 'draft',
+          kind: (needsTwoPoints(this.draft.tool) ? this.draft.tool : 'trend') as TwoPointKind,
+          p1: points[0]!,
+          p2: points[points.length - 1]!,
+          color: DRAWING_COLORS.muted,
+        } as Drawing;
+        this.paintDrawing(this.gDraft, d, true);
+      }
+    } catch (err) {
+      console.warn('[drawings] renderDraft failed', err);
+      this.clearDraftDom();
     }
   }
 
@@ -1013,9 +1114,17 @@ export class DrawingLayer {
     return {
       toXY: (p) => this.toXY(p),
       timeToX: (t) => this.timeToX(t),
-      priceToY: (price) => this.series.priceToCoordinate(price) as number | null,
-      width: this.host.clientWidth,
-      height: this.host.clientHeight,
+      priceToY: (price) => {
+        if (!Number.isFinite(price)) return null;
+        try {
+          const y = this.series.priceToCoordinate(price);
+          return isFiniteNum(y) ? y : null;
+        } catch {
+          return null;
+        }
+      },
+      width: this.host.clientWidth || 0,
+      height: this.host.clientHeight || 0,
       el: (name, attrs) => el(g, name, attrs),
       line: (x1, y1, x2, y2, s, w, dsh, pe) => line(g, x1, y1, x2, y2, s, w, dsh, pe),
       circle: (x, y, r, s, filled) => circle(g, x, y, r, s, filled),
@@ -1035,48 +1144,70 @@ export class DrawingLayer {
     if (!this.selectedId) return null;
     const d = this.drawings.find((x) => x.id === this.selectedId);
     if (!d) return null;
-    const rect = this.svg.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const tol = 10;
-    if (d.kind === 'hline' || d.kind === 'vline') {
-      // No endpoint handles beyond body move
-      return null;
-    }
-    if (d.kind === 'text' || d.kind === 'priceLabel') {
-      const c = this.toXY(d.p1);
-      if (c && Math.hypot(x - c.x, y - c.y) <= tol) return { id: d.id, mode: 'p1' };
-      return null;
-    }
-    if ('points' in d && Array.isArray(d.points) && d.points[0] && d.points[1]) {
-      const a = this.toXY(d.points[0]);
-      const b = this.toXY(d.points[1]);
+    try {
+      const rect = this.svg.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      if (!isFiniteNum(x) || !isFiniteNum(y)) return null;
+      const tol = 10;
+      if (d.kind === 'hline' || d.kind === 'vline') {
+        // No endpoint handles beyond body move
+        return null;
+      }
+      if (d.kind === 'text' || d.kind === 'priceLabel') {
+        if (!d.p1 || !isFinitePoint(d.p1)) return null;
+        const c = this.toXY(d.p1);
+        if (c && Math.hypot(x - c.x, y - c.y) <= tol) return { id: d.id, mode: 'p1' };
+        return null;
+      }
+      if ('points' in d && Array.isArray(d.points) && d.points[0] && d.points[1]) {
+        const a = isFinitePoint(d.points[0]) ? this.toXY(d.points[0]) : null;
+        const b = isFinitePoint(d.points[1]) ? this.toXY(d.points[1]) : null;
+        if (a && Math.hypot(x - a.x, y - a.y) <= tol) return { id: d.id, mode: 'p1' };
+        if (b && Math.hypot(x - b.x, y - b.y) <= tol) return { id: d.id, mode: 'p2' };
+        return null;
+      }
+      if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
+      if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return null;
+      const a = this.toXY(d.p1);
+      const b = this.toXY(d.p2);
       if (a && Math.hypot(x - a.x, y - a.y) <= tol) return { id: d.id, mode: 'p1' };
       if (b && Math.hypot(x - b.x, y - b.y) <= tol) return { id: d.id, mode: 'p2' };
       return null;
+    } catch {
+      return null;
     }
-    if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
-    const a = this.toXY(d.p1);
-    const b = this.toXY(d.p2);
-    if (a && Math.hypot(x - a.x, y - a.y) <= tol) return { id: d.id, mode: 'p1' };
-    if (b && Math.hypot(x - b.x, y - b.y) <= tol) return { id: d.id, mode: 'p2' };
-    return null;
   }
 
   /** Topmost user drawing under the pointer (reverse paint order). */
   private hitTest(e: MouseEvent): string | null {
-    const rect = this.svg.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    // Reverse order (topmost last drawn)
-    for (let i = this.drawings.length - 1; i >= 0; i--) {
-      const d = this.drawings[i]!;
-      if (this.nearDrawing(d, x, y, 8)) return d.id;
+    try {
+      const rect = this.svg.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      if (!isFiniteNum(x) || !isFiniteNum(y)) return null;
+      // Reverse order (topmost last drawn)
+      for (let i = this.drawings.length - 1; i >= 0; i--) {
+        const d = this.drawings[i]!;
+        if (this.nearDrawing(d, x, y, 8)) return d.id;
+      }
+      return null;
+    } catch {
+      return null;
     }
-    return null;
   }
 
   private nearDrawing(d: Drawing, x: number, y: number, tol: number): boolean {
+    if (!isFiniteNum(x) || !isFiniteNum(y) || !isFiniteNum(tol)) return false;
+    try {
+      return this.nearDrawingInner(d, x, y, tol);
+    } catch (err) {
+      console.warn('[drawings] nearDrawing failed', d?.kind, d?.id, err);
+      return false;
+    }
+  }
+
+  private nearDrawingInner(d: Drawing, x: number, y: number, tol: number): boolean {
     const handler = getToolHandler(d.kind);
     if (handler?.hit) {
       const ctx: ToolHitCtx = {
@@ -1085,29 +1216,33 @@ export class DrawingLayer {
         tol,
         toXY: (p) => this.toXY(p),
         timeToX: (t) => this.timeToX(t),
-        priceToY: (price) => this.series.priceToCoordinate(price) as number | null,
+        priceToY: (price) => this.priceToYSafe(price),
         width: this.host.clientWidth,
         height: this.host.clientHeight,
       };
       return handler.hit(d, ctx);
     }
     if (d.kind === 'hline') {
-      const yy = this.series.priceToCoordinate(d.price);
+      if (!Number.isFinite(d.price)) return false;
+      const yy = this.priceToYSafe(d.price);
       if (yy == null) return false;
       return Math.abs(y - yy) <= tol;
     }
     if (d.kind === 'vline') {
       // Future vlines: same X projection as paint (logical extrapolation)
+      if (!Number.isFinite(d.time)) return false;
       const xx = this.timeToX(d.time);
       if (xx == null) return false;
       return Math.abs(x - xx) <= tol;
     }
     if (d.kind === 'text' || d.kind === 'priceLabel') {
+      if (!d.p1 || !isFinitePoint(d.p1)) return false;
       const c = this.toXY(d.p1);
       if (!c) return false;
       return Math.hypot(x - c.x, y - c.y) <= 16;
     }
     if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return false;
+    if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return false;
     const a = this.toXY(d.p1);
     const b = this.toXY(d.p2);
     if (!a || !b) return false;
@@ -1178,14 +1313,26 @@ export class DrawingLayer {
   }
 
   private redrawFillsInner() {
+    if (!this.plotFills.length) {
+      this.gFill.replaceChildren();
+      return;
+    }
     const tmp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     for (const fill of this.plotFills) {
-      this.paintPlotFill(tmp, fill);
+      try {
+        this.paintPlotFill(tmp, fill);
+      } catch (err) {
+        console.warn('[drawings] paintPlotFill failed', err);
+      }
     }
     this.gFill.replaceChildren(...Array.from(tmp.childNodes));
   }
 
   private redrawScriptInner() {
+    if (!this.scriptDrawings.length) {
+      this.gScript.replaceChildren();
+      return;
+    }
     // Build off-DOM then atomically replace children on the stable <g>.
     const tmp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     for (const sd of this.scriptDrawings) {
@@ -1221,6 +1368,7 @@ export class DrawingLayer {
         const t = fill.times[i]!;
         const u = fill.upper[i]!;
         const l = fill.lower[i]!;
+        if (!Number.isFinite(u) || !Number.isFinite(l)) continue;
         const a = this.toXY({ time: t, price: u });
         const b = this.toXY({ time: t, price: l });
         if (!a || !b) continue;
@@ -1232,23 +1380,26 @@ export class DrawingLayer {
       for (let i = 1; i < upperPts.length; i++) d += ` L ${upperPts[i]!.x} ${upperPts[i]!.y}`;
       for (let i = lowerPts.length - 1; i >= 0; i--) d += ` L ${lowerPts[i]!.x} ${lowerPts[i]!.y}`;
       d += ' Z';
-      const c =
+      const rawC =
         (fill.colors[from] && String(fill.colors[from])) ||
         fill.color ||
         'rgba(255, 82, 82, 0.2)';
+      const c = sanitizeStrokeColor(rawC, 'rgba(255, 82, 82, 0.2)');
       el(g, 'path', {
         d,
         fill: c,
         stroke: 'none',
         'pointer-events': 'none',
-        'data-fill': fill.name,
+        'data-fill': String(fill.name || ''),
       });
     };
     for (let i = 0; i < n; i++) {
       const ok =
         fill.upper[i] != null &&
         fill.lower[i] != null &&
-        Number.isFinite(fill.times[i]!);
+        Number.isFinite(fill.times[i]!) &&
+        Number.isFinite(fill.upper[i] as number) &&
+        Number.isFinite(fill.lower[i] as number);
       if (ok) {
         if (runStart < 0) runStart = i;
       } else if (runStart >= 0) {
@@ -1260,6 +1411,15 @@ export class DrawingLayer {
   }
 
   private redrawUserInner() {
+    if (!this.drawings.length) {
+      this.gDraw.replaceChildren();
+      return;
+    }
+    // Hidden mode with nothing selected → empty user group
+    if (this.hideDrawings && !this.selectedId) {
+      this.gDraw.replaceChildren();
+      return;
+    }
     const tmp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     for (const d of this.drawings) {
       this.paintDrawing(tmp, d, d.id === this.selectedId);
@@ -1272,24 +1432,51 @@ export class DrawingLayer {
     return this.toXY(p, { clampToLastBar: true });
   }
 
+  /** Safe price → Y for script paint (guards non-finite + LWC throws). */
+  private priceToYSafe(price: number): number | null {
+    if (!Number.isFinite(price)) return null;
+    try {
+      const y = this.series.priceToCoordinate(price);
+      return isFiniteNum(y) ? y : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** View-only paint for Pine line/box/label/polyline (`pointer-events: none`). */
   private paintScriptDrawing(g: SVGGElement, d: ScriptDrawing) {
+    try {
+      this.paintScriptDrawingInner(g, d);
+    } catch (err) {
+      console.warn('[drawings] paintScriptDrawing failed', d?.type, d?.id, err);
+    }
+  }
+
+  private paintScriptDrawingInner(g: SVGGElement, d: ScriptDrawing) {
     const pe = 'none'; // script drawings are view-only
+    const stroke = sanitizeStrokeColor(d.color, DRAWING_COLORS.default);
+    const sw = clampStrokeWidth(d.width, 1.5);
     if (d.type === 'polyline' && d.points?.length) {
-      const coords = d.points
-        .map((p) => this.toXYScript({ time: p.time, price: p.price }))
-        .filter(Boolean) as { x: number; y: number }[];
+      const coords: { x: number; y: number }[] = [];
+      for (const p of d.points) {
+        if (!p || !Number.isFinite(p.time) || !Number.isFinite(p.price)) continue;
+        const c = this.toXYScript({ time: p.time, price: p.price });
+        if (c) coords.push(c);
+      }
       if (coords.length < 2) return;
       let dPath = `M ${coords[0]!.x} ${coords[0]!.y}`;
       for (let i = 1; i < coords.length; i++) dPath += ` L ${coords[i]!.x} ${coords[i]!.y}`;
       if (d.closed) dPath += ' Z';
       const dash =
         d.style === 'dashed' ? '4 3' : d.style === 'dotted' ? '1 3' : undefined;
+      const fill = d.closed
+        ? sanitizeStrokeColor(d.bgcolor || 'rgba(147,159,255,0.06)', 'rgba(147,159,255,0.06)')
+        : 'none';
       el(g, 'path', {
         d: dPath,
-        fill: d.closed ? d.bgcolor || 'rgba(147,159,255,0.06)' : 'none',
-        stroke: d.color,
-        'stroke-width': String(d.width || 1.5),
+        fill,
+        stroke,
+        'stroke-width': String(sw),
         'stroke-linejoin': 'round',
         'pointer-events': pe,
         ...(dash ? { 'stroke-dasharray': dash } : {}),
@@ -1297,16 +1484,21 @@ export class DrawingLayer {
       return;
     }
     if (d.type === 'line' && d.t2 != null && d.p2 != null) {
+      if (!Number.isFinite(d.t1) || !Number.isFinite(d.p1) || !Number.isFinite(d.t2) || !Number.isFinite(d.p2)) {
+        return;
+      }
       const ext = (d.extend || 'none').toLowerCase();
       const dash =
         d.style === 'dashed' ? '4 3' : d.style === 'dotted' ? '1 3' : undefined;
       // Pine hline → full-width price level (matches user hline tool)
       const isHline = d.id.startsWith('pine_hline_') || (d.p1 === d.p2 && ext === 'both');
       if (isHline && d.p1 === d.p2) {
-        const y = this.series.priceToCoordinate(d.p1);
+        const y = this.priceToYSafe(d.p1);
         if (y != null) {
-          line(g, 0, y, this.host.clientWidth, y, d.color, d.width || 1.5, dash, pe);
-          if (d.text) label(g, 6, y - 4, d.text, d.color, 10);
+          line(g, 0, y, this.host.clientWidth, y, stroke, sw, dash, pe);
+          if (d.text != null && d.text !== '') {
+            label(g, 6, y - 4, sanitizeDrawingText(d.text), stroke, 10);
+          }
           return;
         }
       }
@@ -1314,18 +1506,29 @@ export class DrawingLayer {
       const b = this.toXYScript({ time: d.t2, price: d.p2 });
       // Horizontal + extend with unmapped times → still paint a price level
       if ((!a || !b) && d.p1 === d.p2 && ext !== 'none') {
-        const y = this.series.priceToCoordinate(d.p1);
+        const y = this.priceToYSafe(d.p1);
         if (y != null) {
-          line(g, 0, y, this.host.clientWidth, y, d.color, d.width || 1.5, dash, pe);
+          line(g, 0, y, this.host.clientWidth, y, stroke, sw, dash, pe);
           return;
         }
       }
       if (!a || !b) return;
-      const { x1, y1, x2, y2 } = extendSegment(a.x, a.y, b.x, b.y, ext, this.host.clientWidth, this.host.clientHeight);
-      line(g, x1, y1, x2, y2, d.color, d.width || 1.5, dash, pe);
+      const { x1, y1, x2, y2 } = extendSegment(
+        a.x,
+        a.y,
+        b.x,
+        b.y,
+        ext,
+        this.host.clientWidth,
+        this.host.clientHeight,
+      );
+      line(g, x1, y1, x2, y2, stroke, sw, dash, pe);
       return;
     }
     if (d.type === 'box' && d.t2 != null && d.p2 != null) {
+      if (!Number.isFinite(d.t1) || !Number.isFinite(d.p1) || !Number.isFinite(d.t2) || !Number.isFinite(d.p2)) {
+        return;
+      }
       const a = this.toXYScript({ time: d.t1, price: d.p1 });
       const b = this.toXYScript({ time: d.t2, price: d.p2 });
       if (!a || !b) return;
@@ -1338,19 +1541,22 @@ export class DrawingLayer {
         y: String(y),
         width: String(bw),
         height: String(bh),
-        fill: d.bgcolor || 'rgba(147,159,255,0.08)',
-        stroke: d.color,
-        'stroke-width': String(d.width || 1),
+        fill: sanitizeStrokeColor(d.bgcolor || 'rgba(147,159,255,0.08)', 'rgba(147,159,255,0.08)'),
+        stroke,
+        'stroke-width': String(clampStrokeWidth(d.width, 1)),
         'pointer-events': pe,
       });
-      if (d.text) label(g, x + 4, y + 12, d.text, d.color, 10);
+      if (d.text != null && d.text !== '') {
+        label(g, x + 4, y + 12, sanitizeDrawingText(d.text), stroke, 10);
+      }
       return;
     }
     if (d.type === 'label') {
+      if (!Number.isFinite(d.t1) || !Number.isFinite(d.p1)) return;
       const c = this.toXYScript({ time: d.t1, price: d.p1 });
       if (!c) return;
       // Bubble
-      const text = d.text || '';
+      const text = sanitizeDrawingText(d.text ?? '');
       const pad = 4;
       const tw = Math.max(24, text.length * 6.5 + pad * 2);
       const th = 16;
@@ -1360,13 +1566,21 @@ export class DrawingLayer {
         width: String(tw),
         height: String(th),
         rx: '2',
-        fill: d.color || '#939fff',
+        fill: stroke,
         stroke: '#0a0b10',
         'stroke-width': '1',
         'pointer-events': pe,
       });
-      label(g, c.x, c.y - 10, text, d.textcolor || '#0a0b10', 10, 'middle');
-      circle(g, c.x, c.y, 2.5, d.color || '#939fff');
+      label(
+        g,
+        c.x,
+        c.y - 10,
+        text,
+        sanitizeStrokeColor(d.textcolor || '#0a0b10', '#0a0b10'),
+        10,
+        'middle',
+      );
+      circle(g, c.x, c.y, 2.5, stroke);
     }
   }
 
@@ -1375,17 +1589,27 @@ export class DrawingLayer {
    * (selected still renders so the user can find/edit them).
    */
   private paintDrawing(g: SVGGElement, d: Drawing, selected: boolean) {
+    try {
+      this.paintDrawingInner(g, d, selected);
+    } catch (err) {
+      console.warn('[drawings] paintDrawing failed', d?.kind, d?.id, err);
+    }
+  }
+
+  private paintDrawingInner(g: SVGGElement, d: Drawing, selected: boolean) {
     if (this.hideDrawings && !selected) return;
     // Per-drawing hide from Layers panel (`meta.hidden`)
     if (d.meta?.hidden && !selected) return;
     const st = resolveDrawingStyle(d);
-    const stroke = st.color;
+    const stroke = sanitizeStrokeColor(st.color);
     // Selection uses slightly thicker stroke; dash comes from user lineStyle (not selection)
-    const sw = selected ? st.width + 0.75 : st.width;
+    const baseW = clampStrokeWidth(st.width, 1.5);
+    const sw = selected ? baseW + 0.75 : baseW;
     const dash = strokeDashFor(st.lineStyle, false);
 
     if (d.kind === 'hline') {
-      const y = this.series.priceToCoordinate(d.price);
+      if (!Number.isFinite(d.price)) return;
+      const y = this.priceToYSafe(d.price);
       if (y == null) return;
       const w = this.host.clientWidth;
       line(g, 0, y, w, y, stroke, sw, dash, 'stroke');
@@ -1397,6 +1621,7 @@ export class DrawingLayer {
     }
 
     if (d.kind === 'vline') {
+      if (!Number.isFinite(d.time)) return;
       const x = this.timeToX(d.time);
       if (x == null) return;
       const h = this.host.clientHeight;
@@ -1408,14 +1633,17 @@ export class DrawingLayer {
     }
 
     if (d.kind === 'text') {
+      if (!d.p1 || !isFinitePoint(d.p1)) return;
       const c = this.toXY(d.p1);
       if (!c) return;
-      label(g, c.x + 4, c.y - 4, d.text || d.meta?.text || '', stroke, 12);
+      const text = sanitizeDrawingText(d.text ?? d.meta?.text ?? '');
+      label(g, c.x + 4, c.y - 4, text, stroke, 12);
       circle(g, c.x, c.y, selected ? 5 : 3, stroke, selected);
       return;
     }
 
-    // Extended tools (channel, fibext, polyline, long/short, …) — may lack p1/p2
+    // Extended / multipoint tools (channel, fibext, polyline, long/short, …)
+    // Prefer registry paint even when p1/p2 are missing — handler owns geometry.
     {
       const handler = getToolHandler(d.kind);
       if (handler?.paint) {
@@ -1425,8 +1653,11 @@ export class DrawingLayer {
       }
     }
 
-    const a = this.toXY((d as { p1?: Point }).p1!);
-    const b = this.toXY((d as { p2?: Point }).p2!);
+    const p1 = (d as { p1?: Point }).p1;
+    const p2 = (d as { p2?: Point }).p2;
+    if (!p1 || !p2 || !isFinitePoint(p1) || !isFinitePoint(p2)) return;
+    const a = this.toXY(p1);
+    const b = this.toXY(p2);
     if (!a || !b) return;
 
     if (d.kind === 'trend' || d.kind === 'measure' || d.kind === 'arrow') {
@@ -1438,10 +1669,10 @@ export class DrawingLayer {
       circle(g, b.x, b.y, selected ? 5 : 3, stroke, selected);
       if (d.kind === 'measure') {
         const bars = Math.abs(
-          barIndexApprox(this.chart, d.p1.time) - barIndexApprox(this.chart, d.p2.time),
+          barIndexApprox(this.chart, p1.time) - barIndexApprox(this.chart, p2.time),
         );
-        const dPrice = d.p2.price - d.p1.price;
-        const pct = d.p1.price !== 0 ? (dPrice / d.p1.price) * 100 : 0;
+        const dPrice = p2.price - p1.price;
+        const pct = p1.price !== 0 ? (dPrice / p1.price) * 100 : 0;
         const midX = (a.x + b.x) / 2;
         const midY = (a.y + b.y) / 2;
         label(
@@ -1538,18 +1769,18 @@ export class DrawingLayer {
     }
 
     if (d.kind === 'fib') {
-      const lo = Math.min(d.p1.price, d.p2.price);
-      const hi = Math.max(d.p1.price, d.p2.price);
+      const lo = Math.min(p1.price, p2.price);
+      const hi = Math.max(p1.price, p2.price);
       const span = hi - lo || 1;
       const x1 = Math.min(a.x, b.x);
       const x2 = Math.max(a.x, b.x);
       const right = Math.max(x2, this.host.clientWidth - 8);
       for (const lvl of FIB_LEVELS) {
         const price =
-          d.p1.price >= d.p2.price
-            ? d.p1.price - span * lvl
-            : d.p1.price + span * lvl;
-        const y = this.series.priceToCoordinate(price);
+          p1.price >= p2.price
+            ? p1.price - span * lvl
+            : p1.price + span * lvl;
+        const y = this.priceToYSafe(price);
         if (y == null) continue;
         line(g, x1, y, right, y, stroke, Math.max(1, sw - 0.5), lvl === 0.5 ? undefined : '3 3');
         label(g, right - 4, y - 3, `${(lvl * 100).toFixed(1)}%  ${price.toFixed(2)}`, stroke, 10, 'end');
@@ -1580,7 +1811,10 @@ function el(
   attrs: Record<string, string>,
 ): SVGElement {
   const node = document.createElementNS('http://www.w3.org/2000/svg', name);
-  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null) continue;
+    node.setAttribute(k, v);
+  }
   parent.appendChild(node);
   return node;
 }
@@ -1600,13 +1834,16 @@ function line(
   dash?: string,
   pointerEvents = 'stroke',
 ) {
+  if (!isFiniteNum(x1) || !isFiniteNum(y1) || !isFiniteNum(x2) || !isFiniteNum(y2)) return;
+  const width = clampStrokeWidth(sw, 1.5);
+  const safeStroke = sanitizeStrokeColor(stroke);
   el(g, 'line', {
     x1: String(x1),
     y1: String(y1),
     x2: String(x2),
     y2: String(y2),
-    stroke,
-    'stroke-width': String(Math.max(sw, 8)), // wider hit area
+    stroke: safeStroke,
+    'stroke-width': String(Math.max(width, 8)), // wider hit area
     'stroke-opacity': '0.01',
     'pointer-events': pointerEvents,
     'stroke-linecap': 'round',
@@ -1617,8 +1854,8 @@ function line(
     y1: String(y1),
     x2: String(x2),
     y2: String(y2),
-    stroke,
-    'stroke-width': String(sw),
+    stroke: safeStroke,
+    'stroke-width': String(width),
     'stroke-linecap': 'round',
     'pointer-events': 'none',
     ...(dash ? { 'stroke-dasharray': dash } : {}),
@@ -1633,12 +1870,14 @@ function circle(
   stroke: string,
   handle = false,
 ) {
+  if (!isFiniteNum(cx) || !isFiniteNum(cy) || !isFiniteNum(r) || r <= 0) return;
+  const safeStroke = sanitizeStrokeColor(stroke);
   el(g, 'circle', {
     cx: String(cx),
     cy: String(cy),
     r: String(r),
-    fill: handle ? '#0a0b10' : stroke,
-    stroke: handle ? stroke : '#0a0b10',
+    fill: handle ? '#0a0b10' : safeStroke,
+    stroke: handle ? safeStroke : '#0a0b10',
     'stroke-width': handle ? '2' : '1',
     'pointer-events': 'auto',
     ...(handle ? { cursor: 'nwse-resize' } : {}),
@@ -1674,6 +1913,7 @@ function extendSegment(
 }
 
 function resizeDrawing(origin: Drawing, mode: DragMode, pt: Point): Drawing {
+  if (!isFinitePoint(pt)) return origin;
   if (origin.kind === 'hline') {
     return { ...origin, price: pt.price };
   }
@@ -1708,41 +1948,47 @@ function label(
   g: SVGElement,
   x: number,
   y: number,
-  text: string,
+  text: string | null | undefined,
   fill: string,
   size = 11,
   anchor: 'start' | 'end' | 'middle' = 'start',
 ) {
+  if (!isFiniteNum(x) || !isFiniteNum(y)) return;
   const t = el(g, 'text', {
     x: String(x),
     y: String(y),
-    fill,
-    'font-size': String(size),
+    fill: sanitizeStrokeColor(fill),
+    'font-size': String(isFiniteNum(size) ? size : 11),
     'font-family': 'ui-monospace, SFMono-Regular, Menlo, monospace',
     'text-anchor': anchor,
     'pointer-events': 'none',
   });
-  t.textContent = text;
+  t.textContent = text == null ? '' : String(text);
 }
 
 function shiftDrawing(d: Drawing, dTime: number, dPrice: number): Drawing {
+  if (!Number.isFinite(dTime) || !Number.isFinite(dPrice)) return d;
   if (d.kind === 'hline') {
+    if (!Number.isFinite(d.price)) return d;
     return { ...d, price: d.price + dPrice };
   }
   if (d.kind === 'vline') {
+    if (!Number.isFinite(d.time)) return d;
     return { ...d, time: d.time + dTime };
   }
   if (d.kind === 'text' || d.kind === 'priceLabel') {
+    if (!d.p1 || !isFinitePoint(d.p1)) return d;
     return {
       ...d,
       p1: { time: d.p1.time + dTime, price: d.p1.price + dPrice },
     };
   }
   if ('points' in d && Array.isArray(d.points) && d.points.length) {
-    const points = d.points.map((p) => ({
-      time: p.time + dTime,
-      price: p.price + dPrice,
-    }));
+    const points = d.points.map((p) =>
+      isFinitePoint(p)
+        ? { time: p.time + dTime, price: p.price + dPrice }
+        : p,
+    );
     return {
       ...d,
       points,
@@ -1752,6 +1998,7 @@ function shiftDrawing(d: Drawing, dTime: number, dPrice: number): Drawing {
     } as Drawing;
   }
   if ('p1' in d && 'p2' in d && d.p1 && d.p2) {
+    if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return d;
     return {
       ...d,
       p1: { time: d.p1.time + dTime, price: d.p1.price + dPrice },
@@ -1771,18 +2018,21 @@ function paintArrowHead(
   fill: string,
   size: number,
 ) {
+  if (!isFiniteNum(x1) || !isFiniteNum(y1) || !isFiniteNum(x2) || !isFiniteNum(y2)) return;
   const ang = Math.atan2(y2 - y1, x2 - x1);
-  const s = Math.max(6, size);
+  const s = Math.max(6, isFiniteNum(size) ? size : 8);
   const a1 = ang + Math.PI * 0.82;
   const a2 = ang - Math.PI * 0.82;
   const p1x = x2 + Math.cos(a1) * s;
   const p1y = y2 + Math.sin(a1) * s;
   const p2x = x2 + Math.cos(a2) * s;
   const p2y = y2 + Math.sin(a2) * s;
+  if (!isFiniteNum(p1x) || !isFiniteNum(p1y) || !isFiniteNum(p2x) || !isFiniteNum(p2y)) return;
+  const safe = sanitizeStrokeColor(fill);
   el(g, 'polygon', {
     points: `${x2},${y2} ${p1x},${p1y} ${p2x},${p2y}`,
-    fill,
-    stroke: fill,
+    fill: safe,
+    stroke: safe,
     'stroke-width': '1',
     'pointer-events': 'none',
   });
@@ -1796,6 +2046,16 @@ function distToSegment(
   x2: number,
   y2: number,
 ): number {
+  if (
+    !isFiniteNum(px) ||
+    !isFiniteNum(py) ||
+    !isFiniteNum(x1) ||
+    !isFiniteNum(y1) ||
+    !isFiniteNum(x2) ||
+    !isFiniteNum(y2)
+  ) {
+    return Infinity;
+  }
   const dx = x2 - x1;
   const dy = y2 - y1;
   if (dx === 0 && dy === 0) return Math.hypot(px - x1, py - y1);
@@ -1804,10 +2064,15 @@ function distToSegment(
 }
 
 function barIndexApprox(chart: IChartApi, time: number): number {
-  const c = chart.timeScale().timeToCoordinate(time as UTCTimestamp);
-  if (c == null) return 0;
-  const logical = chart.timeScale().coordinateToLogical(c);
-  return logical ?? 0;
+  if (!Number.isFinite(time)) return 0;
+  try {
+    const c = chart.timeScale().timeToCoordinate(time as UTCTimestamp);
+    if (c == null || !isFiniteNum(c)) return 0;
+    const logical = chart.timeScale().coordinateToLogical(c);
+    return isFiniteNum(logical) ? logical : 0;
+  } catch {
+    return 0;
+  }
 }
 
 /**

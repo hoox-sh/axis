@@ -69,6 +69,7 @@ import {
   type StreamPlugin,
 } from './catalog';
 import { noteDataManagerLiveBar } from '../data/expand-cache';
+import { sanitizeBar } from '../data/parse-bars';
 import { classifyTransport } from '../ui/telemetry';
 
 export type { StreamPlugin };
@@ -195,54 +196,68 @@ export function startLive(
     symbol: sym,
     interval: iv,
     lastBar,
-    onBar: (bar: Bar) => {
+    onBar: (raw: Bar) => {
       if (!isCurrent()) return;
-      // Strip ephemeral closed flag before store (optional field is fine to keep)
-      appendBar(bar);
-      const manager = getManager();
-      if (manager) manager.appendBar(bar);
-      noteTick(bar.close, bar.time);
+      // Drop partial / NaN OHLCV so a bad venue tick cannot poison the chart
+      const bar = sanitizeBar(raw);
+      if (!bar) return;
+      try {
+        appendBar(bar);
+        const manager = getManager();
+        if (manager) manager.appendBar(bar);
+        noteTick(bar.close, bar.time);
 
-      // Data Manager: grow the underlying bars-cache dataset with live ticks
-      noteDataManagerLiveBar(bar);
+        // Data Manager: grow the underlying bars-cache dataset with live ticks
+        noteDataManagerLiveBar(bar);
 
-      const timeAdvanced = lastSeenBarTime > 0 && bar.time > lastSeenBarTime;
-      lastSeenBarTime = bar.time;
-      const mode = store.live.rerunOn || 'every-tick';
-      if (mode === 'every-tick' || bar.closed || timeAdvanced) {
-        scheduleRerun();
+        const timeAdvanced = lastSeenBarTime > 0 && bar.time > lastSeenBarTime;
+        lastSeenBarTime = bar.time;
+        const mode = store.live.rerunOn || 'every-tick';
+        if (mode === 'every-tick' || bar.closed || timeAdvanced) {
+          scheduleRerun();
+        }
+      } catch {
+        /* never let a single tick tear down the live session / UI */
       }
     },
     onStatus: (s) => {
       if (liveEpoch !== epoch) return;
-      if (s.state === 'open') {
-        if (!store.live.active) return;
-        setStore('stream', 'status', 'connected');
-        setTelemetryState('stream', 'open', {
-          detail: s.detail || s.url || `${sym} ${iv}`,
-          error: null,
-        });
-        appendLog('ok', `Stream open${s.detail ? ` · ${s.detail}` : ''}`, 'stream');
-      } else if (s.state === 'reconnecting') {
-        if (!store.live.active) return;
-        setStore('stream', 'status', 'connecting');
-        setTelemetryState('stream', 'degraded', { detail: s.detail || 'reconnecting' });
-        appendLog('warn', `Stream reconnecting${s.detail ? ` · ${s.detail}` : ''}`, 'stream');
-      } else if (s.state === 'closed') {
-        // Only flip disconnected when live was stopped or exhausted — reconnect path uses degraded
-        if (!store.live.active) {
-          setStore('stream', 'status', 'disconnected');
-          setTelemetryState('stream', 'closed');
+      try {
+        if (s.state === 'open') {
+          if (!store.live.active) return;
+          setStore('stream', 'status', 'connected');
+          setTelemetryState('stream', 'open', {
+            detail: s.detail || s.url || `${sym} ${iv}`,
+            error: null,
+          });
+          appendLog('ok', `Stream open${s.detail ? ` · ${s.detail}` : ''}`, 'stream');
+        } else if (s.state === 'reconnecting') {
+          if (!store.live.active) return;
+          setStore('stream', 'status', 'connecting');
+          setTelemetryState('stream', 'degraded', { detail: s.detail || 'reconnecting' });
+          appendLog('warn', `Stream reconnecting${s.detail ? ` · ${s.detail}` : ''}`, 'stream');
+        } else if (s.state === 'closed') {
+          // Only flip disconnected when live was stopped or exhausted — reconnect path uses degraded
+          if (!store.live.active) {
+            setStore('stream', 'status', 'disconnected');
+            setTelemetryState('stream', 'closed');
+          }
         }
+      } catch {
+        /* status UI best-effort */
       }
     },
     onError: (e) => {
       if (liveEpoch !== epoch) return;
-      const msg = e?.message || 'Stream error';
-      appendLog('error', msg, 'stream');
-      setStatus('error', `Live error: ${msg}`);
-      // Preserve error telemetry/status while clearing live.active
-      stopLive({ reason: 'error', error: msg });
+      try {
+        const msg = e?.message || 'Stream error';
+        appendLog('error', msg, 'stream');
+        setStatus('error', `Live error: ${msg}`);
+        // Preserve error telemetry/status while clearing live.active
+        stopLive({ reason: 'error', error: msg });
+      } catch {
+        /* ignore */
+      }
     },
   });
 

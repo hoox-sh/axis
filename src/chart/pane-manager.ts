@@ -95,17 +95,77 @@ export type OverlayLineSpec = {
   linestyle?: string;
 };
 
-/** Map overlay points to LWC LineData | WhitespaceData. */
+/** Map overlay points to LWC LineData | WhitespaceData. Drops non-finite times. */
 export function toLwcLineData(
   data: OverlayPoint[],
 ): Array<{ time: UTCTimestamp; value: number } | { time: UTCTimestamp }> {
-  return data.map((d) => {
+  const out: Array<{ time: UTCTimestamp; value: number } | { time: UTCTimestamp }> = [];
+  for (const d of data) {
+    if (!Number.isFinite(d.time)) continue;
     const time = d.time as UTCTimestamp;
     if (d.value != null && Number.isFinite(d.value)) {
-      return { time, value: d.value };
+      out.push({ time, value: d.value });
+    } else {
+      // Whitespace keeps logical index slots when Pine returns `na`
+      out.push({ time });
     }
-    return { time };
-  });
+  }
+  return out;
+}
+
+/**
+ * True when a bar has finite time + OHLC (safe for LWC candlestick/line update).
+ * Volume may be missing; non-finite volume is not required here.
+ */
+export function isFiniteOhlcBar(bar: {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}): boolean {
+  return (
+    Number.isFinite(bar.time) &&
+    Number.isFinite(bar.open) &&
+    Number.isFinite(bar.high) &&
+    Number.isFinite(bar.low) &&
+    Number.isFinite(bar.close)
+  );
+}
+
+/** setData that never throws (disposed series / NaN leftovers / mock thrash). */
+function safeSetData(series: ISeriesApi<any> | null | undefined, data: unknown): boolean {
+  if (!series) return false;
+  try {
+    series.setData(data as never);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** series.update that never throws. */
+function safeUpdate(series: ISeriesApi<any> | null | undefined, point: unknown): boolean {
+  if (!series) return false;
+  try {
+    series.update(point as never);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** removeSeries that never throws; caller still deletes map keys. */
+function safeRemoveSeries(
+  chart: IChartApi | null | undefined,
+  series: ISeriesApi<any> | null | undefined,
+): void {
+  if (!chart || !series) return;
+  try {
+    chart.removeSeries(series);
+  } catch {
+    /* ignore */
+  }
 }
 
 /** One managed LWC chart + series map. */
@@ -634,7 +694,13 @@ export class PaneManager {
     if (el) el.style.display = visible ? '' : 'none';
     if (visible) {
       const rect = el?.getBoundingClientRect();
-      if (rect) pane.chart.applyOptions({ width: rect.width, height: rect.height });
+      if (rect && rect.width > 0 && rect.height > 0) {
+        try {
+          pane.chart.applyOptions({ width: rect.width, height: rect.height });
+        } catch {
+          /* ignore */
+        }
+      }
       this.alignTimeRangesFromPrice();
     }
     this.syncTimeScales();
@@ -661,7 +727,13 @@ export class PaneManager {
     const pane = this.panes.get(id);
     if (pane) {
       const rect = el?.getBoundingClientRect();
-      if (rect) pane.chart.applyOptions({ width: rect.width, height: height });
+      if (rect && rect.width > 0 && height > 0) {
+        try {
+          pane.chart.applyOptions({ width: rect.width, height });
+        } catch {
+          /* ignore */
+        }
+      }
     }
   }
 
@@ -818,14 +890,17 @@ export class PaneManager {
     // keep last trade, then shapes can share via id when supported.
     const byKey = new Map<string, SeriesMarker<UTCTimestamp>>();
     for (const m of this.debugPinMarkerList) {
+      if (!Number.isFinite(m.time as number)) continue;
       const key = m.id || `d:${m.time}:${m.text || ''}`;
       byKey.set(key, m);
     }
     for (const m of this.shapeMarkerList) {
+      if (!Number.isFinite(m.time as number)) continue;
       const key = m.id || `s:${m.time}:${m.position}:${m.shape}`;
       byKey.set(key, m);
     }
     for (const m of this.tradeMarkerList) {
+      if (!Number.isFinite(m.time as number)) continue;
       // Trades win on exact same id collision; use time+text key
       const key = m.id || `t:${m.time}:${m.text || ''}`;
       byKey.set(key, m);
@@ -834,10 +909,15 @@ export class PaneManager {
       (a, b) => (a.time as number) - (b.time as number),
     );
 
-    if (!this.candleMarkers) {
-      this.candleMarkers = createSeriesMarkers(candle, seriesMarkers);
-    } else {
-      this.candleMarkers.setMarkers(seriesMarkers);
+    try {
+      if (!this.candleMarkers) {
+        this.candleMarkers = createSeriesMarkers(candle, seriesMarkers);
+      } else {
+        this.candleMarkers.setMarkers(seriesMarkers);
+      }
+    } catch {
+      // Host series may have been removed mid-swap; clear stale plugin handle
+      this.candleMarkers = null;
     }
   }
 
@@ -885,26 +965,40 @@ export class PaneManager {
    * ({@link ui/StrategyReport}). Prefer {@link hideEquityPane} to clear leftovers.
    */
   setEquityCurve(points: { time: number; value: number }[]) {
-    if (!points.length) {
+    const mapped = points
+      .filter((p) => Number.isFinite(p.time) && Number.isFinite(p.value))
+      .map((p) => ({ time: p.time as UTCTimestamp, value: p.value }));
+    if (!mapped.length) {
       this.hideEquityPane();
       return;
     }
 
     let pane = this.panes.get('equity');
     if (!pane) {
-      pane = this.createPane('equity', 'equity', 'Equity', 100);
-      pane.series['equity'] = createAreaSeries(pane.chart, 'Equity', VOID.indigo);
-      this.syncTimeScales();
+      try {
+        pane = this.createPane('equity', 'equity', 'Equity', 100);
+        pane.series['equity'] = createAreaSeries(pane.chart, 'Equity', VOID.indigo);
+        this.syncTimeScales();
+      } catch (err: unknown) {
+        reportUiError(err, {
+          source: 'chart',
+          context: 'Equity pane create failed',
+          status: false,
+        });
+        return;
+      }
     } else {
       this.setVisible('equity', true);
       if (!pane.series['equity']) {
-        pane.series['equity'] = createAreaSeries(pane.chart, 'Equity', VOID.indigo);
+        try {
+          pane.series['equity'] = createAreaSeries(pane.chart, 'Equity', VOID.indigo);
+        } catch {
+          return;
+        }
       }
     }
 
-    pane.series['equity'].setData(
-      points.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })),
-    );
+    safeSetData(pane.series['equity'], mapped);
     this.alignTimeRangesFromPrice();
   }
 
@@ -1085,7 +1179,13 @@ export class PaneManager {
 
   fitContent() {
     const pricePane = this.panes.get('price');
-    if (pricePane) pricePane.chart.timeScale().fitContent();
+    if (pricePane) {
+      try {
+        pricePane.chart.timeScale().fitContent();
+      } catch {
+        /* ignore */
+      }
+    }
     // Sub-panes must inherit the fitted range (they do not fit independently)
     this.alignTimeRangesFromPrice();
   }
@@ -1265,8 +1365,7 @@ export class PaneManager {
   setData(paneId: string, seriesKey: string, data: any[]) {
     const pane = this.panes.get(paneId);
     if (!pane) return;
-    const series = pane.series[seriesKey];
-    if (series) series.setData(data);
+    safeSetData(pane.series[seriesKey], data);
   }
 
   /**
@@ -1274,9 +1373,14 @@ export class PaneManager {
    * Uses `store.bars` (already updated by store.appendBar) for Heikin-Ashi /
    * line styles that need prior bars. Falls back to the single `bar` when
    * the store is empty (unit tests).
+   *
+   * Prefers `series.update` (single bar) over full `setData` for live ticks.
+   * Non-finite OHLCV is skipped so NaN candles never reach LWC.
    */
   appendBar(bar: Bar) {
     try {
+      if (!bar || !isFiniteOhlcBar(bar)) return;
+
       const pricePane = this.panes.get('price');
       const chartType = normalizeChartType(store.chartType ?? this.priceChartType);
       if (pricePane?.series['candle']) {
@@ -1289,11 +1393,20 @@ export class PaneManager {
                 )
               : [bar];
         const point = mapBarUpdate(bars, chartType);
-        if (point) {
-          pricePane.series['candle'].update({
-            ...point,
-            time: point.time as UTCTimestamp,
-          } as never);
+        if (point && Number.isFinite(point.time)) {
+          const ohlcOk =
+            'close' in point
+              ? Number.isFinite((point as { open: number }).open) &&
+                Number.isFinite((point as { high: number }).high) &&
+                Number.isFinite((point as { low: number }).low) &&
+                Number.isFinite((point as { close: number }).close)
+              : Number.isFinite((point as { value: number }).value);
+          if (ohlcOk) {
+            safeUpdate(pricePane.series['candle'], {
+              ...point,
+              time: point.time as UTCTimestamp,
+            });
+          }
         }
         // Tint last-price line to bar direction
         try {
@@ -1311,9 +1424,13 @@ export class PaneManager {
       const volPane = this.panes.get('volume');
       if (volPane?.series['volume']) {
         const volColors = getThemeManager().getVolumeColors();
-        volPane.series['volume'].update({
+        const vol =
+          bar.volume != null && Number.isFinite(bar.volume) && bar.volume >= 0
+            ? bar.volume
+            : 0;
+        safeUpdate(volPane.series['volume'], {
           time: bar.time as UTCTimestamp,
-          value: bar.volume ?? 0,
+          value: vol,
           color: bar.close >= bar.open ? volColors.up : volColors.down,
         });
       }
@@ -1335,7 +1452,7 @@ export class PaneManager {
       (k) => k.startsWith('overlay_') || k.startsWith('bgcolor_'),
     );
     for (const k of overlays) {
-      try { pane.chart.removeSeries(pane.series[k]); } catch {}
+      safeRemoveSeries(pane.chart, pane.series[k]);
       delete pane.series[k];
     }
     for (const name of Object.keys(pane.priceLines)) {
@@ -1388,11 +1505,7 @@ export class PaneManager {
       const name = k.slice('overlay_'.length);
       // Keep overlay series if still wanted as plot or as hline fallback
       if (!wantSeries.has(k) && !wantPrice.has(name)) {
-        try {
-          pane.chart.removeSeries(pane.series[k]);
-        } catch {
-          /* ignore */
-        }
+        safeRemoveSeries(pane.chart, pane.series[k]);
         delete pane.series[k];
       }
     }
@@ -1417,7 +1530,7 @@ export class PaneManager {
       const existing = pane.series[key];
       const lw = line.linewidth != null ? Math.max(1, Math.min(4, Math.round(line.linewidth))) : undefined;
       if (existing) {
-        existing.setData(mapped as never);
+        safeSetData(existing, mapped);
         try {
           const opts: Record<string, unknown> = {
             lastValueVisible: this.lastValueLabelsVisible,
@@ -1429,15 +1542,19 @@ export class PaneManager {
           /* ignore */
         }
       } else {
-        const c = line.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
-        const series = createLineSeries(pane.chart, line.name, c, undefined, lw ?? 2);
         try {
-          series.applyOptions({ lastValueVisible: this.lastValueLabelsVisible });
+          const c = line.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
+          const series = createLineSeries(pane.chart, line.name, c, undefined, lw ?? 2);
+          try {
+            series.applyOptions({ lastValueVisible: this.lastValueLabelsVisible });
+          } catch {
+            /* ignore */
+          }
+          safeSetData(series, mapped);
+          pane.series[key] = series;
         } catch {
-          /* ignore */
+          /* chart may be disposed mid-apply */
         }
-        series.setData(mapped as never);
-        pane.series[key] = series;
       }
       colorIdx += 1;
     }
@@ -1446,7 +1563,9 @@ export class PaneManager {
     for (const line of hLines) {
       let price = line.price;
       if (price == null || !Number.isFinite(price)) {
-        const sample = line.data.find((d) => d != null && Number.isFinite(d.value));
+        const sample = line.data.find(
+          (d) => d != null && Number.isFinite(d.time) && Number.isFinite(d.value as number),
+        );
         price = sample?.value;
       }
       if (price == null || !Number.isFinite(price)) continue;
@@ -1460,11 +1579,7 @@ export class PaneManager {
         // Drop any previous constant-line fallback series for this hline
         const fallbackKey = `overlay_${line.name}`;
         if (pane.series[fallbackKey]) {
-          try {
-            pane.chart.removeSeries(pane.series[fallbackKey]);
-          } catch {
-            /* ignore */
-          }
+          safeRemoveSeries(pane.chart, pane.series[fallbackKey]);
           delete pane.series[fallbackKey];
         }
 
@@ -1561,23 +1676,30 @@ export class PaneManager {
     color: string,
     lineWidth: number,
   ) {
+    if (!Number.isFinite(price)) return;
     const key = `overlay_${line.name}`;
     const mapped =
       line.data.length > 0
-        ? line.data.map((d) => ({ time: d.time as UTCTimestamp, value: price }))
+        ? line.data
+            .filter((d) => Number.isFinite(d.time))
+            .map((d) => ({ time: d.time as UTCTimestamp, value: price }))
         : [];
     const existing = pane.series[key];
     if (existing) {
-      if (mapped.length) existing.setData(mapped);
+      if (mapped.length) safeSetData(existing, mapped);
       try {
         existing.applyOptions({ color, lineWidth });
       } catch {
         /* ignore */
       }
     } else if (mapped.length) {
-      const series = createLineSeries(pane.chart, line.name, color, undefined, lineWidth);
-      series.setData(mapped);
-      pane.series[key] = series;
+      try {
+        const series = createLineSeries(pane.chart, line.name, color, undefined, lineWidth);
+        safeSetData(series, mapped);
+        pane.series[key] = series;
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -1586,10 +1708,17 @@ export class PaneManager {
     if (!pane) return;
     const overlayCount = Object.keys(pane.series).filter((k) => k.startsWith('overlay_')).length;
     const c = color || PLOT_PALETTE[overlayCount % PLOT_PALETTE.length];
-    const series = createLineSeries(pane.chart, name, c);
-    series.setData(data.map((d) => ({ time: d.time as UTCTimestamp, value: d.value })));
-    pane.series[`overlay_${name}`] = series;
-    return series;
+    const mapped = data
+      .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
+      .map((d) => ({ time: d.time as UTCTimestamp, value: d.value }));
+    try {
+      const series = createLineSeries(pane.chart, name, c);
+      safeSetData(series, mapped);
+      pane.series[`overlay_${name}`] = series;
+      return series;
+    } catch {
+      return undefined;
+    }
   }
 
   /**
@@ -1613,33 +1742,36 @@ export class PaneManager {
     for (const k of Object.keys(pane.series)) {
       if (!k.startsWith('bgcolor_')) continue;
       if (!want.has(k)) {
-        try {
-          pane.chart.removeSeries(pane.series[k]);
-        } catch {
-          /* ignore */
-        }
+        safeRemoveSeries(pane.chart, pane.series[k]);
         delete pane.series[k];
       }
     }
 
     for (const band of bands) {
       const key = `bgcolor_${band.name}`;
-      const mapped = band.data.map((d) => ({
-        time: d.time as UTCTimestamp,
-        value: d.value,
-        color: d.color,
-      }));
+      // Drop non-finite times/values — LWC histogram rejects NaN
+      const mapped = band.data
+        .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
+        .map((d) => ({
+          time: d.time as UTCTimestamp,
+          value: d.value,
+          color: d.color,
+        }));
       const existing = pane.series[key];
       if (existing) {
-        existing.setData(mapped);
+        safeSetData(existing, mapped);
       } else {
-        const series = createBgcolorSeries(pane.chart);
-        series.setData(mapped);
-        pane.series[key] = series;
         try {
-          series.setSeriesOrder(0);
+          const series = createBgcolorSeries(pane.chart);
+          safeSetData(series, mapped);
+          pane.series[key] = series;
+          try {
+            series.setSeriesOrder(0);
+          } catch {
+            /* ignore */
+          }
         } catch {
-          /* ignore */
+          /* chart disposed */
         }
       }
     }

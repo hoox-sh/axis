@@ -73,6 +73,8 @@ export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
   let attempt = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let openedOnce = false;
+  /** Bumped on every connect/stop so late events from a detached socket are ignored. */
+  let sockGen = 0;
 
   const clearTimer = () => {
     if (timer != null) {
@@ -89,7 +91,9 @@ export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
       sock.onerror = null;
       sock.onmessage = null;
       sock.onopen = null;
-      sock.close();
+      // Skip close when already CLOSED (3) — CLOSING (2) is left alone
+      const rs = sock.readyState;
+      if (rs !== 3) sock.close();
     } catch {
       /* ignore */
     }
@@ -103,32 +107,45 @@ export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
       detachAndClose(ws);
       ws = null;
     }
+    const gen = ++sockGen;
     try {
       ws = new WebSocket(opts.url);
     } catch (e) {
       stopped = true;
-      opts.onError(e instanceof Error ? e : new Error(String(e)));
+      try {
+        opts.onError(e instanceof Error ? e : new Error(String(e)));
+      } catch {
+        /* ignore */
+      }
       return;
     }
 
     ws.onopen = () => {
-      if (stopped) {
+      if (stopped || gen !== sockGen) {
         detachAndClose(ws);
-        ws = null;
+        if (gen === sockGen) ws = null;
         return;
       }
       attempt = 0;
       openedOnce = true;
-      opts.onStatus({ state: 'open', url: opts.url, detail: opts.url });
+      try {
+        opts.onStatus({ state: 'open', url: opts.url, detail: opts.url });
+      } catch {
+        /* ignore */
+      }
       try {
         opts.onOpen?.(ws!);
       } catch (e) {
-        opts.onError(e instanceof Error ? e : new Error(String(e)));
+        try {
+          opts.onError(e instanceof Error ? e : new Error(String(e)));
+        } catch {
+          /* ignore */
+        }
       }
     };
 
     ws.onmessage = (ev) => {
-      if (stopped) return;
+      if (stopped || gen !== sockGen) return;
       try {
         opts.onMessage(ev, ws!);
       } catch {
@@ -142,6 +159,7 @@ export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
     };
 
     ws.onclose = () => {
+      if (gen !== sockGen) return;
       ws = null;
       if (stopped) {
         return;
@@ -150,23 +168,39 @@ export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
       if (attempt > maxAttempts) {
         // Terminal — no further reconnects; treat as stopped so stop() is a no-op
         stopped = true;
-        opts.onStatus({ state: 'closed', detail: 'reconnect exhausted' });
-        opts.onError(
-          new Error(
-            openedOnce
-              ? `WebSocket reconnect exhausted after ${maxAttempts} attempts`
-              : 'WebSocket failed to connect',
-          ),
-        );
+        try {
+          opts.onStatus({ state: 'closed', detail: 'reconnect exhausted' });
+        } catch {
+          /* ignore */
+        }
+        try {
+          opts.onError(
+            new Error(
+              openedOnce
+                ? `WebSocket reconnect exhausted after ${maxAttempts} attempts`
+                : 'WebSocket failed to connect',
+            ),
+          );
+        } catch {
+          /* ignore */
+        }
         return;
       }
       const delay = nextBackoffMs(attempt, baseDelayMs, maxDelayMs);
-      opts.onStatus({
-        state: 'reconnecting',
-        url: opts.url,
-        detail: `attempt ${attempt}/${maxAttempts} in ${delay}ms`,
-      });
-      timer = setTimeout(connect, delay);
+      try {
+        opts.onStatus({
+          state: 'reconnecting',
+          url: opts.url,
+          detail: `attempt ${attempt}/${maxAttempts} in ${delay}ms`,
+        });
+      } catch {
+        /* ignore */
+      }
+      // Guard: do not schedule if stop raced in during status callback
+      if (stopped || gen !== sockGen) return;
+      timer = setTimeout(() => {
+        if (!stopped && gen === sockGen) connect();
+      }, delay);
     };
   };
 
@@ -175,11 +209,16 @@ export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
   return () => {
     if (stopped) return;
     stopped = true;
+    sockGen += 1; // invalidate any in-flight socket / pending reconnect
     clearTimer();
     const sock = ws;
     ws = null;
     detachAndClose(sock);
-    opts.onStatus({ state: 'closed' });
+    try {
+      opts.onStatus({ state: 'closed' });
+    } catch {
+      /* ignore */
+    }
   };
 }
 

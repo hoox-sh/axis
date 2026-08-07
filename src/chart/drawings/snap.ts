@@ -79,22 +79,37 @@ function targetPrice(bar: BarLike, target: SnapTarget): number {
  */
 export function findNearestBarIndex(bars: readonly BarLike[], time: number): number {
   const n = bars.length;
-  if (n === 0) return -1;
+  if (n === 0 || !Number.isFinite(time)) return -1;
   let lo = 0;
   let hi = n - 1;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
     const t = bars[mid]!.time;
+    if (!Number.isFinite(t)) {
+      // Corrupt times: fall back to linear nearest finite
+      break;
+    }
     if (t === time) return mid;
     if (t < time) lo = mid + 1;
     else hi = mid - 1;
   }
-  // hi = last bar with time < target; lo = first bar with time > target
-  if (hi < 0) return 0;
-  if (lo >= n) return n - 1;
-  const dHi = time - bars[hi]!.time;
-  const dLo = bars[lo]!.time - time;
-  return dHi <= dLo ? hi : lo;
+  // Prefer binary-search neighbors when times are finite
+  if (hi >= 0 && lo < n) {
+    const tHi = bars[hi]!.time;
+    const tLo = bars[lo]!.time;
+    if (Number.isFinite(tHi) && Number.isFinite(tLo)) {
+      const dHi = time - tHi;
+      const dLo = tLo - time;
+      return dHi <= dLo ? hi : lo;
+    }
+  }
+  if (hi >= 0 && Number.isFinite(bars[hi]!.time)) return hi;
+  if (lo < n && Number.isFinite(bars[lo]!.time)) return lo;
+  // Last resort: first bar with finite time
+  for (let i = 0; i < n; i++) {
+    if (Number.isFinite(bars[i]!.time)) return i;
+  }
+  return -1;
 }
 
 /**
@@ -116,16 +131,27 @@ export function snapToBars(opts: {
   targets?: SnapTarget[];
 }): { time: number; price: number } {
   const { bars, raw, rawXY, priceToY, mode } = opts;
+  const rawOut = { time: raw.time, price: raw.price };
 
   if (mode === 'off' || bars.length === 0) {
-    return { time: raw.time, price: raw.price };
+    return rawOut;
+  }
+  // Garbage pointer / chart point — do not invent OHLC snaps
+  if (
+    !Number.isFinite(raw.time) ||
+    !Number.isFinite(raw.price) ||
+    !Number.isFinite(rawXY.y)
+  ) {
+    return rawOut;
   }
 
-  const pixelTol = opts.pixelTol ?? DEFAULT_PIXEL_TOL;
+  const pixelTol = Number.isFinite(opts.pixelTol as number)
+    ? (opts.pixelTol as number)
+    : DEFAULT_PIXEL_TOL;
   const targets = opts.targets?.length ? opts.targets : DEFAULT_TARGETS;
   const nearestIdx = findNearestBarIndex(bars, raw.time);
   if (nearestIdx < 0) {
-    return { time: raw.time, price: raw.price };
+    return rawOut;
   }
 
   // strong: nearest bar only; weak: nearest ± 1 neighbor
@@ -139,11 +165,19 @@ export function snapToBars(opts: {
 
   for (let i = lo; i <= hi; i++) {
     const bar = bars[i]!;
+    if (!Number.isFinite(bar.time)) continue;
     for (const t of targets) {
       const p = targetPrice(bar, t);
-      const y = priceToY(p);
+      if (!Number.isFinite(p)) continue;
+      let y: number | null;
+      try {
+        y = priceToY(p);
+      } catch {
+        continue;
+      }
       if (y == null || !Number.isFinite(y)) continue;
       const dist = Math.abs(y - rawXY.y);
+      if (!Number.isFinite(dist)) continue;
       if (dist < bestDist) {
         bestDist = dist;
         bestPrice = p;
@@ -154,13 +188,16 @@ export function snapToBars(opts: {
   }
 
   if (!found) {
-    return { time: raw.time, price: raw.price };
+    return rawOut;
   }
 
   if (mode === 'weak' && bestDist > pixelTol) {
-    return { time: raw.time, price: raw.price };
+    return rawOut;
   }
 
   // strong always snaps; weak snaps when within pixelTol
+  if (!Number.isFinite(bestTime) || !Number.isFinite(bestPrice)) {
+    return rawOut;
+  }
   return { time: bestTime, price: bestPrice };
 }

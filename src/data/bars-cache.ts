@@ -37,6 +37,9 @@ const STORE = 'bars';
 /** Soft cap per series to avoid unbounded IDB growth. */
 export const BARS_CACHE_MAX = 100_000;
 
+/** Soft cap on distinct series keys held in the in-memory map. */
+export const BARS_CACHE_MAX_SERIES = 48;
+
 export interface BarsCacheRecord {
   key: string;
   sourceId: string;
@@ -64,7 +67,7 @@ export interface BarLoadWindow {
  * Empty / invalid bounds are ignored. Does not mutate the input array.
  */
 export function sliceBarsForLoad(bars: Bar[], window?: BarLoadWindow | null): Bar[] {
-  if (!bars?.length) return [];
+  if (!Array.isArray(bars) || !bars.length) return [];
   if (!window) return bars.slice();
 
   const from =
@@ -95,7 +98,7 @@ export function sliceBarsForLoad(bars: Bar[], window?: BarLoadWindow | null): Ba
 
 /** Count bars that would remain after {@link sliceBarsForLoad} without allocating. */
 export function countBarsForLoad(bars: Bar[], window?: BarLoadWindow | null): number {
-  if (!bars?.length) return 0;
+  if (!Array.isArray(bars) || !bars.length) return 0;
   if (!window) return bars.length;
 
   const from =
@@ -131,19 +134,22 @@ export function barsCacheKey(sourceId: string, symbol: string, interval: string)
 
 /** Merge two bar lists: sort by time, last-write wins on duplicate times. */
 export function mergeBars(existing: Bar[], incoming: Bar[]): Bar[] {
-  if (!existing.length) return dedupeSort(incoming);
-  if (!incoming.length) return dedupeSort(existing);
+  const a = Array.isArray(existing) ? existing : [];
+  const b = Array.isArray(incoming) ? incoming : [];
+  if (!a.length) return dedupeSort(b);
+  if (!b.length) return dedupeSort(a);
   const map = new Map<number, Bar>();
-  for (const b of existing) {
-    if (b && Number.isFinite(b.time)) map.set(b.time, b);
+  for (const bar of a) {
+    if (bar && Number.isFinite(bar.time)) map.set(bar.time, bar);
   }
-  for (const b of incoming) {
-    if (b && Number.isFinite(b.time)) map.set(b.time, b);
+  for (const bar of b) {
+    if (bar && Number.isFinite(bar.time)) map.set(bar.time, bar);
   }
-  return Array.from(map.values()).sort((a, b) => a.time - b.time);
+  return Array.from(map.values()).sort((x, y) => x.time - y.time);
 }
 
 function dedupeSort(bars: Bar[]): Bar[] {
+  if (!Array.isArray(bars) || !bars.length) return [];
   const map = new Map<number, Bar>();
   for (const b of bars) {
     if (b && Number.isFinite(b.time)) map.set(b.time, b);
@@ -151,16 +157,57 @@ function dedupeSort(bars: Bar[]): Bar[] {
   return Array.from(map.values()).sort((a, b) => a.time - b.time);
 }
 
+function capNewest(bars: Bar[], max: number): Bar[] {
+  if (!Array.isArray(bars) || !bars.length) return [];
+  if (!Number.isFinite(max) || max <= 0 || bars.length <= max) {
+    // Return a copy when caller may hold a shared memory reference
+    return bars.slice();
+  }
+  return bars.slice(bars.length - Math.floor(max));
+}
+
 /** Sanitize + merge, then trim to {@link BARS_CACHE_MAX} (keep newest). */
 export function mergeAndCap(existing: Bar[], incoming: Bar[], max = BARS_CACHE_MAX): Bar[] {
+  const base = Array.isArray(existing) ? existing : [];
+  const cap =
+    typeof max === 'number' && Number.isFinite(max) && max > 0
+      ? Math.floor(max)
+      : BARS_CACHE_MAX;
+
+  if (!Array.isArray(incoming) || !incoming.length) {
+    return capNewest(base, cap);
+  }
+
+  // Hot path: single live tick updating the open bar or appending a new open time.
+  // Avoid full Map rebuild + sort on every tick when the series is already sorted.
+  if (incoming.length === 1 && base.length > 0) {
+    const b = sanitizeBar(incoming[0]);
+    if (!b) return capNewest(base, cap);
+    const last = base[base.length - 1]!;
+    if (Number.isFinite(last.time) && last.time === b.time) {
+      const out = base.slice();
+      out[out.length - 1] = b;
+      return out;
+    }
+    if (Number.isFinite(last.time) && b.time > last.time) {
+      const out =
+        base.length >= cap ? base.slice(base.length - (cap - 1)) : base.slice();
+      out.push(b);
+      return out;
+    }
+    // Mid/older insert — fall through to full merge
+  }
+
   const cleaned: Bar[] = [];
   for (const raw of incoming) {
     const b = sanitizeBar(raw);
     if (b) cleaned.push(b);
   }
-  let merged = mergeBars(existing, cleaned);
-  if (merged.length > max) {
-    merged = merged.slice(merged.length - max);
+  if (!cleaned.length) return capNewest(base, cap);
+
+  let merged = mergeBars(base, cleaned);
+  if (merged.length > cap) {
+    merged = merged.slice(merged.length - cap);
   }
   return merged;
 }
@@ -169,12 +216,35 @@ export function mergeAndCap(existing: Bar[], incoming: Bar[], max = BARS_CACHE_M
 
 const memory = new Map<string, BarsCacheRecord>();
 
+/** Evict oldest-updated series when the in-memory map exceeds the series cap. */
+function trimMemorySeries(): void {
+  if (memory.size <= BARS_CACHE_MAX_SERIES) return;
+  const ranked = Array.from(memory.values()).sort(
+    (a, b) => (a.updatedAt || 0) - (b.updatedAt || 0),
+  );
+  const drop = memory.size - BARS_CACHE_MAX_SERIES;
+  for (let i = 0; i < drop; i++) {
+    const rec = ranked[i];
+    if (rec?.key) memory.delete(rec.key);
+  }
+}
+
 async function openBarsDb(): Promise<IDBDatabase> {
   return openDb(DB_NAME, DB_VERSION, (db) => {
     if (!db.objectStoreNames.contains(STORE)) {
       db.createObjectStore(STORE, { keyPath: 'key' });
     }
   });
+}
+
+/**
+ * Internal peek: return the in-memory bars array without cloning when warm.
+ * Caller must not mutate the returned array.
+ */
+function peekMemoryBars(key: string): Bar[] | null {
+  const rec = memory.get(key);
+  if (rec?.bars && Array.isArray(rec.bars)) return rec.bars;
+  return null;
 }
 
 /** Read full series for a cache key (empty array if missing). */
@@ -322,8 +392,16 @@ export async function putCachedBars(
 ): Promise<Bar[]> {
   const key = barsCacheKey(sourceId, symbol, interval);
   const sym = String(symbol || '').trim().toUpperCase();
-  const existing = await getCachedBars(sourceId, symbol, interval);
-  const bars = mergeAndCap(existing, incoming);
+  const safeIncoming = Array.isArray(incoming) ? incoming : [];
+
+  // Prefer warm memory reference (no clone) — mergeAndCap never mutates `existing`.
+  // Falls back to IDB/memory clone only when this key is cold.
+  let existing = peekMemoryBars(key);
+  if (!existing) {
+    existing = await getCachedBars(sourceId, symbol, interval);
+  }
+
+  const bars = mergeAndCap(existing, safeIncoming);
   const rec: BarsCacheRecord = {
     key,
     sourceId: String(sourceId || ''),
@@ -333,6 +411,7 @@ export async function putCachedBars(
     updatedAt: Date.now(),
   };
   memory.set(key, rec);
+  trimMemorySeries();
 
   if (idbAvailable()) {
     try {

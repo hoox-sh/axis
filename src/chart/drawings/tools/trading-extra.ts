@@ -8,9 +8,18 @@
 import { DRAWING_COLORS, type Drawing, type TwoPointDrawing } from '../../drawing-types';
 import { distToSegment, nearRectEdge } from '../geometry';
 import { registerToolHandler, type ToolHitCtx, type ToolViewCtx } from './registry';
+import {
+  clampOpacity,
+  clampStrokeWidth,
+  isFinitePoint,
+  sanitizePoints,
+  sanitizeStrokeColor,
+} from './safe';
 
-function asTwo(d: Drawing): TwoPointDrawing | null {
+function asTwo(d: Drawing, kind?: TwoPointDrawing['kind']): TwoPointDrawing | null {
+  if (kind && d.kind !== kind) return null;
   if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
+  if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return null;
   return d as TwoPointDrawing;
 }
 
@@ -65,18 +74,19 @@ registerToolHandler({
   label: 'Forecast',
   arity: 2,
   create(points, color) {
-    if (points.length < 2) return null;
+    const pts = sanitizePoints(points);
+    if (pts.length < 2) return null;
     return {
       id: '',
       kind: 'forecast',
-      p1: points[0]!,
-      p2: points[1]!,
-      color: color || DRAWING_COLORS.measure,
+      p1: pts[0]!,
+      p2: pts[1]!,
+      color: sanitizeStrokeColor(color, DRAWING_COLORS.measure),
       lineStyle: 'dashed',
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'forecast');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -88,7 +98,8 @@ registerToolHandler({
     ctx.line(b.x, b.y, tip.x, tip.y, ctx.stroke, Math.max(1, ctx.strokeWidth - 0.25), dash);
     paintArrowHead(ctx, a.x, a.y, tip.x, tip.y, ctx.stroke, Math.max(8, ctx.strokeWidth * 3));
     const dPrice = t.p2.price - t.p1.price;
-    const pct = t.p1.price !== 0 ? (dPrice / t.p1.price) * 100 : 0;
+    const denom = t.p1.price || 1;
+    const pct = (dPrice / denom) * 100;
     const midX = (a.x + tip.x) / 2;
     const midY = (a.y + tip.y) / 2;
     ctx.label(
@@ -107,7 +118,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'forecast');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -127,18 +138,19 @@ registerToolHandler({
   label: 'Date + price range',
   arity: 2,
   create(points, color) {
-    if (points.length < 2) return null;
+    const pts = sanitizePoints(points);
+    if (pts.length < 2) return null;
     return {
       id: '',
       kind: 'datePriceRange',
-      p1: points[0]!,
-      p2: points[1]!,
-      color: color || DRAWING_COLORS.measure,
+      p1: pts[0]!,
+      p2: pts[1]!,
+      color: sanitizeStrokeColor(color, DRAWING_COLORS.measure),
       fillOpacity: 0.12,
     };
   },
   paint(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'datePriceRange');
     if (!t) return;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
@@ -153,17 +165,23 @@ registerToolHandler({
       width: String(w),
       height: String(h),
       fill: ctx.stroke,
-      'fill-opacity': String(ctx.fillOpacity),
+      'fill-opacity': String(clampOpacity(ctx.fillOpacity, 0.12)),
       stroke: ctx.stroke,
-      'stroke-width': String(ctx.strokeWidth),
+      'stroke-width': String(clampStrokeWidth(ctx.strokeWidth)),
       'pointer-events': 'all',
     });
-    const bars =
-      ctx.barIndexApprox != null
-        ? Math.abs(ctx.barIndexApprox(t.p1.time) - ctx.barIndexApprox(t.p2.time))
-        : 0;
+    let bars = 0;
+    if (ctx.barIndexApprox != null) {
+      try {
+        const n = Math.abs(ctx.barIndexApprox(t.p1.time) - ctx.barIndexApprox(t.p2.time));
+        if (Number.isFinite(n)) bars = n;
+      } catch {
+        bars = 0;
+      }
+    }
     const dPrice = t.p2.price - t.p1.price;
-    const pct = t.p1.price !== 0 ? (dPrice / t.p1.price) * 100 : 0;
+    const denom = t.p1.price || 1;
+    const pct = (dPrice / denom) * 100;
     const barPart = bars ? `${bars} bars · ` : '';
     ctx.label(
       left + 4,
@@ -178,7 +196,7 @@ registerToolHandler({
     }
   },
   hit(d, ctx) {
-    const t = asTwo(d);
+    const t = asTwo(d, 'datePriceRange');
     if (!t) return false;
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);

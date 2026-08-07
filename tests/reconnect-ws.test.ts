@@ -222,4 +222,26 @@ describe('openReconnectableWs', () => {
     sock.onmessage?.({ data: 'b' });
     expect(bars).toEqual(['a']);
   });
+
+  it('stop nulls handlers so close does not reconnect', async () => {
+    const statuses: string[] = [];
+    const stop = openReconnectableWs({
+      url: 'wss://example.test/ws',
+      maxAttempts: 5,
+      baseDelayMs: 10,
+      maxDelayMs: 20,
+      onStatus: (s) => statuses.push(s.state),
+      onError: () => {},
+      onMessage: () => {},
+    });
+    const sock = FakeWS.instances[0]!;
+    sock.open();
+    stop();
+    // Late drop after stop must not schedule reconnect sockets
+    const before = FakeWS.instances.length;
+    sock.drop();
+    await new Promise((r) => setTimeout(r, 40));
+    expect(FakeWS.instances.length).toBe(before);
+    expect(statuses.filter((s) => s === 'reconnecting')).toHaveLength(0);
+  });
 });

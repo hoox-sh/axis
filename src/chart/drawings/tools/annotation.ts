@@ -8,29 +8,39 @@
 import type { Drawing, TextDrawing } from '../../drawing-types';
 import { nearPoint } from '../geometry';
 import { registerToolHandler } from './registry';
+import {
+  isFinitePoint,
+  sanitizeDrawingText,
+  sanitizePoints,
+  sanitizeStrokeColor,
+} from './safe';
 
 registerToolHandler({
   id: 'priceLabel',
   label: 'Price label',
   arity: 1,
   create(points, color) {
-    if (!points[0]) return null;
-    const p = points[0];
+    const pts = sanitizePoints(points);
+    if (!pts[0]) return null;
+    const p = pts[0];
     const text = p.price.toFixed(2);
     return {
       id: '',
       kind: 'priceLabel',
       p1: p,
       text,
-      color,
+      color: sanitizeStrokeColor(color),
     } as TextDrawing;
   },
   paint(d, ctx) {
     if (d.kind !== 'priceLabel' && d.kind !== 'text') return;
     const td = d as TextDrawing;
+    if (!isFinitePoint(td.p1)) return;
     const c = ctx.toXY(td.p1);
     if (!c) return;
-    const text = td.text || td.meta?.text || td.p1.price.toFixed(2);
+    const text =
+      sanitizeDrawingText(td.text || td.meta?.text || td.p1.price.toFixed(2)) ||
+      td.p1.price.toFixed(2);
     // Chip background
     const padX = 6;
     const padY = 3;
@@ -49,10 +59,12 @@ registerToolHandler({
     });
     ctx.label(c.x + 6 + padX, c.y + 4, text, '#0b0c10', 11);
     ctx.circle(c.x, c.y, ctx.selected ? 5 : 3, ctx.stroke, true);
+    void padY;
   },
   hit(d, ctx) {
     if (d.kind !== 'priceLabel' && d.kind !== 'text') return false;
     const td = d as TextDrawing;
+    if (!isFinitePoint(td.p1)) return false;
     const c = ctx.toXY(td.p1);
     if (!c) return false;
     return nearPoint(ctx.x, ctx.y, c.x, c.y, ctx.tol + 8);

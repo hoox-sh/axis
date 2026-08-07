@@ -49,15 +49,35 @@ export function distToSegment(
   x2: number,
   y2: number,
 ): number {
+  if (
+    !Number.isFinite(px) ||
+    !Number.isFinite(py) ||
+    !Number.isFinite(x1) ||
+    !Number.isFinite(y1) ||
+    !Number.isFinite(x2) ||
+    !Number.isFinite(y2)
+  ) {
+    return Number.POSITIVE_INFINITY;
+  }
   const dx = x2 - x1;
   const dy = y2 - y1;
   if (dx === 0 && dy === 0) return Math.hypot(px - x1, py - y1);
   const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)));
-  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+  const d = Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+  return Number.isFinite(d) ? d : Number.POSITIVE_INFINITY;
 }
 
 /** True if (px,py) is within `tol` of point (x,y). */
 export function nearPoint(px: number, py: number, x: number, y: number, tol: number): boolean {
+  if (
+    !Number.isFinite(px) ||
+    !Number.isFinite(py) ||
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(tol)
+  ) {
+    return false;
+  }
   return Math.hypot(px - x, py - y) <= tol;
 }
 
@@ -104,10 +124,21 @@ export function extendSegment(
   w: number,
   h: number,
 ): { x1: number; y1: number; x2: number; y2: number } {
+  // Non-finite geometry → return zeros (callers should skip paint via toXY nulls)
+  if (
+    !Number.isFinite(ax) ||
+    !Number.isFinite(ay) ||
+    !Number.isFinite(bx) ||
+    !Number.isFinite(by)
+  ) {
+    return { x1: 0, y1: 0, x2: 0, y2: 0 };
+  }
+  const safeW = Number.isFinite(w) && w > 0 ? w : 1;
+  const safeH = Number.isFinite(h) && h > 0 ? h : 1;
   const dx = bx - ax;
   const dy = by - ay;
   const len = Math.hypot(dx, dy) || 1;
-  const scale = (Math.max(w, h) * 4) / len;
+  const scale = (Math.max(safeW, safeH) * 4) / len;
   let x1 = ax;
   let y1 = ay;
   let x2 = bx;
@@ -120,7 +151,12 @@ export function extendSegment(
     x1 = ax - dx * scale;
     y1 = ay - dy * scale;
   }
-  return { x1, y1, x2, y2 };
+  return {
+    x1: Number.isFinite(x1) ? x1 : ax,
+    y1: Number.isFinite(y1) ? y1 : ay,
+    x2: Number.isFinite(x2) ? x2 : bx,
+    y2: Number.isFinite(y2) ? y2 : by,
+  };
 }
 
 /**

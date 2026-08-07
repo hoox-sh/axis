@@ -201,6 +201,9 @@ class EngineWsClient {
    * Parse one inbound frame. Malformed / non-object payloads are ignored so a
    * single bad message does not tear down the socket; unmatched ids wait for
    * timeout or a later correlated reply.
+   *
+   * Engine error frames resolve (not reject) so callers never see an uncaught
+   * rejection from a protocol-level error payload.
    */
   private handleMessage(data: unknown): void {
     let raw: string;
@@ -223,20 +226,35 @@ class EngineWsClient {
       if (!pend) return;
       clearTimeout(pend.timer);
       this.pending.delete(id);
-      if (rec.type === 'error' || rec.status === 'error') {
+      try {
+        if (
+          rec.type === 'error' ||
+          rec.status === 'error' ||
+          rec.status === 'failed' ||
+          rec.ok === false
+        ) {
+          pend.resolve({
+            status: 'error',
+            error: String(rec.message || rec.error || 'Engine error'),
+            code: rec.code as string | undefined,
+            transport: 'ws',
+          });
+          return;
+        }
+        // Strip non-serializable / odd top-level junk; keep known run fields
         pend.resolve({
-          status: 'error',
-          error: String(rec.message || rec.error || 'Engine error'),
-          code: rec.code as string | undefined,
+          ...(rec as EngineWsResult),
+          status: 'success',
           transport: 'ws',
         });
-        return;
+      } catch (e) {
+        // resolve callback itself must not leave the promise hanging
+        pend.resolve({
+          status: 'error',
+          error: e instanceof Error ? e.message : 'Engine response handling failed',
+          transport: 'ws',
+        });
       }
-      pend.resolve({
-        ...(rec as EngineWsResult),
-        status: 'success',
-        transport: 'ws',
-      });
     } catch {
       /* ignore malformed JSON — pending wait for timeout / good frame */
     }

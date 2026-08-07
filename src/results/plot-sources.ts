@@ -132,7 +132,11 @@ export function resolveInputSourceValues(
   inputs: Record<string, unknown> | undefined | null,
   cache: IndicatorSeriesCache | undefined | null,
 ): Record<string, unknown> | undefined {
-  if (!inputs || !Object.keys(inputs).length) return inputs || undefined;
+  if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) {
+    return undefined;
+  }
+  const keys = Object.keys(inputs);
+  if (!keys.length) return undefined;
   let changed = false;
   const out: Record<string, unknown> = { ...inputs };
   for (const [k, v] of Object.entries(inputs)) {
@@ -143,7 +147,11 @@ export function resolveInputSourceValues(
       // Leave ref as-is; engine cannot resolve it — better a soft miss than crash
       continue;
     }
-    out[k] = series;
+    // Coerce non-finite samples so the engine never sees NaN/Infinity from a
+    // stale cache entry (chart-side garbage must not poison the next run).
+    out[k] = series.map((sample) =>
+      typeof sample === 'number' && Number.isFinite(sample) ? sample : null,
+    );
     changed = true;
   }
   return changed ? out : inputs;

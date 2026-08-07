@@ -112,6 +112,8 @@ interface InternalJob extends DataSourceJob {
 const MAX_CONCURRENT = 1;
 const MAX_PAGES = 200;
 const MAX_BARS_PER_JOB = 50_000;
+/** Cap retained terminal jobs so the manager UI/store cannot grow without bound. */
+const MAX_RETAINED_JOBS = 40;
 const PAGE_YIELD_MS = 50;
 const DEFAULT_LOOKBACK_SEC = 90 * 86_400;
 
@@ -202,6 +204,32 @@ function publicJob(j: InternalJob): DataSourceJob {
   };
 }
 
+function isTerminalStatus(status: DataSourceJobStatus): boolean {
+  return status === 'complete' || status === 'error' || status === 'cancelled';
+}
+
+/** Drop oldest terminal jobs beyond {@link MAX_RETAINED_JOBS}. */
+function pruneJobList(): void {
+  const list = managerState.jobs;
+  if (list.length <= MAX_RETAINED_JOBS) return;
+  const terminal = list.filter((j) => isTerminalStatus(j.status));
+  const active = list.filter((j) => !isTerminalStatus(j.status));
+  const keepTerminal = terminal
+    .slice()
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    .slice(0, Math.max(0, MAX_RETAINED_JOBS - active.length));
+  const keepIds = new Set([...active, ...keepTerminal].map((j) => j.id));
+  for (const j of list) {
+    if (!keepIds.has(j.id) && isTerminalStatus(j.status)) {
+      internals.delete(j.id);
+    }
+  }
+  setManagerState(
+    'jobs',
+    list.filter((j) => keepIds.has(j.id)),
+  );
+}
+
 function syncJob(j: InternalJob): void {
   const pub = publicJob(j);
   setManagerState(
@@ -212,6 +240,7 @@ function syncJob(j: InternalJob): void {
       else list.unshift(pub);
     }),
   );
+  if (isTerminalStatus(j.status)) pruneJobList();
 }
 
 function setJobStatus(j: InternalJob, status: DataSourceJobStatus, error: string | null = null): void {
@@ -391,31 +420,58 @@ async function fetchWalkPage(
   windowFrom: number,
   windowTo: number,
 ): Promise<{ rawOldest: number; pageBars: Bar[] } | null> {
-  const raw = await source.fetchHistorical({
-    symbol: j.symbol,
-    interval: j.interval,
-    endTime: cursorEnd,
-    limit: pageLimit,
-    signal: j.abort.signal,
-    config: {
-      ...sourceConfig(j.sourceId),
+  let raw: unknown;
+  try {
+    raw = await source.fetchHistorical({
+      symbol: j.symbol,
+      interval: j.interval,
+      endTime: cursorEnd,
       limit: pageLimit,
-      fallback: false,
-    },
-  });
+      signal: j.abort.signal,
+      config: {
+        ...sourceConfig(j.sourceId),
+        limit: pageLimit,
+        fallback: false,
+      },
+    });
+  } catch (err: unknown) {
+    // Re-throw aborts / real network errors to the job runner
+    throw err;
+  }
+  // normalizeHistoricalBars never throws — drops partial/malformed rows
   const rawPage = normalizeHistoricalBars(raw, { limit: pageLimit });
   j.pagesFetched += 1;
   if (!rawPage.length) return null;
 
   const rawOldest = rawPage[0]!.time;
-  const pageBars = rawPage.filter((b) => b.time >= windowFrom && b.time <= windowTo + 86_400);
+  const pageBars = rawPage.filter(
+    (b) =>
+      b &&
+      Number.isFinite(b.time) &&
+      b.time >= windowFrom &&
+      b.time <= windowTo + 86_400,
+  );
   if (pageBars.length) {
-    const merged = await putCachedBars(j.sourceId, j.symbol, j.interval, pageBars);
-    j.barsFetched = merged.length;
-    j.oldestSec = merged[0]!.time;
-    j.newestSec = merged[merged.length - 1]!.time;
-    j.updatedAt = Date.now();
-    syncJob(j);
+    try {
+      const merged = await putCachedBars(j.sourceId, j.symbol, j.interval, pageBars);
+      if (merged.length) {
+        j.barsFetched = merged.length;
+        j.oldestSec = merged[0]!.time;
+        j.newestSec = merged[merged.length - 1]!.time;
+        j.updatedAt = Date.now();
+        syncJob(j);
+      }
+    } catch (err: unknown) {
+      // Cache write failure should not kill the job mid-page — keep going with page data
+      console.warn('[data-source-manager] putCachedBars failed', err);
+      if (!j.oldestSec || pageBars[0]!.time < j.oldestSec) j.oldestSec = pageBars[0]!.time;
+      if (!j.newestSec || pageBars[pageBars.length - 1]!.time > j.newestSec) {
+        j.newestSec = pageBars[pageBars.length - 1]!.time;
+      }
+      j.barsFetched = Math.max(j.barsFetched, pageBars.length);
+      j.updatedAt = Date.now();
+      syncJob(j);
+    }
   }
   return { rawOldest, pageBars };
 }
