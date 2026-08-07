@@ -23,9 +23,11 @@
  * Endpoints (relative to `store.endpoint`):
  * - `POST /lsp/completion` — `{ source, line, character }` → completion items
  * - `POST /lsp/hover` — same position → markdown/plaintext hover
+ * - `POST /lsp/diagnostics` — `{ source }` → parse+lint pre-eval diagnostics
  *
  * Used when engine is `server` and Backend URL is set (local `:5002` or remote).
- * Pyodide / offline mode falls back to client builtins in `pine-lsp`.
+ * Pyodide / offline mode falls back to client builtins in `pine-lsp`
+ * (and local structural pre-eval in `preevaluate.ts`).
  * Timeouts default to 4s; failures return `null` (caller uses local index).
  *
  * @module editor/pine-lsp-client
@@ -129,6 +131,60 @@ export async function fetchRemoteHover(opts: {
     };
     if (j.status === 'error' || !j.hover) return null;
     return j.hover;
+  } catch {
+    return null;
+  }
+}
+
+/** One diagnostic from Pro API `/lsp/diagnostics` (preevaluate). */
+export type RemoteDiagnostic = {
+  /** 1-based line */
+  line: number;
+  /** 0-based start column */
+  character?: number;
+  endLine?: number;
+  endCharacter?: number;
+  message: string;
+  severity?: string;
+  code?: string;
+  source?: string;
+};
+
+/** Result of remote parse+lint pre-eval (null on network/HTTP failure). */
+export type RemoteDiagnosticsResult = {
+  ok: boolean;
+  diagnostics: RemoteDiagnostic[];
+};
+
+/**
+ * Fetch parse+lint diagnostics from pyne Pro API.
+ * Used for as-you-type pre-eval (mark wrong code / gate Run).
+ * Returns `null` on network/HTTP/schema failure so callers can fall back.
+ */
+export async function fetchRemoteDiagnostics(opts: {
+  source: string;
+  signal?: AbortSignal;
+}): Promise<RemoteDiagnosticsResult | null> {
+  const base = lspBaseUrl();
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}/lsp/diagnostics`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: opts.source }),
+      signal: opts.signal ?? AbortSignal.timeout(4_000),
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as {
+      status?: string;
+      ok?: boolean;
+      diagnostics?: RemoteDiagnostic[];
+    };
+    if (j.status === 'error' || !Array.isArray(j.diagnostics)) return null;
+    return {
+      ok: j.ok !== false && !j.diagnostics.some((d) => String(d.severity).toLowerCase() === 'error'),
+      diagnostics: j.diagnostics,
+    };
   } catch {
     return null;
   }

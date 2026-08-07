@@ -163,6 +163,7 @@
             "group": "Reference",
             "pages": [
               "reference/feature-atlas",
+              "reference/open-capability-gaps",
               "reference/legacy-shell",
               "reference/testing",
               "reference/plugin-examples"

@@ -54,6 +54,7 @@ import {
   formatDiagnosticCount,
   type EditorDiagnostic,
 } from './diagnostics';
+import { schedulePreeval, cancelPreeval } from './preevaluate';
 import { countDocStats, cursorLineCol } from './doc-stats';
 
 export { countDocStats, cursorLineCol } from './doc-stats';
@@ -150,15 +151,31 @@ export const TabbedEditor: Component<Props> = (props) => {
   });
 
   /**
-   * CM underlines / gutter diagnostics from last run + active doc
-   * (line → offset mapping uses current tab text).
+   * CM underlines / gutter diagnostics:
+   * 1. Live pre-eval (parse/lint) — marks wrong code as you type
+   * 2. Last-run engine errors — only when buffer still matches last pre-eval
+   *    source and pre-eval did not already cover the same line+message
    */
   const editorDiagnostics = createMemo((): EditorDiagnostic[] => {
     void store.lastRun;
+    void store.preEval;
     void tabs();
     void activeTab();
     const sourceDoc =
       props.editorRef?.getDoc?.() || tabs()[activeTab()]?.doc || '';
+    const pre = store.preEval?.diagnostics ?? [];
+    // Prefer pre-eval for current buffer; keep last-run when pre-eval empty/pending
+    // and the buffer is still the one that was run (stale underlines after edits
+    // are avoided by clearing last-run contribution when pre has results).
+    if (pre.length > 0) return pre as EditorDiagnostic[];
+    if (store.preEval?.pending) {
+      // While checking, still show last-run if any
+      return diagnosticsFromLastRun(store.lastRun, sourceDoc);
+    }
+    // Pre-eval finished with zero findings — drop stale last-run marks for this doc
+    if (store.preEval && store.preEval.source === sourceDoc && !store.preEval.hasErrors) {
+      return [];
+    }
     return diagnosticsFromLastRun(store.lastRun, sourceDoc);
   });
 
@@ -195,6 +212,8 @@ export const TabbedEditor: Component<Props> = (props) => {
     setStats(countDocStats(doc));
     // Cursor resets to start of tab until CM reports the real head
     setCursor({ line: 1, col: 1 });
+    // Pre-eval active tab (marks wrong code; gates Run)
+    schedulePreeval(doc);
   });
 
   onMount(() => {
@@ -204,7 +223,10 @@ export const TabbedEditor: Component<Props> = (props) => {
       // Line flash is applied inside editor/inline-debug firePinJump
       jumpToDebugPin({ barIndex: detail.barIndex, time: detail.time });
     });
-    onCleanup(() => setDebugChipClickHandler(null));
+    onCleanup(() => {
+      setDebugChipClickHandler(null);
+      cancelPreeval();
+    });
 
     // Prefer storage draft over empty first paint (async)
     void loadDraft().then((d) => {
@@ -341,6 +363,7 @@ export const TabbedEditor: Component<Props> = (props) => {
     );
     props.onDocChange?.(doc);
     scheduleDraft(doc, tabs()[activeTab()]?.name);
+    schedulePreeval(doc);
   };
 
   const activeTabState = () => tabs()[activeTab()];
@@ -487,6 +510,7 @@ export const TabbedEditor: Component<Props> = (props) => {
           onDocChange={onDocChange}
           onCursorChange={(pos) => setCursor({ line: pos.line, col: pos.col })}
           onRun={() => {
+            if (store.preEval?.hasErrors && !store.preEval?.pending) return;
             const doc = props.editorRef?.getDoc?.() || tabs()[activeTab()]?.doc;
             if (doc?.trim()) props.onRun?.(doc);
           }}
@@ -553,7 +577,9 @@ export const TabbedEditor: Component<Props> = (props) => {
           title={
             editorDiagnostics().length
               ? `${diagCountLabel() || `${problemCounts().total} problem(s)`} — click to ${problemsOpen() ? 'hide' : 'show'} list`
-              : 'No problems from last run'
+              : store.preEval?.pending
+                ? 'Checking script…'
+                : 'No problems (pre-eval + last run)'
           }
           aria-pressed={problemsOpen()}
           aria-expanded={problemsOpen()}

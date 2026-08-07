@@ -111,11 +111,13 @@ Bottom of tabbed editor (`data-testid="axis-editor-stats"`):
 
 ### Diagnostics & Problems
 
-After a run, `diagnosticsFromLastRun(lastRun, doc)` builds ranges from engine `error`, `meta.errors` / `diagnostics`, and error logs with line refs (`line 12:`, `L12:`, …).
+**Pre-eval (as you type)** — `schedulePreeval` / `POST /lsp/diagnostics` (when engine=server) plus local structural checks mark wrong code *before* Run. Severity **error** disables Run (topbar, editor, Mod-Enter, command palette). Warnings do not block.
+
+**After a run**, `diagnosticsFromLastRun(lastRun, doc)` still builds ranges from engine `error`, `meta.errors` / `diagnostics`, and error logs with line refs (`line 12:`, `L12:`, …). Live pre-eval takes precedence when it has findings for the current buffer.
 
 - CodeMirror: wavy underlines, severity gutter, hover tooltips  
 - **Problems** panel: clickable rows → `scrollToLine` / `jumpToDiagnostic`  
-- Unit tests: `tests/editor-diagnostics.test.ts`, `tests/editor-problems.test.ts`
+- Unit tests: `tests/editor-diagnostics.test.ts`, `tests/editor-problems.test.ts`, `tests/preevaluate.test.ts`
 
 ### 80-column ruler
 
@@ -157,8 +159,8 @@ App holds `{ getDoc, setDoc?, loadLibraryDoc?, scrollToLine?, jumpToDiagnostic?,
 1. Empty doc Run is a no-op at topbar/editor handlers.  
 2. Popout does not own PaneManager.  
 3. Reattach restores shared doc into docked CM.  
-4. AXIS ≠ engine: editor never evaluates Pine itself.  
-5. Diagnostics/Debug/Pins read **last run** only — re-run after edits.
+4. AXIS ≠ engine: editor never fully evaluates Pine itself; pre-eval is parse/lint only.  
+5. Debug/Pins still read **last run**; static diagnostics also come from pre-eval.
 
 ## Failure modes
 

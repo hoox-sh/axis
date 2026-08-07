@@ -51,12 +51,14 @@ import {
   toggleDebugPinsEnabled,
   toggleEditorRulerEnabled,
   saveEditorDoc,
+  isScriptRunBlockedByPreEval,
 } from '../store';
 import { FloatableShell } from '../ui/panels/FloatableShell';
 import { Icons } from '../ui/icons';
 import { openEditorWindow, writeSharedDoc, bridgePublish } from './editor-bridge';
 import { runAndApply } from '../indicators/runner';
 import { countDebugPins } from '../results/debug-pins';
+import { runPreevalNow } from './preevaluate';
 
 /** How long a slide-in label stays open after pointer leaves (ms). */
 const EDITOR_LABEL_HOLD_MS = 2000;
@@ -70,11 +72,16 @@ interface Props {
 
 /** Side panel or full-window shell for the multi-tab Pine editor. */
 export const EditorPane: Component<Props> = (props) => {
-  const onRun = (doc: string) => {
-    if (doc?.trim()) {
-      props.onRun?.(doc) ?? runAndApply(doc);
-    }
+  const onRun = async (doc: string) => {
+    if (!doc?.trim()) return;
+    // Final pre-eval gate (catches race if debounce has not finished)
+    const pe = await runPreevalNow(doc);
+    if (pe.hasErrors) return;
+    if (isScriptRunBlockedByPreEval()) return;
+    props.onRun?.(doc) ?? void runAndApply(doc);
   };
+
+  const runBlocked = () => isScriptRunBlockedByPreEval();
 
   const popoutLiveEditor = (mode: 'popup' | 'tab' = 'popup') => {
     const doc = props.editorRef.getDoc?.() || '';
@@ -165,21 +172,30 @@ export const EditorPane: Component<Props> = (props) => {
       <Show when={!props.standalone}>
         <EditorToolBtn
           id="run"
-          label={store.status === 'running' ? 'Running…' : 'Run'}
+          label={
+            store.status === 'running'
+              ? 'Running…'
+              : runBlocked()
+                ? 'Fix errors'
+                : 'Run'
+          }
           title={
             store.status === 'running'
               ? 'Script is running…'
-              : 'Run script against loaded bars'
+              : runBlocked()
+                ? `Fix ${store.preEval.diagnostics.filter((d) => d.severity === 'error').length || ''} script error(s) before running`
+                : 'Run script against loaded bars'
           }
           testId="axis-editor-btn-run"
           pressed={store.status === 'running'}
+          disabled={runBlocked() || store.status === 'running'}
           open={labelId() === 'run'}
           onShow={() => showToolLabel('run')}
           onScheduleHide={() => scheduleHideToolLabel('run')}
           onClick={() => {
-            if (store.status === 'running') return;
+            if (store.status === 'running' || runBlocked()) return;
             const doc = props.editorRef.getDoc?.() || '';
-            if (doc.trim()) onRun(doc);
+            if (doc.trim()) void onRun(doc);
           }}
         >
           <Icons.play size={12} />
@@ -213,9 +229,9 @@ export const EditorPane: Component<Props> = (props) => {
           // Enabling without a fresh run never produces line stats — re-run now.
           if (turningOn) {
             const doc = props.editorRef.getDoc?.() || '';
-            if (doc.trim()) {
+            if (doc.trim() && !runBlocked()) {
               // Defer so store.profilerEnabled is true when runScript reads it.
-              queueMicrotask(() => onRun(doc));
+              queueMicrotask(() => void onRun(doc));
             }
           }
         }}
@@ -456,6 +472,7 @@ const EditorToolBtn: Component<{
   title: string;
   testId?: string;
   pressed?: boolean;
+  disabled?: boolean;
   open: boolean;
   onShow: () => void;
   onScheduleHide: () => void;
@@ -467,17 +484,24 @@ const EditorToolBtn: Component<{
       type="button"
       class={`sc-btn sc-btn-ghost axis-editor-tool-btn ${
         props.pressed ? 'is-tool-on' : ''
-      } ${props.open ? 'is-label-open' : ''}`}
+      } ${props.open ? 'is-label-open' : ''} ${
+        props.disabled ? 'opacity-50 cursor-not-allowed' : ''
+      }`}
       title={props.title}
       aria-label={props.label}
       aria-pressed={props.pressed}
+      aria-disabled={props.disabled || undefined}
+      disabled={props.disabled}
       data-testid={props.testId}
       data-tool-id={props.id}
       onPointerEnter={() => props.onShow()}
       onPointerLeave={() => props.onScheduleHide()}
       onFocus={() => props.onShow()}
       onBlur={() => props.onScheduleHide()}
-      onClick={() => props.onClick()}
+      onClick={() => {
+        if (props.disabled) return;
+        props.onClick();
+      }}
     >
       <span class="axis-editor-tool-icon" aria-hidden="true">
         {props.children}

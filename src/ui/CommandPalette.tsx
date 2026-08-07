@@ -153,6 +153,9 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       runScript: async () => {
         const doc = props.editorRef?.getDoc?.() || '';
         if (!doc.trim()) return;
+        const { runPreevalNow } = await import('../editor/preevaluate');
+        const pe = await runPreevalNow(doc);
+        if (pe.hasErrors) return;
         await runAndApply(doc, undefined, {
           inputs: store.editorInputValues || {},
         });

@@ -35,8 +35,9 @@ import {
   writeSharedDoc,
   readSharedDoc,
 } from './editor-bridge';
-import { store } from '../store';
+import { store, isScriptRunBlockedByPreEval } from '../store';
 import { applyThemeToDocument } from '../theme';
+import { runPreevalNow } from './preevaluate';
 
 /** Pop-out / new-tab editor shell; does not host the chart. */
 export const EditorApp: Component = () => {
@@ -82,7 +83,13 @@ export const EditorApp: Component = () => {
     });
   });
 
-  const onRun = (doc: string) => {
+  const onRun = async (doc: string) => {
+    if (!doc?.trim()) return;
+    const pe = await runPreevalNow(doc);
+    if (pe.hasErrors || isScriptRunBlockedByPreEval()) {
+      setRunStatus('blocked: fix script errors');
+      return;
+    }
     writeSharedDoc(doc);
     setRunStatus('running…');
     bridgePublish({ type: 'run', doc });
@@ -90,6 +97,7 @@ export const EditorApp: Component = () => {
 
   const isRunBusy = () =>
     runStatus().startsWith('running') || runStatus() === 'running…';
+  const runBlocked = () => isScriptRunBlockedByPreEval();
 
   return (
     <div class="h-screen flex flex-col bg-bg-base text-text overflow-hidden">
@@ -100,22 +108,30 @@ export const EditorApp: Component = () => {
         </span>
         <span class="text-[10px] text-text-faint font-mono truncate flex-1">{runStatus()}</span>
         <button
-          class={`sc-btn ${isRunBusy() ? 'sc-btn-primary is-active' : 'sc-btn-ghost'}`}
+          class={`sc-btn ${isRunBusy() ? 'sc-btn-primary is-active' : 'sc-btn-ghost'} ${
+            runBlocked() ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
           aria-busy={isRunBusy()}
+          disabled={runBlocked() || isRunBusy()}
+          title={
+            runBlocked()
+              ? 'Fix script errors before running'
+              : 'Run script in main chart window'
+          }
           onClick={() => {
-            if (isRunBusy()) return;
+            if (isRunBusy() || runBlocked()) return;
             const doc = editorRef.getDoc() || readSharedDoc();
-            if (doc.trim()) onRun(doc);
+            if (doc.trim()) void onRun(doc);
           }}
         >
-          {isRunBusy() ? '▶ Running…' : '▶ Run'}
+          {isRunBusy() ? '▶ Running…' : runBlocked() ? '▶ Fix errors' : '▶ Run'}
         </button>
       </div>
       <div class="flex-1 min-h-0 overflow-hidden">
         <EditorPane
           standalone
           editorRef={editorRef}
-          onRun={onRun}
+          onRun={(doc) => void onRun(doc)}
         />
       </div>
     </div>

@@ -59,9 +59,11 @@ import {
   isPanelOpen,
   toggleLibraryPanel,
   toggleDataSourcePanel,
+  isScriptRunBlockedByPreEval,
 } from '../store';
 import { CHART_TYPES } from '../chart/chart-type';
 import { runAndApply } from '../indicators/runner';
+import { runPreevalNow } from '../editor/preevaluate';
 import { startLive, stopLive, listStreams, defaultStreamForSource } from '../streams/multiplex';
 import { loadSymbolData } from '../data/load-symbol';
 import { parseOhlcvFile } from '../data/parse-bars';
@@ -186,10 +188,15 @@ export const Topbar: Component<{
     if (store.status === 'running') return;
     const doc = props.editorRef.getDoc();
     if (!doc?.trim()) return;
+    // Pre-eval gate: mark wrong code / block run when static errors remain
+    const pe = await runPreevalNow(doc);
+    if (pe.hasErrors || isScriptRunBlockedByPreEval()) return;
     await runAndApply(doc, undefined, {
       inputs: store.editorInputValues || {},
     });
   };
+
+  const runBlocked = () => isScriptRunBlockedByPreEval();
 
   const toggleLive = () => {
     const next = !store.live.active;
@@ -483,18 +490,25 @@ export const Topbar: Component<{
         {/* Action cluster: Run · Live · Replay — Run is accent only while executing */}
         <button
           type="button"
-          class={`sc-btn ${store.status === 'running' ? 'sc-btn-primary is-active' : 'sc-btn-ghost'}`}
-          onClick={onRun}
+          class={`sc-btn ${store.status === 'running' ? 'sc-btn-primary is-active' : 'sc-btn-ghost'} ${
+            runBlocked() ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
+          onClick={() => void onRun()}
           data-testid="axis-btn-run"
           aria-busy={store.status === 'running'}
+          disabled={runBlocked() || store.status === 'running'}
           title={
             store.status === 'running'
               ? 'Running…'
-              : 'Run script against loaded bars (or use detached editor)'
+              : runBlocked()
+                ? 'Fix script errors in the editor before running'
+                : 'Run script against loaded bars (or use detached editor)'
           }
         >
           <Icons.play />
-          <span class="axis-tb-btn-label">{store.status === 'running' ? 'Running…' : 'Run'}</span>
+          <span class="axis-tb-btn-label">
+            {store.status === 'running' ? 'Running…' : runBlocked() ? 'Fix errors' : 'Run'}
+          </span>
         </button>
 
         <button

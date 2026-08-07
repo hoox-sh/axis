@@ -247,6 +247,32 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
   if (!silent) setStatus('running', 'Executing Pine Script…');
   const t0 = performance.now();
 
+  // Pre-eval gate: refuse when this exact script still has static errors in the
+  // editor buffer. Live re-runs of applied indicators use stored code and usually
+  // won't match `preEval.source`; interactive Run always matches.
+  if (!silent) {
+    const pe = store.preEval;
+    if (pe && !pe.pending && pe.hasErrors && pe.source === script) {
+      const msg = 'Script has errors — fix them in the editor before running';
+      if (epoch == null || isRunEpochCurrent(epoch)) {
+        setStatus('error', msg);
+        setTelemetryState('engine', 'error', { error: msg });
+      }
+      return {
+        status: 'error',
+        plots: [],
+        series: {},
+        events: [],
+        error: msg,
+        meta: {
+          ms: 0,
+          blocked: 'preeval',
+          diagnostics: pe.diagnostics,
+        },
+      };
+    }
+  }
+
   const bars = store.bars;
   if (!Array.isArray(bars) || bars.length === 0) {
     const msg = 'No bars loaded — load a symbol before running';

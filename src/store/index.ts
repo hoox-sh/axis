@@ -184,6 +184,12 @@ const DEFAULTS: AppState = {
   stream: { status: 'disconnected' },
   status: 'ready',
   statusMessage: 'Ready.',
+  preEval: {
+    diagnostics: [],
+    hasErrors: false,
+    pending: false,
+    source: '',
+  },
   lastRunMs: null,
   lastRun: null,
   runResults: {},
@@ -464,6 +470,13 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       logs: [],
       bars: [],
       chartDataGen: 0,
+      // Live editor pre-eval — always start clean
+      preEval: {
+        diagnostics: [],
+        hasErrors: false,
+        pending: false,
+        source: '',
+      },
       telemetry: {
         ...DEFAULTS.telemetry,
         hud: {
@@ -812,6 +825,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     selectedDrawingId: _sel,
     indicatorSeries: _is,
     errorShareOffer: _eso,
+    preEval: _pe,
     compare,
     telemetry,
     drawings,
@@ -1161,6 +1175,21 @@ export function setStatus(status: AppState['status'], message?: string) {
     setStore('statusMessage', message);
     appendLog(statusToLevel(status), message, status);
   }
+}
+
+/**
+ * Update live editor pre-eval state (parse/lint). Ephemeral — not persisted.
+ * Used by {@link ../editor/preevaluate} to mark wrong code and gate Run.
+ */
+export function setPreEval(next: AppState['preEval']) {
+  setStore('preEval', next);
+}
+
+/** True when pre-eval found errors and is not still pending. */
+export function isScriptRunBlockedByPreEval(): boolean {
+  const pe = store.preEval;
+  if (!pe || pe.pending) return false;
+  return !!pe.hasErrors;
 }
 
 /** Persist main price pane chart style (candles, bars, line, Heikin-Ashi, …). */

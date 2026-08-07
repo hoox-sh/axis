@@ -367,6 +367,27 @@ export interface AppState {
   stream: { status: 'connected' | 'disconnected' | 'error' | 'connecting' };
   status: AppStatus;
   statusMessage: string;
+  /**
+   * Live pre-eval (parse/lint) for the active editor buffer.
+   * Ephemeral — drives underlines + Run gating. Not persisted.
+   */
+  preEval: {
+    /** Editor diagnostics for current buffer (empty while pending first pass). */
+    diagnostics: Array<{
+      from: number;
+      to: number;
+      line: number;
+      severity: 'error' | 'warning' | 'info';
+      message: string;
+      source?: string;
+    }>;
+    /** True when any diagnostic is severity error (blocks Run when not pending). */
+    hasErrors: boolean;
+    /** True while a debounced / in-flight check is running. */
+    pending: boolean;
+    /** Source text last checked (or currently checking). */
+    source: string;
+  };
   lastRunMs: number | null;
   /**
    * Focused script run payload for Results / Scriptlogs / debug chrome.

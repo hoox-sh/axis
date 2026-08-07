@@ -1,0 +1,143 @@
+# Copyright (C) 2024-2026 jango_blockchained
+#
+# This file is part of pynescript.
+#
+# pynescript is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# pynescript is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with pynescript.  If not, see <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+---
+title: "Open capability gaps"
+description: "Research synthesis of high-demand charting, strategy, and script-host capabilities that remain scarce or incomplete in mainstream platforms—framed for AXIS product direction."
+sidebarTitle: "Capability gaps"
+---
+
+# Open capability gaps
+
+## Abstract
+
+This page records a **product research synthesis**: roughly thirty concrete capabilities that traders, quant authors, and chart power-users still treat as missing or incomplete on mainstream charting and strategy hosts. It is not a shipped-feature checklist for AXIS and not a competitive teardown of any named vendor.
+
+Use it when prioritizing AXIS surfaces (sources, streams, engines, strategy results, debugging, data plane). Items below are durable demand themes from community threads and documented hard limits—not a public vendor roadmap with delivery status.
+
+## How to read this list
+
+| Term | Meaning here |
+| --- | --- |
+| **Still open** | Capability is absent, plan-gated to a partial substitute, or still described as unreliable for professional use |
+| **Not a ranking poll** | No single global leaderboard exists; order is thematic, then by how often demand shows up as trade-blocking |
+| **Status changes** | Individual venues or UX affordances can ship later; verify against current product notes before treating any row as forever |
+
+**Highest-pressure themes overall:** true tick and order-flow data, portfolio-grade strategy tooling, live multi-bracket and automated execution, higher cloud/screener ceilings, and a real interactive debugger.
+
+---
+
+## Order flow, volume, and tick data
+
+| # | Capability | Why it stays open |
+| --- | --- | --- |
+| 1 | **True tick volume** under volume profiles (including reliable delta) | Profiles over the same range can disagree on buy/sell aggression; many treat minute-aggregated volume as unsuitable for professional volume work |
+| 2 | **Real volume footprint** with aggressor-tagged prints | Synthetic or approximate footprints are still not trusted next to tick-native tools |
+| 3 | **Transaction-level order-flow viewing** | Charts that are primarily bar/minute-based cannot show trade-by-trade flow without true tick history |
+
+## Live trading, brackets, and execution
+
+| # | Capability | Why it stays open |
+| --- | --- | --- |
+| 4 | **Multi take-profit / multi-bracket management on live broker routes** | Multi-exit levels often exist in paper/simulators while live multi-exit brackets remain incomplete or broker-dependent |
+| 5 | **Direct automated live order placement from strategy scripts** | Strategy engines commonly fill via a broker *emulator*; real exchange orders need external webhooks or bridges |
+| 6 | **Unified routing** of strategy orders through the same trading panel path as manual/paper orders | Script strategies and discretionary trading panels are often separate stacks |
+
+## Strategy model: portfolio, hedge, and fill realism
+
+| # | Capability | Why it stays open |
+| --- | --- | --- |
+| 7 | **Native multi-symbol / portfolio strategy backtesting** | One script run is typically bound to one chart dataset; multi-asset P&L is export-and-compare, not a portfolio engine |
+| 8 | **Simultaneous long + short (hedge) on the same symbol** | Position models are often single-direction at a time |
+| 9 | **Positions in symbols other than the chart asset** | Cross-asset entries from one strategy remain unsupported on many hosts |
+| 10 | **Full tick-level historical fill realism** | Fills usually walk chart OHLC with assumed open→high→low→close (or open→low→high→close) paths; higher-resolution path reconstruction is partial and often tier-gated |
+| 11 | **Large trade histories without silent trim** | Non–deep backtests often cap order history (older trades dropped from testers); deep modes raise the ceiling but remain product-tier features |
+
+## Script runtime, quotas, and tooling
+
+| # | Capability | Why it stays open |
+| --- | --- | --- |
+| 12 | **Higher unique multi-series / remote-series request ceilings** | Cloud hosts hard-cap distinct series fetches per script (plan tiers only raise the number) |
+| 13 | **Higher total script wall-time budgets** | Entire-run timeouts remain fixed per plan class |
+| 14 | **Higher per-bar loop budgets** | Tight loop-per-bar limits reject heavy iterative logic |
+| 15 | **Higher data, memory, and compiled-size caps** | Large libraries and data-heavy studies hit opaque resource walls |
+| 16 | **Large multi-symbol scanning without burning unique-request quotas** | Dynamic loops still count each distinct symbol/timeframe against the unique ceiling |
+| 17 | **Runtime profilers** (wall time, memory, compiled size) before failure | Authors discover limits by rejection or runtime error, not by measurement tools |
+| 18 | **Interactive step-through debugger with breakpoints** | Official debugging remains logs, plots, drawings, and chart colors—not a classic debugger |
+
+## Script-driven screener constraints
+
+| # | Capability | Why it stays open |
+| --- | --- | --- |
+| 19 | **Multiple custom indicators per screener pass** | Many screeners allow only one user script per screen |
+| 20 | **Indicator-on-indicator** composition inside the screener | Nested studies are unsupported |
+| 21 | **Custom timeframes** in scripted screens | Non-standard bars often unavailable |
+| 22 | **Higher remote-series call counts** inside screener scripts | Typical caps are very small (single-digit) |
+| 23 | **Lookback beyond a short trailing window** (e.g. hundreds of bars only) | Screen math is truncated to recent history |
+| 24 | **Full input-type coverage** for screener-hosted scripts | Several input kinds are unsupported in the screener surface |
+
+## Chart UX and market coverage
+
+| # | Capability | Why it stays open |
+| --- | --- | --- |
+| 25 | **Stable, discoverable watchlist gestures** (e.g. context-menu add) | Removal or relocation of common chart chrome produces sustained restore demand |
+| 26 | **Timely exchange / venue chart coverage** when a market is popular | Coverage gaps surface as high-engagement “still missing” demand until a data feed lands |
+| 27 | **Sector / industry / theme heatmaps** and similar multi-name overview boards | Recurring UX requests outside pure charting |
+
+## Open script host vs general-purpose stacks
+
+| # | Capability | Why it stays open |
+| --- | --- | --- |
+| 28 | **External data sources, HTTP, and host APIs from inside scripts** | Cloud sandboxes intentionally block outbound and arbitrary I/O |
+| 29 | **Databases, file I/O, and machine-learning libraries inside the script runtime** | Language surface is chart-bound, not a general quant stack |
+| 30 | **True custom UI and host programming** beyond chart plots and fixed panels | Outgrow path is usually a multi-asset engine with live broker APIs outside the chart host |
+
+---
+
+## Themes for AXIS
+
+These gaps map cleanly onto AXIS axes without implying any third-party product parity:
+
+| Demand theme | AXIS lever |
+| --- | --- |
+| Tick / order-flow fidelity | Pluggable **sources** and **streams** with higher-resolution bars or trades when data exists |
+| Portfolio multi-symbol strategies | Multi-source strategy evaluation and results beyond single-chart P&L |
+| Live multi-exit and automation | Optional execution adapters / webhooks (explicit, user-owned—not silent live routing) |
+| Runtime ceilings and profilers | Local and Worker engines with measurable limits you control |
+| Interactive debugger | Step and pin tooling against the active engine (see UI debugging surfaces) |
+| Screener scale | Offline or self-hosted scan loops unbound by a single vendor’s cloud quota |
+| External data / ML / DB | Host bridges and plugins—not inventing closed chart-host APIs |
+
+<Note>
+AXIS remains a composition host: sources load history, streams advance the present, engines evaluate scripts, storage holds libraries. Capability work should preserve that separation.
+</Note>
+
+## Related docs
+
+- [Architecture overview](/architecture/overview) — composition model
+- [Strategy and results (end user)](/enduser/guides/strategy-and-results) — how strategy output is surfaced today
+- [Debugging (UI)](/ui/debugging) — current debug surfaces
+- [Feature atlas](/reference/feature-atlas) — path index for implementation work
+
+## Research notes
+
+- Synthesis date context: community and documentation signals through early–mid 2026.
+- “Still open” means encoded as present limits or still treated as incomplete in high-engagement demand—not items already reversed by later product notes.
+- Engagement is qualitative across forums and social posts; it is not a weighted global survey.
+- Plan-gated historical depth and deep-backtest order ceilings partially address older “more bars / more trades” asks; those are de-emphasized relative to portfolio, execution, order-flow, and tooling gaps.
