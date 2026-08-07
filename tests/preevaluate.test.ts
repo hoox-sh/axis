@@ -7,11 +7,16 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
+  checkUnknownBuiltinMembers,
+  editDistance,
   hasErrorDiagnostics,
+  isKnownBuiltinPath,
+  isRemoteStyleNoise,
   localPreevaluate,
   mergePreevalDiagnostics,
   rangeFromLineCols,
   remoteToEditorDiagnostics,
+  suggestBuiltinPath,
 } from '../src/editor/preevaluate.ts';
 import type { EditorDiagnostic } from '../src/editor/diagnostics.ts';
 
@@ -67,6 +72,54 @@ describe('localPreevaluate', () => {
     expect(localPreevaluate('')).toEqual([]);
     expect(localPreevaluate('   \n')).toEqual([]);
   });
+
+  it('flags strategy.etry as non-blocking typo (violet mark)', () => {
+    const src = `//@version=5
+strategy("t")
+strategy.etry("Long", strategy.long)
+`;
+    const diags = localPreevaluate(src);
+    // Typos must not block Run
+    expect(hasErrorDiagnostics(diags)).toBe(false);
+    const hit = diags.find((d) => /strategy\.etry/i.test(d.message));
+    expect(hit).toBeTruthy();
+    expect(hit!.severity).toBe('typo');
+    expect(hit!.source).toBe('preeval-typo');
+    expect(hit!.message).toMatch(/strategy\.entry/);
+  });
+
+  it('accepts strategy.entry as known', () => {
+    const src = `//@version=5
+strategy("t")
+strategy.entry("Long", strategy.long)
+`;
+    const diags = localPreevaluate(src);
+    expect(diags.some((d) => /strategy\.entry/i.test(d.message) && /unknown/i.test(d.message))).toBe(
+      false,
+    );
+  });
+});
+
+describe('builtin path helpers', () => {
+  it('knows strategy.entry and namespaces', () => {
+    expect(isKnownBuiltinPath('strategy.entry')).toBe(true);
+    expect(isKnownBuiltinPath('strategy.long')).toBe(true);
+    expect(isKnownBuiltinPath('ta.rsi')).toBe(true);
+    expect(isKnownBuiltinPath('strategy.etry')).toBe(false);
+  });
+
+  it('suggests entry for etry', () => {
+    expect(suggestBuiltinPath('strategy.etry')).toBe('strategy.entry');
+    expect(editDistance('etry', 'entry')).toBeLessThanOrEqual(2);
+  });
+
+  it('checkUnknownBuiltinMembers returns a range on the typo', () => {
+    const src = 'strategy.etry("x")\n';
+    const diags = checkUnknownBuiltinMembers(src);
+    expect(diags).toHaveLength(1);
+    expect(diags[0]!.from).toBe(0);
+    expect(diags[0]!.to).toBe('strategy.etry'.length);
+  });
 });
 
 describe('rangeFromLineCols', () => {
@@ -110,14 +163,23 @@ describe('remoteToEditorDiagnostics', () => {
 });
 
 describe('mergePreevalDiagnostics', () => {
-  it('uses remote when present', () => {
+  it('unions local member errors with remote (remote alone misses typos)', () => {
     const local: EditorDiagnostic[] = [
-      { from: 0, to: 1, line: 1, severity: 'error', message: 'local' },
+      {
+        from: 0,
+        to: 13,
+        line: 3,
+        severity: 'error',
+        message: 'Unknown `strategy.etry`',
+        source: 'preeval-local',
+      },
     ];
     const remote: EditorDiagnostic[] = [
-      { from: 0, to: 2, line: 1, severity: 'error', message: 'remote' },
+      { from: 0, to: 2, line: 1, severity: 'warning', message: 'Missing @version' },
     ];
-    expect(mergePreevalDiagnostics(local, remote)).toEqual(remote);
+    const merged = mergePreevalDiagnostics(local, remote);
+    expect(merged.some((d) => d.message.includes('strategy.etry'))).toBe(true);
+    expect(merged.some((d) => d.message.includes('@version'))).toBe(true);
   });
 
   it('falls back to local when remote null', () => {
@@ -125,5 +187,34 @@ describe('mergePreevalDiagnostics', () => {
       { from: 0, to: 1, line: 1, severity: 'warning', message: 'local' },
     ];
     expect(mergePreevalDiagnostics(local, null)).toEqual(local);
+  });
+});
+
+describe('isRemoteStyleNoise', () => {
+  it('drops C001 camelCase and C004 newline noise', () => {
+    expect(
+      isRemoteStyleNoise({
+        line: 1,
+        message: 'Variable rsi should use camelCase',
+        severity: 'warning',
+        code: 'C001',
+      }),
+    ).toBe(true);
+    expect(
+      isRemoteStyleNoise({
+        line: 1,
+        message: 'File should end with a newline',
+        severity: 'warning',
+        code: 'C004',
+      }),
+    ).toBe(true);
+    expect(
+      isRemoteStyleNoise({
+        line: 1,
+        message: 'Syntax error: unexpected token',
+        severity: 'error',
+        code: 'E001',
+      }),
+    ).toBe(false);
   });
 });

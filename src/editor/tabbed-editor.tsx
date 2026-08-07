@@ -29,7 +29,14 @@
 
 import { Component, For, Show, createMemo, createSignal, batch, onCleanup, onMount, createEffect } from 'solid-js';
 import { PineEditor, type PineEditorRef } from './PineEditor';
-import { store, loadEditorDoc, saveEditorDoc, setStatus, toggleDebugPinsEnabled } from '../store';
+import {
+  store,
+  loadEditorDoc,
+  saveEditorDoc,
+  setStatus,
+  toggleDebugPinsEnabled,
+  toggleEditorWrapEnabled,
+} from '../store';
 import { saveDraft, loadDraft } from '../storage/service';
 import { normalizeRunProfile, type RunProfile } from '../results/profiler';
 import {
@@ -524,6 +531,7 @@ export const TabbedEditor: Component<Props> = (props) => {
           onToggleDebugPins={() => toggleDebugPinsEnabled()}
           diagnostics={editorDiagnostics()}
           rulerEnabled={store.editorRulerEnabled}
+          wrapEnabled={store.editorWrapEnabled}
         />
       </div>
       <Show when={problemsOpen()}>
@@ -545,7 +553,7 @@ export const TabbedEditor: Component<Props> = (props) => {
       <div
         class="flex-shrink-0 flex items-center gap-3 px-2 py-0.5 border-t-2 border-border bg-bg-base text-[10px] font-mono text-text-faint tabular-nums select-none"
         data-testid="axis-editor-stats"
-        title="Document statistics · cursor position · line wrap on"
+        title="Document statistics · cursor position · click wrap to toggle soft wrap"
       >
         <span data-testid="axis-editor-cursor" title="Cursor position (line : column)">
           Pos{' '}
@@ -571,7 +579,9 @@ export const TabbedEditor: Component<Props> = (props) => {
               ? 'text-red'
               : diagCounts().warnings > 0
                 ? 'text-orange'
-                : 'text-text-faint'
+                : diagCounts().typos > 0
+                  ? 'text-violet-400'
+                  : 'text-text-faint'
           }`}
           data-testid="axis-editor-problems-toggle"
           title={
@@ -600,7 +610,9 @@ export const TabbedEditor: Component<Props> = (props) => {
                 ? 'text-red'
                 : diagCounts().warnings > 0
                   ? 'text-orange'
-                  : 'text-text-dim'
+                  : diagCounts().typos > 0
+                    ? 'text-violet-400'
+                    : 'text-text-dim'
             }`}
             data-testid="axis-editor-diag-count"
             title={`${diagCountLabel()} — jump to first`}
@@ -623,7 +635,24 @@ export const TabbedEditor: Component<Props> = (props) => {
             {diagCountLabel()}
           </button>
         </Show>
-        <span class="ml-auto text-text-faint/80">wrap</span>
+        <button
+          type="button"
+          class={`ml-auto px-1.5 py-0 rounded border border-transparent hover:bg-bg-hover hover:text-text ${
+            store.editorWrapEnabled
+              ? 'text-accent border-border-soft bg-bg-hover'
+              : 'text-text-faint/80'
+          }`}
+          data-testid="axis-editor-wrap-toggle"
+          title={
+            store.editorWrapEnabled
+              ? 'Soft wrap on — click to show horizontal scroll'
+              : 'Soft wrap off — click to wrap long lines'
+          }
+          aria-pressed={store.editorWrapEnabled}
+          onClick={() => toggleEditorWrapEnabled()}
+        >
+          wrap
+        </button>
       </div>
     </div>
   );

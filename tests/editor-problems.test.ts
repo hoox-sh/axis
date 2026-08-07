@@ -8,6 +8,9 @@
 import { describe, expect, it } from 'bun:test';
 import type { EditorDiagnostic } from '../src/editor/diagnostics.ts';
 import {
+  EDITOR_PROBLEMS_DEFAULT_HEIGHT,
+  EDITOR_PROBLEMS_MIN_HEIGHT,
+  clampProblemsHeight,
   countProblemsBySeverity,
   diagnosticsToProblems,
   formatProblemLine,
@@ -85,13 +88,26 @@ describe('diagnosticsToProblems', () => {
 });
 
 describe('countProblemsBySeverity', () => {
-  it('counts errors and warnings', () => {
+  it('counts errors, warnings, and typos', () => {
     const c = countProblemsBySeverity([
       { severity: 'error' },
       { severity: 'error' },
       { severity: 'warning' },
+      { severity: 'typo' },
       { severity: 'info' },
     ]);
-    expect(c).toEqual({ errors: 2, warnings: 1, total: 4 });
+    expect(c).toEqual({ errors: 2, warnings: 1, typos: 1, total: 5 });
+  });
+});
+
+describe('clampProblemsHeight', () => {
+  it('clamps to min / max and rounds', () => {
+    expect(clampProblemsHeight(10, 400)).toBe(EDITOR_PROBLEMS_MIN_HEIGHT);
+    expect(clampProblemsHeight(9999, 400)).toBe(400);
+    expect(clampProblemsHeight(123.7, 400)).toBe(124);
+  });
+
+  it('falls back to default for non-finite', () => {
+    expect(clampProblemsHeight(Number.NaN, 400)).toBe(EDITOR_PROBLEMS_DEFAULT_HEIGHT);
   });
 });

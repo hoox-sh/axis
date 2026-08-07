@@ -35,7 +35,7 @@ import {
   highlightActiveLine,
   highlightActiveLineGutter,
 } from '@codemirror/view';
-import { EditorSelection, EditorState } from '@codemirror/state';
+import { Compartment, EditorSelection, EditorState, type Extension } from '@codemirror/state';
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { bracketMatching } from '@codemirror/language';
@@ -138,12 +138,24 @@ interface Props {
    * when false, the guide is hidden. Default true.
    */
   rulerEnabled?: boolean;
+  /**
+   * Soft line wrap. Reconfigured via Compartment when toggled.
+   * Default true (matches previous always-on wrap).
+   */
+  wrapEnabled?: boolean;
+}
+
+/** Soft-wrap extension set for the wrap compartment (empty = no wrap). */
+export function lineWrapExtension(enabled: boolean): Extension {
+  return enabled ? EditorView.lineWrapping : [];
 }
 
 /** Solid wrapper around a single CodeMirror EditorView instance. */
 export const PineEditor: Component<Props> = (props) => {
   let containerRef!: HTMLDivElement;
   let view: EditorView | undefined;
+  /** Compartment so wrap can toggle without rebuilding the whole state. */
+  const wrapCompartment = new Compartment();
 
   const getDoc = () => view?.state.doc.toString() ?? '';
 
@@ -215,6 +227,15 @@ export const PineEditor: Component<Props> = (props) => {
     refreshColumnRuler(view);
   };
 
+  const syncWrap = () => {
+    if (!view) return;
+    const enabled = props.wrapEnabled !== false;
+    view.dispatch({
+      effects: wrapCompartment.reconfigure(lineWrapExtension(enabled)),
+    });
+    view.requestMeasure();
+  };
+
   onMount(() => {
     const runKeymap = keymap.of([
       {
@@ -234,13 +255,15 @@ export const PineEditor: Component<Props> = (props) => {
       },
     ]);
 
+    const wrapOn = props.wrapEnabled !== false;
+
     const state = EditorState.create({
       doc: props.initialDoc ?? '',
       extensions: [
         lineNumbers(),
         highlightActiveLine(),
         highlightActiveLineGutter(),
-        EditorView.lineWrapping,
+        wrapCompartment.of(lineWrapExtension(wrapOn)),
         bracketMatching(),
         highlightSelectionMatches(),
         // Pine LSP-lite: typing completion + hover docs (from pyne builtin metadata)
@@ -360,6 +383,11 @@ export const PineEditor: Component<Props> = (props) => {
   createEffect(() => {
     void props.rulerEnabled;
     syncRuler();
+  });
+
+  createEffect(() => {
+    void props.wrapEnabled;
+    syncWrap();
   });
 
   return (

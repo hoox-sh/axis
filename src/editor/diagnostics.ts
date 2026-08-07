@@ -47,8 +47,14 @@ import {
 import { parseSourceLine } from '../results/inline-debug';
 import { normalizePineLogs } from '../results/pine-logs';
 
-/** Diagnostic severity (IDE-style). */
-export type DiagnosticSeverity = 'error' | 'warning' | 'info';
+/**
+ * Diagnostic severity (IDE-style).
+ * - `error` — blocks Run (syntax / hard failures)
+ * - `warning` — style / deprecation
+ * - `typo` — unknown builtin member; non-blocking (engine may autocorrect)
+ * - `info` — soft notes
+ */
+export type DiagnosticSeverity = 'error' | 'warning' | 'typo' | 'info';
 
 /**
  * One diagnostic bound to a CM document range.
@@ -516,7 +522,16 @@ export function diagnosticsFromLastRun(
 }
 
 function severityRank(s: DiagnosticSeverity): number {
-  return s === 'error' ? 0 : s === 'warning' ? 1 : 2;
+  switch (s) {
+    case 'error':
+      return 0;
+    case 'warning':
+      return 1;
+    case 'typo':
+      return 2;
+    default:
+      return 3;
+  }
 }
 
 function sortDiagnostics(list: EditorDiagnostic[]): EditorDiagnostic[] {
@@ -532,28 +547,32 @@ function sortDiagnostics(list: EditorDiagnostic[]): EditorDiagnostic[] {
 export function countDiagnostics(diags: EditorDiagnostic[]): {
   errors: number;
   warnings: number;
+  typos: number;
   infos: number;
   total: number;
 } {
   let errors = 0;
   let warnings = 0;
+  let typos = 0;
   let infos = 0;
   for (const d of diags) {
     if (d.severity === 'error') errors++;
     else if (d.severity === 'warning') warnings++;
+    else if (d.severity === 'typo') typos++;
     else infos++;
   }
-  return { errors, warnings, infos, total: diags.length };
+  return { errors, warnings, typos, infos, total: diags.length };
 }
 
 /** Human label for the status strip badge (e.g. `3 errors`, `1 warning`). */
 export function formatDiagnosticCount(diags: EditorDiagnostic[]): string {
-  const { errors, warnings, infos, total } = countDiagnostics(diags);
+  const { errors, warnings, typos, infos, total } = countDiagnostics(diags);
   if (total === 0) return '';
   const parts: string[] = [];
   if (errors) parts.push(`${errors} error${errors === 1 ? '' : 's'}`);
   if (warnings) parts.push(`${warnings} warning${warnings === 1 ? '' : 's'}`);
-  if (infos && !errors && !warnings) {
+  if (typos) parts.push(`${typos} typo${typos === 1 ? '' : 's'}`);
+  if (infos && !errors && !warnings && !typos) {
     parts.push(`${infos} info`);
   } else if (infos && parts.length === 0) {
     parts.push(`${infos} info`);
@@ -706,7 +725,13 @@ class DiagGutterMarker extends GutterMarker {
     el.title = this.title;
     el.setAttribute('aria-label', this.title);
     el.textContent =
-      this.severity === 'error' ? '●' : this.severity === 'warning' ? '▲' : '■';
+      this.severity === 'error'
+        ? '●'
+        : this.severity === 'warning'
+          ? '▲'
+          : this.severity === 'typo'
+            ? '✦'
+            : '■';
     return el;
   }
 }
@@ -789,6 +814,14 @@ function diagnosticHover(view: EditorView, pos: number): Tooltip | null {
           row.appendChild(src);
         }
         dom.appendChild(row);
+        // Typo foot-note: engine autocorrect, Run not blocked
+        if (h.severity === 'typo') {
+          const note = document.createElement('div');
+          note.className = 'cm-diag-tooltip-note cm-diag-tooltip-note-typo';
+          note.textContent =
+            'PYNE autocorrects this on the fly · Run is not blocked';
+          dom.appendChild(note);
+        }
       }
       return { dom };
     },
@@ -806,6 +839,12 @@ export const diagnosticsTheme = EditorView.baseTheme({
     textUnderlineOffset: '2px',
     backgroundColor: 'rgba(232, 160, 58, 0.10)',
   },
+  /* Builtin typos — distinct violet, not an error (engine may autocorrect) */
+  '.cm-diag-mark-typo': {
+    textDecoration: 'underline wavy #c084fc',
+    textUnderlineOffset: '2px',
+    backgroundColor: 'rgba(192, 132, 252, 0.12)',
+  },
   '.cm-diag-mark-info': {
     textDecoration: 'underline dotted #8b8e9c',
     textUnderlineOffset: '2px',
@@ -816,6 +855,9 @@ export const diagnosticsTheme = EditorView.baseTheme({
   },
   '.cm-diag-line-warning': {
     backgroundColor: 'rgba(232, 160, 58, 0.06)',
+  },
+  '.cm-diag-line-typo': {
+    backgroundColor: 'rgba(192, 132, 252, 0.07)',
   },
   '.cm-diag-line-info': {
     backgroundColor: 'rgba(139, 142, 156, 0.04)',
@@ -834,6 +876,7 @@ export const diagnosticsTheme = EditorView.baseTheme({
   },
   '.cm-diag-gutter-error': { color: '#e85d4c', fontWeight: '700' },
   '.cm-diag-gutter-warning': { color: '#e8a03a', fontWeight: '700' },
+  '.cm-diag-gutter-typo': { color: '#c084fc', fontWeight: '700' },
   '.cm-diag-gutter-info': { color: '#8b8e9c' },
   '.cm-diag-tooltip': {
     fontSize: '11px',
@@ -864,6 +907,7 @@ export const diagnosticsTheme = EditorView.baseTheme({
   },
   '.cm-diag-tooltip-sev-error': { color: '#e85d4c' },
   '.cm-diag-tooltip-sev-warning': { color: '#e8a03a' },
+  '.cm-diag-tooltip-sev-typo': { color: '#c084fc' },
   '.cm-diag-tooltip-sev-info': { color: '#8b8e9c' },
   '.cm-diag-tooltip-msg': {
     flex: '1 1 auto',
@@ -874,6 +918,17 @@ export const diagnosticsTheme = EditorView.baseTheme({
     fontSize: '9px',
     color: '#6b6e7c',
     flexShrink: '0',
+  },
+  '.cm-diag-tooltip-note': {
+    fontSize: '10px',
+    marginTop: '4px',
+    paddingTop: '4px',
+    borderTop: '1px solid #3a3c48',
+    color: '#a1a1aa',
+    lineHeight: '1.3',
+  },
+  '.cm-diag-tooltip-note-typo': {
+    color: '#d8b4fe',
   },
 });
 
@@ -926,6 +981,7 @@ export function jumpToFirstDiagnostic(
   const first =
     diags.find((d) => d.severity === 'error') ??
     diags.find((d) => d.severity === 'warning') ??
+    diags.find((d) => d.severity === 'typo') ??
     diags[0]!;
   return jumpToDiagnostic(view, first);
 }

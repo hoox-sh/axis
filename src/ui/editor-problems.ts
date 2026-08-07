@@ -28,6 +28,30 @@
 
 import type { DiagnosticSeverity, EditorDiagnostic } from '../editor/diagnostics';
 
+/** localStorage key for problems panel total height (px). */
+export const EDITOR_PROBLEMS_HEIGHT_KEY = 'pynescript.axis.editor.problemsHeight';
+
+/** Default total panel height including header + handle. */
+export const EDITOR_PROBLEMS_DEFAULT_HEIGHT = 120;
+
+/** Minimum total height (header + handle + one row). */
+export const EDITOR_PROBLEMS_MIN_HEIGHT = 56;
+
+/** Pure clamp for resizable problems panel height. */
+export function clampProblemsHeight(h: number, max?: number): number {
+  const hi =
+    typeof max === 'number' && Number.isFinite(max)
+      ? max
+      : typeof window !== 'undefined'
+        ? Math.floor(window.innerHeight * 0.85)
+        : 800;
+  if (!Number.isFinite(h)) return EDITOR_PROBLEMS_DEFAULT_HEIGHT;
+  return Math.min(
+    Math.max(Math.round(h), EDITOR_PROBLEMS_MIN_HEIGHT),
+    Math.max(EDITOR_PROBLEMS_MIN_HEIGHT, hi),
+  );
+}
+
 /** Re-export list-row shape used by the panel (alias of editor diagnostics). */
 export type EditorProblem = Pick<
   EditorDiagnostic,
@@ -50,12 +74,15 @@ export function severityRank(severity: DiagnosticSeverity | string): number {
     case 'warning':
     case 'warn':
       return 1;
+    case 'typo':
+      return 2;
     case 'info':
     case 'information':
     case 'hint':
     case 'debug':
+      return 3;
     default:
-      return 2;
+      return 3;
   }
 }
 
@@ -91,19 +118,22 @@ export function diagnosticsToProblems(
   }));
 }
 
-/** Count errors / warnings for badge text. */
+/** Count errors / warnings / typos for badge text. */
 export function countProblemsBySeverity(
   problems: readonly Pick<EditorProblem, 'severity'>[],
 ): {
   errors: number;
   warnings: number;
+  typos: number;
   total: number;
 } {
   let errors = 0;
   let warnings = 0;
+  let typos = 0;
   for (const p of problems) {
     if (p.severity === 'error') errors += 1;
     else if (p.severity === 'warning') warnings += 1;
+    else if (p.severity === 'typo') typos += 1;
   }
-  return { errors, warnings, total: problems.length };
+  return { errors, warnings, typos, total: problems.length };
 }

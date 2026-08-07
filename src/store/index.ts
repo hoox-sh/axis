@@ -181,6 +181,7 @@ const DEFAULTS: AppState = {
   inlineDebugEnabled: false,
   debugPinsEnabled: false,
   editorRulerEnabled: true,
+  editorWrapEnabled: true,
   stream: { status: 'disconnected' },
   status: 'ready',
   statusMessage: 'Ready.',
@@ -450,6 +451,10 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         typeof (bag as { editorRulerEnabled?: boolean }).editorRulerEnabled === 'boolean'
           ? !!(bag as { editorRulerEnabled?: boolean }).editorRulerEnabled
           : DEFAULTS.editorRulerEnabled,
+      editorWrapEnabled:
+        typeof (bag as { editorWrapEnabled?: boolean }).editorWrapEnabled === 'boolean'
+          ? !!(bag as { editorWrapEnabled?: boolean }).editorWrapEnabled
+          : DEFAULTS.editorWrapEnabled,
       activePlugins: {
         ...DEFAULTS.activePlugins,
         ...pluginsBag,
@@ -1947,6 +1952,18 @@ export function setEditorRulerEnabled(on: boolean) {
 /** Toggle the 80-column recommended line-length ruler in the Pine editor. */
 export function toggleEditorRulerEnabled() {
   setStore('editorRulerEnabled', !store.editorRulerEnabled);
+  persist();
+}
+
+/** Enable/disable soft line wrap in the Pine editor (persisted; default on). */
+export function setEditorWrapEnabled(on: boolean) {
+  setStore('editorWrapEnabled', !!on);
+  persist();
+}
+
+/** Toggle soft line wrap in the Pine editor. */
+export function toggleEditorWrapEnabled() {
+  setStore('editorWrapEnabled', !store.editorWrapEnabled);
   persist();
 }
 

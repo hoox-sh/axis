@@ -364,6 +364,11 @@ export interface AppState {
    * (default 80 chars). Persisted. Default on.
    */
   editorRulerEnabled: boolean;
+  /**
+   * Soft line wrap in the Pine editor. Persisted. Default on.
+   * Toggle from the editor stats strip “wrap” control.
+   */
+  editorWrapEnabled: boolean;
   stream: { status: 'connected' | 'disconnected' | 'error' | 'connecting' };
   status: AppStatus;
   statusMessage: string;
@@ -377,11 +382,14 @@ export interface AppState {
       from: number;
       to: number;
       line: number;
-      severity: 'error' | 'warning' | 'info';
+      severity: 'error' | 'warning' | 'typo' | 'info';
       message: string;
       source?: string;
     }>;
-    /** True when any diagnostic is severity error (blocks Run when not pending). */
+    /**
+     * True when any diagnostic is severity **error** (blocks Run when not pending).
+     * Typos are non-blocking (engine may autocorrect).
+     */
     hasErrors: boolean;
     /** True while a debounced / in-flight check is running. */
     pending: boolean;

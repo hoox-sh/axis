@@ -19,23 +19,34 @@
 
 /**
  * Compact **Problems** list under the Pine editor — diagnostics / errors
- * from the last run with jump-to-line.
+ * from pre-eval and last run with jump-to-line.
+ *
+ * Panel height is freely resizable via the top drag handle (persisted).
  *
  * Data source: {@link EditorDiagnostic} from `editor/diagnostics`.
  *
  * @module ui/EditorProblems
  */
 
-import { Component, For, Show } from 'solid-js';
+import { Component, For, Show, createSignal, onCleanup } from 'solid-js';
 import type { DiagnosticSeverity, EditorDiagnostic } from '../editor/diagnostics';
 import {
+  EDITOR_PROBLEMS_DEFAULT_HEIGHT,
+  EDITOR_PROBLEMS_HEIGHT_KEY,
+  EDITOR_PROBLEMS_MIN_HEIGHT,
+  clampProblemsHeight,
   formatProblemLine,
   truncateProblemMessage,
   type EditorProblem,
 } from './editor-problems';
+import { ResizeHandle } from './ResizeHandle';
 
 export type { EditorProblem } from './editor-problems';
 export {
+  EDITOR_PROBLEMS_DEFAULT_HEIGHT,
+  EDITOR_PROBLEMS_HEIGHT_KEY,
+  EDITOR_PROBLEMS_MIN_HEIGHT,
+  clampProblemsHeight,
   countProblemsBySeverity,
   diagnosticsToProblems,
   formatProblemLine,
@@ -43,12 +54,34 @@ export {
   truncateProblemMessage,
 } from './editor-problems';
 
+function loadStoredHeight(): number {
+  try {
+    if (typeof localStorage === 'undefined') return EDITOR_PROBLEMS_DEFAULT_HEIGHT;
+    const raw = localStorage.getItem(EDITOR_PROBLEMS_HEIGHT_KEY);
+    if (raw == null || raw === '') return EDITOR_PROBLEMS_DEFAULT_HEIGHT;
+    return clampProblemsHeight(Number(raw));
+  } catch {
+    return EDITOR_PROBLEMS_DEFAULT_HEIGHT;
+  }
+}
+
+function persistHeight(h: number): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(EDITOR_PROBLEMS_HEIGHT_KEY, String(clampProblemsHeight(h)));
+  } catch {
+    /* quota / private mode */
+  }
+}
+
 function severityClass(sev: DiagnosticSeverity | string): string {
   switch (String(sev).toLowerCase()) {
     case 'error':
       return 'text-red';
     case 'warning':
       return 'text-orange';
+    case 'typo':
+      return 'text-violet-400';
     case 'info':
       return 'text-text-dim';
     default:
@@ -63,6 +96,8 @@ function SeverityGlyph(props: { severity: DiagnosticSeverity | string }) {
         return '⊗';
       case 'warning':
         return '⚠';
+      case 'typo':
+        return '✦';
       case 'info':
         return 'ℹ';
       default:
@@ -90,21 +125,73 @@ export interface EditorProblemsProps {
   onJump: (line: number) => void;
   /** Optional clear / dismiss callback */
   onClear?: () => void;
+  /**
+   * Controlled height in CSS px (total panel). When omitted, height is
+   * managed internally and persisted to localStorage.
+   */
+  height?: number;
+  /** Called when the user resizes (controlled + uncontrolled). */
+  onHeightChange?: (height: number) => void;
   class?: string;
 }
 
 /**
  * Compact problems list — severity · line · truncated message.
  * Click a row to jump; empty state shows “No problems”.
+ * Drag the top handle to freely resize height.
  */
 export const EditorProblems: Component<EditorProblemsProps> = (props) => {
+  const [internalHeight, setInternalHeight] = createSignal(loadStoredHeight());
+
+  const height = () =>
+    typeof props.height === 'number' && Number.isFinite(props.height)
+      ? clampProblemsHeight(props.height)
+      : internalHeight();
+
+  const setHeight = (h: number) => {
+    const next = clampProblemsHeight(h);
+    if (typeof props.height !== 'number') {
+      setInternalHeight(next);
+      persistHeight(next);
+    }
+    props.onHeightChange?.(next);
+  };
+
+  // Persist final size on window unload if uncontrolled
+  const onUnload = () => {
+    if (typeof props.height !== 'number') persistHeight(internalHeight());
+  };
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', onUnload);
+    onCleanup(() => window.removeEventListener('pagehide', onUnload));
+  }
+
+  /** Header ~24px + handle ~6px — list gets the rest. */
+  const listHeight = () => Math.max(24, height() - 30);
+
   return (
     <div
       class={`flex flex-col min-h-0 flex-shrink-0 border-t-2 border-border bg-bg-base ${props.class ?? ''}`}
+      style={{ height: `${height()}px` }}
       data-testid="axis-editor-problems"
+      data-height={height()}
       role="region"
       aria-label="Editor problems"
     >
+      {/* Drag up to grow — top edge between editor buffer and problems */}
+      <ResizeHandle
+        direction="grow-up"
+        getSize={height}
+        setSize={setHeight}
+        min={EDITOR_PROBLEMS_MIN_HEIGHT}
+        max={
+          typeof window !== 'undefined'
+            ? Math.floor(window.innerHeight * 0.85)
+            : 800
+        }
+        class="w-full"
+      />
+
       <div class="flex items-center gap-1.5 px-2 py-0.5 border-b border-border-soft flex-shrink-0">
         <span class="text-text-faint text-[11px] leading-none" aria-hidden>
           ⚠
@@ -133,7 +220,8 @@ export const EditorProblems: Component<EditorProblemsProps> = (props) => {
       </div>
 
       <div
-        class="max-h-[7.5rem] overflow-y-auto font-mono text-[10px]"
+        class="overflow-y-auto font-mono text-[10px] min-h-0 flex-1"
+        style={{ height: `${listHeight()}px` }}
         data-testid="axis-editor-problems-list"
       >
         <Show

@@ -107,7 +107,7 @@ Bottom of tabbed editor (`data-testid="axis-editor-stats"`):
 | **Words / Chars** | Document stats |
 | **Diagnostics badge** | Error/warning count from last run — click jumps to first |
 | **Problems** | Expand/collapse problems list |
-| **wrap** | Soft wrap is on |
+| **wrap** | Soft wrap toggle (`editorWrapEnabled`, default on) |
 
 ### Diagnostics & Problems
 
@@ -152,7 +152,7 @@ App holds `{ getDoc, setDoc?, loadLibraryDoc?, scrollToLine?, jumpToDiagnostic?,
 | --- | --- |
 | `store.editor` + `panelChrome.editor` | Dock geometry, open, mode |
 | `pynescript.axis.editor.doc` | Draft text |
-| `profilerEnabled` / `inlineDebugEnabled` / `debugPinsEnabled` / `editorRulerEnabled` | Editor tools |
+| `profilerEnabled` / `inlineDebugEnabled` / `debugPinsEnabled` / `editorRulerEnabled` / `editorWrapEnabled` | Editor tools |
 
 ## Invariants
 

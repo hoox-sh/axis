@@ -25,9 +25,10 @@
  * 2. Disable Run when static errors are present
  *
  * Strategy (fast → authoritative):
- * - Always run {@link localPreevaluate} (brackets, strings, entry point)
+ * - Always run {@link localPreevaluate}: brackets, strings, entry point, and
+ *   **unknown builtin members** (`strategy.etry` → error via pine-builtins.json)
  * - When server engine + Backend URL: merge with Pro API `POST /lsp/diagnostics`
- *   (parse + linter — same rules as `pynescript-lsp`)
+ *   (parse + real syntax). Style-noise rules (C001–C004) are filtered out.
  *
  * Does **not** execute against bars. Runtime errors still appear after Run.
  *
@@ -44,9 +45,247 @@ import {
   type EditorDiagnostic,
 } from './diagnostics';
 import { setPreEval, store } from '../store';
+import builtinsJson from './data/pine-builtins.json';
 
 /** Debounce for as-you-type pre-eval (ms). */
 export const PREEVAL_DEBOUNCE_MS = 350;
+
+// ── Builtin member index (from pine-builtins.json) ───────────────────────────
+
+const BUILTIN_NAMES = new Set(Object.keys(builtinsJson as Record<string, unknown>));
+
+/** Paths that are parents of a known member (e.g. `strategy`, `strategy.closedtrades`). */
+const BUILTIN_PREFIXES = new Set<string>();
+/** Root modules that have dotted members (strategy, ta, math, …). */
+const BUILTIN_MODULES = new Set<string>();
+
+for (const name of BUILTIN_NAMES) {
+  if (!name.includes('.')) continue;
+  const parts = name.split('.');
+  BUILTIN_MODULES.add(parts[0]!);
+  for (let i = 1; i < parts.length; i++) {
+    BUILTIN_PREFIXES.add(parts.slice(0, i).join('.'));
+  }
+}
+
+/** True if `path` is a known builtin, or a namespace prefix of one. */
+export function isKnownBuiltinPath(path: string): boolean {
+  if (!path) return false;
+  if (BUILTIN_NAMES.has(path) || BUILTIN_PREFIXES.has(path)) return true;
+  // Bare module name (ta, strategy, …)
+  if (BUILTIN_MODULES.has(path)) return true;
+  return false;
+}
+
+/** Small Levenshtein for typo suggestions (capped lengths). */
+export function editDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  if (a.length > 32 || b.length > 32) return 99;
+  const m = a.length;
+  const n = b.length;
+  const row = new Array<number>(n + 1);
+  for (let j = 0; j <= n; j++) row[j] = j;
+  for (let i = 1; i <= m; i++) {
+    let prev = row[0]!;
+    row[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = row[j]!;
+      const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
+      row[j] = Math.min(row[j]! + 1, row[j - 1]! + 1, prev + cost);
+      prev = tmp;
+    }
+  }
+  return row[n]!;
+}
+
+/**
+ * Suggest a close known path for a typo (e.g. strategy.etry → strategy.entry).
+ * Returns null when nothing is close enough.
+ */
+export function suggestBuiltinPath(path: string): string | null {
+  const parts = path.split('.');
+  if (parts.length < 2) return null;
+  const leaf = parts[parts.length - 1]!;
+  const parent = parts.slice(0, -1).join('.');
+  const depth = parts.length;
+  let best: string | null = null;
+  let bestD = 3; // only suggest if distance ≤ 2
+  for (const k of BUILTIN_NAMES) {
+    if (!k.startsWith(parent + '.')) continue;
+    const kp = k.split('.');
+    if (kp.length !== depth) continue;
+    const candLeaf = kp[kp.length - 1]!;
+    const d = editDistance(leaf.toLowerCase(), candLeaf.toLowerCase());
+    if (d > 0 && d < bestD) {
+      bestD = d;
+      best = k;
+    }
+  }
+  return best;
+}
+
+export type DottedRef = {
+  /** Full path e.g. strategy.etry */
+  path: string;
+  /** 1-based line */
+  line: number;
+  /** 0-based start column of the full path */
+  col: number;
+  /** 0-based end column (exclusive) */
+  endCol: number;
+};
+
+/**
+ * Scan source for `module.member` references (skips strings / comments).
+ * Only yields paths whose root is a known builtin module.
+ */
+export function scanBuiltinMemberRefs(source: string): DottedRef[] {
+  const out: DottedRef[] = [];
+  const lines = source.split('\n');
+  let inBlock = false;
+
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li]!;
+    let i = 0;
+    let inStr: '"' | "'" | null = null;
+    while (i < line.length) {
+      const c = line[i]!;
+      const n = line[i + 1];
+
+      if (!inStr && !inBlock && c === '/' && n === '/') break;
+      if (!inStr && !inBlock && c === '/' && n === '*') {
+        inBlock = true;
+        i += 2;
+        continue;
+      }
+      if (inBlock) {
+        if (c === '*' && n === '/') {
+          inBlock = false;
+          i += 2;
+          continue;
+        }
+        i += 1;
+        continue;
+      }
+      if (inStr) {
+        if (c === '\\') {
+          i += 2;
+          continue;
+        }
+        if (c === inStr) inStr = null;
+        i += 1;
+        continue;
+      }
+      if (c === '"' || c === "'") {
+        inStr = c;
+        i += 1;
+        continue;
+      }
+
+      // Identifier start
+      if (/[A-Za-z_]/.test(c)) {
+        const start = i;
+        i += 1;
+        while (i < line.length && /[A-Za-z0-9_]/.test(line[i]!)) i += 1;
+        // Consume .member chains
+        while (i < line.length && line[i] === '.') {
+          const afterDot = i + 1;
+          if (afterDot >= line.length || !/[A-Za-z_]/.test(line[afterDot]!)) break;
+          i = afterDot + 1;
+          while (i < line.length && /[A-Za-z0-9_]/.test(line[i]!)) i += 1;
+        }
+        const path = line.slice(start, i);
+        if (path.includes('.')) {
+          const root = path.split('.')[0]!;
+          if (BUILTIN_MODULES.has(root)) {
+            out.push({
+              path,
+              line: li + 1,
+              col: start,
+              endCol: i,
+            });
+          }
+        }
+        continue;
+      }
+      i += 1;
+    }
+  }
+  return out;
+}
+
+/**
+ * Flag unknown `module.member` paths against the builtins catalog.
+ * e.g. `strategy.etry` → error with optional “Did you mean strategy.entry?”
+ */
+export function checkUnknownBuiltinMembers(source: string): EditorDiagnostic[] {
+  const refs = scanBuiltinMemberRefs(source);
+  const out: EditorDiagnostic[] = [];
+  const seen = new Set<string>();
+  for (const ref of refs) {
+    if (isKnownBuiltinPath(ref.path)) continue;
+    const key = `${ref.line}:${ref.col}:${ref.path}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const hint = suggestBuiltinPath(ref.path);
+    const msg = hint
+      ? `Unknown \`${ref.path}\` — did you mean \`${hint}\`?`
+      : `Unknown \`${ref.path}\` (not a built-in member)`;
+    out.push(
+      diag(source, {
+        line: ref.line,
+        col: ref.col,
+        endLine: ref.line,
+        endCol: ref.endCol,
+        message: msg,
+        // Non-blocking: violet “typo” mark — PYNE may autocorrect at run time
+        severity: 'typo',
+        source: 'preeval-typo',
+      }),
+    );
+  }
+  return out;
+}
+
+/**
+ * Remote style rules that are noisy / wrong for Pine (C001 camelCase flags
+ * every `rsi = ta.rsi`, C004 trailing newline is editor-buffer noise).
+ */
+export function isRemoteStyleNoise(d: EditorDiagnostic | RemoteDiagnostic): boolean {
+  const code =
+    'code' in d && d.code
+      ? String(d.code)
+      : (() => {
+          const m = String((d as EditorDiagnostic).message || '').match(/\[([A-Z]\d{3})\]/);
+          return m?.[1] ?? '';
+        })();
+  if (/^C00[1-4]$/.test(code)) return true;
+  const msg = String((d as EditorDiagnostic).message || (d as RemoteDiagnostic).message || '');
+  if (/should use camelCase/i.test(msg)) return true;
+  if (/end with a newline/i.test(msg)) return true;
+  if (/exceeds 120 characters/i.test(msg)) return true;
+  if (/single-line if statements without braces/i.test(msg)) return true;
+  return false;
+}
+
+function diagKey(d: EditorDiagnostic): string {
+  return `${d.line}|${d.severity}|${d.message}`;
+}
+
+function dedupeDiagnostics(list: EditorDiagnostic[]): EditorDiagnostic[] {
+  const seen = new Set<string>();
+  const out: EditorDiagnostic[] = [];
+  for (const d of list) {
+    const k = diagKey(d);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(d);
+  }
+  out.sort((a, b) => a.line - b.line || a.from - b.from || a.message.localeCompare(b.message));
+  return out;
+}
 
 export type PreevalResult = {
   diagnostics: EditorDiagnostic[];
@@ -315,6 +554,9 @@ export function localPreevaluate(source: string): EditorDiagnostic[] {
     );
   }
 
+  // Unknown builtin members (strategy.etry, ta.smma, …) — not catchable by parse alone
+  out.push(...checkUnknownBuiltinMembers(source));
+
   return out;
 }
 
@@ -325,6 +567,8 @@ export function remoteToEditorDiagnostics(
 ): EditorDiagnostic[] {
   const out: EditorDiagnostic[] = [];
   for (const r of remote) {
+    // Drop pyne style noise before it hits the editor (false “wrong code”)
+    if (isRemoteStyleNoise(r)) continue;
     const line = typeof r.line === 'number' && r.line > 0 ? r.line : 1;
     const col = typeof r.character === 'number' && r.character >= 0 ? r.character : 0;
     const endLine =
@@ -352,17 +596,16 @@ export function remoteToEditorDiagnostics(
 }
 
 /**
- * Prefer remote (full parse) over local for the same line+severity class;
- * always keep remote errors; keep local-only findings when remote is absent.
+ * Union local structural/member checks with remote parse diagnostics.
+ * Local is never discarded when remote is present (remote does not know
+ * `strategy.etry`-style typos). Style noise is filtered on the remote side.
  */
 export function mergePreevalDiagnostics(
   local: readonly EditorDiagnostic[],
   remote: readonly EditorDiagnostic[] | null,
 ): EditorDiagnostic[] {
-  if (!remote || !remote.length) return [...local];
-  // Remote is authoritative for parse/lint; still keep local structural if remote missed
-  // (usually remote supersets). Prefer remote entirely when present to avoid double marks.
-  return [...remote];
+  if (remote == null) return dedupeDiagnostics([...local]);
+  return dedupeDiagnostics([...remote, ...local]);
 }
 
 export function hasErrorDiagnostics(diags: readonly EditorDiagnostic[]): boolean {

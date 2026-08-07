@@ -249,6 +249,7 @@ describe('countDiagnostics / formatDiagnosticCount', () => {
     expect(countDiagnostics(sample)).toEqual({
       errors: 2,
       warnings: 1,
+      typos: 0,
       infos: 0,
       total: 3,
     });
@@ -258,5 +259,10 @@ describe('countDiagnostics / formatDiagnosticCount', () => {
     expect(formatDiagnosticCount(sample)).toBe('2 errors, 1 warning');
     expect(formatDiagnosticCount([sample[0]!])).toBe('1 error');
     expect(formatDiagnosticCount([])).toBe('');
+    expect(
+      formatDiagnosticCount([
+        { from: 0, to: 1, line: 1, severity: 'typo', message: 'strategy.etry' },
+      ]),
+    ).toBe('1 typo');
   });
 });
