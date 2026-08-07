@@ -1,0 +1,77 @@
+# Copyright (C) 2024-2026 jango_blockchained
+#
+# This file is part of AXIS.
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+---
+title: "PYNE Agent"
+description: "Write scripts from natural language (PYNE Agent) in AXIS using the optional pyne-agent-worker Cloudflare® plugin."
+---
+
+# PYNE Agent
+
+## What it does
+
+Describe an indicator or strategy in plain language. The **PYNE Agent** (Cloudflare® Workers AI™) returns a full script you can insert into the AXIS editor, then **run** with your normal engine (local PYNE Pro API, edge worker, or Pyodide).
+
+You do **not** need the full HOOX mesh. The agent worker is usable **standalone**.
+
+_Pine Script™ and TradingView® are trademarks of TradingView, Inc. Cloudflare® is a registered trademark of Cloudflare, Inc._
+
+## Prerequisites
+
+1. A deployed [pyne-agent-worker](https://github.com/hoox-sh/pyne-agent-worker) origin (or local `wrangler dev`).
+2. AXIS open in the browser (dev or production PWA).
+
+Optional: API key if the worker has `API_KEY` set.
+
+## Install the plugin
+
+1. Open **Manager → Plugins → Install**.
+2. Paste:
+
+```text
+https://<your-agent-worker>/plugin/axis-pine-agent.js
+```
+
+3. Set **endpoint** to the same origin (no trailing slash).
+4. Set **API key** if required.
+5. Prefer **v6** / **strategy** or **indicator** when you know the target style.
+
+If the Manager does not mount component plugins yet, open the worker’s chat UI directly:
+
+```text
+https://<your-agent-worker>/
+```
+
+or use the floating **PYNE Agent** button the plugin may inject.
+
+## Typical workflow
+
+1. Ask for a script (example: “v6 RSI strategy with ATR trailing stop and clear plots”).
+2. Review the fenced Pine block.
+3. **Insert into editor** (plugin action) or copy/paste.
+4. Select your **engine** and **Run** as usual.
+5. Iterate with follow-up messages (“use length input”, “overlay false”, …).
+
+## Tips
+
+- Prefer specific version (`v5` / `v6`) and script kind in the request.
+- The agent may use a private knowledge base (docs + open examples). Quality improves after the operator ingests docs — not required to start chatting.
+- Validation against **pyne-worker** is optional on the agent side; AXIS evaluation is still your engine plugin.
+
+## Troubleshooting
+
+| Issue | Fix |
+| --- | --- |
+| Load error | Check URL HTTPS, CORS, and that the module is reachable |
+| Unauthorized | Match plugin `apiKey` to worker secret |
+| Weak answers | Ingest KB on the worker; still usable without it |
+| Cannot insert | Use copy; ensure plugin `api.insertScript` is provided by host |
+
+## See also
+
+- [Plugin deep dive](/axis/docs/plugins/pine-agent)
+- [Manager and settings](/axis/docs/enduser/guides/manager-and-settings)
+- [Plugin examples](/axis/docs/reference/plugin-examples)

@@ -2,7 +2,7 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
   "name": "AXIS",
-  "description": "Open charting PWA — compose sources, streams, engines, and storage. Full Pine Script™ surface via PYNE without a proprietary charting host.",
+  "description": "Open charting PWA \u2014 compose sources, streams, engines, and storage. Full Pine Script\u2122 surface via PYNE without a proprietary charting host.",
   "colors": {
     "primary": "#A78BFA",
     "light": "#C4B5FD",
@@ -15,7 +15,7 @@
     "indexing": "navigable",
     "metatags": {
       "og:site_name": "AXIS Docs",
-      "og:title": "AXIS — Open Charting PWA",
+      "og:title": "AXIS \u2014 Open Charting PWA",
       "og:description": "Installable AXIS for price and time. Orthogonal plugins: sources, streams, engines, storage. Self-host the chart.",
       "og:type": "website",
       "canonical": "https://hoox.sh/axis/docs",
@@ -54,6 +54,7 @@
                 "group": "Guides",
                 "pages": [
                   "enduser/guides/manager-and-settings",
+                  "enduser/guides/pine-agent",
                   "enduser/guides/data-source-manager",
                   "enduser/guides/script-library",
                   "enduser/guides/strategy-and-results",
@@ -100,7 +101,8 @@
               "plugins/streams",
               "plugins/engines",
               "plugins/storage",
-              "plugins/dynamic-loader"
+              "plugins/dynamic-loader",
+              "plugins/pine-agent"
             ]
           }
         ]
