@@ -103,6 +103,31 @@ export function formatProblemLine(line: number): string {
   return String(Math.trunc(line));
 }
 
+/**
+ * One-line clipboard text for a problem row
+ * (e.g. `L12 [error] Unknown strategy.etry`).
+ */
+export function formatProblemForCopy(
+  p: Pick<EditorProblem, 'line' | 'severity' | 'message' | 'source'>,
+): string {
+  const line =
+    Number.isFinite(p.line) && (p.line as number) >= 1
+      ? `L${Math.trunc(p.line as number)}`
+      : 'L—';
+  const sev = String(p.severity || 'info').toLowerCase();
+  const msg = String(p.message ?? '').replace(/\s+/g, ' ').trim();
+  const src = p.source && p.source !== 'diagnostic' ? ` (${p.source})` : '';
+  return `${line} [${sev}] ${msg}${src}`.trim();
+}
+
+/** Multi-line clipboard text for the full problems list. */
+export function formatProblemsListForCopy(
+  problems: readonly Pick<EditorProblem, 'line' | 'severity' | 'message' | 'source'>[],
+): string {
+  if (!problems.length) return '';
+  return problems.map(formatProblemForCopy).join('\n');
+}
+
 /** Map full CM diagnostics to compact problem rows (stable order preserved). */
 export function diagnosticsToProblems(
   diags: readonly EditorDiagnostic[] | null | undefined,

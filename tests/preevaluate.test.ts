@@ -108,6 +108,19 @@ describe('builtin path helpers', () => {
     expect(isKnownBuiltinPath('strategy.etry')).toBe(false);
   });
 
+  it('knows strategy.percent_of_equity / strategy.fixed (qty-type constants)', () => {
+    expect(isKnownBuiltinPath('strategy.percent_of_equity')).toBe(true);
+    expect(isKnownBuiltinPath('strategy.fixed')).toBe(true);
+    expect(isKnownBuiltinPath('strategy.cash')).toBe(true);
+    // Should not flag as typo in a real strategy() declaration
+    const src = `//@version=5
+strategy("t", default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+strategy.entry("L", strategy.long)
+`;
+    const diags = localPreevaluate(src);
+    expect(diags.some((d) => /percent_of_equity/i.test(d.message))).toBe(false);
+  });
+
   it('suggests entry for etry', () => {
     expect(suggestBuiltinPath('strategy.etry')).toBe('strategy.entry');
     expect(editDistance('etry', 'entry')).toBeLessThanOrEqual(2);

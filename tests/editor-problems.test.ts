@@ -13,7 +13,9 @@ import {
   clampProblemsHeight,
   countProblemsBySeverity,
   diagnosticsToProblems,
+  formatProblemForCopy,
   formatProblemLine,
+  formatProblemsListForCopy,
   severityRank,
   truncateProblemMessage,
 } from '../src/ui/editor-problems.ts';
@@ -48,6 +50,37 @@ describe('formatProblemLine', () => {
     expect(formatProblemLine(0)).toBe('—');
     expect(formatProblemLine(-1)).toBe('—');
     expect(formatProblemLine(12)).toBe('12');
+  });
+});
+
+describe('formatProblemForCopy / formatProblemsListForCopy', () => {
+  it('formats a single problem for clipboard', () => {
+    expect(
+      formatProblemForCopy({
+        line: 12,
+        severity: 'error',
+        message: 'Unexpected token',
+        source: 'preeval',
+      }),
+    ).toBe('L12 [error] Unexpected token (preeval)');
+  });
+
+  it('formats typos without inventing a line', () => {
+    expect(
+      formatProblemForCopy({
+        line: 0,
+        severity: 'typo',
+        message: 'Unknown `strategy.etry`',
+      }),
+    ).toBe('L— [typo] Unknown `strategy.etry`');
+  });
+
+  it('joins multiple problems with newlines', () => {
+    const text = formatProblemsListForCopy([
+      { line: 1, severity: 'warning', message: 'a' },
+      { line: 2, severity: 'error', message: 'b' },
+    ]);
+    expect(text).toBe('L1 [warning] a\nL2 [error] b');
   });
 });
 

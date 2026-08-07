@@ -21,6 +21,7 @@
  * Compact **Problems** list under the Pine editor — diagnostics / errors
  * from pre-eval and last run with jump-to-line.
  *
+ * Click a row to jump and copy; copy icon / header action copy without jump.
  * Panel height is freely resizable via the top drag handle (persisted).
  *
  * Data source: {@link EditorDiagnostic} from `editor/diagnostics`.
@@ -35,11 +36,15 @@ import {
   EDITOR_PROBLEMS_HEIGHT_KEY,
   EDITOR_PROBLEMS_MIN_HEIGHT,
   clampProblemsHeight,
+  formatProblemForCopy,
   formatProblemLine,
+  formatProblemsListForCopy,
   truncateProblemMessage,
   type EditorProblem,
 } from './editor-problems';
 import { ResizeHandle } from './ResizeHandle';
+import { copyToClipboard } from './clipboard';
+import { Icons } from './icons';
 
 export type { EditorProblem } from './editor-problems';
 export {
@@ -49,7 +54,9 @@ export {
   clampProblemsHeight,
   countProblemsBySeverity,
   diagnosticsToProblems,
+  formatProblemForCopy,
   formatProblemLine,
+  formatProblemsListForCopy,
   severityRank,
   truncateProblemMessage,
 } from './editor-problems';
@@ -137,11 +144,13 @@ export interface EditorProblemsProps {
 
 /**
  * Compact problems list — severity · line · truncated message.
- * Click a row to jump; empty state shows “No problems”.
+ * Click a row to jump + copy; copy icon copies only; empty state shows “No problems”.
  * Drag the top handle to freely resize height.
  */
 export const EditorProblems: Component<EditorProblemsProps> = (props) => {
   const [internalHeight, setInternalHeight] = createSignal(loadStoredHeight());
+  const [copiedKey, setCopiedKey] = createSignal<string | null>(null);
+  let copiedTimer: ReturnType<typeof setTimeout> | null = null;
 
   const height = () =>
     typeof props.height === 'number' && Number.isFinite(props.height)
@@ -157,13 +166,43 @@ export const EditorProblems: Component<EditorProblemsProps> = (props) => {
     props.onHeightChange?.(next);
   };
 
+  const flashCopied = (key: string, ms = 1000) => {
+    if (copiedTimer != null) clearTimeout(copiedTimer);
+    setCopiedKey(key);
+    copiedTimer = setTimeout(() => {
+      copiedTimer = null;
+      setCopiedKey(null);
+    }, ms);
+  };
+
+  const copyText = async (text: string, key: string) => {
+    const t = text.trim();
+    if (!t) return;
+    if (await copyToClipboard(t)) flashCopied(key);
+  };
+
+  const copyOne = async (
+    p: EditorDiagnostic | EditorProblem,
+    key: string,
+  ) => {
+    await copyText(formatProblemForCopy(p), key);
+  };
+
+  const copyAll = async () => {
+    const text = formatProblemsListForCopy(props.diagnostics);
+    await copyText(text, 'all');
+  };
+
   // Persist final size on window unload if uncontrolled
   const onUnload = () => {
     if (typeof props.height !== 'number') persistHeight(internalHeight());
   };
   if (typeof window !== 'undefined') {
     window.addEventListener('pagehide', onUnload);
-    onCleanup(() => window.removeEventListener('pagehide', onUnload));
+    onCleanup(() => {
+      window.removeEventListener('pagehide', onUnload);
+      if (copiedTimer != null) clearTimeout(copiedTimer);
+    });
   }
 
   /** Header ~24px + handle ~6px — list gets the rest. */
@@ -205,7 +244,25 @@ export const EditorProblems: Component<EditorProblemsProps> = (props) => {
         >
           {props.diagnostics.length}
         </span>
+        <Show when={copiedKey() === 'all'}>
+          <span
+            class="text-[9px] text-accent-2 inline-flex items-center gap-0.5"
+            data-testid="axis-editor-problems-copied"
+          >
+            <Icons.check size={10} /> Copied
+          </span>
+        </Show>
         <div class="flex-1" />
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost px-1 py-0"
+          title="Copy all problems to clipboard"
+          data-testid="axis-editor-problems-copy-all"
+          disabled={!props.diagnostics.length}
+          onClick={() => void copyAll()}
+        >
+          <Icons.copy size={12} />
+        </button>
         <Show when={props.onClear}>
           <button
             type="button"
@@ -237,45 +294,66 @@ export const EditorProblems: Component<EditorProblemsProps> = (props) => {
         >
           <ul class="list-none m-0 p-0">
             <For each={[...props.diagnostics]}>
-              {(p, idx) => (
-                <li>
-                  <button
-                    type="button"
-                    class="w-full flex items-start gap-1.5 px-2 py-0.5 text-left hover:bg-bg-hover border-none bg-transparent cursor-pointer text-text group"
-                    data-testid="axis-editor-problems-row"
-                    data-line={p.line > 0 ? p.line : undefined}
-                    data-severity={p.severity}
-                    title={
-                      p.line > 0
-                        ? `Go to line ${p.line}: ${p.message}`
-                        : p.message
-                    }
-                    onClick={() => {
-                      if (p.line >= 1) props.onJump(p.line);
-                    }}
-                  >
-                    <SeverityGlyph severity={p.severity} />
-                    <span
-                      class="text-text-faint tabular-nums w-7 flex-shrink-0 text-right group-hover:text-accent"
-                      data-testid="axis-editor-problems-line"
+              {(p, idx) => {
+                const rowKey = () => `row-${idx()}-${p.line}-${p.message.slice(0, 24)}`;
+                return (
+                  <li class="group flex items-stretch border-b border-border-soft/40 last:border-b-0">
+                    <button
+                      type="button"
+                      class="flex-1 min-w-0 flex items-start gap-1.5 px-2 py-0.5 text-left hover:bg-bg-hover border-none bg-transparent cursor-pointer text-text"
+                      data-testid="axis-editor-problems-row"
+                      data-line={p.line > 0 ? p.line : undefined}
+                      data-severity={p.severity}
+                      title={
+                        p.line > 0
+                          ? `Click to jump to L${p.line} and copy`
+                          : 'Click to copy'
+                      }
+                      onClick={() => {
+                        void copyOne(p, rowKey());
+                        if (p.line >= 1) props.onJump(p.line);
+                      }}
                     >
-                      {formatProblemLine(p.line)}
-                    </span>
-                    <span
-                      class={`flex-1 min-w-0 truncate ${severityClass(p.severity)}`}
-                      data-testid="axis-editor-problems-msg"
-                    >
-                      {truncateProblemMessage(p.message)}
-                    </span>
-                    <Show when={p.source && p.source !== 'diagnostic'}>
-                      <span class="text-text-faint/70 flex-shrink-0 text-[9px] uppercase">
-                        {p.source}
+                      <SeverityGlyph severity={p.severity} />
+                      <span
+                        class="text-text-faint tabular-nums w-7 flex-shrink-0 text-right group-hover:text-accent"
+                        data-testid="axis-editor-problems-line"
+                      >
+                        {formatProblemLine(p.line)}
                       </span>
-                    </Show>
-                    <span class="sr-only">{idx() + 1}</span>
-                  </button>
-                </li>
-              )}
+                      <span
+                        class={`flex-1 min-w-0 truncate ${severityClass(p.severity)}`}
+                        data-testid="axis-editor-problems-msg"
+                      >
+                        {truncateProblemMessage(p.message)}
+                      </span>
+                      <Show when={p.source && p.source !== 'diagnostic'}>
+                        <span class="text-text-faint/70 flex-shrink-0 text-[9px] uppercase">
+                          {p.source}
+                        </span>
+                      </Show>
+                      <Show when={copiedKey() === rowKey()}>
+                        <span class="text-[9px] text-accent-2 flex-shrink-0">Copied</span>
+                      </Show>
+                      <span class="sr-only">{idx() + 1}</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="sc-btn sc-btn-ghost px-1.5 py-0 opacity-40 group-hover:opacity-100 flex-shrink-0 self-center"
+                      title="Copy problem to clipboard"
+                      data-testid="axis-editor-problems-copy-row"
+                      aria-label="Copy problem"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void copyOne(p, rowKey());
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      <Icons.copy size={11} />
+                    </button>
+                  </li>
+                );
+              }}
             </For>
           </ul>
         </Show>

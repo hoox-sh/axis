@@ -50,22 +50,58 @@ import builtinsJson from './data/pine-builtins.json';
 /** Debounce for as-you-type pre-eval (ms). */
 export const PREEVAL_DEBOUNCE_MS = 350;
 
-// ── Builtin member index (from pine-builtins.json) ───────────────────────────
+// ── Builtin member index (from pine-builtins.json + runtime constants) ───────
 
-const BUILTIN_NAMES = new Set(Object.keys(builtinsJson as Record<string, unknown>));
+/**
+ * Runtime strategy constants that may be missing from the LSP metadata catalog
+ * (qty / OCA / commission / direction). Kept in sync with pyne
+ * `strategy_constants.py` so pre-eval never false-flags real Pine.
+ */
+export const EXTRA_KNOWN_BUILTIN_PATHS: readonly string[] = [
+  // default_qty_type (strategy(..., default_qty_type=...))
+  'strategy.fixed',
+  'strategy.percent_of_equity',
+  'strategy.cash', // dual: free-cash series + qty-type sentinel
+  // direction
+  'strategy.long',
+  'strategy.short',
+  'strategy.direction.long',
+  'strategy.direction.short',
+  'strategy.direction.all',
+  // OCA
+  'strategy.oca.none',
+  'strategy.oca.cancel',
+  'strategy.oca.reduce',
+  // commission_type
+  'strategy.commission.percent',
+  'strategy.commission.cash_per_order',
+  'strategy.commission.cash_per_contract',
+];
+
+const BUILTIN_NAMES = new Set([
+  ...Object.keys(builtinsJson as Record<string, unknown>),
+  ...EXTRA_KNOWN_BUILTIN_PATHS,
+]);
 
 /** Paths that are parents of a known member (e.g. `strategy`, `strategy.closedtrades`). */
 const BUILTIN_PREFIXES = new Set<string>();
 /** Root modules that have dotted members (strategy, ta, math, …). */
 const BUILTIN_MODULES = new Set<string>();
 
-for (const name of BUILTIN_NAMES) {
-  if (!name.includes('.')) continue;
+function indexBuiltinPath(name: string): void {
+  if (!name.includes('.')) {
+    BUILTIN_MODULES.add(name);
+    return;
+  }
   const parts = name.split('.');
   BUILTIN_MODULES.add(parts[0]!);
   for (let i = 1; i < parts.length; i++) {
     BUILTIN_PREFIXES.add(parts.slice(0, i).join('.'));
   }
+}
+
+for (const name of BUILTIN_NAMES) {
+  indexBuiltinPath(name);
 }
 
 /** True if `path` is a known builtin, or a namespace prefix of one. */
