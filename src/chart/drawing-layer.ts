@@ -114,6 +114,12 @@ function uid(): string {
   return `dw_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/** True when two anchors are effectively the same (zero-length segment). */
+function anchorsTooClose(a: Point, b: Point): boolean {
+  if (!isFinitePoint(a) || !isFinitePoint(b)) return true;
+  return a.time === b.time && a.price === b.price;
+}
+
 /** Drag handle mode: whole-body move or endpoint resize (`price` reserved). */
 type DragMode = 'move' | 'p1' | 'p2' | 'price';
 
@@ -351,8 +357,20 @@ export class DrawingLayer {
   /**
    * Switch tool; clears draft/drag. Place tools capture the full SVG surface;
    * cursor restores `pointer-events: none` so only painted shapes receive hits.
+   *
+   * **Same-tool re-apply is a no-op** unless `force` is set (preserves
+   * in-progress draft). ChartHost / store effects re-push the active tool often;
+   * wiping draft there made the second trendline (and other multi-click tools)
+   * lose their first anchor mid-placement. Toolbar explicit picks use `force`.
    */
-  setTool(tool: DrawingToolId) {
+  setTool(tool: DrawingToolId, opts?: { force?: boolean }) {
+    if (this.tool === tool && !opts?.force) {
+      // Still ensure pointer-events match (e.g. after destroy/recreate race)
+      this.svg.style.pointerEvents = tool === 'cursor' ? 'none' : 'auto';
+      this.svg.style.cursor =
+        tool === 'cursor' ? 'default' : tool === 'eraser' ? 'cell' : 'crosshair';
+      return;
+    }
     this.tool = tool;
     this.draft = null;
     this.drag = null;
@@ -961,6 +979,13 @@ export class DrawingLayer {
         this.renderDraft(pt);
         return;
       }
+      // Ignore near-duplicate anchors (double-click bounce / same-pixel re-click)
+      // so trend/ray/etc. never commit a zero-length segment as the "second line".
+      const prev = this.draft.points[this.draft.points.length - 1];
+      if (prev && anchorsTooClose(prev, pt)) {
+        this.renderDraft(pt);
+        return;
+      }
       this.draft.points.push(pt);
       // Drop any non-finite anchors that may have snuck into the draft
       this.draft.points = sanitizePoints(this.draft.points);
@@ -977,6 +1002,17 @@ export class DrawingLayer {
       if (n < target) {
         this.renderDraft(pt);
         return;
+      }
+
+      // Final guard: first vs last must be distinct for 2-pt tools
+      if (target === 2 && n >= 2) {
+        const a = this.draft.points[0]!;
+        const b = this.draft.points[n - 1]!;
+        if (anchorsTooClose(a, b)) {
+          this.draft.points = [a];
+          this.renderDraft(pt);
+          return;
+        }
       }
 
       this.commitDraftPoints(this.draft.points);
@@ -1011,16 +1047,22 @@ export class DrawingLayer {
       handler?.minPoints ??
       (arity === 3 ? 3 : arity === 1 ? 1 : 2);
     if (clean.length < minPts) return;
+    // Refuse zero-length 2-pt geometry (would paint as a single handle)
+    if (minPts >= 2 && anchorsTooClose(clean[0]!, clean[clean.length - 1]!)) return;
 
     let drawing: Drawing | null = null;
     if (handler?.create) {
       drawing = handler.create(clean, this.defaultColor(tool));
     } else if (clean.length >= 2 && needsTwoPoints(tool)) {
+      const p1 = { time: clean[0]!.time, price: clean[0]!.price };
+      const p2 = { time: clean[1]!.time, price: clean[1]!.price };
+      // Dual-shape: p1/p2 for legacy paint + points[] for normalize/hydrate
       drawing = {
         id: uid(),
         kind: tool as TwoPointKind,
-        p1: clean[0]!,
-        p2: clean[1]!,
+        p1,
+        p2,
+        points: [p1, p2],
         color: this.defaultColor(tool),
       } as Drawing;
     }
@@ -1590,7 +1632,12 @@ export class DrawingLayer {
    */
   private paintDrawing(g: SVGGElement, d: Drawing, selected: boolean) {
     try {
-      this.paintDrawingInner(g, d, selected);
+      // One <g> per drawing so multi-line paint never shares attrs / hit targets
+      const sub = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      if (d?.id) sub.setAttribute('data-drawing-id', String(d.id));
+      if (d?.kind) sub.setAttribute('data-drawing-kind', String(d.kind));
+      this.paintDrawingInner(sub, d, selected);
+      if (sub.childNodes.length) g.appendChild(sub);
     } catch (err) {
       console.warn('[drawings] paintDrawing failed', d?.kind, d?.id, err);
     }

@@ -461,7 +461,10 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     if (!isActive()) return;
     const tool = store.drawingTool;
     try {
-      getDrawingLayer()?.setTool(tool);
+      const layer = getDrawingLayer();
+      // setTool no-ops when unchanged — safe to call; preserves multi-click drafts
+      // (trendline second anchor, channel third, …) across store re-syncs.
+      layer?.setTool(tool);
     } catch (err: unknown) {
       reportUiError(err, {
         source: 'chart',

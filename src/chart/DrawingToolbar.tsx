@@ -236,7 +236,8 @@ export const DrawingToolbar: Component = () => {
   /** Activate a tool in store + layer; remember it as the group's last tool. */
   const selectTool = (id: DrawingToolId) => {
     setDrawingTool(id);
-    getActiveDrawingLayer()?.setTool(id);
+    // force: explicit rail pick cancels an in-progress draft even if same tool
+    getActiveDrawingLayer()?.setTool(id, { force: true });
     const g = groupForTool(id);
     if (g) {
       setDrawingUi({ lastToolByGroup: { [g.id]: id } });
