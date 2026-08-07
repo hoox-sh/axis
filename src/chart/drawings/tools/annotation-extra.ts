@@ -2,17 +2,30 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Annotation extras — flag, anchored text, arrow marks.
+ * Annotation extras — flag, anchored text, arrow mark up/down.
+ * All are 1-point {@link TextDrawing} tools registered via the tool handler pack.
  */
 
 import { DRAWING_COLORS, type Drawing, type TextDrawing } from '../../drawing-types';
 import { nearPoint } from '../geometry';
-import { registerToolHandler } from './registry';
+import { registerToolHandler, type ToolViewCtx } from './registry';
 
-function promptText(def: string): string {
-  if (typeof window === 'undefined') return def;
-  return (window.prompt('Text', def) || def).trim() || def;
+function asText(d: Drawing, kind: TextDrawing['kind']): TextDrawing | null {
+  if (d.kind !== kind) return null;
+  return d as TextDrawing;
 }
+
+function promptText(label: string, fallback: string): string {
+  if (typeof window !== 'undefined' && typeof window.prompt === 'function') {
+    const v = window.prompt(label, fallback);
+    if (v == null) return fallback;
+    const t = v.trim();
+    return t || fallback;
+  }
+  return fallback;
+}
+
+// ── Flag (pin + small flag; optional meta/text label) ───────────────────────
 
 registerToolHandler({
   id: 'flag',
@@ -24,33 +37,52 @@ registerToolHandler({
       id: '',
       kind: 'flag',
       p1: points[0],
-      text: '!',
+      text: '',
       color,
     } as TextDrawing;
   },
   paint(d, ctx) {
-    if (d.kind !== 'flag') return;
-    const c = ctx.toXY(d.p1);
+    const td = asText(d, 'flag');
+    if (!td) return;
+    const c = ctx.toXY(td.p1);
     if (!c) return;
-    // Stem
-    ctx.line(c.x, c.y, c.x, c.y - 22, ctx.stroke, 1.5);
-    // Flag triangle
+    const stroke = ctx.stroke;
+    const stemH = 18;
+    const flagW = 12;
+    const flagH = 8;
+    // Vertical stem
+    ctx.line(c.x, c.y, c.x, c.y - stemH, stroke, Math.max(1.25, ctx.strokeWidth), undefined, 'stroke');
+    // Flag triangle / rect to the right of stem top
+    const topY = c.y - stemH;
     ctx.el('polygon', {
-      points: `${c.x},${c.y - 22} ${c.x + 16},${c.y - 16} ${c.x},${c.y - 10}`,
-      fill: ctx.stroke,
-      stroke: ctx.stroke,
-      'fill-opacity': '0.85',
+      points: `${c.x},${topY} ${c.x + flagW},${topY + flagH / 2} ${c.x},${topY + flagH}`,
+      fill: stroke,
+      stroke: 'none',
+      'fill-opacity': '0.95',
       'pointer-events': 'all',
     });
-    if (ctx.selected) ctx.circle(c.x, c.y, 5, ctx.stroke, true);
+    // Base pin
+    ctx.circle(c.x, c.y, ctx.selected ? 5 : 3, stroke, true);
+    const text = td.text || td.meta?.text;
+    if (text) {
+      ctx.label(c.x + 6, c.y - stemH - 4, String(text), stroke, 10);
+    }
   },
   hit(d, ctx) {
-    if (d.kind !== 'flag') return false;
-    const c = ctx.toXY(d.p1);
+    const td = asText(d, 'flag');
+    if (!td) return false;
+    const c = ctx.toXY(td.p1);
     if (!c) return false;
-    return nearPoint(ctx.x, ctx.y, c.x, c.y, ctx.tol + 14);
+    // Hit stem region + pin
+    if (nearPoint(ctx.x, ctx.y, c.x, c.y, ctx.tol + 6)) return true;
+    if (Math.abs(ctx.x - c.x) <= ctx.tol + 4 && ctx.y <= c.y + ctx.tol && ctx.y >= c.y - 22 - ctx.tol) {
+      return true;
+    }
+    return false;
   },
 });
+
+// ── Anchored text (chip background; prompt on create) ───────────────────────
 
 registerToolHandler({
   id: 'anchoredText',
@@ -58,43 +90,85 @@ registerToolHandler({
   arity: 1,
   create(points, color) {
     if (!points[0]) return null;
-    const text = promptText('Text');
+    const text = promptText('Anchored text', 'Text');
     return {
       id: '',
       kind: 'anchoredText',
       p1: points[0],
       text,
       color,
+      meta: { text },
     } as TextDrawing;
   },
   paint(d, ctx) {
-    if (d.kind !== 'anchoredText') return;
-    const c = ctx.toXY(d.p1);
+    const td = asText(d, 'anchoredText');
+    if (!td) return;
+    const c = ctx.toXY(td.p1);
     if (!c) return;
-    const text = d.text || d.meta?.text || '';
-    const tw = Math.max(32, String(text).length * 7 + 14);
-    const th = 18;
+    const text = td.text || td.meta?.text || 'Text';
+    const padX = 6;
+    const padY = 3;
+    const approxW = Math.max(40, String(text).length * 7 + padX * 2);
+    const h = 18;
     ctx.el('rect', {
-      x: String(c.x),
-      y: String(c.y - th),
-      width: String(tw),
-      height: String(th),
+      x: String(c.x + 6),
+      y: String(c.y - h / 2),
+      width: String(approxW),
+      height: String(h),
       rx: '3',
-      fill: '#12141c',
-      stroke: ctx.stroke,
-      'stroke-width': String(ctx.strokeWidth),
+      fill: ctx.stroke,
+      'fill-opacity': '0.9',
+      stroke: 'none',
       'pointer-events': 'all',
     });
-    ctx.label(c.x + 7, c.y - 5, String(text), ctx.stroke, 11);
-    ctx.circle(c.x, c.y, ctx.selected ? 5 : 2, ctx.stroke, true);
+    ctx.label(c.x + 6 + padX, c.y + 4, String(text), '#0b0c10', 11);
+    ctx.circle(c.x, c.y, ctx.selected ? 5 : 3, ctx.stroke, true);
+    void padY;
   },
   hit(d, ctx) {
-    if (d.kind !== 'anchoredText') return false;
-    const c = ctx.toXY(d.p1);
+    const td = asText(d, 'anchoredText');
+    if (!td) return false;
+    const c = ctx.toXY(td.p1);
     if (!c) return false;
     return nearPoint(ctx.x, ctx.y, c.x, c.y, ctx.tol + 12);
   },
 });
+
+// ── Arrow mark up (green triangle below p1, tip toward p1) ──────────────────
+
+function paintArrowMark(
+  ctx: ToolViewCtx,
+  c: { x: number; y: number },
+  dir: 'up' | 'down',
+  fill: string,
+) {
+  const size = 10;
+  const gap = 4;
+  if (dir === 'up') {
+    // Tip at p1-ish from below: base lower, tip upper (near p1)
+    const tipY = c.y + gap;
+    const baseY = tipY + size;
+    ctx.el('polygon', {
+      points: `${c.x},${tipY} ${c.x - size * 0.7},${baseY} ${c.x + size * 0.7},${baseY}`,
+      fill,
+      stroke: fill,
+      'stroke-width': '1',
+      'pointer-events': 'all',
+    });
+  } else {
+    // Tip near p1 from above: base higher, tip lower
+    const tipY = c.y - gap;
+    const baseY = tipY - size;
+    ctx.el('polygon', {
+      points: `${c.x},${tipY} ${c.x - size * 0.7},${baseY} ${c.x + size * 0.7},${baseY}`,
+      fill,
+      stroke: fill,
+      'stroke-width': '1',
+      'pointer-events': 'all',
+    });
+  }
+  if (ctx.selected) ctx.circle(c.x, c.y, 5, fill, true);
+}
 
 registerToolHandler({
   id: 'arrowMarkUp',
@@ -106,31 +180,28 @@ registerToolHandler({
       id: '',
       kind: 'arrowMarkUp',
       p1: points[0],
-      text: '↑',
+      text: '',
       color: color || DRAWING_COLORS.up,
     } as TextDrawing;
   },
   paint(d, ctx) {
-    if (d.kind !== 'arrowMarkUp') return;
-    const c = ctx.toXY(d.p1);
+    const td = asText(d, 'arrowMarkUp');
+    if (!td) return;
+    const c = ctx.toXY(td.p1);
     if (!c) return;
-    const col = DRAWING_COLORS.up;
-    const s = 10;
-    ctx.el('polygon', {
-      points: `${c.x},${c.y - s} ${c.x - s * 0.7},${c.y + s * 0.4} ${c.x + s * 0.7},${c.y + s * 0.4}`,
-      fill: col,
-      stroke: col,
-      'pointer-events': 'all',
-    });
-    if (ctx.selected) ctx.circle(c.x, c.y + 6, 4, col, true);
+    const fill = ctx.stroke || DRAWING_COLORS.up;
+    paintArrowMark(ctx, c, 'up', fill);
   },
   hit(d, ctx) {
-    if (d.kind !== 'arrowMarkUp') return false;
-    const c = ctx.toXY(d.p1);
+    const td = asText(d, 'arrowMarkUp');
+    if (!td) return false;
+    const c = ctx.toXY(td.p1);
     if (!c) return false;
-    return nearPoint(ctx.x, ctx.y, c.x, c.y, ctx.tol + 10);
+    return nearPoint(ctx.x, ctx.y, c.x, c.y + 8, ctx.tol + 10) || nearPoint(ctx.x, ctx.y, c.x, c.y, ctx.tol + 8);
   },
 });
+
+// ── Arrow mark down (red triangle above p1, tip toward p1) ──────────────────
 
 registerToolHandler({
   id: 'arrowMarkDown',
@@ -142,29 +213,24 @@ registerToolHandler({
       id: '',
       kind: 'arrowMarkDown',
       p1: points[0],
-      text: '↓',
+      text: '',
       color: color || DRAWING_COLORS.down,
     } as TextDrawing;
   },
   paint(d, ctx) {
-    if (d.kind !== 'arrowMarkDown') return;
-    const c = ctx.toXY(d.p1);
+    const td = asText(d, 'arrowMarkDown');
+    if (!td) return;
+    const c = ctx.toXY(td.p1);
     if (!c) return;
-    const col = DRAWING_COLORS.down;
-    const s = 10;
-    ctx.el('polygon', {
-      points: `${c.x},${c.y + s} ${c.x - s * 0.7},${c.y - s * 0.4} ${c.x + s * 0.7},${c.y - s * 0.4}`,
-      fill: col,
-      stroke: col,
-      'pointer-events': 'all',
-    });
-    if (ctx.selected) ctx.circle(c.x, c.y - 6, 4, col, true);
+    const fill = ctx.stroke || DRAWING_COLORS.down;
+    paintArrowMark(ctx, c, 'down', fill);
   },
   hit(d, ctx) {
-    if (d.kind !== 'arrowMarkDown') return false;
-    const c = ctx.toXY(d.p1);
+    const td = asText(d, 'arrowMarkDown');
+    if (!td) return false;
+    const c = ctx.toXY(td.p1);
     if (!c) return false;
-    return nearPoint(ctx.x, ctx.y, c.x, c.y, ctx.tol + 10);
+    return nearPoint(ctx.x, ctx.y, c.x, c.y - 8, ctx.tol + 10) || nearPoint(ctx.x, ctx.y, c.x, c.y, ctx.tol + 8);
   },
 });
 

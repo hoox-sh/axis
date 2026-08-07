@@ -2,17 +2,63 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Trading / measure extras — forecast, date+price range.
+ * Trading / measure extras — forecast projection + combined date×price range.
  */
 
-import type { Drawing, TwoPointDrawing } from '../../drawing-types';
+import { DRAWING_COLORS, type Drawing, type TwoPointDrawing } from '../../drawing-types';
 import { distToSegment, nearRectEdge } from '../geometry';
-import { registerToolHandler } from './registry';
+import { registerToolHandler, type ToolHitCtx, type ToolViewCtx } from './registry';
 
 function asTwo(d: Drawing): TwoPointDrawing | null {
   if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
   return d as TwoPointDrawing;
 }
+
+/** Triangle arrow head at (x2,y2) pointing from (x1,y1). */
+function paintArrowHead(
+  ctx: ToolViewCtx,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  fill: string,
+  size: number,
+): void {
+  const ang = Math.atan2(y2 - y1, x2 - x1);
+  const s = Math.max(6, size);
+  const a1 = ang + Math.PI * 0.82;
+  const a2 = ang - Math.PI * 0.82;
+  const p1x = x2 + Math.cos(a1) * s;
+  const p1y = y2 + Math.sin(a1) * s;
+  const p2x = x2 + Math.cos(a2) * s;
+  const p2y = y2 + Math.sin(a2) * s;
+  ctx.el('polygon', {
+    points: `${x2},${y2} ${p1x},${p1y} ${p2x},${p2y}`,
+    fill,
+    stroke: fill,
+    'stroke-width': '1',
+    'pointer-events': 'none',
+  });
+}
+
+/** Project endpoint a short distance past p2 along p1→p2. */
+function extendPast(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  factor = 0.18,
+  minPx = 16,
+): { x: number; y: number } {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = Math.hypot(dx, dy);
+  if (len < 0.001) return { x: bx + minPx, y: by };
+  const ext = Math.max(minPx, len * factor);
+  return { x: bx + (dx / len) * ext, y: by + (dy / len) * ext };
+}
+
+// ── Forecast (dashed trend projection past p2) ──────────────────────────────
 
 registerToolHandler({
   id: 'forecast',
@@ -20,7 +66,14 @@ registerToolHandler({
   arity: 2,
   create(points, color) {
     if (points.length < 2) return null;
-    return { id: '', kind: 'forecast', p1: points[0]!, p2: points[1]!, color };
+    return {
+      id: '',
+      kind: 'forecast',
+      p1: points[0]!,
+      p2: points[1]!,
+      color: color || DRAWING_COLORS.measure,
+      lineStyle: 'dashed',
+    };
   },
   paint(d, ctx) {
     const t = asTwo(d);
@@ -28,31 +81,19 @@ registerToolHandler({
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
     if (!a || !b) return;
-    // Extend slightly past p2
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const ex = b.x + (dx / len) * 24;
-    const ey = b.y + (dy / len) * 24;
-    ctx.line(a.x, a.y, ex, ey, ctx.stroke, ctx.strokeWidth, '6 4');
-    // Arrow head
-    const ang = Math.atan2(ey - a.y, ex - a.x);
-    const s = 9;
-    const p1x = ex - Math.cos(ang - 0.4) * s;
-    const p1y = ey - Math.sin(ang - 0.4) * s;
-    const p2x = ex - Math.cos(ang + 0.4) * s;
-    const p2y = ey - Math.sin(ang + 0.4) * s;
-    ctx.el('polygon', {
-      points: `${ex},${ey} ${p1x},${p1y} ${p2x},${p2y}`,
-      fill: ctx.stroke,
-      stroke: ctx.stroke,
-      'pointer-events': 'none',
-    });
+    const tip = extendPast(a.x, a.y, b.x, b.y);
+    const dash = ctx.dash || '6 4';
+    // Solid segment to p2, then dashed projection past tip
+    ctx.line(a.x, a.y, b.x, b.y, ctx.stroke, ctx.strokeWidth, dash);
+    ctx.line(b.x, b.y, tip.x, tip.y, ctx.stroke, Math.max(1, ctx.strokeWidth - 0.25), dash);
+    paintArrowHead(ctx, a.x, a.y, tip.x, tip.y, ctx.stroke, Math.max(8, ctx.strokeWidth * 3));
     const dPrice = t.p2.price - t.p1.price;
     const pct = t.p1.price !== 0 ? (dPrice / t.p1.price) * 100 : 0;
+    const midX = (a.x + tip.x) / 2;
+    const midY = (a.y + tip.y) / 2;
     ctx.label(
-      (a.x + b.x) / 2 + 6,
-      (a.y + b.y) / 2 - 6,
+      midX + 6,
+      midY - 6,
       `Forecast ${dPrice >= 0 ? '+' : ''}${dPrice.toFixed(2)} (${pct.toFixed(2)}%)`,
       ctx.stroke,
       11,
@@ -60,6 +101,9 @@ registerToolHandler({
     if (ctx.selected) {
       ctx.circle(a.x, a.y, 5, ctx.stroke, true);
       ctx.circle(b.x, b.y, 5, ctx.stroke, true);
+    } else {
+      ctx.circle(a.x, a.y, 3, ctx.stroke, false);
+      ctx.circle(b.x, b.y, 3, ctx.stroke, false);
     }
   },
   hit(d, ctx) {
@@ -68,9 +112,15 @@ registerToolHandler({
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
     if (!a || !b) return false;
-    return distToSegment(ctx.x, ctx.y, a.x, a.y, b.x, b.y) <= ctx.tol;
+    const tip = extendPast(a.x, a.y, b.x, b.y);
+    return (
+      distToSegment(ctx.x, ctx.y, a.x, a.y, b.x, b.y) <= ctx.tol ||
+      distToSegment(ctx.x, ctx.y, b.x, b.y, tip.x, tip.y) <= ctx.tol
+    );
   },
 });
+
+// ── Date + price range (combined box) ────────────────────────────────────────
 
 registerToolHandler({
   id: 'datePriceRange',
@@ -83,8 +133,8 @@ registerToolHandler({
       kind: 'datePriceRange',
       p1: points[0]!,
       p2: points[1]!,
-      color,
-      fillOpacity: 0.1,
+      color: color || DRAWING_COLORS.measure,
+      fillOpacity: 0.12,
     };
   },
   paint(d, ctx) {
@@ -93,31 +143,32 @@ registerToolHandler({
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
     if (!a || !b) return;
-    const x = Math.min(a.x, b.x);
-    const y = Math.min(a.y, b.y);
-    const w = Math.abs(b.x - a.x);
-    const h = Math.abs(b.y - a.y);
+    const left = Math.min(a.x, b.x);
+    const top = Math.min(a.y, b.y);
+    const w = Math.max(1, Math.abs(b.x - a.x));
+    const h = Math.max(1, Math.abs(b.y - a.y));
     ctx.el('rect', {
-      x: String(x),
-      y: String(y),
-      width: String(Math.max(1, w)),
-      height: String(Math.max(1, h)),
+      x: String(left),
+      y: String(top),
+      width: String(w),
+      height: String(h),
       fill: ctx.stroke,
       'fill-opacity': String(ctx.fillOpacity),
       stroke: ctx.stroke,
       'stroke-width': String(ctx.strokeWidth),
       'pointer-events': 'all',
     });
-    const dPrice = t.p2.price - t.p1.price;
-    const pct = t.p1.price !== 0 ? (dPrice / t.p1.price) * 100 : 0;
     const bars =
       ctx.barIndexApprox != null
         ? Math.abs(ctx.barIndexApprox(t.p1.time) - ctx.barIndexApprox(t.p2.time))
         : 0;
+    const dPrice = t.p2.price - t.p1.price;
+    const pct = t.p1.price !== 0 ? (dPrice / t.p1.price) * 100 : 0;
+    const barPart = bars ? `${bars} bars · ` : '';
     ctx.label(
-      x + 4,
-      y + 14,
-      `${bars ? `${bars} bars · ` : ''}${dPrice >= 0 ? '+' : ''}${dPrice.toFixed(2)} (${pct.toFixed(2)}%)`,
+      left + 4,
+      top + 14,
+      `${barPart}${dPrice >= 0 ? '+' : ''}${dPrice.toFixed(2)} (${pct.toFixed(2)}%)`,
       ctx.stroke,
       11,
     );
@@ -132,12 +183,17 @@ registerToolHandler({
     const a = ctx.toXY(t.p1);
     const b = ctx.toXY(t.p2);
     if (!a || !b) return false;
-    return (
-      nearRectEdge(ctx.x, ctx.y, a.x, a.y, b.x, b.y, ctx.tol) ||
-      (ctx.x >= Math.min(a.x, b.x) - ctx.tol &&
-        ctx.x <= Math.max(a.x, b.x) + ctx.tol &&
-        ctx.y >= Math.min(a.y, b.y) - ctx.tol &&
-        ctx.y <= Math.max(a.y, b.y) + ctx.tol)
-    );
+    const x1 = Math.min(a.x, b.x);
+    const x2 = Math.max(a.x, b.x);
+    const y1 = Math.min(a.y, b.y);
+    const y2 = Math.max(a.y, b.y);
+    // Full interior hit (filled box) plus edge tolerance
+    if (ctx.x >= x1 - ctx.tol && ctx.x <= x2 + ctx.tol && ctx.y >= y1 - ctx.tol && ctx.y <= y2 + ctx.tol) {
+      return true;
+    }
+    return nearRectEdge(ctx.x, ctx.y, x1, y1, x2, y2, ctx.tol);
   },
 });
+
+void 0 as unknown as ToolHitCtx;
+void 0 as unknown as ToolViewCtx;
