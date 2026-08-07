@@ -80,7 +80,19 @@ export const TOOL_GROUPS: ToolGroupDef[] = [
   {
     id: 'lines',
     label: 'Lines',
-    tools: ['trend', 'ray', 'extend', 'infoLine', 'hline', 'hray', 'vline', 'channel'],
+    tools: [
+      'trend',
+      'ray',
+      'extend',
+      'infoLine',
+      'trendAngle',
+      'hline',
+      'hray',
+      'vline',
+      'crossline',
+      'channel',
+      'pitchfork',
+    ],
     flyout: true,
   },
   {
@@ -92,13 +104,22 @@ export const TOOL_GROUPS: ToolGroupDef[] = [
   {
     id: 'shapes',
     label: 'Shapes',
-    tools: ['rect', 'ellipse', 'triangle', 'arrow', 'polyline', 'path'],
+    tools: [
+      'rect',
+      'ellipse',
+      'triangle',
+      'arrow',
+      'polyline',
+      'path',
+      'brush',
+      'highlighter',
+    ],
     flyout: true,
   },
   {
     id: 'annotation',
     label: 'Annotation',
-    tools: ['text', 'priceLabel'],
+    tools: ['text', 'priceLabel', 'callout', 'note'],
     flyout: true,
   },
   {

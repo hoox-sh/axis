@@ -27,6 +27,7 @@ import './fib';
 import './shapes';
 import './measure-trading';
 import './annotation';
+import './patterns';
 
 export {
   registerToolHandler,

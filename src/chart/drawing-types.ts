@@ -39,17 +39,22 @@ export type DrawingToolId =
   | 'hline'
   | 'vline'
   | 'hray'
+  | 'crossline'
   | 'trend'
   | 'ray'
   | 'extend'
   | 'infoLine'
+  | 'trendAngle'
   | 'channel'
+  | 'pitchfork'
   | 'rect'
   | 'ellipse'
   | 'arrow'
   | 'triangle'
   | 'polyline'
   | 'path'
+  | 'brush'
+  | 'highlighter'
   | 'fib'
   | 'fibext'
   | 'fibtime'
@@ -59,6 +64,8 @@ export type DrawingToolId =
   | 'priceRange'
   | 'text'
   | 'priceLabel'
+  | 'callout'
+  | 'note'
   | 'long'
   | 'short'
   | 'eraser';
@@ -148,6 +155,7 @@ export interface TwoPointDrawing extends DrawingBase {
     | 'extend'
     | 'hray'
     | 'infoLine'
+    | 'trendAngle'
     | 'rect'
     | 'ellipse'
     | 'arrow'
@@ -156,6 +164,7 @@ export interface TwoPointDrawing extends DrawingBase {
     | 'measure'
     | 'dateRange'
     | 'priceRange'
+    | 'callout'
     | 'long'
     | 'short';
   p1: Point;
@@ -164,7 +173,16 @@ export interface TwoPointDrawing extends DrawingBase {
 
 /** Three-or-more anchor drawings (channel, fib extension, polyline, …). */
 export interface MultiPointDrawing extends DrawingBase {
-  kind: 'channel' | 'fibext' | 'fibchannel' | 'triangle' | 'polyline' | 'path';
+  kind:
+    | 'channel'
+    | 'pitchfork'
+    | 'fibext'
+    | 'fibchannel'
+    | 'triangle'
+    | 'polyline'
+    | 'path'
+    | 'brush'
+    | 'highlighter';
   /** Primary anchors (also mirrored to p1/p2 when length ≥ 2 for legacy paths). */
   points: Point[];
   p1?: Point;
@@ -174,7 +192,7 @@ export interface MultiPointDrawing extends DrawingBase {
 
 /** Point label with free text (prompted on place). */
 export interface TextDrawing extends DrawingBase {
-  kind: 'text' | 'priceLabel';
+  kind: 'text' | 'priceLabel' | 'note' | 'crossline';
   p1: Point;
   text: string;
 }
@@ -233,19 +251,29 @@ export function toolArity(tool: DrawingToolId): 0 | 1 | 2 | 3 | 'n' {
     tool === 'hline' ||
     tool === 'vline' ||
     tool === 'text' ||
-    tool === 'priceLabel'
+    tool === 'priceLabel' ||
+    tool === 'note' ||
+    tool === 'crossline'
   ) {
     return 1;
   }
   if (
     tool === 'channel' ||
+    tool === 'pitchfork' ||
     tool === 'fibext' ||
     tool === 'fibchannel' ||
     tool === 'triangle'
   ) {
     return 3;
   }
-  if (tool === 'polyline' || tool === 'path') return 'n';
+  if (
+    tool === 'polyline' ||
+    tool === 'path' ||
+    tool === 'brush' ||
+    tool === 'highlighter'
+  ) {
+    return 'n';
+  }
   return 2;
 }
 
@@ -275,6 +303,8 @@ export function toolLabel(tool: DrawingToolId): string {
       return 'Vertical line';
     case 'hray':
       return 'Horizontal ray';
+    case 'crossline':
+      return 'Cross line';
     case 'trend':
       return 'Trend line';
     case 'ray':
@@ -283,8 +313,12 @@ export function toolLabel(tool: DrawingToolId): string {
       return 'Extended line';
     case 'infoLine':
       return 'Info line';
+    case 'trendAngle':
+      return 'Trend angle';
     case 'channel':
       return 'Parallel channel';
+    case 'pitchfork':
+      return 'Pitchfork';
     case 'rect':
       return 'Rectangle';
     case 'ellipse':
@@ -297,6 +331,10 @@ export function toolLabel(tool: DrawingToolId): string {
       return 'Polyline';
     case 'path':
       return 'Path';
+    case 'brush':
+      return 'Brush';
+    case 'highlighter':
+      return 'Highlighter';
     case 'fib':
       return 'Fib retracement';
     case 'fibext':
@@ -315,6 +353,10 @@ export function toolLabel(tool: DrawingToolId): string {
       return 'Text';
     case 'priceLabel':
       return 'Price label';
+    case 'callout':
+      return 'Callout';
+    case 'note':
+      return 'Note';
     case 'long':
       return 'Long position';
     case 'short':

@@ -42,8 +42,11 @@ describe('drawing tools helpers', () => {
     expect(needsTwoPoints('long')).toBe(true);
     expect(needsThreePoints('channel')).toBe(true);
     expect(needsThreePoints('fibext')).toBe(true);
+    expect(needsThreePoints('pitchfork')).toBe(true);
     expect(needsNPoints('polyline')).toBe(true);
+    expect(needsNPoints('brush')).toBe(true);
     expect(toolArity('eraser')).toBe(0);
+    expect(toolArity('crossline')).toBe(1);
   });
 
   it('toolLabel covers all tools', () => {
@@ -52,17 +55,22 @@ describe('drawing tools helpers', () => {
       'hline',
       'vline',
       'hray',
+      'crossline',
       'trend',
       'ray',
       'extend',
       'infoLine',
+      'trendAngle',
       'channel',
+      'pitchfork',
       'rect',
       'ellipse',
       'arrow',
       'triangle',
       'polyline',
       'path',
+      'brush',
+      'highlighter',
       'fib',
       'fibext',
       'fibtime',
@@ -72,6 +80,8 @@ describe('drawing tools helpers', () => {
       'priceRange',
       'text',
       'priceLabel',
+      'callout',
+      'note',
       'long',
       'short',
       'eraser',
@@ -84,6 +94,7 @@ describe('drawing tools helpers', () => {
     expect(toolLabel('extend')).toMatch(/Extended/i);
     expect(toolLabel('fib')).toMatch(/Fib/i);
     expect(toolLabel('channel')).toMatch(/channel/i);
+    expect(toolLabel('pitchfork')).toMatch(/Pitchfork/i);
   });
 
   it('registers extended tool handlers', () => {
@@ -92,8 +103,21 @@ describe('drawing tools helpers', () => {
     expect(ids).toContain('fibext');
     expect(ids).toContain('long');
     expect(ids).toContain('polyline');
+    expect(ids).toContain('pitchfork');
+    expect(ids).toContain('brush');
+    expect(ids).toContain('callout');
     expect(getToolHandler('channel')?.arity).toBe(3);
     expect(getToolHandler('polyline')?.create?.([{ time: 1, price: 1 }, { time: 2, price: 2 }], '#fff')).toBeTruthy();
+    expect(
+      getToolHandler('pitchfork')?.create?.(
+        [
+          { time: 1, price: 1 },
+          { time: 2, price: 2 },
+          { time: 2, price: 0 },
+        ],
+        '#fff',
+      ),
+    ).toBeTruthy();
   });
 
   it('toolbar catalog exposes parity packs', () => {
@@ -103,6 +127,9 @@ describe('drawing tools helpers', () => {
     expect(all).toContain('long');
     expect(all).toContain('dateRange');
     expect(all).toContain('eraser');
+    expect(all).toContain('pitchfork');
+    expect(all).toContain('highlighter');
+    expect(all).toContain('callout');
   });
 
   it('fibPrices from high to low (retracement)', () => {

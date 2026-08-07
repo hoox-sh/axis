@@ -123,36 +123,21 @@ export function toolArity(tool: DrawingToolId): PointArity | 0 {
   const h = handlers.get(tool);
   if (h) return h.arity;
   // Built-in legacy defaults
+  // Prefer registered handlers when present; fall through for built-ins.
   if (tool === 'hline' || tool === 'vline' || tool === 'text' || tool === 'priceLabel') {
     return 1;
   }
   if (
     tool === 'channel' ||
+    tool === 'pitchfork' ||
     tool === 'fibext' ||
     tool === 'fibchannel' ||
     tool === 'triangle'
   ) {
     return 3;
   }
-  if (tool === 'polyline' || tool === 'path') return 'n';
-  if (
-    tool === 'trend' ||
-    tool === 'ray' ||
-    tool === 'extend' ||
-    tool === 'hray' ||
-    tool === 'rect' ||
-    tool === 'ellipse' ||
-    tool === 'arrow' ||
-    tool === 'fib' ||
-    tool === 'fibtime' ||
-    tool === 'measure' ||
-    tool === 'dateRange' ||
-    tool === 'priceRange' ||
-    tool === 'long' ||
-    tool === 'short' ||
-    tool === 'infoLine'
-  ) {
-    return 2;
+  if (tool === 'polyline' || tool === 'path' || tool === 'brush' || tool === 'highlighter') {
+    return 'n';
   }
   return 2;
 }
