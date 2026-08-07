@@ -632,10 +632,13 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
         price?: number;
       }>;
       eventsLoading?: boolean;
+      eventsVisible?: boolean;
     };
     const events = mgrState.events;
+    const eventsVisible = mgrState.eventsVisible !== false;
     void mgrState.events;
     void mgrState.eventsLoading;
+    void mgrState.eventsVisible;
     void store.chartDataGen;
     void store.bars.length;
 
@@ -645,7 +648,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     untrack(() => {
       if (!alive) return;
       try {
-        if (!events?.length) {
+        if (!events?.length || !eventsVisible) {
           clearOnchainEventMarkers(mgr);
           return;
         }

@@ -179,7 +179,7 @@ export type TransportClass = 'ws' | 'rest' | 'local' | 'broker' | 'none';
 export type ConnState = 'idle' | 'connecting' | 'open' | 'degraded' | 'error' | 'closed';
 
 /**
- * Live status for one data plane (source / stream / engine / storage).
+ * Live status for one data plane (source / stream / engine / storage / onchain).
  * Ephemeral — rebuilt by loaders and multiplex; only HUD layout prefs persist.
  */
 export interface PlaneTelemetry {
@@ -209,6 +209,11 @@ export interface TelemetryState {
   stream: PlaneTelemetry;
   engine: PlaneTelemetry;
   storage: PlaneTelemetry;
+  /**
+   * Optional on-chain proxy plane (`GET {endpoint}/api/onchain/health`).
+   * Ephemeral — omitted until first health probe; never hydrated from disk.
+   */
+  onchain?: PlaneTelemetry;
   /** Rolling run latency samples (ms), newest last */
   runLatencySamples: number[];
   lastTick: TickTelemetry | null;

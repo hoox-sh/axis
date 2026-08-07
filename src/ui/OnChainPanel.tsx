@@ -29,7 +29,7 @@
  * beyond calling existing load + attach helpers.
  */
 
-import { Component, For, Show, createMemo, createSignal, onCleanup } from 'solid-js';
+import { Component, For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import {
   isPanelOpen,
   persist,
@@ -56,6 +56,7 @@ import {
   resolveDefiLlamaBaseUrl,
   resolveGeckoTerminalBaseUrl,
 } from '../onchain/proxy';
+import { kickOnchainHealthProbe } from '../onchain/health';
 import {
   searchGeckoPools,
   type GeckoPoolSearchHit,
@@ -150,6 +151,14 @@ function geckoDataPath(): DataPathInfo {
 /** Dockable / floatable On-Chain multi-mode manager. */
 export const OnChainPanel: Component = () => {
   const [mode, setMode] = createSignal<PanelMode>('tvl');
+
+  // Probe Worker on-chain proxy when the panel opens (non-blocking HUD plane).
+  createEffect(() => {
+    if (isPanelOpen('onchain')) {
+      void store.endpoint;
+      kickOnchainHealthProbe();
+    }
+  });
 
   // ── TVL ────────────────────────────────────────────────────────────
   const [query, setQuery] = createSignal('');

@@ -12,10 +12,12 @@ import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import {
   GECKOTERMINAL_DEFAULT_BASE,
   GECKOTERMINAL_PROVIDER_ID,
+  GECKO_OHLCV_MAX_LIMIT,
   mapAxisIntervalToGecko,
   mapAxisNetworkToGecko,
   parseGeckoOhlcvList,
   fetchGeckoPoolOhlcv,
+  resolveGeckoBeforeTimestamp,
   searchGeckoPools,
 } from '../src/onchain/geckoterminal';
 import { jsonResponse, mockFetch } from './helpers/mock-fetch';
@@ -37,6 +39,29 @@ describe('geckoterminal constants', () => {
     expect(GECKOTERMINAL_DEFAULT_BASE).toBe(
       'https://api.geckoterminal.com/api/v2',
     );
+    expect(GECKO_OHLCV_MAX_LIMIT).toBe(1000);
+  });
+});
+
+describe('resolveGeckoBeforeTimestamp', () => {
+  it('prefers beforeTimestamp over endTime and normalizes ms', () => {
+    expect(resolveGeckoBeforeTimestamp({ beforeTimestamp: 1_700_000_000 })).toBe(
+      1_700_000_000,
+    );
+    expect(resolveGeckoBeforeTimestamp({ endTime: 1_700_000_000 })).toBe(
+      1_700_000_000,
+    );
+    expect(
+      resolveGeckoBeforeTimestamp({
+        beforeTimestamp: 100,
+        endTime: 999,
+      }),
+    ).toBe(100);
+    expect(
+      resolveGeckoBeforeTimestamp({ endTime: 1_700_000_000_000 }),
+    ).toBe(1_700_000_000);
+    expect(resolveGeckoBeforeTimestamp({})).toBeNull();
+    expect(resolveGeckoBeforeTimestamp({ endTime: 0 })).toBeNull();
   });
 });
 
@@ -200,6 +225,66 @@ describe('fetchGeckoPoolOhlcv', () => {
       baseUrl: 'https://proxy.example/gecko/',
     });
     expect(bars).toHaveLength(1);
+  });
+
+  it('maps endTime → before_timestamp and keeps bars strictly before', async () => {
+    const endTime = 1_700_000_300;
+    const calls: string[] = [];
+    restoreFetch = mockFetch((input) => {
+      const url = String(input);
+      calls.push(url);
+      expect(url).toContain(`before_timestamp=${endTime}`);
+      expect(url).toContain('limit=1000');
+      return jsonResponse({
+        data: {
+          attributes: {
+            ohlcv_list: [
+              [1_700_000_100, 1, 2, 0.5, 1.5, 10],
+              [1_700_000_200, 1.5, 2.5, 1, 2, 20],
+              // Inclusive boundary / leak — must be dropped (strictly before)
+              [endTime, 2, 3, 1, 2.5, 30],
+              [1_700_000_400, 3, 4, 2, 3.5, 40],
+            ],
+          },
+        },
+      });
+    });
+
+    const bars = await fetchGeckoPoolOhlcv({
+      network: 'eth',
+      poolAddress: POOL,
+      interval: '1h',
+      limit: 5000, // clamp to GECKO_OHLCV_MAX_LIMIT
+      endTime,
+    });
+    expect(calls).toHaveLength(1);
+    expect(bars.map((b) => b.time)).toEqual([1_700_000_100, 1_700_000_200]);
+    for (const b of bars) {
+      expect(b.time).toBeLessThan(endTime);
+    }
+    // ascending
+    expect(bars[0]!.time).toBeLessThan(bars[1]!.time);
+  });
+
+  it('maps beforeTimestamp → before_timestamp (alias of endTime)', async () => {
+    restoreFetch = mockFetch((input) => {
+      expect(String(input)).toContain('before_timestamp=1700000100');
+      return jsonResponse({
+        data: {
+          attributes: {
+            ohlcv_list: [[1_700_000_050, 1, 1, 1, 1, 1]],
+          },
+        },
+      });
+    });
+    const bars = await fetchGeckoPoolOhlcv({
+      network: 'eth',
+      poolAddress: POOL,
+      interval: '1h',
+      beforeTimestamp: 1_700_000_100,
+    });
+    expect(bars).toHaveLength(1);
+    expect(bars[0]!.time).toBe(1_700_000_050);
   });
 
   it('rejects missing params and empty OHLCV', async () => {

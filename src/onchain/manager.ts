@@ -27,7 +27,7 @@
  * Field naming: primary shape uses `attachments` / `loadingSearch` / `lastError`
  * (Phase 1 spec). Parallel UI/chart also read `series` / `searchLoading` /
  * `error` aliases kept in lockstep. Events: `events` / `eventsLoading` /
- * `eventsError` / `eventSourceLabel`.
+ * `eventsError` / `eventSourceLabel` / `eventsVisible`.
  *
  * @module onchain/manager
  */
@@ -41,6 +41,7 @@ import {
   ensureOnchainDatasetsRegistered,
   getDatasetPlugin,
 } from './catalog';
+import { notifyOnchainEventsLoaded } from './alerts-bridge';
 import { searchDefiLlamaProtocols } from './defillama';
 import {
   buildTvlSpikeEvents,
@@ -48,6 +49,7 @@ import {
   tvlSpikeEventSourceLabel,
 } from './events';
 import { resolveDefiLlamaBaseUrl } from './proxy';
+import { kickOnchainHealthProbe } from './health';
 import { instrumentCacheKey } from './keys';
 import type {
   EventPoint,
@@ -118,6 +120,11 @@ export interface OnchainManagerState {
   eventsError: string | null;
   /** e.g. `"aave TVL spikes"`. */
   eventSourceLabel: string | null;
+  /**
+   * When false, ChartHost hides event markers without clearing `events`.
+   * Default true so loaded events show immediately.
+   */
+  eventsVisible: boolean;
 }
 
 const [state, setState] = createStore<OnchainManagerState>({
@@ -134,6 +141,7 @@ const [state, setState] = createStore<OnchainManagerState>({
   eventsLoading: false,
   eventsError: null,
   eventSourceLabel: null,
+  eventsVisible: true,
 });
 
 /** Reactive Solid store for on-chain manager UI / chart consumers. */
@@ -240,6 +248,8 @@ export async function attachDefiLlamaTvl(
   slugOrHit: AttachDefiLlamaArg,
   name?: string,
 ): Promise<OnchainSeriesAttachment> {
+  // Non-blocking Connection HUD onchain plane (proxy health)
+  kickOnchainHealthProbe();
   ensureOnchainDatasetsRegistered();
 
   let slug: string;
@@ -418,10 +428,12 @@ export function clearAllOnchainSeries(): void {
 /**
  * Replace the displayed on-chain events plane (normalized + sorted).
  * Does not touch series attachments.
+ * Triggers on-chain alert evaluation (fire-and-forget).
  */
 export function setOnchainEvents(
   events: EventPoint[],
   label?: string,
+  opts?: { protocolId?: string },
 ): void {
   const normalized = normalizeEventPoints(events);
   setState(
@@ -433,6 +445,9 @@ export function setOnchainEvents(
         label != null && String(label).trim() ? String(label).trim() : null;
     }),
   );
+  notifyOnchainEventsLoaded(normalized, {
+    protocolId: opts?.protocolId,
+  });
 }
 
 /** Clear on-chain events plane state. */
@@ -445,6 +460,14 @@ export function clearOnchainEvents(): void {
       s.eventSourceLabel = null;
     }),
   );
+}
+
+/**
+ * Show/hide on-chain event markers on the chart without clearing the events list.
+ * ChartHost reads {@link OnchainManagerState.eventsVisible}.
+ */
+export function setOnchainEventsVisible(vis: boolean): void {
+  setState('eventsVisible', !!vis);
 }
 
 /**
@@ -505,6 +528,11 @@ export async function loadTvlSpikeEventsFromAttachment(
         s.eventSourceLabel = sourceLabel;
       }),
     );
+
+    // Fire on-chain TVL spike alerts against the derived events.
+    notifyOnchainEventsLoaded(events, {
+      protocolId: row.instrument?.protocolId || row.key || undefined,
+    });
   } catch (err) {
     const msg = errMessage(err);
     setState(
@@ -524,6 +552,8 @@ export async function loadTvlSpikeEventsFromAttachment(
  * `loadingSearch` on the manager store.
  */
 export async function searchProtocols(q: string): Promise<ProtocolSearchHit[]> {
+  // Non-blocking Connection HUD onchain plane (proxy health)
+  kickOnchainHealthProbe();
   const query = String(q || '');
   setState('protocolQuery', query);
   setLoadingSearch(true);
@@ -567,5 +597,16 @@ export function _resetOnchainManagerState(): void {
     eventsLoading: false,
     eventsError: null,
     eventSourceLabel: null,
+    eventsVisible: true,
   });
+}
+
+/**
+ * @internal test helper — seed attachments without network (TVL spike tests).
+ * Mirrors into both `attachments` and `series`.
+ */
+export function _seedOnchainAttachmentsForTests(
+  rows: OnchainSeriesRow[],
+): void {
+  setSeriesRows(Array.isArray(rows) ? rows : []);
 }

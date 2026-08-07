@@ -84,8 +84,21 @@ Phase 2 adds **DEX pool OHLCV** via [GeckoTerminal](https://www.geckoterminal.co
 | Pool address | EVM `0x` + 40 hex, or Solana-style base58 |
 | Timeframe | `minute` / `hour` / `day` with aggregate (e.g. 1h → hour + aggregate 1) |
 | Currency | Default USD when proxied with query pass-through |
+| Page size | **Max 1000 candles per request** (`limit`); Gecko hard cap |
+| Walk-back | `endTime` → Gecko `before_timestamp` (bars **strictly before** that unix second) |
 
 Client helpers live in `src/onchain/geckoterminal.ts` (`fetchGeckoPoolOhlcv`, `searchGeckoPools`, interval/network maps). Browsers should use the **Worker gecko proxy** (below) because public GeckoTerminal hosts often lack CORS for arbitrary origins.
+
+### Deep history (Data Sources + GeckoTerminal DEX)
+
+Topbar **Load** fetches a **single page** (up to 1000 bars). For multi-page history down to a past date:
+
+1. Set the chart source to **GeckoTerminal DEX** (`geckoterminal-ohlcv`).
+2. Use a pool symbol such as `eth:0x…` (network + pool address).
+3. Open **Data** (Data Source Manager) → set symbol / source / timeframe / **accumulate to**.
+4. Start background backfill — AXIS walks older pages with `endTime` only (each page maps to `before_timestamp`). The source does **not** multi-page inside one `fetchHistorical` call; DSM does it page-by-page.
+
+See [Data Source Manager](/enduser/guides/data-source-manager) for job phases and cache behavior.
 
 ## Events (TVL spikes)
 
@@ -110,6 +123,16 @@ DefiLlama **raises** and **token unlocks** require Pro API (`pro-api.llama.fi`) 
 | Main market | Primary OHLCV stays on the **right** scale |
 | Compare | Compare overlays may share the left scale; on-chain keys are `onchain_*`, not `overlay_*` |
 | Units | TVL values are **USD** liquidity totals from DefiLlama; DEX OHLCV is pool quote (often USD) |
+
+## Settings
+
+**Settings → General → On-Chain** is a short note only (no extra bindings):
+
+- Proxy paths use the **engine endpoint**: `{endpoint}/api/onchain/llama` and `{endpoint}/api/onchain/gecko`
+- Local Worker: set Backend Endpoint to `http://127.0.0.1:8787` and run `cd worker && bun run dev`
+- **Not a wallet** — public metrics only; no signing
+
+Set or change the URL under **Settings → General → Engine → Backend Endpoint**. Use **Open On-Chain panel** in that note (or topbar **Panels** / command palette) to open the panel.
 
 ## Network path (CORS / Worker proxy)
 

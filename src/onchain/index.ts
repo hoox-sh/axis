@@ -76,9 +76,11 @@ export type { DefiLlamaProtocolSummary } from './defillama';
 export {
   GECKOTERMINAL_PROVIDER_ID,
   GECKOTERMINAL_DEFAULT_BASE,
+  GECKO_OHLCV_MAX_LIMIT,
   mapAxisNetworkToGecko,
   mapAxisIntervalToGecko,
   parseGeckoOhlcvList,
+  resolveGeckoBeforeTimestamp,
   fetchGeckoPoolOhlcv,
   searchGeckoPools,
 } from './geckoterminal';
@@ -97,6 +99,18 @@ export {
   isWorkerLlamaProxy,
   isWorkerGeckoProxy,
 } from './proxy';
+
+// Proxy health → Connection HUD telemetry.onchain
+export {
+  ONCHAIN_HEALTH_PATH,
+  checkOnchainProxyHealth,
+  kickOnchainHealthProbe,
+  refreshOnchainTelemetry,
+} from './health';
+export type {
+  OnchainProxyHealthResult,
+  CheckOnchainProxyHealthOpts,
+} from './health';
 
 // Catalog
 export {
@@ -125,6 +139,14 @@ export {
 } from './events';
 export type { BuildTvlSpikeEventsOpts, TvlSpikeEventType } from './events';
 
+// On-chain ↔ alerts bridge (TVL spike / event alerts)
+export {
+  evaluateOnchainEventAlerts,
+  notifyOnchainEventsLoaded,
+  toOnchainEvalEvents,
+} from './alerts-bridge';
+export type { EvaluateOnchainEventAlertsOpts } from './alerts-bridge';
+
 // Manager
 export {
   MAX_ONCHAIN_SERIES,
@@ -136,6 +158,7 @@ export {
   clearAllOnchainSeries,
   setOnchainEvents,
   clearOnchainEvents,
+  setOnchainEventsVisible,
   loadTvlSpikeEventsFromAttachment,
   searchProtocols,
 } from './manager';

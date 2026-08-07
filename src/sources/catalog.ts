@@ -728,6 +728,11 @@ export const coinbaseRest: SourcePlugin = {
  * - `base/0x…` — slash form
  * - bare `0x…` — uses `config.network` (default `eth`)
  *
+ * **Pagination:** one request max **1000** candles. `endTime` (unix sec) maps to
+ * Gecko `before_timestamp` — bars strictly before that time. Deep history is
+ * **not** multi-page inside this method; use Data Source Manager walk-back
+ * (page-by-page `endTime`) for ranges beyond one page.
+ *
  * Empty `baseUrl` → Worker proxy when the geckoterminal client resolves it.
  * Live stream: pair with `mock-poll` until a DEX WS exists (Phase 2).
  */
@@ -736,7 +741,7 @@ export const geckoTerminalOhlcv: SourcePlugin = {
   name: 'GeckoTerminal DEX',
   kind: 'source',
   description:
-    'DEX pool OHLCV via GeckoTerminal (network:poolAddress symbol). Browser CORS usually needs the AXIS Worker proxy.',
+    'DEX pool OHLCV via GeckoTerminal (network:poolAddress symbol). Browser CORS usually needs the AXIS Worker proxy. Max 1000 bars/request; deep history via Data Sources walk-back.',
   builtIn: true,
   capabilities: { needsNetwork: true, needsProxy: true },
   configSchema: {
@@ -768,6 +773,7 @@ export const geckoTerminalOhlcv: SourcePlugin = {
     const defaultNetwork = String(cfg.network || 'eth');
     const { network, poolAddress } = parseGeckoPoolSymbol(symbol, defaultNetwork);
     const baseUrl = String(cfg.baseUrl ?? '');
+    // Gecko hard max is 1000 candles per request (matches sourcePageLimit).
     const pageLimit =
       typeof limit === 'number' && Number.isFinite(limit) && limit > 0
         ? Math.min(1000, Math.floor(limit))
@@ -779,6 +785,7 @@ export const geckoTerminalOhlcv: SourcePlugin = {
       poolAddress,
       interval: String(interval || '1h'),
       limit: pageLimit,
+      // DSM walk-back: endTime → before_timestamp (bars strictly before)
       endTime,
       startTime,
       signal: fetchSignal(signal),
@@ -788,6 +795,10 @@ export const geckoTerminalOhlcv: SourcePlugin = {
       throw new Error(
         `GeckoTerminal: no candles for ${network}:${poolAddress} (${interval || '1h'})`,
       );
+    }
+    // Ensure ascending by open time (client already sorts; defensive for DSM merge)
+    if (bars.length >= 2 && bars[0]!.time > bars[bars.length - 1]!.time) {
+      return bars.slice().sort((a, b) => a.time - b.time);
     }
     return bars;
   },

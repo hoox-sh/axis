@@ -72,13 +72,26 @@ export {
   becomesTrue,
   clearPrevPrices,
   crossesLevel,
+  DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT,
   evaluateOne,
+  evaluateOnchainEventAlertsPure,
+  eventAbsPct,
+  eventMatchesDirection,
+  eventMatchesOnchainAlert,
+  eventMatchesProtocol,
   getPrevPrice,
   isInCooldown,
+  isOnchainTvlEventType,
   normalizeSymbol,
   numParam,
   resolveBasePrice,
   setPrevPrice,
+} from './engine';
+
+export type {
+  OnchainEvalContext,
+  OnchainEvalEvent,
+  OnchainEvalFired,
 } from './engine';
 
 export {

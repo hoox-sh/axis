@@ -19,7 +19,7 @@
 
 /**
  * Application Settings modal — two tabs:
- * - **General**: engine, storage, density, chart interval, live prefs, workspace
+ * - **General**: engine, on-chain proxy note, storage, density, chart interval, live prefs, workspace
  * - **Theme**: chart Theme Manager (bar colors, chart.bg_color / chart.fg_color, …)
  *
  * Local form state is seeded from `store` when the dialog opens (not on every
@@ -50,6 +50,7 @@ import {
   UI_SCALE_MAX,
   UI_SCALE_STEP,
   applyUiScale,
+  toggleOnchainPanel,
 } from '../store';
 import { Icons } from './icons';
 import { HooxLoader } from './HooxLoader';
@@ -777,6 +778,47 @@ export const SettingsDialog: Component<Props> = (props) => {
               </p>
             </div>
 
+            </div>
+
+            {/* ── On-Chain (Worker proxy note; no extra bindings) ── */}
+            <div class="sc-section" data-testid="axis-settings-onchain">
+              <div class="sc-section-title">On-Chain</div>
+              <p class="sc-hint mt-0">
+                Protocol TVL and DEX pool data go through the Worker proxy on the same{' '}
+                <strong class="text-text-dim font-normal">engine endpoint</strong> as Run / LSP:
+              </p>
+              <ul class="sc-hint mt-0.5 pl-3.5 list-disc space-y-0.5 font-mono text-[0.9em]">
+                <li>
+                  <code class="text-text-dim">{'{endpoint}/api/onchain/llama'}</code>
+                </li>
+                <li>
+                  <code class="text-text-dim">{'{endpoint}/api/onchain/gecko'}</code>
+                </li>
+              </ul>
+              <p class="sc-hint mt-1">
+                Local Worker:{' '}
+                <code class="font-mono text-text-dim">http://127.0.0.1:8787</code>
+                {' · '}
+                <code class="font-mono text-text-dim">cd worker &amp;&amp; bun run dev</code>
+              </p>
+              <p class="sc-hint mt-0.5">
+                <strong class="text-text-dim font-normal">Not a wallet</strong> — no MetaMask,
+                Ledger, or signing; public metrics only.
+              </p>
+              <div class="mt-1.5">
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost px-2 py-0.5 text-[11px]"
+                  data-testid="axis-settings-open-onchain"
+                  title="Open the On-Chain panel"
+                  onClick={() => {
+                    toggleOnchainPanel();
+                    props.onClose();
+                  }}
+                >
+                  Open On-Chain panel
+                </button>
+              </div>
             </div>
 
             <div class="sc-section">

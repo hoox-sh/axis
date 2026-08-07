@@ -221,6 +221,7 @@ const DEFAULTS: AppState = {
     stream: idlePlane('binance-ws', 'Binance WebSocket', 'ws'),
     engine: idlePlane('server', 'Server-Side', 'ws'),
     storage: idlePlane('local', 'Local', 'local'),
+    // onchain?: optional 5th plane — created by health probe; never in DEFAULTS/hydrate
     runLatencySamples: [],
     lastTick: null,
     hud: { compact: false, overlay: false },
@@ -864,6 +865,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
       mode: compare?.mode === 'absolute' ? 'absolute' : 'percent',
       normalizeMain: !!compare?.normalizeMain,
     },
+    // Ephemeral planes (source/stream/engine/storage/onchain) omitted — only HUD prefs
     telemetry: {
       hud: telemetry?.hud || DEFAULTS.telemetry.hud,
       // Privacy default false when missing
@@ -1610,15 +1612,20 @@ export function setLive(active: boolean) {
 
 /* ── Telemetry helpers (ephemeral Connection HUD) ───────────────── */
 
-/** Telemetry plane keys under `store.telemetry`. */
-export type TelemetryPlane = keyof Pick<TelemetryState, 'source' | 'stream' | 'engine' | 'storage'>;
+/** Telemetry plane keys under `store.telemetry` (onchain is optional / ephemeral). */
+export type TelemetryPlane = keyof Pick<
+  TelemetryState,
+  'source' | 'stream' | 'engine' | 'storage' | 'onchain'
+>;
 
 /** Merge a partial update into one telemetry plane (ephemeral). */
 export function setTelemetryPlane(
   plane: TelemetryPlane,
   patch: Partial<PlaneTelemetry> & { id?: string; name?: string; transport?: TransportClass },
 ) {
-  const cur = store.telemetry?.[plane] || idlePlane(patch.id || '', patch.name || plane);
+  const cur =
+    store.telemetry?.[plane] ||
+    idlePlane(patch.id || String(plane), patch.name || String(plane), patch.transport || 'none');
   setStore('telemetry', plane, {
     ...cur,
     ...patch,

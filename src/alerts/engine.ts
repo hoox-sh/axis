@@ -338,9 +338,246 @@ export function evaluateOne(
       }
       return becomesTrue(nowTrue, wasTrue);
     }
+    // On-chain kinds are evaluated against event batches via
+    // {@link evaluateOnchainEventAlertsPure}, not price ticks.
+    case 'onchain_tvl_spike':
+    case 'onchain_event':
+      return false;
     default:
       return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// On-chain TVL / event alerts (batch evaluation — not price ticks)
+// ---------------------------------------------------------------------------
+
+/** Default |pct| threshold when alert.params.minAbsPct is omitted. */
+export const DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT = 10;
+
+/**
+ * Minimal event shape for on-chain alert evaluation (mirrors EventPoint
+ * without importing the on-chain module — keeps alerts pure).
+ */
+export type OnchainEvalEvent = {
+  time: number;
+  type: string;
+  title?: string;
+  severity?: string;
+  price?: number;
+  payload?: Record<string, unknown>;
+};
+
+/** Context for batch on-chain alert evaluation. */
+export type OnchainEvalContext = {
+  /** Protocol id from the attachment / instrument (matched to params.protocolId). */
+  protocolId?: string;
+  /** Evaluation clock (epoch ms). Default Date.now(). */
+  now?: number;
+};
+
+/** Result of a pure on-chain batch evaluation. */
+export type OnchainEvalFired = {
+  alert: Alert;
+  /** Event that caused the fire (most recent match). */
+  event: OnchainEvalEvent;
+};
+
+function normalizeId(s: string | undefined | null): string {
+  return String(s || '')
+    .trim()
+    .toLowerCase();
+}
+
+/** True for synthetic TVL spike/drop event types. */
+export function isOnchainTvlEventType(type: string): boolean {
+  const t = String(type || '')
+    .trim()
+    .toLowerCase();
+  return t === 'tvl_spike' || t === 'tvl_drop';
+}
+
+/**
+ * Resolve absolute % change from an event payload (`absPct` or `|pctChange|`).
+ */
+export function eventAbsPct(event: OnchainEvalEvent): number | null {
+  const p = event.payload;
+  if (!p || typeof p !== 'object') return null;
+  const abs = p.absPct;
+  if (typeof abs === 'number' && Number.isFinite(abs)) return Math.abs(abs);
+  if (typeof abs === 'string' && abs.trim() !== '') {
+    const n = Number(abs);
+    if (Number.isFinite(n)) return Math.abs(n);
+  }
+  const pct = p.pctChange;
+  if (typeof pct === 'number' && Number.isFinite(pct)) return Math.abs(pct);
+  if (typeof pct === 'string' && pct.trim() !== '') {
+    const n = Number(pct);
+    if (Number.isFinite(n)) return Math.abs(n);
+  }
+  return null;
+}
+
+/**
+ * Whether event direction matches alert params.direction.
+ * `up` → tvl_spike (or positive pctChange); `down` → tvl_drop; `both` → either.
+ */
+export function eventMatchesDirection(
+  event: OnchainEvalEvent,
+  direction: string | undefined,
+): boolean {
+  const dir = (direction || 'both').toLowerCase();
+  if (dir === 'both' || dir === '') return true;
+  const type = String(event.type || '')
+    .trim()
+    .toLowerCase();
+  if (dir === 'up') {
+    if (type === 'tvl_spike') return true;
+    if (type === 'tvl_drop') return false;
+    const pct = event.payload?.pctChange;
+    if (typeof pct === 'number') return pct >= 0;
+    return true;
+  }
+  if (dir === 'down') {
+    if (type === 'tvl_drop') return true;
+    if (type === 'tvl_spike') return false;
+    const pct = event.payload?.pctChange;
+    if (typeof pct === 'number') return pct < 0;
+    return true;
+  }
+  return true;
+}
+
+/**
+ * Protocol filter: when alert.params.protocolId is set, it must match
+ * ctx.protocolId or event.payload.protocolId (case-insensitive).
+ * Unset protocolId matches any.
+ */
+export function eventMatchesProtocol(
+  alert: Alert,
+  event: OnchainEvalEvent,
+  ctx: OnchainEvalContext,
+): boolean {
+  const want = normalizeId(
+    alert.params?.protocolId != null
+      ? String(alert.params.protocolId)
+      : '',
+  );
+  if (!want) return true;
+  const fromCtx = normalizeId(ctx.protocolId);
+  if (fromCtx === want) return true;
+  const fromPayload =
+    event.payload && event.payload.protocolId != null
+      ? normalizeId(String(event.payload.protocolId))
+      : '';
+  return fromPayload === want;
+}
+
+/**
+ * Pure predicate: does this single event satisfy an on-chain alert?
+ * Does not check cooldown or lastEventTime watermark.
+ */
+export function eventMatchesOnchainAlert(
+  alert: Alert,
+  event: OnchainEvalEvent,
+  ctx: OnchainEvalContext = {},
+): boolean {
+  if (!alert.enabled) return false;
+  if (alert.kind !== 'onchain_tvl_spike' && alert.kind !== 'onchain_event') {
+    return false;
+  }
+  if (!event || !Number.isFinite(Number(event.time))) return false;
+  const type = String(event.type || '').trim();
+  if (!type) return false;
+
+  if (!eventMatchesProtocol(alert, event, ctx)) return false;
+
+  if (alert.kind === 'onchain_tvl_spike') {
+    if (!isOnchainTvlEventType(type)) return false;
+    if (!eventMatchesDirection(event, alert.params?.direction as string | undefined)) {
+      return false;
+    }
+    const minAbs =
+      numParam(alert.params ?? {}, 'minAbsPct') ?? DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT;
+    if (minAbs < 0) return false;
+    const abs = eventAbsPct(event);
+    if (abs == null) return false;
+    return abs >= minAbs;
+  }
+
+  // onchain_event — optional type filter + optional minAbsPct when payload has %
+  const wantType =
+    alert.params?.eventType != null
+      ? String(alert.params.eventType).trim().toLowerCase()
+      : '';
+  if (wantType && type.toLowerCase() !== wantType) return false;
+  if (!eventMatchesDirection(event, alert.params?.direction as string | undefined)) {
+    return false;
+  }
+  const minAbs = numParam(alert.params ?? {}, 'minAbsPct');
+  if (minAbs != null && minAbs > 0) {
+    const abs = eventAbsPct(event);
+    if (abs == null || abs < minAbs) return false;
+  }
+  return true;
+}
+
+/**
+ * Evaluate on-chain alerts against a batch of events (pure).
+ *
+ * For each matching enabled alert (not in cooldown), fires at most once on
+ * the **most recent** matching event with `time > params.lastEventTime`
+ * (watermark avoids re-firing historical spikes on every reload).
+ *
+ * @returns shallow alert copies with `lastFiredAt` and updated `lastEventTime`
+ *   plus the event that triggered each fire.
+ */
+export function evaluateOnchainEventAlertsPure(
+  alerts: readonly Alert[],
+  events: readonly OnchainEvalEvent[],
+  ctx: OnchainEvalContext = {},
+): OnchainEvalFired[] {
+  const now = ctx.now ?? Date.now();
+  if (!Array.isArray(events) || events.length === 0) return [];
+  if (!Array.isArray(alerts) || alerts.length === 0) return [];
+
+  const sorted = events
+    .filter((e) => e && Number.isFinite(Number(e.time)))
+    .slice()
+    .sort((a, b) => Number(a.time) - Number(b.time));
+
+  const fired: OnchainEvalFired[] = [];
+
+  for (const alert of alerts) {
+    if (!alert.enabled) continue;
+    if (alert.kind !== 'onchain_tvl_spike' && alert.kind !== 'onchain_event') {
+      continue;
+    }
+    if (isInCooldown(alert, now)) continue;
+
+    const watermark = numParam(alert.params ?? {}, 'lastEventTime');
+    let best: OnchainEvalEvent | null = null;
+    for (const ev of sorted) {
+      if (watermark != null && Number(ev.time) <= watermark) continue;
+      if (!eventMatchesOnchainAlert(alert, ev, ctx)) continue;
+      best = ev; // ascending sort → last match is most recent
+    }
+    if (!best) continue;
+
+    fired.push({
+      alert: {
+        ...alert,
+        params: {
+          ...alert.params,
+          lastEventTime: Number(best.time),
+        },
+        lastFiredAt: now,
+      },
+      event: best,
+    });
+  }
+
+  return fired;
 }
 
 /**

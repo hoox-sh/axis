@@ -30,6 +30,8 @@ const KIND_LABELS: Record<AlertKind, string> = {
   pct_change: 'pct change',
   drawing_touch: 'drawing touch',
   pine_condition: 'pine',
+  onchain_tvl_spike: 'TVL spike',
+  onchain_event: 'on-chain event',
 };
 
 /** Kinds exposed in the Alerts panel create form. */
@@ -96,6 +98,31 @@ export function formatAlertCondition(
     const thr = params.threshold;
     if (op && thr != null) return `${label} ${op} ${thr}`;
     return label;
+  }
+
+  if (kind === 'onchain_tvl_spike' || kind === 'onchain_event') {
+    const minRaw = params.minAbsPct;
+    const min =
+      typeof minRaw === 'number'
+        ? minRaw
+        : typeof minRaw === 'string'
+          ? Number(minRaw)
+          : 10;
+    const minStr = Number.isFinite(min) ? formatNum(min) : '10';
+    const dir = typeof params.direction === 'string' ? params.direction : 'both';
+    const protocol =
+      params.protocolId != null && String(params.protocolId).trim()
+        ? String(params.protocolId).trim()
+        : '';
+    let dirLabel = '±';
+    if (dir === 'up') dirLabel = '≥+';
+    else if (dir === 'down') dirLabel = '≤−';
+    const base = `${label} ${dirLabel}${minStr}%`;
+    if (protocol) return `${base} · ${protocol}`;
+    if (kind === 'onchain_event' && params.eventType != null) {
+      return `${base} · ${String(params.eventType)}`;
+    }
+    return base;
   }
 
   return label;

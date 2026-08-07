@@ -25,8 +25,19 @@
  * proxy at `/api/onchain/gecko` rewriting to `/api/v2`).
  *
  * Client paths under base (proxy or public):
- * - `{base}/networks/{net}/pools/{addr}/ohlcv/{tf}?aggregate=&limit=&currency=usd`
+ * - `{base}/networks/{net}/pools/{addr}/ohlcv/{tf}?aggregate=&limit=&currency=usd&before_timestamp=`
  * - `{base}/search/pools?query=`
+ *
+ * ## OHLCV pagination (walk-back)
+ *
+ * Gecko accepts at most {@link GECKO_OHLCV_MAX_LIMIT} candles per request
+ * (`limit` ≤ 1000). Older history uses `before_timestamp` (unix **seconds**):
+ * returned bars are **strictly before** that time.
+ *
+ * AXIS SourcePlugin walk-back (Data Source Manager) pages via `endTime` only —
+ * mapped here to `before_timestamp`. Multi-page accumulation in a single
+ * `fetchHistorical` call is intentionally not done; DSM walks page-by-page
+ * with `endTime = oldestSeen - 1` until the target past date.
  *
  * @module onchain/geckoterminal
  */
@@ -37,8 +48,14 @@ export const GECKOTERMINAL_PROVIDER_ID = 'geckoterminal';
 export const GECKOTERMINAL_DEFAULT_BASE =
   'https://api.geckoterminal.com/api/v2';
 
+/** Default candles when callers omit `limit`. */
 const DEFAULT_OHLCV_LIMIT = 300;
-const MAX_OHLCV_LIMIT = 1000;
+
+/**
+ * GeckoTerminal OHLCV hard max per request (`limit` query param).
+ * DSM page size for `geckoterminal-ohlcv` matches this (see sources catalog).
+ */
+export const GECKO_OHLCV_MAX_LIMIT = 1000;
 
 /** GeckoTerminal OHLCV timeframe + aggregate for a single request. */
 export interface GeckoIntervalMap {
@@ -211,7 +228,7 @@ function clampLimit(limit?: number): number {
   if (typeof limit !== 'number' || !Number.isFinite(limit) || limit <= 0) {
     return DEFAULT_OHLCV_LIMIT;
   }
-  return Math.min(Math.floor(limit), MAX_OHLCV_LIMIT);
+  return Math.min(Math.floor(limit), GECKO_OHLCV_MAX_LIMIT);
 }
 
 /**
@@ -285,22 +302,56 @@ export function parseGeckoOhlcvList(raw: unknown): Bar[] {
 }
 
 /**
- * Fetch OHLCV candles for a DEX pool from GeckoTerminal.
+ * Resolve Gecko `before_timestamp` (unix seconds) from client opts.
+ * Prefers `beforeTimestamp`, then SourcePlugin `endTime`. Accepts ms or sec.
+ * Returns `null` when unset / invalid.
+ */
+export function resolveGeckoBeforeTimestamp(opts: {
+  beforeTimestamp?: number;
+  endTime?: number;
+}): number | null {
+  const raw =
+    typeof opts.beforeTimestamp === 'number' &&
+    Number.isFinite(opts.beforeTimestamp) &&
+    opts.beforeTimestamp > 0
+      ? opts.beforeTimestamp
+      : typeof opts.endTime === 'number' &&
+          Number.isFinite(opts.endTime) &&
+          opts.endTime > 0
+        ? opts.endTime
+        : null;
+  if (raw == null) return null;
+  return toUnixSeconds(raw);
+}
+
+/**
+ * Fetch one page of OHLCV candles for a DEX pool from GeckoTerminal.
  *
+ * **Pagination:** pass `endTime` or `beforeTimestamp` (unix sec) to request
+ * bars **strictly before** that instant (`before_timestamp` query). Max
+ * {@link GECKO_OHLCV_MAX_LIMIT} bars per call — for deep history, the Data
+ * Source Manager walks older pages by lowering `endTime` each round.
+ *
+ * `startTime` is accepted for SourceOpts parity but is **not** sent upstream
+ * (Gecko OHLCV has no after/start cursor on the public API).
+ *
+ * @returns Bars sorted ascending by `time` (unix seconds).
  * @throws on missing params, HTTP failure, invalid JSON, or empty OHLCV
  */
 export async function fetchGeckoPoolOhlcv(opts: {
   network: string;
   poolAddress: string;
   interval: string;
+  /** Request size; clamped to {@link GECKO_OHLCV_MAX_LIMIT} (1000). */
   limit?: number;
   /** Unix seconds — Gecko `before_timestamp` for pagination (older bars). */
   beforeTimestamp?: number;
   /**
    * Alias used by SourcePlugin walk-back (`endTime` in SourceOpts).
-   * Same meaning as {@link beforeTimestamp}.
+   * Same meaning as {@link beforeTimestamp}: bars strictly before this time.
    */
   endTime?: number;
+  /** Ignored by Gecko OHLCV (no start cursor); kept for SourceOpts shape. */
   startTime?: number;
   signal?: AbortSignal;
   baseUrl?: string;
@@ -317,19 +368,15 @@ export async function fetchGeckoPoolOhlcv(opts: {
   const { timeframe, aggregate } = mapAxisIntervalToGecko(opts.interval);
   const limit = clampLimit(opts.limit);
   const base = resolveBaseUrl(opts.baseUrl);
+  void opts.startTime; // SourceOpts parity — not supported by Gecko OHLCV
 
   const params = new URLSearchParams();
   params.set('aggregate', String(aggregate));
   params.set('limit', String(limit));
   params.set('currency', 'usd');
-  const before =
-    typeof opts.beforeTimestamp === 'number' && Number.isFinite(opts.beforeTimestamp) && opts.beforeTimestamp > 0
-      ? opts.beforeTimestamp
-      : typeof opts.endTime === 'number' && Number.isFinite(opts.endTime) && opts.endTime > 0
-        ? opts.endTime
-        : null;
+  const before = resolveGeckoBeforeTimestamp(opts);
   if (before != null) {
-    params.set('before_timestamp', String(Math.floor(before)));
+    params.set('before_timestamp', String(before));
   }
 
   const url =
@@ -369,13 +416,20 @@ export async function fetchGeckoPoolOhlcv(opts: {
     );
   }
 
-  const bars = parseGeckoOhlcvList(json);
+  let bars = parseGeckoOhlcvList(json);
+  // Enforce exclusive upper bound (Gecko before_timestamp semantics).
+  if (before != null && bars.length) {
+    bars = bars.filter((b) => b.time < before);
+  }
   if (!bars.length) {
     throw new Error(
       `GeckoTerminal: empty OHLCV for ${network}/${poolAddress} ` +
-        `(${timeframe} aggregate=${aggregate}, currency=usd)`,
+        `(${timeframe} aggregate=${aggregate}, currency=usd` +
+        (before != null ? `, before_timestamp=${before}` : '') +
+        ')',
     );
   }
+  // parseGeckoOhlcvList already sorts ascending; keep stable contract for callers
   return bars;
 }
 

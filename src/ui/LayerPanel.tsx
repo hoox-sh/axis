@@ -51,6 +51,12 @@ import {
   volumeProfileEnabled,
   toggleVolumeProfileEnabled,
 } from '../chart/volume-profile';
+import {
+  onchainManagerState,
+  setOnchainSeriesVisible,
+  detachOnchainSeries,
+  setOnchainEventsVisible,
+} from '../onchain/manager';
 import { Icons } from './icons';
 import { FloatableShell } from './panels/FloatableShell';
 import {
@@ -347,6 +353,65 @@ export const LayerPanel: Component = () => {
               visible={volumeProfileEnabled()}
               onToggle={() => toggleVolumeProfileEnabled()}
             />
+          </Section>
+
+          <Section title="On-Chain">
+            <div data-testid="axis-layers-onchain" class="flex flex-col gap-0.5">
+              <Show
+                when={
+                  onchainManagerState.series.length > 0 ||
+                  onchainManagerState.events.length > 0
+                }
+                fallback={
+                  <Empty>
+                    No on-chain series. Attach TVL from the On-Chain panel.
+                  </Empty>
+                }
+              >
+                <For each={onchainManagerState.series}>
+                  {(s) => (
+                    <LayerRow
+                      label={s.label || s.key || s.id}
+                      sub={[
+                        s.provider || s.providerId,
+                        s.loading ? 'loading…' : null,
+                        s.error ? 'error' : null,
+                        s.lastTvl != null
+                          ? `$${formatCompactUsd(s.lastTvl)}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                      visible={s.visible !== false}
+                      onToggle={() =>
+                        setOnchainSeriesVisible(s.id, s.visible === false)
+                      }
+                      onRemove={() => detachOnchainSeries(s.id)}
+                      testId={`axis-layers-onchain-series-${s.id}`}
+                      removeTitle="Detach series"
+                    />
+                  )}
+                </For>
+                <Show when={onchainManagerState.events.length > 0}>
+                  <LayerRow
+                    label="Event markers"
+                    sub={
+                      onchainManagerState.eventSourceLabel ||
+                      `${onchainManagerState.events.length} event${
+                        onchainManagerState.events.length === 1 ? '' : 's'
+                      }`
+                    }
+                    visible={onchainManagerState.eventsVisible !== false}
+                    onToggle={() =>
+                      setOnchainEventsVisible(
+                        onchainManagerState.eventsVisible === false,
+                      )
+                    }
+                    testId="axis-layers-onchain-events"
+                  />
+                </Show>
+              </Show>
+            </div>
           </Section>
 
           <Section title="Scripts">
@@ -698,6 +763,17 @@ const Empty: Component<{ children: any }> = (props) => (
   <div class="text-text-faint italic px-1 py-1 text-[0.85em]">{props.children}</div>
 );
 
+/** Compact USD for on-chain last values (e.g. TVL). */
+function formatCompactUsd(n: number): string {
+  if (!Number.isFinite(n)) return '—';
+  const abs = Math.abs(n);
+  if (abs >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return n.toFixed(0);
+}
+
 const LayerRow: Component<{
   label: string;
   sub?: string;
@@ -706,8 +782,15 @@ const LayerRow: Component<{
   onToggle: () => void;
   onSettings?: () => void;
   onRemove?: () => void;
+  /** Optional root data-testid (e.g. axis-layers-onchain-*). */
+  testId?: string;
+  /** Tooltip for the remove/detach control. */
+  removeTitle?: string;
 }> = (props) => (
-  <div class="flex items-center gap-1.5 px-1 py-1 bg-bg-elev border border-border-soft hover:border-border">
+  <div
+    class="flex items-center gap-1.5 px-1 py-1 bg-bg-elev border border-border-soft hover:border-border"
+    data-testid={props.testId}
+  >
     <button
       type="button"
       class={`w-5 h-5 text-[0.75em] flex items-center justify-center border-2 flex-shrink-0 ${
@@ -741,7 +824,10 @@ const LayerRow: Component<{
       <button
         type="button"
         class="sc-btn sc-btn-ghost px-1 text-text-faint hover:text-red"
-        title="Remove"
+        title={props.removeTitle || 'Remove'}
+        data-testid={
+          props.testId ? `${props.testId}-detach` : undefined
+        }
         onClick={props.onRemove}
       >
         <Icons.x />
