@@ -108,9 +108,14 @@ export async function loadSymbolData(
   interval: string = store.interval,
   sourceId: string = store.source,
 ): Promise<boolean> {
-  const sym = String(symbol || '').trim().toUpperCase();
-  const iv = String(interval || store.interval || '1d');
+  // DEX pool symbols (network:0x… / base58) are case-sensitive — do not force upper.
+  const rawSym = String(symbol || '').trim();
   const srcId = String(sourceId || store.source || '');
+  const sym =
+    srcId === 'geckoterminal-ohlcv' || rawSym.includes(':') || rawSym.includes('/')
+      ? rawSym
+      : rawSym.toUpperCase();
+  const iv = String(interval || store.interval || '1d');
 
   // Claim this load as the newest; any prior in-flight work becomes stale.
   const gen = ++loadGeneration;

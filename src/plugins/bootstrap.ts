@@ -21,7 +21,8 @@
  * Register all **built-in** plugins with the unified registry.
  *
  * Idempotent: safe to call from app boot, plugin loader, and active resolvers.
- * Covers sources, streams, engines, and storages (not dynamic URL plugins).
+ * Covers sources, streams, engines, storages, and on-chain datasets
+ * (not dynamic URL plugins).
  *
  * @module plugins/bootstrap
  */
@@ -30,16 +31,18 @@ import { ensureSourcesRegistered } from '../sources/catalog';
 import { ensureStreamsRegistered } from '../streams/catalog';
 import { ensureEnginesRegistered } from '../engines/catalog';
 import { ensureStoragesRegistered } from '../storage/catalog';
+import { ensureOnchainDatasetsRegistered } from '../onchain/catalog';
 
 let done = false;
 
-/** Ensure built-in source/stream/engine/storage plugins are registered once. */
+/** Ensure built-in source/stream/engine/storage/dataset plugins are registered once. */
 export function ensureBuiltins(): void {
   if (done) return;
   ensureSourcesRegistered();
   ensureStreamsRegistered();
   ensureEnginesRegistered();
   ensureStoragesRegistered();
+  ensureOnchainDatasetsRegistered();
   done = true;
 }
 

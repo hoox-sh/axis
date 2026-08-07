@@ -33,7 +33,7 @@
  * | `bybit-ws` | WS | v5 public spot kline |
  * | `coinbase-ws` | WS | ticker → interval-bucketed bars |
  * | `kraken-ws` | WS | public OHLC channel |
- * | `mock-poll` | local | synthetic ticks (pairs with `mock-walk` / CSV) |
+ * | `mock-poll` | local | synthetic ticks (pairs with `mock-walk` / CSV / DEX OHLCV) |
  *
  * ## Lifecycle
  *
@@ -503,7 +503,13 @@ export function listDynamicStreamIds(): string[] {
 
 /** Pick a sensible stream for the current historical source. */
 export function defaultStreamForSource(sourceId: string): string {
-  if (sourceId === 'mock-walk' || sourceId === 'csv-upload') {
+  // Offline / synthetic / no live venue feed yet
+  if (
+    sourceId === 'mock-walk' ||
+    sourceId === 'csv-upload' ||
+    // DEX OHLCV is REST-only for now — no live GeckoTerminal WS (Phase 2)
+    sourceId === 'geckoterminal-ohlcv'
+  ) {
     return 'mock-poll';
   }
   // Data Manager is a cache front-end: stream should match the *venue* series,

@@ -32,6 +32,7 @@
  * | GET `/api/usage`     | stub usage           | public placeholder |
  * | `/api/scripts…`      | {@link handleScripts}| Bearer API key; D1 or in-memory |
  * | `/api/git/oauth/…`   | {@link handleGitOAuth}| public; device-flow proxy (GitHub/GitLab) |
+ * | `/api/onchain/…`     | {@link handleOnchain}| public; DefiLlama + GeckoTerminal allowlisted proxy |
  * | GET `/api/stream`    | SessionDO upgrade    | requires `SESSIONS` DO binding |
  * | OPTIONS `*`          | CORS preflight       | 204 |
  *
@@ -50,6 +51,7 @@ import { handleRun } from './runtime';
 import { handleKeys } from './keys';
 import { handleScripts } from './scripts';
 import { handleGitOAuth } from './git-oauth';
+import { handleOnchain } from './onchain';
 import { SessionDO } from './durable-objects/session';
 
 export { SessionDO };
@@ -170,6 +172,12 @@ export default {
         return await handleGitOAuth(req, env, origin, url.pathname, CORS_HEADERS);
       }
 
+      // On-chain analytics proxy (DefiLlama + GeckoTerminal allowlist — public, no auth)
+      if (url.pathname.startsWith('/api/onchain')) {
+        const onchainRes = await handleOnchain(req, env, origin, url.pathname);
+        if (onchainRes) return onchainRes;
+      }
+
       switch (url.pathname) {
         case '/':
         case '/health':
@@ -182,6 +190,7 @@ export default {
                 scripts: true,
                 d1: !!env.DB,
                 keys: !!env.API_KEYS,
+                onchain: true,
               },
             },
             { status: 200 },

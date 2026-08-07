@@ -20,9 +20,9 @@
 /**
  * Unified **plugin registry** — single source of truth for all plugin kinds.
  *
- * Holds ordered maps of source / stream / engine / storage / component plugins.
- * Built-ins register via catalog `ensure*Registered()`; dynamic plugins via
- * `register*` or {@link PluginRegistry.register}. Built-in plugins cannot be
+ * Holds ordered maps of source / stream / engine / storage / dataset / component
+ * plugins. Built-ins register via catalog `ensure*Registered()`; dynamic plugins
+ * via `register*` or {@link PluginRegistry.register}. Built-in plugins cannot be
  * unregistered unless `allowBuiltIn: true`.
  *
  * Subscribe with {@link PluginRegistry.on} for Settings / Manager refresh.
@@ -34,6 +34,7 @@
 import type {
   AnyPlugin,
   ComponentPlugin,
+  DatasetPlugin,
   EnginePlugin,
   PluginKind,
   RegistrySummary,
@@ -58,6 +59,7 @@ export class PluginRegistry {
   private _streams = new Map<string, StreamPlugin>();
   private _engines = new Map<string, EnginePlugin>();
   private _storages = new Map<string, StoragePlugin>();
+  private _datasets = new Map<string, DatasetPlugin>();
   private _components = new Map<string, ComponentPlugin>();
   private _listeners = new Set<Listener>();
   /** Preserve registration order within each kind */
@@ -65,6 +67,7 @@ export class PluginRegistry {
   private _streamOrder: string[] = [];
   private _engineOrder: string[] = [];
   private _storageOrder: string[] = [];
+  private _datasetOrder: string[] = [];
 
   on(listener: Listener): () => void {
     this._listeners.add(listener);
@@ -202,6 +205,34 @@ export class PluginRegistry {
     return true;
   }
 
+  // --- Dataset ---
+  registerDataset(dataset: DatasetPlugin): this {
+    this._assertDataset(dataset);
+    const isNew = !this._datasets.has(dataset.id);
+    this._datasets.set(dataset.id, dataset);
+    if (isNew) this._setOrdered(this._datasetOrder, dataset.id);
+    this._emit('registered', 'dataset', dataset.id);
+    return this;
+  }
+
+  getDataset(id: string): DatasetPlugin | undefined {
+    return this._datasets.get(id);
+  }
+
+  listDatasets(): DatasetPlugin[] {
+    return this._datasetOrder.map((id) => this._datasets.get(id)!).filter(Boolean);
+  }
+
+  unregisterDataset(id: string, opts?: { allowBuiltIn?: boolean }): boolean {
+    const p = this._datasets.get(id);
+    if (!p) return false;
+    if (p.builtIn && !opts?.allowBuiltIn) return false;
+    this._datasets.delete(id);
+    this._removeOrdered(this._datasetOrder, id);
+    this._emit('unregistered', 'dataset', id);
+    return true;
+  }
+
   // --- Component (phase 2) ---
   registerComponent(component: ComponentPlugin): this {
     if (!component?.id || component.kind !== 'component') {
@@ -227,11 +258,13 @@ export class PluginRegistry {
     this._streams.clear();
     this._engines.clear();
     this._storages.clear();
+    this._datasets.clear();
     this._components.clear();
     this._sourceOrder = [];
     this._streamOrder = [];
     this._engineOrder = [];
     this._storageOrder = [];
+    this._datasetOrder = [];
   }
 
   summary(): RegistrySummary {
@@ -240,6 +273,7 @@ export class PluginRegistry {
       streams: this.listStreams().map(summarize),
       engines: this.listEngines().map(summarize),
       storages: this.listStorages().map(summarize),
+      datasets: this.listDatasets().map(summarize),
     };
   }
 
@@ -253,6 +287,8 @@ export class PluginRegistry {
         return this.registerEngine(plugin);
       case 'storage':
         return this.registerStorage(plugin);
+      case 'dataset':
+        return this.registerDataset(plugin);
       case 'component':
         return this.registerComponent(plugin);
       default:
@@ -270,6 +306,8 @@ export class PluginRegistry {
         return this.unregisterEngine(id, opts);
       case 'storage':
         return this.unregisterStorage(id, opts);
+      case 'dataset':
+        return this.unregisterDataset(id, opts);
       case 'component': {
         if (!this._components.has(id)) return false;
         this._components.delete(id);
@@ -310,6 +348,13 @@ export class PluginRegistry {
     if (typeof s.read !== 'function') throw new Error('storage: read() required');
     if (typeof s.write !== 'function') throw new Error('storage: write() required');
     if (typeof s.remove !== 'function') throw new Error('storage: remove() required');
+  }
+
+  private _assertDataset(d: DatasetPlugin) {
+    if (!d || typeof d !== 'object') throw new Error('dataset: not an object');
+    if (!d.id || !d.name) throw new Error('dataset: id and name required');
+    if (d.kind !== 'dataset') throw new Error(`dataset: kind must be 'dataset' (got ${d.kind})`);
+    if (typeof d.fetchDataset !== 'function') throw new Error('dataset: fetchDataset() required');
   }
 }
 

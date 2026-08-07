@@ -59,6 +59,7 @@ import {
   isPanelOpen,
   toggleLibraryPanel,
   toggleDataSourcePanel,
+  toggleOnchainPanel,
   isScriptRunBlockedByPreEval,
 } from '../store';
 import { CHART_TYPES } from '../chart/chart-type';
@@ -605,6 +606,18 @@ export const Topbar: Component<{
         >
           <Icons.download />
           <span class="axis-tb-btn-label">Data</span>
+        </button>
+
+        <button
+          type="button"
+          class={`sc-btn sc-btn-ghost ${isPanelOpen('onchain') ? 'is-active' : ''}`}
+          onClick={() => toggleOnchainPanel()}
+          title="On-Chain — DefiLlama protocol TVL overlays"
+          aria-pressed={isPanelOpen('onchain')}
+          data-testid="axis-btn-onchain"
+        >
+          <Icons.chain />
+          <span class="axis-tb-btn-label">On-Chain</span>
         </button>
 
         <button

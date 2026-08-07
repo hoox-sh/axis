@@ -32,6 +32,7 @@
  * | `okx-rest` | yes | `GET /api/v5/market/candles` (BTCUSDT → BTC-USDT) |
  * | `bybit-rest` | yes | Bybit v5 spot klines |
  * | `coinbase-rest` | yes | Exchange candles (max ~300) |
+ * | `geckoterminal-ohlcv` | yes | DEX pool OHLCV via GeckoTerminal (`network:0xPool`) |
  * | `mock-walk` | no | Synthetic random walk; optional deterministic seed |
  * | `csv-upload` | no | Last file from {@link upload-store} |
  * | `data-manager` | no | Local bars-cache from Data Source Manager |
@@ -59,6 +60,166 @@ import {
 import { sliceBarsForLoad } from '../data/bars-cache';
 import { expandCachedSeriesToNow } from '../data/expand-cache';
 import { getUploadedBars } from './upload-store';
+
+/** Parsed DEX pool id for {@link geckoTerminalOhlcv}. */
+export interface GeckoPoolRef {
+  network: string;
+  poolAddress: string;
+}
+
+/**
+ * Normalize GeckoTerminal network ids (common aliases → API slug).
+ * e.g. `ethereum` → `eth`, `polygon` → `polygon_pos`.
+ */
+export function normalizeGeckoNetwork(network: string): string {
+  const n = String(network || '')
+    .trim()
+    .toLowerCase();
+  if (!n) return 'eth';
+  const aliases: Record<string, string> = {
+    ethereum: 'eth',
+    ether: 'eth',
+    mainnet: 'eth',
+    bnb: 'bsc',
+    'binance-smart-chain': 'bsc',
+    binancesmartchain: 'bsc',
+    matic: 'polygon_pos',
+    polygon: 'polygon_pos',
+    'polygon-pos': 'polygon_pos',
+    avax: 'avax',
+    avalanche: 'avax',
+    arb: 'arbitrum',
+    'arbitrum-one': 'arbitrum',
+    'arbitrum one': 'arbitrum',
+  };
+  return aliases[n] || n;
+}
+
+/**
+ * Parse AXIS DEX symbol forms into `{ network, poolAddress }`.
+ *
+ * Supported:
+ * 1. `eth:0x…` or `ethereum:0xPool` (optional trailing label after address)
+ * 2. `network/0x…`
+ * 3. bare `0x` address → `defaultNetwork` (config.network, usually `eth`)
+ *
+ * Also accepts Solana-style base58 addresses after `network:` / `network/`.
+ */
+export function parseGeckoPoolSymbol(
+  symbol: string,
+  defaultNetwork = 'eth',
+): GeckoPoolRef {
+  const raw = String(symbol || '').trim();
+  if (!raw) {
+    throw new Error(
+      'GeckoTerminal: symbol is required (e.g. eth:0x… or network/0xPoolAddress)',
+    );
+  }
+
+  // EVM 0x + optional Solana base58 pool addresses
+  const addrBody = '0x[a-fA-F0-9]{6,}|[1-9A-HJ-NP-Za-km-z]{32,44}';
+
+  // Form 1: network:address [optional name…]
+  const colon = new RegExp(
+    `^([a-zA-Z0-9_-]+)\\s*:\\s*(${addrBody})\\b`,
+  ).exec(raw);
+  if (colon) {
+    return {
+      network: normalizeGeckoNetwork(colon[1]),
+      poolAddress: colon[2],
+    };
+  }
+
+  // Form 2: network/address [optional name…]
+  const slash = new RegExp(
+    `^([a-zA-Z0-9_-]+)\\s*/\\s*(${addrBody})\\b`,
+  ).exec(raw);
+  if (slash) {
+    return {
+      network: normalizeGeckoNetwork(slash[1]),
+      poolAddress: slash[2],
+    };
+  }
+
+  // Form 3: bare EVM address
+  const bareEvm = /^(0x[a-fA-F0-9]{40})\b/i.exec(raw);
+  if (bareEvm) {
+    return {
+      network: normalizeGeckoNetwork(defaultNetwork),
+      poolAddress: bareEvm[1],
+    };
+  }
+
+  throw new Error(
+    `GeckoTerminal: cannot parse symbol "${raw}". ` +
+      'Use network:0xPool, network/0xPool, or a bare 0x address ' +
+      '(default network from source config).',
+  );
+}
+
+type GeckoTerminalModule = {
+  fetchGeckoPoolOhlcv: (opts: {
+    network: string;
+    poolAddress: string;
+    interval: string;
+    limit?: number;
+    endTime?: number;
+    startTime?: number;
+    signal?: AbortSignal;
+    baseUrl?: string;
+  }) => Promise<Bar[]>;
+  searchGeckoPools?: (
+    query: string,
+    opts?: {
+      limit?: number;
+      signal?: AbortSignal;
+      baseUrl?: string;
+      network?: string;
+    },
+  ) => Promise<
+    Array<
+      | string
+      | {
+          network: string;
+          address: string;
+          name?: string;
+          symbol?: string;
+        }
+    >
+  >;
+};
+
+/**
+ * Lazy-load `onchain/geckoterminal` so registration works while that module
+ * is mid-land. Throws a clear rebuild hint if the client is missing.
+ */
+async function loadGeckoTerminal(): Promise<GeckoTerminalModule> {
+  try {
+    // Static specifier so Vite can split the chunk when the file exists.
+    const mod = (await import('../onchain/geckoterminal')) as GeckoTerminalModule & {
+      default?: GeckoTerminalModule;
+    };
+    const fetchFn = mod.fetchGeckoPoolOhlcv ?? mod.default?.fetchGeckoPoolOhlcv;
+    if (typeof fetchFn !== 'function') {
+      throw new Error('export fetchGeckoPoolOhlcv not found');
+    }
+    const searchFn = mod.searchGeckoPools ?? mod.default?.searchGeckoPools;
+    return {
+      fetchGeckoPoolOhlcv: fetchFn.bind(mod.default ?? mod),
+      searchGeckoPools:
+        typeof searchFn === 'function'
+          ? searchFn.bind(mod.default ?? mod)
+          : undefined,
+    };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      'GeckoTerminal client missing (src/onchain/geckoterminal). ' +
+        'Rebuild/sync after the on-chain data-plane agent lands that module. ' +
+        `(${detail})`,
+    );
+  }
+}
 
 export type SourceConfigSchema = ConfigSchema;
 /** @deprecated Prefer importing SourcePlugin from plugins/types */
@@ -198,6 +359,7 @@ export function sourcePageLimit(sourceId: string): number {
       return 280;
     case 'binance-rest':
     case 'bybit-rest':
+    case 'geckoterminal-ohlcv':
       return 1000;
     case 'mock-walk':
       return 1000;
@@ -558,12 +720,112 @@ export const coinbaseRest: SourcePlugin = {
   },
 };
 
+/**
+ * DEX pool OHLCV via GeckoTerminal public API.
+ *
+ * **Symbol forms** (see {@link parseGeckoPoolSymbol}):
+ * - `eth:0x…` / `ethereum:0xPool` — network + pool address (optional label suffix)
+ * - `base/0x…` — slash form
+ * - bare `0x…` — uses `config.network` (default `eth`)
+ *
+ * Empty `baseUrl` → Worker proxy when the geckoterminal client resolves it.
+ * Live stream: pair with `mock-poll` until a DEX WS exists (Phase 2).
+ */
+export const geckoTerminalOhlcv: SourcePlugin = {
+  id: 'geckoterminal-ohlcv',
+  name: 'GeckoTerminal DEX',
+  kind: 'source',
+  description:
+    'DEX pool OHLCV via GeckoTerminal (network:poolAddress symbol). Browser CORS usually needs the AXIS Worker proxy.',
+  builtIn: true,
+  capabilities: { needsNetwork: true, needsProxy: true },
+  configSchema: {
+    baseUrl: {
+      type: 'string',
+      default: '',
+      label: 'API base (empty = Worker proxy)',
+      description:
+        'Empty = use AXIS Worker on-chain proxy when available. Override with https://api.geckoterminal.com/api/v2 or a custom proxy.',
+      placeholder: '{endpoint}/api/onchain/gecko',
+    },
+    network: {
+      type: 'string',
+      default: 'eth',
+      label: 'Default network',
+      description: 'Used when the symbol is a bare 0x pool address (e.g. eth, base, solana, bsc).',
+    },
+  },
+  async fetchHistorical({
+    symbol,
+    interval,
+    limit,
+    endTime,
+    startTime,
+    signal,
+    config,
+  }) {
+    const cfg = resolveConfig(this.configSchema, config);
+    const defaultNetwork = String(cfg.network || 'eth');
+    const { network, poolAddress } = parseGeckoPoolSymbol(symbol, defaultNetwork);
+    const baseUrl = String(cfg.baseUrl ?? '');
+    const pageLimit =
+      typeof limit === 'number' && Number.isFinite(limit) && limit > 0
+        ? Math.min(1000, Math.floor(limit))
+        : sourcePageLimit('geckoterminal-ohlcv');
+
+    const gecko = await loadGeckoTerminal();
+    const bars = await gecko.fetchGeckoPoolOhlcv({
+      network,
+      poolAddress,
+      interval: String(interval || '1h'),
+      limit: pageLimit,
+      endTime,
+      startTime,
+      signal: fetchSignal(signal),
+      baseUrl: baseUrl || undefined,
+    });
+    if (!Array.isArray(bars) || !bars.length) {
+      throw new Error(
+        `GeckoTerminal: no candles for ${network}:${poolAddress} (${interval || '1h'})`,
+      );
+    }
+    return bars;
+  },
+  async searchSymbols(query, config) {
+    const q = String(query || '').trim();
+    if (!q) return [];
+    const cfg = resolveConfig(this.configSchema, config);
+    const gecko = await loadGeckoTerminal();
+    if (typeof gecko.searchGeckoPools !== 'function') {
+      return [];
+    }
+    const hits = await gecko.searchGeckoPools(q, {
+      baseUrl: String(cfg.baseUrl || '') || undefined,
+      network: String(cfg.network || 'eth'),
+      limit: 20,
+    });
+    if (!Array.isArray(hits)) return [];
+    return hits
+      .map((hit) => {
+        if (typeof hit === 'string') return hit.trim();
+        if (!hit || typeof hit !== 'object') return '';
+        const network = normalizeGeckoNetwork(hit.network || String(cfg.network || 'eth'));
+        const address = String(hit.address || '').trim();
+        if (!address) return '';
+        const label = String(hit.name || hit.symbol || '').trim();
+        return label ? `${network}:${address} ${label}` : `${network}:${address}`;
+      })
+      .filter(Boolean);
+  },
+};
+
 /** Built-in sources in UI order */
 export const BUILTIN_SOURCES: SourcePlugin[] = [
   binanceRest,
   okxRest,
   bybitRest,
   coinbaseRest,
+  geckoTerminalOhlcv,
   mockWalk,
   csvUpload,
   dataManagerSource,

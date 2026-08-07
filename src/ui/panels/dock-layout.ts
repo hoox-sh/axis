@@ -46,6 +46,7 @@ export const DOCK_STACK_ORDER: readonly PanelId[] = [
   'alerts',
   'library',
   'datasource',
+  'onchain',
   'editor',
   'results',
   'logs',

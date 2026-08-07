@@ -69,6 +69,7 @@ export interface CommandActions {
   toggleScriptLogs?: () => void;
   toggleLibrary?: () => void;
   toggleDataSource?: () => void;
+  toggleOnchain?: () => void;
   toggleTheme: () => void;
   /** Apply a named chart theme preset (void-dark, classic, …). */
   setChartThemePreset?: (presetId: string) => void;
@@ -284,6 +285,20 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
       'exchange',
       'symbol',
       'timeframe',
+    ],
+  },
+  {
+    id: 'panel.onchain',
+    title: 'Toggle On-Chain panel',
+    category: 'panels',
+    keywords: [
+      'onchain',
+      'on-chain',
+      'defillama',
+      'tvl',
+      'chain',
+      'protocol',
+      'liquidity',
     ],
   },
   // Theme
@@ -535,6 +550,7 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.toggleAlerts) byId.set('panel.alerts', actions.toggleAlerts);
   if (actions.toggleLibrary) byId.set('panel.library', actions.toggleLibrary);
   if (actions.toggleDataSource) byId.set('panel.datasource', actions.toggleDataSource);
+  if (actions.toggleOnchain) byId.set('panel.onchain', actions.toggleOnchain);
   if (actions.loadSymbol) byId.set('action.load-symbol', () => void actions.loadSymbol?.());
   if (actions.reloadChart) byId.set('action.reload-chart', () => void actions.reloadChart?.());
   if (actions.toggleLive) byId.set('action.toggle-live', actions.toggleLive);

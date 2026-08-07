@@ -485,6 +485,20 @@ export interface AppState {
    * line series aligned to the main bars (% or absolute).
    */
   compare: CompareState;
+
+  /**
+   * On-chain panel prefs (persisted). Series points / chart attachments live
+   * in the onchain manager module — not here.
+   */
+  onchain: OnchainState;
+}
+
+/** Thin on-chain panel prefs (last protocol search/use). */
+export interface OnchainState {
+  /** Last protocol slug searched/used (persisted). */
+  lastProtocolSlug: string;
+  /** Last protocol display name (persisted). */
+  lastProtocolName: string;
 }
 
 /** Compare-overlay preferences + ephemeral load state. */

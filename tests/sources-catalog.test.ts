@@ -50,7 +50,9 @@ describe('sources catalog', () => {
     expect(ids).toContain('binance-rest');
     expect(ids).toContain('mock-walk');
     expect(ids).toContain('data-manager');
+    expect(ids).toContain('geckoterminal-ohlcv');
     expect(getSource('mock-walk')?.name).toBe('Mock Walk');
+    expect(getSource('geckoterminal-ohlcv')?.name).toBe('GeckoTerminal DEX');
   });
 
   it('mock-walk returns configured length', async () => {

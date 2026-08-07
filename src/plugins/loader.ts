@@ -18,15 +18,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * **Dynamic plugin loader** — install source/stream/engine plugins from URL.
+ * **Dynamic plugin loader** — install source/stream/engine/dataset plugins from URL.
  *
  * Dynamic-imports ES modules from a URL (Vite-ignored). Persists the installed
  * list under `localStorage` key {@link PLUGINS_KEY}. On boot, call
  * {@link restoreInstalledPlugins} to re-import saved URLs.
  *
- * Supported kinds: `source`, `stream`, `engine`. Storage/component via URL
- * are not supported yet. Rejects dangerous schemes (`javascript:`, HTML
- * `data:` URLs, etc.). Maps legacy `/src/plugins/…` paths to `/plugins/…`
+ * Supported kinds: `source`, `stream`, `engine`, `dataset`. Storage/component
+ * via URL are not supported yet. Rejects dangerous schemes (`javascript:`,
+ * HTML `data:` URLs, etc.). Maps legacy `/src/plugins/…` paths to `/plugins/…`
  * for production.
  *
  * Example plugins: `example-coingecko-source.js`, `example-cf-do-stream.js`,
@@ -38,9 +38,10 @@
 import { registerDynamicSource, unregisterDynamicSource, listDynamicSourceIds } from '../sources/catalog';
 import { registerDynamicStream, unregisterDynamicStream } from '../streams/catalog';
 import { registerDynamicEngine, unregisterDynamicEngine } from '../engines/catalog';
+import { registerDynamicDataset, unregisterDynamicDataset } from '../onchain/catalog';
 import { ensureBuiltins } from './bootstrap';
 import { appendLog } from '../store';
-import type { EnginePlugin, SourcePlugin, StreamPlugin } from './types';
+import type { DatasetPlugin, EnginePlugin, SourcePlugin, StreamPlugin } from './types';
 
 /** localStorage key for installed plugin URL list. */
 export const PLUGINS_KEY = 'pynescript.axis.plugins.v1';
@@ -125,10 +126,12 @@ function unregisterByKind(kind: string, id: string): void {
   if (kind === 'source') unregisterDynamicSource(id);
   else if (kind === 'stream') unregisterDynamicStream(id);
   else if (kind === 'engine') unregisterDynamicEngine(id);
+  else if (kind === 'dataset') unregisterDynamicDataset(id);
   else {
     unregisterDynamicSource(id);
     unregisterDynamicStream(id);
     unregisterDynamicEngine(id);
+    unregisterDynamicDataset(id);
   }
 }
 
@@ -214,6 +217,8 @@ export async function loadPluginFromUrl(url: string): Promise<InstalledPlugin> {
     if (typeof p.start !== 'function') throw new Error('Stream plugin needs start()');
   } else if (kind === 'engine') {
     if (typeof p.run !== 'function') throw new Error('Engine plugin needs run()');
+  } else if (kind === 'dataset') {
+    if (typeof p.fetchDataset !== 'function') throw new Error('Dataset plugin needs fetchDataset()');
   } else if (kind === 'storage') {
     throw new Error('Custom storage plugins via URL are not supported yet (use built-in local/cloud)');
   } else {
@@ -228,6 +233,8 @@ export async function loadPluginFromUrl(url: string): Promise<InstalledPlugin> {
       registerDynamicStream(p as unknown as StreamPlugin);
     } else if (kind === 'engine') {
       registerDynamicEngine(p as unknown as EnginePlugin);
+    } else if (kind === 'dataset') {
+      registerDynamicDataset(p as unknown as DatasetPlugin);
     }
     registered = true;
 

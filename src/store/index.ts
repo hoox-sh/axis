@@ -45,6 +45,7 @@ import type {
   Bar,
   CompareState,
   Indicator,
+  OnchainState,
   Pane,
   EditorMode,
   LogEntry,
@@ -243,6 +244,10 @@ const DEFAULTS: AppState = {
     gen: 0,
     loading: false,
     error: null,
+  },
+  onchain: {
+    lastProtocolSlug: '',
+    lastProtocolName: '',
   },
 };
 
@@ -625,6 +630,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
             .slice(0, 40)
         : [],
       compare: hydrateCompare(bag.compare),
+      onchain: hydrateOnchain((bag as { onchain?: unknown }).onchain),
     };
   } catch {
     return null;
@@ -690,6 +696,17 @@ function hydrateCompare(raw: unknown): CompareState {
     gen: 0,
     loading: false,
     error: null,
+  };
+}
+
+/** Restore durable on-chain panel prefs (protocol slug/name only). */
+function hydrateOnchain(raw: unknown): OnchainState {
+  const base = { ...DEFAULTS.onchain };
+  if (!raw || typeof raw !== 'object') return base;
+  const o = raw as Partial<OnchainState>;
+  return {
+    lastProtocolSlug: typeof o.lastProtocolSlug === 'string' ? o.lastProtocolSlug : '',
+    lastProtocolName: typeof o.lastProtocolName === 'string' ? o.lastProtocolName : '',
   };
 }
 
@@ -1907,6 +1924,37 @@ export function toggleDataSourcePanel() {
   setPanelOpen('datasource', !isPanelOpen('datasource'));
 }
 
+/** Open/close On-Chain (DefiLlama TVL) panel. */
+export function setOnchainPanelOpen(open: boolean) {
+  setPanelOpen('onchain', open);
+}
+
+/** Toggle On-Chain panel visibility. */
+export function toggleOnchainPanel() {
+  setPanelOpen('onchain', !isPanelOpen('onchain'));
+}
+
+/** Persist last on-chain protocol slug (search/use recall). */
+export function setOnchainLastProtocolSlug(slug: string) {
+  setStore('onchain', 'lastProtocolSlug', typeof slug === 'string' ? slug : '');
+  persist();
+}
+
+/** Persist last on-chain protocol display name. */
+export function setOnchainLastProtocolName(name: string) {
+  setStore('onchain', 'lastProtocolName', typeof name === 'string' ? name : '');
+  persist();
+}
+
+/** Set last protocol slug + name together (persisted). */
+export function setOnchainLastProtocol(slug: string, name: string) {
+  setStore('onchain', {
+    lastProtocolSlug: typeof slug === 'string' ? slug : '',
+    lastProtocolName: typeof name === 'string' ? name : '',
+  });
+  persist();
+}
+
 /** Enable/disable editor profiler mode (persisted). */
 export function setProfilerEnabled(on: boolean) {
   setStore('profilerEnabled', !!on);
@@ -2000,6 +2048,9 @@ export function isPanelOpen(id: PanelId): boolean {
     case 'datasource':
       // Chrome-only (no legacy flat flag)
       return chromeOpen;
+    case 'onchain':
+      // Chrome-only (no legacy flat flag)
+      return chromeOpen;
     case 'dataview':
       return !!store.dataViewPanel.open || chromeOpen;
     case 'layers':
@@ -2050,6 +2101,7 @@ const DOCK_STACK_IDS: PanelId[] = [
   'alerts',
   'library',
   'datasource',
+  'onchain',
   'editor',
   'results',
   'logs',

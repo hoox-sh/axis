@@ -84,6 +84,7 @@ import {
   WifiOff,
   MoveUpRight,
   Layers,
+  Link2,
   Slash,
   Table2,
   type LucideProps,
@@ -151,6 +152,8 @@ export const Icons = {
   square: withDefaults(Square),
   fib: withDefaults(GitCommitHorizontal),
   layers: withDefaults(Layers),
+  /** Chain / on-chain data (link-as-chain metaphor). */
+  chain: withDefaults(Link2),
   table: withDefaults(Table2),
   ruler: withDefaults(Ruler),
   type: withDefaults(Type),
