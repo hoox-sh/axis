@@ -63,9 +63,12 @@ export async function checkOnchainProxyHealth(
 ): Promise<OnchainProxyHealthResult> {
   let endpoint = '';
   try {
-    endpoint = opts?.endpoint
-      ? normalizeEndpointBase(opts.endpoint)
-      : resolveOnchainWorkerBase();
+    // Explicit empty string means "do not probe" (tests / offline); omit to use default Worker.
+    if (opts && 'endpoint' in opts) {
+      endpoint = normalizeEndpointBase(opts.endpoint);
+    } else {
+      endpoint = resolveOnchainWorkerBase();
+    }
   } catch {
     endpoint = '';
   }
