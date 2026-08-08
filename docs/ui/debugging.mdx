@@ -30,7 +30,7 @@ AXIS separates **script-authored diagnostics** (Pine `log.*`, engine errors, lin
 
 | Surface | Source of truth | Open / toggle |
 | --- | --- | --- |
-| **Scriptlogs** | `store.lastRun` → `normalizePineLogs` | Editor header **Scriptlogs** |
+| **Scriptlogs** | `store.lastRun` → `normalizePyneLogs` | Editor header **Scriptlogs** |
 | **Profiler** | `profilerEnabled` + `profile.lines` | Editor header **Profiler** |
 | **Debug** | `inlineDebugEnabled` + last-run logs with **line** | Editor header **Debug** |
 | **Pins** | `debugPinsEnabled` + logs with **bar_index / time** | Editor header **Pins** · **Alt+P** |
@@ -40,7 +40,7 @@ AXIS separates **script-authored diagnostics** (Pine `log.*`, engine errors, lin
 | Module | Role |
 | --- | --- |
 | `ui/ScriptLogsPanel.tsx` | Floatable last-run `log.*` list |
-| `results/pine-logs.ts` | Normalize / filter / TSV |
+| `results/pyne-logs.ts` | Normalize / filter / TSV |
 | `results/profiler.ts` | Line % profile |
 | `results/inline-debug.ts` | Annotations + pinable helpers |
 | `results/debug-pins.ts` | Bar pins, markers, `countDebugPins` |
@@ -154,7 +154,7 @@ Independent of Debug chips: structural **error reporting** from the run payload.
 | `axis-editor-diag-count` | Diagnostics badge |
 | `axis-editor-problems` | Problems panel |
 
-Unit coverage: `tests/pine-logs.test.ts`, `tests/profiler.test.ts`, `tests/inline-debug.test.ts`, `tests/debug-pins.test.ts`, `tests/editor-diagnostics.test.ts`.
+Unit coverage: `tests/pyne-logs.test.ts`, `tests/profiler.test.ts`, `tests/inline-debug.test.ts`, `tests/debug-pins.test.ts`, `tests/editor-diagnostics.test.ts`.
 
 ## See also
 

@@ -45,7 +45,7 @@ import {
   type Text,
 } from '@codemirror/state';
 import { parseSourceLine } from '../results/inline-debug';
-import { normalizePineLogs } from '../results/pine-logs';
+import { normalizePyneLogs } from '../results/pyne-logs';
 
 /**
  * Diagnostic severity (IDE-style).
@@ -477,7 +477,7 @@ export function diagnosticsFromLastRun(
   }
 
   // ── Logs with line / bar_index (error & warning) ────────────────────
-  const logs = normalizePineLogs(lastRun);
+  const logs = normalizePyneLogs(lastRun);
   for (const e of logs) {
     if (e.level !== 'error' && e.level !== 'warning') continue;
     const line = parseDiagnosticLine(e.message);

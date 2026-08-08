@@ -90,7 +90,7 @@ import {
 } from './editor/editor-bridge';
 import { loadSymbolData } from './data/load-symbol';
 import { prefetchPyodideAssets, preloadPyodide } from './engines/catalog';
-import { filterPineFiles, importPineFiles } from './storage/import-pine-files';
+import { filterPyneFiles, importPyneFiles } from './storage/import-pyne-files';
 import { applyThemeToDocument } from './theme';
 
 /** Primary charting workspace component mounted by `index.tsx`. */
@@ -255,7 +255,7 @@ export const App: Component = () => {
 
     const handlePineImport = async (pine: File[]) => {
       try {
-        const result = await importPineFiles(pine);
+        const result = await importPyneFiles(pine);
         const n = result.imported.length;
         if (n > 0) {
           const names = result.imported.map((d) => d.meta.name).join(', ');
@@ -360,7 +360,7 @@ export const App: Component = () => {
       const files = e.dataTransfer?.files;
       if (!files?.length) return;
 
-      const pine = filterPineFiles(files);
+      const pine = filterPyneFiles(files);
       if (!pine.length) {
         const names = Array.from(files)
           .map((f) => f.name)
@@ -543,7 +543,7 @@ export const App: Component = () => {
       <Show when={pineDropActive()}>
         <div
           class="absolute inset-0 z-[900] flex items-center justify-center pointer-events-none bg-void/75 backdrop-blur-[2px]"
-          data-testid="axis-pine-drop-overlay"
+          data-testid="axis-pyne-drop-overlay"
           aria-hidden="true"
         >
           <div class="border-2 border-dashed border-accent bg-bg-panel/95 px-8 py-6 text-center shadow-[0_8px_32px_rgba(0,0,0,0.5)] rounded-[var(--radius-sc)] max-w-md">

@@ -1,17 +1,38 @@
-/**
- * Copyright (c) 2026 HOOX · AXIS · hoox-sh
- * SPDX-License-Identifier: AGPL-3.0-only
- */
-
-// Example plugin: a custom calculation engine that runs a tiny built-in
-// Pine-like DSL in the browser.  Useful for offline demos that don't need
-// the full pynescript runtime.
+// Copyright (C) 2024-2026 jango_blockchained
 //
-// Supports:
-//   • close, open, high, low, volume
-//   • sma(series, n), ema(series, n), rsi(series, n)
-//   • plot(value) → emits a line series
-//   • strategy.entry(id, dir) / strategy.close(id) → emits events
+// This file is part of pynescript.
+//
+// pynescript is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// pynescript is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with pynescript.  If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * Example **engine** plugin — tiny browser DSL (no full pyne runtime).
+ *
+ * Demonstrates the {@link EnginePlugin} contract: `kind: 'engine'`,
+ * `isReady()`, `run({ script, bars }) → RunResult`. Useful for offline demos.
+ *
+ * ## Supported subset
+ *
+ * - Series: `close`, `open`, `high`, `low`, `volume`
+ * - Indicators: `sma`, `ema`, `rsi`
+ * - Output: `plot(value)` → line series; `strategy.entry` / `strategy.close` → events
+ *
+ * Install via Manager → Plugins (dynamic URL). Not a built-in.
+ *
+ * @module plugins/example-tiny-pyne-engine
+ */
 
 function sma(arr, n) {
     const out = new Array(arr.length).fill(NaN);
@@ -168,8 +189,8 @@ function parseStatements(src) {
 }
 
 const tinyEngine = {
-    id: 'tiny-pine',
-    name: 'Tiny Pine (JS DSL)',
+    id: 'tiny-pyne',
+    name: 'Tiny Pyne (JS DSL)',
     kind: 'engine',
     description: 'In-browser engine for the bundled Tiny-Pine DSL. Limited subset (sma/ema/rsi/plot/strategy.*). Always available, never makes a network call.',
     configSchema: {},
@@ -266,7 +287,7 @@ const tinyEngine = {
                 plots: plotsArr,
                 series: plots,
                 events,
-                meta: { mode: 'tiny-pine', count: N, ms: performance.now() - t0, script_name: 'Tiny Pine' },
+                meta: { mode: 'tiny-pyne', count: N, ms: performance.now() - t0, script_name: 'Tiny Pyne' },
             };
         } catch (err) {
             return { status: 'error', plots: [], events: [], error: err.message, meta: { ms: performance.now() - t0 } };

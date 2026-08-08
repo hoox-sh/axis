@@ -89,7 +89,7 @@ and this repo’s builtins — never invent “TV JS” APIs or invent Pine iden
 - Always `//@version=5` (or 6) with real `indicator()` / `strategy()`.
 - Prefer `overlay=false` + raw oscillator scale for RSI/MACD (not faked price scale).
 - Community scrape chrome: `Expand (N lines)` is **not** Pine — stripped on
-  import (`src/storage/import-pine-files.ts`); warn that those N lines were
+  import (`src/storage/import-pyne-files.ts`); warn that those N lines were
   never in the file.
 
 ### Trademark / wording

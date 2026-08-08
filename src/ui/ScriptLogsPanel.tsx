@@ -22,7 +22,7 @@
  * output from the focused script run.
  *
  * Reads `store.lastRun` (focused via {@link ScriptRunSelect} /
- * `resultsFocusId`) via {@link normalizePineLogs}. Multi-indicator live
+ * `resultsFocusId`) via {@link normalizePyneLogs}. Multi-indicator live
  * re-runs keep per-script caches in `runResults` so the list does not thrash.
  * FloatableShell id `scriptlogs`.
  */
@@ -30,10 +30,10 @@
 import { Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { store, isPanelOpen } from '../store';
 import {
-  normalizePineLogs,
-  type PineLogEntry,
-  type PineLogLevel,
-} from '../results/pine-logs';
+  normalizePyneLogs,
+  type PyneLogEntry,
+  type PyneLogLevel,
+} from '../results/pyne-logs';
 import { jumpToDebugPin } from '../chart/manager-access';
 import { flashDebugPinLine } from '../editor/inline-debug';
 import { parseSourceLine } from '../results/inline-debug';
@@ -45,7 +45,7 @@ import { copyToClipboard } from './clipboard';
 /** Panel chrome id (see `PanelId` in panels/types). */
 const PANEL_ID = 'scriptlogs' as const;
 
-type LevelFilter = 'all' | PineLogLevel;
+type LevelFilter = 'all' | PyneLogLevel;
 
 const FILTERS: { id: LevelFilter; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -75,20 +75,20 @@ function levelClass(level: unknown): string {
   }
 }
 
-function barIndexOf(entry: PineLogEntry): number | null {
+function barIndexOf(entry: PyneLogEntry): number | null {
   const v = entry.barIndex;
   if (typeof v === 'number' && Number.isFinite(v)) return v;
   return null;
 }
 
-function entryAsText(entry: PineLogEntry): string {
+function entryAsText(entry: PyneLogEntry): string {
   const lvl = String(entry.level ?? 'info').toUpperCase();
   const bi = barIndexOf(entry);
   const prefix = bi != null ? `[${bi}] ` : '';
   return `${lvl}\t${prefix}${entry.message ?? ''}`;
 }
 
-function logsAsText(entries: PineLogEntry[]): string {
+function logsAsText(entries: PyneLogEntry[]): string {
   return entries.map(entryAsText).join('\n');
 }
 
@@ -100,11 +100,11 @@ export const ScriptLogsPanel: Component = () => {
 
   const hasRun = () => store.lastRun != null;
 
-  const allEntries = createMemo((): PineLogEntry[] => {
+  const allEntries = createMemo((): PyneLogEntry[] => {
     const r = store.lastRun;
     if (r == null) return [];
     try {
-      return normalizePineLogs(r);
+      return normalizePyneLogs(r);
     } catch {
       return [];
     }
@@ -137,7 +137,7 @@ export const ScriptLogsPanel: Component = () => {
     if (await copyToClipboard(text)) flashCopied(1200);
   };
 
-  const copyLine = async (entry: PineLogEntry, e?: Event) => {
+  const copyLine = async (entry: PyneLogEntry, e?: Event) => {
     e?.stopPropagation?.();
     e?.preventDefault?.();
     const text = String(entry.message ?? '');

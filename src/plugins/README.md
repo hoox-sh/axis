@@ -58,7 +58,7 @@ Use **Manager → Export installed** to back up the list, and
 | File                              | Kind     | Description                                |
 |-----------------------------------|----------|--------------------------------------------|
 | `example-coingecko-source.js`     | source   | CoinGecko public market-chart API          |
-| `example-tiny-pine-engine.js`     | engine   | In-browser "Tiny Pine" JS DSL              |
+| `example-tiny-pyne-engine.js`     | engine   | In-browser "Tiny Pine" JS DSL              |
 | `example-cf-do-stream.js`         | stream   | WebSocket relay via CF Durable Object      |
 
 ## Writing your own

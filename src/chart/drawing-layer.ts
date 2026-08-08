@@ -54,7 +54,7 @@ import {
   normalizeScriptDrawings,
   type DrawingLimits,
   type ScriptDrawing,
-} from './pine-drawings';
+} from './pyne-drawings';
 import { snapToBars, type BarLike, type MagnetMode } from './drawings/snap';
 import { strokeDashFor } from './drawings/svg-primitives';
 import {
@@ -234,9 +234,9 @@ export class DrawingLayer {
     } as CSSStyleDeclaration);
 
     this.gFill = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    this.gFill.setAttribute('class', 'axis-pine-fills');
+    this.gFill.setAttribute('class', 'axis-pyne-fills');
     this.gScript = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    this.gScript.setAttribute('class', 'axis-pine-drawings');
+    this.gScript.setAttribute('class', 'axis-pyne-drawings');
     this.gDraw = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     this.gDraft = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     // Fills under lines/labels; user drawings on top

@@ -19,19 +19,19 @@
 
 /**
  * Pine Logs helpers — normalize engine log payloads into a stable
- * {@link PineLogEntry} list, filter by level, and export TSV for clipboard.
+ * {@link PyneLogEntry} list, filter by level, and export TSV for clipboard.
  *
  * Accepts top-level `logs`, `meta.logs`, arrays of `[level, msg]` tuples, or
  * `{ level, message }` objects (plus common snake_case aliases).
  *
- * @module results/pine-logs
+ * @module results/pyne-logs
  */
 
-export type PineLogLevel = 'info' | 'warning' | 'error';
+export type PyneLogLevel = 'info' | 'warning' | 'error';
 
-export interface PineLogEntry {
+export interface PyneLogEntry {
   id: string;
-  level: PineLogLevel;
+  level: PyneLogLevel;
   message: string;
   /** Optional bar index if engine provided it */
   barIndex?: number | null;
@@ -39,13 +39,13 @@ export interface PineLogEntry {
   time?: number | null;
 }
 
-const LEVELS: readonly PineLogLevel[] = ['info', 'warning', 'error'] as const;
+const LEVELS: readonly PyneLogLevel[] = ['info', 'warning', 'error'] as const;
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return v != null && typeof v === 'object' && !Array.isArray(v);
 }
 
-function normalizeLevel(raw: unknown): PineLogLevel {
+function normalizeLevel(raw: unknown): PyneLogLevel {
   if (raw == null) return 'info';
   const s = String(raw).trim().toLowerCase();
   if (s === 'warn' || s === 'warning') return 'warning';
@@ -113,7 +113,7 @@ function extractLogArray(raw: unknown): unknown[] {
   return [];
 }
 
-function entryFromObject(item: Record<string, unknown>, index: number): PineLogEntry | null {
+function entryFromObject(item: Record<string, unknown>, index: number): PyneLogEntry | null {
   const message = asMessage(
     item.message ?? item.msg ?? item.text ?? item.content ?? item.body ?? '',
   );
@@ -138,7 +138,7 @@ function entryFromObject(item: Record<string, unknown>, index: number): PineLogE
   };
 }
 
-function entryFromTuple(item: unknown[], index: number): PineLogEntry | null {
+function entryFromTuple(item: unknown[], index: number): PyneLogEntry | null {
   if (item.length === 0) return null;
   // [level, message] or [level, message, barIndex] or [level, message, barIndex, time]
   // Also tolerate [message] only
@@ -153,7 +153,7 @@ function entryFromTuple(item: unknown[], index: number): PineLogEntry | null {
   // Heuristic: if first looks like a level, treat as [level, msg, ...]
   const firstStr = first == null ? '' : String(first).trim().toLowerCase();
   const looksLikeLevel =
-    LEVELS.includes(firstStr as PineLogLevel) ||
+    LEVELS.includes(firstStr as PyneLogLevel) ||
     firstStr === 'warn' ||
     firstStr === 'err' ||
     firstStr === 'log' ||
@@ -185,7 +185,7 @@ function entryFromTuple(item: unknown[], index: number): PineLogEntry | null {
   };
 }
 
-function entryFromPrimitive(item: unknown, index: number): PineLogEntry | null {
+function entryFromPrimitive(item: unknown, index: number): PyneLogEntry | null {
   if (item == null) return null;
   if (typeof item === 'string') {
     const message = item.trim();
@@ -219,14 +219,14 @@ function entryFromPrimitive(item: unknown, index: number): PineLogEntry | null {
  * Accept engine payload shapes: top-level logs, meta.logs, arrays of
  * `[level, msg]` tuples, or `{ level, message }` objects.
  */
-export function normalizePineLogs(raw: unknown): PineLogEntry[] {
+export function normalizePyneLogs(raw: unknown): PyneLogEntry[] {
   const arr = extractLogArray(raw);
   if (!arr.length) return [];
 
-  const out: PineLogEntry[] = [];
+  const out: PyneLogEntry[] = [];
   for (let i = 0; i < arr.length; i++) {
     const item = arr[i];
-    let entry: PineLogEntry | null = null;
+    let entry: PyneLogEntry | null = null;
     if (Array.isArray(item)) {
       entry = entryFromTuple(item, i);
     } else if (isRecord(item)) {
@@ -242,10 +242,10 @@ export function normalizePineLogs(raw: unknown): PineLogEntry[] {
 /**
  * Filter by level set; empty set or `'all'` means no filter.
  */
-export function filterPineLogs(
-  entries: PineLogEntry[],
-  levels: Set<PineLogLevel> | 'all',
-): PineLogEntry[] {
+export function filterPyneLogs(
+  entries: PyneLogEntry[],
+  levels: Set<PyneLogLevel> | 'all',
+): PyneLogEntry[] {
   if (!entries?.length) return [];
   if (levels === 'all') return entries.slice();
   if (!(levels instanceof Set) || levels.size === 0) return entries.slice();
@@ -256,7 +256,7 @@ export function filterPineLogs(
  * TSV/text export for clipboard.
  * Columns: level, message, barIndex, time
  */
-export function pineLogsToText(entries: PineLogEntry[]): string {
+export function pyneLogsToText(entries: PyneLogEntry[]): string {
   if (!entries?.length) return '';
   const lines = ['level\tmessage\tbarIndex\ttime'];
   for (const e of entries) {

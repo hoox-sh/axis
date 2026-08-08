@@ -48,7 +48,7 @@ flowchart LR
 
 ```
 http://127.0.0.1:8081/plugins/example-coingecko-source.js
-http://127.0.0.1:3000/plugins/example-tiny-pine-engine.js
+http://127.0.0.1:3000/plugins/example-tiny-pyne-engine.js
 http://127.0.0.1:8081/plugins/example-cf-do-stream.js
 ```
 
@@ -62,9 +62,9 @@ You may host modules on any origin that allows **module** CORS (same-origin is s
 | File | id | kind | Purpose |
 | --- | --- | --- | --- |
 | `example-coingecko-source.js` | `coingecko` | source | Public CoinGecko market_chart → synthetic OHLC |
-| `example-tiny-pine-engine.js` | `tiny-pine` | engine | In-browser JS DSL: sma/ema/rsi/plot/strategy |
+| `example-tiny-pyne-engine.js` | `tiny-pyne` | engine | In-browser JS DSL: sma/ema/rsi/plot/strategy |
 | `example-cf-do-stream.js` | `cf-do` | stream | WS to Worker `/api/stream` SessionDO |
-| **External:** `pyne-agent-worker` `/plugin/axis-pine-agent.js` | `pyne-agent` | component | NL → PYNE Agent chat (Cloudflare® Workers AI™); [docs](/axis/docs/plugins/pine-agent) |
+| **External:** `pyne-agent-worker` `/plugin/axis-pine-agent.js` | `pyne-agent` | component | NL → PYNE Agent chat (Cloudflare® Workers AI™); [docs](/axis/docs/plugins/pyne-agent) |
 
 Paths:
 

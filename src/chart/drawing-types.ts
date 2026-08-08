@@ -20,7 +20,7 @@
 /**
  * AXIS interactive drawing model — chart annotations placed by the user.
  *
- * Distinct from Pine script drawings (`pine-drawings.ts` / `DrawingLayer` script
+ * Distinct from Pine script drawings (`pyne-drawings.ts` / `DrawingLayer` script
  * group): these are editable, selectable, and persisted via the store.
  *
  * ## Dual field shape (legacy + unified)

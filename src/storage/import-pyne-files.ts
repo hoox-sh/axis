@@ -26,8 +26,8 @@
  *   and legacy community exports
  *
  * Used by app-wide drag-and-drop and optional file-picker paths. Pure helpers
- * (`isPineFileName`, `scriptNameFromFileName`, `filterPineFiles`,
- * {@link sanitizePineSource}) are unit-tested; {@link importPineFiles} calls
+ * (`isPyneFileName`, `scriptNameFromFileName`, `filterPyneFiles`,
+ * {@link sanitizePyneSource}) are unit-tested; {@link importPyneFiles} calls
  * {@link writeScript} for each accepted file.
  *
  * TradingView® community scrapes often end with an `Expand (N lines)` UI stub
@@ -59,7 +59,7 @@ const UI_CHROME_RE =
   /^\s*(Copy(\s+code)?|Copied|Pine\s+Script\s*®?|Share|Open\s+in\s+editor)\s*$/i;
 
 /** True when a file name looks like a PYNE / Pine Script™ source file. */
-export function isPineFileName(name: string): boolean {
+export function isPyneFileName(name: string): boolean {
   return PINE_EXT.test(String(name || '').trim());
 }
 
@@ -78,17 +78,17 @@ export function scriptNameFromFileName(fileName: string): string {
 }
 
 /** Filter a FileList / File array down to Pine sources (order preserved). */
-export function filterPineFiles(files: ArrayLike<File> | File[]): File[] {
+export function filterPyneFiles(files: ArrayLike<File> | File[]): File[] {
   const list = Array.from(files as ArrayLike<File>);
-  return list.filter((f) => f && isPineFileName(f.name));
+  return list.filter((f) => f && isPyneFileName(f.name));
 }
 
 /** True when a DataTransfer (or similar) carries at least one Pine file. */
-export function dataTransferHasPineFiles(dt: DataTransfer | null | undefined): boolean {
+export function dataTransferHasPyneFiles(dt: DataTransfer | null | undefined): boolean {
   if (!dt) return false;
   // During dragover, browsers often only expose types, not full FileList
   if (dt.files && dt.files.length > 0) {
-    return filterPineFiles(dt.files).length > 0;
+    return filterPyneFiles(dt.files).length > 0;
   }
   const items = dt.items;
   if (items && items.length > 0) {
@@ -97,7 +97,7 @@ export function dataTransferHasPineFiles(dt: DataTransfer | null | undefined): b
       if (item?.kind === 'file') {
         // File name may be available via getAsFile() or type heuristics
         const file = item.getAsFile?.();
-        if (file && isPineFileName(file.name)) return true;
+        if (file && isPyneFileName(file.name)) return true;
         // Some browsers only give a generic type during drag — accept Files
         if (item.type === '' || item.type.startsWith('text/') || item.type === 'application/octet-stream') {
           // Can't know extension yet; treat as possible pine if only Files are dragged
@@ -112,7 +112,7 @@ export function dataTransferHasPineFiles(dt: DataTransfer | null | undefined): b
 }
 
 /** Result of stripping TradingView community / docs chrome from raw file text. */
-export interface SanitizePineResult {
+export interface SanitizePyneResult {
   /** Cleaned source ready for the library / editor. */
   content: string;
   /**
@@ -131,7 +131,7 @@ export interface SanitizePineResult {
  * page chrome from a **collapsed** community code panel — the N lines were
  * never in the file; we cannot recover them here.
  */
-export function sanitizePineSource(raw: string): SanitizePineResult {
+export function sanitizePyneSource(raw: string): SanitizePyneResult {
   const warnings: string[] = [];
   let missingLines: number | undefined;
   const lines = String(raw ?? '').split(/\r?\n/);
@@ -181,7 +181,7 @@ export function sanitizePineSource(raw: string): SanitizePineResult {
 }
 
 /** One successfully imported script (meta + full source body). */
-export interface ImportedPineScript {
+export interface ImportedPyneScript {
   meta: ScriptMeta;
   /** Full file text as written to the library (use this to open editor tabs). */
   content: string;
@@ -190,9 +190,9 @@ export interface ImportedPineScript {
   warnings?: string[];
 }
 
-export interface ImportPineResult {
+export interface ImportPyneResult {
   /** Successfully saved scripts (in file order). */
-  imported: ImportedPineScript[];
+  imported: ImportedPyneScript[];
   /** Per-file error messages (e.g. read/write failures). */
   errors: string[];
   /** Non-fatal warnings (truncation, chrome stripped, …). */
@@ -220,13 +220,13 @@ export async function readFileAsText(file: File): Promise<string> {
  * @param files - FileList or File array (non-pine entries are skipped)
  * @returns summary of imports / errors / skipped
  */
-export async function importPineFiles(
+export async function importPyneFiles(
   files: ArrayLike<File> | File[],
-): Promise<ImportPineResult> {
+): Promise<ImportPyneResult> {
   const all = Array.from(files as ArrayLike<File>);
-  const pine = filterPineFiles(all);
+  const pine = filterPyneFiles(all);
   const skipped = all.length - pine.length;
-  const imported: ImportedPineScript[] = [];
+  const imported: ImportedPyneScript[] = [];
   const errors: string[] = [];
   const warnings: string[] = [];
   const stamp = Date.now().toString(36);
@@ -240,7 +240,7 @@ export async function importPineFiles(
         errors.push(`${file.name}: empty file`);
         continue;
       }
-      const cleaned = sanitizePineSource(raw);
+      const cleaned = sanitizePyneSource(raw);
       if (!cleaned.content.trim()) {
         errors.push(`${file.name}: empty after removing page chrome`);
         continue;

@@ -54,7 +54,7 @@
                 "group": "Guides",
                 "pages": [
                   "enduser/guides/manager-and-settings",
-                  "enduser/guides/pine-agent",
+                  "enduser/guides/pyne-agent",
                   "enduser/guides/data-source-manager",
                   "enduser/guides/on-chain",
                   "enduser/guides/script-library",
@@ -104,7 +104,7 @@
               "plugins/engines",
               "plugins/storage",
               "plugins/dynamic-loader",
-              "plugins/pine-agent"
+              "plugins/pyne-agent"
             ]
           }
         ]

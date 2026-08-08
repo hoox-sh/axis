@@ -9,20 +9,20 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
-  normalizePineLogs,
-  filterPineLogs,
-  pineLogsToText,
-  type PineLogEntry,
-  type PineLogLevel,
-} from '../src/results/pine-logs.ts';
+  normalizePyneLogs,
+  filterPyneLogs,
+  pyneLogsToText,
+  type PyneLogEntry,
+  type PyneLogLevel,
+} from '../src/results/pyne-logs.ts';
 
-describe('normalizePineLogs', () => {
+describe('normalizePyneLogs', () => {
   it('returns empty array for empty / missing input', () => {
-    expect(normalizePineLogs(null)).toEqual([]);
-    expect(normalizePineLogs(undefined)).toEqual([]);
-    expect(normalizePineLogs({})).toEqual([]);
-    expect(normalizePineLogs([])).toEqual([]);
-    expect(normalizePineLogs({ meta: {} })).toEqual([]);
+    expect(normalizePyneLogs(null)).toEqual([]);
+    expect(normalizePyneLogs(undefined)).toEqual([]);
+    expect(normalizePyneLogs({})).toEqual([]);
+    expect(normalizePyneLogs([])).toEqual([]);
+    expect(normalizePyneLogs({ meta: {} })).toEqual([]);
   });
 
   it('normalizes object arrays with level/message', () => {
@@ -33,7 +33,7 @@ describe('normalizePineLogs', () => {
         { severity: 'error', msg: 'boom', bar_time: 99 },
       ],
     };
-    const entries = normalizePineLogs(raw);
+    const entries = normalizePyneLogs(raw);
     expect(entries).toHaveLength(3);
     expect(entries[0]).toMatchObject({
       level: 'info',
@@ -52,7 +52,7 @@ describe('normalizePineLogs', () => {
       ['warn', 'b'],
       ['error', 'c', 5, 1234],
     ];
-    const entries = normalizePineLogs(raw);
+    const entries = normalizePyneLogs(raw);
     expect(entries).toHaveLength(3);
     expect(entries[0]).toMatchObject({ level: 'info', message: 'a' });
     expect(entries[1]).toMatchObject({ level: 'warning', message: 'b' });
@@ -65,20 +65,20 @@ describe('normalizePineLogs', () => {
   });
 
   it('reads meta.logs and top-level logs', () => {
-    const fromMeta = normalizePineLogs({
+    const fromMeta = normalizePyneLogs({
       meta: { logs: [{ level: 'info', message: 'from-meta' }] },
     });
     expect(fromMeta).toHaveLength(1);
     expect(fromMeta[0]!.message).toBe('from-meta');
 
-    const fromTop = normalizePineLogs({
+    const fromTop = normalizePyneLogs({
       logs: [{ level: 'error', message: 'from-top' }],
     });
     expect(fromTop[0]!.message).toBe('from-top');
   });
 
   it('maps warn → warning and preserves explicit ids', () => {
-    const entries = normalizePineLogs({
+    const entries = normalizePyneLogs({
       logs: [{ id: 'x1', level: 'warn', message: 'w' }],
     });
     expect(entries[0]!.id).toBe('x1');
@@ -86,8 +86,8 @@ describe('normalizePineLogs', () => {
   });
 });
 
-describe('filterPineLogs', () => {
-  const sample: PineLogEntry[] = [
+describe('filterPyneLogs', () => {
+  const sample: PyneLogEntry[] = [
     { id: '1', level: 'info', message: 'i' },
     { id: '2', level: 'warning', message: 'w' },
     { id: '3', level: 'error', message: 'e' },
@@ -95,28 +95,28 @@ describe('filterPineLogs', () => {
   ];
 
   it('returns all when levels is "all"', () => {
-    expect(filterPineLogs(sample, 'all')).toHaveLength(4);
+    expect(filterPyneLogs(sample, 'all')).toHaveLength(4);
   });
 
   it('returns all when level set is empty', () => {
-    expect(filterPineLogs(sample, new Set())).toHaveLength(4);
+    expect(filterPyneLogs(sample, new Set())).toHaveLength(4);
   });
 
   it('filters by level set', () => {
-    const levels = new Set<PineLogLevel>(['error', 'warning']);
-    const filtered = filterPineLogs(sample, levels);
+    const levels = new Set<PyneLogLevel>(['error', 'warning']);
+    const filtered = filterPyneLogs(sample, levels);
     expect(filtered.map((e) => e.level)).toEqual(['warning', 'error']);
   });
 
   it('returns empty for empty entries', () => {
-    expect(filterPineLogs([], 'all')).toEqual([]);
-    expect(filterPineLogs([], new Set(['info']))).toEqual([]);
+    expect(filterPyneLogs([], 'all')).toEqual([]);
+    expect(filterPyneLogs([], new Set(['info']))).toEqual([]);
   });
 });
 
-describe('pineLogsToText', () => {
+describe('pyneLogsToText', () => {
   it('exports TSV with header', () => {
-    const text = pineLogsToText([
+    const text = pyneLogsToText([
       { id: '1', level: 'info', message: 'hello', barIndex: 2, time: 10 },
       { id: '2', level: 'error', message: 'nope', barIndex: null, time: null },
     ]);
@@ -126,6 +126,6 @@ describe('pineLogsToText', () => {
   });
 
   it('returns empty string for no entries', () => {
-    expect(pineLogsToText([])).toBe('');
+    expect(pyneLogsToText([])).toBe('');
   });
 });

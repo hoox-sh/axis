@@ -26,7 +26,7 @@
  * @module results/debug-pins
  */
 
-import { normalizePineLogs, type PineLogEntry, type PineLogLevel } from './pine-logs';
+import { normalizePyneLogs, type PyneLogEntry, type PyneLogLevel } from './pyne-logs';
 import {
   parseSourceLine,
   type InlineDebugAnnotation,
@@ -44,14 +44,14 @@ export interface DebugPin {
   label: string;
   /** 1-based source line when known. */
   line?: number | null;
-  level?: InlineDebugLevel | PineLogLevel;
+  level?: InlineDebugLevel | PyneLogLevel;
   /** Full message (truncated for markers separately). */
   message?: string;
 }
 
 /** Loose entry shape accepted by {@link pinsFromDebugEntries}. */
 export type DebugPinSource =
-  | PineLogEntry
+  | PyneLogEntry
   | InlineDebugAnnotation
   | {
       message?: string;
@@ -392,14 +392,14 @@ export function pinsFromLastRun(
   options: PinsFromDebugOptions & {
     /** Precomputed inline annotations (optional; avoids re-parse of lines). */
     annotations?: ReadonlyArray<InlineDebugAnnotation> | null;
-    /** When true, also use normalizePineLogs (default true). */
+    /** When true, also use normalizePyneLogs (default true). */
     fromLogs?: boolean;
   } = {},
 ): DebugPin[] {
   const sources: DebugPinSource[] = [];
 
   if (options.fromLogs !== false && lastRun != null) {
-    sources.push(...normalizePineLogs(lastRun));
+    sources.push(...normalizePyneLogs(lastRun));
   }
 
   if (options.annotations?.length) {

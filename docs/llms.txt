@@ -30,7 +30,7 @@ Installable AXIS for price and time. Orthogonal plugins: sources, streams, engin
 - [Manager And Settings](https://hoox.sh/axis/docs/enduser/guides/manager-and-settings)
 - [On-Chain Data](https://hoox.sh/axis/docs/enduser/guides/on-chain)
 - [Data Source Manager](https://hoox.sh/axis/docs/enduser/guides/data-source-manager)
-- [PYNE Agent](https://hoox.sh/axis/docs/enduser/guides/pine-agent)
+- [PYNE Agent](https://hoox.sh/axis/docs/enduser/guides/pyne-agent)
 - [Script Library](https://hoox.sh/axis/docs/enduser/guides/script-library)
 - [Strategy And Results](https://hoox.sh/axis/docs/enduser/guides/strategy-and-results)
 - [Drawings](https://hoox.sh/axis/docs/enduser/guides/drawings)
@@ -57,7 +57,7 @@ Installable AXIS for price and time. Orthogonal plugins: sources, streams, engin
 - [Engines](https://hoox.sh/axis/docs/plugins/engines)
 - [Storage](https://hoox.sh/axis/docs/plugins/storage)
 - [Dynamic Loader](https://hoox.sh/axis/docs/plugins/dynamic-loader)
-- [PYNE Agent Plugin](https://hoox.sh/axis/docs/plugins/pine-agent)
+- [PYNE Agent Plugin](https://hoox.sh/axis/docs/plugins/pyne-agent)
 - [pyne-agent-worker](https://github.com/hoox-sh/pyne-agent-worker): Sister Cloudflare® worker (standalone PYNE Agent)
 
 ### UI

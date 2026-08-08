@@ -23,7 +23,7 @@
  * Accepts both interpret-path shapes (`type` + `t1`/`p1`/…) and compile-path
  * `__drawings` events (`kind` + `x1`/`y1`/`left`/…). Non-geometry kinds
  * (bgcolor, plotshape, table, …) are filtered out — tables go to
- * {@link PineTableHud}; shapes to markers via plot-visuals.
+ * {@link PyneTableHud}; shapes to markers via plot-visuals.
  *
  * After normalize, {@link garbageCollectScriptDrawings} trims each type to the
  * Pine declaration caps (`max_lines_count`, `max_labels_count`, …) — oldest
@@ -35,7 +35,7 @@
  *
  * Consumed by the drawing layer when applying script drawings after a run.
  *
- * @module chart/pine-drawings
+ * @module chart/pyne-drawings
  */
 
 import {

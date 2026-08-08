@@ -74,7 +74,7 @@ Covers plugin URL schemes, storage-via-URL reject, poisoned localStorage, worker
 | --- | --- |
 | `storage/local.ts`, `cloud.ts`, `git*.ts` | Error paths, migration edges |
 | `results/strategy.ts` | Multi-id, formatters, CSV |
-| `chart/pine-drawings.ts` | polyline / aliases |
+| `chart/pyne-drawings.ts` | polyline / aliases |
 
 ## Integration suites
 

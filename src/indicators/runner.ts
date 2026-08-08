@@ -83,7 +83,7 @@ import {
   garbageCollectScriptDrawings,
   normalizeScriptDrawings,
   resolveDrawingLimits,
-} from '../chart/pine-drawings';
+} from '../chart/pyne-drawings';
 import { getActiveEngine, getActiveEngineConfig } from '../plugins/active';
 import type { RunResult as EngineRunResult } from '../plugins/types';
 import { classifyTransport } from '../ui/telemetry';
@@ -138,7 +138,7 @@ export interface RunOptions {
   epoch?: number;
 }
 
-type PineLogLine = { level?: string; message?: string; [k: string]: unknown };
+type PyneLogLine = { level?: string; message?: string; [k: string]: unknown };
 
 /**
  * Resolve Pine `overlay` for pane routing.
@@ -213,7 +213,7 @@ function normalizeRunExtras(result: RunResult): RunResult {
   const meta = result.meta;
   let logs = result.logs;
   if (!logs && meta && Array.isArray(meta.logs)) {
-    logs = meta.logs as PineLogLine[];
+    logs = meta.logs as PyneLogLine[];
   }
   let profile = result.profile;
   if (!profile && meta && meta.profile && typeof meta.profile === 'object') {

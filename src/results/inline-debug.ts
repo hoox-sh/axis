@@ -29,10 +29,10 @@
  * @module results/inline-debug
  */
 
-import { normalizePineLogs, type PineLogLevel } from './pine-logs';
+import { normalizePyneLogs, type PyneLogLevel } from './pyne-logs';
 import { parseBarIndexFromText, parseTimeFromText, normalizePinTime } from './debug-pins';
 
-export type InlineDebugLevel = PineLogLevel | 'debug';
+export type InlineDebugLevel = PyneLogLevel | 'debug';
 
 /** One inline annotation bound to a 1-based source line. */
 export interface InlineDebugAnnotation {
@@ -113,7 +113,7 @@ function lineFromRecord(item: Record<string, unknown>): number | null {
   return parseSourceLine(msg);
 }
 
-function levelFromPine(level: PineLogLevel): InlineDebugLevel {
+function levelFromPine(level: PyneLogLevel): InlineDebugLevel {
   return level;
 }
 
@@ -126,7 +126,7 @@ export function collectInlineDebugAnnotations(lastRun: unknown): InlineDebugAnno
   const out: InlineDebugAnnotation[] = [];
 
   // ── Script logs ────────────────────────────────────────────────────
-  const logs = normalizePineLogs(lastRun);
+  const logs = normalizePyneLogs(lastRun);
   for (const e of logs) {
     // Prefer structured line on the raw entry if present
     let line: number | null = null;

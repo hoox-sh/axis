@@ -18,7 +18,7 @@ Part of the **[HOOX](https://hoox.sh)** open trading stack:
 | **pyne-agent-worker** | NL → PYNE scripts (Workers AI™ + optional RAG) | [hoox-sh/pyne-agent-worker](https://github.com/hoox-sh/pyne-agent-worker) | AXIS plugin docs |
 | **AXIS** | Charting PWA (this repo) | [hoox-sh/axis](https://github.com/hoox-sh/axis) | [hoox.sh/axis](https://hoox.sh/axis) · [docs](https://hoox.sh/axis/docs) |
 
-**PYNE Agent plugin** (optional): install from `https://<pyne-agent-worker>/plugin/axis-pine-agent.js` — works standalone without the HOOX mesh. Docs: [PYNE Agent](./docs/enduser/guides/pine-agent.mdx).
+**PYNE Agent plugin** (optional): install from `https://<pyne-agent-worker>/plugin/axis-pine-agent.js` — works standalone without the HOOX mesh. Docs: [PYNE Agent](./docs/enduser/guides/pyne-agent.mdx).
 
 ```bash
 # Typical local trio

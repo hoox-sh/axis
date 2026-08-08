@@ -21,13 +21,13 @@ import {
 import { setActivePlugin } from '../src/store';
 import { listScripts, readScript } from '../src/storage/service';
 import {
-  isPineFileName,
+  isPyneFileName,
   scriptNameFromFileName,
-  filterPineFiles,
-  importPineFiles,
-  dataTransferHasPineFiles,
-  sanitizePineSource,
-} from '../src/storage/import-pine-files';
+  filterPyneFiles,
+  importPyneFiles,
+  dataTransferHasPyneFiles,
+  sanitizePyneSource,
+} from '../src/storage/import-pyne-files';
 
 beforeEach(async () => {
   registry.clear();
@@ -46,23 +46,23 @@ function fakeFile(name: string, content: string): File {
   return new File([content], name, { type: 'text/plain' });
 }
 
-describe('isPineFileName', () => {
+describe('isPyneFileName', () => {
   it('accepts .pyne, .pine, and .pinescript (case-insensitive)', () => {
-    expect(isPineFileName('rsi.pyne')).toBe(true);
-    expect(isPineFileName('RSI.PYNE')).toBe(true);
-    expect(isPineFileName('rsi.pine')).toBe(true);
-    expect(isPineFileName('MACD.PINE')).toBe(true);
-    expect(isPineFileName('x.pinescript')).toBe(true);
-    expect(isPineFileName('Y.PineScript')).toBe(true);
-    expect(isPineFileName('v.pinev5')).toBe(true);
-    expect(isPineFileName('v.pinev6')).toBe(true);
+    expect(isPyneFileName('rsi.pyne')).toBe(true);
+    expect(isPyneFileName('RSI.PYNE')).toBe(true);
+    expect(isPyneFileName('rsi.pine')).toBe(true);
+    expect(isPyneFileName('MACD.PINE')).toBe(true);
+    expect(isPyneFileName('x.pinescript')).toBe(true);
+    expect(isPyneFileName('Y.PineScript')).toBe(true);
+    expect(isPyneFileName('v.pinev5')).toBe(true);
+    expect(isPyneFileName('v.pinev6')).toBe(true);
   });
 
   it('rejects other extensions', () => {
-    expect(isPineFileName('lib.json')).toBe(false);
-    expect(isPineFileName('data.csv')).toBe(false);
-    expect(isPineFileName('readme.md')).toBe(false);
-    expect(isPineFileName('')).toBe(false);
+    expect(isPyneFileName('lib.json')).toBe(false);
+    expect(isPyneFileName('data.csv')).toBe(false);
+    expect(isPyneFileName('readme.md')).toBe(false);
+    expect(isPyneFileName('')).toBe(false);
   });
 });
 
@@ -81,7 +81,7 @@ describe('scriptNameFromFileName', () => {
   });
 });
 
-describe('filterPineFiles', () => {
+describe('filterPyneFiles', () => {
   it('keeps only pyne/pine sources in order', () => {
     const files = [
       fakeFile('a.json', '[]'),
@@ -90,15 +90,15 @@ describe('filterPineFiles', () => {
       fakeFile('notes.txt', 'x'),
       fakeFile('macd.pinescript', 'plot(2)'),
     ];
-    const out = filterPineFiles(files);
+    const out = filterPyneFiles(files);
     expect(out.map((f) => f.name)).toEqual(['rsi.pyne', 'rsi.pine', 'macd.pinescript']);
   });
 });
 
-describe('dataTransferHasPineFiles', () => {
+describe('dataTransferHasPyneFiles', () => {
   it('returns false for null/empty', () => {
-    expect(dataTransferHasPineFiles(null)).toBe(false);
-    expect(dataTransferHasPineFiles(undefined)).toBe(false);
+    expect(dataTransferHasPyneFiles(null)).toBe(false);
+    expect(dataTransferHasPyneFiles(undefined)).toBe(false);
   });
 
   it('detects Files type when file list is empty (dragover)', () => {
@@ -107,7 +107,7 @@ describe('dataTransferHasPineFiles', () => {
       items: { length: 0 },
       types: ['Files'],
     } as unknown as DataTransfer;
-    expect(dataTransferHasPineFiles(dt)).toBe(true);
+    expect(dataTransferHasPyneFiles(dt)).toBe(true);
   });
 
   it('detects pine files when FileList is populated', () => {
@@ -117,7 +117,7 @@ describe('dataTransferHasPineFiles', () => {
       items: { length: 0 },
       types: ['Files'],
     } as unknown as DataTransfer;
-    // filterPineFiles works on Array.from of FileList-like
+    // filterPyneFiles works on Array.from of FileList-like
     Object.defineProperty(dt, 'files', {
       value: {
         length: 1,
@@ -128,18 +128,18 @@ describe('dataTransferHasPineFiles', () => {
         },
       },
     });
-    expect(dataTransferHasPineFiles(dt)).toBe(true);
+    expect(dataTransferHasPyneFiles(dt)).toBe(true);
   });
 });
 
-describe('importPineFiles', () => {
+describe('importPyneFiles', () => {
   it('writes pine files into the active library', async () => {
     const files = [
       fakeFile('My RSI.pine', '//@version=5\nindicator("RSI")\nplot(close)'),
       fakeFile('skip.json', '[]'),
       fakeFile('macd.pine', '//@version=5\nindicator("MACD")\nplot(open)'),
     ];
-    const result = await importPineFiles(files);
+    const result = await importPyneFiles(files);
     expect(result.imported.length).toBe(2);
     expect(result.skipped).toBe(1);
     expect(result.errors).toEqual([]);
@@ -159,7 +159,7 @@ describe('importPineFiles', () => {
 
   it('preserves every line of a large script body', async () => {
     const body = Array.from({ length: 400 }, (_, i) => `// line ${i + 1}`).join('\n') + '\n';
-    const result = await importPineFiles([fakeFile('big.pine', body)]);
+    const result = await importPyneFiles([fakeFile('big.pine', body)]);
     expect(result.imported.length).toBe(1);
     expect(result.imported[0]!.content).toBe(body);
     // trailing newline → 401 split parts with empty last; non-empty lines = 400
@@ -169,7 +169,7 @@ describe('importPineFiles', () => {
   });
 
   it('reports empty files as errors', async () => {
-    const result = await importPineFiles([fakeFile('empty.pine', '   \n')]);
+    const result = await importPyneFiles([fakeFile('empty.pine', '   \n')]);
     expect(result.imported.length).toBe(0);
     expect(result.errors.length).toBe(1);
     expect(result.errors[0]).toContain('empty');
@@ -178,7 +178,7 @@ describe('importPineFiles', () => {
   it('strips TradingView Expand (N lines) chrome and warns', async () => {
     const body =
       '//@version=5\nindicator("x")\nplot(close)\nExpand (132 lines)\n';
-    const result = await importPineFiles([fakeFile('tv.pine', body)]);
+    const result = await importPyneFiles([fakeFile('tv.pine', body)]);
     expect(result.imported.length).toBe(1);
     expect(result.imported[0]!.content).not.toContain('Expand');
     expect(result.imported[0]!.content).toContain('plot(close)');
@@ -187,9 +187,9 @@ describe('importPineFiles', () => {
   });
 });
 
-describe('sanitizePineSource', () => {
+describe('sanitizePyneSource', () => {
   it('removes Expand stub and reports missing line count', () => {
-    const r = sanitizePineSource(
+    const r = sanitizePyneSource(
       '//@version=5\nindicator("A")\nplot(1)\nExpand (42 lines)\nCopy code\n',
     );
     expect(r.content).toBe('//@version=5\nindicator("A")\nplot(1)\n');
@@ -199,14 +199,14 @@ describe('sanitizePineSource', () => {
 
   it('leaves clean pine untouched', () => {
     const src = '//@version=5\nindicator("ok")\nplot(close)\n';
-    const r = sanitizePineSource(src);
+    const r = sanitizePyneSource(src);
     expect(r.content).toBe(src);
     expect(r.missingLines).toBeUndefined();
     expect(r.warnings).toEqual([]);
   });
 
   it('handles Expand without closing paren (bad scrape)', () => {
-    const r = sanitizePineSource('plot(1)\nExpand (10 lines\n');
+    const r = sanitizePyneSource('plot(1)\nExpand (10 lines\n');
     expect(r.content).toContain('plot(1)');
     expect(r.content).not.toMatch(/Expand/i);
     expect(r.missingLines).toBe(10);

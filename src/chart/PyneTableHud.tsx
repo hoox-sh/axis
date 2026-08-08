@@ -24,7 +24,7 @@
  * HTML tables over the chart (top-left, top-right, …). Independent of the
  * SVG drawing layer used for line/box/label geometry.
  *
- * @module chart/PineTableHud
+ * @module chart/PyneTableHud
  */
 
 import { Component, For, Show, createMemo } from 'solid-js';
@@ -62,7 +62,7 @@ function positionClass(pos: string): string {
   return 'top-2 right-14';
 }
 
-export const PineTableHud: Component = () => {
+export const PyneTableHud: Component = () => {
   const tables = createMemo(() => {
     const r = store.lastRun as RunResult | null;
     const drawings = (r as { drawings?: unknown[] } | null)?.drawings;

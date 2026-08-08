@@ -43,7 +43,7 @@ import {
   importLibraryJson,
   getStorageStatus,
 } from '../storage/service';
-import { importPineFiles, isPineFileName } from '../storage/import-pine-files';
+import { importPyneFiles, isPyneFileName } from '../storage/import-pyne-files';
 import { listStorages } from '../storage/catalog';
 import {
   setActivePlugin,
@@ -286,13 +286,13 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
     setBusy(true);
     setError('');
     try {
-      const pineFiles = files.filter((f) => isPineFileName(f.name));
+      const pineFiles = files.filter((f) => isPyneFileName(f.name));
       const jsonFiles = files.filter(
-        (f) => !isPineFileName(f.name) && /\.json$/i.test(f.name),
+        (f) => !isPyneFileName(f.name) && /\.json$/i.test(f.name),
       );
       let total = 0;
       if (pineFiles.length) {
-        const result = await importPineFiles(pineFiles);
+        const result = await importPyneFiles(pineFiles);
         total += result.imported.length;
         if (result.errors.length) {
           setError(result.errors.slice(0, 3).join('; '));

@@ -21,7 +21,7 @@ import {
   parseDrawingLimitsFromScript,
   resolveDrawingLimits,
   type ScriptDrawing,
-} from '../src/chart/pine-drawings.ts';
+} from '../src/chart/pyne-drawings.ts';
 
 describe('normalizeScriptDrawings', () => {
   it('maps line/box/label API payloads', () => {

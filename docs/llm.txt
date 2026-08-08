@@ -1607,7 +1607,7 @@ Internals
 | frontend/src/chart/drawing-types.ts | Tool ids, types, fib levels |
 | frontend/src/chart/drawing-layer.ts | Interaction + render |
 | frontend/src/chart/DrawingToolbar.tsx | UI |
-| frontend/src/chart/pine-drawings.ts | Map engine drawings → layer |
+| frontend/src/chart/pyne-drawings.ts | Map engine drawings → layer |
 | frontend/src/chart/ChartHost.tsx | Mount / dispose |
 Invariants
 . User drawings ≠ strategy results; deleting drawings does not alter lastRun.
@@ -1668,7 +1668,7 @@ Paste a module URL exporting a default plugin object (kind, id, name, contract m
 Security notes (operator-level): only https/http schemes suitable for module load; treat third-party URLs as code execution in your browser origin. See security tests under frontend/tests/security/.
 Example plugins ship in public/plugins/:
 example-coingecko-source.js
-example-tiny-pine-engine.js
+example-tiny-pyne-engine.js
 example-cf-do-stream.js
 Script Library tab
 See Script library. Manager hosts the panel so library and plugins share one modal.
@@ -2635,7 +2635,7 @@ Shipped examples (also under public/plugins/):
 | File | Kind |
 | --- | --- |
 | example-coingecko-source.js | source |
-| example-tiny-pine-engine.js | engine |
+| example-tiny-pyne-engine.js | engine |
 | example-cf-do-stream.js | stream |
 Invariants & edge cases
 . CORS on module URL — the JS file origin must allow module import (same-origin is easiest).
@@ -2761,7 +2761,7 @@ Offline lab
 Source mock-walk, stream mock-poll, engine pyodide, storage local
 Requires dist/ (or Vite public) to serve /pyodide/ and /vendor/
 Tiny non-Python engine
-See plugin examples — example-tiny-pine-engine.js implements a JS DSL with sma / ema / rsi for demos without PYNE.
+See plugin examples — example-tiny-pyne-engine.js implements a JS DSL with sma / ema / rsi for demos without PYNE.
 Failure modes
 | Symptom | Cause |
 | --- | --- |
@@ -3339,7 +3339,7 @@ UI (UI)
 | Multi-chart / recipes | src/chart/layout.ts, layout-recipes.ts, chart-registry.ts, ui/ChartLayoutMenu.tsx |
 | Bar replay | src/chart/bar-replay.ts, ui/BarReplayControls.tsx |
 | Compare / volume profile | src/chart/compare-overlay.ts, volume-profile.ts |
-| Drawings | src/chart/drawing-layer.ts, drawings/, pine-drawings.ts, DrawingToolbar.tsx |
+| Drawings | src/chart/drawing-layer.ts, drawings/, pyne-drawings.ts, DrawingToolbar.tsx |
 | Editor | src/editor/ (CM, diagnostics, ruler, git-sync, inline-debug) |
 | Editor chrome | ui/EditorGitBar.tsx, ui/EditorProblems.tsx |
 | Alerts | src/alerts/, ui/AlertsPanel.tsx |
@@ -3490,7 +3490,7 @@ Loading
 . Paste a same-origin URL, for example:
 ``
 http://...:/plugins/example-coingecko-source.js
-http://...:/plugins/example-tiny-pine-engine.js
+http://...:/plugins/example-tiny-pyne-engine.js
 http://...:/plugins/example-cf-do-stream.js
 `
 . Load — registry updates; pickers show the new plugin.
@@ -3500,7 +3500,7 @@ Example catalog
 | File | id | kind | Purpose |
 | --- | --- | --- | --- |
 | example-coingecko-source.js | coingecko | source | Public CoinGecko marketchart → synthetic OHLC |
-| example-tiny-pine-engine.js | tiny-pine | engine | In-browser JS DSL: sma/ema/rsi/plot/strategy |
+| example-tiny-pyne-engine.js | tiny-pyne | engine | In-browser JS DSL: sma/ema/rsi/plot/strategy |
 | example-cf-do-stream.js | cf-do | stream | WS to Worker /api/stream SessionDO |
 Paths:
 Served: frontend/public/plugins/
@@ -3741,7 +3741,7 @@ Abstract
 | volume-profile.ts | OHLCV volume-at-price overlay |
 | drawing-layer.ts + drawings/ | User + script drawings, templates, sync helpers |
 | crosshair-sync.ts | Cross-pane crosshair |
-| pine-drawings.ts | Engine drawing objects → layer |
+| pyne-drawings.ts | Engine drawing objects → layer |
 | manager-access.ts | Process-wide manager/layer getters |
 Conceptual model
 Interface surface
@@ -3860,7 +3860,7 @@ AXIS separates script-authored diagnostics (Pine log., engine errors, line timin
 Abstract
 | Surface | Source of truth | Open / toggle |
 | --- | --- | --- |
-| Scriptlogs | store.lastRun → normalizePineLogs | Editor header Scriptlogs |
+| Scriptlogs | store.lastRun → normalizePyneLogs | Editor header Scriptlogs |
 | Profiler | profilerEnabled + profile.lines | Editor header Profiler |
 | Debug | inlineDebugEnabled + last-run logs with line | Editor header Debug |
 | Pins | debugPinsEnabled + logs with barindex / time | Editor header Pins · Alt+P |
@@ -3869,7 +3869,7 @@ Abstract
 | Module | Role |
 | --- | --- |
 | ui/ScriptLogsPanel.tsx | Floatable last-run log. list |
-| results/pine-logs.ts | Normalize / filter / TSV |
+| results/pyne-logs.ts | Normalize / filter / TSV |
 | results/profiler.ts | Line % profile |
 | results/inline-debug.ts | Annotations + pinable helpers |
 | results/debug-pins.ts | Bar pins, markers, countDebugPins |
@@ -3942,7 +3942,7 @@ Persistence & test ids
 | axis-debug-pin-count | Pin count |
 | axis-editor-diag-count | Diagnostics badge |
 | axis-editor-problems | Problems panel |
-Unit coverage: tests/pine-logs.test.ts, tests/profiler.test.ts, tests/inline-debug.test.ts, tests/debug-pins.test.ts, tests/editor-diagnostics.test.ts.
+Unit coverage: tests/pyne-logs.test.ts, tests/profiler.test.ts, tests/inline-debug.test.ts, tests/debug-pins.test.ts, tests/editor-diagnostics.test.ts.
 See also
 Editor
 Charting — markers and jump

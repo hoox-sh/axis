@@ -30,7 +30,7 @@
  * for production.
  *
  * Example plugins: `example-coingecko-source.js`, `example-cf-do-stream.js`,
- * `example-tiny-pine-engine.js`.
+ * `example-tiny-pyne-engine.js`.
  *
  * @module plugins/loader
  */

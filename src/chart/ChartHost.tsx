@@ -29,7 +29,7 @@
 import { Component, Show, createEffect, createMemo, onMount, onCleanup, untrack } from 'solid-js';
 import { PaneManager } from './pane-manager';
 import { DrawingToolbar } from './DrawingToolbar';
-import { PineTableHud } from './PineTableHud';
+import { PyneTableHud } from './PyneTableHud';
 import { ChartScaleControls } from './ChartScaleControls';
 import { VolumeProfileOverlay } from '../ui/VolumeProfileOverlay';
 import {
@@ -765,7 +765,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       />
       <Show when={isActive() && bars().length > 0}>
         <DrawingToolbar />
-        <PineTableHud />
+        <PyneTableHud />
         <VolumeProfileOverlay />
         <ChartScaleControls />
       </Show>

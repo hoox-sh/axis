@@ -56,7 +56,7 @@ interface Props {
 // Served from public/plugins/ in production (dist/plugins/); /src/ only works under Vite dev.
 const EXAMPLES = [
   { label: 'CoinGecko source', url: '/plugins/example-coingecko-source.js', kind: 'source' },
-  { label: 'Tiny Pine engine', url: '/plugins/example-tiny-pine-engine.js', kind: 'engine' },
+  { label: 'Tiny Pine engine', url: '/plugins/example-tiny-pyne-engine.js', kind: 'engine' },
   { label: 'CF DO stream', url: '/plugins/example-cf-do-stream.js', kind: 'stream' },
 ];
 

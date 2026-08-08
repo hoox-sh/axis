@@ -39,7 +39,7 @@ const INCLUDE = [
   'src/data/',
   'src/indicators/runner.ts',
   'src/chart/drawing-types.ts',
-  'src/chart/pine-drawings.ts',
+  'src/chart/pyne-drawings.ts',
   'src/chart/series-factory.ts',
   'src/chart/manager-access.ts',
   'worker/src/auth.ts',

@@ -60,7 +60,7 @@ flowchart LR
 | `engine` | Pine / DSL evaluation | `isReady()`, `run(opts) → RunResult` |
 | `storage` | Script library | `list` / `read` / `write` / `remove` |
 | `dataset` | On-chain / alternate series | `fetchDataset(opts) → OnchainDataset` — [Datasets](/axis/docs/plugins/datasets) |
-| `component` | UI slots (phase 2 + URL agents) | `mount(slot, el, api)` — e.g. [PYNE Agent](/axis/docs/plugins/pine-agent) |
+| `component` | UI slots (phase 2 + URL agents) | `mount(slot, el, api)` — e.g. [PYNE Agent](/axis/docs/plugins/pyne-agent) |
 
 Built-ins register at bootstrap (`frontend/src/plugins/bootstrap.ts`). Dynamic plugins install from URL (`loader.ts`) and persist under `localStorage` key `pynescript.axis.plugins.v1`.
 
@@ -125,7 +125,7 @@ Natural-language script authoring is **not** an engine — it is an optional **c
 https://<pyne-agent-worker>/plugin/axis-pine-agent.js
 ```
 
-Works **standalone** (no pyne-worker). Full guide: [PYNE Agent plugin](/axis/docs/plugins/pine-agent) · [End-user](/axis/docs/enduser/guides/pine-agent).
+Works **standalone** (no pyne-worker). Full guide: [PYNE Agent plugin](/axis/docs/plugins/pyne-agent) · [End-user](/axis/docs/enduser/guides/pyne-agent).
 
 ## See also
 
