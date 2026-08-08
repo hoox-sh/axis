@@ -32,9 +32,9 @@ _Pine Script™ and TradingView® are trademarks of TradingView, Inc. This proje
 
 AXIS is a charting PWA, not a language rewrite. Language fidelity lives in [PYNE](/pyne/docs). The PWA contributes:
 
-1. A **unified plugin registry** (`source | stream | engine | storage`)
-2. A **Solid + Vite** product UI (chart, editor, results, manager)
-3. Optional backends: local Flask, offline Pyodide, Cloudflare® Worker (+ DO/KV/D1/R2)
+1. A **unified plugin registry** (`source | stream | engine | storage | dataset`)
+2. A **Solid + Vite** product UI (chart, editor, results, manager, on-chain panel)
+3. Optional backends: local Flask, offline Pyodide, Cloudflare® Worker (+ DO/KV/D1/R2 + `/api/onchain` proxy)
 
 **Invariant (AXIS ≠ engine):** the shell never embeds a closed interpreter. Evaluation is always an engine plugin.
 
@@ -59,16 +59,20 @@ flowchart TB
     STR[Streams]
     ENG[Engines]
     STO[Storage]
-    UI[Chart · Editor · Results]
+    DS[Datasets / on-chain]
+    UI[Chart · Editor · Results · On-Chain]
     SRC --> UI
     STR --> UI
     ENG --> UI
     STO --> UI
+    DS --> UI
   end
   ENG -->|server| FLASK[Flask Pro API]
   ENG -->|pyodide| PY[In-browser pynescript]
   ENG -->|worker proxy| CF[Cloudflare Worker]
+  DS -->|/api/onchain| CF
   CF --> FLASK
+  CF --> LL[DefiLlama / GeckoTerminal]
 ```
 
 Formal active set:
@@ -77,6 +81,7 @@ Formal active set:
 Active set = { source, stream, engine, storage }
 Contract namespace: pynescript.axis.plugins.v1
 App state: pynescript.axis.v1
+On-chain datasets: kind dataset (+ source geckoterminal-ohlcv for pool candles)
 ```
 
 ## Compose in one glance
@@ -86,6 +91,8 @@ App state: pynescript.axis.v1
 | Offline lab | `mock-walk` | `mock-poll` | `pyodide` | `local` |
 | Desk research | `binance-rest` | `binance-ws` | `server` → Flask | `local` |
 | AXIS at the edge | venue REST | venue WS / DO | `server` → Worker | `cloud` |
+| On-chain TVL + CEX | `binance-rest` + DefiLlama dataset | venue WS | any | `local` |
+| DEX pool candles | `geckoterminal-ohlcv` | `mock-poll` | any | `local` |
 | Repo library | any | any | any | `git` |
 
 Full recipes: [Compose recipes](/axis/docs/enduser/getting-started/compose-recipes).

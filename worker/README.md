@@ -73,6 +73,15 @@ Paste the returned IDs into your local `wrangler.toml` (from the example).
 | `/api/scripts`      | GET/POST | List / create scripts (Bearer key)   |
 | `/api/scripts/:id`  | GET/PUT/DELETE | Read / upsert / delete          |
 | `/api/scripts/_draft` | GET/PUT | Per-user draft buffer              |
+| `/api/onchain/health` | GET  | On-chain proxy feature flags (public) |
+| `/api/onchain/llama/protocols` | GET | DefiLlama protocols (allowlisted) |
+| `/api/onchain/llama/protocol/:slug` | GET | DefiLlama protocol TVL history |
+| `/api/onchain/gecko/networks/:net/pools/:addr/ohlcv/:tf` | GET | GeckoTerminal pool OHLCV |
+| `/api/onchain/gecko/search/pools` | GET | GeckoTerminal pool search |
+
+**On-chain proxy** is public (no API key), allowlisted only — not an open reverse proxy.
+The PWA uses `{endpoint}/api/onchain/llama` and `…/gecko` by default when `store.endpoint`
+points at this Worker (CORS-safe DefiLlama / GeckoTerminal).
 
 **Script library auth:** `Authorization: Bearer <api_key>` (same Pro keys as `/api/keys`).
 Scripts are partitioned by a hash of the key. Without D1, an in-memory store is used

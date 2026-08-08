@@ -5,8 +5,9 @@ Compact guide for AI agents working in the **axis** repo.
 ## What this is
 
 **AXIS** (product name; repo `axis`) is a SolidJS + Vite charting PWA for
-running Pine Script™ against pluggable **sources**, **streams**, and **engines**.
-Cloudflare Worker under `worker/` (API, WebSocket, D1/KV). Calculation can use:
+running Pine Script™ against pluggable **sources**, **streams**, **engines**,
+and **datasets** (on-chain TVL / DEX). Cloudflare Worker under `worker/`
+(API, WebSocket, D1/KV, `/api/onchain` allowlisted proxy). Calculation can use:
 
 - Local **pyne** Pro API (`http://127.0.0.1:5002`)
 - This repo’s Worker
@@ -32,11 +33,13 @@ cd worker && bun run dev # wrangler :8787
 |------|------|
 | `src/` | Product UI (Solid) — prefer this over legacy root JS |
 | `src/data/data-source-manager.ts` | Background OHLCV backfill + validate + gap-fill |
+| `src/onchain/` | On-chain plane: DefiLlama TVL, GeckoTerminal, events, jobs |
 | `src/theme/` | Chart theme catalog + curated presets |
-| `worker/` | Cloudflare Worker |
+| `worker/` | Cloudflare Worker (+ `/api/onchain/*` proxy) |
 | `tests/` | Bun unit tests |
 | `e2e/` | Playwright |
 | `docs/` | Product docs (Mintlify-style MDX) |
+| `docs/enduser/guides/on-chain.mdx` | End-user on-chain guide |
 | `LEGACY.md` | Old static shell notes |
 
 ## Hard constraints

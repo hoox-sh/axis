@@ -5,7 +5,7 @@
 # AXIS
 > Open charting PWA — own the axes, swap the engine
 
-Installable AXIS for price and time. Orthogonal plugins: sources, streams, engines, storage. Full Pine surface via PYNE.
+Installable AXIS for price and time. Orthogonal plugins: sources, streams, engines, storage, datasets (on-chain). Full Pine surface via PYNE.
 
 ## Primary
 
@@ -28,6 +28,8 @@ Installable AXIS for price and time. Orthogonal plugins: sources, streams, engin
 - [Quick Start](https://hoox.sh/axis/docs/enduser/getting-started/quick-start)
 - [Compose Recipes](https://hoox.sh/axis/docs/enduser/getting-started/compose-recipes)
 - [Manager And Settings](https://hoox.sh/axis/docs/enduser/guides/manager-and-settings)
+- [On-Chain Data](https://hoox.sh/axis/docs/enduser/guides/on-chain)
+- [Data Source Manager](https://hoox.sh/axis/docs/enduser/guides/data-source-manager)
 - [PYNE Agent](https://hoox.sh/axis/docs/enduser/guides/pine-agent)
 - [Script Library](https://hoox.sh/axis/docs/enduser/guides/script-library)
 - [Strategy And Results](https://hoox.sh/axis/docs/enduser/guides/strategy-and-results)
@@ -50,6 +52,7 @@ Installable AXIS for price and time. Orthogonal plugins: sources, streams, engin
 - [Contracts](https://hoox.sh/axis/docs/plugins/contracts)
 - [Registry](https://hoox.sh/axis/docs/plugins/registry)
 - [Sources](https://hoox.sh/axis/docs/plugins/sources)
+- [Datasets](https://hoox.sh/axis/docs/plugins/datasets)
 - [Streams](https://hoox.sh/axis/docs/plugins/streams)
 - [Engines](https://hoox.sh/axis/docs/plugins/engines)
 - [Storage](https://hoox.sh/axis/docs/plugins/storage)

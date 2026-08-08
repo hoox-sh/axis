@@ -34,10 +34,11 @@ You compose four axes:
 
 | Axis | Question it answers |
 | --- | --- |
-| **Source** | Where do historical OHLCV bars come from? |
+| **Source** | Where do historical OHLCV bars come from? (CEX venues or DEX pools) |
 | **Stream** | How does the live bar advance? |
 | **Engine** | Who evaluates the script? |
 | **Storage** | Where do saved scripts live? |
+| **On-chain** | Protocol TVL, DEX OHLCV, events — parallel plane (not a wallet) |
 
 Any lawful combination is valid. Offline lab, desk research against Binance + Flask, AXIS at the edge through a Cloudflare Worker, and a git-backed library are all first-class recipes—see [Compose recipes](/axis/docs/enduser/getting-started/compose-recipes).
 
@@ -60,13 +61,14 @@ The shell (topbar, chart, editor, results, manager) is **AXIS**. Calculation is 
 
 | Surface | Role |
 | --- | --- |
-| Topbar | Symbol, interval, source/stream/engine pickers, Load, Run, Live |
+| Topbar | Symbol, interval, source/stream/engine pickers, Load, Run, Live, On-Chain |
 | Watchlist | Quick symbol switch + quote poll |
-| Chart | lightweight-charts panes, drawings, trade markers |
+| Chart | lightweight-charts panes, drawings, trade markers, on-chain overlays |
 | Editor | CodeMirror 6 Pine document (docked / popout) |
 | Results | Events, Strategy, Plots, Metrics, Raw + export |
+| On-Chain | DefiLlama TVL, GeckoTerminal DEX, spike events, export / refresh |
 | Manager | Plugin catalog, URL install, Script Library |
-| Settings | Endpoint, engine, storage, interval defaults |
+| Settings | Endpoint, engine, storage, on-chain proxy notes |
 
 ## Getting started
 
@@ -77,6 +79,7 @@ The shell (topbar, chart, editor, results, manager) is **AXIS**. Calculation is 
 ## Guides
 
 - [Manager and settings](/axis/docs/enduser/guides/manager-and-settings)
+- [On-Chain data](/axis/docs/enduser/guides/on-chain) — TVL, DEX pools, events, Worker proxy
 - [Data Source Manager](/axis/docs/enduser/guides/data-source-manager)
 - [Script library](/axis/docs/enduser/guides/script-library)
 - [Strategy and results](/axis/docs/enduser/guides/strategy-and-results)
