@@ -21,8 +21,9 @@
  * Public entry for the AXIS **on-chain data plane** (Phase 1–3 light).
  *
  * Types, keys, adapters, IDB cache, DefiLlama TVL, GeckoTerminal DEX OHLCV,
- * synthetic TVL-spike events, dataset catalog, and attach-manager store.
- * Chart / UI wiring is intentionally out of scope for this module surface.
+ * synthetic TVL-spike events, CSV export helpers, dataset catalog, and
+ * attach-manager store. Chart / UI wiring is intentionally out of scope for
+ * this module surface.
  *
  * @module onchain
  */
@@ -139,6 +140,10 @@ export {
 } from './events';
 export type { BuildTvlSpikeEventsOpts, TvlSpikeEventType } from './events';
 
+// CSV / download export
+export { seriesToCsv, eventsToCsv, downloadTextFile } from './export';
+export type { ExportSeries, ExportEvent } from './export';
+
 // On-chain ↔ alerts bridge (TVL spike / event alerts)
 export {
   evaluateOnchainEventAlerts,
@@ -156,11 +161,20 @@ export {
   detachOnchainSeries,
   setOnchainSeriesVisible,
   clearAllOnchainSeries,
+  exportAllOnchainSeriesCsv,
   setOnchainEvents,
   clearOnchainEvents,
   setOnchainEventsVisible,
   loadTvlSpikeEventsFromAttachment,
   searchProtocols,
+  // Background TVL refresh jobs (re-exported via manager)
+  onchainJobsState,
+  listOnchainJobs,
+  refreshAttachment,
+  refreshAllAttachedTvl,
+  cancelOnchainJob,
+  dismissOnchainJob,
+  _resetOnchainJobsForTests,
 } from './manager';
 export type {
   OnchainManagerState,
@@ -168,4 +182,14 @@ export type {
   DefiLlamaProtocolHit,
   OnchainSeriesRow,
   AttachDefiLlamaArg,
+  OnchainJob,
+  OnchainJobStatus,
 } from './manager';
+
+// Popular protocol + DEX network presets
+export {
+  POPULAR_TVL_PROTOCOLS,
+  DEX_NETWORK_PRESETS,
+  attachPopularTvl,
+} from './presets';
+export type { AttachPopularTvlResult } from './presets';

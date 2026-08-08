@@ -78,6 +78,12 @@ export interface CommandActions {
   clearOnchainEvents?: () => void;
   /** Probe Worker on-chain proxy / refresh telemetry HUD. */
   kickOnchainHealth?: () => void;
+  /** Re-fetch every attached DefiLlama TVL series. */
+  refreshAllAttachedTvl?: () => void | Promise<void>;
+  /** Download all attached on-chain series as long CSV. */
+  exportOnchainSeries?: () => void;
+  /** Attach top popular DefiLlama TVL protocols (preset, e.g. top 5). */
+  attachPopularTvl?: () => void | Promise<void>;
   toggleTheme: () => void;
   /** Apply a named chart theme preset (void-dark, classic, …). */
   setChartThemePreset?: (presetId: string) => void;
@@ -364,6 +370,51 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
       'worker',
     ],
   },
+  {
+    id: 'onchain.refresh',
+    title: 'On-Chain: Refresh Attached TVL',
+    category: 'actions',
+    keywords: [
+      'onchain',
+      'on-chain',
+      'refresh',
+      'reload',
+      'tvl',
+      'refetch',
+      'update series',
+      'defillama',
+    ],
+  },
+  {
+    id: 'onchain.export.series',
+    title: 'On-Chain: Export Series CSV',
+    category: 'actions',
+    keywords: [
+      'onchain',
+      'on-chain',
+      'export',
+      'csv',
+      'download',
+      'series',
+      'tvl',
+      'save data',
+    ],
+  },
+  {
+    id: 'onchain.attach.popular',
+    title: 'On-Chain: Attach Popular TVL',
+    category: 'actions',
+    keywords: [
+      'onchain',
+      'on-chain',
+      'popular',
+      'preset',
+      'top tvl',
+      'attach',
+      'defillama',
+      'protocols',
+    ],
+  },
   // Theme
   {
     id: 'theme.toggle',
@@ -628,6 +679,15 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   }
   if (actions.kickOnchainHealth) {
     byId.set('onchain.health', actions.kickOnchainHealth);
+  }
+  if (actions.refreshAllAttachedTvl) {
+    byId.set('onchain.refresh', () => void actions.refreshAllAttachedTvl?.());
+  }
+  if (actions.exportOnchainSeries) {
+    byId.set('onchain.export.series', actions.exportOnchainSeries);
+  }
+  if (actions.attachPopularTvl) {
+    byId.set('onchain.attach.popular', () => void actions.attachPopularTvl?.());
   }
   if (actions.loadSymbol) byId.set('action.load-symbol', () => void actions.loadSymbol?.());
   if (actions.reloadChart) byId.set('action.reload-chart', () => void actions.reloadChart?.());

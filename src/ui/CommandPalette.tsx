@@ -75,7 +75,10 @@ import { startLive, stopLive, defaultStreamForSource } from '../streams/multiple
 import {
   clearAllOnchainSeries,
   clearOnchainEvents,
+  refreshAllAttachedTvl,
+  exportAllOnchainSeriesCsv,
 } from '../onchain/manager';
+import { attachPopularTvl } from '../onchain/presets';
 import { kickOnchainHealthProbe } from '../onchain/health';
 import {
   buildDefaultCommands,
@@ -159,6 +162,9 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       clearAllOnchainSeries: () => clearAllOnchainSeries(),
       clearOnchainEvents: () => clearOnchainEvents(),
       kickOnchainHealth: () => kickOnchainHealthProbe(),
+      refreshAllAttachedTvl: () => void refreshAllAttachedTvl(),
+      exportOnchainSeries: () => exportAllOnchainSeriesCsv(),
+      attachPopularTvl: () => void attachPopularTvl(5),
       toggleTheme: () => toggleTheme(),
       setChartThemePreset: (id) => setChartThemePreset(id),
       setChartGridMode: (mode) => setChartGridMode(mode),

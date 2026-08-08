@@ -48,6 +48,7 @@ import {
   normalizeEventPoints,
   tvlSpikeEventSourceLabel,
 } from './events';
+import { downloadTextFile, seriesToCsv } from './export';
 import { resolveDefiLlamaBaseUrl } from './proxy';
 import { kickOnchainHealthProbe } from './health';
 import { instrumentCacheKey } from './keys';
@@ -426,6 +427,26 @@ export function clearAllOnchainSeries(): void {
 }
 
 /**
+ * Download **all** attached on-chain series as long CSV (`series,time,value`).
+ *
+ * Uses {@link seriesToCsv} + {@link downloadTextFile}. Header-only file when
+ * nothing is attached (still triggers download for a consistent UX).
+ */
+export function exportAllOnchainSeriesCsv(): void {
+  const payload = state.attachments.map((row) => ({
+    label: row.label || row.key || row.instrument?.protocolId || row.id,
+    points: Array.isArray(row.points) ? row.points : [],
+  }));
+  const csv = seriesToCsv(payload);
+  const stamp = new Date().toISOString().slice(0, 10);
+  downloadTextFile(
+    `axis-onchain-series-${stamp}.csv`,
+    csv,
+    'text/csv;charset=utf-8',
+  );
+}
+
+/**
  * Replace the displayed on-chain events plane (normalized + sorted).
  * Does not touch series attachments.
  * Triggers on-chain alert evaluation (fire-and-forget).
@@ -610,3 +631,16 @@ export function _seedOnchainAttachmentsForTests(
 ): void {
   setSeriesRows(Array.isArray(rows) ? rows : []);
 }
+
+// Background TVL refresh jobs (re-export for callers that import manager)
+export type { OnchainJob, OnchainJobStatus } from './jobs';
+export {
+  onchainJobsState,
+  listOnchainJobs,
+  refreshAttachment,
+  refreshAllAttachedTvl,
+  cancelOnchainJob,
+  dismissOnchainJob,
+  _resetOnchainJobsForTests,
+  _setAttachTvlForTests,
+} from './jobs';

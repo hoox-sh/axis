@@ -201,6 +201,28 @@ describe('DEFAULT_COMMAND_SPECS', () => {
       expect(ranked.some((c) => c.id === 'panel.onchain')).toBe(true);
     }
   });
+
+  it('includes on-chain job command ids (refresh / export / popular)', () => {
+    const ids = new Set(DEFAULT_COMMAND_SPECS.map((c) => c.id));
+    for (const id of [
+      'onchain.refresh',
+      'onchain.export.series',
+      'onchain.attach.popular',
+    ] as const) {
+      expect(ids.has(id)).toBe(true);
+    }
+  });
+
+  it('fuzzy keywords find onchain export / popular / refresh', () => {
+    for (const [query, id] of [
+      ['export csv', 'onchain.export.series'],
+      ['popular', 'onchain.attach.popular'],
+      ['refresh', 'onchain.refresh'],
+    ] as const) {
+      const ranked = filterCommands([...DEFAULT_COMMAND_SPECS], query);
+      expect(ranked.some((c) => c.id === id)).toBe(true);
+    }
+  });
 });
 
 describe('buildDefaultCommands', () => {
@@ -286,6 +308,40 @@ describe('buildDefaultCommands', () => {
     expect(cmd).toBeTruthy();
     cmd!.run();
     expect(toggled).toBe(true);
+  });
+
+  it('wires onchain refresh / export / popular when handlers provided', () => {
+    const seen: string[] = [];
+    const actions = stubActions();
+    actions.refreshAllAttachedTvl = () => {
+      seen.push('refresh');
+    };
+    actions.exportOnchainSeries = () => {
+      seen.push('export');
+    };
+    actions.attachPopularTvl = () => {
+      seen.push('popular');
+    };
+    const cmds = buildDefaultCommands(actions);
+    for (const id of [
+      'onchain.refresh',
+      'onchain.export.series',
+      'onchain.attach.popular',
+    ] as const) {
+      const cmd = cmds.find((c) => c.id === id);
+      expect(cmd).toBeTruthy();
+      cmd!.run();
+    }
+    expect(seen).toEqual(['refresh', 'export', 'popular']);
+  });
+
+  it('omits onchain job commands when optional handlers missing', () => {
+    const actions = stubActions();
+    const cmds = buildDefaultCommands(actions);
+    const ids = new Set(cmds.map((c) => c.id));
+    expect(ids.has('onchain.refresh')).toBe(false);
+    expect(ids.has('onchain.export.series')).toBe(false);
+    expect(ids.has('onchain.attach.popular')).toBe(false);
   });
 
   it('wires editor power command handlers', () => {

@@ -21,10 +21,11 @@
  * On-Chain panel — multi-mode on-chain data plane UI.
  *
  * Modes:
- * 1. **TVL** — DefiLlama protocol search / attach (left-scale overlay)
+ * 1. **TVL** — DefiLlama protocol search / popular presets / attach (left-scale)
  * 2. **DEX** — GeckoTerminal pool OHLCV onto the main chart (`network:0x…`)
  * 3. **Events** — TVL spike events from attached series
  *
+ * TVL footer: refresh jobs, series/events CSV export, job progress list.
  * FloatableShell id `onchain`. Chart / source / manager core stay out of scope
  * beyond calling existing load + attach helpers.
  */
@@ -51,6 +52,22 @@ import {
   type DefiLlamaProtocolHit,
 } from '../onchain/manager';
 import {
+  onchainJobsState,
+  refreshAllAttachedTvl,
+  dismissOnchainJob,
+  type OnchainJob,
+} from '../onchain/jobs';
+import {
+  seriesToCsv,
+  eventsToCsv,
+  downloadTextFile,
+} from '../onchain/export';
+import {
+  POPULAR_TVL_PROTOCOLS,
+  DEX_NETWORK_PRESETS,
+  attachPopularTvl,
+} from '../onchain/presets';
+import {
   isWorkerLlamaProxy,
   isWorkerGeckoProxy,
   resolveDefiLlamaBaseUrl,
@@ -70,16 +87,10 @@ import { FloatableShell } from './panels/FloatableShell';
 /** Historical source id for GeckoTerminal pool OHLCV. */
 const GECKO_SOURCE_ID = 'geckoterminal-ohlcv';
 
-/** DEX networks offered in the pool form. */
-const DEX_NETWORKS = [
-  { id: 'eth', label: 'Ethereum' },
-  { id: 'arbitrum', label: 'Arbitrum' },
-  { id: 'base', label: 'Base' },
-  { id: 'bsc', label: 'BSC' },
-  { id: 'solana', label: 'Solana' },
-] as const;
+/** DEX network options from {@link DEX_NETWORK_PRESETS}. */
+const DEX_NETWORKS = DEX_NETWORK_PRESETS;
 
-type DexNetworkId = (typeof DEX_NETWORKS)[number]['id'];
+type DexNetworkId = (typeof DEX_NETWORK_PRESETS)[number]['id'];
 
 type PanelMode = 'tvl' | 'dex' | 'events';
 
@@ -117,7 +128,7 @@ function normalizePoolAddress(raw: string, network: string): string {
   const colon = a.indexOf(':');
   if (colon > 0) {
     const maybeNet = a.slice(0, colon).toLowerCase();
-    if (DEX_NETWORKS.some((n) => n.id === maybeNet)) {
+    if (DEX_NETWORK_PRESETS.some((n) => n.id === maybeNet)) {
       a = a.slice(colon + 1).trim();
     }
   }
@@ -128,6 +139,55 @@ function normalizePoolAddress(raw: string, network: string): string {
     a = `0x${a}`;
   }
   return a;
+}
+
+function jobStatusLabel(job: OnchainJob): string {
+  switch (job.status) {
+    case 'pending':
+      return 'Queued';
+    case 'running':
+      return 'Running';
+    case 'complete':
+      return job.error ? 'Partial' : 'Complete';
+    case 'error':
+      return 'Error';
+    case 'cancelled':
+      return 'Cancelled';
+    default:
+      return job.status;
+  }
+}
+
+function exportSeriesCsv(): void {
+  const payload = onchainManagerState.series.map((row) => ({
+    label: row.label || row.key || row.instrument?.protocolId || row.id,
+    points: Array.isArray(row.points) ? row.points : [],
+  }));
+  const csv = seriesToCsv(payload);
+  const stamp = new Date().toISOString().slice(0, 10);
+  downloadTextFile(
+    `axis-onchain-series-${stamp}.csv`,
+    csv,
+    'text/csv;charset=utf-8',
+  );
+}
+
+function exportEventsCsv(): void {
+  const csv = eventsToCsv(
+    onchainManagerState.events.map((ev) => ({
+      time: ev.time,
+      type: ev.type,
+      title: ev.title,
+      severity: ev.severity,
+      price: ev.price,
+    })),
+  );
+  const stamp = new Date().toISOString().slice(0, 10);
+  downloadTextFile(
+    `axis-onchain-events-${stamp}.csv`,
+    csv,
+    'text/csv;charset=utf-8',
+  );
 }
 
 function buildPoolSymbol(network: string, address: string): string {
@@ -164,6 +224,9 @@ export const OnChainPanel: Component = () => {
   const [query, setQuery] = createSignal('');
   const [attachError, setAttachError] = createSignal('');
   const [attachingSlug, setAttachingSlug] = createSignal<string | null>(null);
+  const [popularBusy, setPopularBusy] = createSignal(false);
+  const [refreshBusy, setRefreshBusy] = createSignal(false);
+  const [actionMsg, setActionMsg] = createSignal('');
 
   // ── DEX ────────────────────────────────────────────────────────────
   const [dexNetwork, setDexNetwork] = createSignal<DexNetworkId>('eth');
@@ -215,6 +278,7 @@ export const OnChainPanel: Component = () => {
 
   const onAttach = async (hit: DefiLlamaProtocolHit) => {
     setAttachError('');
+    setActionMsg('');
     setAttachingSlug(hit.slug);
     try {
       await attachDefiLlamaTvl(hit);
@@ -224,6 +288,85 @@ export const OnChainPanel: Component = () => {
     } finally {
       setAttachingSlug(null);
     }
+  };
+
+  const onAttachPopularSlug = async (slug: string, name: string) => {
+    setAttachError('');
+    setActionMsg('');
+    setAttachingSlug(slug);
+    try {
+      await attachDefiLlamaTvl({ slug, name });
+      setOnchainLastProtocol(slug, name);
+    } catch (err: unknown) {
+      setAttachError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAttachingSlug(null);
+    }
+  };
+
+  const onAttachTop5 = async () => {
+    setAttachError('');
+    setActionMsg('');
+    setPopularBusy(true);
+    try {
+      const result = await attachPopularTvl(5);
+      const n = result.ok.length;
+      if (n > 0) {
+        setActionMsg(
+          `Attached ${n} popular protocol${n === 1 ? '' : 's'}${
+            result.failed.length ? ` · ${result.failed.length} failed` : ''
+          }.`,
+        );
+      } else if (result.failed.length) {
+        setAttachError(
+          result.failed[0]?.error || 'Failed to attach popular TVL presets.',
+        );
+      } else {
+        setActionMsg('No popular protocols attached (cap or empty).');
+      }
+    } catch (err: unknown) {
+      setAttachError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPopularBusy(false);
+    }
+  };
+
+  const onRefreshAll = async () => {
+    setAttachError('');
+    setActionMsg('');
+    if (!onchainManagerState.series.length) {
+      setActionMsg('No attached series to refresh.');
+      return;
+    }
+    setRefreshBusy(true);
+    try {
+      await refreshAllAttachedTvl();
+      setActionMsg('Refresh queued for all attached TVL series.');
+    } catch (err: unknown) {
+      setAttachError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRefreshBusy(false);
+    }
+  };
+
+  const onExportSeries = () => {
+    setActionMsg('');
+    exportSeriesCsv();
+    setActionMsg(
+      onchainManagerState.series.length
+        ? 'Downloaded series CSV.'
+        : 'Downloaded empty series CSV (header only).',
+    );
+  };
+
+  const onExportEvents = () => {
+    setActionMsg('');
+    exportEventsCsv();
+    setActionMsg(
+      onchainManagerState.events.length
+        ? 'Downloaded events CSV.'
+        : 'Downloaded empty events CSV (header only).',
+    );
   };
 
   const onPoolSearchInput = (value: string) => {
@@ -262,8 +405,11 @@ export const OnChainPanel: Component = () => {
 
   const pickPool = (hit: GeckoPoolSearchHit) => {
     const net = String(hit.network || '').toLowerCase();
-    if (net && DEX_NETWORKS.some((n) => n.id === net)) {
-      setDexNetwork(net as DexNetworkId);
+    if (net && DEX_NETWORK_PRESETS.some((n) => n.id === net || n.gecko === net)) {
+      const preset = DEX_NETWORK_PRESETS.find(
+        (n) => n.id === net || n.gecko === net,
+      );
+      if (preset) setDexNetwork(preset.id as DexNetworkId);
     }
     setPoolAddress(hit.address);
     setDexMsg(hit.name ? `Selected ${hit.name}` : `Selected ${hit.address.slice(0, 10)}…`);
@@ -392,6 +538,58 @@ export const OnChainPanel: Component = () => {
                 <code class="text-[0.7rem] opacity-80">{llamaPath().base}</code>
               </p>
 
+              <div class="flex flex-col gap-1.5" data-testid="axis-onchain-popular">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-muted text-[0.72rem] uppercase tracking-wide">
+                    Popular
+                  </span>
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-ghost sc-btn-sm"
+                    disabled={popularBusy() || !!attachingSlug()}
+                    onClick={() => void onAttachTop5()}
+                    data-testid="axis-onchain-attach-top5"
+                    title="Attach the first 5 popular DefiLlama TVL presets"
+                  >
+                    <Show when={popularBusy()} fallback={<Icons.layers />}>
+                      <Icons.loader class="animate-spin" />
+                    </Show>
+                    <span>{popularBusy() ? 'Attaching…' : 'Attach top 5'}</span>
+                  </button>
+                </div>
+                <div
+                  class="sc-chip-row flex flex-wrap gap-1"
+                  role="group"
+                  aria-label="Popular protocols"
+                  data-testid="axis-onchain-popular-chips"
+                >
+                  <For each={POPULAR_TVL_PROTOCOLS}>
+                    {(p) => {
+                      const attached = () =>
+                        onchainManagerState.series.some(
+                          (s) => s.provider === 'defillama' && s.key === p.slug,
+                        );
+                      return (
+                        <button
+                          type="button"
+                          class={`sc-chip ${attached() ? 'is-active' : ''}`}
+                          disabled={attached() || attachingSlug() === p.slug || popularBusy()}
+                          onClick={() => void onAttachPopularSlug(p.slug, p.name)}
+                          data-testid={`axis-onchain-popular-${p.slug}`}
+                          title={
+                            attached()
+                              ? `${p.name} already attached`
+                              : `Attach ${p.name} TVL`
+                          }
+                        >
+                          {attachingSlug() === p.slug ? '…' : p.name}
+                        </button>
+                      );
+                    }}
+                  </For>
+                </div>
+              </div>
+
               <label class="flex flex-col gap-0.5" data-testid="axis-onchain-search">
                 <span class="text-muted text-[0.72rem] uppercase tracking-wide">
                   Search protocols
@@ -424,6 +622,16 @@ export const OnChainPanel: Component = () => {
               <Show when={attachError() || onchainManagerState.error}>
                 <div class="text-red text-[0.78rem]" role="alert">
                   {attachError() || onchainManagerState.error}
+                </div>
+              </Show>
+
+              <Show when={actionMsg()}>
+                <div
+                  class="text-muted text-[0.78rem]"
+                  role="status"
+                  data-testid="axis-onchain-action-msg"
+                >
+                  {actionMsg()}
                 </div>
               </Show>
 
@@ -473,22 +681,39 @@ export const OnChainPanel: Component = () => {
               </Show>
 
               <div class="flex flex-col gap-2" data-testid="axis-onchain-series">
-                <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center justify-between gap-2 flex-wrap">
                   <div class="text-muted text-[0.72rem] uppercase tracking-wide">
                     Attached series
                   </div>
-                  <Show when={onchainManagerState.series.length}>
+                  <div class="flex items-center gap-1 flex-wrap">
                     <button
                       type="button"
                       class="sc-btn sc-btn-ghost sc-btn-sm"
-                      onClick={() => clearAllOnchainSeries()}
-                      data-testid="axis-onchain-clear-all"
-                      title="Remove all on-chain series"
+                      disabled={
+                        refreshBusy() || !onchainManagerState.series.length
+                      }
+                      onClick={() => void onRefreshAll()}
+                      data-testid="axis-onchain-refresh-all"
+                      title="Re-fetch all attached DefiLlama TVL series"
                     >
-                      <Icons.trash />
-                      <span>Clear</span>
+                      <Show when={refreshBusy()} fallback={<Icons.refresh />}>
+                        <Icons.loader class="animate-spin" />
+                      </Show>
+                      <span>{refreshBusy() ? 'Refreshing…' : 'Refresh all'}</span>
                     </button>
-                  </Show>
+                    <Show when={onchainManagerState.series.length}>
+                      <button
+                        type="button"
+                        class="sc-btn sc-btn-ghost sc-btn-sm"
+                        onClick={() => clearAllOnchainSeries()}
+                        data-testid="axis-onchain-clear-all"
+                        title="Remove all on-chain series"
+                      >
+                        <Icons.trash />
+                        <span>Clear</span>
+                      </button>
+                    </Show>
+                  </div>
                 </div>
 
                 <Show
@@ -563,6 +788,99 @@ export const OnChainPanel: Component = () => {
                   </For>
                 </Show>
               </div>
+
+              {/* TVL footer: export + jobs */}
+              <div
+                class="border-t border-[var(--border)] pt-2 flex flex-col gap-2"
+                data-testid="axis-onchain-tvl-footer"
+              >
+                <div class="flex flex-wrap gap-1" data-testid="axis-onchain-export">
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-ghost sc-btn-sm"
+                    onClick={onExportSeries}
+                    data-testid="axis-onchain-export-series"
+                    title="Download attached series as long CSV (series,time,value)"
+                  >
+                    <Icons.fileCsv />
+                    <span>Export series CSV</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-ghost sc-btn-sm"
+                    onClick={onExportEvents}
+                    data-testid="axis-onchain-export-events"
+                    title="Download spike events as CSV"
+                  >
+                    <Icons.download />
+                    <span>Export events CSV</span>
+                  </button>
+                </div>
+
+                <Show when={onchainJobsState.jobs.length}>
+                  <div class="flex flex-col gap-1.5" data-testid="axis-onchain-jobs">
+                    <div class="text-muted text-[0.72rem] uppercase tracking-wide">
+                      Jobs
+                    </div>
+                    <For each={onchainJobsState.jobs}>
+                      {(job) => {
+                        const pct = () =>
+                          Math.round(
+                            Math.max(0, Math.min(1, Number(job.progress) || 0)) * 100,
+                          );
+                        return (
+                          <div
+                            class="border border-[var(--border)] rounded px-2 py-1.5 flex flex-col gap-1"
+                            data-testid={`axis-onchain-job-${job.id}`}
+                            data-status={job.status}
+                          >
+                            <div class="flex items-start justify-between gap-2 min-w-0">
+                              <div class="min-w-0">
+                                <div class="font-medium truncate text-[0.78rem]">
+                                  {job.label}
+                                </div>
+                                <div class="text-muted text-[0.68rem] truncate">
+                                  {jobStatusLabel(job)}
+                                  {job.kind ? ` · ${job.kind}` : ''}
+                                </div>
+                              </div>
+                              <div class="flex items-center gap-1 shrink-0">
+                                <span class="text-[0.68rem] text-muted tabular-nums">
+                                  {pct()}%
+                                </span>
+                                <button
+                                  type="button"
+                                  class="sc-btn sc-btn-ghost sc-btn-sm"
+                                  onClick={() => dismissOnchainJob(job.id)}
+                                  data-testid={`axis-onchain-job-dismiss-${job.id}`}
+                                  title="Dismiss job"
+                                >
+                                  <Icons.x />
+                                </button>
+                              </div>
+                            </div>
+                            <div
+                              class="h-1 rounded bg-[var(--border)] overflow-hidden"
+                              role="progressbar"
+                              aria-valuenow={pct()}
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                            >
+                              <div
+                                class="h-full bg-[var(--accent,var(--indigo,#6366f1))] transition-[width] duration-200"
+                                style={{ width: `${pct()}%` }}
+                              />
+                            </div>
+                            <Show when={job.error}>
+                              <div class="text-red text-[0.68rem]">{job.error}</div>
+                            </Show>
+                          </div>
+                        );
+                      }}
+                    </For>
+                  </div>
+                </Show>
+              </div>
             </div>
           </Show>
 
@@ -617,7 +935,7 @@ export const OnChainPanel: Component = () => {
                   onChange={(e) => setDexNetwork(e.currentTarget.value as DexNetworkId)}
                   data-testid="axis-onchain-dex-network-select"
                 >
-                  <For each={[...DEX_NETWORKS]}>
+                  <For each={DEX_NETWORKS}>
                     {(n) => <option value={n.id}>{n.label}</option>}
                   </For>
                 </select>

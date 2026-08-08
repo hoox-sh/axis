@@ -74,6 +74,32 @@ flowchart LR
 
 Multiple protocols can be attached (chart safety caps the number of on-chain lines).
 
+## Refresh, export, popular presets
+
+Command palette (**⌘K** / **Ctrl+K**) exposes host jobs for attached TVL series — no Pine required:
+
+| Command id | Title | What it does |
+| --- | --- | --- |
+| `onchain.refresh` | On-Chain: Refresh Attached TVL | Re-fetch every attached DefiLlama TVL series (`refreshAllAttachedTvl`) |
+| `onchain.export.series` | On-Chain: Export Series CSV | Download **all** attached series as long CSV (`series,time,value`) |
+| `onchain.attach.popular` | On-Chain: Attach Popular TVL | Attach the top **5** protocols by current TVL (`attachPopularTvl(5)`) |
+
+Related palette actions (panel / hygiene):
+
+| Command id | Role |
+| --- | --- |
+| `panel.onchain` | Toggle On-Chain panel |
+| `onchain.mode.tvl` | Open panel (TVL mode entry) |
+| `onchain.clear.series` | Detach all series |
+| `onchain.clear.events` | Clear event markers plane |
+| `onchain.health` | Probe Worker `/api/onchain/health` (Connection HUD) |
+
+**Export format:** one row per point — `series,time,value` — with `time` as unix seconds and `value` as USD TVL (or other scalar). Empty attachments still download a header-only file.
+
+**Popular preset:** empty DefiLlama protocol browse (highest TVL first), capped by the chart series limit (`MAX_ONCHAIN_SERIES`, currently 8). Already-attached slugs refresh in place rather than duplicating.
+
+**Refresh:** re-runs the DefiLlama protocol TVL fetch for each attachment so left-scale lines stay current after long sessions.
+
 ## DEX pools (GeckoTerminal)
 
 Phase 2 adds **DEX pool OHLCV** via [GeckoTerminal](https://www.geckoterminal.com/) public API (no API key). Use this when you want on-chain pool candles rather than protocol TVL:
