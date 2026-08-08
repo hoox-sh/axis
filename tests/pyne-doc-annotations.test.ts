@@ -9,10 +9,10 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
-  formatPineDocMarkdown,
-  lookupPineDoc,
-  parsePineDocAnnotations,
-} from '../src/editor/pine-doc-annotations.ts';
+  formatPyneDocMarkdown,
+  lookupPyneDoc,
+  parsePyneDocAnnotations,
+} from '../src/editor/pyne-doc-annotations.ts';
 
 const MIX_EMA = `//@version=6
 library("Demo")
@@ -27,9 +27,9 @@ export mixEMA(float source, int length, float mix = 1.0) =>
     (1.0 - mix) * source + mix * ma
 `;
 
-describe('parsePineDocAnnotations', () => {
+describe('parsePyneDocAnnotations', () => {
   it('parses @function / @param / @returns on export function', () => {
-    const map = parsePineDocAnnotations(MIX_EMA);
+    const map = parsePyneDocAnnotations(MIX_EMA);
     const e = map.get('mixEMA');
     expect(e).toBeTruthy();
     expect(e!.kind).toBe('function');
@@ -48,7 +48,7 @@ describe('parsePineDocAnnotations', () => {
 foo(x) =>
     x
 `;
-    const e = parsePineDocAnnotations(src).get('foo');
+    const e = parsePyneDocAnnotations(src).get('foo');
     expect(e).toBeTruthy();
     expect(e!.description).toContain('First paragraph');
     expect(e!.description).toContain('Second line');
@@ -63,7 +63,7 @@ type Point
     int x
     float y
 `;
-    const e = parsePineDocAnnotations(src).get('Point');
+    const e = parsePyneDocAnnotations(src).get('Point');
     expect(e).toBeTruthy();
     expect(e!.kind).toBe('type');
     expect(e!.description).toContain('Point in chart space');
@@ -74,7 +74,7 @@ type Point
     const src = `//@variable The 20-bar z-score of close values.
 float osc = zScore(close, 20)
 `;
-    const e = parsePineDocAnnotations(src).get('osc');
+    const e = parsePyneDocAnnotations(src).get('osc');
     expect(e).toBeTruthy();
     expect(e!.kind).toBe('variable');
     expect(e!.description).toContain('z-score');
@@ -84,7 +84,7 @@ float osc = zScore(close, 20)
     const src = `// just a comment
 foo() => 1
 `;
-    expect(parsePineDocAnnotations(src).size).toBe(0);
+    expect(parsePyneDocAnnotations(src).size).toBe(0);
   });
 
   it('method keyword functions are documented', () => {
@@ -92,16 +92,16 @@ foo() => 1
 method push(array<float> id, float v) =>
     array.push(id, v)
 `;
-    const e = parsePineDocAnnotations(src).get('push');
+    const e = parsePyneDocAnnotations(src).get('push');
     expect(e).toBeTruthy();
     expect(e!.kind).toBe('function');
   });
 });
 
-describe('formatPineDocMarkdown', () => {
+describe('formatPyneDocMarkdown', () => {
   it('builds signature fence + params + returns', () => {
-    const e = parsePineDocAnnotations(MIX_EMA).get('mixEMA')!;
-    const md = formatPineDocMarkdown(e);
+    const e = parsePyneDocAnnotations(MIX_EMA).get('mixEMA')!;
+    const md = formatPyneDocMarkdown(e);
     expect(md).toContain('```pinescript');
     expect(md).toContain('mixEMA(');
     expect(md).toContain('**Parameters**');
@@ -110,9 +110,9 @@ describe('formatPineDocMarkdown', () => {
   });
 });
 
-describe('lookupPineDoc', () => {
+describe('lookupPyneDoc', () => {
   it('finds by name', () => {
-    expect(lookupPineDoc(MIX_EMA, 'mixEMA')?.name).toBe('mixEMA');
-    expect(lookupPineDoc(MIX_EMA, 'nope')).toBeNull();
+    expect(lookupPyneDoc(MIX_EMA, 'mixEMA')?.name).toBe('mixEMA');
+    expect(lookupPyneDoc(MIX_EMA, 'nope')).toBeNull();
   });
 });

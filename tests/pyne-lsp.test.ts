@@ -12,18 +12,18 @@ import { describe, expect, it } from 'bun:test';
 import { EditorState } from '@codemirror/state';
 import {
   lookupBuiltin,
-  pineBuiltinCount,
-  pineComplete,
+  pyneBuiltinCount,
+  pyneComplete,
   wordAt,
   looksLikeMarkdown,
   peelLeadingSignature,
   renderHoverMarkdown,
   appendInlineMarkdown,
-} from '../src/editor/pine-lsp';
+} from '../src/editor/pyne-lsp';
 
-describe('pine-lsp', () => {
+describe('pyne-lsp', () => {
   it('indexes builtins from metadata', () => {
-    expect(pineBuiltinCount()).toBeGreaterThan(100);
+    expect(pyneBuiltinCount()).toBeGreaterThan(100);
   });
 
   it('looks up ta.sma and bare sma', () => {
@@ -35,7 +35,7 @@ describe('pine-lsp', () => {
   });
 
   it('hover prefers local //@function annotations over missing builtins', async () => {
-    const { pineHoverLocal } = await import('../src/editor/pine-lsp');
+    const { pyneHoverLocal } = await import('../src/editor/pyne-lsp');
     const src = `//@function Demo helper with **bold**.
 //@param n Size.
 //@returns Doubled value.
@@ -43,7 +43,7 @@ demo(n) => n * 2
 plot(demo(2))
 `;
     const pos = src.indexOf('demo(2)') + 2;
-    const tip = pineHoverLocal(
+    const tip = pyneHoverLocal(
       { state: { doc: { sliceString: (a: number, b: number) => src.slice(a, b), length: src.length } } },
       pos,
     );
@@ -68,9 +68,9 @@ plot(demo(2))
   });
 
   it('completes top-level after prefix (local)', async () => {
-    const { pineCompleteLocal } = await import('../src/editor/pine-lsp');
+    const { pyneCompleteLocal } = await import('../src/editor/pyne-lsp');
     const state = EditorState.create({ doc: 'ind' });
-    const r = pineCompleteLocal({
+    const r = pyneCompleteLocal({
       state,
       pos: 3,
       explicit: false,
@@ -85,10 +85,10 @@ plot(demo(2))
   });
 
   it('completes module members after ta. (local)', async () => {
-    const { pineCompleteLocal } = await import('../src/editor/pine-lsp');
+    const { pyneCompleteLocal } = await import('../src/editor/pyne-lsp');
     const doc = 'ta.';
     const state = EditorState.create({ doc });
-    const r = pineCompleteLocal({
+    const r = pyneCompleteLocal({
       state,
       pos: 3,
       explicit: true,
@@ -183,7 +183,7 @@ function installMinimalDom(): () => void {
   };
   const prev = globalThis.document;
   (globalThis as unknown as { document: unknown }).document = {
-    __pineHoverDom: true,
+    __pyneHoverDom: true,
     documentElement: createEl('html'),
     body: createEl('body'),
     createElement(tag: string) {

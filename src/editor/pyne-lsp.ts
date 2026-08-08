@@ -25,14 +25,14 @@
  *    when engine=`server` and Backend URL is set (local or VPS).
  * 2. Fall back to **local doc annotations** in the open buffer
  *    (`//@function`, `//@param`, `//@returns`, `//@type`, …) rendered as markdown.
- * 3. Fall back to **client metadata** from `data/pine-builtins.json` for
+ * 3. Fall back to **client metadata** from `data/pyne-builtins.json` for
  *    pyodide / offline / remote failure.
  *
- * Exports {@link pineLspExtensions} for mounting on {@link PyneEditor}.
+ * Exports {@link pyneLspExtensions} for mounting on {@link PyneEditor}.
  * Indexes builtins by top-level name, module members (`ta.sma`), and full name
  * for hover tooltips.
  *
- * @module editor/pine-lsp
+ * @module editor/pyne-lsp
  */
 
 import {
@@ -45,18 +45,18 @@ import {
 } from '@codemirror/autocomplete';
 import { hoverTooltip, keymap, type EditorView, type Tooltip } from '@codemirror/view';
 import { Extension } from '@codemirror/state';
-import builtinsJson from './data/pine-builtins.json';
+import builtinsJson from './data/pyne-builtins.json';
 import {
   fetchRemoteCompletion,
   fetchRemoteHover,
   shouldUseRemoteLsp,
   type RemoteCompletionItem,
-} from './pine-lsp-client';
+} from './pyne-lsp-client';
 import {
-  formatPineDocMarkdown,
-  lookupPineDoc,
-  parsePineDocAnnotations,
-} from './pine-doc-annotations';
+  formatPyneDocMarkdown,
+  lookupPyneDoc,
+  parsePyneDocAnnotations,
+} from './pyne-doc-annotations';
 
 /** One entry from the local Pine builtins catalog. */
 export type BuiltinMeta = {
@@ -220,7 +220,7 @@ export function lookupBuiltin(name: string): BuiltinMeta | undefined {
 }
 
 /** Local (metadata) completion — always available offline. */
-export function pineCompleteLocal(context: CompletionContext): CompletionResult | null {
+export function pyneCompleteLocal(context: CompletionContext): CompletionResult | null {
   initIndex();
   const line = context.state.doc.lineAt(context.pos);
   const textBefore = line.text.slice(0, context.pos - line.from);
@@ -262,7 +262,7 @@ export function pineCompleteLocal(context: CompletionContext): CompletionResult 
   }
 
   // User-defined symbols with //@function etc. in this buffer
-  const localDocs = parsePineDocAnnotations(fullSource);
+  const localDocs = parsePyneDocAnnotations(fullSource);
   for (const [name, entry] of localDocs) {
     if (entry.kind === 'description') continue;
     if (prefix && !name.toLowerCase().startsWith(prefix.toLowerCase())) continue;
@@ -272,7 +272,7 @@ export function pineCompleteLocal(context: CompletionContext): CompletionResult 
       kind: entry.kind === 'function' ? 'function' : entry.kind === 'type' ? 'type' : 'variable',
       detail: entry.signature || entry.kind,
       brief: entry.description.slice(0, 120),
-      documentation: formatPineDocMarkdown(entry),
+      documentation: formatPyneDocMarkdown(entry),
       snippet: entry.kind === 'function' ? `${name}(\${1})` : undefined,
       category: 'local',
     });
@@ -325,7 +325,7 @@ function completionFromPos(
 }
 
 /** Async completion: remote LSP first, then local metadata. */
-export async function pineComplete(
+export async function pyneComplete(
   context: CompletionContext,
 ): Promise<CompletionResult | null> {
   if (shouldUseRemoteLsp() && !context.aborted) {
@@ -374,7 +374,7 @@ export async function pineComplete(
       return completionFromPos(context, options);
     }
   }
-  return pineCompleteLocal(context);
+  return pyneCompleteLocal(context);
 }
 
 function hoverDocs(meta: BuiltinMeta): string {
@@ -603,7 +603,7 @@ function makeHoverTooltip(
   };
 }
 
-export function pineHoverLocal(
+export function pyneHoverLocal(
   view: { state: { doc: { sliceString: (a: number, b: number) => string; length: number } } },
   pos: number,
 ): Tooltip | null {
@@ -614,9 +614,9 @@ export function pineHoverLocal(
   if (!hit) return null;
 
   // User / library annotations in the open document (//@function, //@param, …)
-  const localDoc = lookupPineDoc(text, hit.word);
+  const localDoc = lookupPyneDoc(text, hit.word);
   if (localDoc && localDoc.kind !== 'description') {
-    const md = formatPineDocMarkdown(localDoc);
+    const md = formatPyneDocMarkdown(localDoc);
     if (md) {
       return makeHoverTooltip(
         hit.from,
@@ -639,7 +639,7 @@ export function pineHoverLocal(
 }
 
 /** Async hover: remote LSP markdown first, then local. */
-export async function pineHover(view: EditorView, pos: number): Promise<Tooltip | null> {
+export async function pyneHover(view: EditorView, pos: number): Promise<Tooltip | null> {
   const doc = view.state.doc;
   const text = doc.toString();
   const hit = wordAt(text, pos);
@@ -669,27 +669,27 @@ export async function pineHover(view: EditorView, pos: number): Promise<Tooltip 
       );
     }
   }
-  return pineHoverLocal(view, pos);
+  return pyneHoverLocal(view, pos);
 }
 
 /** CodeMirror extensions: autocomplete + hover (remote LSP + local fallback). */
-export function pineLspExtensions(): Extension[] {
+export function pyneLspExtensions(): Extension[] {
   initIndex();
   return [
     autocompletion({
-      override: [pineComplete],
+      override: [pyneComplete],
       activateOnTyping: true,
       maxRenderedOptions: 64,
       defaultKeymap: true,
       icons: true,
     }),
     keymap.of(completionKeymap),
-    hoverTooltip((view, pos) => pineHover(view, pos), { hideOnChange: true }),
+    hoverTooltip((view, pos) => pyneHover(view, pos), { hideOnChange: true }),
   ];
 }
 
 /** Test helper — count indexed builtins. */
-export function pineBuiltinCount(): number {
+export function pyneBuiltinCount(): number {
   initIndex();
   return BY_NAME.size;
 }

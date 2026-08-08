@@ -20,7 +20,7 @@
 /**
  * Imperative **CodeMirror 6** host for Pine Script.
  *
- * Mounts language (`pineScript`), void theme, LSP completions/hover, search,
+ * Mounts language (`pyneScript`), void theme, LSP completions/hover, search,
  * and Mod-Enter → {@link Props.onRun}. Exposes `getDoc` / `setDoc` via
  * optional `editorRef` for parent panels and the cross-window bridge.
  *
@@ -39,9 +39,9 @@ import { Compartment, EditorSelection, EditorState, type Extension } from '@code
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { bracketMatching } from '@codemirror/language';
-import { pineScript } from './pine-language';
+import { pyneScript } from './pyne-language';
 import { voidEditorExtensions } from './cm-void';
-import { pineLspExtensions } from './pine-lsp';
+import { pyneLspExtensions } from './pyne-lsp';
 import {
   applyProfilerProfile,
   profilerGutterExtension,
@@ -267,7 +267,7 @@ export const PyneEditor: Component<Props> = (props) => {
         bracketMatching(),
         highlightSelectionMatches(),
         // Pine LSP-lite: typing completion + hover docs (from pyne builtin metadata)
-        ...pineLspExtensions(),
+        ...pyneLspExtensions(),
         // Profiler gutter: always mounted; driven by setProfilerData effects
         profilerGutterExtension(),
         // Inline debug chips / pin gutter / flash (driven by apply*)
@@ -280,7 +280,7 @@ export const PyneEditor: Component<Props> = (props) => {
         }),
         runKeymap,
         keymap.of([...defaultKeymap, indentWithTab, ...searchKeymap]),
-        pineScript,
+        pyneScript,
         ...voidEditorExtensions,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) props.onDocChange?.(update.state.doc.toString());

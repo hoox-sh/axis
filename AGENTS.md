@@ -70,7 +70,7 @@ and this repo’s builtins — never invent “TV JS” APIs or invent Pine iden
 
 | Domain | Source of truth |
 |--------|-----------------|
-| Pine builtins / signatures | `src/editor/data/pine-builtins.json` (sync from pyne via `scripts/sync-pine-builtins.sh`) |
+| Pine builtins / signatures | `src/editor/data/pyne-builtins.json` (sync from pyne via `scripts/sync-pyne-builtins.sh`) |
 | Engine evaluation | pyne Pro API / worker / pyodide — not the editor |
 | Chart brand colors | `VOID` in `src/chart/series-factory.ts` (**not** a Pine/TradingView API) |
 | Drawing object kinds | Pine: `line` / `label` / `box` / `polyline` / `table` + methods like `line.new`, `line.set_xy2` |

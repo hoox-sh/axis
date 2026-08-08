@@ -73,7 +73,7 @@ const BUILTIN_FUNCS = new Set([
     'hl2', 'hlc3', 'ohlc4', 'bar_index', 'nz', 'na',
 ]);
 
-const pineLanguage = StreamLanguage.define({
+const pyneLanguage = StreamLanguage.define({
     name: 'pine',
     startState() {
         return { inBlockComment: false };
@@ -300,7 +300,7 @@ export async function initPyneEditor(opts) {
                 closeBrackets(),
                 autocompletion(),
                 highlightSelectionMatches(),
-                pineLanguage,
+                pyneLanguage,
                 // Pine colors first; default as fallback for unmatched tags
                 syntaxHighlighting(pineHighlight, { fallback: false }),
                 syntaxHighlighting(defaultHighlightStyle, { fallback: true }),

@@ -26,7 +26,7 @@
  *
  * Strategy (fast → authoritative):
  * - Always run {@link localPreevaluate}: brackets, strings, entry point, and
- *   **unknown builtin members** (`strategy.etry` → error via pine-builtins.json)
+ *   **unknown builtin members** (`strategy.etry` → error via pyne-builtins.json)
  * - When server engine + Backend URL: merge with Pro API `POST /lsp/diagnostics`
  *   (parse + real syntax). Style-noise rules (C001–C004) are filtered out.
  *
@@ -39,18 +39,18 @@ import {
   fetchRemoteDiagnostics,
   shouldUseRemoteLsp,
   type RemoteDiagnostic,
-} from './pine-lsp-client';
+} from './pyne-lsp-client';
 import {
   type DiagnosticSeverity,
   type EditorDiagnostic,
 } from './diagnostics';
 import { setPreEval, store } from '../store';
-import builtinsJson from './data/pine-builtins.json';
+import builtinsJson from './data/pyne-builtins.json';
 
 /** Debounce for as-you-type pre-eval (ms). */
 export const PREEVAL_DEBOUNCE_MS = 350;
 
-// ── Builtin member index (from pine-builtins.json + runtime constants) ───────
+// ── Builtin member index (from pyne-builtins.json + runtime constants) ───────
 
 /**
  * Runtime strategy constants that may be missing from the LSP metadata catalog

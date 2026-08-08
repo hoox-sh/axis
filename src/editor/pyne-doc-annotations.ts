@@ -32,11 +32,11 @@
  * tag. An empty `//` line inserts a blank paragraph (same as the Pine Editor).
  * Spaces after `//` before `@` are allowed (`// @function`).
  *
- * @module editor/pine-doc-annotations
+ * @module editor/pyne-doc-annotations
  */
 
 /** Kind of documented declaration. */
-export type PineDocKind =
+export type PyneDocKind =
   | 'function'
   | 'type'
   | 'enum'
@@ -45,8 +45,8 @@ export type PineDocKind =
   | 'field';
 
 /** One documented symbol extracted from annotation + declaration. */
-export interface PineDocEntry {
-  kind: PineDocKind;
+export interface PyneDocEntry {
+  kind: PyneDocKind;
   /** Identifier (function name, type name, variable name, …). */
   name: string;
   /** Optional signature line from the declaration (functions). */
@@ -181,13 +181,13 @@ function collectAnnotationBlock(
 }
 
 function tagsToPartial(tags: RawTag[]): {
-  kindHint?: PineDocKind;
+  kindHint?: PyneDocKind;
   description: string;
   params: Array<{ name: string; description: string }>;
   returns?: string;
   fields: Array<{ name: string; description: string }>;
 } {
-  let kindHint: PineDocKind | undefined;
+  let kindHint: PyneDocKind | undefined;
   let description = '';
   const params: Array<{ name: string; description: string }> = [];
   let returns: string | undefined;
@@ -247,9 +247,9 @@ function tagsToPartial(tags: RawTag[]): {
  * Parse all documented symbols from Pine source.
  * Returns a map keyed by identifier (last declaration wins for duplicates).
  */
-export function parsePineDocAnnotations(source: string): Map<string, PineDocEntry> {
+export function parsePyneDocAnnotations(source: string): Map<string, PyneDocEntry> {
   const lines = source.replace(/\r\n/g, '\n').split('\n');
-  const byName = new Map<string, PineDocEntry>();
+  const byName = new Map<string, PyneDocEntry>();
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? '';
@@ -270,7 +270,7 @@ export function parsePineDocAnnotations(source: string): Map<string, PineDocEntr
     }
 
     let name: string | null = null;
-    let kind: PineDocKind = partial.kindHint ?? 'function';
+    let kind: PyneDocKind = partial.kindHint ?? 'function';
     let signature: string | undefined;
 
     const func = trimmed.match(FUNC_DECL);
@@ -323,7 +323,7 @@ export function parsePineDocAnnotations(source: string): Map<string, PineDocEntr
  * Format a doc entry as markdown for {@link renderHoverMarkdown}.
  * Shape mirrors common LSP / Pine Editor hovers.
  */
-export function formatPineDocMarkdown(entry: PineDocEntry): string {
+export function formatPyneDocMarkdown(entry: PyneDocEntry): string {
   const parts: string[] = [];
 
   if (entry.signature) {
@@ -365,12 +365,12 @@ export function formatPineDocMarkdown(entry: PineDocEntry): string {
  * Look up documentation for a symbol name in `source`.
  * Tries exact name, then bare member after `.`.
  */
-export function lookupPineDoc(
+export function lookupPyneDoc(
   source: string,
   name: string,
-): PineDocEntry | null {
+): PyneDocEntry | null {
   if (!name) return null;
-  const map = parsePineDocAnnotations(source);
+  const map = parsePyneDocAnnotations(source);
   if (map.has(name)) return map.get(name)!;
   if (name.includes('.')) {
     const bare = name.split('.').pop()!;

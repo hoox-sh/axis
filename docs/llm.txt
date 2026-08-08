@@ -2005,7 +2005,7 @@ Chart / editor (recent surfaces)
 | Editor covers Indicators | Side-by-side dock | Both open on right → Indicators left of Editor; resize each panel |
 | Replay shows one candle only | Session start | Replay starts at last bar with full history; Play at end restarts from bar |
 | No Debug chips / Pins | Toggles + log shape | Enable Debug / Pins; logs need line and/or bar_index — Debugging |
-| Completions thin | Builtins corpus | Re-sync pine-builtins.json from PYNE; optional remote LSP |
+| Completions thin | Builtins corpus | Re-sync pyne-builtins.json from PYNE; optional remote LSP |
 Shell / PWA
 | Symptom | Checks | Fix |
 | --- | --- | --- |
@@ -3974,8 +3974,8 @@ Abstract
 | EditorPane.tsx | Docked/standalone chrome, header tools, detach |
 | tabbed-editor.tsx | Multi-tab docs, stats strip, Problems, git bar |
 | PyneEditor.tsx | CM mount (extensions + view APIs) |
-| pine-language.ts | StreamLanguage / highlighting |
-| pine-lsp.ts + data/pine-builtins.json | Offline completion/hover corpus |
+| pyne-language.ts | StreamLanguage / highlighting |
+| pyne-lsp.ts + data/pyne-builtins.json | Offline completion/hover corpus |
 | column-ruler.ts | -character guide line |
 | diagnostics.ts | Underlines, gutter, jump-to from last run |
 | inline-debug.ts | EOL chips, pin gutter, line flash |
@@ -4030,7 +4030,7 @@ Push → writeScript (git commits when storage is git)
 Pull → optional plugin sync('pull') + list/reload bound library id
 Config stays in Settings / Script Library (no second credentials UI)
 Completion corpus
-src/editor/data/pine-builtins.json is synced from PYNE (scripts/sync-pine-builtins.sh). Offline completion/hover fall back to this catalog; optional remote LSP when the Pro API is available.
+src/editor/data/pyne-builtins.json is synced from PYNE (scripts/sync-pyne-builtins.sh). Offline completion/hover fall back to this catalog; optional remote LSP when the Pro API is available.
 Library load
 loadLibraryDoc(doc, name) on editorRef injects storage reads into the active tab.
 Internals

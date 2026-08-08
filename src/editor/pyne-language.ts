@@ -24,14 +24,14 @@
  * (`indicator`/`strategy`/`plot`/…), builtins (`ta`/`math`/`close`/…),
  * control/definition keywords, numbers, operators. Used by {@link PyneEditor}.
  *
- * Completions/hover live in `pine-lsp` (remote Pro API or local builtins).
+ * Completions/hover live in `pyne-lsp` (remote Pro API or local builtins).
  *
- * @module editor/pine-language
+ * @module editor/pyne-language
  */
 
 import { StreamLanguage, StreamParser } from '@codemirror/language';
 
-const pineParser: StreamParser<{ inComment: boolean }> = {
+const pyneParser: StreamParser<{ inComment: boolean }> = {
   startState: () => ({ inComment: false }),
   token(stream, state) {
     if (stream.match('//@version=')) { stream.skipToEnd(); return 'meta'; }
@@ -59,4 +59,4 @@ const pineParser: StreamParser<{ inComment: boolean }> = {
 };
 
 /** CodeMirror language support for Pine (`//@version=…` meta, plots, ta.*, …). */
-export const pineScript = StreamLanguage.define(pineParser);
+export const pyneScript = StreamLanguage.define(pyneParser);

@@ -26,11 +26,11 @@
  * - `POST /lsp/diagnostics` — `{ source }` → parse+lint pre-eval diagnostics
  *
  * Used when engine is `server` and Backend URL is set (local `:5002` or remote).
- * Pyodide / offline mode falls back to client builtins in `pine-lsp`
+ * Pyodide / offline mode falls back to client builtins in `pyne-lsp`
  * (and local structural pre-eval in `preevaluate.ts`).
  * Timeouts default to 4s; failures return `null` (caller uses local index).
  *
- * @module editor/pine-lsp-client
+ * @module editor/pyne-lsp-client
  */
 
 import { store } from '../store';
