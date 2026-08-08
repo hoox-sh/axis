@@ -780,26 +780,21 @@ export const SettingsDialog: Component<Props> = (props) => {
 
             </div>
 
-            {/* ── On-Chain (Worker proxy note; no extra bindings) ── */}
+            {/* ── On-Chain (public APIs by default; Worker only when endpoint is CF Worker) ── */}
             <div class="sc-section" data-testid="axis-settings-onchain">
               <div class="sc-section-title">On-Chain</div>
               <p class="sc-hint mt-0">
-                Protocol TVL and DEX pool data go through the Worker proxy on the same{' '}
-                <strong class="text-text-dim font-normal">engine endpoint</strong> as Run / LSP:
+                Protocol TVL and DEX pools load from public APIs by default (DefiLlama /
+                GeckoTerminal). The Worker proxy is used only when Backend URL is a real AXIS
+                Worker (<code class="font-mono text-text-dim">*.workers.dev</code> or{' '}
+                <code class="font-mono text-text-dim">:8787</code>) — not the Pro API host (
+                <code class="font-mono text-text-dim">axis.hoox.sh</code>).
               </p>
-              <ul class="sc-hint mt-0.5 pl-3.5 list-disc space-y-0.5 font-mono text-[0.9em]">
-                <li>
-                  <code class="text-text-dim">{'{endpoint}/api/onchain/llama'}</code>
-                </li>
-                <li>
-                  <code class="text-text-dim">{'{endpoint}/api/onchain/gecko'}</code>
-                </li>
-              </ul>
               <p class="sc-hint mt-1">
-                Local Worker:{' '}
-                <code class="font-mono text-text-dim">http://127.0.0.1:8787</code>
+                Optional Worker paths:{' '}
+                <code class="font-mono text-text-dim">{'{endpoint}/api/onchain/llama'}</code>
                 {' · '}
-                <code class="font-mono text-text-dim">cd worker &amp;&amp; bun run dev</code>
+                <code class="font-mono text-text-dim">{'{endpoint}/api/onchain/gecko'}</code>
               </p>
               <p class="sc-hint mt-0.5">
                 <strong class="text-text-dim font-normal">Not a wallet</strong> — no MetaMask,
