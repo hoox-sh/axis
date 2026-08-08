@@ -5,8 +5,8 @@
 
 /**
  * CORS origin selection (`pickOrigin` in `src/index.ts`).
- * Invariant: localhost/127.0.0.1 any port echoed; `0.0.0.0` and unknown Origins
- * fall back to `ALLOWED_ORIGIN` (never open reflection of arbitrary origins).
+ * Localhost + known product Origins are echoed; arbitrary Origins fall back
+ * to ALLOWED_ORIGIN (never open reflection of unknown sites).
  */
 
 import { describe, expect, it } from 'bun:test';
@@ -27,12 +27,27 @@ describe('pickOrigin', () => {
     expect(pickOrigin(req('https://localhost'), env)).toBe('https://localhost');
   });
 
+  it('echoes product AXIS / HOOX / Pages origins', () => {
+    expect(pickOrigin(req('https://axis.hoox.sh'), env)).toBe('https://axis.hoox.sh');
+    expect(pickOrigin(req('https://hoox.sh'), env)).toBe('https://hoox.sh');
+    expect(pickOrigin(req('https://pynescript.ai'), env)).toBe('https://pynescript.ai');
+    expect(pickOrigin(req('https://feat-onchain-data-plane.pynescript-axis.pages.dev'), env)).toBe(
+      'https://feat-onchain-data-plane.pynescript-axis.pages.dev',
+    );
+  });
+
   it('does not treat 0.0.0.0 as local-dev', () => {
     expect(pickOrigin(req('http://0.0.0.0:8081'), env)).toBe('https://app.example.com');
   });
 
-  it('falls back to ALLOWED_ORIGIN for other hosts', () => {
+  it('falls back to ALLOWED_ORIGIN for unknown hosts', () => {
     expect(pickOrigin(req('https://evil.example'), env)).toBe('https://app.example.com');
     expect(pickOrigin(req(), env)).toBe('https://app.example.com');
+  });
+
+  it('honors comma-separated ALLOWED_ORIGIN list', () => {
+    const multi = { ALLOWED_ORIGIN: 'https://a.example,https://b.example' };
+    expect(pickOrigin(req('https://b.example'), multi)).toBe('https://b.example');
+    expect(pickOrigin(req('https://evil.example'), multi)).toBe('https://a.example');
   });
 });

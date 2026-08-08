@@ -103,9 +103,17 @@ const CORS_HEADERS = (origin: string): Record<string, string> => ({
 const LOCAL_DEV_ORIGIN_RE = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i;
 
 /**
+ * Production AXIS / HOOX / Pages origins that may call this Worker (on-chain proxy,
+ * scripts, run). Echo exact Origin when matched so credential-less browser GETs work
+ * from axis.hoox.sh while still rejecting arbitrary third-party sites.
+ */
+const PRODUCT_ORIGIN_RE =
+  /^https:\/\/(?:(?:[\w-]+\.)*(?:hoox\.sh|pynescript\.ai|pynescript\.online)|(?:[\w-]+\.)*pages\.dev)$/i;
+
+/**
  * Resolve `Access-Control-Allow-Origin` for this request.
- * Local-dev Origins are echoed (credential-safe for Vite/wrangler); otherwise
- * fall back to `env.ALLOWED_ORIGIN` or the production default.
+ * Local-dev and known product Origins are echoed; otherwise fall back to
+ * `env.ALLOWED_ORIGIN` or the production default.
  * Exported for unit tests (`worker/tests/cors-origin.test.ts`).
  */
 export function pickOrigin(req: Request, env: Env): string {
@@ -113,7 +121,18 @@ export function pickOrigin(req: Request, env: Env): string {
   if (reqOrigin && LOCAL_DEV_ORIGIN_RE.test(reqOrigin)) {
     return reqOrigin;
   }
-  return env.ALLOWED_ORIGIN || 'https://pynescript.ai';
+  if (reqOrigin && PRODUCT_ORIGIN_RE.test(reqOrigin)) {
+    return reqOrigin;
+  }
+  // Comma-separated allowlist in ALLOWED_ORIGIN (e.g. "https://a.com,https://b.com")
+  const allowed = String(env.ALLOWED_ORIGIN || 'https://pynescript.ai')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (reqOrigin && allowed.includes(reqOrigin)) {
+    return reqOrigin;
+  }
+  return allowed[0] || 'https://pynescript.ai';
 }
 
 /** JSON body + CORS headers shared by all non-stream routes. */

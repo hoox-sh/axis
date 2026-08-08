@@ -20,14 +20,16 @@
 /**
  * Lightweight health probe for the AXIS Worker on-chain proxy.
  *
- * Pings `GET {endpoint}/api/onchain/health` and optionally mirrors the result
- * onto the Connection HUD `telemetry.onchain` plane.
+ * Pings `GET {onchainWorker}/api/onchain/health` and optionally mirrors the
+ * result onto the Connection HUD `telemetry.onchain` plane.
+ *
+ * Uses the dedicated on-chain Worker base (not Pro API / SPA host).
  *
  * @module onchain/health
  */
 
 import { store, setTelemetryPlane, setTelemetryState } from '../store';
-import { normalizeEndpointBase } from './proxy';
+import { normalizeEndpointBase, resolveOnchainWorkerBase } from './proxy';
 
 /** Worker path for on-chain proxy feature flags / provider list. */
 export const ONCHAIN_HEALTH_PATH = '/api/onchain/health';
@@ -61,7 +63,9 @@ export async function checkOnchainProxyHealth(
 ): Promise<OnchainProxyHealthResult> {
   let endpoint = '';
   try {
-    endpoint = normalizeEndpointBase(opts?.endpoint ?? store.endpoint);
+    endpoint = opts?.endpoint
+      ? normalizeEndpointBase(opts.endpoint)
+      : resolveOnchainWorkerBase();
   } catch {
     endpoint = '';
   }
@@ -70,7 +74,7 @@ export async function checkOnchainProxyHealth(
     return {
       ok: false,
       providers: [],
-      detail: 'No engine endpoint — set Worker base for /api/onchain proxy',
+      detail: 'No on-chain Worker base — set DEFAULT_ONCHAIN_WORKER_BASE or wrangler :8787',
     };
   }
 

@@ -12,14 +12,15 @@ import { setStore } from '../src/store';
 import {
   normalizeEndpointBase,
   looksLikeOnchainWorkerEndpoint,
+  resolveOnchainWorkerBase,
   resolveDefiLlamaBaseUrl,
   resolveGeckoTerminalBaseUrl,
   isWorkerLlamaProxy,
   ONCHAIN_LLAMA_PROXY_PATH,
   ONCHAIN_GECKO_PROXY_PATH,
+  DEFAULT_ONCHAIN_WORKER_BASE,
 } from '../src/onchain/proxy';
 import { DEFILLAMA_DEFAULT_BASE } from '../src/onchain/defillama';
-import { GECKOTERMINAL_DEFAULT_BASE } from '../src/onchain/geckoterminal';
 
 beforeEach(() => {
   setStore('endpoint', 'https://axis.hoox.sh');
@@ -56,6 +57,24 @@ describe('looksLikeOnchainWorkerEndpoint', () => {
   });
 });
 
+describe('resolveOnchainWorkerBase', () => {
+  it('defaults to production Worker when Pro API endpoint is set', () => {
+    setStore('endpoint', 'https://axis.hoox.sh');
+    expect(resolveOnchainWorkerBase()).toBe(DEFAULT_ONCHAIN_WORKER_BASE);
+  });
+
+  it('uses store.endpoint when it is already a Worker', () => {
+    setStore('endpoint', 'http://127.0.0.1:8787');
+    expect(resolveOnchainWorkerBase()).toBe('http://127.0.0.1:8787');
+  });
+
+  it('honors config.workerBase', () => {
+    expect(
+      resolveOnchainWorkerBase({ workerBase: 'https://custom.workers.dev/' }),
+    ).toBe('https://custom.workers.dev');
+  });
+});
+
 describe('resolveDefiLlamaBaseUrl', () => {
   it('prefers explicit config.baseUrl', () => {
     expect(resolveDefiLlamaBaseUrl({ baseUrl: 'https://api.llama.fi/' })).toBe(
@@ -63,10 +82,14 @@ describe('resolveDefiLlamaBaseUrl', () => {
     );
   });
 
-  it('uses direct llama API when endpoint is axis.hoox.sh (no Worker routes)', () => {
+  it('uses default Worker llama proxy even when endpoint is axis.hoox.sh', () => {
     setStore('endpoint', 'https://axis.hoox.sh');
-    expect(resolveDefiLlamaBaseUrl()).toBe(DEFILLAMA_DEFAULT_BASE);
-    expect(isWorkerLlamaProxy(resolveDefiLlamaBaseUrl())).toBe(false);
+    expect(resolveDefiLlamaBaseUrl()).toBe(
+      `${DEFAULT_ONCHAIN_WORKER_BASE}${ONCHAIN_LLAMA_PROXY_PATH}`,
+    );
+    expect(isWorkerLlamaProxy(resolveDefiLlamaBaseUrl())).toBe(true);
+    // Must not hit SPA host
+    expect(resolveDefiLlamaBaseUrl()).not.toContain('axis.hoox.sh');
   });
 
   it('uses Worker llama proxy when endpoint is workers.dev', () => {
@@ -74,7 +97,6 @@ describe('resolveDefiLlamaBaseUrl', () => {
     expect(resolveDefiLlamaBaseUrl()).toBe(
       `https://pynescript-axis.cryptolinx.workers.dev${ONCHAIN_LLAMA_PROXY_PATH}`,
     );
-    expect(isWorkerLlamaProxy(resolveDefiLlamaBaseUrl())).toBe(true);
   });
 
   it('uses Worker proxy for local wrangler :8787', () => {
@@ -84,19 +106,22 @@ describe('resolveDefiLlamaBaseUrl', () => {
     );
   });
 
-  it('falls back to public llama API when endpoint empty', () => {
-    setStore('endpoint', '');
-    expect(resolveDefiLlamaBaseUrl()).toBe(DEFILLAMA_DEFAULT_BASE);
+  it('still allows forcing public llama via baseUrl', () => {
+    expect(resolveDefiLlamaBaseUrl({ baseUrl: DEFILLAMA_DEFAULT_BASE })).toBe(
+      DEFILLAMA_DEFAULT_BASE,
+    );
   });
 });
 
 describe('resolveGeckoTerminalBaseUrl', () => {
-  it('uses direct gecko API for VPS endpoint', () => {
+  it('uses default Worker gecko proxy for VPS Pro API endpoint', () => {
     setStore('endpoint', 'https://axis.hoox.sh');
-    expect(resolveGeckoTerminalBaseUrl()).toBe(GECKOTERMINAL_DEFAULT_BASE);
+    expect(resolveGeckoTerminalBaseUrl()).toBe(
+      `${DEFAULT_ONCHAIN_WORKER_BASE}${ONCHAIN_GECKO_PROXY_PATH}`,
+    );
   });
 
-  it('uses Worker gecko proxy for workers.dev', () => {
+  it('uses Worker gecko proxy for workers.dev endpoint', () => {
     setStore('endpoint', 'https://pynescript-axis.cryptolinx.workers.dev');
     expect(resolveGeckoTerminalBaseUrl()).toBe(
       `https://pynescript-axis.cryptolinx.workers.dev${ONCHAIN_GECKO_PROXY_PATH}`,

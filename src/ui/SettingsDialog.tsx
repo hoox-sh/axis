@@ -780,21 +780,20 @@ export const SettingsDialog: Component<Props> = (props) => {
 
             </div>
 
-            {/* ── On-Chain (public APIs by default; Worker only when endpoint is CF Worker) ── */}
+            {/* ── On-Chain (dedicated Worker proxy; Pro API endpoint stays for Pine) ── */}
             <div class="sc-section" data-testid="axis-settings-onchain">
               <div class="sc-section-title">On-Chain</div>
               <p class="sc-hint mt-0">
-                Protocol TVL and DEX pools load from public APIs by default (DefiLlama /
-                GeckoTerminal). The Worker proxy is used only when Backend URL is a real AXIS
-                Worker (<code class="font-mono text-text-dim">*.workers.dev</code> or{' '}
-                <code class="font-mono text-text-dim">:8787</code>) — not the Pro API host (
-                <code class="font-mono text-text-dim">axis.hoox.sh</code>).
+                TVL / DEX traffic uses the <strong class="text-text-dim font-normal">AXIS Worker</strong>{' '}
+                allowlisted proxy by default (not the Pro API host). Backend URL above stays for
+                Pine <code class="font-mono text-text-dim">/run</code> / LSP.
               </p>
-              <p class="sc-hint mt-1">
-                Optional Worker paths:{' '}
-                <code class="font-mono text-text-dim">{'{endpoint}/api/onchain/llama'}</code>
+              <p class="sc-hint mt-1 font-mono text-[0.9em]">
+                <code class="text-text-dim">…/api/onchain/llama</code>
                 {' · '}
-                <code class="font-mono text-text-dim">{'{endpoint}/api/onchain/gecko'}</code>
+                <code class="text-text-dim">…/api/onchain/gecko</code>
+                {' · '}
+                local <code class="text-text-dim">http://127.0.0.1:8787</code>
               </p>
               <p class="sc-hint mt-0.5">
                 <strong class="text-text-dim font-normal">Not a wallet</strong> — no MetaMask,

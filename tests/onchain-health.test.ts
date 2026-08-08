@@ -15,13 +15,15 @@ import {
   _resetOnchainHealthProbeState,
   ONCHAIN_HEALTH_PATH,
 } from '../src/onchain/health';
+import { DEFAULT_ONCHAIN_WORKER_BASE } from '../src/onchain/proxy';
 import { mockFetch, jsonResponse } from './helpers/mock-fetch';
 
 let restoreFetch: (() => void) | undefined;
 
 beforeEach(() => {
   _resetOnchainHealthProbeState();
-  setStore('endpoint', 'https://axis.example.test');
+  // Pro API host — health must still hit DEFAULT_ONCHAIN_WORKER_BASE
+  setStore('endpoint', 'https://axis.hoox.sh');
   setStore('telemetry', 'onchain', undefined as never);
   restoreFetch?.();
   restoreFetch = undefined;
@@ -34,18 +36,18 @@ afterEach(() => {
 });
 
 describe('checkOnchainProxyHealth', () => {
-  it('fails when endpoint missing', async () => {
-    setStore('endpoint', '');
-    const r = await checkOnchainProxyHealth();
+  it('fails when explicit endpoint override is empty', async () => {
+    const r = await checkOnchainProxyHealth({ endpoint: '' });
     expect(r.ok).toBe(false);
     expect(r.providers).toEqual([]);
-    expect(r.detail).toMatch(/endpoint/i);
+    expect(r.detail).toMatch(/Worker base|endpoint/i);
   });
 
-  it('parses healthy worker response', async () => {
+  it('probes default AXIS Worker (not Pro API host)', async () => {
     restoreFetch = mockFetch((input) => {
       const url = String(input);
-      expect(url).toBe(`https://axis.example.test${ONCHAIN_HEALTH_PATH}`);
+      expect(url).toBe(`${DEFAULT_ONCHAIN_WORKER_BASE}${ONCHAIN_HEALTH_PATH}`);
+      expect(url).not.toContain('axis.hoox.sh');
       return jsonResponse({
         status: 'healthy',
         service: 'axis-onchain',

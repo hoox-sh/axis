@@ -20,21 +20,22 @@
 /**
  * Resolve Worker on-chain proxy base URLs for dataset plugins.
  *
- * ## When to use the Worker proxy
+ * ## Prefer the AXIS Worker
  *
- * Only when `store.endpoint` is an **AXIS Worker** (wrangler / workers.dev) that
- * actually serves `/api/onchain/*`. The default Pro API host (`axis.hoox.sh`,
- * `:5002`) is a Flask/nginx stack that returns **SPA HTML** for unknown paths —
- * using it as an on-chain base yields `invalid JSON` (`<!DOCTYPE html>`).
+ * On-chain traffic should go through the Cloudflare Worker allowlisted proxy
+ * (rate-limit friendly, single origin, works if public CORS ever tightens):
  *
- * DefiLlama and GeckoTerminal public APIs currently send
- * `Access-Control-Allow-Origin: *`, so **direct browser fetch is preferred**
- * unless a real Worker endpoint is configured.
+ *   `{worker}/api/onchain/llama`  →  `https://api.llama.fi`
+ *   `{worker}/api/onchain/gecko`  →  `https://api.geckoterminal.com/api/v2`
  *
- * Worker path map (when applicable):
+ * **Do not** use the Pro API / SPA host (`axis.hoox.sh`, `:5002`) as the
+ * on-chain base — those return HTML for `/api/onchain/*`.
  *
- *   `{endpoint}/api/onchain/llama`  →  `https://api.llama.fi`
- *   `{endpoint}/api/onchain/gecko`  →  `https://api.geckoterminal.com/api/v2`
+ * Resolution order:
+ * 1. Plugin `config.baseUrl`
+ * 2. `store.endpoint` when it is a Worker (workers.dev / :8787)
+ * 3. Built-in default Worker {@link DEFAULT_ONCHAIN_WORKER_BASE}
+ * 4. Direct public API (last resort)
  *
  * @module onchain/proxy
  */
@@ -48,6 +49,13 @@ export const ONCHAIN_LLAMA_PROXY_PATH = '/api/onchain/llama';
 
 /** Path prefix on the AXIS Worker for GeckoTerminal allowlisted proxy. */
 export const ONCHAIN_GECKO_PROXY_PATH = '/api/onchain/gecko';
+
+/**
+ * Default production AXIS Worker (on-chain proxy + scripts/run when bound).
+ * Keep in sync with `worker/wrangler.toml` name / workers.dev URL.
+ */
+export const DEFAULT_ONCHAIN_WORKER_BASE =
+  'https://pynescript-axis.cryptolinx.workers.dev';
 
 /**
  * Normalize an origin/base URL (no trailing slash).
@@ -101,6 +109,39 @@ export function looksLikeOnchainWorkerEndpoint(
   return false;
 }
 
+/**
+ * Resolve the Worker origin used for on-chain proxy paths (no trailing slash).
+ *
+ * Priority:
+ * 1. `config.workerBase` if set
+ * 2. `store.endpoint` when it is a Worker
+ * 3. {@link DEFAULT_ONCHAIN_WORKER_BASE}
+ */
+export function resolveOnchainWorkerBase(
+  config?: Record<string, unknown> | null,
+): string {
+  const cfgWorker =
+    config && typeof config.workerBase === 'string'
+      ? config.workerBase.trim()
+      : '';
+  if (cfgWorker) {
+    return normalizeEndpointBase(cfgWorker) || DEFAULT_ONCHAIN_WORKER_BASE;
+  }
+
+  let endpoint = '';
+  try {
+    endpoint = normalizeEndpointBase(store.endpoint);
+  } catch {
+    endpoint = '';
+  }
+
+  if (endpoint && looksLikeOnchainWorkerEndpoint(endpoint)) {
+    return endpoint;
+  }
+
+  return DEFAULT_ONCHAIN_WORKER_BASE;
+}
+
 function resolveWorkerProxyBase(
   path: string,
   publicFallback: string,
@@ -112,17 +153,10 @@ function resolveWorkerProxyBase(
     return cfgBase.replace(/\/+$/, '') || publicFallback;
   }
 
-  let endpoint = '';
-  try {
-    endpoint = normalizeEndpointBase(store.endpoint);
-  } catch {
-    endpoint = '';
-  }
-
-  // Only route through endpoint when it is a real AXIS Worker.
-  // VPS / Pro API hosts (axis.hoox.sh, :5002) return SPA HTML for /api/onchain/*.
-  if (endpoint && looksLikeOnchainWorkerEndpoint(endpoint)) {
-    return `${endpoint}${path}`;
+  // Prefer dedicated AXIS Worker for on-chain (not Pro API / SPA host).
+  const worker = resolveOnchainWorkerBase(config);
+  if (worker) {
+    return `${worker}${path}`;
   }
 
   return publicFallback;
@@ -133,8 +167,8 @@ function resolveWorkerProxyBase(
  *
  * Priority:
  * 1. Explicit `config.baseUrl`
- * 2. `{store.endpoint}/api/onchain/llama` **only if** endpoint is a Worker
- * 3. Direct `https://api.llama.fi` (CORS `*` — works in browser)
+ * 2. AXIS Worker `/api/onchain/llama` (default production Worker)
+ * 3. Direct `https://api.llama.fi` (only if Worker base empty)
  */
 export function resolveDefiLlamaBaseUrl(
   config?: Record<string, unknown> | null,
@@ -160,7 +194,7 @@ export function isWorkerLlamaProxy(baseUrl: string): boolean {
  *
  * Priority:
  * 1. Explicit `config.baseUrl`
- * 2. Worker proxy only when endpoint looks like wrangler / workers.dev
+ * 2. AXIS Worker `/api/onchain/gecko`
  * 3. Direct public API
  */
 export function resolveGeckoTerminalBaseUrl(
