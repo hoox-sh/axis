@@ -24,7 +24,7 @@
  * context menu rename/duplicate/delete. Prefer Solid `editor/` package in AXIS.
  */
 
-import { initPineEditor, getScript, setScript } from '../../pyne-editor.js';
+import { initPyneEditor, getScript, setScript } from '../../pyne-editor.js';
 
 const TABS_KEY = 'pynescript.axis.tabs.v1';
 const ACTIVE_KEY = 'pynescript.axis.active-tab.v1';
@@ -103,7 +103,7 @@ export class TabbedEditor {
     }
 
     async init() {
-        await initPineEditor({
+        await initPyneEditor({
             parent: this.editorHostEl,
             initialDoc: this._activeTab().content,
             onRun: (src) => this.onRun(src),

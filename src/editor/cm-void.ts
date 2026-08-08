@@ -231,7 +231,7 @@ export const voidHighlightStyle = HighlightStyle.define([
   { tag: t.namespace, color: 'var(--color-text-dim)' },
 ]);
 
-/** Theme + syntax highlighting bundle for {@link PineEditor}. */
+/** Theme + syntax highlighting bundle for {@link PyneEditor}. */
 export const voidEditorExtensions = [
   voidEditorTheme,
   syntaxHighlighting(voidHighlightStyle),

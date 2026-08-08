@@ -24,7 +24,7 @@
  * and Mod-Enter → {@link Props.onRun}. Exposes `getDoc` / `setDoc` via
  * optional `editorRef` for parent panels and the cross-window bridge.
  *
- * @module editor/PineEditor
+ * @module editor/PyneEditor
  */
 
 import { Component, createEffect, onMount, onCleanup } from 'solid-js';
@@ -65,22 +65,22 @@ import {
   refreshColumnRuler,
 } from './column-ruler';
 
-/** Cursor position reported by {@link PineEditorRef.getCursor}. */
-export type PineEditorCursor = { line: number; col: number; offset: number };
+/** Cursor position reported by {@link PyneEditorRef.getCursor}. */
+export type PyneEditorCursor = { line: number; col: number; offset: number };
 
 /**
  * Imperative handle for parent panels (tabbed editor, bridge, problems jump).
- * Methods beyond `getDoc` are assigned on mount by {@link PineEditor}.
+ * Methods beyond `getDoc` are assigned on mount by {@link PyneEditor}.
  */
-export type PineEditorRef = {
+export type PyneEditorRef = {
   getDoc: () => string;
   setDoc?: (doc: string) => void;
   /** Move selection to 1-based line and scroll it into view. */
   scrollToLine?: (line: number) => void;
-  /** Alias of {@link PineEditorRef.scrollToLine}. */
+  /** Alias of {@link PyneEditorRef.scrollToLine}. */
   focusLine?: (line: number) => void;
   /** Current selection head as 1-based line / column + absolute offset. */
-  getCursor?: () => PineEditorCursor;
+  getCursor?: () => PyneEditorCursor;
   /** Select + scroll to a diagnostic range (underlines / badge jump). */
   jumpToDiagnostic?: (diag: EditorDiagnostic) => boolean;
   /** Load external library content into active tab (set by TabbedEditor). */
@@ -101,10 +101,10 @@ interface Props {
    * Cursor / selection head moved — 1-based line & column, plus absolute offset.
    * Fires on selection changes (arrows, click, typing).
    */
-  onCursorChange?: (pos: PineEditorCursor) => void;
+  onCursorChange?: (pos: PyneEditorCursor) => void;
   onRun?: () => void;
   height?: string;
-  editorRef?: PineEditorRef;
+  editorRef?: PyneEditorRef;
   /**
    * Optional run profile for Profiler-mode gutter (% / ms per line).
    * Parent wires store → this prop; cleared with `null`.
@@ -151,7 +151,7 @@ export function lineWrapExtension(enabled: boolean): Extension {
 }
 
 /** Solid wrapper around a single CodeMirror EditorView instance. */
-export const PineEditor: Component<Props> = (props) => {
+export const PyneEditor: Component<Props> = (props) => {
   let containerRef!: HTMLDivElement;
   let view: EditorView | undefined;
   /** Compartment so wrap can toggle without rebuilding the whole state. */
@@ -183,7 +183,7 @@ export const PineEditor: Component<Props> = (props) => {
     view.focus();
   };
 
-  const getCursor = (): PineEditorCursor => {
+  const getCursor = (): PyneEditorCursor => {
     if (!view) return { line: 1, col: 1, offset: 0 };
     const head = view.state.selection.main.head;
     const line = view.state.doc.lineAt(head);
@@ -393,8 +393,8 @@ export const PineEditor: Component<Props> = (props) => {
   return (
     <div
       ref={containerRef!}
-      class="axis-pine-editor overflow-hidden bg-bg-panel"
-      data-testid="axis-pine-editor"
+      class="axis-pyne-editor overflow-hidden bg-bg-panel"
+      data-testid="axis-pyne-editor"
       style={
         props.height
           ? { height: props.height, position: 'relative' }

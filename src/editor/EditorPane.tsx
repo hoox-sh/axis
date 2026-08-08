@@ -105,7 +105,7 @@ export const EditorPane: Component<Props> = (props) => {
       const t = e.target as HTMLElement | null;
       if (!t) return;
       // CM keymap owns Alt-P while the editor is focused — avoid double-toggle
-      if (t.closest?.('.cm-editor') || t.closest?.('.axis-pine-editor')) return;
+      if (t.closest?.('.cm-editor') || t.closest?.('.axis-pyne-editor')) return;
       if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) {
         return;
       }

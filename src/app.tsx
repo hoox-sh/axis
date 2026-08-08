@@ -106,7 +106,7 @@ export const App: Component = () => {
   /** File drag-over highlight for .pine drop-to-library. */
   const [pineDropActive, setPineDropActive] = createSignal(false);
 
-  // Shared mutable ref — PineEditor / TabbedEditor populate on mount
+  // Shared mutable ref — PyneEditor / TabbedEditor populate on mount
   const editorRef: {
     getDoc: () => string;
     setDoc?: (doc: string) => void;

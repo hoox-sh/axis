@@ -22,7 +22,7 @@
  *
  * Lightweight tokenizer (not a full grammar): comments, strings, keywords
  * (`indicator`/`strategy`/`plot`/…), builtins (`ta`/`math`/`close`/…),
- * control/definition keywords, numbers, operators. Used by {@link PineEditor}.
+ * control/definition keywords, numbers, operators. Used by {@link PyneEditor}.
  *
  * Completions/hover live in `pine-lsp` (remote Pro API or local builtins).
  *

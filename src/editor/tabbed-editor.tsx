@@ -20,7 +20,7 @@
 /**
  * Multi-tab Pine editor with demos, draft, and library save.
  *
- * Hosts one {@link PineEditor} for the active tab. Tabs track dirty state and
+ * Hosts one {@link PyneEditor} for the active tab. Tabs track dirty state and
  * optional `libraryId` when bound to storage. Includes demo scripts
  * (RSI, MACD, …), draft load/save via storage service, and Run callback to parent.
  *
@@ -28,7 +28,7 @@
  */
 
 import { Component, For, Show, createMemo, createSignal, batch, onCleanup, onMount, createEffect } from 'solid-js';
-import { PineEditor, type PineEditorRef } from './PineEditor';
+import { PyneEditor, type PyneEditorRef } from './PyneEditor';
 import {
   store,
   loadEditorDoc,
@@ -116,7 +116,7 @@ function initialDoc(): string {
 interface Props {
   onRun?: (doc: string) => void;
   onDocChange?: (doc: string) => void;
-  editorRef?: PineEditorRef;
+  editorRef?: PyneEditorRef;
 }
 
 /** Multi-tab editor UI with demos, draft autosave, and library integration. */
@@ -512,7 +512,7 @@ export const TabbedEditor: Component<Props> = (props) => {
         </div>
       </div>
       <div class="flex-1 min-h-0 overflow-hidden relative">
-        <PineEditor
+        <PyneEditor
           initialDoc={tabs()[activeTab()]?.doc}
           onDocChange={onDocChange}
           onCursorChange={(pos) => setCursor({ line: pos.line, col: pos.col })}

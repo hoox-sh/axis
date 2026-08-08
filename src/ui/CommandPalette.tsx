@@ -235,9 +235,9 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
         setEditorOpen(true);
         queueMicrotask(() => {
           const el =
-            document.querySelector<HTMLElement>('.axis-pine-editor .cm-content') ||
+            document.querySelector<HTMLElement>('.axis-pyne-editor .cm-content') ||
             document.querySelector<HTMLElement>('.cm-content') ||
-            document.querySelector<HTMLElement>('[data-testid="axis-pine-editor"]');
+            document.querySelector<HTMLElement>('[data-testid="axis-pyne-editor"]');
           el?.focus?.();
         });
       },

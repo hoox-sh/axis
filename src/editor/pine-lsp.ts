@@ -28,7 +28,7 @@
  * 3. Fall back to **client metadata** from `data/pine-builtins.json` for
  *    pyodide / offline / remote failure.
  *
- * Exports {@link pineLspExtensions} for mounting on {@link PineEditor}.
+ * Exports {@link pineLspExtensions} for mounting on {@link PyneEditor}.
  * Indexes builtins by top-level name, module members (`ta.sma`), and full name
  * for hover tooltips.
  *

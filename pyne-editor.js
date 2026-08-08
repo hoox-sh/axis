@@ -266,12 +266,12 @@ export function isCodeMirrorActive() {
  * }} opts
  * @returns {Promise<'codemirror' | 'textarea'>}
  */
-export async function initPineEditor(opts) {
+export async function initPyneEditor(opts) {
     const { parent, initialDoc = '', onRun: runCb, onDocChange: changeCb } = opts;
     onRun = runCb || null;
     onDocChange = changeCb || null;
 
-    if (!parent) throw new Error('initPineEditor: parent required');
+    if (!parent) throw new Error('initPyneEditor: parent required');
     parent.innerHTML = '';
 
     try {

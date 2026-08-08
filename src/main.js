@@ -36,7 +36,7 @@ import { registry } from './registry.js';
 import { initTopbar, setLiveIndicator } from './ui/topbar.js';
 import { setStatus } from './ui/status.js';
 import { initResults, renderResults } from './ui/results.js';
-import { initPineEditor, getScript, setScript, focusEditor } from '../pyne-editor.js';
+import { initPyneEditor, getScript, setScript, focusEditor } from '../pyne-editor.js';
 import { TabbedEditor } from './ui/tabbed-editor.js';
 import { initChart, setOhlcv, appendBar, setMarkers, clearOverlays, addOverlayLine,
          setEquityPane, setEquityCurve, setTimeRange } from './chart.js';
@@ -519,7 +519,7 @@ async function bootstrap() {
     // Editor — multi-tab CodeMirror 6.  Tabs are persisted in localStorage
     // so reloading the page restores every open script.
     editor = new TabbedEditor({
-        parent: document.getElementById('pine-editor'),
+        parent: document.getElementById('pyne-editor'),
         onRun: () => runScript(),
         onDocChange: (src) => getState().assign({ script: src }),
         initialScript: storedScript || DEMOS['rsi-overlay'],

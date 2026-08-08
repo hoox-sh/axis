@@ -1246,18 +1246,18 @@ body.axis-panel-dragging {
   position: relative;
 }
 /* CM host fills the flex slot (absolute + flex so either parent style works) */
-.axis-pine-editor {
+.axis-pyne-editor {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   min-height: 120px;
 }
-.axis-pine-editor .cm-editor {
+.axis-pyne-editor .cm-editor {
   height: 100%;
   width: 100%;
 }
-.axis-pine-editor .cm-scroller {
+.axis-pyne-editor .cm-scroller {
   min-height: 100%;
 }
 
@@ -1273,13 +1273,13 @@ body.axis-panel-dragging {
     background-color: transparent;
   }
 }
-.axis-pine-editor .cm-debug-pin-flash {
+.axis-pyne-editor .cm-debug-pin-flash {
   animation: cm-debug-pin-flash-kf 0.7s ease-out;
   background-color: rgba(147, 159, 255, 0.28);
 }
 
 /* Recommended line-length guide (see editor/column-ruler.ts) */
-.axis-pine-editor .cm-column-ruler {
+.axis-pyne-editor .cm-column-ruler {
   position: absolute;
   top: 0;
   bottom: auto;
