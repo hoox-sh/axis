@@ -18,19 +18,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Data Window — OHLCV + plot series + drawing values at the crosshair bar.
+ * Data Window — OHLCV + plot series + drawing + on-chain values at the
+ * crosshair bar.
  *
  * Rows from `buildDataViewRows` using `store.bars`, `store.crosshair`,
- * last-run series/plot_meta, and `store.drawings`. FloatableShell id `dataview`.
+ * last-run series/plot_meta, `store.drawings`, and
+ * `onchainManagerState.series`. FloatableShell id `dataview`.
  */
 
 import { Component, For, Show, createMemo } from 'solid-js';
 import { store, isPanelOpen } from '../store';
 import { buildDataViewRows } from '../results/dataview';
 import type { RunResult } from '../indicators/runner';
+import { onchainManagerState } from '../onchain/manager';
 import { FloatableShell } from './panels/FloatableShell';
 
-/** Crosshair-synced OHLCV / plot / drawing value inspector. */
+/** Crosshair-synced OHLCV / plot / drawing / on-chain value inspector. */
 export const DataViewPanel: Component = () => {
   const rows = createMemo(() => {
     const r = store.lastRun as RunResult | null;
@@ -40,6 +43,21 @@ export const DataViewPanel: Component = () => {
     >;
     // Depend on drawings so place/drag updates refresh values
     void store.drawings;
+    // Touch each on-chain field through the store proxy for fine-grained refresh
+    const onchainSeries = onchainManagerState.series.map((s) => ({
+      id: s.id,
+      label: s.label,
+      provider: s.provider,
+      providerId: s.providerId,
+      visible: s.visible,
+      color: s.color,
+      points: s.points,
+      finality: s.finality,
+      lastTvl: s.lastTvl,
+      instrument: s.instrument,
+      loading: s.loading,
+      error: s.error,
+    }));
     return buildDataViewRows({
       bars: store.bars,
       time: store.crosshair?.time,
@@ -49,6 +67,7 @@ export const DataViewPanel: Component = () => {
       series: (r?.series || {}) as Record<string, (number | null)[]>,
       plotMeta,
       drawings: store.drawings,
+      onchainSeries,
     });
   });
 
@@ -56,6 +75,7 @@ export const DataViewPanel: Component = () => {
   const ohlcvRows = createMemo(() => rows().filter((x) => x.group === 'ohlcv'));
   const seriesRows = createMemo(() => rows().filter((x) => x.group === 'series'));
   const drawingRows = createMemo(() => rows().filter((x) => x.group === 'drawings'));
+  const onchainRows = createMemo(() => rows().filter((x) => x.group === 'onchain'));
 
   return (
     <Show when={isPanelOpen('dataview') || store.dataViewPanel.open}>
@@ -83,9 +103,20 @@ export const DataViewPanel: Component = () => {
                 <For each={drawingRows()}>{(row) => <Row row={row} />}</For>
               </Section>
             </Show>
-            <Show when={seriesRows().length === 0 && drawingRows().length === 0}>
+            <Show when={onchainRows().length > 0}>
+              <Section label="On-Chain">
+                <For each={onchainRows()}>{(row) => <Row row={row} />}</For>
+              </Section>
+            </Show>
+            <Show
+              when={
+                seriesRows().length === 0 &&
+                drawingRows().length === 0 &&
+                onchainRows().length === 0
+              }
+            >
               <div class="px-2.5 py-2 text-text-faint text-[0.9em]">
-                Run a script or place drawings to see values here.
+                Run a script, place drawings, or attach on-chain series to see values here.
               </div>
             </Show>
           </Show>

@@ -18,12 +18,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * **Data Window** row builder — OHLCV + plot series + user drawings at a
- * bar index / crosshair time.
+ * **Data Window** row builder — OHLCV + plot series + user drawings +
+ * attached on-chain series at a bar index / crosshair time.
  *
  * Pure helpers consumed by the Results / Data Window UI. Resolves the nearest
  * bar via {@link barIndexAtTime}, formats numbers and UTC timestamps, and
- * emits ordered {@link DataViewRow} groups (`ohlcv` | `series` | `drawings` | `meta`).
+ * emits ordered {@link DataViewRow} groups
+ * (`ohlcv` | `series` | `drawings` | `onchain` | `meta`).
  *
  * @module results/dataview
  */
@@ -43,7 +44,33 @@ export interface DataViewRow {
   label: string;
   value: string;
   color?: string;
-  group: 'ohlcv' | 'series' | 'drawings' | 'meta';
+  group: 'ohlcv' | 'series' | 'drawings' | 'onchain' | 'meta';
+}
+
+/** Minimal time/value point (matches on-chain {@link TimePoint}). */
+export interface DataViewTimePoint {
+  time: number;
+  value: number;
+}
+
+/**
+ * Minimal on-chain attachment shape for Data Window rows.
+ * Compatible with {@link OnchainSeriesRow} / {@link OnchainSeriesAttachment}.
+ */
+export interface DataViewOnchainSeries {
+  id: string;
+  label?: string;
+  provider?: string;
+  providerId?: string;
+  visible?: boolean;
+  color?: string;
+  points?: DataViewTimePoint[] | null;
+  finality?: string | null;
+  /** Latest scalar (e.g. last TVL USD) when already computed. */
+  lastTvl?: number | null;
+  instrument?: { metric?: string; symbol?: string } | null;
+  loading?: boolean;
+  error?: string | null;
 }
 
 function fmtNum(v: unknown, digits = 4): string {
@@ -55,6 +82,17 @@ function fmtNum(v: unknown, digits = 4): string {
   if (Math.abs(n) >= 1000) return n.toFixed(2);
   if (Math.abs(n) >= 1) return n.toFixed(digits);
   return n.toPrecision(4);
+}
+
+/** Compact USD (TVL-style): $1.23B / $4.5M / $12.3K / $42. */
+export function fmtUsdCompact(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  const abs = Math.abs(n);
+  if (abs >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
+  return `$${n.toFixed(0)}`;
 }
 
 function fmtTime(t: number): string {
@@ -98,6 +136,11 @@ export interface BuildDataViewOpts {
   plotMeta?: Record<string, { title?: string; color?: string | null; kind?: string }>;
   /** User drawings (trendlines, hlines, fib, …) evaluated at crosshair time */
   drawings?: Drawing[] | null;
+  /**
+   * Attached on-chain series (e.g. DefiLlama TVL). Only `visible !== false`
+   * rows are emitted under group `onchain`.
+   */
+  onchainSeries?: DataViewOnchainSeries[] | null;
   /**
    * Bar period (seconds) for “near vline” tolerance. When omitted, inferred
    * from adjacent bars around the resolved index.
@@ -283,6 +326,143 @@ export function buildDrawingDataViewRows(
   return rows;
 }
 
+// ── On-chain series values ──────────────────────────────────────────────────
+
+/**
+ * Value of a scalar on-chain series at `time` (unix seconds).
+ * Linear interpolation between surrounding points; nearest endpoint outside
+ * the span; exact hit when times match.
+ */
+export function onchainValueAtTime(
+  points: DataViewTimePoint[] | null | undefined,
+  time: number,
+): number | null {
+  if (!Array.isArray(points) || !points.length || !Number.isFinite(time)) return null;
+  // Filter + sort (attachments are usually sorted; tolerate unsorted)
+  const pts: DataViewTimePoint[] = [];
+  for (const p of points) {
+    if (!p) continue;
+    const t = Number(p.time);
+    const v = Number(p.value);
+    if (!Number.isFinite(t) || !Number.isFinite(v)) continue;
+    pts.push({ time: t, value: v });
+  }
+  if (!pts.length) return null;
+  pts.sort((a, b) => a.time - b.time);
+
+  if (time <= pts[0]!.time) return pts[0]!.value;
+  if (time >= pts[pts.length - 1]!.time) return pts[pts.length - 1]!.value;
+
+  // Binary search for right neighbor
+  let lo = 0;
+  let hi = pts.length - 1;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    if (pts[mid]!.time <= time) lo = mid;
+    else hi = mid;
+  }
+  const a = pts[lo]!;
+  const b = pts[hi]!;
+  if (a.time === time) return a.value;
+  if (b.time === time) return b.value;
+  const dt = b.time - a.time;
+  if (dt === 0) return a.value;
+  const f = (time - a.time) / dt;
+  return a.value + f * (b.value - a.value);
+}
+
+function isTvlMetric(s: DataViewOnchainSeries): boolean {
+  const m = (s.instrument?.metric || '').toLowerCase();
+  if (m === 'tvl') return true;
+  // DefiLlama TVL attachments are the primary product path
+  const label = (s.label || s.instrument?.symbol || '').toLowerCase();
+  return /\btvl\b/.test(label);
+}
+
+function lastOnchainValue(s: DataViewOnchainSeries): number | null {
+  if (s.lastTvl != null && Number.isFinite(s.lastTvl)) return Number(s.lastTvl);
+  const pts = s.points;
+  if (!Array.isArray(pts) || !pts.length) return null;
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const v = Number(pts[i]?.value);
+    if (Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
+function formatOnchainValue(s: DataViewOnchainSeries, v: number | null): string {
+  if (v == null || !Number.isFinite(v)) return '—';
+  return isTvlMetric(s) ? fmtUsdCompact(v) : fmtNum(v);
+}
+
+/**
+ * Rows for visible attached on-chain series.
+ * Per series: value (at crosshair when possible), provider, last, points, finality.
+ */
+export function buildOnchainDataViewRows(
+  series: DataViewOnchainSeries[] | null | undefined,
+  time?: number | null,
+): DataViewRow[] {
+  if (!series?.length) return [];
+  const evalTime = time != null && Number.isFinite(time) ? Number(time) : null;
+  const rows: DataViewRow[] = [];
+
+  for (const s of series) {
+    if (!s?.id) continue;
+    if (s.visible === false) continue;
+
+    const label = (s.label || s.instrument?.symbol || s.id).trim() || s.id;
+    const provider = (s.provider || s.providerId || '—').trim() || '—';
+    const pts = Array.isArray(s.points) ? s.points : [];
+    const pointCount = pts.length;
+    const last = lastOnchainValue(s);
+    const at =
+      evalTime != null ? onchainValueAtTime(pts, evalTime) : null;
+    const display = at != null ? at : last;
+    const color = s.color || undefined;
+    const finality = (s.finality && String(s.finality)) || 'unknown';
+
+    let valueStr = formatOnchainValue(s, display);
+    if (s.loading) valueStr = `${valueStr} · loading…`;
+    else if (s.error) valueStr = `${valueStr} · error`;
+
+    rows.push({
+      key: `oc_${s.id}`,
+      label,
+      value: valueStr,
+      color,
+      group: 'onchain',
+    });
+    rows.push({
+      key: `oc_${s.id}_provider`,
+      label: `${label} · Provider`,
+      value: provider,
+      group: 'onchain',
+    });
+    // Always expose last so crosshair-at value is not confused with series tip
+    rows.push({
+      key: `oc_${s.id}_last`,
+      label: `${label} · Last`,
+      value: formatOnchainValue(s, last),
+      group: 'onchain',
+    });
+    rows.push({
+      key: `oc_${s.id}_points`,
+      label: `${label} · Points`,
+      value: String(pointCount),
+      group: 'onchain',
+    });
+    rows.push({
+      key: `oc_${s.id}_finality`,
+      label: `${label} · Finality`,
+      value: finality,
+      group: 'onchain',
+    });
+  }
+
+  return rows;
+}
+
 function inferBarPeriod(bars: Bar[], idx: number): number {
   if (bars.length < 2) return 60;
   const i = Math.max(1, Math.min(idx, bars.length - 1));
@@ -386,6 +566,8 @@ export function buildDataViewRows(opts: BuildDataViewOpts): DataViewRow[] {
   rows.push(
     ...buildDrawingDataViewRows(opts.drawings, evalTime, { barPeriod }),
   );
+
+  rows.push(...buildOnchainDataViewRows(opts.onchainSeries, evalTime));
 
   return rows;
 }

@@ -179,7 +179,7 @@ export type TransportClass = 'ws' | 'rest' | 'local' | 'broker' | 'none';
 export type ConnState = 'idle' | 'connecting' | 'open' | 'degraded' | 'error' | 'closed';
 
 /**
- * Live status for one data plane (source / stream / engine / storage).
+ * Live status for one data plane (source / stream / engine / storage / onchain).
  * Ephemeral — rebuilt by loaders and multiplex; only HUD layout prefs persist.
  */
 export interface PlaneTelemetry {
@@ -209,6 +209,11 @@ export interface TelemetryState {
   stream: PlaneTelemetry;
   engine: PlaneTelemetry;
   storage: PlaneTelemetry;
+  /**
+   * Optional on-chain proxy plane (`GET {endpoint}/api/onchain/health`).
+   * Ephemeral — omitted until first health probe; never hydrated from disk.
+   */
+  onchain?: PlaneTelemetry;
   /** Rolling run latency samples (ms), newest last */
   runLatencySamples: number[];
   lastTick: TickTelemetry | null;
@@ -485,6 +490,20 @@ export interface AppState {
    * line series aligned to the main bars (% or absolute).
    */
   compare: CompareState;
+
+  /**
+   * On-chain panel prefs (persisted). Series points / chart attachments live
+   * in the onchain manager module — not here.
+   */
+  onchain: OnchainState;
+}
+
+/** Thin on-chain panel prefs (last protocol search/use). */
+export interface OnchainState {
+  /** Last protocol slug searched/used (persisted). */
+  lastProtocolSlug: string;
+  /** Last protocol display name (persisted). */
+  lastProtocolName: string;
 }
 
 /** Compare-overlay preferences + ephemeral load state. */

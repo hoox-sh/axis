@@ -30,7 +30,11 @@ export type AlertKind =
   | 'price_below'
   | 'pct_change'
   | 'drawing_touch'
-  | 'pine_condition';
+  | 'pine_condition'
+  /** TVL day-over-day spike/drop events from the on-chain plane. */
+  | 'onchain_tvl_spike'
+  /** Generic on-chain event match (optional `eventType` filter). */
+  | 'onchain_event';
 
 /**
  * Kind-specific parameters.
@@ -39,6 +43,9 @@ export type AlertKind =
  * - pct, direction, basePrice — pct_change
  * - condition / value / threshold / op — pine_condition
  * - tolerance — drawing_touch
+ * - protocolId, minAbsPct, direction — onchain_tvl_spike / onchain_event
+ * - eventType — onchain_event (optional type filter)
+ * - lastEventTime — internal watermark (unix seconds) after an on-chain fire
  */
 export type AlertParams = Record<string, unknown>;
 

@@ -18,16 +18,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Alerts panel — list / create / toggle / delete price alerts.
+ * Alerts panel — list / create / toggle / delete price + on-chain alerts.
  *
  * FloatableShell id `alerts`. Uses `src/alerts` (localStorage engine).
  */
 
-import { Component, For, Show, createSignal } from 'solid-js';
+import { Component, For, Show, createMemo, createSignal } from 'solid-js';
 import { store, isPanelOpen } from '../store';
 import {
   listAlerts,
   createAlert,
+  createOnchainTvlSpikeAlert,
   deleteAlert,
   updateAlert,
   testWebhook,
@@ -37,13 +38,25 @@ import {
   formatLastFired,
   formatAlertKind,
   ALERT_KINDS,
+  DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT,
   type Alert,
   type AlertKind,
+  type OnchainAlertDirection,
 } from '../alerts';
 import { Icons } from './icons';
 import { FloatableShell } from './panels/FloatableShell';
 
-/** Dockable price-alerts list + create form. */
+/** True when kind uses on-chain event params (protocol / % / direction). */
+function isOnchainKind(k: AlertKind): boolean {
+  return k === 'onchain_tvl_spike' || k === 'onchain_event';
+}
+
+/** True when kind uses a price threshold. */
+function isPriceKind(k: AlertKind): boolean {
+  return k === 'price_cross' || k === 'price_above' || k === 'price_below';
+}
+
+/** Dockable alerts list + create form (price + on-chain kinds). */
 export const AlertsPanel: Component = () => {
   /** Local list mirror — alerts storage is not a Solid store. */
   const [items, setItems] = createSignal<Alert[]>(listAlerts());
@@ -53,29 +66,114 @@ export const AlertsPanel: Component = () => {
   const [symbol, setSymbol] = createSignal(store.symbol || 'BTCUSDT');
   const [kind, setKind] = createSignal<AlertKind>('price_cross');
   const [price, setPrice] = createSignal('');
+  const [protocolId, setProtocolId] = createSignal(
+    store.onchain?.lastProtocolSlug || '',
+  );
+  const [minAbsPct, setMinAbsPct] = createSignal(String(DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT));
+  const [direction, setDirection] = createSignal<OnchainAlertDirection>('both');
+  const [cooldownSec, setCooldownSec] = createSignal('');
   const [webhookUrl, setWebhookUrl] = createSignal('');
   const [formError, setFormError] = createSignal('');
   const [statusMsg, setStatusMsg] = createSignal('');
   const [notifPerm, setNotifPerm] = createSignal(notificationPermission());
   const [testingWebhook, setTestingWebhook] = createSignal(false);
 
+  const onchainMode = createMemo(() => isOnchainKind(kind()));
+  const priceMode = createMemo(() => isPriceKind(kind()));
+
+  const parseCooldownMs = (): number | undefined => {
+    const raw = cooldownSec().trim();
+    if (!raw) return undefined;
+    const sec = Number(raw);
+    if (!Number.isFinite(sec) || sec < 0) return undefined;
+    if (sec === 0) return undefined;
+    return Math.round(sec * 1000);
+  };
+
+  const onKindChange = (next: AlertKind) => {
+    setKind(next);
+    if (isOnchainKind(next) && !protocolId().trim()) {
+      const slug = store.onchain?.lastProtocolSlug || '';
+      if (slug) setProtocolId(slug);
+    }
+  };
+
   const onCreate = (e?: Event) => {
     e?.preventDefault();
     setFormError('');
     setStatusMsg('');
+    const k = kind();
+    const webhook = webhookUrl().trim() || undefined;
+    const cooldownMs = parseCooldownMs();
+    if (cooldownSec().trim() && cooldownMs == null) {
+      setFormError('Cooldown must be a non-negative number of seconds.');
+      return;
+    }
+
+    if (isOnchainKind(k)) {
+      const pid = protocolId().trim();
+      if (!pid) {
+        setFormError('Enter a protocol id (e.g. aave).');
+        return;
+      }
+      const pct = Number(minAbsPct());
+      if (!Number.isFinite(pct) || pct <= 0) {
+        setFormError('minAbsPct must be a number greater than 0.');
+        return;
+      }
+      const dir = direction();
+      const sym = (symbol().trim() || pid || 'onchain').toLowerCase();
+      const label =
+        name().trim() ||
+        `${pid} ${formatAlertKind(k)} ${dir === 'both' ? '±' : dir === 'up' ? '≥+' : '≤−'}${pct}%`;
+
+      if (k === 'onchain_tvl_spike') {
+        createOnchainTvlSpikeAlert({
+          protocolId: pid,
+          minAbsPct: pct,
+          direction: dir,
+          name: label,
+          symbol: sym,
+          webhookUrl: webhook,
+          cooldownMs,
+          enabled: true,
+        });
+      } else {
+        // onchain_event — generic event match with optional % / direction
+        createAlert({
+          name: label,
+          symbol: sym,
+          kind: 'onchain_event',
+          params: {
+            protocolId: pid,
+            minAbsPct: pct,
+            direction: dir,
+          },
+          webhookUrl: webhook,
+          cooldownMs,
+          enabled: true,
+        });
+      }
+      refresh();
+      setName('');
+      setStatusMsg('Alert created.');
+      return;
+    }
+
+    // Price kinds (and any future non-onchain kinds using price threshold)
     const p = Number(price());
     if (!Number.isFinite(p) || p <= 0) {
       setFormError('Enter a valid price greater than 0.');
       return;
     }
     const sym = (symbol().trim() || store.symbol || 'BTCUSDT').toUpperCase();
-    const k = kind();
     createAlert({
       name: name().trim() || `${sym} ${formatAlertKind(k)} ${p}`,
       symbol: sym,
       kind: k,
       params: { price: p },
-      webhookUrl: webhookUrl().trim() || undefined,
+      webhookUrl: webhook,
+      cooldownMs,
       enabled: true,
     });
     refresh();
@@ -168,25 +266,27 @@ export const AlertsPanel: Component = () => {
                 />
               </label>
               <div class="grid grid-cols-2 gap-1.5">
-                <label class="axis-alerts-field">
-                  <span class="axis-alerts-label">Symbol</span>
-                  <input
-                    class="sc-input w-full font-mono"
-                    type="text"
-                    value={symbol()}
-                    onInput={(e) => setSymbol(e.currentTarget.value.toUpperCase())}
-                    onFocus={() => {
-                      if (!symbol().trim()) setSymbol((store.symbol || 'BTCUSDT').toUpperCase());
-                    }}
-                    data-testid="axis-alerts-symbol"
-                  />
-                </label>
-                <label class="axis-alerts-field">
+                <Show when={!onchainMode()}>
+                  <label class="axis-alerts-field">
+                    <span class="axis-alerts-label">Symbol</span>
+                    <input
+                      class="sc-input w-full font-mono"
+                      type="text"
+                      value={symbol()}
+                      onInput={(e) => setSymbol(e.currentTarget.value.toUpperCase())}
+                      onFocus={() => {
+                        if (!symbol().trim()) setSymbol((store.symbol || 'BTCUSDT').toUpperCase());
+                      }}
+                      data-testid="axis-alerts-symbol"
+                    />
+                  </label>
+                </Show>
+                <label class={`axis-alerts-field ${onchainMode() ? 'col-span-2' : ''}`}>
                   <span class="axis-alerts-label">Kind</span>
                   <select
                     class="sc-input w-full"
                     value={kind()}
-                    onChange={(e) => setKind(e.currentTarget.value as AlertKind)}
+                    onChange={(e) => onKindChange(e.currentTarget.value as AlertKind)}
                     data-testid="axis-alerts-kind"
                   >
                     <For each={[...ALERT_KINDS]}>
@@ -195,20 +295,69 @@ export const AlertsPanel: Component = () => {
                   </select>
                 </label>
               </div>
-              <label class="axis-alerts-field">
-                <span class="axis-alerts-label">Price</span>
-                <input
-                  class="sc-input w-full font-mono"
-                  type="number"
-                  step="any"
-                  min="0"
-                  placeholder="Threshold"
-                  value={price()}
-                  onInput={(e) => setPrice(e.currentTarget.value)}
-                  data-testid="axis-alerts-price"
-                  required
-                />
-              </label>
+
+              <Show when={priceMode()}>
+                <label class="axis-alerts-field">
+                  <span class="axis-alerts-label">Price</span>
+                  <input
+                    class="sc-input w-full font-mono"
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="Threshold"
+                    value={price()}
+                    onInput={(e) => setPrice(e.currentTarget.value)}
+                    data-testid="axis-alerts-price"
+                    required
+                  />
+                </label>
+              </Show>
+
+              <Show when={onchainMode()}>
+                <label class="axis-alerts-field">
+                  <span class="axis-alerts-label">Protocol id</span>
+                  <input
+                    class="sc-input w-full font-mono"
+                    type="text"
+                    placeholder="e.g. aave"
+                    value={protocolId()}
+                    onInput={(e) => setProtocolId(e.currentTarget.value)}
+                    data-testid="axis-alerts-protocol"
+                    required
+                  />
+                </label>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <label class="axis-alerts-field">
+                    <span class="axis-alerts-label">Min |%|</span>
+                    <input
+                      class="sc-input w-full font-mono"
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder={String(DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT)}
+                      value={minAbsPct()}
+                      onInput={(e) => setMinAbsPct(e.currentTarget.value)}
+                      data-testid="axis-alerts-min-abs-pct"
+                    />
+                  </label>
+                  <label class="axis-alerts-field">
+                    <span class="axis-alerts-label">Direction</span>
+                    <select
+                      class="sc-input w-full"
+                      value={direction()}
+                      onChange={(e) =>
+                        setDirection(e.currentTarget.value as OnchainAlertDirection)
+                      }
+                      data-testid="axis-alerts-direction"
+                    >
+                      <option value="both">both</option>
+                      <option value="up">up</option>
+                      <option value="down">down</option>
+                    </select>
+                  </label>
+                </div>
+              </Show>
+
               <label class="axis-alerts-field">
                 <span class="axis-alerts-label">Webhook URL</span>
                 <input
@@ -218,6 +367,19 @@ export const AlertsPanel: Component = () => {
                   value={webhookUrl()}
                   onInput={(e) => setWebhookUrl(e.currentTarget.value)}
                   data-testid="axis-alerts-webhook"
+                />
+              </label>
+              <label class="axis-alerts-field">
+                <span class="axis-alerts-label">Cooldown (sec)</span>
+                <input
+                  class="sc-input w-full font-mono"
+                  type="number"
+                  step="1"
+                  min="0"
+                  placeholder="optional"
+                  value={cooldownSec()}
+                  onInput={(e) => setCooldownSec(e.currentTarget.value)}
+                  data-testid="axis-alerts-cooldown"
                 />
               </label>
               <Show when={formError()}>

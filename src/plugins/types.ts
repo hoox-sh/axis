@@ -23,7 +23,7 @@
  * All kinds share {@link PluginBase}. Active selection lives in the Solid store
  * (`source` / `live.streamId` / `engine` / `activePlugins.*`); resolve at runtime
  * via `plugins/active`. Built-ins register through catalogs under
- * `sources/`, `streams/`, `engines/`, `storage/`.
+ * `sources/`, `streams/`, `engines/`, `storage/`, `onchain/`.
  *
  * | Kind | Required method | Role |
  * |------|-----------------|------|
@@ -31,15 +31,17 @@
  * | `stream` | `start` → `stop` | Live bars |
  * | `engine` | `isReady` + `run` | Pine evaluation |
  * | `storage` | `list`/`read`/`write`/`remove` | Script library |
+ * | `dataset` | `fetchDataset` | On-chain / alternate series |
  * | `component` | `mount` | UI slot (phase 2) |
  *
- * Dynamic URL plugins (`plugins/loader`) may install source/stream/engine only.
+ * Dynamic URL plugins (`plugins/loader`) may install source/stream/engine/dataset.
  *
  * @module plugins/types
  */
 
 import type { Bar } from '../store/types';
 import type { LogLevel } from '../store/types';
+import type { DatasetFetchOpts, OnchainDataset, OnchainInstrument } from '../onchain/types';
 
 /** Discriminant for registry maps and Settings UI. */
 export type PluginKind =
@@ -47,6 +49,7 @@ export type PluginKind =
   | 'stream'
   | 'engine'
   | 'storage'
+  | 'dataset'
   | 'component';
 
 /** One settings field in a plugin `configSchema`. */
@@ -277,6 +280,18 @@ export interface StoragePlugin extends PluginBase {
   getStatus?(config?: Record<string, unknown>): Promise<StorageStatus>;
 }
 
+// --- Dataset (on-chain / alternate series) ---
+
+/**
+ * Non-OHLCV dataset provider (on-chain metrics, funding, etc.).
+ * Depends on `../onchain/types` for fetch opts and payload shapes.
+ */
+export interface DatasetPlugin extends PluginBase {
+  kind: 'dataset';
+  fetchDataset(opts: DatasetFetchOpts): Promise<OnchainDataset>;
+  searchInstruments?(query: string, config?: Record<string, unknown>): Promise<OnchainInstrument[]>;
+}
+
 // --- Component (phase 2 — reserved) ---
 
 export interface ComponentPlugin extends PluginBase {
@@ -290,6 +305,7 @@ export type AnyPlugin =
   | StreamPlugin
   | EnginePlugin
   | StoragePlugin
+  | DatasetPlugin
   | ComponentPlugin;
 
 export interface PluginSummaryItem {
@@ -304,4 +320,5 @@ export interface RegistrySummary {
   streams: PluginSummaryItem[];
   engines: PluginSummaryItem[];
   storages: PluginSummaryItem[];
+  datasets: PluginSummaryItem[];
 }

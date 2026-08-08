@@ -59,7 +59,13 @@ describe('formatLastFired', () => {
 });
 
 describe('ALERT_KINDS', () => {
-  it('lists three UI kinds', () => {
-    expect(ALERT_KINDS).toEqual(['price_cross', 'price_above', 'price_below']);
+  it('lists price + on-chain kinds for the create form', () => {
+    expect(ALERT_KINDS).toEqual([
+      'price_cross',
+      'price_above',
+      'price_below',
+      'onchain_tvl_spike',
+      'onchain_event',
+    ]);
   });
 });

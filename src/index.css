@@ -1695,6 +1695,18 @@ body.axis-panel-dragging {
   font-weight: 500;
   letter-spacing: 0.02em;
 }
+/* On-chain attachment count — void-muted, only when N > 0 */
+.axis-slot-badge .axis-slot-onchain {
+  opacity: 0.62;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--color-text-faint, #5c5f6b);
+}
+.axis-slot-badge.is-active .axis-slot-onchain {
+  opacity: 0.78;
+  color: color-mix(in srgb, var(--color-accent, #939fff) 70%, var(--color-text-dim, #8b8e9c));
+}
 
 /* ── Pane corner badges (indicator name + script actions) ───────── */
 .axis-pane-badge-root {

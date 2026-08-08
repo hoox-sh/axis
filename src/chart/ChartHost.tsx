@@ -66,6 +66,18 @@ import {
   clearCompareOverlay,
   fetchCompareBars,
 } from './compare-overlay';
+import {
+  applyOnchainOverlays,
+  clearOnchainOverlays,
+  type OnchainLineSpec,
+} from './onchain-overlay';
+import {
+  applyOnchainEventMarkers,
+  clearOnchainEventMarkers,
+} from './onchain-events';
+import { onchainManagerState } from '../onchain/manager';
+import { seriesSeriesKey } from '../onchain/keys';
+import { PLOT_PALETTE } from './series-factory';
 import { reportUiError } from '../ui/boot-errors';
 
 export {
@@ -555,6 +567,102 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     });
   });
 
+  // On-chain scalar overlays (active slot only — multi-chart safe)
+  createEffect(() => {
+    if (!alive || !isActive()) return;
+    // Track series rows + nested fields so point/visibility updates re-paint
+    const tracked = onchainManagerState.series.map((s, i) => ({
+      id: s.id,
+      label: s.label,
+      visible: s.visible,
+      points: s.points,
+      // Prefer manager palette color; fall back by index if missing
+      color: s.color || PLOT_PALETTE[i % PLOT_PALETTE.length] || '#939fff',
+    }));
+    void store.chartDataGen;
+    void store.lastValueLabelsVisible;
+
+    const mgr = localManager || getManager();
+    if (!mgr) return;
+
+    untrack(() => {
+      if (!alive) return;
+      try {
+        const lines: OnchainLineSpec[] = [];
+        for (const att of tracked) {
+          if (!att || att.visible === false) continue;
+          const points = att.points;
+          if (!Array.isArray(points) || !points.length) continue;
+          const id = String(att.id || '').trim();
+          if (!id) continue;
+          lines.push({
+            key: seriesSeriesKey(id),
+            title: String(att.label || id),
+            color: String(att.color || ''),
+            points,
+            visible: true,
+          });
+        }
+        if (!lines.length) {
+          clearOnchainOverlays(mgr);
+          return;
+        }
+        applyOnchainOverlays(mgr, lines);
+      } catch (err: unknown) {
+        reportUiError(err, {
+          source: 'chart',
+          context: 'On-chain overlay failed',
+          status: true,
+        });
+      }
+    });
+  });
+
+  // On-chain event markers (active slot only — dedicated host series, not candle)
+  createEffect(() => {
+    if (!alive || !isActive()) return;
+    // Manager may expose `events` / `eventsLoading` (sibling agent). Track via cast
+    // until typed on OnchainManagerState — reading keeps the effect live.
+    const mgrState = onchainManagerState as typeof onchainManagerState & {
+      events?: Array<{
+        time: number;
+        type?: string;
+        title?: string;
+        severity?: string;
+        price?: number;
+      }>;
+      eventsLoading?: boolean;
+      eventsVisible?: boolean;
+    };
+    const events = mgrState.events;
+    const eventsVisible = mgrState.eventsVisible !== false;
+    void mgrState.events;
+    void mgrState.eventsLoading;
+    void mgrState.eventsVisible;
+    void store.chartDataGen;
+    void store.bars.length;
+
+    const mgr = localManager || getManager();
+    if (!mgr) return;
+
+    untrack(() => {
+      if (!alive) return;
+      try {
+        if (!events?.length || !eventsVisible) {
+          clearOnchainEventMarkers(mgr);
+          return;
+        }
+        applyOnchainEventMarkers(mgr, events);
+      } catch (err: unknown) {
+        reportUiError(err, {
+          source: 'chart',
+          context: 'On-chain event markers failed',
+          status: true,
+        });
+      }
+    });
+  });
+
   // Refetch compare when main interval/source/history reloads while enabled
   createEffect(() => {
     if (!alive || !isActive()) return;
@@ -611,6 +719,11 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       }
       try {
         clearCompareOverlay(owned);
+      } catch {
+        /* ignore */
+      }
+      try {
+        clearOnchainOverlays(owned);
       } catch {
         /* ignore */
       }

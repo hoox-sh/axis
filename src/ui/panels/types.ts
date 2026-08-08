@@ -37,7 +37,8 @@ export type PanelId =
   | 'layers'
   | 'alerts'
   | 'library'
-  | 'datasource';
+  | 'datasource'
+  | 'onchain';
 
 /**
  * Where a panel lives:
@@ -160,6 +161,14 @@ export const PANEL_META: Record<
     defaultW: 320,
     defaultH: 520,
   },
+  onchain: {
+    title: 'On-Chain',
+    defaultDock: 'right',
+    minW: 1,
+    minH: 1,
+    defaultW: 320,
+    defaultH: 480,
+  },
 };
 
 /** Drag overlay target (null = no zone / invalid). */
@@ -216,6 +225,11 @@ export function defaultPanelChromeMap(): PanelChromeMap {
       w: 300,
     }),
     datasource: defaultPanelChrome('datasource', {
+      open: false,
+      dock: 'right',
+      w: 320,
+    }),
+    onchain: defaultPanelChrome('onchain', {
       open: false,
       dock: 'right',
       w: 320,

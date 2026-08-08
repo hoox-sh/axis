@@ -56,6 +56,7 @@ import {
   toggleScriptLogsPanel,
   toggleLibraryPanel,
   toggleDataSourcePanel,
+  toggleOnchainPanel,
   toggleProfilerEnabled,
   toggleInlineDebugEnabled,
   toggleDebugPinsEnabled,
@@ -66,10 +67,19 @@ import {
   persist,
   setStore,
   updateChartSlot,
+  setOnchainPanelOpen,
 } from '../store';
 import { runAndApply } from '../indicators/runner';
 import { loadSymbolData, reloadChart } from '../data/load-symbol';
 import { startLive, stopLive, defaultStreamForSource } from '../streams/multiplex';
+import {
+  clearAllOnchainSeries,
+  clearOnchainEvents,
+  refreshAllAttachedTvl,
+  exportAllOnchainSeriesCsv,
+} from '../onchain/manager';
+import { attachPopularTvl } from '../onchain/presets';
+import { kickOnchainHealthProbe } from '../onchain/health';
 import {
   buildDefaultCommands,
   filterCommands,
@@ -147,6 +157,14 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       toggleScriptLogs: () => toggleScriptLogsPanel(),
       toggleLibrary: () => toggleLibraryPanel(),
       toggleDataSource: () => toggleDataSourcePanel(),
+      toggleOnchain: () => toggleOnchainPanel(),
+      openOnchain: () => setOnchainPanelOpen(true),
+      clearAllOnchainSeries: () => clearAllOnchainSeries(),
+      clearOnchainEvents: () => clearOnchainEvents(),
+      kickOnchainHealth: () => kickOnchainHealthProbe(),
+      refreshAllAttachedTvl: () => void refreshAllAttachedTvl(),
+      exportOnchainSeries: () => exportAllOnchainSeriesCsv(),
+      attachPopularTvl: () => void attachPopularTvl(5),
       toggleTheme: () => toggleTheme(),
       setChartThemePreset: (id) => setChartThemePreset(id),
       setChartGridMode: (mode) => setChartGridMode(mode),

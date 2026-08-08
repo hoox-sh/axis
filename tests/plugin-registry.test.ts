@@ -78,6 +78,36 @@ describe('PluginRegistry', () => {
     ).toThrow(/run/);
   });
 
+  it('rejects a Dataset without fetchDataset', () => {
+    expect(() =>
+      registry.registerDataset({ id: 'd', name: 'D', kind: 'dataset' } as never),
+    ).toThrow(/fetchDataset/);
+  });
+
+  it('registers dataset plugins and includes them in summary', () => {
+    const ds = {
+      id: 'test-ds',
+      name: 'Test Dataset',
+      kind: 'dataset' as const,
+      async fetchDataset() {
+        return {
+          id: 'x',
+          kind: 'scalar_series' as const,
+          instrument: { chainId: 'all', metric: 'tvl', symbol: 'X' },
+          resolution: '1d',
+          points: [],
+          asOf: 0,
+          finality: 'unknown' as const,
+          provenance: { provider: 'test' },
+        };
+      },
+    };
+    registry.registerDataset(ds);
+    expect(registry.getDataset('test-ds')?.name).toBe('Test Dataset');
+    expect(registry.listDatasets().map((d) => d.id)).toEqual(['test-ds']);
+    expect(registry.summary().datasets).toHaveLength(1);
+  });
+
   it('lists registered plugins in registration order', () => {
     registry
       .registerSource(mockWalk)
@@ -104,6 +134,7 @@ describe('PluginRegistry', () => {
     expect(s.engines).toHaveLength(1);
     expect(s.streams).toHaveLength(0);
     expect(s.storages).toHaveLength(0);
+    expect(s.datasets).toHaveLength(0);
     expect(s.sources[0]).toEqual({
       id: 'mock-walk',
       name: 'Mock Walk',

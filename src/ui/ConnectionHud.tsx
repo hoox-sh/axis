@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS Connection HUD — ENG / RUN / MODE / PATH (+ SRC STR STO).
+ * AXIS Connection HUD — ENG / RUN / MODE / PATH (+ SRC STR STO · ONC).
  *
  * Derived via {@link deriveHud} from engine plugin + endpoint + telemetry.
  * Chips live in the status bar; compact mode collapses secondary chips.
@@ -29,6 +29,7 @@
  * | RUN  | browser \| server \| worker |
  * | MODE | interpret \| compile \| auto |
  * | PATH | WS \| REST (hidden for browser-local) |
+ * | ONC  | on-chain proxy (only when probed / error / active) |
  *
  * Sticky info: hover opens panel; click pin (or chip) keeps it until Esc / outside.
  */
@@ -328,6 +329,21 @@ function PlaneChip(props: {
   );
 }
 
+/**
+ * Show optional onchain plane when present and active/error.
+ * Compact: only error / connecting (tight bar). Expanded: also open/degraded.
+ */
+function showOnchainPlane(
+  plane: PlaneTelemetry | undefined | null,
+  compact: boolean,
+): boolean {
+  if (!plane) return false;
+  const st = plane.state;
+  if (st === 'error' || st === 'connecting') return true;
+  if (st === 'open' || st === 'degraded') return !compact;
+  return false;
+}
+
 function TickPulse(props: {
   sticky: ReturnType<typeof useStickyInfo>;
   snap: () => HudSnapshot;
@@ -617,6 +633,17 @@ export const ConnectionHud: Component = () => {
           )}
         </Show>
         <PairingWarn />
+      </Show>
+
+      {/* ONC — optional 5th plane; surface when active/error (incl. compact) */}
+      <Show when={showOnchainPlane(tel()?.onchain, compact())}>
+        <PlaneChip
+          label="onc"
+          plane={tel()!.onchain!}
+          id="onc"
+          sticky={sticky}
+          snap={snap}
+        />
       </Show>
 
       {/* Compact toggle (keeps SRC/STR/STO optional) */}

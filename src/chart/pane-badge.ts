@@ -23,7 +23,9 @@
  * Solid mounts per pane.
  *
  * Layout notes (avoid top-left pile-up):
- * - Chart workspace owns the **symbol · interval** chip (`.axis-slot-badge`).
+ * - Chart workspace owns the **symbol · interval** chip (`.axis-slot-badge`),
+ *   including subtle `· onchain:N` when on-chain series are attached
+ *   ({@link ChartWorkspace} / `onchainManagerState.series`).
  * - Price pane **never** shows a redundant "PRICE" label — that conflicted with
  *   the slot chip and any overlay indicator chips.
  * - Price pane script chips sit on the **top row**, offset **right of the drawing

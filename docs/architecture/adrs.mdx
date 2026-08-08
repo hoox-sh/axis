@@ -19,7 +19,7 @@
 
 ---
 title: "Architecture Decision Records"
-description: "ADR-001 through ADR-014 for AXIS: registry, AXIS≠engine, Solid+Vite, dual engines, configSchema, URL load, storage, CF project id, proxies, DO fan-out, migration, CORS, results export, transport preference + telemetry."
+description: "ADR-001 through ADR-015 for AXIS: registry, AXIS≠engine, Solid+Vite, dual engines, configSchema, URL load, storage, CF project id, proxies, DO fan-out, migration, CORS, results export, transport preference + telemetry, on-chain data plane."
 ---
 
 # Architecture Decision Records
@@ -44,6 +44,7 @@ Formal ADRs for AXIS (product + `frontend/`). Status values: **Accepted** unless
 | [ADR-012](#adr-012-cors-as-deploy-concern) | CORS as deploy concern |
 | [ADR-013](#adr-013-results-export-in-axis) | Results export in AXIS |
 | [ADR-014](#adr-014-transport-preference--connection-telemetry) | Transport preference + connection telemetry |
+| [ADR-015](#adr-015-on-chain-data-plane) | On-chain data plane |
 
 ---
 
@@ -321,6 +322,100 @@ Operators need to see **how** data and calculation move (WS vs REST vs local vs 
 
 ---
 
+## ADR-015: On-chain data plane
+
+### Context
+
+AXIS began as an **OHLCV-first** chart host: `SourcePlugin` / `StreamPlugin` deliver `Bar[]` (open, high, low, close, volume) for CEX and similar venues, then engines run Pine against that series. Operators also need **non-price market structure**:
+
+| Need | Why `Bar` alone fails |
+| --- | --- |
+| Protocol TVL (USD) | Single scalar liquidity total, not OHLC |
+| DEX pool candles | Same shape as bars, but different venue semantics, address/network keys, and page caps |
+| Spike / unlock-style events | Discrete time markers with severity, not candles |
+| Honest provenance | Provider, snapshot cadence, finality — not implied by “the chart symbol” |
+
+Forcing these into the primary `Bar` pipeline would corrupt scale semantics (TVL vs price), invent fake OHLC for scalar metrics, and couple wallet/signing UX to read-only analytics.
+
+### Decision
+
+Ship a **parallel on-chain data plane** orthogonal to the OHLCV source/stream path:
+
+1. **Plugin kind `dataset`** on the unified registry (`DatasetPlugin` in `src/plugins/types.ts`):
+   - `fetchDataset(opts) → OnchainDataset`
+   - optional `searchInstruments`
+   - payload kinds: `ohlcv | scalar_series | multi_series | events | table`
+   - required **provenance** + **finality** (`pending | safe | finalized | unknown`)
+2. **Parallel plane modules** under `src/onchain/` (types, cache, keys, adapters, catalog, manager, events, alerts bridge) — not a new `Bar` field and not Pine output.
+3. **Worker allowlist proxy** (`worker/src/onchain.ts`, routes under `/api/onchain/…`):
+   - rewrite only known DefiLlama / GeckoTerminal paths
+   - validate network ids and pool addresses
+   - short-TTL isolate cache (`X-Axis-Onchain-Cache`)
+   - client default bases from `store.endpoint` (`src/onchain/proxy.ts`)
+4. **Chart UX**: attach as host-side overlays (left scale for scalars; separate series keys `onchain_*`); main market OHLCV stays on the right scale. Not wallet, not Pine plots.
+
+```mermaid
+flowchart LR
+  UI[On-Chain panel / DSM] --> DS[DatasetPlugin]
+  DS -->|browser| W["Worker /api/onchain/*"]
+  W -->|allowlist| UP[DefiLlama / GeckoTerminal]
+  DS --> OD[OnchainDataset]
+  OD --> CH[Chart overlays / markers]
+  OD --> AL[Alerts bridge]
+  SRC[SourcePlugin Bar] --> CH
+```
+
+### Alternatives considered
+
+| Alternative | Rejected because |
+| --- | --- |
+| **Force into `Bar` / active source** | TVL is not OHLC; faking open=high=low=close lies to engines and the price scale. Multi-protocol attach becomes multi-symbol load thrash. |
+| **Piggyback Pine `request.security` only** | Needs engine + script for every host overlay; no attach UI, no provider search, no finality UI. |
+| **Browser → provider direct** | Public DefiLlama / GeckoTerminal hosts often lack CORS for arbitrary AXIS origins (ADR-012). |
+| **Open reverse proxy (any URL)** | SSRF risk; Worker must **allowlist** path shape, not pass-through arbitrary upstream. |
+| **Wallet-connected RPC as the plane** | Different product (signing, accounts, private RPC). On-chain here means **public analytics APIs**, not MetaMask. |
+
+### Consequences
+
+- **CORS / deploy** — browsers should use `{endpoint}/api/onchain/llama|gecko`; local Worker on `:8787` or deployed edge. Direct `baseUrl` overrides are for Node tests / trusted environments only.
+- **Finality honesty** — DefiLlama TVL is typically a **daily snapshot**, not block-final chain state; Gecko OHLCV is **pool** sampling, not CEX marks. UI shows provenance lines; `synthetic` flags fabricated OHLC.
+- **Not a wallet** — no signing, no injected providers, no private keys for this plane.
+- **Not Pine** — overlays are host datasets; they do not replace `indicator()` / `strategy()` plots from the engine.
+- **Engines unchanged** — active OHLCV source still feeds `EnginePlugin.run`; on-chain series do not silently become script `close`.
+- **Cache** — client IDB dataset cache (`instrumentCacheKey`) plus Worker short-TTL memory; operators may see stale TVL briefly after large DeFi moves.
+- **Security** — Worker rejects path traversal, invalid slugs/addresses, non-GET, and non-allowlisted Gecko paths.
+
+### Phases shipped
+
+| Phase | Capability | Primary surfaces |
+| --- | --- | --- |
+| **1 — TVL** | DefiLlama protocol TVL scalar history + search | `defillama-tvl` dataset, `src/onchain/defillama.ts`, llama proxy |
+| **2 — DEX** | GeckoTerminal pool OHLCV + pool search; optional `geckoterminal-ohlcv` source for DSM multi-page backfill | `geckoterminal` dataset, `src/onchain/geckoterminal.ts`, gecko proxy |
+| **3 — Events** | Derived day-over-day TVL spike/drop events (`tvl_spike` / `tvl_drop`) | `src/onchain/events.ts` → chart markers |
+| **4 — Alerts** | Bridge events into alerts engine (`onchain_tvl_spike` / `onchain_event`) | `src/onchain/alerts-bridge.ts`, `src/alerts/engine.ts` |
+
+Pro-only DefiLlama surfaces (raises, unlocks via `pro-api.llama.fi`) remain out of the free Worker allowlist.
+
+### Code map
+
+| Path | Role |
+| --- | --- |
+| `src/onchain/types.ts` | `OnchainDataset`, instruments, finality |
+| `src/onchain/catalog.ts` | Built-in dataset registration |
+| `src/onchain/manager.ts` | Attach / hide / detach store wiring |
+| `src/onchain/proxy.ts` | Resolve Worker llama/gecko bases |
+| `worker/src/onchain.ts` | Allowlisted proxy + health |
+| `src/plugins/types.ts` | `DatasetPlugin` contract |
+
+### Related docs
+
+- [Datasets](/plugins/datasets) — plugin contract
+- [On-Chain data (end user)](/enduser/guides/on-chain) — operator guide
+- [Worker](/worker) — `/api/onchain/…` on the edge route table
+- [ADR-001](#adr-001-pluggable-unified-registry), [ADR-009](#adr-009-worker-proxies-first), [ADR-012](#adr-012-cors-as-deploy-concern)
+
+---
+
 ## ADR lifecycle
 
 New ADRs should:
@@ -334,3 +429,4 @@ New ADRs should:
 - [Overview](/axis/docs/architecture/overview)
 - [Topologies](/axis/docs/architecture/topologies)
 - [Plugins contracts](/axis/docs/plugins/contracts)
+- [Datasets](/plugins/datasets)

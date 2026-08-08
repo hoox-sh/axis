@@ -68,6 +68,7 @@ Every plugin is an object with `{ id, name, kind, description, configSchema, ...
 // kind: 'stream'  — live tick / bar push
 // kind: 'engine'  — calculate Pine
 // kind: 'storage' — user script library (local | git | cloud)
+// kind: 'dataset' — on-chain / alternate series (TVL, …)
 // kind: 'component' — UI slots (phase 2)
 
 // See src/plugins/types.ts for full contracts.
@@ -88,19 +89,21 @@ Legacy vanilla shell still uses `src/registry.js` (see LEGACY.md).
 
 ## Built-in plugins
 
-| Kind   | id            | Source                           |
-|--------|---------------|----------------------------------|
-| Source | `binance-rest`| `https://api.binance.com/...`    |
-| Source | `okx-rest`    | OKX public candles               |
-| Source | `bybit-rest`  | Bybit v5 spot klines             |
-| Source | `coinbase-rest`| Coinbase Exchange candles       |
-| Source | `mock-walk`   | pure-synthetic random walk       |
-| Source | `csv-upload`  | user-uploaded file               |
-| Stream | `binance-ws`  | `wss://stream.binance.com/...`   |
-| Stream | `mock-poll`   | synthetic poll (offline)         |
-| Stream | `none`        | paused                           |
-| Engine | `server`      | `POST {endpoint}/run`            |
-| Engine | `pyodide`     | in-browser Python (Pyodide)      |
+| Kind    | id                   | Source / role                          |
+|---------|----------------------|----------------------------------------|
+| Source  | `binance-rest`       | `https://api.binance.com/...`          |
+| Source  | `okx-rest`           | OKX public candles                     |
+| Source  | `bybit-rest`         | Bybit v5 spot klines                   |
+| Source  | `coinbase-rest`      | Coinbase Exchange candles              |
+| Source  | `geckoterminal-ohlcv`| DEX pool OHLCV (GeckoTerminal)         |
+| Source  | `mock-walk`          | pure-synthetic random walk             |
+| Source  | `csv-upload`         | user-uploaded file                     |
+| Dataset | `defillama-tvl`      | Protocol TVL history (DefiLlama)       |
+| Stream  | `binance-ws`         | `wss://stream.binance.com/...`         |
+| Stream  | `mock-poll`          | synthetic poll (offline)               |
+| Stream  | `none`               | paused                                 |
+| Engine  | `server`             | `POST {endpoint}/run`                  |
+| Engine  | `pyodide`            | in-browser Python (Pyodide)            |
 
 Add a new plugin via the Plugin Manager **Install** tab (URL module), or
 register in TypeScript under `src/sources|streams|engines` and the unified
@@ -117,12 +120,13 @@ await loadPluginFromUrl('https://example.com/my-plugin.js');
 |---------|----------------|
 | **Topbar Load** | One-shot historical fetch (`historyBars` / venue page cap) into the chart |
 | **Data Sources** panel | Background multi-page **backfill** to a past date, **validate** density, **fill gaps**, durable IDB cache, optional Load to chart |
+| **On-Chain** panel | DefiLlama **TVL** lines, GeckoTerminal **DEX pool** candles, TVL spike **events**, CSV export, refresh jobs |
 | **Scripts** panel | Applied indicators/strategies (list, visibility, colors) — renamed from “Indicators” |
 | **Chart themes** | Ten curated high-end presets (void, classic, mono, obsidian, graphite, pacific, dusk, porcelain, parchment, …) — no neon high-contrast default |
 | **Run** | Accent color only while a run is executing (ghost when idle) |
 | **Library / Plugins / Settings** | Script storage, plugin catalog, engine endpoint |
 
-Docs: [Data Source Manager](https://hoox.sh/axis/docs/enduser/guides/data-source-manager) · [UI shell](https://hoox.sh/axis/docs/ui/ui-shell)
+Docs: [On-Chain data](https://hoox.sh/axis/docs/enduser/guides/on-chain) · [Data Source Manager](https://hoox.sh/axis/docs/enduser/guides/data-source-manager) · [UI shell](https://hoox.sh/axis/docs/ui/ui-shell)
 
 ## Local dev
 
@@ -164,17 +168,18 @@ axis/                         (this repo root)
       data-source-manager.ts  Background backfill + validate + gap-fill jobs
       bars-cache.ts           IDB OHLCV cache for manager
       bars-gaps.ts            Series completeness / gap detection
+    onchain/                  Dataset plane: DefiLlama TVL, GeckoTerminal, events, jobs
     theme/                    Chart theme catalog + 10 presets
-    sources/catalog.ts        binance / okx / bybit / coinbase / mock / csv
+    sources/catalog.ts        binance / okx / bybit / coinbase / gecko / mock / csv
     streams/                  Live multiplex + venue WS
     engines/                  server + pyodide
     indicators/               runAndApply + Scripts panel UI
     editor/                   CM6 Pine editor, diagnostics, profiler, pins
-    chart/                    lightweight-charts host, drawings, replay
-    ui/                       Topbar, panels, command palette, settings
+    chart/                    lightweight-charts host, drawings, on-chain overlays
+    ui/                       Topbar, panels, On-Chain, command palette, settings
     store/                    Solid app state + persistence
-    plugins/                  Unified registry contracts + loader
-  worker/                     Cloudflare Worker (API / DO / D1)
+    plugins/                  Unified registry contracts + loader (incl. dataset)
+  worker/                     Cloudflare Worker (API / onchain proxy / DO / D1)
   docs/                       Mintlify-style product docs (MDX)
   tests/                      Bun unit + integration tests
   e2e/                        Playwright
@@ -187,10 +192,10 @@ axis/                         (this repo root)
 - **VPS demo**: PWA + Pro API same-origin at `https://axis.hoox.sh`
   (Cloudflare → nginx TLS → static `axis-pwa` + reverse-proxy `/run`/`/ws`/`/health`
   to `pynescript-api` on `:5002`). Default store endpoint is `https://axis.hoox.sh`.
-- **Cloudflare Worker**: deploy `worker/` with `make deploy-cf`. The Worker
-  exposes `/api/run`, `/api/stream`, `/api/keys`, etc. and proxies to the
-  pynescript Python runtime via Pyodide on the Worker side. See
-  `worker/README.md`.
+- **Cloudflare Worker**: deploy `worker/` with `make worker-deploy`. The Worker
+  exposes `/api/run`, `/api/stream`, `/api/keys`, `/api/onchain/*` (DefiLlama +
+  GeckoTerminal allowlisted proxy), etc. See `worker/README.md` and
+  [Worker docs](https://hoox.sh/axis/docs/worker).
 
 ## CORS (AXIS browser origin → Pro API)
 

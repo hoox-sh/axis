@@ -37,7 +37,17 @@ export type RunClass = 'browser' | 'server' | 'worker';
 export type ExecMode = 'interpret' | 'compile' | 'auto';
 export type PathClass = 'WS' | 'REST' | '—';
 
-export type HudChipId = 'live' | 'tick' | 'eng' | 'run' | 'mode' | 'path' | 'src' | 'str' | 'sto';
+export type HudChipId =
+  | 'live'
+  | 'tick'
+  | 'eng'
+  | 'run'
+  | 'mode'
+  | 'path'
+  | 'src'
+  | 'str'
+  | 'sto'
+  | 'onc';
 
 export interface HudSnapshot {
   eng: EngTopology;
@@ -260,6 +270,16 @@ export function hudChipHelp(id: HudChipId, snap: HudSnapshot): { title: string; 
         body:
           'Where Pine scripts / library docs are stored (local · cloud · git).\n' +
           'Future: split into DATA (bars/cache) vs LIB (scripts).',
+      };
+    case 'onc':
+      return {
+        title: 'ONC — on-chain proxy',
+        body:
+          'Worker on-chain data plane proxy (`GET /api/onchain/health`).\n' +
+          '• DefiLlama TVL via `/api/onchain/llama`\n' +
+          '• GeckoTerminal DEX OHLCV via `/api/onchain/gecko`\n' +
+          'Ephemeral — probed when the On-Chain panel opens or on first attach/search.\n' +
+          'Uses the same engine endpoint base as pyne/Worker.',
       };
     default:
       return { title: id, body: '' };

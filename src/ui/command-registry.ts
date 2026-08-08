@@ -69,6 +69,21 @@ export interface CommandActions {
   toggleScriptLogs?: () => void;
   toggleLibrary?: () => void;
   toggleDataSource?: () => void;
+  toggleOnchain?: () => void;
+  /** Open on-chain panel (e.g. TVL mode; panel mode is local UI state). */
+  openOnchain?: () => void;
+  /** Detach all on-chain chart series attachments. */
+  clearAllOnchainSeries?: () => void;
+  /** Clear on-chain event markers plane. */
+  clearOnchainEvents?: () => void;
+  /** Probe Worker on-chain proxy / refresh telemetry HUD. */
+  kickOnchainHealth?: () => void;
+  /** Re-fetch every attached DefiLlama TVL series. */
+  refreshAllAttachedTvl?: () => void | Promise<void>;
+  /** Download all attached on-chain series as long CSV. */
+  exportOnchainSeries?: () => void;
+  /** Attach top popular DefiLlama TVL protocols (preset, e.g. top 5). */
+  attachPopularTvl?: () => void | Promise<void>;
   toggleTheme: () => void;
   /** Apply a named chart theme preset (void-dark, classic, …). */
   setChartThemePreset?: (presetId: string) => void;
@@ -284,6 +299,120 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
       'exchange',
       'symbol',
       'timeframe',
+    ],
+  },
+  {
+    id: 'panel.onchain',
+    title: 'Toggle On-Chain panel',
+    category: 'panels',
+    keywords: [
+      'onchain',
+      'on-chain',
+      'defillama',
+      'tvl',
+      'chain',
+      'protocol',
+      'liquidity',
+    ],
+  },
+  {
+    id: 'onchain.mode.tvl',
+    title: 'On-Chain: Open TVL',
+    category: 'actions',
+    keywords: [
+      'onchain',
+      'on-chain',
+      'tvl',
+      'defillama',
+      'protocol',
+      'open onchain',
+    ],
+  },
+  {
+    id: 'onchain.clear.series',
+    title: 'On-Chain: Clear Series',
+    category: 'actions',
+    keywords: [
+      'onchain',
+      'on-chain',
+      'clear',
+      'series',
+      'detach',
+      'remove overlays',
+      'tvl lines',
+    ],
+  },
+  {
+    id: 'onchain.clear.events',
+    title: 'On-Chain: Clear Events',
+    category: 'actions',
+    keywords: [
+      'onchain',
+      'on-chain',
+      'clear',
+      'events',
+      'markers',
+      'spikes',
+      'event plane',
+    ],
+  },
+  {
+    id: 'onchain.health',
+    title: 'On-Chain: Refresh Health',
+    category: 'actions',
+    keywords: [
+      'onchain',
+      'on-chain',
+      'health',
+      'probe',
+      'telemetry',
+      'proxy',
+      'worker',
+    ],
+  },
+  {
+    id: 'onchain.refresh',
+    title: 'On-Chain: Refresh Attached TVL',
+    category: 'actions',
+    keywords: [
+      'onchain',
+      'on-chain',
+      'refresh',
+      'reload',
+      'tvl',
+      'refetch',
+      'update series',
+      'defillama',
+    ],
+  },
+  {
+    id: 'onchain.export.series',
+    title: 'On-Chain: Export Series CSV',
+    category: 'actions',
+    keywords: [
+      'onchain',
+      'on-chain',
+      'export',
+      'csv',
+      'download',
+      'series',
+      'tvl',
+      'save data',
+    ],
+  },
+  {
+    id: 'onchain.attach.popular',
+    title: 'On-Chain: Attach Popular TVL',
+    category: 'actions',
+    keywords: [
+      'onchain',
+      'on-chain',
+      'popular',
+      'preset',
+      'top tvl',
+      'attach',
+      'defillama',
+      'protocols',
     ],
   },
   // Theme
@@ -535,6 +664,31 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.toggleAlerts) byId.set('panel.alerts', actions.toggleAlerts);
   if (actions.toggleLibrary) byId.set('panel.library', actions.toggleLibrary);
   if (actions.toggleDataSource) byId.set('panel.datasource', actions.toggleDataSource);
+  if (actions.toggleOnchain) byId.set('panel.onchain', actions.toggleOnchain);
+  // TVL mode: prefer open-only; fall back to toggle when open helper missing
+  if (actions.openOnchain) {
+    byId.set('onchain.mode.tvl', actions.openOnchain);
+  } else if (actions.toggleOnchain) {
+    byId.set('onchain.mode.tvl', actions.toggleOnchain);
+  }
+  if (actions.clearAllOnchainSeries) {
+    byId.set('onchain.clear.series', actions.clearAllOnchainSeries);
+  }
+  if (actions.clearOnchainEvents) {
+    byId.set('onchain.clear.events', actions.clearOnchainEvents);
+  }
+  if (actions.kickOnchainHealth) {
+    byId.set('onchain.health', actions.kickOnchainHealth);
+  }
+  if (actions.refreshAllAttachedTvl) {
+    byId.set('onchain.refresh', () => void actions.refreshAllAttachedTvl?.());
+  }
+  if (actions.exportOnchainSeries) {
+    byId.set('onchain.export.series', actions.exportOnchainSeries);
+  }
+  if (actions.attachPopularTvl) {
+    byId.set('onchain.attach.popular', () => void actions.attachPopularTvl?.());
+  }
   if (actions.loadSymbol) byId.set('action.load-symbol', () => void actions.loadSymbol?.());
   if (actions.reloadChart) byId.set('action.reload-chart', () => void actions.reloadChart?.());
   if (actions.toggleLive) byId.set('action.toggle-live', actions.toggleLive);

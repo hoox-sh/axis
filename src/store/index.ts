@@ -45,6 +45,7 @@ import type {
   Bar,
   CompareState,
   Indicator,
+  OnchainState,
   Pane,
   EditorMode,
   LogEntry,
@@ -220,6 +221,7 @@ const DEFAULTS: AppState = {
     stream: idlePlane('binance-ws', 'Binance WebSocket', 'ws'),
     engine: idlePlane('server', 'Server-Side', 'ws'),
     storage: idlePlane('local', 'Local', 'local'),
+    // onchain?: optional 5th plane — created by health probe; never in DEFAULTS/hydrate
     runLatencySamples: [],
     lastTick: null,
     hud: { compact: false, overlay: false },
@@ -243,6 +245,10 @@ const DEFAULTS: AppState = {
     gen: 0,
     loading: false,
     error: null,
+  },
+  onchain: {
+    lastProtocolSlug: '',
+    lastProtocolName: '',
   },
 };
 
@@ -625,6 +631,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
             .slice(0, 40)
         : [],
       compare: hydrateCompare(bag.compare),
+      onchain: hydrateOnchain((bag as { onchain?: unknown }).onchain),
     };
   } catch {
     return null;
@@ -690,6 +697,17 @@ function hydrateCompare(raw: unknown): CompareState {
     gen: 0,
     loading: false,
     error: null,
+  };
+}
+
+/** Restore durable on-chain panel prefs (protocol slug/name only). */
+function hydrateOnchain(raw: unknown): OnchainState {
+  const base = { ...DEFAULTS.onchain };
+  if (!raw || typeof raw !== 'object') return base;
+  const o = raw as Partial<OnchainState>;
+  return {
+    lastProtocolSlug: typeof o.lastProtocolSlug === 'string' ? o.lastProtocolSlug : '',
+    lastProtocolName: typeof o.lastProtocolName === 'string' ? o.lastProtocolName : '',
   };
 }
 
@@ -847,6 +865,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
       mode: compare?.mode === 'absolute' ? 'absolute' : 'percent',
       normalizeMain: !!compare?.normalizeMain,
     },
+    // Ephemeral planes (source/stream/engine/storage/onchain) omitted — only HUD prefs
     telemetry: {
       hud: telemetry?.hud || DEFAULTS.telemetry.hud,
       // Privacy default false when missing
@@ -1593,15 +1612,20 @@ export function setLive(active: boolean) {
 
 /* ── Telemetry helpers (ephemeral Connection HUD) ───────────────── */
 
-/** Telemetry plane keys under `store.telemetry`. */
-export type TelemetryPlane = keyof Pick<TelemetryState, 'source' | 'stream' | 'engine' | 'storage'>;
+/** Telemetry plane keys under `store.telemetry` (onchain is optional / ephemeral). */
+export type TelemetryPlane = keyof Pick<
+  TelemetryState,
+  'source' | 'stream' | 'engine' | 'storage' | 'onchain'
+>;
 
 /** Merge a partial update into one telemetry plane (ephemeral). */
 export function setTelemetryPlane(
   plane: TelemetryPlane,
   patch: Partial<PlaneTelemetry> & { id?: string; name?: string; transport?: TransportClass },
 ) {
-  const cur = store.telemetry?.[plane] || idlePlane(patch.id || '', patch.name || plane);
+  const cur =
+    store.telemetry?.[plane] ||
+    idlePlane(patch.id || String(plane), patch.name || String(plane), patch.transport || 'none');
   setStore('telemetry', plane, {
     ...cur,
     ...patch,
@@ -1907,6 +1931,37 @@ export function toggleDataSourcePanel() {
   setPanelOpen('datasource', !isPanelOpen('datasource'));
 }
 
+/** Open/close On-Chain (DefiLlama TVL) panel. */
+export function setOnchainPanelOpen(open: boolean) {
+  setPanelOpen('onchain', open);
+}
+
+/** Toggle On-Chain panel visibility. */
+export function toggleOnchainPanel() {
+  setPanelOpen('onchain', !isPanelOpen('onchain'));
+}
+
+/** Persist last on-chain protocol slug (search/use recall). */
+export function setOnchainLastProtocolSlug(slug: string) {
+  setStore('onchain', 'lastProtocolSlug', typeof slug === 'string' ? slug : '');
+  persist();
+}
+
+/** Persist last on-chain protocol display name. */
+export function setOnchainLastProtocolName(name: string) {
+  setStore('onchain', 'lastProtocolName', typeof name === 'string' ? name : '');
+  persist();
+}
+
+/** Set last protocol slug + name together (persisted). */
+export function setOnchainLastProtocol(slug: string, name: string) {
+  setStore('onchain', {
+    lastProtocolSlug: typeof slug === 'string' ? slug : '',
+    lastProtocolName: typeof name === 'string' ? name : '',
+  });
+  persist();
+}
+
 /** Enable/disable editor profiler mode (persisted). */
 export function setProfilerEnabled(on: boolean) {
   setStore('profilerEnabled', !!on);
@@ -2000,6 +2055,9 @@ export function isPanelOpen(id: PanelId): boolean {
     case 'datasource':
       // Chrome-only (no legacy flat flag)
       return chromeOpen;
+    case 'onchain':
+      // Chrome-only (no legacy flat flag)
+      return chromeOpen;
     case 'dataview':
       return !!store.dataViewPanel.open || chromeOpen;
     case 'layers':
@@ -2050,6 +2108,7 @@ const DOCK_STACK_IDS: PanelId[] = [
   'alerts',
   'library',
   'datasource',
+  'onchain',
   'editor',
   'results',
   'logs',

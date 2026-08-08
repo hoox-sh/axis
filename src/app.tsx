@@ -56,6 +56,7 @@ import { LayerPanel } from './ui/LayerPanel';
 import { AlertsPanel } from './ui/AlertsPanel';
 import { LibraryPanel } from './ui/ScriptLibraryPanel';
 import { DataSourceManagerPanel } from './ui/DataSourceManagerPanel';
+import { OnChainPanel } from './ui/OnChainPanel';
 import { CommandPalette } from './ui/CommandPalette';
 import { errorFallback } from './ui/ErrorFallback';
 import { ErrorShareToast } from './ui/ErrorShareToast';
@@ -480,6 +481,7 @@ export const App: Component = () => {
         }}
       />
       <DataSourceManagerPanel />
+      <OnChainPanel />
       <EditorPane
         editorRef={editorRef}
         onRun={(doc) => {

@@ -97,9 +97,33 @@ function errMessage(err: unknown): string {
 }
 
 /**
+ * Normalize a ticker for {@link loadSymbolData} / history fetch.
+ *
+ * CEX tickers are uppercased. DEX pool symbols (`network:0x…`, `network/…`,
+ * Solana base58, or any `sourceId === 'geckoterminal-ohlcv'`) keep mixed case
+ * because addresses are case-sensitive on some chains.
+ */
+export function normalizeLoadSymbol(
+  symbol: string,
+  sourceId?: string | null,
+): string {
+  const rawSym = String(symbol || '').trim();
+  const srcId = String(sourceId || '');
+  if (
+    srcId === 'geckoterminal-ohlcv' ||
+    rawSym.includes(':') ||
+    rawSym.includes('/')
+  ) {
+    return rawSym;
+  }
+  return rawSym.toUpperCase();
+}
+
+/**
  * Fetch OHLCV via the given historical source and push into chart + store.
  *
- * @param symbol - Ticker (uppercased); defaults to `store.symbol`
+ * @param symbol - Ticker (uppercased for CEX; case preserved for DEX pools);
+ *   defaults to `store.symbol`
  * @param interval - AXIS interval string (`1m`…`1w`); defaults to `store.interval`
  * @param sourceId - Source plugin id; defaults to `store.source`
  */
@@ -108,9 +132,10 @@ export async function loadSymbolData(
   interval: string = store.interval,
   sourceId: string = store.source,
 ): Promise<boolean> {
-  const sym = String(symbol || '').trim().toUpperCase();
-  const iv = String(interval || store.interval || '1d');
+  // DEX pool symbols (network:0x… / base58) are case-sensitive — do not force upper.
   const srcId = String(sourceId || store.source || '');
+  const sym = normalizeLoadSymbol(symbol, srcId);
+  const iv = String(interval || store.interval || '1d');
 
   // Claim this load as the newest; any prior in-flight work becomes stale.
   const gen = ++loadGeneration;

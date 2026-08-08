@@ -19,20 +19,20 @@
 
 ---
 title: "Plugins"
-description: "AXIS unified plugin system: source, stream, engine, storage — contracts, registry, catalogs, and dynamic ES-module loading."
+description: "AXIS unified plugin system: source, stream, engine, storage, dataset — contracts, registry, catalogs, and dynamic ES-module loading."
 ---
 
 # Plugins
 
 ## Abstract
 
-AXIS is a **plugin-composed charting PWA**. Historical bars, live ticks, Pine evaluation, and the script library are not hard-coded product features — they are interchangeable modules that share one contract namespace:
+AXIS is a **plugin-composed charting PWA**. Historical bars, live ticks, Pine evaluation, the script library, and **on-chain datasets** are not hard-coded product features — they are interchangeable modules that share one contract namespace:
 
 ```
 pynescript.axis.plugins.v1
 ```
 
-The shell (AXIS) never embeds a closed interpreter. Evaluation is always an **engine** plugin. Data arrives only through **source** and **stream**. Persistence goes through **storage**. Compose any lawful active set without a proprietary charting host.
+The shell (AXIS) never embeds a closed interpreter. Evaluation is always an **engine** plugin. Market candles arrive through **source** and **stream**. Alternate series (protocol TVL, …) use **dataset**. Persistence goes through **storage**. Compose any lawful active set without a proprietary charting host.
 
 ## Conceptual model
 
@@ -59,6 +59,7 @@ flowchart LR
 | `stream` | Live bar updates | `start(opts) → stop()` |
 | `engine` | Pine / DSL evaluation | `isReady()`, `run(opts) → RunResult` |
 | `storage` | Script library | `list` / `read` / `write` / `remove` |
+| `dataset` | On-chain / alternate series | `fetchDataset(opts) → OnchainDataset` — [Datasets](/axis/docs/plugins/datasets) |
 | `component` | UI slots (phase 2 + URL agents) | `mount(slot, el, api)` — e.g. [PYNE Agent](/axis/docs/plugins/pine-agent) |
 
 Built-ins register at bootstrap (`frontend/src/plugins/bootstrap.ts`). Dynamic plugins install from URL (`loader.ts`) and persist under `localStorage` key `pynescript.axis.plugins.v1`.

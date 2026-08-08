@@ -37,9 +37,12 @@ flowchart TB
   PWA[AXIS PWA]
   PWA -->|POST /api/run| W[Worker]
   PWA -->|Bearer /api/scripts| W
+  PWA -->|GET /api/onchain| W
   PWA -->|WS /api/stream| W
   W -->|proxy| FLASK[EXTERNAL_BACKEND Flask]
   W -.->|gated| PY[Pyodide in Worker]
+  W -->|allowlist| LL[DefiLlama]
+  W -->|allowlist| GT[GeckoTerminal]
   W --> KV[API_KEYS / USAGE KV]
   W --> D1[(D1 scripts)]
   W --> DO[SessionDO]
@@ -61,14 +64,32 @@ Custom domains / aliases may say `axis.*`; leave the CF project id stable so KV/
 
 | Path | Method | Role |
 | --- | --- | --- |
-| `/`, `/health` | GET | Health + feature flags (`scripts`, `d1`, `keys`) |
+| `/`, `/health` | GET | Health + feature flags (`scripts`, `d1`, `keys`, `onchain`) |
 | `/api/run` | POST | Run script (proxy / gated Pyodide) |
 | `/api/keys` | GET/POST | Validate / create keys (`X-Admin-Token` for create) |
 | `/api/usage` | GET | Usage stub / KV-backed counters |
 | `/api/scripts`… | CRUD | Script library (Bearer) |
+| `/api/onchain/…` | GET | Public on-chain proxy (DefiLlama + GeckoTerminal allowlist; see below) |
 | `/api/stream` | WS | Session DO relay |
 
-Entry: `frontend/worker/src/index.ts`.
+### On-chain proxy routes (`worker/src/onchain.ts`)
+
+Allowlisted **GET** only (public, no API key). Other `/api/onchain/*` paths return 404.
+
+| Worker path | Upstream | Cache TTL |
+| --- | --- | --- |
+| `/api/onchain/health` | local (providers + cache size) | — |
+| `/api/onchain/llama/protocols` | `https://api.llama.fi/protocols` | ~10 min |
+| `/api/onchain/llama/protocol/:slug` | `https://api.llama.fi/protocol/:slug` | ~2 min |
+| `/api/onchain/gecko/networks/:network/pools/:address/ohlcv/:timeframe` | `https://api.geckoterminal.com/api/v2/networks/.../ohlcv/...` | ~60 s |
+| `/api/onchain/gecko/search/pools` | `https://api.geckoterminal.com/api/v2/search/pools` | ~120 s |
+
+Gecko validation: `network` `^[a-z0-9_]+$`; `address` EVM `0x`+40 hex **or** Solana-style base58 32–48; `timeframe` `day` \| `hour` \| `minute`.  
+OHLCV query pass-through: `aggregate`, `limit`, `currency`, `before_timestamp`. Search: `query`, `network`, `page`, `include`.
+
+Responses may include `X-Axis-Onchain-Cache: HIT|MISS`. Product guide: [On-Chain data](/enduser/guides/on-chain).
+
+Entry: `worker/src/index.ts`.
 
 ## Local entrypoints
 
