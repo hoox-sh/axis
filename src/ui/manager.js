@@ -25,7 +25,7 @@
 
 import { registry, loadPluginFromUrl } from '../registry.js';
 import { getState } from '../state.js';
-import { setScript, getScript } from '../../pine-editor.js';
+import { setScript, getScript } from '../../pyne-editor.js';
 import { setStatus } from './status.js';
 
 let _backdrop = null;

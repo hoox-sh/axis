@@ -36,7 +36,7 @@ import { registry } from './registry.js';
 import { initTopbar, setLiveIndicator } from './ui/topbar.js';
 import { setStatus } from './ui/status.js';
 import { initResults, renderResults } from './ui/results.js';
-import { initPineEditor, getScript, setScript, focusEditor } from '../pine-editor.js';
+import { initPineEditor, getScript, setScript, focusEditor } from '../pyne-editor.js';
 import { TabbedEditor } from './ui/tabbed-editor.js';
 import { initChart, setOhlcv, appendBar, setMarkers, clearOverlays, addOverlayLine,
          setEquityPane, setEquityCurve, setTimeRange } from './chart.js';

@@ -3424,7 +3424,7 @@ What is legacy
 | --- | --- |
 | frontend/src/main.js | Old bootstrap (chart.js, topbar.js, …) |
 | frontend/style.css | TV-blue-era tokens |
-| frontend/pine-editor.js | Pre-Solid CM wiring |
+| frontend/pyne-editor.js | Pre-Solid CM wiring (was pine-editor.js) |
 | frontend/server.ts | Bun static server for old tree |
 | Root / frontend sw.js (static shell SW) | Service worker for old shell |
 Makefile make run-frontend still prints AXIS and runs bun run frontend/server.ts on : — useful for legacy debugging, not the Solid product path.

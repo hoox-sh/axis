@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-// CodeMirror 6 Pine Script editor for AXIS.
+// CodeMirror 6 Pine Script™ / PYNE editor for AXIS (file: pyne-editor.js).
 // Bare imports resolve via importmap in index.html so @lezer/highlight is a
 // single instance (required for tag-based syntax colors to work).
 
@@ -340,11 +340,11 @@ export async function initPineEditor(opts) {
             const marks = parent.querySelectorAll('.cm-line span');
             if (!marks.length) {
                 console.warn(
-                    '[pine-editor] CodeMirror mounted but no highlight spans yet. ' +
+                    '[pyne-editor] CodeMirror mounted but no highlight spans yet. ' +
                     'If this persists, @lezer/highlight may be duplicated (check importmap).',
                 );
             } else {
-                console.info('[pine-editor] highlight spans:', marks.length);
+                console.info('[pyne-editor] highlight spans:', marks.length);
             }
         } catch (_) { /* ignore */ }
 
