@@ -3973,7 +3973,7 @@ Abstract
 | --- | --- |
 | EditorPane.tsx | Docked/standalone chrome, header tools, detach |
 | tabbed-editor.tsx | Multi-tab docs, stats strip, Problems, git bar |
-| PineEditor.tsx | CM mount (extensions + view APIs) |
+| PyneEditor.tsx | CM mount (extensions + view APIs) |
 | pine-language.ts | StreamLanguage / highlighting |
 | pine-lsp.ts + data/pine-builtins.json | Offline completion/hover corpus |
 | column-ruler.ts | -character guide line |
