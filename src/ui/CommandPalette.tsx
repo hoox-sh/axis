@@ -67,10 +67,16 @@ import {
   persist,
   setStore,
   updateChartSlot,
+  setOnchainPanelOpen,
 } from '../store';
 import { runAndApply } from '../indicators/runner';
 import { loadSymbolData, reloadChart } from '../data/load-symbol';
 import { startLive, stopLive, defaultStreamForSource } from '../streams/multiplex';
+import {
+  clearAllOnchainSeries,
+  clearOnchainEvents,
+} from '../onchain/manager';
+import { kickOnchainHealthProbe } from '../onchain/health';
 import {
   buildDefaultCommands,
   filterCommands,
@@ -149,6 +155,10 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       toggleLibrary: () => toggleLibraryPanel(),
       toggleDataSource: () => toggleDataSourcePanel(),
       toggleOnchain: () => toggleOnchainPanel(),
+      openOnchain: () => setOnchainPanelOpen(true),
+      clearAllOnchainSeries: () => clearAllOnchainSeries(),
+      clearOnchainEvents: () => clearOnchainEvents(),
+      kickOnchainHealth: () => kickOnchainHealthProbe(),
       toggleTheme: () => toggleTheme(),
       setChartThemePreset: (id) => setChartThemePreset(id),
       setChartGridMode: (mode) => setChartGridMode(mode),

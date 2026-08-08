@@ -70,6 +70,14 @@ export interface CommandActions {
   toggleLibrary?: () => void;
   toggleDataSource?: () => void;
   toggleOnchain?: () => void;
+  /** Open on-chain panel (e.g. TVL mode; panel mode is local UI state). */
+  openOnchain?: () => void;
+  /** Detach all on-chain chart series attachments. */
+  clearAllOnchainSeries?: () => void;
+  /** Clear on-chain event markers plane. */
+  clearOnchainEvents?: () => void;
+  /** Probe Worker on-chain proxy / refresh telemetry HUD. */
+  kickOnchainHealth?: () => void;
   toggleTheme: () => void;
   /** Apply a named chart theme preset (void-dark, classic, …). */
   setChartThemePreset?: (presetId: string) => void;
@@ -299,6 +307,61 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
       'chain',
       'protocol',
       'liquidity',
+    ],
+  },
+  {
+    id: 'onchain.mode.tvl',
+    title: 'On-Chain: Open TVL',
+    category: 'actions',
+    keywords: [
+      'onchain',
+      'on-chain',
+      'tvl',
+      'defillama',
+      'protocol',
+      'open onchain',
+    ],
+  },
+  {
+    id: 'onchain.clear.series',
+    title: 'On-Chain: Clear Series',
+    category: 'actions',
+    keywords: [
+      'onchain',
+      'on-chain',
+      'clear',
+      'series',
+      'detach',
+      'remove overlays',
+      'tvl lines',
+    ],
+  },
+  {
+    id: 'onchain.clear.events',
+    title: 'On-Chain: Clear Events',
+    category: 'actions',
+    keywords: [
+      'onchain',
+      'on-chain',
+      'clear',
+      'events',
+      'markers',
+      'spikes',
+      'event plane',
+    ],
+  },
+  {
+    id: 'onchain.health',
+    title: 'On-Chain: Refresh Health',
+    category: 'actions',
+    keywords: [
+      'onchain',
+      'on-chain',
+      'health',
+      'probe',
+      'telemetry',
+      'proxy',
+      'worker',
     ],
   },
   // Theme
@@ -551,6 +614,21 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.toggleLibrary) byId.set('panel.library', actions.toggleLibrary);
   if (actions.toggleDataSource) byId.set('panel.datasource', actions.toggleDataSource);
   if (actions.toggleOnchain) byId.set('panel.onchain', actions.toggleOnchain);
+  // TVL mode: prefer open-only; fall back to toggle when open helper missing
+  if (actions.openOnchain) {
+    byId.set('onchain.mode.tvl', actions.openOnchain);
+  } else if (actions.toggleOnchain) {
+    byId.set('onchain.mode.tvl', actions.toggleOnchain);
+  }
+  if (actions.clearAllOnchainSeries) {
+    byId.set('onchain.clear.series', actions.clearAllOnchainSeries);
+  }
+  if (actions.clearOnchainEvents) {
+    byId.set('onchain.clear.events', actions.clearOnchainEvents);
+  }
+  if (actions.kickOnchainHealth) {
+    byId.set('onchain.health', actions.kickOnchainHealth);
+  }
   if (actions.loadSymbol) byId.set('action.load-symbol', () => void actions.loadSymbol?.());
   if (actions.reloadChart) byId.set('action.reload-chart', () => void actions.reloadChart?.());
   if (actions.toggleLive) byId.set('action.toggle-live', actions.toggleLive);

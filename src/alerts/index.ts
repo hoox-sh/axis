@@ -29,6 +29,7 @@
 import {
   applyFired,
   clearPrevPrices,
+  DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT,
   evaluateAlerts as evaluateAlertsPure,
 } from './engine';
 import {
@@ -207,6 +208,69 @@ export function createAlert(input: AlertCreateInput): Alert {
 
   upsertAlert(alert);
   return { ...alert, params: { ...alert.params } };
+}
+
+/** Direction filter for on-chain TVL spike / drop alerts. */
+export type OnchainAlertDirection = 'both' | 'up' | 'down';
+
+/** Input for {@link createOnchainTvlSpikeAlert}. */
+export type CreateOnchainTvlSpikeAlertInput = {
+  /** Protocol slug (e.g. `aave`). Required. */
+  protocolId: string;
+  /** Minimum |%| move to fire. Default {@link DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT}. */
+  minAbsPct?: number;
+  /** `both` (default) | `up` (spike only) | `down` (drop only). */
+  direction?: OnchainAlertDirection;
+  /** Optional display name; default derived from protocol + threshold. */
+  name?: string;
+  /**
+   * Alert symbol field (list/filter). Defaults to `protocolId`, else `"onchain"`.
+   */
+  symbol?: string;
+  webhookUrl?: string;
+  cooldownMs?: number;
+  enabled?: boolean;
+  notifyBrowser?: boolean;
+};
+
+/**
+ * Create and persist an `onchain_tvl_spike` alert for a protocol TVL move.
+ *
+ * Convenience wrapper over {@link createAlert} with sensible defaults for
+ * the on-chain data plane.
+ */
+export function createOnchainTvlSpikeAlert(
+  input: CreateOnchainTvlSpikeAlertInput,
+): Alert {
+  const protocolId = String(input.protocolId ?? '').trim();
+  if (!protocolId) {
+    throw new Error('protocolId is required');
+  }
+  const minAbsPct =
+    input.minAbsPct != null && Number.isFinite(input.minAbsPct)
+      ? Number(input.minAbsPct)
+      : DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT;
+  const direction: OnchainAlertDirection =
+    input.direction === 'up' || input.direction === 'down' ? input.direction : 'both';
+  const symbol = (input.symbol?.trim() || protocolId || 'onchain').toLowerCase();
+  const name =
+    input.name?.trim() ||
+    `${protocolId} TVL spike ±${minAbsPct}%${direction === 'both' ? '' : ` ${direction}`}`;
+
+  return createAlert({
+    name,
+    symbol,
+    kind: 'onchain_tvl_spike',
+    params: {
+      protocolId,
+      minAbsPct,
+      direction,
+    },
+    webhookUrl: input.webhookUrl,
+    cooldownMs: input.cooldownMs,
+    enabled: input.enabled,
+    notifyBrowser: input.notifyBrowser,
+  });
 }
 
 /**

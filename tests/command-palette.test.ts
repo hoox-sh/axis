@@ -146,6 +146,7 @@ describe('DEFAULT_COMMAND_SPECS', () => {
       'panel.indicators',
       'panel.dataview',
       'panel.library',
+      'panel.onchain',
       'theme.toggle',
       'chart.grid.1',
       'chart.grid.2h',
@@ -191,6 +192,13 @@ describe('DEFAULT_COMMAND_SPECS', () => {
     ] as const) {
       const ranked = filterCommands([...DEFAULT_COMMAND_SPECS], query);
       expect(ranked.some((c) => c.id === id)).toBe(true);
+    }
+  });
+
+  it('fuzzy keywords find on-chain panel (tvl / defillama / onchain)', () => {
+    for (const query of ['tvl', 'defillama', 'onchain', 'on-chain', 'liquidity'] as const) {
+      const ranked = filterCommands([...DEFAULT_COMMAND_SPECS], query);
+      expect(ranked.some((c) => c.id === 'panel.onchain')).toBe(true);
     }
   });
 });
@@ -250,6 +258,7 @@ describe('buildDefaultCommands', () => {
     delete actions.toggleEditorRuler;
     delete actions.gitPush;
     delete actions.gitPull;
+    delete actions.toggleOnchain;
     const cmds = buildDefaultCommands(actions);
     const ids = new Set(cmds.map((c) => c.id));
     expect(ids.has('action.settings')).toBe(false);
@@ -257,12 +266,26 @@ describe('buildDefaultCommands', () => {
     expect(ids.has('editor.toggle-ruler')).toBe(false);
     expect(ids.has('git.push')).toBe(false);
     expect(ids.has('git.pull')).toBe(false);
+    expect(ids.has('panel.onchain')).toBe(false);
     expect(ids.has('panel.watchlist')).toBe(true);
     // Core editor power commands remain when their handlers are present
     expect(ids.has('editor.toggle-inline-debug')).toBe(true);
     expect(ids.has('editor.goto-line')).toBe(true);
     expect(ids.has('editor.save-library')).toBe(true);
     expect(ids.has('editor.focus')).toBe(true);
+  });
+
+  it('wires panel.onchain when toggleOnchain is provided', () => {
+    let toggled = false;
+    const actions = stubActions();
+    actions.toggleOnchain = () => {
+      toggled = true;
+    };
+    const cmds = buildDefaultCommands(actions);
+    const cmd = cmds.find((c) => c.id === 'panel.onchain');
+    expect(cmd).toBeTruthy();
+    cmd!.run();
+    expect(toggled).toBe(true);
   });
 
   it('wires editor power command handlers', () => {

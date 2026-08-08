@@ -39,6 +39,8 @@ export const ALERT_KINDS: readonly AlertKind[] = [
   'price_cross',
   'price_above',
   'price_below',
+  'onchain_tvl_spike',
+  'onchain_event',
 ] as const;
 
 /** Short human label for an alert kind. */

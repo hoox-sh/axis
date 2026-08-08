@@ -13,6 +13,7 @@ import {
   DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT,
   _resetAlertsForTests,
   createAlert,
+  createOnchainTvlSpikeAlert,
   evaluateOnchainEventAlertsPure,
   eventAbsPct,
   eventMatchesDirection,
@@ -371,5 +372,38 @@ describe('evaluateOnchainEventAlerts (bridge + storage + deliver)', () => {
       { deliver: false, now },
     );
     expect(fired).toHaveLength(0);
+  });
+});
+
+describe('createOnchainTvlSpikeAlert', () => {
+  it('persists onchain_tvl_spike with defaults', () => {
+    const a = createOnchainTvlSpikeAlert({ protocolId: 'aave' });
+    expect(a.kind).toBe('onchain_tvl_spike');
+    expect(a.symbol).toBe('aave');
+    expect(a.params.protocolId).toBe('aave');
+    expect(a.params.minAbsPct).toBe(DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT);
+    expect(a.params.direction).toBe('both');
+    expect(a.enabled).toBe(true);
+    expect(listAlerts().some((x) => x.id === a.id)).toBe(true);
+  });
+
+  it('accepts minAbsPct, direction, webhook, cooldown', () => {
+    const a = createOnchainTvlSpikeAlert({
+      protocolId: 'uniswap',
+      minAbsPct: 25,
+      direction: 'down',
+      webhookUrl: 'https://example.test/h',
+      cooldownMs: 60_000,
+      name: 'Uni drop',
+    });
+    expect(a.name).toBe('Uni drop');
+    expect(a.params.minAbsPct).toBe(25);
+    expect(a.params.direction).toBe('down');
+    expect(a.webhookUrl).toBe('https://example.test/h');
+    expect(a.cooldownMs).toBe(60_000);
+  });
+
+  it('requires protocolId', () => {
+    expect(() => createOnchainTvlSpikeAlert({ protocolId: '  ' })).toThrow(/protocolId/);
   });
 });

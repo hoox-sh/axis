@@ -14,7 +14,13 @@ import {
   overridesFromDefs,
   normalizeEngineInputs,
 } from '../src/results/script-inputs.ts';
-import { buildDataViewRows, barIndexAtTime } from '../src/results/dataview.ts';
+import {
+  buildDataViewRows,
+  barIndexAtTime,
+  buildOnchainDataViewRows,
+  onchainValueAtTime,
+  fmtUsdCompact,
+} from '../src/results/dataview.ts';
 
 describe('parseScriptInputs', () => {
   it('parses int/float/bool with titles and bounds', () => {
@@ -246,5 +252,56 @@ describe('buildDataViewRows', () => {
       ] as never,
     });
     expect(rows.find((r) => r.key === 'd_t1')).toBeUndefined();
+  });
+
+  it('includes visible on-chain series with USD TVL and meta fields', () => {
+    expect(fmtUsdCompact(1_250_000_000)).toBe('$1.25B');
+    expect(onchainValueAtTime(
+      [
+        { time: 1000, value: 100 },
+        { time: 3000, value: 300 },
+      ],
+      2000,
+    )).toBe(200);
+
+    const rows = buildDataViewRows({
+      bars,
+      time: 2000,
+      onchainSeries: [
+        {
+          id: 'ocs_aave',
+          label: 'Aave TVL',
+          provider: 'defillama',
+          visible: true,
+          color: '#939fff',
+          finality: 'finalized',
+          lastTvl: 1_250_000_000,
+          instrument: { metric: 'tvl' },
+          points: [
+            { time: 1000, value: 1_000_000_000 },
+            { time: 3000, value: 1_500_000_000 },
+          ],
+        },
+        {
+          id: 'ocs_hidden',
+          label: 'Hidden',
+          provider: 'defillama',
+          visible: false,
+          points: [{ time: 1000, value: 1 }],
+          finality: 'finalized',
+        },
+      ],
+    });
+    const val = rows.find((r) => r.key === 'oc_ocs_aave');
+    expect(val?.group).toBe('onchain');
+    expect(val?.label).toBe('Aave TVL');
+    // Midpoint of 1B→1.5B at t=2000
+    expect(val?.value).toBe('$1.25B');
+    expect(rows.find((r) => r.key === 'oc_ocs_aave_provider')?.value).toBe('defillama');
+    expect(rows.find((r) => r.key === 'oc_ocs_aave_last')?.value).toBe('$1.25B');
+    expect(rows.find((r) => r.key === 'oc_ocs_aave_points')?.value).toBe('2');
+    expect(rows.find((r) => r.key === 'oc_ocs_aave_finality')?.value).toBe('finalized');
+    expect(rows.find((r) => r.key === 'oc_ocs_hidden')).toBeUndefined();
+    expect(buildOnchainDataViewRows([], 2000)).toEqual([]);
   });
 });

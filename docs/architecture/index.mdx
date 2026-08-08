@@ -31,8 +31,9 @@ AXIS architecture is the discipline of **separable axes**—price history, live 
 | Layer | Responsibility |
 | --- | --- |
 | AXIS | UI, store, plugin orchestration, chart apply |
-| Plugin contracts | `source \| stream \| engine \| storage` (+ reserved component) |
+| Plugin contracts | `source \| stream \| engine \| storage \| dataset` (+ reserved component) |
 | Engines | PYNE evaluation (browser Pyodide or remote `/run`) |
+| On-chain plane | Parallel non-OHLCV datasets (TVL, DEX, events) via Worker allowlist proxy — [ADR-015](/architecture/adrs#adr-015-on-chain-data-plane) |
 | Optional edge | Cloudflare Pages + Worker + DO/KV/D1/R2 |
 | Optional desk API | Flask Pro API |
 
@@ -43,7 +44,7 @@ AXIS architecture is the discipline of **separable axes**—price history, live 
 | Page | Contents |
 | --- | --- |
 | [Overview](/axis/docs/architecture/overview) | End-to-end data/control flow |
-| [ADRs](/axis/docs/architecture/adrs) | ADR-001 … ADR-013 |
+| [ADRs](/axis/docs/architecture/adrs) | ADR-001 … ADR-015 |
 | [Topologies](/axis/docs/architecture/topologies) | Dev, static, edge deploy shapes |
 | [State namespaces](/axis/docs/architecture/state-namespaces) | Keys, migration, hash, IDB |
 
