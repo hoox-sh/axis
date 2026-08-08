@@ -63,8 +63,9 @@ export async function checkOnchainProxyHealth(
 ): Promise<OnchainProxyHealthResult> {
   let endpoint = '';
   try {
-    // Explicit empty string means "do not probe" (tests / offline); omit to use default Worker.
-    if (opts && 'endpoint' in opts) {
+    // Only an explicit string overrides the default Worker (empty string = skip probe).
+    // Callers often pass `{ endpoint: undefined }` — treat that as "use default".
+    if (opts && typeof opts.endpoint === 'string') {
       endpoint = normalizeEndpointBase(opts.endpoint);
     } else {
       endpoint = resolveOnchainWorkerBase();
@@ -192,7 +193,11 @@ export async function refreshOnchainTelemetry(opts?: {
 }): Promise<OnchainProxyHealthResult> {
   let endpoint = '';
   try {
-    endpoint = normalizeEndpointBase(opts?.endpoint ?? store.endpoint);
+    if (opts && typeof opts.endpoint === 'string') {
+      endpoint = normalizeEndpointBase(opts.endpoint);
+    } else {
+      endpoint = resolveOnchainWorkerBase();
+    }
   } catch {
     endpoint = '';
   }
@@ -223,7 +228,7 @@ export async function refreshOnchainTelemetry(opts?: {
     name: 'On-chain',
     transport: 'rest',
     state: 'connecting',
-    detail: endpoint ? 'health…' : 'no endpoint',
+    detail: endpoint ? 'health…' : 'no Worker base',
     error: null,
   });
 
@@ -232,8 +237,9 @@ export async function refreshOnchainTelemetry(opts?: {
       typeof performance !== 'undefined' && performance.now
         ? performance.now()
         : Date.now();
+    // Pass resolved Worker base (never Pro API SPA host)
     const result = await checkOnchainProxyHealth({
-      endpoint: opts?.endpoint,
+      endpoint: endpoint || undefined,
       signal: opts?.signal,
     });
     const t1 =
