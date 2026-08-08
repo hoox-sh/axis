@@ -20,13 +20,21 @@
 /**
  * Resolve Worker on-chain proxy base URLs for dataset plugins.
  *
- * Default chart engine endpoint (`store.endpoint`) hosts AXIS Worker routes.
- * DefiLlama / GeckoTerminal browser CORS is unreliable — prefer:
+ * ## When to use the Worker proxy
  *
- *   `{endpoint}/api/onchain/llama`  →  Worker → `https://api.llama.fi`
- *   `{endpoint}/api/onchain/gecko`  →  Worker → `https://api.geckoterminal.com/api/v2`
+ * Only when `store.endpoint` is an **AXIS Worker** (wrangler / workers.dev) that
+ * actually serves `/api/onchain/*`. The default Pro API host (`axis.hoox.sh`,
+ * `:5002`) is a Flask/nginx stack that returns **SPA HTML** for unknown paths —
+ * using it as an on-chain base yields `invalid JSON` (`<!DOCTYPE html>`).
  *
- * which preserves client paths (`/protocols`, `/networks/.../ohlcv/...`, etc.).
+ * DefiLlama and GeckoTerminal public APIs currently send
+ * `Access-Control-Allow-Origin: *`, so **direct browser fetch is preferred**
+ * unless a real Worker endpoint is configured.
+ *
+ * Worker path map (when applicable):
+ *
+ *   `{endpoint}/api/onchain/llama`  →  `https://api.llama.fi`
+ *   `{endpoint}/api/onchain/gecko`  →  `https://api.geckoterminal.com/api/v2`
  *
  * @module onchain/proxy
  */
@@ -57,20 +65,51 @@ export function normalizeEndpointBase(raw: string | undefined | null): string {
 }
 
 /**
- * Build DefiLlama fetch root.
+ * True when `endpoint` is likely an AXIS Cloudflare Worker that serves
+ * `/api/onchain/*` — not a VPS Flask/nginx SPA host.
  *
- * Priority:
- * 1. Explicit `config.baseUrl` (plugin settings or call-site)
- * 2. `{store.endpoint}/api/onchain/llama` when endpoint is http(s)
- * 3. Direct `https://api.llama.fi` (may fail CORS in browsers)
+ * Matches:
+ * - `*.workers.dev`
+ * - host containing `pynescript-axis`
+ * - local wrangler (`localhost` / `127.0.0.1` on port **8787**)
+ * - path already includes `/api/onchain`
  */
-export function resolveDefiLlamaBaseUrl(
+export function looksLikeOnchainWorkerEndpoint(
+  endpoint: string | undefined | null,
+): boolean {
+  const raw = String(endpoint || '').trim();
+  if (!raw) return false;
+  const lower = raw.toLowerCase();
+  if (lower.includes('/api/onchain')) return true;
+  try {
+    const u = new URL(raw.includes('://') ? raw : `https://${raw}`);
+    const host = u.hostname.toLowerCase();
+    if (host.endsWith('.workers.dev')) return true;
+    if (host.includes('pynescript-axis')) return true;
+    const port = u.port || (u.protocol === 'https:' ? '443' : '80');
+    if (
+      (host === 'localhost' || host === '127.0.0.1') &&
+      port === '8787'
+    ) {
+      return true;
+    }
+  } catch {
+    if (/\.workers\.dev/i.test(raw)) return true;
+    if (/pynescript-axis/i.test(raw)) return true;
+    if (/:8787\b/.test(raw) && /localhost|127\.0\.0\.1/i.test(raw)) return true;
+  }
+  return false;
+}
+
+function resolveWorkerProxyBase(
+  path: string,
+  publicFallback: string,
   config?: Record<string, unknown> | null,
 ): string {
   const cfgBase =
     config && typeof config.baseUrl === 'string' ? config.baseUrl.trim() : '';
   if (cfgBase) {
-    return cfgBase.replace(/\/+$/, '') || DEFILLAMA_DEFAULT_BASE;
+    return cfgBase.replace(/\/+$/, '') || publicFallback;
   }
 
   let endpoint = '';
@@ -80,11 +119,31 @@ export function resolveDefiLlamaBaseUrl(
     endpoint = '';
   }
 
-  if (endpoint) {
-    return `${endpoint}${ONCHAIN_LLAMA_PROXY_PATH}`;
+  // Only route through endpoint when it is a real AXIS Worker.
+  // VPS / Pro API hosts (axis.hoox.sh, :5002) return SPA HTML for /api/onchain/*.
+  if (endpoint && looksLikeOnchainWorkerEndpoint(endpoint)) {
+    return `${endpoint}${path}`;
   }
 
-  return DEFILLAMA_DEFAULT_BASE;
+  return publicFallback;
+}
+
+/**
+ * Build DefiLlama fetch root.
+ *
+ * Priority:
+ * 1. Explicit `config.baseUrl`
+ * 2. `{store.endpoint}/api/onchain/llama` **only if** endpoint is a Worker
+ * 3. Direct `https://api.llama.fi` (CORS `*` — works in browser)
+ */
+export function resolveDefiLlamaBaseUrl(
+  config?: Record<string, unknown> | null,
+): string {
+  return resolveWorkerProxyBase(
+    ONCHAIN_LLAMA_PROXY_PATH,
+    DEFILLAMA_DEFAULT_BASE,
+    config,
+  );
 }
 
 /**
@@ -100,35 +159,18 @@ export function isWorkerLlamaProxy(baseUrl: string): boolean {
  * Build GeckoTerminal fetch root (replaces `https://api.geckoterminal.com/api/v2`).
  *
  * Priority:
- * 1. Explicit `config.baseUrl` (plugin settings or call-site)
- * 2. `{store.endpoint}/api/onchain/gecko` when endpoint is http(s)
- * 3. Direct public API (may fail CORS in browsers)
- *
- * Client paths under the base:
- * - `/networks/{net}/pools/{addr}/ohlcv/{tf}?aggregate=&limit=`
- * - `/search/pools?query=`
+ * 1. Explicit `config.baseUrl`
+ * 2. Worker proxy only when endpoint looks like wrangler / workers.dev
+ * 3. Direct public API
  */
 export function resolveGeckoTerminalBaseUrl(
   config?: Record<string, unknown> | null,
 ): string {
-  const cfgBase =
-    config && typeof config.baseUrl === 'string' ? config.baseUrl.trim() : '';
-  if (cfgBase) {
-    return cfgBase.replace(/\/+$/, '') || GECKOTERMINAL_DEFAULT_BASE;
-  }
-
-  let endpoint = '';
-  try {
-    endpoint = normalizeEndpointBase(store.endpoint);
-  } catch {
-    endpoint = '';
-  }
-
-  if (endpoint) {
-    return `${endpoint}${ONCHAIN_GECKO_PROXY_PATH}`;
-  }
-
-  return GECKOTERMINAL_DEFAULT_BASE;
+  return resolveWorkerProxyBase(
+    ONCHAIN_GECKO_PROXY_PATH,
+    GECKOTERMINAL_DEFAULT_BASE,
+    config,
+  );
 }
 
 /**

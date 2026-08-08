@@ -95,6 +95,7 @@ export {
   ONCHAIN_LLAMA_PROXY_PATH,
   ONCHAIN_GECKO_PROXY_PATH,
   normalizeEndpointBase,
+  looksLikeOnchainWorkerEndpoint,
   resolveDefiLlamaBaseUrl,
   resolveGeckoTerminalBaseUrl,
   isWorkerLlamaProxy,

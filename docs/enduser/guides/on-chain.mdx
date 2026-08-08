@@ -154,30 +154,30 @@ DefiLlama **raises** and **token unlocks** require Pro API (`pro-api.llama.fi`) 
 
 **Settings → General → On-Chain** is a short note only (no extra bindings):
 
-- Proxy paths use the **engine endpoint**: `{endpoint}/api/onchain/llama` and `{endpoint}/api/onchain/gecko`
-- Local Worker: set Backend Endpoint to `http://127.0.0.1:8787` and run `cd worker && bun run dev`
+- By default the PWA calls **DefiLlama / GeckoTerminal directly** (public CORS).
+- Worker proxy (`{endpoint}/api/onchain/llama` / `…/gecko`) is used **only** when Backend URL is a real AXIS Worker (`*.workers.dev`, `pynescript-axis`, or wrangler `:8787`).
 - **Not a wallet** — public metrics only; no signing
 
-Set or change the URL under **Settings → General → Engine → Backend Endpoint**. Use **Open On-Chain panel** in that note (or topbar **Panels** / command palette) to open the panel.
+Keep **Backend URL** as the Pro API for Pine (`https://axis.hoox.sh` or local `:5002`). That host is **not** an on-chain proxy.
 
 ## Network path (CORS / Worker proxy)
 
-Browsers often **cannot** call `https://api.llama.fi` or `https://api.geckoterminal.com` directly (CORS). AXIS therefore defaults to the **Worker on-chain proxy** derived from **Settings → engine endpoint** (`store.endpoint`):
+Public llama.fi / geckoterminal APIs currently allow browser origins (`Access-Control-Allow-Origin: *`), so AXIS **defaults to direct fetch**.
+
+Using `https://axis.hoox.sh/api/onchain/…` is wrong: nginx serves the **SPA HTML**, which produces *invalid JSON* / *got HTML*. The client now avoids that host for on-chain bases.
+
+When Backend URL **is** an AXIS Worker, paths map as:
 
 | Client request | Worker route | Upstream |
 | --- | --- | --- |
 | `{endpoint}/api/onchain/llama/protocols` | allowlisted GET | `https://api.llama.fi/protocols` |
 | `{endpoint}/api/onchain/llama/protocol/{slug}` | allowlisted GET | `https://api.llama.fi/protocol/{slug}` |
-| `{endpoint}/api/onchain/gecko/networks/{net}/pools/{addr}/ohlcv/{tf}` | allowlisted GET (+ query) | `https://api.geckoterminal.com/api/v2/networks/.../ohlcv/...` |
-| `{endpoint}/api/onchain/gecko/search/pools` | allowlisted GET (+ query) | `https://api.geckoterminal.com/api/v2/search/pools` |
-| `{endpoint}/api/onchain/health` | local | feature flags (providers + cache) |
+| `{endpoint}/api/onchain/gecko/networks/{net}/pools/{addr}/ohlcv/{tf}` | allowlisted GET (+ query) | GeckoTerminal OHLCV |
+| `{endpoint}/api/onchain/gecko/search/pools` | allowlisted GET (+ query) | GeckoTerminal search |
+| `{endpoint}/api/onchain/health` | local | feature flags |
 
-Gecko OHLCV query pass-through (allowlisted only): `aggregate`, `limit`, `currency`, `before_timestamp`.  
-Search pass-through: `query`, `network`, `page`, `include`.
-
-- Local Worker: set endpoint to `http://127.0.0.1:8787` and run `cd worker && bun run dev`.
-- Production default endpoint already points at the AXIS Worker when deployed.
-- Override with plugin config `baseUrl` only if you need a different host (e.g. direct upstream for Node tests).
+- Local Worker: `http://127.0.0.1:8787` + `cd worker && bun run dev` if you want the allowlisted proxy.
+- Override with plugin `config.baseUrl` when needed.
 
 Isolate memory caches short-TTL responses (`X-Axis-Onchain-Cache: HIT|MISS`):
 
@@ -202,8 +202,9 @@ Treat DefiLlama points as **daily** aggregates from the public API — not block
 
 | Situation | What to do |
 | --- | --- |
-| Local dev blocked by CORS | Use Worker proxy via `store.endpoint` (`/api/onchain/llama` or `/api/onchain/gecko`) |
-| Self-hosted demo | Configure edge to reach the Worker, or proxy only allowlisted paths |
+| *invalid JSON* / *got HTML* for aave | Backend URL is a SPA host (e.g. `axis.hoox.sh`) — leave it for Pine; on-chain should hit llama.fi directly (reload after upgrade) |
+| Local dev blocked by CORS | Point Backend URL at wrangler `:8787` Worker, or set plugin `baseUrl` |
+| Self-hosted demo | Optional: reverse-proxy allowlisted `/api/onchain/*` to the Worker |
 | Offline | Needs network; there is no offline synthetic TVL/DEX walk by default |
 
 See also [CORS and origins](/devops/cors-and-origins) for Worker origin allowlisting.

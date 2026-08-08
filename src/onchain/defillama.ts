@@ -151,20 +151,36 @@ export async function fetchDefiLlamaProtocolTvl(
     );
   }
 
+  // Read as text first so HTML SPA shells (wrong host / missing proxy) surface clearly.
+  const text = await res.text().catch(() => '');
+  const trimmed = text.trim();
+  const looksHtml =
+    /^<!DOCTYPE/i.test(trimmed) ||
+    /^<html[\s>]/i.test(trimmed) ||
+    (res.headers.get('content-type') || '').toLowerCase().includes('text/html');
+
   if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    const hint = body ? ` — ${body.slice(0, 160)}` : '';
+    const hint = trimmed ? ` — ${trimmed.slice(0, 160)}` : '';
     throw new Error(
       `DefiLlama: HTTP ${res.status} for protocol "${normalized}"${hint}`,
     );
   }
 
+  if (looksHtml || !trimmed) {
+    throw new Error(
+      `DefiLlama: got HTML (not JSON) for protocol "${normalized}" from ${url}. ` +
+        'The Backend URL is probably a chart host without /api/onchain (e.g. axis.hoox.sh). ' +
+        'Use direct api.llama.fi, or point endpoint at an AXIS Worker (workers.dev / :8787).',
+    );
+  }
+
   let json: unknown;
   try {
-    json = await res.json();
+    json = JSON.parse(trimmed) as unknown;
   } catch (err) {
     throw new Error(
-      `DefiLlama: invalid JSON for protocol "${normalized}": ${errMessage(err)}`,
+      `DefiLlama: invalid JSON for protocol "${normalized}": ${errMessage(err)} ` +
+        `(url=${url}, body starts with ${JSON.stringify(trimmed.slice(0, 48))})`,
     );
   }
 
