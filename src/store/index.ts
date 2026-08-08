@@ -93,6 +93,7 @@ import {
   type ChartThemeState,
   type ThemeTokenValue,
 } from '../theme';
+import { beginRunEpoch, releaseRunStatus } from '../indicators/run-helpers';
 
 // Stable ID generation — uses timestamp prefix + counter to survive reloads
 let idCounter = 0;
@@ -1472,6 +1473,26 @@ export function addIndicator(
   return id;
 }
 
+/**
+ * Patch an applied indicator (re-run replace path updates code / name / pane).
+ * No-op when id is unknown.
+ */
+export function updateIndicator(
+  id: string,
+  patch: Partial<Pick<Indicator, 'name' | 'code' | 'paneId' | 'plots' | 'inputValues' | 'visible'>>,
+) {
+  if (!id || !patch || !Object.keys(patch).length) return;
+  let found = false;
+  setStore('scripts', (s) =>
+    s.map((ind) => {
+      if (ind.id !== id) return ind;
+      found = true;
+      return { ...ind, ...patch };
+    }),
+  );
+  if (found) persist();
+}
+
 /** Remove an applied indicator from the store (caller should clear chart overlays). */
 export function removeIndicator(id: string) {
   setStore('scripts', (s) => s.filter((ind) => ind.id !== id));
@@ -1489,6 +1510,14 @@ export function removeIndicator(id: string) {
   }
   if (store.resultsFocusId === id) {
     setResultsFocusId(Object.keys(nextResults)[0] ?? null);
+  }
+  // Clear stuck Run button if a long/failed apply left status on "running".
+  // Supersede the in-flight generation so chart apply no-ops, and release
+  // interactive status ownership so the button cannot stay on Running….
+  if (store.status === 'running') {
+    beginRunEpoch();
+    releaseRunStatus();
+    setStatus('ready', 'Script removed');
   }
   persist();
 }

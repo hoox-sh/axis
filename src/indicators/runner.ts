@@ -54,6 +54,7 @@ import {
   store,
   setStore,
   addIndicator,
+  updateIndicator,
   addPane,
   removePane,
   setStatus,
@@ -90,10 +91,13 @@ import { classifyTransport } from '../ui/telemetry';
 import { reportUiError } from '../ui/boot-errors';
 import {
   beginRunEpoch,
+  claimRunStatus,
   formatRunError,
   isRunEpochCurrent,
   lineDataHasSample,
   normalizeEngineResult,
+  ownsRunStatus,
+  releaseRunStatus,
   type NormalizedRunResult,
 } from './run-helpers';
 
@@ -106,6 +110,7 @@ export type RunResult = EngineRunResult & {
 export type { NormalizedRunResult };
 export {
   beginRunEpoch,
+  claimRunStatus,
   coercePlotSample,
   currentRunEpoch,
   formatRunError,
@@ -114,9 +119,34 @@ export {
   normalizeBarTime,
   normalizeEngineResult,
   normalizeSeriesMap,
+  ownsRunStatus,
+  releaseRunStatus,
   seriesValuesToLineData,
   _resetRunEpochForTests,
 } from './run-helpers';
+
+/**
+ * End interactive Run status for this epoch: ready/error when still current,
+ * or clear stuck `running` when superseded (e.g. by a silent live re-run).
+ */
+function finishInteractiveStatus(
+  epoch: number | undefined,
+  silent: boolean,
+  next: 'ready' | 'error',
+  message: string,
+): void {
+  if (silent) return;
+  if (epoch == null || isRunEpochCurrent(epoch)) {
+    setStatus(next, message);
+    releaseRunStatus(epoch ?? null);
+    return;
+  }
+  // Superseded: only clear if this run still owns the Running… UI
+  if (ownsRunStatus(epoch) && store.status === 'running') {
+    setStatus('ready', 'Run superseded');
+    releaseRunStatus(epoch);
+  }
+}
 
 /** Options shared by {@link runScript} and {@link runAndApply}. */
 export interface RunOptions {
@@ -244,7 +274,10 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       : opts.claimEpoch === false
         ? undefined
         : beginRunEpoch();
-  if (!silent) setStatus('running', 'Executing Pine Script…');
+  if (!silent) {
+    setStatus('running', 'Executing Pine Script…');
+    claimRunStatus(epoch);
+  }
   const t0 = performance.now();
 
   // Pre-eval gate: refuse when this exact script still has static errors in the
@@ -254,10 +287,8 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     const pe = store.preEval;
     if (pe && !pe.pending && pe.hasErrors && pe.source === script) {
       const msg = 'Script has errors — fix them in the editor before running';
-      if (epoch == null || isRunEpochCurrent(epoch)) {
-        setStatus('error', msg);
-        setTelemetryState('engine', 'error', { error: msg });
-      }
+      setTelemetryState('engine', 'error', { error: msg });
+      finishInteractiveStatus(epoch, silent, 'error', msg);
       return {
         status: 'error',
         plots: [],
@@ -278,9 +309,11 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     const msg = 'No bars loaded — load a symbol before running';
     // Only touch status if this generation is still current
     if (epoch == null || isRunEpochCurrent(epoch)) {
-      if (!silent) setStatus('error', msg);
-      else appendLog('error', `Live re-run: ${msg}`, 'live');
+      if (silent) appendLog('error', `Live re-run: ${msg}`, 'live');
       setTelemetryState('engine', 'error', { error: msg });
+      finishInteractiveStatus(epoch, silent, 'error', msg);
+    } else {
+      finishInteractiveStatus(epoch, silent, 'error', msg);
     }
     return {
       status: 'error',
@@ -340,8 +373,9 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
         : null) ?? performance.now() - t0;
     // Normalize first so callers always get stable series/plots shapes
     const result = normalizeEngineResult(rawResult, ms);
-    // Superseded by a newer run — keep payload, skip status/telemetry of the winner
+    // Superseded by a newer run — keep payload; clear stuck Running… if we own it
     if (epoch != null && !isRunEpochCurrent(epoch)) {
+      finishInteractiveStatus(epoch, silent, 'ready', 'Run superseded');
       return {
         ...result,
         series: result.series || {},
@@ -362,6 +396,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       result.error = msg;
       // Superseded: still return payload but do not clobber winner status bar
       if (epoch != null && !isRunEpochCurrent(epoch)) {
+        finishInteractiveStatus(epoch, silent, 'error', msg);
         return {
           ...result,
           series: result.series || {},
@@ -376,8 +411,8 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
         detail: mode,
         transport: runTransport,
       });
-      if (!silent) setStatus('error', msg);
-      else appendLog('error', `Live re-run failed: ${msg}`, 'live');
+      if (silent) appendLog('error', `Live re-run failed: ${msg}`, 'live');
+      finishInteractiveStatus(epoch, silent, 'error', msg);
       return {
         ...result,
         series: result.series || {},
@@ -387,6 +422,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       };
     }
     if (epoch != null && !isRunEpochCurrent(epoch)) {
+      finishInteractiveStatus(epoch, silent, 'ready', 'Run superseded');
       return {
         ...result,
         series: result.series || {},
@@ -407,7 +443,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       error: null,
       transport: runTransport,
     });
-    if (!silent) setStatus('ready', `Completed in ${ms.toFixed(0)}ms`);
+    finishInteractiveStatus(epoch, silent, 'ready', `Completed in ${ms.toFixed(0)}ms`);
     return {
       ...result,
       series: result.series || {},
@@ -425,6 +461,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     recordRunLatency(ms);
     // Superseded mid-flight: quiet return (winner owns status bar)
     if (epoch != null && !isRunEpochCurrent(epoch)) {
+      finishInteractiveStatus(epoch, silent, 'ready', 'Run superseded');
       return {
         status: 'error',
         plots: [],
@@ -436,8 +473,8 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     }
     const msg = formatRunError(err);
     setTelemetryState('engine', 'error', { error: msg, latencyMs: ms });
-    if (!silent) setStatus('error', msg);
-    else appendLog('error', `Live re-run: ${msg}`, 'live');
+    if (silent) appendLog('error', `Live re-run: ${msg}`, 'live');
+    finishInteractiveStatus(epoch, silent, 'error', msg);
     return {
       status: 'error',
       plots: [],
@@ -484,7 +521,9 @@ export async function runAndApply(
         status: !silent,
       });
       if (silent) appendLog('error', `Run apply failed: ${msg}`, 'live');
-      else if (store.status !== 'error') setStatus('error', msg);
+      else finishInteractiveStatus(epoch, silent, 'error', msg);
+    } else {
+      finishInteractiveStatus(epoch, silent, 'error', msg);
     }
     const superseded = !isRunEpochCurrent(epoch);
     return {
@@ -495,6 +534,12 @@ export async function runAndApply(
       error: msg,
       meta: superseded ? { superseded: true } : {},
     };
+  } finally {
+    // Never leave interactive Run stuck on Running… after this generation ends
+    if (!silent && ownsRunStatus(epoch) && store.status === 'running') {
+      setStatus('ready', 'Run finished');
+      releaseRunStatus(epoch);
+    }
   }
 }
 
@@ -1050,12 +1095,42 @@ async function runAndApplyInner(
           titles: titlesForCache,
         });
       }
-    } else if (Object.keys(seriesForCache).length) {
-      setIndicatorSeries(indicatorId, {
+    } else {
+      // Re-run replace: refresh source / name / pane; keep user plot colors
+      const plots: Record<string, { color: string }> = { ...(existing?.plots || {}) };
+      let colorIdx = 0;
+      if (seriesEntries.length) {
+        for (const [k] of seriesEntries) {
+          if (plots[k]?.color) continue;
+          const meta = plotMeta[k];
+          plots[k] = {
+            color:
+              (meta?.color && String(meta.color)) ||
+              PLOT_PALETTE[colorIdx % PLOT_PALETTE.length],
+          };
+          colorIdx += 1;
+        }
+      }
+      const savedInputs =
+        opts.inputs && Object.keys(opts.inputs).length
+          ? opts.inputs
+          : existing?.inputValues;
+      updateIndicator(indicatorId, {
         name: scriptName,
-        series: seriesForCache,
-        titles: titlesForCache,
+        code: script,
+        paneId,
+        plots,
+        ...(savedInputs && Object.keys(savedInputs).length
+          ? { inputValues: savedInputs }
+          : {}),
       });
+      if (Object.keys(seriesForCache).length) {
+        setIndicatorSeries(indicatorId, {
+          name: scriptName,
+          series: seriesForCache,
+          titles: titlesForCache,
+        });
+      }
     }
   } catch (e: unknown) {
     reportUiError(e, {

@@ -33,7 +33,7 @@
  *
  * ## Actions
  * - **Load / Reload** → force `loadSymbolData` (historical via active source)
- * - **Run** → `runAndApply(editorRef.getDoc())`
+ * - **Run / Re-run** → {@link RunSplitButton} (`runFromEditor`; replace or add instance)
  * - **Live** → multiplex `startLive` / `stopLive`
  * - **Replay** → bar replay over loaded OHLCV (`startBarReplay` / `exitBarReplay`)
  *
@@ -60,11 +60,8 @@ import {
   toggleLibraryPanel,
   toggleDataSourcePanel,
   toggleOnchainPanel,
-  isScriptRunBlockedByPreEval,
 } from '../store';
 import { CHART_TYPES } from '../chart/chart-type';
-import { runAndApply } from '../indicators/runner';
-import { runPreevalNow } from '../editor/preevaluate';
 import { startLive, stopLive, listStreams, defaultStreamForSource } from '../streams/multiplex';
 import { loadSymbolData } from '../data/load-symbol';
 import { parseOhlcvFile } from '../data/parse-bars';
@@ -83,6 +80,7 @@ import { startBarReplay, exitBarReplay } from './BarReplayControls';
 import { isReplayActive, subscribeReplay } from '../chart/bar-replay';
 import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
 import { CachedDatasetsModal } from './CachedDatasetsModal';
+import { RunSplitButton } from './RunSplitButton';
 
 const INTERVALS = [...WATCHLIST_INTERVALS];
 
@@ -184,20 +182,6 @@ export const Topbar: Component<{
       input.value = '';
     }
   };
-
-  const onRun = async () => {
-    if (store.status === 'running') return;
-    const doc = props.editorRef.getDoc();
-    if (!doc?.trim()) return;
-    // Pre-eval gate: mark wrong code / block run when static errors remain
-    const pe = await runPreevalNow(doc);
-    if (pe.hasErrors || isScriptRunBlockedByPreEval()) return;
-    await runAndApply(doc, undefined, {
-      inputs: store.editorInputValues || {},
-    });
-  };
-
-  const runBlocked = () => isScriptRunBlockedByPreEval();
 
   const toggleLive = () => {
     const next = !store.live.active;
@@ -488,29 +472,8 @@ export const Topbar: Component<{
           <For each={streams()}>{(s) => <option value={s.id}>{s.name}</option>}</For>
         </TopbarField>
 
-        {/* Action cluster: Run · Live · Replay — Run is accent only while executing */}
-        <button
-          type="button"
-          class={`sc-btn ${store.status === 'running' ? 'sc-btn-primary is-active' : 'sc-btn-ghost'} ${
-            runBlocked() ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
-          onClick={() => void onRun()}
-          data-testid="axis-btn-run"
-          aria-busy={store.status === 'running'}
-          disabled={runBlocked() || store.status === 'running'}
-          title={
-            store.status === 'running'
-              ? 'Running…'
-              : runBlocked()
-                ? 'Fix script errors in the editor before running'
-                : 'Run script against loaded bars (or use detached editor)'
-          }
-        >
-          <Icons.play />
-          <span class="axis-tb-btn-label">
-            {store.status === 'running' ? 'Running…' : runBlocked() ? 'Fix errors' : 'Run'}
-          </span>
-        </button>
+        {/* Action cluster: Run/Re-run · Live · Replay — Run is accent only while executing */}
+        <RunSplitButton getDoc={() => props.editorRef.getDoc()} />
 
         <button
           type="button"

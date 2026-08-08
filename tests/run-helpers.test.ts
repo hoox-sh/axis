@@ -11,9 +11,11 @@
 import { describe, expect, it, beforeEach } from 'bun:test';
 import {
   beginRunEpoch,
+  claimRunStatus,
   coercePlotSample,
   currentRunEpoch,
   formatRunError,
+  getRunStatusEpoch,
   isRunEpochCurrent,
   lineDataHasSample,
   normalizeBarTime,
@@ -21,6 +23,8 @@ import {
   normalizeEventsArray,
   normalizePlotsArray,
   normalizeSeriesMap,
+  ownsRunStatus,
+  releaseRunStatus,
   seriesValuesToLineData,
   _resetRunEpochForTests,
 } from '../src/indicators/run-helpers';
@@ -285,5 +289,32 @@ describe('run epoch', () => {
     expect(isRunEpochCurrent(a)).toBe(false);
     expect(isRunEpochCurrent(b)).toBe(true);
     expect(b).toBeGreaterThan(a);
+  });
+});
+
+describe('run status ownership', () => {
+  beforeEach(() => {
+    _resetRunEpochForTests();
+  });
+
+  it('claim / owns / release track interactive Run ownership', () => {
+    const e = beginRunEpoch();
+    expect(getRunStatusEpoch()).toBeNull();
+    claimRunStatus(e);
+    expect(getRunStatusEpoch()).toBe(e);
+    expect(ownsRunStatus(e)).toBe(true);
+    expect(ownsRunStatus(e + 1)).toBe(false);
+    releaseRunStatus(e);
+    expect(getRunStatusEpoch()).toBeNull();
+    expect(ownsRunStatus(e)).toBe(false);
+  });
+
+  it('release without epoch always clears; mismatched epoch keeps claim', () => {
+    const e = beginRunEpoch();
+    claimRunStatus(e);
+    releaseRunStatus(e + 99);
+    expect(getRunStatusEpoch()).toBe(e);
+    releaseRunStatus();
+    expect(getRunStatusEpoch()).toBeNull();
   });
 });

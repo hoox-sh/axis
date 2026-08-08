@@ -56,7 +56,10 @@ import {
 import { FloatableShell } from '../ui/panels/FloatableShell';
 import { Icons } from '../ui/icons';
 import { openEditorWindow, writeSharedDoc, bridgePublish } from './editor-bridge';
-import { runAndApply } from '../indicators/runner';
+import {
+  editorHasChartInstance,
+  runFromEditor,
+} from '../indicators/run-target';
 import { countDebugPins } from '../results/debug-pins';
 import { runPreevalNow } from './preevaluate';
 
@@ -72,16 +75,29 @@ interface Props {
 
 /** Side panel or full-window shell for the multi-tab Pine editor. */
 export const EditorPane: Component<Props> = (props) => {
-  const onRun = async (doc: string) => {
+  const onRun = async (doc: string, mode: 'auto' | 'new' = 'auto') => {
     if (!doc?.trim()) return;
     // Final pre-eval gate (catches race if debounce has not finished)
     const pe = await runPreevalNow(doc);
     if (pe.hasErrors) return;
     if (isScriptRunBlockedByPreEval()) return;
-    props.onRun?.(doc) ?? void runAndApply(doc);
+    // Parent may override (e.g. app shell) — still pass through doc only for auto
+    if (props.onRun && mode === 'auto') {
+      props.onRun(doc);
+      return;
+    }
+    void runFromEditor(doc, { mode });
   };
 
   const runBlocked = () => isScriptRunBlockedByPreEval();
+
+  /** Reactive: pre-eval source + chart scripts decide Run vs Re-run label. */
+  const hasChartInstance = () => {
+    void store.scripts.length;
+    void store.resultsFocusId;
+    const src = store.preEval?.source || props.editorRef.getDoc?.() || '';
+    return editorHasChartInstance(src);
+  };
 
   const popoutLiveEditor = (mode: 'popup' | 'tab' = 'popup') => {
     const doc = props.editorRef.getDoc?.() || '';
@@ -177,14 +193,18 @@ export const EditorPane: Component<Props> = (props) => {
               ? 'Running…'
               : runBlocked()
                 ? 'Fix errors'
-                : 'Run'
+                : hasChartInstance()
+                  ? 'Re-run'
+                  : 'Run'
           }
           title={
             store.status === 'running'
               ? 'Script is running…'
               : runBlocked()
                 ? `Fix ${store.preEval.diagnostics.filter((d) => d.severity === 'error').length || ''} script error(s) before running`
-                : 'Run script against loaded bars'
+                : hasChartInstance()
+                  ? 'Re-run replaces the matching script on the chart (topbar ▾ adds another instance)'
+                  : 'Run script against loaded bars'
           }
           testId="axis-editor-btn-run"
           pressed={store.status === 'running'}
@@ -195,10 +215,14 @@ export const EditorPane: Component<Props> = (props) => {
           onClick={() => {
             if (store.status === 'running' || runBlocked()) return;
             const doc = props.editorRef.getDoc?.() || '';
-            if (doc.trim()) void onRun(doc);
+            if (doc.trim()) void onRun(doc, 'auto');
           }}
         >
-          <Icons.play size={12} />
+          {hasChartInstance() && store.status !== 'running' ? (
+            <Icons.refresh size={12} />
+          ) : (
+            <Icons.play size={12} />
+          )}
         </EditorToolBtn>
       </Show>
       <EditorToolBtn

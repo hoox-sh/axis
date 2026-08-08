@@ -61,7 +61,7 @@ import { CommandPalette } from './ui/CommandPalette';
 import { errorFallback } from './ui/ErrorFallback';
 import { ErrorShareToast } from './ui/ErrorShareToast';
 import { reportUiError } from './ui/boot-errors';
-import { runAndApply } from './indicators/runner';
+import { runFromEditor } from './indicators/run-target';
 import { registerBuiltins } from './plugins/bootstrap';
 import { restoreInstalledPlugins } from './plugins/loader';
 
@@ -185,7 +185,10 @@ export const App: Component = () => {
       }
       if (msg.type === 'run') {
         // External editor requested a run — execute on main (has chart + bars)
-        void runAndApply(msg.doc)
+        void runFromEditor(msg.doc, {
+          mode: 'auto',
+          inputs: store.editorInputValues || {},
+        })
           .then((result) => {
             bridgePublish({
               type: 'run-status',
@@ -486,7 +489,8 @@ export const App: Component = () => {
         editorRef={editorRef}
         onRun={(doc) => {
           if (doc?.trim()) {
-            void runAndApply(doc, undefined, {
+            void runFromEditor(doc, {
+              mode: 'auto',
               inputs: store.editorInputValues || {},
             }).catch((err: unknown) => {
               reportUiError(err, {

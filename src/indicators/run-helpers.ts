@@ -335,6 +335,13 @@ export function formatRunError(err: unknown): string {
 /** Monotonic epoch: each {@link beginRunEpoch} invalidates prior applies. */
 let runEpoch = 0;
 
+/**
+ * Which run generation owns the interactive status bar (`running`).
+ * Silent live re-runs advance {@link runEpoch} without claiming status, so a
+ * superseded interactive Run must clear `running` only when it still owns it.
+ */
+let runStatusEpoch: number | null = null;
+
 /** Start a new run generation; previous in-flight applies should no-op. */
 export function beginRunEpoch(): number {
   runEpoch += 1;
@@ -351,7 +358,41 @@ export function isRunEpochCurrent(epoch: number): boolean {
   return epoch === runEpoch;
 }
 
+/** Epoch that currently owns interactive Run status, if any. */
+export function getRunStatusEpoch(): number | null {
+  return runStatusEpoch;
+}
+
+/**
+ * Mark `epoch` as owner of interactive status (`running` button).
+ * Call when setting status to `running` for a non-silent run.
+ */
+export function claimRunStatus(epoch: number | undefined | null): void {
+  if (epoch == null || !Number.isFinite(epoch)) return;
+  runStatusEpoch = epoch;
+}
+
+/**
+ * True when this epoch still owns the interactive Run status bar.
+ * Used before setting ready/error, or to clear stuck `running` after supersede.
+ */
+export function ownsRunStatus(epoch: number | undefined | null): boolean {
+  if (epoch == null) return runStatusEpoch == null;
+  return runStatusEpoch === epoch;
+}
+
+/**
+ * Release status ownership after a non-silent run finishes (ready/error) or is
+ * cancelled. Only clears if `epoch` still owns the claim (or epoch is omitted).
+ */
+export function releaseRunStatus(epoch?: number | null): void {
+  if (epoch == null || runStatusEpoch === epoch) {
+    runStatusEpoch = null;
+  }
+}
+
 /** @internal Test helper — reset epoch between cases. */
 export function _resetRunEpochForTests(): void {
   runEpoch = 0;
+  runStatusEpoch = null;
 }

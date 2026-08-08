@@ -69,7 +69,7 @@ import {
   updateChartSlot,
   setOnchainPanelOpen,
 } from '../store';
-import { runAndApply } from '../indicators/runner';
+import { runFromEditor } from '../indicators/run-target';
 import { loadSymbolData, reloadChart } from '../data/load-symbol';
 import { startLive, stopLive, defaultStreamForSource } from '../streams/multiplex';
 import {
@@ -174,7 +174,8 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
         const { runPreevalNow } = await import('../editor/preevaluate');
         const pe = await runPreevalNow(doc);
         if (pe.hasErrors) return;
-        await runAndApply(doc, undefined, {
+        await runFromEditor(doc, {
+          mode: 'auto',
           inputs: store.editorInputValues || {},
         });
       },

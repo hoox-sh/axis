@@ -167,6 +167,103 @@ describe('runAndApply concurrent supersession', () => {
     // lastRun must still be the newer run
     expect(store.lastRun?.meta?.script_name).toBe('fresh-run');
   });
+
+  it('silent live re-run does not leave interactive Run stuck on running', async () => {
+    let releaseSlow: (() => void) | null = null;
+    const slowGate = new Promise<void>((resolve) => {
+      releaseSlow = resolve;
+    });
+    let call = 0;
+
+    restoreFetch = mockFetch(async () => {
+      call += 1;
+      if (call === 1) {
+        await slowGate;
+        return jsonResponse({
+          status: 'success',
+          plots: SAMPLE_BARS.map(() => 1),
+          series: { slow: SAMPLE_BARS.map(() => 1) },
+          events: [],
+          meta: { script_name: 'interactive', overlay: true },
+        });
+      }
+      return jsonResponse({
+        status: 'success',
+        plots: SAMPLE_BARS.map(() => 2),
+        series: { live: SAMPLE_BARS.map(() => 2) },
+        events: [],
+        meta: { script_name: 'live', overlay: true },
+      });
+    });
+
+    // Interactive Run shows Running… and claims status ownership
+    const interactive = runAndApply(
+      '//@version=5\nindicator("a")\nplot(1)',
+      undefined,
+      { openResults: false, silent: false },
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    expect(store.status).toBe('running');
+
+    // Live tick: silent re-run advances epoch without claiming status
+    const live = runAndApply(
+      '//@version=5\nindicator("b")\nplot(2)',
+      undefined,
+      { openResults: false, silent: true },
+    );
+    await live;
+
+    releaseSlow!();
+    const r1 = await interactive;
+    expect(r1.meta?.superseded).toBe(true);
+    // Button must not stay stuck on Running… after the interactive generation ends
+    expect(store.status).not.toBe('running');
+  });
+});
+
+describe('removeIndicator clears stuck running', () => {
+  it('clears status when script is removed mid-run', async () => {
+    const { removeIndicator, addIndicator } = await import('../src/store');
+    let releaseSlow: (() => void) | null = null;
+    const slowGate = new Promise<void>((resolve) => {
+      releaseSlow = resolve;
+    });
+
+    restoreFetch = mockFetch(async () => {
+      await slowGate;
+      return jsonResponse({
+        status: 'success',
+        plots: SAMPLE_BARS.map(() => 1),
+        series: { p: SAMPLE_BARS.map(() => 1) },
+        events: [],
+        meta: { script_name: 'slow', overlay: true },
+      });
+    });
+
+    const id = addIndicator(
+      'slow',
+      '//@version=5\nindicator("s")\nplot(1)',
+      'price',
+      { p: { color: '#fff' } },
+    );
+
+    const p = runAndApply(
+      '//@version=5\nindicator("s")\nplot(1)',
+      id,
+      { openResults: false, silent: false },
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    expect(store.status).toBe('running');
+
+    removeIndicator(id);
+    expect(store.status).not.toBe('running');
+    expect(store.scripts.find((s) => s.id === id)).toBeUndefined();
+
+    releaseSlow!();
+    await p;
+    // Must stay clear after the superseded run settles
+    expect(store.status).not.toBe('running');
+  });
 });
 
 describe('runAndApply never rejects', () => {
