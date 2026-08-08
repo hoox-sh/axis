@@ -18,19 +18,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * **Dynamic plugin loader** — install source/stream/engine/dataset plugins from URL.
+ * **Dynamic plugin loader** — install source/stream/engine/dataset/component
+ * plugins from URL.
  *
  * Dynamic-imports ES modules from a URL (Vite-ignored). Persists the installed
  * list under `localStorage` key {@link PLUGINS_KEY}. On boot, call
  * {@link restoreInstalledPlugins} to re-import saved URLs.
  *
- * Supported kinds: `source`, `stream`, `engine`, `dataset`. Storage/component
- * via URL are not supported yet. Rejects dangerous schemes (`javascript:`,
- * HTML `data:` URLs, etc.). Maps legacy `/src/plugins/…` paths to `/plugins/…`
- * for production.
+ * Supported kinds: `source`, `stream`, `engine`, `dataset`, `component`.
+ * Storage via URL is not supported yet. Rejects dangerous schemes
+ * (`javascript:`, HTML `data:` URLs, etc.). Maps legacy `/src/plugins/…`
+ * paths to `/plugins/…` for production.
  *
  * Example plugins: `example-coingecko-source.js`, `example-cf-do-stream.js`,
- * `example-tiny-pyne-engine.js`.
+ * `example-tiny-pyne-engine.js`, PYNE Agent (`…/plugin/axis-pine-agent.js`).
  *
  * @module plugins/loader
  */
@@ -40,8 +41,13 @@ import { registerDynamicStream, unregisterDynamicStream } from '../streams/catal
 import { registerDynamicEngine, unregisterDynamicEngine } from '../engines/catalog';
 import { registerDynamicDataset, unregisterDynamicDataset } from '../onchain/catalog';
 import { ensureBuiltins } from './bootstrap';
-import { appendLog } from '../store';
-import type { DatasetPlugin, EnginePlugin, SourcePlugin, StreamPlugin } from './types';
+import { appendLog, store, setStore } from '../store';
+import { registry } from './registry';
+import { pluginKey, type ComponentPlugin, type DatasetPlugin, type EnginePlugin, type SourcePlugin, type StreamPlugin } from './types';
+
+/** Production default for the HOOX-deployed PYNE Agent worker. */
+export const DEFAULT_PYNE_AGENT_PLUGIN_URL =
+  'https://pyne-agent-worker.cryptolinx.workers.dev/plugin/axis-pine-agent.js';
 
 /** localStorage key for installed plugin URL list. */
 export const PLUGINS_KEY = 'pynescript.axis.plugins.v1';
@@ -127,12 +133,49 @@ function unregisterByKind(kind: string, id: string): void {
   else if (kind === 'stream') unregisterDynamicStream(id);
   else if (kind === 'engine') unregisterDynamicEngine(id);
   else if (kind === 'dataset') unregisterDynamicDataset(id);
-  else {
+  else if (kind === 'component') {
+    try {
+      registry.unregister('component', id, { allowBuiltIn: true });
+    } catch {
+      /* ignore */
+    }
+  } else {
     unregisterDynamicSource(id);
     unregisterDynamicStream(id);
     unregisterDynamicEngine(id);
     unregisterDynamicDataset(id);
+    try {
+      registry.unregister('component', id, { allowBuiltIn: true });
+    } catch {
+      /* ignore */
+    }
   }
+}
+
+function componentConfig(id: string): Record<string, unknown> {
+  const configs = store.pluginsConfig || {};
+  return {
+    ...(configs[pluginKey('component', id)] || {}),
+    ...(configs[id] || {}),
+  };
+}
+
+/** Seed default agent endpoint when installing the production plugin URL. */
+function seedPyneAgentConfig(pluginId: string, href: string): void {
+  if (pluginId !== 'pyne-agent' && !href.includes('axis-pine-agent.js')) return;
+  const key = pluginKey('component', 'pyne-agent');
+  const prev = (store.pluginsConfig?.[key] || {}) as Record<string, unknown>;
+  if (prev.endpoint && String(prev.endpoint).trim()) return;
+  let origin = '';
+  try {
+    origin = new URL(href).origin;
+  } catch {
+    origin = 'https://pyne-agent-worker.cryptolinx.workers.dev';
+  }
+  setStore('pluginsConfig', {
+    ...(store.pluginsConfig || {}),
+    [key]: { ...prev, endpoint: origin },
+  });
 }
 
 export function getInstalledPlugins(): InstalledPlugin[] {
@@ -219,6 +262,8 @@ export async function loadPluginFromUrl(url: string): Promise<InstalledPlugin> {
     if (typeof p.run !== 'function') throw new Error('Engine plugin needs run()');
   } else if (kind === 'dataset') {
     if (typeof p.fetchDataset !== 'function') throw new Error('Dataset plugin needs fetchDataset()');
+  } else if (kind === 'component') {
+    if (typeof p.mount !== 'function') throw new Error('Component plugin needs mount()');
   } else if (kind === 'storage') {
     throw new Error('Custom storage plugins via URL are not supported yet (use built-in local/cloud)');
   } else {
@@ -235,6 +280,26 @@ export async function loadPluginFromUrl(url: string): Promise<InstalledPlugin> {
       registerDynamicEngine(p as unknown as EnginePlugin);
     } else if (kind === 'dataset') {
       registerDynamicDataset(p as unknown as DatasetPlugin);
+    } else if (kind === 'component') {
+      const component = p as unknown as ComponentPlugin;
+      registry.registerComponent(component);
+      seedPyneAgentConfig(id, href);
+      // Phase-2 host may not mount slots yet — call init so floating UI can attach.
+      if (typeof component.init === 'function') {
+        try {
+          await component.init({
+            getConfig: () => componentConfig(id),
+            setStatus: (msg, level) => appendLog(level || 'info', msg, 'plugins'),
+            host: { fetch },
+          });
+        } catch (err) {
+          appendLog(
+            'warn',
+            `Component init failed for ${id}: ${err instanceof Error ? err.message : String(err)}`,
+            'plugins',
+          );
+        }
+      }
     }
     registered = true;
 
