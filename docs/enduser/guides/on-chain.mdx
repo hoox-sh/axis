@@ -124,7 +124,7 @@ Topbar **Load** fetches a **single page** (up to 1000 bars). For multi-page hist
 3. Open **Data** (Data Source Manager) → set symbol / source / timeframe / **accumulate to**.
 4. Start background backfill — AXIS walks older pages with `endTime` only (each page maps to `before_timestamp`). The source does **not** multi-page inside one `fetchHistorical` call; DSM does it page-by-page.
 
-See [Data Source Manager](/enduser/guides/data-source-manager) for job phases and cache behavior.
+See [Data Source Manager](/axis/docs/enduser/guides/data-source-manager) for job phases and cache behavior.
 
 ## Events (TVL spikes)
 
@@ -207,15 +207,15 @@ Treat DefiLlama points as **daily** aggregates from the public API — not block
 | Self-hosted demo | Optional: reverse-proxy allowlisted `/api/onchain/*` to the Worker |
 | Offline | Needs network; there is no offline synthetic TVL/DEX walk by default |
 
-See also [CORS and origins](/devops/cors-and-origins) for Worker origin allowlisting.
+See also [CORS and origins](/axis/docs/devops/cors-and-origins) for Worker origin allowlisting.
 
 ## Dataset plugins (advanced)
 
-On-chain providers implement the structural **dataset** plugin contract (`fetchDataset`). Built-ins register via the on-chain catalog; dynamic URL plugins may install additional datasets. End users normally only use the On-Chain panel — see [Datasets](/plugins/datasets) for the contract sketch.
+On-chain providers implement the structural **dataset** plugin contract (`fetchDataset`). Built-ins register via the on-chain catalog; dynamic URL plugins may install additional datasets. End users normally only use the On-Chain panel — see [Datasets](/axis/docs/plugins/datasets) for the contract sketch.
 
 ## Related docs
 
-- [Data Source Manager](/enduser/guides/data-source-manager) — OHLCV backfill (separate from on-chain scalars)
-- [Sources](/plugins/sources) — historical bar sources
-- [Worker overview](/worker) — `/api/onchain/…` route table
-- [CORS and origins](/devops/cors-and-origins) — browser cross-origin constraints
+- [Data Source Manager](/axis/docs/enduser/guides/data-source-manager) — OHLCV backfill (separate from on-chain scalars)
+- [Sources](/axis/docs/plugins/sources) — historical bar sources
+- [Worker overview](/axis/docs/worker) — `/api/onchain/…` route table
+- [CORS and origins](/axis/docs/devops/cors-and-origins) — browser cross-origin constraints

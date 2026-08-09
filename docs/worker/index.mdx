@@ -87,7 +87,7 @@ Allowlisted **GET** only (public, no API key). Other `/api/onchain/*` paths retu
 Gecko validation: `network` `^[a-z0-9_]+$`; `address` EVM `0x`+40 hex **or** Solana-style base58 32–48; `timeframe` `day` \| `hour` \| `minute`.  
 OHLCV query pass-through: `aggregate`, `limit`, `currency`, `before_timestamp`. Search: `query`, `network`, `page`, `include`.
 
-Responses may include `X-Axis-Onchain-Cache: HIT|MISS`. Product guide: [On-Chain data](/enduser/guides/on-chain).
+Responses may include `X-Axis-Onchain-Cache: HIT|MISS`. Product guide: [On-Chain data](/axis/docs/enduser/guides/on-chain).
 
 Entry: `worker/src/index.ts`.
 

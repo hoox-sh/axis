@@ -26,7 +26,7 @@ description: "On-chain / alternate series dataset plugins — fetchDataset contr
 
 ## Abstract
 
-A **dataset** plugin loads non-OHLCV (or alternate OHLCV) series for the chart host (protocol TVL, DEX pool candles, funding, events). Kind is `dataset` on the unified registry. Phase 1 surfaces DefiLlama protocol TVL; Phase 2 adds GeckoTerminal pool OHLCV and derived TVL events. UI: [On-Chain panel](/enduser/guides/on-chain). Contract: `src/plugins/types.ts` (`DatasetPlugin`) and `src/onchain/types.ts`.
+A **dataset** plugin loads non-OHLCV (or alternate OHLCV) series for the chart host (protocol TVL, DEX pool candles, funding, events). Kind is `dataset` on the unified registry. Phase 1 surfaces DefiLlama protocol TVL; Phase 2 adds GeckoTerminal pool OHLCV and derived TVL events. UI: [On-Chain panel](/axis/docs/enduser/guides/on-chain). Contract: `src/plugins/types.ts` (`DatasetPlugin`) and `src/onchain/types.ts`.
 
 ## Conceptual model
 
@@ -132,7 +132,7 @@ Cache keys (IDB dataset cache):
 
 ## Related
 
-- [On-Chain data (end user)](/enduser/guides/on-chain)
-- [Worker overview](/worker) — `/api/onchain/…` route table
-- [Sources](/plugins/sources) — OHLCV (separate plane)
-- [Contracts](/plugins/contracts) — shared plugin base
+- [On-Chain data (end user)](/axis/docs/enduser/guides/on-chain)
+- [Worker overview](/axis/docs/worker) — `/api/onchain/…` route table
+- [Sources](/axis/docs/plugins/sources) — OHLCV (separate plane)
+- [Contracts](/axis/docs/plugins/contracts) — shared plugin base
