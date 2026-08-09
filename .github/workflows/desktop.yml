@@ -1,0 +1,127 @@
+# Copyright (C) 2024-2026 jango_blockchained
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# Build AXIS Tauri 2 desktop bundles on every push to main (and on PRs that
+# touch desktop/frontend). Uploads platform artifacts for download; publishes a
+# GitHub Release when the push is a version tag (v* / desktop-v*).
+
+name: Desktop (Tauri)
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*', 'desktop-v*']
+  pull_request:
+    paths:
+      - 'src-tauri/**'
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
+      - 'bun.lock'
+      - 'vite.config.ts'
+      - '.github/workflows/desktop.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            args: ''
+            artifact: linux
+          - platform: macos-latest
+            args: '--target aarch64-apple-darwin'
+            artifact: macos-arm64
+          - platform: macos-latest
+            args: '--target x86_64-apple-darwin'
+            artifact: macos-x64
+          - platform: windows-latest
+            args: ''
+            artifact: windows
+
+    runs-on: ${{ matrix.platform }}
+    name: ${{ matrix.artifact }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux webview deps
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && (contains(matrix.args, 'aarch64') && 'aarch64-apple-darwin' || 'x86_64-apple-darwin') || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          shared-key: ${{ matrix.artifact }}
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      # Non-tag pushes / PRs: build only (no GitHub Release)
+      - name: Build Tauri app
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI: true
+        with:
+          projectPath: .
+          args: ${{ matrix.args }}
+
+      # Version tags: build + attach to GitHub Release
+      - name: Build Tauri app and publish release
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI: true
+        with:
+          projectPath: .
+          tagName: ${{ github.ref_name }}
+          releaseName: AXIS ${{ github.ref_name }}
+          releaseBody: |
+            Desktop build of AXIS (Tauri 2).
+
+            - Commit: ${{ github.sha }}
+            - Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          releaseDraft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          args: ${{ matrix.args }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: axis-desktop-${{ matrix.artifact }}-${{ github.sha }}
+          path: |
+            src-tauri/target/release/bundle
+            src-tauri/target/*/release/bundle
+          if-no-files-found: warn
+          retention-days: 14

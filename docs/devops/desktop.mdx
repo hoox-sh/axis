@@ -37,6 +37,20 @@ bun run desktop:info    # toolchain / webview diagnostics
 Installers land under `src-tauri/target/release/bundle/` (AppImage, deb, rpm,
 msi, dmg — depending on host OS and `bundle.targets`).
 
+## CI (GitHub Actions)
+
+Every **push to `main`** (and PRs that touch desktop/frontend paths) runs
+[`.github/workflows/desktop.yml`](https://github.com/hoox-sh/axis/blob/main/.github/workflows/desktop.yml):
+
+| Trigger | Result |
+|---------|--------|
+| Push `main` | Matrix build: Linux, macOS arm64, macOS x64, Windows → **workflow artifacts** (14-day retention) |
+| Tag `v*` / `desktop-v*` | Same matrix + **GitHub Release** assets attached to the tag |
+| `workflow_dispatch` | Manual re-run |
+
+Artifacts are named `axis-desktop-{linux\|macos-arm64\|macos-x64\|windows}-{sha}`.
+Concurrency cancels superseded runs on the same ref so each push rebuilds cleanly.
+
 ## Prerequisites
 
 ### Always
