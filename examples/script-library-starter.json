@@ -1,0 +1,399 @@
+[
+  {
+    "id": "ex_lib_math",
+    "name": "AxisMath",
+    "description": "Math helpers: clamp, nz_div, pct_change, normalize — export const + functions (Pine v6).",
+    "path": "libraries/AxisMath.pyne",
+    "tags": [
+      "library",
+      "math",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Shared math helpers for AXIS example scripts\nlibrary(\"AxisMath\")\n\nexport const float EPS = 1e-10\nexport const float GOLDEN = 1.6180339887\n\n/// Clamp x into [lo, hi]\nexport clamp(float x, float lo, float hi) =>\n    math.max(lo, math.min(hi, x))\n\n/// Safe divide; returns fallback when den is ~0\nexport nz_div(float num, float den, float fallback = 0.0) =>\n    math.abs(den) < EPS ? fallback : num / den\n\n/// Percent change vs previous value\nexport pct_change(float cur, float prev) =>\n    nz_div(cur - prev, prev) * 100.0\n\n/// Min-max normalize into [0, 1]\nexport normalize(float x, float lo, float hi) =>\n    nz_div(x - lo, hi - lo)\n"
+  },
+  {
+    "id": "ex_lib_sides",
+    "name": "AxisSides",
+    "description": "Trade side enum + helpers (export enum / export method pattern).",
+    "path": "libraries/AxisSides.pyne",
+    "tags": [
+      "library",
+      "enum",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Side enum and signal helpers\nlibrary(\"AxisSides\")\n\nexport enum Side\n    flat\n    long\n    short\n\nexport sideFromBool(bool isLong, bool isShort) =>\n    isLong ? Side.long : isShort ? Side.short : Side.flat\n\nexport isLong(Side s) =>\n    s == Side.long\n\nexport isShort(Side s) =>\n    s == Side.short\n\nexport invert(Side s) =>\n    s == Side.long ? Side.short : s == Side.short ? Side.long : Side.flat\n\nexport labelOf(Side s) =>\n    switch s\n        Side.long => \"LONG\"\n        Side.short => \"SHORT\"\n        => \"FLAT\"\n"
+  },
+  {
+    "id": "ex_lib_colors",
+    "name": "AxisColors",
+    "description": "Void-theme friendly color tokens + opacity helpers.",
+    "path": "libraries/AxisColors.pyne",
+    "tags": [
+      "library",
+      "color",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Chart color helpers (not TradingView brand APIs)\nlibrary(\"AxisColors\")\n\nexport const color INDIGO = #6366f1\nexport const color CYAN = #22d3ee\nexport const color ROSE = #fb7185\nexport const color EMERALD = #34d399\nexport const color AMBER = #fbbf24\nexport const color SLATE = #94a3b8\n\nexport withAlpha(color c, int alpha) =>\n    color.new(c, alpha)\n\nexport bullBear(bool bull) =>\n    bull ? EMERALD : ROSE\n\nexport heat(float t) =>\n    // t in [0, 1] → cool to warm\n    color.from_gradient(t, 0.0, 1.0, CYAN, ROSE)\n"
+  },
+  {
+    "id": "ex_lib_ma",
+    "name": "AxisMA",
+    "description": "Moving-average family behind a v6 enum switch.",
+    "path": "libraries/AxisMA.pyne",
+    "tags": [
+      "library",
+      "ta",
+      "enum",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Multi-type moving averages via enum + switch\nlibrary(\"AxisMA\")\n\nexport enum MaKind\n    sma\n    ema\n    wma\n    rma\n    hma\n\nexport ma(float src, simple int len, MaKind kind = MaKind.ema) =>\n    switch kind\n        MaKind.sma => ta.sma(src, len)\n        MaKind.ema => ta.ema(src, len)\n        MaKind.wma => ta.wma(src, len)\n        MaKind.rma => ta.rma(src, len)\n        MaKind.hma => ta.hma(src, len)\n        => ta.ema(src, len)\n\nexport ribbon(float src, simple int fast, simple int slow, MaKind kind = MaKind.ema) =>\n    [ma(src, fast, kind), ma(src, slow, kind)]\n"
+  },
+  {
+    "id": "ex_lib_risk",
+    "name": "AxisRisk",
+    "description": "Position sizing and stop math (percent / ATR / R-multiple).",
+    "path": "libraries/AxisRisk.pyne",
+    "tags": [
+      "library",
+      "risk",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Risk and position-size helpers\nlibrary(\"AxisRisk\")\n\nexport const float DEFAULT_RISK_PCT = 1.0\n\n/// Units from equity risk % and stop distance (price units)\nexport sizeFromRisk(float equity, float riskPct, float stopDist) =>\n    stopDist <= 0 ? 0.0 : (equity * riskPct / 100.0) / stopDist\n\nexport stopAtr(float atr, float mult) =>\n    atr * mult\n\nexport takeProfitR(float entry, float stop, float rMultiple, bool isLong) =>\n    float risk = math.abs(entry - stop)\n    isLong ? entry + risk * rMultiple : entry - risk * rMultiple\n\nexport trailOffset(float atr, float mult) =>\n    atr * mult\n"
+  },
+  {
+    "id": "ex_lib_point",
+    "name": "AxisPoint",
+    "description": "UDT point + methods (export type / method style).",
+    "path": "libraries/AxisPoint.pyne",
+    "tags": [
+      "library",
+      "udt",
+      "method",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description 2D point UDT with methods\nlibrary(\"AxisPoint\")\n\nexport type Point\n    float x\n    float y\n\nexport newPoint(float x, float y) =>\n    Point.new(x, y)\n\nexport method dist(Point this, Point other) =>\n    math.sqrt(math.pow(this.x - other.x, 2) + math.pow(this.y - other.y, 2))\n\nexport method midpoint(Point this, Point other) =>\n    Point.new((this.x + other.x) / 2.0, (this.y + other.y) / 2.0)\n\nexport method translate(Point this, float dx, float dy) =>\n    Point.new(this.x + dx, this.y + dy)\n"
+  },
+  {
+    "id": "ex_lib_session",
+    "name": "AxisSession",
+    "description": "Session / time-of-day filters with dynamic string windows.",
+    "path": "libraries/AxisSession.pyne",
+    "tags": [
+      "library",
+      "session",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Session filter helpers\nlibrary(\"AxisSession\")\n\nexport const string RTH_US = \"0930-1600\"\nexport const string LONDON = \"0800-1630\"\nexport const string ASIA = \"0000-0900\"\n\nexport inSession(string sess, string tz = \"America/New_York\") =>\n    not na(time(timeframe.period, sess, tz))\n\nexport sessionChange(string sess, string tz = \"America/New_York\") =>\n    bool now = inSession(sess, tz)\n    now and not now[1]\n\nexport minutesSinceOpen(string sess, string tz = \"America/New_York\") =>\n    // approximate: bar time vs session open is host-dependent; use hour*60+minute\n    hour(time, tz) * 60 + minute(time, tz)\n"
+  },
+  {
+    "id": "ex_lib_stats",
+    "name": "AxisStats",
+    "description": "Array rolling stats (avg, stdev, zscore, percentile).",
+    "path": "libraries/AxisStats.pyne",
+    "tags": [
+      "library",
+      "array",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Rolling array statistics\nlibrary(\"AxisStats\")\n\nexport pushCap(array<float> a, float v, int cap) =>\n    array.push(a, v)\n    while array.size(a) > cap\n        array.shift(a)\n    a\n\nexport mean(array<float> a) =>\n    array.size(a) == 0 ? na : array.avg(a)\n\nexport stdev(array<float> a) =>\n    array.size(a) < 2 ? na : array.stdev(a)\n\nexport zscore(array<float> a, float v) =>\n    float m = mean(a)\n    float s = stdev(a)\n    na(m) or na(s) or s == 0 ? na : (v - m) / s\n\nexport pctRank(array<float> a, float v) =>\n    array.size(a) == 0 ? na : array.percentrank(a, array.indexof(a, v))\n"
+  },
+  {
+    "id": "ex_lib_fib",
+    "name": "AxisFib",
+    "description": "Fibonacci ratios as export const + level builders.",
+    "path": "libraries/AxisFib.pyne",
+    "tags": [
+      "library",
+      "fib",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Fibonacci constants and retracement levels\nlibrary(\"AxisFib\")\n\nexport const float R236 = 0.236\nexport const float R382 = 0.382\nexport const float R500 = 0.500\nexport const float R618 = 0.618\nexport const float R786 = 0.786\nexport const float E1272 = 1.272\nexport const float E1618 = 1.618\n\nexport retrace(float highPrice, float lowPrice, float ratio) =>\n    highPrice - (highPrice - lowPrice) * ratio\n\nexport extend(float highPrice, float lowPrice, float ratio, bool up) =>\n    float rng = highPrice - lowPrice\n    up ? highPrice + rng * (ratio - 1.0) : lowPrice - rng * (ratio - 1.0)\n\nexport levels(float hi, float lo) =>\n    array.from(\n         retrace(hi, lo, R236),\n         retrace(hi, lo, R382),\n         retrace(hi, lo, R500),\n         retrace(hi, lo, R618),\n         retrace(hi, lo, R786))\n"
+  },
+  {
+    "id": "ex_lib_alerts",
+    "name": "AxisAlerts",
+    "description": "Alert message builders with str.format-style helpers.",
+    "path": "libraries/AxisAlerts.pyne",
+    "tags": [
+      "library",
+      "alert",
+      "log",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Alert / log message helpers\nlibrary(\"AxisAlerts\")\n\nexport fmtPrice(float p, int digits = 2) =>\n    str.tostring(p, \"#.\" + str.repeat(\"0\", digits))\n\nexport entryMsg(string side, string sym, float price) =>\n    side + \" \" + sym + \" @ \" + fmtPrice(price)\n\nexport exitMsg(string side, float price, float pnlPct) =>\n    \"EXIT \" + side + \" @ \" + fmtPrice(price) + \" PnL \" + fmtPrice(pnlPct, 2) + \"%\"\n\nexport logCross(string name, float a, float b) =>\n    log.info(\"{0} cross a={1} b={2}\", name, a, b)\n"
+  },
+  {
+    "id": "ex_ind_rsi",
+    "name": "RSI",
+    "description": "Classic RSI with source enum, overbought/oversold zones (overlay=false).",
+    "path": "indicators/RSI.pyne",
+    "tags": [
+      "indicator",
+      "oscillator",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Relative Strength Index (v6 enum source + switch)\nindicator(\"RSI\", shorttitle=\"RSI\", overlay=false, scale=scale.right)\n\nenum Src\n    close_\n    hl2\n    ohlc4\n\nlen = input.int(14, \"Length\", minval=1)\nob = input.float(70, \"Overbought\", minval=50, maxval=100)\nos = input.float(30, \"Oversold\", minval=0, maxval=50)\nsrcKind = input.enum(Src.close_, \"Source\")\n\nsrc = switch srcKind\n    Src.hl2 => hl2\n    Src.ohlc4 => ohlc4\n    => close\n\nr = ta.rsi(src, len)\nplot(r, \"RSI\", color=#6366f1, linewidth=2)\nhline(ob, \"OB\", color=#fb7185, linestyle=hline.style_dashed)\nhline(os, \"OS\", color=#34d399, linestyle=hline.style_dashed)\nhline(50, \"Mid\", color=#94a3b8, linestyle=hline.style_dotted)\nbgcolor(r > ob ? color.new(#fb7185, 90) : r < os ? color.new(#34d399, 90) : na)\n"
+  },
+  {
+    "id": "ex_ind_macd",
+    "name": "MACD",
+    "description": "MACD histogram + signal with method-style helpers and log on cross.",
+    "path": "indicators/MACD.pyne",
+    "tags": [
+      "indicator",
+      "momentum",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description MACD with v6 log on signal cross\nindicator(\"MACD\", shorttitle=\"MACD\", overlay=false)\n\nfastLen = input.int(12, \"Fast\", minval=1)\nslowLen = input.int(26, \"Slow\", minval=1)\nsigLen = input.int(9, \"Signal\", minval=1)\nsrc = input.source(close, \"Source\")\n\n[macdLine, signalLine, hist] = ta.macd(src, fastLen, slowLen, sigLen)\n\nplot(hist, \"Histogram\", style=plot.style_columns, color=hist >= 0 ? #34d399 : #fb7185)\nplot(macdLine, \"MACD\", color=#6366f1)\nplot(signalLine, \"Signal\", color=#fbbf24)\nhline(0, \"Zero\", color=#94a3b8)\n\nbull = ta.crossover(macdLine, signalLine)\nbear = ta.crossunder(macdLine, signalLine)\nif bull\n    log.info(\"MACD bullish cross macd={0} signal={1}\", macdLine, signalLine)\nif bear\n    log.info(\"MACD bearish cross macd={0} signal={1}\", macdLine, signalLine)\nplotshape(bull, title=\"Bull\", style=shape.triangleup, location=location.bottom, color=#34d399, size=size.tiny)\nplotshape(bear, title=\"Bear\", style=shape.triangledown, location=location.top, color=#fb7185, size=size.tiny)\n"
+  },
+  {
+    "id": "ex_ind_bb",
+    "name": "Bollinger Bands",
+    "description": "Bollinger Bands + %B and bandwidth (overlay).",
+    "path": "indicators/BollingerBands.pyne",
+    "tags": [
+      "indicator",
+      "volatility",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Bollinger Bands with %B / bandwidth sub-views via plots\nindicator(\"Bollinger Bands\", shorttitle=\"BB\", overlay=true)\n\nlen = input.int(20, \"Length\", minval=1)\nmult = input.float(2.0, \"StdDev\", minval=0.1, step=0.1)\nsrc = input.source(close, \"Source\")\n\nbasis = ta.sma(src, len)\ndev = mult * ta.stdev(src, len)\nupper = basis + dev\nlower = basis - dev\npctB = (src - lower) / (upper - lower)\nbw = (upper - lower) / basis\n\nplot(basis, \"Basis\", color=#6366f1)\np1 = plot(upper, \"Upper\", color=#22d3ee)\np2 = plot(lower, \"Lower\", color=#22d3ee)\nfill(p1, p2, color=color.new(#6366f1, 90), title=\"Band\")\n// %B available as hidden series for data window\nplot(pctB, \"%B\", display=display.data_window)\nplot(bw, \"Bandwidth\", display=display.data_window)\n"
+  },
+  {
+    "id": "ex_ind_supertrend",
+    "name": "Supertrend",
+    "description": "ATR Supertrend with direction enum and colored line.",
+    "path": "indicators/Supertrend.pyne",
+    "tags": [
+      "indicator",
+      "trend",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Supertrend (ATR) with direction enum\nindicator(\"Supertrend\", shorttitle=\"ST\", overlay=true)\n\nenum Dir\n    up\n    down\n\natrLen = input.int(10, \"ATR Length\", minval=1)\nfactor = input.float(3.0, \"Factor\", minval=0.1, step=0.1)\n\n[st, dirRaw] = ta.supertrend(factor, atrLen)\nDir d = dirRaw < 0 ? Dir.up : Dir.down\n\ncol = d == Dir.up ? #34d399 : #fb7185\nplot(st, \"Supertrend\", color=col, linewidth=2)\nplotshape(d == Dir.up and d[1] == Dir.down, \"Flip Up\", shape.triangleup, location.belowbar, #34d399, size=size.small)\nplotshape(d == Dir.down and d[1] == Dir.up, \"Flip Down\", shape.triangledown, location.abovebar, #fb7185, size=size.small)\n"
+  },
+  {
+    "id": "ex_ind_stochrsi",
+    "name": "Stochastic RSI",
+    "description": "StochRSI K/D with overbought/oversold (overlay=false).",
+    "path": "indicators/StochasticRSI.pyne",
+    "tags": [
+      "indicator",
+      "oscillator",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Stochastic RSI\nindicator(\"Stochastic RSI\", shorttitle=\"StochRSI\", overlay=false)\n\nrsiLen = input.int(14, \"RSI Length\", minval=1)\nstochLen = input.int(14, \"Stoch Length\", minval=1)\nkSmooth = input.int(3, \"K\", minval=1)\ndSmooth = input.int(3, \"D\", minval=1)\nob = input.float(80, \"Overbought\")\nos = input.float(20, \"Oversold\")\n\nr = ta.rsi(close, rsiLen)\nk = ta.sma(ta.stoch(r, r, r, stochLen), kSmooth)\nd = ta.sma(k, dSmooth)\n\nplot(k, \"%K\", color=#6366f1)\nplot(d, \"%D\", color=#fbbf24)\nhline(ob, \"OB\", color=#fb7185, linestyle=hline.style_dashed)\nhline(os, \"OS\", color=#34d399, linestyle=hline.style_dashed)\nhline(50, \"Mid\", color=#94a3b8, linestyle=hline.style_dotted)\n"
+  },
+  {
+    "id": "ex_ind_vwap",
+    "name": "VWAP Bands",
+    "description": "Session VWAP ± standard-deviation bands.",
+    "path": "indicators/VWAPBands.pyne",
+    "tags": [
+      "indicator",
+      "volume",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Session VWAP with σ bands\nindicator(\"VWAP Bands\", shorttitle=\"VWAP\", overlay=true)\n\nsrc = input.source(hlc3, \"Source\")\nshowBands = input.bool(true, \"Show bands\")\nn1 = input.float(1.0, \"Band 1 σ\", minval=0.1, step=0.1)\nn2 = input.float(2.0, \"Band 2 σ\", minval=0.1, step=0.1)\n\nvw = ta.vwap(src)\n// cumulative volume-weighted variance approx via ta.vwap + dev of src\nbasis = vw\n// Use rolling stdev of (src - vwap) as band width proxy\ndev = ta.stdev(src - vw, 20)\n\nplot(basis, \"VWAP\", color=#fbbf24, linewidth=2)\nu1 = plot(showBands ? basis + n1 * dev : na, \"Upper1\", color=#22d3ee)\nl1 = plot(showBands ? basis - n1 * dev : na, \"Lower1\", color=#22d3ee)\nu2 = plot(showBands ? basis + n2 * dev : na, \"Upper2\", color=color.new(#22d3ee, 40))\nl2 = plot(showBands ? basis - n2 * dev : na, \"Lower2\", color=color.new(#22d3ee, 40))\nfill(u1, l1, color=color.new(#fbbf24, 92))\n"
+  },
+  {
+    "id": "ex_ind_atr",
+    "name": "ATR Volatility",
+    "description": "ATR + normalized ATR% with dynamic lookback via for-loop.",
+    "path": "indicators/ATR.pyne",
+    "tags": [
+      "indicator",
+      "volatility",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description ATR and ATR% with v6 dynamic for-loop average\nindicator(\"ATR Volatility\", shorttitle=\"ATR\", overlay=false)\n\nlen = input.int(14, \"ATR Length\", minval=1)\nsmooth = input.int(5, \"Smooth ATR%\", minval=1)\n\na = ta.atr(len)\natrPct = a / close * 100.0\n\n// v6: dynamic for-loop boundary\nfloat sumPct = 0.0\nfor i = 0 to smooth - 1\n    sumPct += atrPct[i]\navgPct = sumPct / smooth\n\nplot(a, \"ATR\", color=#6366f1, linewidth=2)\nplot(atrPct, \"ATR%\", color=#22d3ee)\nplot(avgPct, \"ATR% smooth\", color=#fbbf24, style=plot.style_line)\n"
+  },
+  {
+    "id": "ex_ind_ichimoku",
+    "name": "Ichimoku Cloud",
+    "description": "Ichimoku Conversion/Base/Span A/B cloud (overlay).",
+    "path": "indicators/Ichimoku.pyne",
+    "tags": [
+      "indicator",
+      "trend",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Ichimoku Cloud\nindicator(\"Ichimoku Cloud\", shorttitle=\"Ichimoku\", overlay=true)\n\nconvLen = input.int(9, \"Conversion\", minval=1)\nbaseLen = input.int(26, \"Base\", minval=1)\nspanBLen = input.int(52, \"Span B\", minval=1)\ndisplace = input.int(26, \"Displacement\", minval=1)\n\nmid(len) =>\n    (ta.highest(high, len) + ta.lowest(low, len)) / 2.0\n\nconversion = mid(convLen)\nbase = mid(baseLen)\nspanA = (conversion + base) / 2.0\nspanB = mid(spanBLen)\nlagClose = close\n\nplot(conversion, \"Conversion\", color=#22d3ee)\nplot(base, \"Base\", color=#fbbf24)\npA = plot(spanA, \"Span A\", offset=displace, color=#34d399)\npB = plot(spanB, \"Span B\", offset=displace, color=#fb7185)\nfill(pA, pB, color=spanA > spanB ? color.new(#34d399, 85) : color.new(#fb7185, 85), title=\"Cloud\")\nplot(lagClose, \"Lagging\", offset=-displace, color=#94a3b8)\n"
+  },
+  {
+    "id": "ex_ind_obv",
+    "name": "OBV + Volume Osc",
+    "description": "On-Balance Volume and volume oscillator (overlay=false).",
+    "path": "indicators/OBV.pyne",
+    "tags": [
+      "indicator",
+      "volume",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description OBV with volume oscillator\nindicator(\"OBV + Volume Osc\", shorttitle=\"OBV\", overlay=false)\n\nfast = input.int(5, \"Vol Osc Fast\", minval=1)\nslow = input.int(10, \"Vol Osc Slow\", minval=1)\n\no = ta.obv\nvolOsc = 100.0 * (ta.ema(volume, fast) - ta.ema(volume, slow)) / ta.ema(volume, slow)\n\nplot(o, \"OBV\", color=#6366f1, linewidth=2)\nplot(volOsc, \"Vol Osc\", color=#fbbf24, style=plot.style_histogram)\nhline(0, \"Zero\", color=#94a3b8)\n"
+  },
+  {
+    "id": "ex_ind_mtf_rsi",
+    "name": "MTF RSI (dynamic request)",
+    "description": "Multi-timeframe RSI using v6 dynamic request.security (series TF string).",
+    "path": "indicators/MTF_RSI.pyne",
+    "tags": [
+      "indicator",
+      "mtf",
+      "request",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Multi-timeframe RSI — v6 dynamic request.security\nindicator(\"MTF RSI\", shorttitle=\"MTF RSI\", overlay=false)\n\nlen = input.int(14, \"RSI Length\", minval=1)\n// v6: timeframe can be a series/input string (dynamic request)\nhtf = input.timeframe(\"60\", \"Higher timeframe\")\nob = input.float(70, \"Overbought\")\nos = input.float(30, \"Oversold\")\n\nrsiExpr = ta.rsi(close, len)\n// Dynamic request: TF from input (series string path in v6)\nhtfRsi = request.security(syminfo.tickerid, htf, rsiExpr, barmerge.gaps_off, barmerge.lookahead_off)\n\nplot(rsiExpr, \"RSI\", color=#6366f1)\nplot(htfRsi, \"HTF RSI\", color=#fbbf24, linewidth=2)\nhline(ob, \"OB\", color=#fb7185, linestyle=hline.style_dashed)\nhline(os, \"OS\", color=#34d399, linestyle=hline.style_dashed)\nhline(50, \"Mid\", color=#94a3b8, linestyle=hline.style_dotted)\n\nif barstate.islast\n    log.info(\"MTF RSI chart={0} htf={1} tf={2}\", rsiExpr, htfRsi, htf)\n"
+  },
+  {
+    "id": "ex_str_sma_x",
+    "name": "SMA Crossover",
+    "description": "Classic fast/slow SMA cross with percent-of-equity sizing.",
+    "path": "strategies/SMA_Crossover.pyne",
+    "tags": [
+      "strategy",
+      "trend",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description SMA crossover strategy\nstrategy(\"SMA Crossover\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10,\n     commission_type=strategy.commission.percent, commission_value=0.05)\n\nfastLen = input.int(9, \"Fast SMA\", minval=1)\nslowLen = input.int(21, \"Slow SMA\", minval=1)\nsrc = input.source(close, \"Source\")\n\nfast = ta.sma(src, fastLen)\nslow = ta.sma(src, slowLen)\n\nif ta.crossover(fast, slow)\n    strategy.entry(\"Long\", strategy.long)\nif ta.crossunder(fast, slow)\n    strategy.close(\"Long\")\n\nplot(fast, \"Fast\", color=#22d3ee)\nplot(slow, \"Slow\", color=#fbbf24)\n"
+  },
+  {
+    "id": "ex_str_rsi_mr",
+    "name": "RSI Mean Reversion",
+    "description": "Long when RSI exits oversold; exit on overbought.",
+    "path": "strategies/RSI_MeanReversion.pyne",
+    "tags": [
+      "strategy",
+      "mean-reversion",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description RSI mean-reversion long-only\nstrategy(\"RSI Mean Reversion\", overlay=false, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\n\nlen = input.int(14, \"RSI Length\", minval=2)\nos = input.float(30, \"Oversold\", minval=1, maxval=50)\nob = input.float(70, \"Overbought\", minval=50, maxval=99)\n\nr = ta.rsi(close, len)\n\nif ta.crossover(r, os)\n    strategy.entry(\"Long\", strategy.long)\nif ta.crossunder(r, ob)\n    strategy.close(\"Long\")\n\nplot(r, \"RSI\", color=#6366f1)\nhline(os, \"OS\", color=#34d399)\nhline(ob, \"OB\", color=#fb7185)\n"
+  },
+  {
+    "id": "ex_str_macd_x",
+    "name": "MACD Crossover",
+    "description": "Long/flat on MACD vs signal cross; histogram filter optional.",
+    "path": "strategies/MACD_Crossover.pyne",
+    "tags": [
+      "strategy",
+      "momentum",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description MACD signal-line crossover\nstrategy(\"MACD Crossover\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\n\nfastLen = input.int(12, \"Fast\")\nslowLen = input.int(26, \"Slow\")\nsigLen = input.int(9, \"Signal\")\nuseHist = input.bool(true, \"Require hist > 0 for long\")\n\n[macdLine, signalLine, hist] = ta.macd(close, fastLen, slowLen, sigLen)\n\nlongCond = ta.crossover(macdLine, signalLine) and (not useHist or hist > 0)\nexitCond = ta.crossunder(macdLine, signalLine)\n\nif longCond\n    strategy.entry(\"Long\", strategy.long)\nif exitCond\n    strategy.close(\"Long\")\n"
+  },
+  {
+    "id": "ex_str_bb_bounce",
+    "name": "Bollinger Bounce",
+    "description": "Fade lower band; exit at basis or upper band.",
+    "path": "strategies/Bollinger_Bounce.pyne",
+    "tags": [
+      "strategy",
+      "mean-reversion",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Bollinger mean-reversion bounce\nstrategy(\"Bollinger Bounce\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\n\nlen = input.int(20, \"Length\")\nmult = input.float(2.0, \"StdDev\", step=0.1)\nexitAt = input.string(\"Basis\", \"Exit at\", options=[\"Basis\", \"Upper\"])\n\nbasis = ta.sma(close, len)\ndev = mult * ta.stdev(close, len)\nupper = basis + dev\nlower = basis - dev\n\nif ta.crossover(close, lower)\n    strategy.entry(\"Long\", strategy.long)\n\nfloat exitLevel = exitAt == \"Upper\" ? upper : basis\nif close > exitLevel and strategy.position_size > 0\n    strategy.close(\"Long\")\n\nplot(basis, \"Basis\", color=#6366f1)\nplot(upper, \"Upper\", color=#22d3ee)\nplot(lower, \"Lower\", color=#22d3ee)\n"
+  },
+  {
+    "id": "ex_str_supertrend",
+    "name": "Supertrend Follow",
+    "description": "Trend-follow Supertrend flips with ATR factor inputs.",
+    "path": "strategies/Supertrend_Follow.pyne",
+    "tags": [
+      "strategy",
+      "trend",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Supertrend trend-following\nstrategy(\"Supertrend Follow\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=15,\n     process_orders_on_close=true)\n\natrLen = input.int(10, \"ATR Length\")\nfactor = input.float(3.0, \"Factor\", step=0.1)\nallowShort = input.bool(false, \"Allow short\")\n\n[st, dir] = ta.supertrend(factor, atrLen)\n// dir < 0 → uptrend in Pine Supertrend convention\nbull = dir < 0\nbear = dir > 0\n\nif bull and not bull[1]\n    strategy.entry(\"Long\", strategy.long)\nif bear and not bear[1]\n    if allowShort\n        strategy.entry(\"Short\", strategy.short)\n    else\n        strategy.close(\"Long\")\n\nplot(st, \"ST\", color=bull ? #34d399 : #fb7185, linewidth=2)\n"
+  },
+  {
+    "id": "ex_str_donchian",
+    "name": "Donchian Breakout",
+    "description": "N-bar high breakout entries; exit on channel mid or opposite.",
+    "path": "strategies/Donchian_Breakout.pyne",
+    "tags": [
+      "strategy",
+      "breakout",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Donchian channel breakout\nstrategy(\"Donchian Breakout\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\n\nlen = input.int(20, \"Channel length\", minval=2)\nexitMid = input.bool(true, \"Exit at mid channel\")\n\nupper = ta.highest(high, len)\nlower = ta.lowest(low, len)\nmid = (upper + lower) / 2.0\n\nif ta.crossover(close, upper[1])\n    strategy.entry(\"Long\", strategy.long)\nif exitMid and ta.crossunder(close, mid)\n    strategy.close(\"Long\")\nif ta.crossunder(close, lower[1])\n    strategy.close(\"Long\")\n\nplot(upper, \"Upper\", color=#22d3ee)\nplot(lower, \"Lower\", color=#22d3ee)\nplot(mid, \"Mid\", color=#94a3b8, style=plot.style_stepline)\n"
+  },
+  {
+    "id": "ex_str_ema_atr",
+    "name": "EMA + ATR Stop",
+    "description": "EMA trend filter with ATR trailing stop (strategy.exit).",
+    "path": "strategies/EMA_ATR_Stop.pyne",
+    "tags": [
+      "strategy",
+      "trend",
+      "risk",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description EMA trend + ATR trailing stop\nstrategy(\"EMA + ATR Stop\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\n\nemaLen = input.int(50, \"EMA\", minval=1)\natrLen = input.int(14, \"ATR\", minval=1)\natrMult = input.float(2.5, \"ATR mult\", step=0.1)\n\ne = ta.ema(close, emaLen)\na = ta.atr(atrLen)\n\nif close > e and ta.crossover(close, e)\n    strategy.entry(\"Long\", strategy.long)\n\nif strategy.position_size > 0\n    strategy.exit(\"XL\", from_entry=\"Long\", trail_offset=a * atrMult / syminfo.mintick, trail_points=a * atrMult / syminfo.mintick)\n\nplot(e, \"EMA\", color=#6366f1)\n"
+  },
+  {
+    "id": "ex_str_stoch",
+    "name": "Stochastic Cross",
+    "description": "Stochastic %K/%D cross in oversold/overbought zones.",
+    "path": "strategies/Stochastic_Cross.pyne",
+    "tags": [
+      "strategy",
+      "oscillator",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Stochastic oscillator strategy\nstrategy(\"Stochastic Cross\", overlay=false, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\n\nkLen = input.int(14, \"%K Length\")\nkSmooth = input.int(3, \"%K Smooth\")\ndSmooth = input.int(3, \"%D Smooth\")\nos = input.float(20, \"Oversold\")\nob = input.float(80, \"Overbought\")\n\nk = ta.sma(ta.stoch(close, high, low, kLen), kSmooth)\nd = ta.sma(k, dSmooth)\n\nif ta.crossover(k, d) and k < os\n    strategy.entry(\"Long\", strategy.long)\nif ta.crossunder(k, d) and k > ob\n    strategy.close(\"Long\")\n\nplot(k, \"%K\", color=#6366f1)\nplot(d, \"%D\", color=#fbbf24)\nhline(os, \"OS\", color=#34d399)\nhline(ob, \"OB\", color=#fb7185)\n"
+  },
+  {
+    "id": "ex_str_session",
+    "name": "Session Filtered EMA",
+    "description": "EMA cross only inside a session window (v6 string session input).",
+    "path": "strategies/Session_EMA.pyne",
+    "tags": [
+      "strategy",
+      "session",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Session-filtered EMA cross\nstrategy(\"Session Filtered EMA\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\n\nfastLen = input.int(8, \"Fast EMA\")\nslowLen = input.int(21, \"Slow EMA\")\nsess = input.session(\"0930-1600\", \"Session\")\ntz = input.string(\"America/New_York\", \"Timezone\")\n\ninSess = not na(time(timeframe.period, sess, tz))\nfast = ta.ema(close, fastLen)\nslow = ta.ema(close, slowLen)\n\nif inSess and ta.crossover(fast, slow)\n    strategy.entry(\"Long\", strategy.long)\nif ta.crossunder(fast, slow) or (not inSess and strategy.position_size > 0)\n    strategy.close(\"Long\")\n\nbgcolor(inSess ? color.new(#6366f1, 94) : na)\nplot(fast, \"Fast\", color=#22d3ee)\nplot(slow, \"Slow\", color=#fbbf24)\n"
+  },
+  {
+    "id": "ex_str_multi",
+    "name": "Multi-Signal Enum Engine",
+    "description": "UDT signal + enum Side + switch routing (showcases newest v6 type system).",
+    "path": "strategies/Multi_Signal_Enum.pyne",
+    "tags": [
+      "strategy",
+      "enum",
+      "udt",
+      "method",
+      "v6",
+      "example"
+    ],
+    "content": "//@version=6\n// @description Multi-signal engine with enum Side, UDT, and methods\nstrategy(\"Multi-Signal Enum Engine\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=10)\n\nenum Side\n    flat\n    long\n    short\n\ntype Signal\n    Side side\n    float strength\n    string reason\n\nmethod isActionable(Signal this) =>\n    this.side != Side.flat and this.strength >= 1.0\n\nrsiLen = input.int(14, \"RSI Length\")\nemaLen = input.int(50, \"EMA Length\")\nos = input.float(30, \"Oversold\")\nob = input.float(70, \"Overbought\")\n\nr = ta.rsi(close, rsiLen)\ne = ta.ema(close, emaLen)\n\nSide trend = close > e ? Side.long : close < e ? Side.short : Side.flat\nSide mr = r < os ? Side.long : r > ob ? Side.short : Side.flat\n\n// Combine: require agreement\nSide combined = trend == mr and trend != Side.flat ? trend : Side.flat\nfloat strength = combined != Side.flat ? math.abs(r - 50.0) / 10.0 : 0.0\nstring reason = combined == Side.long ? \"trend+OS\" : combined == Side.short ? \"trend+OB\" : \"none\"\n\nSignal sig = Signal.new(combined, strength, reason)\n\nif sig.isActionable()\n    switch sig.side\n        Side.long =>\n            strategy.entry(\"Long\", strategy.long)\n        Side.short =>\n            strategy.close(\"Long\")\n        =>\n            true\n\nif barstate.islastconfirmedhistory\n    log.info(\"signal side={0} strength={1} reason={2}\", str.tostring(sig.side), sig.strength, sig.reason)\n\nplot(e, \"EMA\", color=#6366f1)\nplotshape(sig.side == Side.long and sig.isActionable(), \"L\", shape.triangleup, location.belowbar, #34d399, size=size.tiny)\n"
+  }
+]
