@@ -97,6 +97,8 @@ export interface CommandActions {
   toggleLive?: () => void;
   openSettings?: () => void;
   openPlugins?: () => void;
+  /** Open Workers Manager (calc backends / edge / Pyodide). */
+  openWorkers?: () => void;
   openScriptSettings?: () => void;
   resetUiLayout?: () => void;
   /** Column ruler in the Pine editor (optional; omitted when store lacks toggle). */
@@ -569,6 +571,26 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     keywords: ['library', 'extensions', 'install'],
   },
   {
+    id: 'action.workers',
+    title: 'Open Workers Manager',
+    category: 'navigation',
+    keywords: [
+      'workers',
+      'worker manager',
+      'backend',
+      'endpoint',
+      'pyodide',
+      'edge',
+      'cloudflare',
+      'pro api',
+      'install helper',
+      'health',
+      'status',
+      'service worker',
+      'pyne-agent',
+    ],
+  },
+  {
     id: 'action.script-settings',
     title: 'Open Script Inputs',
     category: 'actions',
@@ -714,6 +736,7 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
     byId.set('theme.parchment', () => actions.setChartThemePreset?.('parchment'));
   }
   if (actions.openPlugins) byId.set('action.plugins', actions.openPlugins);
+  if (actions.openWorkers) byId.set('action.workers', actions.openWorkers);
   if (actions.openScriptSettings) byId.set('action.script-settings', actions.openScriptSettings);
   if (actions.resetUiLayout) byId.set('action.reset-ui', actions.resetUiLayout);
   if (actions.toggleEditorRuler) byId.set('editor.toggle-ruler', actions.toggleEditorRuler);

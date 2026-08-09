@@ -26,11 +26,14 @@ description: "Build, serve, Cloudflare, VPS demo, CORS, and CI for the AXIS PWA 
 
 ## Abstract
 
-AXIS DevOps spans three runnable surfaces:
+AXIS DevOps spans four runnable surfaces:
 
-1. **Vite + Solid PWA** (`frontend/`) — product UI
+1. **Vite + Solid PWA** — product UI (`bun run dev`)
 2. **Static server** (`axis_pwa_server.py` or Vite preview) — production-like assets
-3. **Cloudflare Worker** (`frontend/worker/`) — edge API / WS
+3. **Cloudflare Worker** (`worker/`) — edge API / WS
+4. **Desktop (Tauri 2)** — native shell around the same UI (`bun run desktop:dev`)
+
+See [Desktop (Tauri)](./desktop) for prerequisites and packaging.
 
 Python evaluation for desk workflows still often uses the **Flask Pro API** (`make run` on `:5002`). The Worker proxies there when `EXTERNAL_BACKEND` is set.
 

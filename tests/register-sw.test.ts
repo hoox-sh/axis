@@ -58,6 +58,20 @@ describe('registerAxisServiceWorker', () => {
     expect(register).not.toHaveBeenCalled();
   });
 
+  it('no-ops inside Tauri desktop shell', async () => {
+    const register = mock(() => Promise.resolve({ waiting: null, addEventListener() {}, update: async () => {} }));
+    // @ts-expect-error test stub
+    globalThis.window = { __TAURI_INTERNALS__: {} };
+    // @ts-expect-error test stub
+    globalThis.navigator = { serviceWorker: { register } };
+    // @ts-expect-error test stub
+    globalThis.location = { protocol: 'https:', hostname: 'tauri.localhost' };
+
+    const reg = await registerAxisServiceWorker();
+    expect(reg).toBeNull();
+    expect(register).not.toHaveBeenCalled();
+  });
+
   it('registers once and shares the same promise (no double-register)', async () => {
     const registration = {
       waiting: null as ServiceWorker | null,

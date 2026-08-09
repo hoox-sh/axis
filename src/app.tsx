@@ -24,7 +24,7 @@
  * Topbar → flex row (left dock | chart | right dock) → bottom dock → system
  * logs → status bar. Dock columns are portal hosts: open panels stack
  * **one below the other** on the same side. Overlay: settings, plugins,
- * script settings, command palette (⌘K), panel drag ghost.
+ * workers manager, script settings, command palette (⌘K), panel drag ghost.
  *
  * ## Boot (`onMount`)
  * - Theme + UI scale; restore dynamic plugins; optional default symbol load
@@ -51,6 +51,7 @@ import { ResultsPanel } from './ui/ResultsPanel';
 import { SystemLogs } from './ui/SystemLogs';
 import { ScriptLogsPanel } from './ui/ScriptLogsPanel';
 import { PluginManager } from './ui/PluginManager';
+import { WorkersManager } from './ui/WorkersManager';
 import { DataViewPanel } from './ui/DataViewPanel';
 import { LayerPanel } from './ui/LayerPanel';
 import { AlertsPanel } from './ui/AlertsPanel';
@@ -90,7 +91,9 @@ import {
 } from './editor/editor-bridge';
 import { loadSymbolData } from './data/load-symbol';
 import { prefetchPyodideAssets, preloadPyodide } from './engines/catalog';
-import { filterPyneFiles, importPyneFiles } from './storage/import-pyne-files';
+import { filterPyneFiles } from './storage/import-pyne-files';
+import { importAndOpenPyneFiles } from './storage/import-pyne-open';
+import { installDesktopShell, isTauriShell } from './desktop';
 import { applyThemeToDocument } from './theme';
 
 /** Primary charting workspace component mounted by `index.tsx`. */
@@ -102,6 +105,7 @@ export const App: Component = () => {
     setSettingsOpen(true);
   };
   const [pluginsOpen, setPluginsOpen] = createSignal(false);
+  const [workersOpen, setWorkersOpen] = createSignal(false);
   const [catalogTick, setCatalogTick] = createSignal(0);
   /** File drag-over highlight for .pine drop-to-library. */
   const [pineDropActive, setPineDropActive] = createSignal(false);
@@ -257,72 +261,16 @@ export const App: Component = () => {
     };
 
     const handlePineImport = async (pine: File[]) => {
-      try {
-        const result = await importPyneFiles(pine);
-        const n = result.imported.length;
-        if (n > 0) {
-          const names = result.imported.map((d) => d.meta.name).join(', ');
-          const lineHint = result.imported
-            .map((d) => {
-              const lines = d.content.split(/\r?\n/).length;
-              return `${d.meta.name} (${lines} ln)`;
-            })
-            .join(', ');
-          setStatus(
-            'ready',
-            n === 1
-              ? `Saved "${names}" to script library`
-              : `Saved ${n} scripts to library · opened ${n} tabs`,
-          );
-          appendLog(
-            'ok',
-            n === 1
-              ? `Imported pine file → library: ${lineHint}`
-              : `Imported ${n} pine files → library + tabs: ${lineHint}`,
-            'library',
-          );
-          // Open every imported script as its own editor tab (full body from import)
-          try {
-            const docs = result.imported.map((d) => ({
-              content: d.content,
-              name: d.meta.name,
-              libraryId: d.meta.id,
-            }));
-            if (editorRef.loadLibraryDocs) {
-              editorRef.loadLibraryDocs(docs);
-            } else if (editorRef.loadLibraryDoc) {
-              const first = docs[0]!;
-              editorRef.loadLibraryDoc(first.content, first.name, first.libraryId);
-            } else {
-              editorRef.setDoc?.(docs[0]!.content);
-            }
-            setEditorOpen(true);
-          } catch {
-            /* open is best-effort */
-          }
-        }
-        if (result.warnings.length) {
-          const w = result.warnings[0]!;
-          // Truncation chrome is common for TV community copies — surface clearly
-          setStatus('error', w.length > 160 ? `${w.slice(0, 157)}…` : w);
-          for (const line of result.warnings.slice(0, 5)) {
-            appendLog('warn', line, 'library');
-          }
-        }
-        if (result.errors.length) {
-          const msg = result.errors.slice(0, 3).join('; ');
-          setStatus('error', `Pine import: ${msg}`);
-          appendLog('error', `Pine import errors: ${msg}`, 'library');
-        }
-        if (!n && !result.errors.length) {
-          setStatus('error', 'No Pine scripts found in drop');
-        }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        setStatus('error', `Pine import failed: ${msg}`);
-        appendLog('error', `Pine import failed: ${msg}`, 'library');
-      }
+      await importAndOpenPyneFiles(pine, { editorRef, emptyContext: 'drop' });
     };
+
+    // Tauri desktop: File → Open Script… / Help → About
+    let unsubDesktop: (() => void) | undefined;
+    if (isTauriShell()) {
+      void installDesktopShell({ editorRef }).then((off) => {
+        unsubDesktop = off;
+      });
+    }
 
     const onWinDragEnter = (e: DragEvent) => {
       if (!isFileDragEvent(e)) return;
@@ -386,6 +334,7 @@ export const App: Component = () => {
     onCleanup(() => {
       unsub();
       unsubPanelWin();
+      unsubDesktop?.();
       window.removeEventListener('dragenter', onWinDragEnter, winOpts);
       window.removeEventListener('dragover', onWinDragOver, winOpts);
       window.removeEventListener('dragleave', onWinDragLeave, winOpts);
@@ -408,6 +357,7 @@ export const App: Component = () => {
         onToggleWatchlist={() => setWatchlistOpen(!store.watchlist.open)}
         onOpenSettings={() => openSettings('general')}
         onOpenPlugins={() => setPluginsOpen(true)}
+        onOpenWorkers={() => setWorkersOpen(true)}
         catalogTick={catalogTick()}
         editorRef={editorRef}
       />
@@ -534,6 +484,11 @@ export const App: Component = () => {
           else ref.setDoc?.(doc);
         }}
       />
+      <WorkersManager
+        open={workersOpen()}
+        onClose={() => setWorkersOpen(false)}
+        onChanged={() => setCatalogTick((n) => n + 1)}
+      />
 
       {/* Global ⌘K / Ctrl+K command palette */}
       <CommandPalette
@@ -541,6 +496,7 @@ export const App: Component = () => {
         onOpenSettings={() => openSettings('general')}
         onOpenThemeSettings={() => openSettings('theme')}
         onOpenPlugins={() => setPluginsOpen(true)}
+        onOpenWorkers={() => setWorkersOpen(true)}
       />
 
       {/* Drop .pyne / .pine / .pinescript files anywhere → script library */}

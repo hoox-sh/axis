@@ -22,6 +22,7 @@ product APIs.
 ```bash
 bun install
 bun run dev              # Vite :3000
+bun run desktop:dev      # Tauri 2 shell + Vite (needs Rust + system webview)
 bun run test             # unit + worker tests
 bun run test:e2e:smoke   # Playwright smoke
 cd worker && bun run dev # wrangler :8787
@@ -35,16 +36,21 @@ cd worker && bun run dev # wrangler :8787
 | `src/data/data-source-manager.ts` | Background OHLCV backfill + validate + gap-fill |
 | `src/onchain/` | On-chain plane: DefiLlama TVL, GeckoTerminal, events, jobs |
 | `src/theme/` | Chart theme catalog + curated presets |
+| `src-tauri/` | Tauri 2 desktop host (`tauri.conf.json`, Rust, icons, native menu) |
+| `src/desktop/` | Desktop shell JS (menu events, open-script, About) |
+| `src/workers/` | Workers Manager catalog + health probes (Pro API, CF Worker, Pyodide, SW) |
+| `src/ui/WorkersManager.tsx` | Workers Manager modal (overview / detail / install / configure) |
 | `worker/` | Cloudflare Worker (+ `/api/onchain/*` proxy) |
 | `tests/` | Bun unit tests |
 | `e2e/` | Playwright |
 | `docs/` | Product docs (Mintlify-style MDX) |
+| `docs/devops/desktop.mdx` | Desktop (Tauri) guide |
 | `docs/enduser/guides/on-chain.mdx` | End-user on-chain guide |
 | `LEGACY.md` | Old static shell notes |
 
 ## Hard constraints
 
-- **Do not commit** `node_modules/`, `dist/`, `.wrangler/`, `.env`, coverage, or debug screenshots (`.axis-*.png`).
+- **Do not commit** `node_modules/`, `dist/`, `src-tauri/target/`, `.wrangler/`, `.env`, coverage, or debug screenshots (`.axis-*.png`).
 - Keep API base URL configurable (default local pyne on `:5002`).
 - License headers / SPDX: **AGPL-3.0-only**, author **jango_blockchained**.
 - Worker bindings (`DB`, KV, etc.) are environment-specific — do not invent production IDs in docs without checking `worker/wrangler.toml`.

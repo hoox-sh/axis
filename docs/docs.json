@@ -152,6 +152,7 @@
               "devops/index",
               "devops/local-dev",
               "devops/build-and-serve",
+              "devops/desktop",
               "devops/cloudflare",
               "devops/vps-demo",
               "devops/cors-and-origins",

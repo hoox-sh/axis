@@ -246,6 +246,7 @@ describe('buildDefaultCommands', () => {
       toggleLive: noop,
       openSettings: noop,
       openPlugins: noop,
+      openWorkers: noop,
       openScriptSettings: noop,
       resetUiLayout: noop,
       toggleEditorRuler: noop,

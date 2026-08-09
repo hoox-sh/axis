@@ -1,0 +1,7 @@
+# Copyright (c) 2026 HOOX · AXIS · jango_blockchained
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[[permission]]
+identifier = "allow-open-pine-scripts"
+description = "Allow the native Open Script dialog and reading selected Pine/PYNE files."
+commands.allow = ["open_pine_scripts"]

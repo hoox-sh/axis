@@ -29,7 +29,7 @@
  * - **Compute** — Engine, Stream, Run, Live, Replay
  * - **Layout** — multi-chart layout menu
  * - **Panels** — List, Editor, Library, Scripts, Layers, Alerts, Data, Inputs, Results
- * - **System** — Plugins, Settings, Theme (`ml-auto`)
+ * - **System** — Workers, Plugins, Settings, Theme (`ml-auto`)
  *
  * ## Actions
  * - **Load / Reload** → force `loadSymbolData` (historical via active source)
@@ -92,6 +92,8 @@ export const Topbar: Component<{
   onToggleWatchlist: () => void;
   onOpenSettings: () => void;
   onOpenPlugins?: () => void;
+  /** Open Workers Manager (backends / edge / Pyodide / SW). */
+  onOpenWorkers?: () => void;
   /** Bump when plugin catalog changes */
   catalogTick?: number;
   editorRef: { getDoc: () => string };
@@ -660,6 +662,17 @@ export const Topbar: Component<{
 
       {/* ── System (pushed right via CSS) ───────────────────── */}
       <div class="axis-tb-group" data-tb-group="system">
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost sc-btn-icon"
+          onClick={() => props.onOpenWorkers?.()}
+          title="Workers Manager — backends, edge, Pyodide, PWA status"
+          data-testid="axis-btn-workers"
+          aria-label="Open workers manager"
+        >
+          <Icons.activity />
+        </button>
+
         <button
           type="button"
           class="sc-btn sc-btn-ghost sc-btn-icon"

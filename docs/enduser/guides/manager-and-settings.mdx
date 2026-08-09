@@ -19,18 +19,19 @@
 
 ---
 title: "Manager and settings"
-description: "Plugin Manager catalog, URL install, capability badges, and Settings dialog for engine, storage, and endpoints."
+description: "Plugin Manager, Workers Manager (status + install helpers), and Settings for engine, storage, and endpoints."
 ---
 
 # Manager and settings
 
-Two orthogonal surfaces configure AXIS: the **Plugin Manager** (what exists and is active) and **Settings** (endpoint, engine, storage, interval defaults). Neither embeds language semantics.
+Three surfaces configure AXIS: the **Plugin Manager** (what exists and is active), the **Workers Manager** (backends / edge / Pyodide / PWA status + install helpers), and **Settings** (endpoint, engine, storage, interval defaults). None embed language semantics.
 
 ## Abstract
 
 | Surface | Opens from | Mutates |
 | --- | --- | --- |
 | Plugin Manager | Topbar Plugins | Registry membership, active source via Use, library ops |
+| Workers Manager | Topbar activity icon · ⌘K “Workers” | Probe health; set `endpoint` / engine; install PYNE Agent plugin |
 | Settings | Topbar gear | `endpoint`, active engine/storage, chart interval, watchlist refresh |
 
 Active plugins live in `store.activePlugins`; per-plugin fields in `store.pluginsConfig` keyed by `` `${kind}:${id}` ``.
@@ -92,6 +93,19 @@ See [PYNE Agent](/axis/docs/enduser/guides/pyne-agent) and [plugin reference](/a
 ### Script Library tab
 
 See [Script library](/axis/docs/enduser/guides/script-library). Manager hosts the panel so library and plugins share one modal.
+
+## Workers Manager
+
+Opens from the topbar **activity** icon (next to Plugins) or command palette **Open Workers Manager**.
+
+| Tab | Role |
+| --- | --- |
+| **Overview** | Health cards for pyne Pro API, AXIS Worker (prod + local wrangler), Pyodide, PWA service worker, optional PYNE Agent / pyne-worker |
+| **Detail** | Probe latency, feature flags, capabilities, Use-as-backend / preload / install actions |
+| **Install** | Step-by-step setup with copyable commands (`make run`, `cd worker && bun run dev`, …) |
+| **Configure** | Paste Backend URL, presets (`:5002`, `:8787`, workers.dev, axis.hoox.sh), activate Pyodide, install agent plugin |
+
+Probes use existing health surfaces (`GET /health`, pyodide assets, `navigator.serviceWorker`) — they do not invent product APIs. Implementation: `src/workers/*`, `src/ui/WorkersManager.tsx`.
 
 ## Settings dialog
 

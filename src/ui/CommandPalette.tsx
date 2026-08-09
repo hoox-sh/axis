@@ -109,6 +109,8 @@ export type CommandPaletteProps = {
   /** Open Settings → Theme tab (chart colors). */
   onOpenThemeSettings?: () => void;
   onOpenPlugins?: () => void;
+  /** Open Workers Manager modal. */
+  onOpenWorkers?: () => void;
 };
 
 function isEditableTarget(t: EventTarget | null): boolean {
@@ -213,6 +215,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       openThemeSettings: () =>
         props.onOpenThemeSettings?.() ?? props.onOpenSettings?.(),
       openPlugins: () => props.onOpenPlugins?.(),
+      openWorkers: () => props.onOpenWorkers?.(),
       openScriptSettings: () => openScriptSettings(null),
       resetUiLayout: () => resetUiLayout(),
       // Editor power commands

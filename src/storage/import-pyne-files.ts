@@ -214,17 +214,27 @@ export async function readFileAsText(file: File): Promise<string> {
   return file.text();
 }
 
+/** In-memory source ready for library import (browser File or desktop open). */
+export interface PyneSourceInput {
+  /** File name or path used for display / extension checks. */
+  name: string;
+  /** Full UTF-8 source text. */
+  content: string;
+  /** Optional original path for library `path` metadata. */
+  path?: string;
+}
+
 /**
- * Read Pine source files and write each into the active script library.
+ * Write already-read Pine sources into the active script library.
  *
- * @param files - FileList or File array (non-pine entries are skipped)
- * @returns summary of imports / errors / skipped
+ * Used by browser File import and the Tauri desktop open flow (paths are
+ * already filtered by extension on the host when possible).
  */
-export async function importPyneFiles(
-  files: ArrayLike<File> | File[],
+export async function importPyneSources(
+  sources: PyneSourceInput[],
 ): Promise<ImportPyneResult> {
-  const all = Array.from(files as ArrayLike<File>);
-  const pine = filterPyneFiles(all);
+  const all = Array.isArray(sources) ? sources : [];
+  const pine = all.filter((s) => s && isPyneFileName(s.name));
   const skipped = all.length - pine.length;
   const imported: ImportedPyneScript[] = [];
   const errors: string[] = [];
@@ -232,32 +242,34 @@ export async function importPyneFiles(
   const stamp = Date.now().toString(36);
 
   for (let i = 0; i < pine.length; i++) {
-    const file = pine[i]!;
-    const name = scriptNameFromFileName(file.name);
+    const src = pine[i]!;
+    const label = src.name;
+    const name = scriptNameFromFileName(label);
     try {
-      const raw = await readFileAsText(file);
+      const raw = String(src.content ?? '');
       if (!raw.trim()) {
-        errors.push(`${file.name}: empty file`);
+        errors.push(`${label}: empty file`);
         continue;
       }
       const cleaned = sanitizePyneSource(raw);
       if (!cleaned.content.trim()) {
-        errors.push(`${file.name}: empty after removing page chrome`);
+        errors.push(`${label}: empty after removing page chrome`);
         continue;
       }
       for (const w of cleaned.warnings) {
-        warnings.push(`${file.name}: ${w}`);
+        warnings.push(`${label}: ${w}`);
       }
+      const pathMeta = src.path || label;
       const desc =
         cleaned.missingLines != null
-          ? `Imported from ${file.name} (truncated — missing ~${cleaned.missingLines} lines)`
-          : `Imported from ${file.name}`;
+          ? `Imported from ${pathMeta} (truncated — missing ~${cleaned.missingLines} lines)`
+          : `Imported from ${pathMeta}`;
       const meta = await writeScript({
         // Unique even when many files import in the same millisecond
         id: `s_${stamp}_${i}_${Math.random().toString(36).slice(2, 8)}`,
         name,
         content: cleaned.content,
-        path: file.name,
+        path: pathMeta,
         description: desc,
       });
       imported.push({
@@ -268,9 +280,39 @@ export async function importPyneFiles(
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      errors.push(`${file.name}: ${msg}`);
+      errors.push(`${label}: ${msg}`);
     }
   }
 
   return { imported, errors, warnings, skipped };
+}
+
+/**
+ * Read Pine source files and write each into the active script library.
+ *
+ * @param files - FileList or File array (non-pine entries are skipped)
+ * @returns summary of imports / errors / skipped
+ */
+export async function importPyneFiles(
+  files: ArrayLike<File> | File[],
+): Promise<ImportPyneResult> {
+  const all = Array.from(files as ArrayLike<File>);
+  const sources: PyneSourceInput[] = [];
+  const readErrors: string[] = [];
+  for (const file of all) {
+    if (!file) continue;
+    try {
+      const content = await readFileAsText(file);
+      sources.push({ name: file.name, content, path: file.name });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      readErrors.push(`${file.name}: ${msg}`);
+    }
+  }
+
+  const result = await importPyneSources(sources);
+  if (readErrors.length) {
+    result.errors = [...readErrors, ...result.errors];
+  }
+  return result;
 }

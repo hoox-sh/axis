@@ -46,9 +46,14 @@ flowchart TB
 ### Frontend (preferred product path)
 
 ```bash
-cd frontend
 bun install
 bun run dev          # Vite + Solid → typically http://127.0.0.1:3000
+```
+
+### Desktop (optional Tauri shell)
+
+```bash
+bun run desktop:dev  # Vite + native window (see devops/desktop)
 ```
 
 ### Flask Pro API (engine backend)

@@ -9,6 +9,10 @@ build/
 out/
 *.tsbuildinfo
 
+# Tauri / Rust
+src-tauri/target/
+src-tauri/gen/
+
 # Test / coverage
 coverage/
 coverage.lcov

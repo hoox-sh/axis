@@ -26,7 +26,13 @@ Part of the **[HOOX](https://hoox.sh)** open trading stack:
 # Typical local trio
 make -C ../pynescript run   # pyne Pro API :5002
 bun run dev                 # this repo :3000
+
+# Optional desktop shell (Tauri 2 — needs Rust + system webview libs)
+bun run desktop:dev         # native window + Vite HMR
+bun run desktop:build       # package installers under src-tauri/target/release/bundle/
 ```
+
+See [docs/devops/desktop.mdx](./docs/devops/desktop.mdx) for platform prerequisites.
 
 **Icons:** [Lucide](https://lucide.dev) via `lucide-solid` (tree-shakable stroke
 icons, ISC). Wrapper: `src/ui/icons.tsx`.
