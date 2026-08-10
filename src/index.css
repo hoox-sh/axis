@@ -12,7 +12,7 @@
 /* AXIS  — Void pack (aligned with hoox-landing-page)
    Primary accent: void indigo oklch(0.74 0.16 277)
    Signals: lightgreen (live/positive), orange (warn/markers)
-   Borders: 2px · soft-minimal radius (4px chrome, 6px inputs)
+   Borders: 2px · exactly two radii (inputs slightly softer; chips = chart badges)
 */
 
 @theme {
@@ -52,21 +52,30 @@
   /* Legacy alias (prefer accent) — hex fallback for canvas/JS */
   --color-purple: #939fff;
 
-  /* Geometry — soft-minimal radius (void chrome, slightly rounded controls) */
+  /* Geometry — exactly two radii (keep pills/circles as 50% / 999px only) */
   --border-w: 2px;
   /* Inputs / buttons — hairline edge, not panel chrome */
   --border-w-input: 1px;
-  --radius-sc: 4px;
-  --radius: 4px;
-  --radius-xs: 3px;
-  --radius-sm: 4px;
-  --radius-md: 5px;
-  --radius-lg: 6px;
-  --radius-xl: 8px;
-  --radius-2xl: 10px;
-  --radius-3xl: 12px;
-  /* Form controls — a touch softer than panels */
-  --radius-input: 6px;
+  /*
+   * Radius A — form controls (inputs, selects, textareas, default buttons).
+   * Slightly softer than chip chrome; kept small for void density.
+   */
+  --radius-input: 3px;
+  /*
+   * Radius B — chart script badges / chips / compact chrome
+   * (matches .axis-pane-badge-chip / .axis-slot-badge).
+   */
+  --radius-chip: 2px;
+  /* Aliases → only the two tokens above (no third value) */
+  --radius-sc: var(--radius-chip);
+  --radius: var(--radius-chip);
+  --radius-xs: var(--radius-chip);
+  --radius-sm: var(--radius-chip);
+  --radius-md: var(--radius-input);
+  --radius-lg: var(--radius-input);
+  --radius-xl: var(--radius-input);
+  --radius-2xl: var(--radius-input);
+  --radius-3xl: var(--radius-input);
 }
 
 :root {
@@ -286,7 +295,7 @@ button.sc-btn:focus-visible {
   background: color-mix(in srgb, var(--color-border) 48%, transparent);
   flex-shrink: 0;
   opacity: 0.85;
-  border-radius: 1px;
+  border-radius: var(--radius-chip);
 }
 
 /* ---------- Topbar chrome (density · groups · active · fields) ---------- */
@@ -347,10 +356,54 @@ button.sc-btn:focus-visible {
   white-space: nowrap;
 }
 
-/* Brand cluster */
-[data-testid="axis-topbar"] [data-testid="axis-brand"] {
-  gap: 0.45em;
-  margin-right: 0.05em;
+/* Brand cluster — match topbar input / control line height */
+[data-testid="axis-topbar"] [data-testid="axis-brand"],
+[data-testid="axis-topbar"] .axis-tb-brand {
+  gap: 0.5em;
+  margin-right: 0.1em;
+  /* Same vertical footprint as .axis-tb-field / .sc-input controls */
+  min-height: var(--ui-control-h);
+  height: var(--ui-control-h);
+  align-items: center;
+  align-self: center;
+}
+
+/* Logo scales with control height (SVG attrs overridden by CSS) */
+[data-testid="axis-topbar"] .axis-tb-brand-logo,
+[data-testid="axis-topbar"] [data-testid="axis-hoox-logo"] {
+  width: calc(var(--ui-control-h) * 0.78);
+  height: calc(var(--ui-control-h) * 0.78);
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Wordmark: line-box = control height so it sits flush with Symbol/Interval */
+[data-testid="axis-topbar"] .axis-tb-brand-title {
+  display: inline-flex;
+  align-items: center;
+  height: var(--ui-control-h);
+  line-height: var(--ui-control-h);
+  font-size: 1.05em;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  white-space: nowrap;
+  user-select: none;
+}
+
+[data-testid="axis-topbar"] .axis-tb-brand-sub {
+  margin-left: 0.4em;
+  font-size: 0.78em;
+  font-weight: 450;
+  letter-spacing: 0.04em;
+  color: var(--color-text-faint);
+  line-height: inherit;
+}
+
+@media (max-width: 639px) {
+  [data-testid="axis-topbar"] .axis-tb-brand-sub {
+    display: none;
+  }
 }
 
 /* Primary Run — stronger emphasis in the toolbar */
@@ -415,7 +468,7 @@ button.sc-btn:focus-visible {
   text-align: left;
   padding: 0.45rem 0.55rem;
   border: 1px solid transparent;
-  border-radius: var(--radius-input, 4px);
+  border-radius: var(--radius-input);
   background: transparent;
   color: var(--color-text);
   cursor: pointer;
@@ -797,7 +850,7 @@ button.sc-btn:focus-visible {
   box-shadow: 0 0 0 1px color-mix(in oklch, oklch(0.74 0.16 277) 55%, transparent);
 }
 
-/* Preset chip row */
+/* Preset chip row — same radius as chart script badges */
 .sc-chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -807,7 +860,7 @@ button.sc-btn:focus-visible {
   font-size: 0.78em;
   padding: 0.28em 0.65em;
   border: var(--border-w-input) solid var(--color-border-soft);
-  border-radius: var(--radius-input);
+  border-radius: var(--radius-chip);
   background: var(--color-bg-elev);
   color: var(--color-text-dim);
   cursor: pointer;
@@ -828,11 +881,11 @@ button.sc-btn:focus-visible {
   font-weight: 600;
 }
 
-/* Dialog shell polish */
+/* Dialog shell polish — chrome uses chip radius (same as chart badges) */
 .sc-dialog {
   background: var(--color-bg-panel);
   border: var(--border-w) solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-chip);
   box-shadow: var(--ui-shadow-dialog);
   outline: none;
   display: flex;
@@ -1128,6 +1181,33 @@ button.sc-btn:focus-visible {
   border-width: 0;
 }
 
+/* ── Presentation modes (fullscreen / chart-only) ───────────────── */
+/*
+ * Chart-only: hide workspace chrome so the chart fills the shell.
+ * Browser fullscreen is Fullscreen API on [data-axis-app] (no extra CSS).
+ * Panels stay mounted (display:none) so docks reappear with prior state.
+ */
+[data-axis-app][data-chart-only='1'] [data-testid='axis-topbar'],
+[data-axis-app][data-chart-only='1'] .axis-dock-col,
+[data-axis-app][data-chart-only='1'] [data-testid='axis-statusbar'],
+[data-axis-app][data-chart-only='1'] [data-axis-system-logs] {
+  display: none !important;
+}
+
+/* Float docked-panel shells can still open via ⌘K; keep float root. */
+[data-axis-app][data-chart-only='1'] [data-axis-workspace] {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* When the app itself is fullscreened, ensure it fills the FS box */
+[data-axis-app]:fullscreen,
+[data-axis-app]:-webkit-full-screen {
+  width: 100%;
+  height: 100%;
+  background: var(--color-bg-base, #0a0a0c);
+}
+
 /* ── Dock columns (portal hosts) ─ */
 /* Left/right multi-panel: side-by-side (row). Bottom: stack vertically.
  * Columns sit in the app flex row so the chart gets remaining space. */
@@ -1418,7 +1498,7 @@ body.axis-panel-dragging {
   height: 2px;
   width: 100%;
   background: var(--color-text-faint);
-  border-radius: 1px;
+  border-radius: var(--radius-chip);
 }
 .axis-panel-handle:hover .axis-panel-grip {
   opacity: 0.95;
@@ -1505,7 +1585,7 @@ body.axis-panel-dragging {
   overflow: hidden;
   white-space: nowrap;
   /* Tighter corners than default sc-btn / --radius-input */
-  border-radius: 2px;
+  border-radius: var(--radius-chip);
   /* No chrome border — active state is icon color only */
   border-color: transparent !important;
   background: transparent !important;
@@ -1708,7 +1788,7 @@ body.axis-panel-dragging {
 }
 .axis-sk-line {
   height: 0.55em;
-  border-radius: 2px;
+  border-radius: var(--radius-chip);
   background: linear-gradient(
     90deg,
     var(--color-border-soft) 0%,
@@ -1722,7 +1802,7 @@ body.axis-panel-dragging {
   flex: 1;
   min-height: 2.5em;
   margin-top: 0.25em;
-  border-radius: 2px;
+  border-radius: var(--radius-chip);
   background: color-mix(in srgb, var(--color-border-soft) 70%, transparent);
   border: 1px solid var(--color-border-soft);
 }
@@ -1750,7 +1830,7 @@ body.axis-panel-dragging {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   line-height: 1.3;
-  border-radius: 2px;
+  border-radius: var(--radius-chip);
   border: 1px solid var(--color-border-soft, #2a2d38);
   background: color-mix(in srgb, var(--color-bg-base, #0a0b10) 92%, transparent);
   color: var(--color-text-dim, #8b8e9c);
@@ -1824,7 +1904,7 @@ body.axis-panel-dragging {
   padding: 1px 2px 1px 6px;
   background: color-mix(in srgb, var(--color-bg-base, #0a0b10) 92%, transparent);
   border: 1px solid var(--color-border-soft, #2a2d38);
-  border-radius: 2px;
+  border-radius: var(--radius-chip);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(4px);
 }
@@ -1859,7 +1939,7 @@ body.axis-panel-dragging {
   padding: 0;
   margin: 0;
   border: none;
-  border-radius: 2px;
+  border-radius: var(--radius-chip);
   background: transparent;
   color: var(--color-text-dim, #8b8e9c);
   cursor: pointer;
@@ -2037,7 +2117,7 @@ body.axis-panel-dragging {
 .axis-cmd-palette-footer kbd {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   border: 1px solid var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-chip);
   padding: 0 0.3em;
   margin-right: 0.15em;
   background: var(--color-bg-elev);

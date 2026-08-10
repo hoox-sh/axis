@@ -29,7 +29,7 @@
  * - **Compute** — Engine, Stream, Run, Live, Replay
  * - **Layout** — multi-chart layout menu
  * - **Panels** — List, Editor, Library, Scripts, Layers, Alerts, Data, Inputs, Results
- * - **System** — Workers, Plugins, Settings, Theme (`ml-auto`)
+ * - **System** — Fullscreen, Chart only, Workers, Plugins, Settings, Theme (`ml-auto`)
  *
  * ## Actions
  * - **Load / Reload** → force `loadSymbolData` (historical via active source)
@@ -82,6 +82,10 @@ import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
 import { CachedDatasetsModal } from './CachedDatasetsModal';
 import { SymbolModal } from './SymbolModal';
 import { RunSplitButton } from './RunSplitButton';
+import {
+  toggleBrowserFullscreen,
+  toggleChartOnlyMode,
+} from './presentation';
 
 const INTERVALS = [...WATCHLIST_INTERVALS];
 
@@ -239,17 +243,19 @@ export const Topbar: Component<{
     >
       {/* ── Brand ───────────────────────────────────────────── */}
       <div
-        class="axis-tb-group"
+        class="axis-tb-group axis-tb-brand"
         data-tb-group="brand"
         data-testid="axis-brand"
         title="HOOX · AXIS"
       >
-        <HooxLogo size="xs" class="text-text flex-shrink-0" data-testid="axis-hoox-logo" />
-        <div class="font-semibold text-[1em] text-text tracking-tight leading-none">
+        <HooxLogo
+          size="m"
+          class="axis-tb-brand-logo text-text flex-shrink-0"
+          data-testid="axis-hoox-logo"
+        />
+        <div class="axis-tb-brand-title">
           AXIS
-          <span class="text-text-faint font-normal text-[0.78em] ml-1.5 tracking-wide hidden sm:inline">
-            chart
-          </span>
+          <span class="axis-tb-brand-sub">chart</span>
         </div>
       </div>
 
@@ -293,7 +299,7 @@ export const Topbar: Component<{
             />
             <button
               type="button"
-              class="sc-btn sc-btn-ghost px-1.5 self-stretch border border-border/40 rounded-sm"
+              class="sc-btn sc-btn-ghost px-1.5 self-stretch border border-border/40 rounded-[var(--radius-chip)]"
               data-testid="axis-symbol-browse"
               title="Browse symbols for current exchange (source / stream)"
               aria-label="Browse symbols"
@@ -687,6 +693,38 @@ export const Topbar: Component<{
 
       {/* ── System (pushed right via CSS) ───────────────────── */}
       <div class="axis-tb-group" data-tb-group="system">
+        <button
+          type="button"
+          class={`sc-btn sc-btn-ghost sc-btn-icon ${store.presentation?.fullscreen ? 'is-active' : ''}`}
+          onClick={() => void toggleBrowserFullscreen()}
+          title={
+            store.presentation?.fullscreen
+              ? 'Exit fullscreen (F11)'
+              : 'Fullscreen — fill the display (F11)'
+          }
+          aria-pressed={!!store.presentation?.fullscreen}
+          aria-label="Toggle fullscreen"
+          data-testid="axis-btn-fullscreen"
+        >
+          <Icons.fullscreen />
+        </button>
+
+        <button
+          type="button"
+          class={`sc-btn sc-btn-ghost sc-btn-icon ${store.presentation?.chartOnly ? 'is-active' : ''}`}
+          onClick={() => toggleChartOnlyMode()}
+          title={
+            store.presentation?.chartOnly
+              ? 'Exit chart only (Shift+F / Esc)'
+              : 'Chart only — hide chrome, chart fills the shell (Shift+F)'
+          }
+          aria-pressed={!!store.presentation?.chartOnly}
+          aria-label="Toggle chart-only mode"
+          data-testid="axis-btn-chart-only"
+        >
+          {store.presentation?.chartOnly ? <Icons.minimize /> : <Icons.maximize />}
+        </button>
+
         <button
           type="button"
           class="sc-btn sc-btn-ghost sc-btn-icon"

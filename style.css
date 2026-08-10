@@ -6,8 +6,10 @@
 /* AXIS legacy shell — void pack (indigo) aligned with Solid path / landing */
 
 :root {
-    --radius: 4px;
-    --radius-input: 6px;
+    /* Match Solid path: only two radii (input soft, chip = chart badges) */
+    --radius-input: 3px;
+    --radius-chip: 2px;
+    --radius: var(--radius-chip);
     --bg-base: #0a0b10;
     --bg-panel: #111218;
     --bg-elev: #171821;
@@ -99,7 +101,7 @@ body {
     background-color: var(--bg-elev);
     color: var(--text);
     border: 1px solid var(--border);
-    border-radius: var(--radius-input, 6px);
+    border-radius: var(--radius-input);
     padding: 5px 10px;
     font-size: 12px;
     outline: none;
@@ -153,7 +155,7 @@ body {
     background-color: var(--bg-elev);
     color: var(--text);
     border: 1px solid var(--border);
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
     padding: 4px 10px;
     font-size: 12px;
     cursor: pointer;
@@ -206,7 +208,7 @@ body {
 .mode-badge {
     display: inline-block;
     padding: 2px 8px;
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
@@ -319,7 +321,7 @@ body {
     font-size: 10px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     padding: 1px 4px;
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
 }
 
 .watchlist-change.positive {
@@ -360,7 +362,7 @@ body {
     width: 100%;
     background: transparent;
     border: 1px solid var(--border);
-    border-radius: var(--radius-input, 6px);
+    border-radius: var(--radius-input);
     color: var(--text-primary);
     font-size: 11px;
     padding: 6px 8px;
@@ -605,7 +607,7 @@ body {
     font-weight: 600;
     font-size: 11px;
     padding: 1px 6px;
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
     text-align: center;
 }
 
@@ -720,7 +722,7 @@ body {
     font-size: 12px;
     padding: 1px 4px;
     line-height: 1;
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
     transition: color 0.15s, background 0.15s;
     flex-shrink: 0;
 }
@@ -747,7 +749,7 @@ body {
     gap: 4px;
     padding: 1px 6px;
     margin-left: 8px;
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
     font-size: 10px;
     font-weight: 600;
     background-color: rgba(255, 152, 0, 0.15);
@@ -788,7 +790,7 @@ body {
 .settings-modal {
     background: var(--bg-panel);
     border: 1px solid var(--border);
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
     width: min(540px, calc(100vw - 32px));
     max-height: calc(100vh - 64px);
     display: flex;
@@ -848,7 +850,7 @@ body {
     background: var(--bg-elev);
     color: var(--text);
     border: 1px solid var(--border);
-    border-radius: var(--radius-input, 6px);
+    border-radius: var(--radius-input);
     padding: 8px 12px;
     margin: 2px 0;
     font-size: 13px;
@@ -898,7 +900,7 @@ body {
     font-size: 11px;
     font-family: inherit;
     cursor: pointer;
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
 }
 
 .time-preset:hover {
@@ -950,7 +952,7 @@ body {
     pointer-events: none;
     background: rgba(19, 23, 34, 0.7);
     padding: 1px 6px;
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
 }
 
 .pane-resize {
@@ -998,7 +1000,7 @@ body {
 .strategy-table-wrap {
     overflow: auto;
     border: 1px solid var(--border-soft);
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
 }
 
 .strategy-table {
@@ -1083,7 +1085,7 @@ body {
     border-collapse: collapse;
     font-size: 12px;
     border: 1px solid var(--border-soft);
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
     overflow: hidden;
 }
 
@@ -1113,7 +1115,7 @@ body {
 .kind-badge {
     display: inline-block;
     padding: 1px 6px;
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -1173,7 +1175,7 @@ html[data-theme="light"] .pyne-editor-host textarea {
     z-index: 1100;
     background: var(--bg-panel);
     border: 1px solid var(--border);
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
     max-height: 280px;
     overflow: auto;
@@ -1284,7 +1286,7 @@ html[data-theme="light"] .pyne-editor-host textarea {
     padding: 0 2px;
     margin-left: 4px;
     cursor: pointer;
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
 }
 
 .tab-close:hover {
@@ -1390,7 +1392,7 @@ html[data-theme="light"] .pyne-editor-host textarea {
     pointer-events: none;
     background: var(--bg-panel);
     border: 1px solid var(--border);
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
     padding: 6px 10px;
     font-size: 11px;
     line-height: 1.6;

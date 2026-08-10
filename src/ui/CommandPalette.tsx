@@ -85,6 +85,11 @@ import {
   filterCommands,
   type CommandDef,
 } from './command-registry';
+import {
+  toggleBrowserFullscreen,
+  toggleChartOnlyMode,
+  toggleChartOnlyFullscreen,
+} from './presentation';
 
 /** Optional host hooks (e.g. desktop shell git bridge). */
 type AxisHostWindow = Window & {
@@ -218,6 +223,9 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       openWorkers: () => props.onOpenWorkers?.(),
       openScriptSettings: () => openScriptSettings(null),
       resetUiLayout: () => resetUiLayout(),
+      toggleFullscreen: () => void toggleBrowserFullscreen(),
+      toggleChartOnly: () => toggleChartOnlyMode(),
+      toggleChartOnlyFullscreen: () => void toggleChartOnlyFullscreen(),
       // Editor power commands
       toggleEditorRuler: () => toggleEditorRulerEnabled(),
       toggleInlineDebug: () => toggleInlineDebugEnabled(),

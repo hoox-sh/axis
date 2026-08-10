@@ -18,26 +18,52 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Price-scale toggles on the main chart (bottom-right of price pane):
+ * Price-scale toggles on the **main (price) pane** corner:
+ * left of the right price scale, above the time (month) axis.
+ *
  * **[A]** auto-scale · **[L]** logarithmic · **[$]** right scale labels ·
  * **[N]** series last-value / name labels.
+ *
+ * Mounted via portal into the price pane DOM (`paneDomId('price')`) so volume
+ * / indicator panes do not push the cluster to the host bottom-right.
  *
  * @module chart/ChartScaleControls
  */
 
-import { Component, createEffect, createSignal, onMount, onCleanup } from 'solid-js';
+import {
+  Component,
+  Show,
+  createEffect,
+  createSignal,
+  onMount,
+  onCleanup,
+} from 'solid-js';
+import { Portal } from 'solid-js/web';
 import { store, setStore, persist } from '../store';
 import { getManager } from './manager-access';
+import { RIGHT_PRICE_SCALE_WIDTH } from './series-factory';
+
+/** Fallback time-axis height when LWC `timeScale().height()` is unavailable. */
+const TIME_SCALE_FALLBACK_PX = 26;
+/** Gap between controls and the scale gutters. */
+const GUTTER_GAP_PX = 4;
 
 /**
- * Bottom-right [A]/[L]/[$]/[N] control cluster for the price pane.
- * Syncs local active state from {@link PaneManager} when available.
+ * [A][L][$][N] cluster for the price pane — sits in the plot-area corner
+ * (above time scale, left of right price scale).
  */
 export const ChartScaleControls: Component = () => {
   const [autoOn, setAutoOn] = createSignal(true);
   const [logOn, setLogOn] = createSignal(false);
   const [labelsOn, setLabelsOn] = createSignal(true);
   const [namesOn, setNamesOn] = createSignal(true);
+  /** Price pane host for portal mount (null until manager creates it). */
+  const [paneEl, setPaneEl] = createSignal<HTMLElement | null>(null);
+  /** Dynamic offsets so we clear the LWC time axis + price gutter. */
+  const [inset, setInset] = createSignal({
+    right: RIGHT_PRICE_SCALE_WIDTH + GUTTER_GAP_PX,
+    bottom: TIME_SCALE_FALLBACK_PX + GUTTER_GAP_PX,
+  });
 
   const syncFromManager = () => {
     const m = getManager();
@@ -53,6 +79,40 @@ export const ChartScaleControls: Component = () => {
     setNamesOn(m.isLastValueLabelsVisible());
   };
 
+  /** Resolve price-pane host + measure scale gutters for corner placement. */
+  const measure = () => {
+    const m = getManager();
+    if (!m) {
+      setPaneEl(null);
+      return;
+    }
+    let el: HTMLElement | null = null;
+    try {
+      el = document.getElementById(m.paneDomId('price'));
+    } catch {
+      el = null;
+    }
+    setPaneEl(el);
+
+    let timeH = TIME_SCALE_FALLBACK_PX;
+    try {
+      const pricePane = m.getPane?.('price');
+      const ts = pricePane?.chart?.timeScale?.();
+      const h = typeof ts?.height === 'function' ? Number(ts.height()) : NaN;
+      if (Number.isFinite(h) && h > 0) timeH = h;
+    } catch {
+      /* keep fallback */
+    }
+
+    const labels = store.priceScaleLabelsVisible !== false;
+    // Match PaneManager right-gutter width so we sit flush left of price labels
+    const rightW = labels ? RIGHT_PRICE_SCALE_WIDTH : 0;
+    setInset({
+      right: rightW + GUTTER_GAP_PX,
+      bottom: timeH + GUTTER_GAP_PX,
+    });
+  };
+
   onMount(() => {
     // Apply persisted label prefs as soon as manager exists
     const m = getManager();
@@ -61,18 +121,44 @@ export const ChartScaleControls: Component = () => {
       if (store.lastValueLabelsVisible === false) m.setLastValueLabelsVisible(false);
     }
     syncFromManager();
-    // Manager is created in ChartHost onMount — poll once after layout.
-    const t = window.setTimeout(syncFromManager, 0);
-    onCleanup(() => clearTimeout(t));
+    measure();
+
+    // Manager / panes mount slightly after ChartHost; retry a few frames
+    const t0 = window.setTimeout(() => {
+      syncFromManager();
+      measure();
+    }, 0);
+    const t1 = window.setTimeout(measure, 50);
+    const t2 = window.setTimeout(measure, 200);
+
+    const onResize = () => measure();
+    window.addEventListener('resize', onResize);
+
+    // Pane height / multi-pane layout changes
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => measure());
+      const host = document.querySelector('[data-axis-panes]');
+      if (host) ro.observe(host);
+    }
+
+    onCleanup(() => {
+      clearTimeout(t0);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener('resize', onResize);
+      ro?.disconnect();
+    });
   });
 
   // Symbol/history reloads re-enable auto-scale via afterDataReload
   createEffect(() => {
     void store.chartDataGen;
     syncFromManager();
+    measure();
   });
 
-  // Keep manager in sync when store pref changes (Settings save, hydrate)
+  // Labels on/off changes the right gutter — re-inset the cluster
   createEffect(() => {
     const want = store.priceScaleLabelsVisible !== false;
     const m = getManager();
@@ -80,6 +166,7 @@ export const ChartScaleControls: Component = () => {
       m.setPriceScaleLabelsVisible(want);
     }
     setLabelsOn(want);
+    measure();
   });
 
   createEffect(() => {
@@ -89,6 +176,13 @@ export const ChartScaleControls: Component = () => {
       m.setLastValueLabelsVisible(want);
     }
     setNamesOn(want);
+  });
+
+  // Multi-pane layout / volume height can move the price pane
+  createEffect(() => {
+    void store.panes;
+    void store.chartLayout?.mode;
+    measure();
   });
 
   const onAuto = () => {
@@ -111,6 +205,8 @@ export const ChartScaleControls: Component = () => {
     setLabelsOn(next);
     setStore('priceScaleLabelsVisible', next);
     persist();
+    // Gutter width changes after LWC applies options
+    queueMicrotask(() => measure());
   };
 
   const onNames = () => {
@@ -134,9 +230,13 @@ export const ChartScaleControls: Component = () => {
         : 'bg-bg-panel/90 border-border text-text-dim hover:border-border-focus hover:text-text',
     ].join(' ');
 
-  return (
+  const cluster = () => (
     <div
-      class="absolute bottom-2 right-2 z-[15] flex items-center gap-0.5 pointer-events-auto"
+      class="absolute z-[15] flex items-center gap-0.5 pointer-events-auto"
+      style={{
+        right: `${inset().right}px`,
+        bottom: `${inset().bottom}px`,
+      }}
       data-testid="axis-chart-scale-controls"
       role="group"
       aria-label="Price scale controls"
@@ -186,5 +286,15 @@ export const ChartScaleControls: Component = () => {
         N
       </button>
     </div>
+  );
+
+  return (
+    <Show when={paneEl()} fallback={null}>
+      {(el) => (
+        <Portal mount={el()}>
+          {cluster()}
+        </Portal>
+      )}
+    </Show>
   );
 };

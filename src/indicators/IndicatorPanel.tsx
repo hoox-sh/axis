@@ -48,7 +48,7 @@ const CompChip: Component<{
   active?: boolean;
 }> = (props) => {
   const base =
-    'inline-flex items-center max-w-full truncate px-1 py-px border font-mono text-[9px] uppercase tracking-wide';
+    'inline-flex items-center max-w-full truncate px-1 py-px border font-mono text-[9px] uppercase tracking-wide rounded-[var(--radius-chip)]';
   const tone = () =>
     props.active
       ? 'border-accent/50 text-accent bg-accent/10'

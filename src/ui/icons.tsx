@@ -91,6 +91,9 @@ import {
   Link2,
   Slash,
   Table2,
+  Fullscreen,
+  Maximize2,
+  Minimize2,
   type LucideProps,
 } from 'lucide-solid';
 
@@ -185,6 +188,12 @@ export const Icons = {
   cpu: withDefaults(Cpu),
   clock: withDefaults(Clock),
   zap: withDefaults(Zap),
+  /** Browser Fullscreen API (app shell). */
+  fullscreen: withDefaults(Fullscreen),
+  /** Chart-only / expand chrome hide. */
+  maximize: withDefaults(Maximize2),
+  /** Exit chart-only / restore chrome. */
+  minimize: withDefaults(Minimize2),
 };
 
 /** Inline icon row helper for buttons */

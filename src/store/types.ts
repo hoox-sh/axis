@@ -27,8 +27,9 @@
  * - **Persisted**: layout, plugins, drawings prefs, panel chrome, scripts list
  *   (code + inputs), watchlist symbols — via `store/index.ts` `persist()`.
  * - **Ephemeral** (never hydrated from disk): `bars`, `lastRun`, `logs`,
- *   `crosshair`, `scriptSettings` open state, `selectedDrawingId`, full
- *   telemetry planes (only HUD layout prefs survive reload).
+ *   `crosshair`, `scriptSettings` open state, `selectedDrawingId`,
+ *   `presentation` (fullscreen / chart-only), full telemetry planes
+ *   (only HUD layout prefs survive reload).
  * - **Live session**: `live.active` always hydrates as `false`; user re-enables.
  *
  * Drawing geometry types re-export from `chart/drawing-types`.
@@ -324,6 +325,15 @@ export interface AppState {
    * 0.8–1.3, default 1. Applied as CSS ``--ui-scale`` on ``<html>``.
    */
   uiScale: number;
+  /**
+   * Workspace presentation (ephemeral — never hydrated / not persisted).
+   * - `fullscreen` — browser Fullscreen API engaged on the app shell
+   * - `chartOnly` — hide topbar / docks / status so the chart fills the shell
+   */
+  presentation: {
+    fullscreen: boolean;
+    chartOnly: boolean;
+  };
   editor: EditorLayoutState;
   watchlist: WatchlistState;
   indicatorPanel: { open: boolean; width: number };

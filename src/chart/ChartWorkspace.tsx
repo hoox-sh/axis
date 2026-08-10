@@ -31,6 +31,13 @@ import { ChartHost } from './ChartHost';
 import { setActiveSlotId } from './chart-registry';
 import { BarReplayControls } from '../ui/BarReplayControls';
 import { onchainManagerState } from '../onchain/manager';
+import { Icons } from '../ui/icons';
+import {
+  toggleBrowserFullscreen,
+  toggleChartOnlyMode,
+  exitBrowserFullscreen,
+  setChartOnlyMode,
+} from '../ui/presentation';
 
 /** Root chart area for the main app shell (replaces bare ChartHost). */
 export const ChartWorkspace: Component = () => {
@@ -46,11 +53,76 @@ export const ChartWorkspace: Component = () => {
   /** Attached on-chain series count (price-pane overlays; subtle chrome only). */
   const onchainCount = () => onchainManagerState.series?.length ?? 0;
 
+  const fsOn = () => !!store.presentation?.fullscreen;
+  const chartOnly = () => !!store.presentation?.chartOnly;
+
+  const exitAllPresentation = () => {
+    setChartOnlyMode(false);
+    if (fsOn()) void exitBrowserFullscreen();
+  };
+
   return (
     <div
       class="flex-1 min-h-0 min-w-0 relative flex flex-col"
       data-axis-chart-workspace-wrap
+      data-chart-only={chartOnly() ? '1' : '0'}
     >
+      {/* Presentation controls — always available on chart; essential when
+          chart-only hides the topbar. Top-right, above slot badges / rail. */}
+      <div
+        class="absolute top-1.5 right-1.5 z-[40] flex items-center gap-0.5 pointer-events-auto"
+        data-testid="axis-presentation-controls"
+        role="group"
+        aria-label="Presentation controls"
+      >
+        <Show when={chartOnly()}>
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost sc-btn-icon min-w-[1.75em] h-[1.75em] bg-bg-panel/90 border-2 border-border text-text-dim hover:text-text hover:border-border-focus"
+            title="Exit chart only (Esc)"
+            aria-label="Exit chart only"
+            data-testid="axis-btn-exit-chart-only"
+            onClick={exitAllPresentation}
+          >
+            <Icons.x />
+          </button>
+        </Show>
+        <button
+          type="button"
+          class={`sc-btn sc-btn-ghost sc-btn-icon min-w-[1.75em] h-[1.75em] border-2 ${
+            fsOn()
+              ? 'bg-accent/20 border-accent text-accent'
+              : 'bg-bg-panel/90 border-border text-text-dim hover:text-text hover:border-border-focus'
+          }`}
+          title={fsOn() ? 'Exit fullscreen (F11)' : 'Fullscreen (F11)'}
+          aria-pressed={fsOn()}
+          aria-label="Toggle fullscreen"
+          data-testid="axis-chart-btn-fullscreen"
+          onClick={() => void toggleBrowserFullscreen()}
+        >
+          <Icons.fullscreen />
+        </button>
+        <button
+          type="button"
+          class={`sc-btn sc-btn-ghost sc-btn-icon min-w-[1.75em] h-[1.75em] border-2 ${
+            chartOnly()
+              ? 'bg-accent/20 border-accent text-accent'
+              : 'bg-bg-panel/90 border-border text-text-dim hover:text-text hover:border-border-focus'
+          }`}
+          title={
+            chartOnly()
+              ? 'Exit chart only (Shift+F / Esc)'
+              : 'Chart only — hide chrome (Shift+F)'
+          }
+          aria-pressed={chartOnly()}
+          aria-label="Toggle chart-only mode"
+          data-testid="axis-chart-btn-chart-only"
+          onClick={() => toggleChartOnlyMode()}
+        >
+          {chartOnly() ? <Icons.minimize /> : <Icons.maximize />}
+        </button>
+      </div>
+
       <div
         class={`flex-1 min-h-0 min-w-0 grid gap-[2px] bg-border ${gridClassForMode(mode())}`}
         data-axis-chart-workspace

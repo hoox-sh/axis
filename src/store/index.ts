@@ -24,11 +24,11 @@
  * 1. `DEFAULTS` seed the shape; `loadPersisted()` merges localStorage
  *    (`STORAGE_KEY`). Corrupt JSON is dropped (never throws on boot).
  * 2. Ephemeral fields are forced off on hydrate (live, logs, bars, lastRun,
- *    selection, open modals).
+ *    selection, open modals, presentation modes).
  * 3. `persist()` debounces a write that **omits** bars, lastRun, logs,
- *    crosshair, scriptSettings, selectedDrawingId, and full telemetry
- *    (only `telemetry.hud` is kept). QuotaExceededError degrades to slim
- *    write / in-memory only. Pending debounce flushes on beforeunload/pagehide.
+ *    crosshair, scriptSettings, selectedDrawingId, presentation, and full
+ *    telemetry (only `telemetry.hud` is kept). QuotaExceededError degrades to
+ *    slim write / in-memory only. Pending debounce flushes on beforeunload/pagehide.
  *
  * ## Data flow
  * - Chart / loaders call `loadBars` / `appendBar` / `setStatus` / telemetry helpers.
@@ -168,6 +168,8 @@ const DEFAULTS: AppState = {
   theme: 'dark',
   chartTheme: defaultChartThemeState(),
   uiScale: 1,
+  // Ephemeral presentation — never hydrate as on
+  presentation: { fullscreen: false, chartOnly: false },
   editor: { open: true, width: 460, mode: 'docked' },
   watchlist: { open: true, width: 200, symbols: [...DEFAULT_WATCHLIST], refreshSec: 15 },
   indicatorPanel: { open: false, width: 224 },
@@ -510,6 +512,8 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       },
       // Ephemeral error-share toast — never restore from disk
       errorShareOffer: null,
+      // Ephemeral presentation modes — always start normal
+      presentation: { fullscreen: false, chartOnly: false },
       // Drawing tool always starts as cursor; list normalized for dual legacy/style fields
       drawingTool: 'cursor',
       drawings: normalizeUserDrawings(bag.drawings) as Drawing[],
@@ -850,6 +854,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     indicatorSeries: _is,
     errorShareOffer: _eso,
     preEval: _pe,
+    presentation: _presentation,
     compare,
     telemetry,
     drawings,
@@ -1773,6 +1778,32 @@ export function setUiScale(raw: number) {
   persist();
 }
 
+/* ── Presentation (fullscreen / chart-only) ─────────────────────── */
+
+/** Sync browser Fullscreen API state into the store (ephemeral). */
+export function setPresentationFullscreen(on: boolean): void {
+  if (store.presentation?.fullscreen === !!on) return;
+  setStore('presentation', 'fullscreen', !!on);
+}
+
+/** Hide or restore workspace chrome (topbar / docks / status). Ephemeral. */
+export function setChartOnly(on: boolean): void {
+  if (store.presentation?.chartOnly === !!on) return;
+  setStore('presentation', 'chartOnly', !!on);
+}
+
+/** Toggle chart-only presentation (chart fills the shell). */
+export function toggleChartOnly(): void {
+  setChartOnly(!store.presentation?.chartOnly);
+}
+
+/** Exit chart-only (and report previous state). */
+export function exitChartOnly(): boolean {
+  const was = !!store.presentation?.chartOnly;
+  if (was) setChartOnly(false);
+  return was;
+}
+
 /**
  * Reset workspace chrome to factory defaults without touching market data,
  * scripts, plugins, endpoint, drawings, or watchlist symbols.
@@ -1807,6 +1838,8 @@ export function resetUiLayout(): void {
 
   setStore('uiScale', 1);
   applyUiScale(1);
+  // Leave browser fullscreen alone (user OS gesture); clear chart-only chrome hide
+  setStore('presentation', 'chartOnly', false);
 
   setStore('telemetry', 'hud', 'compact', false);
   setStore('telemetry', 'hud', 'overlay', false);

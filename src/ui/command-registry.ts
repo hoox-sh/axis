@@ -101,6 +101,12 @@ export interface CommandActions {
   openWorkers?: () => void;
   openScriptSettings?: () => void;
   resetUiLayout?: () => void;
+  /** Browser Fullscreen API on the app shell. */
+  toggleFullscreen?: () => void | Promise<void>;
+  /** Hide topbar / docks / status — chart fills the shell. */
+  toggleChartOnly?: () => void;
+  /** Chart-only + browser fullscreen together (immersive chart). */
+  toggleChartOnlyFullscreen?: () => void | Promise<void>;
   /** Column ruler in the Pine editor (optional; omitted when store lacks toggle). */
   toggleEditorRuler?: () => void;
   /** End-of-line log/error chips from last run. */
@@ -602,6 +608,39 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     category: 'actions',
     keywords: ['factory', 'defaults', 'chrome', 'panels reset'],
   },
+  {
+    id: 'action.fullscreen',
+    title: 'Toggle Fullscreen',
+    category: 'navigation',
+    keywords: ['fullscreen', 'full screen', 'display', 'monitor', 'f11'],
+    shortcut: 'F11',
+  },
+  {
+    id: 'action.chart-only',
+    title: 'Toggle Chart Only',
+    category: 'navigation',
+    keywords: [
+      'chart only',
+      'fullscreen chart',
+      'hide chrome',
+      'focus chart',
+      'zen',
+      'immersive',
+    ],
+    shortcut: '⇧F',
+  },
+  {
+    id: 'action.chart-only-fullscreen',
+    title: 'Chart Only + Fullscreen',
+    category: 'navigation',
+    keywords: [
+      'immersive',
+      'chart fullscreen',
+      'full screen only chart',
+      'maximize chart',
+      'presentation',
+    ],
+  },
   // Editor power tools
   {
     id: 'editor.toggle-ruler',
@@ -739,6 +778,13 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.openWorkers) byId.set('action.workers', actions.openWorkers);
   if (actions.openScriptSettings) byId.set('action.script-settings', actions.openScriptSettings);
   if (actions.resetUiLayout) byId.set('action.reset-ui', actions.resetUiLayout);
+  if (actions.toggleFullscreen) {
+    byId.set('action.fullscreen', () => void actions.toggleFullscreen?.());
+  }
+  if (actions.toggleChartOnly) byId.set('action.chart-only', actions.toggleChartOnly);
+  if (actions.toggleChartOnlyFullscreen) {
+    byId.set('action.chart-only-fullscreen', () => void actions.toggleChartOnlyFullscreen?.());
+  }
   if (actions.toggleEditorRuler) byId.set('editor.toggle-ruler', actions.toggleEditorRuler);
   if (actions.toggleInlineDebug) byId.set('editor.toggle-inline-debug', actions.toggleInlineDebug);
   if (actions.toggleDebugPins) byId.set('editor.toggle-debug-pins', actions.toggleDebugPins);

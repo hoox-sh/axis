@@ -63,10 +63,10 @@ interface Props {
 }
 
 const iconBtn =
-  'inline-flex items-center justify-center w-6 h-6 text-text-faint hover:text-accent border border-transparent hover:border-border/60 bg-transparent disabled:opacity-40';
+  'inline-flex items-center justify-center w-6 h-6 text-text-faint hover:text-accent border border-transparent hover:border-border/60 bg-transparent disabled:opacity-40 rounded-[var(--radius-chip)]';
 
 const badgeShell =
-  'inline-flex items-center justify-center w-[1.35rem] h-[1.35rem] border border-border/45 bg-bg/40';
+  'inline-flex items-center justify-center w-[1.35rem] h-[1.35rem] border border-border/45 bg-bg/40 rounded-[var(--radius-chip)]';
 
 /** One meta badge — icon only, full explanation in `title`. Optional click. */
 const MetaBadge: Component<{
@@ -230,7 +230,7 @@ export const IndicatorCard: Component<Props> = (props) => {
 
   return (
     <div
-      class="bg-bg-elev border border-border-soft p-2 mb-2 data-[hidden=true]:opacity-55"
+      class="bg-bg-elev border border-border-soft p-2 mb-2 rounded-[var(--radius-chip)] data-[hidden=true]:opacity-55"
       data-testid="axis-indicator-card"
       data-hidden={!props.indicator.visible || undefined}
     >

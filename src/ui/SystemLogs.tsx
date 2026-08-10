@@ -96,7 +96,10 @@ export const SystemLogs: Component = () => {
   const last = () => store.logs[store.logs.length - 1];
 
   return (
-    <div class="flex flex-col border-t-2 border-border bg-bg-panel flex-shrink-0">
+    <div
+      class="flex flex-col border-t-2 border-border bg-bg-panel flex-shrink-0"
+      data-axis-system-logs
+    >
       {/* Collapsed header / toggle row */}
       <div class="flex items-center gap-1.5 px-2 py-0.5 min-h-[24px]">
         <button

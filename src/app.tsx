@@ -95,6 +95,10 @@ import { filterPyneFiles } from './storage/import-pyne-files';
 import { importAndOpenPyneFiles } from './storage/import-pyne-open';
 import { installDesktopShell, isTauriShell } from './desktop';
 import { applyThemeToDocument } from './theme';
+import {
+  installPresentationControls,
+  setPresentationRoot,
+} from './ui/presentation';
 
 /** Primary charting workspace component mounted by `index.tsx`. */
 export const App: Component = () => {
@@ -127,6 +131,8 @@ export const App: Component = () => {
     applyThemeToDocument(store.chartTheme);
     applyUiScale(store.uiScale);
     document.title = 'AXIS';
+    // Fullscreen API + chart-only shortcuts (F11 / Shift+F / Esc)
+    const unsubPresentation = installPresentationControls();
     appendLog(
       'ok',
       `AXIS ready · scale ${Math.round((store.uiScale || 1) * 100)}% · void chrome`,
@@ -335,6 +341,8 @@ export const App: Component = () => {
       unsub();
       unsubPanelWin();
       unsubDesktop?.();
+      unsubPresentation();
+      setPresentationRoot(null);
       window.removeEventListener('dragenter', onWinDragEnter, winOpts);
       window.removeEventListener('dragover', onWinDragOver, winOpts);
       window.removeEventListener('dragleave', onWinDragLeave, winOpts);
@@ -343,7 +351,13 @@ export const App: Component = () => {
   });
 
   return (
-    <div class="h-screen flex flex-col bg-bg-base text-text overflow-hidden relative">
+    <div
+      class="h-screen flex flex-col bg-bg-base text-text overflow-hidden relative"
+      data-axis-app
+      data-fullscreen={store.presentation?.fullscreen ? '1' : '0'}
+      data-chart-only={store.presentation?.chartOnly ? '1' : '0'}
+      ref={(el) => setPresentationRoot(el)}
+    >
       <Topbar
         onToggleEditor={() => {
           if (store.editor.mode === 'popout') {
@@ -387,7 +401,7 @@ export const App: Component = () => {
           </ErrorBoundary>
 
           {/* Popout placeholder when editor is external */}
-          <Show when={store.editor.mode === 'popout'}>
+          <Show when={store.editor.mode === 'popout' && !store.presentation?.chartOnly}>
             <div class="absolute bottom-3 right-3 z-20 flex items-center gap-2 px-2.5 py-1.5 bg-bg-panel border-2 border-accent text-[11px] text-accent shadow-[0_4px_20px_rgba(0,0,0,0.45)]">
               <span>Editor detached</span>
               <button
