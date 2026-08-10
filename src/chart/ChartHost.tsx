@@ -40,6 +40,7 @@ import {
   clearCompareBars,
 } from '../store';
 import { HooxLoader } from '../ui/HooxLoader';
+import { barIndexAtTimeBinary } from './heavy-data';
 import {
   getManager,
   setManager,
@@ -268,24 +269,9 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
           return;
         }
         const bl = bars();
-        let barIndex: number | null = null;
-        if (bl.length) {
-          const exact = bl.findIndex((b) => b.time === t);
-          barIndex = exact >= 0 ? exact : null;
-          if (barIndex == null) {
-            let best = 0;
-            let bestD = Infinity;
-            for (let i = 0; i < bl.length; i++) {
-              const d = Math.abs(bl[i]!.time - t);
-              if (d < bestD) {
-                bestD = d;
-                best = i;
-              }
-            }
-            barIndex = best;
-          }
-        }
-        setCrosshair(t, barIndex);
+        const barIndex =
+          bl.length > 0 ? barIndexAtTimeBinary(bl, t) : null;
+        setCrosshair(t, barIndex >= 0 ? barIndex : null);
       });
     } catch (err: unknown) {
       reportUiError(err, {

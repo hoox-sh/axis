@@ -38,33 +38,62 @@
  * Built-ins register at module load (`registerBuiltins`) before first paint.
  */
 
-import { Component, createSignal, onMount, onCleanup, Show, ErrorBoundary } from 'solid-js';
+import {
+  Component,
+  createSignal,
+  onMount,
+  onCleanup,
+  Show,
+  ErrorBoundary,
+  lazy,
+  Suspense,
+} from 'solid-js';
 import { Topbar } from './ui/Topbar';
 import { StatusBar } from './ui/StatusBar';
 import { Watchlist } from './ui/Watchlist';
 import { ChartWorkspace } from './chart/ChartWorkspace';
 import { EditorPane } from './editor/EditorPane';
 import { IndicatorPanel } from './indicators/IndicatorPanel';
-import { SettingsDialog, type SettingsTabId } from './ui/SettingsDialog';
-import { ScriptSettingsModal } from './ui/ScriptSettingsModal';
+import { type SettingsTabId } from './ui/SettingsDialog';
 import { ResultsPanel } from './ui/ResultsPanel';
 import { SystemLogs } from './ui/SystemLogs';
 import { ScriptLogsPanel } from './ui/ScriptLogsPanel';
-import { PluginManager } from './ui/PluginManager';
-import { WorkersManager } from './ui/WorkersManager';
 import { DataViewPanel } from './ui/DataViewPanel';
 import { LayerPanel } from './ui/LayerPanel';
-import { AlertsPanel } from './ui/AlertsPanel';
-import { LibraryPanel } from './ui/ScriptLibraryPanel';
-import { DataSourceManagerPanel } from './ui/DataSourceManagerPanel';
-import { OnChainPanel } from './ui/OnChainPanel';
-import { CommandPalette } from './ui/CommandPalette';
 import { errorFallback } from './ui/ErrorFallback';
 import { ErrorShareToast } from './ui/ErrorShareToast';
 import { reportUiError } from './ui/boot-errors';
-import { runFromEditor } from './indicators/run-target';
 import { registerBuiltins } from './plugins/bootstrap';
 import { restoreInstalledPlugins } from './plugins/loader';
+
+// Heavy / rarely-open UI — split out of the first paint graph
+const SettingsDialog = lazy(() =>
+  import('./ui/SettingsDialog').then((m) => ({ default: m.SettingsDialog })),
+);
+const ScriptSettingsModal = lazy(() =>
+  import('./ui/ScriptSettingsModal').then((m) => ({ default: m.ScriptSettingsModal })),
+);
+const PluginManager = lazy(() =>
+  import('./ui/PluginManager').then((m) => ({ default: m.PluginManager })),
+);
+const WorkersManager = lazy(() =>
+  import('./ui/WorkersManager').then((m) => ({ default: m.WorkersManager })),
+);
+const AlertsPanel = lazy(() =>
+  import('./ui/AlertsPanel').then((m) => ({ default: m.AlertsPanel })),
+);
+const LibraryPanel = lazy(() =>
+  import('./ui/ScriptLibraryPanel').then((m) => ({ default: m.LibraryPanel })),
+);
+const DataSourceManagerPanel = lazy(() =>
+  import('./ui/DataSourceManagerPanel').then((m) => ({ default: m.DataSourceManagerPanel })),
+);
+const OnChainPanel = lazy(() =>
+  import('./ui/OnChainPanel').then((m) => ({ default: m.OnChainPanel })),
+);
+const CommandPalette = lazy(() =>
+  import('./ui/CommandPalette').then((m) => ({ default: m.CommandPalette })),
+);
 
 // Ensure built-in source/stream/engine plugins are registered before first paint.
 registerBuiltins();
@@ -157,22 +186,11 @@ export const App: Component = () => {
         });
       });
     }
-    // Pyodide: warm same-origin assets immediately; full init on idle (or ASAP if selected).
-    // preloadPyodide only updates ENG HUD when pyodide is the active engine.
-    prefetchPyodideAssets();
-    const warmPyodide = () => {
-      void preloadPyodide();
-    };
+    // Pyodide: only warm when selected (or user switches later via Workers Manager).
+    // Avoid ~14MB download contention on server-engine boots.
     if (store.engine === 'pyodide' || store.activePlugins?.engine === 'pyodide') {
-      warmPyodide();
-    } else if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      (
-        window as Window & {
-          requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number;
-        }
-      ).requestIdleCallback(warmPyodide, { timeout: 5000 });
-    } else {
-      setTimeout(warmPyodide, 2000);
+      prefetchPyodideAssets();
+      void preloadPyodide();
     }
     bridgePublish({ type: 'hello', role: 'main' });
 
@@ -195,10 +213,13 @@ export const App: Component = () => {
       }
       if (msg.type === 'run') {
         // External editor requested a run — execute on main (has chart + bars)
-        void runFromEditor(msg.doc, {
-          mode: 'auto',
-          inputs: store.editorInputValues || {},
-        })
+        void import('./indicators/run-target')
+          .then(({ runFromEditor }) =>
+            runFromEditor(msg.doc, {
+              mode: 'auto',
+              inputs: store.editorInputValues || {},
+            }),
+          )
           .then((result) => {
             bridgePublish({
               type: 'run-status',
@@ -433,36 +454,42 @@ export const App: Component = () => {
       {/* Panel Solid trees (DOM portaled into dock columns / float root) */}
       <Watchlist />
       <LayerPanel />
-      <AlertsPanel />
       <DataViewPanel />
       <IndicatorPanel />
-      <LibraryPanel
-        getDoc={() => editorRef.getDoc()}
-        setDoc={(doc, name, libraryId) => {
-          const ref = editorRef as {
-            setDoc?: (d: string) => void;
-            loadLibraryDoc?: (d: string, n?: string, id?: string) => void;
-          };
-          if (ref.loadLibraryDoc) ref.loadLibraryDoc(doc, name, libraryId);
-          else ref.setDoc?.(doc);
-        }}
-      />
-      <DataSourceManagerPanel />
-      <OnChainPanel />
+      <Suspense fallback={null}>
+        <AlertsPanel />
+        <LibraryPanel
+          getDoc={() => editorRef.getDoc()}
+          setDoc={(doc, name, libraryId) => {
+            const ref = editorRef as {
+              setDoc?: (d: string) => void;
+              loadLibraryDoc?: (d: string, n?: string, id?: string) => void;
+            };
+            if (ref.loadLibraryDoc) ref.loadLibraryDoc(doc, name, libraryId);
+            else ref.setDoc?.(doc);
+          }}
+        />
+        <DataSourceManagerPanel />
+        <OnChainPanel />
+      </Suspense>
       <EditorPane
         editorRef={editorRef}
         onRun={(doc) => {
           if (doc?.trim()) {
-            void runFromEditor(doc, {
-              mode: 'auto',
-              inputs: store.editorInputValues || {},
-            }).catch((err: unknown) => {
-              reportUiError(err, {
-                source: 'run',
-                context: 'Run failed',
-                status: true,
+            void import('./indicators/run-target')
+              .then(({ runFromEditor }) =>
+                runFromEditor(doc, {
+                  mode: 'auto',
+                  inputs: store.editorInputValues || {},
+                }),
+              )
+              .catch((err: unknown) => {
+                reportUiError(err, {
+                  source: 'run',
+                  context: 'Run failed',
+                  status: true,
+                });
               });
-            });
           }
         }}
       />
@@ -478,40 +505,47 @@ export const App: Component = () => {
       {/* Skeleton ghost + dock zones while dragging a panel handle */}
       <PanelDragOverlay />
 
-      <SettingsDialog
-        open={settingsOpen()}
-        initialTab={settingsTab()}
-        onClose={() => setSettingsOpen(false)}
-      />
-      <ScriptSettingsModal />
-      <PluginManager
-        open={pluginsOpen()}
-        onClose={() => setPluginsOpen(false)}
-        onChanged={() => setCatalogTick((n) => n + 1)}
-        getDoc={() => editorRef.getDoc()}
-        setDoc={(doc, name, libraryId) => {
-          const ref = editorRef as {
-            setDoc?: (d: string) => void;
-            loadLibraryDoc?: (d: string, n?: string, id?: string) => void;
-          };
-          if (ref.loadLibraryDoc) ref.loadLibraryDoc(doc, name, libraryId);
-          else ref.setDoc?.(doc);
-        }}
-      />
-      <WorkersManager
-        open={workersOpen()}
-        onClose={() => setWorkersOpen(false)}
-        onChanged={() => setCatalogTick((n) => n + 1)}
-      />
-
-      {/* Global ⌘K / Ctrl+K command palette */}
-      <CommandPalette
-        editorRef={editorRef}
-        onOpenSettings={() => openSettings('general')}
-        onOpenThemeSettings={() => openSettings('theme')}
-        onOpenPlugins={() => setPluginsOpen(true)}
-        onOpenWorkers={() => setWorkersOpen(true)}
-      />
+      <Suspense fallback={null}>
+        <Show when={settingsOpen()}>
+          <SettingsDialog
+            open={settingsOpen()}
+            initialTab={settingsTab()}
+            onClose={() => setSettingsOpen(false)}
+          />
+        </Show>
+        <ScriptSettingsModal />
+        <Show when={pluginsOpen()}>
+          <PluginManager
+            open={pluginsOpen()}
+            onClose={() => setPluginsOpen(false)}
+            onChanged={() => setCatalogTick((n) => n + 1)}
+            getDoc={() => editorRef.getDoc()}
+            setDoc={(doc, name, libraryId) => {
+              const ref = editorRef as {
+                setDoc?: (d: string) => void;
+                loadLibraryDoc?: (d: string, n?: string, id?: string) => void;
+              };
+              if (ref.loadLibraryDoc) ref.loadLibraryDoc(doc, name, libraryId);
+              else ref.setDoc?.(doc);
+            }}
+          />
+        </Show>
+        <Show when={workersOpen()}>
+          <WorkersManager
+            open={workersOpen()}
+            onClose={() => setWorkersOpen(false)}
+            onChanged={() => setCatalogTick((n) => n + 1)}
+          />
+        </Show>
+        {/* Global ⌘K / Ctrl+K command palette */}
+        <CommandPalette
+          editorRef={editorRef}
+          onOpenSettings={() => openSettings('general')}
+          onOpenThemeSettings={() => openSettings('theme')}
+          onOpenPlugins={() => setPluginsOpen(true)}
+          onOpenWorkers={() => setWorkersOpen(true)}
+        />
+      </Suspense>
 
       {/* Drop .pyne / .pine / .pinescript files anywhere → script library */}
       <Show when={pineDropActive()}>

@@ -837,55 +837,79 @@ export function isQuotaExceededError(err: unknown): boolean {
 
 /**
  * Build the durable JSON payload (omits bars, lastRun, logs, …).
- * Pure-ish snapshot of current store — used by {@link flushPersist}.
+ *
+ * Avoids walking the full `unwrap(store)` tree (would deep-copy 10k–100k
+ * bars + lastRun series). Only durable subtrees are unwrapped.
  */
 function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown> {
-  const plain = unwrap(store) as AppState;
-  const {
-    bars: _b,
-    lastRun: _r,
-    runResults: _rr,
-    resultsFocusId: _rf,
-    logs: _l,
-    chartDataGen: _g,
-    crosshair: _c,
-    scriptSettings: _ss,
-    selectedDrawingId: _sel,
-    indicatorSeries: _is,
-    errorShareOffer: _eso,
-    preEval: _pe,
-    presentation: _presentation,
-    compare,
-    telemetry,
-    drawings,
-    savedLayouts,
-    ...rest
-  } = plain;
+  const s = store;
+  const compare = s.compare;
+  const telemetry = s.telemetry;
 
   const base: Record<string, unknown> = {
-    ...rest,
-    // Durable compare prefs only — bars / loading / error stay session-local
+    symbol: s.symbol,
+    interval: s.interval,
+    exchange: s.exchange,
+    source: s.source,
+    endpoint: s.endpoint,
+    engine: s.engine,
+    historyBars: s.historyBars,
+    theme: s.theme,
+    chartType: s.chartType,
+    chartTheme: unwrap(s.chartTheme),
+    strategyUi: unwrap(s.strategyUi),
+    uiScale: s.uiScale,
+    editor: unwrap(s.editor),
+    editorInputValues: unwrap(s.editorInputValues),
+    scripts: unwrap(s.scripts),
+    panes: unwrap(s.panes),
+    watchlist: unwrap(s.watchlist),
+    indicatorPanel: unwrap(s.indicatorPanel),
+    dataViewPanel: unwrap(s.dataViewPanel),
+    layerPanel: unwrap(s.layerPanel),
+    alertsPanel: unwrap(s.alertsPanel),
+    resultsPanel: unwrap(s.resultsPanel),
+    logsPanel: unwrap(s.logsPanel),
+    live: {
+      streamId: s.live?.streamId,
+      preferAfterLoad: !!s.live?.preferAfterLoad,
+      rerunOn: s.live?.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick',
+    },
+    drawingTool: s.drawingTool,
+    drawingPrefs: unwrap(s.drawingPrefs),
+    profilerEnabled: s.profilerEnabled,
+    inlineDebugEnabled: s.inlineDebugEnabled,
+    debugPinsEnabled: s.debugPinsEnabled,
+    editorRulerEnabled: s.editorRulerEnabled,
+    editorWrapEnabled: s.editorWrapEnabled,
+    lastValueLabelsVisible: s.lastValueLabelsVisible,
+    priceScaleLabelsVisible: s.priceScaleLabelsVisible,
+    activePlugins: unwrap(s.activePlugins),
+    pluginsConfig: unwrap(s.pluginsConfig),
     compare: {
       enabled: !!compare?.enabled,
       symbol: (compare?.symbol || '').toUpperCase(),
       mode: compare?.mode === 'absolute' ? 'absolute' : 'percent',
       normalizeMain: !!compare?.normalizeMain,
     },
-    // Ephemeral planes (source/stream/engine/storage/onchain) omitted — only HUD prefs
     telemetry: {
       hud: telemetry?.hud || DEFAULTS.telemetry.hud,
-      // Privacy default false when missing
       shareOnError: telemetry?.shareOnError === true,
     },
   };
 
+  // Optional layout bags (may be undefined on older sessions)
+  if (s.panelChrome != null) base.panelChrome = unwrap(s.panelChrome);
+  if (s.panelWindows != null) base.panelWindows = unwrap(s.panelWindows);
+  if (s.dockLayout != null) base.dockLayout = unwrap(s.dockLayout);
+  if (s.chartLayout != null) base.chartLayout = unwrap(s.chartLayout);
+
   if (opts?.slim) {
-    // Smaller payload when full write hits quota — drop heavy arrays
     base.drawings = [];
     base.savedLayouts = [];
   } else {
-    base.drawings = drawings;
-    base.savedLayouts = savedLayouts;
+    base.drawings = unwrap(s.drawings);
+    base.savedLayouts = unwrap(s.savedLayouts ?? []);
   }
 
   return base;
@@ -1618,24 +1642,32 @@ export function reorderPanes(orderedIds: string[]) {
 /**
  * Append or update the latest bar (live klines update the open bar in place).
  * Does not persist every tick — bars stay in memory only.
+ *
+ * **Hot path:** path-update the last index (no O(N) `slice()` clone) so Solid
+ * and GC stay cheap on 10k–100k histories. Full array replace only when
+ * capping or the series is empty.
  */
 export function appendBar(bar: Bar) {
-  setStore('bars', (b) => {
-    if (b.length && b[b.length - 1].time === bar.time) {
-      const next = b.slice();
-      next[next.length - 1] = bar;
-      return next;
-    }
-    // Cap history growth during long live sessions (Settings HISTORY_BARS_MAX)
-    const next =
-      b.length >= HISTORY_BARS_MAX
-        ? b.slice(b.length - (HISTORY_BARS_MAX - 1))
-        : b.slice();
-    next.push(bar);
-    return next;
-  });
-  setStore('live', 'lastBarTime', bar.time);
-  setStore('live', 'needsRerun', true);
+  const b = store.bars;
+  const n = b.length;
+  if (n && b[n - 1]!.time === bar.time) {
+    // Same open bar — fine-grained path set (no full-array clone)
+    setStore('bars', n - 1, bar);
+  } else if (n >= HISTORY_BARS_MAX) {
+    setStore('bars', [...b.slice(n - (HISTORY_BARS_MAX - 1)), bar]);
+  } else if (n === 0) {
+    setStore('bars', [bar]);
+  } else {
+    // Append by index — Solid extends the array without copying prior bars
+    setStore('bars', n, bar);
+  }
+  if (store.live.lastBarTime !== bar.time) {
+    setStore('live', 'lastBarTime', bar.time);
+  }
+  // Dirtiness for live re-run scheduler — only set when not already true
+  if (!store.live.needsRerun) {
+    setStore('live', 'needsRerun', true);
+  }
 }
 
 /** Enable/disable live streaming preference (stream start/stop is elsewhere). */
@@ -2313,6 +2345,8 @@ export function closeScriptSettings() {
 
 /** Ephemeral — do not persist every crosshair move. */
 export function setCrosshair(time: number | null, barIndex: number | null = null) {
+  const cur = store.crosshair;
+  if (cur?.time === time && cur?.barIndex === barIndex) return;
   setStore('crosshair', { time, barIndex });
 }
 

@@ -39,7 +39,7 @@ describe('syncOverlayLines', () => {
     document.getElementById('pane-price')?.remove();
   });
 
-  it('creates overlay series then updates data in place', () => {
+  it('creates overlay series then full setData when length grows', () => {
     const data1 = [
       { time: 1, value: 10 },
       { time: 2, value: 12 },
@@ -55,12 +55,14 @@ describe('syncOverlayLines', () => {
       return orig(d);
     };
 
+    // Length change → full setData (not tip-only update)
     pm.syncOverlayLines('price', [
       {
         name: 'plotA',
         data: [
           { time: 1, value: 11 },
           { time: 2, value: 13 },
+          { time: 3, value: 14 },
         ],
         color: '#fff',
       },
@@ -83,6 +85,67 @@ describe('syncOverlayLines', () => {
     pm.syncOverlayLines('price', [{ name: 'a', data: [{ time: 1, value: 3 }] }]);
     expect(pane.series['overlay_a']).toBeDefined();
     expect(pane.series['overlay_b']).toBeUndefined();
+  });
+
+  it('owner-scoped apply does not wipe another script’s overlays', () => {
+    pm.syncOverlayLines(
+      'price',
+      [{ name: 'rsi', data: [{ time: 1, value: 50 }], color: '#f00' }],
+      { ownerId: 'scriptA' },
+    );
+    pm.syncOverlayLines(
+      'price',
+      [{ name: 'macd', data: [{ time: 1, value: 1 }], color: '#0f0' }],
+      { ownerId: 'scriptB' },
+    );
+    const pane = pm.getPane('price')!;
+    expect(pane.series['overlay_scriptA__rsi']).toBeDefined();
+    expect(pane.series['overlay_scriptB__macd']).toBeDefined();
+
+    // B re-runs without A — A’s series must remain
+    pm.syncOverlayLines(
+      'price',
+      [{ name: 'macd', data: [{ time: 1, value: 2 }, { time: 2, value: 3 }], color: '#0f0' }],
+      { ownerId: 'scriptB' },
+    );
+    expect(pane.series['overlay_scriptA__rsi']).toBeDefined();
+    expect(pane.series['overlay_scriptB__macd']).toBeDefined();
+  });
+
+  it('uses series.update when only last bar changes (same length + time)', () => {
+    const data1 = [
+      { time: 1, value: 10 },
+      { time: 2, value: 12 },
+    ];
+    pm.syncOverlayLines('price', [{ name: 'plotA', data: data1, color: '#fff' }]);
+    const pane = pm.getPane('price')!;
+    const series = pane.series['overlay_plotA']!;
+    let setCount = 0;
+    let updateCount = 0;
+    const origSet = series.setData.bind(series);
+    const origUp = series.update?.bind(series);
+    series.setData = (d: unknown) => {
+      setCount += 1;
+      return origSet(d);
+    };
+    series.update = (d: unknown) => {
+      updateCount += 1;
+      return origUp?.(d);
+    };
+
+    // Same length, same last time — tip-only update path
+    pm.syncOverlayLines('price', [
+      {
+        name: 'plotA',
+        data: [
+          { time: 1, value: 10 },
+          { time: 2, value: 99 },
+        ],
+        color: '#fff',
+      },
+    ]);
+    expect(updateCount).toBe(1);
+    expect(setCount).toBe(0);
   });
 
   it('creates price lines for kind=hline and applies linewidth on plots', () => {

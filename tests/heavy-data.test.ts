@@ -7,6 +7,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   CONFLATION_BARS_THRESHOLD,
   HEAVY_BARS_THRESHOLD,
+  barIndexAtTimeBinary,
   createRafCoalescer,
   heavyTimeScaleOptions,
   isHeavyBarLoad,
@@ -49,6 +50,17 @@ describe('mapBarsToVolumeData', () => {
     expect(out[0]).toEqual({ time: 1, value: 10, color: '#0f0' });
     expect(out[1]).toEqual({ time: 2, value: 20, color: '#f00' });
     expect(out[2]!.value).toBe(0);
+  });
+});
+
+describe('barIndexAtTimeBinary', () => {
+  it('finds exact and nearest in O(log n)', () => {
+    const bars = [1, 3, 5, 7, 9].map((time) => ({ time }));
+    expect(barIndexAtTimeBinary(bars, 5)).toBe(2);
+    expect(barIndexAtTimeBinary(bars, 6)).toBe(2); // nearer 5 than 7? |6-5|=1, |6-7|=1 → lower
+    expect(barIndexAtTimeBinary(bars, 0)).toBe(0);
+    expect(barIndexAtTimeBinary(bars, 100)).toBe(4);
+    expect(barIndexAtTimeBinary([], 1)).toBe(-1);
   });
 });
 

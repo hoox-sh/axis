@@ -20,6 +20,28 @@ export default defineConfig({
     target: process.env.TAURI_ENV_PLATFORM ? 'es2021' : 'esnext',
     // Produce sourcemaps for debugging the desktop shell.
     sourcemap: !!process.env.TAURI_ENV_PLATFORM,
+    rollupOptions: {
+      output: {
+        /**
+         * Vendor / heavy-feature chunks for parallel download + better caching.
+         * Feature lazy() still needed to shrink first-parse; this helps cache.
+         */
+        manualChunks(id) {
+          if (id.includes('node_modules/lightweight-charts')) return 'lwc';
+          if (
+            id.includes('node_modules/@codemirror') ||
+            id.includes('node_modules/crelt') ||
+            id.includes('node_modules/style-mod') ||
+            id.includes('node_modules/w3c-keyname')
+          ) {
+            return 'cm';
+          }
+          if (id.includes('node_modules/lucide-solid')) return 'icons';
+          if (id.includes('node_modules/solid-js')) return 'solid';
+          if (id.includes('pyne-builtins.json')) return 'pyne-builtins';
+        },
+      },
+    },
   },
   envPrefix: ['VITE_', 'TAURI_ENV_'],
   server: {

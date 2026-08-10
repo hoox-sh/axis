@@ -28,6 +28,34 @@ export function isHeavyBarLoad(barCount: number): boolean {
   return Number.isFinite(barCount) && barCount >= HEAVY_BARS_THRESHOLD;
 }
 
+/**
+ * O(log n) bar index for sorted OHLCV by time (exact or nearest).
+ * Replaces linear findIndex + full scans on every crosshair move.
+ */
+export function barIndexAtTimeBinary(
+  bars: readonly { time: number }[],
+  time: number | null | undefined,
+): number {
+  const n = bars.length;
+  if (!n) return -1;
+  if (time == null || !Number.isFinite(time)) return n - 1;
+  let lo = 0;
+  let hi = n - 1;
+  if (time <= bars[0]!.time) return 0;
+  if (time >= bars[hi]!.time) return hi;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const t = bars[mid]!.time;
+    if (t === time) return mid;
+    if (t < time) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  // Nearest of the two candidates around the insertion point
+  const a = Math.max(0, hi);
+  const c = Math.min(n - 1, lo);
+  return Math.abs(bars[a]!.time - time) <= Math.abs(bars[c]!.time - time) ? a : c;
+}
+
 /** LWC timeScale options for large datasets (safe on small histories too). */
 export function heavyTimeScaleOptions(barCount: number): {
   enableConflation: boolean;

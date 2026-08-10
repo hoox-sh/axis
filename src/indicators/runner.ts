@@ -895,10 +895,12 @@ async function runAndApplyInner(
         );
       }
     } else {
-      manager.syncOverlayLines(paneId, overlayLines);
-      // plotbar / plotcandle OHLC overlays (empty list clears stale OHLC series)
+      // Owner-scoped keys so multi-script live re-runs do not wipe each other
+      const overlayOwner = { ownerId: indicatorId ?? EDITOR_RUN_KEY };
+      manager.syncOverlayLines(paneId, overlayLines, overlayOwner);
+      // plotbar / plotcandle OHLC overlays (empty list clears this owner’s OHLC)
       if (typeof manager.syncOverlayOhlc === 'function') {
-        manager.syncOverlayOhlc(paneId, overlayOhlc);
+        manager.syncOverlayOhlc(paneId, overlayOhlc, overlayOwner);
       }
       if (overlayOhlc.length && !silent) {
         appendLog(
@@ -922,7 +924,7 @@ async function runAndApplyInner(
           data: bgcolorSeriesToHistogramData(ohlcvTimes, values, meta.color),
         }))
         .filter((b) => b.data.length > 0);
-      manager.syncBgcolorBands(bgBands);
+      manager.syncBgcolorBands(bgBands, overlayOwner);
       if (bgBands.length && !silent) {
         appendLog('ok', `bgcolor: ${bgBands.length} band series`, 'plot');
       }

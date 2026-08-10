@@ -124,6 +124,56 @@ export type OverlayOhlcSpec = {
 /** Series key prefix for plotbar/plotcandle overlays (`overlay_ohlc_${name}`). */
 export const OVERLAY_OHLC_PREFIX = 'overlay_ohlc_';
 
+/** Options for owner-scoped multi-script overlay apply (live re-runs). */
+export type OverlayOwnerOpts = {
+  /**
+   * When set, only this script’s series are created/removed
+   * (`overlay_${owner}__${name}`). Prevents multi-indicator thrash on the
+   * shared indicator pane.
+   */
+  ownerId?: string;
+};
+
+/** Sanitize owner id for use in LWC series keys. */
+export function sanitizeOverlayOwnerId(ownerId: string): string {
+  return String(ownerId || 'script')
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .slice(0, 48);
+}
+
+/** Prefix for line overlays owned by `ownerId`. */
+export function ownedOverlayPrefix(ownerId: string): string {
+  return `overlay_${sanitizeOverlayOwnerId(ownerId)}__`;
+}
+
+/** Prefix for OHLC overlays owned by `ownerId`. */
+export function ownedOhlcPrefix(ownerId: string): string {
+  return `${OVERLAY_OHLC_PREFIX}${sanitizeOverlayOwnerId(ownerId)}__`;
+}
+
+/** Prefix for bgcolor bands owned by `ownerId`. */
+export function ownedBgcolorPrefix(ownerId: string): string {
+  return `bgcolor_${sanitizeOverlayOwnerId(ownerId)}__`;
+}
+
+/** Build line overlay series key (legacy unowned or owner-scoped). */
+export function makeOverlayLineKey(name: string, ownerId?: string): string {
+  if (!ownerId) return `overlay_${name}`;
+  return `${ownedOverlayPrefix(ownerId)}${name}`;
+}
+
+/** Build OHLC overlay series key. */
+export function makeOverlayOhlcKey(name: string, ownerId?: string): string {
+  if (!ownerId) return `${OVERLAY_OHLC_PREFIX}${name}`;
+  return `${ownedOhlcPrefix(ownerId)}${name}`;
+}
+
+/** Build bgcolor series key. */
+export function makeBgcolorKey(name: string, ownerId?: string): string {
+  if (!ownerId) return `bgcolor_${name}`;
+  return `${ownedBgcolorPrefix(ownerId)}${name}`;
+}
+
 /** Map overlay points to LWC LineData | WhitespaceData. Drops non-finite times. */
 export function toLwcLineData(
   data: OverlayPoint[],
@@ -182,6 +232,39 @@ function safeUpdate(series: ISeriesApi<any> | null | undefined, point: unknown):
   } catch {
     return false;
   }
+}
+
+/**
+ * Prefer last-point update when length + last time match prior apply.
+ * Falls back to full setData (history rewrite / first paint / length change).
+ */
+function applySeriesDataSmart(
+  series: ISeriesApi<any>,
+  mapped: Array<{ time: number }>,
+  metaKey: string,
+  metaMap: Map<string, { len: number; lastTime: number }>,
+): void {
+  const last = mapped.length ? mapped[mapped.length - 1] : null;
+  const lastTime = last && Number.isFinite(last.time) ? Number(last.time) : null;
+  const prev = metaMap.get(metaKey);
+  if (
+    prev &&
+    last &&
+    lastTime != null &&
+    prev.len === mapped.length &&
+    prev.lastTime === lastTime &&
+    mapped.length > 0
+  ) {
+    if (safeUpdate(series, last)) {
+      metaMap.set(metaKey, { len: mapped.length, lastTime });
+      return;
+    }
+  }
+  safeSetData(series, mapped);
+  metaMap.set(metaKey, {
+    len: mapped.length,
+    lastTime: lastTime ?? 0,
+  });
 }
 
 /** removeSeries that never throws; caller still deletes map keys. */
@@ -283,6 +366,11 @@ export class PaneManager {
    * `overlay_ohlc_*`). When style/kind changes the series is recreated.
    */
   private overlaySeriesKinds = new Map<string, PlotSeriesKind | 'plotbar' | 'plotcandle'>();
+  /**
+   * Last applied data fingerprint per series key — enables last-bar
+   * `series.update` on silent live re-runs when only the tip changed.
+   */
+  private overlayDataMeta = new Map<string, { len: number; lastTime: number }>();
   /** ThemeManager chart unregister fns keyed by pane id */
   private themeUnregs = new Map<string, () => void>();
 
@@ -1406,21 +1494,23 @@ export class PaneManager {
    * auto-scale, fit time range, keep current log mode.
    */
   afterDataReload() {
-    this.resizeAll();
-    this.applyPriceScaleOptions({ autoScale: true });
-    this.fitContent();
-    this.alignTimeRangesFromPrice();
-    // Second pass after layout settles (empty-state flip / flex reflow)
+    const run = () => {
+      this.resizeAll();
+      this.applyPriceScaleOptions({ autoScale: true });
+      this.fitContent();
+      this.alignTimeRangesFromPrice();
+    };
+    // One layout pass first (sync) so paint is visible immediately
+    run();
+    // Second pass only for light histories — empty-state / flex reflow.
+    // Heavy 10k+ loads skip the double resize+fit (main-thread tax).
+    const barN = store.bars?.length ?? 0;
+    if (barN >= 10_000) return;
     const raf =
       typeof requestAnimationFrame === 'function'
         ? requestAnimationFrame
         : (cb: FrameRequestCallback) => setTimeout(cb, 0) as unknown as number;
-    raf(() => {
-      this.resizeAll();
-      this.fitContent();
-      this.applyPriceScaleOptions({ autoScale: true });
-      this.alignTimeRangesFromPrice();
-    });
+    raf(run);
   }
 
   setData(paneId: string, seriesKey: string, data: any[]) {
@@ -1544,10 +1634,15 @@ export class PaneManager {
    * Update overlay lines in place when keys match — avoids destroy/recreate flash
    * during live re-runs. Removes only stale keys; creates missing ones.
    * kind=hline → createPriceLine on host series (or constant line series fallback).
+   *
+   * Pass {@link OverlayOwnerOpts.ownerId} so multi-script applies only touch
+   * that script’s series (keys `overlay_${owner}__${name}`).
    */
-  syncOverlayLines(paneId: string, lines: OverlayLineSpec[]) {
+  syncOverlayLines(paneId: string, lines: OverlayLineSpec[], opts?: OverlayOwnerOpts) {
     const pane = this.panes.get(paneId);
     if (!pane) return;
+    const ownerId = opts?.ownerId;
+    const ownerPrefix = ownerId ? ownedOverlayPrefix(ownerId) : null;
 
     // Preserve viewport — setData must not auto-reposition on live re-runs
     let savedRange: { from: number; to: number } | null = null;
@@ -1561,23 +1656,31 @@ export class PaneManager {
     const hLines = lines.filter((l) => l.kind === 'hline');
 
     // Plot series keys we want to keep (hline may fall back to series too)
-    const wantSeries = new Set(plotLines.map((l) => `overlay_${l.name}`));
-    const wantPrice = new Set(hLines.map((l) => l.name));
+    const wantSeries = new Set(plotLines.map((l) => makeOverlayLineKey(l.name, ownerId)));
+    // Price lines namespaced by owner when set (avoid multi-script hline wipe)
+    const plName = (name: string) => (ownerId ? `${sanitizeOverlayOwnerId(ownerId)}__${name}` : name);
+    const wantPrice = new Set(hLines.map((l) => plName(l.name)));
 
     for (const k of Object.keys(pane.series)) {
       if (!k.startsWith('overlay_')) continue;
       // OHLC overlays (`overlay_ohlc_*`) are owned by {@link syncOverlayOhlc}
       if (k.startsWith(OVERLAY_OHLC_PREFIX)) continue;
-      const name = k.slice('overlay_'.length);
+      // Owner-scoped: only manage this owner’s keys
+      if (ownerPrefix && !k.startsWith(ownerPrefix)) continue;
+      // Legacy unowned mode: skip owner-scoped keys from other scripts
+      if (!ownerPrefix && k.includes('__')) continue;
       // Keep overlay series if still wanted as plot or as hline fallback
-      if (!wantSeries.has(k) && !wantPrice.has(name)) {
+      if (!wantSeries.has(k) && !wantPrice.has(k.slice('overlay_'.length))) {
         safeRemoveSeries(pane.chart, pane.series[k]);
         delete pane.series[k];
         this.overlaySeriesKinds.delete(`${paneId}:${k}`);
+        this.overlayDataMeta.delete(k);
       }
     }
 
     for (const name of Object.keys(pane.priceLines)) {
+      if (ownerId && !name.startsWith(`${sanitizeOverlayOwnerId(ownerId)}__`)) continue;
+      if (!ownerId && name.includes('__')) continue;
       if (!wantPrice.has(name)) {
         const pl = pane.priceLines[name];
         try {
@@ -1591,7 +1694,7 @@ export class PaneManager {
 
     let colorIdx = 0;
     for (const line of plotLines) {
-      const key = `overlay_${line.name}`;
+      const key = makeOverlayLineKey(line.name, ownerId);
       const kindKey = `${paneId}:${key}`;
       // Whitespace for na keeps logical indices aligned with the price pane
       const mapped = toLwcLineData(line.data);
@@ -1604,10 +1707,11 @@ export class PaneManager {
         safeRemoveSeries(pane.chart, existing);
         delete pane.series[key];
         this.overlaySeriesKinds.delete(kindKey);
+        this.overlayDataMeta.delete(key);
       }
       const seriesNow = pane.series[key];
       if (seriesNow) {
-        safeSetData(seriesNow, mapped);
+        applySeriesDataSmart(seriesNow, mapped, key, this.overlayDataMeta);
         try {
           const opts: Record<string, unknown> = {
             lastValueVisible: this.lastValueLabelsVisible,
@@ -1655,7 +1759,7 @@ export class PaneManager {
               /* ignore */
             }
           }
-          safeSetData(series, mapped);
+          applySeriesDataSmart(series, mapped, key, this.overlayDataMeta);
           pane.series[key] = series;
           this.overlaySeriesKinds.set(kindKey, seriesKind);
         } catch {
@@ -1680,14 +1784,16 @@ export class PaneManager {
       const c = line.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
       const lw = Math.max(1, Math.min(4, Math.round(line.linewidth ?? 1))) as 1 | 2 | 3 | 4;
       const host = this.priceLineHost(pane);
-      const existingPl = pane.priceLines[line.name];
+      const plKey = plName(line.name);
+      const existingPl = pane.priceLines[plKey];
 
       if (host) {
         // Drop any previous constant-line fallback series for this hline
-        const fallbackKey = `overlay_${line.name}`;
+        const fallbackKey = makeOverlayLineKey(line.name, ownerId);
         if (pane.series[fallbackKey]) {
           safeRemoveSeries(pane.chart, pane.series[fallbackKey]);
           delete pane.series[fallbackKey];
+          this.overlayDataMeta.delete(fallbackKey);
         }
 
         const opts = {
@@ -1714,7 +1820,7 @@ export class PaneManager {
           }
           try {
             const pl = host.createPriceLine(opts);
-            pane.priceLines[line.name] = { line: pl, host };
+            pane.priceLines[plKey] = { line: pl, host };
           } catch {
             // Fall through to constant series if createPriceLine unavailable (tests/mocks)
             this._hlineAsSeries(pane, line, price, c, lw);
@@ -1830,12 +1936,15 @@ export class PaneManager {
 
   /**
    * Sync Pine `plotbar` / `plotcandle` OHLC overlays.
-   * Keys are `overlay_ohlc_${name}`; empty list clears all OHLC overlays on the pane.
+   * Keys are `overlay_ohlc_${name}` (or owner-scoped). Empty list clears
+   * this owner’s OHLC overlays (or all when unowned).
    * Recreates the LWC series when kind switches (plotbar ↔ plotcandle).
    */
-  syncOverlayOhlc(paneId: string, specs: OverlayOhlcSpec[]) {
+  syncOverlayOhlc(paneId: string, specs: OverlayOhlcSpec[], opts?: OverlayOwnerOpts) {
     const pane = this.panes.get(paneId);
     if (!pane) return;
+    const ownerId = opts?.ownerId;
+    const ownerPrefix = ownerId ? ownedOhlcPrefix(ownerId) : null;
 
     let savedRange: { from: number; to: number } | null = null;
     try {
@@ -1844,19 +1953,22 @@ export class PaneManager {
       savedRange = null;
     }
 
-    const want = new Set(specs.map((s) => `${OVERLAY_OHLC_PREFIX}${s.name}`));
+    const want = new Set(specs.map((s) => makeOverlayOhlcKey(s.name, ownerId)));
     for (const k of Object.keys(pane.series)) {
       if (!k.startsWith(OVERLAY_OHLC_PREFIX)) continue;
+      if (ownerPrefix && !k.startsWith(ownerPrefix)) continue;
+      if (!ownerPrefix && k.slice(OVERLAY_OHLC_PREFIX.length).includes('__')) continue;
       if (!want.has(k)) {
         safeRemoveSeries(pane.chart, pane.series[k]);
         delete pane.series[k];
         this.overlaySeriesKinds.delete(`${paneId}:${k}`);
+        this.overlayDataMeta.delete(k);
       }
     }
 
     let colorIdx = 0;
     for (const spec of specs) {
-      const key = `${OVERLAY_OHLC_PREFIX}${spec.name}`;
+      const key = makeOverlayOhlcKey(spec.name, ownerId);
       const kindKey = `${paneId}:${key}`;
       const seriesKind: 'plotbar' | 'plotcandle' =
         spec.kind === 'plotcandle' ? 'plotcandle' : 'plotbar';
@@ -1894,12 +2006,13 @@ export class PaneManager {
         safeRemoveSeries(pane.chart, existing);
         delete pane.series[key];
         this.overlaySeriesKinds.delete(kindKey);
+        this.overlayDataMeta.delete(key);
       }
 
       const c = spec.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
       const seriesNow = pane.series[key];
       if (seriesNow) {
-        safeSetData(seriesNow, mapped);
+        applySeriesDataSmart(seriesNow, mapped, key, this.overlayDataMeta);
         try {
           const opts: Record<string, unknown> = {
             lastValueVisible: this.lastValueLabelsVisible,
@@ -1955,13 +2068,16 @@ export class PaneManager {
 
   /**
    * Sync Pine bgcolor histogram bands on the price pane (behind candles).
-   * Empty list removes all bgcolor_* series.
+   * Empty list removes this owner’s bgcolor_* series (or all when unowned).
    */
   syncBgcolorBands(
     bands: Array<{ name: string; data: { time: number; value: number; color: string }[] }>,
+    opts?: OverlayOwnerOpts,
   ) {
     const pane = this.panes.get('price');
     if (!pane) return;
+    const ownerId = opts?.ownerId;
+    const ownerPrefix = ownerId ? ownedBgcolorPrefix(ownerId) : null;
 
     let savedRange: { from: number; to: number } | null = null;
     try {
@@ -1970,17 +2086,20 @@ export class PaneManager {
       savedRange = null;
     }
 
-    const want = new Set(bands.map((b) => `bgcolor_${b.name}`));
+    const want = new Set(bands.map((b) => makeBgcolorKey(b.name, ownerId)));
     for (const k of Object.keys(pane.series)) {
       if (!k.startsWith('bgcolor_')) continue;
+      if (ownerPrefix && !k.startsWith(ownerPrefix)) continue;
+      if (!ownerPrefix && k.slice('bgcolor_'.length).includes('__')) continue;
       if (!want.has(k)) {
         safeRemoveSeries(pane.chart, pane.series[k]);
         delete pane.series[k];
+        this.overlayDataMeta.delete(k);
       }
     }
 
     for (const band of bands) {
-      const key = `bgcolor_${band.name}`;
+      const key = makeBgcolorKey(band.name, ownerId);
       // Drop non-finite times/values — LWC histogram rejects NaN
       const mapped = band.data
         .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
@@ -1991,11 +2110,11 @@ export class PaneManager {
         }));
       const existing = pane.series[key];
       if (existing) {
-        safeSetData(existing, mapped);
+        applySeriesDataSmart(existing, mapped, key, this.overlayDataMeta);
       } else {
         try {
           const series = createBgcolorSeries(pane.chart);
-          safeSetData(series, mapped);
+          applySeriesDataSmart(series, mapped, key, this.overlayDataMeta);
           pane.series[key] = series;
           try {
             series.setSeriesOrder(0);

@@ -132,12 +132,79 @@ export function barsCacheKey(sourceId: string, symbol: string, interval: string)
   return `${src}|${sym}|${iv}`;
 }
 
+/** True when bars are strictly non-decreasing by time (venue pages). */
+function isTimeSorted(bars: readonly Bar[]): boolean {
+  for (let i = 1; i < bars.length; i++) {
+    if (bars[i]!.time < bars[i - 1]!.time) return false;
+  }
+  return true;
+}
+
+/**
+ * Linear merge of two **time-sorted** series (last-write wins on equal time).
+ * O(n+m) — avoids Map + sort on DSM multi-page backfill.
+ */
+function mergeSortedBars(a: Bar[], b: Bar[]): Bar[] {
+  const out: Bar[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    const ta = a[i]!.time;
+    const tb = b[j]!.time;
+    if (ta < tb) {
+      out.push(a[i]!);
+      i++;
+    } else if (tb < ta) {
+      out.push(b[j]!);
+      j++;
+    } else {
+      // Equal time — incoming wins
+      out.push(b[j]!);
+      i++;
+      j++;
+    }
+  }
+  while (i < a.length) out.push(a[i++]!);
+  while (j < b.length) out.push(b[j++]!);
+  return out;
+}
+
 /** Merge two bar lists: sort by time, last-write wins on duplicate times. */
 export function mergeBars(existing: Bar[], incoming: Bar[]): Bar[] {
   const a = Array.isArray(existing) ? existing : [];
   const b = Array.isArray(incoming) ? incoming : [];
   if (!a.length) return dedupeSort(b);
   if (!b.length) return dedupeSort(a);
+
+  // Fast path: older page fully before base (DSM walk-back)
+  if (
+    a.length &&
+    b.length &&
+    Number.isFinite(b[b.length - 1]!.time) &&
+    Number.isFinite(a[0]!.time) &&
+    b[b.length - 1]!.time < a[0]!.time &&
+    isTimeSorted(a) &&
+    isTimeSorted(b)
+  ) {
+    return b.concat(a);
+  }
+  // Fast path: newer page fully after base
+  if (
+    a.length &&
+    b.length &&
+    Number.isFinite(a[a.length - 1]!.time) &&
+    Number.isFinite(b[0]!.time) &&
+    b[0]!.time > a[a.length - 1]!.time &&
+    isTimeSorted(a) &&
+    isTimeSorted(b)
+  ) {
+    return a.concat(b);
+  }
+  // Sorted linear merge when both ordered
+  if (isTimeSorted(a) && isTimeSorted(b)) {
+    return mergeSortedBars(a, b);
+  }
+
   const map = new Map<number, Bar>();
   for (const bar of a) {
     if (bar && Number.isFinite(bar.time)) map.set(bar.time, bar);
@@ -215,6 +282,69 @@ export function mergeAndCap(existing: Bar[], incoming: Bar[], max = BARS_CACHE_M
 // ── Memory fallback ──────────────────────────────────────────────────
 
 const memory = new Map<string, BarsCacheRecord>();
+
+// ── Batched IDB writes (DSM multi-page backfill) ──────────────────────
+
+/** Pending records keyed by series key — flushed on a short debounce. */
+const pendingIdbPuts = new Map<string, BarsCacheRecord>();
+let idbFlushTimer: ReturnType<typeof setTimeout> | null = null;
+/** Shared DB handle reused across a flush batch (closed after flush). */
+let sharedDbPromise: Promise<IDBDatabase> | null = null;
+
+async function openSharedBarsDb(): Promise<IDBDatabase> {
+  if (!sharedDbPromise) {
+    sharedDbPromise = openBarsDb().catch((err) => {
+      sharedDbPromise = null;
+      throw err;
+    });
+  }
+  return sharedDbPromise;
+}
+
+function scheduleIdbPut(rec: BarsCacheRecord): void {
+  if (!idbAvailable()) return;
+  pendingIdbPuts.set(rec.key, rec);
+  if (idbFlushTimer != null) return;
+  idbFlushTimer = setTimeout(() => {
+    idbFlushTimer = null;
+    void flushPendingIdbPuts();
+  }, 120);
+}
+
+/** Flush all pending IDB puts in one connection (best-effort). */
+export async function flushPendingIdbPuts(): Promise<void> {
+  if (idbFlushTimer != null) {
+    clearTimeout(idbFlushTimer);
+    idbFlushTimer = null;
+  }
+  if (!pendingIdbPuts.size || !idbAvailable()) {
+    pendingIdbPuts.clear();
+    return;
+  }
+  const batch = Array.from(pendingIdbPuts.values());
+  pendingIdbPuts.clear();
+  try {
+    const db = await openSharedBarsDb();
+    try {
+      const tx = db.transaction(STORE, 'readwrite');
+      const store = tx.objectStore(STORE);
+      for (const rec of batch) {
+        store.put(rec);
+      }
+      await idbTxDone(tx);
+    } finally {
+      try {
+        db.close();
+      } catch {
+        /* ignore */
+      }
+      sharedDbPromise = null;
+    }
+  } catch (err) {
+    console.warn('[bars-cache] batched IDB put failed; kept in memory only', err);
+    sharedDbPromise = null;
+  }
+}
 
 /** Evict oldest-updated series when the in-memory map exceeds the series cap. */
 function trimMemorySeries(): void {
@@ -413,21 +543,10 @@ export async function putCachedBars(
   memory.set(key, rec);
   trimMemorySeries();
 
-  if (idbAvailable()) {
-    try {
-      const db = await openBarsDb();
-      try {
-        const tx = db.transaction(STORE, 'readwrite');
-        tx.objectStore(STORE).put(rec);
-        await idbTxDone(tx);
-      } finally {
-        db.close();
-      }
-    } catch (err) {
-      console.warn('[bars-cache] IDB put failed; kept in memory only', err);
-    }
-  }
-  return bars.slice();
+  // Debounce IDB during multi-page backfill — memory is source of truth
+  scheduleIdbPut(rec);
+  // Return the live array (callers must not mutate). Avoids O(N) clone every page.
+  return bars;
 }
 
 /** Drop one series from cache. */
@@ -456,6 +575,12 @@ export async function clearCachedBars(
 /** @internal test helper — wipe memory map (and best-effort IDB). */
 export async function _resetBarsCacheForTests(): Promise<void> {
   memory.clear();
+  pendingIdbPuts.clear();
+  if (idbFlushTimer != null) {
+    clearTimeout(idbFlushTimer);
+    idbFlushTimer = null;
+  }
+  sharedDbPromise = null;
   if (!idbAvailable()) return;
   try {
     const db = await openBarsDb();

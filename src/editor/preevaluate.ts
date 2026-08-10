@@ -686,10 +686,22 @@ export function cancelPreeval(): void {
 /**
  * Clear underlines while the user is still typing.
  * Incomplete input is not syntax-checked until Save or Run.
+ * No-ops when already clear (avoids store + CM thrash every keystroke).
  */
 export function clearPreevalOnEdit(source: string): void {
-  cancelPreeval();
   lastSource = source;
+  const pe = store.preEval;
+  if (
+    pe &&
+    !pe.pending &&
+    !pe.hasErrors &&
+    (!pe.diagnostics || pe.diagnostics.length === 0)
+  ) {
+    // Still cancel any in-flight timer/request from a prior Save/Run
+    cancelPreeval();
+    return;
+  }
+  cancelPreeval();
   setPreEval({
     diagnostics: [],
     hasErrors: false,

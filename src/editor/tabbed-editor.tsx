@@ -228,12 +228,14 @@ export const TabbedEditor: Component<Props> = (props) => {
   });
 
   const scheduleDraft = (doc: string, name?: string) => {
-    saveEditorDoc(doc);
+    // Debounce ALL persistence — sync localStorage every keystroke was a
+    // main-thread tax on large Pine buffers. Stats stay live for the strip.
     setStats(countDocStats(doc));
     if (draftTimer) clearTimeout(draftTimer);
     draftTimer = setTimeout(() => {
+      saveEditorDoc(doc);
       void saveDraft(doc, name).catch(() => {});
-    }, 400);
+    }, 500);
   };
 
   // Refresh counters when switching tabs (not on every keystroke)

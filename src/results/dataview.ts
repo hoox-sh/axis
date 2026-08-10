@@ -29,6 +29,8 @@
  * @module results/dataview
  */
 
+import { barIndexAtTimeBinary } from '../chart/heavy-data';
+
 import type { Bar } from '../store/types';
 import {
   FIB_LEVELS,
@@ -106,22 +108,9 @@ function fmtTime(t: number): string {
   }
 }
 
-/** Resolve bar index from crosshair time (nearest). */
+/** Resolve bar index from crosshair time (nearest) — O(log n) binary search. */
 export function barIndexAtTime(bars: Bar[], time: number | null | undefined): number {
-  if (!bars.length || time == null || !Number.isFinite(time)) return bars.length ? bars.length - 1 : -1;
-  // exact
-  const exact = bars.findIndex((b) => b.time === time);
-  if (exact >= 0) return exact;
-  let best = 0;
-  let bestD = Infinity;
-  for (let i = 0; i < bars.length; i++) {
-    const d = Math.abs(bars[i]!.time - time);
-    if (d < bestD) {
-      bestD = d;
-      best = i;
-    }
-  }
-  return best;
+  return barIndexAtTimeBinary(bars, time);
 }
 
 export interface BuildDataViewOpts {

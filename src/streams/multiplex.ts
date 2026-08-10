@@ -333,17 +333,28 @@ function scheduleRerun() {
   if (!store.scripts.some((s) => s.visible && s.code?.trim())) return;
   // Interactive Run owns the engine — mark dirty and wait (do not beginRunEpoch)
   if (isInteractiveRunInFlight()) {
-    setStore('live', 'needsRerun', true);
+    if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
     return;
   }
-  if (rerunTimer) return;
+  // Timer already armed or cycle in flight: remember bars advanced, don't drop work
+  if (rerunTimer || rerunInFlight) {
+    if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
+    return;
+  }
   const epochAtSchedule = liveEpoch;
+  // Adaptive debounce: heavier histories need longer quiet windows
+  const barN = store.bars?.length ?? 0;
+  const debounceMs = barN >= 10_000 ? 900 : barN >= 2_500 ? 600 : 400;
   rerunTimer = setTimeout(async () => {
     rerunTimer = null;
-    if (liveEpoch !== epochAtSchedule || rerunInFlight || !store.live.active) return;
+    if (liveEpoch !== epochAtSchedule || !store.live.active) return;
+    if (rerunInFlight) {
+      if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
+      return;
+    }
     // Interactive may have started during the debounce window
     if (isInteractiveRunInFlight()) {
-      setStore('live', 'needsRerun', true);
+      if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
       return;
     }
     rerunInFlight = true;
@@ -357,7 +368,7 @@ function scheduleRerun() {
       for (const ind of ordered) {
         if (liveEpoch !== epochAtSchedule || !store.live.active) break;
         if (isInteractiveRunInFlight()) {
-          setStore('live', 'needsRerun', true);
+          if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
           break;
         }
         await runAndApply(ind.code, ind.id, {
@@ -372,7 +383,7 @@ function scheduleRerun() {
         scheduleRerun();
       }
     }
-  }, 400);
+  }, debounceMs);
 }
 
 /**

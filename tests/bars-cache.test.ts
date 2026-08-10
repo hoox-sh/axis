@@ -31,6 +31,19 @@ describe('bars-cache', () => {
     expect(barsCacheKey('binance-rest', 'btcusdt', '1h')).toBe('binance-rest|BTCUSDT|1h');
   });
 
+  it('mergeBars prepends older sorted page without Map rebuild', () => {
+    const base = [
+      { time: 300, open: 1, high: 1, low: 1, close: 1 },
+      { time: 400, open: 1, high: 1, low: 1, close: 1 },
+    ];
+    const older = [
+      { time: 100, open: 1, high: 1, low: 1, close: 1 },
+      { time: 200, open: 1, high: 1, low: 1, close: 1 },
+    ];
+    const merged = mergeBars(base as never, older as never);
+    expect(merged.map((b) => b.time)).toEqual([100, 200, 300, 400]);
+  });
+
   it('mergeBars sorts and dedupes by time (last wins)', () => {
     const a = [bar(1, 10), bar(2, 20)];
     const b = [bar(2, 99), bar(3, 30)];

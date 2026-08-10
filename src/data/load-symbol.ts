@@ -58,10 +58,18 @@ import { normalizeHistoricalBars } from './parse-bars';
  * lower id are ignored so mid-load symbol switches cannot race into the store.
  */
 let loadGeneration = 0;
+/** Abort controller for the active history fetch (cancelled on newer load). */
+let loadAbort: AbortController | null = null;
 
 /** @internal test helper — reset race token between suites */
 export function _resetLoadGeneration(): void {
   loadGeneration = 0;
+  try {
+    loadAbort?.abort();
+  } catch {
+    /* ignore */
+  }
+  loadAbort = null;
 }
 
 /** @internal test helper — current race token */
@@ -137,8 +145,15 @@ export async function loadSymbolData(
   const sym = normalizeLoadSymbol(symbol, srcId);
   const iv = String(interval || store.interval || '1d');
 
-  // Claim this load as the newest; any prior in-flight work becomes stale.
+  // Claim this load as the newest; abort prior network + ignore stale completions.
   const gen = ++loadGeneration;
+  try {
+    loadAbort?.abort();
+  } catch {
+    /* ignore */
+  }
+  loadAbort = new AbortController();
+  const signal = loadAbort.signal;
 
   const source = getSource(srcId);
   if (!source) {
@@ -207,15 +222,24 @@ export async function loadSymbolData(
           ...sourceCfg,
           limit,
         },
+        signal,
       });
     } catch (fetchErr: unknown) {
+      // Aborted by a newer load — silent success (caller no longer needs us)
+      if (
+        signal.aborted ||
+        (fetchErr instanceof Error && fetchErr.name === 'AbortError') ||
+        !stillCurrent()
+      ) {
+        return false;
+      }
       // Plugin throw / network fail — rethrow into outer handler with clean message
       throw fetchErr instanceof Error
         ? fetchErr
         : new Error(errMessage(fetchErr));
     }
 
-    if (!stillCurrent()) {
+    if (!stillCurrent() || signal.aborted) {
       // Newer load started while we were awaiting the source — drop result
       return false;
     }
