@@ -75,6 +75,7 @@ import {
   type ChartType,
   DEFAULT_CHART_TYPE,
 } from './chart-type';
+import { createRafCoalescer } from './heavy-data';
 import type { Bar } from '../store/types';
 import { resizePane, store } from '../store';
 import type { TradeMarker } from '../results/events';
@@ -253,6 +254,8 @@ export class PaneManager {
   private pointerInside: boolean | null = null;
   /** Pane id last entered by the pointer (while {@link pointerInside}). */
   private hoveredPaneId: string | null = null;
+  /** Coalesce multi-pane crosshair mirrors to one frame (heavy histories). */
+  private crosshairRaf = createRafCoalescer();
   /** Host callback for Data Window / store (set via {@link syncCrosshair}) */
   private crosshairOnMove:
     | ((data: {
@@ -447,38 +450,40 @@ export class PaneManager {
     }
 
     const isSecondary = type !== 'price';
+    // Only pass keys that apply — never `timeScale: undefined` (wipes base
+    // timeVisible and leaves crosshair labels date-only).
     const chart = createBaseChart(div, {
-      // Secondary panes: no time axis / scrollbar; time range follows the price pane.
-      timeScale: isSecondary
+      ...(isSecondary
         ? {
-            visible: false,
-            borderVisible: false,
-            borderColor: VOID.border,
-            timeVisible: false,
-            ticksVisible: false,
-            minimumHeight: 0,
-            shiftVisibleRangeOnNewBar: false,
-            allowShiftVisibleRangeOnWhitespaceReplacement: false,
-            rightBarStaysOnScroll: true,
+            // Secondary panes: no time axis / scrollbar; range follows price pane.
+            timeScale: {
+              visible: false,
+              borderVisible: false,
+              borderColor: VOID.border,
+              timeVisible: false,
+              ticksVisible: false,
+              minimumHeight: 0,
+              shiftVisibleRangeOnNewBar: false,
+              allowShiftVisibleRangeOnWhitespaceReplacement: false,
+              rightBarStaysOnScroll: true,
+            },
+            // Lock horz scroll/zoom — price pane is the driver.
+            handleScroll: {
+              mouseWheel: false,
+              pressedMouseMove: false,
+              horzTouchDrag: false,
+              vertTouchDrag: false,
+            },
+            handleScale: {
+              mouseWheel: false,
+              pinch: false,
+              axisPressedMouseMove: { time: false, price: true },
+              axisDoubleClickReset: { time: false, price: true },
+            },
           }
-        : undefined,
-      // Lock horz scroll/zoom on volume/indicator/equity — price pane is the driver.
-      handleScroll: isSecondary
-        ? {
-            mouseWheel: false,
-            pressedMouseMove: false,
-            horzTouchDrag: false,
-            vertTouchDrag: false,
-          }
-        : { vertTouchDrag: true },
-      handleScale: isSecondary
-        ? {
-            mouseWheel: false,
-            pinch: false,
-            axisPressedMouseMove: { time: false, price: true },
-            axisDoubleClickReset: { time: false, price: true },
-          }
-        : undefined,
+        : {
+            handleScroll: { vertTouchDrag: true },
+          }),
       rightPriceScale: {
         borderColor: VOID.border,
         borderVisible: this.priceScaleLabelsVisible,
@@ -1085,6 +1090,7 @@ export class PaneManager {
   }
 
   private rewireCrosshair() {
+    this.crosshairRaf.cancel();
     for (const u of this.crosshairUnsubs) {
       try {
         u();
@@ -1101,6 +1107,7 @@ export class PaneManager {
 
         // Leave / outside plot: clear mirrors + host. Also accept when not hovering.
         if (!param.time || !param.point) {
+          this.crosshairRaf.cancel();
           this.suppressCrosshair = true;
           try {
             for (const other of this.getAllPanes()) {
@@ -1143,16 +1150,22 @@ export class PaneManager {
           (param as MouseEventParams & { sourceEvent?: unknown }).sourceEvent == null;
 
         if (!isDataDriven) {
-          // Mirror onto all other panes (user pointer move)
-          this.suppressCrosshair = true;
-          try {
-            for (const other of this.getAllPanes()) {
-              if (!other.visible || other.chart === pane.chart) continue;
-              this.applyCrosshairToPane(other, param);
+          // Mirror onto all other panes once per animation frame (10k+ bars:
+          // setCrosshairPosition per move × N panes was a major hover cost).
+          const sourcePane = pane;
+          const snap = param;
+          this.crosshairRaf.schedule(() => {
+            if (this.suppressCrosshair) return;
+            this.suppressCrosshair = true;
+            try {
+              for (const other of this.getAllPanes()) {
+                if (!other.visible || other.chart === sourcePane.chart) continue;
+                this.applyCrosshairToPane(other, snap);
+              }
+            } finally {
+              this.suppressCrosshair = false;
             }
-          } finally {
-            this.suppressCrosshair = false;
-          }
+          });
         }
 
         this.crosshairOnMove?.({
@@ -1432,15 +1445,12 @@ export class PaneManager {
       const pricePane = this.panes.get('price');
       const chartType = normalizeChartType(store.chartType ?? this.priceChartType);
       if (pricePane?.series['candle']) {
-        const bars =
-          store.bars?.length && store.bars[store.bars.length - 1]?.time === bar.time
-            ? store.bars
-            : store.bars?.length
-              ? [...store.bars.filter((b) => b.time !== bar.time), bar].sort(
-                  (a, c) => a.time - c.time,
-                )
-              : [bar];
-        const point = mapBarUpdate(bars, chartType);
+        // Non-HA: O(1) from the single tick. HA: use store history + HA cache
+        // (mapBarUpdate is O(1) after full paint; never filter+sort 10k bars).
+        const storeBars = store.bars;
+        const barsForMap: readonly Bar[] =
+          chartType === 'heikinashi' && storeBars?.length ? storeBars : [bar];
+        const point = mapBarUpdate(barsForMap, chartType);
         if (point && Number.isFinite(point.time)) {
           const ohlcOk =
             'close' in point
@@ -1458,7 +1468,13 @@ export class PaneManager {
         }
         // Tint last-price line to bar direction
         try {
-          const dir = lastBarDirection(bars, chartType);
+          const dirBars =
+            storeBars?.length && storeBars[storeBars.length - 1]?.time === bar.time
+              ? storeBars
+              : storeBars?.length
+                ? storeBars
+                : [bar];
+          const dir = lastBarDirection(dirBars, chartType);
           if (dir) {
             const voidLike = getThemeManager().getVoidLike();
             pricePane.series['candle'].applyOptions({
@@ -2012,6 +2028,7 @@ export class PaneManager {
   }
 
   dispose() {
+    this.crosshairRaf.cancel();
     this.candleMarkers = null;
     this.tradeMarkerList = [];
     this.shapeMarkerList = [];

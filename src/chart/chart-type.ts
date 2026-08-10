@@ -125,27 +125,76 @@ export function isOhlcChartType(type: ChartType): boolean {
  * - haHigh = max(H, haOpen, haClose)
  * - haLow = min(L, haOpen, haClose)
  */
+/**
+ * Incremental HA state so live ticks are O(1), not O(n) full transforms
+ * on 10k+ histories.
+ */
+type HaCache = {
+  /** Time of the last painted HA bar. */
+  lastTime: number;
+  lastOpen: number;
+  lastClose: number;
+  /** HA open/close of the bar before last (for same-bar updates). */
+  prevOpen: number;
+  prevClose: number;
+};
+
+let haCache: HaCache | null = null;
+
+/** Drop HA live cache (full history replace / chart-type switch). */
+export function resetHeikinAshiCache(): void {
+  haCache = null;
+}
+
+function haCandleFrom(
+  b: Bar,
+  prevHaOpen: number,
+  prevHaClose: number,
+  isFirst: boolean,
+): { open: number; high: number; low: number; close: number } {
+  const haClose = (b.open + b.high + b.low + b.close) / 4;
+  const haOpen = isFirst ? (b.open + b.close) / 2 : (prevHaOpen + prevHaClose) / 2;
+  return {
+    open: haOpen,
+    high: Math.max(b.high, haOpen, haClose),
+    low: Math.min(b.low, haOpen, haClose),
+    close: haClose,
+  };
+}
+
 export function toHeikinAshi(bars: readonly Bar[]): Bar[] {
-  const out: Bar[] = [];
+  const n = bars.length;
+  const out: Bar[] = new Array(n);
   let prevOpen = 0;
   let prevClose = 0;
-  for (let i = 0; i < bars.length; i++) {
+  for (let i = 0; i < n; i++) {
     const b = bars[i]!;
-    const haClose = (b.open + b.high + b.low + b.close) / 4;
-    const haOpen = i === 0 ? (b.open + b.close) / 2 : (prevOpen + prevClose) / 2;
-    const haHigh = Math.max(b.high, haOpen, haClose);
-    const haLow = Math.min(b.low, haOpen, haClose);
-    out.push({
+    const ha = haCandleFrom(b, prevOpen, prevClose, i === 0);
+    out[i] = {
       time: b.time,
-      open: haOpen,
-      high: haHigh,
-      low: haLow,
-      close: haClose,
+      open: ha.open,
+      high: ha.high,
+      low: ha.low,
+      close: ha.close,
       volume: b.volume,
       closed: b.closed,
-    });
-    prevOpen = haOpen;
-    prevClose = haClose;
+    };
+    prevOpen = ha.open;
+    prevClose = ha.close;
+  }
+  // Seed live cache from full paint
+  if (n >= 1) {
+    const last = out[n - 1]!;
+    const prev = n >= 2 ? out[n - 2]! : last;
+    haCache = {
+      lastTime: last.time,
+      lastOpen: last.open,
+      lastClose: last.close,
+      prevOpen: n >= 2 ? prev.open : last.open,
+      prevClose: n >= 2 ? prev.close : last.close,
+    };
+  } else {
+    haCache = null;
   }
   return out;
 }
@@ -153,7 +202,7 @@ export function toHeikinAshi(bars: readonly Bar[]): Bar[] {
 /** Source bars for painting: HA transform or identity. */
 export function sourceBarsForChartType(bars: readonly Bar[], type: ChartType): Bar[] {
   if (type === 'heikinashi') return toHeikinAshi(bars);
-  // Return a shallow copy only when HA; identity pass-through avoids allocs
+  // Identity pass-through avoids allocs for candles/line/…
   return bars as Bar[];
 }
 
@@ -175,45 +224,111 @@ export type ValueDatum = {
 export type PriceSeriesDatum = OhlcDatum | ValueDatum;
 
 function toOhlcData(bars: readonly Bar[]): OhlcDatum[] {
-  return bars.map((b) => ({
-    time: b.time,
-    open: b.open,
-    high: b.high,
-    low: b.low,
-    close: b.close,
-  }));
+  const n = bars.length;
+  const out: OhlcDatum[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const b = bars[i]!;
+    out[i] = {
+      time: b.time,
+      open: b.open,
+      high: b.high,
+      low: b.low,
+      close: b.close,
+    };
+  }
+  return out;
 }
 
 function toCloseData(bars: readonly Bar[]): ValueDatum[] {
-  return bars.map((b) => ({
-    time: b.time,
-    value: b.close,
-  }));
+  const n = bars.length;
+  const out: ValueDatum[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const b = bars[i]!;
+    out[i] = { time: b.time, value: b.close };
+  }
+  return out;
 }
 
 /**
  * Map store OHLCV → Lightweight Charts series data for the active chart type.
+ * Pre-sized loops avoid `.map` intermediate GC on 10k+ bars.
  */
 export function mapBarsToPriceData(bars: readonly Bar[], type: ChartType): PriceSeriesDatum[] {
   if (!bars.length) return [];
-  const src = sourceBarsForChartType(bars, type);
-  if (isOhlcChartType(type)) return toOhlcData(src);
-  return toCloseData(src);
+  if (type === 'heikinashi') {
+    return toOhlcData(toHeikinAshi(bars));
+  }
+  if (isOhlcChartType(type)) return toOhlcData(bars);
+  return toCloseData(bars);
 }
 
 /**
- * Map a single bar update for live ticks.
+ * Map a single bar update for live ticks — O(1) for candles/line and HA.
  *
- * For Heikin-Ashi, pass the full bar list (already including the updated bar)
- * so the last HA candle is recomputed correctly from prior HA open/close.
+ * For Heikin-Ashi, uses {@link haCache} seeded by the last full
+ * {@link mapBarsToPriceData} / {@link toHeikinAshi} pass.
  */
 export function mapBarUpdate(
   bars: readonly Bar[],
   type: ChartType,
 ): PriceSeriesDatum | null {
   if (!bars.length) return null;
-  const data = mapBarsToPriceData(bars, type);
-  return data[data.length - 1] ?? null;
+  const last = bars[bars.length - 1]!;
+
+  if (type === 'heikinashi') {
+    return mapHeikinAshiUpdate(bars, last);
+  }
+
+  if (isOhlcChartType(type)) {
+    return {
+      time: last.time,
+      open: last.open,
+      high: last.high,
+      low: last.low,
+      close: last.close,
+    };
+  }
+  return { time: last.time, value: last.close };
+}
+
+function mapHeikinAshiUpdate(bars: readonly Bar[], last: Bar): OhlcDatum | null {
+  // Cold cache or history gap → full recompute once (seeds cache)
+  if (!haCache || bars.length === 1) {
+    const all = toHeikinAshi(bars);
+    const h = all[all.length - 1];
+    if (!h) return null;
+    return { time: h.time, open: h.open, high: h.high, low: h.low, close: h.close };
+  }
+
+  if (last.time === haCache.lastTime) {
+    // Same bar tick: recompute last HA from cached previous HA open/close
+    const ha = haCandleFrom(last, haCache.prevOpen, haCache.prevClose, bars.length === 1);
+    haCache = {
+      ...haCache,
+      lastOpen: ha.open,
+      lastClose: ha.close,
+    };
+    return { time: last.time, open: ha.open, high: ha.high, low: ha.low, close: ha.close };
+  }
+
+  if (last.time > haCache.lastTime) {
+    // New bar: previous last becomes prev
+    const ha = haCandleFrom(last, haCache.lastOpen, haCache.lastClose, false);
+    haCache = {
+      lastTime: last.time,
+      lastOpen: ha.open,
+      lastClose: ha.close,
+      prevOpen: haCache.lastOpen,
+      prevClose: haCache.lastClose,
+    };
+    return { time: last.time, open: ha.open, high: ha.high, low: ha.low, close: ha.close };
+  }
+
+  // Time went backwards (history rewrite) — full recompute
+  const all = toHeikinAshi(bars);
+  const h = all[all.length - 1];
+  if (!h) return null;
+  return { time: h.time, open: h.open, high: h.high, low: h.low, close: h.close };
 }
 
 /** Price-line tint from last painted bar (up/down vs prior close for line types). */

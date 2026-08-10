@@ -31,12 +31,35 @@ const {
   createVolumeSeries,
   createLineSeries,
   createAreaSeries,
+  formatCrosshairDateTime,
+  deepMergeChartOptions,
 } = await import('../src/chart/series-factory');
 
 describe('series-factory', () => {
   it('exports brand tokens and palette', () => {
     expect(VOID.bg).toMatch(/^#/);
     expect(PLOT_PALETTE.length).toBeGreaterThan(3);
+  });
+
+  it('formatCrosshairDateTime includes date and HH:mm', () => {
+    // 2026-08-10 14:35:00 UTC
+    const ts = Math.floor(Date.UTC(2026, 7, 10, 14, 35, 0) / 1000);
+    const label = formatCrosshairDateTime(ts);
+    expect(label).toContain('10');
+    expect(label).toContain('Aug');
+    expect(label).toMatch(/14:35/);
+  });
+
+  it('deepMergeChartOptions skips undefined so timeVisible is preserved', () => {
+    const base = {
+      timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#111' },
+    };
+    const merged = deepMergeChartOptions(base, {
+      timeScale: undefined as unknown as Record<string, unknown>,
+      handleScroll: { vertTouchDrag: true },
+    });
+    expect((merged.timeScale as { timeVisible: boolean }).timeVisible).toBe(true);
+    expect(merged.handleScroll).toEqual({ vertTouchDrag: true });
   });
 
   it('createBaseChart returns chart api', () => {

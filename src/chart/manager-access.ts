@@ -33,8 +33,14 @@ import {
   mapBarsToPriceData,
   lastBarDirection,
   normalizeChartType,
+  resetHeikinAshiCache,
   type ChartType,
 } from './chart-type';
+import {
+  heavyTimeScaleOptions,
+  isHeavyBarLoad,
+  mapBarsToVolumeData,
+} from './heavy-data';
 import {
   store,
   setDrawings,
@@ -407,7 +413,23 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
 
     ensurePriceSeries(chartType);
 
+    // Tune LWC conflation for this history size before the heavy setData paint
+    const tsHeavy = heavyTimeScaleOptions(bars.length);
+    try {
+      pricePane?.chart.timeScale().applyOptions(tsHeavy as never);
+      volPane?.chart.timeScale().applyOptions({
+        enableConflation: tsHeavy.enableConflation,
+        conflationThresholdFactor: tsHeavy.conflationThresholdFactor,
+        // Volume follows price range — no need to precompute twice
+        precomputeConflationOnInit: false,
+      } as never);
+    } catch {
+      /* conflation options optional on older mocks */
+    }
+
     if (pricePane?.series['candle']) {
+      // Full replace invalidates incremental HA live state (re-seeded by mapper)
+      if (chartType !== 'heikinashi') resetHeikinAshiCache();
       const data = mapBarsToPriceData(bars, chartType);
       pricePane.series['candle'].setData(data as never);
 
@@ -434,15 +456,23 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
         }
       }
       if (fit) {
-        // Symbol / history change: resize host canvases + fit + auto-scale
-        if (typeof mgr.afterDataReload === 'function') {
-          mgr.afterDataReload();
-        } else {
+        // Defer fit/layout work one frame so LWC can commit setData first
+        // (noticeable on 10k+ candles — avoids long main-thread block).
+        const runFit = () => {
           try {
-            pricePane.chart.timeScale().fitContent();
+            if (typeof mgr.afterDataReload === 'function') {
+              mgr.afterDataReload();
+            } else {
+              pricePane.chart.timeScale().fitContent();
+            }
           } catch {
             /* fit optional */
           }
+        };
+        if (isHeavyBarLoad(bars.length) && typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(runFit);
+        } else {
+          runFit();
         }
       }
     }
@@ -453,11 +483,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
     if (volPane?.series['volume']) {
       const volColors = getThemeManager().getVolumeColors();
       volPane.series['volume'].setData(
-        bars.map((b) => ({
-          time: b.time as never,
-          value: b.volume ?? 0,
-          color: b.close >= b.open ? volColors.up : volColors.down,
-        })),
+        mapBarsToVolumeData(bars, volColors) as never,
       );
       try {
         volPane.series['volume'].applyOptions({

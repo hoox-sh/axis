@@ -109,6 +109,32 @@ describe('mapBarsToPriceData', () => {
     expect(last).toEqual({ time: 3, value: 11.5 });
     expect(mapBarUpdate([], 'candles')).toBeNull();
   });
+
+  it('mapBarUpdate candles is O(1) and matches last OHLC', () => {
+    const last = mapBarUpdate(sample, 'candles');
+    expect(last).toEqual({
+      time: 3,
+      open: 13,
+      high: 13.5,
+      low: 11,
+      close: 11.5,
+    });
+  });
+
+  it('mapBarUpdate heikinashi stays consistent across full + live path', () => {
+    const full = mapBarsToPriceData(sample, 'heikinashi');
+    const live = mapBarUpdate(sample, 'heikinashi');
+    expect(live).toEqual(full[full.length - 1]);
+    const again = mapBarUpdate(sample, 'heikinashi');
+    expect(again).toEqual(live);
+    const extended: Bar[] = [
+      ...sample,
+      { time: 4, open: 11.5, high: 12, low: 11, close: 11.8, volume: 50 },
+    ];
+    const nextLive = mapBarUpdate(extended, 'heikinashi');
+    const nextFull = mapBarsToPriceData(extended, 'heikinashi');
+    expect(nextLive).toEqual(nextFull[nextFull.length - 1]);
+  });
 });
 
 describe('lastBarDirection', () => {

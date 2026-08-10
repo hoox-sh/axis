@@ -221,7 +221,13 @@ export function buildChartOptionsFromTokens(
             timeVisible: false,
             ticksVisible: false,
           }
-        : {}),
+        : {
+            // Keep date+time on axis / crosshair after theme re-apply
+            timeVisible: true,
+            secondsVisible: false,
+            // Do not clear conflation flags set by heavy setData
+            enableConflation: true,
+          }),
     },
     crosshair: {
       vertLine: {

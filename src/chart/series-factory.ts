@@ -132,13 +132,84 @@ export function getActiveChartPalette() {
   return getThemeManager().getVoidLike();
 }
 
-/** Shallow-object deep merge; arrays and non-plain values replace. */
-function deepMerge(
+/**
+ * Format a Lightweight Charts time value for the vertical crosshair label.
+ * Always includes clock time (HH:mm) so hover endpoints are not date-only.
+ *
+ * Accepts UTCTimestamp (seconds), millis, BusinessDay `{ year, month, day }`,
+ * or `YYYY-MM-DD` strings.
+ */
+export function formatCrosshairDateTime(time: unknown): string {
+  const d = resolveChartTimeToDate(time);
+  if (!d || Number.isNaN(d.getTime())) return '';
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const mon = MONTH_SHORT[d.getUTCMonth()] ?? '';
+  const yy = String(d.getUTCFullYear()).slice(-2);
+  const hh = String(d.getUTCHours()).padStart(2, '0');
+  const mm = String(d.getUTCMinutes()).padStart(2, '0');
+  // Match LWC DateTimeFormatter spacing: date + multi-space + time
+  return `${dd} ${mon} '${yy}  ${hh}:${mm}`;
+}
+
+const MONTH_SHORT = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+] as const;
+
+/** Normalize LWC time variants to a Date (UTC wall clock for labels). */
+export function resolveChartTimeToDate(time: unknown): Date | null {
+  if (time == null) return null;
+  if (typeof time === 'number' && Number.isFinite(time)) {
+    // Heuristic: ms vs seconds (LWC uses UTCTimestamp in seconds)
+    const ms = time > 1e12 ? time : time * 1000;
+    return new Date(ms);
+  }
+  if (typeof time === 'string') {
+    // Business-day string "YYYY-MM-DD" or ISO
+    const t = Date.parse(time.includes('T') ? time : `${time}T00:00:00Z`);
+    if (Number.isFinite(t)) return new Date(t);
+    return null;
+  }
+  if (typeof time === 'object') {
+    const o = time as { year?: number; month?: number; day?: number; timestamp?: number };
+    if (typeof o.timestamp === 'number' && Number.isFinite(o.timestamp)) {
+      const ms = o.timestamp > 1e12 ? o.timestamp : o.timestamp * 1000;
+      return new Date(ms);
+    }
+    if (
+      typeof o.year === 'number' &&
+      typeof o.month === 'number' &&
+      typeof o.day === 'number'
+    ) {
+      return new Date(Date.UTC(o.year, o.month - 1, o.day));
+    }
+  }
+  return null;
+}
+
+/**
+ * Shallow-object deep merge; arrays and non-plain values replace.
+ * **Skips `undefined` source values** so callers can pass optional keys
+ * (`timeScale: isSecondary ? … : undefined`) without wiping base options
+ * like `timeVisible: true` (crosshair date+time labels).
+ */
+export function deepMergeChartOptions(
   target: Record<string, unknown>,
   source: Record<string, unknown>,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...target };
   for (const [key, value] of Object.entries(source)) {
+    if (value === undefined) continue;
     const prev = out[key];
     if (
       value &&
@@ -148,12 +219,23 @@ function deepMerge(
       typeof prev === 'object' &&
       !Array.isArray(prev)
     ) {
-      out[key] = deepMerge(prev as Record<string, unknown>, value as Record<string, unknown>);
+      out[key] = deepMergeChartOptions(
+        prev as Record<string, unknown>,
+        value as Record<string, unknown>,
+      );
     } else {
       out[key] = value;
     }
   }
   return out;
+}
+
+/** @deprecated Prefer {@link deepMergeChartOptions} — same behavior. */
+function deepMerge(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  return deepMergeChartOptions(target, source);
 }
 
 /**
@@ -195,6 +277,7 @@ export function createBaseChart(container: HTMLElement, options?: Record<string,
     timeScale: {
       borderColor: VOID.border,
       borderVisible: true,
+      // Date + HH:mm on axis ticks and vertical crosshair endpoint labels
       timeVisible: true,
       secondsVisible: false,
       ticksVisible: true,
@@ -205,6 +288,19 @@ export function createBaseChart(container: HTMLElement, options?: Record<string,
       shiftVisibleRangeOnNewBar: false,
       allowShiftVisibleRangeOnWhitespaceReplacement: false,
       rightBarStaysOnScroll: true,
+      // Merge sub-pixel bars when zoomed out — critical for 10k+ candle histories.
+      // Precompute is toggled on after heavy setData (see manager-access).
+      enableConflation: true,
+      conflationThresholdFactor: 1,
+      precomputeConflationOnInit: false,
+      precomputeConflationPriority: 'background',
+    },
+    // Crosshair time label uses this when set; fallback is LWC DateTimeFormatter
+    // (date + time when timeScale.timeVisible is true).
+    localization: {
+      // Prefer compact date+time so the bottom crosshair pill always includes clock time
+      // for intraday bars (e.g. "10 Aug 26  14:35"), not date-only.
+      timeFormatter: (time: unknown) => formatCrosshairDateTime(time),
     },
     crosshair: {
       mode: CrosshairMode.Normal,
