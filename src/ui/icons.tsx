@@ -38,7 +38,9 @@ import {
   ChevronRight,
   ChevronUp,
   Circle,
+  Clock,
   Copy,
+  Cpu,
   Download,
   Eraser,
   Eye,
@@ -67,6 +69,7 @@ import {
   RotateCcw,
   Ruler,
   SendToBack,
+  Server,
   Settings,
   Shapes,
   Square,
@@ -77,6 +80,7 @@ import {
   Unlock,
   Upload,
   X,
+  Zap,
   ExternalLink,
   SquareArrowOutUpRight,
   ScrollText,
@@ -176,6 +180,11 @@ export const Icons = {
   eyeOff: withDefaults(EyeOff),
   vline: withDefaults(Slash),
   extend: withDefaults(MoveUpRight),
+  /** Engine / execution badges (Scripts panel) */
+  server: withDefaults(Server),
+  cpu: withDefaults(Cpu),
+  clock: withDefaults(Clock),
+  zap: withDefaults(Zap),
 };
 
 /** Inline icon row helper for buttons */

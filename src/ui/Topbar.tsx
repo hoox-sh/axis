@@ -80,6 +80,7 @@ import { startBarReplay, exitBarReplay } from './BarReplayControls';
 import { isReplayActive, subscribeReplay } from '../chart/bar-replay';
 import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
 import { CachedDatasetsModal } from './CachedDatasetsModal';
+import { SymbolModal } from './SymbolModal';
 import { RunSplitButton } from './RunSplitButton';
 
 const INTERVALS = [...WATCHLIST_INTERVALS];
@@ -114,6 +115,7 @@ export const Topbar: Component<{
   const [uploadLabel, setUploadLabel] = createSignal(getUploadedFileName() || '');
   const [replayOn, setReplayOn] = createSignal(isReplayActive());
   const [datasetsOpen, setDatasetsOpen] = createSignal(false);
+  const [symbolModalOpen, setSymbolModalOpen] = createSignal(false);
   let fileInput: HTMLInputElement | undefined;
   /** Last symbol we successfully requested (avoids redundant blur reloads). */
   let lastLoadedSymbol = store.symbol;
@@ -254,35 +256,58 @@ export const Topbar: Component<{
       {/* ── Market ──────────────────────────────────────────── */}
       <div class="axis-tb-group" data-tb-group="market">
         <Show when={sourceNeedsSymbol()}>
-          <TopbarField
-            id="axis-symbol"
-            label="Symbol"
-            class="min-w-[7em]"
-            mono
-            value={store.symbol}
-            spellcheck={false}
-            autocomplete="off"
-            title="Symbol · Enter or leave field to load"
-            onInput={(e) => {
-              setStore('symbol', e.currentTarget.value.toUpperCase());
-            }}
-            onChange={(e) => {
-              // Persist + slot sync only; load on blur / Enter (same as before)
-              const next = e.currentTarget.value.toUpperCase().trim();
-              if (!next) return;
-              setStore('symbol', next);
-              const aid = store.chartLayout?.activeId;
-              if (aid) updateChartSlot(aid, { symbol: next });
-              persist();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                commitSymbol(e.currentTarget.value, true);
-              }
-            }}
-            onBlur={(e) => {
-              commitSymbol(e.currentTarget.value, false);
+          <div class="flex items-stretch gap-0.5" data-testid="axis-symbol-control">
+            <TopbarField
+              id="axis-symbol"
+              label="Symbol"
+              class="min-w-[7em]"
+              mono
+              value={store.symbol}
+              spellcheck={false}
+              autocomplete="off"
+              title="Symbol · click list to browse exchange pairs · Enter to load"
+              onInput={(e) => {
+                setStore('symbol', e.currentTarget.value.toUpperCase());
+              }}
+              onChange={(e) => {
+                // Persist + slot sync only; load on blur / Enter (same as before)
+                const next = e.currentTarget.value.toUpperCase().trim();
+                if (!next) return;
+                setStore('symbol', next);
+                const aid = store.chartLayout?.activeId;
+                if (aid) updateChartSlot(aid, { symbol: next });
+                persist();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitSymbol(e.currentTarget.value, true);
+                } else if (e.key === 'ArrowDown' || (e.key === ' ' && e.ctrlKey)) {
+                  e.preventDefault();
+                  setSymbolModalOpen(true);
+                }
+              }}
+              onBlur={(e) => {
+                commitSymbol(e.currentTarget.value, false);
+              }}
+            />
+            <button
+              type="button"
+              class="sc-btn sc-btn-ghost px-1.5 self-stretch border border-border/40 rounded-sm"
+              data-testid="axis-symbol-browse"
+              title="Browse symbols for current exchange (source / stream)"
+              aria-label="Browse symbols"
+              onClick={() => setSymbolModalOpen(true)}
+            >
+              <Icons.list />
+            </button>
+          </div>
+          <SymbolModal
+            open={symbolModalOpen()}
+            initialQuery={store.symbol}
+            onClose={() => setSymbolModalOpen(false)}
+            onSelect={(sym) => {
+              commitSymbol(sym, true);
             }}
           />
         </Show>
