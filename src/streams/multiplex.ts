@@ -60,7 +60,7 @@ import {
 } from '../store';
 import { getManager, setDataToChart } from '../chart/manager-access';
 import { isReplayActive, stopReplaySession } from '../chart/bar-replay';
-import { runAndApply } from '../indicators/runner';
+import { isInteractiveRunInFlight, runAndApply } from '../indicators/runner';
 import { orderIndicatorsByPlotDeps } from '../results/plot-sources';
 import {
   getStream,
@@ -325,14 +325,27 @@ export function stopLive(opts?: StopLiveOpts) {
 /**
  * Debounced re-run of all visible indicators after live bars.
  * Silent: no Results drawer spam; updates chart overlays only.
+ *
+ * Does **not** cancel an in-flight interactive Run (MTF / request.security).
+ * Those set `live.needsRerun` and flush after the interactive epoch ends.
  */
 function scheduleRerun() {
   if (!store.scripts.some((s) => s.visible && s.code?.trim())) return;
+  // Interactive Run owns the engine — mark dirty and wait (do not beginRunEpoch)
+  if (isInteractiveRunInFlight()) {
+    setStore('live', 'needsRerun', true);
+    return;
+  }
   if (rerunTimer) return;
   const epochAtSchedule = liveEpoch;
   rerunTimer = setTimeout(async () => {
     rerunTimer = null;
     if (liveEpoch !== epochAtSchedule || rerunInFlight || !store.live.active) return;
+    // Interactive may have started during the debounce window
+    if (isInteractiveRunInFlight()) {
+      setStore('live', 'needsRerun', true);
+      return;
+    }
     rerunInFlight = true;
     rerunAttemptCount += 1;
     setStore('live', 'needsRerun', false);
@@ -343,6 +356,10 @@ function scheduleRerun() {
       );
       for (const ind of ordered) {
         if (liveEpoch !== epochAtSchedule || !store.live.active) break;
+        if (isInteractiveRunInFlight()) {
+          setStore('live', 'needsRerun', true);
+          break;
+        }
         await runAndApply(ind.code, ind.id, {
           silent: true,
           openResults: false,
@@ -350,6 +367,19 @@ function scheduleRerun() {
       }
     } finally {
       rerunInFlight = false;
+      // If more ticks arrived or interactive deferred us, schedule again
+      if (store.live.active && store.live.needsRerun && !isInteractiveRunInFlight()) {
+        scheduleRerun();
+      }
     }
   }, 400);
+}
+
+/**
+ * Public entry for deferred live re-runs after an interactive Run finishes.
+ * Safe to call when live is inactive (no-op).
+ */
+export function scheduleLiveRerun(): void {
+  if (!store.live?.active) return;
+  scheduleRerun();
 }

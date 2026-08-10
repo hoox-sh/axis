@@ -337,8 +337,9 @@ let runEpoch = 0;
 
 /**
  * Which run generation owns the interactive status bar (`running`).
- * Silent live re-runs advance {@link runEpoch} without claiming status, so a
- * superseded interactive Run must clear `running` only when it still owns it.
+ * Silent live re-runs must **not** advance {@link runEpoch} while this is set
+ * (slow scripts like MTF `request.security` would otherwise show "Run superseded"
+ * and never apply). Another interactive Run still supersedes via beginRunEpoch.
  */
 let runStatusEpoch: number | null = null;
 
@@ -361,6 +362,14 @@ export function isRunEpochCurrent(epoch: number): boolean {
 /** Epoch that currently owns interactive Run status, if any. */
 export function getRunStatusEpoch(): number | null {
   return runStatusEpoch;
+}
+
+/**
+ * True when an interactive (non-silent) Run owns the current epoch.
+ * Silent live re-runs must defer instead of calling {@link beginRunEpoch}.
+ */
+export function isInteractiveRunInFlight(): boolean {
+  return runStatusEpoch != null && runStatusEpoch === runEpoch;
 }
 
 /**

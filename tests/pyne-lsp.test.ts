@@ -19,7 +19,18 @@ import {
   peelLeadingSignature,
   renderHoverMarkdown,
   appendInlineMarkdown,
+  styleArgContext,
+  styleEnumsForNamespace,
+  filterStyleEnums,
+  pyneCompleteLocal,
+  completeNamedArgEnum,
+  enumsMatchingPrefixes,
 } from '../src/editor/pyne-lsp';
+import {
+  namedArgEnumContext,
+  findNearestCallName,
+  styleNamespaceForCall,
+} from '../src/editor/pine-enums';
 
 describe('pyne-lsp', () => {
   it('indexes builtins from metadata', () => {
@@ -67,8 +78,7 @@ plot(demo(2))
     expect(w?.word).toContain('sma');
   });
 
-  it('completes top-level after prefix (local)', async () => {
-    const { pyneCompleteLocal } = await import('../src/editor/pyne-lsp');
+  it('completes top-level after prefix (local)', () => {
     const state = EditorState.create({ doc: 'ind' });
     const r = pyneCompleteLocal({
       state,
@@ -85,7 +95,6 @@ plot(demo(2))
   });
 
   it('completes module members after ta. (local)', async () => {
-    const { pyneCompleteLocal } = await import('../src/editor/pyne-lsp');
     const doc = 'ta.';
     const state = EditorState.create({ doc });
     const r = pyneCompleteLocal({
@@ -96,6 +105,188 @@ plot(demo(2))
     } as never);
     expect(r).toBeTruthy();
     expect(r!.options.length).toBeGreaterThan(5);
+  });
+
+  it('detects style= context and plot namespace', () => {
+    const line = 'plot(st, "Supertrend", color=col, linewidth=2, style=)';
+    const ctx = styleArgContext(line.slice(0, line.indexOf('style=') + 'style='.length));
+    expect(ctx).toBeTruthy();
+    expect(ctx!.namespace).toBe('plot');
+    expect(ctx!.prefix).toBe('');
+  });
+
+  it('suggests plot.style_* when cursor is after style=', () => {
+    const doc = 'plot(st, "Supertrend", color=col, linewidth=2, style=)';
+    const pos = doc.indexOf('style=') + 'style='.length;
+    const state = EditorState.create({ doc });
+    const r = pyneCompleteLocal({
+      state,
+      pos,
+      explicit: true,
+      matchBefore: () => null,
+    } as never);
+    expect(r).toBeTruthy();
+    const labels = (r!.options || []).map((o) => String(o.label));
+    expect(labels).toContain('plot.style_line');
+    expect(labels).toContain('plot.style_linebr');
+    expect(labels).toContain('plot.style_stepline');
+    expect(labels.every((l) => l.startsWith('plot.style_'))).toBe(true);
+    // Insert replaces from after `style=`
+    expect(r!.from).toBe(pos);
+  });
+
+  it('suggests style_ members after style=plot.', () => {
+    const doc = 'plot(close, style=plot.)';
+    const pos = doc.indexOf('plot.') + 'plot.'.length;
+    const state = EditorState.create({ doc });
+    const r = pyneCompleteLocal({
+      state,
+      pos,
+      explicit: true,
+      matchBefore: () => null,
+    } as never);
+    expect(r).toBeTruthy();
+    const labels = (r!.options || []).map((o) => String(o.label));
+    expect(labels.some((l) => l === 'style_line' || l === 'style_linebr')).toBe(true);
+  });
+
+  it('filters style enums by partial prefix', () => {
+    const enums = styleEnumsForNamespace('plot');
+    expect(enums.length).toBeGreaterThan(5);
+    const filtered = filterStyleEnums(enums, 'linebr');
+    expect(filtered.some((m) => m.label.includes('linebr'))).toBe(true);
+  });
+
+  it('looks up plot.style_stepline after inject', () => {
+    const meta = lookupBuiltin('plot.style_stepline');
+    expect(meta?.label).toBe('plot.style_stepline');
+  });
+
+  it('resolves style= across multi-line plot() for any script', () => {
+    const doc = `//@version=5
+indicator("t")
+plot(
+  close,
+  title="x",
+  style=
+)`;
+    const pos = doc.indexOf('style=') + 'style='.length;
+    const before = doc.slice(0, pos);
+    expect(findNearestCallName(before)).toBe('plot');
+    expect(styleNamespaceForCall(findNearestCallName(before))).toBe('plot');
+    const state = EditorState.create({ doc });
+    const r = completeNamedArgEnum({
+      state,
+      pos,
+      explicit: true,
+      matchBefore: () => null,
+    } as never);
+    expect(r).toBeTruthy();
+    const labels = (r!.options || []).map((o) => String(o.label));
+    expect(labels).toContain('plot.style_linebr');
+  });
+
+  it('suggests line.style_* for line.new(..., style=)', () => {
+    const doc = 'line.new(bar_index, high, bar_index+1, low, style=)';
+    const pos = doc.indexOf('style=') + 'style='.length;
+    const ctx = namedArgEnumContext(doc.slice(0, pos));
+    expect(ctx?.arg).toBe('style');
+    expect(ctx?.prefixes.some((p) => p.startsWith('line.style_'))).toBe(true);
+    const state = EditorState.create({ doc });
+    const r = pyneCompleteLocal({
+      state,
+      pos,
+      explicit: true,
+      matchBefore: () => null,
+    } as never);
+    const labels = (r!.options || []).map((o) => String(o.label));
+    expect(labels).toContain('line.style_dashed');
+    expect(labels.every((l) => l.startsWith('line.style_'))).toBe(true);
+  });
+
+  it('suggests label.style_* for label.new style=', () => {
+    const doc = 'label.new(bar_index, high, "x", style=)';
+    const pos = doc.indexOf('style=') + 'style='.length;
+    const state = EditorState.create({ doc });
+    const r = pyneCompleteLocal({
+      state,
+      pos,
+      explicit: true,
+      matchBefore: () => null,
+    } as never);
+    const labels = (r!.options || []).map((o) => String(o.label));
+    expect(labels).toContain('label.style_label_up');
+    expect(labels.every((l) => l.startsWith('label.style_'))).toBe(true);
+  });
+
+  it('suggests shape.* for plotshape shape=', () => {
+    const doc = 'plotshape(true, shape=)';
+    const pos = doc.indexOf('shape=') + 'shape='.length;
+    const state = EditorState.create({ doc });
+    const r = pyneCompleteLocal({
+      state,
+      pos,
+      explicit: true,
+      matchBefore: () => null,
+    } as never);
+    const labels = (r!.options || []).map((o) => String(o.label));
+    expect(labels).toContain('shape.triangleup');
+    expect(labels.every((l) => l.startsWith('shape.'))).toBe(true);
+  });
+
+  it('suggests location/size for plotshape named args', () => {
+    const locDoc = 'plotshape(true, location=)';
+    const locPos = locDoc.indexOf('location=') + 'location='.length;
+    const locR = pyneCompleteLocal({
+      state: EditorState.create({ doc: locDoc }),
+      pos: locPos,
+      explicit: true,
+      matchBefore: () => null,
+    } as never);
+    expect((locR!.options || []).map((o) => o.label)).toContain('location.abovebar');
+
+    const sizeDoc = 'plotshape(true, size=)';
+    const sizePos = sizeDoc.indexOf('size=') + 'size='.length;
+    const sizeR = pyneCompleteLocal({
+      state: EditorState.create({ doc: sizeDoc }),
+      pos: sizePos,
+      explicit: true,
+      matchBefore: () => null,
+    } as never);
+    expect((sizeR!.options || []).map((o) => o.label)).toContain('size.small');
+  });
+
+  it('suggests color constants after color= without call parens', () => {
+    const doc = 'plot(close, color=)';
+    const pos = doc.indexOf('color=') + 'color='.length;
+    const r = pyneCompleteLocal({
+      state: EditorState.create({ doc }),
+      pos,
+      explicit: true,
+      matchBefore: () => null,
+    } as never);
+    expect(r).toBeTruthy();
+    const labels = (r!.options || []).map((o) => String(o.label));
+    expect(labels.some((l) => l === 'color.red' || l === 'color.green')).toBe(true);
+  });
+
+  it('suggests strategy qty enums for default_qty_type=', () => {
+    const doc = 'strategy("t", overlay=true, default_qty_type=)';
+    const pos = doc.indexOf('default_qty_type=') + 'default_qty_type='.length;
+    const r = pyneCompleteLocal({
+      state: EditorState.create({ doc }),
+      pos,
+      explicit: true,
+      matchBefore: () => null,
+    } as never);
+    const labels = (r!.options || []).map((o) => String(o.label));
+    expect(labels).toContain('strategy.percent_of_equity');
+    expect(labels).toContain('strategy.fixed');
+  });
+
+  it('enumsMatchingPrefixes covers hline styles', () => {
+    const list = enumsMatchingPrefixes(['hline.style_']);
+    expect(list.map((m) => m.label)).toContain('hline.style_dotted');
   });
 
   it('detects markdown hover payloads', () => {

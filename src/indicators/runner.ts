@@ -95,6 +95,7 @@ import {
   beginRunEpoch,
   claimRunStatus,
   formatRunError,
+  isInteractiveRunInFlight,
   isRunEpochCurrent,
   lineDataHasSample,
   normalizeEngineResult,
@@ -116,6 +117,7 @@ export {
   coercePlotSample,
   currentRunEpoch,
   formatRunError,
+  isInteractiveRunInFlight,
   isRunEpochCurrent,
   lineDataHasSample,
   normalizeBarTime,
@@ -129,7 +131,8 @@ export {
 
 /**
  * End interactive Run status for this epoch: ready/error when still current,
- * or clear stuck `running` when superseded (e.g. by a silent live re-run).
+ * or clear stuck `running` when superseded by a newer **interactive** Run.
+ * Silent live re-runs defer instead of superseding (see {@link runAndApply}).
  */
 function finishInteractiveStatus(
   epoch: number | undefined,
@@ -143,11 +146,34 @@ function finishInteractiveStatus(
     releaseRunStatus(epoch ?? null);
     return;
   }
-  // Superseded: only clear if this run still owns the Running… UI
+  // Superseded by a newer interactive Run: only clear if we still own Running…
   if (ownsRunStatus(epoch) && store.status === 'running') {
     setStatus('ready', 'Run superseded');
     releaseRunStatus(epoch);
   }
+}
+
+/** Soft-skip payload when a silent re-run defers to an interactive Run. */
+function deferredSilentResult(): RunResult {
+  return {
+    status: 'success',
+    plots: [],
+    series: {},
+    events: [],
+    meta: { deferred: true, ms: 0 },
+  };
+}
+
+/** After interactive Run ends, flush live re-runs that were deferred. */
+function flushDeferredLiveRerun(): void {
+  if (!store.live?.active || !store.live?.needsRerun) return;
+  void import('../streams/multiplex')
+    .then((m) => {
+      m.scheduleLiveRerun?.();
+    })
+    .catch(() => {
+      /* multiplex optional during tests */
+    });
 }
 
 /** Options shared by {@link runScript} and {@link runAndApply}. */
@@ -509,10 +535,26 @@ export async function runAndApply(
 ): Promise<RunResult> {
   const silent = !!opts.silent;
   const openResults = opts.openResults ?? !silent;
+
+  // Live/silent must not cancel an in-flight interactive Run (MTF RSI /
+  // request.security can take seconds). Defer and re-schedule after it finishes.
+  if (silent && isInteractiveRunInFlight()) {
+    setStore('live', 'needsRerun', true);
+    return deferredSilentResult();
+  }
+
   const epoch = beginRunEpoch();
 
   try {
-    return await runAndApplyInner(script, indicatorId, opts, epoch, silent, openResults);
+    const result = await runAndApplyInner(
+      script,
+      indicatorId,
+      opts,
+      epoch,
+      silent,
+      openResults,
+    );
+    return result;
   } catch (e: unknown) {
     // Last-resort fence: callers use void runAndApply / fire-and-forget.
     const msg = formatRunError(e);
@@ -542,6 +584,8 @@ export async function runAndApply(
       setStatus('ready', 'Run finished');
       releaseRunStatus(epoch);
     }
+    // Interactive done → allow deferred live re-runs (latest bars)
+    if (!silent) flushDeferredLiveRerun();
   }
 }
 

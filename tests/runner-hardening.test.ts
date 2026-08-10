@@ -168,7 +168,7 @@ describe('runAndApply concurrent supersession', () => {
     expect(store.lastRun?.meta?.script_name).toBe('fresh-run');
   });
 
-  it('silent live re-run does not leave interactive Run stuck on running', async () => {
+  it('silent live re-run defers while interactive Run is in flight (MTF-safe)', async () => {
     let releaseSlow: (() => void) | null = null;
     const slowGate = new Promise<void>((resolve) => {
       releaseSlow = resolve;
@@ -205,17 +205,23 @@ describe('runAndApply concurrent supersession', () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(store.status).toBe('running');
 
-    // Live tick: silent re-run advances epoch without claiming status
-    const live = runAndApply(
+    // Live tick while interactive is still running: must NOT supersede (MTF RSI)
+    const live = await runAndApply(
       '//@version=5\nindicator("b")\nplot(2)',
       undefined,
       { openResults: false, silent: true },
     );
-    await live;
+    expect(live.meta?.deferred).toBe(true);
+    expect(store.live.needsRerun).toBe(true);
+    // Interactive still owns the engine
+    expect(store.status).toBe('running');
+    expect(call).toBe(1);
 
     releaseSlow!();
     const r1 = await interactive;
-    expect(r1.meta?.superseded).toBe(true);
+    expect(r1.meta?.superseded).not.toBe(true);
+    expect(r1.status).toBe('success');
+    expect(r1.meta?.script_name).toBe('interactive');
     // Button must not stay stuck on Running… after the interactive generation ends
     expect(store.status).not.toBe('running');
   });

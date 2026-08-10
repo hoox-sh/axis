@@ -21,8 +21,9 @@
  * **Pre-evaluate** Pine source before a full engine run.
  *
  * Goals:
- * 1. Mark wrong code in the editor (underlines / Problems)
- * 2. Disable Run when static errors are present
+ * 1. Mark wrong code in the editor (underlines / Problems) after **Save** or **Run**
+ *    — not mid-typing (incomplete input is not treated as finished)
+ * 2. Disable Run when static errors are present (after a check has landed)
  *
  * Strategy (fast → authoritative):
  * - Always run {@link localPreevaluate}: brackets, strings, entry point, and
@@ -46,8 +47,13 @@ import {
 } from './diagnostics';
 import { setPreEval, store } from '../store';
 import builtinsJson from './data/pyne-builtins.json';
+import { PINE_ENUM_PATHS } from './pine-enums';
 
-/** Debounce for as-you-type pre-eval (ms). */
+/**
+ * Debounce for optional delayed pre-eval (ms).
+ * Live typing no longer schedules checks — syntax runs on **Save** / **Run**
+ * so incomplete edits are not flagged mid-keystroke.
+ */
 export const PREEVAL_DEBOUNCE_MS = 350;
 
 // ── Builtin member index (from pyne-builtins.json + runtime constants) ───────
@@ -56,168 +62,10 @@ export const PREEVAL_DEBOUNCE_MS = 350;
  * Runtime / style constants missing from the LSP metadata catalog
  * (`pyne-builtins.json` only ships callables + a few constants).
  *
- * Sources of truth in pyne:
- * - `ast/evaluator/base.py` `_MATH_CONSTANTS` (shape/location/size/… seeds)
- * - `compiler/compiler.py` `_STYLE_NS` / `_ENUM_NS` (plot.style_*, line.style_*, …)
- * - strategy qty / OCA / commission / direction
- *
- * Without these, pre-eval false-flags real Pine like `plot.style_stepline`.
+ * Canonical list: {@link PINE_ENUM_PATHS} in `pine-enums.ts` (shared with
+ * editor completions for all Pine named-arg enums).
  */
-export const EXTRA_KNOWN_BUILTIN_PATHS: readonly string[] = [
-  // ── strategy qty / direction / OCA / commission ──────────────────────────
-  'strategy.fixed',
-  'strategy.percent_of_equity',
-  'strategy.cash', // dual: free-cash series + qty-type sentinel
-  'strategy.long',
-  'strategy.short',
-  'strategy.direction.long',
-  'strategy.direction.short',
-  'strategy.direction.all',
-  'strategy.oca.none',
-  'strategy.oca.cancel',
-  'strategy.oca.reduce',
-  'strategy.commission.percent',
-  'strategy.commission.cash_per_order',
-  'strategy.commission.cash_per_contract',
-
-  // ── plot.style_* (plot(..., style=...)) ──────────────────────────────────
-  'plot.style_line',
-  'plot.style_linebr',
-  'plot.style_stepline',
-  'plot.style_steplinebr',
-  'plot.style_stepline_diamond',
-  'plot.style_histogram',
-  'plot.style_columns',
-  'plot.style_cross',
-  'plot.style_area',
-  'plot.style_areabr',
-  'plot.style_circles',
-
-  // ── hline.style_* ────────────────────────────────────────────────────────
-  'hline.style_solid',
-  'hline.style_dashed',
-  'hline.style_dotted',
-
-  // ── line.style_* ─────────────────────────────────────────────────────────
-  'line.style_solid',
-  'line.style_dashed',
-  'line.style_dotted',
-  'line.style_arrow_left',
-  'line.style_arrow_right',
-  'line.style_arrow_both',
-
-  // ── label.style_* ────────────────────────────────────────────────────────
-  'label.style_none',
-  'label.style_xcross',
-  'label.style_cross',
-  'label.style_triangleup',
-  'label.style_triangledown',
-  'label.style_flag',
-  'label.style_circle',
-  'label.style_arrowup',
-  'label.style_arrowdown',
-  'label.style_label_up',
-  'label.style_label_down',
-  'label.style_label_left',
-  'label.style_label_right',
-  'label.style_label_lower_left',
-  'label.style_label_lower_right',
-  'label.style_label_upper_left',
-  'label.style_label_upper_right',
-  'label.style_label_center',
-  'label.style_square',
-  'label.style_diamond',
-  'label.style_text_outline',
-
-  // ── plotshape / plotchar enums ───────────────────────────────────────────
-  'shape.arrowup',
-  'shape.arrowdown',
-  'shape.circle',
-  'shape.cross',
-  'shape.diamond',
-  'shape.flag',
-  'shape.labelup',
-  'shape.labeldown',
-  'shape.square',
-  'shape.triangledown',
-  'shape.triangleup',
-  'shape.xcross',
-  'location.abovebar',
-  'location.belowbar',
-  'location.top',
-  'location.bottom',
-  'location.absolute',
-  'size.auto',
-  'size.tiny',
-  'size.small',
-  'size.normal',
-  'size.large',
-  'size.huge',
-
-  // ── drawing / table placement ────────────────────────────────────────────
-  'xloc.bar_index',
-  'xloc.bar_time',
-  'yloc.price',
-  'yloc.abovebar',
-  'yloc.belowbar',
-  'extend.none',
-  'extend.left',
-  'extend.right',
-  'extend.both',
-  'display.none',
-  'display.all',
-  'display.data_window',
-  'display.price_scale',
-  'display.status_line',
-  'position.top_left',
-  'position.top_center',
-  'position.top_right',
-  'position.middle_left',
-  'position.middle_center',
-  'position.middle_right',
-  'position.bottom_left',
-  'position.bottom_center',
-  'position.bottom_right',
-
-  // ── format / order / text / alert / math constants ───────────────────────
-  'format.mintick',
-  'format.percent',
-  'format.volume',
-  'format.price',
-  'order.ascending',
-  'order.descending',
-  'text.formatting.none',
-  'text.formatting.bold',
-  'text.formatting.italic',
-  'text.formatting.bold_italic',
-  // v5 aliases sometimes used in scripts / docs
-  'text.format_none',
-  'text.format_bold',
-  'text.format_italic',
-  'alert.freq_once_per_bar',
-  'alert.freq_once_per_bar_close',
-  'alert.freq_all',
-  'math.pi',
-  'math.e',
-  'math.phi',
-  'math.rphi',
-  'math.isnan',
-  'math.isfinite',
-
-  // ── barstate / session / scale (common enum-style constants) ─────────────
-  'barstate.islast',
-  'barstate.isfirst',
-  'barstate.ishistory',
-  'barstate.isrealtime',
-  'barstate.isnew',
-  'barstate.isconfirmed',
-  'barstate.islastconfirmedhistory',
-  'session.regular',
-  'session.extended',
-  'scale.right',
-  'scale.left',
-  'scale.none',
-];
+export const EXTRA_KNOWN_BUILTIN_PATHS: readonly string[] = PINE_ENUM_PATHS;
 
 const BUILTIN_NAMES = new Set([
   ...Object.keys(builtinsJson as Record<string, unknown>),
@@ -836,8 +684,24 @@ export function cancelPreeval(): void {
 }
 
 /**
+ * Clear underlines while the user is still typing.
+ * Incomplete input is not syntax-checked until Save or Run.
+ */
+export function clearPreevalOnEdit(source: string): void {
+  cancelPreeval();
+  lastSource = source;
+  setPreEval({
+    diagnostics: [],
+    hasErrors: false,
+    pending: false,
+    source,
+  });
+}
+
+/**
  * Debounced pre-eval → {@link setPreEval} on the app store.
- * Call from editor `onDocChange` and once on mount with the active doc.
+ * Prefer {@link runPreevalNow} on Save / Run; do not call from every keystroke
+ * (use {@link clearPreevalOnEdit} while typing instead).
  */
 export function schedulePreeval(source: string, debounceMs = PREEVAL_DEBOUNCE_MS): void {
   lastSource = source;
@@ -856,7 +720,7 @@ export function schedulePreeval(source: string, debounceMs = PREEVAL_DEBOUNCE_MS
   }, debounceMs);
 }
 
-/** Immediate pre-eval (no debounce) — used before Run as a final gate. */
+/** Immediate pre-eval (no debounce) — Save / Run gate. */
 export async function runPreevalNow(source: string): Promise<PreevalResult> {
   if (abort) abort.abort();
   abort = new AbortController();
@@ -907,7 +771,8 @@ export async function runPreevalNow(source: string): Promise<PreevalResult> {
 
 /**
  * True when Run should be blocked by pre-eval errors.
- * Pending checks do **not** block (avoid flicker while typing).
+ * Pending checks do **not** block. Typing clears diagnostics via
+ * {@link clearPreevalOnEdit}, so Run is only gated after Save/Run pre-eval.
  */
 export function isScriptRunBlocked(): boolean {
   const pe = store.preEval;

@@ -27,7 +27,18 @@
  * @module editor/tabbed-editor
  */
 
-import { Component, For, Show, createMemo, createSignal, batch, onCleanup, onMount, createEffect } from 'solid-js';
+import {
+  Component,
+  For,
+  Show,
+  createMemo,
+  createSignal,
+  batch,
+  onCleanup,
+  onMount,
+  createEffect,
+  untrack,
+} from 'solid-js';
 import { PyneEditor, type PyneEditorRef } from './PyneEditor';
 import {
   store,
@@ -62,7 +73,7 @@ import {
   formatDiagnosticCount,
   type EditorDiagnostic,
 } from './diagnostics';
-import { schedulePreeval, cancelPreeval } from './preevaluate';
+import { clearPreevalOnEdit, cancelPreeval, runPreevalNow } from './preevaluate';
 import { countDocStats, cursorLineCol } from './doc-stats';
 import { ColorToolsPanel } from './ColorToolsPanel';
 import { scanPineColors } from './pine-colors';
@@ -164,7 +175,7 @@ export const TabbedEditor: Component<Props> = (props) => {
 
   /**
    * CM underlines / gutter diagnostics:
-   * 1. Live pre-eval (parse/lint) — marks wrong code as you type
+   * 1. Pre-eval (parse/lint) — after Save or Run only (not mid-typing)
    * 2. Last-run engine errors — only when buffer still matches last pre-eval
    *    source and pre-eval did not already cover the same line+message
    */
@@ -225,14 +236,15 @@ export const TabbedEditor: Component<Props> = (props) => {
     }, 400);
   };
 
-  // Refresh counters when switching tabs
+  // Refresh counters when switching tabs (not on every keystroke)
   createEffect(() => {
-    const doc = tabs()[activeTab()]?.doc ?? '';
+    const idx = activeTab();
+    const doc = untrack(() => tabs()[idx]?.doc ?? '');
     setStats(countDocStats(doc));
     // Cursor resets to start of tab until CM reports the real head
     setCursor({ line: 1, col: 1 });
-    // Pre-eval active tab (marks wrong code; gates Run)
-    schedulePreeval(doc);
+    // Syntax underlines only after Save / Run — clear stale marks for this buffer
+    clearPreevalOnEdit(doc);
   });
 
   onMount(() => {
@@ -382,7 +394,8 @@ export const TabbedEditor: Component<Props> = (props) => {
     );
     props.onDocChange?.(doc);
     scheduleDraft(doc, tabs()[activeTab()]?.name);
-    schedulePreeval(doc);
+    // Incomplete edits are not linted mid-keystroke — Save / Run re-check
+    clearPreevalOnEdit(doc);
   };
 
   const activeTabState = () => tabs()[activeTab()];
@@ -395,6 +408,8 @@ export const TabbedEditor: Component<Props> = (props) => {
       setStatus('error', 'Editor is empty');
       return;
     }
+    // Syntax diagnostics after save (editor does not lint while typing)
+    const pe = await runPreevalNow(doc);
     const name = tab?.name || 'Script';
     try {
       const meta = await pushScript({
@@ -403,12 +418,15 @@ export const TabbedEditor: Component<Props> = (props) => {
         content: doc,
       });
       onGitPushSuccess(meta);
-      setStatus(
-        'ready',
-        isGitStorageActive()
-          ? `Committed & saved "${meta.name}" to git`
-          : `Saved "${meta.name}" → ${getEditorStorageId()}`,
-      );
+      const errN = pe.diagnostics.filter((d) => d.severity === 'error').length;
+      const base = isGitStorageActive()
+        ? `Committed & saved "${meta.name}" to git`
+        : `Saved "${meta.name}" → ${getEditorStorageId()}`;
+      if (errN > 0) {
+        setStatus('error', `${base} · ${errN} syntax error${errN === 1 ? '' : 's'}`);
+      } else {
+        setStatus('ready', base);
+      }
     } catch (e: unknown) {
       setStatus('error', e instanceof Error ? e.message : String(e));
     }

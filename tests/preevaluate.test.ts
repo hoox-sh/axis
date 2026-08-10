@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
   checkUnknownBuiltinMembers,
+  clearPreevalOnEdit,
   editDistance,
   hasErrorDiagnostics,
   isKnownBuiltinPath,
@@ -19,6 +20,7 @@ import {
   suggestBuiltinPath,
 } from '../src/editor/preevaluate.ts';
 import type { EditorDiagnostic } from '../src/editor/diagnostics.ts';
+import { setPreEval, store } from '../src/store/index.ts';
 
 const GOOD = `//@version=5
 indicator("t")
@@ -295,5 +297,32 @@ describe('isRemoteStyleNoise', () => {
         code: 'E001',
       }),
     ).toBe(false);
+  });
+});
+
+describe('clearPreevalOnEdit', () => {
+  it('clears diagnostics so mid-typing does not keep stale errors', () => {
+    // Seed as if a prior Save/Run found errors
+    setPreEval({
+      diagnostics: [
+        {
+          from: 0,
+          to: 4,
+          line: 1,
+          severity: 'error',
+          message: 'Unclosed parenthesis',
+          source: 'preeval-local',
+        },
+      ],
+      hasErrors: true,
+      pending: false,
+      source: 'plot(close',
+    });
+    expect(store.preEval.hasErrors).toBe(true);
+    clearPreevalOnEdit('plot(close)');
+    expect(store.preEval.diagnostics).toEqual([]);
+    expect(store.preEval.hasErrors).toBe(false);
+    expect(store.preEval.pending).toBe(false);
+    expect(store.preEval.source).toBe('plot(close)');
   });
 });

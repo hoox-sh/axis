@@ -57,6 +57,13 @@ import {
   lookupPyneDoc,
   parsePyneDocAnnotations,
 } from './pyne-doc-annotations';
+import {
+  namedArgEnumContext,
+  pathMatchesEnumPrefixes,
+  pineEnumMetas,
+  styleNamespaceForCall,
+  type PineEnumMeta,
+} from './pine-enums';
 
 /** One entry from the local Pine builtins catalog. */
 export type BuiltinMeta = {
@@ -71,42 +78,123 @@ export type BuiltinMeta = {
 
 const BUILTINS = builtinsJson as Record<string, BuiltinMeta>;
 
+/** @deprecated Use pine-enums catalog — kept as alias for tests. */
+export const COMPLETION_STYLE_ENUMS: readonly PineEnumMeta[] = pineEnumMetas().filter((e) =>
+  /\.style_/.test(e.path),
+);
+
 /** Top-level names (no dots) + module prefixes. */
 const TOP_LEVEL: BuiltinMeta[] = [];
 /** module → member metas (label without module prefix for insert after `.`) */
 const BY_MODULE = new Map<string, BuiltinMeta[]>();
 /** full name → meta for hover */
 const BY_NAME = new Map<string, BuiltinMeta>();
+/** All injected enum full-path metas (label = full path). */
+const ENUM_FULL: BuiltinMeta[] = [];
+/** Named color constants under color.* (no function parens). */
+const COLOR_CONSTANTS: BuiltinMeta[] = [];
+
+/** Color names that are values, not functions. */
+const COLOR_VALUE_RE =
+  /^(aqua|black|blue|fuchsia|gray|grey|green|lime|maroon|navy|olive|orange|purple|red|silver|teal|white|yellow)$/i;
+
+function isColorConstantName(member: string): boolean {
+  return COLOR_VALUE_RE.test(member);
+}
+
+function injectEnumPath(name: string, meta: BuiltinMeta, modules: Set<string>) {
+  // Prefer richer enum meta when builtins already listed a path as a function
+  const existing = BY_NAME.get(name);
+  if (existing && existing.category === 'enum') return;
+  const full: BuiltinMeta = {
+    ...meta,
+    label: name,
+    kind: 'constant',
+    snippet: undefined,
+    category: meta.category || 'enum',
+  };
+  BY_NAME.set(name, full);
+  ENUM_FULL.push(full);
+  if (!name.includes('.')) {
+    if (!TOP_LEVEL.some((t) => t.label === name)) TOP_LEVEL.push(full);
+    return;
+  }
+  const [mod, ...rest] = name.split('.');
+  const member = rest.join('.');
+  modules.add(mod);
+  const list = BY_MODULE.get(mod) || [];
+  // Replace prior member entry (e.g. color.red wrongly catalogued as function)
+  const without = list.filter((m) => m.label !== member);
+  without.push({
+    ...full,
+    label: member,
+    kind: 'constant',
+    snippet: undefined,
+  });
+  BY_MODULE.set(mod, without);
+}
 
 function initIndex() {
   if (BY_NAME.size) return;
   const modules = new Set<string>();
   for (const [name, meta] of Object.entries(BUILTINS)) {
-    const m = { ...meta, label: meta.label || name };
+    // Color value constants: force constant kind (catalog marks them as functions)
+    const isColorVal =
+      name.startsWith('color.') && isColorConstantName(name.slice('color.'.length));
+    const m: BuiltinMeta = isColorVal
+      ? {
+          ...meta,
+          label: meta.label || name,
+          kind: 'constant',
+          snippet: undefined,
+          detail: meta.detail?.includes('(') ? 'color constant' : meta.detail,
+          category: 'enum',
+        }
+      : { ...meta, label: meta.label || name };
     BY_NAME.set(name, m);
     if (name.includes('.')) {
       const [mod, ...rest] = name.split('.');
       const member = rest.join('.');
       modules.add(mod);
       const list = BY_MODULE.get(mod) || [];
-      list.push({
+      const memberMeta: BuiltinMeta = {
         ...m,
         label: member,
-        // insert only the member after `mod.`
-        snippet: m.snippet?.startsWith(`${mod}.`)
-          ? m.snippet.slice(mod.length + 1)
-          : member.includes('(')
-            ? undefined
-            : m.snippet?.includes('(')
-              ? m.snippet.replace(/^[\w.]+\(/, `${member}(`)
-              : `${member}(\${1})`,
-      });
+        snippet: isColorVal
+          ? undefined
+          : m.snippet?.startsWith(`${mod}.`)
+            ? m.snippet.slice(mod.length + 1)
+            : member.includes('(')
+              ? undefined
+              : m.snippet?.includes('(')
+                ? m.snippet.replace(/^[\w.]+\(/, `${member}(`)
+                : m.kind === 'constant' || m.kind === 'variable'
+                  ? undefined
+                  : `${member}(\${1})`,
+      };
+      list.push(memberMeta);
       BY_MODULE.set(mod, list);
+      if (isColorVal) COLOR_CONSTANTS.push({ ...m, label: name });
     } else {
       TOP_LEVEL.push(m);
     }
   }
-  // Module name completions (ta, math, …)
+  // Full Pine enum catalog (plot.style_*, shape.*, size.*, strategy.*, …)
+  for (const e of pineEnumMetas()) {
+    injectEnumPath(
+      e.path,
+      {
+        label: e.path,
+        kind: 'constant',
+        detail: e.detail,
+        brief: e.brief,
+        documentation: `\`${e.path}\` — ${e.brief}`,
+        category: 'enum',
+      },
+      modules,
+    );
+  }
+  // Module name completions (ta, math, plot, …)
   for (const mod of modules) {
     if (!BY_NAME.has(mod)) {
       const modMeta: BuiltinMeta = {
@@ -125,6 +213,159 @@ function initIndex() {
   for (const [, list] of BY_MODULE) {
     list.sort((a, b) => a.label.localeCompare(b.label));
   }
+  ENUM_FULL.sort((a, b) => a.label.localeCompare(b.label));
+  COLOR_CONSTANTS.sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Detect `style=` value position and which call namespace to suggest.
+ * Accepts multi-line `textBefore` (from doc start or a window through cursor).
+ * @deprecated Prefer {@link namedArgEnumContext} — kept for tests / call sites.
+ */
+export function styleArgContext(
+  textBefore: string,
+): { namespace: string; prefix: string; fromOffset: number } | null {
+  const ctx = namedArgEnumContext(textBefore);
+  if (!ctx || ctx.arg !== 'style') return null;
+  return {
+    namespace: styleNamespaceForCall(ctx.call),
+    prefix: ctx.prefix,
+    fromOffset: ctx.fromOffset,
+  };
+}
+
+/** Style enum paths for a call namespace (plot → plot.style_*). */
+export function styleEnumsForNamespace(namespace: string): BuiltinMeta[] {
+  initIndex();
+  return enumsMatchingPrefixes([`${namespace}.style_`]);
+}
+
+/** Enums whose full path matches any prefix (or exact path). */
+export function enumsMatchingPrefixes(prefixes: string[]): BuiltinMeta[] {
+  initIndex();
+  const out: BuiltinMeta[] = [];
+  const seen = new Set<string>();
+  // Prefer injected enums first
+  for (const m of ENUM_FULL) {
+    if (!pathMatchesEnumPrefixes(m.label, prefixes)) continue;
+    if (seen.has(m.label)) continue;
+    seen.add(m.label);
+    out.push(m);
+  }
+  // color.* constants live mainly in builtins
+  if (prefixes.some((p) => p === 'color.' || p.startsWith('color.'))) {
+    for (const m of COLOR_CONSTANTS) {
+      if (seen.has(m.label)) continue;
+      seen.add(m.label);
+      out.push(m);
+    }
+    // also scan BY_NAME for any color.* constant we marked
+    for (const [name, meta] of BY_NAME) {
+      if (!name.startsWith('color.')) continue;
+      if (!isColorConstantName(name.slice('color.'.length))) continue;
+      if (seen.has(name)) continue;
+      seen.add(name);
+      out.push({ ...meta, label: name, kind: 'constant', snippet: undefined });
+    }
+  }
+  return out;
+}
+
+/** Filter style enums by typed prefix (full path, bare style_*, or member tail). */
+export function filterStyleEnums(items: BuiltinMeta[], prefix: string): BuiltinMeta[] {
+  if (!prefix) return items;
+  const p = prefix.toLowerCase();
+  const starts: BuiltinMeta[] = [];
+  const memberStarts: BuiltinMeta[] = [];
+  const includes: BuiltinMeta[] = [];
+  for (const it of items) {
+    const l = it.label.toLowerCase();
+    const member = l.includes('.') ? l.slice(l.lastIndexOf('.') + 1) : l;
+    if (l.startsWith(p)) starts.push(it);
+    else if (
+      member.startsWith(p) ||
+      `style_${member}`.startsWith(p) ||
+      member.startsWith(p.replace(/^style_/, ''))
+    )
+      memberStarts.push(it);
+    else if (l.includes(p) || member.includes(p)) includes.push(it);
+  }
+  return [...starts, ...memberStarts, ...includes];
+}
+
+/**
+ * Source text from document start through cursor (multi-line named-arg context).
+ * Caps lookback so huge files stay cheap.
+ */
+function textBeforeCursor(context: CompletionContext, maxChars = 4000): string {
+  const pos = context.pos;
+  const from = Math.max(0, pos - maxChars);
+  return context.state.doc.sliceString(from, pos);
+}
+
+/** Completion for named-arg enums across any Pine call (`style=`, `shape=`, …). */
+export function completeNamedArgEnum(
+  context: CompletionContext,
+): CompletionResult | null {
+  initIndex();
+  const before = textBeforeCursor(context);
+  const ctx = namedArgEnumContext(before);
+  if (!ctx) return null;
+
+  // Absolute from in the document = (pos - before.length) + fromOffset
+  const windowStart = context.pos - before.length;
+  const absFrom = windowStart + ctx.fromOffset;
+
+  // After `plot.` / `shape.` inside the value — member-only insert
+  const dotInValue = ctx.prefix.match(/^([A-Za-z_][\w]*)\.\s*([A-Za-z_][\w.]*)?$/);
+  if (dotInValue) {
+    const mod = dotInValue[1]!;
+    const memberPrefix = dotInValue[2] || '';
+    const members = BY_MODULE.get(mod);
+    if (members?.length) {
+      // Prefer enum/constant members for named-arg values
+      let filtered = filterByPrefix(members, memberPrefix);
+      if (ctx.arg === 'style') {
+        filtered = filtered.filter(
+          (m) => m.label.startsWith('style_') || m.category === 'enum' || m.kind === 'constant',
+        );
+        if (!filtered.length) filtered = filterByPrefix(members, memberPrefix);
+      }
+      if (ctx.arg === 'color' || ctx.arg === 'bgcolor' || ctx.arg === 'textcolor') {
+        filtered = filtered.filter(
+          (m) => m.kind === 'constant' || m.category === 'enum' || isColorConstantName(m.label),
+        );
+        if (!filtered.length) filtered = filterByPrefix(members, memberPrefix);
+      }
+      if (filtered.length || context.explicit || memberPrefix === '') {
+        return {
+          from: context.pos - memberPrefix.length,
+          options: filtered.map((m, i) =>
+            toCompletion(
+              { ...m, kind: 'constant', snippet: undefined },
+              100 - Math.min(i, 20),
+            ),
+          ),
+          validFor: /^[\w.]*$/,
+        };
+      }
+    }
+  }
+
+  const enums = enumsMatchingPrefixes(ctx.prefixes);
+  const filtered = filterStyleEnums(enums, ctx.prefix);
+  const list = filtered.length ? filtered : context.explicit || ctx.prefix === '' ? enums : [];
+  if (!list.length) return null;
+  return {
+    from: absFrom,
+    options: list.slice(0, 80).map((m, i) =>
+      toCompletion(
+        { ...m, label: m.label, kind: 'constant', snippet: undefined },
+        100 - Math.min(i, 20),
+      ),
+    ),
+    validFor: /^[\w.]*$/,
+  };
 }
 
 function cmType(kind?: string): string {
@@ -155,6 +396,16 @@ function toCompletion(meta: BuiltinMeta, boost = 0): Completion {
     info: info || undefined,
     boost,
   };
+  // Constants / enums never take call parens (plot.style_line, color.red, …)
+  const isConst =
+    meta.kind === 'constant' ||
+    meta.kind === 'variable' ||
+    meta.category === 'enum' ||
+    /\.style_/.test(label) ||
+    (label.startsWith('color.') && isColorConstantName(label.slice('color.'.length)));
+  if (isConst) {
+    return { ...base, apply: label };
+  }
   if (meta.snippet && meta.snippet.includes('${')) {
     return snippetCompletion(meta.snippet, base);
   }
@@ -225,6 +476,11 @@ export function pyneCompleteLocal(context: CompletionContext): CompletionResult 
   const line = context.state.doc.lineAt(context.pos);
   const textBefore = line.text.slice(0, context.pos - line.from);
   const fullSource = context.state.doc.toString();
+
+  // Named-arg enums for any Pine call (style=, shape=, location=, size=, color=, …)
+  // Multi-line aware — works for all scripts, not only single-line plot(...).
+  const named = completeNamedArgEnum(context);
+  if (named) return named;
 
   // module.member after dot
   const dot = textBefore.match(/([A-Za-z_][\w]*)\.\s*([A-Za-z_][\w]*)?$/);
@@ -328,6 +584,13 @@ function completionFromPos(
 export async function pyneComplete(
   context: CompletionContext,
 ): Promise<CompletionResult | null> {
+  // Named-arg enums (style/shape/size/color/…) are client-owned — remote
+  // catalogs often omit plot.style_* and friends. Prefer local for all Pine.
+  {
+    const named = completeNamedArgEnum(context);
+    if (named) return named;
+  }
+
   if (shouldUseRemoteLsp() && !context.aborted) {
     const line = context.state.doc.lineAt(context.pos);
     const source = context.state.doc.toString();

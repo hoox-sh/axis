@@ -388,8 +388,8 @@ export interface AppState {
   status: AppStatus;
   statusMessage: string;
   /**
-   * Live pre-eval (parse/lint) for the active editor buffer.
-   * Ephemeral — drives underlines + Run gating. Not persisted.
+   * Pre-eval (parse/lint) for the active editor buffer after Save / Run.
+   * Cleared while typing. Ephemeral — drives underlines + Run gating. Not persisted.
    */
   preEval: {
     /** Editor diagnostics for current buffer (empty while pending first pass). */

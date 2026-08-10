@@ -1208,7 +1208,7 @@ export function setStatus(status: AppState['status'], message?: string) {
 }
 
 /**
- * Update live editor pre-eval state (parse/lint). Ephemeral — not persisted.
+ * Update editor pre-eval state (parse/lint after Save / Run). Ephemeral — not persisted.
  * Used by {@link ../editor/preevaluate} to mark wrong code and gate Run.
  */
 export function setPreEval(next: AppState['preEval']) {
