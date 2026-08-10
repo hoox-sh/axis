@@ -32,6 +32,27 @@ bun run desktop:dev         # native window + Vite HMR
 bun run desktop:build       # package installers under src-tauri/target/release/bundle/
 ```
 
+### AXIS CLI (`packages/cli`)
+
+Operator entry for install, diagnostics, Worker bootstrap (D1 / OAuth), secrets, deploy, and health.
+
+```bash
+cd packages/cli && bun install && cd ../..
+bun run axis --help
+
+bun run axis:install                          # app + worker + CLI deps
+bun run axis:doctor                           # toolchain + wrangler.toml
+bun run axis setup -- --github-client-id Ov23li…
+bun run axis setup -- d1 --remote             # apply D1 schema on CF
+bun run axis -- secret put ADMIN_TOKEN
+bun run axis:deploy                           # Worker pynescript-axis
+bun run axis:health -- --oauth                # live /health + device OAuth
+
+# Make wrappers: make axis-doctor  make axis-deploy  make axis ARGS="…"
+```
+
+Docs: [AXIS CLI](./docs/devops/cli.mdx) · [packages/cli/README.md](./packages/cli/README.md) · live demo [axis.hoox.sh](https://axis.hoox.sh) · Worker `https://pynescript-axis.cryptolinx.workers.dev`
+
 See [docs/devops/desktop.mdx](./docs/devops/desktop.mdx) for platform prerequisites.
 
 **Icons:** [Lucide](https://lucide.dev) via `lucide-solid` (tree-shakable stroke
@@ -188,7 +209,8 @@ axis/                         (this repo root)
     store/                    Solid app state + persistence
     plugins/                  Unified registry contracts + loader (incl. dataset)
   worker/                     Cloudflare Worker (API / onchain proxy / DO / D1)
-  docs/                       Mintlify-style product docs (MDX)
+  packages/cli/               AXIS CLI (@hoox-sh/axis-cli) — setup / deploy / doctor
+  docs/                       Product docs (MDX; mirrored to hoox.sh/axis/docs)
   tests/                      Bun unit + integration tests
   e2e/                        Playwright
 ```
@@ -200,10 +222,10 @@ axis/                         (this repo root)
 - **VPS demo**: PWA + Pro API same-origin at `https://axis.hoox.sh`
   (Cloudflare → nginx TLS → static `axis-pwa` + reverse-proxy `/run`/`/ws`/`/health`
   to `pynescript-api` on `:5002`). Default store endpoint is `https://axis.hoox.sh`.
-- **Cloudflare Worker**: deploy `worker/` with `make worker-deploy`. The Worker
+- **Cloudflare Worker**: `bun run axis:deploy` (or `make worker-deploy`). The Worker
   exposes `/api/run`, `/api/stream`, `/api/keys`, `/api/onchain/*` (DefiLlama +
-  GeckoTerminal allowlisted proxy), etc. See `worker/README.md` and
-  [Worker docs](https://hoox.sh/axis/docs/worker).
+  GeckoTerminal allowlisted proxy), Git OAuth device flow, etc. See `worker/README.md`,
+  [Worker docs](https://hoox.sh/axis/docs/worker), and [AXIS CLI](https://hoox.sh/axis/docs/devops/cli).
 
 ## CORS (AXIS browser origin → Pro API)
 

@@ -24,46 +24,62 @@ description: "Run AXIS as Vite+Solid dev, static dist PWA, or against Flask / Cl
 
 # Installation
 
-AXIS ships as the `frontend/` package (`axis-chart`). Primary path is **Vite + Solid**. Legacy static shell (`main.js`, root `style.css`) is not the product UI—prefer `bun run dev` or built `dist/`.
+AXIS ships as the **`axis`** package (Solid + Vite). Primary path is the product UI under `src/`. Legacy static shell (`main.js`, root `style.css`) is not the product UI—prefer `bun run dev` or built `dist/`.
 
 ## Abstract
 
-Three operator modes:
+Operator modes:
 
 | Mode | Command surface | When |
 | --- | --- | --- |
 | Dev AXIS | Vite `:3000` | Day-to-day UI work |
 | Static PWA | `dist/` + `axis_pwa_server.py` `:8081` | Offline demo / VPS |
-| AXIS at the edge | CF Pages + Worker | Production topology |
+| AXIS at the edge | CF Worker (+ optional Pages) | Production data plane |
+| Operator CLI | `packages/cli` → `bun run axis` | Install / doctor / setup / deploy |
 
 Backend is optional when **Engine = Client-Side (Pyodide)** and sources/streams are mock or CSV.
 
 ## Prerequisites
 
-- **Bun** (or Node 22+) for package install and Vite
+- **Bun ≥ 1.2** for package install, Vite, and the AXIS CLI
 - **Python 3.10+** if you use Flask Pro API (`make run`) or `axis_pwa_server.py`
 - Modern Chromium / Firefox / Safari (PWA install works best on Chromium)
+- Optional: Cloudflare auth (`CLOUDFLARE_API_TOKEN` or `wrangler login`) for Worker deploy
 
 ## Dev AXIS (recommended)
 
 ```bash
-# Terminal 1 — Pro API (server engine)
-make run              # Flask :5002
+# One-shot deps (app + worker + CLI)
+bun install && cd packages/cli && bun install && cd ../..
+# or: bun run axis:install
+
+# Terminal 1 — Pro API (server engine) from sister pyne/pynescript repo
+make -C ../pynescript run    # Flask :5002
 
 # Terminal 2 — AXIS
-cd frontend
-bun install
-bun run dev           # Vite :3000, proxies /run → :5002 when configured
+bun run dev                  # Vite :3000
+# or: bun run axis dev
 ```
 
-Open `http://localhost:3000`. Default symbol `BTCUSDT`, engine often `server` with endpoint `http://localhost:5002` (or a demo host if preconfigured).
+Open `http://localhost:3000`. Default symbol `BTCUSDT`, engine often `server` with endpoint `http://localhost:5002` (or demo host `https://axis.hoox.sh`).
+
+### AXIS CLI (setup / deploy)
+
+```bash
+bun run axis --help
+bun run axis:doctor
+bun run axis setup -- --github-client-id Ov23li…   # wrangler.toml + local D1
+bun run axis:deploy                                # Worker
+bun run axis:health -- --oauth
+```
+
+Full reference: [AXIS CLI](/axis/docs/devops/cli).
 
 ## Production build (static)
 
 ```bash
-cd frontend
 bun install
-bun run build         # → frontend/dist/
+bun run build                # → dist/
 python3 axis_pwa_server.py   # serves dist/ on :8081
 ```
 

@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 .PHONY: help install dev test test-unit test-e2e typecheck worker-install worker-dev worker-typecheck worker-deploy build pages-deploy clean \
-	docker-builder docker-bake docker-bake-all docker-up docker-up-api docker-up-proxy docker-down docker-logs docker-ps docker-push
+	docker-builder docker-bake docker-bake-all docker-up docker-up-api docker-up-proxy docker-down docker-logs docker-ps docker-push \
+	axis axis-install axis-doctor axis-setup axis-deploy axis-health
 
 GIT_SHA ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 export GIT_SHA
@@ -20,6 +21,14 @@ help:
 	@echo "  build             Production Vite build"
 	@echo "  pages-deploy      Build + deploy Cloudflare Pages"
 	@echo "  clean             Remove dist/coverage/test-results"
+	@echo ""
+	@echo "AXIS CLI (packages/cli)"
+	@echo "  axis              bun packages/cli/bin/axis.js …"
+	@echo "  axis-install      Install app + worker + CLI deps"
+	@echo "  axis-doctor       Toolchain / wrangler diagnostics"
+	@echo "  axis-setup        Bootstrap wrangler / D1 / OAuth"
+	@echo "  axis-deploy       Deploy Worker (axis deploy worker)"
+	@echo "  axis-health       Probe deployed Worker /health"
 	@echo ""
 	@echo "Docker (Buildx + Compose)"
 	@echo "  docker-builder    Create/use buildx builder 'axis'"
@@ -65,6 +74,26 @@ worker-typecheck:
 
 worker-deploy:
 	cd worker && bun run deploy
+
+# ── AXIS CLI ────────────────────────────────────────────────────────
+
+axis:
+	bun packages/cli/bin/axis.js $(ARGS)
+
+axis-install:
+	bun packages/cli/bin/axis.js install
+
+axis-doctor:
+	bun packages/cli/bin/axis.js doctor $(ARGS)
+
+axis-setup:
+	bun packages/cli/bin/axis.js setup $(ARGS)
+
+axis-deploy:
+	bun packages/cli/bin/axis.js deploy worker $(ARGS)
+
+axis-health:
+	bun packages/cli/bin/axis.js health $(ARGS)
 
 build:
 	bun run build

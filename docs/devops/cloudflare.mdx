@@ -75,9 +75,14 @@ Production checklist:
 ### 3. Deploy Worker
 
 ```bash
-cd frontend/worker
-npm install
-npx wrangler deploy
+# Preferred: AXIS CLI
+bun run axis deploy worker
+# or: axis setup d1 --remote && axis deploy worker
+
+# Equivalent raw wrangler
+cd worker
+bun install
+bun run deploy
 ```
 
 ### 4. Build & deploy Pages

@@ -20,7 +20,13 @@
     "test:all": "bun run test:coverage:gate && bun run test:security",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
-    "desktop:info": "tauri info"
+    "desktop:info": "tauri info",
+    "axis": "bun packages/cli/bin/axis.js",
+    "axis:install": "bun packages/cli/bin/axis.js install",
+    "axis:doctor": "bun packages/cli/bin/axis.js doctor",
+    "axis:setup": "bun packages/cli/bin/axis.js setup",
+    "axis:deploy": "bun packages/cli/bin/axis.js deploy",
+    "axis:health": "bun packages/cli/bin/axis.js health"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.0",

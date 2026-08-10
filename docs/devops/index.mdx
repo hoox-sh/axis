@@ -26,14 +26,15 @@ description: "Build, serve, Cloudflare, VPS demo, CORS, and CI for the AXIS PWA 
 
 ## Abstract
 
-AXIS DevOps spans four runnable surfaces:
+AXIS DevOps spans five runnable surfaces:
 
 1. **Vite + Solid PWA** — product UI (`bun run dev`)
 2. **Static server** (`axis_pwa_server.py` or Vite preview) — production-like assets
-3. **Cloudflare Worker** (`worker/`) — edge API / WS
+3. **Cloudflare Worker** (`worker/`) — edge API / WS / OAuth / on-chain proxy
 4. **Desktop (Tauri 2)** — native shell around the same UI (`bun run desktop:dev`)
+5. **AXIS CLI** (`packages/cli`) — install, doctor, setup, secrets, deploy, health
 
-See [Desktop (Tauri)](./desktop) for prerequisites and packaging.
+See [Desktop (Tauri)](./desktop) and [AXIS CLI](./cli) for operator entry points.
 
 Python evaluation for desk workflows still often uses the **Flask Pro API** (`make run` on `:5002`). The Worker proxies there when `EXTERNAL_BACKEND` is set.
 
@@ -57,17 +58,19 @@ flowchart LR
 
 | Mode | Command sketch | Ports |
 | --- | --- | --- |
-| Dev AXIS | `cd frontend && bun run dev` | Vite (often `:3000`) |
-| Dev + Flask | + `make run` | `:5002` |
+| Dev AXIS | `bun run dev` / `bun run axis dev` | Vite (often `:3000`) |
+| Dev + Flask | + `make -C ../pynescript run` | `:5002` |
 | Static dist | `bun run build` + `python axis_pwa_server.py` | `:8081` |
-| Worker | `cd frontend/worker && npm run dev` | `:8787` |
-| CF prod | Pages `pynescript-axis` + Worker same name family | HTTPS |
+| Worker local | `bun run axis dev worker` / `cd worker && bun run dev` | `:8787` |
+| CF Worker prod | `bun run axis:deploy` | HTTPS workers.dev / custom |
+| Operator | `bun run axis:doctor` · `axis setup` · `axis health` | — |
 
 ## Page map
 
 | Page | Topic |
 | --- | --- |
 | [Local dev](/axis/docs/devops/local-dev) | Day-to-day loop |
+| [AXIS CLI](/axis/docs/devops/cli) | Install, doctor, setup, secrets, deploy, health |
 | [Build and serve](/axis/docs/devops/build-and-serve) | Vite build, SPA server, assets |
 | [Cloudflare](/axis/docs/devops/cloudflare) | Pages + Worker deploy |
 | [VPS demo](/axis/docs/devops/vps-demo) | Single-box static + Flask |

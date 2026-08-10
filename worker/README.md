@@ -27,16 +27,31 @@ This Worker provides the **production backend** for the PWA. It can:
 
 ## Local dev
 
+**Preferred (AXIS CLI from repo root):**
+
+```bash
+bun run axis:install
+bun run axis setup worker          # ensure wrangler.toml
+bun run axis setup d1 --local      # apply schemas/scripts.sql
+bun run axis setup oauth --github-client-id Ov23li…
+bun run axis dev worker            # wrangler :8787
+bun run axis:deploy                # production Worker
+bun run axis:health -- --oauth
+```
+
+**Manual:**
+
 ```bash
 cd worker
 cp wrangler.toml.example wrangler.toml   # gitignored local config
 # edit D1 id, ALLOWED_ORIGIN, GITHUB_OAUTH_CLIENT_ID, …
-bun install   # or npm install
+bun install
 bun run dev   # wrangler dev on http://127.0.0.1:8787
 ```
 
 `wrangler.toml` is **gitignored** — only `wrangler.toml.example` is committed.
-Copy the example once per machine and fill in bindings / OAuth client ids.
+Copy the example once per machine (or `axis setup worker`) and fill in bindings / OAuth client ids.
+Docs: [AXIS CLI](https://hoox.sh/axis/docs/devops/cli) · [bindings](https://hoox.sh/axis/docs/worker/bindings).
 
 The PWA's `endpoint` input can be pointed at this URL for an end-to-end
 local stack.

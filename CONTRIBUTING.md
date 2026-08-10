@@ -13,15 +13,21 @@ Thanks for helping with **AXIS** — the charting PWA for Pine Script™ evaluat
 ## Setup
 
 ```bash
+# AXIS CLI (recommended)
 bun install
-cd worker && bun install && cd ..
+cd packages/cli && bun install && cd ../..
+bun run axis install
+bun run axis doctor
 
 # Terminal A — Pyne Pro API (from the pyne repo)
 # make run   # http://127.0.0.1:5002
 
 # Terminal B — AXIS
 bun run dev  # http://127.0.0.1:3000
+# or: bun run axis dev
 ```
+
+Worker bootstrap / deploy: `bun run axis setup`, `bun run axis deploy`. See `packages/cli/README.md` and docs [AXIS CLI](docs/devops/cli.mdx).
 
 ## Checks
 

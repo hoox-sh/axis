@@ -26,12 +26,21 @@ bun run desktop:dev      # Tauri 2 shell + Vite (needs Rust + system webview)
 bun run test             # unit + worker tests
 bun run test:e2e:smoke   # Playwright smoke
 cd worker && bun run dev # wrangler :8787
+
+# AXIS CLI (setup / deploy / doctor) — packages/cli
+bun run axis --help
+bun run axis:install
+bun run axis:doctor
+bun run axis:setup -- --github-client-id Ov23li…
+bun run axis:deploy
+bun run axis:health -- --oauth
 ```
 
 ## Layout
 
 | Path | Role |
 |------|------|
+| `packages/cli/` | **axis** CLI (`@hoox-sh/axis-cli`) — install, doctor, setup, deploy, secrets, health |
 | `src/` | Product UI (Solid) — prefer this over legacy root JS |
 | `src/data/data-source-manager.ts` | Background OHLCV backfill + validate + gap-fill |
 | `src/onchain/` | On-chain plane: DefiLlama TVL, GeckoTerminal, events, jobs |

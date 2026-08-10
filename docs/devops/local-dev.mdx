@@ -70,12 +70,24 @@ Set PWA endpoint to `http://127.0.0.1:5002` for the **server** engine.
 ### Worker
 
 ```bash
-cd frontend/worker
-npm install          # or bun
-npm run dev          # http://127.0.0.1:8787
+cd worker
+bun install
+bun run dev          # http://127.0.0.1:8787
+# or: bun run axis dev worker
 ```
 
 Point cloud storage / Worker endpoint at `http://127.0.0.1:8787`. For `/api/run` proxy, set Worker `EXTERNAL_BACKEND=http://127.0.0.1:5002` (works on local wrangler; not on CF edge).
+
+### AXIS CLI
+
+Preferred operator entry for install / doctor / setup / deploy — see [AXIS CLI](/axis/docs/devops/cli):
+
+```bash
+bun run axis install
+bun run axis doctor
+bun run axis setup
+bun run axis dev worker
+```
 
 ### Makefile helpers
 
