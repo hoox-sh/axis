@@ -50,8 +50,10 @@ import {
   toggleInlineDebugEnabled,
   toggleDebugPinsEnabled,
   toggleEditorRulerEnabled,
+  toggleEditorWrapEnabled,
   saveEditorDoc,
   isScriptRunBlockedByPreEval,
+  setStatus,
 } from '../store';
 import { FloatableShell } from '../ui/panels/FloatableShell';
 import { Icons } from '../ui/icons';
@@ -62,6 +64,7 @@ import {
 } from '../indicators/run-target';
 import { countDebugPins } from '../results/debug-pins';
 import { runPreevalNow } from './preevaluate';
+import { formatPineSource } from './pine-format';
 
 /** How long a slide-in label stays open after pointer leaves (ms). */
 const EDITOR_LABEL_HOLD_MS = 2000;
@@ -178,7 +181,40 @@ export const EditorPane: Component<Props> = (props) => {
 
   onCleanup(() => clearLabelHideTimer());
 
-  /** Primary strip: Run · Logs · Profiler only. */
+  /** Format active buffer (indent / whitespace). Shift+Alt+F also bound in CM. */
+  const formatActiveDoc = () => {
+    const ref = props.editorRef as {
+      formatDoc?: () => boolean;
+      getDoc?: () => string;
+      setDoc?: (d: string) => void;
+    };
+    if (ref.formatDoc) {
+      const changed = ref.formatDoc();
+      const doc = ref.getDoc?.() || '';
+      if (changed) {
+        saveEditorDoc(doc);
+        setStatus('ready', 'Formatted');
+      } else {
+        setStatus('ready', 'Already formatted');
+      }
+      return;
+    }
+    const doc = ref.getDoc?.() || '';
+    if (!doc.trim()) return;
+    const next = formatPineSource(doc);
+    if (next === doc) {
+      setStatus('ready', 'Already formatted');
+      return;
+    }
+    ref.setDoc?.(next);
+    saveEditorDoc(next);
+    setStatus('ready', 'Formatted');
+  };
+
+  /**
+   * Primary strip (left → right): Run · Format · | · Logs · Profiler
+   * Secondary tools live in the overflow menu (right).
+   */
   const editorTools = (
     <div
       class="axis-editor-tools"
@@ -225,6 +261,19 @@ export const EditorPane: Component<Props> = (props) => {
           )}
         </EditorToolBtn>
       </Show>
+      <EditorToolBtn
+        id="format"
+        label="Format"
+        title="Format document — indent, trim, normalize blanks (Shift+Alt+F)"
+        testId="axis-editor-btn-format"
+        open={labelId() === 'format'}
+        onShow={() => showToolLabel('format')}
+        onScheduleHide={() => scheduleHideToolLabel('format')}
+        onClick={() => formatActiveDoc()}
+      >
+        <Icons.alignLeft size={12} />
+      </EditorToolBtn>
+      <span class="axis-editor-tools-sep" aria-hidden="true" />
       <EditorToolBtn
         id="scriptlogs"
         label="Logs"
@@ -280,14 +329,16 @@ export const EditorPane: Component<Props> = (props) => {
     </button>
   );
 
-  /** Right overflow (next to close): secondary editor tools. */
+  /** Right overflow (next to close): view / debug toggles. */
   const editorOverflowMenu = () => (
     <EditorOverflowMenu
       pinCount={pinCount()}
+      pinsTitle={pinsTitle()}
       onToggleInlineDebug={() => toggleInlineDebugEnabled()}
       onTogglePins={() => toggleDebugPinsEnabled()}
       onToggleRuler={() => toggleEditorRulerEnabled()}
-      pinsTitle={pinsTitle()}
+      onToggleWrap={() => toggleEditorWrapEnabled()}
+      onFormat={() => formatActiveDoc()}
     />
   );
 
@@ -354,13 +405,15 @@ export const EditorPane: Component<Props> = (props) => {
   );
 };
 
-/** Right-side hamburger: secondary editor tools (debug / pins / ruler). */
+/** Right-side overflow: view toggles + format (secondary). */
 const EditorOverflowMenu: Component<{
   pinCount: number;
   pinsTitle: string;
   onToggleInlineDebug: () => void;
   onTogglePins: () => void;
   onToggleRuler: () => void;
+  onToggleWrap: () => void;
+  onFormat: () => void;
 }> = (props) => {
   const [open, setOpen] = createSignal(false);
   let wrapEl: HTMLDivElement | undefined;
@@ -417,6 +470,48 @@ const EditorOverflowMenu: Component<{
             if (t?.closest?.('[role="menuitem"]')) close();
           }}
         >
+          <div class="axis-panel-menu-section">View</div>
+          <button
+            type="button"
+            role="menuitem"
+            class={`axis-panel-menu-item ${
+              store.editorWrapEnabled ? 'is-active' : ''
+            }`}
+            title={
+              store.editorWrapEnabled
+                ? 'Soft wrap on — long lines wrap in the viewport'
+                : 'Soft wrap off — horizontal scroll for long lines'
+            }
+            data-testid="axis-btn-editor-wrap"
+            onClick={() => props.onToggleWrap()}
+          >
+            <Icons.wrapText size={14} />
+            <span>Soft wrap</span>
+            <Show when={store.editorWrapEnabled}>
+              <Icons.check size={12} class="ml-auto opacity-80" />
+            </Show>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class={`axis-panel-menu-item ${
+              store.editorRulerEnabled ? 'is-active' : ''
+            }`}
+            title={
+              store.editorRulerEnabled
+                ? 'Column ruler on — 80-character recommended line length guide'
+                : 'Show 80-character recommended line length ruler'
+            }
+            data-testid="axis-btn-editor-ruler"
+            onClick={() => props.onToggleRuler()}
+          >
+            <Icons.ruler size={14} />
+            <span>Column ruler</span>
+            <Show when={store.editorRulerEnabled}>
+              <Icons.check size={12} class="ml-auto opacity-80" />
+            </Show>
+          </button>
+          <div class="axis-panel-menu-section">Debug</div>
           <button
             type="button"
             role="menuitem"
@@ -460,25 +555,17 @@ const EditorOverflowMenu: Component<{
               <Icons.check size={12} class="ml-auto opacity-80" />
             </Show>
           </button>
+          <div class="axis-panel-menu-section">Source</div>
           <button
             type="button"
             role="menuitem"
-            class={`axis-panel-menu-item ${
-              store.editorRulerEnabled ? 'is-active' : ''
-            }`}
-            title={
-              store.editorRulerEnabled
-                ? 'Column ruler on — 80-character recommended line length guide'
-                : 'Show 80-character recommended line length ruler'
-            }
-            data-testid="axis-btn-editor-ruler"
-            onClick={() => props.onToggleRuler()}
+            class="axis-panel-menu-item"
+            title="Format document (Shift+Alt+F)"
+            data-testid="axis-btn-editor-format-menu"
+            onClick={() => props.onFormat()}
           >
-            <Icons.ruler size={14} />
-            <span>Column ruler</span>
-            <Show when={store.editorRulerEnabled}>
-              <Icons.check size={12} class="ml-auto opacity-80" />
-            </Show>
+            <Icons.alignLeft size={14} />
+            <span>Format document</span>
           </button>
         </div>
       </Show>

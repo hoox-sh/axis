@@ -64,6 +64,7 @@ import {
   columnRulerExtension,
   refreshColumnRuler,
 } from './column-ruler';
+import { formatPineSource } from './pine-format';
 
 /** Cursor position reported by {@link PyneEditorRef.getCursor}. */
 export type PyneEditorCursor = { line: number; col: number; offset: number };
@@ -83,6 +84,10 @@ export type PyneEditorRef = {
   getCursor?: () => PyneEditorCursor;
   /** Select + scroll to a diagnostic range (underlines / badge jump). */
   jumpToDiagnostic?: (diag: EditorDiagnostic) => boolean;
+  /** Select absolute [from, to) range and scroll into view (color tools, etc.). */
+  selectRange?: (from: number, to: number) => boolean;
+  /** Format document (indent / whitespace). Returns true when changed. */
+  formatDoc?: () => boolean;
   /** Load external library content into active tab (set by TabbedEditor). */
   loadLibraryDoc?: (doc: string, name?: string, libraryId?: string) => void;
   /**
@@ -194,6 +199,35 @@ export const PyneEditor: Component<Props> = (props) => {
     };
   };
 
+  /** Select [from, to) in document offsets and center it. */
+  const selectRange = (from: number, to: number): boolean => {
+    if (!view) return false;
+    const len = view.state.doc.length;
+    const a = Math.max(0, Math.min(Math.trunc(from), len));
+    const b = Math.max(a, Math.min(Math.trunc(to), len));
+    view.dispatch({
+      selection: EditorSelection.range(a, b),
+      effects: EditorView.scrollIntoView(a, { y: 'center' }),
+    });
+    view.focus();
+    return true;
+  };
+
+  /** Format full document; preserves roughly the cursor offset when possible. */
+  const formatDoc = (): boolean => {
+    if (!view) return false;
+    const prev = view.state.doc.toString();
+    const next = formatPineSource(prev);
+    if (next === prev) return false;
+    const head = view.state.selection.main.head;
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: next },
+      selection: EditorSelection.cursor(Math.min(head, next.length)),
+    });
+    view.focus();
+    return true;
+  };
+
   const syncProfiler = () => {
     if (!view) return;
     const enabled = props.profilerEnabled !== false;
@@ -242,6 +276,20 @@ export const PyneEditor: Component<Props> = (props) => {
         key: 'Mod-Enter',
         run: () => {
           props.onRun?.();
+          return true;
+        },
+      },
+      {
+        key: 'Shift-Alt-f',
+        run: () => {
+          formatDoc();
+          return true;
+        },
+      },
+      {
+        key: 'Mod-Shift-f',
+        run: () => {
+          formatDoc();
           return true;
         },
       },
@@ -305,6 +353,8 @@ export const PyneEditor: Component<Props> = (props) => {
       props.editorRef.scrollToLine = scrollToLine;
       props.editorRef.focusLine = scrollToLine;
       props.editorRef.getCursor = getCursor;
+      props.editorRef.selectRange = selectRange;
+      props.editorRef.formatDoc = formatDoc;
       props.editorRef.jumpToDiagnostic = (diag: EditorDiagnostic) => {
         if (!view) return false;
         return jumpToDiagnostic(view, diag);

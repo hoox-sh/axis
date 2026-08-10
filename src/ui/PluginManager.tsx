@@ -174,19 +174,19 @@ export const PluginManager: Component<Props> = (props) => {
   return (
     <Show when={props.open}>
       <div
-        class="fixed inset-0 bg-black/75 flex items-center justify-center z-[1000] p-2 sm:p-4"
+        class="sc-dialog-backdrop"
         onClick={onBackdrop}
         role="presentation"
       >
         <div
-          class="bg-bg-panel border-2 border-border w-[min(1200px,calc(100vw-16px))] h-[min(900px,calc(100vh-16px))] max-h-[calc(100vh-16px)] flex flex-col shadow-[0_16px_48px_rgba(0,0,0,0.6)]"
+          class="sc-dialog w-[min(1200px,calc(100vw-2*var(--ui-dialog-margin)))] h-[min(900px,calc(100vh-2*var(--ui-dialog-margin-y)))]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="axis-plugins-title"
           data-testid="axis-manager"
         >
-          <div class="h-0.5 w-full bg-accent flex-shrink-0" />
-          <div class="flex items-center justify-between px-4 py-3 border-b-2 border-border">
+          <div class="sc-dialog-accent" />
+          <div class="sc-dialog-header">
             <span
               id="axis-plugins-title"
               class="text-base font-semibold text-text tracking-tight inline-flex items-center gap-2"
@@ -199,7 +199,7 @@ export const PluginManager: Component<Props> = (props) => {
             </button>
           </div>
 
-          <div class="flex border-b-2 border-border flex-shrink-0" role="tablist">
+          <div class="sc-dialog-tabs sc-dialog-tabs--underline" role="tablist">
             {tabBtn('catalog', 'Catalog')}
             {tabBtn('install', 'Install')}
             {tabBtn('library', 'Script Library')}
@@ -207,7 +207,7 @@ export const PluginManager: Component<Props> = (props) => {
 
           {/* fixed tall body: tabs stay put; content scrolls inside */}
 
-          <div class="p-4 sm:p-5 flex flex-col gap-4 overflow-auto text-[12px] min-h-0 flex-1">
+          <div class="sc-dialog-body flex flex-col gap-4 overflow-auto text-[12px] min-h-0 flex-1">
             <Show when={tab() === 'catalog'}>
               <div class="flex flex-wrap gap-1.5">
                 <For

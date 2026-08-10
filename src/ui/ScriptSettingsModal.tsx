@@ -200,12 +200,12 @@ export const ScriptSettingsModal: Component = () => {
   return (
     <Show when={open()}>
       <div
-        class="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000] p-4 backdrop-blur-[2px]"
+        class="sc-dialog-backdrop"
         onClick={onBackdrop}
         role="presentation"
       >
         <div
-          class="sc-dialog w-[min(440px,calc(100vw-32px))]"
+          class="sc-dialog w-[min(460px,calc(100vw-2*var(--ui-dialog-margin)))]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="axis-script-settings-title"

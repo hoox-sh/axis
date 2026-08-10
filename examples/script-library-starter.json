@@ -2,7 +2,7 @@
   {
     "id": "ex_lib_math",
     "name": "AxisMath",
-    "description": "Math helpers: clamp, nz_div, pct_change, normalize — export const + functions (Pine v6).",
+    "description": "Math helpers: clamp, nz_div, pct_change, normalize \u2014 export const + functions (Pine v6).",
     "path": "libraries/AxisMath.pyne",
     "tags": [
       "library",
@@ -36,7 +36,7 @@
       "v6",
       "example"
     ],
-    "content": "//@version=6\n// @description Chart color helpers (not TradingView brand APIs)\nlibrary(\"AxisColors\")\n\nexport const color INDIGO = #6366f1\nexport const color CYAN = #22d3ee\nexport const color ROSE = #fb7185\nexport const color EMERALD = #34d399\nexport const color AMBER = #fbbf24\nexport const color SLATE = #94a3b8\n\nexport withAlpha(color c, int alpha) =>\n    color.new(c, alpha)\n\nexport bullBear(bool bull) =>\n    bull ? EMERALD : ROSE\n\nexport heat(float t) =>\n    // t in [0, 1] → cool to warm\n    color.from_gradient(t, 0.0, 1.0, CYAN, ROSE)\n"
+    "content": "//@version=6\n// @description Chart color helpers (not TradingView brand APIs)\nlibrary(\"AxisColors\")\n\nexport const color INDIGO = #6366f1\nexport const color CYAN = #22d3ee\nexport const color ROSE = #fb7185\nexport const color EMERALD = #34d399\nexport const color AMBER = #fbbf24\nexport const color SLATE = #94a3b8\n\nexport withAlpha(color c, int alpha) =>\n    color.new(c, alpha)\n\nexport bullBear(bool bull) =>\n    bull ? EMERALD : ROSE\n\nexport heat(float t) =>\n    // t in [0, 1] \u2192 cool to warm\n    color.from_gradient(t, 0.0, 1.0, CYAN, ROSE)\n"
   },
   {
     "id": "ex_lib_ma",
@@ -174,7 +174,7 @@
   {
     "id": "ex_ind_supertrend",
     "name": "Supertrend",
-    "description": "ATR Supertrend with direction enum and colored line.",
+    "description": "ATR Supertrend with linebr up/down segments and flip markers.",
     "path": "indicators/Supertrend.pyne",
     "tags": [
       "indicator",
@@ -182,7 +182,7 @@
       "v6",
       "example"
     ],
-    "content": "//@version=6\n// @description Supertrend (ATR) with direction enum\nindicator(\"Supertrend\", shorttitle=\"ST\", overlay=true)\n\nenum Dir\n    up\n    down\n\natrLen = input.int(10, \"ATR Length\", minval=1)\nfactor = input.float(3.0, \"Factor\", minval=0.1, step=0.1)\n\n[st, dirRaw] = ta.supertrend(factor, atrLen)\nDir d = dirRaw < 0 ? Dir.up : Dir.down\n\ncol = d == Dir.up ? #34d399 : #fb7185\nplot(st, \"Supertrend\", color=col, linewidth=2)\nplotshape(d == Dir.up and d[1] == Dir.down, \"Flip Up\", shape.triangleup, location.belowbar, #34d399, size=size.small)\nplotshape(d == Dir.down and d[1] == Dir.up, \"Flip Down\", shape.triangledown, location.abovebar, #fb7185, size=size.small)\n"
+    "content": "//@version=6\n// @description Supertrend (ATR) with dual linebr segments + flip markers\nindicator(\"Supertrend\", shorttitle=\"ST\", overlay=true)\n\natrLen = input.int(10, \"ATR Length\", minval=1)\nfactor = input.float(3.0, \"Factor\", minval=0.1, step=0.1)\n\n[st, dirRaw] = ta.supertrend(factor, atrLen)\n// Pine Supertrend: dir < 0 \u2192 uptrend, dir > 0 \u2192 downtrend\nbull = dirRaw < 0\nbear = dirRaw > 0\n\n// Break-style plots: na on the inactive side so the line does not connect through flips\nupLine = bull ? st : na\ndnLine = bear ? st : na\nplot(upLine, \"ST Up\", color=#34d399, linewidth=2, style=plot.style_linebr)\nplot(dnLine, \"ST Down\", color=#fb7185, linewidth=2, style=plot.style_linebr)\n\n// Flip markers (use dir history \u2014 more reliable than enum series lookback)\nplotshape(bull and not bull[1], \"Flip Up\", shape.triangleup, location.belowbar, #34d399, size=size.small)\nplotshape(bear and not bear[1], \"Flip Down\", shape.triangledown, location.abovebar, #fb7185, size=size.small)\n"
   },
   {
     "id": "ex_ind_stochrsi",
@@ -200,7 +200,7 @@
   {
     "id": "ex_ind_vwap",
     "name": "VWAP Bands",
-    "description": "Session VWAP ± standard-deviation bands.",
+    "description": "Session VWAP \u00b1 standard-deviation bands.",
     "path": "indicators/VWAPBands.pyne",
     "tags": [
       "indicator",
@@ -208,7 +208,7 @@
       "v6",
       "example"
     ],
-    "content": "//@version=6\n// @description Session VWAP with σ bands\nindicator(\"VWAP Bands\", shorttitle=\"VWAP\", overlay=true)\n\nsrc = input.source(hlc3, \"Source\")\nshowBands = input.bool(true, \"Show bands\")\nn1 = input.float(1.0, \"Band 1 σ\", minval=0.1, step=0.1)\nn2 = input.float(2.0, \"Band 2 σ\", minval=0.1, step=0.1)\n\nvw = ta.vwap(src)\n// cumulative volume-weighted variance approx via ta.vwap + dev of src\nbasis = vw\n// Use rolling stdev of (src - vwap) as band width proxy\ndev = ta.stdev(src - vw, 20)\n\nplot(basis, \"VWAP\", color=#fbbf24, linewidth=2)\nu1 = plot(showBands ? basis + n1 * dev : na, \"Upper1\", color=#22d3ee)\nl1 = plot(showBands ? basis - n1 * dev : na, \"Lower1\", color=#22d3ee)\nu2 = plot(showBands ? basis + n2 * dev : na, \"Upper2\", color=color.new(#22d3ee, 40))\nl2 = plot(showBands ? basis - n2 * dev : na, \"Lower2\", color=color.new(#22d3ee, 40))\nfill(u1, l1, color=color.new(#fbbf24, 92))\n"
+    "content": "//@version=6\n// @description Session VWAP with \u03c3 bands\nindicator(\"VWAP Bands\", shorttitle=\"VWAP\", overlay=true)\n\nsrc = input.source(hlc3, \"Source\")\nshowBands = input.bool(true, \"Show bands\")\nn1 = input.float(1.0, \"Band 1 \u03c3\", minval=0.1, step=0.1)\nn2 = input.float(2.0, \"Band 2 \u03c3\", minval=0.1, step=0.1)\n\nvw = ta.vwap(src)\n// cumulative volume-weighted variance approx via ta.vwap + dev of src\nbasis = vw\n// Use rolling stdev of (src - vwap) as band width proxy\ndev = ta.stdev(src - vw, 20)\n\nplot(basis, \"VWAP\", color=#fbbf24, linewidth=2)\nu1 = plot(showBands ? basis + n1 * dev : na, \"Upper1\", color=#22d3ee)\nl1 = plot(showBands ? basis - n1 * dev : na, \"Lower1\", color=#22d3ee)\nu2 = plot(showBands ? basis + n2 * dev : na, \"Upper2\", color=color.new(#22d3ee, 40))\nl2 = plot(showBands ? basis - n2 * dev : na, \"Lower2\", color=color.new(#22d3ee, 40))\nfill(u1, l1, color=color.new(#fbbf24, 92))\n"
   },
   {
     "id": "ex_ind_atr",
@@ -261,7 +261,7 @@
       "v6",
       "example"
     ],
-    "content": "//@version=6\n// @description Multi-timeframe RSI — v6 dynamic request.security\nindicator(\"MTF RSI\", shorttitle=\"MTF RSI\", overlay=false)\n\nlen = input.int(14, \"RSI Length\", minval=1)\n// v6: timeframe can be a series/input string (dynamic request)\nhtf = input.timeframe(\"60\", \"Higher timeframe\")\nob = input.float(70, \"Overbought\")\nos = input.float(30, \"Oversold\")\n\nrsiExpr = ta.rsi(close, len)\n// Dynamic request: TF from input (series string path in v6)\nhtfRsi = request.security(syminfo.tickerid, htf, rsiExpr, barmerge.gaps_off, barmerge.lookahead_off)\n\nplot(rsiExpr, \"RSI\", color=#6366f1)\nplot(htfRsi, \"HTF RSI\", color=#fbbf24, linewidth=2)\nhline(ob, \"OB\", color=#fb7185, linestyle=hline.style_dashed)\nhline(os, \"OS\", color=#34d399, linestyle=hline.style_dashed)\nhline(50, \"Mid\", color=#94a3b8, linestyle=hline.style_dotted)\n\nif barstate.islast\n    log.info(\"MTF RSI chart={0} htf={1} tf={2}\", rsiExpr, htfRsi, htf)\n"
+    "content": "//@version=6\n// @description Multi-timeframe RSI \u2014 v6 dynamic request.security\nindicator(\"MTF RSI\", shorttitle=\"MTF RSI\", overlay=false)\n\nlen = input.int(14, \"RSI Length\", minval=1)\n// v6: timeframe can be a series/input string (dynamic request)\nhtf = input.timeframe(\"60\", \"Higher timeframe\")\nob = input.float(70, \"Overbought\")\nos = input.float(30, \"Oversold\")\n\nrsiExpr = ta.rsi(close, len)\n// Dynamic request: TF from input (series string path in v6)\nhtfRsi = request.security(syminfo.tickerid, htf, rsiExpr, barmerge.gaps_off, barmerge.lookahead_off)\n\nplot(rsiExpr, \"RSI\", color=#6366f1)\nplot(htfRsi, \"HTF RSI\", color=#fbbf24, linewidth=2)\nhline(ob, \"OB\", color=#fb7185, linestyle=hline.style_dashed)\nhline(os, \"OS\", color=#34d399, linestyle=hline.style_dashed)\nhline(50, \"Mid\", color=#94a3b8, linestyle=hline.style_dotted)\n\nif barstate.islast\n    log.info(\"MTF RSI chart={0} htf={1} tf={2}\", rsiExpr, htfRsi, htf)\n"
   },
   {
     "id": "ex_str_sma_x",
@@ -326,7 +326,7 @@
       "v6",
       "example"
     ],
-    "content": "//@version=6\n// @description Supertrend trend-following\nstrategy(\"Supertrend Follow\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=15,\n     process_orders_on_close=true)\n\natrLen = input.int(10, \"ATR Length\")\nfactor = input.float(3.0, \"Factor\", step=0.1)\nallowShort = input.bool(false, \"Allow short\")\n\n[st, dir] = ta.supertrend(factor, atrLen)\n// dir < 0 → uptrend in Pine Supertrend convention\nbull = dir < 0\nbear = dir > 0\n\nif bull and not bull[1]\n    strategy.entry(\"Long\", strategy.long)\nif bear and not bear[1]\n    if allowShort\n        strategy.entry(\"Short\", strategy.short)\n    else\n        strategy.close(\"Long\")\n\nplot(st, \"ST\", color=bull ? #34d399 : #fb7185, linewidth=2)\n"
+    "content": "//@version=6\n// @description Supertrend trend-following\nstrategy(\"Supertrend Follow\", overlay=true, initial_capital=100000,\n     default_qty_type=strategy.percent_of_equity, default_qty_value=15,\n     process_orders_on_close=true)\n\natrLen = input.int(10, \"ATR Length\")\nfactor = input.float(3.0, \"Factor\", step=0.1)\nallowShort = input.bool(false, \"Allow short\")\n\n[st, dir] = ta.supertrend(factor, atrLen)\n// dir < 0 \u2192 uptrend in Pine Supertrend convention\nbull = dir < 0\nbear = dir > 0\n\nif bull and not bull[1]\n    strategy.entry(\"Long\", strategy.long)\nif bear and not bear[1]\n    if allowShort\n        strategy.entry(\"Short\", strategy.short)\n    else\n        strategy.close(\"Long\")\n\nplot(bull ? st : na, \"ST Up\", color=#34d399, linewidth=2, style=plot.style_linebr)\nplot(bear ? st : na, \"ST Down\", color=#fb7185, linewidth=2, style=plot.style_linebr)\n"
   },
   {
     "id": "ex_str_donchian",

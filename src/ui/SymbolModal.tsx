@@ -207,12 +207,12 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
   return (
     <Show when={props.open}>
       <div
-        class="fixed inset-0 bg-black/70 flex items-start sm:items-center justify-center z-[1000] p-3 sm:p-4 backdrop-blur-[2px]"
+        class="sc-dialog-backdrop sc-dialog-backdrop--start sm:items-center"
         onClick={onBackdrop}
         role="presentation"
       >
         <div
-          class="sc-dialog w-[min(520px,calc(100vw-16px))] max-h-[min(88vh,640px)] flex flex-col"
+          class="sc-dialog w-[min(540px,calc(100vw-2*var(--ui-dialog-margin)))] max-h-[min(86vh,660px)] flex flex-col"
           role="dialog"
           aria-modal="true"
           aria-labelledby="axis-symbol-modal-title"
@@ -256,7 +256,7 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
             </div>
           </div>
 
-          <div class="sc-dialog-body flex flex-col gap-2 min-h-0 overflow-hidden flex-1">
+          <div class="sc-dialog-body flex flex-col gap-3 min-h-0 overflow-hidden flex-1">
             <Show when={error()}>
               <div
                 class="text-[11px] text-amber-200/90 border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 rounded"

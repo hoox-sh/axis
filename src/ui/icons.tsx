@@ -94,6 +94,8 @@ import {
   Fullscreen,
   Maximize2,
   Minimize2,
+  AlignLeft,
+  WrapText,
   type LucideProps,
 } from 'lucide-solid';
 
@@ -194,6 +196,10 @@ export const Icons = {
   maximize: withDefaults(Maximize2),
   /** Exit chart-only / restore chrome. */
   minimize: withDefaults(Minimize2),
+  /** Document autoformat / indent */
+  alignLeft: withDefaults(AlignLeft),
+  /** Soft wrap */
+  wrapText: withDefaults(WrapText),
 };
 
 /** Inline icon row helper for buttons */

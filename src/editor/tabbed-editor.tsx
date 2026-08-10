@@ -36,6 +36,7 @@ import {
   setStatus,
   toggleDebugPinsEnabled,
   toggleEditorWrapEnabled,
+  toggleEditorRulerEnabled,
 } from '../store';
 import { saveDraft, loadDraft } from '../storage/service';
 import { normalizeRunProfile, type RunProfile } from '../results/profiler';
@@ -63,6 +64,10 @@ import {
 } from './diagnostics';
 import { schedulePreeval, cancelPreeval } from './preevaluate';
 import { countDocStats, cursorLineCol } from './doc-stats';
+import { ColorToolsPanel } from './ColorToolsPanel';
+import { scanPineColors } from './pine-colors';
+import { formatPineSource } from './pine-format';
+import { Icons } from '../ui/icons';
 
 export { countDocStats, cursorLineCol } from './doc-stats';
 
@@ -197,6 +202,13 @@ export const TabbedEditor: Component<Props> = (props) => {
   const [cursor, setCursor] = createSignal({ line: 1, col: 1 });
   /** Problems panel expanded under the editor. */
   const [problemsOpen, setProblemsOpen] = createSignal(false);
+  const [colorsOpen, setColorsOpen] = createSignal(false);
+
+  /** Active tab source (reactive) — color tools + badge count. */
+  const activeDoc = createMemo(
+    () => props.editorRef?.getDoc?.() || tabs()[activeTab()]?.doc || '',
+  );
+  const colorHitCount = createMemo(() => scanPineColors(activeDoc()).length);
 
   // Auto-expand when new diagnostics appear after a run
   createEffect(() => {
@@ -462,44 +474,91 @@ export const TabbedEditor: Component<Props> = (props) => {
     scheduleDraft(doc, name);
   };
 
+  const formatDoc = () => {
+    const ref = props.editorRef as PyneEditorRef | undefined;
+    if (ref?.formatDoc) {
+      const changed = ref.formatDoc();
+      if (changed) {
+        onDocChange(ref.getDoc?.() || '');
+        setStatus('ready', 'Formatted');
+      } else {
+        setStatus('ready', 'Already formatted');
+      }
+      return;
+    }
+    const doc = ref?.getDoc?.() || activeTabState()?.doc || '';
+    if (!doc.trim()) return;
+    const next = formatPineSource(doc);
+    if (next === doc) {
+      setStatus('ready', 'Already formatted');
+      return;
+    }
+    ref?.setDoc?.(next);
+    onDocChange(next);
+    setStatus('ready', 'Formatted');
+  };
+
   return (
     <div class="flex flex-col h-full min-h-0 flex-1">
-      <div class="flex items-stretch bg-bg-base border-b-2 border-border overflow-x-auto flex-shrink-0">
-        <For each={tabs()}>
-          {(tab, idx) => (
-            <button
-              class={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] border-r-2 border-border-soft cursor-pointer whitespace-nowrap select-none ${
-                idx() === activeTab()
-                  ? 'bg-bg-panel text-text border-b-2 border-b-accent -mb-[2px]'
-                  : 'text-text-dim hover:bg-bg-hover hover:text-text border-b-2 border-b-transparent'
-              }`}
-              onClick={() => switchTab(idx())}
-            >
-              {tab.dirty && <span class="inline-block w-1.5 h-1.5 rounded-full bg-orange" />}
-              <span class="max-w-[140px] overflow-hidden text-ellipsis">{tab.name}</span>
-              {tabs().length > 1 && (
-                <span
-                  class="text-text-faint hover:text-red text-sm px-0.5 hover:bg-bg-hover"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeTab(idx());
-                  }}
-                >
-                  ×
-                </span>
-              )}
-            </button>
-          )}
-        </For>
-        <button
-          class="text-text-dim border-none bg-transparent px-2.5 cursor-pointer text-lg hover:text-accent hover:bg-bg-hover"
-          onClick={addTab}
-          title="New tab"
+      {/* ── Tab strip + source actions ───────────────────────────── */}
+      <div
+        class="axis-editor-tabbar flex items-stretch bg-bg-base border-b-2 border-border flex-shrink-0 min-h-[2rem]"
+        data-testid="axis-editor-tabbar"
+      >
+        <div class="axis-editor-tabs flex items-stretch min-w-0 flex-1 overflow-x-auto">
+          <For each={tabs()}>
+            {(tab, idx) => (
+              <button
+                type="button"
+                class={`axis-editor-tab flex items-center gap-1.5 px-2.5 py-1 text-[11px] border-r border-border-soft cursor-pointer whitespace-nowrap select-none ${
+                  idx() === activeTab()
+                    ? 'is-active bg-bg-panel text-text'
+                    : 'text-text-dim hover:bg-bg-hover hover:text-text'
+                }`}
+                onClick={() => switchTab(idx())}
+              >
+                {tab.dirty && (
+                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-orange flex-shrink-0" />
+                )}
+                <span class="max-w-[140px] overflow-hidden text-ellipsis">{tab.name}</span>
+                {tabs().length > 1 && (
+                  <span
+                    class="text-text-faint hover:text-red text-sm px-0.5 leading-none hover:bg-bg-hover rounded"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeTab(idx());
+                    }}
+                    title="Close tab"
+                  >
+                    ×
+                  </span>
+                )}
+              </button>
+            )}
+          </For>
+          <button
+            type="button"
+            class="axis-editor-tab-add text-text-dim border-none bg-transparent px-2 cursor-pointer text-base hover:text-accent hover:bg-bg-hover flex-shrink-0"
+            onClick={addTab}
+            title="New tab"
+            aria-label="New tab"
+          >
+            +
+          </button>
+        </div>
+        <div
+          class="axis-editor-tabbar-actions flex items-center gap-0.5 px-1.5 flex-shrink-0 border-l border-border-soft"
+          onPointerDown={(e) => e.stopPropagation()}
         >
-          +
-        </button>
-        <div class="flex-1" />
-        <div class="self-center m-0.5">
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost px-1.5 py-0.5 text-[10px] font-semibold inline-flex items-center gap-1"
+            data-testid="axis-editor-tabbar-format"
+            title="Format document (Shift+Alt+F)"
+            onClick={() => formatDoc()}
+          >
+            Format
+          </button>
           <EditorGitBar
             getDoc={() => props.editorRef?.getDoc?.() || activeTabState()?.doc || ''}
             getName={() => activeTabState()?.name || 'Script'}
@@ -550,109 +609,188 @@ export const TabbedEditor: Component<Props> = (props) => {
           }}
         />
       </Show>
+      <Show when={colorsOpen()}>
+        <ColorToolsPanel
+          doc={activeDoc()}
+          onApplyDoc={(next) => {
+            const ref = props.editorRef;
+            if (ref?.setDoc) ref.setDoc(next);
+            // Keep tab dirty + draft in sync (setDoc does fire CM listener)
+            onDocChange(next);
+          }}
+          onJump={(hit) => {
+            const ref = props.editorRef as PyneEditorRef | undefined;
+            if (ref?.selectRange?.(hit.from, hit.to)) return;
+            if (ref?.scrollToLine) ref.scrollToLine(hit.line);
+            else ref?.focusLine?.(hit.line);
+          }}
+        />
+      </Show>
+      {/* ── Status / action bar ─────────────────────────────────── */}
       <div
-        class="flex-shrink-0 flex items-center gap-3 px-2 py-0.5 border-t-2 border-border bg-bg-base text-[10px] font-mono text-text-faint tabular-nums select-none"
+        class="axis-editor-statusbar flex-shrink-0 flex items-center gap-1 px-1.5 py-0.5 border-t-2 border-border bg-bg-base text-[10px] font-mono tabular-nums select-none min-h-[1.75rem]"
         data-testid="axis-editor-stats"
-        title="Document statistics · cursor position · click wrap to toggle soft wrap"
       >
-        <span data-testid="axis-editor-cursor" title="Cursor position (line : column)">
-          Pos{' '}
-          <span class="text-text-dim">
-            {cursor().line}:{cursor().col}
-          </span>
-        </span>
-        <span title="Total lines in document">
-          Ln <span class="text-text-dim">{stats().lines}</span>
-        </span>
-        <span>
-          Words <span class="text-text-dim">{stats().words}</span>
-        </span>
-        <span>
-          Chars <span class="text-text-dim">{stats().chars}</span>
-        </span>
-        <button
-          type="button"
-          class={`ml-1 px-1.5 py-0 rounded border border-transparent hover:bg-bg-hover hover:text-text inline-flex items-center gap-1 ${
-            problemsOpen() ? 'text-accent border-border-soft bg-bg-hover' : ''
-          } ${
-            diagCounts().errors > 0
-              ? 'text-red'
-              : diagCounts().warnings > 0
-                ? 'text-orange'
-                : diagCounts().typos > 0
-                  ? 'text-violet-400'
-                  : 'text-text-faint'
-          }`}
-          data-testid="axis-editor-problems-toggle"
-          title={
-            editorDiagnostics().length
-              ? `${diagCountLabel() || `${problemCounts().total} problem(s)`} — click to ${problemsOpen() ? 'hide' : 'show'} list`
-              : store.preEval?.pending
-                ? 'Checking script…'
-                : 'No problems (pre-eval + last run)'
-          }
-          aria-pressed={problemsOpen()}
-          aria-expanded={problemsOpen()}
-          onClick={() => setProblemsOpen((o) => !o)}
-        >
-          Problems
-          <Show when={editorDiagnostics().length > 0}>
-            <span class="tabular-nums" data-testid="axis-editor-problems-badge">
-              {editorDiagnostics().length}
+        {/* Stats cluster */}
+        <div class="axis-editor-statusbar-stats flex items-center gap-2 text-text-faint min-w-0">
+          <span data-testid="axis-editor-cursor" title="Cursor (line : column)" class="flex-shrink-0">
+            <span class="text-text-dim">
+              {cursor().line}:{cursor().col}
             </span>
-          </Show>
-        </button>
-        <Show when={editorDiagnostics().length > 0}>
+          </span>
+          <span class="text-border-soft" aria-hidden="true">
+            ·
+          </span>
+          <span title="Lines" class="flex-shrink-0">
+            <span class="text-text-dim">{stats().lines}</span>
+            <span class="text-text-faint ml-0.5">ln</span>
+          </span>
+          <span title="Characters" class="hidden sm:inline flex-shrink-0">
+            <span class="text-text-dim">{stats().chars}</span>
+            <span class="text-text-faint ml-0.5">ch</span>
+          </span>
+        </div>
+
+        <span class="axis-editor-statusbar-sep" aria-hidden="true" />
+
+        {/* Diagnostics / panels */}
+        <div class="axis-editor-statusbar-actions flex items-center gap-0.5 min-w-0">
           <button
             type="button"
-            class={`px-1.5 py-0 rounded border border-transparent hover:bg-bg-hover inline-flex items-center gap-1 font-semibold ${
+            class={`axis-editor-status-btn ${
+              problemsOpen() ? 'is-active' : ''
+            } ${
               diagCounts().errors > 0
-                ? 'text-red'
+                ? 'is-error'
                 : diagCounts().warnings > 0
-                  ? 'text-orange'
+                  ? 'is-warn'
                   : diagCounts().typos > 0
-                    ? 'text-violet-400'
-                    : 'text-text-dim'
+                    ? 'is-typo'
+                    : ''
             }`}
-            data-testid="axis-editor-diag-count"
-            title={`${diagCountLabel()} — jump to first`}
-            onClick={() => {
-              const diags = editorDiagnostics();
-              if (!diags.length) return;
-              const ref = props.editorRef;
-              const first =
-                diags.find((d) => d.severity === 'error') ??
-                diags.find((d) => d.severity === 'warning') ??
-                diags[0]!;
-              if (ref?.jumpToDiagnostic) {
-                ref.jumpToDiagnostic(first);
-                return;
-              }
-              if (ref?.scrollToLine) ref.scrollToLine(first.line);
-              else ref?.focusLine?.(first.line);
-            }}
+            data-testid="axis-editor-problems-toggle"
+            title={
+              editorDiagnostics().length
+                ? `${diagCountLabel() || `${problemCounts().total} problem(s)`} — ${problemsOpen() ? 'hide' : 'show'}`
+                : store.preEval?.pending
+                  ? 'Checking script…'
+                  : 'No problems'
+            }
+            aria-pressed={problemsOpen()}
+            aria-expanded={problemsOpen()}
+            onClick={() => setProblemsOpen((o) => !o)}
           >
-            {diagCountLabel()}
+            Problems
+            <Show when={editorDiagnostics().length > 0}>
+              <span class="tabular-nums" data-testid="axis-editor-problems-badge">
+                {editorDiagnostics().length}
+              </span>
+            </Show>
           </button>
-        </Show>
-        <button
-          type="button"
-          class={`ml-auto px-1.5 py-0 rounded border border-transparent hover:bg-bg-hover hover:text-text ${
-            store.editorWrapEnabled
-              ? 'text-accent border-border-soft bg-bg-hover'
-              : 'text-text-faint/80'
-          }`}
-          data-testid="axis-editor-wrap-toggle"
-          title={
-            store.editorWrapEnabled
-              ? 'Soft wrap on — click to show horizontal scroll'
-              : 'Soft wrap off — click to wrap long lines'
-          }
-          aria-pressed={store.editorWrapEnabled}
-          onClick={() => toggleEditorWrapEnabled()}
-        >
-          wrap
-        </button>
+          <Show when={editorDiagnostics().length > 0}>
+            <button
+              type="button"
+              class={`axis-editor-status-btn font-semibold ${
+                diagCounts().errors > 0
+                  ? 'is-error'
+                  : diagCounts().warnings > 0
+                    ? 'is-warn'
+                    : diagCounts().typos > 0
+                      ? 'is-typo'
+                      : ''
+              }`}
+              data-testid="axis-editor-diag-count"
+              title={`${diagCountLabel()} — jump to first`}
+              onClick={() => {
+                const diags = editorDiagnostics();
+                if (!diags.length) return;
+                const ref = props.editorRef;
+                const first =
+                  diags.find((d) => d.severity === 'error') ??
+                  diags.find((d) => d.severity === 'warning') ??
+                  diags[0]!;
+                if (ref?.jumpToDiagnostic) {
+                  ref.jumpToDiagnostic(first);
+                  return;
+                }
+                if (ref?.scrollToLine) ref.scrollToLine(first.line);
+                else ref?.focusLine?.(first.line);
+              }}
+            >
+              {diagCountLabel()}
+            </button>
+          </Show>
+          <button
+            type="button"
+            class={`axis-editor-status-btn ${colorsOpen() ? 'is-active' : ''}`}
+            data-testid="axis-editor-colors-toggle"
+            title={
+              colorsOpen()
+                ? 'Hide color tools'
+                : 'Color chips, editor, and converter'
+            }
+            aria-pressed={colorsOpen()}
+            aria-expanded={colorsOpen()}
+            onClick={() => setColorsOpen((o) => !o)}
+          >
+            Colors
+            <Show when={colorHitCount() > 0}>
+              <span class="tabular-nums" data-testid="axis-editor-colors-badge">
+                {colorHitCount()}
+              </span>
+            </Show>
+          </button>
+        </div>
+
+        <div class="flex-1 min-w-[0.5rem]" />
+
+        {/* View / format cluster (right) */}
+        <div class="axis-editor-statusbar-view flex items-center gap-0.5 flex-shrink-0">
+          <button
+            type="button"
+            class="axis-editor-status-btn"
+            data-testid="axis-editor-statusbar-format"
+            title="Format document (Shift+Alt+F)"
+            onClick={() => formatDoc()}
+          >
+            <Icons.alignLeft size={11} />
+            Format
+          </button>
+          <button
+            type="button"
+            class={`axis-editor-status-btn ${
+              store.editorWrapEnabled ? 'is-active' : ''
+            }`}
+            data-testid="axis-editor-wrap-toggle"
+            title={
+              store.editorWrapEnabled
+                ? 'Soft wrap on'
+                : 'Soft wrap off'
+            }
+            aria-pressed={store.editorWrapEnabled}
+            onClick={() => toggleEditorWrapEnabled()}
+          >
+            <Icons.wrapText size={11} />
+            wrap
+          </button>
+          <button
+            type="button"
+            class={`axis-editor-status-btn ${
+              store.editorRulerEnabled ? 'is-active' : ''
+            }`}
+            data-testid="axis-editor-ruler-toggle"
+            title={
+              store.editorRulerEnabled
+                ? 'Column ruler on (80 cols)'
+                : 'Show column ruler'
+            }
+            aria-pressed={store.editorRulerEnabled}
+            onClick={() => toggleEditorRulerEnabled()}
+          >
+            <Icons.ruler size={11} />
+            80
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -349,22 +349,22 @@ export const WorkersManager: Component<Props> = (props) => {
   return (
     <Show when={props.open}>
       <div
-        class="fixed inset-0 bg-black/75 flex items-center justify-center z-[1000] p-2 sm:p-4"
+        class="sc-dialog-backdrop"
         onClick={onBackdrop}
         onKeyDown={onKey}
         role="presentation"
       >
         <div
-          class="bg-bg-panel border-2 border-border w-[min(1100px,calc(100vw-16px))] h-[min(880px,calc(100vh-16px))] max-h-[calc(100vh-16px)] flex flex-col shadow-[0_16px_48px_rgba(0,0,0,0.6)]"
+          class="sc-dialog w-[min(1100px,calc(100vw-2*var(--ui-dialog-margin)))] h-[min(880px,calc(100vh-2*var(--ui-dialog-margin-y)))]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="axis-workers-title"
           data-testid="axis-workers-manager"
         >
-          <div class="h-0.5 w-full bg-accent flex-shrink-0" />
+          <div class="sc-dialog-accent" />
 
           {/* Header */}
-          <div class="flex items-center justify-between px-4 py-3 border-b-2 border-border gap-3">
+          <div class="sc-dialog-header gap-3">
             <div class="min-w-0">
               <span
                 id="axis-workers-title"
@@ -373,7 +373,7 @@ export const WorkersManager: Component<Props> = (props) => {
                 <Icons.activity size={16} />
                 Workers Manager
               </span>
-              <p class="text-[11px] text-text-faint mt-0.5 truncate">
+              <p class="sc-hint truncate">
                 Calculation backends · edge data plane · browser runtime · PWA
               </p>
             </div>
@@ -400,7 +400,13 @@ export const WorkersManager: Component<Props> = (props) => {
           </div>
 
           {/* Summary strip */}
-          <div class="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-border bg-bg-elev/40 text-[11px] font-mono">
+          <div
+            class="flex flex-wrap items-center gap-2 border-b border-border bg-bg-elev/40 text-[11px] font-mono"
+            style={{
+              'padding-inline': 'var(--ui-dialog-header-pad-x)',
+              'padding-block': '0.65em',
+            }}
+          >
             <Show
               when={snap()}
               fallback={
@@ -441,14 +447,14 @@ export const WorkersManager: Component<Props> = (props) => {
             </Show>
           </div>
 
-          <div class="flex border-b-2 border-border flex-shrink-0" role="tablist">
+          <div class="sc-dialog-tabs sc-dialog-tabs--underline" role="tablist">
             {tabBtn('overview', 'Overview')}
             {tabBtn('detail', 'Detail')}
             {tabBtn('install', 'Install')}
             {tabBtn('configure', 'Configure')}
           </div>
 
-          <div class="p-4 sm:p-5 flex flex-col gap-4 overflow-auto text-[12px] min-h-0 flex-1">
+          <div class="sc-dialog-body flex flex-col gap-4 overflow-auto text-[12px] min-h-0 flex-1">
             <Show when={probeError()}>
               <p class="text-red font-mono text-[11px]">{probeError()}</p>
             </Show>

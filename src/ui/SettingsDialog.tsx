@@ -394,7 +394,7 @@ export const SettingsDialog: Component<Props> = (props) => {
   return (
     <Show when={props.open}>
       <div
-        class="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000] p-4 backdrop-blur-[2px]"
+        class="sc-dialog-backdrop"
         onClick={onBackdrop}
         onKeyDown={onKey}
         role="presentation"
@@ -402,8 +402,8 @@ export const SettingsDialog: Component<Props> = (props) => {
         <div
           class={`sc-dialog ${
             tab() === 'theme'
-              ? 'w-[min(620px,calc(100vw-32px))]'
-              : 'w-[min(540px,calc(100vw-32px))]'
+              ? 'w-[min(640px,calc(100vw-2*var(--ui-dialog-margin)))]'
+              : 'w-[min(560px,calc(100vw-2*var(--ui-dialog-margin)))]'
           }`}
           role="dialog"
           aria-modal="true"
@@ -422,7 +422,7 @@ export const SettingsDialog: Component<Props> = (props) => {
               >
                 Settings
               </div>
-              <div class="sc-hint mt-0">
+              <div class="sc-hint">
                 {SETTINGS_TABS.find((t) => t.id === tab())?.hint ||
                   'Engine · density · chart · theme'}
               </div>
@@ -439,7 +439,7 @@ export const SettingsDialog: Component<Props> = (props) => {
 
           {/* Tab strip — General vs Theme (theme lives only here) */}
           <div
-            class="sc-chip-row px-3 pt-2 pb-0 border-b border-border-soft"
+            class="sc-dialog-tabs sc-chip-row"
             role="tablist"
             aria-label="Settings sections"
             data-testid="axis-settings-tabs"

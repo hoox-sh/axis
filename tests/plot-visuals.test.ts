@@ -258,10 +258,26 @@ describe('normalizeLineStyleToken', () => {
 describe('isBreakPlotStyle', () => {
   it('true only for linebr / areabr / steplinebr', () => {
     expect(isBreakPlotStyle('plot.style_linebr')).toBe(true);
+    expect(isBreakPlotStyle('style_linebr')).toBe(true);
     expect(isBreakPlotStyle('plot.style_areabr')).toBe(true);
     expect(isBreakPlotStyle('plot.style_steplinebr')).toBe(true);
     expect(isBreakPlotStyle('plot.style_line')).toBe(false);
     expect(isBreakPlotStyle(null)).toBe(false);
+  });
+
+  it('lineSeriesToOverlayData emits whitespace gaps for linebr na segments', () => {
+    // Supertrend dual-line pattern: inactive side is na → LWC line break
+    const times = [1, 2, 3, 4, 5];
+    const up = [10, 11, null, null, 14];
+    const data = lineSeriesToOverlayData(times, up);
+    expect(data).toEqual([
+      { time: 1, value: 10 },
+      { time: 2, value: 11 },
+      { time: 3 },
+      { time: 4 },
+      { time: 5, value: 14 },
+    ]);
+    expect(mapPlotStyleToSeriesKind('style_linebr')).toBe('line');
   });
 });
 
