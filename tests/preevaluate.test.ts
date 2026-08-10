@@ -98,6 +98,39 @@ strategy.entry("Long", strategy.long)
       false,
     );
   });
+
+  it('accepts plot.style_stepline / plotshape enums (not false typo)', () => {
+    const src = `//@version=5
+indicator("t")
+plot(close, style=plot.style_stepline)
+plot(close, style=plot.style_columns)
+plot(close, style=plot.style_histogram)
+plotshape(true, style=shape.triangleup, location=location.belowbar, size=size.tiny)
+hline(0, linestyle=hline.style_dashed)
+`;
+    const diags = localPreevaluate(src);
+    const typos = diags.filter((d) => d.source === 'preeval-typo');
+    expect(typos).toEqual([]);
+    expect(isKnownBuiltinPath('plot.style_stepline')).toBe(true);
+    expect(isKnownBuiltinPath('shape.triangleup')).toBe(true);
+    expect(isKnownBuiltinPath('location.belowbar')).toBe(true);
+    expect(isKnownBuiltinPath('hline.style_dashed')).toBe(true);
+  });
+
+  it('flags plot.style_steplne as typo (suggest stepline)', () => {
+    const src = `//@version=5
+indicator("t")
+plot(close, style=plot.style_steplne)
+`;
+    const diags = localPreevaluate(src);
+    expect(hasErrorDiagnostics(diags)).toBe(false);
+    const hit = diags.find((d) => /plot\.style_steplne/i.test(d.message));
+    expect(hit).toBeTruthy();
+    expect(hit!.severity).toBe('typo');
+    expect(hit!.source).toBe('preeval-typo');
+    // distance steplne → stepline is 1 → suggestion when within threshold
+    expect(hit!.message).toMatch(/plot\.style_stepline/);
+  });
 });
 
 describe('builtin path helpers', () => {
@@ -106,6 +139,34 @@ describe('builtin path helpers', () => {
     expect(isKnownBuiltinPath('strategy.long')).toBe(true);
     expect(isKnownBuiltinPath('ta.rsi')).toBe(true);
     expect(isKnownBuiltinPath('strategy.etry')).toBe(false);
+  });
+
+  it('knows EXTRA plot / line / label / alert / math constants', () => {
+    // plot.style_* (full set used by plot style parity)
+    expect(isKnownBuiltinPath('plot.style_columns')).toBe(true);
+    expect(isKnownBuiltinPath('plot.style_area')).toBe(true);
+    expect(isKnownBuiltinPath('plot.style_line')).toBe(true);
+    expect(isKnownBuiltinPath('plot.style_linebr')).toBe(true);
+    expect(isKnownBuiltinPath('plot.style_stepline')).toBe(true);
+    expect(isKnownBuiltinPath('plot.style_steplinebr')).toBe(true);
+    expect(isKnownBuiltinPath('plot.style_stepline_diamond')).toBe(true);
+    expect(isKnownBuiltinPath('plot.style_histogram')).toBe(true);
+    expect(isKnownBuiltinPath('plot.style_cross')).toBe(true);
+    expect(isKnownBuiltinPath('plot.style_areabr')).toBe(true);
+    expect(isKnownBuiltinPath('plot.style_circles')).toBe(true);
+    // line / label styles
+    expect(isKnownBuiltinPath('line.style_dashed')).toBe(true);
+    expect(isKnownBuiltinPath('label.style_label_up')).toBe(true);
+    // alert + math
+    expect(isKnownBuiltinPath('alert.freq_all')).toBe(true);
+    expect(isKnownBuiltinPath('math.pi')).toBe(true);
+  });
+
+  it('still rejects real typos (plot.style_steplne, strategy.etry)', () => {
+    expect(isKnownBuiltinPath('plot.style_steplne')).toBe(false);
+    expect(isKnownBuiltinPath('strategy.etry')).toBe(false);
+    expect(suggestBuiltinPath('plot.style_steplne')).toBe('plot.style_stepline');
+    expect(suggestBuiltinPath('strategy.etry')).toBe('strategy.entry');
   });
 
   it('knows strategy.percent_of_equity / strategy.fixed (qty-type constants)', () => {
@@ -124,6 +185,11 @@ strategy.entry("L", strategy.long)
   it('suggests entry for etry', () => {
     expect(suggestBuiltinPath('strategy.etry')).toBe('strategy.entry');
     expect(editDistance('etry', 'entry')).toBeLessThanOrEqual(2);
+  });
+
+  it('suggests stepline for steplne', () => {
+    expect(editDistance('steplne', 'stepline')).toBeLessThanOrEqual(2);
+    expect(suggestBuiltinPath('plot.style_steplne')).toBe('plot.style_stepline');
   });
 
   it('checkUnknownBuiltinMembers returns a range on the typo', () => {

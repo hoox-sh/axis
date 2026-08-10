@@ -25,9 +25,16 @@
  * even when git/cloud is selected (remotes typically skip draft commits).
  */
 
-import type { ScriptDocument, ScriptMeta, StoragePlugin, StorageStatus } from '../plugins/types';
+import type {
+  ScriptDocument,
+  ScriptMeta,
+  ScriptVersion,
+  StoragePlugin,
+  StorageStatus,
+} from '../plugins/types';
 import { ensureBuiltins } from '../plugins/bootstrap';
 import { getActiveStorage, getActiveStorageId } from '../plugins/active';
+import { metaFromScriptContent } from '../indicators/script-meta';
 import { getStorage } from './catalog';
 import { localStoragePlugin } from './local';
 import { appendLog } from '../store';
@@ -64,16 +71,23 @@ export async function writeScript(
   doc: Omit<ScriptDocument, 'updatedAt' | 'revision'> &
     Partial<Pick<ScriptDocument, 'updatedAt' | 'revision' | 'createdAt'>>,
 ): Promise<ScriptMeta> {
+  const content = doc.content ?? '';
+  const derived = metaFromScriptContent(content, {
+    scriptKind: doc.scriptKind,
+    pineVersion: doc.pineVersion,
+  });
   const full: ScriptDocument = {
     id: doc.id || `s_${Date.now().toString(36)}`,
     name: doc.name || 'Untitled',
     description: doc.description,
     path: doc.path,
-    content: doc.content ?? '',
+    content,
     updatedAt: doc.updatedAt || Date.now(),
     createdAt: doc.createdAt,
     revision: doc.revision,
     tags: doc.tags,
+    scriptKind: derived.scriptKind,
+    pineVersion: derived.pineVersion,
   };
   const meta = await requireActive().write(full);
   appendLog('ok', `Saved "${meta.name}" → ${getActiveStorageId()}`, 'library');
@@ -127,6 +141,65 @@ export async function getStorageStatus(): Promise<StorageStatus> {
 /** Active storage plugin instance (or local fallback). */
 export function getActiveStoragePlugin(): StoragePlugin {
   return requireActive();
+}
+
+/** True when the active storage can list/restore git commit history. */
+export function supportsScriptVersioning(): boolean {
+  const p = requireActive();
+  return typeof p.listVersions === 'function' && typeof p.readAtRevision === 'function';
+}
+
+/**
+ * List git commit history for a library script (newest first).
+ * Throws when the active backend does not implement versioning.
+ */
+export async function listScriptVersions(
+  id: string,
+  opts?: { limit?: number },
+): Promise<ScriptVersion[]> {
+  const p = requireActive();
+  if (typeof p.listVersions !== 'function') {
+    throw new Error('Script version history requires Git storage (GitHub / GitLab)');
+  }
+  return p.listVersions(id, { limit: opts?.limit });
+}
+
+/**
+ * Read a library script body at a historical commit SHA.
+ * Does not modify the remote tip — use {@link writeScript} to restore.
+ */
+export async function readScriptVersion(id: string, rev: string): Promise<ScriptDocument> {
+  const p = requireActive();
+  if (typeof p.readAtRevision !== 'function') {
+    throw new Error('Script version history requires Git storage (GitHub / GitLab)');
+  }
+  return p.readAtRevision(id, rev);
+}
+
+/**
+ * Restore a historical revision as the current library tip (new commit on git).
+ * Loads the content at `rev` and writes it back with an optional note in description.
+ */
+export async function restoreScriptVersion(
+  id: string,
+  rev: string,
+  opts?: { name?: string },
+): Promise<ScriptMeta> {
+  const doc = await readScriptVersion(id, rev);
+  const short = rev.slice(0, 7);
+  const meta = await writeScript({
+    id: doc.id,
+    name: opts?.name || doc.name,
+    description: doc.description,
+    path: doc.path,
+    content: doc.content,
+    createdAt: doc.createdAt,
+    tags: doc.tags,
+    scriptKind: doc.scriptKind,
+    pineVersion: doc.pineVersion,
+  });
+  appendLog('ok', `Restored "${meta.name}" from ${short}`, 'library');
+  return meta;
 }
 
 /** Export all scripts from active storage as JSON-friendly array. */

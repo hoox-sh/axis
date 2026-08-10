@@ -33,7 +33,7 @@
  */
 
 import { Component, For, Show, createSignal, createEffect } from 'solid-js';
-import type { ScriptMeta } from '../plugins/types';
+import type { ScriptMeta, ScriptVersion } from '../plugins/types';
 import {
   listScripts,
   readScript,
@@ -42,6 +42,10 @@ import {
   exportLibraryJson,
   importLibraryJson,
   getStorageStatus,
+  supportsScriptVersioning,
+  listScriptVersions,
+  readScriptVersion,
+  restoreScriptVersion,
 } from '../storage/service';
 import { importPyneFiles, isPyneFileName } from '../storage/import-pyne-files';
 import { listStorages } from '../storage/catalog';
@@ -65,9 +69,337 @@ import {
   startDeviceFlow,
   waitForDeviceToken,
 } from '../storage/git-oauth';
+import {
+  formatScriptUpdatedAt,
+  scriptKindLabel,
+  scriptKindShort,
+  type ScriptKind,
+} from '../indicators/script-meta';
 import { Icons } from './icons';
 import { HooxLoader } from './HooxLoader';
 import { FloatableShell } from './panels/FloatableShell';
+
+/** Kind chip colors for library cards. */
+function kindChipClass(kind: ScriptKind): string {
+  switch (kind) {
+    case 'strategy':
+      return 'border-accent-2/45 text-accent-2 bg-accent-2/10';
+    case 'library':
+      return 'border-border text-text-dim bg-bg/50';
+    case 'indicator':
+      return 'border-accent/45 text-accent bg-accent/10';
+    default:
+      return 'border-border/50 text-text-faint bg-bg/30';
+  }
+}
+
+function shortRev(rev?: string): string {
+  if (!rev) return '';
+  // Blob/file shas and commit ids — show 7 chars when long enough
+  return rev.length > 10 ? rev.slice(0, 7) : rev;
+}
+
+/** One library row — name, kind, Pine version, last updated, optional git history. */
+const LibraryScriptCard: Component<{
+  item: ScriptMeta;
+  busy?: boolean;
+  /** Git storage active — show commit history controls. */
+  versioning?: boolean;
+  onLoad: () => void;
+  onDelete: () => void;
+  /** Load a historical revision into the editor (does not write remote). */
+  onLoadVersion?: (doc: { content: string; name: string; libraryId: string }) => void;
+  /** After restore (new tip commit) — refresh list / optional editor reload. */
+  onRestored?: (meta: ScriptMeta) => void;
+}> = (props) => {
+  const [historyOpen, setHistoryOpen] = createSignal(false);
+  const [historyBusy, setHistoryBusy] = createSignal(false);
+  const [historyErr, setHistoryErr] = createSignal('');
+  const [versions, setVersions] = createSignal<ScriptVersion[]>([]);
+  const [actionSha, setActionSha] = createSignal('');
+
+  const kind = (): ScriptKind =>
+    (props.item.scriptKind as ScriptKind) || 'unknown';
+  const updatedAbs = () =>
+    props.item.updatedAt ? new Date(props.item.updatedAt).toLocaleString() : '';
+  const updatedRel = () => formatScriptUpdatedAt(props.item.updatedAt);
+  const versionLabel = () =>
+    props.item.pineVersion ? `v${props.item.pineVersion}` : '';
+  const revLabel = () => shortRev(props.item.revision);
+
+  const loadHistory = async () => {
+    if (!props.versioning) return;
+    setHistoryBusy(true);
+    setHistoryErr('');
+    try {
+      const list = await listScriptVersions(props.item.id, { limit: 40 });
+      setVersions(list);
+    } catch (e: unknown) {
+      setHistoryErr(e instanceof Error ? e.message : String(e));
+      setVersions([]);
+    } finally {
+      setHistoryBusy(false);
+    }
+  };
+
+  const toggleHistory = () => {
+    const next = !historyOpen();
+    setHistoryOpen(next);
+    if (next && versions().length === 0 && !historyErr()) {
+      void loadHistory();
+    }
+  };
+
+  const onLoadAt = async (v: ScriptVersion) => {
+    if (!props.onLoadVersion) return;
+    setActionSha(v.sha);
+    setHistoryErr('');
+    try {
+      const doc = await readScriptVersion(props.item.id, v.sha);
+      props.onLoadVersion({
+        content: doc.content,
+        name: doc.name,
+        libraryId: doc.id,
+      });
+      setStatus('ready', `Loaded ${doc.name} @ ${v.shortSha} (not pushed)`);
+      appendLog(
+        'info',
+        `Loaded "${doc.name}" at ${v.shortSha} into editor`,
+        'library',
+      );
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setHistoryErr(msg);
+      setStatus('error', msg);
+    } finally {
+      setActionSha('');
+    }
+  };
+
+  const onRestore = async (v: ScriptVersion) => {
+    if (
+      !window.confirm(
+        `Restore "${props.item.name}" to commit ${v.shortSha}?\n\n` +
+          `This creates a new commit on the current branch with that content.`,
+      )
+    ) {
+      return;
+    }
+    setActionSha(v.sha);
+    setHistoryErr('');
+    try {
+      const meta = await restoreScriptVersion(props.item.id, v.sha);
+      setStatus('ready', `Restored ${meta.name} from ${v.shortSha}`);
+      props.onRestored?.(meta);
+      await loadHistory();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setHistoryErr(msg);
+      setStatus('error', msg);
+    } finally {
+      setActionSha('');
+    }
+  };
+
+  return (
+    <li
+      class="flex flex-col gap-1 border-2 border-border bg-bg-elev px-2 py-1.5 rounded-[var(--radius-chip)]"
+      data-testid="axis-library-script-card"
+      data-script-kind={kind()}
+      data-pine-version={props.item.pineVersion || undefined}
+    >
+      <div class="flex items-start gap-2">
+        <div class="flex-1 min-w-0">
+          <div
+            class="text-text font-medium truncate text-[12px]"
+            title={props.item.name}
+          >
+            {props.item.name}
+          </div>
+          <div
+            class="flex flex-wrap items-center gap-1 mt-1"
+            data-testid="axis-library-script-meta"
+          >
+            <span
+              class={`inline-flex items-center px-1 py-px border font-mono text-[9px] uppercase tracking-wide rounded-[var(--radius-chip)] ${kindChipClass(kind())}`}
+              title={
+                kind() === 'strategy'
+                  ? 'Pine strategy()'
+                  : kind() === 'library'
+                    ? 'Pine library()'
+                    : kind() === 'indicator'
+                      ? 'Pine indicator()'
+                      : 'Script kind not detected'
+              }
+              data-testid="axis-library-kind"
+            >
+              {scriptKindShort(kind())}
+              <span class="sr-only"> {scriptKindLabel(kind())}</span>
+            </span>
+            <Show when={versionLabel()}>
+              <span
+                class="inline-flex items-center px-1 py-px border border-border/50 font-mono text-[9px] text-text-dim rounded-[var(--radius-chip)]"
+                title={`Pine //@version=${props.item.pineVersion}`}
+                data-testid="axis-library-version"
+              >
+                {versionLabel()}
+              </span>
+            </Show>
+            <Show when={revLabel()}>
+              <span
+                class="inline-flex items-center px-1 py-px border border-border/40 font-mono text-[9px] text-text-faint rounded-[var(--radius-chip)]"
+                title={`Git revision ${props.item.revision}`}
+                data-testid="axis-library-git-rev"
+              >
+                {revLabel()}
+              </span>
+            </Show>
+            <Show when={updatedRel()}>
+              <span
+                class="font-mono text-[9px] text-text-faint truncate"
+                title={updatedAbs() ? `Last updated ${updatedAbs()}` : 'Last updated'}
+                data-testid="axis-library-updated"
+              >
+                · {updatedRel()}
+              </span>
+            </Show>
+          </div>
+          <Show when={props.item.description || props.item.path}>
+            <div
+              class="text-text-faint font-mono text-[9px] truncate mt-0.5"
+              title={props.item.description || props.item.path || props.item.id}
+            >
+              {props.item.description || props.item.path}
+            </div>
+          </Show>
+        </div>
+        <Show when={props.versioning}>
+          <button
+            type="button"
+            class={`sc-btn sc-btn-ghost sc-btn-icon px-1.5 flex-shrink-0 ${historyOpen() ? 'is-active' : ''}`}
+            title="Git commit history"
+            aria-pressed={historyOpen()}
+            aria-label="Toggle git history"
+            disabled={props.busy}
+            onClick={toggleHistory}
+            data-testid="axis-library-history"
+          >
+            <Icons.clock size={13} />
+          </button>
+        </Show>
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost px-1.5 text-[10px] flex-shrink-0"
+          title="Load into editor"
+          disabled={props.busy}
+          onClick={() => props.onLoad()}
+          data-testid="axis-library-load"
+        >
+          Load
+        </button>
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost px-1.5 flex-shrink-0"
+          title="Delete"
+          disabled={props.busy}
+          onClick={() => props.onDelete()}
+          data-testid="axis-library-delete"
+        >
+          <Icons.x size={13} />
+        </button>
+      </div>
+
+      <Show when={historyOpen() && props.versioning}>
+        <div
+          class="mt-1 border-t border-border/50 pt-1.5 space-y-1"
+          data-testid="axis-library-history-panel"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-[9px] uppercase tracking-wider text-text-dim">
+              Git history
+            </span>
+            <button
+              type="button"
+              class="sc-btn sc-btn-ghost text-[9px] px-1 py-0.5 inline-flex items-center gap-1"
+              disabled={historyBusy()}
+              onClick={() => void loadHistory()}
+              title="Refresh commit list"
+            >
+              {historyBusy() ? <HooxLoader size="xs" /> : <Icons.refresh size={11} />}
+              Refresh
+            </button>
+          </div>
+          <Show when={historyErr()}>
+            <p class="text-red font-mono text-[9px]">{historyErr()}</p>
+          </Show>
+          <Show
+            when={!historyBusy() && versions().length === 0 && !historyErr()}
+          >
+            <p class="text-text-faint text-[9px]">No commits found for this file.</p>
+          </Show>
+          <Show when={historyBusy() && versions().length === 0}>
+            <div class="flex items-center gap-1.5 text-text-faint text-[9px] py-1">
+              <HooxLoader size="xs" /> Loading commits…
+            </div>
+          </Show>
+          <ul class="flex flex-col gap-0.5 max-h-44 overflow-auto">
+            <For each={versions()}>
+              {(v) => (
+                <li
+                  class="flex items-start gap-1.5 px-1 py-1 rounded-[var(--radius-chip)] hover:bg-bg/60"
+                  data-testid="axis-library-history-row"
+                  data-sha={v.sha}
+                >
+                  <div class="flex-1 min-w-0">
+                    <div class="flex flex-wrap items-center gap-1 font-mono text-[9px]">
+                      <span class="text-accent" title={v.sha}>
+                        {v.shortSha}
+                      </span>
+                      <span class="text-text-faint" title={new Date(v.committedAt).toLocaleString()}>
+                        {formatScriptUpdatedAt(v.committedAt)}
+                      </span>
+                      <Show when={v.author}>
+                        <span class="text-text-faint truncate max-w-[8rem]" title={v.author}>
+                          · {v.author}
+                        </span>
+                      </Show>
+                    </div>
+                    <div
+                      class="text-[10px] text-text-dim truncate"
+                      title={v.message}
+                    >
+                      {v.message}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-ghost px-1 py-0.5 text-[9px] flex-shrink-0"
+                    title="Load this revision into the editor (does not push)"
+                    disabled={!!actionSha() || props.busy}
+                    onClick={() => void onLoadAt(v)}
+                    data-testid="axis-library-history-load"
+                  >
+                    {actionSha() === v.sha ? '…' : 'Open'}
+                  </button>
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-ghost px-1 py-0.5 text-[9px] flex-shrink-0"
+                    title="Restore as new tip commit on the branch"
+                    disabled={!!actionSha() || props.busy}
+                    onClick={() => void onRestore(v)}
+                    data-testid="axis-library-history-restore"
+                  >
+                    Restore
+                  </button>
+                </li>
+              )}
+            </For>
+          </ul>
+        </div>
+      </Show>
+    </li>
+  );
+};
 
 function cloudCfg(): { endpoint: string; apiKey: string } {
   const pc = store.pluginsConfig || {};
@@ -98,7 +430,8 @@ function saveGitCfg(cfg: GitConfig) {
 /** Optional editor doc bridge and load callback. */
 export interface ScriptLibraryPanelProps {
   getDoc?: () => string;
-  setDoc?: (doc: string, name?: string) => void;
+  /** Load into editor; optional libraryId binds the tab for git push. */
+  setDoc?: (doc: string, name?: string, libraryId?: string) => void;
   onLoaded?: (meta: ScriptMeta, content: string) => void;
 }
 
@@ -241,7 +574,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
     setError('');
     try {
       const doc = await readScript(id);
-      props.setDoc?.(doc.content, doc.name);
+      props.setDoc?.(doc.content, doc.name, doc.id);
       props.onLoaded?.(doc, doc.content);
       setStatus('ready', `Loaded "${doc.name}"`);
       appendLog('ok', `Loaded library script ${doc.name}`, 'library');
@@ -251,6 +584,8 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
       setBusy(false);
     }
   };
+
+  const versioning = () => isGit() && supportsScriptVersioning();
 
   const onDelete = async (id: string, scriptName: string) => {
     if (!confirm(`Delete "${scriptName}"?`)) return;
@@ -762,33 +1097,35 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
           when={items().length > 0}
           fallback={<div class="text-text-faint p-2">No saved scripts yet.</div>}
         >
-          <ul class="flex flex-col gap-1 max-h-[min(480px,50vh)] overflow-auto">
+          <ul
+            class="flex flex-col gap-1 max-h-[min(480px,50vh)] overflow-auto"
+            data-testid="axis-library-script-list"
+          >
             <For each={items()}>
               {(item) => (
-                <li class="flex items-center gap-2 border-2 border-border bg-bg-elev px-2 py-1.5">
-                  <div class="flex-1 min-w-0">
-                    <div class="text-text font-medium truncate">{item.name}</div>
-                    <div class="text-text-faint font-mono text-[9px] truncate">
-                      {item.description || item.path || item.id}
-                      {' · '}
-                      {item.updatedAt ? new Date(item.updatedAt).toLocaleString() : ''}
-                    </div>
-                  </div>
-                  <button
-                    class="sc-btn sc-btn-ghost px-1.5 text-[10px]"
-                    title="Load into editor"
-                    onClick={() => void onLoad(item.id)}
-                  >
-                    Load
-                  </button>
-                  <button
-                    class="sc-btn sc-btn-ghost px-1.5"
-                    title="Delete"
-                    onClick={() => void onDelete(item.id, item.name)}
-                  >
-                    <Icons.x size={13} />
-                  </button>
-                </li>
+                <LibraryScriptCard
+                  item={item}
+                  busy={busy()}
+                  versioning={versioning()}
+                  onLoad={() => void onLoad(item.id)}
+                  onDelete={() => void onDelete(item.id, item.name)}
+                  onLoadVersion={(payload) => {
+                    props.setDoc?.(
+                      payload.content,
+                      payload.name,
+                      payload.libraryId,
+                    );
+                    props.onLoaded?.(
+                      {
+                        id: payload.libraryId,
+                        name: payload.name,
+                        updatedAt: Date.now(),
+                      },
+                      payload.content,
+                    );
+                  }}
+                  onRestored={() => void refresh()}
+                />
               )}
             </For>
           </ul>

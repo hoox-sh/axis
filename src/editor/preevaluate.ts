@@ -53,29 +53,170 @@ export const PREEVAL_DEBOUNCE_MS = 350;
 // ── Builtin member index (from pyne-builtins.json + runtime constants) ───────
 
 /**
- * Runtime strategy constants that may be missing from the LSP metadata catalog
- * (qty / OCA / commission / direction). Kept in sync with pyne
- * `strategy_constants.py` so pre-eval never false-flags real Pine.
+ * Runtime / style constants missing from the LSP metadata catalog
+ * (`pyne-builtins.json` only ships callables + a few constants).
+ *
+ * Sources of truth in pyne:
+ * - `ast/evaluator/base.py` `_MATH_CONSTANTS` (shape/location/size/… seeds)
+ * - `compiler/compiler.py` `_STYLE_NS` / `_ENUM_NS` (plot.style_*, line.style_*, …)
+ * - strategy qty / OCA / commission / direction
+ *
+ * Without these, pre-eval false-flags real Pine like `plot.style_stepline`.
  */
 export const EXTRA_KNOWN_BUILTIN_PATHS: readonly string[] = [
-  // default_qty_type (strategy(..., default_qty_type=...))
+  // ── strategy qty / direction / OCA / commission ──────────────────────────
   'strategy.fixed',
   'strategy.percent_of_equity',
   'strategy.cash', // dual: free-cash series + qty-type sentinel
-  // direction
   'strategy.long',
   'strategy.short',
   'strategy.direction.long',
   'strategy.direction.short',
   'strategy.direction.all',
-  // OCA
   'strategy.oca.none',
   'strategy.oca.cancel',
   'strategy.oca.reduce',
-  // commission_type
   'strategy.commission.percent',
   'strategy.commission.cash_per_order',
   'strategy.commission.cash_per_contract',
+
+  // ── plot.style_* (plot(..., style=...)) ──────────────────────────────────
+  'plot.style_line',
+  'plot.style_linebr',
+  'plot.style_stepline',
+  'plot.style_steplinebr',
+  'plot.style_stepline_diamond',
+  'plot.style_histogram',
+  'plot.style_columns',
+  'plot.style_cross',
+  'plot.style_area',
+  'plot.style_areabr',
+  'plot.style_circles',
+
+  // ── hline.style_* ────────────────────────────────────────────────────────
+  'hline.style_solid',
+  'hline.style_dashed',
+  'hline.style_dotted',
+
+  // ── line.style_* ─────────────────────────────────────────────────────────
+  'line.style_solid',
+  'line.style_dashed',
+  'line.style_dotted',
+  'line.style_arrow_left',
+  'line.style_arrow_right',
+  'line.style_arrow_both',
+
+  // ── label.style_* ────────────────────────────────────────────────────────
+  'label.style_none',
+  'label.style_xcross',
+  'label.style_cross',
+  'label.style_triangleup',
+  'label.style_triangledown',
+  'label.style_flag',
+  'label.style_circle',
+  'label.style_arrowup',
+  'label.style_arrowdown',
+  'label.style_label_up',
+  'label.style_label_down',
+  'label.style_label_left',
+  'label.style_label_right',
+  'label.style_label_lower_left',
+  'label.style_label_lower_right',
+  'label.style_label_upper_left',
+  'label.style_label_upper_right',
+  'label.style_label_center',
+  'label.style_square',
+  'label.style_diamond',
+  'label.style_text_outline',
+
+  // ── plotshape / plotchar enums ───────────────────────────────────────────
+  'shape.arrowup',
+  'shape.arrowdown',
+  'shape.circle',
+  'shape.cross',
+  'shape.diamond',
+  'shape.flag',
+  'shape.labelup',
+  'shape.labeldown',
+  'shape.square',
+  'shape.triangledown',
+  'shape.triangleup',
+  'shape.xcross',
+  'location.abovebar',
+  'location.belowbar',
+  'location.top',
+  'location.bottom',
+  'location.absolute',
+  'size.auto',
+  'size.tiny',
+  'size.small',
+  'size.normal',
+  'size.large',
+  'size.huge',
+
+  // ── drawing / table placement ────────────────────────────────────────────
+  'xloc.bar_index',
+  'xloc.bar_time',
+  'yloc.price',
+  'yloc.abovebar',
+  'yloc.belowbar',
+  'extend.none',
+  'extend.left',
+  'extend.right',
+  'extend.both',
+  'display.none',
+  'display.all',
+  'display.data_window',
+  'display.price_scale',
+  'display.status_line',
+  'position.top_left',
+  'position.top_center',
+  'position.top_right',
+  'position.middle_left',
+  'position.middle_center',
+  'position.middle_right',
+  'position.bottom_left',
+  'position.bottom_center',
+  'position.bottom_right',
+
+  // ── format / order / text / alert / math constants ───────────────────────
+  'format.mintick',
+  'format.percent',
+  'format.volume',
+  'format.price',
+  'order.ascending',
+  'order.descending',
+  'text.formatting.none',
+  'text.formatting.bold',
+  'text.formatting.italic',
+  'text.formatting.bold_italic',
+  // v5 aliases sometimes used in scripts / docs
+  'text.format_none',
+  'text.format_bold',
+  'text.format_italic',
+  'alert.freq_once_per_bar',
+  'alert.freq_once_per_bar_close',
+  'alert.freq_all',
+  'math.pi',
+  'math.e',
+  'math.phi',
+  'math.rphi',
+  'math.isnan',
+  'math.isfinite',
+
+  // ── barstate / session / scale (common enum-style constants) ─────────────
+  'barstate.islast',
+  'barstate.isfirst',
+  'barstate.ishistory',
+  'barstate.isrealtime',
+  'barstate.isnew',
+  'barstate.isconfirmed',
+  'barstate.islastconfirmedhistory',
+  'session.regular',
+  'session.extended',
+  'scale.right',
+  'scale.left',
+  'scale.none',
 ];
 
 const BUILTIN_NAMES = new Set([

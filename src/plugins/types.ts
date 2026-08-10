@@ -246,10 +246,40 @@ export interface ScriptMeta {
   createdAt?: number;
   revision?: string;
   tags?: string[];
+  /**
+   * Pine declaration kind (`indicator` / `strategy` / `library`).
+   * Derived from source on write/list when content is available; persisted in
+   * local + git index for cards without loading the full body.
+   */
+  scriptKind?: 'indicator' | 'strategy' | 'library' | 'unknown';
+  /**
+   * Pine language version from `//@version=N` (e.g. `"5"`).
+   * Optional — omitted when the source has no version pragma.
+   */
+  pineVersion?: string;
 }
 
 export interface ScriptDocument extends ScriptMeta {
   content: string;
+}
+
+/**
+ * One commit in a script’s git history (GitHub/GitLab storage only).
+ * `sha` is the commit id used with {@link StoragePlugin.readAtRevision}.
+ */
+export interface ScriptVersion {
+  /** Full commit SHA / GitLab commit id. */
+  sha: string;
+  /** Short display SHA (7 chars when available). */
+  shortSha: string;
+  /** Commit subject / first line of message. */
+  message: string;
+  /** Author display name when known. */
+  author?: string;
+  /** Commit author or committer ISO time (epoch ms). */
+  committedAt: number;
+  /** Optional web URL on the forge. */
+  url?: string;
 }
 
 export interface SyncResult {
@@ -278,6 +308,23 @@ export interface StoragePlugin extends PluginBase {
   loadDraft?(config?: Record<string, unknown>): Promise<{ content: string; name?: string } | null>;
   sync?(direction: 'push' | 'pull' | 'both', config?: Record<string, unknown>): Promise<SyncResult>;
   getStatus?(config?: Record<string, unknown>): Promise<StorageStatus>;
+  /**
+   * Git commit history for a script file (newest first).
+   * Optional — only git backends implement this.
+   */
+  listVersions?(
+    id: string,
+    opts?: { limit?: number; config?: Record<string, unknown> },
+  ): Promise<ScriptVersion[]>;
+  /**
+   * Read script content at a historical commit SHA.
+   * Optional — only git backends implement this.
+   */
+  readAtRevision?(
+    id: string,
+    rev: string,
+    config?: Record<string, unknown>,
+  ): Promise<ScriptDocument>;
 }
 
 // --- Dataset (on-chain / alternate series) ---

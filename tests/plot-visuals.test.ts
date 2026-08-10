@@ -14,10 +14,19 @@ import {
   bgcolorSeriesToHistogramData,
   buildPlotVisuals,
   isActiveColor,
+  isBreakPlotStyle,
+  isOhlcPlotKind,
   isTruthyPlotValue,
   lineSeriesToOverlayData,
+  lineSeriesToOverlayDataWithBreaks,
+  mapPlotStyleToSeriesKind,
   mapShapeLocation,
+  mapShapeSize,
   mapShapeStyle,
+  normalizeLineStyleToken,
+  normalizePlotStyleToken,
+  ohlcSeriesToBarData,
+  parseOhlcCell,
   resolvePlotFillBands,
   shapeSeriesToMarkers,
   splitSeriesByKind,
@@ -100,6 +109,71 @@ describe('shapeSeriesToMarkers', () => {
       color: '#fff',
     });
     expect(markers[0]).toMatchObject({ shape: 'circle', text: 'X' });
+    expect(markers[0]!.size).toBeUndefined();
+  });
+
+  it('includes mapped size from meta.size', () => {
+    const markers = shapeSeriesToMarkers([10], [true], {
+      style: 'shape.triangleup',
+      size: 'size.tiny',
+    });
+    expect(markers).toHaveLength(1);
+    expect(markers[0]!.size).toBe(0.6);
+  });
+
+  it('falls back to text_size when size omitted (pyne plotshape)', () => {
+    const markers = shapeSeriesToMarkers([10], [true], {
+      text_size: 'huge',
+    });
+    expect(markers[0]!.size).toBe(1.8);
+  });
+
+  it('prefers size over text_size', () => {
+    const markers = shapeSeriesToMarkers([10], [true], {
+      size: 'small',
+      text_size: 'huge',
+    });
+    expect(markers[0]!.size).toBe(0.8);
+  });
+
+  it('omits size key when auto / unset', () => {
+    const auto = shapeSeriesToMarkers([1], [true], { size: 'size.auto' });
+    expect(auto[0]!.size).toBeUndefined();
+    expect('size' in auto[0]!).toBe(false);
+    const unset = shapeSeriesToMarkers([1], [true], {});
+    expect(unset[0]!.size).toBeUndefined();
+  });
+});
+
+describe('mapShapeSize', () => {
+  it('maps size.* tokens and bare names', () => {
+    expect(mapShapeSize('size.tiny')).toBe(0.6);
+    expect(mapShapeSize('tiny')).toBe(0.6);
+    expect(mapShapeSize('size.small')).toBe(0.8);
+    expect(mapShapeSize('size.normal')).toBe(1);
+    expect(mapShapeSize('size.large')).toBe(1.4);
+    expect(mapShapeSize('size.huge')).toBe(1.8);
+  });
+
+  it('omits auto / null / empty / na', () => {
+    expect(mapShapeSize('size.auto')).toBeUndefined();
+    expect(mapShapeSize(null)).toBeUndefined();
+    expect(mapShapeSize('')).toBeUndefined();
+    expect(mapShapeSize('na')).toBeUndefined();
+  });
+
+  it('uses small numerics as LWC size; scales Pine point sizes', () => {
+    expect(mapShapeSize(1)).toBe(1);
+    expect(mapShapeSize(0.6)).toBe(0.6);
+    expect(mapShapeSize(8)).toBeCloseTo(8 / 12);
+    expect(mapShapeSize(12)).toBe(1);
+    expect(mapShapeSize('12')).toBe(1);
+  });
+
+  it('rejects non-positive / non-finite numbers', () => {
+    expect(mapShapeSize(0)).toBeUndefined();
+    expect(mapShapeSize(-1)).toBeUndefined();
+    expect(mapShapeSize(NaN)).toBeUndefined();
   });
 });
 
@@ -107,6 +181,131 @@ describe('mapShapeStyle / mapShapeLocation', () => {
   it('maps triangle down / abovebar', () => {
     expect(mapShapeStyle('shape.triangledown')).toBe('arrowDown');
     expect(mapShapeLocation('location.abovebar')).toBe('aboveBar');
+  });
+});
+
+describe('mapPlotStyleToSeriesKind', () => {
+  it('normalizes plot.style_* tokens', () => {
+    expect(normalizePlotStyleToken('plot.style_stepline')).toBe('stepline');
+    expect(normalizePlotStyleToken('style_columns')).toBe('columns');
+    expect(normalizePlotStyleToken('histogram')).toBe('histogram');
+  });
+
+  it('maps Pine plot styles to LWC series kinds', () => {
+    expect(mapPlotStyleToSeriesKind('plot.style_line')).toBe('line');
+    expect(mapPlotStyleToSeriesKind('plot.style_stepline')).toBe('stepline');
+    expect(mapPlotStyleToSeriesKind('plot.style_steplinebr')).toBe('stepline');
+    expect(mapPlotStyleToSeriesKind('plot.style_histogram')).toBe('histogram');
+    expect(mapPlotStyleToSeriesKind('plot.style_columns')).toBe('histogram');
+    expect(mapPlotStyleToSeriesKind('plot.style_area')).toBe('area');
+    expect(mapPlotStyleToSeriesKind('plot.style_areabr')).toBe('area');
+    expect(mapPlotStyleToSeriesKind('plot.style_circles')).toBe('circles');
+    expect(mapPlotStyleToSeriesKind('plot.style_cross')).toBe('circles');
+    expect(mapPlotStyleToSeriesKind(null)).toBe('line');
+  });
+
+  const PLOT_STYLE_TO_KIND: Array<{
+    token: string;
+    bare: string;
+    kind: ReturnType<typeof mapPlotStyleToSeriesKind>;
+  }> = [
+    { token: 'plot.style_line', bare: 'line', kind: 'line' },
+    { token: 'plot.style_linebr', bare: 'linebr', kind: 'line' },
+    { token: 'plot.style_stepline', bare: 'stepline', kind: 'stepline' },
+    { token: 'plot.style_steplinebr', bare: 'steplinebr', kind: 'stepline' },
+    { token: 'plot.style_stepline_diamond', bare: 'stepline_diamond', kind: 'stepline' },
+    { token: 'plot.style_histogram', bare: 'histogram', kind: 'histogram' },
+    { token: 'plot.style_cross', bare: 'cross', kind: 'circles' },
+    { token: 'plot.style_area', bare: 'area', kind: 'area' },
+    { token: 'plot.style_areabr', bare: 'areabr', kind: 'area' },
+    { token: 'plot.style_columns', bare: 'columns', kind: 'histogram' },
+    { token: 'plot.style_circles', bare: 'circles', kind: 'circles' },
+  ];
+
+  it('maps every documented plot.style_* token to a series kind', () => {
+    for (const { token, bare, kind } of PLOT_STYLE_TO_KIND) {
+      expect(normalizePlotStyleToken(token)).toBe(bare);
+      expect(normalizePlotStyleToken(`style_${bare}`)).toBe(bare);
+      expect(normalizePlotStyleToken(bare)).toBe(bare);
+      expect(mapPlotStyleToSeriesKind(token)).toBe(kind);
+      expect(mapPlotStyleToSeriesKind(`style_${bare}`)).toBe(kind);
+      expect(mapPlotStyleToSeriesKind(bare)).toBe(kind);
+    }
+  });
+
+  it('defaults unknown / null / empty style to line', () => {
+    expect(mapPlotStyleToSeriesKind(null)).toBe('line');
+    expect(mapPlotStyleToSeriesKind('')).toBe('line');
+    expect(mapPlotStyleToSeriesKind('plot.style_not_a_real_style')).toBe('line');
+  });
+});
+
+describe('normalizeLineStyleToken', () => {
+  it('maps plot.linestyle_* and bare tokens', () => {
+    expect(normalizeLineStyleToken('plot.linestyle_solid')).toBe('solid');
+    expect(normalizeLineStyleToken('plot.linestyle_dashed')).toBe('dashed');
+    expect(normalizeLineStyleToken('plot.linestyle_dotted')).toBe('dotted');
+    expect(normalizeLineStyleToken('linestyle_dashed')).toBe('dashed');
+    expect(normalizeLineStyleToken('style_dotted')).toBe('dotted');
+    expect(normalizeLineStyleToken('hline.style_dashed')).toBe('dashed');
+    expect(normalizeLineStyleToken('dashed')).toBe('dashed');
+    expect(normalizeLineStyleToken(null)).toBe('solid');
+    expect(normalizeLineStyleToken('')).toBe('solid');
+    expect(normalizeLineStyleToken('unknown')).toBe('solid');
+  });
+});
+
+describe('isBreakPlotStyle', () => {
+  it('true only for linebr / areabr / steplinebr', () => {
+    expect(isBreakPlotStyle('plot.style_linebr')).toBe(true);
+    expect(isBreakPlotStyle('plot.style_areabr')).toBe(true);
+    expect(isBreakPlotStyle('plot.style_steplinebr')).toBe(true);
+    expect(isBreakPlotStyle('plot.style_line')).toBe(false);
+    expect(isBreakPlotStyle(null)).toBe(false);
+  });
+});
+
+describe('buildPlotVisuals style / linestyle forward', () => {
+  it('forwards style and linestyle from plot_meta onto line specs', () => {
+    const times = [1, 2, 3];
+    const series = {
+      macd: [1, 2, 3],
+      hist: [0.5, -0.2, 0.1],
+    };
+    const meta = {
+      macd: {
+        kind: 'plot' as const,
+        color: '#6366f1',
+        style: 'plot.style_stepline',
+        linestyle: 'line.style_dashed',
+        linewidth: 2,
+      },
+      hist: {
+        kind: 'plot' as const,
+        color: '#34d399',
+        style: 'plot.style_columns',
+      },
+    };
+    const visuals = buildPlotVisuals(series, meta, times);
+    expect(visuals.lines).toHaveLength(2);
+    const byName = Object.fromEntries(visuals.lines.map((l) => [l.name, l]));
+    expect(byName['macd']!.style).toBe('plot.style_stepline');
+    expect(byName['macd']!.linestyle).toBe('line.style_dashed');
+    expect(byName['macd']!.linewidth).toBe(2);
+    expect(byName['hist']!.style).toBe('plot.style_columns');
+    expect(mapPlotStyleToSeriesKind(byName['macd']!.style)).toBe('stepline');
+    expect(mapPlotStyleToSeriesKind(byName['hist']!.style)).toBe('histogram');
+  });
+
+  it('forwards null style when meta omits style (defaults to line kind)', () => {
+    const visuals = buildPlotVisuals(
+      { close: [10, 11] },
+      { close: { kind: 'plot', color: '#fff' } },
+      [1, 2],
+    );
+    expect(visuals.lines).toHaveLength(1);
+    expect(visuals.lines[0]!.style).toBeNull();
+    expect(mapPlotStyleToSeriesKind(visuals.lines[0]!.style)).toBe('line');
   });
 });
 
@@ -131,6 +330,21 @@ describe('lineSeriesToOverlayData whitespace', () => {
   it('pads to full times length when series is shorter', () => {
     const data = lineSeriesToOverlayData([1, 2, 3], [9]);
     expect(data).toEqual([{ time: 1, value: 9 }, { time: 2 }, { time: 3 }]);
+  });
+
+  it('mid-series na gaps stay as whitespace (enough for style_*br line breaks)', () => {
+    const times = [1, 2, 3, 4, 5];
+    const values = [10, null, null, 20, 30];
+    const data = lineSeriesToOverlayData(times, values);
+    expect(data).toEqual([
+      { time: 1, value: 10 },
+      { time: 2 },
+      { time: 3 },
+      { time: 4, value: 20 },
+      { time: 5, value: 30 },
+    ]);
+    expect(lineSeriesToOverlayDataWithBreaks(times, values, { breaks: true })).toEqual(data);
+    expect(isBreakPlotStyle('plot.style_linebr')).toBe(true);
   });
 });
 
@@ -257,5 +471,159 @@ describe('splitSeriesByKind + buildPlotVisuals', () => {
     const visuals = buildPlotVisuals(series, meta, [1, 2, 3, 4]);
     expect(visuals.fills).toHaveLength(1);
     expect(visuals.fills[0]!.name).toBe('band');
+  });
+});
+
+describe('plotbar / plotcandle OHLC', () => {
+  it('isOhlcPlotKind recognizes plotbar and plotcandle', () => {
+    expect(isOhlcPlotKind('plotbar')).toBe(true);
+    expect(isOhlcPlotKind('plotcandle')).toBe(true);
+    expect(isOhlcPlotKind('PlotBar')).toBe(true);
+    expect(isOhlcPlotKind('plot')).toBe(false);
+  });
+
+  it('parseOhlcCell accepts objects, arrays, and scalar close', () => {
+    expect(parseOhlcCell({ open: 1, high: 3, low: 0.5, close: 2 })).toEqual({
+      open: 1,
+      high: 3,
+      low: 0.5,
+      close: 2,
+    });
+    expect(parseOhlcCell({ o: 1, h: 2, l: 0.5, c: 1.5, color: '#f00' })).toEqual({
+      open: 1,
+      high: 2,
+      low: 0.5,
+      close: 1.5,
+      color: '#f00',
+    });
+    expect(parseOhlcCell([10, 12, 9, 11])).toEqual({
+      open: 10,
+      high: 12,
+      low: 9,
+      close: 11,
+    });
+    expect(parseOhlcCell(42)).toEqual({ open: 42, high: 42, low: 42, close: 42 });
+    expect(parseOhlcCell(null)).toBeNull();
+    expect(parseOhlcCell({ open: 1, high: null, low: 0, close: 1 })).toBeNull();
+  });
+
+  it('ohlcSeriesToBarData: object cells', () => {
+    const times = [100, 200, 300];
+    const values = [
+      { open: 10, high: 12, low: 9, close: 11 },
+      null,
+      { o: 11, h: 14, l: 10, c: 13 },
+    ];
+    const data = ohlcSeriesToBarData(times, values);
+    expect(data).toEqual([
+      { time: 100, open: 10, high: 12, low: 9, close: 11 },
+      { time: 300, open: 11, high: 14, low: 10, close: 13 },
+    ]);
+  });
+
+  it('ohlcSeriesToBarData: length-4 array cells', () => {
+    const times = [1, 2];
+    const values = [
+      [1, 2, 0.5, 1.5],
+      [1.5, 3, 1.5, 2.8],
+    ];
+    const data = ohlcSeriesToBarData(times, values);
+    expect(data).toHaveLength(2);
+    expect(data[0]).toEqual({ time: 1, open: 1, high: 2, low: 0.5, close: 1.5 });
+    expect(data[1]).toEqual({ time: 2, open: 1.5, high: 3, low: 1.5, close: 2.8 });
+  });
+
+  it('ohlcSeriesToBarData: close-only scalar fallback (flat OHLC)', () => {
+    const data = ohlcSeriesToBarData([10, 20, 30], [null, 5, 7.5]);
+    expect(data).toEqual([
+      { time: 20, open: 5, high: 5, low: 5, close: 5 },
+      { time: 30, open: 7.5, high: 7.5, low: 7.5, close: 7.5 },
+    ]);
+  });
+
+  it('ohlcSeriesToBarData: meta-linked sibling series', () => {
+    const times = [1, 2, 3];
+    const series = {
+      myBars: [null, null, null],
+      o: [10, 11, 12],
+      h: [12, 13, 14],
+      l: [9, 10, 11],
+      c: [11, 12, 13],
+    };
+    const meta = {
+      kind: 'plotbar' as const,
+      open: 'o',
+      high: 'h',
+      low: 'l',
+      close: 'c',
+    };
+    const data = ohlcSeriesToBarData(times, series.myBars, series, meta);
+    expect(data).toEqual([
+      { time: 1, open: 10, high: 12, low: 9, close: 11 },
+      { time: 2, open: 11, high: 13, low: 10, close: 12 },
+      { time: 3, open: 12, high: 14, low: 11, close: 13 },
+    ]);
+  });
+
+  it('splitSeriesByKind + buildPlotVisuals route plotbar/plotcandle to ohlc', () => {
+    const times = [1, 2, 3];
+    const series = {
+      bars: [
+        { open: 1, high: 2, low: 0.5, close: 1.5 },
+        { open: 1.5, high: 2.5, low: 1, close: 2 },
+        { open: 2, high: 3, low: 1.5, close: 2.5 },
+      ],
+      candles: [
+        [10, 12, 9, 11],
+        [11, 13, 10, 12],
+        [12, 14, 11, 13],
+      ],
+      line: [1, 2, 3],
+    };
+    const plotMeta = {
+      bars: { kind: 'plotbar' as const, color: '#5ecf8a' },
+      candles: { kind: 'plotcandle' as const, color: '#e85d4c' },
+      line: { kind: 'plot' as const, color: '#939fff' },
+    };
+    const split = splitSeriesByKind(series, plotMeta);
+    expect(split.ohlc.map((e) => e.key).sort()).toEqual(['bars', 'candles']);
+    expect(split.lines.map((l) => l.key)).toEqual(['line']);
+
+    const visuals = buildPlotVisuals(series, plotMeta, times);
+    expect(visuals.ohlc).toHaveLength(2);
+    const byName = Object.fromEntries(visuals.ohlc.map((o) => [o.name, o]));
+    expect(byName.bars!.kind).toBe('plotbar');
+    expect(byName.candles!.kind).toBe('plotcandle');
+    expect(byName.bars!.data).toHaveLength(3);
+    expect(byName.candles!.data[0]).toEqual({
+      time: 1,
+      open: 10,
+      high: 12,
+      low: 9,
+      close: 11,
+    });
+    expect(byName.bars!.color).toBe('#5ecf8a');
+  });
+
+  it('skips OHLC sibling series from line split when meta refs present', () => {
+    const series = {
+      renko: [1, 2, 3],
+      renko_open: [1, 2, 3],
+      renko_high: [2, 3, 4],
+      renko_low: [0.5, 1, 2],
+      renko_close: [1.5, 2.5, 3.5],
+    };
+    const meta = {
+      renko: {
+        kind: 'plotcandle' as const,
+        open: 'renko_open',
+        high: 'renko_high',
+        low: 'renko_low',
+        close: 'renko_close',
+      },
+    };
+    const split = splitSeriesByKind(series, meta);
+    expect(split.ohlc.map((e) => e.key)).toEqual(['renko']);
+    expect(split.lines).toHaveLength(0);
   });
 });

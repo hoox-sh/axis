@@ -22,9 +22,9 @@
  *
  * The engine returns parallel `series` arrays and a `meta.plot_meta` map with
  * `kind` (`plot` | `hline` | `bgcolor` | `fill` | `plotshape` | `plotchar` |
- * `plotarrow`). This module splits and converts those into line data, bgcolor
- * histograms, fill bands (plot1↔plot2), and shape markers for
- * {@link indicators/runner}.
+ * `plotarrow` | `plotbar` | `plotcandle`). This module splits and converts
+ * those into line data, bgcolor histograms, fill bands (plot1↔plot2), OHLC
+ * bar/candle overlays, and shape markers for {@link indicators/runner}.
  *
  * @module results/plot-visuals
  */
@@ -37,6 +37,8 @@ export type PlotKind =
   | 'plotshape'
   | 'plotchar'
   | 'plotarrow'
+  | 'plotbar'
+  | 'plotcandle'
   | string;
 
 export interface PlotMetaEntry {
@@ -51,10 +53,28 @@ export interface PlotMetaEntry {
   text?: string | null;
   char?: string | null;
   price?: number | null;
+  /**
+   * Pine `size.*` for plotshape/plotchar (or bare token / numeric).
+   * Prefer over {@link text_size} when both are present.
+   */
+  size?: string | number | null;
+  /**
+   * pyne often stores plotshape `size=` in `text_size` on plot_meta.
+   * Accepted tokens match {@link size}.
+   */
+  text_size?: string | number | null;
   /** `fill(plot1, plot2, …)` — series title of first plot edge */
   plot1?: string | null;
   /** `fill(plot1, plot2, …)` — series title of second plot edge */
   plot2?: string | null;
+  /**
+   * `plotbar` / `plotcandle` — optional series titles for OHLC components when
+   * the primary series is close-only or a handle (sibling packaging).
+   */
+  open?: string | null;
+  high?: string | null;
+  low?: string | null;
+  close?: string | null;
 }
 
 export type SeriesMap = Record<string, unknown[] | (number | null)[]>;
@@ -65,6 +85,10 @@ export interface LineOverlaySpec {
   data: { time: number; value?: number }[];
   color?: string;
   kind: 'plot' | 'hline' | string;
+  /** Pine `plot.style_*` (optional; chart maps via {@link mapPlotStyleToSeriesKind}) */
+  style?: string | null;
+  linewidth?: number;
+  linestyle?: string | null;
 }
 
 export interface BgcolorBandSpec {
@@ -81,6 +105,8 @@ export interface ShapeMarkerSpec {
   shape: 'arrowUp' | 'arrowDown' | 'circle' | 'square';
   text: string;
   id?: string;
+  /** LWC SeriesMarker relative size (optional; omit = library default ~1) */
+  size?: number;
 }
 
 /** Pine `fill(plot1, plot2, color=…)` band for SVG overlay. */
@@ -95,6 +121,25 @@ export interface PlotFillBandSpec {
   color: string;
   plot1: string;
   plot2: string;
+}
+
+/** One LWC-ready OHLC sample from `plotbar` / `plotcandle`. */
+export interface OhlcBarPoint {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  /** Optional per-bar color (LWC Bar/Candlestick `color`) */
+  color?: string;
+}
+
+/** Chart overlay spec for Pine `plotbar` / `plotcandle`. */
+export interface OhlcOverlaySpec {
+  name: string;
+  kind: 'plotbar' | 'plotcandle';
+  data: OhlcBarPoint[];
+  color?: string;
 }
 
 const DEFAULT_SHAPE_COLOR = '#939fff';
@@ -124,6 +169,12 @@ export function isShapeKind(kind?: string | null): boolean {
   return k === 'plotshape' || k === 'plotchar' || k === 'plotarrow';
 }
 
+/** Pine `plotbar` / `plotcandle` — OHLC overlays (not line styles). */
+export function isOhlcPlotKind(kind?: string | null): boolean {
+  const k = normalizePlotKind(kind);
+  return k === 'plotbar' || k === 'plotcandle';
+}
+
 /** Split series map by plot_meta.kind (missing kind → line plot). */
 export function splitSeriesByKind(
   series: SeriesMap | undefined | null,
@@ -133,13 +184,24 @@ export function splitSeriesByKind(
   bgcolors: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }>;
   shapes: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }>;
   fills: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }>;
+  ohlc: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }>;
 } {
   const lines: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }> = [];
   const bgcolors: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }> = [];
   const shapes: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }> = [];
   const fills: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }> = [];
-  if (!series) return { lines, bgcolors, shapes, fills };
+  const ohlc: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }> = [];
+  if (!series) return { lines, bgcolors, shapes, fills, ohlc };
   const meta = plotMeta || {};
+
+  // Sibling OHLC component series (open/high/low/close refs) stay off the line list
+  const ohlcLinked = new Set<string>();
+  for (const m of Object.values(meta)) {
+    if (!m || !isOhlcPlotKind(m.kind)) continue;
+    for (const ref of [m.open, m.high, m.low, m.close]) {
+      if (ref != null && String(ref)) ohlcLinked.add(String(ref));
+    }
+  }
 
   for (const [key, arr] of Object.entries(series)) {
     if (!key || key.startsWith('__') || key.startsWith('_')) continue;
@@ -150,10 +212,15 @@ export function splitSeriesByKind(
     if (isBgcolorKind(kind)) bgcolors.push(entry);
     else if (isShapeKind(kind)) shapes.push(entry);
     else if (isFillKind(kind)) fills.push(entry);
-    else if (isLinePlotKind(kind)) lines.push(entry);
-    // unknown kinds skipped (future plotbar/plotcandle/…)
+    else if (isOhlcPlotKind(kind)) ohlc.push(entry);
+    else if (isLinePlotKind(kind)) {
+      // Skip siblings that only feed plotbar/plotcandle open/high/low/close refs
+      if (ohlcLinked.has(key)) continue;
+      lines.push(entry);
+    }
+    // unknown kinds skipped
   }
-  return { lines, bgcolors, shapes, fills };
+  return { lines, bgcolors, shapes, fills, ohlc };
 }
 
 function asFiniteNumber(v: unknown): number | null {
@@ -303,6 +370,90 @@ function stripNs(s: string): string {
   return i >= 0 ? s.slice(i + 1).toLowerCase() : s.toLowerCase();
 }
 
+/**
+ * LWC series kind used for a Pine `plot(..., style=plot.style_*)`.
+ * `plotbar` / `plotcandle` are separate plot_meta.kinds (not style tokens).
+ */
+export type PlotSeriesKind = 'line' | 'stepline' | 'histogram' | 'area' | 'circles';
+
+/**
+ * Normalize Pine style tokens to a bare leaf:
+ * `plot.style_stepline` / `style_stepline` / `stepline` → `stepline`.
+ */
+export function normalizePlotStyleToken(style?: string | null): string {
+  let s = String(style || '')
+    .toLowerCase()
+    .trim();
+  if (!s) return '';
+  // strip namespace prefixes (plot.style_*, line.style_*, bare style_*)
+  const lastDot = s.lastIndexOf('.');
+  if (lastDot >= 0) s = s.slice(lastDot + 1);
+  if (s.startsWith('style_')) s = s.slice('style_'.length);
+  return s;
+}
+
+/**
+ * Normalize Pine `plot.linestyle_*` / `hline.style_*` / bare tokens →
+ * `solid` | `dashed` | `dotted` for Lightweight Charts `lineStyle`.
+ *
+ * Accepts: `plot.linestyle_dashed`, `linestyle_dotted`, `style_dashed`,
+ * `dashed`, `hline.style_solid`, etc.
+ */
+export function normalizeLineStyleToken(
+  linestyle?: string | null,
+): 'solid' | 'dashed' | 'dotted' {
+  let s = String(linestyle || '')
+    .toLowerCase()
+    .trim();
+  if (!s) return 'solid';
+  const lastDot = s.lastIndexOf('.');
+  if (lastDot >= 0) s = s.slice(lastDot + 1);
+  if (s.startsWith('linestyle_')) s = s.slice('linestyle_'.length);
+  if (s.startsWith('style_')) s = s.slice('style_'.length);
+  if (s.includes('dash')) return 'dashed';
+  if (s.includes('dot')) return 'dotted';
+  return 'solid';
+}
+
+/**
+ * True for Pine plot styles that break the series on `na` gaps:
+ * `plot.style_linebr`, `plot.style_areabr`, `plot.style_steplinebr`.
+ *
+ * Chart path: {@link lineSeriesToOverlayData} already emits LWC whitespace
+ * (`{ time }` only) for null/na, which breaks Line / Area / stepline segments.
+ */
+export function isBreakPlotStyle(style?: string | null): boolean {
+  const s = normalizePlotStyleToken(style);
+  return s === 'linebr' || s === 'areabr' || s === 'steplinebr';
+}
+
+/**
+ * Map Pine `plot.style_*` → chart series kind.
+ *
+ * | Pine style | AXIS chart |
+ * |------------|------------|
+ * | line / linebr / (default) | line |
+ * | stepline / steplinebr / stepline_diamond | stepline (LWC WithSteps) |
+ * | histogram / columns | histogram |
+ * | area / areabr | area |
+ * | circles / cross | line + point markers |
+ *
+ * `plotbar` / `plotcandle` are separate plot_meta.kinds — see
+ * {@link isOhlcPlotKind} / {@link ohlcSeriesToBarData}.
+ *
+ * Break variants (`*br`) use the same series kind; gaps come from whitespace
+ * points (see {@link isBreakPlotStyle} / {@link lineSeriesToOverlayData}).
+ */
+export function mapPlotStyleToSeriesKind(style?: string | null): PlotSeriesKind {
+  const s = normalizePlotStyleToken(style);
+  if (!s || s === 'line' || s === 'linebr') return 'line';
+  if (s === 'stepline' || s === 'steplinebr' || s === 'stepline_diamond') return 'stepline';
+  if (s === 'histogram' || s === 'columns') return 'histogram';
+  if (s === 'area' || s === 'areabr') return 'area';
+  if (s === 'circles' || s === 'cross') return 'circles';
+  return 'line';
+}
+
 /** Map Pine shape.* style → LWC SeriesMarkerShape. */
 export function mapShapeStyle(
   style?: string | null,
@@ -350,6 +501,44 @@ export function mapShapeLocation(
 }
 
 /**
+ * Map Pine `size.*` (or pyne `text_size` / bare token / numeric) → LWC SeriesMarker `size`.
+ *
+ * Pine point sizes (pyne base): auto, tiny=8, small=10, normal=12, large=16, huge=20.
+ * LWC uses a relative scale (typically ~0.5–3); omit/undefined keeps library default.
+ */
+export function mapShapeSize(size?: string | number | null): number | undefined {
+  if (size == null) return undefined;
+  if (typeof size === 'number') {
+    if (!Number.isFinite(size) || size <= 0) return undefined;
+    return size > 4 ? size / 12 : size;
+  }
+  const raw = String(size).trim();
+  if (!raw || /^na$/i.test(raw)) return undefined;
+  const asNum = Number(raw);
+  if (Number.isFinite(asNum) && raw !== '' && !/[a-z_]/i.test(raw)) {
+    if (asNum <= 0) return undefined;
+    return asNum > 4 ? asNum / 12 : asNum;
+  }
+  const token = stripNs(raw);
+  switch (token) {
+    case 'auto':
+      return undefined;
+    case 'tiny':
+      return 0.6;
+    case 'small':
+      return 0.8;
+    case 'normal':
+      return 1;
+    case 'large':
+      return 1.4;
+    case 'huge':
+      return 1.8;
+    default:
+      return undefined;
+  }
+}
+
+/**
  * Truthy condition series → LWC markers (one per active bar).
  */
 export function shapeSeriesToMarkers(
@@ -372,6 +561,7 @@ export function shapeSeriesToMarkers(
     (meta.title && String(meta.title)) ||
     '';
   const prefix = opts?.idPrefix || meta.title || 'shape';
+  const size = mapShapeSize(meta.size ?? meta.text_size);
 
   for (let i = 0; i < n; i++) {
     if (!isTruthyPlotValue(valArr[i])) continue;
@@ -383,14 +573,16 @@ export function shapeSeriesToMarkers(
     if (typeof v === 'string' && isActiveColor(v) && !/^(true|false)$/i.test(v)) {
       c = v.trim();
     }
-    out.push({
+    const marker: ShapeMarkerSpec = {
       time: t,
       position,
       color: c,
       shape,
       text,
       id: `${prefix}_${i}`,
-    });
+    };
+    if (size != null) marker.size = size;
+    out.push(marker);
   }
   return out;
 }
@@ -426,6 +618,159 @@ export function lineSeriesToOverlayData(
 }
 
 /**
+ * Alias for break-style plots (`linebr` / `areabr` / `steplinebr`).
+ * Whitespace on na already breaks LWC Line/Area segments — same as
+ * {@link lineSeriesToOverlayData}.
+ */
+export function lineSeriesToOverlayDataWithBreaks(
+  times: number[] | ReadonlyArray<unknown>,
+  values: unknown[] | unknown,
+  _opts?: { breaks?: boolean },
+): { time: number; value?: number }[] {
+  return lineSeriesToOverlayData(times, values);
+}
+
+/** True when cell is a structured OHLC payload (object keys or length-4 array). */
+function isStructuredOhlcCell(v: unknown): boolean {
+  if (v == null) return false;
+  if (Array.isArray(v) && v.length >= 4) return true;
+  if (typeof v === 'object' && !Array.isArray(v)) {
+    const o = v as Record<string, unknown>;
+    return (
+      o.open != null ||
+      o.o != null ||
+      o.high != null ||
+      o.h != null ||
+      o.low != null ||
+      o.l != null ||
+      o.close != null ||
+      o.c != null
+    );
+  }
+  return false;
+}
+
+/**
+ * Parse one series cell into OHLC numbers.
+ * Accepts `{open,high,low,close}` / `{o,h,l,c}`, length-4 arrays, or a
+ * finite scalar (flat OHLC from close). Incomplete cells → null.
+ */
+export function parseOhlcCell(
+  v: unknown,
+): { open: number; high: number; low: number; close: number; color?: string } | null {
+  if (v == null) return null;
+
+  if (Array.isArray(v) && v.length >= 4) {
+    const open = asFiniteNumber(v[0]);
+    const high = asFiniteNumber(v[1]);
+    const low = asFiniteNumber(v[2]);
+    const close = asFiniteNumber(v[3]);
+    if (open == null || high == null || low == null || close == null) return null;
+    let color: string | undefined;
+    if (v.length >= 5 && isActiveColor(v[4])) color = String(v[4]).trim();
+    return { open, high, low, close, color };
+  }
+
+  if (typeof v === 'object' && !Array.isArray(v)) {
+    const o = v as Record<string, unknown>;
+    const open = asFiniteNumber(o.open ?? o.o ?? o.Open ?? o.O);
+    const high = asFiniteNumber(o.high ?? o.h ?? o.High ?? o.H);
+    const low = asFiniteNumber(o.low ?? o.l ?? o.Low ?? o.L);
+    const close = asFiniteNumber(o.close ?? o.c ?? o.Close ?? o.C);
+    if (open != null && high != null && low != null && close != null) {
+      let color: string | undefined;
+      if (isActiveColor(o.color)) color = String(o.color).trim();
+      return { open, high, low, close, color };
+    }
+    // Close-only object → flat OHLC
+    if (close != null && open == null && high == null && low == null) {
+      return { open: close, high: close, low: close, close };
+    }
+    return null;
+  }
+
+  const close = asFiniteNumber(v);
+  if (close != null) return { open: close, high: close, low: close, close };
+  return null;
+}
+
+function siblingAt(
+  seriesMap: SeriesMap | null | undefined,
+  key: string | null | undefined,
+  i: number,
+): number | null {
+  if (!key || !seriesMap) return null;
+  const arr = seriesMap[String(key)];
+  if (!Array.isArray(arr)) return null;
+  return asFiniteNumber(arr[i]);
+}
+
+/**
+ * Convert `plotbar` / `plotcandle` series cells + bar times → LWC bar data.
+ *
+ * Payload acceptance (first match wins per bar):
+ * 1. Per-bar objects `{open,high,low,close}` / `{o,h,l,c}` or length-4 arrays
+ * 2. Meta-linked sibling series titles (`meta.open` / `high` / `low` / `close`)
+ * 3. Close-only scalar → flat OHLC (o=h=l=c)
+ *
+ * Incomplete bars are omitted (no LWC whitespace for OHLC series).
+ */
+export function ohlcSeriesToBarData(
+  times: number[] | ReadonlyArray<unknown>,
+  values: unknown[] | unknown,
+  seriesMap?: SeriesMap | null,
+  meta?: PlotMetaEntry | null,
+): OhlcBarPoint[] {
+  if (!Array.isArray(times) || times.length === 0) return [];
+  const arr = Array.isArray(values) ? values : [];
+  const n = times.length;
+  const out: OhlcBarPoint[] = [];
+  const hasSiblings = !!(
+    meta &&
+    (meta.open || meta.high || meta.low || meta.close) &&
+    seriesMap
+  );
+
+  for (let i = 0; i < n; i++) {
+    const time = asBarTime(times[i]);
+    if (time == null) continue;
+    const cell = arr[i];
+    let ohlc: { open: number; high: number; low: number; close: number; color?: string } | null =
+      null;
+
+    if (isStructuredOhlcCell(cell)) {
+      ohlc = parseOhlcCell(cell);
+    } else if (hasSiblings) {
+      const open = siblingAt(seriesMap, meta!.open, i);
+      const high = siblingAt(seriesMap, meta!.high, i);
+      const low = siblingAt(seriesMap, meta!.low, i);
+      const close =
+        siblingAt(seriesMap, meta!.close, i) ?? asFiniteNumber(cell);
+      if (open != null && high != null && low != null && close != null) {
+        ohlc = { open, high, low, close };
+      }
+    }
+
+    if (!ohlc) {
+      // Close-only scalar fallback (or full parse for bare numbers)
+      ohlc = parseOhlcCell(cell);
+    }
+    if (!ohlc) continue;
+
+    const point: OhlcBarPoint = {
+      time,
+      open: ohlc.open,
+      high: ohlc.high,
+      low: ohlc.low,
+      close: ohlc.close,
+    };
+    if (ohlc.color) point.color = ohlc.color;
+    out.push(point);
+  }
+  return out;
+}
+
+/**
  * Pure apply helper: convert result series + plot_meta + times into chart payloads.
  */
 export function buildPlotVisuals(
@@ -438,6 +783,7 @@ export function buildPlotVisuals(
   bgcolors: BgcolorBandSpec[];
   shapes: ShapeMarkerSpec[];
   fills: PlotFillBandSpec[];
+  ohlc: OhlcOverlaySpec[];
 } {
   const split = splitSeriesByKind(series, plotMeta);
   const lines: LineOverlaySpec[] = [];
@@ -455,6 +801,9 @@ export function buildPlotVisuals(
       data,
       color,
       kind: normalizePlotKind(meta.kind),
+      style: meta.style ?? null,
+      linewidth: meta.linewidth,
+      linestyle: meta.linestyle ?? null,
     });
   }
 
@@ -476,5 +825,18 @@ export function buildPlotVisuals(
 
   const fills = resolvePlotFillBands(series, plotMeta);
 
-  return { lines, bgcolors, shapes, fills };
+  const ohlc: OhlcOverlaySpec[] = [];
+  for (const { key, values, meta } of split.ohlc) {
+    const data = ohlcSeriesToBarData(times, values, series, meta);
+    if (!data.length) continue;
+    const color =
+      (meta.color && isActiveColor(meta.color) ? meta.color : null) ||
+      palette[colorIdx % palette.length];
+    colorIdx += 1;
+    const kind: 'plotbar' | 'plotcandle' =
+      normalizePlotKind(meta.kind) === 'plotcandle' ? 'plotcandle' : 'plotbar';
+    ohlc.push({ name: key, kind, data, color });
+  }
+
+  return { lines, bgcolors, shapes, fills, ohlc };
 }

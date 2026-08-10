@@ -72,6 +72,8 @@ flowchart TB
 | Config | `provider`, `token`, `owner`, `repo`, `branch`, `basePath` (default `pine-library`), commit template |
 | Commit boundary | **Explicit Save only** — not every keystroke |
 | Drafts | `saveDraft` / `loadDraft` are no-ops; local dual-write handles drafts |
+| Version history | `listVersions` / `readAtRevision` — GitHub/GitLab commits for the script path |
+| Restore | `restoreScriptVersion` writes historical content as a **new** tip commit |
 | Capabilities | `needsNetwork`, `needsAuth` |
 
 ## Interface surface
@@ -87,6 +89,10 @@ Contract: [StoragePlugin](/axis/docs/plugins/contracts).
 | `saveDraft` / `loadDraft` | Local first; also active if supported |
 | `exportLibraryJson` / `importLibraryJson` | Portable backup |
 | `getStorageStatus` | Connected / dirty / remote hints |
+| `supportsScriptVersioning` | True when active storage implements git history |
+| `listScriptVersions(id)` | Commit history for a script (git only) |
+| `readScriptVersion(id, rev)` | Content at a commit SHA (git only) |
+| `restoreScriptVersion(id, rev)` | Write historical content as the new tip |
 
 ### Catalog helpers
 

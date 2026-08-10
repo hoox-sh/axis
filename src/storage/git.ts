@@ -28,11 +28,13 @@
 import type {
   ScriptDocument,
   ScriptMeta,
+  ScriptVersion,
   StoragePlugin,
   StorageStatus,
   SyncResult,
 } from '../plugins/types';
-import { resolveGitConfig } from './git-config';
+import { metaFromScriptContent } from '../indicators/script-meta';
+import { resolveGitConfig, resolveScriptRepoPath } from './git-config';
 import * as gh from './git-github';
 import * as gl from './git-gitlab';
 
@@ -43,7 +45,7 @@ export const gitStoragePlugin: StoragePlugin = {
   kind: 'storage',
   builtIn: true,
   description:
-    'Store Pine scripts in a git repo. Each Save commits (and pushes) via the host API. Drafts stay local.',
+    'Store Pine scripts in a git repo. Each Save commits (and pushes) via the host API. Browse and restore historical versions. Drafts stay local.',
   capabilities: { needsNetwork: true, needsAuth: true },
   configSchema: {
     provider: {
@@ -150,7 +152,73 @@ export const gitStoragePlugin: StoragePlugin = {
       lastSyncAt: st.connected ? Date.now() : undefined,
     };
   },
+
+  async listVersions(id, opts): Promise<ScriptVersion[]> {
+    const cfg = resolveGitConfig(opts?.config);
+    const path = await resolveScriptPathForId(cfg, id);
+    return cfg.provider === 'gitlab'
+      ? gl.gitlabListFileCommits(cfg, path, { limit: opts?.limit })
+      : gh.githubListFileCommits(cfg, path, { limit: opts?.limit });
+  },
+
+  async readAtRevision(id, rev, config): Promise<ScriptDocument> {
+    const cfg = resolveGitConfig(config);
+    const meta = await findScriptMeta(cfg, id);
+    const path = resolveScriptRepoPath(cfg, {
+      id,
+      indexPath: meta?.path,
+      docPath: meta?.path,
+    });
+    const file =
+      cfg.provider === 'gitlab'
+        ? await gl.gitlabGetFileAtRef(cfg, path, rev)
+        : await gh.githubGetFileAtRef(cfg, path, rev);
+    if (!file) {
+      throw new Error(`Script not found at revision ${rev.slice(0, 7)}: ${id}`);
+    }
+    const content = file.content;
+    const derived = metaFromScriptContent(content, {
+      scriptKind: meta?.scriptKind,
+      pineVersion: meta?.pineVersion,
+    });
+    return {
+      id,
+      name: meta?.name || id,
+      description: meta?.description,
+      path,
+      content,
+      updatedAt: meta?.updatedAt || Date.now(),
+      createdAt: meta?.createdAt,
+      revision: rev,
+      tags: meta?.tags,
+      scriptKind: derived.scriptKind,
+      pineVersion: derived.pineVersion,
+    };
+  },
 };
 
+/** Look up index meta for a script id (GitHub or GitLab). */
+async function findScriptMeta(
+  cfg: ReturnType<typeof resolveGitConfig>,
+  id: string,
+): Promise<ScriptMeta | undefined> {
+  const list =
+    cfg.provider === 'gitlab' ? await gl.gitlabList(cfg) : await gh.githubList(cfg);
+  return list.find((s) => s.id === id);
+}
+
+/** Resolve on-disk path for a script id from the library index. */
+async function resolveScriptPathForId(
+  cfg: ReturnType<typeof resolveGitConfig>,
+  id: string,
+): Promise<string> {
+  const meta = await findScriptMeta(cfg, id);
+  return resolveScriptRepoPath(cfg, {
+    id,
+    indexPath: meta?.path,
+    docPath: meta?.path,
+  });
+}
+
 /** Re-export script types for callers that only import git storage. */
-export type { ScriptMeta, ScriptDocument };
+export type { ScriptMeta, ScriptDocument, ScriptVersion };

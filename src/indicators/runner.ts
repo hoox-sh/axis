@@ -27,6 +27,7 @@
  *    update engine telemetry / latency (no chart mutation).
  * 2. {@link runAndApply} — then map result onto {@link PaneManager}:
  *    - line/hline series from `series` + `plot_meta`
+ *    - plotbar/plotcandle OHLC overlays
  *    - bgcolor histograms, plotshape markers
  *    - strategy trade markers (equity curve stays in Results → Strategy panel)
  *    - Pine line/box/label drawings via drawing layer
@@ -74,6 +75,7 @@ import { buildStrategyReport } from '../results/strategy';
 import {
   bgcolorSeriesToHistogramData,
   lineSeriesToOverlayData,
+  ohlcSeriesToBarData,
   resolvePlotFillBands,
   shapeSeriesToMarkers,
   splitSeriesByKind,
@@ -714,6 +716,7 @@ async function runAndApplyInner(
     kind?: 'plot' | 'hline';
     price?: number;
     linestyle?: string;
+    style?: string | null;
   }> = [];
   // Prefer named `series` + `meta.plot_meta` (PYNE modern). Top-level `plots[]`
   // is often an all-null pad of bar length — never let that block named lines.
@@ -760,12 +763,13 @@ async function runAndApplyInner(
         kind: isHline ? 'hline' : 'plot',
         price,
         linestyle: meta?.linestyle ? String(meta.linestyle) : undefined,
+        style: meta?.style != null ? String(meta.style) : null,
       });
     }
   } else if (Array.isArray(result.plots) && result.plots.length) {
     // Legacy single-array plots only when no named line series and no specialized kinds.
     // Skip all-null pads (modern engines still send plots: [null, …]).
-    if (!split.bgcolors.length && !split.shapes.length) {
+    if (!split.bgcolors.length && !split.shapes.length && !split.ohlc.length) {
       const data = toLineData(result.plots);
       if (lineDataHasSample(data)) {
         const userColor =
@@ -777,6 +781,43 @@ async function runAndApplyInner(
           color: (userColor && String(userColor)) || PLOT_PALETTE[0],
         });
       }
+    }
+  }
+
+  // plotbar / plotcandle → LWC Bar / Candlestick overlays
+  const overlayOhlc: Array<{
+    name: string;
+    kind: 'plotbar' | 'plotcandle';
+    data: Array<{
+      time: number;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      color?: string;
+    }>;
+    color?: string;
+  }> = [];
+  {
+    let ohlcColorIdx = overlayLines.length;
+    for (const { key, values, meta } of split.ohlc) {
+      if (!isRunEpochCurrent(epoch)) {
+        return {
+          ...result,
+          meta: { ...result.meta, superseded: true },
+        };
+      }
+      const data = ohlcSeriesToBarData(ohlcvTimes, values, seriesMap, meta);
+      if (!data.length) continue;
+      const userColor = userPlotColors[key]?.color;
+      const color =
+        (userColor && String(userColor)) ||
+        (meta?.color && String(meta.color)) ||
+        PLOT_PALETTE[ohlcColorIdx % PLOT_PALETTE.length];
+      ohlcColorIdx += 1;
+      const kind: 'plotbar' | 'plotcandle' =
+        String(meta?.kind || '').toLowerCase() === 'plotcandle' ? 'plotcandle' : 'plotbar';
+      overlayOhlc.push({ name: key, kind, data, color });
     }
   }
 
@@ -811,6 +852,17 @@ async function runAndApplyInner(
       }
     } else {
       manager.syncOverlayLines(paneId, overlayLines);
+      // plotbar / plotcandle OHLC overlays (empty list clears stale OHLC series)
+      if (typeof manager.syncOverlayOhlc === 'function') {
+        manager.syncOverlayOhlc(paneId, overlayOhlc);
+      }
+      if (overlayOhlc.length && !silent) {
+        appendLog(
+          'ok',
+          `plot OHLC: ${overlayOhlc.map((o) => `${o.name}(${o.kind})`).join(', ')}`,
+          'plot',
+        );
+      }
       // Refresh corner badges (name + settings / eye / re-run / remove)
       try {
         manager.refreshBadges?.(paneId);
@@ -886,6 +938,17 @@ async function runAndApplyInner(
         if (pricePane) {
           for (const line of overlayLines) {
             const key = `overlay_${line.name}`;
+            if (pricePane.series[key]) {
+              try {
+                pricePane.chart.removeSeries(pricePane.series[key]);
+              } catch {
+                /* ignore */
+              }
+              delete pricePane.series[key];
+            }
+          }
+          for (const o of overlayOhlc) {
+            const key = `overlay_ohlc_${o.name}`;
             if (pricePane.series[key]) {
               try {
                 pricePane.chart.removeSeries(pricePane.series[key]);

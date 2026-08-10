@@ -6,13 +6,18 @@ import {
   activeChartContext,
   cycleLiveRerunOn,
   detectDeclaredOverlay,
+  detectPineVersion,
   detectScriptKind,
   engineFamily,
   engineFamilyLabel,
+  formatScriptUpdatedAt,
   isPricePane,
   lastRunStatus,
   liveRerunTitle,
+  metaFromScriptContent,
   panePlacementLabel,
+  scriptKindLabel,
+  scriptKindShort,
 } from '../src/indicators/script-meta';
 
 describe('detectScriptKind', () => {
@@ -23,6 +28,33 @@ describe('detectScriptKind', () => {
     );
     expect(detectScriptKind('//@version=5\nlibrary("Lib")\n')).toBe('library');
     expect(detectScriptKind('plot(close)')).toBe('unknown');
+  });
+});
+
+describe('detectPineVersion / metaFromScriptContent', () => {
+  test('reads //@version=N', () => {
+    expect(detectPineVersion('//@version=5\nindicator("x")')).toBe('5');
+    expect(detectPineVersion('// @version = 6\nstrategy("s")')).toBe('6');
+    expect(detectPineVersion('indicator("x")')).toBe(null);
+  });
+
+  test('metaFromScriptContent fills kind + version', () => {
+    const m = metaFromScriptContent('//@version=5\nstrategy("S")\nplot(close)');
+    expect(m.scriptKind).toBe('strategy');
+    expect(m.pineVersion).toBe('5');
+  });
+
+  test('labels', () => {
+    expect(scriptKindLabel('indicator')).toBe('Indicator');
+    expect(scriptKindShort('library')).toBe('LIB');
+  });
+
+  test('formatScriptUpdatedAt relative', () => {
+    const now = 1_700_000_000_000;
+    expect(formatScriptUpdatedAt(now - 10_000, now)).toBe('just now');
+    expect(formatScriptUpdatedAt(now - 5 * 60_000, now)).toBe('5m ago');
+    expect(formatScriptUpdatedAt(now - 3 * 3_600_000, now)).toBe('3h ago');
+    expect(formatScriptUpdatedAt(undefined, now)).toBe('');
   });
 });
 

@@ -26,7 +26,8 @@
  * Project identity from `projectId` or `owner/repo`.
  */
 
-import type { ScriptDocument, ScriptMeta } from '../plugins/types';
+import type { ScriptDocument, ScriptMeta, ScriptVersion } from '../plugins/types';
+import { metaFromScriptContent } from '../indicators/script-meta';
 import {
   type GitConfig,
   GitIndexCorruptError,
@@ -116,12 +117,11 @@ function b64Decode(s: string): string {
 export async function gitlabGetFile(
   cfg: GitConfig,
   filePath: string,
+  ref?: string,
 ): Promise<{ content: string; blobId: string } | null> {
   try {
-    const { json } = await gl(
-      cfg,
-      `${fileUrl(cfg, filePath)}?ref=${encodeURIComponent(cfg.branch)}`,
-    );
+    const at = encodeURIComponent(ref || cfg.branch);
+    const { json } = await gl(cfg, `${fileUrl(cfg, filePath)}?ref=${at}`);
     const encoding = String(json.encoding || 'base64');
     const raw = String(json.content || '');
     const content = encoding === 'base64' ? b64Decode(raw) : raw;
@@ -130,6 +130,84 @@ export async function gitlabGetFile(
     if ((e as { status?: number }).status === 404) return null;
     throw e;
   }
+}
+
+/**
+ * Commit history for a path (newest first).
+ * `GET /projects/:id/repository/commits?path=…`
+ */
+export async function gitlabListFileCommits(
+  cfg: GitConfig,
+  filePath: string,
+  opts?: { limit?: number },
+): Promise<ScriptVersion[]> {
+  assertGitConfig(cfg);
+  const limit = Math.min(100, Math.max(1, opts?.limit ?? 30));
+  const q = new URLSearchParams({
+    path: filePath,
+    ref_name: cfg.branch,
+    per_page: String(limit),
+  });
+  const url = `${cfg.apiBaseUrl}/projects/${projectRef(cfg)}/repository/commits?${q}`;
+  const headers = gitlabAuthHeaders(cfg.token);
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
+  const text = await res.text();
+  if (!res.ok) {
+    let msg = text;
+    try {
+      msg = String((JSON.parse(text) as { message?: string }).message || text);
+    } catch {
+      /* keep */
+    }
+    throw new Error(`GitLab: ${msg || `HTTP ${res.status}`}`);
+  }
+  let arr: unknown[] = [];
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    arr = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    arr = [];
+  }
+  const out: ScriptVersion[] = [];
+  for (const row of arr) {
+    if (!row || typeof row !== 'object') continue;
+    const c = row as {
+      id?: string;
+      short_id?: string;
+      title?: string;
+      message?: string;
+      author_name?: string;
+      committed_date?: string;
+      created_at?: string;
+      web_url?: string;
+    };
+    const sha = String(c.id || '');
+    if (!sha) continue;
+    const msg =
+      String(c.title || '').trim() ||
+      String(c.message || '').split('\n')[0] ||
+      '(no message)';
+    const dateStr = c.committed_date || c.created_at || '';
+    const committedAt = dateStr ? Date.parse(dateStr) : Date.now();
+    out.push({
+      sha,
+      shortSha: String(c.short_id || sha.slice(0, 7)),
+      message: msg,
+      author: c.author_name ? String(c.author_name) : undefined,
+      committedAt: Number.isFinite(committedAt) ? committedAt : Date.now(),
+      url: c.web_url ? String(c.web_url) : undefined,
+    });
+  }
+  return out;
+}
+
+/** Read file body at an arbitrary commit / branch ref. */
+export async function gitlabGetFileAtRef(
+  cfg: GitConfig,
+  filePath: string,
+  ref: string,
+): Promise<{ content: string; blobId: string } | null> {
+  return gitlabGetFile(cfg, filePath, ref);
 }
 
 /** Create (`POST`) or update (`PUT`) a text file on the branch. */
@@ -251,6 +329,10 @@ export async function gitlabRead(cfg: GitConfig, id: string): Promise<ScriptDocu
   });
   const file = await gitlabGetFile(cfg, path);
   if (!file) throw new Error(`Script not found in repo: ${id}`);
+  const derived = metaFromScriptContent(file.content, {
+    scriptKind: meta?.scriptKind,
+    pineVersion: meta?.pineVersion,
+  });
   return {
     id,
     name: meta?.name || id,
@@ -261,6 +343,8 @@ export async function gitlabRead(cfg: GitConfig, id: string): Promise<ScriptDocu
     createdAt: meta?.createdAt,
     revision: file.blobId || meta?.revision,
     tags: meta?.tags,
+    scriptKind: derived.scriptKind,
+    pineVersion: derived.pineVersion,
   };
 }
 
@@ -280,6 +364,10 @@ export async function gitlabWrite(cfg: GitConfig, doc: ScriptDocument): Promise<
   const msg = formatCommitMessage(cfg.commitMessageTemplate, doc.name);
   const put = await gitlabPutFile(cfg, path, doc.content, msg, !!existing);
 
+  const derived = metaFromScriptContent(doc.content, {
+    scriptKind: doc.scriptKind ?? prevMeta?.scriptKind,
+    pineVersion: doc.pineVersion ?? prevMeta?.pineVersion,
+  });
   let meta: ScriptMeta = {
     id: doc.id,
     name: doc.name,
@@ -289,6 +377,8 @@ export async function gitlabWrite(cfg: GitConfig, doc: ScriptDocument): Promise<
     createdAt: prevMeta?.createdAt || doc.createdAt || now,
     revision: put.commitId || `gl-${now}`,
     tags: doc.tags,
+    scriptKind: derived.scriptKind,
+    pineVersion: derived.pineVersion,
   };
 
   await gitlabUpsertIndexEntry(

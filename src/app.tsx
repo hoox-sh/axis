@@ -438,12 +438,12 @@ export const App: Component = () => {
       <IndicatorPanel />
       <LibraryPanel
         getDoc={() => editorRef.getDoc()}
-        setDoc={(doc, name) => {
+        setDoc={(doc, name, libraryId) => {
           const ref = editorRef as {
             setDoc?: (d: string) => void;
-            loadLibraryDoc?: (d: string, n?: string) => void;
+            loadLibraryDoc?: (d: string, n?: string, id?: string) => void;
           };
-          if (ref.loadLibraryDoc) ref.loadLibraryDoc(doc, name);
+          if (ref.loadLibraryDoc) ref.loadLibraryDoc(doc, name, libraryId);
           else ref.setDoc?.(doc);
         }}
       />
@@ -489,12 +489,12 @@ export const App: Component = () => {
         onClose={() => setPluginsOpen(false)}
         onChanged={() => setCatalogTick((n) => n + 1)}
         getDoc={() => editorRef.getDoc()}
-        setDoc={(doc, name) => {
+        setDoc={(doc, name, libraryId) => {
           const ref = editorRef as {
             setDoc?: (d: string) => void;
-            loadLibraryDoc?: (d: string, n?: string) => void;
+            loadLibraryDoc?: (d: string, n?: string, id?: string) => void;
           };
-          if (ref.loadLibraryDoc) ref.loadLibraryDoc(doc, name);
+          if (ref.loadLibraryDoc) ref.loadLibraryDoc(doc, name, libraryId);
           else ref.setDoc?.(doc);
         }}
       />

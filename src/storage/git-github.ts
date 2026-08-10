@@ -25,7 +25,8 @@
  * (Contents API = auto-push). Library index is rewritten on every write/remove.
  */
 
-import type { ScriptDocument, ScriptMeta } from '../plugins/types';
+import type { ScriptDocument, ScriptMeta, ScriptVersion } from '../plugins/types';
+import { metaFromScriptContent } from '../indicators/script-meta';
 import {
   type GitConfig,
   GitIndexCorruptError,
@@ -114,9 +115,11 @@ function repoPath(cfg: GitConfig, filePath: string): string {
 export async function githubGetFile(
   cfg: GitConfig,
   filePath: string,
+  ref?: string,
 ): Promise<{ content: string; sha: string } | null> {
   try {
-    const { json } = await gh(cfg, `${repoPath(cfg, filePath)}?ref=${encodeURIComponent(cfg.branch)}`);
+    const at = encodeURIComponent(ref || cfg.branch);
+    const { json } = await gh(cfg, `${repoPath(cfg, filePath)}?ref=${at}`);
     if (json.type === 'file' && typeof json.content === 'string') {
       return { content: b64Decode(String(json.content)), sha: String(json.sha) };
     }
@@ -125,6 +128,86 @@ export async function githubGetFile(
     if ((e as { status?: number }).status === 404) return null;
     throw e;
   }
+}
+
+/**
+ * Commit history for a single path (newest first).
+ * Uses `GET /repos/{owner}/{repo}/commits?path=…`.
+ */
+export async function githubListFileCommits(
+  cfg: GitConfig,
+  filePath: string,
+  opts?: { limit?: number },
+): Promise<ScriptVersion[]> {
+  assertGitConfig(cfg);
+  const limit = Math.min(100, Math.max(1, opts?.limit ?? 30));
+  const q = new URLSearchParams({
+    path: filePath,
+    sha: cfg.branch,
+    per_page: String(limit),
+  });
+  const url = `${cfg.apiBaseUrl}/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}/commits?${q}`;
+  const headers: Record<string, string> = {
+    Accept: 'application/vnd.github+json',
+    Authorization: `Bearer ${cfg.token}`,
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
+  const text = await res.text();
+  if (!res.ok) {
+    let msg = text;
+    try {
+      msg = String((JSON.parse(text) as { message?: string }).message || text);
+    } catch {
+      /* keep */
+    }
+    throw new Error(`GitHub: ${msg || `HTTP ${res.status}`}`);
+  }
+  let arr: unknown[] = [];
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    arr = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    arr = [];
+  }
+  const out: ScriptVersion[] = [];
+  for (const row of arr) {
+    if (!row || typeof row !== 'object') continue;
+    const c = row as {
+      sha?: string;
+      html_url?: string;
+      commit?: {
+        message?: string;
+        author?: { name?: string; date?: string };
+        committer?: { name?: string; date?: string };
+      };
+    };
+    const sha = String(c.sha || '');
+    if (!sha) continue;
+    const msg = String(c.commit?.message || '').split('\n')[0] || '(no message)';
+    const dateStr = c.commit?.author?.date || c.commit?.committer?.date || '';
+    const committedAt = dateStr ? Date.parse(dateStr) : Date.now();
+    out.push({
+      sha,
+      shortSha: sha.slice(0, 7),
+      message: msg,
+      author: c.commit?.author?.name || c.commit?.committer?.name,
+      committedAt: Number.isFinite(committedAt) ? committedAt : Date.now(),
+      url: c.html_url ? String(c.html_url) : undefined,
+    });
+  }
+  return out;
+}
+
+/** Read script file body at an arbitrary commit / branch ref. */
+export async function githubGetFileAtRef(
+  cfg: GitConfig,
+  filePath: string,
+  ref: string,
+): Promise<{ content: string; blobSha: string } | null> {
+  const file = await githubGetFile(cfg, filePath, ref);
+  if (!file) return null;
+  return { content: file.content, blobSha: file.sha };
 }
 
 /** Create or update a file (pass previous `sha` for updates). */
@@ -259,6 +342,10 @@ export async function githubRead(cfg: GitConfig, id: string): Promise<ScriptDocu
   });
   const file = await githubGetFile(cfg, path);
   if (!file) throw new Error(`Script not found in repo: ${id}`);
+  const derived = metaFromScriptContent(file.content, {
+    scriptKind: meta?.scriptKind,
+    pineVersion: meta?.pineVersion,
+  });
   return {
     id,
     name: meta?.name || id,
@@ -269,6 +356,8 @@ export async function githubRead(cfg: GitConfig, id: string): Promise<ScriptDocu
     createdAt: meta?.createdAt,
     revision: file.sha,
     tags: meta?.tags,
+    scriptKind: derived.scriptKind,
+    pineVersion: derived.pineVersion,
   };
 }
 
@@ -289,6 +378,10 @@ export async function githubWrite(cfg: GitConfig, doc: ScriptDocument): Promise<
   const msg = formatCommitMessage(cfg.commitMessageTemplate, doc.name);
   const put = await githubPutFile(cfg, path, doc.content, msg, existing?.sha);
 
+  const derived = metaFromScriptContent(doc.content, {
+    scriptKind: doc.scriptKind ?? prevMeta?.scriptKind,
+    pineVersion: doc.pineVersion ?? prevMeta?.pineVersion,
+  });
   let meta: ScriptMeta = {
     id: doc.id,
     name: doc.name,
@@ -298,6 +391,8 @@ export async function githubWrite(cfg: GitConfig, doc: ScriptDocument): Promise<
     createdAt: prevMeta?.createdAt || doc.createdAt || now,
     revision: put.sha || put.commitSha,
     tags: doc.tags,
+    scriptKind: derived.scriptKind,
+    pineVersion: derived.pineVersion,
   };
 
   await githubUpsertIndexEntry(

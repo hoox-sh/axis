@@ -43,6 +43,99 @@ export function detectScriptKind(code: string): ScriptKind {
 }
 
 /**
+ * Pine language version from `//@version=N` (or `// @version = N`).
+ * Returns the numeric token only (`"5"`, `"6"`); `null` when absent.
+ */
+export function detectPineVersion(code: string): string | null {
+  const m = String(code ?? '').match(/\/\/\s*@version\s*=\s*(\d+)\b/i);
+  return m?.[1] ?? null;
+}
+
+/** Human label for library / Scripts panel cards. */
+export function scriptKindLabel(kind: ScriptKind): string {
+  switch (kind) {
+    case 'strategy':
+      return 'Strategy';
+    case 'library':
+      return 'Library';
+    case 'indicator':
+      return 'Indicator';
+    default:
+      return 'Unknown';
+  }
+}
+
+/** Compact badge text (IND / STR / LIB). */
+export function scriptKindShort(kind: ScriptKind): string {
+  switch (kind) {
+    case 'strategy':
+      return 'STR';
+    case 'library':
+      return 'LIB';
+    case 'indicator':
+      return 'IND';
+    default:
+      return '?';
+  }
+}
+
+/**
+ * Relative-ish updated time for library cards.
+ * Uses compact absolute locale string when older than ~7 days.
+ */
+export function formatScriptUpdatedAt(
+  ts: number | undefined | null,
+  now: number = Date.now(),
+): string {
+  if (ts == null || !Number.isFinite(ts) || ts <= 0) return '';
+  const diff = Math.max(0, now - ts);
+  const sec = Math.floor(diff / 1000);
+  if (sec < 45) return 'just now';
+  if (sec < 90) return '1m ago';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 36) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}d ago`;
+  try {
+    return new Date(ts).toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return new Date(ts).toISOString();
+  }
+}
+
+/**
+ * Fill {@link ScriptMeta}-like fields from Pine source when missing.
+ * Used by storage list/write so library cards can show kind + version.
+ */
+export function metaFromScriptContent(
+  content: string | undefined | null,
+  base?: {
+    scriptKind?: ScriptKind;
+    pineVersion?: string;
+  },
+): { scriptKind: ScriptKind; pineVersion?: string } {
+  const code = String(content ?? '');
+  const detected = detectScriptKind(code);
+  const scriptKind: ScriptKind =
+    base?.scriptKind && base.scriptKind !== 'unknown'
+      ? base.scriptKind
+      : detected;
+  const pineVersion =
+    (base?.pineVersion && String(base.pineVersion).trim()) ||
+    detectPineVersion(code) ||
+    undefined;
+  return { scriptKind, pineVersion };
+}
+
+/**
  * Explicit `overlay=` in `indicator()` / `strategy()` when present.
  * `null` = not declared (Pine defaults apply at run time).
  */

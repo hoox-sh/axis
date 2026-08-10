@@ -31,7 +31,7 @@
  *
  * - `createPane` / `destroyPane` / `getPane`
  * - `setBars` / `appendBar` — OHLCV on price pane
- * - `syncOverlayLines` / `syncBgcolorBands` — indicator apply (update-in-place)
+ * - `syncOverlayLines` / `syncOverlayOhlc` / `syncBgcolorBands` — indicator apply (update-in-place)
  * - `setTradeMarkers` / `setShapeMarkers` / `setEquityCurve` (legacy; strategy equity is Results panel only)
  * - `syncTimeScales` / `syncCrosshair`
  *
@@ -56,10 +56,18 @@ import {
   createLineSeries,
   createAreaSeries,
   createBgcolorSeries,
+  createPlotOverlaySeries,
+  createPlotBarOverlaySeries,
+  createPlotCandleOverlaySeries,
   PLOT_PALETTE,
   RIGHT_PRICE_SCALE_WIDTH,
   VOID,
 } from './series-factory';
+import {
+  mapPlotStyleToSeriesKind,
+  normalizeLineStyleToken,
+  type PlotSeriesKind,
+} from '../results/plot-visuals';
 import {
   mapBarUpdate,
   lastBarDirection,
@@ -93,7 +101,27 @@ export type OverlayLineSpec = {
   /** Constant price for kind=hline (preferred over sampling data) */
   price?: number;
   linestyle?: string;
+  /** Pine `plot.style_*` — maps to LWC line / stepline / histogram / area / circles */
+  style?: string | null;
 };
+
+/** Overlay OHLC from Pine `plotbar` / `plotcandle` (runner → LWC Bar/Candlestick). */
+export type OverlayOhlcSpec = {
+  name: string;
+  kind: 'plotbar' | 'plotcandle';
+  data: Array<{
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    color?: string;
+  }>;
+  color?: string;
+};
+
+/** Series key prefix for plotbar/plotcandle overlays (`overlay_ohlc_${name}`). */
+export const OVERLAY_OHLC_PREFIX = 'overlay_ohlc_';
 
 /** Map overlay points to LWC LineData | WhitespaceData. Drops non-finite times. */
 export function toLwcLineData(
@@ -181,10 +209,11 @@ export interface ManagedPane {
   resizeObserver: ResizeObserver | null;
 }
 
+/** Pine `plot.linestyle_*` / `hline.style_*` → LWC LineStyle. */
 function mapLineStyle(linestyle?: string): LineStyle {
-  const s = (linestyle || '').toLowerCase();
-  if (s.includes('dash')) return LineStyle.Dashed;
-  if (s.includes('dot')) return LineStyle.Dotted;
+  const t = normalizeLineStyleToken(linestyle);
+  if (t === 'dashed') return LineStyle.Dashed;
+  if (t === 'dotted') return LineStyle.Dotted;
   return LineStyle.Solid;
 }
 
@@ -246,6 +275,11 @@ export class PaneManager {
    * Default on. Independent of {@link priceScaleLabelsVisible}.
    */
   private lastValueLabelsVisible = true;
+  /**
+   * Pine plot series kind per overlay key (`${paneId}:overlay_${name}` or
+   * `overlay_ohlc_*`). When style/kind changes the series is recreated.
+   */
+  private overlaySeriesKinds = new Map<string, PlotSeriesKind | 'plotbar' | 'plotcandle'>();
   /** ThemeManager chart unregister fns keyed by pane id */
   private themeUnregs = new Map<string, () => void>();
 
@@ -838,14 +872,21 @@ export class PaneManager {
    * plotshape / plotchar markers — stored separately and merged with strategy markers.
    */
   setShapeMarkers(markers: ShapeMarkerSpec[] | TradeMarker[]) {
-    this.shapeMarkerList = markers.map((m, i) => ({
-      time: m.time as UTCTimestamp,
-      position: m.position,
-      color: m.color,
-      shape: m.shape,
-      text: m.text,
-      id: ('id' in m && m.id) || `shape_${m.time}_${i}`,
-    }));
+    this.shapeMarkerList = markers.map((m, i) => {
+      const base: SeriesMarker<UTCTimestamp> = {
+        time: m.time as UTCTimestamp,
+        position: m.position,
+        color: m.color,
+        shape: m.shape,
+        text: m.text,
+        id: ('id' in m && m.id) || `shape_${m.time}_${i}`,
+      };
+      const size = 'size' in m ? m.size : undefined;
+      if (typeof size === 'number' && Number.isFinite(size) && size > 0) {
+        base.size = size;
+      }
+      return base;
+    });
     this.applyCandleMarkers();
   }
 
@@ -864,14 +905,21 @@ export class PaneManager {
    * strategy / plotshape updates do not wipe them.
    */
   setDebugPinMarkers(markers: ShapeMarkerSpec[] | TradeMarker[]) {
-    this.debugPinMarkerList = markers.map((m, i) => ({
-      time: m.time as UTCTimestamp,
-      position: m.position,
-      color: m.color,
-      shape: m.shape,
-      text: m.text,
-      id: ('id' in m && m.id) || `debug_${m.time}_${i}`,
-    }));
+    this.debugPinMarkerList = markers.map((m, i) => {
+      const base: SeriesMarker<UTCTimestamp> = {
+        time: m.time as UTCTimestamp,
+        position: m.position,
+        color: m.color,
+        shape: m.shape,
+        text: m.text,
+        id: ('id' in m && m.id) || `debug_${m.time}_${i}`,
+      };
+      const size = 'size' in m ? m.size : undefined;
+      if (typeof size === 'number' && Number.isFinite(size) && size > 0) {
+        base.size = size;
+      }
+      return base;
+    });
     this.applyCandleMarkers();
   }
 
@@ -1502,11 +1550,14 @@ export class PaneManager {
 
     for (const k of Object.keys(pane.series)) {
       if (!k.startsWith('overlay_')) continue;
+      // OHLC overlays (`overlay_ohlc_*`) are owned by {@link syncOverlayOhlc}
+      if (k.startsWith(OVERLAY_OHLC_PREFIX)) continue;
       const name = k.slice('overlay_'.length);
       // Keep overlay series if still wanted as plot or as hline fallback
       if (!wantSeries.has(k) && !wantPrice.has(name)) {
         safeRemoveSeries(pane.chart, pane.series[k]);
         delete pane.series[k];
+        this.overlaySeriesKinds.delete(`${paneId}:${k}`);
       }
     }
 
@@ -1525,37 +1576,77 @@ export class PaneManager {
     let colorIdx = 0;
     for (const line of plotLines) {
       const key = `overlay_${line.name}`;
+      const kindKey = `${paneId}:${key}`;
       // Whitespace for na keeps logical indices aligned with the price pane
       const mapped = toLwcLineData(line.data);
+      const seriesKind = mapPlotStyleToSeriesKind(line.style);
       const existing = pane.series[key];
+      const prevKind = this.overlaySeriesKinds.get(kindKey);
       const lw = line.linewidth != null ? Math.max(1, Math.min(4, Math.round(line.linewidth))) : undefined;
-      if (existing) {
-        safeSetData(existing, mapped);
+      // Recreate when Pine style family changes (line ↔ histogram ↔ area, …)
+      if (existing && prevKind != null && prevKind !== seriesKind) {
+        safeRemoveSeries(pane.chart, existing);
+        delete pane.series[key];
+        this.overlaySeriesKinds.delete(kindKey);
+      }
+      const seriesNow = pane.series[key];
+      if (seriesNow) {
+        safeSetData(seriesNow, mapped);
         try {
           const opts: Record<string, unknown> = {
             lastValueVisible: this.lastValueLabelsVisible,
           };
-          if (line.color) opts.color = line.color;
-          if (lw != null) opts.lineWidth = lw;
-          existing.applyOptions(opts);
+          if (line.color) {
+            if (seriesKind === 'area') {
+              opts.lineColor = line.color;
+              // keep prior fill if color is non-hex; series-factory sets fills on create
+            } else if (seriesKind === 'circles') {
+              opts.crosshairMarkerBackgroundColor = line.color;
+            } else {
+              opts.color = line.color;
+            }
+          }
+          if (lw != null && seriesKind !== 'histogram') opts.lineWidth = lw;
+          // plot.linestyle_* on Line / Area / circles hairline (not histogram)
+          if (seriesKind !== 'histogram' && line.linestyle) {
+            opts.lineStyle = mapLineStyle(line.linestyle);
+          }
+          seriesNow.applyOptions(opts);
         } catch {
           /* ignore */
         }
       } else {
         try {
           const c = line.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
-          const series = createLineSeries(pane.chart, line.name, c, undefined, lw ?? 2);
+          const series = createPlotOverlaySeries(
+            pane.chart,
+            line.name,
+            c,
+            seriesKind,
+            lw ?? 2,
+            undefined,
+            line.linestyle,
+          );
           try {
             series.applyOptions({ lastValueVisible: this.lastValueLabelsVisible });
           } catch {
             /* ignore */
           }
+          if (seriesKind !== 'histogram' && line.linestyle) {
+            try {
+              series.applyOptions({ lineStyle: mapLineStyle(line.linestyle) });
+            } catch {
+              /* ignore */
+            }
+          }
           safeSetData(series, mapped);
           pane.series[key] = series;
+          this.overlaySeriesKinds.set(kindKey, seriesKind);
         } catch {
           /* chart may be disposed mid-apply */
         }
       }
+      if (pane.series[key]) this.overlaySeriesKinds.set(kindKey, seriesKind);
       colorIdx += 1;
     }
 
@@ -1718,6 +1809,131 @@ export class PaneManager {
       return series;
     } catch {
       return undefined;
+    }
+  }
+
+  /**
+   * Sync Pine `plotbar` / `plotcandle` OHLC overlays.
+   * Keys are `overlay_ohlc_${name}`; empty list clears all OHLC overlays on the pane.
+   * Recreates the LWC series when kind switches (plotbar ↔ plotcandle).
+   */
+  syncOverlayOhlc(paneId: string, specs: OverlayOhlcSpec[]) {
+    const pane = this.panes.get(paneId);
+    if (!pane) return;
+
+    let savedRange: { from: number; to: number } | null = null;
+    try {
+      savedRange = pane.chart.timeScale().getVisibleLogicalRange();
+    } catch {
+      savedRange = null;
+    }
+
+    const want = new Set(specs.map((s) => `${OVERLAY_OHLC_PREFIX}${s.name}`));
+    for (const k of Object.keys(pane.series)) {
+      if (!k.startsWith(OVERLAY_OHLC_PREFIX)) continue;
+      if (!want.has(k)) {
+        safeRemoveSeries(pane.chart, pane.series[k]);
+        delete pane.series[k];
+        this.overlaySeriesKinds.delete(`${paneId}:${k}`);
+      }
+    }
+
+    let colorIdx = 0;
+    for (const spec of specs) {
+      const key = `${OVERLAY_OHLC_PREFIX}${spec.name}`;
+      const kindKey = `${paneId}:${key}`;
+      const seriesKind: 'plotbar' | 'plotcandle' =
+        spec.kind === 'plotcandle' ? 'plotcandle' : 'plotbar';
+      const mapped = spec.data
+        .filter(
+          (d) =>
+            Number.isFinite(d.time) &&
+            Number.isFinite(d.open) &&
+            Number.isFinite(d.high) &&
+            Number.isFinite(d.low) &&
+            Number.isFinite(d.close),
+        )
+        .map((d) => {
+          const bar: {
+            time: UTCTimestamp;
+            open: number;
+            high: number;
+            low: number;
+            close: number;
+            color?: string;
+          } = {
+            time: d.time as UTCTimestamp,
+            open: d.open,
+            high: d.high,
+            low: d.low,
+            close: d.close,
+          };
+          if (d.color) bar.color = d.color;
+          return bar;
+        });
+
+      const existing = pane.series[key];
+      const prevKind = this.overlaySeriesKinds.get(kindKey);
+      if (existing && prevKind != null && prevKind !== seriesKind) {
+        safeRemoveSeries(pane.chart, existing);
+        delete pane.series[key];
+        this.overlaySeriesKinds.delete(kindKey);
+      }
+
+      const c = spec.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
+      const seriesNow = pane.series[key];
+      if (seriesNow) {
+        safeSetData(seriesNow, mapped);
+        try {
+          const opts: Record<string, unknown> = {
+            lastValueVisible: this.lastValueLabelsVisible,
+            title: spec.name,
+          };
+          if (spec.color) {
+            if (seriesKind === 'plotcandle') {
+              opts.upColor = c;
+              opts.downColor = c;
+              opts.borderUpColor = c;
+              opts.borderDownColor = c;
+              opts.wickUpColor = c;
+              opts.wickDownColor = c;
+            } else {
+              opts.upColor = c;
+              opts.downColor = c;
+            }
+          }
+          seriesNow.applyOptions(opts);
+        } catch {
+          /* ignore */
+        }
+      } else {
+        try {
+          const series =
+            seriesKind === 'plotcandle'
+              ? createPlotCandleOverlaySeries(pane.chart, spec.name, spec.color)
+              : createPlotBarOverlaySeries(pane.chart, spec.name, spec.color);
+          try {
+            series.applyOptions({ lastValueVisible: this.lastValueLabelsVisible });
+          } catch {
+            /* ignore */
+          }
+          safeSetData(series, mapped);
+          pane.series[key] = series;
+          this.overlaySeriesKinds.set(kindKey, seriesKind);
+        } catch {
+          /* chart may be disposed mid-apply */
+        }
+      }
+      if (pane.series[key]) this.overlaySeriesKinds.set(kindKey, seriesKind);
+      colorIdx += 1;
+    }
+
+    if (savedRange) {
+      try {
+        pane.chart.timeScale().setVisibleLogicalRange(savedRange);
+      } catch {
+        /* ignore */
+      }
     }
   }
 

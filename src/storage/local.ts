@@ -35,6 +35,7 @@ import type {
   StoragePlugin,
   StorageStatus,
 } from '../plugins/types';
+import { metaFromScriptContent } from '../indicators/script-meta';
 import { idbAvailable, idbReq, idbTxDone, openDb } from './idb';
 
 const DB_NAME = 'pynescript.axis.storage';
@@ -101,23 +102,38 @@ function newId(): string {
 }
 
 function toMeta(doc: ScriptDocument): ScriptMeta {
-  const { content: _c, ...meta } = doc;
-  return meta;
+  const { content, ...meta } = doc;
+  // Always re-derive from body when present so old library entries get kind/version
+  const derived = metaFromScriptContent(content, {
+    scriptKind: meta.scriptKind,
+    pineVersion: meta.pineVersion,
+  });
+  return {
+    ...meta,
+    scriptKind: derived.scriptKind,
+    pineVersion: derived.pineVersion,
+  };
 }
 
 function normalizeDoc(raw: Partial<ScriptDocument> & { script?: string }): ScriptDocument {
   const now = Date.now();
-  const content = raw.content ?? raw.script ?? '';
+  const content = String(raw.content ?? raw.script ?? '');
+  const derived = metaFromScriptContent(content, {
+    scriptKind: raw.scriptKind,
+    pineVersion: raw.pineVersion,
+  });
   return {
     id: raw.id || newId(),
     name: raw.name || 'Untitled',
     description: raw.description,
     path: raw.path,
-    content: String(content),
+    content,
     updatedAt: raw.updatedAt || now,
     createdAt: raw.createdAt || now,
     revision: raw.revision || `local-${now}`,
     tags: raw.tags,
+    scriptKind: derived.scriptKind,
+    pineVersion: derived.pineVersion,
   };
 }
 

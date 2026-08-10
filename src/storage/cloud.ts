@@ -31,6 +31,7 @@ import type {
   StoragePlugin,
   StorageStatus,
 } from '../plugins/types';
+import { metaFromScriptContent } from '../indicators/script-meta';
 import { store } from '../store';
 import { pluginKey } from '../plugins/types';
 
@@ -98,6 +99,31 @@ async function api(
 }
 
 function metaFromRemote(r: Record<string, unknown>): ScriptMeta {
+  const content = r.content != null ? String(r.content) : '';
+  const kindRaw = r.scriptKind != null ? String(r.scriptKind) : r.kind != null ? String(r.kind) : '';
+  const scriptKind =
+    kindRaw === 'indicator' ||
+    kindRaw === 'strategy' ||
+    kindRaw === 'library' ||
+    kindRaw === 'unknown'
+      ? kindRaw
+      : undefined;
+  const pineVersion =
+    r.pineVersion != null
+      ? String(r.pineVersion)
+      : r.version != null
+        ? String(r.version)
+        : undefined;
+  const derived = content
+    ? metaFromScriptContent(content, { scriptKind, pineVersion })
+    : {
+        scriptKind: (scriptKind || 'unknown') as
+          | 'indicator'
+          | 'strategy'
+          | 'library'
+          | 'unknown',
+        pineVersion,
+      };
   return {
     id: String(r.id),
     name: String(r.name || 'Untitled'),
@@ -106,13 +132,17 @@ function metaFromRemote(r: Record<string, unknown>): ScriptMeta {
     revision: r.revision ? String(r.revision) : undefined,
     createdAt: Number(r.createdAt ?? r.created_at ?? Date.now()),
     updatedAt: Number(r.updatedAt ?? r.updated_at ?? Date.now()),
+    tags: Array.isArray(r.tags) ? (r.tags as string[]) : undefined,
+    scriptKind: derived.scriptKind,
+    pineVersion: derived.pineVersion,
   };
 }
 
 function docFromRemote(r: Record<string, unknown>): ScriptDocument {
+  const content = String(r.content ?? '');
   return {
-    ...metaFromRemote(r),
-    content: String(r.content ?? ''),
+    ...metaFromRemote({ ...r, content }),
+    content,
   };
 }
 

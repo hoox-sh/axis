@@ -40,10 +40,16 @@ import {
   LineSeries,
   AreaSeries,
   BaselineSeries,
+  LineType,
+  LineStyle,
   type IChartApi,
   type ISeriesApi,
   type LineWidth,
 } from 'lightweight-charts';
+import {
+  normalizeLineStyleToken,
+  type PlotSeriesKind,
+} from '../results/plot-visuals';
 import type { ChartType } from './chart-type';
 import {
   getThemeManager,
@@ -438,6 +444,29 @@ export function createBgcolorSeries(chart: IChartApi, paneIndex?: number): ISeri
   return series;
 }
 
+/** Hex `#rrggbb` / `#rgb` → `rgba(r,g,b,a)` for area fills; fall back to indigo soft. */
+function colorWithAlpha(color: string, alpha: number): string {
+  const s = (color || '').trim();
+  const m6 = s.match(/^#([0-9a-f]{6})$/i);
+  if (m6) {
+    const n = parseInt(m6[1]!, 16);
+    const r = (n >> 16) & 255;
+    const g = (n >> 8) & 255;
+    const b = n & 255;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  const m3 = s.match(/^#([0-9a-f]{3})$/i);
+  if (m3) {
+    const h = m3[1]!;
+    const r = parseInt(h[0]! + h[0]!, 16);
+    const g = parseInt(h[1]! + h[1]!, 16);
+    const b = parseInt(h[2]! + h[2]!, 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  if (/^rgba?\(/i.test(s)) return s;
+  return `rgba(147, 159, 255, ${alpha})`;
+}
+
 /** Plot / overlay line series with crosshair marker. */
 export function createLineSeries(
   chart: IChartApi,
@@ -465,20 +494,150 @@ export function createLineSeries(
     : chart.addSeries(LineSeries, opts);
 }
 
-/** Equity curve — void indigo fill on void canvas */
+/** Map Pine `plot.linestyle_*` string → LWC {@link LineStyle}. */
+function pineLineStyleToLwc(linestyle?: string | null): LineStyle {
+  const t = normalizeLineStyleToken(linestyle);
+  if (t === 'dashed') return LineStyle.Dashed;
+  if (t === 'dotted') return LineStyle.Dotted;
+  return LineStyle.Solid;
+}
+
+/**
+ * Pine plot overlay series for a {@link PlotSeriesKind}.
+ * - line / stepline / circles → Line (steps / point markers applied)
+ * - histogram → Histogram (columns & histogram)
+ * - area → Area
+ *
+ * Optional `linestyle` (`plot.linestyle_dashed` / `dotted` / `solid`) sets
+ * LWC `lineStyle` on Line / Area / stepline / circles hairline.
+ * Histogram ignores linestyle.
+ */
+export function createPlotOverlaySeries(
+  chart: IChartApi,
+  name: string,
+  color: string,
+  seriesKind: PlotSeriesKind = 'line',
+  lineWidth: number = 2,
+  paneIndex?: number,
+  linestyle?: string | null,
+): ISeriesApi<'Line'> | ISeriesApi<'Histogram'> | ISeriesApi<'Area'> {
+  const lw = Math.max(1, Math.min(4, Math.round(lineWidth || 2))) as LineWidth;
+  const lwcStyle = pineLineStyleToLwc(linestyle);
+  if (seriesKind === 'histogram') {
+    const opts = {
+      color,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      title: name,
+      base: 0,
+    };
+    return paneIndex !== undefined
+      ? chart.addSeries(HistogramSeries, opts, paneIndex)
+      : chart.addSeries(HistogramSeries, opts);
+  }
+  if (seriesKind === 'area') {
+    const series = createAreaSeries(chart, name, color, paneIndex, lw);
+    try {
+      series.applyOptions({ lineStyle: lwcStyle });
+    } catch {
+      /* ignore */
+    }
+    return series;
+  }
+  const series = createLineSeries(chart, name, color, paneIndex, lw);
+  try {
+    if (seriesKind === 'stepline') {
+      series.applyOptions({ lineType: LineType.WithSteps, lineStyle: lwcStyle });
+    } else if (seriesKind === 'circles') {
+      series.applyOptions({
+        pointMarkersVisible: true,
+        pointMarkersRadius: Math.max(2, lw + 1),
+        // Keep a hairline so times still connect; markers carry the style
+        lineWidth: 1 as LineWidth,
+        color: colorWithAlpha(color, 0.35),
+        crosshairMarkerBackgroundColor: color,
+        lineStyle: lwcStyle,
+      });
+    } else {
+      series.applyOptions({ lineStyle: lwcStyle });
+    }
+  } catch {
+    /* disposed / mock */
+  }
+  return series;
+}
+
+/**
+ * Pine `plotbar` overlay — OHLC bar series (not the main price bars).
+ * Single `color` tints both up/down; omit for VOID up/down.
+ */
+export function createPlotBarOverlaySeries(
+  chart: IChartApi,
+  name: string,
+  color?: string,
+  paneIndex?: number,
+): ISeriesApi<'Bar'> {
+  const up = color || VOID.up;
+  const down = color || VOID.down;
+  const opts = {
+    upColor: up,
+    downColor: down,
+    openVisible: true,
+    thinBars: true,
+    priceLineVisible: false,
+    lastValueVisible: true,
+    title: name,
+  };
+  return paneIndex !== undefined
+    ? chart.addSeries(BarSeries, opts, paneIndex)
+    : chart.addSeries(BarSeries, opts);
+}
+
+/**
+ * Pine `plotcandle` overlay — candlestick series (not the main price candles).
+ * Single `color` tints body/border/wick for both directions; omit for VOID up/down.
+ */
+export function createPlotCandleOverlaySeries(
+  chart: IChartApi,
+  name: string,
+  color?: string,
+  paneIndex?: number,
+): ISeriesApi<'Candlestick'> {
+  const up = color || VOID.up;
+  const down = color || VOID.down;
+  const opts = {
+    upColor: up,
+    downColor: down,
+    borderVisible: true,
+    borderUpColor: up,
+    borderDownColor: down,
+    wickUpColor: up,
+    wickDownColor: down,
+    priceLineVisible: false,
+    lastValueVisible: true,
+    title: name,
+  };
+  return paneIndex !== undefined
+    ? chart.addSeries(CandlestickSeries, opts, paneIndex)
+    : chart.addSeries(CandlestickSeries, opts);
+}
+
+/** Equity curve / plot.style_area — tinted fill from line color */
 export function createAreaSeries(
   chart: IChartApi,
   name: string,
   color = VOID.indigo,
   paneIndex?: number,
+  lineWidth: number = 2,
 ): ISeriesApi<'Area'> {
   const tokens = activeTokens();
   const bg = String(tokens['chart.bg_color'] ?? VOID.bg);
+  const lw = Math.max(1, Math.min(4, Math.round(lineWidth || 2))) as LineWidth;
   const opts = {
     lineColor: color,
-    topColor: 'rgba(147, 159, 255, 0.28)',
-    bottomColor: 'rgba(147, 159, 255, 0.02)',
-    lineWidth: 2 as LineWidth,
+    topColor: colorWithAlpha(color, 0.28),
+    bottomColor: colorWithAlpha(color, 0.02),
+    lineWidth: lw,
     priceLineVisible: false,
     lastValueVisible: true,
     title: name,
