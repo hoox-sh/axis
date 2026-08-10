@@ -42,6 +42,11 @@ import {
   mapBarsToVolumeData,
 } from './heavy-data';
 import {
+  formatPriceWithDecimals,
+  priceFormatForDecimals,
+  resolvePriceDecimals,
+} from './price-precision';
+import {
   store,
   setDrawings,
   setSelectedDrawingId,
@@ -282,6 +287,42 @@ export type SetDataToChartOpts = {
 };
 
 /**
+ * Apply price-scale decimal precision to the main price series (+ crosshair).
+ * Mode from {@link store.priceScaleDecimals}; auto uses symbol + bars.
+ */
+export function applyPriceScaleDecimals(opts?: {
+  bars?: typeof store.bars;
+  symbol?: string;
+}): number {
+  const mgr = getManager();
+  const pricePane = mgr?.getPane('price');
+  const series = pricePane?.series['candle'];
+  if (!series || !pricePane?.chart) return 2;
+
+  const bars = opts?.bars ?? store.bars;
+  const symbol = opts?.symbol ?? store.symbol;
+  const decimals = resolvePriceDecimals(store.priceScaleDecimals, { bars, symbol });
+  const fmt = priceFormatForDecimals(decimals);
+
+  try {
+    series.applyOptions({ priceFormat: fmt } as never);
+  } catch {
+    /* series disposed */
+  }
+  try {
+    // Crosshair horizontal label uses localization.priceFormatter when set
+    pricePane.chart.applyOptions({
+      localization: {
+        priceFormatter: (p: number) => formatPriceWithDecimals(p, decimals),
+      },
+    } as never);
+  } catch {
+    /* chart disposed */
+  }
+  return decimals;
+}
+
+/**
  * Ensure the price pane has a series matching `chartType`.
  * Swaps LWC series when the style changes; rebinds markers + drawing layer.
  */
@@ -336,6 +377,12 @@ export function ensurePriceSeries(chartType?: ChartType): void {
       pricePane.series['candle'].applyOptions({
         lastValueVisible: store.lastValueLabelsVisible !== false,
       });
+    } catch {
+      /* ignore */
+    }
+    // Price scale decimals (auto from symbol/bars or fixed)
+    try {
+      applyPriceScaleDecimals();
     } catch {
       /* ignore */
     }
@@ -432,6 +479,12 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       if (chartType !== 'heikinashi') resetHeikinAshiCache();
       const data = mapBarsToPriceData(bars, chartType);
       pricePane.series['candle'].setData(data as never);
+      // Re-detect decimals after history lands (auto uses symbol + bars)
+      try {
+        applyPriceScaleDecimals({ bars, symbol: store.symbol });
+      } catch {
+        /* ignore */
+      }
 
       // Baseline: base at first bar close so early range splits meaningfully
       if (chartType === 'baseline' && bars.length) {

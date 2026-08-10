@@ -94,6 +94,10 @@ import {
   type ThemeTokenValue,
 } from '../theme';
 import { beginRunEpoch, releaseRunStatus } from '../indicators/run-helpers';
+import {
+  normalizePriceScaleDecimalsMode,
+  type PriceScaleDecimalsMode,
+} from '../chart/price-precision';
 
 // Stable ID generation — uses timestamp prefix + counter to survive reloads
 let idCounter = 0;
@@ -133,6 +137,7 @@ const DEFAULTS: AppState = {
   chartType: DEFAULT_CHART_TYPE,
   priceScaleLabelsVisible: true,
   lastValueLabelsVisible: true,
+  priceScaleDecimals: 'auto',
   strategyUi: {
     slippageNextOpen: false,
     invertTradeLabels: false,
@@ -345,6 +350,9 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         typeof bag.lastValueLabelsVisible === 'boolean'
           ? bag.lastValueLabelsVisible
           : DEFAULTS.lastValueLabelsVisible,
+      priceScaleDecimals: normalizePriceScaleDecimalsMode(
+        (bag as { priceScaleDecimals?: unknown }).priceScaleDecimals,
+      ),
       strategyUi: {
         ...DEFAULTS.strategyUi,
         ...(bag.strategyUi && typeof bag.strategyUi === 'object'
@@ -884,6 +892,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     editorWrapEnabled: s.editorWrapEnabled,
     lastValueLabelsVisible: s.lastValueLabelsVisible,
     priceScaleLabelsVisible: s.priceScaleLabelsVisible,
+    priceScaleDecimals: normalizePriceScaleDecimalsMode(s.priceScaleDecimals),
     activePlugins: unwrap(s.activePlugins),
     pluginsConfig: unwrap(s.pluginsConfig),
     compare: {
@@ -2348,6 +2357,12 @@ export function setCrosshair(time: number | null, barIndex: number | null = null
   const cur = store.crosshair;
   if (cur?.time === time && cur?.barIndex === barIndex) return;
   setStore('crosshair', { time, barIndex });
+}
+
+/** Persist price-scale decimal mode (`auto` or 0–8). */
+export function setPriceScaleDecimals(mode: PriceScaleDecimalsMode | unknown) {
+  setStore('priceScaleDecimals', normalizePriceScaleDecimalsMode(mode));
+  persist();
 }
 
 /** Persist input overrides for the docked editor document (not yet applied). */

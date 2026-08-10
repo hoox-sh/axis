@@ -256,6 +256,13 @@ export interface AppState {
    */
   lastValueLabelsVisible: boolean;
   /**
+   * Right price-scale decimal places.
+   * - `'auto'` — detect from symbol heuristics + recent OHLCV
+   * - `0`–`8` — fixed decimals
+   * Persisted. Default `'auto'`.
+   */
+  priceScaleDecimals: import('../chart/price-precision').PriceScaleDecimalsMode;
+  /**
    * Strategy tester + chart trade-marker prefs (persisted).
    * Fills default to signal-bar **close**; slippage uses next bar **open**.
    */

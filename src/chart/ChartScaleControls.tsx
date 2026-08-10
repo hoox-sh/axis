@@ -22,7 +22,7 @@
  * left of the right price scale, above the time (month) axis.
  *
  * **[A]** auto-scale · **[L]** logarithmic · **[$]** right scale labels ·
- * **[N]** series last-value / name labels.
+ * **[N]** series last-value / name labels · **[.n]** price decimals (auto/0–8).
  *
  * Mounted via portal into the price pane DOM (`paneDomId('price')`) so volume
  * / indicator panes do not push the cluster to the host bottom-right.
@@ -35,13 +35,20 @@ import {
   Show,
   createEffect,
   createSignal,
+  createMemo,
   onMount,
   onCleanup,
 } from 'solid-js';
 import { Portal } from 'solid-js/web';
-import { store, setStore, persist } from '../store';
-import { getManager } from './manager-access';
+import { store, setStore, persist, setPriceScaleDecimals } from '../store';
+import { applyPriceScaleDecimals, getManager } from './manager-access';
 import { RIGHT_PRICE_SCALE_WIDTH } from './series-factory';
+import {
+  cyclePriceScaleDecimalsMode,
+  normalizePriceScaleDecimalsMode,
+  priceScaleDecimalsLabel,
+  resolvePriceDecimals,
+} from './price-precision';
 
 /** Fallback time-axis height when LWC `timeScale().height()` is unavailable. */
 const TIME_SCALE_FALLBACK_PX = 26;
@@ -219,6 +226,38 @@ export const ChartScaleControls: Component = () => {
     persist();
   };
 
+  const decimalsMode = createMemo(() =>
+    normalizePriceScaleDecimalsMode(store.priceScaleDecimals),
+  );
+  const decimalsEffective = createMemo(() =>
+    resolvePriceDecimals(decimalsMode(), {
+      symbol: store.symbol,
+      bars: store.bars,
+    }),
+  );
+
+  const onDecimals = () => {
+    const next = cyclePriceScaleDecimalsMode(store.priceScaleDecimals);
+    setPriceScaleDecimals(next);
+    try {
+      applyPriceScaleDecimals();
+    } catch {
+      /* chart optional */
+    }
+  };
+
+  // Re-apply when symbol / history / mode changes (auto re-detect)
+  createEffect(() => {
+    void store.priceScaleDecimals;
+    void store.symbol;
+    void store.chartDataGen;
+    try {
+      applyPriceScaleDecimals();
+    } catch {
+      /* ignore */
+    }
+  });
+
   const btnClass = (active: boolean) =>
     [
       'min-w-[1.65em] h-[1.65em] px-1',
@@ -284,6 +323,21 @@ export const ChartScaleControls: Component = () => {
         onClick={onNames}
       >
         N
+      </button>
+      <button
+        type="button"
+        class={btnClass(decimalsMode() === 'auto')}
+        title={
+          decimalsMode() === 'auto'
+            ? `Price scale decimals: auto (currently ${decimalsEffective()} from symbol/data) — click to fix 0…8`
+            : `Price scale decimals: fixed ${decimalsMode()} — click to cycle (auto → 0…8)`
+        }
+        aria-label="Price scale decimals"
+        aria-pressed={decimalsMode() === 'auto'}
+        data-testid="axis-chart-scale-decimals"
+        onClick={onDecimals}
+      >
+        .{priceScaleDecimalsLabel(decimalsMode())}
       </button>
     </div>
   );
