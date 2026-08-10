@@ -1,0 +1,188 @@
+# Copyright (C) 2024-2026 jango_blockchained
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# Build and push AXIS container images to GHCR.
+#
+# Images (owner from github.repository_owner):
+#   ghcr.io/<owner>/axis:pwa
+#   ghcr.io/<owner>/axis:pwa-latest
+#   ghcr.io/<owner>/axis:pwa-sha-<sha>
+#   ghcr.io/<owner>/axis:pwa-nginx (when building all/release)
+
+name: Docker
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths:
+      - 'Dockerfile'
+      - 'docker/**'
+      - 'docker-bake.hcl'
+      - 'docker-compose.yml'
+      - 'docker-compose.prod.yml'
+      - 'Makefile'
+      - 'package.json'
+      - 'bun.lock'
+      - 'vite.config.ts'
+      - 'index.html'
+      - 'tsconfig.json'
+      - 'bunfig.toml'
+      - 'src/**'
+      - 'public/**'
+      - 'vendor/**'
+      - 'pyodide/**'
+      - 'brand/**'
+      - 'scripts/**'
+      - 'examples/**'
+      - 'axis_pwa_server.py'
+      - 'manifest.webmanifest'
+      - '.github/workflows/docker.yml'
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'docker/**'
+      - 'docker-bake.hcl'
+      - 'docker-compose.yml'
+      - 'package.json'
+      - 'bun.lock'
+      - 'src/**'
+      - 'public/**'
+      - '.github/workflows/docker.yml'
+  workflow_dispatch:
+    inputs:
+      push:
+        description: 'Push images to GHCR'
+        type: boolean
+        default: true
+      targets:
+        description: 'Bake group/target'
+        type: choice
+        options:
+          - pwa
+          - all
+          - release
+        default: all
+
+concurrency:
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: Bake images
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Meta
+        id: meta
+        run: |
+          SHA_SHORT="${GITHUB_SHA::7}"
+          echo "sha_short=${SHA_SHORT}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF#refs/tags/v}"
+            TARGET="release"
+            MULTIARCH=true
+          else
+            TAG="latest"
+            TARGET="${{ github.event.inputs.targets || 'all' }}"
+            if [[ "${TARGET}" == "release" ]]; then
+              MULTIARCH=true
+            else
+              MULTIARCH=false
+            fi
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "bake_target=${TARGET}" >> "$GITHUB_OUTPUT"
+          echo "multiarch=${MULTIARCH}" >> "$GITHUB_OUTPUT"
+          VER=$(node -p "require('./package.json').version" 2>/dev/null || echo "2.0.0")
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          PUSH=false
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            if [[ "${{ github.event_name }}" != "workflow_dispatch" || "${{ inputs.push }}" == "true" ]]; then
+              PUSH=true
+            fi
+          fi
+          echo "push=${PUSH}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        if: steps.meta.outputs.multiarch == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: steps.meta.outputs.push == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bake (push)
+        if: steps.meta.outputs.push == 'true'
+        uses: docker/bake-action@v6
+        with:
+          files: |
+            ./docker-bake.hcl
+          targets: ${{ steps.meta.outputs.bake_target }}
+          push: true
+          set: |
+            *.args.GIT_SHA=${{ steps.meta.outputs.sha_short }}
+            *.args.VERSION=${{ steps.meta.outputs.version }}
+            *.args.BUN_VERSION=1.3.14
+            *.cache-from=type=gha,scope=axis-docker
+            *.cache-to=type=gha,mode=max,scope=axis-docker
+            TAG=${{ steps.meta.outputs.tag }}
+            GIT_SHA=${{ steps.meta.outputs.sha_short }}
+            VERSION=${{ steps.meta.outputs.version }}
+            REGISTRY=ghcr.io/${{ github.repository_owner }}
+            IMAGE_NAME=axis
+
+      - name: Bake (PR / no-push load)
+        if: steps.meta.outputs.push != 'true'
+        uses: docker/bake-action@v6
+        with:
+          files: |
+            ./docker-bake.hcl
+          # release group requires push; fall back to all for PR validation
+          targets: ${{ steps.meta.outputs.bake_target == 'release' && 'all' || steps.meta.outputs.bake_target }}
+          load: true
+          set: |
+            *.args.GIT_SHA=${{ steps.meta.outputs.sha_short }}
+            *.args.VERSION=${{ steps.meta.outputs.version }}
+            *.args.BUN_VERSION=1.3.14
+            *.cache-from=type=gha,scope=axis-docker
+            *.cache-to=type=gha,mode=max,scope=axis-docker
+            *.platform=linux/amd64
+            *.output=type=docker
+            TAG=${{ steps.meta.outputs.tag }}
+            GIT_SHA=${{ steps.meta.outputs.sha_short }}
+            VERSION=${{ steps.meta.outputs.version }}
+            REGISTRY=ghcr.io/${{ github.repository_owner }}
+            IMAGE_NAME=axis
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Docker bake"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Target | \`${{ steps.meta.outputs.bake_target }}\` |"
+            echo "| Push | \`${{ steps.meta.outputs.push }}\` |"
+            echo "| Tag | \`${{ steps.meta.outputs.tag }}\` |"
+            echo "| SHA | \`${{ steps.meta.outputs.sha_short }}\` |"
+            echo "| Version | \`${{ steps.meta.outputs.version }}\` |"
+            echo "| Image | \`ghcr.io/${{ github.repository_owner }}/axis:pwa\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

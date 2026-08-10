@@ -26,7 +26,13 @@
     "axis:doctor": "bun packages/cli/bin/axis.js doctor",
     "axis:setup": "bun packages/cli/bin/axis.js setup",
     "axis:deploy": "bun packages/cli/bin/axis.js deploy",
-    "axis:health": "bun packages/cli/bin/axis.js health"
+    "axis:health": "bun packages/cli/bin/axis.js health",
+    "docker:bake": "make docker-bake",
+    "docker:up": "make docker-up",
+    "docker:down": "make docker-down",
+    "docker:health": "make docker-health",
+    "docker:smoke": "make docker-smoke",
+    "docker:push": "make docker-push"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.0",
