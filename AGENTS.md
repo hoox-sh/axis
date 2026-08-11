@@ -55,6 +55,8 @@ bun run axis:health -- --oauth
 | `docs/` | Product docs (Mintlify-style MDX) |
 | `docs/devops/desktop.mdx` | Desktop (Tauri) guide |
 | `docs/enduser/guides/on-chain.mdx` | End-user on-chain guide |
+| `CHANGELOG.md` | Recursive release notes + full git history |
+| `scripts/generate-changelog.py` | Regenerate changelog history block |
 | `LEGACY.md` | Old static shell notes |
 
 ## Hard constraints
@@ -63,6 +65,140 @@ bun run axis:health -- --oauth
 - Keep API base URL configurable (default local pyne on `:5002`).
 - License headers / SPDX: **AGPL-3.0-only**, author **jango_blockchained**.
 - Worker bindings (`DB`, KV, etc.) are environment-specific — do not invent production IDs in docs without checking `worker/wrangler.toml`.
+- **Keep `CHANGELOG.md` current** — see [Changelog & releases](#changelog--releases) below. Do not ship a tag without updating it.
+
+## Changelog & releases
+
+### Changelog (recursive — keep updating)
+
+| Path | Role |
+|------|------|
+| `CHANGELOG.md` | Human release notes + **full recursive git history** (month × type) |
+| `scripts/generate-changelog.py` | Regenerates the **Full history** block; preserves hand-written version sections |
+
+**Agents must continue updating the changelog** on every meaningful change set and before any tag/publish:
+
+1. **During work** — append bullets under `## [Unreleased]` (what / why, not only commit subjects).
+2. **Before release** — move Unreleased into `## [X.Y.Z] — YYYY-MM-DD`, bump `package.json` `version`, then:
+   ```bash
+   python3 scripts/generate-changelog.py   # refresh recursive history; keeps version sections
+   ```
+3. **Commit** the changelog with the release (or a dedicated `docs(changelog): …` commit).
+4. Never invent history; regenerate from git. Prefer conventional commits (`feat:`, `fix:`, `perf:`, `docs:`, …) so the recursive sections group cleanly.
+
+### Commit
+
+```bash
+# Review
+git status && git diff && git log -5 --oneline
+
+# Stage intentional paths only (never secrets / dist / node_modules)
+git add <paths>
+git commit -m "$(cat <<'EOF'
+type(scope): short summary
+
+Why this change matters (1–2 sentences).
+EOF
+)"
+```
+
+- Use **conventional commits** when possible: `feat`, `fix`, `perf`, `docs`, `refactor`, `test`, `ci`, `chore`.
+- One logical change per commit when practical; security/perf hardening can be a small stack.
+- **Do not** commit `.env`, wrangler secrets, or real production KV/D1 ids invented in docs.
+
+### Build
+
+```bash
+bun install                 # app
+cd worker && bun install    # worker deps
+bun run build               # Vite → dist/
+bun run test                # unit + worker tests
+# optional:
+bunx tsc --noEmit && (cd worker && bun run typecheck)
+make docker-bake            # local PWA image
+```
+
+### Tag
+
+Semver follows root `package.json` `version` (e.g. `2.0.1` → tag `v2.0.1`).
+
+```bash
+# After changelog + version bump are committed on main
+git tag -a "v$(node -p "require('./package.json').version")" -m "AXIS v$(node -p "require('./package.json').version")"
+git push origin "v$(node -p "require('./package.json').version")"
+# or push all: git push origin --tags
+```
+
+- Annotated tags only (`-a`).
+- Tag only from a clean `main` (or release branch) that includes the changelog section for that version.
+
+### Push
+
+```bash
+git push origin main
+git push origin --tags
+```
+
+- Confirm `git status` is clean and CI-green when required.
+- Pushing `main` triggers GitHub Actions (desktop build, docker workflows under `.github/workflows/`).
+
+### Publish (deploy)
+
+“Publish” here means shipping artifacts users hit, not npm (root package is `private`).
+
+| Target | Command | Notes |
+|--------|---------|--------|
+| **Worker** (API/WS) | `bun run axis:deploy` or `make worker-deploy` / `axis deploy worker` | Wrangler → `pynescript-axis` |
+| **Pages** (PWA static) | `make pages-deploy` or `axis deploy pages` | `vite build` + `wrangler pages deploy dist --project-name=pynescript-axis` |
+| **All** | `bun packages/cli/bin/axis.js deploy all` | Worker then Pages |
+| **Health** | `bun run axis:health` | Probe deployed Worker `/health` |
+| **GHCR / Docker** | `make docker-push` | Multi-arch bake release (needs registry login) |
+
+```bash
+# Typical product publish after tag
+bun run build
+bun packages/cli/bin/axis.js deploy all
+bun run axis:health
+```
+
+- Production Worker must **not** ship `ALLOW_OPEN_KEYS=1` with real D1; bind `API_KEYS` KV (see harden-perf audit).
+- Never invent CF resource IDs — use `worker/wrangler.toml` / dashboard values.
+
+### Sync
+
+Keep remotes, sister tools, and vendored PYNE assets aligned after publish:
+
+```bash
+# Git
+git fetch origin
+git status   # main should match origin/main after push
+
+# PYNE builtins / wheel (when pyne releases change runtime surface)
+scripts/sync-pyne-builtins.sh
+scripts/sync-pyne-wheel.sh
+
+# Optional: doctor deployed stack
+bun run axis:doctor
+bun run axis:health -- --oauth
+```
+
+| Sync target | When |
+|-------------|------|
+| `origin/main` + tags | After every release push |
+| `src/editor/data/pyne-builtins.json` | After pyne language/builtin changes |
+| Vendored wheel under `vendor/` / `public/pyodide/` | After pyne runtime releases |
+| Docs site (Mintlify / Pages docs) | After user-facing doc changes under `docs/` |
+
+### Release checklist (agents)
+
+1. Update `CHANGELOG.md` `[Unreleased]` → version section; run `python3 scripts/generate-changelog.py`.
+2. Bump `package.json` `version` if not already.
+3. `git commit` (changelog + version + product commits already on branch).
+4. `bun run test` and `bun run build`.
+5. `git tag -a vX.Y.Z -m "AXIS vX.Y.Z"`.
+6. `git push origin main && git push origin vX.Y.Z`.
+7. Publish: `axis deploy all` (or Worker/Pages separately) + `axis:health`.
+8. Sync: `git fetch` / status clean; pyne scripts if needed.
 
 ## Pine Script™ / naming parity (critical)
 
