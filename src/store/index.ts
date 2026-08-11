@@ -2315,8 +2315,17 @@ export function setPanelHoverSlide(id: PanelId, enabled: boolean) {
     clearPanelHoverSlideExpanded(id);
   }
   persist();
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('axis-chart-reflow'));
+  // Chart reflow (best-effort — skip when window is partial, e.g. unit tests)
+  try {
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.dispatchEvent === 'function' &&
+      typeof CustomEvent === 'function'
+    ) {
+      window.dispatchEvent(new CustomEvent('axis-chart-reflow'));
+    }
+  } catch {
+    /* ignore */
   }
 }
 
