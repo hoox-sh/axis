@@ -21,10 +21,11 @@
  * Dockable / floatable **editor chrome** around {@link TabbedEditor}.
  *
  * Uses {@link FloatableShell} for the same panel management as watchlist /
- * layers (dock menu, float, drag-to-edge, close). Primary header tools:
- * **Run**, **Scriptlogs**, **Profiler** (slide-in labels on hover). Secondary
- * tools (inline debug, chart pins, column ruler) live in a **right hamburger**
- * next to close. **Open in new tab** stays in the left dock menu.
+ * layers (dock menu, float, drag-to-edge, close). Primary header tools show
+ * **icon + label** always (no hover slide-in): **Run**, **Library**,
+ * **Scriptlogs**, **Profiler**. Secondary tools (inline debug, chart pins,
+ * column ruler, format) live in a **right overflow** next to close.
+ * **Open in new tab** stays in the left dock menu.
  *
  * Set `standalone` for the `?view=editor` popout window (simplified chrome).
  *
@@ -51,6 +52,7 @@ import {
   toggleDebugPinsEnabled,
   toggleEditorRulerEnabled,
   toggleEditorWrapEnabled,
+  toggleLibraryPanel,
   saveEditorDoc,
   isScriptRunBlockedByPreEval,
   setStatus,
@@ -66,9 +68,6 @@ import { countDebugPins } from '../results/debug-pins';
 import { runPreevalNow } from './preevaluate';
 import { formatPineSource } from './pine-format';
 
-/** How long a slide-in label stays open after pointer leaves (ms). */
-const EDITOR_LABEL_HOLD_MS = 2000;
-
 interface Props {
   editorRef: { getDoc: () => string; setDoc?: (doc: string) => void };
   /** When true, render as full-window editor (no floatable chrome) */
@@ -80,16 +79,21 @@ interface Props {
 export const EditorPane: Component<Props> = (props) => {
   const onRun = async (doc: string, mode: 'auto' | 'new' = 'auto') => {
     if (!doc?.trim()) return;
-    // Final pre-eval gate (catches race if debounce has not finished)
-    const pe = await runPreevalNow(doc);
-    if (pe.hasErrors) return;
-    if (isScriptRunBlockedByPreEval()) return;
-    // Parent may override (e.g. app shell) — still pass through doc only for auto
-    if (props.onRun && mode === 'auto') {
-      props.onRun(doc);
-      return;
+    try {
+      // Final pre-eval gate (catches race if debounce has not finished)
+      const pe = await runPreevalNow(doc);
+      if (pe.hasErrors) return;
+      if (isScriptRunBlockedByPreEval()) return;
+      // Parent may override (e.g. app shell) — still pass through doc only for auto
+      if (props.onRun && mode === 'auto') {
+        props.onRun(doc);
+        return;
+      }
+      void runFromEditor(doc, { mode });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setStatus('error', msg || 'Run failed');
     }
-    void runFromEditor(doc, { mode });
   };
 
   const runBlocked = () => isScriptRunBlockedByPreEval();
@@ -103,11 +107,16 @@ export const EditorPane: Component<Props> = (props) => {
   };
 
   const popoutLiveEditor = (mode: 'popup' | 'tab' = 'popup') => {
-    const doc = props.editorRef.getDoc?.() || '';
-    writeSharedDoc(doc);
-    saveEditorDoc(doc);
-    setEditorMode('popout');
-    openEditorWindow(mode);
+    try {
+      const doc = props.editorRef.getDoc?.() || '';
+      writeSharedDoc(doc);
+      saveEditorDoc(doc);
+      setEditorMode('popout');
+      openEditorWindow(mode);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setStatus('error', msg || 'Could not open editor window');
+    }
   };
 
   /** Chart pin count from last run (shown next to Pins when enabled). */
@@ -151,69 +160,49 @@ export const EditorPane: Component<Props> = (props) => {
   };
 
   /**
-   * Icon toolbar with slide-in labels to the right on hover.
-   * Label stays open while hovering; slides out 2s after leave, or immediately
-   * when the pointer moves to another tool.
+   * Format active buffer (indent / whitespace).
+   * Available from overflow menu + Shift+Alt+F / Mod+Shift+F in CodeMirror.
    */
-  const [labelId, setLabelId] = createSignal<string | null>(null);
-  let labelHideTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const clearLabelHideTimer = () => {
-    if (labelHideTimer != null) {
-      clearTimeout(labelHideTimer);
-      labelHideTimer = null;
-    }
-  };
-
-  const showToolLabel = (id: string) => {
-    clearLabelHideTimer();
-    setLabelId(id);
-  };
-
-  const scheduleHideToolLabel = (id: string) => {
-    clearLabelHideTimer();
-    labelHideTimer = setTimeout(() => {
-      labelHideTimer = null;
-      // Only hide if still the same tool (next-button hover will have changed it)
-      if (labelId() === id) setLabelId(null);
-    }, EDITOR_LABEL_HOLD_MS);
-  };
-
-  onCleanup(() => clearLabelHideTimer());
-
-  /** Format active buffer (indent / whitespace). Shift+Alt+F also bound in CM. */
   const formatActiveDoc = () => {
-    const ref = props.editorRef as {
-      formatDoc?: () => boolean;
-      getDoc?: () => string;
-      setDoc?: (d: string) => void;
-    };
-    if (ref.formatDoc) {
-      const changed = ref.formatDoc();
-      const doc = ref.getDoc?.() || '';
-      if (changed) {
-        saveEditorDoc(doc);
-        setStatus('ready', 'Formatted');
-      } else {
-        setStatus('ready', 'Already formatted');
+    try {
+      const ref = props.editorRef as {
+        formatDoc?: () => boolean;
+        getDoc?: () => string;
+        setDoc?: (d: string) => void;
+      };
+      if (typeof ref.formatDoc === 'function') {
+        const changed = ref.formatDoc();
+        const doc = ref.getDoc?.() || '';
+        if (changed) {
+          saveEditorDoc(doc);
+          setStatus('ready', 'Formatted');
+        } else {
+          setStatus('ready', 'Already formatted');
+        }
+        return;
       }
-      return;
+      const doc = ref.getDoc?.() || '';
+      if (!doc.trim()) {
+        setStatus('ready', 'Nothing to format');
+        return;
+      }
+      const next = formatPineSource(doc);
+      if (next === doc) {
+        setStatus('ready', 'Already formatted');
+        return;
+      }
+      ref.setDoc?.(next);
+      saveEditorDoc(next);
+      setStatus('ready', 'Formatted');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setStatus('error', msg || 'Format failed');
     }
-    const doc = ref.getDoc?.() || '';
-    if (!doc.trim()) return;
-    const next = formatPineSource(doc);
-    if (next === doc) {
-      setStatus('ready', 'Already formatted');
-      return;
-    }
-    ref.setDoc?.(next);
-    saveEditorDoc(next);
-    setStatus('ready', 'Formatted');
   };
 
   /**
-   * Primary strip (left → right): Run · Format · | · Logs · Profiler
-   * Secondary tools live in the overflow menu (right).
+   * Primary strip (left → right): Run · Library · | · Logs · Profiler
+   * Labels always visible (icon + text). Secondary tools in overflow menu.
    */
   const editorTools = (
     <div
@@ -245,9 +234,6 @@ export const EditorPane: Component<Props> = (props) => {
           testId="axis-editor-btn-run"
           pressed={store.status === 'running'}
           disabled={runBlocked() || store.status === 'running'}
-          open={labelId() === 'run'}
-          onShow={() => showToolLabel('run')}
-          onScheduleHide={() => scheduleHideToolLabel('run')}
           onClick={() => {
             if (store.status === 'running' || runBlocked()) return;
             const doc = props.editorRef.getDoc?.() || '';
@@ -260,29 +246,24 @@ export const EditorPane: Component<Props> = (props) => {
             <Icons.play size={12} />
           )}
         </EditorToolBtn>
+        <EditorToolBtn
+          id="library"
+          label="Library"
+          title="Script library — load / save Pine scripts"
+          testId="axis-editor-btn-library"
+          pressed={isPanelOpen('library')}
+          onClick={() => toggleLibraryPanel()}
+        >
+          <Icons.folder size={12} />
+        </EditorToolBtn>
+        <span class="axis-editor-tools-sep" aria-hidden="true" />
       </Show>
-      <EditorToolBtn
-        id="format"
-        label="Format"
-        title="Format document — indent, trim, normalize blanks (Shift+Alt+F)"
-        testId="axis-editor-btn-format"
-        open={labelId() === 'format'}
-        onShow={() => showToolLabel('format')}
-        onScheduleHide={() => scheduleHideToolLabel('format')}
-        onClick={() => formatActiveDoc()}
-      >
-        <Icons.alignLeft size={12} />
-      </EditorToolBtn>
-      <span class="axis-editor-tools-sep" aria-hidden="true" />
       <EditorToolBtn
         id="scriptlogs"
         label="Logs"
         title="Scriptlogs — script log.* output (not system telemetry)"
         testId="axis-btn-scriptlogs"
         pressed={isPanelOpen('scriptlogs')}
-        open={labelId() === 'scriptlogs'}
-        onShow={() => showToolLabel('scriptlogs')}
-        onScheduleHide={() => scheduleHideToolLabel('scriptlogs')}
         onClick={() => toggleScriptLogsPanel()}
       >
         <Icons.scrollText size={12} />
@@ -293,9 +274,6 @@ export const EditorPane: Component<Props> = (props) => {
         title={profilerTitle()}
         testId="axis-btn-profiler"
         pressed={store.profilerEnabled}
-        open={labelId() === 'profiler'}
-        onShow={() => showToolLabel('profiler')}
-        onScheduleHide={() => scheduleHideToolLabel('profiler')}
         onClick={() => {
           const turningOn = !store.profilerEnabled;
           toggleProfilerEnabled();
@@ -329,7 +307,7 @@ export const EditorPane: Component<Props> = (props) => {
     </button>
   );
 
-  /** Right overflow (next to close): view / debug toggles. */
+  /** Right overflow (next to close): view / debug / format toggles. */
   const editorOverflowMenu = () => (
     <EditorOverflowMenu
       pinCount={pinCount()}
@@ -339,6 +317,10 @@ export const EditorPane: Component<Props> = (props) => {
       onToggleRuler={() => toggleEditorRulerEnabled()}
       onToggleWrap={() => toggleEditorWrapEnabled()}
       onFormat={() => formatActiveDoc()}
+      onOpenLibrary={
+        props.standalone ? undefined : () => toggleLibraryPanel()
+      }
+      libraryOpen={!props.standalone && isPanelOpen('library')}
     />
   );
 
@@ -414,6 +396,8 @@ const EditorOverflowMenu: Component<{
   onToggleRuler: () => void;
   onToggleWrap: () => void;
   onFormat: () => void;
+  onOpenLibrary?: () => void;
+  libraryOpen?: boolean;
 }> = (props) => {
   const [open, setOpen] = createSignal(false);
   let wrapEl: HTMLDivElement | undefined;
@@ -470,6 +454,25 @@ const EditorOverflowMenu: Component<{
             if (t?.closest?.('[role="menuitem"]')) close();
           }}
         >
+          <Show when={props.onOpenLibrary}>
+            <div class="axis-panel-menu-section">Scripts</div>
+            <button
+              type="button"
+              role="menuitem"
+              class={`axis-panel-menu-item ${
+                props.libraryOpen ? 'is-active' : ''
+              }`}
+              title="Open script library panel"
+              data-testid="axis-btn-editor-library-menu"
+              onClick={() => props.onOpenLibrary?.()}
+            >
+              <Icons.folder size={14} />
+              <span>Open library</span>
+              <Show when={props.libraryOpen}>
+                <Icons.check size={12} class="ml-auto opacity-80" />
+              </Show>
+            </button>
+          </Show>
           <div class="axis-panel-menu-section">View</div>
           <button
             type="button"
@@ -574,8 +577,8 @@ const EditorOverflowMenu: Component<{
 };
 
 /**
- * Icon button with a label that slides in to the right when `open`.
- * Active/pressed state is **icon color only** (no border / fill chrome).
+ * Compact icon + always-visible label button for the editor header strip.
+ * Active/pressed state is **icon/label color only** (no border / fill chrome).
  */
 const EditorToolBtn: Component<{
   id: string;
@@ -584,9 +587,6 @@ const EditorToolBtn: Component<{
   testId?: string;
   pressed?: boolean;
   disabled?: boolean;
-  open: boolean;
-  onShow: () => void;
-  onScheduleHide: () => void;
   onClick: () => void;
   children: JSX.Element;
 }> = (props) => {
@@ -595,9 +595,7 @@ const EditorToolBtn: Component<{
       type="button"
       class={`sc-btn sc-btn-ghost axis-editor-tool-btn ${
         props.pressed ? 'is-tool-on' : ''
-      } ${props.open ? 'is-label-open' : ''} ${
-        props.disabled ? 'opacity-50 cursor-not-allowed' : ''
-      }`}
+      } ${props.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
       title={props.title}
       aria-label={props.label}
       aria-pressed={props.pressed}
@@ -605,10 +603,6 @@ const EditorToolBtn: Component<{
       disabled={props.disabled}
       data-testid={props.testId}
       data-tool-id={props.id}
-      onPointerEnter={() => props.onShow()}
-      onPointerLeave={() => props.onScheduleHide()}
-      onFocus={() => props.onShow()}
-      onBlur={() => props.onScheduleHide()}
       onClick={() => {
         if (props.disabled) return;
         props.onClick();

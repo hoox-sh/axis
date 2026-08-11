@@ -1445,8 +1445,21 @@ body.axis-panel-dragging {
   display: flex;
   flex-direction: column;
 }
-/* Alone in dock strip: grow to fill width */
-.axis-dock-col[data-dock-count='1'] .axis-panel-shell[data-panel-id='editor'] {
+/* Hover-slide peek must win over editor fill so the rail can collapse */
+.axis-panel-shell[data-panel-id='editor'].axis-panel-hover-slide.is-hover-collapsed {
+  height: auto !important;
+  max-height: none;
+  flex: 0 0 auto !important;
+  width: auto !important; /* use inline peek width from shellStyle */
+}
+/* Alone in dock strip: grow to fill width (unless hover-slide is managing size) */
+.axis-dock-col[data-dock-count='1']
+  .axis-panel-shell[data-panel-id='editor']:not(.axis-panel-hover-slide) {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+}
+.axis-dock-col[data-dock-count='1']
+  .axis-panel-shell[data-panel-id='editor'].axis-panel-hover-slide.is-hover-expanded {
   flex: 1 1 auto !important;
   width: 100% !important;
 }
@@ -1560,6 +1573,44 @@ body.axis-panel-dragging {
   gap: 0.35em;
   user-select: none;
   touch-action: none;
+}
+
+/* ── Hover-slide (docked auto-hide rail) ───────────────────────── */
+.axis-panel-shell.axis-panel-hover-slide {
+  will-change: width, height;
+}
+.axis-panel-shell.axis-panel-hover-slide.is-hover-collapsed {
+  /* Peek rail — keep the handle reachable, hide body chrome */
+  overflow: hidden;
+}
+.axis-panel-shell.axis-panel-hover-slide.is-hover-collapsed .axis-panel-handle {
+  /* Center the menu icon in the thin strip */
+  padding-inline: 0.15em;
+  gap: 0;
+  min-height: 100%;
+  justify-content: center;
+}
+.axis-panel-shell.axis-panel-hover-slide.is-hover-collapsed .axis-panel-title {
+  /* Side docks: vertical-ish label; bottom: still truncates */
+  font-size: 0.65em;
+  letter-spacing: 0.04em;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+  pointer-events: none;
+}
+.axis-panel-shell.axis-panel-hover-slide.is-hover-collapsed[data-panel-dock='bottom'] .axis-panel-title {
+  max-width: 8em;
+  opacity: 0.85;
+}
+.axis-panel-shell.axis-panel-hover-slide .axis-panel-body.is-hover-hidden {
+  display: none !important;
+  pointer-events: none;
+}
+.axis-panel-shell.axis-panel-hover-slide.is-hover-expanded {
+  box-shadow: var(--ui-shadow-panel, 0 8px 28px rgba(0, 0, 0, 0.35));
 }
 
 .axis-panel-grip {
@@ -1717,14 +1768,14 @@ body.axis-panel-dragging {
   padding-top: 0.25em;
 }
 
-/* Editor header tools — icons with slide-in labels on hover */
+/* Editor header tools — icon + label always visible (no slide-in) */
 .axis-editor-tools {
   display: flex;
   align-items: center;
   gap: 0.15em;
   flex-shrink: 0;
   min-width: 0;
-  max-width: min(78%, 32rem);
+  max-width: min(85%, 36rem);
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -1744,26 +1795,23 @@ body.axis-panel-dragging {
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 0;
-  min-width: 1.65em;
-  max-width: 1.65em;
+  gap: 0.35em;
+  min-width: 0;
+  max-width: none;
   height: 1.65em;
   min-height: 1.65em;
-  padding: 0 0.3em;
+  padding: 0 0.5em 0 0.35em;
   overflow: hidden;
   white-space: nowrap;
   /* Tighter corners than default sc-btn / --radius-input */
   border-radius: var(--radius-chip);
-  /* No chrome border — active state is icon color only */
+  /* No chrome border — active state is icon/label color only */
   border-color: transparent !important;
   background: transparent !important;
   box-shadow: none !important;
-  /* Closed / slide-out timing (used when .is-label-open is removed) */
   transition:
-    max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-    gap 0.36s cubic-bezier(0.4, 0, 0.2, 1),
-    padding 0.36s cubic-bezier(0.4, 0, 0.2, 1),
-    color 0.15s ease;
+    color 0.15s ease,
+    background-color 0.15s ease;
 }
 /* Override sc-btn is-active / aria-pressed borders — color the icon only */
 .axis-editor-tools .axis-editor-tool-btn.is-tool-on,
@@ -1786,20 +1834,6 @@ body.axis-panel-dragging {
   background: color-mix(in srgb, var(--color-accent) 10%, transparent) !important;
   border-color: transparent !important;
 }
-.axis-editor-tools .axis-editor-tool-btn.is-label-open {
-  max-width: 11em;
-  gap: 0.35em;
-  padding-left: 0.35em;
-  padding-right: 0.5em;
-  /* Open / slide-in: slightly snappier ease-out */
-  transition:
-    max-width 0.36s cubic-bezier(0.22, 1, 0.36, 1),
-    gap 0.32s cubic-bezier(0.22, 1, 0.36, 1),
-    padding 0.32s cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease;
-}
 .axis-editor-tool-icon {
   display: inline-flex;
   align-items: center;
@@ -1810,29 +1844,11 @@ body.axis-panel-dragging {
 }
 .axis-editor-tool-label {
   display: inline-block;
-  max-width: 0;
-  opacity: 0;
-  overflow: hidden;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1;
-  transform: translateX(-6px);
-  /* Slide-out: fade a bit earlier than width collapse */
-  transition:
-    max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.22s ease,
-    transform 0.36s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.axis-editor-tool-btn.is-label-open .axis-editor-tool-label {
-  max-width: 9em;
-  opacity: 1;
-  transform: translateX(0);
-  /* Slide-in: width leads slightly, text fades in with soft ease-out */
-  transition:
-    max-width 0.36s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.28s ease 0.04s,
-    transform 0.36s cubic-bezier(0.22, 1, 0.36, 1);
+  user-select: none;
 }
 
 /* Editor right overflow menu (secondary tools) — open upward/down next to close */

@@ -31,7 +31,12 @@
 
 import { store, isPanelOpen } from '../../store';
 import type { PanelChrome, PanelDock, PanelId } from './types';
-import { PANEL_META } from './types';
+import { isHoverSlideEligible, PANEL_META } from './types';
+import {
+  getHoverSlideExpandedMap,
+  hoverSlideLayoutSize,
+  isPanelHoverSlideExpanded,
+} from './hover-slide';
 
 /**
  * Stable start→end order within a dock.
@@ -104,21 +109,50 @@ export function dockStackCount(dock: PanelDock): number {
 }
 
 /**
+ * Layout width of one panel on a side dock (respects hover-slide peek).
+ * Tracks {@link getHoverSlideExpandedMap} for reactivity when collapsed.
+ */
+export function panelDockLayoutWidth(id: PanelId): number {
+  void getHoverSlideExpandedMap();
+  const c = store.panelChrome?.[id] as PanelChrome | undefined;
+  const full = c?.w ?? PANEL_META[id].defaultW;
+  const dock = c?.dock ?? PANEL_META[id].defaultDock;
+  return hoverSlideLayoutSize(id, dock, full, {
+    hoverSlide: !!c?.hoverSlide && isHoverSlideEligible(dock),
+    expanded: isPanelHoverSlideExpanded(id),
+  });
+}
+
+/**
+ * Layout height of one panel on the bottom dock (respects hover-slide peek).
+ */
+export function panelDockLayoutHeight(id: PanelId): number {
+  void getHoverSlideExpandedMap();
+  const c = store.panelChrome?.[id] as PanelChrome | undefined;
+  const full = c?.h ?? PANEL_META[id].defaultH;
+  const dock = c?.dock ?? 'bottom';
+  return hoverSlideLayoutSize(id, dock, full, {
+    hoverSlide: !!c?.hoverSlide && isHoverSlideEligible(dock),
+    expanded: isPanelHoverSlideExpanded(id),
+  });
+}
+
+/**
  * Width of a left/right dock strip.
- * - 1 panel: that panel’s width
- * - 2+ panels: **sum** of widths (side-by-side), capped to a viewport fraction
+ * - 1 panel: that panel’s layout width (peek when hover-slide collapsed)
+ * - 2+ panels: **sum** of layout widths (side-by-side), capped to a viewport fraction
  */
 export function dockColumnWidth(dock: 'left' | 'right'): number {
   const ids = panelsOnDock(dock);
   if (!ids.length) return 0;
+  // Track hover expand map so column width reflows with slide open/close
+  void getHoverSlideExpandedMap();
   if (ids.length === 1) {
-    const id = ids[0]!;
-    return store.panelChrome?.[id]?.w ?? PANEL_META[id].defaultW;
+    return panelDockLayoutWidth(ids[0]!);
   }
   let sum = 0;
   for (const id of ids) {
-    const w = store.panelChrome?.[id]?.w ?? PANEL_META[id].defaultW;
-    sum += Math.max(PANEL_META[id].minW || 1, w);
+    sum += Math.max(PANEL_META[id].minW || 1, panelDockLayoutWidth(id));
   }
   const cap =
     typeof window !== 'undefined' && window.innerWidth > 0

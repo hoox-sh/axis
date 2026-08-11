@@ -59,6 +59,12 @@ export interface PanelChrome {
   h: number;
   /** Stacking order for float windows */
   z: number;
+  /**
+   * When true and the panel is **docked** (left/right/bottom), the shell
+   * collapses to a peek strip and slides open on pointer enter / closed on leave.
+   * Ignored for float / window docks.
+   */
+  hoverSlide?: boolean;
 }
 
 /** Full chrome map keyed by {@link PanelId}. */
@@ -185,8 +191,14 @@ export function defaultPanelChrome(id: PanelId, overrides?: Partial<PanelChrome>
     w: m.defaultW,
     h: m.defaultH,
     z: 20,
+    hoverSlide: false,
     ...overrides,
   };
+}
+
+/** True when hover-slide is meaningful (docked side/bottom, not float/window). */
+export function isHoverSlideEligible(dock: PanelDock): boolean {
+  return dock === 'left' || dock === 'right' || dock === 'bottom';
 }
 
 /**

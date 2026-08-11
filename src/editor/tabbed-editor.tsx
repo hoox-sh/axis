@@ -77,7 +77,6 @@ import { clearPreevalOnEdit, cancelPreeval, runPreevalNow } from './preevaluate'
 import { countDocStats, cursorLineCol } from './doc-stats';
 import { ColorToolsPanel } from './ColorToolsPanel';
 import { scanPineColors } from './pine-colors';
-import { formatPineSource } from './pine-format';
 import { Icons } from '../ui/icons';
 
 export { countDocStats, cursorLineCol } from './doc-stats';
@@ -283,7 +282,13 @@ export const TabbedEditor: Component<Props> = (props) => {
        * Activates the first opened tab and loads full content into CM.
        */
       props.editorRef.loadLibraryDocs = (docs) => {
-        const items = (docs || []).filter((d) => d && typeof d.content === 'string');
+        const items = (docs || [])
+          .filter((d) => d && typeof d.content === 'string')
+          .map((d) => ({
+            content: d.content,
+            name: (d.name || 'Imported').trim() || 'Imported',
+            libraryId: d.libraryId,
+          }));
         if (!items.length) return;
 
         // Snapshot current CM buffer into the active tab before we reshuffle
@@ -295,12 +300,13 @@ export const TabbedEditor: Component<Props> = (props) => {
         }
 
         const newTabs = items.map((d) =>
-          newTab(d.name || 'Imported', d.content, d.libraryId),
+          newTab(d.name, d.content, d.libraryId),
         );
 
         const onlyPlaceholder =
           prev.length === 1 &&
           !prev[0]!.libraryId &&
+          !prev[0]!.dirty &&
           (!prev[0]!.doc.trim() ||
             prev[0]!.doc === DEMOS['rsi-overlay'] ||
             prev[0]!.doc === DEMOS.macd ||
@@ -354,50 +360,93 @@ export const TabbedEditor: Component<Props> = (props) => {
   });
 
   const addTab = () => {
-    const newIdx = tabs().length;
-    setTabs((t) => [...t, newTab(`Script ${t.length + 1}`, '')]);
-    setActiveTab(newIdx);
-    if (props.editorRef?.setDoc) {
-      props.editorRef.setDoc('');
+    // Snapshot CM into the current tab before opening a blank one
+    let snapshot = tabs();
+    if (props.editorRef?.getDoc) {
+      const currentDoc = props.editorRef.getDoc();
+      const cur = activeTab();
+      snapshot = snapshot.map((tab, i) =>
+        i === cur ? { ...tab, doc: currentDoc } : tab,
+      );
     }
+    const next = [...snapshot, newTab(`Script ${snapshot.length + 1}`, '')];
+    const newIdx = next.length - 1;
+    batch(() => {
+      setTabs(next);
+      setActiveTab(newIdx);
+    });
+    props.editorRef?.setDoc?.('');
   };
 
   const closeTab = (idx: number) => {
-    if (tabs().length <= 1) return;
-    batch(() => {
-      const newTabs = tabs().filter((_, i) => i !== idx);
-      setTabs(newTabs);
-      if (activeTab() >= newTabs.length) {
-        setActiveTab(newTabs.length - 1);
-      }
-    });
-    const newActiveIdx = Math.min(activeTab(), tabs().length - 1);
-    if (props.editorRef?.setDoc) {
-      props.editorRef.setDoc(tabs()[newActiveIdx]?.doc ?? '');
+    const list = tabs();
+    if (list.length <= 1) return;
+    if (idx < 0 || idx >= list.length) return;
+
+    const cur = activeTab();
+    // Snapshot live CM buffer into the active tab before reshuffling
+    let snapshot = list;
+    if (props.editorRef?.getDoc) {
+      const currentDoc = props.editorRef.getDoc();
+      snapshot = list.map((tab, i) =>
+        i === cur ? { ...tab, doc: currentDoc } : tab,
+      );
     }
+
+    const newTabs = snapshot.filter((_, i) => i !== idx);
+    let nextActive: number;
+    if (idx === cur) {
+      // Closing the focused tab → stay at same index (next tab slides in)
+      nextActive = Math.min(idx, newTabs.length - 1);
+    } else if (idx < cur) {
+      // Closed a tab to the left → active index shifts down
+      nextActive = cur - 1;
+    } else {
+      nextActive = cur;
+    }
+    nextActive = Math.max(0, Math.min(nextActive, newTabs.length - 1));
+
+    batch(() => {
+      setTabs(newTabs);
+      setActiveTab(nextActive);
+    });
+    props.editorRef?.setDoc?.(newTabs[nextActive]?.doc ?? '');
   };
 
   const switchTab = (idx: number) => {
+    const list = tabs();
+    if (idx < 0 || idx >= list.length || idx === activeTab()) return;
+    // Persist CM buffer into the tab we're leaving
+    let snapshot = list;
     if (props.editorRef?.getDoc) {
       const currentDoc = props.editorRef.getDoc();
-      setTabs((t) =>
-        t.map((tab, i) => (i === activeTab() ? { ...tab, doc: currentDoc } : tab)),
+      snapshot = list.map((tab, i) =>
+        i === activeTab() ? { ...tab, doc: currentDoc } : tab,
       );
+      setTabs(snapshot);
     }
     setActiveTab(idx);
-    if (props.editorRef?.setDoc) {
-      props.editorRef.setDoc(tabs()[idx]?.doc ?? '');
-    }
+    props.editorRef?.setDoc?.(snapshot[idx]?.doc ?? '');
   };
 
   const onDocChange = (doc: string) => {
+    const text = typeof doc === 'string' ? doc : String(doc ?? '');
     setTabs((t) =>
-      t.map((tab, i) => (i === activeTab() ? { ...tab, doc, dirty: true } : tab)),
+      t.map((tab, i) =>
+        i === activeTab()
+          ? {
+              ...tab,
+              doc: text,
+              // Only mark dirty when content actually changed
+              dirty: tab.dirty || tab.doc !== text,
+            }
+          : tab,
+      ),
     );
-    props.onDocChange?.(doc);
-    scheduleDraft(doc, tabs()[activeTab()]?.name);
+    props.onDocChange?.(text);
+    scheduleDraft(text, tabs()[activeTab()]?.name);
     // Incomplete edits are not linted mid-keystroke — Save / Run re-check
-    clearPreevalOnEdit(doc);
+    clearPreevalOnEdit(text);
   };
 
   const activeTabState = () => tabs()[activeTab()];
@@ -476,14 +525,16 @@ export const TabbedEditor: Component<Props> = (props) => {
   };
 
   const onGitPullReload = (doc: string, name?: string, libraryId?: string) => {
+    if (typeof doc !== 'string') return;
     const idx = activeTab();
+    const resolvedName = name || activeTabState()?.name || 'Script';
     setTabs((t) =>
       t.map((tab, i) =>
         i === idx
           ? {
               ...tab,
               doc,
-              name: name || tab.name,
+              name: resolvedName,
               dirty: false,
               libraryId: libraryId ?? tab.libraryId,
             }
@@ -491,36 +542,12 @@ export const TabbedEditor: Component<Props> = (props) => {
       ),
     );
     props.editorRef?.setDoc?.(doc);
-    scheduleDraft(doc, name);
-  };
-
-  const formatDoc = () => {
-    const ref = props.editorRef as PyneEditorRef | undefined;
-    if (ref?.formatDoc) {
-      const changed = ref.formatDoc();
-      if (changed) {
-        onDocChange(ref.getDoc?.() || '');
-        setStatus('ready', 'Formatted');
-      } else {
-        setStatus('ready', 'Already formatted');
-      }
-      return;
-    }
-    const doc = ref?.getDoc?.() || activeTabState()?.doc || '';
-    if (!doc.trim()) return;
-    const next = formatPineSource(doc);
-    if (next === doc) {
-      setStatus('ready', 'Already formatted');
-      return;
-    }
-    ref?.setDoc?.(next);
-    onDocChange(next);
-    setStatus('ready', 'Formatted');
+    scheduleDraft(doc, resolvedName);
   };
 
   return (
     <div class="flex flex-col h-full min-h-0 flex-1">
-      {/* ── Tab strip + source actions ───────────────────────────── */}
+      {/* ── Tab strip + git/source actions ───────────────────────── */}
       <div
         class="axis-editor-tabbar flex items-stretch bg-bg-base border-b-2 border-border flex-shrink-0 min-h-[2rem]"
         data-testid="axis-editor-tabbar"
@@ -543,12 +570,22 @@ export const TabbedEditor: Component<Props> = (props) => {
                 <span class="max-w-[140px] overflow-hidden text-ellipsis">{tab.name}</span>
                 {tabs().length > 1 && (
                   <span
+                    role="button"
+                    tabindex={0}
                     class="text-text-faint hover:text-red text-sm px-0.5 leading-none hover:bg-bg-hover rounded"
                     onClick={(e) => {
                       e.stopPropagation();
                       closeTab(idx());
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        closeTab(idx());
+                      }
+                    }}
                     title="Close tab"
+                    aria-label={`Close ${tab.name}`}
                   >
                     ×
                   </span>
@@ -570,15 +607,6 @@ export const TabbedEditor: Component<Props> = (props) => {
           class="axis-editor-tabbar-actions flex items-center gap-0.5 px-1.5 flex-shrink-0 border-l border-border-soft"
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <button
-            type="button"
-            class="sc-btn sc-btn-ghost px-1.5 py-0.5 text-[10px] font-semibold inline-flex items-center gap-1"
-            data-testid="axis-editor-tabbar-format"
-            title="Format document (Shift+Alt+F)"
-            onClick={() => formatDoc()}
-          >
-            Format
-          </button>
           <EditorGitBar
             getDoc={() => props.editorRef?.getDoc?.() || activeTabState()?.doc || ''}
             getName={() => activeTabState()?.name || 'Script'}
@@ -764,18 +792,8 @@ export const TabbedEditor: Component<Props> = (props) => {
 
         <div class="flex-1 min-w-[0.5rem]" />
 
-        {/* View / format cluster (right) */}
+        {/* View cluster (right) — format via overflow menu / Shift+Alt+F */}
         <div class="axis-editor-statusbar-view flex items-center gap-0.5 flex-shrink-0">
-          <button
-            type="button"
-            class="axis-editor-status-btn"
-            data-testid="axis-editor-statusbar-format"
-            title="Format document (Shift+Alt+F)"
-            onClick={() => formatDoc()}
-          >
-            <Icons.alignLeft size={11} />
-            Format
-          </button>
           <button
             type="button"
             class={`axis-editor-status-btn ${

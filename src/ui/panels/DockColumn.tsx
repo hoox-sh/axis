@@ -26,7 +26,13 @@
 
 import { Component, createMemo } from 'solid-js';
 import { store } from '../../store';
-import { DOCK_HOST_IDS, dockColumnWidth, panelsOnDock } from './dock-layout';
+import {
+  DOCK_HOST_IDS,
+  dockColumnWidth,
+  panelDockLayoutHeight,
+  panelsOnDock,
+} from './dock-layout';
+import { getHoverSlideExpandedMap } from './hover-slide';
 import type { PanelDock } from './types';
 
 type Side = Extract<PanelDock, 'left' | 'right' | 'bottom'>;
@@ -47,21 +53,25 @@ export const DockColumn: Component<{ side: Side }> = (props) => {
   const ids = createMemo(() => {
     // Track full chrome map so open/dock changes re-measure the column
     void store.panelChrome;
+    // Hover-slide expand/collapse reflows column width/height
+    void getHoverSlideExpandedMap();
     return panelsOnDock(props.side);
   });
   const empty = () => ids().length === 0;
   const width = createMemo(() => {
     if (props.side === 'bottom') return undefined;
     void store.panelChrome;
+    void getHoverSlideExpandedMap();
     return empty() ? 0 : dockColumnWidth(props.side);
   });
   const bottomHeight = createMemo(() => {
     if (props.side !== 'bottom' || empty()) return 0;
-    // Sum pixel heights of open bottom panels so the main row flex-shrinks
+    void store.panelChrome;
+    void getHoverSlideExpandedMap();
+    // Sum layout heights (peek when hover-slide collapsed)
     let sum = 0;
     for (const id of ids()) {
-      const h = store.panelChrome?.[id]?.h;
-      sum += typeof h === 'number' && h > 0 ? h : 160;
+      sum += panelDockLayoutHeight(id);
     }
     return sum;
   });
@@ -77,8 +87,17 @@ export const DockColumn: Component<{ side: Side }> = (props) => {
         empty()
           ? undefined
           : props.side === 'bottom'
-            ? { height: `${bottomHeight()}px`, flex: '0 0 auto' }
-            : { width: `${width()}px`, flex: '0 0 auto' }
+            ? {
+                height: `${bottomHeight()}px`,
+                flex: '0 0 auto',
+                // Smooth column size when a hover-slide panel opens/closes
+                transition: 'height 0.22s cubic-bezier(0.22, 1, 0.36, 1)',
+              }
+            : {
+                width: `${width()}px`,
+                flex: '0 0 auto',
+                transition: 'width 0.22s cubic-bezier(0.22, 1, 0.36, 1)',
+              }
       }
     />
   );

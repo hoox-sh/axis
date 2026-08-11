@@ -47,11 +47,14 @@ import {
   setPanelDock,
   setPanelGeometry,
   bumpPanelZ,
+  setPanelHoverSlide,
+  isPanelHoverSlide,
 } from '../../store';
 import { Icons } from '../icons';
 import { ResizeHandle } from '../ResizeHandle';
 import {
   PANEL_META,
+  isHoverSlideEligible,
   type PanelDock,
   type PanelId,
   type DropZone,
@@ -63,7 +66,15 @@ import {
   dockStackCssOrder,
   isLastInDockStack,
   panelsOnDock,
+  panelDockLayoutHeight,
+  panelDockLayoutWidth,
 } from './dock-layout';
+import {
+  HOVER_SLIDE_LEAVE_MS,
+  clearPanelHoverSlideExpanded,
+  isPanelHoverSlideExpanded,
+  setPanelHoverSlideExpanded,
+} from './hover-slide';
 
 /** Props for a dockable panel wrapper (title falls back to PANEL_META). */
 export interface FloatableShellProps {
@@ -164,6 +175,62 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   let drag: DragState | null = null;
   let holdTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingDrag = false;
+  let hoverLeaveTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Hover-slide preference + dock eligibility (persisted chrome). */
+  const hoverSlideOn = () => {
+    const d = dock();
+    return isPanelHoverSlide(props.id) && isHoverSlideEligible(d) && !isFloat();
+  };
+  const hoverExpanded = () => isPanelHoverSlideExpanded(props.id);
+  const hoverCollapsed = () => hoverSlideOn() && !hoverExpanded();
+
+  const clearHoverLeaveTimer = () => {
+    if (hoverLeaveTimer != null) {
+      clearTimeout(hoverLeaveTimer);
+      hoverLeaveTimer = undefined;
+    }
+  };
+
+  /** Notify chart host so LWC canvases shrink/grow with dock columns (not overlay). */
+  const requestChartReflow = () => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('axis-chart-reflow'));
+  };
+
+  const expandHoverSlide = () => {
+    if (!hoverSlideOn() || dragging()) return;
+    clearHoverLeaveTimer();
+    setPanelHoverSlideExpanded(props.id, true);
+    requestChartReflow();
+  };
+
+  const scheduleCollapseHoverSlide = () => {
+    if (!hoverSlideOn() || dragging()) return;
+    // Keep open while dock menu is expanded (user may move to menu items)
+    if (menuOpen()) return;
+    clearHoverLeaveTimer();
+    hoverLeaveTimer = setTimeout(() => {
+      hoverLeaveTimer = undefined;
+      if (menuOpen() || dragging()) return;
+      setPanelHoverSlideExpanded(props.id, false);
+      requestChartReflow();
+    }, HOVER_SLIDE_LEAVE_MS);
+  };
+
+  // Reset expanded state when preference / dock changes
+  createEffect(() => {
+    const on = hoverSlideOn();
+    if (!on) {
+      clearHoverLeaveTimer();
+      clearPanelHoverSlideExpanded(props.id);
+      return;
+    }
+    // Prefer collapsed until the user hovers
+    if (!isPanelHoverSlideExpanded(props.id)) {
+      setPanelHoverSlideExpanded(props.id, false);
+    }
+  });
 
   const resolveMount = () => {
     const next = dockHostElement(dock());
@@ -196,12 +263,6 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
     document.body.classList.remove('axis-panel-dragging');
-  };
-
-  /** Notify chart host so LWC canvases shrink/grow with dock columns (not overlay). */
-  const requestChartReflow = () => {
-    if (typeof window === 'undefined') return;
-    window.dispatchEvent(new CustomEvent('axis-chart-reflow'));
   };
 
   const close = () => setPanelOpen(props.id, false);
@@ -438,6 +499,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       document.removeEventListener('pointerdown', onDocPointerDown, true);
       document.removeEventListener('keydown', onDocKey);
       if (holdTimer != null) clearTimeout(holdTimer);
+      clearHoverLeaveTimer();
     });
   });
 
@@ -551,6 +613,12 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     const d = dock();
     const order = dockStackCssOrder(props.id);
     const isEditor = props.id === 'editor';
+    const slide = hoverSlideOn();
+    const collapsed = slide && !hoverExpanded();
+    // Transition only when hover-slide is active (avoid animating normal resizes)
+    const slideTransition = slide
+      ? 'width 0.22s cubic-bezier(0.22, 1, 0.36, 1), height 0.22s cubic-bezier(0.22, 1, 0.36, 1), flex-basis 0.22s cubic-bezier(0.22, 1, 0.36, 1), min-width 0.22s ease'
+      : undefined;
 
     if (d === 'float' || d === 'window') {
       // Keep editor/CM usable: never allow collapsed float chrome.
@@ -590,7 +658,26 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     // Side docks: flow in the dock column (never position:fixed — that overlays the chart).
     // Multiple panels share the strip **side-by-side** (row): e.g. indicators | editor.
     if (d === 'left' || d === 'right') {
-      const w = Math.max(meta().minW, c.w || meta().defaultW);
+      // Layout width respects hover-slide peek when collapsed
+      const layoutW = panelDockLayoutWidth(props.id);
+      const fullW = Math.max(meta().minW, c.w || meta().defaultW);
+      if (slide) {
+        return {
+          position: 'relative',
+          width: `${layoutW}px`,
+          height: '100%',
+          flex: `0 0 ${layoutW}px`,
+          'min-width': collapsed ? `${layoutW}px` : `${meta().minW}px`,
+          'min-height': '0',
+          order: String(order),
+          left: 'auto',
+          top: 'auto',
+          'z-index': hoverExpanded() ? '30' : 'auto',
+          transition: slideTransition,
+          // Keep full width intent for tools that read CSS vars
+          '--axis-panel-full-w': `${fullW}px`,
+        } as JSX.CSSProperties;
+      }
       if (!stacked()) {
         // Alone: fill the whole dock strip width + height
         return {
@@ -608,9 +695,9 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       // Side-by-side: each panel keeps its own width; full strip height
       return {
         position: 'relative',
-        width: `${w}px`,
+        width: `${fullW}px`,
         height: '100%',
-        flex: `0 0 ${w}px`,
+        flex: `0 0 ${fullW}px`,
         'min-width': `${meta().minW}px`,
         'min-height': '0',
         order: String(order),
@@ -620,6 +707,22 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       };
     }
     // bottom: pixel heights (column has no fixed height; flex-grow would collapse)
+    // Hover-slide uses layout height (peek when collapsed)
+    if (slide) {
+      const layoutH = panelDockLayoutHeight(props.id);
+      return {
+        position: 'relative',
+        width: '100%',
+        height: `${layoutH}px`,
+        flex: '0 0 auto',
+        'min-height': collapsed ? `${layoutH}px` : `${Math.max(meta().minH, 40)}px`,
+        order: String(order),
+        left: 'auto',
+        top: 'auto',
+        'z-index': hoverExpanded() ? '30' : 'auto',
+        transition: slideTransition,
+      };
+    }
     // Editor docked bottom still fills the bottom column when alone / stacked
     if (isEditor) {
       return {
@@ -654,8 +757,12 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     return 'axis-panel-float sc-float-panel';
   };
 
-  const showSideWidthResize = () => dock() === 'left' || dock() === 'right';
+  const showSideWidthResize = () => {
+    if (hoverCollapsed()) return false;
+    return dock() === 'left' || dock() === 'right';
+  };
   const showBottomHeightResize = () => {
+    if (hoverCollapsed()) return false;
     // Editor always fills height — no vertical split handles
     if (props.id === 'editor') return false;
     const d = dock();
@@ -672,21 +779,35 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
           <div
             ref={rootEl}
             class={`axis-panel-shell flex flex-col min-h-0 overflow-hidden ${dockClass()} ${props.class || ''}`}
-            classList={{ 'is-dragging': dragging() }}
+            classList={{
+              'is-dragging': dragging(),
+              'axis-panel-hover-slide': hoverSlideOn(),
+              'is-hover-collapsed': hoverCollapsed(),
+              'is-hover-expanded': hoverSlideOn() && hoverExpanded(),
+            }}
             style={shellStyle()}
             data-panel-id={props.id}
             data-panel-dock={dock()}
             data-panel-stacked={stacked() ? '1' : '0'}
+            data-hover-slide={hoverSlideOn() ? '1' : '0'}
             data-testid={props.testId}
+            onPointerEnter={() => expandHoverSlide()}
+            onPointerLeave={() => scheduleCollapseHoverSlide()}
             onPointerDown={() => {
               if (isFloat()) bumpPanelZ(props.id);
+              // Touch / click on peek strip should expand immediately
+              if (hoverCollapsed()) expandHoverSlide();
             }}
           >
             {/* Title bar — drag on title; hamburger click = menu, hold = drag */}
             <div
               class="axis-panel-handle sc-float-panel-header cursor-grab active:cursor-grabbing select-none relative"
               onPointerDown={onHandlePointerDown}
-              title="Drag title to move · drop on edges to dock"
+              title={
+                hoverCollapsed()
+                  ? `${title()} — hover to expand`
+                  : 'Drag title to move · drop on edges to dock'
+              }
             >
               <div
                 class="axis-panel-menu relative flex-shrink-0"
@@ -732,6 +853,27 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                         );
                       }}
                     </For>
+                    <Show when={isHoverSlideEligible(dock())}>
+                      <div class="axis-panel-menu-sep" role="separator" />
+                      <button
+                        type="button"
+                        role="menuitem"
+                        class={`axis-panel-menu-item ${
+                          isPanelHoverSlide(props.id) ? 'is-active' : ''
+                        }`}
+                        title="When docked: collapse to a strip, expand on hover, collapse on leave"
+                        data-testid={`axis-panel-hover-slide-${props.id}`}
+                        onClick={() => {
+                          setPanelHoverSlide(props.id, !isPanelHoverSlide(props.id));
+                        }}
+                      >
+                        <Icons.panelRight size={14} />
+                        <span>Slide on hover</span>
+                        <Show when={isPanelHoverSlide(props.id)}>
+                          <Icons.check size={12} class="ml-auto opacity-80" />
+                        </Show>
+                      </button>
+                    </Show>
                     <Show when={props.menuExtra}>
                       <div class="axis-panel-menu-sep" role="separator" />
                       {props.menuExtra}
@@ -739,26 +881,34 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                   </div>
                 </Show>
               </div>
-              <span class="flex-1 truncate min-w-0">{title()}</span>
-              <Show when={props.headerExtra}>{props.headerExtra}</Show>
+              <span class="flex-1 truncate min-w-0 axis-panel-title">{title()}</span>
+              <Show when={!hoverCollapsed() && props.headerExtra}>{props.headerExtra}</Show>
               <div
                 class="flex items-center gap-0.5 flex-shrink-0"
                 onPointerDown={(e) => e.stopPropagation()}
               >
-                <Show when={props.headerEnd}>{props.headerEnd}</Show>
-                <button
-                  type="button"
-                  class="sc-btn sc-btn-ghost px-1"
-                  title="Close"
-                  aria-label="Close panel"
-                  onClick={close}
-                >
-                  <Icons.x />
-                </button>
+                <Show when={!hoverCollapsed() && props.headerEnd}>{props.headerEnd}</Show>
+                <Show when={!hoverCollapsed()}>
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-ghost px-1"
+                    title="Close"
+                    aria-label="Close panel"
+                    onClick={close}
+                  >
+                    <Icons.x />
+                  </button>
+                </Show>
               </div>
             </div>
 
-            <div class="flex-1 min-h-0 overflow-auto axis-panel-body">{props.children}</div>
+            <div
+              class="flex-1 min-h-0 overflow-auto axis-panel-body"
+              classList={{ 'is-hover-hidden': hoverCollapsed() }}
+              aria-hidden={hoverCollapsed() || undefined}
+            >
+              {props.children}
+            </div>
 
             {/* Docked left/right: column width on free vertical edge */}
             <Show when={showSideWidthResize() && dock() === 'left'}>

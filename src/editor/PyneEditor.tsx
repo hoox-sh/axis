@@ -164,12 +164,14 @@ export const PyneEditor: Component<Props> = (props) => {
 
   const getDoc = () => view?.state.doc.toString() ?? '';
 
+  /** Replace buffer; no-op when content is unchanged (avoids dirty thrash / cursor jump). */
   const setDoc = (doc: string) => {
-    if (view) {
-      view.dispatch({
-        changes: { from: 0, to: view.state.doc.length, insert: doc },
-      });
-    }
+    if (!view) return;
+    const next = typeof doc === 'string' ? doc : String(doc ?? '');
+    if (view.state.doc.toString() === next) return;
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: next },
+    });
   };
 
   /** 1-based line → selection + scrollIntoView (clamped to document). */
@@ -213,19 +215,30 @@ export const PyneEditor: Component<Props> = (props) => {
     return true;
   };
 
-  /** Format full document; preserves roughly the cursor offset when possible. */
+  /**
+   * Format full document; preserves cursor position by document-offset ratio
+   * when the buffer length changes (safer than clamping a raw offset).
+   */
   const formatDoc = (): boolean => {
     if (!view) return false;
-    const prev = view.state.doc.toString();
-    const next = formatPineSource(prev);
-    if (next === prev) return false;
-    const head = view.state.selection.main.head;
-    view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: next },
-      selection: EditorSelection.cursor(Math.min(head, next.length)),
-    });
-    view.focus();
-    return true;
+    try {
+      const prev = view.state.doc.toString();
+      const next = formatPineSource(prev);
+      if (next === prev) return false;
+      const head = view.state.selection.main.head;
+      const mapped =
+        prev.length > 0
+          ? Math.min(Math.round((head / prev.length) * next.length), next.length)
+          : 0;
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: next },
+        selection: EditorSelection.cursor(mapped),
+      });
+      view.focus();
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const syncProfiler = () => {

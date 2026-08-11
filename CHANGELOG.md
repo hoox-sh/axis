@@ -9,9 +9,30 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-11 · 189 commits · describe-tag: `none`_
+_Generated/updated: 2026-08-11 · 192 commits · describe-tag: `v2.0.1`_
 
 ---
+
+## [Unreleased]
+
+_Nothing yet — next changes land here._
+
+## [2.0.2] — 2026-08-11
+
+Editor chrome polish and docked panel **hover slide**.
+
+### Added
+
+- **Panel hover slide** — docked panels can collapse to a peek strip and slide open/closed on pointer enter/leave. Toggle **Slide on hover** in the panel hamburger menu (left/right/bottom only). Store APIs: `setPanelHoverSlide`, `togglePanelHoverSlide`, `isPanelHoverSlide`. Preference persists on `panelChrome[id].hoverSlide`.
+
+### Changed
+
+- **Editor chrome polish** — header tools always show **icon + label** (no hover slide-in); **Format** removed from the editor header and tab strip (still available via overflow **Format document** and `Shift+Alt+F` / `Mod+Shift+F`).
+- **Library from editor** — primary **Library** tool opens the script library panel; overflow menu also has **Open library**.
+
+### Fixed
+
+- **Tab close / switch** — closing a tab left of the active one no longer jumps focus; CM buffer is snapshotted before add/close/switch; `setDoc` no-ops on identical content.
 
 ## [2.0.1] — 2026-08-11
 
@@ -37,15 +58,14 @@ Security and performance release from the multi-agent **harden-perf** audit
 - `0a668e00` — fix(security,perf): gate /api/run, OAuth clientId, WS cool-down
 - `156221b9` — fix(security,perf): fail-closed Worker auth, CORS, bars-cache
 
-## [Unreleased]
 
-_Nothing yet — next changes land here._
+---
 
 ---
 
 ## Full history (recursive)
 
-### 2026-08 (107 commits)
+### 2026-08 (110 commits)
 
 #### Security
 
@@ -155,6 +175,8 @@ _Nothing yet — next changes land here._
 
 #### Documentation
 
+- `d3172dbb` (2026-08-11) — docs: AXIS 2.0.1 docs, CLI-first ops, Pine Script v6 examples
+- `78c22e85` (2026-08-11) — docs(release): recursive changelog, AGENTS release workflow, v2.0.1
 - `f7c30e04` (2026-08-09) — docs: prefix internal links with /axis/docs
 - `3d6fe1ab` (2026-08-08) — docs(ui): clarify on-chain uses public APIs unless Worker endpoint
 - `f21dcc47` (2026-08-08) — docs: update llm.txt for PyneEditor rename
@@ -171,6 +193,7 @@ _Nothing yet — next changes land here._
 
 #### Chores
 
+- `12cffe27` (2026-08-11) — chore: ignore local multi-agent sync notice files
 - `33e11930` (2026-08-06) — chore(worker): gitignore wrangler.toml and ship example
 - `9cb4dad0` (2026-08-06) — chore: vendor latest pyne 0.3.0 wheel (parity Aug 6)
 - `9fba8aaf` (2026-08-03) — chore: rename SuperChart branding to AXIS including CF project id

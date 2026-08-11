@@ -60,10 +60,15 @@ import type {
 import { idlePlane, pushSample } from '../ui/telemetry';
 import {
   defaultPanelChromeMap,
+  isHoverSlideEligible,
   type PanelChrome,
   type PanelDock,
   type PanelId,
 } from '../ui/panels/types';
+import {
+  clearPanelHoverSlideExpanded,
+  setPanelHoverSlideExpanded,
+} from '../ui/panels/hover-slide';
 import {
   defaultChartLayout,
   normalizeChartLayout,
@@ -740,6 +745,12 @@ function mergePanelChrome(
   for (const id of Object.keys(base) as PanelId[]) {
     const fromDisk = src[id] || {};
     const fromLegacy = legacy[id] || {};
+    const hoverSlideRaw =
+      typeof fromDisk.hoverSlide === 'boolean'
+        ? fromDisk.hoverSlide
+        : typeof fromLegacy.hoverSlide === 'boolean'
+          ? fromLegacy.hoverSlide
+          : base[id].hoverSlide;
     base[id] = {
       ...base[id],
       ...fromLegacy,
@@ -751,6 +762,7 @@ function mergePanelChrome(
       w: Number(fromDisk.w ?? fromLegacy.w ?? base[id].w) || base[id].w,
       h: Number(fromDisk.h ?? fromLegacy.h ?? base[id].h) || base[id].h,
       z: Number(fromDisk.z ?? fromLegacy.z ?? base[id].z) || base[id].z,
+      hoverSlide: !!hoverSlideRaw,
     };
   }
   return base;
@@ -2268,14 +2280,56 @@ export function setPanelDock(id: PanelId, dock: PanelDock) {
   }
   if (dock === 'float' || dock === 'window') {
     bumpPanelZ(id);
+    // Hover-slide only applies when docked
+    clearPanelHoverSlideExpanded(id);
   } else {
     // Do not force-match peer widths — each panel keeps its own w
     rebalanceDockStack(dock);
+    // Re-arm collapsed peek when hover-slide is on
+    if (getPanelChrome(id).hoverSlide && isHoverSlideEligible(dock)) {
+      setPanelHoverSlideExpanded(id, false);
+    } else {
+      clearPanelHoverSlideExpanded(id);
+    }
   }
   if (prev !== dock && (prev === 'left' || prev === 'right' || prev === 'bottom')) {
     rebalanceDockStack(prev);
   }
   persist();
+}
+
+/**
+ * Enable/disable **hover slide** for a panel (docked only).
+ * When enabled, the panel collapses to a peek strip and expands on pointer
+ * enter / collapses on leave. Preference is persisted on panel chrome.
+ */
+export function setPanelHoverSlide(id: PanelId, enabled: boolean) {
+  ensurePanelChrome();
+  const on = !!enabled;
+  setStore('panelChrome', id, 'hoverSlide', on);
+  const dock = getPanelChrome(id).dock;
+  if (on && isHoverSlideEligible(dock) && isPanelOpen(id)) {
+    // Start collapsed so the chart gains space until the user hovers
+    setPanelHoverSlideExpanded(id, false);
+  } else {
+    clearPanelHoverSlideExpanded(id);
+  }
+  persist();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('axis-chart-reflow'));
+  }
+}
+
+/** Toggle {@link setPanelHoverSlide} for a panel. */
+export function togglePanelHoverSlide(id: PanelId): boolean {
+  const next = !getPanelChrome(id).hoverSlide;
+  setPanelHoverSlide(id, next);
+  return next;
+}
+
+/** Read hover-slide preference (false when unset). */
+export function isPanelHoverSlide(id: PanelId): boolean {
+  return !!getPanelChrome(id).hoverSlide;
 }
 
 /**
