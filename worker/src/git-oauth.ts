@@ -24,9 +24,12 @@
  * (no CORS). The Worker relays device-code start + poll so the PWA can
  * offer "Connect with GitHub / GitLab" without pasting a PAT.
  *
- * Env (optional — body may supply clientId for self-hosted OAuth apps):
+ * Env (preferred — production must set these; body clientId is fallback only):
  * - `GITHUB_OAUTH_CLIENT_ID`
  * - `GITLAB_OAUTH_CLIENT_ID`
+ *
+ * When an env client id is set, body `clientId` is **ignored** so third parties
+ * cannot use this Worker as a free device-flow proxy for their own OAuth apps.
  *
  * Routes (mounted by index):
  * - `POST /api/git/oauth/device/start`  `{ provider, clientId?, scope? }`
@@ -101,15 +104,23 @@ async function readJsonBody(req: Request): Promise<Record<string, unknown>> {
   }
 }
 
+/**
+ * Resolve OAuth client id: **env wins**. Body is only a local/self-host fallback
+ * when the matching env var is unset.
+ */
 function resolveClientId(
   provider: GitOAuthProvider,
   body: Record<string, unknown>,
   env: GitOAuthEnv,
 ): string {
-  const fromBody = String(body.clientId || body.client_id || '').trim();
-  if (fromBody) return fromBody;
-  if (provider === 'github') return String(env.GITHUB_OAUTH_CLIENT_ID || '').trim();
-  return String(env.GITLAB_OAUTH_CLIENT_ID || '').trim();
+  if (provider === 'github') {
+    const fromEnv = String(env.GITHUB_OAUTH_CLIENT_ID || '').trim();
+    if (fromEnv) return fromEnv;
+  } else {
+    const fromEnv = String(env.GITLAB_OAUTH_CLIENT_ID || '').trim();
+    if (fromEnv) return fromEnv;
+  }
+  return String(body.clientId || body.client_id || '').trim();
 }
 
 function formBody(params: Record<string, string>): string {
@@ -271,7 +282,8 @@ export async function handleGitOAuth(
   // start is stricter (burns forge rate limits); poll is looser
   const isStart = pathname.endsWith('/start');
   const isPoll = pathname.endsWith('/poll');
-  if (isStart && !allowRate(`oauth:start:${ip}`, 20, 60_000)) {
+  // Tighter start limit (burns forge rate limits); poll stays higher for device UX
+  if (isStart && !allowRate(`oauth:start:${ip}`, 8, 60_000)) {
     return json(
       { status: 'error', code: 'RATE_LIMIT', message: 'Too many OAuth start requests' },
       { status: 429 },
@@ -279,7 +291,7 @@ export async function handleGitOAuth(
       cors,
     );
   }
-  if (isPoll && !allowRate(`oauth:poll:${ip}`, 120, 60_000)) {
+  if (isPoll && !allowRate(`oauth:poll:${ip}`, 60, 60_000)) {
     return json(
       { status: 'error', code: 'RATE_LIMIT', message: 'Too many OAuth poll requests' },
       { status: 429 },
@@ -300,8 +312,8 @@ export async function handleGitOAuth(
         code: 'NO_CLIENT_ID',
         message:
           provider === 'github'
-            ? 'GitHub OAuth client id missing. Set Worker env GITHUB_OAUTH_CLIENT_ID or pass clientId (public OAuth App id with Device Flow enabled).'
-            : 'GitLab OAuth application id missing. Set Worker env GITLAB_OAUTH_CLIENT_ID or pass clientId.',
+            ? 'GitHub OAuth client id missing. Set Worker env GITHUB_OAUTH_CLIENT_ID (preferred) or pass clientId only when env is unset (local self-host).'
+            : 'GitLab OAuth application id missing. Set Worker env GITLAB_OAUTH_CLIENT_ID (preferred) or pass clientId only when env is unset.',
       },
       { status: 400 },
       origin,

@@ -27,7 +27,7 @@
  * | Method / path        | Handler              | Auth / notes |
  * |----------------------|----------------------|--------------|
  * | GET `/`, `/health`   | health JSON          | public; reports D1/KV binding presence |
- * | POST `/api/run`      | {@link handleRun}    | optional Bearer; proxies or Pyodide |
+ * | POST `/api/run`      | {@link handleRun}    | auth when API_KEYS / REQUIRE_RUN_AUTH; always rate-limited; body caps |
  * | `/api/keys`          | {@link handleKeys}   | create needs `X-Admin-Token`; validate uses Bearer/`?key=` |
  * | GET `/api/usage`     | stub usage           | public placeholder |
  * | `/api/scripts…`      | {@link handleScripts}| Bearer API key; D1 or in-memory |
@@ -79,6 +79,11 @@ export interface Env {
   PYODIDE_IN_WORKER?: string;
   /** When `"1"` / `"true"`, accept any non-empty Bearer key (local demos only). */
   ALLOW_OPEN_KEYS?: string;
+  /**
+   * When `"1"` / `"true"`, require API key on `/api/run` even without `API_KEYS` KV.
+   * Production should bind `API_KEYS` instead; this flag is for staged hardening.
+   */
+  REQUIRE_RUN_AUTH?: string;
   /** Public GitHub OAuth App client id (Device Flow enabled). */
   GITHUB_OAUTH_CLIENT_ID?: string;
   /** Public GitLab OAuth application id (device grant). */

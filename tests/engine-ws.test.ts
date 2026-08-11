@@ -221,20 +221,18 @@ describe('EngineWsClient', () => {
     expect(client.isDead).toBe(true);
   });
 
-  it('getEngineWsClient replaces a dead client', async () => {
+  it('getEngineWsClient keeps dead client during cool-down (no thrash)', async () => {
     FakeWS.failConstruct = true;
     const dead = getEngineWsClient('http://localhost:5002');
     await expect(dead.ensureConnected()).rejects.toThrow();
     expect(dead.isDead).toBe(true);
 
     FakeWS.failConstruct = false;
+    // Same instance while cool-down is active — avoids open-storm on every run
     const next = getEngineWsClient('http://localhost:5002');
-    expect(next).not.toBe(dead);
-    expect(next.isDead).toBe(false);
-    const connecting = next.ensureConnected();
-    FakeWS.instances[FakeWS.instances.length - 1]!.open();
-    await connecting;
-    expect(next.isOpen).toBe(true);
+    expect(next).toBe(dead);
+    expect(next.isDead).toBe(true);
+    await expect(next.ensureConnected()).rejects.toThrow(/dead/i);
   });
 
   it('rejects send failures without leaving a dangling pending', async () => {

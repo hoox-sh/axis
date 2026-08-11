@@ -26,12 +26,18 @@
  * 2. **Proxy** to `EXTERNAL_BACKEND` + `/run` (local pyne Pro API, Flask, etc.).
  * 3. **503 `NO_BACKEND`** if neither path is available / Pyodide fails open.
  *
+ * ## Auth & abuse controls
+ * - When `API_KEYS` is bound or `REQUIRE_RUN_AUTH=1`, {@link requireApiKey} is mandatory.
+ * - Always rate-limited per IP (and per key when authenticated) — isolate memory.
+ * - Script/data size caps + upstream proxy timeout.
+ *
  * Optional `Authorization: Bearer` increments `USAGE` KV (`usage:<key>`), 30d TTL.
  * Body is validated once; the same parsed JSON is re-stringified for the proxy
  * because `Request` bodies are single-shot streams.
  */
 
 import type { Env } from './index';
+import { requireApiKey } from './auth';
 import { tryRunInWorker } from './pyodide_runtime';
 
 /** Max Pine source length (chars) accepted by `/api/run`. */
@@ -40,6 +46,65 @@ const MAX_SCRIPT_CHARS = 512 * 1024;
 const MAX_DATA_BARS = 50_000;
 /** Upstream `/run` proxy timeout — prevents hung backends pinning Worker isolates. */
 const PROXY_TIMEOUT_MS = 60_000;
+/** Max runs per IP (or key) per window. */
+const RUN_RATE_LIMIT = 30;
+const RUN_RATE_WINDOW_MS = 60_000;
+
+// ── Best-effort in-isolate rate limit (same pattern as git-oauth) ──
+const rateBuckets = new Map<string, { count: number; windowStart: number }>();
+
+function clientIp(req: Request): string {
+  return (
+    req.headers.get('cf-connecting-ip') ||
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    'unknown'
+  );
+}
+
+function allowRate(key: string, limit: number, windowMs: number): boolean {
+  const now = Date.now();
+  const b = rateBuckets.get(key);
+  if (!b || now - b.windowStart > windowMs) {
+    rateBuckets.set(key, { count: 1, windowStart: now });
+    if (rateBuckets.size > 5000) {
+      for (const [k, v] of rateBuckets) {
+        if (now - v.windowStart > windowMs * 2) rateBuckets.delete(k);
+      }
+    }
+    return true;
+  }
+  b.count += 1;
+  return b.count <= limit;
+}
+
+/** True when /api/run must authenticate (prod KV or explicit flag). */
+function runAuthRequired(env: Env): boolean {
+  if (env.API_KEYS) return true;
+  const flag = String(env.REQUIRE_RUN_AUTH || '').toLowerCase();
+  return flag === '1' || flag === 'true' || flag === 'yes';
+}
+
+function jsonError(
+  status: number,
+  code: string,
+  message: string,
+  origin: string,
+  extraHeaders?: Record<string, string>,
+): Response {
+  return new Response(JSON.stringify({ status: 'error', code, message }), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': origin,
+      ...(extraHeaders || {}),
+    },
+  });
+}
+
+/** @internal test helper — clear rate buckets between tests. */
+export function _resetRunRateLimitForTests(): void {
+  rateBuckets.clear();
+}
 
 /** Client JSON body for `/api/run` (aligned with pyne Pro API). */
 interface RunRequest {
@@ -118,25 +183,57 @@ async function proxyToExternal(bodyText: string, env: Env, origin: string): Prom
 }
 
 /**
- * POST `/api/run` handler. Validates body, optionally meters usage, then
- * Pyodide → external proxy fallback.
+ * POST `/api/run` handler. Auth (when required) → rate limit → validate →
+ * optional usage meter → Pyodide → external proxy fallback.
  */
 export async function handleRun(req: Request, env: Env, origin: string): Promise<Response> {
+    // ── Auth gate (prod: API_KEYS bound or REQUIRE_RUN_AUTH) ──
+    let userId: string | null = null;
+    let rawKey: string | null = null;
+    if (runAuthRequired(env)) {
+        const auth = await requireApiKey(req, env);
+        if (!auth.ok) {
+            return jsonError(auth.status, auth.code, auth.message, origin);
+        }
+        userId = auth.ctx.userId;
+        rawKey = auth.ctx.key;
+    } else {
+        // Optional bearer for metering / tighter rate bucket when present
+        const header = req.headers.get('Authorization') ?? '';
+        if (header.startsWith('Bearer ')) {
+            rawKey = header.slice(7).trim() || null;
+        }
+    }
+
+    // ── Rate limit (always) ──
+    const ip = clientIp(req);
+    const rateKey = userId ? `run:user:${userId}` : rawKey ? `run:key:${rawKey.slice(0, 16)}` : `run:ip:${ip}`;
+    if (!allowRate(rateKey, RUN_RATE_LIMIT, RUN_RATE_WINDOW_MS)) {
+        return jsonError(
+            429,
+            'RATE_LIMIT',
+            `Too many /api/run requests (max ${RUN_RATE_LIMIT}/${RUN_RATE_WINDOW_MS / 1000}s)`,
+            origin,
+            { 'Retry-After': String(Math.ceil(RUN_RATE_WINDOW_MS / 1000)) },
+        );
+    }
+
     const body = await req.json().catch(() => null);
     const v = validate(body);
     if (!v.ok) {
-        return new Response(JSON.stringify({ status: 'error', code: 'BAD_REQUEST', message: v.err }), {
-            status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin },
-        });
+        return jsonError(400, 'BAD_REQUEST', v.err, origin);
     }
 
     // Best-effort usage meter; failures/unbound KV must not block runs.
-    const auth = req.headers.get('Authorization') ?? '';
-    if (auth.startsWith('Bearer ') && (env as unknown as { USAGE?: KVNamespace }).USAGE) {
-        const key = auth.slice(7).trim();
-        const usage = (env as unknown as { USAGE: KVNamespace }).USAGE;
-        const current = parseInt((await usage.get(`usage:${key}`)) ?? '0', 10);
-        await usage.put(`usage:${key}`, String(current + 1), { expirationTtl: 60 * 60 * 24 * 30 });
+    if (rawKey && env.USAGE) {
+        try {
+            const current = parseInt((await env.USAGE.get(`usage:${rawKey}`)) ?? '0', 10);
+            await env.USAGE.put(`usage:${rawKey}`, String(current + 1), {
+                expirationTtl: 60 * 60 * 24 * 30,
+            });
+        } catch {
+            /* meter must not block */
+        }
     }
 
     // 1) In-Worker Python via Pyodide (preferred when enabled).
@@ -144,7 +241,11 @@ export async function handleRun(req: Request, env: Env, origin: string): Promise
         const pyResult = await tryRunInWorker(v.value.script, v.value.data, env);
         if (pyResult) {
             return new Response(JSON.stringify(pyResult), {
-                status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin },
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': origin,
+                },
             });
         }
         // Fall through to external if Pyodide failed to boot.

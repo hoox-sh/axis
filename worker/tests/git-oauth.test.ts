@@ -219,4 +219,39 @@ describe('handleGitOAuth', () => {
     expect(bodySeen).toContain('repo');
     expect(bodySeen).not.toContain('delete_repo');
   });
+
+  it('prefers env client id over body clientId', async () => {
+    let bodySeen = '';
+    // @ts-expect-error test override
+    globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      bodySeen = String(init?.body || '');
+      return new Response(
+        JSON.stringify({
+          device_code: 'd',
+          user_code: 'U',
+          verification_uri: 'https://github.com/login/device',
+          expires_in: 900,
+          interval: 5,
+        }),
+        { status: 200 },
+      );
+    });
+
+    await handleGitOAuth(
+      new Request('http://x/api/git/oauth/device/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'github',
+          clientId: 'Iv1.attacker',
+        }),
+      }),
+      { GITHUB_OAUTH_CLIENT_ID: 'Iv1.env-wins' },
+      'http://localhost:3000',
+      '/api/git/oauth/device/start',
+      cors,
+    );
+    expect(bodySeen).toContain('Iv1.env-wins');
+    expect(bodySeen).not.toContain('Iv1.attacker');
+  });
 });

@@ -10,7 +10,7 @@
 
 import { describe, expect, it, afterEach } from 'bun:test';
 import { handleKeys } from '../src/keys';
-import { handleRun } from '../src/runtime';
+import { handleRun, _resetRunRateLimitForTests } from '../src/runtime';
 import type { Env } from '../src/index';
 
 const origin = 'http://localhost:3000';
@@ -18,6 +18,7 @@ const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  _resetRunRateLimitForTests();
 });
 
 describe('handleKeys', () => {
@@ -208,5 +209,92 @@ describe('handleRun', () => {
     expect(r.status).toBe(200);
     const j = await r.json();
     expect(j.status).toBe('success');
+  });
+
+  it('requires API key when API_KEYS KV is bound', async () => {
+    const kv = {
+      get: async () => null,
+    } as unknown as KVNamespace;
+    const r = await handleRun(
+      new Request('http://x/api/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          script: 'plot(close)',
+          data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+        }),
+      }),
+      { API_KEYS: kv, EXTERNAL_BACKEND: 'http://flask.test' } as Env,
+      origin,
+    );
+    expect(r.status).toBe(401);
+    const j = await r.json();
+    expect(j.code).toBe('NO_KEY');
+  });
+
+  it('requires API key when REQUIRE_RUN_AUTH is set', async () => {
+    const r = await handleRun(
+      new Request('http://x/api/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          script: 'plot(close)',
+          data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+        }),
+      }),
+      { REQUIRE_RUN_AUTH: '1', EXTERNAL_BACKEND: 'http://flask.test' } as Env,
+      origin,
+    );
+    expect(r.status).toBe(401);
+  });
+
+  it('rejects oversized script body', async () => {
+    const r = await handleRun(
+      new Request('http://x/api/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          script: 'x'.repeat(512 * 1024 + 1),
+          data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+        }),
+      }),
+      { EXTERNAL_BACKEND: 'http://flask.test' } as Env,
+      origin,
+    );
+    expect(r.status).toBe(400);
+    const j = await r.json();
+    expect(j.message).toMatch(/exceeds/i);
+  });
+
+  it('rate-limits repeated /api/run from same IP', async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ status: 'success', plots: [] }), {
+        status: 200,
+      })) as typeof fetch;
+
+    const mk = () =>
+      handleRun(
+        new Request('http://x/api/run', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'cf-connecting-ip': '203.0.113.9',
+          },
+          body: JSON.stringify({
+            script: 'plot(close)',
+            data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+          }),
+        }),
+        { EXTERNAL_BACKEND: 'http://flask.test' } as Env,
+        origin,
+      );
+
+    let last: Response | null = null;
+    for (let i = 0; i < 35; i++) {
+      last = await mk();
+    }
+    expect(last!.status).toBe(429);
+    const j = await last!.json();
+    expect(j.code).toBe('RATE_LIMIT');
   });
 });

@@ -42,6 +42,7 @@ import { DATA_MANAGER_SOURCE_ID } from './data-manager-source';
 import { normalizeHistoricalBars } from './parse-bars';
 import {
   getCachedBars,
+  getCachedBarCount,
   putCachedBars,
   sliceBarsForLoad,
   type BarLoadWindow,
@@ -561,7 +562,7 @@ async function fillGaps(
     if (j.abort.signal.aborted) return 'cancelled';
     if (j.paused) return 'paused';
 
-    const before = (await getCachedBars(j.sourceId, j.symbol, j.interval)).length;
+    const before = await getCachedBarCount(j.sourceId, j.symbol, j.interval);
     // Walk back inside the gap window (endTime only)
     const outcome = await walkBackRange(
       j,
@@ -574,7 +575,7 @@ async function fillGaps(
     );
     if (outcome !== 'ok') return outcome;
 
-    const after = (await getCachedBars(j.sourceId, j.symbol, j.interval)).length;
+    const after = await getCachedBarCount(j.sourceId, j.symbol, j.interval);
     if (after > before) {
       filled += 1;
       j.gapsFilled = (j.gapsFilled || 0) + 1;

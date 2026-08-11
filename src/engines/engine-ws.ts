@@ -99,12 +99,17 @@ type Pending = {
   timer: ReturnType<typeof setTimeout>;
 };
 
+/** How long a dead client stays dead before a reconnect attempt is allowed. */
+const DEAD_COOLDOWN_MS = 45_000;
+
 class EngineWsClient {
   private url: string;
   private ws: WebSocket | null = null;
   private pending = new Map<string, Pending>();
   private connectPromise: Promise<void> | null = null;
   private dead = false;
+  /** Epoch ms until which {@link isDead} stays true after a hard failure. */
+  private deadUntil = 0;
   private reqSeq = 0;
 
   constructor(url: string) {
@@ -116,13 +121,29 @@ class EngineWsClient {
     return !!this.ws && this.ws.readyState === 1;
   }
 
-  /** True after hard failure so callers skip WS for a while. */
+  /**
+   * True after hard failure for {@link DEAD_COOLDOWN_MS}.
+   * After the cool-down, returns false and clears the dead flag so one
+   * shared client can reconnect without thrashing a new socket every call.
+   */
   get isDead(): boolean {
-    return this.dead;
+    if (!this.dead) return false;
+    if (Date.now() >= this.deadUntil) {
+      this.dead = false;
+      this.deadUntil = 0;
+      return false;
+    }
+    return true;
+  }
+
+  /** Mark this client dead until cool-down elapses. */
+  private markDead(): void {
+    this.dead = true;
+    this.deadUntil = Date.now() + DEAD_COOLDOWN_MS;
   }
 
   async ensureConnected(timeoutMs = 6_000): Promise<void> {
-    if (this.dead) throw new Error('WebSocket client marked dead');
+    if (this.isDead) throw new Error('WebSocket client marked dead');
     if (this.isOpen) return;
     if (this.connectPromise) return this.connectPromise;
 
@@ -132,7 +153,7 @@ class EngineWsClient {
       try {
         ws = new WebSocket(this.url);
       } catch (e) {
-        this.dead = true;
+        this.markDead();
         this.connectPromise = null;
         reject(e instanceof Error ? e : new Error(String(e)));
         return;
@@ -149,7 +170,7 @@ class EngineWsClient {
         }
         this.ws = null;
         this.connectPromise = null;
-        this.dead = true;
+        this.markDead();
         reject(new Error('WebSocket connect timeout'));
       }, timeoutMs);
 
@@ -158,6 +179,7 @@ class EngineWsClient {
         settled = true;
         clearTimeout(timer);
         this.dead = false;
+        this.deadUntil = 0;
         this.connectPromise = null;
         resolve();
       };
@@ -168,7 +190,7 @@ class EngineWsClient {
         clearTimeout(timer);
         this.ws = null;
         this.connectPromise = null;
-        this.dead = true;
+        this.markDead();
         reject(new Error('WebSocket error'));
       };
 
@@ -184,7 +206,7 @@ class EngineWsClient {
         if (!settled) {
           settled = true;
           clearTimeout(timer);
-          this.dead = true;
+          this.markDead();
           reject(new Error('WebSocket closed before open'));
         }
       };
@@ -261,7 +283,7 @@ class EngineWsClient {
   }
 
   run(req: EngineWsRunRequest, timeoutMs: number): Promise<EngineWsResult> {
-    if (this.dead) {
+    if (this.isDead) {
       return Promise.reject(new Error('WebSocket client marked dead'));
     }
     // Fast-fail connect (gunicorn without a WS worker often 404/hangs here).
@@ -269,7 +291,7 @@ class EngineWsClient {
     return this.ensureConnected(connectMs).then(
       () =>
         new Promise<EngineWsResult>((resolve, reject) => {
-          if (this.dead) {
+          if (this.isDead) {
             reject(new Error('WebSocket client marked dead'));
             return;
           }
@@ -281,7 +303,7 @@ class EngineWsClient {
           const timer = setTimeout(() => {
             this.pending.delete(id);
             // Mark dead so subsequent runs skip WS and go straight to REST.
-            this.dead = true;
+            this.markDead();
             try {
               this.ws?.close();
             } catch {
@@ -319,7 +341,9 @@ class EngineWsClient {
   }
 
   close() {
+    // Permanent close (reset / teardown) — not a cool-down soft-dead.
     this.dead = true;
+    this.deadUntil = Date.now() + DEAD_COOLDOWN_MS;
     for (const [, p] of this.pending) {
       clearTimeout(p.timer);
       p.reject(new Error('WebSocket client closed'));
@@ -345,13 +369,15 @@ const clients = new Map<string, EngineWsClient>();
 
 /**
  * Return a shared {@link EngineWsClient} for the given HTTP endpoint.
- * Dead clients are discarded and replaced so a later retry can reconnect.
+ *
+ * Dead clients are **kept** for a cool-down window so callers see `isDead`
+ * and skip WS → REST without opening a new socket every run. After the
+ * cool-down, the same instance becomes live again and may reconnect.
  */
 export function getEngineWsClient(endpoint: string): EngineWsClient {
   const url = endpointToRunWsUrl(endpoint);
   let c = clients.get(url);
-  if (!c || c.isDead) {
-    c?.close();
+  if (!c) {
     c = new EngineWsClient(url);
     clients.set(url, c);
   }
