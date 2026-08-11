@@ -234,13 +234,68 @@ export function assertSafePluginUrl(href: string): void {
   }
 }
 
+/**
+ * Dynamic-import an ES module plugin URL.
+ * Cross-origin modules require CORS (`Access-Control-Allow-Origin`).
+ * On failure, try fetch+blob (same CORS requirements, clearer errors).
+ */
+async function importPluginModule(href: string): Promise<unknown> {
+  try {
+    return await import(/* @vite-ignore */ href);
+  } catch (directErr: unknown) {
+    // Fallback: fetch as text → blob URL (helps some hosts / MIME edge cases).
+    // Still requires CORS on the GET; surface a clearer message if missing.
+    let res: Response;
+    try {
+      res = await fetch(href, {
+        method: 'GET',
+        mode: 'cors',
+        credentials: 'omit',
+        headers: { Accept: 'text/javascript, application/javascript, */*' },
+      });
+    } catch (fetchErr: unknown) {
+      const d =
+        directErr instanceof Error ? directErr.message : String(directErr);
+      const f = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+      throw new Error(
+        `Failed to load plugin module (CORS or network). ` +
+          `The host must send Access-Control-Allow-Origin for dynamic import(). ` +
+          `import: ${d} · fetch: ${f}`,
+      );
+    }
+    if (!res.ok) {
+      throw new Error(
+        `Plugin URL HTTP ${res.status} ${res.statusText || ''}`.trim(),
+      );
+    }
+    const text = await res.text();
+    if (!text.trim()) throw new Error('Plugin URL returned an empty body');
+    if (/^\s*</.test(text)) {
+      throw new Error(
+        'Plugin URL returned HTML (not JavaScript) — check the path and deploy',
+      );
+    }
+    const blob = new Blob([text], { type: 'text/javascript' });
+    const blobUrl = URL.createObjectURL(blob);
+    try {
+      return await import(/* @vite-ignore */ blobUrl);
+    } finally {
+      try {
+        URL.revokeObjectURL(blobUrl);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
 export async function loadPluginFromUrl(url: string): Promise<InstalledPlugin> {
   ensureBuiltins();
   const href = normalizePluginUrl(typeof url === 'string' ? url : '');
   if (!href) throw new Error('URL required');
   assertSafePluginUrl(href);
 
-  const mod = await import(/* @vite-ignore */ href);
+  const mod = await importPluginModule(href);
   const p = asPlugin(mod);
   if (!p) throw new Error('Module did not export a plugin object');
 
