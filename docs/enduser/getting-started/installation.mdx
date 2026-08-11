@@ -19,12 +19,12 @@
 
 ---
 title: "Installation"
-description: "Run AXIS as Vite+Solid dev, static dist PWA, or against Flask / Cloudflare Worker backends."
+description: "Install AXIS via the AXIS CLI, Vite+Solid dev, static dist PWA, desktop shell, or Cloudflare® Worker backends."
 ---
 
 # Installation
 
-AXIS ships as the **`axis`** package (Solid + Vite). Primary path is the product UI under `src/`. Legacy static shell (`main.js`, root `style.css`) is not the product UI—prefer `bun run dev` or built `dist/`.
+AXIS ships as the **`axis`** package (Solid + Vite), version **2.0.1**. Primary path is the product UI under `src/`. Legacy static shell (`main.js`, root `style.css`) is not the product UI—prefer `bun run dev` or built `dist/`.
 
 ## Abstract
 
@@ -32,10 +32,11 @@ Operator modes:
 
 | Mode | Command surface | When |
 | --- | --- | --- |
-| Dev AXIS | Vite `:3000` | Day-to-day UI work |
+| **AXIS CLI** (recommended ops) | `bun run axis` · `make axis-*` | Install / doctor / setup / deploy / health |
+| Dev AXIS | `bun run dev` · `axis dev` | Day-to-day UI work |
+| Desktop shell | `bun run desktop:dev` | Tauri 2 native window |
 | Static PWA | `dist/` + `axis_pwa_server.py` `:8081` | Offline demo / VPS |
-| AXIS at the edge | CF Worker (+ optional Pages) | Production data plane |
-| Operator CLI | `packages/cli` → `bun run axis` | Install / doctor / setup / deploy |
+| AXIS at the edge | `axis deploy worker` (+ optional Pages) | Production data plane |
 
 Backend is optional when **Engine = Client-Side (Pyodide)** and sources/streams are mock or CSV.
 
@@ -44,16 +45,39 @@ Backend is optional when **Engine = Client-Side (Pyodide)** and sources/streams 
 - **Bun ≥ 1.2** for package install, Vite, and the AXIS CLI
 - **Python 3.10+** if you use Flask Pro API (`make run`) or `axis_pwa_server.py`
 - Modern Chromium / Firefox / Safari (PWA install works best on Chromium)
-- Optional: Cloudflare auth (`CLOUDFLARE_API_TOKEN` or `wrangler login`) for Worker deploy
+- Optional: Cloudflare® auth (`CLOUDFLARE_API_TOKEN` or `wrangler login`) for Worker deploy
+- Optional desktop: Rust + platform webview libs — [Desktop (Tauri)](/axis/docs/devops/desktop)
 
-## Dev AXIS (recommended)
+## CLI-first bootstrap (recommended)
 
 ```bash
-# One-shot deps (app + worker + CLI)
-bun install && cd packages/cli && bun install && cd ../..
-# or: bun run axis:install
+# From the AXIS monorepo root
+bun install
+cd packages/cli && bun install && cd ../..
 
-# Terminal 1 — Pro API (server engine) from sister pyne/pynescript repo
+bun run axis:install          # app + worker/ + CLI deps
+bun run axis:doctor           # toolchain, wrangler.toml, optional CF auth
+bun run axis setup            # ensure wrangler.toml + local D1 schema
+# or: make axis-install && make axis-doctor && make axis-setup
+```
+
+| Script / target | Equivalent |
+| --- | --- |
+| `bun run axis` | `bun packages/cli/bin/axis.js` |
+| `bun run axis:install` | `axis install` |
+| `bun run axis:doctor` | `axis doctor` |
+| `bun run axis:setup` | `axis setup` |
+| `bun run axis:deploy` | `axis deploy worker` |
+| `bun run axis:health` | `axis health` |
+| `make axis ARGS="…"` | pass-through to the CLI |
+| `make axis-install` · `axis-doctor` · `axis-setup` · `axis-deploy` · `axis-health` | Make wrappers |
+
+Full command surface: [AXIS CLI](/axis/docs/devops/cli).
+
+## Dev AXIS
+
+```bash
+# Terminal 1 — Pro API (server engine) from sister pyne / pynescript repo
 make -C ../pynescript run    # Flask :5002
 
 # Terminal 2 — AXIS
@@ -63,22 +87,38 @@ bun run dev                  # Vite :3000
 
 Open `http://localhost:3000`. Default symbol `BTCUSDT`, engine often `server` with endpoint `http://localhost:5002` (or demo host `https://axis.hoox.sh`).
 
-### AXIS CLI (setup / deploy)
+### Desktop shell (optional)
 
 ```bash
-bun run axis --help
-bun run axis:doctor
-bun run axis setup -- --github-client-id Ov23li…   # wrangler.toml + local D1
-bun run axis:deploy                                # Worker
-bun run axis:health -- --oauth
+bun run desktop:dev          # Tauri window + Vite HMR
+bun run desktop:build        # native installers
 ```
 
-Full reference: [AXIS CLI](/axis/docs/devops/cli).
+See [Desktop (Tauri)](/axis/docs/devops/desktop).
+
+### Edge Worker (local)
+
+```bash
+bun run axis dev worker      # wrangler :8787
+# or: cd worker && bun run dev
+```
+
+In AXIS: open **Workers Manager** (topbar activity icon) or Settings → set **Backend URL** to `http://127.0.0.1:8787`. Production project id is frozen as `pynescript-axis` — see [topologies](/axis/docs/architecture/topologies).
+
+### Deploy checklist (prod)
+
+```bash
+bun run axis setup -- --github-client-id Ov23li… --remote-d1
+bun run axis -- secret put ADMIN_TOKEN
+bun run axis -- secret put EXTERNAL_BACKEND
+bun run axis:deploy
+bun run axis:health -- --oauth
+```
 
 ## Production build (static)
 
 ```bash
-bun install
+bun run axis:install
 bun run build                # → dist/
 python3 axis_pwa_server.py   # serves dist/ on :8081
 ```
@@ -100,19 +140,9 @@ Pyodide assets and vendor wheels under `public/pyodide/` and `public/vendor/` mu
 
 Disable network in DevTools; **Run** still executes. First Pyodide boot downloads/loads self-hosted runtime from the origin—allow that once while online, then go offline.
 
-## Cloudflare Worker endpoint
-
-```bash
-cd frontend/worker
-npm install
-npm run dev           # wrangler :8787
-```
-
-In AXIS Settings, set **Backend URL** to `http://127.0.0.1:8787` (or `/api` path as your Worker routes). Production project id is frozen as `pynescript-axis`—see [topologies](/axis/docs/architecture/topologies).
-
 ## CORS when using server engine
 
-Browser origin → Pro API must allow your AXIS origin. Flask uses `ALLOWED_ORIGINS`. Localhost regex is typically included; for a VPS demo host, set an explicit origin list. Symptom of failure: `POST /run` blocked in Network tab (no `Access-Control-Allow-Origin`).
+Browser origin → Pro API must allow your AXIS origin. Flask uses `ALLOWED_ORIGINS`. Localhost regex is typically included; for a VPS demo host, set an explicit origin list. Symptom of failure: `POST /run` blocked in Network tab (no `Access-Control-Allow-Origin`). Worker CORS: [CORS and origins](/axis/docs/devops/cors-and-origins).
 
 ## PWA install
 
@@ -129,30 +159,37 @@ Browser origin → Pro API must allow your AXIS origin. Flask uses `ALLOWED_ORIG
 | Run (server) | Flask or Worker responds; plots overlay |
 | Run (pyodide) | Offline OK after warm-up |
 | Manager | Catalog lists built-ins |
+| Workers Manager | Health cards for local/prod backends |
 | Theme | Dark/light toggle persists |
+| `axis doctor` | Toolchain + wrangler green |
 
 ## Failure modes
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | Empty chart | Source network / CORS / wrong symbol | Load again; try mock-walk |
-| Engine errors immediately | Endpoint down or wrong URL | Settings → Test endpoint |
+| Engine errors immediately | Endpoint down or wrong URL | Settings / Workers Manager → Probe |
 | Pyodide “BadZipFile” / HTML | SPA fallback instead of wheels | Ensure `public/vendor` and pyodide in `dist/` |
 | SW stale UI | Aggressive cache | Unregister SW or hard reload |
+| `API_KEYS_REQUIRED` on scripts | D1 without KV | Bind `API_KEYS` or local `ALLOW_OPEN_KEYS=1` — [Auth](/axis/docs/worker/auth) |
 
 ## Internals (repo paths)
 
 | Path | Role |
 | --- | --- |
-| `frontend/src/index.tsx`, `app.tsx` | Solid entry |
-| `frontend/vite.config.ts` | Build |
-| `frontend/axis_pwa_server.py` | Static host |
-| `frontend/manifest.webmanifest`, `sw.js` | PWA |
-| `frontend/worker/` | CF Worker data plane |
+| `src/index.tsx`, `src/app.tsx` | Solid entry |
+| `vite.config.ts` | Build |
+| `axis_pwa_server.py` | Static host |
+| `public/manifest.webmanifest`, SW | PWA |
+| `worker/` | Cloudflare® Worker data plane |
+| `packages/cli/` | AXIS CLI (`@hoox-sh/axis-cli`) |
+| `src-tauri/` | Desktop shell |
 
 ## See also
 
 - [Quick start](/axis/docs/enduser/getting-started/quick-start)
 - [Compose recipes](/axis/docs/enduser/getting-started/compose-recipes)
+- [AXIS CLI](/axis/docs/devops/cli)
 - [DevOps local dev](/axis/docs/devops/local-dev)
+- [Desktop (Tauri)](/axis/docs/devops/desktop)
 - [Worker](/axis/docs/worker)

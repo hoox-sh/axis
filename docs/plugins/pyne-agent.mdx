@@ -61,11 +61,13 @@ https://pyne-agent-worker.cryptolinx.workers.dev/plugin/axis-pine-agent.js
 | `pineVersion` | `auto` \| `v5` \| `v6` |
 | `style` | `auto` \| `indicator` \| `strategy` \| `library` |
 
-4. Open the agent from the **manager tab** / **topbar** action, or use the floating **PYNE Agent** button if component slots are not mounted yet (phase-2 fallback).
+4. Open the agent from the **manager tab** / **topbar** action, **Workers Manager → Install/Configure**, or the floating **PYNE Agent** button when mounted.
+
+**Component URL load is enabled** (AXIS 2.0.x): `loadPluginFromUrl` accepts `kind: 'component'`, registers via `registry.registerComponent`, and runs optional `init({ getConfig })`.
 
 Contract namespace remains `pynescript.axis.plugins.v1`. Export shape: default ES module with `kind: 'component'`, `slots`, `mount`, optional `init`/`dispose`.
 
-See also: [Dynamic loader](/axis/docs/plugins/dynamic-loader), [Plugin examples](/axis/docs/reference/plugin-examples), end-user guide [PYNE Agent](/axis/docs/enduser/guides/pyne-agent).
+See also: [Dynamic loader](/axis/docs/plugins/dynamic-loader), [Plugin examples](/axis/docs/reference/plugin-examples), end-user guide [PYNE Agent](/axis/docs/enduser/guides/pyne-agent), [Workers Manager](/axis/docs/enduser/guides/manager-and-settings).
 
 ## Standalone vs HOOX
 
@@ -97,7 +99,7 @@ Auth: `X-API-Key` or `Authorization: Bearer` when the worker secret is set.
 
 | Symptom | Likely cause |
 | --- | --- |
-| Plugin load fails (`kind: component`) | Older AXIS build rejects component via URL — use floating UI from worker `/` or upgrade AXIS loader |
+| Plugin load fails (`kind: component`) | CORS / mixed content on module URL; verify HTTPS and that AXIS is current (component URL load is supported) |
 | 401 on chat | Missing/wrong `apiKey` vs worker `API_KEY` |
 | Empty RAG quality | KB not ingested; chat still works with model knowledge only |
 | `validation.available: false` | Expected in standalone — not an error |

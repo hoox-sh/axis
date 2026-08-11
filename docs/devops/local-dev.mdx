@@ -43,40 +43,45 @@ flowchart TB
 
 ## Interface surface — commands
 
+### Bootstrap (CLI-first)
+
+```bash
+bun run axis:install   # app + worker + CLI
+bun run axis:doctor
+```
+
 ### Frontend (preferred product path)
 
 ```bash
-bun install
-bun run dev          # Vite + Solid → typically http://127.0.0.1:3000
+bun run dev            # Vite + Solid → typically http://127.0.0.1:3000
+# or: bun run axis dev
 ```
 
 ### Desktop (optional Tauri shell)
 
 ```bash
-bun run desktop:dev  # Vite + native window (see devops/desktop)
+bun run desktop:dev    # Vite + native window (see devops/desktop)
+# or: bun run axis dev desktop
 ```
 
 ### Flask Pro API (engine backend)
 
-From repo root:
+From the pyne / pynescript checkout (sister repo):
 
 ```bash
-make run             # python -m backend.app → :5002
-# or hatch / documented backend entry
+make -C ../pynescript run   # Flask → :5002
 ```
 
-Set PWA endpoint to `http://127.0.0.1:5002` for the **server** engine.
+Set PWA endpoint to `http://127.0.0.1:5002` for the **server** engine. Workers Manager and Settings can probe this URL.
 
 ### Worker
 
 ```bash
-cd worker
-bun install
-bun run dev          # http://127.0.0.1:8787
-# or: bun run axis dev worker
+bun run axis dev worker   # http://127.0.0.1:8787
+# or: cd worker && bun run dev
 ```
 
-Point cloud storage / Worker endpoint at `http://127.0.0.1:8787`. For `/api/run` proxy, set Worker `EXTERNAL_BACKEND=http://127.0.0.1:5002` (works on local wrangler; not on CF edge).
+Point cloud storage / Worker endpoint at `http://127.0.0.1:8787`. For `/api/run` proxy, set Worker `EXTERNAL_BACKEND=http://127.0.0.1:5002` (works on local wrangler; not on Cloudflare® edge).
 
 ### AXIS CLI
 

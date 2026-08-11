@@ -19,18 +19,17 @@
 
 ---
 title: "Dynamic plugin loader"
-description: "Install ES-module plugins from URL, persist installed list, restore on boot, and URL safety rules."
+description: "Install ES-module plugins from URL (source, stream, engine, dataset, component), persist, restore, safety rules."
 ---
 
 # Dynamic plugin loader
 
 ## Abstract
 
-The loader (`frontend/src/plugins/loader.ts`) lets users install **third-party or example** source/stream/engine plugins at runtime via dynamic `import()`. Installed URLs persist in `localStorage` under:
+The loader (`src/plugins/loader.ts`) lets users install **third-party or example** plugins at runtime via dynamic `import()`. Supported kinds: **`source`**, **`stream`**, **`engine`**, **`dataset`**, **`component`** (e.g. PYNE Agent). Installed URLs persist in `localStorage` under:
 
 | Key | Role |
 | --- | --- |
-| `pynescript.axis.plugins.v1` | Current |
 | `pynescript.axis.plugins.v1` | Installed plugin list |
 
 On boot, `restoreInstalledPlugins()` re-imports every saved URL.
@@ -77,14 +76,16 @@ PLUGINS_KEY // 'pynescript.axis.plugins.v1'
 2. `export const plugin = …`
 3. Module namespace object that *is* the plugin
 
-Must include `id` and `kind`. Required methods:
+Must include `id` and `kind`. Required methods / contracts:
 
-| kind | Method |
+| kind | Requirement |
 | --- | --- |
 | `source` | `fetchHistorical` |
 | `stream` | `start` |
 | `engine` | `run` |
-| `storage` | **Rejected** — “not supported yet” |
+| `dataset` | dataset fetch contract (`onchain` catalog) |
+| `component` | `ComponentPlugin` — `slots` / `mount`; optional `init` / `dispose` (registered on the unified registry) |
+| `storage` | **Rejected** via URL install — use built-in local/cloud/git |
 
 ## Internals
 
@@ -121,7 +122,7 @@ List filters out same URL **or** same `(kind, id)` before append — reloading a
 
 ## Manager UX (product)
 
-From `frontend/src/plugins/README.md`:
+From `src/plugins/README.md`:
 
 1. **Manager → Plugins → Load from URL**
 2. Example: `http://localhost:8081/plugins/example-coingecko-source.js`
@@ -135,6 +136,9 @@ Shipped examples (also under `public/plugins/`):
 | `example-coingecko-source.js` | source |
 | `example-tiny-pyne-engine.js` | engine |
 | `example-cf-do-stream.js` | stream |
+
+External component example: [PYNE Agent](/axis/docs/plugins/pyne-agent) —  
+`https://pyne-agent-worker.cryptolinx.workers.dev/plugin/axis-pine-agent.js`
 
 ## Invariants & edge cases
 
@@ -162,11 +166,12 @@ Then select **CoinGecko** in the source picker (id `coingecko`).
 | `Module did not export a plugin object` | Wrong export shape |
 | `Plugin needs id and kind` | Incomplete object |
 | `Source plugin needs fetchHistorical()` | Incomplete source |
-| `Unknown plugin kind` | Typo / component |
+| `Unknown plugin kind` | Typo or unsupported kind (not in source/stream/engine/dataset/component) |
 | Restore log errors | 404, network, syntax error in remote JS |
 
 ## See also
 
 - [Plugin examples](/axis/docs/reference/plugin-examples)
+- [PYNE Agent plugin](/axis/docs/plugins/pyne-agent)
 - [Registry](/axis/docs/plugins/registry)
 - [CORS and origins](/axis/docs/devops/cors-and-origins)

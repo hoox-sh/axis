@@ -26,9 +26,13 @@ description: "Cloudflare Worker for AXIS: /api/run proxy, keys, scripts, usage, 
 
 ## Abstract
 
-The AXIS Cloudflare Worker (`frontend/worker/`) is the **edge data plane** for the PWA: JSON APIs, optional script library (D1), API keys (KV), usage meters, and a WebSocket session relay (Durable Objects). It is **not** a full Pine interpreter in production today.
+The AXIS Cloudflare® Worker (`worker/`) is the **edge data plane** for the PWA: JSON APIs, optional script library (D1), API keys (KV), usage meters, on-chain proxy, and a WebSocket session relay (Durable Objects). It is **not** a full Pine Script™ interpreter in production today.
 
-**Honest runtime fact:** `POST /api/run` **proxies to `EXTERNAL_BACKEND`** (typically Flask) unless `PYODIDE_IN_WORKER=enabled` and the in-worker path succeeds. In-worker Pyodide is **planned / feature-gated** — see [Runtime](/axis/docs/worker/runtime) and `frontend/worker/RUNTIME.md`.
+**Honest runtime fact:** `POST /api/run` **proxies to `EXTERNAL_BACKEND`** (typically Flask) unless `PYODIDE_IN_WORKER=enabled` and the in-worker path succeeds. In-worker Pyodide is **planned / feature-gated** — see [Runtime](/axis/docs/worker/runtime) and `worker/RUNTIME.md`.
+
+**Security (2.0.1+):** gated `/api/run` (auth when `API_KEYS` / `REQUIRE_RUN_AUTH`), rate limits + body caps, fail-closed Worker auth when D1 is bound without `API_KEYS` KV, product-scoped CORS (not open `*.pages.dev`), OAuth env client ids over body `clientId`. See [Auth](/axis/docs/worker/auth) and [CORS](/axis/docs/devops/cors-and-origins).
+
+**Operator path:** [AXIS CLI](/axis/docs/devops/cli) — `axis setup` · `axis deploy worker` · `axis health`.
 
 ## Conceptual model
 

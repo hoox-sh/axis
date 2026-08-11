@@ -61,14 +61,14 @@ mindmap
 
 | Feature | Primary paths |
 | --- | --- |
-| Contracts | `frontend/src/plugins/types.ts` |
-| Registry | `frontend/src/plugins/registry.ts` |
-| Bootstrap | `frontend/src/plugins/bootstrap.ts` |
-| Active set | `frontend/src/plugins/active.ts` |
-| Dynamic install | `frontend/src/plugins/loader.ts` |
-| Barrel | `frontend/src/plugins/index.ts` |
-| Manager UI | `frontend/src/ui/PluginManager.tsx`, `plugin-badges.tsx` |
-| Docs (in-tree) | `frontend/src/plugins/README.md` |
+| Contracts | `src/plugins/types.ts` |
+| Registry | `src/plugins/registry.ts` |
+| Bootstrap | `src/plugins/bootstrap.ts` |
+| Active set | `src/plugins/active.ts` |
+| Dynamic install | `src/plugins/loader.ts` (source/stream/engine/dataset/**component**) |
+| Barrel | `src/plugins/index.ts` |
+| Manager UI | `src/ui/PluginManager.tsx`, `plugin-badges.tsx` |
+| Docs (in-tree) | `src/plugins/README.md` |
 
 ### Data plugins
 
@@ -87,12 +87,13 @@ mindmap
 
 | Feature | Primary paths |
 | --- | --- |
-| Catalog | `frontend/src/storage/catalog.ts` |
-| Local IDB | `frontend/src/storage/local.ts`, `idb.ts` |
-| Cloud | `frontend/src/storage/cloud.ts` |
-| Git | `frontend/src/storage/git.ts`, `git-github.ts`, `git-gitlab.ts` |
-| Service façade | `frontend/src/storage/service.ts` |
-| Library panel | `frontend/src/ui/ScriptLibraryPanel.tsx` |
+| Catalog | `src/storage/catalog.ts` |
+| Local IDB | `src/storage/local.ts`, `idb.ts` |
+| Cloud | `src/storage/cloud.ts` |
+| Git | `src/storage/git.ts`, `git-github.ts`, `git-gitlab.ts` |
+| Service façade | `src/storage/service.ts` |
+| Library panel | `src/ui/ScriptLibraryPanel.tsx` |
+| v6 starter pack | `examples/script-library-starter.json` |
 
 ### UI (UI)
 
@@ -100,6 +101,8 @@ mindmap
 | --- | --- |
 | Entry | `src/index.tsx`, `src/app.tsx` |
 | Chart host | `src/chart/ChartHost.tsx`, `ChartWorkspace.tsx`, `pane-manager.ts`, `pane-badge.ts`, `series-factory.ts` |
+| Price-scale decimals | `src/chart/price-precision.ts` |
+| Plot style parity | `src/results/plot-visuals.ts` → pane-manager |
 | Multi-chart / recipes | `src/chart/layout.ts`, `layout-recipes.ts`, `chart-registry.ts`, `ui/ChartLayoutMenu.tsx` |
 | Bar replay | `src/chart/bar-replay.ts`, `ui/BarReplayControls.tsx` |
 | Compare / volume profile | `src/chart/compare-overlay.ts`, `volume-profile.ts` |
@@ -110,42 +113,49 @@ mindmap
 | Command palette | `ui/CommandPalette.tsx`, `command-registry.ts` |
 | Docks | `ui/panels/*` (side-by-side left/right) |
 | Results | `src/results/*`, `ui/ResultsPanel.tsx`, `StrategyReport.tsx` |
+| Workers Manager | `src/ui/WorkersManager.tsx`, `src/workers/*` |
 | Store | `src/store/index.ts`, `types.ts` |
 | Topbar / settings | `ui/Topbar.tsx`, `TopbarField.tsx`, `SettingsDialog.tsx` |
 | Workspace snapshot | `src/storage/workspace-snapshot.ts` |
+| Desktop shell bridge | `src/desktop/*`, `src-tauri/` |
 
 ### Worker
 
 | Feature | Primary paths |
 | --- | --- |
-| Router | `frontend/worker/src/index.ts` |
-| Run | `frontend/worker/src/runtime.ts`, `pyodide_runtime.ts` |
-| Auth / keys | `frontend/worker/src/auth.ts`, `keys.ts` |
-| Scripts | `frontend/worker/src/scripts.ts`, `schemas/scripts.sql` |
-| Session DO | `frontend/worker/src/durable-objects/session.ts` |
-| Config | `frontend/worker/wrangler.toml`, `RUNTIME.md`, `README.md` |
+| Router / CORS | `worker/src/index.ts` (`pickOrigin`) |
+| Run (auth + rate limit) | `worker/src/runtime.ts`, `pyodide_runtime.ts` |
+| Auth / keys | `worker/src/auth.ts`, `keys.ts` |
+| Scripts | `worker/src/scripts.ts`, `schemas/scripts.sql` |
+| Git OAuth | `worker/src/git-oauth.ts` |
+| Session DO | `worker/src/durable-objects/session.ts` |
+| Config | `worker/wrangler.toml.example`, `RUNTIME.md`, `README.md` |
 
 ### Build / ops
 
 | Feature | Primary paths |
 | --- | --- |
-| Package scripts | `frontend/package.json` (`test:*`, `build`, `dev`) |
-| Static server | `frontend/axis_pwa_server.py` |
-| Public assets | `frontend/public/plugins`, `public/vendor`, `public/pyodide` |
-| Makefile | `run-axis` (Vite), `pages-deploy` → `dist/`, `test-frontend` |
-| CI | `.github/workflows/ci.yml` (coverage + e2e smoke), `axis-nightly.yml` |
-| Coverage gate | `frontend/scripts/check-coverage.mjs` (scoped core ≥95%) |
+| Package scripts | root `package.json` (`dev`, `build`, `test:*`, `axis:*`, `desktop:*`) |
+| AXIS CLI | `packages/cli/` (`@hoox-sh/axis-cli`) |
+| Static server | `axis_pwa_server.py` |
+| Public assets | `public/plugins`, `public/vendor`, `public/pyodide` |
+| Makefile | `axis` / `axis-*`, `pages-deploy`, `docker-*` |
+| Desktop CI | `.github/workflows/desktop.yml` |
+| CI | `.github/workflows/ci.yml` (coverage + e2e smoke) |
+| Coverage gate | `scripts/check-coverage.mjs` (scoped core ≥95%) |
+| Harden/perf audit | `docs/devops/harden-perf-audit-2026-08-11.md` |
 
 ### Examples & tests
 
 | Feature | Primary paths |
 | --- | --- |
-| Example plugins | `frontend/public/plugins/*.js`, `src/plugins/example-*.js` |
-| Unit tests | `frontend/tests/**` |
-| Worker tests | `frontend/worker/tests/**` |
-| E2E | `frontend/e2e/**`, `playwright.config.ts` |
-| Testing guide | `frontend/TESTING.md` |
-| Legacy notes | `frontend/LEGACY.md` |
+| Example plugins | `public/plugins/*.js` |
+| Pine v6 library starter | `examples/script-library-starter.json` |
+| Unit tests | `tests/**` |
+| Worker tests | `worker/tests/**` |
+| E2E | `e2e/**`, `playwright.config.ts` |
+| Testing guide | `TESTING.md` |
+| Legacy notes | `LEGACY.md` |
 
 ## Namespaces & keys
 

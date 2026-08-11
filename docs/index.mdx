@@ -24,17 +24,18 @@ description: "Open charting PWA — orthogonal sources, streams, engines, and st
 
 # AXIS Documentation
 
-**AXIS**  is an installable charting PWA that treats **price**, **time**, and **calculation** as separable axes. Sources load history. Streams advance the present. Engines evaluate Pine Script™ via **PYNE**. Storage keeps your script library. Compose any lawful combination without a proprietary charting host.
+**AXIS** is an installable charting PWA (v**2.0.1**) that treats **price**, **time**, and **calculation** as separable axes. Sources load history. Streams advance the present. Engines evaluate Pine Script™ via **PYNE**. Storage keeps your script library. Compose any lawful combination without a proprietary charting host.
 
-_Pine Script™ and TradingView® are trademarks of TradingView, Inc. This project is independent and not affiliated with or endorsed by TradingView, Inc._
+_Pine Script™ and TradingView® are trademarks of TradingView, Inc. Cloudflare® is a registered trademark of Cloudflare, Inc. This project is independent and not affiliated with or endorsed by TradingView, Inc. or Cloudflare, Inc._
 
 ## Abstract
 
 AXIS is a charting PWA, not a language rewrite. Language fidelity lives in [PYNE](/pyne/docs). The PWA contributes:
 
-1. A **unified plugin registry** (`source | stream | engine | storage | dataset`)
-2. A **Solid + Vite** product UI (chart, editor, results, manager, on-chain panel)
+1. A **unified plugin registry** (`source | stream | engine | storage | dataset | component`)
+2. A **Solid + Vite** product UI (chart, editor, results, manager, Workers Manager, on-chain panel)
 3. Optional backends: local Flask, offline Pyodide, Cloudflare® Worker (+ DO/KV/D1/R2 + `/api/onchain` proxy)
+4. **AXIS CLI** + optional **Tauri** desktop shell for operators
 
 **Invariant (AXIS ≠ engine):** the shell never embeds a closed interpreter. Evaluation is always an engine plugin.
 
@@ -107,11 +108,13 @@ Full recipes: [Compose recipes](/axis/docs/enduser/getting-started/compose-recip
 
 ## Demo topologies
 
-- Dev: Vite `:3000` + Flask `:5002`
+- Dev: Vite `:3000` + Flask `:5002` (`bun run axis:install` then `bun run dev`)
+- Desktop: `bun run desktop:dev` (Tauri 2)
 - Static: `bun run build` + `axis_pwa_server.py` `:8081`
-- Worker: `wrangler` on `:8787`
+- Worker: `bun run axis dev worker` / wrangler on `:8787`
+- Prod: `bun run axis:deploy` → project `pynescript-axis`
 
-See [topologies](/axis/docs/architecture/topologies) and [local dev](/axis/docs/devops/local-dev).
+See [topologies](/axis/docs/architecture/topologies), [AXIS CLI](/axis/docs/devops/cli), and [local dev](/axis/docs/devops/local-dev).
 
 ## Offline & agent exports
 

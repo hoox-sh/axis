@@ -76,7 +76,7 @@ export class TabbedEditor {
 
         // Ensure at least one tab
         if (!this.tabs.length) {
-            this.tabs.push({ id: genId(), name: 'untitled', content: initialScript || '//@version=5\n' });
+            this.tabs.push({ id: genId(), name: 'untitled', content: initialScript || '//@version=6\n' });
         }
         if (!this.activeId || !this.tabs.find((t) => t.id === this.activeId)) {
             this.activeId = this.tabs[0].id;
@@ -137,7 +137,7 @@ export class TabbedEditor {
 
     newTab(content) {
         const id = genId();
-        const tab = { id, name: `untitled-${this.tabs.length + 1}`, content: content || '//@version=5\n' };
+        const tab = { id, name: `untitled-${this.tabs.length + 1}`, content: content || '//@version=6\n' };
         this.tabs.push(tab);
         this.activeId = id;
         saveTabs(this.tabs); saveActive(this.activeId);

@@ -19,7 +19,7 @@
 
 ---
 title: "CORS and origins"
-description: "How AXIS Worker pickOrigin works, local allowlist, ALLOWED_ORIGIN, and Flask/browser constraints."
+description: "Worker pickOrigin: local-dev, product hosts, project-scoped Pages previews, ALLOWED_ORIGIN list, Flask constraints."
 ---
 
 # CORS and origins
@@ -28,7 +28,7 @@ description: "How AXIS Worker pickOrigin works, local allowlist, ALLOWED_ORIGIN,
 
 AXIS is a browser product that talks to **cross-origin** backends (Flask, Worker, venues). CORS misconfiguration is the #1 local-deploy footgun after missing wheels.
 
-The Worker implements an explicit origin picker; Flask and venue APIs have their own rules.
+The Worker implements an explicit origin picker (`pickOrigin` in `worker/src/index.ts`); Flask and venue APIs have their own rules.
 
 ## Conceptual model
 
@@ -36,29 +36,46 @@ The Worker implements an explicit origin picker; Flask and venue APIs have their
 flowchart TD
   ORIGIN[Browser Origin header]
   ORIGIN --> W[Worker pickOrigin]
-  W -->|localhost:3000/8081| ECHO[Echo request origin]
-  W -->|else| ALLOWED[env.ALLOWED_ORIGIN]
+  W -->|localhost / 127.0.0.1| ECHO1[Echo]
+  W -->|product hosts| ECHO2[Echo]
+  W -->|*.pynescript-axis.pages.dev| ECHO3[Echo]
+  W -->|ALLOWED_ORIGIN list| ECHO4[Echo if listed]
+  W -->|else| FALLBACK[First ALLOWED_ORIGIN]
   ORIGIN --> F[Flask CORS middleware]
   ORIGIN --> V[Venue APIs]
 ```
 
 ## Worker behavior
 
-From `frontend/worker/src/index.ts`:
+Resolution order for `Access-Control-Allow-Origin`:
 
-**Always echoed (local-dev regex):**
+### 1. Local-dev (always echoed)
 
-- Any `http://` or `https://` origin on **`localhost`** or **`127.0.0.1`**, optional port  
-  (e.g. Vite `:3000`, `axis_pwa_server` `:8081`, Playwright ephemeral ports)
+Any `http://` or `https://` origin on **`localhost`** or **`127.0.0.1`**, optional port  
+(e.g. Vite `:3000`, `axis_pwa_server` `:8081`, Playwright ephemeral ports).
 
-**Not allowed (and not needed):**
-
-- `http://0.0.0.0:…` — browsers do not use `0.0.0.0` as a page origin in normal use;  
-  binding the server with `HOST=0.0.0.0` only means “listen on all interfaces,” not a CORS origin.
-
-**Otherwise:** `env.ALLOWED_ORIGIN` or default `https://pynescript.ai` (exact match).
+**Not allowed (and not needed):** `http://0.0.0.0:…` — browsers do not use `0.0.0.0` as a page origin; binding with `HOST=0.0.0.0` only means “listen on all interfaces.”
 
 Localhost/127 allowlisting is **safe for CORS**: only pages actually served from those hosts present that `Origin`. A public site cannot forge `Origin: http://localhost:3000` in a real browser.
+
+### 2. Product hosts (2.0.1+)
+
+Exact product / HOOX / legacy PYNE hosts under:
+
+- `*.hoox.sh` / `hoox.sh`
+- `*.pynescript.ai` / `pynescript.ai`
+- `*.pynescript.online` / `pynescript.online`
+
+Examples: `https://axis.hoox.sh`, `https://hoox.sh`, `https://pynescript.ai`.
+
+### 3. Project-scoped Cloudflare® Pages (not open `*.pages.dev`)
+
+Only origins matching **`*.pynescript-axis.pages.dev`** (and the apex `pynescript-axis.pages.dev`) are echoed. Arbitrary third-party Pages projects (`evil.pages.dev`, other apps) fall through to the allowlist fallback — they are **not** reflected.
+
+### 4. `ALLOWED_ORIGIN` allowlist
+
+Comma-separated exact origins in `env.ALLOWED_ORIGIN` (e.g. `https://a.example,https://b.example`). If the request Origin is listed, echo it; otherwise return the **first** entry (default `https://pynescript.ai`).
+
 **CORS headers applied:**
 
 ```
@@ -71,17 +88,13 @@ Vary: Origin
 
 `OPTIONS` → `204` preflight.
 
-Scripts handler duplicates allow headers for consistency.
-
 ### Production implication
 
-If Pages is `https://pynescript-axis.pages.dev` (example), set:
+For a custom domain already under product regex, no extra var is required. For one-off preview hosts outside the project, list them:
 
 ```
-ALLOWED_ORIGIN = "https://pynescript-axis.pages.dev"
+ALLOWED_ORIGIN = "https://my-preview.example.com,https://axis.example.com"
 ```
-
-or your custom domain. **Exact string match** — no wildcard logic in code.
 
 ## Flask / server engine
 
@@ -109,9 +122,10 @@ Public Binance/OKX/etc. REST must send CORS headers usable by browsers. If block
 ## Invariants & edge cases
 
 1. **Credentials** — Worker CORS does not set `Allow-Credentials: true`; use Bearer headers, not cookies.
-2. **Multiple prod domains** — code picks a single `ALLOWED_ORIGIN`; multi-domain needs code change or edge rewrite.
+2. **Multiple prod domains** — product regex + comma-separated `ALLOWED_ORIGIN` cover multi-host; unknown sites never get open reflection.
 3. **Vite vs 8081** — both covered for Worker; Flask config must match whichever you use.
 4. **Health checks** from curl omit Origin — still work; browser calls need correct ACAO.
+5. **No open `*.pages.dev`** — only the frozen project `pynescript-axis` previews are product-scoped.
 
 ## Failure modes
 

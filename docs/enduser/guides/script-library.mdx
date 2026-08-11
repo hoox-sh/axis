@@ -64,11 +64,23 @@ Manager → **Script Library**:
 | Load | `read` → inject editor (`loadLibraryDoc` / setDoc) |
 | Delete | `remove` |
 | Export JSON | Full library dump |
-| Import JSON | Bulk write |
+| Import JSON | Bulk write (`importLibraryJson`) |
 | Cloud endpoint + key | Saved under `pluginsConfig['storage:cloud']` |
 | Git fields | provider, token, owner, repo, branch, basePath, … |
 
 Status line: backend · remote · branch · connected · count.
+
+### Pine Script™ v6 starter pack
+
+Repo ships a portable library dump of **v6** indicators, strategies, and helpers:
+
+| Path | Role |
+| --- | --- |
+| `examples/script-library-starter.json` | Importable library JSON (`//@version=6` scripts: RSI, MACD, ATR, MTF, sessions, math lib, …) |
+
+**Import:** Manager → Script Library → **Import JSON** → pick the file (or any prior export). Uses `importLibraryJson` with new ids so it merges into the active backend (local / cloud / git).
+
+Prefer `//@version=6` for new scripts; engines accept v5/v6 when the runtime supports them.
 
 ## Local backend
 
@@ -125,12 +137,13 @@ Token scopes: GitHub `contents:write`; GitLab `api` or `write_repository`.
 
 | Path | Role |
 | --- | --- |
-| `frontend/src/ui/ScriptLibraryPanel.tsx` | UI |
-| `frontend/src/storage/service.ts` | Facade |
-| `frontend/src/storage/local.ts` | IDB |
-| `frontend/src/storage/cloud.ts` | Worker API |
-| `frontend/src/storage/git.ts` | Git plugin |
-| `frontend/src/storage/git-github.ts`, `git-gitlab.ts` | Forges |
+| `src/ui/ScriptLibraryPanel.tsx` | UI |
+| `src/storage/service.ts` | Facade |
+| `src/storage/local.ts` | IDB |
+| `src/storage/cloud.ts` | Worker API |
+| `src/storage/git.ts` | Git plugin |
+| `src/storage/git-github.ts`, `git-gitlab.ts` | Forges |
+| `examples/script-library-starter.json` | Pine v6 starter pack |
 
 Contract: [Plugin types](/axis/docs/plugins/contracts) `StoragePlugin`.
 

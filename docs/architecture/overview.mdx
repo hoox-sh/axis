@@ -58,17 +58,20 @@ flowchart TB
 
 | Concern | Primary paths |
 | --- | --- |
-| Entry | `frontend/src/index.tsx`, `app.tsx` |
-| State | `frontend/src/store/` |
-| Plugins | `frontend/src/plugins/{registry,types,loader,bootstrap,active}.ts` |
+| Entry | `src/index.tsx`, `app.tsx` |
+| State | `src/store/` |
+| Plugins | `src/plugins/{registry,types,loader,bootstrap,active}.ts` |
 | Catalogs | `sources/catalog.ts`, `streams/*`, `engines/catalog.ts`, `storage/*` |
-| Chart | `chart/ChartHost.tsx`, `pane-manager.ts`, `drawing-layer.ts` |
+| Chart | `chart/ChartHost.tsx`, `pane-manager.ts`, `drawing-layer.ts`, `price-precision.ts` |
 | Editor | `editor/*` |
 | Run apply | `indicators/runner.ts` |
 | Results | `results/*`, `ui/ResultsPanel.tsx` |
-| Worker | `frontend/worker/` |
+| Workers Manager | `ui/WorkersManager.tsx`, `workers/*` |
+| Worker | `worker/` |
+| CLI | `packages/cli/` |
+| Desktop | `src-tauri/`, `src/desktop/` |
 
-Legacy parallel: `state.js`, `registry.js`, `main.js` — not product path. See repo `frontend/LEGACY.md`.
+Legacy parallel: `state.js`, `registry.js`, `main.js` — not product path. See repo `LEGACY.md`.
 
 ## Control plane vs data plane
 

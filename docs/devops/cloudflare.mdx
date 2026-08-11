@@ -19,23 +19,25 @@
 
 ---
 title: "Cloudflare deployment"
-description: "Pages + Worker for AXIS: frozen project pynescript-axis, bindings, deploy order, EXTERNAL_BACKEND reality."
+description: "Pages + Worker for AXIS: frozen project pynescript-axis, CLI deploy, bindings, security checklist."
 ---
 
-# Cloudflare deployment
+# Cloudflare® deployment
 
 ## Abstract
 
-Production AXIS on Cloudflare is a **split deploy**:
+Production AXIS on Cloudflare® is a **split deploy**:
 
 | Piece | Role |
 | --- | --- |
-| **Pages** | Static PWA (`frontend/dist`) |
-| **Worker** | JSON API + WebSocket (`frontend/worker`) |
+| **Pages** | Static PWA (`dist/`) |
+| **Worker** | JSON API + WebSocket (`worker/`) |
 
 **Project id:** `pynescript-axis` — frozen infrastructure name (dashboard, wrangler, CI). Do not rename without a full binding/domain migration.
 
-**Evaluation truth:** Worker `/api/run` **proxies to `EXTERNAL_BACKEND`** unless the gated Pyodide path is fully implemented and enabled. You still need a Python host (VPS Flask, container, etc.) for real Pine fidelity today.
+**Evaluation truth:** Worker `/api/run` **proxies to `EXTERNAL_BACKEND`** unless the gated Pyodide path is fully implemented and enabled. You still need a Python host (VPS Flask, container, etc.) for real Pine Script™ fidelity today.
+
+Prefer the **[AXIS CLI](/axis/docs/devops/cli)** for setup and deploy (`bun run axis:deploy`).
 
 ## Conceptual model
 
@@ -66,18 +68,25 @@ Production checklist:
 
 | Setting | Production guidance |
 | --- | --- |
-| `EXTERNAL_BACKEND` | Public HTTPS URL of Flask/PYNE API |
-| `ALLOWED_ORIGIN` | Exact Pages origin (e.g. `https://…pages.dev` or custom) |
+| `EXTERNAL_BACKEND` | Public HTTPS URL of Flask/PYNE API (`axis secret put`) |
+| `ALLOWED_ORIGIN` | Extra exact origins (comma-separated); product hosts + `*.pynescript-axis.pages.dev` are built-in — [CORS](/axis/docs/devops/cors-and-origins) |
 | `ADMIN_TOKEN` | Secret, strong |
+| `API_KEYS` KV | **Bind in prod** — D1 without KV fails closed (`API_KEYS_REQUIRED`) |
 | `ALLOW_OPEN_KEYS` | `"0"` or unset |
+| `REQUIRE_RUN_AUTH` | `"1"` optional force Bearer on `/api/run` |
+| `GITHUB_OAUTH_CLIENT_ID` | Env preferred; never rely on body `clientId` alone |
 | `PYODIDE_IN_WORKER` | `"disabled"` until wheel pipeline ready |
 
 ### 3. Deploy Worker
 
 ```bash
 # Preferred: AXIS CLI
-bun run axis deploy worker
-# or: axis setup d1 --remote && axis deploy worker
+bun run axis:deploy
+# or: bun run axis deploy worker
+# or: make axis-deploy
+
+# Schema first (remote)
+bun run axis setup -- d1 --remote
 
 # Equivalent raw wrangler
 cd worker
@@ -88,16 +97,11 @@ bun run deploy
 ### 4. Build & deploy Pages
 
 ```bash
-cd frontend
-bun install
+bun run axis deploy pages
+# or
 bun run build
-npx wrangler pages deploy dist --project-name=pynescript-axis
-```
-
-Worker package also defines:
-
-```json
-"deploy:pages": "wrangler pages deploy ../dist --project-name=pynescript-axis"
+bunx wrangler pages deploy dist --project-name=pynescript-axis
+# Make: make pages-deploy
 ```
 
 ### 5. Point the PWA
@@ -110,14 +114,17 @@ Worker package also defines:
 
 | Path | Role |
 | --- | --- |
-| `frontend/worker/wrangler.toml` | Worker name + bindings |
-| `frontend/worker/README.md` | Ops narrative |
-| `frontend/worker/package.json` | deploy scripts |
-| Makefile `worker-deploy` / `pages-deploy` | Convenience (verify Pages path) |
+| `worker/wrangler.toml` / `.example` | Worker name + bindings |
+| `worker/README.md` | Ops narrative |
+| `worker/package.json` | deploy scripts |
+| `packages/cli/` | `axis deploy` / `axis health` |
+| Makefile `axis-deploy` / `pages-deploy` / `worker-deploy` | Convenience targets |
 
 ### Health check
 
 ```bash
+bun run axis:health
+# or
 curl -sS https://<worker>/health
 # service: pynescript-axis-worker
 ```

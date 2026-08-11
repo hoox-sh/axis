@@ -88,7 +88,8 @@ flowchart TB
 **Deploy sketch**
 
 ```bash
-cd frontend/worker && wrangler deploy
+bun run axis:deploy
+# or: cd worker && bun run deploy
 cd frontend && bun run build
 wrangler pages deploy dist --project-name=pynescript-axis
 ```
@@ -155,10 +156,11 @@ AXIS --source--> venue or CSV
 
 | Path | Role |
 | --- | --- |
-| `frontend/vite.config.ts` | Dev/build |
-| `frontend/axis_pwa_server.py` | Static host |
-| `frontend/worker/wrangler.toml` | CF name + bindings |
-| `frontend/worker/README.md` | Edge ops |
+| `vite.config.ts` | Dev/build |
+| `axis_pwa_server.py` | Static host |
+| `worker/wrangler.toml` | CF name + bindings |
+| `packages/cli/` | AXIS CLI (setup / deploy / health) |
+| `worker/README.md` | Edge ops |
 
 ## See also
 

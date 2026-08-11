@@ -26,7 +26,7 @@ description: "wrangler.toml vars, KV, D1, R2, Durable Objects — provision once
 
 ## Abstract
 
-Bindings and vars for the AXIS Worker are declared in `frontend/worker/wrangler.toml`. Many production bindings ship **commented** so clone-and-dev does not require Cloudflare resources; `wrangler dev` synthesizes local substitutes where possible.
+Bindings and vars for the AXIS Worker are declared in `worker/wrangler.toml` (copy from `wrangler.toml.example` via `axis setup worker`). Many production bindings ship **commented** so clone-and-dev does not require Cloudflare® resources; `wrangler dev` synthesizes local substitutes where possible.
 
 **Project name is frozen:** `name = "pynescript-axis"`.
 
@@ -60,6 +60,9 @@ interface Env {
   ADMIN_TOKEN?: string;
   PYODIDE_IN_WORKER?: string;
   ALLOW_OPEN_KEYS?: string;
+  REQUIRE_RUN_AUTH?: string;
+  GITHUB_OAUTH_CLIENT_ID?: string;
+  GITLAB_OAUTH_CLIENT_ID?: string;
 }
 ```
 
@@ -68,17 +71,24 @@ interface Env {
 | Var | Default (repo) | Role |
 | --- | --- | --- |
 | `EXTERNAL_BACKEND` | `""` | Flask (or other) base URL for `/api/run` proxy |
-| `ALLOWED_ORIGIN` | `https://pynescript.ai` | CORS allow when Origin not local |
+| `ALLOWED_ORIGIN` | `https://pynescript.ai` | Extra CORS allowlist (comma-separated); product hosts built-in |
 | `ADMIN_TOKEN` | `""` | Shared secret for key minting |
 | `PYODIDE_IN_WORKER` | `"disabled"` | Gate in-worker Python |
 | `ALLOW_OPEN_KEYS` | `"1"` | Local demos; set `"0"` in prod |
+| `REQUIRE_RUN_AUTH` | unset | `"1"` forces Bearer on `/api/run` |
+| `GITHUB_OAUTH_CLIENT_ID` | unset | Preferred OAuth App id (wins over body) |
+| `GITLAB_OAUTH_CLIENT_ID` | unset | Same for GitLab |
 
 Prefer **secrets** for `ADMIN_TOKEN` and production backends:
 
 ```bash
-wrangler secret put ADMIN_TOKEN
-wrangler secret put EXTERNAL_BACKEND
+# CLI-first
+axis secret put ADMIN_TOKEN
+axis secret put EXTERNAL_BACKEND
+# or: wrangler secret put …
 ```
+
+**Prod invariant:** if `DB` (D1) is bound, also bind `API_KEYS` KV — otherwise script routes fail closed with `API_KEYS_REQUIRED`.
 
 ## Provision recipes
 

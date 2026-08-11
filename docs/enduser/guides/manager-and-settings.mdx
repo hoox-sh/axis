@@ -74,15 +74,15 @@ Paste a module URL exporting a default plugin object (`kind`, `id`, `name`, cont
 2. Registers into the TypeScript registry
 3. Persists install record so `restoreInstalledPlugins()` reloads next visit
 
-Security notes (operator-level): only https/http schemes suitable for module load; treat third-party URLs as code execution in your browser origin. See security tests under `frontend/tests/security/`.
+Security notes (operator-level): only https/http schemes suitable for module load; treat third-party URLs as code execution in your browser origin. See security tests under `tests/security/`.
 
-Example plugins ship in `public/plugins/`:
+Supported URL kinds: **source**, **stream**, **engine**, **dataset**, **component**. Example plugins ship in `public/plugins/`:
 
 - `example-coingecko-source.js`
 - `example-tiny-pyne-engine.js`
 - `example-cf-do-stream.js`
 
-**PYNE Agent** (sister project — natural language → PYNE scripts) installs from your deployed worker URL, not from AXIS `public/`:
+**PYNE Agent** (sister project — natural language → PYNE scripts) installs as a **component** from your deployed worker URL (or via Workers Manager → Install):
 
 ```text
 https://<pyne-agent-worker>/plugin/axis-pine-agent.js
@@ -102,10 +102,10 @@ Opens from the topbar **activity** icon (next to Plugins) or command palette **O
 | --- | --- |
 | **Overview** | Health cards for pyne Pro API, AXIS Worker (prod + local wrangler), Pyodide, PWA service worker, optional PYNE Agent / pyne-worker |
 | **Detail** | Probe latency, feature flags, capabilities, Use-as-backend / preload / install actions |
-| **Install** | Step-by-step setup with copyable commands (`make run`, `cd worker && bun run dev`, …) |
+| **Install** | Step-by-step setup with copyable commands (`make run`, `bun run axis dev worker`, `axis doctor`, …) |
 | **Configure** | Paste Backend URL, presets (`:5002`, `:8787`, workers.dev, axis.hoox.sh), activate Pyodide, install agent plugin |
 
-Probes use existing health surfaces (`GET /health`, pyodide assets, `navigator.serviceWorker`) — they do not invent product APIs. Implementation: `src/workers/*`, `src/ui/WorkersManager.tsx`.
+Probes use existing health surfaces (`GET /health`, pyodide assets, `navigator.serviceWorker`) — they do not invent product APIs. Implementation: `src/workers/*`, `src/ui/WorkersManager.tsx`. Operator CLI twin: [AXIS CLI](/axis/docs/devops/cli).
 
 ## Settings dialog
 
@@ -150,12 +150,13 @@ The Connection HUD engine chip shows the selected mode. Save persists via Solid 
 
 | Path | Role |
 | --- | --- |
-| `frontend/src/ui/PluginManager.tsx` | Manager modal |
-| `frontend/src/ui/SettingsDialog.tsx` | Settings |
-| `frontend/src/ui/plugin-badges.tsx` | Capability badges |
-| `frontend/src/plugins/registry.ts` | Unified registry |
-| `frontend/src/plugins/loader.ts` | URL load + restore |
-| `frontend/src/plugins/bootstrap.ts` | Built-ins |
+| `src/ui/PluginManager.tsx` | Manager modal |
+| `src/ui/WorkersManager.tsx` | Workers Manager modal |
+| `src/ui/SettingsDialog.tsx` | Settings |
+| `src/ui/plugin-badges.tsx` | Capability badges |
+| `src/plugins/registry.ts` | Unified registry |
+| `src/plugins/loader.ts` | URL load + restore (incl. component) |
+| `src/plugins/bootstrap.ts` | Built-ins |
 
 ## Invariants
 

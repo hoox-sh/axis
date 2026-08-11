@@ -19,20 +19,32 @@
 
 ---
 title: "Worker runtime"
-description: "POST /api/run execution modes: EXTERNAL_BACKEND proxy today, feature-gated in-worker Pyodide planned."
+description: "POST /api/run — auth gate, rate limits, size caps, EXTERNAL_BACKEND proxy, feature-gated in-worker Pyodide."
 ---
 
 # Worker runtime
 
 ## Abstract
 
-`frontend/worker/src/runtime.ts` implements `handleRun` for **`POST /api/run`**. Execution preference is documented in-file:
+`worker/src/runtime.ts` implements `handleRun` for **`POST /api/run`**. Execution preference is documented in-file:
 
 1. **`PYODIDE_IN_WORKER=enabled`** → `tryRunInWorker` (`pyodide_runtime.ts`)
 2. Else **`EXTERNAL_BACKEND`** set → HTTP proxy to `${EXTERNAL_BACKEND}/run`
-3. Else **503** `NO_BACKEND` with a pointer at env vars and `RUNTIME.md`
+3. Else **503** `NO_BACKEND` with a pointer at env vars and `worker/RUNTIME.md`
 
 **Production reality:** ships as a **proxy** to Flask (or another Python host). In-worker Pyodide is a **scaffold**, not a complete wheel-upload pipeline.
+
+### Auth & abuse controls (2.0.1+)
+
+| Control | Behavior |
+| --- | --- |
+| **Auth gate** | When `API_KEYS` KV is bound **or** `REQUIRE_RUN_AUTH=1`, `requireApiKey` is mandatory |
+| **Rate limit** | 30 requests / minute per IP (and per key when authenticated) |
+| **Script cap** | Max **512 KiB** source chars |
+| **Bars cap** | Max **50 000** OHLCV rows per run |
+| **Upstream timeout** | 60s proxy abort to `EXTERNAL_BACKEND` |
+
+Optional `Authorization: Bearer` still increments `USAGE` KV when bound (`usage:<key>`, 30-day TTL).
 
 ## Conceptual model
 
@@ -73,7 +85,9 @@ Proxy returns upstream status and body verbatim (JSON content-type, CORS origin 
 
 | Code | HTTP | Meaning |
 | --- | --- | --- |
-| `BAD_REQUEST` | 400 | Validation |
+| `BAD_REQUEST` | 400 | Validation / size caps |
+| `NO_KEY` / `INVALID_KEY` | 401 | Auth required and missing/unknown key |
+| `RATE_LIMIT` | 429 | >30 runs/min for IP or key |
 | `NO_BACKEND` | 503 | No external backend and Pyodide path off/failed path to proxy |
 | (Pyodide) | 200 body error | `tryRunInWorker` may return `{ status: 'error', error }` JSON |
 
@@ -89,10 +103,10 @@ usage:{key} → count++, TTL 30 days
 
 | Path | Role |
 | --- | --- |
-| `src/runtime.ts` | validate, meter, dispatch |
-| `src/pyodide_runtime.ts` | gated boot + `run_script` stub path |
-| `RUNTIME.md` | architecture plan for wheels / R2 / cold start |
-| `wrangler.toml` `[vars]` | `EXTERNAL_BACKEND`, `PYODIDE_IN_WORKER` |
+| `worker/src/runtime.ts` | auth gate, rate limit, validate, meter, dispatch |
+| `worker/src/pyodide_runtime.ts` | gated boot + `run_script` stub path |
+| `worker/RUNTIME.md` | architecture plan for wheels / R2 / cold start |
+| `worker/wrangler.toml` `[vars]` | `EXTERNAL_BACKEND`, `PYODIDE_IN_WORKER`, `REQUIRE_RUN_AUTH` |
 
 ### pyodide_runtime scaffold
 
@@ -136,7 +150,7 @@ PYODIDE_IN_WORKER = "disabled"
 ```bash
 curl -sS -X POST http://127.0.0.1:8787/api/run \
   -H 'content-type: application/json' \
-  -d '{"script":"//@version=5\nindicator(\"t\")\nplot(close)","data":[{"time":1,"open":1,"high":1,"low":1,"close":1}]}'
+  -d '{"script":"//@version=6\nindicator(\"t\")\nplot(close)","data":[{"time":1,"open":1,"high":1,"low":1,"close":1}]}'
 ```
 
 ### Force 503 for missing backend
@@ -155,4 +169,6 @@ Unset `EXTERNAL_BACKEND`, keep Pyodide disabled → expect `NO_BACKEND` message 
 
 - [Bindings](/axis/docs/worker/bindings)
 - [Engines](/axis/docs/plugins/engines)
-- [Auth](/axis/docs/worker/auth) (Bearer on run for metering)
+- [Auth](/axis/docs/worker/auth) (Bearer when gated; metering)
+- [CORS and origins](/axis/docs/devops/cors-and-origins)
+- [AXIS CLI](/axis/docs/devops/cli) — `axis deploy worker` · `axis health`

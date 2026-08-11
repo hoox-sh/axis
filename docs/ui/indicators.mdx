@@ -91,7 +91,7 @@ Prefer `indicator(..., overlay=false)` and raw `plot(rsi)` for oscillators — n
 
 Prefer `result.series` entries whose keys do not start with `_` / `__`. Fallback: single `plots[]` array as one line named from `script_name`.
 
-Colors: `plot_meta[k].color` or `PLOT_PALETTE[i]`.
+Colors: `plot_meta[k].color` or `PLOT_PALETTE[i]`. Pine Script™ `plot.style_*` maps to LWC series kinds (line, stepline, histogram/columns, area, circles) — see [Charting — plot style parity](/axis/docs/ui/charting).
 
 ### Indicator panel & pane badges
 
@@ -117,10 +117,11 @@ Streams may set `live.needsRerun`; multiplex/runner path can call `runAndApply` 
 
 | Path | Role |
 | --- | --- |
-| `frontend/src/indicators/runner.ts` | Pipeline |
-| `frontend/src/indicators/IndicatorPanel.tsx` | List UI |
-| `frontend/src/plugins/active.ts` | Active engine/source helpers |
-| `frontend/src/engines/catalog.ts` | Built-in engines |
+| `src/indicators/runner.ts` | Pipeline |
+| `src/indicators/IndicatorPanel.tsx` | List UI |
+| `src/plugins/active.ts` | Active engine/source helpers |
+| `src/engines/catalog.ts` | Built-in engines |
+| `src/results/plot-visuals.ts` | Plot style → series kind |
 
 ## Invariants
 

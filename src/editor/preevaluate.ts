@@ -562,7 +562,7 @@ export function localPreevaluate(source: string): EditorDiagnostic[] {
     out.push(
       diag(source, {
         line: 1,
-        message: "Missing //@version declaration. Add '//@version=5' at the top.",
+        message: "Missing //@version declaration. Add '//@version=6' at the top.",
         severity: 'warning',
         source: 'preeval-local',
       }),

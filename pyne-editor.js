@@ -354,7 +354,7 @@ export async function initPyneEditor(opts) {
         const ta = document.createElement('textarea');
         ta.id = 'pine-script-input';
         ta.spellcheck = false;
-        ta.placeholder = "//@version=5\nstrategy('My Strategy', overlay=true)\n...";
+        ta.placeholder = "//@version=6\nstrategy('My Strategy', overlay=true)\n...";
         ta.value = initialDoc;
         ta.addEventListener('keydown', (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {

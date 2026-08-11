@@ -99,18 +99,31 @@ Use Load for desk-speed symbol switches; use the manager when you need years of 
 | Path | Role |
 | --- | --- |
 | `src/data/data-source-manager.ts` | Job queue, walk-back, validate, gap-fill |
-| `src/data/bars-cache.ts` | IDB merge/cap by series key |
+| `src/data/bars-cache.ts` | Memory-first + IDB durable OHLCV cache |
 | `src/data/bars-gaps.ts` | Gap detection / coverage report |
 | `src/ui/DataSourceManagerPanel.tsx` | Panel UI |
 | `src/plugins/types.ts` | `SourceOpts`: `startTime?`, `endTime?`, `signal?` |
 | `src/sources/catalog.ts` | Venue date params + `sourcePageLimit` |
+
+### bars-cache performance (2.0.1+)
+
+`bars-cache.ts` is **memory-first**:
+
+| API | Behavior |
+| --- | --- |
+| `getCachedBars` | Serve warm in-memory series immediately; cold miss hydrates from IndexedDB then fills memory |
+| `getCachedBarCount` | Count without cloning the full series when warm |
+| Range / window | `sliceBarsForLoad` + count helpers avoid full clones for progress UI |
+| Soft caps | `BARS_CACHE_MAX` (100k bars/series), `BARS_CACHE_MAX_SERIES` (48 keys) |
+
+DSM gap-fill progress uses `getCachedBarCount` instead of loading full series each tick.
 
 ## Limits & safety
 
 - Max concurrent network jobs: **1** (queue the rest).
 - Caps: pages per walk, bars per series (soft IDB cap), gap-fill rounds.
 - Backfill forces `fallback: false` so synthetic walks do not fake venue history.
-- Cancel uses `AbortController` on in-flight fetches.
+- Cancel uses `AbortController` on in-flight fetches (symbol / job switches abort mid-page).
 
 ## See also
 

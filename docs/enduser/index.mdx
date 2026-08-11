@@ -63,25 +63,28 @@ The shell (topbar, chart, editor, results, manager) is **AXIS**. Calculation is 
 | --- | --- |
 | Topbar | Symbol, interval, source/stream/engine pickers, Load, Run, Live, On-Chain |
 | Watchlist | Quick symbol switch + quote poll |
-| Chart | lightweight-charts panes, drawings, trade markers, on-chain overlays |
-| Editor | CodeMirror 6 Pine document (docked / popout) |
+| Chart | lightweight-charts panes, drawings, trade markers, on-chain overlays, price-scale decimals |
+| Editor | CodeMirror 6 Pine Script™ document (docked / popout) |
 | Results | Events, Strategy, Plots, Metrics, Raw + export |
 | On-Chain | DefiLlama TVL, GeckoTerminal DEX, spike events, export / refresh |
-| Manager | Plugin catalog, URL install, Script Library |
+| Manager | Plugin catalog, URL install (incl. **component** / PYNE Agent), Script Library |
+| Workers Manager | Backend health probes, presets, install helpers |
 | Settings | Endpoint, engine, storage, on-chain proxy notes |
+| Desktop | Optional Tauri 2 shell (`bun run desktop:dev`) |
 
 ## Getting started
 
-1. [Installation](/axis/docs/enduser/getting-started/installation) — Vite dev, static `dist/`, or hosted PWA
-2. [Quick start](/axis/docs/enduser/getting-started/quick-start) — first load + first Run
+1. [Installation](/axis/docs/enduser/getting-started/installation) — AXIS CLI, Vite dev, desktop, static `dist/`, or hosted PWA
+2. [Quick start](/axis/docs/enduser/getting-started/quick-start) — first load + first Run (`//@version=6`)
 3. [Compose recipes](/axis/docs/enduser/getting-started/compose-recipes) — offline, desk, multi-venue, CSV, edge, git
 
 ## Guides
 
-- [Manager and settings](/axis/docs/enduser/guides/manager-and-settings)
+- [Manager and settings](/axis/docs/enduser/guides/manager-and-settings) — Plugins + **Workers Manager**
+- [PYNE Agent](/axis/docs/enduser/guides/pyne-agent) — natural language → scripts
 - [On-Chain data](/axis/docs/enduser/guides/on-chain) — TVL, DEX pools, events, Worker proxy
 - [Data Source Manager](/axis/docs/enduser/guides/data-source-manager)
-- [Script library](/axis/docs/enduser/guides/script-library)
+- [Script library](/axis/docs/enduser/guides/script-library) — incl. v6 starter pack import
 - [Strategy and results](/axis/docs/enduser/guides/strategy-and-results)
 - [Drawings](/axis/docs/enduser/guides/drawings)
 - [Troubleshooting](/axis/docs/enduser/guides/troubleshooting)
@@ -96,11 +99,13 @@ The shell (topbar, chart, editor, results, manager) is **AXIS**. Calculation is 
 1. **AXIS ≠ engine** — switching engine does not change the chart library; switching source does not change the language runtime.
 2. **Active set is four-tuple** — source, stream, engine, storage are selected independently (with sensible defaults when source implies stream).
 3. **API keys stay in the browser** — cloud storage and Pro keys are not uploaded by the shell except as request headers you configure.
-4. **OHLCV bars are not persisted** — reload re-fetches history; layout, script draft, and drawings survive in `pynescript.axis.v1`.
+4. **Chart OHLCV is ephemeral** — reload re-fetches for the topbar path; the **Data Source Manager** keeps a durable IDB `bars-cache` for deep history jobs.
+5. Layout, script draft, and drawings survive in `pynescript.axis.v1`.
 
 ## See also
 
 - [Architecture](/axis/docs/architecture) — ADRs and topologies
+- [AXIS CLI](/axis/docs/devops/cli) — install / doctor / deploy
 - [UI](/axis/docs/ui) — chart, editor, store internals
 - [Plugins](/axis/docs/plugins) — contracts and catalogs
 - [PYNE runtime](/pyne/docs/runtime) — evaluation semantics

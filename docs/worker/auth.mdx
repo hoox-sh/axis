@@ -19,16 +19,16 @@
 
 ---
 title: "Worker auth"
-description: "API keys (pn_…), admin token, Bearer extraction, ALLOW_OPEN_KEYS, and KV validation."
+description: "API keys (pn_…), fail-closed D1 without KV, admin token, Bearer, ALLOW_OPEN_KEYS, and /api/run gating."
 ---
 
 # Worker auth
 
 ## Abstract
 
-AXIS Worker auth is **API-key based**, not session cookies. Keys are created by admins (`X-Admin-Token`), validated via KV when bound, and used as `Authorization: Bearer` on script library and optionally on `/api/run` (usage metering).
+AXIS Worker auth is **API-key based**, not session cookies. Keys are created by admins (`X-Admin-Token`), validated via KV when bound, and used as `Authorization: Bearer` on the script library and (when gated) on `/api/run`.
 
-Core helpers: `frontend/worker/src/auth.ts`. Key CRUD: `frontend/worker/src/keys.ts`.
+Core helpers: `worker/src/auth.ts`. Key CRUD: `worker/src/keys.ts`.
 
 ## Conceptual model
 
@@ -40,7 +40,9 @@ flowchart TD
   KV -->|yes| LOOKUP[get key:…]
   LOOKUP -->|miss| 401
   LOOKUP -->|hit| CTX[AuthContext]
-  KV -->|no| OPEN{ALLOW_OPEN_KEYS?}
+  KV -->|no| D1{DB bound and open keys off?}
+  D1 -->|yes| FAIL[503 API_KEYS_REQUIRED]
+  D1 -->|no| OPEN{ALLOW_OPEN_KEYS?}
   OPEN -->|yes| CTX
   OPEN -->|no| SHAPE{pn_ + 48 hex?}
   SHAPE -->|yes| CTX
@@ -68,8 +70,28 @@ Returns either `{ ok: true, ctx }` or `{ ok: false, status, code, message }`.
 
 | Code | HTTP | When |
 | --- | --- | --- |
-| `NO_KEY` | 401 | Empty |
-| `INVALID_KEY` | 401 | Unknown in KV / malformed |
+| `NO_KEY` | 401 | Empty Bearer / `?key=` |
+| `INVALID_KEY` | 401 | Unknown in KV / malformed shape |
+| `API_KEYS_REQUIRED` | 503 | **Fail-closed:** D1 (`DB`) bound without `API_KEYS` KV and `ALLOW_OPEN_KEYS` off |
+
+### Fail-closed with durable storage (2.0.1+)
+
+When D1 is active but `API_KEYS` KV is **not** bound, inventable shape-only keys would partition real script data by attacker-chosen tokens with no mint/revoke path. In that configuration:
+
+1. Only explicit `ALLOW_OPEN_KEYS=1` accepts any non-empty Bearer (local demos).
+2. Otherwise respond **503** `API_KEYS_REQUIRED` — bind `API_KEYS` and mint via `/api/keys`.
+
+### `/api/run` auth gate
+
+From `worker/src/runtime.ts`:
+
+| Condition | Auth on `POST /api/run` |
+| --- | --- |
+| `API_KEYS` bound | **Required** |
+| `REQUIRE_RUN_AUTH=1` (or `true` / `yes`) | **Required** |
+| Neither | Optional (Bearer still meters when present) |
+
+Always rate-limited (30/min) regardless of auth — see [Runtime](/axis/docs/worker/runtime).
 
 ### Admin keys API (`/api/keys`)
 
@@ -96,10 +118,11 @@ Without KV on validate: accepts well-formed `pn_[a-f0-9]{48}` as hobby (dev).
 
 | Path | Role |
 | --- | --- |
-| `src/auth.ts` | Bearer, hash, requireApiKey |
-| `src/keys.ts` | Admin create / validate |
-| `src/runtime.ts` | Optional usage increment by Bearer |
-| `src/scripts.ts` | requireApiKey gate |
+| `worker/src/auth.ts` | Bearer, hash, requireApiKey (fail-closed) |
+| `worker/src/keys.ts` | Admin create / validate |
+| `worker/src/runtime.ts` | Run gate + rate limit + usage meter |
+| `worker/src/scripts.ts` | requireApiKey on library CRUD |
+| `worker/src/git-oauth.ts` | Env `GITHUB_OAUTH_CLIENT_ID` / `GITLAB_OAUTH_CLIENT_ID` wins over body `clientId` |
 
 ### Key format
 
@@ -138,10 +161,15 @@ curl -sS 'http://127.0.0.1:8787/api/keys?action=validate' \
 | --- | --- |
 | 403 create | Wrong/missing admin token |
 | 401 scripts | Open keys off + no KV + bad shape |
+| 503 `API_KEYS_REQUIRED` | D1 without `API_KEYS` KV and open keys off — bind KV + mint keys |
+| 401 on `/api/run` | `API_KEYS` or `REQUIRE_RUN_AUTH` set; missing Bearer |
+| OAuth start uses attacker client | Env client id not set — set `GITHUB_OAUTH_CLIENT_ID` (env always wins over body) |
 | Cross-user leakage tests fail | Partition hash regression |
 
 ## See also
 
 - [Data plane](/axis/docs/worker/data-plane)
 - [Bindings](/axis/docs/worker/bindings)
+- [Runtime](/axis/docs/worker/runtime)
 - [Security tests](/axis/docs/reference/testing)
+- [AXIS CLI](/axis/docs/devops/cli) — `axis secret put` · `axis setup oauth`

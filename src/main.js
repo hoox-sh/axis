@@ -52,7 +52,7 @@ let liveStop = null;      // cleanup for current live stream
 let editor;               // TabbedEditor instance, set during bootstrap()
 
 const DEMOS = {
-    'rsi-overlay': `//@version=5
+    'rsi-overlay': `//@version=6
 // RSI mean-reversion, plotted on the main chart
 strategy("RSI Overlay", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=10)
 
@@ -70,7 +70,7 @@ if (rsi > overbought)
 
 plot(rsi * 0.01, "RSI scaled", color=color.new(color.purple, 50))
 `,
-    'rsi-subpane': `//@version=5
+    'rsi-subpane': `//@version=6
 // RSI sub-pane (overlay=false) — the traditional layout
 strategy("RSI SubPane", overlay=false, default_qty_type=strategy.percent_of_equity, default_qty_value=10)
 
@@ -90,7 +90,7 @@ plot(rsi, "RSI")
 hline(oversold,   "Oversold",   color=color.green)
 hline(overbought, "Overbought", color=color.red)
 `,
-    'sma-crossover': `//@version=5
+    'sma-crossover': `//@version=6
 // SMA crossover indicator
 strategy("SMA Cross", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
 
@@ -109,7 +109,7 @@ if (ta.crossunder(fastMA, slowMA))
 plot(fastMA, "Fast", color=color.orange)
 plot(slowMA, "Slow", color=color.blue)
 `,
-    'macd': `//@version=5
+    'macd': `//@version=6
 // MACD indicator with signal line
 indicator("MACD", overlay=false)
 
@@ -123,7 +123,7 @@ plot(macdLine,   "MACD",   color=color.blue)
 plot(signalLine, "Signal", color=color.orange)
 plot(histLine,   "Histogram", color=histLine >= 0 ? color.green : color.red, style=plot.style_columns)
 `,
-    'bollinger': `//@version=5
+    'bollinger': `//@version=6
 // Bollinger Bands
 indicator("Bollinger Bands", overlay=true)
 
@@ -141,7 +141,7 @@ plot(upper, "Upper", color=color.blue)
 plot(lower, "Lower", color=color.blue)
 fill(plot(upper), plot(lower), color=color.new(color.blue, 90))
 `,
-    'client-side-demo': `//@version=5
+    'client-side-demo': `//@version=6
 // Tiny client-side demo — works with the Pyodide engine + sma/rsi builtins
 indicator("Client SMA", overlay=true)
 length = input.int(20, "Length", minval=2)

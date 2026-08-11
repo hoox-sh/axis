@@ -94,7 +94,7 @@ interface Tab {
 
 const DEMOS: Record<string, string> = {
   // Oscillators must use overlay=false — on the price pane RSI (0–100) is invisible.
-  'rsi-overlay': `//@version=5
+  'rsi-overlay': `//@version=6
 indicator("RSI", overlay=false)
 length = input.int(14, "RSI Length", minval=2, maxval=100)
 rsi = ta.rsi(close, length)
@@ -102,7 +102,7 @@ plot(rsi, "RSI", color=color.purple)
 hline(70, "Overbought", color=color.red)
 hline(30, "Oversold", color=color.green)
 `,
-  macd: `//@version=5
+  macd: `//@version=6
 indicator("MACD", overlay=false)
 fastLen   = input.int(12, "Fast Length")
 slowLen   = input.int(26, "Slow Length")

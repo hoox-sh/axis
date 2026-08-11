@@ -152,10 +152,14 @@ await loadPluginFromUrl('https://example.com/my-plugin.js');
 | **On-Chain** panel | DefiLlama **TVL** lines, GeckoTerminal **DEX pool** candles, TVL spike **events**, CSV export, refresh jobs |
 | **Scripts** panel | Applied indicators/strategies (list, visibility, colors) — renamed from “Indicators” |
 | **Chart themes** | Ten curated high-end presets (void, classic, mono, obsidian, graphite, pacific, dusk, porcelain, parchment, …) — no neon high-contrast default |
+| **Price scale** | Auto or 0–8 decimals from symbol + bars; Pine `plot.style_*` parity on overlays |
 | **Run** | Accent color only while a run is executing (ghost when idle) |
-| **Library / Plugins / Settings** | Script storage, plugin catalog, engine endpoint |
+| **Library / Plugins / Settings** | Script storage (import v6 starter pack), plugin catalog (incl. **component** URL), engine endpoint |
+| **Workers Manager** | Health cards + install helpers for Flask / Worker / Pyodide / PWA / PYNE Agent |
+| **AXIS CLI** | `packages/cli` — install, doctor, setup, secrets, deploy, health |
+| **Desktop** | Optional Tauri 2 shell (`bun run desktop:dev`) |
 
-Docs: [On-Chain data](https://hoox.sh/axis/docs/enduser/guides/on-chain) · [Data Source Manager](https://hoox.sh/axis/docs/enduser/guides/data-source-manager) · [UI shell](https://hoox.sh/axis/docs/ui/ui-shell)
+Docs: [On-Chain data](https://hoox.sh/axis/docs/enduser/guides/on-chain) · [Data Source Manager](https://hoox.sh/axis/docs/enduser/guides/data-source-manager) · [AXIS CLI](https://hoox.sh/axis/docs/devops/cli) · [UI shell](https://hoox.sh/axis/docs/ui/ui-shell)
 
 ## Local dev
 
@@ -255,7 +259,7 @@ Environment=ALLOWED_ORIGINS=*
 
 ### AXIS Worker
 
-`worker/src/index.ts` `pickOrigin` echoes any `localhost` / `127.0.0.1` origin (any port); otherwise `ALLOWED_ORIGIN` env (single exact origin).
+`worker/src/index.ts` `pickOrigin` echoes `localhost` / `127.0.0.1`, known product hosts (`*.hoox.sh`, `*.pynescript.ai`, …), and **`*.pynescript-axis.pages.dev`** only (not open `*.pages.dev`); otherwise comma-separated `ALLOWED_ORIGIN` (first entry is fallback). See [CORS docs](https://hoox.sh/axis/docs/devops/cors-and-origins).
 Smoke:
 
 ```bash
@@ -267,7 +271,7 @@ curl -sS -D- -o /dev/null -X OPTIONS https://axis.hoox.sh/run \
 curl -sS -X POST https://axis.hoox.sh/run \
   -H "Content-Type: application/json" \
   -H "Origin: https://axis.hoox.sh" \
-  -d '{"script":"//@version=5\nindicator(\"t\")\nplot(close)","data":[{"time":1,"open":1,"high":1,"low":1,"close":1,"volume":1}]}'
+  -d '{"script":"//@version=6\nindicator(\"t\")\nplot(close)","data":[{"time":1,"open":1,"high":1,"low":1,"close":1,"volume":1}]}'
 ```
 
 ## PWA

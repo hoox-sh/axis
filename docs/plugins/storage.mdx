@@ -147,7 +147,7 @@ await importLibraryJson(docs, { forceNewIds: true });
 
 ### Point cloud at local Worker
 
-1. `cd frontend/worker && npm run dev` → `:8787`
+1. `bun run axis dev worker` (or `cd worker && bun run dev`) → `:8787`
 2. Manager → storage `cloud`
 3. Config endpoint `http://127.0.0.1:8787`, key from `/api/keys` or `ALLOW_OPEN_KEYS=1` demo key
 

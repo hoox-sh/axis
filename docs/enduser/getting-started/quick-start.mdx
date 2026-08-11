@@ -78,7 +78,7 @@ Click **Load** (or pick a watchlist row). Status bar should move through loading
 Open the editor (docked right by default). Example indicator:
 
 ```pine
-//@version=5
+//@version=6
 indicator("AXIS smoke", overlay=true)
 plot(close, "close")
 plot(ta.sma(close, 20), "sma20")
@@ -87,7 +87,7 @@ plot(ta.sma(close, 20), "sma20")
 Strategy smoke (events for Results → Strategy):
 
 ```pine
-//@version=5
+//@version=6
 strategy("AXIS strat smoke", overlay=true)
 longCond = ta.crossover(ta.sma(close, 10), ta.sma(close, 30))
 if longCond
@@ -136,11 +136,14 @@ Manager → **Script Library** → name → Save. Backend is active storage (`lo
 | Tool | Where | Purpose |
 | --- | --- | --- |
 | **⌘/Ctrl+K** | Global | Command palette — panels, Run, layout, editor toggles |
+| **Workers Manager** | Topbar activity · ⌘K | Backend health, presets, PYNE Agent install |
 | **Layouts** | Topbar | Multi-chart 1 / 2H / 2V / 4 + recipes |
 | **Replay** | Topbar | Scrub history (full bars, cursor on last) |
 | **Compare** | Topbar | Second symbol overlay |
+| **Price decimals** | Price-pane scale | Auto or 0–8 — [Charting](/axis/docs/ui/charting) |
 | **Debug / Pins** | Editor header | Line chips vs chart markers — [Debugging](/axis/docs/ui/debugging) |
 | **Layers / Alerts** | Panel toggles | Drawings list; local price alerts |
+| **v6 starter pack** | Script Library → Import | `examples/script-library-starter.json` |
 
 ## Worked example: offline lab
 

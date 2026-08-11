@@ -40,6 +40,8 @@ Charting is the spatial surface for OHLCV, overlays, and annotations. Implementa
 | `compare-overlay.ts` | Second-symbol compare series |
 | `volume-profile.ts` | OHLCV volume-at-price overlay |
 | `drawing-layer.ts` + `drawings/*` | User + script drawings, templates, sync helpers |
+| `price-precision.ts` | Price-scale decimals (`auto` or 0–8) from symbol + bars |
+| `results/plot-visuals.ts` | Pine `plot.style_*` → LWC series kind (line, stepline, columns, area, …) |
 | `crosshair-sync.ts` | Cross-pane crosshair |
 | `pyne-drawings.ts` | Engine drawing objects → layer |
 | `manager-access.ts` | Process-wide manager/layer getters |
@@ -94,6 +96,32 @@ Series still live under pane key `candle` so markers, hlines, and the drawing la
 ### Empty / status overlay
 
 When `bars.length === 0`, ChartHost shows contextual title/sub from `store.status` (loading, error, running, or “Load data to begin”).
+
+### Price-scale decimals
+
+Price pane labels use `chart/price-precision.ts`:
+
+| Mode | Behavior |
+| --- | --- |
+| `auto` (default) | Merge symbol heuristics (e.g. BTC→2, SHIB→8) with recent OHLCV significant digits |
+| `0`–`8` | Fixed display decimals + matching `minMove` |
+
+UI control cycles **A → 0 → … → 8 → A** on the price-pane scale chrome. Store field: `priceScaleDecimals` (persisted).
+
+### Plot style parity
+
+Engine plot series honor Pine Script™ `plot.style_*` via `mapPlotStyleToSeriesKind` (`results/plot-visuals.ts` → pane-manager series factory):
+
+| Pine style (examples) | Chart series |
+| --- | --- |
+| `plot.style_line` / default | Line |
+| `plot.style_stepline` / `stepline_diamond` | Stepline |
+| `plot.style_histogram` / `columns` | Histogram |
+| `plot.style_area` / `areabr` | Area |
+| `plot.style_circles` | Circles / markers |
+| `plot.style_linebr` / `steplinebr` | Broken line variants |
+
+`fill(plot1, plot2, color=…)` renders as SVG bands between the two series when both resolve on the same pane.
 
 ### Multi-chart layouts
 
@@ -164,10 +192,12 @@ From `runAndApply` (indicators):
 
 - Full loads: `loadBars` → `chartDataGen++` → `setDataToChart` + fitContent  
 - Live: `multiplex` → `appendBar` + `manager.appendBar` only (no fitContent, no full setData)
+- **Performance (2.0.x):** live tick path is O(1) append + conflation under load; heavy history paint is batched; load requests use **AbortController** so symbol switches cancel in-flight venue fetches
+- Overlay re-runs prefer in-place series updates (`syncOverlayLines`) to avoid destroy→blank flash
 
 ### series-factory
 
-Centralizes series construction options and color palette so Results plot summary and chart stay chromatically related.
+Centralizes series construction options, plot-style mapping, and color palette so Results plot summary and chart stay chromatically related.
 
 ## Invariants
 
