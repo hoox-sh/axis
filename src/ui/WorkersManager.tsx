@@ -40,6 +40,7 @@ import {
   createMemo,
   createSignal,
   onCleanup,
+  untrack,
 } from 'solid-js';
 import { store, setStore, setActivePlugin, persist, setStatus, flushPersist } from '../store';
 import { pluginKey } from '../plugins/types';
@@ -61,12 +62,37 @@ import {
   PRODUCT_PYNE_PRO_HINT,
   type WorkerCatalogEntry,
   type WorkerId,
+  type WorkerIconKey,
   type WorkerProbeResult,
   type WorkerHealthStatus,
   type WorkersOverviewSnapshot,
 } from '../workers';
 
 type TabId = 'overview' | 'detail' | 'install' | 'configure';
+
+/** Map catalog icon keys → product Icons (distinct per worker card). */
+function workerIcon(key: WorkerIconKey | undefined) {
+  switch (key) {
+    case 'server':
+      return Icons.server;
+    case 'cpu':
+      return Icons.cpu;
+    case 'zap':
+      return Icons.zap;
+    case 'activity':
+      return Icons.activity;
+    case 'wifi':
+      return Icons.wifi;
+    case 'download':
+      return Icons.download;
+    case 'settings':
+      return Icons.settings;
+    case 'chain':
+      return Icons.chain;
+    default:
+      return Icons.server;
+  }
+}
 
 interface Props {
   open: boolean;
@@ -77,6 +103,13 @@ interface Props {
   initialWorkerId?: WorkerId;
   /** Called after plugin install (agent). */
   onChanged?: () => void;
+  /**
+   * When true, render body only (no backdrop/dialog chrome).
+   * Used inside {@link RuntimesHub}.
+   */
+  embedded?: boolean;
+  /** Cross-link to Runtimes → Plugins. */
+  onOpenPlugins?: () => void;
 }
 
 function statusDotClass(s: WorkerHealthStatus): string {
@@ -172,30 +205,49 @@ export const WorkersManager: Component<Props> = (props) => {
   const matchedBackend = createMemo(() => matchCatalogForEndpoint(store.endpoint));
 
   let abort: AbortController | null = null;
+  /** Monotonic gen so stale refresh/finally never leave probing stuck or wipe newer results. */
+  let probeGen = 0;
 
   const refresh = async () => {
     abort?.abort();
     abort = new AbortController();
+    const gen = ++probeGen;
     setProbing(true);
     setProbeError('');
     try {
+      // Cap wall-clock: each worker has its own timeout; 5s is enough for overview.
       const next = await probeAllWorkers({
-        timeoutMs: 7000,
+        timeoutMs: 5000,
         signal: abort.signal,
       });
+      if (gen !== probeGen) return;
       setSnap(next);
     } catch (e: unknown) {
+      if (gen !== probeGen) return;
       if ((e as { name?: string })?.name === 'AbortError') return;
       setProbeError(e instanceof Error ? e.message : String(e));
+      // Keep last good snap if any — never block the UI on a failed probe pass
+      if (!snap()) {
+        setSnap({
+          results: [],
+          healthy: 0,
+          degraded: 0,
+          down: 0,
+          unknown: 0,
+          checkedAt: Date.now(),
+        });
+      }
     } finally {
-      setProbing(false);
+      if (gen === probeGen) setProbing(false);
     }
   };
 
   const refreshOne = async (id: WorkerId) => {
+    const gen = ++probeGen;
     setProbing(true);
     try {
-      const r = await probeWorker(id, { timeoutMs: 7000 });
+      const r = await probeWorker(id, { timeoutMs: 5000 });
+      if (gen !== probeGen) return;
       setSnap((prev) => {
         if (!prev) {
           return {
@@ -220,31 +272,41 @@ export const WorkersManager: Component<Props> = (props) => {
           checkedAt: Date.now(),
         };
       });
+    } catch (e: unknown) {
+      if (gen !== probeGen) return;
+      setProbeError(e instanceof Error ? e.message : String(e));
     } finally {
-      setProbing(false);
+      if (gen === probeGen) setProbing(false);
     }
   };
 
-  // Probe once when the modal opens (not on every reactive tick).
-  let wasOpen = false;
+  // Probe once when the modal opens. Only track `open` — never `store.endpoint`
+  // (setBackend would re-fire this effect and loop “Probing…” forever).
   createEffect(() => {
     const open = props.open;
-    if (open && !wasOpen) {
+    if (!open) {
+      abort?.abort();
+      probeGen += 1;
+      return;
+    }
+    untrack(() => {
       setTab(props.initialTab || 'overview');
       if (props.initialWorkerId) setSelectedId(props.initialWorkerId);
       setCustomEndpoint(store.endpoint || '');
       setActionMsg('');
       setActionErr('');
+      setProbeError('');
       void refresh();
-    }
-    if (!open && wasOpen) {
+    });
+    onCleanup(() => {
       abort?.abort();
-    }
-    wasOpen = open;
+      probeGen += 1;
+    });
   });
 
   onCleanup(() => {
     abort?.abort();
+    probeGen += 1;
   });
 
   const onBackdrop = (e: MouseEvent) => {
@@ -346,78 +408,57 @@ export const WorkersManager: Component<Props> = (props) => {
     </button>
   );
 
-  return (
-    <Show when={props.open}>
-      <div
-        class="sc-dialog-backdrop"
-        onClick={onBackdrop}
-        onKeyDown={onKey}
-        role="presentation"
-      >
-        <div
-          class="sc-dialog w-[min(1100px,calc(100vw-2*var(--ui-dialog-margin)))] h-[min(880px,calc(100vh-2*var(--ui-dialog-margin-y)))]"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="axis-workers-title"
-          data-testid="axis-workers-manager"
-        >
-          <div class="sc-dialog-accent" />
-
-          {/* Header */}
-          <div class="sc-dialog-header gap-3">
-            <div class="min-w-0">
-              <span
-                id="axis-workers-title"
-                class="text-base font-semibold text-text tracking-tight inline-flex items-center gap-2"
-              >
-                <Icons.activity size={16} />
-                Workers Manager
-              </span>
-              <p class="sc-hint truncate">
-                Calculation backends · edge data plane · browser runtime · PWA
-              </p>
-            </div>
-            <div class="flex items-center gap-1.5 flex-shrink-0">
-              <button
-                type="button"
-                class="sc-btn sc-btn-ghost px-2 inline-flex items-center gap-1 text-[11px]"
-                disabled={probing()}
-                onClick={() => void refresh()}
-                title="Probe all workers"
-                data-testid="axis-workers-refresh"
-              >
-                {probing() ? <HooxLoader size="xs" /> : <Icons.refresh size={13} />}
-                Refresh
-              </button>
-              <button
-                class="sc-btn sc-btn-ghost px-2"
-                onClick={props.onClose}
-                aria-label="Close"
-              >
-                <Icons.x size={14} />
-              </button>
-            </div>
-          </div>
-
-          {/* Summary strip */}
+  const summaryAndBody = (
+    <>
+          {/* Summary strip + probe refresh */}
           <div
-            class="flex flex-wrap items-center gap-2 border-b border-border bg-bg-elev/40 text-[11px] font-mono"
+            class="flex flex-wrap items-center gap-2 border-b border-border bg-bg-elev/40 text-[11px] font-mono flex-shrink-0"
             style={{
               'padding-inline': 'var(--ui-dialog-header-pad-x)',
               'padding-block': '0.65em',
             }}
+            data-testid="axis-workers-manager"
           >
+            <button
+              type="button"
+              class="sc-btn sc-btn-ghost px-2 inline-flex items-center gap-1 text-[11px]"
+              disabled={probing()}
+              onClick={() => void refresh()}
+              title="Probe all workers"
+              data-testid="axis-workers-refresh"
+            >
+              {probing() ? <HooxLoader size="xs" /> : <Icons.refresh size={13} />}
+              Refresh
+            </button>
+            <Show when={props.onOpenPlugins}>
+              <button
+                type="button"
+                class="sc-btn sc-btn-ghost px-2 inline-flex items-center gap-1 text-[11px]"
+                data-testid="axis-workers-goto-plugins"
+                title="Sources, streams, engines, storage, script library"
+                onClick={() => props.onOpenPlugins?.()}
+              >
+                <Icons.folder size={12} />
+                Plugins
+              </button>
+            </Show>
             <Show
               when={snap()}
               fallback={
                 <span class="text-text-faint inline-flex items-center gap-1.5">
                   {probing() ? <HooxLoader size="xs" /> : null}
-                  Probing…
+                  {probing() ? 'Probing…' : 'No probe yet — click Refresh'}
                 </span>
               }
             >
               {(s) => (
                 <>
+                  <Show when={probing()}>
+                    <span class="text-text-faint inline-flex items-center gap-1 mr-1">
+                      <HooxLoader size="xs" />
+                      Updating…
+                    </span>
+                  </Show>
                   <span class="text-accent-2">{s().healthy} healthy</span>
                   <span class="text-text-faint">·</span>
                   <span class="text-orange">{s().degraded} degraded</span>
@@ -499,11 +540,21 @@ export const WorkersManager: Component<Props> = (props) => {
                       >
                         <div class="flex items-start gap-2">
                           <span
-                            class={`mt-1.5 h-2 w-2 rounded-full flex-shrink-0 ${statusDotClass(st())}`}
+                            class={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded border border-border bg-bg ${statusTextClass(st())}`}
                             aria-hidden="true"
-                          />
+                            title={workerHealthLabel(st())}
+                          >
+                            {(() => {
+                              const Icon = workerIcon(w.icon);
+                              return <Icon size={15} />;
+                            })()}
+                          </span>
                           <div class="min-w-0 flex-1">
                             <div class="flex items-center gap-1.5 flex-wrap">
+                              <span
+                                class={`h-2 w-2 rounded-full flex-shrink-0 ${statusDotClass(st())}`}
+                                aria-hidden="true"
+                              />
                               <span class="font-semibold text-text text-[13px]">{w.name}</span>
                               <span class="text-[9px] uppercase tracking-wider text-text-faint border border-border px-1 py-0.5">
                                 {kindLabel(w.kind)}
@@ -578,16 +629,37 @@ export const WorkersManager: Component<Props> = (props) => {
                   return (
                     <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 min-h-0">
                       <div class="lg:col-span-3 flex flex-col gap-3 border-2 border-border bg-bg-elev p-4">
-                        <div class="flex items-start gap-2">
+                        <div class="flex items-start gap-2.5">
                           <span
-                            class={`mt-1.5 h-2.5 w-2.5 rounded-full ${statusDotClass(r()?.status || 'unknown')}`}
-                          />
-                          <div>
-                            <h3 class="text-[15px] font-semibold text-text">{w().name}</h3>
+                            class={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded border border-border bg-bg ${statusTextClass(r()?.status || 'unknown')}`}
+                            aria-hidden="true"
+                          >
+                            {(() => {
+                              const Icon = workerIcon(w().icon);
+                              return <Icon size={17} />;
+                            })()}
+                          </span>
+                          <div class="min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                              <span
+                                class={`h-2.5 w-2.5 rounded-full ${statusDotClass(r()?.status || 'unknown')}`}
+                              />
+                              <h3 class="text-[15px] font-semibold text-text">{w().name}</h3>
+                              <span class="text-[9px] uppercase tracking-wider text-text-faint border border-border px-1 py-0.5">
+                                {kindLabel(w().kind)}
+                              </span>
+                            </div>
                             <p class="text-text-dim text-[12px] mt-1 leading-relaxed">
                               {w().description}
                             </p>
                           </div>
+                        </div>
+
+                        <div class="border border-accent/25 bg-accent/5 px-3 py-2.5 rounded-sm">
+                          <div class="text-[9px] uppercase tracking-wider text-accent font-semibold mb-1">
+                            Usage
+                          </div>
+                          <p class="text-text text-[12px] leading-relaxed">{w().usage}</p>
                         </div>
 
                         <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
@@ -805,11 +877,26 @@ export const WorkersManager: Component<Props> = (props) => {
               <Show when={selected()}>
                 {(w) => (
                   <div class="flex flex-col gap-4">
-                    <div>
-                      <h3 class="text-[14px] font-semibold text-text">
-                        Install · {w().name}
-                      </h3>
-                      <p class="text-text-faint text-[11px] mt-1">{w().summary}</p>
+                    <div class="flex items-start gap-2.5">
+                      <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded border border-border bg-bg-elev text-accent">
+                        {(() => {
+                          const Icon = workerIcon(w().icon);
+                          return <Icon size={17} />;
+                        })()}
+                      </span>
+                      <div class="min-w-0">
+                        <h3 class="text-[14px] font-semibold text-text">
+                          Install · {w().name}
+                        </h3>
+                        <p class="text-text-faint text-[11px] mt-1">{w().summary}</p>
+                      </div>
+                    </div>
+
+                    <div class="border border-accent/25 bg-accent/5 px-3 py-2.5">
+                      <div class="text-[9px] uppercase tracking-wider text-accent font-semibold mb-1">
+                        When to use
+                      </div>
+                      <p class="text-text text-[12px] leading-relaxed">{w().usage}</p>
                     </div>
 
                     <ol class="flex flex-col gap-3">
@@ -1012,6 +1099,56 @@ export const WorkersManager: Component<Props> = (props) => {
               </div>
             </Show>
           </div>
+    </>
+  );
+
+  if (props.embedded) {
+    return (
+      <Show when={props.open}>
+        <div class="flex flex-col min-h-0 flex-1 overflow-hidden">{summaryAndBody}</div>
+      </Show>
+    );
+  }
+
+  return (
+    <Show when={props.open}>
+      <div
+        class="sc-dialog-backdrop"
+        onClick={onBackdrop}
+        onKeyDown={onKey}
+        role="presentation"
+      >
+        <div
+          class="sc-dialog w-[min(1100px,calc(100vw-2*var(--ui-dialog-margin)))] h-[min(880px,calc(100vh-2*var(--ui-dialog-margin-y)))]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="axis-workers-title"
+          data-testid="axis-workers-manager"
+        >
+          <div class="sc-dialog-accent" />
+          <div class="sc-dialog-header gap-3">
+            <div class="min-w-0">
+              <span
+                id="axis-workers-title"
+                class="text-base font-semibold text-text tracking-tight inline-flex items-center gap-2"
+              >
+                <Icons.cpu size={16} />
+                Status
+              </span>
+              <p class="sc-hint truncate">
+                Calculation backends · edge data plane · browser runtime · PWA
+              </p>
+            </div>
+            <button
+              type="button"
+              class="sc-btn sc-btn-ghost px-2"
+              onClick={props.onClose}
+              aria-label="Close"
+            >
+              <Icons.x size={14} />
+            </button>
+          </div>
+          {summaryAndBody}
         </div>
       </div>
     </Show>

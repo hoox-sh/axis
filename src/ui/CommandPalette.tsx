@@ -109,7 +109,10 @@ function emitWindowEvent(name: string, detail?: Record<string, unknown>) {
 
 export type CommandPaletteProps = {
   /** Docked editor document accessor for Run Script. */
-  editorRef?: { getDoc: () => string };
+  editorRef?: {
+    getDoc: () => string;
+    ensureSavedForRun?: () => Promise<{ ok: boolean; doc: string }>;
+  };
   onOpenSettings?: () => void;
   /** Open Settings → Theme tab (chart colors). */
   onOpenThemeSettings?: () => void;
@@ -176,7 +179,14 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       setChartThemePreset: (id) => setChartThemePreset(id),
       setChartGridMode: (mode) => setChartGridMode(mode),
       runScript: async () => {
-        const doc = props.editorRef?.getDoc?.() || '';
+        let doc = props.editorRef?.getDoc?.() || '';
+        if (!doc.trim()) return;
+        // Save unsaved buffer to the library before running
+        if (props.editorRef?.ensureSavedForRun) {
+          const saved = await props.editorRef.ensureSavedForRun();
+          if (!saved.ok) return;
+          doc = saved.doc || doc;
+        }
         if (!doc.trim()) return;
         const { runPreevalNow } = await import('../editor/preevaluate');
         const pe = await runPreevalNow(doc);

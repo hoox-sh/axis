@@ -78,13 +78,36 @@ Then PWA endpoint = `https://axis.example.com` and the **server** engine posts t
 # 1. Ship latest main
 git push origin main
 
-# 2. On VPS (paths may vary — often /opt/axis)
-ssh <vps> 'cd /opt/axis && git pull && bun install && bun run build && sudo systemctl restart axis-pwa'
-# Pro API (sister repo) if needed:
-# ssh <vps> 'cd /opt/pynescript && git pull && sudo systemctl restart pynescript-api'
+# 2. On VPS (paths may vary — often /root/axis + rsync dist → PWA WorkingDirectory)
+ssh axis 'cd /root/axis && git pull --ff-only'
+# Build on a machine with enough RAM, then rsync dist (VPS bun may OOM):
+# rsync -az --delete dist/ axis:/root/pynescript/frontend/dist/
+ssh axis 'systemctl restart axis-pwa'
+# Pro API if needed:
+# ssh axis 'systemctl restart pynescript-api'
 ```
 
 Local operator CLI for the **Worker** edge (separate from VPS static): `bun run axis:deploy` — see [AXIS CLI](/axis/docs/devops/cli).
+
+### Hardened network (UFW) + health checks
+
+Production VPS pattern (verified on `axis.hoox.sh`):
+
+| Surface | Bind / allow | Health URL |
+| --- | --- | --- |
+| **UFW** | `deny incoming` default; **allow 22/tcp, 443/tcp only** | — |
+| **nginx** | `0.0.0.0:443` TLS | `https://axis.hoox.sh/health` → proxy `127.0.0.1:5002/health` |
+| **Pro API (gunicorn)** | **`127.0.0.1:5002` only** | loopback; **not** public |
+| **PWA static** | **`127.0.0.1:80` only** (nginx fronts it) | SPA at `/` |
+| **fail2ban** | `sshd` jail | — |
+
+**Do not** open UFW for `5002`, `80`, or `8787` on a public VPS. Direct probes to `http://<vps-ip>:5002/health` **must time out** if hardening is correct.
+
+**Workers Manager** browser probes:
+
+- On **product hosts** (`axis.hoox.sh`, …), pyne Pro is probed via **same-origin** `/health` (nginx), not `http://127.0.0.1:5002` (that would hit the *client* PC and always look “down”).
+- Catalog `publicEndpoint` (`https://axis.hoox.sh`) is used when the default is loopback and the page is not local dev.
+- CF Worker health stays on `https://pynescript-axis.*.workers.dev/health` (edge; independent of VPS UFW).
 
 ### Minimal without TLS
 

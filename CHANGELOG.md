@@ -9,13 +9,30 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-11 · 192 commits · describe-tag: `v2.0.1`_
+_Generated/updated: 2026-08-11 · 194 commits · describe-tag: `v2.0.2`_
 
 ---
 
 ## [Unreleased]
 
 _Nothing yet — next changes land here._
+
+## [2.0.3] — 2026-08-11
+
+Runtimes hub, editor save-before-run / idle lint, Workers Manager reliability, and hardened VPS probe routing.
+
+### Fixed
+
+- **Workers Manager endless probing** — open-effect no longer tracks `store.endpoint` (backend changes re-fired probes); every probe gets a hard timeout merged with the modal abort; Pyodide probe uses HEAD instead of downloading full `pyodide.js`; `probeAllWorkers` uses `allSettled`.
+- **Workers Manager / hardened VPS** — pyne Pro probes use same-origin `https://axis.hoox.sh/health` (nginx → loopback :5002) instead of client `127.0.0.1:5002`, which UFW correctly blocks on the public VPS.
+
+### Changed
+
+- **Runtimes hub** — single dialog for **Status** (Workers Manager) and **Plugins** (catalog / install / library); topbar **Runtimes** entry; cross-links between sections; models remain separate.
+- **Save before Run** — clicking Run (editor header, topbar split, Mod-Enter, command palette) auto-saves the active script to the library when the tab is dirty or not yet bound (`libraryId`). Save failure blocks the run.
+- **Idle lint** — editor underlines (e.g. `plt()` → unknown) reappear after **2s** without typing, not only after Save/Run. Mid-keystroke marks stay cleared; bare call typos like `plt()` flagged locally.
+- **Workers Manager UX** — distinct icon per catalog worker; **Usage / When to use** copy on Detail + Install; docs updated.
+- **Editor line numbers** — gutter width follows digit count only (no fixed min-width / heavy padding).
 
 ## [2.0.2] — 2026-08-11
 
@@ -63,9 +80,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (110 commits)
+### 2026-08 (112 commits)
 
 #### Security
 
@@ -73,6 +92,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `0c4a812d` (2026-08-11) — feat(editor,panels): hover-slide docks and editor chrome polish
 - `7abea423` (2026-08-10) — feat(chart): price-scale decimals with auto from symbol/bars
 - `235079b7` (2026-08-10) — feat(editor): autoformat, color tools, and chrome redesign
 - `9ce5e0f3` (2026-08-10) — feat: plot style chart parity, preeval constants, and storage versions
@@ -124,6 +144,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `3bc43323` (2026-08-11) — fix(panels): harden hover-slide reflow for non-DOM test windows
 - `0a668e00` (2026-08-11) — fix(security,perf): gate /api/run, OAuth clientId, WS cool-down
 - `156221b9` (2026-08-11) — fix(security,perf): fail-closed Worker auth, CORS, bars-cache
 - `9bfc801b` (2026-08-10) — fix(editor,run): defer syntax lint; enum completions; protect interactive Run

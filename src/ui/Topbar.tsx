@@ -29,7 +29,7 @@
  * - **Compute** — Engine, Stream, Run, Live, Replay
  * - **Layout** — multi-chart layout menu
  * - **Panels** — List, Editor, Library, Scripts, Layers, Alerts, Data, Inputs, Results
- * - **System** — Fullscreen, Chart only, Workers, Plugins, Settings, Theme (`ml-auto`)
+ * - **System** — Fullscreen, Chart only, Runtimes (Status + Plugins), Settings, Theme (`ml-auto`)
  *
  * ## Actions
  * - **Load / Reload** → force `loadSymbolData` (historical via active source)
@@ -101,7 +101,10 @@ export const Topbar: Component<{
   onOpenWorkers?: () => void;
   /** Bump when plugin catalog changes */
   catalogTick?: number;
-  editorRef: { getDoc: () => string };
+  editorRef: {
+    getDoc: () => string;
+    ensureSavedForRun?: () => Promise<{ ok: boolean; doc: string }>;
+  };
 }> = (props) => {
   const sources = createMemo(() => {
     void props.catalogTick;
@@ -506,7 +509,14 @@ export const Topbar: Component<{
         </TopbarField>
 
         {/* Action cluster: Run/Re-run · Live · Replay — Run is accent only while executing */}
-        <RunSplitButton getDoc={() => props.editorRef.getDoc()} />
+        <RunSplitButton
+          getDoc={() => props.editorRef.getDoc()}
+          ensureSavedForRun={
+            props.editorRef.ensureSavedForRun
+              ? () => props.editorRef.ensureSavedForRun!()
+              : undefined
+          }
+        />
 
         <button
           type="button"
@@ -727,25 +737,32 @@ export const Topbar: Component<{
 
         <button
           type="button"
-          class="sc-btn sc-btn-ghost sc-btn-icon"
+          class="sc-btn sc-btn-ghost"
           onClick={() => props.onOpenWorkers?.()}
-          title="Workers Manager — backends, edge, Pyodide, PWA status"
-          data-testid="axis-btn-workers"
-          aria-label="Open workers manager"
+          title="Runtimes — Status (backends / edge / Pyodide) and Plugins (catalog / library)"
+          data-testid="axis-btn-runtimes"
+          aria-label="Open Runtimes"
         >
-          <Icons.activity />
+          <Icons.server />
+          <span class="axis-tb-btn-label">Runtimes</span>
         </button>
-
+        {/* Keep test ids for palette / docs that open Status or Plugins specifically */}
         <button
           type="button"
-          class="sc-btn sc-btn-ghost sc-btn-icon"
-          onClick={() => props.onOpenPlugins?.()}
-          title="Plugins"
+          class="sr-only"
+          tabindex={-1}
+          data-testid="axis-btn-workers"
+          aria-hidden="true"
+          onClick={() => props.onOpenWorkers?.()}
+        />
+        <button
+          type="button"
+          class="sr-only"
+          tabindex={-1}
           data-testid="axis-btn-plugins"
-          aria-label="Open plugin manager"
-        >
-          <Icons.folder />
-        </button>
+          aria-hidden="true"
+          onClick={() => props.onOpenPlugins?.()}
+        />
 
         <button
           type="button"

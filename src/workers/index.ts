@@ -28,6 +28,7 @@ export type {
   WorkerRole,
   WorkerHealthStatus,
   WorkerKind,
+  WorkerIconKey,
   WorkerInstallStep,
   WorkerCatalogEntry,
   WorkerProbeResult,
@@ -40,17 +41,22 @@ export {
   LOCAL_AXIS_WORKER_BASE,
   DEFAULT_PYNE_PRO_BASE,
   PRODUCT_PYNE_PRO_HINT,
+  PRODUCT_SAME_ORIGIN_API_HOSTS,
+  isProductSameOriginApiHost,
+  isLoopbackBase,
   pyneAgentWorkerOrigin,
   getWorkerCatalogEntry,
   listWorkerCatalog,
   normalizeWorkerBase,
   endpointsMatch,
   matchCatalogForEndpoint,
+  resolveProbeEndpoint,
 } from './catalog';
 
 export {
   probeWorker,
   probeAllWorkers,
+  probeAbortSignal,
   workerHealthLabel,
   type ProbeWorkerOpts,
 } from './probe';

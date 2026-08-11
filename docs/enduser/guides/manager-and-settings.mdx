@@ -24,14 +24,14 @@ description: "Plugin Manager, Workers Manager (status + install helpers), and Se
 
 # Manager and settings
 
-Three surfaces configure AXIS: the **Plugin Manager** (what exists and is active), the **Workers Manager** (backends / edge / Pyodide / PWA status + install helpers), and **Settings** (endpoint, engine, storage, interval defaults). None embed language semantics.
+Two chrome surfaces configure AXIS: the unified **Runtimes** hub (Status + Plugins), and **Settings**. Models stay separate; entry chrome is shared.
 
 ## Abstract
 
 | Surface | Opens from | Mutates |
 | --- | --- | --- |
-| Plugin Manager | Topbar Plugins | Registry membership, active source via Use, library ops |
-| Workers Manager | Topbar activity icon · ⌘K “Workers” | Probe health; set `endpoint` / engine; install PYNE Agent plugin |
+| **Runtimes → Status** | Topbar **Runtimes** · ⌘K “Status” | Probe health; set `endpoint` / engine; install PYNE Agent plugin |
+| **Runtimes → Plugins** | Topbar **Runtimes** · ⌘K “Plugins” | Registry membership, active source via Use, script library |
 | Settings | Topbar gear | `endpoint`, active engine/storage, chart interval, watchlist refresh |
 
 Active plugins live in `store.activePlugins`; per-plugin fields in `store.pluginsConfig` keyed by `` `${kind}:${id}` ``.
@@ -94,18 +94,43 @@ See [PYNE Agent](/axis/docs/enduser/guides/pyne-agent) and [plugin reference](/a
 
 See [Script library](/axis/docs/enduser/guides/script-library). Manager hosts the panel so library and plugins share one modal.
 
-## Workers Manager
+## Runtimes hub
 
-Opens from the topbar **activity** icon (next to Plugins) or command palette **Open Workers Manager**.
+One dialog (`RuntimesHub`) with primary tabs **Status** | **Plugins**. Cross-links jump between them without closing.
 
-| Tab | Role |
+Implementation: `src/ui/RuntimesHub.tsx` hosts embedded `WorkersManager` + `PluginManager` (no nested dialogs).
+
+## Status (Workers Manager body)
+
+Opens from topbar **Runtimes** (Status section) or ⌘K **Open Runtimes → Status**.
+
+| Sub-tab | Role |
 | --- | --- |
-| **Overview** | Health cards for pyne Pro API, AXIS Worker (prod + local wrangler), Pyodide, PWA service worker, optional PYNE Agent / pyne-worker |
-| **Detail** | Probe latency, feature flags, capabilities, Use-as-backend / preload / install actions |
-| **Install** | Step-by-step setup with copyable commands (`make run`, `bun run axis dev worker`, `axis doctor`, …) |
+| **Overview** | Health cards (distinct icon per worker) for pyne Pro API, AXIS Worker (prod + local wrangler), Pyodide, PWA service worker, optional PYNE Agent / pyne-worker |
+| **Detail** | **Usage** (when to pick this worker), probe latency, feature flags, Use-as-backend / preload / install actions |
+| **Install** | **When to use** + step-by-step setup with copyable commands (`make run`, `wrangler`, plugin URL, …) |
 | **Configure** | Paste Backend URL, presets (`:5002`, `:8787`, workers.dev, axis.hoox.sh), activate Pyodide, install agent plugin |
 
-Probes use existing health surfaces (`GET /health`, pyodide assets, `navigator.serviceWorker`) — they do not invent product APIs. Implementation: `src/workers/*`, `src/ui/WorkersManager.tsx`. Operator CLI twin: [AXIS CLI](/axis/docs/devops/cli).
+### Catalog items (usage)
+
+| Worker | Icon intent | When to use |
+| --- | --- | --- |
+| **pyne Pro API** | server | Primary **Server** calculation backend (Flask `:5002`). Best for compile/Numba and long history. |
+| **AXIS Worker** | zap | Production edge data plane (on-chain proxy, scripts D1, optional `/api/run`). Default for On-Chain. |
+| **AXIS Worker (local)** | activity | Local wrangler `:8787` while developing the Worker. |
+| **Pyodide** | cpu | In-browser offline calc — no Backend URL; first load ~20–30s. |
+| **Service Worker** | wifi | PWA shell cache (auto in production; skipped in Vite dev). Not a calc engine. |
+| **PYNE Agent** | download | Optional NL → Pine plugin; scripts still run via your engine. |
+| **pyne-worker** | settings | Optional HOOX mesh edge evaluator; paste origin as Backend URL. |
+
+### Probes
+
+- Run once when the modal opens; **Refresh** re-runs.
+- Each worker has a **hard wall-clock timeout** (~5s) so a hung host cannot leave “Probing…” forever.
+- Pyodide probe uses **HEAD** (not a full `pyodide.js` download).
+- HTTP probes hit `GET /health` (JSON markers). Implementation: `src/workers/*`, `src/ui/WorkersManager.tsx`. Operator CLI twin: [AXIS CLI](/axis/docs/devops/cli).
+
+**Hardened VPS note:** production UFW typically allows only **22 + 443**. Pro API binds **`127.0.0.1:5002`** — public `:5002` probes correctly **time out**. On `https://axis.hoox.sh`, Workers Manager probes pyne Pro via **same-origin** `https://axis.hoox.sh/health` (nginx reverse-proxy), not loopback. See [VPS demo](/axis/docs/devops/vps-demo).
 
 ## Settings dialog
 
@@ -150,8 +175,9 @@ The Connection HUD engine chip shows the selected mode. Save persists via Solid 
 
 | Path | Role |
 | --- | --- |
-| `src/ui/PluginManager.tsx` | Manager modal |
-| `src/ui/WorkersManager.tsx` | Workers Manager modal |
+| `src/ui/RuntimesHub.tsx` | Unified Runtimes dialog (Status + Plugins) |
+| `src/ui/PluginManager.tsx` | Plugins body (catalog / install / library) |
+| `src/ui/WorkersManager.tsx` | Status body (probes / install / configure) |
 | `src/ui/SettingsDialog.tsx` | Settings |
 | `src/ui/plugin-badges.tsx` | Capability badges |
 | `src/plugins/registry.ts` | Unified registry |

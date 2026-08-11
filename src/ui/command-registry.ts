@@ -572,17 +572,18 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
   },
   {
     id: 'action.plugins',
-    title: 'Open Plugins',
+    title: 'Open Runtimes → Plugins',
     category: 'navigation',
-    keywords: ['library', 'extensions', 'install'],
+    keywords: ['library', 'extensions', 'install', 'catalog', 'runtimes', 'manager'],
   },
   {
     id: 'action.workers',
-    title: 'Open Workers Manager',
+    title: 'Open Runtimes → Status',
     category: 'navigation',
     keywords: [
       'workers',
       'worker manager',
+      'runtimes',
       'backend',
       'endpoint',
       'pyodide',

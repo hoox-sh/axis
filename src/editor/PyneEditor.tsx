@@ -97,6 +97,17 @@ export type PyneEditorRef = {
   loadLibraryDocs?: (
     docs: Array<{ content: string; name?: string; libraryId?: string }>,
   ) => void;
+  /**
+   * True when the active tab has unsaved edits or is not bound to the library.
+   * Set by {@link TabbedEditor}.
+   */
+  isUnsaved?: () => boolean;
+  /**
+   * Persist the active tab to the script library when unsaved, then return
+   * the current document. Used by Run paths so scripts are saved before run.
+   * `ok: false` when empty or library write failed (caller should not run).
+   */
+  ensureSavedForRun?: () => Promise<{ ok: boolean; doc: string }>;
 };
 
 interface Props {

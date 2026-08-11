@@ -67,9 +67,23 @@ export const voidEditorTheme = EditorView.theme(
       color: 'var(--color-text-faint)',
       border: 'none',
       borderRight: '2px solid var(--color-border)',
+      /* No fixed gutter min — each column sizes to its content */
+      minWidth: '0',
+    },
+    /*
+     * Line numbers: only as wide as the current digit count needs.
+     * CM already spacers with maxLineNumber (9 / 99 / 999…); drop the library
+     * minWidth:20px and excess padding so 1–9 line files stay a single digit.
+     */
+    '.cm-lineNumbers': {
+      minWidth: '0',
     },
     '.cm-lineNumbers .cm-gutterElement': {
-      padding: '0 8px 0 6px',
+      padding: '0 0.35em 0 0.2em',
+      minWidth: '0',
+      textAlign: 'right',
+      whiteSpace: 'nowrap',
+      boxSizing: 'border-box',
     },
     '.cm-panels': {
       backgroundColor: 'var(--color-bg-panel)',

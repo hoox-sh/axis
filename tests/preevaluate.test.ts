@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
+  cancelPreeval,
   checkUnknownBuiltinMembers,
   clearPreevalOnEdit,
   editDistance,
@@ -15,8 +16,11 @@ import {
   isRemoteStyleNoise,
   localPreevaluate,
   mergePreevalDiagnostics,
+  PREEVAL_DEBOUNCE_MS,
+  PREEVAL_IDLE_MS,
   rangeFromLineCols,
   remoteToEditorDiagnostics,
+  schedulePreeval,
   suggestBuiltinPath,
 } from '../src/editor/preevaluate.ts';
 import type { EditorDiagnostic } from '../src/editor/diagnostics.ts';
@@ -324,5 +328,45 @@ describe('clearPreevalOnEdit', () => {
     expect(store.preEval.hasErrors).toBe(false);
     expect(store.preEval.pending).toBe(false);
     expect(store.preEval.source).toBe('plot(close)');
+  });
+});
+
+describe('schedulePreeval idle lint', () => {
+  it('exports a 3s idle window', () => {
+    expect(PREEVAL_IDLE_MS).toBe(2000);
+    expect(PREEVAL_DEBOUNCE_MS).toBe(PREEVAL_IDLE_MS);
+  });
+
+  it('clears marks immediately without pending for the whole idle window', () => {
+    setPreEval({
+      diagnostics: [
+        {
+          from: 0,
+          to: 3,
+          line: 1,
+          severity: 'error',
+          message: 'stale',
+          source: 'preeval-local',
+        },
+      ],
+      hasErrors: true,
+      pending: false,
+      source: 'old',
+    });
+
+    // Long idle so we only assert the immediate clear (no remote race)
+    schedulePreeval('//@version=6\nindicator("t")\nplt(close)\n', 60_000);
+    expect(store.preEval.hasErrors).toBe(false);
+    expect(store.preEval.diagnostics).toEqual([]);
+    expect(store.preEval.pending).toBe(false);
+    cancelPreeval();
+  });
+
+  it('flags bare call typos like plt() locally', () => {
+    const diags = localPreevaluate('//@version=6\nindicator("t")\nplt(close)\n');
+    const typo = diags.find((d) => /plt/.test(d.message));
+    expect(typo).toBeTruthy();
+    expect(typo!.message).toMatch(/plot/i);
+    expect(typo!.severity).toBe('typo');
   });
 });

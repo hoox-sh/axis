@@ -52,6 +52,13 @@ interface Props {
   setDoc?: (doc: string, name?: string) => void;
   /** Initial tab when opening */
   initialTab?: TabId;
+  /**
+   * When true, render body only (no backdrop/dialog chrome).
+   * Used inside {@link RuntimesHub}.
+   */
+  embedded?: boolean;
+  /** Cross-link to Runtimes → Status (Workers). */
+  onOpenStatus?: () => void;
 }
 
 // Served from public/plugins/ in production (dist/plugins/); /src/ only works under Vite dev.
@@ -171,35 +178,15 @@ export const PluginManager: Component<Props> = (props) => {
     </button>
   );
 
-  return (
-    <Show when={props.open}>
-      <div
-        class="sc-dialog-backdrop"
-        onClick={onBackdrop}
-        role="presentation"
-      >
-        <div
-          class="sc-dialog w-[min(1200px,calc(100vw-2*var(--ui-dialog-margin)))] h-[min(900px,calc(100vh-2*var(--ui-dialog-margin-y)))]"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="axis-plugins-title"
-          data-testid="axis-manager"
-        >
-          <div class="sc-dialog-accent" />
-          <div class="sc-dialog-header">
-            <span
-              id="axis-plugins-title"
-              class="text-base font-semibold text-text tracking-tight inline-flex items-center gap-2"
-            >
-              <Icons.folder size={16} />
-              Manager
-            </span>
-            <button class="sc-btn sc-btn-ghost px-2" onClick={props.onClose} aria-label="Close">
-              <Icons.x size={14} />
-            </button>
-          </div>
-
-          <div class="sc-dialog-tabs sc-dialog-tabs--underline" role="tablist">
+  const inner = (
+    <>
+          <div
+            class={`sc-dialog-tabs sc-dialog-tabs--underline flex-shrink-0 ${
+              props.embedded ? 'border-t border-border/60' : ''
+            }`}
+            role="tablist"
+            aria-label="Plugin sections"
+          >
             {tabBtn('catalog', 'Catalog')}
             {tabBtn('install', 'Install')}
             {tabBtn('library', 'Script Library')}
@@ -207,7 +194,27 @@ export const PluginManager: Component<Props> = (props) => {
 
           {/* fixed tall body: tabs stay put; content scrolls inside */}
 
-          <div class="sc-dialog-body flex flex-col gap-4 overflow-auto text-[12px] min-h-0 flex-1">
+          <div
+            class="sc-dialog-body flex flex-col gap-4 overflow-auto text-[12px] min-h-0 flex-1"
+            data-testid="axis-manager"
+          >
+            <Show when={props.onOpenStatus}>
+              <div class="flex flex-wrap items-center gap-2 text-[11px] border border-border bg-bg-elev/50 px-2.5 py-1.5">
+                <span class="text-text-faint">
+                  Calculation backends &amp; health live under{' '}
+                  <strong class="text-text-dim font-medium">Status</strong>.
+                </span>
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost text-[10px] px-2 ml-auto"
+                  data-testid="axis-plugins-goto-status"
+                  onClick={() => props.onOpenStatus?.()}
+                >
+                  <Icons.cpu size={12} />
+                  Open Status
+                </button>
+              </div>
+            </Show>
             <Show when={tab() === 'catalog'}>
               <div class="flex flex-wrap gap-1.5">
                 <For
@@ -424,7 +431,7 @@ export const PluginManager: Component<Props> = (props) => {
             </Show>
           </div>
 
-          <div class="flex items-center gap-2 px-3.5 py-2.5 border-t-2 border-border bg-bg-base">
+          <div class="flex items-center gap-2 px-3.5 py-2.5 border-t-2 border-border bg-bg-base flex-shrink-0">
             <div class="flex-1 text-[10px] text-text-faint truncate">
               {tab() === 'catalog' &&
                 `Active · src ${store.source} · eng ${store.engine} · stm ${store.live.streamId} · stor ${store.activePlugins?.storage || 'local'}`}
@@ -448,6 +455,45 @@ export const PluginManager: Component<Props> = (props) => {
               Done
             </button>
           </div>
+    </>
+  );
+
+  if (props.embedded) {
+    return (
+      <Show when={props.open}>
+        <div class="flex flex-col min-h-0 flex-1 overflow-hidden">{inner}</div>
+      </Show>
+    );
+  }
+
+  return (
+    <Show when={props.open}>
+      <div
+        class="sc-dialog-backdrop"
+        onClick={onBackdrop}
+        role="presentation"
+      >
+        <div
+          class="sc-dialog w-[min(1200px,calc(100vw-2*var(--ui-dialog-margin)))] h-[min(900px,calc(100vh-2*var(--ui-dialog-margin-y)))]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="axis-plugins-title"
+          data-testid="axis-manager"
+        >
+          <div class="sc-dialog-accent" />
+          <div class="sc-dialog-header">
+            <span
+              id="axis-plugins-title"
+              class="text-base font-semibold text-text tracking-tight inline-flex items-center gap-2"
+            >
+              <Icons.folder size={16} />
+              Plugins
+            </span>
+            <button class="sc-btn sc-btn-ghost px-2" onClick={props.onClose} aria-label="Close">
+              <Icons.x size={14} />
+            </button>
+          </div>
+          {inner}
         </div>
       </div>
     </Show>

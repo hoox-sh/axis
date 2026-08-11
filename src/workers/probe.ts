@@ -32,6 +32,7 @@ import {
   getWorkerCatalogEntry,
   listWorkerCatalog,
   normalizeWorkerBase,
+  resolveProbeEndpoint,
 } from './catalog';
 import type {
   WorkerCatalogEntry,
@@ -46,12 +47,65 @@ export interface ProbeWorkerOpts {
   endpoint?: string;
   /** Fetch timeout ms (default 6000). */
   timeoutMs?: number;
-  /** AbortSignal. */
+  /** AbortSignal (e.g. modal close). Always combined with a hard timeout. */
   signal?: AbortSignal;
 }
 
 function activeEngineId(): string {
   return (store.engine || store.activePlugins?.engine || 'server').trim() || 'server';
+}
+
+/**
+ * Hard timeout for every probe request, optionally merged with a parent abort
+ * (modal close / refresh). Prevents endless “Probing…” when a shared signal
+ * has no timeout and a host never responds.
+ */
+export function probeAbortSignal(
+  timeoutMs: number,
+  parent?: AbortSignal,
+): AbortSignal {
+  const raw = Number(timeoutMs);
+  const ms =
+    Number.isFinite(raw) && raw > 0
+      ? Math.max(50, Math.floor(raw))
+      : 6000;
+  // Prefer a manual controller + timer — reliable in browser and Bun tests.
+  // (AbortSignal.timeout is fine in browsers but some runtimes are flaky.)
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => {
+    try {
+      ctrl.abort();
+    } catch {
+      /* ignore */
+    }
+  }, ms);
+  const onParentAbort = () => {
+    clearTimeout(timer);
+    try {
+      ctrl.abort();
+    } catch {
+      /* ignore */
+    }
+  };
+  if (parent) {
+    if (parent.aborted) onParentAbort();
+    else parent.addEventListener('abort', onParentAbort, { once: true });
+  }
+  // Clear timer when we abort ourselves so we do not keep handles open
+  ctrl.signal.addEventListener(
+    'abort',
+    () => {
+      clearTimeout(timer);
+    },
+    { once: true },
+  );
+  return ctrl.signal;
+}
+
+function resolveTimeoutMs(opts?: ProbeWorkerOpts): number {
+  return opts?.timeoutMs != null && Number.isFinite(opts.timeoutMs)
+    ? Math.max(100, Math.floor(opts.timeoutMs))
+    : 6000;
 }
 
 function baseResult(
@@ -89,57 +143,139 @@ function baseResult(
 
 /**
  * Probe one catalog entry.
+ * Hard wall-clock cap so a hung `fetch` (or ignore-abort mocks) cannot block forever.
  */
 export async function probeWorker(
   id: WorkerId,
   opts?: ProbeWorkerOpts,
 ): Promise<WorkerProbeResult> {
+  const timeoutMs = resolveTimeoutMs(opts);
   const entry = getWorkerCatalogEntry(id);
-  if (!entry) {
-    return {
-      id,
-      status: 'unknown',
-      latencyMs: null,
-      detail: 'Unknown worker id',
-      endpoint: '',
-      features: {},
-      service: null,
-      checkedAt: Date.now(),
-      error: 'not in catalog',
-      isActiveBackend: false,
-      isActiveEngine: false,
-    };
-  }
 
-  if (entry.probe === 'none') {
-    return baseResult(entry, {
-      status: 'skipped',
-      detail: 'No automatic probe — configure endpoint manually if you deploy this worker.',
-      endpoint: opts?.endpoint || entry.defaultEndpoint || '',
+  const run = async (): Promise<WorkerProbeResult> => {
+    if (!entry) {
+      return {
+        id,
+        status: 'unknown',
+        latencyMs: null,
+        detail: 'Unknown worker id',
+        endpoint: '',
+        features: {},
+        service: null,
+        checkedAt: Date.now(),
+        error: 'not in catalog',
+        isActiveBackend: false,
+        isActiveEngine: false,
+      };
+    }
+
+    if (entry.probe === 'none') {
+      return baseResult(entry, {
+        status: 'skipped',
+        detail: 'No automatic probe — configure endpoint manually if you deploy this worker.',
+        endpoint: opts?.endpoint || entry.defaultEndpoint || '',
+      });
+    }
+
+    if (entry.probe === 'pyodide') {
+      return probePyodide(entry, opts);
+    }
+
+    if (entry.probe === 'service-worker') {
+      return probeServiceWorker(entry);
+    }
+
+    // http-health — resolve loopback vs public reverse-proxy (hardened VPS)
+    let pageOrigin = '';
+    try {
+      if (typeof window !== 'undefined' && window.location?.origin) {
+        pageOrigin = window.location.origin;
+      }
+    } catch {
+      /* non-DOM */
+    }
+    const endpoint = resolveProbeEndpoint(entry, {
+      endpoint: opts?.endpoint,
+      activeEndpoint: store.endpoint,
+      pageOrigin,
     });
-  }
+    if (!endpoint) {
+      return baseResult(entry, {
+        status: 'unknown',
+        detail: 'No endpoint configured',
+        endpoint: '',
+      });
+    }
 
-  if (entry.probe === 'pyodide') {
-    return probePyodide(entry, opts);
-  }
+    return probeHttpHealth(entry, endpoint, opts);
+  };
 
-  if (entry.probe === 'service-worker') {
-    return probeServiceWorker(entry);
-  }
+  // Belt-and-suspenders: some environments ignore AbortSignal on fetch.
+  const timedOut: Promise<WorkerProbeResult> = new Promise((resolve) => {
+    const t = setTimeout(() => {
+      resolve(
+        entry
+          ? baseResult(entry, {
+              status: 'down',
+              detail: 'Timeout',
+              endpoint:
+                opts?.endpoint ||
+                entry.defaultEndpoint ||
+                entry.localEndpoint ||
+                '',
+              error: 'Timeout',
+            })
+          : {
+              id,
+              status: 'down',
+              latencyMs: null,
+              detail: 'Timeout',
+              endpoint: '',
+              features: {},
+              service: null,
+              checkedAt: Date.now(),
+              error: 'Timeout',
+              isActiveBackend: false,
+              isActiveEngine: false,
+            },
+      );
+    }, timeoutMs + 250);
+    opts?.signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(t);
+        resolve(
+          entry
+            ? baseResult(entry, {
+                status: 'down',
+                detail: 'Aborted',
+                endpoint:
+                  opts?.endpoint ||
+                  entry.defaultEndpoint ||
+                  entry.localEndpoint ||
+                  '',
+                error: 'Aborted',
+              })
+            : {
+                id,
+                status: 'down',
+                latencyMs: null,
+                detail: 'Aborted',
+                endpoint: '',
+                features: {},
+                service: null,
+                checkedAt: Date.now(),
+                error: 'Aborted',
+                isActiveBackend: false,
+                isActiveEngine: false,
+              },
+        );
+      },
+      { once: true },
+    );
+  });
 
-  // http-health
-  const endpoint = normalizeWorkerBase(
-    opts?.endpoint || entry.defaultEndpoint || entry.localEndpoint || '',
-  );
-  if (!endpoint) {
-    return baseResult(entry, {
-      status: 'unknown',
-      detail: 'No endpoint configured',
-      endpoint: '',
-    });
-  }
-
-  return probeHttpHealth(entry, endpoint, opts);
+  return Promise.race([run(), timedOut]);
 }
 
 async function probeHttpHealth(
@@ -147,10 +283,9 @@ async function probeHttpHealth(
   endpoint: string,
   opts?: ProbeWorkerOpts,
 ): Promise<WorkerProbeResult> {
-  const timeoutMs =
-    opts?.timeoutMs != null && Number.isFinite(opts.timeoutMs)
-      ? Math.max(500, Math.floor(opts.timeoutMs))
-      : 6000;
+  const timeoutMs = resolveTimeoutMs(opts);
+  // One budget for all paths so a dead host does not take N × timeoutMs
+  const signal = probeAbortSignal(timeoutMs, opts?.signal);
   const paths = entry.healthPaths?.length ? entry.healthPaths : ['/health', '/'];
   const markers = entry.healthMarkers || ['status', 'service', 'endpoints'];
   const t0 = performance.now();
@@ -159,12 +294,16 @@ async function probeHttpHealth(
   let lastErr: string | null = null;
 
   for (const path of paths) {
+    if (signal.aborted) {
+      lastErr = lastErr || 'Timeout';
+      break;
+    }
     const url = `${endpoint}${path.startsWith('/') ? path : `/${path}`}`;
     try {
       const res = await fetch(url, {
         method: 'GET',
         mode: 'cors',
-        signal: opts?.signal ?? AbortSignal.timeout(timeoutMs),
+        signal,
         headers: { Accept: 'application/json' },
       });
       lastStatus = res.status;
@@ -261,21 +400,40 @@ async function probePyodide(
   opts?: ProbeWorkerOpts,
 ): Promise<WorkerProbeResult> {
   const t0 = performance.now();
+  const timeoutMs = resolveTimeoutMs(opts);
+  const signal = probeAbortSignal(timeoutMs, opts?.signal);
   const eng = getEngine('pyodide');
   const indexUrl = resolvePyodideIndexUrl(LOCAL_PYODIDE_INDEX);
   const features: Record<string, boolean | string | number | null> = {
     indexUrl,
   };
+  const assetUrl = `${indexUrl}pyodide.js`;
 
-  // Quick asset check (pyodide.js) — don't download wasm fully
+  // Quick asset check — HEAD first (no full download). Full GET of pyodide.js
+  // was hanging Workers Manager probes for tens of seconds.
   try {
-    const head = await fetch(`${indexUrl}pyodide.js`, {
-      method: 'GET',
-      signal: opts?.signal ?? AbortSignal.timeout(opts?.timeoutMs ?? 6000),
+    let res = await fetch(assetUrl, {
+      method: 'HEAD',
+      signal,
       credentials: 'same-origin',
     });
-    features.assetOk = head.ok;
-    const ct = (head.headers.get('content-type') || '').toLowerCase();
+    // Some static hosts reject HEAD — fall back to a short GET that we abort
+    // after headers via the same timeout budget (do not await full body).
+    if (!res.ok && (res.status === 405 || res.status === 501 || res.status === 403)) {
+      res = await fetch(assetUrl, {
+        method: 'GET',
+        signal,
+        credentials: 'same-origin',
+      });
+      // Drop body immediately so we never wait on multi‑MB download
+      try {
+        res.body?.cancel?.();
+      } catch {
+        /* ignore */
+      }
+    }
+    features.assetOk = res.ok;
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
     if (ct.includes('text/html')) {
       return baseResult(entry, {
         status: 'down',
@@ -286,14 +444,14 @@ async function probePyodide(
         error: 'SPA fallback',
       });
     }
-    if (!head.ok) {
+    if (!res.ok) {
       return baseResult(entry, {
         status: 'down',
         latencyMs: Math.round(performance.now() - t0),
-        detail: `pyodide.js HTTP ${head.status}`,
+        detail: `pyodide.js HTTP ${res.status}`,
         endpoint: indexUrl,
         features,
-        error: `HTTP ${head.status}`,
+        error: `HTTP ${res.status}`,
       });
     }
   } catch (e: unknown) {
@@ -301,18 +459,31 @@ async function probePyodide(
     return baseResult(entry, {
       status: 'down',
       latencyMs: Math.round(performance.now() - t0),
-      detail: `Assets unreachable: ${msg}`,
+      detail: `Assets unreachable: ${/abort/i.test(msg) ? 'Timeout' : msg}`,
       endpoint: indexUrl,
       features,
-      error: msg,
+      error: /abort/i.test(msg) ? 'Timeout' : msg,
     });
   }
 
-  // Runtime ready?
+  // Runtime ready? Cap isReady so a stuck engine never freezes the manager.
   let ready = false;
   try {
     if (eng && typeof eng.isReady === 'function') {
-      ready = await eng.isReady();
+      ready = await Promise.race([
+        Promise.resolve(eng.isReady()).then(Boolean),
+        new Promise<boolean>((resolve) => {
+          const t = setTimeout(() => resolve(false), Math.min(1500, timeoutMs));
+          signal.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(t);
+              resolve(false);
+            },
+            { once: true },
+          );
+        }),
+      ]);
     }
   } catch {
     ready = false;
@@ -409,7 +580,9 @@ async function probeServiceWorker(entry: WorkerCatalogEntry): Promise<WorkerProb
 }
 
 /**
- * Probe all catalog workers (parallel).
+ * Probe all catalog workers in parallel.
+ * Uses {@link Promise.allSettled} so one throw cannot leave the UI probing forever.
+ * Each worker gets its own hard timeout (merged with the parent signal).
  */
 export async function probeAllWorkers(opts?: {
   timeoutMs?: number;
@@ -419,15 +592,37 @@ export async function probeAllWorkers(opts?: {
 }): Promise<WorkersOverviewSnapshot> {
   const entries = listWorkerCatalog();
   const checkedAt = Date.now();
-  const results = await Promise.all(
+  const timeoutMs = opts?.timeoutMs ?? 6000;
+
+  const settled = await Promise.allSettled(
     entries.map((e) =>
       probeWorker(e.id, {
-        timeoutMs: opts?.timeoutMs,
+        timeoutMs,
         signal: opts?.signal,
         endpoint: opts?.endpoints?.[e.id],
       }),
     ),
   );
+
+  const results: WorkerProbeResult[] = settled.map((s, i) => {
+    if (s.status === 'fulfilled') return s.value;
+    const entry = entries[i]!;
+    const msg =
+      s.reason instanceof Error ? s.reason.message : String(s.reason ?? 'probe failed');
+    return {
+      id: entry.id,
+      status: 'down' as const,
+      latencyMs: null,
+      detail: msg,
+      endpoint: entry.defaultEndpoint || entry.localEndpoint || '',
+      features: {},
+      service: null,
+      checkedAt: Date.now(),
+      error: msg,
+      isActiveBackend: false,
+      isActiveEngine: false,
+    };
+  });
 
   const healthy = results.filter((r) => r.status === 'healthy').length;
   const degraded = results.filter((r) => r.status === 'degraded').length;

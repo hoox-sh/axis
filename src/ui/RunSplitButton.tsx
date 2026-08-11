@@ -49,6 +49,11 @@ import { Icons } from './icons';
 
 export const RunSplitButton: Component<{
   getDoc: () => string;
+  /**
+   * Optional: save unsaved editor buffer to the library before run.
+   * Wired from the app editorRef (`ensureSavedForRun`).
+   */
+  ensureSavedForRun?: () => Promise<{ ok: boolean; doc: string }>;
   /** Optional class on the outer split group */
   class?: string;
 }> = (props) => {
@@ -112,8 +117,15 @@ export const RunSplitButton: Component<{
 
   const gateAndRun = async (mode: 'auto' | 'new') => {
     if (isRunning()) return;
-    const doc = props.getDoc();
+    // Persist unsaved scripts first (library write / git commit)
+    let doc = props.getDoc();
     if (!doc?.trim()) return;
+    if (props.ensureSavedForRun) {
+      const saved = await props.ensureSavedForRun();
+      if (!saved.ok) return;
+      doc = saved.doc || doc;
+    }
+    if (!doc.trim()) return;
     const pe = await runPreevalNow(doc);
     if (pe.hasErrors || isScriptRunBlockedByPreEval()) return;
     closeMenu();

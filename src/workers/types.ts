@@ -65,6 +65,20 @@ export interface WorkerInstallStep {
   command?: string;
 }
 
+/**
+ * Lucide / product icon key for catalog cards (maps to {@link Icons} in UI).
+ * Distinct per worker so overview cards are scannable.
+ */
+export type WorkerIconKey =
+  | 'server'
+  | 'cpu'
+  | 'zap'
+  | 'activity'
+  | 'wifi'
+  | 'download'
+  | 'settings'
+  | 'chain';
+
 /** Static catalog entry (no live status). */
 export interface WorkerCatalogEntry {
   id: WorkerId;
@@ -73,12 +87,25 @@ export interface WorkerCatalogEntry {
   summary: string;
   /** Longer overview for Detail tab. */
   description: string;
+  /**
+   * When / how to use this worker in AXIS (shown in Detail + Install).
+   * Keep practical: “set as backend”, “on-chain proxy”, “offline calc”, etc.
+   */
+  usage: string;
+  /** Distinct icon key for overview / detail chrome. */
+  icon: WorkerIconKey;
   kind: WorkerKind;
   roles: WorkerRole[];
   /** Default base URL when applicable (empty for browser/SW). */
   defaultEndpoint: string;
   /** Suggested local endpoint (wrangler / Flask). */
   localEndpoint?: string;
+  /**
+   * Public HTTPS origin when the service is reverse-proxied (e.g. nginx on
+   * axis.hoox.sh → loopback :5002). Browser probes prefer this over loopback
+   * when the page is not on the VPS (UFW blocks public :5002).
+   */
+  publicEndpoint?: string;
   /** Production / docs links. */
   docsPath?: string;
   homepage?: string;

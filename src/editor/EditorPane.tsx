@@ -69,7 +69,11 @@ import { runPreevalNow } from './preevaluate';
 import { formatPineSource } from './pine-format';
 
 interface Props {
-  editorRef: { getDoc: () => string; setDoc?: (doc: string) => void };
+  editorRef: {
+    getDoc: () => string;
+    setDoc?: (doc: string) => void;
+    ensureSavedForRun?: () => Promise<{ ok: boolean; doc: string }>;
+  };
   /** When true, render as full-window editor (no floatable chrome) */
   standalone?: boolean;
   onRun?: (doc: string) => void;
@@ -80,16 +84,24 @@ export const EditorPane: Component<Props> = (props) => {
   const onRun = async (doc: string, mode: 'auto' | 'new' = 'auto') => {
     if (!doc?.trim()) return;
     try {
+      // Unsaved scripts are written to the library before any run
+      let source = doc;
+      if (props.editorRef.ensureSavedForRun) {
+        const saved = await props.editorRef.ensureSavedForRun();
+        if (!saved.ok) return;
+        source = saved.doc || doc;
+      }
+      if (!source.trim()) return;
       // Final pre-eval gate (catches race if debounce has not finished)
-      const pe = await runPreevalNow(doc);
+      const pe = await runPreevalNow(source);
       if (pe.hasErrors) return;
       if (isScriptRunBlockedByPreEval()) return;
       // Parent may override (e.g. app shell) — still pass through doc only for auto
       if (props.onRun && mode === 'auto') {
-        props.onRun(doc);
+        props.onRun(source);
         return;
       }
-      void runFromEditor(doc, { mode });
+      void runFromEditor(source, { mode });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setStatus('error', msg || 'Run failed');

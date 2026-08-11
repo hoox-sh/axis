@@ -21,15 +21,18 @@
  * **Pre-evaluate** Pine source before a full engine run.
  *
  * Goals:
- * 1. Mark wrong code in the editor (underlines / Problems) after **Save** or **Run**
- *    — not mid-typing (incomplete input is not treated as finished)
+ * 1. Mark wrong code in the editor (underlines / Problems) after **idle**,
+ *    **Save**, or **Run** — not mid-keystroke (incomplete input is not finished)
  * 2. Disable Run when static errors are present (after a check has landed)
  *
  * Strategy (fast → authoritative):
  * - Always run {@link localPreevaluate}: brackets, strings, entry point, and
- *   **unknown builtin members** (`strategy.etry` → error via pyne-builtins.json)
+ *   **unknown builtin members** (`plt()` / `strategy.etry` → error via builtins)
  * - When server engine + Backend URL: merge with Pro API `POST /lsp/diagnostics`
  *   (parse + real syntax). Style-noise rules (C001–C004) are filtered out.
+ *
+ * Typing: {@link schedulePreeval} clears marks and re-checks after
+ * {@link PREEVAL_IDLE_MS} of no edits. Save / Run use {@link runPreevalNow}.
  *
  * Does **not** execute against bars. Runtime errors still appear after Run.
  *
@@ -50,11 +53,16 @@ import builtinsJson from './data/pyne-builtins.json';
 import { PINE_ENUM_PATHS } from './pine-enums';
 
 /**
- * Debounce for optional delayed pre-eval (ms).
- * Live typing no longer schedules checks — syntax runs on **Save** / **Run**
- * so incomplete edits are not flagged mid-keystroke.
+ * Quiet time after the last keystroke before idle lint runs (ms).
+ * Incomplete mid-edit input is not flagged until the user pauses.
  */
-export const PREEVAL_DEBOUNCE_MS = 350;
+export const PREEVAL_IDLE_MS = 2000;
+
+/**
+ * Default debounce for {@link schedulePreeval} — same as idle lint window.
+ * Kept as an alias for older call sites / tests.
+ */
+export const PREEVAL_DEBOUNCE_MS = PREEVAL_IDLE_MS;
 
 // ── Builtin member index (from pyne-builtins.json + runtime constants) ───────
 
@@ -126,12 +134,28 @@ export function editDistance(a: string, b: string): number {
 }
 
 /**
- * Suggest a close known path for a typo (e.g. strategy.etry → strategy.entry).
+ * Suggest a close known path for a typo
+ * (e.g. `strategy.etry` → `strategy.entry`, bare `plt` → `plot`).
  * Returns null when nothing is close enough.
  */
 export function suggestBuiltinPath(path: string): string | null {
   const parts = path.split('.');
-  if (parts.length < 2) return null;
+  // Bare top-level name (plt → plot)
+  if (parts.length < 2) {
+    const leaf = path.toLowerCase();
+    if (!leaf) return null;
+    let best: string | null = null;
+    let bestD = 3; // only suggest if distance ≤ 2
+    for (const k of BUILTIN_NAMES) {
+      if (k.includes('.')) continue;
+      const d = editDistance(leaf, k.toLowerCase());
+      if (d > 0 && d < bestD) {
+        bestD = d;
+        best = k;
+      }
+    }
+    return best;
+  }
   const leaf = parts[parts.length - 1]!;
   const parent = parts.slice(0, -1).join('.');
   const depth = parts.length;
@@ -150,6 +174,42 @@ export function suggestBuiltinPath(path: string): string | null {
   }
   return best;
 }
+
+/** Pine keywords / control forms that look like calls but are not builtins. */
+const BARE_CALL_SKIP = new Set([
+  'if',
+  'else',
+  'for',
+  'while',
+  'switch',
+  'type',
+  'method',
+  'export',
+  'import',
+  'and',
+  'or',
+  'not',
+  'true',
+  'false',
+  'na',
+  'var',
+  'varip',
+  'matrix',
+  'array',
+  'map',
+  'int',
+  'float',
+  'bool',
+  'string',
+  'color',
+  'line',
+  'label',
+  'box',
+  'table',
+  'polyline',
+  'chart',
+  'point',
+]);
 
 export type DottedRef = {
   /** Full path e.g. strategy.etry */
@@ -242,11 +302,95 @@ export function scanBuiltinMemberRefs(source: string): DottedRef[] {
 }
 
 /**
- * Flag unknown `module.member` paths against the builtins catalog.
- * e.g. `strategy.etry` → error with optional “Did you mean strategy.entry?”
+ * Scan for bare call sites `name(` (not dotted). Used for top-level typos
+ * like `plt(close)` → `plot`. Skips strings / comments.
+ */
+export function scanBareCallRefs(source: string): DottedRef[] {
+  const out: DottedRef[] = [];
+  const lines = source.split('\n');
+  let inBlock = false;
+
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li]!;
+    let i = 0;
+    let inStr: '"' | "'" | null = null;
+    while (i < line.length) {
+      const c = line[i]!;
+      const n = line[i + 1];
+
+      if (!inStr && !inBlock && c === '/' && n === '/') break;
+      if (!inStr && !inBlock && c === '/' && n === '*') {
+        inBlock = true;
+        i += 2;
+        continue;
+      }
+      if (inBlock) {
+        if (c === '*' && n === '/') {
+          inBlock = false;
+          i += 2;
+          continue;
+        }
+        i += 1;
+        continue;
+      }
+      if (inStr) {
+        if (c === '\\') {
+          i += 2;
+          continue;
+        }
+        if (c === inStr) inStr = null;
+        i += 1;
+        continue;
+      }
+      if (c === '"' || c === "'") {
+        inStr = c;
+        i += 1;
+        continue;
+      }
+
+      if (/[A-Za-z_]/.test(c)) {
+        const start = i;
+        i += 1;
+        while (i < line.length && /[A-Za-z0-9_]/.test(line[i]!)) i += 1;
+        // Dotted paths are handled by {@link scanBuiltinMemberRefs}
+        if (i < line.length && line[i] === '.') {
+          while (i < line.length && line[i] === '.') {
+            const afterDot = i + 1;
+            if (afterDot >= line.length || !/[A-Za-z_]/.test(line[afterDot]!)) break;
+            i = afterDot + 1;
+            while (i < line.length && /[A-Za-z0-9_]/.test(line[i]!)) i += 1;
+          }
+          continue;
+        }
+        // Optional whitespace then '('
+        let j = i;
+        while (j < line.length && (line[j] === ' ' || line[j] === '\t')) j += 1;
+        if (j >= line.length || line[j] !== '(') continue;
+        const path = line.slice(start, i);
+        if (!path || BARE_CALL_SKIP.has(path)) continue;
+        out.push({
+          path,
+          line: li + 1,
+          col: start,
+          endCol: i,
+        });
+        continue;
+      }
+      i += 1;
+    }
+  }
+  return out;
+}
+
+/**
+ * Flag unknown `module.member` paths and bare call typos against the builtins catalog.
+ * e.g. `strategy.etry` / `plt(close)` → typo with optional “Did you mean …?”
  */
 export function checkUnknownBuiltinMembers(source: string): EditorDiagnostic[] {
-  const refs = scanBuiltinMemberRefs(source);
+  const refs = [
+    ...scanBuiltinMemberRefs(source),
+    ...scanBareCallRefs(source),
+  ];
   const out: EditorDiagnostic[] = [];
   const seen = new Set<string>();
   for (const ref of refs) {
@@ -255,6 +399,8 @@ export function checkUnknownBuiltinMembers(source: string): EditorDiagnostic[] {
     if (seen.has(key)) continue;
     seen.add(key);
     const hint = suggestBuiltinPath(ref.path);
+    // Bare user-defined helpers (`myFunc()`) stay quiet unless a close builtin exists
+    if (!ref.path.includes('.') && !hint) continue;
     const msg = hint
       ? `Unknown \`${ref.path}\` — did you mean \`${hint}\`?`
       : `Unknown \`${ref.path}\` (not a built-in member)`;
@@ -685,7 +831,7 @@ export function cancelPreeval(): void {
 
 /**
  * Clear underlines while the user is still typing.
- * Incomplete input is not syntax-checked until Save or Run.
+ * Incomplete input is not treated as finished until idle / Save / Run.
  * No-ops when already clear (avoids store + CM thrash every keystroke).
  */
 export function clearPreevalOnEdit(source: string): void {
@@ -697,7 +843,7 @@ export function clearPreevalOnEdit(source: string): void {
     !pe.hasErrors &&
     (!pe.diagnostics || pe.diagnostics.length === 0)
   ) {
-    // Still cancel any in-flight timer/request from a prior Save/Run
+    // Still cancel any in-flight timer/request from a prior check
     cancelPreeval();
     return;
   }
@@ -711,25 +857,60 @@ export function clearPreevalOnEdit(source: string): void {
 }
 
 /**
- * Debounced pre-eval → {@link setPreEval} on the app store.
- * Prefer {@link runPreevalNow} on Save / Run; do not call from every keystroke
- * (use {@link clearPreevalOnEdit} while typing instead).
+ * Debounced pre-eval after the user stops typing.
+ *
+ * - Clears stale underlines immediately (no mid-keystroke noise)
+ * - Does **not** set `pending` for the whole idle window (avoids a 2s “checking…” flash)
+ * - Runs {@link runPreevalNow} after `debounceMs` (default {@link PREEVAL_IDLE_MS})
+ *
+ * Save / Run should still call {@link runPreevalNow} for an immediate gate.
  */
-export function schedulePreeval(source: string, debounceMs = PREEVAL_DEBOUNCE_MS): void {
+export function schedulePreeval(
+  source: string,
+  debounceMs: number = PREEVAL_IDLE_MS,
+): void {
   lastSource = source;
-  if (timer != null) clearTimeout(timer);
-  // Mark pending so UI can show checking state (still allow Run until errors land)
-  setPreEval({
-    diagnostics: [],
-    hasErrors: false,
-    pending: true,
-    source,
-  });
+  // Drop any prior idle timer / in-flight request
+  if (timer != null) {
+    clearTimeout(timer);
+    timer = null;
+  }
+  if (abort) {
+    abort.abort();
+    abort = null;
+  }
 
+  // Clear marks while typing; keep pending=false until the idle check starts
+  const pe = store.preEval;
+  const alreadyClear =
+    pe &&
+    !pe.pending &&
+    !pe.hasErrors &&
+    (!pe.diagnostics || pe.diagnostics.length === 0);
+  if (!alreadyClear) {
+    setPreEval({
+      diagnostics: [],
+      hasErrors: false,
+      pending: false,
+      source,
+    });
+  } else if (pe.source !== source) {
+    // Keep store source in sync for tab/doc identity without thrashing
+    setPreEval({
+      diagnostics: [],
+      hasErrors: false,
+      pending: false,
+      source,
+    });
+  }
+
+  const delay = Math.max(0, Number(debounceMs) || 0);
   timer = setTimeout(() => {
     timer = null;
+    // Ignore if a newer keystroke updated lastSource
+    if (source !== lastSource) return;
     void runPreevalNow(source);
-  }, debounceMs);
+  }, delay);
 }
 
 /** Immediate pre-eval (no debounce) — Save / Run gate. */
@@ -783,8 +964,8 @@ export async function runPreevalNow(source: string): Promise<PreevalResult> {
 
 /**
  * True when Run should be blocked by pre-eval errors.
- * Pending checks do **not** block. Typing clears diagnostics via
- * {@link clearPreevalOnEdit}, so Run is only gated after Save/Run pre-eval.
+ * Pending checks do **not** block. Typing clears diagnostics until the idle
+ * check (or Save / Run) lands again.
  */
 export function isScriptRunBlocked(): boolean {
   const pe = store.preEval;

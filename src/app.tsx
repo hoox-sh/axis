@@ -73,11 +73,8 @@ const SettingsDialog = lazy(() =>
 const ScriptSettingsModal = lazy(() =>
   import('./ui/ScriptSettingsModal').then((m) => ({ default: m.ScriptSettingsModal })),
 );
-const PluginManager = lazy(() =>
-  import('./ui/PluginManager').then((m) => ({ default: m.PluginManager })),
-);
-const WorkersManager = lazy(() =>
-  import('./ui/WorkersManager').then((m) => ({ default: m.WorkersManager })),
+const RuntimesHub = lazy(() =>
+  import('./ui/RuntimesHub').then((m) => ({ default: m.RuntimesHub })),
 );
 const AlertsPanel = lazy(() =>
   import('./ui/AlertsPanel').then((m) => ({ default: m.AlertsPanel })),
@@ -137,8 +134,15 @@ export const App: Component = () => {
     setSettingsTab(tab);
     setSettingsOpen(true);
   };
-  const [pluginsOpen, setPluginsOpen] = createSignal(false);
-  const [workersOpen, setWorkersOpen] = createSignal(false);
+  /** Unified Runtimes hub (Status = workers, Plugins = catalog/library). */
+  const [runtimesOpen, setRuntimesOpen] = createSignal(false);
+  const [runtimesSection, setRuntimesSection] = createSignal<'status' | 'plugins'>(
+    'status',
+  );
+  const openRuntimes = (section: 'status' | 'plugins' = 'status') => {
+    setRuntimesSection(section);
+    setRuntimesOpen(true);
+  };
   const [catalogTick, setCatalogTick] = createSignal(0);
   /** File drag-over highlight for .pine drop-to-library. */
   const [pineDropActive, setPineDropActive] = createSignal(false);
@@ -151,6 +155,8 @@ export const App: Component = () => {
     loadLibraryDocs?: (
       docs: Array<{ content: string; name?: string; libraryId?: string }>,
     ) => void;
+    isUnsaved?: () => boolean;
+    ensureSavedForRun?: () => Promise<{ ok: boolean; doc: string }>;
   } = {
     getDoc: () => '',
   };
@@ -391,8 +397,8 @@ export const App: Component = () => {
         }}
         onToggleWatchlist={() => setWatchlistOpen(!store.watchlist.open)}
         onOpenSettings={() => openSettings('general')}
-        onOpenPlugins={() => setPluginsOpen(true)}
-        onOpenWorkers={() => setWorkersOpen(true)}
+        onOpenPlugins={() => openRuntimes('plugins')}
+        onOpenWorkers={() => openRuntimes('status')}
         catalogTick={catalogTick()}
         editorRef={editorRef}
       />
@@ -475,6 +481,7 @@ export const App: Component = () => {
       <EditorPane
         editorRef={editorRef}
         onRun={(doc) => {
+          // EditorPane already ensureSavedForRun before calling onRun
           if (doc?.trim()) {
             void import('./indicators/run-target')
               .then(({ runFromEditor }) =>
@@ -514,10 +521,11 @@ export const App: Component = () => {
           />
         </Show>
         <ScriptSettingsModal />
-        <Show when={pluginsOpen()}>
-          <PluginManager
-            open={pluginsOpen()}
-            onClose={() => setPluginsOpen(false)}
+        <Show when={runtimesOpen()}>
+          <RuntimesHub
+            open={runtimesOpen()}
+            initialSection={runtimesSection()}
+            onClose={() => setRuntimesOpen(false)}
             onChanged={() => setCatalogTick((n) => n + 1)}
             getDoc={() => editorRef.getDoc()}
             setDoc={(doc, name, libraryId) => {
@@ -530,20 +538,13 @@ export const App: Component = () => {
             }}
           />
         </Show>
-        <Show when={workersOpen()}>
-          <WorkersManager
-            open={workersOpen()}
-            onClose={() => setWorkersOpen(false)}
-            onChanged={() => setCatalogTick((n) => n + 1)}
-          />
-        </Show>
         {/* Global ⌘K / Ctrl+K command palette */}
         <CommandPalette
           editorRef={editorRef}
           onOpenSettings={() => openSettings('general')}
           onOpenThemeSettings={() => openSettings('theme')}
-          onOpenPlugins={() => setPluginsOpen(true)}
-          onOpenWorkers={() => setWorkersOpen(true)}
+          onOpenPlugins={() => openRuntimes('plugins')}
+          onOpenWorkers={() => openRuntimes('status')}
         />
       </Suspense>
 

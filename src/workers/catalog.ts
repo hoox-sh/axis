@@ -42,6 +42,43 @@ export const DEFAULT_PYNE_PRO_BASE = 'http://127.0.0.1:5002';
 /** Production / common pyne Pro host when AXIS is served with same-origin API. */
 export const PRODUCT_PYNE_PRO_HINT = 'https://axis.hoox.sh';
 
+/**
+ * Hostnames where nginx (or similar) terminates TLS and reverse-proxies Pro API
+ * routes (`/health`, `/run`, `/ws/…`) while UFW keeps :5002 loopback-only.
+ */
+export const PRODUCT_SAME_ORIGIN_API_HOSTS: readonly string[] = [
+  'axis.hoox.sh',
+  'pynescript.online',
+  'www.pynescript.online',
+  'server1.pynescript.online',
+];
+
+/** True when origin/host is a known product AXIS + Pro API same-origin deployment. */
+export function isProductSameOriginApiHost(raw: string | undefined | null): boolean {
+  const s = String(raw || '').trim().toLowerCase();
+  if (!s) return false;
+  try {
+    const u = new URL(s.includes('://') ? s : `https://${s}`);
+    const host = u.hostname.replace(/^www\./, '');
+    return PRODUCT_SAME_ORIGIN_API_HOSTS.some(
+      (h) => host === h || host.endsWith(`.${h}`),
+    );
+  } catch {
+    return PRODUCT_SAME_ORIGIN_API_HOSTS.some((h) => s.includes(h));
+  }
+}
+
+/** True when base is loopback (browser probes hit the *user's* machine, not the VPS). */
+export function isLoopbackBase(raw: string | undefined | null): boolean {
+  const s = String(raw || '').toLowerCase();
+  return (
+    s.includes('127.0.0.1') ||
+    s.includes('localhost') ||
+    s.includes('[::1]') ||
+    s.includes('0.0.0.0')
+  );
+}
+
 /** PYNE Agent worker origin (plugin host). */
 export function pyneAgentWorkerOrigin(): string {
   try {
@@ -64,16 +101,24 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
       'Long-lived process that evaluates Pine Script™ via the pyne Pro API. ' +
       'AXIS server engine prefers WebSocket `/ws/run`, then `POST /run`. ' +
       'Best for compile mode (Numba) and large history. Default local port is 5002.',
+    usage:
+      'Primary calculation backend for Run / Re-run when engine is Server. ' +
+      'Local: Backend URL http://127.0.0.1:5002 (UFW should keep :5002 loopback-only). ' +
+      'Production VPS (axis.hoox.sh): same-origin https://axis.hoox.sh — nginx proxies /health and /run; do not open :5002 publicly. ' +
+      'Prefer this for compile/Numba and long histories.',
+    icon: 'server',
     kind: 'process',
     roles: ['calc'],
     defaultEndpoint: DEFAULT_PYNE_PRO_BASE,
     localEndpoint: DEFAULT_PYNE_PRO_BASE,
+    /** Public same-origin Pro API (nginx → loopback :5002). Used by browser probes off-VPS. */
+    publicEndpoint: PRODUCT_PYNE_PRO_HINT,
     docsPath: '/axis/docs/plugins/engines',
     homepage: 'https://hoox.sh/pyne',
     canUseAsBackend: true,
     probe: 'http-health',
     healthPaths: ['/health', '/'],
-    healthMarkers: ['endpoints', 'status', 'service', 'websocket'],
+    healthMarkers: ['endpoints', 'status', 'service', 'websocket', 'compile'],
     serviceHint: 'pyne',
     capabilities: ['WS /ws/run', 'POST /run', 'interpret', 'compile', 'Numba'],
     install: [
@@ -84,19 +129,26 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
         command: 'cd ../pynescript   # or your pyne checkout',
       },
       {
-        title: 'Start Pro API',
-        detail: 'Flask Pro API on :5002 (make target or package scripts).',
-        command: 'make run',
+        title: 'Start Pro API (loopback)',
+        detail:
+          'Bind gunicorn/Flask to 127.0.0.1:5002 only. UFW should NOT allow 5002/tcp from the internet.',
+        command: 'make run   # listen 127.0.0.1:5002',
       },
       {
-        title: 'Point AXIS at it',
+        title: 'Point AXIS at it (local)',
         detail: 'Workers Manager → Use as backend, or Settings → Backend URL.',
         command: 'http://127.0.0.1:5002',
       },
       {
+        title: 'Production VPS (hardened)',
+        detail:
+          'nginx :443 proxies /health, /run, /ws/ to loopback :5002. Public health = https://axis.hoox.sh/health. UFW: allow 22,443 only.',
+        command: 'https://axis.hoox.sh',
+      },
+      {
         title: 'CORS',
         detail:
-          'If AXIS origin differs from the API host, set ALLOWED_ORIGINS on the Pro API to include this page origin.',
+          'If AXIS origin differs from the API host, set ALLOWED_ORIGINS on the Pro API to include this page origin. Same-origin nginx avoids CORS.',
       },
     ],
   },
@@ -109,6 +161,11 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
       'allowlisted on-chain proxy, optional script library (D1), API keys (KV), ' +
       '`POST /api/run` (typically proxies to EXTERNAL_BACKEND), Git OAuth relay, ' +
       'and Durable Object stream sessions. Production default is workers.dev.',
+    usage:
+      'Always on for On-Chain (DefiLlama / GeckoTerminal proxy) and cloud script library. ' +
+      'Optionally set as calculation backend if EXTERNAL_BACKEND is bound on the Worker. ' +
+      'You do not need a local install — production workers.dev is the default.',
+    icon: 'zap',
     kind: 'edge',
     roles: ['proxy', 'onchain', 'scripts', 'stream', 'oauth', 'calc'],
     defaultEndpoint: DEFAULT_AXIS_WORKER_BASE,
@@ -154,6 +211,11 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
       'Local Cloudflare Worker via wrangler for developing the data plane. ' +
       'Same routes as production; bindings may be stubs. Use when iterating on ' +
       'on-chain proxy, run proxy, or DO stream without deploying.',
+    usage:
+      'Local edge loop: `cd worker && bun run dev`, then Use as calculation backend ' +
+      'or point On-Chain / Backend URL at http://127.0.0.1:8787. ' +
+      'Skip this card if you only use production workers.dev.',
+    icon: 'activity',
     kind: 'edge',
     roles: ['proxy', 'onchain', 'scripts', 'stream', 'oauth', 'calc'],
     defaultEndpoint: LOCAL_AXIS_WORKER_BASE,
@@ -191,6 +253,11 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
       'Client-side engine: self-hosted Pyodide + vendored pynescript wheel. ' +
       'No network needed after assets load. First cold load is often 20–30s. ' +
       'No Numba; interpret path is primary. Ideal for offline demos and VPS without Flask.',
+    usage:
+      'Switch engine to Client-Side (Pyodide) from this card or Settings → Engine. ' +
+      'No Backend URL needed. Use for offline demos, restricted networks, or when Flask is unavailable. ' +
+      'First Run / Preload may take 20–30s while Wasm + wheel load.',
+    icon: 'cpu',
     kind: 'browser',
     roles: ['calc'],
     defaultEndpoint: '',
@@ -229,6 +296,11 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
       'Registers `/sw.js` in production builds (skipped in Vite dev and Tauri). ' +
       'Caches app shell and same-origin pyodide/vendor for offline use. ' +
       'API routes stay network-first so a down backend fails cleanly.',
+    usage:
+      'Automatic in production builds — no action for normal use. ' +
+      'Skipped under `bun run dev` (HMR). If chrome looks stale after a deploy, hard-reload or unregister the SW. ' +
+      'Does not evaluate Pine; only caches the PWA shell and assets.',
+    icon: 'wifi',
     kind: 'pwa',
     roles: ['pwa'],
     defaultEndpoint: '',
@@ -260,6 +332,11 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
       'Optional sister Worker that powers the PYNE Agent plugin. ' +
       'Serves `GET /plugin/axis-pine-agent.js` and chat/search APIs. ' +
       'Not required for charting or script evaluation — AXIS still runs scripts via your engine.',
+    usage:
+      'Optional AI assist only. Install the plugin from this card (or Plugin Manager URL), then open the agent UI. ' +
+      'Generated scripts still run through your chosen engine (pyne Pro / Worker / Pyodide). ' +
+      'Safe to hide via “Show optional” if you only need charting.',
+    icon: 'download',
     kind: 'optional',
     roles: ['agent'],
     defaultEndpoint: pyneAgentWorkerOrigin(),
@@ -294,6 +371,10 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
       'Sister Cloudflare Python Worker for edge evaluation in the HOOX mesh. ' +
       'Not required for AXIS day-to-day; the server engine can target any ' +
       'compatible `/run` host. Listed here for operators who run the full mesh.',
+    usage:
+      'Advanced / mesh-only. Deploy the sister project, then paste its origin into ' +
+      'Configure or Settings → Backend URL. No automatic health probe — status stays Skipped until you set an endpoint.',
+    icon: 'settings',
     kind: 'optional',
     roles: ['calc'],
     defaultEndpoint: '',
@@ -375,13 +456,69 @@ export function matchCatalogForEndpoint(endpoint: string): WorkerId | null {
   if (lower.includes('pyne-worker') || lower.includes('pine-worker')) return 'pyne-worker';
   if (/127\.0\.0\.1:8787|localhost:8787/.test(lower)) return 'axis-worker-local';
   if (/127\.0\.0\.1:5002|localhost:5002/.test(lower)) return 'pyne-pro';
+  // Product VPS same-origin (nginx → Pro API). Not the CF Worker.
+  if (isProductSameOriginApiHost(e)) return 'pyne-pro';
   if (lower.includes('pynescript-axis') || lower.includes('workers.dev')) {
     return 'axis-worker';
   }
 
   for (const w of WORKER_CATALOG) {
+    if (w.publicEndpoint && endpointsMatch(e, w.publicEndpoint)) return w.id;
     if (w.defaultEndpoint && endpointsMatch(e, w.defaultEndpoint)) return w.id;
     if (w.localEndpoint && endpointsMatch(e, w.localEndpoint)) return w.id;
   }
   return null;
+}
+
+/**
+ * Resolve which base URL a browser probe should hit for a catalog entry.
+ *
+ * Order:
+ * 1. Explicit override
+ * 2. Active backend URL when it maps to this worker
+ * 3. Page origin when it is a product same-origin API host (pyne-pro)
+ * 4. `publicEndpoint` when defaults are loopback (hardened VPS — UFW denies :5002)
+ * 5. default / local catalog endpoints
+ *
+ * @param activeEndpoint - typically `store.endpoint` (optional for pure tests)
+ * @param pageOrigin - `window.location.origin` when in the browser
+ */
+export function resolveProbeEndpoint(
+  entry: WorkerCatalogEntry,
+  opts?: {
+    endpoint?: string;
+    activeEndpoint?: string;
+    pageOrigin?: string;
+  },
+): string {
+  if (opts?.endpoint) return normalizeWorkerBase(opts.endpoint);
+
+  const active = normalizeWorkerBase(opts?.activeEndpoint);
+  if (active && matchCatalogForEndpoint(active) === entry.id) {
+    return active;
+  }
+
+  const page = normalizeWorkerBase(opts?.pageOrigin);
+  // Browser on product host (axis.hoox.sh) → probe same origin for Pro API
+  if (entry.id === 'pyne-pro' && page && isProductSameOriginApiHost(page)) {
+    return page;
+  }
+
+  // Catalog default is loopback — off-box probes would hit the *client* machine.
+  // Use public reverse-proxy origin when available (hardened VPS pattern).
+  const def = normalizeWorkerBase(entry.defaultEndpoint || entry.localEndpoint || '');
+  if (entry.publicEndpoint && isLoopbackBase(def)) {
+    const onLocalPage = !page || isLoopbackBase(page);
+    if (onLocalPage) {
+      // Local Vite/dev: probe loopback (expects Flask on this machine)
+      return def;
+    }
+    // Remote page (product HTTPS): never probe client loopback for pyne-pro
+    if (entry.id === 'pyne-pro') {
+      if (page && isProductSameOriginApiHost(page)) return page;
+      return normalizeWorkerBase(entry.publicEndpoint);
+    }
+  }
+
+  return def;
 }

@@ -73,7 +73,12 @@ import {
   formatDiagnosticCount,
   type EditorDiagnostic,
 } from './diagnostics';
-import { clearPreevalOnEdit, cancelPreeval, runPreevalNow } from './preevaluate';
+import {
+  cancelPreeval,
+  runPreevalNow,
+  schedulePreeval,
+  PREEVAL_IDLE_MS,
+} from './preevaluate';
 import { countDocStats, cursorLineCol } from './doc-stats';
 import { ColorToolsPanel } from './ColorToolsPanel';
 import { scanPineColors } from './pine-colors';
@@ -244,8 +249,8 @@ export const TabbedEditor: Component<Props> = (props) => {
     setStats(countDocStats(doc));
     // Cursor resets to start of tab until CM reports the real head
     setCursor({ line: 1, col: 1 });
-    // Syntax underlines only after Save / Run — clear stale marks for this buffer
-    clearPreevalOnEdit(doc);
+    // Lint this tab after a short beat (immediate feel when switching)
+    schedulePreeval(doc, 120);
   });
 
   onMount(() => {
@@ -445,20 +450,44 @@ export const TabbedEditor: Component<Props> = (props) => {
     );
     props.onDocChange?.(text);
     scheduleDraft(text, tabs()[activeTab()]?.name);
-    // Incomplete edits are not linted mid-keystroke — Save / Run re-check
-    clearPreevalOnEdit(text);
+    // Idle lint: clear mid-type marks; re-check after 2s without typing
+    // (Save / Run still call runPreevalNow immediately)
+    schedulePreeval(text, PREEVAL_IDLE_MS);
   };
 
   const activeTabState = () => tabs()[activeTab()];
 
-  /** Persist active tab via storage (library write / git commit). */
-  const saveActiveToLibrary = async () => {
+  /** Live doc for the active tab (CM buffer preferred). */
+  const activeDocText = () =>
+    props.editorRef?.getDoc?.() || activeTabState()?.doc || '';
+
+  /**
+   * Unsaved = dirty edits, or never written to the library (`libraryId` missing).
+   * Empty buffers are not considered “needing save” for Run (blocked separately).
+   */
+  const isActiveUnsaved = (): boolean => {
     const tab = activeTabState();
-    const doc = props.editorRef?.getDoc?.() || tab?.doc || '';
+    if (!tab) return true;
+    const doc = activeDocText();
+    if (!doc.trim()) return false;
+    return !!tab.dirty || !tab.libraryId;
+  };
+
+  /**
+   * Persist active tab via storage (library write / git commit).
+   * @returns whether the write succeeded and the document that was saved.
+   */
+  const saveActiveToLibrary = async (): Promise<{ ok: boolean; doc: string }> => {
+    const tab = activeTabState();
+    const doc = activeDocText();
     if (!doc.trim()) {
       setStatus('error', 'Editor is empty');
-      return;
+      return { ok: false, doc: '' };
     }
+    // Snapshot CM into tab state so libraryId/dirty updates stay consistent
+    setTabs((t) =>
+      t.map((tb, i) => (i === activeTab() ? { ...tb, doc } : tb)),
+    );
     // Syntax diagnostics after save (editor does not lint while typing)
     const pe = await runPreevalNow(doc);
     const name = tab?.name || 'Script';
@@ -478,10 +507,35 @@ export const TabbedEditor: Component<Props> = (props) => {
       } else {
         setStatus('ready', base);
       }
+      return { ok: true, doc };
     } catch (e: unknown) {
       setStatus('error', e instanceof Error ? e.message : String(e));
+      return { ok: false, doc };
     }
   };
+
+  /**
+   * Before Run: write the active script to the library when unsaved.
+   * Already-saved clean tabs are a no-op.
+   */
+  const ensureSavedForRun = async (): Promise<{ ok: boolean; doc: string }> => {
+    const doc = activeDocText();
+    if (!doc.trim()) {
+      setStatus('error', 'Editor is empty');
+      return { ok: false, doc: '' };
+    }
+    if (!isActiveUnsaved()) {
+      return { ok: true, doc };
+    }
+    setStatus('ready', 'Saving before run…');
+    return saveActiveToLibrary();
+  };
+
+  // Expose save/run hooks for topbar / command palette / EditorPane
+  if (props.editorRef) {
+    props.editorRef.isUnsaved = () => isActiveUnsaved();
+    props.editorRef.ensureSavedForRun = () => ensureSavedForRun();
+  }
 
   /** Pull / refresh bound library script from active storage. */
   const pullActiveFromLibrary = async () => {
@@ -624,9 +678,14 @@ export const TabbedEditor: Component<Props> = (props) => {
           onDocChange={onDocChange}
           onCursorChange={(pos) => setCursor({ line: pos.line, col: pos.col })}
           onRun={() => {
-            if (store.preEval?.hasErrors && !store.preEval?.pending) return;
-            const doc = props.editorRef?.getDoc?.() || tabs()[activeTab()]?.doc;
-            if (doc?.trim()) props.onRun?.(doc);
+            void (async () => {
+              if (store.preEval?.hasErrors && !store.preEval?.pending) return;
+              const saved = await ensureSavedForRun();
+              if (!saved.ok || !saved.doc.trim()) return;
+              // Re-check after save (save runs pre-eval; block hard errors)
+              if (store.preEval?.hasErrors) return;
+              props.onRun?.(saved.doc);
+            })();
           }}
           editorRef={props.editorRef}
           profilerEnabled={store.profilerEnabled}
