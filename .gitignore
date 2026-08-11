@@ -54,3 +54,8 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Multi-agent coordination notes (local only — do not commit)
+.agent-sync-notice.md
+.agent_sync*.md
+.agent-sync/
