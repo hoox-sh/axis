@@ -67,6 +67,7 @@ export interface CommandActions {
   toggleDataView: () => void;
   toggleAlerts?: () => void;
   toggleScriptLogs?: () => void;
+  toggleStatusBar?: () => void;
   toggleLibrary?: () => void;
   toggleDataSource?: () => void;
   toggleOnchain?: () => void;
@@ -285,7 +286,13 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     id: 'panel.scriptlogs',
     title: 'Toggle Script Logs',
     category: 'panels',
-    keywords: ['log.info', 'pine logs', 'script output'],
+    keywords: ['log.info', 'pine logs', 'script output', 'scriptlogs'],
+  },
+  {
+    id: 'panel.statusbar',
+    title: 'Toggle Status Bar',
+    category: 'panels',
+    keywords: ['status', 'hud', 'connection', 'statusbar', 'footer'],
   },
   {
     id: 'panel.library',
@@ -723,6 +730,7 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   ]);
 
   if (actions.toggleScriptLogs) byId.set('panel.scriptlogs', actions.toggleScriptLogs);
+  if (actions.toggleStatusBar) byId.set('panel.statusbar', actions.toggleStatusBar);
   if (actions.toggleAlerts) byId.set('panel.alerts', actions.toggleAlerts);
   if (actions.toggleLibrary) byId.set('panel.library', actions.toggleLibrary);
   if (actions.toggleDataSource) byId.set('panel.datasource', actions.toggleDataSource);

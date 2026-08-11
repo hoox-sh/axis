@@ -56,6 +56,7 @@ export const DOCK_STACK_ORDER: readonly PanelId[] = [
   'results',
   'logs',
   'scriptlogs',
+  'statusbar',
 ] as const;
 
 /** CSS `order` so portal append order does not scramble the stack. */

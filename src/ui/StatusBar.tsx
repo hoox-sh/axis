@@ -18,20 +18,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Bottom status strip — Connection HUD (left) + status message + optional
- * strategy PnL summary from `store.lastRun`.
+ * Status pane — Connection HUD + status message + optional strategy PnL.
  *
- * Mirrors `store.status` / `statusMessage`; shows HooxLoader while loading/running.
- * Results/logs panel toggles live on the right when present in the layout.
+ * FloatableShell id `statusbar` (title **Status**). Close via panel chrome or
+ * topbar; re-open from topbar **Status** or command palette.
+ *
+ * @module ui/StatusBar
  */
 
 import { Component, Show, createMemo } from 'solid-js';
-import { store, setStore, persist } from '../store';
+import { store, isPanelOpen } from '../store';
 import { Icons } from './icons';
 import type { RunResult } from '../indicators/runner';
 import { buildStrategyReport, formatMoney } from '../results/strategy';
 import { ConnectionHud } from './ConnectionHud';
 import { HooxLoader } from './HooxLoader';
+import { FloatableShell } from './panels/FloatableShell';
+
+const PANEL_ID = 'statusbar' as const;
 
 const STATUS_COLORS: Record<string, string> = {
   ready: 'text-accent-2',
@@ -42,7 +46,7 @@ const STATUS_COLORS: Record<string, string> = {
   disconnected: 'text-text-faint',
 };
 
-/** Fixed footer chrome under the workspace. */
+/** Dockable status / HUD strip. */
 export const StatusBar: Component = () => {
   const color = () => STATUS_COLORS[store.status] || 'text-text-dim';
 
@@ -55,60 +59,53 @@ export const StatusBar: Component = () => {
   });
 
   return (
-    <div
-      class="flex items-center gap-[var(--ui-gap-sm)] px-2.5 py-0.5 bg-bg-panel border-t-2 border-border text-[0.85em] text-text-dim min-h-[var(--ui-statusbar-min-h)] flex-shrink-0 overflow-x-auto"
-      data-testid="axis-statusbar"
-      role="status"
-    >
-      {/* Left: connection / transport / tick HUD */}
-      <ConnectionHud />
-
-      <span class="flex-1 min-w-2" />
-
-      {/* Right: former top-row message + meta */}
-      <span
-        class={`flex items-center gap-1.5 min-w-0 max-w-[42vw] ${color()}`}
-        data-testid="axis-status-message"
+    <Show when={isPanelOpen(PANEL_ID)}>
+      <FloatableShell
+        id={PANEL_ID}
+        title="Status"
+        testId="axis-statusbar"
+        class="min-h-0"
       >
-        {(store.status === 'running' || store.status === 'loading') && (
-          <HooxLoader size="xs" class="flex-shrink-0" />
-        )}
-        {store.status === 'error' && <Icons.alert class="text-red flex-shrink-0" />}
-        {store.status === 'ready' && <Icons.activity class="text-accent-2 flex-shrink-0" />}
-        <span class="truncate">{store.statusMessage}</span>
-      </span>
+        <div
+          class="flex items-center gap-[var(--ui-gap-sm)] px-2.5 py-0.5 bg-bg-panel text-[0.85em] text-text-dim min-h-[var(--ui-statusbar-min-h)] h-full overflow-x-auto"
+          role="status"
+        >
+          <ConnectionHud />
 
-      <Show when={strategySummary()}>
-        {(stats) => (
+          <span class="flex-1 min-w-2" />
+
           <span
-            class={`text-[0.85em] font-mono tracking-tight tabular-nums flex-shrink-0 ${
-              stats().totalPnl >= 0 ? 'text-accent-2' : 'text-red'
-            }`}
-            title="Closed trades from last run"
+            class={`flex items-center gap-1.5 min-w-0 max-w-[42vw] ${color()}`}
+            data-testid="axis-status-message"
           >
-            {stats().trades} trades · {formatMoney(stats().totalPnl)}
+            {(store.status === 'running' || store.status === 'loading') && (
+              <HooxLoader size="xs" class="flex-shrink-0" />
+            )}
+            {store.status === 'error' && <Icons.alert class="text-red flex-shrink-0" />}
+            {store.status === 'ready' && (
+              <Icons.activity class="text-accent-2 flex-shrink-0" />
+            )}
+            <span class="truncate">{store.statusMessage}</span>
           </span>
-        )}
-      </Show>
 
-      <button
-        type="button"
-        class={`sc-btn sc-btn-ghost px-1.5 py-0 text-[0.85em] flex-shrink-0 ${
-          store.logsPanel.open ? 'text-accent' : ''
-        }`}
-        title="Toggle system logs"
-        onClick={() => {
-          setStore('logsPanel', 'open', !store.logsPanel.open);
-          persist();
-        }}
-      >
-        <Icons.scrollText />
-        <span class="font-mono tabular-nums w-[2ch] text-right">{store.logs.length}</span>
-      </button>
+          <Show when={strategySummary()}>
+            {(stats) => (
+              <span
+                class={`text-[0.85em] font-mono tracking-tight tabular-nums flex-shrink-0 ${
+                  stats().totalPnl >= 0 ? 'text-accent-2' : 'text-red'
+                }`}
+                title="Closed trades from last run"
+              >
+                {stats().trades} trades · {formatMoney(stats().totalPnl)}
+              </span>
+            )}
+          </Show>
 
-      <span class="text-text-faint font-mono text-[10px] tracking-tight flex-shrink-0 tabular-nums">
-        {store.bars.length} bars · {store.scripts.length} ind · {store.panes.length} panes
-      </span>
-    </div>
+          <span class="text-text-faint font-mono text-[10px] tracking-tight flex-shrink-0 tabular-nums">
+            {store.bars.length} bars · {store.scripts.length} ind · {store.panes.length} panes
+          </span>
+        </div>
+      </FloatableShell>
+    </Show>
   );
 };

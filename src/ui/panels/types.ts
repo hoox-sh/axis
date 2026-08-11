@@ -33,6 +33,7 @@ export type PanelId =
   | 'results'
   | 'logs'
   | 'scriptlogs'
+  | 'statusbar'
   | 'dataview'
   | 'layers'
   | 'alerts'
@@ -112,20 +113,28 @@ export const PANEL_META: Record<
     defaultH: 220,
   },
   logs: {
-    title: 'Logs',
+    title: 'System Logs',
     defaultDock: 'bottom',
     minW: 1,
-    minH: 1,
+    minH: 80,
     defaultW: 640,
     defaultH: 160,
   },
   scriptlogs: {
-    title: 'Scriptlogs',
+    title: 'Script Logs',
     defaultDock: 'bottom',
     minW: 1,
-    minH: 1,
+    minH: 80,
     defaultW: 640,
     defaultH: 200,
+  },
+  statusbar: {
+    title: 'Status',
+    defaultDock: 'bottom',
+    minW: 1,
+    minH: 28,
+    defaultW: 640,
+    defaultH: 36,
   },
   dataview: {
     title: 'Data window',
@@ -213,6 +222,8 @@ export function defaultPanelChromeMap(): PanelChromeMap {
     results: defaultPanelChrome('results', { open: false, dock: 'bottom', h: 220 }),
     logs: defaultPanelChrome('logs', { open: false, dock: 'bottom', h: 160 }),
     scriptlogs: defaultPanelChrome('scriptlogs', { open: false, dock: 'bottom', h: 200 }),
+    // Always-on app HUD by default; closeable like other dock panes
+    statusbar: defaultPanelChrome('statusbar', { open: true, dock: 'bottom', h: 36 }),
     dataview: defaultPanelChrome('dataview', {
       open: false,
       dock: 'float',

@@ -60,6 +60,9 @@ import {
   toggleLibraryPanel,
   toggleDataSourcePanel,
   toggleOnchainPanel,
+  toggleScriptLogsPanel,
+  toggleSystemLogsPanel,
+  toggleStatusBarPanel,
 } from '../store';
 import { CHART_TYPES } from '../chart/chart-type';
 import { startLive, stopLive, listStreams, defaultStreamForSource } from '../streams/multiplex';
@@ -696,8 +699,44 @@ export const Topbar: Component<{
             persist();
           }}
         >
-          <Icons.scrollText />
+          <Icons.list />
           <span class="axis-tb-btn-label">Results</span>
+        </button>
+
+        <button
+          type="button"
+          class={`sc-btn sc-btn-ghost ${isPanelOpen('scriptlogs') ? 'is-active' : ''}`}
+          title="Script Logs — Pine log.* from the last run"
+          data-testid="axis-btn-scriptlogs-top"
+          aria-pressed={isPanelOpen('scriptlogs')}
+          onClick={() => toggleScriptLogsPanel()}
+        >
+          <Icons.scrollText />
+          <span class="axis-tb-btn-label">Script Logs</span>
+        </button>
+
+        <button
+          type="button"
+          class={`sc-btn sc-btn-ghost ${isPanelOpen('logs') ? 'is-active' : ''}`}
+          title="System Logs — app / transport / boot telemetry"
+          data-testid="axis-btn-systemlogs"
+          aria-pressed={isPanelOpen('logs')}
+          onClick={() => toggleSystemLogsPanel()}
+        >
+          <Icons.server />
+          <span class="axis-tb-btn-label">System Logs</span>
+        </button>
+
+        <button
+          type="button"
+          class={`sc-btn sc-btn-ghost ${isPanelOpen('statusbar') ? 'is-active' : ''}`}
+          title="Status — connection HUD and status message"
+          data-testid="axis-btn-statusbar"
+          aria-pressed={isPanelOpen('statusbar')}
+          onClick={() => toggleStatusBarPanel()}
+        >
+          <Icons.activity />
+          <span class="axis-tb-btn-label">Status</span>
         </button>
       </div>
 

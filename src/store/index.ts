@@ -2016,14 +2016,34 @@ export function toggleAlertsPanel() {
   setPanelOpen('alerts', !isPanelOpen('alerts'));
 }
 
-/** Open/close Scriptlogs panel (script `log.*` output — not system telemetry). */
+/** Open/close Script Logs panel (script `log.*` output — not system telemetry). */
 export function setScriptLogsPanelOpen(open: boolean) {
   setPanelOpen('scriptlogs', open);
 }
 
-/** Toggle Scriptlogs panel visibility. */
+/** Toggle Script Logs panel visibility. */
 export function toggleScriptLogsPanel() {
   setPanelOpen('scriptlogs', !isPanelOpen('scriptlogs'));
+}
+
+/** Open/close System Logs panel (app / transport telemetry). */
+export function setSystemLogsPanelOpen(open: boolean) {
+  setPanelOpen('logs', open);
+}
+
+/** Toggle System Logs panel visibility. */
+export function toggleSystemLogsPanel() {
+  setPanelOpen('logs', !isPanelOpen('logs'));
+}
+
+/** Open/close Status bar pane (connection HUD + status message). */
+export function setStatusBarPanelOpen(open: boolean) {
+  setPanelOpen('statusbar', open);
+}
+
+/** Toggle Status bar pane visibility. */
+export function toggleStatusBarPanel() {
+  setPanelOpen('statusbar', !isPanelOpen('statusbar'));
 }
 
 /** Open/close Script Library panel. */
@@ -2162,14 +2182,9 @@ export function isPanelOpen(id: PanelId): boolean {
     case 'logs':
       return !!store.logsPanel.open || chromeOpen;
     case 'scriptlogs':
-      // Chrome-only (no legacy flat flag)
-      return chromeOpen;
+    case 'statusbar':
     case 'library':
-      // Chrome-only (no legacy flat flag)
-      return chromeOpen;
     case 'datasource':
-      // Chrome-only (no legacy flat flag)
-      return chromeOpen;
     case 'onchain':
       // Chrome-only (no legacy flat flag)
       return chromeOpen;
@@ -2228,6 +2243,7 @@ const DOCK_STACK_IDS: PanelId[] = [
   'results',
   'logs',
   'scriptlogs',
+  'statusbar',
 ];
 
 /** Open panel ids currently assigned to a side dock (stack order). */

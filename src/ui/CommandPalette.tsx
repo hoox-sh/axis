@@ -54,6 +54,8 @@ import {
   toggleLayerPanel,
   toggleAlertsPanel,
   toggleScriptLogsPanel,
+  toggleSystemLogsPanel,
+  toggleStatusBarPanel,
   toggleLibraryPanel,
   toggleDataSourcePanel,
   toggleOnchainPanel,
@@ -154,17 +156,13 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
         setEditorOpen(!isPanelOpen('editor'));
       },
       toggleResults: () => setPanelOpen('results', !isPanelOpen('results')),
-      toggleLogs: () => {
-        const next = !store.logsPanel.open;
-        setStore('logsPanel', 'open', next);
-        setPanelOpen('logs', next);
-        persist();
-      },
+      toggleLogs: () => toggleSystemLogsPanel(),
       toggleLayers: () => toggleLayerPanel(),
       toggleIndicators: () => toggleIndicatorPanel(),
       toggleDataView: () => toggleDataViewPanel(),
       toggleAlerts: () => toggleAlertsPanel(),
       toggleScriptLogs: () => toggleScriptLogsPanel(),
+      toggleStatusBar: () => toggleStatusBarPanel(),
       toggleLibrary: () => toggleLibraryPanel(),
       toggleDataSource: () => toggleDataSourcePanel(),
       toggleOnchain: () => toggleOnchainPanel(),

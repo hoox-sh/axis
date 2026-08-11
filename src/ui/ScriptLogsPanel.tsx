@@ -18,13 +18,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Scriptlogs panel — `log.info` / `log.warning` / `log.error`
+ * Script Logs panel — `log.info` / `log.warning` / `log.error`
  * output from the focused script run.
  *
  * Reads `store.lastRun` (focused via {@link ScriptRunSelect} /
  * `resultsFocusId`) via {@link normalizePyneLogs}. Multi-indicator live
  * re-runs keep per-script caches in `runResults` so the list does not thrash.
- * FloatableShell id `scriptlogs`.
+ * FloatableShell id `scriptlogs` (title **Script Logs**).
  */
 
 import { Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
@@ -92,7 +92,7 @@ function logsAsText(entries: PyneLogEntry[]): string {
   return entries.map(entryAsText).join('\n');
 }
 
-/** Floatable script `log.*` output from the last run (Scriptlogs). */
+/** Floatable script `log.*` output from the last run (Script Logs). */
 export const ScriptLogsPanel: Component = () => {
   const [filter, setFilter] = createSignal<LevelFilter>('all');
   const [copied, setCopied] = createSignal(false);
@@ -147,7 +147,7 @@ export const ScriptLogsPanel: Component = () => {
 
   return (
     <Show when={isPanelOpen(PANEL_ID)}>
-      <FloatableShell id={PANEL_ID} title="Scriptlogs" testId="axis-scriptlogs">
+      <FloatableShell id={PANEL_ID} title="Script Logs" testId="axis-scriptlogs">
         {/* Toolbar: script picker + level filters + count + copy */}
         <div
           class="flex items-center gap-1.5 px-2 py-1 border-b border-border-soft flex-shrink-0 flex-wrap"

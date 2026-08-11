@@ -18,17 +18,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Collapsible system log strip above the status bar.
+ * System Logs pane — app / transport / boot telemetry (`store.logs`).
  *
- * Bound to `store.logs` / `logsPanel`; auto-scrolls when expanded.
- * Copy-all formats TSV-like lines; clear empties the in-memory ring buffer.
+ * FloatableShell id `logs` (title **System Logs**). Distinct from
+ * {@link ScriptLogsPanel} (`scriptlogs` — Pine `log.*` from a run).
+ *
+ * @module ui/SystemLogs
  */
 
 import { Component, For, Show, createEffect, createSignal } from 'solid-js';
-import { store, setStore, persist, clearLogs } from '../store';
+import { store, clearLogs, isPanelOpen } from '../store';
 import type { LogEntry } from '../store/types';
 import { Icons } from './icons';
 import { copyToClipboard } from './clipboard';
+import { FloatableShell } from './panels/FloatableShell';
+
+const PANEL_ID = 'logs' as const;
 
 function formatTs(ts: number): string {
   const d = new Date(ts);
@@ -50,27 +55,24 @@ function levelClass(level: LogEntry['level']): string {
 
 function logsAsText(logs: LogEntry[]): string {
   return logs
-    .map((l) => `${formatTs(l.ts)}\t${l.level.toUpperCase()}\t[${l.source || 'system'}]\t${l.message}`)
+    .map(
+      (l) =>
+        `${formatTs(l.ts)}\t${l.level.toUpperCase()}\t[${l.source || 'system'}]\t${l.message}`,
+    )
     .join('\n');
 }
 
-/** Expandable log list with copy and clear controls. */
+/** Dockable system log list with copy and clear controls. */
 export const SystemLogs: Component = () => {
   const [copied, setCopied] = createSignal(false);
   let listRef: HTMLDivElement | undefined;
 
   createEffect(() => {
-    // Auto-scroll when expanded and logs grow
     void store.logs.length;
-    if (store.logsPanel.open && listRef) {
+    if (isPanelOpen(PANEL_ID) && listRef) {
       listRef.scrollTop = listRef.scrollHeight;
     }
   });
-
-  const toggle = () => {
-    setStore('logsPanel', 'open', !store.logsPanel.open);
-    persist();
-  };
 
   const flashCopied = (ms = 1200) => {
     setCopied(true);
@@ -86,90 +88,63 @@ export const SystemLogs: Component = () => {
   const copyLine = async (entry: LogEntry, e?: Event) => {
     e?.stopPropagation?.();
     e?.preventDefault?.();
-    // Prefer the message alone for per-line copy (what users paste into chats);
-    // include level/source for multi-line dump via "Copy all".
     const text = String(entry.message ?? '');
     if (!text) return;
     if (await copyToClipboard(text)) flashCopied(800);
   };
 
-  const last = () => store.logs[store.logs.length - 1];
-
   return (
-    <div
-      class="flex flex-col border-t-2 border-border bg-bg-panel flex-shrink-0"
-      data-axis-system-logs
-    >
-      {/* Collapsed header / toggle row */}
-      <div class="flex items-center gap-1.5 px-2 py-0.5 min-h-[24px]">
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost px-1.5 py-0.5 text-[10px] inline-flex items-center gap-1"
-          onClick={toggle}
-          title={store.logsPanel.open ? 'Collapse system logs' : 'Expand system logs'}
-          aria-expanded={store.logsPanel.open}
-        >
-          <Icons.scrollText size={13} />
-          <span class="uppercase tracking-wider text-text-dim">Logs</span>
-          <span class="text-text-faint font-mono">({store.logs.length})</span>
-          {store.logsPanel.open ? <Icons.chevronDown size={12} /> : <Icons.chevronUp size={12} />}
-        </button>
-
-        <Show when={!store.logsPanel.open && last()}>
-          <button
-            type="button"
-            class={`flex-1 min-w-0 text-left text-[10px] font-mono truncate px-1 ${levelClass(last()!.level)}`}
-            title="Click to expand"
-            onClick={toggle}
+    <Show when={isPanelOpen(PANEL_ID)}>
+      <FloatableShell
+        id={PANEL_ID}
+        title="System Logs"
+        testId="axis-system-logs"
+        class="min-h-0"
+        headerExtra={
+          <div
+            class="flex items-center gap-1 flex-shrink-0"
+            onPointerDown={(e) => e.stopPropagation()}
           >
-            <span class="text-text-faint mr-1.5">{formatTs(last()!.ts)}</span>
-            {last()!.message}
-          </button>
-        </Show>
-        <Show when={!store.logsPanel.open && !last()}>
-          <span class="flex-1 text-[10px] text-text-faint px-1">No log entries yet</span>
-        </Show>
-        <Show when={store.logsPanel.open}>
-          <div class="flex-1" />
-        </Show>
-
-        <Show when={copied()}>
-          <span class="text-[10px] text-accent-2 inline-flex items-center gap-0.5">
-            <Icons.check size={12} /> Copied
-          </span>
-        </Show>
-
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost px-1.5 py-0.5"
-          title="Copy all logs"
-          disabled={!store.logs.length}
-          onClick={copyAll}
-        >
-          <Icons.copy size={13} />
-        </button>
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost px-1.5 py-0.5"
-          title="Clear logs"
-          disabled={!store.logs.length}
-          onClick={() => clearLogs()}
-        >
-          <Icons.x size={13} />
-        </button>
-      </div>
-
-      {/* Expanded body */}
-      <Show when={store.logsPanel.open}>
+            <span class="text-[10px] text-text-faint font-mono tabular-nums">
+              {store.logs.length}
+            </span>
+            <Show when={copied()}>
+              <span class="text-[10px] text-accent-2 inline-flex items-center gap-0.5">
+                <Icons.check size={12} /> Copied
+              </span>
+            </Show>
+            <button
+              type="button"
+              class="sc-btn sc-btn-ghost px-1.5 py-0.5"
+              title="Copy all system logs"
+              disabled={!store.logs.length}
+              onClick={() => void copyAll()}
+            >
+              <Icons.copy size={13} />
+            </button>
+            <button
+              type="button"
+              class="sc-btn sc-btn-ghost px-1.5 py-0.5"
+              title="Clear system logs"
+              disabled={!store.logs.length}
+              onClick={() => clearLogs()}
+            >
+              <Icons.x size={13} />
+            </button>
+          </div>
+        }
+      >
         <div
           ref={listRef}
-          class="overflow-auto border-t border-border-soft font-mono text-[10px] bg-bg-base"
-          style={{ height: `${Math.max(80, store.logsPanel.height - 28)}px` }}
+          class="overflow-auto h-full min-h-0 font-mono text-[10px] bg-bg-base"
+          data-axis-system-logs
         >
           <Show
             when={store.logs.length > 0}
             fallback={
-              <div class="p-3 text-text-faint uppercase tracking-wider">Waiting for system events…</div>
+              <div class="p-3 text-text-faint uppercase tracking-wider">
+                Waiting for system events…
+              </div>
             }
           >
             <For each={store.logs}>
@@ -208,7 +183,7 @@ export const SystemLogs: Component = () => {
             </For>
           </Show>
         </div>
-      </Show>
-    </div>
+      </FloatableShell>
+    </Show>
   );
 };

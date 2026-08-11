@@ -272,8 +272,8 @@ export const EditorPane: Component<Props> = (props) => {
       </Show>
       <EditorToolBtn
         id="scriptlogs"
-        label="Logs"
-        title="Scriptlogs — script log.* output (not system telemetry)"
+        label="Script Logs"
+        title="Script Logs — Pine log.* output from the last run (not system telemetry)"
         testId="axis-btn-scriptlogs"
         pressed={isPanelOpen('scriptlogs')}
         onClick={() => toggleScriptLogsPanel()}

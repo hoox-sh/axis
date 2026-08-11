@@ -1269,6 +1269,7 @@ button.sc-btn:focus-visible {
 [data-axis-app][data-chart-only='1'] [data-testid='axis-topbar'],
 [data-axis-app][data-chart-only='1'] .axis-dock-col,
 [data-axis-app][data-chart-only='1'] [data-testid='axis-statusbar'],
+[data-axis-app][data-chart-only='1'] [data-testid='axis-system-logs'],
 [data-axis-app][data-chart-only='1'] [data-axis-system-logs] {
   display: none !important;
 }

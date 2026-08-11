@@ -9,13 +9,22 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-11 · 194 commits · describe-tag: `v2.0.2`_
+_Generated/updated: 2026-08-11 · 196 commits · describe-tag: `v2.0.3`_
 
 ---
 
 ## [Unreleased]
 
 _Nothing yet — next changes land here._
+
+## [2.0.4] — 2026-08-11
+
+Script Logs / System Logs naming and dockable Status + System Logs panes.
+
+### Changed
+
+- **Script Logs / System Logs** — Script `log.*` pane titled **Script Logs** (editor tool + panel); app telemetry titled **System Logs** (no bare “Logs”).
+- **Dockable Status & System Logs** — Status bar and System Logs are FloatableShell panes (`statusbar`, `logs`); closable/dockable like Results. Topbar toggles: **Script Logs**, **System Logs**, **Status**.
 
 ## [2.0.3] — 2026-08-11
 
@@ -82,9 +91,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (112 commits)
+### 2026-08 (114 commits)
 
 #### Security
 
@@ -92,6 +103,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `7f44667e` (2026-08-11) — feat(runtimes,editor): hub, idle lint, save-before-run, tight line gutters
 - `0c4a812d` (2026-08-11) — feat(editor,panels): hover-slide docks and editor chrome polish
 - `7abea423` (2026-08-10) — feat(chart): price-scale decimals with auto from symbol/bars
 - `235079b7` (2026-08-10) — feat(editor): autoformat, color tools, and chrome redesign
@@ -144,6 +156,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `41099e71` (2026-08-11) — fix(plugins): clearer errors when cross-origin plugin import lacks CORS
 - `3bc43323` (2026-08-11) — fix(panels): harden hover-slide reflow for non-DOM test windows
 - `0a668e00` (2026-08-11) — fix(security,perf): gate /api/run, OAuth clientId, WS cool-down
 - `156221b9` (2026-08-11) — fix(security,perf): fail-closed Worker auth, CORS, bars-cache
