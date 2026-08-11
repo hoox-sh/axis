@@ -27,13 +27,21 @@ describe('pickOrigin', () => {
     expect(pickOrigin(req('https://localhost'), env)).toBe('https://localhost');
   });
 
-  it('echoes product AXIS / HOOX / Pages origins', () => {
+  it('echoes product AXIS / HOOX / project-scoped Pages origins', () => {
     expect(pickOrigin(req('https://axis.hoox.sh'), env)).toBe('https://axis.hoox.sh');
     expect(pickOrigin(req('https://hoox.sh'), env)).toBe('https://hoox.sh');
     expect(pickOrigin(req('https://pynescript.ai'), env)).toBe('https://pynescript.ai');
     expect(pickOrigin(req('https://feat-onchain-data-plane.pynescript-axis.pages.dev'), env)).toBe(
       'https://feat-onchain-data-plane.pynescript-axis.pages.dev',
     );
+    expect(pickOrigin(req('https://pynescript-axis.pages.dev'), env)).toBe(
+      'https://pynescript-axis.pages.dev',
+    );
+  });
+
+  it('does not echo arbitrary *.pages.dev hosts', () => {
+    expect(pickOrigin(req('https://evil.pages.dev'), env)).toBe('https://app.example.com');
+    expect(pickOrigin(req('https://attacker-app.pages.dev'), env)).toBe('https://app.example.com');
   });
 
   it('does not treat 0.0.0.0 as local-dev', () => {

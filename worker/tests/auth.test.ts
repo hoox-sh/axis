@@ -43,10 +43,30 @@ describe('requireApiKey', () => {
     }
   });
 
-  it('accepts well-formed pn_ keys without KV', async () => {
+  it('accepts well-formed pn_ keys without KV when D1 is unbound', async () => {
     const key = 'pn_' + 'ab'.repeat(24);
     const req = new Request('http://x/', { headers: { Authorization: `Bearer ${key}` } });
     const r = await requireApiKey(req, {} as Env);
+    expect(r.ok).toBe(true);
+  });
+
+  it('rejects shape-only keys when D1 is bound without API_KEYS KV', async () => {
+    const key = 'pn_' + 'ab'.repeat(24);
+    const req = new Request('http://x/', { headers: { Authorization: `Bearer ${key}` } });
+    const r = await requireApiKey(req, { DB: {} as D1Database } as Env);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.status).toBe(503);
+      expect(r.code).toBe('API_KEYS_REQUIRED');
+    }
+  });
+
+  it('ALLOW_OPEN_KEYS still works with D1 for local demos', async () => {
+    const req = new Request('http://x/', { headers: { Authorization: 'Bearer demo' } });
+    const r = await requireApiKey(req, {
+      DB: {} as D1Database,
+      ALLOW_OPEN_KEYS: '1',
+    } as Env);
     expect(r.ok).toBe(true);
   });
 

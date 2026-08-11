@@ -377,15 +377,37 @@ function peekMemoryBars(key: string): Bar[] | null {
   return null;
 }
 
-/** Read full series for a cache key (empty array if missing). */
+/**
+ * Hydrate the in-memory map from an IDB record so subsequent reads during
+ * backfill/validate skip IDB (memory is source of truth while warm).
+ */
+function hydrateMemoryFromIdb(rec: BarsCacheRecord): void {
+  if (!rec?.key || !Array.isArray(rec.bars)) return;
+  // Prefer an already-warmer in-memory entry (newer updatedAt or pending write).
+  const existing = memory.get(rec.key);
+  if (existing && (existing.updatedAt || 0) >= (rec.updatedAt || 0)) return;
+  memory.set(rec.key, rec);
+  trimMemorySeries();
+}
+
+/**
+ * Read full series for a cache key (empty array if missing).
+ *
+ * **Memory-first:** when the series is warm in the process map (active DSM
+ * backfill / recent put), return that immediately — do not re-open IDB and
+ * risk serving a lagging pre-flush snapshot. On cold miss, load IDB and hydrate memory.
+ */
 export async function getCachedBars(
   sourceId: string,
   symbol: string,
   interval: string,
 ): Promise<Bar[]> {
   const key = barsCacheKey(sourceId, symbol, interval);
+  const warm = peekMemoryBars(key);
+  if (warm) return warm.slice();
+
   if (!idbAvailable()) {
-    return memory.get(key)?.bars?.slice() ?? [];
+    return [];
   }
   try {
     const db = await openBarsDb();
@@ -393,13 +415,30 @@ export async function getCachedBars(
       const tx = db.transaction(STORE, 'readonly');
       const rec = (await idbReq(tx.objectStore(STORE).get(key))) as BarsCacheRecord | undefined;
       await idbTxDone(tx);
-      return rec?.bars?.slice() ?? [];
+      if (!rec?.bars?.length) return [];
+      hydrateMemoryFromIdb(rec);
+      return rec.bars.slice();
     } finally {
       db.close();
     }
   } catch {
-    return memory.get(key)?.bars?.slice() ?? [];
+    return peekMemoryBars(key)?.slice() ?? [];
   }
+}
+
+/**
+ * Bar count only — prefers warm memory (no clone, no IDB) for DSM gap progress.
+ */
+export async function getCachedBarCount(
+  sourceId: string,
+  symbol: string,
+  interval: string,
+): Promise<number> {
+  const key = barsCacheKey(sourceId, symbol, interval);
+  const warm = peekMemoryBars(key);
+  if (warm) return warm.length;
+  const bars = await getCachedBars(sourceId, symbol, interval);
+  return bars.length;
 }
 
 /** Read cache metadata (oldest/newest/count) without cloning all bars when possible. */
@@ -408,6 +447,15 @@ export async function getCachedRange(
   symbol: string,
   interval: string,
 ): Promise<{ count: number; oldestSec: number | null; newestSec: number | null } | null> {
+  const key = barsCacheKey(sourceId, symbol, interval);
+  const warm = peekMemoryBars(key);
+  if (warm?.length) {
+    return {
+      count: warm.length,
+      oldestSec: warm[0]!.time,
+      newestSec: warm[warm.length - 1]!.time,
+    };
+  }
   const bars = await getCachedBars(sourceId, symbol, interval);
   if (!bars.length) return null;
   return {

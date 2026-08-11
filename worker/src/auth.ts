@@ -27,8 +27,9 @@
  * ## Validation order ({@link requireApiKey})
  * 1. Extract Bearer or `?key=` ({@link extractBearer}).
  * 2. If `API_KEYS` KV is bound → lookup `key:<token>`; reject unknown.
- * 3. Else if `ALLOW_OPEN_KEYS` → accept any non-empty key (local demos).
- * 4. Else accept only well-formed `pn_[a-f0-9]{48}` (dev without KV).
+ * 3. Else if D1 (`DB`) is bound and open keys is off → `API_KEYS_REQUIRED` (fail closed).
+ * 4. Else if `ALLOW_OPEN_KEYS` → accept any non-empty key (local demos only).
+ * 5. Else accept only well-formed `pn_[a-f0-9]{48}` (dev without KV / without D1).
  *
  * ## Multi-tenant partition
  * `userId` is a SHA-256 prefix of the raw key (32 hex chars). D1 rows and
@@ -72,7 +73,13 @@ export function extractBearer(req: Request): string {
 /**
  * Validate the request's API key and return an {@link AuthContext}.
  * On failure returns HTTP status + stable error `code` for JSON clients
- * (`NO_KEY` | `INVALID_KEY`).
+ * (`NO_KEY` | `INVALID_KEY` | `API_KEYS_REQUIRED`).
+ *
+ * ## Fail-closed with durable storage
+ * When `env.DB` (D1) is bound but `API_KEYS` KV is not, shape-only / open
+ * acceptance would partition real script data by attacker-chosen tokens with
+ * no mint/revoke. In that configuration we only allow **explicit**
+ * `ALLOW_OPEN_KEYS` (local demos) or reject with `API_KEYS_REQUIRED`.
  */
 export async function requireApiKey(
   req: Request,
@@ -99,8 +106,24 @@ export async function requireApiKey(
     return { ok: true, ctx: { key, userId: await hashKey(key), tier } };
   }
 
-  // Dev without KV: open mode or shape-only validation.
-  if (env.ALLOW_OPEN_KEYS === '1' || env.ALLOW_OPEN_KEYS === 'true') {
+  const openKeys = env.ALLOW_OPEN_KEYS === '1' || env.ALLOW_OPEN_KEYS === 'true';
+  const durableWithoutKv = Boolean(env.DB);
+
+  // Durable partition without KV: refuse shape-only inventable keys.
+  // Explicit open-keys remains available for local demos only.
+  if (durableWithoutKv && !openKeys) {
+    return {
+      ok: false,
+      status: 503,
+      code: 'API_KEYS_REQUIRED',
+      message:
+        'API_KEYS KV is not bound while D1 is active. Bind API_KEYS and mint keys via /api/keys, ' +
+        'or set ALLOW_OPEN_KEYS=1 only for non-production local demos.',
+    };
+  }
+
+  // Dev without KV: open mode or shape-only validation (no durable DB).
+  if (openKeys) {
     return { ok: true, ctx: { key, userId: await hashKey(key), tier: 'hobby' } };
   }
 

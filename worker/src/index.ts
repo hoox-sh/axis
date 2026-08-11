@@ -107,8 +107,13 @@ const LOCAL_DEV_ORIGIN_RE = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i;
  * scripts, run). Echo exact Origin when matched so credential-less browser GETs work
  * from axis.hoox.sh while still rejecting arbitrary third-party sites.
  */
+/**
+ * Known product hosts only — not open `*.pages.dev` (any third-party Pages
+ * project). AXIS Cloudflare Pages project is `pynescript-axis.pages.dev`.
+ * Additional preview hosts can be listed in `ALLOWED_ORIGIN`.
+ */
 const PRODUCT_ORIGIN_RE =
-  /^https:\/\/(?:(?:[\w-]+\.)*(?:hoox\.sh|pynescript\.ai|pynescript\.online)|(?:[\w-]+\.)*pages\.dev)$/i;
+  /^https:\/\/(?:(?:[\w-]+\.)*(?:hoox\.sh|pynescript\.ai|pynescript\.online)|(?:[\w-]+\.)*pynescript-axis\.pages\.dev)$/i;
 
 /**
  * Resolve `Access-Control-Allow-Origin` for this request.

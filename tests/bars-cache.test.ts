@@ -7,6 +7,8 @@ import {
   mergeBars,
   mergeAndCap,
   getCachedBars,
+  getCachedBarCount,
+  getCachedRange,
   putCachedBars,
   clearCachedBars,
   listCachedSeries,
@@ -91,6 +93,14 @@ describe('bars-cache', () => {
 
     await clearCachedBars('mock-walk', 'TEST', '1d');
     expect(await getCachedBars('mock-walk', 'TEST', '1d')).toEqual([]);
+  });
+
+  it('getCachedBarCount and getCachedRange prefer warm memory', async () => {
+    await putCachedBars('mock-walk', 'COUNT', '1h', [bar(10), bar(20), bar(30)]);
+    expect(await getCachedBarCount('mock-walk', 'COUNT', '1h')).toBe(3);
+    const range = await getCachedRange('mock-walk', 'COUNT', '1h');
+    expect(range).toEqual({ count: 3, oldestSec: 10, newestSec: 30 });
+    expect(await getCachedBarCount('mock-walk', 'MISSING', '1h')).toBe(0);
   });
 
   it('exposes a finite max constant', () => {

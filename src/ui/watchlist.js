@@ -37,34 +37,59 @@ function renderWatchlist() {
     const body = el('watchlist-body');
     if (!body) return;
     const current = (getState().get('symbol') || 'BTCUSDT').toUpperCase();
-    body.innerHTML = '';
+    body.replaceChildren();
     for (const sym of _symbols) {
-        const item = document.createElement('div');
-        item.className = 'watchlist-item' + (sym === current ? ' is-active' : '');
-        item.dataset.symbol = sym;
+        const safeSym = String(sym || '').toUpperCase().replace(/[^A-Z0-9._/-]/g, '');
+        if (!safeSym) continue;
 
-        const info = _prices[sym] || {};
+        const item = document.createElement('div');
+        item.className = 'watchlist-item' + (safeSym === current ? ' is-active' : '');
+        item.dataset.symbol = safeSym;
+
+        const info = _prices[safeSym] || _prices[sym] || {};
         const price = info.price != null ? Number(info.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
         const change = info.change != null ? (info.change >= 0 ? '+' : '') + info.change.toFixed(2) + '%' : '';
         const changeClass = info.change != null ? (info.change >= 0 ? 'positive' : 'negative') : '';
 
-        item.innerHTML = `
-            <span class="watchlist-symbol">${sym}</span>
-            <span style="display:flex;align-items:center;gap:6px;">
-                <span class="watchlist-price">${price}</span>
-                ${change ? `<span class="watchlist-change ${changeClass}">${change}</span>` : ''}
-                <span class="watchlist-remove" title="Remove ${sym}">×</span>
-            </span>
-        `;
+        // Build DOM with textContent for untrusted symbol labels (no raw innerHTML interpolation).
+        const symEl = document.createElement('span');
+        symEl.className = 'watchlist-symbol';
+        symEl.textContent = safeSym;
+
+        const right = document.createElement('span');
+        right.style.display = 'flex';
+        right.style.alignItems = 'center';
+        right.style.gap = '6px';
+
+        const priceEl = document.createElement('span');
+        priceEl.className = 'watchlist-price';
+        priceEl.textContent = price;
+        right.appendChild(priceEl);
+
+        if (change) {
+            const chEl = document.createElement('span');
+            chEl.className = `watchlist-change ${changeClass}`;
+            chEl.textContent = change;
+            right.appendChild(chEl);
+        }
+
+        const remove = document.createElement('span');
+        remove.className = 'watchlist-remove';
+        remove.title = `Remove ${safeSym}`;
+        remove.textContent = '×';
+        right.appendChild(remove);
+
+        item.appendChild(symEl);
+        item.appendChild(right);
 
         item.addEventListener('click', (e) => {
             if (e.target.classList.contains('watchlist-remove')) return;
-            selectSymbol(sym);
+            selectSymbol(safeSym);
         });
 
-        item.querySelector('.watchlist-remove').addEventListener('click', (e) => {
+        remove.addEventListener('click', (e) => {
             e.stopPropagation();
-            removeSymbol(sym);
+            removeSymbol(safeSym);
         });
 
         body.appendChild(item);

@@ -34,6 +34,13 @@
 import type { Env } from './index';
 import { tryRunInWorker } from './pyodide_runtime';
 
+/** Max Pine source length (chars) accepted by `/api/run`. */
+const MAX_SCRIPT_CHARS = 512 * 1024;
+/** Max OHLCV rows per run (aligned with chart history soft caps). */
+const MAX_DATA_BARS = 50_000;
+/** Upstream `/run` proxy timeout — prevents hung backends pinning Worker isolates. */
+const PROXY_TIMEOUT_MS = 60_000;
+
 /** Client JSON body for `/api/run` (aligned with pyne Pro API). */
 interface RunRequest {
     script: string;
@@ -46,7 +53,13 @@ function validate(body: unknown): { ok: true; value: RunRequest } | { ok: false;
     if (!body || typeof body !== 'object') return { ok: false, err: 'body must be a JSON object' };
     const b = body as Record<string, unknown>;
     if (typeof b.script !== 'string' || !b.script.trim()) return { ok: false, err: 'script is required' };
+    if (b.script.length > MAX_SCRIPT_CHARS) {
+        return { ok: false, err: `script exceeds ${MAX_SCRIPT_CHARS} characters` };
+    }
     if (!Array.isArray(b.data) || b.data.length === 0) return { ok: false, err: 'data must be a non-empty array' };
+    if (b.data.length > MAX_DATA_BARS) {
+        return { ok: false, err: `data exceeds ${MAX_DATA_BARS} bars` };
+    }
     if (b.mode !== undefined && b.mode !== 'interpret' && b.mode !== 'compile') {
         return { ok: false, err: 'mode must be "interpret" or "compile"' };
     }
@@ -68,11 +81,31 @@ async function proxyToExternal(bodyText: string, env: Env, origin: string): Prom
             { status: 503, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin } },
         );
     }
-    const upstream = await fetch(`${target}/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: bodyText,
-    });
+    let upstream: Response;
+    try {
+        upstream = await fetch(`${target}/run`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: bodyText,
+            signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
+        });
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const timedOut = /abort|timeout/i.test(msg);
+        return new Response(
+            JSON.stringify({
+                status: 'error',
+                code: timedOut ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_NETWORK',
+                message: timedOut
+                    ? `EXTERNAL_BACKEND /run timed out after ${PROXY_TIMEOUT_MS}ms`
+                    : `EXTERNAL_BACKEND /run unreachable: ${msg}`,
+            }),
+            {
+                status: 504,
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin },
+            },
+        );
+    }
     const text = await upstream.text();
     return new Response(text, {
         status: upstream.status,
