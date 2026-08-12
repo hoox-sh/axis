@@ -9,15 +9,21 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-12 · 200 commits · describe-tag: `v2.0.5`_
+_Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 
 ---
 
 ## [Unreleased]
 
+_Nothing yet — next changes land here._
+
+## [2.0.7] — 2026-08-12
+
+Pine drawings diagnostics and plotarrow direction; pairs with pyne 0.3.5 last-bar line export.
+
 ### Fixed
 
-- **`line.new` / drawing export** — pyne `export_for_api` no longer drops lines whose `bar_index` is past the last bar (classic `bar_index+1` on last bar); AXIS runner logs when drawings arrive but normalize drops them or the drawing layer is missing.
+- **`line.new` / drawings apply** — prefer DrawingLayer fallback when applying Pine drawings; warn when the engine returns drawings that normalize to zero or when no layer is mounted (load bars first).
 - **`plotarrow`** — negative series samples render as down arrows (were always up).
 
 ## [2.0.6] — 2026-08-12
@@ -124,9 +130,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (118 commits)
+### 2026-08 (120 commits)
 
 #### Security
 
@@ -190,6 +198,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `eb61d218` (2026-08-12) — fix(drawings,plot): line.new last-bar export path + plotarrow direction
 - `299ec83c` (2026-08-12) — fix(test,store): green suite — isolate defaults, health mock, bar fills
 - `41099e71` (2026-08-11) — fix(plugins): clearer errors when cross-origin plugin import lacks CORS
 - `3bc43323` (2026-08-11) — fix(panels): harden hover-slide reflow for non-DOM test windows
@@ -262,6 +271,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `5f6d7a9a` (2026-08-12) — chore(release): AXIS v2.0.6
 - `12cffe27` (2026-08-11) — chore: ignore local multi-agent sync notice files
 - `33e11930` (2026-08-06) — chore(worker): gitignore wrangler.toml and ship example
 - `9cb4dad0` (2026-08-06) — chore: vendor latest pyne 0.3.0 wheel (parity Aug 6)
