@@ -68,7 +68,11 @@ import {
   setTelemetryState,
 } from '../store';
 import { resolveInputSourceValues } from '../results/plot-sources';
-import { getManager, applyDebugPinsToChart } from '../chart/manager-access';
+import {
+  getManager,
+  getDrawingLayer,
+  applyDebugPinsToChart,
+} from '../chart/manager-access';
 import { PLOT_PALETTE } from '../chart/series-factory';
 import { normalizeStrategyEvents, eventsToMarkers } from '../results/events';
 import { buildStrategyReport } from '../results/strategy';
@@ -1114,24 +1118,40 @@ async function runAndApplyInner(
       const drawings = Array.isArray((result as RunResult & { drawings?: unknown[] }).drawings)
         ? (result as RunResult & { drawings?: unknown[] }).drawings
         : undefined;
-      const layer = getActiveDrawingLayer();
+      const layer = getActiveDrawingLayer() ?? getDrawingLayer();
       if (drawings?.length) {
         const limits = resolveDrawingLimits(
           script,
           (result.meta as Record<string, unknown> | undefined) ?? null,
         );
-        layer?.setScriptDrawings(drawings, limits);
+        const keptCount = layer?.setScriptDrawings(drawings, limits) ?? 0;
         if (!silent) {
           const normalized = normalizeScriptDrawings(drawings);
           const kept = garbageCollectScriptDrawings(normalized, limits);
           const dropped = normalized.length - kept.length;
-          appendLog(
-            'ok',
-            dropped > 0
-              ? `Pine drawings: ${kept.length} object(s) (${dropped} GC'd by max_*_count)`
-              : `Pine drawings: ${kept.length} object(s)`,
-            'drawings',
-          );
+          if (!layer) {
+            appendLog(
+              'warn',
+              `Pine drawings: engine returned ${drawings.length} object(s) but no drawing layer is mounted (load bars first)`,
+              'drawings',
+            );
+          } else if (normalized.length === 0) {
+            const sample = drawings[0] as Record<string, unknown> | undefined;
+            const keys = sample && typeof sample === 'object' ? Object.keys(sample).slice(0, 12).join(',') : '';
+            appendLog(
+              'warn',
+              `Pine drawings: ${drawings.length} raw object(s) dropped by normalize (need type/kind + coords; sample keys: ${keys || '—'})`,
+              'drawings',
+            );
+          } else {
+            appendLog(
+              'ok',
+              dropped > 0
+                ? `Pine drawings: ${kept.length} object(s) (${dropped} GC'd by max_*_count)`
+                : `Pine drawings: ${keptCount || kept.length} object(s)`,
+              'drawings',
+            );
+          }
         }
       } else if (!silent) {
         // Only clear on interactive full runs when engine returned none

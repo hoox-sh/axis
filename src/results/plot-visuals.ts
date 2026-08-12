@@ -458,9 +458,17 @@ export function mapPlotStyleToSeriesKind(style?: string | null): PlotSeriesKind 
 export function mapShapeStyle(
   style?: string | null,
   kind?: string | null,
+  /** For plotarrow: signed series sample (negative → arrowDown). */
+  sample?: unknown,
 ): 'arrowUp' | 'arrowDown' | 'circle' | 'square' {
   const k = normalizePlotKind(kind);
-  if (k === 'plotarrow') return 'arrowUp';
+  if (k === 'plotarrow') {
+    // plotarrow(series): positive/up, negative/down (Pine reference)
+    if (typeof sample === 'number' && Number.isFinite(sample) && sample < 0) {
+      return 'arrowDown';
+    }
+    return 'arrowUp';
+  }
   if (k === 'plotchar') return 'circle';
   const s = stripNs(String(style || ''));
   if (
@@ -553,8 +561,7 @@ export function shapeSeriesToMarkers(
   const n = Math.min(times.length, valArr.length);
   const color =
     (meta.color && isActiveColor(meta.color) ? meta.color : null) || DEFAULT_SHAPE_COLOR;
-  const shape = mapShapeStyle(meta.style, meta.kind);
-  const position = mapShapeLocation(meta.location, meta.style);
+  const kindNorm = normalizePlotKind(meta.kind);
   const text =
     (meta.text && String(meta.text)) ||
     (meta.char && String(meta.char)) ||
@@ -572,6 +579,12 @@ export function shapeSeriesToMarkers(
     const v = valArr[i];
     if (typeof v === 'string' && isActiveColor(v) && !/^(true|false)$/i.test(v)) {
       c = v.trim();
+    }
+    // plotarrow: shape + position depend on the signed sample
+    const shape = mapShapeStyle(meta.style, meta.kind, v);
+    let position = mapShapeLocation(meta.location, meta.style);
+    if (kindNorm === 'plotarrow' && !meta.location) {
+      position = shape === 'arrowDown' ? 'aboveBar' : 'belowBar';
     }
     const marker: ShapeMarkerSpec = {
       time: t,

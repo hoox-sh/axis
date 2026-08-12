@@ -15,7 +15,10 @@ _Generated/updated: 2026-08-12 · 200 commits · describe-tag: `v2.0.5`_
 
 ## [Unreleased]
 
-_Nothing yet — next changes land here._
+### Fixed
+
+- **`line.new` / drawing export** — pyne `export_for_api` no longer drops lines whose `bar_index` is past the last bar (classic `bar_index+1` on last bar); AXIS runner logs when drawings arrive but normalize drops them or the drawing layer is missing.
+- **`plotarrow`** — negative series samples render as down arrows (were always up).
 
 ## [2.0.6] — 2026-08-12
 

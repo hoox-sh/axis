@@ -178,6 +178,11 @@ describe('mapShapeSize', () => {
 });
 
 describe('mapShapeStyle / mapShapeLocation', () => {
+  it('maps plotarrow direction from signed sample', () => {
+    expect(mapShapeStyle(undefined, 'plotarrow', 1.5)).toBe('arrowUp');
+    expect(mapShapeStyle(undefined, 'plotarrow', -2)).toBe('arrowDown');
+  });
+
   it('maps triangle down / abovebar', () => {
     expect(mapShapeStyle('shape.triangledown')).toBe('arrowDown');
     expect(mapShapeLocation('location.abovebar')).toBe('aboveBar');
