@@ -372,16 +372,34 @@ button.sc-btn:focus-visible {
   white-space: nowrap;
 }
 
-/* Brand cluster — match topbar input / control line height */
+/* Brand cluster — match topbar input / control line height; button opens About */
 [data-testid="axis-topbar"] [data-testid="axis-brand"],
-[data-testid="axis-topbar"] .axis-tb-brand {
+[data-testid="axis-topbar"] .axis-tb-brand,
+[data-testid="axis-topbar"] .axis-tb-brand-btn {
+  appearance: none;
+  background: transparent;
+  border: none;
+  margin: 0;
+  padding: 0 0.15em;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
   gap: 0.5em;
   margin-right: 0.1em;
-  /* Same vertical footprint as .axis-tb-field / .sc-input controls */
   min-height: var(--ui-control-h);
   height: var(--ui-control-h);
   align-items: center;
   align-self: center;
+  display: inline-flex;
+}
+[data-testid="axis-topbar"] .axis-tb-brand-btn:hover .axis-tb-brand-title,
+[data-testid="axis-topbar"] .axis-tb-brand-btn:focus-visible .axis-tb-brand-title {
+  color: var(--color-accent);
+}
+[data-testid="axis-topbar"] .axis-tb-brand-btn:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
+  outline-offset: 2px;
 }
 
 /* Logo scales with control height (SVG attrs overridden by CSS) */

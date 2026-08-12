@@ -21,8 +21,15 @@ export interface DesktopShellOptions {
   editorRef: ImportEditorHost;
 }
 
-/** Native About dialog (desktop only). */
+/** About AXIS — prefer in-app modal (ethos); fall back to native message. */
 export async function showAboutDialog(): Promise<void> {
+  try {
+    const { openAboutModal } = await import('../ui/AboutModal');
+    openAboutModal();
+    return;
+  } catch (err) {
+    console.warn('[axis-desktop] about modal import failed', err);
+  }
   if (!isTauriShell()) return;
   try {
     await message(

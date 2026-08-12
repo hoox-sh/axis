@@ -91,6 +91,9 @@ const OnChainPanel = lazy(() =>
 const CommandPalette = lazy(() =>
   import('./ui/CommandPalette').then((m) => ({ default: m.CommandPalette })),
 );
+const AboutModal = lazy(() =>
+  import('./ui/AboutModal').then((m) => ({ default: m.AboutModal })),
+);
 
 // Ensure built-in source/stream/engine plugins are registered before first paint.
 registerBuiltins();
@@ -546,6 +549,8 @@ export const App: Component = () => {
           onOpenPlugins={() => openRuntimes('plugins')}
           onOpenWorkers={() => openRuntimes('status')}
         />
+        {/* About AXIS — logo click / Help → About / command palette */}
+        <AboutModal />
       </Suspense>
 
       {/* Drop .pyne / .pine / .pinescript files anywhere → script library */}

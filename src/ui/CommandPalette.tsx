@@ -92,6 +92,7 @@ import {
   toggleChartOnlyMode,
   toggleChartOnlyFullscreen,
 } from './presentation';
+import { openAboutModal } from './AboutModal';
 
 /** Optional host hooks (e.g. desktop shell git bridge). */
 type AxisHostWindow = Window & {
@@ -230,6 +231,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       openPlugins: () => props.onOpenPlugins?.(),
       openWorkers: () => props.onOpenWorkers?.(),
       openScriptSettings: () => openScriptSettings(null),
+      openAbout: () => openAboutModal(),
       resetUiLayout: () => resetUiLayout(),
       toggleFullscreen: () => void toggleBrowserFullscreen(),
       toggleChartOnly: () => toggleChartOnlyMode(),

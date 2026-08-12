@@ -85,6 +85,7 @@ import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
 import { CachedDatasetsModal } from './CachedDatasetsModal';
 import { SymbolModal } from './SymbolModal';
 import { RunSplitButton } from './RunSplitButton';
+import { openAboutModal } from './AboutModal';
 import {
   toggleBrowserFullscreen,
   toggleChartOnlyMode,
@@ -247,12 +248,15 @@ export const Topbar: Component<{
       class="flex items-center gap-[var(--ui-gap-sm)] px-2.5 py-1 bg-bg-panel border-b-2 border-border flex-shrink-0 min-h-[var(--ui-topbar-min-h)] flex-wrap"
       data-testid="axis-topbar"
     >
-      {/* ── Brand ───────────────────────────────────────────── */}
-      <div
-        class="axis-tb-group axis-tb-brand"
+      {/* ── Brand (click → About) ───────────────────────────── */}
+      <button
+        type="button"
+        class="axis-tb-group axis-tb-brand axis-tb-brand-btn"
         data-tb-group="brand"
         data-testid="axis-brand"
-        title="HOOX · AXIS"
+        title="About AXIS · HOOX ethos"
+        aria-label="About AXIS"
+        onClick={() => openAboutModal()}
       >
         <HooxLogo
           size="m"
@@ -263,7 +267,7 @@ export const Topbar: Component<{
           AXIS
           <span class="axis-tb-brand-sub">chart</span>
         </div>
-      </div>
+      </button>
 
       {/* ── Market ──────────────────────────────────────────── */}
       <div class="axis-tb-group" data-tb-group="market">

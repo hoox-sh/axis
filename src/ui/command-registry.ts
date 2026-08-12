@@ -101,6 +101,8 @@ export interface CommandActions {
   /** Open Workers Manager (calc backends / edge / Pyodide). */
   openWorkers?: () => void;
   openScriptSettings?: () => void;
+  /** About AXIS modal (logo / Help → About). */
+  openAbout?: () => void;
   resetUiLayout?: () => void;
   /** Browser Fullscreen API on the app shell. */
   toggleFullscreen?: () => void | Promise<void>;
@@ -611,6 +613,23 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     keywords: ['inputs', 'parameters', 'input.*'],
   },
   {
+    id: 'action.about',
+    title: 'About AXIS',
+    category: 'navigation',
+    keywords: [
+      'about',
+      'hoox',
+      'ethos',
+      'manifesto',
+      'author',
+      'jango',
+      'license',
+      'agpl',
+      'version',
+      'credits',
+    ],
+  },
+  {
     id: 'action.reset-ui',
     title: 'Reset UI Layout',
     category: 'actions',
@@ -786,6 +805,7 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.openPlugins) byId.set('action.plugins', actions.openPlugins);
   if (actions.openWorkers) byId.set('action.workers', actions.openWorkers);
   if (actions.openScriptSettings) byId.set('action.script-settings', actions.openScriptSettings);
+  if (actions.openAbout) byId.set('action.about', actions.openAbout);
   if (actions.resetUiLayout) byId.set('action.reset-ui', actions.resetUiLayout);
   if (actions.toggleFullscreen) {
     byId.set('action.fullscreen', () => void actions.toggleFullscreen?.());

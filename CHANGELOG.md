@@ -15,7 +15,11 @@ _Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 
 ## [Unreleased]
 
-_Nothing yet — next changes land here._
+### Added
+
+- **About AXIS modal** — click the topbar HOOX/AXIS brand (or command palette **About AXIS** / Help → About) for product, author, and HOOX ethos from [hoox.sh/manifesto](https://hoox.sh/manifesto), with links to AXIS / PYNE / docs.
+
+##
 
 ## [2.0.7] — 2026-08-12
 
