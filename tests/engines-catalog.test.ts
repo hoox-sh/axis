@@ -355,7 +355,11 @@ describe('engines catalog', () => {
   });
 
   it('server isReady probes root', async () => {
-    restoreFetch = mockFetch(async () => new Response('ok', { status: 200 }));
+    // isReady requires a JSON health body (status/service/endpoints/websocket);
+    // plain text "ok" is treated as SPA HTML and returns false.
+    restoreFetch = mockFetch(async () =>
+      jsonResponse({ status: 'ok', service: 'pyne-pro', websocket: false }),
+    );
     expect(await serverEngine.isReady()).toBe(true);
   });
 

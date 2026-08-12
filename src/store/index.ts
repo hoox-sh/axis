@@ -512,10 +512,34 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         pending: false,
         source: '',
       },
+      // Fresh planes only — never spread DEFAULTS.telemetry (shared with live store)
+      // and never restore plane state from disk.
       telemetry: {
-        ...DEFAULTS.telemetry,
+        source: idlePlane(
+          pluginsBag?.source || source || DEFAULTS.activePlugins.source,
+          'Source',
+          'rest',
+        ),
+        stream: idlePlane(
+          pluginsBag?.stream || streamId || DEFAULTS.live.streamId,
+          'Stream',
+          'ws',
+        ),
+        engine: idlePlane(
+          pluginsBag?.engine || engine || DEFAULTS.activePlugins.engine,
+          'Engine',
+          'ws',
+        ),
+        storage: idlePlane(
+          pluginsBag?.storage || DEFAULTS.activePlugins.storage,
+          'Storage',
+          'local',
+        ),
+        runLatencySamples: [],
+        lastTick: null,
         hud: {
-          ...DEFAULTS.telemetry.hud,
+          compact: false,
+          overlay: false,
           ...(bag.telemetry &&
           typeof bag.telemetry === 'object' &&
           (bag.telemetry as TelemetryState).hud &&
@@ -818,13 +842,82 @@ export function setActivePlugin(
 }
 
 /**
+ * Deep-ish seed for createStore so nested DEFAULTS objects (telemetry, live,
+ * panels, …) are never shared with the live store. setStore path updates would
+ * otherwise mutate DEFAULTS and poison parsePersistedState / reset helpers.
+ */
+function seedStoreState(overlay: Partial<AppState> | null | undefined): AppState {
+  const base: AppState = {
+    ...DEFAULTS,
+    activePlugins: { ...DEFAULTS.activePlugins },
+    live: { ...DEFAULTS.live },
+    editor: { ...DEFAULTS.editor },
+    watchlist: {
+      ...DEFAULTS.watchlist,
+      symbols: [...DEFAULTS.watchlist.symbols],
+    },
+    indicatorPanel: { ...DEFAULTS.indicatorPanel },
+    dataViewPanel: { ...DEFAULTS.dataViewPanel },
+    layerPanel: { ...DEFAULTS.layerPanel },
+    alertsPanel: { ...DEFAULTS.alertsPanel },
+    resultsPanel: { ...DEFAULTS.resultsPanel },
+    logsPanel: { ...DEFAULTS.logsPanel },
+    scriptSettings: { ...DEFAULTS.scriptSettings },
+    crosshair: { ...DEFAULTS.crosshair },
+    preEval: { ...DEFAULTS.preEval, diagnostics: [] },
+    presentation: { ...DEFAULTS.presentation },
+    drawingPrefs: { ...DEFAULTS.drawingPrefs },
+    drawingUi: {
+      ...DEFAULTS.drawingUi,
+      lastToolByGroup: { ...DEFAULTS.drawingUi.lastToolByGroup },
+    },
+    strategyUi: { ...DEFAULTS.strategyUi },
+    stream: { ...DEFAULTS.stream },
+    compare: { ...DEFAULTS.compare, bars: [] },
+    onchain: { ...DEFAULTS.onchain },
+    chartTheme: defaultChartThemeState(),
+    panes: DEFAULTS.panes.map((p) => ({ ...p })),
+    scripts: [],
+    drawings: [],
+    logs: [],
+    bars: [],
+    runResults: {},
+    indicatorSeries: {},
+    editorInputValues: {},
+    pluginsConfig: {},
+    savedLayouts: [],
+    panelChrome: defaultPanelChromeMap(),
+    chartLayout: defaultChartLayout({
+      symbol: DEFAULTS.symbol,
+      interval: DEFAULTS.interval,
+      exchange: DEFAULTS.exchange,
+    }),
+    telemetry: {
+      source: idlePlane('binance-rest', 'Binance REST', 'rest'),
+      stream: idlePlane('binance-ws', 'Binance WebSocket', 'ws'),
+      engine: idlePlane('server', 'Server-Side', 'ws'),
+      storage: idlePlane('local', 'Local', 'local'),
+      runLatencySamples: [],
+      lastTick: null,
+      hud: { compact: false, overlay: false },
+      shareOnError: false,
+    },
+    errorShareOffer: null,
+    selectedDrawingId: null,
+    lastRun: null,
+    lastRunMs: null,
+    chartDataGen: 0,
+  };
+  if (!overlay) return base;
+  // Overlay wins for top-level keys; nested bags from parsePersistedState are already fresh.
+  return { ...base, ...overlay };
+}
+
+/**
  * Reactive app state + setter. Hydrated once at module load from localStorage.
  * Prefer domain helpers below for multi-field updates that must persist correctly.
  */
-export const [store, setStore] = createStore<AppState>({
-  ...DEFAULTS,
-  ...loadPersisted(),
-});
+export const [store, setStore] = createStore<AppState>(seedStoreState(loadPersisted()));
 
 // Apply theme + density as soon as the store hydrates (before first paint when possible)
 {

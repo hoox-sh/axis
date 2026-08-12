@@ -8,7 +8,25 @@
  * Guards: PaneManager export exists; Solid store defaults (symbol/interval/status).
  */
 
-import { describe, it, expect } from 'bun:test';
+import './setup';
+import { describe, it, expect, beforeEach } from 'bun:test';
+import { setStore, store } from '../src/store';
+
+/** Isolate factory defaults — other suites mutate the shared store singleton. */
+beforeEach(() => {
+  setStore('symbol', 'BTCUSDT');
+  setStore('interval', '1d');
+  setStore('status', 'ready');
+  setStore('statusMessage', 'Ready.');
+  setStore('live', {
+    active: false,
+    needsRerun: false,
+    lastBarTime: 0,
+    streamId: 'binance-ws',
+    preferAfterLoad: true,
+    rerunOn: 'every-tick',
+  });
+});
 
 describe('PaneManager', () => {
   it('can be imported', async () => {
@@ -18,16 +36,14 @@ describe('PaneManager', () => {
 });
 
 describe('Store', () => {
-  it('has default state', async () => {
-    const { store } = await import('../src/store');
+  it('has default state', () => {
     expect(store.symbol).toBe('BTCUSDT');
     expect(store.interval).toBe('1d');
     expect(store.status).toBe('ready');
     expect(store.statusMessage).toBe('Ready.');
   });
 
-  it('has stable live defaults', async () => {
-    const { store } = await import('../src/store');
+  it('has stable live defaults', () => {
     expect(store.live.active).toBe(false);
     expect(store.live.streamId).toBe('binance-ws');
   });

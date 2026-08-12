@@ -16,17 +16,17 @@ import {
   formatPct,
   tradesToCsv,
 } from '../src/results/strategy';
-import { SAMPLE_BARS } from './fixtures/bars';
 
 describe('strategy extras', () => {
   it('handles multiple long trades win rate', () => {
+    // Bare event prices (no bars) — bar fills use OHLC closes and ignore event price.
     const events = [
-      { time: SAMPLE_BARS[0].time, type: 'entry', dir: 'long', id: 'a', price: 100 },
-      { time: SAMPLE_BARS[1].time, type: 'exit', id: 'a', price: 110 },
-      { time: SAMPLE_BARS[2].time, type: 'entry', dir: 'long', id: 'b', price: 110 },
-      { time: SAMPLE_BARS[3].time, type: 'exit', id: 'b', price: 100 },
+      { time: 1, type: 'entry', dir: 'long', id: 'a', price: 100 },
+      { time: 2, type: 'exit', id: 'a', price: 110 },
+      { time: 3, type: 'entry', dir: 'long', id: 'b', price: 110 },
+      { time: 4, type: 'exit', id: 'b', price: 100 },
     ];
-    const rep = buildStrategyReport(events as never[], SAMPLE_BARS);
+    const rep = buildStrategyReport(events as never[]);
     expect(rep.stats.trades).toBe(2);
     // winRate is percent 0–100 in this reporter
     expect(rep.stats.winRate).toBeGreaterThanOrEqual(0);
@@ -39,10 +39,10 @@ describe('strategy extras', () => {
 
   it('profitFactor infinity when only winners', () => {
     const events = [
-      { time: SAMPLE_BARS[0].time, type: 'entry', dir: 'long', id: 'a', price: 100 },
-      { time: SAMPLE_BARS[1].time, type: 'exit', id: 'a', price: 120 },
+      { time: 1, type: 'entry', dir: 'long', id: 'a', price: 100 },
+      { time: 2, type: 'exit', id: 'a', price: 120 },
     ];
-    const rep = buildStrategyReport(events as never[], SAMPLE_BARS);
+    const rep = buildStrategyReport(events as never[]);
     expect(rep.stats.trades).toBe(1);
     expect(rep.stats.profitFactor === Infinity || rep.stats.profitFactor > 0).toBe(true);
   });

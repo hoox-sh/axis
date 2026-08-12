@@ -15,7 +15,9 @@ _Generated/updated: 2026-08-12 · 197 commits · describe-tag: `v2.0.4`_
 
 ## [Unreleased]
 
-_Nothing yet — next changes land here._
+### Fixed
+
+- **Tests** — isolate store/state defaults across suites; strategy-extra uses event prices (not bar fills); engine `isReady` mock returns JSON health; hydrate never restores plane telemetry from disk.
 
 ## [2.0.5] — 2026-08-12
 

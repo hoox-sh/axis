@@ -25,7 +25,9 @@ beforeEach(() => {
 
 describe('State', () => {
     it('returns defaults when localStorage is empty', async () => {
-        const { initState } = await import('../src/state.js');
+        // resetState clears the module singleton + cache (other suites import state.js)
+        const { initState, resetState } = await import('../src/state.js');
+        resetState();
         const s = initState();
         expect(s.get('symbol')).toBe('BTCUSDT');
         expect(s.get('engine')).toBe('server');
