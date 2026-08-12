@@ -37,6 +37,10 @@ import {
   hoverSlideLayoutSize,
   isPanelHoverSlideExpanded,
 } from './hover-slide';
+import {
+  FIXED_APP_SHELL_PANELS,
+  isPanelInChartOverlayMode,
+} from './panel-manager';
 
 /**
  * Stable start→end order within a dock.
@@ -98,9 +102,13 @@ export function panelsOnDock(dock: PanelDock): PanelId[] {
   const chrome = store.panelChrome;
   if (!chrome) return [];
   return DOCK_STACK_ORDER.filter((id) => {
+    if (FIXED_APP_SHELL_PANELS.has(id)) return false;
     if (!isPanelOpen(id)) return false;
     const c = chrome[id] as PanelChrome | undefined;
-    return c?.dock === dock;
+    if (!c || c.dock !== dock) return false;
+    // Chart-overlay panels float over the plot — exclude from dock columns
+    if (isPanelInChartOverlayMode(c)) return false;
+    return true;
   });
 }
 

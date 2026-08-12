@@ -49,6 +49,11 @@ import {
   bumpPanelZ,
   setPanelHoverSlide,
   isPanelHoverSlide,
+  resetPanelToDefault,
+  setPanelChartOverlay,
+  isPanelChartOverlay,
+  setAllPanelsChartOverlay,
+  isAllPanelsChartOverlay,
 } from '../../store';
 import { Icons } from '../icons';
 import { ResizeHandle } from '../ResizeHandle';
@@ -75,6 +80,12 @@ import {
   isPanelHoverSlideExpanded,
   setPanelHoverSlideExpanded,
 } from './hover-slide';
+import {
+  chartOverlayGeometry,
+  effectivePortalDock,
+  isChartOverlayEligible,
+  isPanelInChartOverlayMode,
+} from './panel-manager';
 
 /** Props for a dockable panel wrapper (title falls back to PANEL_META). */
 export interface FloatableShellProps {
@@ -150,10 +161,13 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   const chrome = () => getPanelChrome(props.id);
   const title = () => props.title || meta().title;
   const dock = () => chrome().dock;
+  /** True when presenting as free/edge overlay (float, window, or chart-overlay flag). */
+  const isOverlay = () => isPanelInChartOverlayMode(chrome());
   const isFloat = () => dock() === 'float' || dock() === 'window';
   const stackN = () => {
     // Track full chrome map so peer open/dock changes re-flex this shell
     void store.panelChrome;
+    if (isOverlay()) return 1;
     const d = dock();
     if (d === 'float' || d === 'window') return 1;
     return dockStackCount(d);
@@ -180,7 +194,13 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   /** Hover-slide preference + dock eligibility (persisted chrome). */
   const hoverSlideOn = () => {
     const d = dock();
-    return isPanelHoverSlide(props.id) && isHoverSlideEligible(d) && !isFloat();
+    // Chart overlay / float: no peek strip
+    return (
+      isPanelHoverSlide(props.id) &&
+      isHoverSlideEligible(d) &&
+      !isFloat() &&
+      !isPanelChartOverlay(props.id)
+    );
   };
   const hoverExpanded = () => isPanelHoverSlideExpanded(props.id);
   const hoverCollapsed = () => hoverSlideOn() && !hoverExpanded();
@@ -233,7 +253,8 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   });
 
   const resolveMount = () => {
-    const next = dockHostElement(dock());
+    // Chart-overlay edge docks portal into the float root (not dock columns)
+    const next = dockHostElement(effectivePortalDock(chrome()));
     // Only update when the host node actually changes (avoids Show thrash)
     setMountEl((prev) => (prev === next ? prev : next));
   };
@@ -253,9 +274,10 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     onCleanup(() => window.removeEventListener('blur', onVis));
   });
 
-  // Re-portal when dock side changes (same component instance keeps children)
+  // Re-portal when dock side or chart-overlay changes (same instance keeps children)
   createEffect(() => {
     void dock();
+    void chrome().chartOverlay;
     queueMicrotask(resolveMount);
   });
 
@@ -310,10 +332,20 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
 
   const setDock = (d: PanelDock) => {
     setMenuOpen(false);
-    const rect = d === 'float' ? rootEl?.getBoundingClientRect() : null;
+    const rect = d === 'float' || isPanelChartOverlay(props.id) ? rootEl?.getBoundingClientRect() : null;
     setPanelDock(props.id, d);
     if (d === 'float') {
       seedFloatGeometry(rect ?? null);
+      bumpPanelZ(props.id);
+    } else if (isPanelChartOverlay(props.id) && isChartOverlayEligible(d)) {
+      // Stay in chart-overlay mode at the new edge
+      const c = getPanelChrome(props.id);
+      const geo = chartOverlayGeometry(
+        { ...c, dock: d, chartOverlay: true },
+        window.innerWidth,
+        window.innerHeight,
+      );
+      setPanelGeometry(props.id, geo);
       bumpPanelZ(props.id);
     }
     if (d === 'window') {
@@ -324,6 +356,33 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
         openCompanionWindow(props.id, title());
       }
     }
+    queueMicrotask(() => {
+      resolveMount();
+      requestChartReflow();
+    });
+  };
+
+  const onResetDefault = () => {
+    setMenuOpen(false);
+    resetPanelToDefault(props.id);
+    queueMicrotask(() => {
+      resolveMount();
+      requestChartReflow();
+    });
+  };
+
+  const onToggleChartOverlay = () => {
+    const next = !isPanelChartOverlay(props.id);
+    setPanelChartOverlay(props.id, next);
+    queueMicrotask(() => {
+      resolveMount();
+      requestChartReflow();
+    });
+  };
+
+  const onToggleAllChartOverlay = () => {
+    const next = !isAllPanelsChartOverlay();
+    setAllPanelsChartOverlay(next);
     queueMicrotask(() => {
       resolveMount();
       requestChartReflow();
@@ -514,7 +573,8 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       e.stopPropagation();
       e.preventDefault();
       const cur = getPanelChrome(props.id);
-      if (cur.dock !== 'float' && cur.dock !== 'window') return;
+      // Float, window, or chart-overlay edge presentation
+      if (!isPanelInChartOverlayMode(cur)) return;
       const startX = e.clientX;
       const startY = e.clientY;
       const origX = cur.x;
@@ -620,24 +680,91 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       ? 'width 0.22s cubic-bezier(0.22, 1, 0.36, 1), height 0.22s cubic-bezier(0.22, 1, 0.36, 1), flex-basis 0.22s cubic-bezier(0.22, 1, 0.36, 1), min-width 0.22s ease'
       : undefined;
 
-    if (d === 'float' || d === 'window') {
+    // Chart overlay (edge dock) or free float/window — fixed over the chart
+    if (isOverlay()) {
       // Keep editor/CM usable: never allow collapsed float chrome.
       // pointer-events:auto is required — float root is pointer-events:none so
       // empty overlay space clicks pass through; without this, CM is not editable
       // and clicks hit the chart/topbar underneath.
-      const w = Math.max(meta().minW, c.w || meta().defaultW);
+      const edgeOverlay =
+        !!c.chartOverlay && isChartOverlayEligible(d) && d !== 'float' && d !== 'window';
+      const vw = typeof window !== 'undefined' ? window.innerWidth || 1280 : 1280;
+      const vh = typeof window !== 'undefined' ? window.innerHeight || 800 : 800;
+      const geo = edgeOverlay ? chartOverlayGeometry(c, vw, vh) : null;
+      const w = Math.max(meta().minW, geo?.w ?? c.w ?? meta().defaultW);
       // Editor float: always fill viewport under top edge (CSS tracks window resize)
       const bottomPad = 36; // status / safe area
-      const top = Math.max(0, Math.min(c.y || 48, window.innerHeight - 160));
-      const h = Math.max(meta().minH, c.h || meta().defaultH);
+      const top = Math.max(
+        0,
+        Math.min(geo?.y ?? (c.y > 8 ? c.y : 48), vh - 160),
+      );
+      const h = Math.max(meta().minH, geo?.h ?? c.h ?? meta().defaultH);
+      const z = String(Math.max(100, c.z || 20));
+      // Edge-anchor with right/left CSS so narrow viewports stay correct without
+      // depending on stale store x after a window resize.
+      if (edgeOverlay && d === 'right') {
+        const style: JSX.CSSProperties = {
+          position: 'fixed',
+          right: '0',
+          left: 'auto',
+          top: `${top}px`,
+          width: `${w}px`,
+          'z-index': z,
+          'min-width': `${meta().minW}px`,
+          'pointer-events': 'auto',
+        };
+        if (isEditor) {
+          style.height = `calc(100vh - ${top}px - ${bottomPad}px)`;
+          style['min-height'] = '200px';
+        } else {
+          style.height = `${h}px`;
+          style['min-height'] = `${Math.max(meta().minH, 120)}px`;
+        }
+        return style;
+      }
+      if (edgeOverlay && d === 'left') {
+        const style: JSX.CSSProperties = {
+          position: 'fixed',
+          left: '0',
+          right: 'auto',
+          top: `${top}px`,
+          width: `${w}px`,
+          'z-index': z,
+          'min-width': `${meta().minW}px`,
+          'pointer-events': 'auto',
+        };
+        if (isEditor) {
+          style.height = `calc(100vh - ${top}px - ${bottomPad}px)`;
+          style['min-height'] = '200px';
+        } else {
+          style.height = `${h}px`;
+          style['min-height'] = `${Math.max(meta().minH, 120)}px`;
+        }
+        return style;
+      }
+      if (edgeOverlay && d === 'bottom') {
+        return {
+          position: 'fixed',
+          left: '0',
+          right: '0',
+          bottom: `${bottomPad}px`,
+          top: 'auto',
+          width: '100%',
+          height: `${h}px`,
+          'z-index': z,
+          'min-height': `${Math.max(meta().minH, 80)}px`,
+          'pointer-events': 'auto',
+        };
+      }
+      const left = geo?.x ?? c.x;
       if (isEditor) {
         return {
           position: 'fixed',
-          left: `${c.x}px`,
+          left: `${left}px`,
           top: `${top}px`,
           width: `${w}px`,
           height: `calc(100vh - ${top}px - ${bottomPad}px)`,
-          'z-index': String(Math.max(100, c.z || 20)),
+          'z-index': z,
           'min-width': `${meta().minW}px`,
           'min-height': '200px',
           'pointer-events': 'auto',
@@ -645,11 +772,11 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       }
       return {
         position: 'fixed',
-        left: `${c.x}px`,
-        top: `${c.y}px`,
+        left: `${left}px`,
+        top: `${geo?.y ?? c.y}px`,
         width: `${w}px`,
         height: `${h}px`,
-        'z-index': String(Math.max(100, c.z || 20)),
+        'z-index': z,
         'min-width': `${meta().minW}px`,
         'min-height': `${Math.max(meta().minH, 120)}px`,
         'pointer-events': 'auto',
@@ -750,6 +877,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   };
 
   const dockClass = () => {
+    if (isOverlay()) return 'axis-panel-float sc-float-panel';
     const d = dock();
     if (d === 'left') return 'axis-panel-dock axis-panel-dock-left';
     if (d === 'right') return 'axis-panel-dock axis-panel-dock-right';
@@ -758,11 +886,11 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   };
 
   const showSideWidthResize = () => {
-    if (hoverCollapsed()) return false;
+    if (hoverCollapsed() || isOverlay()) return false;
     return dock() === 'left' || dock() === 'right';
   };
   const showBottomHeightResize = () => {
-    if (hoverCollapsed()) return false;
+    if (hoverCollapsed() || isOverlay()) return false;
     // Editor always fills height — no vertical split handles
     if (props.id === 'editor') return false;
     const d = dock();
@@ -794,7 +922,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
             onPointerEnter={() => expandHoverSlide()}
             onPointerLeave={() => scheduleCollapseHoverSlide()}
             onPointerDown={() => {
-              if (isFloat()) bumpPanelZ(props.id);
+              if (isOverlay()) bumpPanelZ(props.id);
               // Touch / click on peek strip should expand immediately
               if (hoverCollapsed()) expandHoverSlide();
             }}
@@ -853,8 +981,50 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                         );
                       }}
                     </For>
-                    <Show when={isHoverSlideEligible(dock())}>
-                      <div class="axis-panel-menu-sep" role="separator" />
+                    <div class="axis-panel-menu-sep" role="separator" />
+                    <Show when={isChartOverlayEligible(dock()) || isFloat()}>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        class={`axis-panel-menu-item ${
+                          isPanelChartOverlay(props.id) || isFloat() ? 'is-active' : ''
+                        }`}
+                        title="Float this panel over the chart (chart does not shrink)"
+                        data-testid={`axis-panel-chart-overlay-${props.id}`}
+                        disabled={isFloat()}
+                        onClick={() => {
+                          if (isFloat()) return;
+                          onToggleChartOverlay();
+                        }}
+                      >
+                        <Icons.layers size={14} />
+                        <span>Chart overlay</span>
+                        <Show when={isPanelChartOverlay(props.id) || isFloat()}>
+                          <Icons.check size={12} class="ml-auto opacity-80" />
+                        </Show>
+                      </button>
+                    </Show>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      class={`axis-panel-menu-item ${
+                        isAllPanelsChartOverlay() ? 'is-active' : ''
+                      }`}
+                      title="Enable or disable chart overlay for every panel"
+                      data-testid="axis-panel-chart-overlay-all"
+                      onClick={() => onToggleAllChartOverlay()}
+                    >
+                      <Icons.layers size={14} />
+                      <span>
+                        {isAllPanelsChartOverlay()
+                          ? 'Chart overlay: all off'
+                          : 'Chart overlay: all on'}
+                      </span>
+                      <Show when={isAllPanelsChartOverlay()}>
+                        <Icons.check size={12} class="ml-auto opacity-80" />
+                      </Show>
+                    </button>
+                    <Show when={isHoverSlideEligible(dock()) && !isPanelChartOverlay(props.id)}>
                       <button
                         type="button"
                         role="menuitem"
@@ -874,6 +1044,17 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                         </Show>
                       </button>
                     </Show>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      class="axis-panel-menu-item"
+                      title="Restore factory dock, size, and position for this panel"
+                      data-testid={`axis-panel-reset-default-${props.id}`}
+                      onClick={() => onResetDefault()}
+                    >
+                      <Icons.reset size={14} />
+                      <span>Reset to default</span>
+                    </button>
                     <Show when={props.menuExtra}>
                       <div class="axis-panel-menu-sep" role="separator" />
                       {props.menuExtra}
@@ -944,8 +1125,8 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
               />
             </Show>
 
-            {/* Float: borders. Editor keeps full viewport height — width-only resize. */}
-            <Show when={isFloat()}>
+            {/* Float / chart-overlay: borders. Editor keeps full viewport height — width-only resize. */}
+            <Show when={isOverlay()}>
               <div
                 class="sc-resize-handle absolute right-0 top-0 bottom-0"
                 role="separator"

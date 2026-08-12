@@ -18,10 +18,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Status pane — Connection HUD + status message + optional strategy PnL.
+ * Bottom status strip — Connection HUD (left) + status message + optional
+ * strategy PnL summary from `store.lastRun`.
  *
- * FloatableShell id `statusbar` (title **Status**). Close via panel chrome or
- * topbar; re-open from topbar **Status** or command palette.
+ * Classic fixed footer chrome (no FloatableShell title bar). Visibility is
+ * gated by panel chrome `statusbar` (topbar **Status** / command palette).
  *
  * @module ui/StatusBar
  */
@@ -33,9 +34,6 @@ import type { RunResult } from '../indicators/runner';
 import { buildStrategyReport, formatMoney } from '../results/strategy';
 import { ConnectionHud } from './ConnectionHud';
 import { HooxLoader } from './HooxLoader';
-import { FloatableShell } from './panels/FloatableShell';
-
-const PANEL_ID = 'statusbar' as const;
 
 const STATUS_COLORS: Record<string, string> = {
   ready: 'text-accent-2',
@@ -46,7 +44,7 @@ const STATUS_COLORS: Record<string, string> = {
   disconnected: 'text-text-faint',
 };
 
-/** Dockable status / HUD strip. */
+/** Fixed footer chrome under the workspace (when Status pane is open). */
 export const StatusBar: Component = () => {
   const color = () => STATUS_COLORS[store.status] || 'text-text-dim';
 
@@ -59,53 +57,49 @@ export const StatusBar: Component = () => {
   });
 
   return (
-    <Show when={isPanelOpen(PANEL_ID)}>
-      <FloatableShell
-        id={PANEL_ID}
-        title="Status"
-        testId="axis-statusbar"
-        class="min-h-0"
+    <Show when={isPanelOpen('statusbar')}>
+      <div
+        class="flex items-center gap-[var(--ui-gap-sm)] px-2.5 py-0.5 bg-bg-panel border-t-2 border-border text-[0.85em] text-text-dim min-h-[var(--ui-statusbar-min-h)] flex-shrink-0 overflow-x-auto"
+        data-testid="axis-statusbar"
+        role="status"
       >
-        <div
-          class="flex items-center gap-[var(--ui-gap-sm)] px-2.5 py-0.5 bg-bg-panel text-[0.85em] text-text-dim min-h-[var(--ui-statusbar-min-h)] h-full overflow-x-auto"
-          role="status"
+        {/* Left: connection / transport / tick HUD */}
+        <ConnectionHud />
+
+        <span class="flex-1 min-w-2" />
+
+        {/* Right: status message + meta */}
+        <span
+          class={`flex items-center gap-1.5 min-w-0 max-w-[42vw] ${color()}`}
+          data-testid="axis-status-message"
         >
-          <ConnectionHud />
+          {(store.status === 'running' || store.status === 'loading') && (
+            <HooxLoader size="xs" class="flex-shrink-0" />
+          )}
+          {store.status === 'error' && <Icons.alert class="text-red flex-shrink-0" />}
+          {store.status === 'ready' && (
+            <Icons.activity class="text-accent-2 flex-shrink-0" />
+          )}
+          <span class="truncate">{store.statusMessage}</span>
+        </span>
 
-          <span class="flex-1 min-w-2" />
+        <Show when={strategySummary()}>
+          {(stats) => (
+            <span
+              class={`text-[0.85em] font-mono tracking-tight tabular-nums flex-shrink-0 ${
+                stats().totalPnl >= 0 ? 'text-accent-2' : 'text-red'
+              }`}
+              title="Closed trades from last run"
+            >
+              {stats().trades} trades · {formatMoney(stats().totalPnl)}
+            </span>
+          )}
+        </Show>
 
-          <span
-            class={`flex items-center gap-1.5 min-w-0 max-w-[42vw] ${color()}`}
-            data-testid="axis-status-message"
-          >
-            {(store.status === 'running' || store.status === 'loading') && (
-              <HooxLoader size="xs" class="flex-shrink-0" />
-            )}
-            {store.status === 'error' && <Icons.alert class="text-red flex-shrink-0" />}
-            {store.status === 'ready' && (
-              <Icons.activity class="text-accent-2 flex-shrink-0" />
-            )}
-            <span class="truncate">{store.statusMessage}</span>
-          </span>
-
-          <Show when={strategySummary()}>
-            {(stats) => (
-              <span
-                class={`text-[0.85em] font-mono tracking-tight tabular-nums flex-shrink-0 ${
-                  stats().totalPnl >= 0 ? 'text-accent-2' : 'text-red'
-                }`}
-                title="Closed trades from last run"
-              >
-                {stats().trades} trades · {formatMoney(stats().totalPnl)}
-              </span>
-            )}
-          </Show>
-
-          <span class="text-text-faint font-mono text-[10px] tracking-tight flex-shrink-0 tabular-nums">
-            {store.bars.length} bars · {store.scripts.length} ind · {store.panes.length} panes
-          </span>
-        </div>
-      </FloatableShell>
+        <span class="text-text-faint font-mono text-[10px] tracking-tight flex-shrink-0 tabular-nums">
+          {store.bars.length} bars · {store.scripts.length} ind · {store.panes.length} panes
+        </span>
+      </div>
     </Show>
   );
 };

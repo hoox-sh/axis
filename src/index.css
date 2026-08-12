@@ -1471,10 +1471,11 @@ body.axis-panel-dragging {
   max-width: none;
 }
 .axis-panel-shell[data-panel-id='editor'].axis-panel-float {
-  /* float height is set inline to viewport remainder */
+  /* float / chart-overlay height comes from inline calc (viewport remainder) */
   flex: none !important;
-  height: auto !important; /* use inline calc height from shellStyle */
+  /* do not force height:auto — that collapses to min-height and hides the body */
   width: auto !important;
+  max-width: none;
 }
 /* CodeMirror needs a non-scrolling body so the pane owns height */
 .axis-panel-shell[data-panel-id='editor'] .axis-panel-body {

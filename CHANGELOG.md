@@ -9,7 +9,7 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-11 · 196 commits · describe-tag: `v2.0.3`_
+_Generated/updated: 2026-08-12 · 197 commits · describe-tag: `v2.0.4`_
 
 ---
 
@@ -17,14 +17,29 @@ _Generated/updated: 2026-08-11 · 196 commits · describe-tag: `v2.0.3`_
 
 _Nothing yet — next changes land here._
 
-## [2.0.4] — 2026-08-11
+## [2.0.5] — 2026-08-12
 
-Script Logs / System Logs naming and dockable Status + System Logs panes.
+Panel manager defaults / reset / chart overlay; classic Status + System Logs chrome; editor open-in-new-tab.
+
+### Added
+
+- **Panel manager** — per-panel **default position** (dock + size + float coords in `PANEL_META`); panel menu **Reset to default**.
+- **Chart overlay** — per-panel toggle and bulk **Chart overlay: all on/off** (`setAllPanelsChartOverlay`); edge-docked panels float over the chart without shrinking it.
+- **Editor** — **Open in new tab** in overflow panel options (and left dock menu).
 
 ### Changed
 
-- **Script Logs / System Logs** — Script `log.*` pane titled **Script Logs** (editor tool + panel); app telemetry titled **System Logs** (no bare “Logs”).
-- **Dockable Status & System Logs** — Status bar and System Logs are FloatableShell panes (`statusbar`, `logs`); closable/dockable like Results. Topbar toggles: **Script Logs**, **System Logs**, **Status**.
+- **Status bar** — restored classic fixed footer look (no panel title chrome).
+- **System Logs** — restored classic collapsible strip (expand/collapse body); topbar shows/hides the strip. Label **System Logs** (not bare “Logs”).
+
+## [2.0.4] — 2026-08-11
+
+Script Logs / System Logs naming and Status / System Logs topbar toggles.
+
+### Changed
+
+- **Script Logs / System Logs** — Script `log.*` pane titled **Script Logs** (editor tool + panel); app telemetry titled **System Logs**.
+- **Status & System Logs** — topbar toggles for **Script Logs**, **System Logs**, **Status**.
 
 ## [2.0.3] — 2026-08-11
 
@@ -93,9 +108,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (114 commits)
+### 2026-08 (115 commits)
 
 #### Security
 
@@ -103,6 +120,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `a00ad891` (2026-08-11) — feat(ui): dockable Status and System Logs; Script Logs naming
 - `7f44667e` (2026-08-11) — feat(runtimes,editor): hub, idle lint, save-before-run, tight line gutters
 - `0c4a812d` (2026-08-11) — feat(editor,panels): hover-slide docks and editor chrome polish
 - `7abea423` (2026-08-10) — feat(chart): price-scale decimals with auto from symbol/bars

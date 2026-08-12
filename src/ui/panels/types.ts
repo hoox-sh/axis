@@ -66,19 +66,37 @@ export interface PanelChrome {
    * Ignored for float / window docks.
    */
   hoverSlide?: boolean;
+  /**
+   * When true and dock is left/right/bottom, the panel floats over the chart
+   * edge (chart does not shrink). Ignored for float / window (already overlay).
+   * See {@link ui/panels/panel-manager}.
+   */
+  chartOverlay?: boolean;
 }
 
 /** Full chrome map keyed by {@link PanelId}. */
 export type PanelChromeMap = Record<PanelId, PanelChrome>;
 
 /**
- * Static titles, default docks, and size constraints for each panel.
+ * Static titles, default docks, size constraints, and default float positions.
  * minW/minH are 1px so panels can shrink to the border.
  * Used by FloatableShell headers and default chrome factories.
+ * `defaultX` / `defaultY` are factory float coordinates (viewport-relative at runtime).
  */
 export const PANEL_META: Record<
   PanelId,
-  { title: string; defaultDock: PanelDock; minW: number; minH: number; defaultW: number; defaultH: number }
+  {
+    title: string;
+    defaultDock: PanelDock;
+    minW: number;
+    minH: number;
+    defaultW: number;
+    defaultH: number;
+    /** Default float x (px) when undocked / reset */
+    defaultX: number;
+    /** Default float y (px) when undocked / reset */
+    defaultY: number;
+  }
 > = {
   watchlist: {
     title: 'Watchlist',
@@ -87,6 +105,8 @@ export const PANEL_META: Record<
     minH: 1,
     defaultW: 200,
     defaultH: 420,
+    defaultX: 16,
+    defaultY: 56,
   },
   indicators: {
     title: 'Scripts',
@@ -95,6 +115,8 @@ export const PANEL_META: Record<
     minH: 1,
     defaultW: 224,
     defaultH: 420,
+    defaultX: 1000,
+    defaultY: 56,
   },
   editor: {
     title: 'Editor',
@@ -103,6 +125,8 @@ export const PANEL_META: Record<
     minH: 1,
     defaultW: 460,
     defaultH: 520,
+    defaultX: 780,
+    defaultY: 48,
   },
   results: {
     title: 'Results',
@@ -111,14 +135,19 @@ export const PANEL_META: Record<
     minH: 1,
     defaultW: 640,
     defaultH: 220,
+    defaultX: 48,
+    defaultY: 520,
   },
+  /** Fixed app-shell strip (not a dock portal); chrome.open = show/hide. */
   logs: {
     title: 'System Logs',
-    defaultDock: 'bottom',
+    defaultDock: 'float',
     minW: 1,
-    minH: 80,
+    minH: 1,
     defaultW: 640,
     defaultH: 160,
+    defaultX: 48,
+    defaultY: 560,
   },
   scriptlogs: {
     title: 'Script Logs',
@@ -127,14 +156,19 @@ export const PANEL_META: Record<
     minH: 80,
     defaultW: 640,
     defaultH: 200,
+    defaultX: 48,
+    defaultY: 500,
   },
+  /** Fixed app-shell strip (not a dock portal); chrome.open = show/hide. */
   statusbar: {
     title: 'Status',
-    defaultDock: 'bottom',
+    defaultDock: 'float',
     minW: 1,
-    minH: 28,
+    minH: 1,
     defaultW: 640,
     defaultH: 36,
+    defaultX: 48,
+    defaultY: 700,
   },
   dataview: {
     title: 'Data window',
@@ -143,6 +177,8 @@ export const PANEL_META: Record<
     minH: 1,
     defaultW: 240,
     defaultH: 360,
+    defaultX: 72,
+    defaultY: 56,
   },
   layers: {
     title: 'Layers',
@@ -151,6 +187,8 @@ export const PANEL_META: Record<
     minH: 1,
     defaultW: 260,
     defaultH: 340,
+    defaultX: 16,
+    defaultY: 100,
   },
   alerts: {
     title: 'Alerts',
@@ -159,6 +197,8 @@ export const PANEL_META: Record<
     minH: 1,
     defaultW: 280,
     defaultH: 420,
+    defaultX: 960,
+    defaultY: 56,
   },
   library: {
     title: 'Script Library',
@@ -167,6 +207,8 @@ export const PANEL_META: Record<
     minH: 1,
     defaultW: 300,
     defaultH: 480,
+    defaultX: 940,
+    defaultY: 56,
   },
   datasource: {
     title: 'Data Sources',
@@ -175,6 +217,8 @@ export const PANEL_META: Record<
     minH: 1,
     defaultW: 320,
     defaultH: 520,
+    defaultX: 920,
+    defaultY: 56,
   },
   onchain: {
     title: 'On-Chain',
@@ -183,6 +227,8 @@ export const PANEL_META: Record<
     minH: 1,
     defaultW: 320,
     defaultH: 480,
+    defaultX: 920,
+    defaultY: 80,
   },
 };
 
@@ -195,12 +241,13 @@ export function defaultPanelChrome(id: PanelId, overrides?: Partial<PanelChrome>
   return {
     open: false,
     dock: m.defaultDock,
-    x: 48,
-    y: 48,
+    x: m.defaultX,
+    y: m.defaultY,
     w: m.defaultW,
     h: m.defaultH,
     z: 20,
     hoverSlide: false,
+    chartOverlay: false,
     ...overrides,
   };
 }
@@ -216,19 +263,61 @@ export function isHoverSlideEligible(dock: PanelDock): boolean {
  */
 export function defaultPanelChromeMap(): PanelChromeMap {
   return {
-    watchlist: defaultPanelChrome('watchlist', { open: true, dock: 'left', w: 200 }),
-    indicators: defaultPanelChrome('indicators', { open: false, dock: 'right', w: 224 }),
-    editor: defaultPanelChrome('editor', { open: true, dock: 'right', w: 460 }),
-    results: defaultPanelChrome('results', { open: false, dock: 'bottom', h: 220 }),
-    logs: defaultPanelChrome('logs', { open: false, dock: 'bottom', h: 160 }),
-    scriptlogs: defaultPanelChrome('scriptlogs', { open: false, dock: 'bottom', h: 200 }),
-    // Always-on app HUD by default; closeable like other dock panes
-    statusbar: defaultPanelChrome('statusbar', { open: true, dock: 'bottom', h: 36 }),
+    watchlist: defaultPanelChrome('watchlist', {
+      open: true,
+      dock: 'left',
+      w: 200,
+      x: PANEL_META.watchlist.defaultX,
+      y: PANEL_META.watchlist.defaultY,
+    }),
+    indicators: defaultPanelChrome('indicators', {
+      open: false,
+      dock: 'right',
+      w: 224,
+      x: PANEL_META.indicators.defaultX,
+      y: PANEL_META.indicators.defaultY,
+    }),
+    editor: defaultPanelChrome('editor', {
+      open: true,
+      dock: 'right',
+      w: 460,
+      x: PANEL_META.editor.defaultX,
+      y: PANEL_META.editor.defaultY,
+    }),
+    results: defaultPanelChrome('results', {
+      open: false,
+      dock: 'bottom',
+      h: 220,
+      x: PANEL_META.results.defaultX,
+      y: PANEL_META.results.defaultY,
+    }),
+    // Classic fixed bottom strips (not FloatableShell); chrome.open = show/hide
+    logs: defaultPanelChrome('logs', {
+      open: true,
+      dock: 'float',
+      h: 160,
+      x: PANEL_META.logs.defaultX,
+      y: PANEL_META.logs.defaultY,
+    }),
+    scriptlogs: defaultPanelChrome('scriptlogs', {
+      open: false,
+      dock: 'bottom',
+      h: 200,
+      x: PANEL_META.scriptlogs.defaultX,
+      y: PANEL_META.scriptlogs.defaultY,
+    }),
+    statusbar: defaultPanelChrome('statusbar', {
+      open: true,
+      dock: 'float',
+      h: 36,
+      x: PANEL_META.statusbar.defaultX,
+      y: PANEL_META.statusbar.defaultY,
+    }),
     dataview: defaultPanelChrome('dataview', {
       open: false,
       dock: 'float',
-      x: 72,
-      y: 56,
+      x: PANEL_META.dataview.defaultX,
+      y: PANEL_META.dataview.defaultY,
       w: 240,
       h: 380,
     }),
@@ -236,26 +325,36 @@ export function defaultPanelChromeMap(): PanelChromeMap {
       open: false,
       dock: 'left',
       w: 260,
+      x: PANEL_META.layers.defaultX,
+      y: PANEL_META.layers.defaultY,
     }),
     alerts: defaultPanelChrome('alerts', {
       open: false,
       dock: 'right',
       w: 280,
+      x: PANEL_META.alerts.defaultX,
+      y: PANEL_META.alerts.defaultY,
     }),
     library: defaultPanelChrome('library', {
       open: false,
       dock: 'right',
       w: 300,
+      x: PANEL_META.library.defaultX,
+      y: PANEL_META.library.defaultY,
     }),
     datasource: defaultPanelChrome('datasource', {
       open: false,
       dock: 'right',
       w: 320,
+      x: PANEL_META.datasource.defaultX,
+      y: PANEL_META.datasource.defaultY,
     }),
     onchain: defaultPanelChrome('onchain', {
       open: false,
       dock: 'right',
       w: 320,
+      x: PANEL_META.onchain.defaultX,
+      y: PANEL_META.onchain.defaultY,
     }),
   };
 }

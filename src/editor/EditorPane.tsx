@@ -25,7 +25,7 @@
  * **icon + label** always (no hover slide-in): **Run**, **Library**,
  * **Scriptlogs**, **Profiler**. Secondary tools (inline debug, chart pins,
  * column ruler, format) live in a **right overflow** next to close.
- * **Open in new tab** stays in the left dock menu.
+ * **Open in new tab** is in the left dock menu and the overflow panel options.
  *
  * Set `standalone` for the `?view=editor` popout window (simplified chrome).
  *
@@ -319,7 +319,7 @@ export const EditorPane: Component<Props> = (props) => {
     </button>
   );
 
-  /** Right overflow (next to close): view / debug / format toggles. */
+  /** Right overflow (next to close): view / debug / format / window toggles. */
   const editorOverflowMenu = () => (
     <EditorOverflowMenu
       pinCount={pinCount()}
@@ -333,6 +333,9 @@ export const EditorPane: Component<Props> = (props) => {
         props.standalone ? undefined : () => toggleLibraryPanel()
       }
       libraryOpen={!props.standalone && isPanelOpen('library')}
+      onOpenNewTab={
+        props.standalone ? undefined : () => popoutLiveEditor('tab')
+      }
     />
   );
 
@@ -399,7 +402,7 @@ export const EditorPane: Component<Props> = (props) => {
   );
 };
 
-/** Right-side overflow: view toggles + format (secondary). */
+/** Right-side overflow: view toggles + format + window (secondary). */
 const EditorOverflowMenu: Component<{
   pinCount: number;
   pinsTitle: string;
@@ -410,6 +413,8 @@ const EditorOverflowMenu: Component<{
   onFormat: () => void;
   onOpenLibrary?: () => void;
   libraryOpen?: boolean;
+  /** Open live editor in a full browser tab (main window only). */
+  onOpenNewTab?: () => void;
 }> = (props) => {
   const [open, setOpen] = createSignal(false);
   let wrapEl: HTMLDivElement | undefined;
@@ -582,6 +587,20 @@ const EditorOverflowMenu: Component<{
             <Icons.alignLeft size={14} />
             <span>Format document</span>
           </button>
+          <Show when={props.onOpenNewTab}>
+            <div class="axis-panel-menu-section">Window</div>
+            <button
+              type="button"
+              role="menuitem"
+              class="axis-panel-menu-item"
+              title="Open editor in a new browser tab"
+              data-testid="axis-editor-btn-new-tab-overflow"
+              onClick={() => props.onOpenNewTab?.()}
+            >
+              <Icons.externalLink size={14} />
+              <span>Open in new tab</span>
+            </button>
+          </Show>
         </div>
       </Show>
     </div>

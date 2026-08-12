@@ -70,6 +70,14 @@ import {
   setPanelHoverSlideExpanded,
 } from '../ui/panels/hover-slide';
 import {
+  chartOverlayGeometry,
+  defaultPanelPosition,
+  getDefaultPanelChrome,
+  isChartOverlayEligible,
+  isManagedFloatablePanel,
+  PANEL_IDS,
+} from '../ui/panels/panel-manager';
+import {
   defaultChartLayout,
   normalizeChartLayout,
   type ChartGridMode,
@@ -751,6 +759,12 @@ function mergePanelChrome(
         : typeof fromLegacy.hoverSlide === 'boolean'
           ? fromLegacy.hoverSlide
           : base[id].hoverSlide;
+    const chartOverlayRaw =
+      typeof fromDisk.chartOverlay === 'boolean'
+        ? fromDisk.chartOverlay
+        : typeof fromLegacy.chartOverlay === 'boolean'
+          ? fromLegacy.chartOverlay
+          : base[id].chartOverlay;
     base[id] = {
       ...base[id],
       ...fromLegacy,
@@ -763,6 +777,7 @@ function mergePanelChrome(
       h: Number(fromDisk.h ?? fromLegacy.h ?? base[id].h) || base[id].h,
       z: Number(fromDisk.z ?? fromLegacy.z ?? base[id].z) || base[id].z,
       hoverSlide: !!hoverSlideRaw,
+      chartOverlay: !!chartOverlayRaw,
     };
   }
   return base;
@@ -2180,7 +2195,9 @@ export function isPanelOpen(id: PanelId): boolean {
     case 'results':
       return !!store.resultsPanel.open || chromeOpen;
     case 'logs':
-      return !!store.logsPanel.open || chromeOpen;
+      // Visibility of the System Logs strip (topbar). Body expand uses
+      // `logsPanel.open` separately so collapse does not hide the strip.
+      return chromeOpen;
     case 'scriptlogs':
     case 'statusbar':
     case 'library':
@@ -2251,7 +2268,11 @@ function openIdsOnDock(dock: PanelDock): PanelId[] {
   if (dock === 'float' || dock === 'window') return [];
   return DOCK_STACK_IDS.filter((pid) => {
     if (!isPanelOpen(pid)) return false;
-    return store.panelChrome?.[pid]?.dock === dock;
+    const c = store.panelChrome?.[pid];
+    if (!c || c.dock !== dock) return false;
+    // Chart-overlay panels do not occupy the dock column
+    if (c.chartOverlay && isChartOverlayEligible(dock)) return false;
+    return true;
   });
 }
 
@@ -2355,6 +2376,140 @@ export function togglePanelHoverSlide(id: PanelId): boolean {
 /** Read hover-slide preference (false when unset). */
 export function isPanelHoverSlide(id: PanelId): boolean {
   return !!getPanelChrome(id).hoverSlide;
+}
+
+function requestPanelChartReflow() {
+  try {
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.dispatchEvent === 'function' &&
+      typeof CustomEvent === 'function'
+    ) {
+      window.dispatchEvent(new CustomEvent('axis-chart-reflow'));
+    }
+  } catch {
+    /* ignore — partial window in unit tests */
+  }
+}
+
+/**
+ * Reset one panel to factory dock, size, position, and flags.
+ * Keeps the current open/closed state so an open shell does not vanish.
+ * Fixed app-shell strips (logs / statusbar) only restore size flags.
+ */
+export function resetPanelToDefault(id: PanelId): void {
+  ensurePanelChrome();
+  const def = getDefaultPanelChrome(id);
+  const keepOpen = isPanelOpen(id);
+  const pos = defaultPanelPosition(id);
+  setStore('panelChrome', id, {
+    open: keepOpen,
+    dock: def.dock,
+    x: pos.x,
+    y: pos.y,
+    w: def.w,
+    h: def.h,
+    z: def.z,
+    hoverSlide: !!def.hoverSlide,
+    chartOverlay: !!def.chartOverlay,
+  });
+  // Mirror legacy layout fields
+  mirrorPanelWidth(id, def.w);
+  if (id === 'results') setStore('resultsPanel', 'height', def.h);
+  if (id === 'logs') setStore('logsPanel', 'height', def.h);
+  if (id === 'editor' && def.dock !== 'window') {
+    setStore('editor', 'mode', 'docked');
+  }
+  syncLegacyOpen(id, keepOpen);
+  clearPanelHoverSlideExpanded(id);
+  if (def.dock === 'left' || def.dock === 'right') {
+    rebalanceDockStack(def.dock);
+  }
+  persist();
+  requestPanelChartReflow();
+}
+
+/**
+ * Enable/disable **chart overlay** for one panel.
+ * When on and docked left/right/bottom, the panel floats over the chart edge
+ * (dock column does not shrink). Float/window docks are always overlays.
+ */
+export function setPanelChartOverlay(id: PanelId, enabled: boolean): void {
+  ensurePanelChrome();
+  if (!isManagedFloatablePanel(id)) return;
+  const on = !!enabled;
+  const cur = getPanelChrome(id);
+  setStore('panelChrome', id, 'chartOverlay', on);
+  if (on) {
+    // Seed edge geometry when entering overlay from a layout dock
+    if (isChartOverlayEligible(cur.dock)) {
+      const vw =
+        typeof window !== 'undefined' && window.innerWidth > 0 ? window.innerWidth : 1280;
+      const vh =
+        typeof window !== 'undefined' && window.innerHeight > 0 ? window.innerHeight : 800;
+      const geo = chartOverlayGeometry({ ...cur, chartOverlay: true }, vw, vh);
+      setStore('panelChrome', id, 'x', geo.x);
+      setStore('panelChrome', id, 'y', geo.y);
+      if (cur.dock === 'bottom') {
+        setStore('panelChrome', id, 'h', geo.h);
+      } else {
+        setStore('panelChrome', id, 'w', geo.w);
+      }
+      bumpPanelZ(id);
+    }
+    clearPanelHoverSlideExpanded(id);
+  } else if (isChartOverlayEligible(cur.dock)) {
+    // Returning to layout dock — rebalance peers
+    rebalanceDockStack(cur.dock);
+    if (cur.hoverSlide) {
+      setPanelHoverSlideExpanded(id, false);
+    }
+  }
+  persist();
+  requestPanelChartReflow();
+}
+
+/** Toggle {@link setPanelChartOverlay} for a panel. */
+export function togglePanelChartOverlay(id: PanelId): boolean {
+  const next = !getPanelChrome(id).chartOverlay;
+  setPanelChartOverlay(id, next);
+  return next;
+}
+
+/** Read chart-overlay preference (false when unset). */
+export function isPanelChartOverlay(id: PanelId): boolean {
+  return !!getPanelChrome(id).chartOverlay;
+}
+
+/**
+ * Main panel-manager bulk control: set chart overlay on/off for **all**
+ * managed floatable panels (every dock option / panel id).
+ *
+ * When `enabled` is true, edge-docked panels float over the chart.
+ * When false, they return to normal dock columns (chart shrinks).
+ */
+export function setAllPanelsChartOverlay(enabled: boolean): void {
+  ensurePanelChrome();
+  const on = !!enabled;
+  for (const id of PANEL_IDS) {
+    if (!isManagedFloatablePanel(id)) continue;
+    const cur = getPanelChrome(id);
+    // Always write the flag so float panels keep preference for later docks
+    setStore('panelChrome', id, 'chartOverlay', on);
+    if (on && isChartOverlayEligible(cur.dock) && isPanelOpen(id)) {
+      bumpPanelZ(id);
+      clearPanelHoverSlideExpanded(id);
+    } else if (!on && isChartOverlayEligible(cur.dock)) {
+      rebalanceDockStack(cur.dock);
+    }
+  }
+  persist();
+  requestPanelChartReflow();
+}
+
+/** True when every managed panel has chart overlay enabled. */
+export function isAllPanelsChartOverlay(): boolean {
+  return PANEL_IDS.filter(isManagedFloatablePanel).every((id) => !!getPanelChrome(id).chartOverlay);
 }
 
 /**
