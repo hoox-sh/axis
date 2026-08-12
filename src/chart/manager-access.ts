@@ -112,6 +112,11 @@ function clearChartScriptState(mgr: PaneManager, layer: DrawingLayer | undefined
     /* optional */
   }
   try {
+    clearScriptPaneLayers();
+  } catch {
+    /* optional */
+  }
+  try {
     layer?.clearPlotFills?.();
   } catch {
     /* optional */
@@ -214,6 +219,60 @@ export function getDrawingLayer(): DrawingLayer | undefined {
   const id = getActiveSlotId();
   if (id) return getSlotDrawingLayer(id) ?? drawingLayer;
   return drawingLayer;
+}
+
+/**
+ * Script-only drawing layers for non-price panes (oscillator Y scale).
+ * Keyed by pane id within the active chart slot.
+ */
+const scriptPaneLayers = new Map<string, DrawingLayer>();
+
+/**
+ * Ensure a script-only {@link DrawingLayer} on an indicator sub-pane so
+ * `line.new` / labels use that pane’s price scale (overlay=false scripts).
+ */
+export function ensureScriptPaneLayer(paneId: string): DrawingLayer | undefined {
+  if (!paneId || paneId === 'price' || paneId === 'volume') {
+    return getDrawingLayer();
+  }
+  const existing = scriptPaneLayers.get(paneId);
+  if (existing) return existing;
+  const mgr = getManager();
+  if (!mgr) return undefined;
+  const pane = mgr.getPane?.(paneId);
+  if (!pane?.chart) return undefined;
+  // Prefer first line overlay series as Y reference; fall back to any series
+  const seriesMap = pane.series || {};
+  const seriesKey =
+    Object.keys(seriesMap).find((k) => k && !k.startsWith('_')) ||
+    Object.keys(seriesMap)[0];
+  const series = seriesKey ? seriesMap[seriesKey] : undefined;
+  if (!series) return undefined;
+  const paneElId =
+    typeof mgr.paneDomId === 'function' ? mgr.paneDomId(paneId) : `pane-${paneId}`;
+  const el = typeof document !== 'undefined' ? document.getElementById(paneElId) : null;
+  if (!el || typeof document.createElementNS !== 'function') return undefined;
+  try {
+    const layer = new DrawingLayer(el, pane.chart, series as never, {
+      scriptOnly: true,
+    });
+    scriptPaneLayers.set(paneId, layer);
+    return layer;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Drop script-only layers (history reload / pane destroy). */
+export function clearScriptPaneLayers() {
+  for (const layer of scriptPaneLayers.values()) {
+    try {
+      layer.destroy();
+    } catch {
+      /* ignore */
+    }
+  }
+  scriptPaneLayers.clear();
 }
 
 /** Replace or clear the module-local layer ref (e.g. on chart teardown). */

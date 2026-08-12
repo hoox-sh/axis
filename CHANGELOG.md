@@ -22,6 +22,8 @@ _Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 - **`linefill.new` paint** — normalize + SVG quad fill between two lines (pairs with pyne `export_for_api` linefill serialization).
 - **`barcolor()`** — per-bar candle body/wick tint from `kind: barcolor` series (LWC color fields).
 - **plotshape multi-script** — shape markers are owner-scoped by script id so one run does not wipe another script’s shapes.
+- **Non-overlay drawings** — `overlay=false` scripts paint geometry on the indicator pane Y-scale; `force_overlay` still routes to price.
+- **Compile `line.set_*`** — pyne folds set events onto handles before export (final geometry for AXIS).
 
 ##
 

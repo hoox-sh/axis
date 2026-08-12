@@ -72,6 +72,7 @@ import { applyStrategyPropsToSource } from '../results/strategy-props';
 import {
   getManager,
   getDrawingLayer,
+  ensureScriptPaneLayer,
   applyDebugPinsToChart,
 } from '../chart/manager-access';
 import { PLOT_PALETTE } from '../chart/series-factory';
@@ -1168,18 +1169,33 @@ async function runAndApplyInner(
       const drawings = Array.isArray((result as RunResult & { drawings?: unknown[] }).drawings)
         ? (result as RunResult & { drawings?: unknown[] }).drawings
         : undefined;
-      const layer = getActiveDrawingLayer() ?? getDrawingLayer();
+      const priceLayer = getActiveDrawingLayer() ?? getDrawingLayer();
       if (drawings?.length) {
         const limits = resolveDrawingLimits(
           script,
           (result.meta as Record<string, unknown> | undefined) ?? null,
         );
-        const keptCount = layer?.setScriptDrawings(drawings, limits) ?? 0;
+        const normalized = normalizeScriptDrawings(drawings);
+        const kept = garbageCollectScriptDrawings(normalized, limits);
+        // Non-overlay scripts: force_overlay → price pane; rest → indicator pane Y
+        let keptCount = 0;
+        if (!overlay && paneId !== 'price') {
+          const onPrice = kept.filter((d) => d.forceOverlay);
+          const onPane = kept.filter((d) => !d.forceOverlay);
+          keptCount = priceLayer?.setScriptDrawings(onPrice, limits) ?? 0;
+          const paneLayer = ensureScriptPaneLayer(paneId);
+          if (paneLayer) {
+            keptCount += paneLayer.setScriptDrawings(onPane, limits);
+          } else if (onPane.length) {
+            // Fall back to price if sub-pane layer unavailable
+            keptCount = priceLayer?.setScriptDrawings(kept, limits) ?? 0;
+          }
+        } else {
+          keptCount = priceLayer?.setScriptDrawings(kept, limits) ?? 0;
+        }
         if (!silent) {
-          const normalized = normalizeScriptDrawings(drawings);
-          const kept = garbageCollectScriptDrawings(normalized, limits);
           const dropped = normalized.length - kept.length;
-          if (!layer) {
+          if (!priceLayer && kept.length) {
             appendLog(
               'warn',
               `Pine drawings: engine returned ${drawings.length} object(s) but no drawing layer is mounted (load bars first)`,
@@ -1194,18 +1210,29 @@ async function runAndApplyInner(
               'drawings',
             );
           } else {
+            const paneNote =
+              !overlay && paneId !== 'price'
+                ? ` · pane=${paneId}`
+                : '';
             appendLog(
               'ok',
               dropped > 0
-                ? `Pine drawings: ${kept.length} object(s) (${dropped} GC'd by max_*_count)`
-                : `Pine drawings: ${keptCount || kept.length} object(s)`,
+                ? `Pine drawings: ${kept.length} object(s) (${dropped} GC'd by max_*_count)${paneNote}`
+                : `Pine drawings: ${keptCount || kept.length} object(s)${paneNote}`,
               'drawings',
             );
           }
         }
       } else if (!silent) {
         // Only clear on interactive full runs when engine returned none
-        layer?.clearScriptDrawings();
+        priceLayer?.clearScriptDrawings();
+        if (!overlay && paneId !== 'price') {
+          try {
+            ensureScriptPaneLayer(paneId)?.clearScriptDrawings();
+          } catch {
+            /* optional */
+          }
+        }
       }
     } catch {
       /* drawing layer optional in tests */

@@ -68,6 +68,11 @@ export interface ScriptDrawing {
   extend?: string;
   closed?: boolean;
   points?: Array<{ time: number; price: number }>;
+  /**
+   * Pine `force_overlay=true` — always paint on the price pane even when the
+   * script is a non-overlay indicator.
+   */
+  forceOverlay?: boolean;
 }
 
 /**
@@ -544,6 +549,7 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
           width: clampWidth(r.width, 1),
           style: normalizeLineStyle(r.style, 'solid'),
           extend: normalizeExtend(r.extend, extendDefault),
+          forceOverlay: Boolean(r.force_overlay ?? r.forceOverlay),
         });
       } else if (type === 'box' || type === 'rect' || type === 'rectangle') {
         const t2 = num(r.t2 ?? r.x2 ?? r.right);
@@ -560,6 +566,7 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
           bgcolor: sanitizeStrokeColor(r.bgcolor, 'rgba(147,159,255,0.08)'),
           width: clampWidth(r.width ?? r.border_width, 1),
           text: sanitizeDrawingText(r.text, DRAWING_TEXT_MAX),
+          forceOverlay: Boolean(r.force_overlay ?? r.forceOverlay),
         });
       } else if (type === 'label' || type === 'text') {
         out.push({
@@ -570,6 +577,7 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
           color: sanitizeStrokeColor(r.color, '#939fff'),
           textcolor: sanitizeStrokeColor(r.textcolor ?? r.text_color, '#eceef4'),
           text: sanitizeDrawingText(r.text, DRAWING_TEXT_MAX),
+          forceOverlay: Boolean(r.force_overlay ?? r.forceOverlay),
         });
       } else if (type === 'linefill' || type === 'line_fill') {
         // pyne export: line1 (t1/p1→t2/p2) + line2 (t3/p3→t4/p4)

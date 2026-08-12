@@ -202,26 +202,41 @@ export class DrawingLayer {
   private lastScriptSig = '';
 
   /**
-   * @param host - Price pane DOM element (positioning context; gets the SVG child)
+   * When true, this layer only paints Pine script drawings (no user tools /
+   * selection). Used for non-overlay indicator panes so Y maps to the
+   * oscillator scale. Does not claim {@link activeLayer}.
+   */
+  private scriptOnly = false;
+
+  /**
+   * @param host - Pane DOM element (positioning context; gets the SVG child)
    * @param chart - LWC chart API (time scale + crosshair subscriptions)
-   * @param series - Price series for price ↔ Y conversion (any main series type)
+   * @param series - Series for price ↔ Y conversion (price candle or indicator line)
+   * @param opts.scriptOnly - Script drawings only (indicator sub-pane)
    */
   constructor(
     host: HTMLElement,
     chart: IChartApi,
     series: ISeriesApi<any>,
+    opts?: { scriptOnly?: boolean },
   ) {
     this.host = host;
     this.chart = chart;
     this.series = series;
-    activeLayer = this;
+    this.scriptOnly = !!opts?.scriptOnly;
+    if (!this.scriptOnly) activeLayer = this;
 
     // Ensure host is positioning context
     const cs = getComputedStyle(host);
     if (cs.position === 'static') host.style.position = 'relative';
 
     this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    this.svg.setAttribute('class', 'axis-drawing-layer');
+    this.svg.setAttribute(
+      'class',
+      this.scriptOnly
+        ? 'axis-drawing-layer axis-script-only'
+        : 'axis-drawing-layer',
+    );
     Object.assign(this.svg.style, {
       position: 'absolute',
       inset: '0',
@@ -242,21 +257,28 @@ export class DrawingLayer {
     // Fills under lines/labels; user drawings on top
     this.svg.appendChild(this.gFill);
     this.svg.appendChild(this.gScript);
-    this.svg.appendChild(this.gDraw);
-    this.svg.appendChild(this.gDraft);
+    if (!this.scriptOnly) {
+      this.svg.appendChild(this.gDraw);
+      this.svg.appendChild(this.gDraft);
+    }
     host.appendChild(this.svg);
 
-    this.bindEvents();
-    // Seed a small empty right margin so place tools can start past the last bar
-    try {
-      const cur = this.chart.timeScale().options().rightOffset ?? 0;
-      if (cur < DRAWING_RIGHT_OFFSET_DEFAULT) {
-        this.chart.timeScale().applyOptions({
-          rightOffset: DRAWING_RIGHT_OFFSET_DEFAULT,
-        });
+    if (this.scriptOnly) {
+      // Pan/zoom only — no user tool hit-testing
+      this.bindScriptOnlyEvents();
+    } else {
+      this.bindEvents();
+      // Seed a small empty right margin so place tools can start past the last bar
+      try {
+        const cur = this.chart.timeScale().options().rightOffset ?? 0;
+        if (cur < DRAWING_RIGHT_OFFSET_DEFAULT) {
+          this.chart.timeScale().applyOptions({
+            rightOffset: DRAWING_RIGHT_OFFSET_DEFAULT,
+          });
+        }
+      } catch {
+        /* ignore */
       }
-    } catch {
-      /* ignore */
     }
     this.syncSize();
     this.redraw();
@@ -559,6 +581,23 @@ export class DrawingLayer {
 
   private emit() {
     this.onChange?.(this.drawings.slice());
+  }
+
+  /** Time-scale + resize only (indicator pane script drawings). */
+  private bindScriptOnlyEvents() {
+    const subRange = () => this.scheduleRedraw();
+    this.chart.timeScale().subscribeVisibleLogicalRangeChange(subRange);
+    this.unsubs.push(() => {
+      try {
+        this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(subRange);
+      } catch {
+        /* ignore */
+      }
+    });
+    this.ro = new ResizeObserver(() => {
+      this.scheduleRedraw();
+    });
+    this.ro.observe(this.host);
   }
 
   /** Wire pointer/keyboard, range/crosshair re-paint, and host ResizeObserver. */
