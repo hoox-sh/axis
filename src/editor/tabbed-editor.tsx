@@ -45,6 +45,7 @@ import {
   loadEditorDoc,
   saveEditorDoc,
   setStatus,
+  setEditorOpen,
   toggleDebugPinsEnabled,
   toggleEditorWrapEnabled,
   toggleEditorRulerEnabled,
@@ -353,10 +354,72 @@ export const TabbedEditor: Component<Props> = (props) => {
     window.addEventListener('axis-editor-save-library', onSaveLibrary);
     window.addEventListener('axis-editor-git-push', onGitPush);
     window.addEventListener('axis-editor-git-pull', onGitPull);
+
+    /**
+     * PYNE Agent plugin bridge:
+     * - `axis-agent-insert-script` → replace active tab body
+     * - `axis-agent-open-script` → new tab (via loadLibraryDocs)
+     */
+    const onAgentInsert = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ code?: string; name?: string }>).detail;
+      const code = typeof detail?.code === 'string' ? detail.code : '';
+      if (!code.trim()) return;
+      setEditorOpen(true);
+      props.editorRef?.setDoc?.(code);
+      // Keep tab model in sync with CM buffer
+      setTabs((prev) => {
+        const idx = activeTab();
+        return prev.map((tab, i) =>
+          i === idx
+            ? {
+                ...tab,
+                doc: code,
+                dirty: true,
+                name: detail?.name?.trim() || tab.name,
+              }
+            : tab,
+        );
+      });
+      scheduleDraft(code, detail?.name);
+      setStats(countDocStats(code));
+      setStatus('ready', 'Agent script added to editor');
+    };
+    const onAgentOpen = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ code?: string; name?: string }>).detail;
+      const code = typeof detail?.code === 'string' ? detail.code : '';
+      if (!code.trim()) return;
+      setEditorOpen(true);
+      const name = (detail?.name || 'Agent script').trim() || 'Agent script';
+      // Snapshot live CM buffer, then open a dirty new tab with agent source
+      let snapshot = tabs();
+      if (props.editorRef?.getDoc) {
+        const currentDoc = props.editorRef.getDoc();
+        const cur = activeTab();
+        snapshot = snapshot.map((tab, i) =>
+          i === cur ? { ...tab, doc: currentDoc } : tab,
+        );
+      }
+      const tab = { ...newTab(name, code), dirty: true };
+      const next = [...snapshot, tab];
+      const newIdx = next.length - 1;
+      batch(() => {
+        setTabs(next);
+        setActiveTab(newIdx);
+      });
+      props.editorRef?.setDoc?.(code);
+      scheduleDraft(code, name);
+      setStats(countDocStats(code));
+      setStatus('ready', `Opened "${name}" from PYNE Agent`);
+    };
+    window.addEventListener('axis-agent-insert-script', onAgentInsert);
+    window.addEventListener('axis-agent-open-script', onAgentOpen);
+
     onCleanup(() => {
       window.removeEventListener('axis-editor-save-library', onSaveLibrary);
       window.removeEventListener('axis-editor-git-push', onGitPush);
       window.removeEventListener('axis-editor-git-pull', onGitPull);
+      window.removeEventListener('axis-agent-insert-script', onAgentInsert);
+      window.removeEventListener('axis-agent-open-script', onAgentOpen);
     });
   });
 
