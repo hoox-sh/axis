@@ -9,15 +9,22 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-12 · 197 commits · describe-tag: `v2.0.4`_
+_Generated/updated: 2026-08-12 · 200 commits · describe-tag: `v2.0.5`_
 
 ---
 
 ## [Unreleased]
 
+_Nothing yet — next changes land here._
+
+## [2.0.6] — 2026-08-12
+
+Test suite isolation and store hydrate defaults hardening.
+
 ### Fixed
 
 - **Tests** — isolate store/state defaults across suites; strategy-extra uses event prices (not bar fills); engine `isReady` mock returns JSON health; hydrate never restores plane telemetry from disk.
+- **Store seed** — createStore no longer aliases nested `DEFAULTS` objects (telemetry/panels/live), so path updates cannot poison factory defaults.
 
 ## [2.0.5] — 2026-08-12
 
@@ -112,9 +119,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (115 commits)
+### 2026-08 (118 commits)
 
 #### Security
 
@@ -122,6 +131,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `e96114b0` (2026-08-12) — feat(editor): handle PYNE Agent insert/open script events
+- `e29aa644` (2026-08-12) — feat(ui,panels): panel defaults, chart overlay, classic logs chrome
 - `a00ad891` (2026-08-11) — feat(ui): dockable Status and System Logs; Script Logs naming
 - `7f44667e` (2026-08-11) — feat(runtimes,editor): hub, idle lint, save-before-run, tight line gutters
 - `0c4a812d` (2026-08-11) — feat(editor,panels): hover-slide docks and editor chrome polish
@@ -176,6 +187,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `299ec83c` (2026-08-12) — fix(test,store): green suite — isolate defaults, health mock, bar fills
 - `41099e71` (2026-08-11) — fix(plugins): clearer errors when cross-origin plugin import lacks CORS
 - `3bc43323` (2026-08-11) — fix(panels): harden hover-slide reflow for non-DOM test windows
 - `0a668e00` (2026-08-11) — fix(security,perf): gate /api/run, OAuth clientId, WS cool-down
