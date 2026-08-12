@@ -51,6 +51,8 @@ import {
   clampTimeToLastBar,
   dedupeScriptLabelsAtSameTime,
   garbageCollectScriptDrawings,
+  labelBubbleLayout,
+  labelFontSizePx,
   normalizeScriptDrawings,
   type DrawingLimits,
   type ScriptDrawing,
@@ -1671,16 +1673,52 @@ export class DrawingLayer {
     }
     if (d.type === 'label') {
       if (!Number.isFinite(d.t1) || !Number.isFinite(d.p1)) return;
-      const c = this.toXYScript({ time: d.t1, price: d.p1 });
+      // yloc.abovebar / belowbar: re-anchor price to bar high/low when OHLC available
+      let price = d.p1;
+      const yloc = (d.yloc || 'price').toLowerCase();
+      if (yloc === 'abovebar' || yloc === 'belowbar') {
+        const bar = this.barNearTime(d.t1);
+        if (bar) {
+          price = yloc === 'abovebar' ? bar.high : bar.low;
+        }
+      }
+      if (!Number.isFinite(price)) return;
+      const c = this.toXYScript({ time: d.t1, price });
       if (!c) return;
-      // Bubble
       const text = sanitizeDrawingText(d.text ?? '');
-      const pad = 4;
-      const tw = Math.max(24, text.length * 6.5 + pad * 2);
-      const th = 16;
+      const fontPx = labelFontSizePx(d.size, 10);
+      const style = (d.style || 'label_center').toLowerCase();
+      const textFill = sanitizeStrokeColor(d.textcolor || '#0a0b10', '#0a0b10');
+      // Non-bubble icon styles (xcross, arrow, …): marker + optional text beside
+      if (
+        style === 'none' ||
+        style === 'xcross' ||
+        style === 'cross' ||
+        style === 'triangleup' ||
+        style === 'triangledown' ||
+        style === 'flag' ||
+        style === 'circle' ||
+        style === 'arrowup' ||
+        style === 'arrowdown' ||
+        style === 'square' ||
+        style === 'diamond' ||
+        style === 'text_outline'
+      ) {
+        this.paintScriptLabelMarker(g, c.x, c.y, style, stroke, pe);
+        if (text) {
+          label(g, c.x + 6, c.y + fontPx * 0.35, text, textFill, fontPx, 'start');
+        }
+        return;
+      }
+      // Bubble styles: label_up / down / left / right / center (+ corners)
+      const pad = Math.max(3, Math.round(fontPx * 0.35));
+      const charW = fontPx * 0.62;
+      const tw = Math.max(fontPx * 2.2, text.length * charW + pad * 2);
+      const th = Math.max(14, fontPx + pad);
+      const layout = labelBubbleLayout(c.x, c.y, tw, th, style, 6);
       el(g, 'rect', {
-        x: String(c.x - tw / 2),
-        y: String(c.y - th - 6),
+        x: String(layout.rectX),
+        y: String(layout.rectY),
         width: String(tw),
         height: String(th),
         rx: '2',
@@ -1689,16 +1727,216 @@ export class DrawingLayer {
         'stroke-width': '1',
         'pointer-events': pe,
       });
-      label(
-        g,
-        c.x,
-        c.y - 10,
-        text,
-        sanitizeStrokeColor(d.textcolor || '#0a0b10', '#0a0b10'),
-        10,
-        'middle',
-      );
+      // Small pointer tip toward the anchor for directional bubbles
+      if (style !== 'label_center' && style !== 'center') {
+        this.paintLabelTip(g, c.x, c.y, layout.rectX, layout.rectY, tw, th, style, stroke, pe);
+      }
+      label(g, layout.textX, layout.textY, text, textFill, fontPx, layout.textAnchor);
       circle(g, c.x, c.y, 2.5, stroke);
+    }
+  }
+
+  /** Nearest OHLCV bar for `yloc.abovebar` / `belowbar` (exact time preferred). */
+  private barNearTime(t: number): BarLike | null {
+    const bars = this.barsProvider?.();
+    if (!bars?.length || !Number.isFinite(t)) return null;
+    let best: BarLike | null = null;
+    let bestDt = Infinity;
+    for (const b of bars) {
+      if (!b || !Number.isFinite(b.time)) continue;
+      const dt = Math.abs(b.time - t);
+      if (dt < bestDt) {
+        bestDt = dt;
+        best = b;
+        if (dt === 0) break;
+      }
+    }
+    return best;
+  }
+
+  /** Tiny triangular tip from bubble edge toward the anchor point. */
+  private paintLabelTip(
+    g: SVGGElement,
+    ax: number,
+    ay: number,
+    rx: number,
+    ry: number,
+    tw: number,
+    th: number,
+    style: string,
+    fill: string,
+    pe: string,
+  ) {
+    const st = style.toLowerCase();
+    let x1 = ax;
+    let y1 = ay;
+    let x2 = ax;
+    let y2 = ay;
+    let x3 = ax;
+    let y3 = ay;
+    // Prefer horizontal tips for *_left / *_right (including corner styles)
+    if (st === 'label_left' || st === 'left' || st.endsWith('_left')) {
+      const midY = ry + th / 2;
+      const right = rx + tw;
+      x1 = right;
+      y1 = midY - 4;
+      x2 = right;
+      y2 = midY + 4;
+      x3 = Math.max(ax, right + 6);
+      y3 = ay;
+    } else if (st === 'label_right' || st === 'right' || st.endsWith('_right')) {
+      const midY = ry + th / 2;
+      x1 = rx;
+      y1 = midY - 4;
+      x2 = rx;
+      y2 = midY + 4;
+      x3 = Math.min(ax, rx - 6);
+      y3 = ay;
+    } else if (st === 'label_up' || st === 'up' || st.includes('upper')) {
+      // Tip hangs from bottom-center of bubble toward anchor
+      const midX = rx + tw / 2;
+      const bot = ry + th;
+      x1 = midX - 4;
+      y1 = bot;
+      x2 = midX + 4;
+      y2 = bot;
+      x3 = ax;
+      y3 = Math.min(ay, bot + 6);
+    } else if (st === 'label_down' || st === 'down' || st.includes('lower')) {
+      const midX = rx + tw / 2;
+      x1 = midX - 4;
+      y1 = ry;
+      x2 = midX + 4;
+      y2 = ry;
+      x3 = ax;
+      y3 = Math.max(ay, ry - 6);
+    } else {
+      return;
+    }
+    el(g, 'polygon', {
+      points: `${x1},${y1} ${x2},${y2} ${x3},${y3}`,
+      fill,
+      stroke: '#0a0b10',
+      'stroke-width': '1',
+      'pointer-events': pe,
+    });
+  }
+
+  /** Simple marker for non-bubble label styles (cross, triangle, …). */
+  private paintScriptLabelMarker(
+    g: SVGGElement,
+    x: number,
+    y: number,
+    style: string,
+    stroke: string,
+    pe: string,
+  ) {
+    const r = 5;
+    if (style === 'circle') {
+      circle(g, x, y, r, stroke);
+      return;
+    }
+    if (style === 'square') {
+      el(g, 'rect', {
+        x: String(x - r),
+        y: String(y - r),
+        width: String(r * 2),
+        height: String(r * 2),
+        fill: stroke,
+        stroke: '#0a0b10',
+        'stroke-width': '1',
+        'pointer-events': pe,
+      });
+      return;
+    }
+    if (style === 'diamond') {
+      el(g, 'polygon', {
+        points: `${x},${y - r} ${x + r},${y} ${x},${y + r} ${x - r},${y}`,
+        fill: stroke,
+        stroke: '#0a0b10',
+        'stroke-width': '1',
+        'pointer-events': pe,
+      });
+      return;
+    }
+    if (style === 'triangleup' || style === 'arrowup') {
+      el(g, 'polygon', {
+        points: `${x},${y - r} ${x + r},${y + r} ${x - r},${y + r}`,
+        fill: stroke,
+        stroke: '#0a0b10',
+        'stroke-width': '1',
+        'pointer-events': pe,
+      });
+      return;
+    }
+    if (style === 'triangledown' || style === 'arrowdown') {
+      el(g, 'polygon', {
+        points: `${x},${y + r} ${x + r},${y - r} ${x - r},${y - r}`,
+        fill: stroke,
+        stroke: '#0a0b10',
+        'stroke-width': '1',
+        'pointer-events': pe,
+      });
+      return;
+    }
+    if (style === 'flag') {
+      el(g, 'line', {
+        x1: String(x),
+        y1: String(y + r),
+        x2: String(x),
+        y2: String(y - r),
+        stroke,
+        'stroke-width': '1.5',
+        'pointer-events': pe,
+      });
+      el(g, 'polygon', {
+        points: `${x},${y - r} ${x + r + 2},${y - r + 3} ${x},${y - 1}`,
+        fill: stroke,
+        'pointer-events': pe,
+      });
+      return;
+    }
+    // cross / xcross / none / default: X mark at anchor
+    if (style !== 'none') {
+      const s = style === 'cross' ? r : r * 0.85;
+      el(g, 'line', {
+        x1: String(x - s),
+        y1: String(y - s),
+        x2: String(x + s),
+        y2: String(y + s),
+        stroke,
+        'stroke-width': '1.5',
+        'pointer-events': pe,
+      });
+      el(g, 'line', {
+        x1: String(x + s),
+        y1: String(y - s),
+        x2: String(x - s),
+        y2: String(y + s),
+        stroke,
+        'stroke-width': '1.5',
+        'pointer-events': pe,
+      });
+      if (style === 'cross') {
+        el(g, 'line', {
+          x1: String(x - s),
+          y1: String(y),
+          x2: String(x + s),
+          y2: String(y),
+          stroke,
+          'stroke-width': '1.5',
+          'pointer-events': pe,
+        });
+        el(g, 'line', {
+          x1: String(x),
+          y1: String(y - s),
+          x2: String(x),
+          y2: String(y + s),
+          stroke,
+          'stroke-width': '1.5',
+          'pointer-events': pe,
+        });
+      }
     }
   }
 
@@ -2223,10 +2461,13 @@ function scriptDrawingsSignature(list: ScriptDrawing[]): string {
         t2: d.t2,
         p2: d.p2,
         c: d.color,
+        tc: d.textcolor,
         n: d.points?.length,
         tx: d.text,
         ext: d.extend,
         st: d.style,
+        yl: d.yloc,
+        sz: d.size,
       })),
     );
   } catch {

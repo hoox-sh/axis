@@ -47,6 +47,7 @@ import {
   type LineWidth,
 } from 'lightweight-charts';
 import {
+  isHistogramSeriesKind,
   normalizeLineStyleToken,
   type PlotSeriesKind,
 } from '../results/plot-visuals';
@@ -600,13 +601,20 @@ function pineLineStyleToLwc(linestyle?: string | null): LineStyle {
 
 /**
  * Pine plot overlay series for a {@link PlotSeriesKind}.
- * - line / stepline / circles → Line (steps / point markers applied)
- * - histogram → Histogram (columns & histogram)
+ * - line / stepline / stepline_diamond / circles / cross → Line
+ * - histogram / columns → Histogram (both base 0; LWC has no column-width API)
  * - area → Area
  *
  * Optional `linestyle` (`plot.linestyle_dashed` / `dotted` / `solid`) sets
- * LWC `lineStyle` on Line / Area / stepline / circles hairline.
- * Histogram ignores linestyle.
+ * LWC `lineStyle` on Line / Area / stepline / marker hairlines.
+ * Histogram / columns ignore linestyle.
+ *
+ * **Presentation notes (LWC limits):**
+ * - `columns` vs `histogram`: same bar geometry; kind kept distinct for
+ *   recreate-on-style-change and docs. Both use `base: 0`.
+ * - `cross`: connector hidden (`lineVisible: false`) + larger point markers
+ *   (LWC point markers are always circles — no native + glyph on Line).
+ * - `stepline_diamond`: WithSteps + point markers at vertices (diamond ≈ circle).
  */
 export function createPlotOverlaySeries(
   chart: IChartApi,
@@ -619,7 +627,9 @@ export function createPlotOverlaySeries(
 ): ISeriesApi<'Line'> | ISeriesApi<'Histogram'> | ISeriesApi<'Area'> {
   const lw = Math.max(1, Math.min(4, Math.round(lineWidth || 2))) as LineWidth;
   const lwcStyle = pineLineStyleToLwc(linestyle);
-  if (seriesKind === 'histogram') {
+  if (isHistogramSeriesKind(seriesKind)) {
+    // LWC HistogramStyleOptions = { color, base } only — no gap/width.
+    // columns and histogram share geometry; base 0 matches Pine zero-origin bars.
     const opts = {
       color,
       priceLineVisible: false,
@@ -644,6 +654,15 @@ export function createPlotOverlaySeries(
   try {
     if (seriesKind === 'stepline') {
       series.applyOptions({ lineType: LineType.WithSteps, lineStyle: lwcStyle });
+    } else if (seriesKind === 'stepline_diamond') {
+      // Step line with vertex markers (LWC circles stand in for diamonds)
+      series.applyOptions({
+        lineType: LineType.WithSteps,
+        lineStyle: lwcStyle,
+        pointMarkersVisible: true,
+        pointMarkersRadius: Math.max(3, lw + 1),
+        crosshairMarkerBackgroundColor: color,
+      });
     } else if (seriesKind === 'circles') {
       series.applyOptions({
         pointMarkersVisible: true,
@@ -652,6 +671,22 @@ export function createPlotOverlaySeries(
         lineWidth: 1 as LineWidth,
         color: colorWithAlpha(color, 0.35),
         crosshairMarkerBackgroundColor: color,
+        lineStyle: lwcStyle,
+      });
+    } else if (seriesKind === 'cross') {
+      // Discrete cross-like marks: hide connector; larger circular markers.
+      // (LWC Line point markers are circles only — distinct from circles style
+      // by no hairline + bigger radius.)
+      series.applyOptions({
+        pointMarkersVisible: true,
+        pointMarkersRadius: Math.max(3, lw + 2),
+        lineVisible: false,
+        lineWidth: 1 as LineWidth,
+        color,
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: Math.max(4, lw + 2),
+        crosshairMarkerBackgroundColor: color,
+        crosshairMarkerBorderColor: color,
         lineStyle: lwcStyle,
       });
     } else {

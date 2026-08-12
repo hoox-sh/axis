@@ -15,9 +15,13 @@ import {
   clampTimeToLastBar,
   dedupeScriptLabelsAtSameTime,
   garbageCollectScriptDrawings,
+  labelBubbleLayout,
+  labelFontSizePx,
   normalizeExtend,
+  normalizeLabelStyle,
   normalizeLineStyle,
   normalizeScriptDrawings,
+  normalizeYloc,
   parseDrawingLimitsFromScript,
   resolveDrawingLimits,
   type ScriptDrawing,
@@ -51,6 +55,68 @@ describe('normalizeScriptDrawings', () => {
     expect(list[0].t2).toBe(200);
     expect(list[1].type).toBe('box');
     expect(list[2].text).toBe('hi');
+    // Defaults when style/yloc omitted
+    expect(list[2].style).toBe('label_center');
+    expect(list[2].yloc).toBe('price');
+  });
+
+  it('passes through label style, yloc, size, textcolor', () => {
+    const list = normalizeScriptDrawings([
+      {
+        type: 'label',
+        t1: 10,
+        p1: 100,
+        text: 'UP',
+        color: '#22AB94',
+        textcolor: '#FFFFFF',
+        style: 'label.style_label_up',
+        yloc: 'yloc.abovebar',
+        size: 'size.small',
+      },
+      {
+        type: 'label',
+        t1: 20,
+        p1: 90,
+        text: 'L',
+        color: '#F23645',
+        text_color: '#000',
+        style: 'style_label_left',
+        yloc: 'belowbar',
+        text_size: 14,
+      },
+      {
+        kind: 'label',
+        x: 5,
+        y: 50,
+        text: 'R',
+        style: 'label_right',
+        yloc: 'price',
+        size: 'huge',
+      },
+    ]);
+    expect(list).toHaveLength(3);
+    expect(list[0]).toMatchObject({
+      type: 'label',
+      text: 'UP',
+      style: 'label_up',
+      yloc: 'abovebar',
+      size: 'size.small',
+      textcolor: '#FFFFFF',
+      color: '#22AB94',
+    });
+    expect(list[1]).toMatchObject({
+      style: 'label_left',
+      yloc: 'belowbar',
+      size: 14,
+      textcolor: '#000',
+    });
+    expect(list[2]).toMatchObject({
+      style: 'label_right',
+      yloc: 'price',
+      size: 'huge',
+      t1: 5,
+      p1: 50,
+    });
   });
 
   it('skips incomplete objects', () => {
@@ -78,6 +144,116 @@ describe('normalizeScriptDrawings', () => {
     expect(list[0]!.t3).toBe(100);
     expect(list[0]!.p4).toBe(7);
     expect(list[0]!.bgcolor).toContain('rgba');
+  });
+
+  it('maps force_overlay on line / box / label (snake + camel)', () => {
+    const list = normalizeScriptDrawings([
+      {
+        type: 'line',
+        t1: 1,
+        p1: 1,
+        t2: 2,
+        p2: 2,
+        force_overlay: true,
+      },
+      {
+        type: 'box',
+        t1: 1,
+        p1: 10,
+        t2: 2,
+        p2: 5,
+        forceOverlay: true,
+      },
+      {
+        type: 'label',
+        t1: 3,
+        p1: 7,
+        text: 'ov',
+        force_overlay: 1,
+      },
+      {
+        type: 'line',
+        t1: 4,
+        p1: 1,
+        t2: 5,
+        p2: 2,
+        // omitted → false
+      },
+      {
+        type: 'label',
+        t1: 6,
+        p1: 1,
+        text: 'no',
+        force_overlay: false,
+      },
+    ]);
+    expect(list).toHaveLength(5);
+    expect(list[0]!.forceOverlay).toBe(true);
+    expect(list[1]!.forceOverlay).toBe(true);
+    expect(list[2]!.forceOverlay).toBe(true);
+    expect(list[3]!.forceOverlay).toBe(false);
+    expect(list[4]!.forceOverlay).toBe(false);
+  });
+
+  it('linefill edge cases: alias, compile coords, incomplete skip, fill color', () => {
+    const list = normalizeScriptDrawings([
+      // line_fill alias + x/y quad keys
+      {
+        type: 'line_fill',
+        x1: 10,
+        y1: 1,
+        x2: 20,
+        y2: 2,
+        x3: 10,
+        y3: 0,
+        x4: 20,
+        y4: 0.5,
+        bgcolor: 'rgba(0,128,0,0.25)',
+      },
+      // incomplete — missing t4/p4
+      {
+        type: 'linefill',
+        t1: 1,
+        p1: 1,
+        t2: 2,
+        p2: 2,
+        t3: 1,
+        p3: 0,
+      },
+      // non-finite corner rejected
+      {
+        type: 'linefill',
+        t1: 1,
+        p1: 1,
+        t2: 2,
+        p2: 2,
+        t3: 1,
+        p3: 0,
+        t4: Number.NaN,
+        p4: 0,
+      },
+      // color-only fill (no bgcolor) still paints
+      {
+        type: 'linefill',
+        t1: 1,
+        p1: 10,
+        t2: 2,
+        p2: 11,
+        t3: 1,
+        p3: 5,
+        t4: 2,
+        p4: 6,
+        color: '#2962FF',
+      },
+    ]);
+    expect(list).toHaveLength(2);
+    expect(list[0]!.type).toBe('linefill');
+    expect(list[0]!.t1).toBe(10);
+    expect(list[0]!.p4).toBe(0.5);
+    expect(list[0]!.bgcolor).toContain('rgba');
+    expect(list[0]!.color).toBe(list[0]!.bgcolor);
+    expect(list[1]!.color).toBe('#2962FF');
+    expect(list[1]!.bgcolor).toBe('#2962FF');
   });
 
   it('maps trend/rect aliases and polyline points', () => {
@@ -243,6 +419,62 @@ describe('normalizeLineStyle / normalizeExtend', () => {
   });
 });
 
+describe('normalizeLabelStyle / normalizeYloc / label layout', () => {
+  it('normalizes label.style_* and bare tokens', () => {
+    expect(normalizeLabelStyle('label.style_label_up')).toBe('label_up');
+    expect(normalizeLabelStyle('style_label_down')).toBe('label_down');
+    expect(normalizeLabelStyle('label_left')).toBe('label_left');
+    expect(normalizeLabelStyle('label.style_label_right')).toBe('label_right');
+    expect(normalizeLabelStyle('label.style_label_center')).toBe('label_center');
+    expect(normalizeLabelStyle('up')).toBe('label_up');
+    expect(normalizeLabelStyle('center')).toBe('label_center');
+    expect(normalizeLabelStyle('label.style_xcross')).toBe('xcross');
+    expect(normalizeLabelStyle(null)).toBe('label_center');
+    expect(normalizeLabelStyle('label.style_label_upper_left')).toBe('label_upper_left');
+  });
+
+  it('normalizes yloc.* tokens', () => {
+    expect(normalizeYloc('yloc.price')).toBe('price');
+    expect(normalizeYloc('yloc.abovebar')).toBe('abovebar');
+    expect(normalizeYloc('belowbar')).toBe('belowbar');
+    expect(normalizeYloc('nope')).toBe('price');
+    expect(normalizeYloc(undefined)).toBe('price');
+  });
+
+  it('maps size tokens to font px', () => {
+    expect(labelFontSizePx('size.tiny')).toBe(8);
+    expect(labelFontSizePx('small')).toBe(10);
+    expect(labelFontSizePx('size.large')).toBe(14);
+    expect(labelFontSizePx(16)).toBe(16);
+    expect(labelFontSizePx(null)).toBe(10);
+  });
+
+  it('places bubbles by style relative to anchor', () => {
+    const up = labelBubbleLayout(100, 200, 40, 16, 'label_up', 6);
+    expect(up.rectY).toBeLessThan(200);
+    expect(up.textAnchor).toBe('middle');
+
+    const down = labelBubbleLayout(100, 200, 40, 16, 'label_down', 6);
+    expect(down.rectY).toBeGreaterThan(200);
+
+    const left = labelBubbleLayout(100, 200, 40, 16, 'label_left', 6);
+    expect(left.rectX).toBeLessThan(100 - 40);
+    expect(left.textAnchor).toBe('end');
+
+    const right = labelBubbleLayout(100, 200, 40, 16, 'label_right', 6);
+    expect(right.rectX).toBeGreaterThan(100);
+    expect(right.textAnchor).toBe('start');
+
+    const center = labelBubbleLayout(100, 200, 40, 16, 'label_center', 6);
+    expect(center.rectX).toBe(80);
+    expect(center.rectY).toBe(192);
+
+    // Unknown → bubble above (same as label_up default)
+    const unk = labelBubbleLayout(100, 200, 40, 16, 'mystery', 6);
+    expect(unk.rectY).toBe(up.rectY);
+  });
+});
+
 function mk(
   type: ScriptDrawing['type'],
   i: number,
@@ -330,6 +562,67 @@ label.new(bar_index, high, "x")
     expect(kept).toHaveLength(50);
     expect(kept[0]!.id).toBe('label_10');
     expect(kept[49]!.id).toBe('label_59');
+  });
+
+  it('preserves linefill when GC trims other types', () => {
+    const fills: ScriptDrawing[] = [
+      {
+        id: 'lf_0',
+        type: 'linefill',
+        t1: 1,
+        p1: 10,
+        t2: 2,
+        p2: 11,
+        t3: 1,
+        p3: 5,
+        t4: 2,
+        p4: 6,
+        color: 'rgba(41,98,255,0.2)',
+        bgcolor: 'rgba(41,98,255,0.2)',
+      },
+      {
+        id: 'lf_1',
+        type: 'linefill',
+        t1: 3,
+        p1: 20,
+        t2: 4,
+        p2: 21,
+        t3: 3,
+        p3: 15,
+        t4: 4,
+        p4: 16,
+        color: 'rgba(0,200,0,0.15)',
+        bgcolor: 'rgba(0,200,0,0.15)',
+      },
+    ];
+    const labels = [mk('label', 0), mk('label', 1), mk('label', 2)];
+    const mixed = [fills[0]!, labels[0]!, fills[1]!, labels[1]!, labels[2]!];
+    const kept = garbageCollectScriptDrawings(mixed, {
+      max_lines_count: 50,
+      max_labels_count: 1,
+      max_boxes_count: 50,
+      max_polylines_count: 50,
+    });
+    // Labels: keep newest only; both linefills pass through (no max_linefills cap).
+    expect(kept.map((d) => d.id)).toEqual(['lf_0', 'lf_1', 'label_2']);
+    expect(kept.filter((d) => d.type === 'linefill')).toHaveLength(2);
+  });
+
+  it('linefill-only batches are identity under GC', () => {
+    const fills: ScriptDrawing[] = Array.from({ length: 5 }, (_, i) => ({
+      id: `lf_${i}`,
+      type: 'linefill' as const,
+      t1: i,
+      p1: 1,
+      t2: i + 1,
+      p2: 2,
+      t3: i,
+      p3: 0,
+      t4: i + 1,
+      p4: 0.5,
+      color: '#2962FF',
+    }));
+    expect(garbageCollectScriptDrawings(fills, DEFAULT_DRAWING_LIMITS)).toBe(fills);
   });
 });
 

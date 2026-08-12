@@ -15,9 +15,12 @@ import {
   barcolorSeriesToMap,
   buildPlotVisuals,
   coerceBarColor,
+  defaultShapeMarkerGlyph,
   isActiveColor,
   isBreakPlotStyle,
+  isHistogramSeriesKind,
   isOhlcPlotKind,
+  isPointMarkerSeriesKind,
   isTruthyPlotValue,
   lineSeriesToOverlayData,
   lineSeriesToOverlayDataWithBreaks,
@@ -189,6 +192,43 @@ describe('mapShapeStyle / mapShapeLocation', () => {
     expect(mapShapeStyle('shape.triangledown')).toBe('arrowDown');
     expect(mapShapeLocation('location.abovebar')).toBe('aboveBar');
   });
+
+  it('maps diamond to square (LWC has no diamond shape)', () => {
+    expect(mapShapeStyle('shape.diamond')).toBe('square');
+    expect(mapShapeStyle('diamond')).toBe('square');
+  });
+
+  it('maps cross / xcross to square (distinct from circle)', () => {
+    expect(mapShapeStyle('shape.cross')).toBe('square');
+    expect(mapShapeStyle('shape.xcross')).toBe('square');
+    expect(mapShapeStyle('cross')).toBe('square');
+    expect(mapShapeStyle('shape.circle')).toBe('circle');
+  });
+
+  it('defaultShapeMarkerGlyph supplies + / ✕ when text omitted', () => {
+    expect(defaultShapeMarkerGlyph('shape.cross')).toBe('+');
+    expect(defaultShapeMarkerGlyph('shape.xcross')).toBe('✕');
+    expect(defaultShapeMarkerGlyph('shape.diamond')).toBeNull();
+    expect(defaultShapeMarkerGlyph(null)).toBeNull();
+  });
+
+  it('shapeSeriesToMarkers uses cross glyph when no text/char/title', () => {
+    const markers = shapeSeriesToMarkers([10], [true], {
+      style: 'shape.xcross',
+      color: '#f00',
+    });
+    expect(markers).toHaveLength(1);
+    expect(markers[0]).toMatchObject({ shape: 'square', text: '✕', color: '#f00' });
+  });
+
+  it('shapeSeriesToMarkers prefers explicit text over cross glyph', () => {
+    const markers = shapeSeriesToMarkers([10], [true], {
+      style: 'shape.cross',
+      text: 'BUY',
+    });
+    expect(markers[0]!.text).toBe('BUY');
+    expect(markers[0]!.shape).toBe('square');
+  });
 });
 
 describe('mapPlotStyleToSeriesKind', () => {
@@ -196,19 +236,32 @@ describe('mapPlotStyleToSeriesKind', () => {
     expect(normalizePlotStyleToken('plot.style_stepline')).toBe('stepline');
     expect(normalizePlotStyleToken('style_columns')).toBe('columns');
     expect(normalizePlotStyleToken('histogram')).toBe('histogram');
+    expect(normalizePlotStyleToken('plot.style_stepline_diamond')).toBe('stepline_diamond');
+    expect(normalizePlotStyleToken('plot.style_cross')).toBe('cross');
   });
 
-  it('maps Pine plot styles to LWC series kinds', () => {
+  it('maps Pine plot styles to distinct LWC series kinds', () => {
     expect(mapPlotStyleToSeriesKind('plot.style_line')).toBe('line');
     expect(mapPlotStyleToSeriesKind('plot.style_stepline')).toBe('stepline');
     expect(mapPlotStyleToSeriesKind('plot.style_steplinebr')).toBe('stepline');
+    expect(mapPlotStyleToSeriesKind('plot.style_stepline_diamond')).toBe('stepline_diamond');
     expect(mapPlotStyleToSeriesKind('plot.style_histogram')).toBe('histogram');
-    expect(mapPlotStyleToSeriesKind('plot.style_columns')).toBe('histogram');
+    expect(mapPlotStyleToSeriesKind('plot.style_columns')).toBe('columns');
     expect(mapPlotStyleToSeriesKind('plot.style_area')).toBe('area');
     expect(mapPlotStyleToSeriesKind('plot.style_areabr')).toBe('area');
     expect(mapPlotStyleToSeriesKind('plot.style_circles')).toBe('circles');
-    expect(mapPlotStyleToSeriesKind('plot.style_cross')).toBe('circles');
+    expect(mapPlotStyleToSeriesKind('plot.style_cross')).toBe('cross');
     expect(mapPlotStyleToSeriesKind(null)).toBe('line');
+  });
+
+  it('classifies histogram family and point-marker kinds', () => {
+    expect(isHistogramSeriesKind('histogram')).toBe(true);
+    expect(isHistogramSeriesKind('columns')).toBe(true);
+    expect(isHistogramSeriesKind('line')).toBe(false);
+    expect(isPointMarkerSeriesKind('circles')).toBe(true);
+    expect(isPointMarkerSeriesKind('cross')).toBe(true);
+    expect(isPointMarkerSeriesKind('stepline_diamond')).toBe(true);
+    expect(isPointMarkerSeriesKind('stepline')).toBe(false);
   });
 
   const PLOT_STYLE_TO_KIND: Array<{
@@ -220,12 +273,12 @@ describe('mapPlotStyleToSeriesKind', () => {
     { token: 'plot.style_linebr', bare: 'linebr', kind: 'line' },
     { token: 'plot.style_stepline', bare: 'stepline', kind: 'stepline' },
     { token: 'plot.style_steplinebr', bare: 'steplinebr', kind: 'stepline' },
-    { token: 'plot.style_stepline_diamond', bare: 'stepline_diamond', kind: 'stepline' },
+    { token: 'plot.style_stepline_diamond', bare: 'stepline_diamond', kind: 'stepline_diamond' },
     { token: 'plot.style_histogram', bare: 'histogram', kind: 'histogram' },
-    { token: 'plot.style_cross', bare: 'cross', kind: 'circles' },
+    { token: 'plot.style_cross', bare: 'cross', kind: 'cross' },
     { token: 'plot.style_area', bare: 'area', kind: 'area' },
     { token: 'plot.style_areabr', bare: 'areabr', kind: 'area' },
-    { token: 'plot.style_columns', bare: 'columns', kind: 'histogram' },
+    { token: 'plot.style_columns', bare: 'columns', kind: 'columns' },
     { token: 'plot.style_circles', bare: 'circles', kind: 'circles' },
   ];
 
@@ -317,7 +370,8 @@ describe('buildPlotVisuals style / linestyle forward', () => {
     expect(byName['macd']!.linewidth).toBe(2);
     expect(byName['hist']!.style).toBe('plot.style_columns');
     expect(mapPlotStyleToSeriesKind(byName['macd']!.style)).toBe('stepline');
-    expect(mapPlotStyleToSeriesKind(byName['hist']!.style)).toBe('histogram');
+    expect(mapPlotStyleToSeriesKind(byName['hist']!.style)).toBe('columns');
+    expect(isHistogramSeriesKind(mapPlotStyleToSeriesKind(byName['hist']!.style))).toBe(true);
   });
 
   it('forwards null style when meta omits style (defaults to line kind)', () => {
@@ -426,6 +480,65 @@ describe('splitSeriesByKind + buildPlotVisuals', () => {
     expect(map.get(20)).toBe('#F23645');
     expect(map.get(30)).toBe('rgba(0,255,0,0.5)');
     expect(map.has(10)).toBe(false);
+  });
+
+  it('coerceBarColor rejects na-like / empty and accepts hex rgb hsl color.* names', () => {
+    expect(coerceBarColor(null)).toBeNull();
+    expect(coerceBarColor(undefined)).toBeNull();
+    expect(coerceBarColor('')).toBeNull();
+    expect(coerceBarColor('   ')).toBeNull();
+    expect(coerceBarColor('na')).toBeNull();
+    expect(coerceBarColor('NA')).toBeNull();
+    expect(coerceBarColor('nan')).toBeNull();
+    expect(coerceBarColor('null')).toBeNull();
+    expect(coerceBarColor('none')).toBeNull();
+    expect(coerceBarColor('undefined')).toBeNull();
+    expect(coerceBarColor(true)).toBeNull();
+    expect(coerceBarColor({})).toBeNull();
+    expect(coerceBarColor('not a color!!!')).toBeNull();
+
+    expect(coerceBarColor('#F23645')).toBe('#F23645');
+    expect(coerceBarColor('  #abc  ')).toBe('#abc');
+    expect(coerceBarColor('rgb(1,2,3)')).toBe('rgb(1,2,3)');
+    expect(coerceBarColor('rgba(1,2,3,0.5)')).toBe('rgba(1,2,3,0.5)');
+    expect(coerceBarColor('hsl(120,50%,40%)')).toBe('hsl(120,50%,40%)');
+    expect(coerceBarColor('color.red')).toBe('color.red');
+    expect(coerceBarColor('red')).toBe('red');
+  });
+
+  it('coerceBarColor maps finite integer 0xRRGGBB / 0xAARRGGBB', () => {
+    expect(coerceBarColor(0xff0000)).toBe('#ff0000');
+    expect(coerceBarColor(0x00ff00)).toBe('#00ff00');
+    expect(coerceBarColor(0)).toBe('#000000');
+    // ARGB: alpha high byte, RGB lower 24 — implementation masks R/G/B from low 24 bits
+    expect(coerceBarColor(0x80ff0000)).toBe('#ff0000');
+    expect(coerceBarColor(Number.NaN)).toBeNull();
+    expect(coerceBarColor(Number.POSITIVE_INFINITY)).toBeNull();
+    expect(coerceBarColor(-1)).toBeNull();
+  });
+
+  it('barcolorSeriesToMap later series win; empty / non-array safe', () => {
+    expect(barcolorSeriesToMap([], [{ values: ['#f00'] }]).size).toBe(0);
+    expect(barcolorSeriesToMap([1, 2], []).size).toBe(0);
+    expect(
+      barcolorSeriesToMap([1, 2], [{ values: null as unknown as unknown[] }]).size,
+    ).toBe(0);
+
+    const times = [100, 200, 300, 400];
+    const map = barcolorSeriesToMap(times, [
+      { values: ['#111111', null, 'na', '#222222'] },
+      { values: [null, '#aaaaaa', '#bbbbbb'] }, // shorter: only first 3 bars
+    ]);
+    expect(map.get(100)).toBe('#111111'); // first series only
+    expect(map.get(200)).toBe('#aaaaaa'); // second overwrites null skip of first
+    expect(map.get(300)).toBe('#bbbbbb'); // second overwrites na of first
+    expect(map.get(400)).toBe('#222222'); // only first series reaches bar 4
+    expect(map.has(200)).toBe(true);
+
+    // Non-finite times skipped
+    const sparse = barcolorSeriesToMap([Number.NaN, 50], [{ values: ['#f00', '#0f0'] }]);
+    expect(sparse.has(Number.NaN as unknown as number)).toBe(false);
+    expect(sparse.get(50)).toBe('#0f0');
   });
 
   /**

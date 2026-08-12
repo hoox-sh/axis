@@ -97,6 +97,19 @@ Colors: default accent `#939fff`, up/down/measure variants in `DRAWING_COLORS`.
 2. Layer clears previous script drawings, then applies new set.  
 3. User drawings remain.
 
+### Script drawings (engine → chart)
+
+Engine `drawings[]` map through `pyne-drawings.ts` before paint:
+
+| Engine surface | Chart behavior |
+| --- | --- |
+| `line` / `box` / `label` / `polyline` | SVG geometry on the script’s pane scale |
+| `linefill` / `line_fill` | Filled quad between two line endpoints |
+| `force_overlay` (line/box/label) | Paint on the **price** pane even when the script is `overlay=false` |
+| `barcolor` series | Not SVG — per-bar candle body/wick tint via `plot-visuals` |
+
+Non-overlay scripts place ordinary geometry on the indicator pane Y-scale; user toolbar drawings always stay on price.
+
 ## Internals
 
 | Path | Role |

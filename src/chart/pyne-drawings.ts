@@ -64,7 +64,21 @@ export interface ScriptDrawing {
   text?: string;
   textcolor?: string;
   width?: number;
+  /**
+   * Line dash style (`solid`/`dashed`/`dotted`) or label style token
+   * (`label_up`, `label_left`, …) after {@link normalizeLabelStyle}.
+   */
   style?: string;
+  /**
+   * Pine `yloc.*` for labels: `price` | `abovebar` | `belowbar`
+   * (see {@link normalizeYloc}).
+   */
+  yloc?: string;
+  /**
+   * Pine `size.*` / `text_size` for labels — raw token or numeric points
+   * (paint maps via {@link labelFontSizePx}).
+   */
+  size?: string | number;
   extend?: string;
   closed?: boolean;
   points?: Array<{ time: number; price: number }>;
@@ -336,6 +350,150 @@ export function normalizeExtend(raw: unknown, fallback = 'none'): string {
 }
 
 /**
+ * Normalize Pine `label.style_*` / bare tokens for chart paint.
+ *
+ * Accepts `label.style_label_up`, `style_label_up`, `label_up`, or short
+ * `up`/`down`/`left`/`right`/`center`. Unknown tokens pass through lowercased
+ * so the painter can fall back to a bubble.
+ */
+export function normalizeLabelStyle(raw: unknown, fallback = 'label_center'): string {
+  if (raw == null) return fallback;
+  if (typeof raw === 'string' && raw.length > 64) return fallback;
+  let s = String(raw).toLowerCase().trim();
+  if (!s) return fallback;
+  s = s.replace(/^label\./, '');
+  s = s.replace(/^style_/, '');
+  // Short direction aliases → full label_* tokens
+  if (s === 'up' || s === 'down' || s === 'left' || s === 'right' || s === 'center') {
+    return `label_${s}`;
+  }
+  // Corner aliases without label_ prefix
+  if (
+    s === 'lower_left' ||
+    s === 'lower_right' ||
+    s === 'upper_left' ||
+    s === 'upper_right'
+  ) {
+    return `label_${s}`;
+  }
+  return s || fallback;
+}
+
+/**
+ * Normalize Pine `yloc.*` for labels → `price` | `abovebar` | `belowbar`.
+ */
+export function normalizeYloc(raw: unknown, fallback = 'price'): string {
+  if (raw == null) return fallback;
+  if (typeof raw === 'string' && raw.length > 64) return fallback;
+  let s = String(raw).toLowerCase().trim();
+  if (!s) return fallback;
+  s = s.replace(/^yloc\./, '');
+  if (s === 'price' || s === 'abovebar' || s === 'belowbar') return s;
+  return fallback;
+}
+
+/**
+ * Map Pine label `size.*` / `text_size` / numeric points → SVG font-size (px).
+ * Defaults to 10 (matches prior bubble paint).
+ */
+export function labelFontSizePx(raw: unknown, fallback = 10): number {
+  if (raw == null) return fallback;
+  if (typeof raw === 'number') {
+    if (!Number.isFinite(raw) || raw <= 0) return fallback;
+    // Numeric Pine points are typically 8–20; clamp for SVG.
+    return Math.min(32, Math.max(6, raw));
+  }
+  if (typeof raw === 'string' && raw.length > 64) return fallback;
+  let s = String(raw).toLowerCase().trim();
+  if (!s) return fallback;
+  s = s.replace(/^size\./, '');
+  switch (s) {
+    case 'tiny':
+      return 8;
+    case 'small':
+      return 10;
+    case 'normal':
+    case 'auto':
+      return 11;
+    case 'large':
+      return 14;
+    case 'huge':
+      return 18;
+    default: {
+      const n = Number(s);
+      if (Number.isFinite(n) && n > 0) return Math.min(32, Math.max(6, n));
+      return fallback;
+    }
+  }
+}
+
+/**
+ * Bubble box + text anchor for a label style at pixel anchor `(ax, ay)`.
+ * `label_up` / default: box above the point; `label_down` below; left/right
+ * beside; `label_center` centered on the point.
+ */
+export function labelBubbleLayout(
+  ax: number,
+  ay: number,
+  tw: number,
+  th: number,
+  style: string | undefined,
+  gap = 6,
+): {
+  rectX: number;
+  rectY: number;
+  textX: number;
+  textY: number;
+  textAnchor: 'start' | 'middle' | 'end';
+} {
+  const st = (style || 'label_center').toLowerCase();
+  const g = Number.isFinite(gap) ? gap : 6;
+  // Baseline ~3/4 down the box for monospace paint
+  const textYIn = (rectY: number) => rectY + th * 0.72;
+
+  if (st === 'label_down' || st === 'down') {
+    const rectX = ax - tw / 2;
+    const rectY = ay + g;
+    return { rectX, rectY, textX: ax, textY: textYIn(rectY), textAnchor: 'middle' };
+  }
+  if (st === 'label_left' || st === 'left' || st === 'label_lower_left' || st === 'label_upper_left') {
+    const rectX = ax - tw - g;
+    let rectY = ay - th / 2;
+    if (st.includes('upper')) rectY = ay - th - g;
+    if (st.includes('lower')) rectY = ay + g;
+    return {
+      rectX,
+      rectY,
+      textX: rectX + tw - 4,
+      textY: textYIn(rectY),
+      textAnchor: 'end',
+    };
+  }
+  if (st === 'label_right' || st === 'right' || st === 'label_lower_right' || st === 'label_upper_right') {
+    const rectX = ax + g;
+    let rectY = ay - th / 2;
+    if (st.includes('upper')) rectY = ay - th - g;
+    if (st.includes('lower')) rectY = ay + g;
+    return {
+      rectX,
+      rectY,
+      textX: rectX + 4,
+      textY: textYIn(rectY),
+      textAnchor: 'start',
+    };
+  }
+  if (st === 'label_center' || st === 'center') {
+    const rectX = ax - tw / 2;
+    const rectY = ay - th / 2;
+    return { rectX, rectY, textX: ax, textY: textYIn(rectY), textAnchor: 'middle' };
+  }
+  // label_up / unknown bubble default: above the anchor
+  const rectX = ax - tw / 2;
+  const rectY = ay - th - g;
+  return { rectX, rectY, textX: ax, textY: textYIn(rectY), textAnchor: 'middle' };
+}
+
+/**
  * Clamp a time anchor that lies strictly past the last bar to that bar's time.
  *
  * Pine scripts often place labels with `xloc.bar_time` + `timenow` (or other
@@ -569,6 +727,7 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
           forceOverlay: Boolean(r.force_overlay ?? r.forceOverlay),
         });
       } else if (type === 'label' || type === 'text') {
+        const sizeRaw = r.size ?? r.text_size ?? r.textSize;
         out.push({
           id: `pine_label_${i++}`,
           type: 'label',
@@ -577,6 +736,14 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
           color: sanitizeStrokeColor(r.color, '#939fff'),
           textcolor: sanitizeStrokeColor(r.textcolor ?? r.text_color, '#eceef4'),
           text: sanitizeDrawingText(r.text, DRAWING_TEXT_MAX),
+          style: normalizeLabelStyle(r.style, 'label_center'),
+          yloc: normalizeYloc(r.yloc, 'price'),
+          size:
+            sizeRaw == null || sizeRaw === ''
+              ? undefined
+              : typeof sizeRaw === 'number'
+                ? sizeRaw
+                : String(sizeRaw),
           forceOverlay: Boolean(r.force_overlay ?? r.forceOverlay),
         });
       } else if (type === 'linefill' || type === 'line_fill') {

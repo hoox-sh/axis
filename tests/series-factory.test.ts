@@ -31,6 +31,7 @@ const {
   createVolumeSeries,
   createLineSeries,
   createAreaSeries,
+  createPlotOverlaySeries,
   formatCrosshairDateTime,
   deepMergeChartOptions,
 } = await import('../src/chart/series-factory');
@@ -112,5 +113,58 @@ describe('series-factory', () => {
     createLineSeries(chart as never, 'wide', '#0f0', undefined, 4);
     expect(calls.length).toBe(1);
     expect((calls[0] as { lineWidth: number }).lineWidth).toBe(4);
+  });
+
+  it('createPlotOverlaySeries: columns and histogram use base 0', () => {
+    const chart = makeFakeChart();
+    const optsLog: unknown[] = [];
+    const orig = chart.addSeries.bind(chart);
+    chart.addSeries = ((type: unknown, opts?: unknown, paneIndex?: number) => {
+      optsLog.push(opts);
+      return orig(type, opts, paneIndex);
+    }) as typeof chart.addSeries;
+    createPlotOverlaySeries(chart as never, 'h', '#0f0', 'histogram');
+    createPlotOverlaySeries(chart as never, 'c', '#0f0', 'columns');
+    expect(optsLog).toHaveLength(2);
+    expect((optsLog[0] as { base: number }).base).toBe(0);
+    expect((optsLog[1] as { base: number }).base).toBe(0);
+  });
+
+  it('createPlotOverlaySeries: cross hides line; stepline_diamond enables markers', () => {
+    const chart = makeFakeChart();
+    const applied: unknown[] = [];
+    const orig = chart.addSeries.bind(chart);
+    chart.addSeries = ((type: unknown, opts?: unknown, paneIndex?: number) => {
+      const s = orig(type, opts, paneIndex);
+      const prev = s.applyOptions.bind(s);
+      s.applyOptions = (o: unknown) => {
+        applied.push(o);
+        prev(o);
+      };
+      return s;
+    }) as typeof chart.addSeries;
+
+    createPlotOverlaySeries(chart as never, 'x', '#f00', 'cross', 2);
+    const crossOpts = applied.find(
+      (o) => o && typeof o === 'object' && 'lineVisible' in (o as object),
+    ) as { lineVisible?: boolean; pointMarkersVisible?: boolean } | undefined;
+    expect(crossOpts?.lineVisible).toBe(false);
+    expect(crossOpts?.pointMarkersVisible).toBe(true);
+
+    applied.length = 0;
+    createPlotOverlaySeries(chart as never, 'd', '#0ff', 'stepline_diamond', 2);
+    const diamondOpts = applied.find(
+      (o) => o && typeof o === 'object' && 'pointMarkersVisible' in (o as object),
+    ) as { pointMarkersVisible?: boolean; lineType?: number } | undefined;
+    expect(diamondOpts?.pointMarkersVisible).toBe(true);
+    expect(diamondOpts?.lineType).toBe(1); // LineType.WithSteps in mock
+
+    applied.length = 0;
+    createPlotOverlaySeries(chart as never, 'o', '#0f0', 'circles', 2);
+    const circleOpts = applied.find(
+      (o) => o && typeof o === 'object' && 'pointMarkersVisible' in (o as object),
+    ) as { pointMarkersVisible?: boolean; lineVisible?: boolean } | undefined;
+    expect(circleOpts?.pointMarkersVisible).toBe(true);
+    expect(circleOpts?.lineVisible).not.toBe(false);
   });
 });

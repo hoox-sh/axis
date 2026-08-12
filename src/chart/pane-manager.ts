@@ -64,6 +64,8 @@ import {
   VOID,
 } from './series-factory';
 import {
+  isHistogramSeriesKind,
+  isPointMarkerSeriesKind,
   mapPlotStyleToSeriesKind,
   normalizeLineStyleToken,
   type PlotSeriesKind,
@@ -102,7 +104,7 @@ export type OverlayLineSpec = {
   /** Constant price for kind=hline (preferred over sampling data) */
   price?: number;
   linestyle?: string;
-  /** Pine `plot.style_*` — maps to LWC line / stepline / histogram / area / circles */
+  /** Pine `plot.style_*` — maps to LWC line / stepline / hist|columns / area / circles|cross */
   style?: string | null;
 };
 
@@ -1804,6 +1806,7 @@ export class PaneManager {
         this.overlayDataMeta.delete(key);
       }
       const seriesNow = pane.series[key];
+      const histFamily = isHistogramSeriesKind(seriesKind);
       if (seriesNow) {
         applySeriesDataSmart(seriesNow, mapped, key, this.overlayDataMeta);
         try {
@@ -1814,15 +1817,22 @@ export class PaneManager {
             if (seriesKind === 'area') {
               opts.lineColor = line.color;
               // keep prior fill if color is non-hex; series-factory sets fills on create
-            } else if (seriesKind === 'circles') {
+            } else if (isPointMarkerSeriesKind(seriesKind)) {
               opts.crosshairMarkerBackgroundColor = line.color;
+              // cross / stepline_diamond use solid series color for markers;
+              // circles keep a faint hairline (re-apply alpha on color updates)
+              if (seriesKind === 'circles') {
+                /* hairline alpha set at create; marker tint only here */
+              } else {
+                opts.color = line.color;
+              }
             } else {
               opts.color = line.color;
             }
           }
-          if (lw != null && seriesKind !== 'histogram') opts.lineWidth = lw;
-          // plot.linestyle_* on Line / Area / circles hairline (not histogram)
-          if (seriesKind !== 'histogram' && line.linestyle) {
+          if (lw != null && !histFamily) opts.lineWidth = lw;
+          // plot.linestyle_* on Line / Area / marker hairline (not hist/columns)
+          if (!histFamily && line.linestyle) {
             opts.lineStyle = mapLineStyle(line.linestyle);
           }
           seriesNow.applyOptions(opts);
@@ -1846,7 +1856,7 @@ export class PaneManager {
           } catch {
             /* ignore */
           }
-          if (seriesKind !== 'histogram' && line.linestyle) {
+          if (!histFamily && line.linestyle) {
             try {
               series.applyOptions({ lineStyle: mapLineStyle(line.linestyle) });
             } catch {

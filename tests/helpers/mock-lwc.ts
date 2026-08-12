@@ -162,6 +162,7 @@ export function installLightweightChartsMock() {
     PriceScaleMode: { Normal: 0, Logarithmic: 1, Percentage: 2, IndexedTo100: 3 },
     MismatchDirection: { NearestLeft: -1, None: 0, NearestRight: 1 },
     LineStyle: { Solid: 0, Dotted: 1, Dashed: 2, LargeDashed: 3, SparseDotted: 4 },
+    LineType: { Simple: 0, WithSteps: 1, Curved: 2 },
     CandlestickSeries: 'CandlestickSeries',
     BarSeries: 'BarSeries',
     BaselineSeries: 'BaselineSeries',

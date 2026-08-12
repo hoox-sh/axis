@@ -115,11 +115,16 @@ Engine plot series honor Pine Script™ `plot.style_*` via `mapPlotStyleToSeries
 | Pine style (examples) | Chart series |
 | --- | --- |
 | `plot.style_line` / default | Line |
-| `plot.style_stepline` / `stepline_diamond` | Stepline |
-| `plot.style_histogram` / `columns` | Histogram |
+| `plot.style_stepline` | Stepline (LWC WithSteps) |
+| `plot.style_stepline_diamond` | Stepline + vertex point markers |
+| `plot.style_histogram` | Histogram (base 0) |
+| `plot.style_columns` | Columns → LWC Histogram (base 0; no column-width/gap API) |
 | `plot.style_area` / `areabr` | Area |
-| `plot.style_circles` | Circles / markers |
-| `plot.style_linebr` / `steplinebr` | Broken line variants |
+| `plot.style_circles` | Circular point markers + faint hairline |
+| `plot.style_cross` | Larger point markers, connector hidden |
+| `plot.style_linebr` / `steplinebr` | Broken line / stepline variants (whitespace gaps) |
+
+**LWC limits:** Histogram series has no bar-width or gap option, so `columns` and `histogram` share the same bar geometry (both zero-based). Point markers are always circular — `cross` is approximated by discrete markers without a connector; `stepline_diamond` uses stepline + vertex markers. Sparse `plotshape` styles map diamond/cross to square markers (optional `+` / `✕` glyphs when text is omitted).
 
 `fill(plot1, plot2, color=…)` renders as SVG bands between the two series when both resolve on the same pane.
 
@@ -185,7 +190,7 @@ From `runAndApply` (indicators):
 
 - `syncOverlayLines` — update existing overlay series in place (avoids destroy→blank→add flash on live re-runs)
 - Markers from normalized events (set in place)
-- Script drawings atomic replace via DrawingLayer (`setScriptDrawings` without empty frame)
+- Script drawings atomic replace via DrawingLayer (`setScriptDrawings` without empty frame); `linefill` quads and `force_overlay` geometry route with other script drawings; `barcolor` tints candles via plot-visuals (not the SVG layer)
 - Equity series when strategy report warrants (silent live runs skip hide thrash)
 
 ### History vs live bars

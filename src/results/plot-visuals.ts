@@ -447,8 +447,34 @@ function stripNs(s: string): string {
 /**
  * LWC series kind used for a Pine `plot(..., style=plot.style_*)`.
  * `plotbar` / `plotcandle` are separate plot_meta.kinds (not style tokens).
+ *
+ * Distinct kinds may share an LWC series type when the library has no exact
+ * match (e.g. `columns` vs `histogram` both use HistogramSeries — LWC has no
+ * column-width/gap API). Kind identity still drives recreate-on-style-change
+ * and presentation tweaks (point markers, line visibility).
  */
-export type PlotSeriesKind = 'line' | 'stepline' | 'histogram' | 'area' | 'circles';
+export type PlotSeriesKind =
+  | 'line'
+  | 'stepline'
+  | 'stepline_diamond'
+  | 'histogram'
+  | 'columns'
+  | 'area'
+  | 'circles'
+  | 'cross';
+
+/** True when kind is drawn with LWC `HistogramSeries` (histogram or columns). */
+export function isHistogramSeriesKind(kind?: string | null): boolean {
+  return kind === 'histogram' || kind === 'columns';
+}
+
+/**
+ * True when kind uses LWC line point markers (circles / cross / stepline_diamond).
+ * LWC point markers are always circular; cross/diamond are approximations.
+ */
+export function isPointMarkerSeriesKind(kind?: string | null): boolean {
+  return kind === 'circles' || kind === 'cross' || kind === 'stepline_diamond';
+}
 
 /**
  * Normalize Pine style tokens to a bare leaf:
@@ -507,25 +533,52 @@ export function isBreakPlotStyle(style?: string | null): boolean {
  * | Pine style | AXIS chart |
  * |------------|------------|
  * | line / linebr / (default) | line |
- * | stepline / steplinebr / stepline_diamond | stepline (LWC WithSteps) |
- * | histogram / columns | histogram |
+ * | stepline / steplinebr | stepline (LWC WithSteps) |
+ * | stepline_diamond | stepline + point markers at steps |
+ * | histogram | histogram (LWC Histogram, base 0) |
+ * | columns | columns (LWC Histogram, base 0; no width/gap API) |
  * | area / areabr | area |
- * | circles / cross | line + point markers |
+ * | circles | line + circular point markers (hairline) |
+ * | cross | discrete point markers, connector hidden |
  *
  * `plotbar` / `plotcandle` are separate plot_meta.kinds — see
  * {@link isOhlcPlotKind} / {@link ohlcSeriesToBarData}.
  *
  * Break variants (`*br`) use the same series kind; gaps come from whitespace
  * points (see {@link isBreakPlotStyle} / {@link lineSeriesToOverlayData}).
+ *
+ * **LWC limits:** Histogram has no column-gap/width option (columns ≈ histogram
+ * bars). Point markers are always circles — cross/diamond use size + line
+ * visibility / stepline combos as stand-ins (see {@link mapShapeStyle} for
+ * sparse plotshape markers, where square + glyph approximates diamond/cross).
  */
 export function mapPlotStyleToSeriesKind(style?: string | null): PlotSeriesKind {
   const s = normalizePlotStyleToken(style);
   if (!s || s === 'line' || s === 'linebr') return 'line';
-  if (s === 'stepline' || s === 'steplinebr' || s === 'stepline_diamond') return 'stepline';
-  if (s === 'histogram' || s === 'columns') return 'histogram';
+  if (s === 'stepline' || s === 'steplinebr') return 'stepline';
+  if (s === 'stepline_diamond') return 'stepline_diamond';
+  if (s === 'histogram') return 'histogram';
+  if (s === 'columns') return 'columns';
   if (s === 'area' || s === 'areabr') return 'area';
-  if (s === 'circles' || s === 'cross') return 'circles';
+  if (s === 'circles') return 'circles';
+  if (s === 'cross') return 'cross';
   return 'line';
+}
+
+/**
+ * Default marker glyph for sparse plotshape styles when text/char omitted.
+ * LWC has no native cross/diamond shapes — glyphs ride on square/circle marks.
+ *
+ * - `shape.xcross` → `✕`
+ * - `shape.cross` → `+`
+ * - diamond / others → null (shape alone)
+ */
+export function defaultShapeMarkerGlyph(style?: string | null): string | null {
+  const s = stripNs(String(style || ''));
+  if (!s) return null;
+  if (s.includes('xcross')) return '✕';
+  if (s === 'cross') return '+';
+  return null;
 }
 
 /** Map Pine shape.* style → LWC SeriesMarkerShape. */
@@ -561,8 +614,13 @@ export function mapShapeStyle(
   ) {
     return 'arrowUp';
   }
-  if (s.includes('square') || s.includes('diamond') || s.includes('flag')) return 'square';
-  if (s.includes('circle') || s.includes('xcross') || s.includes('cross')) return 'circle';
+  // LWC has no diamond — square is the closest axis-aligned mark
+  if (s.includes('diamond')) return 'square';
+  if (s.includes('square') || s.includes('flag')) return 'square';
+  // cross / xcross: square (+ optional glyph via {@link defaultShapeMarkerGlyph})
+  // so they stay distinct from shape.circle
+  if (s.includes('xcross') || s === 'cross') return 'square';
+  if (s.includes('circle')) return 'circle';
   return 'circle';
 }
 
@@ -640,6 +698,7 @@ export function shapeSeriesToMarkers(
     (meta.text && String(meta.text)) ||
     (meta.char && String(meta.char)) ||
     (meta.title && String(meta.title)) ||
+    defaultShapeMarkerGlyph(meta.style) ||
     '';
   const prefix = opts?.idPrefix || meta.title || 'shape';
   const size = mapShapeSize(meta.size ?? meta.text_size);
