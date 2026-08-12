@@ -12,7 +12,9 @@ import './setup';
 import { describe, expect, it } from 'bun:test';
 import {
   bgcolorSeriesToHistogramData,
+  barcolorSeriesToMap,
   buildPlotVisuals,
+  coerceBarColor,
   isActiveColor,
   isBreakPlotStyle,
   isOhlcPlotKind,
@@ -407,6 +409,23 @@ describe('splitSeriesByKind + buildPlotVisuals', () => {
     const split = splitSeriesByKind({ a: [1, 2] }, {});
     expect(split.lines).toHaveLength(1);
     expect(split.bgcolors).toHaveLength(0);
+  });
+
+  it('routes barcolor series and builds time→color map', () => {
+    const times = [10, 20, 30];
+    const series = {
+      bc: [null, '#F23645', 'rgba(0,255,0,0.5)'],
+    };
+    const meta = { bc: { kind: 'barcolor', title: 'bc' } };
+    const split = splitSeriesByKind(series, meta);
+    expect(split.barcolors.map((b) => b.key)).toEqual(['bc']);
+    expect(split.lines).toHaveLength(0);
+    expect(coerceBarColor('#abc')).toBe('#abc');
+    expect(coerceBarColor('na')).toBeNull();
+    const map = barcolorSeriesToMap(times, split.barcolors);
+    expect(map.get(20)).toBe('#F23645');
+    expect(map.get(30)).toBe('rgba(0,255,0,0.5)');
+    expect(map.has(10)).toBe(false);
   });
 
   /**

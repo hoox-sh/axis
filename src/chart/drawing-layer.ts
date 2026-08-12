@@ -1525,6 +1525,43 @@ export class DrawingLayer {
       });
       return;
     }
+    if (
+      d.type === 'linefill' &&
+      d.t2 != null &&
+      d.p2 != null &&
+      d.t3 != null &&
+      d.p3 != null &&
+      d.t4 != null &&
+      d.p4 != null
+    ) {
+      // Quad between two lines: line1 (t1,p1→t2,p2) then reverse line2 (t4,p4→t3,p3)
+      const corners = [
+        { time: d.t1, price: d.p1 },
+        { time: d.t2, price: d.p2 },
+        { time: d.t4, price: d.p4 },
+        { time: d.t3, price: d.p3 },
+      ];
+      const coords: { x: number; y: number }[] = [];
+      for (const p of corners) {
+        if (!Number.isFinite(p.time) || !Number.isFinite(p.price)) continue;
+        const c = this.toXYScript({ time: p.time, price: p.price });
+        if (c) coords.push(c);
+      }
+      if (coords.length < 3) return;
+      let dPath = `M ${coords[0]!.x} ${coords[0]!.y}`;
+      for (let i = 1; i < coords.length; i++) dPath += ` L ${coords[i]!.x} ${coords[i]!.y}`;
+      dPath += ' Z';
+      el(g, 'path', {
+        d: dPath,
+        fill: sanitizeStrokeColor(
+          d.bgcolor || d.color || 'rgba(147,159,255,0.15)',
+          'rgba(147,159,255,0.15)',
+        ),
+        stroke: 'none',
+        'pointer-events': pe,
+      });
+      return;
+    }
     if (d.type === 'line' && d.t2 != null && d.p2 != null) {
       if (!Number.isFinite(d.t1) || !Number.isFinite(d.p1) || !Number.isFinite(d.t2) || !Number.isFinite(d.p2)) {
         return;

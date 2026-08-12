@@ -22,8 +22,9 @@
  *
  * Accepts both interpret-path shapes (`type` + `t1`/`p1`/…) and compile-path
  * `__drawings` events (`kind` + `x1`/`y1`/`left`/…). Non-geometry kinds
- * (bgcolor, plotshape, table, …) are filtered out — tables go to
- * {@link PyneTableHud}; shapes to markers via plot-visuals.
+ * (bgcolor, barcolor, plotshape, table, …) are filtered out — tables go to
+ * {@link PyneTableHud}; shapes/barcolor to markers / candle tint via plot-visuals.
+ * `linefill` is geometry (filled quad between two lines).
  *
  * After normalize, {@link garbageCollectScriptDrawings} trims each type to the
  * Pine declaration caps (`max_lines_count`, `max_labels_count`, …) — oldest
@@ -48,11 +49,16 @@ import {
 /** Normalized Pine drawing for the SVG overlay. */
 export interface ScriptDrawing {
   id: string;
-  type: 'line' | 'box' | 'label' | 'polyline';
+  type: 'line' | 'box' | 'label' | 'polyline' | 'linefill';
   t1: number;
   p1: number;
   t2?: number;
   p2?: number;
+  /** linefill: second line endpoints (t3/p3 → t4/p4) */
+  t3?: number;
+  p3?: number;
+  t4?: number;
+  p4?: number;
   color: string;
   bgcolor?: string;
   text?: string;
@@ -247,6 +253,7 @@ export function garbageCollectScriptDrawings(
     label: 0,
     box: 0,
     polyline: 0,
+    linefill: 0,
   };
   const out: ScriptDrawing[] = [];
   for (const d of drawings) {
@@ -261,14 +268,13 @@ export function garbageCollectScriptDrawings(
 /** Kinds that are not price-geometry (handled elsewhere or ignored). */
 const NON_GEOMETRY = new Set([
   'bgcolor',
-  'barcolor',
+  'barcolor', // candle tint via plot-visuals / PaneManager — not SVG
   'plotshape',
   'plotchar',
   'plotarrow',
   'fill',
   'set',
   'table',
-  'linefill',
 ]);
 
 function parsePolylinePoints(raw: unknown): Array<{ time: number; price: number }> {
@@ -372,6 +378,8 @@ export function clampScriptDrawingTimes(
     }
     const t1 = clampTimeToLastBar(d.t1, lastBarTime);
     const t2 = d.t2 != null ? clampTimeToLastBar(d.t2, lastBarTime) : d.t2;
+    const t3 = d.t3 != null ? clampTimeToLastBar(d.t3, lastBarTime) : d.t3;
+    const t4 = d.t4 != null ? clampTimeToLastBar(d.t4, lastBarTime) : d.t4;
     let points = d.points;
     if (points?.length) {
       let ptsChanged = false;
@@ -391,13 +399,21 @@ export function clampScriptDrawingTimes(
       }
       if (ptsChanged) points = nextPts;
     }
-    if (t1 === d.t1 && t2 === d.t2 && points === d.points) {
+    if (
+      t1 === d.t1 &&
+      t2 === d.t2 &&
+      t3 === d.t3 &&
+      t4 === d.t4 &&
+      points === d.points
+    ) {
       out.push(d);
       continue;
     }
     changed = true;
     const next: ScriptDrawing = { ...d, t1 };
     if (t2 !== undefined) next.t2 = t2;
+    if (t3 !== undefined) next.t3 = t3;
+    if (t4 !== undefined) next.t4 = t4;
     if (points !== d.points) next.points = points;
     out.push(next);
   }
@@ -554,6 +570,35 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
           color: sanitizeStrokeColor(r.color, '#939fff'),
           textcolor: sanitizeStrokeColor(r.textcolor ?? r.text_color, '#eceef4'),
           text: sanitizeDrawingText(r.text, DRAWING_TEXT_MAX),
+        });
+      } else if (type === 'linefill' || type === 'line_fill') {
+        // pyne export: line1 (t1/p1→t2/p2) + line2 (t3/p3→t4/p4)
+        const t2 = num(r.t2 ?? r.x2);
+        const p2 = num(r.p2 ?? r.y2);
+        const t3 = num(r.t3 ?? r.x3);
+        const p3 = num(r.p3 ?? r.y3);
+        const t4 = num(r.t4 ?? r.x4);
+        const p4 = num(r.p4 ?? r.y4);
+        if (t2 == null || p2 == null || t3 == null || p3 == null || t4 == null || p4 == null) {
+          continue;
+        }
+        const fillColor = sanitizeStrokeColor(
+          r.bgcolor ?? r.color,
+          'rgba(147,159,255,0.15)',
+        );
+        out.push({
+          id: `pine_linefill_${i++}`,
+          type: 'linefill',
+          t1,
+          p1,
+          t2,
+          p2,
+          t3,
+          p3,
+          t4,
+          p4,
+          color: fillColor,
+          bgcolor: fillColor,
         });
       }
     }

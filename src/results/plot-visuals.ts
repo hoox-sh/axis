@@ -160,6 +160,11 @@ export function isBgcolorKind(kind?: string | null): boolean {
   return normalizePlotKind(kind) === 'bgcolor';
 }
 
+/** Pine `barcolor(series)` — per-bar candle body/wick tint (not SVG geometry). */
+export function isBarcolorKind(kind?: string | null): boolean {
+  return normalizePlotKind(kind) === 'barcolor';
+}
+
 export function isFillKind(kind?: string | null): boolean {
   return normalizePlotKind(kind) === 'fill';
 }
@@ -182,16 +187,18 @@ export function splitSeriesByKind(
 ): {
   lines: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }>;
   bgcolors: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }>;
+  barcolors: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }>;
   shapes: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }>;
   fills: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }>;
   ohlc: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }>;
 } {
   const lines: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }> = [];
   const bgcolors: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }> = [];
+  const barcolors: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }> = [];
   const shapes: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }> = [];
   const fills: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }> = [];
   const ohlc: Array<{ key: string; values: unknown[]; meta: PlotMetaEntry }> = [];
-  if (!series) return { lines, bgcolors, shapes, fills, ohlc };
+  if (!series) return { lines, bgcolors, barcolors, shapes, fills, ohlc };
   const meta = plotMeta || {};
 
   // Sibling OHLC component series (open/high/low/close refs) stay off the line list
@@ -210,6 +217,7 @@ export function splitSeriesByKind(
     const kind = normalizePlotKind(m.kind);
     const entry = { key, values: arr as unknown[], meta: { ...m, kind } };
     if (isBgcolorKind(kind)) bgcolors.push(entry);
+    else if (isBarcolorKind(kind)) barcolors.push(entry);
     else if (isShapeKind(kind)) shapes.push(entry);
     else if (isFillKind(kind)) fills.push(entry);
     else if (isOhlcPlotKind(kind)) ohlc.push(entry);
@@ -220,7 +228,73 @@ export function splitSeriesByKind(
     }
     // unknown kinds skipped
   }
-  return { lines, bgcolors, shapes, fills, ohlc };
+  return { lines, bgcolors, barcolors, shapes, fills, ohlc };
+}
+
+/**
+ * Build per-bar candle color overrides from one or more `barcolor` series.
+ * Later series win on non-null samples. Values may be color strings or na/null.
+ */
+export function barcolorSeriesToMap(
+  times: ReadonlyArray<number>,
+  barcolors: ReadonlyArray<{ values: unknown[]; meta?: PlotMetaEntry }>,
+): Map<number, string> {
+  const map = new Map<number, string>();
+  if (!times?.length || !barcolors?.length) return map;
+  for (const { values } of barcolors) {
+    if (!Array.isArray(values)) continue;
+    const n = Math.min(times.length, values.length);
+    for (let i = 0; i < n; i++) {
+      const t = times[i];
+      if (t == null || !Number.isFinite(t)) continue;
+      const c = coerceBarColor(values[i]);
+      if (c) map.set(t, c);
+    }
+  }
+  return map;
+}
+
+/** Accept color string / hex / rgba; reject na/null/numbers that are not colors. */
+export function coerceBarColor(v: unknown): string | null {
+  if (v == null) return null;
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v)) return null;
+    // 0xRRGGBB or 0xAARRGGBB integer from some engines
+    if (v > 0xffffff) {
+      const r = (v >> 16) & 0xff;
+      const g = (v >> 8) & 0xff;
+      const b = v & 0xff;
+      return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    }
+    if (v >= 0 && v <= 0xffffff) {
+      return `#${Math.floor(v).toString(16).padStart(6, '0')}`;
+    }
+    return null;
+  }
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  if (!s) return null;
+  const lower = s.toLowerCase();
+  if (
+    lower === 'na' ||
+    lower === 'nan' ||
+    lower === 'null' ||
+    lower === 'none' ||
+    lower === 'undefined'
+  ) {
+    return null;
+  }
+  if (
+    s.startsWith('#') ||
+    lower.startsWith('rgb') ||
+    lower.startsWith('hsl') ||
+    lower.startsWith('color.')
+  ) {
+    return s;
+  }
+  // Named CSS-ish tokens (rare) — keep short alphanumeric
+  if (/^[a-zA-Z][\w-]{0,30}$/.test(s)) return s;
+  return null;
 }
 
 function asFiniteNumber(v: unknown): number | null {

@@ -117,6 +117,16 @@ function clearChartScriptState(mgr: PaneManager, layer: DrawingLayer | undefined
     /* optional */
   }
   try {
+    mgr.clearBarColors?.();
+  } catch {
+    /* optional */
+  }
+  try {
+    mgr.clearShapeMarkers?.();
+  } catch {
+    /* optional */
+  }
+  try {
     if (typeof mgr.getAllPanes === 'function') {
       for (const p of mgr.getAllPanes()) {
         try {

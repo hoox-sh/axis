@@ -58,6 +58,28 @@ describe('normalizeScriptDrawings', () => {
     expect(normalizeScriptDrawings(null)).toHaveLength(0);
   });
 
+  it('maps linefill quads from pyne export', () => {
+    const list = normalizeScriptDrawings([
+      {
+        type: 'linefill',
+        t1: 100,
+        p1: 10,
+        t2: 200,
+        p2: 12,
+        t3: 100,
+        p3: 5,
+        t4: 200,
+        p4: 7,
+        color: 'rgba(41,98,255,0.2)',
+      },
+    ]);
+    expect(list).toHaveLength(1);
+    expect(list[0]!.type).toBe('linefill');
+    expect(list[0]!.t3).toBe(100);
+    expect(list[0]!.p4).toBe(7);
+    expect(list[0]!.bgcolor).toContain('rgba');
+  });
+
   it('maps trend/rect aliases and polyline points', () => {
     const list = normalizeScriptDrawings([
       {

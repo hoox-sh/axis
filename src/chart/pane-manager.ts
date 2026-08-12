@@ -320,8 +320,18 @@ export class PaneManager {
   private tradeMarkerList: SeriesMarker<UTCTimestamp>[] = [];
   /** plotshape / plotchar markers (merged with trade markers) */
   private shapeMarkerList: SeriesMarker<UTCTimestamp>[] = [];
+  /**
+   * Owner-scoped shape markers (script id → list) so multi-script runs do not
+   * wipe each other’s plotshape markers. Flattened into {@link shapeMarkerList}.
+   */
+  private shapeMarkersByOwner = new Map<string, SeriesMarker<UTCTimestamp>[]>();
   /** Inline-debug / Pine log bar pins (merged with trade + shape markers) */
   private debugPinMarkerList: SeriesMarker<UTCTimestamp>[] = [];
+  /**
+   * Last barcolor map (time → color) applied to candles. Cleared on full
+   * history reload / clearShape path.
+   */
+  private barColorByTime = new Map<number, string>();
   /** Time-range sync unsubscribers (all panes ↔ all panes) */
   private timeSyncUnsubs: Array<() => void> = [];
   /** Crosshair multi-pane sync unsubscribers */
@@ -963,16 +973,24 @@ export class PaneManager {
 
   /**
    * plotshape / plotchar markers — stored separately and merged with strategy markers.
+   *
+   * @param ownerId - Optional script id; when set, only that script’s shapes are
+   *   replaced (other applied scripts keep their markers). Omit/`__global__`
+   *   replaces the global bag (legacy single-run path).
    */
-  setShapeMarkers(markers: ShapeMarkerSpec[] | TradeMarker[]) {
-    this.shapeMarkerList = markers.map((m, i) => {
+  setShapeMarkers(
+    markers: ShapeMarkerSpec[] | TradeMarker[],
+    ownerId?: string | null,
+  ) {
+    const owner = (ownerId && String(ownerId).trim()) || '__global__';
+    const list = markers.map((m, i) => {
       const base: SeriesMarker<UTCTimestamp> = {
         time: m.time as UTCTimestamp,
         position: m.position,
         color: m.color,
         shape: m.shape,
         text: m.text,
-        id: ('id' in m && m.id) || `shape_${m.time}_${i}`,
+        id: ('id' in m && m.id) || `shape_${owner}_${m.time}_${i}`,
       };
       const size = 'size' in m ? m.size : undefined;
       if (typeof size === 'number' && Number.isFinite(size) && size > 0) {
@@ -980,6 +998,8 @@ export class PaneManager {
       }
       return base;
     });
+    this.shapeMarkersByOwner.set(owner, list);
+    this.rebuildShapeMarkerList();
     this.applyCandleMarkers();
   }
 
@@ -988,9 +1008,83 @@ export class PaneManager {
     this.applyCandleMarkers();
   }
 
-  clearShapeMarkers() {
-    this.shapeMarkerList = [];
+  clearShapeMarkers(ownerId?: string | null) {
+    if (ownerId && String(ownerId).trim()) {
+      this.shapeMarkersByOwner.delete(String(ownerId).trim());
+    } else {
+      this.shapeMarkersByOwner.clear();
+    }
+    this.rebuildShapeMarkerList();
     this.applyCandleMarkers();
+  }
+
+  private rebuildShapeMarkerList() {
+    const out: SeriesMarker<UTCTimestamp>[] = [];
+    for (const list of this.shapeMarkersByOwner.values()) {
+      for (const m of list) out.push(m);
+    }
+    this.shapeMarkerList = out;
+  }
+
+  /**
+   * Apply Pine `barcolor()` overrides to the price candle series.
+   * Each entry is `{ time, color }` (unix seconds). Empty / null clears.
+   * Only effective for candlestick / hollow / heikin chart types.
+   */
+  applyBarColors(
+    colors: ReadonlyArray<{ time: number; color: string }> | Map<number, string> | null | undefined,
+  ): number {
+    this.barColorByTime = new Map();
+    if (colors instanceof Map) {
+      for (const [t, c] of colors) {
+        if (Number.isFinite(t) && c) this.barColorByTime.set(t, c);
+      }
+    } else if (Array.isArray(colors)) {
+      for (const row of colors) {
+        if (!row || !Number.isFinite(row.time) || !row.color) continue;
+        this.barColorByTime.set(row.time, row.color);
+      }
+    }
+    return this.repaintCandlesWithBarColors();
+  }
+
+  clearBarColors() {
+    if (!this.barColorByTime.size) return;
+    this.barColorByTime.clear();
+    this.repaintCandlesWithBarColors();
+  }
+
+  /**
+   * Re-set candle data with optional barcolor fields (color/borderColor/wickColor).
+   * Returns number of bars that received a custom color.
+   */
+  private repaintCandlesWithBarColors(): number {
+    const pricePane = this.getPane('price');
+    const candle = pricePane?.series?.['candle'];
+    if (!candle || typeof candle.setData !== 'function') return 0;
+    const bars = Array.isArray(store.bars) ? store.bars : [];
+    if (!bars.length) return 0;
+    let tinted = 0;
+    const data = bars.map((b) => {
+      const t = Number(b.time);
+      const row: Record<string, unknown> = {
+        time: t as UTCTimestamp,
+        open: b.open,
+        high: b.high,
+        low: b.low,
+        close: b.close,
+      };
+      const c = this.barColorByTime.get(t);
+      if (c) {
+        row.color = c;
+        row.borderColor = c;
+        row.wickColor = c;
+        tinted += 1;
+      }
+      return row;
+    });
+    safeSetData(candle, data);
+    return tinted;
   }
 
   /**
