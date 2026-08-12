@@ -411,6 +411,13 @@ describe('normalizeLineStyle / normalizeExtend', () => {
     expect(normalizeLineStyle(null)).toBe('solid');
   });
 
+  it('maps line.style_arrow_* to directional tokens', () => {
+    expect(normalizeLineStyle('line.style_arrow_right')).toBe('arrow_right');
+    expect(normalizeLineStyle('style_arrow_left')).toBe('arrow_left');
+    expect(normalizeLineStyle('line.style_arrow_both')).toBe('arrow_both');
+    expect(normalizeLineStyle('arrow')).toBe('arrow_right');
+  });
+
   it('normalizes extend constants', () => {
     expect(normalizeExtend('extend.right')).toBe('right');
     expect(normalizeExtend('both')).toBe('both');

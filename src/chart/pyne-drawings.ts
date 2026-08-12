@@ -320,7 +320,10 @@ function clampWidth(raw: unknown, fallback = 1): number {
   return Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, n));
 }
 
-/** Strip Pine prefixes: ``line.style_dashed`` / ``style_dotted`` → ``dashed``/``dotted``. */
+/**
+ * Strip Pine prefixes: ``line.style_dashed`` / ``style_dotted`` → ``dashed``/``dotted``.
+ * Arrow styles: ``arrow_left`` | ``arrow_right`` | ``arrow_both`` | ``arrow`` (→ right).
+ */
 export function normalizeLineStyle(raw: unknown, fallback = 'solid'): string {
   if (raw == null) return fallback;
   // Bound work on hostile strings
@@ -333,7 +336,22 @@ export function normalizeLineStyle(raw: unknown, fallback = 'solid'): string {
   s = s.replace(/^linestyle_/, '');
   if (s.includes('dash')) return 'dashed';
   if (s.includes('dot')) return 'dotted';
-  if (s.includes('arrow')) return 'arrow';
+  // Prefer specific arrow_* before bare "arrow"
+  if (s.includes('arrow_both') || s === 'both' || s.includes('arrowboth')) {
+    return 'arrow_both';
+  }
+  if (s.includes('arrow_left') || s.includes('arrowleft') || s === 'arrow_left') {
+    return 'arrow_left';
+  }
+  if (
+    s.includes('arrow_right') ||
+    s.includes('arrowright') ||
+    s === 'arrow_right' ||
+    s === 'arrow'
+  ) {
+    return 'arrow_right';
+  }
+  if (s.includes('arrow')) return 'arrow_right';
   if (s === 'solid' || s === 'none') return s;
   return s || fallback;
 }

@@ -1643,6 +1643,17 @@ export class DrawingLayer {
         this.host.clientHeight,
       );
       line(g, x1, y1, x2, y2, stroke, sw, dash, pe);
+      // Pine line.style_arrow_left|right|both — solid stroke + SVG heads
+      const st = (d.style || 'solid').toLowerCase();
+      if (st.startsWith('arrow')) {
+        const head = Math.max(8, sw * 3);
+        if (st === 'arrow_right' || st === 'arrow_both' || st === 'arrow') {
+          paintArrowHead(g, x1, y1, x2, y2, stroke, head);
+        }
+        if (st === 'arrow_left' || st === 'arrow_both') {
+          paintArrowHead(g, x2, y2, x1, y1, stroke, head);
+        }
+      }
       return;
     }
     if (d.type === 'box' && d.t2 != null && d.p2 != null) {
