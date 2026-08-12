@@ -18,11 +18,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Script Settings modal — edit Pine `input.*` values and re-run.
+ * Script Settings modal — edit Pine `input.*` values and Strategy Properties.
  *
  * Target is either an applied indicator (`scriptSettings.indicatorId`) or the
- * docked editor document. Field defs from `resolveScriptInputs`; Apply writes
- * overrides via store helpers and calls `runAndApply`.
+ * docked editor document. Field defs from `resolveScriptInputs`; Strategy
+ * Properties tab appears when `strategy()` is declared. Apply writes overrides
+ * via store helpers and calls `runAndApply`.
  *
  * **Focus / value stability:** fields are seeded only when the modal opens or
  * the target indicator changes — not on every `lastRun` / live tick. Number
@@ -44,6 +45,8 @@ import {
   closeScriptSettings,
   setEditorInputValues,
   setIndicatorInputValues,
+  setEditorStrategyProps,
+  setIndicatorStrategyProps,
   loadEditorDoc,
 } from '../store';
 import {
@@ -52,17 +55,29 @@ import {
   overridesFromDefs,
   type ScriptInputDef,
 } from '../results/script-inputs';
+import {
+  resolveStrategyProps,
+  strategyOverridesFromDefs,
+  hasStrategyDeclaration,
+  type StrategyPropDef,
+} from '../results/strategy-props';
+import { detectScriptKind } from '../indicators/script-meta';
 import { sourceOptionsWithPlots } from '../results/plot-sources';
 import { runAndApply } from '../indicators/runner';
 import type { RunResult } from '../indicators/runner';
 import { Icons } from './icons';
 
-/** Modal form for Pine inputs (editor doc or applied indicator). */
+type SettingsTab = 'inputs' | 'strategy';
+
+/** Modal form for Pine inputs + strategy properties (editor doc or applied). */
 export const ScriptSettingsModal: Component = () => {
   const open = () => store.scriptSettings.open;
   const indicatorId = () => store.scriptSettings.indicatorId;
 
   const [fields, setFields] = createSignal<ScriptInputDef[]>([]);
+  const [strategyFields, setStrategyFields] = createSignal<StrategyPropDef[]>([]);
+  const [showStrategyTab, setShowStrategyTab] = createSignal(false);
+  const [tab, setTab] = createSignal<SettingsTab>('inputs');
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
   /** Labels for cross-indicator plot options (value → display). */
@@ -85,6 +100,7 @@ export const ScriptSettingsModal: Component = () => {
         name: ind.name,
         code: ind.code,
         values: ind.inputValues || {},
+        strategyProps: ind.strategyProps || {},
       };
     }
     return {
@@ -93,6 +109,7 @@ export const ScriptSettingsModal: Component = () => {
       name: 'Editor script',
       code: loadEditorDoc() || '',
       values: store.editorInputValues || {},
+      strategyProps: store.editorStrategyProps || {},
     };
   });
 
@@ -100,6 +117,8 @@ export const ScriptSettingsModal: Component = () => {
     const t = untrack(() => targetMeta());
     if (!t) {
       setFields([]);
+      setStrategyFields([]);
+      setShowStrategyTab(false);
       setSourceLabels({});
       return;
     }
@@ -122,6 +141,19 @@ export const ScriptSettingsModal: Component = () => {
     });
     setSourceLabels({ ...labels });
     setFields(applyInputOverrides(withPlots, t.values));
+
+    const isStrategy =
+      detectScriptKind(t.code) === 'strategy' || hasStrategyDeclaration(t.code);
+    setShowStrategyTab(isStrategy);
+    if (isStrategy) {
+      setStrategyFields(resolveStrategyProps(t.code, t.strategyProps));
+      // Prefer Inputs when they exist; otherwise open Properties
+      if (withPlots.length === 0) setTab('strategy');
+      else setTab('inputs');
+    } else {
+      setStrategyFields([]);
+      setTab('inputs');
+    }
     setError('');
   };
 
@@ -147,8 +179,24 @@ export const ScriptSettingsModal: Component = () => {
     return [...map.entries()];
   });
 
+  const strategyGroups = createMemo(() => {
+    const map = new Map<string, StrategyPropDef[]>();
+    for (const f of strategyFields()) {
+      const g = f.group || 'Properties';
+      if (!map.has(g)) map.set(g, []);
+      map.get(g)!.push(f);
+    }
+    return [...map.entries()];
+  });
+
   const setFieldValue = (id: string, value: unknown) => {
     setFields((list) => list.map((f) => (f.id === id ? { ...f, value } : f)));
+  };
+
+  const setStrategyFieldValue = (id: string, value: unknown) => {
+    setStrategyFields((list) =>
+      list.map((f) => (f.id === id ? { ...f, value } : f)),
+    );
   };
 
   const onBackdrop = (e: MouseEvent) => {
@@ -171,10 +219,15 @@ export const ScriptSettingsModal: Component = () => {
     const t = untrack(() => targetMeta());
     if (!t) return;
     const overrides = overridesFromDefs(fields());
+    const stratOverrides = showStrategyTab()
+      ? strategyOverridesFromDefs(strategyFields())
+      : {};
     if (t.kind === 'indicator' && t.id) {
       setIndicatorInputValues(t.id, overrides);
+      if (showStrategyTab()) setIndicatorStrategyProps(t.id, stratOverrides);
     } else {
       setEditorInputValues(overrides);
+      if (showStrategyTab()) setEditorStrategyProps(stratOverrides);
     }
     if (!andRun) {
       closeScriptSettings();
@@ -184,7 +237,12 @@ export const ScriptSettingsModal: Component = () => {
     setError('');
     try {
       const id = t.kind === 'indicator' ? t.id : undefined;
-      await runAndApply(t.code, id, { inputs: overrides });
+      await runAndApply(t.code, id, {
+        inputs: overrides,
+        ...(showStrategyTab() && Object.keys(stratOverrides).length
+          ? { strategyProps: stratOverrides }
+          : {}),
+      });
       closeScriptSettings();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
@@ -194,8 +252,15 @@ export const ScriptSettingsModal: Component = () => {
   };
 
   const onReset = () => {
-    setFields((list) => list.map((f) => ({ ...f, value: f.default })));
+    if (tab() === 'strategy') {
+      setStrategyFields((list) => list.map((f) => ({ ...f, value: f.default })));
+    } else {
+      setFields((list) => list.map((f) => ({ ...f, value: f.default })));
+    }
   };
+
+  const canReset = () =>
+    tab() === 'strategy' ? strategyFields().length > 0 : fields().length > 0;
 
   return (
     <Show when={open()}>
@@ -205,7 +270,7 @@ export const ScriptSettingsModal: Component = () => {
         role="presentation"
       >
         <div
-          class="sc-dialog w-[min(460px,calc(100vw-2*var(--ui-dialog-margin)))]"
+          class="sc-dialog w-[min(480px,calc(100vw-2*var(--ui-dialog-margin)))]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="axis-script-settings-title"
@@ -222,7 +287,10 @@ export const ScriptSettingsModal: Component = () => {
                 Script settings
               </div>
               <div class="sc-hint truncate">
-                {targetMeta()?.name || 'Script'} · input parameters
+                {targetMeta()?.name || 'Script'}
+                {showStrategyTab()
+                  ? ' · inputs & strategy properties'
+                  : ' · input parameters'}
               </div>
             </div>
             <button
@@ -235,35 +303,107 @@ export const ScriptSettingsModal: Component = () => {
             </button>
           </div>
 
-          <div class="sc-dialog-body">
-            <Show
-              when={fields().length > 0}
-              fallback={
-                <div class="text-[12px] text-text-dim leading-relaxed">
-                  No <code class="text-accent">input.*</code> declarations found in this script.
-                  Add e.g. <code class="text-text-faint">length = input.int(14, "Length")</code>.
-                </div>
-              }
+          <Show when={showStrategyTab()}>
+            <div
+              class="sc-chip-row px-4 pt-2"
+              role="tablist"
+              aria-label="Script settings tabs"
+              data-testid="axis-script-settings-tabs"
             >
-              <For each={groups()}>
-                {([group, items]) => (
-                  <div class="flex flex-col gap-2">
-                    <div class="text-[10px] uppercase tracking-wider text-text-dim font-semibold">
-                      {group}
-                    </div>
-                    <For each={items}>
-                      {(field) => (
-                        <InputField
-                          field={field}
-                          optionLabels={sourceLabels()}
-                          onChange={(v) => setFieldValue(field.id, v)}
-                        />
-                      )}
-                    </For>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab() === 'inputs'}
+                class={`sc-chip ${tab() === 'inputs' ? 'is-active' : ''}`}
+                onClick={() => setTab('inputs')}
+                data-testid="axis-script-settings-tab-inputs"
+              >
+                Inputs
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab() === 'strategy'}
+                class={`sc-chip ${tab() === 'strategy' ? 'is-active' : ''}`}
+                onClick={() => setTab('strategy')}
+                data-testid="axis-script-settings-tab-strategy"
+              >
+                Properties
+              </button>
+            </div>
+          </Show>
+
+          <div class="sc-dialog-body">
+            <Show when={tab() === 'inputs' || !showStrategyTab()}>
+              <Show
+                when={fields().length > 0}
+                fallback={
+                  <div class="text-[12px] text-text-dim leading-relaxed">
+                    No <code class="text-accent">input.*</code> declarations found in this script.
+                    Add e.g. <code class="text-text-faint">length = input.int(14, "Length")</code>.
+                    <Show when={showStrategyTab()}>
+                      <span>
+                        {' '}
+                        Strategy broker settings are under the{' '}
+                        <strong class="text-text">Properties</strong> tab.
+                      </span>
+                    </Show>
                   </div>
-                )}
-              </For>
+                }
+              >
+                <For each={groups()}>
+                  {([group, items]) => (
+                    <div class="flex flex-col gap-2">
+                      <div class="text-[10px] uppercase tracking-wider text-text-dim font-semibold">
+                        {group}
+                      </div>
+                      <For each={items}>
+                        {(field) => (
+                          <InputField
+                            field={field}
+                            optionLabels={sourceLabels()}
+                            onChange={(v) => setFieldValue(field.id, v)}
+                          />
+                        )}
+                      </For>
+                    </div>
+                  )}
+                </For>
+              </Show>
             </Show>
+
+            <Show when={tab() === 'strategy' && showStrategyTab()}>
+              <div
+                role="tabpanel"
+                aria-label="Strategy properties"
+                class="flex flex-col gap-3"
+                data-testid="axis-script-settings-strategy"
+              >
+                <p class="text-[11px] text-text-dim leading-relaxed m-0">
+                  Broker settings for this <code class="text-accent">strategy()</code> —
+                  initial capital, order size, commission, leverage / margin, and
+                  execution flags. Applied on run without rewriting your editor buffer.
+                </p>
+                <For each={strategyGroups()}>
+                  {([group, items]) => (
+                    <div class="flex flex-col gap-2">
+                      <div class="text-[10px] uppercase tracking-wider text-text-dim font-semibold">
+                        {group}
+                      </div>
+                      <For each={items}>
+                        {(field) => (
+                          <StrategyField
+                            field={field}
+                            onChange={(v) => setStrategyFieldValue(field.id, v)}
+                          />
+                        )}
+                      </For>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+
             <Show when={error()}>
               <div class="text-[11px] text-red border border-red/40 bg-red/10 px-2 py-1.5">
                 {error()}
@@ -276,7 +416,7 @@ export const ScriptSettingsModal: Component = () => {
               type="button"
               class="sc-btn sc-btn-ghost"
               onClick={onReset}
-              disabled={!fields().length || busy()}
+              disabled={!canReset() || busy()}
             >
               Reset
             </button>
@@ -476,6 +616,141 @@ const InputField: Component<{
           !props.field.options?.length
         }
       >
+        <input
+          id={id()}
+          type="text"
+          class="sc-input w-full"
+          value={textDisplay()}
+          onFocus={(e) => {
+            setTextFocused(true);
+            setTextDraft(e.currentTarget.value);
+          }}
+          onInput={(e) => {
+            setTextDraft(e.currentTarget.value);
+            props.onChange(e.currentTarget.value);
+          }}
+          onBlur={() => {
+            setTextFocused(false);
+            setTextDraft(null);
+          }}
+        />
+      </Show>
+    </div>
+  );
+};
+
+const StrategyField: Component<{
+  field: StrategyPropDef;
+  onChange: (v: unknown) => void;
+}> = (props) => {
+  const id = () => `axis-sp-${props.field.id}`;
+  const t = () => props.field.type;
+  const val = () => props.field.value ?? props.field.default;
+
+  const [numDraft, setNumDraft] = createSignal<string | null>(null);
+  const [textDraft, setTextDraft] = createSignal<string | null>(null);
+  const [numFocused, setNumFocused] = createSignal(false);
+  const [textFocused, setTextFocused] = createSignal(false);
+
+  createEffect(() => {
+    void props.field.value;
+    void props.field.default;
+    if (!numFocused()) setNumDraft(null);
+    if (!textFocused()) setTextDraft(null);
+  });
+
+  const numDisplay = () => {
+    if (numFocused() && numDraft() != null) return numDraft()!;
+    const v = val();
+    return v == null ? '' : String(v);
+  };
+
+  const textDisplay = () => {
+    if (textFocused() && textDraft() != null) return textDraft()!;
+    return String(val() ?? '');
+  };
+
+  const commitNumber = (raw: string) => {
+    if (raw.trim() === '') {
+      props.onChange(props.field.default);
+      return;
+    }
+    const n = t() === 'int' ? parseInt(raw, 10) : parseFloat(raw);
+    props.onChange(Number.isFinite(n) ? n : props.field.default);
+  };
+
+  const enumLabel = (opt: string) => {
+    // strategy.percent_of_equity → percent of equity
+    const bare = opt.replace(/^strategy\.(commission\.)?/, '');
+    return bare.replace(/_/g, ' ');
+  };
+
+  return (
+    <div class="sc-field" data-strategy-prop={props.field.id}>
+      <label class="text-[11px] text-text-dim" for={id()} title={props.field.tooltip || undefined}>
+        {props.field.title}
+        <Show when={props.field.tooltip}>
+          <span class="text-text-faint ml-1" title={props.field.tooltip!}>
+            ⓘ
+          </span>
+        </Show>
+      </label>
+      <Show when={t() === 'bool'}>
+        <label class="inline-flex items-center gap-2 text-[12px] text-text cursor-pointer">
+          <input
+            id={id()}
+            type="checkbox"
+            class="accent-[var(--color-accent)]"
+            checked={!!val()}
+            onChange={(e) => props.onChange(e.currentTarget.checked)}
+          />
+          {val() ? 'On' : 'Off'}
+        </label>
+      </Show>
+      <Show when={t() === 'int' || t() === 'float'}>
+        <input
+          id={id()}
+          type="number"
+          class="sc-input w-full"
+          value={numDisplay()}
+          min={props.field.min ?? undefined}
+          max={props.field.max ?? undefined}
+          step={props.field.step ?? (t() === 'int' ? 1 : 'any')}
+          onFocus={(e) => {
+            setNumFocused(true);
+            setNumDraft(e.currentTarget.value);
+          }}
+          onInput={(e) => {
+            const raw = e.currentTarget.value;
+            setNumDraft(raw);
+            if (raw.trim() === '') return;
+            const n = t() === 'int' ? parseInt(raw, 10) : parseFloat(raw);
+            if (Number.isFinite(n)) props.onChange(n);
+          }}
+          onChange={(e) => commitNumber(e.currentTarget.value)}
+          onBlur={(e) => {
+            commitNumber(e.currentTarget.value);
+            setNumFocused(false);
+            setNumDraft(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur();
+          }}
+        />
+      </Show>
+      <Show when={t() === 'enum' && props.field.options?.length}>
+        <select
+          id={id()}
+          class="sc-input w-full"
+          value={String(val() ?? '')}
+          onChange={(e) => props.onChange(e.currentTarget.value)}
+        >
+          <For each={props.field.options}>
+            {(opt) => <option value={opt}>{enumLabel(opt)}</option>}
+          </For>
+        </select>
+      </Show>
+      <Show when={t() === 'string'}>
         <input
           id={id()}
           type="text"

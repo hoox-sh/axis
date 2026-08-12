@@ -196,6 +196,7 @@ const DEFAULTS: AppState = {
   alertsPanel: { open: false, width: 280 },
   scriptSettings: { open: false, indicatorId: null },
   editorInputValues: {},
+  editorStrategyProps: {},
   crosshair: { time: null, barIndex: null },
   resultsPanel: { open: false, height: 220 },
   logsPanel: { open: false, height: 160 },
@@ -462,6 +463,11 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         bag.editorInputValues && typeof bag.editorInputValues === 'object'
           ? (bag.editorInputValues as Record<string, unknown>)
           : DEFAULTS.editorInputValues,
+      editorStrategyProps:
+        (bag as { editorStrategyProps?: unknown }).editorStrategyProps &&
+        typeof (bag as { editorStrategyProps?: unknown }).editorStrategyProps === 'object'
+          ? ((bag as { editorStrategyProps: Record<string, unknown> }).editorStrategyProps)
+          : DEFAULTS.editorStrategyProps,
       // Ephemeral UI — never hydrate open modals / crosshair from disk
       scriptSettings: { open: false, indicatorId: null },
       crosshair: { time: null, barIndex: null },
@@ -884,6 +890,7 @@ function seedStoreState(overlay: Partial<AppState> | null | undefined): AppState
     runResults: {},
     indicatorSeries: {},
     editorInputValues: {},
+    editorStrategyProps: {},
     pluginsConfig: {},
     savedLayouts: [],
     panelChrome: defaultPanelChromeMap(),
@@ -989,6 +996,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     uiScale: s.uiScale,
     editor: unwrap(s.editor),
     editorInputValues: unwrap(s.editorInputValues),
+    editorStrategyProps: unwrap(s.editorStrategyProps),
     scripts: unwrap(s.scripts),
     panes: unwrap(s.panes),
     watchlist: unwrap(s.watchlist),
@@ -1613,6 +1621,7 @@ export function addIndicator(
   paneId: string,
   plots: Record<string, { color: string }>,
   inputValues?: Record<string, unknown>,
+  strategyProps?: Record<string, unknown>,
 ) {
   const id = uid();
   setStore('scripts', (s) => [
@@ -1625,6 +1634,7 @@ export function addIndicator(
       visible: true,
       plots,
       inputValues: inputValues ? { ...inputValues } : undefined,
+      strategyProps: strategyProps ? { ...strategyProps } : undefined,
     },
   ]);
   persist();
@@ -1637,7 +1647,9 @@ export function addIndicator(
  */
 export function updateIndicator(
   id: string,
-  patch: Partial<Pick<Indicator, 'name' | 'code' | 'paneId' | 'plots' | 'inputValues' | 'visible'>>,
+  patch: Partial<
+    Pick<Indicator, 'name' | 'code' | 'paneId' | 'plots' | 'inputValues' | 'strategyProps' | 'visible'>
+  >,
 ) {
   if (!id || !patch || !Object.keys(patch).length) return;
   let found = false;
@@ -2702,6 +2714,20 @@ export function setEditorInputValues(values: Record<string, unknown>) {
 export function setIndicatorInputValues(id: string, values: Record<string, unknown>) {
   setStore('scripts', (s) =>
     s.map((ind) => (ind.id === id ? { ...ind, inputValues: { ...values } } : ind)),
+  );
+  persist();
+}
+
+/** Persist Strategy Properties overrides for the docked editor document. */
+export function setEditorStrategyProps(values: Record<string, unknown>) {
+  setStore('editorStrategyProps', values);
+  persist();
+}
+
+/** Persist Strategy Properties overrides on an applied strategy script. */
+export function setIndicatorStrategyProps(id: string, values: Record<string, unknown>) {
+  setStore('scripts', (s) =>
+    s.map((ind) => (ind.id === id ? { ...ind, strategyProps: { ...values } } : ind)),
   );
   persist();
 }

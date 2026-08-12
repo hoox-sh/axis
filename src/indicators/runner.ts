@@ -68,6 +68,7 @@ import {
   setTelemetryState,
 } from '../store';
 import { resolveInputSourceValues } from '../results/plot-sources';
+import { applyStrategyPropsToSource } from '../results/strategy-props';
 import {
   getManager,
   getDrawingLayer,
@@ -78,6 +79,7 @@ import { normalizeStrategyEvents, eventsToMarkers } from '../results/events';
 import { buildStrategyReport } from '../results/strategy';
 import {
   bgcolorSeriesToHistogramData,
+  barcolorSeriesToMap,
   lineSeriesToOverlayData,
   ohlcSeriesToBarData,
   resolvePlotFillBands,
@@ -188,6 +190,11 @@ export interface RunOptions {
   openResults?: boolean;
   /** Pine input.* overrides keyed by title (Script Settings) */
   inputs?: Record<string, unknown>;
+  /**
+   * Strategy Properties overrides keyed by `strategy()` kwarg
+   * (`initial_capital`, `pyramiding`, …). Merged into a run-time source copy.
+   */
+  strategyProps?: Record<string, unknown>;
   /**
    * When false, do not advance the concurrent-run epoch (nested calls).
    * Prefer {@link RunOptions.epoch} when nesting under {@link runAndApply}.
@@ -389,8 +396,15 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
           : undefined;
     // Expand plot:<indicatorId>:<plotKey> refs → full series arrays for the engine
     const inputs = resolveInputSourceValues(rawInputs, store.indicatorSeries);
+    // Strategy Properties: rewrite strategy() kwargs on a run-time copy only
+    // (resolved by runAndApplyInner; empty bag = no rewrite).
+    const strategyProps =
+      opts.strategyProps && Object.keys(opts.strategyProps).length
+        ? opts.strategyProps
+        : undefined;
+    const scriptForEngine = applyStrategyPropsToSource(script, strategyProps);
     const rawResult = await engine.run({
-      script,
+      script: scriptForEngine,
       bars,
       config,
       inputs,
@@ -601,16 +615,34 @@ async function runAndApplyInner(
   silent: boolean,
   openResults: boolean,
 ): Promise<RunResult> {
-  // Prefer explicit opts.inputs; else per-indicator saved values; else editor
+  // Prefer explicit opts.inputs / strategyProps; else per-indicator saved; else editor
   let inputs = opts.inputs;
-  if (!inputs && indicatorId) {
+  let strategyProps = opts.strategyProps;
+  if (indicatorId) {
     const ind = store.scripts.find((s) => s.id === indicatorId);
-    if (ind?.inputValues && Object.keys(ind.inputValues).length) {
+    if (!inputs && ind?.inputValues && Object.keys(ind.inputValues).length) {
       inputs = ind.inputValues;
     }
+    // Explicit bag for this script only — never fall through to editorStrategyProps
+    if (strategyProps === undefined) {
+      strategyProps = ind?.strategyProps && Object.keys(ind.strategyProps).length
+        ? ind.strategyProps
+        : {};
+    }
+  } else if (strategyProps === undefined) {
+    strategyProps =
+      store.editorStrategyProps && Object.keys(store.editorStrategyProps).length
+        ? store.editorStrategyProps
+        : {};
   }
   // Pass epoch so nested runScript can skip status/telemetry if superseded mid-flight
-  const raw = await runScript(script, { ...opts, inputs, claimEpoch: false, epoch });
+  const raw = await runScript(script, {
+    ...opts,
+    inputs,
+    strategyProps,
+    claimEpoch: false,
+    epoch,
+  });
   const result = normalizeRunExtras(raw);
 
   // Stale completion — never clobber newer lastRun / chart
@@ -973,13 +1005,31 @@ async function runAndApplyInner(
         /* drawing layer optional in tests */
       }
 
-      // plotshape / plotchar → markers (merged with strategy markers; never wipe trades)
+      // plotshape / plotchar → markers (owner-scoped so multi-script runs keep others)
       const shapeMarkers = split.shapes.flatMap(({ key, values, meta }) =>
         shapeSeriesToMarkers(ohlcvTimes, values, meta, { idPrefix: key }),
       );
-      manager.setShapeMarkers(shapeMarkers);
+      const shapeOwner = indicatorId ?? EDITOR_RUN_KEY;
+      if (shapeMarkers.length || split.shapes.length) {
+        manager.setShapeMarkers(shapeMarkers, shapeOwner);
+      }
       if (shapeMarkers.length && !silent) {
         appendLog('ok', `plotshape: ${shapeMarkers.length} marker(s)`, 'plot');
+      }
+
+      // barcolor() → tint price candles (LWC per-bar color fields).
+      // Last script with barcolor wins; runs without barcolor do not clear
+      // (history reload / clearChartScriptState clears via clearBarColors).
+      try {
+        if (split.barcolors?.length) {
+          const colorMap = barcolorSeriesToMap(ohlcvTimes, split.barcolors);
+          const n = manager.applyBarColors?.(colorMap) ?? 0;
+          if (n > 0 && !silent) {
+            appendLog('ok', `barcolor: ${n} bar(s) tinted`, 'plot');
+          }
+        }
+      } catch {
+        /* barcolor optional on older managers */
       }
 
       // Non-overlay scripts must not leave series on the price pane
@@ -1210,12 +1260,19 @@ async function runAndApplyInner(
         opts.inputs && Object.keys(opts.inputs).length
           ? opts.inputs
           : store.editorInputValues;
+      const savedStrategyProps =
+        opts.strategyProps && Object.keys(opts.strategyProps).length
+          ? opts.strategyProps
+          : store.editorStrategyProps;
       const newId = addIndicator(
         scriptName,
         script,
         paneId,
         plots,
         savedInputs && Object.keys(savedInputs).length ? savedInputs : undefined,
+        savedStrategyProps && Object.keys(savedStrategyProps).length
+          ? savedStrategyProps
+          : undefined,
       );
       if (Object.keys(seriesForCache).length) {
         setIndicatorSeries(newId, {
@@ -1244,6 +1301,10 @@ async function runAndApplyInner(
         opts.inputs && Object.keys(opts.inputs).length
           ? opts.inputs
           : existing?.inputValues;
+      const savedStrategyProps =
+        opts.strategyProps && Object.keys(opts.strategyProps).length
+          ? opts.strategyProps
+          : existing?.strategyProps;
       updateIndicator(indicatorId, {
         name: scriptName,
         code: script,
@@ -1251,6 +1312,9 @@ async function runAndApplyInner(
         plots,
         ...(savedInputs && Object.keys(savedInputs).length
           ? { inputValues: savedInputs }
+          : {}),
+        ...(savedStrategyProps && Object.keys(savedStrategyProps).length
+          ? { strategyProps: savedStrategyProps }
           : {}),
       });
       if (Object.keys(seriesForCache).length) {

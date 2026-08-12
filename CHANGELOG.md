@@ -18,6 +18,10 @@ _Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 ### Added
 
 - **About AXIS modal** — click the topbar HOOX/AXIS brand (or command palette **About AXIS** / Help → About) for product, author, and HOOX ethos from [hoox.sh/manifesto](https://hoox.sh/manifesto), with links to AXIS / PYNE / docs.
+- **Script settings → Properties** — when a `strategy()` is loaded, a **Properties** tab exposes broker parameters (initial capital, order size / pyramiding, commission, leverage / margin, process orders on close, calc flags). Overrides persist per script and are merged into `strategy()` on run without rewriting the editor buffer.
+- **`linefill.new` paint** — normalize + SVG quad fill between two lines (pairs with pyne `export_for_api` linefill serialization).
+- **`barcolor()`** — per-bar candle body/wick tint from `kind: barcolor` series (LWC color fields).
+- **plotshape multi-script** — shape markers are owner-scoped by script id so one run does not wipe another script’s shapes.
 
 ##
 

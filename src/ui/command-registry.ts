@@ -610,7 +610,7 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     id: 'action.script-settings',
     title: 'Open Script Inputs',
     category: 'actions',
-    keywords: ['inputs', 'parameters', 'input.*'],
+    keywords: ['inputs', 'parameters', 'input.*', 'strategy', 'properties', 'capital', 'pyramiding'],
   },
   {
     id: 'action.about',

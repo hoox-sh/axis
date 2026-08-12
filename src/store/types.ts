@@ -82,6 +82,12 @@ export interface Indicator {
   plots: Record<string, { color: string }>;
   /** Last-known input values keyed by title (Script Settings) */
   inputValues?: Record<string, unknown>;
+  /**
+   * Strategy Properties overrides keyed by `strategy()` kwarg
+   * (`initial_capital`, `pyramiding`, …). Applied by rewriting the declaration
+   * on run — not Pine `input.*`.
+   */
+  strategyProps?: Record<string, unknown>;
 }
 
 /** High-level app / connection status shown in the status bar. */
@@ -351,12 +357,17 @@ export interface AppState {
   /** Price alerts panel */
   alertsPanel: { open: boolean; width: number };
   /**
-   * Script Settings modal — shows ``input.*`` fields.
+   * Script Settings modal — shows ``input.*`` fields (+ Strategy Properties).
    * indicatorId null = editor document (not yet an applied indicator).
    */
   scriptSettings: { open: boolean; indicatorId: string | null };
   /** Input overrides for the docked editor doc (keyed by input title) */
   editorInputValues: Record<string, unknown>;
+  /**
+   * Strategy Properties overrides for the docked editor doc
+   * (keyed by strategy() kwarg name).
+   */
+  editorStrategyProps: Record<string, unknown>;
   /**
    * Ephemeral crosshair position for Data Window (not persisted).
    * time = bar time; barIndex = index into store.bars when known.
