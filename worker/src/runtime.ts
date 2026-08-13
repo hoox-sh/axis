@@ -27,7 +27,11 @@
  * 3. **503 `NO_BACKEND`** if neither path is available / Pyodide fails open.
  *
  * ## Auth & abuse controls
- * - When `API_KEYS` is bound or `REQUIRE_RUN_AUTH=1`, {@link requireApiKey} is mandatory.
+ * - Auth is required when `API_KEYS` is bound, `REQUIRE_RUN_AUTH=1`, or a real
+ *   compute path is configured (`EXTERNAL_BACKEND` non-empty or
+ *   `PYODIDE_IN_WORKER=enabled`) and `ALLOW_OPEN_KEYS` is not `"1"`.
+ * - Local demos: `ALLOW_OPEN_KEYS=1` keeps `/api/run` open (no Bearer) even with
+ *   a backend; never enable that on a public Worker.
  * - Always rate-limited per IP (and per key when authenticated) — isolate memory.
  * - Script/data size caps + upstream proxy timeout.
  *
@@ -77,11 +81,29 @@ function allowRate(key: string, limit: number, windowMs: number): boolean {
   return b.count <= limit;
 }
 
-/** True when /api/run must authenticate (prod KV or explicit flag). */
+/**
+ * True when /api/run must authenticate.
+ * Fail-closed whenever a real backend would burn CPU for unauthenticated callers.
+ * Local demos opt out with ALLOW_OPEN_KEYS=1 (and no API_KEYS / REQUIRE_RUN_AUTH).
+ */
 function runAuthRequired(env: Env): boolean {
   if (env.API_KEYS) return true;
   const flag = String(env.REQUIRE_RUN_AUTH || '').toLowerCase();
-  return flag === '1' || flag === 'true' || flag === 'yes';
+  if (flag === '1' || flag === 'true' || flag === 'yes') return true;
+
+  // Explicit local-demo open mode: do not force the auth gate (Bearer optional).
+  const openKeys =
+    env.ALLOW_OPEN_KEYS === '1' ||
+    env.ALLOW_OPEN_KEYS === 'true' ||
+    String(env.ALLOW_OPEN_KEYS || '').toLowerCase() === 'yes';
+  if (openKeys) return false;
+
+  const external = String(env.EXTERNAL_BACKEND || '').trim();
+  if (external) return true;
+
+  if (env.PYODIDE_IN_WORKER === 'enabled') return true;
+
+  return false;
 }
 
 function jsonError(
@@ -187,7 +209,7 @@ async function proxyToExternal(bodyText: string, env: Env, origin: string): Prom
  * optional usage meter → Pyodide → external proxy fallback.
  */
 export async function handleRun(req: Request, env: Env, origin: string): Promise<Response> {
-    // ── Auth gate (prod: API_KEYS bound or REQUIRE_RUN_AUTH) ──
+    // ── Auth gate (KV / REQUIRE_RUN_AUTH / backend without open keys) ──
     let userId: string | null = null;
     let rawKey: string | null = null;
     if (runAuthRequired(env)) {

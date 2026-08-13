@@ -21,9 +21,15 @@
  * Multi-chart registry — one {@link PaneManager} (+ optional drawing layer)
  * per layout slot. The “active” slot backs legacy {@link getManager}.
  *
+ * Slot **bars** / **chartDataGen** live in a Solid store so ChartHost inactive
+ * slots re-paint when those paths change. Managers and drawing layers stay
+ * imperative refs (not reactive).
+ *
  * @module chart/chart-registry
  */
 
+import { batch, createSignal } from 'solid-js';
+import { createStore, produce } from 'solid-js/store';
 import type { PaneManager } from './pane-manager';
 import type { DrawingLayer } from './drawing-layer';
 import type { Bar } from '../store/types';
@@ -35,20 +41,48 @@ export interface ChartSlotRuntime {
   chartDataGen: number;
 }
 
-const runtimes = new Map<string, ChartSlotRuntime>();
+/** Reactive per-slot OHLCV + generation (tracked by getSlotBars / getSlotChartDataGen). */
+interface SlotReactive {
+  bars: Bar[];
+  chartDataGen: number;
+}
+
+/** Imperative manager / drawing-layer refs (not reactive). */
+interface SlotRefs {
+  manager?: PaneManager;
+  drawingLayer?: DrawingLayer;
+}
+
+const [slotData, setSlotData] = createStore<Record<string, SlotReactive>>({});
+const slotRefs = new Map<string, SlotRefs>();
 let activeSlotId: string | null = null;
 
-function emptyRuntime(): ChartSlotRuntime {
-  return { bars: [], chartDataGen: 0 };
+/**
+ * Bumped only when a slot key is created or removed so cold readers
+ * (missing key) re-subscribe; path updates to bars/gen stay fine-grained.
+ */
+const [structureEpoch, setStructureEpoch] = createSignal(0);
+
+function ensureSlot(slotId: string): void {
+  if (slotData[slotId] == null) {
+    setSlotData(slotId, { bars: [], chartDataGen: 0 });
+    setStructureEpoch((n) => n + 1);
+  }
+  if (!slotRefs.has(slotId)) {
+    slotRefs.set(slotId, {});
+  }
 }
 
 export function getSlotRuntime(slotId: string): ChartSlotRuntime {
-  let r = runtimes.get(slotId);
-  if (!r) {
-    r = emptyRuntime();
-    runtimes.set(slotId, r);
-  }
-  return r;
+  ensureSlot(slotId);
+  const refs = slotRefs.get(slotId)!;
+  const data = slotData[slotId]!;
+  return {
+    manager: refs.manager,
+    drawingLayer: refs.drawingLayer,
+    bars: data.bars,
+    chartDataGen: data.chartDataGen,
+  };
 }
 
 export function setActiveSlotId(id: string | null) {
@@ -60,43 +94,76 @@ export function getActiveSlotId(): string | null {
 }
 
 export function setSlotManager(slotId: string, manager: PaneManager | undefined) {
-  const r = getSlotRuntime(slotId);
-  r.manager = manager;
+  ensureSlot(slotId);
+  slotRefs.get(slotId)!.manager = manager;
 }
 
 export function getSlotManager(slotId: string): PaneManager | undefined {
-  return runtimes.get(slotId)?.manager;
+  return slotRefs.get(slotId)?.manager;
 }
 
 export function setSlotDrawingLayer(slotId: string, layer: DrawingLayer | undefined) {
-  const r = getSlotRuntime(slotId);
-  r.drawingLayer = layer;
+  ensureSlot(slotId);
+  slotRefs.get(slotId)!.drawingLayer = layer;
 }
 
 export function getSlotDrawingLayer(slotId: string): DrawingLayer | undefined {
-  return runtimes.get(slotId)?.drawingLayer;
+  return slotRefs.get(slotId)?.drawingLayer;
 }
 
 export function setSlotBars(slotId: string, bars: Bar[], bumpGen = true) {
-  const r = getSlotRuntime(slotId);
-  r.bars = bars;
-  if (bumpGen) r.chartDataGen += 1;
+  if (slotData[slotId] == null) {
+    batch(() => {
+      setSlotData(slotId, {
+        bars,
+        chartDataGen: bumpGen ? 1 : 0,
+      });
+      setStructureEpoch((n) => n + 1);
+    });
+    if (!slotRefs.has(slotId)) slotRefs.set(slotId, {});
+    return;
+  }
+  batch(() => {
+    setSlotData(slotId, 'bars', bars);
+    if (bumpGen) {
+      setSlotData(slotId, 'chartDataGen', (n) => n + 1);
+    }
+  });
 }
 
+/**
+ * Reactive read of slot bars. Tracks `slotData[slotId].bars` when the slot
+ * exists (fine-grained). Cold miss tracks {@link structureEpoch} so the first
+ * `setSlotBars` / ensure still wakes ChartHost memos/effects.
+ */
 export function getSlotBars(slotId: string): Bar[] {
-  return runtimes.get(slotId)?.bars ?? [];
+  const entry = slotData[slotId];
+  if (entry == null) {
+    structureEpoch();
+    return [];
+  }
+  return entry.bars;
 }
 
+/**
+ * Reactive read of slot chart data generation. Same cold-miss / fine-grained
+ * rules as {@link getSlotBars}.
+ */
 export function getSlotChartDataGen(slotId: string): number {
-  return runtimes.get(slotId)?.chartDataGen ?? 0;
+  const entry = slotData[slotId];
+  if (entry == null) {
+    structureEpoch();
+    return 0;
+  }
+  return entry.chartDataGen;
 }
 
 /** Dispose manager/layer for a slot (keep bars for quick re-show). */
 export function disposeSlotChart(slotId: string) {
-  const r = runtimes.get(slotId);
-  if (!r) return;
-  const layer = r.drawingLayer;
-  r.drawingLayer = undefined;
+  const refs = slotRefs.get(slotId);
+  if (!refs) return;
+  const layer = refs.drawingLayer;
+  refs.drawingLayer = undefined;
   if (layer) {
     try {
       layer.destroy();
@@ -104,8 +171,8 @@ export function disposeSlotChart(slotId: string) {
       /* ignore */
     }
   }
-  const mgr = r.manager;
-  r.manager = undefined;
+  const mgr = refs.manager;
+  refs.manager = undefined;
   if (mgr) {
     try {
       mgr.dispose();
@@ -118,7 +185,17 @@ export function disposeSlotChart(slotId: string) {
 /** Drop runtime entirely (slot removed from layout). */
 export function removeSlotRuntime(slotId: string) {
   disposeSlotChart(slotId);
-  runtimes.delete(slotId);
+  slotRefs.delete(slotId);
+  if (slotData[slotId] != null) {
+    batch(() => {
+      setSlotData(
+        produce((s) => {
+          delete s[slotId];
+        }),
+      );
+      setStructureEpoch((n) => n + 1);
+    });
+  }
   if (activeSlotId === slotId) activeSlotId = null;
 }
 

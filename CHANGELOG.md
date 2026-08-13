@@ -28,6 +28,9 @@ _Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 
 ### Improved
 
+- **First-paint bundle** — chart PWA critical path no longer statically imports CodeMirror/editor or `@tauri-apps/*`: `index.tsx` dynamic-imports App vs EditorApp; `EditorPane` is Solid `lazy` + `Show` when docked editor is open; Tauri shell install is dynamic-imported after a lightweight `isTauriShell` check.
+- **Multi-chart slot bars reactive** — `chart-registry` stores per-slot `bars` / `chartDataGen` in a Solid store so inactive ChartHost slots re-paint when those paths change.
+- **PWA SW update UX** — stop blind `SKIP_WAITING` without a reload path; post skip-waiting only when activating a waiting update, and soft-reload once on `controllerchange` (refreshing guard) so mixed old/new modules never stick. Still skips DEV and Tauri.
 - **Heavy live re-runs** — at ≥10k bars, `every-tick` indicator re-runs are treated as `bar-close` so full OHLCV is not re-encoded for the engine on every open-bar tick (`effectiveLiveRerunMode`).
 - **Offline history fallback** — when venue/source fetch fails, `loadSymbolData` paints warm `bars-cache` series and reports `Offline · N cached bars` (telemetry `degraded`).
 - **SW runtime cache cap** — `axis-runtime-v4` soft-caps at 96 entries (FIFO trim after put); version bump clears prior unbounded `v3` runtime caches.
@@ -35,6 +38,7 @@ _Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 - **Live tick rAF coalesce** — multiplex keeps only the newest bar until the next animation frame so trade-ticker floods (Coinbase) do not thrash store + LWC every message.
 - **Pane resize coalescing** — `PaneManager` ResizeObserver callbacks flush once per rAF (was synchronous `applyOptions` per pane entry).
 - **Smart series apply fingerprint** — overlay tip no-op when length + last time **and** last value match (skips redundant LWC `update` on silent re-runs).
+- **Overlay tip-only re-apply** — silent live `syncOverlayLines` updates the last point without a full `toLwcLineData` map when prior meta length + lastTime match (falls back to full setData on length/time change).
 - **StatusBar / Results strategy reports** — no longer rebuild trade pairing on every live `store.bars` path update; depend on `lastRun` / `chartDataGen` / fill-mode prefs.
 - **`loadBars` batching** — multi-field store writes run inside Solid `batch()` for a single reactive flush.
 - **Vite critical path** — `modulePreload` drops CodeMirror / pyne-builtins from first paint; gzip enabled on Docker nginx; `X-Frame-Options: DENY`.
@@ -44,6 +48,7 @@ _Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 
 ### Fixed
 
+- **Worker `/api/run` auth fail-closed** — when `EXTERNAL_BACKEND` is non-empty or `PYODIDE_IN_WORKER=enabled` and `ALLOW_OPEN_KEYS` is not `"1"`, `POST /api/run` requires `requireApiKey` (also still forced by `API_KEYS` / `REQUIRE_RUN_AUTH`); local demos keep open keys without burning unauthenticated compute on a real backend.
 - **Script-only drawing layer leak** — `clearScriptPaneLayers()` on ChartHost unmount (RO + time-scale subs were retained after multi-chart dispose).
 - **Companion panel postMessage** — origin-bound target + receiver check (no more `*`).
 - **Legacy results event CSS class** — allowlist kind tokens before interpolating into `class` (attribute breakout).
@@ -52,11 +57,14 @@ _Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 
 ### Tests
 
+- **CI workflow** — `.github/workflows/ci.yml` runs `bun run test`, `test:security`, and Playwright `@smoke` (Chromium) on PR / main.
+- **Optional firehose bench** — `tests/bench/` (`AXIS_BENCH=1` / `bun run test:bench`): 500k `appendBar` ticks on ~50k history with soft wall budget; skipped by default.
 - **Drawings / plot-visuals** — unit coverage for `force_overlay` normalize, `linefill` edge cases, `barcolorSeriesToMap` / `coerceBarColor`, and GC with `linefill` present.
 - **plot-visuals** — columns / cross / stepline_diamond kind mapping, histogram-family helpers, diamond/cross shape + glyph defaults.
 - **chart-type / heavy-data** — non-finite OHLC filter on price + volume mappers.
 - **store-append-scale** — always-on `appendBar` same-time + cap invariants.
 - **multiplex-heavy-rerun / sw-strategy / load-symbol** — heavy re-run mode, runtime cache FIFO cap, offline bars-cache fallback.
+- **register-sw** — pure update helpers (`shouldSoftReloadOnControllerChange`, skip-waiting) + controllerchange single-reload mocks.
 
 ## [2.0.7] — 2026-08-12
 

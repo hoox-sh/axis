@@ -52,7 +52,6 @@ import { Topbar } from './ui/Topbar';
 import { StatusBar } from './ui/StatusBar';
 import { Watchlist } from './ui/Watchlist';
 import { ChartWorkspace } from './chart/ChartWorkspace';
-import { EditorPane } from './editor/EditorPane';
 import { IndicatorPanel } from './indicators/IndicatorPanel';
 import { type SettingsTabId } from './ui/SettingsDialog';
 import { ResultsPanel } from './ui/ResultsPanel';
@@ -67,6 +66,9 @@ import { registerBuiltins } from './plugins/bootstrap';
 import { restoreInstalledPlugins } from './plugins/loader';
 
 // Heavy / rarely-open UI — split out of the first paint graph
+const EditorPane = lazy(() =>
+  import('./editor/EditorPane').then((m) => ({ default: m.EditorPane })),
+);
 const SettingsDialog = lazy(() =>
   import('./ui/SettingsDialog').then((m) => ({ default: m.SettingsDialog })),
 );
@@ -122,7 +124,7 @@ import { loadSymbolData } from './data/load-symbol';
 import { prefetchPyodideAssets, preloadPyodide } from './engines/catalog';
 import { filterPyneFiles } from './storage/import-pyne-files';
 import { importAndOpenPyneFiles } from './storage/import-pyne-open';
-import { installDesktopShell, isTauriShell } from './desktop';
+import { isTauriShell } from './desktop/is-tauri';
 import { applyThemeToDocument } from './theme';
 import {
   installPresentationControls,
@@ -301,11 +303,17 @@ export const App: Component = () => {
     };
 
     // Tauri desktop: File → Open Script… / Help → About
+    // Dynamic import keeps @tauri-apps/* out of the PWA static graph.
     let unsubDesktop: (() => void) | undefined;
     if (isTauriShell()) {
-      void installDesktopShell({ editorRef }).then((off) => {
-        unsubDesktop = off;
-      });
+      void import('./desktop/shell')
+        .then(({ installDesktopShell }) => installDesktopShell({ editorRef }))
+        .then((off) => {
+          unsubDesktop = off;
+        })
+        .catch((err: unknown) => {
+          console.warn('[axis-desktop] shell install failed', err);
+        });
     }
 
     const onWinDragEnter = (e: DragEvent) => {
@@ -480,29 +488,32 @@ export const App: Component = () => {
         />
         <DataSourceManagerPanel />
         <OnChainPanel />
+        {/* CodeMirror / editor chrome — only fetch when docked editor is open */}
+        <Show when={store.editor.open && store.editor.mode !== 'popout'}>
+          <EditorPane
+            editorRef={editorRef}
+            onRun={(doc) => {
+              // EditorPane already ensureSavedForRun before calling onRun
+              if (doc?.trim()) {
+                void import('./indicators/run-target')
+                  .then(({ runFromEditor }) =>
+                    runFromEditor(doc, {
+                      mode: 'auto',
+                      inputs: store.editorInputValues || {},
+                    }),
+                  )
+                  .catch((err: unknown) => {
+                    reportUiError(err, {
+                      source: 'run',
+                      context: 'Run failed',
+                      status: true,
+                    });
+                  });
+              }
+            }}
+          />
+        </Show>
       </Suspense>
-      <EditorPane
-        editorRef={editorRef}
-        onRun={(doc) => {
-          // EditorPane already ensureSavedForRun before calling onRun
-          if (doc?.trim()) {
-            void import('./indicators/run-target')
-              .then(({ runFromEditor }) =>
-                runFromEditor(doc, {
-                  mode: 'auto',
-                  inputs: store.editorInputValues || {},
-                }),
-              )
-              .catch((err: unknown) => {
-                reportUiError(err, {
-                  source: 'run',
-                  context: 'Run failed',
-                  status: true,
-                });
-              });
-          }
-        }}
-      />
       <ResultsPanel />
       <ScriptLogsPanel />
 

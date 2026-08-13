@@ -122,6 +122,7 @@ describe('syncOverlayLines', () => {
     const series = pane.series['overlay_plotA']!;
     let setCount = 0;
     let updateCount = 0;
+    let lastUpdate: unknown;
     const origSet = series.setData.bind(series);
     const origUp = series.update?.bind(series);
     series.setData = (d: unknown) => {
@@ -130,10 +131,11 @@ describe('syncOverlayLines', () => {
     };
     series.update = (d: unknown) => {
       updateCount += 1;
+      lastUpdate = d;
       return origUp?.(d);
     };
 
-    // Same length, same last time — tip-only update path
+    // Same length, same last time — tip-only update path (no full setData)
     pm.syncOverlayLines('price', [
       {
         name: 'plotA',
@@ -146,6 +148,60 @@ describe('syncOverlayLines', () => {
     ]);
     expect(updateCount).toBe(1);
     expect(setCount).toBe(0);
+    expect(lastUpdate).toEqual({ time: 2, value: 99 });
+
+    // Identical tip → pure no-op (no update, no setData)
+    pm.syncOverlayLines('price', [
+      {
+        name: 'plotA',
+        data: [
+          { time: 1, value: 10 },
+          { time: 2, value: 99 },
+        ],
+        color: '#fff',
+      },
+    ]);
+    expect(updateCount).toBe(1);
+    expect(setCount).toBe(0);
+  });
+
+  it('falls back to setData when last time advances (same length)', () => {
+    pm.syncOverlayLines('price', [
+      {
+        name: 'plotA',
+        data: [
+          { time: 1, value: 10 },
+          { time: 2, value: 12 },
+        ],
+        color: '#fff',
+      },
+    ]);
+    const series = pm.getPane('price')!.series['overlay_plotA']!;
+    let setCount = 0;
+    let updateCount = 0;
+    const origSet = series.setData.bind(series);
+    const origUp = series.update?.bind(series);
+    series.setData = (d: unknown) => {
+      setCount += 1;
+      return origSet(d);
+    };
+    series.update = (d: unknown) => {
+      updateCount += 1;
+      return origUp?.(d);
+    };
+
+    pm.syncOverlayLines('price', [
+      {
+        name: 'plotA',
+        data: [
+          { time: 2, value: 12 },
+          { time: 3, value: 14 },
+        ],
+        color: '#fff',
+      },
+    ]);
+    expect(setCount).toBe(1);
+    expect(updateCount).toBe(0);
   });
 
   it('creates price lines for kind=hline and applies linewidth on plots', () => {

@@ -194,6 +194,39 @@ export function toLwcLineData(
   return out;
 }
 
+/** Tip peek for silent live re-apply without allocating a full LWC series array. */
+export type OverlayTipPeek = {
+  len: number;
+  lastTime: number;
+  lastVal: number;
+  /** LWC update payload (value omitted → whitespace / `na`). */
+  tip: { time: UTCTimestamp; value: number } | { time: UTCTimestamp };
+};
+
+/**
+ * Peek last overlay point when raw length matches a prior mapped length.
+ * Returns null when tip-only apply is unsafe (empty, length mismatch, or
+ * non-finite tip time — fall through to full {@link toLwcLineData}).
+ *
+ * Assumes engine rows keep finite times (mapped len === raw len). Rows with
+ * dropped non-finite times fail the length check and take the full path.
+ */
+export function peekOverlayLineTip(
+  data: OverlayPoint[],
+  expectedLen: number,
+): OverlayTipPeek | null {
+  if (expectedLen <= 0 || data.length !== expectedLen) return null;
+  const last = data[data.length - 1];
+  if (!last || !Number.isFinite(last.time)) return null;
+  const lastTime = Number(last.time);
+  const hasVal = last.value != null && Number.isFinite(last.value);
+  const lastVal = hasVal ? Number(last.value) : Number.NaN;
+  const tip = hasVal
+    ? { time: lastTime as UTCTimestamp, value: lastVal }
+    : { time: lastTime as UTCTimestamp };
+  return { len: expectedLen, lastTime, lastVal, tip };
+}
+
 /**
  * True when a bar has finite time + OHLC (safe for LWC candlestick/line update).
  * Volume may be missing; non-finite volume is not required here.
@@ -284,6 +317,38 @@ function applySeriesDataSmart(
     lastTime: lastTime ?? 0,
     lastVal,
   });
+}
+
+/**
+ * Overlay line apply that skips full {@link toLwcLineData} when prior meta
+ * shows same length + lastTime (tip-only live re-run). Falls back to full map
+ * + {@link applySeriesDataSmart} when length/lastTime change or mid-history
+ * cannot be proven tip-only.
+ */
+function applyOverlayLineDataSmart(
+  series: ISeriesApi<any>,
+  data: OverlayPoint[],
+  metaKey: string,
+  metaMap: Map<string, SeriesApplyMeta>,
+): void {
+  const prev = metaMap.get(metaKey);
+  if (prev && prev.len > 0) {
+    const peek = peekOverlayLineTip(data, prev.len);
+    if (peek && peek.lastTime === prev.lastTime) {
+      if (Object.is(prev.lastVal, peek.lastVal) || prev.lastVal === peek.lastVal) {
+        return;
+      }
+      if (safeUpdate(series, peek.tip)) {
+        metaMap.set(metaKey, {
+          len: peek.len,
+          lastTime: peek.lastTime,
+          lastVal: peek.lastVal,
+        });
+        return;
+      }
+    }
+  }
+  applySeriesDataSmart(series, toLwcLineData(data), metaKey, metaMap);
 }
 
 /** removeSeries that never throws; caller still deletes map keys. */
@@ -1804,8 +1869,6 @@ export class PaneManager {
     for (const line of plotLines) {
       const key = makeOverlayLineKey(line.name, ownerId);
       const kindKey = `${paneId}:${key}`;
-      // Whitespace for na keeps logical indices aligned with the price pane
-      const mapped = toLwcLineData(line.data);
       const seriesKind = mapPlotStyleToSeriesKind(line.style);
       const existing = pane.series[key];
       const prevKind = this.overlaySeriesKinds.get(kindKey);
@@ -1820,7 +1883,8 @@ export class PaneManager {
       const seriesNow = pane.series[key];
       const histFamily = isHistogramSeriesKind(seriesKind);
       if (seriesNow) {
-        applySeriesDataSmart(seriesNow, mapped, key, this.overlayDataMeta);
+        // Tip-only path skips full toLwcLineData when length + lastTime match
+        applyOverlayLineDataSmart(seriesNow, line.data, key, this.overlayDataMeta);
         try {
           const opts: Record<string, unknown> = {
             lastValueVisible: this.lastValueLabelsVisible,
@@ -1875,7 +1939,8 @@ export class PaneManager {
               /* ignore */
             }
           }
-          applySeriesDataSmart(series, mapped, key, this.overlayDataMeta);
+          // First paint always maps full series (incl. na whitespace slots)
+          applyOverlayLineDataSmart(series, line.data, key, this.overlayDataMeta);
           pane.series[key] = series;
           this.overlaySeriesKinds.set(kindKey, seriesKind);
         } catch {

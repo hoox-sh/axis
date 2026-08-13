@@ -16,7 +16,59 @@ beforeAll(() => {
   installLightweightChartsMock();
 });
 
-const { PaneManager } = await import('../src/chart/pane-manager');
+const { PaneManager, peekOverlayLineTip, toLwcLineData } = await import('../src/chart/pane-manager');
+
+describe('peekOverlayLineTip', () => {
+  it('returns tip when raw length matches expected mapped length', () => {
+    const peek = peekOverlayLineTip(
+      [
+        { time: 1, value: 10 },
+        { time: 2, value: 12 },
+      ],
+      2,
+    );
+    expect(peek).toEqual({
+      len: 2,
+      lastTime: 2,
+      lastVal: 12,
+      tip: { time: 2, value: 12 },
+    });
+  });
+
+  it('emits whitespace tip when last value is na', () => {
+    const peek = peekOverlayLineTip(
+      [
+        { time: 1, value: 10 },
+        { time: 2, value: undefined },
+      ],
+      2,
+    );
+    expect(peek).not.toBeNull();
+    expect(peek!.lastVal).toBeNaN();
+    expect(peek!.tip).toEqual({ time: 2 });
+    expect('value' in peek!.tip).toBe(false);
+  });
+
+  it('returns null on length mismatch or non-finite tip time', () => {
+    expect(peekOverlayLineTip([{ time: 1, value: 1 }], 2)).toBeNull();
+    expect(peekOverlayLineTip([{ time: Number.NaN, value: 1 }], 1)).toBeNull();
+    expect(peekOverlayLineTip([], 0)).toBeNull();
+  });
+
+  it('matches toLwcLineData tip for finite rows (fast-path contract)', () => {
+    const data = [
+      { time: 10, value: 1 },
+      { time: 20, value: 2 },
+      { time: 30, value: 3.5 },
+    ];
+    const mapped = toLwcLineData(data);
+    const peek = peekOverlayLineTip(data, mapped.length);
+    expect(peek).not.toBeNull();
+    expect(peek!.len).toBe(mapped.length);
+    expect(peek!.lastTime).toBe(Number(mapped[mapped.length - 1]!.time));
+    expect(peek!.lastVal).toBe((mapped[mapped.length - 1] as { value: number }).value);
+  });
+});
 
 describe('PaneManager', () => {
   let container: HTMLElement;

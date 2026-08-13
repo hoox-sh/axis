@@ -145,6 +145,12 @@ describe('handleRun', () => {
   });
 
   it('uses pyodide path when enabled and runtime returns result', async () => {
+    // Local-demo open keys: backend present without forcing Bearer for this path test.
+    const demoEnv = {
+      PYODIDE_IN_WORKER: 'enabled',
+      EXTERNAL_BACKEND: 'http://flask.test',
+      ALLOW_OPEN_KEYS: '1',
+    } as Env;
     // Mock tryRunInWorker via env flag; if pyodide fails, falls through
     const r = await handleRun(
       new Request('http://x/api/run', {
@@ -155,10 +161,7 @@ describe('handleRun', () => {
           data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
         }),
       }),
-      {
-        PYODIDE_IN_WORKER: 'enabled',
-        EXTERNAL_BACKEND: 'http://flask.test',
-      } as Env,
+      demoEnv,
       origin,
     );
     // Without real pyodide, falls through to proxy — mock fetch
@@ -176,17 +179,14 @@ describe('handleRun', () => {
           data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
         }),
       }),
-      {
-        PYODIDE_IN_WORKER: 'enabled',
-        EXTERNAL_BACKEND: 'http://flask.test',
-      } as Env,
+      demoEnv,
       origin,
     );
     expect([200, 503]).toContain(r.status);
     expect(r2.status).toBe(200);
   });
 
-  it('proxies to EXTERNAL_BACKEND', async () => {
+  it('proxies to EXTERNAL_BACKEND with ALLOW_OPEN_KEYS (local demo)', async () => {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       expect(String(input)).toContain('http://flask.test/run');
       return new Response(JSON.stringify({ status: 'success', plots: [1], events: [] }), {
@@ -203,12 +203,78 @@ describe('handleRun', () => {
           data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
         }),
       }),
-      { EXTERNAL_BACKEND: 'http://flask.test' } as Env,
+      { EXTERNAL_BACKEND: 'http://flask.test', ALLOW_OPEN_KEYS: '1' } as Env,
       origin,
     );
     expect(r.status).toBe(200);
     const j = await r.json();
     expect(j.status).toBe('success');
+  });
+
+  it('requires API key when EXTERNAL_BACKEND is set without ALLOW_OPEN_KEYS', async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ status: 'success', plots: [] }), {
+        status: 200,
+      })) as typeof fetch;
+
+    const r = await handleRun(
+      new Request('http://x/api/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          script: 'plot(close)',
+          data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+        }),
+      }),
+      { EXTERNAL_BACKEND: 'http://flask.test' } as Env,
+      origin,
+    );
+    expect(r.status).toBe(401);
+    const j = await r.json();
+    expect(j.code).toBe('NO_KEY');
+  });
+
+  it('proxies when EXTERNAL_BACKEND set and well-formed pn_ key is presented', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      expect(String(input)).toContain('http://flask.test/run');
+      return new Response(JSON.stringify({ status: 'success', plots: [2] }), { status: 200 });
+    }) as typeof fetch;
+
+    const key = 'pn_' + 'ef'.repeat(24);
+    const r = await handleRun(
+      new Request('http://x/api/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify({
+          script: 'plot(close)',
+          data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+        }),
+      }),
+      { EXTERNAL_BACKEND: 'http://flask.test' } as Env,
+      origin,
+    );
+    expect(r.status).toBe(200);
+  });
+
+  it('requires API key when PYODIDE_IN_WORKER is enabled without ALLOW_OPEN_KEYS', async () => {
+    const r = await handleRun(
+      new Request('http://x/api/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          script: 'plot(close)',
+          data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+        }),
+      }),
+      { PYODIDE_IN_WORKER: 'enabled' } as Env,
+      origin,
+    );
+    expect(r.status).toBe(401);
+    const j = await r.json();
+    expect(j.code).toBe('NO_KEY');
   });
 
   it('requires API key when API_KEYS KV is bound', async () => {
@@ -248,7 +314,26 @@ describe('handleRun', () => {
     expect(r.status).toBe(401);
   });
 
+  it('ALLOW_OPEN_KEYS without EXTERNAL_BACKEND still reaches NO_BACKEND', async () => {
+    const r = await handleRun(
+      new Request('http://x/api/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          script: 'plot(close)',
+          data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+        }),
+      }),
+      { ALLOW_OPEN_KEYS: '1' } as Env,
+      origin,
+    );
+    expect(r.status).toBe(503);
+    const j = await r.json();
+    expect(j.code).toBe('NO_BACKEND');
+  });
+
   it('rejects oversized script body', async () => {
+    // No backend → auth not forced; size check runs before NO_BACKEND.
     const r = await handleRun(
       new Request('http://x/api/run', {
         method: 'POST',
@@ -258,7 +343,7 @@ describe('handleRun', () => {
           data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
         }),
       }),
-      { EXTERNAL_BACKEND: 'http://flask.test' } as Env,
+      {} as Env,
       origin,
     );
     expect(r.status).toBe(400);
@@ -285,7 +370,8 @@ describe('handleRun', () => {
             data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
           }),
         }),
-        { EXTERNAL_BACKEND: 'http://flask.test' } as Env,
+        // Local demo open path so rate limit is exercised after auth gate.
+        { EXTERNAL_BACKEND: 'http://flask.test', ALLOW_OPEN_KEYS: '1' } as Env,
         origin,
       );
 

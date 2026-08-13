@@ -24,6 +24,9 @@
  * - Editor popout → {@link EditorApp} (detached Pine editor)
  * - Default → {@link App} (full chart workspace)
  *
+ * App and EditorApp are dynamic imports so the chart PWA critical path does
+ * not statically pull CodeMirror / editor chrome (and vice versa).
+ *
  * Global styles: `./index.css` (Tailwind + void theme tokens).
  *
  * Hardening: root {@link ErrorBoundary} + window unhandled error handlers so a
@@ -32,8 +35,6 @@
 
 import { ErrorBoundary } from 'solid-js';
 import { render } from 'solid-js/web';
-import { App } from './app';
-import { EditorApp } from './editor/EditorApp';
 import { isEditorView } from './editor/editor-bridge';
 import { registerAxisServiceWorker } from './pwa/register-sw';
 import { errorFallback } from './ui/ErrorFallback';
@@ -61,25 +62,39 @@ if (root) {
       }),
   });
 
-  if (isEditor) {
-    render(
-      () => (
-        <ErrorBoundary fallback={fallback}>
-          <EditorApp />
-        </ErrorBoundary>
-      ),
-      root,
-    );
-  } else {
-    render(
-      () => (
-        <ErrorBoundary fallback={fallback}>
-          <App />
-        </ErrorBoundary>
-      ),
-      root,
-    );
-  }
+  void (async () => {
+    try {
+      if (isEditor) {
+        const { EditorApp } = await import('./editor/EditorApp');
+        render(
+          () => (
+            <ErrorBoundary fallback={fallback}>
+              <EditorApp />
+            </ErrorBoundary>
+          ),
+          root,
+        );
+      } else {
+        const { App } = await import('./app');
+        render(
+          () => (
+            <ErrorBoundary fallback={fallback}>
+              <App />
+            </ErrorBoundary>
+          ),
+          root,
+        );
+      }
+    } catch (err: unknown) {
+      reportUiError(err, {
+        source: isEditor ? 'editor' : 'boot',
+        context: isEditor ? 'Editor shell import failed' : 'App shell import failed',
+        status: true,
+      });
+      // Import failed before ErrorBoundary could mount — show the same page fallback.
+      render(() => fallback(err, () => location.reload()), root);
+    }
+  })();
 } else if (typeof console !== 'undefined' && console.error) {
   console.error('[axis] #app root element missing — cannot mount');
 }

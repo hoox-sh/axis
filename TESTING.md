@@ -51,7 +51,7 @@ bun run test:e2e             # all specs
 
 - Mocks `/run` and Binance so smoke does not need a live Pro API.
 - Selectors use `data-testid` on topbar / manager (`axis-btn-load`, `axis-manager`, …).
-- CI: `axis-e2e` smoke on PR; **AXIS nightly** runs full e2e (`.github/workflows/axis-nightly.yml`).
+- CI: `.github/workflows/ci.yml` runs unit + security + Playwright `@smoke` on PR / main. Optional firehose bench: `bun run test:bench` (`AXIS_BENCH=1`).
 
 ## Security
 
