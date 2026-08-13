@@ -28,11 +28,15 @@ import {
   loadSymbolData,
   _resetLoadGeneration,
 } from '../../src/data/load-symbol';
+import {
+  putCachedBars,
+  _resetBarsCacheForTests,
+} from '../../src/data/bars-cache';
 import { makeBars } from '../fixtures/bars';
 import type { Bar } from '../../src/store/types';
 import type { SourcePlugin } from '../../src/plugins/types';
 
-beforeEach(() => {
+beforeEach(async () => {
   registry.clear();
   _resetSourceRegistrationFlag();
   _resetStreamRegistrationFlag();
@@ -40,6 +44,7 @@ beforeEach(() => {
   _resetStorageRegistrationFlag();
   _resetBootstrapFlag();
   _resetLoadGeneration();
+  await _resetBarsCacheForTests();
   ensureBuiltins();
   clearLogs();
   setStore('bars', []);
@@ -111,6 +116,22 @@ describe('loadSymbolData', () => {
     expect(store.statusMessage).toMatch(/network down/i);
     expect(store.telemetry.source.state).toBe('error');
     expect(store.telemetry.source.error).toMatch(/network down/i);
+  });
+
+  it('falls back to bars-cache when venue fetch fails', async () => {
+    const cached = makeBars(8);
+    await putCachedBars('offline-src', 'BTCUSDT', '1h', cached);
+    registerDynamicSource(
+      dynSource('offline-src', async () => {
+        throw new Error('network down');
+      }),
+    );
+    const ok = await loadSymbolData('BTCUSDT', '1h', 'offline-src');
+    expect(ok).toBe(true);
+    expect(store.bars.length).toBe(8);
+    expect(store.status).toBe('ready');
+    expect(store.statusMessage).toMatch(/Offline|cached/i);
+    expect(store.telemetry.source.state).toBe('degraded');
   });
 
   it('handles non-Error throw values', async () => {

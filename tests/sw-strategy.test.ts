@@ -18,6 +18,8 @@ import { describe, expect, it } from 'bun:test';
 import {
   SW_VERSION,
   CACHE_PREFIX,
+  RUNTIME_CACHE_MAX_ENTRIES,
+  runtimeCacheDropCount,
   shellCacheName,
   runtimeCacheName,
   isAxisCacheName,
@@ -34,25 +36,43 @@ describe('SW cache names', () => {
   it('uses axis-* shell and runtime names with version', () => {
     expect(shellCacheName()).toBe(`axis-shell-${SW_VERSION}`);
     expect(runtimeCacheName()).toBe(`axis-runtime-${SW_VERSION}`);
+    expect(SW_VERSION).toBe('v4');
     expect(shellCacheName('v9')).toBe('axis-shell-v9');
     expect(isAxisCacheName(shellCacheName())).toBe(true);
     expect(isAxisCacheName('workbox-precache-v2')).toBe(false);
     expect(CACHE_PREFIX).toBe('axis-');
+    expect(RUNTIME_CACHE_MAX_ENTRIES).toBeGreaterThan(0);
+  });
+
+  it('runtimeCacheDropCount trims only when over the soft cap', () => {
+    expect(runtimeCacheDropCount(0)).toBe(0);
+    expect(runtimeCacheDropCount(RUNTIME_CACHE_MAX_ENTRIES)).toBe(0);
+    expect(runtimeCacheDropCount(RUNTIME_CACHE_MAX_ENTRIES + 5)).toBe(5);
+    expect(runtimeCacheDropCount(10, 8)).toBe(2);
   });
 
   it('activate cleanup deletes old axis caches but not current or foreign', () => {
-    const shell = shellCacheName('v3');
-    const runtime = runtimeCacheName('v3');
+    const shell = shellCacheName('v4');
+    const runtime = runtimeCacheName('v4');
     const existing = [
       shell,
       runtime,
       'axis-shell-v2',
       'axis-runtime-v2',
+      'axis-shell-v3',
+      'axis-runtime-v3',
       'workbox-precache-v2',
       'other-app-cache',
     ];
     const doomed = cachesToDelete(existing, [shell, runtime]);
-    expect(doomed.sort()).toEqual(['axis-runtime-v2', 'axis-shell-v2'].sort());
+    expect(doomed.sort()).toEqual(
+      [
+        'axis-runtime-v2',
+        'axis-shell-v2',
+        'axis-runtime-v3',
+        'axis-shell-v3',
+      ].sort(),
+    );
     expect(doomed).not.toContain(shell);
     expect(doomed).not.toContain(runtime);
     expect(doomed).not.toContain('workbox-precache-v2');

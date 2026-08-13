@@ -30,9 +30,16 @@
  */
 
 /** Bump when shell precache or strategy semantics change. */
-export const SW_VERSION = 'v3';
+export const SW_VERSION = 'v4';
 
 export const CACHE_PREFIX = 'axis-';
+
+/**
+ * Soft cap on `axis-runtime-*` entries (hashed assets, pyodide, CDN).
+ * FIFO trim after put — prevents unbounded Cache Storage growth.
+ * Mirrored in `public/sw.js` / root `sw.js`.
+ */
+export const RUNTIME_CACHE_MAX_ENTRIES = 96;
 
 export function shellCacheName(version: string = SW_VERSION): string {
   return `${CACHE_PREFIX}shell-${version}`;
@@ -44,6 +51,19 @@ export function runtimeCacheName(version: string = SW_VERSION): string {
 
 export function isAxisCacheName(name: string): boolean {
   return name.startsWith(CACHE_PREFIX);
+}
+
+/**
+ * When `keyCount` exceeds `max`, return how many leading keys to drop
+ * (Cache.keys() is insertion order — approximate FIFO / LRU-adjacent).
+ */
+export function runtimeCacheDropCount(
+  keyCount: number,
+  max: number = RUNTIME_CACHE_MAX_ENTRIES,
+): number {
+  if (!Number.isFinite(keyCount) || keyCount <= 0) return 0;
+  if (!Number.isFinite(max) || max <= 0) return 0;
+  return keyCount > max ? keyCount - max : 0;
 }
 
 /**

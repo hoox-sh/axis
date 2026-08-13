@@ -65,35 +65,40 @@ export const Watchlist: Component = () => {
   /** `ws` live, `rest` polling fallback, `off` idle/closed/no transport. */
   const [quoteMode, setQuoteMode] = createSignal<'ws' | 'rest' | 'off'>('off');
 
-  /**
-   * Merge a partial quote into row state, retaining open24h and recomputing
-   * 24h % when the update only carries last price.
-   */
-  const mergeQuote = (partial: {
+  type QuotePartial = {
     symbol: string;
     price: number;
     change?: number;
     open24h?: number;
     source?: string;
-  }) => {
+  };
+
+  /**
+   * Apply one or more quote partials into row state (open24h retention + 24h %).
+   * Used by the rAF-batched path so multi-symbol WS frames share one Solid write.
+   */
+  const applyQuoteBatch = (partials: readonly QuotePartial[]) => {
+    if (!partials.length) return;
     setPrices((prev) => {
-      const old = prev[partial.symbol];
-      const open24h = partial.open24h ?? old?.open24h;
-      let change = partial.change;
-      if (change == null && open24h && open24h !== 0) {
-        change = ((partial.price - open24h) / open24h) * 100;
-      }
-      if (change == null) change = old?.change ?? 0;
-      return {
-        ...prev,
-        [partial.symbol]: {
+      const next = { ...prev };
+      const now = Date.now();
+      for (const partial of partials) {
+        const old = next[partial.symbol];
+        const open24h = partial.open24h ?? old?.open24h;
+        let change = partial.change;
+        if (change == null && open24h && open24h !== 0) {
+          change = ((partial.price - open24h) / open24h) * 100;
+        }
+        if (change == null) change = old?.change ?? 0;
+        next[partial.symbol] = {
           price: partial.price,
           change,
           open24h,
           source: partial.source ?? old?.source,
-          updatedAt: Date.now(),
-        },
-      };
+          updatedAt: now,
+        };
+      }
+      return next;
     });
   };
 
@@ -116,6 +121,35 @@ export const Watchlist: Component = () => {
     let restTimer: ReturnType<typeof setInterval> | undefined;
     let wsHealthy = false;
     let cancelled = false;
+    /** Pending quotes coalesced to one Solid write per animation frame. */
+    const pendingQuotes = new Map<string, QuotePartial>();
+    let quoteRaf = 0;
+
+    const flushQuotes = () => {
+      quoteRaf = 0;
+      if (cancelled || !pendingQuotes.size) {
+        pendingQuotes.clear();
+        return;
+      }
+      const batch = Array.from(pendingQuotes.values());
+      pendingQuotes.clear();
+      applyQuoteBatch(batch);
+    };
+
+    const mergeQuote = (partial: QuotePartial) => {
+      if (cancelled) return;
+      const prev = pendingQuotes.get(partial.symbol);
+      pendingQuotes.set(
+        partial.symbol,
+        prev ? { ...prev, ...partial, symbol: partial.symbol } : partial,
+      );
+      if (quoteRaf) return;
+      if (typeof requestAnimationFrame === 'function') {
+        quoteRaf = requestAnimationFrame(flushQuotes);
+      } else {
+        flushQuotes();
+      }
+    };
 
     const clearRest = () => {
       if (restTimer) {
@@ -189,6 +223,11 @@ export const Watchlist: Component = () => {
 
     onCleanup(() => {
       cancelled = true;
+      pendingQuotes.clear();
+      if (quoteRaf && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(quoteRaf);
+      }
+      quoteRaf = 0;
       stopMux?.();
       clearRest();
       setQuoteMode('off');

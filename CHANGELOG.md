@@ -28,6 +28,10 @@ _Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 
 ### Improved
 
+- **Heavy live re-runs** — at ≥10k bars, `every-tick` indicator re-runs are treated as `bar-close` so full OHLCV is not re-encoded for the engine on every open-bar tick (`effectiveLiveRerunMode`).
+- **Offline history fallback** — when venue/source fetch fails, `loadSymbolData` paints warm `bars-cache` series and reports `Offline · N cached bars` (telemetry `degraded`).
+- **SW runtime cache cap** — `axis-runtime-v4` soft-caps at 96 entries (FIFO trim after put); version bump clears prior unbounded `v3` runtime caches.
+- **Watchlist quote batching** — multi-symbol WS ticks coalesce to one Solid price-map write per animation frame.
 - **Live tick rAF coalesce** — multiplex keeps only the newest bar until the next animation frame so trade-ticker floods (Coinbase) do not thrash store + LWC every message.
 - **Pane resize coalescing** — `PaneManager` ResizeObserver callbacks flush once per rAF (was synchronous `applyOptions` per pane entry).
 - **Smart series apply fingerprint** — overlay tip no-op when length + last time **and** last value match (skips redundant LWC `update` on silent re-runs).
@@ -52,6 +56,7 @@ _Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 - **plot-visuals** — columns / cross / stepline_diamond kind mapping, histogram-family helpers, diamond/cross shape + glyph defaults.
 - **chart-type / heavy-data** — non-finite OHLC filter on price + volume mappers.
 - **store-append-scale** — always-on `appendBar` same-time + cap invariants.
+- **multiplex-heavy-rerun / sw-strategy / load-symbol** — heavy re-run mode, runtime cache FIFO cap, offline bars-cache fallback.
 
 ## [2.0.7] — 2026-08-12
 

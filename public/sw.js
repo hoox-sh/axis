@@ -20,10 +20,12 @@
  * Activate deletes old `axis-*` caches only; current shell/runtime kept.
  */
 
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE_PREFIX = 'axis-';
 const SHELL_CACHE = `${CACHE_PREFIX}shell-${VERSION}`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-${VERSION}`;
+/** Soft cap on runtime cache entries (hashed assets + pyodide + CDN). Keep in sync with src/sw/strategy.ts. */
+const RUNTIME_CACHE_MAX_ENTRIES = 96;
 
 /** Stable shell assets present in Vite dist and legacy root trees. */
 const SHELL_ASSETS = [
@@ -112,6 +114,29 @@ self.addEventListener('activate', (event) => {
     })());
 });
 
+/** After put into runtime cache, drop oldest entries past the soft cap. */
+async function trimRuntimeCache(cache) {
+    try {
+        const keys = await cache.keys();
+        const drop = keys.length - RUNTIME_CACHE_MAX_ENTRIES;
+        if (drop <= 0) return;
+        for (let i = 0; i < drop; i++) {
+            try {
+                await cache.delete(keys[i]);
+            } catch {
+                /* ignore */
+            }
+        }
+    } catch {
+        /* ignore */
+    }
+}
+
+async function putRuntime(cache, req, res) {
+    await cache.put(req, res);
+    await trimRuntimeCache(cache);
+}
+
 async function cacheFirst(req, cacheName) {
     const cache = await caches.open(cacheName);
     const cached = await cache.match(req);
@@ -119,7 +144,11 @@ async function cacheFirst(req, cacheName) {
     const res = await fetch(req);
     if (shouldCacheStaticResponse(res)) {
         try {
-            await cache.put(req, res.clone());
+            if (cacheName === RUNTIME_CACHE) {
+                await putRuntime(cache, req, res.clone());
+            } else {
+                await cache.put(req, res.clone());
+            }
         } catch {
             /* quota / opaque clone edge */
         }
@@ -133,7 +162,11 @@ async function networkFirstStatic(req, cacheName) {
         const res = await fetch(req);
         if (shouldCacheStaticResponse(res)) {
             try {
-                await cache.put(req, res.clone());
+                if (cacheName === RUNTIME_CACHE) {
+                    await putRuntime(cache, req, res.clone());
+                } else {
+                    await cache.put(req, res.clone());
+                }
             } catch {
                 /* ignore */
             }
@@ -155,7 +188,7 @@ async function networkFirstApi(req) {
         const res = await fetch(req);
         if (shouldCacheApiResponse(res)) {
             try {
-                await cache.put(req, res.clone());
+                await putRuntime(cache, req, res.clone());
             } catch {
                 /* ignore */
             }

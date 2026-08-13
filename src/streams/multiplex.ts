@@ -71,9 +71,29 @@ import {
 import { noteDataManagerLiveBar } from '../data/expand-cache';
 import { sanitizeBar } from '../data/parse-bars';
 import { classifyTransport } from '../ui/telemetry';
+import { HEAVY_BARS_THRESHOLD } from '../chart/heavy-data';
 
 export type { StreamPlugin };
 export { listStreams, defaultStreamForSource };
+
+/**
+ * When history is this large, live `every-tick` re-runs are treated as
+ * `bar-close` so we do not re-serialize full OHLCV for the engine every open-bar tick.
+ * User-selected `bar-close` is unchanged. Aligns with {@link HEAVY_BARS_THRESHOLD}.
+ */
+export const HEAVY_LIVE_RERUN_BARS = HEAVY_BARS_THRESHOLD;
+
+/** Effective live re-run mode after heavy-history throttle. */
+export function effectiveLiveRerunMode(
+  mode: 'every-tick' | 'bar-close' | undefined,
+  barCount: number,
+): 'every-tick' | 'bar-close' {
+  if (mode === 'bar-close') return 'bar-close';
+  if (Number.isFinite(barCount) && barCount >= HEAVY_LIVE_RERUN_BARS) {
+    return 'bar-close';
+  }
+  return 'every-tick';
+}
 
 /** How the live session ended (affects telemetry wipe). */
 export type StopLiveReason = 'user' | 'error' | 'restart';
@@ -226,7 +246,11 @@ export function startLive(
 
       const timeAdvanced = lastSeenBarTime > 0 && bar.time > lastSeenBarTime;
       lastSeenBarTime = bar.time;
-      const mode = store.live.rerunOn || 'every-tick';
+      // Heavy histories: throttle every-tick → bar-close to avoid full engine re-encode
+      const mode = effectiveLiveRerunMode(
+        store.live.rerunOn,
+        store.bars?.length ?? 0,
+      );
       if (mode === 'every-tick' || bar.closed || timeAdvanced) {
         scheduleRerun();
       }

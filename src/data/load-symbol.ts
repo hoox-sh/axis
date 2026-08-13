@@ -51,6 +51,7 @@ import { classifyTransport } from '../ui/telemetry';
 import { defaultStreamForSource } from '../streams/catalog';
 import { pluginKey } from '../plugins/types';
 import { normalizeHistoricalBars } from './parse-bars';
+import { getCachedBars } from './bars-cache';
 
 /**
  * Monotonic generation for in-flight history loads.
@@ -317,6 +318,57 @@ export async function loadSymbolData(
   } catch (err: unknown) {
     // Stale failure must not overwrite a newer load's telemetry/status
     if (!stillCurrent()) return false;
+
+    // Offline / network fail: restore last DSM/venue series from bars-cache when warm
+    try {
+      const cached = await getCachedBars(srcId, sym, iv);
+      if (cached.length && stillCurrent()) {
+        const exchange = exchangeForSource(srcId);
+        loadBars(cached, sym, iv, exchange);
+        const manager = getManager();
+        if (manager) {
+          try {
+            setDataToChart(cached, { fit: true });
+          } catch (chartErr: unknown) {
+            console.error('setDataToChart failed (cached fallback):', chartErr);
+          }
+        }
+        if (!stillCurrent()) return false;
+        const ms = performance.now() - t0;
+        setTelemetryState('source', 'degraded', {
+          latencyMs: ms,
+          detail: `cached ${cached.length} bars · ${label}`,
+          error: null,
+        });
+        setStatus(
+          'ready',
+          `Offline · ${cached.length} cached bars · ${source.name}`,
+        );
+        // Do not auto-start live on offline cache (no reliable venue stream)
+        if (stillCurrent() && store.scripts.some((s) => s.visible && s.code?.trim())) {
+          try {
+            const { runAndApply } = await import('../indicators/runner');
+            const { orderIndicatorsByPlotDeps } = await import('../results/plot-sources');
+            const ordered = orderIndicatorsByPlotDeps(
+              store.scripts.filter((s) => s.visible && s.code?.trim()),
+            );
+            for (const ind of ordered) {
+              if (!stillCurrent()) break;
+              await runAndApply(ind.code, ind.id, {
+                silent: true,
+                openResults: false,
+              });
+            }
+          } catch {
+            /* re-run optional */
+          }
+        }
+        return stillCurrent();
+      }
+    } catch {
+      /* cache miss / IDB unavailable — fall through to hard error */
+    }
+
     const msg = errMessage(err);
     console.error('Load failed:', err);
     setTelemetryState('source', 'error', {
