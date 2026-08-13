@@ -68,6 +68,19 @@ const CORS_HEADERS = {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token',
 };
 
+/** Hardening headers for local Bun static server (mirror docker/nginx baseline). */
+const SECURITY_HEADERS: Record<string, string> = {
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'X-Frame-Options': 'DENY',
+    'Content-Security-Policy':
+        "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; " +
+        "script-src 'self' 'wasm-unsafe-eval' https://pyne-agent-worker.cryptolinx.workers.dev; " +
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; " +
+        "connect-src 'self' https: wss: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; " +
+        "worker-src 'self' blob:; child-src 'self' blob:; manifest-src 'self'",
+};
+
 const server = Bun.serve({
     port: PORT,
     hostname: HOST,
@@ -92,6 +105,7 @@ const server = Bun.serve({
                 'Content-Type': contentTypeFor(path),
                 'ETag': etag,
                 ...CORS_HEADERS,
+                ...SECURITY_HEADERS,
             };
             // Long cache for fingerprinted assets, short for HTML.
             if (path.endsWith('index.html')) headers['Cache-Control'] = 'no-cache';
@@ -114,6 +128,7 @@ const server = Bun.serve({
                     'Content-Type': MIME['.html']!,
                     'Cache-Control': 'no-cache',
                     ...CORS_HEADERS,
+                    ...SECURITY_HEADERS,
                 },
             });
         }

@@ -235,6 +235,123 @@ export function assertSafePluginUrl(href: string): void {
 }
 
 /**
+ * Hostnames allowed for **remote** plugins in production builds.
+ * Same-origin `/plugins/*`, relative paths, and `data:` fixtures stay unrestricted.
+ * Override with `VITE_ALLOW_REMOTE_PLUGINS=1` (or add hosts via
+ * `VITE_PLUGIN_REMOTE_ALLOW` comma list).
+ */
+export const DEFAULT_REMOTE_PLUGIN_HOSTS = [
+  'pyne-agent-worker.cryptolinx.workers.dev',
+] as const;
+
+function isProdBuild(override?: boolean): boolean {
+  if (typeof override === 'boolean') return override;
+  try {
+    return Boolean(import.meta.env?.PROD);
+  } catch {
+    return false;
+  }
+}
+
+function remoteAllowHostsFromEnv(): string[] {
+  const extra: string[] = [];
+  try {
+    const raw = String(import.meta.env?.VITE_PLUGIN_REMOTE_ALLOW || '').trim();
+    if (raw) {
+      for (const part of raw.split(',')) {
+        const h = part.trim().toLowerCase();
+        if (h) extra.push(h);
+      }
+    }
+  } catch {
+    /* no env */
+  }
+  return extra;
+}
+
+function envAllowsAnyRemote(): boolean {
+  try {
+    const v = String(import.meta.env?.VITE_ALLOW_REMOTE_PLUGINS || '').toLowerCase();
+    return v === '1' || v === 'true' || v === 'yes';
+  } catch {
+    return false;
+  }
+}
+
+/** True when `href` targets a non-same-origin http(s) host (not data/blob/relative). */
+export function isRemoteHttpPluginUrl(href: string): boolean {
+  const trimmed = String(href || '').trim();
+  if (!trimmed) return false;
+  const lower = normalizeForSchemeCheck(trimmed);
+  if (lower.startsWith('data:') || lower.startsWith('blob:') || lower.startsWith('file:')) {
+    return false;
+  }
+  // Relative / root-absolute path — not remote
+  if (!/^[a-z][a-z0-9+.-]*:/.test(lower) && !lower.startsWith('//')) {
+    return false;
+  }
+  try {
+    const base =
+      typeof location !== 'undefined' && location?.origin
+        ? location.origin
+        : 'https://axis.local';
+    const u = new URL(trimmed, base);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+    if (typeof location !== 'undefined' && location?.origin && u.origin === location.origin) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function hostAllowed(host: string, allow: readonly string[]): boolean {
+  const h = host.toLowerCase();
+  for (const a of allow) {
+    const needle = a.toLowerCase();
+    if (h === needle || h.endsWith(`.${needle}`)) return true;
+  }
+  return false;
+}
+
+/**
+ * Production default-deny for remote plugin modules (full-origin RCE surface).
+ * Dev builds stay open (after scheme checks). Tests pass `{ prod: true }`.
+ */
+export function assertPluginRemoteAllowed(
+  href: string,
+  opts?: { prod?: boolean; allowHosts?: readonly string[] },
+): void {
+  assertSafePluginUrl(href);
+  if (!isProdBuild(opts?.prod)) return;
+  if (envAllowsAnyRemote()) return;
+  if (!isRemoteHttpPluginUrl(href)) return;
+
+  const base =
+    typeof location !== 'undefined' && location?.origin
+      ? location.origin
+      : 'https://axis.local';
+  let host = '';
+  try {
+    host = new URL(href, base).hostname;
+  } catch {
+    throw new Error('Remote plugin URL is invalid');
+  }
+  const allow = [
+    ...DEFAULT_REMOTE_PLUGIN_HOSTS,
+    ...remoteAllowHostsFromEnv(),
+    ...(opts?.allowHosts || []),
+  ];
+  if (!hostAllowed(host, allow)) {
+    throw new Error(
+      'Remote plugin hosts are blocked in production (allowlist only). ' +
+        'Use same-origin /plugins/…, set VITE_ALLOW_REMOTE_PLUGINS=1, or add the host to VITE_PLUGIN_REMOTE_ALLOW.',
+    );
+  }
+}
+
+/**
  * Dynamic-import an ES module plugin URL.
  * Cross-origin modules require CORS (`Access-Control-Allow-Origin`).
  * On failure, try fetch+blob (same CORS requirements, clearer errors).
@@ -293,7 +410,7 @@ export async function loadPluginFromUrl(url: string): Promise<InstalledPlugin> {
   ensureBuiltins();
   const href = normalizePluginUrl(typeof url === 'string' ? url : '');
   if (!href) throw new Error('URL required');
-  assertSafePluginUrl(href);
+  assertPluginRemoteAllowed(href);
 
   const mod = await importPluginModule(href);
   const p = asPlugin(mod);

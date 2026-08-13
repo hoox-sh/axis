@@ -309,6 +309,41 @@ describe('evaluateAlerts with delivery', () => {
 });
 
 describe('webhook helpers', () => {
+  it('isAllowedWebhookUrl requires https and rejects loopback / private IPs', async () => {
+    const { isAllowedWebhookUrl } = await import('../src/alerts/webhook');
+    expect(isAllowedWebhookUrl('https://hooks.example/a')).toBe(true);
+    expect(isAllowedWebhookUrl('http://hooks.example/a')).toBe(false);
+    expect(isAllowedWebhookUrl('https://user:pass@hooks.example/a')).toBe(false);
+    expect(isAllowedWebhookUrl('https://127.0.0.1/x')).toBe(false);
+    expect(isAllowedWebhookUrl('https://10.0.0.1/x')).toBe(false);
+    expect(isAllowedWebhookUrl('https://192.168.1.1/x')).toBe(false);
+    expect(isAllowedWebhookUrl('https://169.254.1.1/x')).toBe(false);
+    expect(isAllowedWebhookUrl('javascript:alert(1)')).toBe(false);
+  });
+
+  it('fireWebhook returns false on disallowed url without calling fetch', async () => {
+    let called = 0;
+    const fetchImpl = (async () => {
+      called += 1;
+      return new Response('ok', { status: 200 });
+    }) as typeof fetch;
+    const ok = await fireWebhook('http://evil.test', buildWebhookPayload(
+      {
+        id: '1',
+        name: 'n',
+        symbol: 'S',
+        kind: 'price_above',
+        params: {},
+        enabled: true,
+        createdAt: 1,
+      },
+      1,
+      2,
+    ), fetchImpl);
+    expect(ok).toBe(false);
+    expect(called).toBe(0);
+  });
+
   it('fireWebhook returns false on network error', async () => {
     const fetchImpl = (async () => {
       throw new Error('offline');

@@ -194,10 +194,11 @@ export function installPresentationControls(): () => void {
     if (e.key !== 'Escape') return;
     if (isEditableTarget(e.target)) return;
     if (document.fullscreenElement) return; // browser handles FS exit first
-    // Don't steal Escape from open dialogs / command palette
+    // Don't steal Escape from open dialogs / command palette.
+    // AXIS dialogs are div[role=dialog][aria-modal=true], not <dialog open>.
     if (
       document.querySelector(
-        '[role="dialog"][open], [data-testid="axis-command-palette"], [data-testid="axis-command-palette-backdrop"]',
+        '[role="dialog"][aria-modal="true"], [role="dialog"][open], [data-testid="axis-command-palette"], [data-testid="axis-command-palette-backdrop"]',
       )
     ) {
       return;

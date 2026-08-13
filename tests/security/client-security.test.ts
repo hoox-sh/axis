@@ -21,6 +21,8 @@ import { _resetStorageRegistrationFlag } from '../../src/storage/catalog';
 import {
   loadPluginFromUrl,
   assertSafePluginUrl,
+  assertPluginRemoteAllowed,
+  isRemoteHttpPluginUrl,
   normalizePluginUrl,
   getInstalledPlugins,
   restoreInstalledPlugins,
@@ -101,6 +103,29 @@ describe('plugin URL safety', () => {
     expect(() => assertSafePluginUrl('/plugins/example.js')).not.toThrow();
     expect(() => assertSafePluginUrl('https://cdn.example/plugin.js')).not.toThrow();
     expect(() => assertSafePluginUrl('http://localhost:3000/plugins/a.js')).not.toThrow();
+  });
+
+  it('classifies remote http(s) vs relative/data', () => {
+    expect(isRemoteHttpPluginUrl('/plugins/example.js')).toBe(false);
+    expect(isRemoteHttpPluginUrl('data:text/javascript,export default {}')).toBe(false);
+    expect(isRemoteHttpPluginUrl('https://evil.example/p.js')).toBe(true);
+  });
+
+  it('prod default-deny blocks unknown remote hosts; allowlist + relative ok', () => {
+    expect(() =>
+      assertPluginRemoteAllowed('https://evil.example/plugin.js', { prod: true }),
+    ).toThrow(/blocked in production|allowlist/i);
+    expect(() =>
+      assertPluginRemoteAllowed(
+        'https://pyne-agent-worker.cryptolinx.workers.dev/plugin/axis-pine-agent.js',
+        { prod: true },
+      ),
+    ).not.toThrow();
+    expect(() => assertPluginRemoteAllowed('/plugins/example.js', { prod: true })).not.toThrow();
+    // Dev (prod:false) still allows arbitrary https after scheme checks
+    expect(() =>
+      assertPluginRemoteAllowed('https://cdn.example/plugin.js', { prod: false }),
+    ).not.toThrow();
   });
 
   it('rejects empty / non-string urls', () => {

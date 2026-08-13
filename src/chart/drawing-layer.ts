@@ -202,6 +202,8 @@ export class DrawingLayer {
   private redrawRaf = 0;
   /** Skip setScriptDrawings when payload is unchanged (live silent re-runs). */
   private lastScriptSig = '';
+  /** Skip setPlotFills DOM rebuild when fill payload is unchanged (live silent re-runs). */
+  private lastFillSig = '';
 
   /**
    * When true, this layer only paints Pine script drawings (no user tools /
@@ -468,7 +470,7 @@ export class DrawingLayer {
       color?: string;
     }>,
   ) {
-    this.plotFills = (fills || []).map((f) => ({
+    const next = (fills || []).map((f) => ({
       name: f.name,
       times: f.times,
       upper: f.upper,
@@ -476,12 +478,18 @@ export class DrawingLayer {
       colors: f.colors || [],
       color: f.color || 'rgba(255, 82, 82, 0.2)',
     }));
+    const sig = plotFillsSignature(next);
+    // Live silent re-runs often re-apply identical fills — skip SVG rebuild
+    if (sig === this.lastFillSig) return;
+    this.lastFillSig = sig;
+    this.plotFills = next;
     this.redrawFills();
   }
 
   clearPlotFills() {
-    if (!this.plotFills.length) return;
+    if (!this.plotFills.length && this.lastFillSig === '') return;
     this.plotFills = [];
+    this.lastFillSig = '';
     this.redrawFills();
   }
 
@@ -1441,14 +1449,56 @@ export class DrawingLayer {
   ) {
     const n = Math.min(fill.times.length, fill.upper.length, fill.lower.length);
     if (n < 2) return;
+
+    // Visible time window (± one bar margin) so pan/zoom does not walk 50k off-screen points
+    let tMin = -Infinity;
+    let tMax = Infinity;
+    try {
+      const vr = this.chart.timeScale().getVisibleRange() as
+        | { from: number; to: number }
+        | null
+        | undefined;
+      if (
+        vr &&
+        Number.isFinite(vr.from as number) &&
+        Number.isFinite(vr.to as number)
+      ) {
+        const pad = Math.max(1, (Number(vr.to) - Number(vr.from)) * 0.05);
+        tMin = Number(vr.from) - pad;
+        tMax = Number(vr.to) + pad;
+      }
+    } catch {
+      /* full series fallback */
+    }
+
+    // Pixel budget → stride dense fills (mirrors LWC conflation idea)
+    let cssW = 800;
+    try {
+      const w = this.host?.clientWidth;
+      if (typeof w === 'number' && w > 0) cssW = w;
+    } catch {
+      /* ignore */
+    }
+    const maxSamples = Math.max(64, Math.floor(cssW * 2));
+
     // Segment into contiguous runs of finite pairs so na gaps split the band.
     let runStart = -1;
     const flush = (from: number, to: number) => {
       if (to - from < 2) return; // need ≥2 samples (to exclusive)
+      const span = to - from;
+      const step = span > maxSamples ? Math.ceil(span / maxSamples) : 1;
       const upperPts: { x: number; y: number }[] = [];
       const lowerPts: { x: number; y: number }[] = [];
-      for (let i = from; i < to; i++) {
+      // Include endpoints when striding so fill edges stay attached to the run
+      const indices: number[] = [];
+      for (let i = from; i < to; i += step) indices.push(i);
+      if (step > 1) {
+        const last = to - 1;
+        if (indices[indices.length - 1] !== last) indices.push(last);
+      }
+      for (const i of indices) {
         const t = fill.times[i]!;
+        if (t < tMin || t > tMax) continue;
         const u = fill.upper[i]!;
         const l = fill.lower[i]!;
         if (!Number.isFinite(u) || !Number.isFinite(l)) continue;
@@ -2484,4 +2534,36 @@ function scriptDrawingsSignature(list: ScriptDrawing[]): string {
   } catch {
     return String(list.length);
   }
+}
+
+/**
+ * Cheap fingerprint for plot fill bands (name/len/tip times/values/color).
+ * Full mid-history rewrites with same tips are rare on live silent re-runs.
+ * Exported for unit tests.
+ */
+export function plotFillsSignature(
+  fills: ReadonlyArray<{
+    name: string;
+    times: number[];
+    upper: (number | null)[];
+    lower: (number | null)[];
+    colors?: (string | null)[];
+    color?: string;
+  }>,
+): string {
+  if (!fills.length) return '';
+  const parts: string[] = [];
+  for (const f of fills) {
+    const n = Math.min(f.times?.length || 0, f.upper?.length || 0, f.lower?.length || 0);
+    const lt = n ? f.times[n - 1] : 0;
+    const ft = n ? f.times[0] : 0;
+    const lu = n ? f.upper[n - 1] : null;
+    const ll = n ? f.lower[n - 1] : null;
+    const fu = n ? f.upper[0] : null;
+    const fl = n ? f.lower[0] : null;
+    parts.push(
+      `${f.name}|${n}|${ft}|${lt}|${fu}|${fl}|${lu}|${ll}|${f.color || ''}`,
+    );
+  }
+  return parts.join(';');
 }

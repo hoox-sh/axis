@@ -117,6 +117,61 @@ export type RunResult = EngineRunResult & {
   plots: (number | null)[];
 };
 
+/**
+ * Cache OHLCV time axis for chart apply — live every-tick updates often keep
+ * the same length + last time (open bar), so skip O(n) rebuild of times[].
+ */
+let ohlcvTimesCache: {
+  gen: number;
+  times: number[];
+} | null = null;
+
+/** @internal test helper */
+export function _resetOhlcvTimesCacheForTests(): void {
+  ohlcvTimesCache = null;
+}
+
+/**
+ * Bar times aligned with `store.bars` for plot apply.
+ * Reuses the prior array when chartDataGen + length + last time are unchanged.
+ */
+export function getOhlcvTimesForApply(): number[] {
+  const bars = store.bars || [];
+  const gen = typeof store.chartDataGen === 'number' ? store.chartDataGen : 0;
+  const n = bars.length;
+  const lastT = n ? Number(bars[n - 1]?.time) : Number.NaN;
+
+  if (
+    ohlcvTimesCache &&
+    ohlcvTimesCache.gen === gen &&
+    ohlcvTimesCache.times.length === n &&
+    (n === 0 || ohlcvTimesCache.times[n - 1] === lastT)
+  ) {
+    return ohlcvTimesCache.times;
+  }
+
+  // Append path: new closed bar on same history generation
+  if (
+    ohlcvTimesCache &&
+    ohlcvTimesCache.gen === gen &&
+    ohlcvTimesCache.times.length === n - 1 &&
+    n > 0 &&
+    Number.isFinite(lastT)
+  ) {
+    const next = ohlcvTimesCache.times.slice();
+    next.push(lastT);
+    ohlcvTimesCache = { gen, times: next };
+    return next;
+  }
+
+  const times = new Array<number>(n);
+  for (let i = 0; i < n; i++) {
+    times[i] = bars[i]?.time as number;
+  }
+  ohlcvTimesCache = { gen, times };
+  return times;
+}
+
 export type { NormalizedRunResult };
 export {
   beginRunEpoch,
@@ -687,7 +742,7 @@ async function runAndApplyInner(
       '',
   ).toLowerCase();
 
-  const ohlcvTimes = (store.bars || []).map((b) => b?.time);
+  const ohlcvTimes = getOhlcvTimesForApply();
   const plotMeta = (result.meta?.plot_meta || {}) as Record<string, PlotMetaEntry>;
   const seriesMap = result.series || {};
   const split = splitSeriesByKind(seriesMap, plotMeta);

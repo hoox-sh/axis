@@ -28,6 +28,12 @@ _Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 
 ### Improved
 
+- **Prod plugin remote allowlist** — production builds default-deny remote plugin hosts (same-origin `/plugins/*` + `data:` + allowlisted PYNE Agent host); override with `VITE_ALLOW_REMOTE_PLUGINS` / `VITE_PLUGIN_REMOTE_ALLOW`.
+- **Plot fill apply** — skip SVG rebuild when fill fingerprint matches; pan/zoom paint uses visible-range cull + pixel-budget stride on dense bands.
+- **Runner OHLCV times cache** — live re-apply reuses the times axis when `chartDataGen` + length + last time are unchanged (open-bar ticks).
+- **Webhook URL policy** — https-only, no credentials, reject loopback/private IP literals; 8s AbortController timeout.
+- **Presentation Escape** — detect AXIS modals via `[role=dialog][aria-modal=true]` (not only native `<dialog open>`).
+- **CSP baseline** — nginx + Bun static server send Content-Security-Policy (self scripts, wasm-unsafe-eval, https/wss connect, frame-ancestors self).
 - **First-paint bundle** — chart PWA critical path no longer statically imports CodeMirror/editor or `@tauri-apps/*`: `index.tsx` dynamic-imports App vs EditorApp; `EditorPane` is Solid `lazy` + `Show` when docked editor is open; Tauri shell install is dynamic-imported after a lightweight `isTauriShell` check.
 - **Multi-chart slot bars reactive** — `chart-registry` stores per-slot `bars` / `chartDataGen` in a Solid store so inactive ChartHost slots re-paint when those paths change.
 - **PWA SW update UX** — stop blind `SKIP_WAITING` without a reload path; post skip-waiting only when activating a waiting update, and soft-reload once on `controllerchange` (refreshing guard) so mixed old/new modules never stick. Still skips DEV and Tauri.
@@ -65,6 +71,7 @@ _Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 - **store-append-scale** — always-on `appendBar` same-time + cap invariants.
 - **multiplex-heavy-rerun / sw-strategy / load-symbol** — heavy re-run mode, runtime cache FIFO cap, offline bars-cache fallback.
 - **register-sw** — pure update helpers (`shouldSoftReloadOnControllerChange`, skip-waiting) + controllerchange single-reload mocks.
+- **security / runner / fills** — remote plugin prod allowlist, webhook URL policy, OHLCV times cache, plot fill signature.
 
 ## [2.0.7] — 2026-08-12
 
