@@ -52,6 +52,7 @@ import { defaultStreamForSource } from '../streams/catalog';
 import { pluginKey } from '../plugins/types';
 import { normalizeHistoricalBars } from './parse-bars';
 import { getCachedBars } from './bars-cache';
+import { announce, announceError } from '../ui/sr-announce';
 
 /**
  * Monotonic generation for in-flight history loads.
@@ -280,6 +281,7 @@ export async function loadSymbolData(
       error: null,
     });
     setStatus('ready', `Loaded ${normalized.length} bars · ${source.name}`);
+    announce(`Loaded ${normalized.length} bars ${sym} ${iv}`);
 
     // Restart / auto-start live on the new ticker after a full history paint
     if (restartLiveAfter) {
@@ -344,6 +346,7 @@ export async function loadSymbolData(
           'ready',
           `Offline · ${cached.length} cached bars · ${source.name}`,
         );
+        announce(`Offline cached ${cached.length} bars ${sym} ${iv}`);
         // Do not auto-start live on offline cache (no reliable venue stream)
         if (stillCurrent() && store.scripts.some((s) => s.visible && s.code?.trim())) {
           try {
@@ -376,6 +379,7 @@ export async function loadSymbolData(
       latencyMs: performance.now() - t0,
     });
     setStatus('error', `Load failed: ${msg}`);
+    announceError(`Load failed: ${msg}`);
     return false;
   }
 }

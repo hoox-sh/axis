@@ -25,6 +25,7 @@
  */
 
 import { Component, For, Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { installFocusTrap } from './focus-trap';
 import { Icons } from './icons';
 import { HooxLogo } from './HooxLogo';
 
@@ -128,7 +129,11 @@ export const AboutModal: Component = () => {
           aria-labelledby="axis-about-title"
           data-testid="axis-about-modal"
           tabIndex={-1}
-          ref={(el) => queueMicrotask(() => el?.focus())}
+          ref={(el) => {
+            if (!el) return;
+            const dispose = installFocusTrap(el, { autoFocus: true });
+            onCleanup(dispose);
+          }}
         >
           <div class="sc-dialog-accent" />
 

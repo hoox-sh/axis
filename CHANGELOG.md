@@ -28,6 +28,9 @@ _Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 
 ### Improved
 
+- **Modal focus trap** — shared `installFocusTrap` cycles Tab inside Settings / About and restores prior focus on close.
+- **Chart a11y region** — ChartHost exposes `role="region"` with symbol/interval/bar-count label; load success/error uses polite/assertive SR announcer.
+- **Session DO stream sanitize** — symbol `^[A-Z0-9]{1,20}$` + Binance interval allowlist before upstream WS URL is built.
 - **Prod plugin remote allowlist** — production builds default-deny remote plugin hosts (same-origin `/plugins/*` + `data:` + allowlisted PYNE Agent host); override with `VITE_ALLOW_REMOTE_PLUGINS` / `VITE_PLUGIN_REMOTE_ALLOW`.
 - **Plot fill apply** — skip SVG rebuild when fill fingerprint matches; pan/zoom paint uses visible-range cull + pixel-budget stride on dense bands.
 - **Runner OHLCV times cache** — live re-apply reuses the times axis when `chartDataGen` + length + last time are unchanged (open-bar ticks).

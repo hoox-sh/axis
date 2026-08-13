@@ -31,8 +31,18 @@
  * Optional `initialTab` focuses General or Theme when opening (e.g. command palette).
  */
 
-import { Component, For, createEffect, createSignal, Show, createMemo, untrack } from 'solid-js';
+import {
+  Component,
+  For,
+  createEffect,
+  createSignal,
+  Show,
+  createMemo,
+  untrack,
+  onCleanup,
+} from 'solid-js';
 import { reconcile } from 'solid-js/store';
+import { installFocusTrap } from './focus-trap';
 import {
   store,
   setStore,
@@ -410,7 +420,11 @@ export const SettingsDialog: Component<Props> = (props) => {
           aria-labelledby="axis-settings-title"
           data-testid="axis-settings"
           tabIndex={-1}
-          ref={(el) => queueMicrotask(() => el?.focus())}
+          ref={(el) => {
+            if (!el) return;
+            const dispose = installFocusTrap(el, { autoFocus: true });
+            onCleanup(dispose);
+          }}
         >
           <div class="sc-dialog-accent" />
 

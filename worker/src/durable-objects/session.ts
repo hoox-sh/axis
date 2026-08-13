@@ -40,6 +40,45 @@
 
 import type { Env } from '../index';
 
+/** Binance kline intervals accepted into the upstream path. */
+const ALLOWED_INTERVALS = new Set([
+    '1s',
+    '1m',
+    '3m',
+    '5m',
+    '15m',
+    '30m',
+    '1h',
+    '2h',
+    '4h',
+    '6h',
+    '8h',
+    '12h',
+    '1d',
+    '3d',
+    '1w',
+    '1M',
+]);
+
+/**
+ * Sanitize symbol for Binance WS path segments.
+ * Only alphanumerics (uppercase), length 1–20 — blocks path injection.
+ */
+export function sanitizeStreamSymbol(raw: unknown): string | null {
+    const s = String(raw ?? '')
+        .trim()
+        .toUpperCase();
+    if (!/^[A-Z0-9]{1,20}$/.test(s)) return null;
+    return s;
+}
+
+/** Return interval if in the Binance kline allowlist; otherwise null. */
+export function sanitizeStreamInterval(raw: unknown): string | null {
+    const s = String(raw ?? '').trim();
+    if (!ALLOWED_INTERVALS.has(s)) return null;
+    return s;
+}
+
 /** In-memory session fields kept on the DO instance (not durable storage). */
 interface SessionState {
     symbol: string;
@@ -79,9 +118,26 @@ export class SessionDO {
             return new Response('expected websocket', { status: 426 });
         }
 
-        const symbol = url.searchParams.get('symbol') ?? 'BTCUSDT';
-        const interval = url.searchParams.get('interval') ?? '1m';
-        this.sess.symbol = symbol.toUpperCase();
+        const symbol =
+            sanitizeStreamSymbol(url.searchParams.get('symbol') ?? 'BTCUSDT') ?? 'BTCUSDT';
+        const interval =
+            sanitizeStreamInterval(url.searchParams.get('interval') ?? '1m') ?? '1m';
+        // Reject clearly malicious query values instead of falling through to defaults only
+        const rawSym = url.searchParams.get('symbol');
+        const rawIv = url.searchParams.get('interval');
+        if (rawSym != null && sanitizeStreamSymbol(rawSym) == null) {
+            return new Response(JSON.stringify({ status: 'error', code: 'BAD_SYMBOL' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+            });
+        }
+        if (rawIv != null && sanitizeStreamInterval(rawIv) == null) {
+            return new Response(JSON.stringify({ status: 'error', code: 'BAD_INTERVAL' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+            });
+        }
+        this.sess.symbol = symbol;
         this.sess.interval = interval;
 
         const pair = new WebSocketPair();
@@ -103,11 +159,35 @@ export class SessionDO {
     async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
         try {
             const msg = JSON.parse(typeof message === 'string' ? message : new TextDecoder().decode(message));
-            if (msg.action === 'subscribe' && (msg.symbol !== this.sess.symbol || msg.interval !== this.sess.interval)) {
-                this.sess.symbol = String(msg.symbol ?? this.sess.symbol).toUpperCase();
-                this.sess.interval = String(msg.interval ?? this.sess.interval);
-                this.closeUpstream();
-                this.ensureUpstream();
+            if (msg.action === 'subscribe') {
+                const nextSym =
+                    msg.symbol != null
+                        ? sanitizeStreamSymbol(msg.symbol)
+                        : this.sess.symbol;
+                const nextIv =
+                    msg.interval != null
+                        ? sanitizeStreamInterval(msg.interval)
+                        : this.sess.interval;
+                if (nextSym == null || nextIv == null) {
+                    try {
+                        ws.send(
+                            JSON.stringify({
+                                type: 'error',
+                                code: 'BAD_SUBSCRIBE',
+                                message: 'invalid symbol or interval',
+                            }),
+                        );
+                    } catch {
+                        /* ignore */
+                    }
+                    return;
+                }
+                if (nextSym !== this.sess.symbol || nextIv !== this.sess.interval) {
+                    this.sess.symbol = nextSym;
+                    this.sess.interval = nextIv;
+                    this.closeUpstream();
+                    this.ensureUpstream();
+                }
             } else if (msg.action === 'ping') {
                 ws.send(JSON.stringify({ action: 'pong', t: Date.now() }));
             }
@@ -127,7 +207,19 @@ export class SessionDO {
     /** Open Binance kline WS if not already connected for current symbol/interval. */
     private ensureUpstream(): void {
         if (this.sess.upstream) return;
-        const url = `wss://stream.binance.com:9443/ws/${this.sess.symbol.toLowerCase()}@kline_${this.sess.interval}`;
+        const symbol = sanitizeStreamSymbol(this.sess.symbol);
+        const interval = sanitizeStreamInterval(this.sess.interval);
+        if (!symbol || !interval) {
+            this.broadcast(
+                JSON.stringify({
+                    type: 'error',
+                    code: 'BAD_STREAM',
+                    message: 'invalid symbol or interval for upstream',
+                }),
+            );
+            return;
+        }
+        const url = `wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@kline_${interval}`;
         try {
             const upstream = new WebSocket(url);
             upstream.addEventListener('open', () => this.broadcast(JSON.stringify({ type: 'status', state: 'open', url })));

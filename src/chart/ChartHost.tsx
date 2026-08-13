@@ -739,6 +739,15 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     localManager = undefined;
   });
 
+  const chartAriaLabel = () => {
+    const sym = props.symbol || store.symbol || 'chart';
+    const iv = props.interval || store.interval || '';
+    const n = bars().length;
+    return n
+      ? `Chart ${sym} ${iv}, ${n} bars`
+      : `Chart ${sym} ${iv}, no data`;
+  };
+
   return (
     <div
       ref={(el) => {
@@ -748,6 +757,8 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       data-axis-chart-host
       data-slot={slotId()}
       data-active={isActive() ? '1' : '0'}
+      role="region"
+      aria-label={chartAriaLabel()}
     >
       <div
         ref={(el) => {
