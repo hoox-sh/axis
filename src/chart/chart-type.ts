@@ -223,28 +223,40 @@ export type ValueDatum = {
 
 export type PriceSeriesDatum = OhlcDatum | ValueDatum;
 
+/** True when a bar is safe for LWC candlestick / line `setData`. */
+function isFinitePriceBar(b: Bar): boolean {
+  return (
+    Number.isFinite(b.time) &&
+    Number.isFinite(b.open) &&
+    Number.isFinite(b.high) &&
+    Number.isFinite(b.low) &&
+    Number.isFinite(b.close)
+  );
+}
+
 function toOhlcData(bars: readonly Bar[]): OhlcDatum[] {
-  const n = bars.length;
-  const out: OhlcDatum[] = new Array(n);
-  for (let i = 0; i < n; i++) {
+  const out: OhlcDatum[] = [];
+  for (let i = 0; i < bars.length; i++) {
     const b = bars[i]!;
-    out[i] = {
+    // Drop poisoned rows so one NaN candle cannot blank the whole series
+    if (!isFinitePriceBar(b)) continue;
+    out.push({
       time: b.time,
       open: b.open,
       high: b.high,
       low: b.low,
       close: b.close,
-    };
+    });
   }
   return out;
 }
 
 function toCloseData(bars: readonly Bar[]): ValueDatum[] {
-  const n = bars.length;
-  const out: ValueDatum[] = new Array(n);
-  for (let i = 0; i < n; i++) {
+  const out: ValueDatum[] = [];
+  for (let i = 0; i < bars.length; i++) {
     const b = bars[i]!;
-    out[i] = { time: b.time, value: b.close };
+    if (!isFinitePriceBar(b)) continue;
+    out.push({ time: b.time, value: b.close });
   }
   return out;
 }

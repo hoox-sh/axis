@@ -92,6 +92,10 @@ let rerunTimer: ReturnType<typeof setTimeout> | null = null;
 let rerunInFlight = false;
 /** Test-only: increments each time a debounced live re-run is attempted. */
 let rerunAttemptCount = 0;
+/** Latest bar waiting for rAF flush (trade-ticker coalescing). */
+let pendingLiveBar: Bar | null = null;
+/** rAF handle for {@link pendingLiveBar}; cancelled on stop. */
+let liveBarRaf = 0;
 
 /** @internal Test helper — live re-run attempts since last reset. */
 export function _getRerunAttemptCountForTests(): number {
@@ -103,9 +107,19 @@ export function _getLiveEpochForTests(): number {
   return liveEpoch;
 }
 
+/** Cancel coalesced live-bar rAF (stop / test reset). */
+function cancelPendingLiveBarFlush(): void {
+  pendingLiveBar = null;
+  if (liveBarRaf && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(liveBarRaf);
+  }
+  liveBarRaf = 0;
+}
+
 /** @internal Test helper — clear multiplex timers/gates between cases. */
 export function _resetMultiplexForTests(): void {
   liveEpoch += 1;
+  cancelPendingLiveBarFlush();
   if (currentStop) {
     try {
       currentStop();
@@ -192,6 +206,35 @@ export function startLive(
   /** True only while this startLive session is still the active epoch. */
   const isCurrent = () => liveEpoch === epoch && store.live.active;
 
+  /**
+   * Apply the latest coalesced bar to store + chart.
+   * Trade-level streams (Coinbase ticker) can fire 10–100+/s; rAF keeps UI ≤1 paint/frame.
+   */
+  const flushPendingBar = () => {
+    liveBarRaf = 0;
+    const bar = pendingLiveBar;
+    pendingLiveBar = null;
+    if (!bar || !isCurrent()) return;
+    try {
+      appendBar(bar);
+      const manager = getManager();
+      if (manager) manager.appendBar(bar);
+      noteTick(bar.close, bar.time);
+
+      // Data Manager: grow the underlying bars-cache dataset with live ticks
+      noteDataManagerLiveBar(bar);
+
+      const timeAdvanced = lastSeenBarTime > 0 && bar.time > lastSeenBarTime;
+      lastSeenBarTime = bar.time;
+      const mode = store.live.rerunOn || 'every-tick';
+      if (mode === 'every-tick' || bar.closed || timeAdvanced) {
+        scheduleRerun();
+      }
+    } catch {
+      /* never let a single tick tear down the live session / UI */
+    }
+  };
+
   const stop = stream.start({
     symbol: sym,
     interval: iv,
@@ -201,23 +244,13 @@ export function startLive(
       // Drop partial / NaN OHLCV so a bad venue tick cannot poison the chart
       const bar = sanitizeBar(raw);
       if (!bar) return;
-      try {
-        appendBar(bar);
-        const manager = getManager();
-        if (manager) manager.appendBar(bar);
-        noteTick(bar.close, bar.time);
-
-        // Data Manager: grow the underlying bars-cache dataset with live ticks
-        noteDataManagerLiveBar(bar);
-
-        const timeAdvanced = lastSeenBarTime > 0 && bar.time > lastSeenBarTime;
-        lastSeenBarTime = bar.time;
-        const mode = store.live.rerunOn || 'every-tick';
-        if (mode === 'every-tick' || bar.closed || timeAdvanced) {
-          scheduleRerun();
-        }
-      } catch {
-        /* never let a single tick tear down the live session / UI */
+      // Keep only the newest bar until the next animation frame
+      pendingLiveBar = bar;
+      if (liveBarRaf) return;
+      if (typeof requestAnimationFrame === 'function') {
+        liveBarRaf = requestAnimationFrame(flushPendingBar);
+      } else {
+        flushPendingBar();
       }
     },
     onStatus: (s) => {
@@ -284,6 +317,7 @@ export function stopLive(opts?: StopLiveOpts) {
 
   // Invalidate session first so in-flight callbacks no-op
   liveEpoch += 1;
+  cancelPendingLiveBarFlush();
 
   // Mark inactive before stop() so reconnect closed callbacks don't fight UI state
   setLive(false);

@@ -27,7 +27,7 @@
  * @module ui/StatusBar
  */
 
-import { Component, Show, createMemo } from 'solid-js';
+import { Component, Show, createMemo, untrack } from 'solid-js';
 import { store, isPanelOpen } from '../store';
 import { Icons } from './icons';
 import type { RunResult } from '../indicators/runner';
@@ -51,7 +51,13 @@ export const StatusBar: Component = () => {
   const strategySummary = createMemo(() => {
     const r = store.lastRun as RunResult | null;
     if (!r?.events?.length) return null;
-    const rep = buildStrategyReport(r.events as never[], store.bars);
+    // Recompute on history reload / fill-mode prefs — not on every live tick path-update
+    void store.chartDataGen;
+    void store.strategyUi?.slippageNextOpen;
+    const bars = untrack(() => store.bars);
+    const rep = buildStrategyReport(r.events as never[], bars, {
+      fillMode: store.strategyUi?.slippageNextOpen ? 'next_open' : 'close',
+    });
     if (!rep.stats.trades) return null;
     return rep.stats;
   });

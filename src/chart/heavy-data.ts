@@ -76,22 +76,28 @@ export function heavyTimeScaleOptions(barCount: number): {
   };
 }
 
-/** Volume histogram points — pre-sized single pass (no intermediate `.map` GC). */
+/** Volume histogram points — single pass, skips non-finite time/OHLC rows. */
 export function mapBarsToVolumeData(
   bars: readonly Bar[],
   colors: { up: string; down: string },
 ): Array<{ time: number; value: number; color: string }> {
-  const n = bars.length;
-  const out = new Array<{ time: number; value: number; color: string }>(n);
-  for (let i = 0; i < n; i++) {
+  const out: Array<{ time: number; value: number; color: string }> = [];
+  for (let i = 0; i < bars.length; i++) {
     const b = bars[i]!;
+    if (
+      !Number.isFinite(b.time) ||
+      !Number.isFinite(b.open) ||
+      !Number.isFinite(b.close)
+    ) {
+      continue;
+    }
     const vol =
       b.volume != null && Number.isFinite(b.volume) && b.volume >= 0 ? b.volume : 0;
-    out[i] = {
+    out.push({
       time: b.time,
       value: vol,
       color: b.close >= b.open ? colors.up : colors.down,
-    };
+    });
   }
   return out;
 }

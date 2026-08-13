@@ -263,7 +263,7 @@ export function renderResults(payload) {
             const detail = JSON.stringify(ev).slice(0, 120);
             return `<li class="event-item">
                 <span class="event-time">${t}</span>
-                <span class="event-type ${kind.toLowerCase()}">${escapeHtml(kind)}</span>
+                <span class="event-type ${/^[a-z0-9_-]+$/i.test(kind) ? kind.toLowerCase() : 'event'}">${escapeHtml(kind)}</span>
                 <span class="event-symbol">${escapeHtml(sym)}</span>
                 <span class="event-detail" title="${escapeHtml(detail)}">${escapeHtml(detail)}</span>
                 <span class="event-price">${price}</span>

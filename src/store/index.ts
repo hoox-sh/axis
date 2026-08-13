@@ -39,6 +39,7 @@
  * Types: {@link ./types.ts}. Panel chrome shapes: `ui/panels/types`.
  */
 
+import { batch } from 'solid-js';
 import { createStore, reconcile, unwrap } from 'solid-js/store';
 import type {
   AppState,
@@ -1595,22 +1596,25 @@ if (typeof window !== 'undefined') {
  * Persists symbol/interval/exchange; bars themselves are not written to localStorage.
  */
 export function loadBars(bars: Bar[], symbol: string, interval: string, exchange: string) {
-  setStore('bars', bars);
-  setStore('chartDataGen', (g) => (typeof g === 'number' ? g + 1 : 1));
-  setStore('symbol', symbol);
-  setStore('interval', interval);
-  setStore('exchange', exchange);
-  // Mirror into active multi-chart slot + runtime bar cache
-  const slotId = getActiveSlotId() || store.chartLayout?.activeId;
-  if (slotId) {
-    setSlotBars(slotId, bars, true);
-    const idx = store.chartLayout?.slots?.findIndex((s) => s.id === slotId) ?? -1;
-    if (idx >= 0) {
-      setStore('chartLayout', 'slots', idx, 'symbol', symbol);
-      setStore('chartLayout', 'slots', idx, 'interval', interval);
-      setStore('chartLayout', 'slots', idx, 'exchange', exchange);
+  // One reactive flush for Topbar + ChartHost + StatusBar (not 5 micro-updates)
+  batch(() => {
+    setStore('bars', bars);
+    setStore('chartDataGen', (g) => (typeof g === 'number' ? g + 1 : 1));
+    setStore('symbol', symbol);
+    setStore('interval', interval);
+    setStore('exchange', exchange);
+    // Mirror into active multi-chart slot + runtime bar cache
+    const slotId = getActiveSlotId() || store.chartLayout?.activeId;
+    if (slotId) {
+      setSlotBars(slotId, bars, true);
+      const idx = store.chartLayout?.slots?.findIndex((s) => s.id === slotId) ?? -1;
+      if (idx >= 0) {
+        setStore('chartLayout', 'slots', idx, 'symbol', symbol);
+        setStore('chartLayout', 'slots', idx, 'interval', interval);
+        setStore('chartLayout', 'slots', idx, 'exchange', exchange);
+      }
     }
-  }
+  });
   persist();
 }
 

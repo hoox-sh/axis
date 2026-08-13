@@ -34,6 +34,7 @@ import {
   createSignal,
   onCleanup,
   onMount,
+  untrack,
 } from 'solid-js';
 import { store, isPanelOpen, setStrategyUi } from '../store';
 import type { RunResult } from '../indicators/runner';
@@ -104,9 +105,11 @@ export const ResultsPanel: Component = () => {
   const report = createMemo(() => {
     const r = result();
     if (!r) return null;
-    // Pass bars so ohlc-less / zero-ohlc events still resolve close prices
+    // Rebuild on history reload / fill-mode — not every live tip path-update
+    void store.chartDataGen;
     void store.strategyUi?.slippageNextOpen;
-    return buildStrategyReport((r.events || []) as StrategyEvent[], store.bars || [], {
+    const bars = untrack(() => store.bars || []);
+    return buildStrategyReport((r.events || []) as StrategyEvent[], bars, {
       fillMode: fillMode(),
     });
   });
@@ -114,9 +117,11 @@ export const ResultsPanel: Component = () => {
   const normalizedEvents = createMemo(() => {
     const r = result();
     if (!r) return [] as StrategyEvent[];
+    void store.chartDataGen;
     void store.strategyUi?.slippageNextOpen;
+    const bars = untrack(() => store.bars || []);
     return normalizeStrategyEvents((r.events || []) as StrategyEvent[], {
-      bars: store.bars || [],
+      bars,
       includeOrders: true,
       fillMode: fillMode(),
     });

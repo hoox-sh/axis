@@ -49,6 +49,7 @@ import {
   setDataToChart,
   getActiveDrawingLayer,
   applyDebugPinsToChart,
+  clearScriptPaneLayers,
 } from './manager-access';
 import {
   getSlotBars,
@@ -701,6 +702,12 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
             /* ignore */
           }
           setDrawingLayer(undefined, id);
+        }
+        // Script-only indicator layers hold RO + time-scale subs; drop with host
+        try {
+          clearScriptPaneLayers();
+        } catch {
+          /* ignore */
         }
       }
       try {

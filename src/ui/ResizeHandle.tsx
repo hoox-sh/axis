@@ -50,13 +50,17 @@ function isVertical(dir: ResizeDirection): boolean {
  */
 export const ResizeHandle: Component<Props> = (props) => {
   let dragging = false;
+  let activePointerId: number | null = null;
   let startPos = 0;
   let startSize = 0;
 
   const onPointerDown = (e: PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    // Ignore secondary fingers mid-drag (multi-touch jump)
+    if (dragging) return;
     dragging = true;
+    activePointerId = e.pointerId;
     startPos = isVertical(props.direction) ? e.clientX : e.clientY;
     startSize = props.getSize();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -65,7 +69,7 @@ export const ResizeHandle: Component<Props> = (props) => {
   };
 
   const onPointerMove = (e: PointerEvent) => {
-    if (!dragging) return;
+    if (!dragging || e.pointerId !== activePointerId) return;
     const pos = isVertical(props.direction) ? e.clientX : e.clientY;
     const delta = pos - startPos;
     let raw: number;
@@ -93,8 +97,9 @@ export const ResizeHandle: Component<Props> = (props) => {
   };
 
   const onPointerUp = (e: PointerEvent) => {
-    if (!dragging) return;
+    if (!dragging || e.pointerId !== activePointerId) return;
     dragging = false;
+    activePointerId = null;
     try {
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     } catch {

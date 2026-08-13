@@ -1257,7 +1257,7 @@ function openCompanionWindow(id: PanelId, title: string) {
   document.getElementById('reattach').onclick = function(){
     try {
       if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({ type: 'axis-panel-reattach', id: '${id}' }, '*');
+        window.opener.postMessage({ type: 'axis-panel-reattach', id: '${id}' }, window.location.origin);
       }
     } catch (e) {}
     window.close();
@@ -1265,7 +1265,7 @@ function openCompanionWindow(id: PanelId, title: string) {
   window.addEventListener('beforeunload', function(){
     try {
       if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({ type: 'axis-panel-window-closed', id: '${id}' }, '*');
+        window.opener.postMessage({ type: 'axis-panel-window-closed', id: '${id}' }, window.location.origin);
       }
     } catch (e) {}
   });
@@ -1282,6 +1282,8 @@ function openCompanionWindow(id: PanelId, title: string) {
  */
 export function installPanelWindowBridge() {
   const onMsg = (ev: MessageEvent) => {
+    // Same-origin only — companion popups use location.origin as targetOrigin
+    if (ev.origin !== window.location.origin) return;
     const d = ev.data;
     if (!d || typeof d !== 'object') return;
     if (d.type === 'axis-panel-reattach' && typeof d.id === 'string') {

@@ -51,6 +51,17 @@ describe('mapBarsToVolumeData', () => {
     expect(out[1]).toEqual({ time: 2, value: 20, color: '#f00' });
     expect(out[2]!.value).toBe(0);
   });
+
+  it('skips non-finite time/open/close rows', () => {
+    const bars: Bar[] = [
+      { time: 1, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 },
+      { time: Number.NaN, open: 1, high: 2, low: 0.5, close: 1, volume: 5 },
+      { time: 3, open: Number.NaN, high: 2, low: 1, close: 1, volume: 5 },
+    ];
+    const out = mapBarsToVolumeData(bars, { up: '#0f0', down: '#f00' });
+    expect(out).toHaveLength(1);
+    expect(out[0]!.time).toBe(1);
+  });
 });
 
 describe('barIndexAtTimeBinary', () => {

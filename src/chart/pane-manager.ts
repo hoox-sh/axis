@@ -236,18 +236,30 @@ function safeUpdate(series: ISeriesApi<any> | null | undefined, point: unknown):
   }
 }
 
+/** Tip value for smart-apply fingerprint (close preferred, then value). */
+function seriesTipValue(point: unknown): number {
+  if (!point || typeof point !== 'object') return Number.NaN;
+  const o = point as { close?: unknown; value?: unknown };
+  if (Number.isFinite(o.close as number)) return Number(o.close);
+  if (Number.isFinite(o.value as number)) return Number(o.value);
+  return Number.NaN;
+}
+
+type SeriesApplyMeta = { len: number; lastTime: number; lastVal: number };
+
 /**
  * Prefer last-point update when length + last time match prior apply.
- * Falls back to full setData (history rewrite / first paint / length change).
+ * True no-op when tip value is unchanged; full setData on history rewrite.
  */
 function applySeriesDataSmart(
   series: ISeriesApi<any>,
   mapped: Array<{ time: number }>,
   metaKey: string,
-  metaMap: Map<string, { len: number; lastTime: number }>,
+  metaMap: Map<string, SeriesApplyMeta>,
 ): void {
   const last = mapped.length ? mapped[mapped.length - 1] : null;
   const lastTime = last && Number.isFinite(last.time) ? Number(last.time) : null;
+  const lastVal = seriesTipValue(last);
   const prev = metaMap.get(metaKey);
   if (
     prev &&
@@ -257,8 +269,12 @@ function applySeriesDataSmart(
     prev.lastTime === lastTime &&
     mapped.length > 0
   ) {
+    // Identical tip → skip LWC work entirely (live re-run no-ops)
+    if (Object.is(prev.lastVal, lastVal) || prev.lastVal === lastVal) {
+      return;
+    }
     if (safeUpdate(series, last)) {
-      metaMap.set(metaKey, { len: mapped.length, lastTime });
+      metaMap.set(metaKey, { len: mapped.length, lastTime, lastVal });
       return;
     }
   }
@@ -266,6 +282,7 @@ function applySeriesDataSmart(
   metaMap.set(metaKey, {
     len: mapped.length,
     lastTime: lastTime ?? 0,
+    lastVal,
   });
 }
 
@@ -351,6 +368,10 @@ export class PaneManager {
   private hoveredPaneId: string | null = null;
   /** Coalesce multi-pane crosshair mirrors to one frame (heavy histories). */
   private crosshairRaf = createRafCoalescer();
+  /** Coalesce ResizeObserver → applyOptions to one pass per animation frame. */
+  private resizeRaf = createRafCoalescer();
+  /** Pane ids that need a measured resize on the next rAF flush. */
+  private pendingResizePaneIds = new Set<string>();
   /** Host callback for Data Window / store (set via {@link syncCrosshair}) */
   private crosshairOnMove:
     | ((data: {
@@ -382,7 +403,7 @@ export class PaneManager {
    * Last applied data fingerprint per series key — enables last-bar
    * `series.update` on silent live re-runs when only the tip changed.
    */
-  private overlayDataMeta = new Map<string, { len: number; lastTime: number }>();
+  private overlayDataMeta = new Map<string, SeriesApplyMeta>();
   /** ThemeManager chart unregister fns keyed by pane id */
   private themeUnregs = new Map<string, () => void>();
 
@@ -618,18 +639,9 @@ export class PaneManager {
     }
 
     const ro = new ResizeObserver(() => {
-      const rect = div.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        chart.applyOptions({ width: rect.width, height: rect.height });
-        // Re-assert scale width / visibility after resize (LWC may recompute)
-        try {
-          chart.priceScale('right').applyOptions(this.rightScaleLayoutOptions());
-        } catch {
-          /* ignore */
-        }
-        // Keep secondary panes aligned after layout thrash
-        if (isSecondary) this.alignTimeRangesFromPrice();
-      }
+      // Coalesce rapid RO entries (panel drag, multi-pane, multi-slot) to 1 frame
+      this.pendingResizePaneIds.add(id);
+      this.resizeRaf.schedule(() => this.flushPendingPaneResizes());
     });
     ro.observe(div);
 
@@ -2250,8 +2262,51 @@ export class PaneManager {
     }
   }
 
+  /**
+   * Apply coalesced ResizeObserver measurements — one layout pass per rAF.
+   * Re-asserts right scale width and realigns secondaries once at the end.
+   */
+  private flushPendingPaneResizes() {
+    if (!this.pendingResizePaneIds.size) return;
+    const ids = [...this.pendingResizePaneIds];
+    this.pendingResizePaneIds.clear();
+    let anySecondary = false;
+    for (const paneId of ids) {
+      const pane = this.panes.get(paneId);
+      if (!pane?.chart) continue;
+      const el =
+        typeof document !== 'undefined'
+          ? document.getElementById(this.paneDomId(paneId))
+          : null;
+      const div = el || null;
+      if (!div || typeof div.getBoundingClientRect !== 'function') continue;
+      const rect = div.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      try {
+        pane.chart.applyOptions({ width: rect.width, height: rect.height });
+      } catch {
+        /* disposed */
+      }
+      try {
+        pane.chart.priceScale('right').applyOptions(this.rightScaleLayoutOptions());
+      } catch {
+        /* ignore */
+      }
+      if (pane.type !== 'price') anySecondary = true;
+    }
+    if (anySecondary) {
+      try {
+        this.alignTimeRangesFromPrice();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   dispose() {
     this.crosshairRaf.cancel();
+    this.resizeRaf.cancel();
+    this.pendingResizePaneIds.clear();
     this.candleMarkers = null;
     this.tradeMarkerList = [];
     this.shapeMarkerList = [];

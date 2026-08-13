@@ -68,6 +68,23 @@ describe('Heikin-Ashi', () => {
 });
 
 describe('mapBarsToPriceData', () => {
+  it('drops non-finite OHLC rows so LWC setData cannot be poisoned', () => {
+    const dirty: Bar[] = [
+      { time: 1, open: 10, high: 12, low: 9, close: 11, volume: 1 },
+      { time: 2, open: 11, high: Number.NaN, low: 10, close: 12, volume: 1 },
+      { time: Number.POSITIVE_INFINITY, open: 1, high: 2, low: 0, close: 1, volume: 1 },
+      { time: 3, open: 12, high: 13, low: 11, close: 12.5, volume: 1 },
+    ];
+    const ohlc = mapBarsToPriceData(dirty, 'candles');
+    expect(ohlc).toHaveLength(2);
+    expect(ohlc[0]).toEqual({ time: 1, open: 10, high: 12, low: 9, close: 11 });
+    expect(ohlc[1]).toEqual({ time: 3, open: 12, high: 13, low: 11, close: 12.5 });
+
+    const line = mapBarsToPriceData(dirty, 'line');
+    expect(line).toHaveLength(2);
+    expect(line[1]).toEqual({ time: 3, value: 12.5 });
+  });
+
   it('maps candles/bars to OHLC', () => {
     const data = mapBarsToPriceData(sample, 'candles');
     expect(data).toHaveLength(3);

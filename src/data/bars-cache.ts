@@ -346,6 +346,15 @@ export async function flushPendingIdbPuts(): Promise<void> {
   }
 }
 
+// Flush pending IDB puts when the tab is killed mid-debounce (DSM backfill)
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  const flushOnLeave = () => {
+    void flushPendingIdbPuts();
+  };
+  window.addEventListener('pagehide', flushOnLeave);
+  window.addEventListener('beforeunload', flushOnLeave);
+}
+
 /** Evict oldest-updated series when the in-memory map exceeds the series cap. */
 function trimMemorySeries(): void {
   if (memory.size <= BARS_CACHE_MAX_SERIES) return;

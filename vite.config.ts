@@ -20,6 +20,23 @@ export default defineConfig({
     target: process.env.TAURI_ENV_PLATFORM ? 'es2021' : 'esnext',
     // Produce sourcemaps for debugging the desktop shell.
     sourcemap: !!process.env.TAURI_ENV_PLATFORM,
+    reportCompressedSize: true,
+    chunkSizeWarningLimit: 450,
+    /**
+     * Avoid modulepreloading editor/CodeMirror/builtins on first paint.
+     * Those chunks stay split for cache but load when the editor graph is used.
+     */
+    modulePreload: {
+      resolveDependencies(_filename, deps) {
+        return deps.filter(
+          (d) =>
+            d.includes('/solid-') ||
+            d.includes('/lwc-') ||
+            d.includes('/icons-') ||
+            d.includes('/index-'),
+        );
+      },
+    },
     rollupOptions: {
       output: {
         /**
