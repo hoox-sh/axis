@@ -569,7 +569,14 @@ export const inlineDebugTheme = EditorView.baseTheme({
   '.cm-inline-debug-line-debug': {
     backgroundColor: 'rgba(147, 159, 255, 0.06)',
   },
+  /* Hidden until inline-debug markers exist (profiler-style on-demand column) */
   '.cm-inline-debug-gutter-col': {
+    display: 'none',
+    minWidth: '0',
+    width: '0',
+  },
+  '&.cm-has-inline-debug-gutter .cm-inline-debug-gutter-col': {
+    display: 'flex',
     width: '14px',
     minWidth: '14px',
   },
@@ -630,6 +637,11 @@ export function inlineDebugExtension(): Extension {
     inlineDebugGutterExt,
     debugPinGutterExt,
     inlineDebugTheme,
+    EditorView.editorAttributes.of((view) => {
+      const st = view.state.field(inlineDebugStateField, false);
+      if (!st?.anns?.length) return null;
+      return { class: 'cm-has-inline-debug-gutter' };
+    }),
   ];
 }
 

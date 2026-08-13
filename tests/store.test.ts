@@ -53,6 +53,7 @@ import {
   loadChartLayout,
   setActiveChartSlot,
   setEditorWidth,
+  defaultEditorWidthPx,
   setPanelDock,
   setPanelOpen,
   getPanelChrome,
@@ -370,7 +371,7 @@ describe('layout helpers', () => {
     expect(store.symbol).toBe('ETHUSDT');
     expect(store.uiScale).toBe(1);
     expect(store.editor.open).toBe(true);
-    expect(store.editor.width).toBe(460);
+    expect(store.editor.width).toBe(defaultEditorWidthPx());
     expect(store.editor.mode).toBe('docked');
     expect(getPanelChrome('editor').dock).toBe('right');
     expect(getPanelChrome('watchlist').dock).toBe('left');

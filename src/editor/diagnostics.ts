@@ -862,7 +862,14 @@ export const diagnosticsTheme = EditorView.baseTheme({
   '.cm-diag-line-info': {
     backgroundColor: 'rgba(139, 142, 156, 0.04)',
   },
+  /* Hidden until diagnostics exist (profiler-style on-demand column) */
   '.cm-diag-gutter-col': {
+    display: 'none',
+    minWidth: '0',
+    width: '0',
+  },
+  '&.cm-has-diag-gutter .cm-diag-gutter-col': {
+    display: 'flex',
     width: '12px',
     minWidth: '12px',
   },
@@ -939,6 +946,12 @@ export function diagnosticsExtension(): Extension {
     diagnosticsGutterExt,
     diagnosticsTheme,
     hoverTooltip(diagnosticHover, { hideOnChange: true }),
+    // Show diag gutter column only when markers exist (no empty reserved width)
+    EditorView.editorAttributes.of((view) => {
+      const st = view.state.field(diagnosticsStateField, false);
+      if (!st?.diags?.length) return null;
+      return { class: 'cm-has-diag-gutter' };
+    }),
   ];
 }
 

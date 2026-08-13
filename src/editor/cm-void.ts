@@ -71,16 +71,17 @@ export const voidEditorTheme = EditorView.theme(
       minWidth: '0',
     },
     /*
-     * Line numbers: only as wide as the current digit count needs.
-     * CM already spacers with maxLineNumber (9 / 99 / 999…); drop the library
-     * minWidth:20px and excess padding so 1–9 line files stay a single digit.
+     * Line numbers: width = digits of max line only (CM spacer 9 → 99 → 999…).
+     * Override library `.cm-lineNumbers .cm-gutterElement { minWidth: 20px }`.
      */
     '.cm-lineNumbers': {
       minWidth: '0',
+      width: 'auto',
     },
     '.cm-lineNumbers .cm-gutterElement': {
-      padding: '0 0.35em 0 0.2em',
+      padding: '0 0.3em 0 0.15em',
       minWidth: '0',
+      width: 'auto',
       textAlign: 'right',
       whiteSpace: 'nowrap',
       boxSizing: 'border-box',

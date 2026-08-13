@@ -138,6 +138,25 @@ export const HISTORY_BARS_DEFAULT = 500;
 export const HISTORY_BARS_MIN = 50;
 export const HISTORY_BARS_MAX = 100_000;
 
+/**
+ * Default docked editor width = 50% of viewport (clamped).
+ * Used for factory defaults / layout reset — not for overwriting user prefs.
+ */
+export function defaultEditorWidthPx(viewportWidth?: number): number {
+  const vw =
+    typeof viewportWidth === 'number' && Number.isFinite(viewportWidth) && viewportWidth > 0
+      ? viewportWidth
+      : typeof window !== 'undefined' &&
+          typeof window.innerWidth === 'number' &&
+          Number.isFinite(window.innerWidth) &&
+          window.innerWidth > 0
+        ? window.innerWidth
+        : 1280;
+  const half = Math.round(vw * 0.5);
+  const max = Math.floor(vw * 0.9);
+  return Math.min(Math.max(half, 1), Math.max(1, max));
+}
+
 /** Clamp history bar count into a safe range for REST kline APIs. */
 export function clampHistoryBars(n: unknown): number {
   const v = typeof n === 'number' ? n : Number(n);
@@ -189,7 +208,7 @@ const DEFAULTS: AppState = {
   uiScale: 1,
   // Ephemeral presentation — never hydrate as on
   presentation: { fullscreen: false, chartOnly: false },
-  editor: { open: true, width: 460, mode: 'docked' },
+  editor: { open: true, width: defaultEditorWidthPx(), mode: 'docked' },
   watchlist: { open: true, width: 200, symbols: [...DEFAULT_WATCHLIST], refreshSec: 15 },
   indicatorPanel: { open: false, width: 224 },
   dataViewPanel: { open: false, width: 220 },

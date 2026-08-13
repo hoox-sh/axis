@@ -32,6 +32,8 @@ _Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 
 ### Improved
 
+- **Editor default width** — factory / layout-reset docked editor width is **50vw** (was fixed 460px); existing persisted widths unchanged.
+- **Editor gutters on demand** — line-number column stays content-width (digits only; overrides CM 20px min); diagnostic + inline-debug gutters hide until they have markers (profiler-style).
 - **Modal focus trap** — shared `installFocusTrap` cycles Tab inside Settings / About and restores prior focus on close.
 - **Chart a11y region** — ChartHost exposes `role="region"` with symbol/interval/bar-count label; load success/error uses polite/assertive SR announcer.
 - **Session DO stream sanitize** — symbol `^[A-Z0-9]{1,20}$` + Binance interval allowlist before upstream WS URL is built.
