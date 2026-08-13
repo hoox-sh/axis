@@ -60,7 +60,10 @@ import {
 import { setDebugChipClickHandler } from './inline-debug';
 import { jumpToDebugPin } from '../chart/manager-access';
 import { EditorProblems } from '../ui/EditorProblems';
-import { countProblemsBySeverity } from '../ui/editor-problems';
+import {
+  countProblemsBySeverity,
+  shouldAutoOpenProblems,
+} from '../ui/editor-problems';
 import { EditorGitBar } from '../ui/EditorGitBar';
 import {
   getEditorStorageId,
@@ -226,10 +229,16 @@ export const TabbedEditor: Component<Props> = (props) => {
   );
   const colorHitCount = createMemo(() => scanPineColors(activeDoc()).length);
 
-  // Auto-expand when new diagnostics appear after a run
+  // Auto-expand only when the diagnostic count *increases* (e.g. after a run).
+  // Forcing open whenever n > 0 re-opened the panel on every store/pre-eval tick
+  // and made the statusbar toggle unable to stay closed.
+  let prevProblemsCount = 0;
   createEffect(() => {
     const n = editorDiagnostics().length;
-    if (n > 0) setProblemsOpen(true);
+    if (shouldAutoOpenProblems(prevProblemsCount, n)) {
+      setProblemsOpen(true);
+    }
+    prevProblemsCount = n;
   });
 
   const scheduleDraft = (doc: string, name?: string) => {

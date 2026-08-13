@@ -37,6 +37,17 @@ export const EDITOR_PROBLEMS_DEFAULT_HEIGHT = 120;
 /** Minimum total height (header + handle + one row). */
 export const EDITOR_PROBLEMS_MIN_HEIGHT = 56;
 
+/**
+ * Whether the Problems panel should auto-expand.
+ * Open only when the diagnostic count **rises** (empty→N or N→N+k), not on
+ * every reactive re-read while count stays positive (that blocked close).
+ */
+export function shouldAutoOpenProblems(prevCount: number, nextCount: number): boolean {
+  const prev = Number.isFinite(prevCount) ? Math.max(0, Math.floor(prevCount)) : 0;
+  const next = Number.isFinite(nextCount) ? Math.max(0, Math.floor(nextCount)) : 0;
+  return next > 0 && next > prev;
+}
+
 /** Pure clamp for resizable problems panel height. */
 export function clampProblemsHeight(h: number, max?: number): number {
   const hi =

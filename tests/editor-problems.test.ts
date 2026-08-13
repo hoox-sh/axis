@@ -17,8 +17,23 @@ import {
   formatProblemLine,
   formatProblemsListForCopy,
   severityRank,
+  shouldAutoOpenProblems,
   truncateProblemMessage,
 } from '../src/ui/editor-problems.ts';
+
+describe('shouldAutoOpenProblems', () => {
+  it('opens when count rises from empty or grows', () => {
+    expect(shouldAutoOpenProblems(0, 3)).toBe(true);
+    expect(shouldAutoOpenProblems(2, 5)).toBe(true);
+  });
+
+  it('does not re-open when count is unchanged or shrinks', () => {
+    expect(shouldAutoOpenProblems(3, 3)).toBe(false);
+    expect(shouldAutoOpenProblems(5, 2)).toBe(false);
+    expect(shouldAutoOpenProblems(0, 0)).toBe(false);
+    expect(shouldAutoOpenProblems(1, 0)).toBe(false);
+  });
+});
 
 describe('severityRank', () => {
   it('ranks error above warning above info', () => {

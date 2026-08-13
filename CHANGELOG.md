@@ -61,6 +61,7 @@ _Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 
 ### Fixed
 
+- **Editor Problems panel close** — auto-open only when diagnostic count *increases*; no longer re-forces open on every pre-eval/store tick while problems remain (statusbar toggle can stay closed).
 - **Worker `/api/run` auth fail-closed** — when `EXTERNAL_BACKEND` is non-empty or `PYODIDE_IN_WORKER=enabled` and `ALLOW_OPEN_KEYS` is not `"1"`, `POST /api/run` requires `requireApiKey` (also still forced by `API_KEYS` / `REQUIRE_RUN_AUTH`); local demos keep open keys without burning unauthenticated compute on a real backend.
 - **Script-only drawing layer leak** — `clearScriptPaneLayers()` on ChartHost unmount (RO + time-scale subs were retained after multi-chart dispose).
 - **Companion panel postMessage** — origin-bound target + receiver check (no more `*`).
