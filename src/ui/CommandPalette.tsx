@@ -122,6 +122,8 @@ export type CommandPaletteProps = {
   onOpenPlugins?: () => void;
   /** Open Workers Manager modal. */
   onOpenWorkers?: () => void;
+  /** Open Architecture (compose-recipe) modal. */
+  onOpenArchitecture?: () => void;
 };
 
 function isEditableTarget(t: EventTarget | null): boolean {
@@ -230,6 +232,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
         props.onOpenThemeSettings?.() ?? props.onOpenSettings?.(),
       openPlugins: () => props.onOpenPlugins?.(),
       openWorkers: () => props.onOpenWorkers?.(),
+      openArchitecture: () => props.onOpenArchitecture?.(),
       openScriptSettings: () => openScriptSettings(null),
       openAbout: () => openAboutModal(),
       resetUiLayout: () => resetUiLayout(),

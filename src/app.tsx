@@ -24,7 +24,8 @@
  * Topbar → flex row (left dock | chart | right dock) → bottom dock → system
  * logs → status bar. Dock columns are portal hosts: open panels stack
  * **one below the other** on the same side. Overlay: settings, plugins,
- * workers manager, script settings, command palette (⌘K), panel drag ghost.
+ * workers manager, architecture (Wire), script settings, command palette (⌘K),
+ * panel drag ghost.
  *
  * ## Boot (`onMount`)
  * - Theme + UI scale; restore dynamic plugins; optional default symbol load
@@ -77,6 +78,9 @@ const ScriptSettingsModal = lazy(() =>
 );
 const RuntimesHub = lazy(() =>
   import('./ui/RuntimesHub').then((m) => ({ default: m.RuntimesHub })),
+);
+const ArchitectureModal = lazy(() =>
+  import('./ui/ArchitectureModal').then((m) => ({ default: m.ArchitectureModal })),
 );
 const AlertsPanel = lazy(() =>
   import('./ui/AlertsPanel').then((m) => ({ default: m.AlertsPanel })),
@@ -148,6 +152,7 @@ export const App: Component = () => {
     setRuntimesSection(section);
     setRuntimesOpen(true);
   };
+  const [architectureOpen, setArchitectureOpen] = createSignal(false);
   const [catalogTick, setCatalogTick] = createSignal(0);
   /** File drag-over highlight for .pine drop-to-library. */
   const [pineDropActive, setPineDropActive] = createSignal(false);
@@ -410,6 +415,7 @@ export const App: Component = () => {
         onOpenSettings={() => openSettings('general')}
         onOpenPlugins={() => openRuntimes('plugins')}
         onOpenWorkers={() => openRuntimes('status')}
+        onOpenArchitecture={() => setArchitectureOpen(true)}
         catalogTick={catalogTick()}
         editorRef={editorRef}
       />
@@ -552,6 +558,13 @@ export const App: Component = () => {
             }}
           />
         </Show>
+        <Show when={architectureOpen()}>
+          <ArchitectureModal
+            open={architectureOpen()}
+            onClose={() => setArchitectureOpen(false)}
+            onApplied={() => setCatalogTick((n) => n + 1)}
+          />
+        </Show>
         {/* Global ⌘K / Ctrl+K command palette */}
         <CommandPalette
           editorRef={editorRef}
@@ -559,6 +572,7 @@ export const App: Component = () => {
           onOpenThemeSettings={() => openSettings('theme')}
           onOpenPlugins={() => openRuntimes('plugins')}
           onOpenWorkers={() => openRuntimes('status')}
+          onOpenArchitecture={() => setArchitectureOpen(true)}
         />
         {/* About AXIS — logo click / Help → About / command palette */}
         <AboutModal />

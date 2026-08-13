@@ -100,6 +100,8 @@ export interface CommandActions {
   openPlugins?: () => void;
   /** Open Workers Manager (calc backends / edge / Pyodide). */
   openWorkers?: () => void;
+  /** Open the architecture / compose-recipe wiring modal. */
+  openArchitecture?: () => void;
   openScriptSettings?: () => void;
   /** About AXIS modal (logo / Help → About). */
   openAbout?: () => void;
@@ -607,6 +609,25 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     ],
   },
   {
+    id: 'action.architecture',
+    title: 'Open Architecture',
+    category: 'navigation',
+    keywords: [
+      'wire',
+      'compose',
+      'recipe',
+      'predefinition',
+      'source',
+      'stream',
+      'engine',
+      'storage',
+      'dataset',
+      'offline lab',
+      'plugin slots',
+      'modular',
+    ],
+  },
+  {
     id: 'action.script-settings',
     title: 'Open Script Inputs',
     category: 'actions',
@@ -804,6 +825,7 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   }
   if (actions.openPlugins) byId.set('action.plugins', actions.openPlugins);
   if (actions.openWorkers) byId.set('action.workers', actions.openWorkers);
+  if (actions.openArchitecture) byId.set('action.architecture', actions.openArchitecture);
   if (actions.openScriptSettings) byId.set('action.script-settings', actions.openScriptSettings);
   if (actions.openAbout) byId.set('action.about', actions.openAbout);
   if (actions.resetUiLayout) byId.set('action.reset-ui', actions.resetUiLayout);

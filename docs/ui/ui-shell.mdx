@@ -35,6 +35,7 @@ The shell is the non-canvas chrome: navigation of axes, market selection, modals
 | StatusBar | `ui/StatusBar.tsx` | Status, engine/storage badges, trade snippet |
 | SettingsDialog | `ui/SettingsDialog.tsx` | Endpoint, engine, storage, intervals |
 | PluginManager | `ui/PluginManager.tsx` | Catalog / install / library |
+| ArchitectureModal | `ui/ArchitectureModal.tsx` | Compose-recipe wiring (source × stream × engine × storage × dataset) |
 | SystemLogs | `ui/SystemLogs.tsx` | Ring buffer of `store.logs` |
 | ResultsPanel | `ui/ResultsPanel.tsx` | Bottom drawer (see results doc) |
 | Icons | `ui/icons.tsx` | Lucide wrappers |
@@ -67,7 +68,7 @@ Grouped left→right (`axis-tb-group`, `data-tb-group`):
 | **compute** | Engine, Stream, **Run**, Live, Replay |
 | **layout** | Multi-chart layouts + recipes |
 | **panels** | List, Editor, Library, **Data** (Source Manager), **Scripts**, Layers, Alerts, Data window, Inputs, Results |
-| **system** | Plugins, Settings, Theme (`margin-left: auto`) |
+| **system** | Wire (Architecture), Runtimes, Settings, Theme (`margin-left: auto`) |
 
 | Control | Effect |
 | --- | --- |

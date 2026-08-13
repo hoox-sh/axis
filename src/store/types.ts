@@ -140,6 +140,11 @@ export interface ActivePlugins {
   engine: string;
   /** local | git | cloud (or dynamic storage plugin id) */
   storage: string;
+  /**
+   * Optional on-chain / alternate series plugin id.
+   * Empty or omitted = dataset slot off.
+   */
+  dataset?: string;
 }
 
 import type { Drawing, DrawingToolId } from '../chart/drawing-types';

@@ -21,6 +21,7 @@ _Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 
 ### Added
 
+- **Architecture modal** — topbar **Wire** (and command palette **Open Architecture**) opens a compose-recipe dialog: pick Offline Lab / Live Crypto / CSV Desk / On-Chain / Team Cloud, then swap or switch off any source · stream · engine · storage · dataset slot. Plan name records drift (`Live Crypto +1 −1`); Apply commits `setActivePlugin` + optional on-chain panel.
 - **Pine `label` styles / yloc** — normalize passes through `style`, `yloc`, `size`/`text_size`, `textcolor`, and `color`; SVG paint supports `label.style_label_up|down|left|right|center` (and bare tokens), bubble tips, icon markers (`xcross`, triangles, …), and `yloc.abovebar` / `yloc.belowbar` when OHLC bars are available (default `yloc.price` + bubble for unknown styles).
 - **About AXIS modal** — click the topbar HOOX/AXIS brand (or command palette **About AXIS** / Help → About) for product, author, and HOOX ethos from [hoox.sh/manifesto](https://hoox.sh/manifesto), with links to AXIS / PYNE / docs.
 - **Script settings → Properties** — when a `strategy()` is loaded, a **Properties** tab exposes broker parameters (initial capital, order size / pyramiding, commission, leverage / margin, process orders on close, calc flags). Overrides persist per script and are merged into `strategy()` on run without rewriting the editor buffer.

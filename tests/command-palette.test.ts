@@ -154,6 +154,7 @@ describe('DEFAULT_COMMAND_SPECS', () => {
       'chart.grid.4',
       'action.run',
       'action.focus-symbol',
+      'action.architecture',
     ]) {
       expect(ids.has(id)).toBe(true);
     }

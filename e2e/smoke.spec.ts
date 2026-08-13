@@ -82,6 +82,18 @@ test.describe('AXIS smoke @smoke', () => {
     await expect(page.getByTestId('axis-manager')).toHaveCount(0);
   });
 
+  test('opens Architecture modal and applies Offline Lab', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('axis-btn-architecture').click();
+    await expect(page.getByTestId('axis-architecture-modal')).toBeVisible();
+    await page.getByTestId('axis-arch-preset-offline-lab').click();
+    await expect(page.getByTestId('axis-architecture-title')).toContainText('Offline Lab');
+    await page.getByTestId('axis-architecture-apply').click();
+    await expect(page.getByTestId('axis-architecture-modal')).toHaveCount(0);
+    await expect(page.getByTestId('axis-select-source')).toHaveValue('mock-walk');
+    await expect(page.getByTestId('axis-select-engine')).toHaveValue('pyodide');
+  });
+
   test('opens Settings dialog', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('axis-btn-settings').click();

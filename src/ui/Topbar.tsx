@@ -29,7 +29,7 @@
  * - **Compute** — Engine, Stream, Run, Live, Replay
  * - **Layout** — multi-chart layout menu
  * - **Panels** — List, Editor, Library, Scripts, Layers, Alerts, Data, Inputs, Results
- * - **System** — Fullscreen, Chart only, Runtimes (Status + Plugins), Settings, Theme (`ml-auto`)
+ * - **System** — Fullscreen, Chart only, Wire (Architecture), Runtimes (Status + Plugins), Settings, Theme (`ml-auto`)
  *
  * ## Actions
  * - **Load / Reload** → force `loadSymbolData` (historical via active source)
@@ -103,6 +103,8 @@ export const Topbar: Component<{
   onOpenPlugins?: () => void;
   /** Open Workers Manager (backends / edge / Pyodide / SW). */
   onOpenWorkers?: () => void;
+  /** Open Architecture — wire source / stream / engine / storage. */
+  onOpenArchitecture?: () => void;
   /** Bump when plugin catalog changes */
   catalogTick?: number;
   editorRef: {
@@ -776,6 +778,18 @@ export const Topbar: Component<{
           data-testid="axis-btn-chart-only"
         >
           {store.presentation?.chartOnly ? <Icons.minimize /> : <Icons.maximize />}
+        </button>
+
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost"
+          onClick={() => props.onOpenArchitecture?.()}
+          title="Architecture — wire source / stream / engine / storage / dataset from a predefinition"
+          data-testid="axis-btn-architecture"
+          aria-label="Open Architecture"
+        >
+          <Icons.layers />
+          <span class="axis-tb-btn-label">Wire</span>
         </button>
 
         <button
