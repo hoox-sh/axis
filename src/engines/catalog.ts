@@ -511,7 +511,7 @@ export function prefetchPyodideAssets(indexUrl?: string): void {
   if (typeof location !== 'undefined') {
     const origin = location.origin;
     for (const path of [
-      '/vendor/pynescript-0.3.6-py3-none-any.whl',
+      '/vendor/pynescript-0.3.7-py3-none-any.whl',
       '/vendor/antlr4_python3_runtime-4.13.2-py3-none-any.whl',
       '/pyodide/pynescript_runtime.py',
     ]) {
@@ -653,7 +653,7 @@ export const pyodideEngine: EnginePlugin & {
       // which are not needed for in-browser evaluate and are NOT vendored under
       // /pyodide/v0.26.2/ — micropip would 404 them on the self-hosted index.
       // Second positional arg alone is keep_going, not deps (micropip 0.6).
-      const wheelUrl = `${origin}/vendor/pynescript-0.3.6-py3-none-any.whl`;
+      const wheelUrl = `${origin}/vendor/pynescript-0.3.7-py3-none-any.whl`;
       const antlrUrl = `${origin}/vendor/antlr4_python3_runtime-4.13.2-py3-none-any.whl`;
       await assertZipAsset(wheelUrl, 'pynescript wheel');
       await assertZipAsset(antlrUrl, 'antlr4 wheel');

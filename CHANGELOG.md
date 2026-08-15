@@ -15,6 +15,10 @@ _Generated/updated: 2026-08-15 · 219 commits · describe-tag: `v2.0.7`_
 
 ## [Unreleased]
 
+### Changed
+
+- **Pyodide PYNE wheel** — vendor `pynescript-0.3.7` (`Runtime.run(libraries=)` for `import ns/Name/ver`, ring-series skip, runtime hot path). Engine catalog, legacy JS engine, SW cache test, and editor builtins synced from pyne 0.3.7.
+
 ## [2.0.8] — 2026-08-15
 
 Architecture modal, library publish emulator, drawings/plot parity, and the post-2.0.7 hardening stack.
