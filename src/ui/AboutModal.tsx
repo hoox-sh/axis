@@ -30,7 +30,7 @@ import { Icons } from './icons';
 import { HooxLogo } from './HooxLogo';
 
 /** App version shown in the about chrome (keep near package.json). */
-const AXIS_VERSION = '2.0.7';
+const AXIS_VERSION = '2.0.8';
 
 const LINKS = {
   axis: 'https://hoox.sh/axis',

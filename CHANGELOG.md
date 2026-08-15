@@ -9,11 +9,15 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
+_Generated/updated: 2026-08-15 · 219 commits · describe-tag: `v2.0.7`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.8] — 2026-08-15
+
+Architecture modal, library publish emulator, drawings/plot parity, and the post-2.0.7 hardening stack.
 
 ### Changed
 
@@ -200,16 +204,31 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (120 commits)
+### 2026-08 (137 commits)
 
 #### Security
 
+- `d2b50220` (2026-08-13) — a11y,security: focus trap, chart region, SessionDO stream sanitize
+- `4321c4b9` (2026-08-13) — security,perf: plugin allowlist, webhook policy, CSP, fill/runner hot paths
+- `72869743` (2026-08-13) — perf,security,ci: multi-agent optim stack (registry, overlay tip, auth, SW, bundle, CI)
 - `ebfc9955` (2026-08-07) — harden chart, data, and run paths for performance and crash resilience
 
 #### Features
 
+- `fe6dfb18` (2026-08-15) — feat(library): git versioned publish emulator for import ns/Name/ver
+- `4d1e8647` (2026-08-13) — feat(ui): architecture modal to wire plugin slots from recipes
+- `814cb21f` (2026-08-13) — feat(editor): 50vw default width; content-sized gutters
+- `80f25012` (2026-08-13) — feat(pyodide): vendor pynescript 0.3.6 wheel
+- `904ec110` (2026-08-12) — feat(drawings): paint line.style_arrow_left/right/both heads
+- `669ee31d` (2026-08-12) — feat(drawings,plot): label styles/yloc, plot columns/cross/diamond
+- `8b80166b` (2026-08-12) — feat(drawings): non-overlay pane Y + force_overlay routing
+- `46229069` (2026-08-12) — feat(drawings,plot): linefill paint, barcolor, multi-script shapes
+- `4b379391` (2026-08-12) — feat(ui): strategy Properties tab in Script settings
+- `4bf973e4` (2026-08-12) — feat(ui): About AXIS modal on logo click
 - `e96114b0` (2026-08-12) — feat(editor): handle PYNE Agent insert/open script events
 - `e29aa644` (2026-08-12) — feat(ui,panels): panel defaults, chart overlay, classic logs chrome
 - `a00ad891` (2026-08-11) — feat(ui): dockable Status and System Logs; Script Logs naming
@@ -266,6 +285,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `4d34d82a` (2026-08-13) — fix(editor): allow Problems panel to stay closed
 - `eb61d218` (2026-08-12) — fix(drawings,plot): line.new last-bar export path + plotarrow direction
 - `299ec83c` (2026-08-12) — fix(test,store): green suite — isolate defaults, health mock, bar fills
 - `41099e71` (2026-08-11) — fix(plugins): clearer errors when cross-origin plugin import lacks CORS
@@ -308,6 +328,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Performance
 
+- `de00cbf3` (2026-08-13) — perf(pwa): heavy live re-run throttle, offline bars fallback, SW v4 cap
+- `a9375440` (2026-08-13) — perf: coalesce live ticks, resize, and strategy UI; harden paint/security
 - `cb901eb4` (2026-08-10) — perf: full-app hardening — live ticks, overlays, load abort, boot split
 - `a9f57958` (2026-08-10) — perf(chart): heavy history paint, conflation, and O(1) live ticks
 
@@ -339,6 +361,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `236d042f` (2026-08-12) — chore(release): AXIS v2.0.7
 - `5f6d7a9a` (2026-08-12) — chore(release): AXIS v2.0.6
 - `12cffe27` (2026-08-11) — chore: ignore local multi-agent sync notice files
 - `33e11930` (2026-08-06) — chore(worker): gitignore wrangler.toml and ship example
