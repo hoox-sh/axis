@@ -33,7 +33,7 @@
 import './registry-bootstrap.js';
 import { initState, getState } from './state.js';
 import { registry } from './registry.js';
-import { initTopbar, setLiveIndicator } from './ui/topbar.js';
+import { initTopbar, setLiveIndicator } from './ui/legacy-topbar.js';
 import { setStatus } from './ui/status.js';
 import { initResults, renderResults } from './ui/results.js';
 import { initPyneEditor, getScript, setScript, focusEditor } from '../pyne-editor.js';

@@ -58,10 +58,11 @@ test.describe('AXIS smoke @smoke', () => {
     await page.getByTestId('axis-select-source').selectOption('mock-walk');
     await page.getByTestId('axis-btn-load').click();
 
-    // Status bar should leave loading
-    await expect(page.getByText(/Loaded \d+ bars|Ready|bars/i).first()).toBeVisible({
-      timeout: 15_000,
-    });
+    // Status message — not getByText(/bars/i), which matches hidden <option>Bars
+    await expect(page.getByTestId('axis-status-message')).toContainText(
+      /Loaded \d+ bars|Ready/i,
+      { timeout: 15_000 },
+    );
 
     await page.getByTestId('axis-select-engine').selectOption('server');
     await page.getByTestId('axis-btn-run').click();
@@ -75,11 +76,13 @@ test.describe('AXIS smoke @smoke', () => {
 
   test('opens and closes plugin Manager', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('axis-btn-plugins').click();
+    await page.getByTestId('axis-btn-runtimes').click();
+    await expect(page.getByTestId('axis-runtimes-hub')).toBeVisible();
+    await page.getByTestId('axis-runtimes-tab-plugins').click();
     await expect(page.getByTestId('axis-manager')).toBeVisible();
-    await expect(page.getByText('Catalog')).toBeVisible();
-    await page.getByRole('button', { name: 'Done' }).click();
-    await expect(page.getByTestId('axis-manager')).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: 'Catalog' })).toBeVisible();
+    await page.getByTestId('axis-runtimes-close').click();
+    await expect(page.getByTestId('axis-runtimes-hub')).toHaveCount(0);
   });
 
   test('opens Architecture modal and applies Offline Lab', async ({ page }) => {

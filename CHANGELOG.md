@@ -15,6 +15,10 @@ _Generated/updated: 2026-08-15 · 219 commits · describe-tag: `v2.0.7`_
 
 ## [Unreleased]
 
+### Fixed
+
+- **CI** — library publish stays on the local cache when leftover/invalid git credentials fail remote (was `GitHub: Bad credentials` in the full unit suite). Smoke waits on `axis-status-message` and opens Plugins via Runtimes. Vite build on macOS/Windows resolves Solid `Topbar.tsx` instead of legacy `topbar.js`. Docker bake-action v6 takes `TAG`/`REGISTRY` as env, not `--set` keys.
+
 ### Changed
 
 - **Pyodide PYNE wheel** — vendor `pynescript-0.3.7` (`Runtime.run(libraries=)` for `import ns/Name/ver`, ring-series skip, runtime hot path). Engine catalog, legacy JS engine, SW cache test, and editor builtins synced from pyne 0.3.7.

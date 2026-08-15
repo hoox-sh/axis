@@ -24,6 +24,7 @@ import {
   publishLibrary,
   resolveLibrariesForScript,
 } from '../src/storage/library-publish-io';
+import { setStore } from '../src/store';
 
 class MemoryStorage {
   store = new Map<string, string>();
@@ -55,6 +56,7 @@ plot(mh.double(close))
 beforeEach(() => {
   (globalThis as { localStorage?: MemoryStorage }).localStorage = new MemoryStorage();
   _resetPublishedCacheForTests();
+  setStore('pluginsConfig', {});
 });
 
 describe('parse', () => {
@@ -139,5 +141,27 @@ describe('publish + resolve (local cache)', () => {
     expect(formatImportSnippet({ namespace: 'acme', name: 'Fib', version: 3 })).toBe(
       'import acme/Fib/3 as fib',
     );
+  });
+
+  it('stays local when leftover git credentials fail remote', async () => {
+    setStore('pluginsConfig', 'storage:git', {
+      token: 'ghp_bad',
+      owner: 'acme',
+      repo: 'pines',
+    });
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response('Bad credentials', { status: 401 })) as typeof fetch;
+    try {
+      const a = await publishLibrary(LIB, { origin: 'manual', namespace: 'user' });
+      expect(a.skipped).toBe(false);
+      expect(a.library.version).toBe(1);
+      expect(a.remote).toBe(false);
+      const { libraries, missing } = await resolveLibrariesForScript(CONSUMER);
+      expect(missing).toEqual([]);
+      expect(libraries).toHaveLength(1);
+    } finally {
+      globalThis.fetch = orig;
+    }
   });
 });

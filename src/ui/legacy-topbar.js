@@ -21,7 +21,8 @@
  * @file Legacy top bar (vanilla DOM).
  * Symbol/interval/source/engine pickers, load/run/live/upload/save/reset.
  * Prefer Solid `Topbar.tsx` in the AXIS product shell; this remains for the
- * legacy static entry (`main.js` / LEGACY.md).
+ * legacy static entry (`main.js` / LEGACY.md). Named `legacy-topbar.js` so
+ * case-insensitive filesystems do not resolve `./ui/Topbar` here.
  */
 
 import { registry } from '../registry.js';

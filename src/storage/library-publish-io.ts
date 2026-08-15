@@ -174,7 +174,14 @@ export async function publishLibrary(
     : defaultPublishNamespace(cfg);
 
   const local = readCache();
-  const remote = gitReady(cfg) ? await readRemoteIndex(cfg) : emptyPublishedIndex();
+  let remote = emptyPublishedIndex();
+  if (gitReady(cfg)) {
+    try {
+      remote = await readRemoteIndex(cfg);
+    } catch {
+      remote = emptyPublishedIndex();
+    }
+  }
   const index = mergeIndexes(local.index, remote);
 
   const latest = latestPublished(index, namespace, decl.name);
@@ -209,43 +216,50 @@ export async function publishLibrary(
 
   upsertCache(rec);
 
+  let remoteOk = false;
   if (gitReady(cfg)) {
-    const msg = `feat(lib): publish ${namespace}/${decl.name}/${version}`;
-    await gitPutFile(cfg, publishedLibPath(cfg, namespace, decl.name, version), code, msg);
-    await gitPutFile(
-      cfg,
-      publishedManifestPath(cfg, namespace, decl.name, version),
-      JSON.stringify(
-        {
-          namespace: rec.namespace,
-          name: rec.name,
-          version: rec.version,
-          pineVersion: rec.pineVersion ?? null,
-          publishedAt: rec.publishedAt,
-          contentSha: rec.contentSha,
-          origin: rec.origin,
-        },
-        null,
-        2,
-      ) + '\n',
-      msg,
-    );
-    const nextIndex = mergeIndexes(await readRemoteIndex(cfg), {
-      version: 1,
-      libraries: [stripSource(rec)],
-    });
-    await gitPutFile(
-      cfg,
-      publishedIndexPath(cfg),
-      JSON.stringify(nextIndex, null, 2) + '\n',
-      `${msg} (index)`,
-    );
+    try {
+      const msg = `feat(lib): publish ${namespace}/${decl.name}/${version}`;
+      await gitPutFile(cfg, publishedLibPath(cfg, namespace, decl.name, version), code, msg);
+      await gitPutFile(
+        cfg,
+        publishedManifestPath(cfg, namespace, decl.name, version),
+        JSON.stringify(
+          {
+            namespace: rec.namespace,
+            name: rec.name,
+            version: rec.version,
+            pineVersion: rec.pineVersion ?? null,
+            publishedAt: rec.publishedAt,
+            contentSha: rec.contentSha,
+            origin: rec.origin,
+          },
+          null,
+          2,
+        ) + '\n',
+        msg,
+      );
+      const nextIndex = mergeIndexes(await readRemoteIndex(cfg), {
+        version: 1,
+        libraries: [stripSource(rec)],
+      });
+      await gitPutFile(
+        cfg,
+        publishedIndexPath(cfg),
+        JSON.stringify(nextIndex, null, 2) + '\n',
+        `${msg} (index)`,
+      );
+      remoteOk = true;
+    } catch {
+      // Local cache already holds the version. A stale/invalid token must not
+      // block offline publish (and leftover test git config must not fail CI).
+    }
   }
 
   return {
     library: rec,
     skipped: false,
-    remote: gitReady(cfg),
+    remote: remoteOk,
     importSnippet: `import ${rec.namespace}/${rec.name}/${rec.version} as ${rec.name}`,
   };
 }
@@ -291,16 +305,20 @@ export async function resolvePublishedLibrary(
 
   const cfg = resolveGitConfig(opts?.config);
   if (!gitReady(cfg)) return null;
-  const file = await gitGetFile(cfg, publishedLibPath(cfg, spec.namespace, spec.name, spec.version));
-  if (!file) return null;
-  const rec = buildPublishedRecord(file.content, {
-    namespace: spec.namespace,
-    version: spec.version,
-    origin: 'manual',
-    path: publishedVersionDirSafe(cfg, spec.namespace, spec.name, spec.version),
-  });
-  if (rec) upsertCache(rec);
-  return rec;
+  try {
+    const file = await gitGetFile(cfg, publishedLibPath(cfg, spec.namespace, spec.name, spec.version));
+    if (!file) return null;
+    const rec = buildPublishedRecord(file.content, {
+      namespace: spec.namespace,
+      version: spec.version,
+      origin: 'manual',
+      path: publishedVersionDirSafe(cfg, spec.namespace, spec.name, spec.version),
+    });
+    if (rec) upsertCache(rec);
+    return rec;
+  } catch {
+    return null;
+  }
 }
 
 /** Resolve every `import` in `code` to engine-ready library payloads. */
