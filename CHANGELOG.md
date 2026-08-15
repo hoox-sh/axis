@@ -9,11 +9,24 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-15 · 219 commits · describe-tag: `v2.0.7`_
+_Generated/updated: 2026-08-15 · 224 commits · describe-tag: `v2.0.8`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.9] — 2026-08-15
+
+Editor symbol catalog, richer Pine highlighting, CORS for Pages previews, and CI greens.
+
+### Added
+
+- **Editor symbol & emoji manager** — status-bar **Symbols** catalog of TV-editor-safe arrows, box drawing, blocks, marks, spaces, and chart emoji (IBM Plex Mono vs wide). Insert raw, quoted, or `plotchar(…)`.
+
+### Improved
+
+- **Pine highlighting** — stateful multiline strings + `/* */` blocks, `\\n` / hex-color atoms, namespaces (`ta.`, `label.new`), types, control vs definition keywords, function names before `(`.
+- **Format** — leaves continuation lines of an unclosed string or block comment untouched.
 
 ### Fixed
 
@@ -215,9 +228,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (137 commits)
+### 2026-08 (142 commits)
 
 #### Security
 
@@ -228,6 +243,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `9411a16b` (2026-08-15) — feat(pyodide): vendor pynescript 0.3.7 wheel
 - `fe6dfb18` (2026-08-15) — feat(library): git versioned publish emulator for import ns/Name/ver
 - `4d1e8647` (2026-08-13) — feat(ui): architecture modal to wire plugin slots from recipes
 - `814cb21f` (2026-08-13) — feat(editor): 50vw default width; content-sized gutters
@@ -294,6 +310,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `f0235ac1` (2026-08-15) — fix(ci): desktop Watchlist case clash and GHCR-only docker push
+- `42cb454f` (2026-08-15) — fix(ci): green unit, smoke, desktop build, and docker bake
 - `4d34d82a` (2026-08-13) — fix(editor): allow Problems panel to stay closed
 - `eb61d218` (2026-08-12) — fix(drawings,plot): line.new last-bar export path + plotarrow direction
 - `299ec83c` (2026-08-12) — fix(test,store): green suite — isolate defaults, health mock, bar fills
@@ -352,6 +370,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `36900319` (2026-08-15) — docs(cors): document Pages preview origins for axis.hoox.sh
 - `d3172dbb` (2026-08-11) — docs: AXIS 2.0.1 docs, CLI-first ops, Pine Script v6 examples
 - `78c22e85` (2026-08-11) — docs(release): recursive changelog, AGENTS release workflow, v2.0.1
 - `f7c30e04` (2026-08-09) — docs: prefix internal links with /axis/docs
@@ -370,6 +389,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `b4b3227b` (2026-08-15) — chore(release): AXIS v2.0.8
 - `236d042f` (2026-08-12) — chore(release): AXIS v2.0.7
 - `5f6d7a9a` (2026-08-12) — chore(release): AXIS v2.0.6
 - `12cffe27` (2026-08-11) — chore: ignore local multi-agent sync notice files

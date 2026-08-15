@@ -227,23 +227,29 @@ export const voidEditorTheme = EditorView.theme(
 
 /** Syntax colors driven by chrome CSS variables. */
 export const voidHighlightStyle = HighlightStyle.define([
-  { tag: t.keyword, color: 'var(--color-accent)' },
+  { tag: t.keyword, color: 'var(--color-accent)', fontWeight: '600' },
+  { tag: t.controlKeyword, color: 'var(--color-accent)', fontWeight: '600' },
+  { tag: t.definitionKeyword, color: 'var(--color-accent)', fontWeight: '600' },
+  { tag: t.moduleKeyword, color: 'var(--color-accent)', fontWeight: '600' },
   { tag: t.operator, color: 'var(--color-accent)' },
   { tag: t.string, color: 'var(--color-accent-2)' },
+  { tag: t.special(t.string), color: 'var(--color-orange)' },
   { tag: t.number, color: 'var(--color-orange)' },
-  { tag: t.bool, color: 'var(--color-orange)' },
-  { tag: t.null, color: 'var(--color-red)' },
+  { tag: t.bool, color: 'var(--color-orange)', fontWeight: '600' },
+  { tag: t.null, color: 'var(--color-red)', fontStyle: 'italic' },
   { tag: t.comment, color: 'var(--color-text-faint)', fontStyle: 'italic' },
   { tag: t.variableName, color: 'var(--color-text)' },
   { tag: t.definition(t.variableName), color: 'var(--color-accent)' },
   { tag: t.function(t.variableName), color: 'var(--color-accent)' },
-  { tag: t.propertyName, color: 'var(--color-text-dim)' },
+  { tag: t.propertyName, color: 'color-mix(in srgb, var(--color-accent-2) 70%, var(--color-text))' },
   { tag: t.typeName, color: 'var(--color-accent)' },
   { tag: t.className, color: 'var(--color-accent)' },
-  { tag: t.meta, color: 'var(--color-text-dim)' },
+  { tag: t.meta, color: 'var(--color-text-dim)', fontStyle: 'italic' },
   { tag: t.punctuation, color: 'var(--color-text-dim)' },
+  { tag: t.bracket, color: 'var(--color-text-dim)' },
   { tag: t.atom, color: 'var(--color-orange)' },
-  { tag: t.namespace, color: 'var(--color-text-dim)' },
+  { tag: t.namespace, color: 'color-mix(in srgb, var(--color-accent) 55%, var(--color-text-dim))' },
+  { tag: t.standard(t.variableName), color: 'var(--color-text)' },
 ]);
 
 /** Theme + syntax highlighting bundle for {@link PyneEditor}. */

@@ -26,11 +26,17 @@
  * 3. Align `else` / `else if` with the nearest open `if` when they were over-indented
  * 4. Collapse excess blank lines; ensure a single trailing newline
  * 5. Keep `//@version` / compiler directives at column 0
+ * 6. Leave lines that continue a multiline string / `/*` block untouched
  *
  * Does not reflow expressions or wrap long lines.
  *
  * @module editor/pine-format
  */
+
+import {
+  advancePineLineState,
+  type PineHighlightState,
+} from './pyne-language';
 
 export type PineFormatOptions = {
   /** Spaces per indent level (default 4 — Pine convention). */
@@ -80,9 +86,24 @@ export function formatPineSource(
   const ifStack: number[] = [];
   const formatted: string[] = [];
   let blankRun = 0;
+  let scan: PineHighlightState = {
+    inBlockComment: false,
+    stringQuote: null,
+    afterDot: false,
+  };
 
   for (let i = 0; i < lines.length; i++) {
-    let line = expandTabs(lines[i] ?? '', indentSize);
+    const rawLine = lines[i] ?? '';
+    const startedInLiteral = Boolean(scan.stringQuote || scan.inBlockComment);
+    scan = advancePineLineState(rawLine, scan);
+
+    if (startedInLiteral) {
+      formatted.push(rawLine.replace(/\t/g, pad));
+      blankRun = rawLine.trim() ? 0 : blankRun + 1;
+      continue;
+    }
+
+    let line = expandTabs(rawLine, indentSize);
     line = line.replace(/[ \t]+$/g, '');
 
     if (!line.trim()) {

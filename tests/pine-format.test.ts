@@ -33,6 +33,11 @@ describe('formatPineSource', () => {
     expect(formatPineSource('\tplot(close)\n')).toBe('    plot(close)\n');
   });
 
+  it('does not reindent the body of a multiline string', () => {
+    const src = 'msg = "hello\n    world"\nplot(close)\n';
+    expect(formatPineSource(src)).toBe(src);
+  });
+
   it('pineSourceNeedsFormat detects change', () => {
     expect(pineSourceNeedsFormat('plot(close)  \n')).toBe(true);
     const clean = formatPineSource('plot(close)\n');

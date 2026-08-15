@@ -85,6 +85,7 @@ import {
 } from './preevaluate';
 import { countDocStats, cursorLineCol } from './doc-stats';
 import { ColorToolsPanel } from './ColorToolsPanel';
+import { SymbolEmojiManager } from './SymbolEmojiManager';
 import { scanPineColors } from './pine-colors';
 import { Icons } from '../ui/icons';
 
@@ -222,6 +223,7 @@ export const TabbedEditor: Component<Props> = (props) => {
   /** Problems panel expanded under the editor. */
   const [problemsOpen, setProblemsOpen] = createSignal(false);
   const [colorsOpen, setColorsOpen] = createSignal(false);
+  const [symbolsOpen, setSymbolsOpen] = createSignal(false);
 
   /** Active tab source (reactive) — color tools + badge count. */
   const activeDoc = createMemo(
@@ -805,6 +807,14 @@ export const TabbedEditor: Component<Props> = (props) => {
           }}
         />
       </Show>
+      <Show when={symbolsOpen()}>
+        <SymbolEmojiManager
+          onInsert={(text) => {
+            const ref = props.editorRef as PyneEditorRef | undefined;
+            return ref?.insertAtCursor?.(text) ?? false;
+          }}
+        />
+      </Show>
       {/* ── Status / action bar ─────────────────────────────────── */}
       <div
         class="axis-editor-statusbar flex-shrink-0 flex items-center gap-1 px-1.5 py-0.5 border-t-2 border-border bg-bg-base text-[10px] font-mono tabular-nums select-none min-h-[1.75rem]"
@@ -918,6 +928,21 @@ export const TabbedEditor: Component<Props> = (props) => {
                 {colorHitCount()}
               </span>
             </Show>
+          </button>
+          <button
+            type="button"
+            class={`axis-editor-status-btn ${symbolsOpen() ? 'is-active' : ''}`}
+            data-testid="axis-editor-symbols-toggle"
+            title={
+              symbolsOpen()
+                ? 'Hide symbol & emoji manager'
+                : 'Insert TV-editor-safe symbols, box drawing, and emoji'
+            }
+            aria-pressed={symbolsOpen()}
+            aria-expanded={symbolsOpen()}
+            onClick={() => setSymbolsOpen((o) => !o)}
+          >
+            Symbols
           </button>
         </div>
 

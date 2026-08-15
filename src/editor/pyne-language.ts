@@ -18,45 +18,440 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * CodeMirror 6 **stream language** for Pine Script syntax highlighting.
+ * CodeMirror 6 **stream language** for Pine Script™ syntax highlighting.
  *
- * Lightweight tokenizer (not a full grammar): comments, strings, keywords
- * (`indicator`/`strategy`/`plot`/…), builtins (`ta`/`math`/`close`/…),
- * control/definition keywords, numbers, operators. Used by {@link PyneEditor}.
+ * Stateful tokenizer: line comments, `/* *​/` blocks, quoted strings that
+ * continue across lines (while typing / rare sources), `\\n` escapes, hex
+ * colors, namespaces (`ta.`), types, control/definition keywords, and
+ * function names before `(`.
  *
- * Completions/hover live in `pyne-lsp` (remote Pro API or local builtins).
+ * Completions/hover live in `pyne-lsp`.
  *
  * @module editor/pyne-language
  */
 
-import { StreamLanguage, StreamParser } from '@codemirror/language';
+import { StreamLanguage, type StreamParser, type StringStream } from '@codemirror/language';
 
-const pyneParser: StreamParser<{ inComment: boolean }> = {
-  startState: () => ({ inComment: false }),
+export type PineHighlightState = {
+  inBlockComment: boolean;
+  /** Unclosed quote — string continues on the next line (`"` / `'` / `"""` / `'''`). */
+  stringQuote: '"' | "'" | '"""' | "'''" | null;
+  /** Last token was `.` — next ident is a property / method. */
+  afterDot: boolean;
+};
+
+const KEYWORDS = new Set([
+  'indicator',
+  'strategy',
+  'library',
+  'plot',
+  'hline',
+  'fill',
+  'bgcolor',
+  'barcolor',
+  'plotshape',
+  'plotchar',
+  'plotarrow',
+  'alertcondition',
+  'alert',
+]);
+
+const CONTROL = new Set([
+  'if',
+  'else',
+  'for',
+  'in',
+  'to',
+  'by',
+  'while',
+  'switch',
+  'break',
+  'continue',
+  'and',
+  'or',
+  'not',
+]);
+
+const DEFS = new Set([
+  'var',
+  'varip',
+  'export',
+  'import',
+  'type',
+  'method',
+  'enum',
+  'as',
+  'const',
+]);
+
+const TYPES = new Set([
+  'int',
+  'float',
+  'bool',
+  'string',
+  'color',
+  'line',
+  'label',
+  'box',
+  'table',
+  'array',
+  'matrix',
+  'map',
+  'polyline',
+  'linefill',
+  'chart.point',
+]);
+
+const NAMESPACES = new Set([
+  'ta',
+  'math',
+  'str',
+  'request',
+  'input',
+  'strategy',
+  'color',
+  'label',
+  'line',
+  'box',
+  'table',
+  'array',
+  'matrix',
+  'map',
+  'chart',
+  'timeframe',
+  'ticker',
+  'syminfo',
+  'barstate',
+  'session',
+  'runtime',
+  'polyline',
+  'linefill',
+  'plot',
+  'hline',
+  'alert',
+  'log',
+  'ticker',
+]);
+
+const SERIES = new Set([
+  'open',
+  'high',
+  'low',
+  'close',
+  'volume',
+  'time',
+  'bar_index',
+  'hl2',
+  'hlc3',
+  'ohlc4',
+  'last_bar_index',
+  'timenow',
+]);
+
+const OP_RE = /^(?:=>|\?\?|:=|\+=|-=|\*=|\/=|%=|==|!=|<=|>=|[+\-*/%=<>!?:])/;
+
+function eatString(stream: StringStream, state: PineHighlightState): string {
+  const q = state.stringQuote;
+  if (!q) return 'string';
+  if (q.length === 3) {
+    if (stream.match(q)) {
+      state.stringQuote = null;
+      return 'string';
+    }
+    stream.next();
+    while (!stream.eol() && !stream.match(q, false)) stream.next();
+    return 'string';
+  }
+  if (stream.match(/\\[ntr"'\\]/)) return 'atom';
+  if (stream.match(/\\u[0-9a-fA-F]{4}/) || stream.match(/\\x[0-9a-fA-F]{2}/)) {
+    return 'atom';
+  }
+  if (stream.eat('\\')) {
+    stream.next();
+    return 'atom';
+  }
+  if (stream.eat(q)) {
+    state.stringQuote = null;
+    return 'string';
+  }
+  while (!stream.eol()) {
+    const ch = stream.peek();
+    if (ch === '\\' || ch === q) break;
+    stream.next();
+  }
+  return 'string';
+}
+
+const pyneParser: StreamParser<PineHighlightState> = {
+  startState: () => ({ inBlockComment: false, stringQuote: null, afterDot: false }),
+  copyState: (s) => ({
+    inBlockComment: s.inBlockComment,
+    stringQuote: s.stringQuote,
+    afterDot: s.afterDot,
+  }),
   token(stream, state) {
-    if (stream.match('//@version=')) { stream.skipToEnd(); return 'meta'; }
-    if (stream.match('//')) { stream.skipToEnd(); return 'comment'; }
-    if (stream.match('/*')) { state.inComment = true; return 'comment'; }
-    if (state.inComment) {
-      if (stream.match('*/')) { state.inComment = false; return 'comment'; }
+    if (state.stringQuote) return eatString(stream, state);
+
+    if (state.inBlockComment) {
+      if (stream.match('*/')) {
+        state.inBlockComment = false;
+        return 'comment';
+      }
+      stream.next();
+      while (!stream.eol() && !stream.match('*/', false)) stream.next();
+      return 'comment';
+    }
+
+    if (stream.eatSpace()) return null;
+
+    if (stream.sol() && stream.match(/^\/\/@[A-Za-z_][\w.]*/)) {
+      stream.skipToEnd();
+      return 'meta';
+    }
+    if (stream.match('//')) {
       stream.skipToEnd();
       return 'comment';
     }
-    if (stream.match(/"[^"]*"/) || stream.match(/'[^']*'/)) return 'string';
-    if (stream.match(/\b(indicator|strategy|plot|hline|fill|plotshape|plotchar|alertcondition)\b/)) return 'keyword';
-    if (stream.match(/\b(input|int|float|bool|string|color|bar_index|close|open|high|low|volume|time|math|ta|array|matrix)\b/)) return 'variableName';
-    if (stream.match(/\b(if|else|for|while|switch|true|false|na)\b/)) return 'controlKeyword';
-    if (stream.match(/\b(var|varip|export|import|type|method|using)\b/)) return 'definitionKeyword';
-    if (stream.match(/[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?/)) return 'number';
-    // Use `atom` (valid stream highlight) — not `constantName` (unknown tag warning)
-    if (stream.match(/[A-Z][A-Z0-9_]+/)) return 'atom';
-    if (stream.match(/[a-zA-Z_][a-zA-Z0-9_]*/)) return 'variableName';
-    if (stream.match(/[+\-*/%=<>!&|^~?:]+/)) return 'operator';
-    if (stream.match(/[{}()\[\],;.]/)) return 'punctuation';
+    if (stream.match('/*')) {
+      state.inBlockComment = true;
+      return 'comment';
+    }
+
+    if (stream.match('"""')) {
+      state.stringQuote = '"""';
+      return eatString(stream, state);
+    }
+    if (stream.match("'''")) {
+      state.stringQuote = "'''";
+      return eatString(stream, state);
+    }
+    const quote = stream.peek();
+    if (quote === '"' || quote === "'") {
+      stream.next();
+      state.stringQuote = quote;
+      return eatString(stream, state);
+    }
+
+    if (stream.match(/#[0-9a-fA-F]{8}\b/) || stream.match(/#[0-9a-fA-F]{6}\b/)) {
+      return 'atom';
+    }
+
+    if (stream.match(/\d+(\.\d+)?([eE][+-]?\d+)?/)) return 'number';
+
+    if (stream.match(OP_RE)) {
+      state.afterDot = false;
+      return 'operator';
+    }
+
+    if (stream.match('.')) {
+      state.afterDot = true;
+      return 'punctuation';
+    }
+
+    if (stream.match(/[{}()\[\],;]/)) {
+      state.afterDot = false;
+      return 'punctuation';
+    }
+
+    if (stream.match(/[A-Za-z_][\w]*/)) {
+      const word = stream.current();
+      if (state.afterDot) {
+        state.afterDot = false;
+        return 'propertyName';
+      }
+      if (KEYWORDS.has(word)) return 'keyword';
+      if (CONTROL.has(word)) return 'controlKeyword';
+      if (DEFS.has(word)) return 'definitionKeyword';
+      if (word === 'true' || word === 'false') return 'bool';
+      if (word === 'na') return 'null';
+      if (stream.match(/^\s*\./, false)) {
+        if (NAMESPACES.has(word) || TYPES.has(word)) return 'namespace';
+      }
+      if (TYPES.has(word)) return 'typeName';
+      if (NAMESPACES.has(word)) return 'namespace';
+      if (SERIES.has(word)) return 'variableName';
+      if (stream.match(/^\s*\(/, false)) return 'def';
+      if (/^[A-Z][A-Z0-9_]+$/.test(word)) return 'atom';
+      return 'variableName';
+    }
+    state.afterDot = false;
+
     stream.next();
     return null;
   },
+  languageData: {
+    commentTokens: { line: '//', block: { open: '/*', close: '*/' } },
+    closeBrackets: { brackets: ['(', '[', '{', "'", '"'] },
+    indentOnInput: /^\s*(?:else|else\s+if)\b/,
+  },
 };
 
-/** CodeMirror language support for Pine (`//@version=…` meta, plots, ta.*, …). */
+/** CodeMirror language support for Pine (`//@version=…`, plots, ta.*, …). */
 export const pyneScript = StreamLanguage.define(pyneParser);
+
+export type PineToken = { text: string; type: string | null };
+
+/**
+ * Tokenize a full buffer (tests + format). Walks every line so multiline
+ * strings / block comments keep state.
+ */
+export function tokenizePine(source: string): PineToken[] {
+  const state: PineHighlightState = {
+    inBlockComment: false,
+    stringQuote: null,
+    afterDot: false,
+  };
+  const out: PineToken[] = [];
+  const lines = String(source ?? '').replace(/\r\n/g, '\n').split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? '';
+    const stream = makeLineStream(line);
+    while (!stream.eol()) {
+      stream.start = stream.pos;
+      const before = stream.pos;
+      const type = pyneParser.token(stream, state);
+      const text = line.slice(before, stream.pos);
+      if (text.length) out.push({ text, type });
+      else stream.next();
+    }
+    if (i < lines.length - 1) out.push({ text: '\n', type: null });
+  }
+  return out;
+}
+
+/** True when a source offset is inside a string or block/line comment. */
+export function pineOffsetInLiteral(
+  source: string,
+  offset: number,
+): { inString: boolean; inComment: boolean } {
+  const tokens = tokenizePine(source);
+  let pos = 0;
+  for (const tok of tokens) {
+    const next = pos + tok.text.length;
+    if (offset >= pos && offset < next) {
+      return {
+        inString: tok.type === 'string' || (tok.type === 'atom' && /^\\/.test(tok.text)),
+        inComment: tok.type === 'comment',
+      };
+    }
+    pos = next;
+  }
+  return { inString: false, inComment: false };
+}
+
+/** Scan state after consuming `line` (used by the formatter). */
+export function advancePineLineState(
+  line: string,
+  state: PineHighlightState,
+): PineHighlightState {
+  const next: PineHighlightState = {
+    inBlockComment: state.inBlockComment,
+    stringQuote: state.stringQuote,
+    afterDot: state.afterDot,
+  };
+  const stream = makeLineStream(line);
+  while (!stream.eol()) {
+    stream.start = stream.pos;
+    const before = stream.pos;
+    pyneParser.token(stream, next);
+    if (stream.pos === before) stream.next();
+  }
+  return next;
+}
+
+type MiniStream = StringStream & { pos: number; start: number };
+
+function makeLineStream(line: string): MiniStream {
+  let pos = 0;
+  let start = 0;
+  const stream = {
+    get pos() {
+      return pos;
+    },
+    set pos(v: number) {
+      pos = v;
+    },
+    get start() {
+      return start;
+    },
+    set start(v: number) {
+      start = v;
+    },
+    eol: () => pos >= line.length,
+    sol: () => pos === 0,
+    peek: () => (pos < line.length ? line[pos] : undefined),
+    next: () => (pos < line.length ? line[pos++] : undefined),
+    eat: (m: string | RegExp | ((ch: string) => boolean)) => {
+      const ch = line[pos];
+      if (ch == null) return undefined;
+      const ok =
+        typeof m === 'string'
+          ? ch === m
+          : typeof m === 'function'
+            ? m(ch)
+            : m.test(ch);
+      if (ok) {
+        pos += 1;
+        return ch;
+      }
+      return undefined;
+    },
+    eatSpace: () => {
+      const start = pos;
+      while (pos < line.length && /[ \t]/.test(line[pos]!)) pos += 1;
+      return pos > start;
+    },
+    eatWhile: (m: string | RegExp | ((ch: string) => boolean)) => {
+      const start = pos;
+      while (pos < line.length) {
+        const ch = line[pos]!;
+        const ok =
+          typeof m === 'string'
+            ? ch === m
+            : typeof m === 'function'
+              ? m(ch)
+              : m.test(ch);
+        if (!ok) break;
+        pos += 1;
+      }
+      return pos > start;
+    },
+    skipToEnd: () => {
+      pos = line.length;
+    },
+    skipTo: (ch: string) => {
+      const i = line.indexOf(ch, pos);
+      if (i < 0) return false;
+      pos = i;
+      return true;
+    },
+    backUp: (n: number) => {
+      pos = Math.max(0, pos - n);
+    },
+    column: () => pos,
+    indentation: () => {
+      let n = 0;
+      while (n < line.length && line[n] === ' ') n += 1;
+      return n;
+    },
+    match: (
+      pat: string | RegExp,
+      consume?: boolean,
+      caseFold?: boolean,
+    ): boolean | RegExpMatchArray | null => {
+      const eat = consume !== false;
+      if (typeof pat === 'string') {
+        const slice = line.slice(pos, pos + pat.length);
+        const ok = caseFold ? slice.toLowerCase() === pat.toLowerCase() : slice === pat;
+        if (ok && eat) pos += pat.length;
+        return ok;
+      }
+      const m = line.slice(pos).match(pat);
+      if (!m || m.index !== 0) return null;
+      if (eat) pos += m[0].length;
+      return m;
+    },
+    current: () => line.slice(start, pos),
+  };
+  return stream as MiniStream;
+}

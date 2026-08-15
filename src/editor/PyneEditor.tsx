@@ -86,6 +86,8 @@ export type PyneEditorRef = {
   jumpToDiagnostic?: (diag: EditorDiagnostic) => boolean;
   /** Select absolute [from, to) range and scroll into view (color tools, etc.). */
   selectRange?: (from: number, to: number) => boolean;
+  /** Insert text at the selection (replaces it). Used by the symbol manager. */
+  insertAtCursor?: (text: string) => boolean;
   /** Format document (indent / whitespace). Returns true when changed. */
   formatDoc?: () => boolean;
   /** Load external library content into active tab (set by TabbedEditor). */
@@ -221,6 +223,19 @@ export const PyneEditor: Component<Props> = (props) => {
     view.dispatch({
       selection: EditorSelection.range(a, b),
       effects: EditorView.scrollIntoView(a, { y: 'center' }),
+    });
+    view.focus();
+    return true;
+  };
+
+  const insertAtCursor = (text: string): boolean => {
+    if (!view) return false;
+    const raw = typeof text === 'string' ? text : String(text ?? '');
+    if (!raw) return false;
+    const sel = view.state.selection.main;
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: raw },
+      selection: EditorSelection.cursor(sel.from + raw.length),
     });
     view.focus();
     return true;
@@ -378,6 +393,7 @@ export const PyneEditor: Component<Props> = (props) => {
       props.editorRef.focusLine = scrollToLine;
       props.editorRef.getCursor = getCursor;
       props.editorRef.selectRange = selectRange;
+      props.editorRef.insertAtCursor = insertAtCursor;
       props.editorRef.formatDoc = formatDoc;
       props.editorRef.jumpToDiagnostic = (diag: EditorDiagnostic) => {
         if (!view) return false;

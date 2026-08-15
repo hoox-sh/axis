@@ -79,6 +79,7 @@ import {
   Settings,
   Shapes,
   Shuffle,
+  Smile,
   Square,
   Sun,
   Trash2,
@@ -214,6 +215,8 @@ export const Icons = {
   alignLeft: withDefaults(AlignLeft),
   /** Soft wrap */
   wrapText: withDefaults(WrapText),
+  /** Symbol / emoji picker */
+  smile: withDefaults(Smile),
 };
 
 /** Inline icon row helper for buttons */

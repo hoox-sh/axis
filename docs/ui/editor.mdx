@@ -31,9 +31,10 @@ The editor is the **source axis of intent**: Pine text the operator authorizes t
 | Module | Role |
 | --- | --- |
 | `EditorPane.tsx` | Docked/standalone chrome, header tools, detach |
-| `tabbed-editor.tsx` | Multi-tab docs, stats strip, Problems, git bar |
+| `tabbed-editor.tsx` | Multi-tab docs, stats strip, Problems, Colors, Symbols, git bar |
 | `PyneEditor.tsx` | CM6 mount (extensions + view APIs) |
-| `pyne-language.ts` | StreamLanguage / highlighting |
+| `pyne-language.ts` | StreamLanguage / highlighting (namespaces, types, multiline strings) |
+| `pine-symbols.ts` + `SymbolEmojiManager.tsx` | TV-editor-safe glyph catalog + insert panel |
 | `pyne-lsp.ts` + `data/pyne-builtins.json` | Offline completion/hover corpus |
 | `column-ruler.ts` | 80-character guide line |
 | `diagnostics.ts` | Underlines, gutter, jump-to from last run |
@@ -107,7 +108,24 @@ Bottom of tabbed editor (`data-testid="axis-editor-stats"`):
 | **Words / Chars** | Document stats |
 | **Diagnostics badge** | Error/warning count from last run — click jumps to first |
 | **Problems** | Expand/collapse problems list |
+| **Colors** | Color chips / picker / converter for hex and `color.*` |
+| **Symbols** | Insert TV-editor-safe arrows, box drawing, marks, spaces, and chart emoji (raw, quoted, or `plotchar`) |
 | **wrap** | Soft wrap toggle (`editorWrapEnabled`, default on) |
+
+### Symbols & emoji
+
+Status-bar **Symbols** (`data-testid="axis-editor-symbols"`) opens a searchable catalog of glyphs used in Pine Script™ `plotchar` / `label.new` / table text.
+
+- **Mono-safe** — ~1 cell in IBM Plex Mono / the TV editor (box drawing, `▲▼●◆✓★`, arrows).
+- **Wide / chart-only** — official `🠅🠇` and emoji (`🔥🚀📈`). Filter with **Mono-safe**.
+- Click inserts at the cursor (replaces the selection). Right-click copies.
+- Insert mode: raw glyph, quoted string, or a `plotchar(cond, "mark", "…", location.belowbar)` snippet.
+
+Sources: TradingView *Exploring Unicode*, [Text and shapes](https://www.tradingview.com/pine-script-docs/visuals/text-and-shapes/), box-drawing U+2500, PineCoders conventions.
+
+### Highlighting
+
+`pyne-language.ts` is a stateful stream tokenizer: `//@` annotations, `//` and `/* */` (including across lines), quoted and `"""` / `'''` strings with `\\n` escapes, `#RRGGBB(AA)` colors, namespaces (`ta.`, `label.new`), types, control vs definition keywords, and function names before `(`. Format leaves continuation lines of an open string or block comment untouched.
 
 ### Diagnostics & Problems
 
@@ -144,7 +162,7 @@ Tab toolbar **Pull / Push / status** (`EditorGitBar`):
 
 ### editorRef pattern
 
-App holds `{ getDoc, setDoc?, loadLibraryDoc?, scrollToLine?, jumpToDiagnostic?, getCursor? }` populated by CM mount—avoids full-doc store writes every keystroke (doc also mirrored to `EDITOR_DOC_KEY`).
+App holds `{ getDoc, setDoc?, loadLibraryDoc?, scrollToLine?, jumpToDiagnostic?, getCursor?, insertAtCursor? }` populated by CM mount—avoids full-doc store writes every keystroke (doc also mirrored to `EDITOR_DOC_KEY`).
 
 ### Persistence
 
