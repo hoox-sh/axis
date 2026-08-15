@@ -152,7 +152,7 @@ export const serverEngine: EnginePlugin = {
       return false;
     }
   },
-  async run({ script, bars, config, inputs, signal }) {
+  async run({ script, bars, config, inputs, libraries, signal }) {
     // Prefer store.endpoint (Settings) over plugin config so a stale
     // pluginsConfig.endpoint cannot pin an old backend after Save.
     const endpoint = (
@@ -194,6 +194,7 @@ export const serverEngine: EnginePlugin = {
               symbol: typeof store.symbol === 'string' && store.symbol ? store.symbol : 'CHART',
               ...(inputOverrides ? { inputs: inputOverrides } : {}),
               ...(profilerOn ? { profiler: true } : {}),
+              ...(libraries?.length ? { libraries } : {}),
             },
             wsBudget,
           );
@@ -288,18 +289,33 @@ export const serverEngine: EnginePlugin = {
       // mode must be in the JSON body — Pro API validates body only (query is legacy).
       const profilerOn = cfg.profiler === true;
       const restMode = profilerOn ? 'interpret' : mode;
-      const res = await fetch(`${endpoint}/run?mode=${encodeURIComponent(restMode)}`, {
+      const restBody = {
+        script,
+        data: bars,
+        mode: restMode,
+        ...(inputOverrides ? { inputs: inputOverrides } : {}),
+        ...(profilerOn ? { profiler: true } : {}),
+        ...(libraries?.length ? { libraries } : {}),
+      };
+      let res = await fetch(`${endpoint}/run?mode=${encodeURIComponent(restMode)}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          script,
-          data: bars,
-          mode: restMode,
-          ...(inputOverrides ? { inputs: inputOverrides } : {}),
-          ...(profilerOn ? { profiler: true } : {}),
-        }),
+        body: JSON.stringify(restBody),
         signal: restSignal,
       });
+      // Older Pro APIs reject unknown `libraries` — retry without them.
+      if (!res.ok && libraries?.length) {
+        const peek = await res.clone().text();
+        if (/UNKNOWN_FIELDS|libraries/i.test(peek)) {
+          const { libraries: _drop, ...legacy } = restBody;
+          res = await fetch(`${endpoint}/run?mode=${encodeURIComponent(restMode)}`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(legacy),
+            signal: restSignal,
+          });
+        }
+      }
       const text = await res.text();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let payload: any;
@@ -671,7 +687,7 @@ export const pyodideEngine: EnginePlugin & {
     });
     return this._loadPromise;
   },
-  async run({ script, bars, config }) {
+  async run({ script, bars, config, libraries }) {
     const t0 = performance.now();
     try {
       const py = await this._ensure();
@@ -689,7 +705,7 @@ export const pyodideEngine: EnginePlugin & {
         }
       }
       const resultJson = py.runPython(
-        `run_script(${JSON.stringify(script)}, ${JSON.stringify(bars)}, ${JSON.stringify(mode)})`,
+        `run_script(${JSON.stringify(script)}, ${JSON.stringify(bars)}, ${JSON.stringify(mode)}, ${JSON.stringify(libraries || [])})`,
       );
       const result = JSON.parse(resultJson) as RunResult & {
         overlay?: unknown;

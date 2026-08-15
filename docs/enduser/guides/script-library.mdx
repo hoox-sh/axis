@@ -111,6 +111,21 @@ Configure key in library panel or Settings-related config; keys stay in this bro
 
 Token scopes: GitHub `contents:write`; GitLab `api` or `write_repository`.
 
+### Published libraries (import emulator)
+
+`library("Name")` scripts can be **published** as versioned folders so other scripts can `import owner/Name/1 as alias`:
+
+```
+{basePath}/published/index.json
+{basePath}/published/{namespace}/{Name}/{version}/lib.pyne
+{basePath}/published/{namespace}/{Name}/{version}/manifest.json
+```
+
+- Library panel → **Publish library** (or a successful **Run** of a `library()` — auto, skipped if unchanged).
+- Namespace defaults to the git owner, else `user`.
+- Local cache always updates so Pyodide / offline runs resolve imports.
+- The engine receives `{namespace, name, version, source}` and pyne registers them before `import` (interpret path).
+
 ## Worked examples
 
 ### Solo offline library

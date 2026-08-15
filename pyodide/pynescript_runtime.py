@@ -306,7 +306,7 @@ class _Namespace:
 # --- The run loop --------------------------------------------------------
 
 
-def _run_interpret(script: str, bars: list[dict]) -> dict:
+def _run_interpret(script: str, bars: list[dict], libraries: list | None = None) -> dict:
     # Build series
     open_series = PineSeries()
     high_series = PineSeries()
@@ -341,6 +341,21 @@ def _run_interpret(script: str, bars: list[dict]) -> dict:
     }
 
     evaluator = CustomEvaluator(context=context)
+    for lib in libraries or []:
+        if not isinstance(lib, dict):
+            continue
+        ns = str(lib.get("namespace") or "")
+        name = str(lib.get("name") or "")
+        src = str(lib.get("source") or "")
+        try:
+            ver = int(lib.get("version") or 1)
+        except (TypeError, ValueError):
+            ver = 1
+        if ns and name and src and hasattr(evaluator, "register_library_source"):
+            try:
+                evaluator.register_library_source(ns, name, ver, src)
+            except Exception:
+                pass
 
     script_id = hashlib.sha256(script.encode("utf-8")).hexdigest()[:16]
     run_id = uuid.uuid4().hex[:12]
@@ -555,10 +570,16 @@ def _run_compiled(script: str, bars: list[dict]) -> dict:
     }
 
 
-def run_script(script: str, bars: list[dict], mode: str = "interpret") -> str:
+def run_script(
+    script: str,
+    bars: list[dict],
+    mode: str = "interpret",
+    libraries: list | None = None,
+) -> str:
     """Top-level entry. Always returns a JSON string for the JS side.
 
     ``mode`` is interpret|compile|auto (same semantics as the Pro API).
+    ``libraries`` is an optional list of ``{namespace,name,version,source}``.
     """
     mode_norm = (mode or "interpret").strip().lower()
     if mode_norm not in ("interpret", "compile", "auto"):
@@ -586,14 +607,14 @@ def run_script(script: str, bars: list[dict], mode: str = "interpret") -> str:
                         }
                     )
                 # auto → interpret fallback
-                out = _run_interpret(script, bars)
+                out = _run_interpret(script, bars, libraries)
                 if isinstance(out, dict):
                     out.setdefault("meta", {})
                     out["meta"]["auto_backend"] = "interpret"
                     out["meta"]["compile_fallback_reason"] = str(compile_err)
                 return json.dumps(out, allow_nan=False, default=str)
 
-        out = _run_interpret(script, bars)
+        out = _run_interpret(script, bars, libraries)
         return json.dumps(out, allow_nan=False, default=str)
     except Exception as e:
         return json.dumps(

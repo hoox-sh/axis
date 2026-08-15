@@ -216,12 +216,25 @@ export interface RunResult {
 }
 
 /** Arguments to {@link EnginePlugin.run}. */
+/** Published Pine library to register before `import ns/Name/ver`. */
+export interface EngineLibrarySource {
+  namespace: string;
+  name: string;
+  version: number;
+  source: string;
+}
+
 export interface EngineOpts {
   script: string;
   bars: Bar[];
   config?: Record<string, unknown>;
   /** Pine input.* overrides keyed by title */
   inputs?: Record<string, unknown>;
+  /**
+   * Published `library()` sources for `import namespace/Name/version`.
+   * Server / Pyodide register these via `register_library_source`.
+   */
+  libraries?: EngineLibrarySource[];
   signal?: AbortSignal;
 }
 

@@ -160,15 +160,17 @@ export function normalizeRepoPath(path: string): string {
 }
 
 /**
- * Ensure `path` is under `{basePath}/library` (or is that directory).
+ * Ensure `path` is under `{basePath}/library` or `{basePath}/published`.
  * @returns normalized path
  */
 export function assertSafeRepoPath(cfg: GitConfig, path: string): string {
   const p = normalizeRepoPath(path);
   const lib = libraryDir(cfg);
+  const pub = `${cfg.basePath}/published`.replace(/\/+/g, '/');
   if (p === lib || p.startsWith(`${lib}/`)) return p;
+  if (p === pub || p.startsWith(`${pub}/`)) return p;
   throw new Error(
-    `Git storage: path must be under ${lib}/ (got "${path}")`,
+    `Git storage: path must be under ${lib}/ or ${pub}/ (got "${path}")`,
   );
 }
 

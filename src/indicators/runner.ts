@@ -459,11 +459,44 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
         ? opts.strategyProps
         : undefined;
     const scriptForEngine = applyStrategyPropsToSource(script, strategyProps);
+    let engineLibraries: import('../plugins/types').EngineLibrarySource[] | undefined;
+    try {
+      const { resolveLibrariesForScript, publishLibrary } = await import(
+        '../storage/library-publish-io'
+      );
+      const { detectScriptKind } = await import('../indicators/script-meta');
+      if (detectScriptKind(scriptForEngine) === 'library') {
+        void publishLibrary(scriptForEngine, { origin: 'auto' }).then((pub) => {
+          if (pub.skipped) return;
+          appendLog(
+            'ok',
+            `Published ${pub.library.namespace}/${pub.library.name}/${pub.library.version}` +
+              (pub.remote ? ' → git' : ' (local cache)'),
+            'library',
+          );
+        }).catch((e: unknown) => {
+          appendLog(
+            'warn',
+            `Library auto-publish skipped: ${e instanceof Error ? e.message : String(e)}`,
+            'library',
+          );
+        });
+      }
+      const resolved = await resolveLibrariesForScript(scriptForEngine);
+      if (resolved.libraries.length) engineLibraries = resolved.libraries;
+      if (resolved.missing.length && !silent) {
+        const miss = resolved.missing.map((s) => `${s.namespace}/${s.name}/${s.version}`).join(', ');
+        appendLog('warn', `Unresolved import ${miss} — publish the library or check git`, 'library');
+      }
+    } catch {
+      /* publish / resolve optional */
+    }
     const rawResult = await engine.run({
       script: scriptForEngine,
       bars,
       config,
       inputs,
+      ...(engineLibraries?.length ? { libraries: engineLibraries } : {}),
       // Do not abort the whole run on a short timer while engine may still REST-fallback.
       // Engine uses its own AbortSignal.timeout for HTTP; pass undefined for max reliability.
       signal: undefined,

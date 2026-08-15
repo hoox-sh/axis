@@ -50,6 +50,8 @@ export type EngineWsRunRequest = {
   inputs?: Record<string, unknown>;
   /** Collect per-line timings for AXIS profiler gutter */
   profiler?: boolean;
+  /** Published library() sources for import ns/Name/ver. */
+  libraries?: Array<{ namespace: string; name: string; version: number; source: string }>;
   /** Correlation id; auto-generated when omitted. */
   id?: string;
 };

@@ -30,6 +30,9 @@ describe('git path safety', () => {
     expect(assertSafeRepoPath(cfg, 'pyne-library/library/s1.pyne')).toBe(
       'pyne-library/library/s1.pyne',
     );
+    expect(assertSafeRepoPath(cfg, 'pyne-library/published/user/Lib/1/lib.pyne')).toBe(
+      'pyne-library/published/user/Lib/1/lib.pyne',
+    );
     expect(() => assertSafeRepoPath(cfg, 'README.md')).toThrow(/under/);
     expect(() => assertSafeRepoPath(cfg, 'pyne-library/library/../secret')).toThrow(/unsafe/);
     expect(() => assertSafeRepoPath(cfg, '../x')).toThrow();

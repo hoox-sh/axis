@@ -21,6 +21,7 @@ _Generated/updated: 2026-08-12 · 202 commits · describe-tag: `v2.0.6`_
 
 ### Added
 
+- **Library publish emulator** — `library()` scripts publish to git `{basePath}/published/{ns}/{Name}/{1,2,3…}/lib.pyne` (plus local cache). Library panel **Publish library**, or auto-publish on a successful Run. Consumers `import ns/Name/ver`; AXIS resolves the folder and sends sources to the engine (`register_library_source`).
 - **Architecture modal** — topbar **Wire** (and command palette **Open Architecture**) opens a compose-recipe dialog: pick Offline Lab / Live Crypto / CSV Desk / On-Chain / Team Cloud, then swap or switch off any source · stream · engine · storage · dataset slot. Plan name records drift (`Live Crypto +1 −1`); Apply commits `setActivePlugin` + optional on-chain panel.
 - **Pine `label` styles / yloc** — normalize passes through `style`, `yloc`, `size`/`text_size`, `textcolor`, and `color`; SVG paint supports `label.style_label_up|down|left|right|center` (and bare tokens), bubble tips, icon markers (`xcross`, triangles, …), and `yloc.abovebar` / `yloc.belowbar` when OHLC bars are available (default `yloc.price` + bubble for unknown styles).
 - **About AXIS modal** — click the topbar HOOX/AXIS brand (or command palette **About AXIS** / Help → About) for product, author, and HOOX ethos from [hoox.sh/manifesto](https://hoox.sh/manifesto), with links to AXIS / PYNE / docs.

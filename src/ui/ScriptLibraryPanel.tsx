@@ -48,6 +48,15 @@ import {
   restoreScriptVersion,
 } from '../storage/service';
 import { importPyneFiles, isPyneFileName } from '../storage/import-pyne-files';
+import {
+  listPublishedLibraries,
+  publishLibrary,
+} from '../storage/library-publish-io';
+import {
+  formatImportSnippet,
+  parseLibraryDeclaration,
+  type PublishedIndex,
+} from '../storage/library-publish';
 import { listStorages } from '../storage/catalog';
 import {
   setActivePlugin,
@@ -442,6 +451,8 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
   const [error, setError] = createSignal('');
   const [name, setName] = createSignal('');
   const [desc, setDesc] = createSignal('');
+  const [published, setPublished] = createSignal<PublishedIndex['libraries']>([]);
+  const [lastImport, setLastImport] = createSignal('');
   const [statusLine, setStatusLine] = createSignal('');
   const [cloudEndpoint, setCloudEndpoint] = createSignal(cloudCfg().endpoint);
   const [cloudKey, setCloudKey] = createSignal(cloudCfg().apiKey);
@@ -498,6 +509,14 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
     try {
       const list = await listScripts();
       setItems(list);
+      try {
+        const pub = await listPublishedLibraries();
+        setPublished(
+          [...pub.libraries].sort((a, b) => (b.publishedAt || 0) - (a.publishedAt || 0)),
+        );
+      } catch {
+        /* published catalog optional */
+      }
       const st = await getStorageStatus();
       const parts = [
         backend(),
@@ -560,6 +579,32 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
       setStatus(
         'ready',
         isGit() ? `Committed & saved "${n}" to git` : `Saved "${n}"`,
+      );
+      await refresh();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onPublish = async () => {
+    const content = props.getDoc?.() ?? '';
+    if (!parseLibraryDeclaration(content)) {
+      setError('Current editor is not a library() — add library("Name") first');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const result = await publishLibrary(content, { origin: 'manual' });
+      setLastImport(result.importSnippet);
+      setStatus(
+        'ready',
+        result.skipped
+          ? `Already published ${result.library.namespace}/${result.library.name}/${result.library.version}`
+          : `Published ${result.library.namespace}/${result.library.name}/${result.library.version}` +
+              (result.remote ? ' to git' : ' (local cache)'),
       );
       await refresh();
     } catch (e: unknown) {
@@ -1054,6 +1099,26 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
           <Icons.download size={13} />
           {isGit() ? 'Save & commit' : 'Save to library'}
         </button>
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost inline-flex items-center gap-1 justify-center"
+          disabled={busy()}
+          onClick={() => void onPublish()}
+          title="Publish library() as the next version folder (1, 2, 3, …) — importable as import ns/Name/ver"
+          data-testid="axis-library-publish"
+        >
+          Publish library
+        </button>
+        <Show when={lastImport()}>
+          <p class="m-0 font-mono text-[10px] text-accent break-all" data-testid="axis-library-import-snippet">
+            {lastImport()}
+          </p>
+        </Show>
+        <p class="m-0 text-[9px] text-text-faint">
+          A successful Run of a <code class="font-mono">library()</code> also
+          auto-publishes the next version (skips if unchanged). Git storage writes
+          <code class="font-mono"> published/ns/Name/N/lib.pyne</code>.
+        </p>
       </div>
 
       <div class="flex gap-1.5 flex-wrap">
@@ -1087,6 +1152,35 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
 
       <Show when={error()}>
         <p class="text-red font-mono text-[10px]">{error()}</p>
+      </Show>
+
+      <Show when={published().length > 0}>
+        <div>
+          <div class="text-[10px] text-text-dim uppercase tracking-wider mb-1">
+            Published ({published().length})
+          </div>
+          <ul class="m-0 p-0 list-none flex flex-col gap-1">
+            <For each={published()}>
+              {(p) => (
+                <li class="font-mono text-[10px] text-text-dim border border-border px-2 py-1">
+                  {p.namespace}/{p.name}/{p.version}
+                  <span class="text-text-faint"> · {p.origin}</span>
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-ghost px-1 py-0 ml-2 text-[9px]"
+                    onClick={() => {
+                      const snip = formatImportSnippet(p);
+                      setLastImport(snip);
+                      void navigator.clipboard?.writeText(snip).catch(() => {});
+                    }}
+                  >
+                    copy import
+                  </button>
+                </li>
+              )}
+            </For>
+          </ul>
+        </div>
       </Show>
 
       <div>
