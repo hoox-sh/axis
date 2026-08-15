@@ -17,6 +17,7 @@ _Generated/updated: 2026-08-15 · 219 commits · describe-tag: `v2.0.7`_
 
 ### Fixed
 
+- **CORS** — Cloudflare Pages previews (`*.pynescript-axis.pages.dev`) can call `https://axis.hoox.sh`. Pyne always allowlists those product Origins and treats `GET /health` as a free CORS path (AXIS Settings probe). Worker `pickOrigin` already echoed the same hosts.
 - **CI** — library publish stays on the local cache when leftover/invalid git credentials fail remote (was `GitHub: Bad credentials` in the full unit suite). Smoke waits on `axis-status-message` and opens Plugins via Runtimes. Vite build on macOS/Windows resolves Solid `Topbar.tsx` / `Watchlist.tsx` instead of same-stem legacy JS. Docker push uses the `release` bake group (no `:local` docker.io tags) and bake-action v6 env overrides.
 
 ### Changed

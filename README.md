@@ -239,22 +239,29 @@ CORS is enforced by the **API you call** (pyne Pro API or the AXIS Worker), not 
 
 `backend/app.py` uses `flask-cors` with `ALLOWED_ORIGINS` (comma-separated). Defaults include
 `https://pynescript.ai`, `https://app.pynescript.ai`, and a **localhost/127.0.0.1 any-port** regex.
+Product Origins are **always appended** even when systemd sets a short list:
+`*.hoox.sh`, `*.pynescript.ai`, `*.pynescript.online`, and **`*.pynescript-axis.pages.dev`**
+(not open `*.pages.dev`). `GET /health` and `POST /run` always reflect the request Origin
+so a Cloudflare Pages preview can probe/run against `https://axis.hoox.sh`.
 
 | Origin style | Safe? | Notes |
 |--------------|-------|--------|
 | `localhost` / `127.0.0.1` (+ port) | Yes | Local AXIS / Vite; only your machine presents these Origins |
+| `*.pynescript-axis.pages.dev` | Yes | AXIS Pages project (apex + preview hashes) — always allowlisted |
 | Public demo host (`http://VPS:8081`) | Yes if listed | Needed when UI is on VPS and API is elsewhere (or same box) |
 | `*` | Demo-only | Reflects any Origin — fine for a public demo, not for production secrets |
 | `0.0.0.0` | **Skip** | Not a normal browser Origin; listening on `0.0.0.0` ≠ CORS |
 
-Same-origin proxy (recommended): browser calls `https://axis.hoox.sh/run` — no CORS.
+Same-origin proxy (recommended): browser on `https://axis.hoox.sh` calls `/run` — no CORS.
+Cross-origin (Pages → `axis.hoox.sh`) needs the product regex above.
 Direct `:5002` is still fine for demos if `ALLOWED_ORIGINS` includes the page origin.
 
 ```ini
 # /etc/systemd/system/pynescript-api.service
-Environment=ALLOWED_ORIGINS=*
-# or tighter:
-# Environment=ALLOWED_ORIGINS=https://axis.hoox.sh,^https?://(localhost|127\.0\.0\.1)(:\d+)?$
+# Short list is fine — pyne always appends localhost + product/Pages regex.
+Environment=ALLOWED_ORIGINS=https://axis.hoox.sh,https://hoox.sh
+# Demo-only open reflection:
+# Environment=ALLOWED_ORIGINS=*
 ```
 
 ### AXIS Worker

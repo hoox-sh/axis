@@ -104,7 +104,15 @@ The **server** engine posts from the browser to the configured endpoint. Flask P
 2. Reflect or allow the PWA origin.
 3. Accept `Content-Type: application/json`.
 
-Same-origin reverse proxy ([VPS demo](/axis/docs/devops/vps-demo)) eliminates CORS for `/run`.
+Pyne always appends the same product Origin regex as Worker `pickOrigin` (including
+`*.pynescript-axis.pages.dev`) even when systemd `ALLOWED_ORIGINS` is a short list.
+`GET /health` (AXIS Settings probe) and `POST /run` are **free CORS paths** — they
+echo any `Origin` so a Pages preview can reach `https://axis.hoox.sh` without a
+per-preview allowlist entry.
+
+Same-origin reverse proxy ([VPS demo](/axis/docs/devops/vps-demo)) eliminates CORS
+when the PWA and Pro API share `https://axis.hoox.sh`. Cross-origin Pages → VPS
+still needs those headers (they are now default).
 
 ## Venue sources/streams
 
