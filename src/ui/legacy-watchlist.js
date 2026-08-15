@@ -20,7 +20,8 @@
 /**
  * @file Legacy watchlist sidebar (vanilla DOM).
  * Polls Binance tickers; click loads chart symbol. Prefer Solid `Watchlist.tsx`
- * (WS-first quotes via watchlist-live).
+ * (WS-first quotes via watchlist-live). Named `legacy-watchlist.js` so
+ * case-insensitive filesystems do not resolve `./ui/Watchlist` here.
  */
 
 import { getState } from '../state.js';

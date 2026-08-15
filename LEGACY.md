@@ -11,7 +11,7 @@ bun run build        → `dist/` served by `axis_pwa_server.py` / CF Pages
 
 | Path | Role |
 |------|------|
-| `src/main.js` | Old bootstrap (chart.js, legacy-topbar.js, …) |
+| `src/main.js` | Old bootstrap (chart.js, legacy-topbar.js, legacy-watchlist.js, …) |
 | `style.css` | TV-blue-era tokens |
 | `pyne-editor.js` | Pre-Solid CM6 wiring (was `pine-editor.js`) |
 | `server.ts` | Bun static server for the old tree |

@@ -42,7 +42,7 @@ import { initChart, setOhlcv, appendBar, setMarkers, clearOverlays, addOverlayLi
          setEquityPane, setEquityCurve, setTimeRange } from './chart.js';
 import { openSettings } from './ui/settings.js';
 import { pyodideEngine } from './engines/index.js';
-import { initWatchlist } from './ui/watchlist.js';
+import { initWatchlist } from './ui/legacy-watchlist.js';
 import { applyHashState, watchHashState } from './state-hash.js';
 import { openManager, initManager } from './ui/manager.js';
 import { attachSymbolAutocomplete } from './ui/symbol-autocomplete.js';
