@@ -38,8 +38,6 @@
 
 import {
   openScriptSettings,
-  removeIndicator,
-  removePane,
   setPaneVisible,
   store,
   toggleIndicator,
@@ -105,16 +103,20 @@ function toggleScriptVisible(id: string, paneId: string, currentlyVisible: boole
   const manager = getManager();
   if (!manager) return;
   if (currentlyVisible) {
-    // Now hidden — clear series for this pane (other visible scripts re-applied)
+    // Hide only this script’s series — leave siblings intact
     try {
-      manager.removeOverlays(paneId);
+      if (typeof manager.removeOverlaysForOwner === 'function') {
+        manager.removeOverlaysForOwner(paneId, id);
+      } else {
+        manager.removeOverlays(paneId);
+        for (const s of store.scripts) {
+          if (s.paneId === paneId && s.visible && s.id !== id && s.code?.trim()) {
+            reRunScript(s.id, s.code);
+          }
+        }
+      }
     } catch {
       /* ignore */
-    }
-    for (const s of store.scripts) {
-      if (s.paneId === paneId && s.visible && s.id !== id && s.code?.trim()) {
-        reRunScript(s.id, s.code);
-      }
     }
   } else {
     // Turning back on — re-run to repaint
@@ -125,38 +127,15 @@ function toggleScriptVisible(id: string, paneId: string, currentlyVisible: boole
 }
 
 function removeScript(id: string, paneId: string) {
-  const manager = getManager();
-  if (manager) {
-    try {
-      manager.removeOverlays(paneId);
-    } catch {
-      /* ignore */
-    }
-  }
-  removeIndicator(id);
-  const remaining = store.scripts.filter((s) => s.paneId === paneId);
-  if (manager && paneId !== 'price' && paneId !== 'volume' && remaining.length === 0) {
-    try {
-      manager.destroyPane(paneId);
-    } catch {
-      /* ignore */
-    }
-    if (store.panes.some((p) => p.id === paneId)) {
-      try {
-        removePane(paneId);
-      } catch {
-        /* ignore */
-      }
-    }
-  } else if (remaining.length) {
-    // Re-paint remaining scripts on this pane
-    for (const s of remaining) {
-      if (s.visible && s.code?.trim()) reRunScript(s.id, s.code);
-    }
+  void import('../indicators/detach').then(({ detachIndicatorFromChart }) => {
+    detachIndicatorFromChart(id);
     refreshPaneBadge(paneId);
-  } else {
-    refreshPaneBadge(paneId);
-  }
+    try {
+      getManager()?.refreshBadges?.('price');
+    } catch {
+      /* optional */
+    }
+  });
 }
 
 function hidePane(paneId: string) {

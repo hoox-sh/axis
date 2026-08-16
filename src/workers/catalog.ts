@@ -366,32 +366,52 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
   {
     id: 'pyne-worker',
     name: 'pyne-worker (edge eval)',
-    summary: 'Optional HOOX edge Pine evaluator (sister project)',
+    summary: 'HOOX edge Pine evaluator — built-in engine + /run host',
     description:
-      'Sister Cloudflare Python Worker for edge evaluation in the HOOX mesh. ' +
-      'Not required for AXIS day-to-day; the server engine can target any ' +
-      'compatible `/run` host. Listed here for operators who run the full mesh.',
+      'Sister Cloudflare® Python Worker for edge evaluation (POST /run, alerts, cron, libraries). ' +
+      'AXIS ships a dedicated **pyne-worker** engine plugin with this production origin. ' +
+      'Distinct from the AXIS data-plane Worker (pynescript-axis / on-chain proxy).',
     usage:
-      'Advanced / mesh-only. Deploy the sister project, then paste its origin into ' +
-      'Configure or Settings → Backend URL. No automatic health probe — status stays Skipped until you set an endpoint.',
+      'Select engine **pyne-worker (edge)** in the topbar or Settings, or Use as calculation backend here. ' +
+      'Set API key in Settings when the Worker secret API_KEY is required. ' +
+      'Generated scripts still need bars from your source/stream; this is evaluate-only.',
     icon: 'settings',
     kind: 'optional',
     roles: ['calc'],
-    defaultEndpoint: '',
-    docsPath: '/axis/docs/architecture/topologies',
-    homepage: 'https://hoox.sh',
+    defaultEndpoint: 'https://pyne-worker.cryptolinx.workers.dev',
+    docsPath: '/axis/docs/plugins/engines',
+    homepage: 'https://hoox.sh/pyne',
     canUseAsBackend: true,
+    canUseAsEngine: true,
     optional: true,
-    probe: 'none',
-    capabilities: ['edge eval', 'HOOX mesh', 'optional'],
+    probe: 'http-health',
+    healthPaths: ['/health'],
+    healthMarkers: ['status', 'worker', 'features', 'engine'],
+    serviceHint: 'pyne-worker',
+    capabilities: [
+      'POST /run',
+      'GET /health',
+      'interpret',
+      'compile',
+      'alerts',
+      'libraries',
+      'cron',
+    ],
     install: [
       {
-        title: 'Deploy sister project',
-        detail: 'See hoox-sh/pyne-worker (or monorepo workers/pyne-worker) docs.',
+        title: 'Use built-in engine',
+        detail: 'Topbar Engine → pyne-worker (edge), or Workers Manager → Use as calculation backend.',
+        command: 'https://pyne-worker.cryptolinx.workers.dev',
       },
       {
-        title: 'Point AXIS endpoint',
-        detail: 'Paste the worker origin into Configure / Settings Backend URL.',
+        title: 'API key (production)',
+        detail:
+          'When API_KEY is set on the Worker, add it under Settings → engine config (X-API-Key).',
+      },
+      {
+        title: 'Self-host',
+        detail: 'Deploy hoox-sh/pyne-worker and paste your origin into Backend URL.',
+        command: 'https://<your-pyne-worker>',
       },
     ],
   },

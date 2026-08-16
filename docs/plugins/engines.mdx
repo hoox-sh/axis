@@ -26,14 +26,15 @@ description: "Calculation engines: server (Flask/Worker) and client Pyodide — 
 
 ## Abstract
 
-An **engine** evaluates a script against bars and returns plots, series, events, and optional drawings. AXIS ships two built-ins in `src/engines/catalog.ts`:
+An **engine** evaluates a script against bars and returns plots, series, events, and optional drawings. AXIS ships three built-ins in `src/engines/catalog.ts`:
 
 | id | Name | Where Python runs |
 | --- | --- | --- |
-| `server` | Server-Side | External Flask Pro API **or** Cloudflare Worker that proxies/evaluates |
+| `server` | Server-Side | External Flask Pro API **or** AXIS Worker `/api/run` proxy |
+| `pyne-worker` | pyne-worker (edge) | HOOX **pyne-worker** Cloudflare® edge evaluator (`POST /run`) |
 | `pyodide` | Client-Side (Pyodide) | Browser WebAssembly via self-hosted Pyodide |
 
-There is **no** third built-in engine in AXIS itself. Worker in-process Pyodide is a **separate**, feature-gated path on the edge (`PYODIDE_IN_WORKER`) and is not production-ready — see [Worker runtime](/axis/docs/worker/runtime).
+AXIS Worker in-process Pyodide (`PYODIDE_IN_WORKER`) remains a separate, feature-gated edge path — see [Worker runtime](/axis/docs/worker/runtime).
 
 ## Conceptual model
 
@@ -85,7 +86,24 @@ run({ script, bars, config?, signal? }): Promise<RunResult>
 
 **Timeouts:** adaptive `min(180s, max(60s, 30s + bars×80ms))`.
 
-**Note on Worker path:** the PWA’s `server` engine posts to `/run` on whatever endpoint you set. The Worker exposes **`POST /api/run`**. When pointing the PWA at a Worker, either put a reverse-proxy path rewrite in front, or set the endpoint so the engine path matches your deployment. Worker `handleRun` validates `{ script, data, mode? }` and **today prefers proxying to `EXTERNAL_BACKEND`** (Flask). In-worker Pyodide only if `PYODIDE_IN_WORKER=enabled` and the wheel pipeline works.
+**Note on Worker path:** the PWA’s `server` engine posts to `/run` on whatever endpoint you set. The AXIS data-plane Worker exposes **`POST /api/run`**. When pointing the PWA at that Worker, either put a reverse-proxy path rewrite in front, or set the endpoint so the engine path matches your deployment. Worker `handleRun` validates `{ script, data, mode? }` and **today prefers proxying to `EXTERNAL_BACKEND`** (Flask). In-worker Pyodide only if `PYODIDE_IN_WORKER=enabled` and the wheel pipeline works.
+
+### pyne-worker engine
+
+Dedicated HOOX **pyne-worker** edge host (not `pynescript-axis`).
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `endpoint` | `https://pyne-worker.cryptolinx.workers.dev` | Production workers.dev |
+| `mode` | `interpret` | `interpret` \| `compile` \| `auto` (see `/health` `features.modes`) |
+| `preferWs` | `false` | Edge deploys are usually REST-only |
+| `apiKey` | `''` | Sent as `X-API-Key` + Bearer when the Worker secret `API_KEY` is set |
+
+**Contract:** same evaluate body as Flask (`POST /run`). Health: `GET /health` → `{ status: "ok", worker: "pyne-worker", … }`.
+
+**UI:** Topbar engine list, Settings preset **pyne-worker edge**, Workers Manager → **Use as calculation backend** / **Use pyne-worker engine**.
+
+**Browser CORS:** the pyne-worker origin must allow the AXIS page Origin (or use a same-origin reverse proxy). Auth failures return HTTP 401 without a key.
 
 ### pyodide engine
 

@@ -9,11 +9,25 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-16 · 225 commits · describe-tag: `v2.0.9`_
+_Generated/updated: 2026-08-17 · 226 commits · describe-tag: `v2.0.10`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.11] — 2026-08-17
+
+Chart script lifecycle, per-script indicator panes, pyne-worker engine, panel drag UX.
+
+### Fixed
+
+- **Panel title bar** — a plain click no longer undocks the panel to float; undock/move starts only after the pointer is dragged past a small threshold (hamburger still: click = menu, hold/drag = move).
+- **Non-overlay indicators** — each `overlay=false` script gets its own sub-pane (`ind_<id>`) instead of stacking into a single shared `indicator` pane. Removing one script only clears that owner’s series and no longer destroys siblings’ full history (was left with 1–2 bars).
+- **Chart scripts lifecycle** — add/remove/reopen stays correct: owner-scoped detach (no leftover series/empty panes), ChartHost no longer wipes re-applied scripts after history paint, centralized `reapplyChartScripts` restores visible scripts (with saved inputs/strategy props) after symbol load / cache paint; applied scripts are sanitized on hydrate and re-run on reopen.
+
+### Added
+
+- **Engine `pyne-worker`** — built-in edge evaluator plugin (default `https://pyne-worker.cryptolinx.workers.dev`), API key field, Workers Manager / Settings presets. Distinct from AXIS data-plane Worker and Flask `server`.
 
 ## [2.0.10] — 2026-08-16
 
@@ -253,9 +267,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (143 commits)
+### 2026-08 (144 commits)
 
 #### Security
 
@@ -266,6 +282,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `7f85d664` (2026-08-16) — feat(release): AXIS v2.0.10 market proxy, inputs layout, local-first LSP
 - `2cae2b72` (2026-08-15) — feat(editor): symbol catalog and richer Pine highlighting
 - `9411a16b` (2026-08-15) — feat(pyodide): vendor pynescript 0.3.7 wheel
 - `fe6dfb18` (2026-08-15) — feat(library): git versioned publish emulator for import ns/Name/ver

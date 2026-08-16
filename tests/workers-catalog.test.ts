@@ -30,6 +30,11 @@ describe('workers catalog', () => {
     expect(ids).toContain('pyodide');
     expect(ids).toContain('service-worker');
     expect(ids).toContain('pyne-agent');
+    expect(ids).toContain('pyne-worker');
+    expect(getWorkerCatalogEntry('pyne-worker')?.defaultEndpoint).toContain(
+      'pyne-worker',
+    );
+    expect(getWorkerCatalogEntry('pyne-worker')?.canUseAsBackend).toBe(true);
   });
 
   it('has install steps for every entry', () => {

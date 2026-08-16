@@ -14,10 +14,13 @@ import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { mockFetch, jsonResponse } from './helpers/mock-fetch';
 import {
   serverEngine,
+  pyneWorkerEngine,
   listEngines,
   getEngine,
   registerDynamicEngine,
   ensureEnginesRegistered,
+  resolvePyneWorkerEndpoint,
+  DEFAULT_PYNE_WORKER_ENDPOINT,
   _resetEngineRegistrationFlag,
 } from '../src/engines/catalog';
 import { _resetEngineWsClients } from '../src/engines/engine-ws';
@@ -91,10 +94,64 @@ function installCatalogFakeWs(): void {
 }
 
 describe('engines catalog', () => {
-  it('lists server and pyodide', () => {
+  it('lists server, pyne-worker, and pyodide', () => {
     const ids = listEngines().map((e) => e.id);
     expect(ids).toContain('server');
+    expect(ids).toContain('pyne-worker');
     expect(ids).toContain('pyodide');
+    expect(getEngine('pyne-worker')?.builtIn).toBe(true);
+    expect(pyneWorkerEngine.configSchema?.endpoint?.default).toBe(
+      DEFAULT_PYNE_WORKER_ENDPOINT,
+    );
+  });
+
+  it('resolvePyneWorkerEndpoint prefers config then production default', () => {
+    setStore('endpoint', 'http://127.0.0.1:5002');
+    expect(resolvePyneWorkerEndpoint({})).toBe(DEFAULT_PYNE_WORKER_ENDPOINT);
+    expect(
+      resolvePyneWorkerEndpoint({ endpoint: 'https://custom.example/pw' }),
+    ).toBe('https://custom.example/pw');
+    setStore('endpoint', 'https://pyne-worker.cryptolinx.workers.dev');
+    expect(resolvePyneWorkerEndpoint({})).toBe(
+      'https://pyne-worker.cryptolinx.workers.dev',
+    );
+  });
+
+  it('pyne-worker run posts to edge /run with api key headers', async () => {
+    const seen: { url: string; headers: Record<string, string> }[] = [];
+    restoreFetch = mockFetch(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/health')) {
+        return jsonResponse({ status: 'ok', worker: 'pyne-worker' });
+      }
+      const h = (init?.headers || {}) as Record<string, string>;
+      seen.push({ url, headers: h });
+      expect(url).toContain('pyne-worker');
+      expect(url).toContain('/run');
+      return jsonResponse({
+        status: 'success',
+        plots: [1],
+        series: {},
+        events: [],
+        mode: 'interpret',
+      });
+    });
+    // Force REST (no WS)
+    CatalogFakeWS.failConstruct = true;
+    installCatalogFakeWs();
+    const result = await pyneWorkerEngine.run({
+      script: 'plot(close)',
+      bars: SAMPLE_BARS as never,
+      config: {
+        endpoint: DEFAULT_PYNE_WORKER_ENDPOINT,
+        preferWs: false,
+        apiKey: 'test-key',
+      },
+    });
+    expect(result.status).toBe('success');
+    expect(seen.some((s) => s.url.includes('/run'))).toBe(true);
+    const run = seen.find((s) => s.url.includes('/run'));
+    expect(run?.headers['X-API-Key'] || run?.headers['x-api-key']).toBeTruthy();
   });
 
   it('server run success', async () => {

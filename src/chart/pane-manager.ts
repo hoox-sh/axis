@@ -1781,6 +1781,8 @@ export class PaneManager {
     for (const k of overlays) {
       safeRemoveSeries(pane.chart, pane.series[k]);
       delete pane.series[k];
+      this.overlaySeriesKinds.delete(`${paneId}:${k}`);
+      this.overlayDataMeta.delete(k);
     }
     for (const name of Object.keys(pane.priceLines)) {
       const pl = pane.priceLines[name];
@@ -1790,6 +1792,48 @@ export class PaneManager {
         /* ignore */
       }
       delete pane.priceLines[name];
+    }
+  }
+
+  /**
+   * Remove only one script’s overlay series / price lines on a pane.
+   * Used when multiple scripts share a pane (or after owner-scoped applies).
+   * Prefer this over {@link removeOverlays} so siblings keep their plots.
+   */
+  removeOverlaysForOwner(paneId: string, ownerId: string) {
+    const pane = this.panes.get(paneId);
+    if (!pane || !ownerId) return;
+    const linePrefix = ownedOverlayPrefix(ownerId);
+    const ohlcPrefix = ownedOhlcPrefix(ownerId);
+    const bgPrefix = ownedBgcolorPrefix(ownerId);
+    const plPrefix = `${sanitizeOverlayOwnerId(ownerId)}__`;
+
+    for (const k of Object.keys(pane.series)) {
+      if (
+        k.startsWith(linePrefix) ||
+        k.startsWith(ohlcPrefix) ||
+        k.startsWith(bgPrefix)
+      ) {
+        safeRemoveSeries(pane.chart, pane.series[k]);
+        delete pane.series[k];
+        this.overlaySeriesKinds.delete(`${paneId}:${k}`);
+        this.overlayDataMeta.delete(k);
+      }
+    }
+    for (const name of Object.keys(pane.priceLines)) {
+      if (!name.startsWith(plPrefix)) continue;
+      const pl = pane.priceLines[name];
+      try {
+        pl.host.removePriceLine(pl.line);
+      } catch {
+        /* ignore */
+      }
+      delete pane.priceLines[name];
+    }
+    try {
+      this.clearShapeMarkers?.(ownerId);
+    } catch {
+      /* optional */
     }
   }
 

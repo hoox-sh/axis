@@ -132,6 +132,7 @@ export const SettingsDialog: Component<Props> = (props) => {
   const [engine, setEngine] = createSignal(store.engine);
   const [execMode, setExecMode] = createSignal<EngineExecMode>('interpret');
   const [preferWs, setPreferWs] = createSignal(true);
+  const [apiKey, setApiKey] = createSignal('');
   const [storage, setStorage] = createSignal(store.activePlugins?.storage || 'local');
   const [chartInterval, setChartInterval] = createSignal(store.interval);
   const [historyBars, setHistoryBars] = createSignal(
@@ -181,7 +182,7 @@ export const SettingsDialog: Component<Props> = (props) => {
    */
   const hasExecMode = createMemo(() => {
     const id = engine() || selectedEngine()?.id || '';
-    if (id === 'server' || id === 'pyodide') return true;
+    if (id === 'server' || id === 'pyodide' || id === 'pyne-worker') return true;
     const schema = selectedEngine()?.configSchema;
     if (!schema?.mode) return false;
     // Accept select schemas even if type string was lost on a shallow clone
@@ -191,6 +192,10 @@ export const SettingsDialog: Component<Props> = (props) => {
     const id = engine() || selectedEngine()?.id || '';
     if (id === 'server') return true;
     return selectedEngine()?.configSchema?.preferWs?.type === 'boolean';
+  });
+  /** Optional API key (pyne-worker, secured Pro hosts). */
+  const hasApiKey = createMemo(() => {
+    return selectedEngine()?.configSchema?.apiKey?.type === 'string';
   });
   const execModeOptions = createMemo(() => {
     const opts = selectedEngine()?.configSchema?.mode?.options;
@@ -209,6 +214,19 @@ export const SettingsDialog: Component<Props> = (props) => {
     setExecMode(normalizeExecMode(cfg.mode, defaultMode));
     if (typeof cfg.preferWs === 'boolean') setPreferWs(cfg.preferWs);
     else setPreferWs(schema?.preferWs?.default !== false);
+    setApiKey(typeof cfg.apiKey === 'string' ? cfg.apiKey : String(schema?.apiKey?.default || ''));
+    // Seed pyne-worker URL into the endpoint field when switching engines
+    if (engineId === 'pyne-worker') {
+      const def =
+        String(schema?.endpoint?.default || 'https://pyne-worker.cryptolinx.workers.dev').replace(
+          /\/$/,
+          '',
+        );
+      const cur = endpoint().trim();
+      if (!cur || /127\.0\.0\.1|localhost|:5002/i.test(cur)) {
+        setEndpoint(def);
+      }
+    }
   };
 
   /**
@@ -284,6 +302,8 @@ export const SettingsDialog: Component<Props> = (props) => {
     const writeEndpoint = needsEndpoint();
     const writeExecMode = hasExecMode();
     const writePreferWs = hasPreferWs();
+    const writeApiKey = hasApiKey();
+    const nextApiKey = apiKey().trim();
 
     // Batch all durable fields before persist so one flush sees full state
     setStore('endpoint', nextEndpoint);
@@ -309,13 +329,14 @@ export const SettingsDialog: Component<Props> = (props) => {
 
     // Always merge engine plugin config when any engine field is shown — include
     // endpoint so pluginsConfig cannot keep a stale URL over store.endpoint.
-    if (writeEndpoint || writeExecMode || writePreferWs) {
+    if (writeEndpoint || writeExecMode || writePreferWs || writeApiKey) {
       const key = pluginKey('engine', nextEngine);
       const prev = readEnginePluginConfig(nextEngine);
       const nextCfg: Record<string, unknown> = { ...prev };
       if (writeEndpoint) nextCfg.endpoint = nextEndpoint;
       if (writeExecMode) nextCfg.mode = nextExecMode;
       if (writePreferWs) nextCfg.preferWs = nextPreferWs;
+      if (writeApiKey) nextCfg.apiKey = nextApiKey;
       // reconcile replaces nested keys (Solid merges plain objects / function returns)
       setStore('pluginsConfig', key, reconcile(nextCfg));
     }
@@ -660,6 +681,32 @@ export const SettingsDialog: Component<Props> = (props) => {
               </label>
             </Show>
 
+            <Show when={hasApiKey()}>
+              <div class="sc-field" data-testid="axis-engine-api-key-field">
+                <label
+                  class="text-[10px] text-text-dim uppercase tracking-wider"
+                  for="axis-engine-api-key"
+                >
+                  Engine API key
+                </label>
+                <input
+                  id="axis-engine-api-key"
+                  type="password"
+                  class="sc-input font-mono text-[12px] w-full"
+                  data-testid="axis-engine-api-key"
+                  value={apiKey()}
+                  onInput={(e) => setApiKey(e.currentTarget.value)}
+                  placeholder="X-API-Key (pyne-worker / secured backends)"
+                  spellcheck={false}
+                  autocomplete="off"
+                />
+                <p class="text-[10px] text-text-faint mt-0.5">
+                  Sent as <code class="font-mono">X-API-Key</code> and Bearer on{' '}
+                  <code class="font-mono">POST /run</code>. Leave empty for open local backends.
+                </p>
+              </div>
+            </Show>
+
             <Show when={needsEndpoint()}>
               <div class="sc-field">
                 <label
@@ -716,6 +763,20 @@ export const SettingsDialog: Component<Props> = (props) => {
                     }}
                   >
                     axis.hoox.sh API
+                  </button>
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-ghost px-1.5 py-0.5 text-[10px] font-mono"
+                    data-testid="axis-endpoint-preset-pyne-worker"
+                    title="HOOX pyne-worker edge evaluator (POST /run)"
+                    onClick={() => {
+                      setEndpoint('https://pyne-worker.cryptolinx.workers.dev');
+                      setEngine('pyne-worker');
+                      setPreferWs(false);
+                      setProbeMsg('');
+                    }}
+                  >
+                    pyne-worker edge
                   </button>
                 </div>
                 <Show

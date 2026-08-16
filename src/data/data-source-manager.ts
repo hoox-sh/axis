@@ -862,6 +862,13 @@ export async function applyCachedToChart(
       console.error('applyCachedToChart setDataToChart failed:', err);
     }
   }
+  // Restore applied scripts after full clear+paint (same as load-symbol)
+  try {
+    const { reapplyChartScripts } = await import('../indicators/reapply');
+    await reapplyChartScripts();
+  } catch {
+    /* re-run optional */
+  }
   return true;
 }
 

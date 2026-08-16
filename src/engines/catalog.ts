@@ -28,7 +28,8 @@
  *
  * | id | Transport | Backend |
  * |----|-----------|---------|
- * | `server` | WebSocket `/ws/run` preferred, then `POST /run` | pyne Pro API (default `http://localhost:5002`) or Worker |
+ * | `server` | WebSocket `/ws/run` preferred, then `POST /run` | pyne Pro API (default `http://localhost:5002`) or AXIS Worker |
+ * | `pyne-worker` | `POST /run` (+ optional WS) | HOOX **pyne-worker** edge evaluator (`https://pyne-worker…workers.dev`) |
  * | `pyodide` | In-browser | Self-hosted Pyodide + vendored `pynescript` wheel |
  *
  * ## `server` protocol
@@ -40,15 +41,20 @@
  *
  * ## Public API
  *
- * - {@link serverEngine} / {@link pyodideEngine} — plugin instances
+ * - {@link serverEngine} / {@link pyneWorkerEngine} / {@link pyodideEngine} — plugin instances
  * - {@link ensureEnginesRegistered}, {@link getEngine}, {@link listEngines}
  * - {@link registerDynamicEngine} / {@link unregisterDynamicEngine} — runtime plugins
  * - {@link preloadPyodide}, {@link prefetchPyodideAssets} — cold-load helpers
+ * - {@link DEFAULT_PYNE_WORKER_ENDPOINT} — production pyne-worker origin
  *
  * @module engines/catalog
  * @see {@link EnginePlugin} in `plugins/types`
  * @see {@link engine-ws} for the persistent WS client
  */
+
+/** Production HOOX pyne-worker (edge Pine evaluate). */
+export const DEFAULT_PYNE_WORKER_ENDPOINT =
+  'https://pyne-worker.cryptolinx.workers.dev';
 
 import type { EnginePlugin, RunResult } from '../plugins/types';
 import { store, setTelemetryPlane, setTelemetryState, setStatus, appendLog } from '../store';
@@ -115,6 +121,12 @@ export const serverEngine: EnginePlugin = {
       default: true,
       label: 'Prefer WebSocket (/ws/run)',
     },
+    apiKey: {
+      type: 'string',
+      default: '',
+      label: 'API key (optional)',
+      description: 'Sent as X-API-Key / Authorization Bearer when the backend requires auth',
+    },
   },
   async isReady() {
     const endpoint = (store.endpoint || this.configSchema!.endpoint.default as string).replace(/\/$/, '');
@@ -132,9 +144,18 @@ export const serverEngine: EnginePlugin = {
             websocket?: boolean;
             status?: unknown;
             service?: string;
+            worker?: string;
             endpoints?: unknown;
+            features?: unknown;
           };
-          if (j.endpoints || j.status || j.service || j.websocket != null) {
+          if (
+            j.endpoints ||
+            j.status ||
+            j.service ||
+            j.worker ||
+            j.features ||
+            j.websocket != null
+          ) {
             health = j;
             break;
           }
@@ -155,14 +176,16 @@ export const serverEngine: EnginePlugin = {
   async run({ script, bars, config, inputs, libraries, signal }) {
     // Prefer store.endpoint (Settings) over plugin config so a stale
     // pluginsConfig.endpoint cannot pin an old backend after Save.
+    // Explicit config.endpoint still wins when set (e.g. pyne-worker engine).
     const endpoint = (
-      store.endpoint ||
       (config?.endpoint as string) ||
+      store.endpoint ||
       (this.configSchema!.endpoint.default as string)
     ).replace(/\/$/, '');
     const cfg = resolveConfig(this.configSchema, { ...(config || {}), endpoint });
     const mode = String(cfg.mode || 'interpret');
     const preferWs = cfg.preferWs !== false;
+    const apiKey = String(cfg.apiKey || '').trim();
     const t0 = performance.now();
     // Generous budget: compile + large OHLCV can exceed 30s on cold Numba.
     const timeoutMs = Math.min(
@@ -265,6 +288,10 @@ export const serverEngine: EnginePlugin = {
 
     // ── REST fallback ─────────────────────────────────────────────
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) {
+      headers['X-API-Key'] = apiKey;
+      headers.Authorization = `Bearer ${apiKey}`;
+    }
     try {
       // Never reuse a parent AbortSignal that already fired while WS was tried —
       // browsers surface that as "The operation timed out." with no REST attempt.
@@ -740,7 +767,127 @@ export const pyodideEngine: EnginePlugin & {
   },
 };
 
-export const BUILTIN_ENGINES: EnginePlugin[] = [serverEngine, pyodideEngine];
+/**
+ * Resolve the pyne-worker base URL for readiness / run.
+ * Prefer plugin config, then a store.endpoint that looks like pyne-worker, else production default.
+ */
+export function resolvePyneWorkerEndpoint(
+  config?: Record<string, unknown> | null,
+): string {
+  const fromCfg = String(config?.endpoint || '').trim().replace(/\/$/, '');
+  if (fromCfg) return fromCfg;
+  const fromStore = String(store.endpoint || '').trim().replace(/\/$/, '');
+  if (fromStore && /pyne-worker|pine-worker/i.test(fromStore)) return fromStore;
+  return DEFAULT_PYNE_WORKER_ENDPOINT;
+}
+
+/** True when a base URL targets the HOOX pyne-worker (not AXIS pynescript-axis). */
+export function looksLikePyneWorkerEndpoint(raw: string | undefined | null): boolean {
+  const s = String(raw || '').toLowerCase();
+  if (!s) return false;
+  return s.includes('pyne-worker') || s.includes('pine-worker');
+}
+
+/**
+ * HOOX **pyne-worker** edge evaluator — same `/run` contract as Flask Pro API,
+ * default origin production workers.dev. Optional `apiKey` for `X-API-Key`.
+ *
+ * Distinct from the AXIS data-plane Worker (`pynescript-axis` / engine `server`
+ * pointed at that host). Prefer this when you want edge Pine + alerts/cron mesh.
+ */
+export const pyneWorkerEngine: EnginePlugin = {
+  id: 'pyne-worker',
+  name: 'pyne-worker (edge)',
+  kind: 'engine',
+  builtIn: true,
+  description:
+    'HOOX pyne-worker Cloudflare® edge evaluator (POST /run). ' +
+    'Default production origin is pyne-worker.cryptolinx.workers.dev. ' +
+    'Set API key when the Worker secret API_KEY is required. ' +
+    'Not the AXIS data-plane Worker (on-chain / scripts proxy).',
+  capabilities: { needsNetwork: true },
+  configSchema: {
+    endpoint: {
+      type: 'string',
+      default: DEFAULT_PYNE_WORKER_ENDPOINT,
+      label: 'pyne-worker URL',
+    },
+    mode: {
+      type: 'select',
+      options: ['interpret', 'compile', 'auto'],
+      default: 'interpret',
+      label: 'Execution mode',
+      description:
+        'interpret = AST; compile / auto when the edge runtime supports them (see /health features.modes)',
+    },
+    preferWs: {
+      type: 'boolean',
+      default: false,
+      label: 'Prefer WebSocket (/ws/run)',
+      description: 'Most pyne-worker deploys are REST-only; leave off unless /ws/run is enabled',
+    },
+    apiKey: {
+      type: 'string',
+      default: '',
+      label: 'API key (X-API-Key)',
+      description: 'Required when the Worker has secret API_KEY set (production)',
+    },
+  },
+  async isReady() {
+    const endpoint = resolvePyneWorkerEndpoint(
+      resolveConfig(this.configSchema, {
+        ...(store.pluginsConfig?.['engine:pyne-worker'] as Record<string, unknown> | undefined),
+        endpoint: store.endpoint,
+      }),
+    );
+    try {
+      const res = await fetch(`${endpoint}/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!res.ok) return false;
+      const j = (await res.json()) as {
+        status?: string;
+        worker?: string;
+        features?: unknown;
+        engine?: unknown;
+      };
+      // pyne-worker health uses status: "ok" (not "healthy")
+      if (j.worker === 'pyne-worker') return true;
+      if (j.status === 'ok' || j.status === 'healthy') return true;
+      if (j.features || j.engine) return true;
+      return false;
+    } catch {
+      return false;
+    }
+  },
+  async run(opts) {
+    const pluginCfg =
+      (store.pluginsConfig?.['engine:pyne-worker'] as Record<string, unknown> | undefined) ||
+      {};
+    const merged = {
+      ...pluginCfg,
+      ...(opts.config || {}),
+    };
+    const endpoint = resolvePyneWorkerEndpoint(merged);
+    // Delegate to server engine (WS + REST + NaN cleanup + libraries retry)
+    return serverEngine.run({
+      ...opts,
+      config: {
+        ...merged,
+        endpoint,
+        // Default preferWs false unless user explicitly enabled it
+        preferWs: merged.preferWs === true,
+      },
+    });
+  },
+};
+
+export const BUILTIN_ENGINES: EnginePlugin[] = [
+  serverEngine,
+  pyneWorkerEngine,
+  pyodideEngine,
+];
 
 let registered = false;
 
@@ -777,9 +924,12 @@ export function registerDynamicEngine(engine: EnginePlugin): void {
   ensureEnginesRegistered();
   if (!engine?.id || engine.kind !== 'engine') throw new Error('Invalid engine plugin');
   if (typeof engine.run !== 'function') throw new Error('Engine must implement run()');
-  // Refuse to replace built-in server/pyodide (preserves Settings schema + run path)
+  // Refuse to replace built-in engines (preserves Settings schema + run path)
   const existing = registry.getEngine(engine.id);
-  if (existing?.builtIn && (engine.id === 'server' || engine.id === 'pyodide')) {
+  if (
+    existing?.builtIn &&
+    (engine.id === 'server' || engine.id === 'pyodide' || engine.id === 'pyne-worker')
+  ) {
     throw new Error(
       `Cannot replace built-in engine "${engine.id}" — use a different plugin id`,
     );

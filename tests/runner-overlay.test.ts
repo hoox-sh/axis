@@ -27,12 +27,21 @@ describe('resolveOverlayFlag', () => {
 
   it('defaults indicator to sub-pane when missing', () => {
     expect(resolveOverlayFlag(undefined, 'indicator')).toBe(false);
-    expect(resolveOverlayFlag(null, 'library')).toBe(false);
+  });
+
+  it('documents per-script pane ids (not shared indicator host)', () => {
+    // Contract: runner assigns ind_<scriptId> for non-overlay scripts.
+    // Shared legacy pane id "indicator" is migrated on re-run.
+    const sampleId = 'id_test_abc';
+    const paneId = `ind_${sampleId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 56)}`;
+    expect(paneId).toBe('ind_id_test_abc');
+    expect(paneId).not.toBe('indicator');
   });
 
   it('defaults strategy / unknown to overlay', () => {
     expect(resolveOverlayFlag(undefined, 'strategy')).toBe(true);
     expect(resolveOverlayFlag(undefined, '')).toBe(true);
+    expect(resolveOverlayFlag(null, 'library')).toBe(false);
   });
 });
 

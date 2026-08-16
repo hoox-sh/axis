@@ -66,6 +66,7 @@ import {
   recordRunLatency,
   setTelemetryPlane,
   setTelemetryState,
+  newEntityId,
 } from '../store';
 import { resolveInputSourceValues } from '../results/plot-sources';
 import { applyStrategyPropsToSource } from '../results/strategy-props';
@@ -444,12 +445,19 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     void (silent
       ? 60_000
       : Math.min(180_000, Math.max(90_000, 45_000 + bars.length * 40)));
+    // Prefer explicit opts → applied indicator saved values → editor draft
+    const applied =
+      typeof indicatorId === 'string' && indicatorId
+        ? store.scripts.find((s) => s.id === indicatorId)
+        : undefined;
     const rawInputs =
       opts.inputs && Object.keys(opts.inputs).length
         ? opts.inputs
-        : store.editorInputValues && Object.keys(store.editorInputValues).length
-          ? store.editorInputValues
-          : undefined;
+        : applied?.inputValues && Object.keys(applied.inputValues).length
+          ? applied.inputValues
+          : store.editorInputValues && Object.keys(store.editorInputValues).length
+            ? store.editorInputValues
+            : undefined;
     // Expand plot:<indicatorId>:<plotKey> refs → full series arrays for the engine
     const inputs = resolveInputSourceValues(rawInputs, store.indicatorSeries);
     // Strategy Properties: rewrite strategy() kwargs on a run-time copy only
@@ -457,7 +465,9 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     const strategyProps =
       opts.strategyProps && Object.keys(opts.strategyProps).length
         ? opts.strategyProps
-        : undefined;
+        : applied?.strategyProps && Object.keys(applied.strategyProps).length
+          ? applied.strategyProps
+          : undefined;
     const scriptForEngine = applyStrategyPropsToSource(script, strategyProps);
     let engineLibraries: import('../plugins/types').EngineLibrarySource[] | undefined;
     try {
@@ -801,13 +811,28 @@ async function runAndApplyInner(
   }
 
   let paneId = 'price';
+  /** Previous sub-pane when migrating off the legacy shared `indicator` pane. */
+  let previousSubPane: string | null = null;
   if (!overlay) {
-    // Always use the stable shared sub-pane id so store.panes, manager, and
-    // script.paneId stay aligned (random addPane ids left empty orphan panes).
-    paneId = 'indicator';
+    // One sub-pane per non-overlay script (not a single shared `indicator` pane).
+    // Re-runs keep the script’s existing private pane; first run / legacy shared
+    // pane gets a stable `ind_<scriptId>` host so RSI + MACD stack as separate panes.
+    const reserved = new Set(['price', 'volume']);
+    const legacyShared = 'indicator';
+    if (
+      existing?.paneId &&
+      !reserved.has(existing.paneId) &&
+      existing.paneId !== legacyShared
+    ) {
+      paneId = existing.paneId;
+    } else {
+      const key = indicatorId || newEntityId();
+      paneId = `ind_${String(key).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 56)}`;
+      if (existing?.paneId === legacyShared) previousSubPane = legacyShared;
+    }
     try {
       if (!manager.getPane(paneId)) {
-        addPane('indicator', scriptName, { id: 'indicator', height: 140 });
+        addPane('indicator', scriptName, { id: paneId, height: 140 });
         manager.createPane(paneId, 'indicator', scriptName, 140);
         manager.syncTimeScales();
       } else {
@@ -817,11 +842,43 @@ async function runAndApplyInner(
           /* ignore */
         }
       }
-      // Drop orphan store panes (legacy random ids) left empty without a manager pane
+      // Migrating off legacy shared pane — drop this script’s series there
+      if (previousSubPane && previousSubPane !== paneId) {
+        try {
+          const owner = indicatorId ?? EDITOR_RUN_KEY;
+          if (typeof manager.removeOverlaysForOwner === 'function') {
+            manager.removeOverlaysForOwner(previousSubPane, owner);
+          }
+        } catch {
+          /* ignore */
+        }
+        // Destroy legacy shared pane when no scripts still reference it
+        if (
+          !store.scripts.some(
+            (s) => s.paneId === previousSubPane && s.id !== indicatorId,
+          )
+        ) {
+          try {
+            manager.destroyPane(previousSubPane);
+          } catch {
+            /* ignore */
+          }
+          if (store.panes.some((p) => p.id === previousSubPane)) {
+            try {
+              removePane(previousSubPane);
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      }
+      // Drop orphan store panes left empty without a manager pane / script.
+      // Never treat the pane we just created for this run as an orphan (script
+      // may not be in store.scripts until after apply).
       for (const p of [...store.panes]) {
         if (
           p.type === 'indicator' &&
-          p.id !== 'indicator' &&
+          p.id !== paneId &&
           !manager.getPane(p.id) &&
           !store.scripts.some((s) => s.paneId === p.id)
         ) {
@@ -836,7 +893,7 @@ async function runAndApplyInner(
       for (const mp of manager.getAllPanes()) {
         if (
           mp.type === 'indicator' &&
-          mp.id !== 'indicator' &&
+          mp.id !== paneId &&
           !store.scripts.some((s) => s.paneId === mp.id)
         ) {
           try {
@@ -859,7 +916,31 @@ async function runAndApplyInner(
   } else if (existing?.paneId && existing.paneId !== 'price' && existing.paneId !== 'volume') {
     // Was a sub-pane script, now true overlay — clear stale series on old pane
     try {
-      manager.removeOverlays(existing.paneId);
+      const owner = indicatorId ?? EDITOR_RUN_KEY;
+      if (typeof manager.removeOverlaysForOwner === 'function') {
+        manager.removeOverlaysForOwner(existing.paneId, owner);
+      } else {
+        manager.removeOverlays(existing.paneId);
+      }
+      // Destroy empty private sub-pane
+      if (
+        !store.scripts.some(
+          (s) => s.paneId === existing.paneId && s.id !== indicatorId,
+        )
+      ) {
+        try {
+          manager.destroyPane(existing.paneId);
+        } catch {
+          /* ignore */
+        }
+        if (store.panes.some((p) => p.id === existing.paneId)) {
+          try {
+            removePane(existing.paneId);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
     } catch {
       /* ignore */
     }

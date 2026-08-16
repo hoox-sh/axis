@@ -193,7 +193,7 @@ describe('Catalog → registry bridge', () => {
   it('ensureEnginesRegistered populates registry', () => {
     ensureEnginesRegistered();
     const ids = listEngines().map((e) => e.id);
-    expect(ids).toEqual(expect.arrayContaining(['server', 'pyodide']));
+    expect(ids).toEqual(expect.arrayContaining(['server', 'pyne-worker', 'pyodide']));
   });
 
   it('ensureBuiltins includes local storage', () => {

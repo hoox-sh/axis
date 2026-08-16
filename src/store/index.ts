@@ -117,6 +117,11 @@ import {
 let idCounter = 0;
 const uid = () => `id_${Date.now()}_${++idCounter}`;
 
+/** Public id generator for stable pane / script keys (chart apply path). */
+export function newEntityId(): string {
+  return uid();
+}
+
 /** Current AXIS app-state localStorage key. */
 export const STORAGE_KEY = 'pynescript.axis.v1';
 /** Older app-state keys — read once and write forward. */
@@ -488,6 +493,8 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         typeof (bag as { editorStrategyProps?: unknown }).editorStrategyProps === 'object'
           ? ((bag as { editorStrategyProps: Record<string, unknown> }).editorStrategyProps)
           : DEFAULTS.editorStrategyProps,
+      // Applied chart scripts (code + pane + colors) — durable so reopen re-paints
+      scripts: sanitizePersistedScripts(bag.scripts),
       // Ephemeral UI — never hydrate open modals / crosshair from disk
       scriptSettings: { open: false, indicatorId: null },
       crosshair: { time: null, barIndex: null },
@@ -715,6 +722,58 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
 }
 
 /**
+ * Normalize applied-script list from disk. Drops entries without id/code so
+ * reopen cannot re-apply empty shells. Keeps paneId / colors / inputs.
+ */
+export function sanitizePersistedScripts(raw: unknown): Indicator[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Indicator[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < raw.length; i++) {
+    const s = raw[i];
+    if (!s || typeof s !== 'object') continue;
+    const o = s as Record<string, unknown>;
+    const id = typeof o.id === 'string' ? o.id.trim() : '';
+    const code = typeof o.code === 'string' ? o.code : '';
+    if (!id || !code.trim()) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const name =
+      typeof o.name === 'string' && o.name.trim() ? o.name.trim() : `Script ${i + 1}`;
+    const paneId =
+      typeof o.paneId === 'string' && o.paneId.trim() ? o.paneId.trim() : 'price';
+    const plots: Record<string, { color: string }> = {};
+    if (o.plots && typeof o.plots === 'object' && !Array.isArray(o.plots)) {
+      for (const [k, v] of Object.entries(o.plots as Record<string, unknown>)) {
+        if (v && typeof v === 'object' && typeof (v as { color?: unknown }).color === 'string') {
+          plots[k] = { color: String((v as { color: string }).color) };
+        }
+      }
+    }
+    const item: Indicator = {
+      id,
+      name,
+      code,
+      paneId,
+      visible: o.visible !== false,
+      plots,
+    };
+    if (o.inputValues && typeof o.inputValues === 'object' && !Array.isArray(o.inputValues)) {
+      item.inputValues = { ...(o.inputValues as Record<string, unknown>) };
+    }
+    if (
+      o.strategyProps &&
+      typeof o.strategyProps === 'object' &&
+      !Array.isArray(o.strategyProps)
+    ) {
+      item.strategyProps = { ...(o.strategyProps as Record<string, unknown>) };
+    }
+    out.push(item);
+  }
+  return out;
+}
+
+/**
  * Hydrate durable fields from localStorage. Corrupt JSON is dropped (key cleared)
  * and never throws — boot always gets defaults + any valid overlay.
  */
@@ -860,8 +919,28 @@ export function setActivePlugin(
         'telemetry',
         'engine',
         'transport',
-        id === 'pyodide' ? 'local' : id === 'server' ? 'ws' : store.telemetry.engine.transport,
+        id === 'pyodide'
+          ? 'local'
+          : id === 'server'
+            ? 'ws'
+            : id === 'pyne-worker'
+              ? 'rest'
+              : store.telemetry.engine.transport,
       );
+      // Seed Backend URL when switching to pyne-worker if endpoint is empty or Flask loopback
+      if (id === 'pyne-worker') {
+        const ep = String(store.endpoint || '').trim();
+        const isPw = /pyne-worker|pine-worker/i.test(ep);
+        const isLoop =
+          !ep ||
+          /127\.0\.0\.1|localhost/i.test(ep) ||
+          ep.includes(':5002');
+        if (!isPw && isLoop) {
+          setStore('endpoint', 'https://pyne-worker.cryptolinx.workers.dev');
+        } else if (!isPw && !ep) {
+          setStore('endpoint', 'https://pyne-worker.cryptolinx.workers.dev');
+        }
+      }
     }
   }
   persist();

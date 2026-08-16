@@ -275,6 +275,19 @@ export function clearScriptPaneLayers() {
   scriptPaneLayers.clear();
 }
 
+/** Drop one script-only layer when its sub-pane is destroyed. */
+export function clearScriptPaneLayer(paneId: string) {
+  if (!paneId) return;
+  const layer = scriptPaneLayers.get(paneId);
+  if (!layer) return;
+  try {
+    layer.destroy();
+  } catch {
+    /* ignore */
+  }
+  scriptPaneLayers.delete(paneId);
+}
+
 /** Replace or clear the module-local layer ref (e.g. on chart teardown). */
 export function setDrawingLayer(layer: DrawingLayer | undefined, slotId?: string) {
   const id = slotId || getActiveSlotId();
@@ -351,6 +364,12 @@ function ensureDrawingLayer() {
 export type SetDataToChartOpts = {
   /** Reset viewport to fit all bars (full loads only; never live ticks). Default true. */
   fit?: boolean;
+  /**
+   * When true (default if `fit`), clear Pine overlays / script drawings before paint.
+   * Set false on ChartHost chartDataGen rebinds so a second paint does not wipe
+   * scripts that load-symbol already re-applied.
+   */
+  clearScriptState?: boolean;
   /** Clear trade markers before applying OHLCV. Default true for full loads. */
   clearMarkers?: boolean;
 };
@@ -497,6 +516,9 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
   try {
     const fit = opts.fit !== false;
     const clearMarkers = opts.clearMarkers !== false;
+    // Clearing script state is opt-out when fitting (default clear on full loads)
+    const clearScriptState =
+      opts.clearScriptState !== undefined ? !!opts.clearScriptState : fit;
     const pricePane = mgr.getPane('price');
     const volPane = mgr.getPane('volume');
     const chartType = normalizeChartType(store.chartType);
@@ -516,7 +538,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
     }
 
     // Full history replace (symbol / interval): wipe script visuals before paint
-    if (fit) {
+    if (clearScriptState) {
       clearChartScriptState(mgr, getDrawingLayer());
       // Drop selection that may point at a drawing not on the new symbol
       setSelectedDrawingId(null);

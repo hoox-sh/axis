@@ -102,10 +102,34 @@ export function getActiveStreamConfig(): Record<string, unknown> {
 export function getActiveEngineConfig(): Record<string, unknown> {
   const base = pluginConfig('engine', getActiveEngineId());
   ensureBuiltins();
-  const engine = registry.getEngine(getActiveEngineId());
+  const id = getActiveEngineId();
+  const engine = registry.getEngine(id);
+
+  // pyne-worker: prefer pluginsConfig / a matching store.endpoint / production default
+  // so a leftover Flask localhost URL does not override the edge host.
+  if (id === 'pyne-worker') {
+    try {
+      // Lazy import path avoided — resolve inline to keep active.ts light
+      const fromCfg = String(base.endpoint || '').trim();
+      const fromStore = String(store.endpoint || '').trim();
+      const looksPw = (s: string) => /pyne-worker|pine-worker/i.test(s);
+      const endpoint = (
+        fromCfg ||
+        (looksPw(fromStore) ? fromStore : '') ||
+        'https://pyne-worker.cryptolinx.workers.dev'
+      ).replace(/\/$/, '');
+      return { ...base, endpoint };
+    } catch {
+      return {
+        ...base,
+        endpoint: 'https://pyne-worker.cryptolinx.workers.dev',
+      };
+    }
+  }
+
   // store.endpoint is the Settings field of record — must win over a stale
   // pluginsConfig.endpoint left over from older saves / presets.
-  if (store.endpoint && (engine?.configSchema?.endpoint || getActiveEngineId() === 'server')) {
+  if (store.endpoint && (engine?.configSchema?.endpoint || id === 'server')) {
     return { ...base, endpoint: store.endpoint };
   }
   return base;

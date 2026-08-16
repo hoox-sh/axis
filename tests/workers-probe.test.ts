@@ -66,9 +66,19 @@ describe('probeWorker http-health', () => {
     expect(r.error).toBeTruthy();
   });
 
-  it('skips pyne-worker (no automatic probe)', async () => {
-    const r = await probeWorker('pyne-worker');
-    expect(r.status).toBe('skipped');
+  it('probes pyne-worker /health when default endpoint is set', async () => {
+    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      expect(url).toContain('pyne-worker');
+      expect(url).toContain('/health');
+      return new Response(
+        JSON.stringify({ status: 'ok', worker: 'pyne-worker', features: {} }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }) as typeof fetch;
+    const r = await probeWorker('pyne-worker', { timeoutMs: 500 });
+    expect(r.status).toBe('healthy');
+    expect(r.endpoint).toContain('pyne-worker');
   });
 
   it('returns unknown for bogus id', async () => {

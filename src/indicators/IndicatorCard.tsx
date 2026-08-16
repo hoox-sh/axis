@@ -32,7 +32,7 @@ import { Component, For, Show, createMemo, createSignal } from 'solid-js';
 import type { Indicator } from '../store/types';
 import {
   toggleIndicator,
-  removeIndicator,
+
   setIndicatorColor,
   openScriptSettings,
   store,
@@ -180,17 +180,9 @@ export const IndicatorCard: Component<Props> = (props) => {
   const toggle = () => toggleIndicator(props.indicator.id);
 
   const remove = () => {
-    const manager = getManager();
-    if (manager) {
-      manager.removeOverlays(props.indicator.paneId);
-      if (
-        props.indicator.paneId !== 'price' &&
-        props.indicator.paneId !== 'volume'
-      ) {
-        manager.destroyPane(props.indicator.paneId);
-      }
-    }
-    removeIndicator(props.indicator.id);
+    void import('./detach').then(({ detachIndicatorFromChart }) => {
+      detachIndicatorFromChart(props.indicator.id);
+    });
   };
 
   const reRun = () => {

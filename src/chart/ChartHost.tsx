@@ -117,7 +117,7 @@ export interface ChartHostProps {
 /** Paint path that never throws into Solid effects. */
 function safePaint(
   bars: typeof store.bars,
-  opts: { fit?: boolean; clearMarkers?: boolean },
+  opts: { fit?: boolean; clearMarkers?: boolean; clearScriptState?: boolean },
   context: string,
 ) {
   try {
@@ -374,10 +374,16 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     if (!getManager()) return;
     untrack(() => {
       if (!alive || !store.bars.length) return;
-      // Respect bar-replay cursor so reloads / paint paths don't flash full history
+      // Rebind OHLCV only — do NOT clear script overlays here.
+      // load-symbol / DSM already clear+paint+reapply; a second fit:true wipe
+      // after reapply left empty panes / 1–2 bar leftovers.
       safePaint(
         barsForPaint(store.bars),
-        { fit: !isReplayActive() },
+        {
+          fit: !isReplayActive(),
+          clearMarkers: false,
+          clearScriptState: false,
+        },
         'Chart data reload',
       );
       setSlotBars(slotId(), store.bars, false);

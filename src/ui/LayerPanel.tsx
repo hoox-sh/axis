@@ -33,7 +33,7 @@ import {
   isPanelOpen,
   setPaneVisible,
   toggleIndicator,
-  removeIndicator,
+
   clearDrawingsForSymbol,
   openScriptSettings,
   setSelectedDrawingId,
@@ -110,27 +110,36 @@ export const LayerPanel: Component = () => {
     const manager = getManager();
     if (!manager) return;
     if (currentlyVisible) {
+      // Hide only this script’s series — keep siblings on the same pane
       try {
-        manager.removeOverlays(paneId);
-      } catch {
-        /* ignore */
-      }
-    }
-  };
-
-  const onRemoveIndicator = (id: string, paneId: string) => {
-    const manager = getManager();
-    if (manager) {
-      try {
-        manager.removeOverlays(paneId);
-        if (paneId !== 'price' && paneId !== 'volume') {
-          manager.destroyPane(paneId);
+        if (typeof manager.removeOverlaysForOwner === 'function') {
+          manager.removeOverlaysForOwner(paneId, id);
+        } else {
+          manager.removeOverlays(paneId);
         }
       } catch {
         /* ignore */
       }
+    } else {
+      // Turning back on — re-run to repaint
+      const script = store.scripts.find((s) => s.id === id);
+      if (script?.code?.trim()) {
+        void import('../indicators/runner').then(({ runAndApply }) => {
+          void runAndApply(script.code, id, {
+            silent: true,
+            openResults: false,
+            inputs: script.inputValues,
+            strategyProps: script.strategyProps,
+          });
+        });
+      }
     }
-    removeIndicator(id);
+  };
+
+  const onRemoveIndicator = (id: string, _paneId: string) => {
+    void import('../indicators/detach').then(({ detachIndicatorFromChart }) => {
+      detachIndicatorFromChart(id);
+    });
   };
 
   /** Push the active-symbol list to the layer (never the full multi-symbol store). */

@@ -325,20 +325,27 @@ export const WorkersManager: Component<Props> = (props) => {
     }
   };
 
-  const setBackend = (endpoint: string, label: string) => {
+  const setBackend = (endpoint: string, label: string, engineId = 'server') => {
     const base = endpoint.replace(/\/$/, '');
     if (!base) return;
     setBusyAction('backend');
     setActionErr('');
     try {
       setStore('endpoint', base);
-      setActivePlugin('engine', 'server');
-      const key = pluginKey('engine', 'server');
+      // pyne-worker catalog entry activates the dedicated edge engine plugin
+      const eng =
+        engineId === 'pyne-worker' || /pyne-worker|pine-worker/i.test(base)
+          ? 'pyne-worker'
+          : engineId === 'pyodide'
+            ? 'pyodide'
+            : 'server';
+      setActivePlugin('engine', eng);
+      const key = pluginKey('engine', eng);
       const prev = (store.pluginsConfig?.[key] || {}) as Record<string, unknown>;
       setStore('pluginsConfig', key, { ...prev, endpoint: base });
       flushPersist();
       setCustomEndpoint(base);
-      setActionMsg(`Backend → ${label} (${base})`);
+      setActionMsg(`Backend → ${label} (${base}) · engine=${eng}`);
       setStatus('ready', `Workers · backend ${base}`);
       void refresh();
     } catch (e: unknown) {
@@ -759,6 +766,7 @@ export const WorkersManager: Component<Props> = (props) => {
                               setBackend(
                                 w().defaultEndpoint || w().localEndpoint || '',
                                 w().name,
+                                w().id === 'pyne-worker' ? 'pyne-worker' : 'server',
                               )
                             }
                           >
@@ -775,7 +783,7 @@ export const WorkersManager: Component<Props> = (props) => {
                             Use local endpoint
                           </button>
                         </Show>
-                        <Show when={w().canUseAsEngine}>
+                        <Show when={w().canUseAsEngine && w().id === 'pyodide'}>
                           <button
                             type="button"
                             class="sc-btn sc-btn-primary justify-start text-[11px]"
@@ -788,6 +796,24 @@ export const WorkersManager: Component<Props> = (props) => {
                               <Icons.play size={12} />
                             )}
                             Use as engine + preload
+                          </button>
+                        </Show>
+                        <Show when={w().canUseAsEngine && w().id === 'pyne-worker'}>
+                          <button
+                            type="button"
+                            class="sc-btn sc-btn-primary justify-start text-[11px]"
+                            disabled={!!busyAction()}
+                            onClick={() =>
+                              setBackend(
+                                w().defaultEndpoint ||
+                                  'https://pyne-worker.cryptolinx.workers.dev',
+                                w().name,
+                                'pyne-worker',
+                              )
+                            }
+                          >
+                            <Icons.play size={12} />
+                            Use pyne-worker engine
                           </button>
                         </Show>
                         <Show when={w().pluginUrl}>

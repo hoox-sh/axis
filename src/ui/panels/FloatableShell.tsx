@@ -21,8 +21,10 @@
  * Floatable / dockable panel chrome with drag handle + skeleton preview.
  *
  * ## Lifecycle
- * - Reads `getPanelChrome(id)`; header drag (hold ~280ms or move past threshold)
- *   starts a global drag preview consumed by {@link PanelDragOverlay}.
+ * - Reads `getPanelChrome(id)`; title-bar **drag** (move past threshold) starts a
+ *   global drag preview consumed by {@link PanelDragOverlay}. A plain click on
+ *   the title does **not** undock/float the panel.
+ * - Hamburger: click → dock menu; hold (~280ms) or drag → move panel.
  * - Dock menu: left/right/bottom/float/window; window may call `onPopoutWindow`.
  * - Float mode: free geometry via `setPanelGeometry` + `bumpPanelZ`.
  *
@@ -483,13 +485,52 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     window.addEventListener('pointercancel', onUp);
   };
 
-  /** Title bar: drag immediately (not hamburger / menu / close). */
+  /**
+   * Title bar: **drag to undock/move** only after the pointer moves past
+   * {@link MOVE_PX}. A plain click must not float a docked panel out.
+   * (Buttons / menu / inputs are ignored.)
+   */
   const onHandlePointerDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
     if (target.closest('button, a, input, select, textarea, .axis-panel-menu')) return;
     e.preventDefault();
-    beginMoveDrag(e.clientX, e.clientY);
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let started = false;
+
+    const startDrag = (clientX: number, clientY: number) => {
+      if (started) return;
+      started = true;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      beginMoveDrag(clientX, clientY);
+    };
+
+    const onMove = (ev: PointerEvent) => {
+      if (started) return;
+      if (
+        Math.abs(ev.clientX - startX) > MOVE_PX ||
+        Math.abs(ev.clientY - startY) > MOVE_PX
+      ) {
+        // Use current pointer so the first move frame matches the hand
+        startDrag(ev.clientX, ev.clientY);
+      }
+    };
+
+    const onUp = () => {
+      // Click (no threshold move): leave docked — do not float
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      if (!started && isOverlay()) bumpPanelZ(props.id);
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   };
 
   /**
@@ -927,14 +968,14 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
               if (hoverCollapsed()) expandHoverSlide();
             }}
           >
-            {/* Title bar — drag on title; hamburger click = menu, hold = drag */}
+            {/* Title bar — drag (move) to undock/move; click alone stays docked */}
             <div
               class="axis-panel-handle sc-float-panel-header cursor-grab active:cursor-grabbing select-none relative"
               onPointerDown={onHandlePointerDown}
               title={
                 hoverCollapsed()
                   ? `${title()} — hover to expand`
-                  : 'Drag title to move · drop on edges to dock'
+                  : 'Drag title to move or undock · click does not float · drop on edges to dock'
               }
             >
               <div

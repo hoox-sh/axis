@@ -297,20 +297,10 @@ export async function loadSymbolData(
     }
 
     // Re-apply visible indicators/strategies on the new OHLCV (silent)
-    if (stillCurrent() && store.scripts.some((s) => s.visible && s.code?.trim())) {
+    if (stillCurrent()) {
       try {
-        const { runAndApply } = await import('../indicators/runner');
-        const { orderIndicatorsByPlotDeps } = await import('../results/plot-sources');
-        const ordered = orderIndicatorsByPlotDeps(
-          store.scripts.filter((s) => s.visible && s.code?.trim()),
-        );
-        for (const ind of ordered) {
-          if (!stillCurrent()) break;
-          await runAndApply(ind.code, ind.id, {
-            silent: true,
-            openResults: false,
-          });
-        }
+        const { reapplyChartScripts } = await import('../indicators/reapply');
+        await reapplyChartScripts({ stillCurrent });
       } catch {
         /* re-run optional — user can re-run manually */
       }
@@ -348,20 +338,10 @@ export async function loadSymbolData(
         );
         announce(`Offline cached ${cached.length} bars ${sym} ${iv}`);
         // Do not auto-start live on offline cache (no reliable venue stream)
-        if (stillCurrent() && store.scripts.some((s) => s.visible && s.code?.trim())) {
+        if (stillCurrent()) {
           try {
-            const { runAndApply } = await import('../indicators/runner');
-            const { orderIndicatorsByPlotDeps } = await import('../results/plot-sources');
-            const ordered = orderIndicatorsByPlotDeps(
-              store.scripts.filter((s) => s.visible && s.code?.trim()),
-            );
-            for (const ind of ordered) {
-              if (!stillCurrent()) break;
-              await runAndApply(ind.code, ind.id, {
-                silent: true,
-                openResults: false,
-              });
-            }
+            const { reapplyChartScripts } = await import('../indicators/reapply');
+            await reapplyChartScripts({ stillCurrent });
           } catch {
             /* re-run optional */
           }

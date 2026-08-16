@@ -80,10 +80,16 @@ overlay = resolveOverlayFlag(meta.overlay, script_type)
 
 if overlay && seriesWouldHideOnPrice(plots, bars):
   overlay = false   // RSI / scaled oscillators on BTC scale
-paneId = overlay ? 'price' : 'indicator'   // stable id `indicator`
+paneId = overlay ? 'price' : `ind_<scriptId>`   // one sub-pane per script
 ```
 
-Non-overlay ensures store + manager pane id **`indicator`** (not a random uid). Orphan empty indicator panes are cleaned up. After apply, sub-panes force autoScale / resize so lines paint on first run.
+Each non-overlay script gets its own sub-pane (`ind_<id>`), not a shared `indicator` host. Re-runs keep the script’s private pane; legacy shared `indicator` panes migrate on re-run. Removing a script clears only that owner’s series and destroys the sub-pane only when empty.
+
+### Persist + reopen
+
+Applied scripts (`store.scripts` with full `code`, `paneId`, colors, inputs, strategy props) are written to localStorage with the rest of durable UI state. On boot they hydrate via `sanitizePersistedScripts`. After each successful history paint (`load-symbol`, DSM cache apply), `reapplyChartScripts` silently re-runs every visible script in plot-dependency order so the chart matches the saved set without manual re-run.
+
+Detach path: `detachIndicatorFromChart` (Scripts panel, Layers, pane badges) — owner-scoped overlay clear, orphan pane sweep, no sibling wipe.
 
 Prefer `indicator(..., overlay=false)` and raw `plot(rsi)` for oscillators — not `strategy(..., overlay=true)` with `rsi * 0.01` on price.
 
