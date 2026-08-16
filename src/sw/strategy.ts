@@ -19,6 +19,7 @@
  * 6. Self-hosted pyodide + vendor paths are same-origin static → cache-first
  *    after first successful fetch (offline engine).
  * 7. Navigation is network-first with shell fallback (fresh HTML when online).
+ * 8. Navigation never rejects `respondWith` — offline shell HTML if cache miss.
  *
  * ## Manual checklist (DevTools → Application)
  *
@@ -30,7 +31,7 @@
  */
 
 /** Bump when shell precache or strategy semantics change. */
-export const SW_VERSION = 'v4';
+export const SW_VERSION = 'v5';
 
 export const CACHE_PREFIX = 'axis-';
 

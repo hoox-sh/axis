@@ -47,7 +47,13 @@ export type WsStatus = {
 
 /** Options for {@link openReconnectableWs}. */
 export interface ReconnectableWsOpts {
+  /** Primary URL (used when `urls` is empty). */
   url: string;
+  /**
+   * Optional URL rotation list. On each reconnect attempt the next entry is
+   * tried (wraps). Useful when port 9443 is firewalled but 443 works.
+   */
+  urls?: string[];
   /** Called after each successful open (re-subscribe here). */
   onOpen?: (ws: WebSocket) => void;
   onMessage: (ev: MessageEvent, ws: WebSocket) => void;
@@ -67,14 +73,21 @@ export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
   const maxAttempts = Math.max(0, opts.maxAttempts ?? RECONNECT_DEFAULTS.maxAttempts);
   const baseDelayMs = Math.max(0, opts.baseDelayMs ?? RECONNECT_DEFAULTS.baseDelayMs);
   const maxDelayMs = Math.max(baseDelayMs, opts.maxDelayMs ?? RECONNECT_DEFAULTS.maxDelayMs);
+  const urlList = (opts.urls && opts.urls.length ? opts.urls : [opts.url]).filter(
+    (u) => typeof u === 'string' && u.trim() !== '',
+  );
+  const urls = urlList.length ? urlList : [opts.url];
 
   let stopped = false;
   let ws: WebSocket | null = null;
   let attempt = 0;
+  let urlIndex = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let openedOnce = false;
   /** Bumped on every connect/stop so late events from a detached socket are ignored. */
   let sockGen = 0;
+
+  const currentUrl = () => urls[urlIndex % urls.length] || opts.url;
 
   const clearTimer = () => {
     if (timer != null) {
@@ -108,15 +121,36 @@ export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
       ws = null;
     }
     const gen = ++sockGen;
+    const url = currentUrl();
     try {
-      ws = new WebSocket(opts.url);
+      ws = new WebSocket(url);
     } catch (e) {
-      stopped = true;
-      try {
-        opts.onError(e instanceof Error ? e : new Error(String(e)));
-      } catch {
-        /* ignore */
+      // Construction failure (bad scheme / env). With a single URL, fail hard like
+      // before; with a rotation list, try the next host once per attempt budget.
+      if (urls.length <= 1) {
+        stopped = true;
+        try {
+          opts.onError(e instanceof Error ? e : new Error(String(e)));
+        } catch {
+          /* ignore */
+        }
+        return;
       }
+      attempt += 1;
+      urlIndex = (urlIndex + 1) % urls.length;
+      if (attempt > maxAttempts) {
+        stopped = true;
+        try {
+          opts.onError(e instanceof Error ? e : new Error(String(e)));
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+      const delay = nextBackoffMs(attempt, baseDelayMs, maxDelayMs);
+      timer = setTimeout(() => {
+        if (!stopped && gen === sockGen) connect();
+      }, delay);
       return;
     }
 
@@ -129,7 +163,7 @@ export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
       attempt = 0;
       openedOnce = true;
       try {
-        opts.onStatus({ state: 'open', url: opts.url, detail: opts.url });
+        opts.onStatus({ state: 'open', url, detail: url });
       } catch {
         /* ignore */
       }
@@ -165,6 +199,8 @@ export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
         return;
       }
       attempt += 1;
+      // Rotate host/port on every unexpected close so firewalled 9443 can fall through
+      urlIndex = (urlIndex + 1) % urls.length;
       if (attempt > maxAttempts) {
         // Terminal — no further reconnects; treat as stopped so stop() is a no-op
         stopped = true;
@@ -187,10 +223,11 @@ export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
         return;
       }
       const delay = nextBackoffMs(attempt, baseDelayMs, maxDelayMs);
+      const next = currentUrl();
       try {
         opts.onStatus({
           state: 'reconnecting',
-          url: opts.url,
+          url: next,
           detail: `attempt ${attempt}/${maxAttempts} in ${delay}ms`,
         });
       } catch {

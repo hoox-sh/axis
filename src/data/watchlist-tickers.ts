@@ -43,6 +43,8 @@
  * by the WS layer so REST and live keys stay aligned.
  */
 
+import { fetchBinanceJson } from './binance-http';
+
 /** One row’s quote state as stored by the Watchlist UI. */
 export interface WatchTicker {
   price: number;
@@ -116,16 +118,16 @@ export async function fetchWatchlistTickers(
 /** Binance batch 24hr ticker; maps exchange `symbol` back to watchlist keys. */
 async function fetchBinance(symbols: string[]): Promise<Record<string, WatchTicker>> {
   const syms = symbols.map(toUsdt);
-  const res = await fetch(
-    `https://api.binance.com/api/v3/ticker/24hr?symbols=${JSON.stringify(syms)}`,
-  );
-  if (!res.ok) throw new Error(`binance ${res.status}`);
-  const data = (await res.json()) as Array<{
+  const data = (await fetchBinanceJson({
+    path: 'ticker/24hr',
+    query: `symbols=${JSON.stringify(syms)}`,
+  })) as Array<{
     symbol: string;
     lastPrice: string;
     priceChangePercent: string;
     openPrice?: string;
   }>;
+  if (!Array.isArray(data)) throw new Error('binance ticker: unexpected body');
   const next: Record<string, WatchTicker> = {};
   for (const t of data) {
     // Map back to original key if present

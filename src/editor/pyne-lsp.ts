@@ -20,13 +20,13 @@
 /**
  * Pine **language intelligence** for AXIS CodeMirror (completions + hover).
  *
- * Strategy:
- * 1. Prefer **remote LSP** via pyne Pro API (`POST /lsp/completion`, `/lsp/hover`)
- *    when engine=`server` and Backend URL is set (local or VPS).
- * 2. Fall back to **local doc annotations** in the open buffer
- *    (`//@function`, `//@param`, `//@returns`, `//@type`, …) rendered as markdown.
- * 3. Fall back to **client metadata** from `data/pyne-builtins.json` for
- *    pyodide / offline / remote failure.
+ * Strategy (local-first so a dead Backend URL never blocks UI):
+ * 1. **Local doc annotations** in the open buffer (`//@function`, `//@param`, …).
+ * 2. **Client metadata** from `data/pyne-builtins.json` (always available).
+ * 3. Optional **remote LSP** via pyne Pro API (`POST /lsp/completion`, `/lsp/hover`)
+ *    when engine is server/worker, Backend URL is set, and not in failure cooldown.
+ *
+ * Triggers: typing (`activateOnTyping`), **⌘/Ctrl-Space** (`startCompletion`).
  *
  * Exports {@link pyneLspExtensions} for mounting on {@link PyneEditor}.
  * Indexes builtins by top-level name, module members (`ta.sma`), and full name
@@ -39,6 +39,7 @@ import {
   autocompletion,
   completionKeymap,
   snippetCompletion,
+  startCompletion,
   type Completion,
   type CompletionContext,
   type CompletionResult,
@@ -49,6 +50,8 @@ import builtinsJson from './data/pyne-builtins.json';
 import {
   fetchRemoteCompletion,
   fetchRemoteHover,
+  LSP_COMPLETION_TIMEOUT_MS,
+  LSP_HOVER_TIMEOUT_MS,
   shouldUseRemoteLsp,
   type RemoteCompletionItem,
 } from './pyne-lsp-client';
@@ -580,7 +583,10 @@ function completionFromPos(
   return { from, options, validFor: /^[\w.]*$/ };
 }
 
-/** Async completion: remote LSP first, then local metadata. */
+/**
+ * Completion: named-arg enums + local builtins always; optional remote enrich
+ * with a short timeout. Dead Backend URLs cool down so typing stays instant.
+ */
 export async function pyneComplete(
   context: CompletionContext,
 ): Promise<CompletionResult | null> {
@@ -591,53 +597,57 @@ export async function pyneComplete(
     if (named) return named;
   }
 
-  if (shouldUseRemoteLsp() && !context.aborted) {
-    const line = context.state.doc.lineAt(context.pos);
-    const source = context.state.doc.toString();
-    const lineNo = line.number - 1; // CM is 1-based line.number
-    const character = context.pos - line.from;
-    // CompletionContext has .aborted + abort listeners, not AbortSignal
-    const ac = new AbortController();
-    const timeoutMs = 4_000;
-    const timer = setTimeout(() => ac.abort(), timeoutMs);
-    context.addEventListener('abort', () => ac.abort());
-    let remote: Awaited<ReturnType<typeof fetchRemoteCompletion>>;
-    try {
-      remote = await fetchRemoteCompletion({
-        source,
-        line: lineNo,
-        character,
-        signal: ac.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-    if (remote?.length) {
-      // After module prefix, server may return full "ta.sma" labels — strip for apply after dot
-      const textBefore = line.text.slice(0, context.pos - line.from);
-      const afterDot = /([A-Za-z_][\w]*)\.\s*([A-Za-z_][\w]*)?$/.exec(textBefore);
-      const options = remote.slice(0, 80).map((item, i) => {
-        let it = item;
-        if (afterDot && item.label.startsWith(`${afterDot[1]}.`)) {
-          const member = item.label.slice(afterDot[1]!.length + 1);
-          it = {
-            ...item,
-            label: member,
-            insertText: item.insertText?.startsWith(`${afterDot[1]}.`)
-              ? item.insertText.slice(afterDot[1]!.length + 1)
-              : member.includes('(')
-                ? item.insertText
-                : item.insertTextFormat === 'snippet'
-                  ? item.insertText
-                  : `${member}(\${1})`,
-          };
-        }
-        return remoteItemToCompletion(it, 100 - Math.min(i, 40));
-      });
-      return completionFromPos(context, options);
-    }
+  // Local catalog first (instant, 1000+ builtins). Remote Pro API only fills
+  // gaps when local has nothing — never blocks typing / Cmd-Space on a dead host.
+  const localResult = pyneCompleteLocal(context);
+  if (localResult?.options?.length) return localResult;
+  if (!shouldUseRemoteLsp() || context.aborted) return localResult;
+
+  const line = context.state.doc.lineAt(context.pos);
+  const source = context.state.doc.toString();
+  const lineNo = line.number - 1; // CM is 1-based line.number
+  const character = context.pos - line.from;
+  const ac = new AbortController();
+  context.addEventListener('abort', () => ac.abort());
+  let remote: Awaited<ReturnType<typeof fetchRemoteCompletion>>;
+  try {
+    remote = await fetchRemoteCompletion({
+      source,
+      line: lineNo,
+      character,
+      signal: ac.signal,
+      timeoutMs: context.explicit
+        ? Math.min(600, LSP_COMPLETION_TIMEOUT_MS)
+        : LSP_COMPLETION_TIMEOUT_MS,
+    });
+  } catch {
+    remote = null;
   }
-  return pyneCompleteLocal(context);
+  if (remote?.length) {
+    // After module prefix, server may return full "ta.sma" labels — strip for apply after dot
+    const textBefore = line.text.slice(0, context.pos - line.from);
+    const afterDot = /([A-Za-z_][\w]*)\.\s*([A-Za-z_][\w]*)?$/.exec(textBefore);
+    const options = remote.slice(0, 80).map((item, i) => {
+      let it = item;
+      if (afterDot && item.label.startsWith(`${afterDot[1]}.`)) {
+        const member = item.label.slice(afterDot[1]!.length + 1);
+        it = {
+          ...item,
+          label: member,
+          insertText: item.insertText?.startsWith(`${afterDot[1]}.`)
+            ? item.insertText.slice(afterDot[1]!.length + 1)
+            : member.includes('(')
+              ? item.insertText
+              : item.insertTextFormat === 'snippet'
+                ? item.insertText
+                : `${member}(\${1})`,
+        };
+      }
+      return remoteItemToCompletion(it, 100 - Math.min(i, 40));
+    });
+    return completionFromPos(context, options);
+  }
+  return localResult;
 }
 
 function hoverDocs(meta: BuiltinMeta): string {
@@ -901,27 +911,47 @@ export function pyneHoverLocal(
   return makeHoverTooltip(hit.from, hit.to, meta.label, hoverDocs(meta), 'local metadata');
 }
 
-/** Async hover: remote LSP markdown first, then local. */
+/**
+ * Hover: **local builtins / doc annotations first** (instant), then optional
+ * remote Pro API for symbols missing from the client catalog.
+ *
+ * Previously remote was awaited first with a multi-second timeout whenever
+ * engine=`server` + Backend URL was set — a dead `localhost:5002` made hover
+ * appear broken (tooltip never showed before the pointer left).
+ */
 export async function pyneHover(view: EditorView, pos: number): Promise<Tooltip | null> {
   const doc = view.state.doc;
   const text = doc.toString();
   const hit = wordAt(text, pos);
   if (!hit) return null;
 
-  if (shouldUseRemoteLsp()) {
+  const local = pyneHoverLocal(view, pos);
+  // Instant path for ta.sma, plot, input.*, //@function, …
+  if (local) return local;
+
+  if (!shouldUseRemoteLsp()) return null;
+
+  try {
     const line = doc.lineAt(pos);
     const remote = await fetchRemoteHover({
       source: text,
       line: line.number - 1,
       character: pos - line.from,
+      timeoutMs: LSP_HOVER_TIMEOUT_MS,
     });
     if (remote?.contents) {
-      const from = remote.range
-        ? doc.line(remote.range.start.line + 1).from + remote.range.start.character
-        : hit.from;
-      const to = remote.range
-        ? doc.line(remote.range.end.line + 1).from + remote.range.end.character
-        : hit.to;
+      let from = hit.from;
+      let to = hit.to;
+      if (remote.range) {
+        try {
+          const startLine = doc.line(remote.range.start.line + 1);
+          const endLine = doc.line(remote.range.end.line + 1);
+          from = startLine.from + remote.range.start.character;
+          to = endLine.from + remote.range.end.character;
+        } catch {
+          /* keep wordAt range */
+        }
+      }
       return makeHoverTooltip(
         Math.max(0, from),
         Math.min(doc.length, to),
@@ -931,9 +961,22 @@ export async function pyneHover(view: EditorView, pos: number): Promise<Tooltip 
         { markdown: true },
       );
     }
+  } catch {
+    /* network / abort */
   }
-  return pyneHoverLocal(view, pos);
+  return null;
 }
+
+/**
+ * Extra completion triggers:
+ * - **Mod-Space** (⌘/Ctrl-Space) — VS Code style “trigger suggest”
+ * - **Ctrl-Space** kept for non-Mod platforms / CM default
+ * - **Alt-`** / **Alt-i** already in {@link completionKeymap}
+ */
+export const pyneCompletionTriggerKeymap = keymap.of([
+  { key: 'Mod-Space', run: startCompletion },
+  { key: 'Ctrl-Space', run: startCompletion },
+]);
 
 /** CodeMirror extensions: autocomplete + hover (remote LSP + local fallback). */
 export function pyneLspExtensions(): Extension[] {
@@ -945,9 +988,17 @@ export function pyneLspExtensions(): Extension[] {
       maxRenderedOptions: 64,
       defaultKeymap: true,
       icons: true,
+      // Open on explicit trigger even with empty prefix (Cmd/Ctrl-Space)
+      closeOnBlur: true,
     }),
+    // Mod-Space before completionKeymap so ⌘-Space is not swallowed elsewhere
+    pyneCompletionTriggerKeymap,
     keymap.of(completionKeymap),
-    hoverTooltip((view, pos) => pyneHover(view, pos), { hideOnChange: true }),
+    hoverTooltip((view, pos) => pyneHover(view, pos), {
+      hideOnChange: true,
+      // Slightly snappier than CM default (300ms)
+      hoverTime: 250,
+    }),
   ];
 }
 

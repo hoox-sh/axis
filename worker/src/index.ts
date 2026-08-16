@@ -33,6 +33,7 @@
  * | `/api/scripts…`      | {@link handleScripts}| Bearer API key; D1 or in-memory |
  * | `/api/git/oauth/…`   | {@link handleGitOAuth}| public; device-flow proxy (GitHub/GitLab) |
  * | `/api/onchain/…`     | {@link handleOnchain}| public; DefiLlama + GeckoTerminal allowlisted proxy |
+ * | `/api/market/…`      | {@link handleMarket}| public; Binance klines/ticker/exchangeInfo proxy |
  * | GET `/api/stream`    | SessionDO upgrade    | requires `SESSIONS` DO binding |
  * | OPTIONS `*`          | CORS preflight       | 204 |
  *
@@ -52,6 +53,7 @@ import { handleKeys } from './keys';
 import { handleScripts } from './scripts';
 import { handleGitOAuth } from './git-oauth';
 import { handleOnchain } from './onchain';
+import { handleMarket } from './market';
 import { SessionDO } from './durable-objects/session';
 
 export { SessionDO };
@@ -207,6 +209,12 @@ export default {
         if (onchainRes) return onchainRes;
       }
 
+      // CEX market data proxy (Binance klines / ticker / exchangeInfo — public, no auth)
+      if (url.pathname.startsWith('/api/market')) {
+        const marketRes = await handleMarket(req, env, origin, url.pathname);
+        if (marketRes) return marketRes;
+      }
+
       switch (url.pathname) {
         case '/':
         case '/health':
@@ -220,6 +228,7 @@ export default {
                 d1: !!env.DB,
                 keys: !!env.API_KEYS,
                 onchain: true,
+                market: true,
               },
             },
             { status: 200 },

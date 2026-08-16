@@ -60,6 +60,7 @@ import {
 import { sliceBarsForLoad } from '../data/bars-cache';
 import { expandCachedSeriesToNow } from '../data/expand-cache';
 import { getUploadedBars } from './upload-store';
+import { fetchBinanceJson } from '../data/binance-http';
 
 /** Parsed DEX pool id for {@link geckoTerminalOhlcv}. */
 export interface GeckoPoolRef {
@@ -374,7 +375,7 @@ export const binanceRest: SourcePlugin = {
   kind: 'source',
   builtIn: true,
   description:
-    'Public Binance kline API (api.binance.com). Falls back to a synthetic walk if the network is unavailable.',
+    'Public Binance kline API with host + Worker proxy fallback. Synthesizes a walk if every path fails.',
   capabilities: { needsNetwork: true },
   configSchema: {
     baseUrl: { type: 'string', default: 'https://api.binance.com', label: 'API base URL' },
@@ -391,14 +392,13 @@ export const binanceRest: SourcePlugin = {
       limit: String(limit),
     });
     appendTimeParams(params, { startTime, endTime }, 'ms');
-    const url = `${baseUrl}/api/v3/klines?${params}`;
     try {
-      const res = await fetch(url, {
-        cache: 'no-store',
+      const data = await fetchBinanceJson({
+        path: 'klines',
+        query: params.toString(),
+        baseUrl,
         signal: fetchSignal(signal),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
       if (!Array.isArray(data) || !data.length) throw new Error('empty kline response');
       // Binance: [openTimeMs, o, h, l, c, volume, ...]
       const bars = mapValidBars(data, (row) => {

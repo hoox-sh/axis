@@ -89,6 +89,10 @@ Paste the returned IDs into your local `wrangler.toml` (from the example).
 | `/api/scripts/:id`  | GET/PUT/DELETE | Read / upsert / delete          |
 | `/api/scripts/_draft` | GET/PUT | Per-user draft buffer              |
 | `/api/onchain/health` | GET  | On-chain proxy feature flags (public) |
+| `/api/market/health` | GET  | Market proxy feature flags (public) |
+| `/api/market/binance/klines` | GET | Allowlisted Binance klines proxy |
+| `/api/market/binance/ticker/24hr` | GET | Allowlisted Binance 24hr ticker proxy |
+| `/api/market/binance/exchangeInfo` | GET | Allowlisted Binance exchangeInfo proxy |
 | `/api/onchain/llama/protocols` | GET | DefiLlama protocols (allowlisted) |
 | `/api/onchain/llama/protocol/:slug` | GET | DefiLlama protocol TVL history |
 | `/api/onchain/gecko/networks/:net/pools/:addr/ohlcv/:tf` | GET | GeckoTerminal pool OHLCV |

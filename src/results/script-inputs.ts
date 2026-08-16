@@ -26,6 +26,9 @@
  *
  * Supports `input.int|float|bool|string|color|source|timeframe|symbol|session|price|enum|text_area`
  * and bare `input(...)`. Emits {@link ScriptInputDef} with stable `id` = title.
+ * Layout meta: `group`, `inline`, `tooltip` (`\\n`), `active` / `active=<ident>`,
+ * plus LHS `varName` for active resolution. String consts like
+ * `string GRP = "Moving Average"` resolve in `group=GRP`.
  *
  * **Source recovery:** bare `input(close, "Source")` and engine rows that
  * mis-type series defvals as float (resolved bar price) are coerced to
@@ -83,9 +86,41 @@ export interface ScriptInputDef {
   max?: number | null;
   step?: number | null;
   options?: string[];
+  /** Pine `group=` — section heading in Settings (case-sensitive). */
   group?: string | null;
+  /** Pine `tooltip=` — hover help; may contain `\n` line breaks. */
   tooltip?: string | null;
+  /**
+   * Pine `inline=` — same string places fields on one row (case-sensitive).
+   * The identifier itself is not shown.
+   */
+  inline?: string | null;
+  /**
+   * Static enable flag from `active=true|false`. When {@link activeRef} is set,
+   * the modal resolves enablement from the referenced input’s current value.
+   */
   active?: boolean;
+  /**
+   * Pine `active=<ident>` — LHS var of another input (e.g. `active=showMA`).
+   * Resolved at form-render time against {@link varName} of peer fields.
+   */
+  activeRef?: string | null;
+  /**
+   * LHS identifier of `name = input.*(...)` when parseable from source.
+   * Used to resolve `active=<ident>` dependencies.
+   */
+  varName?: string | null;
+}
+
+/** One visual row in the Inputs tab (single field or an `inline` cluster). */
+export type InputFormRow =
+  | { kind: 'single'; field: ScriptInputDef }
+  | { kind: 'inline'; key: string; fields: ScriptInputDef[] };
+
+/** Grouped rows for the Script Settings modal (declaration order preserved). */
+export interface InputFormGroup {
+  group: string;
+  rows: InputFormRow[];
 }
 
 /** True when `v` is a built-in OHLC/series source name (not a bar price). */
@@ -351,6 +386,110 @@ function parseOptions(raw: string | undefined): string[] | undefined {
   return parts.map((p) => String(parseLiteral(p) ?? unquote(p)));
 }
 
+/**
+ * Best-effort LHS of `name = input.*(` immediately before `callStart`.
+ * Skips type prefixes (`int length = input.int(...)`).
+ */
+export function findLhsIdent(src: string, callStart: number): string | null {
+  let i = callStart - 1;
+  while (i >= 0 && /[\s\u00a0]/.test(src[i]!)) i--;
+  if (i < 0 || src[i] !== '=') return null;
+  i--;
+  while (i >= 0 && /[\s\u00a0]/.test(src[i]!)) i--;
+  if (i < 0 || !/[\w]/.test(src[i]!)) return null;
+  const end = i;
+  while (i >= 0 && /[\w]/.test(src[i]!)) i--;
+  const ident = src.slice(i + 1, end + 1);
+  if (!/^[A-Za-z_]\w*$/.test(ident)) return null;
+  // Reject common type keywords mistaken as names
+  if (
+    /^(int|float|bool|string|color|source|series|simple|const|var|varip)$/i.test(
+      ident,
+    )
+  ) {
+    return null;
+  }
+  return ident;
+}
+
+/** Normalize Pine tooltip escapes (`\\n` → newline). */
+export function normalizeTooltip(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const s = String(raw);
+  if (!s) return null;
+  return s.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+}
+
+/**
+ * Whether a field should be editable given current form values.
+ * Resolves Pine `active=<ident>` against peer {@link ScriptInputDef.varName}.
+ */
+export function isInputActive(
+  field: ScriptInputDef,
+  all: readonly ScriptInputDef[],
+): boolean {
+  if (field.activeRef) {
+    const dep = all.find(
+      (f) => f.varName === field.activeRef || f.id === field.activeRef,
+    );
+    if (dep) {
+      const v = dep.value ?? dep.default;
+      return !!v;
+    }
+    // Unresolved ref — leave enabled so the user can still edit
+    return true;
+  }
+  return field.active !== false;
+}
+
+/**
+ * Layout fields into group → rows, clustering consecutive same-`inline` keys.
+ * Matches TradingView Settings: `group` sections, `inline` shared rows.
+ */
+export function layoutInputRows(
+  fields: readonly ScriptInputDef[],
+): InputFormGroup[] {
+  const groups: InputFormGroup[] = [];
+  const groupIndex = new Map<string, number>();
+
+  const ensureGroup = (name: string): InputFormGroup => {
+    const existing = groupIndex.get(name);
+    if (existing != null) return groups[existing]!;
+    const g: InputFormGroup = { group: name, rows: [] };
+    groupIndex.set(name, groups.length);
+    groups.push(g);
+    return g;
+  };
+
+  // Track open inline clusters per group so non-consecutive same keys don't merge
+  const openInline = new Map<string, { key: string; row: Extract<InputFormRow, { kind: 'inline' }> }>();
+
+  for (const f of fields) {
+    const gName = f.group?.trim() || 'Inputs';
+    const g = ensureGroup(gName);
+    const inlineKey = f.inline?.trim() || '';
+    if (!inlineKey) {
+      openInline.delete(gName);
+      g.rows.push({ kind: 'single', field: f });
+      continue;
+    }
+    const open = openInline.get(gName);
+    if (open && open.key === inlineKey) {
+      open.row.fields.push(f);
+      continue;
+    }
+    const row: Extract<InputFormRow, { kind: 'inline' }> = {
+      kind: 'inline',
+      key: inlineKey,
+      fields: [f],
+    };
+    g.rows.push(row);
+    openInline.set(gName, { key: inlineKey, row });
+  }
+
+  return groups;
+}
+
 function mapType(kind: string | undefined): ScriptInputType {
   switch (kind) {
     case 'int':
@@ -378,6 +517,55 @@ function mapType(kind: string | undefined): ScriptInputType {
 }
 
 /**
+ * Collect simple string constants for resolving `group=GRP` / `inline=ROW`
+ * when authors use `string GRP = "Moving Average"` (common Pine style).
+ */
+export function collectStringConsts(source: string): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!source) return map;
+  const re =
+    /(?:^|[\n;])\s*(?:string\s+)?([A-Za-z_]\w*)\s*=\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(source)) !== null) {
+    const name = m[1]!;
+    const lit = parseLiteral(m[2]!);
+    if (typeof lit === 'string') map.set(name, lit);
+  }
+  return map;
+}
+
+/** Resolve a keyword value that may be a quoted string or a string const ident. */
+function resolveStringish(
+  raw: string | undefined,
+  consts: Map<string, string>,
+): string | null {
+  if (raw == null) return null;
+  const lit = parseLiteral(raw);
+  if (typeof lit === 'string') {
+    // Bare ident that matches a const
+    if (/^[A-Za-z_]\w*$/.test(lit) && consts.has(lit)) {
+      return consts.get(lit)!;
+    }
+    // Quoted string or other token
+    if (
+      (raw.trim().startsWith('"') || raw.trim().startsWith("'")) &&
+      typeof lit === 'string'
+    ) {
+      return lit;
+    }
+    if (consts.has(String(lit))) return consts.get(String(lit))!;
+    // Unquoted non-const ident — keep as-is (group label = "GRP")
+    return lit;
+  }
+  if (typeof lit === 'number' || typeof lit === 'boolean') return String(lit);
+  const ident = raw.trim();
+  if (/^[A-Za-z_]\w*$/.test(ident) && consts.has(ident)) {
+    return consts.get(ident)!;
+  }
+  return ident || null;
+}
+
+/**
  * Parse `input.*` / `input()` calls from Pine source into field defs.
  * Prefer {@link resolveScriptInputs} which merges engine-exported inputs.
  */
@@ -385,6 +573,7 @@ export function parseScriptInputs(source: string): ScriptInputDef[] {
   if (!source?.trim()) return [];
   const out: ScriptInputDef[] = [];
   const seen = new Set<string>();
+  const stringConsts = collectStringConsts(source);
   let m: RegExpExecArray | null;
   CALL_RE.lastIndex = 0;
   while ((m = CALL_RE.exec(source)) !== null) {
@@ -440,7 +629,26 @@ export function parseScriptInputs(source: string): ScriptInputDef[] {
 
     const groupR = kw(args, 'group');
     const tooltipR = kw(args, 'tooltip');
-    const idBase = title || `input_${out.length}`;
+    const inlineR = kw(args, 'inline');
+    const activeR = kw(args, 'active');
+    const varName = findLhsIdent(source, m.index);
+
+    let active = true;
+    let activeRef: string | null = null;
+    if (activeR != null) {
+      const lit = parseLiteral(activeR);
+      if (typeof lit === 'boolean') {
+        active = lit;
+      } else {
+        // `active=showMA` or bare ident
+        const ident = String(lit ?? activeR).trim();
+        if (/^[A-Za-z_]\w*$/.test(ident) && ident !== 'true' && ident !== 'false') {
+          activeRef = ident;
+        }
+      }
+    }
+
+    const idBase = title || varName || `input_${out.length}`;
     let id = idBase;
     let n = 2;
     while (seen.has(id)) {
@@ -471,6 +679,12 @@ export function parseScriptInputs(source: string): ScriptInputDef[] {
       options = parseOptions(kw(args, 'options'));
     }
 
+    const groupVal = groupR ? resolveStringish(groupR, stringConsts) : null;
+    const tooltipVal = tooltipR
+      ? normalizeTooltip(resolveStringish(tooltipR, stringConsts))
+      : null;
+    const inlineVal = inlineR ? resolveStringish(inlineR, stringConsts) : null;
+
     out.push(
       recoverSourceType({
         id,
@@ -482,9 +696,12 @@ export function parseScriptInputs(source: string): ScriptInputDef[] {
         max: max ?? null,
         step: step ?? null,
         options,
-        group: groupR ? String(parseLiteral(groupR) ?? unquote(groupR)) : null,
-        tooltip: tooltipR ? String(parseLiteral(tooltipR) ?? unquote(tooltipR)) : null,
-        active: true,
+        group: groupVal,
+        tooltip: tooltipVal,
+        inline: inlineVal,
+        active,
+        activeRef,
+        varName,
       }),
     );
   }
@@ -506,6 +723,20 @@ export function normalizeEngineInputs(raw: unknown): ScriptInputDef[] {
     while (seen.has(id)) id = `${title}_${n++}`;
     seen.add(id);
     const type = mapType(String(r.type || 'unknown'));
+    let active = r.active !== false;
+    let activeRef: string | null = null;
+    if (typeof r.active === 'string') {
+      const ident = r.active.trim();
+      if (/^[A-Za-z_]\w*$/.test(ident) && ident !== 'true' && ident !== 'false') {
+        activeRef = ident;
+        active = true;
+      }
+    } else if (r.active === false) {
+      active = false;
+    }
+    if (r.activeRef != null && String(r.activeRef).trim()) {
+      activeRef = String(r.activeRef).trim();
+    }
     out.push(
       recoverSourceType({
         id,
@@ -518,8 +749,11 @@ export function normalizeEngineInputs(raw: unknown): ScriptInputDef[] {
         step: r.step != null ? Number(r.step) : null,
         options: Array.isArray(r.options) ? r.options.map(String) : undefined,
         group: r.group != null ? String(r.group) : null,
-        tooltip: r.tooltip != null ? String(r.tooltip) : null,
-        active: r.active !== false,
+        tooltip: r.tooltip != null ? normalizeTooltip(String(r.tooltip)) : null,
+        inline: r.inline != null ? String(r.inline) : null,
+        active,
+        activeRef,
+        varName: r.varName != null ? String(r.varName) : r.name != null ? String(r.name) : null,
       }),
     );
   }
@@ -594,6 +828,13 @@ export function resolveScriptInputs(
       id: s.id,
       title: s.title,
       options,
+      // Prefer source-parse layout meta (inline / activeRef / varName) when engine omits
+      group: e.group ?? s.group,
+      tooltip: e.tooltip ?? s.tooltip,
+      inline: e.inline ?? s.inline,
+      active: e.activeRef || s.activeRef ? true : e.active !== false && s.active !== false,
+      activeRef: e.activeRef ?? s.activeRef,
+      varName: e.varName ?? s.varName,
       value: e.value ?? s.value ?? s.default,
     });
   });

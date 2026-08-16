@@ -13,6 +13,10 @@ import {
   applyInputOverrides,
   overridesFromDefs,
   normalizeEngineInputs,
+  layoutInputRows,
+  isInputActive,
+  normalizeTooltip,
+  findLhsIdent,
 } from '../src/results/script-inputs.ts';
 import {
   buildDataViewRows,
@@ -180,6 +184,70 @@ src2 = input.source(hlc3, title="Alt")
     expect(n[0]!.type).toBe('source');
     expect(n[0]!.default).toBe('hlc3');
     expect(n[0]!.value).toBe('hlc3');
+  });
+
+  it('parses group, inline, tooltip, active, and LHS varName', () => {
+    const src = `//@version=6
+indicator("demo")
+string GRP = "Moving Average"
+bool showMA = input.bool(true, "Show MA", group=GRP)
+int maLen = input.int(20, "Length", minval=1, group=GRP, tooltip="Lookback\\nHigher = smoother", active=showMA)
+color maColor = input.color(color.blue, "Color", group=GRP, inline="style", active=showMA)
+int maWidth = input.int(2, "Width", minval=1, maxval=5, group=GRP, inline="style", active=showMA)
+`;
+    const defs = parseScriptInputs(src);
+    expect(defs.length).toBe(4);
+    expect(defs[0]!.varName).toBe('showMA');
+    expect(defs[0]!.group).toBe('Moving Average');
+    expect(defs[1]!.activeRef).toBe('showMA');
+    expect(defs[1]!.tooltip).toContain('Lookback');
+    expect(defs[1]!.tooltip).toContain('\n');
+    expect(defs[2]!.inline).toBe('style');
+    expect(defs[3]!.inline).toBe('style');
+    expect(defs[2]!.activeRef).toBe('showMA');
+  });
+
+  it('layoutInputRows clusters consecutive inline keys per group', () => {
+    const src = `
+g1a = input.int(1, "A", group="G1", inline="row")
+g1b = input.int(2, "B", group="G1", inline="row")
+g1c = input.bool(true, "C", group="G1")
+g2a = input.string("x", "D", group="G2", inline="row")
+`;
+    const layout = layoutInputRows(parseScriptInputs(src));
+    expect(layout.map((g) => g.group)).toEqual(['G1', 'G2']);
+    expect(layout[0]!.rows).toHaveLength(2);
+    expect(layout[0]!.rows[0]!.kind).toBe('inline');
+    if (layout[0]!.rows[0]!.kind === 'inline') {
+      expect(layout[0]!.rows[0]!.fields.map((f) => f.title)).toEqual(['A', 'B']);
+    }
+    expect(layout[0]!.rows[1]!.kind).toBe('single');
+    expect(layout[1]!.rows[0]!.kind).toBe('inline');
+  });
+
+  it('isInputActive resolves activeRef against peer bool values', () => {
+    const defs = parseScriptInputs(`
+show = input.bool(true, "Show")
+length = input.int(14, "Length", active=show)
+`);
+    expect(isInputActive(defs[1]!, defs)).toBe(true);
+    const off = defs.map((d) =>
+      d.title === 'Show' ? { ...d, value: false } : d,
+    );
+    expect(isInputActive(off[1]!, off)).toBe(false);
+    const staticOff = parseScriptInputs(`x = input.int(1, "X", active=false)`);
+    expect(isInputActive(staticOff[0]!, staticOff)).toBe(false);
+  });
+
+  it('normalizeTooltip expands escaped newlines', () => {
+    expect(normalizeTooltip('a\\nb')).toBe('a\nb');
+    expect(normalizeTooltip(null)).toBeNull();
+  });
+
+  it('findLhsIdent reads assignment before call', () => {
+    const src = '  int length = input.int(14, "Length")';
+    const idx = src.indexOf('input.int');
+    expect(findLhsIdent(src, idx)).toBe('length');
   });
 });
 

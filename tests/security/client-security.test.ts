@@ -121,6 +121,10 @@ describe('plugin URL safety', () => {
         { prod: true },
       ),
     ).not.toThrow();
+    // Same-origin vendored agent plugin (preferred install path)
+    expect(() =>
+      assertPluginRemoteAllowed('/plugins/axis-pine-agent.js', { prod: true }),
+    ).not.toThrow();
     expect(() => assertPluginRemoteAllowed('/plugins/example.js', { prod: true })).not.toThrow();
     // Dev (prod:false) still allows arbitrary https after scheme checks
     expect(() =>

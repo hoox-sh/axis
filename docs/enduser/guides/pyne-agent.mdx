@@ -29,15 +29,23 @@ Optional: API key if the worker has `API_KEY` set.
 ## Install the plugin
 
 1. Open **Manager → Plugins → Install**.
-2. Paste:
+2. Paste the **same-origin** module (avoids cross-origin module CORS):
+
+```text
+/plugins/axis-pine-agent.js
+```
+
+Or the remote copy (needs CORS on the agent Worker):
 
 ```text
 https://pyne-agent-worker.cryptolinx.workers.dev/plugin/axis-pine-agent.js
 ```
 
-3. Set **endpoint** to the same origin (no trailing slash).
+3. Set **endpoint** to the agent Worker origin (no trailing slash), e.g. `https://pyne-agent-worker.cryptolinx.workers.dev`. Same-origin install still talks to this API host.
 4. Set **API key** if required.
 5. Prefer **v6** / **strategy** or **indicator** when you know the target style.
+
+AXIS migrates a previously saved remote plugin URL to `/plugins/axis-pine-agent.js` on restore.
 
 AXIS **loads component plugins from URL** (Manager → Install, or Workers Manager → install agent). You can also open the worker’s built-in chat UI:
 

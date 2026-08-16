@@ -9,11 +9,32 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-15 · 224 commits · describe-tag: `v2.0.8`_
+_Generated/updated: 2026-08-16 · 225 commits · describe-tag: `v2.0.9`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.10] — 2026-08-16
+
+Market data resilience, Script Settings input layout, and local-first editor LSP.
+
+### Improved
+
+- **Script Settings → Inputs formatting** — Pine `group`, `inline`, `tooltip` (`\\n`), and `active` / `active=<ident>` layout in the modal (TV Settings-style sections, same-line clusters, `?` help, grayed inactive fields). `input.text_area` uses a multi-line control.
+- **Editor LSP hover + autocomplete** — local builtins/doc annotations show **immediately** (no wait on a dead Backend URL); remote Pro API is short-timeout + 30s cooldown after failure. **⌘/Ctrl-Space** triggers completion; tooltip z-index raised so hover/suggest stay above chart chrome.
+
+### Fixed
+
+- **Browser market data / plugins (CORS “status null”)** — when the page cannot reach venue hosts or remote plugin modules (geo, firewall, port 9443, extensions), AXIS no longer hard-depends on a single cross-origin path:
+  - **Binance REST** tries `api.binance.com` → `data-api.binance.vision`, then the Worker allowlisted proxy `GET /api/market/binance/{klines,ticker/24hr,exchangeInfo}`.
+  - **Binance WS** rotates `stream.binance.com:9443` → `:443` → default 443 → `data-stream.binance.vision`.
+  - **PYNE Agent plugin** ships same-origin at `/plugins/axis-pine-agent.js` (legacy remote URL migrates on restore); agent API endpoint still defaults to the pyne-agent Worker.
+  - **Service worker** navigation never rejects `respondWith` (offline shell HTML); cache version **v5**.
+
+### Added
+
+- **Worker market proxy** — `worker/src/market.ts` public allowlist for Binance klines / 24hr ticker / exchangeInfo (short isolate cache; not an open reverse proxy).
 
 ## [2.0.9] — 2026-08-15
 
@@ -230,9 +251,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (142 commits)
+### 2026-08 (143 commits)
 
 #### Security
 
@@ -243,6 +266,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `2cae2b72` (2026-08-15) — feat(editor): symbol catalog and richer Pine highlighting
 - `9411a16b` (2026-08-15) — feat(pyodide): vendor pynescript 0.3.7 wheel
 - `fe6dfb18` (2026-08-15) — feat(library): git versioned publish emulator for import ns/Name/ver
 - `4d1e8647` (2026-08-13) — feat(ui): architecture modal to wire plugin slots from recipes

@@ -140,7 +140,7 @@ describe('sources catalog', () => {
         interval: '1d',
         config: { fallback: false },
       }),
-    ).rejects.toThrow(/ECONNRESET/);
+    ).rejects.toThrow(/Binance network error|ECONNRESET/);
   });
 
   it('okx-rest maps candles', async () => {

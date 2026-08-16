@@ -45,8 +45,18 @@ import { appendLog, store, setStore } from '../store';
 import { registry } from './registry';
 import { pluginKey, type ComponentPlugin, type DatasetPlugin, type EnginePlugin, type SourcePlugin, type StreamPlugin } from './types';
 
-/** Production default for the HOOX-deployed PYNE Agent worker. */
-export const DEFAULT_PYNE_AGENT_PLUGIN_URL =
+/**
+ * Same-origin copy of the PYNE Agent component plugin (avoids cross-origin
+ * module CORS / CSP issues). API traffic still goes to {@link DEFAULT_PYNE_AGENT_ENDPOINT}.
+ */
+export const DEFAULT_PYNE_AGENT_PLUGIN_URL = '/plugins/axis-pine-agent.js';
+
+/** Production agent Worker origin (NL → Pine). Seeded into plugin config. */
+export const DEFAULT_PYNE_AGENT_ENDPOINT =
+  'https://pyne-agent-worker.cryptolinx.workers.dev';
+
+/** Legacy remote plugin URL — migrated to same-origin on restore. */
+export const LEGACY_PYNE_AGENT_PLUGIN_URL =
   'https://pyne-agent-worker.cryptolinx.workers.dev/plugin/axis-pine-agent.js';
 
 /** localStorage key for installed plugin URL list. */
@@ -160,22 +170,58 @@ function componentConfig(id: string): Record<string, unknown> {
   };
 }
 
-/** Seed default agent endpoint when installing the production plugin URL. */
+/** Seed default agent API endpoint when installing the PYNE Agent plugin. */
 function seedPyneAgentConfig(pluginId: string, href: string): void {
   if (pluginId !== 'pyne-agent' && !href.includes('axis-pine-agent.js')) return;
   const key = pluginKey('component', 'pyne-agent');
   const prev = (store.pluginsConfig?.[key] || {}) as Record<string, unknown>;
   if (prev.endpoint && String(prev.endpoint).trim()) return;
-  let origin = '';
+  // Prefer the known agent Worker origin — same-origin `/plugins/…` is only the module.
+  let endpoint = DEFAULT_PYNE_AGENT_ENDPOINT;
   try {
-    origin = new URL(href).origin;
+    const u = new URL(href, typeof location !== 'undefined' ? location.origin : 'https://axis.local');
+    if (
+      u.hostname === 'pyne-agent-worker.cryptolinx.workers.dev' ||
+      u.hostname.endsWith('.pyne-agent-worker.cryptolinx.workers.dev')
+    ) {
+      endpoint = u.origin;
+    }
   } catch {
-    origin = 'https://pyne-agent-worker.cryptolinx.workers.dev';
+    /* keep default */
   }
   setStore('pluginsConfig', {
     ...(store.pluginsConfig || {}),
-    [key]: { ...prev, endpoint: origin },
+    [key]: { ...prev, endpoint },
   });
+}
+
+/** Map legacy remote agent plugin URL → same-origin static copy. */
+export function migratePyneAgentPluginUrl(url: string): string {
+  const href = normalizePluginUrl(typeof url === 'string' ? url : '');
+  if (!href) return href;
+  try {
+    const base =
+      typeof location !== 'undefined' && location?.origin
+        ? location.origin
+        : 'https://axis.local';
+    const u = new URL(href, base);
+    if (
+      u.pathname.endsWith('/plugin/axis-pine-agent.js') ||
+      u.pathname.endsWith('/plugins/axis-pine-agent.js') ||
+      href === LEGACY_PYNE_AGENT_PLUGIN_URL
+    ) {
+      // Remote cryptolinx host → ship same-origin module
+      if (
+        u.hostname === 'pyne-agent-worker.cryptolinx.workers.dev' ||
+        href === LEGACY_PYNE_AGENT_PLUGIN_URL
+      ) {
+        return DEFAULT_PYNE_AGENT_PLUGIN_URL;
+      }
+    }
+  } catch {
+    if (href === LEGACY_PYNE_AGENT_PLUGIN_URL) return DEFAULT_PYNE_AGENT_PLUGIN_URL;
+  }
+  return href;
 }
 
 export function getInstalledPlugins(): InstalledPlugin[] {
@@ -408,7 +454,9 @@ async function importPluginModule(href: string): Promise<unknown> {
 
 export async function loadPluginFromUrl(url: string): Promise<InstalledPlugin> {
   ensureBuiltins();
-  const href = normalizePluginUrl(typeof url === 'string' ? url : '');
+  const href = migratePyneAgentPluginUrl(
+    normalizePluginUrl(typeof url === 'string' ? url : ''),
+  );
   if (!href) throw new Error('URL required');
   assertPluginRemoteAllowed(href);
 

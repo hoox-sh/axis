@@ -53,6 +53,9 @@ import {
   resolveScriptInputs,
   applyInputOverrides,
   overridesFromDefs,
+  layoutInputRows,
+  isInputActive,
+  type InputFormRow,
   type ScriptInputDef,
 } from '../results/script-inputs';
 import {
@@ -169,15 +172,8 @@ export const ScriptSettingsModal: Component = () => {
     seedFields();
   });
 
-  const groups = createMemo(() => {
-    const map = new Map<string, ScriptInputDef[]>();
-    for (const f of fields()) {
-      const g = f.group || 'Inputs';
-      if (!map.has(g)) map.set(g, []);
-      map.get(g)!.push(f);
-    }
-    return [...map.entries()];
-  });
+  /** Pine `group` + `inline` layout (declaration order). */
+  const inputLayout = createMemo(() => layoutInputRows(fields()));
 
   const strategyGroups = createMemo(() => {
     const map = new Map<string, StrategyPropDef[]>();
@@ -270,7 +266,7 @@ export const ScriptSettingsModal: Component = () => {
         role="presentation"
       >
         <div
-          class="sc-dialog w-[min(480px,calc(100vw-2*var(--ui-dialog-margin)))]"
+          class="sc-dialog w-[min(520px,calc(100vw-2*var(--ui-dialog-margin)))]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="axis-script-settings-title"
@@ -351,22 +347,26 @@ export const ScriptSettingsModal: Component = () => {
                   </div>
                 }
               >
-                <For each={groups()}>
-                  {([group, items]) => (
-                    <div class="flex flex-col gap-2">
-                      <div class="text-[10px] uppercase tracking-wider text-text-dim font-semibold">
-                        {group}
+                <For each={inputLayout()}>
+                  {(section) => (
+                    <section
+                      class="sc-input-group"
+                      data-input-group={section.group}
+                    >
+                      <div class="sc-section-title sc-input-group-title">
+                        {section.group}
                       </div>
-                      <For each={items}>
-                        {(field) => (
-                          <InputField
-                            field={field}
+                      <For each={section.rows}>
+                        {(row) => (
+                          <InputFormRowView
+                            row={row}
+                            allFields={fields()}
                             optionLabels={sourceLabels()}
-                            onChange={(v) => setFieldValue(field.id, v)}
+                            onChange={setFieldValue}
                           />
                         )}
                       </For>
-                    </div>
+                    </section>
                   )}
                 </For>
               </Show>
@@ -456,9 +456,55 @@ export const ScriptSettingsModal: Component = () => {
   );
 };
 
+/** Renders one layout row (single field or Pine `inline=` cluster). */
+const InputFormRowView: Component<{
+  row: InputFormRow;
+  allFields: ScriptInputDef[];
+  optionLabels: Record<string, string>;
+  onChange: (id: string, v: unknown) => void;
+}> = (props) => {
+  return (
+    <Show
+      when={props.row.kind === 'inline' ? props.row : false}
+      fallback={
+        <Show when={props.row.kind === 'single' ? props.row.field : false}>
+          {(field) => (
+            <InputField
+              field={field()}
+              allFields={props.allFields}
+              optionLabels={props.optionLabels}
+              onChange={(v) => props.onChange(field().id, v)}
+            />
+          )}
+        </Show>
+      }
+    >
+      {(row) => (
+        <div class="sc-input-inline-row" data-inline={row().key}>
+          <For each={row().fields}>
+            {(field) => (
+              <InputField
+                field={field}
+                allFields={props.allFields}
+                compact
+                optionLabels={props.optionLabels}
+                onChange={(v) => props.onChange(field.id, v)}
+              />
+            )}
+          </For>
+        </div>
+      )}
+    </Show>
+  );
+};
+
 const InputField: Component<{
   field: ScriptInputDef;
   onChange: (v: unknown) => void;
+  /** Full form list — resolves Pine `active=<ident>`. */
+  allFields?: ScriptInputDef[];
+  /** Tighter layout inside an `inline` row. */
+  compact?: boolean;
   /** Optional display labels for option values (cross-indicator sources). */
   optionLabels?: Record<string, string>;
 }> = (props) => {
@@ -466,6 +512,10 @@ const InputField: Component<{
   const t = () => props.field.type;
   const val = () => props.field.value ?? props.field.default;
   const optLabel = (opt: string) => props.optionLabels?.[opt] || opt;
+  const enabled = () =>
+    isInputActive(props.field, props.allFields || [props.field]);
+  const tip = () => props.field.tooltip || undefined;
+  const showTitle = () => Boolean(props.field.title?.trim());
 
   // Local drafts so parent re-renders do not clobber caret while focused
   const [numDraft, setNumDraft] = createSignal<string | null>(null);
@@ -502,22 +552,40 @@ const InputField: Component<{
   };
 
   return (
-    <div class="sc-field" data-input-id={props.field.id}>
-      <label class="text-[11px] text-text-dim" for={id()} title={props.field.tooltip || undefined}>
-        {props.field.title}
-        <Show when={props.field.tooltip}>
-          <span class="text-text-faint ml-1" title={props.field.tooltip!}>
-            ⓘ
-          </span>
-        </Show>
-      </label>
+    <div
+      class={`sc-field ${props.compact ? 'sc-field-inline' : ''} ${enabled() ? '' : 'is-disabled'}`}
+      data-input-id={props.field.id}
+      data-inline={props.field.inline || undefined}
+      aria-disabled={!enabled() || undefined}
+    >
+      <Show when={showTitle() || tip()}>
+        <label
+          class="sc-field-label text-[11px] text-text-dim"
+          for={id()}
+        >
+          <span class="sc-field-title">{props.field.title || '\u00a0'}</span>
+          <Show when={tip()}>
+            <span
+              class="sc-field-tooltip"
+              title={tip()}
+              aria-label={tip()}
+              data-tooltip={tip()}
+            >
+              ?
+            </span>
+          </Show>
+        </label>
+      </Show>
       <Show when={t() === 'bool'}>
-        <label class="inline-flex items-center gap-2 text-[12px] text-text cursor-pointer">
+        <label
+          class={`inline-flex items-center gap-2 text-[12px] text-text ${enabled() ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
+        >
           <input
             id={id()}
             type="checkbox"
             class="accent-[var(--color-accent)]"
             checked={!!val()}
+            disabled={!enabled()}
             onChange={(e) => props.onChange(e.currentTarget.checked)}
           />
           {val() ? 'On' : 'Off'}
@@ -532,11 +600,13 @@ const InputField: Component<{
           min={props.field.min ?? undefined}
           max={props.field.max ?? undefined}
           step={props.field.step ?? (t() === 'int' ? 1 : 'any')}
+          disabled={!enabled()}
           onFocus={(e) => {
             setNumFocused(true);
             setNumDraft(e.currentTarget.value);
           }}
           onInput={(e) => {
+            if (!enabled()) return;
             const raw = e.currentTarget.value;
             setNumDraft(raw);
             // Commit finite numbers so Apply works without blur; leave empty
@@ -545,9 +615,11 @@ const InputField: Component<{
             const n = t() === 'int' ? parseInt(raw, 10) : parseFloat(raw);
             if (Number.isFinite(n)) props.onChange(n);
           }}
-          onChange={(e) => commitNumber(e.currentTarget.value)}
+          onChange={(e) => {
+            if (enabled()) commitNumber(e.currentTarget.value);
+          }}
           onBlur={(e) => {
-            commitNumber(e.currentTarget.value);
+            if (enabled()) commitNumber(e.currentTarget.value);
             setNumFocused(false);
             setNumDraft(null);
           }}
@@ -565,17 +637,22 @@ const InputField: Component<{
             type="color"
             class="h-8 w-10 border-2 border-border bg-bg-elev cursor-pointer p-0 rounded-[var(--radius-input)]"
             value={toHexColor(val())}
-            onInput={(e) => props.onChange(e.currentTarget.value)}
+            disabled={!enabled()}
+            onInput={(e) => {
+              if (enabled()) props.onChange(e.currentTarget.value);
+            }}
           />
           <input
             type="text"
             class="sc-input flex-1 font-mono text-[11px]"
             value={textDisplay()}
+            disabled={!enabled()}
             onFocus={(e) => {
               setTextFocused(true);
               setTextDraft(e.currentTarget.value);
             }}
             onInput={(e) => {
+              if (!enabled()) return;
               setTextDraft(e.currentTarget.value);
               props.onChange(e.currentTarget.value);
             }}
@@ -596,7 +673,10 @@ const InputField: Component<{
           id={id()}
           class="sc-input w-full"
           value={String(val() ?? '')}
-          onChange={(e) => props.onChange(e.currentTarget.value)}
+          disabled={!enabled()}
+          onChange={(e) => {
+            if (enabled()) props.onChange(e.currentTarget.value);
+          }}
         >
           <For each={props.field.options}>
             {(opt) => <option value={opt}>{optLabel(opt)}</option>}
@@ -616,24 +696,52 @@ const InputField: Component<{
           !props.field.options?.length
         }
       >
-        <input
-          id={id()}
-          type="text"
-          class="sc-input w-full"
-          value={textDisplay()}
-          onFocus={(e) => {
-            setTextFocused(true);
-            setTextDraft(e.currentTarget.value);
-          }}
-          onInput={(e) => {
-            setTextDraft(e.currentTarget.value);
-            props.onChange(e.currentTarget.value);
-          }}
-          onBlur={() => {
-            setTextFocused(false);
-            setTextDraft(null);
-          }}
-        />
+        <Show
+          when={t() === 'text'}
+          fallback={
+            <input
+              id={id()}
+              type="text"
+              class="sc-input w-full"
+              value={textDisplay()}
+              disabled={!enabled()}
+              onFocus={(e) => {
+                setTextFocused(true);
+                setTextDraft(e.currentTarget.value);
+              }}
+              onInput={(e) => {
+                if (!enabled()) return;
+                setTextDraft(e.currentTarget.value);
+                props.onChange(e.currentTarget.value);
+              }}
+              onBlur={() => {
+                setTextFocused(false);
+                setTextDraft(null);
+              }}
+            />
+          }
+        >
+          <textarea
+            id={id()}
+            class="sc-input w-full min-h-[4.5rem] resize-y font-mono text-[11px]"
+            value={textDisplay()}
+            disabled={!enabled()}
+            rows={3}
+            onFocus={(e) => {
+              setTextFocused(true);
+              setTextDraft(e.currentTarget.value);
+            }}
+            onInput={(e) => {
+              if (!enabled()) return;
+              setTextDraft(e.currentTarget.value);
+              props.onChange(e.currentTarget.value);
+            }}
+            onBlur={() => {
+              setTextFocused(false);
+              setTextDraft(null);
+            }}
+          />
+        </Show>
       </Show>
     </div>
   );

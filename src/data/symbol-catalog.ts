@@ -28,6 +28,7 @@
  */
 
 import { getDataManagerSelection } from './data-manager-source';
+import { fetchBinanceJson } from './binance-http';
 
 export type SymbolVenue =
   | 'binance'
@@ -184,11 +185,7 @@ function entry(base: string, quote: string, symbol?: string): SymbolEntry {
 }
 
 async function fetchBinance(): Promise<SymbolEntry[]> {
-  const res = await fetch('https://api.binance.com/api/v3/exchangeInfo', {
-    cache: 'no-store',
-  });
-  if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
-  const data = (await res.json()) as {
+  const data = (await fetchBinanceJson({ path: 'exchangeInfo' })) as {
     symbols?: Array<{
       symbol: string;
       baseAsset: string;

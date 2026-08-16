@@ -60,6 +60,7 @@
                   "enduser/guides/script-library",
                   "enduser/guides/strategy-and-results",
                   "enduser/guides/drawings",
+                  "enduser/guides/alerts",
                   "enduser/guides/troubleshooting"
                 ]
               },
@@ -82,6 +83,7 @@
             "pages": [
               "architecture/index",
               "architecture/overview",
+              "architecture/evaluation",
               "architecture/adrs",
               "architecture/topologies",
               "architecture/state-namespaces"

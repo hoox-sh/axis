@@ -20,7 +20,7 @@
  * Activate deletes old `axis-*` caches only; current shell/runtime kept.
  */
 
-const VERSION = 'v4';
+const VERSION = 'v5';
 const CACHE_PREFIX = 'axis-';
 const SHELL_CACHE = `${CACHE_PREFIX}shell-${VERSION}`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-${VERSION}`;
@@ -156,6 +156,24 @@ async function cacheFirst(req, cacheName) {
     return res;
 }
 
+/** Minimal offline shell when network + cache both miss (never reject respondWith). */
+function offlineShellResponse() {
+    const html =
+        '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>' +
+        '<meta name="viewport" content="width=device-width,initial-scale=1"/>' +
+        '<title>AXIS offline</title>' +
+        '<style>body{margin:0;font:15px/1.45 system-ui,sans-serif;background:#0a0b10;color:#e8eaed;' +
+        'display:grid;place-items:center;min-height:100vh;padding:1.5rem;box-sizing:border-box}' +
+        'main{max-width:28rem}a{color:#8ab4ff}</style></head><body><main>' +
+        '<h1>AXIS is offline</h1>' +
+        '<p>Network unavailable and no cached shell. Reconnect, then reload.</p>' +
+        '<p><a href="./">Retry</a></p></main></body></html>';
+    return new Response(html, {
+        status: 503,
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+    });
+}
+
 async function networkFirstStatic(req, cacheName) {
     const cache = await caches.open(cacheName);
     try {
@@ -172,13 +190,14 @@ async function networkFirstStatic(req, cacheName) {
             }
         }
         return res;
-    } catch (err) {
+    } catch {
         const cached = await cache.match(req);
         if (cached) return cached;
         // index.html fallback for navigations
         const shell = await cache.match('./index.html') || await cache.match('./');
         if (shell) return shell;
-        throw err;
+        // Never reject respondWith — a thrown NetworkError surfaces as SW failure in the console
+        return offlineShellResponse();
     }
 }
 

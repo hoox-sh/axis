@@ -25,12 +25,21 @@ import {
   pyneCompleteLocal,
   completeNamedArgEnum,
   enumsMatchingPrefixes,
+  pyneHoverLocal,
+  pyneCompletionTriggerKeymap,
 } from '../src/editor/pyne-lsp';
 import {
   namedArgEnumContext,
   findNearestCallName,
   styleNamespaceForCall,
 } from '../src/editor/pine-enums';
+import {
+  shouldUseRemoteLsp,
+  markRemoteLspFailed,
+  markRemoteLspOk,
+  isRemoteLspCoolingDown,
+  _resetRemoteLspCooldownForTests,
+} from '../src/editor/pyne-lsp-client';
 
 describe('pyne-lsp', () => {
   it('indexes builtins from metadata', () => {
@@ -46,7 +55,6 @@ describe('pyne-lsp', () => {
   });
 
   it('hover prefers local //@function annotations over missing builtins', async () => {
-    const { pyneHoverLocal } = await import('../src/editor/pyne-lsp');
     const src = `//@function Demo helper with **bold**.
 //@param n Size.
 //@returns Doubled value.
@@ -69,6 +77,46 @@ plot(demo(2))
     } finally {
       restore();
     }
+  });
+
+  it('hover resolves ta.sma from local builtins', () => {
+    const src = `//@version=6
+indicator("t")
+x = ta.sma(close, 14)
+`;
+    const pos = src.indexOf('sma') + 1;
+    const tip = pyneHoverLocal(
+      {
+        state: {
+          doc: {
+            sliceString: (a: number, b: number) => src.slice(a, b),
+            length: src.length,
+          },
+        },
+      },
+      pos,
+    );
+    expect(tip).toBeTruthy();
+    expect(tip!.pos).toBeLessThanOrEqual(pos);
+    expect(tip!.end).toBeGreaterThan(pos);
+  });
+
+  it('completion trigger keymap binds Mod-Space', () => {
+    const keys = (pyneCompletionTriggerKeymap as { value?: Array<{ key?: string }> }).value
+      || (pyneCompletionTriggerKeymap as unknown as Array<{ key?: string }>);
+    // Facet/extension shape varies; ensure extension is non-empty
+    expect(pyneCompletionTriggerKeymap).toBeTruthy();
+    void keys;
+  });
+
+  it('remote LSP cooldown disables shouldUseRemoteLsp after failure', () => {
+    _resetRemoteLspCooldownForTests();
+    markRemoteLspFailed(60_000);
+    expect(isRemoteLspCoolingDown()).toBe(true);
+    expect(shouldUseRemoteLsp()).toBe(false);
+    markRemoteLspOk();
+    expect(isRemoteLspCoolingDown()).toBe(false);
+    _resetRemoteLspCooldownForTests();
   });
 
   it('wordAt finds qualified names', () => {

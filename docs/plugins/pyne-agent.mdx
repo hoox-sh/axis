@@ -18,7 +18,7 @@ description: "Install the pyne-agent-worker AXIS component plugin — natural-la
 | | |
 |--|--|
 | **Repo** | [hoox-sh/pyne-agent-worker](https://github.com/hoox-sh/pyne-agent-worker) |
-| **Plugin module** | `GET /plugin/axis-pine-agent.js` |
+| **Plugin module** | AXIS ships `/plugins/axis-pine-agent.js`; remote `GET /plugin/axis-pine-agent.js` on the agent Worker |
 | **API** | `POST /v1/chat` |
 | **Standalone** | Workers AI™ only — **no** pyne-worker / HOOX mesh required |
 | **Optional** | pyne-worker validate→retry when configured |
@@ -43,20 +43,24 @@ flowchart LR
 
 ## Install in AXIS
 
-1. Deploy [pyne-agent-worker](https://github.com/hoox-sh/pyne-agent-worker) (standalone is enough).
-2. AXIS → **Manager → Plugins → Install from URL**:
+1. Deploy [pyne-agent-worker](https://github.com/hoox-sh/pyne-agent-worker) (standalone is enough) for the **API** endpoint.
+2. AXIS → **Manager → Plugins → Install from URL** — prefer the **same-origin** module:
+
+```text
+/plugins/axis-pine-agent.js
+```
+
+Remote (needs CORS on the agent Worker):
 
 ```text
 https://pyne-agent-worker.cryptolinx.workers.dev/plugin/axis-pine-agent.js
 ```
 
-(Or your own deploy: `https://<your-pyne-agent-worker>/plugin/axis-pine-agent.js`.)
-
 3. Configure plugin fields:
 
 | Field | Meaning |
 | --- | --- |
-| `endpoint` | Worker origin (no trailing slash) |
+| `endpoint` | Agent Worker origin (no trailing slash) — not the AXIS page origin |
 | `apiKey` | Worker `API_KEY` (optional in open local mode) |
 | `pineVersion` | `auto` \| `v5` \| `v6` |
 | `style` | `auto` \| `indicator` \| `strategy` \| `library` |

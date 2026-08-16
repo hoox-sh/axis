@@ -116,16 +116,22 @@ still needs those headers (they are now default).
 
 ## Venue sources/streams
 
-Public Binance/OKX/etc. REST must send CORS headers usable by browsers. If blocked:
+Public Binance/OKX/etc. REST must send CORS headers usable by browsers. Firefox often reports **“CORS request did not succeed / status (null)”** when the TCP/TLS connection fails entirely (geo block, firewall, extension) — that is **not** a missing `Access-Control-Allow-Origin` header.
 
-1. Use offline `mock-walk` / `mock-poll`.
-2. Add a **same-origin proxy** on Worker/Flask (not a general open proxy — scope carefully).
-3. Prefer DO relay only for WS fan-out (WS is not CORS in the XHR sense, but still network-reachable).
+AXIS resilience for Binance:
+
+1. Direct hosts: `api.binance.com` then `data-api.binance.vision` (`src/data/binance-http.ts`).
+2. Worker allowlisted proxy: `GET /api/market/binance/klines|ticker/24hr|exchangeInfo` on the AXIS Worker (`worker/src/market.ts`).
+3. Live WS rotates `:9443` → `:443` → `data-stream.binance.vision` (port 9443 is frequently firewalled).
+4. Offline last resort: `mock-walk` / `mock-poll`, or warm bars-cache.
+
+Prefer the DO relay (`cf-do` stream / `/api/stream`) when many tabs share one upstream WS — still requires the Worker edge to reach Binance.
 
 ## Dynamic plugins
 
-- **Module import** of plugin JS: needs CORS on the **script origin** (same-origin `/plugins/` is safe).
-- **fetch inside plugin**: subject to third-party CORS independently.
+- **Module import** of plugin JS: needs CORS on the **script origin**. Prefer same-origin `/plugins/*` (PYNE Agent ships as `/plugins/axis-pine-agent.js`).
+- **Remote** modules (e.g. legacy `pyne-agent-worker…/plugin/axis-pine-agent.js`) need ACAO + CSP `script-src` allow when a CSP is present.
+- **fetch inside plugin**: subject to third-party CORS independently (agent API still uses the pyne-agent Worker origin).
 
 ## Invariants & edge cases
 

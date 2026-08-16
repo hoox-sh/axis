@@ -36,7 +36,7 @@ describe('SW cache names', () => {
   it('uses axis-* shell and runtime names with version', () => {
     expect(shellCacheName()).toBe(`axis-shell-${SW_VERSION}`);
     expect(runtimeCacheName()).toBe(`axis-runtime-${SW_VERSION}`);
-    expect(SW_VERSION).toBe('v4');
+    expect(SW_VERSION).toBe('v5');
     expect(shellCacheName('v9')).toBe('axis-shell-v9');
     expect(isAxisCacheName(shellCacheName())).toBe(true);
     expect(isAxisCacheName('workbox-precache-v2')).toBe(false);
@@ -52,8 +52,8 @@ describe('SW cache names', () => {
   });
 
   it('activate cleanup deletes old axis caches but not current or foreign', () => {
-    const shell = shellCacheName('v4');
-    const runtime = runtimeCacheName('v4');
+    const shell = shellCacheName('v5');
+    const runtime = runtimeCacheName('v5');
     const existing = [
       shell,
       runtime,
@@ -61,6 +61,8 @@ describe('SW cache names', () => {
       'axis-runtime-v2',
       'axis-shell-v3',
       'axis-runtime-v3',
+      'axis-shell-v4',
+      'axis-runtime-v4',
       'workbox-precache-v2',
       'other-app-cache',
     ];
@@ -71,6 +73,8 @@ describe('SW cache names', () => {
         'axis-shell-v2',
         'axis-runtime-v3',
         'axis-shell-v3',
+        'axis-runtime-v4',
+        'axis-shell-v4',
       ].sort(),
     );
     expect(doomed).not.toContain(shell);

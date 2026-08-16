@@ -116,9 +116,12 @@ export const voidEditorTheme = EditorView.theme(
       color: 'var(--color-text)',
       overflow: 'hidden',
       boxShadow: 'var(--ui-shadow-panel)',
+      // Above chart chrome / docked panels so hover + autocomplete stay visible
+      zIndex: '200',
     },
     '.cm-tooltip-autocomplete': {
       borderRadius: '6px',
+      maxHeight: 'min(320px, 50vh)',
     },
     '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
       backgroundColor: 'color-mix(in srgb, var(--color-accent) 18%, transparent)',
@@ -131,6 +134,7 @@ export const voidEditorTheme = EditorView.theme(
       color: 'var(--color-text)',
       maxWidth: 'min(420px, 92vw)',
       padding: '0',
+      zIndex: '210',
     },
     '.cm-tooltip .cm-pine-hover': {
       padding: '10px 12px',

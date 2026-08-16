@@ -38,6 +38,8 @@
  *
  * ## 24h change model
  *
+ * @see {@link binanceTickerWsUrls} for host/port rotation
+ *
  * - **Binance**: exchange `%` in `P`; open in `o` → both forwarded.
  * - **OKX / Coinbase**: last + open24h (or sodUtc0); change = `(last−open)/open×100`.
  * - **Bybit**: `price24hPcnt` is a fraction → ×100 for %; `prevPrice24h` as open.
@@ -52,6 +54,7 @@
  */
 
 import { openReconnectableWs, type WsStatus } from '../streams/reconnect-ws';
+import { binanceTickerWsUrls } from './binance-http';
 import { coinbaseProduct, okxInst, toUsdt } from './watchlist-tickers';
 
 /** Normalized quote pushed to the UI for one watchlist row. */
@@ -149,10 +152,14 @@ function startBinanceQuotes(
   const stops: Array<() => void> = [];
   for (let i = 0; i < streams.length; i += BINANCE_CHUNK) {
     const chunk = streams.slice(i, i + BINANCE_CHUNK);
-    const url = `wss://stream.binance.com:9443/stream?streams=${chunk.join('/')}`;
+    // chunk entries are already `{sym}@ticker`
+    const syms = chunk.map((s) => s.replace(/@ticker$/i, ''));
+    const urls = binanceTickerWsUrls(syms);
+    const url = urls[0] || `wss://stream.binance.com:9443/stream?streams=${chunk.join('/')}`;
     stops.push(
       openReconnectableWs({
         url,
+        urls,
         maxAttempts: 12,
         onStatus: (s) => opts.onStatus?.({ ...s, mode: 'ws' }),
         onError: (e) => opts.onError?.(e),

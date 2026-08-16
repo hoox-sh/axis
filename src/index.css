@@ -792,6 +792,79 @@ button.sc-btn:focus-visible {
   margin-block: 0.15em;
 }
 
+/* Pine `group=` section in Script Settings */
+.sc-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55em;
+}
+.sc-input-group-title {
+  margin-top: 0.35em;
+}
+.sc-input-group:first-child .sc-input-group-title {
+  margin-top: 0;
+}
+
+/* Pine `inline=` — multiple inputs on one row (TV Settings parity) */
+.sc-input-inline-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.55em 0.75em;
+}
+.sc-field-inline {
+  flex: 1 1 6.5rem;
+  min-width: 5.5rem;
+  margin-block: 0;
+}
+.sc-field-inline .sc-field-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  min-height: 1.15em;
+}
+
+/* Pine `tooltip=` — ? chip with multi-line title (\\n → newline in attr) */
+.sc-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  flex-wrap: wrap;
+}
+.sc-field-tooltip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.05em;
+  height: 1.05em;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-faint);
+  font-size: 0.72em;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  flex-shrink: 0;
+  user-select: none;
+}
+.sc-field-tooltip:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-dim);
+  background: color-mix(in srgb, var(--color-bg-elev) 80%, transparent);
+}
+
+/* Pine `active=false` / inactive dependency */
+.sc-field.is-disabled {
+  opacity: 0.48;
+  pointer-events: none;
+}
+.sc-field.is-disabled .sc-input,
+.sc-field.is-disabled input,
+.sc-field.is-disabled select,
+.sc-field.is-disabled textarea {
+  cursor: not-allowed;
+}
+
 .sc-hint {
   font-size: 0.78em;
   color: var(--color-text-faint);

@@ -57,6 +57,7 @@ import type { StreamPlugin as UnifiedStreamPlugin } from '../plugins/types';
 import { registry } from '../plugins/registry';
 import { getDataManagerSelection } from '../data/data-manager-source';
 import { openReconnectableWs } from './reconnect-ws';
+import { binanceKlineWsUrls } from '../data/binance-http';
 
 /** @deprecated Prefer importing StreamPlugin from plugins/types */
 export type StreamPlugin = UnifiedStreamPlugin;
@@ -84,14 +85,16 @@ export const binanceStream: StreamPlugin = {
   name: 'Binance WebSocket',
   kind: 'stream',
   builtIn: true,
-  description: 'Real-time klines via wss://stream.binance.com (auto-reconnect).',
+  description:
+    'Real-time klines via stream.binance.com (auto-reconnect; rotates :9443 → :443 → data-stream).',
   capabilities: { needsNetwork: true, transport: 'ws' },
   configSchema: {},
   start({ symbol, interval, onBar, onStatus, onError }) {
     const wsInterval = INTERVAL_MAP[interval] || interval;
-    const url = `wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@kline_${wsInterval}`;
+    const urls = binanceKlineWsUrls(String(symbol || ''), wsInterval);
     return openReconnectableWs({
-      url,
+      url: urls[0] || `wss://stream.binance.com:9443/ws/${String(symbol || '').toLowerCase()}@kline_${wsInterval}`,
+      urls,
       onStatus,
       onError,
       onMessage: (e) => {

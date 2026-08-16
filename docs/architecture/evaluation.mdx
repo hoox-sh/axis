@@ -1,0 +1,119 @@
+# Copyright (C) 2024-2026 jango_blockchained
+#
+# This file is part of pynescript.
+#
+# pynescript is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# pynescript is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with pynescript.  If not, see <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+---
+title: "Evaluation map"
+description: "How AXIS runs Pine: Flask Pro API, Worker proxy, in-browser Pyodide. AXIS does not import PyneTS and does not place HOOX orders."
+---
+
+# Evaluation map
+
+## Abstract
+
+AXIS is a charting PWA, not a language rewrite. Every Pine evaluation goes through an **engine plugin**. Built-ins are `server` (HTTP/WS to PYNE) and `pyodide` (in-browser Python wheel). Optional HOOX **pyne-worker** is just another Backend URL.
+
+**AXIS does not import `@hoox-sh/pynets`.** **AXIS does not call `trade-worker`.** Drawing a strategy on the chart is research, not execution.
+
+## Conceptual model
+
+```mermaid
+flowchart TB
+  UI[Chart / Editor / Run] --> ENG{engine id}
+  ENG -->|server| WS["WS /ws/run preferred"]
+  ENG -->|server| HTTP["POST /run?mode="]
+  WS --> FLASK[PYNE Flask :5002]
+  HTTP --> FLASK
+  HTTP --> AXW[AXIS Worker /api/run]
+  AXW -->|EXTERNAL_BACKEND| FLASK
+  AXW -->|no backend| E503[503 NO_BACKEND]
+  ENG -->|pyodide| WASM[Pyodide 0.26.2 + pynescript wheel]
+  UI -.->|not an engine| PYNETS[PyneTS library]
+  FLASK -.->|alerts / events only| PYW[optional pyne-worker URL]
+  PYW -->|if TRADE_SERVICE| HOOX[HOOX trade-worker]
+```
+
+## Interface surface
+
+| Path | Implementation | Notes |
+| --- | --- | --- |
+| Engine `server` | `src/engines/catalog.ts` | Prefer **WS** `ws(s)://{endpoint}/ws/run` (`preferWs` default true), else **POST** `{endpoint}/run?mode=` with `{ script, data, mode, inputs?, profiler?, libraries? }`. Modes `interpret \| compile \| auto`. Timeout scales with bar count (45–180s). Default endpoint `http://localhost:5002`. |
+| Engine `pyodide` | same file | Self-hosted **Pyodide 0.26.2** (`/pyodide/v0.26.2/`), wheels `/vendor/pynescript-0.3.7-py3-none-any.whl` + antlr4, runtime `/pyodide/pynescript_runtime.py`. **Numba is not in Wasm**; `compile` / `auto` is object-mode. Cold load ~20–30s. |
+| AXIS Worker `/api/run` | `worker/src/runtime.ts` | `PYODIDE_IN_WORKER=enabled` scaffold; else **proxy `EXTERNAL_BACKEND/run`**; else 503 `NO_BACKEND`. Caps: 512 KiB script, 50k bars, 30 req/min/IP, 60s upstream. |
+| HOOX **pyne-worker** | `src/workers/catalog.ts` | Not a built-in engine. Paste origin as Backend URL. Distinct from the AXIS Worker (`pynescript-axis`). |
+| **PyneTS** | — | TypeScript library. [PYNE docs](/pyne/docs/pynets). **Not referenced** in AXIS source. |
+
+Payloads follow the [PYNE evaluate contract](/pyne/docs/api/contract). Defaults: Flask `POST /run` uses `mode` **`auto`**. See [modes](/pyne/docs/enduser/reference/modes).
+
+## Internals
+
+| Path | Role |
+| --- | --- |
+| `src/engines/catalog.ts` | `server` + `pyodide` |
+| `src/workers/catalog.ts` | Runtimes Hub entries |
+| `worker/src/runtime.ts` | Edge `/api/run` |
+| `public/pyodide/` | Wasm runtime + wheel |
+| `scripts/sync-pyne-wheel.sh` | Refresh vendored wheel |
+
+## Invariants & edge cases
+
+1. **AXIS ≠ engine** (ADR-002). The shell never embeds a closed interpreter.
+2. **AXIS ≠ execution.** Strategy events on the Results panel are not HOOX orders. See [AXIS and HOOX](/docs/enduser/guides/axis-and-hoox).
+3. **No `none` stream plugin** in `src/streams/catalog.ts`. Pausing live data is `stopLive()`, not a plugin id.
+4. Pyodide wheel version can lag PyPI (`0.3.7` wheel vs `hoox-pyne` 0.3.9). Check `vendor/`.
+5. CORS: Worker allows localhost, `*.hoox.sh`, `*.pynescript.ai`, `*.pynescript.online`, `*.pynescript-axis.pages.dev` only.
+
+## Worked examples
+
+### Local desk
+
+```bash
+# terminal 1 — PYNE Pro API
+cd pynescript && make run    # :5002
+
+# terminal 2 — AXIS
+cd axis && bun run dev
+```
+
+Manager → engine `server`, Backend URL `http://localhost:5002`.
+
+### Offline
+
+Switch engine to `pyodide`. First run downloads/caches the self-hosted runtime. Do not expect Numba.
+
+### Edge proxy
+
+Deploy AXIS Worker with `EXTERNAL_BACKEND` pointing at Flask or pyne-worker. Engine stays `server`; endpoint is the Worker origin. Still no trade-worker hop unless **that** backend forwards events.
+
+## Failure modes
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| 503 `NO_BACKEND` | Worker has no `EXTERNAL_BACKEND` and Pyodide-in-worker off | Set backend or use browser Pyodide |
+| Compile "slow / different" in Pyodide | No Numba | Use Flask for numeric compile |
+| Expecting pynets in the PWA | Not wired | Import `@hoox-sh/pynets` in your own app |
+| Strategy PnL on chart, no CEX fill | AXIS does not execute | [pyne-worker live trading](/docs/enduser/guides/pyne-live-trading) |
+
+## See also
+
+- [Engines](/axis/docs/plugins/engines)
+- [Worker runtime](/axis/docs/worker/runtime)
+- [PYNE Pro API](/pyne/docs/api/endpoints/run)
+- [PyneTS](/pyne/docs/pynets)
+- [HOOX pyne-worker](/docs/devops/workers/pyne-worker)
+- [AXIS and HOOX](/docs/enduser/guides/axis-and-hoox)
