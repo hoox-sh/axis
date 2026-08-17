@@ -248,6 +248,8 @@ export interface RunOptions {
   openResults?: boolean;
   /** Pine input.* overrides keyed by title (Script Settings) */
   inputs?: Record<string, unknown>;
+  /** Applied indicator id — used to resolve saved inputValues / strategyProps. */
+  indicatorId?: string;
   /**
    * Strategy Properties overrides keyed by `strategy()` kwarg
    * (`initial_capital`, `pyramiding`, …). Merged into a run-time source copy.
@@ -263,6 +265,18 @@ export interface RunOptions {
    * new epoch and use this for supersession checks (status / telemetry).
    */
   epoch?: number;
+  /**
+   * Headless evaluation (HPO trials). Skips epoch, status bar, and engine HUD.
+   * Does not write `lastRun`. Implies `silent` + `claimEpoch: false`.
+   */
+  isolate?: boolean;
+  /** Abort in-flight `engine.run` (Cancel on an optimisation study). */
+  signal?: AbortSignal;
+  /**
+   * Bar window override. When set, used instead of `store.bars` so holdout /
+   * walk-forward slices do not mutate the chart series.
+   */
+  bars?: import('../store/types').Bar[];
 }
 
 type PyneLogLine = { level?: string; message?: string; [k: string]: unknown };
@@ -363,10 +377,12 @@ function normalizeRunExtras(result: RunResult): RunResult {
  * with user-readable {@link formatRunError} messages.
  */
 export async function runScript(script: string, opts: RunOptions = {}): Promise<RunResult> {
-  const silent = !!opts.silent;
+  const isolate = !!opts.isolate;
+  const silent = !!opts.silent || isolate;
   // Prefer caller epoch (runAndApply); else claim unless claimEpoch: false.
-  const epoch =
-    opts.epoch != null
+  const epoch = isolate
+    ? undefined
+    : opts.epoch != null
       ? opts.epoch
       : opts.claimEpoch === false
         ? undefined
@@ -380,7 +396,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
   // Pre-eval gate: refuse when this exact script still has static errors in the
   // editor buffer. Live re-runs of applied indicators use stored code and usually
   // won't match `preEval.source`; interactive Run always matches.
-  if (!silent) {
+  if (!silent && !isolate) {
     const pe = store.preEval;
     if (pe && !pe.pending && pe.hasErrors && pe.source === script) {
       const msg = 'Script has errors — fix them in the editor before running';
@@ -401,15 +417,15 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     }
   }
 
-  const bars = store.bars;
+  const bars = Array.isArray(opts.bars) && opts.bars.length ? opts.bars : store.bars;
   if (!Array.isArray(bars) || bars.length === 0) {
     const msg = 'No bars loaded — load a symbol before running';
     // Only touch status if this generation is still current
-    if (epoch == null || isRunEpochCurrent(epoch)) {
+    if (!isolate && (epoch == null || isRunEpochCurrent(epoch))) {
       if (silent) appendLog('error', `Live re-run: ${msg}`, 'live');
       setTelemetryState('engine', 'error', { error: msg });
       finishInteractiveStatus(epoch, silent, 'error', msg);
-    } else {
+    } else if (!isolate) {
       finishInteractiveStatus(epoch, silent, 'error', msg);
     }
     return {
@@ -432,14 +448,16 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     };
     const transport = classifyTransport('engine', engine.id, engine.capabilities);
     const mode = String(config.mode || 'interpret');
-    setTelemetryPlane('engine', {
-      id: engine.id,
-      name: engine.name,
-      transport,
-      state: 'connecting',
-      detail: mode,
-      error: null,
-    });
+    if (!isolate) {
+      setTelemetryPlane('engine', {
+        id: engine.id,
+        name: engine.name,
+        transport,
+        state: 'connecting',
+        detail: mode,
+        error: null,
+      });
+    }
     // Soft outer budget for status messaging only — engines manage their own
     // AbortSignal.timeout for HTTP (WS probe + REST fallback must not share a
     // short parent abort). We still surface timeout wording via formatRunError.
@@ -447,6 +465,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       ? 60_000
       : Math.min(180_000, Math.max(90_000, 45_000 + bars.length * 40)));
     // Prefer explicit opts → applied indicator saved values → editor draft
+    const indicatorId = opts.indicatorId;
     const applied =
       typeof indicatorId === 'string' && indicatorId
         ? store.scripts.find((s) => s.id === indicatorId)
@@ -508,9 +527,9 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       config,
       inputs,
       ...(engineLibraries?.length ? { libraries: engineLibraries } : {}),
-      // Do not abort the whole run on a short timer while engine may still REST-fallback.
-      // Engine uses its own AbortSignal.timeout for HTTP; pass undefined for max reliability.
-      signal: undefined,
+      // Honour caller abort (HPO cancel). Interactive runs still omit a parent
+      // timer so WS→REST fallback is not killed mid-flight.
+      signal: isolate ? opts.signal : undefined,
     });
 
     const ms =
@@ -551,13 +570,15 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
           meta: { ...result.meta, ms, superseded: true },
         };
       }
-      setTelemetryState('engine', 'error', {
-        error: msg,
-        latencyMs: ms,
-        detail: mode,
-        transport: runTransport,
-      });
-      if (silent) appendLog('error', `Live re-run failed: ${msg}`, 'live');
+      if (!isolate) {
+        setTelemetryState('engine', 'error', {
+          error: msg,
+          latencyMs: ms,
+          detail: mode,
+          transport: runTransport,
+        });
+        if (silent) appendLog('error', `Live re-run failed: ${msg}`, 'live');
+      }
       finishInteractiveStatus(epoch, silent, 'error', msg);
       return {
         ...result,
@@ -586,12 +607,14 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
         },
       };
     }
-    setTelemetryState('engine', 'open', {
-      latencyMs: ms,
-      detail: `${mode} · ${runTransport} · ${ms.toFixed(0)}ms`,
-      error: null,
-      transport: runTransport,
-    });
+    if (!isolate) {
+      setTelemetryState('engine', 'open', {
+        latencyMs: ms,
+        detail: `${mode} · ${runTransport} · ${ms.toFixed(0)}ms`,
+        error: null,
+        transport: runTransport,
+      });
+    }
     finishInteractiveStatus(epoch, silent, 'ready', `Completed in ${ms.toFixed(0)}ms`);
     return {
       ...result,
@@ -624,8 +647,10 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       };
     }
     const msg = formatRunError(err);
-    setTelemetryState('engine', 'error', { error: msg, latencyMs: ms });
-    if (silent) appendLog('error', `Live re-run: ${msg}`, 'live');
+    if (!isolate) {
+      setTelemetryState('engine', 'error', { error: msg, latencyMs: ms });
+      if (silent) appendLog('error', `Live re-run: ${msg}`, 'live');
+    }
     finishInteractiveStatus(epoch, silent, 'error', msg);
     return {
       status: 'error',

@@ -103,6 +103,8 @@ export interface CommandActions {
   /** Open the architecture / compose-recipe wiring modal. */
   openArchitecture?: () => void;
   openScriptSettings?: () => void;
+  /** Open Results on the Optimise tab (strategy HPO). */
+  openOptimise?: () => void;
   /** About AXIS modal (logo / Help → About). */
   openAbout?: () => void;
   resetUiLayout?: () => void;
@@ -634,6 +636,21 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     keywords: ['inputs', 'parameters', 'input.*', 'strategy', 'properties', 'capital', 'pyramiding'],
   },
   {
+    id: 'action.optimise-strategy',
+    title: 'Optimise strategy',
+    category: 'actions',
+    keywords: [
+      'hpo',
+      'hyperparameter',
+      'optimisation',
+      'optimization',
+      'tune',
+      'walk-forward',
+      'tpe',
+      'inputs',
+    ],
+  },
+  {
     id: 'action.about',
     title: 'About AXIS',
     category: 'navigation',
@@ -827,6 +844,7 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.openWorkers) byId.set('action.workers', actions.openWorkers);
   if (actions.openArchitecture) byId.set('action.architecture', actions.openArchitecture);
   if (actions.openScriptSettings) byId.set('action.script-settings', actions.openScriptSettings);
+  if (actions.openOptimise) byId.set('action.optimise-strategy', actions.openOptimise);
   if (actions.openAbout) byId.set('action.about', actions.openAbout);
   if (actions.resetUiLayout) byId.set('action.reset-ui', actions.resetUiLayout);
   if (actions.toggleFullscreen) {

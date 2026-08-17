@@ -53,19 +53,28 @@ import { Icons } from './icons';
 import { StrategyReport } from './StrategyReport';
 import { ScriptRunSelect } from './ScriptRunSelect';
 import { copyToClipboard } from './clipboard';
+import { HpoPanel } from './HpoPanel';
 
-type TabId = 'events' | 'strategy' | 'plots' | 'metrics' | 'raw';
+type TabId = 'events' | 'strategy' | 'optimise' | 'plots' | 'metrics' | 'raw';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'events', label: 'Events' },
   { id: 'strategy', label: 'Strategy' },
+  { id: 'optimise', label: 'Optimise' },
   { id: 'plots', label: 'Plots' },
   { id: 'metrics', label: 'Metrics' },
   { id: 'raw', label: 'Raw' },
 ];
 
 function isResultsTab(v: unknown): v is TabId {
-  return v === 'events' || v === 'strategy' || v === 'plots' || v === 'metrics' || v === 'raw';
+  return (
+    v === 'events' ||
+    v === 'strategy' ||
+    v === 'optimise' ||
+    v === 'plots' ||
+    v === 'metrics' ||
+    v === 'raw'
+  );
 }
 
 function downloadText(filename: string, text: string, mime = 'text/plain') {
@@ -291,13 +300,16 @@ export const ResultsPanel: Component = () => {
 
         {/* Body */}
         <div class="flex-1 min-h-0 overflow-auto p-2 text-[0.85em]">
-          <Show when={!result()}>
+          <Show when={tab() === 'optimise'}>
+            <HpoPanel />
+          </Show>
+          <Show when={tab() !== 'optimise' && !result()}>
             <div class="text-text-faint uppercase tracking-wider text-[10px] p-3">
               Run a script to populate results
             </div>
           </Show>
 
-          <Show when={result()?.status === 'error'}>
+          <Show when={tab() !== 'optimise' && result()?.status === 'error'}>
             <div class="text-red p-2 border-2 border-red/40 bg-red/5 font-mono">
               {result()?.error || 'Run error'}
             </div>

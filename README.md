@@ -131,8 +131,9 @@ Legacy vanilla shell still uses `src/registry.js` (see LEGACY.md).
 | Stream  | `binance-ws`         | `wss://stream.binance.com/...`         |
 | Stream  | `mock-poll`          | synthetic poll (offline)               |
 | Stream  | `none`               | paused                                 |
-| Engine  | `server`             | `POST {endpoint}/run`                  |
+| Engine  | `server`             | `POST {endpoint}/run` (+ `/optimize`)  |
 | Engine  | `pyodide`            | in-browser Python (Pyodide)            |
+| Component | `hyperparameter-optimisation` | Results → Optimise (strategies) |
 
 Add a new plugin via the Plugin Manager **Install** tab (URL module), or
 register in TypeScript under `src/sources|streams|engines` and the unified
@@ -150,6 +151,7 @@ await loadPluginFromUrl('https://example.com/my-plugin.js');
 | **Topbar Load** | One-shot historical fetch (`historyBars` / venue page cap) into the chart |
 | **Data Sources** panel | Background multi-page **backfill** to a past date, **validate** density, **fill gaps**, durable IDB cache, optional Load to chart |
 | **On-Chain** panel | DefiLlama **TVL** lines, GeckoTerminal **DEX pool** candles, TVL spike **events**, CSV export, refresh jobs |
+| **Results → Optimise** | Strategy `input.*` search (pyne `/optimize` or isolated client fallback) |
 | **Scripts** panel | Applied indicators/strategies (list, visibility, colors) — renamed from “Indicators” |
 | **Chart themes** | Ten curated high-end presets (void, classic, mono, obsidian, graphite, pacific, dusk, porcelain, parchment, …) — no neon high-contrast default |
 | **Price scale** | Auto or 0–8 decimals from symbol + bars; Pine `plot.style_*` parity on overlays |

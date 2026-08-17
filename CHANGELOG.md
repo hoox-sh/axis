@@ -9,11 +9,25 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-17 · 228 commits · describe-tag: `v2.0.12`_
+_Generated/updated: 2026-08-17 · 229 commits · describe-tag: `v2.0.13`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.14] — 2026-08-17
+
+Strategy hyperparameter search in Results, isolated trial runs, and `/optimize` proxy wiring.
+
+### Added
+
+- **Hyperparameter Optimisation** — built-in component plugin (`hyperparameter-optimisation`) and Results → **Optimise** tab. Searches `strategy()` `input.*` values over N trials. Evaluation SoT is pyne `POST /optimize` (TPE / random / grid + holdout / walk-forward); Pyodide falls back to an isolated client loop. Apply winner **merges** into Script Inputs (unsearched fields stay). Strategies only.
+- **`runScript({ isolate, bars, signal })`** — headless engine eval so HPO trials do not touch `lastRun`, the chart, or the engine HUD. Live multiplex defers while a study is running.
+- Vite / Docker nginx **proxy `/optimize`** next to `/run` so same-origin VPS and `bun run dev` hit Flask.
+
+### See also
+
+- [Hyperparameter Optimisation](docs/enduser/guides/hyperparameter-optimisation.mdx)
 
 ## [2.0.13] — 2026-08-17
 
@@ -316,9 +330,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (146 commits)
+### 2026-08 (147 commits)
 
 #### Security
 
@@ -329,6 +345,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `9ec62e96` (2026-08-17) — feat(release): AXIS v2.0.13 params, highlighting, input enums, tables
 - `db3b42c1` (2026-08-17) — feat(release): AXIS v2.0.12 editor UX, chart lifecycle, icon map
 - `f96319e3` (2026-08-17) — feat(release): AXIS v2.0.11 chart scripts lifecycle and pyne-worker engine
 - `7f85d664` (2026-08-16) — feat(release): AXIS v2.0.10 market proxy, inputs layout, local-first LSP

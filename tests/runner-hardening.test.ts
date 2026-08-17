@@ -51,6 +51,26 @@ afterEach(() => {
   restoreFetch = null;
 });
 
+describe('runScript isolate', () => {
+  it('does not write lastRun or status when isolate is set', async () => {
+    setStore('status', 'ready');
+    setLastRun({ status: 'success', plots: [1], events: [], series: {} } as never);
+    restoreFetch = mockFetch(async () =>
+      jsonResponse({
+        status: 'success',
+        plots: [],
+        events: [],
+        series: {},
+      }),
+    );
+    const r = await runScript('plot(close)', { isolate: true, bars: SAMPLE_BARS.slice(0, 5) });
+    expect(r.status).toBe('success');
+    expect(store.lastRun).toBeTruthy();
+    expect((store.lastRun as { plots?: number[] }).plots).toEqual([1]);
+    expect(store.status).toBe('ready');
+  });
+});
+
 describe('runScript empty bars', () => {
   it('returns user-readable error without calling engine', async () => {
     setStore('bars', []);

@@ -155,6 +155,7 @@ describe('DEFAULT_COMMAND_SPECS', () => {
       'action.run',
       'action.focus-symbol',
       'action.architecture',
+      'action.optimise-strategy',
     ]) {
       expect(ids.has(id)).toBe(true);
     }

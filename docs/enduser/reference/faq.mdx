@@ -112,6 +112,10 @@ UI detail: [UI shell](/axis/docs/ui/ui-shell), [Charting](/axis/docs/ui/charting
 
 Left/right docks with multiple open panels lay out **side-by-side** (row), so the **Scripts** panel can sit left of Editor on the right strip. Bottom dock still stacks. (Internal panel id is still `indicators` for saved layouts.)
 
+### Can AXIS tune strategy inputs?
+
+Yes — Results → **Optimise**, or command palette **Optimise strategy**. Strategies only. pyne `POST /optimize` runs TPE / random / grid with holdout by default; Pyodide falls back to a local random loop. See [Hyperparameter Optimisation](/axis/docs/enduser/guides/hyperparameter-optimisation).
+
 ### How do I download years of history?
 
 Topbar **Load** is one venue page. Open the **Data** panel (Data Source Manager) to backfill in the background to a past date, validate completeness, and fill gaps — see [Data Source Manager](/axis/docs/enduser/guides/data-source-manager).

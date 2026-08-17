@@ -1,0 +1,87 @@
+# Copyright (C) 2024-2026 jango_blockchained
+#
+# This file is part of AXIS.
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+---
+title: "Hyperparameter Optimisation"
+description: "Search strategy input.* values over N trials (TPE / random / grid) with holdout or walk-forward. Strategies only."
+---
+
+# Hyperparameter Optimisation
+
+AXIS can search Pine Script™ `input.*` values on a **`strategy()`** script and apply the best assignment for this symbol and bar window.
+
+The search engine is **pyne** (`POST /optimize` / `pynescript.optimize`). AXIS is the plugin UI. Pyodide and engines without `/optimize` fall back to an isolated local loop (random only).
+
+This is not a live trading optimiser and not a Pine builtin. Best-on-sample is not a guarantee out of sample.
+
+<Warning>
+Holdout is the default for a reason. In-sample-only search overfits. Winners on one symbol or timeframe often fail on another.
+</Warning>
+
+## Open it
+
+<Steps>
+  <Step title="Load a strategy and bars">
+    Open a script that declares `strategy()`. Load history. A first **Run** is optional but helps engine-exported inputs appear.
+  </Step>
+  <Step title="Open Optimise">
+    Results drawer → **Optimise**, or command palette **Optimise strategy**. Indicators and libraries show a one-line disabled reason.
+  </Step>
+  <Step title="Set the space">
+    Tick the `input.int` / `float` / `bool` / `enum` fields to search. Numeric fields need **min** and **max** (`minval`/`maxval` from the script, or typed in the table). Source, color, timeframe, symbol, session, and text stay at their current Script Settings values.
+  </Step>
+  <Step title="Start">
+    Set trials, sampler, objective, and validation. **Start** runs the study. **Cancel** aborts the in-flight engine call. Trials do not paint the chart.
+  </Step>
+  <Step title="Apply">
+    **Apply best** merges the winner into Script Inputs (other inputs stay). **Apply + re-run** also runs the winner so the Strategy tab matches. Export the trial table as CSV.
+  </Step>
+</Steps>
+
+## Study controls
+
+| Control | Default | Notes |
+| --- | --- | --- |
+| Trials | 30 | Hard cap 200 |
+| Sampler | auto | Random if N&lt;20, else TPE (TPE needs pyne `/optimize`) |
+| Objective | composite | Also net PnL, profit factor, Calmar-like |
+| Validation | holdout 30% | Walk-forward or in-sample (warned) |
+| Min trades | 5 | Fewer closed trades → trial rejected |
+
+<Note>
+Grid is offered when the cartesian product fits the trial budget. On Pyodide (no `/optimize`) the UI falls back to random and says so.
+</Note>
+
+## Validation
+
+| Mode | What happens |
+| --- | --- |
+| **Holdout** (default) | Sampler sees the first ~70% of bars. Every trial is also scored on the last ~30%. Ranking prefers out-of-sample. |
+| **Walk-forward** | Rolling train/test windows. Engine runs ≈ `N × folds` (capped at 400). |
+| **In-sample** | One run on all bars. Warned in the UI. |
+
+Train and test are **bar slices**, not trade filters on a full-sample run.
+
+## Engines
+
+| Engine | Path |
+| --- | --- |
+| `server` (Pro API) | `POST {endpoint}/optimize` — parse-cached interpret loop, TPE / random / grid |
+| Pyodide / missing `/optimize` | Isolated `runScript` — random only |
+
+Same-origin VPS / Docker must **proxy `/optimize`** to Flask (same as `/run`). Otherwise AXIS falls back to the slow client loop.
+
+## Overfitting
+
+- Prefer holdout. Treat in-sample net profit as a search score, not a live forecast.
+- Composite + min-trades rejects lottery-ticket parameter sets with 1–2 fills.
+- Apply + re-run on a later date range or another symbol before trusting a winner.
+
+## See also
+
+- [Strategy and results](/axis/docs/enduser/guides/strategy-and-results)
+- pyne [POST /optimize](https://hoox.sh/pyne/docs/api/endpoints/optimize)
+- pyne [CLI `optimize`](https://hoox.sh/pyne/docs/enduser/reference/cli-commands)

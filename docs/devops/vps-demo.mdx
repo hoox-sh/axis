@@ -57,6 +57,9 @@ axis.example.com {
   handle /run* {
     reverse_proxy 127.0.0.1:5002
   }
+  handle /optimize* {
+    reverse_proxy 127.0.0.1:5002
+  }
   handle {
     reverse_proxy 127.0.0.1:8081
   }
@@ -68,7 +71,7 @@ Then PWA endpoint = `https://axis.example.com` and the **server** engine posts t
 ### Production-like (axis.hoox.sh)
 
 - Cloudflare → VPS nginx `:443` (TLS)
-- nginx proxies SPA to static server and Pro API paths (`/run`, `/ws/`, `/health`,
+- nginx proxies SPA to static server and Pro API paths (`/run`, `/optimize`, `/ws/`, `/health`,
   `/lsp/`, …) to gunicorn `:5002`
 - PWA **Backend URL** = `https://axis.hoox.sh` (same origin — no mixed content)
 - Cloudflare Pages previews (`*.pynescript-axis.pages.dev`) also use that Backend URL

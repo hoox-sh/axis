@@ -37,6 +37,7 @@ import { listSources } from '../sources/catalog';
 import { listStreams } from '../streams/catalog';
 import { listEngines } from '../engines/catalog';
 import { listStorages } from '../storage/catalog';
+import { registry } from '../plugins/registry';
 import { ScriptLibraryPanel } from './ScriptLibraryPanel';
 import { CapabilityBadges, engineOptionLabel } from './plugin-badges';
 import { Icons } from './icons';
@@ -114,6 +115,7 @@ export const PluginManager: Component<Props> = (props) => {
   const streams = createMemo(() => listStreams());
   const engines = createMemo(() => listEngines());
   const storages = createMemo(() => listStorages());
+  const components = createMemo(() => registry.listComponents());
 
   const catalogSections = createMemo(() => {
     const sections: Array<{
@@ -304,6 +306,31 @@ export const PluginManager: Component<Props> = (props) => {
                   </div>
                 )}
               </For>
+              <Show when={kindFilter() === 'all' && components().length}>
+                <div class="flex flex-col gap-2 min-w-0 xl:col-span-2">
+                  <div class="text-[11px] text-text-dim uppercase tracking-wider font-semibold">
+                    Components
+                  </div>
+                  <ul class="flex flex-col gap-1.5">
+                    <For each={components()}>
+                      {(p) => (
+                        <li class="flex items-start gap-2 border-2 border-border px-2.5 py-2 bg-bg-elev">
+                          <div class="flex-1 min-w-0">
+                            <div class="text-text font-medium flex items-center gap-1.5 flex-wrap">
+                              {p.name}
+                              <span class="text-text-faint font-mono text-[9px]">{p.id}</span>
+                            </div>
+                            <Show when={p.description}>
+                              <div class="text-text-faint text-[10px] mt-0.5">{p.description}</div>
+                            </Show>
+                          </div>
+                          <span class="text-[10px] text-text-faint flex-shrink-0">Built-in</span>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </div>
+              </Show>
               </div>
             </Show>
 

@@ -61,6 +61,7 @@ import {
 import { getManager, setDataToChart } from '../chart/manager-access';
 import { isReplayActive, stopReplaySession } from '../chart/bar-replay';
 import { isInteractiveRunInFlight, runAndApply } from '../indicators/runner';
+import { isStudyActive } from '../optimize/guard';
 import { orderIndicatorsByPlotDeps } from '../results/plot-sources';
 import {
   getStream,
@@ -390,7 +391,7 @@ export function stopLive(opts?: StopLiveOpts) {
 function scheduleRerun() {
   if (!store.scripts.some((s) => s.visible && s.code?.trim())) return;
   // Interactive Run owns the engine — mark dirty and wait (do not beginRunEpoch)
-  if (isInteractiveRunInFlight()) {
+  if (isInteractiveRunInFlight() || isStudyActive()) {
     if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
     return;
   }
@@ -411,7 +412,7 @@ function scheduleRerun() {
       return;
     }
     // Interactive may have started during the debounce window
-    if (isInteractiveRunInFlight()) {
+    if (isInteractiveRunInFlight() || isStudyActive()) {
       if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
       return;
     }
@@ -425,7 +426,7 @@ function scheduleRerun() {
       );
       for (const ind of ordered) {
         if (liveEpoch !== epochAtSchedule || !store.live.active) break;
-        if (isInteractiveRunInFlight()) {
+        if (isInteractiveRunInFlight() || isStudyActive()) {
           if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
           break;
         }
@@ -437,7 +438,12 @@ function scheduleRerun() {
     } finally {
       rerunInFlight = false;
       // If more ticks arrived or interactive deferred us, schedule again
-      if (store.live.active && store.live.needsRerun && !isInteractiveRunInFlight()) {
+      if (
+        store.live.active &&
+        store.live.needsRerun &&
+        !isInteractiveRunInFlight() &&
+        !isStudyActive()
+      ) {
         scheduleRerun();
       }
     }
