@@ -18,99 +18,119 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS icon set — Lucide (https://lucide.dev) via `lucide-solid`.
+ * AXIS icon components — Lucide via `lucide-solid`.
  *
- * Why Lucide: tree-shakable stroke icons, consistent 24×24 grid, ISC license,
- * solid-js package, strong default for modern UIs (shadcn, etc.).
+ * Exact intent → Lucide map: {@link ./icon-map} (`ICON_MAP`).
+ * Prefer `Icons.<key>` everywhere; never import lucide-solid outside this file.
  *
- * Export `Icons` maps short product names → pre-sized components; prefer
- * these over raw Lucide imports for consistent chrome density.
+ * @module ui/icons
  */
 
 import type { Component, JSX } from 'solid-js';
 import {
   Activity,
   AlertCircle,
+  AlignLeft,
   Archive,
   ArrowRight,
   ArrowUpRight,
+  BarChart3,
+  Bell,
+  BookOpen,
+  Boxes,
   BringToFront,
+  Cable,
+  ChartCandlestick,
   Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   Circle,
+  ClipboardList,
   Clock,
   Copy,
   Cpu,
   Database,
   Download,
   Eraser,
+  ExternalLink,
   Eye,
   EyeOff,
-  GitCommitHorizontal,
+  FileCode,
   FileJson,
   FileSpreadsheet,
   FolderOpen,
+  Fullscreen,
+  Gauge,
+  GitCommitHorizontal,
+  GripVertical,
+  HardDrive,
   KeyRound,
+  Layers,
+  Link2,
   List,
   Loader2,
   Lock,
   Magnet,
+  Maximize2,
   Menu,
+  Minimize2,
   Minus,
   Moon,
   MousePointer2,
-  PanelRight,
-  PanelLeft,
-  PanelBottom,
-  GripVertical,
+  MoveHorizontal,
+  MoveUpRight,
+  Network,
+  Package,
   Palette,
+  PanelBottom,
+  PanelLeft,
+  PanelRight,
   Pencil,
-  Radio,
   Pin,
   Play,
   Plus,
+  Radio,
   RefreshCw,
   RotateCcw,
   Ruler,
+  ScrollText,
+  Search,
   SendToBack,
   Server,
   Settings,
   Shapes,
   Shuffle,
+  Slash,
+  SlidersHorizontal,
   Smile,
   Square,
+  SquareArrowOutUpRight,
   Sun,
+  Table2,
+  Terminal,
   Trash2,
   TrendingUp,
   Type,
   Unlock,
   Upload,
-  X,
-  Zap,
-  ExternalLink,
-  SquareArrowOutUpRight,
-  ScrollText,
   Wifi,
   WifiOff,
-  MoveUpRight,
-  Layers,
-  Link2,
-  Slash,
-  Table2,
-  Fullscreen,
-  Maximize2,
-  Minimize2,
-  AlignLeft,
   WrapText,
+  X,
+  Zap,
   type LucideProps,
 } from 'lucide-solid';
+
+export {
+  ICON_MAP,
+  findDuplicateIconGlyphs,
+  type IconName,
+} from './icon-map';
 
 export type IconProps = LucideProps & { class?: string };
 
 const defaults: Partial<LucideProps> = {
-  // 1em tracks --ui-scale via root font-size (density slider)
   size: '1em',
   strokeWidth: 2,
   absoluteStrokeWidth: false,
@@ -127,18 +147,19 @@ function withDefaults(Icon: Component<LucideProps>): Component<IconProps> {
 }
 
 /**
- * Product icon map — prefer these over raw Lucide imports for consistent sizing.
- * Keys match UI intent (play, magnet, panelLeft, …).
+ * Product icons — keys match {@link ICON_MAP}.
+ * Legacy aliases at the bottom share glyphs for gradual migration.
  */
 export const Icons = {
   play: withDefaults(Play),
   settings: withDefaults(Settings),
   sun: withDefaults(Sun),
   moon: withDefaults(Moon),
-  list: withDefaults(List),
+  watchlist: withDefaults(List),
+  search: withDefaults(Search),
   menu: withDefaults(Menu),
-  panelRight: withDefaults(PanelRight),
   panelLeft: withDefaults(PanelLeft),
+  panelRight: withDefaults(PanelRight),
   panelBottom: withDefaults(PanelBottom),
   grip: withDefaults(GripVertical),
   upload: withDefaults(Upload),
@@ -150,15 +171,18 @@ export const Icons = {
   x: withDefaults(X),
   chevronDown: withDefaults(ChevronDown),
   chevronUp: withDefaults(ChevronUp),
+  chevronRight: withDefaults(ChevronRight),
   externalLink: withDefaults(ExternalLink),
   popout: withDefaults(SquareArrowOutUpRight),
   fileJson: withDefaults(FileJson),
   fileCsv: withDefaults(FileSpreadsheet),
-  folder: withDefaults(FolderOpen),
+  library: withDefaults(FolderOpen),
   loader: withDefaults(Loader2),
   alert: withDefaults(AlertCircle),
-  activity: withDefaults(Activity),
-  scrollText: withDefaults(ScrollText),
+  scripts: withDefaults(ChartCandlestick),
+  scriptLogs: withDefaults(ScrollText),
+  systemLogs: withDefaults(Terminal),
+  status: withDefaults(Gauge),
   wifi: withDefaults(Wifi),
   wifiOff: withDefaults(WifiOff),
   database: withDefaults(Database),
@@ -167,23 +191,23 @@ export const Icons = {
   key: withDefaults(KeyRound),
   shuffle: withDefaults(Shuffle),
   plus: withDefaults(Plus),
-  arrowRight: withDefaults(ArrowRight),
-  // Drawing tools
-  cursor: withDefaults(MousePointer2),
   minus: withDefaults(Minus),
+  arrowRight: withDefaults(ArrowRight),
+  cursor: withDefaults(MousePointer2),
   trend: withDefaults(TrendingUp),
   ray: withDefaults(MoveUpRight),
+  extend: withDefaults(MoveHorizontal),
   square: withDefaults(Square),
   fib: withDefaults(GitCommitHorizontal),
   layers: withDefaults(Layers),
-  /** Chain / on-chain data (link-as-chain metaphor). */
-  chain: withDefaults(Link2),
-  table: withDefaults(Table2),
+  onchain: withDefaults(Link2),
+  dataView: withDefaults(Table2),
+  dataSource: withDefaults(HardDrive),
+  datasets: withDefaults(Package),
   ruler: withDefaults(Ruler),
   type: withDefaults(Type),
   trash: withDefaults(Trash2),
   eraser: withDefaults(Eraser),
-  // Drawing toolbar chrome / prefs
   magnet: withDefaults(Magnet),
   lock: withDefaults(Lock),
   unlock: withDefaults(Unlock),
@@ -192,31 +216,44 @@ export const Icons = {
   circle: withDefaults(Circle),
   arrowUpRight: withDefaults(ArrowUpRight),
   pin: withDefaults(Pin),
-  chevronRight: withDefaults(ChevronRight),
   palette: withDefaults(Palette),
   bringToFront: withDefaults(BringToFront),
   sendToBack: withDefaults(SendToBack),
   eye: withDefaults(Eye),
   eyeOff: withDefaults(EyeOff),
   vline: withDefaults(Slash),
-  extend: withDefaults(MoveUpRight),
-  /** Engine / execution badges (Scripts panel) */
   server: withDefaults(Server),
   cpu: withDefaults(Cpu),
   clock: withDefaults(Clock),
   zap: withDefaults(Zap),
-  /** Browser Fullscreen API (app shell). */
   fullscreen: withDefaults(Fullscreen),
-  /** Chart-only / expand chrome hide. */
   maximize: withDefaults(Maximize2),
-  /** Exit chart-only / restore chrome. */
   minimize: withDefaults(Minimize2),
-  /** Document autoformat / indent */
   alignLeft: withDefaults(AlignLeft),
-  /** Soft wrap */
   wrapText: withDefaults(WrapText),
-  /** Symbol / emoji picker */
   smile: withDefaults(Smile),
+  editor: withDefaults(FileCode),
+  inputs: withDefaults(SlidersHorizontal),
+  alerts: withDefaults(Bell),
+  results: withDefaults(ClipboardList),
+  architecture: withDefaults(Network),
+  runtimes: withDefaults(Boxes),
+  book: withDefaults(BookOpen),
+  cable: withDefaults(Cable),
+  barChart: withDefaults(BarChart3),
+  activity: withDefaults(Activity),
+
+  // ── Legacy aliases (same glyph as canonical key) ──────────────────────
+  /** @deprecated use Icons.watchlist */
+  list: withDefaults(List),
+  /** @deprecated use Icons.library */
+  folder: withDefaults(FolderOpen),
+  /** @deprecated use Icons.scriptLogs */
+  scrollText: withDefaults(ScrollText),
+  /** @deprecated use Icons.onchain */
+  chain: withDefaults(Link2),
+  /** @deprecated use Icons.dataView */
+  table: withDefaults(Table2),
 };
 
 /** Inline icon row helper for buttons */

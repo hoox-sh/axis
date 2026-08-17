@@ -132,6 +132,11 @@ function clearChartScriptState(mgr: PaneManager, layer: DrawingLayer | undefined
     /* optional */
   }
   try {
+    mgr.clearTradeMarkers?.();
+  } catch {
+    /* optional */
+  }
+  try {
     if (typeof mgr.getAllPanes === 'function') {
       for (const p of mgr.getAllPanes()) {
         try {

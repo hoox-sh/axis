@@ -67,6 +67,7 @@ import {
 import { countDebugPins } from '../results/debug-pins';
 import { runPreevalNow } from './preevaluate';
 import { formatPineSource } from './pine-format';
+import { addMissingTypeDeclarations } from './pine-declare-types';
 
 interface Props {
   editorRef: {
@@ -163,12 +164,31 @@ export const EditorPane: Component<Props> = (props) => {
     return `Profiler on — line cost gutter; click to disable${ms}`;
   };
 
+  /** How-to tooltip for Chart pins (menu hover + title). */
   const pinsTitle = () => {
-    if (!store.debugPinsEnabled) {
-      return 'Pin last-run log bars on the chart + editor gutter (needs bar_index or time). Alt-P';
-    }
     const n = pinCount();
-    return `Chart pins on (${n} ${n === 1 ? 'pin' : 'pins'}) — markers + gutter (Alt-P). Click 📍 to jump.`;
+    const how =
+      'How to use: 1) Add log.* with bar_index or time (e.g. log.info("x", bar_index)). 2) Run the script. 3) Enable Chart pins. 4) Click 📍 in the gutter or a chart marker to jump. Shortcut: Alt-P.';
+    if (!store.debugPinsEnabled) {
+      return `Chart pins — mark bars on the chart from last-run logs + 📍 in the editor gutter.\n${how}`;
+    }
+    if (n === 0) {
+      return `Chart pins on — no pinable logs yet (need bar_index or time in the message).\n${how}`;
+    }
+    return `Chart pins on (${n} ${n === 1 ? 'pin' : 'pins'}) — click 📍 or a chart marker to jump. Alt-P to turn off.\n${how}`;
+  };
+
+  /** How-to tooltip for Inline debug (menu hover). */
+  const inlineDebugTitle = () => {
+    const how =
+      'How to use: 1) Use log.info / log.warning / log.error in Pine (or fix a run error with a line number). 2) Run the script. 3) Enable Inline debug. 4) Chips appear at the end of matching source lines; click underlined chips (with bar_index/time) to jump the chart.';
+    if (!store.inlineDebugEnabled) {
+      return `Inline debug — end-of-line log/error chips from the last run.\n${how}`;
+    }
+    if (store.lastRun == null) {
+      return `Inline debug on — no last run yet. Run a script to populate chips.\n${how}`;
+    }
+    return `Inline debug on — chips on source lines from last run. Click pin-able chips to jump the chart.\n${how}`;
   };
 
   /**
@@ -209,6 +229,85 @@ export const EditorPane: Component<Props> = (props) => {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setStatus('error', msg || 'Format failed');
+    }
+  };
+
+  /** True after at least one successful engine run (enables type-declare). */
+  const canDeclareTypes = createMemo(() => {
+    const r = store.lastRun as { status?: string } | null | undefined;
+    if (r?.status === 'success') return true;
+    const bag = store.runResults || {};
+    for (const v of Object.values(bag)) {
+      if (v && typeof v === 'object' && (v as { status?: string }).status === 'success') {
+        return true;
+      }
+    }
+    return false;
+  });
+
+  /** Series / plot names from last successful run (hint series float). */
+  const lastRunSeriesNames = createMemo((): string[] => {
+    const names = new Set<string>();
+    const take = (r: unknown) => {
+      if (!r || typeof r !== 'object') return;
+      const o = r as { status?: string; series?: Record<string, unknown> };
+      if (o.status && o.status !== 'success') return;
+      if (o.series && typeof o.series === 'object') {
+        for (const k of Object.keys(o.series)) {
+          if (k && !k.startsWith('__')) names.add(k);
+        }
+      }
+    };
+    take(store.lastRun);
+    for (const v of Object.values(store.runResults || {})) take(v);
+    return [...names];
+  });
+
+  /**
+   * Insert missing type1 (series/simple/const) + type2 (int/float/…) on
+   * untyped assignments. Enabled after a successful first run.
+   */
+  const declareTypesActiveDoc = () => {
+    if (!canDeclareTypes()) {
+      setStatus('ready', 'Run the script once before adding type declarations');
+      return;
+    }
+    try {
+      const ref = props.editorRef as {
+        declareTypesDoc?: (opts?: { seriesNames?: Iterable<string> | null }) => boolean;
+        getDoc?: () => string;
+        setDoc?: (d: string) => void;
+      };
+      const seriesNames = lastRunSeriesNames();
+      if (typeof ref.declareTypesDoc === 'function') {
+        const changed = ref.declareTypesDoc({ seriesNames });
+        const doc = ref.getDoc?.() || '';
+        if (changed) {
+          saveEditorDoc(doc);
+          setStatus('ready', 'Added type declarations');
+        } else {
+          setStatus('ready', 'No missing type declarations');
+        }
+        return;
+      }
+      const doc = ref.getDoc?.() || '';
+      if (!doc.trim()) {
+        setStatus('ready', 'Nothing to annotate');
+        return;
+      }
+      const { source: next, changed } = addMissingTypeDeclarations(doc, {
+        seriesNames,
+      });
+      if (!changed || next === doc) {
+        setStatus('ready', 'No missing type declarations');
+        return;
+      }
+      ref.setDoc?.(next);
+      saveEditorDoc(next);
+      setStatus('ready', `Added ${changed} type declaration${changed === 1 ? '' : 's'}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setStatus('error', msg || 'Add types failed');
     }
   };
 
@@ -324,11 +423,14 @@ export const EditorPane: Component<Props> = (props) => {
     <EditorOverflowMenu
       pinCount={pinCount()}
       pinsTitle={pinsTitle()}
+      inlineDebugTitle={inlineDebugTitle()}
       onToggleInlineDebug={() => toggleInlineDebugEnabled()}
       onTogglePins={() => toggleDebugPinsEnabled()}
       onToggleRuler={() => toggleEditorRulerEnabled()}
       onToggleWrap={() => toggleEditorWrapEnabled()}
       onFormat={() => formatActiveDoc()}
+      canDeclareTypes={canDeclareTypes()}
+      onDeclareTypes={() => declareTypesActiveDoc()}
       onOpenLibrary={
         props.standalone ? undefined : () => toggleLibraryPanel()
       }
@@ -406,11 +508,16 @@ export const EditorPane: Component<Props> = (props) => {
 const EditorOverflowMenu: Component<{
   pinCount: number;
   pinsTitle: string;
+  /** How-to title for Inline debug (multi-line ok via native title). */
+  inlineDebugTitle: string;
   onToggleInlineDebug: () => void;
   onTogglePins: () => void;
   onToggleRuler: () => void;
   onToggleWrap: () => void;
   onFormat: () => void;
+  /** After a successful run — enable “Add type declarations”. */
+  canDeclareTypes?: boolean;
+  onDeclareTypes?: () => void;
   onOpenLibrary?: () => void;
   libraryOpen?: boolean;
   /** Open live editor in a full browser tab (main window only). */
@@ -538,11 +645,7 @@ const EditorOverflowMenu: Component<{
             class={`axis-panel-menu-item ${
               store.inlineDebugEnabled ? 'is-active' : ''
             }`}
-            title={
-              store.inlineDebugEnabled
-                ? 'Inline debug on — end-of-line log/error chips from last run'
-                : 'Show last-run logs/errors inline on source lines'
-            }
+            title={props.inlineDebugTitle}
             data-testid="axis-btn-inline-debug"
             onClick={() => props.onToggleInlineDebug()}
           >
@@ -586,6 +689,28 @@ const EditorOverflowMenu: Component<{
           >
             <Icons.alignLeft size={14} />
             <span>Format document</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class={`axis-panel-menu-item ${
+              props.canDeclareTypes ? '' : 'opacity-50'
+            }`}
+            title={
+              props.canDeclareTypes
+                ? 'Insert missing type1 (series/simple/const) and type2 (int/float/string/…) on untyped assignments'
+                : 'Run the script once to unlock type declarations'
+            }
+            data-testid="axis-btn-editor-declare-types"
+            disabled={!props.canDeclareTypes}
+            aria-disabled={!props.canDeclareTypes}
+            onClick={() => {
+              if (!props.canDeclareTypes) return;
+              props.onDeclareTypes?.();
+            }}
+          >
+            <Icons.type size={14} />
+            <span>Add type declarations</span>
           </button>
           <Show when={props.onOpenNewTab}>
             <div class="axis-panel-menu-section">Window</div>

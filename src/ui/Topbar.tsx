@@ -28,8 +28,9 @@
  * - **Data** — Source (+ CSV upload), Load, Reload
  * - **Compute** — Engine, Stream, Run, Live, Replay
  * - **Layout** — multi-chart layout menu
- * - **Panels** — List, Editor, Library, Scripts, Layers, Alerts, Data, Inputs, Results
- * - **System** — Fullscreen, Chart only, Wire (Architecture), Runtimes (Status + Plugins), Settings, Theme (`ml-auto`)
+ * - **Panels** — List → Editor → Library → Scripts → Inputs → Layers → DSM →
+ *   On-Chain → Alerts → Values → Results → Script Logs → System Logs → Status
+ * - **System** — Fullscreen, Chart only, Wire (Architecture), Runtimes, Settings, Theme (`ml-auto`)
  *
  * ## Actions
  * - **Load / Reload** → force `loadSymbolData` (historical via active source)
@@ -317,7 +318,7 @@ export const Topbar: Component<{
               aria-label="Browse symbols"
               onClick={() => setSymbolModalOpen(true)}
             >
-              <Icons.list />
+              <Icons.search />
             </button>
           </div>
           <SymbolModal
@@ -421,7 +422,7 @@ export const Topbar: Component<{
             onClick={() => setDatasetsOpen(true)}
             data-testid="axis-btn-datasets"
           >
-            <Icons.layers />
+            <Icons.datasets />
             <span class="truncate axis-tb-btn-label">Datasets…</span>
           </button>
         </Show>
@@ -568,7 +569,7 @@ export const Topbar: Component<{
         <ChartLayoutMenu />
       </div>
 
-      {/* ── Panels ──────────────────────────────────────────── */}
+      {/* ── Panels (unique Icons.* per button — see ICON_MAP in icons.tsx) ─ */}
       <div class="axis-tb-group" data-tb-group="panels">
         <button
           type="button"
@@ -578,7 +579,7 @@ export const Topbar: Component<{
           aria-pressed={isPanelOpen('watchlist') || store.watchlist.open}
           data-testid="axis-btn-watchlist"
         >
-          <Icons.list />
+          <Icons.watchlist />
           <span class="axis-tb-btn-label">List</span>
         </button>
 
@@ -592,7 +593,7 @@ export const Topbar: Component<{
           aria-pressed={!!(store.editor.open && store.editor.mode === 'docked')}
           data-testid="axis-btn-editor"
         >
-          <Icons.panelRight />
+          <Icons.editor />
           <span class="axis-tb-btn-label">Editor</span>
           {store.editor.mode === 'popout' && (
             <span class="text-orange ml-0.5 text-[0.72em]">ext</span>
@@ -607,32 +608,8 @@ export const Topbar: Component<{
           aria-pressed={isPanelOpen('library')}
           data-testid="axis-btn-library"
         >
-          <Icons.folder />
+          <Icons.library />
           <span class="axis-tb-btn-label">Library</span>
-        </button>
-
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost ${isPanelOpen('datasource') ? 'is-active' : ''}`}
-          onClick={() => toggleDataSourcePanel()}
-          title="Data Source Manager — background OHLCV backfill"
-          aria-pressed={isPanelOpen('datasource')}
-          data-testid="axis-btn-datasource"
-        >
-          <Icons.download />
-          <span class="axis-tb-btn-label">Data</span>
-        </button>
-
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost ${isPanelOpen('onchain') ? 'is-active' : ''}`}
-          onClick={() => toggleOnchainPanel()}
-          title="On-Chain — DefiLlama protocol TVL overlays"
-          aria-pressed={isPanelOpen('onchain')}
-          data-testid="axis-btn-onchain"
-        >
-          <Icons.chain />
-          <span class="axis-tb-btn-label">On-Chain</span>
         </button>
 
         <button
@@ -643,8 +620,19 @@ export const Topbar: Component<{
           aria-pressed={isPanelOpen('indicators') || store.indicatorPanel.open}
           data-testid="axis-btn-indicators"
         >
-          <Icons.activity />
+          <Icons.scripts />
           <span class="axis-tb-btn-label">Scripts</span>
+        </button>
+
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost"
+          onClick={() => openScriptSettings(null)}
+          title="Script settings — edit input.* parameters"
+          data-testid="axis-btn-script-settings"
+        >
+          <Icons.inputs />
+          <span class="axis-tb-btn-label">Inputs</span>
         </button>
 
         <button
@@ -661,13 +649,37 @@ export const Topbar: Component<{
 
         <button
           type="button"
+          class={`sc-btn sc-btn-ghost ${isPanelOpen('datasource') ? 'is-active' : ''}`}
+          onClick={() => toggleDataSourcePanel()}
+          title="Data Source Manager — background OHLCV backfill"
+          aria-pressed={isPanelOpen('datasource')}
+          data-testid="axis-btn-datasource"
+        >
+          <Icons.dataSource />
+          <span class="axis-tb-btn-label">DSM</span>
+        </button>
+
+        <button
+          type="button"
+          class={`sc-btn sc-btn-ghost ${isPanelOpen('onchain') ? 'is-active' : ''}`}
+          onClick={() => toggleOnchainPanel()}
+          title="On-Chain — DefiLlama protocol TVL overlays"
+          aria-pressed={isPanelOpen('onchain')}
+          data-testid="axis-btn-onchain"
+        >
+          <Icons.onchain />
+          <span class="axis-tb-btn-label">On-Chain</span>
+        </button>
+
+        <button
+          type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('alerts') || store.alertsPanel.open ? 'is-active' : ''}`}
           onClick={() => toggleAlertsPanel()}
           title="Price alerts — create, toggle, webhook"
           aria-pressed={isPanelOpen('alerts') || store.alertsPanel.open}
           data-testid="axis-btn-alerts"
         >
-          <Icons.alert />
+          <Icons.alerts />
           <span class="axis-tb-btn-label">Alerts</span>
         </button>
 
@@ -679,19 +691,8 @@ export const Topbar: Component<{
           aria-pressed={isPanelOpen('dataview') || store.dataViewPanel.open}
           data-testid="axis-btn-dataview"
         >
-          <Icons.table />
-          <span class="axis-tb-btn-label">Data</span>
-        </button>
-
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost"
-          onClick={() => openScriptSettings(null)}
-          title="Script settings — edit input.* parameters"
-          data-testid="axis-btn-script-settings"
-        >
-          <Icons.settings />
-          <span class="axis-tb-btn-label">Inputs</span>
+          <Icons.dataView />
+          <span class="axis-tb-btn-label">Values</span>
         </button>
 
         <button
@@ -705,7 +706,7 @@ export const Topbar: Component<{
             persist();
           }}
         >
-          <Icons.list />
+          <Icons.results />
           <span class="axis-tb-btn-label">Results</span>
         </button>
 
@@ -717,7 +718,7 @@ export const Topbar: Component<{
           aria-pressed={isPanelOpen('scriptlogs')}
           onClick={() => toggleScriptLogsPanel()}
         >
-          <Icons.scrollText />
+          <Icons.scriptLogs />
           <span class="axis-tb-btn-label">Script Logs</span>
         </button>
 
@@ -729,7 +730,7 @@ export const Topbar: Component<{
           aria-pressed={isPanelOpen('logs')}
           onClick={() => toggleSystemLogsPanel()}
         >
-          <Icons.server />
+          <Icons.systemLogs />
           <span class="axis-tb-btn-label">System Logs</span>
         </button>
 
@@ -741,7 +742,7 @@ export const Topbar: Component<{
           aria-pressed={isPanelOpen('statusbar')}
           onClick={() => toggleStatusBarPanel()}
         >
-          <Icons.activity />
+          <Icons.status />
           <span class="axis-tb-btn-label">Status</span>
         </button>
       </div>
@@ -788,7 +789,7 @@ export const Topbar: Component<{
           data-testid="axis-btn-architecture"
           aria-label="Open Architecture"
         >
-          <Icons.layers />
+          <Icons.architecture />
           <span class="axis-tb-btn-label">Wire</span>
         </button>
 
@@ -800,7 +801,7 @@ export const Topbar: Component<{
           data-testid="axis-btn-runtimes"
           aria-label="Open Runtimes"
         >
-          <Icons.server />
+          <Icons.runtimes />
           <span class="axis-tb-btn-label">Runtimes</span>
         </button>
         {/* Keep test ids for palette / docs that open Status or Plugins specifically */}

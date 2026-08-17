@@ -402,6 +402,12 @@ export class PaneManager {
   private candleMarkers: ISeriesMarkersPluginApi<any> | null = null;
   /** Strategy entry/exit markers (merged with shape markers) */
   private tradeMarkerList: SeriesMarker<UTCTimestamp>[] = [];
+  /**
+   * Owner-scoped strategy markers (script id → list) so remove/re-run of one
+   * strategy does not leave long/short labels when another path clears only
+   * shapes. Flattened into {@link tradeMarkerList}.
+   */
+  private tradeMarkersByOwner = new Map<string, SeriesMarker<UTCTimestamp>[]>();
   /** plotshape / plotchar markers (merged with trade markers) */
   private shapeMarkerList: SeriesMarker<UTCTimestamp>[] = [];
   /**
@@ -1037,16 +1043,27 @@ export class PaneManager {
   /**
    * Attach or update entry/exit markers on the price candle series (LWC v5).
    * Merges with plotshape markers so neither path wipes the other.
+   *
+   * @param ownerId - Script id; when set, only that strategy’s markers are
+   *   replaced. Omit/`__global__` is the legacy single-run bag. Empty list
+   *   clears that owner (used when a strategy returns 0 fills).
    */
-  setTradeMarkers(markers: TradeMarker[]) {
-    this.tradeMarkerList = markers.map((m) => ({
+  setTradeMarkers(markers: TradeMarker[], ownerId?: string | null) {
+    const owner = (ownerId && String(ownerId).trim()) || '__global__';
+    const list = markers.map((m, i) => ({
       time: m.time as UTCTimestamp,
       position: m.position,
       color: m.color,
       shape: m.shape,
       text: m.text,
-      id: `trade_${m.time}_${m.text || ''}`,
+      id: `trade_${owner}_${m.time}_${m.text || ''}_${i}`,
     }));
+    if (list.length === 0) {
+      this.tradeMarkersByOwner.delete(owner);
+    } else {
+      this.tradeMarkersByOwner.set(owner, list);
+    }
+    this.rebuildTradeMarkerList();
     this.applyCandleMarkers();
   }
 
@@ -1082,8 +1099,18 @@ export class PaneManager {
     this.applyCandleMarkers();
   }
 
-  clearTradeMarkers() {
-    this.tradeMarkerList = [];
+  /**
+   * Clear strategy entry/exit markers.
+   * @param ownerId - When set, only that script’s long/short labels are removed.
+   *   Omit to clear every strategy’s markers (symbol reload / full wipe).
+   */
+  clearTradeMarkers(ownerId?: string | null) {
+    if (ownerId && String(ownerId).trim()) {
+      this.tradeMarkersByOwner.delete(String(ownerId).trim());
+    } else {
+      this.tradeMarkersByOwner.clear();
+    }
+    this.rebuildTradeMarkerList();
     this.applyCandleMarkers();
   }
 
@@ -1095,6 +1122,14 @@ export class PaneManager {
     }
     this.rebuildShapeMarkerList();
     this.applyCandleMarkers();
+  }
+
+  private rebuildTradeMarkerList() {
+    const out: SeriesMarker<UTCTimestamp>[] = [];
+    for (const list of this.tradeMarkersByOwner.values()) {
+      for (const m of list) out.push(m);
+    }
+    this.tradeMarkerList = out;
   }
 
   private rebuildShapeMarkerList() {
@@ -1835,6 +1870,89 @@ export class PaneManager {
     } catch {
       /* optional */
     }
+    // Strategy long/short labels live on the price candle series (not overlays)
+    try {
+      this.clearTradeMarkers?.(ownerId);
+    } catch {
+      /* optional */
+    }
+  }
+
+  /**
+   * Drop series that would double right-scale last-value labels for the same
+   * plot. Called from owner-scoped sync when promoting `__editor__` → real id
+   * or when a dedicated sub-pane should only hold one script’s series.
+   *
+   * - **Exclusive panes** (`ind_*`, not price/volume): remove every overlay
+   *   not owned by `ownerId` (including legacy unowned + other owners).
+   * - **Shared price pane**: remove legacy unowned keys and `__editor__`
+   *   leftovers for the plot names being applied (siblings stay).
+   */
+  private pruneConflictingOverlaySeries(
+    pane: ManagedPane,
+    paneId: string,
+    ownerId: string | undefined,
+    plotNames: ReadonlySet<string>,
+    kind: 'line' | 'ohlc',
+  ): void {
+    if (!ownerId) return;
+    const exclusive = paneId !== 'price' && paneId !== 'volume';
+    const ownerPrefix =
+      kind === 'ohlc' ? ownedOhlcPrefix(ownerId) : ownedOverlayPrefix(ownerId);
+    // store.EDITOR_RUN_KEY — keep string literal to avoid circular import
+    const editorPrefix =
+      kind === 'ohlc' ? ownedOhlcPrefix('__editor__') : ownedOverlayPrefix('__editor__');
+    const isRealOwner = sanitizeOverlayOwnerId(ownerId) !== sanitizeOverlayOwnerId('__editor__');
+
+    for (const k of Object.keys(pane.series)) {
+      if (kind === 'line') {
+        if (!k.startsWith('overlay_') || k.startsWith(OVERLAY_OHLC_PREFIX)) continue;
+      } else if (!k.startsWith(OVERLAY_OHLC_PREFIX)) {
+        continue;
+      }
+      // Keep this owner’s own keys
+      if (k.startsWith(ownerPrefix)) continue;
+
+      let drop = false;
+      if (exclusive) {
+        // Dedicated sub-pane: only one script may own series
+        drop = true;
+      } else {
+        // Shared price: drop legacy unowned overlay_${name}
+        if (kind === 'line' && k.startsWith('overlay_') && !k.includes('__')) {
+          const name = k.slice('overlay_'.length);
+          if (plotNames.has(name)) drop = true;
+        } else if (kind === 'ohlc') {
+          const rest = k.slice(OVERLAY_OHLC_PREFIX.length);
+          if (!rest.includes('__') && plotNames.has(rest)) drop = true;
+        }
+        // Drop editor preview leftovers when applying under a real script id
+        if (isRealOwner && k.startsWith(editorPrefix)) {
+          const name = k.slice(editorPrefix.length);
+          if (plotNames.has(name)) drop = true;
+        }
+      }
+      if (!drop) continue;
+      safeRemoveSeries(pane.chart, pane.series[k]);
+      delete pane.series[k];
+      this.overlaySeriesKinds.delete(`${paneId}:${k}`);
+      this.overlayDataMeta.delete(k);
+    }
+
+    // Exclusive panes: also drop other owners’ price lines (hlines)
+    if (exclusive && kind === 'line') {
+      const plPrefix = `${sanitizeOverlayOwnerId(ownerId)}__`;
+      for (const name of Object.keys(pane.priceLines)) {
+        if (name.startsWith(plPrefix)) continue;
+        const pl = pane.priceLines[name];
+        try {
+          pl.host.removePriceLine(pl.line);
+        } catch {
+          /* ignore */
+        }
+        delete pane.priceLines[name];
+      }
+    }
   }
 
   /** Prefer candle, else first non-overlay series, else any series (for createPriceLine host). */
@@ -1877,6 +1995,13 @@ export class PaneManager {
     // Price lines namespaced by owner when set (avoid multi-script hline wipe)
     const plName = (name: string) => (ownerId ? `${sanitizeOverlayOwnerId(ownerId)}__${name}` : name);
     const wantPrice = new Set(hLines.map((l) => plName(l.name)));
+
+    // Drop editor leftovers / exclusive-pane orphans before owner-scoped keep set
+    // (prevents stacked identical last-value labels: last + current duplicate series)
+    if (ownerId) {
+      const plotNames = new Set(lines.map((l) => l.name));
+      this.pruneConflictingOverlaySeries(pane, paneId, ownerId, plotNames, 'line');
+    }
 
     for (const k of Object.keys(pane.series)) {
       if (!k.startsWith('overlay_')) continue;
@@ -2179,6 +2304,10 @@ export class PaneManager {
     }
 
     const want = new Set(specs.map((s) => makeOverlayOhlcKey(s.name, ownerId)));
+    if (ownerId) {
+      const plotNames = new Set(specs.map((s) => s.name));
+      this.pruneConflictingOverlaySeries(pane, paneId, ownerId, plotNames, 'ohlc');
+    }
     for (const k of Object.keys(pane.series)) {
       if (!k.startsWith(OVERLAY_OHLC_PREFIX)) continue;
       if (ownerPrefix && !k.startsWith(ownerPrefix)) continue;
@@ -2418,7 +2547,10 @@ export class PaneManager {
     this.pendingResizePaneIds.clear();
     this.candleMarkers = null;
     this.tradeMarkerList = [];
+    this.tradeMarkersByOwner.clear();
     this.shapeMarkerList = [];
+    this.shapeMarkersByOwner.clear();
+    this.debugPinMarkerList = [];
     this.crosshairOnMove = null;
     this.pointerInside = null;
     this.hoveredPaneId = null;

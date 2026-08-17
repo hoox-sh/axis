@@ -2337,10 +2337,29 @@ export function setInlineDebugEnabled(on: boolean) {
   persist();
 }
 
-/** Toggle inline debug mode (end-of-line log/error chips). */
+/**
+ * Toggle inline debug mode (end-of-line log/error chips from last run).
+ * Surfaces a short status tip so the menu hover how-to is mirrored on toggle.
+ */
 export function toggleInlineDebugEnabled() {
-  setStore('inlineDebugEnabled', !store.inlineDebugEnabled);
+  const next = !store.inlineDebugEnabled;
+  setStore('inlineDebugEnabled', next);
   persist();
+  if (!next) {
+    setStatus('ready', 'Inline debug off');
+    return;
+  }
+  if (store.lastRun == null) {
+    setStatus(
+      'ready',
+      'Inline debug on — Run a script with log.* (or fix errors) to see end-of-line chips',
+    );
+    return;
+  }
+  setStatus(
+    'ready',
+    'Inline debug on — chips on source lines from last run (click pin-able chips to jump chart)',
+  );
 }
 
 /** Enable/disable chart pins from last-run logs with bar_index/time. */
@@ -2349,10 +2368,29 @@ export function setDebugPinsEnabled(on: boolean) {
   persist();
 }
 
-/** Toggle chart debug pins (markers on bars referenced by logs). */
+/**
+ * Toggle chart debug pins (markers on bars referenced by logs + editor 📍 gutter).
+ * Alt-P also toggles this (editor overflow menu + global when focus is outside CM).
+ */
 export function toggleDebugPinsEnabled() {
-  setStore('debugPinsEnabled', !store.debugPinsEnabled);
+  const next = !store.debugPinsEnabled;
+  setStore('debugPinsEnabled', next);
   persist();
+  if (!next) {
+    setStatus('ready', 'Chart pins off');
+    return;
+  }
+  if (store.lastRun == null) {
+    setStatus(
+      'ready',
+      'Chart pins on — Run with log.info("…", bar_index) so pins can attach to bars',
+    );
+    return;
+  }
+  setStatus(
+    'ready',
+    'Chart pins on — markers on the chart + 📍 gutter; click to jump (needs bar_index or time in logs)',
+  );
 }
 
 /** Enable/disable editor column ruler (persisted; default on). */

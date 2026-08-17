@@ -9,11 +9,35 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-17 · 226 commits · describe-tag: `v2.0.10`_
+_Generated/updated: 2026-08-17 · 227 commits · describe-tag: `v2.0.11`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.12] — 2026-08-17
+
+Editor color chips + type declarations, chart label/marker lifecycle, topbar icon map, debug UX.
+
+### Added
+
+- **Editor inline color chips** — square swatches (line-height × line-height) before Pine color literals (`#hex`, `color.red`, `color.rgb(...)`, `color.new(...)`). Click selects the range.
+- **Add type declarations** (editor overflow → Source) — after a successful first run, inserts missing Pine **type1** (`series` / `simple` / `const`) and **type2** (`int` / `float` / `bool` / `string` / `color` / …) on untyped assignments.
+- **`ICON_MAP`** (`src/ui/icon-map.ts` + `Icons` in `icons.tsx`) — one Lucide glyph per product intent; topbar panel buttons each use a unique icon.
+
+### Improved
+
+- **Panel hamburger menu** — consistent 12px label / 14px icons; **New window** → **New tab**.
+- **System Logs** — clear control uses trash icon instead of ×.
+- **Topbar panels** — reordered List → Editor → Library → Scripts → Inputs → Layers → DSM → On-Chain → Alerts → Values → Results → Script Logs → System Logs → Status.
+- **Inline debug / Chart pins** — overflow Debug items include full how-to on hover; toggle shows status-bar tips.
+
+### Fixed
+
+- **Duplicate last-value labels** on indicator panes (editor owner + real script id stacked series).
+- **Strategy long/short labels** stayed after remove — trade markers are owner-scoped and cleared on detach.
+- **Chart chrome** — removed top-right fullscreen / chart-only icon buttons (F11 / Shift+F / Esc still work).
+- **Inline debug enable gate** — chips only when explicitly on; pin gutter class clears when empty.
 
 ## [2.0.11] — 2026-08-17
 
@@ -269,9 +293,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (144 commits)
+### 2026-08 (145 commits)
 
 #### Security
 
@@ -282,6 +308,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `f96319e3` (2026-08-17) — feat(release): AXIS v2.0.11 chart scripts lifecycle and pyne-worker engine
 - `7f85d664` (2026-08-16) — feat(release): AXIS v2.0.10 market proxy, inputs layout, local-first LSP
 - `2cae2b72` (2026-08-15) — feat(editor): symbol catalog and richer Pine highlighting
 - `9411a16b` (2026-08-15) — feat(pyodide): vendor pynescript 0.3.7 wheel

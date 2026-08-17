@@ -65,6 +65,8 @@ import {
   refreshColumnRuler,
 } from './column-ruler';
 import { formatPineSource } from './pine-format';
+import { colorChipsExtension } from './color-chips';
+import { addMissingTypeDeclarations } from './pine-declare-types';
 
 /** Cursor position reported by {@link PyneEditorRef.getCursor}. */
 export type PyneEditorCursor = { line: number; col: number; offset: number };
@@ -90,6 +92,12 @@ export type PyneEditorRef = {
   insertAtCursor?: (text: string) => boolean;
   /** Format document (indent / whitespace). Returns true when changed. */
   formatDoc?: () => boolean;
+  /**
+   * Insert missing Pine type1 (`series`/`simple`/`const`) + type2
+   * (`int`/`float`/…) on untyped assignments. Optional series names from
+   * last run force `series float` for matching plot ids. Returns true when changed.
+   */
+  declareTypesDoc?: (opts?: { seriesNames?: Iterable<string> | null }) => boolean;
   /** Load external library content into active tab (set by TabbedEditor). */
   loadLibraryDoc?: (doc: string, name?: string, libraryId?: string) => void;
   /**
@@ -267,6 +275,36 @@ export const PyneEditor: Component<Props> = (props) => {
     }
   };
 
+  /**
+   * Add missing type1/type2 declarations on untyped `name = expr` lines.
+   * Cursor mapped by offset ratio (same strategy as format).
+   */
+  const declareTypesDoc = (opts?: {
+    seriesNames?: Iterable<string> | null;
+  }): boolean => {
+    if (!view) return false;
+    try {
+      const prev = view.state.doc.toString();
+      const { source: next, changed } = addMissingTypeDeclarations(prev, {
+        seriesNames: opts?.seriesNames,
+      });
+      if (!changed || next === prev) return false;
+      const head = view.state.selection.main.head;
+      const mapped =
+        prev.length > 0
+          ? Math.min(Math.round((head / prev.length) * next.length), next.length)
+          : 0;
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: next },
+        selection: EditorSelection.cursor(mapped),
+      });
+      view.focus();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const syncProfiler = () => {
     if (!view) return;
     const enabled = props.profilerEnabled !== false;
@@ -276,7 +314,8 @@ export const PyneEditor: Component<Props> = (props) => {
 
   const syncInlineDebug = () => {
     if (!view) return;
-    const enabled = props.inlineDebugEnabled !== false;
+    // Require explicit true — same gate as chart pins (avoids chips when prop omitted)
+    const enabled = props.inlineDebugEnabled === true;
     const anns = enabled ? (props.inlineDebug ?? null) : null;
     applyInlineDebug(view, anns && anns.length ? anns : null);
   };
@@ -365,6 +404,8 @@ export const PyneEditor: Component<Props> = (props) => {
         columnRulerExtension({
           enabled: () => props.rulerEnabled !== false,
         }),
+        // Inline color chips (line-height × line-height) before hex / color.*
+        colorChipsExtension(),
         runKeymap,
         keymap.of([...defaultKeymap, indentWithTab, ...searchKeymap]),
         pyneScript,
@@ -395,6 +436,7 @@ export const PyneEditor: Component<Props> = (props) => {
       props.editorRef.selectRange = selectRange;
       props.editorRef.insertAtCursor = insertAtCursor;
       props.editorRef.formatDoc = formatDoc;
+      props.editorRef.declareTypesDoc = declareTypesDoc;
       props.editorRef.jumpToDiagnostic = (diag: EditorDiagnostic) => {
         if (!view) return false;
         return jumpToDiagnostic(view, diag);

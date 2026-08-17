@@ -25,7 +25,7 @@
  *   global drag preview consumed by {@link PanelDragOverlay}. A plain click on
  *   the title does **not** undock/float the panel.
  * - Hamburger: click → dock menu; hold (~280ms) or drag → move panel.
- * - Dock menu: left/right/bottom/float/window; window may call `onPopoutWindow`.
+ * - Dock menu: left/right/bottom/float/new tab; new tab may call `onPopoutWindow`.
  * - Float mode: free geometry via `setPanelGeometry` + `bumpPanelZ`.
  *
  * {@link installPanelWindowBridge} listens for companion-window reattach messages.
@@ -107,7 +107,7 @@ export interface FloatableShellProps {
    */
   menuExtra?: JSX.Element;
   class?: string;
-  /** Called when user chooses "new window" (shell still sets dock=window) */
+  /** Called when user chooses "New tab" (shell still sets dock=window) */
   onPopoutWindow?: () => void;
   testId?: string;
 }
@@ -144,12 +144,16 @@ export function getDragPreview() {
 const HOLD_MS = 280;
 const MOVE_PX = 6;
 
+/** Menu icon size — matches editor overflow / other panel menuitems. */
+const MENU_ICON = 14;
+const MENU_CHECK = 12;
+
 const DOCK_MENU = [
   { dock: 'left' as const, label: 'Dock left', Icon: Icons.panelLeft },
   { dock: 'right' as const, label: 'Dock right', Icon: Icons.panelRight },
   { dock: 'bottom' as const, label: 'Dock bottom', Icon: Icons.panelBottom },
   { dock: 'float' as const, label: 'Float', Icon: Icons.square },
-  { dock: 'window' as const, label: 'New window', Icon: Icons.popout },
+  { dock: 'window' as const, label: 'New tab', Icon: Icons.externalLink },
 ];
 
 /**
@@ -1016,7 +1020,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                             class={`axis-panel-menu-item ${active() ? 'is-active' : ''}`}
                             onClick={() => setDock(item.dock)}
                           >
-                            <ItemIcon />
+                            <ItemIcon size={MENU_ICON} />
                             <span>{item.label}</span>
                           </button>
                         );
@@ -1038,10 +1042,10 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                           onToggleChartOverlay();
                         }}
                       >
-                        <Icons.layers size={14} />
+                        <Icons.layers size={MENU_ICON} />
                         <span>Chart overlay</span>
                         <Show when={isPanelChartOverlay(props.id) || isFloat()}>
-                          <Icons.check size={12} class="ml-auto opacity-80" />
+                          <Icons.check size={MENU_CHECK} class="ml-auto opacity-80" />
                         </Show>
                       </button>
                     </Show>
@@ -1055,14 +1059,14 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                       data-testid="axis-panel-chart-overlay-all"
                       onClick={() => onToggleAllChartOverlay()}
                     >
-                      <Icons.layers size={14} />
+                      <Icons.layers size={MENU_ICON} />
                       <span>
                         {isAllPanelsChartOverlay()
                           ? 'Chart overlay: all off'
                           : 'Chart overlay: all on'}
                       </span>
                       <Show when={isAllPanelsChartOverlay()}>
-                        <Icons.check size={12} class="ml-auto opacity-80" />
+                        <Icons.check size={MENU_CHECK} class="ml-auto opacity-80" />
                       </Show>
                     </button>
                     <Show when={isHoverSlideEligible(dock()) && !isPanelChartOverlay(props.id)}>
@@ -1078,10 +1082,10 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                           setPanelHoverSlide(props.id, !isPanelHoverSlide(props.id));
                         }}
                       >
-                        <Icons.panelRight size={14} />
+                        <Icons.panelRight size={MENU_ICON} />
                         <span>Slide on hover</span>
                         <Show when={isPanelHoverSlide(props.id)}>
-                          <Icons.check size={12} class="ml-auto opacity-80" />
+                          <Icons.check size={MENU_CHECK} class="ml-auto opacity-80" />
                         </Show>
                       </button>
                     </Show>
@@ -1093,7 +1097,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                       data-testid={`axis-panel-reset-default-${props.id}`}
                       onClick={() => onResetDefault()}
                     >
-                      <Icons.reset size={14} />
+                      <Icons.reset size={MENU_ICON} />
                       <span>Reset to default</span>
                     </button>
                     <Show when={props.menuExtra}>

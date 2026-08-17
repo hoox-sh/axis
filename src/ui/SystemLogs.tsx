@@ -173,7 +173,7 @@ export const SystemLogs: Component = () => {
             disabled={!store.logs.length}
             onClick={() => clearLogs()}
           >
-            <Icons.x size={13} />
+            <Icons.trash size={13} />
           </button>
         </div>
 

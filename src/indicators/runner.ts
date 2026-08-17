@@ -1203,31 +1203,39 @@ async function runAndApplyInner(
       }
 
       // Non-overlay scripts must not leave series on the price pane
+      // (legacy unowned + this owner’s keys from a prior overlay=true run)
       if (!overlay && paneId !== 'price') {
-        const pricePane = manager.getPane('price');
-        if (pricePane) {
-          for (const line of overlayLines) {
-            const key = `overlay_${line.name}`;
-            if (pricePane.series[key]) {
-              try {
-                pricePane.chart.removeSeries(pricePane.series[key]);
-              } catch {
-                /* ignore */
+        const owner = indicatorId ?? EDITOR_RUN_KEY;
+        try {
+          manager.removeOverlaysForOwner?.('price', owner);
+          // Also drop legacy unowned keys for these plot names
+          const pricePane = manager.getPane('price');
+          if (pricePane) {
+            for (const line of overlayLines) {
+              const key = `overlay_${line.name}`;
+              if (pricePane.series[key]) {
+                try {
+                  pricePane.chart.removeSeries(pricePane.series[key]);
+                } catch {
+                  /* ignore */
+                }
+                delete pricePane.series[key];
               }
-              delete pricePane.series[key];
+            }
+            for (const o of overlayOhlc) {
+              const key = `overlay_ohlc_${o.name}`;
+              if (pricePane.series[key]) {
+                try {
+                  pricePane.chart.removeSeries(pricePane.series[key]);
+                } catch {
+                  /* ignore */
+                }
+                delete pricePane.series[key];
+              }
             }
           }
-          for (const o of overlayOhlc) {
-            const key = `overlay_ohlc_${o.name}`;
-            if (pricePane.series[key]) {
-              try {
-                pricePane.chart.removeSeries(pricePane.series[key]);
-              } catch {
-                /* ignore */
-              }
-              delete pricePane.series[key];
-            }
-          }
+        } catch {
+          /* manager optional */
         }
       }
 
@@ -1266,7 +1274,9 @@ async function runAndApplyInner(
           invertLabels: !!store.strategyUi?.invertTradeLabels,
           exactOnCandle: store.strategyUi?.exactOnCandle !== false,
         });
-        manager.setTradeMarkers(markers);
+        // Owner-scoped so removing this strategy clears its long/short labels
+        // without relying on a global wipe (and without wiping sibling markers).
+        manager.setTradeMarkers(markers, indicatorId ?? EDITOR_RUN_KEY);
 
         const report = buildStrategyReport(events, store.bars || [], { fillMode });
         if (report.trades.length) {
@@ -1313,7 +1323,9 @@ async function runAndApplyInner(
             'strategy',
           );
         }
-        manager.setTradeMarkers([]);
+        // Clear only this script’s trade markers (indicators must not wipe a
+        // sibling strategy’s long/short labels on interactive re-run).
+        manager.setTradeMarkers([], indicatorId ?? EDITOR_RUN_KEY);
       }
 
       // Debug pins from logs (bar_index/time) — independent of trade/shape lists
@@ -1470,6 +1482,51 @@ async function runAndApplyInner(
           ? savedStrategyProps
           : undefined,
       );
+      // Chart series were applied under EDITOR_RUN_KEY — re-own under the real
+      // script id so the next reapply/live run does not stack a second copy
+      // (identical last-value labels: "last" + "current" on the right scale).
+      // Also re-own strategy trade markers so remove(id) clears long/short labels.
+      try {
+        const mgr = getManager();
+        if (mgr?.getPane?.(paneId) && isRunEpochCurrent(epoch)) {
+          mgr.removeOverlaysForOwner?.(paneId, EDITOR_RUN_KEY);
+          mgr.syncOverlayLines?.(paneId, overlayLines, { ownerId: newId });
+          if (typeof mgr.syncOverlayOhlc === 'function') {
+            mgr.syncOverlayOhlc(paneId, overlayOhlc, { ownerId: newId });
+          }
+          if (typeof mgr.syncBgcolorBands === 'function') {
+            const bgBands = split.bgcolors
+              .map(({ key, values, meta }) => ({
+                name: key,
+                data: bgcolorSeriesToHistogramData(ohlcvTimes, values, meta.color),
+              }))
+              .filter((b) => b.data.length > 0);
+            mgr.syncBgcolorBands(bgBands, { ownerId: newId });
+          }
+          // Trade markers were set under EDITOR_RUN_KEY in the apply block
+          try {
+            mgr.clearTradeMarkers?.(EDITOR_RUN_KEY);
+            const ev = result.events || [];
+            if (ev.length && typeof mgr.setTradeMarkers === 'function') {
+              const fillMode = store.strategyUi?.slippageNextOpen ? 'next_open' : 'close';
+              const normalized = normalizeStrategyEvents(ev, {
+                bars: store.bars || [],
+                includeOrders: false,
+                fillMode,
+              });
+              const markers = eventsToMarkers(normalized, {
+                invertLabels: !!store.strategyUi?.invertTradeLabels,
+                exactOnCandle: store.strategyUi?.exactOnCandle !== false,
+              });
+              mgr.setTradeMarkers(markers, newId);
+            }
+          } catch {
+            /* markers optional */
+          }
+        }
+      } catch {
+        /* chart may be disposed */
+      }
       if (Object.keys(seriesForCache).length) {
         setIndicatorSeries(newId, {
           name: scriptName,

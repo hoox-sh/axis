@@ -242,6 +242,67 @@ describe('PaneManager', () => {
     expect(lastVal).toBe(true);
   });
 
+  it('owner-scoped sync drops editor leftovers so last-value labels are not doubled', () => {
+    // Exclusive indicator sub-pane: first apply under __editor__, then real id
+    pm.createPane('ind_script1', 'indicator', 'ATR Volatility');
+    const data = [
+      { time: 1_700_000_000, value: 10 },
+      { time: 1_700_000_060, value: 12 },
+    ];
+    pm.syncOverlayLines(
+      'ind_script1',
+      [{ name: 'ATR', data, color: '#00f' }],
+      { ownerId: '__editor__' },
+    );
+    const afterEditor = pm.getPane('ind_script1')!;
+    const editorKeys = Object.keys(afterEditor.series).filter((k) =>
+      k.startsWith('overlay_'),
+    );
+    expect(editorKeys.length).toBe(1);
+    expect(editorKeys[0]).toContain('__editor__');
+
+    pm.syncOverlayLines(
+      'ind_script1',
+      [{ name: 'ATR', data, color: '#00f' }],
+      { ownerId: 'script1' },
+    );
+    const afterReal = pm.getPane('ind_script1')!;
+    const overlayKeys = Object.keys(afterReal.series).filter((k) =>
+      k.startsWith('overlay_'),
+    );
+    // Only the real-owner series remains — no stacked last/current labels
+    expect(overlayKeys.length).toBe(1);
+    expect(overlayKeys[0]).toContain('script1');
+    expect(overlayKeys[0]).not.toContain('__editor__');
+  });
+
+  it('price pane keeps sibling owners but drops editor leftovers for same plot', () => {
+    pm.createPane('price', 'price', 'Price');
+    const data = [{ time: 1_700_000_000, value: 1 }];
+    pm.syncOverlayLines(
+      'price',
+      [{ name: 'EMA', data, color: '#0f0' }],
+      { ownerId: 'sibling' },
+    );
+    pm.syncOverlayLines(
+      'price',
+      [{ name: 'EMA', data, color: '#f00' }],
+      { ownerId: '__editor__' },
+    );
+    pm.syncOverlayLines(
+      'price',
+      [{ name: 'EMA', data, color: '#f00' }],
+      { ownerId: 'mine' },
+    );
+    const keys = Object.keys(pm.getPane('price')!.series).filter((k) =>
+      k.startsWith('overlay_'),
+    );
+    // sibling kept; editor dropped; mine kept
+    expect(keys.some((k) => k.includes('sibling'))).toBe(true);
+    expect(keys.some((k) => k.includes('mine'))).toBe(true);
+    expect(keys.some((k) => k.includes('__editor__'))).toBe(false);
+  });
+
   it('price scale labels toggle and overlay color apply', () => {
     const p = pm.createPane('price', 'price', 'Price');
     expect(pm.isPriceScaleLabelsVisible()).toBe(true);
@@ -289,6 +350,49 @@ describe('PaneManager', () => {
       } as never,
     ]);
     pm.clearTradeMarkers();
+  });
+
+  it('owner-scoped trade markers clear on removeOverlaysForOwner (strategy detach)', () => {
+    const p = pm.createPane('price', 'price', 'Price');
+    p.series['candle'] = {
+      setData: () => {},
+      applyOptions: () => {},
+      priceScale: () => ({ applyOptions: () => {} }),
+      seriesOrder: () => 1,
+      setSeriesOrder: () => {},
+    } as never;
+    const long = {
+      time: 1000,
+      position: 'belowBar' as const,
+      color: '#0f0',
+      shape: 'arrowUp' as const,
+      text: 'L',
+    };
+    const short = {
+      time: 2000,
+      position: 'aboveBar' as const,
+      color: '#f00',
+      shape: 'arrowDown' as const,
+      text: 'S',
+    };
+    pm.setTradeMarkers([long as never], 'strat_a');
+    pm.setTradeMarkers([short as never], 'strat_b');
+    const internal = pm as unknown as {
+      tradeMarkerList: unknown[];
+      tradeMarkersByOwner: Map<string, unknown[]>;
+    };
+    expect(internal.tradeMarkersByOwner.has('strat_a')).toBe(true);
+    expect(internal.tradeMarkersByOwner.has('strat_b')).toBe(true);
+    expect(internal.tradeMarkerList.length).toBe(2);
+
+    // Detach path: removeOverlaysForOwner clears that owner’s trade markers
+    pm.removeOverlaysForOwner('price', 'strat_a');
+    expect(internal.tradeMarkersByOwner.has('strat_a')).toBe(false);
+    expect(internal.tradeMarkersByOwner.has('strat_b')).toBe(true);
+    expect(internal.tradeMarkerList.length).toBe(1);
+
+    pm.clearTradeMarkers('strat_b');
+    expect(internal.tradeMarkerList.length).toBe(0);
   });
 
   it('setShapeMarkers and setTradeMarkers both apply without wipe', () => {

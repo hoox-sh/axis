@@ -141,7 +141,9 @@ export const ResultsPanel: Component = () => {
       invertLabels: !!store.strategyUi?.invertTradeLabels,
       exactOnCandle: store.strategyUi?.exactOnCandle !== false,
     });
-    mgr.setTradeMarkers(markers);
+    // Keep owner so remove script still clears these long/short labels
+    const owner = store.resultsFocusId || undefined;
+    mgr.setTradeMarkers(markers, owner);
   };
 
   function jumpToTrade(trade: ClosedTrade, which: 'entry' | 'exit' = 'entry') {

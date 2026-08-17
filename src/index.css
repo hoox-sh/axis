@@ -1968,7 +1968,8 @@ body.axis-panel-dragging {
   opacity: 0.95;
 }
 
-/* Panel hamburger dock menu (click expand · hold drag) */
+/* Panel hamburger dock menu (click expand · hold drag)
+ * Font + icon size match editor overflow menuitems (12px text / 14px icons). */
 .axis-panel-menu {
   position: relative;
   z-index: 2;
@@ -1977,7 +1978,7 @@ body.axis-panel-dragging {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  min-width: 10.5em;
+  min-width: 11.5rem;
   padding: 0.3em;
   display: flex;
   flex-direction: column;
@@ -1987,6 +1988,8 @@ body.axis-panel-dragging {
   border-radius: var(--radius-input);
   box-shadow: var(--ui-shadow-panel);
   z-index: 50;
+  font-size: 12px;
+  line-height: 1.3;
 }
 .axis-panel-menu-item {
   display: flex;
@@ -1998,8 +2001,10 @@ body.axis-panel-dragging {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-dim);
-  font: inherit;
-  font-size: 0.85em;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
@@ -2008,10 +2013,19 @@ body.axis-panel-dragging {
   background: var(--color-bg-hover);
   color: var(--color-text);
 }
+.axis-panel-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .axis-panel-menu-item.is-active {
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 12%, transparent);
   font-weight: 600;
+}
+.axis-panel-menu-item .sc-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
 }
 .axis-panel-menu-sep {
   height: 1px;

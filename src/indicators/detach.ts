@@ -109,6 +109,12 @@ export function detachIndicatorFromChart(id: string): void {
     } catch {
       /* optional */
     }
+    // Strategy long/short entry/exit labels (price-pane candle markers)
+    try {
+      manager.clearTradeMarkers?.(id);
+    } catch {
+      /* optional */
+    }
     try {
       if (isSubPane) clearScriptPaneLayer?.(paneId);
     } catch {
