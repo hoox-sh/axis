@@ -48,6 +48,7 @@ import {
   setEditorStrategyProps,
   setIndicatorStrategyProps,
   loadEditorDoc,
+  EDITOR_RUN_KEY,
 } from '../store';
 import {
   resolveScriptInputs,
@@ -66,9 +67,43 @@ import {
 } from '../results/strategy-props';
 import { detectScriptKind } from '../indicators/script-meta';
 import { sourceOptionsWithPlots } from '../results/plot-sources';
+import { parseLibraryImports } from '../storage/library-publish';
+import { readCachedLibrarySource } from '../storage/library-publish-io';
 import { runAndApply } from '../indicators/runner';
 import type { RunResult } from '../indicators/runner';
 import { Icons } from './icons';
+
+/** Extra Pine sources that may declare `enum`s imported by the target script. */
+function extraEnumSources(code: string, skipId?: string | null): string[] {
+  const extra: string[] = [];
+  const seen = new Set<string>();
+  const add = (src: string | null | undefined) => {
+    const s = String(src || '').trim();
+    if (!s || s === code || seen.has(s)) return;
+    seen.add(s);
+    extra.push(s);
+  };
+  for (const s of store.scripts || []) {
+    if (skipId && s.id === skipId) continue;
+    add(s.code);
+  }
+  const editor = loadEditorDoc();
+  if (editor && editor !== code) add(editor);
+  try {
+    for (const spec of parseLibraryImports(code)) {
+      add(readCachedLibrarySource(spec));
+    }
+  } catch {
+    /* cache optional */
+  }
+  return extra;
+}
+
+function runResultForTarget(kind: 'indicator' | 'editor', id: string): RunResult | null {
+  const key = kind === 'indicator' && id ? id : EDITOR_RUN_KEY;
+  const bag = store.runResults as Record<string, RunResult | undefined> | undefined;
+  return bag?.[key] ?? null;
+}
 
 type SettingsTab = 'inputs' | 'strategy';
 
@@ -125,10 +160,15 @@ export const ScriptSettingsModal: Component = () => {
       setSourceLabels({});
       return;
     }
-    // Snapshot engine inputs / plot series once at seed — do not track live updates
-    const r = untrack(() => store.lastRun as RunResult | null);
+    // Snapshot this script's engine inputs / plot series once at seed.
+    // Do not use global lastRun — that may belong to a different indicator.
+    // Re-read the editor buffer here: `targetMeta` cannot track localStorage.
+    const code =
+      t.kind === 'editor' ? untrack(() => loadEditorDoc() || t.code) : t.code;
+    const r = untrack(() => runResultForTarget(t.kind, t.id));
     const engineInputs = r?.meta?.inputs ?? (r as { inputs?: unknown } | null)?.inputs;
-    const defs = resolveScriptInputs(t.code, engineInputs);
+    const extraSources = untrack(() => extraEnumSources(code, t.kind === 'indicator' ? t.id : null));
+    const defs = resolveScriptInputs(code, engineInputs, extraSources);
     const seriesSnap = untrack(() => store.indicatorSeries);
     const { options: plotOpts, labels } = sourceOptionsWithPlots(seriesSnap, indicatorId());
     setSourceLabels({ ...labels });
@@ -233,7 +273,9 @@ export const ScriptSettingsModal: Component = () => {
     setError('');
     try {
       const id = t.kind === 'indicator' ? t.id : undefined;
-      await runAndApply(t.code, id, {
+      const code =
+        t.kind === 'editor' ? untrack(() => loadEditorDoc() || t.code) : t.code;
+      await runAndApply(code, id, {
         inputs: overrides,
         ...(showStrategyTab() && Object.keys(stratOverrides).length
           ? { strategyProps: stratOverrides }
@@ -511,7 +553,17 @@ const InputField: Component<{
   const id = () => `axis-in-${props.field.id}`;
   const t = () => props.field.type;
   const val = () => props.field.value ?? props.field.default;
-  const optLabel = (opt: string) => props.optionLabels?.[opt] || opt;
+  const optLabel = (opt: string) => {
+    const fromField = props.field.optionLabels?.[opt];
+    if (fromField) return fromField;
+    const fromPlot = props.optionLabels?.[opt];
+    if (fromPlot) return fromPlot;
+    if (t() === 'enum') {
+      const bits = String(opt).split('.');
+      return bits[bits.length - 1] || opt;
+    }
+    return opt;
+  };
   const enabled = () =>
     isInputActive(props.field, props.allFields || [props.field]);
   const tip = () => props.field.tooltip || undefined;

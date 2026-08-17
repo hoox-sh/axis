@@ -49,6 +49,15 @@
   /* Loss / error */
   --color-red: #e85d4c;
 
+  /* Cyan — series builtins in the Pine editor */
+  --color-cyan: #6ee7f5;
+
+  /* Pine editor highlight extras */
+  --color-editor-builtin: #6ee7f5;
+  --color-editor-lib: #d8b4fe;
+  --color-editor-lib-member: #e879f9;
+  --color-editor-type: #e8a03a;
+
   /* Legacy alias (prefer accent) — hex fallback for canvas/JS */
   --color-purple: #939fff;
 
@@ -171,6 +180,11 @@ body {
   --color-yellow: #c47a18;
   --color-red: #c44538;
   --color-purple: #5a6ad4;
+  --color-cyan: #0e8aaa;
+  --color-editor-builtin: #0e8aaa;
+  --color-editor-lib: #7c3aed;
+  --color-editor-lib-member: #a21caf;
+  --color-editor-type: #c47a18;
 }
 
 /* Scrollbars — void chrome */

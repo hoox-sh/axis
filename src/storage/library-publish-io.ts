@@ -355,6 +355,14 @@ export async function listPublishedLibraries(opts?: {
   }
 }
 
+/** Sync lookup of a published library body from the local cache (no git). */
+export function readCachedLibrarySource(
+  spec: Pick<LibraryImportSpec, 'namespace' | 'name' | 'version'>,
+): string | null {
+  const src = readCache().sources[specKey(spec.namespace, spec.name, spec.version)];
+  return typeof src === 'string' && src.trim() ? src : null;
+}
+
 /** @internal tests */
 export function _resetPublishedCacheForTests(): void {
   try {

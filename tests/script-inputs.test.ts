@@ -17,6 +17,11 @@ import {
   isInputActive,
   normalizeTooltip,
   findLhsIdent,
+  parsePineEnums,
+  normalizeEnumToken,
+  matchEnumOption,
+  recoverEnumType,
+  collectImportAliases,
 } from '../src/results/script-inputs.ts';
 import {
   buildDataViewRows,
@@ -248,6 +253,126 @@ length = input.int(14, "Length", active=show)
     const src = '  int length = input.int(14, "Length")';
     const idx = src.indexOf('input.int');
     expect(findLhsIdent(src, idx)).toBe('length');
+  });
+
+  it('parses user enums and infers input.enum options', () => {
+    const src = `//@version=6
+indicator("motion")
+enum Easing
+    linear
+    ease_in = "Ease in"
+    ease_out
+easing = input.enum(Easing.linear, "easing")
+`;
+    const enums = parsePineEnums(src);
+    expect(enums.get('Easing')?.members.map((m) => m.name)).toEqual([
+      'linear',
+      'ease_in',
+      'ease_out',
+    ]);
+    expect(enums.get('Easing')?.members[1]!.title).toBe('Ease in');
+    const defs = parseScriptInputs(src);
+    expect(defs[0]!.type).toBe('enum');
+    expect(defs[0]!.default).toBe('Easing.linear');
+    expect(defs[0]!.options).toEqual([
+      'Easing.linear',
+      'Easing.ease_in',
+      'Easing.ease_out',
+    ]);
+    expect(defs[0]!.optionLabels?.['Easing.ease_in']).toBe('Ease in');
+  });
+
+  it('strips library alias from imported enum defvals', () => {
+    const src = `//@version=6
+indicator("logo")
+import cryptolinx/Motion/12 as m
+easing = input.enum(m.Easing.linear, "easing")
+frequency = input.enum(m.Frequency.on_tick, "frequency")
+start_on = input.enum(m.StartOn.now, "start_on")
+calculation = input.enum(m.Calculation.relative, "calculation")
+`;
+    expect([...collectImportAliases(src)]).toContain('m');
+    expect(normalizeEnumToken('m.Easing.linear', collectImportAliases(src))).toBe(
+      'Easing.linear',
+    );
+    expect(normalizeEnumToken('strategy.percent_of_equity')).toBe(
+      'strategy.percent_of_equity',
+    );
+    const lib = `export enum Easing
+    linear
+    ease
+    ease_in
+    ease_out
+export enum Frequency
+    on_tick
+    on_time
+export enum StartOn
+    now
+    on_open
+export enum Calculation
+    relative
+    absolute
+`;
+    const defs = parseScriptInputs(src, [lib]);
+    const easing = defs.find((d) => d.title === 'easing')!;
+    expect(easing.type).toBe('enum');
+    expect(easing.default).toBe('Easing.linear');
+    expect(easing.value).toBe('Easing.linear');
+    expect(easing.options).toContain('Easing.ease_in');
+    expect(easing.options).not.toContain('m.Easing.linear');
+    const freq = defs.find((d) => d.title === 'frequency')!;
+    expect(freq.default).toBe('Frequency.on_tick');
+    expect(freq.options).toEqual(['Frequency.on_tick', 'Frequency.on_time']);
+  });
+
+  it('engine m.Type.member values merge onto Type.member options', () => {
+    const src = `import user/Motion/1 as m
+easing = input.enum(m.Easing.linear, "easing")
+`;
+    const lib = `enum Easing
+    linear
+    ease_in
+`;
+    const eng = [
+      {
+        title: 'easing',
+        type: 'enum',
+        default: 'm.Easing.linear',
+        value: 'm.Easing.ease_in',
+        options: [],
+      },
+    ];
+    const defs = resolveScriptInputs(src, eng, [lib]);
+    expect(defs[0]!.type).toBe('enum');
+    expect(defs[0]!.default).toBe('Easing.linear');
+    expect(defs[0]!.value).toBe('Easing.ease_in');
+    expect(defs[0]!.options).toEqual(['Easing.linear', 'Easing.ease_in']);
+    const over = applyInputOverrides(defs, { easing: 'm.Easing.linear' });
+    expect(over[0]!.value).toBe('Easing.linear');
+    expect(overridesFromDefs(over).easing).toBe('Easing.linear');
+  });
+
+  it('matchEnumOption aligns alias / member / Type.member forms', () => {
+    const opts = ['Easing.linear', 'Easing.ease_in'];
+    expect(matchEnumOption('m.Easing.linear', opts)).toBe('Easing.linear');
+    expect(matchEnumOption('ease_in', opts)).toBe('Easing.ease_in');
+    expect(matchEnumOption('Easing.linear', opts)).toBe('Easing.linear');
+  });
+
+  it('recoverEnumType does not rewrite builtin strategy enums', () => {
+    const d = recoverEnumType(
+      {
+        id: 'qty',
+        title: 'qty',
+        type: 'enum',
+        default: 'strategy.percent_of_equity',
+        value: 'strategy.percent_of_equity',
+        options: ['strategy.fixed', 'strategy.percent_of_equity', 'strategy.cash'],
+      },
+      new Map(),
+    );
+    expect(d.default).toBe('strategy.percent_of_equity');
+    expect(d.options).toContain('strategy.percent_of_equity');
   });
 });
 

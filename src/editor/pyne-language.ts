@@ -25,6 +25,11 @@
  * colors, namespaces (`ta.`), types, control/definition keywords, and
  * function names before `(`.
  *
+ * Series builtins (`close`, `bar_index`) are `variableName.standard`;
+ * `import … as alias` names and members after them (`m.Easing`) are
+ * `variableName.special` / `propertyName.special` so the theme can color
+ * library exports apart from user variables and built-in namespaces.
+ *
  * Completions/hover live in `pyne-lsp`.
  *
  * @module editor/pyne-language
@@ -38,7 +43,43 @@ export type PineHighlightState = {
   stringQuote: '"' | "'" | '"""' | "'''" | null;
   /** Last token was `.` — next ident is a property / method. */
   afterDot: boolean;
+  /** Last ident was an `import … as` alias — next `.member` is a library export. */
+  afterLibAlias: boolean;
+  /** After `export` — next user ident is a library export name. */
+  afterExport: boolean;
+  /** Inside an `import ns/Name/ver [as alias]` line. */
+  inImport: boolean;
+  /** Last token was `as` inside an import. */
+  afterAs: boolean;
+  /** Last path segment of the current import (default alias when `as` omitted). */
+  importName: string | null;
+  /** Import aliases seen so far in this buffer (`m`, `motion`, …). */
+  importAliases: string[];
 };
+
+export function defaultPineHighlightState(): PineHighlightState {
+  return {
+    inBlockComment: false,
+    stringQuote: null,
+    afterDot: false,
+    afterLibAlias: false,
+    afterExport: false,
+    inImport: false,
+    afterAs: false,
+    importName: null,
+    importAliases: [],
+  };
+}
+
+function ensureState(state: PineHighlightState): PineHighlightState {
+  if (!state.importAliases) state.importAliases = [];
+  if (state.afterLibAlias == null) state.afterLibAlias = false;
+  if (state.afterExport == null) state.afterExport = false;
+  if (state.inImport == null) state.inImport = false;
+  if (state.afterAs == null) state.afterAs = false;
+  if (state.importName === undefined) state.importName = null;
+  return state;
+}
 
 const KEYWORDS = new Set([
   'indicator',
@@ -130,9 +171,25 @@ const NAMESPACES = new Set([
   'hline',
   'alert',
   'log',
-  'ticker',
+  'display',
+  'format',
+  'xloc',
+  'yloc',
+  'extend',
+  'size',
+  'shape',
+  'location',
+  'scale',
+  'font',
+  'order',
+  'barmerge',
+  'adjustment',
+  'dayofweek',
+  'position',
+  'text',
 ]);
 
+/** Built-in series / time idents — highlighted apart from user variables. */
 const SERIES = new Set([
   'open',
   'high',
@@ -140,13 +197,34 @@ const SERIES = new Set([
   'close',
   'volume',
   'time',
+  'time_close',
+  'timenow',
   'bar_index',
+  'last_bar_index',
+  'last_bar_time',
   'hl2',
   'hlc3',
   'ohlc4',
-  'last_bar_index',
-  'timenow',
+  'hlcc4',
+  'year',
+  'month',
+  'weekofyear',
+  'dayofmonth',
+  'dayofweek',
+  'hour',
+  'minute',
+  'second',
 ]);
+
+const EXPORT_KINDS = new Set(['enum', 'type', 'method', 'var', 'varip', 'const']);
+
+function isImportAlias(state: PineHighlightState, word: string): boolean {
+  return state.importAliases.includes(word);
+}
+
+function addImportAlias(state: PineHighlightState, word: string) {
+  if (word && !state.importAliases.includes(word)) state.importAliases.push(word);
+}
 
 const OP_RE = /^(?:=>|\?\?|:=|\+=|-=|\*=|\/=|%=|==|!=|<=|>=|[+\-*/%=<>!?:])/;
 
@@ -183,13 +261,27 @@ function eatString(stream: StringStream, state: PineHighlightState): string {
 }
 
 const pyneParser: StreamParser<PineHighlightState> = {
-  startState: () => ({ inBlockComment: false, stringQuote: null, afterDot: false }),
+  startState: () => defaultPineHighlightState(),
   copyState: (s) => ({
     inBlockComment: s.inBlockComment,
     stringQuote: s.stringQuote,
     afterDot: s.afterDot,
+    afterLibAlias: !!s.afterLibAlias,
+    afterExport: !!s.afterExport,
+    inImport: !!s.inImport,
+    afterAs: !!s.afterAs,
+    importName: s.importName ?? null,
+    importAliases: s.importAliases ? s.importAliases.slice() : [],
   }),
   token(stream, state) {
+    ensureState(state);
+    if (stream.sol() && state.inImport && !state.afterAs) {
+      // `import ns/Lib/1` with no `as` — default alias is the library name
+      if (state.importName) addImportAlias(state, state.importName);
+      state.inImport = false;
+      state.importName = null;
+    }
+
     if (state.stringQuote) return eatString(stream, state);
 
     if (state.inBlockComment) {
@@ -240,6 +332,7 @@ const pyneParser: StreamParser<PineHighlightState> = {
 
     if (stream.match(OP_RE)) {
       state.afterDot = false;
+      state.afterLibAlias = false;
       return 'operator';
     }
 
@@ -249,32 +342,101 @@ const pyneParser: StreamParser<PineHighlightState> = {
     }
 
     if (stream.match(/[{}()\[\],;]/)) {
+      const ch = stream.current();
       state.afterDot = false;
+      state.afterLibAlias = false;
+      if (ch === ';' && state.inImport) {
+        if (state.importName && !state.afterAs) addImportAlias(state, state.importName);
+        state.inImport = false;
+        state.afterAs = false;
+        state.importName = null;
+      }
       return 'punctuation';
     }
 
     if (stream.match(/[A-Za-z_][\w]*/)) {
       const word = stream.current();
       if (state.afterDot) {
+        const libMember = state.afterLibAlias;
         state.afterDot = false;
-        return 'propertyName';
+        // Keep the lib chain alive for `m.Easing.linear`
+        if (!libMember) state.afterLibAlias = false;
+        return libMember ? 'propertyName.special' : 'propertyName';
       }
-      if (KEYWORDS.has(word)) return 'keyword';
-      if (CONTROL.has(word)) return 'controlKeyword';
-      if (DEFS.has(word)) return 'definitionKeyword';
-      if (word === 'true' || word === 'false') return 'bool';
-      if (word === 'na') return 'null';
-      if (stream.match(/^\s*\./, false)) {
-        if (NAMESPACES.has(word) || TYPES.has(word)) return 'namespace';
+      if (KEYWORDS.has(word)) {
+        state.afterExport = false;
+        return 'keyword';
+      }
+      if (CONTROL.has(word)) {
+        state.afterExport = false;
+        return 'controlKeyword';
+      }
+      if (DEFS.has(word)) {
+        if (word === 'import') {
+          state.inImport = true;
+          state.afterAs = false;
+          state.importName = null;
+          state.afterExport = false;
+        } else if (word === 'as' && state.inImport) {
+          state.afterAs = true;
+        } else if (word === 'export') {
+          state.afterExport = true;
+        } else if (state.afterExport && EXPORT_KINDS.has(word)) {
+          // export enum/type/method/const — name comes next
+          state.afterExport = true;
+        } else {
+          state.afterExport = false;
+        }
+        return 'definitionKeyword';
+      }
+      if (word === 'true' || word === 'false') {
+        state.afterExport = false;
+        return 'bool';
+      }
+      if (word === 'na') {
+        state.afterExport = false;
+        return 'null';
+      }
+
+      if (state.inImport && state.afterAs) {
+        addImportAlias(state, word);
+        state.inImport = false;
+        state.afterAs = false;
+        state.importName = null;
+        state.afterExport = false;
+        return 'variableName.special';
+      }
+      if (state.inImport) {
+        state.importName = word;
+        state.afterExport = false;
+        return 'namespace';
+      }
+
+      const dotted = !!stream.match(/^\s*\./, false);
+      if (dotted && isImportAlias(state, word)) {
+        state.afterLibAlias = true;
+        state.afterExport = false;
+        return 'variableName.special';
+      }
+      if (dotted && (NAMESPACES.has(word) || TYPES.has(word))) {
+        state.afterExport = false;
+        return 'namespace';
+      }
+      if (state.afterExport) {
+        state.afterExport = false;
+        if (stream.match(/^\s*\(/, false)) return 'variableName.special';
+        return TYPES.has(word) ? 'typeName' : 'variableName.special';
       }
       if (TYPES.has(word)) return 'typeName';
       if (NAMESPACES.has(word)) return 'namespace';
-      if (SERIES.has(word)) return 'variableName';
+      if (SERIES.has(word)) return 'variableName.standard';
+      if (isImportAlias(state, word)) return 'variableName.special';
       if (stream.match(/^\s*\(/, false)) return 'def';
       if (/^[A-Z][A-Z0-9_]+$/.test(word)) return 'atom';
       return 'variableName';
     }
     state.afterDot = false;
+    state.afterLibAlias = false;
 
     stream.next();
     return null;
@@ -296,11 +458,7 @@ export type PineToken = { text: string; type: string | null };
  * strings / block comments keep state.
  */
 export function tokenizePine(source: string): PineToken[] {
-  const state: PineHighlightState = {
-    inBlockComment: false,
-    stringQuote: null,
-    afterDot: false,
-  };
+  const state: PineHighlightState = defaultPineHighlightState();
   const out: PineToken[] = [];
   const lines = String(source ?? '').replace(/\r\n/g, '\n').split('\n');
   for (let i = 0; i < lines.length; i++) {
@@ -345,9 +503,9 @@ export function advancePineLineState(
   state: PineHighlightState,
 ): PineHighlightState {
   const next: PineHighlightState = {
-    inBlockComment: state.inBlockComment,
-    stringQuote: state.stringQuote,
-    afterDot: state.afterDot,
+    ...defaultPineHighlightState(),
+    ...state,
+    importAliases: state.importAliases ? state.importAliases.slice() : [],
   };
   const stream = makeLineStream(line);
   while (!stream.eol()) {

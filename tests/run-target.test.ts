@@ -14,6 +14,7 @@ import {
   findChartScriptForEditor,
   normalizeScriptSource,
   pickPreferredScript,
+  resolveScriptDisplayName,
 } from '../src/indicators/run-target';
 import type { Indicator } from '../src/store/types';
 
@@ -47,8 +48,34 @@ describe('extractScriptTitle', () => {
     ).toBe('My Strat');
   });
 
+  it('reads library name', () => {
+    expect(extractScriptTitle('//@version=5\nlibrary("MyLib")\n')).toBe('MyLib');
+  });
+
   it('returns null when missing', () => {
     expect(extractScriptTitle('plot(close)')).toBeNull();
+  });
+});
+
+describe('resolveScriptDisplayName', () => {
+  const src = '//@version=6\nindicator("ATR Volatility", overlay=false)\nplot(1)\n';
+
+  it('always prefers source title over engine meta and existing name', () => {
+    expect(resolveScriptDisplayName(src, 'plot', 'old-file.pine')).toBe(
+      'ATR Volatility',
+    );
+    expect(resolveScriptDisplayName(src, 'plot', null)).toBe('ATR Volatility');
+  });
+
+  it('ignores generic engine names when title missing', () => {
+    expect(resolveScriptDisplayName('plot(close)', 'plot', 'My Script')).toBe(
+      'My Script',
+    );
+    expect(resolveScriptDisplayName('plot(close)', 'plot', null)).toBe('plot');
+  });
+
+  it('falls back to Indicator when nothing useful', () => {
+    expect(resolveScriptDisplayName('', null, null)).toBe('Indicator');
   });
 });
 

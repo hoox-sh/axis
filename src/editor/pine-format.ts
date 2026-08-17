@@ -35,7 +35,7 @@
 
 import {
   advancePineLineState,
-  type PineHighlightState,
+  defaultPineHighlightState,
 } from './pyne-language';
 
 export type PineFormatOptions = {
@@ -86,11 +86,7 @@ export function formatPineSource(
   const ifStack: number[] = [];
   const formatted: string[] = [];
   let blankRun = 0;
-  let scan: PineHighlightState = {
-    inBlockComment: false,
-    stringQuote: null,
-    afterDot: false,
-  };
+  let scan = defaultPineHighlightState();
 
   for (let i = 0; i < lines.length; i++) {
     const rawLine = lines[i] ?? '';

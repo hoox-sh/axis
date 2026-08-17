@@ -29,8 +29,14 @@
  * @module indicators/detach
  */
 
-import { store, removeIndicator, removePane } from '../store';
-import { getManager, clearScriptPaneLayer } from '../chart/manager-access';
+import { store, removeIndicator, removePane, setLastRun, EDITOR_RUN_KEY } from '../store';
+import {
+  getManager,
+  clearScriptPaneLayer,
+  clearScriptPaneLayers,
+  getDrawingLayer,
+  getActiveDrawingLayer,
+} from '../chart/manager-access';
 
 /**
  * Clear chart series for one script, remove it from the store, and destroy its
@@ -120,9 +126,38 @@ export function detachIndicatorFromChart(id: string): void {
     } catch {
       /* optional */
     }
+    // Overlay scripts paint Pine geometry on the price drawing layer (full
+    // replace, not owner-scoped). Clear when this was the only script so
+    // lines/labels/boxes do not linger after delete.
+    try {
+      const others = store.scripts.filter((s) => s.id !== id);
+      if (others.length === 0) {
+        (getActiveDrawingLayer() ?? getDrawingLayer())?.clearScriptDrawings?.();
+        clearScriptPaneLayers?.();
+      }
+    } catch {
+      /* optional */
+    }
   }
 
   removeIndicator(id);
+
+  // Drop orphan editor-preview run cache so table HUD cannot keep lastRun tables
+  // after the chart script that produced them is gone.
+  try {
+    if (!store.scripts.some((s) => s.id === id)) {
+      // removeIndicator already deleted runResults[id]; if nothing applied left,
+      // clear editor key leftovers that still hold drawings/tables.
+      if ((store.scripts || []).length === 0) {
+        setLastRun(null, { scriptId: EDITOR_RUN_KEY });
+        setLastRun(null, { scriptId: id });
+        (getActiveDrawingLayer() ?? getDrawingLayer())?.clearScriptDrawings?.();
+        clearScriptPaneLayers?.();
+      }
+    }
+  } catch {
+    /* optional */
+  }
 
   const remaining = store.scripts.filter((s) => s.paneId === paneId);
   if (manager && isSubPane && remaining.length === 0) {

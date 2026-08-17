@@ -225,6 +225,56 @@ export const voidEditorTheme = EditorView.theme(
       color: 'var(--color-accent-2)',
       whiteSpace: 'pre',
     },
+    '.cm-tooltip .cm-pine-param-hint': {
+      padding: '8px 10px',
+      maxWidth: 'min(360px, 90vw)',
+      fontSize: '11.5px',
+      lineHeight: '1.4',
+      fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif',
+    },
+    '.cm-pine-param-hint-sig': {
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+      fontSize: '11px',
+      color: 'var(--color-accent)',
+      fontWeight: '600',
+      marginBottom: '6px',
+      wordBreak: 'break-word',
+    },
+    '.cm-pine-param-hint-list': {
+      listStyle: 'none',
+      margin: '0',
+      padding: '0',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '2px',
+    },
+    '.cm-pine-param-hint-list li': {
+      display: 'flex',
+      gap: '6px',
+      alignItems: 'baseline',
+      color: 'var(--color-text-dim)',
+    },
+    '.cm-pine-param-hint-list li.is-used': {
+      color: 'var(--color-text-faint)',
+      textDecoration: 'line-through',
+      opacity: '0.75',
+    },
+    '.cm-pine-param-hint-list li.is-current': {
+      color: 'var(--color-accent)',
+      fontWeight: '600',
+      backgroundColor: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
+      borderRadius: '3px',
+      padding: '1px 4px',
+    },
+    '.cm-pine-param-hint-list li.is-unused': {
+      color: 'var(--color-text)',
+    },
+    '.cm-pine-param-hint-note': {
+      marginLeft: 'auto',
+      fontSize: '10px',
+      color: 'var(--color-text-faint)',
+      fontWeight: '400',
+    },
   },
   { dark: true },
 );
@@ -235,25 +285,32 @@ export const voidHighlightStyle = HighlightStyle.define([
   { tag: t.controlKeyword, color: 'var(--color-accent)', fontWeight: '600' },
   { tag: t.definitionKeyword, color: 'var(--color-accent)', fontWeight: '600' },
   { tag: t.moduleKeyword, color: 'var(--color-accent)', fontWeight: '600' },
-  { tag: t.operator, color: 'var(--color-accent)' },
+  { tag: t.operator, color: 'color-mix(in srgb, var(--color-accent) 72%, var(--color-text-dim))' },
   { tag: t.string, color: 'var(--color-accent-2)' },
   { tag: t.special(t.string), color: 'var(--color-orange)' },
   { tag: t.number, color: 'var(--color-orange)' },
   { tag: t.bool, color: 'var(--color-orange)', fontWeight: '600' },
   { tag: t.null, color: 'var(--color-red)', fontStyle: 'italic' },
   { tag: t.comment, color: 'var(--color-text-faint)', fontStyle: 'italic' },
+  // User locals — neutral, not a builtin
   { tag: t.variableName, color: 'var(--color-text)' },
-  { tag: t.definition(t.variableName), color: 'var(--color-accent)' },
-  { tag: t.function(t.variableName), color: 'var(--color-accent)' },
-  { tag: t.propertyName, color: 'color-mix(in srgb, var(--color-accent-2) 70%, var(--color-text))' },
-  { tag: t.typeName, color: 'var(--color-accent)' },
-  { tag: t.className, color: 'var(--color-accent)' },
+  // Series builtins: close / bar_index / time / hl2 …
+  { tag: t.standard(t.variableName), color: 'var(--color-editor-builtin)', fontWeight: '500' },
+  // import alias (`m`, `motion`) and `export` names
+  { tag: t.special(t.variableName), color: 'var(--color-editor-lib)', fontWeight: '500' },
+  { tag: t.definition(t.variableName), color: 'var(--color-accent)', fontWeight: '500' },
+  { tag: t.function(t.variableName), color: 'var(--color-accent)', fontWeight: '500' },
+  // Built-in members: ta.sma, color.red
+  { tag: t.propertyName, color: 'color-mix(in srgb, var(--color-accent-2) 72%, var(--color-text))' },
+  // Library exports: m.Easing, motion.easing
+  { tag: t.special(t.propertyName), color: 'var(--color-editor-lib-member)' },
+  { tag: t.typeName, color: 'var(--color-editor-type)' },
+  { tag: t.className, color: 'var(--color-editor-type)' },
   { tag: t.meta, color: 'var(--color-text-dim)', fontStyle: 'italic' },
   { tag: t.punctuation, color: 'var(--color-text-dim)' },
   { tag: t.bracket, color: 'var(--color-text-dim)' },
   { tag: t.atom, color: 'var(--color-orange)' },
-  { tag: t.namespace, color: 'color-mix(in srgb, var(--color-accent) 55%, var(--color-text-dim))' },
-  { tag: t.standard(t.variableName), color: 'var(--color-text)' },
+  { tag: t.namespace, color: 'color-mix(in srgb, var(--color-accent) 58%, var(--color-text-dim))' },
 ]);
 
 /** Theme + syntax highlighting bundle for {@link PyneEditor}. */

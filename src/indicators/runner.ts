@@ -111,6 +111,7 @@ import {
   releaseRunStatus,
   type NormalizedRunResult,
 } from './run-helpers';
+import { resolveScriptDisplayName } from './run-target';
 
 /** Engine result with `series` always present (empty object if missing). */
 export type RunResult = EngineRunResult & {
@@ -577,7 +578,10 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
           ...result.meta,
           ms,
           overlay: result.meta?.overlay ?? true,
-          script_name: result.meta?.script_name || 'plot',
+          script_name: resolveScriptDisplayName(
+            script,
+            result.meta?.script_name != null ? String(result.meta.script_name) : null,
+          ),
           superseded: true,
         },
       };
@@ -598,7 +602,10 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
         ...result.meta,
         ms,
         overlay: result.meta?.overlay ?? true,
-        script_name: result.meta?.script_name || 'plot',
+        script_name: resolveScriptDisplayName(
+          script,
+          result.meta?.script_name != null ? String(result.meta.script_name) : null,
+        ),
       },
     };
   } catch (err: unknown) {
@@ -778,7 +785,13 @@ async function runAndApplyInner(
   const existing = indicatorId
     ? store.scripts.find((s) => s.id === indicatorId)
     : undefined;
-  const scriptName = String(result.meta?.script_name || existing?.name || 'Indicator');
+  // Always prefer Pine indicator()/strategy()/library() title over engine meta
+  // (engine often sends "plot") or a stale file-based existing name.
+  const scriptName = resolveScriptDisplayName(
+    script,
+    result.meta?.script_name != null ? String(result.meta.script_name) : null,
+    existing?.name,
+  );
   const scriptType = String(
     (result.meta as { script_type?: string } | undefined)?.script_type ||
       (result.meta as { kind?: string } | undefined)?.kind ||
@@ -1482,6 +1495,14 @@ async function runAndApplyInner(
           ? savedStrategyProps
           : undefined,
       );
+      // Run cache was under EDITOR_RUN_KEY — migrate so tables/results follow
+      // the real script id and delete clears them with the card.
+      try {
+        setLastRun(result, { scriptId: newId, focus: !silent });
+        setLastRun(null, { scriptId: EDITOR_RUN_KEY });
+      } catch {
+        /* store optional */
+      }
       // Chart series were applied under EDITOR_RUN_KEY — re-own under the real
       // script id so the next reapply/live run does not stack a second copy
       // (identical last-value labels: "last" + "current" on the right scale).

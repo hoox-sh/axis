@@ -33,7 +33,7 @@
 
 import {
   advancePineLineState,
-  type PineHighlightState,
+  defaultPineHighlightState,
 } from './pyne-language';
 
 /** Pine type qualifier (TV type1). */
@@ -398,11 +398,7 @@ export function addMissingTypeDeclarations(
   const lines = raw.split('\n');
   const out: string[] = [];
   const edits: TypeDeclareEdit[] = [];
-  let scan: PineHighlightState = {
-    inBlockComment: false,
-    stringQuote: null,
-    afterDot: false,
-  };
+  let scan = defaultPineHighlightState();
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? '';

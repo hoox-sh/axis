@@ -389,6 +389,91 @@ plot(
   });
 });
 
+describe('call params completion/hover', () => {
+  it('suggests unused named params after plot(close, )', () => {
+    const doc = 'plot(close, ';
+    const state = EditorState.create({ doc });
+    const r = pyneCompleteLocal({
+      state,
+      pos: doc.length,
+      explicit: true,
+      matchBefore: () => null,
+    } as never);
+    expect(r).toBeTruthy();
+    const labels = (r!.options || []).map((o) => String(o.label));
+    expect(labels).toContain('title=');
+    expect(labels).toContain('color=');
+  });
+
+  it('still returns plot.style_* enums after plot(close, style=)', () => {
+    const doc = 'plot(close, style=';
+    const pos = doc.length;
+    const state = EditorState.create({ doc });
+    const r = pyneCompleteLocal({
+      state,
+      pos,
+      explicit: true,
+      matchBefore: () => null,
+    } as never);
+    expect(r).toBeTruthy();
+    const labels = (r!.options || []).map((o) => String(o.label));
+    expect(labels.some((l) => l.startsWith('plot.style_'))).toBe(true);
+    expect(labels).toContain('plot.style_line');
+  });
+
+  it('hover on sma in ta.sma(close, 14) includes params or example', () => {
+    const src = 'ta.sma(close, 14)';
+    const pos = src.indexOf('sma') + 1;
+    const tip = pyneHoverLocal(
+      {
+        state: {
+          doc: {
+            sliceString: (a: number, b: number) => src.slice(a, b),
+            length: src.length,
+          },
+        },
+      },
+      pos,
+    );
+    expect(tip).toBeTruthy();
+    const restore = installMinimalDom();
+    try {
+      const built = tip!.create(null as never);
+      const text = collectText(built.dom);
+      expect(text).toMatch(/source|length|Parameters|Example/i);
+    } finally {
+      restore();
+    }
+  });
+
+  it('hover on title in plot(close, title="Hi") includes title and plot', () => {
+    const src = 'plot(close, title="Hi")';
+    const pos = src.indexOf('title') + 1;
+    const tip = pyneHoverLocal(
+      {
+        state: {
+          doc: {
+            sliceString: (a: number, b: number) => src.slice(a, b),
+            length: src.length,
+          },
+        },
+      },
+      pos,
+    );
+    expect(tip).toBeTruthy();
+    const restore = installMinimalDom();
+    try {
+      const built = tip!.create(null as never);
+      const text = collectText(built.dom);
+      expect(text).toContain('title');
+      expect(text).toContain('plot');
+    } finally {
+      restore();
+    }
+  });
+});
+
+
 /** Lightweight DOM for hover markdown tests (no browser). Restores prior document. */
 function installMinimalDom(): () => void {
   type NodeLike = {

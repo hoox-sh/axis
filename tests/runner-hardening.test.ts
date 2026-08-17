@@ -158,14 +158,15 @@ describe('runAndApply concurrent supersession', () => {
     });
     const r2 = await p2;
     expect(r2.status).toBe('success');
-    expect(r2.meta?.script_name).toBe('fresh-run');
-    expect(store.lastRun?.meta?.script_name).toBe('fresh-run');
+    // Display name always comes from Pine indicator()/strategy() title
+    expect(r2.meta?.script_name).toBe('b');
+    expect(store.lastRun?.meta?.script_name).toBe('b');
 
     releaseSlow!();
     const r1 = await p1;
     expect(r1.meta?.superseded).toBe(true);
     // lastRun must still be the newer run
-    expect(store.lastRun?.meta?.script_name).toBe('fresh-run');
+    expect(store.lastRun?.meta?.script_name).toBe('b');
   });
 
   it('silent live re-run defers while interactive Run is in flight (MTF-safe)', async () => {
@@ -221,7 +222,8 @@ describe('runAndApply concurrent supersession', () => {
     const r1 = await interactive;
     expect(r1.meta?.superseded).not.toBe(true);
     expect(r1.status).toBe('success');
-    expect(r1.meta?.script_name).toBe('interactive');
+    // Pine title wins over engine meta.script_name
+    expect(r1.meta?.script_name).toBe('a');
     // Button must not stay stuck on Running… after the interactive generation ends
     expect(store.status).not.toBe('running');
   });

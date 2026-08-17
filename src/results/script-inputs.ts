@@ -36,6 +36,11 @@
  * {@link recoverSourceType} (client guard until pyne exports series inputs
  * as `source`).
  *
+ * **Enum recovery:** `input.enum(m.Easing.linear)` (library alias) and local
+ * `enum Easing` members become dropdowns. Values normalize to `Type.member`
+ * so the form never shows Python/import-qualified tokens like
+ * `m.Easing.linear`. See {@link recoverEnumType}.
+ *
  * @module results/script-inputs
  */
 
@@ -86,6 +91,8 @@ export interface ScriptInputDef {
   max?: number | null;
   step?: number | null;
   options?: string[];
+  /** Display labels for option values (enum member titles, plot refs). */
+  optionLabels?: Record<string, string>;
   /** Pine `group=` — section heading in Settings (case-sensitive). */
   group?: string | null;
   /** Pine `tooltip=` — hover help; may contain `\n` line breaks. */
@@ -251,6 +258,321 @@ export function recoverSourceType(def: ScriptInputDef): ScriptInputDef {
   }
 
   return def;
+}
+
+/** One member of a user-defined Pine `enum`. */
+export interface PineEnumMember {
+  name: string;
+  /** `member = "Title"` display string, else the field name. */
+  title: string;
+}
+
+/** Parsed `enum Name` declaration. */
+export interface PineEnumDef {
+  name: string;
+  members: PineEnumMember[];
+}
+
+/**
+ * Built-in Pine namespaces that must not be stripped as import aliases.
+ * (`strategy.fixed`, `font.family_monospace`, `plot.style_line`, …)
+ */
+const BUILTIN_ENUM_NS = new Set([
+  'adjustment',
+  'alert',
+  'barmerge',
+  'box',
+  'color',
+  'dayofweek',
+  'display',
+  'extend',
+  'font',
+  'format',
+  'hline',
+  'label',
+  'line',
+  'location',
+  'order',
+  'plot',
+  'polyline',
+  'scale',
+  'session',
+  'shape',
+  'size',
+  'strategy',
+  'table',
+  'text',
+  'xloc',
+  'yloc',
+]);
+
+const IMPORT_ALIAS_RE =
+  /^\s*import\s+([A-Za-z_]\w*)\/([A-Za-z_]\w*)\/\d+(?:\s+as\s+([A-Za-z_]\w*))?/gm;
+
+/** Import aliases (`import ns/Lib/1 as m` → `m`) plus default lib names. */
+export function collectImportAliases(source: string): Set<string> {
+  const out = new Set<string>();
+  if (!source) return out;
+  IMPORT_ALIAS_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = IMPORT_ALIAS_RE.exec(source)) !== null) {
+    out.add(m[3] || m[2]!);
+  }
+  return out;
+}
+
+function stripLineComment(line: string): string {
+  let inStr: '"' | "'" | null = null;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]!;
+    if (inStr) {
+      if (c === '\\') {
+        i++;
+        continue;
+      }
+      if (c === inStr) inStr = null;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      inStr = c;
+      continue;
+    }
+    if (c === '/' && line[i + 1] === '/') return line.slice(0, i);
+  }
+  return line;
+}
+
+const ENUM_HEADER_RE = /^(?:export\s+)?enum\s+([A-Za-z_]\w*)\b/;
+const ENUM_MEMBER_RE =
+  /^([A-Za-z_]\w*)(?:\s*=\s*(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'))?$/;
+
+/**
+ * Parse user-defined `enum Name` declarations (optional `export`).
+ * Members may have a display title: `linear = "Linear"`.
+ */
+export function parsePineEnums(source: string): Map<string, PineEnumDef> {
+  const map = new Map<string, PineEnumDef>();
+  if (!source) return map;
+  const lines = source.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const head = stripLineComment(lines[i]!).trim();
+    const hm = head.match(ENUM_HEADER_RE);
+    if (!hm) continue;
+    const name = hm[1]!;
+    const members: PineEnumMember[] = [];
+    let j = i + 1;
+    while (j < lines.length) {
+      const trimmed = stripLineComment(lines[j]!).trim();
+      if (!trimmed) {
+        j++;
+        continue;
+      }
+      const mm = trimmed.match(ENUM_MEMBER_RE);
+      if (!mm) break;
+      const memName = mm[1]!;
+      const title = mm[2] ?? mm[3] ?? memName;
+      members.push({ name: memName, title });
+      j++;
+    }
+    if (members.length) map.set(name, { name, members });
+    i = j - 1;
+  }
+  return map;
+}
+
+/** Merge enum maps; first source wins on name collision. */
+export function mergePineEnums(
+  ...maps: Array<Map<string, PineEnumDef> | undefined>
+): Map<string, PineEnumDef> {
+  const out = new Map<string, PineEnumDef>();
+  for (const m of maps) {
+    if (!m) continue;
+    for (const [k, v] of m) {
+      if (!out.has(k)) out.set(k, v);
+    }
+  }
+  return out;
+}
+
+export function collectPineEnumsFromSources(
+  sources: readonly string[],
+): Map<string, PineEnumDef> {
+  const out = new Map<string, PineEnumDef>();
+  for (const src of sources) {
+    if (!src) continue;
+    for (const [k, v] of parsePineEnums(src)) {
+      if (!out.has(k)) out.set(k, v);
+    }
+  }
+  return out;
+}
+
+function isImportAliasLike(ident: string): boolean {
+  return /^[a-z][A-Za-z0-9_]*$/.test(ident) && !BUILTIN_ENUM_NS.has(ident);
+}
+
+function isTypeNameLike(ident: string): boolean {
+  return /^[A-Z][A-Za-z0-9_]*$/.test(ident);
+}
+
+/**
+ * Canonical Pine enum token: `Type.member`.
+ * Strips library aliases (`m.Easing.linear` → `Easing.linear`) but never
+ * built-in namespaces (`strategy.percent_of_equity`).
+ */
+export function normalizeEnumToken(
+  raw: unknown,
+  aliases?: ReadonlySet<string>,
+): string {
+  if (raw == null) return '';
+  const s = String(raw).trim();
+  if (!s) return '';
+  const parts = s.split('.');
+  if (parts.length === 3) {
+    const [a, t, mem] = parts as [string, string, string];
+    const strip =
+      !BUILTIN_ENUM_NS.has(a) &&
+      (aliases?.has(a) || (isImportAliasLike(a) && isTypeNameLike(t)));
+    if (strip) return `${t}.${mem}`;
+    return s;
+  }
+  return s;
+}
+
+/** `Type.member` → `{ type, member }` after alias strip. */
+export function splitEnumToken(
+  raw: unknown,
+  aliases?: ReadonlySet<string>,
+): { type: string; member: string } | null {
+  const tok = normalizeEnumToken(raw, aliases);
+  const i = tok.lastIndexOf('.');
+  if (i <= 0 || i === tok.length - 1) return null;
+  const type = tok.slice(0, i);
+  const member = tok.slice(i + 1);
+  if (!/^[A-Za-z_]\w*$/.test(member)) return null;
+  // Drop leftover alias if still present (`m.Easing` as type)
+  const bits = type.split('.');
+  const typeName = bits[bits.length - 1]!;
+  if (!/^[A-Za-z_]\w*$/.test(typeName)) return null;
+  return { type: typeName, member };
+}
+
+function looksLikeUserEnumToken(
+  raw: unknown,
+  aliases?: ReadonlySet<string>,
+): boolean {
+  const parts = String(raw ?? '')
+    .trim()
+    .split('.');
+  if (parts.length === 2) {
+    return isTypeNameLike(parts[0]!) && !BUILTIN_ENUM_NS.has(parts[0]!);
+  }
+  if (parts.length === 3) {
+    const [a, t] = parts;
+    return (
+      !BUILTIN_ENUM_NS.has(a!) &&
+      (aliases?.has(a!) || isImportAliasLike(a!)) &&
+      isTypeNameLike(t!)
+    );
+  }
+  return false;
+}
+
+function optionsForEnum(
+  typeName: string,
+  enums: Map<string, PineEnumDef>,
+): { options: string[]; labels: Record<string, string> } | null {
+  const def = enums.get(typeName);
+  if (!def?.members.length) return null;
+  const options: string[] = [];
+  const labels: Record<string, string> = {};
+  for (const mem of def.members) {
+    const tok = `${def.name}.${mem.name}`;
+    options.push(tok);
+    labels[tok] = mem.title || mem.name;
+  }
+  return { options, labels };
+}
+
+/**
+ * Pick the option that matches `v` after alias/member normalization.
+ */
+export function matchEnumOption(
+  v: unknown,
+  options: readonly string[] | undefined,
+  aliases?: ReadonlySet<string>,
+): string | null {
+  if (v == null || v === '') return null;
+  const raw = String(v).trim();
+  const norm = normalizeEnumToken(raw, aliases);
+  const member = splitEnumToken(norm, aliases)?.member ?? norm;
+  if (options?.length) {
+    for (const opt of options) {
+      if (opt === raw || opt === norm) return opt;
+      const on = normalizeEnumToken(opt, aliases);
+      if (on === norm || on === raw) return opt;
+      if ((splitEnumToken(on, aliases)?.member ?? on) === member) return opt;
+    }
+  }
+  return norm || raw;
+}
+
+/**
+ * Recover `type: 'enum'` + `Type.member` options from local / imported enums.
+ *
+ * Engine and source often leak `m.Easing.linear` (import alias / Python
+ * module path). Settings must show and submit `Easing.linear`.
+ */
+export function recoverEnumType(
+  def: ScriptInputDef,
+  enums: Map<string, PineEnumDef>,
+  aliases?: ReadonlySet<string>,
+): ScriptInputDef {
+  const aliasSet = aliases ?? new Set<string>();
+  const defLooks = looksLikeUserEnumToken(def.default, aliasSet);
+  const valLooks = looksLikeUserEnumToken(def.value, aliasSet);
+  const isEnum = def.type === 'enum' || defLooks || valLooks;
+  if (!isEnum) return def;
+
+  const split =
+    splitEnumToken(def.default, aliasSet) ||
+    splitEnumToken(def.value, aliasSet);
+  const inferred = split ? optionsForEnum(split.type, enums) : null;
+
+  const rawOpts = def.options?.length
+    ? def.options.map((o) => normalizeEnumToken(o, aliasSet) || String(o))
+    : inferred?.options;
+  const options = rawOpts?.length ? [...new Set(rawOpts)] : undefined;
+
+  const labels: Record<string, string> = { ...(def.optionLabels || {}) };
+  if (inferred) Object.assign(labels, inferred.labels);
+  if (options) {
+    for (const o of options) {
+      if (!labels[o]) {
+        labels[o] = splitEnumToken(o, aliasSet)?.member || o;
+      }
+    }
+  }
+
+  const defaultTok =
+    matchEnumOption(def.default, options, aliasSet) ??
+    normalizeEnumToken(def.default, aliasSet) ??
+    def.default;
+  const valueTok =
+    matchEnumOption(
+      def.value != null && def.value !== '' ? def.value : defaultTok,
+      options,
+      aliasSet,
+    ) ?? defaultTok;
+
+  return {
+    ...def,
+    type: 'enum',
+    default: defaultTok,
+    value: valueTok,
+    options,
+    optionLabels: Object.keys(labels).length ? labels : def.optionLabels,
+  };
 }
 
 const CALL_RE =
@@ -569,11 +891,19 @@ function resolveStringish(
  * Parse `input.*` / `input()` calls from Pine source into field defs.
  * Prefer {@link resolveScriptInputs} which merges engine-exported inputs.
  */
-export function parseScriptInputs(source: string): ScriptInputDef[] {
+export function parseScriptInputs(
+  source: string,
+  extraSources?: readonly string[],
+): ScriptInputDef[] {
   if (!source?.trim()) return [];
   const out: ScriptInputDef[] = [];
   const seen = new Set<string>();
   const stringConsts = collectStringConsts(source);
+  const aliases = collectImportAliases(source);
+  const enums = mergePineEnums(
+    parsePineEnums(source),
+    extraSources?.length ? collectPineEnumsFromSources(extraSources) : undefined,
+  );
   let m: RegExpExecArray | null;
   CALL_RE.lastIndex = 0;
   while ((m = CALL_RE.exec(source)) !== null) {
@@ -686,33 +1016,42 @@ export function parseScriptInputs(source: string): ScriptInputDef[] {
     const inlineVal = inlineR ? resolveStringish(inlineR, stringConsts) : null;
 
     out.push(
-      recoverSourceType({
-        id,
-        title: title || id,
-        type: resolvedType,
-        default: finalDefault,
-        value: finalDefault,
-        min: min ?? null,
-        max: max ?? null,
-        step: step ?? null,
-        options,
-        group: groupVal,
-        tooltip: tooltipVal,
-        inline: inlineVal,
-        active,
-        activeRef,
-        varName,
-      }),
+      recoverEnumType(
+        recoverSourceType({
+          id,
+          title: title || id,
+          type: resolvedType,
+          default: finalDefault,
+          value: finalDefault,
+          min: min ?? null,
+          max: max ?? null,
+          step: step ?? null,
+          options,
+          group: groupVal,
+          tooltip: tooltipVal,
+          inline: inlineVal,
+          active,
+          activeRef,
+          varName,
+        }),
+        enums,
+        aliases,
+      ),
     );
   }
   return out;
 }
 
 /** Normalize engine-exported input metadata into ScriptInputDef[]. */
-export function normalizeEngineInputs(raw: unknown): ScriptInputDef[] {
+export function normalizeEngineInputs(
+  raw: unknown,
+  extra?: { enums?: Map<string, PineEnumDef>; aliases?: ReadonlySet<string> },
+): ScriptInputDef[] {
   if (!Array.isArray(raw)) return [];
   const out: ScriptInputDef[] = [];
   const seen = new Set<string>();
+  const enums = extra?.enums ?? new Map<string, PineEnumDef>();
+  const aliases = extra?.aliases ?? new Set<string>();
   for (let i = 0; i < raw.length; i++) {
     const item = raw[i];
     if (!item || typeof item !== 'object') continue;
@@ -738,23 +1077,27 @@ export function normalizeEngineInputs(raw: unknown): ScriptInputDef[] {
       activeRef = String(r.activeRef).trim();
     }
     out.push(
-      recoverSourceType({
-        id,
-        title,
-        type,
-        default: r.default ?? r.defval ?? r.value,
-        value: r.value ?? r.default ?? r.defval,
-        min: r.min != null ? Number(r.min) : r.minval != null ? Number(r.minval) : null,
-        max: r.max != null ? Number(r.max) : r.maxval != null ? Number(r.maxval) : null,
-        step: r.step != null ? Number(r.step) : null,
-        options: Array.isArray(r.options) ? r.options.map(String) : undefined,
-        group: r.group != null ? String(r.group) : null,
-        tooltip: r.tooltip != null ? normalizeTooltip(String(r.tooltip)) : null,
-        inline: r.inline != null ? String(r.inline) : null,
-        active,
-        activeRef,
-        varName: r.varName != null ? String(r.varName) : r.name != null ? String(r.name) : null,
-      }),
+      recoverEnumType(
+        recoverSourceType({
+          id,
+          title,
+          type,
+          default: r.default ?? r.defval ?? r.value,
+          value: r.value ?? r.default ?? r.defval,
+          min: r.min != null ? Number(r.min) : r.minval != null ? Number(r.minval) : null,
+          max: r.max != null ? Number(r.max) : r.maxval != null ? Number(r.maxval) : null,
+          step: r.step != null ? Number(r.step) : null,
+          options: Array.isArray(r.options) ? r.options.map(String) : undefined,
+          group: r.group != null ? String(r.group) : null,
+          tooltip: r.tooltip != null ? normalizeTooltip(String(r.tooltip)) : null,
+          inline: r.inline != null ? String(r.inline) : null,
+          active,
+          activeRef,
+          varName: r.varName != null ? String(r.varName) : r.name != null ? String(r.name) : null,
+        }),
+        enums,
+        aliases,
+      ),
     );
   }
   return out;
@@ -767,9 +1110,15 @@ export function normalizeEngineInputs(raw: unknown): ScriptInputDef[] {
 export function resolveScriptInputs(
   source: string,
   engineInputs?: unknown,
+  extraSources?: readonly string[],
 ): ScriptInputDef[] {
-  const fromSrc = parseScriptInputs(source);
-  const fromEng = normalizeEngineInputs(engineInputs);
+  const fromSrc = parseScriptInputs(source, extraSources);
+  const aliases = collectImportAliases(source);
+  const enums = mergePineEnums(
+    parsePineEnums(source),
+    extraSources?.length ? collectPineEnumsFromSources(extraSources) : undefined,
+  );
+  const fromEng = normalizeEngineInputs(engineInputs, { enums, aliases });
   if (!fromEng.length) return fromSrc;
   if (!fromSrc.length) return fromEng;
   const byTitle = new Map(fromEng.map((d) => [d.title, d]));
@@ -807,39 +1156,53 @@ export function resolveScriptInputs(
         : isSourceSeriesToken(s.value)
           ? String(s.value).toLowerCase()
           : tokenDefault;
-      return recoverSourceType({
+      return recoverEnumType(
+        recoverSourceType({
+          ...s,
+          ...e,
+          id: s.id,
+          title: s.title,
+          type: 'source',
+          default: tokenDefault,
+          value: tokenValue,
+          options,
+          min: null,
+          max: null,
+          step: null,
+        }),
+        enums,
+        aliases,
+      );
+    }
+
+    const optionLabels = { ...s.optionLabels, ...e.optionLabels };
+    const preferEnum = s.type === 'enum' || e.type === 'enum';
+    return recoverEnumType(
+      recoverSourceType({
         ...s,
         ...e,
         id: s.id,
         title: s.title,
-        type: 'source',
-        default: tokenDefault,
-        value: tokenValue,
+        type: preferEnum ? 'enum' : e.type || s.type,
         options,
-        min: null,
-        max: null,
-        step: null,
-      });
-    }
-
-    return recoverSourceType({
-      ...s,
-      ...e,
-      id: s.id,
-      title: s.title,
-      options,
-      // Prefer source-parse layout meta (inline / activeRef / varName) when engine omits
-      group: e.group ?? s.group,
-      tooltip: e.tooltip ?? s.tooltip,
-      inline: e.inline ?? s.inline,
-      active: e.activeRef || s.activeRef ? true : e.active !== false && s.active !== false,
-      activeRef: e.activeRef ?? s.activeRef,
-      varName: e.varName ?? s.varName,
-      value: e.value ?? s.value ?? s.default,
-    });
+        optionLabels: Object.keys(optionLabels).length ? optionLabels : undefined,
+        // Prefer source-parse layout meta (inline / activeRef / varName) when engine omits
+        group: e.group ?? s.group,
+        tooltip: e.tooltip ?? s.tooltip,
+        inline: e.inline ?? s.inline,
+        active: e.activeRef || s.activeRef ? true : e.active !== false && s.active !== false,
+        activeRef: e.activeRef ?? s.activeRef,
+        varName: e.varName ?? s.varName,
+        value: e.value ?? s.value ?? s.default,
+      }),
+      enums,
+      aliases,
+    );
   });
-  for (const leftover of byTitle.values()) merged.push(recoverSourceType(leftover));
-  return merged.map(recoverSourceType);
+  for (const leftover of byTitle.values()) {
+    merged.push(recoverEnumType(recoverSourceType(leftover), enums, aliases));
+  }
+  return merged.map((d) => recoverEnumType(recoverSourceType(d), enums, aliases));
 }
 
 /** Apply override map (keyed by title or id) onto defs for form initial values. */
@@ -851,12 +1214,15 @@ export function applyInputOverrides(
     return defs.map((d) => ({ ...d, value: d.value ?? d.default }));
   }
   return defs.map((d) => {
-    const v =
+    let v =
       overrides[d.title] !== undefined
         ? overrides[d.title]
         : overrides[d.id] !== undefined
           ? overrides[d.id]
           : d.value ?? d.default;
+    if (d.type === 'enum') {
+      v = matchEnumOption(v, d.options) ?? v;
+    }
     return { ...d, value: v };
   });
 }

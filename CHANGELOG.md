@@ -9,11 +9,30 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-17 · 227 commits · describe-tag: `v2.0.11`_
+_Generated/updated: 2026-08-17 · 228 commits · describe-tag: `v2.0.12`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.13] — 2026-08-17
+
+Call-parameter intelligence, richer Pine highlighting, script input enums, and Pine table lifecycle.
+
+### Added
+
+- **Call parameter intelligence** — hover on `plot` / `input.int` / `ta.sma` (and other curated calls) shows parameter docs + an example. After `,` inside a call, completions offer remaining named args (`title=`, `minval=`) in a **Parameters** section and already-used ones under **Already used**. A signature hint below the cursor lists every parameter and marks used / current / unused.
+
+### Improved
+
+- **Pine editor highlighting** — series builtins (`close`, `bar_index`, `time`, OHLC) use a cyan token distinct from user variables; `import … as` aliases and library export members (`m.Easing`) use a violet family; types get a warm token. New chrome vars `--color-cyan`, `--color-editor-builtin`, `--color-editor-lib`, `--color-editor-lib-member`, `--color-editor-type`.
+
+### Fixed
+
+- **Script Inputs enum values** — `input.enum(m.Easing.linear)` no longer shows the import/Python path as a text field. Members are inferred from `enum` declarations (local + imported library source), values normalize to `Type.member`, and the modal seeds from that script’s `runResults` (not another indicator’s `lastRun`).
+- **Script display name** — applied scripts / pane badges always use the Pine `indicator()` / `strategy()` / `library()` title (not engine `"plot"` or a stale file name).
+- **Pine tables after delete** — table HUD only shows tables from still-applied scripts’ `runResults` (orphans / `__editor__` leftovers no longer stick). First-run migrates run cache to the real script id; last-script delete clears script drawings.
+- **Pine table layout** — grid size expands from cell extents when engine understates rows/columns; frame/border and cell align improved.
 
 ## [2.0.12] — 2026-08-17
 
@@ -295,9 +314,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (145 commits)
+### 2026-08 (146 commits)
 
 #### Security
 
@@ -308,6 +329,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `db3b42c1` (2026-08-17) — feat(release): AXIS v2.0.12 editor UX, chart lifecycle, icon map
 - `f96319e3` (2026-08-17) — feat(release): AXIS v2.0.11 chart scripts lifecycle and pyne-worker engine
 - `7f85d664` (2026-08-16) — feat(release): AXIS v2.0.10 market proxy, inputs layout, local-first LSP
 - `2cae2b72` (2026-08-15) — feat(editor): symbol catalog and richer Pine highlighting

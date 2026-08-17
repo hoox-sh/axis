@@ -46,20 +46,57 @@ export function normalizeScriptSource(code: string): string {
 }
 
 /**
- * Best-effort Pine title from `indicator("…")` / `strategy("…")`
+ * Best-effort Pine title from `indicator("…")` / `strategy("…")` / `library("…")`
  * (positional title or `title=`).
  */
 export function extractScriptTitle(code: string): string | null {
   const src = String(code ?? '');
-  // title= form first
+  // title= form first (may appear after shorttitle= etc.)
   const named = src.match(
-    /\b(?:indicator|strategy)\s*\(\s*[^)]*?\btitle\s*=\s*(["'])([^"']+)\1/i,
+    /\b(?:indicator|strategy|library)\s*\(\s*[^)]*?\btitle\s*=\s*(["'])([^"']+)\1/i,
   );
   if (named?.[2]) return named[2].trim() || null;
   // positional first string arg
-  const pos = src.match(/\b(?:indicator|strategy)\s*\(\s*(["'])([^"']+)\1/i);
+  const pos = src.match(
+    /\b(?:indicator|strategy|library)\s*\(\s*(["'])([^"']+)\1/i,
+  );
   if (pos?.[2]) return pos[2].trim() || null;
   return null;
+}
+
+/** Engine / store placeholders that are not real Pine titles. */
+const GENERIC_SCRIPT_NAMES = new Set([
+  'plot',
+  'indicator',
+  'strategy',
+  'library',
+  'script',
+  'untitled',
+  'draft',
+]);
+
+/**
+ * Display name for an applied chart script.
+ * **Always prefers the Pine declaration title** over engine meta / file names.
+ */
+export function resolveScriptDisplayName(
+  code: string,
+  metaName?: string | null,
+  existingName?: string | null,
+): string {
+  const fromSource = extractScriptTitle(code);
+  if (fromSource) return fromSource;
+
+  const meta = metaName != null ? String(metaName).trim() : '';
+  if (meta && !GENERIC_SCRIPT_NAMES.has(meta.toLowerCase())) return meta;
+
+  const existing = existingName != null ? String(existingName).trim() : '';
+  if (existing && !GENERIC_SCRIPT_NAMES.has(existing.toLowerCase())) {
+    return existing;
+  }
+  if (existing) return existing;
+  if (meta) return meta;
+  return 'Indicator';
 }
 
 /**

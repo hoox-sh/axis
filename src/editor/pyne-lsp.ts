@@ -26,7 +26,11 @@
  * 3. Optional **remote LSP** via pyne Pro API (`POST /lsp/completion`, `/lsp/hover`)
  *    when engine is server/worker, Backend URL is set, and not in failure cooldown.
  *
- * Triggers: typing (`activateOnTyping`), **⌘/Ctrl-Space** (`startCompletion`).
+ * Triggers: typing (`activateOnTyping`), **⌘/Ctrl-Space** (`startCompletion`),
+ * and **`,`** inside a call (remaining named parameters).
+ *
+ * Hover shows parameter lists + examples. A signature-hint tooltip lists
+ * every parameter and marks used vs unused vs current.
  *
  * Exports {@link pyneLspExtensions} for mounting on {@link PyneEditor}.
  * Indexes builtins by top-level name, module members (`ta.sma`), and full name
@@ -44,8 +48,8 @@ import {
   type CompletionContext,
   type CompletionResult,
 } from '@codemirror/autocomplete';
-import { hoverTooltip, keymap, type EditorView, type Tooltip } from '@codemirror/view';
-import { Extension } from '@codemirror/state';
+import { hoverTooltip, keymap, showTooltip, type EditorView, type Tooltip } from '@codemirror/view';
+import { Extension, StateField, type EditorState } from '@codemirror/state';
 import builtinsJson from './data/pyne-builtins.json';
 import {
   fetchRemoteCompletion,
@@ -67,6 +71,15 @@ import {
   styleNamespaceForCall,
   type PineEnumMeta,
 } from './pine-enums';
+import {
+  classifyParams,
+  findCallSite,
+  formatCallHoverMarkdown,
+  formatParamHoverMarkdown,
+  paramCompletions,
+  resolveCallSignature,
+  type PineCallSig,
+} from './pine-call-params';
 
 /** One entry from the local Pine builtins catalog. */
 export type BuiltinMeta = {
@@ -371,6 +384,155 @@ export function completeNamedArgEnum(
   };
 }
 
+function sigForCall(name: string, source: string): PineCallSig | null {
+  const meta = lookupBuiltin(name) || lookupBuiltin(name.split('.').pop() || '');
+  const local = lookupPyneDoc(source, name);
+  return resolveCallSignature(name, {
+    documentation: meta?.documentation,
+    detail: meta?.detail,
+    brief: meta?.brief,
+    snippet: meta?.snippet,
+    localParams: local?.params,
+    localDescription: local?.description,
+  });
+}
+
+/**
+ * Named-parameter completions inside a call — unused first, then already used.
+ * Opens after `(` / `,` and while typing a param name (`ti` → `title=`).
+ */
+export function completeCallParams(
+  context: CompletionContext,
+): CompletionResult | null {
+  const text = context.state.doc.toString();
+  const site = findCallSite(text, context.pos);
+  if (!site) return null;
+  const sig = sigForCall(site.name, text);
+  if (!sig?.params.length) return null;
+  const items = paramCompletions(sig, site);
+  if (!items.length) return null;
+  // Don't steal `style=` / `color=` value completion
+  if (site.prefix.includes('=')) return null;
+  const before = text.slice(0, site.argFrom).trimEnd();
+  const afterComma = before.endsWith(',');
+  const afterParen = before.endsWith('(');
+  const typingName = /^[A-Za-z_][\w]*$/.test(site.prefix);
+  const looksLikeValue =
+    /^(close|high|low|open|volume|time|hl2|hlc3|ohlc4|true|false|na|color|ta|math|str|input|strategy|bar_index|syminfo|request)$/i.test(
+      site.prefix,
+    );
+  const nameHit = typingName && items.some((p) => p.name.toLowerCase().startsWith(site.prefix.toLowerCase()));
+  if (!context.explicit) {
+    if (afterComma) {
+      // always offer remaining params after `,`
+    } else if (afterParen && nameHit && !looksLikeValue) {
+      // `input.int(14, min` — named param, not a series token
+    } else if (afterParen && !site.prefix) {
+      // empty first slot: only on explicit trigger (Cmd-Space)
+      return null;
+    } else {
+      return null;
+    }
+  }
+
+  const options = items.map((p, i) => ({
+    label: p.insert,
+    type: 'keyword' as const,
+    detail: p.used ? 'used' : 'param',
+    info: p.description || `Parameter of ${sig.name}`,
+    apply: p.insert,
+    boost: p.used ? 10 - Math.min(i, 8) : 92 - Math.min(i, 30),
+    section: p.used
+      ? { name: 'Already used', rank: 2 }
+      : { name: 'Parameters', rank: 1 },
+  }));
+  const leadWs = /^\s*/.exec(text.slice(site.argFrom, context.pos))?.[0].length || 0;
+  return {
+    from: site.argFrom + leadWs,
+    options,
+    validFor: /^[\w]*$/,
+  };
+}
+
+const PARAM_HINT_MAX_ROWS = 12;
+
+/** Compact `plot(series, title, color, …)` header for the hint tooltip. */
+function compactParamHintSig(sig: PineCallSig): string {
+  const names = sig.params.filter((p) => !p.rest).map((p) => p.name);
+  const head = names.slice(0, 3);
+  const ellip = names.length > 3 || sig.params.some((p) => p.rest);
+  return `${sig.name}(${head.join(', ')}${ellip ? ', …' : ''})`;
+}
+
+/**
+ * Signature-hint tooltip: every parameter marked used / current / unused.
+ * Shown below the call while the cursor is inside it (empty selection).
+ */
+export function buildParamHintTooltip(state: EditorState): Tooltip | null {
+  const text = state.doc.toString();
+  const sel = state.selection.main;
+  if (!sel.empty) return null;
+  const pos = sel.head;
+  const site = findCallSite(text, pos);
+  if (!site) return null;
+  const sig = sigForCall(site.name, text);
+  if (!sig || sig.params.length < 2) return null;
+  const rows = classifyParams(sig, site).filter((p) => !p.rest);
+  if (!rows.length) return null;
+
+  return {
+    pos: site.openParen,
+    above: false,
+    create() {
+      const dom = document.createElement('div');
+      dom.className = 'cm-pine-param-hint';
+
+      const sigEl = document.createElement('div');
+      sigEl.className = 'cm-pine-param-hint-sig';
+      sigEl.textContent = compactParamHintSig(sig);
+      dom.appendChild(sigEl);
+
+      const ul = document.createElement('ul');
+      ul.className = 'cm-pine-param-hint-list';
+
+      const overflow = rows.length > PARAM_HINT_MAX_ROWS;
+      const shown = overflow ? rows.slice(0, PARAM_HINT_MAX_ROWS - 1) : rows;
+      for (const p of shown) {
+        const li = document.createElement('li');
+        // current wins over used for class / mark / note
+        const kind = p.current ? 'current' : p.used ? 'used' : 'unused';
+        li.className = `is-${kind}`;
+        const mark = kind === 'current' ? '●' : kind === 'used' ? '✓' : '○';
+        li.appendChild(document.createTextNode(`${mark} ${p.name}`));
+        if (kind !== 'unused') {
+          const note = document.createElement('span');
+          note.className = 'cm-pine-param-hint-note';
+          note.textContent = kind;
+          li.appendChild(note);
+        }
+        ul.appendChild(li);
+      }
+      if (overflow) {
+        const more = document.createElement('li');
+        more.textContent = `+${rows.length - shown.length} more`;
+        ul.appendChild(more);
+      }
+
+      dom.appendChild(ul);
+      return { dom };
+    },
+  };
+}
+
+export const pineParamHintField = StateField.define<Tooltip | null>({
+  create: (state) => buildParamHintTooltip(state),
+  update(tip, tr) {
+    if (!tr.docChanged && !tr.selection) return tip;
+    return buildParamHintTooltip(tr.state);
+  },
+  provide: (f) => showTooltip.from(f),
+});
+
 function cmType(kind?: string): string {
   switch ((kind || '').toLowerCase()) {
     case 'function':
@@ -485,6 +647,10 @@ export function pyneCompleteLocal(context: CompletionContext): CompletionResult 
   const named = completeNamedArgEnum(context);
   if (named) return named;
 
+  // Remaining named parameters after `(` / `,` (`title=`, `minval=`, …)
+  const callParams = completeCallParams(context);
+  if (callParams) return callParams;
+
   // module.member after dot
   const dot = textBefore.match(/([A-Za-z_][\w]*)\.\s*([A-Za-z_][\w]*)?$/);
   if (dot) {
@@ -596,6 +762,10 @@ export async function pyneComplete(
     const named = completeNamedArgEnum(context);
     if (named) return named;
   }
+  {
+    const callParams = completeCallParams(context);
+    if (callParams) return callParams;
+  }
 
   // Local catalog first (instant, 1000+ builtins). Remote Pro API only fills
   // gaps when local has nothing — never blocks typing / Cmd-Space on a dead host.
@@ -650,7 +820,25 @@ export async function pyneComplete(
   return localResult;
 }
 
-function hoverDocs(meta: BuiltinMeta): string {
+function hoverDocs(meta: BuiltinMeta, sig?: PineCallSig | null): string {
+  if (sig?.params.length) {
+    const merged: PineCallSig = {
+      ...sig,
+      description: sig.description || meta.brief || undefined,
+    };
+    let md = formatCallHoverMarkdown(merged);
+    const extra = meta.documentation?.trim();
+    if (
+      extra &&
+      extra !== sig.description &&
+      extra !== meta.brief &&
+      extra !== meta.detail &&
+      !extra.startsWith(`${meta.label}(`)
+    ) {
+      md += '\n\n' + extra;
+    }
+    return md;
+  }
   const parts: string[] = [];
   if (meta.detail) parts.push(meta.detail);
   if (meta.brief) parts.push(meta.brief);
@@ -884,6 +1072,29 @@ export function pyneHoverLocal(
   const doc = view.state.doc;
   const text = doc.sliceString(0, doc.length);
   const hit = wordAt(text, pos);
+  const site = findCallSite(text, pos);
+
+  // Hovering a named argument (`title=` inside plot / input.int / …)
+  if (site && hit) {
+    const sig = sigForCall(site.name, text);
+    const param = sig?.params.find((p) => p.name === hit.word);
+    const isParamToken =
+      !!param &&
+      (site.namedUsed.has(hit.word) ||
+        /^\s*=/.test(text.slice(hit.to)) ||
+        site.args.some((a) => a.name === hit.word));
+    if (sig && param && isParamToken) {
+      return makeHoverTooltip(
+        hit.from,
+        hit.to,
+        `${sig.name} · ${param.name}`,
+        formatParamHoverMarkdown(sig, param),
+        'parameter',
+        { markdown: true },
+      );
+    }
+  }
+
   if (!hit) return null;
 
   // User / library annotations in the open document (//@function, //@param, …)
@@ -906,9 +1117,35 @@ export function pyneHoverLocal(
   if (!meta && hit.word.includes('.')) {
     meta = lookupBuiltin(hit.word.split('.').pop() || '');
   }
-  if (!meta) return null;
+  if (!meta) {
+    // Inside a call with no symbol under the cursor — show the current param
+    if (site) {
+      const sig = sigForCall(site.name, text);
+      const rows = sig ? classifyParams(sig, site) : [];
+      const current = rows.find((p) => p.current) || rows[site.cursorArgIndex];
+      if (sig && current) {
+        return makeHoverTooltip(
+          site.argFrom,
+          Math.max(site.argFrom + 1, pos),
+          `${sig.name} · ${current.name}`,
+          formatParamHoverMarkdown(sig, current),
+          'parameter',
+          { markdown: true },
+        );
+      }
+    }
+    return null;
+  }
 
-  return makeHoverTooltip(hit.from, hit.to, meta.label, hoverDocs(meta), 'local metadata');
+  const sig = sigForCall(meta.label || hit.word, text);
+  return makeHoverTooltip(
+    hit.from,
+    hit.to,
+    meta.label,
+    hoverDocs(meta, sig),
+    'local metadata',
+    { markdown: !!sig?.params.length || looksLikeMarkdown(hoverDocs(meta, sig)) },
+  );
 }
 
 /**
@@ -920,16 +1157,15 @@ export function pyneHoverLocal(
  * appear broken (tooltip never showed before the pointer left).
  */
 export async function pyneHover(view: EditorView, pos: number): Promise<Tooltip | null> {
+  const local = pyneHoverLocal(view, pos);
+  // Instant path for ta.sma, plot, input.*, named params, inside-call hover
+  if (local) return local;
+
   const doc = view.state.doc;
   const text = doc.toString();
   const hit = wordAt(text, pos);
-  if (!hit) return null;
-
-  const local = pyneHoverLocal(view, pos);
-  // Instant path for ta.sma, plot, input.*, //@function, …
-  if (local) return local;
-
-  if (!shouldUseRemoteLsp()) return null;
+  // Remote LSP needs a word; local already handled inside-call param hover
+  if (!hit || !shouldUseRemoteLsp()) return null;
 
   try {
     const line = doc.lineAt(pos);
@@ -985,6 +1221,7 @@ export function pyneLspExtensions(): Extension[] {
     autocompletion({
       override: [pyneComplete],
       activateOnTyping: true,
+      activateOnCompletion: (c) => String(c.label || '').endsWith('='),
       maxRenderedOptions: 64,
       defaultKeymap: true,
       icons: true,
@@ -999,6 +1236,7 @@ export function pyneLspExtensions(): Extension[] {
       // Slightly snappier than CM default (300ms)
       hoverTime: 250,
     }),
+    pineParamHintField,
   ];
 }
 

@@ -114,6 +114,28 @@ export function buildChromeCssVars(
     '--color-accent-3': `color-mix(in srgb, ${accent} 35%, #e8a03a 65%)`,
     '--color-orange': `color-mix(in srgb, ${accent} 25%, #e8a03a 75%)`,
     '--color-yellow': `color-mix(in srgb, ${accent} 20%, #e8a03a 80%)`,
+    '--color-cyan':
+      base === 'light'
+        ? `color-mix(in srgb, ${up} 35%, #0e8aaa 65%)`
+        : `color-mix(in srgb, ${up} 30%, #6ee7f5 70%)`,
+
+    // Pine editor highlight extras (series builtins vs library exports)
+    '--color-editor-builtin':
+      base === 'light'
+        ? `color-mix(in srgb, ${up} 30%, #0e8aaa 70%)`
+        : `color-mix(in srgb, ${up} 28%, #6ee7f5 72%)`,
+    '--color-editor-lib':
+      base === 'light'
+        ? `color-mix(in srgb, ${accent} 40%, #9b4dca 60%)`
+        : `color-mix(in srgb, ${accent} 38%, #d8b4fe 62%)`,
+    '--color-editor-lib-member':
+      base === 'light'
+        ? `color-mix(in srgb, ${accent} 25%, #c026d3 75%)`
+        : `color-mix(in srgb, ${accent} 20%, #e879f9 80%)`,
+    '--color-editor-type':
+      base === 'light'
+        ? `color-mix(in srgb, ${accent} 30%, #c47a18 70%)`
+        : `color-mix(in srgb, ${accent} 22%, #e8a03a 78%)`,
 
     // Focus / shadows track theme depth
     '--ui-focus-ring': `0 0 0 1px color-mix(in srgb, ${accent} 40%, transparent)`,
