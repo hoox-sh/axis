@@ -102,6 +102,15 @@ export function lspBaseUrl(): string {
   return (store.endpoint || '').replace(/\/$/, '');
 }
 
+/**
+ * True when a failed remote LSP fetch should start the 30s cooldown.
+ * Caller abort (user typed / hover left / pre-eval cancelled) must not
+ * disable `/lsp/diagnostics` for the next idle check.
+ */
+export function shouldMarkRemoteLspFailed(callerSignal?: AbortSignal): boolean {
+  return !callerSignal?.aborted;
+}
+
 function mergeAbortSignals(
   a?: AbortSignal,
   b?: AbortSignal,
@@ -163,7 +172,7 @@ export async function fetchRemoteCompletion(opts: {
     markRemoteLspOk();
     return j.items;
   } catch {
-    markRemoteLspFailed();
+    if (shouldMarkRemoteLspFailed(opts.signal)) markRemoteLspFailed();
     return null;
   }
 }
@@ -205,7 +214,7 @@ export async function fetchRemoteHover(opts: {
     markRemoteLspOk();
     return j.hover;
   } catch {
-    markRemoteLspFailed();
+    if (shouldMarkRemoteLspFailed(opts.signal)) markRemoteLspFailed();
     return null;
   }
 }
@@ -269,7 +278,7 @@ export async function fetchRemoteDiagnostics(opts: {
       diagnostics: j.diagnostics,
     };
   } catch {
-    markRemoteLspFailed();
+    if (shouldMarkRemoteLspFailed(opts.signal)) markRemoteLspFailed();
     return null;
   }
 }

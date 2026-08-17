@@ -12,6 +12,8 @@ import {
   lineStartOffsets,
   mapLineToRange,
   diagnosticsFromLastRun,
+  combineEditorDiagnostics,
+  lastRunScriptSource,
   countDiagnostics,
   formatDiagnosticCount,
   type EditorDiagnostic,
@@ -235,6 +237,58 @@ describe('diagnosticsFromLastRun', () => {
     const exact = diags.filter((d) => d.message === 'line 3: dup');
     expect(exact.length).toBeLessThanOrEqual(2);
     void same;
+  });
+});
+
+describe('combineEditorDiagnostics', () => {
+  const typo: EditorDiagnostic = {
+    from: 0,
+    to: 4,
+    line: 2,
+    severity: 'typo',
+    message: 'Unknown `plt` — did you mean `plot`?',
+    source: 'preeval-typo',
+  };
+
+  it('keeps last-run runtime errors when pre-eval is clean', () => {
+    const lastRun = {
+      status: 'error',
+      error: 'Runtime error on line 3: division by zero',
+    };
+    const merged = combineEditorDiagnostics([], lastRun, SAMPLE_DOC);
+    expect(merged.some((d) => d.line === 3 && d.severity === 'error')).toBe(true);
+  });
+
+  it('unions last-run errors with pre-eval typos', () => {
+    const lastRun = {
+      status: 'error',
+      error: 'Runtime error on line 3: boom',
+    };
+    const merged = combineEditorDiagnostics([typo], lastRun, SAMPLE_DOC);
+    expect(merged.some((d) => d.severity === 'typo')).toBe(true);
+    expect(merged.some((d) => d.line === 3 && d.severity === 'error')).toBe(true);
+  });
+
+  it('drops last-run when the buffer no longer matches stamped source', () => {
+    const lastRun = {
+      status: 'error',
+      error: 'Runtime error on line 3: boom',
+      meta: { axisSource: SAMPLE_DOC },
+    };
+    expect(lastRunScriptSource(lastRun)).toBe(SAMPLE_DOC);
+    const merged = combineEditorDiagnostics([], lastRun, SAMPLE_DOC + '\nplot(1)\n');
+    expect(merged).toEqual([]);
+  });
+
+  it('keeps last-run when stamped source still matches', () => {
+    const lastRun = {
+      status: 'error',
+      error: 'Runtime error on line 3: boom',
+      meta: { axisSource: SAMPLE_DOC },
+    };
+    const merged = combineEditorDiagnostics([typo], lastRun, SAMPLE_DOC);
+    expect(merged.some((d) => d.line === 3)).toBe(true);
+    expect(merged.some((d) => d.severity === 'typo')).toBe(true);
   });
 });
 

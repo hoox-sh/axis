@@ -54,6 +54,7 @@ import {
   labelBubbleLayout,
   labelFontSizePx,
   normalizeScriptDrawings,
+  scriptPaintClampsToLastBar,
   type DrawingLimits,
   type ScriptDrawing,
 } from './pyne-drawings';
@@ -436,8 +437,8 @@ export class DrawingLayer {
     limits: DrawingLimits = DEFAULT_DRAWING_LIMITS,
   ): number {
     // Normalize → GC caps → collapse same-text label stacks (status labels).
-    // Future-time clamp is applied at paint (toXY) so we also dedupe by raw t1
-    // here; identical future anchors share one key and collapse to one chip.
+    // Labels clamp to last bar at paint; geometry (line/box/…) keeps
+    // bar_index+1 / varip future endpoints (logical extrapolation).
     const next = dedupeScriptLabelsAtSameTime(
       garbageCollectScriptDrawings(normalizeScriptDrawings(raw), limits),
     );
@@ -831,8 +832,8 @@ export class DrawingLayer {
    * extrapolate via logical index. Compile-mode `bar_index` falls back last.
    *
    * User drawings may sit up to {@link DRAWING_FUTURE_BARS} past series end
-   * (default). Pass `clampToLastBar: true` for Pine script paint so `timenow`
-   * labels stay on the last bar.
+   * (default). Pine **labels** pass `clampToLastBar: true` so `timenow` stays
+   * on the last candle; lines/boxes/polylines do not (last-bar / varip +1).
    */
   private toXY(
     p: Point,
@@ -1560,9 +1561,17 @@ export class DrawingLayer {
     this.gDraw.replaceChildren(...Array.from(tmp.childNodes));
   }
 
-  /** Script (Pine) paint uses last-bar clamp for future wall-clock times. */
-  private toXYScript(p: Point): { x: number; y: number } | null {
-    return this.toXY(p, { clampToLastBar: true });
+  /**
+   * Script (Pine) paint. Clamp only when {@link scriptPaintClampsToLastBar}
+   * says so (labels). Geometry uses logical extrapolation past the last bar.
+   */
+  private toXYScript(
+    p: Point,
+    type?: ScriptDrawing['type'],
+  ): { x: number; y: number } | null {
+    return this.toXY(p, {
+      clampToLastBar: scriptPaintClampsToLastBar(type),
+    });
   }
 
   /** Safe price → Y for script paint (guards non-finite + LWC throws). */
@@ -1593,7 +1602,7 @@ export class DrawingLayer {
       const coords: { x: number; y: number }[] = [];
       for (const p of d.points) {
         if (!p || !Number.isFinite(p.time) || !Number.isFinite(p.price)) continue;
-        const c = this.toXYScript({ time: p.time, price: p.price });
+        const c = this.toXYScript({ time: p.time, price: p.price }, d.type);
         if (c) coords.push(c);
       }
       if (coords.length < 2) return;
@@ -1635,7 +1644,7 @@ export class DrawingLayer {
       const coords: { x: number; y: number }[] = [];
       for (const p of corners) {
         if (!Number.isFinite(p.time) || !Number.isFinite(p.price)) continue;
-        const c = this.toXYScript({ time: p.time, price: p.price });
+        const c = this.toXYScript({ time: p.time, price: p.price }, d.type);
         if (c) coords.push(c);
       }
       if (coords.length < 3) return;
@@ -1672,8 +1681,8 @@ export class DrawingLayer {
           return;
         }
       }
-      const a = this.toXYScript({ time: d.t1, price: d.p1 });
-      const b = this.toXYScript({ time: d.t2, price: d.p2 });
+      const a = this.toXYScript({ time: d.t1, price: d.p1 }, d.type);
+      const b = this.toXYScript({ time: d.t2, price: d.p2 }, d.type);
       // Horizontal + extend with unmapped times → still paint a price level
       if ((!a || !b) && d.p1 === d.p2 && ext !== 'none') {
         const y = this.priceToYSafe(d.p1);
@@ -1710,8 +1719,8 @@ export class DrawingLayer {
       if (!Number.isFinite(d.t1) || !Number.isFinite(d.p1) || !Number.isFinite(d.t2) || !Number.isFinite(d.p2)) {
         return;
       }
-      const a = this.toXYScript({ time: d.t1, price: d.p1 });
-      const b = this.toXYScript({ time: d.t2, price: d.p2 });
+      const a = this.toXYScript({ time: d.t1, price: d.p1 }, d.type);
+      const b = this.toXYScript({ time: d.t2, price: d.p2 }, d.type);
       if (!a || !b) return;
       const x = Math.min(a.x, b.x);
       const y = Math.min(a.y, b.y);
@@ -1744,7 +1753,7 @@ export class DrawingLayer {
         }
       }
       if (!Number.isFinite(price)) return;
-      const c = this.toXYScript({ time: d.t1, price });
+      const c = this.toXYScript({ time: d.t1, price }, d.type);
       if (!c) return;
       const text = sanitizeDrawingText(d.text ?? '');
       const fontPx = labelFontSizePx(d.size, 10);

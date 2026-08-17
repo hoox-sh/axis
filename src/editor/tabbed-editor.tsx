@@ -72,8 +72,8 @@ import {
   pushScript,
 } from './git-sync';
 import {
+  combineEditorDiagnostics,
   countDiagnostics,
-  diagnosticsFromLastRun,
   formatDiagnosticCount,
   type EditorDiagnostic,
 } from './diagnostics';
@@ -184,9 +184,8 @@ export const TabbedEditor: Component<Props> = (props) => {
 
   /**
    * CM underlines / gutter diagnostics:
-   * 1. Pre-eval (parse/lint) — after Save or Run only (not mid-typing)
-   * 2. Last-run engine errors — only when buffer still matches last pre-eval
-   *    source and pre-eval did not already cover the same line+message
+   * 1. Pre-eval (parse/lint) after idle / Save / Run
+   * 2. Last-run engine errors, unioned when the buffer still matches the run
    */
   const editorDiagnostics = createMemo((): EditorDiagnostic[] => {
     void store.lastRun;
@@ -196,19 +195,7 @@ export const TabbedEditor: Component<Props> = (props) => {
     const sourceDoc =
       props.editorRef?.getDoc?.() || tabs()[activeTab()]?.doc || '';
     const pre = store.preEval?.diagnostics ?? [];
-    // Prefer pre-eval for current buffer; keep last-run when pre-eval empty/pending
-    // and the buffer is still the one that was run (stale underlines after edits
-    // are avoided by clearing last-run contribution when pre has results).
-    if (pre.length > 0) return pre as EditorDiagnostic[];
-    if (store.preEval?.pending) {
-      // While checking, still show last-run if any
-      return diagnosticsFromLastRun(store.lastRun, sourceDoc);
-    }
-    // Pre-eval finished with zero findings — drop stale last-run marks for this doc
-    if (store.preEval && store.preEval.source === sourceDoc && !store.preEval.hasErrors) {
-      return [];
-    }
-    return diagnosticsFromLastRun(store.lastRun, sourceDoc);
+    return combineEditorDiagnostics(pre, store.lastRun, sourceDoc);
   });
 
   const diagCountLabel = createMemo(() => formatDiagnosticCount(editorDiagnostics()));

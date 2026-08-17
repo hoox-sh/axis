@@ -561,27 +561,46 @@ export function localPreevaluate(source: string): EditorDiagnostic[] {
   const out: EditorDiagnostic[] = [];
   const lines = source.split('\n');
 
-  // Unclosed block comment
+  // Unclosed block comment (skip strings — `"/*"` / `https://` are not comments)
   let inBlock = false;
   let blockStartLine = 1;
+  let blockInStr: '"' | "'" | null = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     let j = 0;
     while (j < line.length) {
-      if (!inBlock && line.startsWith('//', j)) break; // line comment
-      if (!inBlock && line.startsWith('/*', j)) {
+      const c = line[j]!;
+      const n = line[j + 1];
+      if (blockInStr) {
+        if (c === '\\') {
+          j += 2;
+          continue;
+        }
+        if (c === blockInStr) blockInStr = null;
+        j += 1;
+        continue;
+      }
+      if (!inBlock && (c === '"' || c === "'")) {
+        blockInStr = c;
+        j += 1;
+        continue;
+      }
+      if (!inBlock && c === '/' && n === '/') break;
+      if (!inBlock && c === '/' && n === '*') {
         inBlock = true;
         blockStartLine = i + 1;
         j += 2;
         continue;
       }
-      if (inBlock && line.startsWith('*/', j)) {
+      if (inBlock && c === '*' && n === '/') {
         inBlock = false;
         j += 2;
         continue;
       }
       j += 1;
     }
+    // Pine strings do not span lines
+    blockInStr = null;
   }
   if (inBlock) {
     out.push(

@@ -114,6 +114,18 @@ const COLOR_CONSTANTS: BuiltinMeta[] = [];
 const COLOR_VALUE_RE =
   /^(aqua|black|blue|fuchsia|gray|grey|green|lime|maroon|navy|olive|orange|purple|red|silver|teal|white|yellow)$/i;
 
+/** `color.new` / `color.rgb` / `color.from_gradient` — usual `color=` values. */
+const COLOR_CTOR_MEMBERS = new Set(['new', 'rgb', 'from_gradient']);
+const COLOR_CTOR_PATHS = ['color.new', 'color.rgb', 'color.from_gradient'] as const;
+
+function isColorCtorLabel(label: string): boolean {
+  return COLOR_CTOR_MEMBERS.has(label) || (COLOR_CTOR_PATHS as readonly string[]).includes(label);
+}
+
+function isColorNamedArg(arg: string): boolean {
+  return arg === 'color' || arg === 'bgcolor' || arg === 'textcolor' || arg === 'border_color';
+}
+
 function isColorConstantName(member: string): boolean {
   return COLOR_VALUE_RE.test(member);
 }
@@ -347,9 +359,13 @@ export function completeNamedArgEnum(
         );
         if (!filtered.length) filtered = filterByPrefix(members, memberPrefix);
       }
-      if (ctx.arg === 'color' || ctx.arg === 'bgcolor' || ctx.arg === 'textcolor') {
+      if (isColorNamedArg(ctx.arg)) {
         filtered = filtered.filter(
-          (m) => m.kind === 'constant' || m.category === 'enum' || isColorConstantName(m.label),
+          (m) =>
+            m.kind === 'constant' ||
+            m.category === 'enum' ||
+            isColorConstantName(m.label) ||
+            isColorCtorLabel(m.label),
         );
         if (!filtered.length) filtered = filterByPrefix(members, memberPrefix);
       }
@@ -358,8 +374,10 @@ export function completeNamedArgEnum(
           from: context.pos - memberPrefix.length,
           options: filtered.map((m, i) =>
             toCompletion(
-              { ...m, kind: 'constant', snippet: undefined },
-              100 - Math.min(i, 20),
+              isColorCtorLabel(m.label)
+                ? m
+                : { ...m, kind: 'constant', snippet: undefined },
+              isColorCtorLabel(m.label) ? 110 : 100 - Math.min(i, 20),
             ),
           ),
           validFor: /^[\w.]*$/,
@@ -369,6 +387,14 @@ export function completeNamedArgEnum(
   }
 
   const enums = enumsMatchingPrefixes(ctx.prefixes);
+  if (isColorNamedArg(ctx.arg)) {
+    for (const path of COLOR_CTOR_PATHS) {
+      const meta = BY_NAME.get(path);
+      if (!meta) continue;
+      if (enums.some((m) => m.label === path)) continue;
+      enums.unshift({ ...meta, label: path });
+    }
+  }
   const filtered = filterStyleEnums(enums, ctx.prefix);
   const list = filtered.length ? filtered : context.explicit || ctx.prefix === '' ? enums : [];
   if (!list.length) return null;
@@ -376,8 +402,10 @@ export function completeNamedArgEnum(
     from: absFrom,
     options: list.slice(0, 80).map((m, i) =>
       toCompletion(
-        { ...m, label: m.label, kind: 'constant', snippet: undefined },
-        100 - Math.min(i, 20),
+        isColorCtorLabel(m.label)
+          ? { ...m, label: m.label }
+          : { ...m, label: m.label, kind: 'constant', snippet: undefined },
+        isColorCtorLabel(m.label) ? 110 : 100 - Math.min(i, 20),
       ),
     ),
     validFor: /^[\w.]*$/,

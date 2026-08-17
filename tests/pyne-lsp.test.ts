@@ -38,6 +38,7 @@ import {
   markRemoteLspFailed,
   markRemoteLspOk,
   isRemoteLspCoolingDown,
+  shouldMarkRemoteLspFailed,
   _resetRemoteLspCooldownForTests,
 } from '../src/editor/pyne-lsp-client';
 
@@ -117,6 +118,14 @@ x = ta.sma(close, 14)
     markRemoteLspOk();
     expect(isRemoteLspCoolingDown()).toBe(false);
     _resetRemoteLspCooldownForTests();
+  });
+
+  it('does not cool down remote LSP when the caller aborted', () => {
+    const live = new AbortController();
+    expect(shouldMarkRemoteLspFailed(undefined)).toBe(true);
+    expect(shouldMarkRemoteLspFailed(live.signal)).toBe(true);
+    live.abort();
+    expect(shouldMarkRemoteLspFailed(live.signal)).toBe(false);
   });
 
   it('wordAt finds qualified names', () => {
@@ -267,6 +276,22 @@ plot(
     expect(labels.every((l) => l.startsWith('label.style_'))).toBe(true);
   });
 
+  it('suggests shape.* for plotshape(..., style=)', () => {
+    const doc = 'plotshape(true, style=)';
+    const pos = doc.indexOf('style=') + 'style='.length;
+    const r = pyneCompleteLocal({
+      state: EditorState.create({ doc }),
+      pos,
+      explicit: true,
+      matchBefore: () => null,
+    } as never);
+    expect(r).toBeTruthy();
+    const labels = (r!.options || []).map((o) => String(o.label));
+    expect(labels).toContain('shape.triangleup');
+    expect(labels.every((l) => l.startsWith('shape.'))).toBe(true);
+    expect(labels.some((l) => l.startsWith('plot.style_'))).toBe(false);
+  });
+
   it('suggests shape.* for plotshape shape=', () => {
     const doc = 'plotshape(true, shape=)';
     const pos = doc.indexOf('shape=') + 'shape='.length;
@@ -316,6 +341,24 @@ plot(
     expect(r).toBeTruthy();
     const labels = (r!.options || []).map((o) => String(o.label));
     expect(labels.some((l) => l === 'color.red' || l === 'color.green')).toBe(true);
+    expect(labels).toContain('color.new');
+    expect(labels).toContain('color.rgb');
+  });
+
+  it('suggests color.new after color=color.', () => {
+    const doc = 'plot(close, color=color.)';
+    const pos = doc.indexOf('color.') + 'color.'.length;
+    const r = pyneCompleteLocal({
+      state: EditorState.create({ doc }),
+      pos,
+      explicit: true,
+      matchBefore: () => null,
+    } as never);
+    expect(r).toBeTruthy();
+    const labels = (r!.options || []).map((o) => String(o.label));
+    expect(labels).toContain('new');
+    expect(labels).toContain('rgb');
+    expect(labels).toContain('red');
   });
 
   it('suggests strategy qty enums for default_qty_type=', () => {

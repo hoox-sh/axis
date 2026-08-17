@@ -15,6 +15,17 @@ _Generated/updated: 2026-08-17 · 229 commits · describe-tag: `v2.0.13`_
 
 ## [Unreleased]
 
+### Fixed
+
+- **Last-bar / `varip` drawings** — `line.new` / `box.new` / polylines / linefills that extend one bar past the series (`bar_index + 1`) are no longer snapped to the last candle (that flattened them into a vertical tick). Labels still clamp `timenow` onto the last bar. Historical `varip` **plots** already render as a normal 1-sample-per-bar series (AXIS does not send `realtime_last_bar`; enabling it would reset last-bar `varip` cells under pyne’s current re-init).
+
+- **Remote LSP cooldown** — aborting an in-flight `/lsp/*` request (typing, hover leave, pre-eval cancel) no longer starts the 30s failure cooldown, so idle parse diagnostics still reach pyne.
+- **Editor Problems / underlines** — a clean pre-eval no longer wipes last-run runtime errors. Pre-eval and last-run marks are unioned while the buffer still matches the run source.
+- **`plotshape` / `plotchar` / `plotarrow` `style=`** — completions offer `shape.*` instead of invalid `plot.style_*`.
+- **Pre-eval block comments** — `"/*"` and `https://` inside strings are no longer treated as comments (which could block Run).
+- **Inline debug line parse** — log values like `RSI: 55` no longer become a chip on line 55; structured `line` wins.
+- **`color=` completions** — `color.new` / `color.rgb` / `color.from_gradient` stay in the list (including after `color=color.`).
+
 ## [2.0.14] — 2026-08-17
 
 Strategy hyperparameter search in Results, isolated trial runs, and `/optimize` proxy wiring.

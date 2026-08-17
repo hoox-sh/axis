@@ -14,6 +14,7 @@ import {
   clampScriptDrawingTimes,
   clampTimeToLastBar,
   dedupeScriptLabelsAtSameTime,
+  scriptPaintClampsToLastBar,
   garbageCollectScriptDrawings,
   labelBubbleLayout,
   labelFontSizePx,
@@ -28,6 +29,31 @@ import {
 } from '../src/chart/pyne-drawings.ts';
 
 describe('normalizeScriptDrawings', () => {
+  it('keeps last-bar +1 endpoints (varip / islast line.new bar_index+1)', () => {
+    const last = 1_700_000_000;
+    const next = last + 86_400;
+    const list = normalizeScriptDrawings([
+      {
+        type: 'line',
+        t1: last,
+        p1: 100,
+        t2: next,
+        p2: 110,
+        color: '#F23645',
+      },
+      {
+        type: 'box',
+        t1: last,
+        p1: 120,
+        t2: next,
+        p2: 90,
+      },
+    ]);
+    expect(list).toHaveLength(2);
+    expect(list[0]).toMatchObject({ type: 'line', t1: last, t2: next, p1: 100, p2: 110 });
+    expect(list[1]).toMatchObject({ type: 'box', t1: last, t2: next, p1: 120, p2: 90 });
+  });
+
   it('maps line/box/label API payloads', () => {
     const list = normalizeScriptDrawings([
       {
@@ -669,6 +695,17 @@ describe('dedupeScriptLabelsAtSameTime', () => {
     ];
     const kept = dedupeScriptLabelsAtSameTime(list);
     expect(kept.map((d) => d.id)).toEqual(['l', 'b']);
+  });
+});
+
+describe('scriptPaintClampsToLastBar', () => {
+  it('clamps only labels so last-bar / varip geometry can extend past the series', () => {
+    expect(scriptPaintClampsToLastBar('label')).toBe(true);
+    expect(scriptPaintClampsToLastBar('line')).toBe(false);
+    expect(scriptPaintClampsToLastBar('box')).toBe(false);
+    expect(scriptPaintClampsToLastBar('polyline')).toBe(false);
+    expect(scriptPaintClampsToLastBar('linefill')).toBe(false);
+    expect(scriptPaintClampsToLastBar(undefined)).toBe(false);
   });
 });
 

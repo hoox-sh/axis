@@ -62,8 +62,8 @@ function asFiniteNumber(v: unknown): number | null {
 
 /**
  * Parse a 1-based source line from free text / engine messages.
- * Examples: `line 12`, `Line:12`, `line #12`, `:12:`, `L12`, `L:12`,
- * `at 12:`, `(line 12)`.
+ * Examples: `line 12`, `Line:12`, `line #12`, `file:12:1`, `L12`, `L:12`,
+ * `at 12`, `(line 12)`. Does not treat `RSI: 55` / `close: 14` as a line.
  */
 export function parseSourceLine(text: string): number | null {
   if (!text) return null;
@@ -72,7 +72,6 @@ export function parseSourceLine(text: string): number | null {
     /\bL:(\d+)\b/,
     /\bL(\d+)\b/,
     /:(\d+):\d+/, // file:line:col
-    /:(\d+)\b/, // trailing :12
     /\(line\s+(\d+)\)/i,
     /\bat\s+(\d+)\b/i,
   ];
@@ -128,13 +127,9 @@ export function collectInlineDebugAnnotations(lastRun: unknown): InlineDebugAnno
   // ── Script logs ────────────────────────────────────────────────────
   const logs = normalizePyneLogs(lastRun);
   for (const e of logs) {
-    // Prefer structured line on the raw entry if present
-    let line: number | null = null;
-    if (isRecord(lastRun)) {
-      // already normalized; re-scan raw arrays for line fields when message matched
-    }
-    line = parseSourceLine(e.message);
-    // Also try barIndex-only logs: no source line → skip for inline (they belong in Scriptlogs)
+    const line =
+      e.line != null && e.line >= 1 ? e.line : parseSourceLine(e.message);
+    // barIndex-only logs belong in Scriptlogs, not inline chips
     if (line == null) continue;
     out.push({
       line,

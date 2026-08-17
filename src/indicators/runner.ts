@@ -368,6 +368,14 @@ function normalizeRunExtras(result: RunResult): RunResult {
   };
 }
 
+/** Stamp the Pine source so editor last-run marks drop after the buffer changes. */
+function withAxisSource(result: RunResult, script: string): RunResult {
+  return {
+    ...result,
+    meta: { ...result.meta, axisSource: script },
+  };
+}
+
 /**
  * Execute Pine against `store.bars` via the active engine.
  * Does not mutate chart series; use {@link runAndApply} for full apply.
@@ -786,7 +794,7 @@ async function runAndApplyInner(
 
   // Per-script cache: silent multi-indicator live re-runs must not thrash
   // Scriptlogs/Results (only the focused id updates store.lastRun).
-  setLastRun(result, {
+  setLastRun(withAxisSource(result, script), {
     scriptId: indicatorId ?? EDITOR_RUN_KEY,
     focus: !silent,
   });
@@ -1523,7 +1531,7 @@ async function runAndApplyInner(
       // Run cache was under EDITOR_RUN_KEY — migrate so tables/results follow
       // the real script id and delete clears them with the card.
       try {
-        setLastRun(result, { scriptId: newId, focus: !silent });
+        setLastRun(withAxisSource(result, script), { scriptId: newId, focus: !silent });
         setLastRun(null, { scriptId: EDITOR_RUN_KEY });
       } catch {
         /* store optional */

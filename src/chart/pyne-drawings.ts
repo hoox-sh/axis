@@ -30,9 +30,10 @@
  * Pine declaration caps (`max_lines_count`, `max_labels_count`, …) — oldest
  * first, matching TradingView garbage collection.
  *
- * Future times (`t > last bar`, e.g. `timenow` + `xloc.bar_time`) are clamped
- * at paint time via {@link clampTimeToLastBar} in the drawing layer so LWC can
- * map them; see also {@link clampScriptDrawingTimes}.
+ * Future **label** times (`timenow` + `xloc.bar_time`) are clamped to the last
+ * bar at paint. Lines / boxes / polylines / linefills that extend one bar past
+ * the series (`line.new(..., bar_index + 1, …)` — last-bar and `varip` pattern)
+ * are **not** clamped; the drawing layer maps them via logical index.
  *
  * Consumed by the drawing layer when applying script drawings after a run.
  *
@@ -524,6 +525,17 @@ export function labelBubbleLayout(
  * @param t - Drawing time (unix seconds) or bar index
  * @param lastBarTime - Last series bar time (unix seconds); null skips clamp
  */
+/**
+ * True when Pine script paint should snap this kind to the last bar.
+ * Labels (`timenow`) stay on the last candle. Geometry that uses
+ * `bar_index + 1` / `varip` updates must keep the future endpoint.
+ */
+export function scriptPaintClampsToLastBar(
+  type: ScriptDrawing['type'] | string | null | undefined,
+): boolean {
+  return type === 'label';
+}
+
 export function clampTimeToLastBar(
   t: number,
   lastBarTime: number | null | undefined,

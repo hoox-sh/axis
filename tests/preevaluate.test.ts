@@ -68,6 +68,27 @@ describe('localPreevaluate', () => {
     expect(diags.some((d) => d.severity === 'warning' && /@version/i.test(d.message))).toBe(true);
   });
 
+  it('does not treat /* inside a string as a block comment', () => {
+    const src = `//@version=6
+indicator("t")
+s = "/*"
+plot(close)
+`;
+    const diags = localPreevaluate(src);
+    expect(diags.some((d) => /unclosed block comment/i.test(d.message))).toBe(false);
+    expect(hasErrorDiagnostics(diags)).toBe(false);
+  });
+
+  it('does not start a line comment at https:// inside a string', () => {
+    const src = `//@version=6
+indicator("t")
+u = "https://example.com"
+plot(close)
+`;
+    const diags = localPreevaluate(src);
+    expect(hasErrorDiagnostics(diags)).toBe(false);
+  });
+
   it('flags unclosed string', () => {
     const diags = localPreevaluate('//@version=5\nindicator("t\nplot(close)\n');
     expect(hasErrorDiagnostics(diags)).toBe(true);

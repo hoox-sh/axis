@@ -270,9 +270,9 @@ export const NAMED_ENUM_ARGS = new Set(Object.keys(NAMED_ARG_ENUM_ROOTS));
  */
 const STYLE_CALL_NS: Record<string, string> = {
   plot: 'plot',
-  plotshape: 'plot',
-  plotchar: 'plot',
-  plotarrow: 'plot',
+  plotshape: 'shape',
+  plotchar: 'shape',
+  plotarrow: 'shape',
   plotcandle: 'plot',
   plotbar: 'plot',
   hline: 'hline',
@@ -313,6 +313,8 @@ export function enumPrefixesForArg(arg: string, call: string | null): string[] {
   const key = arg.toLowerCase();
   if (key === 'style') {
     const ns = styleNamespaceForCall(call);
+    // plotshape / plotchar / plotarrow take shape.* (not plot.style_*)
+    if (ns === 'shape') return ['shape.'];
     return [`${ns}.style_`];
   }
   if (key === 'shape') return ['shape.'];

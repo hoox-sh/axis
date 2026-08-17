@@ -543,6 +543,52 @@ function sortDiagnostics(list: EditorDiagnostic[]): EditorDiagnostic[] {
   );
 }
 
+/**
+ * Pine source stamped onto a last-run payload (`meta.axisSource`) so editor
+ * underlines can drop after the buffer diverges from the run.
+ */
+export function lastRunScriptSource(lastRun: unknown): string | null {
+  if (!isRecord(lastRun)) return null;
+  const meta = isRecord(lastRun.meta) ? lastRun.meta : null;
+  if (meta && typeof meta.axisSource === 'string' && meta.axisSource.length) {
+    return meta.axisSource;
+  }
+  if (typeof lastRun.script === 'string' && lastRun.script.length) {
+    return lastRun.script;
+  }
+  return null;
+}
+
+function diagMergeKey(d: EditorDiagnostic): string {
+  return `${d.line}|${d.severity}|${d.message}`;
+}
+
+/**
+ * Union pre-eval marks with last-run engine errors.
+ * Last-run is omitted when the buffer no longer matches the stamped run source.
+ * Dedupes by line + severity + message (pre-eval wins on collision).
+ */
+export function combineEditorDiagnostics(
+  pre: readonly EditorDiagnostic[],
+  lastRun: unknown,
+  sourceDoc: string,
+): EditorDiagnostic[] {
+  const runSrc = lastRunScriptSource(lastRun);
+  const includeLast = runSrc == null || runSrc === sourceDoc;
+  const last = includeLast ? diagnosticsFromLastRun(lastRun, sourceDoc) : [];
+  if (!pre.length) return last;
+  if (!last.length) return [...pre];
+  const seen = new Set(pre.map(diagMergeKey));
+  const out: EditorDiagnostic[] = [...pre];
+  for (const d of last) {
+    const k = diagMergeKey(d);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(d);
+  }
+  return sortDiagnostics(out);
+}
+
 /** Count diagnostics by severity. */
 export function countDiagnostics(diags: EditorDiagnostic[]): {
   errors: number;

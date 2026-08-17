@@ -24,6 +24,12 @@ describe('parseSourceLine', () => {
     expect(parseSourceLine('(line 3)')).toBe(3);
     expect(parseSourceLine('no line here')).toBeNull();
   });
+
+  it('does not treat value suffixes like RSI: 55 as a source line', () => {
+    expect(parseSourceLine('RSI: 55')).toBeNull();
+    expect(parseSourceLine('close: 14')).toBeNull();
+    expect(parseSourceLine('timeout: 5000')).toBeNull();
+  });
 });
 
 describe('isPinableAnnotation / filterPinableAnnotations', () => {
@@ -81,6 +87,14 @@ describe('collectInlineDebugAnnotations', () => {
     ]);
     expect(collapsed).toHaveLength(1);
     expect(collapsed[0]!.level).toBe('error');
+  });
+
+  it('prefers structured line over numbers in the message', () => {
+    const anns = collectInlineDebugAnnotations({
+      logs: [{ level: 'info', message: 'RSI: 55', line: 9 }],
+    });
+    expect(anns.some((a) => a.line === 9)).toBe(true);
+    expect(anns.some((a) => a.line === 55)).toBe(false);
   });
 
   it('parses bar_index from log message for pin-able chips', () => {

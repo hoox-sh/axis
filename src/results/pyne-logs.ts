@@ -33,6 +33,8 @@ export interface PyneLogEntry {
   id: string;
   level: PyneLogLevel;
   message: string;
+  /** Optional 1-based source line if the engine provided it */
+  line?: number | null;
   /** Optional bar index if engine provided it */
   barIndex?: number | null;
   /** Optional bar time ms if engine provided it */
@@ -122,6 +124,9 @@ function entryFromObject(item: Record<string, unknown>, index: number): PyneLogE
   if (!message && !hasLevel) return null;
 
   const level = normalizeLevel(item.level ?? item.severity ?? item.type);
+  const line = asFiniteNumber(
+    item.line ?? item.lineNumber ?? item.line_number ?? item.lineno ?? item.source_line,
+  );
   const barIndex = asFiniteNumber(
     item.barIndex ?? item.bar_index ?? item.bar ?? item.index,
   );
@@ -133,6 +138,7 @@ function entryFromObject(item: Record<string, unknown>, index: number): PyneLogE
     id,
     level,
     message,
+    line: line != null && line >= 1 ? Math.trunc(line) : null,
     barIndex,
     time,
   };
