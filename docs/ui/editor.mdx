@@ -127,14 +127,30 @@ Sources: TradingView *Exploring Unicode*, [Text and shapes](https://www.tradingv
 
 `pyne-language.ts` is a stateful stream tokenizer: `//@` annotations, `//` and `/* */` (including across lines), quoted and `"""` / `'''` strings with `\\n` escapes, `#RRGGBB(AA)` colors, namespaces (`ta.`, `label.new`), types (`int` / `float` / `string`, `series` / `simple` in qualifier position, and declared UDTs / enums as `typeName`, **bold** in the void theme), control vs definition keywords, and function names before `(`. Format leaves continuation lines of an open string or block comment untouched.
 
+### Four information surfaces
+
+| Surface | When | Answers |
+| --- | --- | --- |
+| **Hover** | Rest on a symbol | Keyword, type, series, namespace, builtin, user input/function, or hex color |
+| **Param checklist** | Inside a call | Used / current / unused args with type + default |
+| **Pre-eval** | While typing / Save | What is wrong *before* Run |
+| **Debug chips** | After Run, **Debug** on | Last-run `log.*` / errors on that source line |
+
+Hover + param checklist are writing-time docs — not a TradingView® debug API. Pre-eval marks the buffer; chips still read **last run**. Details: [Debugging](/axis/docs/ui/debugging).
+
 ### Diagnostics & Problems
 
-**Pre-eval (as you type)** — `schedulePreeval` / `POST /lsp/diagnostics` (when engine=server) plus local structural checks mark wrong code *before* Run. Severity **error** disables Run (topbar, editor, Mod-Enter, command palette). Warnings do not block.
+**Pre-eval (as you type)** — `schedulePreeval` waits `PREEVAL_IDLE_MS` (1000 ms) after the last keystroke (marks clear while typing; mid-token is never flagged). Local parse/lint (`localPreevaluate`) plus `POST /lsp/diagnostics` when engine=server. Severity **error** disables Run (topbar, editor, Mod-Enter, command palette). Warnings and typos do not block.
 
-**After a run**, `diagnosticsFromLastRun(lastRun, doc)` still builds ranges from engine `error`, `meta.errors` / `diagnostics`, and error logs with line refs (`line 12:`, `L12:`, …). Live pre-eval takes precedence when it has findings for the current buffer.
+Local checks: unclosed `(` / `[` / `{` and strings, missing entry point, `study()` → `indicator()` / `strategy()`, bare `security()` → `request.security`, duplicate `indicator()` / `strategy()` / `library()`, unknown builtin members (`strategy.etry`, `plt` → “did you mean …?”). User functions and import aliases are not flagged.
+
+Merge: remote style-noise C001–C004 is dropped; remote syntax errors win the same span; local unknown-member marks still show when remote is down. Hover tooltips use the diagnostic message (including the suggestion).
+
+**After a run**, `diagnosticsFromLastRun(lastRun, doc)` still builds ranges from engine `error`, `meta.errors` / `diagnostics`, and error logs with line refs (`line 12:`, `L12:`, …). Live pre-eval for the current buffer is listed first; last-run engine messages are kept when they add detail (dropped only when the buffer no longer matches the stamped run source).
 
 - CodeMirror: wavy underlines, severity gutter, hover tooltips  
-- **Problems** panel: clickable rows → `scrollToLine` / `jumpToDiagnostic`  
+- **Problems** panel: clickable rows → `scrollToLine` / `jumpToDiagnostic`; origin **`pre-eval`** vs **`run`** when the diagnostic has a source  
+- Empty / pending pre-eval stays **No problems** (no flicker)  
 - Unit tests: `tests/editor-diagnostics.test.ts`, `tests/editor-problems.test.ts`, `tests/preevaluate.test.ts`
 
 ### 80-column ruler

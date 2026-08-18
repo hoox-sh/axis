@@ -26,10 +26,13 @@
  * 2. Disable Run when static errors are present (after a check has landed)
  *
  * Strategy (fast → authoritative):
- * - Always run {@link localPreevaluate}: brackets, strings, entry point, and
- *   **unknown builtin members** (`plt()` / `strategy.etry` → error via builtins)
+ * - Always run {@link localPreevaluate}: brackets, strings, entry point,
+ *   v3 `study()` / bare `security()`, duplicate declarations, and
+ *   **unknown builtin members** (`plt()` / `strategy.etry` via builtins)
  * - When server engine + Backend URL: merge with Pro API `POST /lsp/diagnostics`
  *   (parse + real syntax). Style-noise rules (C001–C004) are filtered out.
+ *   Remote syntax errors win the same span; local unknown-member marks stay
+ *   when remote is down. User functions and import aliases are not flagged.
  *
  * Typing: {@link schedulePreeval} clears marks and re-checks after
  * {@link PREEVAL_IDLE_MS} of no edits. Save / Run use {@link runPreevalNow}.
@@ -54,9 +57,12 @@ import { PINE_ENUM_PATHS } from './pine-enums';
 
 /**
  * Quiet time after the last keystroke before idle lint runs (ms).
- * Incomplete mid-edit input is not flagged until the user pauses.
+ * Incomplete mid-edit input is not flagged until the user pauses
+ * ({@link schedulePreeval} cancels on each keystroke).
+ *
+ * ~1s is snappy for underlines without marking mid-token (was 2s).
  */
-export const PREEVAL_IDLE_MS = 2000;
+export const PREEVAL_IDLE_MS = 1000;
 
 /**
  * Default debounce for {@link schedulePreeval} — same as idle lint window.
@@ -134,6 +140,15 @@ export function editDistance(a: string, b: string): number {
 }
 
 /**
+ * Max exclusive edit-distance for a typo suggestion.
+ * Short tokens (≤3) only accept distance 1 (`plt` → `plot`) so `foo` is
+ * not flagged as `box` / `log`. Longer leaves still accept distance 2.
+ */
+function maxSuggestDistance(leaf: string): number {
+  return leaf.length <= 3 ? 2 : 3;
+}
+
+/**
  * Suggest a close known path for a typo
  * (e.g. `strategy.etry` → `strategy.entry`, bare `plt` → `plot`).
  * Returns null when nothing is close enough.
@@ -145,7 +160,7 @@ export function suggestBuiltinPath(path: string): string | null {
     const leaf = path.toLowerCase();
     if (!leaf) return null;
     let best: string | null = null;
-    let bestD = 3; // only suggest if distance ≤ 2
+    let bestD = maxSuggestDistance(leaf);
     for (const k of BUILTIN_NAMES) {
       if (k.includes('.')) continue;
       const d = editDistance(leaf, k.toLowerCase());
@@ -160,7 +175,7 @@ export function suggestBuiltinPath(path: string): string | null {
   const parent = parts.slice(0, -1).join('.');
   const depth = parts.length;
   let best: string | null = null;
-  let bestD = 3; // only suggest if distance ≤ 2
+  let bestD = maxSuggestDistance(leaf);
   for (const k of BUILTIN_NAMES) {
     if (!k.startsWith(parent + '.')) continue;
     const kp = k.split('.');
@@ -383,23 +398,105 @@ export function scanBareCallRefs(source: string): DottedRef[] {
 }
 
 /**
+ * User function names (`foo(x) =>`) and `import … as alias` bindings.
+ * These must not be flagged as unknown builtins.
+ */
+export function collectUserBindings(source: string): Set<string> {
+  const names = new Set<string>();
+  const lines = source.split('\n');
+  let inBlock = false;
+  const fnRe =
+    /(?:^|[\s;])(?:export\s+)?(?:method\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*=>/g;
+  const importRe = /\bimport\s+\S+\s+as\s+([A-Za-z_][A-Za-z0-9_]*)/g;
+
+  for (const raw of lines) {
+    let text = '';
+    let i = 0;
+    let inStr: '"' | "'" | null = null;
+    while (i < raw.length) {
+      const c = raw[i]!;
+      const n = raw[i + 1];
+      if (!inStr && !inBlock && c === '/' && n === '/') break;
+      if (!inStr && !inBlock && c === '/' && n === '*') {
+        inBlock = true;
+        i += 2;
+        continue;
+      }
+      if (inBlock) {
+        if (c === '*' && n === '/') {
+          inBlock = false;
+          i += 2;
+          continue;
+        }
+        i += 1;
+        continue;
+      }
+      if (inStr) {
+        if (c === '\\') {
+          i += 2;
+          continue;
+        }
+        if (c === inStr) inStr = null;
+        i += 1;
+        continue;
+      }
+      if (c === '"' || c === "'") {
+        inStr = c;
+        i += 1;
+        continue;
+      }
+      text += c;
+      i += 1;
+    }
+
+    fnRe.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = fnRe.exec(text))) {
+      const name = m[1]!;
+      if (!BARE_CALL_SKIP.has(name)) names.add(name);
+    }
+    // Also match a definition that starts the line (`foo(x) =>`)
+    const lead = /^\s*(?:export\s+)?(?:method\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*=>/.exec(
+      text,
+    );
+    if (lead && !BARE_CALL_SKIP.has(lead[1]!)) names.add(lead[1]!);
+
+    importRe.lastIndex = 0;
+    while ((m = importRe.exec(text))) {
+      names.add(m[1]!);
+    }
+  }
+  return names;
+}
+
+function isUserBinding(path: string, user: Set<string>): boolean {
+  if (user.has(path)) return true;
+  const root = path.split('.')[0]!;
+  return user.has(root);
+}
+
+/**
  * Flag unknown `module.member` paths and bare call typos against the builtins catalog.
  * e.g. `strategy.etry` / `plt(close)` → typo with optional “Did you mean …?”
+ * User functions and import aliases are never flagged.
  */
 export function checkUnknownBuiltinMembers(source: string): EditorDiagnostic[] {
   const refs = [
     ...scanBuiltinMemberRefs(source),
     ...scanBareCallRefs(source),
   ];
+  const user = collectUserBindings(source);
   const out: EditorDiagnostic[] = [];
   const seen = new Set<string>();
   for (const ref of refs) {
     if (isKnownBuiltinPath(ref.path)) continue;
+    if (isUserBinding(ref.path, user)) continue;
     const key = `${ref.line}:${ref.col}:${ref.path}`;
     if (seen.has(key)) continue;
     seen.add(key);
     const hint = suggestBuiltinPath(ref.path);
-    // Bare user-defined helpers (`myFunc()`) stay quiet unless a close builtin exists
+    // Bare user-defined helpers (`myFunc()` / `foo()`) stay quiet unless a
+    // close builtin exists (short names need distance 1 — see maxSuggestDistance)
     if (!ref.path.includes('.') && !hint) continue;
     const msg = hint
       ? `Unknown \`${ref.path}\` — did you mean \`${hint}\`?`
@@ -553,7 +650,8 @@ function diag(
 
 /**
  * Fast client-side checks (no engine). Catches unbalanced brackets, unclosed
- * strings, missing entry point — enough to mark wrong code offline.
+ * strings, missing / duplicate entry point, v3 `study()`, bare `security()`,
+ * and unknown builtin members — enough to mark wrong code offline.
  */
 export function localPreevaluate(source: string): EditorDiagnostic[] {
   if (!source.trim()) return [];
@@ -617,6 +715,7 @@ export function localPreevaluate(source: string): EditorDiagnostic[] {
   type Frame = { ch: string; line: number; col: number };
   const stack: Frame[] = [];
   const pairs: Record<string, string> = { ')': '(', ']': '[', '}': '{' };
+  const closers: Record<string, string> = { '(': ')', '[': ']', '{': '}' };
   const openers = new Set(['(', '[', '{']);
 
   let inStr: '"' | "'" | null = null;
@@ -681,7 +780,7 @@ export function localPreevaluate(source: string): EditorDiagnostic[] {
               endLine: li + 1,
               endCol: i + 1,
               message: top
-                ? `Mismatched '${c}' (expected close for '${top.ch}' from line ${top.line})`
+                ? `Mismatched '${c}' (expected '${closers[top.ch] ?? top.ch}' for '${top.ch}' from line ${top.line})`
                 : `Unexpected '${c}'`,
               severity: 'error',
               source: 'preeval-local',
@@ -715,7 +814,9 @@ export function localPreevaluate(source: string): EditorDiagnostic[] {
         col: f.col,
         endLine: f.line,
         endCol: f.col + 1,
-        message: `Unclosed '${f.ch}'`,
+        message: closers[f.ch]
+          ? `Unclosed '${f.ch}' — add a matching '${closers[f.ch]}'`
+          : `Unclosed '${f.ch}'`,
         severity: 'error',
         source: 'preeval-local',
       }),
@@ -733,12 +834,62 @@ export function localPreevaluate(source: string): EditorDiagnostic[] {
       }),
     );
   }
-  if (!/\b(indicator|strategy|library)\s*\(/.test(source)) {
+  const bareCalls = scanBareCallRefs(source);
+  const entryDecls = bareCalls.filter(
+    (r) => r.path === 'indicator' || r.path === 'strategy' || r.path === 'library',
+  );
+  const studyCalls = bareCalls.filter((r) => r.path === 'study');
+  const securityCalls = bareCalls.filter((r) => r.path === 'security');
+
+  // v3 study() is a valid entry — warn, do not also emit the missing-entry error
+  if (entryDecls.length === 0 && studyCalls.length === 0) {
     out.push(
       diag(source, {
         line: 1,
         message: 'Script needs indicator(), strategy(), or library() declaration.',
         severity: 'error',
+        source: 'preeval-local',
+      }),
+    );
+  }
+  for (const ref of studyCalls) {
+    out.push(
+      diag(source, {
+        line: ref.line,
+        col: ref.col,
+        endLine: ref.line,
+        endCol: ref.endCol,
+        message: 'study() is Pine v3 — use indicator() or strategy().',
+        severity: 'warning',
+        source: 'preeval-local',
+      }),
+    );
+  }
+  if (entryDecls.length > 1) {
+    for (const ref of entryDecls.slice(1)) {
+      out.push(
+        diag(source, {
+          line: ref.line,
+          col: ref.col,
+          endLine: ref.line,
+          endCol: ref.endCol,
+          message:
+            'Duplicate script declaration — only one indicator(), strategy(), or library() is allowed.',
+          severity: 'warning',
+          source: 'preeval-local',
+        }),
+      );
+    }
+  }
+  for (const ref of securityCalls) {
+    out.push(
+      diag(source, {
+        line: ref.line,
+        col: ref.col,
+        endLine: ref.line,
+        endCol: ref.endCol,
+        message: 'Prefer request.security (Pine v4+) over bare security().',
+        severity: 'warning',
         source: 'preeval-local',
       }),
     );
@@ -785,17 +936,30 @@ export function remoteToEditorDiagnostics(
   return out;
 }
 
+function rangesOverlap(a: EditorDiagnostic, b: EditorDiagnostic): boolean {
+  return a.from < b.to && b.from < a.to;
+}
+
 /**
  * Union local structural/member checks with remote parse diagnostics.
- * Local is never discarded when remote is present (remote does not know
- * `strategy.etry`-style typos). Style noise is filtered on the remote side.
+ *
+ * - Remote `null` (down / cooldown) → local only, so unknown-member marks still show
+ * - Remote syntax **errors** win the same span (drop overlapping local structural errors)
+ * - Local typo / unknown-member marks always stay (remote parse does not know them)
+ * - Style noise is filtered on the remote side ({@link isRemoteStyleNoise})
  */
 export function mergePreevalDiagnostics(
   local: readonly EditorDiagnostic[],
   remote: readonly EditorDiagnostic[] | null,
 ): EditorDiagnostic[] {
   if (remote == null) return dedupeDiagnostics([...local]);
-  return dedupeDiagnostics([...remote, ...local]);
+  const remoteErrors = remote.filter((r) => r.severity === 'error');
+  const keptLocal = local.filter((l) => {
+    if (l.severity === 'typo' || l.source === 'preeval-typo') return true;
+    if (l.severity !== 'error') return true;
+    return !remoteErrors.some((r) => rangesOverlap(l, r));
+  });
+  return dedupeDiagnostics([...remote, ...keptLocal]);
 }
 
 export function hasErrorDiagnostics(diags: readonly EditorDiagnostic[]): boolean {
@@ -879,7 +1043,7 @@ export function clearPreevalOnEdit(source: string): void {
  * Debounced pre-eval after the user stops typing.
  *
  * - Clears stale underlines immediately (no mid-keystroke noise)
- * - Does **not** set `pending` for the whole idle window (avoids a 2s “checking…” flash)
+ * - Does **not** set `pending` for the whole idle window (avoids a “checking…” flash)
  * - Runs {@link runPreevalNow} after `debounceMs` (default {@link PREEVAL_IDLE_MS})
  *
  * Save / Run should still call {@link runPreevalNow} for an immediate gate.
@@ -939,12 +1103,24 @@ export async function runPreevalNow(source: string): Promise<PreevalResult> {
   const mySeq = ++seq;
   const signal = abort.signal;
 
+  // Publish local marks immediately so unknown-member / structural issues
+  // show while remote `/lsp/diagnostics` is in flight (or down).
+  const local = localPreevaluate(source);
+  const waitRemote = shouldUseRemoteLsp();
   setPreEval({
-    diagnostics: [],
-    hasErrors: false,
-    pending: true,
+    diagnostics: local,
+    hasErrors: hasErrorDiagnostics(local),
+    pending: waitRemote,
     source,
   });
+
+  if (!waitRemote) {
+    return {
+      diagnostics: local,
+      hasErrors: hasErrorDiagnostics(local),
+      source: 'local',
+    };
+  }
 
   try {
     const result = await preevaluateSource(source, { signal });
@@ -965,7 +1141,6 @@ export async function runPreevalNow(source: string): Promise<PreevalResult> {
       return { diagnostics: [], hasErrors: false, source: 'local' };
     }
     // On failure, fall back to local-only so offline still works
-    const local = localPreevaluate(source);
     const result: PreevalResult = {
       diagnostics: local,
       hasErrors: hasErrorDiagnostics(local),

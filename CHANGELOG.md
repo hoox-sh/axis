@@ -22,6 +22,8 @@ _Generated/updated: 2026-08-17 · 229 commits · describe-tag: `v2.0.13`_
 
 ### Improved
 
+- **Editor hover + param checklist** — mouseover covers keywords, types/qualifiers, series (`close` / `bar_index`), namespaces (`ta.`), user inputs/functions, and hex colors. Call hints list type + default; current param is emphasized (no strikethrough on used). Hover cards use a void-theme header, parameter definition list, and inset example.
+- **Pre-eval / Problems / debug chips** — idle lint is 1s; `study()` and bare `security()` warn; duplicate `indicator()`/`strategy()` warn; Problems label **pre-eval** vs **run**; debug chips have higher contrast and truncate long logs.
 - **Live scripts auto-run** — starting a stream immediately re-runs every **visible** script on the chart (no extra Run). Hide pauses execution and clears that script’s plots (series, markers, drawings, fills, `barcolor` when it is the last visible script); show re-runs it. `library()` sources stay out of the live / reapply loop.
 - **Editor type highlighting** — `int` / `float` / `string` / … and declared UDTs / enums (`type Point`, `export enum Easing`, `m.Easing`) use the type token in **bold**. `series` / `simple` are bold only as type qualifiers; `m.SuperTrend(` stays a library member.
 - **Strategy Properties wiring** — Apply persists only changed `strategy()` kwargs (so leverage is not overwritten by default margin %). Leverage ↔ margin UI no longer writes the auto-filled sibling into the bag. Editor Properties apply on isolate/HPO runs. Execution flags are documented as not implemented in PYNE.

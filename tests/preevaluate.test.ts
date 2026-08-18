@@ -10,6 +10,7 @@ import {
   cancelPreeval,
   checkUnknownBuiltinMembers,
   clearPreevalOnEdit,
+  collectUserBindings,
   editDistance,
   hasErrorDiagnostics,
   isKnownBuiltinPath,
@@ -158,6 +159,92 @@ plot(close, style=plot.style_steplne)
     // distance steplne → stepline is 1 → suggestion when within threshold
     expect(hit!.message).toMatch(/plot\.style_stepline/);
   });
+
+  it('warns on study() as a Pine v3 entry (does not error)', () => {
+    const src = `//@version=3
+study("t")
+plot(close)
+`;
+    const diags = localPreevaluate(src);
+    expect(hasErrorDiagnostics(diags)).toBe(false);
+    const hit = diags.find((d) => /study\s*\(/i.test(d.message));
+    expect(hit).toBeTruthy();
+    expect(hit!.severity).toBe('warning');
+    expect(hit!.message).toMatch(/indicator\(\)|strategy\(\)/);
+    expect(diags.some((d) => /needs indicator/i.test(d.message))).toBe(false);
+  });
+
+  it('does not treat study() as an extra error when indicator() is also present', () => {
+    const src = `//@version=6
+indicator("t")
+study("legacy")
+plot(close)
+`;
+    const diags = localPreevaluate(src);
+    expect(hasErrorDiagnostics(diags)).toBe(false);
+    expect(diags.some((d) => d.severity === 'warning' && /study\s*\(/i.test(d.message))).toBe(
+      true,
+    );
+  });
+
+  it('warns on bare security() to prefer request.security', () => {
+    const src = `//@version=6
+indicator("t")
+s = security(syminfo.tickerid, "D", close)
+plot(s)
+`;
+    const diags = localPreevaluate(src);
+    const hit = diags.find((d) => /security/i.test(d.message) && /request\.security/i.test(d.message));
+    expect(hit).toBeTruthy();
+    expect(hit!.severity).toBe('warning');
+    expect(hasErrorDiagnostics(diags)).toBe(false);
+  });
+
+  it('does not warn on request.security', () => {
+    const src = `//@version=6
+indicator("t")
+s = request.security(syminfo.tickerid, "D", close)
+plot(s)
+`;
+    const diags = localPreevaluate(src);
+    expect(diags.some((d) => /bare security/i.test(d.message) || /Prefer request\.security/i.test(d.message))).toBe(
+      false,
+    );
+  });
+
+  it('warns on duplicate indicator/strategy declarations', () => {
+    const src = `//@version=6
+indicator("a")
+strategy("b")
+plot(close)
+`;
+    const diags = localPreevaluate(src);
+    const hit = diags.find((d) => /duplicate script declaration/i.test(d.message));
+    expect(hit).toBeTruthy();
+    expect(hit!.severity).toBe('warning');
+  });
+
+  it('does not flag user foo() as an unknown builtin', () => {
+    const src = `//@version=6
+indicator("t")
+foo(x) => x + 1
+plot(foo(close))
+`;
+    const diags = localPreevaluate(src);
+    expect(diags.some((d) => /`foo`/.test(d.message))).toBe(false);
+    expect(collectUserBindings(src).has('foo')).toBe(true);
+  });
+
+  it('does not flag import aliases as unknown builtins', () => {
+    const src = `//@version=6
+indicator("t")
+import MyUser/MyLib/1 as mylib
+plot(mylib.helper(close))
+`;
+    const diags = localPreevaluate(src);
+    expect(diags.some((d) => /mylib/i.test(d.message))).toBe(false);
+    expect(collectUserBindings(src).has('mylib')).toBe(true);
+  });
 });
 
 describe('builtin path helpers', () => {
@@ -212,6 +299,10 @@ strategy.entry("L", strategy.long)
   it('suggests entry for etry', () => {
     expect(suggestBuiltinPath('strategy.etry')).toBe('strategy.entry');
     expect(editDistance('etry', 'entry')).toBeLessThanOrEqual(2);
+  });
+
+  it('does not suggest a builtin for short user names like foo', () => {
+    expect(suggestBuiltinPath('foo')).toBeNull();
   });
 
   it('suggests stepline for steplne', () => {
@@ -275,9 +366,9 @@ describe('mergePreevalDiagnostics', () => {
         from: 0,
         to: 13,
         line: 3,
-        severity: 'error',
-        message: 'Unknown `strategy.etry`',
-        source: 'preeval-local',
+        severity: 'typo',
+        message: 'Unknown `strategy.etry` — did you mean `strategy.entry`?',
+        source: 'preeval-typo',
       },
     ];
     const remote: EditorDiagnostic[] = [
@@ -293,6 +384,48 @@ describe('mergePreevalDiagnostics', () => {
       { from: 0, to: 1, line: 1, severity: 'warning', message: 'local' },
     ];
     expect(mergePreevalDiagnostics(local, null)).toEqual(local);
+  });
+
+  it('lets remote syntax errors win the same span', () => {
+    const local: EditorDiagnostic[] = [
+      {
+        from: 10,
+        to: 20,
+        line: 2,
+        severity: 'error',
+        message: "Unclosed '('",
+        source: 'preeval-local',
+      },
+    ];
+    const remote: EditorDiagnostic[] = [
+      {
+        from: 12,
+        to: 18,
+        line: 2,
+        severity: 'error',
+        message: '[E001] Syntax error: unexpected end of input',
+        source: 'preeval',
+      },
+    ];
+    const merged = mergePreevalDiagnostics(local, remote);
+    expect(merged.some((d) => /E001/.test(d.message))).toBe(true);
+    expect(merged.some((d) => /Unclosed/.test(d.message))).toBe(false);
+  });
+
+  it('keeps local unknown-member when remote is down', () => {
+    const local: EditorDiagnostic[] = [
+      {
+        from: 0,
+        to: 13,
+        line: 3,
+        severity: 'typo',
+        message: 'Unknown `strategy.etry` — did you mean `strategy.entry`?',
+        source: 'preeval-typo',
+      },
+    ];
+    const merged = mergePreevalDiagnostics(local, null);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.message).toMatch(/strategy\.etry/);
   });
 });
 
@@ -353,8 +486,10 @@ describe('clearPreevalOnEdit', () => {
 });
 
 describe('schedulePreeval idle lint', () => {
-  it('exports a 3s idle window', () => {
-    expect(PREEVAL_IDLE_MS).toBe(2000);
+  it('exports idle window used by schedulePreeval (900–1200ms)', () => {
+    expect(PREEVAL_IDLE_MS).toBe(1000);
+    expect(PREEVAL_IDLE_MS).toBeGreaterThanOrEqual(900);
+    expect(PREEVAL_IDLE_MS).toBeLessThanOrEqual(1200);
     expect(PREEVAL_DEBOUNCE_MS).toBe(PREEVAL_IDLE_MS);
   });
 

@@ -26,15 +26,19 @@ description: "Scriptlogs, Profiler, Debug chips, chart Pins, diagnostics, and Sy
 
 AXIS separates **script-authored diagnostics** (Pine `log.*`, engine errors, line timing) from **shell telemetry** (load, stream, engine connection).
 
+Writing-time and last-run info share four surfaces — hover, the param checklist, pre-eval, and debug chips — so each answer stays on its own chrome.
+
 ## Abstract
 
 | Surface | Source of truth | Open / toggle |
 | --- | --- | --- |
+| **Hover** | Builtin / identifier docs (local corpus or LSP) | Rest cursor on a symbol |
+| **Param checklist** | Call signature + remaining named args | Type inside `plot(` / `ta.sma(` / … |
+| **Pre-eval / Problems** | Parse/lint ∪ last-run engine errors | Underlines + Problems (`pre-eval` vs `run`) |
 | **Scriptlogs** | `store.lastRun` → `normalizePyneLogs` | Editor header **Scriptlogs** |
 | **Profiler** | `profilerEnabled` + `profile.lines` | Editor header **Profiler** |
-| **Debug** | `inlineDebugEnabled` + last-run logs with **line** | Editor header **Debug** |
+| **Debug chips** | `inlineDebugEnabled` + last-run logs with **line** | Editor header **Debug** |
 | **Pins** | `debugPinsEnabled` + logs with **bar_index / time** | Editor header **Pins** · **Alt+P** |
-| **Diagnostics / Problems** | Engine errors + line-mapped logs | Underlines + Problems list (always from last run) |
 | **System Logs** | `store.logs` ring buffer | Status bar / logs strip |
 
 | Module | Role |
@@ -64,6 +68,19 @@ flowchart LR
 ```
 
 **Invariant:** Scriptlogs / Debug / Pins never write into `store.logs`.
+
+---
+
+## Four information surfaces
+
+| Surface | When | Answers |
+| --- | --- | --- |
+| **Hover** | Idle on a symbol | What is this builtin / identifier? |
+| **Param checklist** | Inside a call | Which arguments remain? |
+| **Pre-eval** | While typing / Save | What is wrong *before* Run? |
+| **Debug chips** | After Run, **Debug** on | What did this **source line** log or error? |
+
+Hover and the param checklist never invent TradingView® host APIs — they read PYNE builtins / local docs. Pre-eval marks the buffer; Debug chips still read **last run** only.
 
 ---
 
@@ -115,12 +132,14 @@ Toggle **Profiler** (`axis-btn-profiler`):
 
 ## Diagnostics & Problems
 
-Independent of Debug chips: structural **error reporting** from the run payload.
+Independent of Debug chips: structural **error reporting** from pre-eval and the run payload.
 
-- Parses `error`, `meta.errors`, `diagnostics`, error-level logs  
-- CodeMirror underlines + severity gutter  
+- Pre-eval (`preeval*`) marks parse / lint issues as you type; last-run adds engine `error`, `meta.errors`, `diagnostics`, error-level logs  
+- CodeMirror underlines + severity gutter (larger hit target than line numbers)  
 - Stats strip badge (`axis-editor-diag-count`) and **Problems** list (`axis-editor-problems`)  
+- Each row shows origin **`pre-eval`** or **`run`** when the diagnostic has a source  
 - Click → jump to line/range  
+- Empty / in-flight pre-eval stays **No problems** (no checking flicker)  
 
 ---
 

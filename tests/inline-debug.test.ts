@@ -13,6 +13,10 @@ import {
   isPinableAnnotation,
   filterPinableAnnotations,
 } from '../src/results/inline-debug.ts';
+import {
+  INLINE_DEBUG_CHIP_MAX,
+  truncateInlineDebugChip,
+} from '../src/editor/inline-debug.ts';
 
 describe('parseSourceLine', () => {
   it('parses common patterns', () => {
@@ -103,5 +107,24 @@ describe('collectInlineDebugAnnotations', () => {
     });
     const a = anns.find((x) => x.line === 9);
     expect(a?.barIndex).toBe(44);
+  });
+});
+
+describe('truncateInlineDebugChip', () => {
+  it('returns short messages unchanged', () => {
+    expect(truncateInlineDebugChip('RSI 55')).toBe('RSI 55');
+  });
+
+  it('ellipsizes long log chips; full text is longer than the chip', () => {
+    const long = 'x'.repeat(80);
+    const out = truncateInlineDebugChip(long);
+    expect(out.endsWith('…')).toBe(true);
+    expect(out.length).toBe(INLINE_DEBUG_CHIP_MAX);
+    expect(out.length).toBeLessThan(long.length);
+    expect(out.startsWith('x')).toBe(true);
+  });
+
+  it('collapses whitespace before measuring', () => {
+    expect(truncateInlineDebugChip('  a   b  ')).toBe('a b');
   });
 });

@@ -37,6 +37,15 @@ describe('parseSignatureParams', () => {
     expect(offset!.optional).toBe(true);
     expect(offset!.defaultValue).toBe('0.85');
   });
+
+  it('extracts types from ta.sma(series float source, simple int length)', () => {
+    const params = parseSignatureParams('ta.sma(series float source, simple int length) → series float');
+    const source = params.find((p) => p.name === 'source');
+    const length = params.find((p) => p.name === 'length');
+    expect(source?.type).toBe('series float');
+    expect(length?.type).toBe('simple int');
+    expect(source?.optional).toBeFalsy();
+  });
 });
 
 describe('splitTopLevelParams', () => {
@@ -90,6 +99,29 @@ describe('classifyParams / paramCompletions', () => {
     expect(color?.current).toBe(false);
   });
 
+  it('marks title current at plot(close, |)', () => {
+    const src = 'plot(close, ';
+    const site = findCallSite(src, src.length);
+    expect(site).toBeTruthy();
+    expect(site!.name).toBe('plot');
+    const sig = resolveCallSignature('plot');
+    expect(sig).toBeTruthy();
+    const rows = classifyParams(sig!, site!);
+    expect(rows.find((p) => p.name === 'series')?.used).toBe(true);
+    expect(rows.find((p) => p.name === 'title')?.current).toBe(true);
+    expect(rows.find((p) => p.name === 'title')?.used).toBe(false);
+  });
+
+  it('keeps title current while typing a positional value', () => {
+    const src = 'plot(close, "Close"';
+    const site = findCallSite(src, src.length);
+    expect(site).toBeTruthy();
+    const sig = resolveCallSignature('plot');
+    expect(sig).toBeTruthy();
+    const rows = classifyParams(sig!, site!);
+    expect(rows.find((p) => p.name === 'title')?.current).toBe(true);
+  });
+
   it('suggests unused title=/color= after plot(close, )', () => {
     const src = 'plot(close, )';
     const site = findCallSite(src, src.lastIndexOf(',') + 1);
@@ -117,12 +149,59 @@ describe('resolveCallSignature / hover markdown', () => {
     expect(sig!.example).toContain('ta.sma');
   });
 
+  it('resolves strategy.entry / request.security / color.new param names', () => {
+    const entry = resolveCallSignature('strategy.entry');
+    expect(entry).toBeTruthy();
+    expect(entry!.params.map((p) => p.name)).toEqual(
+      expect.arrayContaining(['id', 'direction', 'qty', 'limit', 'stop', 'alert_message']),
+    );
+    const sec = resolveCallSignature('request.security');
+    expect(sec).toBeTruthy();
+    expect(sec!.params.map((p) => p.name)).toEqual(
+      expect.arrayContaining(['symbol', 'timeframe', 'expression', 'gaps', 'lookahead']),
+    );
+    const col = resolveCallSignature('color.new');
+    expect(col).toBeTruthy();
+    expect(col!.params.map((p) => p.name)).toEqual(['color', 'transp']);
+  });
+
+  it('attaches types from documentation when the signature line is untyped', () => {
+    const sig = resolveCallSignature('ta.wma', {
+      documentation:
+        'ta.wma(source, length) → series float\n\nsource (series float) Series of values.\nlength (simple int) Number of bars.',
+    });
+    expect(sig).toBeTruthy();
+    expect(sig!.params.find((p) => p.name === 'source')?.type).toBe('series float');
+    expect(sig!.params.find((p) => p.name === 'length')?.type).toBe('simple int');
+    expect(sig!.returns).toBe('series float');
+  });
+
   it('formatCallHoverMarkdown includes Parameters and Example', () => {
     const sig = resolveCallSignature('ta.sma');
     expect(sig).toBeTruthy();
     const md = formatCallHoverMarkdown(sig!);
     expect(md).toContain('**Parameters**');
     expect(md).toContain('**Example**');
+    expect(md).toMatch(/series float|simple int/);
+  });
+
+  it('formatCallHoverMarkdown shows type + default + optional', () => {
+    const md = formatCallHoverMarkdown({
+      name: 'foo',
+      params: [
+        {
+          name: 'n',
+          type: 'simple int',
+          optional: true,
+          defaultValue: '14',
+          description: 'Lookback',
+        },
+      ],
+    });
+    expect(md).toContain('**Parameters**');
+    expect(md).toContain('simple int');
+    expect(md).toContain('14');
+    expect(md).toContain('optional');
   });
 
   it('formatParamHoverMarkdown mentions the param name and parent call', () => {
@@ -133,5 +212,16 @@ describe('resolveCallSignature / hover markdown', () => {
     const md = formatParamHoverMarkdown(sig!, title!);
     expect(md).toContain('title');
     expect(md).toContain('plot');
+    expect(md).toMatch(/const string|optional/);
+  });
+
+  it('paramCompletions description includes type or default', () => {
+    const src = 'plot(close, ';
+    const site = findCallSite(src, src.length);
+    const sig = resolveCallSignature('plot');
+    expect(site && sig).toBeTruthy();
+    const items = paramCompletions(sig!, site!);
+    const title = items.find((p) => p.name === 'title');
+    expect(title?.description).toMatch(/const string|optional|Plot title/);
   });
 });

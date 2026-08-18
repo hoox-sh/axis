@@ -38,6 +38,7 @@ import {
   clampProblemsHeight,
   formatProblemForCopy,
   formatProblemLine,
+  formatProblemSource,
   formatProblemsListForCopy,
   truncateProblemMessage,
   type EditorProblem,
@@ -45,6 +46,7 @@ import {
 import { ResizeHandle } from './ResizeHandle';
 import { copyToClipboard } from './clipboard';
 import { Icons } from './icons';
+import { store } from '../store';
 
 export type { EditorProblem } from './editor-problems';
 export {
@@ -56,6 +58,7 @@ export {
   diagnosticsToProblems,
   formatProblemForCopy,
   formatProblemLine,
+  formatProblemSource,
   formatProblemsListForCopy,
   severityRank,
   truncateProblemMessage,
@@ -139,6 +142,11 @@ export interface EditorProblemsProps {
   height?: number;
   /** Called when the user resizes (controlled + uncontrolled). */
   onHeightChange?: (height: number) => void;
+  /**
+   * Pre-eval still in flight. Empty copy stays the same as idle
+   * (`No problems`) so the list does not flicker while typing.
+   */
+  pending?: boolean;
   class?: string;
 }
 
@@ -287,6 +295,13 @@ export const EditorProblems: Component<EditorProblemsProps> = (props) => {
             <div
               class="px-2 py-1.5 text-text-faint italic"
               data-testid="axis-editor-problems-empty"
+              data-pending={
+                (typeof props.pending === 'boolean'
+                  ? props.pending
+                  : !!store.preEval?.pending)
+                  ? 'true'
+                  : undefined
+              }
             >
               No problems
             </div>
@@ -296,6 +311,7 @@ export const EditorProblems: Component<EditorProblemsProps> = (props) => {
             <For each={[...props.diagnostics]}>
               {(p, idx) => {
                 const rowKey = () => `row-${idx()}-${p.line}-${p.message.slice(0, 24)}`;
+                const sourceLabel = formatProblemSource(p.source);
                 return (
                   <li class="group flex items-stretch border-b border-border-soft/40 last:border-b-0">
                     <button
@@ -304,10 +320,11 @@ export const EditorProblems: Component<EditorProblemsProps> = (props) => {
                       data-testid="axis-editor-problems-row"
                       data-line={p.line > 0 ? p.line : undefined}
                       data-severity={p.severity}
+                      data-source={sourceLabel || undefined}
                       title={
                         p.line > 0
-                          ? `Click to jump to L${p.line} and copy`
-                          : 'Click to copy'
+                          ? `${p.message}${sourceLabel ? ` · ${sourceLabel}` : ''} — jump to L${p.line}`
+                          : p.message || 'Click to copy'
                       }
                       onClick={() => {
                         void copyOne(p, rowKey());
@@ -324,12 +341,16 @@ export const EditorProblems: Component<EditorProblemsProps> = (props) => {
                       <span
                         class={`flex-1 min-w-0 truncate ${severityClass(p.severity)}`}
                         data-testid="axis-editor-problems-msg"
+                        title={p.message}
                       >
                         {truncateProblemMessage(p.message)}
                       </span>
-                      <Show when={p.source && p.source !== 'diagnostic'}>
-                        <span class="text-text-faint/70 flex-shrink-0 text-[9px] uppercase">
-                          {p.source}
+                      <Show when={sourceLabel}>
+                        <span
+                          class="text-text-faint/70 flex-shrink-0 text-[9px] lowercase tracking-wide"
+                          data-testid="axis-editor-problems-source"
+                        >
+                          {sourceLabel}
                         </span>
                       </Show>
                       <Show when={copiedKey() === rowKey()}>

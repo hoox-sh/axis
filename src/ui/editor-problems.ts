@@ -115,6 +115,37 @@ export function formatProblemLine(line: number): string {
 }
 
 /**
+ * Compact origin label for the Problems list.
+ * Maps known diagnostic sources to `pre-eval` vs `run`; unknown tags pass through.
+ */
+export function formatProblemSource(source: string | null | undefined): string {
+  if (source == null) return '';
+  const s = String(source).trim();
+  if (!s) return '';
+  const lower = s.toLowerCase();
+  if (
+    lower === 'pre-eval' ||
+    lower === 'preeval' ||
+    lower === 'local' ||
+    lower.startsWith('preeval')
+  ) {
+    return 'pre-eval';
+  }
+  if (
+    lower === 'run' ||
+    lower === 'error' ||
+    lower === 'log' ||
+    lower === 'stack' ||
+    lower === 'diagnostic' ||
+    lower === 'meta.errors' ||
+    lower.startsWith('run')
+  ) {
+    return 'run';
+  }
+  return s;
+}
+
+/**
  * One-line clipboard text for a problem row
  * (e.g. `L12 [error] Unknown strategy.etry`).
  */
@@ -127,7 +158,8 @@ export function formatProblemForCopy(
       : 'L—';
   const sev = String(p.severity || 'info').toLowerCase();
   const msg = String(p.message ?? '').replace(/\s+/g, ' ').trim();
-  const src = p.source && p.source !== 'diagnostic' ? ` (${p.source})` : '';
+  const srcLabel = formatProblemSource(p.source);
+  const src = srcLabel ? ` (${srcLabel})` : '';
   return `${line} [${sev}] ${msg}${src}`.trim();
 }
 

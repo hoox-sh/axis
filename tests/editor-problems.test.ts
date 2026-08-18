@@ -15,6 +15,7 @@ import {
   diagnosticsToProblems,
   formatProblemForCopy,
   formatProblemLine,
+  formatProblemSource,
   formatProblemsListForCopy,
   severityRank,
   shouldAutoOpenProblems,
@@ -68,6 +69,30 @@ describe('formatProblemLine', () => {
   });
 });
 
+describe('formatProblemSource', () => {
+  it('maps pre-eval family to pre-eval', () => {
+    expect(formatProblemSource('preeval')).toBe('pre-eval');
+    expect(formatProblemSource('preeval-local')).toBe('pre-eval');
+    expect(formatProblemSource('preeval-typo')).toBe('pre-eval');
+    expect(formatProblemSource('local')).toBe('pre-eval');
+  });
+
+  it('maps last-run family to run', () => {
+    expect(formatProblemSource('run')).toBe('run');
+    expect(formatProblemSource('diagnostic')).toBe('run');
+    expect(formatProblemSource('error')).toBe('run');
+    expect(formatProblemSource('log')).toBe('run');
+    expect(formatProblemSource('stack')).toBe('run');
+    expect(formatProblemSource('meta.errors')).toBe('run');
+  });
+
+  it('passes through unknown tags and empty', () => {
+    expect(formatProblemSource('lsp')).toBe('lsp');
+    expect(formatProblemSource('')).toBe('');
+    expect(formatProblemSource(undefined)).toBe('');
+  });
+});
+
 describe('formatProblemForCopy / formatProblemsListForCopy', () => {
   it('formats a single problem for clipboard', () => {
     expect(
@@ -77,7 +102,18 @@ describe('formatProblemForCopy / formatProblemsListForCopy', () => {
         message: 'Unexpected token',
         source: 'preeval',
       }),
-    ).toBe('L12 [error] Unexpected token (preeval)');
+    ).toBe('L12 [error] Unexpected token (pre-eval)');
+  });
+
+  it('labels last-run diagnostic source as run', () => {
+    expect(
+      formatProblemForCopy({
+        line: 3,
+        severity: 'error',
+        message: 'boom',
+        source: 'diagnostic',
+      }),
+    ).toBe('L3 [error] boom (run)');
   });
 
   it('formats typos without inventing a line', () => {

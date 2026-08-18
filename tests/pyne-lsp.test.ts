@@ -516,6 +516,98 @@ describe('call params completion/hover', () => {
   });
 });
 
+describe('hover facts / user symbols', () => {
+  function hoverOn(src: string, needle: string, extra = 1) {
+    const pos = src.indexOf(needle) + extra;
+    return pyneHoverLocal(
+      {
+        state: {
+          doc: {
+            sliceString: (a: number, b: number) => src.slice(a, b),
+            length: src.length,
+          },
+        },
+      },
+      pos,
+    );
+  }
+
+  function hoverText(src: string, needle: string, extra = 1): string {
+    const tip = hoverOn(src, needle, extra);
+    expect(tip).toBeTruthy();
+    const restore = installMinimalDom();
+    try {
+      return collectText(tip!.create(null as never).dom);
+    } finally {
+      restore();
+    }
+  }
+
+  it('var hover mentions persistence', () => {
+    const src = `//@version=6
+indicator("t")
+var float x = 0.0
+`;
+    expect(hoverText(src, 'var')).toMatch(/persist/i);
+  });
+
+  it('if hover mentions conditional', () => {
+    const src = `//@version=6
+indicator("t")
+if close > open
+    x = high
+`;
+    expect(hoverText(src, 'if')).toMatch(/condition/i);
+  });
+
+  it('series qualifier hover mentions type qualifier', () => {
+    const src = `//@version=6
+indicator("t")
+series float x = close
+`;
+    expect(hoverText(src, 'series')).toMatch(/type qualifier|qualifier/i);
+  });
+
+  it('close hover is not empty', () => {
+    const src = `//@version=6
+indicator("t")
+plot(close)
+`;
+    const text = hoverText(src, 'close');
+    expect(text.trim().length).toBeGreaterThan(0);
+  });
+
+  it('ta in ta.sma hover mentions technical / module', () => {
+    const src = `//@version=6
+indicator("t")
+x = ta.sma(close, 14)
+`;
+    expect(hoverText(src, 'ta', 1)).toMatch(/technical|module/i);
+  });
+
+  it('user input len hover mentions input / Length', () => {
+    const src = `//@version=6
+indicator("t")
+len = input.int(14, "Length")
+plot(len)
+`;
+    const text = hoverText(src, 'plot(len)', 'plot('.length + 1);
+    expect(text).toMatch(/input/i);
+    expect(text).toMatch(/Length/);
+  });
+
+  it('foo(a) => a hover on foo mentions function / param a', () => {
+    const src = `//@version=6
+indicator("t")
+foo(a) => a
+plot(foo(1))
+`;
+    const text = hoverText(src, 'foo(a)', 1);
+    expect(text).toMatch(/function/i);
+    expect(text).toMatch(/\ba\b/);
+  });
+});
+
 
 /** Lightweight DOM for hover markdown tests (no browser). Restores prior document. */
 function installMinimalDom(): () => void {

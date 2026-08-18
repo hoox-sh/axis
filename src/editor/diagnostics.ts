@@ -303,7 +303,9 @@ function pushDiag(
     to: to!,
     line,
     severity: partial.severity,
-    message: partial.message.slice(0, 500),
+    // Keep the engine text — hover / Problems show this verbatim
+    // (including last-run "Did you mean …" / runtime detail).
+    message: partial.message.slice(0, 2000),
     source: partial.source,
   });
 }
@@ -367,7 +369,7 @@ export function diagnosticsFromLastRun(
         pushDiag(out, text, {
           line,
           severity: 'error',
-          message: lastRun.trim().slice(0, 500),
+          message: lastRun.trim().slice(0, 2000),
           source: 'error',
         });
       }
@@ -445,7 +447,7 @@ export function diagnosticsFromLastRun(
       pushDiag(out, text, {
         line,
         severity: 'error',
-        message: combined.slice(0, 500),
+        message: combined.slice(0, 2000),
         source: 'error',
         col: asFiniteNumber(lastRun.col ?? lastRun.column ?? lastRun.character),
       });
@@ -454,7 +456,7 @@ export function diagnosticsFromLastRun(
       pushDiag(out, text, {
         line: 1,
         severity: 'error',
-        message: combined.slice(0, 500),
+        message: combined.slice(0, 2000),
         source: 'error',
       });
     }
@@ -470,7 +472,7 @@ export function diagnosticsFromLastRun(
       pushDiag(out, text, {
         line,
         severity: 'error',
-        message: trimmed.slice(0, 500),
+        message: trimmed.slice(0, 2000),
         source: 'stack',
       });
     }
@@ -565,8 +567,10 @@ function diagMergeKey(d: EditorDiagnostic): string {
 
 /**
  * Union pre-eval marks with last-run engine errors.
- * Last-run is omitted when the buffer no longer matches the stamped run source.
- * Dedupes by line + severity + message (pre-eval wins on collision).
+ * Pre-eval for the current buffer is listed first (Problems / hover).
+ * Last-run engine messages are still kept when they add detail — they are
+ * only dropped when the buffer no longer matches the stamped run source.
+ * Dedupes by line + severity + message (pre-eval wins on exact collision).
  */
 export function combineEditorDiagnostics(
   pre: readonly EditorDiagnostic[],
@@ -916,14 +920,20 @@ export const diagnosticsTheme = EditorView.baseTheme({
   },
   '&.cm-has-diag-gutter .cm-diag-gutter-col': {
     display: 'flex',
-    width: '12px',
-    minWidth: '12px',
+    width: '16px',
+    minWidth: '16px',
+  },
+  '.cm-diag-gutter-col .cm-gutterElement': {
+    minWidth: '16px',
+    padding: '0 1px',
   },
   '.cm-diag-gutter': {
-    fontSize: '8px',
-    lineHeight: '1',
+    fontSize: '11px',
+    lineHeight: '1.35',
     textAlign: 'center',
     width: '100%',
+    minHeight: '14px',
+    padding: '1px 0',
     opacity: '0.95',
     cursor: 'default',
   },

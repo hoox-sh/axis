@@ -80,6 +80,21 @@ import {
   resolveCallSignature,
   type PineCallSig,
 } from './pine-call-params';
+import {
+  declarationTypeFact,
+  dottedSegmentAt,
+  enclosingStringAt,
+  formatColorLiteralMarkdown,
+  formatHoverFactMarkdown,
+  formatUserSymbolMarkdown,
+  hexColorAt,
+  inPineLineComment,
+  isHexColorToken,
+  isNumericLiteral,
+  lookupHoverFact,
+  lookupUserSymbol,
+  userSymbolBadge,
+} from './pine-hover-facts';
 
 /** One entry from the local Pine builtins catalog. */
 export type BuiltinMeta = {
@@ -482,14 +497,69 @@ export function completeCallParams(
   };
 }
 
-const PARAM_HINT_MAX_ROWS = 12;
+const PARAM_HINT_MAX_ROWS = 14;
+/** How many names to keep in the compact signature header. */
+const PARAM_HINT_SIG_NAMES = 8;
 
-/** Compact `plot(series, title, color, …)` header for the hint tooltip. */
-function compactParamHintSig(sig: PineCallSig): string {
+type ParamHintRow = ReturnType<typeof classifyParams>[number] & {
+  type?: string;
+};
+
+/** Window of at most `max` rows that always includes the current param. */
+function selectParamHintRows(rows: ParamHintRow[], max: number): ParamHintRow[] {
+  if (rows.length <= max) return rows;
+  const ci = rows.findIndex((p) => p.current);
+  if (ci < 0) return rows.slice(0, max);
+  let start = Math.max(0, ci - Math.floor((max - 1) / 2));
+  let end = start + max;
+  if (end > rows.length) {
+    end = rows.length;
+    start = Math.max(0, end - max);
+  }
+  return rows.slice(start, end);
+}
+
+/**
+ * Compact `plot(series, title, color, …)` header with the current name
+ * wrapped in `.is-current` so the live hint can emphasize it.
+ */
+function compactParamHintSig(
+  parent: HTMLElement,
+  sig: PineCallSig,
+  currentName?: string,
+): void {
   const names = sig.params.filter((p) => !p.rest).map((p) => p.name);
-  const head = names.slice(0, 3);
-  const ellip = names.length > 3 || sig.params.some((p) => p.rest);
-  return `${sig.name}(${head.join(', ')}${ellip ? ', …' : ''})`;
+  let shown = names;
+  let leadEllip = false;
+  let trailEllip = names.length > PARAM_HINT_SIG_NAMES || sig.params.some((p) => p.rest);
+  if (names.length > PARAM_HINT_SIG_NAMES) {
+    const ci = Math.max(0, currentName ? names.indexOf(currentName) : 0);
+    let start = Math.max(0, ci - Math.floor((PARAM_HINT_SIG_NAMES - 1) / 2));
+    let end = start + PARAM_HINT_SIG_NAMES;
+    if (end > names.length) {
+      end = names.length;
+      start = Math.max(0, end - PARAM_HINT_SIG_NAMES);
+    }
+    shown = names.slice(start, end);
+    leadEllip = start > 0;
+    trailEllip = end < names.length || sig.params.some((p) => p.rest);
+  }
+
+  parent.appendChild(document.createTextNode(`${sig.name}(`));
+  if (leadEllip) parent.appendChild(document.createTextNode('…, '));
+  for (let i = 0; i < shown.length; i++) {
+    if (i > 0) parent.appendChild(document.createTextNode(', '));
+    const name = shown[i]!;
+    if (currentName && name === currentName) {
+      const em = document.createElement('span');
+      em.className = 'is-current';
+      em.textContent = name;
+      parent.appendChild(em);
+    } else {
+      parent.appendChild(document.createTextNode(name));
+    }
+  }
+  parent.appendChild(document.createTextNode(trailEllip ? ', …)' : ')'));
 }
 
 /**
@@ -505,8 +575,9 @@ export function buildParamHintTooltip(state: EditorState): Tooltip | null {
   if (!site) return null;
   const sig = sigForCall(site.name, text);
   if (!sig || sig.params.length < 2) return null;
-  const rows = classifyParams(sig, site).filter((p) => !p.rest);
+  const rows = classifyParams(sig, site).filter((p) => !p.rest) as ParamHintRow[];
   if (!rows.length) return null;
+  const current = rows.find((p) => p.current);
 
   return {
     pos: site.openParen,
@@ -514,39 +585,68 @@ export function buildParamHintTooltip(state: EditorState): Tooltip | null {
     create() {
       const dom = document.createElement('div');
       dom.className = 'cm-pine-param-hint';
+      if (current?.name) dom.dataset.current = current.name;
 
       const sigEl = document.createElement('div');
       sigEl.className = 'cm-pine-param-hint-sig';
-      sigEl.textContent = compactParamHintSig(sig);
+      compactParamHintSig(sigEl, sig, current?.name);
       dom.appendChild(sigEl);
 
       const ul = document.createElement('ul');
       ul.className = 'cm-pine-param-hint-list';
 
-      const overflow = rows.length > PARAM_HINT_MAX_ROWS;
-      const shown = overflow ? rows.slice(0, PARAM_HINT_MAX_ROWS - 1) : rows;
+      const shown = selectParamHintRows(rows, PARAM_HINT_MAX_ROWS);
       for (const p of shown) {
         const li = document.createElement('li');
-        // current wins over used for class / mark / note
         const kind = p.current ? 'current' : p.used ? 'used' : 'unused';
         li.className = `is-${kind}`;
-        const mark = kind === 'current' ? '●' : kind === 'used' ? '✓' : '○';
-        li.appendChild(document.createTextNode(`${mark} ${p.name}`));
-        if (kind !== 'unused') {
-          const note = document.createElement('span');
-          note.className = 'cm-pine-param-hint-note';
-          note.textContent = kind;
-          li.appendChild(note);
+
+        const mark = document.createElement('span');
+        mark.className = 'cm-pine-param-hint-mark';
+        mark.textContent = kind === 'current' ? '●' : kind === 'used' ? '✓' : '○';
+        li.appendChild(mark);
+
+        const nameEl = document.createElement('span');
+        nameEl.className = 'cm-pine-param-hint-name';
+        nameEl.textContent = p.name;
+        li.appendChild(nameEl);
+
+        const pType = p.type;
+        if (pType) {
+          const typeEl = document.createElement('span');
+          typeEl.className = 'cm-pine-param-hint-type';
+          typeEl.textContent = pType;
+          li.appendChild(typeEl);
         }
+
+        const defVal = p.defaultValue;
+        if (defVal) {
+          const defEl = document.createElement('span');
+          defEl.className = 'cm-pine-param-hint-default';
+          defEl.textContent = `= ${defVal}`;
+          li.appendChild(defEl);
+        }
+
         ul.appendChild(li);
       }
-      if (overflow) {
+      const hidden = rows.length - shown.length;
+      if (hidden > 0) {
         const more = document.createElement('li');
-        more.textContent = `+${rows.length - shown.length} more`;
+        more.className = 'cm-pine-param-hint-more';
+        more.textContent = `+${hidden} more`;
         ul.appendChild(more);
       }
 
       dom.appendChild(ul);
+
+      const docLine = current?.description?.trim().split(/\n/)[0]?.trim();
+      if (docLine) {
+        const docEl = document.createElement('div');
+        docEl.className = 'cm-pine-param-hint-doc';
+        docEl.textContent = docLine;
+        dom.appendChild(docEl);
+      }
+
       return { dom };
     },
   };
@@ -630,6 +730,8 @@ export function wordAt(
   pos: number,
 ): { word: string; from: number; to: number } | null {
   if (pos < 0 || pos > text.length) return null;
+  const hex = hexColorAt(text, pos);
+  if (hex) return hex;
   const isId = (ch: string) => /[A-Za-z0-9_.]/.test(ch);
   let from = pos;
   let to = pos;
@@ -922,6 +1024,38 @@ export function appendInlineMarkdown(parent: HTMLElement, text: string): void {
   }
 }
 
+const HOVER_SECTION_RE = /^\*\*([^*]+)\*\*:?\s*$/;
+const HOVER_PARAM_ITEM_RE = /^([-*+]|\d+\.)\s+`([^`]+)`\s*(.*)$/;
+const HOVER_BULLET_RE = /^([-*+]|\d+\.)\s+/;
+
+function isBulletChunk(lines: string[]): boolean {
+  return lines.length > 0 && lines.every((l) => HOVER_BULLET_RE.test(l.trim()));
+}
+
+/** Merge `\n\n`-split bullet paragraphs (call-hover params) into one list. */
+function mergeHoverChunks(raw: string[]): string[] {
+  const out: string[] = [];
+  for (const chunk of raw) {
+    const lines = chunk.split('\n').map((l) => l.trimEnd()).filter((l) => l.trim().length > 0);
+    if (isBulletChunk(lines) && out.length) {
+      const prevLines = out[out.length - 1]!
+        .split('\n')
+        .map((l) => l.trimEnd())
+        .filter((l) => l.trim().length > 0);
+      if (isBulletChunk(prevLines)) {
+        out[out.length - 1] = prevLines.concat(lines).join('\n');
+        continue;
+      }
+    }
+    out.push(chunk);
+  }
+  return out;
+}
+
+function sectionKey(label: string): string {
+  return label.toLowerCase().replace(/:$/, '').trim();
+}
+
 /**
  * Render a subset of markdown used by pyne LSP hovers into `root`.
  * Handles: fenced code, paragraphs, `---` rules, **bold**, inline `code`.
@@ -950,10 +1084,13 @@ export function renderHoverMarkdown(root: HTMLElement, md: string): void {
     blocks.push({ kind: 'prose', text: src.slice(cursor) });
   }
 
+  let lastSection = '';
+
   for (const block of blocks) {
     if (block.kind === 'code') {
       const pre = document.createElement('pre');
-      pre.className = 'cm-pine-hover-pre';
+      pre.className =
+        lastSection === 'example' ? 'cm-pine-hover-pre cm-pine-hover-example' : 'cm-pine-hover-pre';
       if (block.lang) pre.dataset.lang = block.lang;
       const code = document.createElement('code');
       code.className = 'cm-pine-hover-code-block';
@@ -963,8 +1100,8 @@ export function renderHoverMarkdown(root: HTMLElement, md: string): void {
       continue;
     }
 
-    // Prose: split on blank lines / horizontal rules
-    const chunks = block.text.split(/\n{2,}/);
+    // Prose: split on blank lines / horizontal rules, then merge adjacent lists
+    const chunks = mergeHoverChunks(block.text.split(/\n{2,}/));
     for (const chunk of chunks) {
       const lines = chunk.split('\n').map((l) => l.trimEnd());
       const nonEmpty = lines.filter((l) => l.trim().length > 0);
@@ -995,6 +1132,7 @@ export function renderHoverMarkdown(root: HTMLElement, md: string): void {
         h.className = 'cm-pine-hover-heading';
         appendInlineMarkdown(h, rest[0]!.replace(/^#{1,3}\s+/, ''));
         root.appendChild(h);
+        lastSection = sectionKey(rest[0]!.replace(/^#{1,3}\s+/, ''));
         if (rest.length > 1) {
           const p = document.createElement('p');
           p.className = 'cm-pine-hover-p';
@@ -1004,14 +1142,49 @@ export function renderHoverMarkdown(root: HTMLElement, md: string): void {
         continue;
       }
 
+      // Standalone **Parameters** / **Example** / **Returns** section labels
+      if (rest.length === 1) {
+        const sec = HOVER_SECTION_RE.exec(rest[0]!.trim());
+        if (sec) {
+          const h = document.createElement('div');
+          h.className = 'cm-pine-hover-heading';
+          lastSection = sectionKey(sec[1]!);
+          if (lastSection) h.dataset.section = lastSection.replace(/\s+/g, '-');
+          appendInlineMarkdown(h, rest[0]!.trim());
+          root.appendChild(h);
+          continue;
+        }
+      }
+
       // Bullet / numbered lists (library doc @param blocks, etc.)
-      if (rest.every((l) => /^([-*+]|\d+\.)\s+/.test(l.trim()))) {
+      if (rest.every((l) => HOVER_BULLET_RE.test(l.trim()))) {
+        const asParams = rest.every((l) => HOVER_PARAM_ITEM_RE.test(l.trim()));
+        if (asParams) {
+          const dl = document.createElement('div');
+          dl.className = 'cm-pine-hover-dl';
+          for (const l of rest) {
+            const m = HOVER_PARAM_ITEM_RE.exec(l.trim());
+            const row = document.createElement('div');
+            row.className = 'cm-pine-hover-di';
+            const dt = document.createElement('code');
+            dt.className = 'cm-pine-hover-dt cm-pine-hover-code-inline';
+            dt.textContent = m?.[2] || '';
+            const dd = document.createElement('span');
+            dd.className = 'cm-pine-hover-dd';
+            if (m?.[3]) appendInlineMarkdown(dd, m[3]);
+            row.appendChild(dt);
+            row.appendChild(dd);
+            dl.appendChild(row);
+          }
+          root.appendChild(dl);
+          continue;
+        }
         const ul = document.createElement('ul');
         ul.className = 'cm-pine-hover-list';
         for (const l of rest) {
           const li = document.createElement('li');
           li.className = 'cm-pine-hover-li';
-          appendInlineMarkdown(li, l.trim().replace(/^([-*+]|\d+\.)\s+/, ''));
+          appendInlineMarkdown(li, l.trim().replace(HOVER_BULLET_RE, ''));
           ul.appendChild(li);
         }
         root.appendChild(ul);
@@ -1027,15 +1200,20 @@ export function renderHoverMarkdown(root: HTMLElement, md: string): void {
   }
 }
 
+function hoverKindAttr(badge: string): string {
+  return badge.trim().toLowerCase().replace(/\s+/g, '-');
+}
+
 function makeHoverTooltip(
   from: number,
   to: number,
   title: string,
   body: string,
   badge?: string,
-  opts?: { markdown?: boolean },
+  opts?: { markdown?: boolean; category?: string },
 ): Tooltip {
   const asMarkdown = opts?.markdown ?? looksLikeMarkdown(body);
+  const category = opts?.category?.trim();
   return {
     pos: from,
     end: to,
@@ -1043,12 +1221,24 @@ function makeHoverTooltip(
     create() {
       const dom = document.createElement('div');
       dom.className = 'cm-pine-hover';
+      if (badge) dom.dataset.kind = hoverKindAttr(badge);
 
-      if (badge) {
-        const b = document.createElement('div');
-        b.className = 'cm-pine-hover-badge';
-        b.textContent = badge;
-        dom.appendChild(b);
+      const head = document.createElement('div');
+      head.className = 'cm-pine-hover-head';
+
+      if (badge || category) {
+        if (badge) {
+          const b = document.createElement('span');
+          b.className = 'cm-pine-hover-badge';
+          b.textContent = badge;
+          head.appendChild(b);
+        }
+        if (category) {
+          const cat = document.createElement('span');
+          cat.className = 'cm-pine-hover-cat';
+          cat.textContent = category;
+          head.appendChild(cat);
+        }
       }
 
       let signature: string | null = null;
@@ -1065,8 +1255,10 @@ function makeHoverTooltip(
         const t = document.createElement('div');
         t.className = signature ? 'cm-pine-hover-sig' : 'cm-pine-hover-title';
         t.textContent = headerText;
-        dom.appendChild(t);
+        head.appendChild(t);
       }
+
+      if (head.childNodes.length) dom.appendChild(head);
 
       if (bodyMd.trim()) {
         const content = document.createElement('div');
@@ -1092,6 +1284,50 @@ function makeHoverTooltip(
   };
 }
 
+/** Generated `ta` / `math` module stub — prefer richer namespace facts. */
+function isThinModuleStub(meta: BuiltinMeta): boolean {
+  if (meta.kind === 'module' || meta.category === 'module') return true;
+  const brief = meta.brief || '';
+  return brief.startsWith('Pine module ') || brief === `${meta.label}.*`;
+}
+
+function hoverInsideCallParam(
+  site: ReturnType<typeof findCallSite>,
+  text: string,
+  pos: number,
+): Tooltip | null {
+  if (!site) return null;
+  const sig = sigForCall(site.name, text);
+  const rows = sig ? classifyParams(sig, site) : [];
+  const current = rows.find((p) => p.current) || rows[site.cursorArgIndex];
+  if (sig && current) {
+    return makeHoverTooltip(
+      site.argFrom,
+      Math.max(site.argFrom + 1, pos),
+      `${sig.name} · ${current.name}`,
+      formatParamHoverMarkdown(sig, current),
+      'parameter',
+      { markdown: true, category: sig.name },
+    );
+  }
+  return null;
+}
+
+function hoverFromFact(
+  from: number,
+  to: number,
+  fact: NonNullable<ReturnType<typeof lookupHoverFact>>,
+): Tooltip {
+  return makeHoverTooltip(
+    from,
+    to,
+    fact.title || fact.name,
+    formatHoverFactMarkdown(fact),
+    fact.kind,
+    { markdown: true, category: fact.kind },
+  );
+}
+
 export function pyneHoverLocal(
   view: { state: { doc: { sliceString: (a: number, b: number) => string; length: number } } },
   pos: number,
@@ -1099,10 +1335,24 @@ export function pyneHoverLocal(
   initIndex();
   const doc = view.state.doc;
   const text = doc.sliceString(0, doc.length);
-  const hit = wordAt(text, pos);
   const site = findCallSite(text, pos);
 
-  // Hovering a named argument (`title=` inside plot / input.int / …)
+  // Hex color literals (`#939fff`) — even inside strings / calls
+  const hex = hexColorAt(text, pos);
+  if (hex) {
+    return makeHoverTooltip(
+      hex.from,
+      hex.to,
+      hex.word,
+      formatColorLiteralMarkdown(hex.word),
+      'color',
+      { markdown: true, category: 'color' },
+    );
+  }
+
+  const hit = wordAt(text, pos);
+
+  // 1. Named argument (`title=` inside plot / input.int / …)
   if (site && hit) {
     const sig = sigForCall(site.name, text);
     const param = sig?.params.find((p) => p.name === hit.word);
@@ -1118,14 +1368,38 @@ export function pyneHoverLocal(
         `${sig.name} · ${param.name}`,
         formatParamHoverMarkdown(sig, param),
         'parameter',
-        { markdown: true },
+        { markdown: true, category: sig.name },
       );
     }
   }
 
-  if (!hit) return null;
+  if (inPineLineComment(text, pos)) return null;
 
-  // User / library annotations in the open document (//@function, //@param, …)
+  const inString = enclosingStringAt(text, pos);
+  if (inString && (!hit || (hit.from >= inString.from && hit.to <= inString.to))) {
+    // `"title"` inside a call stays current-param hover
+    return (
+      hoverInsideCallParam(site, text, pos) ||
+      makeHoverTooltip(inString.from, inString.to, `"${inString.value}"`, 'String literal.')
+    );
+  }
+
+  if (!hit) {
+    return hoverInsideCallParam(site, text, pos);
+  }
+
+  if (isHexColorToken(hit.word)) {
+    return makeHoverTooltip(
+      hit.from,
+      hit.to,
+      hit.word,
+      formatColorLiteralMarkdown(hit.word),
+      'color',
+      { markdown: true, category: 'color' },
+    );
+  }
+
+  // 2. User / library annotations in the open document (`//@function`, …)
   const localDoc = lookupPyneDoc(text, hit.word);
   if (localDoc && localDoc.kind !== 'description') {
     const md = formatPyneDocMarkdown(localDoc);
@@ -1136,44 +1410,91 @@ export function pyneHoverLocal(
         localDoc.signature || localDoc.name,
         md,
         'doc annotations',
-        { markdown: true },
+        { markdown: true, category: 'doc' },
       );
     }
   }
 
+  // Namespace prefix of a qualified name (`ta` in `ta.sma`)
+  const seg = dottedSegmentAt(hit.word, hit.from, pos);
+  if (seg.count > 1 && seg.index < seg.count - 1) {
+    const ns = lookupHoverFact(seg.name, { prefer: 'namespace' });
+    if (ns) {
+      const prefix = hit.word.split('.').slice(0, seg.index).join('.');
+      const nsFrom = hit.from + prefix.length + (seg.index ? 1 : 0);
+      return hoverFromFact(nsFrom, nsFrom + seg.name.length, ns);
+    }
+  }
+
+  // Type / qualifier in declaration position beats cast-function builtins
+  const declFact = declarationTypeFact(text, hit);
+  if (declFact) return hoverFromFact(hit.from, hit.to, declFact);
+
+  // 3. Builtins catalog
   let meta = lookupBuiltin(hit.word);
   if (!meta && hit.word.includes('.')) {
     meta = lookupBuiltin(hit.word.split('.').pop() || '');
   }
-  if (!meta) {
-    // Inside a call with no symbol under the cursor — show the current param
-    if (site) {
-      const sig = sigForCall(site.name, text);
-      const rows = sig ? classifyParams(sig, site) : [];
-      const current = rows.find((p) => p.current) || rows[site.cursorArgIndex];
-      if (sig && current) {
-        return makeHoverTooltip(
-          site.argFrom,
-          Math.max(site.argFrom + 1, pos),
-          `${sig.name} · ${current.name}`,
-          formatParamHoverMarkdown(sig, current),
-          'parameter',
-          { markdown: true },
-        );
-      }
-    }
-    return null;
+  if (meta && isThinModuleStub(meta)) {
+    const ns = lookupHoverFact(meta.label || hit.word, { prefer: 'namespace' });
+    if (ns) return hoverFromFact(hit.from, hit.to, ns);
+  }
+  if (meta && !isThinModuleStub(meta)) {
+    const sig = sigForCall(meta.label || hit.word, text);
+    return makeHoverTooltip(
+      hit.from,
+      hit.to,
+      meta.label,
+      hoverDocs(meta, sig),
+      'local metadata',
+      {
+        markdown: !!sig?.params.length || looksLikeMarkdown(hoverDocs(meta, sig)),
+        category: meta.category,
+      },
+    );
   }
 
-  const sig = sigForCall(meta.label || hit.word, text);
-  return makeHoverTooltip(
-    hit.from,
-    hit.to,
-    meta.label,
-    hoverDocs(meta, sig),
-    'local metadata',
-    { markdown: !!sig?.params.length || looksLikeMarkdown(hoverDocs(meta, sig)) },
-  );
+  // 4. Facts / keywords / types / series / namespaces
+  const fact =
+    lookupHoverFact(hit.word) ||
+    (hit.word.includes('.') ? lookupHoverFact(hit.word.split('.').pop() || '') : null) ||
+    (seg.count > 1 ? lookupHoverFact(seg.name, { prefer: 'namespace' }) : null);
+  if (fact) return hoverFromFact(hit.from, hit.to, fact);
+
+  // 5. User symbols in this buffer
+  const user = lookupUserSymbol(text, hit.word);
+  if (user) {
+    return makeHoverTooltip(
+      hit.from,
+      hit.to,
+      user.name,
+      formatUserSymbolMarkdown(user),
+      userSymbolBadge(user),
+      { markdown: true, category: user.kind },
+    );
+  }
+
+  // 6. Inside-call current param, then number literals
+  const callTip = hoverInsideCallParam(site, text, pos);
+  if (callTip) return callTip;
+  if (isNumericLiteral(hit.word)) {
+    return makeHoverTooltip(hit.from, hit.to, hit.word, 'Numeric literal (int or float).');
+  }
+  if (meta) {
+    const sig = sigForCall(meta.label || hit.word, text);
+    return makeHoverTooltip(
+      hit.from,
+      hit.to,
+      meta.label,
+      hoverDocs(meta, sig),
+      'local metadata',
+      {
+        markdown: !!sig?.params.length || looksLikeMarkdown(hoverDocs(meta, sig)),
+        category: meta.category,
+      },
+    );
+  }
+  return null;
 }
 
 /**
@@ -1221,8 +1542,8 @@ export async function pyneHover(view: EditorView, pos: number): Promise<Tooltip 
         Math.min(doc.length, to),
         hit.word,
         remote.contents,
-        'pyne lsp',
-        { markdown: true },
+        'function',
+        { markdown: true, category: 'pyne lsp' },
       );
     }
   } catch {

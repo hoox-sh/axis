@@ -21,6 +21,8 @@
 
 export interface PineParamDef {
   name: string;
+  /** Pine type qualifier + type, e.g. `series float`, `const string`. */
+  type?: string;
   optional?: boolean;
   defaultValue?: string;
   rest?: boolean;
@@ -73,22 +75,22 @@ const CURATED: Record<string, PineCallSig> = {
   plot: {
     name: 'plot',
     params: [
-      { name: 'series', description: 'Series of values to display' },
-      { name: 'title', optional: true, description: 'Plot title in the scale / data window' },
-      { name: 'color', optional: true, description: 'Plot color (`color.red`, `color.new`, hex)' },
-      { name: 'linewidth', optional: true, description: 'Line width in pixels' },
-      { name: 'style', optional: true, description: '`plot.style_line`, `plot.style_histogram`, …' },
-      { name: 'trackprice', optional: true, description: 'Draw a price line for the last value' },
-      { name: 'histbase', optional: true, description: 'Histogram baseline' },
-      { name: 'offset', optional: true, description: 'Bar offset (negative = left)' },
-      { name: 'join', optional: true, description: 'Connect histogram / columns' },
-      { name: 'editable', optional: true, description: 'Show in Style settings' },
-      { name: 'show_last', optional: true, description: 'Only draw the last N bars' },
-      { name: 'display', optional: true, description: '`display.all` / `display.none`' },
-      { name: 'format', optional: true, description: '`format.price` / `format.percent`' },
-      { name: 'precision', optional: true, description: 'Decimal places' },
-      { name: 'force_overlay', optional: true, description: 'Force onto the price pane' },
-      { name: 'linestyle', optional: true, description: '`plot.linestyle_solid` / dashed / dotted' },
+      { name: 'series', type: 'series float', description: 'Series of values to display' },
+      { name: 'title', type: 'const string', optional: true, description: 'Plot title in the scale / data window' },
+      { name: 'color', type: 'series color', optional: true, description: 'Plot color (`color.red`, `color.new`, hex)' },
+      { name: 'linewidth', type: 'input int', optional: true, description: 'Line width in pixels' },
+      { name: 'style', type: 'input string', optional: true, description: '`plot.style_line`, `plot.style_histogram`, …' },
+      { name: 'trackprice', type: 'input bool', optional: true, description: 'Draw a price line for the last value' },
+      { name: 'histbase', type: 'input int/float', optional: true, description: 'Histogram baseline' },
+      { name: 'offset', type: 'simple int', optional: true, description: 'Bar offset (negative = left)' },
+      { name: 'join', type: 'input bool', optional: true, description: 'Connect histogram / columns' },
+      { name: 'editable', type: 'const bool', optional: true, description: 'Show in Style settings' },
+      { name: 'show_last', type: 'input int', optional: true, description: 'Only draw the last N bars' },
+      { name: 'display', type: 'input string', optional: true, description: '`display.all` / `display.none`' },
+      { name: 'format', type: 'const string', optional: true, description: '`format.price` / `format.percent`' },
+      { name: 'precision', type: 'const int', optional: true, description: 'Decimal places' },
+      { name: 'force_overlay', type: 'const bool', optional: true, description: 'Force onto the price pane' },
+      { name: 'linestyle', type: 'input string', optional: true, description: '`plot.linestyle_solid` / dashed / dotted' },
     ],
     returns: 'plot',
     description: 'Plot a series on the chart.',
@@ -97,98 +99,148 @@ const CURATED: Record<string, PineCallSig> = {
   plotshape: {
     name: 'plotshape',
     params: [
-      { name: 'series', description: 'True / non-na to draw a shape' },
-      { name: 'title', optional: true, description: 'Shape title' },
-      { name: 'style', optional: true, description: '`shape.triangleup`, `shape.circle`, …' },
-      { name: 'location', optional: true, description: '`location.abovebar` / `location.belowbar`' },
-      { name: 'color', optional: true, description: 'Shape color' },
-      { name: 'offset', optional: true, description: 'Bar offset' },
-      { name: 'text', optional: true, description: 'Optional label text' },
-      { name: 'textcolor', optional: true, description: 'Text color' },
-      { name: 'editable', optional: true },
-      { name: 'size', optional: true, description: '`size.tiny` … `size.huge`' },
-      { name: 'show_last', optional: true },
-      { name: 'display', optional: true },
+      { name: 'series', type: 'series bool', description: 'True / non-na to draw a shape' },
+      { name: 'title', type: 'const string', optional: true, description: 'Shape title' },
+      { name: 'style', type: 'input string', optional: true, description: '`shape.triangleup`, `shape.circle`, …' },
+      { name: 'location', type: 'input string', optional: true, description: '`location.abovebar` / `location.belowbar`' },
+      { name: 'color', type: 'series color', optional: true, description: 'Shape color' },
+      { name: 'offset', type: 'simple int', optional: true, description: 'Bar offset' },
+      { name: 'text', type: 'const string', optional: true, description: 'Optional label text' },
+      { name: 'textcolor', type: 'series color', optional: true, description: 'Text color' },
+      { name: 'editable', type: 'const bool', optional: true },
+      { name: 'size', type: 'const string', optional: true, description: '`size.tiny` … `size.huge`' },
+      { name: 'show_last', type: 'input int', optional: true },
+      { name: 'display', type: 'input string', optional: true },
     ],
     example: 'plotshape(ta.crossover(fast, slow), style=shape.triangleup, location=location.belowbar)',
   },
   plotchar: {
     name: 'plotchar',
     params: [
-      { name: 'series', description: 'True / non-na to draw the character' },
-      { name: 'title', optional: true },
-      { name: 'char', optional: true, description: 'Single character, e.g. `"▲"`' },
-      { name: 'location', optional: true },
-      { name: 'color', optional: true },
-      { name: 'offset', optional: true },
-      { name: 'text', optional: true },
-      { name: 'textcolor', optional: true },
-      { name: 'editable', optional: true },
-      { name: 'size', optional: true },
-      { name: 'show_last', optional: true },
-      { name: 'display', optional: true },
+      { name: 'series', type: 'series bool', description: 'True / non-na to draw the character' },
+      { name: 'title', type: 'const string', optional: true },
+      { name: 'char', type: 'const string', optional: true, description: 'Single character, e.g. `"▲"`' },
+      { name: 'location', type: 'input string', optional: true },
+      { name: 'color', type: 'series color', optional: true },
+      { name: 'offset', type: 'simple int', optional: true },
+      { name: 'text', type: 'const string', optional: true },
+      { name: 'textcolor', type: 'series color', optional: true },
+      { name: 'editable', type: 'const bool', optional: true },
+      { name: 'size', type: 'const string', optional: true },
+      { name: 'show_last', type: 'input int', optional: true },
+      { name: 'display', type: 'input string', optional: true },
     ],
     example: 'plotchar(longCond, char="▲", location=location.belowbar, color=color.lime)',
   },
   hline: {
     name: 'hline',
     params: [
-      { name: 'price', description: 'Horizontal price / level' },
-      { name: 'title', optional: true },
-      { name: 'color', optional: true },
-      { name: 'linestyle', optional: true, description: '`hline.style_dashed` / `hline.style_dotted`' },
-      { name: 'linewidth', optional: true },
-      { name: 'editable', optional: true },
-      { name: 'display', optional: true },
+      { name: 'price', type: 'input int/float', description: 'Horizontal price / level' },
+      { name: 'title', type: 'const string', optional: true },
+      { name: 'color', type: 'input color', optional: true },
+      { name: 'linestyle', type: 'input string', optional: true, description: '`hline.style_dashed` / `hline.style_dotted`' },
+      { name: 'linewidth', type: 'input int', optional: true },
+      { name: 'editable', type: 'const bool', optional: true },
+      { name: 'display', type: 'input string', optional: true },
     ],
     example: 'hline(70, "Overbought", color.red, linestyle=hline.style_dashed)',
   },
   bgcolor: {
     name: 'bgcolor',
     params: [
-      { name: 'color', description: 'Background color (`na` = none)' },
-      { name: 'offset', optional: true },
-      { name: 'editable', optional: true },
-      { name: 'show_last', optional: true },
-      { name: 'title', optional: true },
-      { name: 'display', optional: true },
+      { name: 'color', type: 'series color', description: 'Background color (`na` = none)' },
+      { name: 'offset', type: 'simple int', optional: true },
+      { name: 'editable', type: 'const bool', optional: true },
+      { name: 'show_last', type: 'input int', optional: true },
+      { name: 'title', type: 'const string', optional: true },
+      { name: 'display', type: 'input string', optional: true },
     ],
     example: 'bgcolor(close > open ? color.new(color.teal, 85) : na)',
   },
   indicator: {
     name: 'indicator',
     params: [
-      { name: 'title', description: 'Script name in the chart legend' },
-      { name: 'shorttitle', optional: true, description: 'Compact name on the pane' },
-      { name: 'overlay', optional: true, description: '`true` = price pane, `false` = own pane' },
-      { name: 'format', optional: true, description: '`format.price` / `format.percent` / `format.volume`' },
-      { name: 'precision', optional: true, description: 'Decimal places on the scale' },
-      { name: 'scale', optional: true, description: '`scale.right` / `scale.left` / `scale.none`' },
-      { name: 'max_bars_back', optional: true, description: 'History buffer depth' },
-      { name: 'timeframe', optional: true, description: 'MTF: `"60"`, `"D"`, `timeframe.period`' },
-      { name: 'timeframe_gaps', optional: true, description: 'Leave gaps when MTF bars do not align' },
-      { name: 'explicit_plot_zorder', optional: true, description: 'Honour plot() call order for z-index' },
-      { name: 'max_lines_count', optional: true },
-      { name: 'max_labels_count', optional: true },
-      { name: 'max_boxes_count', optional: true },
-      { name: 'calc_bars_count', optional: true, description: 'Limit calculated bars' },
-      { name: 'max_polylines_count', optional: true },
-      { name: 'dynamic_requests', optional: true, description: 'Allow series `request.*` (v6)' },
-      { name: 'behind_chart', optional: true, description: 'Draw behind candles (v6)' },
+      { name: 'title', type: 'const string', description: 'Script name in the chart legend' },
+      { name: 'shorttitle', type: 'const string', optional: true, description: 'Compact name on the pane' },
+      { name: 'overlay', type: 'const bool', optional: true, description: '`true` = price pane, `false` = own pane' },
+      { name: 'format', type: 'const string', optional: true, description: '`format.price` / `format.percent` / `format.volume`' },
+      { name: 'precision', type: 'const int', optional: true, description: 'Decimal places on the scale' },
+      { name: 'scale', type: 'const string', optional: true, description: '`scale.right` / `scale.left` / `scale.none`' },
+      { name: 'max_bars_back', type: 'const int', optional: true, description: 'History buffer depth' },
+      { name: 'timeframe', type: 'const string', optional: true, description: 'MTF: `"60"`, `"D"`, `timeframe.period`' },
+      { name: 'timeframe_gaps', type: 'const bool', optional: true, description: 'Leave gaps when MTF bars do not align' },
+      { name: 'explicit_plot_zorder', type: 'const bool', optional: true, description: 'Honour plot() call order for z-index' },
+      { name: 'max_lines_count', type: 'const int', optional: true },
+      { name: 'max_labels_count', type: 'const int', optional: true },
+      { name: 'max_boxes_count', type: 'const int', optional: true },
+      { name: 'calc_bars_count', type: 'const int', optional: true, description: 'Limit calculated bars' },
+      { name: 'max_polylines_count', type: 'const int', optional: true },
+      { name: 'dynamic_requests', type: 'const bool', optional: true, description: 'Allow series `request.*` (v6)' },
+      { name: 'behind_chart', type: 'const bool', optional: true, description: 'Draw behind candles (v6)' },
     ],
     description: 'Declare an indicator script.',
     example: 'indicator("RSI", shorttitle="RSI", overlay=false)',
+  },
+  strategy: {
+    name: 'strategy',
+    params: [
+      { name: 'title', type: 'const string', description: 'Script name in the chart legend' },
+      { name: 'shorttitle', type: 'const string', optional: true, description: 'Compact name on the pane' },
+      { name: 'overlay', type: 'const bool', optional: true, description: '`true` = price pane, `false` = own pane' },
+      { name: 'format', type: 'const string', optional: true, description: '`format.price` / `format.percent` / `format.volume`' },
+      { name: 'precision', type: 'const int', optional: true, description: 'Decimal places on the scale' },
+      { name: 'scale', type: 'const string', optional: true, description: '`scale.right` / `scale.left` / `scale.none`' },
+      { name: 'pyramiding', type: 'const int', optional: true, description: 'Max entries in the same direction' },
+      { name: 'calc_on_order_fills', type: 'const bool', optional: true, description: 'Recalculate after intra-bar fills' },
+      { name: 'calc_on_every_tick', type: 'const bool', optional: true, description: 'Recalculate on every realtime tick' },
+      { name: 'max_bars_back', type: 'const int', optional: true, description: 'History buffer depth' },
+      { name: 'backtest_fill_limits_assumption', type: 'const int', optional: true },
+      { name: 'default_qty_type', type: 'const string', optional: true, description: '`strategy.fixed` / `strategy.cash` / `strategy.percent_of_equity`' },
+      { name: 'default_qty_value', type: 'const int/float', optional: true, description: 'Default order size' },
+      { name: 'initial_capital', type: 'const int/float', optional: true },
+      { name: 'currency', type: 'const string', optional: true, description: '`currency.USD`, …' },
+      { name: 'slippage', type: 'const int', optional: true, description: 'Slippage in ticks' },
+      { name: 'commission_type', type: 'const string', optional: true, description: '`strategy.commission.percent`, …' },
+      { name: 'commission_value', type: 'const int/float', optional: true },
+      { name: 'process_orders_on_close', type: 'const bool', optional: true },
+      { name: 'close_entries_rule', type: 'const string', optional: true, description: '`"FIFO"` / `"ANY"`' },
+      { name: 'margin_long', type: 'const int/float', optional: true },
+      { name: 'margin_short', type: 'const int/float', optional: true },
+      { name: 'explicit_plot_zorder', type: 'const bool', optional: true },
+      { name: 'max_lines_count', type: 'const int', optional: true },
+      { name: 'max_labels_count', type: 'const int', optional: true },
+      { name: 'max_boxes_count', type: 'const int', optional: true },
+      { name: 'calc_bars_count', type: 'const int', optional: true },
+      { name: 'risk_free_rate', type: 'const int/float', optional: true },
+      { name: 'use_bar_magnifier', type: 'const bool', optional: true },
+      { name: 'fill_orders_on_standard_ohlc', type: 'const bool', optional: true },
+      { name: 'max_polylines_count', type: 'const int', optional: true },
+      { name: 'dynamic_requests', type: 'const bool', optional: true, description: 'Allow series `request.*` (v6)' },
+      { name: 'behind_chart', type: 'const bool', optional: true, description: 'Draw behind candles (v6)' },
+    ],
+    description: 'Declare a strategy script.',
+    example: 'strategy("MA Cross", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity)',
+  },
+  library: {
+    name: 'library',
+    params: [
+      { name: 'title', type: 'const string', description: 'Library name' },
+      { name: 'overlay', type: 'const bool', optional: true, description: '`true` = price pane when used as overlay' },
+      { name: 'dynamic_requests', type: 'const bool', optional: true, description: 'Allow series `request.*` (v6)' },
+    ],
+    description: 'Declare a library script.',
+    example: 'library("MyLib", overlay=true)',
   },
   input: {
     name: 'input',
     params: [
       { name: 'defval', description: 'Default value (type is inferred)' },
-      { name: 'title', optional: true, description: 'Settings label' },
-      { name: 'tooltip', optional: true, description: 'Hover help (`\\n` for line breaks)' },
-      { name: 'inline', optional: true, description: 'Same string = same Settings row' },
-      { name: 'group', optional: true, description: 'Settings section heading' },
-      { name: 'confirm', optional: true, description: 'Prompt on the chart when added' },
-      { name: 'active', optional: true, description: '`true` / `false` or another input ident' },
+      { name: 'title', type: 'const string', optional: true, description: 'Settings label' },
+      { name: 'tooltip', type: 'const string', optional: true, description: 'Hover help (`\\n` for line breaks)' },
+      { name: 'inline', type: 'const string', optional: true, description: 'Same string = same Settings row' },
+      { name: 'group', type: 'const string', optional: true, description: 'Settings section heading' },
+      { name: 'confirm', type: 'const bool', optional: true, description: 'Prompt on the chart when added' },
+      { name: 'active', type: 'input bool', optional: true, description: '`true` / `false` or another input ident' },
     ],
     returns: 'value',
     description: 'Generic script input (type follows `defval`).',
@@ -197,119 +249,137 @@ const CURATED: Record<string, PineCallSig> = {
   'input.int': {
     name: 'input.int',
     params: [
-      { name: 'defval', description: 'Default integer' },
-      { name: 'title', optional: true, description: 'Settings label' },
-      { name: 'minval', optional: true, description: 'Minimum allowed value' },
-      { name: 'maxval', optional: true, description: 'Maximum allowed value' },
-      { name: 'step', optional: true, description: 'Spinner step' },
-      { name: 'tooltip', optional: true, description: 'Hover help (`\\n` for line breaks)' },
-      { name: 'inline', optional: true, description: 'Same string = same Settings row' },
-      { name: 'group', optional: true, description: 'Settings section heading' },
-      { name: 'confirm', optional: true },
-      { name: 'display', optional: true },
-      { name: 'active', optional: true, description: '`true` / `false` or another input ident' },
+      { name: 'defval', type: 'const int', description: 'Default integer' },
+      { name: 'title', type: 'const string', optional: true, description: 'Settings label' },
+      { name: 'minval', type: 'const int', optional: true, description: 'Minimum allowed value' },
+      { name: 'maxval', type: 'const int', optional: true, description: 'Maximum allowed value' },
+      { name: 'step', type: 'const int', optional: true, description: 'Spinner step' },
+      { name: 'tooltip', type: 'const string', optional: true, description: 'Hover help (`\\n` for line breaks)' },
+      { name: 'inline', type: 'const string', optional: true, description: 'Same string = same Settings row' },
+      { name: 'group', type: 'const string', optional: true, description: 'Settings section heading' },
+      { name: 'confirm', type: 'const bool', optional: true },
+      { name: 'display', type: 'const string', optional: true, description: '`display.all` / `display.none`' },
+      { name: 'active', type: 'input bool', optional: true, description: '`true` / `false` or another input ident' },
     ],
-    returns: 'int',
+    returns: 'input int',
     example: 'len = input.int(14, "Length", minval=1, maxval=200)',
   },
   'input.float': {
     name: 'input.float',
     params: [
-      { name: 'defval', description: 'Default float' },
-      { name: 'title', optional: true },
-      { name: 'minval', optional: true },
-      { name: 'maxval', optional: true },
-      { name: 'step', optional: true },
-      { name: 'tooltip', optional: true },
-      { name: 'inline', optional: true },
-      { name: 'group', optional: true },
-      { name: 'confirm', optional: true },
-      { name: 'display', optional: true },
-      { name: 'active', optional: true },
+      { name: 'defval', type: 'const int/float', description: 'Default float' },
+      { name: 'title', type: 'const string', optional: true },
+      { name: 'minval', type: 'const int/float', optional: true },
+      { name: 'maxval', type: 'const int/float', optional: true },
+      { name: 'step', type: 'const int/float', optional: true },
+      { name: 'tooltip', type: 'const string', optional: true },
+      { name: 'inline', type: 'const string', optional: true },
+      { name: 'group', type: 'const string', optional: true },
+      { name: 'confirm', type: 'const bool', optional: true },
+      { name: 'display', type: 'const string', optional: true },
+      { name: 'active', type: 'input bool', optional: true },
     ],
-    returns: 'float',
+    returns: 'input float',
     example: 'mult = input.float(2.0, "StdDev", minval=0.1, step=0.1)',
   },
   'input.bool': {
     name: 'input.bool',
     params: [
-      { name: 'defval', description: 'Default true/false' },
-      { name: 'title', optional: true },
-      { name: 'tooltip', optional: true },
-      { name: 'inline', optional: true },
-      { name: 'group', optional: true },
-      { name: 'confirm', optional: true },
-      { name: 'display', optional: true },
-      { name: 'active', optional: true },
+      { name: 'defval', type: 'const bool', description: 'Default true/false' },
+      { name: 'title', type: 'const string', optional: true },
+      { name: 'tooltip', type: 'const string', optional: true },
+      { name: 'inline', type: 'const string', optional: true },
+      { name: 'group', type: 'const string', optional: true },
+      { name: 'confirm', type: 'const bool', optional: true },
+      { name: 'display', type: 'const string', optional: true },
+      { name: 'active', type: 'input bool', optional: true },
     ],
-    returns: 'bool',
+    returns: 'input bool',
     example: 'showMa = input.bool(true, "Show MA")',
   },
   'input.string': {
     name: 'input.string',
     params: [
-      { name: 'defval', description: 'Default string' },
-      { name: 'title', optional: true },
-      { name: 'options', optional: true, description: 'Dropdown list, e.g. `["A","B"]`' },
-      { name: 'tooltip', optional: true },
-      { name: 'inline', optional: true },
-      { name: 'group', optional: true },
-      { name: 'confirm', optional: true },
-      { name: 'display', optional: true },
-      { name: 'active', optional: true },
+      { name: 'defval', type: 'const string', description: 'Default string' },
+      { name: 'title', type: 'const string', optional: true },
+      { name: 'options', type: 'const string[]', optional: true, description: 'Dropdown list, e.g. `["A","B"]`' },
+      { name: 'tooltip', type: 'const string', optional: true },
+      { name: 'inline', type: 'const string', optional: true },
+      { name: 'group', type: 'const string', optional: true },
+      { name: 'confirm', type: 'const bool', optional: true },
+      { name: 'display', type: 'const string', optional: true },
+      { name: 'active', type: 'input bool', optional: true },
     ],
-    returns: 'string',
+    returns: 'input string',
     example: 'tf = input.string("1h", "Timeframe", options=["15m","1h","4h"])',
   },
   'input.source': {
     name: 'input.source',
     params: [
-      { name: 'defval', description: '`close`, `hlc3`, …' },
-      { name: 'title', optional: true },
-      { name: 'tooltip', optional: true },
-      { name: 'inline', optional: true },
-      { name: 'group', optional: true },
-      { name: 'display', optional: true },
-      { name: 'active', optional: true },
+      { name: 'defval', type: 'series float', description: '`close`, `hlc3`, …' },
+      { name: 'title', type: 'const string', optional: true },
+      { name: 'tooltip', type: 'const string', optional: true },
+      { name: 'inline', type: 'const string', optional: true },
+      { name: 'group', type: 'const string', optional: true },
+      { name: 'confirm', type: 'const bool', optional: true },
+      { name: 'display', type: 'const string', optional: true },
+      { name: 'active', type: 'input bool', optional: true },
     ],
-    returns: 'source',
+    returns: 'series float',
     example: 'src = input.source(close, "Source")',
   },
   'input.color': {
     name: 'input.color',
     params: [
-      { name: 'defval', description: 'Default color' },
-      { name: 'title', optional: true },
-      { name: 'tooltip', optional: true },
-      { name: 'inline', optional: true },
-      { name: 'group', optional: true },
-      { name: 'confirm', optional: true },
-      { name: 'display', optional: true },
-      { name: 'active', optional: true },
+      { name: 'defval', type: 'const color', description: 'Default color' },
+      { name: 'title', type: 'const string', optional: true },
+      { name: 'tooltip', type: 'const string', optional: true },
+      { name: 'inline', type: 'const string', optional: true },
+      { name: 'group', type: 'const string', optional: true },
+      { name: 'confirm', type: 'const bool', optional: true },
+      { name: 'display', type: 'const string', optional: true },
+      { name: 'active', type: 'input bool', optional: true },
     ],
-    returns: 'color',
+    returns: 'input color',
     example: 'col = input.color(color.teal, "Line")',
+  },
+  'input.timeframe': {
+    name: 'input.timeframe',
+    params: [
+      { name: 'defval', type: 'const string', description: 'Default timeframe (`""`, `"60"`, `"D"`)' },
+      { name: 'title', type: 'const string', optional: true },
+      { name: 'options', type: 'const string[]', optional: true, description: 'Dropdown list of timeframes' },
+      { name: 'tooltip', type: 'const string', optional: true },
+      { name: 'inline', type: 'const string', optional: true },
+      { name: 'group', type: 'const string', optional: true },
+      { name: 'confirm', type: 'const bool', optional: true },
+      { name: 'display', type: 'const string', optional: true },
+      { name: 'active', type: 'input bool', optional: true },
+    ],
+    returns: 'input string',
+    description: 'Timeframe input (`""` = chart TF).',
+    example: 'tf = input.timeframe("60", "Timeframe")',
   },
   'input.enum': {
     name: 'input.enum',
     params: [
       { name: 'defval', description: 'Default enum member (`Easing.linear`)' },
-      { name: 'title', optional: true },
+      { name: 'title', type: 'const string', optional: true },
       { name: 'options', optional: true, description: 'Optional subset of members' },
-      { name: 'tooltip', optional: true },
-      { name: 'inline', optional: true },
-      { name: 'group', optional: true },
-      { name: 'confirm', optional: true },
-      { name: 'display', optional: true },
-      { name: 'active', optional: true },
+      { name: 'tooltip', type: 'const string', optional: true },
+      { name: 'inline', type: 'const string', optional: true },
+      { name: 'group', type: 'const string', optional: true },
+      { name: 'confirm', type: 'const bool', optional: true },
+      { name: 'display', type: 'const string', optional: true },
+      { name: 'active', type: 'input bool', optional: true },
     ],
     example: 'easing = input.enum(Easing.linear, "Easing")',
   },
   'ta.sma': {
     name: 'ta.sma',
     params: [
-      { name: 'source', description: 'Series of values (`close`, a plot, …)' },
-      { name: 'length', description: 'Lookback period (int ≥ 1)' },
+      { name: 'source', type: 'series float', description: 'Series of values (`close`, a plot, …)' },
+      { name: 'length', type: 'simple int', description: 'Lookback period (int ≥ 1)' },
     ],
     returns: 'series float',
     description: 'Simple moving average.',
@@ -318,8 +388,8 @@ const CURATED: Record<string, PineCallSig> = {
   'ta.ema': {
     name: 'ta.ema',
     params: [
-      { name: 'source', description: 'Series of values' },
-      { name: 'length', description: 'Lookback period' },
+      { name: 'source', type: 'series float', description: 'Series of values' },
+      { name: 'length', type: 'simple int', description: 'Lookback period' },
     ],
     returns: 'series float',
     example: 'ta.ema(close, 21)',
@@ -327,8 +397,8 @@ const CURATED: Record<string, PineCallSig> = {
   'ta.rma': {
     name: 'ta.rma',
     params: [
-      { name: 'source', description: 'Series of values' },
-      { name: 'length', description: 'Lookback period' },
+      { name: 'source', type: 'series float', description: 'Series of values' },
+      { name: 'length', type: 'simple int', description: 'Lookback period' },
     ],
     returns: 'series float',
     description: 'Rolling / Wilder moving average.',
@@ -337,8 +407,8 @@ const CURATED: Record<string, PineCallSig> = {
   'ta.vwma': {
     name: 'ta.vwma',
     params: [
-      { name: 'source', description: 'Series of values' },
-      { name: 'length', description: 'Lookback period' },
+      { name: 'source', type: 'series float', description: 'Series of values' },
+      { name: 'length', type: 'simple int', description: 'Lookback period' },
     ],
     returns: 'series float',
     description: 'Volume-weighted moving average.',
@@ -347,23 +417,33 @@ const CURATED: Record<string, PineCallSig> = {
   'ta.rsi': {
     name: 'ta.rsi',
     params: [
-      { name: 'source', description: 'Series of values' },
-      { name: 'length', description: 'Lookback period' },
+      { name: 'source', type: 'series float', description: 'Series of values' },
+      { name: 'length', type: 'simple int', description: 'Lookback period' },
     ],
     returns: 'series float',
     example: 'ta.rsi(close, 14)',
   },
   'ta.atr': {
     name: 'ta.atr',
-    params: [{ name: 'length', description: 'Lookback period' }],
+    params: [{ name: 'length', type: 'simple int', description: 'Lookback period' }],
     returns: 'series float',
     example: 'ta.atr(14)',
+  },
+  'ta.supertrend': {
+    name: 'ta.supertrend',
+    params: [
+      { name: 'factor', type: 'simple int/float', description: 'ATR multiplier' },
+      { name: 'atrPeriod', type: 'simple int', description: 'ATR length' },
+    ],
+    returns: '[supertrend, direction]',
+    description: 'Supertrend (`ta.supertrend(factor, atrPeriod)`).',
+    example: '[st, dir] = ta.supertrend(3, 10)',
   },
   'ta.crossover': {
     name: 'ta.crossover',
     params: [
-      { name: 'source1', description: 'First series' },
-      { name: 'source2', description: 'Second series' },
+      { name: 'source1', type: 'series float', description: 'First series' },
+      { name: 'source2', type: 'series float', description: 'Second series' },
     ],
     returns: 'series bool',
     example: 'ta.crossover(fast, slow)',
@@ -371,8 +451,8 @@ const CURATED: Record<string, PineCallSig> = {
   'ta.crossunder': {
     name: 'ta.crossunder',
     params: [
-      { name: 'source1', description: 'First series' },
-      { name: 'source2', description: 'Second series' },
+      { name: 'source1', type: 'series float', description: 'First series' },
+      { name: 'source2', type: 'series float', description: 'Second series' },
     ],
     returns: 'series bool',
     example: 'ta.crossunder(fast, slow)',
@@ -380,26 +460,26 @@ const CURATED: Record<string, PineCallSig> = {
   'ta.highest': {
     name: 'ta.highest',
     params: [
-      { name: 'source', description: 'Series (or length if one-arg form)' },
-      { name: 'length', optional: true, description: 'Lookback period' },
+      { name: 'source', type: 'series float', description: 'Series (or length if one-arg form)' },
+      { name: 'length', type: 'simple int', optional: true, description: 'Lookback period' },
     ],
     example: 'ta.highest(high, 20)',
   },
   'ta.lowest': {
     name: 'ta.lowest',
     params: [
-      { name: 'source', description: 'Series (or length if one-arg form)' },
-      { name: 'length', optional: true, description: 'Lookback period' },
+      { name: 'source', type: 'series float', description: 'Series (or length if one-arg form)' },
+      { name: 'length', type: 'simple int', optional: true, description: 'Lookback period' },
     ],
     example: 'ta.lowest(low, 20)',
   },
   'ta.macd': {
     name: 'ta.macd',
     params: [
-      { name: 'source', description: 'Series of values' },
-      { name: 'fastlen', description: 'Fast EMA length' },
-      { name: 'slowlen', description: 'Slow EMA length' },
-      { name: 'siglen', description: 'Signal EMA length' },
+      { name: 'source', type: 'series float', description: 'Series of values' },
+      { name: 'fastlen', type: 'simple int', description: 'Fast EMA length' },
+      { name: 'slowlen', type: 'simple int', description: 'Slow EMA length' },
+      { name: 'siglen', type: 'simple int', description: 'Signal EMA length' },
     ],
     returns: '[macd, signal, hist]',
     example: '[macdLine, signalLine, hist] = ta.macd(close, 12, 26, 9)',
@@ -407,8 +487,8 @@ const CURATED: Record<string, PineCallSig> = {
   'color.new': {
     name: 'color.new',
     params: [
-      { name: 'color', description: 'Base color' },
-      { name: 'transp', description: 'Transparency 0 (solid) … 100 (invisible)' },
+      { name: 'color', type: 'series color', description: 'Base color' },
+      { name: 'transp', type: 'series int/float', description: 'Transparency 0 (solid) … 100 (invisible)' },
     ],
     returns: 'color',
     example: 'color.new(color.teal, 80)',
@@ -416,89 +496,246 @@ const CURATED: Record<string, PineCallSig> = {
   'color.rgb': {
     name: 'color.rgb',
     params: [
-      { name: 'red', description: '0–255' },
-      { name: 'green', description: '0–255' },
-      { name: 'blue', description: '0–255' },
-      { name: 'transp', optional: true, description: '0–100' },
+      { name: 'red', type: 'series int/float', description: '0–255' },
+      { name: 'green', type: 'series int/float', description: '0–255' },
+      { name: 'blue', type: 'series int/float', description: '0–255' },
+      { name: 'transp', type: 'series int/float', optional: true, description: '0–100' },
     ],
     returns: 'color',
     example: 'color.rgb(147, 159, 255, 20)',
   },
+  'color.from_gradient': {
+    name: 'color.from_gradient',
+    params: [
+      { name: 'value', type: 'series int/float', description: 'Value to map onto the gradient' },
+      { name: 'bottom_value', type: 'series int/float', description: 'Value that maps to `bottom_color`' },
+      { name: 'top_value', type: 'series int/float', description: 'Value that maps to `top_color`' },
+      { name: 'bottom_color', type: 'series color', description: 'Color at `bottom_value`' },
+      { name: 'top_color', type: 'series color', description: 'Color at `top_value`' },
+    ],
+    returns: 'series color',
+    description: 'Interpolate a color between two endpoints.',
+    example: 'color.from_gradient(rsi, 30, 70, color.red, color.lime)',
+  },
   'label.new': {
     name: 'label.new',
     params: [
-      { name: 'x', description: 'Bar index or time (`xloc`)' },
-      { name: 'y', description: 'Price' },
-      { name: 'text', optional: true },
-      { name: 'xloc', optional: true, description: '`xloc.bar_index` / `xloc.bar_time`' },
-      { name: 'yloc', optional: true, description: '`yloc.price` / `yloc.abovebar`' },
-      { name: 'color', optional: true },
-      { name: 'style', optional: true, description: '`label.style_label_up`, …' },
-      { name: 'textcolor', optional: true },
-      { name: 'size', optional: true },
-      { name: 'textalign', optional: true },
-      { name: 'tooltip', optional: true },
+      { name: 'x', type: 'series int', description: 'Bar index or time (`xloc`)' },
+      { name: 'y', type: 'series int/float', description: 'Price' },
+      { name: 'text', type: 'series string', optional: true },
+      { name: 'xloc', type: 'series string', optional: true, description: '`xloc.bar_index` / `xloc.bar_time`' },
+      { name: 'yloc', type: 'series string', optional: true, description: '`yloc.price` / `yloc.abovebar`' },
+      { name: 'color', type: 'series color', optional: true },
+      { name: 'style', type: 'series string', optional: true, description: '`label.style_label_up`, …' },
+      { name: 'textcolor', type: 'series color', optional: true },
+      { name: 'size', type: 'series string', optional: true },
+      { name: 'textalign', type: 'series string', optional: true },
+      { name: 'tooltip', type: 'series string', optional: true },
+      { name: 'text_font_family', type: 'series string', optional: true, description: '`font.family_default` / `font.family_monospace`' },
+      { name: 'force_overlay', type: 'const bool', optional: true },
+      { name: 'text_formatting', type: 'const string', optional: true },
     ],
+    returns: 'series label',
     example: 'label.new(bar_index, high, "High", style=label.style_label_down)',
   },
   'line.new': {
     name: 'line.new',
     params: [
-      { name: 'x1', description: 'Start bar / time' },
-      { name: 'y1', description: 'Start price' },
-      { name: 'x2', description: 'End bar / time' },
-      { name: 'y2', description: 'End price' },
-      { name: 'xloc', optional: true },
-      { name: 'extend', optional: true, description: '`extend.none` / `extend.right`' },
-      { name: 'color', optional: true },
-      { name: 'style', optional: true, description: '`line.style_solid` / dashed' },
-      { name: 'width', optional: true },
+      { name: 'x1', type: 'series int', description: 'Start bar / time' },
+      { name: 'y1', type: 'series int/float', description: 'Start price' },
+      { name: 'x2', type: 'series int', description: 'End bar / time' },
+      { name: 'y2', type: 'series int/float', description: 'End price' },
+      { name: 'xloc', type: 'simple string', optional: true, description: '`xloc.bar_index` / `xloc.bar_time`' },
+      { name: 'extend', type: 'series string', optional: true, description: '`extend.none` / `extend.right`' },
+      { name: 'color', type: 'series color', optional: true },
+      { name: 'style', type: 'series string', optional: true, description: '`line.style_solid` / dashed' },
+      { name: 'width', type: 'series int', optional: true },
+      { name: 'force_overlay', type: 'const bool', optional: true },
     ],
+    returns: 'series line',
     example: 'line.new(bar_index[10], high[10], bar_index, high, extend=extend.right)',
+  },
+  'box.new': {
+    name: 'box.new',
+    params: [
+      { name: 'left', type: 'series int', description: 'Left bar / time' },
+      { name: 'top', type: 'series int/float', description: 'Top price' },
+      { name: 'right', type: 'series int', description: 'Right bar / time' },
+      { name: 'bottom', type: 'series int/float', description: 'Bottom price' },
+      { name: 'border_color', type: 'series color', optional: true },
+      { name: 'border_width', type: 'series int', optional: true },
+      { name: 'border_style', type: 'series string', optional: true, description: '`line.style_solid` / dashed / dotted' },
+      { name: 'extend', type: 'series string', optional: true, description: '`extend.none` / `extend.right`' },
+      { name: 'xloc', type: 'series string', optional: true, description: '`xloc.bar_index` / `xloc.bar_time`' },
+      { name: 'bgcolor', type: 'series color', optional: true },
+      { name: 'text', type: 'series string', optional: true },
+      { name: 'text_size', type: 'series string', optional: true },
+      { name: 'text_color', type: 'series color', optional: true },
+      { name: 'text_halign', type: 'series string', optional: true },
+      { name: 'text_valign', type: 'series string', optional: true },
+      { name: 'text_wrap', type: 'series string', optional: true },
+      { name: 'text_font_family', type: 'series string', optional: true },
+      { name: 'force_overlay', type: 'const bool', optional: true },
+      { name: 'text_formatting', type: 'const string', optional: true },
+    ],
+    returns: 'series box',
+    description: 'Create a box (`box.new(left, top, right, bottom, …)`).',
+    example: 'box.new(bar_index[10], high, bar_index, low, bgcolor=color.new(color.teal, 85))',
+  },
+  'table.new': {
+    name: 'table.new',
+    params: [
+      { name: 'position', type: 'series string', description: '`position.top_right`, …' },
+      { name: 'columns', type: 'series int', description: 'Column count' },
+      { name: 'rows', type: 'series int', description: 'Row count' },
+      { name: 'bgcolor', type: 'series color', optional: true },
+      { name: 'frame_color', type: 'series color', optional: true },
+      { name: 'frame_width', type: 'series int', optional: true },
+      { name: 'border_color', type: 'series color', optional: true },
+      { name: 'border_width', type: 'series int', optional: true },
+      { name: 'force_overlay', type: 'const bool', optional: true },
+    ],
+    returns: 'series table',
+    description: 'Create a table (`table.new(position, columns, rows, …)`).',
+    example: 'var t = table.new(position.top_right, 2, 2)',
+  },
+  'table.cell': {
+    name: 'table.cell',
+    params: [
+      { name: 'table_id', type: 'series table', description: 'Table from `table.new`' },
+      { name: 'column', type: 'series int', description: '0-based column' },
+      { name: 'row', type: 'series int', description: '0-based row' },
+      { name: 'text', type: 'series string', optional: true },
+      { name: 'width', type: 'series int', optional: true, description: 'Cell width as % of pane' },
+      { name: 'height', type: 'series int', optional: true, description: 'Cell height as % of pane' },
+      { name: 'text_color', type: 'series color', optional: true },
+      { name: 'text_halign', type: 'series string', optional: true },
+      { name: 'text_valign', type: 'series string', optional: true },
+      { name: 'text_size', type: 'series string', optional: true },
+      { name: 'bgcolor', type: 'series color', optional: true },
+      { name: 'tooltip', type: 'series string', optional: true },
+      { name: 'text_font_family', type: 'series string', optional: true },
+      { name: 'text_formatting', type: 'const string', optional: true },
+    ],
+    description: 'Set a table cell (column then row).',
+    example: 'table.cell(t, 0, 0, "RSI", text_color=color.white)',
   },
   'strategy.entry': {
     name: 'strategy.entry',
     params: [
-      { name: 'id', description: 'Order id' },
-      { name: 'direction', description: '`strategy.long` / `strategy.short`' },
-      { name: 'qty', optional: true },
-      { name: 'limit', optional: true },
-      { name: 'stop', optional: true },
-      { name: 'oca_name', optional: true },
-      { name: 'oca_type', optional: true },
-      { name: 'comment', optional: true },
-      { name: 'alert_message', optional: true },
+      { name: 'id', type: 'series string', description: 'Order id' },
+      { name: 'direction', type: 'series strategy_direction', description: '`strategy.long` / `strategy.short`' },
+      { name: 'qty', type: 'series int/float', optional: true },
+      { name: 'limit', type: 'series int/float', optional: true },
+      { name: 'stop', type: 'series int/float', optional: true },
+      { name: 'oca_name', type: 'series string', optional: true },
+      { name: 'oca_type', type: 'const string', optional: true, description: '`strategy.oca.cancel` / `strategy.oca.reduce`' },
+      { name: 'comment', type: 'series string', optional: true },
+      { name: 'alert_message', type: 'series string', optional: true },
+      { name: 'disable_alert', type: 'series bool', optional: true },
     ],
     example: 'strategy.entry("Long", strategy.long)',
+  },
+  'strategy.exit': {
+    name: 'strategy.exit',
+    params: [
+      { name: 'id', type: 'series string', description: 'Exit order id' },
+      { name: 'from_entry', type: 'series string', optional: true, description: 'Entry id to exit (all if omitted)' },
+      { name: 'qty', type: 'series int/float', optional: true },
+      { name: 'qty_percent', type: 'series int/float', optional: true },
+      { name: 'profit', type: 'series int/float', optional: true, description: 'Take-profit in ticks' },
+      { name: 'limit', type: 'series int/float', optional: true, description: 'Take-profit price' },
+      { name: 'loss', type: 'series int/float', optional: true, description: 'Stop-loss in ticks' },
+      { name: 'stop', type: 'series int/float', optional: true, description: 'Stop-loss price' },
+      { name: 'trail_price', type: 'series int/float', optional: true },
+      { name: 'trail_points', type: 'series int/float', optional: true },
+      { name: 'trail_offset', type: 'series int/float', optional: true },
+      { name: 'oca_name', type: 'series string', optional: true },
+      { name: 'comment', type: 'series string', optional: true },
+      { name: 'comment_profit', type: 'series string', optional: true },
+      { name: 'comment_loss', type: 'series string', optional: true },
+      { name: 'comment_trailing', type: 'series string', optional: true },
+      { name: 'alert_message', type: 'series string', optional: true },
+      { name: 'alert_profit', type: 'series string', optional: true },
+      { name: 'alert_loss', type: 'series string', optional: true },
+      { name: 'alert_trailing', type: 'series string', optional: true },
+      { name: 'disable_alert', type: 'series bool', optional: true },
+    ],
+    example: 'strategy.exit("XL", from_entry="Long", stop=low, limit=high)',
   },
   'strategy.close': {
     name: 'strategy.close',
     params: [
-      { name: 'id', description: 'Entry id to close' },
-      { name: 'comment', optional: true },
-      { name: 'qty', optional: true },
-      { name: 'qty_percent', optional: true },
-      { name: 'alert_message', optional: true },
+      { name: 'id', type: 'series string', description: 'Entry id to close' },
+      { name: 'comment', type: 'series string', optional: true },
+      { name: 'qty', type: 'series int/float', optional: true },
+      { name: 'qty_percent', type: 'series int/float', optional: true },
+      { name: 'alert_message', type: 'series string', optional: true },
+      { name: 'immediately', type: 'series bool', optional: true, description: 'Close on this tick (v5+)' },
+      { name: 'disable_alert', type: 'series bool', optional: true },
     ],
     example: 'strategy.close("Long")',
+  },
+  'strategy.close_all': {
+    name: 'strategy.close_all',
+    params: [
+      { name: 'comment', type: 'series string', optional: true },
+      { name: 'alert_message', type: 'series string', optional: true },
+      { name: 'immediately', type: 'series bool', optional: true, description: 'Close on this tick (v5+)' },
+      { name: 'disable_alert', type: 'series bool', optional: true },
+    ],
+    example: 'strategy.close_all()',
+  },
+  'strategy.order': {
+    name: 'strategy.order',
+    params: [
+      { name: 'id', type: 'series string', description: 'Order id' },
+      { name: 'direction', type: 'series strategy_direction', description: '`strategy.long` / `strategy.short`' },
+      { name: 'qty', type: 'series int/float', optional: true },
+      { name: 'limit', type: 'series int/float', optional: true },
+      { name: 'stop', type: 'series int/float', optional: true },
+      { name: 'oca_name', type: 'series string', optional: true },
+      { name: 'oca_type', type: 'const string', optional: true, description: '`strategy.oca.cancel` / `strategy.oca.reduce`' },
+      { name: 'comment', type: 'series string', optional: true },
+      { name: 'alert_message', type: 'series string', optional: true },
+      { name: 'disable_alert', type: 'series bool', optional: true },
+    ],
+    example: 'strategy.order("L", strategy.long, qty=1)',
   },
   'request.security': {
     name: 'request.security',
     params: [
-      { name: 'symbol', description: '`syminfo.tickerid` or `"BINANCE:BTCUSDT"`' },
-      { name: 'timeframe', description: '`"60"`, `"D"`, `timeframe.period`' },
+      { name: 'symbol', type: 'simple string', description: '`syminfo.tickerid` or `"BINANCE:BTCUSDT"`' },
+      { name: 'timeframe', type: 'simple string', description: '`"60"`, `"D"`, `timeframe.period`' },
       { name: 'expression', description: 'Value to request (`close`, a tuple, …)' },
-      { name: 'gaps', optional: true, description: '`barmerge.gaps_off` / `barmerge.gaps_on`' },
-      { name: 'lookahead', optional: true, description: '`barmerge.lookahead_off` (default)' },
-      { name: 'ignore_invalid_symbol', optional: true },
+      { name: 'gaps', type: 'simple string', optional: true, description: '`barmerge.gaps_off` / `barmerge.gaps_on`' },
+      { name: 'lookahead', type: 'simple string', optional: true, description: '`barmerge.lookahead_off` (default)' },
+      { name: 'ignore_invalid_symbol', type: 'simple bool', optional: true },
+      { name: 'currency', type: 'simple string', optional: true, description: '`currency.USD` or `syminfo.currency`' },
+      { name: 'calc_bars_count', type: 'simple int', optional: true },
     ],
     example: 'request.security(syminfo.tickerid, "D", close)',
+  },
+  'request.security_lower_tf': {
+    name: 'request.security_lower_tf',
+    params: [
+      { name: 'symbol', type: 'simple string', description: '`syminfo.tickerid` or `"BINANCE:BTCUSDT"`' },
+      { name: 'timeframe', type: 'simple string', description: 'Lower TF (`"1"`, `"5"`, …)' },
+      { name: 'expression', description: 'Value to request (`close`, a tuple, …)' },
+      { name: 'ignore_invalid_symbol', type: 'simple bool', optional: true },
+      { name: 'currency', type: 'simple string', optional: true },
+      { name: 'ignore_invalid_timeframe', type: 'simple bool', optional: true },
+      { name: 'calc_bars_count', type: 'simple int', optional: true },
+    ],
+    returns: 'array',
+    description: 'Request lower-timeframe values as an array.',
+    example: 'request.security_lower_tf(syminfo.tickerid, "1", close)',
   },
   alert: {
     name: 'alert',
     params: [
-      { name: 'message', description: 'Alert text' },
-      { name: 'freq', optional: true, description: '`alert.freq_once_per_bar` / `alert.freq_all`' },
+      { name: 'message', type: 'series string', description: 'Alert text' },
+      { name: 'freq', type: 'input string', optional: true, description: '`alert.freq_once_per_bar` / `alert.freq_all`' },
     ],
     example: 'alert("Cross", alert.freq_once_per_bar)',
   },
@@ -506,7 +743,7 @@ const CURATED: Record<string, PineCallSig> = {
     name: 'nz',
     params: [
       { name: 'x', description: 'Value that may be `na`' },
-      { name: 'y', optional: true, description: 'Replacement when `x` is `na` (default 0)' },
+      { name: 'y', optional: true, defaultValue: '0', description: 'Replacement when `x` is `na` (default 0)' },
     ],
     example: 'nz(ta.sma(close, 14), close)',
   },
@@ -622,6 +859,70 @@ function isRestToken(part: string): boolean {
   return t === '…' || t === '...' || t === '..' || /^\.{3}\w*$/.test(t) || /^…\w*$/.test(t);
 }
 
+/** Qualifiers / primitives that may lead a typed Pine param (`series float source`). */
+const TYPE_TOKEN =
+  /^(series|simple|const|input|literal|int|float|bool|string|color|void|na|array|matrix|map|line|label|box|table|polyline|plot|hline|chart\.point|strategy_direction|int\/float|float\/int)(\<[^>]+\>)?$/i;
+
+function looksLikeTypeToken(w: string): boolean {
+  const t = w.trim();
+  if (!t) return false;
+  if (TYPE_TOKEN.test(t)) return true;
+  return /[\/<>]/.test(t) && /^[\w./<>]+$/.test(t);
+}
+
+function looksLikeTypeString(s: string): boolean {
+  const bits = s.trim().split(/\s+/).filter(Boolean);
+  if (!bits.length || bits.length > 5) return false;
+  return bits.every(looksLikeTypeToken);
+}
+
+/** `['series','float','source']` → `series float`; bare `source` → undefined. */
+function typeFromLeadingBits(bits: string[]): string | undefined {
+  if (bits.length < 2) return undefined;
+  const leading = bits.slice(0, -1);
+  if (!leading.every(looksLikeTypeToken)) return undefined;
+  return leading.join(' ');
+}
+
+function parseReturns(line: string): string | undefined {
+  const m = String(line || '').match(/(?:→|->)\s*(.+?)\s*$/);
+  const t = m?.[1]?.trim();
+  return t || undefined;
+}
+
+/** Attach `name (series float)` / `name: series float` types from a doc blob. */
+function enrichParamsFromDocs(params: PineParamDef[], blob: string): PineParamDef[] {
+  const src = String(blob || '');
+  if (!src.trim() || !params.length) return params;
+  return params.map((p) => {
+    if (p.rest || p.type) return p;
+    const escaped = p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const paren = new RegExp(`(?:^|[\\n\\r]|\\b)${escaped}\\s*\\(([^)\\n]{1,80})\\)`);
+    const m = src.match(paren);
+    if (m) {
+      const inner = m[1]!.trim();
+      if (looksLikeTypeString(inner)) return { ...p, type: inner };
+    }
+    const colon = new RegExp(`(?:^|[\\n\\r])\\s*${escaped}\\s*:\\s*([^\\n]+)`);
+    const c = src.match(colon);
+    if (c) {
+      const raw = c[1]!.trim().split(/\s+[—–-]\s+/)[0]!.trim();
+      const t = raw.replace(/[.,;]+$/, '').trim();
+      if (looksLikeTypeString(t)) return { ...p, type: t };
+    }
+    return p;
+  });
+}
+
+function formatParamMeta(p: PineParamDef): string | undefined {
+  const bits: string[] = [];
+  if (p.type) bits.push(p.type);
+  if (p.defaultValue) bits.push(`default ${p.defaultValue}`);
+  else if (p.optional) bits.push('optional');
+  if (p.description) bits.push(p.description);
+  return bits.length ? bits.join(' · ') : undefined;
+}
+
 /**
  * Parse `name(a, b=1, c?, …)` / `foo(a, b) → T` / a bare list (`offset=0.85`)
  * into parameter defs. Snippet placeholders and `param1` junk are skipped.
@@ -677,10 +978,12 @@ export function parseSignatureParams(raw: string): PineParamDef[] {
     const bits = namePart.split(/\s+/);
     let name = (bits[bits.length - 1] || namePart).replace(/[^\w]/g, '');
     if (!name || isJunkParamName(name) || !/^[A-Za-z_][\w]*$/.test(name)) continue;
+    const type = typeFromLeadingBits(bits);
     params.push({
       name,
       optional: defaultValue != null || optionalMark,
       defaultValue,
+      ...(type ? { type } : {}),
     });
   }
   return params;
@@ -697,8 +1000,41 @@ function firstSignatureLine(name: string, text: string): string | null {
     if (from >= 0) {
       const parsed = parseSignatureParams(src.slice(m.index));
       if (parsed.length) {
-        const close = src.indexOf('\n', from);
-        return src.slice(m.index, close < 0 ? src.length : close).replace(/^[`\s]+|[`\s]+$/g, '').replace(/^Signature:\s*/i, '');
+        let close = from;
+        let depth = 0;
+        let inStr: '"' | "'" | null = null;
+        for (let i = from; i < src.length; i++) {
+          const c = src[i]!;
+          if (inStr) {
+            if (c === '\\') {
+              i++;
+              continue;
+            }
+            if (c === inStr) inStr = null;
+            continue;
+          }
+          if (c === '"' || c === "'") {
+            inStr = c;
+            continue;
+          }
+          if (c === '(') depth++;
+          else if (c === ')') {
+            depth--;
+            if (depth === 0) {
+              close = i;
+              break;
+            }
+          }
+        }
+        let end = close + 1;
+        const after = src.slice(end);
+        const ret = after.match(/^\s*(?:→|->)\s*[^\n]+/);
+        if (ret) end += ret[0].length;
+        return src
+          .slice(m.index, end)
+          .replace(/^[`\s]+|[`\s]+$/g, '')
+          .replace(/^Signature:\s*/i, '')
+          .replace(/\s+/g, ' ');
       }
     }
   }
@@ -757,9 +1093,11 @@ export function resolveCallSignature(
   let parsed = line ? parseSignatureParams(line) : [];
   if (!parsed.length && extra?.snippet) parsed = parseSignatureParams(extra.snippet);
   if (!parsed.length) return null;
+  parsed = enrichParamsFromDocs(parsed, blob);
   return {
     name: n,
     params: parsed,
+    returns: parseReturns(line || ''),
     description: extra?.documentation || extra?.brief || undefined,
   };
 }
@@ -906,6 +1244,7 @@ export function classifyParams(
   let budget = site.positionalUsed;
   const typed = site.prefix.match(/^([A-Za-z_][\w]*)/);
   const typedName = typed?.[1];
+  const typedNameMatches = !!typedName && sig.params.some((p) => p.name === typedName);
   const out: Array<PineParamDef & { used: boolean; current: boolean }> = [];
   for (let i = 0; i < sig.params.length; i++) {
     const p = sig.params[i]!;
@@ -914,7 +1253,7 @@ export function classifyParams(
       used = true;
       budget -= 1;
     }
-    const current = typedName
+    const current = typedNameMatches
       ? p.name === typedName
       : i === site.cursorArgIndex;
     out.push({ ...p, used, current });
@@ -946,7 +1285,7 @@ export function paramCompletions(
       used: p.used,
       current: p.current,
       insert: `${p.name}=`,
-      description: p.description,
+      description: formatParamMeta(p),
     }));
 }
 
@@ -963,10 +1302,11 @@ export function formatCallHoverMarkdown(sig: PineCallSig): string {
     parts.push('**Parameters**');
     for (const p of sig.params) {
       if (p.rest) continue;
+      const type = p.type ? ` (\`${p.type}\`)` : '';
       const opt = p.optional ? ' *(optional)*' : '';
       const d = p.description ? ` — ${p.description}` : '';
       const def = p.defaultValue ? ` (default \`${p.defaultValue}\`)` : '';
-      parts.push(`- \`${p.name}\`${opt}${d}${def}`);
+      parts.push(`- \`${p.name}\`${type}${opt}${d}${def}`);
     }
   }
   if (sig.example) {
@@ -985,6 +1325,7 @@ export function formatParamHoverMarkdown(
   const parts: string[] = [];
   parts.push('```pinescript\n' + `${sig.name}(…, ${param.name}, …)` + '\n```');
   const bits = [`Parameter \`${param.name}\` of \`${sig.name}\``];
+  if (param.type) bits.push(`\`${param.type}\``);
   if (param.optional) bits.push('optional');
   if (param.defaultValue) bits.push(`default \`${param.defaultValue}\``);
   parts.push(bits.join(' · '));

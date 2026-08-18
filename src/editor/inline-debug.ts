@@ -49,6 +49,23 @@ import {
 export type { InlineDebugAnnotation };
 export { isPinableAnnotation };
 
+/** Max visible chip characters (including ellipsis). Full text stays in `title`. */
+export const INLINE_DEBUG_CHIP_MAX = 48;
+
+/**
+ * Truncate a log / error chip for the end-of-line widget.
+ * Collapses whitespace; ellipsizes when longer than `maxLen`.
+ */
+export function truncateInlineDebugChip(
+  message: string,
+  maxLen: number = INLINE_DEBUG_CHIP_MAX,
+): string {
+  const m = String(message ?? '').replace(/\s+/g, ' ').trim();
+  if (maxLen <= 0 || m.length <= maxLen) return m;
+  if (maxLen <= 1) return '…';
+  return `${m.slice(0, maxLen - 1)}…`;
+}
+
 /** Push annotations (or null to clear). */
 export const setInlineDebugData = StateEffect.define<InlineDebugAnnotation[] | null>();
 
@@ -141,9 +158,11 @@ class InlineDebugWidget extends WidgetType {
       this.pinable ? ' cm-inline-debug-pinable' : ''
     }`;
     span.textContent = this.text;
+    // Native tooltip always carries the untruncated message (this.title).
     span.title = this.pinable
       ? `${this.title} · click to pin bar on chart`
       : this.title;
+    span.setAttribute('aria-label', this.title);
     if (this.pinable) {
       span.setAttribute('role', 'button');
       span.tabIndex = 0;
@@ -311,8 +330,7 @@ function buildDecorations(anns: InlineDebugAnnotation[], doc: Text): DecorationS
   for (const a of collapsed) {
     if (a.line < 1 || a.line > doc.lines) continue;
     const line = doc.line(a.line);
-    const short =
-      a.message.length > 48 ? `${a.message.slice(0, 46)}…` : a.message;
+    const short = truncateInlineDebugChip(a.message);
     const title = [
       `Line ${a.line}`,
       a.level,
@@ -523,15 +541,21 @@ const debugPinGutterExt = gutter({
 
 export const inlineDebugTheme = EditorView.baseTheme({
   '.cm-inline-debug': {
-    fontSize: '10px',
+    fontSize: '11px',
+    fontWeight: '500',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
     marginLeft: '8px',
-    padding: '0 5px',
-    borderRadius: '2px',
-    opacity: '0.92',
+    padding: '1px 6px',
+    borderRadius: '3px',
+    borderLeft: '2px solid transparent',
+    opacity: '1',
     verticalAlign: 'middle',
     pointerEvents: 'none',
     whiteSpace: 'nowrap',
+    maxWidth: '28em',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    letterSpacing: '0.01em',
   },
   '.cm-inline-debug-pinable': {
     pointerEvents: 'auto',
@@ -540,24 +564,37 @@ export const inlineDebugTheme = EditorView.baseTheme({
     textUnderlineOffset: '2px',
   },
   '.cm-inline-debug-pinable:hover': {
-    opacity: '1',
-    filter: 'brightness(1.15)',
+    filter: 'brightness(1.12)',
+    boxShadow: '0 0 0 1px rgba(147, 159, 255, 0.45)',
   },
+  '.cm-inline-debug-pinable:focus': {
+    outline: 'none',
+  },
+  '.cm-inline-debug-pinable:focus-visible': {
+    outline: '1px solid #939fff',
+    outlineOffset: '1px',
+    boxShadow: '0 0 0 2px rgba(147, 159, 255, 0.28)',
+  },
+  /* Void-dark readable: light text + left accent, not noisy fills */
   '.cm-inline-debug-info': {
-    color: '#8b8e9c',
-    backgroundColor: 'rgba(139, 142, 156, 0.12)',
+    color: '#c8cad4',
+    backgroundColor: 'rgba(200, 202, 212, 0.10)',
+    borderLeftColor: '#8b8e9c',
   },
   '.cm-inline-debug-debug': {
-    color: '#939fff',
-    backgroundColor: 'rgba(147, 159, 255, 0.12)',
+    color: '#c4caff',
+    backgroundColor: 'rgba(147, 159, 255, 0.14)',
+    borderLeftColor: '#939fff',
   },
   '.cm-inline-debug-warning': {
-    color: '#e8a03a',
+    color: '#f3c06a',
     backgroundColor: 'rgba(232, 160, 58, 0.14)',
+    borderLeftColor: '#e8a03a',
   },
   '.cm-inline-debug-error': {
-    color: '#e85d4c',
+    color: '#f08a7e',
     backgroundColor: 'rgba(232, 93, 76, 0.16)',
+    borderLeftColor: '#e85d4c',
   },
   '.cm-inline-debug-line-error': {
     backgroundColor: 'rgba(232, 93, 76, 0.08)',
@@ -595,6 +632,14 @@ export const inlineDebugTheme = EditorView.baseTheme({
   '.cm-inline-debug-gutter-pinable:hover': {
     filter: 'brightness(1.25)',
   },
+  '.cm-inline-debug-gutter-pinable:focus': {
+    outline: 'none',
+  },
+  '.cm-inline-debug-gutter-pinable:focus-visible': {
+    outline: '1px solid #939fff',
+    outlineOffset: '0',
+    borderRadius: '2px',
+  },
   '.cm-inline-debug-gutter-error': { color: '#e85d4c', fontWeight: '700' },
   '.cm-inline-debug-gutter-warning': { color: '#e8a03a' },
   '.cm-inline-debug-gutter-info': { color: '#8b8e9c' },
@@ -620,6 +665,14 @@ export const inlineDebugTheme = EditorView.baseTheme({
   '.cm-debug-pin-gutter:hover': {
     filter: 'brightness(1.2)',
     opacity: '1',
+  },
+  '.cm-debug-pin-gutter:focus': {
+    outline: 'none',
+  },
+  '.cm-debug-pin-gutter:focus-visible': {
+    outline: '1px solid #939fff',
+    outlineOffset: '0',
+    borderRadius: '2px',
   },
   '.cm-debug-pin-gutter-error': { filter: 'hue-rotate(-20deg)' },
   '.cm-debug-pin-gutter-warning': { filter: 'hue-rotate(20deg)' },

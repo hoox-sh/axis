@@ -290,6 +290,18 @@ describe('combineEditorDiagnostics', () => {
     expect(merged.some((d) => d.line === 3)).toBe(true);
     expect(merged.some((d) => d.severity === 'typo')).toBe(true);
   });
+
+  it('preserves a useful last-run engine message next to pre-eval marks', () => {
+    const engine =
+      'Runtime error on line 3: Cannot call "ta.sma" with argument "length"=na. The argument must be a simple int.';
+    const lastRun = { status: 'error', error: engine };
+    const merged = combineEditorDiagnostics([typo], lastRun, SAMPLE_DOC);
+    const run = merged.find((d) => d.line === 3 && d.severity === 'error');
+    expect(run).toBeTruthy();
+    expect(run!.message).toContain('Cannot call "ta.sma"');
+    expect(run!.message).toContain('simple int');
+    expect(merged.some((d) => d.message.includes('did you mean `plot`'))).toBe(true);
+  });
 });
 
 describe('countDiagnostics / formatDiagnosticCount', () => {

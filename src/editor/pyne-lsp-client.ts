@@ -28,7 +28,8 @@
  * Used when engine is `server` and Backend URL is set (local `:5002` or remote).
  * Pyodide / offline mode falls back to client builtins in `pyne-lsp`
  * (and local structural pre-eval in `preevaluate.ts`).
- * Timeouts default to 4s; failures return `null` (caller uses local index).
+ * Timeouts: hover 700ms, completion 1.2s, diagnostics
+ * {@link LSP_DIAGNOSTICS_TIMEOUT_MS}; failures return `null` (caller uses local).
  *
  * @module editor/pyne-lsp-client
  */
@@ -58,6 +59,8 @@ export type RemoteHover = {
 export const LSP_HOVER_TIMEOUT_MS = 700;
 /** Slightly longer for completion (user is waiting on a popup intentionally). */
 export const LSP_COMPLETION_TIMEOUT_MS = 1_200;
+/** `/lsp/diagnostics` budget — local marks already published; do not stall idle lint. */
+export const LSP_DIAGNOSTICS_TIMEOUT_MS = 2_000;
 /** Skip remote after network failure (ms) so hover is not blocked for 4s repeatedly. */
 export const LSP_COOLDOWN_MS = 30_000;
 
@@ -251,7 +254,7 @@ export async function fetchRemoteDiagnostics(opts: {
 }): Promise<RemoteDiagnosticsResult | null> {
   const base = lspBaseUrl();
   if (!base) return null;
-  const timeoutMs = opts.timeoutMs ?? 4_000;
+  const timeoutMs = opts.timeoutMs ?? LSP_DIAGNOSTICS_TIMEOUT_MS;
   const signal = mergeAbortSignals(opts.signal, AbortSignal.timeout(timeoutMs));
   try {
     const res = await fetch(`${base}/lsp/diagnostics`, {
