@@ -91,7 +91,7 @@ plot(m.easing(close))
 `;
     const t = typesOf(src);
     expect(t).toContain('variableName.special:m');
-    expect(t).toContain('propertyName.special:Easing');
+    expect(t).toContain('typeName:Easing');
     expect(t).toContain('propertyName.special:linear');
     expect(t).toContain('propertyName.special:easing');
     expect(t).toContain('variableName.standard:close');
@@ -107,8 +107,46 @@ plot(m.easing(close))
 
   it('tags export names as library symbols', () => {
     const t = typesOf('export enum Easing\nexport method foo()\n');
-    expect(t).toContain('variableName.special:Easing');
+    expect(t).toContain('typeName:Easing');
     expect(t).toContain('variableName.special:foo');
+  });
+
+  it('tags built-in types and qualifiers as typeName', () => {
+    const t = typesOf('series float x = close\nsimple int n = 1\nstring s = "a"\n');
+    expect(t).toContain('typeName:series');
+    expect(t).toContain('typeName:float');
+    expect(t).toContain('typeName:simple');
+    expect(t).toContain('typeName:int');
+    expect(t).toContain('typeName:string');
+  });
+
+  it('tags declared UDTs and later uses as typeName', () => {
+    const src = `type Point
+    float x
+    int y
+p = Point.new()
+`;
+    const t = typesOf(src);
+    expect(t).toContain('definitionKeyword:type');
+    expect(t).toContain('typeName:Point');
+    expect(t).toContain('typeName:float');
+    expect(t).toContain('typeName:int');
+    expect(t.filter((x) => x === 'typeName:Point').length).toBeGreaterThanOrEqual(2);
+    expect(t).toContain('propertyName:new');
+    expect(t).not.toContain('variableName:Point');
+  });
+
+  it('does not treat the next line after type as the UDT name', () => {
+    const t = typesOf('type Point\n    float x\n');
+    expect(t).toContain('typeName:Point');
+    expect(t.filter((x) => x === 'typeName:float').length).toBe(1);
+    expect(t).not.toContain('variableName:float');
+  });
+
+  it('tags imported PascalCase members as types (UDT / enum)', () => {
+    const t = typesOf('import user/Lib/1 as m\nx = m.Easing.linear\n');
+    expect(t).toContain('typeName:Easing');
+    expect(t).toContain('propertyName.special:linear');
   });
 
   it('keeps built-in namespace members as ordinary properties', () => {

@@ -230,9 +230,40 @@ export const ScriptSettingsModal: Component = () => {
   };
 
   const setStrategyFieldValue = (id: string, value: unknown) => {
-    setStrategyFields((list) =>
-      list.map((f) => (f.id === id ? { ...f, value } : f)),
-    );
+    setStrategyFields((list) => {
+      const next = list.map((f) => (f.id === id ? { ...f, value } : f));
+      // Keep leverage ↔ margin % consistent (PYNE: leverage wins if both present).
+      if (id === 'leverage') {
+        const lev = Number(value);
+        if (Number.isFinite(lev) && lev >= 1) {
+          const margin = 100 / lev;
+          return next.map((f) =>
+            f.id === 'margin_long' || f.id === 'margin_short'
+              ? { ...f, value: margin }
+              : f,
+          );
+        }
+      }
+      if (id === 'margin_long' || id === 'margin_short') {
+        const ml = Number(
+          id === 'margin_long'
+            ? value
+            : next.find((f) => f.id === 'margin_long')?.value,
+        );
+        const ms = Number(
+          id === 'margin_short'
+            ? value
+            : next.find((f) => f.id === 'margin_short')?.value,
+        );
+        const conservative =
+          [ml, ms].filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => b - a)[0];
+        if (conservative) {
+          const lev = Math.max(1, 100 / conservative);
+          return next.map((f) => (f.id === 'leverage' ? { ...f, value: lev } : f));
+        }
+      }
+      return next;
+    });
   };
 
   const onBackdrop = (e: MouseEvent) => {
@@ -423,8 +454,10 @@ export const ScriptSettingsModal: Component = () => {
               >
                 <p class="text-[11px] text-text-dim leading-relaxed m-0">
                   Broker settings for this <code class="text-accent">strategy()</code> —
-                  initial capital, order size, commission, leverage / margin, and
-                  execution flags. Applied on run without rewriting your editor buffer.
+                  capital, order size, commission, and leverage / margin. Applied on
+                  run without rewriting your editor buffer. Execution checkboxes are
+                  kept for TV-shaped scripts; PYNE does not implement
+                  calc_on_order_fills / calc_on_every_tick.
                 </p>
                 <For each={strategyGroups()}>
                   {([group, items]) => (

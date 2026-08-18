@@ -119,10 +119,11 @@ describe('normalizeStrategyEnum / overridesFromDefs', () => {
     );
   });
 
-  it('strategyOverridesFromDefs keeps values', () => {
+  it('strategyOverridesFromDefs keeps only dirty values', () => {
     const defs = resolveStrategyProps(STRAT, { initial_capital: 1 });
     const o = strategyOverridesFromDefs(defs);
     expect(o.initial_capital).toBe(1);
-    expect(typeof o.pyramiding).toBe('number');
+    expect(o.pyramiding).toBeUndefined();
+    expect(o.leverage).toBeUndefined();
   });
 });

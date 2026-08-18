@@ -267,6 +267,12 @@ export interface AppState {
    */
   lastValueLabelsVisible: boolean;
   /**
+   * Plot / hline **names** on last-value labels (`RSI`, `Overbought`, …).
+   * When false, the numeric last value stays; only the left-side title is hidden.
+   * Independent of {@link lastValueLabelsVisible}. Persisted. Default true.
+   */
+  lastValueNamesVisible: boolean;
+  /**
    * Right price-scale decimal places.
    * - `'auto'` — detect from symbol heuristics + recent OHLCV
    * - `0`–`8` — fixed decimals

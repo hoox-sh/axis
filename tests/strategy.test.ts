@@ -15,6 +15,8 @@ import {
   eventsToMarkers,
   buildEquityCurve,
   isNoFillCloseEvent,
+  formatTradeQty,
+  tradeMarkerText,
 } from '../src/results/events.ts';
 
 /** Arrow-only markers (no inBar circles) for length/shape assertions. */
@@ -349,7 +351,7 @@ describe('eventsToMarkers', () => {
     const markers = eventsToMarkers(events, ARROW_ONLY);
     expect(markers).toHaveLength(1);
     expect(markers[0]!.shape).toBe('arrowUp');
-    expect(markers[0]!.text).toBe('L');
+    expect(markers[0]!.text).toBe('Long 1');
   });
 
   it('even with includeOrders, eventsToMarkers ignores cancel kinds', () => {
@@ -433,6 +435,60 @@ describe('eventsToMarkers', () => {
     );
     expect(markers).toHaveLength(1);
     expect(markers[0]!.shape).toBe('arrowUp');
+  });
+});
+
+describe('trade marker qty (Long/Short amount)', () => {
+  it('long entry qty 2 → Long 2', () => {
+    const events = normalizeStrategyEvents([
+      { kind: 'entry', id: 'L', direction: 'long', qty: 2, bar_time: 10, ohlc: [1, 1, 1, 100] },
+    ]);
+    const markers = eventsToMarkers(events, ARROW_ONLY);
+    expect(markers).toHaveLength(1);
+    expect(markers[0]!.text).toBe('Long 2');
+  });
+
+  it('short entry qty 1.5 → Short 1.5', () => {
+    const events = normalizeStrategyEvents([
+      { kind: 'entry', id: 'S', direction: 'short', qty: 1.5, bar_time: 10, ohlc: [1, 1, 1, 100] },
+    ]);
+    const markers = eventsToMarkers(events, ARROW_ONLY);
+    expect(markers).toHaveLength(1);
+    expect(markers[0]!.text).toBe('Short 1.5');
+  });
+
+  it('exit with qty 2 includes amount (id + qty)', () => {
+    const events = normalizeStrategyEvents([
+      { kind: 'entry', id: 'L', direction: 'long', qty: 2, bar_time: 10, ohlc: [1, 1, 1, 100] },
+      { kind: 'close', id: 'X', from_entry: 'L', qty: 2, bar_time: 20, ohlc: [1, 1, 1, 110] },
+    ]);
+    const markers = eventsToMarkers(events, ARROW_ONLY);
+    expect(markers).toHaveLength(2);
+    expect(markers[1]!.text).toContain('2');
+    expect(markers[1]!.text).toBe('X 2');
+  });
+
+  it('missing qty still falls back to id (L / S)', () => {
+    const events = normalizeStrategyEvents([
+      { kind: 'entry', id: 'L', direction: 'long', bar_time: 10, ohlc: [1, 1, 1, 100] },
+      { kind: 'entry', id: 'S', direction: 'short', bar_time: 20, ohlc: [1, 1, 1, 100] },
+    ]);
+    const markers = eventsToMarkers(events, ARROW_ONLY);
+    expect(markers).toHaveLength(2);
+    expect(markers[0]!.text).toBe('L');
+    expect(markers[1]!.text).toBe('S');
+    expect(tradeMarkerText({ kind: 'entry', isShort: false, id: 'L' })).toBe('L');
+    expect(tradeMarkerText({ kind: 'entry', isShort: true, id: 'S' })).toBe('S');
+  });
+});
+
+describe('formatTradeQty', () => {
+  it('prints compact amounts and rejects missing / non-positive', () => {
+    expect(formatTradeQty(1)).toBe('1');
+    expect(formatTradeQty(1.0)).toBe('1');
+    expect(formatTradeQty(0.25)).toBe('0.25');
+    expect(formatTradeQty(0)).toBeUndefined();
+    expect(formatTradeQty(Number.NaN)).toBeUndefined();
   });
 });
 

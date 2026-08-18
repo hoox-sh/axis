@@ -243,6 +243,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     try {
       manager.setPriceScaleLabelsVisible(store.priceScaleLabelsVisible !== false);
       manager.setLastValueLabelsVisible(store.lastValueLabelsVisible !== false);
+      manager.setLastValueNamesVisible(store.lastValueNamesVisible !== false);
     } catch {
       /* label prefs optional */
     }
@@ -532,6 +533,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     void store.compare?.gen;
     void store.chartDataGen;
     void store.bars.length;
+    void store.lastValueNamesVisible;
 
     const mgr = localManager || getManager();
     if (!mgr) return;
@@ -574,6 +576,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     }));
     void store.chartDataGen;
     void store.lastValueLabelsVisible;
+    void store.lastValueNamesVisible;
 
     const mgr = localManager || getManager();
     if (!mgr) return;

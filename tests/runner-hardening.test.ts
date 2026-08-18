@@ -294,6 +294,22 @@ describe('removeIndicator clears stuck running', () => {
   });
 });
 
+describe('runAndApply hidden script gate', () => {
+  it('silent run of a hidden script is skipped (no engine call)', async () => {
+    let fetches = 0;
+    restoreFetch = mockFetch(async () => {
+      fetches += 1;
+      return jsonResponse({ status: 'success', plots: [], series: {}, events: [] });
+    });
+    const { addIndicator } = await import('../src/store');
+    const id = addIndicator('hid', 'plot(close)', 'price', {});
+    setStore('scripts', (s) => s.map((x) => (x.id === id ? { ...x, visible: false } : x)));
+    const r = await runAndApply('plot(close)', id, { silent: true, openResults: false });
+    expect(r.meta?.skipped).toBe('hidden');
+    expect(fetches).toBe(0);
+  });
+});
+
 describe('runAndApply never rejects', () => {
   it('returns error result when engine throws (no unhandled rejection)', async () => {
     restoreFetch = mockFetch(async () => {

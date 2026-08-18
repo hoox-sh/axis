@@ -32,8 +32,6 @@ import {
   store,
   isPanelOpen,
   setPaneVisible,
-  toggleIndicator,
-
   clearDrawingsForSymbol,
   openScriptSettings,
   setSelectedDrawingId,
@@ -105,35 +103,10 @@ export const LayerPanel: Component = () => {
     getManager()?.setVisible(id, next);
   };
 
-  const onToggleIndicator = (id: string, paneId: string, currentlyVisible: boolean) => {
-    toggleIndicator(id);
-    const manager = getManager();
-    if (!manager) return;
-    if (currentlyVisible) {
-      // Hide only this script’s series — keep siblings on the same pane
-      try {
-        if (typeof manager.removeOverlaysForOwner === 'function') {
-          manager.removeOverlaysForOwner(paneId, id);
-        } else {
-          manager.removeOverlays(paneId);
-        }
-      } catch {
-        /* ignore */
-      }
-    } else {
-      // Turning back on — re-run to repaint
-      const script = store.scripts.find((s) => s.id === id);
-      if (script?.code?.trim()) {
-        void import('../indicators/runner').then(({ runAndApply }) => {
-          void runAndApply(script.code, id, {
-            silent: true,
-            openResults: false,
-            inputs: script.inputValues,
-            strategyProps: script.strategyProps,
-          });
-        });
-      }
-    }
+  const onToggleIndicator = (id: string) => {
+    void import('../indicators/visibility').then(({ toggleScriptChartVisible }) => {
+      toggleScriptChartVisible(id);
+    });
   };
 
   const onRemoveIndicator = (id: string, _paneId: string) => {
@@ -434,7 +407,7 @@ export const LayerPanel: Component = () => {
                     label={ind.name}
                     sub={ind.paneId}
                     visible={ind.visible}
-                    onToggle={() => onToggleIndicator(ind.id, ind.paneId, ind.visible)}
+                    onToggle={() => onToggleIndicator(ind.id)}
                     onSettings={() => openScriptSettings(ind.id)}
                     onRemove={() => onRemoveIndicator(ind.id, ind.paneId)}
                   />

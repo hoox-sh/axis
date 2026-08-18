@@ -19,6 +19,7 @@ import {
 } from '../src/store';
 import { listReapplicableScripts } from '../src/indicators/reapply';
 import { detachIndicatorFromChart } from '../src/indicators/detach';
+import { setScriptChartVisible, toggleScriptChartVisible } from '../src/indicators/visibility';
 import {
   ownedOverlayPrefix,
   sanitizeOverlayOwnerId,
@@ -73,6 +74,29 @@ describe('listReapplicableScripts', () => {
     const list = listReapplicableScripts();
     expect(list.map((x) => x.id)).toEqual([a]);
     void b;
+  });
+});
+
+describe('setScriptChartVisible', () => {
+  beforeEach(() => {
+    setStore('scripts', []);
+    setStore('bars', []);
+    setStore('live', { ...store.live, active: false });
+  });
+
+  it('hide flips visible off without throwing when no chart manager', () => {
+    const id = addIndicator('RSI', 'plot(1)', 'ind_r', {});
+    expect(store.scripts.find((s) => s.id === id)?.visible).toBe(true);
+    expect(setScriptChartVisible(id, false)).toBe(false);
+    expect(store.scripts.find((s) => s.id === id)?.visible).toBe(false);
+    expect(toggleScriptChartVisible(id)).toBe(true);
+    expect(store.scripts.find((s) => s.id === id)?.visible).toBe(true);
+  });
+
+  it('hidden scripts are not in the live reapply list', () => {
+    const id = addIndicator('RSI', 'plot(1)', 'ind_r', {});
+    setScriptChartVisible(id, false);
+    expect(listReapplicableScripts().map((s) => s.id)).not.toContain(id);
   });
 });
 

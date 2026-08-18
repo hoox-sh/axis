@@ -175,6 +175,7 @@ const DEFAULTS: AppState = {
   chartType: DEFAULT_CHART_TYPE,
   priceScaleLabelsVisible: true,
   lastValueLabelsVisible: true,
+  lastValueNamesVisible: true,
   priceScaleDecimals: 'auto',
   strategyUi: {
     slippageNextOpen: false,
@@ -389,6 +390,10 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         typeof bag.lastValueLabelsVisible === 'boolean'
           ? bag.lastValueLabelsVisible
           : DEFAULTS.lastValueLabelsVisible,
+      lastValueNamesVisible:
+        typeof bag.lastValueNamesVisible === 'boolean'
+          ? bag.lastValueNamesVisible
+          : DEFAULTS.lastValueNamesVisible,
       priceScaleDecimals: normalizePriceScaleDecimalsMode(
         (bag as { priceScaleDecimals?: unknown }).priceScaleDecimals,
       ),
@@ -1118,6 +1123,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     editorRulerEnabled: s.editorRulerEnabled,
     editorWrapEnabled: s.editorWrapEnabled,
     lastValueLabelsVisible: s.lastValueLabelsVisible,
+    lastValueNamesVisible: s.lastValueNamesVisible,
     priceScaleLabelsVisible: s.priceScaleLabelsVisible,
     priceScaleDecimals: normalizePriceScaleDecimalsMode(s.priceScaleDecimals),
     activePlugins: unwrap(s.activePlugins),

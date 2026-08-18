@@ -31,8 +31,6 @@
 import { Component, For, Show, createMemo, createSignal } from 'solid-js';
 import type { Indicator } from '../store/types';
 import {
-  toggleIndicator,
-
   setIndicatorColor,
   openScriptSettings,
   store,
@@ -42,6 +40,7 @@ import {
   setStatus,
 } from '../store';
 import { getManager } from '../chart/manager-access';
+import { toggleScriptChartVisible } from './visibility';
 import { PLOT_PALETTE } from '../chart/series-factory';
 import { Icons } from '../ui/icons';
 import {
@@ -177,7 +176,7 @@ export const IndicatorCard: Component<Props> = (props) => {
     );
   };
 
-  const toggle = () => toggleIndicator(props.indicator.id);
+  const toggle = () => toggleScriptChartVisible(props.indicator.id);
 
   const remove = () => {
     void import('./detach').then(({ detachIndicatorFromChart }) => {
@@ -254,7 +253,11 @@ export const IndicatorCard: Component<Props> = (props) => {
             type="button"
             class={iconBtn}
             onClick={toggle}
-            title={props.indicator.visible ? 'Hide on chart' : 'Show on chart'}
+            title={
+              props.indicator.visible
+                ? 'Hide — pause live execution and remove plots'
+                : 'Show — run this script on the chart'
+            }
             aria-label={props.indicator.visible ? 'Hide' : 'Show'}
             data-testid="axis-indicator-visibility"
           >

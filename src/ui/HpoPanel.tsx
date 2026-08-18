@@ -20,6 +20,7 @@ import {
 } from '../store';
 import { detectScriptKind } from '../indicators/script-meta';
 import { resolveScriptInputs } from '../results/script-inputs';
+import { applyStrategyPropsToSource } from '../results/strategy-props';
 import { runAndApply } from '../indicators/runner';
 import { defaultParamFromInput, spaceReady } from '../optimize/space';
 import type { ParamSpec } from '../optimize/types';
@@ -49,6 +50,15 @@ function currentInputValues(): Record<string, unknown> {
     return { ...(ind?.inputValues || {}) };
   }
   return { ...(store.editorInputValues || {}) };
+}
+
+function currentStrategyProps(): Record<string, unknown> {
+  const { id } = currentScript();
+  if (id) {
+    const ind = store.scripts.find((s) => s.id === id);
+    return { ...(ind?.strategyProps || {}) };
+  }
+  return { ...(store.editorStrategyProps || {}) };
 }
 
 function downloadText(filename: string, text: string) {
@@ -113,12 +123,13 @@ export const HpoPanel: Component = () => {
       return;
     }
     const { code } = currentScript();
+    const script = applyStrategyPropsToSource(code, currentStrategyProps());
     setError('');
     setBusy(true);
     abort = new AbortController();
     try {
       const snap = await runHpoStudy({
-        script: code,
+        script,
         bars: store.bars || [],
         params: params(),
         fixedInputs: currentInputValues(),

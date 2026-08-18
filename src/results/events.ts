@@ -39,8 +39,9 @@
  * of thousands of phantom exits. Events with missing `qty` are kept for
  * older payloads that omit the field on real fills.
  *
- * Also exports {@link eventsToMarkers}, {@link buildEquityCurve}, exit-id
- * matching, and kind rank for stable sort order.
+ * Also exports {@link eventsToMarkers}, {@link formatTradeQty},
+ * {@link tradeMarkerText}, {@link buildEquityCurve}, exit-id matching, and
+ * kind rank for stable sort order.
  *
  * @module results/events
  */
@@ -442,6 +443,38 @@ export function resolveExitMatchId(ev: StrategyEvent): string {
 }
 
 /**
+ * Format a filled qty for a chart marker (`1`, `1.5`, `0.25`).
+ * Returns `undefined` when missing / non-finite / ≤ 0 (legacy payloads).
+ */
+export function formatTradeQty(qty: unknown): string | undefined {
+  const n = typeof qty === 'number' ? qty : Number(qty);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  const abs = Math.abs(n);
+  if (Math.abs(abs - Math.round(abs)) < 1e-9) return String(Math.round(abs));
+  const trimmed = abs.toFixed(8).replace(/\.?0+$/, '');
+  return trimmed || undefined;
+}
+
+/**
+ * Chart label for one fill: `Long 1` / `Short 2.5` on entries, `X 1` on exits.
+ * Falls back to the order id (or L/S/X) when qty is unknown.
+ */
+export function tradeMarkerText(opts: {
+  kind: 'entry' | 'exit';
+  isShort: boolean;
+  id?: string;
+  qty?: unknown;
+}): string {
+  const amt = formatTradeQty(opts.qty);
+  if (opts.kind === 'entry') {
+    const side = opts.isShort ? 'Short' : 'Long';
+    return amt ? `${side} ${amt}` : opts.id || (opts.isShort ? 'S' : 'L');
+  }
+  const base = opts.id || 'X';
+  return amt ? `${base} ${amt}` : base;
+}
+
+/**
  * Side positions for entry/exit labels.
  * Default: long entry **below**, short entry **above**; exits opposite.
  * When `invert`, long entry **above**, short entry **below**.
@@ -551,7 +584,7 @@ export function eventsToMarkers(
         kind: 'entry',
         isShort,
         color: isShort ? COLOR.shortEntry : COLOR.longEntry,
-        text: id || (isShort ? 'S' : 'L'),
+        text: tradeMarkerText({ kind: 'entry', isShort, id, qty: ev.qty }),
         invertLabels,
         exactOnCandle,
       });
@@ -573,7 +606,7 @@ export function eventsToMarkers(
           kind: 'exit',
           isShort,
           color: COLOR.exit,
-          text: id || 'X',
+          text: tradeMarkerText({ kind: 'exit', isShort, id, qty: ev.qty }),
           invertLabels,
           exactOnCandle,
         });
@@ -596,7 +629,7 @@ export function eventsToMarkers(
           kind: 'exit',
           isShort,
           color: COLOR.exit,
-          text: id || 'X',
+          text: tradeMarkerText({ kind: 'exit', isShort, id, qty: ev.qty }),
           invertLabels,
           exactOnCandle,
         });

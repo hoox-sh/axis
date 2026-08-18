@@ -39,6 +39,7 @@ import type { PaneManager } from './pane-manager';
 import { createLineSeries, PLOT_PALETTE, VOID } from './series-factory';
 import { store } from '../store';
 import { ONCHAIN_EVENTS_SERIES_KEY } from './onchain-events';
+import { seriesLabelTitle } from './last-value-labels';
 
 /** Line series key prefix for on-chain scalars (not under `overlay_`). */
 export const ONCHAIN_SERIES_PREFIX = 'onchain_';
@@ -95,7 +96,7 @@ function ensureOnchainLine(
     try {
       existing.applyOptions({
         color,
-        title,
+        title: seriesLabelTitle(title),
         priceScaleId,
         lastValueVisible,
         priceLineVisible: false,
@@ -111,7 +112,7 @@ function ensureOnchainLine(
       priceScaleId,
       lastValueVisible,
       priceLineVisible: false,
-      title,
+      title: seriesLabelTitle(title),
       color,
     });
   } catch {

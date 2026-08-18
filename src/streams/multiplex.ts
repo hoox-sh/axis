@@ -330,6 +330,10 @@ export function startLive(
   }
 
   currentStop = stop;
+
+  // Visible chart scripts start immediately — do not wait for the first tick
+  // or a manual Run. Hidden scripts stay out of the live loop.
+  scheduleRerun();
 }
 
 /**

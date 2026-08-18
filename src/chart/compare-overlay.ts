@@ -35,6 +35,7 @@ import { getSource } from '../sources/catalog';
 import { pluginKey } from '../plugins/types';
 import { clampHistoryBars, store } from '../store';
 import { normalizeHistoricalBars } from '../data/parse-bars';
+import { seriesLabelTitle } from './last-value-labels';
 
 /** Line series key for the compare symbol (not under `overlay_`). */
 export const COMPARE_SERIES_KEY = 'compare';
@@ -227,7 +228,7 @@ function ensureCompareLine(
     try {
       existing.applyOptions({
         color,
-        title,
+        title: seriesLabelTitle(title),
         priceScaleId,
         lastValueVisible,
         priceLineVisible: false,
@@ -243,7 +244,7 @@ function ensureCompareLine(
       priceScaleId,
       lastValueVisible,
       priceLineVisible: false,
-      title,
+      title: seriesLabelTitle(title),
       color,
     });
   } catch {

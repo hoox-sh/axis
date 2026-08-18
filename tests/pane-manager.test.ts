@@ -16,7 +16,7 @@ beforeAll(() => {
   installLightweightChartsMock();
 });
 
-const { PaneManager, peekOverlayLineTip, toLwcLineData } = await import('../src/chart/pane-manager');
+const { PaneManager, peekOverlayLineTip, toLwcLineData, inferOverlayTitle } = await import('../src/chart/pane-manager');
 
 describe('peekOverlayLineTip', () => {
   it('returns tip when raw length matches expected mapped length', () => {
@@ -240,6 +240,32 @@ describe('PaneManager', () => {
     expect(lastVal).toBe(false);
     expect(pm.toggleLastValueLabelsVisible()).toBe(true);
     expect(lastVal).toBe(true);
+  });
+
+  it('plot name titles toggle clears series title but not last value', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    let title: string | undefined;
+    let lastVal: boolean | undefined;
+    price.series['overlay_RSI'] = {
+      applyOptions: (o: { title?: string; lastValueVisible?: boolean }) => {
+        if (o.title != null) title = o.title;
+        if (o.lastValueVisible != null) lastVal = o.lastValueVisible;
+      },
+    } as never;
+    pm.rememberSeriesTitle('price', 'overlay_RSI', 'RSI');
+    expect(pm.isLastValueNamesVisible()).toBe(true);
+    expect(pm.setLastValueNamesVisible(false)).toBe(false);
+    expect(title).toBe('');
+    expect(lastVal).toBeUndefined();
+    expect(pm.toggleLastValueNamesVisible()).toBe(true);
+    expect(title).toBe('RSI');
+  });
+
+  it('inferOverlayTitle strips owner prefix', () => {
+    expect(inferOverlayTitle('overlay_RSI')).toBe('RSI');
+    expect(inferOverlayTitle('overlay_script1__Overbought')).toBe('Overbought');
+    expect(inferOverlayTitle('overlay_ohlc_Haiken')).toBe('Haiken');
+    expect(inferOverlayTitle('volume')).toBe('Volume');
   });
 
   it('owner-scoped sync drops editor leftovers so last-value labels are not doubled', () => {

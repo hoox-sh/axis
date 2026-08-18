@@ -164,6 +164,22 @@ export function makeOverlayLineKey(name: string, ownerId?: string): string {
   return `${ownedOverlayPrefix(ownerId)}${name}`;
 }
 
+/** Best-effort plot title from a series key when none was remembered. */
+export function inferOverlayTitle(key: string): string {
+  if (key.startsWith(OVERLAY_OHLC_PREFIX)) {
+    const rest = key.slice(OVERLAY_OHLC_PREFIX.length);
+    const cut = rest.indexOf('__');
+    return cut >= 0 ? rest.slice(cut + 2) : rest;
+  }
+  if (key.startsWith('overlay_')) {
+    const rest = key.slice('overlay_'.length);
+    const cut = rest.indexOf('__');
+    return cut >= 0 ? rest.slice(cut + 2) : rest;
+  }
+  if (key === 'volume') return 'Volume';
+  return '';
+}
+
 /** Build OHLC overlay series key. */
 export function makeOverlayOhlcKey(name: string, ownerId?: string): string {
   if (!ownerId) return `${OVERLAY_OHLC_PREFIX}${name}`;
@@ -465,6 +481,13 @@ export class PaneManager {
    * Default on. Independent of {@link priceScaleLabelsVisible}.
    */
   private lastValueLabelsVisible = true;
+  /**
+   * Plot / hline names on last-value labels (UI [T] / Settings).
+   * When false, numeric last values stay; LWC `title` is cleared.
+   */
+  private lastValueNamesVisible = true;
+  /** Intended last-value titles keyed by `paneId:seriesKey` / `paneId:pl:key`. */
+  private lastValueTitleByKey = new Map<string, string>();
   /**
    * Pine plot series kind per overlay key (`${paneId}:overlay_${name}` or
    * `overlay_ohlc_*`). When style/kind changes the series is recreated.
@@ -1641,6 +1664,66 @@ export class PaneManager {
     return this.setLastValueLabelsVisible(!this.lastValueLabelsVisible);
   }
 
+  isLastValueNamesVisible(): boolean {
+    return this.lastValueNamesVisible;
+  }
+
+  /**
+   * Show/hide plot names on last-value labels. Numbers stay if [N] is on.
+   */
+  setLastValueNamesVisible(visible: boolean): boolean {
+    this.lastValueNamesVisible = !!visible;
+    this.applyLastValueNamesToAllSeries();
+    return this.lastValueNamesVisible;
+  }
+
+  toggleLastValueNamesVisible(): boolean {
+    return this.setLastValueNamesVisible(!this.lastValueNamesVisible);
+  }
+
+  /** LWC `title` for a remembered series/hline name (empty when names are off). */
+  displaySeriesTitle(name: string | null | undefined): string {
+    if (!this.lastValueNamesVisible) return '';
+    return name != null ? String(name) : '';
+  }
+
+  rememberSeriesTitle(paneId: string, key: string, name: string): void {
+    this.lastValueTitleByKey.set(`${paneId}:${key}`, name);
+  }
+
+  rememberPriceLineTitle(paneId: string, key: string, name: string): void {
+    this.lastValueTitleByKey.set(`${paneId}:pl:${key}`, name);
+  }
+
+  /**
+   * Apply {@link lastValueNamesVisible} to series + hline titles.
+   */
+  applyLastValueNamesToAllSeries() {
+    const show = this.lastValueNamesVisible;
+    for (const pane of this.getAllPanes()) {
+      for (const [key, series] of Object.entries(pane.series)) {
+        if (!series) continue;
+        if (key.startsWith('bgcolor_')) continue;
+        const stored = this.lastValueTitleByKey.get(`${pane.id}:${key}`);
+        const name = stored ?? inferOverlayTitle(key);
+        try {
+          series.applyOptions({ title: show ? name : '' });
+        } catch {
+          /* ignore */
+        }
+      }
+      for (const [key, pl] of Object.entries(pane.priceLines)) {
+        const stored = this.lastValueTitleByKey.get(`${pane.id}:pl:${key}`);
+        const name = stored ?? key;
+        try {
+          pl.line.applyOptions({ title: show ? name : '' });
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
   /**
    * Apply {@link lastValueLabelsVisible} to all series and hline price-lines.
    * Skips bgcolor underlays (always unlabeled).
@@ -2057,7 +2140,9 @@ export class PaneManager {
         try {
           const opts: Record<string, unknown> = {
             lastValueVisible: this.lastValueLabelsVisible,
+            title: this.displaySeriesTitle(line.name),
           };
+          this.rememberSeriesTitle(paneId, key, line.name);
           if (line.color) {
             if (seriesKind === 'area') {
               opts.lineColor = line.color;
@@ -2097,7 +2182,11 @@ export class PaneManager {
             line.linestyle,
           );
           try {
-            series.applyOptions({ lastValueVisible: this.lastValueLabelsVisible });
+            series.applyOptions({
+              lastValueVisible: this.lastValueLabelsVisible,
+              title: this.displaySeriesTitle(line.name),
+            });
+            this.rememberSeriesTitle(paneId, key, line.name);
           } catch {
             /* ignore */
           }
@@ -2152,8 +2241,9 @@ export class PaneManager {
           lineWidth: lw,
           lineStyle: mapLineStyle(line.linestyle),
           axisLabelVisible: this.lastValueLabelsVisible,
-          title: line.name,
+          title: this.displaySeriesTitle(line.name),
         };
+        this.rememberPriceLineTitle(paneId, plKey, line.name);
         if (existingPl && existingPl.host === host) {
           try {
             existingPl.line.applyOptions(opts);
@@ -2370,8 +2460,9 @@ export class PaneManager {
         try {
           const opts: Record<string, unknown> = {
             lastValueVisible: this.lastValueLabelsVisible,
-            title: spec.name,
+            title: this.displaySeriesTitle(spec.name),
           };
+          this.rememberSeriesTitle(paneId, key, spec.name);
           if (spec.color) {
             if (seriesKind === 'plotcandle') {
               opts.upColor = c;
@@ -2396,7 +2487,11 @@ export class PaneManager {
               ? createPlotCandleOverlaySeries(pane.chart, spec.name, spec.color)
               : createPlotBarOverlaySeries(pane.chart, spec.name, spec.color);
           try {
-            series.applyOptions({ lastValueVisible: this.lastValueLabelsVisible });
+            series.applyOptions({
+              lastValueVisible: this.lastValueLabelsVisible,
+              title: this.displaySeriesTitle(spec.name),
+            });
+            this.rememberSeriesTitle(paneId, key, spec.name);
           } catch {
             /* ignore */
           }

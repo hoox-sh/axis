@@ -84,7 +84,7 @@ Pairing rules: entry-like kinds open by `id`; exit/close kinds match id or sole 
 
 ### Chart coupling
 
-- Trade markers on price pane (`eventsToMarkers`)
+- Trade markers on the price pane (`eventsToMarkers`) show filled size as `Long N` / `Short N` (exits: order id + qty); missing engine qty keeps the id / `L`/`S`/`X` fallback
 - Scroll-to-time on trade row click
 - Equity curve series when strategy events warrant (`buildEquityCurve`)
 - Status bar snippet: closed trade count · net PnL when available

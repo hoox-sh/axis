@@ -22,7 +22,8 @@
  * left of the right price scale, above the time (month) axis.
  *
  * **[A]** auto-scale · **[L]** logarithmic · **[$]** right scale labels ·
- * **[N]** series last-value / name labels · **[.n]** price decimals (auto/0–8).
+ * **[N]** series last-value labels · **[T]** plot names on those labels ·
+ * **[.n]** price decimals (auto/0–8).
  *
  * Mounted via portal into the price pane DOM (`paneDomId('price')`) so volume
  * / indicator panes do not push the cluster to the host bottom-right.
@@ -56,7 +57,7 @@ const TIME_SCALE_FALLBACK_PX = 26;
 const GUTTER_GAP_PX = 4;
 
 /**
- * [A][L][$][N] cluster for the price pane — sits in the plot-area corner
+ * [A][L][$][N][T] cluster for the price pane — sits in the plot-area corner
  * (above time scale, left of right price scale).
  */
 export const ChartScaleControls: Component = () => {
@@ -64,6 +65,7 @@ export const ChartScaleControls: Component = () => {
   const [logOn, setLogOn] = createSignal(false);
   const [labelsOn, setLabelsOn] = createSignal(true);
   const [namesOn, setNamesOn] = createSignal(true);
+  const [titlesOn, setTitlesOn] = createSignal(true);
   /** Price pane host for portal mount (null until manager creates it). */
   const [paneEl, setPaneEl] = createSignal<HTMLElement | null>(null);
   /** Dynamic offsets so we clear the LWC time axis + price gutter. */
@@ -78,12 +80,14 @@ export const ChartScaleControls: Component = () => {
       // Fall back to persisted preference before manager is ready
       setLabelsOn(store.priceScaleLabelsVisible !== false);
       setNamesOn(store.lastValueLabelsVisible !== false);
+      setTitlesOn(store.lastValueNamesVisible !== false);
       return;
     }
     setAutoOn(m.isPriceAutoScale());
     setLogOn(m.isPriceLogScale());
     setLabelsOn(m.isPriceScaleLabelsVisible());
     setNamesOn(m.isLastValueLabelsVisible());
+    setTitlesOn(m.isLastValueNamesVisible());
   };
 
   /** Resolve price-pane host + measure scale gutters for corner placement. */
@@ -126,6 +130,7 @@ export const ChartScaleControls: Component = () => {
     if (m) {
       if (store.priceScaleLabelsVisible === false) m.setPriceScaleLabelsVisible(false);
       if (store.lastValueLabelsVisible === false) m.setLastValueLabelsVisible(false);
+      if (store.lastValueNamesVisible === false) m.setLastValueNamesVisible(false);
     }
     syncFromManager();
     measure();
@@ -185,6 +190,15 @@ export const ChartScaleControls: Component = () => {
     setNamesOn(want);
   });
 
+  createEffect(() => {
+    const want = store.lastValueNamesVisible !== false;
+    const m = getManager();
+    if (m && m.isLastValueNamesVisible() !== want) {
+      m.setLastValueNamesVisible(want);
+    }
+    setTitlesOn(want);
+  });
+
   // Multi-pane layout / volume height can move the price pane
   createEffect(() => {
     void store.panes;
@@ -223,6 +237,16 @@ export const ChartScaleControls: Component = () => {
       : !(store.lastValueLabelsVisible !== false);
     setNamesOn(next);
     setStore('lastValueLabelsVisible', next);
+    persist();
+  };
+
+  const onTitles = () => {
+    const m = getManager();
+    const next = m
+      ? m.toggleLastValueNamesVisible()
+      : !(store.lastValueNamesVisible !== false);
+    setTitlesOn(next);
+    setStore('lastValueNamesVisible', next);
     persist();
   };
 
@@ -316,13 +340,24 @@ export const ChartScaleControls: Component = () => {
       <button
         type="button"
         class={btnClass(namesOn())}
-        title="Show series last-value / name labels on the right (N)"
+        title="Show series last-value labels on the right (N)"
         aria-pressed={namesOn()}
-        aria-label="Series name labels"
+        aria-label="Series last-value labels"
         data-testid="axis-chart-scale-names"
         onClick={onNames}
       >
         N
+      </button>
+      <button
+        type="button"
+        class={btnClass(titlesOn())}
+        title="Show plot names on last-value labels (T)"
+        aria-pressed={titlesOn()}
+        aria-label="Plot name labels"
+        data-testid="axis-chart-scale-titles"
+        onClick={onTitles}
+      >
+        T
       </button>
       <button
         type="button"

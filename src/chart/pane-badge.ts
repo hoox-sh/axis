@@ -40,7 +40,6 @@ import {
   openScriptSettings,
   setPaneVisible,
   store,
-  toggleIndicator,
 } from '../store';
 import { getManager } from './manager-access';
 
@@ -98,32 +97,11 @@ function reRunScript(id: string, code: string) {
   });
 }
 
-function toggleScriptVisible(id: string, paneId: string, currentlyVisible: boolean) {
-  toggleIndicator(id);
-  const manager = getManager();
-  if (!manager) return;
-  if (currentlyVisible) {
-    // Hide only this script’s series — leave siblings intact
-    try {
-      if (typeof manager.removeOverlaysForOwner === 'function') {
-        manager.removeOverlaysForOwner(paneId, id);
-      } else {
-        manager.removeOverlays(paneId);
-        for (const s of store.scripts) {
-          if (s.paneId === paneId && s.visible && s.id !== id && s.code?.trim()) {
-            reRunScript(s.id, s.code);
-          }
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-  } else {
-    // Turning back on — re-run to repaint
-    const script = store.scripts.find((s) => s.id === id);
-    if (script?.code?.trim()) reRunScript(id, script.code);
-  }
-  refreshPaneBadge(paneId);
+function toggleScriptVisible(id: string, paneId: string, _currentlyVisible: boolean) {
+  void import('../indicators/visibility').then(({ toggleScriptChartVisible }) => {
+    toggleScriptChartVisible(id);
+    refreshPaneBadge(paneId);
+  });
 }
 
 function removeScript(id: string, paneId: string) {

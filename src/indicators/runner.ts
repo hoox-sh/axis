@@ -495,7 +495,11 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
         ? opts.strategyProps
         : applied?.strategyProps && Object.keys(applied.strategyProps).length
           ? applied.strategyProps
-          : undefined;
+          : !indicatorId &&
+              store.editorStrategyProps &&
+              Object.keys(store.editorStrategyProps).length
+            ? store.editorStrategyProps
+            : undefined;
     const scriptForEngine = applyStrategyPropsToSource(script, strategyProps);
     let engineLibraries: import('../plugins/types').EngineLibrarySource[] | undefined;
     try {
@@ -698,6 +702,35 @@ export async function runAndApply(
   if (silent && isInteractiveRunInFlight()) {
     setStore('live', 'needsRerun', true);
     return deferredSilentResult();
+  }
+
+  // Hidden scripts are not executed (live loop + silent reapply). Interactive
+  // Run while hidden turns the script back on first.
+  if (indicatorId) {
+    const applied = store.scripts.find((s) => s.id === indicatorId);
+    if (applied && applied.visible === false) {
+      if (silent) {
+        return {
+          status: 'success',
+          plots: [],
+          series: {},
+          events: [],
+          meta: { skipped: 'hidden', ms: 0 },
+        };
+      }
+      try {
+        const { setScriptChartVisible } = await import('./visibility');
+        setScriptChartVisible(indicatorId, true);
+      } catch {
+        /* store-only fallback */
+        try {
+          const { updateIndicator } = await import('../store');
+          updateIndicator(indicatorId, { visible: true });
+        } catch {
+          /* ignore */
+        }
+      }
+    }
   }
 
   const epoch = beginRunEpoch();

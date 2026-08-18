@@ -29,6 +29,8 @@
  * `import … as alias` names and members after them (`m.Easing`) are
  * `variableName.special` / `propertyName.special` so the theme can color
  * library exports apart from user variables and built-in namespaces.
+ * Built-in types (`int` / `float` / …) and declared UDTs / enums are
+ * `typeName` (theme: warm + bold).
  *
  * Completions/hover live in `pyne-lsp`.
  *
@@ -55,6 +57,10 @@ export type PineHighlightState = {
   importName: string | null;
   /** Import aliases seen so far in this buffer (`m`, `motion`, …). */
   importAliases: string[];
+  /** After `type` / `enum` — next ident is the declared name. */
+  afterTypeDecl: boolean;
+  /** User-defined type / enum names seen so far (`Point`, `Easing`, …). */
+  userTypes: string[];
 };
 
 export function defaultPineHighlightState(): PineHighlightState {
@@ -68,6 +74,8 @@ export function defaultPineHighlightState(): PineHighlightState {
     afterAs: false,
     importName: null,
     importAliases: [],
+    afterTypeDecl: false,
+    userTypes: [],
   };
 }
 
@@ -78,6 +86,8 @@ function ensureState(state: PineHighlightState): PineHighlightState {
   if (state.inImport == null) state.inImport = false;
   if (state.afterAs == null) state.afterAs = false;
   if (state.importName === undefined) state.importName = null;
+  if (state.afterTypeDecl == null) state.afterTypeDecl = false;
+  if (!state.userTypes) state.userTypes = [];
   return state;
 }
 
@@ -141,6 +151,8 @@ const TYPES = new Set([
   'polyline',
   'linefill',
   'chart.point',
+  'series',
+  'simple',
 ]);
 
 const NAMESPACES = new Set([
@@ -226,6 +238,18 @@ function addImportAlias(state: PineHighlightState, word: string) {
   if (word && !state.importAliases.includes(word)) state.importAliases.push(word);
 }
 
+function isUserType(state: PineHighlightState, word: string): boolean {
+  return state.userTypes.includes(word);
+}
+
+function addUserType(state: PineHighlightState, word: string) {
+  if (word && !state.userTypes.includes(word)) state.userTypes.push(word);
+}
+
+function isTypeIdent(state: PineHighlightState, word: string): boolean {
+  return TYPES.has(word) || isUserType(state, word);
+}
+
 const OP_RE = /^(?:=>|\?\?|:=|\+=|-=|\*=|\/=|%=|==|!=|<=|>=|[+\-*/%=<>!?:])/;
 
 function eatString(stream: StringStream, state: PineHighlightState): string {
@@ -272,14 +296,20 @@ const pyneParser: StreamParser<PineHighlightState> = {
     afterAs: !!s.afterAs,
     importName: s.importName ?? null,
     importAliases: s.importAliases ? s.importAliases.slice() : [],
+    afterTypeDecl: !!s.afterTypeDecl,
+    userTypes: s.userTypes ? s.userTypes.slice() : [],
   }),
   token(stream, state) {
     ensureState(state);
-    if (stream.sol() && state.inImport && !state.afterAs) {
-      // `import ns/Lib/1` with no `as` — default alias is the library name
-      if (state.importName) addImportAlias(state, state.importName);
-      state.inImport = false;
-      state.importName = null;
+    if (stream.sol()) {
+      // `type Name` / `enum Name` are same-line; do not steal the next line's `float`.
+      state.afterTypeDecl = false;
+      if (state.inImport && !state.afterAs) {
+        // `import ns/Lib/1` with no `as` — default alias is the library name
+        if (state.importName) addImportAlias(state, state.importName);
+        state.inImport = false;
+        state.importName = null;
+      }
     }
 
     if (state.stringQuote) return eatString(stream, state);
@@ -361,6 +391,8 @@ const pyneParser: StreamParser<PineHighlightState> = {
         state.afterDot = false;
         // Keep the lib chain alive for `m.Easing.linear`
         if (!libMember) state.afterLibAlias = false;
+        // Imported UDT / enum (`m.Easing`) — type color + bold, not a method.
+        if (libMember && /^[A-Z][A-Za-z0-9]*$/.test(word)) return 'typeName';
         return libMember ? 'propertyName.special' : 'propertyName';
       }
       if (KEYWORDS.has(word)) {
@@ -377,15 +409,21 @@ const pyneParser: StreamParser<PineHighlightState> = {
           state.afterAs = false;
           state.importName = null;
           state.afterExport = false;
+          state.afterTypeDecl = false;
         } else if (word === 'as' && state.inImport) {
           state.afterAs = true;
         } else if (word === 'export') {
           state.afterExport = true;
+          state.afterTypeDecl = false;
+        } else if (word === 'type' || word === 'enum') {
+          state.afterTypeDecl = true;
         } else if (state.afterExport && EXPORT_KINDS.has(word)) {
-          // export enum/type/method/const — name comes next
+          // export method/const/var — name comes next
           state.afterExport = true;
+          state.afterTypeDecl = false;
         } else {
           state.afterExport = false;
+          state.afterTypeDecl = false;
         }
         return 'definitionKeyword';
       }
@@ -412,11 +450,22 @@ const pyneParser: StreamParser<PineHighlightState> = {
         return 'namespace';
       }
 
+      if (state.afterTypeDecl) {
+        addUserType(state, word);
+        state.afterTypeDecl = false;
+        state.afterExport = false;
+        return 'typeName';
+      }
+
       const dotted = !!stream.match(/^\s*\./, false);
       if (dotted && isImportAlias(state, word)) {
         state.afterLibAlias = true;
         state.afterExport = false;
         return 'variableName.special';
+      }
+      if (dotted && isUserType(state, word)) {
+        state.afterExport = false;
+        return 'typeName';
       }
       if (dotted && (NAMESPACES.has(word) || TYPES.has(word))) {
         state.afterExport = false;
@@ -425,9 +474,9 @@ const pyneParser: StreamParser<PineHighlightState> = {
       if (state.afterExport) {
         state.afterExport = false;
         if (stream.match(/^\s*\(/, false)) return 'variableName.special';
-        return TYPES.has(word) ? 'typeName' : 'variableName.special';
+        return isTypeIdent(state, word) ? 'typeName' : 'variableName.special';
       }
-      if (TYPES.has(word)) return 'typeName';
+      if (isTypeIdent(state, word)) return 'typeName';
       if (NAMESPACES.has(word)) return 'namespace';
       if (SERIES.has(word)) return 'variableName.standard';
       if (isImportAlias(state, word)) return 'variableName.special';

@@ -184,7 +184,8 @@ export const STRATEGY_PROP_CATALOG: readonly Omit<StrategyPropDef, 'value'>[] = 
     type: 'bool',
     default: false,
     group: 'Execution',
-    tooltip: 'Fill market orders at the close of the bar that generates them.',
+    tooltip:
+      'TV: fill at the generating bar’s close. PYNE already fills on the visit bar (close). This flag is stored but not a separate broker mode.',
   },
   {
     id: 'calc_on_order_fills',
@@ -192,7 +193,8 @@ export const STRATEGY_PROP_CATALOG: readonly Omit<StrategyPropDef, 'value'>[] = 
     type: 'bool',
     default: false,
     group: 'Execution',
-    tooltip: 'Recalculate the strategy after an order fills within a bar.',
+    tooltip:
+      'TV: re-run after an intra-bar fill. Not implemented in PYNE — changing this does not change fills.',
   },
   {
     id: 'calc_on_every_tick',
@@ -200,7 +202,8 @@ export const STRATEGY_PROP_CATALOG: readonly Omit<StrategyPropDef, 'value'>[] = 
     type: 'bool',
     default: false,
     group: 'Execution',
-    tooltip: 'Recalculate on every realtime tick (not only bar close).',
+    tooltip:
+      'TV: re-run on every realtime tick. AXIS live re-runs use Settings → Live (every tick / bar close), not this kwarg.',
   },
 ] as const;
 
@@ -446,14 +449,23 @@ export function resolveStrategyProps(
   });
 }
 
-/** Map field defs → override payload (only keys that differ from declaration defaults). */
+function samePropValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a === 'number' && typeof b === 'number') {
+    return Number.isFinite(a) && Number.isFinite(b) && a === b;
+  }
+  if (a == null && b == null) return true;
+  return String(a) === String(b);
+}
+
+/** Persist only values that differ from the declaration (or catalog) default. */
 export function strategyOverridesFromDefs(
   defs: StrategyPropDef[],
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const d of defs) {
     const v = d.value !== undefined ? d.value : d.default;
-    // Always persist explicit values so re-runs are stable
+    if (samePropValue(v, d.default)) continue;
     out[d.id] = v;
   }
   return out;

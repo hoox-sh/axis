@@ -152,6 +152,9 @@ export const SettingsDialog: Component<Props> = (props) => {
   const [lastValueLabels, setLastValueLabels] = createSignal(
     store.lastValueLabelsVisible !== false,
   );
+  const [lastValueNames, setLastValueNames] = createSignal(
+    store.lastValueNamesVisible !== false,
+  );
   const [slippageNextOpen, setSlippageNextOpen] = createSignal(
     !!store.strategyUi?.slippageNextOpen,
   );
@@ -252,6 +255,7 @@ export const SettingsDialog: Component<Props> = (props) => {
         setUiScaleLocal(clampUiScale(store.uiScale ?? 1));
         setPriceScaleLabels(store.priceScaleLabelsVisible !== false);
         setLastValueLabels(store.lastValueLabelsVisible !== false);
+        setLastValueNames(store.lastValueNamesVisible !== false);
         setSlippageNextOpen(!!store.strategyUi?.slippageNextOpen);
         setInvertTradeLabels(!!store.strategyUi?.invertTradeLabels);
         setExactOnCandle(store.strategyUi?.exactOnCandle !== false);
@@ -294,6 +298,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     const nextUiScale = clampUiScale(uiScale());
     const nextPriceScaleLabels = priceScaleLabels();
     const nextLastValueLabels = lastValueLabels();
+    const nextLastValueNames = lastValueNames();
     const nextSlippage = slippageNextOpen();
     const nextInvertLabels = invertTradeLabels();
     const nextExactMarks = exactOnCandle();
@@ -317,6 +322,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     setStore('uiScale', nextUiScale);
     setStore('priceScaleLabelsVisible', nextPriceScaleLabels);
     setStore('lastValueLabelsVisible', nextLastValueLabels);
+    setStore('lastValueNamesVisible', nextLastValueNames);
     setStore('strategyUi', {
       slippageNextOpen: nextSlippage,
       invertTradeLabels: nextInvertLabels,
@@ -971,10 +977,31 @@ export const SettingsDialog: Component<Props> = (props) => {
                   data-testid="axis-settings-last-value-labels"
                 />
                 <span>
-                  <span class="text-[12px] text-text">Series name / last-value labels</span>
+                  <span class="text-[12px] text-text">Series last-value labels</span>
                   <span class="block text-[10px] text-text-faint mt-0.5">
-                    Show series titles and last prices on the right scale (plots, volume,
-                    hlines). Same as the chart [N] control. Independent of [$].
+                    Show last prices on the right scale (plots, volume, hlines).
+                    Same as the chart [N] control. Independent of [$].
+                  </span>
+                </span>
+              </label>
+
+              <label
+                class="flex items-start gap-2 cursor-pointer mb-3"
+                for="axis-last-value-names"
+              >
+                <input
+                  id="axis-last-value-names"
+                  type="checkbox"
+                  class="mt-0.5"
+                  checked={lastValueNames()}
+                  onChange={(e) => setLastValueNames(e.currentTarget.checked)}
+                  data-testid="axis-settings-last-value-names"
+                />
+                <span>
+                  <span class="text-[12px] text-text">Plot names on last-value labels</span>
+                  <span class="block text-[10px] text-text-faint mt-0.5">
+                    Show RSI / Overbought titles next to the last value. Off
+                    keeps the number only. Same as the chart [T] control.
                   </span>
                 </span>
               </label>

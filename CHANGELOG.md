@@ -15,6 +15,17 @@ _Generated/updated: 2026-08-17 · 229 commits · describe-tag: `v2.0.13`_
 
 ## [Unreleased]
 
+### Added
+
+- **Strategy chart trade size** — entry/exit markers print `Long N` / `Short N` (and exit id + qty) so the filled amount is visible on the chart, not only the order id.
+- **Hide plot names on last-value labels** — Settings and chart **[T]** clear `RSI` / `Overbought` titles beside the last value; the numeric label stays. Independent of **[N]**.
+
+### Improved
+
+- **Live scripts auto-run** — starting a stream immediately re-runs every **visible** script on the chart (no extra Run). Hide pauses execution and clears that script’s plots; show re-runs it.
+- **Editor type highlighting** — `int` / `float` / `string` / `series` / … and declared UDTs / enums (`type Point`, `export enum Easing`, `m.Easing`) use the type token in **bold**.
+- **Strategy Properties wiring** — Apply persists only changed `strategy()` kwargs (so leverage is not overwritten by default margin %). Editor Properties apply on isolate/HPO runs. Execution flags are documented as not implemented in PYNE.
+
 ### Fixed
 
 - **Last-bar / `varip` drawings** — `line.new` / `box.new` / polylines / linefills that extend one bar past the series (`bar_index + 1`) are no longer snapped to the last candle (that flattened them into a vertical tick). Labels still clamp `timenow` onto the last bar. Historical `varip` **plots** already render as a normal 1-sample-per-bar series (AXIS does not send `realtime_last_bar`; enabling it would reset last-bar `varip` cells under pyne’s current re-init).
