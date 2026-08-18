@@ -308,6 +308,71 @@ describe('runAndApply hidden script gate', () => {
     expect(r.meta?.skipped).toBe('hidden');
     expect(fetches).toBe(0);
   });
+
+  it('hide after engine start skips chart apply', async () => {
+    let releaseSlow: (() => void) | null = null;
+    const slowGate = new Promise<void>((resolve) => {
+      releaseSlow = resolve;
+    });
+    restoreFetch = mockFetch(async () => {
+      await slowGate;
+      return jsonResponse({
+        status: 'success',
+        plots: SAMPLE_BARS.map(() => 1),
+        series: { p: SAMPLE_BARS.map(() => 1) },
+        events: [],
+        meta: { script_name: 'hid', overlay: true },
+      });
+    });
+    const { addIndicator } = await import('../src/store');
+    const id = addIndicator('hid', 'plot(close)', 'price', {});
+    const p = runAndApply('plot(close)', id, { silent: true, openResults: false });
+    await new Promise((r) => setTimeout(r, 10));
+    setStore('scripts', (s) => s.map((x) => (x.id === id ? { ...x, visible: false } : x)));
+    releaseSlow!();
+    const r = await p;
+    expect(r.meta?.skipped).toBe('hidden');
+    expect(r.status).toBe('success');
+  });
+});
+
+describe('runScript strategyProps bag', () => {
+  it('explicit empty bag does not merge leftover editor props', async () => {
+    const src = '//@version=6\nstrategy("T", initial_capital=1000)\nstrategy.entry("L", strategy.long)';
+    setStore('editorStrategyProps', { initial_capital: 99999, leverage: 10 });
+    let sent = '';
+    restoreFetch = mockFetch(async (_input, init) => {
+      try {
+        const body = JSON.parse(String(init?.body || '{}')) as { script?: string };
+        sent = String(body.script || '');
+      } catch {
+        sent = '';
+      }
+      return jsonResponse({ status: 'success', plots: [], series: {}, events: [] });
+    });
+    await runScript(src, { isolate: true, silent: true, strategyProps: {}, bars: SAMPLE_BARS });
+    expect(sent).toContain('initial_capital=1000');
+    expect(sent).not.toContain('99999');
+    expect(sent).not.toContain('leverage');
+  });
+
+  it('isolate without a bag does not fall back to editorStrategyProps', async () => {
+    const src = '//@version=6\nstrategy("T", initial_capital=1000)\nstrategy.entry("L", strategy.long)';
+    setStore('editorStrategyProps', { initial_capital: 42 });
+    let sent = '';
+    restoreFetch = mockFetch(async (_input, init) => {
+      try {
+        const body = JSON.parse(String(init?.body || '{}')) as { script?: string };
+        sent = String(body.script || '');
+      } catch {
+        sent = '';
+      }
+      return jsonResponse({ status: 'success', plots: [], series: {}, events: [] });
+    });
+    await runScript(src, { isolate: true, silent: true, bars: SAMPLE_BARS });
+    expect(sent).toContain('initial_capital=1000');
+    expect(sent).not.toContain('initial_capital=42');
+  });
 });
 
 describe('runAndApply never rejects', () => {

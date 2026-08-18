@@ -194,6 +194,8 @@ async function evalWindow(
     silent: true,
     claimEpoch: false,
     inputs,
+    // Study source is already rewritten; empty bag = do not merge editor leftovers.
+    strategyProps: {},
     bars,
     signal,
   });

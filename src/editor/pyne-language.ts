@@ -26,11 +26,12 @@
  * function names before `(`.
  *
  * Series builtins (`close`, `bar_index`) are `variableName.standard`;
- * `import … as alias` names and members after them (`m.Easing`) are
+ * `import … as alias` names and members after them (`m.easing`) are
  * `variableName.special` / `propertyName.special` so the theme can color
  * library exports apart from user variables and built-in namespaces.
- * Built-in types (`int` / `float` / …) and declared UDTs / enums are
- * `typeName` (theme: warm + bold).
+ * Built-in types (`int` / `float` / …), `series` / `simple` in qualifier
+ * position, imported UDTs (`m.Easing.linear`), and declared UDTs / enums
+ * are `typeName` (theme: warm + bold).
  *
  * Completions/hover live in `pyne-lsp`.
  *
@@ -151,9 +152,10 @@ const TYPES = new Set([
   'polyline',
   'linefill',
   'chart.point',
-  'series',
-  'simple',
 ]);
+
+/** Type1 qualifiers — not reserved; only `typeName` before a real type. */
+const TYPE_QUALIFIERS = new Set(['series', 'simple']);
 
 const NAMESPACES = new Set([
   'ta',
@@ -248,6 +250,22 @@ function addUserType(state: PineHighlightState, word: string) {
 
 function isTypeIdent(state: PineHighlightState, word: string): boolean {
   return TYPES.has(word) || isUserType(state, word);
+}
+
+/** `series float x` / `ma(series float src)` — not `series = close` / `plot(series)`. */
+function isTypeQualifier(state: PineHighlightState, word: string, stream: StringStream): boolean {
+  if (!TYPE_QUALIFIERS.has(word)) return false;
+  const ahead = stream.match(/^\s+([A-Za-z_][\w]*)/, false);
+  if (!ahead || typeof ahead === 'boolean') return false;
+  return isTypeIdent(state, ahead[1] ?? '');
+}
+
+/** Imported UDT / enum (`m.Easing`) — not `m.SuperTrend(` or ALLCAPS `m.RSI`. */
+function isImportedTypeMember(word: string, stream: StringStream): boolean {
+  if (!/^[A-Z][A-Za-z0-9]*$/.test(word)) return false;
+  if (/^[A-Z][A-Z0-9_]*$/.test(word)) return false;
+  if (stream.match(/^\s*\(/, false)) return false;
+  return true;
 }
 
 const OP_RE = /^(?:=>|\?\?|:=|\+=|-=|\*=|\/=|%=|==|!=|<=|>=|[+\-*/%=<>!?:])/;
@@ -363,11 +381,13 @@ const pyneParser: StreamParser<PineHighlightState> = {
     if (stream.match(OP_RE)) {
       state.afterDot = false;
       state.afterLibAlias = false;
+      state.afterTypeDecl = false;
       return 'operator';
     }
 
     if (stream.match('.')) {
       state.afterDot = true;
+      state.afterTypeDecl = false;
       return 'punctuation';
     }
 
@@ -375,6 +395,7 @@ const pyneParser: StreamParser<PineHighlightState> = {
       const ch = stream.current();
       state.afterDot = false;
       state.afterLibAlias = false;
+      state.afterTypeDecl = false;
       if (ch === ';' && state.inImport) {
         if (state.importName && !state.afterAs) addImportAlias(state, state.importName);
         state.inImport = false;
@@ -391,8 +412,8 @@ const pyneParser: StreamParser<PineHighlightState> = {
         state.afterDot = false;
         // Keep the lib chain alive for `m.Easing.linear`
         if (!libMember) state.afterLibAlias = false;
-        // Imported UDT / enum (`m.Easing`) — type color + bold, not a method.
-        if (libMember && /^[A-Z][A-Za-z0-9]*$/.test(word)) return 'typeName';
+        // UDT / enum (`m.Easing.linear`, `m.Point.new`) — not `m.SuperTrend(` / `m.RSI`.
+        if (libMember && isImportedTypeMember(word, stream)) return 'typeName';
         return libMember ? 'propertyName.special' : 'propertyName';
       }
       if (KEYWORDS.has(word)) {
@@ -417,6 +438,7 @@ const pyneParser: StreamParser<PineHighlightState> = {
           state.afterTypeDecl = false;
         } else if (word === 'type' || word === 'enum') {
           state.afterTypeDecl = true;
+          state.afterExport = false;
         } else if (state.afterExport && EXPORT_KINDS.has(word)) {
           // export method/const/var — name comes next
           state.afterExport = true;
@@ -476,7 +498,7 @@ const pyneParser: StreamParser<PineHighlightState> = {
         if (stream.match(/^\s*\(/, false)) return 'variableName.special';
         return isTypeIdent(state, word) ? 'typeName' : 'variableName.special';
       }
-      if (isTypeIdent(state, word)) return 'typeName';
+      if (isTypeQualifier(state, word, stream) || isTypeIdent(state, word)) return 'typeName';
       if (NAMESPACES.has(word)) return 'namespace';
       if (SERIES.has(word)) return 'variableName.standard';
       if (isImportAlias(state, word)) return 'variableName.special';
@@ -486,6 +508,7 @@ const pyneParser: StreamParser<PineHighlightState> = {
     }
     state.afterDot = false;
     state.afterLibAlias = false;
+    state.afterTypeDecl = false;
 
     stream.next();
     return null;
@@ -555,6 +578,7 @@ export function advancePineLineState(
     ...defaultPineHighlightState(),
     ...state,
     importAliases: state.importAliases ? state.importAliases.slice() : [],
+    userTypes: state.userTypes ? state.userTypes.slice() : [],
   };
   const stream = makeLineStream(line);
   while (!stream.eol()) {

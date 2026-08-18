@@ -117,6 +117,7 @@ function resetStoreBasics() {
   setStore('lastRunMs', null);
   setStore('drawingTool', 'cursor');
   setStore('drawings', []);
+  setStore('lastValueNamesVisible', true);
   localStorage.removeItem(STORAGE_KEY);
 }
 
@@ -617,6 +618,20 @@ describe('parsePersistedState / corrupt hydrate', () => {
     expect(overlay?.interval).toBe('4h');
     expect(overlay?.activePlugins?.engine).toBe('pyodide');
     expect(overlay?.engine).toBe('pyodide');
+  });
+
+  it('parsePersistedState keeps lastValueNamesVisible false; missing key defaults true', () => {
+    const off = parsePersistedState(JSON.stringify({ lastValueNamesVisible: false }));
+    expect(off?.lastValueNamesVisible).toBe(false);
+    const missing = parsePersistedState(JSON.stringify({ symbol: 'BTCUSDT' }));
+    expect(missing?.lastValueNamesVisible).toBe(true);
+    setStore('lastValueNamesVisible', false);
+    expect(flushPersist()).toBe(true);
+    const bag = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as {
+      lastValueNamesVisible?: boolean;
+    };
+    expect(bag.lastValueNamesVisible).toBe(false);
+    setStore('lastValueNamesVisible', true);
   });
 });
 

@@ -20,10 +20,13 @@ import {
 import { listReapplicableScripts } from '../src/indicators/reapply';
 import { detachIndicatorFromChart } from '../src/indicators/detach';
 import { setScriptChartVisible, toggleScriptChartVisible } from '../src/indicators/visibility';
+import { setManager, setDrawingLayer } from '../src/chart/manager-access';
 import {
   ownedOverlayPrefix,
   sanitizeOverlayOwnerId,
 } from '../src/chart/pane-manager';
+import { mockFetch, jsonResponse } from './helpers/mock-fetch';
+import { _resetMultiplexForTests } from '../src/streams/multiplex';
 
 describe('sanitizePersistedScripts', () => {
   it('keeps scripts with id + code and drops empty shells', () => {
@@ -75,13 +78,37 @@ describe('listReapplicableScripts', () => {
     expect(list.map((x) => x.id)).toEqual([a]);
     void b;
   });
+
+  it('skips library() sources', () => {
+    addIndicator(
+      'Lib',
+      '//@version=6\nlibrary("Helpers")\nexport n() => 1',
+      'price',
+      {},
+    );
+    const ind = addIndicator('A', 'indicator("A")\nplot(1)', 'ind_a', {});
+    expect(listReapplicableScripts().map((x) => x.id)).toEqual([ind]);
+  });
 });
 
 describe('setScriptChartVisible', () => {
+  let restoreFetch: (() => void) | null = null;
+
   beforeEach(() => {
     setStore('scripts', []);
     setStore('bars', []);
     setStore('live', { ...store.live, active: false });
+    setManager(undefined);
+    setDrawingLayer(undefined);
+  });
+
+  afterEach(() => {
+    restoreFetch?.();
+    restoreFetch = null;
+    setStore('live', { ...store.live, active: false });
+    _resetMultiplexForTests();
+    setManager(undefined);
+    setDrawingLayer(undefined);
   });
 
   it('hide flips visible off without throwing when no chart manager', () => {
@@ -97,6 +124,155 @@ describe('setScriptChartVisible', () => {
     const id = addIndicator('RSI', 'plot(1)', 'ind_r', {});
     setScriptChartVisible(id, false);
     expect(listReapplicableScripts().map((s) => s.id)).not.toContain(id);
+  });
+
+  it('hide last visible script clears drawings, fills, barcolor, and markers', () => {
+    const owner: string[] = [];
+    let drawings = 0;
+    let fills = 0;
+    let barColors = 0;
+    let shapes = 0;
+    let trades = 0;
+    setManager({
+      removeOverlaysForOwner: (pane: string, sid: string) => {
+        owner.push(`${pane}:${sid}`);
+      },
+      clearShapeMarkers: () => {
+        shapes += 1;
+      },
+      clearTradeMarkers: () => {
+        trades += 1;
+      },
+      clearBarColors: () => {
+        barColors += 1;
+      },
+    } as never);
+    setDrawingLayer({
+      clearScriptDrawings: () => {
+        drawings += 1;
+      },
+      clearPlotFills: () => {
+        fills += 1;
+      },
+    } as never);
+    const id = addIndicator('RSI', 'indicator("RSI")\nplot(1)', 'ind_r', {});
+    setScriptChartVisible(id, false);
+    expect(owner.some((x) => x.endsWith(`:${id}`))).toBe(true);
+    expect(drawings).toBe(1);
+    expect(fills).toBe(1);
+    expect(barColors).toBe(1);
+    expect(shapes).toBe(1);
+    expect(trades).toBe(1);
+  });
+
+  it('hide with another visible script does not clear global fills or barcolor', () => {
+    let fills = 0;
+    let barColors = 0;
+    let drawings = 0;
+    setManager({
+      removeOverlaysForOwner: () => {},
+      clearShapeMarkers: () => {},
+      clearTradeMarkers: () => {},
+      clearBarColors: () => {
+        barColors += 1;
+      },
+    } as never);
+    setDrawingLayer({
+      clearScriptDrawings: () => {
+        drawings += 1;
+      },
+      clearPlotFills: () => {
+        fills += 1;
+      },
+    } as never);
+    addIndicator('A', 'indicator("A")\nplot(1)', 'ind_a', {});
+    const b = addIndicator('B', 'indicator("B")\nplot(2)', 'ind_b', {});
+    setScriptChartVisible(b, false);
+    expect(fills).toBe(0);
+    expect(barColors).toBe(0);
+    expect(drawings).toBe(0);
+  });
+
+  it('fallback removeOverlays skips when a sibling shares the pane', () => {
+    let wiped = 0;
+    setManager({
+      removeOverlays: () => {
+        wiped += 1;
+      },
+    } as never);
+    const a = addIndicator('A', 'plot(1)', 'price', {});
+    addIndicator('B', 'plot(2)', 'price', {});
+    setScriptChartVisible(a, false);
+    expect(wiped).toBe(0);
+  });
+
+  it('fallback removeOverlays wipes pane when no sibling shares it', () => {
+    const wiped: string[] = [];
+    setManager({
+      removeOverlays: (pane: string) => {
+        wiped.push(pane);
+      },
+    } as never);
+    const a = addIndicator('A', 'plot(1)', 'ind_a', {});
+    addIndicator('B', 'plot(2)', 'price', {});
+    setScriptChartVisible(a, false);
+    expect(wiped).toEqual(['ind_a']);
+  });
+
+  it('hide still clears overlays for library() sources', () => {
+    const owner: string[] = [];
+    setManager({
+      removeOverlaysForOwner: (_pane: string, sid: string) => {
+        owner.push(sid);
+      },
+    } as never);
+    const id = addIndicator(
+      'Lib',
+      '//@version=6\nlibrary("Helpers")\nexport n() => 1',
+      'price',
+      {},
+    );
+    setScriptChartVisible(id, false);
+    expect(owner).toContain(id);
+  });
+
+  it('show while live only schedules multiplex rerun', async () => {
+    let fetches = 0;
+    restoreFetch = mockFetch(async () => {
+      fetches += 1;
+      return jsonResponse({ status: 'success', plots: [], events: [], series: {} });
+    });
+    setStore('bars', [
+      { time: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+    ]);
+    const id = addIndicator('RSI', 'indicator("RSI")\nplot(close)', 'ind_r', {});
+    setScriptChartVisible(id, false);
+    setStore('live', { ...store.live, active: true });
+    expect(setScriptChartVisible(id, true)).toBe(true);
+    await new Promise((r) => setTimeout(r, 80));
+    expect(fetches).toBe(0);
+    setStore('live', { ...store.live, active: false });
+  });
+
+  it('show does not run library() sources', async () => {
+    let fetches = 0;
+    restoreFetch = mockFetch(async () => {
+      fetches += 1;
+      return jsonResponse({ status: 'success', plots: [], events: [], series: {} });
+    });
+    setStore('bars', [
+      { time: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+    ]);
+    const id = addIndicator(
+      'Lib',
+      '//@version=6\nlibrary("Helpers")\nexport n() => 1',
+      'price',
+      {},
+    );
+    setScriptChartVisible(id, false);
+    expect(setScriptChartVisible(id, true)).toBe(true);
+    await new Promise((r) => setTimeout(r, 80));
+    expect(fetches).toBe(0);
   });
 });
 

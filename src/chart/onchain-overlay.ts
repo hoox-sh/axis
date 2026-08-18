@@ -84,6 +84,7 @@ function lastValueLabelsOn(): boolean {
 }
 
 function ensureOnchainLine(
+  manager: PaneManager,
   pane: NonNullable<ReturnType<PaneManager['getPane']>>,
   key: string,
   title: string,
@@ -104,6 +105,7 @@ function ensureOnchainLine(
     } catch {
       /* ignore */
     }
+    manager.rememberSeriesTitle(pane.id, key, title);
     return existing;
   }
   const series = createLineSeries(pane.chart, title, color, undefined, 2);
@@ -118,6 +120,7 @@ function ensureOnchainLine(
   } catch {
     /* ignore */
   }
+  manager.rememberSeriesTitle(pane.id, key, title);
   pane.series[key] = series;
   return series;
 }
@@ -227,6 +230,7 @@ export function applyOnchainOverlays(
 
   for (const spec of specs) {
     const series = ensureOnchainLine(
+      manager,
       pane,
       spec.key,
       spec.title,

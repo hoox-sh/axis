@@ -63,6 +63,7 @@ import { isReplayActive, stopReplaySession } from '../chart/bar-replay';
 import { isInteractiveRunInFlight, runAndApply } from '../indicators/runner';
 import { isStudyActive } from '../optimize/guard';
 import { orderIndicatorsByPlotDeps } from '../results/plot-sources';
+import { detectScriptKind } from '../indicators/script-meta';
 import {
   getStream,
   listStreams,
@@ -385,6 +386,11 @@ export function stopLive(opts?: StopLiveOpts) {
   rerunInFlight = false;
 }
 
+/** Visible applied sources that belong in the live re-run loop (not library()). */
+function isLiveRerunScript(s: { visible?: boolean; code?: string }): boolean {
+  return !!(s.visible && s.code?.trim() && detectScriptKind(s.code) !== 'library');
+}
+
 /**
  * Debounced re-run of all visible indicators after live bars.
  * Silent: no Results drawer spam; updates chart overlays only.
@@ -393,7 +399,8 @@ export function stopLive(opts?: StopLiveOpts) {
  * Those set `live.needsRerun` and flush after the interactive epoch ends.
  */
 function scheduleRerun() {
-  if (!store.scripts.some((s) => s.visible && s.code?.trim())) return;
+  if (!store.bars?.length) return;
+  if (!store.scripts.some(isLiveRerunScript)) return;
   // Interactive Run owns the engine — mark dirty and wait (do not beginRunEpoch)
   if (isInteractiveRunInFlight() || isStudyActive()) {
     if (!store.live.needsRerun) setStore('live', 'needsRerun', true);
@@ -426,7 +433,7 @@ function scheduleRerun() {
     try {
       // Producers of plot sources before consumers (cross-indicator input.source)
       const ordered = orderIndicatorsByPlotDeps(
-        store.scripts.filter((s) => s.visible && s.code?.trim()),
+        store.scripts.filter(isLiveRerunScript),
       );
       for (const ind of ordered) {
         if (liveEpoch !== epochAtSchedule || !store.live.active) break;

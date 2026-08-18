@@ -298,6 +298,20 @@ describe('eventsToMarkers', () => {
     expect(markers.some((m) => m.shape === 'arrowUp')).toBe(true);
   });
 
+  it('exactOnCandle puts qty on the side arrow, not the in-bar circle', () => {
+    const events = normalizeStrategyEvents([
+      { kind: 'entry', id: 'L', direction: 'long', qty: 2, bar_time: 10, ohlc: [1, 1, 1, 100] },
+    ]);
+    const markers = eventsToMarkers(events);
+    expect(markers).toHaveLength(2);
+    const circle = markers.find((m) => m.position === 'inBar' && m.shape === 'circle');
+    const arrow = markers.find((m) => m.shape === 'arrowUp');
+    expect(circle).toBeTruthy();
+    expect(arrow).toBeTruthy();
+    expect(circle!.text === '' || circle!.text.length <= 1).toBe(true);
+    expect(arrow!.text).toBe('Long 2');
+  });
+
   it('keeps both entry and exit markers on the same bar', () => {
     // LWC v5 stacks same-time markers — do not collapse to last-only
     const events = normalizeStrategyEvents([

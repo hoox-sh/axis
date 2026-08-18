@@ -126,6 +126,8 @@ export const ScriptSettingsModal: Component = () => {
    * opens or the target script changes — never on lastRun / live series ticks.
    */
   let seededKey = '';
+  /** Strategy fields the user edited this session (not auto-mirrored siblings). */
+  let strategyUserEdited = new Set<string>();
 
   const targetMeta = createMemo(() => {
     const id = indicatorId();
@@ -154,6 +156,7 @@ export const ScriptSettingsModal: Component = () => {
   const seedFields = () => {
     const t = untrack(() => targetMeta());
     if (!t) {
+      strategyUserEdited = new Set();
       setFields([]);
       setStrategyFields([]);
       setShowStrategyTab(false);
@@ -185,6 +188,7 @@ export const ScriptSettingsModal: Component = () => {
     setSourceLabels({ ...labels });
     setFields(applyInputOverrides(withPlots, t.values));
 
+    strategyUserEdited = new Set();
     const isStrategy =
       detectScriptKind(t.code) === 'strategy' || hasStrategyDeclaration(t.code);
     setShowStrategyTab(isStrategy);
@@ -230,35 +234,29 @@ export const ScriptSettingsModal: Component = () => {
   };
 
   const setStrategyFieldValue = (id: string, value: unknown) => {
+    strategyUserEdited.add(id);
+    if (id === 'margin_long' || id === 'margin_short') {
+      // PYNE honors per-side % only when leverage is not re-persisted.
+      strategyUserEdited.delete('leverage');
+    }
     setStrategyFields((list) => {
       const next = list.map((f) => (f.id === id ? { ...f, value } : f));
-      // Keep leverage ↔ margin % consistent (PYNE: leverage wins if both present).
       if (id === 'leverage') {
         const lev = Number(value);
         if (Number.isFinite(lev) && lev >= 1) {
           const margin = 100 / lev;
           return next.map((f) =>
-            f.id === 'margin_long' || f.id === 'margin_short'
+            (f.id === 'margin_long' || f.id === 'margin_short') &&
+            !strategyUserEdited.has(f.id)
               ? { ...f, value: margin }
               : f,
           );
         }
       }
       if (id === 'margin_long' || id === 'margin_short') {
-        const ml = Number(
-          id === 'margin_long'
-            ? value
-            : next.find((f) => f.id === 'margin_long')?.value,
-        );
-        const ms = Number(
-          id === 'margin_short'
-            ? value
-            : next.find((f) => f.id === 'margin_short')?.value,
-        );
-        const conservative =
-          [ml, ms].filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => b - a)[0];
-        if (conservative) {
-          const lev = Math.max(1, 100 / conservative);
+        const n = Number(value);
+        if (Number.isFinite(n) && n > 0) {
+          const lev = Math.max(1, 100 / n);
           return next.map((f) => (f.id === 'leverage' ? { ...f, value: lev } : f));
         }
       }
@@ -287,7 +285,7 @@ export const ScriptSettingsModal: Component = () => {
     if (!t) return;
     const overrides = overridesFromDefs(fields());
     const stratOverrides = showStrategyTab()
-      ? strategyOverridesFromDefs(strategyFields())
+      ? dirtyStrategyOverrides(strategyFields(), strategyUserEdited)
       : {};
     if (t.kind === 'indicator' && t.id) {
       setIndicatorInputValues(t.id, overrides);
@@ -296,7 +294,12 @@ export const ScriptSettingsModal: Component = () => {
       setEditorInputValues(overrides);
       if (showStrategyTab()) setEditorStrategyProps(stratOverrides);
     }
-    if (!andRun) {
+    const hasBars = Array.isArray(store.bars) && store.bars.length > 0;
+    const applied = t.kind === 'indicator' && !!t.id;
+    const live = !!store.live?.active;
+    const silentSave =
+      !andRun && hasBars && (applied || live) && !!String(t.code || '').trim();
+    if (!andRun && !silentSave) {
       closeScriptSettings();
       return;
     }
@@ -308,9 +311,8 @@ export const ScriptSettingsModal: Component = () => {
         t.kind === 'editor' ? untrack(() => loadEditorDoc() || t.code) : t.code;
       await runAndApply(code, id, {
         inputs: overrides,
-        ...(showStrategyTab() && Object.keys(stratOverrides).length
-          ? { strategyProps: stratOverrides }
-          : {}),
+        strategyProps: stratOverrides,
+        ...(andRun ? {} : { silent: true, openResults: false }),
       });
       closeScriptSettings();
     } catch (err: unknown) {
@@ -322,6 +324,7 @@ export const ScriptSettingsModal: Component = () => {
 
   const onReset = () => {
     if (tab() === 'strategy') {
+      strategyUserEdited = new Set();
       setStrategyFields((list) => list.map((f) => ({ ...f, value: f.default })));
     } else {
       setFields((list) => list.map((f) => ({ ...f, value: f.default })));
@@ -966,6 +969,33 @@ const StrategyField: Component<{
     </div>
   );
 };
+
+/**
+ * Persist only values that differ from declaration defaults, minus
+ * auto-mirrored leverage↔margin siblings the user did not edit.
+ */
+function dirtyStrategyOverrides(
+  fields: StrategyPropDef[],
+  edited: ReadonlySet<string>,
+): Record<string, unknown> {
+  const fromDefs = strategyOverridesFromDefs(fields);
+  if (!edited.size) return fromDefs;
+  const bag: Record<string, unknown> = {};
+  const dropLeverage = edited.has('margin_long') || edited.has('margin_short');
+  const keys = new Set([...Object.keys(fromDefs), ...edited]);
+  for (const k of keys) {
+    if (dropLeverage && k === 'leverage') continue;
+    if (
+      edited.has('leverage') &&
+      (k === 'margin_long' || k === 'margin_short') &&
+      !edited.has(k)
+    ) {
+      continue;
+    }
+    if (Object.prototype.hasOwnProperty.call(fromDefs, k)) bag[k] = fromDefs[k];
+  }
+  return bag;
+}
 
 function toHexColor(v: unknown): string {
   const s = String(v ?? '#939fff');

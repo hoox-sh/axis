@@ -176,7 +176,10 @@ export function inferOverlayTitle(key: string): string {
     const cut = rest.indexOf('__');
     return cut >= 0 ? rest.slice(cut + 2) : rest;
   }
-  if (key === 'volume') return 'Volume';
+  if (key === 'compare') return 'Compare';
+  if (key === 'compare_main_pct') return 'Main %';
+  if (key.startsWith('onchain_')) return key.slice('onchain_'.length);
+  // volume / candle / other hosts: number-only unless a title was remembered
   return '';
 }
 
@@ -1695,6 +1698,17 @@ export class PaneManager {
     this.lastValueTitleByKey.set(`${paneId}:pl:${key}`, name);
   }
 
+  /** Drop remembered last-value title(s) when a series or hline is removed. */
+  private forgetLastValueTitle(
+    paneId: string,
+    key: string,
+    kind: 'series' | 'priceLine' = 'series',
+  ): void {
+    this.lastValueTitleByKey.delete(
+      kind === 'priceLine' ? `${paneId}:pl:${key}` : `${paneId}:${key}`,
+    );
+  }
+
   /**
    * Apply {@link lastValueNamesVisible} to series + hline titles.
    */
@@ -1901,6 +1915,7 @@ export class PaneManager {
       delete pane.series[k];
       this.overlaySeriesKinds.delete(`${paneId}:${k}`);
       this.overlayDataMeta.delete(k);
+      this.forgetLastValueTitle(paneId, k);
     }
     for (const name of Object.keys(pane.priceLines)) {
       const pl = pane.priceLines[name];
@@ -1910,6 +1925,7 @@ export class PaneManager {
         /* ignore */
       }
       delete pane.priceLines[name];
+      this.forgetLastValueTitle(paneId, name, 'priceLine');
     }
   }
 
@@ -1936,6 +1952,7 @@ export class PaneManager {
         delete pane.series[k];
         this.overlaySeriesKinds.delete(`${paneId}:${k}`);
         this.overlayDataMeta.delete(k);
+        this.forgetLastValueTitle(paneId, k);
       }
     }
     for (const name of Object.keys(pane.priceLines)) {
@@ -1947,6 +1964,7 @@ export class PaneManager {
         /* ignore */
       }
       delete pane.priceLines[name];
+      this.forgetLastValueTitle(paneId, name, 'priceLine');
     }
     try {
       this.clearShapeMarkers?.(ownerId);
@@ -2341,13 +2359,34 @@ export class PaneManager {
     if (existing) {
       if (mapped.length) safeSetData(existing, mapped);
       try {
-        existing.applyOptions({ color, lineWidth });
+        existing.applyOptions({
+          color,
+          lineWidth,
+          lastValueVisible: this.lastValueLabelsVisible,
+          title: this.displaySeriesTitle(line.name),
+        });
       } catch {
         /* ignore */
       }
+      this.rememberSeriesTitle(pane.id, key, line.name);
     } else if (mapped.length) {
       try {
-        const series = createLineSeries(pane.chart, line.name, color, undefined, lineWidth);
+        const series = createLineSeries(
+          pane.chart,
+          this.displaySeriesTitle(line.name),
+          color,
+          undefined,
+          lineWidth,
+        );
+        try {
+          series.applyOptions({
+            lastValueVisible: this.lastValueLabelsVisible,
+            title: this.displaySeriesTitle(line.name),
+          });
+        } catch {
+          /* ignore */
+        }
+        this.rememberSeriesTitle(pane.id, key, line.name);
         safeSetData(series, mapped);
         pane.series[key] = series;
       } catch {
@@ -2364,10 +2403,20 @@ export class PaneManager {
     const mapped = data
       .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
       .map((d) => ({ time: d.time as UTCTimestamp, value: d.value }));
+    const key = `overlay_${name}`;
     try {
-      const series = createLineSeries(pane.chart, name, c);
+      const series = createLineSeries(pane.chart, this.displaySeriesTitle(name), c);
+      try {
+        series.applyOptions({
+          lastValueVisible: this.lastValueLabelsVisible,
+          title: this.displaySeriesTitle(name),
+        });
+      } catch {
+        /* ignore */
+      }
+      this.rememberSeriesTitle(paneId, key, name);
       safeSetData(series, mapped);
-      pane.series[`overlay_${name}`] = series;
+      pane.series[key] = series;
       return series;
     } catch {
       return undefined;

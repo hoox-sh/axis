@@ -302,10 +302,9 @@ export const voidHighlightStyle = HighlightStyle.define([
   { tag: t.function(t.variableName), color: 'var(--color-accent)', fontWeight: '500' },
   // Built-in members: ta.sma, color.red
   { tag: t.propertyName, color: 'color-mix(in srgb, var(--color-accent-2) 72%, var(--color-text))' },
-  // Library exports: m.Easing, motion.easing
+  // Library members: m.easing, m.SuperTrend (imported types use typeName)
   { tag: t.special(t.propertyName), color: 'var(--color-editor-lib-member)' },
   { tag: t.typeName, color: 'var(--color-editor-type)', fontWeight: '700' },
-  { tag: t.className, color: 'var(--color-editor-type)', fontWeight: '700' },
   { tag: t.meta, color: 'var(--color-text-dim)', fontStyle: 'italic' },
   { tag: t.punctuation, color: 'var(--color-text-dim)' },
   { tag: t.bracket, color: 'var(--color-text-dim)' },

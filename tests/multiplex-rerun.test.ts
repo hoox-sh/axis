@@ -114,4 +114,56 @@ describe('multiplex scheduleRerun', () => {
     expect(_getRerunAttemptCountForTests()).toBeGreaterThanOrEqual(1);
     stopLive();
   });
+
+  it('does not arm rerun when there are no bars', async () => {
+    setStore('bars', []);
+    registerDynamicStream({
+      id: 'empty-bar-stream',
+      name: 'E',
+      kind: 'stream',
+      start({ onStatus }) {
+        onStatus({ state: 'open' });
+        return () => {};
+      },
+    });
+    startLive('empty-bar-stream', 'BTCUSDT', '1m');
+    await new Promise((r) => setTimeout(r, 500));
+    expect(_getRerunAttemptCountForTests()).toBe(0);
+    stopLive();
+  });
+
+  it('does not schedule rerun for library-only scripts', async () => {
+    setStore('scripts', [
+      {
+        id: 'lib1',
+        name: 'L',
+        code: '//@version=6\nlibrary("Lib")\nexport foo() => 1',
+        paneId: 'price',
+        visible: true,
+        plots: {},
+      },
+    ]);
+    registerDynamicStream({
+      id: 'lib-stream',
+      name: 'L',
+      kind: 'stream',
+      start({ onBar, onStatus }) {
+        onStatus({ state: 'open' });
+        onBar({
+          time: Math.floor(Date.now() / 1000),
+          open: 1,
+          high: 1,
+          low: 1,
+          close: 1,
+          volume: 1,
+          closed: true,
+        });
+        return () => {};
+      },
+    });
+    startLive('lib-stream', 'BTCUSDT', '1m');
+    await new Promise((r) => setTimeout(r, 500));
+    expect(_getRerunAttemptCountForTests()).toBe(0);
+    stopLive();
+  });
 });

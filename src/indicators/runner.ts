@@ -253,6 +253,9 @@ export interface RunOptions {
   /**
    * Strategy Properties overrides keyed by `strategy()` kwarg
    * (`initial_capital`, `pyramiding`, …). Merged into a run-time source copy.
+   * Explicit bag is authoritative, including `{}` (no rewrite). Omitted
+   * (`undefined`) falls back to the applied script, then the editor draft
+   * (editor fallback is skipped for isolate / applied-script studies).
    */
   strategyProps?: Record<string, unknown>;
   /**
@@ -376,6 +379,13 @@ function withAxisSource(result: RunResult, script: string): RunResult {
   };
 }
 
+/** Applied script is still present and visible (hide/detach mid-flight). */
+function appliedScriptStillOnChart(indicatorId?: string): boolean {
+  if (!indicatorId) return true;
+  const applied = store.scripts.find((s) => s.id === indicatorId);
+  return !!(applied && applied.visible !== false);
+}
+
 /**
  * Execute Pine against `store.bars` via the active engine.
  * Does not mutate chart series; use {@link runAndApply} for full apply.
@@ -488,14 +498,16 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
             : undefined;
     // Expand plot:<indicatorId>:<plotKey> refs → full series arrays for the engine
     const inputs = resolveInputSourceValues(rawInputs, store.indicatorSeries);
-    // Strategy Properties: rewrite strategy() kwargs on a run-time copy only
-    // (resolved by runAndApplyInner; empty bag = no rewrite).
+    // Strategy Properties: rewrite strategy() kwargs on a run-time copy only.
+    // Explicit opts.strategyProps (including {}) wins — empty bag = no rewrite.
+    // Isolate studies already bake props into source; never merge editor leftovers.
     const strategyProps =
-      opts.strategyProps && Object.keys(opts.strategyProps).length
+      opts.strategyProps !== undefined
         ? opts.strategyProps
         : applied?.strategyProps && Object.keys(applied.strategyProps).length
           ? applied.strategyProps
           : !indicatorId &&
+              !isolate &&
               store.editorStrategyProps &&
               Object.keys(store.editorStrategyProps).length
             ? store.editorStrategyProps
@@ -837,6 +849,20 @@ async function runAndApplyInner(
   // Do not auto-open Scriptlogs aggressively; panel is user-toggled.
   if (result.status === 'error') return result;
 
+  // Hide / detach after the engine returned: do not resurrect plots.
+  if (indicatorId && !appliedScriptStillOnChart(indicatorId)) {
+    try {
+      const { clearScriptChartOverlays } = await import('./visibility');
+      clearScriptChartOverlays(indicatorId);
+    } catch {
+      /* chart optional */
+    }
+    return {
+      ...result,
+      meta: { ...result.meta, skipped: 'hidden' },
+    };
+  }
+
   const manager = getManager();
   if (!manager) return result;
 
@@ -1163,6 +1189,20 @@ async function runAndApplyInner(
     };
   }
 
+  // Hide / detach after the engine returned: do not resurrect plots.
+  if (indicatorId && !appliedScriptStillOnChart(indicatorId)) {
+    try {
+      const { clearScriptChartOverlays } = await import('./visibility');
+      clearScriptChartOverlays(indicatorId);
+    } catch {
+      /* chart optional */
+    }
+    return {
+      ...result,
+      meta: { ...result.meta, skipped: 'hidden' },
+    };
+  }
+
   // Chart series mutations isolated — LWC throws / disposed panes must not reject
   try {
     if (!isRunEpochCurrent(epoch)) {
@@ -1424,7 +1464,7 @@ async function runAndApplyInner(
   // Pine drawings: atomic replace (no clear→empty→set flash).
   // GC trims each type to indicator()/strategy() max_*_count (default 50).
   // Skip when superseded so a stale run cannot wipe fresher drawings.
-  if (isRunEpochCurrent(epoch)) {
+  if (isRunEpochCurrent(epoch) && appliedScriptStillOnChart(indicatorId)) {
     try {
       const drawings = Array.isArray((result as RunResult & { drawings?: unknown[] }).drawings)
         ? (result as RunResult & { drawings?: unknown[] }).drawings
@@ -1548,7 +1588,7 @@ async function runAndApplyInner(
           ? opts.inputs
           : store.editorInputValues;
       const savedStrategyProps =
-        opts.strategyProps && Object.keys(opts.strategyProps).length
+        opts.strategyProps !== undefined
           ? opts.strategyProps
           : store.editorStrategyProps;
       const newId = addIndicator(
@@ -1642,7 +1682,7 @@ async function runAndApplyInner(
           ? opts.inputs
           : existing?.inputValues;
       const savedStrategyProps =
-        opts.strategyProps && Object.keys(opts.strategyProps).length
+        opts.strategyProps !== undefined
           ? opts.strategyProps
           : existing?.strategyProps;
       updateIndicator(indicatorId, {
@@ -1653,9 +1693,11 @@ async function runAndApplyInner(
         ...(savedInputs && Object.keys(savedInputs).length
           ? { inputValues: savedInputs }
           : {}),
-        ...(savedStrategyProps && Object.keys(savedStrategyProps).length
-          ? { strategyProps: savedStrategyProps }
-          : {}),
+        ...(opts.strategyProps !== undefined
+          ? { strategyProps: { ...opts.strategyProps } }
+          : savedStrategyProps && Object.keys(savedStrategyProps).length
+            ? { strategyProps: savedStrategyProps }
+            : {}),
       });
       if (Object.keys(seriesForCache).length) {
         setIndicatorSeries(indicatorId, {

@@ -449,13 +449,21 @@ export function resolveStrategyProps(
   });
 }
 
+/** Relative/absolute slack so 100/3-style floats do not look dirty. */
+const PROP_NUM_EPS = 1e-9;
+
 function samePropValue(a: unknown, b: unknown): boolean {
   if (a === b) return true;
-  if (typeof a === 'number' && typeof b === 'number') {
-    return Number.isFinite(a) && Number.isFinite(b) && a === b;
-  }
   if (a == null && b == null) return true;
-  return String(a) === String(b);
+  if (typeof a === 'number' && typeof b === 'number') {
+    return (
+      Number.isFinite(a) &&
+      Number.isFinite(b) &&
+      Math.abs(a - b) < PROP_NUM_EPS
+    );
+  }
+  if (typeof a === 'string' && typeof b === 'string') return a === b;
+  return false;
 }
 
 /** Persist only values that differ from the declaration (or catalog) default. */

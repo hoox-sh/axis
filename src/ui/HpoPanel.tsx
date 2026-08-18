@@ -52,13 +52,13 @@ function currentInputValues(): Record<string, unknown> {
   return { ...(store.editorInputValues || {}) };
 }
 
-function currentStrategyProps(): Record<string, unknown> {
+function currentStrategyProps(): Record<string, unknown> | undefined {
   const { id } = currentScript();
   if (id) {
     const ind = store.scripts.find((s) => s.id === id);
-    return { ...(ind?.strategyProps || {}) };
+    return ind?.strategyProps;
   }
-  return { ...(store.editorStrategyProps || {}) };
+  return store.editorStrategyProps;
 }
 
 function downloadText(filename: string, text: string) {
@@ -194,7 +194,9 @@ export const HpoPanel: Component = () => {
     else setEditorInputValues(merged);
     if (rerun) {
       setPanelOpen('results', true);
-      await runAndApply(currentScript().code, id || undefined);
+      await runAndApply(currentScript().code, id || undefined, {
+        strategyProps: currentStrategyProps(),
+      });
     }
   };
 

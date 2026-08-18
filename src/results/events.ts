@@ -512,21 +512,21 @@ function pushTradeMarkers(
   const sidePos = tradeLabelPosition(kind, isShort, invertLabels);
 
   if (exactOnCandle) {
-    // Exact mark on the candle body (fill bar)
+    // Exact mark on the candle body (fill bar) — unlabeled; qty lives on the arrow
     markers.push({
       time,
       position: 'inBar',
       color,
       shape: 'circle',
-      text,
+      text: '',
     });
-    // Directional side arrow without text (label already on circle)
+    // Directional side arrow carries Long/Short/X qty
     markers.push({
       time,
       position: sidePos,
       color,
       shape: arrowUp ? 'arrowUp' : 'arrowDown',
-      text: '',
+      text,
     });
   } else {
     markers.push({

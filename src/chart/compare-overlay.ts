@@ -210,6 +210,7 @@ export function clearCompareOverlay(manager: PaneManager | undefined | null): vo
 }
 
 function ensureCompareLine(
+  manager: PaneManager,
   pane: NonNullable<ReturnType<PaneManager['getPane']>>,
   key: string,
   title: string,
@@ -236,6 +237,7 @@ function ensureCompareLine(
     } catch {
       /* ignore */
     }
+    manager.rememberSeriesTitle(pane.id, key, title);
     return existing;
   }
   const series = createLineSeries(pane.chart, title, color, undefined, 2);
@@ -250,6 +252,7 @@ function ensureCompareLine(
   } catch {
     /* ignore */
   }
+  manager.rememberSeriesTitle(pane.id, key, title);
   pane.series[key] = series;
   return series;
 }
@@ -318,7 +321,7 @@ export function applyCompareOverlay(
   const title =
     mode === 'percent' ? `${opts.symbol} %` : opts.symbol;
 
-  const series = ensureCompareLine(pane, COMPARE_SERIES_KEY, title, color, scaleId);
+  const series = ensureCompareLine(manager, pane, COMPARE_SERIES_KEY, title, color, scaleId);
   // Finite-only line data — LWC rejects NaN/Infinity
   const compareData = compare
     .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
@@ -331,6 +334,7 @@ export function applyCompareOverlay(
 
   if (normalizeMain && mainPercent.length) {
     const mainSeries = ensureCompareLine(
+      manager,
       pane,
       COMPARE_MAIN_PCT_KEY,
       'Main %',

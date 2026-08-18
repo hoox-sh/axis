@@ -265,7 +265,115 @@ describe('PaneManager', () => {
     expect(inferOverlayTitle('overlay_RSI')).toBe('RSI');
     expect(inferOverlayTitle('overlay_script1__Overbought')).toBe('Overbought');
     expect(inferOverlayTitle('overlay_ohlc_Haiken')).toBe('Haiken');
-    expect(inferOverlayTitle('volume')).toBe('Volume');
+    expect(inferOverlayTitle('volume')).toBe('');
+    expect(inferOverlayTitle('compare')).toBe('Compare');
+    expect(inferOverlayTitle('compare_main_pct')).toBe('Main %');
+    expect(inferOverlayTitle('onchain_tvl')).toBe('tvl');
+    expect(inferOverlayTitle('onchain_dex_volume')).toBe('dex_volume');
+  });
+
+  it('compare / on-chain remembered titles survive [T] toggle', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    const titles: Record<string, string> = {};
+    const attach = (key: string) => {
+      price.series[key] = {
+        applyOptions: (o: { title?: string }) => {
+          if (o.title != null) titles[key] = o.title;
+        },
+      } as never;
+    };
+    attach('compare');
+    attach('compare_main_pct');
+    attach('onchain_tvl');
+    pm.rememberSeriesTitle('price', 'compare', 'ETHUSDT %');
+    pm.rememberSeriesTitle('price', 'compare_main_pct', 'Main %');
+    pm.rememberSeriesTitle('price', 'onchain_tvl', 'TVL');
+    expect(pm.setLastValueNamesVisible(false)).toBe(false);
+    expect(titles['compare']).toBe('');
+    expect(titles['compare_main_pct']).toBe('');
+    expect(titles['onchain_tvl']).toBe('');
+    expect(pm.setLastValueNamesVisible(true)).toBe(true);
+    expect(titles['compare']).toBe('ETHUSDT %');
+    expect(titles['compare_main_pct']).toBe('Main %');
+    expect(titles['onchain_tvl']).toBe('TVL');
+  });
+
+  it('volume last-value stays number-only unless a title was remembered', () => {
+    const vol = pm.createPane('volume', 'volume', 'Volume');
+    let title: string | undefined;
+    vol.series['volume'] = {
+      applyOptions: (o: { title?: string }) => {
+        if (o.title != null) title = o.title;
+      },
+    } as never;
+    expect(pm.setLastValueNamesVisible(false)).toBe(false);
+    expect(title).toBe('');
+    expect(pm.setLastValueNamesVisible(true)).toBe(true);
+    expect(title).toBe('');
+  });
+
+  it('removeOverlays forgets remembered last-value titles', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    let title: string | undefined;
+    const attach = () => {
+      price.series['overlay_RSI'] = {
+        applyOptions: (o: { title?: string }) => {
+          if (o.title != null) title = o.title;
+        },
+      } as never;
+    };
+    attach();
+    pm.rememberSeriesTitle('price', 'overlay_RSI', 'Custom RSI');
+    pm.removeOverlays('price');
+    attach();
+    title = undefined;
+    pm.setLastValueNamesVisible(false);
+    pm.setLastValueNamesVisible(true);
+    expect(title).toBe('RSI');
+  });
+
+  it('removeOverlays forgets remembered price-line titles', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    let title: string | undefined;
+    const attach = () => {
+      price.priceLines['OB'] = {
+        line: {
+          applyOptions: (o: { title?: string }) => {
+            if (o.title != null) title = o.title;
+          },
+        },
+        host: { removePriceLine: () => {} },
+      } as never;
+    };
+    attach();
+    pm.rememberPriceLineTitle('price', 'OB', 'Overbought');
+    pm.removeOverlays('price');
+    attach();
+    title = undefined;
+    pm.setLastValueNamesVisible(false);
+    pm.setLastValueNamesVisible(true);
+    expect(title).toBe('OB');
+  });
+
+  it('removeOverlaysForOwner forgets that owner’s last-value titles', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    const key = 'overlay_script1__ATR';
+    let title: string | undefined;
+    const attach = () => {
+      price.series[key] = {
+        applyOptions: (o: { title?: string }) => {
+          if (o.title != null) title = o.title;
+        },
+      } as never;
+    };
+    attach();
+    pm.rememberSeriesTitle('price', key, 'Average True Range');
+    pm.removeOverlaysForOwner('price', 'script1');
+    attach();
+    title = undefined;
+    pm.setLastValueNamesVisible(false);
+    pm.setLastValueNamesVisible(true);
+    expect(title).toBe('ATR');
   });
 
   it('owner-scoped sync drops editor leftovers so last-value labels are not doubled', () => {

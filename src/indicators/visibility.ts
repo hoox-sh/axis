@@ -14,7 +14,14 @@
  */
 
 import { store, updateIndicator } from '../store';
-import { getManager } from '../chart/manager-access';
+import {
+  getManager,
+  clearScriptPaneLayer,
+  clearScriptPaneLayers,
+  getDrawingLayer,
+  getActiveDrawingLayer,
+} from '../chart/manager-access';
+import { detectScriptKind } from './script-meta';
 
 /** Clear this script’s overlays on its pane and the price pane (force_overlay). */
 export function clearScriptChartOverlays(id: string, paneId?: string): void {
@@ -22,15 +29,47 @@ export function clearScriptChartOverlays(id: string, paneId?: string): void {
   const pane = paneId || script?.paneId || 'price';
   const manager = getManager();
   if (!manager) return;
+  const isSubPane = pane !== 'price' && pane !== 'volume';
+  const othersOnPane = store.scripts.filter(
+    (s) => s.id !== id && (s.paneId || 'price') === pane,
+  );
+  // Drawings / fills / barcolor are last-writer-wins — wipe only when nobody else is shown.
+  const otherVisible = store.scripts.some((s) => s.id !== id && s.visible);
+
   try {
     if (typeof manager.removeOverlaysForOwner === 'function') {
       manager.removeOverlaysForOwner(pane, id);
       if (pane !== 'price') manager.removeOverlaysForOwner('price', id);
-    } else if (typeof manager.removeOverlays === 'function') {
+    } else if (typeof manager.removeOverlays === 'function' && othersOnPane.length === 0) {
       manager.removeOverlays(pane);
     }
   } catch {
     /* chart dispose races */
+  }
+  try {
+    manager.clearShapeMarkers?.(id);
+  } catch {
+    /* optional */
+  }
+  try {
+    manager.clearTradeMarkers?.(id);
+  } catch {
+    /* optional */
+  }
+  try {
+    if (isSubPane) clearScriptPaneLayer?.(pane);
+  } catch {
+    /* optional */
+  }
+  if (otherVisible) return;
+  try {
+    const layer = getActiveDrawingLayer() ?? getDrawingLayer();
+    layer?.clearScriptDrawings?.();
+    clearScriptPaneLayers?.();
+    layer?.clearPlotFills?.();
+    manager.clearBarColors?.();
+  } catch {
+    /* optional */
   }
 }
 
@@ -53,6 +92,19 @@ export function setScriptChartVisible(id: string, visible: boolean): boolean {
   }
 
   const code = String(script.code || '').trim();
+  if (detectScriptKind(code) === 'library') return true;
+
+  if (store.live?.active) {
+    void import('../streams/multiplex')
+      .then((m) => {
+        m.scheduleLiveRerun?.();
+      })
+      .catch(() => {
+        /* multiplex optional */
+      });
+    return true;
+  }
+
   if (code && Array.isArray(store.bars) && store.bars.length) {
     void import('./runner')
       .then(({ runAndApply }) =>
@@ -65,15 +117,6 @@ export function setScriptChartVisible(id: string, visible: boolean): boolean {
       )
       .catch(() => {
         /* live / chart optional */
-      });
-  }
-  if (store.live?.active) {
-    void import('../streams/multiplex')
-      .then((m) => {
-        m.scheduleLiveRerun?.();
-      })
-      .catch(() => {
-        /* multiplex optional */
       });
   }
   return true;

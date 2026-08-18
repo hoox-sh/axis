@@ -30,6 +30,7 @@
 import { store } from '../store';
 import type { Indicator } from '../store/types';
 import { orderIndicatorsByPlotDeps } from '../results/plot-sources';
+import { detectScriptKind } from './script-meta';
 
 export type ReapplyChartScriptsOpts = {
   /**
@@ -51,6 +52,7 @@ export function listReapplicableScripts(ids?: string[]): Indicator[] {
   const list = (store.scripts || []).filter((s) => {
     if (!s?.id || !s.visible) return false;
     if (!String(s.code || '').trim()) return false;
+    if (detectScriptKind(s.code) === 'library') return false;
     if (want && !want.has(s.id)) return false;
     return true;
   });

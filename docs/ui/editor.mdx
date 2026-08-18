@@ -125,7 +125,7 @@ Sources: TradingView *Exploring Unicode*, [Text and shapes](https://www.tradingv
 
 ### Highlighting
 
-`pyne-language.ts` is a stateful stream tokenizer: `//@` annotations, `//` and `/* */` (including across lines), quoted and `"""` / `'''` strings with `\\n` escapes, `#RRGGBB(AA)` colors, namespaces (`ta.`, `label.new`), types (`int` / `float` / `string` / `series` and declared UDTs / enums as `typeName`, **bold** in the void theme), control vs definition keywords, and function names before `(`. Format leaves continuation lines of an open string or block comment untouched.
+`pyne-language.ts` is a stateful stream tokenizer: `//@` annotations, `//` and `/* */` (including across lines), quoted and `"""` / `'''` strings with `\\n` escapes, `#RRGGBB(AA)` colors, namespaces (`ta.`, `label.new`), types (`int` / `float` / `string`, `series` / `simple` in qualifier position, and declared UDTs / enums as `typeName`, **bold** in the void theme), control vs definition keywords, and function names before `(`. Format leaves continuation lines of an open string or block comment untouched.
 
 ### Diagnostics & Problems
 

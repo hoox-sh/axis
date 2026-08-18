@@ -126,4 +126,75 @@ describe('normalizeStrategyEnum / overridesFromDefs', () => {
     expect(o.pyramiding).toBeUndefined();
     expect(o.leverage).toBeUndefined();
   });
+
+  it('treats near-equal numbers as unchanged', () => {
+    const defs = resolveStrategyProps(STRAT, {
+      initial_capital: 100_000 + 1e-12,
+    });
+    expect(strategyOverridesFromDefs(defs).initial_capital).toBeUndefined();
+  });
+
+  it('does not string-compare mixed types', () => {
+    const defs = resolveStrategyProps(STRAT, { pyramiding: '2' });
+    expect(strategyOverridesFromDefs(defs).pyramiding).toBe('2');
+  });
+});
+
+describe('applyStrategyPropsToSource catalog / dirty-only', () => {
+  it('ignores non-catalog keys (title, overlay)', () => {
+    const src = 'strategy("Old Title", overlay=true)\nplot(close)\n';
+    const out = applyStrategyPropsToSource(src, {
+      title: 'X',
+      overlay: false,
+      shorttitle: 'Nope',
+    });
+    expect(out).toContain('"Old Title"');
+    expect(out).toContain('overlay=true');
+    expect(out).not.toMatch(/\btitle\s*=/);
+    expect(out).not.toContain('overlay=false');
+    expect(out).not.toContain('shorttitle');
+  });
+
+  it('capital-only override does not insert default leverage / margin_*', () => {
+    const out = applyStrategyPropsToSource('strategy("T")\n', {
+      initial_capital: 1,
+    });
+    expect(out).toContain('initial_capital=1');
+    expect(out).not.toContain('leverage');
+    expect(out).not.toContain('margin_');
+  });
+
+  it('keeps declared margin_long when only capital is applied', () => {
+    const src = 'strategy("T", margin_long=10)\n';
+    const out = applyStrategyPropsToSource(src, { initial_capital: 1 });
+    expect(out).toContain('margin_long=10');
+    expect(out).toContain('initial_capital=1');
+    expect(out).not.toContain('leverage');
+  });
+
+  it('full old-style bag rewrites declared margin; dirty-only capital does not', () => {
+    const src = 'strategy("T", margin_long=10)\n';
+
+    const full = applyStrategyPropsToSource(src, {
+      leverage: 1,
+      margin_long: 100,
+      margin_short: 100,
+    });
+    expect(full).toContain('margin_long=100');
+    expect(full).toContain('leverage=1');
+
+    const capitalOnly = strategyOverridesFromDefs(
+      resolveStrategyProps(src, { initial_capital: 1 }),
+    );
+    expect(capitalOnly).toEqual({ initial_capital: 1 });
+    const applied = applyStrategyPropsToSource(src, capitalOnly);
+    expect(applied).toContain('margin_long=10');
+    expect(applied).not.toContain('leverage');
+
+    const mirrored = strategyOverridesFromDefs(
+      resolveStrategyProps(src, { leverage: 1, margin_long: 100 }),
+    );
+    expect(mirrored.leverage).toBeUndefined();
+    expect(mirrored.margin_long).toBe(100);
+  });
 });

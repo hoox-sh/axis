@@ -75,6 +75,16 @@ describe('tokenizePine', () => {
     expect(s2.stringQuote).toBe(null);
   });
 
+  it('advancePineLineState clones userTypes', () => {
+    const s1 = advancePineLineState('type Point', defaultPineHighlightState());
+    const s2 = advancePineLineState('float x', s1);
+    expect(s1.userTypes).toContain('Point');
+    expect(s2.userTypes).toContain('Point');
+    expect(s1.userTypes).not.toBe(s2.userTypes);
+    s1.userTypes.push('Mutated');
+    expect(s2.userTypes).not.toContain('Mutated');
+  });
+
   it('tags series builtins apart from user variables', () => {
     const t = typesOf('len = bar_index + close + time\nfoo = len\n');
     expect(t).toContain('variableName.standard:bar_index');
@@ -120,6 +130,28 @@ plot(m.easing(close))
     expect(t).toContain('typeName:string');
   });
 
+  it('does not steal series / simple as user identifiers', () => {
+    const assign = typesOf('series = close\n');
+    expect(assign).toContain('variableName:series');
+    expect(assign).toContain('variableName.standard:close');
+    expect(assign).not.toContain('typeName:series');
+
+    const call = typesOf('plot(series)\n');
+    expect(call).toContain('variableName:series');
+    expect(call).not.toContain('typeName:series');
+
+    const fn = typesOf('ma(series, length) =>\n');
+    expect(fn).toContain('variableName:series');
+    expect(fn).toContain('variableName:length');
+    expect(fn).not.toContain('typeName:series');
+
+    const typed = typesOf('ma(series float src, simple int length) =>\n');
+    expect(typed).toContain('typeName:series');
+    expect(typed).toContain('typeName:float');
+    expect(typed).toContain('typeName:simple');
+    expect(typed).toContain('typeName:int');
+  });
+
   it('tags declared UDTs and later uses as typeName', () => {
     const src = `type Point
     float x
@@ -147,6 +179,16 @@ p = Point.new()
     const t = typesOf('import user/Lib/1 as m\nx = m.Easing.linear\n');
     expect(t).toContain('typeName:Easing');
     expect(t).toContain('propertyName.special:linear');
+  });
+
+  it('does not tag imported PascalCase calls or ALLCAPS as types', () => {
+    const t = typesOf('import user/Lib/1 as m\nplot(m.SuperTrend(close))\nv = m.VERSION\nr = m.RSI(close, 14)\n');
+    expect(t).toContain('propertyName.special:SuperTrend');
+    expect(t).not.toContain('typeName:SuperTrend');
+    expect(t).toContain('propertyName.special:VERSION');
+    expect(t).not.toContain('typeName:VERSION');
+    expect(t).toContain('propertyName.special:RSI');
+    expect(t).not.toContain('typeName:RSI');
   });
 
   it('keeps built-in namespace members as ordinary properties', () => {
