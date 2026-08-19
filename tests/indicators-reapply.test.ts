@@ -165,32 +165,32 @@ describe('setScriptChartVisible', () => {
     expect(trades).toBe(1);
   });
 
-  it('hide with another visible script does not clear global fills or barcolor', () => {
-    let fills = 0;
-    let barColors = 0;
-    let drawings = 0;
+  it('hide with another visible script owner-clears fills / barcolor / drawings', () => {
+    const fills: string[] = [];
+    const barColors: string[] = [];
+    const drawings: string[] = [];
     setManager({
       removeOverlaysForOwner: () => {},
       clearShapeMarkers: () => {},
       clearTradeMarkers: () => {},
-      clearBarColors: () => {
-        barColors += 1;
+      clearBarColors: (owner?: string) => {
+        barColors.push(owner || '');
       },
     } as never);
     setDrawingLayer({
-      clearScriptDrawings: () => {
-        drawings += 1;
+      clearScriptDrawings: (owner?: string) => {
+        drawings.push(owner || '');
       },
-      clearPlotFills: () => {
-        fills += 1;
+      clearPlotFills: (owner?: string) => {
+        fills.push(owner || '');
       },
     } as never);
     addIndicator('A', 'indicator("A")\nplot(1)', 'ind_a', {});
     const b = addIndicator('B', 'indicator("B")\nplot(2)', 'ind_b', {});
     setScriptChartVisible(b, false);
-    expect(fills).toBe(0);
-    expect(barColors).toBe(0);
-    expect(drawings).toBe(0);
+    expect(fills).toEqual([b]);
+    expect(barColors).toEqual([b]);
+    expect(drawings).toEqual([b]);
   });
 
   it('fallback removeOverlays skips when a sibling shares the pane', () => {
@@ -217,6 +217,24 @@ describe('setScriptChartVisible', () => {
     addIndicator('B', 'plot(2)', 'price', {});
     setScriptChartVisible(a, false);
     expect(wiped).toEqual(['ind_a']);
+  });
+
+  it('hide of exclusive sub-pane destroys the empty oscillator strip', () => {
+    const destroyed: string[] = [];
+    setManager({
+      removeOverlaysForOwner: () => {},
+      destroyPane: (id: string) => {
+        destroyed.push(id);
+      },
+    } as never);
+    setStore('panes', [
+      { id: 'price', type: 'price', height: 400, order: 0, visible: true },
+      { id: 'ind_r', type: 'indicator', height: 140, order: 2, visible: true },
+    ]);
+    const id = addIndicator('RSI', 'indicator("RSI")\nplot(1)', 'ind_r', {});
+    setScriptChartVisible(id, false);
+    expect(destroyed).toEqual(['ind_r']);
+    expect(store.panes.some((p) => p.id === 'ind_r')).toBe(false);
   });
 
   it('hide still clears overlays for library() sources', () => {

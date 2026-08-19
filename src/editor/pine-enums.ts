@@ -128,6 +128,7 @@ export const PINE_ENUM_PATHS: readonly string[] = [
   'extend.both',
   'display.none',
   'display.all',
+  'display.pane',
   'display.data_window',
   'display.price_scale',
   'display.status_line',
@@ -162,8 +163,6 @@ export const PINE_ENUM_PATHS: readonly string[] = [
   'math.e',
   'math.phi',
   'math.rphi',
-  'math.isnan',
-  'math.isfinite',
 
   // ── barstate / session / scale ───────────────────────────────────────────
   'barstate.islast',
@@ -194,6 +193,7 @@ const ENUM_BLURBS: Record<string, { detail: string; brief: string }> = {
   'plot.style_area': { detail: 'plot style', brief: 'Filled area' },
   'plot.style_areabr': { detail: 'plot style', brief: 'Area with breaks on na' },
   'plot.style_circles': { detail: 'plot style', brief: 'Circle markers' },
+  'display.pane': { detail: 'display', brief: 'Show on the chart pane' },
   // hline / line / label
   'hline.style_solid': { detail: 'hline style', brief: 'Solid horizontal line' },
   'hline.style_dashed': { detail: 'hline style', brief: 'Dashed horizontal line' },

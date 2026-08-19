@@ -274,6 +274,9 @@ describe('builtin path helpers', () => {
     // alert + math
     expect(isKnownBuiltinPath('alert.freq_all')).toBe(true);
     expect(isKnownBuiltinPath('math.pi')).toBe(true);
+    expect(isKnownBuiltinPath('display.pane')).toBe(true);
+    expect(isKnownBuiltinPath('math.isnan')).toBe(false);
+    expect(isKnownBuiltinPath('math.isfinite')).toBe(false);
   });
 
   it('still rejects real typos (plot.style_steplne, strategy.etry)', () => {

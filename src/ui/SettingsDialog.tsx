@@ -18,17 +18,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Application Settings modal — two tabs:
+ * Application Settings modal — three tabs:
  * - **General**: engine, on-chain proxy note, storage, density, chart interval, live prefs, workspace
+ * - **Editor**: lint / hover / completions / marks / timings (applies live, no Save)
  * - **Theme**: chart Theme Manager (bar colors, chart.bg_color / chart.fg_color, …)
  *
  * Local form state is seeded from `store` when the dialog opens (not on every
  * store mutation while open). Save snapshots form fields, writes
  * `pluginsConfig` / `activePlugins` / layout prefs, then `flushPersist()`.
- * Theme applies live (no Save). Endpoint **Probe** uses `probeEndpoint`
+ * Editor and Theme apply live (no Save). Endpoint **Probe** uses `probeEndpoint`
  * without committing form values.
  *
- * Optional `initialTab` focuses General or Theme when opening (e.g. command palette).
+ * Optional `initialTab` focuses General, Editor, or Theme when opening
+ * (e.g. command palette).
  */
 
 import {
@@ -1311,6 +1313,20 @@ function IntelNum(props: {
   suffix?: string;
   onChange: (v: number) => void;
 }) {
+  const [draft, setDraft] = createSignal(String(props.value));
+  createEffect(() => {
+    setDraft(String(props.value));
+  });
+  const commit = (raw: string) => {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) {
+      setDraft(String(props.value));
+      return;
+    }
+    const clamped = Math.min(props.max, Math.max(props.min, Math.round(n)));
+    if (clamped !== props.value) props.onChange(clamped);
+    setDraft(String(clamped));
+  };
   return (
     <label class="flex flex-col gap-0.5 mb-2" for={props.id}>
       <span class="flex items-baseline justify-between gap-2">
@@ -1327,11 +1343,10 @@ function IntelNum(props: {
         min={props.min}
         max={props.max}
         step={props.step ?? 50}
-        value={props.value}
-        onInput={(e) => {
-          const n = Number(e.currentTarget.value);
-          if (Number.isFinite(n)) props.onChange(n);
-        }}
+        value={draft()}
+        onInput={(e) => setDraft(e.currentTarget.value)}
+        onChange={(e) => commit(e.currentTarget.value)}
+        onBlur={(e) => commit(e.currentTarget.value)}
         data-testid={props.id}
       />
       <span class="text-[10px] text-text-faint">

@@ -584,7 +584,7 @@ export function combineEditorDiagnostics(
   sourceDoc: string,
 ): EditorDiagnostic[] {
   const runSrc = lastRunScriptSource(lastRun);
-  const includeLast = runSrc == null || runSrc === sourceDoc;
+  const includeLast = runSrc != null && runSrc === sourceDoc;
   const last = includeLast ? diagnosticsFromLastRun(lastRun, sourceDoc) : [];
   if (!pre.length) return last;
   if (!last.length) return [...pre];
@@ -840,11 +840,13 @@ function diagnosticHover(view: EditorView, pos: number): Tooltip | null {
   if (!diagIntel().diagHover) return null;
   const st = view.state.field(diagnosticsStateField, false);
   if (!st?.diags.length) return null;
-  const hits = st.diags.filter((d) => pos >= d.from && pos <= d.to);
+  const intel = diagIntel();
+  const shown = (d: EditorDiagnostic) => intelShowsSeverity(intel, d.severity);
+  const hits = st.diags.filter((d) => shown(d) && pos >= d.from && pos <= d.to);
   if (!hits.length) {
     // Also match full line when only line highlight is present
     const line = view.state.doc.lineAt(pos);
-    const lineHits = st.diags.filter((d) => d.line === line.number);
+    const lineHits = st.diags.filter((d) => shown(d) && d.line === line.number);
     if (!lineHits.length) return null;
     hits.push(...lineHits);
   }

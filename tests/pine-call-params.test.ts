@@ -140,6 +140,20 @@ describe('classifyParams / paramCompletions', () => {
 });
 
 describe('resolveCallSignature / hover markdown', () => {
+  it('includes format / precision / force_overlay on plotshape and plotchar', () => {
+    const shape = resolveCallSignature('plotshape');
+    const ch = resolveCallSignature('plotchar');
+    expect(shape).toBeTruthy();
+    expect(ch).toBeTruthy();
+    for (const sig of [shape!, ch!]) {
+      const names = sig.params.map((p) => p.name);
+      expect(names).toContain('format');
+      expect(names).toContain('precision');
+      expect(names).toContain('force_overlay');
+      expect(sig.params.find((p) => p.name === 'series')?.type).toBe('series int/bool');
+    }
+  });
+
   it('resolves ta.sma with source + length and an example', () => {
     const sig = resolveCallSignature('ta.sma');
     expect(sig).toBeTruthy();

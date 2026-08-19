@@ -316,10 +316,10 @@ add(
   'UNIX timestamp (milliseconds) of the current bar’s open (`series int`). Bare `time` is also a function that accepts session/timezone args.',
 );
 add('series', 'bar_index', 'Zero-based index of the current bar (`series int`).', 'plot(bar_index)');
-add('series', 'hl2', 'Typical price `(high + low) / 2` (`series float`).');
+add('series', 'hl2', 'Midpoint `(high + low) / 2` (`series float`).');
 add('series', 'hlc3', 'Typical price `(high + low + close) / 3` (`series float`).');
-add('series', 'ohlc4', 'Typical price `(open + high + low + close) / 4` (`series float`).');
-add('series', 'hlcc4', 'Typical price `(high + low + close + close) / 4` (`series float`).');
+add('series', 'ohlc4', 'OHLC average `(open + high + low + close) / 4` (`series float`).');
+add('series', 'hlcc4', 'HLCC average `(high + low + close + close) / 4` (`series float`).');
 add(
   'series',
   'timenow',

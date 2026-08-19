@@ -254,6 +254,7 @@ describe('combineEditorDiagnostics', () => {
     const lastRun = {
       status: 'error',
       error: 'Runtime error on line 3: division by zero',
+      meta: { axisSource: SAMPLE_DOC },
     };
     const merged = combineEditorDiagnostics([], lastRun, SAMPLE_DOC);
     expect(merged.some((d) => d.line === 3 && d.severity === 'error')).toBe(true);
@@ -263,6 +264,7 @@ describe('combineEditorDiagnostics', () => {
     const lastRun = {
       status: 'error',
       error: 'Runtime error on line 3: boom',
+      meta: { axisSource: SAMPLE_DOC },
     };
     const merged = combineEditorDiagnostics([typo], lastRun, SAMPLE_DOC);
     expect(merged.some((d) => d.severity === 'typo')).toBe(true);
@@ -291,10 +293,18 @@ describe('combineEditorDiagnostics', () => {
     expect(merged.some((d) => d.severity === 'typo')).toBe(true);
   });
 
+  it('drops unstamped last-run marks', () => {
+    const lastRun = {
+      status: 'error',
+      error: 'Runtime error on line 3: boom',
+    };
+    expect(combineEditorDiagnostics([], lastRun, SAMPLE_DOC)).toEqual([]);
+  });
+
   it('preserves a useful last-run engine message next to pre-eval marks', () => {
     const engine =
       'Runtime error on line 3: Cannot call "ta.sma" with argument "length"=na. The argument must be a simple int.';
-    const lastRun = { status: 'error', error: engine };
+    const lastRun = { status: 'error', error: engine, meta: { axisSource: SAMPLE_DOC } };
     const merged = combineEditorDiagnostics([typo], lastRun, SAMPLE_DOC);
     const run = merged.find((d) => d.line === 3 && d.severity === 'error');
     expect(run).toBeTruthy();

@@ -60,8 +60,6 @@ import {
 import {
   fetchRemoteCompletion,
   fetchRemoteHover,
-  LSP_COMPLETION_TIMEOUT_MS,
-  LSP_HOVER_TIMEOUT_MS,
   shouldUseRemoteLsp,
   type RemoteCompletionItem,
 } from './pyne-lsp-client';
@@ -434,7 +432,7 @@ export function completeNamedArgEnum(
 }
 
 function sigForCall(name: string, source: string): PineCallSig | null {
-  const meta = lookupBuiltin(name) || lookupBuiltin(name.split('.').pop() || '');
+  const meta = lookupBuiltin(name);
   const local = lookupPyneDoc(source, name);
   return resolveCallSignature(name, {
     documentation: meta?.documentation,
@@ -762,12 +760,42 @@ export function wordAt(
 export function lookupBuiltin(name: string): BuiltinMeta | undefined {
   initIndex();
   if (BY_NAME.has(name)) return BY_NAME.get(name);
-  // bare member → try common modules
-  if (!name.includes('.')) {
-    for (const mod of ['ta', 'math', 'str', 'array', 'matrix', 'map', 'input', 'strategy', 'request', 'ticker', 'timeframe', 'barstate', 'syminfo', 'session', 'color', 'line', 'label', 'box', 'table', 'polyline', 'chart']) {
-      const full = `${mod}.${name}`;
-      if (BY_NAME.has(full)) return BY_NAME.get(full);
-    }
+  return undefined;
+}
+
+/**
+ * Completions only: resolve a bare member via common modules (`sma` → `ta.sma`).
+ * Hover / signatures must not use this — it steals language facts (`close` →
+ * `strategy.close`, `new` → `array.new`).
+ */
+export function lookupBuiltinMember(name: string): BuiltinMeta | undefined {
+  initIndex();
+  if (!name || name.includes('.')) return lookupBuiltin(name);
+  for (const mod of [
+    'ta',
+    'math',
+    'str',
+    'array',
+    'matrix',
+    'map',
+    'input',
+    'strategy',
+    'request',
+    'ticker',
+    'timeframe',
+    'barstate',
+    'syminfo',
+    'session',
+    'color',
+    'line',
+    'label',
+    'box',
+    'table',
+    'polyline',
+    'chart',
+  ]) {
+    const full = `${mod}.${name}`;
+    if (BY_NAME.has(full)) return BY_NAME.get(full);
   }
   return undefined;
 }
@@ -928,8 +956,8 @@ export async function pyneComplete(
       character,
       signal: ac.signal,
       timeoutMs: context.explicit
-        ? Math.min(600, LSP_COMPLETION_TIMEOUT_MS)
-        : LSP_COMPLETION_TIMEOUT_MS,
+        ? Math.min(600, cfg.completionTimeoutMs)
+        : cfg.completionTimeoutMs,
     });
   } catch {
     remote = null;
@@ -1441,11 +1469,16 @@ export function pyneHoverLocal(
   const declFact = declarationTypeFact(text, hit);
   if (declFact) return hoverFromFact(hit.from, hit.to, declFact);
 
-  // 3. Builtins catalog
-  let meta = lookupBuiltin(hit.word);
-  if (!meta && hit.word.includes('.')) {
-    meta = lookupBuiltin(hit.word.split('.').pop() || '');
-  }
+  // 3. Facts / keywords / types / series / namespaces (before catalog — `close`
+  // is a series builtin, not `strategy.close`)
+  const fact =
+    lookupHoverFact(hit.word) ||
+    (hit.word.includes('.') ? lookupHoverFact(hit.word.split('.').pop() || '') : null) ||
+    (seg.count > 1 ? lookupHoverFact(seg.name, { prefer: 'namespace' }) : null);
+  if (fact) return hoverFromFact(hit.from, hit.to, fact);
+
+  // 4. Builtins catalog — exact names only (never `Foo.new` → `array.new`)
+  const meta = lookupBuiltin(hit.word);
   if (meta && isThinModuleStub(meta)) {
     const ns = lookupHoverFact(meta.label || hit.word, { prefer: 'namespace' });
     if (ns) return hoverFromFact(hit.from, hit.to, ns);
@@ -1464,13 +1497,6 @@ export function pyneHoverLocal(
       },
     );
   }
-
-  // 4. Facts / keywords / types / series / namespaces
-  const fact =
-    lookupHoverFact(hit.word) ||
-    (hit.word.includes('.') ? lookupHoverFact(hit.word.split('.').pop() || '') : null) ||
-    (seg.count > 1 ? lookupHoverFact(seg.name, { prefer: 'namespace' }) : null);
-  if (fact) return hoverFromFact(hit.from, hit.to, fact);
 
   // 5. User symbols in this buffer
   const user = lookupUserSymbol(text, hit.word);
@@ -1534,7 +1560,6 @@ export async function pyneHover(view: EditorView, pos: number): Promise<Tooltip 
       source: text,
       line: line.number - 1,
       character: pos - line.from,
-      timeoutMs: LSP_HOVER_TIMEOUT_MS,
     });
     if (remote?.contents) {
       let from = hit.from;

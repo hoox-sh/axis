@@ -949,6 +949,7 @@ async function runAndApplyInner(
         manager.syncTimeScales();
       } else {
         try {
+          manager.setVisible?.(paneId, true);
           manager.setLabel(paneId, scriptName);
         } catch {
           /* ignore */
@@ -1285,6 +1286,7 @@ async function runAndApplyInner(
                 colors: f.colors,
                 color: f.color,
               })),
+              indicatorId ?? EDITOR_RUN_KEY,
             );
             if (!silent) {
               appendLog(
@@ -1294,7 +1296,7 @@ async function runAndApplyInner(
               );
             }
           } else {
-            layer.clearPlotFills?.();
+            layer.clearPlotFills?.(indicatorId ?? EDITOR_RUN_KEY);
           }
         }
       } catch {
@@ -1319,7 +1321,7 @@ async function runAndApplyInner(
       try {
         if (split.barcolors?.length) {
           const colorMap = barcolorSeriesToMap(ohlcvTimes, split.barcolors);
-          const n = manager.applyBarColors?.(colorMap) ?? 0;
+          const n = manager.applyBarColors?.(colorMap, indicatorId ?? EDITOR_RUN_KEY) ?? 0;
           if (n > 0 && !silent) {
             appendLog('ok', `barcolor: ${n} bar(s) tinted`, 'plot');
           }
@@ -1489,16 +1491,16 @@ async function runAndApplyInner(
         if (!overlay && paneId !== 'price') {
           const onPrice = kept.filter((d) => d.forceOverlay);
           const onPane = kept.filter((d) => !d.forceOverlay);
-          keptCount = priceLayer?.setScriptDrawings(onPrice, limits) ?? 0;
+          keptCount = priceLayer?.setScriptDrawings(onPrice, limits, indicatorId ?? EDITOR_RUN_KEY) ?? 0;
           const paneLayer = ensureScriptPaneLayer(paneId);
           if (paneLayer) {
-            keptCount += paneLayer.setScriptDrawings(onPane, limits);
+            keptCount += paneLayer.setScriptDrawings(onPane, limits, indicatorId ?? EDITOR_RUN_KEY);
           } else if (onPane.length) {
             // Fall back to price if sub-pane layer unavailable
-            keptCount = priceLayer?.setScriptDrawings(kept, limits) ?? 0;
+            keptCount = priceLayer?.setScriptDrawings(kept, limits, indicatorId ?? EDITOR_RUN_KEY) ?? 0;
           }
         } else {
-          keptCount = priceLayer?.setScriptDrawings(kept, limits) ?? 0;
+          keptCount = priceLayer?.setScriptDrawings(kept, limits, indicatorId ?? EDITOR_RUN_KEY) ?? 0;
         }
         if (!silent) {
           const dropped = normalized.length - kept.length;
@@ -1532,10 +1534,10 @@ async function runAndApplyInner(
         }
       } else if (!silent) {
         // Only clear on interactive full runs when engine returned none
-        priceLayer?.clearScriptDrawings();
+        priceLayer?.clearScriptDrawings(indicatorId ?? EDITOR_RUN_KEY);
         if (!overlay && paneId !== 'price') {
           try {
-            ensureScriptPaneLayer(paneId)?.clearScriptDrawings();
+            ensureScriptPaneLayer(paneId)?.clearScriptDrawings(indicatorId ?? EDITOR_RUN_KEY);
           } catch {
             /* optional */
           }

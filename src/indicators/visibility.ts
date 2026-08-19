@@ -8,12 +8,14 @@
  * Chart-script visibility = execution gate.
  *
  * Hidden scripts are removed from the pane and skipped by live re-runs.
- * Showing a script re-runs it on current bars (and keeps it in the live loop).
+ * Owner-scoped drawings / fills / barcolor are cleared on hide; exclusive
+ * sub-panes are destroyed when empty. Showing a script re-runs it on current
+ * bars (and keeps it in the live loop).
  *
  * @module indicators/visibility
  */
 
-import { store, updateIndicator } from '../store';
+import { store, updateIndicator, removePane } from '../store';
 import {
   getManager,
   clearScriptPaneLayer,
@@ -33,7 +35,6 @@ export function clearScriptChartOverlays(id: string, paneId?: string): void {
   const othersOnPane = store.scripts.filter(
     (s) => s.id !== id && (s.paneId || 'price') === pane,
   );
-  // Drawings / fills / barcolor are last-writer-wins — wipe only when nobody else is shown.
   const otherVisible = store.scripts.some((s) => s.id !== id && s.visible);
 
   try {
@@ -57,17 +58,41 @@ export function clearScriptChartOverlays(id: string, paneId?: string): void {
     /* optional */
   }
   try {
-    if (isSubPane) clearScriptPaneLayer?.(pane);
+    if (isSubPane) {
+      clearScriptPaneLayer?.(pane);
+      const stillOnPane = store.scripts.some(
+        (s) => s.id !== id && (s.paneId || 'price') === pane,
+      );
+      if (!stillOnPane) {
+        try {
+          manager.destroyPane?.(pane);
+        } catch {
+          /* optional */
+        }
+        if (store.panes.some((p) => p.id === pane)) {
+          try {
+            removePane(pane);
+          } catch {
+            /* optional */
+          }
+        }
+      }
+    }
   } catch {
     /* optional */
   }
-  if (otherVisible) return;
   try {
     const layer = getActiveDrawingLayer() ?? getDrawingLayer();
-    layer?.clearScriptDrawings?.();
-    clearScriptPaneLayers?.();
-    layer?.clearPlotFills?.();
-    manager.clearBarColors?.();
+    if (otherVisible) {
+      layer?.clearScriptDrawings?.(id);
+      layer?.clearPlotFills?.(id);
+      manager.clearBarColors?.(id);
+    } else {
+      layer?.clearScriptDrawings?.();
+      clearScriptPaneLayers?.();
+      layer?.clearPlotFills?.();
+      manager.clearBarColors?.();
+    }
   } catch {
     /* optional */
   }

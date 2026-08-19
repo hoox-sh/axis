@@ -12,6 +12,7 @@ import { describe, expect, it } from 'bun:test';
 import { EditorState } from '@codemirror/state';
 import {
   lookupBuiltin,
+  lookupBuiltinMember,
   pyneBuiltinCount,
   pyneComplete,
   wordAt,
@@ -50,9 +51,10 @@ describe('pyne-lsp', () => {
   it('looks up ta.sma and bare sma', () => {
     const full = lookupBuiltin('ta.sma');
     expect(full?.label).toBeTruthy();
-    const bare = lookupBuiltin('sma');
-    // may resolve via module search
-    expect(bare || full).toBeTruthy();
+    expect(lookupBuiltinMember('sma')?.label).toBeTruthy();
+    // No module-walk for hover: `close`/`new` must not become strategy.close / array.new
+    expect(lookupBuiltin('close')).toBeUndefined();
+    expect(lookupBuiltin('new')).toBeUndefined();
   });
 
   it('hover prefers local //@function annotations over missing builtins', async () => {
@@ -568,13 +570,15 @@ series float x = close
     expect(hoverText(src, 'series')).toMatch(/type qualifier|qualifier/i);
   });
 
-  it('close hover is not empty', () => {
+  it('close hover is the series builtin, not strategy.close', () => {
     const src = `//@version=6
 indicator("t")
 plot(close)
 `;
     const text = hoverText(src, 'close');
     expect(text.trim().length).toBeGreaterThan(0);
+    expect(text).toMatch(/closing price|current bar/i);
+    expect(text).not.toMatch(/strategy\.close/i);
   });
 
   it('ta in ta.sma hover mentions technical / module', () => {

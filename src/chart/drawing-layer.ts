@@ -156,6 +156,8 @@ export class DrawingLayer {
   private tool: DrawingToolId = 'cursor';
   private drawings: Drawing[] = [];
   private scriptDrawings: ScriptDrawing[] = [];
+  /** Owner-scoped Pine geometry (hide one script without wiping siblings). */
+  private scriptDrawingsByOwner = new Map<string, ScriptDrawing[]>();
   /**
    * Pine fill bands: upper/lower price series + color, projected to SVG on redraw.
    * Populated by {@link setPlotFills} from runner after a successful `/run`.
@@ -168,6 +170,17 @@ export class DrawingLayer {
     colors: (string | null)[];
     color: string;
   }> = [];
+  private plotFillsByOwner = new Map<
+    string,
+    Array<{
+      name: string;
+      times: number[];
+      upper: (number | null)[];
+      lower: (number | null)[];
+      colors: (string | null)[];
+      color: string;
+    }>
+  >();
   private selectedId: string | null = null;
   /** In-progress multi-click placement (1/2/3/n anchors). */
   private draft: { tool: DrawingToolId; points: Point[] } | null = null;
@@ -435,6 +448,7 @@ export class DrawingLayer {
   setScriptDrawings(
     raw: unknown[] | undefined | null,
     limits: DrawingLimits = DEFAULT_DRAWING_LIMITS,
+    ownerId?: string,
   ): number {
     // Normalize → GC caps → collapse same-text label stacks (status labels).
     // Labels clamp to last bar at paint; geometry (line/box/…) keeps
@@ -442,6 +456,14 @@ export class DrawingLayer {
     const next = dedupeScriptLabelsAtSameTime(
       garbageCollectScriptDrawings(normalizeScriptDrawings(raw), limits),
     );
+    const owner = ownerId && String(ownerId).trim();
+    if (owner) {
+      if (next.length) this.scriptDrawingsByOwner.set(owner, next);
+      else this.scriptDrawingsByOwner.delete(owner);
+      this.rebuildOwnedScriptDrawings();
+      return this.scriptDrawings.length;
+    }
+    this.scriptDrawingsByOwner.clear();
     const sig = scriptDrawingsSignature(next);
     if (sig === this.lastScriptSig) return this.scriptDrawings.length;
     this.lastScriptSig = sig;
@@ -450,10 +472,30 @@ export class DrawingLayer {
     return next.length;
   }
 
-  clearScriptDrawings() {
+  clearScriptDrawings(ownerId?: string) {
+    const owner = ownerId && String(ownerId).trim();
+    if (owner) {
+      if (!this.scriptDrawingsByOwner.has(owner)) return;
+      this.scriptDrawingsByOwner.delete(owner);
+      this.rebuildOwnedScriptDrawings();
+      return;
+    }
+    this.scriptDrawingsByOwner.clear();
     if (!this.scriptDrawings.length && this.lastScriptSig === '') return;
     this.scriptDrawings = [];
     this.lastScriptSig = '';
+    this.redrawScript();
+  }
+
+  private rebuildOwnedScriptDrawings(): void {
+    const next: ScriptDrawing[] = [];
+    for (const list of this.scriptDrawingsByOwner.values()) {
+      for (const d of list) next.push(d);
+    }
+    const sig = scriptDrawingsSignature(next);
+    if (sig === this.lastScriptSig) return;
+    this.lastScriptSig = sig;
+    this.scriptDrawings = next;
     this.redrawScript();
   }
 
@@ -470,6 +512,7 @@ export class DrawingLayer {
       colors?: (string | null)[];
       color?: string;
     }>,
+    ownerId?: string,
   ) {
     const next = (fills || []).map((f) => ({
       name: f.name,
@@ -479,6 +522,14 @@ export class DrawingLayer {
       colors: f.colors || [],
       color: f.color || 'rgba(255, 82, 82, 0.2)',
     }));
+    const owner = ownerId && String(ownerId).trim();
+    if (owner) {
+      if (next.length) this.plotFillsByOwner.set(owner, next);
+      else this.plotFillsByOwner.delete(owner);
+      this.rebuildOwnedPlotFills();
+      return;
+    }
+    this.plotFillsByOwner.clear();
     const sig = plotFillsSignature(next);
     // Live silent re-runs often re-apply identical fills — skip SVG rebuild
     if (sig === this.lastFillSig) return;
@@ -487,10 +538,37 @@ export class DrawingLayer {
     this.redrawFills();
   }
 
-  clearPlotFills() {
+  clearPlotFills(ownerId?: string) {
+    const owner = ownerId && String(ownerId).trim();
+    if (owner) {
+      if (!this.plotFillsByOwner.has(owner)) return;
+      this.plotFillsByOwner.delete(owner);
+      this.rebuildOwnedPlotFills();
+      return;
+    }
+    this.plotFillsByOwner.clear();
     if (!this.plotFills.length && this.lastFillSig === '') return;
     this.plotFills = [];
     this.lastFillSig = '';
+    this.redrawFills();
+  }
+
+  private rebuildOwnedPlotFills(): void {
+    const next: Array<{
+      name: string;
+      times: number[];
+      upper: (number | null)[];
+      lower: (number | null)[];
+      colors: (string | null)[];
+      color: string;
+    }> = [];
+    for (const list of this.plotFillsByOwner.values()) {
+      for (const f of list) next.push(f);
+    }
+    const sig = plotFillsSignature(next);
+    if (sig === this.lastFillSig) return;
+    this.lastFillSig = sig;
+    this.plotFills = next;
     this.redrawFills();
   }
 
@@ -787,7 +865,10 @@ export class DrawingLayer {
    * Time → pixel X (unix seconds first, then future logical extrapolation,
    * then bare bar_index). Used by {@link toXY} and vline hit-test.
    */
-  private timeToX(time: number, opts?: { clampToLastBar?: boolean }): number | null {
+  private timeToX(
+    time: number,
+    opts?: { clampToLastBar?: boolean; growRightOffset?: boolean },
+  ): number | null {
     if (!Number.isFinite(time)) return null;
     try {
       const bars = this.barsProvider?.() ?? null;
@@ -803,13 +884,25 @@ export class DrawingLayer {
         x = null;
       }
       if (x == null && bars?.length) {
+        const lastIdx = bars.length - 1;
         const logical = unixTimeToLogicalIndex(t, bars, DRAWING_FUTURE_BARS);
         if (logical != null) {
-          this.ensureRightOffsetForLogical(logical, bars.length);
-          try {
-            x = this.chart.timeScale().logicalToCoordinate(logical as never);
-          } catch {
-            x = null;
+          const extra = logical - lastIdx;
+          if (opts?.growRightOffset === false && extra > 2) {
+            try {
+              x = this.chart.timeScale().timeToCoordinate(bars[lastIdx]!.time as UTCTimestamp);
+            } catch {
+              x = null;
+            }
+          } else {
+            if (opts?.growRightOffset !== false) {
+              this.ensureRightOffsetForLogical(logical, bars.length);
+            }
+            try {
+              x = this.chart.timeScale().logicalToCoordinate(logical as never);
+            } catch {
+              x = null;
+            }
           }
         }
       }
@@ -837,7 +930,7 @@ export class DrawingLayer {
    */
   private toXY(
     p: Point,
-    opts?: { clampToLastBar?: boolean },
+    opts?: { clampToLastBar?: boolean; growRightOffset?: boolean },
   ): { x: number; y: number } | null {
     if (!p || !isFinitePoint(p)) return null;
     try {
@@ -1571,6 +1664,7 @@ export class DrawingLayer {
   ): { x: number; y: number } | null {
     return this.toXY(p, {
       clampToLastBar: scriptPaintClampsToLastBar(type),
+      growRightOffset: false,
     });
   }
 

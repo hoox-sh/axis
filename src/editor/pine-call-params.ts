@@ -99,7 +99,7 @@ const CURATED: Record<string, PineCallSig> = {
   plotshape: {
     name: 'plotshape',
     params: [
-      { name: 'series', type: 'series bool', description: 'True / non-na to draw a shape' },
+      { name: 'series', type: 'series int/bool', description: 'True / nonzero / non-na to draw a shape' },
       { name: 'title', type: 'const string', optional: true, description: 'Shape title' },
       { name: 'style', type: 'input string', optional: true, description: '`shape.triangleup`, `shape.circle`, …' },
       { name: 'location', type: 'input string', optional: true, description: '`location.abovebar` / `location.belowbar`' },
@@ -111,13 +111,16 @@ const CURATED: Record<string, PineCallSig> = {
       { name: 'size', type: 'const string', optional: true, description: '`size.tiny` … `size.huge`' },
       { name: 'show_last', type: 'input int', optional: true },
       { name: 'display', type: 'input string', optional: true },
+      { name: 'format', type: 'const string', optional: true, description: '`format.price` / `format.percent`' },
+      { name: 'precision', type: 'const int', optional: true, description: 'Decimal places' },
+      { name: 'force_overlay', type: 'const bool', optional: true, description: 'Force onto the price pane' },
     ],
     example: 'plotshape(ta.crossover(fast, slow), style=shape.triangleup, location=location.belowbar)',
   },
   plotchar: {
     name: 'plotchar',
     params: [
-      { name: 'series', type: 'series bool', description: 'True / non-na to draw the character' },
+      { name: 'series', type: 'series int/bool', description: 'True / nonzero / non-na to draw the character' },
       { name: 'title', type: 'const string', optional: true },
       { name: 'char', type: 'const string', optional: true, description: 'Single character, e.g. `"▲"`' },
       { name: 'location', type: 'input string', optional: true },
@@ -129,6 +132,9 @@ const CURATED: Record<string, PineCallSig> = {
       { name: 'size', type: 'const string', optional: true },
       { name: 'show_last', type: 'input int', optional: true },
       { name: 'display', type: 'input string', optional: true },
+      { name: 'format', type: 'const string', optional: true, description: '`format.price` / `format.percent`' },
+      { name: 'precision', type: 'const int', optional: true, description: 'Decimal places' },
+      { name: 'force_overlay', type: 'const bool', optional: true, description: 'Force onto the price pane' },
     ],
     example: 'plotchar(longCond, char="▲", location=location.belowbar, color=color.lime)',
   },

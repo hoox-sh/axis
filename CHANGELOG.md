@@ -15,6 +15,27 @@ _Generated/updated: 2026-08-19 · 236 commits · describe-tag: `v2.0.14`_
 
 ## [Unreleased]
 
+### Fixed
+
+- **Editor hover catalog** — bare `close` / `new` no longer steal `strategy.close` / `array.new`. Hover facts win; completions still walk modules.
+- **`display.pane`** — real Pine v5+ member is allowlisted (no more typo → `display.none`). Invented `math.isnan` / `math.isfinite` completions removed.
+- **Editor intel timeouts** — Hover / Completion timeout settings now reach `/lsp/*` (were hardcoded).
+- **Intel number fields** — clamp on blur / spinner, not every keystroke, so `1500` is typeable.
+- **Diagnostic hover** — respects Show errors / warnings / typos / info flags.
+- **Pre-eval flags apply live** — toggling lint generation immediately re-runs or clears marks.
+- **Hide + tables** — `table.*` HUDs follow visibility; drawings / fills / `barcolor` are owner-scoped so hide with a sibling no longer leaves the hidden script’s artifacts.
+- **Hide exclusive pane** — empty oscillator strip is destroyed; show recreates it.
+- **`*br` primitives** — `destroyPane` detaches line-break primitives; attach failure is not cached; segments are cached and culled to the visible range.
+- **Last-bar drawings** — script paint no longer grows `rightOffset` up to 500 bars for wall-clock `timenow` (one-bar `bar_index+1` still maps).
+- **PYNE Agent seed** — same-origin plugin install no longer writes a hardcoded Worker URL; chat stays off until the operator sets the endpoint.
+- **Unstamped last-run marks** — engine underlines drop unless `meta.axisSource` (or `script`) still matches the buffer.
+
+### Improved
+
+- **Hover facts** — `hl2` / `ohlc4` / `hlcc4` use midpoint / OHLC / HLCC wording (only `hlc3` is typical price).
+- **`plotshape` / `plotchar`** — curated params include `format`, `precision`, `force_overlay`; `series` is `int/bool`.
+- **Docs** — `areabr` is only on the broken-segment row; debugging mermaid includes pre-eval → Problems.
+
 ## [2.0.15] — 2026-08-19
 
 Editor intelligence settings, Supertrend `linebr` gaps, live script hide/run, and PYNE Agent chat markdown.

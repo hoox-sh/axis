@@ -47,11 +47,13 @@ import { pluginKey, type ComponentPlugin, type DatasetPlugin, type EnginePlugin,
 
 /**
  * Same-origin copy of the PYNE Agent component plugin (avoids cross-origin
- * module CORS / CSP issues). API traffic still goes to {@link DEFAULT_PYNE_AGENT_ENDPOINT}.
+ * module CORS / CSP issues). Chat API host is **not** implied — set
+ * `pluginsConfig.endpoint` in the plugin UI (or seed only when the install
+ * URL is already an agent Worker origin).
  */
 export const DEFAULT_PYNE_AGENT_PLUGIN_URL = '/plugins/axis-pine-agent.js';
 
-/** Production agent Worker origin (NL → Pine). Seeded into plugin config. */
+/** Known production agent Worker origin (NL → Pine). Not auto-seeded. */
 export const DEFAULT_PYNE_AGENT_ENDPOINT =
   'https://pyne-agent-worker.cryptolinx.workers.dev';
 
@@ -170,14 +172,17 @@ function componentConfig(id: string): Record<string, unknown> {
   };
 }
 
-/** Seed default agent API endpoint when installing the PYNE Agent plugin. */
+/**
+ * Seed agent API endpoint only when the install URL is already the Worker
+ * origin. Same-origin `/plugins/axis-pine-agent.js` is just the module —
+ * leave endpoint unset so chat stays disabled until the operator sets it.
+ */
 function seedPyneAgentConfig(pluginId: string, href: string): void {
   if (pluginId !== 'pyne-agent' && !href.includes('axis-pine-agent.js')) return;
   const key = pluginKey('component', 'pyne-agent');
   const prev = (store.pluginsConfig?.[key] || {}) as Record<string, unknown>;
   if (prev.endpoint && String(prev.endpoint).trim()) return;
-  // Prefer the known agent Worker origin — same-origin `/plugins/…` is only the module.
-  let endpoint = DEFAULT_PYNE_AGENT_ENDPOINT;
+  let endpoint = '';
   try {
     const u = new URL(href, typeof location !== 'undefined' ? location.origin : 'https://axis.local');
     if (
@@ -187,8 +192,9 @@ function seedPyneAgentConfig(pluginId: string, href: string): void {
       endpoint = u.origin;
     }
   } catch {
-    /* keep default */
+    /* leave unset */
   }
+  if (!endpoint) return;
   setStore('pluginsConfig', {
     ...(store.pluginsConfig || {}),
     [key]: { ...prev, endpoint },

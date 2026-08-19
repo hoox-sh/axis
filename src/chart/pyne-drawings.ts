@@ -513,6 +513,17 @@ export function labelBubbleLayout(
 }
 
 /**
+ * True when Pine script paint should snap this kind to the last bar.
+ * Labels (`timenow`) stay on the last candle. Geometry that uses
+ * `bar_index + 1` / `varip` updates must keep the future endpoint.
+ */
+export function scriptPaintClampsToLastBar(
+  type: ScriptDrawing['type'] | string | null | undefined,
+): boolean {
+  return type === 'label';
+}
+
+/**
  * Clamp a time anchor that lies strictly past the last bar to that bar's time.
  *
  * Pine scripts often place labels with `xloc.bar_time` + `timenow` (or other
@@ -525,17 +536,6 @@ export function labelBubbleLayout(
  * @param t - Drawing time (unix seconds) or bar index
  * @param lastBarTime - Last series bar time (unix seconds); null skips clamp
  */
-/**
- * True when Pine script paint should snap this kind to the last bar.
- * Labels (`timenow`) stay on the last candle. Geometry that uses
- * `bar_index + 1` / `varip` updates must keep the future endpoint.
- */
-export function scriptPaintClampsToLastBar(
-  type: ScriptDrawing['type'] | string | null | undefined,
-): boolean {
-  return type === 'label';
-}
-
 export function clampTimeToLastBar(
   t: number,
   lastBarTime: number | null | undefined,
@@ -551,6 +551,10 @@ export function clampTimeToLastBar(
  * Clamp t1/t2/polyline point times past {@link lastBarTime} (immutable).
  * No-op when lastBarTime is missing or nothing is in the future.
  * Drops polyline vertices with non-finite price; leaves finite coords as-is.
+ *
+ * Do not use this for script **paint** — labels already clamp via
+ * {@link scriptPaintClampsToLastBar}; lines/boxes/polylines must keep
+ * `bar_index + 1` / `varip` endpoints.
  */
 export function clampScriptDrawingTimes(
   drawings: ScriptDrawing[],

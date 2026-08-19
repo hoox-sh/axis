@@ -2444,16 +2444,57 @@ export function setEditorIntel(next: EditorIntelSettings | Record<string, unknow
   persist();
 }
 
+const PREEVAL_GEN_KEYS: (keyof EditorIntelSettings)[] = [
+  'preevalEnabled',
+  'preevalTypos',
+  'preevalVersionWarn',
+  'preevalStudyWarn',
+  'preevalSecurityWarn',
+  'preevalDuplicateDecl',
+  'preevalLocal',
+  'preevalRemote',
+];
+
 /** Merge a partial editor-intel patch and persist. */
 export function patchEditorIntel(partial: Partial<EditorIntelSettings>) {
-  setStore('editorIntel', readEditorIntel({ ...store.editorIntel, ...partial }));
+  const prev = readEditorIntel(store.editorIntel);
+  const next = readEditorIntel({ ...store.editorIntel, ...partial });
+  setStore('editorIntel', next);
   persist();
+  const genChanged = PREEVAL_GEN_KEYS.some((k) => prev[k] !== next[k]);
+  if (!genChanged) return;
+  const source = store.preEval?.source || '';
+  if (!next.preevalEnabled) {
+    setPreEval({
+      diagnostics: [],
+      hasErrors: false,
+      pending: false,
+      source,
+    });
+    return;
+  }
+  if (!source) return;
+  void import('../editor/preevaluate')
+    .then((m) => m.runPreevalNow(source))
+    .catch(() => {
+      /* editor optional */
+    });
 }
 
 /** Restore factory editor-intelligence defaults. */
 export function resetEditorIntel() {
+  const prev = readEditorIntel(store.editorIntel);
   setStore('editorIntel', { ...DEFAULT_EDITOR_INTEL });
   persist();
+  const next = DEFAULT_EDITOR_INTEL;
+  const genChanged = PREEVAL_GEN_KEYS.some((k) => prev[k] !== next[k]);
+  if (!genChanged) return;
+  const source = store.preEval?.source || '';
+  void import('../editor/preevaluate')
+    .then((m) => m.runPreevalNow(source))
+    .catch(() => {
+      /* editor optional */
+    });
 }
 
 /* ── Panel chrome (dock / float / window) ───────────────────────── */

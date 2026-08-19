@@ -59,4 +59,16 @@ describe('LineBreakPrimitive', () => {
       lineStyle: 'dashed',
     });
   });
+
+  it('setPoints is a no-op when length, tip, and opts are unchanged', () => {
+    const prim = new LineBreakPrimitive();
+    const data = [
+      { time: 1, value: 10 },
+      { time: 2, value: 11 },
+    ];
+    prim.setPoints(data, { color: '#fff', lineWidth: 2, lineStyle: 'solid' });
+    const first = prim.segments();
+    prim.setPoints(data, { color: '#fff', lineWidth: 2, lineStyle: 'solid' });
+    expect(prim.segments()).toBe(first);
+  });
 });

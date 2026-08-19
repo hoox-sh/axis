@@ -42,7 +42,9 @@ export const PyneTableHud: Component = () => {
     void store.scripts;
     void store.runResults;
     void store.lastRun;
-    const scriptIds = (store.scripts || []).map((s) => s.id);
+    const scriptIds = (store.scripts || [])
+      .filter((s) => s.visible !== false)
+      .map((s) => s.id);
     return collectVisiblePineTables({
       scriptIds,
       runResults: store.runResults,

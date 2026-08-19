@@ -114,10 +114,23 @@ class LineBreakRenderer implements IPrimitivePaneRenderer {
 
     media.useMediaCoordinateSpace(({ context: ctx, mediaSize }: MediaScope) => {
       const ts = chart.timeScale();
+      let fromT = Number.NEGATIVE_INFINITY;
+      let toT = Number.POSITIVE_INFINITY;
+      try {
+        const vr = ts.getVisibleRange?.();
+        if (vr && vr.from != null && vr.to != null) {
+          const pad = (Number(vr.to) - Number(vr.from)) * 0.05 || 0;
+          fromT = Number(vr.from) - pad;
+          toT = Number(vr.to) + pad;
+        }
+      } catch {
+        /* mock / disposed */
+      }
       const mapped: { x: number; y: number }[][] = [];
       for (const seg of segs) {
         const pts: { x: number; y: number }[] = [];
         for (const p of seg) {
+          if (p.time < fromT || p.time > toT) continue;
           const x = ts.timeToCoordinate(p.time as Time);
           const y = series.priceToCoordinate(p.value);
           if (x == null || y == null || !Number.isFinite(x) || !Number.isFinite(y)) continue;
@@ -196,6 +209,8 @@ class LineBreakPaneView implements IPrimitivePaneView {
 export class LineBreakPrimitive implements ISeriesPrimitive<Time> {
   private _points: LineBreakOverlayPoint[] = [];
   private _opts: LineBreakPrimitiveOpts = { ...DEFAULT_OPTS };
+  private _segments: { time: number; value: number }[][] = [];
+  private _pointsSig = '';
   private _chart: IChartApi | null = null;
   private _series: ISeriesApi<any> | null = null;
   private _requestUpdate: (() => void) | null = null;
@@ -222,8 +237,14 @@ export class LineBreakPrimitive implements ISeriesPrimitive<Time> {
   }
 
   setPoints(points: ReadonlyArray<LineBreakOverlayPoint>, opts?: Partial<LineBreakPrimitiveOpts>): void {
+    const nextOpts = opts ? { ...this._opts, ...opts } : this._opts;
+    const last = points.length ? points[points.length - 1] : undefined;
+    const sig = `${points.length}|${last?.time ?? ''}|${last?.value ?? ''}|${nextOpts.color}|${nextOpts.lineWidth}|${nextOpts.lineStyle}|${nextOpts.stepped ? 1 : 0}|${nextOpts.area ? 1 : 0}`;
+    if (sig === this._pointsSig) return;
+    this._pointsSig = sig;
     this._points = points.slice();
-    if (opts) this._opts = { ...this._opts, ...opts };
+    this._opts = nextOpts;
+    this._segments = splitOverlayLineSegments(this._points);
     try {
       this._requestUpdate?.();
     } catch {
@@ -245,6 +266,6 @@ export class LineBreakPrimitive implements ISeriesPrimitive<Time> {
 
   /** Finite runs used by the renderer (and tests). */
   segments(): { time: number; value: number }[][] {
-    return splitOverlayLineSegments(this._points);
+    return this._segments;
   }
 }

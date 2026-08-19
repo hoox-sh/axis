@@ -444,6 +444,8 @@ export class PaneManager {
    * history reload / clearShape path.
    */
   private barColorByTime = new Map<number, string>();
+  /** Owner-scoped barcolor so hide/clear of one script keeps siblings. */
+  private barColorsByOwner = new Map<string, Map<number, string>>();
   /** Time-range sync unsubscribers (all panes ↔ all panes) */
   private timeSyncUnsubs: Array<() => void> = [];
   /** Crosshair multi-pane sync unsubscribers */
@@ -804,6 +806,9 @@ export class PaneManager {
   destroyPane(id: string, opts?: { rewire?: boolean }) {
     const pane = this.panes.get(id);
     if (!pane) return;
+    for (const key of Object.keys(pane.series)) {
+      this.dropLineBreak(pane.series[key], key);
+    }
     // Disconnect ResizeObserver to prevent memory leak
     if (pane.resizeObserver) {
       pane.resizeObserver.disconnect();
@@ -1181,25 +1186,51 @@ export class PaneManager {
    */
   applyBarColors(
     colors: ReadonlyArray<{ time: number; color: string }> | Map<number, string> | null | undefined,
+    ownerId?: string,
   ): number {
-    this.barColorByTime = new Map();
+    const next = new Map<number, string>();
     if (colors instanceof Map) {
       for (const [t, c] of colors) {
-        if (Number.isFinite(t) && c) this.barColorByTime.set(t, c);
+        if (Number.isFinite(t) && c) next.set(t, c);
       }
     } else if (Array.isArray(colors)) {
       for (const row of colors) {
         if (!row || !Number.isFinite(row.time) || !row.color) continue;
-        this.barColorByTime.set(row.time, row.color);
+        next.set(row.time, row.color);
       }
+    }
+    const owner = ownerId && String(ownerId).trim();
+    if (owner) {
+      if (next.size) this.barColorsByOwner.set(owner, next);
+      else this.barColorsByOwner.delete(owner);
+      this.mergeOwnedBarColors();
+    } else {
+      this.barColorsByOwner.clear();
+      this.barColorByTime = next;
     }
     return this.repaintCandlesWithBarColors();
   }
 
-  clearBarColors() {
+  clearBarColors(ownerId?: string) {
+    const owner = ownerId && String(ownerId).trim();
+    if (owner) {
+      if (!this.barColorsByOwner.has(owner)) return;
+      this.barColorsByOwner.delete(owner);
+      this.mergeOwnedBarColors();
+      this.repaintCandlesWithBarColors();
+      return;
+    }
+    this.barColorsByOwner.clear();
     if (!this.barColorByTime.size) return;
     this.barColorByTime.clear();
     this.repaintCandlesWithBarColors();
+  }
+
+  private mergeOwnedBarColors(): void {
+    this.barColorByTime = new Map();
+    for (const map of this.barColorsByOwner.values()) {
+      for (const [t, c] of map) this.barColorByTime.set(t, c);
+    }
   }
 
   /**
@@ -1778,10 +1809,10 @@ export class PaneManager {
       prim = new LineBreakPrimitive();
       try {
         series.attachPrimitive(prim);
+        this.overlayLineBreaks.set(key, prim);
       } catch {
-        /* mock / disposed */
+        return;
       }
-      this.overlayLineBreaks.set(key, prim);
     }
     prim.setPoints(line.data, {
       color: line.color || VOID.indigo,

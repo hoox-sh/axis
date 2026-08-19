@@ -57,12 +57,14 @@ Writing-time and last-run info share four surfaces — hover, the param checklis
 
 ```mermaid
 flowchart LR
+  SRC[Editor buffer] --> PRE[Pre-eval]
+  PRE --> DIAG[Diagnostics / Problems]
   PIN[Pine log.* / errors] --> ENG[Engine run]
   ENG --> RR[lastRun]
   RR --> SL[Scriptlogs]
   RR --> DBG[Debug chips]
   RR --> PINZ[Pins + markers]
-  RR --> DIAG[Diagnostics / Problems]
+  RR --> DIAG
   RR --> PR[Profiler gutters]
   APP[Load / stream / boot] --> SYS[System Logs]
 ```

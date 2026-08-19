@@ -1179,10 +1179,6 @@ export async function runPreevalNow(source: string): Promise<PreevalResult> {
   try {
     const result = await preevaluateSource(source, { signal });
     if (mySeq !== seq || signal.aborted) return result;
-    // Stale if user typed again during await
-    if (source !== lastSource && lastSource !== '') {
-      // still publish if this was the latest scheduled source
-    }
     setPreEval({
       diagnostics: result.diagnostics,
       hasErrors: result.hasErrors,

@@ -219,8 +219,9 @@ export type CollectTablesOpts = {
 };
 
 /**
- * Tables visible on the chart: union of tables from **still-applied** scripts.
- * Orphan runResults (deleted scripts) are ignored so tables leave with delete.
+ * Tables visible on the chart: union of tables from **still-applied and
+ * visible** scripts. Callers must pass only visible script ids. Orphan
+ * runResults (deleted scripts) are ignored so tables leave with delete.
  */
 export function collectVisiblePineTables(opts: CollectTablesOpts): PineTable[] {
   const ids = opts.scriptIds instanceof Set ? opts.scriptIds : new Set(opts.scriptIds);

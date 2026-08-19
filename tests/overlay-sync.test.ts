@@ -345,6 +345,52 @@ describe('syncOverlayLines', () => {
     expect(series._opts.lineVisible).toBe(true);
   });
 
+  it('hides LWC area fill and attaches a break primitive for plot.style_areabr', () => {
+    const data = [
+      { time: 1, value: 10 },
+      { time: 2 },
+      { time: 3, value: 12 },
+    ];
+    pm.syncOverlayLines('price', [
+      {
+        name: 'zone',
+        data,
+        color: '#34d399',
+        style: 'plot.style_areabr',
+      },
+    ]);
+    const series = pm.getPane('price')!.series['overlay_zone'] as {
+      _opts: { lineVisible?: boolean; topColor?: string; bottomColor?: string };
+      _primitives: Array<{ options?: () => { area?: boolean } }>;
+    };
+    expect(series._opts.lineVisible).toBe(false);
+    expect(series._opts.topColor).toBe('rgba(0,0,0,0)');
+    expect(series._opts.bottomColor).toBe('rgba(0,0,0,0)');
+    expect(series._primitives).toHaveLength(1);
+    expect(series._primitives[0]!.options?.().area).toBe(true);
+  });
+
+  it('attaches a stepped break primitive for plot.style_steplinebr', () => {
+    pm.syncOverlayLines('price', [
+      {
+        name: 'steps',
+        data: [
+          { time: 1, value: 10 },
+          { time: 2, value: 11 },
+        ],
+        color: '#fff',
+        style: 'plot.style_steplinebr',
+      },
+    ]);
+    const series = pm.getPane('price')!.series['overlay_steps'] as {
+      _opts: { lineVisible?: boolean };
+      _primitives: Array<{ options?: () => { stepped?: boolean } }>;
+    };
+    expect(series._opts.lineVisible).toBe(false);
+    expect(series._primitives).toHaveLength(1);
+    expect(series._primitives[0]!.options?.().stepped).toBe(true);
+  });
+
   it('does not attach a break primitive for plot.style_line (span na)', () => {
     pm.syncOverlayLines('price', [
       {
