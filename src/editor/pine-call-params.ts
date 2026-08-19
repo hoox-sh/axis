@@ -1241,6 +1241,59 @@ export function findCallSite(text: string, pos: number): CallSite | null {
   };
 }
 
+/**
+ * Every non-control call in `source` (nested calls included).
+ * Used by pre-eval to lint named arguments (`coltor=` → `color=`).
+ */
+export function scanAllCallSites(source: string): CallSite[] {
+  const src = String(source ?? '');
+  const out: CallSite[] = [];
+  let inStr: '"' | "'" | null = null;
+  let inBlock = false;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i]!;
+    const n = src[i + 1];
+    if (inStr) {
+      if (c === '\\') {
+        i += 1;
+        continue;
+      }
+      if (c === '\n' || c === inStr) inStr = null;
+      continue;
+    }
+    if (inBlock) {
+      if (c === '*' && n === '/') {
+        inBlock = false;
+        i += 1;
+      }
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      inStr = c;
+      continue;
+    }
+    if (c === '/' && n === '/') {
+      const nl = src.indexOf('\n', i);
+      if (nl < 0) break;
+      i = nl;
+      continue;
+    }
+    if (c === '/' && n === '*') {
+      inBlock = true;
+      i += 1;
+      continue;
+    }
+    if (c !== '(') continue;
+    const name = identBefore(src, i);
+    if (!name || !/^[A-Za-z_]/.test(name)) continue;
+    const head = name.includes('.') ? name.slice(0, name.indexOf('.')) : name;
+    if (CONTROL_CALLS.has(name) || CONTROL_CALLS.has(head)) continue;
+    const site = findCallSite(src, i + 1);
+    if (site && site.openParen === i) out.push(site);
+  }
+  return out;
+}
+
 /** Params already supplied (named or consumed as leading positionals). */
 export function classifyParams(
   sig: PineCallSig,

@@ -11,6 +11,7 @@ import {
   checkUnknownBuiltinMembers,
   clearPreevalOnEdit,
   collectUserBindings,
+  collectUserFunctionParams,
   editDistance,
   hasErrorDiagnostics,
   isKnownBuiltinPath,
@@ -23,9 +24,10 @@ import {
   remoteToEditorDiagnostics,
   schedulePreeval,
   suggestBuiltinPath,
+  suggestClosestName,
 } from '../src/editor/preevaluate.ts';
-import type { EditorDiagnostic } from '../src/editor/diagnostics.ts';
-import { setPreEval, store } from '../src/store/index.ts';
+import { combineEditorDiagnostics, type EditorDiagnostic } from '../src/editor/diagnostics.ts';
+import { patchEditorIntel, resetEditorIntel, setPreEval, store } from '../src/store/index.ts';
 
 const GOOD = `//@version=5
 indicator("t")
@@ -521,11 +523,176 @@ describe('schedulePreeval idle lint', () => {
     cancelPreeval();
   });
 
+  it('does not stamp the live buffer onto stale diagnostics when clear-on-edit is off', () => {
+    resetEditorIntel();
+    patchEditorIntel({ preevalClearOnEdit: false });
+    const linted = '//@version=6\nindicator("t")\nplt(close)\n';
+    const fixed = '//@version=6\nindicator("t")\nplot(close)\n';
+    const stale: EditorDiagnostic = {
+      from: linted.indexOf('plt'),
+      to: linted.indexOf('plt') + 3,
+      line: 3,
+      severity: 'typo',
+      message: 'Unknown `plt` — did you mean `plot`?',
+      source: 'preeval-typo',
+    };
+    setPreEval({
+      diagnostics: [stale],
+      hasErrors: false,
+      pending: false,
+      source: linted,
+    });
+    schedulePreeval(fixed, 60_000);
+    expect(store.preEval.source).toBe(linted);
+    expect(store.preEval.diagnostics.some((d) => /plt/.test(d.message))).toBe(true);
+    expect(
+      combineEditorDiagnostics(
+        store.preEval.diagnostics,
+        null,
+        fixed,
+        store.preEval.source,
+      ),
+    ).toEqual([]);
+    cancelPreeval();
+    resetEditorIntel();
+  });
+
+  it('does not wipe a completed lint when the same buffer is scheduled again', () => {
+    resetEditorIntel();
+    const src = '//@version=6\nindicator("t")\nplt(close)\n';
+    const typo: EditorDiagnostic = {
+      from: src.indexOf('plt'),
+      to: src.indexOf('plt') + 3,
+      line: 3,
+      severity: 'typo',
+      message: 'Unknown `plt` — did you mean `plot`?',
+      source: 'preeval-typo',
+    };
+    schedulePreeval(src, 60_000);
+    cancelPreeval();
+    setPreEval({
+      diagnostics: [typo],
+      hasErrors: false,
+      pending: false,
+      source: src,
+    });
+    schedulePreeval(src, 60_000);
+    expect(store.preEval.diagnostics).toEqual([typo]);
+    cancelPreeval();
+  });
+
   it('flags bare call typos like plt() locally', () => {
     const diags = localPreevaluate('//@version=6\nindicator("t")\nplt(close)\n');
     const typo = diags.find((d) => /plt/.test(d.message));
     expect(typo).toBeTruthy();
     expect(typo!.message).toMatch(/plot/i);
     expect(typo!.severity).toBe('typo');
+  });
+});
+
+describe('named-arg and user-var typos', () => {
+  it('suggests color for plot(..., coltor=color.green)', () => {
+    const src = `//@version=6
+indicator("t")
+plot("title", coltor=color.green)
+`;
+    const diags = localPreevaluate(src);
+    const hit = diags.find((d) => /coltor/.test(d.message));
+    expect(hit).toBeTruthy();
+    expect(hit!.message).toMatch(/color/);
+    expect(src.slice(hit!.from, hit!.to)).toBe('coltor');
+    expect(hit!.severity).toBe('typo');
+  });
+
+  it('suggests length for ta.rsi(..., lengh=14)', () => {
+    const src = `//@version=6
+indicator("t")
+plot(ta.rsi(close, lengh=14))
+`;
+    const hit = localPreevaluate(src).find((d) => /lengh/.test(d.message));
+    expect(hit).toBeTruthy();
+    expect(hit!.message).toMatch(/length/);
+  });
+
+  it('suggests title for input.int(..., titel=...)', () => {
+    const src = `//@version=6
+indicator("t")
+len = input.int(14, titel="Length")
+plot(len)
+`;
+    const hit = localPreevaluate(src).find((d) => /titel/.test(d.message));
+    expect(hit).toBeTruthy();
+    expect(hit!.message).toMatch(/title/);
+  });
+
+  it('uses user-function parameter names as the signature', () => {
+    const src = `//@version=6
+indicator("t")
+foo(bar, baz) => bar + baz
+plot(foo(ba=1, baz=2))
+`;
+    expect(collectUserFunctionParams(src).get('foo')).toEqual(['bar', 'baz']);
+    const hit = localPreevaluate(src).find((d) => /`ba`/.test(d.message));
+    expect(hit).toBeTruthy();
+    expect(hit!.message).toMatch(/bar/);
+  });
+
+  it('indexes assignment declarations as the source of truth', () => {
+    const src = `//@version=6
+indicator("t")
+length = 14
+rsi = ta.rsi(close, length)
+plot(rsi)
+`;
+    const names = collectUserBindings(src);
+    expect(names.has('length')).toBe(true);
+    expect(names.has('rsi')).toBe(true);
+  });
+
+  it('flags uses that look like a declared var typo (lenght → length)', () => {
+    const src = `//@version=6
+indicator("t")
+length = 14
+plot(ta.rsi(close, lenght))
+`;
+    const hit = localPreevaluate(src).find((d) => /lenght/.test(d.message));
+    expect(hit).toBeTruthy();
+    expect(hit!.message).toMatch(/length/);
+    expect(src.slice(hit!.from, hit!.to)).toBe('lenght');
+  });
+
+  it('indexes tuple unpack names', () => {
+    const src = `//@version=6
+indicator("t")
+[macdLine, signalLine, histLine] = ta.macd(close, 12, 26, 9)
+plot(macdLin)
+`;
+    expect(collectUserBindings(src).has('macdLine')).toBe(true);
+    const hit = localPreevaluate(src).find((d) => /macdLin/.test(d.message));
+    expect(hit).toBeTruthy();
+    expect(hit!.message).toMatch(/macdLine/);
+  });
+
+  it('does not flag exact declared names or builtins', () => {
+    const src = `//@version=6
+indicator("t")
+length = 14
+plot(ta.rsi(close, length))
+`;
+    const diags = localPreevaluate(src);
+    expect(diags.some((d) => /`length`/.test(d.message))).toBe(false);
+    expect(diags.some((d) => /`close`/.test(d.message))).toBe(false);
+    expect(diags.some((d) => /`plot`/.test(d.message))).toBe(false);
+  });
+
+  it('does not flag short identifiers as user-var typos', () => {
+    expect(suggestClosestName('xy', ['xyz'])).toBeNull();
+    const src = `//@version=6
+indicator("t")
+foo(x, y) => x + y
+plot(foo(1, 2))
+`;
+    const diags = localPreevaluate(src);
+    expect(diags.some((d) => /did you mean/.test(d.message))).toBe(false);
   });
 });

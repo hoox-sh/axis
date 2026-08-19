@@ -106,6 +106,14 @@ describe('lint underlines apply to the editor state', () => {
     expect(merged.some((d) => /plt/.test(d.message))).toBe(true);
   });
 
+  it('drops pre-eval from Problems when the buffer moved on', () => {
+    const pre = localPreevaluate(BAD_SRC);
+    const fixed = BAD_SRC.replace('plt(1)', 'plot(1)');
+    expect(
+      combineEditorDiagnostics(pre, null, fixed, BAD_SRC).some((d) => /plt/.test(d.message)),
+    ).toBe(false);
+  });
+
   it('setDiagnosticsData builds underline decorations', () => {
     const pre = localPreevaluate(BAD_SRC);
     expect(pre.length).toBeGreaterThan(0);
@@ -117,6 +125,28 @@ describe('lint underlines apply to the editor state', () => {
     const st = tr.state.field(diagnosticsStateField);
     expect(st.diags.length).toBeGreaterThan(0);
     expect(st.decorations.size).toBeGreaterThan(0);
+    let marks = 0;
+    st.decorations.between(0, tr.state.doc.length, (_from, _to, value) => {
+      const cls = String((value as { spec?: { class?: string } }).spec?.class || '');
+      if (cls.includes('cm-diag-mark')) marks += 1;
+    });
+    expect(marks).toBeGreaterThan(0);
+  });
+
+  it('doc edits that delete a lint range drop that diagnostic', () => {
+    const pre = localPreevaluate(BAD_SRC);
+    const typo = pre.find((d) => /plt/.test(d.message));
+    expect(typo).toBeTruthy();
+    let state = EditorState.create({
+      doc: BAD_SRC,
+      extensions: [diagnosticsExtension()],
+    });
+    state = state.update({ effects: setDiagnosticsData.of(pre) }).state;
+    state = state.update({
+      changes: { from: typo!.from, to: typo!.to, insert: 'plot' },
+    }).state;
+    const st = state.field(diagnosticsStateField);
+    expect(st.diags.some((d) => /plt/.test(d.message))).toBe(false);
   });
 
   it('applyDiagnostics no-ops when the payload is unchanged', () => {
@@ -133,6 +163,39 @@ describe('lint underlines apply to the editor state', () => {
     const second = state.field(diagnosticsStateField);
     expect(`${second.diags.length}:${second.decorations.size}`).toBe(sig);
     expect(applyDiagnostics).toBeTypeOf('function');
+  });
+
+  it('applyDiagnostics rebuilds when diags exist but nothing is painted', () => {
+    const pre = localPreevaluate(BAD_SRC);
+    expect(pre.length).toBeGreaterThan(0);
+    let state = EditorState.create({
+      doc: BAD_SRC,
+      extensions: [diagnosticsExtension()],
+    });
+    patchEditorIntel({ diagUnderlines: false });
+    const mock = {
+      get state() {
+        return state;
+      },
+      dispatch(spec: { effects?: unknown }) {
+        state = state.update(spec as never).state;
+      },
+    };
+    applyDiagnostics(mock as never, pre);
+    expect(state.field(diagnosticsStateField).diags.length).toBeGreaterThan(0);
+    expect(state.field(diagnosticsStateField).decorations.size).toBe(0);
+
+    patchEditorIntel({ diagUnderlines: true });
+    applyDiagnostics(mock as never, pre);
+    const st = state.field(diagnosticsStateField);
+    expect(st.diags.length).toBeGreaterThan(0);
+    expect(st.decorations.size).toBeGreaterThan(0);
+    let marks = 0;
+    st.decorations.between(0, state.doc.length, (_from, _to, value) => {
+      const cls = String((value as { spec?: { class?: string } }).spec?.class || '');
+      if (cls.includes('cm-diag-mark')) marks += 1;
+    });
+    expect(marks).toBeGreaterThan(0);
   });
 });
 

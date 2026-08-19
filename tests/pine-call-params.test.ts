@@ -18,6 +18,7 @@ import {
   formatCallHoverMarkdown,
   formatParamHoverMarkdown,
   splitTopLevelParams,
+  scanAllCallSites,
 } from '../src/editor/pine-call-params';
 
 describe('parseSignatureParams', () => {
@@ -78,6 +79,18 @@ describe('findCallSite', () => {
     expect(site).toBeTruthy();
     expect(site!.name).toBe('plot');
     expect(site!.name).not.toBe('ta.sma');
+  });
+});
+
+describe('scanAllCallSites', () => {
+  it('finds nested plot + ta.sma and named args', () => {
+    const src = 'plot(ta.sma(close, 14), coltor=color.green)';
+    const sites = scanAllCallSites(src);
+    const names = sites.map((s) => s.name);
+    expect(names).toContain('plot');
+    expect(names).toContain('ta.sma');
+    const plot = sites.find((s) => s.name === 'plot');
+    expect(plot?.namedUsed.has('coltor')).toBe(true);
   });
 });
 

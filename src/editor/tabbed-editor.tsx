@@ -148,6 +148,8 @@ interface Props {
 export const TabbedEditor: Component<Props> = (props) => {
   const [tabs, setTabs] = createSignal<Tab[]>([newTab('Script 1', initialDoc())]);
   const [activeTab, setActiveTab] = createSignal(0);
+  /** Live CM buffer — tracked so Problems drop the moment the doc diverges. */
+  const [liveSource, setLiveSource] = createSignal(tabs()[0]?.doc || '');
 
   /** Normalize last-run profile for the CM profiler gutter (null when off / empty). */
   const profilerProfile = createMemo((): RunProfile | null => {
@@ -191,13 +193,19 @@ export const TabbedEditor: Component<Props> = (props) => {
     void store.lastRun;
     void store.preEval;
     void store.preEval?.diagnostics;
+    void store.preEval?.source;
     void store.preEval?.pending;
+    void liveSource();
     void tabs();
     void activeTab();
     const sourceDoc =
-      props.editorRef?.getDoc?.() || tabs()[activeTab()]?.doc || '';
+      liveSource() ||
+      props.editorRef?.getDoc?.() ||
+      tabs()[activeTab()]?.doc ||
+      '';
     const pre = store.preEval?.diagnostics ?? [];
-    return combineEditorDiagnostics(pre, store.lastRun, sourceDoc);
+    const preSource = store.preEval?.source ?? '';
+    return combineEditorDiagnostics(pre, store.lastRun, sourceDoc, preSource);
   });
 
   const diagCountLabel = createMemo(() => formatDiagnosticCount(editorDiagnostics()));
@@ -243,15 +251,19 @@ export const TabbedEditor: Component<Props> = (props) => {
     }, 500);
   };
 
-  // Refresh counters when switching tabs (not on every keystroke)
+  // Refresh counters when switching tabs (not on every keystroke).
+  // Only `activeTab` is tracked — reading intel/tabs/store here re-ran the
+  // effect in a loop and reset the idle lint timer so underlines never landed.
   createEffect(() => {
     const idx = activeTab();
-    const doc = untrack(() => tabs()[idx]?.doc ?? '');
-    setStats(countDocStats(doc));
-    // Cursor resets to start of tab until CM reports the real head
-    setCursor({ line: 1, col: 1 });
-    // Lint this tab after a short beat (immediate feel when switching)
-    schedulePreeval(doc, readEditorIntel(store.editorIntel).preevalTabSwitchMs);
+    untrack(() => {
+      const doc = tabs()[idx]?.doc ?? '';
+      setLiveSource(doc);
+      setStats(countDocStats(doc));
+      // Cursor resets to start of tab until CM reports the real head
+      setCursor({ line: 1, col: 1 });
+      schedulePreeval(doc, readEditorIntel(store.editorIntel).preevalTabSwitchMs);
+    });
   });
 
   onMount(() => {
@@ -499,6 +511,7 @@ export const TabbedEditor: Component<Props> = (props) => {
 
   const onDocChange = (doc: string) => {
     const text = typeof doc === 'string' ? doc : String(doc ?? '');
+    setLiveSource(text);
     setTabs((t) =>
       t.map((tab, i) =>
         i === activeTab()

@@ -9,11 +9,25 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-19 · 238 commits · describe-tag: `v2.0.15`_
+_Generated/updated: 2026-08-19 · 239 commits · describe-tag: `v2.0.16`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.17] — 2026-08-19
+
+Visible pre-eval squiggles, Problems that drop on edit, and idle lint for named args and declared vars.
+
+### Added
+
+- **Named-arg typos** — idle lint flags unknown function/method parameters (`plot(..., coltor=color.green)` → `color=`) from curated signatures, builtin docs, and user-function parameter lists.
+- **User-var typos** — assignment / `var` / tuple-unpack / function-parameter names are added to the typo map (declaration is source of truth), so `length = 14` then `lenght` suggests `length`.
+
+### Fixed
+
+- **Lint underlines** — pre-eval / error marks use a high-precedence squiggle (SVG + wavy underline + inset line), not CodeMirror `baseTheme`, so they stay visible against Tailwind. Empty decoration sets rebuild when underlines are on. The tab-switch effect no longer loops and cancel the idle lint timer, which left the buffer with Problems but no squiggles.
+- **Stale Problems** — pre-eval rows drop as soon as the buffer diverges from the last linted source. Idle lint no longer stamps the live buffer onto old diagnostics, and rescheduling the same buffer does not wipe a completed lint (fixing a typo no longer leaves the old error in the list).
 
 ## [2.0.16] — 2026-08-19
 
@@ -403,9 +417,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (156 commits)
+### 2026-08 (157 commits)
 
 #### Security
 
@@ -416,6 +432,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `720237a1` (2026-08-19) — feat(release): AXIS v2.0.16 editor intel recovery
 - `fd23d4a8` (2026-08-19) — feat(release): AXIS v2.0.15 editor intelligence and linebr
 - `cbe6369f` (2026-08-19) — feat(editor): richer hover, param checklist, and pre-eval
 - `a2178fc9` (2026-08-18) — feat: live script execution, chart labels, and strategy properties

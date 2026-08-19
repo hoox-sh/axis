@@ -40,6 +40,7 @@ import {
   StateField,
   StateEffect,
   RangeSetBuilder,
+  Prec,
   type Extension,
   type Transaction,
   type Text,
@@ -582,14 +583,17 @@ export function combineEditorDiagnostics(
   pre: readonly EditorDiagnostic[],
   lastRun: unknown,
   sourceDoc: string,
+  preSource?: string | null,
 ): EditorDiagnostic[] {
+  const preFresh =
+    preSource == null || preSource === '' || preSource === sourceDoc ? pre : [];
   const runSrc = lastRunScriptSource(lastRun);
   const includeLast = runSrc != null && runSrc === sourceDoc;
   const last = includeLast ? diagnosticsFromLastRun(lastRun, sourceDoc) : [];
-  if (!pre.length) return last;
-  if (!last.length) return [...pre];
-  const seen = new Set(pre.map(diagMergeKey));
-  const out: EditorDiagnostic[] = [...pre];
+  if (!preFresh.length) return last;
+  if (!last.length) return [...preFresh];
+  const seen = new Set(preFresh.map(diagMergeKey));
+  const out: EditorDiagnostic[] = [...preFresh];
   for (const d of last) {
     const k = diagMergeKey(d);
     if (seen.has(k)) continue;
@@ -736,31 +740,21 @@ export const diagnosticsStateField = StateField.define<DiagnosticsState>({
   },
   update(value: DiagnosticsState, tr: Transaction): DiagnosticsState {
     let diags = value.diags;
-    let changed = tr.docChanged;
+    let assigned = false;
     for (const e of tr.effects) {
       if (e.is(setDiagnosticsData)) {
         diags = e.value ?? [];
-        changed = true;
+        assigned = true;
       }
     }
-    if (!changed) return value;
+    // Typing must not keep remapped leftovers (plt → plot would otherwise
+    // keep the typo underline on the fixed token). Solid re-applies after combine.
+    if (tr.docChanged && !assigned) return emptyState;
+    if (!assigned && !tr.docChanged) return value;
     if (!diags.length) return emptyState;
-    // Re-map ranges if the document changed while diags still refer to old offsets
-    let next = diags;
-    if (tr.docChanged && diags.length) {
-      next = diags.map((d) => {
-        const mappedFrom = tr.changes.mapPos(d.from, 1);
-        const mappedTo = tr.changes.mapPos(d.to, -1);
-        return {
-          ...d,
-          from: mappedFrom,
-          to: Math.max(mappedFrom, mappedTo),
-        };
-      });
-    }
     return {
-      diags: next,
-      decorations: buildDecorations(next, tr.state.doc),
+      diags,
+      decorations: buildDecorations(diags, tr.state.doc),
     };
   },
   provide: (f) => EditorView.decorations.from(f, (s) => s.decorations),
@@ -892,28 +886,41 @@ function diagnosticHover(view: EditorView, pos: number): Tooltip | null {
   };
 }
 
-export const diagnosticsTheme = EditorView.baseTheme({
-  '.cm-diag-mark-error': {
-    textDecoration: 'underline wavy #e85d4c',
+/** Squiggle underline via repeating SVG (same recipe as @codemirror/lint). */
+function diagSquiggle(color: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="6" height="3"><path d="m0 2.5 l1.5-1.5 1.5 1.5 1.5-1.5 1.5 1.5" stroke="${color}" fill="none" stroke-width="1.2"/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+function diagMarkSpec(color: string, wash: string): Record<string, string> {
+  return {
+    backgroundImage: diagSquiggle(color),
+    backgroundColor: wash,
+    // Solid fallback — wavy text-decoration is often reset by Tailwind preflight
+    boxShadow: `inset 0 -2px 0 0 ${color}`,
+    textDecoration: `underline wavy ${color}`,
     textUnderlineOffset: '2px',
-    backgroundColor: 'rgba(232, 93, 76, 0.10)',
+    textDecorationSkipInk: 'none',
+  };
+}
+
+/**
+ * High-precedence theme (not baseTheme / Prec.lowest) so squiggles are not
+ * wiped by Tailwind preflight or the void editor theme.
+ */
+export const diagnosticsTheme = Prec.high(
+  EditorView.theme({
+  '.cm-diag-mark': {
+    backgroundRepeat: 'repeat-x',
+    backgroundPosition: 'left bottom',
+    backgroundSize: '6px 3px',
+    paddingBottom: '3px',
   },
-  '.cm-diag-mark-warning': {
-    textDecoration: 'underline wavy #e8a03a',
-    textUnderlineOffset: '2px',
-    backgroundColor: 'rgba(232, 160, 58, 0.10)',
-  },
+  '.cm-diag-mark-error': diagMarkSpec('#e85d4c', 'rgba(232, 93, 76, 0.12)'),
+  '.cm-diag-mark-warning': diagMarkSpec('#e8a03a', 'rgba(232, 160, 58, 0.12)'),
   /* Builtin typos — distinct violet, not an error (engine may autocorrect) */
-  '.cm-diag-mark-typo': {
-    textDecoration: 'underline wavy #c084fc',
-    textUnderlineOffset: '2px',
-    backgroundColor: 'rgba(192, 132, 252, 0.12)',
-  },
-  '.cm-diag-mark-info': {
-    textDecoration: 'underline dotted #8b8e9c',
-    textUnderlineOffset: '2px',
-    backgroundColor: 'rgba(139, 142, 156, 0.08)',
-  },
+  '.cm-diag-mark-typo': diagMarkSpec('#c084fc', 'rgba(192, 132, 252, 0.14)'),
+  '.cm-diag-mark-info': diagMarkSpec('#8b8e9c', 'rgba(139, 142, 156, 0.10)'),
   '.cm-diag-line-error': {
     backgroundColor: 'rgba(232, 93, 76, 0.07)',
   },
@@ -1007,7 +1014,8 @@ export const diagnosticsTheme = EditorView.baseTheme({
   '.cm-diag-tooltip-note-typo': {
     color: '#d8b4fe',
   },
-});
+  }),
+);
 
 /** Mount always; drive with {@link applyDiagnostics}. */
 export function diagnosticsExtension(): Extension {
@@ -1038,7 +1046,19 @@ export function applyDiagnostics(
 ) {
   const next = diags && diags.length ? diags : [];
   const st = view.state.field(diagnosticsStateField, false);
-  if (st && diagnosticsSignature(st.diags) === diagnosticsSignature(next)) return;
+  const intel = diagIntel();
+  const sigMatch =
+    !!st && diagnosticsSignature(st.diags) === diagnosticsSignature(next);
+  if (sigMatch) {
+    const painted = st.decorations.size > 0;
+    const shouldPaint =
+      next.length > 0 &&
+      intel.diagUnderlines &&
+      next.some((d) => intelShowsSeverity(intel, d.severity));
+    // Skip only when paint already matches intent. Empty decorations with
+    // live diags (underlines were off, then on) must rebuild.
+    if (painted === shouldPaint) return;
+  }
   view.dispatch({
     effects: setDiagnosticsData.of(next.length ? next : null),
   });

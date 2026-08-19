@@ -308,7 +308,7 @@ export const EditorProblems: Component<EditorProblemsProps> = (props) => {
           }
         >
           <ul class="list-none m-0 p-0">
-            <For each={[...props.diagnostics]}>
+            <For each={props.diagnostics}>
               {(p, idx) => {
                 const rowKey = () => `row-${idx()}-${p.line}-${p.message.slice(0, 24)}`;
                 const sourceLabel = formatProblemSource(p.source);

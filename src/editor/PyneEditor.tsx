@@ -533,7 +533,9 @@ export const PyneEditor: Component<Props> = (props) => {
   });
 
   createEffect(() => {
-    void props.diagnostics;
+    const diags = props.diagnostics;
+    void (diags?.length ?? 0);
+    void (diags ?? []).map((d) => `${d.line}:${d.from}:${d.message}`).join('|');
     syncDiagnostics();
   });
 

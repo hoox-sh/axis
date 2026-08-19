@@ -293,6 +293,21 @@ describe('combineEditorDiagnostics', () => {
     expect(merged.some((d) => d.severity === 'typo')).toBe(true);
   });
 
+  it('drops pre-eval marks when the buffer no longer matches the linted source', () => {
+    const merged = combineEditorDiagnostics(
+      [typo],
+      null,
+      SAMPLE_DOC + '\nplot(1)\n',
+      SAMPLE_DOC,
+    );
+    expect(merged).toEqual([]);
+  });
+
+  it('keeps pre-eval marks when preSource still matches the buffer', () => {
+    const merged = combineEditorDiagnostics([typo], null, SAMPLE_DOC, SAMPLE_DOC);
+    expect(merged).toEqual([typo]);
+  });
+
   it('drops unstamped last-run marks', () => {
     const lastRun = {
       status: 'error',

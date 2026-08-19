@@ -2064,6 +2064,49 @@ body.axis-panel-dragging {
   min-height: 1.5em;
 }
 
+/* Lint / error squiggles — unlayered so they beat Tailwind preflight and
+   CodeMirror baseTheme (Prec.lowest). Mark classes come from diagnostics.ts. */
+.axis-pyne-editor .cm-diag-mark,
+.cm-editor .cm-diag-mark {
+  background-repeat: repeat-x;
+  background-position: left bottom;
+  background-size: 6px 3px;
+  padding-bottom: 3px;
+  text-decoration-skip-ink: none;
+}
+.axis-pyne-editor .cm-diag-mark-error,
+.cm-editor .cm-diag-mark-error {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3'%3E%3Cpath d='m0 2.5 l1.5-1.5 1.5 1.5 1.5-1.5 1.5 1.5' stroke='%23e85d4c' fill='none' stroke-width='1.2'/%3E%3C/svg%3E");
+  background-color: rgba(232, 93, 76, 0.12);
+  text-decoration: underline wavy #e85d4c;
+  text-underline-offset: 2px;
+  box-shadow: inset 0 -2px 0 0 #e85d4c;
+}
+.axis-pyne-editor .cm-diag-mark-warning,
+.cm-editor .cm-diag-mark-warning {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3'%3E%3Cpath d='m0 2.5 l1.5-1.5 1.5 1.5 1.5-1.5 1.5 1.5' stroke='%23e8a03a' fill='none' stroke-width='1.2'/%3E%3C/svg%3E");
+  background-color: rgba(232, 160, 58, 0.12);
+  text-decoration: underline wavy #e8a03a;
+  text-underline-offset: 2px;
+  box-shadow: inset 0 -2px 0 0 #e8a03a;
+}
+.axis-pyne-editor .cm-diag-mark-typo,
+.cm-editor .cm-diag-mark-typo {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3'%3E%3Cpath d='m0 2.5 l1.5-1.5 1.5 1.5 1.5-1.5 1.5 1.5' stroke='%23c084fc' fill='none' stroke-width='1.2'/%3E%3C/svg%3E");
+  background-color: rgba(192, 132, 252, 0.14);
+  text-decoration: underline wavy #c084fc;
+  text-underline-offset: 2px;
+  box-shadow: inset 0 -2px 0 0 #c084fc;
+}
+.axis-pyne-editor .cm-diag-mark-info,
+.cm-editor .cm-diag-mark-info {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3'%3E%3Cpath d='m0 2.5 l1.5-1.5 1.5 1.5 1.5-1.5 1.5 1.5' stroke='%238b8e9c' fill='none' stroke-width='1.2'/%3E%3C/svg%3E");
+  background-color: rgba(139, 142, 156, 0.10);
+  text-decoration: underline wavy #8b8e9c;
+  text-underline-offset: 2px;
+  box-shadow: inset 0 -2px 0 0 #8b8e9c;
+}
+
 /* Editor status / action bar */
 .axis-editor-statusbar {
   gap: 0.35em;

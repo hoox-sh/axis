@@ -28,7 +28,9 @@
  * Strategy (fast → authoritative):
  * - Always run {@link localPreevaluate}: brackets, strings, entry point,
  *   v3 `study()` / bare `security()`, duplicate declarations, and
- *   **unknown builtin members** (`plt()` / `strategy.etry` via builtins)
+ *   **unknown builtin members** (`plt()` / `strategy.etry` via builtins),
+ *   **named-arg typos** (`coltor=` → `color=`), and **user-var typos**
+ *   against declaration names (`lenght` → `length`)
  * - When server engine + Backend URL: merge with Pro API `POST /lsp/diagnostics`
  *   (parse + real syntax). Style-noise rules (C001–C004) are filtered out.
  *   Remote syntax errors win the same span; local unknown-member marks stay
@@ -59,6 +61,13 @@ import {
   readEditorIntel,
   type EditorIntelSettings,
 } from './editor-intel';
+import {
+  parseSignatureParams,
+  resolveCallSignature,
+  scanAllCallSites,
+  type ResolveCallSigOpts,
+} from './pine-call-params';
+import { parseAssignLine } from './pine-declare-types';
 
 /**
  * Quiet time after the last keystroke before idle lint runs (ms).
@@ -192,6 +201,30 @@ export function suggestBuiltinPath(path: string): string | null {
     if (kp.length !== depth) continue;
     const candLeaf = kp[kp.length - 1]!;
     const d = editDistance(leaf.toLowerCase(), candLeaf.toLowerCase());
+    if (d > 0 && d < bestD) {
+      bestD = d;
+      best = k;
+    }
+  }
+  return best;
+}
+
+/**
+ * Closest name in `names` for a typo (`coltor` → `color`, `lenght` → `length`).
+ * Ignores tokens shorter than 3 characters so `x` is not flagged as `y`.
+ */
+export function suggestClosestName(
+  needle: string,
+  names: Iterable<string>,
+  minLen = 3,
+): string | null {
+  const leaf = needle.toLowerCase();
+  if (leaf.length < minLen) return null;
+  let best: string | null = null;
+  let bestD = maxSuggestDistance(leaf);
+  for (const k of names) {
+    if (!k || k.length < minLen) continue;
+    const d = editDistance(leaf, k.toLowerCase());
     if (d > 0 && d < bestD) {
       bestD = d;
       best = k;
@@ -407,25 +440,302 @@ export function scanBareCallRefs(source: string): DottedRef[] {
   return out;
 }
 
+function stripPineCommentsAndStrings(raw: string, inBlock: { v: boolean }): string {
+  let text = '';
+  let i = 0;
+  let inStr: '"' | "'" | null = null;
+  while (i < raw.length) {
+    const c = raw[i]!;
+    const n = raw[i + 1];
+    if (!inStr && !inBlock.v && c === '/' && n === '/') break;
+    if (!inStr && !inBlock.v && c === '/' && n === '*') {
+      inBlock.v = true;
+      i += 2;
+      continue;
+    }
+    if (inBlock.v) {
+      if (c === '*' && n === '/') {
+        inBlock.v = false;
+        i += 2;
+        continue;
+      }
+      i += 1;
+      continue;
+    }
+    if (inStr) {
+      if (c === '\\') {
+        i += 2;
+        continue;
+      }
+      if (c === inStr) inStr = null;
+      i += 1;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      inStr = c;
+      i += 1;
+      continue;
+    }
+    text += c;
+    i += 1;
+  }
+  return text;
+}
+
+const USER_FN_RE =
+  /(?:^|[\s;])(?:export\s+)?(?:method\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\(([^;]*)\)\s*=>/g;
+const USER_FN_LEAD_RE =
+  /^\s*(?:export\s+)?(?:method\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\(([^;]*)\)\s*=>/;
+const IMPORT_AS_RE = /\bimport\s+\S+\s+as\s+([A-Za-z_][A-Za-z0-9_]*)/g;
+const TUPLE_ASSIGN_RE =
+  /^\s*(?:export\s+)?(?:varip|var)?\s*\[([^\]]+)\]\s*=/;
+
+function addFnParams(paramsRaw: string, into: Set<string>, fnMap: Map<string, string[]>, fnName: string): void {
+  const parsed = parseSignatureParams(`fn(${paramsRaw})`);
+  const names: string[] = [];
+  for (const p of parsed) {
+    if (p.rest || !p.name || p.name === 'this' || BARE_CALL_SKIP.has(p.name)) continue;
+    names.push(p.name);
+    into.add(p.name);
+  }
+  if (fnName && !BARE_CALL_SKIP.has(fnName)) {
+    fnMap.set(fnName, names);
+  }
+}
+
 /**
- * User function names (`foo(x) =>`) and `import … as alias` bindings.
- * These must not be flagged as unknown builtins.
+ * User bindings: function names, import aliases, `var` / assignment
+ * declarations, tuple unpacks, and user-function parameters.
+ * Declarations are the source of truth for user-var typo suggestions.
  */
 export function collectUserBindings(source: string): Set<string> {
+  return collectUserDeclarationMap(source).names;
+}
+
+/** User function name → parameter names (`foo(x, y) =>`). */
+export function collectUserFunctionParams(source: string): Map<string, string[]> {
+  return collectUserDeclarationMap(source).functions;
+}
+
+function collectUserDeclarationMap(source: string): {
+  names: Set<string>;
+  functions: Map<string, string[]>;
+} {
   const names = new Set<string>();
+  const functions = new Map<string, string[]>();
   const lines = source.split('\n');
-  let inBlock = false;
-  const fnRe =
-    /(?:^|[\s;])(?:export\s+)?(?:method\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*=>/g;
-  const importRe = /\bimport\s+\S+\s+as\s+([A-Za-z_][A-Za-z0-9_]*)/g;
+  const inBlock = { v: false };
 
   for (const raw of lines) {
-    let text = '';
+    const text = stripPineCommentsAndStrings(raw, inBlock);
+
+    USER_FN_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = USER_FN_RE.exec(text))) {
+      const name = m[1]!;
+      if (!BARE_CALL_SKIP.has(name)) names.add(name);
+      addFnParams(m[2] || '', names, functions, name);
+    }
+    const lead = USER_FN_LEAD_RE.exec(text);
+    if (lead) {
+      const name = lead[1]!;
+      if (!BARE_CALL_SKIP.has(name)) names.add(name);
+      addFnParams(lead[2] || '', names, functions, name);
+    }
+
+    IMPORT_AS_RE.lastIndex = 0;
+    while ((m = IMPORT_AS_RE.exec(text))) {
+      names.add(m[1]!);
+    }
+
+    const assign = parseAssignLine(text);
+    if (assign && !BARE_CALL_SKIP.has(assign.name)) {
+      names.add(assign.name);
+    }
+
+    const tuple = TUPLE_ASSIGN_RE.exec(text);
+    if (tuple) {
+      for (const part of tuple[1]!.split(',')) {
+        const id = part.trim();
+        if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(id) && !BARE_CALL_SKIP.has(id)) names.add(id);
+      }
+    }
+  }
+  return { names, functions };
+}
+
+function isUserBinding(path: string, user: Set<string>): boolean {
+  if (user.has(path)) return true;
+  const root = path.split('.')[0]!;
+  return user.has(root);
+}
+
+/**
+ * Flag unknown `module.member` paths and bare call typos against the builtins catalog.
+ * e.g. `strategy.etry` / `plt(close)` → typo with optional “Did you mean …?”
+ * User functions, import aliases, and declared vars are never flagged as builtins.
+ * Also lints named arguments (`coltor=`) and uses of declared vars (`lenght`).
+ */
+export function checkUnknownBuiltinMembers(source: string): EditorDiagnostic[] {
+  const refs = [
+    ...scanBuiltinMemberRefs(source),
+    ...scanBareCallRefs(source),
+  ];
+  const decl = collectUserDeclarationMap(source);
+  const user = decl.names;
+  const out: EditorDiagnostic[] = [];
+  const seen = new Set<string>();
+  for (const ref of refs) {
+    if (isKnownBuiltinPath(ref.path)) continue;
+    if (isUserBinding(ref.path, user)) continue;
+    const key = `${ref.line}:${ref.col}:${ref.path}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const hint = suggestBuiltinPath(ref.path);
+    // Bare user-defined helpers (`myFunc()` / `foo()`) stay quiet unless a
+    // close builtin exists (short names need distance 1 — see maxSuggestDistance)
+    if (!ref.path.includes('.') && !hint) continue;
+    const msg = hint
+      ? `Unknown \`${ref.path}\` — did you mean \`${hint}\`?`
+      : `Unknown \`${ref.path}\` (not a built-in member)`;
+    out.push(
+      diag(source, {
+        line: ref.line,
+        col: ref.col,
+        endLine: ref.line,
+        endCol: ref.endCol,
+        message: msg,
+        // Non-blocking: violet “typo” mark — PYNE may autocorrect at run time
+        severity: 'typo',
+        source: 'preeval-typo',
+      }),
+    );
+  }
+  out.push(...checkUnknownNamedArgs(source, decl.functions, seen));
+  out.push(...checkUnknownUserIdents(source, user, seen));
+  return out;
+}
+
+function isGenericParamName(name: string): boolean {
+  return /^(arg|param)\d*$/i.test(name) || name === '…';
+}
+
+function usableParamNames(params: readonly { name: string; rest?: boolean }[]): string[] {
+  return params
+    .filter((p) => !p.rest && p.name && !isGenericParamName(p.name))
+    .map((p) => p.name);
+}
+
+function builtinSigExtra(name: string): ResolveCallSigOpts | undefined {
+  const json = builtinsJson as Record<string, Record<string, unknown>>;
+  const entry =
+    json[name] ||
+    json[name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : `ta.${name}`];
+  if (!entry || typeof entry !== 'object') return undefined;
+  const str = (k: string) => (typeof entry[k] === 'string' ? (entry[k] as string) : undefined);
+  return {
+    documentation: str('documentation'),
+    detail: str('detail'),
+    brief: str('brief'),
+    snippet: str('snippet'),
+  };
+}
+
+function signatureParamNames(
+  callName: string,
+  userFns: Map<string, string[]>,
+): string[] {
+  const extra = builtinSigExtra(callName);
+  const sig = resolveCallSignature(callName, extra);
+  const fromSig = sig ? usableParamNames(sig.params) : [];
+  if (fromSig.length) return fromSig;
+  const user =
+    userFns.get(callName) ||
+    userFns.get(callName.includes('.') ? callName.slice(callName.lastIndexOf('.') + 1) : callName);
+  return user && user.length ? user : [];
+}
+
+function offsetToLineCol(doc: string, offset: number): { line: number; col: number } {
+  const offs = lineOffsets(doc);
+  let line = 1;
+  for (let i = 1; i < offs.length; i++) {
+    if (offs[i]! > offset) break;
+    line = i + 1;
+  }
+  return { line, col: offset - (offs[line - 1] ?? 0) };
+}
+
+function diagAtOffset(
+  doc: string,
+  from: number,
+  to: number,
+  message: string,
+): EditorDiagnostic {
+  const { line, col } = offsetToLineCol(doc, from);
+  return {
+    from,
+    to: Math.max(from, to),
+    line,
+    severity: 'typo',
+    message,
+    source: 'preeval-typo',
+  };
+}
+
+/** Named-arg typos: `plot(..., coltor=color.green)` → `color`. */
+export function checkUnknownNamedArgs(
+  source: string,
+  userFns?: Map<string, string[]>,
+  seen?: Set<string>,
+): EditorDiagnostic[] {
+  const fns = userFns ?? collectUserFunctionParams(source);
+  const used = seen ?? new Set<string>();
+  const out: EditorDiagnostic[] = [];
+  for (const site of scanAllCallSites(source)) {
+    const params = signatureParamNames(site.name, fns);
+    if (!params.length) continue;
+    const known = new Set(params);
+    for (const arg of site.args) {
+      if (!arg.name) continue;
+      if (known.has(arg.name)) continue;
+      const lead = arg.raw.match(/^\s*/)?.[0].length ?? 0;
+      const from = arg.from + lead;
+      const to = from + arg.name.length;
+      const key = `arg:${from}:${arg.name}`;
+      if (used.has(key)) continue;
+      used.add(key);
+      const hint = suggestClosestName(arg.name, params, 2);
+      const call = site.name;
+      const msg = hint
+        ? `Unknown parameter \`${arg.name}\` for ${call}() — did you mean \`${hint}\`?`
+        : `Unknown parameter \`${arg.name}\` for ${call}()`;
+      out.push(diagAtOffset(source, from, to, msg));
+    }
+  }
+  return out;
+}
+
+type IdentRef = {
+  name: string;
+  from: number;
+  to: number;
+  line: number;
+  col: number;
+};
+
+/** Bare identifier uses (not dotted members, not calls, not `name=` bindings). */
+export function scanIdentRefs(source: string): IdentRef[] {
+  const out: IdentRef[] = [];
+  const lines = source.split('\n');
+  let inBlock = false;
+  let offset = 0;
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li]!;
     let i = 0;
     let inStr: '"' | "'" | null = null;
-    while (i < raw.length) {
-      const c = raw[i]!;
-      const n = raw[i + 1];
+    while (i < line.length) {
+      const c = line[i]!;
+      const n = line[i + 1];
       if (!inStr && !inBlock && c === '/' && n === '/') break;
       if (!inStr && !inBlock && c === '/' && n === '*') {
         inBlock = true;
@@ -455,73 +765,69 @@ export function collectUserBindings(source: string): Set<string> {
         i += 1;
         continue;
       }
-      text += c;
+      if (/[A-Za-z_]/.test(c)) {
+        const start = i;
+        i += 1;
+        while (i < line.length && /[A-Za-z0-9_]/.test(line[i]!)) i += 1;
+        const prev = start > 0 ? line[start - 1] : '';
+        if (prev === '.') {
+          continue;
+        }
+        let j = i;
+        while (j < line.length && (line[j] === ' ' || line[j] === '\t')) j += 1;
+        const next = line[j] ?? '';
+        const next2 = line[j + 1] ?? '';
+        // Call site — handled by builtin / named-arg checkers
+        if (next === '(') continue;
+        // Declaration or named arg `name=` (but not `:=` reassignment, `==`, `=>`)
+        if (next === '=' && next2 !== '=' && next2 !== '>') continue;
+        const name = line.slice(start, i);
+        out.push({
+          name,
+          from: offset + start,
+          to: offset + i,
+          line: li + 1,
+          col: start,
+        });
+        continue;
+      }
       i += 1;
     }
-
-    fnRe.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = fnRe.exec(text))) {
-      const name = m[1]!;
-      if (!BARE_CALL_SKIP.has(name)) names.add(name);
-    }
-    // Also match a definition that starts the line (`foo(x) =>`)
-    const lead = /^\s*(?:export\s+)?(?:method\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*=>/.exec(
-      text,
-    );
-    if (lead && !BARE_CALL_SKIP.has(lead[1]!)) names.add(lead[1]!);
-
-    importRe.lastIndex = 0;
-    while ((m = importRe.exec(text))) {
-      names.add(m[1]!);
-    }
+    offset += line.length + 1;
   }
-  return names;
-}
-
-function isUserBinding(path: string, user: Set<string>): boolean {
-  if (user.has(path)) return true;
-  const root = path.split('.')[0]!;
-  return user.has(root);
+  return out;
 }
 
 /**
- * Flag unknown `module.member` paths and bare call typos against the builtins catalog.
- * e.g. `strategy.etry` / `plt(close)` → typo with optional “Did you mean …?”
- * User functions and import aliases are never flagged.
+ * Uses of identifiers that look like typos of a *declared* user name.
+ * Declaration is source of truth — `length = 14` then `lenght` suggests `length`.
  */
-export function checkUnknownBuiltinMembers(source: string): EditorDiagnostic[] {
-  const refs = [
-    ...scanBuiltinMemberRefs(source),
-    ...scanBareCallRefs(source),
-  ];
-  const user = collectUserBindings(source);
+export function checkUnknownUserIdents(
+  source: string,
+  declared?: Set<string>,
+  seen?: Set<string>,
+): EditorDiagnostic[] {
+  const names = declared ?? collectUserBindings(source);
+  const used = seen ?? new Set<string>();
   const out: EditorDiagnostic[] = [];
-  const seen = new Set<string>();
-  for (const ref of refs) {
-    if (isKnownBuiltinPath(ref.path)) continue;
-    if (isUserBinding(ref.path, user)) continue;
-    const key = `${ref.line}:${ref.col}:${ref.path}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const hint = suggestBuiltinPath(ref.path);
-    // Bare user-defined helpers (`myFunc()` / `foo()`) stay quiet unless a
-    // close builtin exists (short names need distance 1 — see maxSuggestDistance)
-    if (!ref.path.includes('.') && !hint) continue;
-    const msg = hint
-      ? `Unknown \`${ref.path}\` — did you mean \`${hint}\`?`
-      : `Unknown \`${ref.path}\` (not a built-in member)`;
+  if (names.size === 0) return out;
+  for (const ref of scanIdentRefs(source)) {
+    if (ref.name.length < 3) continue;
+    if (BARE_CALL_SKIP.has(ref.name)) continue;
+    if (isKnownBuiltinPath(ref.name)) continue;
+    if (names.has(ref.name)) continue;
+    const hint = suggestClosestName(ref.name, names);
+    if (!hint) continue;
+    const key = `${ref.line}:${ref.col}:${ref.name}`;
+    if (used.has(key)) continue;
+    used.add(key);
     out.push(
-      diag(source, {
-        line: ref.line,
-        col: ref.col,
-        endLine: ref.line,
-        endCol: ref.endCol,
-        message: msg,
-        // Non-blocking: violet “typo” mark — PYNE may autocorrect at run time
-        severity: 'typo',
-        source: 'preeval-typo',
-      }),
+      diagAtOffset(
+        source,
+        ref.from,
+        ref.to,
+        `Unknown \`${ref.name}\` — did you mean \`${hint}\`?`,
+      ),
     );
   }
   return out;
@@ -1084,6 +1390,13 @@ export function schedulePreeval(
     });
     return;
   }
+  const pe = store.preEval;
+  // Same buffer already waiting or already linted — do not reset the timer
+  // (tab-switch effects / store ticks used to cancel idle forever).
+  if (source === lastSource) {
+    if (timer != null) return;
+    if (pe && pe.source === source && !pe.pending) return;
+  }
   lastSource = source;
   // Drop any prior idle timer / in-flight request
   if (timer != null) {
@@ -1095,8 +1408,9 @@ export function schedulePreeval(
     abort = null;
   }
 
-  // Clear marks while typing (optional); keep pending=false until idle starts
-  const pe = store.preEval;
+  // Clear marks while typing (optional); keep pending=false until idle starts.
+  // Never stamp the live buffer onto old diagnostics — that made combine
+  // treat stale rows as fresh (Problems kept the error after a fix).
   if (cfg.preevalClearOnEdit) {
     const alreadyClear =
       pe &&
@@ -1110,7 +1424,7 @@ export function schedulePreeval(
         pending: false,
         source,
       });
-    } else if (pe.source !== source) {
+    } else if (pe?.source !== source) {
       setPreEval({
         diagnostics: [],
         hasErrors: false,
@@ -1118,13 +1432,6 @@ export function schedulePreeval(
         source,
       });
     }
-  } else if (pe.source !== source) {
-    setPreEval({
-      diagnostics: pe.diagnostics || [],
-      hasErrors: !!pe.hasErrors,
-      pending: false,
-      source,
-    });
   }
 
   const delay = Math.max(
