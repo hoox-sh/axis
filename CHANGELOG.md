@@ -30,6 +30,7 @@ _Generated/updated: 2026-08-17 · 229 commits · describe-tag: `v2.0.13`_
 
 ### Fixed
 
+- **`plot.style_linebr` / `steplinebr` / `areabr` on `na`** — Lightweight Charts Line/Area series drop whitespace points and connect the remaining samples, so Supertrend-style `bull ? st : na` plots drew a diagonal through inactive stretches. `*br` styles now hide the LWC connector and stroke each finite run (isolated samples stay a tick). `plot.style_line` still spans `na`.
 - **Hide mid-run** — an in-flight live apply no longer paints after Hide; empty-bar `startLive` no longer logs `No bars loaded`.
 - **Last-value names** — compare / on-chain titles survive **[T]**; volume stays number-only unless a title was set. Default `exactOnCandle` puts `Long N` on the side arrow, not the in-bar circle.
 - **Isolate / HPO strategy bag** — explicit `strategyProps: {}` means no rewrite; isolate no longer merges leftover editor broker settings onto a baked study.

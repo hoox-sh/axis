@@ -59,17 +59,20 @@ import {
   createPlotOverlaySeries,
   createPlotBarOverlaySeries,
   createPlotCandleOverlaySeries,
+  colorWithAlpha,
   PLOT_PALETTE,
   RIGHT_PRICE_SCALE_WIDTH,
   VOID,
 } from './series-factory';
 import {
+  isBreakPlotStyle,
   isHistogramSeriesKind,
   isPointMarkerSeriesKind,
   mapPlotStyleToSeriesKind,
   normalizeLineStyleToken,
   type PlotSeriesKind,
 } from '../results/plot-visuals';
+import { LineBreakPrimitive } from './line-break-primitive';
 import {
   mapBarUpdate,
   lastBarDirection,
@@ -501,6 +504,11 @@ export class PaneManager {
    * `series.update` on silent live re-runs when only the tip changed.
    */
   private overlayDataMeta = new Map<string, SeriesApplyMeta>();
+  /**
+   * `plot.style_*br` primitives keyed by overlay series key. LWC Line/Area
+   * connect through whitespace; these stroke each finite `na`-bounded run.
+   */
+  private overlayLineBreaks = new Map<string, LineBreakPrimitive>();
   /** ThemeManager chart unregister fns keyed by pane id */
   private themeUnregs = new Map<string, () => void>();
 
@@ -1710,6 +1718,81 @@ export class PaneManager {
   }
 
   /**
+   * Hide the LWC connector for `*br` styles (library connects through `na`)
+   * and restore it — plus area fills — when the plot is not a break style.
+   * `cross` already uses `lineVisible: false` for discrete markers.
+   */
+  private breakStyleSeriesOptions(
+    breakStyle: boolean,
+    seriesKind: PlotSeriesKind,
+    color?: string,
+  ): Record<string, unknown> {
+    if (isHistogramSeriesKind(seriesKind)) return {};
+    if (breakStyle) {
+      const opts: Record<string, unknown> = { lineVisible: false };
+      if (seriesKind === 'area') {
+        opts.topColor = 'rgba(0,0,0,0)';
+        opts.bottomColor = 'rgba(0,0,0,0)';
+      }
+      return opts;
+    }
+    if (seriesKind === 'cross') return {};
+    const opts: Record<string, unknown> = { lineVisible: true };
+    if (seriesKind === 'area' && color) {
+      opts.topColor = colorWithAlpha(color, 0.28);
+      opts.bottomColor = colorWithAlpha(color, 0.02);
+    }
+    return opts;
+  }
+
+  private dropLineBreak(series: ISeriesApi<any> | null | undefined, key: string): void {
+    const prim = this.overlayLineBreaks.get(key);
+    if (!prim) return;
+    if (series) {
+      try {
+        series.detachPrimitive(prim);
+      } catch {
+        /* disposed / mock */
+      }
+    }
+    this.overlayLineBreaks.delete(key);
+  }
+
+  /**
+   * Attach / update {@link LineBreakPrimitive} for `plot.style_*br`.
+   * Detach when the style is a spanning line so LWC can connect through `na`.
+   */
+  private syncLineBreakPrimitive(
+    series: ISeriesApi<any>,
+    key: string,
+    line: OverlayLineSpec,
+    seriesKind: PlotSeriesKind,
+    breakStyle: boolean,
+  ): void {
+    if (!breakStyle || isHistogramSeriesKind(seriesKind)) {
+      this.dropLineBreak(series, key);
+      return;
+    }
+    let prim = this.overlayLineBreaks.get(key);
+    if (!prim) {
+      prim = new LineBreakPrimitive();
+      try {
+        series.attachPrimitive(prim);
+      } catch {
+        /* mock / disposed */
+      }
+      this.overlayLineBreaks.set(key, prim);
+    }
+    prim.setPoints(line.data, {
+      color: line.color || VOID.indigo,
+      lineWidth: line.linewidth != null ? Math.max(1, Math.min(4, Math.round(line.linewidth))) : 2,
+      lineStyle: normalizeLineStyleToken(line.linestyle),
+      stepped: seriesKind === 'stepline',
+      area: seriesKind === 'area',
+    });
+  }
+
+  /**
    * Apply {@link lastValueNamesVisible} to series + hline titles.
    */
   applyLastValueNamesToAllSeries() {
@@ -1911,6 +1994,7 @@ export class PaneManager {
       (k) => k.startsWith('overlay_') || k.startsWith('bgcolor_'),
     );
     for (const k of overlays) {
+      this.dropLineBreak(pane.series[k], k);
       safeRemoveSeries(pane.chart, pane.series[k]);
       delete pane.series[k];
       this.overlaySeriesKinds.delete(`${paneId}:${k}`);
@@ -1948,6 +2032,7 @@ export class PaneManager {
         k.startsWith(ohlcPrefix) ||
         k.startsWith(bgPrefix)
       ) {
+        this.dropLineBreak(pane.series[k], k);
         safeRemoveSeries(pane.chart, pane.series[k]);
         delete pane.series[k];
         this.overlaySeriesKinds.delete(`${paneId}:${k}`);
@@ -2034,6 +2119,7 @@ export class PaneManager {
         }
       }
       if (!drop) continue;
+      this.dropLineBreak(pane.series[k], k);
       safeRemoveSeries(pane.chart, pane.series[k]);
       delete pane.series[k];
       this.overlaySeriesKinds.delete(`${paneId}:${k}`);
@@ -2114,6 +2200,7 @@ export class PaneManager {
       if (!ownerPrefix && k.includes('__')) continue;
       // Keep overlay series if still wanted as plot or as hline fallback
       if (!wantSeries.has(k) && !wantPrice.has(k.slice('overlay_'.length))) {
+        this.dropLineBreak(pane.series[k], k);
         safeRemoveSeries(pane.chart, pane.series[k]);
         delete pane.series[k];
         this.overlaySeriesKinds.delete(`${paneId}:${k}`);
@@ -2145,6 +2232,7 @@ export class PaneManager {
       const lw = line.linewidth != null ? Math.max(1, Math.min(4, Math.round(line.linewidth))) : undefined;
       // Recreate when Pine style family changes (line ↔ histogram ↔ area, …)
       if (existing && prevKind != null && prevKind !== seriesKind) {
+        this.dropLineBreak(existing, key);
         safeRemoveSeries(pane.chart, existing);
         delete pane.series[key];
         this.overlaySeriesKinds.delete(kindKey);
@@ -2152,6 +2240,7 @@ export class PaneManager {
       }
       const seriesNow = pane.series[key];
       const histFamily = isHistogramSeriesKind(seriesKind);
+      const breakStyle = isBreakPlotStyle(line.style);
       if (seriesNow) {
         // Tip-only path skips full toLwcLineData when length + lastTime match
         applyOverlayLineDataSmart(seriesNow, line.data, key, this.overlayDataMeta);
@@ -2183,10 +2272,12 @@ export class PaneManager {
           if (!histFamily && line.linestyle) {
             opts.lineStyle = mapLineStyle(line.linestyle);
           }
+          Object.assign(opts, this.breakStyleSeriesOptions(breakStyle, seriesKind, line.color));
           seriesNow.applyOptions(opts);
         } catch {
           /* ignore */
         }
+        this.syncLineBreakPrimitive(seriesNow, key, line, seriesKind, breakStyle);
       } else {
         try {
           const c = line.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
@@ -2203,6 +2294,7 @@ export class PaneManager {
             series.applyOptions({
               lastValueVisible: this.lastValueLabelsVisible,
               title: this.displaySeriesTitle(line.name),
+              ...this.breakStyleSeriesOptions(breakStyle, seriesKind, c),
             });
             this.rememberSeriesTitle(paneId, key, line.name);
           } catch {
@@ -2219,6 +2311,7 @@ export class PaneManager {
           applyOverlayLineDataSmart(series, line.data, key, this.overlayDataMeta);
           pane.series[key] = series;
           this.overlaySeriesKinds.set(kindKey, seriesKind);
+          this.syncLineBreakPrimitive(series, key, line, seriesKind, breakStyle);
         } catch {
           /* chart may be disposed mid-apply */
         }
@@ -2248,6 +2341,7 @@ export class PaneManager {
         // Drop any previous constant-line fallback series for this hline
         const fallbackKey = makeOverlayLineKey(line.name, ownerId);
         if (pane.series[fallbackKey]) {
+          this.dropLineBreak(pane.series[fallbackKey], fallbackKey);
           safeRemoveSeries(pane.chart, pane.series[fallbackKey]);
           delete pane.series[fallbackKey];
           this.overlayDataMeta.delete(fallbackKey);

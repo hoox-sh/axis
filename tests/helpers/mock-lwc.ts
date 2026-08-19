@@ -34,8 +34,13 @@ export type FakeSeries = {
   setSeriesOrder: (n: number) => void;
   dataByIndex: (i: number, dir?: number) => unknown;
   coordinateToPrice: (y: number) => number | null;
+  priceToCoordinate: (p: number) => number | null;
+  attachPrimitive: (p: unknown) => void;
+  detachPrimitive: (p: unknown) => void;
   _order: number;
   _data: unknown;
+  _opts: Record<string, unknown>;
+  _primitives: unknown[];
 };
 
 export type FakeChart = {
@@ -69,19 +74,46 @@ export function makeFakeChart(): FakeChart {
     const priceLines: FakePriceLine[] = [];
     const s: FakeSeries = {
       _data: null,
+      _opts: {},
+      _primitives: [],
       setData: (d) => {
         s._data = d;
       },
       update: (d) => {
         s._data = d;
       },
-      applyOptions: () => {},
+      applyOptions: (o) => {
+        Object.assign(s._opts, (o || {}) as object);
+      },
       priceScale: () => ({ applyOptions: () => {} }),
       _priceLines: priceLines,
       _order: series.length,
       seriesOrder: () => s._order,
       setSeriesOrder: (n: number) => {
         s._order = n;
+      },
+      attachPrimitive: (p) => {
+        s._primitives.push(p);
+        const prim = p as { attached?: (arg: unknown) => void };
+        try {
+          prim.attached?.({
+            chart: null,
+            series: s,
+            requestUpdate: () => {},
+          });
+        } catch {
+          /* ignore */
+        }
+      },
+      detachPrimitive: (p) => {
+        const i = s._primitives.indexOf(p);
+        if (i >= 0) s._primitives.splice(i, 1);
+        const prim = p as { detached?: () => void };
+        try {
+          prim.detached?.();
+        } catch {
+          /* ignore */
+        }
       },
       createPriceLine: (opts) => {
         const pl: FakePriceLine = {
@@ -101,6 +133,7 @@ export function makeFakeChart(): FakeChart {
       priceLines: () => priceLines.slice(),
       dataByIndex: () => null,
       coordinateToPrice: () => 1,
+      priceToCoordinate: (p) => p,
     };
     series.push(s);
     return s;

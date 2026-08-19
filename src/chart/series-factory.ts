@@ -542,7 +542,7 @@ export function createBgcolorSeries(chart: IChartApi, paneIndex?: number): ISeri
 }
 
 /** Hex `#rrggbb` / `#rgb` → `rgba(r,g,b,a)` for area fills; fall back to indigo soft. */
-function colorWithAlpha(color: string, alpha: number): string {
+export function colorWithAlpha(color: string, alpha: number): string {
   const s = (color || '').trim();
   const m6 = s.match(/^#([0-9a-f]{6})$/i);
   if (m6) {

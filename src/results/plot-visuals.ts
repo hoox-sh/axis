@@ -519,8 +519,10 @@ export function normalizeLineStyleToken(
  * True for Pine plot styles that break the series on `na` gaps:
  * `plot.style_linebr`, `plot.style_areabr`, `plot.style_steplinebr`.
  *
- * Chart path: {@link lineSeriesToOverlayData} already emits LWC whitespace
- * (`{ time }` only) for null/na, which breaks Line / Area / stepline segments.
+ * LWC Line/Area series **filter whitespace and connect remaining points**,
+ * which matches Pine `style_line` (span `na`) but not `*br`. Chart path
+ * keeps whitespace slots for pane alignment and draws breaks via
+ * `LineBreakPrimitive` when this is true.
  */
 export function isBreakPlotStyle(style?: string | null): boolean {
   const s = normalizePlotStyleToken(style);
@@ -544,8 +546,9 @@ export function isBreakPlotStyle(style?: string | null): boolean {
  * `plotbar` / `plotcandle` are separate plot_meta.kinds — see
  * {@link isOhlcPlotKind} / {@link ohlcSeriesToBarData}.
  *
- * Break variants (`*br`) use the same series kind; gaps come from whitespace
- * points (see {@link isBreakPlotStyle} / {@link lineSeriesToOverlayData}).
+ * Break variants (`*br`) use the same series kind. Whitespace keeps time-scale
+ * slots; the connector is hidden and {@link splitOverlayLineSegments} +
+ * `LineBreakPrimitive` stroke each finite run (LWC would otherwise connect).
  *
  * **LWC limits:** Histogram has no column-gap/width option (columns ≈ histogram
  * bars). Point markers are always circles — cross/diamond use size + line
@@ -764,9 +767,35 @@ export function lineSeriesToOverlayData(
 }
 
 /**
- * Alias for break-style plots (`linebr` / `areabr` / `steplinebr`).
- * Whitespace on na already breaks LWC Line/Area segments — same as
- * {@link lineSeriesToOverlayData}.
+ * Contiguous finite runs from overlay data. `na` / whitespace (`{ time }`
+ * only) ends a segment so `plot.style_linebr` / `steplinebr` / `areabr`
+ * can stroke each run separately. Isolated finite samples stay as
+ * one-point segments (a tick, not a connector across the gap).
+ */
+export function splitOverlayLineSegments(
+  data: ReadonlyArray<{ time: number; value?: number }>,
+): { time: number; value: number }[][] {
+  const segs: { time: number; value: number }[][] = [];
+  let cur: { time: number; value: number }[] = [];
+  for (let i = 0; i < data.length; i++) {
+    const p = data[i]!;
+    const v = p.value;
+    if (v != null && Number.isFinite(v) && Number.isFinite(p.time)) {
+      cur.push({ time: p.time, value: v });
+    } else if (cur.length) {
+      segs.push(cur);
+      cur = [];
+    }
+  }
+  if (cur.length) segs.push(cur);
+  return segs;
+}
+
+/**
+ * Overlay points for break-style plots (`linebr` / `areabr` / `steplinebr`).
+ * Same whitespace padding as {@link lineSeriesToOverlayData} (multi-pane
+ * logical range). Rendering must split via {@link splitOverlayLineSegments}
+ * — LWC Line/Area connect through omitted values.
  */
 export function lineSeriesToOverlayDataWithBreaks(
   times: number[] | ReadonlyArray<unknown>,

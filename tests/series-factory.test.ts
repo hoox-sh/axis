@@ -32,6 +32,7 @@ const {
   createLineSeries,
   createAreaSeries,
   createPlotOverlaySeries,
+  colorWithAlpha,
   formatCrosshairDateTime,
   deepMergeChartOptions,
 } = await import('../src/chart/series-factory');
@@ -40,6 +41,10 @@ describe('series-factory', () => {
   it('exports brand tokens and palette', () => {
     expect(VOID.bg).toMatch(/^#/);
     expect(PLOT_PALETTE.length).toBeGreaterThan(3);
+  });
+
+  it('colorWithAlpha expands hex for area fills', () => {
+    expect(colorWithAlpha('#34d399', 0.22)).toBe('rgba(52, 211, 153, 0.22)');
   });
 
   it('formatCrosshairDateTime includes date and HH:mm', () => {

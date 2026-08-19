@@ -122,7 +122,7 @@ Engine plot series honor Pine Script™ `plot.style_*` via `mapPlotStyleToSeries
 | `plot.style_area` / `areabr` | Area |
 | `plot.style_circles` | Circular point markers + faint hairline |
 | `plot.style_cross` | Larger point markers, connector hidden |
-| `plot.style_linebr` / `steplinebr` | Broken line / stepline variants (whitespace gaps) |
+| `plot.style_linebr` / `steplinebr` / `areabr` | Broken line / stepline / area — `na` ends a segment (LWC would otherwise connect through whitespace) |
 
 **LWC limits:** Histogram series has no bar-width or gap option, so `columns` and `histogram` share the same bar geometry (both zero-based). Point markers are always circular — `cross` is approximated by discrete markers without a connector; `stepline_diamond` uses stepline + vertex markers. Sparse `plotshape` styles map diamond/cross to square markers (optional `+` / `✕` glyphs when text is omitted).
 

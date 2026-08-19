@@ -289,4 +289,80 @@ describe('syncOverlayLines', () => {
     expect(pane.priceLines['Overbought']).toBeUndefined();
     expect(host._priceLines[0]!._opts.price).toBe(25);
   });
+
+  it('hides LWC connector and attaches a break primitive for plot.style_linebr', () => {
+    const data = [
+      { time: 1, value: 10 },
+      { time: 2, value: 11 },
+      { time: 3 },
+      { time: 4, value: 14 },
+    ];
+    pm.syncOverlayLines('price', [
+      {
+        name: 'ST Up',
+        data,
+        color: '#34d399',
+        style: 'plot.style_linebr',
+        linewidth: 2,
+      },
+    ]);
+    const series = pm.getPane('price')!.series['overlay_ST Up'] as {
+      _opts: { lineVisible?: boolean };
+      _primitives: Array<{ segments?: () => unknown }>;
+    };
+    expect(series._opts.lineVisible).toBe(false);
+    expect(series._primitives).toHaveLength(1);
+    const segs = series._primitives[0]!.segments?.();
+    expect(segs).toEqual([
+      [
+        { time: 1, value: 10 },
+        { time: 2, value: 11 },
+      ],
+      [{ time: 4, value: 14 }],
+    ]);
+  });
+
+  it('detaches the break primitive when style is no longer *br', () => {
+    const data = [
+      { time: 1, value: 10 },
+      { time: 2 },
+      { time: 3, value: 12 },
+    ];
+    pm.syncOverlayLines('price', [
+      { name: 'plotA', data, color: '#fff', style: 'plot.style_linebr' },
+    ]);
+    const series = pm.getPane('price')!.series['overlay_plotA'] as {
+      _opts: { lineVisible?: boolean };
+      _primitives: unknown[];
+    };
+    expect(series._primitives).toHaveLength(1);
+    expect(series._opts.lineVisible).toBe(false);
+
+    pm.syncOverlayLines('price', [
+      { name: 'plotA', data, color: '#fff', style: 'plot.style_line' },
+    ]);
+    expect(series._primitives).toHaveLength(0);
+    expect(series._opts.lineVisible).toBe(true);
+  });
+
+  it('does not attach a break primitive for plot.style_line (span na)', () => {
+    pm.syncOverlayLines('price', [
+      {
+        name: 'sma',
+        data: [
+          { time: 1 },
+          { time: 2, value: 10 },
+          { time: 3, value: 11 },
+        ],
+        color: '#fff',
+        style: 'plot.style_line',
+      },
+    ]);
+    const series = pm.getPane('price')!.series['overlay_sma'] as {
+      _opts: { lineVisible?: boolean };
+      _primitives: unknown[];
+    };
+    expect(series._primitives).toHaveLength(0);
+    expect(series._opts.lineVisible).not.toBe(false);
+  });
 });

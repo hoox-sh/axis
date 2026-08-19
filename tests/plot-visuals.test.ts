@@ -24,6 +24,7 @@ import {
   isTruthyPlotValue,
   lineSeriesToOverlayData,
   lineSeriesToOverlayDataWithBreaks,
+  splitOverlayLineSegments,
   mapPlotStyleToSeriesKind,
   mapShapeLocation,
   mapShapeSize,
@@ -326,7 +327,7 @@ describe('isBreakPlotStyle', () => {
   });
 
   it('lineSeriesToOverlayData emits whitespace gaps for linebr na segments', () => {
-    // Supertrend dual-line pattern: inactive side is na → LWC line break
+    // Supertrend dual-line: inactive side is na (time slots kept; LWC still connects)
     const times = [1, 2, 3, 4, 5];
     const up = [10, 11, null, null, 14];
     const data = lineSeriesToOverlayData(times, up);
@@ -338,6 +339,13 @@ describe('isBreakPlotStyle', () => {
       { time: 5, value: 14 },
     ]);
     expect(mapPlotStyleToSeriesKind('style_linebr')).toBe('line');
+    expect(splitOverlayLineSegments(data)).toEqual([
+      [
+        { time: 1, value: 10 },
+        { time: 2, value: 11 },
+      ],
+      [{ time: 5, value: 14 }],
+    ]);
   });
 });
 
@@ -409,7 +417,7 @@ describe('lineSeriesToOverlayData whitespace', () => {
     expect(data).toEqual([{ time: 1, value: 9 }, { time: 2 }, { time: 3 }]);
   });
 
-  it('mid-series na gaps stay as whitespace (enough for style_*br line breaks)', () => {
+  it('mid-series na gaps stay as whitespace (LWC still connects; *br splits runs)', () => {
     const times = [1, 2, 3, 4, 5];
     const values = [10, null, null, 20, 30];
     const data = lineSeriesToOverlayData(times, values);
@@ -422,6 +430,55 @@ describe('lineSeriesToOverlayData whitespace', () => {
     ]);
     expect(lineSeriesToOverlayDataWithBreaks(times, values, { breaks: true })).toEqual(data);
     expect(isBreakPlotStyle('plot.style_linebr')).toBe(true);
+    expect(splitOverlayLineSegments(data)).toEqual([
+      [{ time: 1, value: 10 }],
+      [
+        { time: 4, value: 20 },
+        { time: 5, value: 30 },
+      ],
+    ]);
+  });
+});
+
+describe('splitOverlayLineSegments', () => {
+  it('splits Supertrend-style na islands into separate runs', () => {
+    const data = [
+      { time: 1, value: 10 },
+      { time: 2, value: 11 },
+      { time: 3 },
+      { time: 4 },
+      { time: 5, value: 14 },
+      { time: 6, value: 15 },
+      { time: 7 },
+      { time: 8, value: 17 },
+    ];
+    expect(splitOverlayLineSegments(data)).toEqual([
+      [
+        { time: 1, value: 10 },
+        { time: 2, value: 11 },
+      ],
+      [
+        { time: 5, value: 14 },
+        { time: 6, value: 15 },
+      ],
+      [{ time: 8, value: 17 }],
+    ]);
+  });
+
+  it('treats NaN / non-finite as a break, not a vertex', () => {
+    const data = [
+      { time: 1, value: 1 },
+      { time: 2, value: Number.NaN },
+      { time: 3, value: 3 },
+    ];
+    expect(splitOverlayLineSegments(data)).toEqual([
+      [{ time: 1, value: 1 }],
+      [{ time: 3, value: 3 }],
+    ]);
+  });
+
+  it('returns empty when every sample is na', () => {
+    expect(splitOverlayLineSegments([{ time: 1 }, { time: 2 }])).toEqual([]);
   });
 });
 
