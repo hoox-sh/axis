@@ -22,6 +22,7 @@ _Generated/updated: 2026-08-17 · 229 commits · describe-tag: `v2.0.13`_
 
 ### Improved
 
+- **PYNE Agent chat markdown** — replies render headings, lists, and **bold** instead of raw `###` / `1. **Foo**`. Plugin default API endpoint is empty (set in plugin config); no hardcoded Worker URL.
 - **Editor hover + param checklist** — mouseover covers keywords, types/qualifiers, series (`close` / `bar_index`), namespaces (`ta.`), user inputs/functions, and hex colors. Call hints list type + default; current param is emphasized (no strikethrough on used). Hover cards use a void-theme header, parameter definition list, and inset example.
 - **Pre-eval / Problems / debug chips** — idle lint is 1s; `study()` and bare `security()` warn; duplicate `indicator()`/`strategy()` warn; Problems label **pre-eval** vs **run**; debug chips have higher contrast and truncate long logs.
 - **Live scripts auto-run** — starting a stream immediately re-runs every **visible** script on the chart (no extra Run). Hide pauses execution and clears that script’s plots (series, markers, drawings, fills, `barcolor` when it is the last visible script); show re-runs it. `library()` sources stay out of the live / reapply loop.

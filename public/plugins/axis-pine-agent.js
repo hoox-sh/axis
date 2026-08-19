@@ -22,8 +22,7 @@
  * @property {{ fetch?: typeof fetch }} [host]
  */
 
-/** Production agent Worker — module may be served same-origin from AXIS `/plugins/`. */
-const DEFAULT_ENDPOINT = "https://pyne-agent-worker.cryptolinx.workers.dev";
+const DEFAULT_ENDPOINT = "";
 
 /** Default floating modal geometry (not an AXIS dock panel). */
 const MODAL_DEFAULT = {
@@ -59,7 +58,7 @@ async function agentFetch(endpoint, apiKey, path, init = {}, hostFetch) {
   return data;
 }
 
-const PLUGIN_UI_VERSION = "0.1.5";
+const PLUGIN_UI_VERSION = "0.1.6";
 
 function injectStyles() {
   const id = "pyne-agent-styles";
@@ -187,10 +186,19 @@ function injectStyles() {
       color: var(--color-red, #fecaca);
     }
     .pyne-agent-prose {
-      white-space: pre-wrap;
       margin: 0 0 8px;
     }
     .pyne-agent-prose:last-child { margin-bottom: 0; }
+    .pyne-agent-prose p { margin: 0 0 6px; }
+    .pyne-agent-prose p:last-child { margin-bottom: 0; }
+    .pyne-agent-prose h3, .pyne-agent-prose h4 {
+      margin: 8px 0 4px; font-size: 12px; font-weight: 650;
+    }
+    .pyne-agent-prose ol, .pyne-agent-prose ul {
+      margin: 4px 0 8px; padding-left: 1.25em;
+    }
+    .pyne-agent-prose li { margin: 2px 0; }
+    .pyne-agent-prose strong { font-weight: 650; }
     .pyne-agent-codebox {
       margin: 8px 0 0;
       border: 1px solid var(--color-border, #3a3d4a);
@@ -612,22 +620,97 @@ function parseReplySegments(text) {
   return parts;
 }
 
-/** Light inline formatting: `code` → span (escape HTML). */
-function fillProse(el, text) {
-  el.textContent = "";
+/** Inline `code` + **bold**. */
+function appendInline(el, text) {
   const s = String(text || "");
-  const re = /`([^`\n]+)`/g;
+  const re = /(`[^`\n]+`|\*\*[^*]+\*\*)/g;
   let last = 0;
   let m;
   while ((m = re.exec(s)) !== null) {
     if (m.index > last) el.appendChild(document.createTextNode(s.slice(last, m.index)));
-    const code = document.createElement("code");
-    code.className = "pyne-agent-inline-code";
-    code.textContent = m[1];
-    el.appendChild(code);
+    const tok = m[1];
+    if (tok.startsWith("`")) {
+      const code = document.createElement("code");
+      code.className = "pyne-agent-inline-code";
+      code.textContent = tok.slice(1, -1);
+      el.appendChild(code);
+    } else {
+      const strong = document.createElement("strong");
+      strong.textContent = tok.slice(2, -2);
+      el.appendChild(strong);
+    }
     last = m.index + m[0].length;
   }
   if (last < s.length) el.appendChild(document.createTextNode(s.slice(last)));
+}
+
+/**
+ * Render compact markdown (paragraphs, lists, **bold**, `code`, ### headings).
+ * Avoids dumping raw ### / 1. **Foo** into the AXIS chat pane.
+ */
+function fillProse(el, text) {
+  el.textContent = "";
+  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  let i = 0;
+  const flushPara = (buf) => {
+    const t = buf.join(" ").trim();
+    if (!t) return;
+    const p = document.createElement("p");
+    appendInline(p, t);
+    el.appendChild(p);
+  };
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (!trimmed) {
+      i += 1;
+      continue;
+    }
+    const heading = trimmed.match(/^#{1,4}\s+(.+)$/);
+    if (heading) {
+      const h = document.createElement("h3");
+      appendInline(h, heading[1]);
+      el.appendChild(h);
+      i += 1;
+      continue;
+    }
+    const ol = trimmed.match(/^(\d+)[.)]\s+(.+)$/);
+    const ul = trimmed.match(/^[-*]\s+(.+)$/);
+    if (ol || ul) {
+      const list = document.createElement(ol ? "ol" : "ul");
+      if (ol) list.start = Number(ol[1]);
+      while (i < lines.length) {
+        const t = lines[i].trim();
+        const om = t.match(/^(\d+)[.)]\s+(.+)$/);
+        const um = t.match(/^[-*]\s+(.+)$/);
+        if (ol && om) {
+          const li = document.createElement("li");
+          appendInline(li, om[2]);
+          list.appendChild(li);
+        } else if (ul && um) {
+          const li = document.createElement("li");
+          appendInline(li, um[1]);
+          list.appendChild(li);
+        } else if (!t) {
+          break;
+        } else {
+          break;
+        }
+        i += 1;
+      }
+      el.appendChild(list);
+      continue;
+    }
+    const buf = [trimmed];
+    i += 1;
+    while (i < lines.length) {
+      const n = lines[i].trim();
+      if (!n || /^#{1,4}\s/.test(n) || /^\d+[.)]\s/.test(n) || /^[-*]\s/.test(n)) break;
+      buf.push(n);
+      i += 1;
+    }
+    flushPara(buf);
+  }
 }
 
 /**
