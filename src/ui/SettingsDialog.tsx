@@ -53,6 +53,9 @@ import {
   clampUiScale,
   clampHistoryBars,
   resetUiLayout,
+  patchEditorIntel,
+  resetEditorIntel,
+  getEditorIntel,
   HISTORY_BARS_MIN,
   HISTORY_BARS_MAX,
   HISTORY_BARS_DEFAULT,
@@ -79,6 +82,19 @@ import { getManager } from '../chart/manager-access';
 import { UI_SCALE_PRESETS, formatUiScalePct } from './ui-scale';
 import { WorkspaceSnapshotMenu } from './WorkspaceSnapshotMenu';
 import { ThemePanel } from './ThemePanel';
+import {
+  INTEL_HOVER_MS_MAX,
+  INTEL_HOVER_MS_MIN,
+  INTEL_IDLE_MS_MAX,
+  INTEL_IDLE_MS_MIN,
+  INTEL_MAX_OPTIONS_MAX,
+  INTEL_MAX_OPTIONS_MIN,
+  INTEL_TAB_SWITCH_MS_MAX,
+  INTEL_TAB_SWITCH_MS_MIN,
+  INTEL_TIMEOUT_MS_MAX,
+  INTEL_TIMEOUT_MS_MIN,
+  type EditorIntelSettings,
+} from '../editor/editor-intel';
 
 /** PYNE Runtime modes for the server/worker engine plugin config. */
 export type EngineExecMode = 'interpret' | 'compile' | 'auto';
@@ -112,7 +128,7 @@ function readEnginePluginConfig(engineId: string): Record<string, unknown> {
   return (pc[pluginKey('engine', engineId)] || pc[engineId] || {}) as Record<string, unknown>;
 }
 
-export type SettingsTabId = 'general' | 'theme';
+export type SettingsTabId = 'general' | 'editor' | 'theme';
 
 interface Props {
   open: boolean;
@@ -123,6 +139,7 @@ interface Props {
 
 const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'general', label: 'General', hint: 'Engine · density · chart · live' },
+  { id: 'editor', label: 'Editor', hint: 'Lint · hover · complete · marks · timings' },
   { id: 'theme', label: 'Theme', hint: 'Bars · canvas · Pine chart.bg_color' },
 ];
 
@@ -260,7 +277,11 @@ export const SettingsDialog: Component<Props> = (props) => {
         setInvertTradeLabels(!!store.strategyUi?.invertTradeLabels);
         setExactOnCandle(store.strategyUi?.exactOnCandle !== false);
         setProbeMsg('');
-        setTab(props.initialTab === 'theme' ? 'theme' : 'general');
+        setTab(
+          props.initialTab === 'theme' || props.initialTab === 'editor'
+            ? props.initialTab
+            : 'general',
+        );
       });
     }
     return isOpen;
@@ -270,7 +291,7 @@ export const SettingsDialog: Component<Props> = (props) => {
   createEffect(() => {
     if (!props.open) return;
     const t = props.initialTab;
-    if (t === 'theme' || t === 'general') setTab(t);
+    if (t === 'theme' || t === 'general' || t === 'editor') setTab(t);
   });
 
   /** Live density preview while dragging (persists on Save or preset click). */
@@ -438,7 +459,7 @@ export const SettingsDialog: Component<Props> = (props) => {
       >
         <div
           class={`sc-dialog ${
-            tab() === 'theme'
+            tab() === 'theme' || tab() === 'editor'
               ? 'w-[min(640px,calc(100vw-2*var(--ui-dialog-margin)))]'
               : 'w-[min(560px,calc(100vw-2*var(--ui-dialog-margin)))]'
           }`}
@@ -505,6 +526,17 @@ export const SettingsDialog: Component<Props> = (props) => {
 
           <div class="sc-dialog-body">
             {/* ── Theme tab ─────────────────────────────────────────── */}
+            <Show when={tab() === 'editor'}>
+              <div
+                id="axis-settings-panel-editor"
+                role="tabpanel"
+                aria-labelledby="axis-settings-tab-editor"
+                data-testid="axis-settings-editor"
+                class="flex flex-col gap-2"
+              >
+                <EditorIntelPanel />
+              </div>
+            </Show>
             <Show when={tab() === 'theme'}>
               <div
                 id="axis-settings-panel-theme"
@@ -1223,10 +1255,12 @@ export const SettingsDialog: Component<Props> = (props) => {
             <div class="flex-1 text-[0.72em] text-text-faint font-mono truncate">
               {tab() === 'theme'
                 ? 'Theme applies live · Save not required'
-                : `AXIS · scale ${formatUiScalePct(uiScale())}`}
+                : tab() === 'editor'
+                  ? 'Editor intel applies live · Save not required'
+                  : `AXIS · scale ${formatUiScalePct(uiScale())}`}
             </div>
             <button type="button" class="sc-btn" onClick={closeWithoutSave}>
-              {tab() === 'theme' ? 'Close' : 'Cancel'}
+              {tab() === 'theme' || tab() === 'editor' ? 'Close' : 'Cancel'}
             </button>
             <Show when={tab() === 'general'}>
               <button type="button" class="sc-btn sc-btn-primary" onClick={save}>
@@ -1238,5 +1272,398 @@ export const SettingsDialog: Component<Props> = (props) => {
         </div>
       </div>
     </Show>
+  );
+};
+
+function IntelCheck(props: {
+  id: string;
+  label: string;
+  hint: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label class="flex items-start gap-2 cursor-pointer mb-2" for={props.id}>
+      <input
+        id={props.id}
+        type="checkbox"
+        class="mt-0.5"
+        checked={props.checked}
+        onChange={(e) => props.onChange(e.currentTarget.checked)}
+        data-testid={props.id}
+      />
+      <span>
+        <span class="text-[12px] text-text">{props.label}</span>
+        <span class="block text-[10px] text-text-faint mt-0.5">{props.hint}</span>
+      </span>
+    </label>
+  );
+}
+
+function IntelNum(props: {
+  id: string;
+  label: string;
+  hint: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  suffix?: string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label class="flex flex-col gap-0.5 mb-2" for={props.id}>
+      <span class="flex items-baseline justify-between gap-2">
+        <span class="text-[12px] text-text">{props.label}</span>
+        <span class="font-mono text-[11px] tabular-nums text-text-faint">
+          {props.value}
+          {props.suffix || ''}
+        </span>
+      </span>
+      <input
+        id={props.id}
+        type="number"
+        class="sc-input font-mono text-[12px] w-full"
+        min={props.min}
+        max={props.max}
+        step={props.step ?? 50}
+        value={props.value}
+        onInput={(e) => {
+          const n = Number(e.currentTarget.value);
+          if (Number.isFinite(n)) props.onChange(n);
+        }}
+        data-testid={props.id}
+      />
+      <span class="text-[10px] text-text-faint">
+        {props.hint} ({props.min}–{props.max}
+        {props.suffix || ''})
+      </span>
+    </label>
+  );
+}
+
+/** Live-applied editor intelligence (lint / hover / complete / marks). */
+const EditorIntelPanel: Component = () => {
+  const intel = () => getEditorIntel();
+  const set = (partial: Partial<EditorIntelSettings>) => patchEditorIntel(partial);
+
+  return (
+    <>
+      <div class="flex items-center justify-between gap-2 mb-1">
+        <div>
+          <div class="sc-section-title !mb-0">Editor intelligence</div>
+          <p class="sc-hint mt-0.5">
+            Pre-eval, hover cards, completions, underlines, and inline chips.
+            Changes apply immediately.
+          </p>
+        </div>
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost text-[11px]"
+          data-testid="axis-settings-editor-reset"
+          onClick={() => resetEditorIntel()}
+        >
+          Reset defaults
+        </button>
+      </div>
+
+      <div class="sc-section !mt-2">
+        <div class="sc-section-title">Pre-eval / lint</div>
+        <IntelCheck
+          id="axis-intel-preeval"
+          label="Enable pre-eval"
+          hint="Parse/lint after idle, Save, and Run. Off skips all static checks."
+          checked={intel().preevalEnabled}
+          onChange={(v) => set({ preevalEnabled: v })}
+        />
+        <IntelCheck
+          id="axis-intel-preeval-local"
+          label="Local structural checks"
+          hint="Brackets, strings, missing indicator()/strategy()/library()."
+          checked={intel().preevalLocal}
+          onChange={(v) => set({ preevalLocal: v })}
+        />
+        <IntelCheck
+          id="axis-intel-preeval-remote"
+          label="Remote Pro API diagnostics"
+          hint="POST /lsp/diagnostics when Backend URL is set (merged with local)."
+          checked={intel().preevalRemote}
+          onChange={(v) => set({ preevalRemote: v })}
+        />
+        <IntelCheck
+          id="axis-intel-preeval-typos"
+          label="Unknown builtin / typo hints"
+          hint="plt() → plot, strategy.etry → strategy.entry (violet, non-blocking)."
+          checked={intel().preevalTypos}
+          onChange={(v) => set({ preevalTypos: v })}
+        />
+        <IntelCheck
+          id="axis-intel-preeval-version"
+          label="Warn if //@version is missing"
+          checked={intel().preevalVersionWarn}
+          hint="Suggests //@version=6 at the top of the script."
+          onChange={(v) => set({ preevalVersionWarn: v })}
+        />
+        <IntelCheck
+          id="axis-intel-preeval-study"
+          label="Warn on study()"
+          hint="Pine v3 name — use indicator() or strategy()."
+          checked={intel().preevalStudyWarn}
+          onChange={(v) => set({ preevalStudyWarn: v })}
+        />
+        <IntelCheck
+          id="axis-intel-preeval-security"
+          label="Warn on bare security()"
+          hint="Prefer request.security (v4+)."
+          checked={intel().preevalSecurityWarn}
+          onChange={(v) => set({ preevalSecurityWarn: v })}
+        />
+        <IntelCheck
+          id="axis-intel-preeval-dup"
+          label="Warn on duplicate declarations"
+          hint="Only one indicator() / strategy() / library() per script."
+          checked={intel().preevalDuplicateDecl}
+          onChange={(v) => set({ preevalDuplicateDecl: v })}
+        />
+        <IntelCheck
+          id="axis-intel-preeval-block"
+          label="Block Run on errors"
+          hint="Severity error disables Run. Typos and warnings never block."
+          checked={intel().preevalBlockRun}
+          onChange={(v) => set({ preevalBlockRun: v })}
+        />
+        <IntelCheck
+          id="axis-intel-preeval-clear"
+          label="Clear marks while typing"
+          hint="On: hide underlines until idle. Off: keep last marks until the next check lands."
+          checked={intel().preevalClearOnEdit}
+          onChange={(v) => set({ preevalClearOnEdit: v })}
+        />
+        <IntelNum
+          id="axis-intel-idle-ms"
+          label="Idle delay"
+          hint="Quiet time after the last keystroke before lint runs"
+          value={intel().preevalIdleMs}
+          min={INTEL_IDLE_MS_MIN}
+          max={INTEL_IDLE_MS_MAX}
+          suffix=" ms"
+          onChange={(v) => set({ preevalIdleMs: v })}
+        />
+        <IntelNum
+          id="axis-intel-tab-ms"
+          label="Tab-switch delay"
+          hint="Lint shortly after switching editor tabs"
+          value={intel().preevalTabSwitchMs}
+          min={INTEL_TAB_SWITCH_MS_MIN}
+          max={INTEL_TAB_SWITCH_MS_MAX}
+          suffix=" ms"
+          onChange={(v) => set({ preevalTabSwitchMs: v })}
+        />
+      </div>
+
+      <div class="sc-section">
+        <div class="sc-section-title">Error marking</div>
+        <IntelCheck
+          id="axis-intel-underlines"
+          label="Underlines + line tint"
+          hint="Wavy/dotted marks in the buffer."
+          checked={intel().diagUnderlines}
+          onChange={(v) => set({ diagUnderlines: v })}
+        />
+        <IntelCheck
+          id="axis-intel-gutter"
+          label="Gutter markers"
+          hint="● / ▲ / ✦ in the left gutter."
+          checked={intel().diagGutter}
+          onChange={(v) => set({ diagGutter: v })}
+        />
+        <IntelCheck
+          id="axis-intel-diag-hover"
+          label="Diagnostic hover"
+          hint="Tooltip when the cursor rests on a mark."
+          checked={intel().diagHover}
+          onChange={(v) => set({ diagHover: v })}
+        />
+        <IntelCheck
+          id="axis-intel-err"
+          label="Show errors"
+          checked={intel().diagErrors}
+          hint="Blocking parse / structural errors."
+          onChange={(v) => set({ diagErrors: v })}
+        />
+        <IntelCheck
+          id="axis-intel-warn"
+          label="Show warnings"
+          checked={intel().diagWarnings}
+          hint="study(), missing version, bare security()."
+          onChange={(v) => set({ diagWarnings: v })}
+        />
+        <IntelCheck
+          id="axis-intel-typo"
+          label="Show typos"
+          checked={intel().diagTypos}
+          hint="Unknown builtin members (violet)."
+          onChange={(v) => set({ diagTypos: v })}
+        />
+        <IntelCheck
+          id="axis-intel-info"
+          label="Show info"
+          checked={intel().diagInfo}
+          hint="Hints and informational engine notes."
+          onChange={(v) => set({ diagInfo: v })}
+        />
+      </div>
+
+      <div class="sc-section">
+        <div class="sc-section-title">Hover cards &amp; hints</div>
+        <IntelCheck
+          id="axis-intel-hover"
+          label="Builtin / symbol hover cards"
+          hint="Docs for ta.sma, plot, input.*, user annotations."
+          checked={intel().hoverEnabled}
+          onChange={(v) => set({ hoverEnabled: v })}
+        />
+        <IntelCheck
+          id="axis-intel-hover-remote"
+          label="Remote hover"
+          hint="Ask Pro API /lsp/hover when local catalog has no card."
+          checked={intel().hoverRemote}
+          onChange={(v) => set({ hoverRemote: v })}
+        />
+        <IntelCheck
+          id="axis-intel-sig"
+          label="Signature / param checklist"
+          hint="In-call hint lists every parameter (used / current / unused)."
+          checked={intel().signatureHints}
+          onChange={(v) => set({ signatureHints: v })}
+        />
+        <IntelNum
+          id="axis-intel-hover-ms"
+          label="Hover delay"
+          hint="How long to rest the pointer before a card opens"
+          value={intel().hoverTimeMs}
+          min={INTEL_HOVER_MS_MIN}
+          max={INTEL_HOVER_MS_MAX}
+          step={25}
+          suffix=" ms"
+          onChange={(v) => set({ hoverTimeMs: v })}
+        />
+      </div>
+
+      <div class="sc-section">
+        <div class="sc-section-title">Suggestions / autocomplete</div>
+        <IntelCheck
+          id="axis-intel-ac"
+          label="Enable completions"
+          hint="Typing + ⌘/Ctrl-Space. Off removes the list entirely."
+          checked={intel().autocompleteEnabled}
+          onChange={(v) => set({ autocompleteEnabled: v })}
+        />
+        <IntelCheck
+          id="axis-intel-ac-type"
+          label="Activate while typing"
+          hint="Off = only open on ⌘/Ctrl-Space."
+          checked={intel().activateOnTyping}
+          onChange={(v) => set({ activateOnTyping: v })}
+        />
+        <IntelCheck
+          id="axis-intel-ac-params"
+          label="Named parameter suggestions"
+          hint="After ( or , offer remaining title= / minval= args."
+          checked={intel().paramCompletions}
+          onChange={(v) => set({ paramCompletions: v })}
+        />
+        <IntelCheck
+          id="axis-intel-ac-enums"
+          label="Enum value lists"
+          hint="plot.style_*, shape.*, size.*, location.*, color.* after name=."
+          checked={intel().enumCompletions}
+          onChange={(v) => set({ enumCompletions: v })}
+        />
+        <IntelCheck
+          id="axis-intel-ac-remote"
+          label="Remote completions"
+          hint="Merge Pro API /lsp/completion when local has no hit."
+          checked={intel().remoteCompletions}
+          onChange={(v) => set({ remoteCompletions: v })}
+        />
+        <IntelNum
+          id="axis-intel-ac-max"
+          label="Max rendered options"
+          hint="Cap the suggestion popup"
+          value={intel().maxRenderedOptions}
+          min={INTEL_MAX_OPTIONS_MIN}
+          max={INTEL_MAX_OPTIONS_MAX}
+          step={8}
+          onChange={(v) => set({ maxRenderedOptions: v })}
+        />
+      </div>
+
+      <div class="sc-section">
+        <div class="sc-section-title">Remote LSP timings</div>
+        <IntelCheck
+          id="axis-intel-remote-master"
+          label="Use remote LSP"
+          hint="Master switch for hover / complete / diagnostics against Backend URL."
+          checked={intel().remoteLspEnabled}
+          onChange={(v) => set({ remoteLspEnabled: v })}
+        />
+        <IntelNum
+          id="axis-intel-to-hover"
+          label="Hover timeout"
+          hint="Give up on /lsp/hover and show local (or nothing)"
+          value={intel().hoverTimeoutMs}
+          min={INTEL_TIMEOUT_MS_MIN}
+          max={INTEL_TIMEOUT_MS_MAX}
+          suffix=" ms"
+          onChange={(v) => set({ hoverTimeoutMs: v })}
+        />
+        <IntelNum
+          id="axis-intel-to-ac"
+          label="Completion timeout"
+          hint="Give up on /lsp/completion"
+          value={intel().completionTimeoutMs}
+          min={INTEL_TIMEOUT_MS_MIN}
+          max={INTEL_TIMEOUT_MS_MAX}
+          suffix=" ms"
+          onChange={(v) => set({ completionTimeoutMs: v })}
+        />
+        <IntelNum
+          id="axis-intel-to-diag"
+          label="Diagnostics timeout"
+          hint="Local marks already show; this only waits for remote parse"
+          value={intel().diagnosticsTimeoutMs}
+          min={INTEL_TIMEOUT_MS_MIN}
+          max={INTEL_TIMEOUT_MS_MAX}
+          suffix=" ms"
+          onChange={(v) => set({ diagnosticsTimeoutMs: v })}
+        />
+      </div>
+
+      <div class="sc-section">
+        <div class="sc-section-title">Inline markers</div>
+        <IntelCheck
+          id="axis-intel-color-chips"
+          label="Color chips"
+          hint="Swatches before hex / color.* tokens."
+          checked={intel().colorChips}
+          onChange={(v) => set({ colorChips: v })}
+        />
+        <IntelCheck
+          id="axis-intel-inline-chips"
+          label="Debug chips (end of line)"
+          hint="Also requires the editor Debug toggle. Last-run logs / errors."
+          checked={intel().inlineChips}
+          onChange={(v) => set({ inlineChips: v })}
+        />
+        <IntelCheck
+          id="axis-intel-pin-gutter"
+          label="Debug pin gutter"
+          hint="Also requires chart Pins. Lines with bar_index / time."
+          checked={intel().inlinePinGutter}
+          onChange={(v) => set({ inlinePinGutter: v })}
+        />
+      </div>
+    </>
   );
 };

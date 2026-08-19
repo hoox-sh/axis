@@ -42,6 +42,8 @@ import { bracketMatching } from '@codemirror/language';
 import { pyneScript } from './pyne-language';
 import { voidEditorExtensions } from './cm-void';
 import { pyneLspExtensions } from './pyne-lsp';
+import { store } from '../store';
+import { readEditorIntel } from './editor-intel';
 import {
   applyProfilerProfile,
   profilerGutterExtension,
@@ -182,6 +184,8 @@ export const PyneEditor: Component<Props> = (props) => {
   let view: EditorView | undefined;
   /** Compartment so wrap can toggle without rebuilding the whole state. */
   const wrapCompartment = new Compartment();
+  const lspCompartment = new Compartment();
+  const chipsCompartment = new Compartment();
 
   const getDoc = () => view?.state.doc.toString() ?? '';
 
@@ -348,6 +352,21 @@ export const PyneEditor: Component<Props> = (props) => {
     view.requestMeasure();
   };
 
+  const syncIntel = () => {
+    if (!view) return;
+    const intel = readEditorIntel(store.editorIntel);
+    view.dispatch({
+      effects: [
+        lspCompartment.reconfigure(pyneLspExtensions(intel)),
+        chipsCompartment.reconfigure(intel.colorChips ? colorChipsExtension() : []),
+      ],
+    });
+    // Re-apply diagnostics so underline/gutter/hover flags take effect
+    const diags = props.diagnostics ?? null;
+    applyDiagnostics(view, diags && diags.length ? diags : null);
+    view.requestMeasure();
+  };
+
   onMount(() => {
     const runKeymap = keymap.of([
       {
@@ -393,7 +412,7 @@ export const PyneEditor: Component<Props> = (props) => {
         bracketMatching(),
         highlightSelectionMatches(),
         // Pine LSP-lite: typing completion + hover docs (from pyne builtin metadata)
-        ...pyneLspExtensions(),
+        lspCompartment.of(pyneLspExtensions(readEditorIntel(store.editorIntel))),
         // Profiler gutter: always mounted; driven by setProfilerData effects
         profilerGutterExtension(),
         // Inline debug chips / pin gutter / flash (driven by apply*)
@@ -405,7 +424,9 @@ export const PyneEditor: Component<Props> = (props) => {
           enabled: () => props.rulerEnabled !== false,
         }),
         // Inline color chips (line-height × line-height) before hex / color.*
-        colorChipsExtension(),
+        chipsCompartment.of(
+          readEditorIntel(store.editorIntel).colorChips ? colorChipsExtension() : [],
+        ),
         runKeymap,
         keymap.of([...defaultKeymap, indentWithTab, ...searchKeymap]),
         pyneScript,
@@ -520,6 +541,11 @@ export const PyneEditor: Component<Props> = (props) => {
   createEffect(() => {
     void props.wrapEnabled;
     syncWrap();
+  });
+
+  createEffect(() => {
+    void store.editorIntel;
+    syncIntel();
   });
 
   return (

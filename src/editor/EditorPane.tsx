@@ -95,7 +95,6 @@ export const EditorPane: Component<Props> = (props) => {
       if (!source.trim()) return;
       // Final pre-eval gate (catches race if debounce has not finished)
       const pe = await runPreevalNow(source);
-      if (pe.hasErrors) return;
       if (isScriptRunBlockedByPreEval()) return;
       // Parent may override (e.g. app shell) — still pass through doc only for auto
       if (props.onRun && mode === 'auto') {

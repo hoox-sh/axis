@@ -35,6 +35,7 @@
  */
 
 import { store } from '../store';
+import { readEditorIntel } from './editor-intel';
 
 /** One completion item from Pro API `/lsp/completion`. */
 export type RemoteCompletionItem = {
@@ -92,6 +93,8 @@ export function _resetRemoteLspCooldownForTests(): void {
  */
 export function shouldUseRemoteLsp(): boolean {
   if (isRemoteLspCoolingDown()) return false;
+  const intel = readEditorIntel(store.editorIntel);
+  if (!intel.remoteLspEnabled) return false;
   const eng = store.engine || store.activePlugins?.engine || '';
   if (eng === 'pyodide') return false;
   // Worker / edge engines may also expose /lsp/* when pointed at a Pro API host
@@ -144,9 +147,11 @@ export async function fetchRemoteCompletion(opts: {
   signal?: AbortSignal;
   timeoutMs?: number;
 }): Promise<RemoteCompletionItem[] | null> {
+  if (!readEditorIntel(store.editorIntel).remoteCompletions) return null;
   const base = lspBaseUrl();
   if (!base) return null;
-  const timeoutMs = opts.timeoutMs ?? LSP_COMPLETION_TIMEOUT_MS;
+  const timeoutMs =
+    opts.timeoutMs ?? readEditorIntel(store.editorIntel).completionTimeoutMs ?? LSP_COMPLETION_TIMEOUT_MS;
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const signal = mergeAbortSignals(opts.signal, timeoutSignal);
   try {
@@ -187,9 +192,11 @@ export async function fetchRemoteHover(opts: {
   signal?: AbortSignal;
   timeoutMs?: number;
 }): Promise<RemoteHover | null> {
+  if (!readEditorIntel(store.editorIntel).hoverRemote) return null;
   const base = lspBaseUrl();
   if (!base) return null;
-  const timeoutMs = opts.timeoutMs ?? LSP_HOVER_TIMEOUT_MS;
+  const timeoutMs =
+    opts.timeoutMs ?? readEditorIntel(store.editorIntel).hoverTimeoutMs ?? LSP_HOVER_TIMEOUT_MS;
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const signal = mergeAbortSignals(opts.signal, timeoutSignal);
   try {
@@ -254,7 +261,10 @@ export async function fetchRemoteDiagnostics(opts: {
 }): Promise<RemoteDiagnosticsResult | null> {
   const base = lspBaseUrl();
   if (!base) return null;
-  const timeoutMs = opts.timeoutMs ?? LSP_DIAGNOSTICS_TIMEOUT_MS;
+  const timeoutMs =
+    opts.timeoutMs ??
+    readEditorIntel(store.editorIntel).diagnosticsTimeoutMs ??
+    LSP_DIAGNOSTICS_TIMEOUT_MS;
   const signal = mergeAbortSignals(opts.signal, AbortSignal.timeout(timeoutMs));
   try {
     const res = await fetch(`${base}/lsp/diagnostics`, {

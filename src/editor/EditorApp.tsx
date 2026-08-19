@@ -85,8 +85,8 @@ export const EditorApp: Component = () => {
 
   const onRun = async (doc: string) => {
     if (!doc?.trim()) return;
-    const pe = await runPreevalNow(doc);
-    if (pe.hasErrors || isScriptRunBlockedByPreEval()) {
+    await runPreevalNow(doc);
+    if (isScriptRunBlockedByPreEval()) {
       setRunStatus('blocked: fix script errors');
       return;
     }

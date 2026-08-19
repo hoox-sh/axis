@@ -119,6 +119,8 @@ export type CommandPaletteProps = {
   onOpenSettings?: () => void;
   /** Open Settings → Theme tab (chart colors). */
   onOpenThemeSettings?: () => void;
+  /** Open Settings → Editor tab (lint / hover / complete). */
+  onOpenEditorSettings?: () => void;
   onOpenPlugins?: () => void;
   /** Open Workers Manager modal. */
   onOpenWorkers?: () => void;
@@ -189,9 +191,9 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
           doc = saved.doc || doc;
         }
         if (!doc.trim()) return;
-        const { runPreevalNow } = await import('../editor/preevaluate');
-        const pe = await runPreevalNow(doc);
-        if (pe.hasErrors) return;
+        const { runPreevalNow, isScriptRunBlocked } = await import('../editor/preevaluate');
+        await runPreevalNow(doc);
+        if (isScriptRunBlocked()) return;
         await runFromEditor(doc, {
           mode: 'auto',
           inputs: store.editorInputValues || {},
@@ -230,6 +232,8 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       openSettings: () => props.onOpenSettings?.(),
       openThemeSettings: () =>
         props.onOpenThemeSettings?.() ?? props.onOpenSettings?.(),
+      openEditorSettings: () =>
+        props.onOpenEditorSettings?.() ?? props.onOpenSettings?.(),
       openPlugins: () => props.onOpenPlugins?.(),
       openWorkers: () => props.onOpenWorkers?.(),
       openArchitecture: () => props.onOpenArchitecture?.(),

@@ -127,7 +127,7 @@ export const RunSplitButton: Component<{
     }
     if (!doc.trim()) return;
     const pe = await runPreevalNow(doc);
-    if (pe.hasErrors || isScriptRunBlockedByPreEval()) return;
+    if (isScriptRunBlockedByPreEval()) return;
     closeMenu();
     try {
       await runFromEditor(doc, {

@@ -51,6 +51,12 @@ import {
 import { hoverTooltip, keymap, showTooltip, type EditorView, type Tooltip } from '@codemirror/view';
 import { Extension, StateField, type EditorState } from '@codemirror/state';
 import builtinsJson from './data/pyne-builtins.json';
+import { store } from '../store';
+import {
+  DEFAULT_EDITOR_INTEL,
+  readEditorIntel,
+  type EditorIntelSettings,
+} from './editor-intel';
 import {
   fetchRemoteCompletion,
   fetchRemoteHover,
@@ -447,6 +453,7 @@ function sigForCall(name: string, source: string): PineCallSig | null {
 export function completeCallParams(
   context: CompletionContext,
 ): CompletionResult | null {
+  if (!readEditorIntel(store.editorIntel).paramCompletions) return null;
   const text = context.state.doc.toString();
   const site = findCallSite(text, context.pos);
   if (!site) return null;
@@ -768,13 +775,15 @@ export function lookupBuiltin(name: string): BuiltinMeta | undefined {
 /** Local (metadata) completion — always available offline. */
 export function pyneCompleteLocal(context: CompletionContext): CompletionResult | null {
   initIndex();
+  const cfg = readEditorIntel(store.editorIntel);
+  if (!cfg.autocompleteEnabled) return null;
   const line = context.state.doc.lineAt(context.pos);
   const textBefore = line.text.slice(0, context.pos - line.from);
   const fullSource = context.state.doc.toString();
 
   // Named-arg enums for any Pine call (style=, shape=, location=, size=, color=, …)
   // Multi-line aware — works for all scripts, not only single-line plot(...).
-  const named = completeNamedArgEnum(context);
+  const named = cfg.enumCompletions ? completeNamedArgEnum(context) : null;
   if (named) return named;
 
   // Remaining named parameters after `(` / `,` (`title=`, `minval=`, …)
@@ -886,10 +895,12 @@ function completionFromPos(
 export async function pyneComplete(
   context: CompletionContext,
 ): Promise<CompletionResult | null> {
+  const cfg = readEditorIntel(store.editorIntel);
+  if (!cfg.autocompleteEnabled) return null;
   // Named-arg enums (style/shape/size/color/…) are client-owned — remote
   // catalogs often omit plot.style_* and friends. Prefer local for all Pine.
   {
-    const named = completeNamedArgEnum(context);
+    const named = cfg.enumCompletions ? completeNamedArgEnum(context) : null;
     if (named) return named;
   }
   {
@@ -1506,6 +1517,7 @@ export function pyneHoverLocal(
  * appear broken (tooltip never showed before the pointer left).
  */
 export async function pyneHover(view: EditorView, pos: number): Promise<Tooltip | null> {
+  if (!readEditorIntel(store.editorIntel).hoverEnabled) return null;
   const local = pyneHoverLocal(view, pos);
   // Instant path for ta.sma, plot, input.*, named params, inside-call hover
   if (local) return local;
@@ -1564,29 +1576,35 @@ export const pyneCompletionTriggerKeymap = keymap.of([
 ]);
 
 /** CodeMirror extensions: autocomplete + hover (remote LSP + local fallback). */
-export function pyneLspExtensions(): Extension[] {
+export function pyneLspExtensions(intel?: EditorIntelSettings): Extension[] {
   initIndex();
-  return [
-    autocompletion({
-      override: [pyneComplete],
-      activateOnTyping: true,
-      activateOnCompletion: (c) => String(c.label || '').endsWith('='),
-      maxRenderedOptions: 64,
-      defaultKeymap: true,
-      icons: true,
-      // Open on explicit trigger even with empty prefix (Cmd/Ctrl-Space)
-      closeOnBlur: true,
-    }),
-    // Mod-Space before completionKeymap so ⌘-Space is not swallowed elsewhere
-    pyneCompletionTriggerKeymap,
-    keymap.of(completionKeymap),
-    hoverTooltip((view, pos) => pyneHover(view, pos), {
-      hideOnChange: true,
-      // Slightly snappier than CM default (300ms)
-      hoverTime: 250,
-    }),
-    pineParamHintField,
-  ];
+  const cfg = intel ?? readEditorIntel(store.editorIntel) ?? DEFAULT_EDITOR_INTEL;
+  const out: Extension[] = [];
+  if (cfg.autocompleteEnabled) {
+    out.push(
+      autocompletion({
+        override: [pyneComplete],
+        activateOnTyping: cfg.activateOnTyping,
+        activateOnCompletion: (c) => String(c.label || '').endsWith('='),
+        maxRenderedOptions: cfg.maxRenderedOptions,
+        defaultKeymap: true,
+        icons: true,
+        closeOnBlur: true,
+      }),
+      pyneCompletionTriggerKeymap,
+      keymap.of(completionKeymap),
+    );
+  }
+  if (cfg.hoverEnabled) {
+    out.push(
+      hoverTooltip((view, pos) => pyneHover(view, pos), {
+        hideOnChange: true,
+        hoverTime: cfg.hoverTimeMs,
+      }),
+    );
+  }
+  if (cfg.signatureHints) out.push(pineParamHintField);
+  return out;
 }
 
 /** Test helper — count indexed builtins. */

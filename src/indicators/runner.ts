@@ -99,6 +99,7 @@ import { getActiveEngine, getActiveEngineConfig } from '../plugins/active';
 import type { RunResult as EngineRunResult } from '../plugins/types';
 import { classifyTransport } from '../ui/telemetry';
 import { reportUiError } from '../ui/boot-errors';
+import { isScriptRunBlocked } from '../editor/preevaluate';
 import {
   beginRunEpoch,
   claimRunStatus,
@@ -416,7 +417,13 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
   // won't match `preEval.source`; interactive Run always matches.
   if (!silent && !isolate) {
     const pe = store.preEval;
-    if (pe && !pe.pending && pe.hasErrors && pe.source === script) {
+    if (
+      pe &&
+      !pe.pending &&
+      pe.hasErrors &&
+      pe.source === script &&
+      isScriptRunBlocked()
+    ) {
       const msg = 'Script has errors — fix them in the editor before running';
       setTelemetryState('engine', 'error', { error: msg });
       finishInteractiveStatus(epoch, silent, 'error', msg);

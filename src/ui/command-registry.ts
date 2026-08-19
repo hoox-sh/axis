@@ -90,6 +90,8 @@ export interface CommandActions {
   setChartThemePreset?: (presetId: string) => void;
   /** Open Settings on the Theme tab. */
   openThemeSettings?: () => void;
+  /** Open Settings on the Editor (lint / hover / complete) tab. */
+  openEditorSettings?: () => void;
   setChartGridMode: (mode: '1' | '2h' | '2v' | '4') => void;
   runScript: () => void | Promise<void>;
   focusSymbol: () => void;
@@ -584,6 +586,23 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     keywords: ['preferences', 'endpoint', 'engine', 'config'],
   },
   {
+    id: 'action.settings-editor',
+    title: 'Open Editor Settings',
+    category: 'navigation',
+    keywords: [
+      'lint',
+      'preeval',
+      'pre-eval',
+      'hover',
+      'autocomplete',
+      'completion',
+      'suggestions',
+      'underlines',
+      'diagnostics',
+      'hints',
+    ],
+  },
+  {
     id: 'action.plugins',
     title: 'Open Runtimes → Plugins',
     category: 'navigation',
@@ -821,6 +840,11 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.toggleLive) byId.set('action.toggle-live', actions.toggleLive);
   if (actions.openSettings) {
     byId.set('action.settings', actions.openSettings);
+  }
+  if (actions.openEditorSettings) {
+    byId.set('action.settings-editor', actions.openEditorSettings);
+  } else if (actions.openSettings) {
+    byId.set('action.settings-editor', actions.openSettings);
   }
   // Chart Theme → Settings Theme tab (prefer dedicated opener)
   if (actions.openThemeSettings) {

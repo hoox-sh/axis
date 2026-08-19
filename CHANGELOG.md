@@ -9,19 +9,25 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-17 · 229 commits · describe-tag: `v2.0.13`_
+_Generated/updated: 2026-08-19 · 236 commits · describe-tag: `v2.0.14`_
 
 ---
 
 ## [Unreleased]
 
+## [2.0.15] — 2026-08-19
+
+Editor intelligence settings, Supertrend `linebr` gaps, live script hide/run, and PYNE Agent chat markdown.
+
 ### Added
 
+- **Editor intelligence settings** — Settings → **Editor** (and command *Open Editor Settings*) exposes every lint / pre-eval / hover-card / signature-hint / autocomplete / underline / gutter / inline-chip option, plus idle / tab-switch / remote timeouts. Defaults match the previous hardcoded behavior; **Reset defaults** restores them.
 - **Strategy chart trade size** — entry/exit markers print `Long N` / `Short N` (and exit id + qty) so the filled amount is visible on the chart, not only the order id.
 - **Hide plot names on last-value labels** — Settings and chart **[T]** clear `RSI` / `Overbought` titles beside the last value; the numeric label stays. Independent of **[N]**.
 
 ### Improved
 
+- **Pre-eval timings** — idle lint stays **1s** after the last keystroke (configurable 200–3000 ms). Tab switch uses a separate **200 ms** beat (was a hardcoded 120 ms). Remote `/lsp/diagnostics` wait is **2s** (configurable) and only starts after idle; local marks still publish immediately. Stale “2s idle” editor comment removed.
 - **PYNE Agent chat markdown** — replies render headings, lists, and **bold** instead of raw `###` / `1. **Foo**`. Plugin default API endpoint is empty (set in plugin config); no hardcoded Worker URL.
 - **Editor hover + param checklist** — mouseover covers keywords, types/qualifiers, series (`close` / `bar_index`), namespaces (`ta.`), user inputs/functions, and hex colors. Call hints list type + default; current param is emphasized (no strikethrough on used). Hover cards use a void-theme header, parameter definition list, and inset example.
 - **Pre-eval / Problems / debug chips** — idle lint is 1s; `study()` and bare `security()` warn; duplicate `indicator()`/`strategy()` warn; Problems label **pre-eval** vs **run**; debug chips have higher contrast and truncate long logs.
@@ -43,6 +49,10 @@ _Generated/updated: 2026-08-17 · 229 commits · describe-tag: `v2.0.13`_
 - **Pre-eval block comments** — `"/*"` and `https://` inside strings are no longer treated as comments (which could block Run).
 - **Inline debug line parse** — log values like `RSI: 55` no longer become a chip on line 55; structured `line` wins.
 - **`color=` completions** — `color.new` / `color.rgb` / `color.from_gradient` stay in the list (including after `color=color.`).
+
+### See also
+
+- [Editor](docs/ui/editor.mdx)
 
 ## [2.0.14] — 2026-08-17
 
@@ -361,9 +371,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (147 commits)
+### 2026-08 (154 commits)
 
 #### Security
 
@@ -374,6 +386,9 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `cbe6369f` (2026-08-19) — feat(editor): richer hover, param checklist, and pre-eval
+- `a2178fc9` (2026-08-18) — feat: live script execution, chart labels, and strategy properties
+- `35557be3` (2026-08-17) — feat(release): AXIS v2.0.14 strategy hyperparameter optimisation
 - `9ec62e96` (2026-08-17) — feat(release): AXIS v2.0.13 params, highlighting, input enums, tables
 - `db3b42c1` (2026-08-17) — feat(release): AXIS v2.0.12 editor UX, chart lifecycle, icon map
 - `f96319e3` (2026-08-17) — feat(release): AXIS v2.0.11 chart scripts lifecycle and pyne-worker engine
@@ -446,6 +461,10 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `35efaed7` (2026-08-19) — fix(plugins): render PYNE Agent markdown and drop default endpoint
+- `7ccd745d` (2026-08-19) — fix(chart): break plot.style_linebr on na
+- `dbcf1f0a` (2026-08-18) — fix: review follow-up for live hide, labels, and strategy props
+- `fa57f639` (2026-08-17) — fix(editor): LSP pre-eval marks and last-bar drawings
 - `f0235ac1` (2026-08-15) — fix(ci): desktop Watchlist case clash and GHCR-only docker push
 - `42cb454f` (2026-08-15) — fix(ci): green unit, smoke, desktop build, and docker bake
 - `4d34d82a` (2026-08-13) — fix(editor): allow Problems panel to stay closed

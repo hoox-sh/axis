@@ -81,8 +81,8 @@ import {
   cancelPreeval,
   runPreevalNow,
   schedulePreeval,
-  PREEVAL_IDLE_MS,
 } from './preevaluate';
+import { readEditorIntel } from './editor-intel';
 import { countDocStats, cursorLineCol } from './doc-stats';
 import { ColorToolsPanel } from './ColorToolsPanel';
 import { SymbolEmojiManager } from './SymbolEmojiManager';
@@ -169,7 +169,7 @@ export const TabbedEditor: Component<Props> = (props) => {
 
   /** Last-run logs/errors mapped to source lines for inline chips. */
   const inlineDebugAnns = createMemo((): InlineDebugAnnotation[] => {
-    if (!store.inlineDebugEnabled) return [];
+    if (!store.inlineDebugEnabled || !readEditorIntel(store.editorIntel).inlineChips) return [];
     return collectInlineDebugAnnotations(store.lastRun);
   });
 
@@ -178,7 +178,7 @@ export const TabbedEditor: Component<Props> = (props) => {
    * Independent of inline debug chips — gated on `debugPinsEnabled`.
    */
   const debugPinAnns = createMemo((): InlineDebugAnnotation[] => {
-    if (!store.debugPinsEnabled) return [];
+    if (!store.debugPinsEnabled || !readEditorIntel(store.editorIntel).inlinePinGutter) return [];
     return filterPinableAnnotations(collectInlineDebugAnnotations(store.lastRun));
   });
 
@@ -249,7 +249,7 @@ export const TabbedEditor: Component<Props> = (props) => {
     // Cursor resets to start of tab until CM reports the real head
     setCursor({ line: 1, col: 1 });
     // Lint this tab after a short beat (immediate feel when switching)
-    schedulePreeval(doc, 120);
+    schedulePreeval(doc, readEditorIntel(store.editorIntel).preevalTabSwitchMs);
   });
 
   onMount(() => {
@@ -511,9 +511,9 @@ export const TabbedEditor: Component<Props> = (props) => {
     );
     props.onDocChange?.(text);
     scheduleDraft(text, tabs()[activeTab()]?.name);
-    // Idle lint: clear mid-type marks; re-check after 2s without typing
-    // (Save / Run still call runPreevalNow immediately)
-    schedulePreeval(text, PREEVAL_IDLE_MS);
+    // Idle lint: wait Settings → Editor idle delay (default 1s).
+    // Save / Run still call runPreevalNow immediately.
+    schedulePreeval(text, readEditorIntel(store.editorIntel).preevalIdleMs);
   };
 
   const activeTabState = () => tabs()[activeTab()];
@@ -740,11 +740,11 @@ export const TabbedEditor: Component<Props> = (props) => {
           onCursorChange={(pos) => setCursor({ line: pos.line, col: pos.col })}
           onRun={() => {
             void (async () => {
-              if (store.preEval?.hasErrors && !store.preEval?.pending) return;
+              const { isScriptRunBlocked } = await import('./preevaluate');
+              if (isScriptRunBlocked()) return;
               const saved = await ensureSavedForRun();
               if (!saved.ok || !saved.doc.trim()) return;
-              // Re-check after save (save runs pre-eval; block hard errors)
-              if (store.preEval?.hasErrors) return;
+              if (isScriptRunBlocked()) return;
               props.onRun?.(saved.doc);
             })();
           }}

@@ -126,6 +126,9 @@ export interface EditorLayoutState {
   mode: EditorMode;
 }
 
+/** Re-export so persist / UI can type the editor intelligence bag. */
+export type { EditorIntelSettings } from '../editor/editor-intel';
+
 /** Built-in historical source ids (D1) */
 export type SourceId = 'binance-rest' | 'mock-walk' | 'csv-upload' | string;
 
@@ -413,6 +416,12 @@ export interface AppState {
    * Toggle from the editor stats strip “wrap” control.
    */
   editorWrapEnabled: boolean;
+  /**
+   * Editor intelligence — pre-eval / lint, hover cards, signature hints,
+   * autocomplete, diagnostic marks, inline chips. Persisted.
+   * See {@link EditorIntelSettings}.
+   */
+  editorIntel: import('../editor/editor-intel').EditorIntelSettings;
   stream: { status: 'connected' | 'disconnected' | 'error' | 'connecting' };
   status: AppStatus;
   statusMessage: string;

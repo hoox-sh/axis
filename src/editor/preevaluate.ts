@@ -54,21 +54,31 @@ import {
 import { setPreEval, store } from '../store';
 import builtinsJson from './data/pyne-builtins.json';
 import { PINE_ENUM_PATHS } from './pine-enums';
+import {
+  DEFAULT_PREEVAL_IDLE_MS,
+  readEditorIntel,
+  type EditorIntelSettings,
+} from './editor-intel';
 
 /**
  * Quiet time after the last keystroke before idle lint runs (ms).
  * Incomplete mid-edit input is not flagged until the user pauses
  * ({@link schedulePreeval} cancels on each keystroke).
  *
- * ~1s is snappy for underlines without marking mid-token (was 2s).
+ * Default 1s (was 2s). Overridable via Settings → Editor → idle delay
+ * ({@link EditorIntelSettings.preevalIdleMs}).
  */
-export const PREEVAL_IDLE_MS = 1000;
+export const PREEVAL_IDLE_MS = DEFAULT_PREEVAL_IDLE_MS;
 
 /**
  * Default debounce for {@link schedulePreeval} — same as idle lint window.
  * Kept as an alias for older call sites / tests.
  */
 export const PREEVAL_DEBOUNCE_MS = PREEVAL_IDLE_MS;
+
+function intel(): EditorIntelSettings {
+  return readEditorIntel(store.editorIntel);
+}
 
 // ── Builtin member index (from pyne-builtins.json + runtime constants) ───────
 
@@ -655,6 +665,8 @@ function diag(
  */
 export function localPreevaluate(source: string): EditorDiagnostic[] {
   if (!source.trim()) return [];
+  const cfg = intel();
+  if (!cfg.preevalEnabled || !cfg.preevalLocal) return [];
 
   const out: EditorDiagnostic[] = [];
   const lines = source.split('\n');
@@ -824,7 +836,7 @@ export function localPreevaluate(source: string): EditorDiagnostic[] {
   }
 
   // Entry point / version (warnings — do not block Run alone if remote will decide)
-  if (!/\/\/\s*@version\s*=\s*\d+/m.test(source)) {
+  if (cfg.preevalVersionWarn && !/\/\/\s*@version\s*=\s*\d+/m.test(source)) {
     out.push(
       diag(source, {
         line: 1,
@@ -852,20 +864,22 @@ export function localPreevaluate(source: string): EditorDiagnostic[] {
       }),
     );
   }
-  for (const ref of studyCalls) {
-    out.push(
-      diag(source, {
-        line: ref.line,
-        col: ref.col,
-        endLine: ref.line,
-        endCol: ref.endCol,
-        message: 'study() is Pine v3 — use indicator() or strategy().',
-        severity: 'warning',
-        source: 'preeval-local',
-      }),
-    );
+  if (cfg.preevalStudyWarn) {
+    for (const ref of studyCalls) {
+      out.push(
+        diag(source, {
+          line: ref.line,
+          col: ref.col,
+          endLine: ref.line,
+          endCol: ref.endCol,
+          message: 'study() is Pine v3 — use indicator() or strategy().',
+          severity: 'warning',
+          source: 'preeval-local',
+        }),
+      );
+    }
   }
-  if (entryDecls.length > 1) {
+  if (cfg.preevalDuplicateDecl && entryDecls.length > 1) {
     for (const ref of entryDecls.slice(1)) {
       out.push(
         diag(source, {
@@ -881,22 +895,24 @@ export function localPreevaluate(source: string): EditorDiagnostic[] {
       );
     }
   }
-  for (const ref of securityCalls) {
-    out.push(
-      diag(source, {
-        line: ref.line,
-        col: ref.col,
-        endLine: ref.line,
-        endCol: ref.endCol,
-        message: 'Prefer request.security (Pine v4+) over bare security().',
-        severity: 'warning',
-        source: 'preeval-local',
-      }),
-    );
+  if (cfg.preevalSecurityWarn) {
+    for (const ref of securityCalls) {
+      out.push(
+        diag(source, {
+          line: ref.line,
+          col: ref.col,
+          endLine: ref.line,
+          endCol: ref.endCol,
+          message: 'Prefer request.security (Pine v4+) over bare security().',
+          severity: 'warning',
+          source: 'preeval-local',
+        }),
+      );
+    }
   }
 
   // Unknown builtin members (strategy.etry, ta.smma, …) — not catchable by parse alone
-  out.push(...checkUnknownBuiltinMembers(source));
+  if (cfg.preevalTypos) out.push(...checkUnknownBuiltinMembers(source));
 
   return out;
 }
@@ -973,11 +989,15 @@ export async function preevaluateSource(
   source: string,
   opts?: { signal?: AbortSignal },
 ): Promise<PreevalResult> {
+  const cfg = intel();
+  if (!cfg.preevalEnabled) {
+    return { diagnostics: [], hasErrors: false, source: 'off' };
+  }
   const local = localPreevaluate(source);
   let remote: EditorDiagnostic[] | null = null;
   let tag = 'local';
 
-  if (shouldUseRemoteLsp()) {
+  if (cfg.preevalRemote && shouldUseRemoteLsp()) {
     const res = await fetchRemoteDiagnostics({ source, signal: opts?.signal });
     if (res) {
       remote = remoteToEditorDiagnostics(source, res.diagnostics);
@@ -1050,8 +1070,20 @@ export function clearPreevalOnEdit(source: string): void {
  */
 export function schedulePreeval(
   source: string,
-  debounceMs: number = PREEVAL_IDLE_MS,
+  debounceMs?: number,
 ): void {
+  const cfg = intel();
+  if (!cfg.preevalEnabled) {
+    lastSource = source;
+    cancelPreeval();
+    setPreEval({
+      diagnostics: [],
+      hasErrors: false,
+      pending: false,
+      source,
+    });
+    return;
+  }
   lastSource = source;
   // Drop any prior idle timer / in-flight request
   if (timer != null) {
@@ -1063,31 +1095,42 @@ export function schedulePreeval(
     abort = null;
   }
 
-  // Clear marks while typing; keep pending=false until the idle check starts
+  // Clear marks while typing (optional); keep pending=false until idle starts
   const pe = store.preEval;
-  const alreadyClear =
-    pe &&
-    !pe.pending &&
-    !pe.hasErrors &&
-    (!pe.diagnostics || pe.diagnostics.length === 0);
-  if (!alreadyClear) {
-    setPreEval({
-      diagnostics: [],
-      hasErrors: false,
-      pending: false,
-      source,
-    });
+  if (cfg.preevalClearOnEdit) {
+    const alreadyClear =
+      pe &&
+      !pe.pending &&
+      !pe.hasErrors &&
+      (!pe.diagnostics || pe.diagnostics.length === 0);
+    if (!alreadyClear) {
+      setPreEval({
+        diagnostics: [],
+        hasErrors: false,
+        pending: false,
+        source,
+      });
+    } else if (pe.source !== source) {
+      setPreEval({
+        diagnostics: [],
+        hasErrors: false,
+        pending: false,
+        source,
+      });
+    }
   } else if (pe.source !== source) {
-    // Keep store source in sync for tab/doc identity without thrashing
     setPreEval({
-      diagnostics: [],
-      hasErrors: false,
+      diagnostics: pe.diagnostics || [],
+      hasErrors: !!pe.hasErrors,
       pending: false,
       source,
     });
   }
 
-  const delay = Math.max(0, Number(debounceMs) || 0);
+  const delay = Math.max(
+    0,
+    Number(debounceMs ?? cfg.preevalIdleMs ?? PREEVAL_IDLE_MS) || 0,
+  );
   timer = setTimeout(() => {
     timer = null;
     // Ignore if a newer keystroke updated lastSource
@@ -1098,6 +1141,17 @@ export function schedulePreeval(
 
 /** Immediate pre-eval (no debounce) — Save / Run gate. */
 export async function runPreevalNow(source: string): Promise<PreevalResult> {
+  const cfg = intel();
+  if (!cfg.preevalEnabled) {
+    cancelPreeval();
+    setPreEval({
+      diagnostics: [],
+      hasErrors: false,
+      pending: false,
+      source,
+    });
+    return { diagnostics: [], hasErrors: false, source: 'off' };
+  }
   if (abort) abort.abort();
   abort = new AbortController();
   const mySeq = ++seq;
@@ -1106,7 +1160,7 @@ export async function runPreevalNow(source: string): Promise<PreevalResult> {
   // Publish local marks immediately so unknown-member / structural issues
   // show while remote `/lsp/diagnostics` is in flight (or down).
   const local = localPreevaluate(source);
-  const waitRemote = shouldUseRemoteLsp();
+  const waitRemote = cfg.preevalRemote && shouldUseRemoteLsp();
   setPreEval({
     diagnostics: local,
     hasErrors: hasErrorDiagnostics(local),
@@ -1162,6 +1216,8 @@ export async function runPreevalNow(source: string): Promise<PreevalResult> {
  * check (or Save / Run) lands again.
  */
 export function isScriptRunBlocked(): boolean {
+  const cfg = intel();
+  if (!cfg.preevalEnabled || !cfg.preevalBlockRun) return false;
   const pe = store.preEval;
   if (!pe || pe.pending) return false;
   return !!pe.hasErrors;

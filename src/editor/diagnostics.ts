@@ -46,6 +46,12 @@ import {
 } from '@codemirror/state';
 import { parseSourceLine } from '../results/inline-debug';
 import { normalizePyneLogs } from '../results/pyne-logs';
+import { store } from '../store';
+import { intelShowsSeverity, readEditorIntel } from './editor-intel';
+
+function diagIntel() {
+  return readEditorIntel(store.editorIntel);
+}
 
 /**
  * Diagnostic severity (IDE-style).
@@ -662,8 +668,10 @@ function buildDecorations(diags: EditorDiagnostic[], doc: Text): DecorationSet {
   const entries: Entry[] = [];
   const lineSev = new Map<number, DiagnosticSeverity>();
 
+  const intel = diagIntel();
   for (const d of diags) {
     if (d.line < 1 || d.line > doc.lines) continue;
+    if (!intelShowsSeverity(intel, d.severity)) continue;
     const prev = lineSev.get(d.line);
     if (prev == null || severityRank(d.severity) < severityRank(prev)) {
       lineSev.set(d.line, d.severity);
@@ -695,6 +703,7 @@ function buildDecorations(diags: EditorDiagnostic[], doc: Text): DecorationSet {
   });
 
   const builder = new RangeSetBuilder<import('@codemirror/view').Decoration>();
+  if (!intel.diagUnderlines) return builder.finish();
   for (const e of entries) {
     if (e.kind === 'line') {
       builder.add(
@@ -789,15 +798,17 @@ class DiagGutterMarker extends GutterMarker {
 function diagnosticsGutterMarkers(view: EditorView) {
   const st = view.state.field(diagnosticsStateField, false);
   const builder = new RangeSetBuilder<GutterMarker>();
-  if (!st?.diags.length) return builder.finish();
+  if (!st?.diags.length || !diagIntel().diagGutter) return builder.finish();
 
   // One marker per line (highest severity), tooltip lists all messages
   const byLine = new Map<
     number,
     { severity: DiagnosticSeverity; messages: string[] }
   >();
+  const intel = diagIntel();
   for (const d of st.diags) {
     if (d.line < 1 || d.line > view.state.doc.lines) continue;
+    if (!intelShowsSeverity(intel, d.severity)) continue;
     const prev = byLine.get(d.line);
     if (!prev) {
       byLine.set(d.line, { severity: d.severity, messages: [d.message] });
@@ -826,6 +837,7 @@ const diagnosticsGutterExt = gutter({
 
 /** Hover tooltip when the cursor rests on a diagnostic underline. */
 function diagnosticHover(view: EditorView, pos: number): Tooltip | null {
+  if (!diagIntel().diagHover) return null;
   const st = view.state.field(diagnosticsStateField, false);
   if (!st?.diags.length) return null;
   const hits = st.diags.filter((d) => pos >= d.from && pos <= d.to);
@@ -1005,7 +1017,7 @@ export function diagnosticsExtension(): Extension {
     // Show diag gutter column only when markers exist (no empty reserved width)
     EditorView.editorAttributes.of((view) => {
       const st = view.state.field(diagnosticsStateField, false);
-      if (!st?.diags?.length) return null;
+      if (!st?.diags?.length || !diagIntel().diagGutter) return null;
       return { class: 'cm-has-diag-gutter' };
     }),
   ];

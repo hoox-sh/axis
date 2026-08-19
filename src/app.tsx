@@ -570,6 +570,7 @@ export const App: Component = () => {
           editorRef={editorRef}
           onOpenSettings={() => openSettings('general')}
           onOpenThemeSettings={() => openSettings('theme')}
+          onOpenEditorSettings={() => openSettings('editor')}
           onOpenPlugins={() => openRuntimes('plugins')}
           onOpenWorkers={() => openRuntimes('status')}
           onOpenArchitecture={() => setArchitectureOpen(true)}

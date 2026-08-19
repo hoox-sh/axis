@@ -58,6 +58,11 @@ import type {
   TransportClass,
   TelemetryState,
 } from './types';
+import {
+  DEFAULT_EDITOR_INTEL,
+  readEditorIntel,
+  type EditorIntelSettings,
+} from '../editor/editor-intel';
 import { idlePlane, pushSample } from '../ui/telemetry';
 import {
   defaultPanelChromeMap,
@@ -231,6 +236,7 @@ const DEFAULTS: AppState = {
   debugPinsEnabled: false,
   editorRulerEnabled: true,
   editorWrapEnabled: true,
+  editorIntel: { ...DEFAULT_EDITOR_INTEL },
   stream: { status: 'disconnected' },
   status: 'ready',
   statusMessage: 'Ready.',
@@ -523,6 +529,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         typeof (bag as { editorWrapEnabled?: boolean }).editorWrapEnabled === 'boolean'
           ? !!(bag as { editorWrapEnabled?: boolean }).editorWrapEnabled
           : DEFAULTS.editorWrapEnabled,
+      editorIntel: readEditorIntel((bag as { editorIntel?: unknown }).editorIntel),
       activePlugins: {
         ...DEFAULTS.activePlugins,
         ...pluginsBag,
@@ -1122,6 +1129,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     debugPinsEnabled: s.debugPinsEnabled,
     editorRulerEnabled: s.editorRulerEnabled,
     editorWrapEnabled: s.editorWrapEnabled,
+    editorIntel: readEditorIntel(s.editorIntel),
     lastValueLabelsVisible: s.lastValueLabelsVisible,
     lastValueNamesVisible: s.lastValueNamesVisible,
     priceScaleLabelsVisible: s.priceScaleLabelsVisible,
@@ -1483,6 +1491,8 @@ export function setPreEval(next: AppState['preEval']) {
 
 /** True when pre-eval found errors and is not still pending. */
 export function isScriptRunBlockedByPreEval(): boolean {
+  const intel = readEditorIntel(store.editorIntel);
+  if (!intel.preevalEnabled || !intel.preevalBlockRun) return false;
   const pe = store.preEval;
   if (!pe || pe.pending) return false;
   return !!pe.hasErrors;
@@ -2420,6 +2430,29 @@ export function setEditorWrapEnabled(on: boolean) {
 /** Toggle soft line wrap in the Pine editor. */
 export function toggleEditorWrapEnabled() {
   setStore('editorWrapEnabled', !store.editorWrapEnabled);
+  persist();
+}
+
+/** Normalized editor intelligence bag (defaults filled). */
+export function getEditorIntel(): EditorIntelSettings {
+  return readEditorIntel(store.editorIntel);
+}
+
+/** Replace the editor intelligence bag and persist. */
+export function setEditorIntel(next: EditorIntelSettings | Record<string, unknown>) {
+  setStore('editorIntel', readEditorIntel(next));
+  persist();
+}
+
+/** Merge a partial editor-intel patch and persist. */
+export function patchEditorIntel(partial: Partial<EditorIntelSettings>) {
+  setStore('editorIntel', readEditorIntel({ ...store.editorIntel, ...partial }));
+  persist();
+}
+
+/** Restore factory editor-intelligence defaults. */
+export function resetEditorIntel() {
+  setStore('editorIntel', { ...DEFAULT_EDITOR_INTEL });
   persist();
 }
 
