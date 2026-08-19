@@ -47,6 +47,11 @@ export const INTEL_MAX_OPTIONS_MAX = 128;
 export const DEFAULT_PREEVAL_IDLE_MS = 1_000;
 
 export type EditorIntelSettings = {
+  /**
+   * Persist schema revision. Written on user patches so an accidental
+   * all-off bag without `rev` can be recovered as defaults.
+   */
+  rev?: number;
   /** Master: schedule idle / Save / Run pre-eval at all. */
   preevalEnabled: boolean;
   /** Quiet time after last keystroke before idle lint (ms). */
@@ -119,7 +124,11 @@ export type EditorIntelSettings = {
   inlinePinGutter: boolean;
 };
 
+/** Bumped when the persist schema changes. Missing/0 recovers a dead all-off bag. */
+export const EDITOR_INTEL_REV = 1;
+
 export const DEFAULT_EDITOR_INTEL: EditorIntelSettings = {
+  rev: EDITOR_INTEL_REV,
   preevalEnabled: true,
   preevalIdleMs: DEFAULT_PREEVAL_IDLE_MS,
   preevalTabSwitchMs: 200,
@@ -168,6 +177,24 @@ function asBool(v: unknown, fallback: boolean): boolean {
   return fallback;
 }
 
+const EDITOR_INTEL_BOOL_KEYS = (Object.keys(DEFAULT_EDITOR_INTEL) as (keyof EditorIntelSettings)[]).filter(
+  (k) => typeof DEFAULT_EDITOR_INTEL[k] === 'boolean',
+);
+
+/**
+ * True when a persisted bag looks like an accidental all-off write
+ * (checkbox mount / Solid proxy spread), not a user who toggled one switch.
+ */
+export function isDeadEditorIntelBag(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+  const o = raw as Record<string, unknown>;
+  const rev = typeof o.rev === 'number' ? o.rev : 0;
+  if (rev >= EDITOR_INTEL_REV) return false;
+  const flags = EDITOR_INTEL_BOOL_KEYS.filter((k) => typeof o[k] === 'boolean');
+  if (flags.length < EDITOR_INTEL_BOOL_KEYS.length - 1) return false;
+  return flags.every((k) => o[k] === false);
+}
+
 function asInt(v: unknown, fallback: number, min: number, max: number): number {
   const n = typeof v === 'number' ? v : Number(v);
   if (!Number.isFinite(n)) return fallback;
@@ -176,9 +203,11 @@ function asInt(v: unknown, fallback: number, min: number, max: number): number {
 
 /** Coerce a persisted / partial bag to a full {@link EditorIntelSettings}. */
 export function readEditorIntel(raw: unknown): EditorIntelSettings {
+  if (isDeadEditorIntelBag(raw)) return { ...DEFAULT_EDITOR_INTEL };
   const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const d = DEFAULT_EDITOR_INTEL;
   return {
+    rev: typeof o.rev === 'number' && Number.isFinite(o.rev) ? Math.trunc(o.rev) : EDITOR_INTEL_REV,
     preevalEnabled: asBool(o.preevalEnabled, d.preevalEnabled),
     preevalIdleMs: asInt(o.preevalIdleMs, d.preevalIdleMs, INTEL_IDLE_MS_MIN, INTEL_IDLE_MS_MAX),
     preevalTabSwitchMs: asInt(

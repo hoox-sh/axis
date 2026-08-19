@@ -1291,7 +1291,10 @@ function IntelCheck(props: {
         type="checkbox"
         class="mt-0.5"
         checked={props.checked}
-        onChange={(e) => props.onChange(e.currentTarget.checked)}
+        onChange={(e) => {
+          if (!e.isTrusted) return;
+          props.onChange(e.currentTarget.checked);
+        }}
         data-testid={props.id}
       />
       <span>

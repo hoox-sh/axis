@@ -1015,7 +1015,7 @@ export function diagnosticsExtension(): Extension {
     diagnosticsStateField,
     diagnosticsGutterExt,
     diagnosticsTheme,
-    hoverTooltip(diagnosticHover, { hideOnChange: true }),
+    hoverTooltip(diagnosticHover, { hideOn: (tr) => tr.docChanged }),
     // Show diag gutter column only when markers exist (no empty reserved width)
     EditorView.editorAttributes.of((view) => {
       const st = view.state.field(diagnosticsStateField, false);
@@ -1025,13 +1025,22 @@ export function diagnosticsExtension(): Extension {
   ];
 }
 
+function diagnosticsSignature(diags: readonly EditorDiagnostic[]): string {
+  return diags
+    .map((d) => `${d.line}|${d.from}|${d.to}|${d.severity}|${d.message}|${d.source ?? ''}`)
+    .join('\n');
+}
+
 /** Apply or clear diagnostics on a view. */
 export function applyDiagnostics(
   view: EditorView,
   diags: EditorDiagnostic[] | null,
 ) {
+  const next = diags && diags.length ? diags : [];
+  const st = view.state.field(diagnosticsStateField, false);
+  if (st && diagnosticsSignature(st.diags) === diagnosticsSignature(next)) return;
   view.dispatch({
-    effects: setDiagnosticsData.of(diags && diags.length ? diags : null),
+    effects: setDiagnosticsData.of(next.length ? next : null),
   });
 }
 

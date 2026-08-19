@@ -700,13 +700,22 @@ export function inlineDebugExtension(): Extension {
   ];
 }
 
+function inlineDebugSignature(anns: readonly InlineDebugAnnotation[]): string {
+  return anns
+    .map((a) => `${a.line}|${a.level}|${a.message}|${a.barIndex ?? ''}|${a.time ?? ''}`)
+    .join('\n');
+}
+
 /** Apply or clear inline debug annotations on a view. */
 export function applyInlineDebug(
   view: EditorView,
   anns: InlineDebugAnnotation[] | null,
 ) {
+  const next = anns && anns.length ? anns : [];
+  const st = view.state.field(inlineDebugStateField, false);
+  if (st && inlineDebugSignature(st.anns) === inlineDebugSignature(next)) return;
   view.dispatch({
-    effects: setInlineDebugData.of(anns && anns.length ? anns : null),
+    effects: setInlineDebugData.of(next.length ? next : null),
   });
 }
 

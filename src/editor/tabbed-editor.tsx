@@ -190,6 +190,8 @@ export const TabbedEditor: Component<Props> = (props) => {
   const editorDiagnostics = createMemo((): EditorDiagnostic[] => {
     void store.lastRun;
     void store.preEval;
+    void store.preEval?.diagnostics;
+    void store.preEval?.pending;
     void tabs();
     void activeTab();
     const sourceDoc =

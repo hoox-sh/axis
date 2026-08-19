@@ -1257,6 +1257,8 @@ function makeHoverTooltip(
     pos: from,
     end: to,
     above: true,
+    // Editor chrome is overflow:hidden — default clip hides cards above line 1
+    clip: false,
     create() {
       const dom = document.createElement('div');
       dom.className = 'cm-pine-hover';
@@ -1623,7 +1625,7 @@ export function pyneLspExtensions(intel?: EditorIntelSettings): Extension[] {
   if (cfg.hoverEnabled) {
     out.push(
       hoverTooltip((view, pos) => pyneHover(view, pos), {
-        hideOnChange: true,
+        hideOn: (tr) => tr.docChanged,
         hoverTime: cfg.hoverTimeMs,
       }),
     );

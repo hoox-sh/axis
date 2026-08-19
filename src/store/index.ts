@@ -60,6 +60,7 @@ import type {
 } from './types';
 import {
   DEFAULT_EDITOR_INTEL,
+  EDITOR_INTEL_REV,
   readEditorIntel,
   type EditorIntelSettings,
 } from '../editor/editor-intel';
@@ -2458,7 +2459,9 @@ const PREEVAL_GEN_KEYS: (keyof EditorIntelSettings)[] = [
 /** Merge a partial editor-intel patch and persist. */
 export function patchEditorIntel(partial: Partial<EditorIntelSettings>) {
   const prev = readEditorIntel(store.editorIntel);
-  const next = readEditorIntel({ ...store.editorIntel, ...partial });
+  // Always merge the normalized bag — spreading the Solid store proxy can
+  // yield `{}` or all-undefined and persist a dead all-off intel bag.
+  const next = readEditorIntel({ ...prev, ...partial, rev: EDITOR_INTEL_REV });
   setStore('editorIntel', next);
   persist();
   const genChanged = PREEVAL_GEN_KEYS.some((k) => prev[k] !== next[k]);

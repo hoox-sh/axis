@@ -352,9 +352,13 @@ export const PyneEditor: Component<Props> = (props) => {
     view.requestMeasure();
   };
 
+  let lastIntelSig = '';
   const syncIntel = () => {
     if (!view) return;
     const intel = readEditorIntel(store.editorIntel);
+    const sig = JSON.stringify(intel);
+    if (sig === lastIntelSig) return;
+    lastIntelSig = sig;
     view.dispatch({
       effects: [
         lspCompartment.reconfigure(pyneLspExtensions(intel)),
@@ -544,7 +548,15 @@ export const PyneEditor: Component<Props> = (props) => {
   });
 
   createEffect(() => {
-    void store.editorIntel;
+    const intel = readEditorIntel(store.editorIntel);
+    void intel.hoverEnabled;
+    void intel.preevalEnabled;
+    void intel.diagUnderlines;
+    void intel.autocompleteEnabled;
+    void intel.colorChips;
+    void intel.inlineChips;
+    void intel.hoverTimeMs;
+    void intel.signatureHints;
     syncIntel();
   });
 

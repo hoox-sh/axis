@@ -9,14 +9,21 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-19 · 236 commits · describe-tag: `v2.0.14`_
+_Generated/updated: 2026-08-19 · 238 commits · describe-tag: `v2.0.15`_
 
 ---
 
 ## [Unreleased]
 
+## [2.0.16] — 2026-08-19
+
+Restore editor hover, lint underlines, and chips after a dead Settings bag and clipped hover cards.
+
 ### Fixed
 
+- **Editor intel dead bag** — an all-off persisted Settings bag (checkbox mount / store-proxy spread) no longer disables hover, lint underlines, completions, and chips. Hydrate recovers defaults; user patches write `rev`.
+- **Hover cards clipped** — Pine hover tooltips set `clip: false` so overflow-hidden editor chrome no longer hides cards on the first lines.
+- **Hover hide-on-apply** — decoration / selection transactions no longer dismiss hover cards; only document edits do.
 - **Editor hover catalog** — bare `close` / `new` no longer steal `strategy.close` / `array.new`. Hover facts win; completions still walk modules.
 - **`display.pane`** — real Pine v5+ member is allowlisted (no more typo → `display.none`). Invented `math.isnan` / `math.isfinite` completions removed.
 - **Editor intel timeouts** — Hover / Completion timeout settings now reach `/lsp/*` (were hardcoded).
@@ -394,9 +401,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (154 commits)
+### 2026-08 (156 commits)
 
 #### Security
 
@@ -407,6 +416,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `fd23d4a8` (2026-08-19) — feat(release): AXIS v2.0.15 editor intelligence and linebr
 - `cbe6369f` (2026-08-19) — feat(editor): richer hover, param checklist, and pre-eval
 - `a2178fc9` (2026-08-18) — feat: live script execution, chart labels, and strategy properties
 - `35557be3` (2026-08-17) — feat(release): AXIS v2.0.14 strategy hyperparameter optimisation
@@ -482,6 +492,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `b160498e` (2026-08-19) — fix: review follow-up for hover, hide, linebr, and agent seed
 - `35efaed7` (2026-08-19) — fix(plugins): render PYNE Agent markdown and drop default endpoint
 - `7ccd745d` (2026-08-19) — fix(chart): break plot.style_linebr on na
 - `dbcf1f0a` (2026-08-18) — fix: review follow-up for live hide, labels, and strategy props
