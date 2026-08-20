@@ -42,6 +42,9 @@ const PASSPHRASE = 'okx-pass-do-not-leak';
 
 beforeEach(() => {
   clearCredentials();
+  store.provider.venue = 'binance';
+  store.provider.authMode = 'public';
+  store.provider.credentialId = undefined;
 });
 
 afterEach(() => {
