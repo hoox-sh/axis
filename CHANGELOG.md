@@ -9,13 +9,17 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-20 · 242 commits · describe-tag: `v2.0.18`_
+_Generated/updated: 2026-08-20 · 243 commits · describe-tag: `v2.0.18`_
 
 ---
 
 ## [Unreleased]
 
+## [2.0.19] — 2026-08-20
+
 ### Fixed
+
+- **Hex color lint false positive** — pre-eval `scanIdentRefs` no longer treats hex color tails (e.g. `d3ee` in `#22d3ee`) as unknown identifiers. Scans backward past hex digits to detect the `#` prefix and skips the entire literal.
 
 - **Pre-existing TypeScript errors** — resolved 23 type errors across 7 files: null barIndex guard, CSS `TextAlign` narrowing, `PineTable` camelCase property reads via `Record<string, unknown>`, `linefill` missing from `DrawingLimits` / drawing caps/counts/skip, `cancelled` status narrowed type assertions, `ParamValue` import + explicit typing, legacy `panelWindows`/`dockLayout` access on `AppState`.
 
@@ -450,9 +454,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (160 commits)
+### 2026-08 (161 commits)
 
 #### Security
 
@@ -542,6 +548,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `d408f110` (2026-08-20) — fix: resolve all 23 pre-existing TypeScript errors + CI typecheck gate
 - `804c5662` (2026-08-20) — fix(test): reset store provider state in credentials beforeEach
 - `b160498e` (2026-08-19) — fix: review follow-up for hover, hide, linebr, and agent seed
 - `35efaed7` (2026-08-19) — fix(plugins): render PYNE Agent markdown and drop default endpoint

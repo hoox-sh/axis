@@ -773,6 +773,12 @@ export function scanIdentRefs(source: string): IdentRef[] {
         if (prev === '.') {
           continue;
         }
+        // Hex color literal — skip alpha/digit tail after `#` (e.g. `#22d3ee`)
+        if (prev >= '0' && prev <= '9' || prev >= 'a' && prev <= 'f' || prev >= 'A' && prev <= 'F') {
+          let k = start - 1;
+          while (k > 0 && /[\da-fA-F]/.test(line[k]!)) k -= 1;
+          if (line[k] === '#') continue;
+        }
         let j = i;
         while (j < line.length && (line[j] === ' ' || line[j] === '\t')) j += 1;
         const next = line[j] ?? '';
