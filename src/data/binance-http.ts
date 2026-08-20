@@ -22,6 +22,7 @@
  *
  * Browser → venue is flaky (geo blocks, corporate firewalls, extensions).
  * Fetch order:
+ * 0. Session vault key → signed REST (direct HMAC, then Worker `/signed/klines`)
  * 1. Explicit `baseUrl` override (source config)
  * 2. Direct public hosts (`api.binance.com`, then `data-api.binance.vision`)
  * 3. AXIS Worker allowlisted proxy (`/api/market/binance/…`)
@@ -35,6 +36,7 @@ import {
   looksLikeOnchainWorkerEndpoint,
   normalizeEndpointBase,
 } from '../onchain/proxy';
+import { fetchSignedJson, hasSignedCreds } from './signed-fetch';
 
 /** Public Binance REST hosts (CORS `*`). Vision first for some restricted networks. */
 export const BINANCE_REST_HOSTS = [
@@ -107,6 +109,8 @@ export interface BinanceFetchOpts {
   signal?: AbortSignal;
   /** Skip Worker proxy (tests / offline lab). Default false. */
   skipWorkerProxy?: boolean;
+  /** Skip vault HMAC (tests). Default false. */
+  skipSigned?: boolean;
 }
 
 function joinUrl(base: string, path: BinanceRestPath, query?: string): string {
@@ -125,13 +129,42 @@ function workerProxyUrl(
   return `${b}/api/market/binance/${path}${q}`;
 }
 
+function queryToRecord(query?: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!query) return out;
+  const q = query.startsWith('?') ? query.slice(1) : query;
+  const params = new URLSearchParams(q);
+  params.forEach((v, k) => {
+    out[k] = v;
+  });
+  return out;
+}
+
 /**
- * Fetch Binance public JSON with host + Worker proxy fallback.
+ * Fetch Binance JSON: signed (vault key) then public host + Worker proxy.
  * Throws the last error when every candidate fails.
  */
 export async function fetchBinanceJson(
   opts: BinanceFetchOpts,
 ): Promise<unknown> {
+  if (!opts.skipSigned && opts.path === 'klines' && hasSignedCreds('binance')) {
+    try {
+      return await fetchSignedJson({
+        venue: 'binance',
+        path: '/api/v3/klines',
+        query: queryToRecord(opts.query),
+        signal: opts.signal,
+        skipWorkerProxy: opts.skipWorkerProxy,
+        workerBase: opts.workerBase,
+      });
+    } catch (err) {
+      if (opts.signal?.aborted) throw err;
+      // 401/403 stay thrown — bad keys must not silently mix public klines
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/HTTP 401|HTTP 403/.test(msg)) throw err;
+    }
+  }
+
   const bases: string[] = [];
   const preferred = normalizeEndpointBase(opts.baseUrl);
   if (preferred) bases.push(preferred);

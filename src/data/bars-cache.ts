@@ -21,6 +21,8 @@
  * Durable OHLCV cache for the Data Source Manager.
  *
  * Keys: `sourceId|symbol|interval` → sorted unique bars (unix seconds).
+ * Authenticated / non-spot series append `|market|authMode` so public and
+ * keyed candles never merge. Default public+spot keeps the legacy 3-part key.
  * Uses IndexedDB when available; falls back to an in-memory map (tests / SSR).
  *
  * @module data/bars-cache
@@ -124,12 +126,23 @@ export function countBarsForLoad(bars: Bar[], window?: BarLoadWindow | null): nu
   return n;
 }
 
-/** Build cache key from source / symbol / interval. */
-export function barsCacheKey(sourceId: string, symbol: string, interval: string): string {
+/** Build cache key from source / symbol / interval (+ optional provider lock). */
+export function barsCacheKey(
+  sourceId: string,
+  symbol: string,
+  interval: string,
+  opts?: { market?: string; authMode?: string },
+): string {
   const src = String(sourceId || '').trim();
   const sym = String(symbol || '').trim().toUpperCase();
   const iv = String(interval || '').trim();
-  return `${src}|${sym}|${iv}`;
+  const base = `${src}|${sym}|${iv}`;
+  const market = String(opts?.market || '').trim();
+  const auth = String(opts?.authMode || '').trim();
+  const extraMarket = market && market !== 'spot' ? market : '';
+  const extraAuth = auth && auth !== 'public' ? auth : '';
+  if (!extraMarket && !extraAuth) return base;
+  return `${base}|${extraMarket || 'spot'}|${extraAuth || 'public'}`;
 }
 
 /** True when bars are strictly non-decreasing by time (venue pages). */

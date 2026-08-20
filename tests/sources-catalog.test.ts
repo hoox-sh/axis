@@ -18,6 +18,7 @@ import {
   okxRest,
   bybitRest,
   coinbaseRest,
+  krakenRest,
   listSources,
   getSource,
   registerDynamicSource,
@@ -51,7 +52,9 @@ describe('sources catalog', () => {
     expect(ids).toContain('mock-walk');
     expect(ids).toContain('data-manager');
     expect(ids).toContain('geckoterminal-ohlcv');
+    expect(ids).toContain('kraken-rest');
     expect(getSource('mock-walk')?.name).toBe('Mock Walk');
+    expect(binanceRest.configSchema?.fallback?.default).toBe(false);
     expect(getSource('geckoterminal-ohlcv')?.name).toBe('GeckoTerminal DEX');
   });
 
@@ -85,6 +88,19 @@ describe('sources catalog', () => {
     expect(bars).toHaveLength(2);
     expect(bars[0].time).toBe(1_700_000_000);
     expect(bars[0].close).toBe(11);
+  });
+
+  it('binance-rest throws when fallback is off (default)', async () => {
+    restoreFetch = mockFetch(async () => {
+      throw new Error('network down');
+    });
+    await expect(
+      binanceRest.fetchHistorical({
+        symbol: 'BTCUSDT',
+        interval: '1d',
+        config: { limit: 5 },
+      }),
+    ).rejects.toThrow(/network down/);
   });
 
   it('binance-rest falls back when fallback true', async () => {
@@ -197,6 +213,30 @@ describe('sources catalog', () => {
     });
     expect(bars.length).toBe(2);
     expect(bars[0].time).toBeLessThanOrEqual(bars[1].time);
+  });
+
+  it('kraken-rest maps OHLC', async () => {
+    restoreFetch = mockFetch(async () =>
+      jsonResponse({
+        error: [],
+        result: {
+          XXBTZUSD: [
+            [1_700_000_000, '1', '2', '0.5', '1.5', '1.2', '10', 4],
+            [1_700_086_400, '1.5', '3', '1', '2', '1.8', '12', 5],
+          ],
+          last: 1_700_086_400,
+        },
+      }),
+    );
+    const bars = await krakenRest.fetchHistorical({
+      symbol: 'BTCUSD',
+      interval: '1d',
+      config: { limit: 10 },
+    });
+    expect(bars.length).toBe(2);
+    expect(bars[0].time).toBe(1_700_000_000);
+    expect(bars[0].close).toBe(1.5);
+    expect(bars[0].volume).toBe(10);
   });
 
   it('dynamic register/unregister', () => {

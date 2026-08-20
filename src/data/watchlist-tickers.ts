@@ -25,8 +25,8 @@
  * 1. **Seed** prices immediately when the panel opens (before/while WS connects)
  * 2. **Poll** on an interval only after WS fails or closes (`mode: rest`)
  *
- * Prefer the active historical source’s exchange when possible; unknown/failed
- * non-Binance sources fall back to Binance USDT 24h stats.
+ * Prefer the active historical source’s exchange when possible. Failed
+ * non-Binance venues return empty — never silently mix Binance quotes.
  *
  * ## Venue strategies (REST)
  *
@@ -99,18 +99,13 @@ export async function fetchWatchlistTickers(
     if (id.includes('bybit')) return await fetchBybit(symbols);
     if (id.includes('coinbase')) return await fetchCoinbase(symbols);
     if (id.includes('mock')) return mockTickers(symbols);
-    if (id.includes('csv')) return {}; // no live quotes
-    // binance-rest and default
-    return await fetchBinance(symbols);
-  } catch {
-    // Fallback to Binance for common USDT pairs
-    if (!id.includes('binance')) {
-      try {
-        return await fetchBinance(symbols);
-      } catch {
-        return {};
-      }
+    if (id.includes('csv') || id.includes('upload')) return {};
+    if (id.includes('kraken') || id.includes('gecko')) return {};
+    if (id.includes('binance') || id === 'data-manager' || !id) {
+      return await fetchBinance(symbols);
     }
+    return {};
+  } catch {
     return {};
   }
 }

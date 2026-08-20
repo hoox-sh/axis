@@ -25,6 +25,7 @@ describe('resolveSymbolVenue', () => {
     expect(resolveSymbolVenue('okx-rest')).toBe('okx');
     expect(resolveSymbolVenue('bybit-rest')).toBe('bybit');
     expect(resolveSymbolVenue('coinbase-rest')).toBe('coinbase');
+    expect(resolveSymbolVenue('kraken-rest')).toBe('kraken');
     expect(resolveSymbolVenue('geckoterminal-ohlcv')).toBe('gecko');
   });
 

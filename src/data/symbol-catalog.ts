@@ -29,6 +29,10 @@
 
 import { getDataManagerSelection } from './data-manager-source';
 import { fetchBinanceJson } from './binance-http';
+import {
+  resolveProviderVenue,
+  type ProviderVenue,
+} from './provider';
 
 export type SymbolVenue =
   | 'binance'
@@ -90,6 +94,11 @@ export function venueLabel(venue: SymbolVenue): string {
   return VENUE_LABEL[venue] || venue;
 }
 
+function toSymbolVenue(v: ProviderVenue): SymbolVenue {
+  if (v === 'mock' || v === 'upload' || v === 'cache') return 'generic';
+  return v;
+}
+
 /**
  * Map source / stream plugin ids → venue.
  * Source wins when it is a known venue; stream is used as a hint for
@@ -99,45 +108,12 @@ export function resolveSymbolVenue(
   sourceId: string,
   streamId?: string
 ): SymbolVenue {
-  const fromPlugin = (id: string | undefined): SymbolVenue | null => {
-    if (!id) return null;
-    const s = id.toLowerCase();
-    if (s.includes('binance')) return 'binance';
-    if (s.includes('okx')) return 'okx';
-    if (s.includes('bybit')) return 'bybit';
-    if (s.includes('coinbase')) return 'coinbase';
-    if (s.includes('kraken')) return 'kraken';
-    if (s.includes('gecko')) return 'gecko';
-    return null;
-  };
-
-  // Data Manager: prefer the venue that produced the cached series
-  if (sourceId === 'data-manager') {
-    const sel = getDataManagerSelection();
-    const venueSrc = sel?.sourceId ? fromPlugin(String(sel.sourceId)) : null;
-    if (venueSrc) return venueSrc;
-    const streamVenue = fromPlugin(streamId);
-    if (streamVenue) return streamVenue;
-    return 'binance';
-  }
-
-  const src = fromPlugin(sourceId);
-  if (src) return src;
-
-  // Offline / synthetic sources: still honour an exchange stream selection
-  if (
-    sourceId === 'mock-walk' ||
-    sourceId === 'csv-upload' ||
-    !sourceId
-  ) {
-    const streamVenue = fromPlugin(streamId);
-    if (streamVenue) return streamVenue;
-    return 'generic';
-  }
-
-  const streamVenue = fromPlugin(streamId);
-  if (streamVenue) return streamVenue;
-  return 'generic';
+  const sel = sourceId === 'data-manager' ? getDataManagerSelection() : null;
+  return toSymbolVenue(
+    resolveProviderVenue(sourceId, streamId, {
+      underlyingSourceId: sel?.sourceId,
+    }),
+  );
 }
 
 function cacheKey(venue: SymbolVenue): string {

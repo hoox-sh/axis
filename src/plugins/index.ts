@@ -40,6 +40,7 @@ export {
   getActiveSourceConfig,
   getActiveStreamConfig,
   getActiveEngineConfig,
+  getActiveProvider,
 } from './active';
 export {
   loadPluginFromUrl,

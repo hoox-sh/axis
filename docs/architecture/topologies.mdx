@@ -19,7 +19,7 @@
 
 ---
 title: "Topologies"
-description: "AXIS deploy and dev topologies: Vite+Flask, static PWA, Cloudflare Pages+Worker, and offline Pyodide lab."
+description: "AXIS deploy and dev topologies: Vite+Flask, static PWA, Cloudflare Pages+Worker, offline Pyodide lab, and local Bun sidecar."
 ---
 
 # Topologies
@@ -34,6 +34,7 @@ Concrete process and network shapes for AXIS. Choose a topology; then compose pl
 | Static demo | `axis_pwa_server` `:8081` | Flask or remote | venue / mock | local |
 | Edge | CF Pages | Worker → Flask | DO fan-out optional | cloud |
 | Offline lab | any AXIS | Pyodide | mock-poll | local |
+| Dev desk + sidecar | Vite `:3000` | Flask `:5002` | Bun sidecar `:5003` | local |
 
 ## Topology A — Dev desk
 
@@ -124,24 +125,57 @@ AXIS --engine:server--> Flask/Worker
 AXIS --source--> venue or CSV
 ```
 
+## Topology F — Dev desk + Bun sidecar (CCXT Pro)
+
+For users who want authenticated WS feeds from any CCXT-supported exchange without running Flask. The sidecar (`packages/datafeed/`) mirrors the PYNE datafeed gateway contract.
+
+```mermaid
+flowchart LR
+  V[Vite AXIS app :3000] --> S[Bun sidecar :5003]
+  S -->|REST OHLCV| EX[CCXT exchanges]
+  S -->|WS watch| EX
+  V -->|POST /run| F[Flask :5002]
+  F --> PYNE[pynescript runtime]
+  V -->|direct WS| BN[Venue APIs]
+```
+
+```bash
+bun run dev           # Vite :3000
+bun run dev:datafeed  # Bun sidecar :5003
+# in separate terminals, or combine in a Procfile
+```
+
+**Gateway contract** (same as PYNE datafeed):
+
+| Endpoint | Method | Description |
+| --- | --- | --- |
+| `/datafeed/ohlcv?exchange=&symbol=&timeframe=` | GET | Historical OHLCV |
+| `/datafeed/markets?exchange=` | GET | Available markets |
+| `/datafeed/watch?exchange=&symbol=&timeframe=` | WS | Live bar stream |
+| `/datafeed/session` | POST | Store credentials (RAM only) |
+| `/health` | GET | Sidecar health |
+
+**Notes:** Credentials stay in RAM only (never persisted). The sidecar is optional — public venues work without it via direct browser WS.
+
 ## Port map (defaults)
 
 | Service | Port |
 | --- | --- |
 | Vite dev | 3000 |
 | Flask Pro API | 5002 |
+| Bun datafeed sidecar | 5003 |
 | Static PWA server | 8081 |
 | Wrangler Worker | 8787 |
 
 ## Comparison
 
-| Concern | A Dev | B Static | C Edge | D Offline |
-| --- | --- | --- | --- | --- |
-| HMR | yes | no | no | n/a |
-| PWA SW realism | partial | full | full | full |
-| Multi-tenant keys | no | no | yes | no |
-| Ops complexity | low | medium | high | low |
-| Fidelity | high (Flask) | high | high via proxy | engine-dependent |
+| Concern | A Dev | B Static | C Edge | D Offline | F Sidecar |
+| --- | --- | --- | --- | --- | --- |
+| HMR | yes | no | no | n/a | yes |
+| PWA SW realism | partial | full | full | full | partial |
+| Multi-tenant keys | no | no | yes | no | local only |
+| Ops complexity | low | medium | high | low | low |
+| Fidelity | high (Flask) | high | high via proxy | engine-dependent | high (CCXT Pro) |
 
 ## Failure modes by topology
 

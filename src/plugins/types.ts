@@ -54,7 +54,7 @@ export type PluginKind =
 
 /** One settings field in a plugin `configSchema`. */
 export interface FieldSchema {
-  type: 'string' | 'number' | 'boolean' | 'select';
+  type: 'string' | 'number' | 'boolean' | 'select' | 'password';
   default?: string | number | boolean;
   label?: string;
   description?: string;
@@ -68,7 +68,7 @@ export interface FieldSchema {
 /** Map of field id → schema; defaults merged at call sites. */
 export type ConfigSchema = Record<string, FieldSchema>;
 
-/** Capability flags for Connection HUD / offline gating. */
+/** Capability flags for Connection HUD / offline gating / provider lock. */
 export interface PluginCapabilities {
   offline?: boolean;
   needsAuth?: boolean;
@@ -76,6 +76,28 @@ export interface PluginCapabilities {
   needsProxy?: boolean;
   /** Optional transport hint for Connection HUD (else inferred from id). */
   transport?: 'ws' | 'rest' | 'local' | 'broker';
+  /**
+   * Venue identity for provider lock. Aggregators must inherit this — do not
+   * guess from plugin id substrings when this is set.
+   */
+  venue?:
+    | 'binance'
+    | 'okx'
+    | 'bybit'
+    | 'coinbase'
+    | 'kraken'
+    | 'gecko'
+    | 'mock'
+    | 'upload'
+    | 'cache'
+    | 'generic';
+  /** Instrument class (spot vs perps). Default spot. */
+  market?: 'spot' | 'linear' | 'inverse' | 'option';
+  /**
+   * True when the stream emits **venue candles** (same aggregation as REST).
+   * False/omit for ticker-bucketed or synthetic bars.
+   */
+  klineStream?: boolean;
 }
 
 /** Shared fields on every plugin kind. */

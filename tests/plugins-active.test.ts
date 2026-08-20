@@ -16,7 +16,8 @@ import { _resetSourceRegistrationFlag } from '../src/sources/catalog';
 import { _resetStreamRegistrationFlag } from '../src/streams/catalog';
 import { _resetEngineRegistrationFlag } from '../src/engines/catalog';
 import { _resetStorageRegistrationFlag } from '../src/storage/catalog';
-import { setStore, setActivePlugin } from '../src/store';
+import { setStore, setActivePlugin, applyProviderVaultAuth } from '../src/store';
+import { clearCredentials } from '../src/data/credentials';
 import {
   getActiveSourceId,
   getActiveStreamId,
@@ -29,6 +30,7 @@ import {
   getActiveSourceConfig,
   getActiveStreamConfig,
   getActiveEngineConfig,
+  getActiveProvider,
 } from '../src/plugins/active';
 
 beforeEach(() => {
@@ -45,6 +47,8 @@ beforeEach(() => {
   setActivePlugin('storage', 'local');
   setStore('pluginsConfig', {});
   setStore('endpoint', 'http://example.test:5002');
+  clearCredentials();
+  applyProviderVaultAuth(undefined, false);
 });
 
 describe('active ids', () => {
@@ -60,6 +64,16 @@ describe('active ids', () => {
     expect(getActiveStream().id).toBe('binance-ws');
     expect(getActiveEngine().id).toBe('server');
     expect(getActiveStorage()?.id).toBe('local');
+  });
+
+  it('exposes locked provider session', () => {
+    clearCredentials();
+    applyProviderVaultAuth(undefined, false);
+    const p = getActiveProvider();
+    expect(p.venue).toBe('binance');
+    expect(p.sourceId).toBe('binance-rest');
+    expect(p.streamId).toBe('binance-ws');
+    expect(p.authMode).toBe('public');
   });
 
   it('falls back when id missing from registry', () => {

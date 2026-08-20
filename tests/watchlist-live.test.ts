@@ -102,6 +102,23 @@ describe('startWatchlistQuotes', () => {
     expect(statuses).toContain('open');
   });
 
+  it('does not fall back to Binance for Kraken', () => {
+    restore = MockWebSocket.install();
+    let detail = '';
+    const h = startWatchlistQuotes({
+      sourceId: 'kraken-rest',
+      symbols: ['BTCUSDT'],
+      onQuote: () => {},
+      onStatus: (s) => {
+        detail = `${s.mode || ''} ${s.detail || ''}`;
+      },
+    });
+    h.stop();
+    expect(MockWebSocket.instances.length).toBe(0);
+    expect(detail).toMatch(/none/i);
+    expect(detail).toMatch(/Kraken/i);
+  });
+
   it('mock source emits synthetic ticks then stops', async () => {
     const quotes: string[] = [];
     const h = startWatchlistQuotes({

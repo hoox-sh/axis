@@ -47,10 +47,11 @@ sequenceDiagram
 
 | id | Name | Network | Notes |
 | --- | --- | --- | --- |
-| `binance-rest` | Binance REST | yes | Public klines; **synthetic walk fallback** when `fallback: true` (default) |
+| `binance-rest` | Binance REST | yes | Public klines; **synthetic walk fallback** only when `fallback: true` (default **off**) |
 | `okx-rest` | OKX REST | yes | Candles; symbol `BTCUSDT` → `BTC-USDT`; max 300 bars |
 | `bybit-rest` | Bybit REST | yes | Spot v5 klines; newest-first reversed |
 | `coinbase-rest` | Coinbase REST | yes | Exchange candles; `USDT` pair rewritten to `USD` product |
+| `kraken-rest` | Kraken REST | yes | Public OHLC; pairs with `kraken-ws` |
 | `mock-walk` | Mock Walk | no | Offline random walk; optional Mulberry-like seed |
 | `csv-upload` | CSV / JSON Upload | no | Reads last upload from `upload-store` |
 
@@ -89,7 +90,9 @@ Do not pass `startTime` + `endTime` together when paginating on Binance-style ve
 | --- | --- | --- |
 | `baseUrl` | `https://api.binance.com` | Override for mirrors/proxies |
 | `limit` | `500` | 50–1000 |
-| `fallback` | `true` | On network error, `synthesizeWalk` |
+| `fallback` | `false` | On network error, `synthesizeWalk` (demo only) |
+
+When Settings → **Data** has a Binance key in the session vault, Load uses signed REST (higher weight) and falls back to the Worker `/api/market/binance/signed/klines` on CORS failure. Keys are never written to disk.
 
 **mock-walk**
 

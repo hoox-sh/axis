@@ -43,7 +43,7 @@ import {
   onCleanup,
   onMount,
 } from 'solid-js';
-import { store, setStore, persist } from '../store';
+import { store, setStore, persist, setActivePlugin } from '../store';
 import type { PlaneTelemetry, TransportClass } from '../store/types';
 import { formatLatency, formatTickAge, transportLabel } from './telemetry';
 import {
@@ -506,17 +506,38 @@ function PairingWarn() {
     const actual = store.live.streamId || store.activePlugins?.stream;
     if (!actual || actual === expected) return null;
     if (src === 'mock-walk' || src === 'csv-upload') return null;
-    return `Stream ${actual} ≠ default ${expected} for ${src}`;
+    return {
+      text: `Stream ${actual} ≠ ${expected} for ${src}`,
+      expected,
+    };
   });
+  const provider = () => store.provider;
   return (
-    <Show when={warn()}>
-      <span
-        class="text-[9px] font-mono text-orange truncate max-w-[140px] flex-shrink-0"
-        title={warn()!}
-      >
-        ⚠ pair
-      </span>
-    </Show>
+    <>
+      <Show when={provider()}>
+        <span
+          class="text-[9px] font-mono text-text-faint truncate max-w-[120px] flex-shrink-0"
+          title={`${provider()!.venue} ${provider()!.market} · ${provider()!.authMode}`}
+          data-testid="axis-hud-provider"
+        >
+          {provider()!.venue}
+          {provider()!.authMode === 'authenticated' ? '·key' : ''}
+        </span>
+      </Show>
+      <Show when={warn()}>
+        {(w) => (
+          <button
+            type="button"
+            class="text-[9px] font-mono text-orange truncate max-w-[160px] flex-shrink-0 border border-orange/40 px-1 h-[22px]"
+            title={w().text}
+            data-testid="axis-hud-pair-fix"
+            onClick={() => setActivePlugin('stream', w().expected)}
+          >
+            ⚠ pair · Fix
+          </button>
+        )}
+      </Show>
+    </>
   );
 }
 

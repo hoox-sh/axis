@@ -45,6 +45,7 @@ Formal ADRs for AXIS (product + `frontend/`). Status values: **Accepted** unless
 | [ADR-013](#adr-013-results-export-in-axis) | Results export in AXIS |
 | [ADR-014](#adr-014-transport-preference--connection-telemetry) | Transport preference + connection telemetry |
 | [ADR-015](#adr-015-on-chain-data-plane) | On-chain data plane |
+| [ADR-016](#adr-016-provider-locked-market-data) | Provider-locked market data; CCXT on the server |
 
 ---
 
@@ -413,6 +414,110 @@ Pro-only DefiLlama surfaces (raises, unlocks via `pro-api.llama.fi`) remain out 
 - [On-Chain data (end user)](/axis/docs/enduser/guides/on-chain) — operator guide
 - [Worker](/axis/docs/worker) — `/api/onchain/…` on the edge route table
 - [ADR-001](#adr-001-pluggable-unified-registry), [ADR-009](#adr-009-worker-proxies-first), [ADR-012](#adr-012-cors-as-deploy-concern)
+
+---
+
+## ADR-016: Provider-locked market data
+
+### Context
+
+AXIS composes source × stream × engine, but **OHLCV aggregation is not composable**. Mixing Binance history with OKX live (or Kraken watchlist quotes on a Binance chart) silently poisons indicators, compare, watchlist, and cache. Prior to this ADR, source and stream were independently selectable, venue detection used plugin-id substrings, and the Binance synthetic fallback made network errors look like real data.
+
+Key problems:
+
+| Issue | Risk |
+| --- | --- |
+| Source and stream independently selectable in Topbar | User loads Binance REST + OKX WS — mixed candles |
+| DSM `sourceId` seeded once from `store.source` | Backfill targets a different venue than the chart |
+| Watchlist Kraken → Binance tickers | Mixed-provider quotes |
+| Coinbase WS ticker → synthetic bars | Not exchange candles; OHLCV ≠ REST history |
+| Binance `fallback: true` synthesizes random walk | Chart looks "live" with fake prices |
+
+### Decision
+
+Introduce **`ProviderSession`** — a first-class locked market-data identity that all aggregators inherit:
+
+1. **`ProviderSession`** (`src/data/provider.ts`): `{ id, sourceId, streamId, venue, market, authMode, credentialId, gateway }`. Persisted without secrets. Every aggregator reads `getActiveProvider()` instead of raw URLs or plugin-id substrings.
+
+2. **Auto-pairing**: Source changes always re-pair the stream via `defaultStreamForSource`. Explicit mismatch is allowed but shows a HUD `⚠ pair · Fix` chip.
+
+3. **Plugin capabilities**: `venue`, `market`, `klineStream` on `PluginCapabilities`. Venues with `klineStream: true` emit exchange candles (not ticker buckets).
+
+4. **Coinbase WS**: switched from ticker buckets to Advanced Trade venue candles, folded into chart interval via `foldVenueCandle`.
+
+5. **Binance fallback**: defaults **off** (`fallback: false`). Network errors must not look like real data.
+
+6. **Watchlist lock**: no silent Binance fallback for Kraken, Gecko, or unknown venues. Each shows a clear "no live mux" message.
+
+7. **Credential vault** (`src/data/credentials.ts`): in-memory session-only vault for API key/secret/passphrase. Secrets never reach `persist()`, `pluginsConfig`, error-share, or CHANGELOG dumps. `redactSecrets` and `stripSecretKeys` enforce this.
+
+8. **Venue HMAC signers** (`src/data/venues/`): thin Binance / OKX / Bybit / Coinbase / Kraken signers. No CCXT in the browser.
+
+9. **Signed Binance klines**: vault key → HMAC direct fetch → Worker `/api/market/binance/signed/klines` (request-scoped `X-Exchange-Key` / `X-Exchange-Secret`). 401/403 stays thrown — bad keys must not silently mix public klines.
+
+10. **Cache key**: includes `providerId|market|authMode|symbol|interval`. Authenticated and public candles do not share cache slots.
+
+### Ownership
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ AXIS (composition host)                                         │
+│  ProviderSession (venue + market + auth mode + credential ref)  │
+│  SourcePlugin  ── REST history / pagination / DSM / compare     │
+│  StreamPlugin  ── venue kline WS (not ticker-synthesized bars)  │
+│  Credential vault (browser session / optional persist / Tauri)  │
+│  Datafeed Gateway client → pyne | worker | sidecar              │
+└───────────────┬─────────────────────────┬───────────────────────┘
+                │                         │
+                ▼                         ▼
+┌───────────────────────────┐   ┌─────────────────────────────────┐
+│ PYNE [data]/[datafeed]    │   │ AXIS Worker                     │
+│ CCXT + CCXT Pro           │   │ Thin HMAC REST proxy (no CCXT)  │
+│ CLI, request.*, gateway   │   │ DO WS fan-out (public + auth    │
+│ Secrets: env / key store  │   │ listenKey) — allowlisted paths  │
+└───────────────────────────┘   └─────────────────────────────────┘
+```
+
+### Alternatives considered
+
+| Alternative | Rejected because |
+| --- | --- |
+| **Bundle CCXT in browser** | ~1 MB+ bundle, Node APIs, isolate CPU, CORS issues |
+| **CCXT in Cloudflare Worker** | Bundle size, 128 MB memory, shared rate-limit IP, not designed for 100-exchange routing |
+| **Keep venues as raw URL substrings** | Silent venue mismatches poison aggregation correctness |
+| **Pluggable venue resolver** | Over-engineered; first-party venues are a fixed set of 5 |
+
+### Consequences
+
+- **Correctness** — aggregation (indicators, compare, watchlist, cache, DSM) inherits a locked venue. Mixed-provider bugs are structurally prevented.
+- **Auth path** — public remains the default. Auth is a capability upgrade on the same provider, not a second source id.
+- **Secret safety** — vault is RAM-only in v1. Tauri keychain / AES-GCM durable wrap is Phase 1.5. `pluginsConfig` and error-share are stripped of secret keys.
+- **CCXT stays in PYNE** — server-side only. AXIS calls the gateway with session handles, never raw secrets in `/run`.
+- **Long-tail exchanges** — AXIS `ccxt-rest` / `ccxt-ws` plugins that talk to a PYNE or Bun sidecar gateway. First-party venues stay thin native adapters.
+
+### Key files
+
+| Path | Role |
+| --- | --- |
+| `src/data/provider.ts` | `ProviderSession` type, `buildProviderSession`, `defaultStreamForSource` |
+| `src/data/credentials.ts` | In-memory vault, `putCredential`, `redactSecrets` |
+| `src/data/signed-fetch.ts` | Vault → HMAC → direct or Worker proxy |
+| `src/data/venues/` | Per-venue HMAC signers (binance, okx, bybit, coinbase, kraken) |
+| `src/plugins/active.ts` | `getActiveProvider()` |
+| `src/plugins/types.ts` | `PluginCapabilities.venue`, `.market`, `.klineStream` |
+| `src/store/index.ts` | `setActivePlugin` auto-pairing, `syncProviderSession` |
+| `src/ui/ConnectionHud.tsx` | Venue label, pairing Fix button |
+| `src/ui/SettingsDialog.tsx` | Data tab (exchange credentials) |
+| `src/ui/error-share.ts` | `stripSecretKeys` redaction |
+| `worker/src/market.ts` | Signed Binance klines proxy |
+
+### Related docs
+
+- [Sources](/axis/docs/plugins/sources) — source plugin catalog
+- [Streams](/axis/docs/plugins/streams) — stream plugin catalog
+- [Data Source Manager](/axis/docs/enduser/guides/data-source-manager) — DSM guide
+- [Topologies](/axis/docs/architecture/topologies) — composition models
+- [ADR-001](#adr-001-pluggable-unified-registry), [ADR-009](#adr-009-worker-proxies-first)
 
 ---
 

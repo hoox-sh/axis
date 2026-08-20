@@ -48,6 +48,7 @@ import type {
   Indicator,
   OnchainState,
   Pane,
+  ProviderSession,
   EditorMode,
   LogEntry,
   LogLevel,
@@ -65,6 +66,14 @@ import {
   type EditorIntelSettings,
 } from '../editor/editor-intel';
 import { idlePlane, pushSample } from '../ui/telemetry';
+import {
+  DEFAULT_PROVIDER,
+  buildProviderSession,
+  defaultStreamForSource as pairStreamForSource,
+  hydrateProviderSession,
+  persistProviderSession,
+} from '../data/provider';
+import { getDataManagerSelection } from '../data/data-manager-source';
 import {
   defaultPanelChromeMap,
   isHoverSlideEligible,
@@ -201,6 +210,7 @@ const DEFAULTS: AppState = {
     engine: 'server',
     storage: 'local',
   },
+  provider: { ...DEFAULT_PROVIDER },
   pluginsConfig: {},
   scripts: [],
   panes: [
@@ -539,6 +549,11 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         stream: pluginsBag?.stream || streamId,
         storage: pluginsBag?.storage || DEFAULTS.activePlugins.storage,
       },
+      provider: hydrateProviderSession(
+        (bag as { provider?: unknown }).provider,
+        pluginsBag?.source || source,
+        pluginsBag?.stream || streamId,
+      ) as ProviderSession,
       pluginsConfig:
         bag.pluginsConfig && typeof bag.pluginsConfig === 'object'
           ? (bag.pluginsConfig as AppState['pluginsConfig'])
@@ -905,8 +920,39 @@ function mergePanelChrome(
   return base;
 }
 
+function pairedStreamFor(sourceId: string): string {
+  const under =
+    sourceId === 'data-manager' ? getDataManagerSelection()?.sourceId : undefined;
+  return pairStreamForSource(sourceId, under);
+}
+
+function syncProviderSession(): void {
+  const sourceId = store.source || store.activePlugins?.source || DEFAULTS.source;
+  const streamId =
+    store.live?.streamId || store.activePlugins?.stream || DEFAULTS.live.streamId;
+  const prev = store.provider;
+  const next = buildProviderSession(sourceId, streamId, {
+    underlyingSourceId:
+      sourceId === 'data-manager' ? getDataManagerSelection()?.sourceId : undefined,
+    authMode: prev?.authMode,
+    credentialId: prev?.credentialId,
+    gateway: prev?.gateway,
+    market: prev?.market,
+  });
+  setStore('provider', next);
+  if (
+    next.venue !== 'generic' &&
+    next.venue !== 'cache' &&
+    next.venue !== 'upload' &&
+    next.venue !== 'mock'
+  ) {
+    setStore('exchange', next.venue);
+  }
+}
+
 /**
  * Select an active plugin and keep flat legacy fields + telemetry plane ids aligned.
+ * Source changes re-pair the live stream so aggregators cannot mix venues.
  * Persists immediately. Engine switch resets engine telemetry (pyodide shows “connecting”).
  */
 export function setActivePlugin(
@@ -914,7 +960,15 @@ export function setActivePlugin(
   id: string,
 ) {
   setStore('activePlugins', kind, id);
-  if (kind === 'source') setStore('source', id);
+  if (kind === 'source') {
+    setStore('source', id);
+    const streamId = pairedStreamFor(id);
+    setStore('activePlugins', 'stream', streamId);
+    setStore('live', 'streamId', streamId);
+    if (store.telemetry?.stream) {
+      setStore('telemetry', 'stream', 'id', streamId);
+    }
+  }
   if (kind === 'engine') setStore('engine', id);
   if (kind === 'stream') setStore('live', 'streamId', id);
   // Keep telemetry plane ids in sync (names/transport refined by loaders)
@@ -956,7 +1010,26 @@ export function setActivePlugin(
       }
     }
   }
+  if (kind === 'source' || kind === 'stream') syncProviderSession();
   persist();
+}
+
+/**
+ * Vault handle only — never secrets. Called from `putCredential` / `deleteCredential`.
+ */
+export function applyProviderVaultAuth(
+  credentialId: string | undefined,
+  authenticated: boolean,
+): void {
+  const prev = store.provider || DEFAULT_PROVIDER;
+  const next: ProviderSession = {
+    ...prev,
+    authMode: authenticated ? 'authenticated' : 'public',
+  };
+  if (credentialId) next.credentialId = credentialId;
+  else delete next.credentialId;
+  // reconcile: Solid merge would keep a stale credentialId when the key is omitted
+  setStore('provider', reconcile(next));
 }
 
 /**
@@ -1004,6 +1077,7 @@ function seedStoreState(overlay: Partial<AppState> | null | undefined): AppState
     editorInputValues: {},
     editorStrategyProps: {},
     pluginsConfig: {},
+    provider: { ...DEFAULT_PROVIDER },
     savedLayouts: [],
     panelChrome: defaultPanelChromeMap(),
     chartLayout: defaultChartLayout({
@@ -1136,6 +1210,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     priceScaleLabelsVisible: s.priceScaleLabelsVisible,
     priceScaleDecimals: normalizePriceScaleDecimalsMode(s.priceScaleDecimals),
     activePlugins: unwrap(s.activePlugins),
+    provider: persistProviderSession(s.provider || DEFAULT_PROVIDER),
     pluginsConfig: unwrap(s.pluginsConfig),
     compare: {
       enabled: !!compare?.enabled,

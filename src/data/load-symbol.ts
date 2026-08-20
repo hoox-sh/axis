@@ -80,6 +80,10 @@ export function _currentLoadGeneration(): number {
 }
 
 function exchangeForSource(sourceId: string): string {
+  const venue = store.provider?.sourceId === sourceId
+    ? store.provider.venue
+    : undefined;
+  if (venue && venue !== 'generic' && venue !== 'cache') return venue;
   switch (sourceId) {
     case 'binance-rest':
       return 'binance';
@@ -89,12 +93,16 @@ function exchangeForSource(sourceId: string): string {
       return 'bybit';
     case 'coinbase-rest':
       return 'coinbase';
+    case 'kraken-rest':
+      return 'kraken';
     case 'mock-walk':
       return 'mock';
     case 'csv-upload':
       return 'upload';
     case 'data-manager':
-      return 'cache';
+      return store.provider?.venue && store.provider.venue !== 'cache'
+        ? store.provider.venue
+        : 'cache';
     default:
       return store.exchange;
   }

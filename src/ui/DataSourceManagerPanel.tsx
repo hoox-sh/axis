@@ -27,7 +27,7 @@
  * FloatableShell id `datasource`.
  */
 
-import { Component, For, Show, createMemo, createSignal } from 'solid-js';
+import { Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { store, isPanelOpen } from '../store';
 import { listSources } from '../sources/catalog';
 import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
@@ -109,6 +109,7 @@ export const DataSourceManagerPanel: Component = () => {
   const [symbol, setSymbol] = createSignal(store.symbol || 'BTCUSDT');
   const [sourceId, setSourceId] = createSignal(store.source || 'binance-rest');
   const [interval, setInterval] = createSignal(store.interval || '1d');
+  const [otherProvider, setOtherProvider] = createSignal(false);
   const [pastDate, setPastDate] = createSignal(defaultPastDateInput());
   const [applyWhenComplete, setApplyWhenComplete] = createSignal(false);
   const [formError, setFormError] = createSignal('');
@@ -120,6 +121,14 @@ export const DataSourceManagerPanel: Component = () => {
 
   const sources = () =>
     listSources().filter((s) => s.id !== DATA_MANAGER_SOURCE_ID);
+
+  // Inherit chart venue unless the user explicitly backfills another source.
+  // Symbol / interval stay editable (same provider, different series).
+  createEffect(() => {
+    if (otherProvider()) return;
+    const src = store.source || 'binance-rest';
+    if (src !== DATA_MANAGER_SOURCE_ID) setSourceId(src);
+  });
 
   const filteredJobs = createMemo(() => {
     const f = jobFilter();
@@ -220,11 +229,22 @@ export const DataSourceManagerPanel: Component = () => {
               />
             </label>
 
+            <label class="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={otherProvider()}
+                onChange={(e) => setOtherProvider(e.currentTarget.checked)}
+                data-testid="axis-datasource-other-provider"
+              />
+              <span>Backfill a different source than the chart</span>
+            </label>
+
             <label class="flex flex-col gap-0.5">
               <span class="text-muted text-[0.72rem] uppercase tracking-wide">Source / exchange</span>
               <select
                 class="sc-input"
                 value={sourceId()}
+                disabled={!otherProvider()}
                 onChange={(e) => setSourceId(e.currentTarget.value)}
                 data-testid="axis-datasource-source"
               >

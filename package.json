@@ -1,12 +1,13 @@
 {
   "name": "axis",
-  "version": "2.0.17",
+  "version": "2.0.18",
   "private": true,
   "license": "AGPL-3.0-only",
   "author": "jango_blockchained",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:datafeed": "bun packages/datafeed/src/index.ts",
     "build": "vite build",
     "preview": "vite preview",
     "test": "bun test tests/ worker/tests/",

@@ -32,6 +32,7 @@
  * | `okx-rest` | yes | `GET /api/v5/market/candles` (BTCUSDT → BTC-USDT) |
  * | `bybit-rest` | yes | Bybit v5 spot klines |
  * | `coinbase-rest` | yes | Exchange candles (max ~300) |
+ * | `kraken-rest` | yes | Public OHLC |
  * | `geckoterminal-ohlcv` | yes | DEX pool OHLCV via GeckoTerminal (`network:0xPool`) |
  * | `mock-walk` | no | Synthetic random walk; optional deterministic seed |
  * | `csv-upload` | no | Last file from {@link upload-store} |
@@ -362,6 +363,8 @@ export function sourcePageLimit(sourceId: string): number {
     case 'bybit-rest':
     case 'geckoterminal-ohlcv':
       return 1000;
+    case 'kraken-rest':
+      return 720;
     case 'mock-walk':
       return 1000;
     default:
@@ -375,12 +378,17 @@ export const binanceRest: SourcePlugin = {
   kind: 'source',
   builtIn: true,
   description:
-    'Public Binance kline API with host + Worker proxy fallback. Synthesizes a walk if every path fails.',
-  capabilities: { needsNetwork: true },
+    'Public Binance kline API with host + Worker proxy fallback. Optional synthetic walk only when fallback is enabled.',
+  capabilities: { needsNetwork: true, venue: 'binance', market: 'spot', transport: 'rest' },
   configSchema: {
     baseUrl: { type: 'string', default: 'https://api.binance.com', label: 'API base URL' },
     limit: { type: 'number', default: 500, min: 50, max: 1000, label: 'Bars' },
-    fallback: { type: 'boolean', default: true, label: 'Synthesize on failure' },
+    fallback: {
+      type: 'boolean',
+      default: false,
+      label: 'Synthesize on failure',
+      description: 'Demo only — fake prices. Off by default so a network error cannot look like real data.',
+    },
   },
   async fetchHistorical({ symbol, interval, config, startTime, endTime, signal }) {
     const cfg = resolveConfig(this.configSchema, config);
@@ -423,7 +431,7 @@ export const mockWalk: SourcePlugin = {
   kind: 'source',
   builtIn: true,
   description: 'Pure-synthetic random walk. Always available; deterministic seed optional.',
-  capabilities: { offline: true },
+  capabilities: { offline: true, venue: 'mock', transport: 'local' },
   configSchema: {
     seed: { type: 'number', default: 0, label: 'Seed (0 = random)' },
     startPrice: { type: 'number', default: 100, label: 'Start price' },
@@ -488,7 +496,7 @@ export const csvUpload: SourcePlugin = {
   builtIn: true,
   description:
     'Uses the last file the user uploaded (CSV with time,open,high,low,close[,volume] or JSON array).',
-  capabilities: { offline: true },
+  capabilities: { offline: true, venue: 'upload', transport: 'local' },
   configSchema: {},
   async fetchHistorical() {
     const bars = getUploadedBars();
@@ -512,7 +520,7 @@ export const dataManagerSource: SourcePlugin = {
   description:
     'Load OHLCV from the Data Source Manager local cache, then auto-fill the gap to now via the venue REST source. Live uses the matching exchange stream and expands the dataset.',
   // Offline cache read; network used only to close cache→now when venue is available
-  capabilities: { offline: true, needsNetwork: true },
+  capabilities: { offline: true, needsNetwork: true, venue: 'cache', transport: 'local' },
   configSchema: {},
   async fetchHistorical({ symbol, interval, signal }) {
     const resolved = await resolveDataManagerBars(symbol, interval);
@@ -590,7 +598,7 @@ export const okxRest: SourcePlugin = {
   kind: 'source',
   builtIn: true,
   description: 'Public OKX candlesticks (www.okx.com). Symbol like BTCUSDT → BTC-USDT.',
-  capabilities: { needsNetwork: true },
+  capabilities: { needsNetwork: true, venue: 'okx', market: 'spot', transport: 'rest' },
   configSchema: {
     limit: { type: 'number', default: 300, min: 50, max: 300, label: 'Bars' },
   },
@@ -631,7 +639,7 @@ export const bybitRest: SourcePlugin = {
   kind: 'source',
   builtIn: true,
   description: 'Public Bybit v5 spot klines (api.bybit.com).',
-  capabilities: { needsNetwork: true },
+  capabilities: { needsNetwork: true, venue: 'bybit', market: 'spot', transport: 'rest' },
   configSchema: {
     limit: { type: 'number', default: 500, min: 50, max: 1000, label: 'Bars' },
   },
@@ -676,7 +684,7 @@ export const coinbaseRest: SourcePlugin = {
   kind: 'source',
   builtIn: true,
   description: 'Coinbase Exchange public candles. Symbol BTCUSDT → BTC-USD.',
-  capabilities: { needsNetwork: true },
+  capabilities: { needsNetwork: true, venue: 'coinbase', market: 'spot', transport: 'rest' },
   configSchema: {
     granularity: { type: 'number', default: 0, label: 'Override granularity (sec, 0=auto)' },
   },
@@ -720,6 +728,90 @@ export const coinbaseRest: SourcePlugin = {
   },
 };
 
+function krakenPair(symbol: string): string {
+  const s = String(symbol || '').toUpperCase().replace(/[-_/]/g, '');
+  let base = s;
+  let quote = 'USD';
+  if (s.endsWith('USDT')) {
+    base = s.slice(0, -4);
+    quote = 'USDT';
+  } else if (s.endsWith('USD')) {
+    base = s.slice(0, -3);
+    quote = 'USD';
+  }
+  if (base === 'BTC') base = 'XBT';
+  return `${base}${quote}`;
+}
+
+function krakenIntervalMin(interval: string): number {
+  const m: Record<string, number> = {
+    '1m': 1,
+    '5m': 5,
+    '15m': 15,
+    '1h': 60,
+    '4h': 240,
+    '1d': 1440,
+    '1w': 10080,
+  };
+  return m[interval] || 1440;
+}
+
+export const krakenRest: SourcePlugin = {
+  id: 'kraken-rest',
+  name: 'Kraken REST',
+  kind: 'source',
+  builtIn: true,
+  description: 'Public Kraken OHLC (api.kraken.com). BTCUSDT → XBTUSDT.',
+  capabilities: { needsNetwork: true, venue: 'kraken', market: 'spot', transport: 'rest' },
+  configSchema: {
+    limit: { type: 'number', default: 720, min: 50, max: 720, label: 'Bars' },
+  },
+  async fetchHistorical({ symbol, interval, config, startTime, endTime, signal }) {
+    const cfg = resolveConfig(this.configSchema, config);
+    const pair = krakenPair(symbol);
+    const iv = krakenIntervalMin(interval);
+    const params = new URLSearchParams({
+      pair,
+      interval: String(iv),
+    });
+    const url = `https://api.kraken.com/0/public/OHLC?${params}`;
+    const res = await fetch(url, { cache: 'no-store', signal: fetchSignal(signal) });
+    if (!res.ok) throw new Error(`Kraken HTTP ${res.status}`);
+    const json = await res.json();
+    if (Array.isArray(json?.error) && json.error.length) {
+      throw new Error(`Kraken: ${json.error.join(', ')}`);
+    }
+    const result = json?.result && typeof json.result === 'object' ? json.result : {};
+    let rows: unknown[] = [];
+    for (const [k, v] of Object.entries(result)) {
+      if (k === 'last') continue;
+      if (Array.isArray(v)) {
+        rows = v;
+        break;
+      }
+    }
+    if (!rows.length) throw new Error('Kraken returned no candles');
+    const lo =
+      typeof startTime === 'number' && Number.isFinite(startTime) && startTime > 0
+        ? Math.floor(startTime)
+        : null;
+    const hi =
+      typeof endTime === 'number' && Number.isFinite(endTime) && endTime > 0
+        ? Math.floor(endTime)
+        : null;
+    const limit = Math.min(720, Number(cfg.limit) || 720);
+    const bars = mapValidBars(rows, (row) => {
+      if (!Array.isArray(row) || row.length < 6) return null;
+      const t = Math.floor(Number(row[0]));
+      if (lo != null && t < lo) return null;
+      if (hi != null && t > hi) return null;
+      return barFromFields(row[0], row[1], row[2], row[3], row[4], row[6]);
+    }).sort((a, b) => a.time - b.time);
+    if (!bars.length) throw new Error('Kraken returned no candles');
+    return bars.length > limit ? bars.slice(-limit) : bars;
+  },
+};
+
 /**
  * DEX pool OHLCV via GeckoTerminal public API.
  *
@@ -743,7 +835,7 @@ export const geckoTerminalOhlcv: SourcePlugin = {
   description:
     'DEX pool OHLCV via GeckoTerminal (network:poolAddress symbol). Browser CORS usually needs the AXIS Worker proxy. Max 1000 bars/request; deep history via Data Sources walk-back.',
   builtIn: true,
-  capabilities: { needsNetwork: true, needsProxy: true },
+  capabilities: { needsNetwork: true, needsProxy: true, venue: 'gecko', transport: 'rest' },
   configSchema: {
     baseUrl: {
       type: 'string',
@@ -836,6 +928,7 @@ export const BUILTIN_SOURCES: SourcePlugin[] = [
   okxRest,
   bybitRest,
   coinbaseRest,
+  krakenRest,
   geckoTerminalOhlcv,
   mockWalk,
   csvUpload,

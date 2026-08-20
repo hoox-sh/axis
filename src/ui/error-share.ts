@@ -100,6 +100,10 @@ export type ErrorDiagnosticPayload = {
     theme?: string;
     barCount?: number;
     scriptCount?: number;
+    /** Provider lock — no secrets; stripSecretKeys applied. */
+    provider?: Record<string, unknown>;
+    /** Plugin config snapshot with secret keys removed. */
+    pluginsConfig?: Record<string, unknown>;
   };
   planes?: Partial<
     Record<
@@ -119,6 +123,53 @@ export type BuildDiagnosticOpts = {
   /** How many recent system logs to include (default 12). */
   logLimit?: number;
 };
+
+/** Keys dropped from diagnostic dumps (case-insensitive). */
+const SECRET_FIELD_NAMES = new Set([
+  'apikey',
+  'secret',
+  'passphrase',
+  'password',
+  'token',
+]);
+
+export function isSecretFieldName(key: string): boolean {
+  return SECRET_FIELD_NAMES.has(String(key || '').toLowerCase());
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value == null || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * Recursively omit keys named apiKey, secret, passphrase, password, token
+ * (any casing). Used so pluginsConfig / provider never leak vault material
+ * if they are copied into a diagnostic session dump.
+ */
+export function stripSecretKeys<T>(value: T): T {
+  if (value == null) return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => stripSecretKeys(item)) as T;
+  }
+  if (!isPlainObject(value)) return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (isSecretFieldName(key)) continue;
+    out[key] = stripSecretKeys(child);
+  }
+  return out as T;
+}
+
+function cloneJson<T>(value: T): T | undefined {
+  if (value == null) return undefined;
+  try {
+    return JSON.parse(JSON.stringify(value)) as T;
+  } catch {
+    return undefined;
+  }
+}
 
 /** Strip path/query; keep host:port only. */
 export function endpointHostOnly(endpoint: string | null | undefined): string | undefined {
@@ -184,7 +235,7 @@ export function buildErrorDiagnosticPayload(
     ts: l.ts,
   }));
 
-  return {
+  const payload: ErrorDiagnosticPayload = {
     kind: 'axis-error-diagnostic',
     version: AXIS_DIAGNOSTIC_VERSION,
     at: new Date().toISOString(),
@@ -205,7 +256,7 @@ export function buildErrorDiagnosticPayload(
           : undefined,
       online: typeof navigator !== 'undefined' ? navigator.onLine : undefined,
     },
-    session: {
+    session: stripSecretKeys({
       symbol: store.symbol,
       interval: store.interval,
       exchange: store.exchange,
@@ -219,7 +270,9 @@ export function buildErrorDiagnosticPayload(
       theme: store.theme,
       barCount: Array.isArray(store.bars) ? store.bars.length : 0,
       scriptCount: Array.isArray(store.scripts) ? store.scripts.length : 0,
-    },
+      provider: stripSecretKeys(cloneJson(store.provider) || {}),
+      pluginsConfig: stripSecretKeys(cloneJson(store.pluginsConfig) || {}),
+    }),
     planes: {
       source: planeSnap(tel?.source),
       stream: planeSnap(tel?.stream),
@@ -228,6 +281,7 @@ export function buildErrorDiagnosticPayload(
     },
     recentLogs: recent,
   };
+  return stripSecretKeys(payload);
 }
 
 /** True when the user opted into error-share prompts (persisted telemetry pref). */

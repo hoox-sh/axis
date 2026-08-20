@@ -56,6 +56,7 @@
 import { openReconnectableWs, type WsStatus } from '../streams/reconnect-ws';
 import { binanceTickerWsUrls } from './binance-http';
 import { coinbaseProduct, okxInst, toUsdt } from './watchlist-tickers';
+import { getDataManagerSelection } from './data-manager-source';
 
 /** Normalized quote pushed to the UI for one watchlist row. */
 export type QuoteUpdate = {
@@ -103,9 +104,13 @@ export function startWatchlistQuotes(opts: StartWatchlistQuotesOpts): QuoteMuxHa
     return { stop: () => {} };
   }
 
-  const id = (opts.sourceId || 'binance-rest').toLowerCase();
+  let sourceId = opts.sourceId || 'binance-rest';
+  if (sourceId === 'data-manager') {
+    sourceId = getDataManagerSelection()?.sourceId || 'binance-rest';
+  }
+  const id = sourceId.toLowerCase();
 
-  if (id.includes('csv')) {
+  if (id.includes('csv') || id.includes('upload')) {
     opts.onStatus?.({ state: 'closed', mode: 'none', detail: 'csv has no live quotes' });
     return { stop: () => {} };
   }
@@ -117,8 +122,28 @@ export function startWatchlistQuotes(opts: StartWatchlistQuotesOpts): QuoteMuxHa
   if (id.includes('okx')) return startOkxQuotes(symbols, opts);
   if (id.includes('bybit')) return startBybitQuotes(symbols, opts);
   if (id.includes('coinbase')) return startCoinbaseQuotes(symbols, opts);
-  // binance + default (+ kraken falls back to binance for quotes)
-  return startBinanceQuotes(symbols, opts);
+  if (id.includes('kraken')) {
+    opts.onStatus?.({
+      state: 'closed',
+      mode: 'none',
+      detail: 'Kraken watchlist quotes are not mixed onto Binance — no live mux yet',
+    });
+    return { stop: () => {} };
+  }
+  if (id.includes('gecko')) {
+    opts.onStatus?.({ state: 'closed', mode: 'none', detail: 'DEX source has no CEX quotes' });
+    return { stop: () => {} };
+  }
+  // binance (and unknown CEX ids that already resolved as binance)
+  if (id.includes('binance')) {
+    return startBinanceQuotes(symbols, opts);
+  }
+  opts.onStatus?.({
+    state: 'closed',
+    mode: 'none',
+    detail: `No watchlist quotes for source ${opts.sourceId}`,
+  });
+  return { stop: () => {} };
 }
 
 // ── Symbol maps ────────────────────────────────────────────────────

@@ -9,11 +9,32 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-19 · 239 commits · describe-tag: `v2.0.16`_
+_Generated/updated: 2026-08-20 · 239 commits · describe-tag: `v2.0.17`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.18] — 2026-08-20
+
+### Added
+
+- **Provider session** — chart aggregators inherit a locked venue identity (`store.provider`: source + stream + market + auth mode). Source changes re-pair the live stream; HUD shows venue and a **Fix** chip when stream mismatches. Data Source Manager follows the chart source unless "different source" is checked.
+- **`kraken-rest`** — public Kraken OHLC source, paired with `kraken-ws`.
+- **Exchange API keys** — Settings → **Data** stores key/secret/passphrase in a **session vault** (RAM only). Saving a key for the active venue sets `provider.authMode = authenticated`. Secrets never go to localStorage, `pluginsConfig`, or error-share dumps.
+- **Signed Binance klines** — with a vault key, history uses HMAC REST then the Worker `GET /api/market/binance/signed/klines` (request-scoped `X-Exchange-Key` / `X-Exchange-Secret`, not a Worker vault). Public allowlisted proxy is unchanged.
+- **Venue HMAC signers** — thin Binance / OKX / Bybit / Coinbase / Kraken signers in `src/data/venues/` (no CCXT).
+- **Test key** — Settings → Data **Test key** button verifies saved credentials with a signed 1-bar kline fetch. Shows success, 401/403 rejection, or CORS/network warnings.
+- **ADR-016** — provider-locked market data architecture decision record.
+- **SessionDO multi-venue** — Worker Durable Object relay now supports all 5 venues (Binance, OKX, Bybit, Coinbase, Kraken) via `venue` query param. Each venue's WS URL and subscribe message handled correctly. Browser → DO control messages accept `venue` for resubscribe.
+- **Shared venue WS builders** — `src/streams/ws-venues.ts` provides `buildVenueWs()` for both browser-side StreamPlugins and the Worker DO. Single source of truth for URL patterns and subscribe messages.
+- **`@hoox-sh/axis-datafeed`** — optional Bun sidecar (`packages/datafeed/`) using CCXT Pro for users who want local WS without running Flask. Mirrors the PYNE datafeed gateway contract: `GET /datafeed/ohlcv`, `GET /datafeed/markets`, `WS /datafeed/watch`, `POST /datafeed/session`. Run with `bun run dev:datafeed`.
+
+### Fixed
+
+- **Mixed-provider quotes** — watchlist no longer falls back to Binance tickers for Kraken (or unknown venues).
+- **Coinbase live bars** — stream uses Advanced Trade venue candles folded into the chart interval, not ticker buckets.
+- **Binance synthetic fallback** — `fallback` defaults **off**, so a network error cannot look like real prices.
 
 ## [2.0.17] — 2026-08-19
 

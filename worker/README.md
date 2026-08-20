@@ -93,6 +93,7 @@ Paste the returned IDs into your local `wrangler.toml` (from the example).
 | `/api/market/binance/klines` | GET | Allowlisted Binance klines proxy |
 | `/api/market/binance/ticker/24hr` | GET | Allowlisted Binance 24hr ticker proxy |
 | `/api/market/binance/exchangeInfo` | GET | Allowlisted Binance exchangeInfo proxy |
+| `/api/market/binance/signed/klines` | GET | HMAC-signed klines; headers `X-Exchange-Key` + `X-Exchange-Secret` (not cached) |
 | `/api/onchain/llama/protocols` | GET | DefiLlama protocols (allowlisted) |
 | `/api/onchain/llama/protocol/:slug` | GET | DefiLlama protocol TVL history |
 | `/api/onchain/gecko/networks/:net/pools/:addr/ohlcv/:tf` | GET | GeckoTerminal pool OHLCV |

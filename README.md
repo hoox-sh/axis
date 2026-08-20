@@ -124,6 +124,7 @@ Legacy vanilla shell still uses `src/registry.js` (see LEGACY.md).
 | Source  | `okx-rest`           | OKX public candles                     |
 | Source  | `bybit-rest`         | Bybit v5 spot klines                   |
 | Source  | `coinbase-rest`      | Coinbase Exchange candles              |
+| Source  | `kraken-rest`        | Kraken public OHLC                     |
 | Source  | `geckoterminal-ohlcv`| DEX pool OHLCV (GeckoTerminal)         |
 | Source  | `mock-walk`          | pure-synthetic random walk             |
 | Source  | `csv-upload`         | user-uploaded file                     |

@@ -34,6 +34,11 @@ import { store } from '../store';
 import { registry } from './registry';
 import { ensureBuiltins } from './bootstrap';
 import { pluginKey, type EnginePlugin, type SourcePlugin, type StoragePlugin, type StreamPlugin } from './types';
+import {
+  buildProviderSession,
+  type ProviderSession,
+} from '../data/provider';
+import { getDataManagerSelection } from '../data/data-manager-source';
 
 function pluginConfig(kind: string, id: string): Record<string, unknown> {
   const configs = store.pluginsConfig || {};
@@ -89,6 +94,29 @@ export function getActiveStorage(): StoragePlugin | undefined {
   ensureBuiltins();
   const id = getActiveStorageId();
   return registry.getStorage(id) || registry.getStorage('local');
+}
+
+/** Locked market-data identity (venue + pair + auth). Falls back to plugins. */
+export function getActiveProvider(): ProviderSession {
+  ensureBuiltins();
+  const sourceId = getActiveSourceId();
+  const streamId = getActiveStreamId();
+  const stored = store.provider;
+  if (stored?.sourceId === sourceId && stored?.streamId === streamId) {
+    return stored;
+  }
+  const src = registry.getSource(sourceId);
+  const str = registry.getStream(streamId);
+  return buildProviderSession(sourceId, streamId, {
+    sourceCaps: src?.capabilities,
+    streamCaps: str?.capabilities,
+    underlyingSourceId:
+      sourceId === 'data-manager' ? getDataManagerSelection()?.sourceId : undefined,
+    authMode: stored?.authMode,
+    credentialId: stored?.credentialId,
+    gateway: stored?.gateway,
+    market: stored?.market || src?.capabilities?.market,
+  });
 }
 
 export function getActiveSourceConfig(): Record<string, unknown> {

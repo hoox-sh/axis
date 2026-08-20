@@ -49,7 +49,7 @@ flowchart LR
 | `binance-ws` | Binance WebSocket | no | `wss://stream.binance.com:9443/ws/{symbol}@kline_{interval}` |
 | `okx-ws` | OKX WebSocket | no | `wss://ws.okx.com:8443/ws/v5/business` candle channels |
 | `bybit-ws` | Bybit WebSocket | no | Public linear/spot kline topics |
-| `coinbase-ws` | Coinbase WebSocket | no | Exchange WS ticker/candles path |
+| `coinbase-ws` | Coinbase WebSocket | no | Advanced Trade **candles** (venue OHLC, not ticker buckets) |
 | `kraken-ws` | Kraken WebSocket | no | Public OHLC channel |
 | `mock-poll` | Mock Poll | **yes** | 1s synthetic updates from `lastBar` |
 
@@ -76,9 +76,10 @@ Config is usually empty for venue streams; custom streams may declare `configSch
 | Path | Role |
 | --- | --- |
 | `frontend/src/streams/catalog.ts` | Built-ins + register helpers |
+| `frontend/src/streams/ws-venues.ts` | Shared venue WS URL + subscribe builders |
 | `frontend/src/streams/binance.ts` | Shared Binance helpers (if split) |
 | `frontend/src/streams/multiplex.ts` | Multi-symbol helpers |
-| `frontend/worker/src/durable-objects/session.ts` | `SessionDO` fan-out |
+| `frontend/worker/src/durable-objects/session.ts` | `SessionDO` multi-venue fan-out |
 | `frontend/public/plugins/example-cf-do-stream.js` | Loadable DO client stream |
 
 ### Binance kline mapping
@@ -103,8 +104,10 @@ Open bars may update repeatedly for the same `time` until the kline closes — c
 Not built-in. After load:
 
 1. Config `endpoint` = Worker origin (`https://…workers.dev` or local `http://127.0.0.1:8787`).
-2. Client opens `wss://…/api/stream?session=…&symbol=…&interval=…`.
-3. Worker routes to `SessionDO`; DO opens one Binance upstream and broadcasts raw kline JSON.
+2. Client opens `wss://…/api/stream?session=…&venue=binance&symbol=BTCUSDT&interval=1m`.
+3. Worker routes to `SessionDO`; DO opens one upstream WS for the venue and broadcasts raw kline JSON.
+
+The DO supports all 5 built-in venues (Binance, OKX, Bybit, Coinbase, Kraken) via the `venue` query param. Each venue's WS URL and subscribe message is built from `src/streams/ws-venues.ts` — the same shared helper used by browser-side StreamPlugins.
 
 Requires `SESSIONS` Durable Object binding (often commented in `wrangler.toml` until provisioned).
 

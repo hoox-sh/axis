@@ -510,7 +510,11 @@ export const Topbar: Component<{
           class="min-w-[7em]"
           value={store.live.streamId}
           disabled={store.live.active}
-          title="Live data stream (disabled while Live is on)"
+          title={
+            store.live.streamId !== defaultStreamForSource(store.source)
+              ? `Live stream (mismatched vs ${defaultStreamForSource(store.source)} — HUD Fix)`
+              : 'Live data stream (disabled while Live is on)'
+          }
           onChange={(e) => {
             setActivePlugin('stream', e.currentTarget.value);
           }}

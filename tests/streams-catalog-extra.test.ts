@@ -89,11 +89,26 @@ describe('extra exchange streams', () => {
 
   it('coinbase stream start/stop', async () => {
     const bars = await startAndPush(coinbaseStream, {
-      type: 'ticker',
-      price: '100.5',
-      time: new Date().toISOString(),
+      channel: 'candles',
+      events: [
+        {
+          type: 'update',
+          candles: [
+            {
+              start: String(Math.floor(Date.now() / 1000) - 30),
+              open: '100',
+              high: '101',
+              low: '99',
+              close: '100.5',
+              volume: '1.2',
+            },
+          ],
+        },
+      ],
     });
     expect(Array.isArray(bars)).toBe(true);
+    expect(bars.length).toBeGreaterThanOrEqual(1);
+    expect(bars[0]?.close).toBeCloseTo(100.5);
   });
 
   it('kraken stream start/stop', async () => {

@@ -49,6 +49,7 @@ describe('defaultStreamForSource', () => {
     expect(defaultStreamForSource('okx-rest')).toBe('okx-ws');
     expect(defaultStreamForSource('bybit-rest')).toBe('bybit-ws');
     expect(defaultStreamForSource('coinbase-rest')).toBe('coinbase-ws');
+    expect(defaultStreamForSource('kraken-rest')).toBe('kraken-ws');
     expect(defaultStreamForSource('binance-rest')).toBe('binance-ws');
   });
 });

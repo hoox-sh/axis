@@ -33,7 +33,7 @@
  * | `/api/scripts…`      | {@link handleScripts}| Bearer API key; D1 or in-memory |
  * | `/api/git/oauth/…`   | {@link handleGitOAuth}| public; device-flow proxy (GitHub/GitLab) |
  * | `/api/onchain/…`     | {@link handleOnchain}| public; DefiLlama + GeckoTerminal allowlisted proxy |
- * | `/api/market/…`      | {@link handleMarket}| public; Binance klines/ticker/exchangeInfo proxy |
+ * | `/api/market/…`      | {@link handleMarket}| public Binance GET proxy; optional request-scoped signed klines |
  * | GET `/api/stream`    | SessionDO upgrade    | requires `SESSIONS` DO binding |
  * | OPTIONS `*`          | CORS preflight       | 204 |
  *
@@ -95,7 +95,8 @@ export interface Env {
 const CORS_HEADERS = (origin: string): Record<string, string> => ({
   'Access-Control-Allow-Origin': origin,
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token, If-Match',
+  'Access-Control-Allow-Headers':
+    'Content-Type, Authorization, X-Admin-Token, If-Match, X-Exchange-Key, X-Exchange-Secret, X-Exchange-Passphrase',
   'Access-Control-Max-Age': '86400',
   Vary: 'Origin',
 });
@@ -209,7 +210,7 @@ export default {
         if (onchainRes) return onchainRes;
       }
 
-      // CEX market data proxy (Binance klines / ticker / exchangeInfo — public, no auth)
+      // CEX market data proxy (public Binance GET + optional request-scoped signed klines)
       if (url.pathname.startsWith('/api/market')) {
         const marketRes = await handleMarket(req, env, origin, url.pathname);
         if (marketRes) return marketRes;

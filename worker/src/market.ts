@@ -26,12 +26,14 @@
  * | Client path | Upstream |
  * |-------------|---------|
  * | `GET /api/market/binance/klines` | Binance `/api/v3/klines` |
+ * | `GET /api/market/binance/signed/klines` | `api.binance.com` HMAC-signed `/api/v3/klines` |
  * | `GET /api/market/binance/ticker/24hr` | Binance `/api/v3/ticker/24hr` |
  * | `GET /api/market/binance/exchangeInfo` | Binance `/api/v3/exchangeInfo` |
  * | `GET /api/market/health` | local feature flags |
  *
- * Not an open reverse proxy: only fixed Binance public GET paths with
- * allowlisted query keys. Short isolate-memory TTL blunts rate limits.
+ * Not an open reverse proxy: only fixed Binance GET paths with allowlisted
+ * query keys. Public GETs use a short isolate-memory TTL. Signed GETs take
+ * request-scoped `X-Exchange-Key` / `X-Exchange-Secret` (never stored).
  *
  * @module worker/market
  */
@@ -43,6 +45,9 @@ const BINANCE_UPSTREAMS = [
   'https://data-api.binance.vision',
   'https://api.binance.com',
 ] as const;
+
+/** Signed USER_DATA endpoints are not served on data-api.binance.vision. */
+const BINANCE_SIGNED_UPSTREAM = 'https://api.binance.com';
 
 const UPSTREAM_TIMEOUT_MS = 20_000;
 const KLINES_TTL_MS = 15_000;
@@ -65,7 +70,8 @@ function corsHeaders(origin: string): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token, If-Match',
+    'Access-Control-Allow-Headers':
+      'Content-Type, Authorization, X-Admin-Token, If-Match, X-Exchange-Key, X-Exchange-Secret, X-Exchange-Passphrase',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
   };
@@ -125,6 +131,46 @@ async function fetchUpstream(url: string): Promise<Response> {
       method: 'GET',
       signal: ctrl.signal,
       headers: { Accept: 'application/json' },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function bytesToHex(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let hex = '';
+  for (let i = 0; i < bytes.length; i++) {
+    hex += bytes[i]!.toString(16).padStart(2, '0');
+  }
+  return hex;
+}
+
+/** HMAC-SHA256 hex digest of `message` with request-scoped user secret. Never log `secret`. */
+async function hmacSha256Hex(secret: string, message: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message));
+  return bytesToHex(sig);
+}
+
+async function fetchSignedBinance(url: string, apiKey: string): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), UPSTREAM_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
+      method: 'GET',
+      signal: ctrl.signal,
+      headers: {
+        Accept: 'application/json',
+        'X-MBX-APIKEY': apiKey,
+      },
     });
   } finally {
     clearTimeout(timer);
@@ -194,6 +240,38 @@ function parseOptionalMs(raw: string | null): number | null | undefined {
   return Math.floor(n);
 }
 
+type KlinesQuery = { ok: true; params: URLSearchParams } | { ok: false; message: string };
+
+/** Shared allowlist for public and signed `/klines` (symbol, interval, limit, startTime, endTime). */
+function parseKlinesQuery(url: URL): KlinesQuery {
+  const symbol = String(url.searchParams.get('symbol') || '')
+    .trim()
+    .toUpperCase();
+  const interval = String(url.searchParams.get('interval') || '').trim();
+  const limit = parseLimit(url.searchParams.get('limit'), 1000, 500);
+  const startTime = parseOptionalMs(url.searchParams.get('startTime'));
+  const endTime = parseOptionalMs(url.searchParams.get('endTime'));
+
+  if (!SYMBOL_RE.test(symbol)) {
+    return { ok: false, message: 'invalid symbol' };
+  }
+  if (!INTERVAL_RE.test(interval)) {
+    return { ok: false, message: 'invalid interval' };
+  }
+  if (limit == null || startTime === null || endTime === null) {
+    return { ok: false, message: 'invalid limit/startTime/endTime' };
+  }
+
+  const params = new URLSearchParams({
+    symbol,
+    interval,
+    limit: String(limit),
+  });
+  if (startTime != null) params.set('startTime', String(startTime));
+  if (endTime != null) params.set('endTime', String(endTime));
+  return { ok: true, params };
+}
+
 /**
  * Handle `/api/market/*` routes. Returns `null` if the path is not market.
  */
@@ -234,6 +312,7 @@ export async function handleMarket(
             paths: ['klines', 'ticker/24hr', 'exchangeInfo'],
           },
         },
+        signed: { binance: ['klines'] },
       },
       200,
       origin,
@@ -243,45 +322,75 @@ export async function handleMarket(
   const url = new URL(req.url);
 
   if (pathname === '/api/market/binance/klines') {
-    const symbol = String(url.searchParams.get('symbol') || '')
-      .trim()
-      .toUpperCase();
-    const interval = String(url.searchParams.get('interval') || '').trim();
-    const limit = parseLimit(url.searchParams.get('limit'), 1000, 500);
-    const startTime = parseOptionalMs(url.searchParams.get('startTime'));
-    const endTime = parseOptionalMs(url.searchParams.get('endTime'));
-
-    if (!SYMBOL_RE.test(symbol)) {
+    const parsed = parseKlinesQuery(url);
+    if (!parsed.ok) {
       return json(
-        { status: 'error', code: 'BAD_REQUEST', message: 'invalid symbol' },
+        { status: 'error', code: 'BAD_REQUEST', message: parsed.message },
         400,
         origin,
       );
     }
-    if (!INTERVAL_RE.test(interval)) {
-      return json(
-        { status: 'error', code: 'BAD_REQUEST', message: 'invalid interval' },
-        400,
-        origin,
-      );
-    }
-    if (limit == null || startTime === null || endTime === null) {
-      return json(
-        { status: 'error', code: 'BAD_REQUEST', message: 'invalid limit/startTime/endTime' },
-        400,
-        origin,
-      );
-    }
-
-    const qs = new URLSearchParams({
-      symbol,
-      interval,
-      limit: String(limit),
-    });
-    if (startTime != null) qs.set('startTime', String(startTime));
-    if (endTime != null) qs.set('endTime', String(endTime));
-    const pathAndQuery = `/api/v3/klines?${qs}`;
+    const pathAndQuery = `/api/v3/klines?${parsed.params}`;
     return proxyBinancePath(pathAndQuery, origin, KLINES_TTL_MS, `klines:${pathAndQuery}`);
+  }
+
+  if (pathname === '/api/market/binance/signed/klines') {
+    const apiKey = (req.headers.get('X-Exchange-Key') || '').trim();
+    const apiSecret = (req.headers.get('X-Exchange-Secret') || '').trim();
+    if (!apiKey || !apiSecret) {
+      return json(
+        {
+          status: 'error',
+          code: 'AUTH',
+          message: 'X-Exchange-Key and X-Exchange-Secret required',
+        },
+        401,
+        origin,
+      );
+    }
+
+    const parsed = parseKlinesQuery(url);
+    if (!parsed.ok) {
+      return json(
+        { status: 'error', code: 'BAD_REQUEST', message: parsed.message },
+        400,
+        origin,
+      );
+    }
+
+    const qs = parsed.params;
+    qs.set('timestamp', String(Date.now()));
+    qs.set('recvWindow', '5000');
+    const query = qs.toString();
+    const signature = await hmacSha256Hex(apiSecret, query);
+    qs.set('signature', signature);
+
+    const upstreamUrl = `${BINANCE_SIGNED_UPSTREAM}/api/v3/klines?${qs}`;
+    try {
+      const upstream = await fetchSignedBinance(upstreamUrl, apiKey);
+      const text = await upstream.text();
+      const contentType = upstream.headers.get('Content-Type') || 'application/json';
+      return new Response(text, {
+        status: upstream.status,
+        headers: {
+          'Content-Type': contentType,
+          'X-Axis-Market-Cache': 'BYPASS',
+          'X-Axis-Market-Upstream': BINANCE_SIGNED_UPSTREAM,
+          ...corsHeaders(origin),
+        },
+      });
+    } catch (err) {
+      const lastErr = err instanceof Error ? err.message : 'unreachable';
+      return json(
+        {
+          status: 'error',
+          code: 'UPSTREAM_NETWORK',
+          message: `Binance signed upstream unreachable: ${lastErr}`,
+        },
+        502,
+        origin,
+      );
+    }
   }
 
   if (pathname === '/api/market/binance/ticker/24hr') {

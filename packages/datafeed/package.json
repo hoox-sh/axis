@@ -1,0 +1,44 @@
+{
+  "name": "@hoox-sh/axis-datafeed",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optional local Bun sidecar for CCXT Pro datafeeds — mirrors the PYNE datafeed gateway contract",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "author": "jango_blockchained",
+  "main": "src/index.ts",
+  "bin": {
+    "axis-datafeed": "bin/datafeed.js"
+  },
+  "scripts": {
+    "dev": "bun src/index.ts",
+    "start": "bun src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ccxt": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "bun": ">=1.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hoox-sh/axis.git",
+    "directory": "packages/datafeed"
+  },
+  "homepage": "https://hoox.sh/axis",
+  "keywords": [
+    "axis",
+    "hoox",
+    "datafeed",
+    "ccxt",
+    "exchange",
+    "ohlcv",
+    "websocket"
+  ]
+}

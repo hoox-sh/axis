@@ -18,18 +18,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Application Settings modal — three tabs:
+ * Application Settings modal — four tabs:
  * - **General**: engine, on-chain proxy note, storage, density, chart interval, live prefs, workspace
+ * - **Data**: per-venue exchange API key / secret / passphrase (session vault)
  * - **Editor**: lint / hover / completions / marks / timings (applies live, no Save)
  * - **Theme**: chart Theme Manager (bar colors, chart.bg_color / chart.fg_color, …)
  *
  * Local form state is seeded from `store` when the dialog opens (not on every
  * store mutation while open). Save snapshots form fields, writes
  * `pluginsConfig` / `activePlugins` / layout prefs, then `flushPersist()`.
- * Editor and Theme apply live (no Save). Endpoint **Probe** uses `probeEndpoint`
- * without committing form values.
+ * Editor and Theme apply live (no Save). Data tab Save writes the session
+ * vault only — never `persist()` with secrets. Endpoint **Probe** uses
+ * `probeEndpoint` without committing form values.
  *
- * Optional `initialTab` focuses General, Editor, or Theme when opening
+ * Optional `initialTab` focuses General, Data, Editor, or Theme when opening
  * (e.g. command palette).
  */
 
@@ -97,6 +99,17 @@ import {
   INTEL_TIMEOUT_MS_MIN,
   type EditorIntelSettings,
 } from '../editor/editor-intel';
+import * as cred from '../data/credentials';
+import { fetchSignedJson, hasSignedCreds } from '../data/signed-fetch';
+import type { VenueId } from '../data/venues/types';
+import {
+  EXCHANGE_CREDENTIAL_VENUES,
+  EXCHANGE_CREDENTIAL_VENUE_LABELS,
+  defaultExchangeCredentialVenue,
+  isExchangeCredentialVenue,
+  venueNeedsPassphrase,
+  type ExchangeCredentialVenue,
+} from './exchange-credentials-form';
 
 /** PYNE Runtime modes for the server/worker engine plugin config. */
 export type EngineExecMode = 'interpret' | 'compile' | 'auto';
@@ -130,7 +143,11 @@ function readEnginePluginConfig(engineId: string): Record<string, unknown> {
   return (pc[pluginKey('engine', engineId)] || pc[engineId] || {}) as Record<string, unknown>;
 }
 
-export type SettingsTabId = 'general' | 'editor' | 'theme';
+export type SettingsTabId = 'general' | 'data' | 'editor' | 'theme';
+
+function isSettingsTabId(v: unknown): v is SettingsTabId {
+  return v === 'general' || v === 'data' || v === 'editor' || v === 'theme';
+}
 
 interface Props {
   open: boolean;
@@ -141,6 +158,7 @@ interface Props {
 
 const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'general', label: 'General', hint: 'Engine · density · chart · live' },
+  { id: 'data', label: 'Data', hint: 'Exchange keys · provider' },
   { id: 'editor', label: 'Editor', hint: 'Lint · hover · complete · marks · timings' },
   { id: 'theme', label: 'Theme', hint: 'Bars · canvas · Pine chart.bg_color' },
 ];
@@ -279,11 +297,7 @@ export const SettingsDialog: Component<Props> = (props) => {
         setInvertTradeLabels(!!store.strategyUi?.invertTradeLabels);
         setExactOnCandle(store.strategyUi?.exactOnCandle !== false);
         setProbeMsg('');
-        setTab(
-          props.initialTab === 'theme' || props.initialTab === 'editor'
-            ? props.initialTab
-            : 'general',
-        );
+        setTab(isSettingsTabId(props.initialTab) ? props.initialTab : 'general');
       });
     }
     return isOpen;
@@ -293,7 +307,7 @@ export const SettingsDialog: Component<Props> = (props) => {
   createEffect(() => {
     if (!props.open) return;
     const t = props.initialTab;
-    if (t === 'theme' || t === 'general' || t === 'editor') setTab(t);
+    if (isSettingsTabId(t)) setTab(t);
   });
 
   /** Live density preview while dragging (persists on Save or preset click). */
@@ -400,7 +414,7 @@ export const SettingsDialog: Component<Props> = (props) => {
       applyUiScale(store.uiScale);
       props.onClose();
     }
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save();
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && tab() === 'general') save();
   };
 
   const closeWithoutSave = () => {
@@ -461,7 +475,7 @@ export const SettingsDialog: Component<Props> = (props) => {
       >
         <div
           class={`sc-dialog ${
-            tab() === 'theme' || tab() === 'editor'
+            tab() === 'theme' || tab() === 'editor' || tab() === 'data'
               ? 'w-[min(640px,calc(100vw-2*var(--ui-dialog-margin)))]'
               : 'w-[min(560px,calc(100vw-2*var(--ui-dialog-margin)))]'
           }`}
@@ -501,7 +515,7 @@ export const SettingsDialog: Component<Props> = (props) => {
             </button>
           </div>
 
-          {/* Tab strip — General vs Theme (theme lives only here) */}
+          {/* Tab strip — General / Data / Editor / Theme */}
           <div
             class="sc-dialog-tabs sc-chip-row"
             role="tablist"
@@ -528,6 +542,17 @@ export const SettingsDialog: Component<Props> = (props) => {
 
           <div class="sc-dialog-body">
             {/* ── Theme tab ─────────────────────────────────────────── */}
+            <Show when={tab() === 'data'}>
+              <div
+                id="axis-settings-panel-data"
+                role="tabpanel"
+                aria-labelledby="axis-settings-tab-data"
+                data-testid="axis-settings-data"
+                class="flex flex-col gap-2"
+              >
+                <ExchangeCredentialsPanel />
+              </div>
+            </Show>
             <Show when={tab() === 'editor'}>
               <div
                 id="axis-settings-panel-editor"
@@ -1259,10 +1284,14 @@ export const SettingsDialog: Component<Props> = (props) => {
                 ? 'Theme applies live · Save not required'
                 : tab() === 'editor'
                   ? 'Editor intel applies live · Save not required'
-                  : `AXIS · scale ${formatUiScalePct(uiScale())}`}
+                  : tab() === 'data'
+                    ? 'Keys stay in this session · not written to disk'
+                    : `AXIS · scale ${formatUiScalePct(uiScale())}`}
             </div>
             <button type="button" class="sc-btn" onClick={closeWithoutSave}>
-              {tab() === 'theme' || tab() === 'editor' ? 'Close' : 'Cancel'}
+              {tab() === 'theme' || tab() === 'editor' || tab() === 'data'
+                ? 'Close'
+                : 'Cancel'}
             </button>
             <Show when={tab() === 'general'}>
               <button type="button" class="sc-btn sc-btn-primary" onClick={save}>
@@ -1274,6 +1303,275 @@ export const SettingsDialog: Component<Props> = (props) => {
         </div>
       </div>
     </Show>
+  );
+};
+
+type CredentialMetaRow = {
+  id: string;
+  venue: string;
+  label?: string;
+  hasKey: boolean;
+  hasSecret: boolean;
+  hasPassphrase: boolean;
+};
+
+/** Per-venue API key/secret/passphrase — session vault, never persist() secrets. */
+const ExchangeCredentialsPanel: Component = () => {
+  const [venue, setVenue] = createSignal<ExchangeCredentialVenue>(
+    defaultExchangeCredentialVenue(store.provider?.venue),
+  );
+  const [apiKey, setApiKey] = createSignal('');
+  const [secret, setSecret] = createSignal('');
+  const [passphrase, setPassphrase] = createSignal('');
+  const [msg, setMsg] = createSignal('');
+  const [rev, setRev] = createSignal(0);
+
+  const unsub = cred.subscribeCredentials(() => setRev((n) => n + 1));
+  onCleanup(unsub);
+
+  const meta = createMemo((): CredentialMetaRow | null => {
+    rev();
+    const v = venue();
+    const rows = cred.listCredentialMeta() as CredentialMetaRow[];
+    return rows.find((m) => m.venue === v) ?? null;
+  });
+
+  const hasSaved = createMemo(() => {
+    rev();
+    try {
+      return cred.hasCredentialForVenue(venue());
+    } catch {
+      const m = meta();
+      return !!(m && (m.hasKey || m.hasSecret || m.hasPassphrase));
+    }
+  });
+
+  const needsPass = createMemo(() => venueNeedsPassphrase(venue()));
+
+  const clearSecrets = () => {
+    setApiKey('');
+    setSecret('');
+    setPassphrase('');
+  };
+
+  const onVenueChange = (raw: string) => {
+    if (!isExchangeCredentialVenue(raw)) return;
+    setVenue(raw);
+    clearSecrets();
+    setMsg('');
+  };
+
+  const onSave = () => {
+    const v = venue();
+    const key = apiKey().trim();
+    const sec = secret().trim();
+    const pass = passphrase().trim();
+    if (!key || !sec) {
+      setMsg('API key and secret are required');
+      return;
+    }
+    if (needsPass() && !pass) {
+      setMsg('Passphrase is required for this venue');
+      return;
+    }
+    try {
+      cred.putCredential({
+        venue: v,
+        apiKey: key,
+        secret: sec,
+        passphrase: needsPass() ? pass : undefined,
+      });
+      clearSecrets();
+      setMsg('');
+      setStatus('ready', `Exchange key saved · ${v} · session only`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : 'Save failed');
+    }
+  };
+
+  const onRemove = () => {
+    const v = venue();
+    const row = meta();
+    const id = row?.id;
+    if (!id) {
+      setMsg('No saved key for this venue');
+      return;
+    }
+    cred.deleteCredential(id);
+    clearSecrets();
+    setMsg('');
+    setStatus('ready', `Exchange key removed · ${v}`);
+  };
+
+  const [testing, setTesting] = createSignal(false);
+
+  const onTestKey = async () => {
+    const v = venue();
+    if (!hasSignedCreds(v as VenueId)) {
+      setMsg('Save a key first, then test');
+      return;
+    }
+    setTesting(true);
+    setMsg('');
+    try {
+      await fetchSignedJson({
+        venue: v as VenueId,
+        path: '/api/v3/klines',
+        query: { symbol: 'BTCUSDT', interval: '1d', limit: 1 },
+        skipWorkerProxy: true,
+      });
+      setMsg('');
+      setStatus('ready', `${v} key verified · signed fetch OK`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/401|403/.test(msg)) {
+        setMsg(`Key rejected (${v}): ${msg}`);
+      } else if (/CORS|network|fetch/i.test(msg)) {
+        setMsg(`Network/CORS error — key may be valid but direct fetch blocked`);
+      } else {
+        setMsg(`Test failed: ${msg}`);
+      }
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <>
+      <div class="sc-section-title">Exchange API keys</div>
+      <p class="sc-hint mt-0" data-testid="axis-exchange-session-note">
+        Saved in this session only (not written to disk). AXIS never puts key, secret, or
+        passphrase into localStorage.
+      </p>
+
+      <div class="sc-field">
+        <label
+          class="text-[10px] text-text-dim uppercase tracking-wider"
+          for="axis-exchange-venue"
+        >
+          Venue
+        </label>
+        <select
+          id="axis-exchange-venue"
+          class="sc-input w-full"
+          data-testid="axis-exchange-venue"
+          value={venue()}
+          onChange={(e) => onVenueChange(e.currentTarget.value)}
+        >
+          <For each={[...EXCHANGE_CREDENTIAL_VENUES]}>
+            {(v) => <option value={v}>{EXCHANGE_CREDENTIAL_VENUE_LABELS[v]}</option>}
+          </For>
+        </select>
+      </div>
+
+      <div class="sc-field">
+        <label
+          class="text-[10px] text-text-dim uppercase tracking-wider"
+          for="axis-exchange-api-key"
+        >
+          API key
+        </label>
+        <input
+          id="axis-exchange-api-key"
+          type="password"
+          class="sc-input font-mono text-[12px] w-full"
+          data-testid="axis-exchange-api-key"
+          value={apiKey()}
+          onInput={(e) => setApiKey(e.currentTarget.value)}
+          placeholder={meta()?.hasKey ? '••••••••  saved' : 'API key'}
+          spellcheck={false}
+          autocomplete="off"
+        />
+        <Show when={meta()?.hasKey && !apiKey()}>
+          <p class="text-[10px] text-accent mt-0.5">saved</p>
+        </Show>
+      </div>
+
+      <div class="sc-field">
+        <label
+          class="text-[10px] text-text-dim uppercase tracking-wider"
+          for="axis-exchange-secret"
+        >
+          Secret
+        </label>
+        <input
+          id="axis-exchange-secret"
+          type="password"
+          class="sc-input font-mono text-[12px] w-full"
+          data-testid="axis-exchange-secret"
+          value={secret()}
+          onInput={(e) => setSecret(e.currentTarget.value)}
+          placeholder={meta()?.hasSecret ? '••••••••  saved' : 'API secret'}
+          spellcheck={false}
+          autocomplete="off"
+        />
+        <Show when={meta()?.hasSecret && !secret()}>
+          <p class="text-[10px] text-accent mt-0.5">saved · ••••••••</p>
+        </Show>
+      </div>
+
+      <Show when={needsPass()}>
+        <div class="sc-field">
+          <label
+            class="text-[10px] text-text-dim uppercase tracking-wider"
+            for="axis-exchange-passphrase"
+          >
+            Passphrase
+          </label>
+          <input
+            id="axis-exchange-passphrase"
+            type="password"
+            class="sc-input font-mono text-[12px] w-full"
+            data-testid="axis-exchange-passphrase"
+            value={passphrase()}
+            onInput={(e) => setPassphrase(e.currentTarget.value)}
+            placeholder={meta()?.hasPassphrase ? '••••••••  saved' : 'Passphrase'}
+            spellcheck={false}
+            autocomplete="off"
+          />
+          <Show when={meta()?.hasPassphrase && !passphrase()}>
+            <p class="text-[10px] text-accent mt-0.5">saved</p>
+          </Show>
+        </div>
+      </Show>
+
+      <div class="flex flex-wrap gap-2 mt-1">
+        <button
+          type="button"
+          class="sc-btn sc-btn-primary"
+          data-testid="axis-exchange-key-save"
+          onClick={onSave}
+        >
+          <Icons.check />
+          Save
+        </button>
+        <button
+          type="button"
+          class="sc-btn"
+          data-testid="axis-exchange-key-remove"
+          disabled={!hasSaved()}
+          onClick={onRemove}
+        >
+          <Icons.trash />
+          Remove
+        </button>
+        <button
+          type="button"
+          class="sc-btn"
+          data-testid="axis-exchange-key-test"
+          disabled={!hasSaved() || testing()}
+          onClick={onTestKey}
+        >
+          {testing() ? 'Testing…' : 'Test key'}
+        </button>
+      </div>
+      <Show when={msg()}>
+        <p class="text-[10px] text-red font-mono mt-0.5">{msg()}</p>
+      </Show>
+      <p class="text-[10px] text-text-faint mt-1">
+        Used when the active provider is authenticated. Public REST/WebSocket needs no key.
+      </p>
+    </>
   );
 };
 

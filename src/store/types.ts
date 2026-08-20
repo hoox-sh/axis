@@ -152,8 +152,10 @@ export interface ActivePlugins {
 
 import type { Drawing, DrawingToolId } from '../chart/drawing-types';
 import type { ChartThemeState } from '../theme';
+import type { ProviderSession } from '../data/provider';
 export type { Drawing, DrawingToolId };
 export type { ChartThemeState };
+export type { ProviderSession };
 
 /**
  * Default stroke/fill applied when the layer places a new drawing.
@@ -317,6 +319,12 @@ export interface AppState {
   endpoint: string;
   /** Canonical active plugin ids */
   activePlugins: ActivePlugins;
+  /**
+   * Locked market-data identity (venue + source/stream pair + auth mode).
+   * Aggregators (load, DSM, compare, watchlist, cache) inherit this.
+   * Never stores API secrets — only optional `credentialId`.
+   */
+  provider: ProviderSession;
   /** Per-plugin config keyed by `${kind}:${id}` or bare id */
   pluginsConfig: Record<string, Record<string, unknown>>;
 

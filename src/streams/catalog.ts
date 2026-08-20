@@ -31,7 +31,7 @@
  * | `binance-ws` | WS | `wss://stream.binance.com:9443/ws/{sym}@kline_{iv}` |
  * | `okx-ws` | WS | business channel candle subscribe |
  * | `bybit-ws` | WS | v5 public spot kline |
- * | `coinbase-ws` | WS | ticker → interval-bucketed bars |
+ * | `coinbase-ws` | WS | Advanced Trade `candles` (venue OHLC; fold into chart TF) |
  * | `kraken-ws` | WS | public OHLC channel |
  * | `mock-poll` | local | synthetic ticks (pairs with `mock-walk` / CSV / DEX OHLCV) |
  *
@@ -56,6 +56,7 @@ import type { Bar } from '../store/types';
 import type { StreamPlugin as UnifiedStreamPlugin } from '../plugins/types';
 import { registry } from '../plugins/registry';
 import { getDataManagerSelection } from '../data/data-manager-source';
+import { defaultStreamForSource as defaultStreamForSourceId } from '../data/provider';
 import { openReconnectableWs } from './reconnect-ws';
 import { binanceKlineWsUrls } from '../data/binance-http';
 
@@ -87,7 +88,13 @@ export const binanceStream: StreamPlugin = {
   builtIn: true,
   description:
     'Real-time klines via stream.binance.com (auto-reconnect; rotates :9443 → :443 → data-stream).',
-  capabilities: { needsNetwork: true, transport: 'ws' },
+  capabilities: {
+    needsNetwork: true,
+    transport: 'ws',
+    venue: 'binance',
+    market: 'spot',
+    klineStream: true,
+  },
   configSchema: {},
   start({ symbol, interval, onBar, onStatus, onError }) {
     const wsInterval = INTERVAL_MAP[interval] || interval;
@@ -126,7 +133,7 @@ export const mockPollStream: StreamPlugin = {
   kind: 'stream',
   builtIn: true,
   description: 'Synthetic live bars (offline). Good with Mock Walk source.',
-  capabilities: { offline: true, transport: 'local' },
+  capabilities: { offline: true, transport: 'local', venue: 'mock', klineStream: false },
   configSchema: {},
   start({ interval, onBar, onStatus, lastBar }) {
     const step = intervalToSec(interval);
@@ -195,7 +202,13 @@ export const okxStream: StreamPlugin = {
   kind: 'stream',
   builtIn: true,
   description: 'OKX public candle channel (wss://ws.okx.com:8443/ws/v5/business).',
-  capabilities: { needsNetwork: true, transport: 'ws' },
+  capabilities: {
+    needsNetwork: true,
+    transport: 'ws',
+    venue: 'okx',
+    market: 'spot',
+    klineStream: true,
+  },
   configSchema: {},
   start({ symbol, interval, onBar, onStatus, onError }) {
     const instId = (() => {
@@ -257,7 +270,13 @@ export const bybitStream: StreamPlugin = {
   kind: 'stream',
   builtIn: true,
   description: 'Bybit public kline stream (wss://stream.bybit.com/v5/public/spot).',
-  capabilities: { needsNetwork: true, transport: 'ws' },
+  capabilities: {
+    needsNetwork: true,
+    transport: 'ws',
+    venue: 'bybit',
+    market: 'spot',
+    klineStream: true,
+  },
   configSchema: {},
   start({ symbol, interval, onBar, onStatus, onError }) {
     const ivMap: Record<string, string> = {
@@ -301,15 +320,57 @@ export const bybitStream: StreamPlugin = {
   },
 };
 
-/** Coinbase Exchange ticker → synthetic bar updates (public WS). */
+/**
+ * Fold a venue 1m (or native) candle into the chart interval using the
+ * candle's **exchange** start time — never wall-clock Date.now().
+ */
+export function foldVenueCandle(
+  cur: Bar | null,
+  startSec: number,
+  ohlcv: { open: number; high: number; low: number; close: number; volume: number },
+  stepSec: number,
+  opts?: { mergeVolume?: boolean },
+): Bar {
+  const step = stepSec > 0 ? stepSec : 60;
+  const slot = Math.floor(startSec / step) * step;
+  if (!cur || cur.time !== slot) {
+    return {
+      time: slot,
+      open: ohlcv.open,
+      high: ohlcv.high,
+      low: ohlcv.low,
+      close: ohlcv.close,
+      volume: ohlcv.volume,
+      closed: !!cur && cur.time !== slot,
+    };
+  }
+  const addVol = opts?.mergeVolume !== false;
+  return {
+    time: slot,
+    open: cur.open,
+    high: Math.max(cur.high, ohlcv.high),
+    low: Math.min(cur.low, ohlcv.low),
+    close: ohlcv.close,
+    volume: addVol ? (cur.volume ?? 0) + ohlcv.volume : (cur.volume ?? ohlcv.volume),
+    closed: false,
+  };
+}
+
+/** Coinbase Advanced Trade candles (venue OHLC, not ticker buckets). */
 export const coinbaseStream: StreamPlugin = {
   id: 'coinbase-ws',
   name: 'Coinbase WebSocket',
   kind: 'stream',
   builtIn: true,
   description:
-    'Coinbase Exchange ticker (wss://ws-feed.exchange.coinbase.com) aggregated into live bars.',
-  capabilities: { needsNetwork: true, transport: 'ws' },
+    'Coinbase Advanced Trade candles (wss://advanced-trade-ws.coinbase.com). Venue OHLC folded into the chart interval.',
+  capabilities: {
+    needsNetwork: true,
+    transport: 'ws',
+    venue: 'coinbase',
+    market: 'spot',
+    klineStream: true,
+  },
   configSchema: {},
   start({ symbol, interval, onBar, onStatus, onError, lastBar }) {
     const product = (() => {
@@ -319,8 +380,10 @@ export const coinbaseStream: StreamPlugin = {
       return `${s}-USD`;
     })();
     const step = intervalToSec(interval);
-    const url = 'wss://ws-feed.exchange.coinbase.com';
+    const url = 'wss://advanced-trade-ws.coinbase.com';
     let cur: Bar | null = lastBar ? { ...lastBar } : null;
+    // First fold into a REST lastBar must not add 1m volume (would double-count).
+    let seededFromLast = !!lastBar;
     return openReconnectableWs({
       url,
       onStatus,
@@ -330,40 +393,35 @@ export const coinbaseStream: StreamPlugin = {
           JSON.stringify({
             type: 'subscribe',
             product_ids: [product],
-            channels: ['ticker'],
+            channel: 'candles',
           }),
         );
       },
       onMessage: (e) => {
         try {
           const msg = JSON.parse(e.data as string);
-          if (msg.type !== 'ticker' || msg.price == null) return;
-          const price = +msg.price;
-          const vol = msg.last_size != null ? +msg.last_size : 0;
-          const now = Math.floor(Date.now() / 1000);
-          const slot = Math.floor(now / step) * step;
-          if (!cur || cur.time !== slot) {
-            cur = {
-              time: slot,
-              open: price,
-              high: price,
-              low: price,
-              close: price,
-              volume: vol,
-              // New slot — time advance is treated as bar-close by multiplex
-              closed: true,
-            };
-          } else {
-            cur = {
-              ...cur,
-              high: Math.max(cur.high, price),
-              low: Math.min(cur.low, price),
-              close: price,
-              volume: (cur.volume ?? 0) + vol,
-              closed: false,
-            };
+          const events = Array.isArray(msg?.events) ? msg.events : [];
+          for (const ev of events) {
+            const candles = Array.isArray(ev?.candles) ? ev.candles : [];
+            for (const c of candles) {
+              const startSec = Math.floor(Number(c.start) || Number(c.start_time) || 0);
+              if (!Number.isFinite(startSec) || startSec <= 0) continue;
+              const ohlcv = {
+                open: +c.open,
+                high: +c.high,
+                low: +c.low,
+                close: +c.close,
+                volume: +c.volume || 0,
+              };
+              if (![ohlcv.open, ohlcv.high, ohlcv.low, ohlcv.close].every(Number.isFinite)) {
+                continue;
+              }
+              const mergeVolume = !(seededFromLast && cur && cur.time === Math.floor(startSec / step) * step);
+              cur = foldVenueCandle(cur, startSec, ohlcv, step, { mergeVolume });
+              seededFromLast = false;
+              onBar({ ...cur });
+            }
           }
-          onBar({ ...cur });
         } catch {
           /* ignore */
         }
@@ -379,7 +437,13 @@ export const krakenStream: StreamPlugin = {
   kind: 'stream',
   builtIn: true,
   description: 'Kraken public OHLC (wss://ws.kraken.com/).',
-  capabilities: { needsNetwork: true, transport: 'ws' },
+  capabilities: {
+    needsNetwork: true,
+    transport: 'ws',
+    venue: 'kraken',
+    market: 'spot',
+    klineStream: true,
+  },
   configSchema: {},
   start({ symbol, interval, onBar, onStatus, onError }) {
     const pair = (() => {
@@ -506,31 +570,11 @@ export function listDynamicStreamIds(): string[] {
 
 /** Pick a sensible stream for the current historical source. */
 export function defaultStreamForSource(sourceId: string): string {
-  // Offline / synthetic / no live venue feed yet
-  if (
-    sourceId === 'mock-walk' ||
-    sourceId === 'csv-upload' ||
-    // DEX OHLCV is REST-only for now — no live GeckoTerminal WS (Phase 2)
-    sourceId === 'geckoterminal-ohlcv'
-  ) {
-    return 'mock-poll';
-  }
-  // Data Manager is a cache front-end: stream should match the *venue* series,
-  // not mock-poll (live candles from the exchange that produced the dataset).
-  if (sourceId === 'data-manager') {
-    const sel = getDataManagerSelection();
-    const venue = sel?.sourceId ? String(sel.sourceId) : '';
-    if (venue && venue !== 'data-manager' && venue !== 'csv-upload') {
-      return defaultStreamForSource(venue);
-    }
-    // Prefer a real venue WS over synthetic mock when no selection yet
-    return 'binance-ws';
-  }
-  if (sourceId === 'okx-rest') return 'okx-ws';
-  if (sourceId === 'bybit-rest') return 'bybit-ws';
-  if (sourceId === 'coinbase-rest') return 'coinbase-ws';
-  if (sourceId === 'kraken-rest') return 'kraken-ws';
-  return 'binance-ws';
+  const underlying =
+    sourceId === 'data-manager'
+      ? getDataManagerSelection()?.sourceId
+      : undefined;
+  return defaultStreamForSourceId(sourceId, underlying);
 }
 
 /** @internal test helper */
