@@ -99,6 +99,7 @@ export interface DrawingLimits {
   max_labels_count: number;
   max_boxes_count: number;
   max_polylines_count: number;
+  max_lines_fills_count: number;
 }
 
 /** TradingView defaults when the declaration omits the kwargs. */
@@ -107,6 +108,7 @@ export const DEFAULT_DRAWING_LIMITS: DrawingLimits = {
   max_labels_count: 50,
   max_boxes_count: 50,
   max_polylines_count: 50,
+  max_lines_fills_count: 50,
 };
 
 const LIMIT_CAPS: Record<keyof DrawingLimits, number> = {
@@ -114,6 +116,7 @@ const LIMIT_CAPS: Record<keyof DrawingLimits, number> = {
   max_labels_count: 500,
   max_boxes_count: 500,
   max_polylines_count: 100,
+  max_lines_fills_count: 100,
 };
 
 /** Hard language-reference caps as {@link DrawingLimits} (normalize safety net). */
@@ -122,6 +125,7 @@ const HARD_DRAWING_LIMITS: DrawingLimits = {
   max_labels_count: LIMIT_CAPS.max_labels_count,
   max_boxes_count: LIMIT_CAPS.max_boxes_count,
   max_polylines_count: LIMIT_CAPS.max_polylines_count,
+  max_lines_fills_count: LIMIT_CAPS.max_lines_fills_count,
 };
 
 /** Mid-pass trim threshold: sum of hard caps + small slack. */
@@ -220,6 +224,7 @@ export function resolveDrawingLimits(
     max_labels_count: pick('max_labels_count'),
     max_boxes_count: pick('max_boxes_count'),
     max_polylines_count: pick('max_polylines_count'),
+    max_lines_fills_count: pick('max_lines_fills_count'),
   };
 }
 
@@ -244,6 +249,10 @@ export function garbageCollectScriptDrawings(
       'max_polylines_count',
       limits?.max_polylines_count ?? DEFAULT_DRAWING_LIMITS.max_polylines_count,
     ),
+    linefill: clampLimit(
+      'max_lines_fills_count',
+      limits?.max_lines_fills_count ?? DEFAULT_DRAWING_LIMITS.max_lines_fills_count,
+    ),
   };
 
   const counts: Record<ScriptDrawing['type'], number> = {
@@ -251,6 +260,7 @@ export function garbageCollectScriptDrawings(
     label: 0,
     box: 0,
     polyline: 0,
+    linefill: 0,
   };
   for (const d of drawings) {
     if (d && d.type in counts) counts[d.type] += 1;
@@ -262,6 +272,7 @@ export function garbageCollectScriptDrawings(
     label: Math.max(0, counts.label - caps.label),
     box: Math.max(0, counts.box - caps.box),
     polyline: Math.max(0, counts.polyline - caps.polyline),
+    linefill: Math.max(0, counts.linefill - caps.linefill),
   };
 
   if (!skip.line && !skip.label && !skip.box && !skip.polyline) {

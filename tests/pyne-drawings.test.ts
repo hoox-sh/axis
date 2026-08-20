@@ -277,7 +277,7 @@ describe('normalizeScriptDrawings', () => {
     expect(list[0]!.t1).toBe(10);
     expect(list[0]!.p4).toBe(0.5);
     expect(list[0]!.bgcolor).toContain('rgba');
-    expect(list[0]!.color).toBe(list[0]!.bgcolor);
+    expect(list[0]!.color).toBe(list[0]!.bgcolor!);
     expect(list[1]!.color).toBe('#2962FF');
     expect(list[1]!.bgcolor).toBe('#2962FF');
   });
@@ -531,6 +531,7 @@ describe('drawing garbage collection', () => {
       max_labels_count: 50,
       max_boxes_count: 50,
       max_polylines_count: 50,
+      max_lines_fills_count: 50,
     });
   });
 
@@ -568,6 +569,7 @@ label.new(bar_index, high, "x")
       max_labels_count: 7,
       max_boxes_count: 50,
       max_polylines_count: 50,
+      max_lines_fills_count: 50,
     });
   });
 
@@ -580,6 +582,7 @@ label.new(bar_index, high, "x")
       max_labels_count: 2,
       max_boxes_count: 50,
       max_polylines_count: 50,
+      max_lines_fills_count: 50,
     });
     expect(kept.map((d) => d.id)).toEqual(['label_2', 'label_3', 'line_1']);
   });
@@ -635,6 +638,7 @@ label.new(bar_index, high, "x")
       max_labels_count: 1,
       max_boxes_count: 50,
       max_polylines_count: 50,
+      max_lines_fills_count: 50,
     });
     // Labels: keep newest only; both linefills pass through (no max_linefills cap).
     expect(kept.map((d) => d.id)).toEqual(['lf_0', 'lf_1', 'label_2']);

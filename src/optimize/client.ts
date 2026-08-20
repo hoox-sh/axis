@@ -16,7 +16,7 @@ import { getActiveEngine, getActiveEngineConfig } from '../plugins/active';
 import type { Bar } from '../store/types';
 import { beginStudy, endStudy } from './guard';
 import { randomAssignment, toPyneSpace } from './space';
-import type { ParamSpec } from './types';
+import type { ParamSpec, ParamValue } from './types';
 import {
   MAX_ENGINE_RUNS,
   MAX_TRIALS,
@@ -254,8 +254,8 @@ async function runClientStudy(opts: RunStudyOpts): Promise<StudySnapshot> {
 
   for (let i = 0; i < n; i++) {
     if (opts.signal?.aborted) break;
-    const params = {
-      ...(opts.fixedInputs || {}),
+    const params: Record<string, ParamValue> = {
+      ...(opts.fixedInputs as Record<string, ParamValue> || {}),
       ...randomAssignment(enabled),
     };
     let isStats: StrategyStats | null = null;

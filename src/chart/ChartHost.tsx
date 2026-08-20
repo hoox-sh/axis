@@ -273,7 +273,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
         const bl = bars();
         const barIndex =
           bl.length > 0 ? barIndexAtTimeBinary(bl, t) : null;
-        setCrosshair(t, barIndex >= 0 ? barIndex : null);
+        setCrosshair(t, barIndex != null && barIndex >= 0 ? barIndex : null);
       });
     } catch (err: unknown) {
       reportUiError(err, {

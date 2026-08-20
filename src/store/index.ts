@@ -1226,8 +1226,9 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
 
   // Optional layout bags (may be undefined on older sessions)
   if (s.panelChrome != null) base.panelChrome = unwrap(s.panelChrome);
-  if (s.panelWindows != null) base.panelWindows = unwrap(s.panelWindows);
-  if (s.dockLayout != null) base.dockLayout = unwrap(s.dockLayout);
+  const legacy = s as unknown as Record<string, unknown>;
+  if (legacy.panelWindows != null) base.panelWindows = unwrap(legacy.panelWindows);
+  if (legacy.dockLayout != null) base.dockLayout = unwrap(legacy.dockLayout);
   if (s.chartLayout != null) base.chartLayout = unwrap(s.chartLayout);
 
   if (opts?.slim) {

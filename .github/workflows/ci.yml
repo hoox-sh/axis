@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   unit:
-    name: Unit + security
+    name: Typecheck + unit + security
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -34,6 +34,9 @@ jobs:
 
       - name: Install dependencies
         run: bun install
+
+      - name: Typecheck
+        run: bun run typecheck
 
       - name: Unit + worker tests
         run: bun run test

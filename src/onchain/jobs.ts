@@ -245,7 +245,7 @@ async function runJob(j: InternalJob): Promise<void> {
       throw new Error(`Unknown on-chain job kind: ${(j as OnchainJob).kind}`);
     }
 
-    if (j.status === 'cancelled') {
+    if ((j.status as OnchainJobStatus) === 'cancelled') {
       settleJob(j, new Error('Job cancelled'));
       return;
     }
@@ -253,7 +253,7 @@ async function runJob(j: InternalJob): Promise<void> {
     setJobFields(j, { status: 'complete', progress: 1, error: null });
     settleJob(j);
   } catch (err) {
-    if (j.status === 'cancelled') {
+    if ((j.status as OnchainJobStatus) === 'cancelled') {
       settleJob(j, new Error('Job cancelled'));
       return;
     }
@@ -268,12 +268,12 @@ async function runRefreshTvl(j: InternalJob): Promise<void> {
   if (!protocolId) {
     throw new Error('Protocol id is required for TVL refresh');
   }
-  if (j.status === 'cancelled') return;
+  if ((j.status as OnchainJobStatus) === 'cancelled') return;
 
   setJobFields(j, { progress: 0.15 });
   await attachTvl(protocolId, j.protocolName);
 
-  if (j.status === 'cancelled') return;
+  if ((j.status as OnchainJobStatus) === 'cancelled') return;
   setJobFields(j, { progress: 1 });
 }
 
@@ -305,7 +305,7 @@ async function runBatchRefresh(j: InternalJob): Promise<void> {
     try {
       await attachTvl(protocolId, displayNameFromRow(row));
     } catch (err) {
-      if (j.status === 'cancelled') return;
+      if ((j.status as OnchainJobStatus) === 'cancelled') return;
       errors.push(`${protocolId}: ${errMessage(err)}`);
     }
 

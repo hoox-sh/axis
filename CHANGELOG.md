@@ -9,11 +9,19 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-20 · 239 commits · describe-tag: `v2.0.17`_
+_Generated/updated: 2026-08-20 · 242 commits · describe-tag: `v2.0.18`_
 
 ---
 
 ## [Unreleased]
+
+### Fixed
+
+- **Pre-existing TypeScript errors** — resolved 23 type errors across 7 files: null barIndex guard, CSS `TextAlign` narrowing, `PineTable` camelCase property reads via `Record<string, unknown>`, `linefill` missing from `DrawingLimits` / drawing caps/counts/skip, `cancelled` status narrowed type assertions, `ParamValue` import + explicit typing, legacy `panelWindows`/`dockLayout` access on `AppState`.
+
+### Changed
+
+- **CI typecheck gate** — added `bunx tsc --noEmit` as a first step in the CI workflow (runs before unit + security tests). Added `typecheck` script to `package.json`.
 
 ## [2.0.18] — 2026-08-20
 
@@ -440,9 +448,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (157 commits)
+### 2026-08 (160 commits)
 
 #### Security
 
@@ -453,6 +463,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `3c72d089` (2026-08-20) — feat(release): AXIS v2.0.18 multi-venue DO, credential vault, CCXT sidecar
+- `c42992e8` (2026-08-19) — feat(release): AXIS v2.0.17 editor lint underlines and typos
 - `720237a1` (2026-08-19) — feat(release): AXIS v2.0.16 editor intel recovery
 - `fd23d4a8` (2026-08-19) — feat(release): AXIS v2.0.15 editor intelligence and linebr
 - `cbe6369f` (2026-08-19) — feat(editor): richer hover, param checklist, and pre-eval
@@ -530,6 +542,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `804c5662` (2026-08-20) — fix(test): reset store provider state in credentials beforeEach
 - `b160498e` (2026-08-19) — fix: review follow-up for hover, hide, linebr, and agent seed
 - `35efaed7` (2026-08-19) — fix(plugins): render PYNE Agent markdown and drop default endpoint
 - `7ccd745d` (2026-08-19) — fix(chart): break plot.style_linebr on na

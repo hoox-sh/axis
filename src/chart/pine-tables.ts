@@ -132,11 +132,12 @@ export function normalizePineTable(
   ownerId?: string,
 ): PineTable | null {
   if (!isPineTable(raw)) return null;
+  const r = raw as unknown as Record<string, unknown>;
   const cells: PineTableCell[] = [];
   const rawCells = Array.isArray(raw.cells)
     ? raw.cells
-    : Array.isArray((raw as { cells_data?: unknown }).cells_data)
-      ? (raw as { cells_data: unknown[] }).cells_data
+    : Array.isArray(r.cells_data)
+      ? (r.cells_data as unknown[])
       : [];
   for (const c of rawCells) {
     const cell = parsePineTableCell(c);
@@ -164,22 +165,22 @@ export function normalizePineTable(
     frame_color:
       raw.frame_color != null
         ? String(raw.frame_color)
-        : raw.frameColor != null
-          ? String(raw.frameColor)
+        : r.frameColor != null
+          ? String(r.frameColor)
           : undefined,
-    frame_width: asFiniteInt(raw.frame_width ?? raw.frameWidth) ?? undefined,
+    frame_width: asFiniteInt(raw.frame_width ?? r.frameWidth) ?? undefined,
     border_color:
       raw.border_color != null
         ? String(raw.border_color)
-        : raw.borderColor != null
-          ? String(raw.borderColor)
+        : r.borderColor != null
+          ? String(r.borderColor)
           : undefined,
-    border_width: asFiniteInt(raw.border_width ?? raw.borderWidth) ?? undefined,
+    border_width: asFiniteInt(raw.border_width ?? r.borderWidth) ?? undefined,
     bgcolor:
       raw.bgcolor != null
         ? String(raw.bgcolor)
-        : raw.bg_color != null
-          ? String(raw.bg_color)
+        : r.bg_color != null
+          ? String(r.bg_color)
           : undefined,
     ownerId,
   };
@@ -289,7 +290,7 @@ export function buildTableGrid(
   return grid;
 }
 
-export function cellTextAlign(halign?: string): string {
+export function cellTextAlign(halign?: string): 'left' | 'right' | 'center' {
   const h = String(halign || '').toLowerCase().replace('text\.', '');
   if (h.includes('left')) return 'left';
   if (h.includes('right')) return 'right';
