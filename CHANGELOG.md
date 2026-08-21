@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-20 · 243 commits · describe-tag: `v2.0.18`_
+_Generated/updated: 2026-08-21 · 249 commits · describe-tag: `v2.0.19`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.20] — 2026-08-21
 
 ### Added
 
@@ -466,9 +468,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (161 commits)
+### 2026-08 (167 commits)
 
 #### Security
 
@@ -479,6 +483,10 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `6b4d5543` (2026-08-21) — feat(plugins): gateway-aware active source/stream resolution
+- `1631975f` (2026-08-21) — feat(stream): ccxt-ws gateway stream plugin
+- `c1887afd` (2026-08-21) — feat(source): ccxt-rest gateway source plugin
+- `a47baf04` (2026-08-21) — feat(data): gateway transport layer for CCXT datafeed
 - `3c72d089` (2026-08-20) — feat(release): AXIS v2.0.18 multi-venue DO, credential vault, CCXT sidecar
 - `c42992e8` (2026-08-19) — feat(release): AXIS v2.0.17 editor lint underlines and typos
 - `720237a1` (2026-08-19) — feat(release): AXIS v2.0.16 editor intel recovery
@@ -558,6 +566,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `aefa3baf` (2026-08-20) — fix(editor): skip hex color tails in pre-eval identifier scanner
 - `d408f110` (2026-08-20) — fix: resolve all 23 pre-existing TypeScript errors + CI typecheck gate
 - `804c5662` (2026-08-20) — fix(test): reset store provider state in credentials beforeEach
 - `b160498e` (2026-08-19) — fix: review follow-up for hover, hide, linebr, and agent seed
@@ -625,6 +634,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `27b5ca13` (2026-08-21) — docs(changelog): datafeed gateway phase 4 additions
 - `36900319` (2026-08-15) — docs(cors): document Pages preview origins for axis.hoox.sh
 - `d3172dbb` (2026-08-11) — docs: AXIS 2.0.1 docs, CLI-first ops, Pine Script v6 examples
 - `78c22e85` (2026-08-11) — docs(release): recursive changelog, AGENTS release workflow, v2.0.1
