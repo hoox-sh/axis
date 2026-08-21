@@ -18,14 +18,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Inline config row for the active source/stream plugin.
+ * Shared inline config row for the active source **and** stream plugins.
  *
- * Renders one compact field per entry of the plugin's `configSchema`
- * (string / number / boolean / select / password) next to the Topbar
- * pickers. Values persist to `store.pluginsConfig[pluginKey(kind, id)]`
- * — the same bag `load-symbol` and `multiplex` hand to plugins as
- * `opts.config`. An `exchange` field gets a datalist fed by the datafeed
- * gateway's `/health` exchange list.
+ * Renders each config field **once** (union of both plugins'
+ * `configSchema` keys — ccxt-rest/ccxt-ws share `exchange` + `gateway`)
+ * and writes every change through to *all* declaring plugins'
+ * `pluginsConfig` bags, so historical and live stay in sync.
+ *
+ * An `exchange` field renders as a dropdown fed by the datafeed gateway
+ * `/health` exchange list (current value kept as an option even when the
+ * gateway doesn't advertise it).
  *
  * @module ui/PluginConfigRow
  */
@@ -33,78 +35,136 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import { store, setStore, persist } from '../store';
 import { getActiveSource, getActiveStream } from '../plugins/active';
-import { pluginKey, type FieldSchema } from '../plugins/types';
+import { pluginKey, type ConfigSchema, type FieldSchema } from '../plugins/types';
 import { effectiveConfig, fetchGatewayExchanges, hasConfigFields } from './plugin-config';
 
-const EXCHANGE_DATALIST_ID = 'axis-gw-exchanges';
+const EXCHANGE_FIELD = 'exchange';
+
+interface ConfigTarget {
+  kind: 'source' | 'stream';
+  id: string;
+  schema: ConfigSchema;
+}
 
 export interface PluginConfigRowProps {
-  kind: 'source' | 'stream';
-  /** Called after a field changes (e.g. re-fetch historical bars). */
+  /** Called after any field changes (e.g. re-fetch historical bars). */
   onApplied?: () => void;
 }
 
 export function PluginConfigRow(props: PluginConfigRowProps) {
-  const plugin = createMemo(() => (props.kind === 'source' ? getActiveSource() : getActiveStream()));
-  const schema = createMemo(() => {
-    const s = plugin()?.configSchema;
-    return hasConfigFields(s) ? s! : undefined;
+  // Active plugins declaring config fields — source first (field order wins).
+  const targets = createMemo<ConfigTarget[]>(() => {
+    void store.activePlugins;
+    void store.live?.streamId;
+    const out: ConfigTarget[] = [];
+    const src = getActiveSource();
+    if (src && hasConfigFields(src.configSchema)) {
+      out.push({ kind: 'source', id: src.id, schema: src.configSchema! });
+    }
+    const stm = getActiveStream();
+    if (stm && !out.some((t) => t.id === stm.id) && hasConfigFields(stm.configSchema)) {
+      out.push({ kind: 'stream', id: stm.id, schema: stm.configSchema! });
+    }
+    return out;
   });
-  const stored = createMemo(() => {
-    const p = plugin();
-    if (!p) return {} as Record<string, unknown>;
-    const all = store.pluginsConfig || {};
-    return (all[pluginKey(props.kind, p.id)] as Record<string, unknown> | undefined) || {};
+
+  /** Ordered union of field keys across targets. */
+  const fields = createMemo<Array<[string, FieldSchema]>>(() => {
+    const seen = new Set<string>();
+    const out: Array<[string, FieldSchema]> = [];
+    for (const t of targets()) {
+      for (const [k, f] of Object.entries(t.schema)) {
+        if (!seen.has(k)) {
+          seen.add(k);
+          out.push([k, f]);
+        }
+      }
+    }
+    return out;
   });
-  const values = createMemo(() => effectiveConfig(schema(), stored()));
+
+  /** Effective value for a field: first stored override among targets, else default. */
+  const valueOf = (key: string): unknown => {
+    for (const t of targets()) {
+      const all = store.pluginsConfig || {};
+      const bag = (all[pluginKey(t.kind, t.id)] as Record<string, unknown> | undefined) || {};
+      if (bag[key] !== undefined) return bag[key];
+      const f = t.schema[key];
+      if (f && 'default' in f && f.default !== undefined) return f.default;
+    }
+    const f0 = fields().find(([k]) => k === key)?.[1];
+    return f0?.default ?? '';
+  };
 
   const [exchanges, setExchanges] = createSignal<string[]>([]);
-  // Lazy: pull gateway exchange ids once an `exchange` field is rendered.
   createMemo(() => {
-    if (!schema() || !('exchange' in schema()!)) return;
-    const mode = String(values().gateway || 'auto') as 'auto' | 'pyne' | 'sidecar';
+    if (!fields().some(([k]) => k === EXCHANGE_FIELD)) return;
+    const mode = String(valueOf('gateway') || 'auto') as 'auto' | 'pyne' | 'sidecar';
     void fetchGatewayExchanges(mode).then(setExchanges);
   });
 
+  /** Dropdown options for the exchange field: advertised ids + current value. */
+  const exchangeOptions = createMemo<string[]>(() => {
+    const cur = String(valueOf(EXCHANGE_FIELD) || '').trim();
+    const set = new Set<string>(exchanges());
+    if (cur) set.add(cur);
+    return [...set];
+  });
+
   const setField = (key: string, v: unknown) => {
-    const p = plugin();
-    if (!p) return;
-    setStore('pluginsConfig', pluginKey(props.kind, p.id), key, v);
+    let changed = false;
+    for (const t of targets()) {
+      if (!(key in t.schema)) continue;
+      setStore('pluginsConfig', pluginKey(t.kind, t.id), key, v);
+      changed = true;
+    }
+    if (!changed) return;
     void persist();
     props.onApplied?.();
   };
 
-  const inputTitle = (key: string, f: FieldSchema) =>
-    f.description || f.label || key;
+  const inputTitle = (key: string, f: FieldSchema) => f.description || f.label || key;
 
   return (
-    <Show when={schema()}>
+    <Show when={fields().length > 0}>
       <div
         class="flex items-center gap-2"
-        data-testid={`axis-cfg-${props.kind}`}
-        title={
-          props.kind === 'stream'
-            ? 'Plugin settings · toggle Live to apply'
-            : 'Plugin settings · applied on Load/Reload'
-        }
+        data-testid="axis-cfg-plugins"
+        title="Shared source/stream settings · history applies on Load/Reload · live applies on Live toggle"
       >
-        <datalist id={EXCHANGE_DATALIST_ID}>
-          <For each={exchanges()}>{(e) => <option value={e} />}</For>
-        </datalist>
-        <For each={Object.entries(schema()!)}>
+        <For each={fields()}>
           {([key, f]) => (
             <label class="flex items-center gap-1 text-[11px] opacity-80">
               <span class="whitespace-nowrap">{f.label || key}</span>
               <Show
-                when={f.type !== 'select'}
+                when={f.type !== 'select' && key !== EXCHANGE_FIELD}
                 fallback={
-                  <select
-                    class="sc-input max-w-[8em] font-mono text-[12px]"
-                    value={String(values()[key] ?? '')}
-                    onChange={(e) => setField(key, e.currentTarget.value)}
+                  <Show
+                    when={key !== EXCHANGE_FIELD}
+                    fallback={
+                      <select
+                        class="sc-input w-[9em] font-mono text-[12px]"
+                        value={String(valueOf(key) ?? '')}
+                        onChange={(e) => setField(key, e.currentTarget.value)}
+                        title={inputTitle(key, f)}
+                      >
+                        <Show when={exchangeOptions().length === 0}>
+                          <option value="">loading…</option>
+                        </Show>
+                        <For each={exchangeOptions()}>
+                          {(o) => <option value={o}>{o}</option>}
+                        </For>
+                      </select>
+                    }
                   >
-                    <For each={f.options || []}>{(o) => <option value={o}>{o}</option>}</For>
-                  </select>
+                    <select
+                      class="sc-input max-w-[8em] font-mono text-[12px]"
+                      value={String(valueOf(key) ?? '')}
+                      onChange={(e) => setField(key, e.currentTarget.value)}
+                    >
+                      <For each={f.options || []}>{(o) => <option value={o}>{o}</option>}</For>
+                    </select>
+                  </Show>
                 }
               >
                 <Show
@@ -112,20 +172,23 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
                   fallback={
                     <input
                       type="checkbox"
-                      checked={Boolean(values()[key])}
+                      checked={Boolean(valueOf(key))}
                       onChange={(e) => setField(key, e.currentTarget.checked)}
                     />
                   }
                 >
                   <input
-                    type={f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}
-                    class={`sc-input ${key === 'exchange' ? 'w-[8em]' : 'w-[7em]'} font-mono text-[12px]`}
+                    type={
+                      f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'
+                    }
+                    class="sc-input w-[7em] font-mono text-[12px]"
                     min={f.min}
                     max={f.max}
                     step={f.step}
                     placeholder={f.placeholder}
-                    list={key === 'exchange' ? EXCHANGE_DATALIST_ID : undefined}
-                    value={f.type === 'number' ? Number(values()[key] ?? 0) : String(values()[key] ?? '')}
+                    value={
+                      f.type === 'number' ? Number(valueOf(key) ?? 0) : String(valueOf(key) ?? '')
+                    }
                     onInput={(e) => {
                       const raw = e.currentTarget.value;
                       setField(key, f.type === 'number' ? Number(raw) : raw);

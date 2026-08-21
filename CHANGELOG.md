@@ -17,7 +17,7 @@ _Generated/updated: 2026-08-21 · 250 commits · describe-tag: `v2.0.20`_
 
 ### Added
 
-- **Topbar plugin config row** — inline settings next to the Source and Stream pickers, rendered from each plugin's `configSchema` (string / number / boolean / select / password). Values persist to `pluginsConfig` and flow to plugins as `opts.config`; an `exchange` field gets a datalist fed by the datafeed gateway `/health` exchange list. Makes CCXT Gateway sources/streams configurable from the UI.
+- **Topbar plugin config row** — one shared inline settings row next to the Source picker, rendered from the union of the active source/stream `configSchema` fields (string / number / boolean / select / password). Each field appears once and writes through to every declaring plugin's `pluginsConfig` bag (ccxt-rest + ccxt-ws stay in sync); an `exchange` field renders as a dropdown fed by the datafeed gateway `/health` exchange list. Makes CCXT Gateway sources/streams configurable from the UI.
 
 - **Stream config pass-through** — `multiplex.startLive` now passes `store.pluginsConfig[stream:<id>]` into `stream.start({ config })`, matching the source path.
 

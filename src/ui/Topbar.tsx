@@ -396,7 +396,7 @@ export const Topbar: Component<{
           <For each={sources()}>{(s) => <option value={s.id}>{s.name}</option>}</For>
         </TopbarField>
 
-        <PluginConfigRow kind="source" onApplied={() => void loadHistorical({ force: true })} />
+        <PluginConfigRow onApplied={() => void loadHistorical({ force: true })} />
 
         <Show when={store.source === 'csv-upload'}>
           <button
@@ -524,8 +524,6 @@ export const Topbar: Component<{
         >
           <For each={streams()}>{(s) => <option value={s.id}>{s.name}</option>}</For>
         </TopbarField>
-
-        <PluginConfigRow kind="stream" />
 
         {/* Action cluster: Run/Re-run · Live · Replay — Run is accent only while executing */}
         <RunSplitButton
