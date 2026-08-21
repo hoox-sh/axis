@@ -532,9 +532,12 @@ export const ccxtWsStream: StreamPlugin = {
     gateway: { type: 'select', default: 'auto', label: 'Gateway' },
   },
   start({ symbol, interval, onBar, onStatus, onError, config }) {
-    const exchange = String(config?.exchange ?? '');
+    const exchange = String(config?.exchange ?? '').trim();
+    if (!exchange) {
+      onError?.(new Error('ccxt-ws: exchange id not configured (stream settings)'));
+      return () => {};
+    }
     const gateway = String(config?.gateway ?? 'auto') as 'auto' | 'pyne' | 'sidecar';
-    const { gatewayWs } = require('../data/gateway');
     const ws: WebSocket = gatewayWs(
       gateway,
       `/watch?exchange=${encodeURIComponent(exchange)}&symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(interval)}`,

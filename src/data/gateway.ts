@@ -37,6 +37,64 @@ export type GatewayMode = ProviderGateway | 'auto';
 
 export const DATAFEED_DEFAULT_PORT = 5003;
 
+/**
+ * Product hosts where nginx terminates TLS and reverse-proxies Pro API routes
+ * (including `/datafeed/`) to loopback :5002. Canonical list lives in
+ * `workers/catalog` (`PRODUCT_SAME_ORIGIN_API_HOSTS`) — kept inline here so
+ * this transport module stays dependency-free (importing workers/catalog
+ * would pull plugins/loader into every catalog chunk).
+ */
+const PRODUCT_SAME_ORIGIN_HOSTS: readonly string[] = [
+  'axis.hoox.sh',
+  'pynescript.online',
+  'www.pynescript.online',
+  'server1.pynescript.online',
+];
+
+/** Product API origin used cross-origin by remote non-product pages (Pages previews). */
+const PRODUCT_DATAFEED_ORIGIN = 'https://axis.hoox.sh';
+
+function isLoopbackHost(host: string): boolean {
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+}
+
+/**
+ * True when the given page origin is a non-loopback host (VPS demo, Pages…).
+ * On such pages loopback gateway URLs point at the *visitor's* machine.
+ */
+export function isRemotePageOrigin(origin: string | undefined | null): boolean {
+  if (!origin) return false;
+  try {
+    return !isLoopbackHost(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function currentPageOrigin(): string | undefined {
+  try {
+    return typeof location !== 'undefined' ? location.origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Same-origin datafeed base for remote pages. Known product hosts proxy
+ * `/datafeed/` themselves; other remote pages (Cloudflare Pages previews)
+ * use the product API origin cross-origin (pyne allows those Origins).
+ */
+function remoteDatafeedBase(pageOrigin: string): string {
+  try {
+    const u = new URL(pageOrigin);
+    const host = u.hostname.replace(/^www\./, '');
+    const known = PRODUCT_SAME_ORIGIN_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+    return `${known ? u.origin : PRODUCT_DATAFEED_ORIGIN}/datafeed`;
+  } catch {
+    return `${PRODUCT_DATAFEED_ORIGIN}/datafeed`;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Auto-probe cache
 // ---------------------------------------------------------------------------
@@ -52,13 +110,29 @@ const PROBE_TTL_MS = 30_000;
 /**
  * Resolve the gateway base URL for the given mode.
  * Returns `null` for `direct` mode (caller should use venue-native fetch).
+ *
+ * Remote-page awareness (hardened VPS pattern): when the page origin is a
+ * non-loopback host, loopback defaults would hit the *visitor's* machine —
+ * `pyne`/`auto` resolve to the same-origin `/datafeed` (product hosts) or the
+ * product API origin (Pages previews). Explicit `endpoint` always wins.
+ *
+ * @param pageOrigin - injectable for tests; defaults to `location.origin`
  */
-export function gatewayBase(mode: GatewayMode, endpoint?: string): string | null {
+export function gatewayBase(mode: GatewayMode, endpoint?: string, pageOrigin?: string): string | null {
   if (mode === 'direct') return null;
-  if (mode === 'pyne') return `${endpoint ?? 'http://127.0.0.1:5002'}/datafeed`;
+  const origin = pageOrigin ?? currentPageOrigin();
+  const remote = isRemotePageOrigin(origin);
+  if (mode === 'pyne') {
+    if (endpoint) return `${endpoint}/datafeed`;
+    if (remote && origin) return remoteDatafeedBase(origin);
+    return 'http://127.0.0.1:5002/datafeed';
+  }
   if (mode === 'sidecar') return `http://127.0.0.1:${DATAFEED_DEFAULT_PORT}`;
-  // auto: prefer sidecar, fall back to pyne
-  if (_sidecarOk) return `http://127.0.0.1:${DATAFEED_DEFAULT_PORT}`;
+  // auto: prefer sidecar (local pages only), fall back to pyne
+  if (!remote && _sidecarOk) return `http://127.0.0.1:${DATAFEED_DEFAULT_PORT}`;
+  if (remote && origin) {
+    return endpoint ? `${endpoint}/datafeed` : remoteDatafeedBase(origin);
+  }
   return `${endpoint ?? 'http://127.0.0.1:5002'}/datafeed`;
 }
 
@@ -94,8 +168,9 @@ export async function gatewayFetch(
   path: string,
   params?: Record<string, string>,
   endpoint?: string,
+  pageOrigin?: string,
 ): Promise<Response> {
-  const base = gatewayBase(mode, endpoint);
+  const base = gatewayBase(mode, endpoint, pageOrigin);
   if (!base) throw new Error('Gateway mode is direct — use venue-native fetch instead');
   const url = new URL(`${base}${path}`);
   if (params) {
@@ -118,8 +193,9 @@ export function gatewayWs(
   mode: GatewayMode,
   path: string,
   endpoint?: string,
+  pageOrigin?: string,
 ): WebSocket {
-  const base = gatewayBase(mode, endpoint);
+  const base = gatewayBase(mode, endpoint, pageOrigin);
   if (!base) throw new Error('Gateway mode is direct — use venue-native WS');
   const httpBase = base.replace(/^http/, 'ws');
   return new WebSocket(`${httpBase}${path}`);

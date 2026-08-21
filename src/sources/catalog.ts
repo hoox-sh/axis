@@ -942,8 +942,10 @@ export const ccxtRest: SourcePlugin = {
   async fetchHistorical({ symbol, interval, limit, endTime, config }) {
     const { gatewayFetch } = await import('../data/gateway');
     const cfg = resolveConfig(this.configSchema, config);
+    const exchange = String(cfg.exchange || '').trim();
+    if (!exchange) throw new Error('ccxt-rest: exchange id not configured (source settings)');
     const params: Record<string, string> = {
-      exchange: String(cfg.exchange),
+      exchange,
       symbol,
       timeframe: interval,
     };

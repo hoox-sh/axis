@@ -98,6 +98,23 @@ describe('ccxt-rest source plugin', () => {
     }
   });
 
+  it('fetchHistorical throws a clear error when exchange is not configured', async () => {
+    let threw = false;
+    let message = '';
+    try {
+      await ccxtRest.fetchHistorical({
+        symbol: 'ETH/USDT',
+        interval: '1d',
+        config: { exchange: '', gateway: 'pyne' },
+      });
+    } catch (e) {
+      threw = true;
+      message = e instanceof Error ? e.message : String(e);
+    }
+    expect(threw).toBe(true);
+    expect(message).toMatch(/exchange id not configured/i);
+  });
+
   it('fetchHistorical throws on non-ok response', async () => {
     const origFetch = globalThis.fetch;
     globalThis.fetch = (() => {

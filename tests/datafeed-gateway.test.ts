@@ -7,6 +7,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import {
   gatewayBase,
   gatewayFetch,
+  isRemotePageOrigin,
   probeSidecar,
   DATAFEED_DEFAULT_PORT,
   type GatewayMode,
@@ -35,6 +36,62 @@ describe('gatewayBase', () => {
   it('auto falls back to pyne when sidecar not probed', () => {
     const base = gatewayBase('auto');
     expect(base).toBe('http://127.0.0.1:5002/datafeed');
+  });
+});
+
+describe('isRemotePageOrigin', () => {
+  it('loopback origins are not remote', () => {
+    expect(isRemotePageOrigin('http://localhost:3000')).toBe(false);
+    expect(isRemotePageOrigin('http://127.0.0.1:3000')).toBe(false);
+    expect(isRemotePageOrigin(undefined)).toBe(false);
+    expect(isRemotePageOrigin('not-a-url')).toBe(false);
+  });
+
+  it('non-loopback origins are remote', () => {
+    expect(isRemotePageOrigin('https://axis.hoox.sh')).toBe(true);
+    expect(isRemotePageOrigin('https://abc.pynescript-axis.pages.dev')).toBe(true);
+  });
+});
+
+describe('gatewayBase remote-page resolution (hardened VPS)', () => {
+  it('pyne on product same-origin host → same-origin /datafeed', () => {
+    expect(gatewayBase('pyne', undefined, 'https://axis.hoox.sh')).toBe(
+      'https://axis.hoox.sh/datafeed',
+    );
+  });
+
+  it('pyne on Pages preview → product API origin cross-origin', () => {
+    expect(gatewayBase('pyne', undefined, 'https://abc.pynescript-axis.pages.dev')).toBe(
+      'https://axis.hoox.sh/datafeed',
+    );
+  });
+
+  it('pyne on loopback page keeps loopback default', () => {
+    expect(gatewayBase('pyne', undefined, 'http://localhost:3000')).toBe(
+      'http://127.0.0.1:5002/datafeed',
+    );
+    expect(gatewayBase('pyne', undefined, undefined)).toBe('http://127.0.0.1:5002/datafeed');
+  });
+
+  it('explicit endpoint wins over remote-page resolution', () => {
+    expect(gatewayBase('pyne', 'http://myhost:9999', 'https://axis.hoox.sh')).toBe(
+      'http://myhost:9999/datafeed',
+    );
+    expect(gatewayBase('auto', 'http://myhost:9999', 'https://axis.hoox.sh')).toBe(
+      'http://myhost:9999/datafeed',
+    );
+  });
+
+  it('auto on remote page skips sidecar probe entirely', () => {
+    expect(gatewayBase('auto', undefined, 'https://axis.hoox.sh')).toBe(
+      'https://axis.hoox.sh/datafeed',
+    );
+  });
+
+  it('sidecar stays loopback regardless of page origin', () => {
+    expect(gatewayBase('sidecar', undefined, 'https://axis.hoox.sh')).toBe(
+      `http://127.0.0.1:${DATAFEED_DEFAULT_PORT}`,
+    );
   });
 });
 
