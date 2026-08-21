@@ -509,12 +509,67 @@ export const krakenStream: StreamPlugin = {
   },
 };
 
+/**
+ * CCXT live kline stream via datafeed gateway WebSocket.
+ * Routes through the PYNE datafeed gateway or local sidecar.
+ */
+export const ccxtWsStream: StreamPlugin = {
+  id: 'ccxt-ws',
+  name: 'CCXT WS (Gateway)',
+  kind: 'stream',
+  builtIn: true,
+  description: 'Real-time klines via datafeed gateway WebSocket.',
+  capabilities: {
+    needsNetwork: true,
+    transport: 'ws',
+    venue: 'generic',
+    market: 'spot',
+    klineStream: true,
+  },
+  configSchema: {
+    exchange: { type: 'string', default: '', label: 'Exchange ID' },
+    gateway: { type: 'select', default: 'auto', label: 'Gateway' },
+  },
+  start({ symbol, interval, onBar, onStatus, onError, config }) {
+    const exchange = String(config?.exchange ?? '');
+    const gateway = String(config?.gateway ?? 'auto') as 'auto' | 'pyne' | 'sidecar';
+    const { gatewayWs } = require('../data/gateway');
+    const ws: WebSocket = gatewayWs(
+      gateway,
+      `/watch?exchange=${encodeURIComponent(exchange)}&symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(interval)}`,
+    );
+    ws.onmessage = (ev: MessageEvent) => {
+      try {
+        const frame = JSON.parse(String(ev.data));
+        onBar({
+          time: frame.time,
+          open: frame.open,
+          high: frame.high,
+          low: frame.low,
+          close: frame.close,
+          volume: frame.volume,
+          closed: frame.closed,
+        });
+      } catch {
+        /* ignore malformed frames */
+      }
+    };
+    ws.onerror = (ev: Event) => onError?.(new Error(String(ev)));
+    ws.onopen = () => onStatus?.({ state: 'open' });
+    ws.onclose = () => onStatus?.({ state: 'closed' });
+    return () => {
+      ws.close();
+    };
+  },
+};
+
 export const BUILTIN_STREAMS: StreamPlugin[] = [
   binanceStream,
   okxStream,
   bybitStream,
   coinbaseStream,
   krakenStream,
+  ccxtWsStream,
   mockPollStream,
 ];
 
