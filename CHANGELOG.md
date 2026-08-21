@@ -15,6 +15,12 @@ _Generated/updated: 2026-08-21 · 250 commits · describe-tag: `v2.0.20`_
 
 ## [Unreleased]
 
+### Added
+
+- **Topbar plugin config row** — inline settings next to the Source and Stream pickers, rendered from each plugin's `configSchema` (string / number / boolean / select / password). Values persist to `pluginsConfig` and flow to plugins as `opts.config`; an `exchange` field gets a datalist fed by the datafeed gateway `/health` exchange list. Makes CCXT Gateway sources/streams configurable from the UI.
+
+- **Stream config pass-through** — `multiplex.startLive` now passes `store.pluginsConfig[stream:<id>]` into `stream.start({ config })`, matching the source path.
+
 ### Fixed
 
 - **Gateway loopback on remote pages (hardened VPS)** — `gatewayBase` resolved `pyne`/`auto` to `http://127.0.0.1:5002/datafeed` even when the page was served from a remote host, so browsers on `axis.hoox.sh` fired doomed cross-origin requests at the *visitor's* machine (CORS NetworkError). Remote pages now resolve to same-origin `/datafeed` on product hosts (nginx) or the product API origin cross-origin (Pages previews); loopback behavior is unchanged for local dev. Explicit endpoint overrides still win.

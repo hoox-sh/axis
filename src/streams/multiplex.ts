@@ -72,6 +72,7 @@ import {
 } from './catalog';
 import { noteDataManagerLiveBar } from '../data/expand-cache';
 import { sanitizeBar } from '../data/parse-bars';
+import { pluginKey } from '../plugins/types';
 import { classifyTransport } from '../ui/telemetry';
 import { HEAVY_BARS_THRESHOLD } from '../chart/heavy-data';
 
@@ -261,10 +262,15 @@ export function startLive(
     }
   };
 
+  // Per-plugin config (Topbar config row → store.pluginsConfig) — e.g. ccxt-ws exchange id
+  const streamCfg =
+    ((store.pluginsConfig || {})[pluginKey('stream', stream.id)] as Record<string, unknown> | undefined) ||
+    {};
   const stop = stream.start({
     symbol: sym,
     interval: iv,
     lastBar,
+    config: streamCfg,
     onBar: (raw: Bar) => {
       if (!isCurrent()) return;
       // Drop partial / NaN OHLCV so a bad venue tick cannot poison the chart

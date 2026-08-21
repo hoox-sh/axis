@@ -80,6 +80,7 @@ import { HooxLoader } from './HooxLoader';
 import { ChartLayoutMenu } from './ChartLayoutMenu';
 import { CompareSymbolControl } from './CompareSymbolControl';
 import { TopbarField } from './TopbarField';
+import { PluginConfigRow } from './PluginConfigRow';
 import { startBarReplay, exitBarReplay } from './BarReplayControls';
 import { isReplayActive, subscribeReplay } from '../chart/bar-replay';
 import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
@@ -395,6 +396,8 @@ export const Topbar: Component<{
           <For each={sources()}>{(s) => <option value={s.id}>{s.name}</option>}</For>
         </TopbarField>
 
+        <PluginConfigRow kind="source" onApplied={() => void loadHistorical({ force: true })} />
+
         <Show when={store.source === 'csv-upload'}>
           <button
             type="button"
@@ -521,6 +524,8 @@ export const Topbar: Component<{
         >
           <For each={streams()}>{(s) => <option value={s.id}>{s.name}</option>}</For>
         </TopbarField>
+
+        <PluginConfigRow kind="stream" />
 
         {/* Action cluster: Run/Re-run · Live · Replay — Run is accent only while executing */}
         <RunSplitButton
