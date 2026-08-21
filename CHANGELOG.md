@@ -23,6 +23,10 @@ _Generated/updated: 2026-08-21 · 250 commits · describe-tag: `v2.0.20`_
 
 ### Fixed
 
+- **Config row crash on first save** — `setField` wrote `pluginsConfig` through a deep Solid store path whose parent bag did not exist yet; solid-js/store does not auto-create intermediate nodes, so the first-ever config change threw `TypeError: can't access property "exchange"` and never persisted. Bag creation is now guarded (`writePluginField`), covered by regression tests and a browser e2e run.
+
+- **Gateway select had no choices** — the ccxt `gateway` schema fields lacked `options`, so the dropdown rendered only its current value. `auto | pyne | sidecar` are now declared on both `ccxt-rest` and `ccxt-ws`.
+
 - **Config row deduplication** — the Topbar renders one shared row for the union of active source/stream config fields (was: duplicated per picker); changes write through to all declaring plugins so ccxt-rest and ccxt-ws stay in sync.
 
 - **Gateway loopback on remote pages (hardened VPS)** — `gatewayBase` resolved `pyne`/`auto` to `http://127.0.0.1:5002/datafeed` even when the page was served from a remote host, so browsers on `axis.hoox.sh` fired doomed cross-origin requests at the *visitor's* machine (CORS NetworkError). Remote pages now resolve to same-origin `/datafeed` on product hosts (nginx) or the product API origin cross-origin (Pages previews); loopback behavior is unchanged for local dev. Explicit endpoint overrides still win.

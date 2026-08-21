@@ -8,8 +8,10 @@ import {
   effectiveConfig,
   fetchGatewayExchanges,
   hasConfigFields,
+  writePluginField,
   _resetGatewayExchangeCache,
 } from '../src/ui/plugin-config';
+import { store, setStore } from '../src/store';
 import type { ConfigSchema } from '../src/plugins/types';
 
 afterEach(() => {
@@ -49,6 +51,25 @@ describe('effectiveConfig', () => {
       a: 'x',
       b: 1,
     });
+  });
+});
+
+describe('writePluginField', () => {
+  const restore = () => setStore('pluginsConfig', {});
+  const bag = () =>
+    (store.pluginsConfig as Record<string, Record<string, unknown>>)['source:ccxt-rest'];
+
+  it('creates a missing bag without throwing (solid deep-path trap)', () => {
+    restore();
+    expect(() => writePluginField('source:ccxt-rest', 'exchange', 'okx')).not.toThrow();
+    expect(bag()).toEqual({ exchange: 'okx' });
+  });
+
+  it('deep-merges into an existing bag and overwrites fields', () => {
+    restore();
+    writePluginField('source:ccxt-rest', 'gateway', 'pyne');
+    writePluginField('source:ccxt-rest', 'exchange', 'kraken');
+    expect(bag()).toEqual({ gateway: 'pyne', exchange: 'kraken' });
   });
 });
 

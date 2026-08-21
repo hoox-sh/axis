@@ -529,7 +529,7 @@ export const ccxtWsStream: StreamPlugin = {
   },
   configSchema: {
     exchange: { type: 'string', default: '', label: 'Exchange ID' },
-    gateway: { type: 'select', default: 'auto', label: 'Gateway' },
+    gateway: { type: 'select', default: 'auto', label: 'Gateway', options: ['auto', 'pyne', 'sidecar'] },
   },
   start({ symbol, interval, onBar, onStatus, onError, config }) {
     const exchange = String(config?.exchange ?? '').trim();

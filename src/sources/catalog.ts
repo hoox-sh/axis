@@ -938,7 +938,7 @@ export const ccxtRest: SourcePlugin = {
   capabilities: { needsNetwork: true, venue: 'generic', market: 'spot', transport: 'rest' },
   configSchema: {
     exchange: { type: 'string', default: '', label: 'Exchange ID', description: 'CCXT exchange id (bybit, bitget, ...)' },
-    gateway: { type: 'select', default: 'auto', label: 'Gateway', description: 'auto | pyne | sidecar' },
+    gateway: { type: 'select', default: 'auto', label: 'Gateway', options: ['auto', 'pyne', 'sidecar'], description: 'auto | pyne | sidecar' },
   },
   async fetchHistorical({ symbol, interval, limit, endTime, config }) {
     const { gatewayFetch } = await import('../data/gateway');

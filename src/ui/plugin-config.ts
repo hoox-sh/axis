@@ -28,10 +28,29 @@
  */
 
 import type { ConfigSchema } from '../plugins/types';
+import { setStore, store } from '../store';
 
 /** True when the plugin declares at least one config field. */
 export function hasConfigFields(schema?: ConfigSchema): boolean {
   return !!schema && Object.keys(schema).length > 0;
+}
+
+/**
+ * Write a single field into a plugin's `pluginsConfig` bag.
+ *
+ * `solid-js/store` does not auto-create intermediate nodes on deep paths, so
+ * `setStore('pluginsConfig', key, field, v)` throws a TypeError when the
+ * plugin's bag does not exist yet (first-ever config write). Create the bag
+ * shallowly in that case.
+ */
+export function writePluginField(configKey: string, key: string, value: unknown): void {
+  const bags = store.pluginsConfig || {};
+  const bag = bags[configKey];
+  if (!bag || typeof bag !== 'object') {
+    setStore('pluginsConfig', configKey, { [key]: value });
+  } else {
+    setStore('pluginsConfig', configKey, key, value);
+  }
 }
 
 /**

@@ -39,10 +39,10 @@
 
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import type { JSX } from 'solid-js';
-import { store, setStore, persist } from '../store';
+import { store, persist } from '../store';
 import { getActiveSource, getActiveStream } from '../plugins/active';
 import { pluginKey, type ConfigSchema, type FieldSchema } from '../plugins/types';
-import { fetchGatewayExchanges } from './plugin-config';
+import { fetchGatewayExchanges, writePluginField } from './plugin-config';
 
 const EXCHANGE_FIELD = 'exchange';
 
@@ -136,7 +136,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
     let changed = false;
     for (const t of targets()) {
       if (!(key in t.schema)) continue;
-      setStore('pluginsConfig', pluginKey(t.kind, t.id), key, v);
+      writePluginField(pluginKey(t.kind, t.id), key, v);
       changed = true;
     }
     if (!changed) return;
