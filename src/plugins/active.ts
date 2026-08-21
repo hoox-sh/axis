@@ -67,7 +67,13 @@ export function getActiveStorageId(): string {
 
 export function getActiveSource(): SourcePlugin {
   ensureBuiltins();
-  const id = getActiveSourceId();
+  let id = getActiveSourceId();
+  // Gateway swap: long-tail ccxt:<exchange> venues use ccxt-rest
+  // when gateway is not direct (reads store directly to avoid circular dep).
+  const gw = store.provider?.gateway;
+  if (gw && gw !== 'direct' && id.startsWith('ccxt:')) {
+    id = 'ccxt-rest';
+  }
   const p = registry.getSource(id) || registry.getSource('binance-rest');
   if (!p) throw new Error(`No source plugin registered (wanted ${id})`);
   return p;
@@ -75,7 +81,12 @@ export function getActiveSource(): SourcePlugin {
 
 export function getActiveStream(): StreamPlugin {
   ensureBuiltins();
-  const id = getActiveStreamId();
+  let id = getActiveStreamId();
+  // Gateway swap: long-tail ccxt:<exchange> venues use ccxt-ws
+  const gw = store.provider?.gateway;
+  if (gw && gw !== 'direct' && id.startsWith('ccxt:')) {
+    id = 'ccxt-ws';
+  }
   const p = registry.getStream(id) || registry.getStream('binance-ws');
   if (!p) throw new Error(`No stream plugin registered (wanted ${id})`);
   return p;
