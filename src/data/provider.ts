@@ -194,6 +194,7 @@ const SOURCE_STREAM: Record<string, string> = {
   'bybit-rest': 'bybit-ws',
   'coinbase-rest': 'coinbase-ws',
   'kraken-rest': 'kraken-ws',
+  'ccxt-rest': 'ccxt-ws',
 };
 
 /**

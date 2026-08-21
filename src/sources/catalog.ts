@@ -367,6 +367,8 @@ export function sourcePageLimit(sourceId: string): number {
       return 720;
     case 'mock-walk':
       return 1000;
+    case 'ccxt-rest':
+      return 500;
     default:
       return 500;
   }
@@ -922,6 +924,46 @@ export const geckoTerminalOhlcv: SourcePlugin = {
   },
 };
 
+/**
+ * CCXT long-tail exchange OHLCV via datafeed gateway (PYNE or sidecar).
+ * Routes through `src/data/gateway.ts` — credentials stay server-side.
+ */
+export const ccxtRest: SourcePlugin = {
+  id: 'ccxt-rest',
+  name: 'CCXT (Gateway)',
+  kind: 'source',
+  builtIn: true,
+  description: 'Long-tail exchange OHLCV via datafeed gateway (PYNE or sidecar).',
+  capabilities: { needsNetwork: true, venue: 'generic', market: 'spot', transport: 'rest' },
+  configSchema: {
+    exchange: { type: 'string', default: '', label: 'Exchange ID', description: 'CCXT exchange id (bybit, bitget, ...)' },
+    gateway: { type: 'select', default: 'auto', label: 'Gateway', description: 'auto | pyne | sidecar' },
+  },
+  async fetchHistorical({ symbol, interval, limit, endTime, config }) {
+    const { gatewayFetch } = await import('../data/gateway');
+    const cfg = resolveConfig(this.configSchema, config);
+    const params: Record<string, string> = {
+      exchange: String(cfg.exchange),
+      symbol,
+      timeframe: interval,
+    };
+    if (typeof endTime === 'number' && Number.isFinite(endTime) && endTime > 0) {
+      params.since = String(Math.floor(endTime * 1000));
+    }
+    if (limit) params.limit = String(limit);
+    const gatewayMode = (String(cfg.gateway || 'auto') as 'auto' | 'pyne' | 'sidecar');
+    const res = await gatewayFetch(gatewayMode, '/ohlcv', params);
+    if (!res.ok) throw new Error(`Gateway ohlcv ${res.status}`);
+    const json = await res.json();
+    if (!Array.isArray(json)) throw new Error('Gateway returned non-array');
+    return mapValidBars(json, (row: unknown) => {
+      if (!row || typeof row !== 'object') return null;
+      const r = row as Record<string, unknown>;
+      return barFromFields(r.time, r.open, r.high, r.low, r.close, r.volume);
+    });
+  },
+};
+
 /** Built-in sources in UI order */
 export const BUILTIN_SOURCES: SourcePlugin[] = [
   binanceRest,
@@ -930,6 +972,7 @@ export const BUILTIN_SOURCES: SourcePlugin[] = [
   coinbaseRest,
   krakenRest,
   geckoTerminalOhlcv,
+  ccxtRest,
   mockWalk,
   csvUpload,
   dataManagerSource,
