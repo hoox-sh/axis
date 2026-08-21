@@ -53,7 +53,23 @@ describe('effectiveConfig', () => {
 });
 
 describe('fetchGatewayExchanges', () => {
-  it('parses the /health exchanges list', async () => {
+  it('prefers the full ccxt_exchanges list over native adapters', async () => {
+    globalThis.fetch = (() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            status: 'ok',
+            exchanges: ['binance', 'okx'],
+            ccxt_exchanges: ['alpaca', 'binance', 'kraken', 'mexc'],
+          }),
+          { status: 200 },
+        ),
+      )) as typeof fetch;
+    const list = await fetchGatewayExchanges('pyne', true);
+    expect(list).toEqual(['alpaca', 'binance', 'kraken', 'mexc']);
+  });
+
+  it('falls back to exchanges when ccxt is disabled upstream', async () => {
     globalThis.fetch = (() =>
       Promise.resolve(
         new Response(JSON.stringify({ status: 'ok', exchanges: ['binance', 'okx', ''] }), {

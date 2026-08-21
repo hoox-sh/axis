@@ -17,17 +17,21 @@ _Generated/updated: 2026-08-21 · 250 commits · describe-tag: `v2.0.20`_
 
 ### Added
 
-- **Topbar plugin config row** — one shared inline settings row next to the Source picker, rendered from the union of the active source/stream `configSchema` fields (string / number / boolean / select / password). Each field appears once and writes through to every declaring plugin's `pluginsConfig` bag (ccxt-rest + ccxt-ws stay in sync); an `exchange` field renders as a dropdown fed by the datafeed gateway `/health` exchange list. Makes CCXT Gateway sources/streams configurable from the UI.
+- **Plugin config `advanced` fields + Settings section** — schema fields can now be marked `advanced` (API base URL, Bars, Synthesize on failure, …). They are hidden from the Topbar config row and rendered in Settings → "Source & stream plugins" with full descriptions, using the shared form classes.
 
-- **Stream config pass-through** — `multiplex.startLive` now passes `store.pluginsConfig[stream:<id>]` into `stream.start({ config })`, matching the source path.
+- **Full unified ccxt exchange dropdown** — the Exchange ID select is fed by the gateway's complete ccxt exchange list (`/health` → new `ccxt_exchanges`, mirrors `ccxt.exchanges`; ~103 venues) instead of only the native adapters. PYNE side: `backend/api/datafeed.py` health payload extended accordingly.
 
 ### Fixed
+
+- **Config row deduplication** — the Topbar renders one shared row for the union of active source/stream config fields (was: duplicated per picker); changes write through to all declaring plugins so ccxt-rest and ccxt-ws stay in sync.
 
 - **Gateway loopback on remote pages (hardened VPS)** — `gatewayBase` resolved `pyne`/`auto` to `http://127.0.0.1:5002/datafeed` even when the page was served from a remote host, so browsers on `axis.hoox.sh` fired doomed cross-origin requests at the *visitor's* machine (CORS NetworkError). Remote pages now resolve to same-origin `/datafeed` on product hosts (nginx) or the product API origin cross-origin (Pages previews); loopback behavior is unchanged for local dev. Explicit endpoint overrides still win.
 
 - **ccxt-ws `require()` actually removed** — v2.0.21 added the static `gatewayWs` import but left the shadowing CommonJS `require('../data/gateway')` call in place, so the browser bundle still threw on stream start. The `require` is now gone.
 
 ### Changed
+
+- **Stream config pass-through** — `multiplex.startLive` now passes `store.pluginsConfig[stream:<id>]` into `stream.start({ config })`, matching the source path, so ccxt-ws receives the configured exchange id.
 
 - **ccxt plugins: clear error for unconfigured exchange** — `ccxt-rest` / `ccxt-ws` no longer fire requests with an empty `exchange=` param; they surface "exchange id not configured" instead.
 

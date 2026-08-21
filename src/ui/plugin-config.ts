@@ -62,8 +62,10 @@ export function _resetGatewayExchangeCache(): void {
 }
 
 /**
- * Exchange ids advertised by the datafeed gateway (`GET /health`).
- * Returns the cached list on network failure (stale-while-error).
+ * Exchange ids for the gateway dropdown. Prefers the **full ccxt exchange
+ * list** (`GET /health` → `ccxt_exchanges`, mirrors `ccxt.exchanges` — ccxt
+ * unifies every supported venue) and falls back to the shorter native
+ * `exchanges` list. Cached 60s; returns stale cache on network failure.
  */
 export async function fetchGatewayExchanges(
   mode: 'auto' | 'pyne' | 'sidecar' = 'auto',
@@ -74,10 +76,13 @@ export async function fetchGatewayExchanges(
     const { gatewayFetch } = await import('../data/gateway');
     const res = await gatewayFetch(mode, '/health');
     if (!res.ok) throw new Error(`gateway health ${res.status}`);
-    const json = (await res.json()) as { exchanges?: unknown };
-    const list = Array.isArray(json?.exchanges)
-      ? json.exchanges.map((e) => String(e).trim()).filter(Boolean)
-      : [];
+    const json = (await res.json()) as { exchanges?: unknown; ccxt_exchanges?: unknown };
+    const pick = (v: unknown): string[] =>
+      Array.isArray(v) ? v.map((e) => String(e).trim()).filter(Boolean) : [];
+    // Full unified ccxt list wins; native adapters are a subset fallback.
+    const list = pick(json?.ccxt_exchanges).length
+      ? pick(json?.ccxt_exchanges)
+      : pick(json?.exchanges);
     _cache = { ts: Date.now(), list };
     return list;
   } catch {

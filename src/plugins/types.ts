@@ -63,6 +63,11 @@ export interface FieldSchema {
   max?: number;
   step?: number;
   options?: string[];
+  /**
+   * Settings-only field (host/proxy URLs, page sizes, fallbacks…).
+   * Hidden from compact inline rows (Topbar); shown in Settings.
+   */
+  advanced?: boolean;
 }
 
 /** Map of field id → schema; defaults merged at call sites. */

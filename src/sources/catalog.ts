@@ -383,12 +383,13 @@ export const binanceRest: SourcePlugin = {
     'Public Binance kline API with host + Worker proxy fallback. Optional synthetic walk only when fallback is enabled.',
   capabilities: { needsNetwork: true, venue: 'binance', market: 'spot', transport: 'rest' },
   configSchema: {
-    baseUrl: { type: 'string', default: 'https://api.binance.com', label: 'API base URL' },
-    limit: { type: 'number', default: 500, min: 50, max: 1000, label: 'Bars' },
+    baseUrl: { type: 'string', default: 'https://api.binance.com', label: 'API base URL', advanced: true },
+    limit: { type: 'number', default: 500, min: 50, max: 1000, label: 'Bars' , advanced: true },
     fallback: {
       type: 'boolean',
       default: false,
       label: 'Synthesize on failure',
+      advanced: true,
       description: 'Demo only — fake prices. Off by default so a network error cannot look like real data.',
     },
   },
@@ -437,7 +438,7 @@ export const mockWalk: SourcePlugin = {
   configSchema: {
     seed: { type: 'number', default: 0, label: 'Seed (0 = random)' },
     startPrice: { type: 'number', default: 100, label: 'Start price' },
-    limit: { type: 'number', default: 500, min: 50, max: 100_000, label: 'Bars' },
+    limit: { type: 'number', default: 500, min: 50, max: 100_000, label: 'Bars' , advanced: true },
   },
   async fetchHistorical({ interval, config, endTime, startTime }) {
     const cfg = resolveConfig(this.configSchema, config);
@@ -602,7 +603,7 @@ export const okxRest: SourcePlugin = {
   description: 'Public OKX candlesticks (www.okx.com). Symbol like BTCUSDT → BTC-USDT.',
   capabilities: { needsNetwork: true, venue: 'okx', market: 'spot', transport: 'rest' },
   configSchema: {
-    limit: { type: 'number', default: 300, min: 50, max: 300, label: 'Bars' },
+    limit: { type: 'number', default: 300, min: 50, max: 300, label: 'Bars' , advanced: true },
   },
   async fetchHistorical({ symbol, interval, config, endTime, signal }) {
     const cfg = resolveConfig(this.configSchema, config);
@@ -643,7 +644,7 @@ export const bybitRest: SourcePlugin = {
   description: 'Public Bybit v5 spot klines (api.bybit.com).',
   capabilities: { needsNetwork: true, venue: 'bybit', market: 'spot', transport: 'rest' },
   configSchema: {
-    limit: { type: 'number', default: 500, min: 50, max: 1000, label: 'Bars' },
+    limit: { type: 'number', default: 500, min: 50, max: 1000, label: 'Bars' , advanced: true },
   },
   async fetchHistorical({ symbol, interval, config, startTime, endTime, signal }) {
     const cfg = resolveConfig(this.configSchema, config);
@@ -766,7 +767,7 @@ export const krakenRest: SourcePlugin = {
   description: 'Public Kraken OHLC (api.kraken.com). BTCUSDT → XBTUSDT.',
   capabilities: { needsNetwork: true, venue: 'kraken', market: 'spot', transport: 'rest' },
   configSchema: {
-    limit: { type: 'number', default: 720, min: 50, max: 720, label: 'Bars' },
+    limit: { type: 'number', default: 720, min: 50, max: 720, label: 'Bars' , advanced: true },
   },
   async fetchHistorical({ symbol, interval, config, startTime, endTime, signal }) {
     const cfg = resolveConfig(this.configSchema, config);

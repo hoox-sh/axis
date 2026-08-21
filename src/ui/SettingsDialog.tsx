@@ -75,6 +75,7 @@ import { probeEndpoint } from '../indicators/runner';
 import { listEngines } from '../engines/catalog';
 import { listStorages } from '../storage/catalog';
 import { CapabilityBadges, engineOptionLabel } from './plugin-badges';
+import { PluginConfigRow } from './PluginConfigRow';
 import { getEngine } from '../engines/catalog';
 import { pluginKey } from '../plugins/types';
 import {
@@ -918,6 +919,16 @@ export const SettingsDialog: Component<Props> = (props) => {
               </p>
             </div>
 
+            </div>
+
+            {/* ── Source & stream plugins (incl. advanced fields hidden from the Topbar row) ── */}
+            <div class="sc-section" data-testid="axis-settings-plugins">
+              <div class="sc-section-title">Source &amp; stream plugins</div>
+              <p class="sc-hint mt-0">
+                Settings for the active data source and live stream (shared — one value each).
+                Advanced options like API base URL, Bars, and failure fallbacks live here.
+              </p>
+              <PluginConfigRow layout="stacked" showAdvanced />
             </div>
 
             {/* ── On-Chain (dedicated Worker proxy; Pro API endpoint stays for Pine) ── */}

@@ -18,25 +18,31 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Shared inline config row for the active source **and** stream plugins.
+ * Shared config fields for the active source **and** stream plugins.
  *
- * Renders each config field **once** (union of both plugins'
- * `configSchema` keys — ccxt-rest/ccxt-ws share `exchange` + `gateway`)
- * and writes every change through to *all* declaring plugins'
- * `pluginsConfig` bags, so historical and live stay in sync.
+ * Renders each field **once** (union of both plugins' `configSchema`
+ * keys — ccxt-rest/ccxt-ws share `exchange` + `gateway`) and writes every
+ * change through to *all* declaring plugins' `pluginsConfig` bags, so
+ * historical and live stay in sync.
  *
- * An `exchange` field renders as a dropdown fed by the datafeed gateway
- * `/health` exchange list (current value kept as an option even when the
- * gateway doesn't advertise it).
+ * - `advanced` fields (host URLs, page sizes, fallbacks) are hidden unless
+ *   `showAdvanced` — they live in Settings → "Source & stream plugins".
+ * - An `exchange` field renders as a dropdown fed by the datafeed gateway's
+ *   full ccxt exchange list (`/health` → `ccxt_exchanges`); the current value
+ *   is always kept as an option even when unlisted.
+ *
+ * Layouts: `inline` (Topbar chip row) and `stacked` (Settings dialog form),
+ * both using the shared `sc-label` / `sc-input` / `sc-hint` classes.
  *
  * @module ui/PluginConfigRow
  */
 
 import { For, Show, createMemo, createSignal } from 'solid-js';
+import type { JSX } from 'solid-js';
 import { store, setStore, persist } from '../store';
 import { getActiveSource, getActiveStream } from '../plugins/active';
 import { pluginKey, type ConfigSchema, type FieldSchema } from '../plugins/types';
-import { effectiveConfig, fetchGatewayExchanges, hasConfigFields } from './plugin-config';
+import { fetchGatewayExchanges } from './plugin-config';
 
 const EXCHANGE_FIELD = 'exchange';
 
@@ -49,26 +55,41 @@ interface ConfigTarget {
 export interface PluginConfigRowProps {
   /** Called after any field changes (e.g. re-fetch historical bars). */
   onApplied?: () => void;
+  /** Include `advanced: true` fields (Settings variant). Default false. */
+  showAdvanced?: boolean;
+  /** `inline` (Topbar) or `stacked` (Settings). Default inline. */
+  layout?: 'inline' | 'stacked';
 }
 
 export function PluginConfigRow(props: PluginConfigRowProps) {
-  // Active plugins declaring config fields — source first (field order wins).
+  const stacked = () => props.layout === 'stacked';
+
+  const hasVisibleFields = (schema?: ConfigSchema): boolean =>
+    !!schema &&
+    Object.keys(schema).length > 0 &&
+    (props.showAdvanced || Object.values(schema).some((f) => !f?.advanced));
+
+  // Active plugins declaring visible config fields — source first (field order wins).
   const targets = createMemo<ConfigTarget[]>(() => {
     void store.activePlugins;
     void store.live?.streamId;
     const out: ConfigTarget[] = [];
     const src = getActiveSource();
-    if (src && hasConfigFields(src.configSchema)) {
+    if (src && hasVisibleFields(src.configSchema)) {
       out.push({ kind: 'source', id: src.id, schema: src.configSchema! });
     }
     const stm = getActiveStream();
-    if (stm && !out.some((t) => t.id === stm.id) && hasConfigFields(stm.configSchema)) {
+    if (
+      stm &&
+      !out.some((t) => t.id === stm.id) &&
+      hasVisibleFields(stm.configSchema)
+    ) {
       out.push({ kind: 'stream', id: stm.id, schema: stm.configSchema! });
     }
     return out;
   });
 
-  /** Ordered union of field keys across targets. */
+  /** Ordered union of field keys across targets (advanced filtered unless showAdvanced). */
   const fields = createMemo<Array<[string, FieldSchema]>>(() => {
     const seen = new Set<string>();
     const out: Array<[string, FieldSchema]> = [];
@@ -76,7 +97,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
       for (const [k, f] of Object.entries(t.schema)) {
         if (!seen.has(k)) {
           seen.add(k);
-          out.push([k, f]);
+          if (!f?.advanced || props.showAdvanced) out.push([k, f]);
         }
       }
     }
@@ -103,7 +124,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
     void fetchGatewayExchanges(mode).then(setExchanges);
   });
 
-  /** Dropdown options for the exchange field: advertised ids + current value. */
+  /** Dropdown options for exchange: full ccxt list (+ current value). */
   const exchangeOptions = createMemo<string[]>(() => {
     const cur = String(valueOf(EXCHANGE_FIELD) || '').trim();
     const set = new Set<string>(exchanges());
@@ -123,84 +144,97 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
     props.onApplied?.();
   };
 
-  const inputTitle = (key: string, f: FieldSchema) => f.description || f.label || key;
+  const fieldTitle = (key: string, f: FieldSchema) => f.description || f.label || key;
+
+  /** Single field control — shared by inline + stacked layouts. */
+  const renderControl = (key: string, f: FieldSchema): JSX.Element => (
+    <Show
+      when={f.type !== 'boolean'}
+      fallback={
+        <input
+          type="checkbox"
+          checked={Boolean(valueOf(key))}
+          onChange={(e) => setField(key, e.currentTarget.checked)}
+        />
+      }
+    >
+      <Show
+        when={f.type !== 'select' && key !== EXCHANGE_FIELD}
+        fallback={
+          <select
+            class={`sc-input font-mono text-[12px] ${stacked() ? 'w-full' : 'w-[9em]'}`}
+            value={String(valueOf(key) ?? '')}
+            onChange={(e) => setField(key, e.currentTarget.value)}
+            title={fieldTitle(key, f)}
+          >
+            <Show when={key === EXCHANGE_FIELD && exchangeOptions().length === 0}>
+              <option value="">loading…</option>
+            </Show>
+            <For
+              each={
+                key === EXCHANGE_FIELD ? exchangeOptions() : f.options || [String(valueOf(key) ?? '')]
+              }
+            >
+              {(o) => <option value={o}>{o}</option>}
+            </For>
+          </select>
+        }
+      >
+        <input
+          type={f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}
+          class={`sc-input font-mono text-[12px] ${stacked() ? 'w-full' : 'w-[7em]'}`}
+          min={f.min}
+          max={f.max}
+          step={f.step}
+          placeholder={f.placeholder}
+          value={f.type === 'number' ? Number(valueOf(key) ?? 0) : String(valueOf(key) ?? '')}
+          onInput={(e) => {
+            const raw = e.currentTarget.value;
+            setField(key, f.type === 'number' ? Number(raw) : raw);
+          }}
+          title={fieldTitle(key, f)}
+        />
+      </Show>
+    </Show>
+  );
 
   return (
     <Show when={fields().length > 0}>
-      <div
-        class="flex items-center gap-2"
-        data-testid="axis-cfg-plugins"
-        title="Shared source/stream settings · history applies on Load/Reload · live applies on Live toggle"
-      >
-        <For each={fields()}>
-          {([key, f]) => (
-            <label class="flex items-center gap-1 text-[11px] opacity-80">
-              <span class="whitespace-nowrap">{f.label || key}</span>
-              <Show
-                when={f.type !== 'select' && key !== EXCHANGE_FIELD}
-                fallback={
-                  <Show
-                    when={key !== EXCHANGE_FIELD}
-                    fallback={
-                      <select
-                        class="sc-input w-[9em] font-mono text-[12px]"
-                        value={String(valueOf(key) ?? '')}
-                        onChange={(e) => setField(key, e.currentTarget.value)}
-                        title={inputTitle(key, f)}
-                      >
-                        <Show when={exchangeOptions().length === 0}>
-                          <option value="">loading…</option>
-                        </Show>
-                        <For each={exchangeOptions()}>
-                          {(o) => <option value={o}>{o}</option>}
-                        </For>
-                      </select>
-                    }
-                  >
-                    <select
-                      class="sc-input max-w-[8em] font-mono text-[12px]"
-                      value={String(valueOf(key) ?? '')}
-                      onChange={(e) => setField(key, e.currentTarget.value)}
-                    >
-                      <For each={f.options || []}>{(o) => <option value={o}>{o}</option>}</For>
-                    </select>
+      <Show
+        when={!stacked()}
+        fallback={
+          <div class="flex flex-col gap-2" data-testid="axis-cfg-plugins-settings">
+            <For each={fields()}>
+              {([key, f]) => (
+                <div class="sc-field">
+                  <label class="sc-label" for={`axis-cfg-${props.layout}-${key}`}>
+                    {f.label || key}
+                  </label>
+                  {renderControl(key, f)}
+                  <Show when={f.description}>
+                    <p class="sc-hint mt-0.5">{f.description}</p>
                   </Show>
-                }
-              >
-                <Show
-                  when={f.type !== 'boolean'}
-                  fallback={
-                    <input
-                      type="checkbox"
-                      checked={Boolean(valueOf(key))}
-                      onChange={(e) => setField(key, e.currentTarget.checked)}
-                    />
-                  }
-                >
-                  <input
-                    type={
-                      f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'
-                    }
-                    class="sc-input w-[7em] font-mono text-[12px]"
-                    min={f.min}
-                    max={f.max}
-                    step={f.step}
-                    placeholder={f.placeholder}
-                    value={
-                      f.type === 'number' ? Number(valueOf(key) ?? 0) : String(valueOf(key) ?? '')
-                    }
-                    onInput={(e) => {
-                      const raw = e.currentTarget.value;
-                      setField(key, f.type === 'number' ? Number(raw) : raw);
-                    }}
-                    title={inputTitle(key, f)}
-                  />
-                </Show>
-              </Show>
-            </label>
-          )}
-        </For>
-      </div>
+                </div>
+              )}
+            </For>
+          </div>
+        }
+      >
+        <div
+          class="flex items-center gap-2"
+          data-testid="axis-cfg-plugins"
+          title="Shared source/stream settings · history applies on Load/Reload · live applies on Live toggle · advanced options in Settings"
+        >
+          <For each={fields()}>
+            {([key, f]) => (
+              <label class="sc-label flex items-center gap-1" title={fieldTitle(key, f)}>
+                <span class="whitespace-nowrap">{f.label || key}</span>
+                {renderControl(key, f)}
+              </label>
+            )}
+          </For>
+        </div>
+      </Show>
     </Show>
   );
 }
