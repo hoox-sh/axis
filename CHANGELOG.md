@@ -9,11 +9,17 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-21 · 249 commits · describe-tag: `v2.0.19`_
+_Generated/updated: 2026-08-21 · 250 commits · describe-tag: `v2.0.20`_
 
 ---
 
-## [Unreleased]
+## [2.0.21] — 2026-08-21
+
+### Fixed
+
+- **ccxt-ws stream: `require()` in browser ESM** — replaced CommonJS `require('../data/gateway')` with a static import. The `require` call threw `ReferenceError` in the Vite browser bundle when activating the `ccxt-ws` stream (Bun tests masked it since Bun honors `require` in ESM).
+
+- **ccxt-rest backfill window inversion** — `endTime` was forwarded as CCXT `since`, which pages *forward* from that timestamp, breaking the Data Source Manager walk-back contract (bars must end at/before `endTime`). Now derives `since = endTime − limit·timeframe` so each page covers `[endTime − limit·tf, endTime]` and gap-fill converges.
 
 ## [2.0.20] — 2026-08-21
 
@@ -470,9 +476,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (167 commits)
+### 2026-08 (168 commits)
 
 #### Security
 
@@ -654,6 +662,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `3e7236ef` (2026-08-21) — chore(release): v2.0.20
 - `b4b3227b` (2026-08-15) — chore(release): AXIS v2.0.8
 - `236d042f` (2026-08-12) — chore(release): AXIS v2.0.7
 - `5f6d7a9a` (2026-08-12) — chore(release): AXIS v2.0.6

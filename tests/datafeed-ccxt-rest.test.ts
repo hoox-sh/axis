@@ -62,7 +62,7 @@ describe('ccxt-rest source plugin', () => {
     }
   });
 
-  it('fetchHistorical passes endTime as since', async () => {
+  it('fetchHistorical derives since from endTime for walk-back (window ends at endTime)', async () => {
     const origFetch = globalThis.fetch;
     let capturedUrl = '';
     globalThis.fetch = ((url: string | URL | Request) => {
@@ -71,13 +71,28 @@ describe('ccxt-rest source plugin', () => {
     }) as typeof fetch;
 
     try {
+      // No explicit limit → sourcePageLimit('ccxt-rest') = 500; 1d = 86_400_000ms
+      // since = 1_700_000_000_000 − 500 × 86_400_000 = 1_656_800_000_000
       await ccxtRest.fetchHistorical({
         symbol: 'ETH/USDT',
         interval: '1d',
         endTime: 1700000000,
         config: { exchange: 'okx' },
       });
-      expect(capturedUrl).toContain('since=1700000000000');
+      expect(capturedUrl).toContain('since=1656800000000');
+
+      // Explicit limit=100; 1h = 3_600_000ms
+      // since = 1_700_000_000_000 − 100 × 3_600_000 = 1_699_640_000_000
+      capturedUrl = '';
+      await ccxtRest.fetchHistorical({
+        symbol: 'ETH/USDT',
+        interval: '1h',
+        limit: 100,
+        endTime: 1700000000,
+        config: { exchange: 'okx' },
+      });
+      expect(capturedUrl).toContain('since=1699640000000');
+      expect(capturedUrl).toContain('limit=100');
     } finally {
       globalThis.fetch = origFetch;
     }

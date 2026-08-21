@@ -59,6 +59,7 @@ import { getDataManagerSelection } from '../data/data-manager-source';
 import { defaultStreamForSource as defaultStreamForSourceId } from '../data/provider';
 import { openReconnectableWs } from './reconnect-ws';
 import { binanceKlineWsUrls } from '../data/binance-http';
+import { gatewayWs } from '../data/gateway';
 
 /** @deprecated Prefer importing StreamPlugin from plugins/types */
 export type StreamPlugin = UnifiedStreamPlugin;

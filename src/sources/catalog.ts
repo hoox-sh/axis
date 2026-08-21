@@ -947,8 +947,14 @@ export const ccxtRest: SourcePlugin = {
       symbol,
       timeframe: interval,
     };
+    // Walk-back contract: endTime is the window's right edge. CCXT pages
+    // forward from `since`, so derive since = endTime − limit·tf to fetch
+    // the page of bars ending at/before endTime (DSM walk-back convergence).
     if (typeof endTime === 'number' && Number.isFinite(endTime) && endTime > 0) {
-      params.since = String(Math.floor(endTime * 1000));
+      const tfMs = intervalToMs(interval);
+      const pageSize = limit && Number.isFinite(limit) && limit > 0 ? limit : sourcePageLimit(this.id);
+      const since = Math.max(0, Math.floor(endTime * 1000 - pageSize * tfMs));
+      params.since = String(since);
     }
     if (limit) params.limit = String(limit);
     const gatewayMode = (String(cfg.gateway || 'auto') as 'auto' | 'pyne' | 'sidecar');
