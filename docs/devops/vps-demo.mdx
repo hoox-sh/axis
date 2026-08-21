@@ -72,7 +72,7 @@ Then PWA endpoint = `https://axis.example.com` and the **server** engine posts t
 
 - Cloudflare → VPS nginx `:443` (TLS)
 - nginx proxies SPA to static server and Pro API paths (`/run`, `/optimize`, `/ws/`, `/health`,
-  `/lsp/`, …) to gunicorn `:5002`
+  `/lsp/`, `/datafeed/`, …) to gunicorn `:5002`
 - PWA **Backend URL** = `https://axis.hoox.sh` (same origin — no mixed content)
 - Cloudflare Pages previews (`*.pynescript-axis.pages.dev`) also use that Backend URL
   cross-origin — pyne must allow those Origins on `/health` and `/run` (always-on
