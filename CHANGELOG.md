@@ -15,6 +15,16 @@ _Generated/updated: 2026-08-20 · 243 commits · describe-tag: `v2.0.18`_
 
 ## [Unreleased]
 
+### Added
+
+- **Datafeed gateway transport** (`src/data/gateway.ts`) — resolves gateway URL (auto/pyne/sidecar/direct), probes sidecar health with 30s TTL cache, and provides `gatewayFetch`/`gatewayWs` helpers for plugins that route through the PYNE datafeed gateway or local sidecar.
+
+- **ccxt-rest source plugin** — long-tail exchange OHLCV via the PYNE datafeed gateway or sidecar. Routes `ccxt:<exchange>` venues through `GET /datafeed/ohlcv`. Credentials stay server-side; browser never holds API keys.
+
+- **ccxt-ws stream plugin** — real-time klines via the datafeed gateway WebSocket. Routes through `WS /datafeed/watch` with exchange+symbol+timeframe params.
+
+- **Gateway-aware active resolution** — when provider gateway is not `direct` and the venue is a `ccxt:<exchange>` long-tail id, active source resolves to `ccxt-rest` and stream to `ccxt-ws`. Native venues (binance, okx, etc.) are never swapped.
+
 ## [2.0.19] — 2026-08-20
 
 ### Fixed
