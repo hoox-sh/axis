@@ -33,6 +33,10 @@ _Generated/updated: 2026-08-21 · 250 commits · describe-tag: `v2.0.20`_
 
 ### Changed
 
+- **Settings / Runtimes / Wire are right-edge drawers** — they slide in over the chart instead of a centered overlay. Larger fields and more space. Runtimes: Workers (click a card) vs Plugins; nested Overview/Detail/Install/Configure tabs are gone.
+
+- **Data tab no longer duplicates bar count or Binance API host** — how many bars to load lives only under General → Historical bars. Native CEX host URLs stay as fetch defaults (Binance already has host + Worker fallback). Gecko proxy/network, CCXT gateway, and synthesize-on-failure remain.
+
 - **Docker release images tagged by version, not sha** — `docker-bake.hcl` release targets now push `pwa-v<VERSION>` / `pwa-nginx-v<VERSION>` (e.g. `ghcr.io/hoox-sh/axis:pwa-v2.0.21`) instead of `pwa-sha-<sha>`. The git SHA remains on the image as the `org.opencontainers.image.revision` label and build arg; workflow docs updated to match.
 
 ### Fixed

@@ -1087,6 +1087,114 @@ button.sc-btn:focus-visible {
   background: var(--color-bg-base);
   flex-shrink: 0;
 }
+
+/* ── Right-edge app drawer (Settings / Runtimes / Wire) ───────────── */
+.sc-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+  background: color-mix(in srgb, #000 52%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.sc-drawer {
+  --sc-drawer-w: 42rem;
+  width: min(var(--sc-drawer-w), 100vw);
+  height: 100%;
+  max-height: 100%;
+  background: var(--color-bg-panel);
+  border-left: var(--border-w) solid var(--color-border);
+  box-shadow: -18px 0 48px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  animation: sc-drawer-in 220ms ease-out;
+}
+.sc-drawer--md { --sc-drawer-w: 42rem; }
+.sc-drawer--lg { --sc-drawer-w: 56rem; }
+.sc-drawer--xl { --sc-drawer-w: min(80rem, 96vw); }
+@keyframes sc-drawer-in {
+  from { transform: translateX(8%); opacity: 0.4; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-drawer { animation: none; }
+}
+.sc-drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1em;
+  padding: 1.15em 1.5em 1.05em;
+  border-bottom: var(--border-w) solid var(--color-border);
+  flex-shrink: 0;
+}
+.sc-drawer-title {
+  margin: 0;
+  font-size: 1.15em;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+}
+.sc-drawer-body {
+  padding: 1.4em 1.55em 1.75em;
+  display: flex;
+  flex-direction: column;
+  gap: 1.45em;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+.sc-drawer-body--flush {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.sc-drawer-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+  padding: 1em 1.5em;
+  border-top: var(--border-w) solid var(--color-border);
+  background: var(--color-bg-base);
+  flex-shrink: 0;
+}
+.sc-drawer .sc-input,
+.sc-drawer select.sc-input,
+.sc-drawer textarea.sc-input {
+  min-height: 2.7em;
+  font-size: 1em;
+  padding: 0.55em 0.9em;
+}
+.sc-drawer .sc-label,
+.sc-drawer .sc-field > label,
+.sc-drawer label.sc-label {
+  font-size: 0.78em;
+  letter-spacing: 0.08em;
+}
+.sc-drawer .sc-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85em;
+  padding-bottom: 0.35em;
+}
+.sc-drawer .sc-section-title {
+  font-size: 0.72em;
+  letter-spacing: 0.14em;
+  margin: 0;
+}
+.sc-drawer .sc-hint {
+  line-height: 1.45;
+  max-width: 42em;
+}
+.sc-drawer .sc-btn {
+  min-height: 2.45em;
+  font-size: 0.95em;
+  padding: 0.45em 0.95em;
+}
 /* Tab strip under header (Settings chips, Plugin/Workers underline) */
 .sc-dialog-tabs {
   display: flex;
@@ -1113,11 +1221,13 @@ button.sc-btn:focus-visible {
 /* ── Architecture modal (compose recipes) ─────────────────────────── */
 .axis-arch-dialog {
   padding: 0;
-  width: min(1100px, calc(100vw - 2 * var(--ui-dialog-margin)));
-  height: min(52rem, calc(100vh - 2 * var(--ui-dialog-margin-y)));
-  max-height: calc(100vh - 2 * var(--ui-dialog-margin-y));
   container-type: inline-size;
   container-name: axis-arch;
+}
+.sc-drawer.axis-arch-dialog {
+  width: min(80rem, 100vw);
+  height: 100%;
+  max-height: 100%;
 }
 .axis-arch-header {
   position: relative;
@@ -1141,6 +1251,7 @@ button.sc-btn:focus-visible {
   grid-template-rows: minmax(8rem, auto) minmax(0, 1fr) minmax(8rem, auto);
   flex: 1;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 @container axis-arch (min-width: 52rem) {

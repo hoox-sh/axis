@@ -46,7 +46,6 @@ import {
   onCleanup,
 } from 'solid-js';
 import { reconcile } from 'solid-js/store';
-import { installFocusTrap } from './focus-trap';
 import {
   store,
   setStore,
@@ -116,6 +115,7 @@ import {
 import { bindCcxtSession, unbindCcxtSession } from '../data/ccxt-session';
 import type { GatewayMode } from '../data/gateway';
 import { writePluginField } from './plugin-config';
+import { AppDrawer } from './AppDrawer';
 
 /** PYNE Runtime modes for the server/worker engine plugin config. */
 export type EngineExecMode = 'interpret' | 'compile' | 'auto';
@@ -407,22 +407,6 @@ export const SettingsDialog: Component<Props> = (props) => {
     props.onClose();
   };
 
-  const onBackdrop = (e: MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      // Restore committed scale if user closed without Save after preview
-      applyUiScale(store.uiScale);
-      props.onClose();
-    }
-  };
-
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      applyUiScale(store.uiScale);
-      props.onClose();
-    }
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && tab() === 'general') save();
-  };
-
   const closeWithoutSave = () => {
     applyUiScale(store.uiScale);
     props.onClose();
@@ -472,56 +456,17 @@ export const SettingsDialog: Component<Props> = (props) => {
   };
 
   return (
-    <Show when={props.open}>
-      <div
-        class="sc-dialog-backdrop"
-        onClick={onBackdrop}
-        onKeyDown={onKey}
-        role="presentation"
-      >
-        <div
-          class={`sc-dialog ${
-            tab() === 'theme' || tab() === 'editor' || tab() === 'data'
-              ? 'w-[min(640px,calc(100vw-2*var(--ui-dialog-margin)))]'
-              : 'w-[min(560px,calc(100vw-2*var(--ui-dialog-margin)))]'
-          }`}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="axis-settings-title"
-          data-testid="axis-settings"
-          tabIndex={-1}
-          ref={(el) => {
-            if (!el) return;
-            const dispose = installFocusTrap(el, { autoFocus: true });
-            onCleanup(dispose);
-          }}
-        >
-          <div class="sc-dialog-accent" />
-
-          <div class="sc-dialog-header">
-            <div class="min-w-0">
-              <div
-                id="axis-settings-title"
-                class="text-[0.95em] font-semibold text-text tracking-tight"
-              >
-                Settings
-              </div>
-              <div class="sc-hint">
-                {SETTINGS_TABS.find((t) => t.id === tab())?.hint ||
-                  'Engine · density · chart · theme'}
-              </div>
-            </div>
-            <button
-              type="button"
-              class="sc-btn sc-btn-ghost px-2"
-              onClick={closeWithoutSave}
-              aria-label="Close"
-            >
-              <Icons.x />
-            </button>
-          </div>
-
-          {/* Tab strip — General / Data / Editor / Theme */}
+    <AppDrawer
+      open={props.open}
+      onClose={closeWithoutSave}
+      title="Settings"
+      titleId="axis-settings-title"
+      hint={
+        SETTINGS_TABS.find((t) => t.id === tab())?.hint || 'Engine · density · chart · theme'
+      }
+      testId="axis-settings"
+      width="md"
+      tabs={
           <div
             class="sc-dialog-tabs sc-chip-row"
             role="tablist"
@@ -545,9 +490,33 @@ export const SettingsDialog: Component<Props> = (props) => {
               )}
             </For>
           </div>
-
-          <div class="sc-dialog-body">
-            {/* ── Theme tab ─────────────────────────────────────────── */}
+      }
+      footer={
+        <>
+          <div class="flex-1 text-[0.78em] text-text-faint font-mono truncate">
+            {tab() === 'theme'
+              ? 'Theme applies live · Save not required'
+              : tab() === 'editor'
+                ? 'Editor intel applies live · Save not required'
+                : tab() === 'data'
+                  ? 'Keys stay in this session · not written to disk'
+                  : `AXIS · scale ${formatUiScalePct(uiScale())}`}
+          </div>
+          <button type="button" class="sc-btn" onClick={closeWithoutSave}>
+            {tab() === 'theme' || tab() === 'editor' || tab() === 'data'
+              ? 'Close'
+              : 'Cancel'}
+          </button>
+          <Show when={tab() === 'general'}>
+            <button type="button" class="sc-btn sc-btn-primary" onClick={save}>
+              <Icons.check />
+              Save
+            </button>
+          </Show>
+        </>
+      }
+    >
+            {/* ── Data / Editor / Theme / General ───────────────────── */}
             <Show when={tab() === 'data'}>
               <div
                 id="axis-settings-panel-data"
@@ -560,10 +529,9 @@ export const SettingsDialog: Component<Props> = (props) => {
                 <div class="sc-section" data-testid="axis-settings-plugins">
                   <div class="sc-section-title">Source &amp; stream plugins</div>
                   <p class="sc-hint mt-0">
-                    Settings for the active data source and live stream (shared — one value each).
-                    Gateway transport, API base URL, Bars, and fallbacks live here — not on the
-                    topbar. Public candles work without a key; optional CCXT keys are session-only
-                    (never localStorage, never in the request URL).
+                    Active venue only: CCXT gateway, Gecko proxy/network, mock start price,
+                    synthesize-on-failure. How many bars to load is under General → Historical
+                    bars. Public candles need no key; optional keys are session-only.
                   </p>
                   <PluginConfigRow layout="stacked" showAdvanced />
                 </div>
@@ -1294,33 +1262,7 @@ export const SettingsDialog: Component<Props> = (props) => {
             </div>
             </div>
             </Show>
-          </div>
-
-          <div class="sc-dialog-footer">
-            <div class="flex-1 text-[0.72em] text-text-faint font-mono truncate">
-              {tab() === 'theme'
-                ? 'Theme applies live · Save not required'
-                : tab() === 'editor'
-                  ? 'Editor intel applies live · Save not required'
-                  : tab() === 'data'
-                    ? 'Keys stay in this session · not written to disk'
-                    : `AXIS · scale ${formatUiScalePct(uiScale())}`}
-            </div>
-            <button type="button" class="sc-btn" onClick={closeWithoutSave}>
-              {tab() === 'theme' || tab() === 'editor' || tab() === 'data'
-                ? 'Close'
-                : 'Cancel'}
-            </button>
-            <Show when={tab() === 'general'}>
-              <button type="button" class="sc-btn sc-btn-primary" onClick={save}>
-                <Icons.check />
-                Save
-              </button>
-            </Show>
-          </div>
-        </div>
-      </div>
-    </Show>
+    </AppDrawer>
   );
 };
 

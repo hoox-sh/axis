@@ -400,21 +400,6 @@ export const WorkersManager: Component<Props> = (props) => {
     setTab('detail');
   };
 
-  const tabBtn = (id: TabId, label: string) => (
-    <button
-      role="tab"
-      aria-selected={tab() === id}
-      class={`flex-1 px-3 py-2.5 text-[12px] font-medium border-b-2 -mb-[2px] ${
-        tab() === id
-          ? 'border-b-accent text-text'
-          : 'border-b-transparent text-text-dim hover:text-text'
-      }`}
-      onClick={() => setTab(id)}
-    >
-      {label}
-    </button>
-  );
-
   const summaryAndBody = (
     <>
           {/* Summary strip + probe refresh */}
@@ -495,12 +480,23 @@ export const WorkersManager: Component<Props> = (props) => {
             </Show>
           </div>
 
-          <div class="sc-dialog-tabs sc-dialog-tabs--underline" role="tablist">
-            {tabBtn('overview', 'Overview')}
-            {tabBtn('detail', 'Detail')}
-            {tabBtn('install', 'Install')}
-            {tabBtn('configure', 'Configure')}
-          </div>
+          <Show when={tab() !== 'overview'}>
+            <div
+              class="flex items-center gap-2 flex-shrink-0 border-b border-border"
+              style={{ 'padding-inline': 'var(--ui-dialog-header-pad-x)', 'padding-block': '0.65em' }}
+            >
+              <button
+                type="button"
+                class="sc-btn sc-btn-ghost"
+                onClick={() => setTab('overview')}
+              >
+                All workers
+              </button>
+              <span class="text-text-dim text-[13px] font-semibold truncate">
+                {selected()?.name || 'Worker'}
+              </span>
+            </div>
+          </Show>
 
           <div class="sc-dialog-body flex flex-col gap-4 overflow-auto text-[12px] min-h-0 flex-1">
             <Show when={probeError()}>
@@ -515,6 +511,10 @@ export const WorkersManager: Component<Props> = (props) => {
 
             {/* ── Overview ───────────────────────────────────── */}
             <Show when={tab() === 'overview'}>
+              <p class="sc-hint m-0 max-w-xl">
+                Each card is a way AXIS can run Pine or fetch data. Click one to see
+                health, install steps, and how to use it as the calculation backend.
+              </p>
               <div class="flex flex-wrap items-center gap-2">
                 <label class="inline-flex items-center gap-1.5 text-[11px] text-text-dim cursor-pointer">
                   <input
@@ -612,8 +612,8 @@ export const WorkersManager: Component<Props> = (props) => {
               </div>
             </Show>
 
-            {/* ── Detail ─────────────────────────────────────── */}
-            <Show when={tab() === 'detail'}>
+            {/* ── Selected worker (detail + install + configure) ── */}
+            <Show when={tab() !== 'overview'}>
               <div class="flex flex-wrap gap-1.5 mb-1">
                 <For each={[...catalog()]}>
                   {(w) => (
@@ -883,7 +883,7 @@ export const WorkersManager: Component<Props> = (props) => {
             </Show>
 
             {/* ── Install ────────────────────────────────────── */}
-            <Show when={tab() === 'install'}>
+            <Show when={tab() !== 'overview'}>
               <div class="flex flex-wrap gap-1.5 mb-1">
                 <For each={[...catalog()]}>
                   {(w) => (
@@ -965,9 +965,8 @@ export const WorkersManager: Component<Props> = (props) => {
                     </ol>
 
                     <div class="border border-border px-3 py-2 text-[11px] text-text-faint">
-                      After install, switch to <strong class="text-text-dim">Overview</strong>{' '}
-                      and Refresh — healthy probes light green. Use{' '}
-                      <strong class="text-text-dim">Configure</strong> to pin a custom URL.
+                      After install, go back to <strong class="text-text-dim">All workers</strong>{' '}
+                      and Refresh — healthy probes light green. Pin a custom URL below.
                     </div>
                   </div>
                 )}
@@ -975,7 +974,7 @@ export const WorkersManager: Component<Props> = (props) => {
             </Show>
 
             {/* ── Configure ──────────────────────────────────── */}
-            <Show when={tab() === 'configure'}>
+            <Show when={tab() !== 'overview'}>
               <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <div class="flex flex-col gap-3">
                   <div>

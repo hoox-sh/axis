@@ -107,7 +107,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
       for (const [k, f] of Object.entries(t.schema)) {
         if (!seen.has(k)) {
           seen.add(k);
-          if (props.hideKeys?.includes(k)) continue;
+          if (f?.hidden || props.hideKeys?.includes(k)) continue;
           if (!f?.advanced || props.showAdvanced) out.push([k, f]);
         }
       }

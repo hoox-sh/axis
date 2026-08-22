@@ -31,11 +31,10 @@ import {
   createEffect,
   createMemo,
   createSignal,
-  onCleanup,
   untrack,
 } from 'solid-js';
-import { installFocusTrap } from './focus-trap';
 import { Icons } from './icons';
+import { AppDrawer } from './AppDrawer';
 import { CapabilityBadges } from './plugin-badges';
 import { store } from '../store';
 import { applyArchitecture } from './architecture/apply';
@@ -126,64 +125,19 @@ export const ArchitectureModal: Component<ArchitectureModalProps> = (props) => {
     props.onClose();
   };
 
-  const onBackdrop = (e: MouseEvent) => {
-    if (e.target === e.currentTarget) props.onClose();
-  };
-
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      props.onClose();
-    }
-  };
-
   return (
-    <Show when={props.open}>
-      <div
-        class="sc-dialog-backdrop"
-        onClick={onBackdrop}
-        onKeyDown={onKey}
-        role="presentation"
-        data-testid="axis-architecture-backdrop"
-      >
-        <div
-          class="sc-dialog axis-arch-dialog"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="axis-architecture-title"
-          data-testid="axis-architecture-modal"
-          tabIndex={-1}
-          ref={(el) => {
-            if (!el) return;
-            const dispose = installFocusTrap(el, { autoFocus: true });
-            onCleanup(dispose);
-          }}
-        >
-          <div class="sc-dialog-accent" />
-
-          <header class="sc-dialog-header axis-arch-header">
-            <div class="axis-arch-header-grid" aria-hidden="true" />
-            <div class="min-w-0 relative">
-              <p class="sc-hint font-mono tracking-[0.18em] uppercase whitespace-nowrap">
-                AXIS · modular architecture
-              </p>
-              <h2
-                id="axis-architecture-title"
-                data-testid="axis-architecture-title"
-                class="mt-0.5 text-[0.95em] font-semibold text-text tracking-tight"
-              >
-                Wire the chart{' '}
-                <span class="font-mono text-accent" aria-live="polite">
-                  {plan().planName}
-                </span>
-              </h2>
-              <p class="sc-hint mt-1 max-w-xl">
-                Every capability is a plugin sharing one contract. Start from a
-                predefinition, then swap or switch off any slot — the plan name
-                and the store patch follow along.
-              </p>
-            </div>
-            <div class="relative flex items-center gap-1.5 flex-shrink-0">
+    <AppDrawer
+      open={props.open}
+      onClose={props.onClose}
+      title={`Wire · ${plan().planName}`}
+      titleId="axis-architecture-title"
+      hint="Start from a recipe, then swap any slot. Plugins share one contract."
+      testId="axis-architecture-modal"
+      closeTestId="axis-architecture-close"
+      width="xl"
+      flush
+      panelClass="axis-arch-dialog"
+      headerRight={
               <button
                 type="button"
                 class="sc-btn sc-btn-ghost px-2"
@@ -194,39 +148,10 @@ export const ArchitectureModal: Component<ArchitectureModalProps> = (props) => {
                 <Icons.reset />
                 <span class="axis-tb-btn-label">Reset</span>
               </button>
-              <button
-                type="button"
-                class="sc-btn sc-btn-ghost px-2"
-                onClick={() => props.onClose()}
-                aria-label="Close"
-                data-testid="axis-architecture-close"
-              >
-                <Icons.x />
-              </button>
-            </div>
-          </header>
-
-          <div class="axis-arch-body">
-            <aside class="axis-arch-col axis-arch-col--presets">
-              <PredefinitionList
-                baseId={plan().base.id}
-                pristine={plan().pristine}
-                config={config()}
-                onSelect={selectPredefinition}
-              />
-            </aside>
-
-            <div class="axis-arch-col axis-arch-col--rail">
-              <SlotRail config={config()} plan={plan()} onChange={changeSlot} />
-            </div>
-
-            <aside class="axis-arch-col axis-arch-col--plan">
-              <PlanSummary config={config()} plan={plan()} />
-            </aside>
-          </div>
-
-          <footer class="sc-dialog-footer justify-between">
-            <p class="sc-hint font-mono m-0">
+      }
+      footer={
+        <>
+            <p class="sc-hint font-mono m-0 flex-1">
               <Show
                 when={plan().pristine}
                 fallback={
@@ -257,10 +182,28 @@ export const ArchitectureModal: Component<ArchitectureModalProps> = (props) => {
                 <span class="truncate">Apply {plan().planName}</span>
               </button>
             </div>
-          </footer>
-        </div>
-      </div>
-    </Show>
+        </>
+      }
+    >
+          <div class="axis-arch-body">
+            <aside class="axis-arch-col axis-arch-col--presets">
+              <PredefinitionList
+                baseId={plan().base.id}
+                pristine={plan().pristine}
+                config={config()}
+                onSelect={selectPredefinition}
+              />
+            </aside>
+
+            <div class="axis-arch-col axis-arch-col--rail">
+              <SlotRail config={config()} plan={plan()} onChange={changeSlot} />
+            </div>
+
+            <aside class="axis-arch-col axis-arch-col--plan">
+              <PlanSummary config={config()} plan={plan()} />
+            </aside>
+          </div>
+    </AppDrawer>
   );
 };
 

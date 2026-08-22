@@ -68,6 +68,8 @@ export interface FieldSchema {
    * Hidden from compact inline rows (Topbar); shown in Settings.
    */
   advanced?: boolean;
+  /** Never render in the config UI (schema still used as a fetch default). */
+  hidden?: boolean;
 }
 
 /** Map of field id → schema; defaults merged at call sites. */
