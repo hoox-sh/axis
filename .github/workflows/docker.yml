@@ -5,8 +5,8 @@
 #
 # Images (owner from github.repository_owner):
 #   ghcr.io/<owner>/axis:pwa
-#   ghcr.io/<owner>/axis:pwa-latest
-#   ghcr.io/<owner>/axis:pwa-sha-<sha>
+#   ghcr.io/<owner>/axis:pwa-latest          (main pushes)
+#   ghcr.io/<owner>/axis:pwa-v<version>      (release; e.g. pwa-v2.0.21)
 #   ghcr.io/<owner>/axis:pwa-nginx (when building all/release)
 
 name: Docker

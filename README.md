@@ -58,6 +58,21 @@ See [docs/devops/desktop.mdx](./docs/devops/desktop.mdx) for platform prerequisi
 **Icons:** [Lucide](https://lucide.dev) via `lucide-solid` (tree-shakable stroke
 icons, ISC). Wrapper: `src/ui/icons.tsx`.
 
+## What's in this repo
+
+| Part | Path | What it does |
+|------|------|--------------|
+| **App** (PWA) | `src/` | SolidJS + Vite charting UI — lightweight-charts, CodeMirror 6 Pine editor, plugin registry (`src/plugins/`), theme catalog (`src/theme/`), service worker / offline cache (`src/pwa/`, `src/sw/`). |
+| **Datafeed** | `src/data/` | Background OHLCV pipeline: backfill, validate, gap-fill (`data-source-manager.ts`), venue adapters (`venues/`, Binance HTTP), bars cache + expansion, watchlist live tickers, signed fetch. |
+| **Calc engines** | `src/engines/`, `src/workers/` | Pluggable Pine evaluation backends sharing one contract: local **pyne** Pro API (`:5002`), the Cloudflare **Worker**, or fully offline in-browser **Pyodide**. Workers Manager ships the catalog + health probes for each backend. |
+| **Pyodide runtime** | `public/pyodide/`, `public/vendor/`, `vendor/` | Vendored Python wheel stack so scripts run 100% client-side/offline; SW caches it for installs. Synced from pyne releases via `scripts/sync-pyne-wheel.sh`. |
+| **On-chain plane** | `src/onchain/` | Dataset plugins: DefiLlama TVL, GeckoTerminal pools/ohlcv, catalog + presets, events, jobs scheduler, alerts bridge, export, keys. |
+| **Worker** | `worker/` | Cloudflare Worker API: `/api/run`, `/api/stream` (+ Durable Object WebSocket sessions), KV API keys & usage meter, D1 persistent runs/scripts, R2 indicator bundle cache, Git OAuth for storage-git. |
+| **Proxy** | `worker/src/onchain.ts` ↔ `src/onchain/proxy.ts` | Allowlisted `/api/onchain/*` egress proxy in front of DefiLlama / GeckoTerminal — keeps third-party keys server-side and CORS-clean. |
+| **Desktop** | `src-tauri/`, `src/desktop/` | Tauri 2 native shell (menu, open-script, About) with per-platform installers built by CI. |
+| **CLI** | `packages/cli/` | [`@hoox-sh/axis-cli`](https://www.npmjs.com/package/@hoox-sh/axis-cli) — install, doctor, setup (OAuth/D1), secrets, deploy (Worker/Pages), health. Published to npm on `v*` tags via `.github/workflows/release.yml`. |
+| **Tests & ops** | `tests/`, `e2e/`, `scripts/`, `Makefile`, `.github/workflows/` | Bun unit + worker suites, Playwright smoke, changelog/pyne sync scripts, Docker bake, desktop + npm release pipelines. |
+
 ## Architecture
 
 ```

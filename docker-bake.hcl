@@ -18,8 +18,8 @@
 #   IMAGE_NAME default axis
 #   TAG        default latest
 #   PLATFORMS  default linux/amd64 (local); release uses amd64+arm64
-#   GIT_SHA    default dev
-#   VERSION    default 2.0.0
+#   GIT_SHA    default dev (OCI revision label + build arg only)
+#   VERSION    default 2.0.0 (release images are tagged pwa-v<VERSION>)
 #   CACHE_DIR  default /tmp/axis-buildx-cache
 #   BUN_VERSION default 1.3.14
 
@@ -119,7 +119,7 @@ target "pwa-release" {
   tags = [
     "${REGISTRY}/${IMAGE_NAME}:pwa",
     "${REGISTRY}/${IMAGE_NAME}:pwa-${TAG}",
-    "${REGISTRY}/${IMAGE_NAME}:pwa-sha-${GIT_SHA}",
+    "${REGISTRY}/${IMAGE_NAME}:pwa-v${VERSION}",
   ]
   platforms = ["linux/amd64", "linux/arm64"]
   output    = ["type=image,push=true"]
@@ -144,7 +144,7 @@ target "pwa-nginx-release" {
   tags = [
     "${REGISTRY}/${IMAGE_NAME}:pwa-nginx",
     "${REGISTRY}/${IMAGE_NAME}:pwa-nginx-${TAG}",
-    "${REGISTRY}/${IMAGE_NAME}:pwa-nginx-sha-${GIT_SHA}",
+    "${REGISTRY}/${IMAGE_NAME}:pwa-nginx-v${VERSION}",
   ]
   platforms = ["linux/amd64", "linux/arm64"]
   output    = ["type=image,push=true"]

@@ -1,0 +1,91 @@
+# Copyright (C) 2024-2026 jango_blockchained
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# npm release for the AXIS CLI (`packages/cli` → @hoox-sh/axis-cli).
+#
+# Triggers on version tags (v*) and workflow_dispatch. Requires the
+# `NPM_TOKEN` repository secret (automation token with publish rights
+# for the @hoox-sh scope). Skips cleanly when the package version is
+# already on the registry, so re-running a tag never fails.
+
+name: Release (npm)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: release-npm-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish-cli:
+    name: Publish @hoox-sh/axis-cli
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install CLI dependencies
+        working-directory: packages/cli
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck + test + build
+        working-directory: packages/cli
+        run: |
+          bun run typecheck
+          bun test
+          bun run build
+
+      - name: Setup Node (npm registry auth)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Check registry version
+        id: check
+        run: |
+          PKG_VER=$(node -p "require('./packages/cli/package.json').version")
+          REG_VER=$(npm view "@hoox-sh/axis-cli" version 2>/dev/null || true)
+          echo "local=${PKG_VER}" >> "$GITHUB_OUTPUT"
+          echo "registry=${REG_VER:-<none>}" >> "$GITHUB_OUTPUT"
+          if [ "${PKG_VER}" = "${REG_VER}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "@hoox-sh/axis-cli@${PKG_VER} already published — will skip"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish to npm
+        if: steps.check.outputs.skip != 'true'
+        working-directory: packages/cli
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## npm release"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Package | [\`@hoox-sh/axis-cli\`](https://www.npmjs.com/package/@hoox-sh/axis-cli) |"
+            echo "| Local version | \`${{ steps.check.outputs.local }}\` |"
+            echo "| Registry version | \`${{ steps.check.outputs.registry }}\` |"
+            echo "| Published | \`${{ steps.check.outputs.skip != 'true' && 'yes' || 'skipped (already published)' }}\` |"
+            echo "| Tag | \`${{ github.ref_name }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
