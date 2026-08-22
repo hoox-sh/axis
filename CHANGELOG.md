@@ -23,6 +23,8 @@ _Generated/updated: 2026-08-21 · 250 commits · describe-tag: `v2.0.20`_
 
 ### Fixed
 
+- **`const` (and line-leading keywords) colored inconsistently — green vs violet** — a float ending in a trailing dot (`2.`, `0.`) was split into number + lone `.`, leaving the tokenizer's `afterDot` state set at end-of-line. The state leaked across comments/blank lines, so the *next* code line's first word (`const`, `series`, …) rendered as a member property (green) instead of a keyword (violet accent). Number scanning now consumes trailing-dot floats and `afterDot` resets at every line start.
+
 - **Pre-eval typo checker round 3 — validated against the real 2222-line grid strategy** — found via local reproduction on `grid.pine`: generic typed declarations (`var series array<string> TP1 = …`) were not parsed by the assignment regex, so TP1/SL1/TRL1-class vars were never registered as declared; library import coordinates (`import cryptolinx/String/1 as strx`) leaked into both the declaration collector and ident scanner (`String`/`Hoox` flags); and dotted method calls (`.init()`, `.show()`, `.abs()`) were treated as bare-call typos. All three fixed; checker now reports **0** typos on grid.pine, grid.2.pine.
 
 - **Pre-eval typo checker round 2 — declaration coverage + copy-paste resilience** — remaining false positives addressed: `strategy(linktoseries=…)` whitelisted (pyne accepts arbitrary declaration kwargs); typographic/curly quotes (`“”‘’`) now treated as string delimiters in every scanner so pasted text no longer leaks as identifiers; `enum` members + enum/type names, `type` fields, and `for [i, v] in …` loop vars are collected as declared bindings; dotted-path roots (`Mode.SINGLE`) skipped by the ident scanner.

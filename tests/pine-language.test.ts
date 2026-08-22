@@ -4,10 +4,12 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { StringStream } from '@codemirror/language';
 import {
   tokenizePine,
   advancePineLineState,
   defaultPineHighlightState,
+  type PineHighlightState,
 } from '../src/editor/pyne-language';
 
 function typesOf(src: string): string[] {
@@ -198,5 +200,33 @@ p = Point.new()
     expect(t).toContain('namespace:ta');
     expect(t).toContain('propertyName:sma');
     expect(t).not.toContain('propertyName.special:red');
+  });
+
+  it('trailing-dot floats do not leak afterDot into the next line', () => {
+    // Continuous tokenization with shared state, like CodeMirror streams it.
+    const { pyneParser } = require('../src/editor/pyne-language') as {
+      pyneParser: { token: (s: StringStream, st: PineHighlightState) => string | null };
+    };
+    const lines = [
+      'const float RiskFreeRate = 2.',
+      '// comment in between',
+      'const int X = 1',
+      'series float y = 0.',
+      'const bool z = true',
+    ];
+    const state = defaultPineHighlightState();
+    const constTypes: (string | null)[] = [];
+    for (const line of lines) {
+      const s = new StringStream(line, 4, 4);
+      while (!s.eol()) {
+        s.start = s.pos;
+        const type = pyneParser.token(s, state);
+        const text = line.slice(s.start, s.pos);
+        if (text.trim() === 'const') constTypes.push(type);
+        if (s.pos === s.start) s.next();
+      }
+    }
+    expect(constTypes.length).toBe(3);
+    expect(constTypes.every((t) => t === 'definitionKeyword')).toBe(true);
   });
 });

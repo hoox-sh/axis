@@ -322,6 +322,9 @@ const pyneParser: StreamParser<PineHighlightState> = {
     if (stream.sol()) {
       // `type Name` / `enum Name` are same-line; do not steal the next line's `float`.
       state.afterTypeDecl = false;
+      // Member access never spans lines in Pine — a trailing `.` on the
+      // previous line must not recolor this line's first word.
+      state.afterDot = false;
       if (state.inImport && !state.afterAs) {
         // `import ns/Lib/1` with no `as` — default alias is the library name
         if (state.importName) addImportAlias(state, state.importName);
@@ -376,7 +379,9 @@ const pyneParser: StreamParser<PineHighlightState> = {
       return 'atom';
     }
 
-    if (stream.match(/\d+(\.\d+)?([eE][+-]?\d+)?/)) return 'number';
+    // Trailing-dot floats (`2.`) must be consumed whole — a leftover `.`
+    // would set `afterDot` at EOL and recolor the next line's first word.
+    if (stream.match(/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/)) return 'number';
 
     if (stream.match(OP_RE)) {
       state.afterDot = false;
@@ -522,6 +527,9 @@ const pyneParser: StreamParser<PineHighlightState> = {
 
 /** CodeMirror language support for Pine (`//@version=…`, plots, ta.*, …). */
 export const pyneScript = StreamLanguage.define(pyneParser);
+
+/** Raw stream parser (exported for tests that drive lines with shared state). */
+export { pyneParser };
 
 export type PineToken = { text: string; type: string | null };
 
