@@ -529,7 +529,13 @@ export const ccxtWsStream: StreamPlugin = {
   },
   configSchema: {
     exchange: { type: 'string', default: '', label: 'Exchange ID' },
-    gateway: { type: 'select', default: 'auto', label: 'Gateway', options: ['auto', 'pyne', 'sidecar'] },
+    gateway: {
+      type: 'select',
+      default: 'auto',
+      label: 'Gateway',
+      options: ['auto', 'pyne', 'sidecar'],
+      advanced: true,
+    },
   },
   start({ symbol, interval, onBar, onStatus, onError, config }) {
     const exchange = String(config?.exchange ?? '').trim();
@@ -538,31 +544,46 @@ export const ccxtWsStream: StreamPlugin = {
       return () => {};
     }
     const gateway = String(config?.gateway ?? 'auto') as 'auto' | 'pyne' | 'sidecar';
-    const ws: WebSocket = gatewayWs(
-      gateway,
-      `/watch?exchange=${encodeURIComponent(exchange)}&symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(interval)}`,
-    );
-    ws.onmessage = (ev: MessageEvent) => {
-      try {
-        const frame = JSON.parse(String(ev.data));
-        onBar({
-          time: frame.time,
-          open: frame.open,
-          high: frame.high,
-          low: frame.low,
-          close: frame.close,
-          volume: frame.volume,
-          closed: frame.closed,
-        });
-      } catch {
-        /* ignore malformed frames */
-      }
-    };
-    ws.onerror = (ev: Event) => onError?.(new Error(String(ev)));
-    ws.onopen = () => onStatus?.({ state: 'open' });
-    ws.onclose = () => onStatus?.({ state: 'closed' });
+    let stopped = false;
+    let ws: WebSocket | undefined;
+    void import('../data/ccxt-session').then(({ bindCcxtSession }) => bindCcxtSession(gateway, exchange)).then((cred) => {
+      if (stopped) return;
+      const q = new URLSearchParams({
+        exchange,
+        symbol,
+        timeframe: interval,
+      });
+      if (cred) q.set('cred', cred);
+      ws = gatewayWs(gateway, `/watch?${q.toString()}`);
+      ws.onmessage = (ev: MessageEvent) => {
+        try {
+          const frame = JSON.parse(String(ev.data));
+          onBar({
+            time: frame.time,
+            open: frame.open,
+            high: frame.high,
+            low: frame.low,
+            close: frame.close,
+            volume: frame.volume,
+            closed: frame.closed,
+          });
+        } catch {
+          /* ignore malformed frames */
+        }
+      };
+      ws.onerror = (ev: Event) => onError?.(new Error(String(ev)));
+      ws.onopen = () => onStatus?.({ state: 'open' });
+      ws.onclose = () => onStatus?.({ state: 'closed' });
+    }).catch((err: unknown) => {
+      if (!stopped) onError?.(err instanceof Error ? err : new Error(String(err)));
+    });
     return () => {
-      ws.close();
+      stopped = true;
+      try {
+        ws?.close();
+      } catch {
+        /* ignore */
+      }
     };
   },
 };

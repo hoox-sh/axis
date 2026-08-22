@@ -412,7 +412,7 @@ export const App: Component = () => {
           setEditorOpen(!store.editor.open);
         }}
         onToggleWatchlist={() => setWatchlistOpen(!store.watchlist.open)}
-        onOpenSettings={() => openSettings('general')}
+        onOpenSettings={(tab) => openSettings(tab || 'general')}
         onOpenPlugins={() => openRuntimes('plugins')}
         onOpenWorkers={() => openRuntimes('status')}
         onOpenArchitecture={() => setArchitectureOpen(true)}

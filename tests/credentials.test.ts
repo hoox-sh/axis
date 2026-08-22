@@ -25,12 +25,16 @@ import './setup';
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import {
   CREDENTIALS_MEMORY_ONLY,
+  ccxtCredentialId,
   clearCredentials,
   deleteCredential,
+  getCcxtCredential,
   getCredential,
   getCredentialForVenue,
+  hasCcxtCredential,
   hasCredentialForVenue,
   listCredentialMeta,
+  putCcxtCredential,
   putCredential,
   redactSecrets,
 } from '../src/data/credentials';
@@ -80,6 +84,27 @@ describe('put / get / list meta', () => {
     expect(meta[0]).not.toHaveProperty('passphrase');
     expect(JSON.stringify(meta)).not.toContain(SECRET);
     expect(JSON.stringify(meta)).not.toContain(API_KEY);
+  });
+
+  it('stores CCXT keys per exchange id without colliding with native venues', () => {
+    putCredential({ venue: 'bybit', apiKey: API_KEY, secret: SECRET });
+    const ccxt = putCcxtCredential({
+      exchange: 'Bybit',
+      apiKey: 'ccxt-key',
+      secret: 'ccxt-secret',
+      passphrase: 'okx-style',
+    });
+    expect(ccxt.id).toBe('ccxt:bybit');
+    expect(ccxtCredentialId('BYBIT')).toBe('ccxt:bybit');
+    expect(getCcxtCredential('bybit')?.secret).toBe('ccxt-secret');
+    expect(hasCcxtCredential('bybit')).toBe(true);
+    expect(getCredentialForVenue('bybit')?.apiKey).toBe(API_KEY);
+    const meta = listCredentialMeta();
+    expect(meta.some((m) => m.id === 'ccxt:bybit' && m.exchange === 'bybit')).toBe(true);
+    expect(JSON.stringify(meta)).not.toContain('ccxt-secret');
+    expect(deleteCredential('ccxt:bybit')).toBe(true);
+    expect(hasCcxtCredential('bybit')).toBe(false);
+    expect(hasCredentialForVenue('bybit')).toBe(true);
   });
 
   it('JSON.stringify(listCredentialMeta()) does not contain the secret', () => {

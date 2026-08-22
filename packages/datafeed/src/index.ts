@@ -92,7 +92,9 @@ const server = Bun.serve({
 
   async fetch(req) {
     const url = new URL(req.url);
-    const path = url.pathname;
+    const path = url.pathname.startsWith('/datafeed/')
+      ? url.pathname.slice('/datafeed'.length)
+      : url.pathname;
 
     if (req.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders() });
@@ -104,7 +106,7 @@ const server = Bun.serve({
     }
 
     // ── GET /datafeed/ohlcv ───────────────────────────────────────
-    if (path === '/datafeed/ohlcv' && req.method === 'GET') {
+    if (path === '/ohlcv' && req.method === 'GET') {
       const exchange = url.searchParams.get('exchange');
       const symbol = url.searchParams.get('symbol');
       if (!exchange || !symbol) return err('missing exchange or symbol');
@@ -121,7 +123,7 @@ const server = Bun.serve({
     }
 
     // ── GET /datafeed/markets ─────────────────────────────────────
-    if (path === '/datafeed/markets' && req.method === 'GET') {
+    if (path === '/markets' && req.method === 'GET') {
       const exchange = url.searchParams.get('exchange');
       if (!exchange) return err('missing exchange');
       try {
@@ -133,7 +135,7 @@ const server = Bun.serve({
     }
 
     // ── POST /datafeed/session ────────────────────────────────────
-    if (path === '/datafeed/session' && req.method === 'POST') {
+    if (path === '/session' && req.method === 'POST') {
       try {
         const body = (await req.json()) as SessionBody;
         if (!body.exchange || !body.credentialId || !body.apiKey || !body.secret) {
@@ -153,7 +155,7 @@ const server = Bun.serve({
     }
 
     // ── DELETE /datafeed/session ──────────────────────────────────
-    if (path === '/datafeed/session' && req.method === 'DELETE') {
+    if (path === '/session' && req.method === 'DELETE') {
       const credId = url.searchParams.get('cred');
       if (!credId) return err('missing cred param');
       const ok = deleteCredential(credId);
@@ -161,7 +163,7 @@ const server = Bun.serve({
     }
 
     // ── WS /datafeed/watch ────────────────────────────────────────
-    if (path === '/datafeed/watch') {
+    if (path === '/watch') {
       const exchange = url.searchParams.get('exchange');
       const symbol = url.searchParams.get('symbol');
       if (!exchange || !symbol) return err('missing exchange or symbol');

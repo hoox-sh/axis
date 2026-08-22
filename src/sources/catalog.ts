@@ -437,7 +437,7 @@ export const mockWalk: SourcePlugin = {
   capabilities: { offline: true, venue: 'mock', transport: 'local' },
   configSchema: {
     seed: { type: 'number', default: 0, label: 'Seed (0 = random)' },
-    startPrice: { type: 'number', default: 100, label: 'Start price' },
+    startPrice: { type: 'number', default: 100, label: 'Start price', advanced: true },
     limit: { type: 'number', default: 500, min: 50, max: 100_000, label: 'Bars' , advanced: true },
   },
   async fetchHistorical({ interval, config, endTime, startTime }) {
@@ -689,7 +689,12 @@ export const coinbaseRest: SourcePlugin = {
   description: 'Coinbase Exchange public candles. Symbol BTCUSDT → BTC-USD.',
   capabilities: { needsNetwork: true, venue: 'coinbase', market: 'spot', transport: 'rest' },
   configSchema: {
-    granularity: { type: 'number', default: 0, label: 'Override granularity (sec, 0=auto)' },
+    granularity: {
+      type: 'number',
+      default: 0,
+      label: 'Override granularity (sec, 0=auto)',
+      advanced: true,
+    },
   },
   async fetchHistorical({ symbol, interval, startTime, endTime, signal, config }) {
     const product = dashPair(symbol.replace(/USDT$/i, 'USD'), 'USD');
@@ -847,12 +852,14 @@ export const geckoTerminalOhlcv: SourcePlugin = {
       description:
         'Empty = use AXIS Worker on-chain proxy when available. Override with https://api.geckoterminal.com/api/v2 or a custom proxy.',
       placeholder: '{endpoint}/api/onchain/gecko',
+      advanced: true,
     },
     network: {
       type: 'string',
       default: 'eth',
       label: 'Default network',
       description: 'Used when the symbol is a bare 0x pool address (e.g. eth, base, solana, bsc).',
+      advanced: true,
     },
   },
   async fetchHistorical({
@@ -938,18 +945,29 @@ export const ccxtRest: SourcePlugin = {
   capabilities: { needsNetwork: true, venue: 'generic', market: 'spot', transport: 'rest' },
   configSchema: {
     exchange: { type: 'string', default: '', label: 'Exchange ID', description: 'CCXT exchange id (bybit, bitget, ...)' },
-    gateway: { type: 'select', default: 'auto', label: 'Gateway', options: ['auto', 'pyne', 'sidecar'], description: 'auto | pyne | sidecar' },
+    gateway: {
+      type: 'select',
+      default: 'auto',
+      label: 'Gateway',
+      options: ['auto', 'pyne', 'sidecar'],
+      description: 'auto | pyne | sidecar — transport for long-tail venues',
+      advanced: true,
+    },
   },
   async fetchHistorical({ symbol, interval, limit, endTime, config }) {
     const { gatewayFetch } = await import('../data/gateway');
+    const { bindCcxtSession } = await import('../data/ccxt-session');
     const cfg = resolveConfig(this.configSchema, config);
     const exchange = String(cfg.exchange || '').trim();
     if (!exchange) throw new Error('ccxt-rest: exchange id not configured (source settings)');
+    const gatewayMode = (String(cfg.gateway || 'auto') as 'auto' | 'pyne' | 'sidecar');
+    const cred = await bindCcxtSession(gatewayMode, exchange);
     const params: Record<string, string> = {
       exchange,
       symbol,
       timeframe: interval,
     };
+    if (cred) params.cred = cred;
     // Walk-back contract: endTime is the window's right edge. CCXT pages
     // forward from `since`, so derive since = endTime − limit·tf to fetch
     // the page of bars ending at/before endTime (DSM walk-back convergence).
@@ -960,7 +978,6 @@ export const ccxtRest: SourcePlugin = {
       params.since = String(since);
     }
     if (limit) params.limit = String(limit);
-    const gatewayMode = (String(cfg.gateway || 'auto') as 'auto' | 'pyne' | 'sidecar');
     const res = await gatewayFetch(gatewayMode, '/ohlcv', params);
     if (!res.ok) throw new Error(`Gateway ohlcv ${res.status}`);
     const json = await res.json();

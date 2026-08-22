@@ -17,11 +17,29 @@ _Generated/updated: 2026-08-21 · 250 commits · describe-tag: `v2.0.20`_
 
 ### Added
 
+- **CCXT session API keys** — Settings → Data can store a key + secret (+ passphrase / uid) per CCXT exchange id (`ccxt:bybit`, …) in the RAM vault (never `pluginsConfig` / localStorage). Save POSTs `POST /datafeed/session`; Load/Live then pass only `cred=` on OHLCV/watch. Public candles still work without a key. Topbar shows an **API key** chip next to the CCXT exchange picker. Gateway `auto|pyne|sidecar` moved to Settings (advanced). Sidecar accepts `/ohlcv` and `/datafeed/ohlcv`. PYNE `POST /datafeed/session` accepts `apiKey`/`secret`/`password` in the JSON body.
+
+- **npm release pipeline for the AXIS CLI** — `@hoox-sh/axis-cli` (`packages/cli`) is now publishable: dropped `"private"`, and a new `.github/workflows/release.yml` typechecks, tests, builds and publishes the package to npm on `v*` tags using an `NPM_TOKEN` repository secret. A registry-version guard skips cleanly when the version is already published (safe tag re-runs); run summary reports local vs registry versions.
+
+- **"What's in this repo" section in README** — table mapping every part of the repo to its role and paths: app/PWA, datafeed pipeline, calc engines + Workers Manager, vendored Pyodide runtime, on-chain plane, Cloudflare Worker (API/WS/D1/KV/R2), allowlisted `/api/onchain` proxy, Tauri desktop shell, npm-published CLI, tests/ops.
+
 - **Plugin config `advanced` fields + Settings section** — schema fields can now be marked `advanced` (API base URL, Bars, Synthesize on failure, …). They are hidden from the Topbar config row and rendered in Settings → "Source & stream plugins" with full descriptions, using the shared form classes.
 
 - **Full unified ccxt exchange dropdown** — the Exchange ID select is fed by the gateway's complete ccxt exchange list (`/health` → new `ccxt_exchanges`, mirrors `ccxt.exchanges`; ~103 venues) instead of only the native adapters. PYNE side: `backend/api/datafeed.py` health payload extended accordingly.
 
+### Changed
+
+- **Docker release images tagged by version, not sha** — `docker-bake.hcl` release targets now push `pwa-v<VERSION>` / `pwa-nginx-v<VERSION>` (e.g. `ghcr.io/hoox-sh/axis:pwa-v2.0.21`) instead of `pwa-sha-<sha>`. The git SHA remains on the image as the `org.opencontainers.image.revision` label and build arg; workflow docs updated to match.
+
 ### Fixed
+
+- **Plugin config row — first-save, apply, and exchange dropdown** — shared source/stream fields now (1) resolve a stored value from *any* target bag before falling back to a schema default (stream `exchange` is no longer hidden by a source default of `''`), (2) persist text/number keystrokes but only reload history on blur/Enter (selects/checkboxes still apply immediately), (3) treat the exchange control as a `<select>` only when the gateway list is actually populated, with a placeholder `Select exchange…` option and a free-text fallback when the fetch fails or returns empty, (4) cache the ccxt list per gateway mode, and (5) wire stacked-form `label for` to the control `id`. Gecko `baseUrl`/`network`, Coinbase granularity, and Mock Walk start price are Settings-only (`advanced`). Topbar Load no longer bails out while a previous fetch is in flight.
+
+- **Pre-eval scanners close paired typographic quotes** — `“…”` / `‘…’` now close on the matching right quote (not only the same code point), so a pasted title string no longer marks the rest of the file as an unclosed string and block Run. Shared `isQuoteClose` in `pine-scan-util.ts`.
+
+- **`array<string>` survived as `array` after Add types** — the declaration rewriter captured the collection token but dropped `<string>` when inserting a missing type1 qualifier. Generic args are preserved (`simple array<string> vals = …`).
+
+- **Type methods and `export enum` missed as user bindings** — indented `method profit(this) =>` inside a `type` body and `export enum Name` now register as declared names (same as `export type`).
 
 - **`const` (and line-leading keywords) colored inconsistently — green vs violet** — a float ending in a trailing dot (`2.`, `0.`) was split into number + lone `.`, leaving the tokenizer's `afterDot` state set at end-of-line. The state leaked across comments/blank lines, so the *next* code line's first word (`const`, `series`, …) rendered as a member property (green) instead of a keyword (violet accent). Number scanning now consumes trailing-dot floats and `afterDot` resets at every line start.
 

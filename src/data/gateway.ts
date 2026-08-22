@@ -181,6 +181,57 @@ export async function gatewayFetch(
   return fetch(url.toString(), { signal: AbortSignal.timeout(10_000) });
 }
 
+/** RAM session body for `POST /session` — secrets in JSON, never query string. */
+export type GatewaySessionBody = {
+  exchange: string;
+  credentialId: string;
+  apiKey: string;
+  secret: string;
+  password?: string;
+  uid?: string;
+};
+
+/**
+ * Bind CCXT keys on the gateway. Do not log `body`.
+ * Sidecar stores by `credentialId`; PYNE stores by `exchange`.
+ */
+export async function gatewayPutSession(
+  mode: GatewayMode,
+  body: GatewaySessionBody,
+  endpoint?: string,
+  pageOrigin?: string,
+): Promise<void> {
+  const base = gatewayBase(mode, endpoint, pageOrigin);
+  if (!base) throw new Error('Gateway mode is direct — use venue-native fetch instead');
+  const res = await fetch(`${base}/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`gateway session ${res.status}`);
+  }
+}
+
+export async function gatewayDeleteSession(
+  mode: GatewayMode,
+  credId: string,
+  endpoint?: string,
+  pageOrigin?: string,
+): Promise<void> {
+  const base = gatewayBase(mode, endpoint, pageOrigin);
+  if (!base) return;
+  const url = new URL(`${base}/session`);
+  url.searchParams.set('cred', credId);
+  url.searchParams.set('exchange', credId.startsWith('ccxt:') ? credId.slice(5) : credId);
+  try {
+    await fetch(url.toString(), { method: 'DELETE', signal: AbortSignal.timeout(10_000) });
+  } catch {
+    /* gateway down — local vault already dropped the key */
+  }
+}
+
 // ---------------------------------------------------------------------------
 // WebSocket helper
 // ---------------------------------------------------------------------------

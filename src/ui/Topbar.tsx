@@ -89,6 +89,10 @@ import { SymbolModal } from './SymbolModal';
 import { RunSplitButton } from './RunSplitButton';
 import { openAboutModal } from './AboutModal';
 import {
+  hasCcxtCredential,
+  subscribeCredentials,
+} from '../data/credentials';
+import {
   toggleBrowserFullscreen,
   toggleChartOnlyMode,
 } from './presentation';
@@ -101,7 +105,7 @@ const INTERVALS = [...WATCHLIST_INTERVALS];
 export const Topbar: Component<{
   onToggleEditor: () => void;
   onToggleWatchlist: () => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (tab?: 'general' | 'data' | 'editor' | 'theme') => void;
   onOpenPlugins?: () => void;
   /** Open Workers Manager (backends / edge / Pyodide / SW). */
   onOpenWorkers?: () => void;
@@ -135,6 +139,8 @@ export const Topbar: Component<{
   /** Last symbol we successfully requested (avoids redundant blur reloads). */
   let lastLoadedSymbol = store.symbol;
   let lastLoadedInterval = store.interval;
+  /** Newest load wins; `loadSymbolData` already aborts the prior network request. */
+  let loadSeq = 0;
 
   onMount(() => {
     const unsub = subscribeReplay((st) => setReplayOn(st.active));
@@ -142,7 +148,6 @@ export const Topbar: Component<{
   });
 
   const loadHistorical = async (opts?: { force?: boolean }) => {
-    if (loading()) return;
     const sym = store.symbol.trim().toUpperCase();
     if (!sym) return;
     if (
@@ -153,15 +158,17 @@ export const Topbar: Component<{
     ) {
       return;
     }
+    const seq = ++loadSeq;
     setLoading(true);
     try {
       const ok = await loadSymbolData(sym, store.interval, store.source);
+      if (seq !== loadSeq) return;
       if (ok) {
         lastLoadedSymbol = sym;
         lastLoadedInterval = store.interval;
       }
     } finally {
-      setLoading(false);
+      if (seq === loadSeq) setLoading(false);
     }
   };
 
@@ -397,6 +404,10 @@ export const Topbar: Component<{
         </TopbarField>
 
         <PluginConfigRow onApplied={() => void loadHistorical({ force: true })} />
+
+        <Show when={store.source === 'ccxt-rest'}>
+          <CcxtKeyChip onOpen={() => props.onOpenSettings('data')} />
+        </Show>
 
         <Show when={store.source === 'csv-upload'}>
           <button
@@ -832,7 +843,7 @@ export const Topbar: Component<{
         <button
           type="button"
           class="sc-btn sc-btn-ghost sc-btn-icon"
-          onClick={props.onOpenSettings}
+          onClick={() => props.onOpenSettings()}
           title="Settings — density, engine, live"
           data-testid="axis-btn-settings"
           aria-label="Open settings"
@@ -854,3 +865,45 @@ export const Topbar: Component<{
     </header>
   );
 };
+
+function ccxtExchangeFromStore(): string {
+  const bags = store.pluginsConfig || {};
+  const src = bags['source:ccxt-rest'] as Record<string, unknown> | undefined;
+  const stm = bags['stream:ccxt-ws'] as Record<string, unknown> | undefined;
+  return String(src?.exchange || stm?.exchange || '').trim().toLowerCase();
+}
+
+function CcxtKeyChip(props: { onOpen: () => void }) {
+  const [rev, setRev] = createSignal(0);
+  onMount(() => {
+    const unsub = subscribeCredentials(() => setRev((n) => n + 1));
+    onCleanup(unsub);
+  });
+  const saved = createMemo(() => {
+    rev();
+    void store.pluginsConfig;
+    const ex = ccxtExchangeFromStore();
+    return !!ex && hasCcxtCredential(ex);
+  });
+  const label = () => {
+    const ex = ccxtExchangeFromStore();
+    if (saved()) return ex ? `Key · ${ex}` : 'Key saved';
+    return 'API key';
+  };
+  return (
+    <button
+      type="button"
+      class="sc-btn sc-btn-ghost"
+      data-testid="axis-cfg-ccxt-key"
+      title={
+        saved()
+          ? 'Session API key saved for this CCXT exchange — click to edit in Settings → Data'
+          : 'Add a session API key + secret for this CCXT exchange (optional for public candles)'
+      }
+      onClick={props.onOpen}
+    >
+      <Icons.key />
+      <span class="axis-tb-btn-label">{label()}</span>
+    </button>
+  );
+}

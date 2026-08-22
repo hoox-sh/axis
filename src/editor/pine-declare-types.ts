@@ -150,6 +150,8 @@ type AssignHit = {
   mode: 'var' | 'varip' | null;
   type1: PineType1 | null;
   type2: string | null;
+  /** Generic args on type2 (`<string>`, `<string,float>`), empty when absent. */
+  type2Generic: string;
   name: string;
   rhs: string;
   /** Full original line (no trailing newline) */
@@ -158,30 +160,32 @@ type AssignHit = {
 
 /**
  * Match a single-line assignment declaration.
- * Groups: indent, export?, var/varip?, type1?, type2?, name, rhs
+ * Groups: indent, export?, var/varip?, type1?, type2?, type2Generic?, name, rhs
  */
 const ASSIGN_RE =
-  /^(\s*)(export\s+)?(varip|var)?\s*(?:(series|simple|const)\s+)?(?:(int|float|bool|string|color|label|line|box|table|polyline|array|matrix|map|linefill)(?:\s*<(?:[^<>]|<[^<>]*>)*>)?\s+)?([A-Za-z_][\w]*)\s*=\s*(.+)$/;
+  /^(\s*)(export\s+)?(varip|var)?\s*(?:(series|simple|const)\s+)?(?:(int|float|bool|string|color|label|line|box|table|polyline|array|matrix|map|linefill)(\s*<(?:[^<>]|<[^<>]*>)*>)?\s+)?([A-Za-z_][\w]*)\s*=\s*(.+)$/;
 
 /** Parse one line into an assign hit, or null. */
 export function parseAssignLine(line: string): AssignHit | null {
   const m = line.match(ASSIGN_RE);
   if (!m) return null;
-  const name = m[6]!;
+  const name = m[7]!;
   if (RESERVED.has(name.toLowerCase())) return null;
   // Skip compound / reassignment that slipped through (shouldn’t)
   if (line.includes(':=')) return null;
   const modeRaw = m[3] ? m[3].toLowerCase() : null;
   const type1Raw = m[4] ? (m[4].toLowerCase() as PineType1) : null;
   const type2Raw = m[5] ? m[5].toLowerCase() : null;
+  const type2Generic = m[6] ? m[6].replace(/\s+/g, '') : '';
   return {
     indent: m[1] || '',
     exportKw: Boolean(m[2]),
     mode: modeRaw === 'var' || modeRaw === 'varip' ? modeRaw : null,
     type1: type1Raw && TYPE1.has(type1Raw) ? type1Raw : null,
     type2: type2Raw && TYPE2.has(type2Raw) ? type2Raw : null,
+    type2Generic,
     name,
-    rhs: (m[7] || '').trim(),
+    rhs: (m[8] || '').trim(),
     raw: line,
   };
 }
@@ -366,13 +370,13 @@ export function buildTypePrefix(
 function rebuildLine(
   hit: AssignHit,
   type1: PineType1 | null,
-  type2: PineType2 | null,
+  type2: string | null,
 ): string {
   const parts: string[] = [];
   if (hit.exportKw) parts.push('export');
   if (hit.mode) parts.push(hit.mode);
   if (type1) parts.push(type1);
-  if (type2) parts.push(type2);
+  if (type2) parts.push(type2 + (hit.type2Generic || ''));
   parts.push(hit.name);
   return `${hit.indent}${parts.join(' ')} = ${hit.rhs}`;
 }

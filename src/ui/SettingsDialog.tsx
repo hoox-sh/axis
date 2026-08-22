@@ -106,11 +106,16 @@ import type { VenueId } from '../data/venues/types';
 import {
   EXCHANGE_CREDENTIAL_VENUES,
   EXCHANGE_CREDENTIAL_VENUE_LABELS,
+  ccxtNeedsPassword,
   defaultExchangeCredentialVenue,
   isExchangeCredentialVenue,
+  normalizeCcxtExchangeId,
   venueNeedsPassphrase,
   type ExchangeCredentialVenue,
 } from './exchange-credentials-form';
+import { bindCcxtSession, unbindCcxtSession } from '../data/ccxt-session';
+import type { GatewayMode } from '../data/gateway';
+import { writePluginField } from './plugin-config';
 
 /** PYNE Runtime modes for the server/worker engine plugin config. */
 export type EngineExecMode = 'interpret' | 'compile' | 'auto';
@@ -556,8 +561,9 @@ export const SettingsDialog: Component<Props> = (props) => {
                   <div class="sc-section-title">Source &amp; stream plugins</div>
                   <p class="sc-hint mt-0">
                     Settings for the active data source and live stream (shared — one value each).
-                    Advanced options like API base URL, Bars, and failure fallbacks live here.
-                    CCXT Gateway venues serve public market data — no API keys required.
+                    Gateway transport, API base URL, Bars, and fallbacks live here — not on the
+                    topbar. Public candles work without a key; optional CCXT keys are session-only
+                    (never localStorage, never in the request URL).
                   </p>
                   <PluginConfigRow layout="stacked" showAdvanced />
                 </div>
@@ -1327,14 +1333,30 @@ type CredentialMetaRow = {
   hasPassphrase: boolean;
 };
 
+function readCcxtPluginField(key: string): string {
+  const bags = store.pluginsConfig || {};
+  const src = bags['source:ccxt-rest'] as Record<string, unknown> | undefined;
+  const stm = bags['stream:ccxt-ws'] as Record<string, unknown> | undefined;
+  return String(src?.[key] ?? stm?.[key] ?? '').trim();
+}
+
+function activeCcxtGateway(): GatewayMode {
+  const g = readCcxtPluginField('gateway');
+  return g === 'pyne' || g === 'sidecar' ? g : 'auto';
+}
+
 /** Per-venue API key/secret/passphrase — session vault, never persist() secrets. */
 const ExchangeCredentialsPanel: Component = () => {
+  const onCcxtSource = () => store.source === 'ccxt-rest' || store.live?.streamId === 'ccxt-ws';
+  const [kind, setKind] = createSignal<'native' | 'ccxt'>(onCcxtSource() ? 'ccxt' : 'native');
   const [venue, setVenue] = createSignal<ExchangeCredentialVenue>(
     defaultExchangeCredentialVenue(store.provider?.venue),
   );
+  const [ccxtExchange, setCcxtExchange] = createSignal(readCcxtPluginField('exchange'));
   const [apiKey, setApiKey] = createSignal('');
   const [secret, setSecret] = createSignal('');
   const [passphrase, setPassphrase] = createSignal('');
+  const [uid, setUid] = createSignal('');
   const [msg, setMsg] = createSignal('');
   const [rev, setRev] = createSignal(0);
 
@@ -1343,27 +1365,30 @@ const ExchangeCredentialsPanel: Component = () => {
 
   const meta = createMemo((): CredentialMetaRow | null => {
     rev();
-    const v = venue();
     const rows = cred.listCredentialMeta() as CredentialMetaRow[];
-    return rows.find((m) => m.venue === v) ?? null;
+    if (kind() === 'ccxt') {
+      const ex = normalizeCcxtExchangeId(ccxtExchange());
+      return rows.find((m) => m.id === cred.ccxtCredentialId(ex)) ?? null;
+    }
+    const v = venue();
+    return rows.find((m) => m.venue === v && !String(m.id).startsWith('ccxt:')) ?? null;
   });
 
   const hasSaved = createMemo(() => {
     rev();
-    try {
-      return cred.hasCredentialForVenue(venue());
-    } catch {
-      const m = meta();
-      return !!(m && (m.hasKey || m.hasSecret || m.hasPassphrase));
-    }
+    const m = meta();
+    return !!(m && (m.hasKey || m.hasSecret || m.hasPassphrase));
   });
 
-  const needsPass = createMemo(() => venueNeedsPassphrase(venue()));
+  const needsPass = createMemo(() =>
+    kind() === 'ccxt' ? ccxtNeedsPassword(ccxtExchange()) : venueNeedsPassphrase(venue()),
+  );
 
   const clearSecrets = () => {
     setApiKey('');
     setSecret('');
     setPassphrase('');
+    setUid('');
   };
 
   const onVenueChange = (raw: string) => {
@@ -1373,8 +1398,7 @@ const ExchangeCredentialsPanel: Component = () => {
     setMsg('');
   };
 
-  const onSave = () => {
-    const v = venue();
+  const onSave = async () => {
     const key = apiKey().trim();
     const sec = secret().trim();
     const pass = passphrase().trim();
@@ -1387,6 +1411,31 @@ const ExchangeCredentialsPanel: Component = () => {
       return;
     }
     try {
+      if (kind() === 'ccxt') {
+        const ex = normalizeCcxtExchangeId(ccxtExchange());
+        if (!ex) {
+          setMsg('Set the CCXT exchange id (topbar or above) first');
+          return;
+        }
+        cred.putCcxtCredential({
+          exchange: ex,
+          apiKey: key,
+          secret: sec,
+          passphrase: pass || undefined,
+          uid: uid().trim() || undefined,
+        });
+        if (!readCcxtPluginField('exchange')) {
+          writePluginField('source:ccxt-rest', 'exchange', ex);
+          writePluginField('stream:ccxt-ws', 'exchange', ex);
+          void flushPersist();
+        }
+        await bindCcxtSession(activeCcxtGateway(), ex);
+        clearSecrets();
+        setMsg('');
+        setStatus('ready', `CCXT key saved · ${ex} · session only`);
+        return;
+      }
+      const v = venue();
       cred.putCredential({
         venue: v,
         apiKey: key,
@@ -1401,8 +1450,7 @@ const ExchangeCredentialsPanel: Component = () => {
     }
   };
 
-  const onRemove = () => {
-    const v = venue();
+  const onRemove = async () => {
     const row = meta();
     const id = row?.id;
     if (!id) {
@@ -1410,9 +1458,13 @@ const ExchangeCredentialsPanel: Component = () => {
       return;
     }
     cred.deleteCredential(id);
+    if (kind() === 'ccxt') {
+      const ex = normalizeCcxtExchangeId(ccxtExchange());
+      if (ex) await unbindCcxtSession(activeCcxtGateway(), ex);
+    }
     clearSecrets();
     setMsg('');
-    setStatus('ready', `Exchange key removed · ${v}`);
+    setStatus('ready', `Exchange key removed · ${kind() === 'ccxt' ? ccxtExchange() : venue()}`);
   };
 
   const [testing, setTesting] = createSignal(false);
@@ -1453,28 +1505,76 @@ const ExchangeCredentialsPanel: Component = () => {
       <div class="sc-section-title">Exchange API keys</div>
       <p class="sc-hint mt-0" data-testid="axis-exchange-session-note">
         Saved in this session only (not written to disk). AXIS never puts key, secret, or
-        passphrase into localStorage.
+        passphrase into localStorage. Native CEX keys sign in the browser; CCXT keys are
+        posted to the datafeed session (handle on later requests, never the secret in the URL).
       </p>
 
       <div class="sc-field">
         <label
           class="text-[10px] text-text-dim uppercase tracking-wider"
-          for="axis-exchange-venue"
+          for="axis-exchange-key-kind"
         >
-          Venue
+          Key type
         </label>
         <select
-          id="axis-exchange-venue"
+          id="axis-exchange-key-kind"
           class="sc-input w-full"
-          data-testid="axis-exchange-venue"
-          value={venue()}
-          onChange={(e) => onVenueChange(e.currentTarget.value)}
+          data-testid="axis-exchange-key-kind"
+          value={kind()}
+          onChange={(e) => {
+            setKind(e.currentTarget.value === 'ccxt' ? 'ccxt' : 'native');
+            clearSecrets();
+            setMsg('');
+          }}
         >
-          <For each={[...EXCHANGE_CREDENTIAL_VENUES]}>
-            {(v) => <option value={v}>{EXCHANGE_CREDENTIAL_VENUE_LABELS[v]}</option>}
-          </For>
+          <option value="native">Native CEX (Binance, OKX, Bybit, Coinbase, Kraken)</option>
+          <option value="ccxt">CCXT gateway (long-tail exchange)</option>
         </select>
       </div>
+
+      <Show
+        when={kind() === 'ccxt'}
+        fallback={
+          <div class="sc-field">
+            <label
+              class="text-[10px] text-text-dim uppercase tracking-wider"
+              for="axis-exchange-venue"
+            >
+              Venue
+            </label>
+            <select
+              id="axis-exchange-venue"
+              class="sc-input w-full"
+              data-testid="axis-exchange-venue"
+              value={venue()}
+              onChange={(e) => onVenueChange(e.currentTarget.value)}
+            >
+              <For each={[...EXCHANGE_CREDENTIAL_VENUES]}>
+                {(v) => <option value={v}>{EXCHANGE_CREDENTIAL_VENUE_LABELS[v]}</option>}
+              </For>
+            </select>
+          </div>
+        }
+      >
+        <div class="sc-field">
+          <label
+            class="text-[10px] text-text-dim uppercase tracking-wider"
+            for="axis-exchange-ccxt-id"
+          >
+            CCXT exchange id
+          </label>
+          <input
+            id="axis-exchange-ccxt-id"
+            class="sc-input font-mono text-[12px] w-full"
+            data-testid="axis-exchange-ccxt-id"
+            value={ccxtExchange()}
+            onInput={(e) => setCcxtExchange(normalizeCcxtExchangeId(e.currentTarget.value))}
+            placeholder="bybit, bitget, mexc, …"
+            spellcheck={false}
+            autocomplete="off"
+          />
+        </div>
+      </Show>
 
       <div class="sc-field">
         <label
@@ -1547,6 +1647,27 @@ const ExchangeCredentialsPanel: Component = () => {
         </div>
       </Show>
 
+      <Show when={kind() === 'ccxt'}>
+        <div class="sc-field">
+          <label
+            class="text-[10px] text-text-dim uppercase tracking-wider"
+            for="axis-exchange-uid"
+          >
+            UID (optional)
+          </label>
+          <input
+            id="axis-exchange-uid"
+            class="sc-input font-mono text-[12px] w-full"
+            data-testid="axis-exchange-uid"
+            value={uid()}
+            onInput={(e) => setUid(e.currentTarget.value)}
+            placeholder="Some venues (e.g. BitMEX) require a uid"
+            spellcheck={false}
+            autocomplete="off"
+          />
+        </div>
+      </Show>
+
       <div class="flex flex-wrap gap-2 mt-1">
         <button
           type="button"
@@ -1571,7 +1692,8 @@ const ExchangeCredentialsPanel: Component = () => {
           type="button"
           class="sc-btn"
           data-testid="axis-exchange-key-test"
-          disabled={!hasSaved() || testing()}
+          disabled={!hasSaved() || testing() || kind() === 'ccxt'}
+          title={kind() === 'ccxt' ? 'CCXT keys are verified on the next Load / Live' : undefined}
           onClick={onTestKey}
         >
           {testing() ? 'Testing…' : 'Test key'}
@@ -1581,7 +1703,8 @@ const ExchangeCredentialsPanel: Component = () => {
         <p class="text-[10px] text-red font-mono mt-0.5">{msg()}</p>
       </Show>
       <p class="text-[10px] text-text-faint mt-1">
-        Used when the active provider is authenticated. Public REST/WebSocket needs no key.
+        Public REST/WebSocket needs no key. CCXT keys raise rate limits / unlock private
+        adapters on the gateway; they are bound on Save and sent as a session handle.
       </p>
     </>
   );

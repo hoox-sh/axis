@@ -19,7 +19,7 @@
  * @module editor/pine-call-params
  */
 
-import { type QuoteChar, isQuoteChar } from './pine-scan-util';
+import { type QuoteChar, isQuoteChar, isQuoteClose } from './pine-scan-util';
 
 export interface PineParamDef {
   name: string;
@@ -814,7 +814,7 @@ function splitTopLevelParts(inner: string, base: number): PartSpan[] {
         if (i + 1 < inner.length) cur += inner[++i];
         continue;
       }
-      if (c === inStr) inStr = null;
+      if (isQuoteClose(inStr, c)) inStr = null;
       continue;
     }
     if (isQuoteChar(c)) {
@@ -952,7 +952,7 @@ export function parseSignatureParams(raw: string): PineParamDef[] {
           i++;
           continue;
         }
-        if (c === inStr) inStr = null;
+        if (isQuoteClose(inStr, c)) inStr = null;
         continue;
       }
       if (isQuoteChar(c)) {
@@ -1019,7 +1019,7 @@ function firstSignatureLine(name: string, text: string): string | null {
               i++;
               continue;
             }
-            if (c === inStr) inStr = null;
+            if (isQuoteClose(inStr, c)) inStr = null;
             continue;
           }
           if (isQuoteChar(c)) {
@@ -1121,7 +1121,7 @@ function matchCloseParen(src: string, openParen: number): number {
         k++;
         continue;
       }
-      if (c === inStr) inStr = null;
+      if (isQuoteClose(inStr, c)) inStr = null;
       continue;
     }
     if (isQuoteChar(c)) {
@@ -1163,7 +1163,7 @@ export function findCallSite(text: string, pos: number): CallSite | null {
         continue;
       }
       // Pine strings do not span lines — recover from a missing closer.
-      if (c === '\n' || c === inStr) inStr = null;
+      if (c === '\n' || isQuoteClose(inStr, c)) inStr = null;
       continue;
     }
     if (isQuoteChar(c)) {
@@ -1261,7 +1261,7 @@ export function scanAllCallSites(source: string): CallSite[] {
         i += 1;
         continue;
       }
-      if (c === '\n' || c === inStr) inStr = null;
+      if (c === '\n' || isQuoteClose(inStr, c)) inStr = null;
       continue;
     }
     if (inBlock) {

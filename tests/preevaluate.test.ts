@@ -371,6 +371,43 @@ strategy.entry("L", strategy.long)
     expect(diags.filter((d) => /`Swing`|`init`|`Hoox`/.test(d.message))).toEqual([]);
   });
 
+  it('closes paired curly quotes so localPreevaluate does not swallow the file', () => {
+    const src = [
+      '//@version=6',
+      'indicator("s")',
+      'title = \u201chello\u201d',
+      'plot(close)',
+    ].join('\n');
+    const diags = localPreevaluate(src);
+    expect(diags.filter((d) => /unclosed string/i.test(d.message))).toEqual([]);
+    expect(hasErrorDiagnostics(diags)).toBe(false);
+  });
+
+  it('collects type methods and export enum members as declared names', () => {
+    const src = [
+      'indicator("d")',
+      'export enum Side',
+      '  LONG',
+      '  SHORT',
+      '',
+      'type Trade',
+      '  float qty',
+      '  method profit(this) => this.qty',
+      'plot(close)',
+    ].join('\n');
+    const names = collectUserBindings(src);
+    expect(names.has('Side')).toBe(true);
+    expect(names.has('LONG')).toBe(true);
+    expect(names.has('SHORT')).toBe(true);
+    expect(names.has('qty')).toBe(true);
+    expect(names.has('profit')).toBe(true);
+    expect(
+      checkUnknownBuiltinMembers(src).filter((d) =>
+        /`Side`|`LONG`|`qty`|`profit`/.test(d.message),
+      ),
+    ).toEqual([]);
+  });
+
   it('collects enum members, type fields, and for-in vars as declared names', () => {
     const src = [
       'indicator("d")',

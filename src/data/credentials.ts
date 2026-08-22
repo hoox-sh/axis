@@ -39,22 +39,36 @@ import { applyProviderVaultAuth, store } from '../store';
 export const CREDENTIALS_MEMORY_ONLY = true;
 
 export type ExchangeCredential = {
-  id: string; // stable, e.g. `venue:binance`
+  id: string; // `venue:binance` or `ccxt:bybit`
   venue: ProviderVenue;
+  /** CCXT exchange id when {@link id} is `ccxt:<id>`. */
+  exchange?: string;
   apiKey: string;
   secret: string;
-  passphrase?: string; // OKX / Coinbase
+  passphrase?: string; // OKX / Coinbase / CCXT `password`
+  uid?: string;
   label?: string;
 };
 
 export type CredentialMeta = {
   id: string;
   venue: ProviderVenue;
+  exchange?: string;
   label?: string;
   hasKey: boolean;
   hasSecret: boolean;
   hasPassphrase: boolean;
+  hasUid?: boolean;
 };
+
+/** Vault id for a CCXT gateway exchange (`bybit` → `ccxt:bybit`). */
+export function ccxtCredentialId(exchange: string): string {
+  return `ccxt:${String(exchange || '').trim().toLowerCase()}`;
+}
+
+export function isCcxtCredentialId(id: string): boolean {
+  return id.startsWith('ccxt:') && id.length > 5;
+}
 
 const vault = new Map<string, ExchangeCredential>();
 /** One credential per venue (v1). Maps venue → credential id. */
@@ -75,7 +89,9 @@ function cloneCred(c: ExchangeCredential): ExchangeCredential {
     apiKey: c.apiKey,
     secret: c.secret,
   };
+  if (c.exchange != null) out.exchange = c.exchange;
   if (c.passphrase != null) out.passphrase = c.passphrase;
+  if (c.uid != null) out.uid = c.uid;
   if (c.label != null) out.label = c.label;
   return out;
 }
@@ -88,7 +104,9 @@ function toMeta(c: ExchangeCredential): CredentialMeta {
     hasSecret: Boolean(c.secret),
     hasPassphrase: Boolean(c.passphrase),
   };
+  if (c.exchange) meta.exchange = c.exchange;
   if (c.label != null && c.label !== '') meta.label = c.label;
+  if (c.uid) meta.hasUid = true;
   return meta;
 }
 
@@ -102,8 +120,27 @@ function notify(): void {
   }
 }
 
-function venueMatchesStore(venue: ProviderVenue): boolean {
+function activeCcxtExchange(): string {
   try {
+    const bags = store.pluginsConfig || {};
+    const src = bags['source:ccxt-rest'] as Record<string, unknown> | undefined;
+    const stm = bags['stream:ccxt-ws'] as Record<string, unknown> | undefined;
+    const ex = String(src?.exchange || stm?.exchange || '').trim().toLowerCase();
+    return ex;
+  } catch {
+    return '';
+  }
+}
+
+function credMatchesStore(cred: ExchangeCredential): boolean {
+  try {
+    if (isCcxtCredentialId(cred.id)) {
+      const sourceId = String(store.source || '');
+      const streamId = String(store.live?.streamId || '');
+      const onCcxt = sourceId === 'ccxt-rest' || streamId === 'ccxt-ws';
+      return onCcxt && !!cred.exchange && cred.exchange === activeCcxtExchange();
+    }
+    const venue = cred.venue;
     if (store.provider?.venue === venue) return true;
     const sourceId = String(store.source || '');
     if (venueFromPluginId(sourceId) === venue) return true;
@@ -117,7 +154,7 @@ function venueMatchesStore(venue: ProviderVenue): boolean {
 }
 
 function syncStoreOnPut(cred: ExchangeCredential): void {
-  if (!venueMatchesStore(cred.venue)) return;
+  if (!credMatchesStore(cred)) return;
   applyProviderVaultAuth(cred.id, true);
 }
 
@@ -135,24 +172,59 @@ export function putCredential(
 ): ExchangeCredential {
   const venue = input.venue;
   const id = (typeof input.id === 'string' && input.id.trim()) || defaultId(venue);
-  const prevId = byVenue.get(venue);
-  if (prevId && prevId !== id) {
-    vault.delete(prevId);
-    syncStoreOnDelete(prevId);
+  if (!isCcxtCredentialId(id)) {
+    const prevId = byVenue.get(venue);
+    if (prevId && prevId !== id) {
+      vault.delete(prevId);
+      syncStoreOnDelete(prevId);
+    }
+    byVenue.set(venue, id);
   }
   const cred = cloneCred({
     id,
     venue,
+    exchange: input.exchange,
     apiKey: input.apiKey,
     secret: input.secret,
     passphrase: input.passphrase,
+    uid: input.uid,
     label: input.label,
   });
   vault.set(id, cred);
-  byVenue.set(venue, id);
   syncStoreOnPut(cred);
   notify();
   return cloneCred(cred);
+}
+
+export function putCcxtCredential(input: {
+  exchange: string;
+  apiKey: string;
+  secret: string;
+  passphrase?: string;
+  uid?: string;
+  label?: string;
+}): ExchangeCredential {
+  const exchange = String(input.exchange || '').trim().toLowerCase();
+  if (!exchange) throw new Error('CCXT exchange id is required');
+  return putCredential({
+    id: ccxtCredentialId(exchange),
+    venue: 'generic',
+    exchange,
+    apiKey: input.apiKey,
+    secret: input.secret,
+    passphrase: input.passphrase,
+    uid: input.uid,
+    label: input.label || `CCXT ${exchange}`,
+  });
+}
+
+export function getCcxtCredential(exchange: string): ExchangeCredential | undefined {
+  return getCredential(ccxtCredentialId(exchange));
+}
+
+export function hasCcxtCredential(exchange: string): boolean {
+  const c = getCcxtCredential(exchange);
+  return !!(c && c.apiKey && c.secret);
 }
 
 export function getCredential(id: string): ExchangeCredential | undefined {

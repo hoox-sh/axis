@@ -68,7 +68,7 @@ import {
   type ResolveCallSigOpts,
 } from './pine-call-params';
 import { parseAssignLine } from './pine-declare-types';
-import { type QuoteChar, isQuoteChar } from './pine-scan-util';
+import { type QuoteChar, isQuoteChar, isQuoteClose } from './pine-scan-util';
 
 /**
  * Quiet time after the last keystroke before idle lint runs (ms).
@@ -324,7 +324,7 @@ export function scanBuiltinMemberRefs(source: string): DottedRef[] {
           i += 2;
           continue;
         }
-        if (c === inStr) inStr = null;
+        if (isQuoteClose(inStr, c)) inStr = null;
         i += 1;
         continue;
       }
@@ -403,7 +403,7 @@ export function scanBareCallRefs(source: string): DottedRef[] {
           i += 2;
           continue;
         }
-        if (c === inStr) inStr = null;
+        if (isQuoteClose(inStr, c)) inStr = null;
         i += 1;
         continue;
       }
@@ -476,7 +476,7 @@ function stripPineCommentsAndStrings(raw: string, inBlock: { v: boolean }): stri
         i += 2;
         continue;
       }
-      if (c === inStr) inStr = null;
+      if (isQuoteClose(inStr, c)) inStr = null;
       i += 1;
       continue;
     }
@@ -499,7 +499,7 @@ const IMPORT_AS_RE = /\bimport\s+\S+\s+as\s+([A-Za-z_][A-Za-z0-9_]*)/g;
 const TUPLE_ASSIGN_RE =
   /^\s*(?:export\s+)?(?:varip|var)?\s*\[([^\]]+)\]\s*=/;
 const FOR_TUPLE_RE = /^\s*for\s+(?:var\s+)?\[([^\]]+)\]\s+in\b/;
-const ENUM_DECL_RE = /^\s*enum\s+[A-Za-z_][\w]*\s*$/;
+const ENUM_DECL_RE = /^\s*(?:export\s+)?enum\s+[A-Za-z_][\w]*\s*$/;
 const TYPE_DECL_RE = /^\s*(?:export\s+)?type\s+[A-Za-z_][\w]*(?:\s+extends\s+\S+)?\s*$/;
 const ENUM_MEMBER_LINE_RE = /^\s*([A-Za-z_]\w*)\s*(?:=.*)?$/;
 const TYPE_FIELD_LINE_RE =
@@ -515,6 +515,26 @@ function addFnParams(paramsRaw: string, into: Set<string>, fnMap: Map<string, st
   }
   if (fnName && !BARE_CALL_SKIP.has(fnName)) {
     fnMap.set(fnName, names);
+  }
+}
+
+function collectFnsFromLine(
+  text: string,
+  names: Set<string>,
+  functions: Map<string, string[]>,
+): void {
+  USER_FN_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = USER_FN_RE.exec(text))) {
+    const name = m[1]!;
+    if (!BARE_CALL_SKIP.has(name)) names.add(name);
+    addFnParams(m[2] || '', names, functions, name);
+  }
+  const lead = USER_FN_LEAD_RE.exec(text);
+  if (lead) {
+    const name = lead[1]!;
+    if (!BARE_CALL_SKIP.has(name)) names.add(name);
+    addFnParams(lead[2] || '', names, functions, name);
   }
 }
 
@@ -557,7 +577,7 @@ function collectUserDeclarationMap(source: string): {
     }
 
     if (ENUM_DECL_RE.test(text)) {
-      const nm = /^\s*enum\s+([A-Za-z_]\w*)/.exec(text)?.[1];
+      const nm = /^\s*(?:export\s+)?enum\s+([A-Za-z_]\w*)/.exec(text)?.[1];
       if (nm && !BARE_CALL_SKIP.has(nm)) names.add(nm);
       blockKind = 'enum';
       blockIndent = text.length - text.trimStart().length;
@@ -576,32 +596,23 @@ function collectUserDeclarationMap(source: string): {
       if (indent <= blockIndent) {
         // Dedent closes the declaration body; fall through to normal parsing.
         blockKind = null;
-      } else {
-        const m =
-          blockKind === 'enum'
-            ? ENUM_MEMBER_LINE_RE.exec(text)
-            : TYPE_FIELD_LINE_RE.exec(text);
-        const id = m?.[1];
+      } else if (blockKind === 'enum') {
+        const id = ENUM_MEMBER_LINE_RE.exec(text)?.[1];
         if (id && /^[A-Za-z_][A-Za-z0-9_]*$/.test(id) && !BARE_CALL_SKIP.has(id)) {
           names.add(id);
         }
         continue;
+      } else {
+        const id = TYPE_FIELD_LINE_RE.exec(text)?.[1];
+        if (id && /^[A-Za-z_][A-Za-z0-9_]*$/.test(id) && !BARE_CALL_SKIP.has(id)) {
+          names.add(id);
+        }
+        collectFnsFromLine(text, names, functions);
+        continue;
       }
     }
 
-    USER_FN_RE.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = USER_FN_RE.exec(text))) {
-      const name = m[1]!;
-      if (!BARE_CALL_SKIP.has(name)) names.add(name);
-      addFnParams(m[2] || '', names, functions, name);
-    }
-    const lead = USER_FN_LEAD_RE.exec(text);
-    if (lead) {
-      const name = lead[1]!;
-      if (!BARE_CALL_SKIP.has(name)) names.add(name);
-      addFnParams(lead[2] || '', names, functions, name);
-    }
+    collectFnsFromLine(text, names, functions);
 
     const assign = parseAssignLine(text);
     if (assign && !BARE_CALL_SKIP.has(assign.name)) {
@@ -824,7 +835,7 @@ export function scanIdentRefs(source: string): IdentRef[] {
           i += 2;
           continue;
         }
-        if (c === inStr) inStr = null;
+        if (isQuoteClose(inStr, c)) inStr = null;
         i += 1;
         continue;
       }
@@ -1145,7 +1156,7 @@ export function localPreevaluate(source: string): EditorDiagnostic[] {
           i += 2;
           continue;
         }
-        if (c === inStr) inStr = null;
+        if (isQuoteClose(inStr, c)) inStr = null;
         i += 1;
         continue;
       }

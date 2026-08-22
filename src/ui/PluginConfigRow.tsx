@@ -27,35 +27,37 @@
  *
  * - `advanced` fields (host URLs, page sizes, fallbacks) are hidden unless
  *   `showAdvanced` — they live in Settings → "Source & stream plugins".
- * - An `exchange` field renders as a dropdown fed by the datafeed gateway's
- *   full ccxt exchange list (`/health` → `ccxt_exchanges`); the current value
- *   is always kept as an option even when unlisted.
+ * - An `exchange` field is a gateway-fed `<select>` when the list is ready,
+ *   and a free-text field while loading fails or the list is empty.
  *
- * Layouts: `inline` (Topbar chip row, rendered via {@link TopbarField} so it
- * matches the Source/Symbol pickers) and `stacked` (Settings dialog form using
- * the shared `sc-label` / `sc-input` / `sc-hint` classes).
+ * Selects / checkboxes apply immediately. Text and number fields persist on
+ * each keystroke but only call {@link PluginConfigRowProps.onApplied} on
+ * blur or Enter (history reload is not a mid-edit action).
+ *
+ * Layouts: `inline` (Topbar chip row, rendered via {@link TopbarField}) and
+ * `stacked` (Settings dialog form using `sc-label` / `sc-input` / `sc-hint`).
  *
  * @module ui/PluginConfigRow
  */
 
-import { For, Show, createMemo, createSignal } from 'solid-js';
+import { For, Show, createMemo, createResource } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { store, persist } from '../store';
 import { getActiveSource, getActiveStream } from '../plugins/active';
-import { pluginKey, type ConfigSchema, type FieldSchema } from '../plugins/types';
-import { fetchGatewayExchanges, writePluginField } from './plugin-config';
+import { pluginKey, type FieldSchema } from '../plugins/types';
+import {
+  fetchGatewayExchanges,
+  resolvePluginFieldValue,
+  writePluginField,
+  type ConfigTarget,
+  type GatewayMode,
+} from './plugin-config';
 import { TopbarField } from './TopbarField';
 
 const EXCHANGE_FIELD = 'exchange';
 
-interface ConfigTarget {
-  kind: 'source' | 'stream';
-  id: string;
-  schema: ConfigSchema;
-}
-
 export interface PluginConfigRowProps {
-  /** Called after any field changes (e.g. re-fetch historical bars). */
+  /** Called after a committed field change (e.g. re-fetch historical bars). */
   onApplied?: () => void;
   /** Include `advanced: true` fields (Settings variant). Default false. */
   showAdvanced?: boolean;
@@ -63,15 +65,20 @@ export interface PluginConfigRowProps {
   layout?: 'inline' | 'stacked';
 }
 
+function parseFieldValue(f: FieldSchema, raw: string): unknown {
+  return f.type === 'number' ? Number(raw) : raw;
+}
+
 export function PluginConfigRow(props: PluginConfigRowProps) {
   const stacked = () => props.layout === 'stacked';
+  const layoutName = () => (stacked() ? 'stacked' : 'inline');
+  const fieldId = (key: string) => `axis-cfg-${layoutName()}-${key}`;
 
-  const hasVisibleFields = (schema?: ConfigSchema): boolean =>
+  const hasVisibleFields = (schema?: Record<string, FieldSchema>): boolean =>
     !!schema &&
     Object.keys(schema).length > 0 &&
     (props.showAdvanced || Object.values(schema).some((f) => !f?.advanced));
 
-  // Active plugins declaring visible config fields — source first (field order wins).
   const targets = createMemo<ConfigTarget[]>(() => {
     void store.activePlugins;
     void store.live?.streamId;
@@ -91,7 +98,6 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
     return out;
   });
 
-  /** Ordered union of field keys across targets (advanced filtered unless showAdvanced). */
   const fields = createMemo<Array<[string, FieldSchema]>>(() => {
     const seen = new Set<string>();
     const out: Array<[string, FieldSchema]> = [];
@@ -106,144 +112,204 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
     return out;
   });
 
-  /** Effective value for a field: first stored override among targets, else default. */
   const valueOf = (key: string): unknown => {
-    for (const t of targets()) {
-      const all = store.pluginsConfig || {};
-      const bag = (all[pluginKey(t.kind, t.id)] as Record<string, unknown> | undefined) || {};
-      if (bag[key] !== undefined) return bag[key];
-      const f = t.schema[key];
-      if (f && 'default' in f && f.default !== undefined) return f.default;
-    }
-    const f0 = fields().find(([k]) => k === key)?.[1];
-    return f0?.default ?? '';
+    void store.pluginsConfig;
+    return resolvePluginFieldValue(store.pluginsConfig, targets(), key);
   };
 
-  const [exchanges, setExchanges] = createSignal<string[]>([]);
-  createMemo(() => {
-    if (!fields().some(([k]) => k === EXCHANGE_FIELD)) return;
-    const mode = String(valueOf('gateway') || 'auto') as 'auto' | 'pyne' | 'sidecar';
-    void fetchGatewayExchanges(mode).then(setExchanges);
+  const gatewayMode = createMemo((): GatewayMode | undefined => {
+    if (!fields().some(([k]) => k === EXCHANGE_FIELD)) return undefined;
+    const g = String(valueOf('gateway') || 'auto');
+    return g === 'pyne' || g === 'sidecar' ? g : 'auto';
   });
 
-  /** Dropdown options for exchange: full ccxt list (+ current value). */
+  const [exchangeList] = createResource(gatewayMode, (mode) => fetchGatewayExchanges(mode));
+
+  /** Reading a failed resource throws in Solid — never call `exchangeList()` in the error state. */
+  const loadedExchanges = (): string[] => {
+    if (exchangeList.state === 'errored') return [];
+    return exchangeList() ?? [];
+  };
+
   const exchangeOptions = createMemo<string[]>(() => {
-    const cur = String(valueOf(EXCHANGE_FIELD) || '').trim();
-    const set = new Set<string>(exchanges());
+    const cur = String(valueOf(EXCHANGE_FIELD) ?? '').trim();
+    const set = new Set<string>(loadedExchanges());
     if (cur) set.add(cur);
     return [...set];
   });
 
-  const setField = (key: string, v: unknown) => {
-    let changed = false;
+  /** `select` when the gateway returned venues; otherwise a typed field. */
+  const exchangeAsSelect = () => loadedExchanges().length > 0;
+
+  /** Text/number keystrokes that have not yet called `onApplied`. */
+  const dirty = new Set<string>();
+
+  const writeField = (key: string, v: unknown): boolean => {
+    let wrote = false;
     for (const t of targets()) {
       if (!(key in t.schema)) continue;
       writePluginField(pluginKey(t.kind, t.id), key, v);
-      changed = true;
+      wrote = true;
     }
-    if (!changed) return;
-    void persist();
+    if (wrote) void persist();
+    return wrote;
+  };
+
+  /** Persist immediately; reload history only for selects/checkboxes. */
+  const applyField = (key: string, v: unknown) => {
+    if (!writeField(key, v)) return;
+    dirty.delete(key);
+    props.onApplied?.();
+  };
+
+  /** Persist a keystroke; history reload waits for {@link commitField}. */
+  const draftField = (key: string, v: unknown) => {
+    if (!writeField(key, v)) return;
+    dirty.add(key);
+  };
+
+  /** Blur / Enter — reload only if this field was edited since last apply. */
+  const commitField = (key: string, v: unknown) => {
+    if (!writeField(key, v)) return;
+    if (!dirty.has(key)) return;
+    dirty.delete(key);
     props.onApplied?.();
   };
 
   const fieldTitle = (key: string, f: FieldSchema) => f.description || f.label || key;
 
   const isSelectField = (key: string, f: FieldSchema): boolean =>
-    f.type === 'select' || key === EXCHANGE_FIELD;
+    f.type === 'select' || (key === EXCHANGE_FIELD && exchangeAsSelect());
 
-  /** Option list for select-style fields (exchange list for the venue dropdown). */
   const optionsFor = (key: string, f: FieldSchema): string[] =>
     key === EXCHANGE_FIELD ? exchangeOptions() : f.options || [String(valueOf(key) ?? '')];
 
   const displayValue = (key: string, f: FieldSchema): string | number =>
     f.type === 'number' ? Number(valueOf(key) ?? 0) : String(valueOf(key) ?? '');
 
-  /**
-   * Inline (Topbar) field — rendered through {@link TopbarField} so it matches
-   * the Source/Symbol pickers exactly (integrated uppercase label, shared
-   * `axis-tb-field` chrome and focus ring). Booleans have no topbar variant
-   * and keep the compact label+checkbox pair.
-   */
+  const onTextInput = (key: string, f: FieldSchema, raw: string) => {
+    draftField(key, parseFieldValue(f, raw));
+  };
+
+  const onTextCommit = (key: string, f: FieldSchema, raw: string) => {
+    commitField(key, parseFieldValue(f, raw));
+  };
+
+  const onTextKeyDown = (
+    key: string,
+    f: FieldSchema,
+    e: KeyboardEvent & { currentTarget: HTMLInputElement },
+  ) => {
+    if (e.key === 'Enter') onTextCommit(key, f, e.currentTarget.value);
+  };
+
+  const selectOptions = (key: string, f: FieldSchema): JSX.Element => (
+    <>
+      <Show when={key === EXCHANGE_FIELD}>
+        <option value="">Select exchange…</option>
+      </Show>
+      <For each={optionsFor(key, f)}>{(o) => <option value={o}>{o}</option>}</For>
+    </>
+  );
+
+  const exchangeLoadingLabel = () =>
+    exchangeList.state === 'pending' || exchangeList.state === 'unresolved'
+      ? 'loading…'
+      : exchangeList.state === 'errored'
+        ? 'gateway unavailable — type an id'
+        : 'no exchanges — type an id';
+
   const renderInlineField = (key: string, f: FieldSchema): JSX.Element => (
     <Show
       when={f.type !== 'boolean'}
       fallback={
-        <label class="flex items-center gap-1" title={fieldTitle(key, f)}>
+        <label class="flex items-center gap-1" for={fieldId(key)} title={fieldTitle(key, f)}>
           <span class="whitespace-nowrap text-[11px] tracking-wide">{f.label || key}</span>
           <input
+            id={fieldId(key)}
             type="checkbox"
             checked={Boolean(valueOf(key))}
-            onChange={(e) => setField(key, e.currentTarget.checked)}
+            onChange={(e) => applyField(key, e.currentTarget.checked)}
           />
         </label>
       }
     >
-      <TopbarField
-        label={f.label || key}
-        variant={isSelectField(key, f) ? 'select' : 'input'}
-        class={isSelectField(key, f) ? 'min-w-[8em]' : 'w-[7.5em]'}
-        mono
-        title={fieldTitle(key, f)}
-        testId={`axis-cfg-${key}`}
-        value={isSelectField(key, f) ? String(valueOf(key) ?? '') : displayValue(key, f)}
-        onChange={(e) => setField(key, e.currentTarget.value)}
-        onInput={(e) => {
-          const raw = e.currentTarget.value;
-          setField(key, f.type === 'number' ? Number(raw) : raw);
-        }}
+      <Show
+        when={isSelectField(key, f)}
+        fallback={
+          <TopbarField
+            id={fieldId(key)}
+            label={f.label || key}
+            variant="input"
+            class="w-[7.5em]"
+            mono
+            title={fieldTitle(key, f)}
+            testId={`axis-cfg-${key}`}
+            placeholder={key === EXCHANGE_FIELD ? exchangeLoadingLabel() : f.placeholder}
+            value={displayValue(key, f)}
+            onInput={(e) => onTextInput(key, f, e.currentTarget.value)}
+            onBlur={(e) => onTextCommit(key, f, e.currentTarget.value)}
+            onKeyDown={(e) => onTextKeyDown(key, f, e)}
+          />
+        }
       >
-        <Show when={isSelectField(key, f)}>
-          <Show when={key === EXCHANGE_FIELD && exchangeOptions().length === 0}>
-            <option value="">loading…</option>
-          </Show>
-          <For each={optionsFor(key, f)}>{(o) => <option value={o}>{o}</option>}</For>
-        </Show>
-      </TopbarField>
+        <TopbarField
+          id={fieldId(key)}
+          label={f.label || key}
+          variant="select"
+          class="min-w-[8em]"
+          mono
+          title={fieldTitle(key, f)}
+          testId={`axis-cfg-${key}`}
+          value={String(valueOf(key) ?? '')}
+          onChange={(e) => applyField(key, e.currentTarget.value)}
+        >
+          {selectOptions(key, f)}
+        </TopbarField>
+      </Show>
     </Show>
   );
 
-  /** Single field control for the stacked (Settings) layout. */
   const renderControl = (key: string, f: FieldSchema): JSX.Element => (
     <Show
       when={f.type !== 'boolean'}
       fallback={
         <input
+          id={fieldId(key)}
           type="checkbox"
           checked={Boolean(valueOf(key))}
-          onChange={(e) => setField(key, e.currentTarget.checked)}
+          onChange={(e) => applyField(key, e.currentTarget.checked)}
         />
       }
     >
       <Show
-        when={f.type !== 'select' && key !== EXCHANGE_FIELD}
+        when={isSelectField(key, f)}
         fallback={
-          <select
+          <input
+            id={fieldId(key)}
+            type={f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}
             class="sc-input font-mono text-[12px] w-full"
-            value={String(valueOf(key) ?? '')}
-            onChange={(e) => setField(key, e.currentTarget.value)}
+            min={f.min}
+            max={f.max}
+            step={f.step}
+            placeholder={key === EXCHANGE_FIELD ? exchangeLoadingLabel() : f.placeholder}
+            value={displayValue(key, f)}
+            onInput={(e) => onTextInput(key, f, e.currentTarget.value)}
+            onBlur={(e) => onTextCommit(key, f, e.currentTarget.value)}
+            onKeyDown={(e) => onTextKeyDown(key, f, e)}
             title={fieldTitle(key, f)}
-          >
-            <Show when={key === EXCHANGE_FIELD && exchangeOptions().length === 0}>
-              <option value="">loading…</option>
-            </Show>
-            <For each={optionsFor(key, f)}>{(o) => <option value={o}>{o}</option>}</For>
-          </select>
+          />
         }
       >
-        <input
-          type={f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}
+        <select
+          id={fieldId(key)}
           class="sc-input font-mono text-[12px] w-full"
-          min={f.min}
-          max={f.max}
-          step={f.step}
-          placeholder={f.placeholder}
-          value={displayValue(key, f)}
-          onInput={(e) => {
-            const raw = e.currentTarget.value;
-            setField(key, f.type === 'number' ? Number(raw) : raw);
-          }}
+          value={String(valueOf(key) ?? '')}
+          onChange={(e) => applyField(key, e.currentTarget.value)}
           title={fieldTitle(key, f)}
-        />
+        >
+          {selectOptions(key, f)}
+        </select>
       </Show>
     </Show>
   );
@@ -257,7 +323,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
             <For each={fields()}>
               {([key, f]) => (
                 <div class="sc-field">
-                  <label class="sc-label" for={`axis-cfg-${props.layout}-${key}`}>
+                  <label class="sc-label" for={fieldId(key)}>
                     {f.label || key}
                   </label>
                   {renderControl(key, f)}
@@ -273,7 +339,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
         <div
           class="flex items-center gap-2"
           data-testid="axis-cfg-plugins"
-          title="Shared source/stream settings · history applies on Load/Reload · live applies on Live toggle · advanced options in Settings"
+          title="Shared source/stream settings · history applies on Load/Reload or when a select/checkbox changes · live applies on Live toggle · advanced options in Settings"
         >
           <For each={fields()}>
             {([key, f]) => renderInlineField(key, f)}

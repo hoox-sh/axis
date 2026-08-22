@@ -8,8 +8,10 @@ import {
   effectiveConfig,
   fetchGatewayExchanges,
   hasConfigFields,
+  resolvePluginFieldValue,
   writePluginField,
   _resetGatewayExchangeCache,
+  type ConfigTarget,
 } from '../src/ui/plugin-config';
 import { store, setStore } from '../src/store';
 import type { ConfigSchema } from '../src/plugins/types';
@@ -101,8 +103,51 @@ describe('fetchGatewayExchanges', () => {
     expect(list).toEqual(['binance', 'okx']);
   });
 
-  it('caches and returns [] on failure without cache', async () => {
+  it('throws on failure without a stale cache', async () => {
     globalThis.fetch = (() => Promise.resolve(new Response('nope', { status: 500 }))) as typeof fetch;
-    expect(await fetchGatewayExchanges('pyne', true)).toEqual([]);
+    await expect(fetchGatewayExchanges('pyne', true)).rejects.toThrow(/gateway health 500/);
+  });
+
+  it('does not reuse a pyne list for sidecar', async () => {
+    let n = 0;
+    globalThis.fetch = ((input: RequestInfo | URL) => {
+      n += 1;
+      void input;
+      if (n === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ ccxt_exchanges: ['binance'] }), { status: 200 }),
+        );
+      }
+      return Promise.resolve(new Response('nope', { status: 500 }));
+    }) as typeof fetch;
+    expect(await fetchGatewayExchanges('pyne', true)).toEqual(['binance']);
+    await expect(fetchGatewayExchanges('sidecar')).rejects.toThrow(/gateway health 500/);
+  });
+});
+
+describe('resolvePluginFieldValue', () => {
+  const targets: ConfigTarget[] = [
+    { kind: 'source', id: 'ccxt-rest', schema: { exchange: { type: 'string', default: '' } } },
+    { kind: 'stream', id: 'ccxt-ws', schema: { exchange: { type: 'string', default: '' } } },
+  ];
+
+  it('prefers a later stored bag over an earlier schema default', () => {
+    expect(
+      resolvePluginFieldValue({ 'stream:ccxt-ws': { exchange: 'bybit' } }, targets, 'exchange'),
+    ).toBe('bybit');
+  });
+
+  it('skips bags that do not have the key', () => {
+    expect(
+      resolvePluginFieldValue(
+        { 'source:ccxt-rest': { gateway: 'auto' }, 'stream:ccxt-ws': { exchange: 'okx' } },
+        targets,
+        'exchange',
+      ),
+    ).toBe('okx');
+  });
+
+  it('falls back to the first schema default when nothing is stored', () => {
+    expect(resolvePluginFieldValue({}, targets, 'exchange')).toBe('');
   });
 });

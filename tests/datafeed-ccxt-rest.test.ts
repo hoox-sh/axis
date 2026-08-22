@@ -98,6 +98,42 @@ describe('ccxt-rest source plugin', () => {
     }
   });
 
+  it('fetchHistorical binds a vault key then passes only cred= on the OHLCV URL', async () => {
+    const { putCcxtCredential, clearCredentials } = await import('../src/data/credentials');
+    putCcxtCredential({ exchange: 'bybit', apiKey: 'AK-live', secret: 'SK-live' });
+    const origFetch = globalThis.fetch;
+    const urls: string[] = [];
+    globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => {
+      const u = typeof url === 'string' ? url : String(url);
+      urls.push(u);
+      if (init?.method === 'POST') return Promise.resolve(new Response(null, { status: 204 }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            { time: 1700000000, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+          ]),
+          { status: 200 },
+        ),
+      );
+    }) as typeof fetch;
+    try {
+      await ccxtRest.fetchHistorical({
+        symbol: 'BTC/USDT',
+        interval: '1h',
+        limit: 10,
+        config: { exchange: 'bybit', gateway: 'pyne' },
+      });
+      expect(urls.some((u) => u.includes('/datafeed/session'))).toBe(true);
+      const ohlcv = urls.find((u) => u.includes('/ohlcv'));
+      expect(ohlcv).toContain('cred=ccxt%3Abybit');
+      expect(ohlcv).not.toContain('AK-live');
+      expect(ohlcv).not.toContain('SK-live');
+    } finally {
+      globalThis.fetch = origFetch;
+      clearCredentials();
+    }
+  });
+
   it('fetchHistorical throws a clear error when exchange is not configured', async () => {
     let threw = false;
     let message = '';

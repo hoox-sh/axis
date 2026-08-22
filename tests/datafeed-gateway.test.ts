@@ -7,6 +7,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import {
   gatewayBase,
   gatewayFetch,
+  gatewayPutSession,
   isRemotePageOrigin,
   probeSidecar,
   DATAFEED_DEFAULT_PORT,
@@ -124,6 +125,35 @@ describe('gatewayFetch', () => {
       expect(capturedUrl).toContain('/datafeed/ohlcv?');
       expect(capturedUrl).toContain('exchange=binance');
       expect(capturedUrl).toContain('symbol=BTC%2FUSDT');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+});
+
+describe('gatewayPutSession', () => {
+  it('POSTs JSON to /session and never puts secrets on the URL', async () => {
+    const origFetch = globalThis.fetch;
+    let capturedUrl = '';
+    let capturedInit: RequestInit | undefined;
+    globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => {
+      capturedUrl = typeof url === 'string' ? url : String(url);
+      capturedInit = init;
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }) as typeof fetch;
+    try {
+      await gatewayPutSession('pyne', {
+        exchange: 'bybit',
+        credentialId: 'ccxt:bybit',
+        apiKey: 'AK',
+        secret: 'SK',
+        password: 'pp',
+      });
+      expect(capturedUrl).toContain('/datafeed/session');
+      expect(capturedUrl).not.toContain('AK');
+      expect(capturedUrl).not.toContain('SK');
+      expect(capturedInit?.method).toBe('POST');
+      expect(String(capturedInit?.body)).toContain('"apiKey":"AK"');
     } finally {
       globalThis.fetch = origFetch;
     }

@@ -67,6 +67,25 @@ export function venueNeedsPassphrase(venue: string): boolean {
   return v === 'okx' || v === 'coinbase';
 }
 
+/** CCXT `password` field (passphrase) — OKX, Coinbase, KuCoin family. */
+const CCXT_PASSWORD_EXCHANGES = new Set([
+  'okx',
+  'okxus',
+  'coinbase',
+  'coinbaseinternational',
+  'kucoin',
+  'kucoinfutures',
+  'kucoinspot',
+]);
+
+export function ccxtNeedsPassword(exchange: string): boolean {
+  return CCXT_PASSWORD_EXCHANGES.has(String(exchange || '').trim().toLowerCase());
+}
+
+export function normalizeCcxtExchangeId(raw: string): string {
+  return String(raw || '').trim().toLowerCase();
+}
+
 export function isExchangeCredentialVenue(venue: string): venue is ExchangeCredentialVenue {
   return (EXCHANGE_CREDENTIAL_VENUES as readonly string[]).includes(venue);
 }

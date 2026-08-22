@@ -18,17 +18,28 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Plugin `configSchema` helpers — pure logic behind the Topbar config row.
+ * Plugin `configSchema` helpers — defaults, bag writes, field resolve, gateway list.
  *
  * - {@link hasConfigFields} / {@link effectiveConfig} — schema-driven defaults
- * - {@link fetchGatewayExchanges} — supported exchange ids from the datafeed
- *   gateway `/health` (`{ exchanges: [...] }`), cached 60s, `[]` on failure
+ * - {@link resolvePluginFieldValue} — stored override across source+stream, then default
+ * - {@link fetchGatewayExchanges} — exchange ids from the datafeed gateway
+ *   `/health` (`ccxt_exchanges` preferred, else `exchanges`), cached 60s per mode
  *
  * @module ui/plugin-config
  */
 
 import type { ConfigSchema } from '../plugins/types';
+import { pluginKey } from '../plugins/types';
 import { setStore, store } from '../store';
+
+export type GatewayMode = 'auto' | 'pyne' | 'sidecar';
+
+/** A plugin that contributes config fields (source or stream). */
+export interface ConfigTarget {
+  kind: 'source' | 'stream';
+  id: string;
+  schema: ConfigSchema;
+}
 
 /** True when the plugin declares at least one config field. */
 export function hasConfigFields(schema?: ConfigSchema): boolean {
@@ -68,43 +79,78 @@ export function effectiveConfig(
   return { ...out, ...stored };
 }
 
+function bagOf(
+  bags: Record<string, unknown> | undefined | null,
+  target: ConfigTarget,
+): Record<string, unknown> | undefined {
+  const raw = bags?.[pluginKey(target.kind, target.id)];
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  return raw as Record<string, unknown>;
+}
+
+/**
+ * Effective value for a config field shared across source + stream.
+ *
+ * Walks every target bag for a **stored** key first (so a stream `exchange`
+ * is not hidden by a source schema default of `''`), then the first schema
+ * default, then `''`.
+ */
+export function resolvePluginFieldValue(
+  bags: Record<string, unknown> | undefined | null,
+  targets: readonly ConfigTarget[],
+  key: string,
+): unknown {
+  for (const t of targets) {
+    const bag = bagOf(bags, t);
+    if (bag && Object.prototype.hasOwnProperty.call(bag, key)) return bag[key];
+  }
+  for (const t of targets) {
+    const f = t.schema[key];
+    if (f && 'default' in f && f.default !== undefined) return f.default;
+  }
+  return '';
+}
+
 // ---------------------------------------------------------------------------
 // Gateway exchange list
 // ---------------------------------------------------------------------------
 
-let _cache: { ts: number; list: string[] } | null = null;
+type CacheEntry = { ts: number; list: string[] };
+const _cache = new Map<GatewayMode, CacheEntry>();
 const EXCHANGES_TTL_MS = 60_000;
 
 /** Test hook — clear the exchanges cache. */
 export function _resetGatewayExchangeCache(): void {
-  _cache = null;
+  _cache.clear();
+}
+
+function pickStringList(v: unknown): string[] {
+  return Array.isArray(v) ? v.map((e) => String(e).trim()).filter(Boolean) : [];
 }
 
 /**
- * Exchange ids for the gateway dropdown. Prefers the **full ccxt exchange
- * list** (`GET /health` → `ccxt_exchanges`, mirrors `ccxt.exchanges` — ccxt
- * unifies every supported venue) and falls back to the shorter native
- * `exchanges` list. Cached 60s; returns stale cache on network failure.
+ * Exchange ids for the venue dropdown. Prefers the full ccxt list
+ * (`GET /health` → `ccxt_exchanges`) and falls back to native `exchanges`.
+ * Cached 60s **per gateway mode**. Throws on network/HTTP failure when that
+ * mode has no stale list (callers render a free-text field).
  */
 export async function fetchGatewayExchanges(
-  mode: 'auto' | 'pyne' | 'sidecar' = 'auto',
+  mode: GatewayMode = 'auto',
   force = false,
 ): Promise<string[]> {
-  if (!force && _cache && Date.now() - _cache.ts < EXCHANGES_TTL_MS) return _cache.list;
+  const hit = _cache.get(mode);
+  if (!force && hit && Date.now() - hit.ts < EXCHANGES_TTL_MS) return hit.list;
   try {
     const { gatewayFetch } = await import('../data/gateway');
     const res = await gatewayFetch(mode, '/health');
     if (!res.ok) throw new Error(`gateway health ${res.status}`);
     const json = (await res.json()) as { exchanges?: unknown; ccxt_exchanges?: unknown };
-    const pick = (v: unknown): string[] =>
-      Array.isArray(v) ? v.map((e) => String(e).trim()).filter(Boolean) : [];
-    // Full unified ccxt list wins; native adapters are a subset fallback.
-    const list = pick(json?.ccxt_exchanges).length
-      ? pick(json?.ccxt_exchanges)
-      : pick(json?.exchanges);
-    _cache = { ts: Date.now(), list };
+    const ccxt = pickStringList(json?.ccxt_exchanges);
+    const list = ccxt.length ? ccxt : pickStringList(json?.exchanges);
+    _cache.set(mode, { ts: Date.now(), list });
     return list;
-  } catch {
-    return _cache?.list ?? [];
+  } catch (err) {
+    if (hit?.list.length) return hit.list;
+    throw err;
   }
 }

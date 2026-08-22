@@ -12,6 +12,7 @@ import {
   defaultExchangeCredentialVenue,
   isExchangeCredentialVenue,
   venueNeedsPassphrase,
+  ccxtNeedsPassword,
 } from '../src/ui/exchange-credentials-form';
 
 describe('venueNeedsPassphrase', () => {
@@ -27,6 +28,19 @@ describe('venueNeedsPassphrase', () => {
     expect(venueNeedsPassphrase('bybit')).toBe(false);
     expect(venueNeedsPassphrase('kraken')).toBe(false);
     expect(venueNeedsPassphrase('')).toBe(false);
+  });
+});
+
+describe('ccxtNeedsPassword', () => {
+  it('is true for okx / coinbase / kucoin family', () => {
+    expect(ccxtNeedsPassword('okx')).toBe(true);
+    expect(ccxtNeedsPassword('kucoin')).toBe(true);
+    expect(ccxtNeedsPassword('coinbase')).toBe(true);
+  });
+
+  it('is false for bybit / binance', () => {
+    expect(ccxtNeedsPassword('bybit')).toBe(false);
+    expect(ccxtNeedsPassword('binance')).toBe(false);
   });
 });
 

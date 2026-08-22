@@ -38,6 +38,16 @@ describe('parseAssignLine', () => {
   it('rejects := reassignment', () => {
     expect(parseAssignLine('x := 1')).toBeNull();
   });
+
+  it('captures generic collection types', () => {
+    const h = parseAssignLine('array<string> vals = array.from(1.0)');
+    expect(h?.name).toBe('vals');
+    expect(h?.type2).toBe('array');
+    expect(h?.type2Generic).toBe('<string>');
+    const nested = parseAssignLine('map<string,float> book = na');
+    expect(nested?.type2).toBe('map');
+    expect(nested?.type2Generic).toBe('<string,float>');
+  });
 });
 
 describe('inferType1 / inferType2', () => {
@@ -127,5 +137,12 @@ y = 2
   it('wouldAddTypeDeclarations mirrors changed', () => {
     expect(wouldAddTypeDeclarations('x = 1\n')).toBe(true);
     expect(wouldAddTypeDeclarations('const int x = 1\n')).toBe(false);
+  });
+
+  it('keeps generic args when adding a type1 qualifier', () => {
+    const src = 'array<string> vals = str.split("1|2", "|")\n';
+    const { source } = addMissingTypeDeclarations(src);
+    expect(source).toContain('array<string> vals');
+    expect(source).not.toMatch(/\barray vals\b/);
   });
 });
