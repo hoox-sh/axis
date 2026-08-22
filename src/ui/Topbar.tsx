@@ -89,6 +89,7 @@ import { SymbolModal } from './SymbolModal';
 import { RunSplitButton } from './RunSplitButton';
 import { openAboutModal } from './AboutModal';
 import {
+  activeCcxtExchange,
   hasCcxtCredential,
   subscribeCredentials,
 } from '../data/credentials';
@@ -518,23 +519,24 @@ export const Topbar: Component<{
           </For>
         </TopbarField>
 
-        <TopbarField
-          label="Stream"
-          variant="select"
-          class="min-w-[7em]"
-          value={store.live.streamId}
-          disabled={store.live.active}
-          title={
-            store.live.streamId !== defaultStreamForSource(store.source)
-              ? `Live stream (mismatched vs ${defaultStreamForSource(store.source)} — HUD Fix)`
-              : 'Live data stream (disabled while Live is on)'
-          }
-          onChange={(e) => {
-            setActivePlugin('stream', e.currentTarget.value);
-          }}
+        <Show
+          when={store.live.streamId !== defaultStreamForSource(store.source)}
+          fallback={null}
         >
-          <For each={streams()}>{(s) => <option value={s.id}>{s.name}</option>}</For>
-        </TopbarField>
+          <TopbarField
+            label="Stream"
+            variant="select"
+            class="min-w-[7em]"
+            value={store.live.streamId}
+            disabled={store.live.active}
+            title={`Live stream (mismatched vs ${defaultStreamForSource(store.source)} — HUD Fix)`}
+            onChange={(e) => {
+              setActivePlugin('stream', e.currentTarget.value);
+            }}
+          >
+            <For each={streams()}>{(s) => <option value={s.id}>{s.name}</option>}</For>
+          </TopbarField>
+        </Show>
 
         {/* Action cluster: Run/Re-run · Live · Replay — Run is accent only while executing */}
         <RunSplitButton
@@ -552,7 +554,14 @@ export const Topbar: Component<{
           onClick={toggleLive}
           data-testid="axis-btn-live"
           aria-pressed={store.live.active}
-          title={store.live.active ? 'Stop live stream' : 'Start live stream'}
+          title={
+            store.live.active
+              ? 'Stop live stream'
+              : `Start live stream (${
+                  streams().find((s) => s.id === defaultStreamForSource(store.source))?.name ||
+                  defaultStreamForSource(store.source)
+                })`
+          }
         >
           {store.live.active ? (
             <Icons.wifi class="text-accent-2" />
@@ -867,10 +876,7 @@ export const Topbar: Component<{
 };
 
 function ccxtExchangeFromStore(): string {
-  const bags = store.pluginsConfig || {};
-  const src = bags['source:ccxt-rest'] as Record<string, unknown> | undefined;
-  const stm = bags['stream:ccxt-ws'] as Record<string, unknown> | undefined;
-  return String(src?.exchange || stm?.exchange || '').trim().toLowerCase();
+  return activeCcxtExchange();
 }
 
 function CcxtKeyChip(props: { onOpen: () => void }) {

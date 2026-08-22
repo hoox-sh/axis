@@ -41,6 +41,7 @@ import {
   resolveSymbolVenue,
   venueLabel,
 } from '../data/symbol-catalog';
+import { activeCcxtExchange, activeCcxtGateway } from '../data/credentials';
 import { Icons } from './icons';
 
 export type SymbolModalProps = {
@@ -107,8 +108,12 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
     if (!props.open) return;
 
     const v = resolveSymbolVenue(store.source, activeStreamId());
+    const ccxtExchange =
+      store.source === 'ccxt-rest' || store.live?.streamId === 'ccxt-ws'
+        ? activeCcxtExchange()
+        : '';
     setVenue(v);
-    setVenueName(venueLabel(v));
+    setVenueName(ccxtExchange ? `${ccxtExchange} (CCXT)` : venueLabel(v));
     setMeta('');
 
     abort?.abort();
@@ -116,7 +121,11 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
     const signal = abort.signal;
 
     setLoading(true);
-    void loadSymbolCatalog(v, { signal })
+    void loadSymbolCatalog(v, {
+      signal,
+      ccxtExchange: ccxtExchange || undefined,
+      gateway: ccxtExchange ? activeCcxtGateway() : undefined,
+    })
       .then((r) => {
         if (signal.aborted) return;
         setVenue(r.venue);
@@ -147,10 +156,9 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
   });
 
   const pick = (sym: string) => {
-    const next = String(sym || '')
-      .toUpperCase()
-      .trim()
-      .replace(/[^A-Z0-9:._-]/g, '');
+    const raw = String(sym || '').toUpperCase().trim();
+    const ccxt = store.source === 'ccxt-rest' || store.live?.streamId === 'ccxt-ws';
+    const next = ccxt ? raw : raw.replace(/[^A-Z0-9:._-]/g, '');
     if (!next) return;
     props.onSelect(next);
     props.onClose();
@@ -192,7 +200,16 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
     setError('');
     abort?.abort();
     abort = new AbortController();
-    void loadSymbolCatalog(v, { forceRefresh: true, signal: abort.signal })
+    const ccxtExchange =
+      store.source === 'ccxt-rest' || store.live?.streamId === 'ccxt-ws'
+        ? activeCcxtExchange()
+        : '';
+    void loadSymbolCatalog(v, {
+      forceRefresh: true,
+      signal: abort.signal,
+      ccxtExchange: ccxtExchange || undefined,
+      gateway: ccxtExchange ? activeCcxtGateway() : undefined,
+    })
       .then((r) => {
         setRows(r.symbols);
         setMeta(`${r.symbols.length} pairs · refreshed`);

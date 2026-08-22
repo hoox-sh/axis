@@ -33,6 +33,7 @@ import {
   resolveProviderVenue,
   type ProviderVenue,
 } from './provider';
+import { gatewayFetch, type GatewayMode } from './gateway';
 
 export type SymbolVenue =
   | 'binance'
@@ -116,13 +117,13 @@ export function resolveSymbolVenue(
   );
 }
 
-function cacheKey(venue: SymbolVenue): string {
-  return `${CACHE_PREFIX}${venue}`;
+function cacheKey(id: string): string {
+  return `${CACHE_PREFIX}${id}`;
 }
 
-function loadCache(venue: SymbolVenue): SymbolEntry[] | null {
+function loadCache(id: string): SymbolEntry[] | null {
   try {
-    const raw = localStorage.getItem(cacheKey(venue));
+    const raw = localStorage.getItem(cacheKey(id));
     if (!raw) return null;
     const c = JSON.parse(raw) as { ts?: number; symbols?: SymbolEntry[] };
     if (!c?.symbols?.length) return null;
@@ -133,10 +134,10 @@ function loadCache(venue: SymbolVenue): SymbolEntry[] | null {
   }
 }
 
-function saveCache(venue: SymbolVenue, symbols: SymbolEntry[]): void {
+function saveCache(id: string, symbols: SymbolEntry[]): void {
   try {
     localStorage.setItem(
-      cacheKey(venue),
+      cacheKey(id),
       JSON.stringify({ ts: Date.now(), symbols })
     );
   } catch {
@@ -302,13 +303,89 @@ async function fetchVenue(venue: SymbolVenue): Promise<SymbolEntry[]> {
   }
 }
 
+async function fetchCcxtMarkets(
+  exchange: string,
+  gateway: GatewayMode,
+): Promise<SymbolEntry[]> {
+  const res = await gatewayFetch(gateway, '/markets', { exchange });
+  if (!res.ok) throw new Error(`gateway markets ${res.status}`);
+  const json: unknown = await res.json();
+  const rows = Array.isArray(json) ? json : [];
+  const out: SymbolEntry[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const r = row as Record<string, unknown>;
+    if (r.active === false) continue;
+    const unified = String(r.symbol || '').trim();
+    const base = String(r.base || '').trim();
+    const quote = String(r.quote || '').trim();
+    if (unified.includes('/')) {
+      const [b, q] = unified.split('/');
+      out.push({
+        symbol: unified.toUpperCase(),
+        base: (base || b || '').toUpperCase(),
+        quote: (quote || q || '').toUpperCase(),
+        display: unified.toUpperCase(),
+      });
+      continue;
+    }
+    if (base && quote) {
+      const display = `${base.toUpperCase()}/${quote.toUpperCase()}`;
+      out.push({ symbol: display, base: base.toUpperCase(), quote: quote.toUpperCase(), display });
+    }
+  }
+  return out;
+}
+
 /**
  * Load symbols for a venue (cache → network → fallback majors).
+ * Pass `ccxtExchange` when the active source is the CCXT gateway.
  */
 export async function loadSymbolCatalog(
   venue: SymbolVenue,
-  opts?: { forceRefresh?: boolean; signal?: AbortSignal }
+  opts?: {
+    forceRefresh?: boolean;
+    signal?: AbortSignal;
+    ccxtExchange?: string;
+    gateway?: GatewayMode;
+  },
 ): Promise<SymbolCatalogResult> {
+  const ccxtEx = String(opts?.ccxtExchange || '').trim().toLowerCase();
+  if (ccxtEx) {
+    const cacheId = `ccxt:${ccxtEx}`;
+    const label = `${ccxtEx} (CCXT)`;
+    if (!opts?.forceRefresh) {
+      const cached = loadCache(cacheId);
+      if (cached?.length) {
+        return { venue: 'generic', label, symbols: cached, fromCache: true, fallback: false };
+      }
+    }
+    try {
+      if (opts?.signal?.aborted) throw new Error('aborted');
+      const symbols = await fetchCcxtMarkets(ccxtEx, opts?.gateway || 'auto');
+      if (!symbols.length) throw new Error('empty catalog');
+      saveCache(cacheId, symbols);
+      return { venue: 'generic', label, symbols, fromCache: false, fallback: false };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const cached = loadCache(cacheId);
+      if (cached?.length) {
+        return { venue: 'generic', label, symbols: cached, fromCache: true, fallback: false, error: msg };
+      }
+      return {
+        venue: 'generic',
+        label,
+        symbols: FALLBACK_MAJORS.map((e) => ({
+          ...e,
+          symbol: e.display,
+        })),
+        fromCache: false,
+        fallback: true,
+        error: msg,
+      };
+    }
+  }
+
   const label = venueLabel(venue);
   if (!opts?.forceRefresh) {
     const cached = loadCache(venue);

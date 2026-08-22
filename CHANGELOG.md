@@ -17,6 +17,8 @@ _Generated/updated: 2026-08-21 · 250 commits · describe-tag: `v2.0.20`_
 
 ### Added
 
+- **CCXT symbol browse uses that exchange's markets** — with Source = CCXT (Gateway), the symbol modal loads `GET /markets?exchange=` and keeps unified `BTC/USDT` tickers (slash is no longer stripped). Stream is hidden on the topbar while it still matches the source pairing (Wire / HUD Fix if it drifts).
+
 - **CCXT session API keys** — Settings → Data can store a key + secret (+ passphrase / uid) per CCXT exchange id (`ccxt:bybit`, …) in the RAM vault (never `pluginsConfig` / localStorage). Save POSTs `POST /datafeed/session`; Load/Live then pass only `cred=` on OHLCV/watch. Public candles still work without a key. Topbar shows an **API key** chip next to the CCXT exchange picker. Gateway `auto|pyne|sidecar` moved to Settings (advanced). Sidecar accepts `/ohlcv` and `/datafeed/ohlcv`. PYNE `POST /datafeed/session` accepts `apiKey`/`secret`/`password` in the JSON body.
 
 - **npm release pipeline for the AXIS CLI** — `@hoox-sh/axis-cli` (`packages/cli`) is now publishable: dropped `"private"`, and a new `.github/workflows/release.yml` typechecks, tests, builds and publishes the package to npm on `v*` tags using an `NPM_TOKEN` repository secret. A registry-version guard skips cleanly when the version is already published (safe tag re-runs); run summary reports local vs registry versions.

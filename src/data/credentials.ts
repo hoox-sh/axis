@@ -120,7 +120,7 @@ function notify(): void {
   }
 }
 
-function activeCcxtExchange(): string {
+export function activeCcxtExchange(): string {
   try {
     const bags = store.pluginsConfig || {};
     const src = bags['source:ccxt-rest'] as Record<string, unknown> | undefined;
@@ -129,6 +129,18 @@ function activeCcxtExchange(): string {
     return ex;
   } catch {
     return '';
+  }
+}
+
+export function activeCcxtGateway(): 'auto' | 'pyne' | 'sidecar' {
+  try {
+    const bags = store.pluginsConfig || {};
+    const src = bags['source:ccxt-rest'] as Record<string, unknown> | undefined;
+    const stm = bags['stream:ccxt-ws'] as Record<string, unknown> | undefined;
+    const g = String(src?.gateway || stm?.gateway || 'auto');
+    return g === 'pyne' || g === 'sidecar' ? g : 'auto';
+  } catch {
+    return 'auto';
   }
 }
 

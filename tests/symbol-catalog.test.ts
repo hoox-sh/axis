@@ -6,6 +6,7 @@ import {
   compactPair,
   filterSymbols,
   listQuotes,
+  loadSymbolCatalog,
   resolveSymbolVenue,
   type SymbolEntry,
   venueLabel,
@@ -37,6 +38,42 @@ describe('resolveSymbolVenue', () => {
 
   test('source wins over stream for venue sources', () => {
     expect(resolveSymbolVenue('okx-rest', 'binance-ws')).toBe('okx');
+  });
+
+  test('ccxt-rest maps to generic until a catalog exchange is passed', () => {
+    expect(resolveSymbolVenue('ccxt-rest', 'ccxt-ws')).toBe('generic');
+  });
+});
+
+describe('loadSymbolCatalog CCXT', () => {
+  test('fetches gateway markets and keeps unified BTC/USDT symbols', async () => {
+    const orig = globalThis.fetch;
+    globalThis.fetch = ((url: string | URL | Request) => {
+      const u = typeof url === 'string' ? url : String(url);
+      expect(u).toContain('/markets');
+      expect(u).toContain('exchange=bybit');
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            { symbol: 'BTC/USDT', base: 'BTC', quote: 'USDT', active: true },
+            { symbol: 'ETH/USDT', base: 'ETH', quote: 'USDT', active: false },
+          ]),
+          { status: 200 },
+        ),
+      );
+    }) as typeof fetch;
+    try {
+      const r = await loadSymbolCatalog('generic', {
+        ccxtExchange: 'bybit',
+        gateway: 'pyne',
+        forceRefresh: true,
+      });
+      expect(r.label).toBe('bybit (CCXT)');
+      expect(r.symbols.map((s) => s.symbol)).toEqual(['BTC/USDT']);
+      expect(r.fallback).toBe(false);
+    } finally {
+      globalThis.fetch = orig;
+    }
   });
 });
 
