@@ -68,6 +68,7 @@ import {
   type ResolveCallSigOpts,
 } from './pine-call-params';
 import { parseAssignLine } from './pine-declare-types';
+import { type QuoteChar, isQuoteChar } from './pine-scan-util';
 
 /**
  * Quiet time after the last keystroke before idle lint runs (ms).
@@ -298,7 +299,7 @@ export function scanBuiltinMemberRefs(source: string): DottedRef[] {
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li]!;
     let i = 0;
-    let inStr: '"' | "'" | null = null;
+    let inStr: QuoteChar | null = null;
     while (i < line.length) {
       const c = line[i]!;
       const n = line[i + 1];
@@ -327,8 +328,8 @@ export function scanBuiltinMemberRefs(source: string): DottedRef[] {
         i += 1;
         continue;
       }
-      if (c === '"' || c === "'") {
-        inStr = c;
+      if (isQuoteChar(c)) {
+        inStr = c as QuoteChar;
         i += 1;
         continue;
       }
@@ -377,7 +378,7 @@ export function scanBareCallRefs(source: string): DottedRef[] {
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li]!;
     let i = 0;
-    let inStr: '"' | "'" | null = null;
+    let inStr: QuoteChar | null = null;
     while (i < line.length) {
       const c = line[i]!;
       const n = line[i + 1];
@@ -406,8 +407,8 @@ export function scanBareCallRefs(source: string): DottedRef[] {
         i += 1;
         continue;
       }
-      if (c === '"' || c === "'") {
-        inStr = c;
+      if (isQuoteChar(c)) {
+        inStr = c as QuoteChar;
         i += 1;
         continue;
       }
@@ -449,7 +450,7 @@ export function scanBareCallRefs(source: string): DottedRef[] {
 function stripPineCommentsAndStrings(raw: string, inBlock: { v: boolean }): string {
   let text = '';
   let i = 0;
-  let inStr: '"' | "'" | null = null;
+  let inStr: QuoteChar | null = null;
   while (i < raw.length) {
     const c = raw[i]!;
     const n = raw[i + 1];
@@ -477,8 +478,8 @@ function stripPineCommentsAndStrings(raw: string, inBlock: { v: boolean }): stri
       i += 1;
       continue;
     }
-    if (c === '"' || c === "'") {
-      inStr = c;
+    if (isQuoteChar(c)) {
+      inStr = c as QuoteChar;
       i += 1;
       continue;
     }
@@ -495,6 +496,12 @@ const USER_FN_LEAD_RE =
 const IMPORT_AS_RE = /\bimport\s+\S+\s+as\s+([A-Za-z_][A-Za-z0-9_]*)/g;
 const TUPLE_ASSIGN_RE =
   /^\s*(?:export\s+)?(?:varip|var)?\s*\[([^\]]+)\]\s*=/;
+const FOR_TUPLE_RE = /^\s*for\s+(?:var\s+)?\[([^\]]+)\]\s+in\b/;
+const ENUM_DECL_RE = /^\s*enum\s+[A-Za-z_][\w]*\s*$/;
+const TYPE_DECL_RE = /^\s*(?:export\s+)?type\s+[A-Za-z_][\w]*(?:\s+extends\s+\S+)?\s*$/;
+const ENUM_MEMBER_LINE_RE = /^\s*([A-Za-z_]\w*)\s*(?:=.*)?$/;
+const TYPE_FIELD_LINE_RE =
+  /^\s+(?:(?:series|simple|const)\s+)?[A-Za-z_][\w.]*(?:<[^>]*>)?(?:\[\])?\s+([A-Za-z_]\w*)\s*(?:=.*)?$/;
 
 function addFnParams(paramsRaw: string, into: Set<string>, fnMap: Map<string, string[]>, fnName: string): void {
   const parsed = parseSignatureParams(`fn(${paramsRaw})`);
@@ -531,9 +538,45 @@ function collectUserDeclarationMap(source: string): {
   const functions = new Map<string, string[]>();
   const lines = source.split('\n');
   const inBlock = { v: false };
+  // `enum` / `type` declaration bodies contribute member/field bindings.
+  let blockKind: 'enum' | 'type' | null = null;
+  let blockIndent = 0;
 
   for (const raw of lines) {
     const text = stripPineCommentsAndStrings(raw, inBlock);
+
+    if (ENUM_DECL_RE.test(text)) {
+      const nm = /^\s*enum\s+([A-Za-z_]\w*)/.exec(text)?.[1];
+      if (nm && !BARE_CALL_SKIP.has(nm)) names.add(nm);
+      blockKind = 'enum';
+      blockIndent = text.length - text.trimStart().length;
+      continue;
+    }
+    if (TYPE_DECL_RE.test(text)) {
+      const nm = /^\s*(?:export\s+)?type\s+([A-Za-z_]\w*)/.exec(text)?.[1];
+      if (nm && !BARE_CALL_SKIP.has(nm)) names.add(nm);
+      blockKind = 'type';
+      blockIndent = text.length - text.trimStart().length;
+      continue;
+    }
+    if (blockKind) {
+      if (!text.trim()) continue;
+      const indent = text.length - text.trimStart().length;
+      if (indent <= blockIndent) {
+        // Dedent closes the declaration body; fall through to normal parsing.
+        blockKind = null;
+      } else {
+        const m =
+          blockKind === 'enum'
+            ? ENUM_MEMBER_LINE_RE.exec(text)
+            : TYPE_FIELD_LINE_RE.exec(text);
+        const id = m?.[1];
+        if (id && /^[A-Za-z_][A-Za-z0-9_]*$/.test(id) && !BARE_CALL_SKIP.has(id)) {
+          names.add(id);
+        }
+        continue;
+      }
+    }
 
     USER_FN_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
@@ -562,6 +605,14 @@ function collectUserDeclarationMap(source: string): {
     const tuple = TUPLE_ASSIGN_RE.exec(text);
     if (tuple) {
       for (const part of tuple[1]!.split(',')) {
+        const id = part.trim();
+        if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(id) && !BARE_CALL_SKIP.has(id)) names.add(id);
+      }
+    }
+
+    const forTuple = FOR_TUPLE_RE.exec(text);
+    if (forTuple) {
+      for (const part of forTuple[1]!.split(',')) {
         const id = part.trim();
         if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(id) && !BARE_CALL_SKIP.has(id)) names.add(id);
       }
@@ -738,7 +789,7 @@ export function scanIdentRefs(source: string): IdentRef[] {
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li]!;
     let i = 0;
-    let inStr: '"' | "'" | null = null;
+    let inStr: QuoteChar | null = null;
     while (i < line.length) {
       const c = line[i]!;
       const n = line[i + 1];
@@ -766,8 +817,8 @@ export function scanIdentRefs(source: string): IdentRef[] {
         i += 1;
         continue;
       }
-      if (c === '"' || c === "'") {
-        inStr = c;
+      if (isQuoteChar(c)) {
+        inStr = c as QuoteChar;
         i += 1;
         continue;
       }
@@ -791,6 +842,8 @@ export function scanIdentRefs(source: string): IdentRef[] {
         const next2 = line[j + 1] ?? '';
         // Call site — handled by builtin / named-arg checkers
         if (next === '(') continue;
+        // Dotted-path root (`Mode.SINGLE`) — handled by scanBuiltinMemberRefs
+        if (next === '.') continue;
         // Declaration or named arg `name=` (but not `:=` reassignment, `==`, `=>`)
         if (next === '=' && next2 !== '=' && next2 !== '>') continue;
         const name = line.slice(start, i);
@@ -1048,7 +1101,7 @@ export function localPreevaluate(source: string): EditorDiagnostic[] {
   const closers: Record<string, string> = { '(': ')', '[': ']', '{': '}' };
   const openers = new Set(['(', '[', '{']);
 
-  let inStr: '"' | "'" | null = null;
+  let inStr: QuoteChar | null = null;
   let strLine = 1;
   let strCol = 0;
   inBlock = false;
@@ -1086,8 +1139,8 @@ export function localPreevaluate(source: string): EditorDiagnostic[] {
         continue;
       }
 
-      if (c === '"' || c === "'") {
-        inStr = c;
+      if (isQuoteChar(c)) {
+        inStr = c as QuoteChar;
         strLine = li + 1;
         strCol = i;
         i += 1;

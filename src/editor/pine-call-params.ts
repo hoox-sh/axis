@@ -19,6 +19,8 @@
  * @module editor/pine-call-params
  */
 
+import { type QuoteChar, isQuoteChar } from './pine-scan-util';
+
 export interface PineParamDef {
   name: string;
   /** Pine type qualifier + type, e.g. `series float`, `const string`. */
@@ -223,6 +225,7 @@ const CURATED: Record<string, PineCallSig> = {
       { name: 'max_polylines_count', type: 'const int', optional: true },
       { name: 'dynamic_requests', type: 'const bool', optional: true, description: 'Allow series `request.*` (v6)' },
       { name: 'behind_chart', type: 'const bool', optional: true, description: 'Draw behind candles (v6)' },
+      { name: 'linktoseries', type: 'const bool', optional: true, description: 'AXIS extension — link strategy fills to the active source series (pyne accepts declaration kwargs)' },
     ],
     description: 'Declare a strategy script.',
     example: 'strategy("MA Cross", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity)',
@@ -801,7 +804,7 @@ function splitTopLevelParts(inner: string, base: number): PartSpan[] {
   let cur = '';
   let start = base;
   let depth = 0;
-  let inStr: '"' | "'" | null = null;
+  let inStr: QuoteChar | null = null;
   for (let i = 0; i < inner.length; i++) {
     const c = inner[i]!;
     const abs = base + i;
@@ -814,8 +817,8 @@ function splitTopLevelParts(inner: string, base: number): PartSpan[] {
       if (c === inStr) inStr = null;
       continue;
     }
-    if (c === '"' || c === "'") {
-      inStr = c;
+    if (isQuoteChar(c)) {
+      inStr = c as QuoteChar;
       cur += c;
       continue;
     }
@@ -940,7 +943,7 @@ export function parseSignatureParams(raw: string): PineParamDef[] {
   const open = s.indexOf('(');
   if (open >= 0) {
     let depth = 0;
-    let inStr: '"' | "'" | null = null;
+    let inStr: QuoteChar | null = null;
     let close = -1;
     for (let i = open; i < s.length; i++) {
       const c = s[i]!;
@@ -952,8 +955,8 @@ export function parseSignatureParams(raw: string): PineParamDef[] {
         if (c === inStr) inStr = null;
         continue;
       }
-      if (c === '"' || c === "'") {
-        inStr = c;
+      if (isQuoteChar(c)) {
+        inStr = c as QuoteChar;
         continue;
       }
       if (c === '(') depth++;
@@ -1008,7 +1011,7 @@ function firstSignatureLine(name: string, text: string): string | null {
       if (parsed.length) {
         let close = from;
         let depth = 0;
-        let inStr: '"' | "'" | null = null;
+        let inStr: QuoteChar | null = null;
         for (let i = from; i < src.length; i++) {
           const c = src[i]!;
           if (inStr) {
@@ -1019,8 +1022,8 @@ function firstSignatureLine(name: string, text: string): string | null {
             if (c === inStr) inStr = null;
             continue;
           }
-          if (c === '"' || c === "'") {
-            inStr = c;
+          if (isQuoteChar(c)) {
+            inStr = c as QuoteChar;
             continue;
           }
           if (c === '(') depth++;
@@ -1110,7 +1113,7 @@ export function resolveCallSignature(
 
 function matchCloseParen(src: string, openParen: number): number {
   let depth = 0;
-  let inStr: '"' | "'" | null = null;
+  let inStr: QuoteChar | null = null;
   for (let k = openParen; k < src.length; k++) {
     const c = src[k]!;
     if (inStr) {
@@ -1121,8 +1124,8 @@ function matchCloseParen(src: string, openParen: number): number {
       if (c === inStr) inStr = null;
       continue;
     }
-    if (c === '"' || c === "'") {
-      inStr = c;
+    if (isQuoteChar(c)) {
+      inStr = c as QuoteChar;
       continue;
     }
     if (c === '/' && src[k + 1] === '/') {
@@ -1151,7 +1154,7 @@ export function findCallSite(text: string, pos: number): CallSite | null {
 
   type Frame = { name: string; openParen: number; skip: boolean };
   const stack: Frame[] = [];
-  let inStr: '"' | "'" | null = null;
+  let inStr: QuoteChar | null = null;
   for (let i = 0; i < pos; i++) {
     const c = src[i]!;
     if (inStr) {
@@ -1163,8 +1166,8 @@ export function findCallSite(text: string, pos: number): CallSite | null {
       if (c === '\n' || c === inStr) inStr = null;
       continue;
     }
-    if (c === '"' || c === "'") {
-      inStr = c;
+    if (isQuoteChar(c)) {
+      inStr = c as QuoteChar;
       continue;
     }
     if (c === '/' && src[i + 1] === '/') {
@@ -1248,7 +1251,7 @@ export function findCallSite(text: string, pos: number): CallSite | null {
 export function scanAllCallSites(source: string): CallSite[] {
   const src = String(source ?? '');
   const out: CallSite[] = [];
-  let inStr: '"' | "'" | null = null;
+  let inStr: QuoteChar | null = null;
   let inBlock = false;
   for (let i = 0; i < src.length; i++) {
     const c = src[i]!;
@@ -1268,8 +1271,8 @@ export function scanAllCallSites(source: string): CallSite[] {
       }
       continue;
     }
-    if (c === '"' || c === "'") {
-      inStr = c;
+    if (isQuoteChar(c)) {
+      inStr = c as QuoteChar;
       continue;
     }
     if (c === '/' && n === '/') {

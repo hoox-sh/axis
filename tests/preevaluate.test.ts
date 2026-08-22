@@ -359,6 +359,40 @@ strategy.entry("L", strategy.long)
     const diags = checkUnknownBuiltinMembers(src);
     expect(diags.some((d) => /`lenghtt`/.test(d.message))).toBe(true);
   });
+
+  it('treats typographic (curly) quotes as string delimiters', () => {
+    const src = [
+      'indicator("s")',
+      'swing = 1',
+      'title = \u201cSwing init Hoox\u201d',
+      'plot(close + swing)',
+    ].join('\n');
+    const diags = checkUnknownBuiltinMembers(src);
+    expect(diags.filter((d) => /`Swing`|`init`|`Hoox`/.test(d.message))).toEqual([]);
+  });
+
+  it('collects enum members, type fields, and for-in vars as declared names', () => {
+    const src = [
+      'indicator("d")',
+      'enum Mode',
+      '  SINGLE',
+      '  CROSS = 2',
+      '',
+      'type Trade',
+      '  float TP1',
+      '  string note = ""',
+      '',
+      'var mode = Mode.SINGLE',
+      'for [idx, px] in highs',
+      '  label.new(idx, px, "L")',
+      't = Trade.new()',
+      'plot(mode == Mode.CROSS ? 1 : 0)',
+    ].join('\n');
+    const diags = checkUnknownBuiltinMembers(src).filter((d) =>
+      /`SINGLE`|`CROSS`|`TP1`|`note`|`idx`|`px`/.test(d.message),
+    );
+    expect(diags).toEqual([]);
+  });
 });
 
 describe('rangeFromLineCols', () => {
