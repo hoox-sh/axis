@@ -153,6 +153,13 @@ export const PINE_ENUM_PATHS: readonly string[] = [
   'text.formatting.bold',
   'text.formatting.italic',
   'text.formatting.bold_italic',
+  'text.align_left',
+  'text.align_center',
+  'text.align_right',
+  'text.align_top',
+  'text.align_bottom',
+  'text.wrap_none',
+  'text.wrap_auto',
   'text.format_none',
   'text.format_bold',
   'text.format_italic',
@@ -177,6 +184,44 @@ export const PINE_ENUM_PATHS: readonly string[] = [
   'scale.right',
   'scale.left',
   'scale.none',
+];
+
+/**
+ * Built-in series variables and type qualifiers the pyne LSP metadata omits
+ * (its catalog only lists functions/namespaces). Kept here so pre-eval typo
+ * checks and completions treat them as known identifiers.
+ */
+export const PINE_BUILTIN_VARS: readonly string[] = [
+  // OHLCV + derived
+  'open',
+  'high',
+  'low',
+  'close',
+  'volume',
+  'hl2',
+  'hlc3',
+  'ohlc4',
+  'hlcc4',
+  // time / bar state
+  'time',
+  'time_close',
+  'time_tradingday',
+  'bar_index',
+  'last_bar_index',
+  'last_bar_time',
+  // calendar parts
+  'year',
+  'month',
+  'weekofyear',
+  'dayofmonth',
+  'dayofweek',
+  'hour',
+  'minute',
+  'second',
+  // type qualifiers (declaration/param modifiers, never values)
+  'simple',
+  'series',
+  'const',
 ];
 
 /** Human-readable meta for completion tooltips (path → detail/brief). */

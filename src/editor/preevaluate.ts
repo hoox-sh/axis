@@ -55,7 +55,7 @@ import {
 } from './diagnostics';
 import { setPreEval, store } from '../store';
 import builtinsJson from './data/pyne-builtins.json';
-import { PINE_ENUM_PATHS } from './pine-enums';
+import { PINE_BUILTIN_VARS, PINE_ENUM_PATHS } from './pine-enums';
 import {
   DEFAULT_PREEVAL_IDLE_MS,
   readEditorIntel,
@@ -98,7 +98,10 @@ function intel(): EditorIntelSettings {
  * Canonical list: {@link PINE_ENUM_PATHS} in `pine-enums.ts` (shared with
  * editor completions for all Pine named-arg enums).
  */
-export const EXTRA_KNOWN_BUILTIN_PATHS: readonly string[] = PINE_ENUM_PATHS;
+export const EXTRA_KNOWN_BUILTIN_PATHS: readonly string[] = [
+  ...PINE_ENUM_PATHS,
+  ...PINE_BUILTIN_VARS,
+];
 
 const BUILTIN_NAMES = new Set([
   ...Object.keys(builtinsJson as Record<string, unknown>),
@@ -252,6 +255,9 @@ const BARE_CALL_SKIP = new Set([
   'na',
   'var',
   'varip',
+  'simple',
+  'series',
+  'const',
   'matrix',
   'array',
   'map',

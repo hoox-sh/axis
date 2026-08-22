@@ -322,6 +322,43 @@ strategy.entry("L", strategy.long)
     expect(diags[0]!.from).toBe(0);
     expect(diags[0]!.to).toBe('strategy.etry'.length);
   });
+
+  it('never flags built-in series variables or type qualifiers', () => {
+    const src = [
+      'indicator("ok", overlay=true)',
+      'simple int len = 14',
+      'series float x = close',
+      'const color c = color.green',
+      'float v = ohlc4 + hl2 + hlc3 + hlcc4',
+      'plot(high - low, "range")',
+      'if bar_index > last_bar_index - 1',
+      '  plot(time_close)',
+    ].join('\n');
+    const diags = checkUnknownBuiltinMembers(src);
+    expect(diags.filter((d) => /typo/i.test(d.message))).toEqual([]);
+  });
+
+  it('knows text align/wrap constants', () => {
+    const src = [
+      'indicator("t")',
+      'label.new(bar_index, close, "x", textalign=text.align_center)',
+      'label.new(bar_index, close, "y", textalign=text.align_right)',
+      'label.new(bar_index, close, "z", textalign=text.wrap_auto)',
+    ].join('\n');
+    const diags = checkUnknownBuiltinMembers(src);
+    expect(diags.filter((d) => /text\.align|text\.wrap/.test(d.message))).toEqual([]);
+  });
+
+  it('still flags genuinely unknown user identifiers', () => {
+    const src = [
+      'indicator("u")',
+      'lenght = 14',
+      'plot(ta.sma(close, lenght))',
+      'plot(lenghtt)',
+    ].join('\n');
+    const diags = checkUnknownBuiltinMembers(src);
+    expect(diags.some((d) => /`lenghtt`/.test(d.message))).toBe(true);
+  });
 });
 
 describe('rangeFromLineCols', () => {

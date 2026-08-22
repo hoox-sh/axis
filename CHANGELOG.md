@@ -23,6 +23,8 @@ _Generated/updated: 2026-08-21 · 250 commits · describe-tag: `v2.0.20`_
 
 ### Fixed
 
+- **Pre-eval typo checker flooded false positives (~260 per script)** — pyne's LSP metadata only lists functions/namespaces, so the pre-eval linter treated core built-in series variables (`close`, `high`, `low`, `open`, `volume`, `ohlc4`, `hl2`…), type qualifiers (`simple`/`series`/`const`) and `text.align_*` / `text.wrap_*` constants as unknown identifiers and suggested nonsense ("Unknown `close` — did you mean `CROSS`?"). Added a curated `PINE_BUILTIN_VARS` supplement (OHLCV + derived, time/bar state, calendar parts) plus the missing `text.*` members to the known-path index; qualifiers also join the bare-call skip set. Regression tests cover the reported failure pattern (now zero typos).
+
 - **Config row crash on first save** — `setField` wrote `pluginsConfig` through a deep Solid store path whose parent bag did not exist yet; solid-js/store does not auto-create intermediate nodes, so the first-ever config change threw `TypeError: can't access property "exchange"` and never persisted. Bag creation is now guarded (`writePluginField`), covered by regression tests and a browser e2e run.
 
 - **Gateway select had no choices** — the ccxt `gateway` schema fields lacked `options`, so the dropdown rendered only its current value. `auto | pyne | sidecar` are now declared on both `ccxt-rest` and `ccxt-ws`.
