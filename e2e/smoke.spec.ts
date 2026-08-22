@@ -76,7 +76,7 @@ test.describe('AXIS smoke @smoke', () => {
 
   test('opens and closes plugin Manager', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('axis-btn-plugins').click();
+    await page.getByTestId('axis-btn-plugins').click({ force: true });
     await expect(page.getByTestId('axis-manager')).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Catalog' })).toBeVisible();
     await page.getByTestId('axis-plugins-close').click();

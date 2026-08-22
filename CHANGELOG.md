@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-21 · 250 commits · describe-tag: `v2.0.20`_
+_Generated/updated: 2026-08-23 · 269 commits · describe-tag: `v2.0.21`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.22] — 2026-08-23
 
 ### Added
 
@@ -548,9 +550,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (168 commits)
+### 2026-08 (187 commits)
 
 #### Security
 
@@ -561,6 +565,13 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `0d45a6f2` (2026-08-23) — feat(ui): full-page studio overlay for Runtime, Wire, and Settings
+- `6900c093` (2026-08-22) — feat(ui): slide-over drawers for Settings, Runtimes, and Wire
+- `c685a2d4` (2026-08-22) — feat(ui): Venue picker pairs native CEX and CCXT in one control
+- `fe0ed9c7` (2026-08-22) — feat(ui): CCXT symbol catalog and hide paired stream
+- `95144094` (2026-08-22) — feat(data): CCXT session keys and plugin-config/editor fixes
+- `339175f0` (2026-08-21) — feat(ui): advanced config fields in Settings + full ccxt exchange list
+- `203b4492` (2026-08-21) — feat(ui): topbar plugin config row for source/stream configSchema
 - `6b4d5543` (2026-08-21) — feat(plugins): gateway-aware active source/stream resolution
 - `1631975f` (2026-08-21) — feat(stream): ccxt-ws gateway stream plugin
 - `c1887afd` (2026-08-21) — feat(source): ccxt-rest gateway source plugin
@@ -644,6 +655,14 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `55e26ddd` (2026-08-22) — fix(editor): stop afterDot state leak from trailing-dot floats
+- `d98048a8` (2026-08-22) — fix(editor): pre-eval typo round 3 — generics, import paths, dotted calls
+- `47beaa62` (2026-08-22) — fix(editor): pre-eval typo round 2 — decl forms, curly quotes, linktoseries
+- `5f0c3f36` (2026-08-22) — fix(editor): stop pre-eval typo flood on built-in vars, qualifiers, text.*
+- `2f8ff1d2` (2026-08-22) — fix(ui): plugin config first-save crash + gateway select options
+- `a6323558` (2026-08-21) — fix(ui): single shared plugin config row + exchange dropdown
+- `7e74a266` (2026-08-21) — fix(gateway): remote-page loopback resolution + drop shadowed require
+- `67361dc6` (2026-08-21) — fix(datafeed): ccxt-ws browser ESM require + ccxt-rest walk-back window
 - `aefa3baf` (2026-08-20) — fix(editor): skip hex color tails in pre-eval identifier scanner
 - `d408f110` (2026-08-20) — fix: resolve all 23 pre-existing TypeScript errors + CI typecheck gate
 - `804c5662` (2026-08-20) — fix(test): reset store provider state in credentials beforeEach
@@ -704,6 +723,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Refactors
 
+- `6041c2d6` (2026-08-22) — refactor(ui): move plugin config section into Settings → Data tab
 - `f19fe9a2` (2026-08-08) — refactor: rename remaining pine-* modules to pyne-*
 - `18eedc78` (2026-08-08) — refactor: rename pine-language/lsp/builtins editor stack to pyne-*
 - `096a799f` (2026-08-08) — refactor: rename pine-editor CSS, DOM, and PyneEditor component
@@ -712,6 +732,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `dce471b0` (2026-08-21) — docs(devops): list /datafeed/ among nginx-proxied Pro API paths
 - `27b5ca13` (2026-08-21) — docs(changelog): datafeed gateway phase 4 additions
 - `36900319` (2026-08-15) — docs(cors): document Pages preview origins for axis.hoox.sh
 - `d3172dbb` (2026-08-11) — docs: AXIS 2.0.1 docs, CLI-first ops, Pine Script v6 examples
@@ -727,6 +748,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### CI
 
+- `75c4543c` (2026-08-22) — ci: versioned docker tags and npm publish for axis-cli
 - `3ddc4193` (2026-08-10) — ci(docker): fix image build, enhance make targets, add GHCR workflow
 - `5b4bbef4` (2026-08-10) — ci: build Tauri desktop app on every main push
 
@@ -741,6 +763,10 @@ Security and performance release from the multi-agent **harden-perf** audit
 - `9cb4dad0` (2026-08-06) — chore: vendor latest pyne 0.3.0 wheel (parity Aug 6)
 - `9fba8aaf` (2026-08-03) — chore: rename SuperChart branding to AXIS including CF project id
 - `0cbda10b` (2026-08-01) — chore(pyodide): vendor pynescript 0.3.0 wheel with drawing GC
+
+#### Style
+
+- `21676494` (2026-08-22) — style(ui): render inline plugin config fields via TopbarField
 
 #### Merges
 
