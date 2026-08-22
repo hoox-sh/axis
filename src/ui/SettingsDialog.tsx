@@ -551,6 +551,17 @@ export const SettingsDialog: Component<Props> = (props) => {
                 data-testid="axis-settings-data"
                 class="flex flex-col gap-2"
               >
+                {/* ── Source & stream plugins (incl. advanced fields hidden from the Topbar row) ── */}
+                <div class="sc-section" data-testid="axis-settings-plugins">
+                  <div class="sc-section-title">Source &amp; stream plugins</div>
+                  <p class="sc-hint mt-0">
+                    Settings for the active data source and live stream (shared — one value each).
+                    Advanced options like API base URL, Bars, and failure fallbacks live here.
+                    CCXT Gateway venues serve public market data — no API keys required.
+                  </p>
+                  <PluginConfigRow layout="stacked" showAdvanced />
+                </div>
+
                 <ExchangeCredentialsPanel />
               </div>
             </Show>
@@ -919,16 +930,6 @@ export const SettingsDialog: Component<Props> = (props) => {
               </p>
             </div>
 
-            </div>
-
-            {/* ── Source & stream plugins (incl. advanced fields hidden from the Topbar row) ── */}
-            <div class="sc-section" data-testid="axis-settings-plugins">
-              <div class="sc-section-title">Source &amp; stream plugins</div>
-              <p class="sc-hint mt-0">
-                Settings for the active data source and live stream (shared — one value each).
-                Advanced options like API base URL, Bars, and failure fallbacks live here.
-              </p>
-              <PluginConfigRow layout="stacked" showAdvanced />
             </div>
 
             {/* ── On-Chain (dedicated Worker proxy; Pro API endpoint stays for Pine) ── */}
