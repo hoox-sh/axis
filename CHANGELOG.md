@@ -35,6 +35,8 @@ _Generated/updated: 2026-08-21 · 250 commits · describe-tag: `v2.0.20`_
 
 ### Changed
 
+- **Config row styled like the Source picker** — inline plugin config fields now render through `TopbarField` (integrated uppercase label, shared `axis-tb-field` chrome, focus-within ring), matching Symbol/Source/Interval exactly; the Settings variant keeps the dialog's stacked form classes.
+
 - **Stream config pass-through** — `multiplex.startLive` now passes `store.pluginsConfig[stream:<id>]` into `stream.start({ config })`, matching the source path, so ccxt-ws receives the configured exchange id.
 
 - **ccxt plugins: clear error for unconfigured exchange** — `ccxt-rest` / `ccxt-ws` no longer fire requests with an empty `exchange=` param; they surface "exchange id not configured" instead.

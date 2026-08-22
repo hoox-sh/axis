@@ -31,8 +31,9 @@
  *   full ccxt exchange list (`/health` → `ccxt_exchanges`); the current value
  *   is always kept as an option even when unlisted.
  *
- * Layouts: `inline` (Topbar chip row) and `stacked` (Settings dialog form),
- * both using the shared `sc-label` / `sc-input` / `sc-hint` classes.
+ * Layouts: `inline` (Topbar chip row, rendered via {@link TopbarField} so it
+ * matches the Source/Symbol pickers) and `stacked` (Settings dialog form using
+ * the shared `sc-label` / `sc-input` / `sc-hint` classes).
  *
  * @module ui/PluginConfigRow
  */
@@ -43,6 +44,7 @@ import { store, persist } from '../store';
 import { getActiveSource, getActiveStream } from '../plugins/active';
 import { pluginKey, type ConfigSchema, type FieldSchema } from '../plugins/types';
 import { fetchGatewayExchanges, writePluginField } from './plugin-config';
+import { TopbarField } from './TopbarField';
 
 const EXCHANGE_FIELD = 'exchange';
 
@@ -146,7 +148,61 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
 
   const fieldTitle = (key: string, f: FieldSchema) => f.description || f.label || key;
 
-  /** Single field control — shared by inline + stacked layouts. */
+  const isSelectField = (key: string, f: FieldSchema): boolean =>
+    f.type === 'select' || key === EXCHANGE_FIELD;
+
+  /** Option list for select-style fields (exchange list for the venue dropdown). */
+  const optionsFor = (key: string, f: FieldSchema): string[] =>
+    key === EXCHANGE_FIELD ? exchangeOptions() : f.options || [String(valueOf(key) ?? '')];
+
+  const displayValue = (key: string, f: FieldSchema): string | number =>
+    f.type === 'number' ? Number(valueOf(key) ?? 0) : String(valueOf(key) ?? '');
+
+  /**
+   * Inline (Topbar) field — rendered through {@link TopbarField} so it matches
+   * the Source/Symbol pickers exactly (integrated uppercase label, shared
+   * `axis-tb-field` chrome and focus ring). Booleans have no topbar variant
+   * and keep the compact label+checkbox pair.
+   */
+  const renderInlineField = (key: string, f: FieldSchema): JSX.Element => (
+    <Show
+      when={f.type !== 'boolean'}
+      fallback={
+        <label class="flex items-center gap-1" title={fieldTitle(key, f)}>
+          <span class="whitespace-nowrap text-[11px] tracking-wide">{f.label || key}</span>
+          <input
+            type="checkbox"
+            checked={Boolean(valueOf(key))}
+            onChange={(e) => setField(key, e.currentTarget.checked)}
+          />
+        </label>
+      }
+    >
+      <TopbarField
+        label={f.label || key}
+        variant={isSelectField(key, f) ? 'select' : 'input'}
+        class={isSelectField(key, f) ? 'min-w-[8em]' : 'w-[7.5em]'}
+        mono
+        title={fieldTitle(key, f)}
+        testId={`axis-cfg-${key}`}
+        value={isSelectField(key, f) ? String(valueOf(key) ?? '') : displayValue(key, f)}
+        onChange={(e) => setField(key, e.currentTarget.value)}
+        onInput={(e) => {
+          const raw = e.currentTarget.value;
+          setField(key, f.type === 'number' ? Number(raw) : raw);
+        }}
+      >
+        <Show when={isSelectField(key, f)}>
+          <Show when={key === EXCHANGE_FIELD && exchangeOptions().length === 0}>
+            <option value="">loading…</option>
+          </Show>
+          <For each={optionsFor(key, f)}>{(o) => <option value={o}>{o}</option>}</For>
+        </Show>
+      </TopbarField>
+    </Show>
+  );
+
+  /** Single field control for the stacked (Settings) layout. */
   const renderControl = (key: string, f: FieldSchema): JSX.Element => (
     <Show
       when={f.type !== 'boolean'}
@@ -162,7 +218,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
         when={f.type !== 'select' && key !== EXCHANGE_FIELD}
         fallback={
           <select
-            class={`sc-input font-mono text-[12px] ${stacked() ? 'w-full' : 'w-[9em]'}`}
+            class="sc-input font-mono text-[12px] w-full"
             value={String(valueOf(key) ?? '')}
             onChange={(e) => setField(key, e.currentTarget.value)}
             title={fieldTitle(key, f)}
@@ -170,24 +226,18 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
             <Show when={key === EXCHANGE_FIELD && exchangeOptions().length === 0}>
               <option value="">loading…</option>
             </Show>
-            <For
-              each={
-                key === EXCHANGE_FIELD ? exchangeOptions() : f.options || [String(valueOf(key) ?? '')]
-              }
-            >
-              {(o) => <option value={o}>{o}</option>}
-            </For>
+            <For each={optionsFor(key, f)}>{(o) => <option value={o}>{o}</option>}</For>
           </select>
         }
       >
         <input
           type={f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}
-          class={`sc-input font-mono text-[12px] ${stacked() ? 'w-full' : 'w-[7em]'}`}
+          class="sc-input font-mono text-[12px] w-full"
           min={f.min}
           max={f.max}
           step={f.step}
           placeholder={f.placeholder}
-          value={f.type === 'number' ? Number(valueOf(key) ?? 0) : String(valueOf(key) ?? '')}
+          value={displayValue(key, f)}
           onInput={(e) => {
             const raw = e.currentTarget.value;
             setField(key, f.type === 'number' ? Number(raw) : raw);
@@ -226,12 +276,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
           title="Shared source/stream settings · history applies on Load/Reload · live applies on Live toggle · advanced options in Settings"
         >
           <For each={fields()}>
-            {([key, f]) => (
-              <label class="sc-label flex items-center gap-1" title={fieldTitle(key, f)}>
-                <span class="whitespace-nowrap">{f.label || key}</span>
-                {renderControl(key, f)}
-              </label>
-            )}
+            {([key, f]) => renderInlineField(key, f)}
           </For>
         </div>
       </Show>
