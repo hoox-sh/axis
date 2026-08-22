@@ -417,6 +417,8 @@ export function scanBareCallRefs(source: string): DottedRef[] {
         const start = i;
         i += 1;
         while (i < line.length && /[A-Za-z0-9_]/.test(line[i]!)) i += 1;
+        // Method call on an object (`.init(`) — not a bare-call typo
+        if (start > 0 && line[start - 1] === '.') continue;
         // Dotted paths are handled by {@link scanBuiltinMemberRefs}
         if (i < line.length && line[i] === '.') {
           while (i < line.length && line[i] === '.') {
@@ -545,6 +547,15 @@ function collectUserDeclarationMap(source: string): {
   for (const raw of lines) {
     const text = stripPineCommentsAndStrings(raw, inBlock);
 
+    // `import a/b/C as alias` — path segments are library coordinates, not
+    // identifiers; only the alias becomes a binding (IMPORT_AS_RE below).
+    if (/^\s*import\b/.test(text)) {
+      IMPORT_AS_RE.lastIndex = 0;
+      let im: RegExpExecArray | null;
+      while ((im = IMPORT_AS_RE.exec(text))) names.add(im[1]!);
+      continue;
+    }
+
     if (ENUM_DECL_RE.test(text)) {
       const nm = /^\s*enum\s+([A-Za-z_]\w*)/.exec(text)?.[1];
       if (nm && !BARE_CALL_SKIP.has(nm)) names.add(nm);
@@ -590,11 +601,6 @@ function collectUserDeclarationMap(source: string): {
       const name = lead[1]!;
       if (!BARE_CALL_SKIP.has(name)) names.add(name);
       addFnParams(lead[2] || '', names, functions, name);
-    }
-
-    IMPORT_AS_RE.lastIndex = 0;
-    while ((m = IMPORT_AS_RE.exec(text))) {
-      names.add(m[1]!);
     }
 
     const assign = parseAssignLine(text);
@@ -788,6 +794,11 @@ export function scanIdentRefs(source: string): IdentRef[] {
   let offset = 0;
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li]!;
+    // `import a/b/C as alias` — library coordinates are not identifiers
+    if (/^\s*import\b/.test(line)) {
+      offset += line.length + 1;
+      continue;
+    }
     let i = 0;
     let inStr: QuoteChar | null = null;
     while (i < line.length) {

@@ -393,6 +393,35 @@ strategy.entry("L", strategy.long)
     );
     expect(diags).toEqual([]);
   });
+
+  it('accepts generic typed declarations (array<string> etc.)', () => {
+    const src = [
+      'indicator("g")',
+      'var series array<string> TP1 = str.split("1|2", "|")',
+      'array<float> vals = array.from(1.0)',
+      'plot(array.size(TP1) + array.size(vals))',
+    ].join('\n');
+    expect(checkUnknownBuiltinMembers(src).filter((d) => /`TP1`|`vals`/.test(d.message))).toEqual([]);
+  });
+
+  it('ignores library coordinates on import lines', () => {
+    const src = [
+      'indicator("i")',
+      'import cryptolinx/String/1 as strx',
+      'import cryptolinx/Hoox/10 as hoox',
+      'plot(close)',
+    ].join('\n');
+    expect(checkUnknownBuiltinMembers(src).filter((d) => /`String`|`Hoox`/.test(d.message))).toEqual([]);
+  });
+
+  it('does not flag dotted method calls as bare typos', () => {
+    const src = [
+      'indicator("m")',
+      't = c.terminal.new()',
+      'plot(math.abs(-1))',
+    ].join('\n');
+    expect(checkUnknownBuiltinMembers(src).filter((d) => /`init`|`new`|`abs`/.test(d.message))).toEqual([]);
+  });
 });
 
 describe('rangeFromLineCols', () => {

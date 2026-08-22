@@ -161,7 +161,7 @@ type AssignHit = {
  * Groups: indent, export?, var/varip?, type1?, type2?, name, rhs
  */
 const ASSIGN_RE =
-  /^(\s*)(export\s+)?(varip|var)?\s*(?:(series|simple|const)\s+)?(?:(int|float|bool|string|color|label|line|box|table|polyline|array|matrix|map|linefill)\s+)?([A-Za-z_][\w]*)\s*=\s*(.+)$/;
+  /^(\s*)(export\s+)?(varip|var)?\s*(?:(series|simple|const)\s+)?(?:(int|float|bool|string|color|label|line|box|table|polyline|array|matrix|map|linefill)(?:\s*<(?:[^<>]|<[^<>]*>)*>)?\s+)?([A-Za-z_][\w]*)\s*=\s*(.+)$/;
 
 /** Parse one line into an assign hit, or null. */
 export function parseAssignLine(line: string): AssignHit | null {
