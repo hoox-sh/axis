@@ -17,6 +17,8 @@ _Generated/updated: 2026-08-21 · 250 commits · describe-tag: `v2.0.20`_
 
 ### Added
 
+- **Topbar Venue picker** — Data group is now Venue (native CEX / pinned CCXT / CCXT… / local) instead of a raw source-plugin list. Picking Bitget (CCXT) writes `ccxt-rest`+`ccxt-ws` and both `exchange` bags together; `store.provider.id` is `ccxt:bitget`. Exchange ID stays on the topbar only for **CCXT…**. Stream remains hidden while paired.
+
 - **CCXT symbol browse uses that exchange's markets** — with Source = CCXT (Gateway), the symbol modal loads `GET /markets?exchange=` and keeps unified `BTC/USDT` tickers (slash is no longer stripped). Stream is hidden on the topbar while it still matches the source pairing (Wire / HUD Fix if it drifts).
 
 - **CCXT session API keys** — Settings → Data can store a key + secret (+ passphrase / uid) per CCXT exchange id (`ccxt:bybit`, …) in the RAM vault (never `pluginsConfig` / localStorage). Save POSTs `POST /datafeed/session`; Load/Live then pass only `cred=` on OHLCV/watch. Public candles still work without a key. Topbar shows an **API key** chip next to the CCXT exchange picker. Gateway `auto|pyne|sidecar` moved to Settings (advanced). Sidecar accepts `/ohlcv` and `/datafeed/ohlcv`. PYNE `POST /datafeed/session` accepts `apiKey`/`secret`/`password` in the JSON body.

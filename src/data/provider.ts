@@ -107,6 +107,7 @@ export function formatProviderLabel(p: Pick<ProviderSession, 'venue' | 'market' 
 export function venueFromPluginId(id: string | undefined | null): ProviderVenue | null {
   if (!id) return null;
   const s = id.toLowerCase();
+  if (s.startsWith('ccxt:') || s === 'ccxt-rest' || s === 'ccxt-ws') return 'generic';
   if (s.includes('binance')) return 'binance';
   if (s.includes('okx')) return 'okx';
   if (s.includes('bybit')) return 'bybit';
@@ -207,6 +208,7 @@ export function defaultStreamForSource(
   sourceId: string,
   underlyingSourceId?: string,
 ): string {
+  if (sourceId.startsWith('ccxt:')) return 'ccxt-ws';
   if (
     sourceId === 'mock-walk' ||
     sourceId === 'csv-upload' ||
@@ -245,19 +247,30 @@ export function buildProviderSession(
     gateway?: ProviderGateway;
     market?: ProviderMarket;
     underlyingSourceId?: string;
+    /** CCXT exchange id when source is `ccxt-rest` (not a plugin id). */
+    ccxtExchange?: string;
   },
 ): ProviderSession {
-  const venue = resolveProviderVenue(sourceId, streamId, opts);
+  const resolvedSource = sourceId.startsWith('ccxt:') ? 'ccxt-rest' : sourceId;
+  const venue = resolveProviderVenue(resolvedSource, streamId, opts);
   const market = opts?.market || opts?.sourceCaps?.market || 'spot';
+  const ccxtEx = String(opts?.ccxtExchange || '').trim().toLowerCase();
+  const isCcxt = resolvedSource === 'ccxt-rest' || streamId === 'ccxt-ws';
+  const id =
+    isCcxt && ccxtEx
+      ? `ccxt:${ccxtEx}`
+      : venue === 'generic'
+        ? resolvedSource || 'generic'
+        : venue;
   return {
-    id: venue === 'generic' ? sourceId || 'generic' : venue,
-    sourceId,
-    streamId: streamId || defaultStreamForSource(sourceId),
-    venue,
+    id,
+    sourceId: resolvedSource,
+    streamId: streamId || defaultStreamForSource(resolvedSource),
+    venue: isCcxt ? 'generic' : venue,
     market,
     authMode: opts?.authMode === 'authenticated' ? 'authenticated' : 'public',
     credentialId: opts?.credentialId,
-    gateway: opts?.gateway || 'direct',
+    gateway: opts?.gateway || (isCcxt ? 'pyne' : 'direct'),
   };
 }
 
@@ -270,8 +283,14 @@ export function hydrateProviderSession(
   raw: unknown,
   sourceId: string,
   streamId: string,
+  ccxtExchange?: string,
 ): ProviderSession {
-  const base = buildProviderSession(sourceId, streamId);
+  let ex = String(ccxtExchange || '').trim().toLowerCase();
+  if (!ex && raw && typeof raw === 'object') {
+    const id = String((raw as { id?: unknown }).id || '');
+    if (id.startsWith('ccxt:') && id.length > 5) ex = id.slice(5);
+  }
+  const base = buildProviderSession(sourceId, streamId, { ccxtExchange: ex || undefined });
   if (!raw || typeof raw !== 'object') return base;
   const bag = raw as Record<string, unknown>;
   const authMode = AUTH_MODES.includes(bag.authMode as ProviderAuthMode)

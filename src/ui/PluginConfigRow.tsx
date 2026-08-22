@@ -63,6 +63,8 @@ export interface PluginConfigRowProps {
   showAdvanced?: boolean;
   /** `inline` (Topbar) or `stacked` (Settings). Default inline. */
   layout?: 'inline' | 'stacked';
+  /** Field keys to omit (e.g. hide `exchange` when Venue already pins it). */
+  hideKeys?: string[];
 }
 
 function parseFieldValue(f: FieldSchema, raw: string): unknown {
@@ -105,6 +107,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
       for (const [k, f] of Object.entries(t.schema)) {
         if (!seen.has(k)) {
           seen.add(k);
+          if (props.hideKeys?.includes(k)) continue;
           if (!f?.advanced || props.showAdvanced) out.push([k, f]);
         }
       }

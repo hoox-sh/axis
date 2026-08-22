@@ -94,6 +94,12 @@ import {
   subscribeCredentials,
 } from '../data/credentials';
 import {
+  applyVenueToken,
+  listVenueOptions,
+  parseVenueToken,
+  venueTokenFromState,
+} from '../data/venue-picker';
+import {
   toggleBrowserFullscreen,
   toggleChartOnlyMode,
 } from './presentation';
@@ -173,17 +179,23 @@ export const Topbar: Component<{
     }
   };
 
-  const onSourceChange = (id: string) => {
-    setActivePlugin('source', id);
-    // Align default live stream with source (mock → mock-poll)
-    const streamId = defaultStreamForSource(id);
-    setActivePlugin('stream', streamId);
-    // CSV needs a file first — nudge the picker
-    if (id === 'csv-upload' && !getUploadedFileName()) {
+  const venueToken = createMemo(() =>
+    venueTokenFromState(store.source, activeCcxtExchange()),
+  );
+  const venueOptions = createMemo(() =>
+    listVenueOptions(
+      sources().map((s) => ({ id: s.id, name: s.name })),
+      activeCcxtExchange(),
+    ),
+  );
+
+  const onVenueChange = (token: string) => {
+    applyVenueToken(token);
+    const { sourceId } = parseVenueToken(token);
+    if (sourceId === 'csv-upload' && !getUploadedFileName()) {
       fileInput?.click();
     }
-    // Data Manager: open datasets browser to pick a cached series
-    if (id === DATA_MANAGER_SOURCE_ID) {
+    if (sourceId === DATA_MANAGER_SOURCE_ID) {
       setDatasetsOpen(true);
     }
   };
@@ -391,20 +403,35 @@ export const Topbar: Component<{
       {/* ── Data ────────────────────────────────────────────── */}
       <div class="axis-tb-group" data-tb-group="data">
         <TopbarField
-          label="Source"
+          label="Venue"
           variant="select"
-          class="min-w-[7.5em]"
+          class="min-w-[8em]"
           testId="axis-select-source"
-          value={store.source}
-          title={
-            sources().find((s) => s.id === store.source)?.description || 'Historical data source'
-          }
-          onChange={(e) => onSourceChange(e.currentTarget.value)}
+          value={venueToken()}
+          title="Exchange / data venue — native CEX, CCXT long-tail, or local"
+          onChange={(e) => onVenueChange(e.currentTarget.value)}
         >
-          <For each={sources()}>{(s) => <option value={s.id}>{s.name}</option>}</For>
+          <optgroup label="CEX">
+            <For each={venueOptions().filter((o) => o.group === 'native')}>
+              {(o) => <option value={o.value}>{o.label}</option>}
+            </For>
+          </optgroup>
+          <optgroup label="CCXT">
+            <For each={venueOptions().filter((o) => o.group === 'ccxt')}>
+              {(o) => <option value={o.value}>{o.label}</option>}
+            </For>
+          </optgroup>
+          <optgroup label="Other">
+            <For each={venueOptions().filter((o) => o.group === 'other' || o.group === 'plugin')}>
+              {(o) => <option value={o.value}>{o.label}</option>}
+            </For>
+          </optgroup>
         </TopbarField>
 
-        <PluginConfigRow onApplied={() => void loadHistorical({ force: true })} />
+        <PluginConfigRow
+          onApplied={() => void loadHistorical({ force: true })}
+          hideKeys={venueToken() === 'ccxt:' ? [] : ['exchange']}
+        />
 
         <Show when={store.source === 'ccxt-rest'}>
           <CcxtKeyChip onOpen={() => props.onOpenSettings('data')} />

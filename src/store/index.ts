@@ -553,6 +553,11 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         (bag as { provider?: unknown }).provider,
         pluginsBag?.source || source,
         pluginsBag?.stream || streamId,
+        (() => {
+          const cfg = (bag as { pluginsConfig?: Record<string, unknown> }).pluginsConfig;
+          const src = cfg?.['source:ccxt-rest'] as Record<string, unknown> | undefined;
+          return typeof src?.exchange === 'string' ? src.exchange : undefined;
+        })(),
       ) as ProviderSession,
       pluginsConfig:
         bag.pluginsConfig && typeof bag.pluginsConfig === 'object'
@@ -926,21 +931,36 @@ function pairedStreamFor(sourceId: string): string {
   return pairStreamForSource(sourceId, under);
 }
 
+function ccxtExchangeFromBags(): string {
+  const bags = store.pluginsConfig || {};
+  const src = bags['source:ccxt-rest'] as Record<string, unknown> | undefined;
+  const stm = bags['stream:ccxt-ws'] as Record<string, unknown> | undefined;
+  return String(src?.exchange || stm?.exchange || '').trim().toLowerCase();
+}
+
 function syncProviderSession(): void {
   const sourceId = store.source || store.activePlugins?.source || DEFAULTS.source;
   const streamId =
     store.live?.streamId || store.activePlugins?.stream || DEFAULTS.live.streamId;
   const prev = store.provider;
+  const ccxtExchange = sourceId === 'ccxt-rest' || streamId === 'ccxt-ws' ? ccxtExchangeFromBags() : '';
+  const isCcxt = sourceId === 'ccxt-rest' || sourceId.startsWith('ccxt:');
+  let gateway = prev?.gateway;
+  if (isCcxt && (!gateway || gateway === 'direct')) gateway = 'pyne';
+  if (!isCcxt && gateway === 'pyne' && prev?.sourceId === 'ccxt-rest') gateway = 'direct';
   const next = buildProviderSession(sourceId, streamId, {
     underlyingSourceId:
       sourceId === 'data-manager' ? getDataManagerSelection()?.sourceId : undefined,
     authMode: prev?.authMode,
     credentialId: prev?.credentialId,
-    gateway: prev?.gateway,
+    gateway,
     market: prev?.market,
+    ccxtExchange: ccxtExchange || undefined,
   });
   setStore('provider', next);
-  if (
+  if (ccxtExchange) {
+    setStore('exchange', ccxtExchange);
+  } else if (
     next.venue !== 'generic' &&
     next.venue !== 'cache' &&
     next.venue !== 'upload' &&
