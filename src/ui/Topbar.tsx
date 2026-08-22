@@ -30,7 +30,7 @@
  * - **Layout** — multi-chart layout menu
  * - **Panels** — List → Editor → Library → Scripts → Inputs → Layers → DSM →
  *   On-Chain → Alerts → Values → Results → Script Logs → System Logs → Status
- * - **System** — Fullscreen, Chart only, Wire (Architecture), Runtimes, Settings, Theme (`ml-auto`)
+ * - **System** — Fullscreen, Chart only, Wire (Architecture), Runtime, Settings, Theme (`ml-auto`)
  *
  * ## Actions
  * - **Load / Reload** → force `loadSymbolData` (historical via active source)
@@ -114,10 +114,12 @@ export const Topbar: Component<{
   onToggleWatchlist: () => void;
   onOpenSettings: (tab?: 'general' | 'data' | 'editor' | 'theme') => void;
   onOpenPlugins?: () => void;
-  /** Open Workers Manager (backends / edge / Pyodide / SW). */
+  /** Open Workers catalog (backends / edge / Pyodide / SW). */
   onOpenWorkers?: () => void;
   /** Open Architecture — wire source / stream / engine / storage. */
   onOpenArchitecture?: () => void;
+  /** Open Runtime — active engine, endpoint, health. */
+  onOpenRuntime?: () => void;
   /** Bump when plugin catalog changes */
   catalogTick?: number;
   editorRef: {
@@ -850,13 +852,13 @@ export const Topbar: Component<{
         <button
           type="button"
           class="sc-btn sc-btn-ghost"
-          onClick={() => props.onOpenWorkers?.()}
-          title="Runtimes — Status (backends / edge / Pyodide) and Plugins (catalog / library)"
+          onClick={() => props.onOpenRuntime?.() ?? props.onOpenWorkers?.()}
+          title="Runtime — active engine, endpoint, health"
           data-testid="axis-btn-runtimes"
-          aria-label="Open Runtimes"
+          aria-label="Open Runtime"
         >
           <Icons.runtimes />
-          <span class="axis-tb-btn-label">Runtimes</span>
+          <span class="axis-tb-btn-label">Runtime</span>
         </button>
         {/* Keep test ids for palette / docs that open Status or Plugins specifically */}
         <button
@@ -880,7 +882,7 @@ export const Topbar: Component<{
           type="button"
           class="sc-btn sc-btn-ghost sc-btn-icon"
           onClick={() => props.onOpenSettings()}
-          title="Settings — density, engine, live"
+          title="Settings — density, chart, live, theme"
           data-testid="axis-btn-settings"
           aria-label="Open settings"
         >

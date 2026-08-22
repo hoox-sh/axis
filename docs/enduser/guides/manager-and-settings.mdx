@@ -19,20 +19,22 @@
 
 ---
 title: "Manager and settings"
-description: "Plugin Manager, Workers Manager (status + install helpers), and Settings for engine, storage, and endpoints."
+description: "Runtime, Workers, Plugins, Wire, and Settings — how AXIS chrome is split."
 ---
 
 # Manager and settings
 
-Two chrome surfaces configure AXIS: the unified **Runtimes** hub (Status + Plugins), and **Settings**. Models stay separate; entry chrome is shared.
+Five studio pages share one full-viewport overlay. Runtime is the active calculation context; Workers and Plugins are catalogs, not tabs inside it.
 
 ## Abstract
 
 | Surface | Opens from | Mutates |
 | --- | --- | --- |
-| **Runtimes → Status** | Topbar **Runtimes** · ⌘K “Status” | Probe health; set `endpoint` / engine; install PYNE Agent plugin |
-| **Runtimes → Plugins** | Topbar **Runtimes** · ⌘K “Plugins” | Registry membership, active source via Use, script library |
-| Settings | Topbar gear | `endpoint`, active engine/storage, chart interval, watchlist refresh |
+| **Runtime** | Topbar **Runtime** · ⌘K “Open Runtime” | Active engine, endpoint, exec mode, probe of *that* backend |
+| **Workers** | Studio rail · ⌘K “Open Workers” · Runtime card | Probe catalog; activate a backend (`endpoint` / engine) |
+| **Plugins** | Studio rail · ⌘K “Open Plugins” · hidden topbar testid | Registry membership, Use, URL install, script library |
+| **Wire** | Topbar **Wire** · ⌘K “Open Architecture” | Compose slots; Apply writes `activePlugins` |
+| **Settings** | Topbar gear | Appearance, chart, live, session keys, editor intel, theme |
 
 Active plugins live in `store.activePlugins`; per-plugin fields in `store.pluginsConfig` keyed by `` `${kind}:${id}` ``.
 
@@ -41,15 +43,21 @@ Active plugins live in `store.activePlugins`; per-plugin fields in `store.plugin
 ```mermaid
 flowchart TB
   REG[PluginRegistry]
-  CAT[Catalog tab]
-  INS[Install tab]
-  LIB[Script Library tab]
-  SET[Settings dialog]
+  CAT[Plugins catalog]
+  INS[Plugins install]
+  LIB[Script Library]
+  RT[Runtime]
+  WRK[Workers]
+  SET[Settings]
+  WIRE[Wire]
   REG --> CAT
   INS -->|loadPluginFromUrl| REG
   LIB --> STO[Storage plugin]
-  SET --> AP[activePlugins + endpoint]
+  RT --> AP[activePlugins + endpoint]
+  WRK -->|Use as backend| RT
   CAT -->|Use| AP
+  WIRE -->|Apply slots| AP
+  SET --> CHROME[uiScale / live / theme]
 ```
 
 ## Plugin Manager
@@ -92,17 +100,19 @@ See [PYNE Agent](/axis/docs/enduser/guides/pyne-agent) and [plugin reference](/a
 
 ### Script Library tab
 
-See [Script library](/axis/docs/enduser/guides/script-library). Manager hosts the panel so library and plugins share one modal.
+See [Script library](/axis/docs/enduser/guides/script-library). The Plugins page hosts the panel so library and plugins share one studio surface.
 
-## Runtimes hub
+## Runtime vs Workers vs Plugins
 
-One dialog (`RuntimesHub`) with primary tabs **Status** | **Plugins**. Cross-links jump between them without closing.
+One overlay (`AppPage` in `src/ui/studio/`) with a left rail. Switching rail pages does not close the overlay.
 
-Implementation: `src/ui/RuntimesHub.tsx` hosts embedded `WorkersManager` + `PluginManager` (no nested dialogs).
+- **Runtime** — `src/ui/runtime/RuntimePage.tsx` — active engine, endpoint, exec mode.
+- **Workers** — `src/ui/workers/WorkersPage.tsx` — backend inventory and probes.
+- **Plugins** — `src/ui/plugins/PluginsPage.tsx` — catalog / install / library.
 
-## Status (Workers Manager body)
+## Workers
 
-Opens from topbar **Runtimes** (Status section) or ⌘K **Open Runtimes → Status**.
+Opens from the studio rail, ⌘K **Open Workers**, or a Runtime related card.
 
 | Sub-tab | Role |
 | --- | --- |
@@ -128,11 +138,13 @@ Opens from topbar **Runtimes** (Status section) or ⌘K **Open Runtimes → Stat
 - Run once when the modal opens; **Refresh** re-runs.
 - Each worker has a **hard wall-clock timeout** (~5s) so a hung host cannot leave “Probing…” forever.
 - Pyodide probe uses **HEAD** (not a full `pyodide.js` download).
-- HTTP probes hit `GET /health` (JSON markers). Implementation: `src/workers/*`, `src/ui/WorkersManager.tsx`. Operator CLI twin: [AXIS CLI](/axis/docs/devops/cli).
+- HTTP probes hit `GET /health` (JSON markers). Implementation: `src/workers/*`, `src/ui/workers/WorkersPage.tsx`. Operator CLI twin: [AXIS CLI](/axis/docs/devops/cli).
 
 **Hardened VPS note:** production UFW typically allows only **22 + 443**. Pro API binds **`127.0.0.1:5002`** — public `:5002` probes correctly **time out**. On `https://axis.hoox.sh`, Workers Manager probes pyne Pro via **same-origin** `https://axis.hoox.sh/health` (nginx reverse-proxy), not loopback. See [VPS demo](/axis/docs/devops/vps-demo).
 
-## Settings dialog
+## Runtime (engine)
+
+Engine, execution mode, Backend URL, Test, and Prefer WebSocket live on **Runtime**, not Settings. Storage is a **Wire** slot.
 
 | Field | Behavior |
 | --- | --- |
@@ -141,7 +153,13 @@ Opens from topbar **Runtimes** (Status section) or ⌘K **Open Runtimes → Stat
 | Prefer WebSocket run | Server engine: prefer `/ws/run` over REST when available |
 | Backend URL | Shown when engine is `server` or has `configSchema.endpoint` |
 | Test / Probe | `GET` health against endpoint; status message |
-| Storage | `local` \| `cloud` \| `git` |
+
+## Settings
+
+Product chrome only. Engine/endpoint/mode are on Runtime.
+
+| Field | Behavior |
+| --- | --- |
 | Default interval | Updates store; may reload bars for current symbol |
 | Watchlist refresh | Clamp 5–120 seconds |
 | Chart theme | Preset picker (void / classic / mono / boutique dark & light) — see `src/theme/presets.ts` |
@@ -175,10 +193,12 @@ The Connection HUD engine chip shows the selected mode. Save persists via Solid 
 
 | Path | Role |
 | --- | --- |
-| `src/ui/RuntimesHub.tsx` | Unified Runtimes dialog (Status + Plugins) |
-| `src/ui/PluginManager.tsx` | Plugins body (catalog / install / library) |
-| `src/ui/WorkersManager.tsx` | Status body (probes / install / configure) |
-| `src/ui/SettingsDialog.tsx` | Settings |
+| `src/ui/studio/` | Full-page overlay kit (`ax-*`) |
+| `src/ui/runtime/RuntimePage.tsx` | Active engine / endpoint / mode |
+| `src/ui/plugins/PluginsPage.tsx` | Catalog / install / library |
+| `src/ui/workers/WorkersPage.tsx` | Backend inventory / probes |
+| `src/ui/settings/SettingsPage.tsx` | Product chrome |
+| `src/ui/wire/WirePage.tsx` | Compose recipes |
 | `src/ui/plugin-badges.tsx` | Capability badges |
 | `src/plugins/registry.ts` | Unified registry |
 | `src/plugins/loader.ts` | URL load + restore (incl. component) |

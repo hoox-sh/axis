@@ -33,7 +33,13 @@ _Generated/updated: 2026-08-21 · 250 commits · describe-tag: `v2.0.20`_
 
 ### Changed
 
-- **Settings / Runtimes / Wire are right-edge drawers** — they slide in over the chart instead of a centered overlay. Larger fields and more space. Runtimes: Workers (click a card) vs Plugins; nested Overview/Detail/Install/Configure tabs are gone.
+- **Studio full-page overlay** — Runtime, Wire, and Settings are no longer right-edge drawers. They share one full-viewport page (`src/ui/studio/`, `ax-*` classes) with a left rail, 16px type root, and large fields. Compact `sc-dialog` stays for Symbol / Script Settings / About / ⌘K.
+
+- **Runtime uncoupled from Workers and Plugins** — Topbar **Runtime** is the active engine / endpoint / exec mode / health. Workers (backend inventory) and Plugins (contract catalog) are sibling pages from the rail, ⌘K, or Runtime cards — not tabs inside Runtime. Engine/endpoint/mode moved out of Settings → General; storage stays a Wire slot.
+
+- **Workers studio restyle** — Backend inventory is a full `ax-*` studio page (`WorkersPage`): large health cards + inspector (probe features, numbered install steps, Use as calculation backend). No inner Overview/Detail/Install/Configure tabs and no `sc-btn` chrome. Engine writes go through `saveEngineConfig`. Open Plugins is a sibling cross-link, not a nested catalog.
+
+- **Plugins studio restyle** — Contract catalog is a full `ax-*` studio page (`PluginsPage`), sibling of Runtime. Catalog / Install / Script Library stay as `StudioTabs` (e2e tab name **Catalog**). Kind chips, large rows with Use + capability badges, URL install + example cards, Script Library embed, active src/eng/stm/stor footer + Done. Open Workers and Open Wire are sibling cross-links. Close stays on the AppPage shell (`axis-plugins-close`); `axis-manager` stays on the dialog only.
 
 - **Data tab no longer duplicates bar count or Binance API host** — how many bars to load lives only under General → Historical bars. Native CEX host URLs stay as fetch defaults (Binance already has host + Worker fallback). Gecko proxy/network, CCXT gateway, and synthesize-on-failure remain.
 

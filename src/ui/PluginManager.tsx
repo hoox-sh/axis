@@ -20,6 +20,9 @@
 /**
  * AXIS plugin manager modal — catalog by kind, install from URL, script library.
  *
+ * Studio canvas is {@link PluginsPage} (`ax-*` kit). This file remains as a
+ * leftover modal implementation; the product overlay uses PluginsPage.
+ *
  * Tabs: **catalog** (built-in + installed), **install** (URL + examples),
  * **library** (embeds {@link ScriptLibraryPanel}). Install calls
  * `loadPluginFromUrl`; parent may pass `onChanged` to bump catalogTick.
@@ -55,7 +58,7 @@ interface Props {
   initialTab?: TabId;
   /**
    * When true, render body only (no backdrop/dialog chrome).
-   * Used inside {@link RuntimesHub}.
+   * Used when this leftover modal is embedded.
    */
   embedded?: boolean;
   /** Cross-link to Runtimes → Status (Workers). */

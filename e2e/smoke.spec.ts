@@ -76,11 +76,17 @@ test.describe('AXIS smoke @smoke', () => {
 
   test('opens and closes plugin Manager', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('axis-btn-runtimes').click();
-    await expect(page.getByTestId('axis-runtimes-hub')).toBeVisible();
-    await page.getByTestId('axis-runtimes-tab-plugins').click();
+    await page.getByTestId('axis-btn-plugins').click();
     await expect(page.getByTestId('axis-manager')).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Catalog' })).toBeVisible();
+    await page.getByTestId('axis-plugins-close').click();
+    await expect(page.getByTestId('axis-manager')).toHaveCount(0);
+  });
+
+  test('opens Runtime studio page', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('axis-btn-runtimes').click();
+    await expect(page.getByTestId('axis-runtimes-hub')).toBeVisible();
     await page.getByTestId('axis-runtimes-close').click();
     await expect(page.getByTestId('axis-runtimes-hub')).toHaveCount(0);
   });

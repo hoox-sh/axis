@@ -100,8 +100,10 @@ export interface CommandActions {
   toggleLive?: () => void;
   openSettings?: () => void;
   openPlugins?: () => void;
-  /** Open Workers Manager (calc backends / edge / Pyodide). */
+  /** Open Workers catalog (calc backends / edge / Pyodide). */
   openWorkers?: () => void;
+  /** Open Runtime — active engine / endpoint / health. */
+  openRuntime?: () => void;
   /** Open the architecture / compose-recipe wiring modal. */
   openArchitecture?: () => void;
   openScriptSettings?: () => void;
@@ -603,14 +605,20 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     ],
   },
   {
+    id: 'action.runtime',
+    title: 'Open Runtime',
+    category: 'navigation',
+    keywords: ['engine', 'endpoint', 'health', 'calculation', 'runtimes'],
+  },
+  {
     id: 'action.plugins',
-    title: 'Open Runtimes → Plugins',
+    title: 'Open Plugins',
     category: 'navigation',
     keywords: ['library', 'extensions', 'install', 'catalog', 'runtimes', 'manager'],
   },
   {
     id: 'action.workers',
-    title: 'Open Runtimes → Status',
+    title: 'Open Workers',
     category: 'navigation',
     keywords: [
       'workers',
@@ -864,6 +872,7 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
     byId.set('theme.porcelain', () => actions.setChartThemePreset?.('porcelain'));
     byId.set('theme.parchment', () => actions.setChartThemePreset?.('parchment'));
   }
+  if (actions.openRuntime) byId.set('action.runtime', actions.openRuntime);
   if (actions.openPlugins) byId.set('action.plugins', actions.openPlugins);
   if (actions.openWorkers) byId.set('action.workers', actions.openWorkers);
   if (actions.openArchitecture) byId.set('action.architecture', actions.openArchitecture);

@@ -122,8 +122,10 @@ export type CommandPaletteProps = {
   /** Open Settings → Editor tab (lint / hover / complete). */
   onOpenEditorSettings?: () => void;
   onOpenPlugins?: () => void;
-  /** Open Workers Manager modal. */
+  /** Open Workers catalog page. */
   onOpenWorkers?: () => void;
+  /** Open Runtime page. */
+  onOpenRuntime?: () => void;
   /** Open Architecture (compose-recipe) modal. */
   onOpenArchitecture?: () => void;
 };
@@ -236,6 +238,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
         props.onOpenEditorSettings?.() ?? props.onOpenSettings?.(),
       openPlugins: () => props.onOpenPlugins?.(),
       openWorkers: () => props.onOpenWorkers?.(),
+      openRuntime: () => props.onOpenRuntime?.(),
       openArchitecture: () => props.onOpenArchitecture?.(),
       openScriptSettings: () => openScriptSettings(null),
       openOptimise: () => {

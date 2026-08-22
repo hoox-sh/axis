@@ -1288,7 +1288,8 @@ function activeCcxtGateway(): GatewayMode {
 }
 
 /** Per-venue API key/secret/passphrase — session vault, never persist() secrets. */
-const ExchangeCredentialsPanel: Component = () => {
+/** Session-only exchange keys. Used by Settings studio page. */
+export const ExchangeCredentialsPanel: Component = () => {
   const onCcxtSource = () => store.source === 'ccxt-rest' || store.live?.streamId === 'ccxt-ws';
   const [kind, setKind] = createSignal<'native' | 'ccxt'>(onCcxtSource() ? 'ccxt' : 'native');
   const [venue, setVenue] = createSignal<ExchangeCredentialVenue>(
@@ -1736,7 +1737,7 @@ function IntelNum(props: {
 }
 
 /** Live-applied editor intelligence (lint / hover / complete / marks). */
-const EditorIntelPanel: Component = () => {
+export const EditorIntelPanel: Component = () => {
   const intel = () => getEditorIntel();
   const set = (partial: Partial<EditorIntelSettings>) => patchEditorIntel(partial);
 

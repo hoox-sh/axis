@@ -23,9 +23,9 @@
  * ## Layout
  * Topbar → flex row (left dock | chart | right dock) → bottom dock → system
  * logs → status bar. Dock columns are portal hosts: open panels stack
- * **one below the other** on the same side. Overlay: settings, plugins,
- * workers manager, architecture (Wire), script settings, command palette (⌘K),
- * panel drag ghost.
+ * **one below the other** on the same side. Overlay: studio pages
+ * (Runtime, Wire, Settings, Workers, Plugins), script settings,
+ * command palette (⌘K), panel drag ghost.
  *
  * ## Boot (`onMount`)
  * - Theme + UI scale; restore dynamic plugins; optional default symbol load
@@ -54,7 +54,7 @@ import { StatusBar } from './ui/StatusBar';
 import { Watchlist } from './ui/Watchlist';
 import { ChartWorkspace } from './chart/ChartWorkspace';
 import { IndicatorPanel } from './indicators/IndicatorPanel';
-import { type SettingsTabId } from './ui/SettingsDialog';
+import { type SettingsTabId, type StudioPageId } from './ui/studio';
 import { ResultsPanel } from './ui/ResultsPanel';
 import { SystemLogs } from './ui/SystemLogs';
 import { ScriptLogsPanel } from './ui/ScriptLogsPanel';
@@ -70,17 +70,11 @@ import { restoreInstalledPlugins } from './plugins/loader';
 const EditorPane = lazy(() =>
   import('./editor/EditorPane').then((m) => ({ default: m.EditorPane })),
 );
-const SettingsDialog = lazy(() =>
-  import('./ui/SettingsDialog').then((m) => ({ default: m.SettingsDialog })),
+const StudioHost = lazy(() =>
+  import('./ui/studio/StudioHost').then((m) => ({ default: m.StudioHost })),
 );
 const ScriptSettingsModal = lazy(() =>
   import('./ui/ScriptSettingsModal').then((m) => ({ default: m.ScriptSettingsModal })),
-);
-const RuntimesHub = lazy(() =>
-  import('./ui/RuntimesHub').then((m) => ({ default: m.RuntimesHub })),
-);
-const ArchitectureModal = lazy(() =>
-  import('./ui/ArchitectureModal').then((m) => ({ default: m.ArchitectureModal })),
 );
 const AlertsPanel = lazy(() =>
   import('./ui/AlertsPanel').then((m) => ({ default: m.AlertsPanel })),
@@ -137,22 +131,13 @@ import {
 
 /** Primary charting workspace component mounted by `index.tsx`. */
 export const App: Component = () => {
-  const [settingsOpen, setSettingsOpen] = createSignal(false);
+  const [studioPage, setStudioPage] = createSignal<StudioPageId | null>(null);
   const [settingsTab, setSettingsTab] = createSignal<SettingsTabId>('general');
+  const openStudio = (page: StudioPageId) => setStudioPage(page);
   const openSettings = (tab: SettingsTabId = 'general') => {
     setSettingsTab(tab);
-    setSettingsOpen(true);
+    openStudio('settings');
   };
-  /** Unified Runtimes hub (Status = workers, Plugins = catalog/library). */
-  const [runtimesOpen, setRuntimesOpen] = createSignal(false);
-  const [runtimesSection, setRuntimesSection] = createSignal<'status' | 'plugins'>(
-    'status',
-  );
-  const openRuntimes = (section: 'status' | 'plugins' = 'status') => {
-    setRuntimesSection(section);
-    setRuntimesOpen(true);
-  };
-  const [architectureOpen, setArchitectureOpen] = createSignal(false);
   const [catalogTick, setCatalogTick] = createSignal(0);
   /** File drag-over highlight for .pine drop-to-library. */
   const [pineDropActive, setPineDropActive] = createSignal(false);
@@ -413,9 +398,10 @@ export const App: Component = () => {
         }}
         onToggleWatchlist={() => setWatchlistOpen(!store.watchlist.open)}
         onOpenSettings={(tab) => openSettings(tab || 'general')}
-        onOpenPlugins={() => openRuntimes('plugins')}
-        onOpenWorkers={() => openRuntimes('status')}
-        onOpenArchitecture={() => setArchitectureOpen(true)}
+        onOpenPlugins={() => openStudio('plugins')}
+        onOpenWorkers={() => openStudio('workers')}
+        onOpenArchitecture={() => openStudio('wire')}
+        onOpenRuntime={() => openStudio('runtime')}
         catalogTick={catalogTick()}
         editorRef={editorRef}
       />
@@ -533,47 +519,42 @@ export const App: Component = () => {
       <PanelDragOverlay />
 
       <Suspense fallback={null}>
-        <Show when={settingsOpen()}>
-          <SettingsDialog
-            open={settingsOpen()}
-            initialTab={settingsTab()}
-            onClose={() => setSettingsOpen(false)}
-          />
+        <Show when={studioPage()}>
+          {(page) => (
+            <StudioHost
+              open
+              page={page()}
+              settingsTab={settingsTab()}
+              onNavigate={(id) => {
+                if (id === 'settings') setSettingsTab('general');
+                openStudio(id);
+              }}
+              onClose={() => setStudioPage(null)}
+              onChanged={() => setCatalogTick((n) => n + 1)}
+              onApplied={() => setCatalogTick((n) => n + 1)}
+              getDoc={() => editorRef.getDoc()}
+              setDoc={(doc, name, libraryId) => {
+                const ref = editorRef as {
+                  setDoc?: (d: string) => void;
+                  loadLibraryDoc?: (d: string, n?: string, id?: string) => void;
+                };
+                if (ref.loadLibraryDoc) ref.loadLibraryDoc(doc, name, libraryId);
+                else ref.setDoc?.(doc);
+              }}
+            />
+          )}
         </Show>
         <ScriptSettingsModal />
-        <Show when={runtimesOpen()}>
-          <RuntimesHub
-            open={runtimesOpen()}
-            initialSection={runtimesSection()}
-            onClose={() => setRuntimesOpen(false)}
-            onChanged={() => setCatalogTick((n) => n + 1)}
-            getDoc={() => editorRef.getDoc()}
-            setDoc={(doc, name, libraryId) => {
-              const ref = editorRef as {
-                setDoc?: (d: string) => void;
-                loadLibraryDoc?: (d: string, n?: string, id?: string) => void;
-              };
-              if (ref.loadLibraryDoc) ref.loadLibraryDoc(doc, name, libraryId);
-              else ref.setDoc?.(doc);
-            }}
-          />
-        </Show>
-        <Show when={architectureOpen()}>
-          <ArchitectureModal
-            open={architectureOpen()}
-            onClose={() => setArchitectureOpen(false)}
-            onApplied={() => setCatalogTick((n) => n + 1)}
-          />
-        </Show>
         {/* Global ⌘K / Ctrl+K command palette */}
         <CommandPalette
           editorRef={editorRef}
           onOpenSettings={() => openSettings('general')}
           onOpenThemeSettings={() => openSettings('theme')}
           onOpenEditorSettings={() => openSettings('editor')}
-          onOpenPlugins={() => openRuntimes('plugins')}
-          onOpenWorkers={() => openRuntimes('status')}
-          onOpenArchitecture={() => setArchitectureOpen(true)}
+          onOpenPlugins={() => openStudio('plugins')}
+          onOpenWorkers={() => openStudio('workers')}
+          onOpenArchitecture={() => openStudio('wire')}
+          onOpenRuntime={() => openStudio('runtime')}
         />
         {/* About AXIS — logo click / Help → About / command palette */}
         <AboutModal />
