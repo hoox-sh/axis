@@ -188,14 +188,35 @@ export async function runFromEditor(
   if (mode !== 'new') {
     indicatorId = findChartScriptForEditor(src)?.id;
   }
-  const inputs =
+  const inst = indicatorId
+    ? store.scripts.find((s) => s.id === indicatorId)
+    : undefined;
+  const instInputs =
+    inst?.inputValues && Object.keys(inst.inputValues).length
+      ? inst.inputValues
+      : undefined;
+  const editorInputs =
     runOpts.inputs && Object.keys(runOpts.inputs).length
       ? runOpts.inputs
       : store.editorInputValues && Object.keys(store.editorInputValues).length
         ? store.editorInputValues
         : undefined;
+  // Per-instance Script Settings must not be clobbered by leftover editor defaults.
+  const inputs = instInputs ?? editorInputs;
+  const instStrategy =
+    inst?.strategyProps && Object.keys(inst.strategyProps).length
+      ? inst.strategyProps
+      : undefined;
+  const editorStrategy =
+    runOpts.strategyProps && Object.keys(runOpts.strategyProps).length
+      ? runOpts.strategyProps
+      : store.editorStrategyProps && Object.keys(store.editorStrategyProps).length
+        ? store.editorStrategyProps
+        : undefined;
+  const strategyProps = instStrategy ?? editorStrategy;
   return runAndApply(src, indicatorId, {
     ...runOpts,
     ...(inputs ? { inputs } : {}),
+    ...(strategyProps ? { strategyProps } : {}),
   });
 }

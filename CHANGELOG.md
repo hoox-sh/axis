@@ -9,11 +9,17 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-23 · 277 commits · describe-tag: `v2.0.23`_
+_Generated/updated: 2026-08-23 · 283 commits · describe-tag: `v2.0.24`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.25] — 2026-08-23
+
+### Fixed
+
+- **Script Settings inputs no longer lose to editor defaults** — re-running an applied script from the editor keeps per-instance `inputValues` / strategy properties. Empty `{}` bags no longer wipe saved settings. Overrides persist only when they differ from the script default and are keyed by title, id, and LHS var name so the engine actually applies them.
 
 ### Changed
 
@@ -610,9 +616,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (195 commits)
+### 2026-08 (201 commits)
 
 #### Security
 
@@ -623,6 +631,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `cd0148ca` (2026-08-23) — feat(cli): ship production-grade @hoox-sh/axis-cli 0.2.0
 - `0d45a6f2` (2026-08-23) — feat(ui): full-page studio overlay for Runtime, Wire, and Settings
 - `6900c093` (2026-08-22) — feat(ui): slide-over drawers for Settings, Runtimes, and Wire
 - `c685a2d4` (2026-08-22) — feat(ui): Venue picker pairs native CEX and CCXT in one control
@@ -811,6 +820,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### CI
 
+- `0c963fc6` (2026-08-23) — ci(cli): do not fail release when access public is forbidden
+- `88ca0133` (2026-08-23) — ci(cli): treat already-published 0.2.0 as success and set public
+- `c35de1fe` (2026-08-23) — ci(cli): auth registry checks and always set package public
+- `e07c59df` (2026-08-23) — ci(cli): force @hoox-sh/axis-cli public after npm publish
+- `dd3ebf85` (2026-08-23) — ci(cli): publish with NPM_TOKEN_HOOXSH and isolate CLI tests
 - `75c4543c` (2026-08-22) — ci: versioned docker tags and npm publish for axis-cli
 - `3ddc4193` (2026-08-10) — ci(docker): fix image build, enhance make targets, add GHCR workflow
 - `5b4bbef4` (2026-08-10) — ci: build Tauri desktop app on every main push

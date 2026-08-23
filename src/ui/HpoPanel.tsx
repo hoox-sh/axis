@@ -195,6 +195,7 @@ export const HpoPanel: Component = () => {
     if (rerun) {
       setPanelOpen('results', true);
       await runAndApply(currentScript().code, id || undefined, {
+        inputs: merged,
         strategyProps: currentStrategyProps(),
       });
     }

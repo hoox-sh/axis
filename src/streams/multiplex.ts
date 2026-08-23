@@ -450,6 +450,8 @@ function scheduleRerun() {
         await runAndApply(ind.code, ind.id, {
           silent: true,
           openResults: false,
+          inputs: ind.inputValues,
+          strategyProps: ind.strategyProps,
         });
       }
     } finally {

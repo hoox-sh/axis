@@ -243,6 +243,14 @@ function flushDeferredLiveRerun(): void {
     });
 }
 
+/** Non-empty plain bag, else undefined (empty `{}` is "not provided"). */
+function nonemptyBag(
+  v?: Record<string, unknown> | null,
+): Record<string, unknown> | undefined {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  return Object.keys(v).length ? v : undefined;
+}
+
 /** Options shared by {@link runScript} and {@link runAndApply}. */
 export interface RunOptions {
   /** Quiet status bar / fewer log lines (live re-runs) */
@@ -498,13 +506,9 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
         ? store.scripts.find((s) => s.id === indicatorId)
         : undefined;
     const rawInputs =
-      opts.inputs && Object.keys(opts.inputs).length
-        ? opts.inputs
-        : applied?.inputValues && Object.keys(applied.inputValues).length
-          ? applied.inputValues
-          : store.editorInputValues && Object.keys(store.editorInputValues).length
-            ? store.editorInputValues
-            : undefined;
+      nonemptyBag(opts.inputs) ??
+      nonemptyBag(applied?.inputValues) ??
+      (!indicatorId ? nonemptyBag(store.editorInputValues) : undefined);
     // Expand plot:<indicatorId>:<plotKey> refs → full series arrays for the engine
     const inputs = resolveInputSourceValues(rawInputs, store.indicatorSeries);
     // Strategy Properties: rewrite strategy() kwargs on a run-time copy only.
@@ -808,8 +812,9 @@ async function runAndApplyInner(
   silent: boolean,
   openResults: boolean,
 ): Promise<RunResult> {
-  // Prefer explicit opts.inputs / strategyProps; else per-indicator saved; else editor
-  let inputs = opts.inputs;
+  // Prefer explicit opts.inputs / strategyProps; else per-indicator saved; else editor.
+  // Empty `{}` is "not provided" — never wipe saved Script Settings.
+  let inputs = nonemptyBag(opts.inputs);
   let strategyProps = opts.strategyProps;
   if (indicatorId) {
     const ind = store.scripts.find((s) => s.id === indicatorId);
@@ -817,12 +822,12 @@ async function runAndApplyInner(
       inputs = ind.inputValues;
     }
     // Explicit bag for this script only — never fall through to editorStrategyProps
-    if (strategyProps === undefined) {
+    if (strategyProps === undefined || !nonemptyBag(strategyProps)) {
       strategyProps = ind?.strategyProps && Object.keys(ind.strategyProps).length
         ? ind.strategyProps
         : {};
     }
-  } else if (strategyProps === undefined) {
+  } else if (strategyProps === undefined || !nonemptyBag(strategyProps)) {
     strategyProps =
       store.editorStrategyProps && Object.keys(store.editorStrategyProps).length
         ? store.editorStrategyProps
@@ -1624,13 +1629,9 @@ async function runAndApplyInner(
       }
       // Prefer original opts/editor overrides (plot refs), not engine-expanded arrays
       const savedInputs =
-        opts.inputs && Object.keys(opts.inputs).length
-          ? opts.inputs
-          : store.editorInputValues;
+        nonemptyBag(opts.inputs) ?? nonemptyBag(store.editorInputValues);
       const savedStrategyProps =
-        opts.strategyProps !== undefined
-          ? opts.strategyProps
-          : store.editorStrategyProps;
+        nonemptyBag(opts.strategyProps) ?? nonemptyBag(store.editorStrategyProps);
       const newId = addIndicator(
         scriptName,
         script,
@@ -1734,14 +1735,9 @@ async function runAndApplyInner(
           colorIdx += 1;
         }
       }
-      const savedInputs =
-        opts.inputs && Object.keys(opts.inputs).length
-          ? opts.inputs
-          : existing?.inputValues;
+      const savedInputs = nonemptyBag(opts.inputs) ?? existing?.inputValues;
       const savedStrategyProps =
-        opts.strategyProps !== undefined
-          ? opts.strategyProps
-          : existing?.strategyProps;
+        nonemptyBag(opts.strategyProps) ?? existing?.strategyProps;
       updateIndicator(indicatorId, {
         name: scriptName,
         code: script,
@@ -1750,11 +1746,9 @@ async function runAndApplyInner(
         ...(savedInputs && Object.keys(savedInputs).length
           ? { inputValues: savedInputs }
           : {}),
-        ...(opts.strategyProps !== undefined
-          ? { strategyProps: { ...opts.strategyProps } }
-          : savedStrategyProps && Object.keys(savedStrategyProps).length
-            ? { strategyProps: savedStrategyProps }
-            : {}),
+        ...(savedStrategyProps && Object.keys(savedStrategyProps).length
+          ? { strategyProps: savedStrategyProps }
+          : {}),
       });
       if (Object.keys(seriesForCache).length) {
         setIndicatorSeries(indicatorId, {

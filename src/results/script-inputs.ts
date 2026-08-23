@@ -1205,7 +1205,50 @@ export function resolveScriptInputs(
   return merged.map((d) => recoverEnumType(recoverSourceType(d), enums, aliases));
 }
 
-/** Apply override map (keyed by title or id) onto defs for form initial values. */
+/** True when a form value matches the script declaration default. */
+export function sameInputValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a === 'number' && typeof b === 'number') return a === b;
+  if (
+    (typeof a === 'number' || typeof b === 'number') &&
+    a != null &&
+    b != null &&
+    a !== '' &&
+    b !== ''
+  ) {
+    const na = Number(a);
+    const nb = Number(b);
+    if (Number.isFinite(na) && Number.isFinite(nb)) return na === nb;
+  }
+  return false;
+}
+
+function overrideKeys(d: ScriptInputDef): string[] {
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  for (const k of [d.title, d.id, d.varName]) {
+    const s = typeof k === 'string' ? k.trim() : '';
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    keys.push(s);
+  }
+  return keys;
+}
+
+/** Look up a saved override by title, id, or LHS var name. */
+export function lookupInputOverride(
+  overrides: Record<string, unknown> | null | undefined,
+  d: Pick<ScriptInputDef, 'title' | 'id' | 'varName'>,
+): unknown {
+  if (!overrides) return undefined;
+  for (const k of [d.title, d.id, d.varName]) {
+    const s = typeof k === 'string' ? k.trim() : '';
+    if (s && Object.prototype.hasOwnProperty.call(overrides, s)) return overrides[s];
+  }
+  return undefined;
+}
+
+/** Apply override map (keyed by title, id, or var name) onto defs. */
 export function applyInputOverrides(
   defs: ScriptInputDef[],
   overrides?: Record<string, unknown> | null,
@@ -1214,12 +1257,8 @@ export function applyInputOverrides(
     return defs.map((d) => ({ ...d, value: d.value ?? d.default }));
   }
   return defs.map((d) => {
-    let v =
-      overrides[d.title] !== undefined
-        ? overrides[d.title]
-        : overrides[d.id] !== undefined
-          ? overrides[d.id]
-          : d.value ?? d.default;
+    let v = lookupInputOverride(overrides, d);
+    if (v === undefined) v = d.value ?? d.default;
     if (d.type === 'enum') {
       v = matchEnumOption(v, d.options) ?? v;
     }
@@ -1227,11 +1266,23 @@ export function applyInputOverrides(
   });
 }
 
-/** Build override payload for engine (title → value). */
-export function overridesFromDefs(defs: ScriptInputDef[]): Record<string, unknown> {
+/**
+ * Build override payload for the engine and persisted `inputValues`.
+ *
+ * Default: only values that differ from the script default, keyed by title
+ * plus id/varName aliases so PYNE title lookup and untitled `length = input.int(14)`
+ * both match. Pass `{ all: true }` for a full snapshot.
+ */
+export function overridesFromDefs(
+  defs: ScriptInputDef[],
+  opts?: { all?: boolean },
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
+  const all = opts?.all === true;
   for (const d of defs) {
-    out[d.title || d.id] = d.value ?? d.default;
+    const v = d.value ?? d.default;
+    if (!all && sameInputValue(v, d.default)) continue;
+    for (const k of overrideKeys(d)) out[k] = v;
   }
   return out;
 }

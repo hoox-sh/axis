@@ -68,6 +68,24 @@ plot(close)
     expect(overridesFromDefs(defs).Length).toBe(42);
   });
 
+  it('applies overrides keyed by LHS var name', () => {
+    const src = `length = input.int(14, "RSI Length")`;
+    const defs = applyInputOverrides(resolveScriptInputs(src), { length: 21 });
+    expect(defs[0]!.value).toBe(21);
+    const bag = overridesFromDefs(defs);
+    expect(bag['RSI Length']).toBe(21);
+    expect(bag.length).toBe(21);
+  });
+
+  it('omits values that still match the script default', () => {
+    const src = `length = input.int(14, "Length")\nsrc = input.source(close, "Source")`;
+    const defs = applyInputOverrides(resolveScriptInputs(src), { Length: 14, Source: 'hl2' });
+    const bag = overridesFromDefs(defs);
+    expect(bag.Length).toBeUndefined();
+    expect(bag.Source).toBe('hl2');
+    expect(overridesFromDefs(defs, { all: true }).Length).toBe(14);
+  });
+
   it('normalizeEngineInputs maps fields', () => {
     const n = normalizeEngineInputs([{ title: 'A', type: 'int', defval: 3, value: 5 }]);
     expect(n[0]!.default).toBe(3);
@@ -349,7 +367,9 @@ easing = input.enum(m.Easing.linear, "easing")
     expect(defs[0]!.options).toEqual(['Easing.linear', 'Easing.ease_in']);
     const over = applyInputOverrides(defs, { easing: 'm.Easing.linear' });
     expect(over[0]!.value).toBe('Easing.linear');
-    expect(overridesFromDefs(over).easing).toBe('Easing.linear');
+    expect(overridesFromDefs(over, { all: true }).easing).toBe('Easing.linear');
+    const dirty = applyInputOverrides(defs, { easing: 'm.Easing.ease_in' });
+    expect(overridesFromDefs(dirty).easing).toBe('Easing.ease_in');
   });
 
   it('matchEnumOption aligns alias / member / Type.member forms', () => {
