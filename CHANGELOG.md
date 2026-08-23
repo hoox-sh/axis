@@ -29,6 +29,10 @@ _Generated/updated: 2026-08-23 · 269 commits · describe-tag: `v2.0.21`_
 
 - **`overlay=false` bgcolor/fill always hit the price pane** — bgcolor bands take `paneId`; fills use the script-pane drawing layer when the indicator is not overlay. Empty `drawings: []` clears script SVG even on silent live re-runs.
 
+- **plotshape on oscillator panes** — `setShapeMarkers` takes a pane id; overlay=false scripts attach LWC markers to the first overlay series on `ind_*` instead of price candles. Trade markers stay on price.
+
+- **Drawing tool settings** — Fill slider covers channel, triangle, gann boxes, ranges, highlighter; highlighter stroke no longer multiplies width ×6; horizontal ray places on one click; XABCD / head-and-shoulders commit on the 5th point.
+
 ## [2.0.22] — 2026-08-23
 
 ### Added

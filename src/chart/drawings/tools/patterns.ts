@@ -421,7 +421,7 @@ registerToolHandler({
       p1: p[0]!,
       p2: p[p.length - 1]!,
       color: sanitizeStrokeColor(color),
-      lineWidth: 12,
+      lineWidth: 8,
       fillOpacity: 0.35,
     } as MultiPointDrawing;
   },
@@ -429,7 +429,7 @@ registerToolHandler({
     if (d.kind !== 'highlighter') return;
     const fo = clampOpacity(ctx.fillOpacity, 0.35);
     paintStroke(pts(d), ctx, {
-      width: Math.max(10, clampStrokeWidth(ctx.strokeWidth) * 6),
+      width: Math.max(8, clampStrokeWidth(ctx.strokeWidth) * 2),
       opacity: String(Math.min(0.45, Math.max(0.2, fo + 0.15))),
       round: true,
     });
@@ -440,7 +440,7 @@ registerToolHandler({
   },
   paintDraft(points, ctx) {
     paintStroke(sanitizePoints(points, DRAWING_POINTS_MAX), ctx, {
-      width: 12,
+      width: 8,
       opacity: '0.3',
       round: true,
     });

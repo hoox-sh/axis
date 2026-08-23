@@ -439,6 +439,10 @@ export class PaneManager {
    * wipe each other’s plotshape markers. Flattened into {@link shapeMarkerList}.
    */
   private shapeMarkersByOwner = new Map<string, SeriesMarker<UTCTimestamp>[]>();
+  /** Script pane for plotshape (`price` or `ind_*`). Missing → price. */
+  private shapePaneByOwner = new Map<string, string>();
+  /** LWC markers plugin on non-price panes (first overlay series). */
+  private paneShapePlugins = new Map<string, ISeriesMarkersPluginApi<any>>();
   /** Inline-debug / Pine log bar pins (merged with trade + shape markers) */
   private debugPinMarkerList: SeriesMarker<UTCTimestamp>[] = [];
   /**
@@ -830,6 +834,7 @@ export class PaneManager {
     const el = document.getElementById(this.paneDomId(id));
     el?.remove();
     document.getElementById(this.handleDomId(id))?.remove();
+    this.paneShapePlugins.delete(id);
     this.panes.delete(id);
     // Re-wire remaining panes so sync handlers don't point at removed charts
     if (opts?.rewire !== false) {
@@ -1118,6 +1123,7 @@ export class PaneManager {
   setShapeMarkers(
     markers: ShapeMarkerSpec[] | TradeMarker[],
     ownerId?: string | null,
+    paneId?: string | null,
   ) {
     const owner = (ownerId && String(ownerId).trim()) || '__global__';
     const list = markers.map((m, i) => {
@@ -1136,8 +1142,10 @@ export class PaneManager {
       return base;
     });
     this.shapeMarkersByOwner.set(owner, list);
+    const pane = (paneId && String(paneId).trim()) || 'price';
+    this.shapePaneByOwner.set(owner, pane);
     this.rebuildShapeMarkerList();
-    this.applyCandleMarkers();
+    this.applyAllShapeMarkers();
   }
 
   /**
@@ -1157,12 +1165,15 @@ export class PaneManager {
 
   clearShapeMarkers(ownerId?: string | null) {
     if (ownerId && String(ownerId).trim()) {
-      this.shapeMarkersByOwner.delete(String(ownerId).trim());
+      const id = String(ownerId).trim();
+      this.shapeMarkersByOwner.delete(id);
+      this.shapePaneByOwner.delete(id);
     } else {
       this.shapeMarkersByOwner.clear();
+      this.shapePaneByOwner.clear();
     }
     this.rebuildShapeMarkerList();
-    this.applyCandleMarkers();
+    this.applyAllShapeMarkers();
   }
 
   private rebuildTradeMarkerList() {
@@ -1296,7 +1307,13 @@ export class PaneManager {
     this.applyCandleMarkers();
   }
 
-  /** Merge trade + shape + debug-pin markers onto the candle series plugin. */
+  /** Apply plotshape markers on price candles and overlay=false panes. */
+  private applyAllShapeMarkers() {
+    this.applyCandleMarkers();
+    this.applyIndicatorShapeMarkers();
+  }
+
+  /** Merge trade + price-pane shape + debug-pin markers onto the candle series. */
   private applyCandleMarkers() {
     const pricePane = this.panes.get('price');
     const candle = pricePane?.series['candle'];
@@ -1310,10 +1327,14 @@ export class PaneManager {
       const key = m.id || `d:${m.time}:${m.text || ''}`;
       byKey.set(key, m);
     }
-    for (const m of this.shapeMarkerList) {
-      if (!Number.isFinite(m.time as number)) continue;
-      const key = m.id || `s:${m.time}:${m.position}:${m.shape}`;
-      byKey.set(key, m);
+    for (const [owner, list] of this.shapeMarkersByOwner) {
+      const pane = this.shapePaneByOwner.get(owner) || 'price';
+      if (pane !== 'price') continue;
+      for (const m of list) {
+        if (!Number.isFinite(m.time as number)) continue;
+        const key = m.id || `s:${m.time}:${m.position}:${m.shape}`;
+        byKey.set(key, m);
+      }
     }
     for (const m of this.tradeMarkerList) {
       if (!Number.isFinite(m.time as number)) continue;
@@ -1334,6 +1355,60 @@ export class PaneManager {
     } catch {
       // Host series may have been removed mid-swap; clear stale plugin handle
       this.candleMarkers = null;
+    }
+  }
+
+  /** First overlay line/area/hist/OHLC series on a pane (plotshape host). */
+  private markerHostSeries(pane: ManagedPane | undefined): ISeriesApi<any> | null {
+    if (!pane) return null;
+    const keys = Object.keys(pane.series);
+    const overlay = keys.find((k) => k.startsWith('overlay_') || k.startsWith(OVERLAY_OHLC_PREFIX));
+    if (overlay && pane.series[overlay]) return pane.series[overlay]!;
+    return pane.series['candle'] ?? null;
+  }
+
+  /**
+   * plotshape on overlay=false panes: attach LWC markers to the first overlay series.
+   * Empty / missing host series clears that pane’s plugin.
+   */
+  private applyIndicatorShapeMarkers() {
+    const byPane = new Map<string, SeriesMarker<UTCTimestamp>[]>();
+    for (const [owner, list] of this.shapeMarkersByOwner) {
+      const paneId = this.shapePaneByOwner.get(owner) || 'price';
+      if (paneId === 'price') continue;
+      const bucket = byPane.get(paneId) || [];
+      for (const m of list) {
+        if (!Number.isFinite(m.time as number)) continue;
+        bucket.push(m);
+      }
+      byPane.set(paneId, bucket);
+    }
+    for (const paneId of [...this.paneShapePlugins.keys()]) {
+      if (byPane.has(paneId)) continue;
+      try {
+        this.paneShapePlugins.get(paneId)?.setMarkers([]);
+      } catch {
+        /* disposed */
+      }
+      this.paneShapePlugins.delete(paneId);
+    }
+    for (const [paneId, markers] of byPane) {
+      const host = this.markerHostSeries(this.panes.get(paneId));
+      if (!host) {
+        this.paneShapePlugins.delete(paneId);
+        continue;
+      }
+      const sorted = markers.sort((a, b) => (a.time as number) - (b.time as number));
+      try {
+        const existing = this.paneShapePlugins.get(paneId);
+        if (existing) {
+          existing.setMarkers(sorted);
+        } else {
+          this.paneShapePlugins.set(paneId, createSeriesMarkers(host, sorted));
+        }
+      } catch {
+        this.paneShapePlugins.delete(paneId);
+      }
     }
   }
 

@@ -561,6 +561,48 @@ describe('PaneManager', () => {
     pm.clearTradeMarkers();
   });
 
+  it('setShapeMarkers paneId keeps overlay=false shapes off price candles', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    price.series['candle'] = {
+      setData: () => {},
+      applyOptions: () => {},
+      priceScale: () => ({ applyOptions: () => {} }),
+      seriesOrder: () => 1,
+      setSeriesOrder: () => {},
+    } as never;
+    const osc = pm.createPane('ind_rsi', 'indicator', 'RSI');
+    osc.series['overlay_RSI'] = {
+      setData: () => {},
+      applyOptions: () => {},
+      priceScale: () => ({ applyOptions: () => {} }),
+      seriesOrder: () => 1,
+      setSeriesOrder: () => {},
+    } as never;
+
+    const spec = {
+      time: 1000,
+      position: 'aboveBar' as const,
+      color: '#f00',
+      shape: 'circle' as const,
+      text: 'S',
+      id: 's1',
+    };
+    pm.setShapeMarkers([spec], 'rsi', 'ind_rsi');
+    const internal = pm as unknown as {
+      shapePaneByOwner: Map<string, string>;
+      shapeMarkersByOwner: Map<string, unknown[]>;
+    };
+    expect(internal.shapePaneByOwner.get('rsi')).toBe('ind_rsi');
+    expect(internal.shapeMarkersByOwner.get('rsi')?.length).toBe(1);
+
+    pm.setShapeMarkers([spec], 'price_script', 'price');
+    expect(internal.shapePaneByOwner.get('price_script')).toBe('price');
+
+    pm.clearShapeMarkers('rsi');
+    expect(internal.shapePaneByOwner.has('rsi')).toBe(false);
+    expect(internal.shapePaneByOwner.get('price_script')).toBe('price');
+  });
+
   it('setDebugPinMarkers merges with trade/shape and clear is independent', () => {
     const p = pm.createPane('price', 'price', 'Price');
     p.series['candle'] = {

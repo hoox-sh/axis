@@ -71,6 +71,25 @@ const COLOR_PRESETS = [
 const WIDTHS = [1, 1.5, 2, 3] as const;
 const LINE_STYLES: DrawingLineStyle[] = ['solid', 'dashed', 'dotted'];
 
+/** Kinds that honor fillOpacity in paint — show the Fill slider. */
+const FILL_KINDS = new Set<string>([
+  'rect',
+  'ellipse',
+  'channel',
+  'triangle',
+  'rotatedRect',
+  'gannBox',
+  'gannSquare',
+  'highlighter',
+  'dateRange',
+  'priceRange',
+  'datePriceRange',
+]);
+
+function showFillControl(tool: DrawingToolId, selectedKind?: string | null): boolean {
+  return FILL_KINDS.has(tool) || (!!selectedKind && FILL_KINDS.has(selectedKind));
+}
+
 const TOOL_ICONS: Partial<Record<DrawingToolId, typeof Icons.cursor>> = {
   cursor: Icons.cursor,
   eraser: Icons.eraser,
@@ -599,12 +618,7 @@ export const DrawingToolbar: Component = () => {
           </For>
 
           <Show
-            when={
-              active() === 'rect' ||
-              active() === 'ellipse' ||
-              selected()?.kind === 'rect' ||
-              selected()?.kind === 'ellipse'
-            }
+            when={showFillControl(active(), selected()?.kind)}
           >
             <span class="w-px h-5 bg-border-soft mx-0.5" />
             <label class="flex items-center gap-1 text-[10px] text-text-faint px-0.5" title="Fill opacity">

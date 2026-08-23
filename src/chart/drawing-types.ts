@@ -295,7 +295,8 @@ export function toolArity(tool: DrawingToolId): 0 | 1 | 2 | 3 | 'n' {
     tool === 'flag' ||
     tool === 'anchoredText' ||
     tool === 'arrowMarkUp' ||
-    tool === 'arrowMarkDown'
+    tool === 'arrowMarkDown' ||
+    tool === 'hray'
   ) {
     return 1;
   }

@@ -36,17 +36,20 @@ function pointsOf(d: Drawing): Point[] {
 registerToolHandler({
   id: 'hray',
   label: 'Horizontal ray',
-  arity: 2,
+  arity: 1,
   create(points, color) {
     const pts = sanitizePoints(points);
-    if (pts.length < 2) return null;
-    const p1 = pts[0]!;
-    const p2 = pts[1]!;
+    if (!pts[0]) return null;
+    const p1 = pts[0];
+    // Default direction: right. A second click is not required.
+    const p2 = pts[1]
+      ? { time: pts[1].time, price: p1.price }
+      : { time: p1.time + 1, price: p1.price };
     return {
       id: '',
       kind: 'hray',
       p1: { time: p1.time, price: p1.price },
-      p2: { time: p2.time, price: p1.price },
+      p2,
       color: sanitizeStrokeColor(color),
     };
   },

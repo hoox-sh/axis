@@ -1315,7 +1315,11 @@ async function runAndApplyInner(
       );
       const shapeOwner = indicatorId ?? EDITOR_RUN_KEY;
       if (shapeMarkers.length || split.shapes.length) {
-        manager.setShapeMarkers(shapeMarkers, shapeOwner);
+        manager.setShapeMarkers(
+          shapeMarkers,
+          shapeOwner,
+          overlay ? 'price' : paneId,
+        );
       }
       if (shapeMarkers.length && !silent) {
         appendLog('ok', `plotshape: ${shapeMarkers.length} marker(s)`, 'plot');

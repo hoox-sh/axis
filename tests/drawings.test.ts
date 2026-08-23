@@ -31,6 +31,7 @@ describe('drawing tools helpers', () => {
   it('needsTwoPoints for multi-click tools', () => {
     expect(needsTwoPoints('hline')).toBe(false);
     expect(needsTwoPoints('vline')).toBe(false);
+    expect(needsTwoPoints('hray')).toBe(false);
     expect(needsTwoPoints('text')).toBe(false);
     expect(needsTwoPoints('cursor')).toBe(false);
     expect(needsTwoPoints('trend')).toBe(true);
@@ -108,6 +109,16 @@ describe('drawing tools helpers', () => {
     expect(ids).toContain('pitchfork');
     expect(ids).toContain('brush');
     expect(ids).toContain('callout');
+    expect(getToolHandler('hray')?.arity).toBe(1);
+    expect(
+      getToolHandler('hray')?.create?.([{ time: 1, price: 10 }], '#fff'),
+    ).toBeTruthy();
+    expect(getToolHandler('xabcd')?.minPoints).toBe(5);
+    expect(getToolHandler('headShoulders')?.minPoints).toBe(5);
+    expect(getToolHandler('highlighter')?.create?.([{ time: 1, price: 1 }, { time: 2, price: 2 }], '#fff')).toMatchObject({
+      kind: 'highlighter',
+      lineWidth: 8,
+    });
     expect(getToolHandler('channel')?.arity).toBe(3);
     expect(getToolHandler('polyline')?.create?.([{ time: 1, price: 1 }, { time: 2, price: 2 }], '#fff')).toBeTruthy();
     expect(

@@ -1135,8 +1135,17 @@ export class DrawingLayer {
       const need = toolArity(this.tool);
       const n = this.draft.points.length;
 
-      // Open-ended: keep collecting until double-click (even when >= minPoints)
+      // Open-ended: keep collecting until double-click, except fixed-count
+      // patterns (XABCD / H&S) which commit as soon as minPoints is reached.
       if (need === 'n') {
+        const minPts = getToolHandler(this.tool)?.minPoints ?? 2;
+        if (
+          n >= minPts &&
+          (this.tool === 'xabcd' || this.tool === 'headShoulders')
+        ) {
+          this.commitDraftPoints(this.draft.points);
+          return;
+        }
         this.renderDraft(pt);
         return;
       }
