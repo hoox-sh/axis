@@ -69,7 +69,8 @@ jobs:
         id: check
         run: |
           PKG_VER=$(node -p "require('./packages/cli/package.json').version")
-          REG_VER=$(npm view "@hoox-sh/axis-cli" version 2>/dev/null || true)
+          # Authenticated view so a restricted first publish is still detected.
+          REG_VER=$(npm view "@hoox-sh/axis-cli@$PKG_VER" version 2>/dev/null || true)
           echo "local=${PKG_VER}" >> "$GITHUB_OUTPUT"
           echo "registry=${REG_VER:-<none>}" >> "$GITHUB_OUTPUT"
           if [ "${PKG_VER}" = "${REG_VER}" ]; then
@@ -111,15 +112,25 @@ jobs:
             echo "Grant hoox-sh/axis access to NPM_TOKEN_HOOXSH (npm automation token for @hoox-sh)."
             exit 1
           fi
+          set +e
           npm publish --access public --provenance
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            exit 0
+          fi
+          if npm view "@hoox-sh/axis-cli@$(node -p "require('./package.json').version")" version >/dev/null 2>&1; then
+            echo "Version already on the registry — treating publish as done."
+            exit 0
+          fi
+          exit "$code"
 
       - name: Ensure public access
         if: always() && steps.check.outcome == 'success'
         working-directory: packages/cli
         run: |
-          # First scoped publish can land restricted; force public on the @hoox-sh org.
-          npm access set status=public --package=@hoox-sh/axis-cli \
-            || npm access public @hoox-sh/axis-cli
+          npm access set status=public @hoox-sh/axis-cli
+          npm access get status @hoox-sh/axis-cli
           PUB=$(npm view @hoox-sh/axis-cli version)
           echo "npm view @hoox-sh/axis-cli → ${PUB}"
 
