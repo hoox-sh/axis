@@ -34,6 +34,8 @@ jobs:
     name: Publish @hoox-sh/axis-cli
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_HOOXSH }}
 
     steps:
       - name: Checkout
@@ -103,8 +105,6 @@ jobs:
       - name: Publish to npm
         if: steps.check.outputs.skip != 'true'
         working-directory: packages/cli
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_HOOXSH }}
         run: |
           if [ -z "${NODE_AUTH_TOKEN}" ]; then
             echo "Org secret NPM_TOKEN_HOOXSH is missing or not available to this repo."
@@ -114,9 +114,8 @@ jobs:
           npm publish --access public --provenance
 
       - name: Ensure public access
+        if: always() && steps.check.outcome == 'success'
         working-directory: packages/cli
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_HOOXSH }}
         run: |
           # First scoped publish can land restricted; force public on the @hoox-sh org.
           npm access set status=public --package=@hoox-sh/axis-cli \
