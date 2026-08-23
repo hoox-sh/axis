@@ -16,6 +16,7 @@ async function axis(
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return run("bun", [bin, ...args], {
     throwOnError: false,
+    cwd: join(here, ".."),
     env: { ...process.env, AXIS_CLI_SRC: "1" },
   });
 }
@@ -59,6 +60,7 @@ describe("axis bin", () => {
     if (!existsSync(dist)) return;
     const r = await run("node", [bin, "--version"], {
       throwOnError: false,
+      cwd: join(here, ".."),
       env: { ...process.env, AXIS_CLI_SRC: "0" },
     });
     expect(r.code).toBe(0);

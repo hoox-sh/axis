@@ -15,6 +15,10 @@ _Generated/updated: 2026-08-23 · 277 commits · describe-tag: `v2.0.23`_
 
 ## [Unreleased]
 
+### Changed
+
+- **npm publish uses org secret `NPM_TOKEN_HOOXSH`** — `release.yml` no longer looks for a repo `NPM_TOKEN`. Root Bun tests ignore `packages/**` so `axis-cli` suites run only after `packages/cli` deps are installed.
+
 ## [2.0.24] — 2026-08-23
 
 ### Added
@@ -41,7 +45,7 @@ _Generated/updated: 2026-08-23 · 277 commits · describe-tag: `v2.0.23`_
 
 ### Changed
 
-- **npm release workflow** — pin Bun 1.3.14, `id-token: write` + `npm publish --provenance`, pack dry-run (LICENSE/dist/bin required), fail closed if `NPM_TOKEN` is missing. CI unit job now typechecks and tests `packages/cli`. Dead `@clack/prompts` dependency removed.
+- **npm release workflow** — pin Bun 1.3.14, `id-token: write` + `npm publish --provenance`, pack dry-run (LICENSE/dist/bin required), org secret `NPM_TOKEN_HOOXSH`. CI unit job now typechecks and tests `packages/cli`. Dead `@clack/prompts` dependency removed.
 
 ## [2.0.23] — 2026-08-23
 

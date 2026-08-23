@@ -15,8 +15,10 @@
 
 [test]
 # Exclude Playwright e2e from Bun discovery (matched dirs are pruned).
+# packages/* ship their own test scripts (axis-cli needs its node_modules).
 pathIgnorePatterns = [
   "e2e/**",
   "playwright-report/**",
   "test-results/**",
+  "packages/**",
 ]

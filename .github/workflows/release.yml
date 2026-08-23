@@ -4,7 +4,7 @@
 # npm release for the AXIS CLI (`packages/cli` → @hoox-sh/axis-cli).
 #
 # Triggers on version tags (v*) and workflow_dispatch. Requires the
-# `NPM_TOKEN` repository secret (automation token with publish rights
+# org secret `NPM_TOKEN_HOOXSH` (automation token with publish rights
 # for the @hoox-sh scope). Skips cleanly when the package version is
 # already on the registry, so re-running a tag never fails.
 #
@@ -104,16 +104,14 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         working-directory: packages/cli
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_HOOXSH }}
         run: |
-          if [ -n "${NODE_AUTH_TOKEN}" ]; then
-            npm publish --access public --provenance
-          else
-            echo "NPM_TOKEN is empty — trying npm trusted publishing (OIDC)."
-            echo "If this fails: set repo secret NPM_TOKEN or configure a trusted publisher for hoox-sh/axis on npmjs.com."
-            unset NODE_AUTH_TOKEN
-            npm publish --access public --provenance
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "Org secret NPM_TOKEN_HOOXSH is missing or not available to this repo."
+            echo "Grant hoox-sh/axis access to NPM_TOKEN_HOOXSH (npm automation token for @hoox-sh)."
+            exit 1
           fi
+          npm publish --access public --provenance
 
       - name: Summary
         if: always()

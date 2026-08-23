@@ -1,0 +1,8 @@
+# Copyright (C) 2024-2026 jango_blockchained
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Nearest bunfig wins. Root bunfig.toml ignores packages/** so the app
+# test run does not load this package without its own node_modules.
+
+[test]
+pathIgnorePatterns = []
