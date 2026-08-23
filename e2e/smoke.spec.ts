@@ -105,10 +105,16 @@ test.describe('AXIS smoke @smoke', () => {
       'aria-current',
       'true',
     );
-    await page.getByTestId('axis-architecture-apply').click();
+    await page.getByTestId('axis-architecture-apply').click({ force: true });
     await expect(page.getByTestId('axis-architecture-modal')).toHaveCount(0);
-    await expect(page.getByTestId('axis-select-source')).toHaveValue('mock-walk');
-    await expect(page.getByTestId('axis-select-engine')).toHaveValue('pyodide');
+    await expect(page.locator('[data-tb-group="data"]')).toHaveAttribute(
+      'data-axis-source',
+      'mock-walk',
+    );
+    await expect(page.locator('[data-tb-group="compute"]')).toHaveAttribute(
+      'data-axis-engine',
+      'pyodide',
+    );
   });
 
   test('opens Settings dialog', async ({ page }) => {

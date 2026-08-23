@@ -403,7 +403,7 @@ export const Topbar: Component<{
       </div>
 
       {/* ── Data ────────────────────────────────────────────── */}
-      <div class="axis-tb-group" data-tb-group="data">
+      <div class="axis-tb-group" data-tb-group="data" data-axis-source={store.source}>
         <TopbarField
           label="Venue"
           variant="select"
@@ -509,7 +509,7 @@ export const Topbar: Component<{
       </div>
 
       {/* ── Compute (Engine · Stream · Run / Live / Replay) ── */}
-      <div class="axis-tb-group" data-tb-group="compute">
+      <div class="axis-tb-group" data-tb-group="compute" data-axis-engine={store.engine}>
         <TopbarField
           label="Engine"
           variant="select"

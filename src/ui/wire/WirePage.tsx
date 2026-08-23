@@ -9,7 +9,7 @@
  * @module ui/wire/WirePage
  */
 
-import { For, Show, createEffect, createMemo, createSignal, untrack } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onMount } from 'solid-js';
 import { Icons } from '../icons';
 import { CapabilityBadges } from '../plugin-badges';
 import { store } from '../../store';
@@ -47,12 +47,10 @@ export function WirePage(props: {
   const [baseId, setBaseId] = createSignal(seedBaseId(seedConfig()));
   const [config, setConfig] = createSignal<AxisConfig>(seedConfig());
 
-  createEffect(() => {
-    untrack(() => {
-      const next = seedConfig();
-      setConfig(next);
-      setBaseId(seedBaseId(next));
-    });
+  onMount(() => {
+    const next = seedConfig();
+    setConfig(next);
+    setBaseId(seedBaseId(next));
   });
 
   const plan = createMemo(() => derivePlan(config(), baseId()));
@@ -78,7 +76,8 @@ export function WirePage(props: {
   const reset = () => setConfig(plan().base.config);
 
   const apply = () => {
-    const result = applyArchitecture(config(), baseId());
+    const cfg = { ...config() };
+    const result = applyArchitecture(cfg, baseId());
     props.onApplied?.(result.planName);
     props.onClose();
   };
