@@ -1,6 +1,6 @@
 {
   "name": "@hoox-sh/axis-cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AXIS CLI — install, doctor, worker setup, secrets, deploy, and health for the charting PWA",
   "type": "module",
   "license": "AGPL-3.0-only",
@@ -9,14 +9,18 @@
     "axis": "bin/axis.js",
     "axis-cli": "bin/axis.js"
   },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
   "scripts": {
     "axis": "bun bin/axis.js",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "build": "bun build ./src/index.ts --outdir ./dist --target bun --packages external"
+    "build": "bun build ./src/index.ts --outdir ./dist --target node --format esm --packages external",
+    "prepublishOnly": "bun run typecheck && bun test && bun run build"
   },
   "dependencies": {
-    "@clack/prompts": "^0.11.0",
     "ansis": "^4.2.0",
     "commander": "^13.1.0"
   },
@@ -25,12 +29,20 @@
     "typescript": "^5.8.0"
   },
   "engines": {
+    "node": ">=20",
     "bun": ">=1.2"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/hoox-sh/axis.git",
     "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/hoox-sh/axis/issues"
   },
   "homepage": "https://hoox.sh/axis",
   "keywords": [
@@ -45,6 +57,7 @@
     "bin",
     "src",
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ]
 }

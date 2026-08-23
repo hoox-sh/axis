@@ -20,9 +20,11 @@ export function getGlobalOpts(cmd: {
     typeof cmd.optsWithGlobals === "function"
       ? cmd.optsWithGlobals()
       : cmd.opts?.() ?? {};
+  const json = Boolean(o.json);
   return {
-    json: Boolean(o.json),
-    quiet: Boolean(o.quiet),
+    json,
+    // JSON is a machine-readable contract — never mix human banners into stdout.
+    quiet: Boolean(o.quiet) || json,
     yes: Boolean(o.yes),
   };
 }
@@ -91,6 +93,20 @@ export function wrapAction(
       handleError(err, opts.json);
     }
   };
+}
+
+/** Commander already printed these; map them to an exit code without wrapping. */
+export function commanderExitCode(err: unknown): number | null {
+  if (!err || typeof err !== "object" || !("code" in err)) return null;
+  const code = String((err as { code?: string }).code ?? "");
+  if (code === "commander.helpDisplayed" || code === "commander.version") {
+    return 0;
+  }
+  if (code.startsWith("commander.")) {
+    const exit = (err as { exitCode?: number }).exitCode;
+    return typeof exit === "number" ? exit : ExitCode.INVALID_USAGE;
+  }
+  return null;
 }
 
 export { CLIError, ExitCode };

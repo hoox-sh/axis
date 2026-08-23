@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 /**
  * Copyright (C) 2024-2026 jango_blockchained
  * SPDX-License-Identifier: AGPL-3.0-only
@@ -6,19 +5,12 @@
  * AXIS CLI — install, doctor, setup, deploy, secrets, health.
  */
 
-if (typeof Bun === "undefined") {
-  process.stderr.write(
-    "Error: the AXIS CLI requires Bun >= 1.2.\n" +
-      "  Install: curl -fsSL https://bun.sh | bash\n" +
-      "  Then:    bun packages/cli/bin/axis.js <command>\n"
-  );
-  process.exit(1);
-}
-
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { Command } from "commander";
 import { theme } from "./utils/theme.js";
-import { handleError } from "./utils/format.js";
+import { commanderExitCode, handleError } from "./utils/format.js";
 import { registerInstall } from "./commands/install.js";
 import { registerDoctor } from "./commands/doctor.js";
 import { registerSetup } from "./commands/setup.js";
@@ -44,6 +36,7 @@ export async function main(): Promise<void> {
     .option("--json", "JSON output where supported")
     .option("--quiet", "Minimal output")
     .option("-y, --yes", "Skip confirmations")
+    .showHelpAfterError()
     .addHelpText(
       "beforeAll",
       theme.heading("\nAXIS CLI") +
@@ -82,28 +75,23 @@ ${theme.dim("Docs:")} https://hoox.sh/axis/docs
   try {
     await program.parseAsync(process.argv);
   } catch (err) {
-    // Commander uses exitOverride errors for --help / unknown commands
-    if (
-      err &&
-      typeof err === "object" &&
-      "code" in err &&
-      (err as { code?: string }).code === "commander.helpDisplayed"
-    ) {
-      process.exit(0);
-    }
-    if (
-      err &&
-      typeof err === "object" &&
-      "code" in err &&
-      (err as { code?: string }).code === "commander.version"
-    ) {
-      process.exit(0);
-    }
+    const cmdExit = commanderExitCode(err);
+    if (cmdExit !== null) process.exit(cmdExit);
     const opts = program.opts() as { json?: boolean };
     handleError(err, opts.json);
   }
 }
 
-if (import.meta.main) {
+function isDirectRun(): boolean {
+  const argv1 = process.argv[1];
+  if (!argv1) return false;
+  try {
+    return fileURLToPath(import.meta.url) === resolve(argv1);
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectRun()) {
   await main();
 }

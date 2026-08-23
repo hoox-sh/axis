@@ -24,6 +24,13 @@ import {
 
 const PAGES_PROJECT = "pynescript-axis";
 
+/** Last workers.dev URL printed by `wrangler deploy`. */
+export function parseDeployedWorkerUrl(output: string): string | undefined {
+  const matches = output.match(/https:\/\/[a-z0-9.-]+\.workers\.dev\/?/gi);
+  if (!matches?.length) return undefined;
+  return matches[matches.length - 1].replace(/\/$/, "");
+}
+
 export async function deployWorker(
   opts: GlobalOpts,
   flags: { skipHealth?: boolean; url?: string } = {}
@@ -40,42 +47,30 @@ export async function deployWorker(
   printHeader("AXIS deploy worker", opts.quiet);
   printInfo("wrangler deploy…", opts.quiet);
 
+  // Always capture so a failure never re-invokes deploy, and so we can parse the URL.
   const result = await runWrangler(paths.worker, ["deploy"], {
-    inherit: !opts.quiet,
+    inherit: false,
     throwOnError: false,
   });
 
-  // When inherit, stdout empty — re-run quiet capture only if failed
-  if (result.code !== 0 && !opts.quiet) {
-    // already printed
-  }
   if (result.code !== 0) {
-    // capture error details if inherit swallowed them
-    if (opts.quiet || !result.stderr) {
-      const r2 = await runWrangler(paths.worker, ["deploy"], {
-        inherit: false,
-        throwOnError: false,
-      });
-      throw new CLIError(
-        `Worker deploy failed (exit ${r2.code})`,
-        ExitCode.ERROR,
-        r2.stderr || r2.stdout
-      );
-    }
-    throw new CLIError(`Worker deploy failed (exit ${result.code})`, ExitCode.ERROR);
+    throw new CLIError(
+      `Worker deploy failed (exit ${result.code})`,
+      ExitCode.ERROR,
+      result.stderr || result.stdout
+    );
   }
 
-  // Prefer capturing deploy output for URL when not inherit
-  let deployedUrl: string | undefined;
   if (!opts.quiet) {
-    // Parse from a quiet re-status is hard; use default + health
-    deployedUrl = flags.url || defaultWorkerUrl();
-  } else {
-    deployedUrl = flags.url || defaultWorkerUrl();
+    if (result.stdout) process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
   }
 
-  // Capture URL from non-inherit deploy if we used inherit
-  // Optional health probe
+  const deployedUrl =
+    flags.url ||
+    parseDeployedWorkerUrl(`${result.stdout}\n${result.stderr}`) ||
+    defaultWorkerUrl();
+
   if (!flags.skipHealth) {
     const health = await probeHealth(deployedUrl);
     if (health.ok) {

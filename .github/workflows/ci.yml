@@ -44,6 +44,16 @@ jobs:
       - name: Security suites
         run: bun run test:security
 
+      - name: Install CLI dependencies
+        working-directory: packages/cli
+        run: bun install --frozen-lockfile
+
+      - name: CLI typecheck + test
+        working-directory: packages/cli
+        run: |
+          bun run typecheck
+          bun test
+
   e2e-smoke:
     name: E2E smoke
     runs-on: ubuntu-latest

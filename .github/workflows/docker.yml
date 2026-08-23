@@ -13,31 +13,11 @@ name: Docker
 
 on:
   push:
+    # Do not path-filter `push`: GitHub applies push.paths to tag pushes too,
+    # which would skip GHCR version tags when the release commit only touches
+    # CHANGELOG / packages/cli / worker.
     branches: [main]
     tags: ['v*']
-    paths:
-      - 'Dockerfile'
-      - 'docker/**'
-      - 'docker-bake.hcl'
-      - 'docker-compose.yml'
-      - 'docker-compose.prod.yml'
-      - 'Makefile'
-      - 'package.json'
-      - 'bun.lock'
-      - 'vite.config.ts'
-      - 'index.html'
-      - 'tsconfig.json'
-      - 'bunfig.toml'
-      - 'src/**'
-      - 'public/**'
-      - 'vendor/**'
-      - 'pyodide/**'
-      - 'brand/**'
-      - 'scripts/**'
-      - 'examples/**'
-      - 'axis_pwa_server.py'
-      - 'manifest.webmanifest'
-      - '.github/workflows/docker.yml'
   pull_request:
     paths:
       - 'Dockerfile'

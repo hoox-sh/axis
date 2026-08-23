@@ -9,17 +9,39 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-23 · 273 commits · describe-tag: `v2.0.22`_
+_Generated/updated: 2026-08-23 · 277 commits · describe-tag: `v2.0.23`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.24] — 2026-08-23
+
+### Added
+
+- **Production-grade `@hoox-sh/axis-cli` 0.2.0** — first npm publish of the AXIS CLI. Node-compatible `dist/` + `npm i -g @hoox-sh/axis-cli`, AGPL `LICENSE` in the tarball, provenance on tag publish, CI coverage for `packages/cli`.
 
 ### Fixed
 
 - **`plot(..., display=)` was ignored at apply time** — editor already knew `display.data_window` / `none` / `pane` / `price_scale` / `status_line` / `all`, but every series still painted on the pane and in the Data Window. AXIS now reads `plot_meta.display` (token or Pine bitfield): `none` hides everywhere, `data_window` keeps Data Window and skips the chart, `price_scale` / `status_line` gate last-value labels. PYNE packs `display=` on plot/hline/shape/fill/bgcolor.
 
 - **E2E smoke vs studio pages** — Plugins is opened from the Runtime rail (topbar hook is sr-only). Wire Apply waits for an exact `Wire · Offline Lab` title so a drifted `Offline Lab +N` plan is not applied as Live Crypto.
+
+- **`axis setup --remote-d1` skipped local D1** — `setup d1` treated `--remote` as exclusive of local even when `local: true` was passed, so bootstrap never applied the schema locally. `--remote` alone stays remote-only; `--local --remote` and `--remote-d1` apply both.
+
+- **Worker `/health` probe accepted any HTTP 2xx** — `probeHealth` OR'd the JSON `status === "healthy"` check with `res.ok`, so a 200 HTML page counted as healthy. Requires a JSON `status` of `healthy` or `ok`.
+
+- **Failed `axis deploy worker` ran wrangler deploy twice** — on inherit/quiet failure the CLI re-invoked deploy to capture stderr. Capture once, parse the workers.dev URL, never redeploy on error.
+
+- **`--json` mixed human banners into stdout** — `--json` now implies `--quiet` so doctor/health/deploy emit parseable JSON only.
+
+- **Docker GHCR version tags could skip on `v*`** — `docker.yml` path-filtered `push`, and GitHub applies that filter to tag pushes. Tag/main image builds no longer use a path filter (PRs still do).
+
+- **Unknown `axis` commands dumped a generic wrapper error** — Commander help/version/unknown-command now exit with Commander's own code instead of `handleError`.
+
+### Changed
+
+- **npm release workflow** — pin Bun 1.3.14, `id-token: write` + `npm publish --provenance`, pack dry-run (LICENSE/dist/bin required), fail closed if `NPM_TOKEN` is missing. CI unit job now typechecks and tests `packages/cli`. Dead `@clack/prompts` dependency removed.
 
 ## [2.0.23] — 2026-08-23
 
@@ -582,9 +604,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (191 commits)
+### 2026-08 (195 commits)
 
 #### Security
 
@@ -685,6 +709,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `ea13ba50` (2026-08-23) — fix(ui): seed Wire plan on mount and expose source for e2e
+- `70d0b378` (2026-08-23) — fix(chart): honor Pine plot display.* flags
 - `bed28c62` (2026-08-23) — fix(chart): hide Pine drawings, label pad, histbase, re-own
 - `a05e42d8` (2026-08-23) — fix(chart): plotshape pane routing and drawing tool settings
 - `098bfee4` (2026-08-23) — fix(chart): drawing move, linefill GC, overlay pane routing
@@ -785,8 +811,13 @@ Security and performance release from the multi-agent **harden-perf** audit
 - `3ddc4193` (2026-08-10) — ci(docker): fix image build, enhance make targets, add GHCR workflow
 - `5b4bbef4` (2026-08-10) — ci: build Tauri desktop app on every main push
 
+#### Tests
+
+- `5d5844ae` (2026-08-23) — test(e2e): open Plugins via studio rail; exact Offline Lab apply
+
 #### Chores
 
+- `a01be631` (2026-08-23) — chore(release): AXIS v2.0.23
 - `22966e62` (2026-08-23) — chore(release): AXIS v2.0.22
 - `3e7236ef` (2026-08-21) — chore(release): v2.0.20
 - `b4b3227b` (2026-08-15) — chore(release): AXIS v2.0.8

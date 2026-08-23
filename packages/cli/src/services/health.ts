@@ -11,37 +11,54 @@ export type HealthResult = {
   error?: string;
 };
 
-const DEFAULT_WORKER_URL =
-  process.env.AXIS_WORKER_URL?.trim() ||
+const FALLBACK_WORKER_URL =
   "https://pynescript-axis.cryptolinx.workers.dev";
 
 export function defaultWorkerUrl(): string {
-  return DEFAULT_WORKER_URL.replace(/\/$/, "");
+  const fromEnv = process.env.AXIS_WORKER_URL?.trim();
+  return (fromEnv || FALLBACK_WORKER_URL).replace(/\/$/, "");
+}
+
+/** True when an HTTP payload is a live AXIS/PYNE health document. */
+export function isHealthyPayload(httpStatus: number, body: unknown): boolean {
+  if (httpStatus < 200 || httpStatus >= 300) return false;
+  if (typeof body !== "object" || body === null) return false;
+  const status = (body as { status?: unknown }).status;
+  return status === "healthy" || status === "ok";
+}
+
+function joinUrl(baseUrl: string, path: string): string {
+  const base = baseUrl.replace(/\/$/, "");
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${p}`;
+}
+
+async function readJsonBody(res: Response): Promise<unknown> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
 }
 
 export async function probeHealth(
   baseUrl: string = defaultWorkerUrl(),
   path = "/health"
 ): Promise<HealthResult> {
-  const url = `${baseUrl.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+  const url = joinUrl(baseUrl, path);
   try {
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(15_000),
     });
-    const text = await res.text();
-    let body: unknown = text;
-    try {
-      body = JSON.parse(text);
-    } catch {
-      /* keep text */
-    }
-    const ok =
-      res.ok &&
-      typeof body === "object" &&
-      body !== null &&
-      (body as { status?: string }).status === "healthy";
-    return { ok: ok || res.ok, url, status: res.status, body };
+    const body = await readJsonBody(res);
+    return {
+      ok: isHealthyPayload(res.status, body),
+      url,
+      status: res.status,
+      body,
+    };
   } catch (err) {
     return {
       ok: false,
@@ -54,7 +71,7 @@ export async function probeHealth(
 export async function probeOAuthStart(
   baseUrl: string = defaultWorkerUrl()
 ): Promise<HealthResult> {
-  const url = `${baseUrl.replace(/\/$/, "")}/api/git/oauth/device/start`;
+  const url = joinUrl(baseUrl, "/api/git/oauth/device/start");
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -65,13 +82,7 @@ export async function probeOAuthStart(
       body: JSON.stringify({ provider: "github" }),
       signal: AbortSignal.timeout(20_000),
     });
-    const text = await res.text();
-    let body: unknown = text;
-    try {
-      body = JSON.parse(text);
-    } catch {
-      /* keep */
-    }
+    const body = await readJsonBody(res);
     const ok =
       res.ok &&
       typeof body === "object" &&

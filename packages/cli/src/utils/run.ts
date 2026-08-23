@@ -2,9 +2,11 @@
  * Copyright (C) 2024-2026 jango_blockchained
  * SPDX-License-Identifier: AGPL-3.0-only
  *
- * Thin process runner (Bun.spawn / child_process fallback).
+ * Thin process runner (child_process).
  */
 
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { spawn } from "node:child_process";
 
 export type RunResult = {
@@ -99,20 +101,35 @@ export async function run(
 }
 
 export async function which(bin: string): Promise<string | null> {
-  const r = await run("sh", ["-c", `command -v ${bin}`], {
+  if (!bin || /[/\0]/.test(bin)) return null;
+  if (typeof Bun !== "undefined" && typeof Bun.which === "function") {
+    return Bun.which(bin) ?? null;
+  }
+  // $1 is bound via the extra argv after -c (never interpolates `bin` into the script).
+  const r = await run("sh", ["-c", 'command -v -- "$1"', "axis-which", bin], {
     throwOnError: false,
   });
   const path = r.stdout.trim();
   return r.code === 0 && path ? path : null;
 }
 
+function wranglerBin(workerDir: string): string | null {
+  const unix = join(workerDir, "node_modules", ".bin", "wrangler");
+  const win = join(workerDir, "node_modules", ".bin", "wrangler.cmd");
+  if (process.platform === "win32") {
+    if (existsSync(win)) return win;
+    if (existsSync(unix)) return unix;
+    return null;
+  }
+  return existsSync(unix) ? unix : existsSync(win) ? win : null;
+}
+
 /** Prefer local worker node_modules wrangler, then bunx, then npx. */
 export async function wranglerCmd(
   workerDir: string
 ): Promise<{ cmd: string; prefix: string[] }> {
-  const local = `${workerDir}/node_modules/.bin/wrangler`;
-  const { existsSync } = await import("node:fs");
-  if (existsSync(local)) return { cmd: local, prefix: [] };
+  const local = wranglerBin(workerDir);
+  if (local) return { cmd: local, prefix: [] };
   if (await which("bunx")) return { cmd: "bunx", prefix: ["wrangler"] };
   if (await which("npx")) return { cmd: "npx", prefix: ["wrangler"] };
   if (await which("wrangler")) return { cmd: "wrangler", prefix: [] };

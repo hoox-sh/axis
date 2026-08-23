@@ -11,6 +11,7 @@ import {
   getTomlVar,
   setTomlVar,
   getD1DatabaseId,
+  getTomlName,
 } from "../src/services/wrangler-toml.js";
 
 describe("wrangler-toml helpers", () => {
@@ -65,5 +66,11 @@ database_id = "ae203eba-a4c4-49ce-8b7c-edcea914d3d9"
     expect(getD1DatabaseId(toml)).toBe(
       "ae203eba-a4c4-49ce-8b7c-edcea914d3d9"
     );
+  });
+
+  test("getTomlName reads the worker name", () => {
+    const toml = join(dir, "wrangler.toml");
+    writeFileSync(toml, 'name = "pynescript-axis"\n');
+    expect(getTomlName(toml)).toBe("pynescript-axis");
   });
 });

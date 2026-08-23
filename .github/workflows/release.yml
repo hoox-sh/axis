@@ -7,6 +7,12 @@
 # `NPM_TOKEN` repository secret (automation token with publish rights
 # for the @hoox-sh scope). Skips cleanly when the package version is
 # already on the registry, so re-running a tag never fails.
+#
+# Other v* tag components (not this workflow):
+#   - Desktop installers + GitHub Release: .github/workflows/desktop.yml
+#   - GHCR images:                       .github/workflows/docker.yml
+# Worker / Pages stay operator-driven (`axis deploy all`) — they need
+# Cloudflare credentials that are not in this job.
 
 name: Release (npm)
 
@@ -21,6 +27,7 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   publish-cli:
@@ -35,7 +42,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.14
 
       - name: Install CLI dependencies
         working-directory: packages/cli
@@ -47,6 +54,8 @@ jobs:
           bun run typecheck
           bun test
           bun run build
+          test -f dist/index.js
+          test -f LICENSE
 
       - name: Setup Node (npm registry auth)
         uses: actions/setup-node@v4
@@ -68,12 +77,43 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Pack dry-run
+        if: steps.check.outputs.skip != 'true'
+        working-directory: packages/cli
+        run: |
+          npm pack --dry-run --json > /tmp/axis-cli-pack.json
+          node -e '
+            const p = require("/tmp/axis-cli-pack.json");
+            const entry = Array.isArray(p)
+              ? p[0]
+              : p.files
+                ? p
+                : Object.values(p)[0];
+            const files = (entry.files || []).map((f) => f.path || f);
+            const need = ["bin/axis.js", "dist/index.js", "LICENSE", "README.md", "package.json"];
+            const missing = need.filter((n) => !files.includes(n));
+            if (missing.length) {
+              console.error("npm pack missing:", missing.join(", "));
+              console.error("have:", files.join(", "));
+              process.exit(1);
+            }
+            console.log("pack files ok:", need.join(", "));
+          '
+
       - name: Publish to npm
         if: steps.check.outputs.skip != 'true'
         working-directory: packages/cli
-        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "${NODE_AUTH_TOKEN}" ]; then
+            npm publish --access public --provenance
+          else
+            echo "NPM_TOKEN is empty — trying npm trusted publishing (OIDC)."
+            echo "If this fails: set repo secret NPM_TOKEN or configure a trusted publisher for hoox-sh/axis on npmjs.com."
+            unset NODE_AUTH_TOKEN
+            npm publish --access public --provenance
+          fi
 
       - name: Summary
         if: always()
@@ -88,4 +128,7 @@ jobs:
             echo "| Registry version | \`${{ steps.check.outputs.registry }}\` |"
             echo "| Published | \`${{ steps.check.outputs.skip != 'true' && 'yes' || 'skipped (already published)' }}\` |"
             echo "| Tag | \`${{ github.ref_name }}\` |"
+            echo ""
+            echo "Same tag also drives desktop (GitHub Release) and Docker (GHCR) workflows."
+            echo "Worker / Pages deploy remains \`axis deploy all\`."
           } >> "$GITHUB_STEP_SUMMARY"

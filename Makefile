@@ -73,6 +73,7 @@ test-e2e:
 typecheck:
 	bunx tsc --noEmit
 	cd worker && bun run typecheck
+	cd packages/cli && bun run typecheck
 
 worker-install:
 	cd worker && bun install

@@ -2,19 +2,19 @@
 
 **AXIS CLI** — install flows, doctor, Worker setup (D1 / OAuth), secrets, deploy, and health probes for the [AXIS](https://hoox.sh/axis) charting PWA.
 
-Requires **Bun ≥ 1.2**.
+Requires **Node ≥ 20** to run the published binary, and **Bun ≥ 1.2** for `axis install` / `axis dev` / `axis deploy pages` (those shell out to Bun).
 
-## Install (from the AXIS monorepo)
+## Install
 
 ```bash
-# from repo root
-bun install
-cd packages/cli && bun install && cd ../..
+# npm (global)
+npm install -g @hoox-sh/axis-cli
+axis --help
 
-# run
+# from the AXIS monorepo
+bun install
+cd packages/cli && bun install && bun run build && cd ../..
 bun packages/cli/bin/axis.js --help
-# or after link:
-cd packages/cli && bun link && axis --help
 ```
 
 Root package scripts:
@@ -23,6 +23,8 @@ Root package scripts:
 bun run axis --help
 bun run axis:doctor
 ```
+
+Global flags: `--json`, `--quiet`, `-y/--yes`. `--json` is machine-only (no banners mixed into stdout).
 
 ## Commands
 
@@ -45,8 +47,6 @@ bun run axis:doctor
 | `axis whoami` | Cloudflare account |
 | `axis dev` / `axis dev worker` / `axis dev desktop` | Local servers |
 
-Global flags: `--json`, `--quiet`, `-y/--yes`.
-
 ## Typical production flow
 
 ```bash
@@ -59,6 +59,8 @@ axis deploy worker
 axis health --oauth
 ```
 
+`axis setup --remote-d1` applies the D1 schema **locally and remotely**. `axis setup d1 --remote` is remote-only; pass both `--local --remote` to apply both.
+
 Env overrides:
 
 | Variable | Role |
@@ -66,7 +68,7 @@ Env overrides:
 | `AXIS_ROOT` | Force monorepo root |
 | `AXIS_WORKER_URL` | Default health/deploy probe URL |
 | `CLOUDFLARE_API_TOKEN` | Wrangler auth (non-interactive) |
-| `AXIS_CLI_SRC=1` | Force bin to load `src/` over `dist/` |
+| `AXIS_CLI_SRC=1` | Force bin to load `src/` over `dist/` (Bun only) |
 
 ## License
 

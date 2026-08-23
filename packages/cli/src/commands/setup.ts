@@ -85,12 +85,10 @@ async function setupD1(
     );
   }
 
-  const doLocal = flags.local || (!flags.local && !flags.remote);
-  const doRemote = Boolean(flags.remote);
-  // default: local only unless --remote or --all
+  const { applyLocal, applyRemote } = d1ApplyPlan(flags);
   let applied: "local" | "remote" | "both" | false = false;
 
-  if (doLocal && !flags.remote) {
+  if (applyLocal) {
     printInfo("Applying D1 schema (local)…", opts.quiet);
     await runWrangler(
       paths.worker,
@@ -101,7 +99,7 @@ async function setupD1(
     printOk("Local D1 schema applied", opts.quiet);
   }
 
-  if (doRemote) {
+  if (applyRemote) {
     printInfo("Applying D1 schema (remote)…", opts.quiet);
     await runWrangler(
       paths.worker,
@@ -112,12 +110,17 @@ async function setupD1(
     printOk("Remote D1 schema applied", opts.quiet);
   }
 
-  // --all applies both
-  if (flags.local && flags.remote) {
-    /* already handled */
-  }
-
   return applied;
+}
+
+/** Default is local-only; `--remote` alone is remote-only; both flags apply both. */
+export function d1ApplyPlan(flags: {
+  local?: boolean;
+  remote?: boolean;
+}): { applyLocal: boolean; applyRemote: boolean } {
+  const applyRemote = Boolean(flags.remote);
+  const applyLocal = Boolean(flags.local) || !applyRemote;
+  return { applyLocal, applyRemote };
 }
 
 async function setupOAuth(

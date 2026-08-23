@@ -37,7 +37,9 @@ bun run desktop:build       # package installers under src-tauri/target/release/
 Operator entry for install, diagnostics, Worker bootstrap (D1 / OAuth), secrets, deploy, and health.
 
 ```bash
-cd packages/cli && bun install && cd ../..
+npm install -g @hoox-sh/axis-cli   # Node ≥ 20; Bun ≥ 1.2 for install/dev/build
+
+cd packages/cli && bun install && bun run build && cd ../..
 bun run axis --help
 
 bun run axis:install                          # app + worker + CLI deps

@@ -6,6 +6,7 @@
  */
 
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { Command } from "commander";
 import { getPaths } from "../utils/paths.js";
 import { runWrangler, which } from "../utils/run.js";
@@ -136,7 +137,9 @@ export async function collectDoctorChecks(options: {
     const r = await runWrangler(paths.worker, ["whoami"], {
       throwOnError: false,
     });
-    cfOk = r.code === 0 && /logged in/i.test(r.stdout + r.stderr);
+    const out = `${r.stdout}\n${r.stderr}`;
+    cfOk =
+      r.code === 0 && !/not (logged in|authenticated)/i.test(out);
     cfDetail = cfOk
       ? "authenticated"
       : "not logged in — CLOUDFLARE_API_TOKEN or wrangler login";
@@ -176,8 +179,8 @@ export async function collectDoctorChecks(options: {
   });
 
   // pyne sibling hint
-  const pyneSiblings = ["../pynescript", "../pyne"].map((p) =>
-    `${paths.root}/${p}`
+  const pyneSiblings = ["pynescript", "pyne"].map((name) =>
+    join(paths.root, "..", name)
   );
   const pyneFound = pyneSiblings.find((p) => existsSync(p));
   checks.push({

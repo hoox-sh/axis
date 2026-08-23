@@ -123,6 +123,7 @@ export async function secretDelete(
   printHeader(`AXIS secret delete ${key}`, opts.quiet);
   await runWrangler(worker, ["secret", "delete", key], {
     inherit: !opts.quiet,
+    input: opts.yes ? "y\n" : undefined,
   });
   printOk(`Secret ${key} deleted`, opts.quiet);
   if (opts.json) printJson({ ok: true, deleted: key });
