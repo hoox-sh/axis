@@ -874,7 +874,7 @@ export const Topbar: Component<{
           class="sr-only"
           tabindex={-1}
           data-testid="axis-btn-plugins"
-          aria-hidden="true"
+          aria-label="Open Plugins"
           onClick={() => props.onOpenPlugins?.()}
         />
 

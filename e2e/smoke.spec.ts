@@ -76,7 +76,10 @@ test.describe('AXIS smoke @smoke', () => {
 
   test('opens and closes plugin Manager', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('axis-btn-plugins').click({ force: true });
+    // Plugins is a studio catalog page (topbar hook is sr-only). Open via Runtime rail.
+    await page.getByTestId('axis-btn-runtimes').click();
+    await expect(page.getByTestId('axis-runtimes-hub')).toBeVisible();
+    await page.getByRole('button', { name: 'Plugins', exact: true }).click();
     await expect(page.getByTestId('axis-manager')).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Catalog' })).toBeVisible();
     await page.getByTestId('axis-plugins-close').click();
@@ -96,7 +99,12 @@ test.describe('AXIS smoke @smoke', () => {
     await page.getByTestId('axis-btn-architecture').click();
     await expect(page.getByTestId('axis-architecture-modal')).toBeVisible();
     await page.getByTestId('axis-arch-preset-offline-lab').click();
-    await expect(page.getByTestId('axis-architecture-title')).toContainText('Offline Lab');
+    // Drift titles like "Offline Lab +2" mean the live wiring, not the recipe.
+    await expect(page.getByTestId('axis-architecture-title')).toHaveText('Wire · Offline Lab');
+    await expect(page.getByTestId('axis-arch-preset-offline-lab')).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
     await page.getByTestId('axis-architecture-apply').click();
     await expect(page.getByTestId('axis-architecture-modal')).toHaveCount(0);
     await expect(page.getByTestId('axis-select-source')).toHaveValue('mock-walk');

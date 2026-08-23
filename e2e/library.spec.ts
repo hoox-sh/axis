@@ -15,7 +15,9 @@ import { test, expect } from '@playwright/test';
 test.describe('Script library @critical', () => {
   test('Manager Script Library tab shows storage picker', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('axis-btn-plugins').click({ force: true });
+    await page.getByTestId('axis-btn-runtimes').click();
+    await expect(page.getByTestId('axis-runtimes-hub')).toBeVisible();
+    await page.getByRole('button', { name: 'Plugins', exact: true }).click();
     await expect(page.getByTestId('axis-manager')).toBeVisible();
     await page.getByRole('tab', { name: 'Script Library' }).click();
     await expect(page.getByText(/Storage backend/i)).toBeVisible();
@@ -25,7 +27,9 @@ test.describe('Script library @critical', () => {
 
   test('Catalog Use activates mock-walk source', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('axis-btn-plugins').click({ force: true });
+    await page.getByTestId('axis-btn-runtimes').click();
+    await expect(page.getByTestId('axis-runtimes-hub')).toBeVisible();
+    await page.getByRole('button', { name: 'Plugins', exact: true }).click();
     await page.getByRole('tab', { name: 'Catalog' }).click();
     // Filter sources if buttons present
     const sourcesFilter = page.getByRole('button', { name: 'Sources' });

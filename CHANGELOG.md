@@ -19,6 +19,8 @@ _Generated/updated: 2026-08-23 · 273 commits · describe-tag: `v2.0.22`_
 
 - **`plot(..., display=)` was ignored at apply time** — editor already knew `display.data_window` / `none` / `pane` / `price_scale` / `status_line` / `all`, but every series still painted on the pane and in the Data Window. AXIS now reads `plot_meta.display` (token or Pine bitfield): `none` hides everywhere, `data_window` keeps Data Window and skips the chart, `price_scale` / `status_line` gate last-value labels. PYNE packs `display=` on plot/hline/shape/fill/bgcolor.
 
+- **E2E smoke vs studio pages** — Plugins is opened from the Runtime rail (topbar hook is sr-only). Wire Apply waits for an exact `Wire · Offline Lab` title so a drifted `Offline Lab +N` plan is not applied as Live Crypto.
+
 ## [2.0.23] — 2026-08-23
 
 ### Changed
