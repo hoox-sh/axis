@@ -422,6 +422,16 @@ export function normalizeYloc(raw: unknown, fallback = 'price'): string {
   return fallback;
 }
 
+/** Pixel Y delta so above/below-bar labels sit off the wick (SVG Y down). */
+export const YLOC_PAD_PX = 8;
+
+export function ylocPixelOffset(yloc: string | undefined | null): number {
+  const y = (yloc || 'price').toLowerCase().replace(/^yloc\./, '');
+  if (y === 'abovebar') return -YLOC_PAD_PX;
+  if (y === 'belowbar') return YLOC_PAD_PX;
+  return 0;
+}
+
 /**
  * Map Pine label `size.*` / `text_size` / numeric points → SVG font-size (px).
  * Defaults to 10 (matches prior bubble paint).

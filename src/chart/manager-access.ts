@@ -261,10 +261,23 @@ export function ensureScriptPaneLayer(paneId: string): DrawingLayer | undefined 
     const layer = new DrawingLayer(el, pane.chart, series as never, {
       scriptOnly: true,
     });
+    layer.setHideDrawings(!!store.drawingUi?.hideDrawings);
     scriptPaneLayers.set(paneId, layer);
     return layer;
   } catch {
     return undefined;
+  }
+}
+
+/** Hide/show user + Pine drawings on the price layer and every script pane. */
+export function setHideDrawingsAll(on: boolean) {
+  getDrawingLayer()?.setHideDrawings(on);
+  for (const layer of scriptPaneLayers.values()) {
+    try {
+      layer.setHideDrawings(on);
+    } catch {
+      /* disposed */
+    }
   }
 }
 

@@ -53,6 +53,7 @@ import {
   garbageCollectScriptDrawings,
   labelBubbleLayout,
   labelFontSizePx,
+  ylocPixelOffset,
   normalizeScriptDrawings,
   scriptPaintClampsToLastBar,
   type DrawingLimits,
@@ -204,7 +205,7 @@ export class DrawingLayer {
   private stayInMode = false;
   /** Blocks all drag/resize and delete when true. */
   private lockAll = false;
-  /** Skip painting non-selected user drawings (selected still shown). */
+  /** Skip painting user (except selection), Pine script drawings, and fills. */
   private hideDrawings = false;
   private stylePrefs: StylePrefs = {
     color: DRAWING_COLORS.default,
@@ -345,11 +346,31 @@ export class DrawingLayer {
     this.lockAll = on;
   }
 
-  /** Hide non-selected user drawings; re-paints the user group immediately. */
+  /**
+   * Hide user drawings (except the selection) and Pine script drawings / fills.
+   * Re-paints all SVG groups immediately.
+   */
   setHideDrawings(on: boolean) {
     if (this.hideDrawings === on) return;
     this.hideDrawings = on;
     this.redrawUser();
+    this.redrawScript();
+    this.redrawFills();
+  }
+
+  /**
+   * Move owner-scoped script drawings from `fromId` → `toId` (first Add
+   * Indicator: `EDITOR_RUN_KEY` → real script id). Same geometry, no flicker.
+   */
+  reownScriptDrawings(fromId: string, toId: string) {
+    reownOwnerMap(this.scriptDrawingsByOwner, fromId, toId);
+    this.rebuildOwnedScriptDrawings();
+  }
+
+  /** Same as {@link reownScriptDrawings} for `fill()` bands. */
+  reownPlotFills(fromId: string, toId: string) {
+    reownOwnerMap(this.plotFillsByOwner, fromId, toId);
+    this.rebuildOwnedPlotFills();
   }
 
   /** Merge defaults used by {@link applyCreateStyle} on next placement. */
@@ -1515,7 +1536,7 @@ export class DrawingLayer {
   }
 
   private redrawFillsInner() {
-    if (!this.plotFills.length) {
+    if (this.hideDrawings || !this.plotFills.length) {
       this.gFill.replaceChildren();
       return;
     }
@@ -1531,7 +1552,7 @@ export class DrawingLayer {
   }
 
   private redrawScriptInner() {
-    if (!this.scriptDrawings.length) {
+    if (this.hideDrawings || !this.scriptDrawings.length) {
       this.gScript.replaceChildren();
       return;
     }
@@ -1866,10 +1887,18 @@ export class DrawingLayer {
       if (!Number.isFinite(price)) return;
       const c = this.toXYScript({ time: d.t1, price }, d.type);
       if (!c) return;
+      c.y += ylocPixelOffset(yloc);
       const text = sanitizeDrawingText(d.text ?? '');
       const fontPx = labelFontSizePx(d.size, 10);
       const style = (d.style || 'label_center').toLowerCase();
       const textFill = sanitizeStrokeColor(d.textcolor || '#0a0b10', '#0a0b10');
+      // Pine `label.style_text_outline`: outlined text at the anchor (no bubble).
+      if (style === 'text_outline') {
+        if (text) {
+          label(g, c.x, c.y + fontPx * 0.35, text, textFill, fontPx, 'middle', true);
+        }
+        return;
+      }
       // Non-bubble icon styles (xcross, arrow, …): marker + optional text beside
       if (
         style === 'none' ||
@@ -1882,8 +1911,7 @@ export class DrawingLayer {
         style === 'arrowup' ||
         style === 'arrowdown' ||
         style === 'square' ||
-        style === 'diamond' ||
-        style === 'text_outline'
+        style === 'diamond'
       ) {
         this.paintScriptLabelMarker(g, c.x, c.y, style, stroke, pe);
         if (text) {
@@ -2503,9 +2531,10 @@ function label(
   fill: string,
   size = 11,
   anchor: 'start' | 'end' | 'middle' = 'start',
+  outline = false,
 ) {
   if (!isFiniteNum(x) || !isFiniteNum(y)) return;
-  const t = el(g, 'text', {
+  const attrs: Record<string, string> = {
     x: String(x),
     y: String(y),
     fill: sanitizeStrokeColor(fill),
@@ -2513,8 +2542,27 @@ function label(
     'font-family': 'ui-monospace, SFMono-Regular, Menlo, monospace',
     'text-anchor': anchor,
     'pointer-events': 'none',
-  });
+  };
+  if (outline) {
+    attrs.stroke = '#0a0b10';
+    attrs['stroke-width'] = '3';
+    attrs['stroke-linejoin'] = 'round';
+    attrs['paint-order'] = 'stroke fill';
+  }
+  const t = el(g, 'text', attrs);
   t.textContent = text == null ? '' : String(text);
+}
+
+/** Move a list Map bucket from `fromId` to `toId` (concat if both exist). */
+function reownOwnerMap<T>(map: Map<string, T[]>, fromId: string, toId: string) {
+  const from = fromId && String(fromId).trim();
+  const to = toId && String(toId).trim();
+  if (!from || !to || from === to) return;
+  const list = map.get(from);
+  if (!list) return;
+  map.delete(from);
+  const existing = map.get(to);
+  map.set(to, existing ? existing.concat(list) : list);
 }
 
 function shiftPoint(p: Point, dTime: number, dPrice: number): Point {

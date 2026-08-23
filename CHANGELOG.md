@@ -33,6 +33,8 @@ _Generated/updated: 2026-08-23 · 269 commits · describe-tag: `v2.0.21`_
 
 - **Drawing tool settings** — Fill slider covers channel, triangle, gann boxes, ranges, highlighter; highlighter stroke no longer multiplies width ×6; horizontal ray places on one click; XABCD / head-and-shoulders commit on the 5th point.
 
+- **Hide drawings hid only user tools** — the eye toggle now also clears Pine script SVG and `fill()` bands (every pane layer). `label.style_text_outline` paints outlined text; `yloc.abovebar` / `belowbar` sit 8px off the wick. First Add Indicator re-owns plotshape / fills / script drawings from `__editor__` to the script id. Histogram overlays honor `plot_meta.histbase` when the engine sends it.
+
 ## [2.0.22] — 2026-08-23
 
 ### Added

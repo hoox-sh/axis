@@ -603,6 +603,39 @@ describe('PaneManager', () => {
     expect(internal.shapePaneByOwner.get('price_script')).toBe('price');
   });
 
+  it('reownShapeMarkers moves editor preview onto the script id', () => {
+    const price = pm.createPane('price', 'price', 'Price');
+    price.series['candle'] = {
+      setData: () => {},
+      applyOptions: () => {},
+      priceScale: () => ({ applyOptions: () => {} }),
+      seriesOrder: () => 1,
+      setSeriesOrder: () => {},
+    } as never;
+    pm.setShapeMarkers(
+      [
+        {
+          time: 1000,
+          position: 'aboveBar',
+          color: '#f00',
+          shape: 'circle',
+          text: 'S',
+          id: 's1',
+        },
+      ],
+      '__editor__',
+      'price',
+    );
+    pm.reownShapeMarkers('__editor__', 'ind_1');
+    const internal = pm as unknown as {
+      shapePaneByOwner: Map<string, string>;
+      shapeMarkersByOwner: Map<string, unknown[]>;
+    };
+    expect(internal.shapeMarkersByOwner.has('__editor__')).toBe(false);
+    expect(internal.shapeMarkersByOwner.get('ind_1')?.length).toBe(1);
+    expect(internal.shapePaneByOwner.get('ind_1')).toBe('price');
+  });
+
   it('setDebugPinMarkers merges with trade/shape and clear is independent', () => {
     const p = pm.createPane('price', 'price', 'Price');
     p.series['candle'] = {

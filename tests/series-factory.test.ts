@@ -135,6 +135,18 @@ describe('series-factory', () => {
     expect((optsLog[1] as { base: number }).base).toBe(0);
   });
 
+  it('createPlotOverlaySeries: histogram honors histbase', () => {
+    const chart = makeFakeChart();
+    const optsLog: unknown[] = [];
+    const orig = chart.addSeries.bind(chart);
+    chart.addSeries = ((type: unknown, opts?: unknown, paneIndex?: number) => {
+      optsLog.push(opts);
+      return orig(type, opts, paneIndex);
+    }) as typeof chart.addSeries;
+    createPlotOverlaySeries(chart as never, 'h', '#0f0', 'histogram', 2, undefined, null, 50);
+    expect((optsLog[0] as { base: number }).base).toBe(50);
+  });
+
   it('createPlotOverlaySeries: cross hides line; stepline_diamond enables markers', () => {
     const chart = makeFakeChart();
     const applied: unknown[] = [];

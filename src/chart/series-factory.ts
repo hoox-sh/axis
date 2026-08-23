@@ -602,7 +602,7 @@ function pineLineStyleToLwc(linestyle?: string | null): LineStyle {
 /**
  * Pine plot overlay series for a {@link PlotSeriesKind}.
  * - line / stepline / stepline_diamond / circles / cross → Line
- * - histogram / columns → Histogram (both base 0; LWC has no column-width API)
+ * - histogram / columns → Histogram (base = histbase, default 0; LWC has no column-width API)
  * - area → Area
  *
  * Optional `linestyle` (`plot.linestyle_dashed` / `dotted` / `solid`) sets
@@ -611,7 +611,7 @@ function pineLineStyleToLwc(linestyle?: string | null): LineStyle {
  *
  * **Presentation notes (LWC limits):**
  * - `columns` vs `histogram`: same bar geometry; kind kept distinct for
- *   recreate-on-style-change and docs. Both use `base: 0`.
+ *   recreate-on-style-change and docs. Both use `base` from `histbase` (default 0).
  * - `cross`: connector hidden (`lineVisible: false`) + larger point markers
  *   (LWC point markers are always circles — no native + glyph on Line).
  * - `stepline_diamond`: WithSteps + point markers at vertices (diamond ≈ circle).
@@ -624,18 +624,20 @@ export function createPlotOverlaySeries(
   lineWidth: number = 2,
   paneIndex?: number,
   linestyle?: string | null,
+  histbase?: number | null,
 ): ISeriesApi<'Line'> | ISeriesApi<'Histogram'> | ISeriesApi<'Area'> {
   const lw = Math.max(1, Math.min(4, Math.round(lineWidth || 2))) as LineWidth;
   const lwcStyle = pineLineStyleToLwc(linestyle);
   if (isHistogramSeriesKind(seriesKind)) {
     // LWC HistogramStyleOptions = { color, base } only — no gap/width.
-    // columns and histogram share geometry; base 0 matches Pine zero-origin bars.
+    // columns and histogram share geometry; histbase defaults to Pine 0.
+    const base = Number.isFinite(Number(histbase)) ? Number(histbase) : 0;
     const opts = {
       color,
       priceLineVisible: false,
       lastValueVisible: true,
       title: name,
-      base: 0,
+      base,
     };
     return paneIndex !== undefined
       ? chart.addSeries(HistogramSeries, opts, paneIndex)

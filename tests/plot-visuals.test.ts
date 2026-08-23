@@ -368,6 +368,7 @@ describe('buildPlotVisuals style / linestyle forward', () => {
         kind: 'plot' as const,
         color: '#34d399',
         style: 'plot.style_columns',
+        histbase: 50,
       },
     };
     const visuals = buildPlotVisuals(series, meta, times);
@@ -377,6 +378,7 @@ describe('buildPlotVisuals style / linestyle forward', () => {
     expect(byName['macd']!.linestyle).toBe('line.style_dashed');
     expect(byName['macd']!.linewidth).toBe(2);
     expect(byName['hist']!.style).toBe('plot.style_columns');
+    expect(byName['hist']!.histbase).toBe(50);
     expect(mapPlotStyleToSeriesKind(byName['macd']!.style)).toBe('stepline');
     expect(mapPlotStyleToSeriesKind(byName['hist']!.style)).toBe('columns');
     expect(isHistogramSeriesKind(mapPlotStyleToSeriesKind(byName['hist']!.style))).toBe(true);

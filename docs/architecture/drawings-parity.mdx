@@ -57,11 +57,17 @@ AXIS cannot paint fields the engine never serializes.
 
 ### P3 — Remaining Pine paint
 
-- `location.top` / `bottom` = pane edges, not bar.
-- Histogram `histbase`, per-bar `plot(..., color=expr)`, plotarrow length.
-- Label `yloc` pad; `label.style_text_outline` as outlined text.
-- Hide-drawings toggle includes script group (or a separate toggle).
-- First `addIndicator` re-own plot fills / script drawings (`EDITOR_RUN_KEY` → script id).
+Done this pass:
+
+- Hide-drawings toggle includes script SVG + fill bands (all pane layers).
+- Label `yloc` pad (8px off wick); `label.style_text_outline` as outlined text.
+- First `addIndicator` re-owns plot fills / script drawings / plotshape (`EDITOR_RUN_KEY` → script id).
+- Histogram `histbase` from `plot_meta` (default 0). PYNE still needs to serialize it for live values.
+
+Still open:
+
+- `location.top` / `bottom` = pane edges, not bar (LWC markers only have above/below/in bar).
+- Per-bar `plot(..., color=expr)`, plotarrow length (`colorup`/`colordown`/`minheight`/`maxheight` wait on PYNE).
 
 ## Invariants
 

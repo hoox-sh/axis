@@ -1080,6 +1080,7 @@ async function runAndApplyInner(
     price?: number;
     linestyle?: string;
     style?: string | null;
+    histbase?: number;
   }> = [];
   // Prefer named `series` + `meta.plot_meta` (PYNE modern). Top-level `plots[]`
   // is often an all-null pad of bar length — never let that block named lines.
@@ -1127,6 +1128,10 @@ async function runAndApplyInner(
         price,
         linestyle: meta?.linestyle ? String(meta.linestyle) : undefined,
         style: meta?.style != null ? String(meta.style) : null,
+        histbase:
+          meta?.histbase != null && Number.isFinite(Number(meta.histbase))
+            ? Number(meta.histbase)
+            : undefined,
       });
     }
   } else if (Array.isArray(result.plots) && result.plots.length) {
@@ -1650,7 +1655,24 @@ async function runAndApplyInner(
               .filter((b) => b.data.length > 0);
             mgr.syncBgcolorBands(bgBands, { ownerId: newId });
           }
-          // Trade markers were set under EDITOR_RUN_KEY in the apply block
+          // Trade markers / plotshape / Pine SVG were set under EDITOR_RUN_KEY
+          try {
+            mgr.reownShapeMarkers?.(EDITOR_RUN_KEY, newId);
+          } catch {
+            /* shape markers optional */
+          }
+          try {
+            const priceLayer = getDrawingLayer() ?? getActiveDrawingLayer();
+            priceLayer?.reownScriptDrawings?.(EDITOR_RUN_KEY, newId);
+            priceLayer?.reownPlotFills?.(EDITOR_RUN_KEY, newId);
+            if (!overlay && paneId !== 'price') {
+              const paneLayer = ensureScriptPaneLayer(paneId);
+              paneLayer?.reownScriptDrawings?.(EDITOR_RUN_KEY, newId);
+              paneLayer?.reownPlotFills?.(EDITOR_RUN_KEY, newId);
+            }
+          } catch {
+            /* drawing layer optional */
+          }
           try {
             mgr.clearTradeMarkers?.(EDITOR_RUN_KEY);
             const ev = result.events || [];

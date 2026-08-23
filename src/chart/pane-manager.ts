@@ -109,6 +109,8 @@ export type OverlayLineSpec = {
   linestyle?: string;
   /** Pine `plot.style_*` — maps to LWC line / stepline / hist|columns / area / circles|cross */
   style?: string | null;
+  /** Pine `plot(..., histbase=)` — histogram / columns baseline (default 0). */
+  histbase?: number | null;
 };
 
 /** Overlay OHLC from Pine `plotbar` / `plotcandle` (runner → LWC Bar/Candlestick). */
@@ -1172,6 +1174,26 @@ export class PaneManager {
       this.shapeMarkersByOwner.clear();
       this.shapePaneByOwner.clear();
     }
+    this.rebuildShapeMarkerList();
+    this.applyAllShapeMarkers();
+  }
+
+  /**
+   * Move plotshape markers from `fromId` → `toId` (first Add Indicator:
+   * `__editor__` → real script id). Pane routing is copied with the bucket.
+   */
+  reownShapeMarkers(fromId: string, toId: string) {
+    const from = fromId && String(fromId).trim();
+    const to = toId && String(toId).trim();
+    if (!from || !to || from === to) return;
+    const list = this.shapeMarkersByOwner.get(from);
+    if (!list) return;
+    this.shapeMarkersByOwner.delete(from);
+    const pane = this.shapePaneByOwner.get(from) || 'price';
+    this.shapePaneByOwner.delete(from);
+    const existing = this.shapeMarkersByOwner.get(to);
+    this.shapeMarkersByOwner.set(to, existing ? existing.concat(list) : list);
+    this.shapePaneByOwner.set(to, pane);
     this.rebuildShapeMarkerList();
     this.applyAllShapeMarkers();
   }
@@ -2380,6 +2402,12 @@ export class PaneManager {
           if (!histFamily && line.linestyle) {
             opts.lineStyle = mapLineStyle(line.linestyle);
           }
+          if (histFamily) {
+            opts.base =
+              line.histbase != null && Number.isFinite(Number(line.histbase))
+                ? Number(line.histbase)
+                : 0;
+          }
           Object.assign(opts, this.breakStyleSeriesOptions(breakStyle, seriesKind, line.color));
           seriesNow.applyOptions(opts);
         } catch {
@@ -2397,6 +2425,7 @@ export class PaneManager {
             lw ?? 2,
             undefined,
             line.linestyle,
+            line.histbase,
           );
           try {
             series.applyOptions({

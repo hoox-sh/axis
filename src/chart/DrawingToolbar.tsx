@@ -50,7 +50,7 @@ import type { DrawingToolId, DrawingLineStyle } from './drawing-types';
 import { toolLabel, resolveDrawingStyle, DRAWING_COLORS } from './drawing-types';
 import { Icons } from '../ui/icons';
 import { getActiveDrawingLayer } from './drawing-layer';
-import { visibleDrawingsForActiveSymbol } from './manager-access';
+import { visibleDrawingsForActiveSymbol, setHideDrawingsAll } from './manager-access';
 import {
   TOOL_GROUPS,
   defaultToolForGroup,
@@ -160,13 +160,13 @@ const GROUP_ICONS: Partial<Record<ToolGroupId, typeof Icons.cursor>> = {
  * Called from the reactive effect and after tool selection.
  */
 function syncLayerFromStore() {
+  setHideDrawingsAll(store.drawingUi.hideDrawings);
   const layer = getActiveDrawingLayer();
   if (!layer) return;
   // Prefer setters that no-op when unchanged (hideDrawings already does).
   layer.setMagnet(store.drawingUi.magnet);
   layer.setStayInMode(store.drawingUi.stayInMode);
   layer.setLockAll(store.drawingUi.lockAll);
-  layer.setHideDrawings(store.drawingUi.hideDrawings);
   layer.setStylePrefs({
     color: store.drawingPrefs.color,
     width: store.drawingPrefs.width,
@@ -469,13 +469,13 @@ export const DrawingToolbar: Component = () => {
         <button
           type="button"
           class={`${btnClass} ${store.drawingUi.hideDrawings ? 'text-accent' : 'text-text-dim'}`}
-          title="Hide drawings (selected still visible)"
+          title="Hide drawings (user + Pine; selected user drawings still visible)"
           aria-pressed={store.drawingUi.hideDrawings}
           aria-label={store.drawingUi.hideDrawings ? 'Show drawings' : 'Hide drawings'}
           onClick={() => {
             const next = !store.drawingUi.hideDrawings;
             setDrawingUi({ hideDrawings: next });
-            getActiveDrawingLayer()?.setHideDrawings(next);
+            setHideDrawingsAll(next);
           }}
         >
           {store.drawingUi.hideDrawings ? (

@@ -75,6 +75,8 @@ export interface PlotMetaEntry {
   high?: string | null;
   low?: string | null;
   close?: string | null;
+  /** Pine `plot(..., histbase=)` — histogram / columns baseline (default 0). */
+  histbase?: number | null;
 }
 
 export type SeriesMap = Record<string, unknown[] | (number | null)[]>;
@@ -89,6 +91,8 @@ export interface LineOverlaySpec {
   style?: string | null;
   linewidth?: number;
   linestyle?: string | null;
+  /** Pine `plot(..., histbase=)` — histogram / columns baseline (default 0). */
+  histbase?: number | null;
 }
 
 export interface BgcolorBandSpec {
@@ -979,6 +983,7 @@ export function buildPlotVisuals(
       style: meta.style ?? null,
       linewidth: meta.linewidth,
       linestyle: meta.linestyle ?? null,
+      histbase: meta.histbase ?? null,
     });
   }
 

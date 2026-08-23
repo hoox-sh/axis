@@ -23,6 +23,7 @@ import {
   normalizeLineStyle,
   normalizeScriptDrawings,
   normalizeYloc,
+  ylocPixelOffset,
   parseDrawingLimitsFromScript,
   resolveDrawingLimits,
   type ScriptDrawing,
@@ -495,6 +496,7 @@ describe('normalizeLabelStyle / normalizeYloc / label layout', () => {
     expect(normalizeLabelStyle('up')).toBe('label_up');
     expect(normalizeLabelStyle('center')).toBe('label_center');
     expect(normalizeLabelStyle('label.style_xcross')).toBe('xcross');
+    expect(normalizeLabelStyle('label.style_text_outline')).toBe('text_outline');
     expect(normalizeLabelStyle(null)).toBe('label_center');
     expect(normalizeLabelStyle('label.style_label_upper_left')).toBe('label_upper_left');
   });
@@ -505,6 +507,13 @@ describe('normalizeLabelStyle / normalizeYloc / label layout', () => {
     expect(normalizeYloc('belowbar')).toBe('belowbar');
     expect(normalizeYloc('nope')).toBe('price');
     expect(normalizeYloc(undefined)).toBe('price');
+  });
+
+  it('ylocPixelOffset pads above/below bar off the wick', () => {
+    expect(ylocPixelOffset('abovebar')).toBe(-8);
+    expect(ylocPixelOffset('yloc.belowbar')).toBe(8);
+    expect(ylocPixelOffset('price')).toBe(0);
+    expect(ylocPixelOffset(null)).toBe(0);
   });
 
   it('maps size tokens to font px', () => {
