@@ -19,7 +19,8 @@ import {
   toolLabel,
   type DrawingToolId,
 } from '../src/chart/drawing-types.ts';
-import { fibPrices as computeFib } from '../src/chart/drawing-layer.ts';
+import { fibPrices as computeFib, shiftDrawing } from '../src/chart/drawing-layer.ts';
+import type { Drawing } from '../src/chart/drawing-types.ts';
 import {
   getToolHandler,
   listToolHandlers,
@@ -131,6 +132,40 @@ describe('drawing tools helpers', () => {
     expect(all).toContain('pitchfork');
     expect(all).toContain('highlighter');
     expect(all).toContain('callout');
+  });
+
+  it('shiftDrawing moves 1-pt kinds that only have p1 (note / flag / crossline)', () => {
+    for (const kind of ['note', 'flag', 'crossline', 'anchoredText', 'arrowMarkUp'] as const) {
+      const d = {
+        id: 'x',
+        kind,
+        p1: { time: 100, price: 10 },
+        color: '#939fff',
+      } as Drawing;
+      const next = shiftDrawing(d, 5, -2);
+      expect(next.p1).toEqual({ time: 105, price: 8 });
+    }
+  });
+
+  it('shiftDrawing moves all polyline vertices', () => {
+    const d = {
+      id: 'p',
+      kind: 'polyline',
+      points: [
+        { time: 1, price: 1 },
+        { time: 2, price: 2 },
+        { time: 3, price: 3 },
+      ],
+      p1: { time: 1, price: 1 },
+      p2: { time: 2, price: 2 },
+      color: '#939fff',
+    } as Drawing;
+    const next = shiftDrawing(d, 10, 1);
+    expect(next.points).toEqual([
+      { time: 11, price: 2 },
+      { time: 12, price: 3 },
+      { time: 13, price: 4 },
+    ]);
   });
 
   it('fibPrices from high to low (retracement)', () => {

@@ -1250,22 +1250,28 @@ async function runAndApplyInner(
         /* badges optional */
       }
 
-      // bgcolor → histogram underlay on price pane (always price; not indicator sub-pane)
+      // bgcolor → histogram underlay on the script pane (price when overlay)
       const bgBands = split.bgcolors
         .map(({ key, values, meta }) => ({
           name: key,
           data: bgcolorSeriesToHistogramData(ohlcvTimes, values, meta.color),
         }))
         .filter((b) => b.data.length > 0);
-      manager.syncBgcolorBands(bgBands, overlayOwner);
+      manager.syncBgcolorBands(bgBands, {
+        ...overlayOwner,
+        paneId: overlay ? 'price' : paneId,
+      });
       if (bgBands.length && !silent) {
         appendLog('ok', `bgcolor: ${bgBands.length} band series`, 'plot');
       }
 
-      // fill(plot1, plot2, color=…) → SVG band between plot edges on price pane
+      // fill(plot1, plot2, color=…) → SVG band on the script pane (price when overlay)
       const fillBands = resolvePlotFillBands(result.series || {}, plotMeta);
       try {
-        const layer = getActiveDrawingLayer();
+        const layer =
+          !overlay && paneId !== 'price'
+            ? ensureScriptPaneLayer(paneId) ?? getActiveDrawingLayer()
+            : getActiveDrawingLayer();
         if (layer?.setPlotFills) {
           if (fillBands.length) {
             const times: number[] = new Array(ohlcvTimes.length);
@@ -1532,8 +1538,9 @@ async function runAndApplyInner(
             );
           }
         }
-      } else if (!silent) {
-        // Only clear on interactive full runs when engine returned none
+      } else if (!silent || Array.isArray(drawings)) {
+        // Empty `drawings: []` must clear even on silent live re-runs.
+        // Omit-the-field (`undefined`) still skips clear when silent.
         priceLayer?.clearScriptDrawings(indicatorId ?? EDITOR_RUN_KEY);
         if (!overlay && paneId !== 'price') {
           try {

@@ -137,6 +137,8 @@ export type OverlayOwnerOpts = {
    * shared indicator pane.
    */
   ownerId?: string;
+  /** Target pane for bgcolor / similar underlays (default `price`). */
+  paneId?: string;
 };
 
 /** Sanitize owner id for use in LWC series keys. */
@@ -2690,14 +2692,15 @@ export class PaneManager {
   }
 
   /**
-   * Sync Pine bgcolor histogram bands on the price pane (behind candles).
+   * Sync Pine bgcolor histogram bands (behind series).
+   * Default pane is price; pass `opts.paneId` for `overlay=false` indicator panes.
    * Empty list removes this owner’s bgcolor_* series (or all when unowned).
    */
   syncBgcolorBands(
     bands: Array<{ name: string; data: { time: number; value: number; color: string }[] }>,
     opts?: OverlayOwnerOpts,
   ) {
-    const pane = this.panes.get('price');
+    const pane = this.panes.get(opts?.paneId || 'price') ?? this.panes.get('price');
     if (!pane) return;
     const ownerId = opts?.ownerId;
     const ownerPrefix = ownerId ? ownedBgcolorPrefix(ownerId) : null;

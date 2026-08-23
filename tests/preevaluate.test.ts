@@ -338,6 +338,19 @@ strategy.entry("L", strategy.long)
     expect(diags.filter((d) => /typo/i.test(d.message))).toEqual([]);
   });
 
+  it('knows chart.bg_color / chart.fg_color host colors', () => {
+    const src = [
+      '//@version=6',
+      'indicator("c")',
+      'bg = chart.bg_color',
+      'fg = chart.fg_color',
+      'plot(close, color=chart.fg_color)',
+      'bgcolor(chart.color_background)',
+    ].join('\n');
+    const diags = checkUnknownBuiltinMembers(src);
+    expect(diags.filter((d) => /chart\.(bg|fg|color_)/.test(d.message))).toEqual([]);
+  });
+
   it('knows text align/wrap constants', () => {
     const src = [
       'indicator("t")',

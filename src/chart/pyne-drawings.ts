@@ -275,7 +275,7 @@ export function garbageCollectScriptDrawings(
     linefill: Math.max(0, counts.linefill - caps.linefill),
   };
 
-  if (!skip.line && !skip.label && !skip.box && !skip.polyline) {
+  if (!skip.line && !skip.label && !skip.box && !skip.polyline && !skip.linefill) {
     return drawings;
   }
 
@@ -707,11 +707,15 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
         t2: points[points.length - 1]!.time,
         p2: points[points.length - 1]!.price,
         color: sanitizeStrokeColor(r.color, '#939fff'),
-        bgcolor: sanitizeStrokeColor(r.bgcolor, 'rgba(147,159,255,0.06)'),
         width: clampWidth(r.width, 1),
         style: normalizeLineStyle(r.style, 'solid'),
         closed: Boolean(r.closed),
         points,
+        bgcolor: sanitizeStrokeColor(
+          r.fill_color ?? r.fillColor ?? r.bgcolor,
+          'rgba(147,159,255,0.06)',
+        ),
+        forceOverlay: Boolean(r.force_overlay ?? r.forceOverlay),
       });
     } else if (type === 'hline' || type === 'horizontalline' || type === 'horizontal_line') {
       // Compile-mode hline: price-only → full-width horizontal line.
@@ -819,6 +823,7 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
           p4,
           color: fillColor,
           bgcolor: fillColor,
+          forceOverlay: Boolean(r.force_overlay ?? r.forceOverlay),
         });
       }
     }

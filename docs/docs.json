@@ -87,7 +87,8 @@
               "architecture/evaluation",
               "architecture/adrs",
               "architecture/topologies",
-              "architecture/state-namespaces"
+              "architecture/state-namespaces",
+              "architecture/drawings-parity"
             ]
           }
         ]

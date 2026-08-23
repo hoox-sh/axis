@@ -124,7 +124,7 @@ function anchorsTooClose(a: Point, b: Point): boolean {
 }
 
 /** Drag handle mode: whole-body move or endpoint resize (`price` reserved). */
-type DragMode = 'move' | 'p1' | 'p2' | 'price';
+type DragMode = 'move' | 'p1' | 'p2' | 'p3' | 'price';
 
 type DragState = {
   id: string;
@@ -1345,11 +1345,19 @@ export class DrawingLayer {
         if (c && Math.hypot(x - c.x, y - c.y) <= tol) return { id: d.id, mode: 'p1' };
         return null;
       }
-      if ('points' in d && Array.isArray(d.points) && d.points[0] && d.points[1]) {
-        const a = isFinitePoint(d.points[0]) ? this.toXY(d.points[0]) : null;
-        const b = isFinitePoint(d.points[1]) ? this.toXY(d.points[1]) : null;
-        if (a && Math.hypot(x - a.x, y - a.y) <= tol) return { id: d.id, mode: 'p1' };
-        if (b && Math.hypot(x - b.x, y - b.y) <= tol) return { id: d.id, mode: 'p2' };
+      if ('points' in d && Array.isArray(d.points) && d.points.length) {
+        const modes: DragMode[] = ['p1', 'p2', 'p3'];
+        for (let i = 0; i < d.points.length && i < modes.length; i++) {
+          const p = d.points[i];
+          if (!p || !isFinitePoint(p)) continue;
+          const c = this.toXY(p);
+          if (c && Math.hypot(x - c.x, y - c.y) <= tol) return { id: d.id, mode: modes[i]! };
+        }
+        return null;
+      }
+      if ('p1' in d && d.p1 && isFinitePoint(d.p1) && !('p2' in d && d.p2)) {
+        const c = this.toXY(d.p1);
+        if (c && Math.hypot(x - c.x, y - c.y) <= tol) return { id: d.id, mode: 'p1' };
         return null;
       }
       if (!('p1' in d) || !('p2' in d) || !d.p1 || !d.p2) return null;
@@ -2174,6 +2182,14 @@ export class DrawingLayer {
       if (handler?.paint) {
         const ctx = this.makeViewCtx(g, stroke, sw, dash || undefined, st.fillOpacity, selected);
         handler.paint(d, ctx);
+        if (selected && Array.isArray(d.points) && d.points.length > 2) {
+          for (let i = 2; i < d.points.length; i++) {
+            const p = d.points[i];
+            if (!p || !isFinitePoint(p)) continue;
+            const c = this.toXY(p);
+            if (c) circle(g, c.x, c.y, 5, stroke, true);
+          }
+        }
         return;
       }
     }
@@ -2445,13 +2461,11 @@ function resizeDrawing(origin: Drawing, mode: DragMode, pt: Point): Drawing {
   if (origin.kind === 'vline') {
     return { ...origin, time: pt.time };
   }
-  if (origin.kind === 'text' || origin.kind === 'priceLabel') {
-    return { ...origin, p1: { ...pt } } as Drawing;
-  }
   if ('points' in origin && Array.isArray(origin.points) && origin.points.length) {
     const points = origin.points.slice();
     if (mode === 'p1' && points[0]) points[0] = { ...pt };
     else if (mode === 'p2' && points[1]) points[1] = { ...pt };
+    else if (mode === 'p3' && points[2]) points[2] = { ...pt };
     return {
       ...origin,
       points,
@@ -2465,6 +2479,9 @@ function resizeDrawing(origin: Drawing, mode: DragMode, pt: Point): Drawing {
   }
   if (mode === 'p2' && 'p2' in origin) {
     return { ...origin, p2: { ...pt } } as Drawing;
+  }
+  if (mode === 'p3' && 'p3' in origin) {
+    return { ...origin, p3: { ...pt } } as Drawing;
   }
   return origin;
 }
@@ -2491,7 +2508,12 @@ function label(
   t.textContent = text == null ? '' : String(text);
 }
 
-function shiftDrawing(d: Drawing, dTime: number, dPrice: number): Drawing {
+function shiftPoint(p: Point, dTime: number, dPrice: number): Point {
+  return { time: p.time + dTime, price: p.price + dPrice };
+}
+
+/** Body-move: shift every stored anchor (1-pt p1, 2-pt p1/p2, n-pt points[]). */
+export function shiftDrawing(d: Drawing, dTime: number, dPrice: number): Drawing {
   if (!Number.isFinite(dTime) || !Number.isFinite(dPrice)) return d;
   if (d.kind === 'hline') {
     if (!Number.isFinite(d.price)) return d;
@@ -2501,18 +2523,9 @@ function shiftDrawing(d: Drawing, dTime: number, dPrice: number): Drawing {
     if (!Number.isFinite(d.time)) return d;
     return { ...d, time: d.time + dTime };
   }
-  if (d.kind === 'text' || d.kind === 'priceLabel') {
-    if (!d.p1 || !isFinitePoint(d.p1)) return d;
-    return {
-      ...d,
-      p1: { time: d.p1.time + dTime, price: d.p1.price + dPrice },
-    };
-  }
   if ('points' in d && Array.isArray(d.points) && d.points.length) {
     const points = d.points.map((p) =>
-      isFinitePoint(p)
-        ? { time: p.time + dTime, price: p.price + dPrice }
-        : p,
+      isFinitePoint(p) ? shiftPoint(p, dTime, dPrice) : p,
     );
     return {
       ...d,
@@ -2522,15 +2535,21 @@ function shiftDrawing(d: Drawing, dTime: number, dPrice: number): Drawing {
       p3: points[2],
     } as Drawing;
   }
-  if ('p1' in d && 'p2' in d && d.p1 && d.p2) {
-    if (!isFinitePoint(d.p1) || !isFinitePoint(d.p2)) return d;
-    return {
-      ...d,
-      p1: { time: d.p1.time + dTime, price: d.p1.price + dPrice },
-      p2: { time: d.p2.time + dTime, price: d.p2.price + dPrice },
-    } as Drawing;
+  const next = { ...d } as Drawing & { p1?: Point; p2?: Point; p3?: Point };
+  let moved = false;
+  if ('p1' in d && d.p1 && isFinitePoint(d.p1)) {
+    next.p1 = shiftPoint(d.p1, dTime, dPrice);
+    moved = true;
   }
-  return d;
+  if ('p2' in d && d.p2 && isFinitePoint(d.p2)) {
+    next.p2 = shiftPoint(d.p2, dTime, dPrice);
+    moved = true;
+  }
+  if ('p3' in d && d.p3 && isFinitePoint(d.p3 as Point)) {
+    next.p3 = shiftPoint(d.p3 as Point, dTime, dPrice);
+    moved = true;
+  }
+  return moved ? next : d;
 }
 
 /** Triangle arrow head at (x2,y2) pointing from (x1,y1). */

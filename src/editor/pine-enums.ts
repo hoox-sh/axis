@@ -184,6 +184,15 @@ export const PINE_ENUM_PATHS: readonly string[] = [
   'scale.right',
   'scale.left',
   'scale.none',
+
+  // chart.* variables — pyne-builtins.json only ships chart.point.* callables
+  'chart.bg_color',
+  'chart.fg_color',
+  'chart.color_background',
+  'chart.color_foreground',
+  'chart.left_visible_bar_time',
+  'chart.right_visible_bar_time',
+  'chart.is_standard',
 ];
 
 /**
@@ -249,6 +258,13 @@ const ENUM_BLURBS: Record<string, { detail: string; brief: string }> = {
   'line.style_arrow_left': { detail: 'line style', brief: 'Arrow at start' },
   'line.style_arrow_right': { detail: 'line style', brief: 'Arrow at end' },
   'line.style_arrow_both': { detail: 'line style', brief: 'Arrows both ends' },
+  'chart.bg_color': { detail: 'chart color', brief: 'Chart canvas background' },
+  'chart.fg_color': { detail: 'chart color', brief: 'Chart foreground / text' },
+  'chart.color_background': { detail: 'chart color', brief: 'Alias of chart.bg_color' },
+  'chart.color_foreground': { detail: 'chart color', brief: 'Alias of chart.fg_color' },
+  'chart.left_visible_bar_time': { detail: 'chart viewport', brief: 'Leftmost visible bar time' },
+  'chart.right_visible_bar_time': { detail: 'chart viewport', brief: 'Rightmost visible bar time' },
+  'chart.is_standard': { detail: 'chart', brief: 'True when the chart type is standard' },
 };
 
 function defaultBlurb(path: string): { detail: string; brief: string } {

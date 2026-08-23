@@ -221,6 +221,39 @@ describe('normalizeScriptDrawings', () => {
     expect(list[4]!.forceOverlay).toBe(false);
   });
 
+  it('maps force_overlay and fill_color on polyline / linefill', () => {
+    const list = normalizeScriptDrawings([
+      {
+        type: 'polyline',
+        points: [
+          { time: 1, price: 1 },
+          { time: 2, price: 2 },
+        ],
+        fill_color: '#00ff0088',
+        force_overlay: true,
+      },
+      {
+        type: 'linefill',
+        t1: 1,
+        p1: 1,
+        t2: 2,
+        p2: 2,
+        t3: 1,
+        p3: 0,
+        t4: 2,
+        p4: 0.5,
+        color: '#123456',
+        forceOverlay: true,
+      },
+    ]);
+    expect(list).toHaveLength(2);
+    expect(list[0]!.type).toBe('polyline');
+    expect(list[0]!.forceOverlay).toBe(true);
+    expect(list[0]!.bgcolor).toMatch(/00ff00|0f0|#00ff0088/i);
+    expect(list[1]!.type).toBe('linefill');
+    expect(list[1]!.forceOverlay).toBe(true);
+  });
+
   it('linefill edge cases: alias, compile coords, incomplete skip, fill color', () => {
     const list = normalizeScriptDrawings([
       // line_fill alias + x/y quad keys
@@ -640,13 +673,13 @@ label.new(bar_index, high, "x")
       max_polylines_count: 50,
       max_lines_fills_count: 50,
     });
-    // Labels: keep newest only; both linefills pass through (no max_linefills cap).
+    // Labels: keep newest only; both linefills stay under the 50 cap.
     expect(kept.map((d) => d.id)).toEqual(['lf_0', 'lf_1', 'label_2']);
     expect(kept.filter((d) => d.type === 'linefill')).toHaveLength(2);
   });
 
-  it('linefill-only batches are identity under GC', () => {
-    const fills: ScriptDrawing[] = Array.from({ length: 5 }, (_, i) => ({
+  it('linefill-only batches trim oldest when over max_lines_fills_count', () => {
+    const fills: ScriptDrawing[] = Array.from({ length: 60 }, (_, i) => ({
       id: `lf_${i}`,
       type: 'linefill' as const,
       t1: i,
@@ -659,7 +692,10 @@ label.new(bar_index, high, "x")
       p4: 0.5,
       color: '#2962FF',
     }));
-    expect(garbageCollectScriptDrawings(fills, DEFAULT_DRAWING_LIMITS)).toBe(fills);
+    const kept = garbageCollectScriptDrawings(fills, DEFAULT_DRAWING_LIMITS);
+    expect(kept).toHaveLength(50);
+    expect(kept[0]!.id).toBe('lf_10');
+    expect(kept[kept.length - 1]!.id).toBe('lf_59');
   });
 });
 

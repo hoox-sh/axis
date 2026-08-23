@@ -15,6 +15,20 @@ _Generated/updated: 2026-08-23 · 269 commits · describe-tag: `v2.0.21`_
 
 ## [Unreleased]
 
+### Changed
+
+- **Drawings / plot parity plan** — `docs/architecture/drawings-parity.mdx` lists P0–P3 work: user-tool move/handles, Pine pane routing, PYNE export gaps (tables, fill meta, plotshape Y, OHLC).
+
+### Fixed
+
+- **Pre-eval treated `chart.fg_color` as a typo** — `pyne-builtins.json` only lists `chart.point.*` callables, so `chart.bg_color` / `chart.fg_color` (and the `color_background` / `color_foreground` aliases, plus viewport `left_visible_bar_time` / `right_visible_bar_time` / `is_standard`) were flagged “not a built-in member”. Allowlisted with the other Pine host constants.
+
+- **1-point drawings did not body-move** — `shiftDrawing` only special-cased `text` / `priceLabel`. Note, flag, crossline, anchored text, and arrow marks now shift `p1` (and `points[]` when present). Third-anchor `p3` handles hit-test and resize.
+
+- **Linefill GC was a no-op** — `garbageCollectScriptDrawings` ignored `skip.linefill` on the early-return. Overflowing linefill-only batches now trim oldest. Polyline/linefill copy `force_overlay`; polyline `fill_color` maps to fill.
+
+- **`overlay=false` bgcolor/fill always hit the price pane** — bgcolor bands take `paneId`; fills use the script-pane drawing layer when the indicator is not overlay. Empty `drawings: []` clears script SVG even on silent live re-runs.
+
 ## [2.0.22] — 2026-08-23
 
 ### Added

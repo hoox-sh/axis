@@ -1,0 +1,80 @@
+---
+title: "Drawings and plot parity"
+description: "Plan to make user drawing tools and Pine plot/drawing outputs match PYNE and render with correct pane, color, geometry, and settings."
+---
+
+# Drawings and plot parity
+
+AXIS has two independent render paths:
+
+| Path | Source | Paint |
+|---|---|---|
+| **User drawings** | Toolbar tools | `DrawingLayer` user SVG group, editable |
+| **Pine output** | PYNE `RunResult` | plots → LWC series; shapes/barcolor → candle markers; bgcolor → histogram; fill → SVG; line/label/box/polyline/linefill → script SVG; tables → HUD |
+
+This plan is the work list from a four-agent audit of AXIS (`src/chart`, `src/results`, `src/indicators/runner.ts`) against PYNE (`pynescript` `drawing.py`, `evaluator.py`, `host.py`).
+
+## Phases
+
+### P0 — AXIS correctness (this pass)
+
+User tools and apply-pipeline bugs that do not wait on a PYNE export change.
+
+1. **1-point body-move** — `shiftDrawing` only special-cased `text` / `priceLabel`. Shift any drawing with `p1` (and `points[]` when present): note, flag, crossline, anchoredText, arrowMarkUp/Down.
+2. **p3 / extra vertex handles** — `hitTestHandle` / `resizeDrawing` only p1/p2. Add `p3` (and remaining `points[i]` as p3 for the third anchor). Paint extra handles after registry paint.
+3. **Linefill GC** — `garbageCollectScriptDrawings` early-return ignored `skip.linefill`.
+4. **Polyline / linefill overlay** — copy `force_overlay` and polyline `fill_color` → `bgcolor`.
+5. **Stale SVG** — silent live re-run with `drawings: []` must clear script drawings.
+6. **Pane routing** — `bgcolor` and `fill()` use the script pane when `overlay=false` (`syncBgcolorBands(paneId)`, `ensureScriptPaneLayer` for fills). `plotshape` / `plotchar` / `plotarrow` attach to a series on that pane when possible; otherwise stay on price (LWC markers need a host series).
+
+### P1 — User-tool settings (AXIS)
+
+Shared style bar today: color, width, dash, Fill **only** for rect/ellipse.
+
+- Fill control for channel, triangle, gannBox, date/price ranges, rotatedRect, highlighter.
+- Highlighter width: stop `create 12` × paint `sw * 6`.
+- hray: 1-click (price only).
+- xabcd / headShoulders: commit on 5th point.
+- Optional later: fib level editor, text re-edit, `extendLeft`/`extendRight` UI, lock in the style bar.
+
+### P2 — PYNE export (pynescript repo)
+
+AXIS cannot paint fields the engine never serializes.
+
+| Gap | Where | Needed on the wire |
+|---|---|---|
+| Table cell keys `(row,col)` vs `(col,row)` | `drawing.py` `table.cell` vs `cell_set_*` | One index order |
+| Table style | `export_for_api` | halign, valign, width, tooltip, text_size, borders |
+| `table.cell` kwargs | ctor | width, halign, valign, size |
+| plotshape Y / `location.absolute` | `_coerce_plot_shape` | keep numeric series (or `{y, on}` cells) |
+| plotbar / plotcandle | evaluator | open/high/low/close (or sibling titles in `plot_meta`) |
+| `fill()` compile / untitled plots | host + evaluator | `plot1`/`plot2` series keys + per-bar fill color column |
+| Positional `plot(..., linewidth)` | `evaluator.py` ~425 | Pine order: series, title, color, linewidth, style |
+| plotarrow | evaluator | `colorup` / `colordown` / minheight / maxheight |
+| `offset`, `force_overlay`, `histbase`, `display` | `_pack_interpret_plot_columns` | `plot_meta` fields AXIS already has hooks for (or will add) |
+| Polyline | export | `fill_color`, `curved`, `force_overlay` |
+| Box / label extras | export | closed, extend, text_*, tooltip, border |
+
+### P3 — Remaining Pine paint
+
+- `location.top` / `bottom` = pane edges, not bar.
+- Histogram `histbase`, per-bar `plot(..., color=expr)`, plotarrow length.
+- Label `yloc` pad; `label.style_text_outline` as outlined text.
+- Hide-drawings toggle includes script group (or a separate toggle).
+- First `addIndicator` re-own plot fills / script drawings (`EDITOR_RUN_KEY` → script id).
+
+## Invariants
+
+- User drawings ≠ Pine drawings. Do not share hit-testing or magnet with script SVG (`pointer-events: none`).
+- `overlay=false` plots, fills, bgcolor, and shapes belong on `ind_*` unless `force_overlay`.
+- `barcolor()` stays on price candles.
+- Color sanitize: `#rgb(a)`, `#rrggbb(aa)`, `rgb/rgba`. Unknown → VOID indigo for **user** tools; Pine should keep engine hex (including `#RRGGBBAA`).
+- GC caps match Pine: 50 default, 500 lines/labels/boxes, 100 polylines. Linefill cap is AXIS-only until PYNE emits `max_lines_fills_count`.
+
+## Tests
+
+- `shiftDrawing` / `resizeDrawing` for 1-pt and 3-pt kinds.
+- Linefill GC overflow.
+- Polyline `force_overlay` + `fill_color`.
+- Runner: bgcolor/fill target pane when `overlay=false` (unit with a fake manager if needed).
+- PYNE: table cell key, fill meta, plotshape Y (in the pynescript repo).
