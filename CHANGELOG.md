@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-23 · 269 commits · describe-tag: `v2.0.21`_
+_Generated/updated: 2026-08-23 · 273 commits · describe-tag: `v2.0.22`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.23] — 2026-08-23
 
 ### Changed
 
@@ -572,9 +574,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (187 commits)
+### 2026-08 (191 commits)
 
 #### Security
 
@@ -675,6 +679,9 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `bed28c62` (2026-08-23) — fix(chart): hide Pine drawings, label pad, histbase, re-own
+- `a05e42d8` (2026-08-23) — fix(chart): plotshape pane routing and drawing tool settings
+- `098bfee4` (2026-08-23) — fix(chart): drawing move, linefill GC, overlay pane routing
 - `55e26ddd` (2026-08-22) — fix(editor): stop afterDot state leak from trailing-dot floats
 - `d98048a8` (2026-08-22) — fix(editor): pre-eval typo round 3 — generics, import paths, dotted calls
 - `47beaa62` (2026-08-22) — fix(editor): pre-eval typo round 2 — decl forms, curly quotes, linktoseries
@@ -774,6 +781,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `22966e62` (2026-08-23) — chore(release): AXIS v2.0.22
 - `3e7236ef` (2026-08-21) — chore(release): v2.0.20
 - `b4b3227b` (2026-08-15) — chore(release): AXIS v2.0.8
 - `236d042f` (2026-08-12) — chore(release): AXIS v2.0.7
