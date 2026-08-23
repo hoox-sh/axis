@@ -129,10 +129,13 @@ jobs:
         if: always() && steps.check.outcome == 'success'
         working-directory: packages/cli
         run: |
-          npm access set status=public @hoox-sh/axis-cli
-          npm access get status @hoox-sh/axis-cli
-          PUB=$(npm view @hoox-sh/axis-cli version)
-          echo "npm view @hoox-sh/axis-cli → ${PUB}"
+          if npm access set status=public @hoox-sh/axis-cli; then
+            npm access get status @hoox-sh/axis-cli
+          else
+            echo "::warning::NPM_TOKEN_HOOXSH cannot change package visibility (403). If the listing is private, set Public at https://www.npmjs.com/package/@hoox-sh/axis-cli"
+          fi
+          PUB=$(npm view @hoox-sh/axis-cli version 2>/dev/null || true)
+          echo "npm view @hoox-sh/axis-cli → ${PUB:-<none>}"
 
       - name: Summary
         if: always()

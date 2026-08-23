@@ -17,7 +17,7 @@ _Generated/updated: 2026-08-23 · 277 commits · describe-tag: `v2.0.23`_
 
 ### Changed
 
-- **npm publish uses org secret `NPM_TOKEN_HOOXSH`** — `release.yml` no longer looks for a repo `NPM_TOKEN`. Root Bun tests ignore `packages/**` so `axis-cli` suites run only after `packages/cli` deps are installed.
+- **npm publish uses org secret `NPM_TOKEN_HOOXSH`** — `release.yml` no longer looks for a repo `NPM_TOKEN`. Root Bun tests ignore `packages/**` so `axis-cli` suites run only after `packages/cli` deps are installed. Authenticated skip detection treats an already-published version as success.
 
 ## [2.0.24] — 2026-08-23
 
