@@ -247,7 +247,12 @@ const ENUM_BLURBS: Record<string, { detail: string; brief: string }> = {
   'plot.style_area': { detail: 'plot style', brief: 'Filled area' },
   'plot.style_areabr': { detail: 'plot style', brief: 'Area with breaks on na' },
   'plot.style_circles': { detail: 'plot style', brief: 'Circle markers' },
+  'display.none': { detail: 'display', brief: 'Hide from pane, data window, scale, and status line' },
+  'display.all': { detail: 'display', brief: 'Show everywhere (pane + data window + scale + status)' },
   'display.pane': { detail: 'display', brief: 'Show on the chart pane' },
+  'display.data_window': { detail: 'display', brief: 'Show in the Data Window only (unless combined)' },
+  'display.price_scale': { detail: 'display', brief: 'Last value on the price scale' },
+  'display.status_line': { detail: 'display', brief: 'Title in the status / last-value line' },
   // hline / line / label
   'hline.style_solid': { detail: 'hline style', brief: 'Solid horizontal line' },
   'hline.style_dashed': { detail: 'hline style', brief: 'Dashed horizontal line' },

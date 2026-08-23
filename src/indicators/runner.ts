@@ -84,6 +84,8 @@ import {
   barcolorSeriesToMap,
   lineSeriesToOverlayData,
   ohlcSeriesToBarData,
+  PLOT_DISPLAY,
+  plotDisplayHas,
   resolvePlotFillBands,
   shapeSeriesToMarkers,
   splitSeriesByKind,
@@ -1081,6 +1083,7 @@ async function runAndApplyInner(
     linestyle?: string;
     style?: string | null;
     histbase?: number;
+    display?: string | number | null;
   }> = [];
   // Prefer named `series` + `meta.plot_meta` (PYNE modern). Top-level `plots[]`
   // is often an all-null pad of bar length — never let that block named lines.
@@ -1112,6 +1115,8 @@ async function runAndApplyInner(
       }
       // Need at least one real sample (or hline price); pure-whitespace series skip
       if (!lineDataHasSample(data) && !(isHline && price != null)) continue;
+      // display.data_window / display.none: keep series for Data Window, skip pane
+      if (!plotDisplayHas(meta?.display, PLOT_DISPLAY.pane)) continue;
       // Prefer panel color override → Pine plot color → palette
       const userColor = userPlotColors[k]?.color;
       const color =
@@ -1132,6 +1137,7 @@ async function runAndApplyInner(
           meta?.histbase != null && Number.isFinite(Number(meta.histbase))
             ? Number(meta.histbase)
             : undefined,
+        display: meta?.display ?? null,
       });
     }
   } else if (Array.isArray(result.plots) && result.plots.length) {
@@ -1175,6 +1181,7 @@ async function runAndApplyInner(
           meta: { ...result.meta, superseded: true },
         };
       }
+      if (!plotDisplayHas(meta?.display, PLOT_DISPLAY.pane)) continue;
       const data = ohlcSeriesToBarData(ohlcvTimes, values, seriesMap, meta);
       if (!data.length) continue;
       const userColor = userPlotColors[key]?.color;
@@ -1257,6 +1264,7 @@ async function runAndApplyInner(
 
       // bgcolor → histogram underlay on the script pane (price when overlay)
       const bgBands = split.bgcolors
+        .filter(({ meta }) => plotDisplayHas(meta.display, PLOT_DISPLAY.pane))
         .map(({ key, values, meta }) => ({
           name: key,
           data: bgcolorSeriesToHistogramData(ohlcvTimes, values, meta.color),
@@ -1271,7 +1279,9 @@ async function runAndApplyInner(
       }
 
       // fill(plot1, plot2, color=…) → SVG band on the script pane (price when overlay)
-      const fillBands = resolvePlotFillBands(result.series || {}, plotMeta);
+      const fillBands = resolvePlotFillBands(result.series || {}, plotMeta).filter((f) =>
+        plotDisplayHas(plotMeta[f.name]?.display, PLOT_DISPLAY.pane),
+      );
       try {
         const layer =
           !overlay && paneId !== 'price'
@@ -1315,9 +1325,11 @@ async function runAndApplyInner(
       }
 
       // plotshape / plotchar → markers (owner-scoped so multi-script runs keep others)
-      const shapeMarkers = split.shapes.flatMap(({ key, values, meta }) =>
-        shapeSeriesToMarkers(ohlcvTimes, values, meta, { idPrefix: key }),
-      );
+      const shapeMarkers = split.shapes
+        .filter(({ meta }) => plotDisplayHas(meta.display, PLOT_DISPLAY.pane))
+        .flatMap(({ key, values, meta }) =>
+          shapeSeriesToMarkers(ohlcvTimes, values, meta, { idPrefix: key }),
+        );
       const shapeOwner = indicatorId ?? EDITOR_RUN_KEY;
       if (shapeMarkers.length || split.shapes.length) {
         manager.setShapeMarkers(
@@ -1335,7 +1347,10 @@ async function runAndApplyInner(
       // (history reload / clearChartScriptState clears via clearBarColors).
       try {
         if (split.barcolors?.length) {
-          const colorMap = barcolorSeriesToMap(ohlcvTimes, split.barcolors);
+          const paneBarcolors = split.barcolors.filter(({ meta }) =>
+            plotDisplayHas(meta?.display, PLOT_DISPLAY.pane),
+          );
+          const colorMap = barcolorSeriesToMap(ohlcvTimes, paneBarcolors);
           const n = manager.applyBarColors?.(colorMap, indicatorId ?? EDITOR_RUN_KEY) ?? 0;
           if (n > 0 && !silent) {
             appendLog('ok', `barcolor: ${n} bar(s) tinted`, 'plot');

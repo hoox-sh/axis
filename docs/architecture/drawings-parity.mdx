@@ -51,7 +51,7 @@ AXIS cannot paint fields the engine never serializes.
 | `fill()` compile / untitled plots | host + evaluator | `plot1`/`plot2` series keys + per-bar fill color column |
 | Positional `plot(..., linewidth)` | `evaluator.py` ~425 | Pine order: series, title, color, linewidth, style |
 | plotarrow | evaluator | `colorup` / `colordown` / minheight / maxheight |
-| `offset`, `force_overlay`, `histbase`, `display` | `_pack_interpret_plot_columns` | `plot_meta` fields AXIS already has hooks for (or will add) |
+| `offset`, `force_overlay`, `histbase` | `_pack_interpret_plot_columns` | remaining plot_meta fields (display is packed) |
 | Polyline | export | `fill_color`, `curved`, `force_overlay` |
 | Box / label extras | export | closed, extend, text_*, tooltip, border |
 
@@ -63,6 +63,7 @@ Done this pass:
 - Label `yloc` pad (8px off wick); `label.style_text_outline` as outlined text.
 - First `addIndicator` re-owns plot fills / script drawings / plotshape (`EDITOR_RUN_KEY` → script id).
 - Histogram `histbase` from `plot_meta` (default 0). PYNE still needs to serialize it for live values.
+- Pine `display.*` (`none` / `pane` / `data_window` / `price_scale` / `status_line` / `all`) on plot, hline, shapes, fill, bgcolor, barcolor.
 
 Still open:
 

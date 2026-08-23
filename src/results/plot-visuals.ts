@@ -77,6 +77,11 @@ export interface PlotMetaEntry {
   close?: string | null;
   /** Pine `plot(..., histbase=)` — histogram / columns baseline (default 0). */
   histbase?: number | null;
+  /**
+   * Pine `plot(..., display=)` — bitfield or token (`display.data_window`,
+   * `display.none`, integer `0`/`2`/`15`, …). Missing = `display.all`.
+   */
+  display?: string | number | null;
 }
 
 export type SeriesMap = Record<string, unknown[] | (number | null)[]>;
@@ -93,6 +98,70 @@ export interface LineOverlaySpec {
   linestyle?: string | null;
   /** Pine `plot(..., histbase=)` — histogram / columns baseline (default 0). */
   histbase?: number | null;
+  /** Pine `display.*` bitfield (see {@link parsePlotDisplay}). */
+  display?: string | number | null;
+}
+
+/**
+ * Pine `display.*` flags (TradingView bitfield).
+ * `display.all` = pane | data_window | price_scale | status_line.
+ */
+export const PLOT_DISPLAY = {
+  none: 0,
+  pane: 1,
+  data_window: 2,
+  price_scale: 4,
+  status_line: 8,
+  all: 15,
+} as const;
+
+const DISPLAY_TOKEN_BITS: Record<string, number> = {
+  none: PLOT_DISPLAY.none,
+  pane: PLOT_DISPLAY.pane,
+  data_window: PLOT_DISPLAY.data_window,
+  price_scale: PLOT_DISPLAY.price_scale,
+  status_line: PLOT_DISPLAY.status_line,
+  all: PLOT_DISPLAY.all,
+};
+
+/**
+ * Parse Pine `display=` / `plot_meta.display` to a bitfield.
+ * Missing / unknown → `display.all` (Pine default).
+ */
+export function parsePlotDisplay(raw: unknown): number {
+  if (raw == null || raw === '') return PLOT_DISPLAY.all;
+  if (typeof raw === 'boolean') return raw ? PLOT_DISPLAY.all : PLOT_DISPLAY.none;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const n = Math.trunc(raw);
+    if (n < 0) return PLOT_DISPLAY.all;
+    return n & PLOT_DISPLAY.all;
+  }
+  const s = String(raw).trim().toLowerCase();
+  if (!s) return PLOT_DISPLAY.all;
+  const stripped = s.replace(/^display\./, '');
+  const single = DISPLAY_TOKEN_BITS[stripped];
+  if (single != null) return single;
+  if (/[+|,\s]/.test(stripped)) {
+    let bits = 0;
+    for (const part of stripped.split(/[+|,\s]+/)) {
+      if (!part) continue;
+      const tok = DISPLAY_TOKEN_BITS[part.replace(/^display\./, '')];
+      if (tok != null) bits |= tok;
+    }
+    return bits;
+  }
+  const asNum = Number(s);
+  if (Number.isFinite(asNum)) {
+    const n = Math.trunc(asNum);
+    if (n < 0) return PLOT_DISPLAY.all;
+    return n & PLOT_DISPLAY.all;
+  }
+  return PLOT_DISPLAY.all;
+}
+
+/** True when `raw` includes the given `display.*` flag (default all). */
+export function plotDisplayHas(raw: unknown, flag: number): boolean {
+  return (parsePlotDisplay(raw) & flag) === flag;
 }
 
 export interface BgcolorBandSpec {
@@ -984,6 +1053,7 @@ export function buildPlotVisuals(
       linewidth: meta.linewidth,
       linestyle: meta.linestyle ?? null,
       histbase: meta.histbase ?? null,
+      display: meta.display ?? null,
     });
   }
 

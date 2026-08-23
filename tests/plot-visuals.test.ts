@@ -33,6 +33,9 @@ import {
   normalizePlotStyleToken,
   ohlcSeriesToBarData,
   parseOhlcCell,
+  parsePlotDisplay,
+  plotDisplayHas,
+  PLOT_DISPLAY,
   resolvePlotFillBands,
   shapeSeriesToMarkers,
   splitSeriesByKind,
@@ -180,6 +183,37 @@ describe('mapShapeSize', () => {
     expect(mapShapeSize(0)).toBeUndefined();
     expect(mapShapeSize(-1)).toBeUndefined();
     expect(mapShapeSize(NaN)).toBeUndefined();
+  });
+});
+
+describe('parsePlotDisplay', () => {
+  it('defaults missing to display.all', () => {
+    expect(parsePlotDisplay(undefined)).toBe(PLOT_DISPLAY.all);
+    expect(parsePlotDisplay(null)).toBe(PLOT_DISPLAY.all);
+    expect(parsePlotDisplay('')).toBe(PLOT_DISPLAY.all);
+    expect(plotDisplayHas(undefined, PLOT_DISPLAY.pane)).toBe(true);
+    expect(plotDisplayHas(undefined, PLOT_DISPLAY.data_window)).toBe(true);
+  });
+
+  it('maps tokens and display.* prefixes', () => {
+    expect(parsePlotDisplay('display.none')).toBe(PLOT_DISPLAY.none);
+    expect(parsePlotDisplay('none')).toBe(0);
+    expect(parsePlotDisplay('display.data_window')).toBe(PLOT_DISPLAY.data_window);
+    expect(parsePlotDisplay('pane')).toBe(PLOT_DISPLAY.pane);
+    expect(parsePlotDisplay('display.all')).toBe(PLOT_DISPLAY.all);
+    expect(plotDisplayHas('display.data_window', PLOT_DISPLAY.pane)).toBe(false);
+    expect(plotDisplayHas('display.data_window', PLOT_DISPLAY.data_window)).toBe(true);
+    expect(plotDisplayHas('display.none', PLOT_DISPLAY.pane)).toBe(false);
+    expect(plotDisplayHas('display.none', PLOT_DISPLAY.data_window)).toBe(false);
+  });
+
+  it('parses integer bitfields and combined tokens', () => {
+    expect(parsePlotDisplay(2)).toBe(PLOT_DISPLAY.data_window);
+    expect(parsePlotDisplay(15)).toBe(PLOT_DISPLAY.all);
+    expect(parsePlotDisplay(PLOT_DISPLAY.pane + PLOT_DISPLAY.data_window)).toBe(3);
+    expect(parsePlotDisplay('pane+data_window')).toBe(3);
+    expect(plotDisplayHas(3, PLOT_DISPLAY.pane)).toBe(true);
+    expect(plotDisplayHas(3, PLOT_DISPLAY.price_scale)).toBe(false);
   });
 });
 

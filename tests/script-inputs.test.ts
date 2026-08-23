@@ -398,6 +398,22 @@ describe('buildDataViewRows', () => {
     expect(rows.find((r) => r.key === 'symbol')!.value).toBe('BTCUSDT');
   });
 
+  it('honors plot display.data_window vs display.none vs default all', () => {
+    const rows = buildDataViewRows({
+      bars,
+      time: 2000,
+      series: { hidden: [1, 2, 3], dw: [4, 5, 6], shown: [7, 8, 9] },
+      plotMeta: {
+        hidden: { title: 'Hidden', display: 'display.none' },
+        dw: { title: '%B', display: 'display.data_window' },
+        shown: { title: 'Basis' },
+      },
+    });
+    expect(rows.find((r) => r.key === 's_hidden')).toBeUndefined();
+    expect(rows.find((r) => r.key === 's_dw')?.label).toBe('%B');
+    expect(rows.find((r) => r.key === 's_shown')?.label).toBe('Basis');
+  });
+
   it('includes drawing prices at crosshair time', () => {
     const rows = buildDataViewRows({
       bars,

@@ -30,6 +30,7 @@
  */
 
 import { barIndexAtTimeBinary } from '../chart/heavy-data';
+import { PLOT_DISPLAY, plotDisplayHas } from './plot-visuals';
 
 import type { Bar } from '../store/types';
 import {
@@ -122,7 +123,10 @@ export interface BuildDataViewOpts {
   symbol?: string;
   interval?: string;
   series?: Record<string, (number | null | string | boolean)[] | unknown>;
-  plotMeta?: Record<string, { title?: string; color?: string | null; kind?: string }>;
+  plotMeta?: Record<
+    string,
+    { title?: string; color?: string | null; kind?: string; display?: string | number | null }
+  >;
   /** User drawings (trendlines, hlines, fib, …) evaluated at crosshair time */
   drawings?: Drawing[] | null;
   /**
@@ -534,6 +538,7 @@ export function buildDataViewRows(opts: BuildDataViewOpts): DataViewRow[] {
     if (!Array.isArray(arr)) continue;
     const raw = arr[idx];
     const m = meta[k];
+    if (!plotDisplayHas(m?.display, PLOT_DISPLAY.data_window)) continue;
     const kind = m?.kind ? String(m.kind) : 'plot';
     let value: string;
     if (kind === 'bgcolor') {

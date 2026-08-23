@@ -15,6 +15,10 @@ _Generated/updated: 2026-08-23 · 273 commits · describe-tag: `v2.0.22`_
 
 ## [Unreleased]
 
+### Fixed
+
+- **`plot(..., display=)` was ignored at apply time** — editor already knew `display.data_window` / `none` / `pane` / `price_scale` / `status_line` / `all`, but every series still painted on the pane and in the Data Window. AXIS now reads `plot_meta.display` (token or Pine bitfield): `none` hides everywhere, `data_window` keeps Data Window and skips the chart, `price_scale` / `status_line` gate last-value labels. PYNE packs `display=` on plot/hline/shape/fill/bgcolor.
+
 ## [2.0.23] — 2026-08-23
 
 ### Changed

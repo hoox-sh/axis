@@ -70,6 +70,8 @@ import {
   isPointMarkerSeriesKind,
   mapPlotStyleToSeriesKind,
   normalizeLineStyleToken,
+  parsePlotDisplay,
+  PLOT_DISPLAY,
   type PlotSeriesKind,
 } from '../results/plot-visuals';
 import { LineBreakPrimitive } from './line-break-primitive';
@@ -111,6 +113,8 @@ export type OverlayLineSpec = {
   style?: string | null;
   /** Pine `plot(..., histbase=)` — histogram / columns baseline (default 0). */
   histbase?: number | null;
+  /** Pine `display.*` — last-value / title honor price_scale + status_line. */
+  display?: string | number | null;
 };
 
 /** Overlay OHLC from Pine `plotbar` / `plotcandle` (runner → LWC Bar/Candlestick). */
@@ -1828,6 +1832,26 @@ export class PaneManager {
     return name != null ? String(name) : '';
   }
 
+  /**
+   * Last-value label + series title from Pine `display.price_scale` /
+   * `display.status_line` (AND the global last-value / name toggles).
+   */
+  private plotLabelOptions(line: OverlayLineSpec): {
+    lastValueVisible: boolean;
+    title: string;
+  } {
+    const bits = parsePlotDisplay(line.display);
+    return {
+      lastValueVisible:
+        this.lastValueLabelsVisible &&
+        (bits & PLOT_DISPLAY.price_scale) === PLOT_DISPLAY.price_scale,
+      title:
+        (bits & PLOT_DISPLAY.status_line) === PLOT_DISPLAY.status_line
+          ? this.displaySeriesTitle(line.name)
+          : '',
+    };
+  }
+
   rememberSeriesTitle(paneId: string, key: string, name: string): void {
     this.lastValueTitleByKey.set(`${paneId}:${key}`, name);
   }
@@ -2375,9 +2399,10 @@ export class PaneManager {
         // Tip-only path skips full toLwcLineData when length + lastTime match
         applyOverlayLineDataSmart(seriesNow, line.data, key, this.overlayDataMeta);
         try {
+          const labels = this.plotLabelOptions(line);
           const opts: Record<string, unknown> = {
-            lastValueVisible: this.lastValueLabelsVisible,
-            title: this.displaySeriesTitle(line.name),
+            lastValueVisible: labels.lastValueVisible,
+            title: labels.title,
           };
           this.rememberSeriesTitle(paneId, key, line.name);
           if (line.color) {
@@ -2428,9 +2453,10 @@ export class PaneManager {
             line.histbase,
           );
           try {
+            const labels = this.plotLabelOptions(line);
             series.applyOptions({
-              lastValueVisible: this.lastValueLabelsVisible,
-              title: this.displaySeriesTitle(line.name),
+              lastValueVisible: labels.lastValueVisible,
+              title: labels.title,
               ...this.breakStyleSeriesOptions(breakStyle, seriesKind, c),
             });
             this.rememberSeriesTitle(paneId, key, line.name);
@@ -2587,14 +2613,15 @@ export class PaneManager {
             .map((d) => ({ time: d.time as UTCTimestamp, value: price }))
         : [];
     const existing = pane.series[key];
+    const labels = this.plotLabelOptions(line);
     if (existing) {
       if (mapped.length) safeSetData(existing, mapped);
       try {
         existing.applyOptions({
           color,
           lineWidth,
-          lastValueVisible: this.lastValueLabelsVisible,
-          title: this.displaySeriesTitle(line.name),
+          lastValueVisible: labels.lastValueVisible,
+          title: labels.title,
         });
       } catch {
         /* ignore */
@@ -2604,15 +2631,15 @@ export class PaneManager {
       try {
         const series = createLineSeries(
           pane.chart,
-          this.displaySeriesTitle(line.name),
+          labels.title,
           color,
           undefined,
           lineWidth,
         );
         try {
           series.applyOptions({
-            lastValueVisible: this.lastValueLabelsVisible,
-            title: this.displaySeriesTitle(line.name),
+            lastValueVisible: labels.lastValueVisible,
+            title: labels.title,
           });
         } catch {
           /* ignore */
