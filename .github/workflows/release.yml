@@ -113,6 +113,17 @@ jobs:
           fi
           npm publish --access public --provenance
 
+      - name: Ensure public access
+        working-directory: packages/cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_HOOXSH }}
+        run: |
+          # First scoped publish can land restricted; force public on the @hoox-sh org.
+          npm access set status=public --package=@hoox-sh/axis-cli \
+            || npm access public @hoox-sh/axis-cli
+          PUB=$(npm view @hoox-sh/axis-cli version)
+          echo "npm view @hoox-sh/axis-cli → ${PUB}"
+
       - name: Summary
         if: always()
         run: |
