@@ -95,6 +95,8 @@ function exchangeForSource(sourceId: string): string {
       return 'coinbase';
     case 'kraken-rest':
       return 'kraken';
+    case 'mexc-rest':
+      return 'mexc';
     case 'mock-walk':
       return 'mock';
     case 'csv-upload':

@@ -212,25 +212,34 @@ describe('probeAbortSignal', () => {
 
 describe('resolveProbeEndpoint / hardened VPS', () => {
   it('detects product same-origin hosts and loopback', () => {
-    expect(isProductSameOriginApiHost('https://axis.hoox.sh')).toBe(true);
-    expect(isProductSameOriginApiHost('https://axis.hoox.sh/app')).toBe(true);
+    expect(isProductSameOriginApiHost('https://pynescript.online')).toBe(true);
+    expect(isProductSameOriginApiHost('https://pynescript.online/app')).toBe(true);
+    expect(isProductSameOriginApiHost('https://axis.hoox.sh')).toBe(false);
     expect(isLoopbackBase('http://127.0.0.1:5002')).toBe(true);
-    expect(isLoopbackBase('https://axis.hoox.sh')).toBe(false);
+    expect(isLoopbackBase('https://pynescript.online')).toBe(false);
   });
 
-  it('maps axis.hoox.sh endpoint to pyne-pro (not CF worker)', () => {
-    expect(matchCatalogForEndpoint('https://axis.hoox.sh')).toBe('pyne-pro');
+  it('maps pynescript.online endpoint to pyne-pro (not CF worker)', () => {
+    expect(matchCatalogForEndpoint('https://pynescript.online')).toBe('pyne-pro');
     expect(matchCatalogForEndpoint(PRODUCT_PYNE_PRO_HINT)).toBe('pyne-pro');
   });
 
-  it('probes same-origin public health on product page, not client loopback', () => {
+  it('probes same-origin public health on product API page, not client loopback', () => {
     const entry = getWorkerCatalogEntry('pyne-pro')!;
     expect(entry.publicEndpoint).toBe(PRODUCT_PYNE_PRO_HINT);
     const ep = resolveProbeEndpoint(entry, {
+      pageOrigin: 'https://pynescript.online',
+    });
+    expect(ep).toBe('https://pynescript.online');
+    expect(isLoopbackBase(ep)).toBe(false);
+  });
+
+  it('probes public API origin from CF Pages (axis.hoox.sh), not same-origin', () => {
+    const entry = getWorkerCatalogEntry('pyne-pro')!;
+    const ep = resolveProbeEndpoint(entry, {
       pageOrigin: 'https://axis.hoox.sh',
     });
-    expect(ep).toBe('https://axis.hoox.sh');
-    expect(isLoopbackBase(ep)).toBe(false);
+    expect(ep).toBe('https://pynescript.online');
   });
 
   it('keeps loopback probe on local Vite page', () => {
@@ -244,9 +253,9 @@ describe('resolveProbeEndpoint / hardened VPS', () => {
   it('uses active backend when it maps to the worker', () => {
     const entry = getWorkerCatalogEntry('pyne-pro')!;
     const ep = resolveProbeEndpoint(entry, {
-      activeEndpoint: 'https://axis.hoox.sh',
+      activeEndpoint: 'https://pynescript.online',
       pageOrigin: 'http://127.0.0.1:3000',
     });
-    expect(ep).toBe('https://axis.hoox.sh');
+    expect(ep).toBe('https://pynescript.online');
   });
 });

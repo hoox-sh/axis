@@ -33,6 +33,7 @@
  * | `bybit-rest` | yes | Bybit v5 spot klines |
  * | `coinbase-rest` | yes | Exchange candles (max ~300) |
  * | `kraken-rest` | yes | Public OHLC |
+ * | `mexc-rest` | yes | `GET /api/v3/klines` (Binance-shaped; `1h` → `60m`) |
  * | `geckoterminal-ohlcv` | yes | DEX pool OHLCV via GeckoTerminal (`network:0xPool`) |
  * | `mock-walk` | no | Synthetic random walk; optional deterministic seed |
  * | `csv-upload` | no | Last file from {@link upload-store} |
@@ -62,6 +63,7 @@ import { sliceBarsForLoad } from '../data/bars-cache';
 import { expandCachedSeriesToNow } from '../data/expand-cache';
 import { getUploadedBars } from './upload-store';
 import { fetchBinanceJson } from '../data/binance-http';
+import { mexcKlineInterval, mexcSpotSymbol } from '../data/venues/mexc';
 
 /** Parsed DEX pool id for {@link geckoTerminalOhlcv}. */
 export interface GeckoPoolRef {
@@ -361,6 +363,7 @@ export function sourcePageLimit(sourceId: string): number {
       return 280;
     case 'binance-rest':
     case 'bybit-rest':
+    case 'mexc-rest':
     case 'geckoterminal-ohlcv':
       return 1000;
     case 'kraken-rest':
@@ -834,6 +837,54 @@ export const krakenRest: SourcePlugin = {
   },
 };
 
+export const mexcRest: SourcePlugin = {
+  id: 'mexc-rest',
+  name: 'MEXC REST',
+  kind: 'source',
+  builtIn: true,
+  description:
+    'Public MEXC spot klines (api.mexc.com). Binance-shaped arrays; 1h is interval 60m.',
+  capabilities: { needsNetwork: true, venue: 'mexc', market: 'spot', transport: 'rest' },
+  configSchema: {
+    limit: {
+      type: 'number',
+      default: 500,
+      min: 50,
+      max: 1000,
+      label: 'Bars',
+      advanced: true,
+      hidden: true,
+    },
+  },
+  async fetchHistorical({ symbol, interval, config, startTime, endTime, signal }) {
+    const cfg = resolveConfig(this.configSchema, config);
+    const limit = Math.min(1000, Number(cfg.limit) || 500);
+    const params = new URLSearchParams({
+      symbol: mexcSpotSymbol(symbol),
+      interval: mexcKlineInterval(interval),
+      limit: String(limit),
+    });
+    appendTimeParams(params, { startTime, endTime }, 'ms');
+    const url = `https://api.mexc.com/api/v3/klines?${params}`;
+    const res = await fetch(url, { cache: 'no-store', signal: fetchSignal(signal) });
+    if (!res.ok) throw new Error(`MEXC HTTP ${res.status}`);
+    const json = await res.json();
+    if (!Array.isArray(json)) {
+      const msg =
+        json && typeof json === 'object' && 'msg' in json
+          ? String((json as { msg?: unknown }).msg || 'MEXC empty response')
+          : 'MEXC empty response';
+      throw new Error(msg);
+    }
+    const bars = mapValidBars(json, (row) => {
+      if (!Array.isArray(row) || row.length < 6) return null;
+      return barFromFields(row[0], row[1], row[2], row[3], row[4], row[5]);
+    });
+    if (!bars.length) throw new Error('MEXC returned no candles');
+    return bars;
+  },
+};
+
 /**
  * DEX pool OHLCV via GeckoTerminal public API.
  *
@@ -1011,6 +1062,7 @@ export const BUILTIN_SOURCES: SourcePlugin[] = [
   bybitRest,
   coinbaseRest,
   krakenRest,
+  mexcRest,
   geckoTerminalOhlcv,
   ccxtRest,
   mockWalk,

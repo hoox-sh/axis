@@ -26,7 +26,7 @@
  * @module streams/ws-venues
  */
 
-export type VenueId = 'binance' | 'okx' | 'bybit' | 'coinbase' | 'kraken';
+export type VenueId = 'binance' | 'okx' | 'bybit' | 'coinbase' | 'kraken' | 'mexc';
 
 // ── Symbol normalization ──────────────────────────────────────────
 
@@ -93,6 +93,17 @@ const KRAKEN_INTERVAL: Record<string, number> = {
   '1w': 10080,
 };
 
+const MEXC_KLINE: Record<string, string> = {
+  '1m': 'Min1',
+  '5m': 'Min5',
+  '15m': 'Min15',
+  '30m': 'Min30',
+  '1h': 'Min60',
+  '4h': 'Hour4',
+  '1d': 'Day1',
+  '1w': 'Week1',
+};
+
 // ── Public API ────────────────────────────────────────────────────
 
 export interface VenueWsConfig {
@@ -156,6 +167,17 @@ export function buildVenueWs(
         },
       };
     }
+    case 'mexc': {
+      const compact = sym.replace(/[-_/]/g, '');
+      const iv = MEXC_KLINE[interval] || 'Day1';
+      return {
+        url: 'wss://wbs.mexc.com/ws',
+        subscribe: {
+          method: 'SUBSCRIPTION',
+          params: [`${compact}@kline@${iv}`],
+        },
+      };
+    }
     default:
       return null;
   }
@@ -170,4 +192,5 @@ export const VENUE_WS_HOSTS: Record<VenueId, string[]> = {
   bybit: ['stream.bybit.com'],
   coinbase: ['advanced-trade-ws.coinbase.com'],
   kraken: ['ws.kraken.com'],
+  mexc: ['wbs.mexc.com', 'wbs-api.mexc.com'],
 };

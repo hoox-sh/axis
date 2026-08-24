@@ -100,6 +100,7 @@ export async function fetchWatchlistTickers(
     if (id.includes('coinbase')) return await fetchCoinbase(symbols);
     if (id.includes('mock')) return mockTickers(symbols);
     if (id.includes('csv') || id.includes('upload')) return {};
+    if (id.includes('mexc')) return await fetchMexc(symbols);
     if (id.includes('kraken') || id.includes('gecko')) return {};
     if (id.includes('binance') || id === 'data-manager' || !id) {
       return await fetchBinance(symbols);
@@ -226,6 +227,35 @@ async function fetchCoinbase(symbols: string[]): Promise<Record<string, WatchTic
       }
     }),
   );
+  return next;
+}
+
+/** MEXC 24hr tickers (Binance-shaped). All-book then filter. */
+async function fetchMexc(symbols: string[]): Promise<Record<string, WatchTicker>> {
+  const res = await fetch('https://api.mexc.com/api/v3/ticker/24hr', { cache: 'no-store' });
+  if (!res.ok) throw new Error(`mexc ${res.status}`);
+  const data = (await res.json()) as Array<{
+    symbol: string;
+    lastPrice: string;
+    priceChangePercent: string;
+    openPrice?: string;
+  }>;
+  if (!Array.isArray(data)) throw new Error('mexc ticker: unexpected body');
+  const bySym = new Map(data.map((t) => [t.symbol, t]));
+  const next: Record<string, WatchTicker> = {};
+  for (const orig of symbols) {
+    const key = toUsdt(orig);
+    const t = bySym.get(key);
+    if (!t) continue;
+    const price = parseFloat(t.lastPrice);
+    const open = t.openPrice != null ? parseFloat(t.openPrice) : NaN;
+    next[orig] = {
+      price,
+      change: parseFloat(t.priceChangePercent),
+      open24h: Number.isFinite(open) ? open : undefined,
+      source: 'mexc',
+    };
+  }
   return next;
 }
 

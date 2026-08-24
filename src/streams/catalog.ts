@@ -33,6 +33,7 @@
  * | `bybit-ws` | WS | v5 public spot kline |
  * | `coinbase-ws` | WS | Advanced Trade `candles` (venue OHLC; fold into chart TF) |
  * | `kraken-ws` | WS | public OHLC channel |
+ * | `mexc-ws` | WS | JSON kline (`wss://wbs.mexc.com/ws`) |
  * | `mock-poll` | local | synthetic ticks (pairs with `mock-walk` / CSV / DEX OHLCV) |
  *
  * ## Lifecycle
@@ -60,6 +61,7 @@ import { defaultStreamForSource as defaultStreamForSourceId } from '../data/prov
 import { openReconnectableWs } from './reconnect-ws';
 import { binanceKlineWsUrls } from '../data/binance-http';
 import { gatewayWs } from '../data/gateway';
+import { mexcSpotSymbol, mexcWsKlineInterval } from '../data/venues/mexc';
 
 /** @deprecated Prefer importing StreamPlugin from plugins/types */
 export type StreamPlugin = UnifiedStreamPlugin;
@@ -510,6 +512,82 @@ export const krakenStream: StreamPlugin = {
   },
 };
 
+/** MEXC public JSON kline stream (spot). */
+export const mexcStream: StreamPlugin = {
+  id: 'mexc-ws',
+  name: 'MEXC WebSocket',
+  kind: 'stream',
+  builtIn: true,
+  description: 'MEXC public kline stream (wss://wbs.mexc.com/ws). JSON channel, 15s PING.',
+  capabilities: {
+    needsNetwork: true,
+    transport: 'ws',
+    venue: 'mexc',
+    market: 'spot',
+    klineStream: true,
+  },
+  configSchema: {},
+  start({ symbol, interval, onBar, onStatus, onError }) {
+    const sym = mexcSpotSymbol(symbol);
+    const iv = mexcWsKlineInterval(interval);
+    const channel = `${sym}@kline@${iv}`;
+    const urls = ['wss://wbs.mexc.com/ws', 'wss://wbs-api.mexc.com/ws'];
+    let ping: ReturnType<typeof setInterval> | undefined;
+    const stopWs = openReconnectableWs({
+      url: urls[0]!,
+      urls,
+      onStatus,
+      onError,
+      onOpen: (ws) => {
+        ws.send(JSON.stringify({ method: 'SUBSCRIPTION', params: [channel] }));
+        if (ping) clearInterval(ping);
+        ping = setInterval(() => {
+          try {
+            ws.send(JSON.stringify({ method: 'PING' }));
+          } catch {
+            /* closed */
+          }
+        }, 15_000);
+      },
+      onMessage: (e) => {
+        try {
+          const msg = JSON.parse(e.data as string) as {
+            d?: { k?: Record<string, unknown> };
+            k?: Record<string, unknown>;
+            c?: string;
+          };
+          const k = msg?.d?.k || msg?.k;
+          if (!k) return;
+          const t = Number(k.t);
+          const open = Number(k.o);
+          const high = Number(k.h);
+          const low = Number(k.l);
+          const close = Number(k.c);
+          const volume = Number(k.v);
+          if (!Number.isFinite(t) || t <= 0) return;
+          if (![open, high, low, close].every(Number.isFinite)) return;
+          onBar({
+            time: Math.floor(t / 1000),
+            open,
+            high,
+            low,
+            close,
+            volume: Number.isFinite(volume) ? volume : 0,
+            closed: false,
+          });
+        } catch {
+          /* ignore */
+        }
+      },
+    });
+    return () => {
+      if (ping) clearInterval(ping);
+      ping = undefined;
+      stopWs();
+    };
+  },
+};
+
 /**
  * CCXT live kline stream via datafeed gateway WebSocket.
  * Routes through the PYNE datafeed gateway or local sidecar.
@@ -594,6 +672,7 @@ export const BUILTIN_STREAMS: StreamPlugin[] = [
   bybitStream,
   coinbaseStream,
   krakenStream,
+  mexcStream,
   ccxtWsStream,
   mockPollStream,
 ];

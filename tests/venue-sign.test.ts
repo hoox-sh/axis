@@ -138,6 +138,27 @@ describe('signVenueRequest coinbase', () => {
   });
 });
 
+describe('signVenueRequest mexc', () => {
+  it('HMAC-SHA256 hex signature and X-MEXC-APIKEY', async () => {
+    const signed = await signVenueRequest('mexc', {
+      ...creds,
+      path: '/api/v3/klines',
+      query: { symbol: 'BTCUSDT', interval: '60m' },
+    });
+    expect(signed.headers['X-MEXC-APIKEY']).toBe(KEY);
+    const url = new URL(signed.url);
+    expect(url.origin).toBe('https://api.mexc.com');
+    expect(url.pathname).toBe('/api/v3/klines');
+    expect(url.searchParams.get('symbol')).toBe('BTCUSDT');
+    expect(url.searchParams.get('interval')).toBe('60m');
+    expect(url.searchParams.get('timestamp')).toBe(String(TS));
+    const signature = url.searchParams.get('signature');
+    expect(signature).toHaveLength(64);
+    expect(/^[0-9a-f]{64}$/.test(signature ?? '')).toBe(true);
+    assertNoSecretLeak(signed.url, signed.headers);
+  });
+});
+
 describe('signVenueRequest kraken', () => {
   it('sets API-Key and API-Sign', async () => {
     const signed = await signVenueRequest('kraken', {
@@ -161,6 +182,7 @@ describe('signVenueRequest all venues', () => {
     { venue: 'bybit', path: '/v5/market/kline', query: { category: 'spot', symbol: 'BTCUSDT' } },
     { venue: 'coinbase', path: '/products/BTC-USD/candles', query: { granularity: 86400 } },
     { venue: 'kraken', path: '/0/public/OHLC', query: { pair: 'XBTUSD' } },
+    { venue: 'mexc', path: '/api/v3/klines', query: { symbol: 'BTCUSDT', interval: '1d' } },
   ];
 
   for (const { venue, path, query } of cases) {

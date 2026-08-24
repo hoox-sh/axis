@@ -50,6 +50,8 @@ describe('venue tokens', () => {
   it('lists native + pinned CCXT + other', () => {
     const opts = listVenueOptions();
     expect(opts.some((o) => o.value === 'binance-rest' && o.group === 'native')).toBe(true);
+    expect(opts.some((o) => o.value === 'mexc-rest' && o.group === 'native')).toBe(true);
+    expect(opts.some((o) => o.value === 'ccxt:mexc')).toBe(false);
     expect(opts.some((o) => o.value === 'ccxt:bitget' && o.group === 'ccxt')).toBe(true);
     expect(opts.some((o) => o.value === 'ccxt:')).toBe(true);
     expect(opts.some((o) => o.value === 'mock-walk')).toBe(true);
@@ -58,6 +60,15 @@ describe('venue tokens', () => {
 });
 
 describe('applyVenueToken', () => {
+  it('MEXC writes native REST + WS pair', () => {
+    applyVenueToken('mexc-rest');
+    expect(store.source).toBe('mexc-rest');
+    expect(store.live.streamId).toBe('mexc-ws');
+    expect(store.provider.venue).toBe('mexc');
+    expect(store.provider.id).toBe('mexc');
+    expect(store.exchange).toBe('mexc');
+  });
+
   it('Bybit writes native REST + WS pair', () => {
     applyVenueToken('bybit-rest');
     expect(store.source).toBe('bybit-rest');

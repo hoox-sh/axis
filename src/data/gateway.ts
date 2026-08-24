@@ -45,14 +45,13 @@ export const DATAFEED_DEFAULT_PORT = 5003;
  * would pull plugins/loader into every catalog chunk).
  */
 const PRODUCT_SAME_ORIGIN_HOSTS: readonly string[] = [
-  'axis.hoox.sh',
   'pynescript.online',
   'www.pynescript.online',
   'server1.pynescript.online',
 ];
 
-/** Product API origin used cross-origin by remote non-product pages (Pages previews). */
-const PRODUCT_DATAFEED_ORIGIN = 'https://axis.hoox.sh';
+/** Product API origin used cross-origin by remote pages (CF Pages / axis.hoox.sh). */
+const PRODUCT_DATAFEED_ORIGIN = 'https://pynescript.online';
 
 function isLoopbackHost(host: string): boolean {
   return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';

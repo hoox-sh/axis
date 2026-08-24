@@ -23,10 +23,11 @@ describe('venueNeedsPassphrase', () => {
     expect(venueNeedsPassphrase('Coinbase')).toBe(true);
   });
 
-  it('is false for Binance, Bybit, Kraken', () => {
+  it('is false for Binance, Bybit, Kraken, MEXC', () => {
     expect(venueNeedsPassphrase('binance')).toBe(false);
     expect(venueNeedsPassphrase('bybit')).toBe(false);
     expect(venueNeedsPassphrase('kraken')).toBe(false);
+    expect(venueNeedsPassphrase('mexc')).toBe(false);
     expect(venueNeedsPassphrase('')).toBe(false);
   });
 });
@@ -45,13 +46,14 @@ describe('ccxtNeedsPassword', () => {
 });
 
 describe('exchange credential venues', () => {
-  it('lists the five CEX venues', () => {
+  it('lists native CEX venues', () => {
     expect([...EXCHANGE_CREDENTIAL_VENUES]).toEqual([
       'binance',
       'okx',
       'bybit',
       'coinbase',
       'kraken',
+      'mexc',
     ]);
   });
 

@@ -26,7 +26,6 @@ export const PINNED_CCXT: readonly string[] = [
   'bitget',
   'kucoin',
   'gateio',
-  'mexc',
   'htx',
   'phemex',
   'bingx',
@@ -38,6 +37,7 @@ export const NATIVE_VENUE_SOURCES: readonly { id: string; label: string }[] = [
   { id: 'bybit-rest', label: 'Bybit' },
   { id: 'coinbase-rest', label: 'Coinbase' },
   { id: 'kraken-rest', label: 'Kraken' },
+  { id: 'mexc-rest', label: 'MEXC' },
 ];
 
 export const OTHER_VENUE_SOURCES: readonly { id: string; label: string }[] = [
@@ -62,7 +62,6 @@ const CCXT_LABEL: Record<string, string> = {
   bitget: 'Bitget',
   kucoin: 'KuCoin',
   gateio: 'Gate.io',
-  mexc: 'MEXC',
   htx: 'HTX',
   phemex: 'Phemex',
   bingx: 'BingX',

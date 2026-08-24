@@ -122,6 +122,14 @@ export function startWatchlistQuotes(opts: StartWatchlistQuotesOpts): QuoteMuxHa
   if (id.includes('okx')) return startOkxQuotes(symbols, opts);
   if (id.includes('bybit')) return startBybitQuotes(symbols, opts);
   if (id.includes('coinbase')) return startCoinbaseQuotes(symbols, opts);
+  if (id.includes('mexc')) {
+    opts.onStatus?.({
+      state: 'closed',
+      mode: 'none',
+      detail: 'MEXC watchlist quotes use REST snapshots — no ticker mux yet',
+    });
+    return { stop: () => {} };
+  }
   if (id.includes('kraken')) {
     opts.onStatus?.({
       state: 'closed',

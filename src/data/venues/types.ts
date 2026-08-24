@@ -23,7 +23,7 @@
  * @module data/venues/types
  */
 
-export type VenueId = 'binance' | 'okx' | 'bybit' | 'coinbase' | 'kraken';
+export type VenueId = 'binance' | 'okx' | 'bybit' | 'coinbase' | 'kraken' | 'mexc';
 
 export interface SignInput {
   method: 'GET';

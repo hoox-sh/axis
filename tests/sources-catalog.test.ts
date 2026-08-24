@@ -19,6 +19,7 @@ import {
   bybitRest,
   coinbaseRest,
   krakenRest,
+  mexcRest,
   listSources,
   getSource,
   registerDynamicSource,
@@ -53,6 +54,7 @@ describe('sources catalog', () => {
     expect(ids).toContain('data-manager');
     expect(ids).toContain('geckoterminal-ohlcv');
     expect(ids).toContain('kraken-rest');
+    expect(ids).toContain('mexc-rest');
     expect(getSource('mock-walk')?.name).toBe('Mock Walk');
     expect(binanceRest.configSchema?.fallback?.default).toBe(false);
     expect(getSource('geckoterminal-ohlcv')?.name).toBe('GeckoTerminal DEX');
@@ -237,6 +239,23 @@ describe('sources catalog', () => {
     expect(bars[0].time).toBe(1_700_000_000);
     expect(bars[0].close).toBe(1.5);
     expect(bars[0].volume).toBe(10);
+  });
+
+  it('mexc-rest maps klines', async () => {
+    restoreFetch = mockFetch(async () =>
+      jsonResponse([
+        [1_700_000_000_000, '10', '12', '9', '11', '100'],
+        [1_700_086_400_000, '11', '13', '10', '12', '200'],
+      ]),
+    );
+    const bars = await mexcRest.fetchHistorical({
+      symbol: 'BTCUSDT',
+      interval: '1h',
+      config: { limit: 2 },
+    });
+    expect(bars).toHaveLength(2);
+    expect(bars[0].time).toBe(1_700_000_000);
+    expect(bars[0].close).toBe(11);
   });
 
   it('dynamic register/unregister', () => {

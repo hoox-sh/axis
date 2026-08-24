@@ -27,6 +27,7 @@ import { signBinance } from './binance';
 import { signBybit } from './bybit';
 import { signCoinbase } from './coinbase';
 import { signKraken } from './kraken';
+import { signMexc } from './mexc';
 import { signOkx } from './okx';
 import type { SignInput, SignedRequest, VenueId } from './types';
 
@@ -37,6 +38,14 @@ export { BINANCE_BASE, BINANCE_KLINES_PATH, signBinance } from './binance';
 export { BYBIT_BASE, BYBIT_KLINE_PATH, signBybit } from './bybit';
 export { COINBASE_BASE, signCoinbase } from './coinbase';
 export { KRAKEN_BASE, KRAKEN_OHLC_PATH, signKraken } from './kraken';
+export {
+  MEXC_BASE,
+  MEXC_KLINES_PATH,
+  mexcKlineInterval,
+  mexcSpotSymbol,
+  mexcWsKlineInterval,
+  signMexc,
+} from './mexc';
 export { OKX_BASE, OKX_CANDLES_PATH, okxHeaders, signOkx } from './okx';
 
 const SIGNERS: Record<VenueId, (input: SignInput) => Promise<SignedRequest>> = {
@@ -45,6 +54,7 @@ const SIGNERS: Record<VenueId, (input: SignInput) => Promise<SignedRequest>> = {
   bybit: signBybit,
   coinbase: signCoinbase,
   kraken: signKraken,
+  mexc: signMexc,
 };
 
 /** Sign a GET kline/candle (or private GET) request for `venue`. */

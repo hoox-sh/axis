@@ -100,3 +100,16 @@ describe('workerHealthLabel', () => {
     expect(workerHealthLabel('unknown')).toBe('Unknown');
   });
 });
+
+describe('studioHealthLabel', () => {
+  it('maps probe statuses the Workers cards display', async () => {
+    const { studioHealthLabel } = await import('../src/ui/studio/StudioDisplay');
+    expect(studioHealthLabel('healthy')).toBe('Healthy');
+    expect(studioHealthLabel('down')).toBe('Down');
+    expect(studioHealthLabel('degraded')).toBe('Degraded');
+    expect(studioHealthLabel('idle')).toBe('Idle');
+    expect(studioHealthLabel('skipped')).toBe('Skipped');
+    expect(studioHealthLabel('unknown')).toBe('Unknown');
+    expect(studioHealthLabel('healthy', 'Custom')).toBe('Custom');
+  });
+});

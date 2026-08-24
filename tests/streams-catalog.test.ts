@@ -50,6 +50,7 @@ describe('defaultStreamForSource', () => {
     expect(defaultStreamForSource('bybit-rest')).toBe('bybit-ws');
     expect(defaultStreamForSource('coinbase-rest')).toBe('coinbase-ws');
     expect(defaultStreamForSource('kraken-rest')).toBe('kraken-ws');
+    expect(defaultStreamForSource('mexc-rest')).toBe('mexc-ws');
     expect(defaultStreamForSource('binance-rest')).toBe('binance-ws');
   });
 });
@@ -58,6 +59,7 @@ describe('streams catalog', () => {
   it('lists built-ins including binance and mock', () => {
     const ids = listStreams().map((s) => s.id);
     expect(ids).toContain('binance-ws');
+    expect(ids).toContain('mexc-ws');
     expect(ids).toContain('mock-poll');
     expect(getStream('binance-ws')).toBeDefined();
   });

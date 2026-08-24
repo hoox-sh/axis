@@ -41,6 +41,7 @@ export type SymbolVenue =
   | 'bybit'
   | 'coinbase'
   | 'kraken'
+  | 'mexc'
   | 'gecko'
   | 'generic';
 
@@ -87,6 +88,7 @@ const VENUE_LABEL: Record<SymbolVenue, string> = {
   bybit: 'Bybit',
   coinbase: 'Coinbase',
   kraken: 'Kraken',
+  mexc: 'MEXC',
   gecko: 'GeckoTerminal',
   generic: 'Popular majors',
 };
@@ -282,6 +284,25 @@ async function fetchKraken(): Promise<SymbolEntry[]> {
   return out;
 }
 
+async function fetchMexc(): Promise<SymbolEntry[]> {
+  const res = await fetch('https://api.mexc.com/api/v3/exchangeInfo', {
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`MEXC HTTP ${res.status}`);
+  const data = (await res.json()) as {
+    symbols?: Array<{
+      symbol: string;
+      baseAsset: string;
+      quoteAsset: string;
+      status: string;
+      isSpotTradingAllowed?: boolean;
+    }>;
+  };
+  return (data.symbols || [])
+    .filter((s) => s.status === 'ENABLED' || s.status === 'TRADING' || s.isSpotTradingAllowed)
+    .map((s) => entry(s.baseAsset, s.quoteAsset, s.symbol));
+}
+
 async function fetchVenue(venue: SymbolVenue): Promise<SymbolEntry[]> {
   switch (venue) {
     case 'binance':
@@ -294,6 +315,8 @@ async function fetchVenue(venue: SymbolVenue): Promise<SymbolEntry[]> {
       return fetchCoinbase();
     case 'kraken':
       return fetchKraken();
+    case 'mexc':
+      return fetchMexc();
     case 'gecko':
       // Full DEX catalog is huge — majors + free-type in modal
       return FALLBACK_MAJORS.map((e) => ({ ...e }));

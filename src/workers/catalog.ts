@@ -39,15 +39,15 @@ export const LOCAL_AXIS_WORKER_BASE = 'http://127.0.0.1:8787';
 /** Default pyne Pro API (Flask). */
 export const DEFAULT_PYNE_PRO_BASE = 'http://127.0.0.1:5002';
 
-/** Production / common pyne Pro host when AXIS is served with same-origin API. */
-export const PRODUCT_PYNE_PRO_HINT = 'https://axis.hoox.sh';
+/** Production pyne Pro API origin (Hetzner VPS behind nginx). */
+export const PRODUCT_PYNE_PRO_HINT = 'https://pynescript.online';
 
 /**
  * Hostnames where nginx (or similar) terminates TLS and reverse-proxies Pro API
  * routes (`/health`, `/run`, `/ws/…`) while UFW keeps :5002 loopback-only.
+ * AXIS PWA on Cloudflare Pages (`axis.hoox.sh`) is **not** same-origin with the API.
  */
 export const PRODUCT_SAME_ORIGIN_API_HOSTS: readonly string[] = [
-  'axis.hoox.sh',
   'pynescript.online',
   'www.pynescript.online',
   'server1.pynescript.online',
@@ -104,7 +104,7 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
     usage:
       'Primary calculation backend for Run / Re-run when engine is Server. ' +
       'Local: Backend URL http://127.0.0.1:5002 (UFW should keep :5002 loopback-only). ' +
-      'Production VPS (axis.hoox.sh): same-origin https://axis.hoox.sh — nginx proxies /health and /run; do not open :5002 publicly. ' +
+      'Production: https://pynescript.online — nginx proxies /health and /run; do not open :5002 publicly. ' +
       'Prefer this for compile/Numba and long histories.',
     icon: 'server',
     kind: 'process',
@@ -142,8 +142,8 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
       {
         title: 'Production VPS (hardened)',
         detail:
-          'nginx :443 proxies /health, /run, /ws/ to loopback :5002. Public health = https://axis.hoox.sh/health. UFW: allow 22,443 only.',
-        command: 'https://axis.hoox.sh',
+          'nginx :443 proxies /health, /run, /ws/ to loopback :5002. Public health = https://pynescript.online/health. UFW: allow 22,80,443 only.',
+        command: 'https://pynescript.online',
       },
       {
         title: 'CORS',
@@ -519,7 +519,7 @@ export function resolveProbeEndpoint(
   }
 
   const page = normalizeWorkerBase(opts?.pageOrigin);
-  // Browser on product host (axis.hoox.sh) → probe same origin for Pro API
+  // Browser on product API host (pynescript.online) → probe same origin for Pro API
   if (entry.id === 'pyne-pro' && page && isProductSameOriginApiHost(page)) {
     return page;
   }

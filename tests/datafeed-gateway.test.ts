@@ -56,14 +56,20 @@ describe('isRemotePageOrigin', () => {
 
 describe('gatewayBase remote-page resolution (hardened VPS)', () => {
   it('pyne on product same-origin host → same-origin /datafeed', () => {
-    expect(gatewayBase('pyne', undefined, 'https://axis.hoox.sh')).toBe(
-      'https://axis.hoox.sh/datafeed',
+    expect(gatewayBase('pyne', undefined, 'https://pynescript.online')).toBe(
+      'https://pynescript.online/datafeed',
     );
   });
 
   it('pyne on Pages preview → product API origin cross-origin', () => {
     expect(gatewayBase('pyne', undefined, 'https://abc.pynescript-axis.pages.dev')).toBe(
-      'https://axis.hoox.sh/datafeed',
+      'https://pynescript.online/datafeed',
+    );
+  });
+
+  it('pyne on CF Pages PWA host → product API origin cross-origin', () => {
+    expect(gatewayBase('pyne', undefined, 'https://axis.hoox.sh')).toBe(
+      'https://pynescript.online/datafeed',
     );
   });
 
@@ -85,7 +91,7 @@ describe('gatewayBase remote-page resolution (hardened VPS)', () => {
 
   it('auto on remote page skips sidecar probe entirely', () => {
     expect(gatewayBase('auto', undefined, 'https://axis.hoox.sh')).toBe(
-      'https://axis.hoox.sh/datafeed',
+      'https://pynescript.online/datafeed',
     );
   });
 

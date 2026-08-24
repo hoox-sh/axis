@@ -1862,8 +1862,8 @@ export async function probeEndpoint(endpoint?: string): Promise<{ ok: boolean; m
           `Cannot reach ${base} (browser → this machine). ` +
           (remotePage
             ? 'AXIS is on a remote host: localhost is *your PC*, not the VPS. ' +
-              'Start local pyne on :5002, or set Backend URL to https://axis.hoox.sh ' +
-              '(same-origin Pro API).'
+              'Start local pyne on :5002, or set Backend URL to https://pynescript.online ' +
+              '(PYNE Pro API).'
             : 'Is pyne Pro API running? (cd pyne && make run)'),
       };
     }

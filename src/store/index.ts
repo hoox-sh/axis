@@ -203,7 +203,7 @@ const DEFAULTS: AppState = {
   historyBars: HISTORY_BARS_DEFAULT,
   source: 'binance-rest',
   engine: 'server',
-  endpoint: 'https://axis.hoox.sh',
+  endpoint: 'https://pynescript.online',
   activePlugins: {
     source: 'binance-rest',
     stream: 'binance-ws',
@@ -385,14 +385,18 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
     const streamId =
       liveBag?.streamId || pluginsBag?.stream || DEFAULTS.live.streamId;
 
-    // Legacy demo IP → same-origin HTTPS host (mixed content + CF edge)
+    // Legacy combined VPS (IP or axis.hoox.sh-as-API) → dedicated Pro API origin.
+    // axis.hoox.sh is now the CF Pages PWA; pyne lives at pynescript.online.
     const rawEndpoint =
       typeof bag.endpoint === 'string' && bag.endpoint.trim()
         ? bag.endpoint.trim()
         : DEFAULTS.endpoint;
-    const endpoint = /^https?:\/\/162\.254\.38\.194(:5002)?\/?$/i.test(rawEndpoint)
-      ? 'https://axis.hoox.sh'
-      : rawEndpoint;
+    const endpoint =
+      /^(https?:\/\/162\.254\.38\.194(:5002)?\/?|https:\/\/axis\.hoox\.sh\/?)$/i.test(
+        rawEndpoint,
+      )
+        ? 'https://pynescript.online'
+        : rawEndpoint;
 
     return {
       ...DEFAULTS,

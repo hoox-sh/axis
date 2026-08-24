@@ -46,9 +46,9 @@
 
 import type { Env } from '../index';
 
-type VenueId = 'binance' | 'okx' | 'bybit' | 'coinbase' | 'kraken';
+type VenueId = 'binance' | 'okx' | 'bybit' | 'coinbase' | 'kraken' | 'mexc';
 
-const VALID_VENUES = new Set<string>(['binance', 'okx', 'bybit', 'coinbase', 'kraken']);
+const VALID_VENUES = new Set<string>(['binance', 'okx', 'bybit', 'coinbase', 'kraken', 'mexc']);
 
 /** Binance kline intervals accepted into the upstream path. */
 const ALLOWED_INTERVALS = new Set([
@@ -127,6 +127,11 @@ const KRAKEN_INTERVAL: Record<string, number> = {
     '1m': 1, '5m': 5, '15m': 15, '1h': 60, '4h': 240, '1d': 1440, '1w': 10080,
 };
 
+const MEXC_KLINE: Record<string, string> = {
+    '1m': 'Min1', '5m': 'Min5', '15m': 'Min15', '30m': 'Min30',
+    '1h': 'Min60', '4h': 'Hour4', '1d': 'Day1', '1w': 'Week1',
+};
+
 interface VenueWsConfig {
     url: string;
     subscribe: Record<string, unknown> | string | null;
@@ -163,6 +168,13 @@ function buildVenueWs(venue: VenueId, symbol: string, interval: string): VenueWs
             return {
                 url: 'wss://ws.kraken.com/',
                 subscribe: { event: 'subscribe', pair: [krakenPair(sym)], subscription: { name: 'ohlc', interval: KRAKEN_INTERVAL[interval] || 1440 } },
+            };
+        }
+        case 'mexc': {
+            const compact = sym.replace(/[-_/]/g, '');
+            return {
+                url: 'wss://wbs.mexc.com/ws',
+                subscribe: { method: 'SUBSCRIPTION', params: [`${compact}@kline@${MEXC_KLINE[interval] || 'Day1'}`] },
             };
         }
         default:

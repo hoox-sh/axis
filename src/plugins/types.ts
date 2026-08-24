@@ -93,6 +93,7 @@ export interface PluginCapabilities {
     | 'bybit'
     | 'coinbase'
     | 'kraken'
+    | 'mexc'
     | 'gecko'
     | 'mock'
     | 'upload'

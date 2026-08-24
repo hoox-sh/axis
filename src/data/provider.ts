@@ -39,6 +39,7 @@ export type ProviderVenue =
   | 'bybit'
   | 'coinbase'
   | 'kraken'
+  | 'mexc'
   | 'gecko'
   | 'mock'
   | 'upload'
@@ -82,6 +83,7 @@ const VENUE_LABEL: Record<ProviderVenue, string> = {
   bybit: 'Bybit',
   coinbase: 'Coinbase',
   kraken: 'Kraken',
+  mexc: 'MEXC',
   gecko: 'GeckoTerminal',
   mock: 'Mock',
   upload: 'Upload',
@@ -113,6 +115,7 @@ export function venueFromPluginId(id: string | undefined | null): ProviderVenue 
   if (s.includes('bybit')) return 'bybit';
   if (s.includes('coinbase')) return 'coinbase';
   if (s.includes('kraken')) return 'kraken';
+  if (s.includes('mexc')) return 'mexc';
   if (s.includes('gecko')) return 'gecko';
   if (s.includes('mock')) return 'mock';
   if (s.includes('csv') || s.includes('upload')) return 'upload';
@@ -131,6 +134,7 @@ export function venueFromCapabilities(
     v === 'bybit' ||
     v === 'coinbase' ||
     v === 'kraken' ||
+    v === 'mexc' ||
     v === 'gecko' ||
     v === 'mock' ||
     v === 'upload' ||
@@ -195,6 +199,7 @@ const SOURCE_STREAM: Record<string, string> = {
   'bybit-rest': 'bybit-ws',
   'coinbase-rest': 'coinbase-ws',
   'kraken-rest': 'kraken-ws',
+  'mexc-rest': 'mexc-ws',
   'ccxt-rest': 'ccxt-ws',
 };
 
