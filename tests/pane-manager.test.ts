@@ -708,6 +708,36 @@ describe('PaneManager', () => {
     pm.setEquityCurve([]);
   });
 
+  it('hlines host on plot series, never on bgcolor underlays', () => {
+    // Regression: bgcolor_* histograms live on a hidden 0..1 price scale;
+    // hosting hlines there mapped them far off-viewport (invisible).
+    const pane = pm.createPane('ind_gc', 'indicator', 'CCI');
+    pm.syncBgcolorBands(
+      [{ name: 'bg', data: [{ time: 100, value: 1, color: 'rgba(8,153,129,0.3)' }] }],
+      { ownerId: 's1', paneId: 'ind_gc' },
+    );
+    expect(Object.keys(pane.series).some((k) => k.startsWith('bgcolor_'))).toBe(true);
+
+    pm.syncOverlayLines(
+      'ind_gc',
+      [
+        { name: 'CCI', data: [{ time: 100, value: 10 }], color: '#ffffff' },
+        { name: 'high', kind: 'hline', data: [], price: 70 },
+        { name: 'mid', kind: 'hline', data: [], price: 50 },
+        { name: 'low', kind: 'hline', data: [], price: 30 },
+      ],
+      { ownerId: 's1' },
+    );
+
+    const bgKey = Object.keys(pane.series).find((k) => k.startsWith('bgcolor_')) as string;
+    const bg = pane.series[bgKey] as never as { _priceLines: unknown[] };
+    expect(bg._priceLines).toHaveLength(0);
+    const total = Object.entries(pane.series)
+      .filter(([k]) => k !== bgKey)
+      .reduce((n, [, s]) => n + ((s as never as { _priceLines?: unknown[] })._priceLines?.length ?? 0), 0);
+    expect(total).toBe(3);
+  });
+
   it('dispose cleans up', () => {
     pm.createPane('price', 'price', 'Price');
     pm.createPane('volume', 'volume', 'Volume', 80);

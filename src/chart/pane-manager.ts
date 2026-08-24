@@ -2299,11 +2299,18 @@ export class PaneManager {
   /** Prefer candle, else first non-overlay series, else any series (for createPriceLine host). */
   private priceLineHost(pane: ManagedPane): ISeriesApi<any> | null {
     if (pane.series['candle']) return pane.series['candle'];
+    let helperFirst: ISeriesApi<any> | null = null;
     for (const [k, s] of Object.entries(pane.series)) {
-      if (!k.startsWith('overlay_')) return s;
+      // Helper underlays (Pine bgcolor histograms) live on their own hidden
+      // price scale — hosting hlines there maps them far off-viewport. TV
+      // paints backgrounds behind the pane; they never host price lines.
+      if (k.startsWith('bgcolor_')) {
+        helperFirst ??= s;
+        continue;
+      }
+      return s;
     }
-    const first = Object.values(pane.series)[0];
-    return first ?? null;
+    return helperFirst ?? Object.values(pane.series)[0] ?? null;
   }
 
   /**

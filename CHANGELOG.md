@@ -22,6 +22,7 @@ _Generated/updated: 2026-08-24 · 290 commits · describe-tag: `v2.0.25`_
 
 ### Fixed
 
+- **`hline()` levels vanished once `bgcolor()` rendered** — `priceLineHost` picked the first non-overlay series, which after the bgcolor fix could be a `bgcolor_*` histogram living on its own hidden 0–1 price scale; hlines attached there mapped far off-viewport. Host selection now skips bgcolor underlays (TradingView paints backgrounds *behind* panes — they never host price lines).
 - **`bgcolor()` / `barcolor()` drew nothing** — response normalization coerced every series sample through `Number()`, turning engine color arrays (`rgba(8, 153, 129, 0.298)` per bar) into all-`null`, so the histogram bands were filtered out before reaching the chart. CSS color samples now pass through normalization untouched (`coerceSeriesSample`); value plots still coerce as before.
 - **Workers status chips stayed “Unknown”** — `StudioStatus` closed over the first `props.status` (`unknown` while probes ran). The CSS class updated (green/red dot) but the word did not. Label is now read from props on each render.
 
