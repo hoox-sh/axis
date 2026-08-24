@@ -14,6 +14,7 @@ import {
   claimRunStatus,
   coercePlotSample,
   currentRunEpoch,
+  coerceSeriesSample,
   formatRunError,
   getRunStatusEpoch,
   isRunEpochCurrent,
@@ -115,6 +116,23 @@ describe('lineDataHasSample', () => {
   });
 });
 
+describe('coerceSeriesSample', () => {
+  it('passes CSS color strings through untouched (bgcolor/barcolor)', () => {
+    expect(coerceSeriesSample('rgba(8, 153, 129, 0.298)')).toBe('rgba(8, 153, 129, 0.298)');
+    expect(coerceSeriesSample('#089981')).toBe('#089981');
+    expect(coerceSeriesSample('#08998126')).toBe('#08998126');
+    expect(coerceSeriesSample('hsla(120, 50%, 50%, 0.3)')).toBe('hsla(120, 50%, 50%, 0.3)');
+    expect(coerceSeriesSample(' color(#abc / 50%) ')).toBe('color(#abc / 50%)');
+  });
+
+  it('still coerces numeric strings and rejects garbage', () => {
+    expect(coerceSeriesSample('3.14')).toBe(3.14);
+    expect(coerceSeriesSample('na')).toBeNull();
+    expect(coerceSeriesSample('nope')).toBeNull();
+    expect(coerceSeriesSample(null)).toBeNull();
+  });
+});
+
 describe('normalizeSeriesMap / plots / events', () => {
   it('drops non-array series entries and coerces samples', () => {
     const m = normalizeSeriesMap({
@@ -126,6 +144,15 @@ describe('normalizeSeriesMap / plots / events', () => {
     expect(m).toEqual({ a: [1, 2, null, null, null] });
     expect(normalizeSeriesMap(null)).toEqual({});
     expect(normalizeSeriesMap([])).toEqual({});
+  });
+
+  it('keeps bgcolor color samples as strings; na → null', () => {
+    const m = normalizeSeriesMap({
+      bgcolor: ['rgba(8, 153, 129, 0.298)', 'na', null, '#ff0000'],
+    });
+    expect(m).toEqual({
+      bgcolor: ['rgba(8, 153, 129, 0.298)', null, null, '#ff0000'],
+    });
   });
 
   it('normalizes plots array', () => {

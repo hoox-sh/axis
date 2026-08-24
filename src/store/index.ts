@@ -85,6 +85,7 @@ import {
   clearPanelHoverSlideExpanded,
   setPanelHoverSlideExpanded,
 } from '../ui/panels/hover-slide';
+import type { PlotSample } from '../plugins/types';
 import {
   chartOverlayGeometry,
   defaultPanelPosition,
@@ -1919,7 +1920,7 @@ export function setIndicatorSeries(
   id: string,
   payload: {
     name: string;
-    series: Record<string, (number | null)[]>;
+    series: Record<string, PlotSample[]>;
     titles?: Record<string, string>;
   },
 ) {

@@ -56,7 +56,7 @@
 export const DEFAULT_PYNE_WORKER_ENDPOINT =
   'https://pyne-worker.cryptolinx.workers.dev';
 
-import type { EnginePlugin, RunResult } from '../plugins/types';
+import type { EnginePlugin, PlotSample, RunResult } from '../plugins/types';
 import { store, setTelemetryPlane, setTelemetryState, setStatus, appendLog } from '../store';
 import { registry } from '../plugins/registry';
 import { classifyTransport } from '../ui/telemetry';
@@ -254,7 +254,7 @@ export const serverEngine: EnginePlugin = {
           return {
             status: 'success',
             plots: (wsResult.plots as (number | null)[]) || [],
-            series: (wsResult.series as Record<string, (number | null)[]>) || {},
+            series: (wsResult.series as Record<string, PlotSample[]>) || {},
             events: (wsResult.events as RunResult['events']) || [],
             drawings: (wsResult.drawings as RunResult['drawings']) || [],
             inputs: (wsResult as { inputs?: unknown }).inputs,
@@ -408,7 +408,7 @@ export const serverEngine: EnginePlugin = {
       return {
         status: 'success',
         plots: (payload.plots as (number | null)[]) || [],
-        series: (payload.series as Record<string, (number | null)[]>) || {},
+        series: (payload.series as Record<string, PlotSample[]>) || {},
         events: (payload.events as RunResult['events']) || [],
         drawings: (payload.drawings as RunResult['drawings']) || [],
         inputs: payload.inputs,

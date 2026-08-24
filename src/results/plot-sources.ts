@@ -30,6 +30,7 @@
 
 import { store } from '../store';
 import { DEFAULT_SOURCE_OPTIONS } from './script-inputs';
+import type { PlotSample } from '../plugins/types';
 
 /** Stable prefix for cross-indicator plot refs (not a built-in OHLC name). */
 export const PLOT_SOURCE_PREFIX = 'plot:';
@@ -38,7 +39,7 @@ export type IndicatorSeriesCache = Record<
   string,
   {
     name: string;
-    series: Record<string, (number | null)[]>;
+    series: Record<string, PlotSample[]>;
     /** Optional display titles from plot_meta */
     titles?: Record<string, string>;
   }

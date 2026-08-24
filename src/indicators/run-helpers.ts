@@ -31,7 +31,7 @@ import type { RunResult as EngineRunResult } from '../plugins/types';
 
 /** Engine result with `series` / `plots` / `events` always present. */
 export type NormalizedRunResult = EngineRunResult & {
-  series: Record<string, (number | null)[]>;
+  series: Record<string, (number | string | null)[]>;
   plots: (number | null)[];
   events: NonNullable<EngineRunResult['events']>;
 };
@@ -60,6 +60,21 @@ export function coercePlotSample(v: unknown): number | null {
     return Number.isFinite(n) ? n : null;
   }
   return null;
+}
+
+/**
+ * CSS color strings pass through untouched — Pine `bgcolor` / `barcolor`
+ * series are per-bar color samples (`rgba(…)` / hex), not numbers. Numeric
+ * coercion would turn every bar into `null` and silently drop the plot.
+ */
+const CSS_COLOR_RE = /^(#[0-9a-f]{3,8}|rgba?\(|hsla?\(|color\()/i;
+
+export function coerceSeriesSample(v: unknown): number | string | null {
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (CSS_COLOR_RE.test(s)) return s;
+  }
+  return coercePlotSample(v);
 }
 
 /**
@@ -110,14 +125,15 @@ export function lineDataHasSample(
 /** Ensure series values are `(number|null)[]`; drop non-array entries. */
 export function normalizeSeriesMap(
   series: unknown,
-): Record<string, (number | null)[]> {
+): Record<string, (number | string | null)[]> {
   if (!series || typeof series !== 'object' || Array.isArray(series)) return {};
-  const out: Record<string, (number | null)[]> = {};
+  const out: Record<string, (number | string | null)[]> = {};
   for (const [key, raw] of Object.entries(series as Record<string, unknown>)) {
     if (!key || key.startsWith('__') || key.startsWith('_')) continue;
     if (!Array.isArray(raw)) continue;
-    // Coerce samples so cache/consumers never see NaN/string garbage
-    out[key] = raw.map((v) => coercePlotSample(v));
+    // Coerce samples so cache/consumers never see NaN garbage; CSS color
+    // strings (bgcolor/barcolor) pass through untouched.
+    out[key] = raw.map((v) => coerceSeriesSample(v));
   }
   return out;
 }

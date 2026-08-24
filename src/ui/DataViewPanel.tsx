@@ -32,6 +32,7 @@ import { buildDataViewRows } from '../results/dataview';
 import type { RunResult } from '../indicators/runner';
 import { onchainManagerState } from '../onchain/manager';
 import { FloatableShell } from './panels/FloatableShell';
+import type { PlotSample } from '../plugins/types';
 
 /** Crosshair-synced OHLCV / plot / drawing / on-chain value inspector. */
 export const DataViewPanel: Component = () => {
@@ -64,7 +65,7 @@ export const DataViewPanel: Component = () => {
       barIndex: store.crosshair?.barIndex,
       symbol: store.symbol,
       interval: store.interval,
-      series: (r?.series || {}) as Record<string, (number | null)[]>,
+      series: (r?.series || {}) as Record<string, PlotSample[]>,
       plotMeta,
       drawings: store.drawings,
       onchainSeries,

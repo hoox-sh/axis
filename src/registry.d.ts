@@ -82,7 +82,7 @@ export interface Stream {
 export interface RunResult {
     status: 'success' | 'error';
     plots: (number | null)[];
-    series?: Record<string, (number | null)[]>;
+    series?: Record<string, (number | string | null)[]>;
     events: Array<{ time: number; type: string; id?: string; price?: number; dir?: string; [k: string]: unknown }>;
     logs?: Array<{ level?: string; message?: string; [k: string]: unknown }>;
     profile?: Record<string, unknown>;

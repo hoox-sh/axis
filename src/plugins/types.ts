@@ -200,10 +200,17 @@ export interface StreamPlugin extends PluginBase {
  * Success payloads typically include `series` (named plots), optional
  * `events` (strategy), `drawings` (line/box/label), and `meta.plot_meta`.
  */
+/**
+ * Per-bar plot sample: numbers for value plots, CSS color strings for
+ * `bgcolor` / `barcolor` series, `null` = na.
+ */
+export type PlotSample = number | string | null;
+
 export interface RunResult {
   status: 'success' | 'error';
   plots: (number | null)[];
-  series?: Record<string, (number | null)[]>;
+  /** Per-bar plot sample: numbers for value plots, CSS color strings for bgcolor/barcolor, null = na. */
+  series?: Record<string, PlotSample[]>;
   events: Array<{
     time: number;
     type: string;

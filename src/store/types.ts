@@ -1,3 +1,4 @@
+import type { PlotSample } from '../plugins/types';
 // Copyright (C) 2024-2026 jango_blockchained
 //
 // This file is part of pynescript.
@@ -483,7 +484,7 @@ export interface AppState {
     string,
     {
       name: string;
-      series: Record<string, (number | null)[]>;
+      series: Record<string, PlotSample[]>;
       titles?: Record<string, string>;
     }
   >;
