@@ -98,7 +98,7 @@ import {
   resolveDrawingLimits,
 } from '../chart/pyne-drawings';
 import { getActiveEngine, getActiveEngineConfig } from '../plugins/active';
-import type { RunResult as EngineRunResult } from '../plugins/types';
+import type { RunResult as EngineRunResult, PlotSample } from '../plugins/types';
 import { classifyTransport } from '../ui/telemetry';
 import { reportUiError } from '../ui/boot-errors';
 import { isScriptRunBlocked } from '../editor/preevaluate';
@@ -118,7 +118,7 @@ import { resolveScriptDisplayName } from './run-target';
 
 /** Engine result with `series` always present (empty object if missing). */
 export type RunResult = EngineRunResult & {
-  series: Record<string, (number | null)[]>;
+  series: Record<string, PlotSample[]>;
   plots: (number | null)[];
 };
 
@@ -1601,7 +1601,7 @@ async function runAndApplyInner(
   }
 
   // Cache line plots for cross-indicator input.source (exclude hline-only noise)
-  const seriesForCache: Record<string, (number | null)[]> = {};
+  const seriesForCache: Record<string, PlotSample[]> = {};
   const titlesForCache: Record<string, string> = {};
   for (const [k, arr] of seriesEntries) {
     seriesForCache[k] = (Array.isArray(arr) ? arr : []) as (number | null)[];
