@@ -59,3 +59,6 @@ venv/
 .agent-sync-notice.md
 .agent_sync*.md
 .agent-sync/
+
+# opencode local session dir (has its own node_modules)
+.opencode/

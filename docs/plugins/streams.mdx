@@ -51,6 +51,7 @@ flowchart LR
 | `bybit-ws` | Bybit WebSocket | no | Public linear/spot kline topics |
 | `coinbase-ws` | Coinbase WebSocket | no | Advanced Trade **candles** (venue OHLC, not ticker buckets) |
 | `kraken-ws` | Kraken WebSocket | no | Public OHLC channel |
+| `mexc-ws` | MEXC WebSocket | no | JSON kline (`wss://wbs.mexc.com/ws`); 15s PING |
 | `mock-poll` | Mock Poll | **yes** | 1s synthetic updates from `lastBar` |
 
 UI order: venues first, `mock-poll` last (`BUILTIN_STREAMS`).
@@ -107,7 +108,7 @@ Not built-in. After load:
 2. Client opens `wss://…/api/stream?session=…&venue=binance&symbol=BTCUSDT&interval=1m`.
 3. Worker routes to `SessionDO`; DO opens one upstream WS for the venue and broadcasts raw kline JSON.
 
-The DO supports all 5 built-in venues (Binance, OKX, Bybit, Coinbase, Kraken) via the `venue` query param. Each venue's WS URL and subscribe message is built from `src/streams/ws-venues.ts` — the same shared helper used by browser-side StreamPlugins.
+The DO supports the built-in CEX venues (Binance, OKX, Bybit, Coinbase, Kraken, MEXC) via the `venue` query param. Each venue's WS URL and subscribe message is built from `src/streams/ws-venues.ts` — the same shared helper used by browser-side StreamPlugins.
 
 Requires `SESSIONS` Durable Object binding (often commented in `wrangler.toml` until provisioned).
 

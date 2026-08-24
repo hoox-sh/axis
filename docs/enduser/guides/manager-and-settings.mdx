@@ -30,11 +30,11 @@ Five studio pages share one full-viewport overlay. Runtime is the active calcula
 
 | Surface | Opens from | Mutates |
 | --- | --- | --- |
-| **Runtime** | Topbar **Runtime** · ⌘K “Open Runtime” | Active engine, endpoint, exec mode, probe of *that* backend |
+| **Runtime** | Topbar **Studio** · studio rail · ⌘K “Open Runtime” | Active engine, endpoint, exec mode, probe of *that* backend |
 | **Workers** | Studio rail · ⌘K “Open Workers” · Runtime card | Probe catalog; activate a backend (`endpoint` / engine) |
 | **Plugins** | Studio rail · ⌘K “Open Plugins” · hidden topbar testid | Registry membership, Use, URL install, script library |
-| **Wire** | Topbar **Wire** · ⌘K “Open Architecture” | Compose slots; Apply writes `activePlugins` |
-| **Settings** | Topbar gear | Appearance, chart, live, session keys, editor intel, theme |
+| **Wire** | Topbar **Studio** → Wire rail · ⌘K “Open Architecture” | Compose slots; Apply writes `activePlugins` |
+| **Settings** | Topbar **Studio** → Settings rail · ⌘K “Open Settings” | Appearance, chart, live, session keys, editor intel, theme |
 
 Active plugins live in `store.activePlugins`; per-plugin fields in `store.pluginsConfig` keyed by `` `${kind}:${id}` ``.
 

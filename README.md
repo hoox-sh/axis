@@ -243,9 +243,9 @@ axis/                         (this repo root)
 
 - **Local Flask**: existing `make run` on `:5002`. PWA talks to it directly
   (CORS handled by the backend). Default endpoint is `http://localhost:5002`.
-- **VPS demo**: PWA + Pro API same-origin at `https://axis.hoox.sh`
-  (Cloudflare → nginx TLS → static `axis-pwa` + reverse-proxy `/run`/`/ws`/`/health`
-  to `pynescript-api` on `:5002`). Default store endpoint is `https://axis.hoox.sh`.
+- **Production split**: PWA on Cloudflare Pages (`https://axis.hoox.sh`); PYNE Pro API
+  on Hetzner (`https://pynescript.online`, nginx → gunicorn `:5002`). Default store
+  endpoint is `https://pynescript.online`. SSH: `ssh pynescript`.
 - **Cloudflare Worker**: `bun run axis:deploy` (or `make worker-deploy`). The Worker
   exposes `/api/run`, `/api/stream`, `/api/keys`, `/api/onchain/*` (DefiLlama +
   GeckoTerminal allowlisted proxy), Git OAuth device flow, etc. See `worker/README.md`,
@@ -262,7 +262,7 @@ CORS is enforced by the **API you call** (pyne Pro API or the AXIS Worker), not 
 Product Origins are **always appended** even when systemd sets a short list:
 `*.hoox.sh`, `*.pynescript.ai`, `*.pynescript.online`, and **`*.pynescript-axis.pages.dev`**
 (not open `*.pages.dev`). `GET /health` and `POST /run` always reflect the request Origin
-so a Cloudflare Pages preview can probe/run against `https://axis.hoox.sh`.
+so a Cloudflare Pages preview can probe/run against `https://pynescript.online`.
 
 | Origin style | Safe? | Notes |
 |--------------|-------|--------|
@@ -272,14 +272,14 @@ so a Cloudflare Pages preview can probe/run against `https://axis.hoox.sh`.
 | `*` | Demo-only | Reflects any Origin — fine for a public demo, not for production secrets |
 | `0.0.0.0` | **Skip** | Not a normal browser Origin; listening on `0.0.0.0` ≠ CORS |
 
-Same-origin proxy (recommended): browser on `https://axis.hoox.sh` calls `/run` — no CORS.
-Cross-origin (Pages → `axis.hoox.sh`) needs the product regex above.
+Same-origin proxy: browser on `https://pynescript.online` calls `/run` — no CORS.
+Cross-origin (Pages `axis.hoox.sh` → `pynescript.online`) needs the product regex above.
 Direct `:5002` is still fine for demos if `ALLOWED_ORIGINS` includes the page origin.
 
 ```ini
 # /etc/systemd/system/pynescript-api.service
 # Short list is fine — pyne always appends localhost + product/Pages regex.
-Environment=ALLOWED_ORIGINS=https://axis.hoox.sh,https://hoox.sh
+Environment=ALLOWED_ORIGINS=https://pynescript.online,https://axis.hoox.sh,https://hoox.sh
 # Demo-only open reflection:
 # Environment=ALLOWED_ORIGINS=*
 ```
@@ -290,12 +290,12 @@ Environment=ALLOWED_ORIGINS=https://axis.hoox.sh,https://hoox.sh
 Smoke:
 
 ```bash
-curl -sS -D- -o /dev/null -X OPTIONS https://axis.hoox.sh/run \
+curl -sS -D- -o /dev/null -X OPTIONS https://pynescript.online/run \
   -H "Origin: https://axis.hoox.sh" \
   -H "Access-Control-Request-Method: POST"
 # expect Access-Control-Allow-Origin echoing the Origin
 
-curl -sS -X POST https://axis.hoox.sh/run \
+curl -sS -X POST https://pynescript.online/run \
   -H "Content-Type: application/json" \
   -H "Origin: https://axis.hoox.sh" \
   -d '{"script":"//@version=6\nindicator(\"t\")\nplot(close)","data":[{"time":1,"open":1,"high":1,"low":1,"close":1,"volume":1}]}'

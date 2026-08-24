@@ -451,7 +451,7 @@ Introduce **`ProviderSession`** — a first-class locked market-data identity th
 
 7. **Credential vault** (`src/data/credentials.ts`): in-memory session-only vault for API key/secret/passphrase. Secrets never reach `persist()`, `pluginsConfig`, error-share, or CHANGELOG dumps. `redactSecrets` and `stripSecretKeys` enforce this.
 
-8. **Venue HMAC signers** (`src/data/venues/`): thin Binance / OKX / Bybit / Coinbase / Kraken signers. No CCXT in the browser.
+8. **Venue HMAC signers** (`src/data/venues/`): thin Binance / OKX / Bybit / Coinbase / Kraken / MEXC signers. No CCXT in the browser.
 
 9. **Signed Binance klines**: vault key → HMAC direct fetch → Worker `/api/market/binance/signed/klines` (request-scoped `X-Exchange-Key` / `X-Exchange-Secret`). 401/403 stays thrown — bad keys must not silently mix public klines.
 
