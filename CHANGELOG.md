@@ -15,6 +15,23 @@ _Generated/updated: 2026-08-23 · 283 commits · describe-tag: `v2.0.24`_
 
 ## [Unreleased]
 
+### Added
+
+- **Pages security headers** — `public/_headers` ships the nginx/server.ts hardening baseline to Cloudflare Pages deploys (CSP with self scripts + `wasm-unsafe-eval` for Pyodide, https/wss connect, plus nosniff / referrer / frame-deny), so axis.hoox.sh gets enforced headers instead of only Page Shield's Report-Only placeholder.
+- **Native MEXC CEX** — `mexc-rest` / `mexc-ws` as a built-in venue (public spot klines, no CCXT). Venue picker lists MEXC with Binance/OKX/Bybit; signed REST uses `X-MEXC-APIKEY`. MEXC was removed from the pinned CCXT shortlist.
+
+### Fixed
+
+- **Workers status chips stayed “Unknown”** — `StudioStatus` closed over the first `props.status` (`unknown` while probes ran). The CSS class updated (green/red dot) but the word did not. Label is now read from props on each render.
+
+### Changed
+
+- **Topbar Studio** — one **Studio** button replaces Wire, Runtime, and Settings. Those pages stay in the studio rail (and ⌘K). The button reopens the last studio page.
+
+- **Wire recipe grid** — the hatch is a behind-layer at lower opacity. The right-edge fade no longer masks preset names.
+
+- **PYNE Pro API origin is `https://pynescript.online`** — Hetzner VPS (nginx → gunicorn `:5002`). `axis.hoox.sh` is the Cloudflare Pages PWA, not same-origin with the API. Default Backend URL, Workers Manager probe, datafeed gateway, and Settings/Runtime presets follow the new origin; saved `axis.hoox.sh` / old VPS IP endpoints remap on load.
+
 ## [2.0.25] — 2026-08-23
 
 ### Fixed
