@@ -132,8 +132,13 @@ import {
 /** Primary charting workspace component mounted by `index.tsx`. */
 export const App: Component = () => {
   const [studioPage, setStudioPage] = createSignal<StudioPageId | null>(null);
+  const [lastStudioPage, setLastStudioPage] = createSignal<StudioPageId>('runtime');
   const [settingsTab, setSettingsTab] = createSignal<SettingsTabId>('general');
-  const openStudio = (page: StudioPageId) => setStudioPage(page);
+  const openStudio = (page: StudioPageId) => {
+    setLastStudioPage(page);
+    setStudioPage(page);
+  };
+  const openStudioHome = () => openStudio(lastStudioPage());
   const openSettings = (tab: SettingsTabId = 'general') => {
     setSettingsTab(tab);
     openStudio('settings');
@@ -402,6 +407,7 @@ export const App: Component = () => {
         onOpenWorkers={() => openStudio('workers')}
         onOpenArchitecture={() => openStudio('wire')}
         onOpenRuntime={() => openStudio('runtime')}
+        onOpenStudio={openStudioHome}
         catalogTick={catalogTick()}
         editorRef={editorRef}
       />
@@ -555,6 +561,7 @@ export const App: Component = () => {
           onOpenWorkers={() => openStudio('workers')}
           onOpenArchitecture={() => openStudio('wire')}
           onOpenRuntime={() => openStudio('runtime')}
+          onOpenStudio={openStudioHome}
         />
         {/* About AXIS — logo click / Help → About / command palette */}
         <AboutModal />

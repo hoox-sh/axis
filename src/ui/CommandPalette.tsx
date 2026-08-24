@@ -126,6 +126,8 @@ export type CommandPaletteProps = {
   onOpenWorkers?: () => void;
   /** Open Runtime page. */
   onOpenRuntime?: () => void;
+  /** Open studio overlay (last page). */
+  onOpenStudio?: () => void;
   /** Open Architecture (compose-recipe) modal. */
   onOpenArchitecture?: () => void;
 };
@@ -239,6 +241,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       openPlugins: () => props.onOpenPlugins?.(),
       openWorkers: () => props.onOpenWorkers?.(),
       openRuntime: () => props.onOpenRuntime?.(),
+      openStudio: () => props.onOpenStudio?.() ?? props.onOpenRuntime?.(),
       openArchitecture: () => props.onOpenArchitecture?.(),
       openScriptSettings: () => openScriptSettings(null),
       openOptimise: () => {

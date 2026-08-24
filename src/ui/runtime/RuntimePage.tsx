@@ -278,9 +278,9 @@ export function RuntimePage(props: {
               </StudioChip>
               <StudioChip
                 testId="axis-endpoint-preset-vps"
-                onClick={() => applyPreset('https://axis.hoox.sh', 'server')}
+                onClick={() => applyPreset('https://pynescript.online', 'server')}
               >
-                axis.hoox.sh API
+                pynescript.online API
               </StudioChip>
               <StudioChip
                 testId="axis-endpoint-preset-pyne-worker"

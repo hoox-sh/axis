@@ -104,6 +104,8 @@ export interface CommandActions {
   openWorkers?: () => void;
   /** Open Runtime — active engine / endpoint / health. */
   openRuntime?: () => void;
+  /** Open the studio overlay (last page, or Runtime). */
+  openStudio?: () => void;
   /** Open the architecture / compose-recipe wiring modal. */
   openArchitecture?: () => void;
   openScriptSettings?: () => void;
@@ -605,6 +607,12 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     ],
   },
   {
+    id: 'action.studio',
+    title: 'Open Studio',
+    category: 'navigation',
+    keywords: ['studio', 'runtime', 'wire', 'settings', 'workers', 'plugins', 'architecture'],
+  },
+  {
     id: 'action.runtime',
     title: 'Open Runtime',
     category: 'navigation',
@@ -872,6 +880,7 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
     byId.set('theme.porcelain', () => actions.setChartThemePreset?.('porcelain'));
     byId.set('theme.parchment', () => actions.setChartThemePreset?.('parchment'));
   }
+  if (actions.openStudio) byId.set('action.studio', actions.openStudio);
   if (actions.openRuntime) byId.set('action.runtime', actions.openRuntime);
   if (actions.openPlugins) byId.set('action.plugins', actions.openPlugins);
   if (actions.openWorkers) byId.set('action.workers', actions.openWorkers);

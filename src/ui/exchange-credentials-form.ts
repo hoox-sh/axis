@@ -34,6 +34,7 @@ export const EXCHANGE_CREDENTIAL_VENUES = [
   'bybit',
   'coinbase',
   'kraken',
+  'mexc',
 ] as const;
 
 export type ExchangeCredentialVenue = (typeof EXCHANGE_CREDENTIAL_VENUES)[number];
@@ -44,6 +45,7 @@ export const EXCHANGE_CREDENTIAL_VENUE_LABELS: Record<ExchangeCredentialVenue, s
   bybit: 'Bybit',
   coinbase: 'Coinbase',
   kraken: 'Kraken',
+  mexc: 'MEXC',
 };
 
 export type ExchangeCredentialFormState = {

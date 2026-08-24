@@ -40,6 +40,7 @@ describe('ICON_MAP', () => {
       'status',
       'architecture',
       'runtimes',
+      'studio',
       'settings',
       'fullscreen',
       'maximize',

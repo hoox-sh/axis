@@ -30,7 +30,7 @@
  * - **Layout** — multi-chart layout menu
  * - **Panels** — List → Editor → Library → Scripts → Inputs → Layers → DSM →
  *   On-Chain → Alerts → Values → Results → Script Logs → System Logs → Status
- * - **System** — Fullscreen, Chart only, Wire (Architecture), Runtime, Settings, Theme (`ml-auto`)
+ * - **System** — Fullscreen, Chart only, Studio, Theme (`ml-auto`)
  *
  * ## Actions
  * - **Load / Reload** → force `loadSymbolData` (historical via active source)
@@ -120,6 +120,8 @@ export const Topbar: Component<{
   onOpenArchitecture?: () => void;
   /** Open Runtime — active engine, endpoint, health. */
   onOpenRuntime?: () => void;
+  /** Open the studio overlay (last page, or Runtime). */
+  onOpenStudio?: () => void;
   /** Bump when plugin catalog changes */
   catalogTick?: number;
   editorRef: {
@@ -840,27 +842,41 @@ export const Topbar: Component<{
         <button
           type="button"
           class="sc-btn sc-btn-ghost"
-          onClick={() => props.onOpenArchitecture?.()}
-          title="Architecture — wire source / stream / engine / storage / dataset from a predefinition"
-          data-testid="axis-btn-architecture"
-          aria-label="Open Architecture"
+          onClick={() =>
+            props.onOpenStudio?.() ?? props.onOpenRuntime?.() ?? props.onOpenWorkers?.()
+          }
+          title="Studio — Runtime, Wire, Settings, Workers, Plugins"
+          data-testid="axis-btn-studio"
+          aria-label="Open Studio"
         >
-          <Icons.architecture />
-          <span class="axis-tb-btn-label">Wire</span>
+          <Icons.studio />
+          <span class="axis-tb-btn-label">Studio</span>
         </button>
-
+        {/* Hidden hooks — e2e / palette / docs still open a specific studio page */}
         <button
           type="button"
-          class="sc-btn sc-btn-ghost"
-          onClick={() => props.onOpenRuntime?.() ?? props.onOpenWorkers?.()}
-          title="Runtime — active engine, endpoint, health"
+          class="sr-only"
+          tabindex={-1}
+          data-testid="axis-btn-architecture"
+          aria-label="Open Architecture"
+          onClick={() => props.onOpenArchitecture?.()}
+        />
+        <button
+          type="button"
+          class="sr-only"
+          tabindex={-1}
           data-testid="axis-btn-runtimes"
           aria-label="Open Runtime"
-        >
-          <Icons.runtimes />
-          <span class="axis-tb-btn-label">Runtime</span>
-        </button>
-        {/* Keep test ids for palette / docs that open Status or Plugins specifically */}
+          onClick={() => props.onOpenRuntime?.() ?? props.onOpenWorkers?.()}
+        />
+        <button
+          type="button"
+          class="sr-only"
+          tabindex={-1}
+          data-testid="axis-btn-settings"
+          aria-label="Open settings"
+          onClick={() => props.onOpenSettings()}
+        />
         <button
           type="button"
           class="sr-only"
@@ -877,17 +893,6 @@ export const Topbar: Component<{
           aria-label="Open Plugins"
           onClick={() => props.onOpenPlugins?.()}
         />
-
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost sc-btn-icon"
-          onClick={() => props.onOpenSettings()}
-          title="Settings — density, chart, live, theme"
-          data-testid="axis-btn-settings"
-          aria-label="Open settings"
-        >
-          <Icons.settings />
-        </button>
 
         <button
           type="button"

@@ -84,21 +84,34 @@ export function StudioChip(props: {
 
 export type StudioHealth = 'healthy' | 'degraded' | 'down' | 'idle' | 'unknown' | 'skipped';
 
+/** Map probe status → visible word. Keep this as a function so Solid re-runs it. */
+export function studioHealthLabel(status: StudioHealth, label?: string): string {
+  if (label) return label;
+  switch (status) {
+    case 'healthy':
+      return 'Healthy';
+    case 'degraded':
+      return 'Degraded';
+    case 'down':
+      return 'Down';
+    case 'idle':
+      return 'Idle';
+    case 'skipped':
+      return 'Skipped';
+    default:
+      return 'Unknown';
+  }
+}
+
 export function StudioStatus(props: { status: StudioHealth; label?: string }) {
-  const word =
-    props.label ||
-    (props.status === 'healthy'
-      ? 'Healthy'
-      : props.status === 'degraded'
-        ? 'Degraded'
-        : props.status === 'down'
-          ? 'Down'
-          : props.status === 'idle'
-            ? 'Idle'
-            : props.status === 'skipped'
-              ? 'Skipped'
-              : 'Unknown');
-  return <span class={`ax-status ax-status--${props.status}`}>{word}</span>;
+  // Do not close over props.status — first paint is often `unknown` (probe
+  // in flight); the class string in JSX was reactive but the word was not,
+  // so cards showed a green/red dot next to a frozen "Unknown".
+  return (
+    <span class={`ax-status ax-status--${props.status}`}>
+      {studioHealthLabel(props.status, props.label)}
+    </span>
+  );
 }
 
 export function StudioEmpty(props: { children: JSX.Element }) {

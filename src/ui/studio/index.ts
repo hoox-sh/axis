@@ -33,6 +33,7 @@ export {
   StudioCode,
   StudioList,
   StudioRow,
+  studioHealthLabel,
 } from './StudioDisplay';
 export type { StudioHealth } from './StudioDisplay';
 export { StudioTabs } from './StudioTabs';

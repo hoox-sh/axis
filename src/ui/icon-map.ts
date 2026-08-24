@@ -83,6 +83,7 @@
  * | results | ClipboardList | Results panel |
  * | architecture | Network | Wire / architecture |
  * | runtimes | Boxes | Runtimes hub |
+ * | studio | AppWindow | Studio overlay |
  * | book / cable / barChart | BookOpen / Cable / BarChart3 | Docs / wire / stats |
  * | activity | Activity | Generic pulse (non-panel) |
  *
@@ -177,6 +178,7 @@ export const ICON_MAP = {
   results: 'ClipboardList',
   architecture: 'Network',
   runtimes: 'Boxes',
+  studio: 'AppWindow',
   book: 'BookOpen',
   cable: 'Cable',
   barChart: 'BarChart3',

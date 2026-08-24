@@ -30,6 +30,7 @@ import type { Component, JSX } from 'solid-js';
 import {
   Activity,
   AlertCircle,
+  AppWindow,
   AlignLeft,
   Archive,
   ArrowRight,
@@ -238,6 +239,7 @@ export const Icons = {
   results: withDefaults(ClipboardList),
   architecture: withDefaults(Network),
   runtimes: withDefaults(Boxes),
+  studio: withDefaults(AppWindow),
   book: withDefaults(BookOpen),
   cable: withDefaults(Cable),
   barChart: withDefaults(BarChart3),

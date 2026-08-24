@@ -94,6 +94,22 @@ test.describe('AXIS smoke @smoke', () => {
     await expect(page.getByTestId('axis-runtimes-hub')).toHaveCount(0);
   });
 
+  test('topbar Studio opens overlay; Wire and Settings stay in the rail', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByTestId('axis-btn-studio')).toBeVisible();
+    await expect(page.getByTestId('axis-btn-architecture')).toBeHidden();
+    await expect(page.getByTestId('axis-btn-runtimes')).toBeHidden();
+    await expect(page.getByTestId('axis-btn-settings')).toBeHidden();
+    await page.getByTestId('axis-btn-studio').click();
+    await expect(page.getByTestId('axis-runtimes-hub')).toBeVisible();
+    await page.getByRole('button', { name: 'Wire', exact: true }).click();
+    await expect(page.getByTestId('axis-architecture-modal')).toBeVisible();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(page.getByTestId('axis-settings')).toBeVisible();
+    await page.getByTestId('axis-settings-close').click();
+    await expect(page.getByTestId('axis-settings')).toHaveCount(0);
+  });
+
   test('opens Architecture modal and applies Offline Lab', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('axis-btn-architecture').click();

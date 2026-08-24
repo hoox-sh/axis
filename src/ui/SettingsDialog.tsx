@@ -806,14 +806,14 @@ export const SettingsDialog: Component<Props> = (props) => {
                     type="button"
                     class="sc-btn sc-btn-ghost px-1.5 py-0.5 text-[10px] font-mono"
                     data-testid="axis-endpoint-preset-vps"
-                    title="Same-origin Pro API on axis.hoox.sh (nginx → pyne :5002)"
+                    title="PYNE Pro API on pynescript.online (nginx → pyne :5002)"
                     onClick={() => {
-                      setEndpoint('https://axis.hoox.sh');
+                      setEndpoint('https://pynescript.online');
                       setEngine('server');
                       setProbeMsg('');
                     }}
                   >
-                    axis.hoox.sh API
+                    pynescript.online API
                   </button>
                   <button
                     type="button"

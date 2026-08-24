@@ -686,25 +686,49 @@ button.ax-card[aria-pressed="true"] {
 }
 
 .ax-wire-col--presets {
+  position: relative;
+  isolation: isolate;
   padding: 1.25rem 0 1.5rem;
   border-bottom: var(--border-w) solid var(--color-border);
+}
+/* Grid lives on a behind-layer so the fade never masks recipe text. */
+.ax-wire-col--presets::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
   background-image:
-    linear-gradient(to right, color-mix(in srgb, var(--color-border) 35%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in srgb, var(--color-border) 35%, transparent) 1px, transparent 1px);
+    linear-gradient(to right, color-mix(in srgb, var(--color-border) 12%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--color-border) 12%, transparent) 1px, transparent 1px);
   background-size: 16px 16px;
-  mask-image: linear-gradient(to bottom, black 70%, transparent);
+  opacity: 0.4;
+  mask-image: linear-gradient(to bottom, black 58%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, black 58%, transparent);
+}
+.ax-wire-col--presets > * {
+  position: relative;
+  z-index: 1;
 }
 @container ax-wire (min-width: 56rem) {
   .ax-wire-col--presets {
     border-bottom: 0;
     border-right: var(--border-w) solid var(--color-border);
-    mask-image: linear-gradient(to right, black 78%, transparent);
+  }
+  .ax-wire-col--presets::before {
+    mask-image: linear-gradient(to right, black 55%, transparent);
+    -webkit-mask-image: linear-gradient(to right, black 55%, transparent);
   }
 }
 .ax-wire-col--rail {
+  position: relative;
+  z-index: 1;
   padding: 1.75rem 2rem 2.25rem;
+  background: var(--color-bg-base);
 }
 .ax-wire-col--plan {
+  position: relative;
+  z-index: 1;
   border-top: var(--border-w) solid var(--color-border);
   background: color-mix(in srgb, var(--color-bg-panel) 70%, var(--color-bg-base));
 }
