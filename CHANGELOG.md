@@ -9,11 +9,11 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-23 · 283 commits · describe-tag: `v2.0.24`_
+_Generated/updated: 2026-08-24 · 290 commits · describe-tag: `v2.0.25`_
 
 ---
 
-## [Unreleased]
+## [2.0.26] — 2026-08-24
 
 ### Added
 
@@ -636,9 +636,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (201 commits)
+### 2026-08 (208 commits)
 
 #### Security
 
@@ -649,6 +651,9 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `67b1558d` (2026-08-24) — feat(security): enforce CSP baseline on Cloudflare Pages deploys
+- `3fb40122` (2026-08-24) — feat(data): native MEXC spot venue + PYNE Pro origin pynescript.online
+- `09e047cd` (2026-08-24) — feat(ui): single Studio button replaces Wire/Runtime/Settings
 - `cd0148ca` (2026-08-23) — feat(cli): ship production-grade @hoox-sh/axis-cli 0.2.0
 - `0d45a6f2` (2026-08-23) — feat(ui): full-page studio overlay for Runtime, Wire, and Settings
 - `6900c093` (2026-08-22) — feat(ui): slide-over drawers for Settings, Runtimes, and Wire
@@ -740,6 +745,9 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `53cef490` (2026-08-24) — fix(chart): finish PlotSample widening in runner types
+- `2db34902` (2026-08-24) — fix(chart): preserve engine color series so bgcolor/barcolor render
+- `68b13118` (2026-08-23) — fix(settings): keep user inputs on applied scripts
 - `ea13ba50` (2026-08-23) — fix(ui): seed Wire plan on mount and expose source for e2e
 - `70d0b378` (2026-08-23) — fix(chart): honor Pine plot display.* flags
 - `bed28c62` (2026-08-23) — fix(chart): hide Pine drawings, label pad, histbase, re-own
@@ -822,6 +830,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `35dacd21` (2026-08-24) — docs: studio shell, MEXC venue, and PYNE Pro origin across guides
 - `dce471b0` (2026-08-21) — docs(devops): list /datafeed/ among nginx-proxied Pro API paths
 - `27b5ca13` (2026-08-21) — docs(changelog): datafeed gateway phase 4 additions
 - `36900319` (2026-08-15) — docs(cors): document Pages preview origins for axis.hoox.sh
