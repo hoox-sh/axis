@@ -1272,6 +1272,7 @@ async function runAndApplyInner(
         .filter(({ meta }) => plotDisplayHas(meta.display, PLOT_DISPLAY.pane))
         .map(({ key, values, meta }) => ({
           name: key,
+          title: meta.title || key,
           data: bgcolorSeriesToHistogramData(ohlcvTimes, values, meta.color),
         }))
         .filter((b) => b.data.length > 0);

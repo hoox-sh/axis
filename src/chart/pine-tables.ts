@@ -296,3 +296,11 @@ export function cellTextAlign(halign?: string): 'left' | 'right' | 'center' {
   if (h.includes('right')) return 'right';
   return 'center';
 }
+
+/** Map Pine `text_valign` tokens (`text.*`-prefixed or bare) → CSS vertical-align. */
+export function cellTextVerticalAlign(valign?: string): 'top' | 'middle' | 'bottom' {
+  const v = String(valign || '').toLowerCase().replace('text\.', '');
+  if (v.includes('top')) return 'top';
+  if (v.includes('bottom')) return 'bottom';
+  return 'middle';
+}

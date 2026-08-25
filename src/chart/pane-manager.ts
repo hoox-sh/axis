@@ -2835,7 +2835,11 @@ export class PaneManager {
    * Empty list removes this owner’s bgcolor_* series (or all when unowned).
    */
   syncBgcolorBands(
-    bands: Array<{ name: string; data: { time: number; value: number; color: string }[] }>,
+    bands: Array<{
+      name: string;
+      title?: string;
+      data: { time: number; value: number; color: string }[];
+    }>,
     opts?: OverlayOwnerOpts,
   ) {
     const pane = this.panes.get(opts?.paneId || 'price') ?? this.panes.get('price');
@@ -2873,11 +2877,21 @@ export class PaneManager {
           color: d.color,
         }));
       const existing = pane.series[key];
+      const applyTitle = (s: { applyOptions: (o: { title?: string }) => void }) => {
+        if (!band.title) return;
+        try {
+          s.applyOptions({ title: band.title });
+        } catch {
+          /* ignore */
+        }
+      };
       if (existing) {
+        applyTitle(existing);
         applySeriesDataSmart(existing, mapped, key, this.overlayDataMeta);
       } else {
         try {
           const series = createBgcolorSeries(pane.chart);
+          applyTitle(series);
           applySeriesDataSmart(series, mapped, key, this.overlayDataMeta);
           pane.series[key] = series;
           try {

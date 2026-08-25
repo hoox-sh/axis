@@ -13,6 +13,13 @@ _Generated/updated: 2026-08-24 · 290 commits · describe-tag: `v2.0.25`_
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **tables**: render Pine `table.cell` `text_valign` (top/middle/bottom) and `text_size` tokens/numeric points in the table HUD — parsed previously but rendered fixed 10px/middle; defaults unchanged when absent.
+- **bgcolor**: carry band titles into `syncBgcolorBands` and apply them as series titles on create/update, matching the offline `buildPlotVisuals` path.
+
 ## [2.0.26] — 2026-08-24
 
 ### Added

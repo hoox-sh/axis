@@ -10,8 +10,10 @@
 import { describe, expect, it } from 'bun:test';
 import {
   buildTableGrid,
+  cellTextVerticalAlign,
   collectVisiblePineTables,
   normalizePineTable,
+  parsePineTableCell,
   pineTablePositionClass,
   tablesFromRunPayload,
 } from '../src/chart/pine-tables';
@@ -134,5 +136,30 @@ describe('pineTablePositionClass', () => {
     expect(pineTablePositionClass('position.top_left')).toContain('left');
     expect(pineTablePositionClass('bottom_center')).toContain('bottom');
     expect(pineTablePositionClass('middle_center')).toContain('translate');
+  });
+});
+
+describe('cellTextVerticalAlign', () => {
+  it('maps valign tokens (prefixed, bare, aliases)', () => {
+    expect(cellTextVerticalAlign('text.top')).toBe('top');
+    expect(cellTextVerticalAlign('top')).toBe('top');
+    expect(cellTextVerticalAlign('text.bottom')).toBe('bottom');
+    expect(cellTextVerticalAlign('bottom')).toBe('bottom');
+    expect(cellTextVerticalAlign('middle')).toBe('middle');
+    expect(cellTextVerticalAlign(undefined)).toBe('middle');
+    expect(cellTextVerticalAlign('nonsense')).toBe('middle');
+  });
+});
+
+describe('parsePineTableCell valign/text_size', () => {
+  it('parses snake/camel/size alias keys', () => {
+    const c = parsePineTableCell({
+      row: 1,
+      col: 2,
+      text: 'x',
+      text_valign: 'text.top',
+      textSize: 'small',
+    });
+    expect(c).toMatchObject({ row: 1, col: 2, text_valign: 'text.top', text_size: 'small' });
   });
 });

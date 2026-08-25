@@ -32,10 +32,12 @@ import { store, EDITOR_RUN_KEY } from '../store';
 import {
   buildTableGrid,
   cellTextAlign,
+  cellTextVerticalAlign,
   collectVisiblePineTables,
   pineTablePositionClass,
   type PineTable,
 } from './pine-tables';
+import { labelFontSizePx } from './pyne-drawings';
 
 export const PyneTableHud: Component = () => {
   const tables = createMemo((): PineTable[] => {
@@ -82,11 +84,14 @@ export const PyneTableHud: Component = () => {
                         <For each={row}>
                           {(cell) => (
                             <td
-                              class="px-1.5 py-0.5 min-w-[1.5rem] max-w-[12rem] align-middle"
+                              class="px-1.5 py-0.5 min-w-[1.5rem] max-w-[12rem]"
                               style={{
                                 color: cell?.text_color || 'var(--color-text, #eceef4)',
                                 'background-color': cell?.bgcolor || undefined,
                                 'text-align': cellTextAlign(cell?.text_halign),
+                                'vertical-align': cellTextVerticalAlign(cell?.text_valign),
+                                'font-size': `${labelFontSizePx(cell?.text_size)}px`,
+                                'line-height': '1.2',
                                 'border': `1px solid ${frame()}`,
                                 'word-break': 'break-word',
                               }}

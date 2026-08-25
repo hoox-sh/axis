@@ -691,6 +691,26 @@ describe('PaneManager', () => {
     expect(p.series['bgcolor_up_bg']).toBeUndefined();
   });
 
+  it('syncBgcolorBands applies band titles on create and update', () => {
+    const p = pm.createPane('price', 'price', 'Price');
+    const applied: unknown[] = [];
+    // The factory isn't injectable here — exercise the update path by
+    // injecting a fake series into the registry before syncing.
+    const existing = {
+      setData: () => {},
+      applyOptions: (o: unknown) => {
+        applied.push(o);
+      },
+      priceScale: () => ({ applyOptions: () => {} }),
+    } as never;
+    p.series['bgcolor_t'] = existing;
+    pm.syncBgcolorBands(
+      [{ name: 't', title: 'My Band', data: [{ time: 1, value: 1, color: '#123456' }] }],
+      {},
+    );
+    expect(applied).toContainEqual({ title: 'My Band' });
+  });
+
   it('scrollToTime centers panes', () => {
     pm.createPane('price', 'price', 'Price');
     pm.scrollToTime(1_700_000_000);
