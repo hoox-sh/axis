@@ -9,11 +9,18 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-26 · 297 commits · describe-tag: `v2.0.28`_
+_Generated/updated: 2026-08-26 · 298 commits · describe-tag: `v2.0.29`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.30] — 2026-08-26
+
+### Fixed
+
+- **plot display= in compile mode**: `plot(..., display=display.data_window)` was not carried in `plot_meta` because the compiler didn't fold Pine `display.*` constants. Both axes now resolve `display.data_window`/`display.pane`/etc. to bitfield integers and pass them through to `plot_meta`.
+- **Pyne wheel** — vendor `pynescript-0.4.2` (was 0.4.1). Compiler display folding + server compile-path backfill.
 
 ## [2.0.29] — 2026-08-26
 
@@ -678,9 +685,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (215 commits)
+### 2026-08 (216 commits)
 
 #### Security
 
@@ -785,6 +794,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `cb9c1773` (2026-08-26) — fix(compile): hline linestyle via plot_meta backfill + default auto mode
 - `5bc18f5d` (2026-08-26) — fix(hline): synthesize plot_meta in interpret path for hline linestyle
 - `d417025f` (2026-08-26) — fix(multi-chart): restore slot history on focus so each cell computes independently
 - `5025302f` (2026-08-26) — fix(hline): carry linestyle through both drawing and overlay paths
