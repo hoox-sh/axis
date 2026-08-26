@@ -67,7 +67,9 @@ def _patch_evaluator():
     too strict for our wrapper."""
     from pynescript.ast.evaluator.builtins.arrays import ArrayBuiltinsMixin
     from pynescript.ast.evaluator.builtins.strings import StringBuiltinsMixin
-    from pynescript.ast.evaluator.builtins.technical_submodules.core import TechnicalHelpers
+    from pynescript.ast.evaluator.builtins.technical_submodules.core import (
+        TechnicalHelpers,
+    )
 
     if getattr(ArrayBuiltinsMixin, "_patched_for_browser", False):
         return
@@ -111,7 +113,9 @@ def _patch_evaluator():
         if len(args) != length:
             self._error(f"ta.* function requires {length} argument(s), got {len(args)}")
         series = self._expect_list(args[0], "First argument must be a list (series)")
-        period = self._expect_int(args[1], "Second argument must be an integer (period)")
+        period = self._expect_int(
+            args[1], "Second argument must be an integer (period)"
+        )
         return series, period
 
     ArrayBuiltinsMixin._expect_list = _expect_list
@@ -192,17 +196,32 @@ def _patch_evaluator():
 
         return safe
 
-    for _name in ("_OPERATOR_ADD", "_OPERATOR_SUB", "_OPERATOR_MUL", "_OPERATOR_DIV", "_OPERATOR_MOD"):
+    for _name in (
+        "_OPERATOR_ADD",
+        "_OPERATOR_SUB",
+        "_OPERATOR_MUL",
+        "_OPERATOR_DIV",
+        "_OPERATOR_MOD",
+    ):
         if hasattr(expr_module, _name):
             setattr(expr_module, _name, _none_safe(getattr(expr_module, _name)))
 
     # Also patch comparison operators for None (PineScript na comparisons)
-    for _name in ("_OPERATOR_LT", "_OPERATOR_LE", "_OPERATOR_GT", "_OPERATOR_GE", "_OPERATOR_EQ", "_OPERATOR_NE"):
+    for _name in (
+        "_OPERATOR_LT",
+        "_OPERATOR_LE",
+        "_OPERATOR_GT",
+        "_OPERATOR_GE",
+        "_OPERATOR_EQ",
+        "_OPERATOR_NE",
+    ):
         if hasattr(expr_module, _name):
             setattr(expr_module, _name, _none_safe(getattr(expr_module, _name)))
 
     # --- Fix AdvancedIndicators._builtin_ta_stdev: properly extract series ---
-    from pynescript.ast.evaluator.builtins.technical_submodules.advanced import AdvancedIndicators
+    from pynescript.ast.evaluator.builtins.technical_submodules.advanced import (
+        AdvancedIndicators,
+    )
 
     if not getattr(AdvancedIndicators, "_stdev_fixed", False):
 
@@ -224,7 +243,9 @@ class CustomEvaluator:
         _patch_evaluator()
 
         # Wrap (not subclass) to avoid multiple-inheritance surprises.
-        self._inner = NodeLiteralEvaluator(context=context, data_feed=data_feed, data_provider=data_provider)
+        self._inner = NodeLiteralEvaluator(
+            context=context, data_feed=data_feed, data_provider=data_provider
+        )
         self.plot_outputs: list[dict] = []
         self._strategy_state = StrategyState()
         self._var_declarations = set()
@@ -275,7 +296,9 @@ class CustomEvaluator:
         value = args[0]
         if hasattr(value, "current"):
             value = value.current
-        self.plot_outputs.append({"type": "plot", "value": value, "kwargs": kwargs or {}})
+        self.plot_outputs.append(
+            {"type": "plot", "value": value, "kwargs": kwargs or {}}
+        )
         return None
 
     def reset_plots(self):
@@ -306,7 +329,9 @@ class _Namespace:
 # --- The run loop --------------------------------------------------------
 
 
-def _run_interpret(script: str, bars: list[dict], libraries: list | None = None) -> dict:
+def _run_interpret(
+    script: str, bars: list[dict], libraries: list | None = None
+) -> dict:
     # Build series
     open_series = PineSeries()
     high_series = PineSeries()
@@ -334,9 +359,16 @@ def _run_interpret(script: str, bars: list[dict], libraries: list | None = None)
             session="regular",
         ),
         "timeframe": _Namespace(
-            period="D", multiplier=1, isdaily=True, isintraday=False, isweekly=False, ismonthly=False
+            period="D",
+            multiplier=1,
+            isdaily=True,
+            isintraday=False,
+            isweekly=False,
+            ismonthly=False,
         ),
-        "barstate": _Namespace(isconfirmed=True, isrealtime=False, isnew=True, islastconfirmedbar=True),
+        "barstate": _Namespace(
+            isconfirmed=True, isrealtime=False, isnew=True, islastconfirmedbar=True
+        ),
         "chart": _Namespace(isfullscreen=False, leftvisiblebars=0, rightvisiblebars=0),
     }
 
@@ -549,6 +581,57 @@ def _run_compiled(script: str, bars: list[dict]) -> dict:
     script_id = hashlib.sha256(script.encode("utf-8")).hexdigest()[:16]
     run_id = uuid.uuid4().hex[:12]
 
+    # Synthesize plot_meta from __drawings so the AXIS overlay renderer
+    # recognises hline / fill / plotshape series and their styling params
+    # (kind, linestyle, color, price, …).  The compiler does not emit
+    # plot_meta directly — the series dict has raw data only.
+    _plot_meta: dict = {}
+    if isinstance(drawings, list):
+        for _d in drawings:
+            if not isinstance(_d, dict):
+                continue
+            _kind = str(_d.get("kind") or "").lower()
+            _title = str(_d.get("title") or "").strip()
+            if not _title:
+                continue
+            _entry: dict = {}
+            if _kind == "hline":
+                _entry["kind"] = "hline"
+                if _d.get("linestyle"):
+                    _entry["linestyle"] = str(_d["linestyle"])
+                elif _d.get("style"):
+                    _entry["style"] = str(_d["style"])
+                if _d.get("color"):
+                    _entry["color"] = str(_d["color"])
+                if _d.get("price") is not None:
+                    _entry["price"] = _d["price"]
+            elif _kind == "fill":
+                _entry["kind"] = "fill"
+                if _d.get("color"):
+                    _entry["color"] = str(_d["color"])
+                if _d.get("plot1"):
+                    _entry["plot1"] = str(_d["plot1"])
+                if _d.get("plot2"):
+                    _entry["plot2"] = str(_d["plot2"])
+            elif _kind in ("plotshape", "plotchar", "plotarrow"):
+                _entry["kind"] = _kind
+                if _d.get("color"):
+                    _entry["color"] = str(_d["color"])
+            if _entry:
+                _plot_meta[_title] = _entry
+
+    _meta: dict = {
+        "mode": "compile",
+        "object_mode": bool(getattr(compiled, "object_mode", False)),
+        "count": len(bars),
+        "ms": (time.perf_counter() - t0) * 1000,
+        "script_id": script_id,
+        "run_id": run_id,
+        "overlay": True,
+        "script_name": "plot",
+    }
+    if _plot_meta:
+        _meta["plot_meta"] = _plot_meta
     return {
         "status": "success",
         "plots": plots_main,
@@ -557,16 +640,7 @@ def _run_compiled(script: str, bars: list[dict]) -> dict:
         "drawings": drawings if isinstance(drawings, list) else [],
         "overlay": True,
         "script_name": "plot",
-        "meta": {
-            "mode": "compile",
-            "object_mode": bool(getattr(compiled, "object_mode", False)),
-            "count": len(bars),
-            "ms": (time.perf_counter() - t0) * 1000,
-            "script_id": script_id,
-            "run_id": run_id,
-            "overlay": True,
-            "script_name": "plot",
-        },
+        "meta": _meta,
     }
 
 

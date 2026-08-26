@@ -17,6 +17,10 @@ _Generated/updated: 2026-08-24 · 290 commits · describe-tag: `v2.0.25`_
 
 ### Fixed
 
+- **hline linestyle**: `hline(linestyle=hline.style_dashed)` rendered solid — the drawing path only checked `r.style` (never `r.linestyle`), and the compile-mode overlay path lacked `plot_meta` entirely so the LWC price-line never received the style. Both paths now covered: `pyne-drawings.ts` falls back to `r.linestyle`, and both Pyodide runtimes synthesize `plot_meta` from `__drawings` (hline/fill/plotshape kinds with linestyle, color, price).
+- **multi-chart**: same indicator on every grid cell showed identical values — the runner evaluates Pine against `store.bars` (active plane), but focusing another slot never swapped in that slot's cached history, so every Run/add computed from whichever chart was loaded last. `setActiveChartSlot` now restores the focused slot's own bars (+ gen bump), stops stale bar replay, restarts live for the slot's market, and silently re-runs applied scripts so each chart shows its own values.
+- **multi-chart**: switching to a 2×2 grid could overwrite the active chart with a sibling's symbol — ChartHost "prefetched" inactive slots via `loadSymbolData`, which always writes the active plane (last-mounted sibling won). Removed; empty cells load on focus instead.
+
 - **tables**: render Pine `table.cell` `text_valign` (top/middle/bottom) and `text_size` tokens/numeric points in the table HUD — parsed previously but rendered fixed 10px/middle; defaults unchanged when absent.
 - **bgcolor**: carry band titles into `syncBgcolorBands` and apply them as series titles on create/update, matching the offline `buildPlotVisuals` path.
 

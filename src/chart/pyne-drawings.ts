@@ -740,7 +740,8 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
         p2: price,
         color: sanitizeStrokeColor(r.color, '#787B86'),
         width: clampWidth(r.width, 1),
-        style: normalizeLineStyle(r.style, 'solid'),
+        // Pine hline() uses `linestyle=` kwarg; drawings may carry either `style` or `linestyle`.
+        style: normalizeLineStyle(r.style ?? r.linestyle, 'solid'),
         extend: normalizeExtend(r.extend, 'right'),
         text: sanitizeDrawingText(r.title ?? r.text, DRAWING_TEXT_MAX),
       });
