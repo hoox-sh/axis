@@ -695,13 +695,7 @@ const InputField: Component<{
           }}
           onInput={(e) => {
             if (!enabled()) return;
-            const raw = e.currentTarget.value;
-            setNumDraft(raw);
-            // Commit finite numbers so Apply works without blur; leave empty
-            // as draft only so clearing the field does not jump to default.
-            if (raw.trim() === '') return;
-            const n = t() === 'int' ? parseInt(raw, 10) : parseFloat(raw);
-            if (Number.isFinite(n)) props.onChange(n);
+            setNumDraft(e.currentTarget.value);
           }}
           onChange={(e) => {
             if (enabled()) commitNumber(e.currentTarget.value);

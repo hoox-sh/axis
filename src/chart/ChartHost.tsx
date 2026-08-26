@@ -61,7 +61,6 @@ import {
   setSlotManager,
   disposeSlotChart,
 } from './chart-registry';
-import { loadSymbolData } from '../data/load-symbol';
 import { getVisibleBars, isReplayActive } from './bar-replay';
 import {
   applyCompareOverlay,
@@ -313,28 +312,14 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
           });
         }
       }
-    } else if (props.symbol && props.interval && !isActive()) {
-      // Prefetch inactive slot history without stealing active focus
-      const sym = props.symbol;
-      const iv = props.interval;
-      void loadSymbolData(sym, iv, store.source)
-        .then((ok) => {
-          // loadSymbolData always writes to active — only use for active slot
-          if (!alive) return;
-          void ok;
-        })
-        .catch((err: unknown) => {
-          if (!alive) return;
-          reportUiError(err, {
-            source: 'data',
-            context: 'Slot prefetch failed',
-            status: false,
-          });
-        });
     } else if (isActive() && store.bars.length) {
       safePaint(store.bars, { fit: true }, 'Initial chart paint');
       setSlotBars(id, store.bars, false);
     }
+    // Inactive empty slots stay on the empty hint until focused — clicking a
+    // cell focuses it and auto-loads its symbol via `axis-slot-activate`.
+    // (Never prefetch here: loadSymbolData writes the ACTIVE plane, so a
+    // sibling fetch would overwrite the focused chart's history.)
 
     let ro: ResizeObserver | undefined;
     if (hostEl && typeof ResizeObserver !== 'undefined') {

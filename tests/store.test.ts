@@ -82,6 +82,7 @@ import {
   HISTORY_BARS_MAX,
 } from '../src/store';
 import { SAMPLE_BARS, makeBars } from './fixtures/bars';
+import { getSlotBars, setSlotBars } from '../src/chart/chart-registry';
 
 function resetStoreBasics() {
   clearLogs();
@@ -356,6 +357,59 @@ describe('layout helpers', () => {
     expect(loadChartLayout(snap.id)).toBe(true);
     expect(store.chartLayout.mode).toBe('2h');
     expect(store.chartLayout.slots.length).toBe(2);
+  });
+
+  it('focusing a slot restores its own cached bars into the active plane', () => {
+    setChartGridMode('2h');
+    const slotA = store.chartLayout.slots[0]!;
+    const slotB = store.chartLayout.slots[1]!;
+
+    // Slot A active: load BTC history (mirrors into slot A runtime)
+    setActiveChartSlot(slotA.id);
+    const btc = makeBars(6, 1_700_000_000, 86_400);
+    loadBars(btc, 'BTCUSDT', '1d', 'binance');
+    expect(getSlotBars(slotA.id)).toBe(btc);
+
+    // Slot B has its own cached history (e.g. loaded earlier in the session)
+    const eth = makeBars(9, 1_700_100_000, 3_600);
+    setSlotBars(slotB.id, eth, true);
+
+    // Focus slot B — Run/indicators must evaluate THIS slot's data
+    const genBefore = store.chartDataGen;
+    setActiveChartSlot(slotB.id);
+    expect(store.chartLayout.activeId).toBe(slotB.id);
+    expect(store.symbol).toBe(slotB.symbol || 'ETHUSDT');
+    expect(store.bars).toBe(eth);
+    expect(store.bars.length).toBe(9);
+    expect(store.chartDataGen).toBe(genBefore + 1);
+
+    // Switching back restores slot A's history
+    setActiveChartSlot(slotA.id);
+    expect(store.bars).toBe(btc);
+  });
+
+  it('rapid slot switches do not leave stale bars in the active plane', async () => {
+    setChartGridMode('2h');
+    const slotA = store.chartLayout.slots[0]!;
+    const slotB = store.chartLayout.slots[1]!;
+
+    setActiveChartSlot(slotA.id);
+    const btc = makeBars(6, 1_700_000_000, 86_400);
+    loadBars(btc, 'BTCUSDT', '1d', 'binance');
+
+    const eth = makeBars(9, 1_700_100_000, 3_600);
+    setSlotBars(slotB.id, eth, true);
+
+    // Rapid A → B → A — the last write must win after async refresh settles
+    setActiveChartSlot(slotB.id);
+    setActiveChartSlot(slotA.id);
+
+    // Allow refreshAfterSlotBarsRestore rAF callbacks to fire
+    await new Promise<void>((r) => setTimeout(r, 50));
+
+    expect(store.bars).toBe(btc);
+    expect(store.symbol).toBe('BTCUSDT');
+    expect(store.chartLayout.activeId).toBe(slotA.id);
   });
 
   it('resetUiLayout restores docks and scale without clearing market data', () => {

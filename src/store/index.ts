@@ -103,6 +103,7 @@ import {
 } from '../chart/layout';
 import {
   getActiveSlotId,
+  getSlotBars,
   setActiveSlotId,
   setSlotBars,
   removeSlotRuntime,
@@ -1615,18 +1616,95 @@ export function setChartType(type: ChartType | string) {
 
 /* ── Multi-chart layouts ─────────────────────────────────────────── */
 
+/**
+ * Monotonic epoch for in-flight slot-refresh operations.
+ * Incremented on every {@link restoreSlotBarsToActivePlane}; completions with a
+ * stale epoch are ignored so rapid slot switches cannot race into the store.
+ */
+let slotRefreshEpoch = 0;
+
+/**
+ * After a focus switch restored another slot's history into the active plane,
+ * rebind side planes: stop stale bar replay, restart live for the slot's
+ * market, and silently re-run applied scripts so indicator values match THIS
+ * chart's data (not the previously focused symbol).
+ *
+ * @param epoch - Generation token captured at call site; stale calls bail early.
+ */
+async function refreshAfterSlotBarsRestore(
+  symbol: string,
+  interval: string,
+  epoch: number,
+): Promise<void> {
+  // Let ChartHost bind the newly active manager before paint-dependent work.
+  await new Promise<void>((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+  if (epoch !== slotRefreshEpoch) return;
+  try {
+    const replay = await import('../chart/bar-replay');
+    if (replay.isReplayActive()) replay.stopReplaySession();
+  } catch {
+    /* replay optional */
+  }
+  if (epoch !== slotRefreshEpoch) return;
+  try {
+    if (store.live.active) {
+      const { startLive } = await import('../streams/multiplex');
+      startLive(store.live.streamId || '', symbol, interval);
+    }
+  } catch {
+    /* live optional */
+  }
+  if (epoch !== slotRefreshEpoch) return;
+  try {
+    if (!store.scripts.some((s) => s.visible !== false && String(s.code || '').trim())) return;
+    const { reapplyChartScripts } = await import('../indicators/reapply');
+    await reapplyChartScripts();
+  } catch {
+    /* reapply optional */
+  }
+}
+
+/**
+ * Swap the active OHLCV plane to the focused slot's own cached history.
+ *
+ * Run / indicator evaluation reads `store.bars`, and results paint via the
+ * now-active manager. Without this restore, adding the same indicator on each
+ * grid cell computed every chart from whichever symbol was loaded last —
+ * identical values across the layout.
+ */
+function restoreSlotBarsToActivePlane(slotId: string): void {
+  const cached = getSlotBars(slotId);
+  if (!cached.length || cached === store.bars) return;
+  const epoch = ++slotRefreshEpoch;
+  batch(() => {
+    setStore('bars', cached);
+    setStore('chartDataGen', (g) => (typeof g === 'number' ? g + 1 : 1));
+  });
+  void refreshAfterSlotBarsRestore(store.symbol, store.interval, epoch).catch(() => {
+    /* best effort — user can press Load / Run manually */
+  });
+}
+
 /** Focus a grid slot — mirrors symbol/interval/chartType into flat store fields. */
 export function setActiveChartSlot(slotId: string) {
   ensureChartLayout();
   const layout = store.chartLayout;
   const slot = layout.slots.find((s) => s.id === slotId);
   if (!slot) return;
+  const switched = layout.activeId !== slotId;
   setStore('chartLayout', 'activeId', slotId);
   setActiveSlotId(slotId);
   setStore('symbol', slot.symbol);
   setStore('interval', slot.interval);
   setStore('exchange', slot.exchange);
   setStore('chartType', normalizeChartType(slot.chartType));
+  if (switched) restoreSlotBarsToActivePlane(slotId);
   persist();
   emitWindowEvent('axis-chart-reflow');
   // Auto-load history when focusing an empty slot
