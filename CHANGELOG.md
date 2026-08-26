@@ -9,11 +9,22 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-26 · 296 commits · describe-tag: `v2.0.27`_
+_Generated/updated: 2026-08-26 · 297 commits · describe-tag: `v2.0.28`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.29] — 2026-08-26
+
+### Changed
+
+- **Engine default mode** — both Pro and Pyodide engines now default to `auto` (try compile, fall back to interpret) instead of `interpret`.
+
+### Fixed
+
+- **hline linestyle in compile mode**: server-side compile path did not include `linestyle`/`color`/`price` in `plot_meta` because `plot_attrs` is empty for hline/fill. Backfill from `__drawings` now fills missing visual attrs.
+- **Pyne wheel** — vendor `pynescript-0.4.1` (was 0.4.0). Server compile-path backfill fix.
 
 ## [2.0.28] — 2026-08-26
 
@@ -665,9 +676,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (214 commits)
+### 2026-08 (215 commits)
 
 #### Security
 
@@ -772,6 +785,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `5bc18f5d` (2026-08-26) — fix(hline): synthesize plot_meta in interpret path for hline linestyle
 - `d417025f` (2026-08-26) — fix(multi-chart): restore slot history on focus so each cell computes independently
 - `5025302f` (2026-08-26) — fix(hline): carry linestyle through both drawing and overlay paths
 - `b07befb9` (2026-08-25) — fix(chart): render table cell valign/text-size; carry bgcolor band titles

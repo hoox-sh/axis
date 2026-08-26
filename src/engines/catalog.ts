@@ -111,10 +111,10 @@ export const serverEngine: EnginePlugin = {
     mode: {
       type: 'select',
       options: ['interpret', 'compile', 'auto'],
-      default: 'interpret',
+      default: 'auto',
       label: 'Execution mode',
       description:
-        'interpret = AST interpreter; compile = Numba/numpy path; auto = try compile, fall back to interpret',
+        'auto = try compile, fall back to interpret; compile = Numba/numpy path; interpret = AST interpreter',
     },
     preferWs: {
       type: 'boolean',
@@ -183,7 +183,7 @@ export const serverEngine: EnginePlugin = {
       (this.configSchema!.endpoint.default as string)
     ).replace(/\/$/, '');
     const cfg = resolveConfig(this.configSchema, { ...(config || {}), endpoint });
-    const mode = String(cfg.mode || 'interpret');
+    const mode = String(cfg.mode || 'auto');
     const preferWs = cfg.preferWs !== false;
     const apiKey = String(cfg.apiKey || '').trim();
     const t0 = performance.now();
@@ -538,7 +538,7 @@ export function prefetchPyodideAssets(indexUrl?: string): void {
   if (typeof location !== 'undefined') {
     const origin = location.origin;
     for (const path of [
-      '/vendor/pynescript-0.4.0-py3-none-any.whl',
+      '/vendor/pynescript-0.4.1-py3-none-any.whl',
       '/vendor/antlr4_python3_runtime-4.13.2-py3-none-any.whl',
       '/pyodide/pynescript_runtime.py',
     ]) {
@@ -636,10 +636,10 @@ export const pyodideEngine: EnginePlugin & {
     mode: {
       type: 'select',
       options: ['interpret', 'compile', 'auto'],
-      default: 'interpret',
+      default: 'auto',
       label: 'Execution mode',
       description:
-        'interpret = AST in browser; compile/auto use pynescript.compiler when possible (object-mode without Numba; numeric Numba needs server)',
+        'auto = try compile, fall back to interpret; compile/auto use pynescript.compiler when possible (object-mode without Numba; numeric Numba needs server)',
     },
   },
   _pyodide: null,
@@ -680,7 +680,7 @@ export const pyodideEngine: EnginePlugin & {
       // which are not needed for in-browser evaluate and are NOT vendored under
       // /pyodide/v0.26.2/ — micropip would 404 them on the self-hosted index.
       // Second positional arg alone is keep_going, not deps (micropip 0.6).
-      const wheelUrl = `${origin}/vendor/pynescript-0.4.0-py3-none-any.whl`;
+      const wheelUrl = `${origin}/vendor/pynescript-0.4.1-py3-none-any.whl`;
       const antlrUrl = `${origin}/vendor/antlr4_python3_runtime-4.13.2-py3-none-any.whl`;
       await assertZipAsset(wheelUrl, 'pynescript wheel');
       await assertZipAsset(antlrUrl, 'antlr4 wheel');
@@ -722,7 +722,7 @@ export const pyodideEngine: EnginePlugin & {
         ...pyodidePluginConfig(),
         ...(config || {}),
       });
-      const mode = String((cfg as { mode?: string }).mode || 'interpret');
+      const mode = String((cfg as { mode?: string }).mode || 'auto');
       // Optional: load numpy for compile/object-mode (no-op if already present)
       if (mode === 'compile' || mode === 'auto') {
         try {

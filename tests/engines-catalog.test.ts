@@ -401,7 +401,7 @@ describe('engines catalog', () => {
     const mode = serverEngine.configSchema?.mode;
     expect(mode?.type).toBe('select');
     expect(mode?.options).toEqual(['interpret', 'compile', 'auto']);
-    expect(mode?.default).toBe('interpret');
+    expect(mode?.default).toBe('auto');
   });
 
   it('pyodide catalog also exposes execution mode (settings UI)', async () => {
