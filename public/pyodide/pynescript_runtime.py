@@ -518,6 +518,45 @@ def _run_interpret(
         drawings = []
         drawing_limits = {}
 
+    # Synthesize plot_meta from drawings so the AXIS overlay renderer
+    # recognises hline / fill / plotshape series and their styling params
+    # (kind, linestyle, color, price, …).  Needed in both interpret and
+    # compile paths because the series dict has raw data only.
+    _plot_meta: dict = {}
+    if isinstance(drawings, list):
+        for _d in drawings:
+            if not isinstance(_d, dict):
+                continue
+            _kind = str(_d.get("kind") or "").lower()
+            _title = str(_d.get("title") or "").strip()
+            if not _title:
+                continue
+            _entry: dict = {}
+            if _kind == "hline":
+                _entry["kind"] = "hline"
+                if _d.get("linestyle"):
+                    _entry["linestyle"] = str(_d["linestyle"])
+                elif _d.get("style"):
+                    _entry["style"] = str(_d["style"])
+                if _d.get("color"):
+                    _entry["color"] = str(_d["color"])
+                if _d.get("price") is not None:
+                    _entry["price"] = _d["price"]
+            elif _kind == "fill":
+                _entry["kind"] = "fill"
+                if _d.get("color"):
+                    _entry["color"] = str(_d["color"])
+                if _d.get("plot1"):
+                    _entry["plot1"] = str(_d["plot1"])
+                if _d.get("plot2"):
+                    _entry["plot2"] = str(_d["plot2"])
+            elif _kind in ("plotshape", "plotchar", "plotarrow"):
+                _entry["kind"] = _kind
+                if _d.get("color"):
+                    _entry["color"] = str(_d["color"])
+            if _entry:
+                _plot_meta[_title] = _entry
+
     meta: dict = {
         "mode": "interpret",
         "count": len(bars),
@@ -530,6 +569,8 @@ def _run_interpret(
     }
     if drawing_limits:
         meta.update(drawing_limits)
+    if _plot_meta:
+        meta["plot_meta"] = _plot_meta
 
     return {
         "status": "success",

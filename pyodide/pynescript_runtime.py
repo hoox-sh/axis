@@ -494,25 +494,85 @@ def _run_interpret(
             else:
                 overlay = script_type == "strategy"
 
+    # Drawing objects + max_*_count caps (AXIS client GC + registry GC in wheel)
+    drawings: list = []
+    drawing_limits: dict = {}
+    try:
+        from pynescript.ast.evaluator.builtins.drawing import DrawingRegistry
+
+        bar_times = [b.get("time", 0) for b in bars]
+        if not DrawingRegistry.is_empty():
+            drawings = DrawingRegistry.export_for_api(bar_times)
+        drawing_limits = DrawingRegistry.limits_dict()
+    except Exception:
+        drawings = []
+        drawing_limits = {}
+
+    # Synthesize plot_meta from drawings so the AXIS overlay renderer
+    # recognises hline / fill / plotshape series and their styling params
+    # (kind, linestyle, color, price, …).  Needed in both interpret and
+    # compile paths because the series dict has raw data only.
+    _plot_meta: dict = {}
+    if isinstance(drawings, list):
+        for _d in drawings:
+            if not isinstance(_d, dict):
+                continue
+            _kind = str(_d.get("kind") or "").lower()
+            _title = str(_d.get("title") or "").strip()
+            if not _title:
+                continue
+            _entry: dict = {}
+            if _kind == "hline":
+                _entry["kind"] = "hline"
+                if _d.get("linestyle"):
+                    _entry["linestyle"] = str(_d["linestyle"])
+                elif _d.get("style"):
+                    _entry["style"] = str(_d["style"])
+                if _d.get("color"):
+                    _entry["color"] = str(_d["color"])
+                if _d.get("price") is not None:
+                    _entry["price"] = _d["price"]
+            elif _kind == "fill":
+                _entry["kind"] = "fill"
+                if _d.get("color"):
+                    _entry["color"] = str(_d["color"])
+                if _d.get("plot1"):
+                    _entry["plot1"] = str(_d["plot1"])
+                if _d.get("plot2"):
+                    _entry["plot2"] = str(_d["plot2"])
+            elif _kind in ("plotshape", "plotchar", "plotarrow"):
+                _entry["kind"] = _kind
+                if _d.get("color"):
+                    _entry["color"] = str(_d["color"])
+            if _entry:
+                _plot_meta[_title] = _entry
+
+    meta: dict = {
+        "mode": "interpret",
+        "count": len(bars),
+        "ms": (time.perf_counter() - t0) * 1000,
+        "script_id": script_id,
+        "run_id": run_id,
+        "overlay": overlay,
+        "script_name": script_name,
+        "script_type": script_type,
+    }
+    if drawing_limits:
+        meta.update(drawing_limits)
+    if _plot_meta:
+        meta["plot_meta"] = _plot_meta
+
     return {
         "status": "success",
         "plots": plots_main,
         "series": series,
         "events": all_events,
+        "drawings": drawings,
         "equity_curve": equity_curve,
         "overlay": overlay,
         "script_name": script_name,
         "script_type": script_type,
-        "meta": {
-            "mode": "interpret",
-            "count": len(bars),
-            "ms": (time.perf_counter() - t0) * 1000,
-            "script_id": script_id,
-            "run_id": run_id,
-            "overlay": overlay,
-            "script_name": script_name,
-            "script_type": script_type,
-        },
+        "meta": meta,
     }
 
 

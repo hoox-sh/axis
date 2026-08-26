@@ -9,11 +9,17 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-26 · 295 commits · describe-tag: `v2.0.26`_
+_Generated/updated: 2026-08-26 · 296 commits · describe-tag: `v2.0.27`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.28] — 2026-08-26
+
+### Fixed
+
+- **hline linestyle in interpret mode**: the interpret path (Pyodide default) did not synthesize `plot_meta` from `__drawings`, so LWC price lines for `hline()` always rendered solid regardless of `linestyle=`. Both interpret and compile paths now synthesize `plot_meta` with kind/linestyle/color/price for hline, fill, and plotshape drawing types.
 
 ## [2.0.27] — 2026-08-26
 
@@ -657,9 +663,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (213 commits)
+### 2026-08 (214 commits)
 
 #### Security
 
@@ -885,6 +893,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `f34c76cf` (2026-08-26) — chore(release): bump to v2.0.27 — PYNE wheel 0.4.0, hline linestyle, multi-chart fix
 - `d323c8fd` (2026-08-24) — chore(release): v2.0.26
 - `a01be631` (2026-08-23) — chore(release): AXIS v2.0.23
 - `22966e62` (2026-08-23) — chore(release): AXIS v2.0.22
