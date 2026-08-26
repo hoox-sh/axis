@@ -142,7 +142,7 @@ describe('classifyRequest', () => {
     ).toBe('static');
     expect(
       classifyRequest(
-        { origin, pathname: '/vendor/pynescript-0.3.7-py3-none-any.whl', host: 'app.example' },
+        { origin, pathname: '/vendor/pynescript-0.4.0-py3-none-any.whl', host: 'app.example' },
         { method: 'GET' },
         origin,
       ),

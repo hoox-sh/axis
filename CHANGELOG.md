@@ -9,18 +9,23 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-24 · 290 commits · describe-tag: `v2.0.25`_
+_Generated/updated: 2026-08-26 · 295 commits · describe-tag: `v2.0.26`_
 
 ---
 
 ## [Unreleased]
+
+## [2.0.27] — 2026-08-26
+
+### Changed
+
+- **Pyodide PYNE wheel** — vendor `pynescript-0.4.0` (was 0.3.7). Engine catalog, legacy JS engine, SW cache test, and editor builtins synced from pyne 0.4.0.
 
 ### Fixed
 
 - **hline linestyle**: `hline(linestyle=hline.style_dashed)` rendered solid — the drawing path only checked `r.style` (never `r.linestyle`), and the compile-mode overlay path lacked `plot_meta` entirely so the LWC price-line never received the style. Both paths now covered: `pyne-drawings.ts` falls back to `r.linestyle`, and both Pyodide runtimes synthesize `plot_meta` from `__drawings` (hline/fill/plotshape kinds with linestyle, color, price).
 - **multi-chart**: same indicator on every grid cell showed identical values — the runner evaluates Pine against `store.bars` (active plane), but focusing another slot never swapped in that slot's cached history, so every Run/add computed from whichever chart was loaded last. `setActiveChartSlot` now restores the focused slot's own bars (+ gen bump), stops stale bar replay, restarts live for the slot's market, and silently re-runs applied scripts so each chart shows its own values.
 - **multi-chart**: switching to a 2×2 grid could overwrite the active chart with a sibling's symbol — ChartHost "prefetched" inactive slots via `loadSymbolData`, which always writes the active plane (last-mounted sibling won). Removed; empty cells load on focus instead.
-
 - **tables**: render Pine `table.cell` `text_valign` (top/middle/bottom) and `text_size` tokens/numeric points in the table HUD — parsed previously but rendered fixed 10px/middle; defaults unchanged when absent.
 - **bgcolor**: carry band titles into `syncBgcolorBands` and apply them as series titles on create/update, matching the offline `buildPlotVisuals` path.
 
@@ -650,9 +655,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (208 commits)
+### 2026-08 (213 commits)
 
 #### Security
 
@@ -757,6 +764,10 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `d417025f` (2026-08-26) — fix(multi-chart): restore slot history on focus so each cell computes independently
+- `5025302f` (2026-08-26) — fix(hline): carry linestyle through both drawing and overlay paths
+- `b07befb9` (2026-08-25) — fix(chart): render table cell valign/text-size; carry bgcolor band titles
+- `86b86bd7` (2026-08-24) — fix(chart): never host hlines on bgcolor underlays
 - `53cef490` (2026-08-24) — fix(chart): finish PlotSample widening in runner types
 - `2db34902` (2026-08-24) — fix(chart): preserve engine color series so bgcolor/barcolor render
 - `68b13118` (2026-08-23) — fix(settings): keep user inputs on applied scripts
@@ -874,6 +885,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `d323c8fd` (2026-08-24) — chore(release): v2.0.26
 - `a01be631` (2026-08-23) — chore(release): AXIS v2.0.23
 - `22966e62` (2026-08-23) — chore(release): AXIS v2.0.22
 - `3e7236ef` (2026-08-21) — chore(release): v2.0.20

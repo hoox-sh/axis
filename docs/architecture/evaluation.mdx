@@ -53,7 +53,7 @@ flowchart TB
 | Path | Implementation | Notes |
 | --- | --- | --- |
 | Engine `server` | `src/engines/catalog.ts` | Prefer **WS** `ws(s)://{endpoint}/ws/run` (`preferWs` default true), else **POST** `{endpoint}/run?mode=` with `{ script, data, mode, inputs?, profiler?, libraries? }`. Modes `interpret \| compile \| auto`. Timeout scales with bar count (45–180s). Default endpoint `http://localhost:5002`. Strategy HPO uses **`POST {endpoint}/optimize`**. |
-| Engine `pyodide` | same file | Self-hosted **Pyodide 0.26.2** (`/pyodide/v0.26.2/`), wheels `/vendor/pynescript-0.3.7-py3-none-any.whl` + antlr4, runtime `/pyodide/pynescript_runtime.py`. **Numba is not in Wasm**; `compile` / `auto` is object-mode. Cold load ~20–30s. |
+| Engine `pyodide` | same file | Self-hosted **Pyodide 0.26.2** (`/pyodide/v0.26.2/`), wheels `/vendor/pynescript-0.4.0-py3-none-any.whl` + antlr4, runtime `/pyodide/pynescript_runtime.py`. **Numba is not in Wasm**; `compile` / `auto` is object-mode. Cold load ~20–30s. |
 | AXIS Worker `/api/run` | `worker/src/runtime.ts` | `PYODIDE_IN_WORKER=enabled` scaffold; else **proxy `EXTERNAL_BACKEND/run`**; else 503 `NO_BACKEND`. Caps: 512 KiB script, 50k bars, 30 req/min/IP, 60s upstream. |
 | HOOX **pyne-worker** | `src/workers/catalog.ts` | Not a built-in engine. Paste origin as Backend URL. Distinct from the AXIS Worker (`pynescript-axis`). |
 | **PyneTS** | — | TypeScript library. [PYNE docs](/pyne/docs/pynets). **Not referenced** in AXIS source. |

@@ -10,7 +10,7 @@
 #   vendor/pynescript-<ver>-py3-none-any.whl         (legacy layout)
 #
 # Hardcoded install paths in src/engines/catalog.ts and index.js must match
-# the wheel filename (currently pynescript-0.3.7-py3-none-any.whl).
+# the wheel filename (currently pynescript-0.4.0-py3-none-any.whl).
 #
 # Copyright (C) 2024-2026 jango_blockchained
 # SPDX-License-Identifier: AGPL-3.0-only
