@@ -61,6 +61,7 @@ const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'data', label: 'Data', hint: 'Exchange keys · provider' },
   { id: 'editor', label: 'Editor', hint: 'Lint · hover · complete' },
   { id: 'theme', label: 'Theme', hint: 'Bars · canvas · chart.bg_color' },
+  { id: 'topbar', label: 'Topbar', hint: 'Show/hide topbar buttons' },
 ];
 
 export function SettingsPage(props: {
@@ -218,9 +219,11 @@ export function SettingsPage(props: {
       ? 'Theme applies live · Save not required'
       : tab() === 'editor'
         ? 'Editor intel applies live · Save not required'
-        : tab() === 'data'
-          ? 'Keys stay in this session · not written to disk'
-          : `AXIS · scale ${formatUiScalePct(uiScale())}`;
+        : tab() === 'topbar'
+          ? 'Topbar applies live · Save not required'
+          : tab() === 'data'
+            ? 'Keys stay in this session · not written to disk'
+            : `AXIS · scale ${formatUiScalePct(uiScale())}`;
 
   return (
     <div class="ax-page-stack">
@@ -522,10 +525,156 @@ export function SettingsPage(props: {
             </StudioSection>
           </div>
         </Show>
+
+        <Show when={tab() === 'topbar'}>
+          <div
+            id="axis-settings-panel-topbar"
+            role="tabpanel"
+            aria-labelledby="axis-settings-tab-topbar"
+            data-testid="axis-settings-topbar"
+          >
+            <StudioSection
+              title="Topbar visibility"
+              lead="Control which topbar groups and buttons are shown. Changes apply immediately and are persisted."
+            >
+              <StudioToggle
+                id="topbar-brand"
+                checked={store.topbar.brand}
+                label="Show brand"
+                onChange={(v) => setStore('topbar', 'brand', v)}
+              />
+              <StudioToggle
+                id="topbar-market"
+                checked={store.topbar.market}
+                label="Show market (symbol, interval, chart type, compare)"
+                onChange={(v) => setStore('topbar', 'market', v)}
+              />
+              <StudioToggle
+                id="topbar-data"
+                checked={store.topbar.data}
+                label="Show data (venue, plugin config, load, reload)"
+                onChange={(v) => setStore('topbar', 'data', v)}
+              />
+              <StudioToggle
+                id="topbar-compute"
+                checked={store.topbar.compute}
+                label="Show compute (engine, stream, run, live, replay)"
+                onChange={(v) => setStore('topbar', 'compute', v)}
+              />
+              <StudioToggle
+                id="topbar-layout"
+                checked={store.topbar.layout}
+                label="Show layout menu"
+                onChange={(v) => setStore('topbar', 'layout', v)}
+              />
+              <StudioToggle
+                id="topbar-panels"
+                checked={store.topbar.panels}
+                label="Show panels group"
+                onChange={(v) => setStore('topbar', 'panels', v)}
+              />
+              <StudioToggle
+                id="topbar-system"
+                checked={store.topbar.system}
+                label="Show system (fullscreen, chart-only, studio, theme)"
+                onChange={(v) => setStore('topbar', 'system', v)}
+              />
+            </StudioSection>
+
+            <Show when={store.topbar.panels}>
+              <StudioSection title="Panel buttons" lead="Individual panel toggle buttons.">
+                <StudioToggle
+                  id="topbar-panels-watchlist"
+                  checked={store.topbar.panelsWatchlist}
+                  label="Watchlist"
+                  onChange={(v) => setStore('topbar', 'panelsWatchlist', v)}
+                />
+                <StudioToggle
+                  id="topbar-panels-editor"
+                  checked={store.topbar.panelsEditor}
+                  label="Editor"
+                  onChange={(v) => setStore('topbar', 'panelsEditor', v)}
+                />
+                <StudioToggle
+                  id="topbar-panels-library"
+                  checked={store.topbar.panelsLibrary}
+                  label="Library"
+                  onChange={(v) => setStore('topbar', 'panelsLibrary', v)}
+                />
+                <StudioToggle
+                  id="topbar-panels-scripts"
+                  checked={store.topbar.panelsScripts}
+                  label="Scripts"
+                  onChange={(v) => setStore('topbar', 'panelsScripts', v)}
+                />
+                <StudioToggle
+                  id="topbar-panels-inputs"
+                  checked={store.topbar.panelsInputs}
+                  label="Inputs"
+                  onChange={(v) => setStore('topbar', 'panelsInputs', v)}
+                />
+                <StudioToggle
+                  id="topbar-panels-layers"
+                  checked={store.topbar.panelsLayers}
+                  label="Layers"
+                  onChange={(v) => setStore('topbar', 'panelsLayers', v)}
+                />
+                <StudioToggle
+                  id="topbar-panels-dsm"
+                  checked={store.topbar.panelsDsm}
+                  label="DSM"
+                  onChange={(v) => setStore('topbar', 'panelsDsm', v)}
+                />
+                <StudioToggle
+                  id="topbar-panels-onchain"
+                  checked={store.topbar.panelsOnchain}
+                  label="On-Chain"
+                  onChange={(v) => setStore('topbar', 'panelsOnchain', v)}
+                />
+                <StudioToggle
+                  id="topbar-panels-alerts"
+                  checked={store.topbar.panelsAlerts}
+                  label="Alerts"
+                  onChange={(v) => setStore('topbar', 'panelsAlerts', v)}
+                />
+                <StudioToggle
+                  id="topbar-panels-values"
+                  checked={store.topbar.panelsValues}
+                  label="Values"
+                  onChange={(v) => setStore('topbar', 'panelsValues', v)}
+                />
+                <StudioToggle
+                  id="topbar-panels-results"
+                  checked={store.topbar.panelsResults}
+                  label="Results"
+                  onChange={(v) => setStore('topbar', 'panelsResults', v)}
+                />
+                <StudioToggle
+                  id="topbar-panels-scriptlogs"
+                  checked={store.topbar.panelsScriptLogs}
+                  label="Script Logs"
+                  onChange={(v) => setStore('topbar', 'panelsScriptLogs', v)}
+                />
+                <StudioToggle
+                  id="topbar-panels-systemlogs"
+                  checked={store.topbar.panelsSystemLogs}
+                  label="System Logs"
+                  onChange={(v) => setStore('topbar', 'panelsSystemLogs', v)}
+                />
+                <StudioToggle
+                  id="topbar-panels-status"
+                  checked={store.topbar.panelsStatus}
+                  label="Status"
+                  onChange={(v) => setStore('topbar', 'panelsStatus', v)}
+                />
+              </StudioSection>
+            </Show>
+          </div>
+        </Show>
       </div>
       <StudioFooter status={footerStatus}>
         <StudioButton variant="ghost" onClick={closeWithoutSave}>
-          {tab() === 'theme' || tab() === 'editor' || tab() === 'data' ? 'Close' : 'Cancel'}
+          {tab() === 'theme' || tab() === 'editor' || tab() === 'data' || tab() === 'topbar' ? 'Close' : 'Cancel'}
         </StudioButton>
         <Show when={tab() === 'general'}>
           <StudioButton variant="primary" onClick={save}>
