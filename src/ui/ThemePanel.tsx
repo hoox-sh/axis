@@ -106,12 +106,12 @@ export const ThemePanel: Component<ThemePanelProps> = (props) => {
 
   return (
     <div
-      class={`flex flex-col ${props.compact ? 'gap-1.5' : 'gap-2'}`}
+      class={`sc-settings-content ${props.compact ? 'gap-1.5' : 'gap-2'}`}
       data-testid="axis-theme-panel"
     >
       {/* ── Presets ─────────────────────────────────────────────── */}
-      <div class="sc-section !mt-0 !border-t-0 !pt-0">
-        <div class="sc-section-title">Presets</div>
+      <div class="sc-settings-section">
+        <div class="sc-settings-section-title">Presets</div>
         <div class="sc-chip-row" role="group" aria-label="Chart theme presets">
           <For each={presets()}>
             {(p) => (
@@ -133,7 +133,7 @@ export const ThemePanel: Component<ThemePanelProps> = (props) => {
             </span>
           </Show>
         </div>
-        <div class="flex flex-wrap items-center gap-2 mt-1">
+        <div class="sc-settings-btn-row mt-1">
           <button
             type="button"
             class="sc-btn sc-btn-ghost text-[0.85em]"
@@ -144,12 +144,12 @@ export const ThemePanel: Component<ThemePanelProps> = (props) => {
             Reset to preset
           </button>
           <Show when={overrideCount() > 0}>
-            <span class="sc-hint m-0">
+            <span class="sc-settings-field-hint m-0">
               {overrideCount()} override{overrideCount() === 1 ? '' : 's'}
             </span>
           </Show>
         </div>
-        <p class="sc-hint mt-1">
+        <p class="sc-settings-field-hint mt-1">
           Pine host colors:{' '}
           <code class="font-mono text-[0.9em]">chart.bg_color</code> /{' '}
           <code class="font-mono text-[0.9em]">chart.fg_color</code>
@@ -163,10 +163,10 @@ export const ThemePanel: Component<ThemePanelProps> = (props) => {
       {/* ── Token groups ────────────────────────────────────────── */}
       <For each={groups()}>
         {(group) => (
-          <div class="sc-section">
-            <div class="sc-section-title">{group.label}</div>
+          <div class="sc-settings-section">
+            <div class="sc-settings-section-title">{group.label}</div>
             <Show when={group.description}>
-              <p class="sc-hint mt-0 mb-0.5">{group.description}</p>
+              <p class="sc-settings-field-hint mt-0 mb-0.5">{group.description}</p>
             </Show>
             <div class={`flex flex-col ${props.compact ? 'gap-2' : 'gap-2.5'}`}>
               <For each={group.defs}>
@@ -224,9 +224,9 @@ const TokenField: Component<TokenFieldProps> = (props) => {
   };
 
   return (
-    <div class="sc-field" data-testid={tokenTestId(props.def.key)}>
+    <div class="sc-settings-field" data-testid={tokenTestId(props.def.key)}>
       <div class="flex items-center justify-between gap-2 min-w-0">
-        <label class="sc-label truncate" for={id()}>
+        <label class="sc-settings-field-label truncate" for={id()}>
           {props.def.label}
         </label>
         <Show when={props.def.type === 'boolean'}>
@@ -242,11 +242,11 @@ const TokenField: Component<TokenFieldProps> = (props) => {
       </div>
 
       <Show when={props.def.type === 'color'}>
-        <div class="flex items-center gap-1.5 min-w-0">
+        <div class="sc-settings-color-row">
           <Show when={showColorPicker()}>
             <input
               type="color"
-              class="h-[var(--ui-control-h)] w-9 p-0.5 bg-bg-elev border border-border rounded-[var(--radius-input)] cursor-pointer shrink-0"
+              class="sc-settings-color-swatch"
               value={toColorInputValue(colorStr())}
               aria-label={`${props.def.label} color picker`}
               onInput={(e) => props.onChange(e.currentTarget.value)}
@@ -258,7 +258,7 @@ const TokenField: Component<TokenFieldProps> = (props) => {
             type="text"
             spellcheck={false}
             value={colorDraft()}
-            placeholder="#rrggbb or rgba(…)"
+            placeholder="#rrggbb, rgba(…), or color name"
             aria-label={props.def.label}
             onInput={(e) => {
               const v = e.currentTarget.value;
@@ -296,14 +296,14 @@ const TokenField: Component<TokenFieldProps> = (props) => {
       </Show>
 
       <Show when={props.def.pine || pineAlias()}>
-        <p class="sc-hint m-0 font-mono text-[0.72em]">
+        <p class="sc-settings-field-hint font-mono text-[0.72em]">
           {props.def.pine ? `Pine: ${props.def.pine}` : null}
           {props.def.pine && pineAlias() ? ' · ' : null}
           {pineAlias() ? `alias: ${pineAlias()}` : null}
         </p>
       </Show>
       <Show when={props.def.description && !props.def.pine && !props.compact}>
-        <p class="sc-hint m-0">{props.def.description}</p>
+        <p class="sc-settings-field-hint">{props.def.description}</p>
       </Show>
     </div>
   );

@@ -527,12 +527,12 @@ export const SettingsDialog: Component<Props> = (props) => {
                 role="tabpanel"
                 aria-labelledby="axis-settings-tab-data"
                 data-testid="axis-settings-data"
-                class="flex flex-col gap-2"
+                class="sc-settings-content"
               >
                 {/* ── Source & stream plugins (incl. advanced fields hidden from the Topbar row) ── */}
-                <div class="sc-section" data-testid="axis-settings-plugins">
-                  <div class="sc-section-title">Source &amp; stream plugins</div>
-                  <p class="sc-hint mt-0">
+                <div class="sc-settings-section" data-testid="axis-settings-plugins">
+                  <div class="sc-settings-section-title">Source &amp; stream plugins</div>
+                  <p class="sc-settings-field-hint mt-0">
                     Active venue only: CCXT gateway, Gecko proxy/network, mock start price,
                     synthesize-on-failure. How many bars to load is under General → Historical
                     bars. Public candles need no key; optional keys are session-only.
@@ -549,7 +549,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                 role="tabpanel"
                 aria-labelledby="axis-settings-tab-editor"
                 data-testid="axis-settings-editor"
-                class="flex flex-col gap-2"
+                class="sc-settings-content"
               >
                 <EditorIntelPanel />
               </div>
@@ -560,10 +560,10 @@ export const SettingsDialog: Component<Props> = (props) => {
                 role="tabpanel"
                 aria-labelledby="axis-settings-tab-theme"
                 data-testid="axis-settings-theme"
-                class="flex flex-col gap-2"
+                class="sc-settings-content"
               >
-                <div class="sc-section-title">Chart theme</div>
-                <p class="sc-hint mt-0">
+                <div class="sc-settings-section-title">Chart theme</div>
+                <p class="sc-settings-field-hint mt-0">
                   Presets and per-group colors (bars, grid, scales, volume). Pine host:{' '}
                   <code class="font-mono text-[0.9em]">chart.bg_color</code> /{' '}
                   <code class="font-mono text-[0.9em]">chart.fg_color</code>
@@ -581,18 +581,18 @@ export const SettingsDialog: Component<Props> = (props) => {
                 role="tabpanel"
                 aria-labelledby="axis-settings-tab-topbar"
                 data-testid="axis-settings-topbar"
-                class="flex flex-col gap-2"
+                class="sc-settings-content"
               >
-                <div class="sc-section-title">Topbar visibility</div>
-                <p class="sc-hint mt-0">
+                <div class="sc-settings-section-title">Topbar visibility</div>
+                <p class="sc-settings-field-hint mt-0">
                   Control which topbar groups and buttons are shown. Changes apply
                   immediately and are persisted.
                 </p>
 
                 {/* Brand group — always shown, kept for parity */}
-                <div class="sc-section">
-                  <div class="sc-section-title">Brand</div>
-                  <p class="sc-hint text-[0.75em]">Always visible</p>
+                <div class="sc-settings-section">
+                  <div class="sc-settings-section-title">Brand</div>
+                  <p class="sc-settings-field-hint text-[0.75em]">Always visible</p>
                   <StudioToggle
                     id="topbar-brand"
                     checked={store.topbar.brand}
@@ -602,9 +602,9 @@ export const SettingsDialog: Component<Props> = (props) => {
                 </div>
 
                 {/* Market group */}
-                <div class="sc-section">
-                  <div class="sc-section-title">Market</div>
-                  <p class="sc-hint text-[0.75em]">
+                <div class="sc-settings-section">
+                  <div class="sc-settings-section-title">Market</div>
+                  <p class="sc-settings-field-hint text-[0.75em]">
                     Symbol, interval, chart type, compare symbol
                   </p>
                   <StudioToggle
@@ -616,9 +616,9 @@ export const SettingsDialog: Component<Props> = (props) => {
                 </div>
 
                 {/* Data group */}
-                <div class="sc-section">
-                  <div class="sc-section-title">Data</div>
-                  <p class="sc-hint text-[0.75em]">
+                <div class="sc-settings-section">
+                  <div class="sc-settings-section-title">Data</div>
+                  <p class="sc-settings-field-hint text-[0.75em]">
                     Venue, plugin config, load, reload, datasets
                   </p>
                   <StudioToggle
@@ -630,9 +630,9 @@ export const SettingsDialog: Component<Props> = (props) => {
                 </div>
 
                 {/* Compute group */}
-                <div class="sc-section">
-                  <div class="sc-section-title">Compute</div>
-                  <p class="sc-hint text-[0.75em]">
+                <div class="sc-settings-section">
+                  <div class="sc-settings-section-title">Compute</div>
+                  <p class="sc-settings-field-hint text-[0.75em]">
                     Engine, stream, run, live, replay
                   </p>
                   <StudioToggle
@@ -644,9 +644,9 @@ export const SettingsDialog: Component<Props> = (props) => {
                 </div>
 
                 {/* Layout group */}
-                <div class="sc-section">
-                  <div class="sc-section-title">Layout</div>
-                  <p class="sc-hint text-[0.75em]">Chart layout menu</p>
+                <div class="sc-settings-section">
+                  <div class="sc-settings-section-title">Layout</div>
+                  <p class="sc-settings-field-hint text-[0.75em]">Chart layout menu</p>
                   <StudioToggle
                     id="topbar-layout"
                     checked={store.topbar.layout}
@@ -656,9 +656,9 @@ export const SettingsDialog: Component<Props> = (props) => {
                 </div>
 
                 {/* Panels group + individual toggles */}
-                <div class="sc-section">
-                  <div class="sc-section-title">Panels</div>
-                  <p class="sc-hint text-[0.75em]">
+                <div class="sc-settings-section">
+                  <div class="sc-settings-section-title">Panels</div>
+                  <p class="sc-settings-field-hint text-[0.75em]">
                     All 14 panel toggle buttons (watchlist, editor, library, scripts,
                     inputs, layers, DSM, on-chain, alerts, values, results, script logs,
                     system logs, status)
@@ -673,8 +673,8 @@ export const SettingsDialog: Component<Props> = (props) => {
 
                 {/* Individual panel toggles (visible only when panels group is on) */}
                 <Show when={store.topbar.panels}>
-                  <div class="sc-section">
-                    <div class="sc-section-title">Watchlist</div>
+                  <div class="sc-settings-section">
+                    <div class="sc-settings-section-title">Watchlist</div>
                     <StudioToggle
                       id="topbar-panels-watchlist"
                       checked={store.topbar.panelsWatchlist}
@@ -683,8 +683,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                     />
                   </div>
 
-                  <div class="sc-section">
-                    <div class="sc-section-title">Editor</div>
+                  <div class="sc-settings-section">
+                    <div class="sc-settings-section-title">Editor</div>
                     <StudioToggle
                       id="topbar-panels-editor"
                       checked={store.topbar.panelsEditor}
@@ -693,8 +693,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                     />
                   </div>
 
-                  <div class="sc-section">
-                    <div class="sc-section-title">Library</div>
+                  <div class="sc-settings-section">
+                    <div class="sc-settings-section-title">Library</div>
                     <StudioToggle
                       id="topbar-panels-library"
                       checked={store.topbar.panelsLibrary}
@@ -703,8 +703,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                     />
                   </div>
 
-                  <div class="sc-section">
-                    <div class="sc-section-title">Scripts</div>
+                  <div class="sc-settings-section">
+                    <div class="sc-settings-section-title">Scripts</div>
                     <StudioToggle
                       id="topbar-panels-scripts"
                       checked={store.topbar.panelsScripts}
@@ -713,8 +713,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                     />
                   </div>
 
-                  <div class="sc-section">
-                    <div class="sc-section-title">Inputs</div>
+                  <div class="sc-settings-section">
+                    <div class="sc-settings-section-title">Inputs</div>
                     <StudioToggle
                       id="topbar-panels-inputs"
                       checked={store.topbar.panelsInputs}
@@ -723,8 +723,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                     />
                   </div>
 
-                  <div class="sc-section">
-                    <div class="sc-section-title">Layers</div>
+                  <div class="sc-settings-section">
+                    <div class="sc-settings-section-title">Layers</div>
                     <StudioToggle
                       id="topbar-panels-layers"
                       checked={store.topbar.panelsLayers}
@@ -733,8 +733,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                     />
                   </div>
 
-                  <div class="sc-section">
-                    <div class="sc-section-title">DSM</div>
+                  <div class="sc-settings-section">
+                    <div class="sc-settings-section-title">DSM</div>
                     <StudioToggle
                       id="topbar-panels-dsm"
                       checked={store.topbar.panelsDsm}
@@ -743,8 +743,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                     />
                   </div>
 
-                  <div class="sc-section">
-                    <div class="sc-section-title">On-Chain</div>
+                  <div class="sc-settings-section">
+                    <div class="sc-settings-section-title">On-Chain</div>
                     <StudioToggle
                       id="topbar-panels-onchain"
                       checked={store.topbar.panelsOnchain}
@@ -753,8 +753,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                     />
                   </div>
 
-                  <div class="sc-section">
-                    <div class="sc-section-title">Alerts</div>
+                  <div class="sc-settings-section">
+                    <div class="sc-settings-section-title">Alerts</div>
                     <StudioToggle
                       id="topbar-panels-alerts"
                       checked={store.topbar.panelsAlerts}
@@ -763,8 +763,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                     />
                   </div>
 
-                  <div class="sc-section">
-                    <div class="sc-section-title">Values</div>
+                  <div class="sc-settings-section">
+                    <div class="sc-settings-section-title">Values</div>
                     <StudioToggle
                       id="topbar-panels-values"
                       checked={store.topbar.panelsValues}
@@ -773,8 +773,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                     />
                   </div>
 
-                  <div class="sc-section">
-                    <div class="sc-section-title">Results</div>
+                  <div class="sc-settings-section">
+                    <div class="sc-settings-section-title">Results</div>
                     <StudioToggle
                       id="topbar-panels-results"
                       checked={store.topbar.panelsResults}
@@ -783,8 +783,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                     />
                   </div>
 
-                  <div class="sc-section">
-                    <div class="sc-section-title">Script Logs</div>
+                  <div class="sc-settings-section">
+                    <div class="sc-settings-section-title">Script Logs</div>
                     <StudioToggle
                       id="topbar-panels-scriptlogs"
                       checked={store.topbar.panelsScriptLogs}
@@ -793,8 +793,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                     />
                   </div>
 
-                  <div class="sc-section">
-                    <div class="sc-section-title">System Logs</div>
+                  <div class="sc-settings-section">
+                    <div class="sc-settings-section-title">System Logs</div>
                     <StudioToggle
                       id="topbar-panels-systemlogs"
                       checked={store.topbar.panelsSystemLogs}
@@ -803,8 +803,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                     />
                   </div>
 
-                  <div class="sc-section">
-                    <div class="sc-section-title">Status</div>
+                  <div class="sc-settings-section">
+                    <div class="sc-settings-section-title">Status</div>
                     <StudioToggle
                       id="topbar-panels-status"
                       checked={store.topbar.panelsStatus}
@@ -823,13 +823,13 @@ export const SettingsDialog: Component<Props> = (props) => {
               role="tabpanel"
               aria-labelledby="axis-settings-tab-general"
               data-testid="axis-settings-general"
-              class="flex flex-col gap-2"
+              class="sc-settings-content"
             >
             {/* ── Appearance / density ─────────────────────────────── */}
-            <div class="flex flex-col gap-2" data-testid="axis-ui-scale-field">
-              <div class="sc-section-title">Appearance</div>
+            <div class="sc-settings-section" data-testid="axis-ui-scale-field">
+              <div class="sc-settings-section-title">Appearance</div>
               <div class="flex items-center justify-between gap-2">
-                <label class="sc-label" for="axis-ui-scale">
+                <label class="sc-settings-field-label" for="axis-ui-scale">
                   UI scale
                 </label>
                 <span
@@ -878,7 +878,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                   )}
                 </For>
               </div>
-              <p class="sc-hint">
+              <p class="sc-settings-field-hint">
                 Scales text, icons, inputs, padding, and gaps. Chart candles stay sharp (canvas not
                 zoomed). Live preview — Save to keep.
               </p>
@@ -898,10 +898,10 @@ export const SettingsDialog: Component<Props> = (props) => {
               </div>
             </div>
 
-            <div class="sc-section">
-              <div class="sc-section-title">Engine</div>
-            <div class="sc-field">
-              <label class="sc-label" for="axis-engine">
+            <div class="sc-settings-section">
+              <div class="sc-settings-section-title">Engine</div>
+            <div class="sc-settings-field">
+              <label class="sc-settings-field-label" for="axis-engine">
                 Calculation engine
               </label>
               <select
@@ -925,16 +925,16 @@ export const SettingsDialog: Component<Props> = (props) => {
                       capabilities={en().capabilities}
                       builtIn={en().builtIn}
                     />
-                    <p class="text-[10px] text-text-faint mt-0.5">{en().description}</p>
+                    <p class="sc-settings-field-hint">{en().description}</p>
                   </div>
                 )}
               </Show>
             </div>
 
             <Show when={hasExecMode()}>
-              <div class="sc-field" data-testid="axis-exec-mode-field">
+              <div class="sc-settings-field" data-testid="axis-exec-mode-field">
                 <label
-                  class="text-[10px] text-text-dim uppercase tracking-wider"
+                  class="sc-settings-field-label"
                   for="axis-exec-mode"
                 >
                   Execution mode
@@ -950,7 +950,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                     {(o) => <option value={o.value}>{o.label}</option>}
                   </For>
                 </select>
-                <p class="text-[10px] text-text-faint mt-0.5">
+                <p class="sc-settings-field-hint">
                   {engine() === 'pyodide'
                     ? `HUD: ENG local · RUN browser. ${execModeHint()} Numba compile needs RUN server (CPython).`
                     : `HUD: ENG local|remote (from Backend URL) · RUN server (or worker if edge URL). ${execModeHint()}`}
@@ -959,18 +959,17 @@ export const SettingsDialog: Component<Props> = (props) => {
             </Show>
 
             <Show when={hasPreferWs()}>
-              <label class="flex items-start gap-2 cursor-pointer" for="axis-prefer-ws">
+              <label class="sc-settings-check" for="axis-prefer-ws">
                 <input
                   id="axis-prefer-ws"
                   type="checkbox"
-                  class="mt-0.5"
                   data-testid="axis-prefer-ws"
                   checked={preferWs()}
                   onChange={(e) => setPreferWs(e.currentTarget.checked)}
                 />
-                <span>
-                  <span class="text-[12px] text-text">Prefer WebSocket run</span>
-                  <span class="block text-[10px] text-text-faint mt-0.5">
+                <span class="sc-settings-check-text">
+                  <span class="sc-settings-check-title">Prefer WebSocket run</span>
+                  <span class="sc-settings-check-hint">
                     Use <code class="font-mono">/ws/run</code> when the backend advertises it;
                     fall back to REST <code class="font-mono">POST /run</code>.
                   </span>
@@ -979,9 +978,9 @@ export const SettingsDialog: Component<Props> = (props) => {
             </Show>
 
             <Show when={hasApiKey()}>
-              <div class="sc-field" data-testid="axis-engine-api-key-field">
+              <div class="sc-settings-field" data-testid="axis-engine-api-key-field">
                 <label
-                  class="text-[10px] text-text-dim uppercase tracking-wider"
+                  class="sc-settings-field-label"
                   for="axis-engine-api-key"
                 >
                   Engine API key
@@ -989,7 +988,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                 <input
                   id="axis-engine-api-key"
                   type="password"
-                  class="sc-input font-mono text-[12px] w-full"
+                  class="sc-input font-mono text-[0.85em] w-full"
                   data-testid="axis-engine-api-key"
                   value={apiKey()}
                   onInput={(e) => setApiKey(e.currentTarget.value)}
@@ -997,7 +996,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                   spellcheck={false}
                   autocomplete="off"
                 />
-                <p class="text-[10px] text-text-faint mt-0.5">
+                <p class="sc-settings-field-hint">
                   Sent as <code class="font-mono">X-API-Key</code> and Bearer on{' '}
                   <code class="font-mono">POST /run</code>. Leave empty for open local backends.
                 </p>
@@ -1005,9 +1004,9 @@ export const SettingsDialog: Component<Props> = (props) => {
             </Show>
 
             <Show when={needsEndpoint()}>
-              <div class="sc-field">
+              <div class="sc-settings-field">
                 <label
-                  class="text-[10px] text-text-dim uppercase tracking-wider"
+                  class="sc-settings-field-label"
                   for="axis-endpoint"
                 >
                   Backend Endpoint
@@ -1015,7 +1014,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                 <div class="flex gap-1.5">
                   <input
                     id="axis-endpoint"
-                    class="sc-input font-mono text-[12px] flex-1 min-w-0"
+                    class="sc-input font-mono text-[0.85em] flex-1 min-w-0"
                     value={endpoint()}
                     onInput={(e) => setEndpoint(e.currentTarget.value)}
                     placeholder="http://host:5002 or Worker URL"
@@ -1032,7 +1031,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                     Test
                   </button>
                 </div>
-                <div class="flex flex-wrap gap-1 mt-0.5">
+                <div class="sc-settings-btn-row mt-0.5">
                   <button
                     type="button"
                     class="sc-btn sc-btn-ghost px-1.5 py-0.5 text-[10px] font-mono"
@@ -1118,15 +1117,15 @@ export const SettingsDialog: Component<Props> = (props) => {
                     {probeMsg()}
                   </p>
                 </Show>
-                <p class="text-[10px] text-text-faint mt-0.5">
+                <p class="sc-settings-field-hint">
                   Server engine + LSP (completion/hover) use this URL. Cross-origin needs CORS on
                   pyne (page origin must be allowed).
                 </p>
               </div>
             </Show>
 
-            <div class="sc-field">
-              <label class="text-[10px] text-text-dim uppercase tracking-wider" for="axis-storage">
+            <div class="sc-settings-field">
+              <label class="sc-settings-field-label" for="axis-storage">
                 Script storage
               </label>
               <select
@@ -1144,7 +1143,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                   )}
                 </For>
               </select>
-              <p class="text-[10px] text-text-faint mt-0.5">
+              <p class="sc-settings-field-hint">
                 Where saved Pine scripts live (local browser, cloud Worker, or git). Configure
                 credentials under Manager → Script Library.
               </p>
@@ -1153,21 +1152,21 @@ export const SettingsDialog: Component<Props> = (props) => {
             </div>
 
             {/* ── On-Chain (dedicated Worker proxy; Pro API endpoint stays for Pine) ── */}
-            <div class="sc-section" data-testid="axis-settings-onchain">
-              <div class="sc-section-title">On-Chain</div>
-              <p class="sc-hint mt-0">
+            <div class="sc-settings-section" data-testid="axis-settings-onchain">
+              <div class="sc-settings-section-title">On-Chain</div>
+              <p class="sc-settings-field-hint mt-0">
                 TVL / DEX traffic uses the <strong class="text-text-dim font-normal">AXIS Worker</strong>{' '}
                 allowlisted proxy by default (not the Pro API host). Backend URL above stays for
                 Pine <code class="font-mono text-text-dim">/run</code> / LSP.
               </p>
-              <p class="sc-hint mt-1 font-mono text-[0.9em]">
+              <p class="sc-settings-field-hint mt-1 font-mono text-[0.9em]">
                 <code class="text-text-dim">…/api/onchain/llama</code>
                 {' · '}
                 <code class="text-text-dim">…/api/onchain/gecko</code>
                 {' · '}
                 local <code class="text-text-dim">http://127.0.0.1:8787</code>
               </p>
-              <p class="sc-hint mt-0.5">
+              <p class="sc-settings-field-hint mt-0.5">
                 <strong class="text-text-dim font-normal">Not a wallet</strong> — no MetaMask,
                 Ledger, or signing; public metrics only.
               </p>
@@ -1187,11 +1186,11 @@ export const SettingsDialog: Component<Props> = (props) => {
               </div>
             </div>
 
-            <div class="sc-section">
-              <div class="sc-section-title">Chart &amp; watchlist</div>
+            <div class="sc-settings-section">
+              <div class="sc-settings-section-title">Chart &amp; watchlist</div>
 
-              <div class="sc-field">
-                <label class="sc-label" for="axis-default-interval">
+              <div class="sc-settings-field">
+                <label class="sc-settings-field-label" for="axis-default-interval">
                   Default interval
                 </label>
                 <select
@@ -1204,14 +1203,14 @@ export const SettingsDialog: Component<Props> = (props) => {
                     {(i) => <option value={i}>{i}</option>}
                   </For>
                 </select>
-                <p class="text-[10px] text-text-faint mt-0.5">
+                <p class="sc-settings-field-hint">
                   Used when loading symbols from the watchlist and top bar. Changing this reloads
                   the active chart.
                 </p>
               </div>
 
-              <div class="sc-field">
-                <label class="sc-label" for="axis-history-bars">
+              <div class="sc-settings-field">
+                <label class="sc-settings-field-label" for="axis-history-bars">
                   Historical bars
                 </label>
                 <input
@@ -1227,7 +1226,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                     setHistoryBars(clampHistoryBars(e.currentTarget.value))
                   }
                 />
-                <p class="text-[10px] text-text-faint mt-0.5">
+                <p class="sc-settings-field-hint">
                   Bars requested on Load / symbol change ({HISTORY_BARS_MIN}–{HISTORY_BARS_MAX}).
                   Default {HISTORY_BARS_DEFAULT}. Venues may return fewer (e.g. OKX max 300,
                   Binance max 1000). Saved with your other settings.
@@ -1235,20 +1234,19 @@ export const SettingsDialog: Component<Props> = (props) => {
               </div>
 
               <label
-                class="flex items-start gap-2 cursor-pointer mb-3"
+                class="sc-settings-check mb-2"
                 for="axis-price-scale-labels"
               >
                 <input
                   id="axis-price-scale-labels"
                   type="checkbox"
-                  class="mt-0.5"
                   checked={priceScaleLabels()}
                   onChange={(e) => setPriceScaleLabels(e.currentTarget.checked)}
                   data-testid="axis-settings-price-scale-labels"
                 />
-                <span>
-                  <span class="text-[12px] text-text">Right price scale labels</span>
-                  <span class="block text-[10px] text-text-faint mt-0.5">
+                <span class="sc-settings-check-text">
+                  <span class="sc-settings-check-title">Right price scale labels</span>
+                  <span class="sc-settings-check-hint">
                     Show price numbers on the right axis. Same as the chart [$] control.
                     Off collapses the gutter for more plot width.
                   </span>
@@ -1256,20 +1254,19 @@ export const SettingsDialog: Component<Props> = (props) => {
               </label>
 
               <label
-                class="flex items-start gap-2 cursor-pointer mb-3"
+                class="sc-settings-check mb-2"
                 for="axis-last-value-labels"
               >
                 <input
                   id="axis-last-value-labels"
                   type="checkbox"
-                  class="mt-0.5"
                   checked={lastValueLabels()}
                   onChange={(e) => setLastValueLabels(e.currentTarget.checked)}
                   data-testid="axis-settings-last-value-labels"
                 />
-                <span>
-                  <span class="text-[12px] text-text">Series last-value labels</span>
-                  <span class="block text-[10px] text-text-faint mt-0.5">
+                <span class="sc-settings-check-text">
+                  <span class="sc-settings-check-title">Series last-value labels</span>
+                  <span class="sc-settings-check-hint">
                     Show last prices on the right scale (plots, volume, hlines).
                     Same as the chart [N] control. Independent of [$].
                   </span>
@@ -1277,117 +1274,112 @@ export const SettingsDialog: Component<Props> = (props) => {
               </label>
 
               <label
-                class="flex items-start gap-2 cursor-pointer mb-3"
+                class="sc-settings-check mb-2"
                 for="axis-last-value-names"
               >
                 <input
                   id="axis-last-value-names"
                   type="checkbox"
-                  class="mt-0.5"
                   checked={lastValueNames()}
                   onChange={(e) => setLastValueNames(e.currentTarget.checked)}
                   data-testid="axis-settings-last-value-names"
                 />
-                <span>
-                  <span class="text-[12px] text-text">Plot names on last-value labels</span>
-                  <span class="block text-[10px] text-text-faint mt-0.5">
+                <span class="sc-settings-check-text">
+                  <span class="sc-settings-check-title">Plot names on last-value labels</span>
+                  <span class="sc-settings-check-hint">
                     Show RSI / Overbought titles next to the last value. Off
                     keeps the number only. Same as the chart [T] control.
                   </span>
                 </span>
               </label>
 
-              <div class="sc-section !mt-0 !border-t-0 !pt-0 mb-3">
-                <div class="sc-section-title">Strategy fills & marks</div>
-                <p class="text-[10px] text-text-faint mb-2">
+              <div class="sc-settings-section !mt-0 !border-t-0 !pt-0 mb-2">
+                <div class="sc-settings-section-title">Strategy fills & marks</div>
+                <p class="sc-settings-field-hint mb-2">
                   Historical and live default: execute on signal bar close. Slippage
                   shifts the fill to the next bar open. Marker options also live on the
                   Results → Strategy tab.
                 </p>
                 <label
-                  class="flex items-start gap-2 cursor-pointer mb-2"
+                  class="sc-settings-check mb-2"
                   for="axis-strategy-slippage"
                 >
                   <input
                     id="axis-strategy-slippage"
                     type="checkbox"
-                    class="mt-0.5"
                     checked={slippageNextOpen()}
                     onChange={(e) => setSlippageNextOpen(e.currentTarget.checked)}
                     data-testid="axis-settings-strategy-slippage"
                   />
-                  <span>
-                    <span class="text-[12px] text-text">Slippage → next bar open</span>
-                    <span class="block text-[10px] text-text-faint mt-0.5">
+                  <span class="sc-settings-check-text">
+                    <span class="sc-settings-check-title">Slippage → next bar open</span>
+                    <span class="sc-settings-check-hint">
                       Off = fill at signal candle close. On = fill at next candle open
                       (mark moves to that bar).
                     </span>
                   </span>
                 </label>
                 <label
-                  class="flex items-start gap-2 cursor-pointer mb-2"
+                  class="sc-settings-check mb-2"
                   for="axis-strategy-invert-labels"
                 >
                   <input
                     id="axis-strategy-invert-labels"
                     type="checkbox"
-                    class="mt-0.5"
                     checked={invertTradeLabels()}
                     onChange={(e) => setInvertTradeLabels(e.currentTarget.checked)}
                     data-testid="axis-settings-strategy-invert-labels"
                   />
-                  <span>
-                    <span class="text-[12px] text-text">Invert long / short labels</span>
-                    <span class="block text-[10px] text-text-faint mt-0.5">
+                  <span class="sc-settings-check-text">
+                    <span class="sc-settings-check-title">Invert long / short labels</span>
+                    <span class="sc-settings-check-hint">
                       Default: long entry below, short above. Invert puts long above and
                       short below.
                     </span>
                   </span>
                 </label>
                 <label
-                  class="flex items-start gap-2 cursor-pointer mb-2"
+                  class="sc-settings-check mb-2"
                   for="axis-strategy-exact-marks"
                 >
                   <input
                     id="axis-strategy-exact-marks"
                     type="checkbox"
-                    class="mt-0.5"
                     checked={exactOnCandle()}
                     onChange={(e) => setExactOnCandle(e.currentTarget.checked)}
                     data-testid="axis-settings-strategy-exact-marks"
                   />
-                  <span>
-                    <span class="text-[12px] text-text">Exact marks on candle</span>
-                    <span class="block text-[10px] text-text-faint mt-0.5">
+                  <span class="sc-settings-check-text">
+                    <span class="sc-settings-check-title">Exact marks on candle</span>
+                    <span class="sc-settings-check-hint">
                       Circle on the fill bar body plus directional side arrows.
                     </span>
                   </span>
                 </label>
               </div>
 
-              <div class="sc-section !mt-0 !border-t-0 !pt-0">
-                <div class="sc-section-title">Live stream</div>
+              <div class="sc-settings-section !mt-0 !border-t-0 !pt-0">
+                <div class="sc-settings-section-title">Live stream</div>
 
-                <label class="flex items-start gap-2 cursor-pointer" for="axis-prefer-live">
+                <label class="sc-settings-check" for="axis-prefer-live">
                   <input
                     id="axis-prefer-live"
                     type="checkbox"
-                    class="mt-0.5"
                     checked={preferAfterLoad()}
                     onChange={(e) => setPreferAfterLoad(e.currentTarget.checked)}
                   />
-                  <span>
-                    <span class="text-[12px] text-text">Auto-start live after Load</span>
-                    <span class="block text-[10px] text-text-faint mt-0.5">
+                  <span class="sc-settings-check-text">
+                    <span class="sc-settings-check-title">Auto-start live after Load</span>
+                    <span class="sc-settings-check-hint">
                       Prefer WebSocket feed immediately after historical REST load. On by default
                       (live mode preferred).
                     </span>
                   </span>
                 </label>
 
-                <div class="sc-field">
+                <div class="sc-settings-field">
                   <label
-                    class="text-[10px] text-text-dim uppercase tracking-wider"
+                    class="sc-settings-field-label"
                     for="axis-rerun-on"
                   >
                     Indicator re-run on live bars
@@ -1405,42 +1397,40 @@ export const SettingsDialog: Component<Props> = (props) => {
                     <option value="every-tick">Every tick (responsive)</option>
                     <option value="bar-close">Bar close only (lighter)</option>
                   </select>
-                  <p class="text-[10px] text-text-faint mt-0.5">
+                  <p class="sc-settings-field-hint">
                     Bar-close uses venue closed flags (Binance/OKX/Bybit) or bar time advance.
                   </p>
                 </div>
 
-                <label class="flex items-start gap-2 cursor-pointer" for="axis-hud-compact">
+                <label class="sc-settings-check" for="axis-hud-compact">
                   <input
                     id="axis-hud-compact"
                     type="checkbox"
-                    class="mt-0.5"
                     checked={hudCompact()}
                     onChange={(e) => setHudCompact(e.currentTarget.checked)}
                   />
-                  <span>
-                    <span class="text-[12px] text-text">Compact connection HUD</span>
-                    <span class="block text-[10px] text-text-faint mt-0.5">
+                  <span class="sc-settings-check-text">
+                    <span class="sc-settings-check-title">Compact connection HUD</span>
+                    <span class="sc-settings-check-hint">
                       Hide SRC/STR/ENG/STO plane chips; keep Live · Tick · Engine latency.
                     </span>
                   </span>
                 </label>
 
                 <label
-                  class="flex items-start gap-2 cursor-pointer mt-2"
+                  class="sc-settings-check mt-2"
                   for="axis-share-on-error"
                 >
                   <input
                     id="axis-share-on-error"
                     type="checkbox"
-                    class="mt-0.5"
                     checked={shareOnError()}
                     onChange={(e) => setShareOnError(e.currentTarget.checked)}
                     data-testid="axis-settings-share-on-error"
                   />
-                  <span>
-                    <span class="text-[12px] text-text">Ask to share data on errors</span>
-                    <span class="block text-[10px] text-text-faint mt-0.5">
+                  <span class="sc-settings-check-text">
+                    <span class="sc-settings-check-title">Ask to share data on errors</span>
+                    <span class="sc-settings-check-hint">
                       Telemetry · off by default. When enabled, UI errors show a prompt to
                       copy/download a redacted diagnostic (no bars, scripts, or secrets).
                       Nothing is uploaded automatically.
@@ -1449,9 +1439,9 @@ export const SettingsDialog: Component<Props> = (props) => {
                 </label>
               </div>
 
-              <div class="sc-field">
+              <div class="sc-settings-field">
                 <label
-                  class="text-[10px] text-text-dim uppercase tracking-wider"
+                  class="sc-settings-field-label"
                   for="axis-watchlist-refresh"
                 >
                   Watchlist REST fallback
@@ -1466,7 +1456,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                     {(o) => <option value={o.value}>{o.label}</option>}
                   </For>
                 </select>
-                <p class="text-[10px] text-text-faint mt-0.5">
+                <p class="sc-settings-field-hint">
                   Used only when WebSocket quotes fail. While live, prices update on every exchange
                   ticker tick (Binance / OKX / Bybit / Coinbase).
                 </p>
@@ -1474,14 +1464,14 @@ export const SettingsDialog: Component<Props> = (props) => {
             </div>
 
             {/* ── Workspace actions ─────────────────────────────────── */}
-            <div class="flex flex-col gap-2 mt-3" data-testid="axis-settings-workspace">
-              <div class="sc-section-title">Workspace</div>
-              <p class="text-[10px] text-text-faint -mt-1">
+            <div class="sc-settings-section" data-testid="axis-settings-workspace">
+              <div class="sc-settings-section-title">Workspace</div>
+              <p class="sc-settings-field-hint -mt-1">
                 Chart reload refetches OHLCV for the current symbol. UI reset restores panel layout
                 and density only. Export / import captures a full chrome + drawings + scripts
                 snapshot (bars omitted).
               </p>
-              <div class="flex flex-wrap gap-2">
+              <div class="sc-settings-btn-row">
                 <button
                   type="button"
                   class={`sc-btn ${reloading() ? 'opacity-50' : ''}`}
@@ -1691,16 +1681,16 @@ export const ExchangeCredentialsPanel: Component = () => {
 
   return (
     <>
-      <div class="sc-section-title">Exchange API keys</div>
-      <p class="sc-hint mt-0" data-testid="axis-exchange-session-note">
+      <div class="sc-settings-section-title">Exchange API keys</div>
+      <p class="sc-settings-field-hint mt-0" data-testid="axis-exchange-session-note">
         Saved in this session only (not written to disk). AXIS never puts key, secret, or
         passphrase into localStorage. Native CEX keys sign in the browser; CCXT keys are
         posted to the datafeed session (handle on later requests, never the secret in the URL).
       </p>
 
-      <div class="sc-field">
+      <div class="sc-settings-field">
         <label
-          class="text-[10px] text-text-dim uppercase tracking-wider"
+          class="sc-settings-field-label"
           for="axis-exchange-key-kind"
         >
           Key type
@@ -1724,9 +1714,9 @@ export const ExchangeCredentialsPanel: Component = () => {
       <Show
         when={kind() === 'ccxt'}
         fallback={
-          <div class="sc-field">
+          <div class="sc-settings-field">
             <label
-              class="text-[10px] text-text-dim uppercase tracking-wider"
+              class="sc-settings-field-label"
               for="axis-exchange-venue"
             >
               Venue
@@ -1745,16 +1735,16 @@ export const ExchangeCredentialsPanel: Component = () => {
           </div>
         }
       >
-        <div class="sc-field">
+        <div class="sc-settings-field">
           <label
-            class="text-[10px] text-text-dim uppercase tracking-wider"
+            class="sc-settings-field-label"
             for="axis-exchange-ccxt-id"
           >
             CCXT exchange id
           </label>
           <input
             id="axis-exchange-ccxt-id"
-            class="sc-input font-mono text-[12px] w-full"
+            class="sc-input font-mono text-[0.85em] w-full"
             data-testid="axis-exchange-ccxt-id"
             value={ccxtExchange()}
             onInput={(e) => setCcxtExchange(normalizeCcxtExchangeId(e.currentTarget.value))}
@@ -1765,9 +1755,9 @@ export const ExchangeCredentialsPanel: Component = () => {
         </div>
       </Show>
 
-      <div class="sc-field">
+      <div class="sc-settings-field">
         <label
-          class="text-[10px] text-text-dim uppercase tracking-wider"
+          class="sc-settings-field-label"
           for="axis-exchange-api-key"
         >
           API key
@@ -1775,7 +1765,7 @@ export const ExchangeCredentialsPanel: Component = () => {
         <input
           id="axis-exchange-api-key"
           type="password"
-          class="sc-input font-mono text-[12px] w-full"
+          class="sc-input font-mono text-[0.85em] w-full"
           data-testid="axis-exchange-api-key"
           value={apiKey()}
           onInput={(e) => setApiKey(e.currentTarget.value)}
@@ -1784,13 +1774,13 @@ export const ExchangeCredentialsPanel: Component = () => {
           autocomplete="off"
         />
         <Show when={meta()?.hasKey && !apiKey()}>
-          <p class="text-[10px] text-accent mt-0.5">saved</p>
+          <p class="sc-settings-field-hint text-accent">saved</p>
         </Show>
       </div>
 
-      <div class="sc-field">
+      <div class="sc-settings-field">
         <label
-          class="text-[10px] text-text-dim uppercase tracking-wider"
+          class="sc-settings-field-label"
           for="axis-exchange-secret"
         >
           Secret
@@ -1798,7 +1788,7 @@ export const ExchangeCredentialsPanel: Component = () => {
         <input
           id="axis-exchange-secret"
           type="password"
-          class="sc-input font-mono text-[12px] w-full"
+          class="sc-input font-mono text-[0.85em] w-full"
           data-testid="axis-exchange-secret"
           value={secret()}
           onInput={(e) => setSecret(e.currentTarget.value)}
@@ -1807,14 +1797,14 @@ export const ExchangeCredentialsPanel: Component = () => {
           autocomplete="off"
         />
         <Show when={meta()?.hasSecret && !secret()}>
-          <p class="text-[10px] text-accent mt-0.5">saved · ••••••••</p>
+          <p class="sc-settings-field-hint text-accent">saved · ••••••••</p>
         </Show>
       </div>
 
       <Show when={needsPass()}>
-        <div class="sc-field">
+        <div class="sc-settings-field">
           <label
-            class="text-[10px] text-text-dim uppercase tracking-wider"
+            class="sc-settings-field-label"
             for="axis-exchange-passphrase"
           >
             Passphrase
@@ -1822,7 +1812,7 @@ export const ExchangeCredentialsPanel: Component = () => {
           <input
             id="axis-exchange-passphrase"
             type="password"
-            class="sc-input font-mono text-[12px] w-full"
+            class="sc-input font-mono text-[0.85em] w-full"
             data-testid="axis-exchange-passphrase"
             value={passphrase()}
             onInput={(e) => setPassphrase(e.currentTarget.value)}
@@ -1831,22 +1821,22 @@ export const ExchangeCredentialsPanel: Component = () => {
             autocomplete="off"
           />
           <Show when={meta()?.hasPassphrase && !passphrase()}>
-            <p class="text-[10px] text-accent mt-0.5">saved</p>
+            <p class="sc-settings-field-hint text-accent">saved</p>
           </Show>
         </div>
       </Show>
 
       <Show when={kind() === 'ccxt'}>
-        <div class="sc-field">
+        <div class="sc-settings-field">
           <label
-            class="text-[10px] text-text-dim uppercase tracking-wider"
+            class="sc-settings-field-label"
             for="axis-exchange-uid"
           >
             UID (optional)
           </label>
           <input
             id="axis-exchange-uid"
-            class="sc-input font-mono text-[12px] w-full"
+            class="sc-input font-mono text-[0.85em] w-full"
             data-testid="axis-exchange-uid"
             value={uid()}
             onInput={(e) => setUid(e.currentTarget.value)}
@@ -1857,7 +1847,7 @@ export const ExchangeCredentialsPanel: Component = () => {
         </div>
       </Show>
 
-      <div class="flex flex-wrap gap-2 mt-1">
+      <div class="sc-settings-btn-row mt-1">
         <button
           type="button"
           class="sc-btn sc-btn-primary"
@@ -1891,7 +1881,7 @@ export const ExchangeCredentialsPanel: Component = () => {
       <Show when={msg()}>
         <p class="text-[10px] text-red font-mono mt-0.5">{msg()}</p>
       </Show>
-      <p class="text-[10px] text-text-faint mt-1">
+      <p class="sc-settings-field-hint mt-1">
         Public REST/WebSocket needs no key. CCXT keys raise rate limits / unlock private
         adapters on the gateway; they are bound on Save and sent as a session handle.
       </p>
@@ -1907,11 +1897,10 @@ function IntelCheck(props: {
   onChange: (v: boolean) => void;
 }) {
   return (
-    <label class="flex items-start gap-2 cursor-pointer mb-2" for={props.id}>
+    <label class="sc-settings-check mb-2" for={props.id}>
       <input
         id={props.id}
         type="checkbox"
-        class="mt-0.5"
         checked={props.checked}
         onChange={(e) => {
           if (!e.isTrusted) return;
@@ -1919,9 +1908,9 @@ function IntelCheck(props: {
         }}
         data-testid={props.id}
       />
-      <span>
-        <span class="text-[12px] text-text">{props.label}</span>
-        <span class="block text-[10px] text-text-faint mt-0.5">{props.hint}</span>
+      <span class="sc-settings-check-text">
+        <span class="sc-settings-check-title">{props.label}</span>
+        <span class="sc-settings-check-hint">{props.hint}</span>
       </span>
     </label>
   );
@@ -1953,9 +1942,9 @@ function IntelNum(props: {
     setDraft(String(clamped));
   };
   return (
-    <label class="flex flex-col gap-0.5 mb-2" for={props.id}>
+    <label class="sc-settings-field mb-2" for={props.id}>
       <span class="flex items-baseline justify-between gap-2">
-        <span class="text-[12px] text-text">{props.label}</span>
+        <span class="sc-settings-field-label">{props.label}</span>
         <span class="font-mono text-[11px] tabular-nums text-text-faint">
           {props.value}
           {props.suffix || ''}
@@ -1964,7 +1953,7 @@ function IntelNum(props: {
       <input
         id={props.id}
         type="number"
-        class="sc-input font-mono text-[12px] w-full"
+        class="sc-input font-mono text-[0.85em] w-full"
         min={props.min}
         max={props.max}
         step={props.step ?? 50}
@@ -1974,7 +1963,7 @@ function IntelNum(props: {
         onBlur={(e) => commit(e.currentTarget.value)}
         data-testid={props.id}
       />
-      <span class="text-[10px] text-text-faint">
+      <span class="sc-settings-field-hint">
         {props.hint} ({props.min}–{props.max}
         {props.suffix || ''})
       </span>
@@ -1991,8 +1980,8 @@ export const EditorIntelPanel: Component = () => {
     <>
       <div class="flex items-center justify-between gap-2 mb-1">
         <div>
-          <div class="sc-section-title !mb-0">Editor intelligence</div>
-          <p class="sc-hint mt-0.5">
+          <div class="sc-settings-section-title !mb-0">Editor intelligence</div>
+          <p class="sc-settings-field-hint mt-0.5">
             Pre-eval, hover cards, completions, underlines, and inline chips.
             Changes apply immediately.
           </p>
@@ -2007,8 +1996,8 @@ export const EditorIntelPanel: Component = () => {
         </button>
       </div>
 
-      <div class="sc-section !mt-2">
-        <div class="sc-section-title">Pre-eval / lint</div>
+      <div class="sc-settings-section !mt-2">
+        <div class="sc-settings-section-title">Pre-eval / lint</div>
         <IntelCheck
           id="axis-intel-preeval"
           label="Enable pre-eval"
@@ -2101,8 +2090,8 @@ export const EditorIntelPanel: Component = () => {
         />
       </div>
 
-      <div class="sc-section">
-        <div class="sc-section-title">Error marking</div>
+      <div class="sc-settings-section">
+        <div class="sc-settings-section-title">Error marking</div>
         <IntelCheck
           id="axis-intel-underlines"
           label="Underlines + line tint"
@@ -2154,8 +2143,8 @@ export const EditorIntelPanel: Component = () => {
         />
       </div>
 
-      <div class="sc-section">
-        <div class="sc-section-title">Hover cards &amp; hints</div>
+      <div class="sc-settings-section">
+        <div class="sc-settings-section-title">Hover cards &amp; hints</div>
         <IntelCheck
           id="axis-intel-hover"
           label="Builtin / symbol hover cards"
@@ -2190,8 +2179,8 @@ export const EditorIntelPanel: Component = () => {
         />
       </div>
 
-      <div class="sc-section">
-        <div class="sc-section-title">Suggestions / autocomplete</div>
+      <div class="sc-settings-section">
+        <div class="sc-settings-section-title">Suggestions / autocomplete</div>
         <IntelCheck
           id="axis-intel-ac"
           label="Enable completions"
@@ -2239,8 +2228,8 @@ export const EditorIntelPanel: Component = () => {
         />
       </div>
 
-      <div class="sc-section">
-        <div class="sc-section-title">Remote LSP timings</div>
+      <div class="sc-settings-section">
+        <div class="sc-settings-section-title">Remote LSP timings</div>
         <IntelCheck
           id="axis-intel-remote-master"
           label="Use remote LSP"
@@ -2280,8 +2269,8 @@ export const EditorIntelPanel: Component = () => {
         />
       </div>
 
-      <div class="sc-section">
-        <div class="sc-section-title">Inline markers</div>
+      <div class="sc-settings-section">
+        <div class="sc-settings-section-title">Inline markers</div>
         <IntelCheck
           id="axis-intel-color-chips"
           label="Color chips"
