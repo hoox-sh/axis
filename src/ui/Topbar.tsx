@@ -277,28 +277,31 @@ export const Topbar: Component<{
       data-testid="axis-topbar"
     >
       {/* ── Brand (click → About) ───────────────────────────── */}
-      <button
-        type="button"
-        class="axis-tb-group axis-tb-brand axis-tb-brand-btn"
-        data-tb-group="brand"
-        data-testid="axis-brand"
-        title="About AXIS · HOOX ethos"
-        aria-label="About AXIS"
-        onClick={() => openAboutModal()}
-      >
-        <HooxLogo
-          size="m"
-          class="axis-tb-brand-logo text-text flex-shrink-0"
-          data-testid="axis-hoox-logo"
-        />
-        <div class="axis-tb-brand-title">
-          AXIS
-          <span class="axis-tb-brand-sub">chart</span>
-        </div>
-      </button>
+      <Show when={store.topbar.brand}>
+        <button
+          type="button"
+          class="axis-tb-group axis-tb-brand axis-tb-brand-btn"
+          data-tb-group="brand"
+          data-testid="axis-brand"
+          title="About AXIS · HOOX ethos"
+          aria-label="About AXIS"
+          onClick={() => openAboutModal()}
+        >
+          <HooxLogo
+            size="m"
+            class="axis-tb-brand-logo text-text flex-shrink-0"
+            data-testid="axis-hoox-logo"
+          />
+          <div class="axis-tb-brand-title">
+            AXIS
+            <span class="axis-tb-brand-sub">chart</span>
+          </div>
+        </button>
+      </Show>
 
       {/* ── Market ──────────────────────────────────────────── */}
-      <div class="axis-tb-group" data-tb-group="market">
+      <Show when={store.topbar.market}>
+        <div class="axis-tb-group" data-tb-group="market">
         <Show when={sourceNeedsSymbol()}>
           <div class="flex items-stretch gap-0.5" data-testid="axis-symbol-control">
             <TopbarField
@@ -403,9 +406,11 @@ export const Topbar: Component<{
 
         <CompareSymbolControl />
       </div>
+      </Show>
 
       {/* ── Data ────────────────────────────────────────────── */}
-      <div class="axis-tb-group" data-tb-group="data" data-axis-source={store.source}>
+      <Show when={store.topbar.data}>
+        <div class="axis-tb-group" data-tb-group="data" data-axis-source={store.source}>
         <TopbarField
           label="Venue"
           variant="select"
@@ -509,9 +514,11 @@ export const Topbar: Component<{
           {loading() ? <HooxLoader size="xs" /> : <Icons.refresh />}
         </button>
       </div>
+      </Show>
 
       {/* ── Compute (Engine · Stream · Run / Live / Replay) ── */}
-      <div class="axis-tb-group" data-tb-group="compute" data-axis-engine={store.engine}>
+      <Show when={store.topbar.compute}>
+        <div class="axis-tb-group" data-tb-group="compute" data-axis-engine={store.engine}>
         <TopbarField
           label="Engine"
           variant="select"
@@ -621,14 +628,19 @@ export const Topbar: Component<{
           <span class="axis-tb-btn-label">Replay</span>
         </button>
       </div>
+      </Show>
 
       {/* ── Layout ──────────────────────────────────────────── */}
-      <div class="axis-tb-group" data-tb-group="layout">
-        <ChartLayoutMenu />
-      </div>
+      <Show when={store.topbar.layout}>
+        <div class="axis-tb-group" data-tb-group="layout">
+          <ChartLayoutMenu />
+        </div>
+      </Show>
 
       {/* ── Panels (unique Icons.* per button — see ICON_MAP in icons.tsx) ─ */}
-      <div class="axis-tb-group" data-tb-group="panels">
+      <Show when={store.topbar.panels}>
+        <div class="axis-tb-group" data-tb-group="panels">
+        <Show when={store.topbar.panelsWatchlist}>
         <button
           type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('watchlist') || store.watchlist.open ? 'is-active' : ''}`}
@@ -640,7 +652,9 @@ export const Topbar: Component<{
           <Icons.watchlist />
           <span class="axis-tb-btn-label">List</span>
         </button>
+        </Show>
 
+        <Show when={store.topbar.panelsEditor}>
         <button
           type="button"
           class={`sc-btn sc-btn-ghost ${
@@ -657,7 +671,9 @@ export const Topbar: Component<{
             <span class="text-orange ml-0.5 text-[0.72em]">ext</span>
           )}
         </button>
+        </Show>
 
+        <Show when={store.topbar.panelsLibrary}>
         <button
           type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('library') ? 'is-active' : ''}`}
@@ -669,7 +685,9 @@ export const Topbar: Component<{
           <Icons.library />
           <span class="axis-tb-btn-label">Library</span>
         </button>
+        </Show>
 
+        <Show when={store.topbar.panelsScripts}>
         <button
           type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('indicators') || store.indicatorPanel.open ? 'is-active' : ''}`}
@@ -681,7 +699,9 @@ export const Topbar: Component<{
           <Icons.scripts />
           <span class="axis-tb-btn-label">Scripts</span>
         </button>
+        </Show>
 
+        <Show when={store.topbar.panelsInputs}>
         <button
           type="button"
           class="sc-btn sc-btn-ghost"
@@ -692,7 +712,9 @@ export const Topbar: Component<{
           <Icons.inputs />
           <span class="axis-tb-btn-label">Inputs</span>
         </button>
+        </Show>
 
+        <Show when={store.topbar.panelsLayers}>
         <button
           type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('layers') || store.layerPanel.open ? 'is-active' : ''}`}
@@ -704,7 +726,9 @@ export const Topbar: Component<{
           <Icons.layers />
           <span class="axis-tb-btn-label">Layers</span>
         </button>
+        </Show>
 
+        <Show when={store.topbar.panelsDsm}>
         <button
           type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('datasource') ? 'is-active' : ''}`}
@@ -716,7 +740,9 @@ export const Topbar: Component<{
           <Icons.dataSource />
           <span class="axis-tb-btn-label">DSM</span>
         </button>
+        </Show>
 
+        <Show when={store.topbar.panelsOnchain}>
         <button
           type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('onchain') ? 'is-active' : ''}`}
@@ -728,7 +754,9 @@ export const Topbar: Component<{
           <Icons.onchain />
           <span class="axis-tb-btn-label">On-Chain</span>
         </button>
+        </Show>
 
+        <Show when={store.topbar.panelsAlerts}>
         <button
           type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('alerts') || store.alertsPanel.open ? 'is-active' : ''}`}
@@ -740,7 +768,9 @@ export const Topbar: Component<{
           <Icons.alerts />
           <span class="axis-tb-btn-label">Alerts</span>
         </button>
+        </Show>
 
+        <Show when={store.topbar.panelsValues}>
         <button
           type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('dataview') || store.dataViewPanel.open ? 'is-active' : ''}`}
@@ -752,7 +782,9 @@ export const Topbar: Component<{
           <Icons.dataView />
           <span class="axis-tb-btn-label">Values</span>
         </button>
+        </Show>
 
+        <Show when={store.topbar.panelsResults}>
         <button
           type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('results') || store.resultsPanel.open ? 'is-active' : ''}`}
@@ -767,7 +799,9 @@ export const Topbar: Component<{
           <Icons.results />
           <span class="axis-tb-btn-label">Results</span>
         </button>
+        </Show>
 
+        <Show when={store.topbar.panelsScriptLogs}>
         <button
           type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('scriptlogs') ? 'is-active' : ''}`}
@@ -779,7 +813,9 @@ export const Topbar: Component<{
           <Icons.scriptLogs />
           <span class="axis-tb-btn-label">Script Logs</span>
         </button>
+        </Show>
 
+        <Show when={store.topbar.panelsSystemLogs}>
         <button
           type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('logs') ? 'is-active' : ''}`}
@@ -791,7 +827,9 @@ export const Topbar: Component<{
           <Icons.systemLogs />
           <span class="axis-tb-btn-label">System Logs</span>
         </button>
+        </Show>
 
+        <Show when={store.topbar.panelsStatus}>
         <button
           type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('statusbar') ? 'is-active' : ''}`}
@@ -803,10 +841,13 @@ export const Topbar: Component<{
           <Icons.status />
           <span class="axis-tb-btn-label">Status</span>
         </button>
+        </Show>
       </div>
+      </Show>
 
       {/* ── System (pushed right via CSS) ───────────────────── */}
-      <div class="axis-tb-group" data-tb-group="system">
+      <Show when={store.topbar.system}>
+        <div class="axis-tb-group" data-tb-group="system">
         <button
           type="button"
           class={`sc-btn sc-btn-ghost sc-btn-icon ${store.presentation?.fullscreen ? 'is-active' : ''}`}
@@ -905,6 +946,7 @@ export const Topbar: Component<{
           {store.theme === 'dark' ? <Icons.sun /> : <Icons.moon />}
         </button>
       </div>
+      </Show>
     </header>
   );
 };

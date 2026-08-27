@@ -553,6 +553,45 @@ export interface AppState {
    * in the onchain manager module — not here.
    */
   onchain: OnchainState;
+
+  /**
+   * Topbar button visibility. Each group and individual button can be toggled
+   * on/off. Persisted. Default: everything visible.
+   */
+  topbar: TopbarSettings;
+}
+
+/** Topbar button visibility settings (persisted). */
+export interface TopbarSettings {
+  /** Brand logo + title — always visible in practice, but kept for parity. */
+  brand: boolean;
+  /** Market group: symbol, interval, chart type, compare. */
+  market: boolean;
+  /** Data group: venue, plugin config, load, reload. */
+  data: boolean;
+  /** Compute group: engine, stream, run, live, replay. */
+  compute: boolean;
+  /** Layout group: chart layout menu. */
+  layout: boolean;
+  /** Panels group: all 14 panel toggle buttons. */
+  panels: boolean;
+  /** Individual panel toggles (inside panels group). */
+  panelsWatchlist: boolean;
+  panelsEditor: boolean;
+  panelsLibrary: boolean;
+  panelsScripts: boolean;
+  panelsInputs: boolean;
+  panelsLayers: boolean;
+  panelsDsm: boolean;
+  panelsOnchain: boolean;
+  panelsAlerts: boolean;
+  panelsValues: boolean;
+  panelsResults: boolean;
+  panelsScriptLogs: boolean;
+  panelsSystemLogs: boolean;
+  panelsStatus: boolean;
+  /** System group: fullscreen, chart-only, studio, theme. */
+  system: boolean;
 }
 
 /** Thin on-chain panel prefs (last protocol search/use). */

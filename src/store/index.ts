@@ -58,6 +58,7 @@ import type {
   ConnState,
   TransportClass,
   TelemetryState,
+  TopbarSettings,
 } from './types';
 import {
   DEFAULT_EDITOR_INTEL,
@@ -316,6 +317,29 @@ const DEFAULTS: AppState = {
   onchain: {
     lastProtocolSlug: '',
     lastProtocolName: '',
+  },
+  topbar: {
+    brand: true,
+    market: true,
+    data: true,
+    compute: true,
+    layout: true,
+    panels: true,
+    panelsWatchlist: true,
+    panelsEditor: true,
+    panelsLibrary: true,
+    panelsScripts: true,
+    panelsInputs: true,
+    panelsLayers: true,
+    panelsDsm: true,
+    panelsOnchain: true,
+    panelsAlerts: true,
+    panelsValues: true,
+    panelsResults: true,
+    panelsScriptLogs: true,
+    panelsSystemLogs: true,
+    panelsStatus: true,
+    system: true,
   },
 };
 
@@ -754,6 +778,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         : [],
       compare: hydrateCompare(bag.compare),
       onchain: hydrateOnchain((bag as { onchain?: unknown }).onchain),
+      topbar: hydrateTopbar((bag as { topbar?: unknown }).topbar),
     };
   } catch {
     return null;
@@ -882,6 +907,36 @@ function hydrateOnchain(raw: unknown): OnchainState {
   return {
     lastProtocolSlug: typeof o.lastProtocolSlug === 'string' ? o.lastProtocolSlug : '',
     lastProtocolName: typeof o.lastProtocolName === 'string' ? o.lastProtocolName : '',
+  };
+}
+
+function hydrateTopbar(raw: unknown): TopbarSettings {
+  const base = { ...DEFAULTS.topbar };
+  if (!raw || typeof raw !== 'object') return base;
+  const t = raw as Record<string, unknown>;
+  const bool = (k: string) => typeof t[k] === 'boolean' ? t[k] as boolean : base[k as keyof TopbarSettings];
+  return {
+    brand: bool('brand'),
+    market: bool('market'),
+    data: bool('data'),
+    compute: bool('compute'),
+    layout: bool('layout'),
+    panels: bool('panels'),
+    panelsWatchlist: bool('panelsWatchlist'),
+    panelsEditor: bool('panelsEditor'),
+    panelsLibrary: bool('panelsLibrary'),
+    panelsScripts: bool('panelsScripts'),
+    panelsInputs: bool('panelsInputs'),
+    panelsLayers: bool('panelsLayers'),
+    panelsDsm: bool('panelsDsm'),
+    panelsOnchain: bool('panelsOnchain'),
+    panelsAlerts: bool('panelsAlerts'),
+    panelsValues: bool('panelsValues'),
+    panelsResults: bool('panelsResults'),
+    panelsScriptLogs: bool('panelsScriptLogs'),
+    panelsSystemLogs: bool('panelsSystemLogs'),
+    panelsStatus: bool('panelsStatus'),
+    system: bool('system'),
   };
 }
 

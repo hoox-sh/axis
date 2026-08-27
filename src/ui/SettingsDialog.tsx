@@ -116,6 +116,7 @@ import { bindCcxtSession, unbindCcxtSession } from '../data/ccxt-session';
 import type { GatewayMode } from '../data/gateway';
 import { writePluginField } from './plugin-config';
 import { AppDrawer } from './AppDrawer';
+import { StudioToggle } from './studio';
 
 /** PYNE Runtime modes for the server/worker engine plugin config. */
 export type EngineExecMode = 'interpret' | 'compile' | 'auto';
@@ -149,10 +150,10 @@ function readEnginePluginConfig(engineId: string): Record<string, unknown> {
   return (pc[pluginKey('engine', engineId)] || pc[engineId] || {}) as Record<string, unknown>;
 }
 
-export type SettingsTabId = 'general' | 'data' | 'editor' | 'theme';
+export type SettingsTabId = 'general' | 'data' | 'editor' | 'theme' | 'topbar';
 
 function isSettingsTabId(v: unknown): v is SettingsTabId {
-  return v === 'general' || v === 'data' || v === 'editor' || v === 'theme';
+  return v === 'general' || v === 'data' || v === 'editor' || v === 'theme' || v === 'topbar';
 }
 
 interface Props {
@@ -167,6 +168,7 @@ const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'data', label: 'Data', hint: 'Exchange keys · provider' },
   { id: 'editor', label: 'Editor', hint: 'Lint · hover · complete · marks · timings' },
   { id: 'theme', label: 'Theme', hint: 'Bars · canvas · Pine chart.bg_color' },
+  { id: 'topbar', label: 'Topbar', hint: 'Show/hide topbar buttons' },
 ];
 
 /** Modal settings form; parent controls `open` / `onClose`. */
@@ -498,12 +500,14 @@ export const SettingsDialog: Component<Props> = (props) => {
               ? 'Theme applies live · Save not required'
               : tab() === 'editor'
                 ? 'Editor intel applies live · Save not required'
-                : tab() === 'data'
-                  ? 'Keys stay in this session · not written to disk'
-                  : `AXIS · scale ${formatUiScalePct(uiScale())}`}
+                : tab() === 'topbar'
+                  ? 'Topbar applies live · Save not required'
+                  : tab() === 'data'
+                    ? 'Keys stay in this session · not written to disk'
+                    : `AXIS · scale ${formatUiScalePct(uiScale())}`}
           </div>
           <button type="button" class="sc-btn" onClick={closeWithoutSave}>
-            {tab() === 'theme' || tab() === 'editor' || tab() === 'data'
+            {tab() === 'theme' || tab() === 'editor' || tab() === 'data' || tab() === 'topbar'
               ? 'Close'
               : 'Cancel'}
           </button>
@@ -567,6 +571,248 @@ export const SettingsDialog: Component<Props> = (props) => {
                   aliases color_background / color_foreground. Changes apply live (no Save).
                 </p>
                 <ThemePanel />
+              </div>
+            </Show>
+
+            {/* ── Topbar tab ───────────────────────────────────────────── */}
+            <Show when={tab() === 'topbar'}>
+              <div
+                id="axis-settings-panel-topbar"
+                role="tabpanel"
+                aria-labelledby="axis-settings-tab-topbar"
+                data-testid="axis-settings-topbar"
+                class="flex flex-col gap-2"
+              >
+                <div class="sc-section-title">Topbar visibility</div>
+                <p class="sc-hint mt-0">
+                  Control which topbar groups and buttons are shown. Changes apply
+                  immediately and are persisted.
+                </p>
+
+                {/* Brand group — always shown, kept for parity */}
+                <div class="sc-section">
+                  <div class="sc-section-title">Brand</div>
+                  <p class="sc-hint text-[0.75em]">Always visible</p>
+                  <StudioToggle
+                    id="topbar-brand"
+                    checked={store.topbar.brand}
+                    label="Show brand"
+                    onChange={(v) => setStore('topbar', 'brand', v)}
+                  />
+                </div>
+
+                {/* Market group */}
+                <div class="sc-section">
+                  <div class="sc-section-title">Market</div>
+                  <p class="sc-hint text-[0.75em]">
+                    Symbol, interval, chart type, compare symbol
+                  </p>
+                  <StudioToggle
+                    id="topbar-market"
+                    checked={store.topbar.market}
+                    label="Show market"
+                    onChange={(v) => setStore('topbar', 'market', v)}
+                  />
+                </div>
+
+                {/* Data group */}
+                <div class="sc-section">
+                  <div class="sc-section-title">Data</div>
+                  <p class="sc-hint text-[0.75em]">
+                    Venue, plugin config, load, reload, datasets
+                  </p>
+                  <StudioToggle
+                    id="topbar-data"
+                    checked={store.topbar.data}
+                    label="Show data"
+                    onChange={(v) => setStore('topbar', 'data', v)}
+                  />
+                </div>
+
+                {/* Compute group */}
+                <div class="sc-section">
+                  <div class="sc-section-title">Compute</div>
+                  <p class="sc-hint text-[0.75em]">
+                    Engine, stream, run, live, replay
+                  </p>
+                  <StudioToggle
+                    id="topbar-compute"
+                    checked={store.topbar.compute}
+                    label="Show compute"
+                    onChange={(v) => setStore('topbar', 'compute', v)}
+                  />
+                </div>
+
+                {/* Layout group */}
+                <div class="sc-section">
+                  <div class="sc-section-title">Layout</div>
+                  <p class="sc-hint text-[0.75em]">Chart layout menu</p>
+                  <StudioToggle
+                    id="topbar-layout"
+                    checked={store.topbar.layout}
+                    label="Show layout"
+                    onChange={(v) => setStore('topbar', 'layout', v)}
+                  />
+                </div>
+
+                {/* Panels group + individual toggles */}
+                <div class="sc-section">
+                  <div class="sc-section-title">Panels</div>
+                  <p class="sc-hint text-[0.75em]">
+                    All 14 panel toggle buttons (watchlist, editor, library, scripts,
+                    inputs, layers, DSM, on-chain, alerts, values, results, script logs,
+                    system logs, status)
+                  </p>
+                  <StudioToggle
+                    id="topbar-panels"
+                    checked={store.topbar.panels}
+                    label="Show panels"
+                    onChange={(v) => setStore('topbar', 'panels', v)}
+                  />
+                </div>
+
+                {/* Individual panel toggles (visible only when panels group is on) */}
+                <Show when={store.topbar.panels}>
+                  <div class="sc-section">
+                    <div class="sc-section-title">Watchlist</div>
+                    <StudioToggle
+                      id="topbar-panels-watchlist"
+                      checked={store.topbar.panelsWatchlist}
+                      label="Show watchlist"
+                      onChange={(v) => setStore('topbar', 'panelsWatchlist', v)}
+                    />
+                  </div>
+
+                  <div class="sc-section">
+                    <div class="sc-section-title">Editor</div>
+                    <StudioToggle
+                      id="topbar-panels-editor"
+                      checked={store.topbar.panelsEditor}
+                      label="Show editor"
+                      onChange={(v) => setStore('topbar', 'panelsEditor', v)}
+                    />
+                  </div>
+
+                  <div class="sc-section">
+                    <div class="sc-section-title">Library</div>
+                    <StudioToggle
+                      id="topbar-panels-library"
+                      checked={store.topbar.panelsLibrary}
+                      label="Show library"
+                      onChange={(v) => setStore('topbar', 'panelsLibrary', v)}
+                    />
+                  </div>
+
+                  <div class="sc-section">
+                    <div class="sc-section-title">Scripts</div>
+                    <StudioToggle
+                      id="topbar-panels-scripts"
+                      checked={store.topbar.panelsScripts}
+                      label="Show scripts"
+                      onChange={(v) => setStore('topbar', 'panelsScripts', v)}
+                    />
+                  </div>
+
+                  <div class="sc-section">
+                    <div class="sc-section-title">Inputs</div>
+                    <StudioToggle
+                      id="topbar-panels-inputs"
+                      checked={store.topbar.panelsInputs}
+                      label="Show inputs"
+                      onChange={(v) => setStore('topbar', 'panelsInputs', v)}
+                    />
+                  </div>
+
+                  <div class="sc-section">
+                    <div class="sc-section-title">Layers</div>
+                    <StudioToggle
+                      id="topbar-panels-layers"
+                      checked={store.topbar.panelsLayers}
+                      label="Show layers"
+                      onChange={(v) => setStore('topbar', 'panelsLayers', v)}
+                    />
+                  </div>
+
+                  <div class="sc-section">
+                    <div class="sc-section-title">DSM</div>
+                    <StudioToggle
+                      id="topbar-panels-dsm"
+                      checked={store.topbar.panelsDsm}
+                      label="Show DSM"
+                      onChange={(v) => setStore('topbar', 'panelsDsm', v)}
+                    />
+                  </div>
+
+                  <div class="sc-section">
+                    <div class="sc-section-title">On-Chain</div>
+                    <StudioToggle
+                      id="topbar-panels-onchain"
+                      checked={store.topbar.panelsOnchain}
+                      label="Show on-chain"
+                      onChange={(v) => setStore('topbar', 'panelsOnchain', v)}
+                    />
+                  </div>
+
+                  <div class="sc-section">
+                    <div class="sc-section-title">Alerts</div>
+                    <StudioToggle
+                      id="topbar-panels-alerts"
+                      checked={store.topbar.panelsAlerts}
+                      label="Show alerts"
+                      onChange={(v) => setStore('topbar', 'panelsAlerts', v)}
+                    />
+                  </div>
+
+                  <div class="sc-section">
+                    <div class="sc-section-title">Values</div>
+                    <StudioToggle
+                      id="topbar-panels-values"
+                      checked={store.topbar.panelsValues}
+                      label="Show values"
+                      onChange={(v) => setStore('topbar', 'panelsValues', v)}
+                    />
+                  </div>
+
+                  <div class="sc-section">
+                    <div class="sc-section-title">Results</div>
+                    <StudioToggle
+                      id="topbar-panels-results"
+                      checked={store.topbar.panelsResults}
+                      label="Show results"
+                      onChange={(v) => setStore('topbar', 'panelsResults', v)}
+                    />
+                  </div>
+
+                  <div class="sc-section">
+                    <div class="sc-section-title">Script Logs</div>
+                    <StudioToggle
+                      id="topbar-panels-scriptlogs"
+                      checked={store.topbar.panelsScriptLogs}
+                      label="Show script logs"
+                      onChange={(v) => setStore('topbar', 'panelsScriptLogs', v)}
+                    />
+                  </div>
+
+                  <div class="sc-section">
+                    <div class="sc-section-title">System Logs</div>
+                    <StudioToggle
+                      id="topbar-panels-systemlogs"
+                      checked={store.topbar.panelsSystemLogs}
+                      label="Show system logs"
+                      onChange={(v) => setStore('topbar', 'panelsSystemLogs', v)}
+                    />
+                  </div>
+
+                  <div class="sc-section">
+                    <div class="sc-section-title">Status</div>
+                    <StudioToggle
+                      id="topbar-panels-status"
+                      checked={store.topbar.panelsStatus}
+                      label="Show status"
+                      onChange={(v) => setStore('topbar', 'panelsStatus', v)}
+                    />
+                  </div>
+                </Show>
               </div>
             </Show>
 
