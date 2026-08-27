@@ -145,6 +145,13 @@ export type OverlayOwnerOpts = {
   ownerId?: string;
   /** Target pane for bgcolor / similar underlays (default `price`). */
   paneId?: string;
+  /**
+   * When true, skip the tip-only smart-apply and always repaint the full
+   * series. Set for interactive runs / input or script recomputes, where the
+   * whole curve changes (not just the newest bar). Live ticks leave this
+   * unset so only the last point is patched for performance.
+   */
+  forceFull?: boolean;
 };
 
 /** Sanitize owner id for use in LWC series keys. */
@@ -313,16 +320,26 @@ type SeriesApplyMeta = { len: number; lastTime: number; lastVal: number };
 /**
  * Prefer last-point update when length + last time match prior apply.
  * True no-op when tip value is unchanged; full setData on history rewrite.
+ *
+ * `forceFull` bypasses the tip-only check and always repaints the whole
+ * series — required when the run recomputed the script (input override,
+ * edited source) rather than just appending a live bar.
  */
 function applySeriesDataSmart(
   series: ISeriesApi<any>,
   mapped: Array<{ time: number }>,
   metaKey: string,
   metaMap: Map<string, SeriesApplyMeta>,
+  forceFull = false,
 ): void {
   const last = mapped.length ? mapped[mapped.length - 1] : null;
   const lastTime = last && Number.isFinite(last.time) ? Number(last.time) : null;
   const lastVal = seriesTipValue(last);
+  if (forceFull) {
+    safeSetData(series, mapped);
+    metaMap.set(metaKey, { len: mapped.length, lastTime: lastTime ?? 0, lastVal });
+    return;
+  }
   const prev = metaMap.get(metaKey);
   if (
     prev &&
@@ -354,15 +371,19 @@ function applySeriesDataSmart(
  * shows same length + lastTime (tip-only live re-run). Falls back to full map
  * + {@link applySeriesDataSmart} when length/lastTime change or mid-history
  * cannot be proven tip-only.
+ *
+ * `forceFull` bypasses the tip-only fast path so a recomputed series (input
+ * override / edited source) repaints every bar, not just the last point.
  */
 function applyOverlayLineDataSmart(
   series: ISeriesApi<any>,
   data: OverlayPoint[],
   metaKey: string,
   metaMap: Map<string, SeriesApplyMeta>,
+  forceFull = false,
 ): void {
   const prev = metaMap.get(metaKey);
-  if (prev && prev.len > 0) {
+  if (!forceFull && prev && prev.len > 0) {
     const peek = peekOverlayLineTip(data, prev.len);
     if (peek && peek.lastTime === prev.lastTime) {
       if (Object.is(prev.lastVal, peek.lastVal) || prev.lastVal === peek.lastVal) {
@@ -378,7 +399,7 @@ function applyOverlayLineDataSmart(
       }
     }
   }
-  applySeriesDataSmart(series, toLwcLineData(data), metaKey, metaMap);
+  applySeriesDataSmart(series, toLwcLineData(data), metaKey, metaMap, forceFull);
 }
 
 /** removeSeries that never throws; caller still deletes map keys. */
@@ -2325,6 +2346,7 @@ export class PaneManager {
     const pane = this.panes.get(paneId);
     if (!pane) return;
     const ownerId = opts?.ownerId;
+    const forceFull = opts?.forceFull === true;
     const ownerPrefix = ownerId ? ownedOverlayPrefix(ownerId) : null;
 
     // Preserve viewport — setData must not auto-reposition on live re-runs
@@ -2404,7 +2426,7 @@ export class PaneManager {
       const breakStyle = isBreakPlotStyle(line.style);
       if (seriesNow) {
         // Tip-only path skips full toLwcLineData when length + lastTime match
-        applyOverlayLineDataSmart(seriesNow, line.data, key, this.overlayDataMeta);
+        applyOverlayLineDataSmart(seriesNow, line.data, key, this.overlayDataMeta, forceFull);
         try {
           const labels = this.plotLabelOptions(line);
           const opts: Record<string, unknown> = {
@@ -2478,7 +2500,7 @@ export class PaneManager {
             }
           }
           // First paint always maps full series (incl. na whitespace slots)
-          applyOverlayLineDataSmart(series, line.data, key, this.overlayDataMeta);
+          applyOverlayLineDataSmart(series, line.data, key, this.overlayDataMeta, forceFull);
           pane.series[key] = series;
           this.overlaySeriesKinds.set(kindKey, seriesKind);
           this.syncLineBreakPrimitive(series, key, line, seriesKind, breakStyle);
@@ -2698,6 +2720,7 @@ export class PaneManager {
     const pane = this.panes.get(paneId);
     if (!pane) return;
     const ownerId = opts?.ownerId;
+    const forceFull = opts?.forceFull === true;
     const ownerPrefix = ownerId ? ownedOhlcPrefix(ownerId) : null;
 
     let savedRange: { from: number; to: number } | null = null;
@@ -2770,7 +2793,7 @@ export class PaneManager {
       const c = spec.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
       const seriesNow = pane.series[key];
       if (seriesNow) {
-        applySeriesDataSmart(seriesNow, mapped, key, this.overlayDataMeta);
+        applySeriesDataSmart(seriesNow, mapped, key, this.overlayDataMeta, forceFull);
         try {
           const opts: Record<string, unknown> = {
             lastValueVisible: this.lastValueLabelsVisible,
@@ -2845,6 +2868,7 @@ export class PaneManager {
     const pane = this.panes.get(opts?.paneId || 'price') ?? this.panes.get('price');
     if (!pane) return;
     const ownerId = opts?.ownerId;
+    const forceFull = opts?.forceFull === true;
     const ownerPrefix = ownerId ? ownedBgcolorPrefix(ownerId) : null;
 
     let savedRange: { from: number; to: number } | null = null;
@@ -2887,12 +2911,12 @@ export class PaneManager {
       };
       if (existing) {
         applyTitle(existing);
-        applySeriesDataSmart(existing, mapped, key, this.overlayDataMeta);
+        applySeriesDataSmart(existing, mapped, key, this.overlayDataMeta, forceFull);
       } else {
         try {
           const series = createBgcolorSeries(pane.chart);
           applyTitle(series);
-          applySeriesDataSmart(series, mapped, key, this.overlayDataMeta);
+          applySeriesDataSmart(series, mapped, key, this.overlayDataMeta, forceFull);
           pane.series[key] = series;
           try {
             series.setSeriesOrder(0);

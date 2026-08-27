@@ -25,6 +25,7 @@ _Generated/updated: 2026-08-26 · 298 commits · describe-tag: `v2.0.29`_
 
 ### Fixed
 
+- **Input override no-op on chart**: changing a script input (e.g. RSI length 14→56) now repaints the whole series. `PaneManager.syncOverlayLines`/`syncOverlayOhlc`/`syncBgcolorBands` gained a `forceFull` owner option; `runAndApplyInner` passes `forceFull: opts.liveTick !== true` so interactive runs / input recomputes bypass the tip-only smart-apply (which only patched the last bar when length + last time were unchanged). Live ticks keep the fast path via `liveTick: true` in the multiplex re-run loop.
 - **Wire page**: removed separate scrolling sections; now uses single-scroll ax-page-canvas pattern matching Runtime, Settings, Workers, and Plugins.
 - **Settings polish**: consolidated duplicate `sc-settings-*` CSS into single definitions, added `sc-settings-section--plain` and `sc-settings-content--compact` variants to replace `!important` overrides, added `color-mix` fallback, `focus-visible` on color swatches, and `prefers-reduced-motion` guard; replaced `!mt-0 !border-t-0 !pt-0` with semantic variant and fixed ThemePanel compact gap override.
 - **Workers probe**: fixed `requestAnimationFrame` leak — now cancels on unmount and removes dead `hasLoaded` signal; probe defers to next frame without blocking studio paint.

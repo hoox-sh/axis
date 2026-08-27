@@ -452,6 +452,7 @@ function scheduleRerun() {
           openResults: false,
           inputs: ind.inputValues,
           strategyProps: ind.strategyProps,
+          liveTick: true,
         });
       }
     } finally {

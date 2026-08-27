@@ -291,6 +291,14 @@ export interface RunOptions {
    * walk-forward slices do not mutate the chart series.
    */
   bars?: import('../store/types').Bar[];
+  /**
+   * Marks a genuine live tick (only the newest bar's data changed). When true,
+   * the chart apply may use the tip-only smart-apply optimization. When false /
+   * omitted (interactive run, input/script recompute, manual reapply), the
+   * chart forces a full `setData` so the whole series repaints — an input
+   * override changes every bar, not just the tip.
+   */
+  liveTick?: boolean;
 }
 
 type PyneLogLine = { level?: string; message?: string; [k: string]: unknown };
@@ -1245,8 +1253,14 @@ async function runAndApplyInner(
         );
       }
     } else {
-      // Owner-scoped keys so multi-script live re-runs do not wipe each other
-      const overlayOwner = { ownerId: indicatorId ?? EDITOR_RUN_KEY };
+      // Owner-scoped keys so multi-script live re-runs do not wipe each other.
+      // Force a full redraw unless this is a genuine live tick: an input/script
+      // recompute changes every bar, so the tip-only smart-apply must not skip
+      // the history (see pane-manager applyOverlayLineDataSmart).
+      const overlayOwner = {
+        ownerId: indicatorId ?? EDITOR_RUN_KEY,
+        forceFull: opts.liveTick !== true,
+      };
       manager.syncOverlayLines(paneId, overlayLines, overlayOwner);
       // plotbar / plotcandle OHLC overlays (empty list clears this owner’s OHLC)
       if (typeof manager.syncOverlayOhlc === 'function') {

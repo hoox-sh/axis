@@ -165,6 +165,51 @@ describe('syncOverlayLines', () => {
     expect(setCount).toBe(0);
   });
 
+  it('forceFull repaints the whole series when length + last time are unchanged', () => {
+    // Regression: an input override (RSI 14 → 56) recomputes every bar, but
+    // length + last time stay identical. Without forceFull the tip-only path
+    // would patch only the last point and leave the history stale — the chart
+    // would appear not to change.
+    const data1 = [
+      { time: 1, value: 10 },
+      { time: 2, value: 12 },
+    ];
+    pm.syncOverlayLines('price', [{ name: 'plotA', data: data1, color: '#fff' }]);
+    const pane = pm.getPane('price')!;
+    const series = pane.series['overlay_plotA']!;
+    let setCount = 0;
+    let updateCount = 0;
+    const origSet = series.setData.bind(series);
+    const origUp = series.update?.bind(series);
+    series.setData = (d: unknown) => {
+      setCount += 1;
+      return origSet(d);
+    };
+    series.update = (d: unknown) => {
+      updateCount += 1;
+      return origUp?.(d);
+    };
+
+    // Same length + last time, but the HISTORY changed (recompute). forceFull
+    // must repaint the whole series, not just patch the tip.
+    pm.syncOverlayLines(
+      'price',
+      [
+        {
+          name: 'plotA',
+          data: [
+            { time: 1, value: 99 },
+            { time: 2, value: 88 },
+          ],
+          color: '#fff',
+        },
+      ],
+      { forceFull: true },
+    );
+    expect(setCount).toBe(1);
+    expect(updateCount).toBe(0);
+  });
+
   it('falls back to setData when last time advances (same length)', () => {
     pm.syncOverlayLines('price', [
       {
