@@ -114,7 +114,6 @@ export function WorkersPage(props: {
   const [actionErr, setActionErr] = createSignal('');
   const [copied, setCopied] = createSignal('');
   const [showOptional, setShowOptional] = createSignal(true);
-  const [hasLoaded, setHasLoaded] = createSignal(false);
 
   const catalog = createMemo(() => {
     const all = listWorkerCatalog();
@@ -199,18 +198,17 @@ export function WorkersPage(props: {
     }
   };
 
-  // Lazy load probes - only run when the page is actually opened
+  // Lazy probe — defer to next frame so studio paint is not blocked
+  let rafId = 0;
   onMount(() => {
-    // Defer probe to next frame to avoid blocking studio startup
-    requestAnimationFrame(() => {
-      if (!hasLoaded()) {
-        setHasLoaded(true);
-        void refresh();
-      }
+    rafId = requestAnimationFrame(() => {
+      rafId = 0;
+      void refresh();
     });
   });
 
   onCleanup(() => {
+    if (rafId) cancelAnimationFrame(rafId);
     abort?.abort();
     probeGen += 1;
   });

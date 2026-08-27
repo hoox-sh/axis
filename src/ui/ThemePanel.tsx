@@ -106,7 +106,7 @@ export const ThemePanel: Component<ThemePanelProps> = (props) => {
 
   return (
     <div
-      class={`sc-settings-content ${props.compact ? 'gap-1.5' : 'gap-2'}`}
+      class={`sc-settings-content ${props.compact ? 'sc-settings-content--compact' : ''}`}
       data-testid="axis-theme-panel"
     >
       {/* ── Presets ─────────────────────────────────────────────── */}

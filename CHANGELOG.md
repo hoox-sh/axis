@@ -26,6 +26,9 @@ _Generated/updated: 2026-08-26 · 298 commits · describe-tag: `v2.0.29`_
 ### Fixed
 
 - **Wire page**: removed separate scrolling sections; now uses single-scroll ax-page-canvas pattern matching Runtime, Settings, Workers, and Plugins.
+- **Settings polish**: consolidated duplicate `sc-settings-*` CSS into single definitions, added `sc-settings-section--plain` and `sc-settings-content--compact` variants to replace `!important` overrides, added `color-mix` fallback, `focus-visible` on color swatches, and `prefers-reduced-motion` guard; replaced `!mt-0 !border-t-0 !pt-0` with semantic variant and fixed ThemePanel compact gap override.
+- **Workers probe**: fixed `requestAnimationFrame` leak — now cancels on unmount and removes dead `hasLoaded` signal; probe defers to next frame without blocking studio paint.
+- **Vendor**: removed obsolete `pynescript-0.4.0/0.4.1` wheels (replaced by `hoox_pyne-0.4.2`).
 
 ## [2.0.30] — 2026-08-26
 

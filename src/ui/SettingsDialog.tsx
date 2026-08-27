@@ -1293,7 +1293,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                 </span>
               </label>
 
-              <div class="sc-settings-section !mt-0 !border-t-0 !pt-0 mb-2">
+              <div class="sc-settings-section sc-settings-section--plain mb-2">
                 <div class="sc-settings-section-title">Strategy fills & marks</div>
                 <p class="sc-settings-field-hint mb-2">
                   Historical and live default: execute on signal bar close. Slippage
@@ -1358,7 +1358,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                 </label>
               </div>
 
-              <div class="sc-settings-section !mt-0 !border-t-0 !pt-0">
+              <div class="sc-settings-section sc-settings-section--plain">
                 <div class="sc-settings-section-title">Live stream</div>
 
                 <label class="sc-settings-check" for="axis-prefer-live">
