@@ -84,7 +84,7 @@ export function WirePage(props: {
 
   return (
     <div class="ax-page-stack">
-      <div class="ax-wire-body">
+      <div class="ax-page-canvas ax-page-canvas--flush ax-wire-body">
         <aside class="ax-wire-col ax-wire-col--presets">
           <PredefinitionList
             baseId={plan().base.id}
@@ -178,7 +178,7 @@ function PredefinitionList(props: {
     SLOTS.filter((s) => props.config[s.kind] !== preset.config[s.kind]).length;
 
   return (
-    <div class="ax-page-stack">
+    <>
       <div class="ax-wire-col-head">
         <h3 class="ax-section-title">Recipes</h3>
         <span class="ax-card-kicker">{PREDEFINITIONS.length}</span>
@@ -218,7 +218,7 @@ function PredefinitionList(props: {
         Picking a recipe rewires every slot. Change any slot afterwards and the plan name records
         the drift.
       </p>
-    </div>
+    </>
   );
 }
 
