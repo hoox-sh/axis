@@ -15,6 +15,18 @@ _Generated/updated: 2026-08-26 · 298 commits · describe-tag: `v2.0.29`_
 
 ## [Unreleased]
 
+### Changed
+
+- **About modal**: removed ethos manifesto list and author section; added AXIS + PYNE version badges and brief no-walled-garden philosophy.
+
+### Added
+
+- **Topbar settings**: new 'Topbar' tab in Settings with toggles for each topbar group (brand, market, data, compute, layout, panels, system) and individual panel buttons (watchlist, editor, library, scripts, inputs, layers, DSM, on-chain, alerts, values, results, script logs, system logs, status). Settings are persisted via localStorage.
+
+### Fixed
+
+- **Wire page**: removed separate scrolling sections; now uses single-scroll ax-page-canvas pattern matching Runtime, Settings, Workers, and Plugins.
+
 ## [2.0.30] — 2026-08-26
 
 ### Fixed
