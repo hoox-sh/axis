@@ -558,6 +558,26 @@ describe('splitSeriesByKind + buildPlotVisuals', () => {
     expect(split.bgcolors).toHaveLength(0);
   });
 
+  it('routes styled plot kinds (histogram/area/columns/line) to lines, never drops them', () => {
+    const series = {
+      h: [1, 2, 3],
+      a: [4, 5, 6],
+      c: [7, 8, 9],
+      l: [10, 11, 12],
+    };
+    const meta = {
+      h: { kind: 'histogram' },
+      a: { kind: 'area' },
+      c: { kind: 'columns' },
+      l: { kind: 'line' },
+    };
+    const split = splitSeriesByKind(series, meta);
+    expect(split.lines.map((x) => x.key).sort()).toEqual(['a', 'c', 'h', 'l']);
+    expect(split.bgcolors).toHaveLength(0);
+    expect(split.shapes).toHaveLength(0);
+    expect(split.ohlc).toHaveLength(0);
+  });
+
   it('routes barcolor series and builds time→color map', () => {
     const times = [10, 20, 30];
     const series = {

@@ -262,6 +262,20 @@ describe('normalizeEngineResult', () => {
     expect(r.error).toMatch(/parse fail/);
   });
 
+  it('keeps success status when a non-fatal warning sits in error/message', () => {
+    const r = normalizeEngineResult({
+      status: 'success',
+      series: { x: [1, 2] },
+      error: 'deprecated argument',
+    });
+    expect(r.status).toBe('success');
+  });
+
+  it('infers error from error/message when status is missing', () => {
+    const r = normalizeEngineResult({ series: {}, error: 'boom' });
+    expect(r.status).toBe('error');
+  });
+
   it('lifts top-level plot_meta / script_name into meta', () => {
     const r = normalizeEngineResult({
       status: 'success',

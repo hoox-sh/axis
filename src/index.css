@@ -86,6 +86,8 @@
   --radius-xl: var(--radius-input);
   --radius-2xl: var(--radius-input);
   --radius-3xl: var(--radius-input);
+  /* Surface radius for studio modal cards/panels/buttons; raised inside .ax-page only */
+  --radius-surface: var(--radius-input);
 }
 
 :root {

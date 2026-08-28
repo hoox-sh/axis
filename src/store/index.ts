@@ -42,6 +42,7 @@
 import { batch } from 'solid-js';
 import { createStore, reconcile, unwrap } from 'solid-js/store';
 import type {
+  AccountTier,
   AppState,
   Bar,
   CompareState,
@@ -244,6 +245,8 @@ const DEFAULTS: AppState = {
   editorStrategyProps: {},
   crosshair: { time: null, barIndex: null },
   resultsPanel: { open: false, height: 220 },
+  resultsAutoOpen: true,
+  tier: 'free',
   logsPanel: { open: false, height: 160 },
   profilerEnabled: false,
   inlineDebugEnabled: false,
@@ -554,6 +557,16 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         ...DEFAULTS.resultsPanel,
         ...(bag.resultsPanel && typeof bag.resultsPanel === 'object' ? bag.resultsPanel : {}),
       },
+      resultsAutoOpen:
+        typeof (bag as { resultsAutoOpen?: unknown }).resultsAutoOpen === 'boolean'
+          ? (bag as { resultsAutoOpen: boolean }).resultsAutoOpen
+          : DEFAULTS.resultsAutoOpen,
+      tier:
+        (bag as { tier?: unknown }).tier === 'pro' ||
+        (bag as { tier?: unknown }).tier === 'self-hosted' ||
+        (bag as { tier?: unknown }).tier === 'free'
+          ? (bag as { tier: AccountTier }).tier
+          : DEFAULTS.tier,
       logsPanel: {
         ...DEFAULTS.logsPanel,
         ...(bag.logsPanel && typeof bag.logsPanel === 'object' ? bag.logsPanel : {}),
@@ -713,16 +726,6 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
             (bag.editor as AppState['editor']).mode === 'popout'
               ? 'window'
               : 'right',
-        },
-        results: {
-          open:
-            bag.resultsPanel && typeof bag.resultsPanel === 'object'
-              ? (bag.resultsPanel as AppState['resultsPanel']).open
-              : DEFAULTS.resultsPanel.open,
-          h:
-            bag.resultsPanel && typeof bag.resultsPanel === 'object'
-              ? (bag.resultsPanel as AppState['resultsPanel']).height
-              : DEFAULTS.resultsPanel.height,
         },
         logs: {
           open: false,
@@ -1272,6 +1275,8 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     layerPanel: unwrap(s.layerPanel),
     alertsPanel: unwrap(s.alertsPanel),
     resultsPanel: unwrap(s.resultsPanel),
+    resultsAutoOpen: !!s.resultsAutoOpen,
+    tier: s.tier,
     logsPanel: unwrap(s.logsPanel),
     live: {
       streamId: s.live?.streamId,
@@ -2357,8 +2362,6 @@ export function resetUiLayout(): void {
   setStore('layerPanel', 'width', chrome.layers.w);
   setStore('alertsPanel', 'open', chrome.alerts.open);
   setStore('alertsPanel', 'width', chrome.alerts.w);
-  setStore('resultsPanel', 'open', chrome.results.open);
-  setStore('resultsPanel', 'height', chrome.results.h);
   setStore('logsPanel', 'open', chrome.logs.open);
   setStore('logsPanel', 'height', chrome.logs.h);
 
@@ -2754,8 +2757,6 @@ export function isPanelOpen(id: PanelId): boolean {
       return (!!store.editor.open && store.editor.mode !== 'popout') || chromeOpen;
     case 'indicators':
       return !!store.indicatorPanel.open || chromeOpen;
-    case 'results':
-      return !!store.resultsPanel.open || chromeOpen;
     case 'logs':
       // Visibility of the System Logs strip (topbar). Body expand uses
       // `logsPanel.open` separately so collapse does not hide the strip.
@@ -2786,7 +2787,6 @@ function syncLegacyOpen(id: PanelId, open: boolean) {
   if (id === 'watchlist') setStore('watchlist', 'open', open);
   else if (id === 'editor') setStore('editor', 'open', open);
   else if (id === 'indicators') setStore('indicatorPanel', 'open', open);
-  else if (id === 'results') setStore('resultsPanel', 'open', open);
   else if (id === 'logs') setStore('logsPanel', 'open', open);
   else if (id === 'dataview') setStore('dataViewPanel', 'open', open);
   else if (id === 'layers') setStore('layerPanel', 'open', open);
@@ -2819,7 +2819,6 @@ const DOCK_STACK_IDS: PanelId[] = [
   'datasource',
   'onchain',
   'editor',
-  'results',
   'logs',
   'scriptlogs',
   'statusbar',
@@ -2977,7 +2976,6 @@ export function resetPanelToDefault(id: PanelId): void {
   });
   // Mirror legacy layout fields
   mirrorPanelWidth(id, def.w);
-  if (id === 'results') setStore('resultsPanel', 'height', def.h);
   if (id === 'logs') setStore('logsPanel', 'height', def.h);
   if (id === 'editor' && def.dock !== 'window') {
     setStore('editor', 'mode', 'docked');
@@ -3095,7 +3093,6 @@ export function setPanelGeometry(
   if (geo.h != null) {
     const h = Math.max(1, Math.round(geo.h));
     setStore('panelChrome', id, 'h', h);
-    if (id === 'results') setStore('resultsPanel', 'height', h);
     if (id === 'logs') setStore('logsPanel', 'height', h);
   }
   if (opts?.persist !== false) persist();

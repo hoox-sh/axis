@@ -55,7 +55,7 @@ import { Watchlist } from './ui/Watchlist';
 import { ChartWorkspace } from './chart/ChartWorkspace';
 import { IndicatorPanel } from './indicators/IndicatorPanel';
 import { type SettingsTabId, type StudioPageId } from './ui/studio';
-import { ResultsPanel } from './ui/ResultsPanel';
+import { ResultsModal } from './ui/ResultsModal';
 import { SystemLogs } from './ui/SystemLogs';
 import { ScriptLogsPanel } from './ui/ScriptLogsPanel';
 import { DataViewPanel } from './ui/DataViewPanel';
@@ -512,7 +512,7 @@ export const App: Component = () => {
           />
         </Show>
       </Suspense>
-      <ResultsPanel />
+      <ResultsModal />
       <ScriptLogsPanel />
 
       <SystemLogs />

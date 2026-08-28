@@ -203,17 +203,22 @@ export function normalizeEngineResult(raw: unknown, ms?: number): NormalizedRunR
     };
   }
   const r = raw as Record<string, unknown>;
-  const status: 'success' | 'error' =
-    r.status === 'error' || r.status === 'failed' || r.ok === false
-      ? 'error'
-      : r.status === 'success' || r.status === 'ok' || r.status == null
-        ? // treat missing status as success only when we have plot data or no error field
-          r.error || r.message
-            ? 'error'
-            : 'success'
-        : String(r.status) === 'error'
+  // Explicit error / failed / ok:false → error. Explicit success / ok → success
+  // (never downgrade a successful run just because a non-fatal warning landed in
+  // `error` / `message`). Missing status infers from error/message; any other
+  // status string is treated as success (we have a payload to apply).
+  const explicitError =
+    r.status === 'error' || r.status === 'failed' || r.ok === false;
+  const explicitSuccess = r.status === 'success' || r.status === 'ok';
+  const status: 'success' | 'error' = explicitError
+    ? 'error'
+    : explicitSuccess
+      ? 'success'
+      : r.status == null
+        ? r.error || r.message
           ? 'error'
-          : 'success';
+          : 'success'
+        : 'success';
 
   const series = normalizeSeriesMap(r.series);
   const plots = normalizePlotsArray(r.plots);

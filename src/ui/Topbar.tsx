@@ -787,10 +787,10 @@ export const Topbar: Component<{
         <Show when={store.topbar.panelsResults}>
         <button
           type="button"
-          class={`sc-btn sc-btn-ghost ${isPanelOpen('results') || store.resultsPanel.open ? 'is-active' : ''}`}
+          class={`sc-btn sc-btn-ghost ${store.resultsPanel.open ? 'is-active' : ''}`}
           title="Results & export"
           data-testid="axis-btn-results"
-          aria-pressed={isPanelOpen('results') || store.resultsPanel.open}
+          aria-pressed={store.resultsPanel.open}
           onClick={() => {
             setStore('resultsPanel', 'open', !store.resultsPanel.open);
             persist();

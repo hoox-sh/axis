@@ -198,12 +198,17 @@ export function WorkersPage(props: {
     }
   };
 
-  // Lazy probe — defer to next frame so studio paint is not blocked
+  // Lazy probe — defer past the first paint (double rAF) so the studio
+  // overlay is visible and interactive before any network request fires.
+  // Inventory/cards render from the local catalog immediately; only the
+  // health snapshot waits, and a slow/failed probe never blocks the panel.
   let rafId = 0;
   onMount(() => {
     rafId = requestAnimationFrame(() => {
-      rafId = 0;
-      void refresh();
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        void refresh();
+      });
     });
   });
 
@@ -336,6 +341,9 @@ export function WorkersPage(props: {
 
         <Show when={probeError()}>
           <p class="ax-error">{probeError()}</p>
+        </Show>
+        <Show when={probing() && !snap()}>
+          <StudioHint>Probing backends — the panel is ready; results fill in as each responds.</StudioHint>
         </Show>
         <Show when={actionMsg()}>
           <StudioHint>{actionMsg()}</StudioHint>

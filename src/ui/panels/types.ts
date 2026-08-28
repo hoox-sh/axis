@@ -30,7 +30,6 @@ export type PanelId =
   | 'watchlist'
   | 'indicators'
   | 'editor'
-  | 'results'
   | 'logs'
   | 'scriptlogs'
   | 'statusbar'
@@ -128,16 +127,6 @@ export const PANEL_META: Record<
     defaultH: 520,
     defaultX: 780,
     defaultY: 48,
-  },
-  results: {
-    title: 'Results',
-    defaultDock: 'bottom',
-    minW: 1,
-    minH: 1,
-    defaultW: 640,
-    defaultH: 220,
-    defaultX: 48,
-    defaultY: 520,
   },
   /** Fixed app-shell strip (not a dock portal); chrome.open = show/hide. */
   logs: {
@@ -288,13 +277,6 @@ export function defaultPanelChromeMap(): PanelChromeMap {
           : PANEL_META.editor.defaultW,
       x: PANEL_META.editor.defaultX,
       y: PANEL_META.editor.defaultY,
-    }),
-    results: defaultPanelChrome('results', {
-      open: false,
-      dock: 'bottom',
-      h: 220,
-      x: PANEL_META.results.defaultX,
-      y: PANEL_META.results.defaultY,
     }),
     // Classic fixed bottom strips (not FloatableShell); chrome.open = show/hide
     logs: defaultPanelChrome('logs', {

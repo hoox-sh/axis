@@ -115,6 +115,7 @@ import {
   type NormalizedRunResult,
 } from './run-helpers';
 import { resolveScriptDisplayName } from './run-target';
+import { detectScriptKind } from './script-meta';
 
 /** Engine result with `series` always present (empty object if missing). */
 export type RunResult = EngineRunResult & {
@@ -129,6 +130,7 @@ export type RunResult = EngineRunResult & {
 let ohlcvTimesCache: {
   gen: number;
   times: number[];
+  barsRef?: unknown;
 } | null = null;
 
 /** @internal test helper */
@@ -139,15 +141,33 @@ export function _resetOhlcvTimesCacheForTests(): void {
 /**
  * Bar times aligned with `store.bars` for plot apply.
  * Reuses the prior array when chartDataGen + length + last time are unchanged.
+ *
+ * Pass `barsInput` (the exact bars the engine evaluated) to keep a series
+ * aligned to its own time axis — e.g. an HPO holdout / walk-forward slice that
+ * is NOT `store.bars`. Only a genuinely different axis takes the override path;
+ * when `barsInput` is `store.bars` itself (the common case) the cache is reused.
  */
-export function getOhlcvTimesForApply(): number[] {
-  const bars = store.bars || [];
+export function getOhlcvTimesForApply(
+  barsInput?: import('../store/types').Bar[],
+): number[] {
+  const isOverride = !!barsInput && barsInput !== store.bars;
+  const bars = (isOverride ? barsInput : store.bars) || [];
   const gen = typeof store.chartDataGen === 'number' ? store.chartDataGen : 0;
   const n = bars.length;
   const lastT = n ? Number(bars[n - 1]?.time) : Number.NaN;
 
+  // Override path: build directly, never cache (see doc above).
+  if (isOverride) {
+    const times = new Array<number>(n);
+    for (let i = 0; i < n; i++) times[i] = bars[i]?.time as number;
+    return times;
+  }
+
+  // Invalidate when the store.bars reference changed (a data refresh that
+  // preserves length + last time would otherwise return a stale axis).
   if (
     ohlcvTimesCache &&
+    ohlcvTimesCache.barsRef === store.bars &&
     ohlcvTimesCache.gen === gen &&
     ohlcvTimesCache.times.length === n &&
     (n === 0 || ohlcvTimesCache.times[n - 1] === lastT)
@@ -158,6 +178,7 @@ export function getOhlcvTimesForApply(): number[] {
   // Append path: new closed bar on same history generation
   if (
     ohlcvTimesCache &&
+    ohlcvTimesCache.barsRef === store.bars &&
     ohlcvTimesCache.gen === gen &&
     ohlcvTimesCache.times.length === n - 1 &&
     n > 0 &&
@@ -165,7 +186,7 @@ export function getOhlcvTimesForApply(): number[] {
   ) {
     const next = ohlcvTimesCache.times.slice();
     next.push(lastT);
-    ohlcvTimesCache = { gen, times: next };
+    ohlcvTimesCache = { gen, times: next, barsRef: store.bars };
     return next;
   }
 
@@ -173,7 +194,7 @@ export function getOhlcvTimesForApply(): number[] {
   for (let i = 0; i < n; i++) {
     times[i] = bars[i]?.time as number;
   }
-  ohlcvTimesCache = { gen, times };
+  ohlcvTimesCache = { gen, times, barsRef: store.bars };
   return times;
 }
 
@@ -841,9 +862,14 @@ async function runAndApplyInner(
         ? store.editorStrategyProps
         : {};
   }
+  // Capture the exact bars the engine will evaluate so the resulting series
+  // align 1:1 with the time axis we build below. A live tick or an HPO
+  // holdout slice must not desync series from bars (see getOhlcvTimesForApply).
+  const bars = Array.isArray(opts.bars) && opts.bars.length ? opts.bars : store.bars || [];
   // Pass epoch so nested runScript can skip status/telemetry if superseded mid-flight
   const raw = await runScript(script, {
     ...opts,
+    bars,
     inputs,
     strategyProps,
     claimEpoch: false,
@@ -865,7 +891,7 @@ async function runAndApplyInner(
     scriptId: indicatorId ?? EDITOR_RUN_KEY,
     focus: !silent,
   });
-  if (openResults) {
+  if (openResults && detectScriptKind(script) === 'strategy' && store.resultsAutoOpen) {
     setStore('resultsPanel', 'open', true);
   }
   // Do not auto-open Scriptlogs aggressively; panel is user-toggled.
@@ -912,7 +938,7 @@ async function runAndApplyInner(
       '',
   ).toLowerCase();
 
-  const ohlcvTimes = getOhlcvTimesForApply();
+  const ohlcvTimes = getOhlcvTimesForApply(bars);
   const plotMeta = (result.meta?.plot_meta || {}) as Record<string, PlotMetaEntry>;
   const seriesMap = result.series || {};
   const split = splitSeriesByKind(seriesMap, plotMeta);
@@ -922,11 +948,15 @@ async function runAndApplyInner(
 
   // Pine: indicator defaults overlay=false; strategy defaults overlay=true.
   // Explicit false must never be coerced to true.
-  let overlay = resolveOverlayFlag(result.meta?.overlay, scriptType);
+  const overlayFlag = result.meta?.overlay as unknown;
+  const overlayExplicitTrue =
+    overlayFlag === true || overlayFlag === 1 || overlayFlag === 'true';
+  let overlay = resolveOverlayFlag(overlayFlag, scriptType);
 
   // Oscillator-scale plots (RSI, MACD, …) on the price pane are effectively
-  // invisible (values ~0–100 vs BTC price). Force a sub-pane so scripts show.
-  if (overlay && seriesWouldHideOnPrice(seriesEntries, store.bars || [])) {
+  // invisible (values ~0–100 vs BTC price). Auto-demote to a sub-pane UNLESS
+  // the script explicitly asked for overlay=true (respect the author's intent).
+  if (overlay && !overlayExplicitTrue && seriesWouldHideOnPrice(seriesEntries, bars)) {
     overlay = false;
     if (!silent) {
       appendLog(

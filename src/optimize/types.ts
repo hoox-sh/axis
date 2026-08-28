@@ -19,7 +19,7 @@ export type ValidationId = 'holdout' | 'walk-forward' | 'in-sample';
 export type ParamKind = 'int' | 'float' | 'bool' | 'categorical';
 
 export const MAX_TRIALS = 200;
-export const MAX_ENGINE_RUNS = 400;
+export const MAX_ENGINE_RUNS = 1000;
 export const HPO_STORAGE_KEY = 'pynescript.axis.hpo.v1';
 
 export type ParamValue = number | boolean | string;

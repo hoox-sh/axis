@@ -45,7 +45,7 @@ afterEach(() => {
 });
 
 describe('runAndApply', () => {
-  it('opens results on success when no manager', async () => {
+  it('opens results on success for a strategy (not an indicator)', async () => {
     restoreFetch = mockFetch(async () =>
       jsonResponse({
         status: 'success',
@@ -55,8 +55,13 @@ describe('runAndApply', () => {
         meta: { overlay: true, script_name: 'demo' },
       }),
     );
-    const r = await runAndApply('plot(close)');
-    expect(r.status).toBe('success');
+    // Indicator: results must NOT auto-open
+    const ind = await runAndApply('plot(close)');
+    expect(ind.status).toBe('success');
+    expect(store.resultsPanel.open).toBe(false);
+    // Strategy: results auto-open
+    const strat = await runAndApply('//@version=5\nstrategy("s")\nplot(close)');
+    expect(strat.status).toBe('success');
     expect(store.resultsPanel.open).toBe(true);
     // Without a chart manager, overlays/indicators are skipped after result is stored
     expect(store.lastRun).toBeTruthy();

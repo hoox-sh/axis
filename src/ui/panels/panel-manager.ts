@@ -50,7 +50,6 @@ export const PANEL_IDS: readonly PanelId[] = [
   'datasource',
   'onchain',
   'editor',
-  'results',
   'logs',
   'scriptlogs',
   'statusbar',

@@ -42,7 +42,6 @@ import {
 } from 'solid-js';
 import {
   store,
-  setPanelOpen,
   isPanelOpen,
   setWatchlistOpen,
   setEditorOpen,
@@ -164,7 +163,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
         }
         setEditorOpen(!isPanelOpen('editor'));
       },
-      toggleResults: () => setPanelOpen('results', !isPanelOpen('results')),
+      toggleResults: () => setStore('resultsPanel', 'open', !store.resultsPanel.open),
       toggleLogs: () => toggleSystemLogsPanel(),
       toggleLayers: () => toggleLayerPanel(),
       toggleIndicators: () => toggleIndicatorPanel(),
@@ -245,7 +244,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       openArchitecture: () => props.onOpenArchitecture?.(),
       openScriptSettings: () => openScriptSettings(null),
       openOptimise: () => {
-        setPanelOpen('results', true);
+        setStore('resultsPanel', 'open', true);
         window.dispatchEvent(new CustomEvent('axis-results-tab', { detail: { tab: 'optimise' } }));
       },
       openAbout: () => openAboutModal(),

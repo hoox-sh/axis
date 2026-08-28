@@ -78,7 +78,7 @@ describe('hoverSlideLayoutSize', () => {
       }),
     ).toBe(HOVER_SLIDE_PEEK_SIDE);
     expect(
-      hoverSlideLayoutSize('results', 'bottom', 220, {
+      hoverSlideLayoutSize('scriptlogs', 'bottom', 220, {
         hoverSlide: true,
         expanded: false,
       }),
@@ -151,12 +151,12 @@ describe('setPanelHoverSlide / layout', () => {
   });
 
   it('bottom dock uses peek height when collapsed', () => {
-    setPanelDock('results', 'bottom');
-    setPanelGeometry('results', { h: 220 });
-    setPanelOpen('results', true);
-    setPanelHoverSlide('results', true);
-    expect(panelDockLayoutHeight('results')).toBe(HOVER_SLIDE_PEEK_BOTTOM);
-    setPanelHoverSlideExpanded('results', true);
-    expect(panelDockLayoutHeight('results')).toBe(220);
+    setPanelDock('scriptlogs', 'bottom');
+    setPanelGeometry('scriptlogs', { h: 220 });
+    setPanelOpen('scriptlogs', true);
+    setPanelHoverSlide('scriptlogs', true);
+    expect(panelDockLayoutHeight('scriptlogs')).toBe(HOVER_SLIDE_PEEK_BOTTOM);
+    setPanelHoverSlideExpanded('scriptlogs', true);
+    expect(panelDockLayoutHeight('scriptlogs')).toBe(220);
   });
 });

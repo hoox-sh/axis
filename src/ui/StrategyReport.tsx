@@ -25,7 +25,6 @@
 import { Component, For, Show, createMemo } from 'solid-js';
 import {
   buildCumulativeEquity,
-  equityToSvgPolyline,
   formatMoney,
   formatPct,
   tradesToCsv,
@@ -33,10 +32,8 @@ import {
   type StrategyStats,
 } from '../results/strategy';
 import { Icons } from './icons';
-
-const EQUITY_W = 480;
-const EQUITY_H = 96;
-const EQUITY_PAD = 6;
+import { StudioStat } from './studio';
+import { EquityChart } from './EquityChart';
 
 function formatTradeTime(t: number): string {
   if (!Number.isFinite(t) || t <= 0) return '—';
@@ -84,12 +81,6 @@ export type StrategyReportProps = {
 export const StrategyReport: Component<StrategyReportProps> = (props) => {
   const hasTrades = () => props.trades.length > 0;
 
-  const equitySvg = createMemo(() => {
-    const steps = buildCumulativeEquity(props.trades);
-    const vals = steps.map((s) => s.equity);
-    return equityToSvgPolyline(vals, EQUITY_W, EQUITY_H, EQUITY_PAD);
-  });
-
   const finalEquity = () => {
     const steps = buildCumulativeEquity(props.trades);
     return steps.length ? steps[steps.length - 1]!.equity : 0;
@@ -106,262 +97,206 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
       : 'Fills at signal bar close (default)';
 
   return (
-    <div class="flex flex-col gap-3 min-h-0" data-testid="axis-strategy-report">
+    <div class="ax-stack ax-stack--compact min-h-0" data-testid="axis-strategy-report">
       {/* Fill / marker options (apply without re-run) */}
       <div
-        class="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px]"
+        class="ax-chip-row ax-field"
         data-testid="axis-strategy-fill-opts"
       >
-        <span class="text-text-faint uppercase tracking-wider text-[10px]">Marks</span>
-        <label class="inline-flex items-center gap-1.5 cursor-pointer text-text-dim" title={fillHint()}>
+        <label class="ax-toggle" title={fillHint()}>
           <input
             type="checkbox"
-            class="accent-[var(--color-accent)]"
             checked={!!props.slippageNextOpen}
             data-testid="axis-strategy-slippage"
             onChange={(e) =>
               props.onStrategyUiChange?.({ slippageNextOpen: e.currentTarget.checked })
             }
           />
-          Slippage → next open
+          <span>
+            <span class="ax-toggle-title">Slippage → next open</span>
+            <span class="ax-toggle-hint">{fillHint()}</span>
+          </span>
         </label>
-        <label
-          class="inline-flex items-center gap-1.5 cursor-pointer text-text-dim"
-          title="Long labels above, short below (swap default sides)"
-        >
+        <label class="ax-toggle" title="Long labels above, short below (swap default sides)">
           <input
             type="checkbox"
-            class="accent-[var(--color-accent)]"
             checked={!!props.invertTradeLabels}
             data-testid="axis-strategy-invert-labels"
             onChange={(e) =>
               props.onStrategyUiChange?.({ invertTradeLabels: e.currentTarget.checked })
             }
           />
-          Invert long/short labels
+          <span>
+            <span class="ax-toggle-title">Invert long/short labels</span>
+          </span>
         </label>
-        <label
-          class="inline-flex items-center gap-1.5 cursor-pointer text-text-dim"
-          title="Circle mark on the fill candle body"
-        >
+        <label class="ax-toggle" title="Circle mark on the fill candle body">
           <input
             type="checkbox"
-            class="accent-[var(--color-accent)]"
             checked={props.exactOnCandle !== false}
             data-testid="axis-strategy-exact-marks"
             onChange={(e) =>
               props.onStrategyUiChange?.({ exactOnCandle: e.currentTarget.checked })
             }
           />
-          Exact on candle
+          <span>
+            <span class="ax-toggle-title">Exact on candle</span>
+          </span>
         </label>
-        <span class="text-text-faint text-[10px] font-mono">{fillHint()}</span>
       </div>
 
       <Show
         when={hasTrades()}
         fallback={
-          <div class="text-text-faint p-2" data-testid="axis-strategy-empty">
+          <p class="ax-empty" data-testid="axis-strategy-empty">
             {props.hasEvents
               ? 'Events present but no closed trades yet.'
               : 'No events. Strategy tester pairs entry/close events.'}
-          </div>
+          </p>
         }
       >
-      <div class="flex flex-col gap-3 min-h-0">
-        {/* Stats cards */}
-        <div class="grid grid-cols-3 sm:grid-cols-6 gap-2" data-testid="axis-strategy-stats">
-          <Metric
-            label="# Trades"
-            value={String(props.stats.trades)}
-          />
-          <Metric
-            label="Win rate"
-            value={`${props.stats.winRate.toFixed(1)}%`}
-          />
-          <Metric
-            label="Profit factor"
-            value={
-              Number.isFinite(props.stats.profitFactor)
-                ? props.stats.profitFactor.toFixed(2)
-                : '∞'
-            }
-          />
-          <Metric
-            label="Net profit"
-            value={formatMoney(props.stats.totalPnl)}
-            tone={props.stats.totalPnl >= 0 ? 'pos' : 'neg'}
-          />
-          <Metric
-            label="Max DD"
-            value={`${(props.stats.maxDD * 100).toFixed(2)}%`}
-            tone="neg"
-          />
-          <Metric
-            label="Avg trade"
-            value={formatMoney(props.stats.avgTrade)}
-            tone={props.stats.avgTrade >= 0 ? 'pos' : 'neg'}
-          />
-        </div>
+        <div class="ax-strat-split">
+          <div class="ax-strat-col">
+            {/* Stats cards */}
+            <div class="ax-grid ax-grid--3" data-testid="axis-strategy-stats">
+            <StudioStat label="# Trades" value={String(props.stats.trades)} />
+            <StudioStat label="Win rate" value={`${props.stats.winRate.toFixed(1)}%`} />
+            <StudioStat
+              label="Profit factor"
+              value={
+                Number.isFinite(props.stats.profitFactor)
+                  ? props.stats.profitFactor.toFixed(2)
+                  : '∞'
+              }
+            />
+            <StudioStat
+              label="Net profit"
+              value={formatMoney(props.stats.totalPnl)}
+              testId="axis-strategy-net"
+            />
+            <StudioStat
+              label="Max DD"
+              value={`${(props.stats.maxDD * 100).toFixed(2)}%`}
+            />
+            <StudioStat
+              label="Avg trade"
+              value={formatMoney(props.stats.avgTrade)}
+            />
+          </div>
 
-        {/* Equity curve */}
-        <div
-          class="border-2 border-border bg-bg-elev px-2 py-1.5"
-          data-testid="axis-strategy-equity"
-        >
-          <div class="flex items-center justify-between gap-2 mb-1">
-            <div class="text-text-dim text-[10px] uppercase tracking-wider">
-              Equity (cum. PnL)
+          {/* Equity curve */}
+          <div class="ax-card" data-testid="axis-strategy-equity">
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <div class="ax-card-kicker">Equity (cum. PnL)</div>
+              <div
+                class={`font-mono text-[1.05rem] tabular-nums ${
+                  finalEquity() >= 0 ? 'text-accent-2' : 'text-red'
+                }`}
+              >
+                {formatMoney(finalEquity())}
+              </div>
             </div>
+            <EquityChart steps={buildCumulativeEquity(props.trades)} />
+          </div>
+          </div>
+
+          <div class="ax-strat-col">
+            {/* Trades table + export */}
+            <div class="ax-section">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="ax-section-title">Closed trades</h3>
+              <button
+                type="button"
+                class="ax-btn ax-btn--ghost text-[0.92rem]"
+                title="Export closed trades CSV"
+                data-testid="axis-strategy-export-csv"
+                onClick={exportCsv}
+                disabled={!props.trades.length}
+              >
+                <Icons.fileCsv />
+                Export CSV
+              </button>
+            </div>
+
             <div
-              class={`font-mono text-[10px] tabular-nums ${
-                finalEquity() >= 0 ? 'text-accent-2' : 'text-red'
-              }`}
+              class="overflow-auto border border-border-soft max-h-[min(360px,42vh)] min-h-0"
+              data-testid="axis-strategy-trades"
             >
-              {formatMoney(finalEquity())}
+              <table class="w-full text-left font-mono text-[0.85rem]">
+                <thead class="bg-bg-panel text-text-faint sticky top-0 z-[1]">
+                  <tr>
+                    <th class="px-2 py-1.5">ID</th>
+                    <th class="px-2 py-1.5">Dir</th>
+                    <th class="px-2 py-1.5">Qty</th>
+                    <th class="px-2 py-1.5">Entry time</th>
+                    <th class="px-2 py-1.5">Entry</th>
+                    <th class="px-2 py-1.5">Exit time</th>
+                    <th class="px-2 py-1.5">Exit</th>
+                    <th class="px-2 py-1.5">P&L</th>
+                    <th class="px-2 py-1.5">%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={props.trades}>
+                    {(t) => (
+                      <tr
+                        class="border-t border-border-soft cursor-pointer hover:bg-bg-hover transition-colors"
+                        title="Jump to entry on chart"
+                        onClick={() => props.onJumpToTrade?.(t, 'entry')}
+                      >
+                        <td class="px-2 py-1 truncate max-w-[72px]">{t.id}</td>
+                        <td class="px-2 py-1">{t.dir}</td>
+                        <td class="px-2 py-1 tabular-nums">
+                          {(t.qty ?? 1) % 1 === 0
+                            ? String(t.qty ?? 1)
+                            : (t.qty ?? 1).toFixed(4)}
+                        </td>
+                        <td
+                          class="px-2 py-1 text-accent hover:underline whitespace-nowrap"
+                          title="Jump to entry"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            props.onJumpToTrade?.(t, 'entry');
+                          }}
+                        >
+                          {formatTradeTime(t.entryTime)}
+                        </td>
+                        <td class="px-2 py-1 tabular-nums">{t.entry.toFixed(2)}</td>
+                        <td
+                          class="px-2 py-1 hover:underline whitespace-nowrap"
+                          title="Jump to exit"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            props.onJumpToTrade?.(t, 'exit');
+                          }}
+                        >
+                          {formatTradeTime(t.exitTime)}
+                        </td>
+                        <td class="px-2 py-1 tabular-nums">{t.exit.toFixed(2)}</td>
+                        <td
+                          class={`px-2 py-1 tabular-nums ${
+                            t.pnl >= 0 ? 'text-accent-2' : 'text-red'
+                          }`}
+                        >
+                          {formatMoney(t.pnl)}
+                        </td>
+                        <td
+                          class={`px-2 py-1 tabular-nums ${
+                            t.pnlPct >= 0 ? 'text-accent-2' : 'text-red'
+                          }`}
+                        >
+                          {formatPct(t.pnlPct)}
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
             </div>
           </div>
-          <svg
-            viewBox={`0 0 ${EQUITY_W} ${EQUITY_H}`}
-            class="w-full h-[72px] block"
-            preserveAspectRatio="none"
-            role="img"
-            aria-label="Cumulative PnL equity curve"
-          >
-            {/* Zero baseline when in range */}
-            <Show when={equitySvg().zeroY != null}>
-              <line
-                x1={EQUITY_PAD}
-                x2={EQUITY_W - EQUITY_PAD}
-                y1={equitySvg().zeroY!}
-                y2={equitySvg().zeroY!}
-                stroke="currentColor"
-                class="text-border"
-                stroke-width="1"
-                stroke-dasharray="3 3"
-              />
-            </Show>
-            <polyline
-              fill="none"
-              stroke="currentColor"
-              class={finalEquity() >= 0 ? 'text-accent-2' : 'text-red'}
-              stroke-width="1.75"
-              stroke-linejoin="round"
-              stroke-linecap="round"
-              points={equitySvg().points}
-            />
-          </svg>
+          </div>
         </div>
-
-        {/* Trades table + export */}
-        <div class="flex items-center gap-2 flex-shrink-0">
-          <span class="text-text-dim text-[10px] uppercase tracking-wider">
-            Closed trades
-          </span>
-          <div class="flex-1" />
-          <button
-            type="button"
-            class="sc-btn sc-btn-ghost px-2 text-[0.78em]"
-            title="Export closed trades CSV"
-            data-testid="axis-strategy-export-csv"
-            onClick={exportCsv}
-            disabled={!props.trades.length}
-          >
-            <Icons.fileCsv />
-            Export CSV
-          </button>
-        </div>
-
-        <div
-          class="overflow-auto border-2 border-border max-h-[min(280px,40vh)] min-h-0"
-          data-testid="axis-strategy-trades"
-        >
-          <table class="w-full text-left font-mono text-[10px]">
-            <thead class="bg-bg-elev text-text-dim sticky top-0 z-[1]">
-              <tr>
-                <th class="px-2 py-1">ID</th>
-                <th class="px-2 py-1">Dir</th>
-                <th class="px-2 py-1">Qty</th>
-                <th class="px-2 py-1">Entry time</th>
-                <th class="px-2 py-1">Entry</th>
-                <th class="px-2 py-1">Exit time</th>
-                <th class="px-2 py-1">Exit</th>
-                <th class="px-2 py-1">P&L</th>
-                <th class="px-2 py-1">%</th>
-              </tr>
-            </thead>
-            <tbody>
-              <For each={props.trades}>
-                {(t) => (
-                  <tr
-                    class="border-t border-border-soft cursor-pointer hover:bg-bg-hover/80 transition-colors"
-                    title="Jump to entry on chart"
-                    onClick={() => props.onJumpToTrade?.(t, 'entry')}
-                  >
-                    <td class="px-2 py-0.5 truncate max-w-[72px]">{t.id}</td>
-                    <td class="px-2 py-0.5">{t.dir}</td>
-                    <td class="px-2 py-0.5 tabular-nums">
-                      {(t.qty ?? 1) % 1 === 0
-                        ? String(t.qty ?? 1)
-                        : (t.qty ?? 1).toFixed(4)}
-                    </td>
-                    <td
-                      class="px-2 py-0.5 text-accent hover:underline whitespace-nowrap"
-                      title="Jump to entry"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        props.onJumpToTrade?.(t, 'entry');
-                      }}
-                    >
-                      {formatTradeTime(t.entryTime)}
-                    </td>
-                    <td class="px-2 py-0.5 tabular-nums">{t.entry.toFixed(2)}</td>
-                    <td
-                      class="px-2 py-0.5 hover:underline whitespace-nowrap"
-                      title="Jump to exit"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        props.onJumpToTrade?.(t, 'exit');
-                      }}
-                    >
-                      {formatTradeTime(t.exitTime)}
-                    </td>
-                    <td class="px-2 py-0.5 tabular-nums">{t.exit.toFixed(2)}</td>
-                    <td
-                      class={`px-2 py-0.5 tabular-nums ${
-                        t.pnl >= 0 ? 'text-accent-2' : 'text-red'
-                      }`}
-                    >
-                      {formatMoney(t.pnl)}
-                    </td>
-                    <td
-                      class={`px-2 py-0.5 tabular-nums ${
-                        t.pnlPct >= 0 ? 'text-accent-2' : 'text-red'
-                      }`}
-                    >
-                      {formatPct(t.pnlPct)}
-                    </td>
-                  </tr>
-                )}
-              </For>
-            </tbody>
-          </table>
-        </div>
-      </div>
       </Show>
     </div>
   );
 };
-
-const Metric: Component<{ label: string; value: string; tone?: 'pos' | 'neg' }> = (props) => (
-  <div class="border-2 border-border bg-bg-elev px-2 py-1.5">
-    <div class="text-text-dim text-[10px] uppercase tracking-wider">{props.label}</div>
-    <div
-      class={`font-mono font-semibold mt-0.5 tabular-nums ${
-        props.tone === 'pos' ? 'text-accent-2' : props.tone === 'neg' ? 'text-red' : 'text-text'
-      }`}
-    >
-      {props.value}
-    </div>
-  </div>
-);

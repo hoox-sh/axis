@@ -98,6 +98,9 @@ export function SettingsPage(props: {
   const [exactOnCandle, setExactOnCandle] = createSignal(
     store.strategyUi?.exactOnCandle !== false,
   );
+  const [resultsAutoOpen, setResultsAutoOpen] = createSignal(
+    store.resultsAutoOpen !== false,
+  );
   const [reloading, setReloading] = createSignal(false);
   const [tab, setTab] = createSignal<SettingsTabId>(
     isSettingsTabId(props.initialTab) ? props.initialTab : 'general',
@@ -121,6 +124,7 @@ export function SettingsPage(props: {
         setSlippageNextOpen(!!store.strategyUi?.slippageNextOpen);
         setInvertTradeLabels(!!store.strategyUi?.invertTradeLabels);
         setExactOnCandle(store.strategyUi?.exactOnCandle !== false);
+        setResultsAutoOpen(store.resultsAutoOpen !== false);
         setTab(isSettingsTabId(props.initialTab) ? props.initialTab : 'general');
       });
     }
@@ -162,6 +166,7 @@ export function SettingsPage(props: {
       invertTradeLabels: invertTradeLabels(),
       exactOnCandle: exactOnCandle(),
     });
+    setStore('resultsAutoOpen', resultsAutoOpen());
     applyUiScale(nextUiScale);
     flushPersist();
     setStatus(
@@ -371,6 +376,20 @@ export function SettingsPage(props: {
                 onChange={setExactOnCandle}
                 label="Exact marks on candle"
                 hint="Circle on the fill bar body plus directional side arrows."
+              />
+            </StudioSection>
+
+            <StudioSection
+              title="Results"
+              lead="The fullscreen Results overlay opens from the Topbar, command palette, or a script card. Strategies can open it automatically on run."
+            >
+              <StudioToggle
+                id="axis-results-auto-open"
+                testId="axis-settings-results-auto-open"
+                checked={resultsAutoOpen()}
+                onChange={setResultsAutoOpen}
+                label="Auto-open results on strategies"
+                hint="When on, running a strategy() script opens the Results overlay. Indicators never auto-open."
               />
             </StudioSection>
 

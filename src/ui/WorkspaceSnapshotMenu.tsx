@@ -139,10 +139,6 @@ export function createLiveWorkspaceSetters(): WorkspaceSnapshotSetters {
               setStore('editor', 'mode', 'docked');
             }
           }
-          if (id === 'results') {
-            setStore('resultsPanel', 'open', !!patch.open);
-            if (typeof patch.h === 'number') setStore('resultsPanel', 'height', patch.h);
-          }
           if (id === 'logs') {
             setStore('logsPanel', 'open', !!patch.open);
             if (typeof patch.h === 'number') setStore('logsPanel', 'height', patch.h);

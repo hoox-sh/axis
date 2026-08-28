@@ -36,6 +36,9 @@ import type { PlotSample } from '../plugins/types';
  * Drawing geometry types re-export from `chart/drawing-types`.
  */
 
+/** Account / deployment tier. Gates Pro-only features (HPO walk-forward, …). */
+export type AccountTier = 'free' | 'pro' | 'self-hosted';
+
 /** Single OHLCV bar. `time` is Unix seconds (Lightweight Charts convention). */
 export interface Bar {
   /** Bar open time (Unix seconds). */
@@ -398,6 +401,16 @@ export interface AppState {
   crosshair: { time: number | null; barIndex: number | null };
   /** Bottom results / export drawer */
   resultsPanel: { open: boolean; height: number };
+  /**
+   * When true (default), running a `strategy()` script auto-opens the
+   * fullscreen Results modal. Indicators never auto-open. Persisted.
+   */
+  resultsAutoOpen: boolean;
+  /**
+   * Account / deployment tier. `free` (default) gates Pro-only features such as
+   * HPO walk-forward validation; `pro` and `self-hosted` unlock them. Persisted.
+   */
+  tier: AccountTier;
   /** System log drawer (collapsed by default) */
   logsPanel: { open: boolean; height: number };
   /**

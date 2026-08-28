@@ -7,6 +7,26 @@
  * VOID tokens only. Prefix: `ax-`.
  */
 
+/* ── Tokens ─────────────────────────────────────────────────────── */
+/* Defined at :root so studio primitives (e.g. ThemePanel reused in the
+   legacy SettingsDialog) have sizing tokens even outside `.ax-page`.
+   `.ax-page` re-declares these for the full-viewport modal scale. */
+:root {
+  --ax-font: 16px;
+  --ax-title: 2.25rem;
+  --ax-section: 1.25rem;
+  --ax-body: 1.05rem;
+  --ax-hint: 0.95rem;
+  --ax-kicker: 0.72rem;
+  --ax-mono: 0.85rem;
+  --ax-control-h: 3.25rem;
+  --ax-gap: 2.25rem;
+  --ax-card-pad: 1.5rem 1.75rem;
+  --ax-rail-w: 13.5rem;
+  --ax-canvas-pad: clamp(2rem, 4.5vw, 4.5rem);
+  --ax-canvas-max: 80rem;
+}
+
 /* ── Overlay ─────────────────────────────────────────────────────── */
 .ax-page-backdrop {
   position: fixed;
@@ -30,6 +50,7 @@
   --ax-rail-w: 13.5rem;
   --ax-canvas-pad: clamp(2rem, 4.5vw, 4.5rem);
   --ax-canvas-max: 80rem;
+  --radius-surface: 8px;
 
   font-size: var(--ax-font);
   line-height: 1.5;
@@ -119,7 +140,7 @@
   letter-spacing: -0.01em;
   text-align: left;
   cursor: pointer;
-  border-radius: var(--radius-input);
+  border-radius: var(--radius-surface);
 }
 .ax-page-rail-item::before {
   content: "";
@@ -268,6 +289,50 @@
   }
 }
 
+/* Results modal: use the full studio width (no reading-column cap) */
+.ax-page-canvas--wide {
+  max-width: none;
+}
+
+/* Optimise tab: inputs left, results right */
+.ax-hpo-split {
+  display: grid;
+  grid-template-columns: minmax(20rem, 0.85fr) minmax(0, 1.15fr);
+  gap: 2rem;
+  align-items: start;
+}
+.ax-hpo-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  min-width: 0;
+}
+@media (max-width: 64rem) {
+  .ax-hpo-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ax-strat-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  min-width: 0;
+}
+
+/* Strategy tab: stats/equity left, trades right */
+.ax-strat-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(20rem, 0.85fr);
+  gap: 2rem;
+  align-items: start;
+}
+@media (max-width: 64rem) {
+  .ax-strat-split {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Controls ────────────────────────────────────────────────────── */
 .ax-btn {
   display: inline-flex;
@@ -283,7 +348,7 @@
   font-weight: 550;
   letter-spacing: -0.01em;
   cursor: pointer;
-  border-radius: var(--radius-input);
+  border-radius: var(--radius-surface);
 }
 .ax-btn:hover:not(:disabled) {
   background: var(--color-bg-hover);
@@ -422,6 +487,45 @@ textarea.ax-input.ax-input--mono {
   height: 1.5rem;
 }
 
+/* ── Color field ──────────────────────────────────────────────── */
+.ax-color-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+.ax-color-preview {
+  flex-shrink: 0;
+  width: var(--ax-control-h);
+  height: var(--ax-control-h);
+  border: var(--border-w) solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #000 20%, transparent);
+}
+.ax-color-row > .ax-input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Stack ─────────────────────────────────────────────────────── */
+.ax-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ax-gap);
+}
+.ax-stack--compact {
+  gap: 1.25rem;
+}
+.ax-stack--tight {
+  gap: 0.85rem;
+}
+
+/* ── Inline code ───────────────────────────────────────────────── */
+.ax-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+}
+
 /* ── Display ─────────────────────────────────────────────────────── */
 .ax-card {
   display: flex;
@@ -430,6 +534,7 @@ textarea.ax-input.ax-input--mono {
   padding: var(--ax-card-pad);
   border: var(--border-w) solid var(--color-border);
   background: var(--color-bg-panel);
+  border-radius: var(--radius-surface);
   text-align: left;
   color: inherit;
 }
@@ -844,6 +949,341 @@ button.ax-card[aria-pressed="true"] {
   line-height: 1.45;
   overflow: auto;
   max-height: 14rem;
+}
+
+/* ── Results modal ───────────────────────────────────────────────── */
+.ax-results-script {
+  min-width: 0;
+}
+
+/* Equity chart */
+.ax-equity {
+  position: relative;
+  width: 100%;
+}
+.ax-equity-svg {
+  display: block;
+  width: 100%;
+  height: clamp(180px, 30vh, 300px);
+  overflow: visible;
+}
+.ax-equity-grid {
+  stroke: var(--color-border-soft);
+  stroke-width: 1;
+}
+.ax-equity-zero {
+  stroke: var(--color-text-faint);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.7;
+}
+.ax-equity-axis {
+  fill: var(--color-text-faint);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.ax-equity-dd {
+  fill: var(--color-red);
+  opacity: 0.12;
+}
+.ax-equity-line-pos {
+  stroke: var(--color-accent-2);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.ax-equity-line-neg {
+  stroke: var(--color-red);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.ax-equity-cross {
+  stroke: var(--color-text-dim);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+.ax-equity-dot {
+  fill: var(--color-bg-base);
+  stroke: var(--color-accent);
+  stroke-width: 2;
+}
+.ax-equity-tip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 10px));
+  pointer-events: none;
+  background: var(--color-bg-panel);
+  border: var(--border-w) solid var(--color-border);
+  border-radius: var(--radius-surface);
+  padding: 0.5rem 0.7rem;
+  font-size: 0.85rem;
+  min-width: 9rem;
+  box-shadow: 0 8px 24px color-mix(in srgb, #000 40%, transparent);
+  z-index: 2;
+}
+.ax-equity-tip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--color-text-faint);
+}
+.ax-equity-tip-val {
+  color: var(--color-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.ax-equity-tip-dd {
+  color: var(--color-red);
+}
+
+/* Events list badges */
+.ax-event-row {
+  align-items: center;
+}
+.ax-event-kind {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-height: 1.6rem;
+  padding: 0.1rem 0.6rem;
+  border: var(--border-w) solid var(--color-border);
+  border-radius: var(--radius-chip);
+  background: var(--color-bg-elev);
+  color: var(--color-text-dim);
+  font-size: 0.82rem;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  text-transform: capitalize;
+}
+.ax-event-dir {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-height: 1.6rem;
+  padding: 0.1rem 0.6rem;
+  border-radius: var(--radius-chip);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.ax-event-dir--long {
+  color: var(--color-accent-2);
+  background: color-mix(in srgb, var(--color-accent-2) 14%, transparent);
+  border: var(--border-w) solid color-mix(in srgb, var(--color-accent-2) 35%, transparent);
+}
+.ax-event-dir--short {
+  color: var(--color-red);
+  background: color-mix(in srgb, var(--color-red) 14%, transparent);
+  border: var(--border-w) solid color-mix(in srgb, var(--color-red) 35%, transparent);
+}
+.ax-event-dir--flat {
+  color: var(--color-text-faint);
+}
+
+/* Plots sparkline cards */
+.ax-plot-card {
+  gap: 0.85rem;
+}
+.ax-plot-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.ax-plot-meta {
+  font-size: 0.85rem;
+  color: var(--color-text-faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.ax-spark {
+  display: block;
+  width: 100%;
+  height: 56px;
+}
+.ax-spark-pos {
+  stroke: var(--color-accent-2);
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.ax-spark-neg {
+  stroke: var(--color-red);
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* HPO trial chart */
+.ax-hpo-chart-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem 1rem 0.5rem;
+  border: var(--border-w) solid var(--color-border-soft);
+  border-radius: var(--radius-surface);
+  background: var(--color-bg-elev);
+}
+.ax-hpo-chart {
+  display: block;
+  width: 100%;
+  height: 130px;
+}
+.ax-hpo-baseline {
+  stroke: var(--color-border-soft);
+  stroke-width: 1;
+}
+.ax-hpo-line-is {
+  stroke: var(--color-accent);
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.ax-hpo-line-oos {
+  stroke: var(--color-accent-2);
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-dasharray: 3 2;
+}
+.ax-hpo-chart-legend {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.82rem;
+  color: var(--color-text-dim);
+}
+.ax-hpo-legend-is::before,
+.ax-hpo-legend-oos::before {
+  content: "";
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.18rem;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+.ax-hpo-legend-is::before {
+  background: var(--color-accent);
+}
+.ax-hpo-legend-oos::before {
+  background: var(--color-accent-2);
+}
+.ax-hpo-bestline {
+  stroke: var(--color-orange);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.ax-hpo-bestdot {
+  fill: var(--color-orange);
+}
+.ax-hpo-scale {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-faint);
+}
+
+/* Account / deployment tier badge (Pro vs Self-hosted) */
+.ax-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.65rem;
+  border: var(--border-w) solid var(--color-border);
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  color: var(--color-text-dim);
+  background: transparent;
+}
+.ax-badge--pro {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+.ax-badge--selfhosted {
+  color: var(--color-accent-2);
+  border-color: color-mix(in srgb, var(--color-accent-2) 55%, transparent);
+  background: color-mix(in srgb, var(--color-accent-2) 12%, transparent);
+}
+
+/* Metrics status pill */
+.ax-metrics-status {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.ax-metrics-script {
+  font-size: 0.95rem;
+  color: var(--color-text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.ax-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 1.7rem;
+  padding: 0.1rem 0.75rem;
+  border-radius: var(--radius-chip);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.ax-status::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+.ax-status--healthy {
+  color: var(--color-accent-2);
+  background: color-mix(in srgb, var(--color-accent-2) 14%, transparent);
+  border: var(--border-w) solid color-mix(in srgb, var(--color-accent-2) 35%, transparent);
+}
+.ax-status--down {
+  color: var(--color-red);
+  background: color-mix(in srgb, var(--color-red) 14%, transparent);
+  border: var(--border-w) solid color-mix(in srgb, var(--color-red) 35%, transparent);
+}
+.ax-results-autotoggle {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.35rem 0.7rem;
+  border: var(--border-w) solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-bg-panel);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.ax-results-autotoggle .ax-toggle-title {
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: var(--color-text-dim);
+  letter-spacing: -0.01em;
+}
+.ax-results-autotoggle input {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+  accent-color: var(--color-accent);
+  flex-shrink: 0;
+}
+.ax-results-script select {
+  min-height: var(--ax-control-h);
+  height: var(--ax-control-h);
+  padding: 0.4rem 0.9rem;
+  background: var(--color-bg-elev);
+  color: var(--color-text);
+  border: var(--border-w) solid var(--color-border);
+  border-radius: var(--radius-input);
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+.ax-results-script select:focus,
+.ax-results-script select:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
 }
 
 /* ── Narrow / mobile ─────────────────────────────────────────────── */

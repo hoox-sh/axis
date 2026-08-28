@@ -9,22 +9,35 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-26 · 298 commits · describe-tag: `v2.0.29`_
+_Generated/updated: 2026-08-28 · 307 commits · describe-tag: `v2.0.30`_
 
 ---
 
-## [Unreleased]
+## [2.0.31] — 2026-08-28
 
 ### Changed
 
 - **About modal**: removed ethos manifesto list and author section; added AXIS + PYNE version badges and brief no-walled-garden philosophy.
+- **Studio consistency**: `ThemePanel` (Settings → Theme) now uses the studio `ax-*` primitives (`StudioSection`, `StudioField`, `StudioInput`, `StudioToggle`, `StudioChip`, `StudioButton`, `StudioHint`) instead of legacy `sc-settings-*` classes, matching Runtime / Wire / Workers / Plugins. Studio `--ax-*` tokens promoted to `:root` so shared panels render correctly outside the modal.
+- **Theme color input**: each token uses a single color input (mono text field + non-interactive preview swatch) instead of a paired swatch picker and text box; number tokens use one number input.
+- **Studio modal radius**: added a scoped `--radius-surface` token (8px inside `.ax-page`, defaulting to 3px elsewhere). Studio modal surfaces — `.ax-card`, `.ax-btn`, rail nav items, color preview, equity tooltip, HPO chart wrap, results auto-open toggle, and the Results error box — now use the higher radius. Chart/panel `<input>`/`<select>` and small chips/badges keep their existing 2–3px radius for hierarchy.
 
 ### Added
 
+- **Results fullscreen studio modal**: replaced the docked Results panel (`FloatableShell`) with a focused fullscreen studio overlay (`ResultsModal`) opened via `store.resultsPanel.open`. Six restyled subpages — Events, Strategy, Optimise, Plots, Metrics, Raw — share one studio canvas (`ax-page` / `ax-*`) with `StudioStat`, `StudioTabs`, and `ax-list`/`ax-card` primitives. `StrategyReport` and `HpoPanel` rebuilt on studio classes (stat cards, equity card, ax-field controls, ax-list search space). Results auto-open only for `strategy()` scripts (indicators no longer auto-open).
+- **Results auto-open setting**: new persisted `resultsAutoOpen` flag (default `true`) gates the strategy-only auto-open in the runner. A visible toggle sits at the top of the Results modal header ("Auto-open on strategies"); the same control is exposed in Settings → General ("Auto-open results on strategies"). Persisted via localStorage and hydrated on boot.
+- **Strategy equity graph**: replaced the flat SVG line with a rich `EquityChart` — gradient area fill, zero baseline, gridlines with money-axis labels, underwater drawdown shading, and a hover crosshair + tooltip showing time, equity, and drawdown.
+- **Results subpage polish**: Events list now shows colored type badges and long/short direction pills; Plots shows a sparkline card per series (positive/negative color); Optimise shows an in-sample / out-of-sample trial score chart with legend; Metrics shows a status pill plus derived stats (profit factor, max DD, plot points, script type).
+- **Results full-width + 2-column subpages**: the Results modal canvas now uses the full studio width (`ax-page-canvas--wide`, no reading-column cap). Optimise uses a two-column split — search configuration + search space on the left, live study chart + trials table on the right. Strategy uses a two-column split — stats + equity curve on the left, closed-trades table on the right (stacks to one column under 64rem).
 - **Topbar settings**: new 'Topbar' tab in Settings with toggles for each topbar group (brand, market, data, compute, layout, panels, system) and individual panel buttons (watchlist, editor, library, scripts, inputs, layers, DSM, on-chain, alerts, values, results, script logs, system logs, status). Settings are persisted via localStorage.
+- **HPO (Optimise) polish**: the search config (trials, sampler, objective, validation, holdout/walk-forward sizes, min trades, and per-param bounds) now persists across reloads; the trial chart pins its x-axis to the trial index (IS/OOS lines no longer desync when trials error), marks the best trial, and shows the score scale; the results header gained a status chip, best IS/OOS scores, and a Clear button; categorical params show their choices and the search-space list has an empty state.
+- **HPO tier gating**: added a persisted `tier` (`free` / `pro` / `self-hosted`) — the free tier disables walk-forward validation (shown as "(Pro)") with an upgrade hint, while Pro / Self-hosted show a tier badge and unlock it. The engine-runs cap was raised from 400 → 1000 so walk-forward fits within the trial ceiling.
 
 ### Fixed
 
+- **Workers probe non-blocking**: initial backend probe deferred past first paint (double `requestAnimationFrame`) and a non-blocking "Probing backends…" hint shows while the first snapshot loads — the Workers panel is ready and interactive immediately, regardless of slow/failed probes.
+- **Indicator engine correctness**: styled Pine plots (`histogram` / `area` / `columns` / `stepline` / `baseline` / `line` / `cross` / `circles`) were silently dropped because `splitSeriesByKind` only accepted `plot`/`hline` kinds — they now route to line plots (missing-kind and unknown-kind both default to line). Engine `status: 'success'` is no longer downgraded to error by a stray non-fatal `error`/`message` string. Series↔time-axis alignment is now derived from the exact bars the engine evaluated (passed through `getOhlcvTimesForApply`), fixing misaligned/blank newest bars on live ticks and HPO holdout slices. Explicit `overlay=true` is no longer auto-demoted to a sub-pane by the oscillator-scale heuristic. The `getOhlcvTimesForApply` cache is reused for the common `store.bars` case (the bypass path only applies to a genuinely different axis) and invalidates on a `store.bars` reference change.
+- **Results panel dock cleanup**: removed the dead `results` panel from the dock registry (`PanelId`, `PANEL_META`, `PANEL_IDS`, `DOCK_STACK_ORDER`) so the bottom dock no longer reserves ~220px of empty space — Results is now a fullscreen modal driven solely by `resultsPanel.open`.
 - **Input override no-op on chart**: changing a script input (e.g. RSI length 14→56) now repaints the whole series. `PaneManager.syncOverlayLines`/`syncOverlayOhlc`/`syncBgcolorBands` gained a `forceFull` owner option; `runAndApplyInner` passes `forceFull: opts.liveTick !== true` so interactive runs / input recomputes bypass the tip-only smart-apply (which only patched the last bar when length + last time were unchanged). Live ticks keep the fast path via `liveTick: true` in the multiplex re-run loop.
 - **Wire page**: removed separate scrolling sections; now uses single-scroll ax-page-canvas pattern matching Runtime, Settings, Workers, and Plugins.
 - **Settings polish**: consolidated duplicate `sc-settings-*` CSS into single definitions, added `sc-settings-section--plain` and `sc-settings-content--compact` variants to replace `!important` overrides, added `color-mix` fallback, `focus-visible` on color swatches, and `prefers-reduced-motion` guard; replaced `!mt-0 !border-t-0 !pt-0` with semantic variant and fixed ThemePanel compact gap override.
@@ -703,9 +716,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (216 commits)
+### 2026-08 (225 commits)
 
 #### Security
 
@@ -716,6 +731,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `28a1f202` (2026-08-27) — feat(settings): add topbar tab to SettingsPage (studio view)
+- `339f6a05` (2026-08-27) — feat(settings): add topbar visibility settings tab
 - `67b1558d` (2026-08-24) — feat(security): enforce CSP baseline on Cloudflare Pages deploys
 - `3fb40122` (2026-08-24) — feat(data): native MEXC spot venue + PYNE Pro origin pynescript.online
 - `09e047cd` (2026-08-24) — feat(ui): single Studio button replaces Wire/Runtime/Settings
@@ -810,6 +827,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `e0b8d4a8` (2026-08-27) — fix(chart): repaint full series on input override recompute
+- `5fe39320` (2026-08-27) — fix(ui): fine-tune settings polish and worker probe
+- `ad473102` (2026-08-27) — fix(ui): polish settings pages and fix worker health probe blocking
+- `bb702efb` (2026-08-27) — fix(wire): remove separate scrolling sections from wire page
+- `f38a0239` (2026-08-26) — fix(compile): display= folding into plot_attrs for data_window-only plots
 - `cb9c1773` (2026-08-26) — fix(compile): hline linestyle via plot_meta backfill + default auto mode
 - `5bc18f5d` (2026-08-26) — fix(hline): synthesize plot_meta in interpret path for hline linestyle
 - `d417025f` (2026-08-26) — fix(multi-chart): restore slot history on focus so each cell computes independently
@@ -892,6 +914,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Refactors
 
+- `afb85816` (2026-08-26) — refactor(about): remove ethos/author, add versions and philosophy
 - `6041c2d6` (2026-08-22) — refactor(ui): move plugin config section into Settings → Data tab
 - `f19fe9a2` (2026-08-08) — refactor: rename remaining pine-* modules to pyne-*
 - `18eedc78` (2026-08-08) — refactor: rename pine-language/lsp/builtins editor stack to pyne-*
@@ -901,6 +924,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `0a705de9` (2026-08-27) — docs(changelog): add topbar settings and wire page fix entries
 - `35dacd21` (2026-08-24) — docs: studio shell, MEXC venue, and PYNE Pro origin across guides
 - `dce471b0` (2026-08-21) — docs(devops): list /datafeed/ among nginx-proxied Pro API paths
 - `27b5ca13` (2026-08-21) — docs(changelog): datafeed gateway phase 4 additions

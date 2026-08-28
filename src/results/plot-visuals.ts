@@ -293,13 +293,16 @@ export function splitSeriesByKind(
     else if (isBarcolorKind(kind)) barcolors.push(entry);
     else if (isShapeKind(kind)) shapes.push(entry);
     else if (isFillKind(kind)) fills.push(entry);
-    else if (isOhlcPlotKind(kind)) ohlc.push(entry);
-    else if (isLinePlotKind(kind)) {
-      // Skip siblings that only feed plotbar/plotcandle open/high/low/close refs
+    else     if (isOhlcPlotKind(kind)) ohlc.push(entry);
+    else {
+      // Line plot: explicit 'plot'/'hline' OR any unrecognized kind
+      // (histogram / area / columns / stepline / baseline / line / cross / …).
+      // Never drop a series just because its kind token is unknown — a missing
+      // kind already defaults to a line plot, so an unknown present kind must
+      // too. This is what lets styled Pine plots actually render.
       if (ohlcLinked.has(key)) continue;
       lines.push(entry);
     }
-    // unknown kinds skipped
   }
   return { lines, bgcolors, barcolors, shapes, fills, ohlc };
 }

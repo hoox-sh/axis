@@ -1,20 +1,5 @@
 // Copyright (C) 2024-2026 jango_blockchained
 //
-// This file is part of pynescript.
-//
-// pynescript is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Affero General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// pynescript is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Affero General Public License for more details.
-//
-// You should have received a copy of the GNU Affero General Public License
-// along with pynescript.  If not, see <https://www.gnu.org/licenses/>.
-//
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
@@ -23,6 +8,12 @@
  * Live-applies bar colors, canvas (`chart.bg_color` / `chart.fg_color`), grid,
  * scales, volume, and series tokens via store helpers.
  *
+ * Uses the same studio design primitives (`ax-*`) as the rest of the studio
+ * modal so the Theme page shares one visual language with Runtime / Wire /
+ * Workers / Plugins. Each token uses a single color input (a text field plus a
+ * non-interactive preview swatch) — not a swatch picker paired with a second
+ * text box.
+ *
  * Pine Script™ host colors:
  * - `chart.bg_color` (alias `chart.color_background`)
  * - `chart.fg_color` (alias `chart.color_foreground`)
@@ -30,7 +21,7 @@
  * @module ui/ThemePanel
  */
 
-import { Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import {
   store,
   setChartThemePreset,
@@ -47,36 +38,19 @@ import {
   type ThemeTokenDef,
   type ThemeTokenValue,
 } from '../theme';
+import {
+  StudioButton,
+  StudioChip,
+  StudioField,
+  StudioHint,
+  StudioInput,
+  StudioSection,
+  StudioToggle,
+} from './studio';
 
 export interface ThemePanelProps {
   /** Compact spacing for Settings embed. */
   compact?: boolean;
-}
-
-function isHexColor(value: string): boolean {
-  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(
-    value.trim(),
-  );
-}
-
-/** Expand #rgb / strip alpha for `<input type="color">` (#rrggbb only). */
-function toColorInputValue(value: string): string {
-  const s = value.trim();
-  if (/^#[0-9a-fA-F]{6}$/.test(s)) return s;
-  if (/^#[0-9a-fA-F]{8}$/.test(s)) return s.slice(0, 7);
-  if (/^#[0-9a-fA-F]{3}$/.test(s)) {
-    const r = s[1]!;
-    const g = s[2]!;
-    const b = s[3]!;
-    return `#${r}${r}${g}${g}${b}${b}`;
-  }
-  if (/^#[0-9a-fA-F]{4}$/.test(s)) {
-    const r = s[1]!;
-    const g = s[2]!;
-    const b = s[3]!;
-    return `#${r}${r}${g}${g}${b}${b}`;
-  }
-  return '#000000';
 }
 
 /** Official Pine alias note under bg/fg tokens. */
@@ -91,7 +65,7 @@ function tokenTestId(key: string): string {
 }
 
 /** Full chart theme editor (presets + grouped tokens). */
-export const ThemePanel: Component<ThemePanelProps> = (props) => {
+export const ThemePanel = (props: ThemePanelProps) => {
   const themeState = createMemo(() => store.chartTheme || defaultChartThemeState());
   const tokens = createMemo(() => resolveTokens(themeState()));
   const presets = createMemo(() => listPresets());
@@ -106,69 +80,56 @@ export const ThemePanel: Component<ThemePanelProps> = (props) => {
 
   return (
     <div
-      class={`sc-settings-content ${props.compact ? 'sc-settings-content--compact' : ''}`}
+      class={`ax-stack ${props.compact ? 'ax-stack--compact' : ''}`}
       data-testid="axis-theme-panel"
     >
       {/* ── Presets ─────────────────────────────────────────────── */}
-      <div class="sc-settings-section">
-        <div class="sc-settings-section-title">Presets</div>
-        <div class="sc-chip-row" role="group" aria-label="Chart theme presets">
+      <StudioSection
+        title="Presets"
+        lead="Switch the base palette. Any edit after that becomes a Custom override."
+      >
+        <div class="ax-chip-row" role="group" aria-label="Chart theme presets">
           <For each={presets()}>
             {(p) => (
-              <button
-                type="button"
-                class={`sc-chip ${activePresetId() === p.id ? 'is-active' : ''}`}
-                aria-pressed={activePresetId() === p.id}
+              <StudioChip
+                pressed={activePresetId() === p.id}
                 title={p.description || p.name}
-                data-testid={`axis-theme-preset-${p.id}`}
                 onClick={() => setChartThemePreset(p.id)}
               >
                 {p.name}
-              </button>
+              </StudioChip>
             )}
           </For>
           <Show when={activePresetId() === 'custom'}>
-            <span class="sc-chip is-active" aria-pressed={true} title="Edited tokens">
-              Custom
-            </span>
+            <StudioChip pressed>Custom</StudioChip>
           </Show>
         </div>
-        <div class="sc-settings-btn-row mt-1">
-          <button
-            type="button"
-            class="sc-btn sc-btn-ghost text-[0.85em]"
-            data-testid="axis-theme-reset"
+        <div class="ax-inline ax-mt">
+          <StudioButton
+            variant="ghost"
+            testId="axis-theme-reset"
             title="Clear overrides and restore the active named preset"
             onClick={() => resetChartTheme()}
           >
             Reset to preset
-          </button>
+          </StudioButton>
           <Show when={overrideCount() > 0}>
-            <span class="sc-settings-field-hint m-0">
-              {overrideCount()} override{overrideCount() === 1 ? '' : 's'}
-            </span>
+            <StudioHint>{overrideCount()} override{overrideCount() === 1 ? '' : 's'}</StudioHint>
           </Show>
         </div>
-        <p class="sc-settings-field-hint mt-1">
-          Pine host colors:{' '}
-          <code class="font-mono text-[0.9em]">chart.bg_color</code> /{' '}
-          <code class="font-mono text-[0.9em]">chart.fg_color</code>
-          {' · '}
-          aliases{' '}
-          <code class="font-mono text-[0.9em]">chart.color_background</code>,{' '}
-          <code class="font-mono text-[0.9em]">chart.color_foreground</code>
-        </p>
-      </div>
+        <StudioHint>
+          Pine host colors: <code class="ax-mono">chart.bg_color</code> /{' '}
+          <code class="ax-mono">chart.fg_color</code> · aliases{' '}
+          <code class="ax-mono">chart.color_background</code>,{' '}
+          <code class="ax-mono">chart.color_foreground</code>
+        </StudioHint>
+      </StudioSection>
 
       {/* ── Token groups ────────────────────────────────────────── */}
       <For each={groups()}>
         {(group) => (
-          <div class="sc-settings-section">
-            <div class="sc-settings-section-title">{group.label}</div>
-            <Show when={group.description}>
-              <p class="sc-settings-field-hint mt-0 mb-0.5">{group.description}</p>
-            </Show>
-            <div class={`flex flex-col ${props.compact ? 'gap-2' : 'gap-2.5'}`}>
+          <StudioSection title={group.label} lead={group.description}>
+            <div class="ax-stack ax-stack--tight">
               <For each={group.defs}>
                 {(def) => (
                   <TokenField
@@ -180,7 +141,7 @@ export const ThemePanel: Component<ThemePanelProps> = (props) => {
                 )}
               </For>
             </div>
-          </div>
+          </StudioSection>
         )}
       </For>
     </div>
@@ -194,11 +155,10 @@ interface TokenFieldProps {
   onChange: (value: ThemeTokenValue) => void;
 }
 
-const TokenField: Component<TokenFieldProps> = (props) => {
+const TokenField = (props: TokenFieldProps) => {
   const id = () => `axis-theme-${props.def.key.replace(/\./g, '-')}`;
   const pineAlias = () => pineAliasFor(props.def.key);
   const colorStr = () => String(props.value ?? '');
-  const showColorPicker = () => isHexColor(colorStr());
 
   // Draft text so intermediate rgba/hex typing is not wiped by coerce rejects
   const [colorDraft, setColorDraft] = createSignal(colorStr());
@@ -224,86 +184,90 @@ const TokenField: Component<TokenFieldProps> = (props) => {
   };
 
   return (
-    <div class="sc-settings-field" data-testid={tokenTestId(props.def.key)}>
-      <div class="flex items-center justify-between gap-2 min-w-0">
-        <label class="sc-settings-field-label truncate" for={id()}>
-          {props.def.label}
-        </label>
-        <Show when={props.def.type === 'boolean'}>
-          <input
-            id={id()}
-            type="checkbox"
-            class="accent-[var(--color-accent)]"
-            checked={!!props.value}
-            aria-label={props.def.label}
-            onChange={(e) => props.onChange(e.currentTarget.checked)}
-          />
-        </Show>
-      </div>
+    <div class="ax-field" data-testid={tokenTestId(props.def.key)}>
+      <Show when={props.def.type === 'boolean'}>
+        <StudioToggle
+          id={id()}
+          checked={!!props.value}
+          label={props.def.label}
+          hint={
+            props.def.pine || pineAlias() ? (
+              <span class="ax-mono">
+                {props.def.pine ? `Pine: ${props.def.pine}` : null}
+                {props.def.pine && pineAlias() ? ' · ' : null}
+                {pineAlias() ? `alias: ${pineAlias()}` : null}
+              </span>
+            ) : undefined
+          }
+          onChange={(checked) => props.onChange(checked)}
+        />
+      </Show>
 
       <Show when={props.def.type === 'color'}>
-        <div class="sc-settings-color-row">
-          <Show when={showColorPicker()}>
-            <input
-              type="color"
-              class="sc-settings-color-swatch"
-              value={toColorInputValue(colorStr())}
-              aria-label={`${props.def.label} color picker`}
-              onInput={(e) => props.onChange(e.currentTarget.value)}
+        <StudioField
+          label={props.def.label}
+          for={id()}
+          hint={
+            props.def.pine || pineAlias() ? (
+              <span class="ax-mono">
+                {props.def.pine ? `Pine: ${props.def.pine}` : null}
+                {props.def.pine && pineAlias() ? ' · ' : null}
+                {pineAlias() ? `alias: ${pineAlias()}` : null}
+              </span>
+            ) : props.def.description ? (
+              props.def.description
+            ) : undefined
+          }
+        >
+          <div class="ax-color-row">
+            <span
+              class="ax-color-preview"
+              aria-hidden="true"
+              style={{ background: colorStr() || 'transparent' }}
             />
-          </Show>
-          <input
-            id={id()}
-            class="sc-input font-mono text-[0.85em] flex-1 min-w-0"
-            type="text"
-            spellcheck={false}
-            value={colorDraft()}
-            placeholder="#rrggbb, rgba(…), or color name"
-            aria-label={props.def.label}
-            onInput={(e) => {
-              const v = e.currentTarget.value;
-              setColorDraft(v);
-              commitColor(v);
-            }}
-            onBlur={(e) => commitColor(e.currentTarget.value)}
-          />
-        </div>
+            <StudioInput
+              id={id()}
+              mono
+              value={colorDraft()}
+              placeholder="#rrggbb, rgba(…), or color name"
+              spellcheck={false}
+              onInput={(v) => {
+                setColorDraft(v);
+                commitColor(v);
+              }}
+              onBlur={(v) => commitColor(v)}
+            />
+          </div>
+        </StudioField>
       </Show>
 
       <Show when={props.def.type === 'number'}>
-        <div class="flex items-center gap-2">
-          <input
-            class="sc-range flex-1"
-            type="range"
-            min={props.def.min ?? 0}
-            max={props.def.max ?? 10}
-            step={props.def.step ?? 1}
-            value={Number(props.value)}
-            aria-label={props.def.label}
-            onInput={(e) => props.onChange(Number(e.currentTarget.value))}
-          />
-          <input
+        <StudioField
+          label={props.def.label}
+          for={id()}
+          hint={
+            props.def.pine || pineAlias() ? (
+              <span class="ax-mono">
+                {props.def.pine ? `Pine: ${props.def.pine}` : null}
+                {props.def.pine && pineAlias() ? ' · ' : null}
+                {pineAlias() ? `alias: ${pineAlias()}` : null}
+              </span>
+            ) : props.def.description ? (
+              props.def.description
+            ) : undefined
+          }
+        >
+          <StudioInput
             id={id()}
-            class="sc-input font-mono text-[0.85em] w-14 shrink-0"
             type="number"
+            mono
+            value={Number(props.value)}
             min={props.def.min}
             max={props.def.max}
             step={props.def.step ?? 1}
-            value={Number(props.value)}
-            onInput={(e) => props.onChange(Number(e.currentTarget.value))}
+            onInput={(v) => props.onChange(Number(v))}
           />
-        </div>
-      </Show>
-
-      <Show when={props.def.pine || pineAlias()}>
-        <p class="sc-settings-field-hint font-mono text-[0.72em]">
-          {props.def.pine ? `Pine: ${props.def.pine}` : null}
-          {props.def.pine && pineAlias() ? ' · ' : null}
-          {pineAlias() ? `alias: ${pineAlias()}` : null}
-        </p>
-      </Show>
-      <Show when={props.def.description && !props.def.pine && !props.compact}>
-        <p class="sc-settings-field-hint">{props.def.description}</p>
+        </StudioField>
       </Show>
     </div>
   );
