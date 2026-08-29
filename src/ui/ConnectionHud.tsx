@@ -245,7 +245,7 @@ function ChipShell(props: {
       ref={(el) => {
         anchor = el;
       }}
-      class={`relative inline-flex items-center gap-1 px-1.5 py-0.5 border h-[22px] box-border flex-shrink-0 overflow-hidden cursor-default select-none ${
+      class={`relative inline-flex items-center gap-1 px-1.5 py-0.5 border-[1px] h-[22px] box-border flex-shrink-0 overflow-hidden cursor-default select-none transition-none ${
         active()
           ? 'border-accent bg-accent/10'
           : 'border-border-soft bg-bg-elev/60'
@@ -380,7 +380,7 @@ function TickPulse(props: {
       ref={(el) => {
         anchor = el;
       }}
-      class={`relative inline-flex items-center gap-1 px-1.5 py-0.5 border font-mono text-[10px] h-[22px] box-border flex-shrink-0 overflow-hidden cursor-default ${
+      class={`relative inline-flex items-center gap-1 px-1.5 py-0.5 border-[1px] font-mono text-[10px] h-[22px] box-border flex-shrink-0 overflow-hidden cursor-default transition-none ${
         active() ? 'border-accent bg-accent/10' : 'border-border-soft'
       }`}
       data-testid="axis-tick-indicator"
@@ -466,8 +466,8 @@ function LiveBadge(props: {
       ref={(el) => {
         anchor = el;
       }}
-      class={`relative px-1.5 py-0.5 border text-[9px] font-mono tracking-wider flex-shrink-0 h-[22px] box-border inline-flex items-center cursor-default ${cls()} ${
-        active() ? 'ring-1 ring-accent' : ''
+      class={`relative px-1.5 py-0.5 border-[1px] text-[9px] font-mono tracking-wider flex-shrink-0 h-[22px] box-border inline-flex items-center cursor-default ring-1 transition-none ${cls()} ${
+        active() ? 'ring-accent' : 'ring-transparent'
       }`}
       data-hud-chip="live"
       data-testid="axis-hud-live"

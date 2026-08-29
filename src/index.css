@@ -304,6 +304,10 @@ button.sc-btn:focus-visible {
   background: transparent;
   border-color: transparent;
   color: var(--color-text-dim);
+  /* Defensive explicit box-sizing (preflight already sets border-box on *,
+     but pinned here so the chip-style ghost never regresses if preflight
+     or compositing layer changes). */
+  box-sizing: border-box;
 }
 .sc-btn-ghost:hover {
   background-color: var(--color-bg-hover);
