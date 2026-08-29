@@ -9,7 +9,36 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-28 · 307 commits · describe-tag: `v2.0.30`_
+_Generated/updated: 2026-08-29 · 314 commits · describe-tag: `v2.0.31`_
+
+---
+
+## [Unreleased]
+
+_Upcoming changes._
+
+---
+
+## [2.1.0] — 2026-08-29
+
+### Added
+
+- **Local storage: persisted run results**: `localStoragePlugin` now implements the optional `saveResult` / `loadResult` / `listResults` / `removeResult` methods so completed strategy/indicator runs can survive reloads. IndexedDB schema bumped from v1 → v2 — additive migration only, with a new `results` object store keyed by compound `[scriptId, runId]` and a `byScript` index on `meta.scriptId` for cheap per-script listing. FIFO trim keeps at most `MAX_RESULTS_PER_SCRIPT = 50` runs per script (oldest by `meta.startedAt` evicted; the just-saved run is always preserved). A `LOCAL_STORAGE_VERSION = 2` constant is exported for downstream schema detection, and the plugin now advertises `capabilities.results = true` so UI can render saved-runs affordances. localStorage JSON + in-memory `Map` fallbacks mirror the same semantics for SSR/tests (`pynescript.axis.results.v1` key + `_getMemResultsForTests` helper). Plugin contract extended in `src/plugins/types.ts` with a `results?: boolean` capability flag.
+- **Storage change confirmation dialog**: new `StorageChangePrompt` (`src/ui/StorageChangePrompt.tsx`) is mounted once at the app root and hosts the existing `StorageChangeDialog` whenever the user switches storage engines. A new `promptStorageChange(oldId, newId)` helper in `src/storage/service.ts` is the single entry point — short-circuits silently when the engine is unchanged or unset (first-time set), and otherwise opens the dialog so the user can pick *Migrate scripts* or *Start fresh* before the active plugin flips. The migration itself still runs through the existing dialog (it calls `getStorage(fromId)` / `getStorage(toId)` directly so the active plugin stays pinned to the source until commit). All four storage-change call sites now route through it — `ScriptLibraryPanel` dropdown, `SettingsDialog` general tab Save, `PluginsPage` catalog activate, `PluginManager` modal activate — so there is exactly one shared dialog state, not four duplicated ones.
+- **Per-panel icon in FloatableShell header**: `FloatableShell` now renders the panel-specific glyph next to the hamburger menu (testid `axis-panel-header-icon-{panelId}`), matching the Topbar panel toggle. Single source of truth is `PANEL_ICON: Record<PanelId, IconName>` in `src/ui/icon-map.ts`; TypeScript exhaustiveness guarantees every `PanelId` has an entry. Missing mappings fall back to the hamburger-only chrome without breaking the panel.
+
+### Fixed
+
+- **Status bar chip 1px hover wobble**: `ConnectionHud` chips (`ChipShell`, `TickPulse`, `LiveBadge`) no longer shift pixels on hover/active. Locked border-width to `border-[1px]` (Tailwind v4 `border` no longer relies on theme indirection), added `transition-none` to prevent any color flicker, and pre-applied the `ring-1` outline on `LiveBadge` so only the ring color animates between `ring-transparent` and `ring-accent` (no box-shadow structure delta). `.sc-btn-ghost` gained an explicit `box-sizing: border-box` (defensive — Tailwind v4 preflight already sets it on `*`).
+- **Duplicate "Open in new tab" in editor dock menu**: the editor panel's dock menu showed both the generic DOCK_MENU "New tab" entry and an editor-specific "Open in new tab" entry passed via `menuExtra`. The `menuExtra` is now `undefined` (per the `FloatableShell` JSX usage in `EditorPane`), so the dock menu shows the generic "New tab" entry exactly once. The editor's own "Open in new tab" affordance lives only in the right-side `EditorOverflowMenu` (testid `axis-editor-btn-new-tab-overflow`), where it pops the editor out into a full browser tab instead of a docked window.
+
+### Tests
+
+- **Storage result round-trip + FIFO + fallback** — `tests/storage-local-results.test.ts` covers the new IndexedDB v2 `results` object store: add / load / list / remove, FIFO trim at `MAX_RESULTS_PER_SCRIPT = 50`, the `byScript` index, SSR fallback (`pynescript.axis.results.v1` + `_getMemResultsForTests`), and additive schema migration from v1.
+- **Service façade + plugin opt-in** — `tests/storage-service-results.test.ts` exercises `saveRunResult` / `loadRunResult` / `listRunResults` / `removeRunResult` / `supportsRunResults` through the active plugin, including the local-only fallback when the active engine (git / cloud) doesn't implement the optional result methods.
+- **Storage change prompt** — `tests/storage-change-prompt.test.ts` asserts the dialog is mounted exactly once at the app root, opens on engine change, and short-circuits silently when the engine is unchanged.
+- **Editor menu dedupe** — `tests/editor-menu.test.ts` locks the regression: `EditorPane` no longer passes a `menuExtra` with a "New tab" entry, the dock menu still contains exactly one "New tab", and `EditorOverflowMenu` still owns the overflow "Open in new tab".
+- **Panel header icon routing** — `tests/panel-icon.test.ts` verifies `PANEL_ICON` covers every `PanelId`, each value is a valid `IconName`, and `FloatableShell` reads `PANEL_ICON[props.id]` and emits the `axis-panel-header-icon-{panelId}` testid.
 
 ---
 
@@ -718,9 +747,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (225 commits)
+### 2026-08 (232 commits)
 
 #### Security
 
@@ -731,6 +762,10 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `fb193c25` (2026-08-29) — feat(panel): per-panel icon in FloatableShell header
+- `9196e4cb` (2026-08-29) — feat(ui): storage-change migration dialog
+- `008fb22a` (2026-08-29) — feat(storage): persist strategy/indicator run results via StoragePlugin
+- `eb86c103` (2026-08-28) — feat(results): fullscreen results studio, HPO polish, and tier gating
 - `28a1f202` (2026-08-27) — feat(settings): add topbar tab to SettingsPage (studio view)
 - `339f6a05` (2026-08-27) — feat(settings): add topbar visibility settings tab
 - `67b1558d` (2026-08-24) — feat(security): enforce CSP baseline on Cloudflare Pages deploys
@@ -827,6 +862,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `8426f3d9` (2026-08-29) — fix(editor): remove duplicate 'Open in new tab' entry
+- `6178bced` (2026-08-29) — fix(ui): status bar chips wobble on hover
 - `e0b8d4a8` (2026-08-27) — fix(chart): repaint full series on input override recompute
 - `5fe39320` (2026-08-27) — fix(ui): fine-tune settings polish and worker probe
 - `ad473102` (2026-08-27) — fix(ui): polish settings pages and fix worker health probe blocking
@@ -924,6 +961,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `ee51466b` (2026-08-29) — docs(changelog): update [Unreleased] for storage results, dialog, panel icon, chip fix, menu dedupe
 - `0a705de9` (2026-08-27) — docs(changelog): add topbar settings and wire page fix entries
 - `35dacd21` (2026-08-24) — docs: studio shell, MEXC venue, and PYNE Pro origin across guides
 - `dce471b0` (2026-08-21) — docs(devops): list /datafeed/ among nginx-proxied Pro API paths
