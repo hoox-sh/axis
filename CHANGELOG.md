@@ -9,13 +9,25 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-29 · 314 commits · describe-tag: `v2.0.31`_
+_Generated/updated: 2026-08-29 · 315 commits · describe-tag: `v2.1.0`_
 
 ---
 
 ## [Unreleased]
 
 _Upcoming changes._
+
+---
+
+## [2.1.1] — 2026-08-29
+
+### Fixed
+
+- **CORS product-host list**: retired the legacy `*.pynescript.ai` branch from `PRODUCT_ORIGIN_RE` (worker `pickOrigin`) — production URL is `pynescript.online`, not `.ai`. The fallback default in `env.ALLOWED_ORIGIN` (and the inline fallback when none is configured) now also points at `https://pynescript.online`. Legacy `.ai` requests fall through to the allowlist fallback instead of being echoed. `isOAuthProxyBase` (git-oauth client proxy allowlist) drops the `.ai` check for symmetry. Docs (README, `docs/devops/cors-and-origins.mdx`, `docs/worker/bindings.mdx`, `docs/architecture/evaluation.mdx`, `docs/llm.txt`) updated.
+
+### Tests
+
+- **CORS regression**: `worker/tests/cors-origin.test.ts` adds a `does NOT echo the retired pynescript.ai product host` case that confirms `https://pynescript.ai` and `https://app.pynescript.ai` requests fall back to the configured `ALLOWED_ORIGIN` first entry (i.e. they're no longer auto-allowed as product hosts).
 
 ---
 
@@ -749,9 +761,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (232 commits)
+### 2026-08 (233 commits)
 
 #### Security
 
@@ -862,6 +876,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `167921f2` (2026-08-29) — fix(worker): update CORS product hosts to pynescript.online (retire .ai)
 - `8426f3d9` (2026-08-29) — fix(editor): remove duplicate 'Open in new tab' entry
 - `6178bced` (2026-08-29) — fix(ui): status bar chips wobble on hover
 - `e0b8d4a8` (2026-08-27) — fix(chart): repaint full series on input override recompute
@@ -961,7 +976,6 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
-- `ee51466b` (2026-08-29) — docs(changelog): update [Unreleased] for storage results, dialog, panel icon, chip fix, menu dedupe
 - `0a705de9` (2026-08-27) — docs(changelog): add topbar settings and wire page fix entries
 - `35dacd21` (2026-08-24) — docs: studio shell, MEXC venue, and PYNE Pro origin across guides
 - `dce471b0` (2026-08-21) — docs(devops): list /datafeed/ among nginx-proxied Pro API paths
@@ -995,6 +1009,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `40668dbc` (2026-08-29) — chore(release): prepare v2.1.0
 - `f34c76cf` (2026-08-26) — chore(release): bump to v2.0.27 — PYNE wheel 0.4.0, hline linestyle, multi-chart fix
 - `d323c8fd` (2026-08-24) — chore(release): v2.0.26
 - `a01be631` (2026-08-23) — chore(release): AXIS v2.0.23
