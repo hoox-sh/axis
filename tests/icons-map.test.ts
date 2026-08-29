@@ -8,7 +8,8 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { ICON_MAP, findDuplicateIconGlyphs } from '../src/ui/icon-map';
+import { ICON_MAP, PANEL_ICON, findDuplicateIconGlyphs } from '../src/ui/icon-map';
+import { PANEL_IDS } from '../src/ui/panels/panel-manager.ts';
 
 describe('ICON_MAP', () => {
   it('has no duplicate Lucide glyphs among canonical keys', () => {
@@ -48,6 +49,23 @@ describe('ICON_MAP', () => {
     ] as const;
     for (const k of need) {
       expect(ICON_MAP[k]).toBeTruthy();
+    }
+  });
+});
+
+describe('PANEL_ICON', () => {
+  it('covers every PanelId', () => {
+    for (const id of PANEL_IDS) {
+      expect(PANEL_ICON[id]).toBeTruthy();
+    }
+  });
+
+  it('resolves each entry to a real ICON_MAP key', () => {
+    for (const id of PANEL_IDS) {
+      const key = PANEL_ICON[id];
+      // Type system already enforces this; assert at runtime too in case
+      // ICON_MAP is mutated independently of PANEL_ICON.
+      expect((ICON_MAP as Record<string, string>)[key]).toBeTruthy();
     }
   });
 });

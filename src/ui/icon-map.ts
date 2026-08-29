@@ -27,6 +27,8 @@
  * 1. Import Lucide only in `icons.tsx`.
  * 2. One Lucide glyph → one canonical key (no shared glyphs in this map).
  * 3. Keys name product intent, not the Lucide file name.
+ * 4. Per-panel glyph routing lives in {@link PANEL_ICON} — keep that table in
+ *    sync when adding a {@link PanelId}.
  *
  * | Icons key | Lucide | Intent |
  * |-----------|--------|--------|
@@ -89,6 +91,8 @@
  *
  * @module ui/icon-map
  */
+
+import type { PanelId } from './panels/types';
 
 export const ICON_MAP = {
   play: 'Play',
@@ -186,6 +190,34 @@ export const ICON_MAP = {
 } as const;
 
 export type IconName = keyof typeof ICON_MAP;
+
+/**
+ * Per-panel icon routing — `PanelId → IconName`.
+ *
+ * Single source of truth for which glyph identifies a panel:
+ * - `FloatableShell` panel header renders this next to the hamburger menu
+ *   (`data-testid="axis-panel-header-icon-{panelId}"`).
+ * - `Topbar` panel-toggle buttons resolve the same glyph by reading this map,
+ *   so a panel always carries the same icon from header to toggle.
+ *
+ * Every {@link PanelId} must be present — TypeScript enforces exhaustiveness via
+ * `Record<PanelId, IconName>`. Add an entry when you add a panel; mirror the
+ * choice in `Topbar.tsx` if you want the toggle there too.
+ */
+export const PANEL_ICON: Record<PanelId, IconName> = {
+  watchlist: 'watchlist',
+  indicators: 'scripts',
+  editor: 'editor',
+  logs: 'systemLogs',
+  scriptlogs: 'scriptLogs',
+  statusbar: 'status',
+  dataview: 'dataView',
+  layers: 'layers',
+  alerts: 'alerts',
+  library: 'library',
+  datasource: 'dataSource',
+  onchain: 'onchain',
+};
 
 /** Lucide names bound more than once (must be empty for {@link ICON_MAP}). */
 export function findDuplicateIconGlyphs(

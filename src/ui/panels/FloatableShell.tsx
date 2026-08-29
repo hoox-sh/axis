@@ -57,7 +57,7 @@ import {
   setAllPanelsChartOverlay,
   isAllPanelsChartOverlay,
 } from '../../store';
-import { Icons } from '../icons';
+import { Icons, PANEL_ICON, type IconProps } from '../icons';
 import { ResizeHandle } from '../ResizeHandle';
 import {
   PANEL_META,
@@ -167,6 +167,15 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   const chrome = () => getPanelChrome(props.id);
   const title = () => props.title || meta().title;
   const dock = () => chrome().dock;
+  /**
+   * Per-panel icon component (resolved from {@link PANEL_ICON} so the header
+   * glyph matches the Topbar panel toggle). Returns undefined if the panel id
+   * has no icon mapping — caller falls back to hamburger-only chrome.
+   */
+  const PanelHeaderIcon = (): Component<IconProps> | undefined => {
+    const key = PANEL_ICON[props.id];
+    return key ? Icons[key] : undefined;
+  };
   /** True when presenting as free/edge overlay (float, window, or chart-overlay flag). */
   const isOverlay = () => isPanelInChartOverlayMode(chrome());
   const isFloat = () => dock() === 'float' || dock() === 'window';
@@ -982,6 +991,21 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                   : 'Drag title to move or undock · click does not float · drop on edges to dock'
               }
             >
+              {/* Per-panel identity glyph (matches Topbar panel toggle). Non-interactive
+                  — purely a visual cue; hamburger menu + title still drive discovery.
+                  `keyed` so the children fn receives the Component value directly,
+                  not an Accessor (avoids `<accessor size=… />` swallowing props). */}
+              <Show when={PanelHeaderIcon()} keyed>
+                {(Icon) => (
+                  <span
+                    class="flex-shrink-0 text-text-dim opacity-70 pointer-events-none"
+                    aria-label={`Panel: ${title()}`}
+                    data-testid={`axis-panel-header-icon-${props.id}`}
+                  >
+                    <Icon size={14} />
+                  </span>
+                )}
+              </Show>
               <div
                 class="axis-panel-menu relative flex-shrink-0"
                 ref={menuWrapEl}

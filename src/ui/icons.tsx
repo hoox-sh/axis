@@ -125,6 +125,7 @@ import {
 
 export {
   ICON_MAP,
+  PANEL_ICON,
   findDuplicateIconGlyphs,
   type IconName,
 } from './icon-map';
