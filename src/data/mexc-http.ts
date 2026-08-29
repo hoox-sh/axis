@@ -20,11 +20,15 @@
 /**
  * Resilient MEXC public REST helpers for the AXIS PWA.
  *
- * Browser → venue is flaky (geo blocks, corporate firewalls, extensions).
+ * MEXC's public REST does NOT send `Access-Control-Allow-Origin`, so the
+ * browser blocks reading responses from `api.mexc.com` directly. The Worker
+ * proxy is the primary path; direct is a last-ditch fallback for offline lab,
+ * tests (`skipWorkerProxy`), or a custom Worker base that's down.
+ *
  * Fetch order:
- * 1. Explicit `baseUrl` override (source config)
- * 2. Direct public host (`https://api.mexc.com`)
- * 3. AXIS Worker allowlisted proxy (`/api/market/mexc/…`)
+ * 1. AXIS Worker allowlisted proxy (`/api/market/mexc/…`)
+ * 2. Explicit `baseUrl` override (source config)
+ * 3. Direct public host (`https://api.mexc.com`)
  *
  * MEXC does not currently support a signed HMAC path here (no
  * `X-MEXC-APIKEY` user-data endpoints consumed by AXIS today). When that
@@ -95,10 +99,39 @@ function workerProxyUrl(
 }
 
 /**
- * Fetch MEXC JSON: direct public host(s) then Worker proxy fallback.
+ * Fetch MEXC JSON: Worker proxy first (CORS-safe in browser), then direct
+ * public host(s) as a fallback.
+ *
+ * MEXC's public REST does NOT send `Access-Control-Allow-Origin` for browser
+ * origins — every direct attempt would surface as a CORS error in the network
+ * log even when the Worker fallback would have succeeded. Try Worker first so
+ * the browser logs are clean and the request path is deterministic; fall back
+ * to the direct host when the Worker is unreachable (offline lab, tests, or a
+ * custom Worker base that's down).
+ *
  * Throws the last error when every candidate fails.
  */
 export async function fetchMexcJson(opts: MexcFetchOpts): Promise<unknown> {
+  const errors: string[] = [];
+
+  if (!opts.skipWorkerProxy) {
+    const worker = resolveMarketWorkerBase(opts.workerBase);
+    const url = workerProxyUrl(worker, opts.path, opts.query);
+    try {
+      const res = await fetch(url, {
+        cache: 'no-store',
+        signal: opts.signal,
+        headers: { Accept: 'application/json' },
+      });
+      if (res.ok) return await res.json();
+      errors.push(`worker: HTTP ${res.status}`);
+    } catch (err) {
+      if (opts.signal?.aborted) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`worker: ${msg}`);
+    }
+  }
+
   const bases: string[] = [];
   const preferred = normalizeEndpointBase(opts.baseUrl);
   if (preferred) bases.push(preferred);
@@ -106,7 +139,6 @@ export async function fetchMexcJson(opts: MexcFetchOpts): Promise<unknown> {
     if (!bases.includes(h)) bases.push(h);
   }
 
-  const errors: string[] = [];
   for (const base of bases) {
     const url = joinUrl(base, opts.path, opts.query);
     try {
@@ -124,27 +156,6 @@ export async function fetchMexcJson(opts: MexcFetchOpts): Promise<unknown> {
       if (opts.signal?.aborted) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       errors.push(`${base}: ${msg}`);
-    }
-  }
-
-  if (!opts.skipWorkerProxy) {
-    const worker = resolveMarketWorkerBase(opts.workerBase);
-    const url = workerProxyUrl(worker, opts.path, opts.query);
-    try {
-      const res = await fetch(url, {
-        cache: 'no-store',
-        signal: opts.signal,
-        headers: { Accept: 'application/json' },
-      });
-      if (!res.ok) {
-        errors.push(`worker: HTTP ${res.status}`);
-      } else {
-        return await res.json();
-      }
-    } catch (err) {
-      if (opts.signal?.aborted) throw err;
-      const msg = err instanceof Error ? err.message : String(err);
-      errors.push(`worker: ${msg}`);
     }
   }
 
