@@ -63,6 +63,7 @@ import { sliceBarsForLoad } from '../data/bars-cache';
 import { expandCachedSeriesToNow } from '../data/expand-cache';
 import { getUploadedBars } from './upload-store';
 import { fetchBinanceJson } from '../data/binance-http';
+import { fetchMexcJson } from '../data/mexc-http';
 import { mexcKlineInterval, mexcSpotSymbol } from '../data/venues/mexc';
 
 /** Parsed DEX pool id for {@link geckoTerminalOhlcv}. */
@@ -865,10 +866,14 @@ export const mexcRest: SourcePlugin = {
       limit: String(limit),
     });
     appendTimeParams(params, { startTime, endTime }, 'ms');
-    const url = `https://api.mexc.com/api/v3/klines?${params}`;
-    const res = await fetch(url, { cache: 'no-store', signal: fetchSignal(signal) });
-    if (!res.ok) throw new Error(`MEXC HTTP ${res.status}`);
-    const json = await res.json();
+    // Route through `fetchMexcJson` so a failed direct `api.mexc.com` call
+    // transparently falls back to the AXIS Worker allowlisted proxy. The
+    // Worker proxy returns the raw MEXC response unmodified.
+    const json = await fetchMexcJson({
+      path: 'klines',
+      query: params.toString(),
+      signal: fetchSignal(signal),
+    });
     if (!Array.isArray(json)) {
       const msg =
         json && typeof json === 'object' && 'msg' in json

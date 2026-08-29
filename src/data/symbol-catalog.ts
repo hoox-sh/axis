@@ -29,6 +29,7 @@
 
 import { getDataManagerSelection } from './data-manager-source';
 import { fetchBinanceJson } from './binance-http';
+import { fetchMexcJson } from './mexc-http';
 import {
   resolveProviderVenue,
   type ProviderVenue,
@@ -285,11 +286,9 @@ async function fetchKraken(): Promise<SymbolEntry[]> {
 }
 
 async function fetchMexc(): Promise<SymbolEntry[]> {
-  const res = await fetch('https://api.mexc.com/api/v3/exchangeInfo', {
-    cache: 'no-store',
-  });
-  if (!res.ok) throw new Error(`MEXC HTTP ${res.status}`);
-  const data = (await res.json()) as {
+  // Route through `fetchMexcJson` so a failed direct `api.mexc.com` call
+  // transparently falls back to the AXIS Worker allowlisted proxy.
+  const data = (await fetchMexcJson({ path: 'exchangeInfo' })) as {
     symbols?: Array<{
       symbol: string;
       baseAsset: string;

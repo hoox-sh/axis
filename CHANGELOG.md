@@ -17,6 +17,10 @@ _Generated/updated: 2026-08-29 · 315 commits · describe-tag: `v2.1.0`_
 
 _Upcoming changes._
 
+### Fixed
+
+- **Market proxy (Worker)**: MEXC public REST is now served through the Worker at `/api/market/mexc/{klines,ticker/24hr,exchangeInfo}` — fixes CORS errors when the browser tries to call `api.mexc.com` directly. New `src/data/mexc-http.ts` exposes `fetchMexcJson` (mirrors `fetchBinanceJson`; same `resolveMarketWorkerBase` resolver from `src/data/binance-http.ts`). Migrated call sites: `watchlist-tickers.ts` (24h tickers), `sources/catalog.ts` (`mexcRest.fetchHistorical` klines), and `symbol-catalog.ts` (exchangeInfo). MEXC interval allowlist is tighter than Binance (no `1s`, `3m`, `2h`, `6h`, `8h`, `12h`, `3d`, `1M` — chart `1h` maps to native `60m`, `1w` to `1W`). MEXC does not support `?symbols=…` on `ticker/24hr` — the endpoint returns the full book and the client filters by symbol after parsing. No signed MEXC path yet (no HMAC endpoints consumed by AXIS today). Backward-compatible: direct `api.mexc.com` calls still work for dev builds; the Worker proxy is an additional fallback when direct fetch fails. No new dependencies.
+
 ---
 
 ## [2.1.1] — 2026-08-29

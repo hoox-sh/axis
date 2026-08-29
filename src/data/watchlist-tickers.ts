@@ -44,6 +44,7 @@
  */
 
 import { fetchBinanceJson } from './binance-http';
+import { fetchMexcJson } from './mexc-http';
 
 /** One row’s quote state as stored by the Watchlist UI. */
 export interface WatchTicker {
@@ -230,11 +231,12 @@ async function fetchCoinbase(symbols: string[]): Promise<Record<string, WatchTic
   return next;
 }
 
-/** MEXC 24hr tickers (Binance-shaped). All-book then filter. */
+/** MEXC 24hr tickers (Binance-shaped). All-book then filter.
+ * Uses {@link fetchMexcJson} so the request transparently falls back from
+ * direct `api.mexc.com` to the AXIS Worker allowlisted proxy when the
+ * browser hits CORS / geo blocks. */
 async function fetchMexc(symbols: string[]): Promise<Record<string, WatchTicker>> {
-  const res = await fetch('https://api.mexc.com/api/v3/ticker/24hr', { cache: 'no-store' });
-  if (!res.ok) throw new Error(`mexc ${res.status}`);
-  const data = (await res.json()) as Array<{
+  const data = (await fetchMexcJson({ path: 'ticker/24hr' })) as Array<{
     symbol: string;
     lastPrice: string;
     priceChangePercent: string;
