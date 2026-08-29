@@ -73,6 +73,8 @@ import { HooxLoader } from './HooxLoader';
 import { probeEndpoint } from '../indicators/runner';
 import { listEngines } from '../engines/catalog';
 import { listStorages } from '../storage/catalog';
+import { promptStorageChange } from '../storage/service';
+import { getActiveStorageId } from '../plugins/active';
 import { CapabilityBadges, engineOptionLabel } from './plugin-badges';
 import { PluginConfigRow } from './PluginConfigRow';
 import { getEngine } from '../engines/catalog';
@@ -376,7 +378,9 @@ export const SettingsDialog: Component<Props> = (props) => {
     applyUiScale(nextUiScale);
     // setActivePlugin keeps flat engine/source fields + telemetry planes aligned
     setActivePlugin('engine', nextEngine);
-    setActivePlugin('storage', nextStorage);
+    // Storage changes open the migrate-or-fresh dialog; the actual engine
+    // flip happens after the user commits (or never, if they cancel).
+    promptStorageChange(getActiveStorageId(), nextStorage);
 
     // Always merge engine plugin config when any engine field is shown — include
     // endpoint so pluginsConfig cannot keep a stale URL over store.endpoint.

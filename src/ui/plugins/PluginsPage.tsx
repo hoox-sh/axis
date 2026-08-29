@@ -20,6 +20,8 @@ import { listSources } from '../../sources/catalog';
 import { listStreams } from '../../streams/catalog';
 import { listEngines } from '../../engines/catalog';
 import { listStorages } from '../../storage/catalog';
+import { promptStorageChange } from '../../storage/service';
+import { getActiveStorageId } from '../../plugins/active';
 import { registry } from '../../plugins/registry';
 import { persist, setActivePlugin, store } from '../../store';
 import type { PluginBase } from '../../plugins/types';
@@ -166,8 +168,19 @@ export function PluginsPage(props: {
   });
 
   const activate = (kind: string, id: string) => {
-    if (kind === 'source' || kind === 'stream' || kind === 'engine' || kind === 'storage') {
+    if (kind === 'source' || kind === 'stream' || kind === 'engine') {
       setActivePlugin(kind, id);
+      refresh();
+      return;
+    }
+    if (kind === 'storage') {
+      // Storage changes open the migrate-or-fresh dialog (hosted globally
+      // via <StorageChangePrompt />). The engine flip is committed by the
+      // dialog; we only refresh the catalog once the dialog accepts the
+      // change — see promptStorageChange / cancelPendingStorageChange in
+      // storage/service.ts. To keep UX snappy, refresh immediately so the
+      // active highlight tracks the in-flight request.
+      promptStorageChange(getActiveStorageId(), id);
       refresh();
     }
   };

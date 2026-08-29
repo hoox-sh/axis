@@ -128,6 +128,7 @@ import {
   installPresentationControls,
   setPresentationRoot,
 } from './ui/presentation';
+import { StorageChangePrompt } from './ui/StorageChangePrompt';
 
 /** Primary charting workspace component mounted by `index.tsx`. */
 export const App: Component = () => {
@@ -520,6 +521,12 @@ export const App: Component = () => {
 
       {/* Opt-in error diagnostic share (telemetry.shareOnError) */}
       <ErrorShareToast />
+
+      {/* Global storage-engine change dialog (Migrate / Start fresh). Host
+          reads the shared signal from storage/service so every call site
+          (ScriptLibraryPanel, SettingsDialog, PluginsPage, PluginManager)
+          shares one dialog instance. */}
+      <StorageChangePrompt />
 
       {/* Skeleton ghost + dock zones while dragging a panel handle */}
       <PanelDragOverlay />

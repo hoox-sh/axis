@@ -46,6 +46,7 @@ import {
   listScriptVersions,
   readScriptVersion,
   restoreScriptVersion,
+  promptStorageChange,
 } from '../storage/service';
 import { importPyneFiles, isPyneFileName } from '../storage/import-pyne-files';
 import {
@@ -59,7 +60,6 @@ import {
 } from '../storage/library-publish';
 import { listStorages } from '../storage/catalog';
 import {
-  setActivePlugin,
   store,
   setStore,
   persist,
@@ -67,6 +67,7 @@ import {
   setStatus,
   isPanelOpen,
 } from '../store';
+import { getActiveStorageId } from '../plugins/active';
 import { pluginKey } from '../plugins/types';
 import { DEFAULT_GIT_CONFIG, type GitConfig } from '../storage/git-config';
 import {
@@ -827,7 +828,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
         <select
           class="sc-input"
           value={backend()}
-          onChange={(e) => setActivePlugin('storage', e.currentTarget.value)}
+          onChange={(e) => promptStorageChange(getActiveStorageId(), e.currentTarget.value)}
           title="Where user Pine scripts are stored"
         >
           <For each={storages()}>

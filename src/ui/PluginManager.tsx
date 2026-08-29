@@ -40,6 +40,8 @@ import { listSources } from '../sources/catalog';
 import { listStreams } from '../streams/catalog';
 import { listEngines } from '../engines/catalog';
 import { listStorages } from '../storage/catalog';
+import { promptStorageChange } from '../storage/service';
+import { getActiveStorageId } from '../plugins/active';
 import { registry } from '../plugins/registry';
 import { ScriptLibraryPanel } from './ScriptLibraryPanel';
 import { CapabilityBadges, engineOptionLabel } from './plugin-badges';
@@ -162,8 +164,17 @@ export const PluginManager: Component<Props> = (props) => {
   };
 
   const activate = (kind: string, id: string) => {
-    if (kind === 'source' || kind === 'stream' || kind === 'engine' || kind === 'storage') {
+    if (kind === 'source' || kind === 'stream' || kind === 'engine') {
       setActivePlugin(kind, id);
+      refresh();
+      return;
+    }
+    if (kind === 'storage') {
+      // Storage changes open the migrate-or-fresh dialog (hosted globally
+      // via <StorageChangePrompt />). The engine flip is committed by the
+      // dialog; refresh immediately so the active highlight tracks the
+      // in-flight request.
+      promptStorageChange(getActiveStorageId(), id);
       refresh();
     }
   };
