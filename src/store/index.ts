@@ -127,10 +127,13 @@ import {
   type ThemeTokenValue,
 } from '../theme';
 import { beginRunEpoch, releaseRunStatus } from '../indicators/run-helpers';
+import { detectScriptKind } from '../indicators/script-meta';
 import {
   normalizePriceScaleDecimalsMode,
   type PriceScaleDecimalsMode,
 } from '../chart/price-precision';
+import { saveRunResult, supportsRunResults } from '../storage/service';
+import type { ResultMeta, RunResult, StoredRunResult } from '../plugins/types';
 
 // Stable ID generation — uses timestamp prefix + counter to survive reloads
 let idCounter = 0;
@@ -1517,6 +1520,15 @@ export type SetLastRunOpts = {
    * Run). Silent live re-runs pass false so other scripts do not thrash the UI.
    */
   focus?: boolean;
+  /**
+   * When `'skip'`, do not persist this run to the storage backend. Used by
+   * tests and by ephemeral re-runs where persistence would be wasteful
+   * (e.g. silent live ticks that get re-rendered seconds later).
+   *
+   * Default: `'auto'` — persist when the active storage plugin supports
+   * `saveResult` (fire-and-forget; UI never blocks on the backend).
+   */
+  persistence?: 'auto' | 'skip';
 };
 
 function applyLastRunMs(result: unknown) {
@@ -1527,13 +1539,136 @@ function applyLastRunMs(result: unknown) {
 }
 
 /**
+ * Stable, semi-deterministic id for a single run.
+ *
+ * The seed mixes the script id, the engine-reported `startedAt`, and a hash of
+ * the inputs snapshot — re-running the same script with the same inputs at the
+ * same instant collapses to the same id, which lets the local storage plugin
+ * dedup on `(scriptId, runId)`. A short random suffix is appended so two runs
+ * inside the same millisecond with identical inputs still get distinct ids.
+ */
+function computeRunId(result: unknown, scriptId: string): string {
+  const meta = readResultMeta(result);
+  const seed = `${scriptId}:${meta.startedAt ?? 0}:${JSON.stringify(meta.inputs ?? {})}`;
+  const digest = hashHex(seed);
+  const rand =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().replace(/-/g, '').slice(0, 8)
+      : Math.random().toString(36).slice(2, 10);
+  return `${digest}_${rand}`;
+}
+
+/**
+ * Tiny non-cryptographic 32-bit hash (djb2-ish) rendered as 8 hex chars.
+ * Stable across sessions; collisions are acceptable because we still append a
+ * random suffix in {@link computeRunId}.
+ */
+function hashHex(input: string): string {
+  let h = 5381;
+  for (let i = 0; i < input.length; i++) {
+    h = ((h << 5) + h + input.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
+/**
+ * Best-effort script kind for the meta payload. The runner always stamps the
+ * Pine source on `result.meta.axisSource` via {@link withAxisSource}, so that
+ * is the canonical input. We fall through to `'unknown'` when the runner did
+ * not stamp the source (defensive — older payloads, tests).
+ */
+function detectRunScriptKind(result: unknown): ResultMeta['scriptKind'] {
+  const source = readResultMeta(result).axisSource;
+  if (typeof source === 'string' && source.trim()) {
+    const kind = detectScriptKind(source);
+    if (kind !== 'unknown') return kind;
+  }
+  return 'unknown';
+}
+
+/** Inputs snapshot persisted alongside the run (symbol / timeframe / params). */
+function extractRunInputs(result: unknown): Record<string, unknown> {
+  const meta = readResultMeta(result);
+  return {
+    symbol: meta.symbol ?? null,
+    timeframe: meta.timeframe ?? null,
+    inputs: meta.inputs ?? null,
+  };
+}
+
+/**
+ * Tolerant reader for the result `meta` bag — runners and engine plugins
+ * type this loosely so we fall through to `{}` when the shape is missing.
+ */
+function readResultMeta(result: unknown): {
+  ms?: number;
+  startedAt?: number;
+  inputs?: unknown;
+  symbol?: unknown;
+  timeframe?: unknown;
+  axisSource?: unknown;
+} {
+  if (result == null || typeof result !== 'object') return {};
+  const m = (result as { meta?: Record<string, unknown> }).meta;
+  return (m && typeof m === 'object') ? m : {};
+}
+
+/**
+ * Build the {@link ResultMeta} that {@link saveRunResult} persists. Pure —
+ * does not mutate the store or touch the backend.
+ */
+function buildResultMeta(result: unknown, scriptId: string): ResultMeta {
+  const meta = readResultMeta(result);
+  const startedAt =
+    typeof meta.startedAt === 'number' && Number.isFinite(meta.startedAt)
+      ? meta.startedAt
+      : Date.now();
+  const durationMs =
+    typeof meta.ms === 'number' && Number.isFinite(meta.ms) ? meta.ms : 0;
+  return {
+    scriptId,
+    runId: computeRunId(result, scriptId),
+    startedAt,
+    durationMs,
+    scriptKind: detectRunScriptKind(result),
+    label: undefined,
+    inputs: extractRunInputs(result),
+    schemaVersion: 1,
+  };
+}
+
+/**
+ * Fire-and-forget save — UI never blocks on the storage backend. Errors are
+ * logged via {@link appendLog} but never propagate, so a transient IDB failure
+ * cannot crash an interactive run.
+ */
+function persistRunResult(stored: StoredRunResult, scriptId: string): void {
+  if (typeof window === 'undefined') return;
+  saveRunResult(stored).catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    appendLog('warn', `Failed to persist run result for ${scriptId}: ${message}`, 'library');
+  });
+}
+
+/**
  * Store an indicator/strategy run payload for Results / Scriptlogs / Data View.
  *
  * Always writes {@link AppState.runResults}[scriptId]. Updates focused
  * {@link AppState.lastRun} only when this script is focused, or when
  * `focus: true` / no focus yet (auto-select first run).
+ *
+ * When `opts.persistence !== 'skip'` and the active storage plugin supports
+ * {@link StoragePlugin.saveResult}, the run is also persisted to durable
+ * storage via {@link saveRunResult}. The save is fire-and-forget — UI never
+ * blocks on the backend, and any failure is logged via {@link appendLog}.
+ *
+ * @returns The {@link ResultMeta.runId} persisted for this run, or `null`
+ *          when persistence was skipped (no in-memory run, or the caller
+ *          passed `persistence: 'skip'`, or the active storage plugin does
+ *          not implement `saveResult`). The id lets the UI link the in-memory
+ *          run to its stored counterpart for restore / dedup flows.
  */
-export function setLastRun(result: unknown, opts: SetLastRunOpts = {}) {
+export function setLastRun(result: unknown, opts: SetLastRunOpts = {}): string | null {
   const id =
     typeof opts.scriptId === 'string' && opts.scriptId.trim()
       ? opts.scriptId.trim()
@@ -1549,7 +1684,7 @@ export function setLastRun(result: unknown, opts: SetLastRunOpts = {}) {
     if (store.resultsFocusId === id) {
       setResultsFocusId(Object.keys(prev).filter((k) => k !== id)[0] ?? null);
     }
-    return;
+    return null;
   }
 
   setStore('runResults', id, result as never);
@@ -1562,6 +1697,49 @@ export function setLastRun(result: unknown, opts: SetLastRunOpts = {}) {
     setStore('lastRun', result as never);
     applyLastRunMs(result);
   }
+
+  // Persist (fire-and-forget) when the caller did not opt out and the active
+  // backend supports `saveResult`. We always compute the meta eagerly so the
+  // returned id is stable even if the backend has not flushed yet.
+  if (opts.persistence === 'skip') return null;
+  if (!supportsRunResults()) return null;
+
+  const meta = buildResultMeta(result, id);
+  const stored: StoredRunResult = {
+    meta,
+    result: isRunResult(result) ? result : { status: 'success', plots: [], events: [] },
+  };
+  persistRunResult(stored, id);
+  return meta.runId;
+}
+
+/**
+ * Type-guard for {@link RunResult} — checks the required status/plots/events
+ * shape so the persisted payload matches the storage contract.
+ */
+function isRunResult(value: unknown): value is RunResult {
+  if (value == null || typeof value !== 'object') return false;
+  const r = value as Record<string, unknown>;
+  return r.status === 'success' || r.status === 'error';
+}
+
+/**
+ * UI selector — read in-memory cached runs grouped by `scriptId` for the
+ * "Saved runs" tab in the Results modal. When `scriptId` is provided,
+ * returns just that slot (single value, `undefined` when the slot is empty);
+ * otherwise returns a snapshot of the full `runResults` bag.
+ *
+ * Backed by the in-memory cache only — the authoritative list of persisted
+ * runs lives in storage (`listRunResults(scriptId)`). The store mirror here
+ * is best-effort and reflects runs that the current session has executed;
+ * previous-session runs only appear after a `loadRunResult` round-trip.
+ */
+export function runResultsByStorage(scriptId?: string | null):
+  | Record<string, unknown>
+  | unknown {
+  const bag = store.runResults || {};
+  if (scriptId == null || !String(scriptId).trim()) return { ...bag };
+  return bag[String(scriptId).trim()];
 }
 
 /**

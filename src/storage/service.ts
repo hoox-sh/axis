@@ -31,13 +31,42 @@ import type {
   ScriptVersion,
   StoragePlugin,
   StorageStatus,
+  ResultMeta,
+  StoredRunResult,
 } from '../plugins/types';
+import { createSignal } from 'solid-js';
 import { ensureBuiltins } from '../plugins/bootstrap';
 import { getActiveStorage, getActiveStorageId } from '../plugins/active';
 import { metaFromScriptContent } from '../indicators/script-meta';
 import { getStorage } from './catalog';
 import { localStoragePlugin } from './local';
-import { appendLog } from '../store';
+import { appendLog, setActivePlugin } from '../store';
+
+/**
+ * Pending storage engine switch awaiting user decision. Consumed by
+ * {@link import('../ui/StorageChangePrompt').StorageChangePrompt}, which
+ * mounts a single global {@link import('../ui/StorageChangeDialog').default}
+ * and applies the final `setActivePlugin('storage', …)` after the user picks
+ * *Migrate*, *Start fresh*, or cancels.
+ *
+ * Single module-level signal so every call site (ScriptLibraryPanel,
+ * SettingsDialog, PluginsPage, PluginManager) shares one source of truth
+ * instead of each one duplicating dialog state.
+ */
+interface StorageChangeRequest {
+  /** Previous active storage id (e.g. `"local"`). */
+  from: string;
+  /** Target storage id the user just picked. */
+  to: string;
+}
+
+const [pendingStorageChange, setPendingStorageChange] =
+  createSignal<StorageChangeRequest | null>(null);
+
+// Re-export so UI consumers (Results modal "Saved runs" tab, badges) can
+// import the lightweight metadata + payload types from this façade without
+// reaching into the plugin layer.
+export type { ResultMeta, StoredRunResult };
 
 /** Active storage or local fallback; throws only if nothing is available. */
 function requireActive(): StoragePlugin {
@@ -143,6 +172,106 @@ export function getActiveStoragePlugin(): StoragePlugin {
   return requireActive();
 }
 
+/**
+ * Returns true when the active storage plugin implements the optional
+ * `saveResult` method (i.e. supports run-result persistence).
+ *
+ * Backends that omit `saveResult` (e.g. plain git / cloud storage without a
+ * results store) report `false` here. UI affordances (the "Saved runs" tab in
+ * the Results modal) should consult this before rendering — callers MUST
+ * still guard the call site itself with `plugin.saveResult?` for type
+ * narrowing.
+ */
+export function supportsRunResults(): boolean {
+  const p = getActiveStoragePlugin();
+  return typeof p?.saveResult === 'function';
+}
+
+/**
+ * Persist a completed strategy/indicator run, keyed by `(meta.scriptId,
+ * meta.runId)`. The active plugin receives the call when it implements
+ * `saveResult`; otherwise the run is written to the local plugin so users on
+ * git/cloud backends still get crash-recovery persistence.
+ *
+ * Throws when the chosen backend fails (quota, IDB unavailable, serialization
+ * error). Callers decide whether to surface or swallow the error.
+ */
+export async function saveRunResult(stored: StoredRunResult): Promise<void> {
+  const p = getActiveStoragePlugin();
+  if (typeof p?.saveResult === 'function') {
+    await p.saveResult(stored);
+    return;
+  }
+  // Fallback: write to local for crash recovery so cloud/git users still
+  // retain results between sessions.
+  const local = localAlways();
+  if (typeof local.saveResult !== 'function') {
+    throw new Error(
+      'No storage backend available that supports saveResult (active and local both lack the method)',
+    );
+  }
+  await local.saveResult(stored);
+}
+
+/**
+ * Load a previously saved run by `(scriptId, runId)`.
+ *
+ * Returns `null` when the active plugin either has no `loadResult` method
+ * or has no record for the requested ids — neither case is treated as an
+ * error. Backends that throw on corruption propagate the error to the caller.
+ */
+export async function loadRunResult(
+  scriptId: string,
+  runId: string,
+): Promise<StoredRunResult | null> {
+  const p = getActiveStoragePlugin();
+  if (typeof p?.loadResult === 'function') {
+    return p.loadResult(scriptId, runId);
+  }
+  return null;
+}
+
+/**
+ * List saved run metadata for a script (newest first). Returns `[]` when the
+ * active plugin does not implement `listResults` — UI consumers should treat
+ * this as "no saved runs", not as an error.
+ */
+export async function listRunResults(scriptId: string): Promise<ResultMeta[]> {
+  const p = getActiveStoragePlugin();
+  if (typeof p?.listResults === 'function') {
+    return p.listResults(scriptId);
+  }
+  return [];
+}
+
+/**
+ * Delete a saved run by `(scriptId, runId)`. Idempotent: silently no-ops when
+ * the run is absent on the active backend. Falls back to the local plugin
+ * when the active one lacks `removeResult` so a run that was written to local
+ * (via the `saveRunResult` fallback) can still be cleaned up.
+ */
+export async function removeRunResult(
+  scriptId: string,
+  runId: string,
+): Promise<void> {
+  const p = getActiveStoragePlugin();
+  if (typeof p?.removeResult === 'function') {
+    await p.removeResult(scriptId, runId);
+    return;
+  }
+  // Fallback: run may have been written to local (see saveRunResult). Try
+  // there for symmetry; the contract says remove is idempotent, so any error
+  // is intentionally swallowed.
+  try {
+    const local = localAlways();
+    if (typeof local.removeResult === 'function') {
+      await local.removeResult(scriptId, runId);
+    }
+  } catch {
+    /* idempotent — record may not exist */
+  }
+}
+
 /** True when the active storage can list/restore git commit history. */
 export function supportsScriptVersioning(): boolean {
   const p = requireActive();
@@ -210,6 +339,59 @@ export async function exportLibraryJson(): Promise<ScriptDocument[]> {
     docs.push(await readScript(m.id));
   }
   return docs;
+}
+
+// ---------------------------------------------------------------------------
+// Storage change dialog glue
+// ---------------------------------------------------------------------------
+
+/**
+ * Accessor for the pending storage-change request. Returns `null` when no
+ * dialog is open. Read by
+ * {@link import('../ui/StorageChangePrompt').StorageChangePrompt} to drive
+ * the global dialog host.
+ */
+export function getPendingStorageChange(): StorageChangeRequest | null {
+  return pendingStorageChange();
+}
+
+/**
+ * Ask the user to confirm switching the active storage engine from `oldId`
+ * to `newId`. Drop-in replacement for
+ * `setActivePlugin('storage', newId)` at every UI call site — wraps the
+ * flip in the {@link import('../ui/StorageChangeDialog').default} dialog so
+ * the user can pick *Migrate* or *Start fresh* (or cancel).
+ *
+ * Short-circuits silently when:
+ * - `newId` is empty (defensive)
+ * - `oldId` and `newId` are identical (no real change → no dialog)
+ * - `oldId` is empty (first-time set → no prior data to migrate)
+ *
+ * The dialog handles the actual per-script copy; once the user picks
+ * *Migrate* or *Start fresh* the global prompt component calls
+ * `setActivePlugin('storage', newId)` and clears the pending request.
+ */
+export function promptStorageChange(oldId: string, newId: string): void {
+  const from = String(oldId || '');
+  const to = String(newId || '');
+  if (!to) return;
+  if (from === to) return;
+  if (!from) {
+    // First-time set — no prior data to migrate, just flip.
+    setActivePlugin('storage', to);
+    return;
+  }
+  setPendingStorageChange({ from, to });
+}
+
+/** Cancel any in-flight storage change dialog. */
+export function cancelPendingStorageChange(): void {
+  setPendingStorageChange(null);
+}
+
+/** Test helper — reset module state between test cases. */
+export function _resetPendingStorageChangeForTests(): void {
+  setPendingStorageChange(null);
 }
 
 /** Import scripts into active storage (skips id conflicts by new id if forceNewIds). */

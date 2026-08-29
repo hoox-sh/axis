@@ -20,10 +20,11 @@
 /**
  * AXIS results — fullscreen studio overlay.
  *
- * Replaces the docked Results panel. Six restyled subpages (Events,
- * Strategy, Optimise, Plots, Metrics, Raw) share one studio canvas bound
- * to `store.lastRun` / `runResults`. Opens when `store.resultsPanel.open`
- * is set (auto for strategies, Topbar toggle, command palette).
+ * Replaces the docked Results panel. Seven restyled subpages (Events,
+ * Strategy, Optimise, Plots, Metrics, Raw, Saved) share one studio canvas
+ * bound to `store.lastRun` / `runResults`. Opens when
+ * `store.resultsPanel.open` is set (auto for strategies, Topbar toggle,
+ * command palette).
  *
  * @module ui/ResultsModal
  */
@@ -33,6 +34,7 @@ import {
   For,
   Show,
   createMemo,
+  createResource,
   createSignal,
   onCleanup,
   onMount,
@@ -42,6 +44,8 @@ import {
   store,
   setStore,
   setStrategyUi,
+  setLastRun,
+  appendLog,
 } from '../store';
 import type { RunResult } from '../indicators/runner';
 import {
@@ -61,8 +65,25 @@ import { ScriptRunSelect } from './ScriptRunSelect';
 import { HpoPanel } from './HpoPanel';
 import { copyToClipboard } from './clipboard';
 import { installFocusTrap } from './focus-trap';
+import {
+  listRunResults,
+  loadRunResult,
+  removeRunResult,
+  supportsRunResults,
+  type ResultMeta,
+  type StoredRunResult,
+} from '../storage/service';
+import { getActiveStorageId } from '../plugins/active';
+import { MAX_RESULTS_PER_SCRIPT } from '../storage/local';
 
-type TabId = 'events' | 'strategy' | 'optimise' | 'plots' | 'metrics' | 'raw';
+type TabId =
+  | 'events'
+  | 'strategy'
+  | 'optimise'
+  | 'plots'
+  | 'metrics'
+  | 'raw'
+  | 'saved';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'events', label: 'Events' },
@@ -71,6 +92,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'plots', label: 'Plots' },
   { id: 'metrics', label: 'Metrics' },
   { id: 'raw', label: 'Raw' },
+  { id: 'saved', label: 'Saved' },
 ];
 
 function isResultsTab(v: unknown): v is TabId {
@@ -80,7 +102,8 @@ function isResultsTab(v: unknown): v is TabId {
     v === 'optimise' ||
     v === 'plots' ||
     v === 'metrics' ||
-    v === 'raw'
+    v === 'raw' ||
+    v === 'saved'
   );
 }
 
@@ -126,6 +149,66 @@ function Sparkline(props: { data: (number | null)[]; positive?: boolean }) {
       />
     </svg>
   );
+}
+
+/** Format a `ResultMeta.startedAt` epoch ms as `2026-08-29 12:34:56` (local). */
+function formatSavedAt(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '—';
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return '—';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+/** Format a run duration for the saved-runs row (e.g. `"234 ms"`, `"1.2s"`). */
+function formatSavedDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(s < 10 ? 2 : 1)}s`;
+  const m = Math.floor(s / 60);
+  const rem = s - m * 60;
+  return `${m}m ${rem.toFixed(0)}s`;
+}
+
+/** Default label for a saved-run row when `meta.label` is missing. */
+function defaultSavedLabel(run: ResultMeta): string {
+  const kind = run.scriptKind ?? 'run';
+  const at = formatSavedAt(run.startedAt);
+  // "Strategy @ 2026-08-29 12:34:56"
+  return `${kind.charAt(0).toUpperCase()}${kind.slice(1)} @ ${at}`;
+}
+
+/** Extract symbol/timeframe strings from `ResultMeta.inputs` (engine-fed). */
+function savedRunMarket(run: ResultMeta): { symbol: string; timeframe: string } {
+  const inputs = run.inputs ?? {};
+  const symbol = String(
+    (inputs as Record<string, unknown>).symbol ??
+      (inputs as Record<string, unknown>).ticker ??
+      '',
+  ).trim();
+  const timeframe = String(
+    (inputs as Record<string, unknown>).timeframe ??
+      (inputs as Record<string, unknown>).interval ??
+      '',
+  ).trim();
+  return { symbol, timeframe };
+}
+
+interface SavedStatsSummary {
+  trades?: number;
+  winRate?: number;
+  totalPnl?: number;
+}
+
+function readSavedStats(raw: unknown): SavedStatsSummary {
+  if (!raw || typeof raw !== 'object') return {};
+  const v = raw as Record<string, unknown>;
+  const out: SavedStatsSummary = {};
+  if (typeof v.trades === 'number') out.trades = v.trades;
+  if (typeof v.winRate === 'number') out.winRate = v.winRate;
+  if (typeof v.totalPnl === 'number') out.totalPnl = v.totalPnl;
+  return out;
 }
 
 /** Fullscreen results studio overlay. */
@@ -276,6 +359,139 @@ export const ResultsModal: Component = () => {
     }
   });
 
+  // ── Saved runs tab (storage-backed) ───────────────────────────────────
+  //
+  // Lists previously persisted `RunResult`s for the focused script. The list
+  // is driven by `listRunResults(scriptId)` from the storage service; it
+  // re-fetches whenever:
+  //   • the focused script changes (`store.resultsFocusId`)
+  //   • the active storage engine changes (`store.activePlugins.storage`)
+  //   • the modal opens
+  //   • a new run completes (`store.lastRunMs` change — proxy for `setLastRun`)
+  //   • the user clicks the badge / refresh button (manual `savedRunsTick++`)
+  //
+  // When the active plugin does not implement `saveResult`, the resource is
+  // short-circuited to an empty array so the tab / badge disappear cleanly.
+
+  /** Script id used to key `saveResult` — mirrors what `setLastRun()` persists. */
+  const savedRunsScriptId = createMemo<string | null>(() => {
+    const focus = store.resultsFocusId;
+    if (focus && String(focus).trim()) return String(focus);
+    const r = store.lastRun;
+    if (r && typeof r === 'object') {
+      const meta = (r as { meta?: { script_id?: string } }).meta;
+      if (meta?.script_id) return String(meta.script_id);
+    }
+    return null;
+  });
+
+  /** Bumped by hand to force a re-fetch of the saved-runs resource. */
+  const [savedRunsTick, setSavedRunsTick] = createSignal(0);
+
+  const [savedRunsResource] = createResource<
+    ResultMeta[],
+    {
+      scriptId: string | null;
+      tick: number;
+      supports: boolean;
+      storageId: string;
+      open: boolean;
+      lastRunMs: number | null;
+    }
+  >(
+    () => ({
+      // Subscribe inside the source so Solid tracks each dep and refetches.
+      scriptId: savedRunsScriptId(),
+      tick: savedRunsTick(),
+      supports: supportsRunResults(),
+      storageId: getActiveStorageId(),
+      open: !!store.resultsPanel.open,
+      lastRunMs: store.lastRunMs,
+    }),
+    async (src) => {
+      if (!src.supports || !src.open || !src.scriptId) return [] as ResultMeta[];
+      try {
+        const list = await listRunResults(src.scriptId);
+        return Array.isArray(list) ? list : [];
+      } catch (err) {
+        // Surface to the resource consumer as `state === 'errored'`; never throw.
+        throw err instanceof Error ? err : new Error(String(err));
+      }
+    },
+  );
+
+  /** Defensive copy of the saved-runs list (safe to sort/filter in templates). */
+  const savedRuns = createMemo<ResultMeta[]>(() => {
+    if (savedRunsResource.state === 'errored') return [];
+    return savedRunsResource() ?? [];
+  });
+
+  const savedRunsError = createMemo<string | null>(() => {
+    if (savedRunsResource.state !== 'errored') return null;
+    const e = savedRunsResource.error;
+    return e instanceof Error ? e.message : String(e);
+  });
+
+  const reloadSavedRuns = () => setSavedRunsTick((n) => n + 1);
+
+  const restoreSavedRun = async (run: ResultMeta) => {
+    if (!supportsRunResults()) return;
+    try {
+      const stored: StoredRunResult | null = await loadRunResult(
+        run.scriptId,
+        run.runId,
+      );
+      if (!stored) return;
+      // Push the loaded payload back into the store; skip persistence since
+      // the run is already on disk.
+      setLastRun(stored.result, {
+        scriptId: run.scriptId,
+        focus: true,
+        persistence: 'skip',
+      });
+      // Switch to the Strategy tab for strategy runs (matches what the
+      // runner dispatches on a fresh close), otherwise fall back to Events.
+      const isStrategy =
+        stored.result?.events?.length ||
+        run.scriptKind === 'strategy' ||
+        run.scriptKind === 'indicator';
+      setTab(isStrategy ? 'strategy' : 'events');
+      reloadSavedRuns();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      appendLog('warn', `Failed to restore run ${run.runId}: ${msg}`, 'library');
+    }
+  };
+
+  const deleteSavedRun = async (run: ResultMeta) => {
+    // Confirmation prompt (AC: destructive delete requires explicit consent).
+    const label = run.label || `${run.scriptKind ?? 'run'} @ ${formatSavedAt(run.startedAt)}`;
+    const ok =
+      typeof window === 'undefined'
+        ? true
+        : window.confirm(
+            `Delete saved run "${label}"? This cannot be undone.`,
+          );
+    if (!ok) return;
+    try {
+      await removeRunResult(run.scriptId, run.runId);
+      reloadSavedRuns();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      appendLog('warn', `Failed to delete run ${run.runId}: ${msg}`, 'library');
+    }
+  };
+
+  /** Active storage engine id — shown in the badge tooltip and empty state. */
+  const storageEngineId = () => getActiveStorageId();
+
+  /** Open the Saved tab from any UI control (badge click, etc.). */
+  const openSavedTab = () => {
+    if (!supportsRunResults()) return;
+    setTab('saved');
+    reloadSavedRuns();
+  };
+
   const flashCopied = async (text: string) => {
     if (await copyToClipboard(text)) {
       setCopied(true);
@@ -405,6 +621,33 @@ export const ResultsModal: Component = () => {
                 </button>
               </div>
             </header>
+
+            {/* Storage badge — only visible when the active plugin supports
+                `saveResult`. Shows saved-runs count + active engine id, and
+                switches to the "Saved" tab on click. */}
+            <Show when={supportsRunResults()}>
+              <div
+                class="flex items-center gap-2 px-6 py-2 border-b border-[color:var(--color-border-soft)]"
+                data-testid="axis-results-saved-badge-row"
+              >
+                <button
+                  type="button"
+                  class="ax-chip"
+                  data-testid="axis-results-saved-badge"
+                  title={`Saved runs · storage: ${storageEngineId()}`}
+                  aria-label={`Open saved runs (${savedRuns().length})`}
+                  onClick={openSavedTab}
+                >
+                  <Icons.database />
+                  <span class="ax-mono">{savedRuns().length} saved</span>
+                  <span class="text-text-faint">·</span>
+                  <span class="text-text-dim">{storageEngineId()}</span>
+                </button>
+                <Show when={savedRunsResource.loading}>
+                  <Icons.loader class="animate-spin text-text-faint" />
+                </Show>
+              </div>
+            </Show>
 
             <StudioTabs
               tabs={TABS}
@@ -561,6 +804,183 @@ export const ResultsModal: Component = () => {
                   {/* Raw */}
                   <Show when={result() && tab() === 'raw'}>
                     <pre class="ax-code" data-testid="axis-results-raw">{rawJson()}</pre>
+                  </Show>
+
+                  {/* Saved runs (storage-backed) — only when the active plugin
+                      supports `saveResult`. Otherwise the tab is effectively
+                      hidden because `supportsRunResults()` is false and we
+                      render an explicit notice. */}
+                  <Show when={tab() === 'saved'}>
+                    <Show
+                      when={supportsRunResults()}
+                      fallback={
+                        <div class="ax-empty">
+                          Saved runs are unavailable on the current storage engine
+                          ({storageEngineId()}). Switch to a backend that supports
+                          <code class="ax-mono"> saveResult</code> to use this tab.
+                        </div>
+                      }
+                    >
+                      <div class="ax-stack ax-stack--compact" data-testid="axis-results-saved">
+                        <div class="flex items-center gap-2 py-2">
+                          <span class="ax-card-kicker">Storage</span>
+                          <span class="text-text-dim ax-mono">{storageEngineId()}</span>
+                          <span class="flex-1" />
+                          <button
+                            type="button"
+                            class="ax-btn ax-btn--ghost"
+                            title="Refresh saved runs"
+                            data-testid="axis-results-saved-refresh"
+                            onClick={reloadSavedRuns}
+                          >
+                            <Icons.refresh class={savedRunsResource.loading ? 'animate-spin' : ''} />
+                            Refresh
+                          </button>
+                        </div>
+
+                        <Show when={savedRunsResource.loading && savedRuns().length === 0}>
+                          <div class="ax-empty">
+                            <Icons.loader class="animate-spin" />
+                            <span class="ml-2">Loading saved runs…</span>
+                          </div>
+                        </Show>
+
+                        <Show when={savedRunsError()}>
+                          <div
+                            class="ax-error border border-[color-mix(in_srgb,var(--color-red)_40%,transparent)] bg-[color-mix(in_srgb,var(--color-red)_8%,transparent)] p-2 rounded-[var(--radius-surface)]"
+                            data-testid="axis-results-saved-error"
+                          >
+                            <div class="font-medium">Failed to list saved runs</div>
+                            <div class="text-text-dim text-xs mt-1">{savedRunsError()}</div>
+                            <button
+                              type="button"
+                              class="ax-btn ax-btn--ghost mt-2"
+                              onClick={reloadSavedRuns}
+                            >
+                              <Icons.refresh />
+                              Retry
+                            </button>
+                          </div>
+                        </Show>
+
+                        <Show when={!savedRunsResource.loading && !savedRunsError() && savedRuns().length === 0}>
+                          <div class="ax-empty" data-testid="axis-results-saved-empty">
+                            <div>
+                              No saved runs yet
+                              <Show when={savedRunsScriptId()}>
+                                {' '}for <code class="ax-mono">{savedRunsScriptId()}</code>
+                              </Show>
+                              . Run a strategy to persist the first result.
+                            </div>
+                            <div class="text-text-dim text-xs mt-2">
+                              Stored in <span class="ax-mono">{storageEngineId()}</span>; FIFO cap
+                              {' '}
+                              <span class="ax-mono">{MAX_RESULTS_PER_SCRIPT}</span>
+                              {' '}
+                              runs per script.
+                            </div>
+                          </div>
+                        </Show>
+
+                        <Show when={savedRuns().length > 0}>
+                          <ul class="ax-list" data-testid="axis-results-saved-list">
+                            <For each={savedRuns()}>
+                              {(run) => {
+                                const market = savedRunMarket(run);
+                                const stats = readSavedStats(run.stats);
+                                return (
+                                  <li class="ax-row" data-testid="axis-results-saved-row">
+                                    <div class="flex-1 min-w-0">
+                                      <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="ax-mono text-text truncate">
+                                          {run.label || defaultSavedLabel(run)}
+                                        </span>
+                                        <span
+                                          class={`ax-chip text-xs ${
+                                            run.scriptKind === 'strategy'
+                                              ? 'is-on'
+                                              : ''
+                                          }`}
+                                          title={`Script kind: ${run.scriptKind ?? 'unknown'}`}
+                                        >
+                                          {run.scriptKind ?? 'unknown'}
+                                        </span>
+                                        <Show when={market.symbol || market.timeframe}>
+                                          <span class="text-text-dim ax-mono text-xs truncate">
+                                            {market.symbol}
+                                            <Show when={market.symbol && market.timeframe}>
+                                              <span class="text-text-faint"> · </span>
+                                            </Show>
+                                            {market.timeframe}
+                                          </span>
+                                        </Show>
+                                      </div>
+                                      <div class="flex items-center gap-3 mt-1 text-xs text-text-dim flex-wrap">
+                                        <span class="ax-mono">{formatSavedAt(run.startedAt)}</span>
+                                        <span class="text-text-faint">·</span>
+                                        <span>{formatSavedDuration(run.durationMs)}</span>
+                                        <Show when={stats.trades} keyed>
+                                          {(trades) => (
+                                            <>
+                                              <span class="text-text-faint">·</span>
+                                              <span>{trades} trades</span>
+                                            </>
+                                          )}
+                                        </Show>
+                                        <Show when={stats.winRate} keyed>
+                                          {(winRate) => (
+                                            <>
+                                              <span class="text-text-faint">·</span>
+                                              <span>{winRate.toFixed(1)}% win</span>
+                                            </>
+                                          )}
+                                        </Show>
+                                        <Show when={stats.totalPnl} keyed>
+                                          {(totalPnl) => (
+                                            <>
+                                              <span class="text-text-faint">·</span>
+                                              <span class={totalPnl >= 0 ? 'text-positive' : 'text-negative'}>
+                                                P&amp;L {formatMoney(totalPnl)}
+                                              </span>
+                                            </>
+                                          )}
+                                        </Show>
+                                      </div>
+                                    </div>
+                                    <div class="flex items-center gap-1 flex-shrink-0">
+                                      <button
+                                        type="button"
+                                        class="ax-btn ax-btn--ghost"
+                                        title="Restore this run into the in-memory Results view"
+                                        data-testid="axis-results-saved-restore"
+                                        onClick={() => void restoreSavedRun(run)}
+                                      >
+                                        <Icons.check />
+                                        Restore
+                                      </button>
+                                      <button
+                                        type="button"
+                                        class="ax-btn ax-btn--ghost ax-btn--danger"
+                                        title="Delete this saved run (irreversible)"
+                                        data-testid="axis-results-saved-delete"
+                                        onClick={() => void deleteSavedRun(run)}
+                                      >
+                                        <Icons.trash />
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </li>
+                                );
+                              }}
+                            </For>
+                          </ul>
+                          <div class="text-text-dim text-xs">
+                            {savedRuns().length} run{savedRuns().length === 1 ? '' : 's'} ·
+                            {' '}FIFO cap <span class="ax-mono">{MAX_RESULTS_PER_SCRIPT}</span>
+                          </div>
+                        </Show>
+                      </div>
+                    </Show>
                   </Show>
                 </div>
               </div>

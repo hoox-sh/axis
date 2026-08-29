@@ -20,6 +20,15 @@
 /**
  * Minimal IndexedDB helpers for AXIS script storage (local plugin).
  * Promise wrappers around IDBRequest / transactions; `idbAvailable` gates SSR/tests.
+ *
+ * ## Versioned schema upgrades
+ *
+ * `openDb(name, version, onUpgrade)` calls `onUpgrade(db, oldVersion)` once
+ * during `onupgradeneeded`. Implementers MUST branch on `oldVersion` (e.g.
+ * `if (oldVersion < 2) { ... }`) so existing object stores / records are
+ * preserved across bumps — never recreate a store that already exists
+ * (use `objectStoreNames.contains(name)` as a guard). Add new stores /
+ * indices inside their own `oldVersion < N` block.
  */
 
 /** True when the browser exposes a usable `indexedDB` global. */

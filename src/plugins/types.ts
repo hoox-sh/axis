@@ -106,6 +106,15 @@ export interface PluginCapabilities {
    * False/omit for ticker-bucketed or synthetic bars.
    */
   klineStream?: boolean;
+  /**
+   * True when the storage plugin supports persisted run results
+   * (`saveResult` / `loadResult` / `listResults` / `removeResult`).
+   * UI surfaces (Results modal "Saved runs" tab) use this flag to decide
+   * whether to render the saved-results affordance; callers MUST still
+   * guard the method itself with `plugin.saveResult?` since the flag is
+   * informational.
+   */
+  results?: boolean;
 }
 
 /** Shared fields on every plugin kind. */
@@ -285,6 +294,45 @@ export interface EnginePlugin extends PluginBase {
   run(opts: EngineOpts): Promise<RunResult>;
 }
 
+/**
+ * Lightweight metadata describing a persisted strategy/indicator run.
+ *
+ * Intentionally distinct from `RunResult` (which holds the full event/series
+ * payload): `ResultMeta` is what list views and saved-results badges render
+ * without loading the heavy `RunResult` body.
+ *
+ * Implementations of `StoragePlugin.saveResult?` receive a paired
+ * {@link StoredRunResult}; backends should persist `meta` separately from
+ * `result` so listings stay cheap.
+ */
+export interface ResultMeta {
+  /** Stable identifier; usually the script id, e.g. `"main.pine"`. */
+  scriptId: string;
+  /** Unique per-run id (uuid or hash of inputs + timestamp). */
+  runId: string;
+  /** Run start time, epoch ms. */
+  startedAt: number;
+  /** Run duration ms. */
+  durationMs: number;
+  /** Script kind for the result (strategy/indicator/library). */
+  scriptKind?: 'indicator' | 'strategy' | 'library' | 'unknown';
+  /** Strategy stats snapshot (optional, derived). */
+  stats?: unknown;
+  /** Title override (defaults to script name + timestamp). */
+  label?: string;
+  /** Free-form inputs snapshot (symbol, timeframe, params). */
+  inputs?: Record<string, unknown>;
+  /** Schema version for migrations. */
+  schemaVersion: 1;
+}
+
+/** Pair of {@link ResultMeta} + the full {@link RunResult} payload. */
+export interface StoredRunResult {
+  meta: ResultMeta;
+  /** The full RunResult — events, series, drawings, logs, etc. */
+  result: RunResult;
+}
+
 // --- Storage (PR2 — interface reserved) ---
 
 export interface ScriptMeta {
@@ -375,6 +423,67 @@ export interface StoragePlugin extends PluginBase {
     rev: string,
     config?: Record<string, unknown>,
   ): Promise<ScriptDocument>;
+
+  /**
+   * Persist a completed strategy/indicator run keyed by `(scriptId, runId)`.
+   *
+   * Payload shape: `{ meta: ResultMeta, result: RunResult }`. Implementations
+   * serialize the full `result` body (events, series, drawings, logs,
+   * profile) alongside the lightweight `meta`. Derived `ClosedTrade[]`,
+   * `StrategyStats`, and equity-curve snapshots already live on `result.meta`
+   * / `result.events` in the current engine output, so no extra shaping is
+   * required at the type layer.
+   *
+   * Semantics:
+   * - MUST be idempotent for the same `(scriptId, runId)` — later saves
+   *   overwrite the prior record.
+   * - SHOULD throw on quota / quota-exceeded / serialization failures.
+   *   Callers decide whether to surface or swallow the error.
+   *
+   * Drafts / local-only storage (`localStoragePlugin`) is the default
+   * implementation. Cloud and git backends may omit this method —
+   * callers MUST check `plugin.saveResult` before invoking it.
+   */
+  saveResult?(stored: StoredRunResult, config?: Record<string, unknown>): Promise<void>;
+
+  /**
+   * Load a previously saved run by `(scriptId, runId)`.
+   *
+   * - Returns `null` when the run is not present on this backend
+   *   (callers should treat this as "no saved record", not an error).
+   * - MAY throw on corruption / deserialization failure.
+   *
+   * Drafts / local-only storage is the default implementation. Cloud and
+   * git backends may omit this method.
+   */
+  loadResult?(
+    scriptId: string,
+    runId: string,
+    config?: Record<string, unknown>,
+  ): Promise<StoredRunResult | null>;
+
+  /**
+   * List {@link ResultMeta} for a given script, newest first.
+   *
+   * Returned entries are safe to render in lists — implementations MUST NOT
+   * inline the full `RunResult` here (callers should call `loadResult` if
+   * they need the body).
+   *
+   * Returns an empty array when the script has no saved runs.
+   *
+   * Drafts / local-only storage is the default implementation. Cloud and
+   * git backends may omit this method.
+   */
+  listResults?(scriptId: string, config?: Record<string, unknown>): Promise<ResultMeta[]>;
+
+  /**
+   * Delete a saved run. Idempotent — silently no-op when the run does not
+   * exist. SHOULD NOT affect other runs for the same script.
+   *
+   * Drafts / local-only storage is the default implementation. Cloud and
+   * git backends may omit this method.
+   */
+  removeResult?(scriptId: string, runId: string, config?: Record<string, unknown>): Promise<void>;
 }
 
 // --- Dataset (on-chain / alternate series) ---
