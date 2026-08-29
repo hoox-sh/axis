@@ -30,13 +30,24 @@ describe('pickOrigin', () => {
   it('echoes product AXIS / HOOX / project-scoped Pages origins', () => {
     expect(pickOrigin(req('https://axis.hoox.sh'), env)).toBe('https://axis.hoox.sh');
     expect(pickOrigin(req('https://hoox.sh'), env)).toBe('https://hoox.sh');
-    expect(pickOrigin(req('https://pynescript.ai'), env)).toBe('https://pynescript.ai');
+    expect(pickOrigin(req('https://pynescript.online'), env)).toBe('https://pynescript.online');
+    expect(pickOrigin(req('https://app.pynescript.online'), env)).toBe(
+      'https://app.pynescript.online',
+    );
     expect(pickOrigin(req('https://feat-onchain-data-plane.pynescript-axis.pages.dev'), env)).toBe(
       'https://feat-onchain-data-plane.pynescript-axis.pages.dev',
     );
     expect(pickOrigin(req('https://pynescript-axis.pages.dev'), env)).toBe(
       'https://pynescript-axis.pages.dev',
     );
+  });
+
+  it('does NOT echo the retired pynescript.ai product host', () => {
+    // pynescript.ai was retired in favor of pynescript.online. PRODUCT_ORIGIN_RE
+    // no longer matches it; the request falls back to the configured ALLOWED_ORIGIN
+    // (or the production default), which is pynescript.online.
+    expect(pickOrigin(req('https://pynescript.ai'), env)).toBe('https://app.example.com');
+    expect(pickOrigin(req('https://app.pynescript.ai'), env)).toBe('https://app.example.com');
   });
 
   it('does not echo arbitrary *.pages.dev hosts', () => {

@@ -320,7 +320,7 @@ Invariants & edge cases
 . AXIS ≠ execution. Strategy events on the Results panel are not HOOX orders. See AXIS and HOOX.
 . No none stream plugin in src/streams/catalog.ts. Pausing live data is stopLive(), not a plugin id.
 . Pyodide wheel version can lag PyPI (.. wheel vs hoox-pyne ..). Check vendor/.
-. CORS: Worker allows localhost, .hoox.sh, .pynescript.ai, .pynescript.online, .pynescript-axis.pages.dev only.
+. CORS: Worker allows localhost, .hoox.sh, .pynescript.online, .pynescript-axis.pages.dev only.
 Worked examples
 Local desk
 ``bash
@@ -1154,13 +1154,12 @@ Localhost/ allowlisting is safe for CORS: only pages actually served from those 
 . Product hosts (..+)
 Exact product / HOOX / legacy PYNE hosts under:
 .hoox.sh / hoox.sh
-.pynescript.ai / pynescript.ai
 .pynescript.online / pynescript.online
-Examples: https://axis.hoox.sh, https://hoox.sh, https://pynescript.ai.
+Examples: https://axis.hoox.sh, https://hoox.sh, https://pynescript.online.
 . Project-scoped Cloudflare Pages (not open .pages.dev)
 Only origins matching .pynescript-axis.pages.dev (and the apex pynescript-axis.pages.dev) are echoed. Arbitrary third-party Pages projects (evil.pages.dev, other apps) fall through to the allowlist fallback — they are not reflected.
 . ALLOWEDORIGIN allowlist
-Comma-separated exact origins in env.ALLOWEDORIGIN (e.g. https://a.example,https://b.example). If the request Origin is listed, echo it; otherwise return the first entry (default https://pynescript.ai).
+Comma-separated exact origins in env.ALLOWEDORIGIN (e.g. https://a.example,https://b.example). If the request Origin is listed, echo it; otherwise return the first entry (default https://pynescript.online).
 CORS headers applied:
 ``
 Access-Control-Allow-Origin:
@@ -6088,7 +6087,7 @@ Vars ([vars])
 | Var | Default (repo) | Role |
 | --- | --- | --- |
 | EXTERNALBACKEND | "" | Flask (or other) base URL for /api/run proxy |
-| ALLOWEDORIGIN | https://pynescript.ai | Extra CORS allowlist (comma-separated); product hosts built-in |
+| ALLOWEDORIGIN | https://pynescript.online | Extra CORS allowlist (comma-separated); product hosts built-in |
 | ADMINTOKEN | "" | Shared secret for key minting |
 | PYODIDEINWORKER | "disabled" | Gate in-worker Python |
 | ALLOWOPENKEYS | "" | Local demos; set "" in prod |

@@ -65,7 +65,7 @@ export type GitUserInfo = {
  * - Cloudflare Worker (`workers.dev`, wrangler `:8787`)
  * - PYNE Pro API (`:5002`) after `backend.api.git_oauth` is registered
  * - Same-origin Pages / product hosts when Worker routes are attached
- * - Explicit product hosts (hoox.sh, pynescript.ai)
+ * - Explicit product hosts (hoox.sh, pynescript.online)
  *
  * Never accepts forge hosts (github.com / gitlab.com) as the proxy.
  */
@@ -80,7 +80,7 @@ export function isOAuthProxyBase(
 
   if (e.includes('workers.dev')) return true;
   if (e.includes('pyne-worker') || e.includes('pine-worker')) return true;
-  if (e.includes('hoox.sh') || e.includes('pynescript.ai') || e.includes('pynescript.online')) {
+  if (e.includes('hoox.sh') || e.includes('pynescript.online')) {
     return true;
   }
 

@@ -63,10 +63,9 @@ Localhost/127 allowlisting is **safe for CORS**: only pages actually served from
 Exact product / HOOX / legacy PYNE hosts under:
 
 - `*.hoox.sh` / `hoox.sh`
-- `*.pynescript.ai` / `pynescript.ai`
 - `*.pynescript.online` / `pynescript.online`
 
-Examples: `https://axis.hoox.sh`, `https://hoox.sh`, `https://pynescript.ai`.
+Examples: `https://axis.hoox.sh`, `https://hoox.sh`, `https://pynescript.online`.
 
 ### 3. Project-scoped Cloudflare® Pages (not open `*.pages.dev`)
 
@@ -74,7 +73,7 @@ Only origins matching **`*.pynescript-axis.pages.dev`** (and the apex `pynescrip
 
 ### 4. `ALLOWED_ORIGIN` allowlist
 
-Comma-separated exact origins in `env.ALLOWED_ORIGIN` (e.g. `https://a.example,https://b.example`). If the request Origin is listed, echo it; otherwise return the **first** entry (default `https://pynescript.ai`).
+Comma-separated exact origins in `env.ALLOWED_ORIGIN` (e.g. `https://a.example,https://b.example`). If the request Origin is listed, echo it; otherwise return the **first** entry (default `https://pynescript.online`).
 
 **CORS headers applied:**
 

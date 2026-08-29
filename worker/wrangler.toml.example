@@ -61,7 +61,7 @@ database_id = "REPLACE_WITH_D1_DATABASE_ID"
 # When unset, /api/run returns 503 with a hint to set EXTERNAL_BACKEND or
 # install the full Python wheel inside the Worker (see worker/RUNTIME.md).
 EXTERNAL_BACKEND = ""
-ALLOWED_ORIGIN = "https://pynescript.ai"
+ALLOWED_ORIGIN = "https://pynescript.online"
 ADMIN_TOKEN = ""
 PYODIDE_IN_WORKER = "disabled"
 # Local demos without KV: set to "1" to accept any Bearer key for /api/scripts

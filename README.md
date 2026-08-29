@@ -258,9 +258,9 @@ CORS is enforced by the **API you call** (pyne Pro API or the AXIS Worker), not 
 ### Pyne Pro API
 
 `backend/app.py` uses `flask-cors` with `ALLOWED_ORIGINS` (comma-separated). Defaults include
-`https://pynescript.ai`, `https://app.pynescript.ai`, and a **localhost/127.0.0.1 any-port** regex.
+`https://pynescript.online`, `https://app.pynescript.online`, and a **localhost/127.0.0.1 any-port** regex.
 Product Origins are **always appended** even when systemd sets a short list:
-`*.hoox.sh`, `*.pynescript.ai`, `*.pynescript.online`, and **`*.pynescript-axis.pages.dev`**
+`*.hoox.sh`, `*.pynescript.online`, and **`*.pynescript-axis.pages.dev`**
 (not open `*.pages.dev`). `GET /health` and `POST /run` always reflect the request Origin
 so a Cloudflare Pages preview can probe/run against `https://pynescript.online`.
 
@@ -286,7 +286,7 @@ Environment=ALLOWED_ORIGINS=https://pynescript.online,https://axis.hoox.sh,https
 
 ### AXIS Worker
 
-`worker/src/index.ts` `pickOrigin` echoes `localhost` / `127.0.0.1`, known product hosts (`*.hoox.sh`, `*.pynescript.ai`, …), and **`*.pynescript-axis.pages.dev`** only (not open `*.pages.dev`); otherwise comma-separated `ALLOWED_ORIGIN` (first entry is fallback). See [CORS docs](https://hoox.sh/axis/docs/devops/cors-and-origins).
+`worker/src/index.ts` `pickOrigin` echoes `localhost` / `127.0.0.1`, known product hosts (`*.hoox.sh`, `*.pynescript.online`), and **`*.pynescript-axis.pages.dev`** only (not open `*.pages.dev`); otherwise comma-separated `ALLOWED_ORIGIN` (first entry is fallback). See [CORS docs](https://hoox.sh/axis/docs/devops/cors-and-origins).
 Smoke:
 
 ```bash

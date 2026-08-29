@@ -121,7 +121,7 @@ const LOCAL_DEV_ORIGIN_RE = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i;
  * Additional preview hosts can be listed in `ALLOWED_ORIGIN`.
  */
 const PRODUCT_ORIGIN_RE =
-  /^https:\/\/(?:(?:[\w-]+\.)*(?:hoox\.sh|pynescript\.ai|pynescript\.online)|(?:[\w-]+\.)*pynescript-axis\.pages\.dev)$/i;
+  /^https:\/\/(?:(?:[\w-]+\.)*(?:hoox\.sh|pynescript\.online)|(?:[\w-]+\.)*pynescript-axis\.pages\.dev)$/i;
 
 /**
  * Resolve `Access-Control-Allow-Origin` for this request.
@@ -138,14 +138,14 @@ export function pickOrigin(req: Request, env: Env): string {
     return reqOrigin;
   }
   // Comma-separated allowlist in ALLOWED_ORIGIN (e.g. "https://a.com,https://b.com")
-  const allowed = String(env.ALLOWED_ORIGIN || 'https://pynescript.ai')
+  const allowed = String(env.ALLOWED_ORIGIN || 'https://pynescript.online')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
   if (reqOrigin && allowed.includes(reqOrigin)) {
     return reqOrigin;
   }
-  return allowed[0] || 'https://pynescript.ai';
+  return allowed[0] || 'https://pynescript.online';
 }
 
 /** JSON body + CORS headers shared by all non-stream routes. */
