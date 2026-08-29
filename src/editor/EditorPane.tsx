@@ -25,7 +25,9 @@
  * **icon + label** always (no hover slide-in): **Run**, **Library**,
  * **Scriptlogs**, **Profiler**. Secondary tools (inline debug, chart pins,
  * column ruler, format) live in a **right overflow** next to close.
- * **Open in new tab** is in the left dock menu and the overflow panel options.
+ * **Open in new tab** is in the overflow panel options (right side, next to close).
+ * The left dock menu's generic "New tab" already covers opening this panel in
+ * a new window, so the editor does not need a duplicate `menuExtra` entry.
  *
  * Set `standalone` for the `?view=editor` popout window (simplified chrome).
  *
@@ -402,20 +404,12 @@ export const EditorPane: Component<Props> = (props) => {
     </div>
   );
 
-  /** Left hamburger: open editor in a full browser tab (dock items stay in shell). */
-  const editorMenuExtra = (
-    <button
-      type="button"
-      role="menuitem"
-      class="axis-panel-menu-item"
-      title="Open editor in a new browser tab"
-      data-testid="axis-editor-btn-new-tab"
-      onClick={() => popoutLiveEditor('tab')}
-    >
-      <Icons.externalLink size={14} />
-      <span>Open in new tab</span>
-    </button>
-  );
+  /**
+   * Left dock menu (rendered by {@link FloatableShell}) intentionally has NO
+   * editor-specific `menuExtra`: the generic DOCK_MENU "New tab" entry already
+   * opens this panel in a window, and the editor's "Open in new tab" lives in
+   * the right overflow menu below.
+   */
 
   /** Right overflow (next to close): view / debug / format / window toggles. */
   const editorOverflowMenu = () => (
@@ -486,7 +480,7 @@ export const EditorPane: Component<Props> = (props) => {
         class="min-h-0 h-full flex-1"
         headerExtra={editorTools}
         headerEnd={editorOverflowMenu()}
-        menuExtra={editorMenuExtra}
+        menuExtra={undefined}
         onPopoutWindow={() => popoutLiveEditor('popup')}
       >
         <div class="flex flex-col h-full min-h-0 flex-1 overflow-hidden">
