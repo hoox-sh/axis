@@ -97,10 +97,10 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
       : 'Fills at signal bar close (default)';
 
   return (
-    <div class="ax-stack ax-stack--compact min-h-0" data-testid="axis-strategy-report">
+    <div class="ax-stack ax-stack--compact" data-testid="axis-strategy-report">
       {/* Fill / marker options (apply without re-run) */}
       <div
-        class="ax-chip-row ax-field"
+        class="ax-toggle-grid ax-toggle-grid--3"
         data-testid="axis-strategy-fill-opts"
       >
         <label class="ax-toggle" title={fillHint()}>
@@ -186,13 +186,10 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
 
           {/* Equity curve */}
           <div class="ax-card" data-testid="axis-strategy-equity">
-            <div class="flex items-center justify-between gap-2 mb-2">
+            <div class="ax-toolbar">
               <div class="ax-card-kicker">Equity (cum. PnL)</div>
-              <div
-                class={`font-mono text-[1.05rem] tabular-nums ${
-                  finalEquity() >= 0 ? 'text-accent-2' : 'text-red'
-                }`}
-              >
+              <span class="ax-toolbar-spacer" />
+              <div class={`ax-mono ${finalEquity() >= 0 ? 'ax-table-pos' : 'ax-table-neg'}`}>
                 {formatMoney(finalEquity())}
               </div>
             </div>
@@ -203,11 +200,12 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
           <div class="ax-strat-col">
             {/* Trades table + export */}
             <div class="ax-section">
-            <div class="flex items-center justify-between gap-2">
+            <div class="ax-toolbar">
               <h3 class="ax-section-title">Closed trades</h3>
+              <span class="ax-toolbar-spacer" />
               <button
                 type="button"
-                class="ax-btn ax-btn--ghost text-[0.92rem]"
+                class="ax-btn ax-btn--ghost"
                 title="Export closed trades CSV"
                 data-testid="axis-strategy-export-csv"
                 onClick={exportCsv}
@@ -218,41 +216,37 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
               </button>
             </div>
 
-            <div
-              class="overflow-auto border border-border-soft max-h-[min(360px,42vh)] min-h-0"
-              data-testid="axis-strategy-trades"
-            >
-              <table class="w-full text-left font-mono text-[0.85rem]">
-                <thead class="bg-bg-panel text-text-faint sticky top-0 z-[1]">
+            <div class="ax-table-wrap" data-testid="axis-strategy-trades">
+              <table class="ax-table ax-table--jump">
+                <thead>
                   <tr>
-                    <th class="px-2 py-1.5">ID</th>
-                    <th class="px-2 py-1.5">Dir</th>
-                    <th class="px-2 py-1.5">Qty</th>
-                    <th class="px-2 py-1.5">Entry time</th>
-                    <th class="px-2 py-1.5">Entry</th>
-                    <th class="px-2 py-1.5">Exit time</th>
-                    <th class="px-2 py-1.5">Exit</th>
-                    <th class="px-2 py-1.5">P&L</th>
-                    <th class="px-2 py-1.5">%</th>
+                    <th>ID</th>
+                    <th>Dir</th>
+                    <th>Qty</th>
+                    <th>Entry time</th>
+                    <th>Entry</th>
+                    <th>Exit time</th>
+                    <th>Exit</th>
+                    <th>P&L</th>
+                    <th>%</th>
                   </tr>
                 </thead>
                 <tbody>
                   <For each={props.trades}>
                     {(t) => (
                       <tr
-                        class="border-t border-border-soft cursor-pointer hover:bg-bg-hover transition-colors"
                         title="Jump to entry on chart"
                         onClick={() => props.onJumpToTrade?.(t, 'entry')}
                       >
-                        <td class="px-2 py-1 truncate max-w-[72px]">{t.id}</td>
-                        <td class="px-2 py-1">{t.dir}</td>
-                        <td class="px-2 py-1 tabular-nums">
+                        <td>{t.id}</td>
+                        <td>{t.dir}</td>
+                        <td>
                           {(t.qty ?? 1) % 1 === 0
                             ? String(t.qty ?? 1)
                             : (t.qty ?? 1).toFixed(4)}
                         </td>
                         <td
-                          class="px-2 py-1 text-accent hover:underline whitespace-nowrap"
+                          class="ax-table-link"
                           title="Jump to entry"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -261,9 +255,8 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
                         >
                           {formatTradeTime(t.entryTime)}
                         </td>
-                        <td class="px-2 py-1 tabular-nums">{t.entry.toFixed(2)}</td>
+                        <td>{t.entry.toFixed(2)}</td>
                         <td
-                          class="px-2 py-1 hover:underline whitespace-nowrap"
                           title="Jump to exit"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -272,19 +265,11 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
                         >
                           {formatTradeTime(t.exitTime)}
                         </td>
-                        <td class="px-2 py-1 tabular-nums">{t.exit.toFixed(2)}</td>
-                        <td
-                          class={`px-2 py-1 tabular-nums ${
-                            t.pnl >= 0 ? 'text-accent-2' : 'text-red'
-                          }`}
-                        >
+                        <td>{t.exit.toFixed(2)}</td>
+                        <td class={t.pnl >= 0 ? 'ax-table-pos' : 'ax-table-neg'}>
                           {formatMoney(t.pnl)}
                         </td>
-                        <td
-                          class={`px-2 py-1 tabular-nums ${
-                            t.pnlPct >= 0 ? 'text-accent-2' : 'text-red'
-                          }`}
-                        >
+                        <td class={t.pnlPct >= 0 ? 'ax-table-pos' : 'ax-table-neg'}>
                           {formatPct(t.pnlPct)}
                         </td>
                       </tr>

@@ -257,20 +257,18 @@ function SlotRail(props: {
                   </h4>
                   <span class="ax-card-kicker">{slot.contract}</span>
                   <Show when={slot.optional}>
-                    <span class="ax-chip">optional</span>
+                    <span class="ax-chip ax-chip--tag">optional</span>
                   </Show>
                   <Show when={drift()}>
-                    {(d) => {
-                      const DriftIcon = DRIFT_ICON[d().drift];
-                      return (
-                        <span
-                          class={`ax-status ax-ml-auto ${d().drift === 'removed' ? 'ax-status--down' : 'ax-status--idle'}`}
-                        >
-                          <DriftIcon />
-                          {d().drift}
-                        </span>
-                      );
-                    }}
+                    {(d) => (
+                      <span
+                        class={`ax-chip ax-chip--tag ax-ml-auto${
+                          d().drift === 'removed' ? ' ax-chip--danger' : ' is-on'
+                        }`}
+                      >
+                        {d().drift}
+                      </span>
+                    )}
                   </Show>
                 </div>
                 <StudioHint>{slot.role}</StudioHint>

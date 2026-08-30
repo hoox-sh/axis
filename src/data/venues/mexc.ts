@@ -44,6 +44,7 @@ export function mexcSpotSymbol(symbol: string): string {
 
 /**
  * Chart TF → MEXC REST `interval`. Hourly is `60m` (not `1h`); weekly is `1W`.
+ * Venue also documents `1M` (mapped through if the UI ever grows a month TF).
  */
 export function mexcKlineInterval(interval: string): string {
   const m: Record<string, string> = {
@@ -55,6 +56,7 @@ export function mexcKlineInterval(interval: string): string {
     '4h': '4h',
     '1d': '1d',
     '1w': '1W',
+    '1M': '1M',
   };
   return m[interval] || '1d';
 }

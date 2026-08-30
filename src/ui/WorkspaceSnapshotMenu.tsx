@@ -330,11 +330,11 @@ export const WorkspaceSnapshotMenu: Component = () => {
   };
 
   return (
-    <div class="flex flex-col gap-2" data-testid="axis-workspace-snapshot">
-      <div class="flex flex-wrap gap-2">
+    <div class="ax-stack ax-stack--tight" data-testid="axis-workspace-snapshot">
+      <div class="ax-inline">
         <button
           type="button"
-          class="sc-btn"
+          class="ax-btn ax-btn--ghost"
           data-testid="axis-workspace-export"
           title="Download full workspace snapshot as JSON (no OHLCV bars)"
           disabled={busy()}
@@ -345,7 +345,7 @@ export const WorkspaceSnapshotMenu: Component = () => {
         </button>
         <button
           type="button"
-          class="sc-btn"
+          class="ax-btn ax-btn--ghost"
           data-testid="axis-workspace-import"
           title="Import a previously exported workspace JSON"
           disabled={busy()}
@@ -363,18 +363,18 @@ export const WorkspaceSnapshotMenu: Component = () => {
           onChange={(e) => void onImportFile(e)}
         />
       </div>
-      <p class="text-[10px] text-text-faint">
+      <p class="ax-hint">
         Snapshot includes symbol, layout, panel chrome, drawings, theme/scale, editor prefs, and
         applied scripts. Bars are omitted by default. Import confirms before applying; invalid
         files never wipe your data.
       </p>
       <Show when={msg()}>
-        <p class="text-[10px] font-mono text-accent-2" data-testid="axis-workspace-snapshot-msg">
+        <p class="ax-hint ax-hint--accent ax-mono" data-testid="axis-workspace-snapshot-msg">
           {msg()}
         </p>
       </Show>
       <Show when={err()}>
-        <p class="text-[10px] font-mono text-red" data-testid="axis-workspace-snapshot-err">
+        <p class="ax-error ax-mono" data-testid="axis-workspace-snapshot-err">
           {err()}
         </p>
       </Show>

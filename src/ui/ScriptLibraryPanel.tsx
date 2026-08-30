@@ -352,7 +352,7 @@ const LibraryScriptCard: Component<{
               <HooxLoader size="xs" /> Loading commits…
             </div>
           </Show>
-          <ul class="flex flex-col gap-0.5 max-h-44 overflow-auto">
+          <ul class="flex flex-col gap-0.5">
             <For each={versions()}>
               {(v) => (
                 <li
@@ -1193,7 +1193,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
           fallback={<div class="text-text-faint p-2">No saved scripts yet.</div>}
         >
           <ul
-            class="flex flex-col gap-1 max-h-[min(480px,50vh)] overflow-auto"
+            class="flex flex-col gap-1"
             data-testid="axis-library-script-list"
           >
             <For each={items()}>

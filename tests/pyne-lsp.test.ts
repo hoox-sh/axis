@@ -221,6 +221,16 @@ x = ta.sma(close, 14)
     expect(meta?.label).toBe('plot.style_stepline');
   });
 
+  it('looks up syminfo.mintick as a host variable (not a function snippet)', () => {
+    const mintick = lookupBuiltin('syminfo.mintick');
+    expect(mintick?.label).toBe('syminfo.mintick');
+    expect(mintick?.kind).toBe('constant');
+    expect(mintick?.snippet).toBeUndefined();
+    // prefix/ticker stay callables from pyne-builtins.json
+    expect(lookupBuiltin('syminfo.prefix')?.kind).not.toBe('constant');
+    expect(lookupBuiltin('syminfo.tickerid')?.kind).toBe('constant');
+  });
+
   it('resolves style= across multi-line plot() for any script', () => {
     const doc = `//@version=5
 indicator("t")

@@ -286,8 +286,6 @@ async function fetchKraken(): Promise<SymbolEntry[]> {
 }
 
 async function fetchMexc(): Promise<SymbolEntry[]> {
-  // Route through `fetchMexcJson` so a failed direct `api.mexc.com` call
-  // transparently falls back to the AXIS Worker allowlisted proxy.
   const data = (await fetchMexcJson({ path: 'exchangeInfo' })) as {
     symbols?: Array<{
       symbol: string;

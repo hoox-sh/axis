@@ -23,6 +23,7 @@ export {
   StudioToggle,
   StudioHint,
 } from './StudioField';
+export { StudioColorInput } from './StudioColorInput';
 export { StudioSection } from './StudioSection';
 export {
   StudioCard,
@@ -38,3 +39,4 @@ export {
 export type { StudioHealth } from './StudioDisplay';
 export { StudioTabs } from './StudioTabs';
 export { StudioFooter } from './StudioFooter';
+export { StudioJson } from './StudioJson';

@@ -505,3 +505,49 @@ export function formatReplacement(
       return transp > 0 ? fmts.pineNew : fmts.hex6;
   }
 }
+
+/** Map a scanned hit kind to a replacement style. */
+export function styleFromColorKind(
+  kind: PineColorKind,
+): 'hex' | 'rgb' | 'new' | 'named' {
+  if (kind === 'named') return 'named';
+  if (kind === 'rgb') return 'rgb';
+  if (kind === 'new') return 'new';
+  return 'hex';
+}
+
+/**
+ * Rewrite `previous` using RGB from a native picker, keeping the user's
+ * format (hex, rgb/rgba, color.rgb, color.new, named enum).
+ */
+export function rewriteColorKeepingFormat(previous: string, next: RgbaColor): string {
+  const prev = parseColorInput(previous);
+  const a = prev && prev.a < 255 ? prev.a : next.a;
+  const c = rgbaFromChannels(next.r, next.g, next.b, a);
+  const fmts = colorFormats(c);
+  const s = previous.trim();
+  if (/^color\.[A-Za-z]+$/.test(s) || PINE_NAMED_COLORS[s.toLowerCase()]) {
+    return fmts.named || fmts.hex6;
+  }
+  if (/^rgba\(/i.test(s)) return fmts.cssRgba;
+  if (/^rgb\(/i.test(s)) return c.a < 255 ? fmts.cssRgba : fmts.cssRgb;
+  if (/^color\.rgb\s*\(/i.test(s)) {
+    return c.a < 255 ? fmts.pineRgbTransp : fmts.pineRgb;
+  }
+  if (/^color\.new\s*\(/i.test(s)) return fmts.pineNew;
+  if (c.a < 255) return fmts.cssRgba;
+  return fmts.hex6;
+}
+
+/**
+ * Replacement text after picking a hex in an inline chip. Preserves
+ * `color.rgb` / `color.new` / named / hex and the hit's transparency.
+ */
+export function formatPickedChipColor(
+  hit: Pick<PineColorHit, 'kind' | 'transp'>,
+  hex6: string,
+): string | null {
+  const p = parseColorInput(hex6);
+  if (!p) return null;
+  return formatReplacement(p.r, p.g, p.b, hit.transp, styleFromColorKind(hit.kind));
+}

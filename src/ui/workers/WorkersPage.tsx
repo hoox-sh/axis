@@ -352,7 +352,8 @@ export function WorkersPage(props: {
           <p class="ax-error">{actionErr()}</p>
         </Show>
 
-        <div class="ax-split">
+        <div class="ax-deck">
+          <div class="ax-deck-pane">
           <StudioSection
             title="Inventory"
             lead="Each card is a way AXIS can run Pine or fetch data. Click one to inspect health, features, and install steps."
@@ -391,6 +392,21 @@ export function WorkersPage(props: {
             </div>
           </StudioSection>
 
+          <StudioSection title="Related" lead="The contract catalog lives next door — not nested here.">
+            <StudioCard
+              kicker="Catalog"
+              title="Open Plugins"
+              testId="axis-workers-goto-plugins"
+              onClick={openPlugins}
+            >
+              <StudioHint>
+                Sources, streams, engines, storage, and the script library. Compose them on Wire.
+              </StudioHint>
+            </StudioCard>
+          </StudioSection>
+          </div>
+
+          <div class="ax-deck-pane ax-deck-pane--inspect">
           <Show when={selected()} fallback={<StudioHint>Select a worker.</StudioHint>}>
             {(w) => {
               const r = () => selectedResult();
@@ -439,7 +455,7 @@ export function WorkersPage(props: {
 
                   <Show when={features().length}>
                     <StudioSection title="Features" lead="Flags from the last successful probe.">
-                      <StudioList>
+                      <StudioList class="ax-list--dense">
                         <For each={features()}>
                           {([k, v]) => (
                             <StudioRow>
@@ -570,20 +586,8 @@ export function WorkersPage(props: {
               );
             }}
           </Show>
+          </div>
         </div>
-
-        <StudioSection title="Related" lead="The contract catalog lives next door — not nested here.">
-          <StudioCard
-            kicker="Catalog"
-            title="Open Plugins"
-            testId="axis-workers-goto-plugins"
-            onClick={openPlugins}
-          >
-            <StudioHint>
-              Sources, streams, engines, storage, and the script library. Compose them on Wire.
-            </StudioHint>
-          </StudioCard>
-        </StudioSection>
       </div>
       <StudioFooter status={footerStatus()}>
         <StudioButton

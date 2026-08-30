@@ -193,6 +193,50 @@ export const PINE_ENUM_PATHS: readonly string[] = [
   'chart.left_visible_bar_time',
   'chart.right_visible_bar_time',
   'chart.is_standard',
+
+  // syminfo.* variables — pyne-builtins.json only ships prefix/ticker callables
+  'syminfo.basecurrency',
+  'syminfo.country',
+  'syminfo.currency',
+  'syminfo.current_contract',
+  'syminfo.description',
+  'syminfo.dividends_per_share',
+  'syminfo.earnings_per_share',
+  'syminfo.employees',
+  'syminfo.expiration_date',
+  'syminfo.industry',
+  'syminfo.isin',
+  'syminfo.main_tickerid',
+  'syminfo.market_capitalization',
+  'syminfo.mincontract',
+  'syminfo.minmove',
+  'syminfo.mintick',
+  'syminfo.pointvalue',
+  'syminfo.pricescale',
+  'syminfo.recommendations_buy',
+  'syminfo.recommendations_buy_strong',
+  'syminfo.recommendations_date',
+  'syminfo.recommendations_hold',
+  'syminfo.recommendations_sell',
+  'syminfo.recommendations_sell_strong',
+  'syminfo.recommendations_total',
+  'syminfo.root',
+  'syminfo.sector',
+  'syminfo.session',
+  'syminfo.shareholders',
+  'syminfo.shares_outstanding_float',
+  'syminfo.shares_outstanding_total',
+  'syminfo.suffix',
+  'syminfo.target_price_average',
+  'syminfo.target_price_date',
+  'syminfo.target_price_estimates',
+  'syminfo.target_price_high',
+  'syminfo.target_price_low',
+  'syminfo.target_price_median',
+  'syminfo.tickerid',
+  'syminfo.timezone',
+  'syminfo.type',
+  'syminfo.volumetype',
 ];
 
 /**
@@ -270,6 +314,17 @@ const ENUM_BLURBS: Record<string, { detail: string; brief: string }> = {
   'chart.left_visible_bar_time': { detail: 'chart viewport', brief: 'Leftmost visible bar time' },
   'chart.right_visible_bar_time': { detail: 'chart viewport', brief: 'Rightmost visible bar time' },
   'chart.is_standard': { detail: 'chart', brief: 'True when the chart type is standard' },
+  'syminfo.mintick': { detail: 'syminfo', brief: 'Minimum price increment (tick size)' },
+  'syminfo.minmove': { detail: 'syminfo', brief: 'Minimum price move in ticks' },
+  'syminfo.pricescale': { detail: 'syminfo', brief: 'Price scale (10^decimals)' },
+  'syminfo.pointvalue': { detail: 'syminfo', brief: 'Currency value of one point' },
+  'syminfo.tickerid': { detail: 'syminfo', brief: 'Exchange:ticker identifier' },
+  'syminfo.timezone': { detail: 'syminfo', brief: 'Exchange IANA timezone' },
+  'syminfo.currency': { detail: 'syminfo', brief: 'Quote currency' },
+  'syminfo.basecurrency': { detail: 'syminfo', brief: 'Base currency' },
+  'syminfo.description': { detail: 'syminfo', brief: 'Full symbol description' },
+  'syminfo.type': { detail: 'syminfo', brief: 'Instrument type (stock, crypto, …)' },
+  'syminfo.session': { detail: 'syminfo', brief: 'Session string for the symbol' },
 };
 
 function defaultBlurb(path: string): { detail: string; brief: string } {
@@ -278,7 +333,7 @@ function defaultBlurb(path: string): { detail: string; brief: string } {
   const ns = path.includes('.') ? path.slice(0, path.indexOf('.')) : path;
   const member = path.includes('.') ? path.slice(path.indexOf('.') + 1) : path;
   return {
-    detail: `${ns} enum`,
+    detail: ns === 'syminfo' ? `${ns} variable` : `${ns} enum`,
     brief: member.replace(/_/g, ' '),
   };
 }

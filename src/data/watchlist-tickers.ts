@@ -231,32 +231,65 @@ async function fetchCoinbase(symbols: string[]): Promise<Record<string, WatchTic
   return next;
 }
 
-/** MEXC 24hr tickers (Binance-shaped). All-book then filter.
- * Uses {@link fetchMexcJson} so the request transparently falls back from
- * direct `api.mexc.com` to the AXIS Worker allowlisted proxy when the
- * browser hits CORS / geo blocks. */
+type MexcTickerRow = {
+  symbol: string;
+  lastPrice: string;
+  priceChangePercent: string;
+  openPrice?: string;
+};
+
+function asMexcTickerRows(data: unknown): MexcTickerRow[] {
+  if (Array.isArray(data)) return data as MexcTickerRow[];
+  if (data && typeof data === 'object' && 'symbol' in data && 'lastPrice' in data) {
+    return [data as MexcTickerRow];
+  }
+  throw new Error('mexc ticker: unexpected body');
+}
+
+function tickerFromMexc(t: MexcTickerRow): WatchTicker {
+  const price = parseFloat(t.lastPrice);
+  const open = t.openPrice != null ? parseFloat(t.openPrice) : NaN;
+  return {
+    price,
+    change: parseFloat(t.priceChangePercent),
+    open24h: Number.isFinite(open) ? open : undefined,
+    source: 'mexc',
+  };
+}
+
+/** Per-symbol `?symbol=` stays cheap; above this, one full-book request wins. */
+const MEXC_SINGLE_TICKER_MAX = 8;
+
+/** MEXC 24hr tickers (Binance-shaped). `symbol=` when the list is small; else the full book. */
 async function fetchMexc(symbols: string[]): Promise<Record<string, WatchTicker>> {
-  const data = (await fetchMexcJson({ path: 'ticker/24hr' })) as Array<{
-    symbol: string;
-    lastPrice: string;
-    priceChangePercent: string;
-    openPrice?: string;
-  }>;
-  if (!Array.isArray(data)) throw new Error('mexc ticker: unexpected body');
+  if (symbols.length <= MEXC_SINGLE_TICKER_MAX) {
+    const next: Record<string, WatchTicker> = {};
+    await Promise.all(
+      symbols.map(async (orig) => {
+        const key = toUsdt(orig);
+        try {
+          const data = await fetchMexcJson({
+            path: 'ticker/24hr',
+            query: `symbol=${key}`,
+          });
+          const t = asMexcTickerRows(data).find((row) => row.symbol === key);
+          if (!t) return;
+          next[orig] = tickerFromMexc(t);
+        } catch {
+          /* skip missing / invalid symbol */
+        }
+      }),
+    );
+    return next;
+  }
+
+  const data = asMexcTickerRows(await fetchMexcJson({ path: 'ticker/24hr' }));
   const bySym = new Map(data.map((t) => [t.symbol, t]));
   const next: Record<string, WatchTicker> = {};
   for (const orig of symbols) {
-    const key = toUsdt(orig);
-    const t = bySym.get(key);
+    const t = bySym.get(toUsdt(orig));
     if (!t) continue;
-    const price = parseFloat(t.lastPrice);
-    const open = t.openPrice != null ? parseFloat(t.openPrice) : NaN;
-    next[orig] = {
-      price,
-      change: parseFloat(t.priceChangePercent),
-      open24h: Number.isFinite(open) ? open : undefined,
-      source: 'mexc',
-    };
+    next[orig] = tickerFromMexc(t);
   }
   return next;
 }

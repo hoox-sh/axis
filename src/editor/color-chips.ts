@@ -22,7 +22,8 @@
  * (line-height × line-height) before each color literal / `color.*` form.
  *
  * Uses {@link scanPineColors} for hex, named, `color.rgb`, and `color.new`.
- * Click selects the color range in the document.
+ * Click opens a native color picker and selects the range; picking rewrites
+ * the source in the original form (hex / named / color.rgb / color.new).
  *
  * @module editor/color-chips
  */
@@ -37,8 +38,10 @@ import {
 } from '@codemirror/view';
 import { RangeSetBuilder, type Extension } from '@codemirror/state';
 import {
+  formatPickedChipColor,
   scanPineColors,
   toCssRgba,
+  toHex6,
   rgbaFromChannels,
   transpToAlpha,
   type PineColorHit,
@@ -49,8 +52,8 @@ class ColorChipWidget extends WidgetType {
   constructor(
     readonly css: string,
     readonly title: string,
-    readonly from: number,
-    readonly to: number,
+    readonly hex6: string,
+    readonly hit: PineColorHit,
   ) {
     super();
   }
@@ -59,20 +62,22 @@ class ColorChipWidget extends WidgetType {
     return (
       other.css === this.css &&
       other.title === this.title &&
-      other.from === this.from &&
-      other.to === this.to
+      other.hex6 === this.hex6 &&
+      other.hit.from === this.hit.from &&
+      other.hit.to === this.hit.to &&
+      other.hit.kind === this.hit.kind &&
+      other.hit.transp === this.hit.transp
     );
   }
 
   toDOM(view: EditorView) {
     const wrap = document.createElement('span');
     wrap.className = 'cm-pine-color-chip';
-    wrap.title = this.title;
+    wrap.title = `${this.title} · click to pick`;
     wrap.setAttribute('role', 'button');
-    wrap.setAttribute('aria-label', `Color ${this.title}`);
+    wrap.setAttribute('aria-label', `Pick color ${this.title}`);
     wrap.tabIndex = -1;
 
-    // line-height × line-height (square), matching the current CM metrics
     const lh = Math.max(10, Math.round(view.defaultLineHeight || 16));
     wrap.style.width = `${lh}px`;
     wrap.style.height = `${lh}px`;
@@ -83,23 +88,41 @@ class ColorChipWidget extends WidgetType {
     fill.setAttribute('aria-hidden', 'true');
     wrap.appendChild(fill);
 
-    const from = this.from;
-    const to = this.to;
-    const select = (e: Event) => {
-      e.preventDefault();
+    const from = this.hit.from;
+    const to = this.hit.to;
+    const hit = this.hit;
+
+    const picker = document.createElement('input');
+    picker.type = 'color';
+    picker.className = 'cm-pine-color-chip-picker';
+    picker.value = this.hex6.toLowerCase();
+    picker.setAttribute('aria-label', `Pick color ${this.title}`);
+    picker.addEventListener('click', (e) => {
       e.stopPropagation();
       view.dispatch({
         selection: { anchor: from, head: to },
         scrollIntoView: true,
       });
-      view.focus();
-    };
-    wrap.addEventListener('mousedown', select);
+    });
+    // Apply on close (`change`), not `input` — live input remounts the widget
+    // and would dismiss the native picker.
+    picker.addEventListener('change', () => {
+      const replacement = formatPickedChipColor(hit, picker.value);
+      if (!replacement) return;
+      const current = view.state.doc.sliceString(from, to);
+      if (current !== hit.text && current !== replacement) return;
+      view.dispatch({
+        changes: { from, to, insert: replacement },
+        selection: { anchor: from, head: from + replacement.length },
+        scrollIntoView: true,
+      });
+    });
+    wrap.appendChild(picker);
     return wrap;
   }
 
-  ignoreEvent(event: Event) {
-    return event.type !== 'mousedown' && event.type !== 'click';
+  ignoreEvent() {
+    return true;
   }
 
   /** Chips are atomic UI; don’t expand selection into the widget. */
@@ -128,15 +151,14 @@ export function buildColorChipDecorations(doc: string): DecorationSet {
 }
 
 function decorationForHit(hit: PineColorHit) {
-  const css = toCssRgba(
-    rgbaFromChannels(hit.r, hit.g, hit.b, transpToAlpha(hit.transp)),
-  );
+  const rgba = rgbaFromChannels(hit.r, hit.g, hit.b, transpToAlpha(hit.transp));
+  const css = toCssRgba(rgba);
   const title =
     hit.transp > 0
       ? `${hit.text} · transp ${hit.transp}`
       : hit.text;
   return Decoration.widget({
-    widget: new ColorChipWidget(css, title, hit.from, hit.to),
+    widget: new ColorChipWidget(css, title, toHex6(rgba), hit),
     side: -1,
   });
 }
@@ -173,6 +195,7 @@ const colorChipsPlugin = ViewPlugin.fromClass(
 /** Theme: square chip with checkerboard underlay for translucent colors. */
 export const colorChipsTheme = EditorView.baseTheme({
   '.cm-pine-color-chip': {
+    position: 'relative',
     display: 'inline-block',
     verticalAlign: 'text-bottom',
     marginRight: '0.3em',
@@ -203,6 +226,17 @@ export const colorChipsTheme = EditorView.baseTheme({
     width: '100%',
     height: '100%',
     pointerEvents: 'none',
+  },
+  '.cm-pine-color-chip-picker': {
+    position: 'absolute',
+    inset: '0',
+    width: '100%',
+    height: '100%',
+    padding: '0',
+    margin: '0',
+    border: '0',
+    opacity: '0',
+    cursor: 'pointer',
   },
   '.cm-pine-color-chip:hover': {
     outline: '1px solid var(--color-accent, #939fff)',

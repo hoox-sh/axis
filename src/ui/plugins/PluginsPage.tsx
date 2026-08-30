@@ -250,9 +250,9 @@ export function PluginsPage(props: {
             id="axis-plugins-panel-catalog"
             role="tabpanel"
             aria-labelledby="axis-plugins-tab-catalog"
-            style={{ display: 'flex', 'flex-direction': 'column', gap: 'var(--ax-gap)' }}
+            class="ax-split-col"
           >
-            <div class="ax-grid ax-grid--3">
+            <div class="ax-grid ax-grid--4">
               <StudioStat label="Source" value={activeName(sources(), activeSourceId())} />
               <StudioStat label="Stream" value={activeName(streams(), activeStreamId())} />
               <StudioStat label="Engine" value={activeName(engines(), activeEngineId())} />
@@ -278,6 +278,7 @@ export function PluginsPage(props: {
               </StudioHint>
             </StudioSection>
 
+            <div class="ax-catalog-grid">
             <For each={catalogSections()}>
               {(section) => (
                 <StudioSection title={section.title} lead={section.lead}>
@@ -285,34 +286,38 @@ export function PluginsPage(props: {
                     when={section.items.length}
                     fallback={<StudioEmpty>No {section.title.toLowerCase()} registered.</StudioEmpty>}
                   >
-                    <StudioList>
+                    <StudioList class="ax-list--entity">
                       <For each={section.items}>
                         {(p) => {
                           const active = () => section.activeId === p.id;
                           return (
                             <StudioRow>
-                              <div style={{ flex: '1', 'min-width': '0', display: 'flex', 'flex-direction': 'column', gap: '0.4rem' }}>
-                                <div class="ax-inline" style={{ 'align-items': 'baseline', gap: '0.7rem' }}>
-                                  <span class="ax-card-title">{p.name}</span>
-                                  <span class="ax-card-kicker">{p.id}</span>
+                              <div class="ax-entity">
+                                <div class="ax-entity-body">
+                                  <div class="ax-entity-head">
+                                    <span class="ax-card-title">{p.name}</span>
+                                    <span class="ax-card-kicker">{p.id}</span>
+                                  </div>
+                                  <CapabilityBadges
+                                    capabilities={p.capabilities}
+                                    builtIn={p.builtIn}
+                                    active={active()}
+                                  />
+                                  <Show when={p.description}>
+                                    <StudioHint>{p.description}</StudioHint>
+                                  </Show>
                                 </div>
-                                <CapabilityBadges
-                                  capabilities={p.capabilities}
-                                  builtIn={p.builtIn}
-                                  active={active()}
-                                />
-                                <Show when={p.description}>
-                                  <StudioHint>{p.description}</StudioHint>
-                                </Show>
+                                <div class="ax-entity-actions">
+                                  <StudioButton
+                                    variant={active() ? 'ghost' : 'primary'}
+                                    disabled={active()}
+                                    onClick={() => activate(section.kind, p.id)}
+                                    title={active() ? 'Currently active' : `Use ${engineOptionLabel(p)}`}
+                                  >
+                                    {active() ? 'Active' : 'Use'}
+                                  </StudioButton>
+                                </div>
                               </div>
-                              <StudioButton
-                                variant={active() ? 'ghost' : 'primary'}
-                                disabled={active()}
-                                onClick={() => activate(section.kind, p.id)}
-                                title={active() ? 'Currently active' : `Use ${engineOptionLabel(p)}`}
-                              >
-                                {active() ? 'Active' : 'Use'}
-                              </StudioButton>
                             </StudioRow>
                           );
                         }}
@@ -322,23 +327,26 @@ export function PluginsPage(props: {
                 </StudioSection>
               )}
             </For>
+            </div>
 
             <Show when={kindFilter() === 'all' && components().length}>
               <StudioSection title="Components" lead="Host UI slots registered with the plugin registry.">
-                <StudioList>
+                <StudioList class="ax-list--entity">
                   <For each={components()}>
                     {(p) => (
                       <StudioRow>
-                        <div style={{ flex: '1', 'min-width': '0', display: 'flex', 'flex-direction': 'column', gap: '0.4rem' }}>
-                          <div class="ax-inline" style={{ 'align-items': 'baseline', gap: '0.7rem' }}>
-                            <span class="ax-card-title">{p.name}</span>
-                            <span class="ax-card-kicker">{p.id}</span>
+                        <div class="ax-entity">
+                          <div class="ax-entity-body">
+                            <div class="ax-entity-head">
+                              <span class="ax-card-title">{p.name}</span>
+                              <span class="ax-card-kicker">{p.id}</span>
+                            </div>
+                            <Show when={p.description}>
+                              <StudioHint>{p.description}</StudioHint>
+                            </Show>
                           </div>
-                          <Show when={p.description}>
-                            <StudioHint>{p.description}</StudioHint>
-                          </Show>
+                          <span class="ax-card-kicker">Built-in</span>
                         </div>
-                        <span class="ax-card-kicker">Built-in</span>
                       </StudioRow>
                     )}
                   </For>
@@ -383,7 +391,7 @@ export function PluginsPage(props: {
             aria-labelledby="axis-plugins-tab-install"
           >
             <div class="ax-split">
-              <div style={{ display: 'flex', 'flex-direction': 'column', gap: 'var(--ax-gap)' }}>
+              <div class="ax-split-col">
                 <StudioSection
                   title="Load from URL"
                   lead="Sources, streams, engines, datasets, and components (e.g. PYNE Agent). After load, source/stream/engine plugins activate and appear in top-bar pickers."
@@ -454,31 +462,33 @@ export function PluginsPage(props: {
                   when={installed().length}
                   fallback={<StudioEmpty>Load a URL or an example to populate this list.</StudioEmpty>}
                 >
-                  <StudioList>
+                  <StudioList class="ax-list--entity">
                     <For each={installed()}>
                       {(p) => (
                         <StudioRow>
-                          <div style={{ flex: '1', 'min-width': '0', display: 'flex', 'flex-direction': 'column', gap: '0.35rem' }}>
-                            <div class="ax-inline" style={{ 'align-items': 'baseline', gap: '0.7rem' }}>
-                              <span class="ax-card-title">{p.name}</span>
-                              <span class="ax-card-kicker">
-                                {p.kind} · {p.id}
-                              </span>
+                          <div class="ax-entity">
+                            <div class="ax-entity-body">
+                              <div class="ax-entity-head">
+                                <span class="ax-card-title">{p.name}</span>
+                                <span class="ax-card-kicker">
+                                  {p.kind} · {p.id}
+                                </span>
+                              </div>
+                              <StudioHint>{p.url}</StudioHint>
                             </div>
-                            <StudioHint>{p.url}</StudioHint>
-                          </div>
-                          <div class="ax-inline">
-                            <StudioButton variant="ghost" onClick={() => activate(p.kind, p.id)}>
-                              Use
-                            </StudioButton>
-                            <StudioButton
-                              variant="danger"
-                              ariaLabel="Remove"
-                              title="Remove"
-                              onClick={() => removeInstalled(p)}
-                            >
-                              <Icons.x />
-                            </StudioButton>
+                            <div class="ax-entity-actions">
+                              <StudioButton variant="ghost" onClick={() => activate(p.kind, p.id)}>
+                                Use
+                              </StudioButton>
+                              <StudioButton
+                                variant="danger"
+                                ariaLabel="Remove"
+                                title="Remove"
+                                onClick={() => removeInstalled(p)}
+                              >
+                                <Icons.x />
+                              </StudioButton>
+                            </div>
                           </div>
                         </StudioRow>
                       )}

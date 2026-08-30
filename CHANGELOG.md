@@ -17,9 +17,31 @@ _Generated/updated: 2026-08-29 · 315 commits · describe-tag: `v2.1.0`_
 
 _Upcoming changes._
 
+### Added
+
+- **Results → Raw JSON tree**: collapsible VOID-colored viewer (keys / strings / numbers / bools) with key filter, Expand / Collapse, and Tree | Source. Large `plots` / `series` arrays page in (32 at a time) so a full run does not mount thousands of nodes. Click a primitive to copy it. Footer Copy / JSON still export the full payload.
+
+### Changed
+
+- **Studio fullscreen canvas**: Runtime, Wire, Settings, Workers, and Plugins (plus nested tabs) now use the full overlay width instead of a reading-column cap. Wide layouts are two columns — Runtime (engine | endpoint), Settings General / Data / Topbar / Editor / Theme token grids, Workers inventory | inspector, Plugins catalog cards, Results strategy table. Legacy `sc-settings-*` chrome on Editor intelligence, exchange keys, and stacked plugin fields is replaced with studio `ax-*` primitives.
+- **Theme color field**: Settings → Theme uses one `StudioColorInput` per token (swatch picker + text). Accepts hex, `rgb()` / `rgba()`, CSS names, and Pine `color.*` enums; the picker rewrites in the same form.
+- **Editor color chips**: clicking an inline script color chip opens a native picker and replaces the source in the original form (`#hex`, `color.red`, `color.rgb`, `color.new`), keeping transparency.
+- **Studio scroll**: nested panes, tables, code blocks, and library lists no longer scroll on their own. Only the modal canvas (`.ax-page-canvas`) scrolls.
+- **Studio primitives**: status pills stay compact (no longer stretch full-width inside cards); Idle/Skipped/Degraded get the same pill chrome as Healthy/Down; cards, stats, inline buttons, and feature rows tightened. Same language applied across Runtime, Wire, Settings (all tabs), Plugins (catalog / install / library), Workers, and Results: capability badges are `ax-cap`, catalog rows are entity lists, chips-as-tags stay small, and compact `sc-*` chrome hosted in the overlay is scaled up to studio density.
+- **Results overlay**: true fullscreen studio shell (`.ax-page-backdrop` + `.ax-page`, no dialog padding/blur). Header holds auto-open / script picker / saved-runs chip; Copy / JSON / CSV sit in the sticky footer. Canvas is the only scroller. Stacks above other studio pages (`z-index: 1050`) so a finished strategy is not trapped under Wire or Workers. Events, Strategy, Optimise, Plots, Metrics, Raw, and Saved use the same `ax-*` primitives as the rest of studio.
+
 ### Fixed
 
-- **Market proxy (Worker)**: MEXC public REST is now served through the Worker at `/api/market/mexc/{klines,ticker/24hr,exchangeInfo}` — fixes CORS errors when the browser tries to call `api.mexc.com` directly. New `src/data/mexc-http.ts` exposes `fetchMexcJson` (mirrors `fetchBinanceJson`; same `resolveMarketWorkerBase` resolver from `src/data/binance-http.ts`). Migrated call sites: `watchlist-tickers.ts` (24h tickers), `sources/catalog.ts` (`mexcRest.fetchHistorical` klines), and `symbol-catalog.ts` (exchangeInfo). MEXC interval allowlist is tighter than Binance (no `1s`, `3m`, `2h`, `6h`, `8h`, `12h`, `3d`, `1M` — chart `1h` maps to native `60m`, `1w` to `1W`). MEXC does not support `?symbols=…` on `ticker/24hr` — the endpoint returns the full book and the client filters by symbol after parsing. No signed MEXC path yet (no HMAC endpoints consumed by AXIS today). Backward-compatible: direct `api.mexc.com` calls still work for dev builds; the Worker proxy is an additional fallback when direct fetch fails. No new dependencies.
+- **Editor false typo on `syminfo.mintick`**: pre-eval “unknown built-in member” only knew `syminfo.prefix` / `syminfo.ticker` from `pyne-builtins.json` (the two callables). Host variables (`mintick`, `tickerid`, `timezone`, `currency`, …) are now allowlisted with the other Pine constants, matching pyne’s implemented `syminfo.*` surface.
+- **Market proxy (Worker)**: MEXC public REST is served through `/api/market/mexc/{klines,ticker/24hr,exchangeInfo}` because `api.mexc.com` does not send `Access-Control-Allow-Origin`. `fetchMexcJson` tries the Worker first and the direct host only as last-ditch fallback (offline lab, `skipWorkerProxy` tests, or Worker 5xx / network). Worker 4xx (allowlist / not found) is thrown immediately so the browser does not pay a CORS-blocked extra hop. Shared `resolveMarketWorkerBase` lives in `src/data/market-worker.ts` (re-exported from `binance-http.ts` / `mexc-http.ts`). Call sites: `watchlist-tickers.ts`, `sources/catalog.ts` (`mexcRest.fetchHistorical`), `symbol-catalog.ts` (exchangeInfo). Interval allowlist is AXIS TFs plus venue `1M` (`1h`→`60m`, `1w`→`1W`; no `1s`/`3m`/`2h`/`6h`/`8h`/`12h`/`3d`). `ticker/24hr` allowlists optional `symbol=` (single object, cached per symbol); there is no `symbols=` batch — omit the query for the full book. Watchlist uses per-symbol requests when the list is small (≤8), else the full book. No signed MEXC path yet.
+
+### Tests
+
+- **Pre-eval `syminfo.*` host vars** — `tests/preevaluate.test.ts`: `syminfo.mintick` / `tickerid` / `timezone` / `currency` are known; `syminfo.minitck` still suggests `mintick`.
+- **MEXC client fetch order** — `tests/mexc-http.test.ts`: Worker first, `skipWorkerProxy` goes direct, abort does not try the next host, Worker 400 does not call `api.mexc.com`, Worker 5xx still falls through. Watchlist small-list `symbol=` vs full-book path.
+- **MEXC Worker ticker `symbol=` + `1M`** — `worker/tests/market-proxy.test.ts`: optional `symbol=` forwarded and cached separately from the full book; `symbols=` rejected; native `1M` klines accepted.
+- **Color rewrite helpers** — `tests/pine-colors.test.ts`: `formatPickedChipColor` keeps kind/transparency; `rewriteColorKeepingFormat` preserves hex / rgb / rgba / named.
+- **JSON tree helpers** — `tests/studio-json.test.ts`: kind / preview / stats, expand-all skips huge arrays, filter does not walk 200-point plot series.
 
 ---
 

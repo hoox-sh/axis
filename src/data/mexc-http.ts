@@ -37,34 +37,16 @@
  * @module data/mexc-http
  */
 
-import { store } from '../store';
+import { normalizeEndpointBase } from '../onchain/proxy';
 import {
-  DEFAULT_ONCHAIN_WORKER_BASE,
-  looksLikeOnchainWorkerEndpoint,
-  normalizeEndpointBase,
-} from '../onchain/proxy';
+  DEFAULT_MARKET_WORKER_BASE,
+  resolveMarketWorkerBase,
+} from './market-worker';
 
-/** Public MEXC REST hosts (CORS `*`). Single canonical host. */
+export { DEFAULT_MARKET_WORKER_BASE, resolveMarketWorkerBase };
+
+/** Canonical public REST origin; no browser CORS (`Access-Control-Allow-Origin`). */
 export const MEXC_REST_HOSTS = ['https://api.mexc.com'] as const;
-
-/** Default production AXIS Worker (market + on-chain proxy). */
-export const DEFAULT_MARKET_WORKER_BASE = DEFAULT_ONCHAIN_WORKER_BASE;
-
-/**
- * Resolve Worker origin for market proxy (no trailing slash).
- * Same rules as on-chain: prefer configured Worker, else production default.
- */
-export function resolveMarketWorkerBase(
-  configWorkerBase?: string | null,
-): string {
-  const fromCfg = normalizeEndpointBase(configWorkerBase);
-  if (fromCfg && looksLikeOnchainWorkerEndpoint(fromCfg)) return fromCfg;
-
-  const fromStore = normalizeEndpointBase(store.endpoint);
-  if (fromStore && looksLikeOnchainWorkerEndpoint(fromStore)) return fromStore;
-
-  return DEFAULT_MARKET_WORKER_BASE;
-}
 
 export type MexcRestPath = 'klines' | 'ticker/24hr' | 'exchangeInfo';
 
@@ -73,7 +55,7 @@ export interface MexcFetchOpts {
   path: MexcRestPath;
   /** Query string without leading `?`. */
   query?: string;
-  /** Prefer this host first (source config `baseUrl`). */
+  /** Direct host override after Worker (source config `baseUrl`). */
   baseUrl?: string;
   /** Optional worker base override. */
   workerBase?: string;
@@ -98,16 +80,28 @@ function workerProxyUrl(
   return `${b}/api/market/mexc/${path}${q}`;
 }
 
+async function workerClientError(res: Response): Promise<string> {
+  try {
+    const body: unknown = await res.json();
+    if (body && typeof body === 'object') {
+      const rec = body as { message?: unknown; code?: unknown };
+      const msg = String(rec.message || '').trim();
+      const code = String(rec.code || '').trim();
+      if (msg && code) return `${msg} (${code})`;
+      if (msg) return msg;
+    }
+  } catch {
+    /* non-JSON */
+  }
+  return `HTTP ${res.status}`;
+}
+
 /**
  * Fetch MEXC JSON: Worker proxy first (CORS-safe in browser), then direct
- * public host(s) as a fallback.
+ * public host as last-ditch fallback (network / 5xx only).
  *
- * MEXC's public REST does NOT send `Access-Control-Allow-Origin` for browser
- * origins — every direct attempt would surface as a CORS error in the network
- * log even when the Worker fallback would have succeeded. Try Worker first so
- * the browser logs are clean and the request path is deterministic; fall back
- * to the direct host when the Worker is unreachable (offline lab, tests, or a
- * custom Worker base that's down).
+ * Worker 4xx (allowlist / not found) is thrown immediately — the browser
+ * cannot read `api.mexc.com` and a second hop only adds CORS noise.
  *
  * Throws the last error when every candidate fails.
  */
@@ -124,9 +118,13 @@ export async function fetchMexcJson(opts: MexcFetchOpts): Promise<unknown> {
         headers: { Accept: 'application/json' },
       });
       if (res.ok) return await res.json();
+      if (res.status >= 400 && res.status < 500) {
+        throw new Error(`MEXC worker: ${await workerClientError(res)}`);
+      }
       errors.push(`worker: HTTP ${res.status}`);
     } catch (err) {
       if (opts.signal?.aborted) throw err;
+      if (err instanceof Error && err.message.startsWith('MEXC worker:')) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       errors.push(`worker: ${msg}`);
     }

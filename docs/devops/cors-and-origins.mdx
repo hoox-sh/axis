@@ -126,6 +126,11 @@ AXIS resilience for Binance:
 
 Prefer the DO relay (`cf-do` stream / `/api/stream`) when many tabs share one upstream WS — still requires the Worker edge to reach Binance.
 
+AXIS resilience for MEXC:
+
+1. Worker allowlisted proxy first: `GET /api/market/mexc/{klines,ticker/24hr,exchangeInfo}` (`src/data/mexc-http.ts`). Public `api.mexc.com` does **not** send `Access-Control-Allow-Origin`.
+2. Direct `api.mexc.com` only as last-ditch fallback (offline lab, tests, or Worker 5xx). Worker 4xx is not retried against the CORS-blocked host.
+
 ## Dynamic plugins
 
 - **Module import** of plugin JS: needs CORS on the **script origin**. Prefer same-origin `/plugins/*` (PYNE Agent ships as `/plugins/axis-pine-agent.js`).

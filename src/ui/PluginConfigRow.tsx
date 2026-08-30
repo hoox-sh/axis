@@ -291,7 +291,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
           <input
             id={fieldId(key)}
             type={f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}
-            class="sc-input font-mono text-[12px] w-full"
+            class="ax-input ax-input--mono"
             min={f.min}
             max={f.max}
             step={f.step}
@@ -306,7 +306,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
       >
         <select
           id={fieldId(key)}
-          class="sc-input font-mono text-[12px] w-full"
+          class="ax-input ax-select ax-input--mono"
           value={String(valueOf(key) ?? '')}
           onChange={(e) => applyField(key, e.currentTarget.value)}
           title={fieldTitle(key, f)}
@@ -322,16 +322,16 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
       <Show
         when={!stacked()}
         fallback={
-          <div class="flex flex-col gap-2" data-testid="axis-cfg-plugins-settings">
+          <div class="ax-token-grid" data-testid="axis-cfg-plugins-settings">
             <For each={fields()}>
               {([key, f]) => (
-                <div class="sc-field">
-                  <label class="sc-label" for={fieldId(key)}>
+                <div class="ax-field">
+                  <label class="ax-label" for={fieldId(key)}>
                     {f.label || key}
                   </label>
                   {renderControl(key, f)}
                   <Show when={f.description}>
-                    <p class="sc-hint mt-0.5">{f.description}</p>
+                    <p class="ax-hint">{f.description}</p>
                   </Show>
                 </div>
               )}

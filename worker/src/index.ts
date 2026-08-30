@@ -33,7 +33,7 @@
  * | `/api/scripts…`      | {@link handleScripts}| Bearer API key; D1 or in-memory |
  * | `/api/git/oauth/…`   | {@link handleGitOAuth}| public; device-flow proxy (GitHub/GitLab) |
  * | `/api/onchain/…`     | {@link handleOnchain}| public; DefiLlama + GeckoTerminal allowlisted proxy |
- * | `/api/market/…`      | {@link handleMarket}| public Binance GET proxy; optional request-scoped signed klines |
+ * | `/api/market/…`      | {@link handleMarket}| public Binance + MEXC GET proxy; optional request-scoped signed Binance klines |
  * | GET `/api/stream`    | SessionDO upgrade    | requires `SESSIONS` DO binding |
  * | OPTIONS `*`          | CORS preflight       | 204 |
  *

@@ -37,11 +37,14 @@ export type ScriptRunSelectProps = {
   /** data-testid prefix (default axis-run-select) */
   testId?: string;
   class?: string;
+  /** Studio overlay uses the large `ax-select`; docked panels stay compact. */
+  variant?: 'compact' | 'studio';
 };
 
 /** Compact &lt;select&gt; of applied scripts (+ Editor) for run-bound panels. */
 export const ScriptRunSelect: Component<ScriptRunSelectProps> = (props) => {
   const testId = () => props.testId || 'axis-run-select';
+  const studio = () => props.variant === 'studio';
   const options = createMemo(() => listRunResultOptions());
   const show = createMemo(() => {
     const opts = options();
@@ -61,12 +64,16 @@ export const ScriptRunSelect: Component<ScriptRunSelectProps> = (props) => {
   return (
     <Show when={show()}>
       <label
-        class={`inline-flex items-center gap-1 min-w-0 max-w-[12rem] ${props.class || ''}`}
+        class={
+          studio()
+            ? `ax-results-script${props.class ? ` ${props.class}` : ''}`
+            : `inline-flex items-center gap-1 min-w-0 max-w-[12rem]${props.class ? ` ${props.class}` : ''}`
+        }
         title="Which script’s last run is shown"
       >
         <span class="sr-only">Script</span>
         <select
-          class="sc-input text-[0.78em] py-0.5 px-1 max-w-full min-w-0"
+          class={studio() ? 'ax-select' : 'sc-input text-[0.78em] py-0.5 px-1 max-w-full min-w-0'}
           data-testid={testId()}
           aria-label="Select script for this panel"
           value={value()}

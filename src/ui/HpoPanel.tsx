@@ -273,7 +273,6 @@ function TrialChart(props: {
       <div class="ax-hpo-chart-legend">
         <span class="ax-hpo-legend-is">In-sample</span>
         <span class="ax-hpo-legend-oos">Out-of-sample</span>
-        <span class="flex-1" />
         <Show when={bounds()}>
           {(b) => (
             <span class="ax-hpo-scale">
@@ -517,7 +516,7 @@ export const HpoPanel: Component = () => {
         </p>
       </Show>
 
-      <div class="ax-hpo-split">
+      <div class={`ax-hpo-split${study() || busy() || error() ? '' : ' ax-hpo-split--solo'}`}>
         <div class="ax-hpo-col">
           <section class="ax-section">
             <h3 class="ax-section-title">Search configuration</h3>
@@ -670,11 +669,11 @@ export const HpoPanel: Component = () => {
               when={params().length}
               fallback={<p class="ax-empty">No searchable input.int / float / bool / enum fields.</p>}
             >
-              <div class="ax-list">
+              <div class="ax-list ax-list--dense">
                 <For each={params()}>
                   {(p) => (
                     <div class="ax-row">
-                      <label class="ax-toggle min-w-[8rem]">
+                      <label class="ax-toggle">
                         <input
                           type="checkbox"
                           checked={p.enabled !== false}
@@ -689,7 +688,7 @@ export const HpoPanel: Component = () => {
                         </span>
                       </label>
                       <Show when={p.kind === 'int' || p.kind === 'float'}>
-                        <div class="ax-inline">
+                        <div class="ax-hpo-bounds">
                           <input
                             class="ax-input"
                             type="number"
@@ -729,6 +728,7 @@ export const HpoPanel: Component = () => {
           </section>
         </div>
 
+        <Show when={study() || busy() || error()}>
         <div class="ax-hpo-col">
           <Show when={error()}>
             <p class="ax-error">{error()}</p>
@@ -741,12 +741,12 @@ export const HpoPanel: Component = () => {
           <Show when={study()}>
             {(s) => (
               <section class="ax-section">
-                <div class="flex flex-wrap items-center gap-2">
+                <div class="ax-toolbar">
                   <span class={`ax-status ${statusClass(s().status)}`}>{s().status}</span>
-                  <span class="ax-hint">
+                  <p class="ax-hint">
                     {s().trials.length}/{s().nTrials} trials · {s().engineRuns} runs ·{' '}
                     {s().backend || '—'} · {Math.round(s().ms)}ms
-                  </span>
+                  </p>
                   <Show when={s().warning}>
                     <span class="ax-hint ax-hint--accent">{s().warning}</span>
                   </Show>
@@ -755,16 +755,16 @@ export const HpoPanel: Component = () => {
                 <TrialChart trials={s().trials} bestIndex={s().bestIndex} />
 
                 <Show when={s().bestParams}>
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span class="ax-hint ax-hint--accent">
+                  <div class="ax-toolbar">
+                    <p class="ax-hint ax-hint--accent">
                       best{' '}
                       {Object.entries(s().bestParams || {})
                         .map(([k, v]) => `${k}=${v}`)
                         .join(' ')}
                       <Show when={s().bestIsScore != null}> · IS {formatScore(s().bestIsScore!)}</Show>
                       <Show when={s().bestOosScore != null}> · OOS {formatScore(s().bestOosScore!)}</Show>
-                    </span>
-                    <span class="flex-1" />
+                    </p>
+                    <span class="ax-toolbar-spacer" />
                     <button
                       type="button"
                       class="ax-btn ax-btn--ghost"
@@ -796,36 +796,26 @@ export const HpoPanel: Component = () => {
                   when={s().trials.length}
                   fallback={<p class="ax-empty">No trials yet.</p>}
                 >
-                  <div class="overflow-auto border border-border-soft max-h-[min(360px,42vh)]">
-                    <table class="w-full text-[0.9rem] font-mono">
-                      <thead class="bg-bg-panel text-text-faint">
-                        <tr class="text-left">
-                          <th class="px-2 py-1.5">#</th>
-                          <th class="px-2 py-1.5">params</th>
-                          <th class="px-2 py-1.5">IS</th>
-                          <th class="px-2 py-1.5">OOS</th>
-                          <th class="px-2 py-1.5">err</th>
+                  <div class="ax-table-wrap">
+                    <table class="ax-table">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>params</th>
+                          <th>IS</th>
+                          <th>OOS</th>
+                          <th>err</th>
                         </tr>
                       </thead>
                       <tbody>
                         <For each={s().trials}>
                           {(t) => (
-                            <tr class={t.index === s().bestIndex ? 'text-accent' : ''}>
-                              <td class="px-2 py-1 border-t border-border-soft">{t.index}</td>
-                              <td class="px-2 py-1 border-t border-border-soft truncate max-w-[16rem]">
-                                {Object.entries(t.params)
-                                  .map(([k, v]) => `${k}=${v}`)
-                                  .join(' ')}
-                              </td>
-                              <td class="px-2 py-1 border-t border-border-soft">
-                                {t.isScore == null ? '—' : t.isScore.toFixed(3)}
-                              </td>
-                              <td class="px-2 py-1 border-t border-border-soft">
-                                {t.oosScore == null ? '—' : t.oosScore.toFixed(3)}
-                              </td>
-                              <td class="px-2 py-1 border-t border-border-soft text-red truncate max-w-[8rem]">
-                                {t.error || ''}
-                              </td>
+                            <tr class={t.index === s().bestIndex ? 'is-best' : undefined}>
+                              <td>{t.index}</td>
+                              <td class="ax-table-cell-wrap">{Object.entries(t.params).map(([k, v]) => `${k}=${v}`).join(' ')}</td>
+                              <td>{t.isScore == null ? '—' : t.isScore.toFixed(3)}</td>
+                              <td>{t.oosScore == null ? '—' : t.oosScore.toFixed(3)}</td>
+                              <td class="ax-table-neg">{t.error || ''}</td>
                             </tr>
                           )}
                         </For>
@@ -837,6 +827,7 @@ export const HpoPanel: Component = () => {
             )}
           </Show>
         </div>
+        </Show>
       </div>
     </div>
   );

@@ -866,9 +866,6 @@ export const mexcRest: SourcePlugin = {
       limit: String(limit),
     });
     appendTimeParams(params, { startTime, endTime }, 'ms');
-    // Route through `fetchMexcJson` so a failed direct `api.mexc.com` call
-    // transparently falls back to the AXIS Worker allowlisted proxy. The
-    // Worker proxy returns the raw MEXC response unmodified.
     const json = await fetchMexcJson({
       path: 'klines',
       query: params.toString(),

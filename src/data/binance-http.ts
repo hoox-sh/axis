@@ -30,22 +30,20 @@
  * @module data/binance-http
  */
 
-import { store } from '../store';
+import { normalizeEndpointBase } from '../onchain/proxy';
 import {
-  DEFAULT_ONCHAIN_WORKER_BASE,
-  looksLikeOnchainWorkerEndpoint,
-  normalizeEndpointBase,
-} from '../onchain/proxy';
+  DEFAULT_MARKET_WORKER_BASE,
+  resolveMarketWorkerBase,
+} from './market-worker';
 import { fetchSignedJson, hasSignedCreds } from './signed-fetch';
+
+export { DEFAULT_MARKET_WORKER_BASE, resolveMarketWorkerBase };
 
 /** Public Binance REST hosts (CORS `*`). Vision first for some restricted networks. */
 export const BINANCE_REST_HOSTS = [
   'https://api.binance.com',
   'https://data-api.binance.vision',
 ] as const;
-
-/** Default production AXIS Worker (market + on-chain proxy). */
-export const DEFAULT_MARKET_WORKER_BASE = DEFAULT_ONCHAIN_WORKER_BASE;
 
 /** Live kline stream URL candidates (port 9443 is often firewalled). */
 export function binanceKlineWsUrls(symbol: string, interval: string): string[] {
@@ -74,22 +72,6 @@ export function binanceTickerWsUrls(symbols: string[]): string[] {
     `wss://stream.binance.com${path}`,
     `wss://data-stream.binance.vision${path}`,
   ];
-}
-
-/**
- * Resolve Worker origin for market proxy (no trailing slash).
- * Same rules as on-chain: prefer configured Worker, else production default.
- */
-export function resolveMarketWorkerBase(
-  configWorkerBase?: string | null,
-): string {
-  const fromCfg = normalizeEndpointBase(configWorkerBase);
-  if (fromCfg && looksLikeOnchainWorkerEndpoint(fromCfg)) return fromCfg;
-
-  const fromStore = normalizeEndpointBase(store.endpoint);
-  if (fromStore && looksLikeOnchainWorkerEndpoint(fromStore)) return fromStore;
-
-  return DEFAULT_MARKET_WORKER_BASE;
 }
 
 export type BinanceRestPath =

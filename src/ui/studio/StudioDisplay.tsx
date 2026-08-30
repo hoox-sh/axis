@@ -126,8 +126,8 @@ export function StudioCode(props: { testId?: string; children: JSX.Element }) {
   );
 }
 
-export function StudioList(props: { children: JSX.Element }) {
-  return <ul class="ax-list">{props.children}</ul>;
+export function StudioList(props: { class?: string; children: JSX.Element }) {
+  return <ul class={`ax-list${props.class ? ` ${props.class}` : ''}`}>{props.children}</ul>;
 }
 
 export function StudioRow(props: { children: JSX.Element; testId?: string }) {

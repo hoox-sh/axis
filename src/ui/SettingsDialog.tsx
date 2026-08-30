@@ -89,6 +89,15 @@ import { UI_SCALE_PRESETS, formatUiScalePct } from './ui-scale';
 import { WorkspaceSnapshotMenu } from './WorkspaceSnapshotMenu';
 import { ThemePanel } from './ThemePanel';
 import {
+  StudioButton,
+  StudioField,
+  StudioHint,
+  StudioInput,
+  StudioSection,
+  StudioSelect,
+  StudioToggle,
+} from './studio';
+import {
   INTEL_HOVER_MS_MAX,
   INTEL_HOVER_MS_MIN,
   INTEL_IDLE_MS_MAX,
@@ -118,7 +127,6 @@ import { bindCcxtSession, unbindCcxtSession } from '../data/ccxt-session';
 import type { GatewayMode } from '../data/gateway';
 import { writePluginField } from './plugin-config';
 import { AppDrawer } from './AppDrawer';
-import { StudioToggle } from './studio';
 
 /** PYNE Runtime modes for the server/worker engine plugin config. */
 export type EngineExecMode = 'interpret' | 'compile' | 'auto';
@@ -1684,212 +1692,166 @@ export const ExchangeCredentialsPanel: Component = () => {
   };
 
   return (
-    <>
-      <div class="sc-settings-section-title">Exchange API keys</div>
-      <p class="sc-settings-field-hint mt-0" data-testid="axis-exchange-session-note">
-        Saved in this session only (not written to disk). AXIS never puts key, secret, or
-        passphrase into localStorage. Native CEX keys sign in the browser; CCXT keys are
-        posted to the datafeed session (handle on later requests, never the secret in the URL).
-      </p>
-
-      <div class="sc-settings-field">
-        <label
-          class="sc-settings-field-label"
-          for="axis-exchange-key-kind"
-        >
-          Key type
-        </label>
-        <select
-          id="axis-exchange-key-kind"
-          class="sc-input w-full"
-          data-testid="axis-exchange-key-kind"
-          value={kind()}
-          onChange={(e) => {
-            setKind(e.currentTarget.value === 'ccxt' ? 'ccxt' : 'native');
-            clearSecrets();
-            setMsg('');
-          }}
-        >
-          <option value="native">Native CEX (Binance, OKX, Bybit, Coinbase, Kraken)</option>
-          <option value="ccxt">CCXT gateway (long-tail exchange)</option>
-        </select>
-      </div>
-
-      <Show
-        when={kind() === 'ccxt'}
-        fallback={
-          <div class="sc-settings-field">
-            <label
-              class="sc-settings-field-label"
-              for="axis-exchange-venue"
-            >
-              Venue
-            </label>
-            <select
-              id="axis-exchange-venue"
-              class="sc-input w-full"
-              data-testid="axis-exchange-venue"
-              value={venue()}
-              onChange={(e) => onVenueChange(e.currentTarget.value)}
-            >
-              <For each={[...EXCHANGE_CREDENTIAL_VENUES]}>
-                {(v) => <option value={v}>{EXCHANGE_CREDENTIAL_VENUE_LABELS[v]}</option>}
-              </For>
-            </select>
-          </div>
-        }
-      >
-        <div class="sc-settings-field">
-          <label
-            class="sc-settings-field-label"
-            for="axis-exchange-ccxt-id"
+    <StudioSection
+      title="Exchange API keys"
+      lead={
+        <span data-testid="axis-exchange-session-note">
+          Saved in this session only (not written to disk). AXIS never puts key, secret, or
+          passphrase into localStorage. Native CEX keys sign in the browser; CCXT keys are
+          posted to the datafeed session (handle on later requests, never the secret in the URL).
+        </span>
+      }
+    >
+      <div class="ax-token-grid">
+        <StudioField label="Key type" for="axis-exchange-key-kind">
+          <StudioSelect
+            id="axis-exchange-key-kind"
+            testId="axis-exchange-key-kind"
+            value={kind()}
+            onChange={(v) => {
+              setKind(v === 'ccxt' ? 'ccxt' : 'native');
+              clearSecrets();
+              setMsg('');
+            }}
           >
-            CCXT exchange id
-          </label>
-          <input
-            id="axis-exchange-ccxt-id"
-            class="sc-input font-mono text-[0.85em] w-full"
-            data-testid="axis-exchange-ccxt-id"
-            value={ccxtExchange()}
-            onInput={(e) => setCcxtExchange(normalizeCcxtExchangeId(e.currentTarget.value))}
-            placeholder="bybit, bitget, mexc, …"
-            spellcheck={false}
-            autocomplete="off"
-          />
-        </div>
-      </Show>
+            <option value="native">Native CEX (Binance, OKX, Bybit, Coinbase, Kraken)</option>
+            <option value="ccxt">CCXT gateway (long-tail exchange)</option>
+          </StudioSelect>
+        </StudioField>
 
-      <div class="sc-settings-field">
-        <label
-          class="sc-settings-field-label"
+        <Show
+          when={kind() === 'ccxt'}
+          fallback={
+            <StudioField label="Venue" for="axis-exchange-venue">
+              <StudioSelect
+                id="axis-exchange-venue"
+                testId="axis-exchange-venue"
+                value={venue()}
+                onChange={onVenueChange}
+              >
+                <For each={[...EXCHANGE_CREDENTIAL_VENUES]}>
+                  {(v) => <option value={v}>{EXCHANGE_CREDENTIAL_VENUE_LABELS[v]}</option>}
+                </For>
+              </StudioSelect>
+            </StudioField>
+          }
+        >
+          <StudioField label="CCXT exchange id" for="axis-exchange-ccxt-id">
+            <StudioInput
+              id="axis-exchange-ccxt-id"
+              mono
+              testId="axis-exchange-ccxt-id"
+              value={ccxtExchange()}
+              onInput={(v) => setCcxtExchange(normalizeCcxtExchangeId(v))}
+              placeholder="bybit, bitget, mexc, …"
+              spellcheck={false}
+              autocomplete="off"
+            />
+          </StudioField>
+        </Show>
+
+        <StudioField
+          label="API key"
           for="axis-exchange-api-key"
+          hint={meta()?.hasKey && !apiKey() ? 'saved' : undefined}
         >
-          API key
-        </label>
-        <input
-          id="axis-exchange-api-key"
-          type="password"
-          class="sc-input font-mono text-[0.85em] w-full"
-          data-testid="axis-exchange-api-key"
-          value={apiKey()}
-          onInput={(e) => setApiKey(e.currentTarget.value)}
-          placeholder={meta()?.hasKey ? '••••••••  saved' : 'API key'}
-          spellcheck={false}
-          autocomplete="off"
-        />
-        <Show when={meta()?.hasKey && !apiKey()}>
-          <p class="sc-settings-field-hint text-accent">saved</p>
-        </Show>
-      </div>
-
-      <div class="sc-settings-field">
-        <label
-          class="sc-settings-field-label"
-          for="axis-exchange-secret"
-        >
-          Secret
-        </label>
-        <input
-          id="axis-exchange-secret"
-          type="password"
-          class="sc-input font-mono text-[0.85em] w-full"
-          data-testid="axis-exchange-secret"
-          value={secret()}
-          onInput={(e) => setSecret(e.currentTarget.value)}
-          placeholder={meta()?.hasSecret ? '••••••••  saved' : 'API secret'}
-          spellcheck={false}
-          autocomplete="off"
-        />
-        <Show when={meta()?.hasSecret && !secret()}>
-          <p class="sc-settings-field-hint text-accent">saved · ••••••••</p>
-        </Show>
-      </div>
-
-      <Show when={needsPass()}>
-        <div class="sc-settings-field">
-          <label
-            class="sc-settings-field-label"
-            for="axis-exchange-passphrase"
-          >
-            Passphrase
-          </label>
-          <input
-            id="axis-exchange-passphrase"
+          <StudioInput
+            id="axis-exchange-api-key"
             type="password"
-            class="sc-input font-mono text-[0.85em] w-full"
-            data-testid="axis-exchange-passphrase"
-            value={passphrase()}
-            onInput={(e) => setPassphrase(e.currentTarget.value)}
-            placeholder={meta()?.hasPassphrase ? '••••••••  saved' : 'Passphrase'}
+            mono
+            testId="axis-exchange-api-key"
+            value={apiKey()}
+            onInput={setApiKey}
+            placeholder={meta()?.hasKey ? '••••••••  saved' : 'API key'}
             spellcheck={false}
             autocomplete="off"
           />
-          <Show when={meta()?.hasPassphrase && !passphrase()}>
-            <p class="sc-settings-field-hint text-accent">saved</p>
-          </Show>
-        </div>
-      </Show>
+        </StudioField>
 
-      <Show when={kind() === 'ccxt'}>
-        <div class="sc-settings-field">
-          <label
-            class="sc-settings-field-label"
-            for="axis-exchange-uid"
-          >
-            UID (optional)
-          </label>
-          <input
-            id="axis-exchange-uid"
-            class="sc-input font-mono text-[0.85em] w-full"
-            data-testid="axis-exchange-uid"
-            value={uid()}
-            onInput={(e) => setUid(e.currentTarget.value)}
-            placeholder="Some venues (e.g. BitMEX) require a uid"
-            spellcheck={false}
-            autocomplete="off"
-          />
-        </div>
-      </Show>
-
-      <div class="sc-settings-btn-row mt-1">
-        <button
-          type="button"
-          class="sc-btn sc-btn-primary"
-          data-testid="axis-exchange-key-save"
-          onClick={onSave}
+        <StudioField
+          label="Secret"
+          for="axis-exchange-secret"
+          hint={meta()?.hasSecret && !secret() ? 'saved · ••••••••' : undefined}
         >
+          <StudioInput
+            id="axis-exchange-secret"
+            type="password"
+            mono
+            testId="axis-exchange-secret"
+            value={secret()}
+            onInput={setSecret}
+            placeholder={meta()?.hasSecret ? '••••••••  saved' : 'API secret'}
+            spellcheck={false}
+            autocomplete="off"
+          />
+        </StudioField>
+
+        <Show when={needsPass()}>
+          <StudioField
+            label="Passphrase"
+            for="axis-exchange-passphrase"
+            hint={meta()?.hasPassphrase && !passphrase() ? 'saved' : undefined}
+          >
+            <StudioInput
+              id="axis-exchange-passphrase"
+              type="password"
+              mono
+              testId="axis-exchange-passphrase"
+              value={passphrase()}
+              onInput={setPassphrase}
+              placeholder={meta()?.hasPassphrase ? '••••••••  saved' : 'Passphrase'}
+              spellcheck={false}
+              autocomplete="off"
+            />
+          </StudioField>
+        </Show>
+
+        <Show when={kind() === 'ccxt'}>
+          <StudioField label="UID (optional)" for="axis-exchange-uid">
+            <StudioInput
+              id="axis-exchange-uid"
+              mono
+              testId="axis-exchange-uid"
+              value={uid()}
+              onInput={setUid}
+              placeholder="Some venues (e.g. BitMEX) require a uid"
+              spellcheck={false}
+              autocomplete="off"
+            />
+          </StudioField>
+        </Show>
+      </div>
+
+      <div class="ax-inline">
+        <StudioButton variant="primary" testId="axis-exchange-key-save" onClick={onSave}>
           <Icons.check />
           Save
-        </button>
-        <button
-          type="button"
-          class="sc-btn"
-          data-testid="axis-exchange-key-remove"
+        </StudioButton>
+        <StudioButton
+          testId="axis-exchange-key-remove"
           disabled={!hasSaved()}
           onClick={onRemove}
         >
           <Icons.trash />
           Remove
-        </button>
-        <button
-          type="button"
-          class="sc-btn"
-          data-testid="axis-exchange-key-test"
+        </StudioButton>
+        <StudioButton
+          testId="axis-exchange-key-test"
           disabled={!hasSaved() || testing() || kind() === 'ccxt'}
           title={kind() === 'ccxt' ? 'CCXT keys are verified on the next Load / Live' : undefined}
           onClick={onTestKey}
         >
           {testing() ? 'Testing…' : 'Test key'}
-        </button>
+        </StudioButton>
       </div>
       <Show when={msg()}>
-        <p class="text-[10px] text-red font-mono mt-0.5">{msg()}</p>
+        <p class="ax-error">{msg()}</p>
       </Show>
-      <p class="sc-settings-field-hint mt-1">
+      <StudioHint>
         Public REST/WebSocket needs no key. CCXT keys raise rate limits / unlock private
         adapters on the gateway; they are bound on Save and sent as a session handle.
-      </p>
-    </>
+      </StudioHint>
+    </StudioSection>
   );
 };
 
@@ -1901,22 +1863,14 @@ function IntelCheck(props: {
   onChange: (v: boolean) => void;
 }) {
   return (
-    <label class="sc-settings-check mb-2" for={props.id}>
-      <input
-        id={props.id}
-        type="checkbox"
-        checked={props.checked}
-        onChange={(e) => {
-          if (!e.isTrusted) return;
-          props.onChange(e.currentTarget.checked);
-        }}
-        data-testid={props.id}
-      />
-      <span class="sc-settings-check-text">
-        <span class="sc-settings-check-title">{props.label}</span>
-        <span class="sc-settings-check-hint">{props.hint}</span>
-      </span>
-    </label>
+    <StudioToggle
+      id={props.id}
+      testId={props.id}
+      checked={props.checked}
+      label={props.label}
+      hint={props.hint}
+      onChange={props.onChange}
+    />
   );
 }
 
@@ -1946,32 +1900,25 @@ function IntelNum(props: {
     setDraft(String(clamped));
   };
   return (
-    <label class="sc-settings-field mb-2" for={props.id}>
-      <span class="flex items-baseline justify-between gap-2">
-        <span class="sc-settings-field-label">{props.label}</span>
-        <span class="font-mono text-[11px] tabular-nums text-text-faint">
-          {props.value}
-          {props.suffix || ''}
-        </span>
-      </span>
-      <input
+    <StudioField
+      label={`${props.label} · ${props.value}${props.suffix || ''}`}
+      for={props.id}
+      hint={`${props.hint} (${props.min}–${props.max}${props.suffix || ''})`}
+    >
+      <StudioInput
         id={props.id}
         type="number"
-        class="sc-input font-mono text-[0.85em] w-full"
+        mono
+        testId={props.id}
         min={props.min}
         max={props.max}
         step={props.step ?? 50}
         value={draft()}
-        onInput={(e) => setDraft(e.currentTarget.value)}
-        onChange={(e) => commit(e.currentTarget.value)}
-        onBlur={(e) => commit(e.currentTarget.value)}
-        data-testid={props.id}
+        onInput={(v) => setDraft(v)}
+        onChange={(v) => commit(v)}
+        onBlur={(v) => commit(v)}
       />
-      <span class="sc-settings-field-hint">
-        {props.hint} ({props.min}–{props.max}
-        {props.suffix || ''})
-      </span>
-    </label>
+    </StudioField>
   );
 }
 
@@ -1981,27 +1928,25 @@ export const EditorIntelPanel: Component = () => {
   const set = (partial: Partial<EditorIntelSettings>) => patchEditorIntel(partial);
 
   return (
-    <>
-      <div class="flex items-center justify-between gap-2 mb-1">
-        <div>
-          <div class="sc-settings-section-title !mb-0">Editor intelligence</div>
-          <p class="sc-settings-field-hint mt-0.5">
-            Pre-eval, hover cards, completions, underlines, and inline chips.
-            Changes apply immediately.
-          </p>
+    <div class="ax-split-col">
+      <StudioSection
+        title="Editor intelligence"
+        lead="Pre-eval, hover cards, completions, underlines, and inline chips. Changes apply immediately."
+      >
+        <div class="ax-toolbar">
+          <StudioButton
+            variant="ghost"
+            testId="axis-settings-editor-reset"
+            onClick={() => resetEditorIntel()}
+          >
+            Reset defaults
+          </StudioButton>
         </div>
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost text-[11px]"
-          data-testid="axis-settings-editor-reset"
-          onClick={() => resetEditorIntel()}
-        >
-          Reset defaults
-        </button>
-      </div>
+      </StudioSection>
 
-      <div class="sc-settings-section !mt-2">
-        <div class="sc-settings-section-title">Pre-eval / lint</div>
+      <div class="ax-catalog-grid">
+      <StudioSection title="Pre-eval / lint">
+        <div class="ax-toggle-grid">
         <IntelCheck
           id="axis-intel-preeval"
           label="Enable pre-eval"
@@ -2072,6 +2017,7 @@ export const EditorIntelPanel: Component = () => {
           checked={intel().preevalClearOnEdit}
           onChange={(v) => set({ preevalClearOnEdit: v })}
         />
+        </div>
         <IntelNum
           id="axis-intel-idle-ms"
           label="Idle delay"
@@ -2092,10 +2038,10 @@ export const EditorIntelPanel: Component = () => {
           suffix=" ms"
           onChange={(v) => set({ preevalTabSwitchMs: v })}
         />
-      </div>
+      </StudioSection>
 
-      <div class="sc-settings-section">
-        <div class="sc-settings-section-title">Error marking</div>
+      <StudioSection title="Error marking">
+        <div class="ax-toggle-grid">
         <IntelCheck
           id="axis-intel-underlines"
           label="Underlines + line tint"
@@ -2145,10 +2091,11 @@ export const EditorIntelPanel: Component = () => {
           hint="Hints and informational engine notes."
           onChange={(v) => set({ diagInfo: v })}
         />
-      </div>
+        </div>
+      </StudioSection>
 
-      <div class="sc-settings-section">
-        <div class="sc-settings-section-title">Hover cards &amp; hints</div>
+      <StudioSection title="Hover cards & hints">
+        <div class="ax-toggle-grid">
         <IntelCheck
           id="axis-intel-hover"
           label="Builtin / symbol hover cards"
@@ -2170,6 +2117,7 @@ export const EditorIntelPanel: Component = () => {
           checked={intel().signatureHints}
           onChange={(v) => set({ signatureHints: v })}
         />
+        </div>
         <IntelNum
           id="axis-intel-hover-ms"
           label="Hover delay"
@@ -2181,10 +2129,10 @@ export const EditorIntelPanel: Component = () => {
           suffix=" ms"
           onChange={(v) => set({ hoverTimeMs: v })}
         />
-      </div>
+      </StudioSection>
 
-      <div class="sc-settings-section">
-        <div class="sc-settings-section-title">Suggestions / autocomplete</div>
+      <StudioSection title="Suggestions / autocomplete">
+        <div class="ax-toggle-grid">
         <IntelCheck
           id="axis-intel-ac"
           label="Enable completions"
@@ -2220,6 +2168,7 @@ export const EditorIntelPanel: Component = () => {
           checked={intel().remoteCompletions}
           onChange={(v) => set({ remoteCompletions: v })}
         />
+        </div>
         <IntelNum
           id="axis-intel-ac-max"
           label="Max rendered options"
@@ -2230,10 +2179,9 @@ export const EditorIntelPanel: Component = () => {
           step={8}
           onChange={(v) => set({ maxRenderedOptions: v })}
         />
-      </div>
+      </StudioSection>
 
-      <div class="sc-settings-section">
-        <div class="sc-settings-section-title">Remote LSP timings</div>
+      <StudioSection title="Remote LSP timings">
         <IntelCheck
           id="axis-intel-remote-master"
           label="Use remote LSP"
@@ -2241,6 +2189,7 @@ export const EditorIntelPanel: Component = () => {
           checked={intel().remoteLspEnabled}
           onChange={(v) => set({ remoteLspEnabled: v })}
         />
+        <div class="ax-token-grid">
         <IntelNum
           id="axis-intel-to-hover"
           label="Hover timeout"
@@ -2271,10 +2220,11 @@ export const EditorIntelPanel: Component = () => {
           suffix=" ms"
           onChange={(v) => set({ diagnosticsTimeoutMs: v })}
         />
-      </div>
+        </div>
+      </StudioSection>
 
-      <div class="sc-settings-section">
-        <div class="sc-settings-section-title">Inline markers</div>
+      <StudioSection title="Inline markers">
+        <div class="ax-toggle-grid">
         <IntelCheck
           id="axis-intel-color-chips"
           label="Color chips"
@@ -2296,7 +2246,9 @@ export const EditorIntelPanel: Component = () => {
           checked={intel().inlinePinGutter}
           onChange={(v) => set({ inlinePinGutter: v })}
         />
+        </div>
+      </StudioSection>
       </div>
-    </>
+    </div>
   );
 };

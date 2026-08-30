@@ -157,179 +157,185 @@ export function RuntimePage(props: {
           <StudioStat label="Catalog match" value={matched()} />
         </div>
 
-        <StudioSection
-          title="Engine"
-          lead="Which runtime evaluates Pine. Changing engine does not install plugins — it selects one already in the catalog."
-        >
-          <div class="ax-chip-row">
-            <For each={engines()}>
-              {(en) => (
-                <StudioChip
-                  pressed={engine() === en.id}
-                  onClick={() => {
-                    setEngine(en.id);
-                    hydrate(en.id);
-                  }}
-                >
-                  {engineOptionLabel(en)}
-                </StudioChip>
-              )}
-            </For>
-          </div>
-          <Show when={selected()}>
-            {(en) => (
-              <>
-                <CapabilityBadges capabilities={en().capabilities} builtIn={en().builtIn} />
-                <StudioHint>{en().description}</StudioHint>
-              </>
-            )}
-          </Show>
-        </StudioSection>
-
-        <Show when={hasExecMode()}>
-          <StudioSection title="Execution mode" lead={modeHint()} testId="axis-exec-mode-field">
-            <div class="ax-chip-row" data-testid="axis-exec-mode">
-              <For each={modeOptions()}>
-                {(o) => (
-                  <StudioChip
-                    pressed={execMode() === o.value}
-                    onClick={() => setExecMode(o.value)}
-                    title={o.hint}
-                  >
-                    {o.label}
-                  </StudioChip>
+        <div class="ax-split">
+          <div class="ax-split-col">
+            <StudioSection
+              title="Engine"
+              lead="Which runtime evaluates Pine. Changing engine does not install plugins — it selects one already in the catalog."
+            >
+              <div class="ax-chip-row">
+                <For each={engines()}>
+                  {(en) => (
+                    <StudioChip
+                      pressed={engine() === en.id}
+                      onClick={() => {
+                        setEngine(en.id);
+                        hydrate(en.id);
+                      }}
+                    >
+                      {engineOptionLabel(en)}
+                    </StudioChip>
+                  )}
+                </For>
+              </div>
+              <Show when={selected()}>
+                {(en) => (
+                  <>
+                    <CapabilityBadges capabilities={en().capabilities} builtIn={en().builtIn} />
+                    <StudioHint>{en().description}</StudioHint>
+                  </>
                 )}
-              </For>
-            </div>
-            <Show when={engine() === 'pyodide'}>
-              <StudioHint>
-                HUD: ENG local · RUN browser. Numba compile needs RUN server (CPython).
-              </StudioHint>
+              </Show>
+            </StudioSection>
+
+            <Show when={hasExecMode()}>
+              <StudioSection title="Execution mode" lead={modeHint()} testId="axis-exec-mode-field">
+                <div class="ax-chip-row" data-testid="axis-exec-mode">
+                  <For each={modeOptions()}>
+                    {(o) => (
+                      <StudioChip
+                        pressed={execMode() === o.value}
+                        onClick={() => setExecMode(o.value)}
+                        title={o.hint}
+                      >
+                        {o.label}
+                      </StudioChip>
+                    )}
+                  </For>
+                </div>
+                <Show when={engine() === 'pyodide'}>
+                  <StudioHint>
+                    HUD: ENG local · RUN browser. Numba compile needs RUN server (CPython).
+                  </StudioHint>
+                </Show>
+              </StudioSection>
             </Show>
-          </StudioSection>
-        </Show>
 
-        <Show when={hasPreferWs()}>
-          <StudioToggle
-            id="axis-prefer-ws"
-            testId="axis-prefer-ws"
-            checked={preferWs()}
-            onChange={setPreferWs}
-            label="Prefer WebSocket run"
-            hint={
-              <>
-                Use <code>/ws/run</code> when the backend advertises it; fall back to REST{' '}
-                <code>POST /run</code>.
-              </>
-            }
-          />
-        </Show>
+            <Show when={hasPreferWs()}>
+              <StudioToggle
+                id="axis-prefer-ws"
+                testId="axis-prefer-ws"
+                checked={preferWs()}
+                onChange={setPreferWs}
+                label="Prefer WebSocket run"
+                hint={
+                  <>
+                    Use <code>/ws/run</code> when the backend advertises it; fall back to REST{' '}
+                    <code>POST /run</code>.
+                  </>
+                }
+              />
+            </Show>
 
-        <Show when={hasApiKey()}>
-          <StudioField
-            label="Engine API key"
-            for="axis-engine-api-key"
-            testId="axis-engine-api-key-field"
-            hint="Sent as X-API-Key and Bearer on POST /run. Leave empty for open local backends."
-          >
-            <StudioInput
-              id="axis-engine-api-key"
-              type="password"
-              mono
-              testId="axis-engine-api-key"
-              value={apiKey()}
-              onInput={setApiKey}
-              placeholder="X-API-Key (pyne-worker / secured backends)"
-              autocomplete="off"
-              spellcheck={false}
-            />
-          </StudioField>
-        </Show>
-
-        <Show when={needsEndpoint()}>
-          <StudioSection
-            title="Backend endpoint"
-            lead="Server engine and LSP (completion / hover) use this URL. Cross-origin needs CORS on pyne."
-          >
-            <StudioField for="axis-endpoint" label="URL">
-              <div class="ax-inline">
+            <Show when={hasApiKey()}>
+              <StudioField
+                label="Engine API key"
+                for="axis-engine-api-key"
+                testId="axis-engine-api-key-field"
+                hint="Sent as X-API-Key and Bearer on POST /run. Leave empty for open local backends."
+              >
                 <StudioInput
-                  id="axis-endpoint"
+                  id="axis-engine-api-key"
+                  type="password"
                   mono
-                  value={endpoint()}
-                  onInput={setEndpoint}
-                  placeholder="http://host:5002 or Worker URL"
+                  testId="axis-engine-api-key"
+                  value={apiKey()}
+                  onInput={setApiKey}
+                  placeholder="X-API-Key (pyne-worker / secured backends)"
+                  autocomplete="off"
                   spellcheck={false}
                 />
-                <StudioButton variant="ghost" disabled={probing()} onClick={() => void testEndpoint()}>
-                  {probing() ? <HooxLoader size="xs" /> : <Icons.activity />}
-                  Test
-                </StudioButton>
-              </div>
-            </StudioField>
-            <div class="ax-chip-row">
-              <StudioChip
-                testId="axis-endpoint-preset-local"
-                onClick={() =>
-                  applyPreset('http://127.0.0.1:5002', 'server', { mode: 'compile', ws: true })
-                }
-              >
-                Local pyne · compile
-              </StudioChip>
-              <StudioChip
-                testId="axis-endpoint-preset-vps"
-                onClick={() => applyPreset('https://pynescript.online', 'server')}
-              >
-                pynescript.online API
-              </StudioChip>
-              <StudioChip
-                testId="axis-endpoint-preset-pyne-worker"
-                onClick={() =>
-                  applyPreset(
-                    'https://pyne-worker.cryptolinx.workers.dev',
-                    'pyne-worker',
-                    { ws: false },
-                  )
-                }
-              >
-                pyne-worker edge
-              </StudioChip>
-            </div>
-            <Show when={loopbackWarn()}>
-              <p class="ax-error" data-testid="axis-endpoint-loopback-warn">
-                VPS UI → local compile: the browser calls this PC at 127.0.0.1:5002, not the VPS
-                API. Run pyne on :5002, allow this origin in CORS, then Test and Save.
-              </p>
+              </StudioField>
             </Show>
-            <Show when={probeMsg()}>
-              <StudioCode>{probeOk() ? `✓ ${probeMsg()}` : `✗ ${probeMsg()}`}</StudioCode>
-            </Show>
-          </StudioSection>
-        </Show>
-
-        <StudioSection title="Related" lead="Inventory lives next door — not as tabs on this page.">
-          <div class="ax-grid ax-grid--2">
-            <StudioCard
-              kicker="Catalog"
-              title="Workers"
-              onClick={() => props.onNavigate('workers')}
-            >
-              <StudioHint>
-                Probe pyne Pro, the AXIS Worker, Pyodide, and the service worker. Activate one to
-                become this Runtime.
-              </StudioHint>
-            </StudioCard>
-            <StudioCard
-              kicker="Catalog"
-              title="Plugins"
-              onClick={() => props.onNavigate('plugins')}
-            >
-              <StudioHint>
-                Sources, streams, engines, storage, and the script library. Compose them on Wire.
-              </StudioHint>
-            </StudioCard>
           </div>
-        </StudioSection>
+
+          <div class="ax-split-col">
+            <Show when={needsEndpoint()}>
+              <StudioSection
+                title="Backend endpoint"
+                lead="Server engine and LSP (completion / hover) use this URL. Cross-origin needs CORS on pyne."
+              >
+                <StudioField for="axis-endpoint" label="URL">
+                  <div class="ax-inline">
+                    <StudioInput
+                      id="axis-endpoint"
+                      mono
+                      value={endpoint()}
+                      onInput={setEndpoint}
+                      placeholder="http://host:5002 or Worker URL"
+                      spellcheck={false}
+                    />
+                    <StudioButton variant="ghost" disabled={probing()} onClick={() => void testEndpoint()}>
+                      {probing() ? <HooxLoader size="xs" /> : <Icons.activity />}
+                      Test
+                    </StudioButton>
+                  </div>
+                </StudioField>
+                <div class="ax-chip-row">
+                  <StudioChip
+                    testId="axis-endpoint-preset-local"
+                    onClick={() =>
+                      applyPreset('http://127.0.0.1:5002', 'server', { mode: 'compile', ws: true })
+                    }
+                  >
+                    Local pyne · compile
+                  </StudioChip>
+                  <StudioChip
+                    testId="axis-endpoint-preset-vps"
+                    onClick={() => applyPreset('https://pynescript.online', 'server')}
+                  >
+                    pynescript.online API
+                  </StudioChip>
+                  <StudioChip
+                    testId="axis-endpoint-preset-pyne-worker"
+                    onClick={() =>
+                      applyPreset(
+                        'https://pyne-worker.cryptolinx.workers.dev',
+                        'pyne-worker',
+                        { ws: false },
+                      )
+                    }
+                  >
+                    pyne-worker edge
+                  </StudioChip>
+                </div>
+                <Show when={loopbackWarn()}>
+                  <p class="ax-error" data-testid="axis-endpoint-loopback-warn">
+                    VPS UI → local compile: the browser calls this PC at 127.0.0.1:5002, not the VPS
+                    API. Run pyne on :5002, allow this origin in CORS, then Test and Save.
+                  </p>
+                </Show>
+                <Show when={probeMsg()}>
+                  <StudioCode>{probeOk() ? `✓ ${probeMsg()}` : `✗ ${probeMsg()}`}</StudioCode>
+                </Show>
+              </StudioSection>
+            </Show>
+
+            <StudioSection title="Related" lead="Inventory lives next door — not as tabs on this page.">
+              <div class="ax-grid ax-grid--2">
+                <StudioCard
+                  kicker="Catalog"
+                  title="Workers"
+                  onClick={() => props.onNavigate('workers')}
+                >
+                  <StudioHint>
+                    Probe pyne Pro, the AXIS Worker, Pyodide, and the service worker. Activate one to
+                    become this Runtime.
+                  </StudioHint>
+                </StudioCard>
+                <StudioCard
+                  kicker="Catalog"
+                  title="Plugins"
+                  onClick={() => props.onNavigate('plugins')}
+                >
+                  <StudioHint>
+                    Sources, streams, engines, storage, and the script library. Compose them on Wire.
+                  </StudioHint>
+                </StudioCard>
+              </div>
+            </StudioSection>
+          </div>
+        </div>
       </div>
       <StudioFooter status={`AXIS · engine ${engine()} · ${endpoint() || 'no endpoint'}`}>
         <StudioButton variant="ghost" onClick={props.onClose}>

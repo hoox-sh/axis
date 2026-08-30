@@ -41,27 +41,22 @@ export const CapabilityBadges: Component<{
 }> = (props) => {
   const keys = () => capabilityKeys(props.capabilities);
   return (
-    <span class={`inline-flex flex-wrap items-center gap-0.5 ${props.compact ? '' : 'mt-0.5'}`}>
+    <span class="ax-cap-row">
       <Show when={props.kind}>
-        <span class="px-1 py-px border border-border text-[9px] font-mono uppercase text-text-faint">
-          {props.kind}
-        </span>
+        <span class="ax-cap">{props.kind}</span>
       </Show>
       <Show when={props.builtIn}>
-        <span class="px-1 py-px border border-border text-[9px] font-mono text-text-faint">built-in</span>
+        <span class="ax-cap">built-in</span>
       </Show>
       <Show when={props.builtIn === false}>
-        <span class="px-1 py-px border border-accent/40 text-[9px] font-mono text-accent">plugin</span>
+        <span class="ax-cap ax-cap--plugin">plugin</span>
       </Show>
       <Show when={props.active}>
-        <span class="px-1 py-px border border-accent-2/50 text-[9px] font-mono text-accent-2">active</span>
+        <span class="ax-cap ax-cap--active">active</span>
       </Show>
       <For each={keys()}>
         {(k: CapKey) => (
-          <span
-            class={`px-1 py-px border text-[9px] font-mono ${CAP_META[k].class}`}
-            title={CAP_META[k].title}
-          >
+          <span class={`ax-cap ax-cap--${k === 'needsNetwork' ? 'network' : k === 'needsAuth' ? 'auth' : k === 'needsProxy' ? 'proxy' : k}`} title={CAP_META[k].title}>
             {CAP_META[k].label}
           </span>
         )}

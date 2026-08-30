@@ -30,7 +30,7 @@
  * | `GET /api/market/binance/ticker/24hr` | Binance `/api/v3/ticker/24hr` |
  * | `GET /api/market/binance/exchangeInfo` | Binance `/api/v3/exchangeInfo` |
  * | `GET /api/market/mexc/klines` | MEXC `/api/v3/klines` (allowlisted intervals) |
- * | `GET /api/market/mexc/ticker/24hr` | MEXC `/api/v3/ticker/24hr` (full book) |
+ * | `GET /api/market/mexc/ticker/24hr` | MEXC `/api/v3/ticker/24hr` (optional `symbol=`; else full book) |
  * | `GET /api/market/mexc/exchangeInfo` | MEXC `/api/v3/exchangeInfo` |
  * | `GET /api/market/health` | local feature flags |
  *
@@ -70,9 +70,8 @@ const SYMBOL_RE = /^[A-Z0-9]{1,20}$/;
 const INTERVAL_RE = /^(1s|1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w|1M)$/;
 
 /** MEXC REST `interval` (chart TF `1h` → `60m`, `1w` → `1W`).
- * Tighter than Binance — MEXC does not support `1s`, `3m`, `2h`, `6h`,
- * `8h`, `12h`, `3d`, or `1M`. */
-const MEXC_INTERVAL_RE = /^(1m|5m|15m|30m|60m|4h|1d|1W)$/;
+ * AXIS TFs plus venue `1M`. No `1s`, `3m`, `2h`, `6h`, `8h`, `12h`, `3d`. */
+const MEXC_INTERVAL_RE = /^(1m|5m|15m|30m|60m|4h|1d|1W|1M)$/;
 
 interface CacheEntry {
   body: string;
@@ -194,17 +193,19 @@ async function fetchSignedBinance(url: string, apiKey: string): Promise<Response
   }
 }
 
-async function proxyBinancePath(
+async function proxyPublicPath(
+  upstreams: readonly string[],
   pathAndQuery: string,
   origin: string,
   ttlMs: number,
   cacheKey: string,
+  venueLabel: string,
 ): Promise<Response> {
   const hit = getCached(cacheKey);
   if (hit) return cachedResponse(hit, origin, 'HIT');
 
   let lastErr = 'unreachable';
-  for (const base of BINANCE_UPSTREAMS) {
+  for (const base of upstreams) {
     const upstreamUrl = `${base}${pathAndQuery}`;
     try {
       const upstream = await fetchUpstream(upstreamUrl);
@@ -236,68 +237,36 @@ async function proxyBinancePath(
     {
       status: 'error',
       code: 'UPSTREAM_NETWORK',
-      message: `Binance upstream unreachable: ${lastErr}`,
+      message: `${venueLabel} upstream unreachable: ${lastErr}`,
     },
     502,
     origin,
   );
 }
 
-/**
- * Like {@link proxyBinancePath} but for MEXC: single canonical upstream
- * (`https://api.mexc.com`), short isolate-memory TTL. The client is
- * responsible for symbol normalization (`mexcSpotSymbol`) and interval
- * mapping (`mexcKlineInterval`) before constructing the query — the Worker
- * only validates against `MEXC_INTERVAL_RE` (tighter than Binance) and the
- * shared `SYMBOL_RE`.
- */
-async function proxyMexcPath(
+function proxyBinancePath(
   pathAndQuery: string,
   origin: string,
   ttlMs: number,
   cacheKey: string,
 ): Promise<Response> {
-  const hit = getCached(cacheKey);
-  if (hit) return cachedResponse(hit, origin, 'HIT');
-
-  let lastErr = 'unreachable';
-  for (const base of MEXC_UPSTREAMS) {
-    const upstreamUrl = `${base}${pathAndQuery}`;
-    try {
-      const upstream = await fetchUpstream(upstreamUrl);
-      const text = await upstream.text();
-      const contentType = upstream.headers.get('Content-Type') || 'application/json';
-      if (upstream.ok || upstream.status === 400 || upstream.status === 404) {
-        putCached(cacheKey, {
-          body: text,
-          status: upstream.status,
-          contentType,
-          expiresAt: Date.now() + ttlMs,
-        });
-      }
-      return new Response(text, {
-        status: upstream.status,
-        headers: {
-          'Content-Type': contentType,
-          'X-Axis-Market-Cache': 'MISS',
-          'X-Axis-Market-Upstream': base,
-          ...corsHeaders(origin),
-        },
-      });
-    } catch (err) {
-      lastErr = err instanceof Error ? err.message : String(err);
-    }
-  }
-
-  return json(
-    {
-      status: 'error',
-      code: 'UPSTREAM_NETWORK',
-      message: `MEXC upstream unreachable: ${lastErr}`,
-    },
-    502,
+  return proxyPublicPath(
+    BINANCE_UPSTREAMS,
+    pathAndQuery,
     origin,
+    ttlMs,
+    cacheKey,
+    'Binance',
   );
+}
+
+function proxyMexcPath(
+  pathAndQuery: string,
+  origin: string,
+  ttlMs: number,
+  cacheKey: string,
+): Promise<Response> {
+  return proxyPublicPath(MEXC_UPSTREAMS, pathAndQuery, origin, ttlMs, cacheKey, 'MEXC');
 }
 
 function parseLimit(raw: string | null, max: number, fallback: number): number | null {
@@ -348,7 +317,7 @@ function parseKlinesQuery(url: URL): KlinesQuery {
 
 /**
  * MEXC klines allowlist (symbol, interval, limit, startTime, endTime).
- * Tighter interval set than Binance — MEXC spot REST rejects the rest.
+ * AXIS TFs plus venue `1M`; other Binance intervals are rejected.
  * Symbol is already normalized by the client (`mexcSpotSymbol`).
  */
 function parseMexcKlinesQuery(url: URL): KlinesQuery {
@@ -378,6 +347,45 @@ function parseMexcKlinesQuery(url: URL): KlinesQuery {
   if (startTime != null) params.set('startTime', String(startTime));
   if (endTime != null) params.set('endTime', String(endTime));
   return { ok: true, params };
+}
+
+type MexcTickerQuery =
+  | { ok: true; pathAndQuery: string; cacheKey: string }
+  | { ok: false; message: string };
+
+/**
+ * Optional `symbol=` (single object ~400 B). No `symbols=` batch param.
+ * Omit query for the full book. Unknown keys are rejected.
+ */
+function parseMexcTickerQuery(url: URL): MexcTickerQuery {
+  for (const key of url.searchParams.keys()) {
+    if (key === 'symbol') continue;
+    if (key === 'symbols') {
+      return {
+        ok: false,
+        message: 'MEXC has no symbols= batch; use symbol= or omit',
+      };
+    }
+    return { ok: false, message: `unexpected query ${key}` };
+  }
+  const symbolOne = String(url.searchParams.get('symbol') || '')
+    .trim()
+    .toUpperCase();
+  if (!symbolOne) {
+    return {
+      ok: true,
+      pathAndQuery: '/api/v3/ticker/24hr',
+      cacheKey: 'mexc:ticker:all',
+    };
+  }
+  if (!SYMBOL_RE.test(symbolOne)) {
+    return { ok: false, message: 'invalid symbol' };
+  }
+  return {
+    ok: true,
+    pathAndQuery: `/api/v3/ticker/24hr?symbol=${symbolOne}`,
+    cacheKey: `mexc:ticker:${symbolOne}`,
+  };
 }
 
 /** @internal test helper — clear the in-memory market cache between cases. */
@@ -598,14 +606,20 @@ export async function handleMarket(
     );
   }
 
-  // MEXC does not support `?symbols=…` on ticker/24hr — it always returns
-  // the full book. The client filters by symbol after parsing the array.
   if (pathname === '/api/market/mexc/ticker/24hr') {
+    const parsed = parseMexcTickerQuery(url);
+    if (!parsed.ok) {
+      return json(
+        { status: 'error', code: 'BAD_REQUEST', message: parsed.message },
+        400,
+        origin,
+      );
+    }
     return proxyMexcPath(
-      '/api/v3/ticker/24hr',
+      parsed.pathAndQuery,
       origin,
       MEXC_TICKER_TTL_MS,
-      'mexc:ticker:all',
+      parsed.cacheKey,
     );
   }
 

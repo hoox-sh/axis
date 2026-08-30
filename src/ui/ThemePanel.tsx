@@ -10,9 +10,8 @@
  *
  * Uses the same studio design primitives (`ax-*`) as the rest of the studio
  * modal so the Theme page shares one visual language with Runtime / Wire /
- * Workers / Plugins. Each token uses a single color input (a text field plus a
- * non-interactive preview swatch) — not a swatch picker paired with a second
- * text box.
+ * Workers / Plugins. Color tokens use one {@link StudioColorInput}: swatch
+ * picker plus a field that accepts hex, rgb(), rgba(), and Pine `color.*` enums.
  *
  * Pine Script™ host colors:
  * - `chart.bg_color` (alias `chart.color_background`)
@@ -21,7 +20,7 @@
  * @module ui/ThemePanel
  */
 
-import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { For, Show, createMemo } from 'solid-js';
 import {
   store,
   setChartThemePreset,
@@ -34,13 +33,13 @@ import {
   listPresets,
   resolveTokens,
   defaultChartThemeState,
-  getTokenDef,
   type ThemeTokenDef,
   type ThemeTokenValue,
 } from '../theme';
 import {
   StudioButton,
   StudioChip,
+  StudioColorInput,
   StudioField,
   StudioHint,
   StudioInput,
@@ -129,13 +128,12 @@ export const ThemePanel = (props: ThemePanelProps) => {
       <For each={groups()}>
         {(group) => (
           <StudioSection title={group.label} lead={group.description}>
-            <div class="ax-stack ax-stack--tight">
+            <div class="ax-token-grid">
               <For each={group.defs}>
                 {(def) => (
                   <TokenField
                     def={def}
                     value={tokens()[def.key] ?? def.default}
-                    compact={!!props.compact}
                     onChange={(v) => setChartThemeToken(def.key, v)}
                   />
                 )}
@@ -151,37 +149,12 @@ export const ThemePanel = (props: ThemePanelProps) => {
 interface TokenFieldProps {
   def: ThemeTokenDef;
   value: ThemeTokenValue;
-  compact: boolean;
   onChange: (value: ThemeTokenValue) => void;
 }
 
 const TokenField = (props: TokenFieldProps) => {
   const id = () => `axis-theme-${props.def.key.replace(/\./g, '-')}`;
   const pineAlias = () => pineAliasFor(props.def.key);
-  const colorStr = () => String(props.value ?? '');
-
-  // Draft text so intermediate rgba/hex typing is not wiped by coerce rejects
-  const [colorDraft, setColorDraft] = createSignal(colorStr());
-  createEffect(() => {
-    setColorDraft(colorStr());
-  });
-
-  const commitColor = (raw: string) => {
-    const s = raw.trim();
-    if (!s) return;
-    const def = getTokenDef(props.def.key);
-    if (def?.type === 'color') {
-      if (
-        /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s) ||
-        /^(rgb|rgba|hsl|hsla)\(/i.test(s) ||
-        /^[a-zA-Z]+$/.test(s)
-      ) {
-        props.onChange(s);
-      }
-    } else {
-      props.onChange(s);
-    }
-  };
 
   return (
     <div class="ax-field" data-testid={tokenTestId(props.def.key)}>
@@ -219,25 +192,11 @@ const TokenField = (props: TokenFieldProps) => {
             ) : undefined
           }
         >
-          <div class="ax-color-row">
-            <span
-              class="ax-color-preview"
-              aria-hidden="true"
-              style={{ background: colorStr() || 'transparent' }}
-            />
-            <StudioInput
-              id={id()}
-              mono
-              value={colorDraft()}
-              placeholder="#rrggbb, rgba(…), or color name"
-              spellcheck={false}
-              onInput={(v) => {
-                setColorDraft(v);
-                commitColor(v);
-              }}
-              onBlur={(v) => commitColor(v)}
-            />
-          </div>
+          <StudioColorInput
+            id={id()}
+            value={String(props.value ?? '')}
+            onChange={(v) => props.onChange(v)}
+          />
         </StudioField>
       </Show>
 

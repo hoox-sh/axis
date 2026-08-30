@@ -248,6 +248,8 @@ export function SettingsPage(props: {
             aria-labelledby="axis-settings-tab-general"
             data-testid="axis-settings-general"
           >
+            <div class="ax-split">
+            <div class="ax-split-col">
             <StudioSection title="Appearance" testId="axis-ui-scale-field">
               <StudioField
                 label={`UI scale · ${formatUiScalePct(uiScale())}`}
@@ -349,6 +351,35 @@ export function SettingsPage(props: {
               />
             </StudioSection>
 
+            <StudioSection
+              title="Workspace"
+              lead="Chart reload refetches OHLCV. UI reset restores panel layout and density only. Engine and endpoint live on Runtime."
+              testId="axis-settings-workspace"
+            >
+              <div class="ax-chip-row">
+                <StudioButton
+                  variant="ghost"
+                  testId="axis-settings-reload-chart"
+                  disabled={reloading()}
+                  onClick={() => void onReloadChart()}
+                >
+                  {reloading() ? <HooxLoader size="xs" /> : <Icons.refresh />}
+                  {reloading() ? 'Reloading…' : 'Reload chart'}
+                </StudioButton>
+                <StudioButton
+                  variant="ghost"
+                  testId="axis-settings-reset-ui"
+                  onClick={onResetUi}
+                >
+                  <Icons.reset />
+                  Reset UI layout
+                </StudioButton>
+                <WorkspaceSnapshotMenu />
+              </div>
+            </StudioSection>
+            </div>
+
+            <div class="ax-split-col">
             <StudioSection
               title="Strategy fills & marks"
               lead="Historical and live default: execute on signal bar close. Marker options also live on Results → Strategy."
@@ -470,33 +501,8 @@ export function SettingsPage(props: {
                 Open On-Chain panel
               </StudioButton>
             </StudioSection>
-
-            <StudioSection
-              title="Workspace"
-              lead="Chart reload refetches OHLCV. UI reset restores panel layout and density only. Engine and endpoint live on Runtime."
-              testId="axis-settings-workspace"
-            >
-              <div class="ax-chip-row">
-                <StudioButton
-                  variant="ghost"
-                  testId="axis-settings-reload-chart"
-                  disabled={reloading()}
-                  onClick={() => void onReloadChart()}
-                >
-                  {reloading() ? <HooxLoader size="xs" /> : <Icons.refresh />}
-                  {reloading() ? 'Reloading…' : 'Reload chart'}
-                </StudioButton>
-                <StudioButton
-                  variant="ghost"
-                  testId="axis-settings-reset-ui"
-                  onClick={onResetUi}
-                >
-                  <Icons.reset />
-                  Reset UI layout
-                </StudioButton>
-                <WorkspaceSnapshotMenu />
-              </div>
-            </StudioSection>
+            </div>
+            </div>
           </div>
         </Show>
 
@@ -507,14 +513,16 @@ export function SettingsPage(props: {
             aria-labelledby="axis-settings-tab-data"
             data-testid="axis-settings-data"
           >
-            <StudioSection
-              title="Source & stream plugins"
-              lead="Advanced fields hidden from the topbar. How many bars to load is under General → Historical bars."
-              testId="axis-settings-plugins"
-            >
-              <PluginConfigRow layout="stacked" showAdvanced />
-            </StudioSection>
-            <ExchangeCredentialsPanel />
+            <div class="ax-split">
+              <StudioSection
+                title="Source & stream plugins"
+                lead="Advanced fields hidden from the topbar. How many bars to load is under General → Historical bars."
+                testId="axis-settings-plugins"
+              >
+                <PluginConfigRow layout="stacked" showAdvanced />
+              </StudioSection>
+              <ExchangeCredentialsPanel />
+            </div>
           </div>
         </Show>
 
@@ -552,10 +560,12 @@ export function SettingsPage(props: {
             aria-labelledby="axis-settings-tab-topbar"
             data-testid="axis-settings-topbar"
           >
+            <div class="ax-split">
             <StudioSection
-              title="Topbar visibility"
-              lead="Control which topbar groups and buttons are shown. Changes apply immediately and are persisted."
+              title="Topbar groups"
+              lead="Control which topbar groups are shown. Changes apply immediately and are persisted."
             >
+              <div class="ax-toggle-grid">
               <StudioToggle
                 id="topbar-brand"
                 checked={store.topbar.brand}
@@ -598,10 +608,12 @@ export function SettingsPage(props: {
                 label="Show system (fullscreen, chart-only, studio, theme)"
                 onChange={(v) => setStore('topbar', 'system', v)}
               />
+              </div>
             </StudioSection>
 
             <Show when={store.topbar.panels}>
               <StudioSection title="Panel buttons" lead="Individual panel toggle buttons.">
+                <div class="ax-toggle-grid">
                 <StudioToggle
                   id="topbar-panels-watchlist"
                   checked={store.topbar.panelsWatchlist}
@@ -686,8 +698,10 @@ export function SettingsPage(props: {
                   label="Status"
                   onChange={(v) => setStore('topbar', 'panelsStatus', v)}
                 />
+                </div>
               </StudioSection>
             </Show>
+            </div>
           </div>
         </Show>
       </div>

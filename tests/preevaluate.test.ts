@@ -351,6 +351,30 @@ strategy.entry("L", strategy.long)
     expect(diags.filter((d) => /chart\.(bg|fg|color_)/.test(d.message))).toEqual([]);
   });
 
+  it('knows syminfo.mintick / tickerid / timezone host vars', () => {
+    expect(isKnownBuiltinPath('syminfo.mintick')).toBe(true);
+    expect(isKnownBuiltinPath('syminfo.tickerid')).toBe(true);
+    expect(isKnownBuiltinPath('syminfo.timezone')).toBe(true);
+    expect(isKnownBuiltinPath('syminfo.currency')).toBe(true);
+    expect(isKnownBuiltinPath('syminfo.prefix')).toBe(true);
+    expect(isKnownBuiltinPath('syminfo.ticker')).toBe(true);
+    expect(isKnownBuiltinPath('syminfo.minitck')).toBe(false);
+    const src = [
+      '//@version=6',
+      'indicator("s")',
+      'tick = syminfo.mintick',
+      'id = request.security(syminfo.tickerid, timeframe.period, close)',
+      'tz = timestamp(syminfo.timezone, year, month, dayofmonth, 0, 0)',
+      'plot(close / tick, title=syminfo.ticker)',
+    ].join('\n');
+    const diags = checkUnknownBuiltinMembers(src);
+    expect(diags.filter((d) => /syminfo\./.test(d.message))).toEqual([]);
+    const typo = checkUnknownBuiltinMembers('plot(close / syminfo.minitck)\n');
+    expect(typo.some((d) => /syminfo\.minitck/.test(d.message) && /mintick/.test(d.message))).toBe(
+      true,
+    );
+  });
+
   it('knows text align/wrap constants', () => {
     const src = [
       'indicator("t")',

@@ -59,7 +59,7 @@ import {
 import { eventsToMarkers, normalizeStrategyEvents } from '../results/events';
 import { getManager } from '../chart/manager-access';
 import { Icons } from './icons';
-import { StudioStat, StudioTabs } from './studio';
+import { StudioButton, StudioFooter, StudioHint, StudioJson, StudioStat, StudioTabs } from './studio';
 import { StrategyReport } from './StrategyReport';
 import { ScriptRunSelect } from './ScriptRunSelect';
 import { HpoPanel } from './HpoPanel';
@@ -511,10 +511,6 @@ export const ResultsModal: Component = () => {
     downloadText(`axis-trades-${Date.now()}.csv`, tradesToCsv(rep.trades), 'text/csv');
   };
 
-  const onBackdrop = (e: MouseEvent) => {
-    if (e.target === e.currentTarget) close();
-  };
-
   const onKey = (e: KeyboardEvent) => {
     if (!store.resultsPanel.open) return;
     if (e.key === 'Escape') {
@@ -531,18 +527,17 @@ export const ResultsModal: Component = () => {
   return (
     <Show when={store.resultsPanel.open}>
       <div
-        class="sc-dialog-backdrop"
-        onClick={onBackdrop}
+        class="ax-page-backdrop ax-page-backdrop--front"
         role="presentation"
         data-testid="axis-results-backdrop"
       >
         <div
-          class="ax-page"
-          style={{ '--ax-canvas-pad': '1.5rem' } as unknown as string}
+          class="ax-page ax-page--results"
           role="dialog"
           aria-modal="true"
           aria-labelledby="axis-results-title"
           data-testid="axis-results"
+          data-studio-page="results"
           tabIndex={-1}
           ref={(el) => {
             if (!el) return;
@@ -573,81 +568,36 @@ export const ResultsModal: Component = () => {
                     <span class="ax-toggle-title">Auto-open on strategies</span>
                   </span>
                 </label>
-                <ScriptRunSelect testId="axis-results-script" class="ax-results-script" />
-                <Show when={copied()}>
-                  <span class="ax-hint ax-hint--accent">Copied</span>
+                <ScriptRunSelect testId="axis-results-script" variant="studio" />
+                <Show when={supportsRunResults()}>
+                  <div class="ax-inline" data-testid="axis-results-saved-badge-row">
+                    <button
+                      type="button"
+                      class="ax-chip"
+                      data-testid="axis-results-saved-badge"
+                      title={`Saved runs · storage: ${storageEngineId()}`}
+                      aria-label={`Open saved runs (${savedRuns().length})`}
+                      onClick={openSavedTab}
+                    >
+                      <Icons.database />
+                      {savedRuns().length} saved
+                    </button>
+                    <Show when={savedRunsResource.loading}>
+                      <Icons.loader class="animate-spin" />
+                    </Show>
+                  </div>
                 </Show>
-                <button
-                  class="ax-btn ax-btn--ghost"
-                  title="Copy current tab"
-                  onClick={() => {
-                    const r = result();
-                    if (!r) return;
-                    if (tab() === 'raw') flashCopied(rawJson());
-                    else if (tab() === 'strategy') {
-                      const rep = report();
-                      flashCopied(rep ? tradesToCsv(rep.trades) : '');
-                    } else flashCopied(rawJson());
-                  }}
-                >
-                  <Icons.copy />
-                  Copy
-                </button>
-                <button
-                  class="ax-btn ax-btn--ghost"
-                  title="Export full run JSON"
-                  onClick={exportJson}
-                  disabled={!result()}
-                >
-                  <Icons.fileJson />
-                  JSON
-                </button>
-                <button
-                  class="ax-btn ax-btn--ghost"
-                  title="Export closed trades CSV"
-                  onClick={exportTradesCsv}
-                  disabled={!report()?.trades.length}
-                >
-                  <Icons.fileCsv />
-                  CSV
-                </button>
-                <button
-                  class="ax-btn ax-btn--ghost ax-btn--icon"
-                  aria-label="Close"
+                <StudioButton
+                  variant="ghost"
+                  class="ax-btn--icon"
+                  ariaLabel="Close"
                   title="Close"
                   onClick={close}
                 >
                   <Icons.x />
-                </button>
+                </StudioButton>
               </div>
             </header>
-
-            {/* Storage badge — only visible when the active plugin supports
-                `saveResult`. Shows saved-runs count + active engine id, and
-                switches to the "Saved" tab on click. */}
-            <Show when={supportsRunResults()}>
-              <div
-                class="flex items-center gap-2 px-6 py-2 border-b border-[color:var(--color-border-soft)]"
-                data-testid="axis-results-saved-badge-row"
-              >
-                <button
-                  type="button"
-                  class="ax-chip"
-                  data-testid="axis-results-saved-badge"
-                  title={`Saved runs · storage: ${storageEngineId()}`}
-                  aria-label={`Open saved runs (${savedRuns().length})`}
-                  onClick={openSavedTab}
-                >
-                  <Icons.database />
-                  <span class="ax-mono">{savedRuns().length} saved</span>
-                  <span class="text-text-faint">·</span>
-                  <span class="text-text-dim">{storageEngineId()}</span>
-                </button>
-                <Show when={savedRunsResource.loading}>
-                  <Icons.loader class="animate-spin text-text-faint" />
-                </Show>
-              </div>
-            </Show>
 
             <StudioTabs
               tabs={TABS}
@@ -660,13 +610,13 @@ export const ResultsModal: Component = () => {
 
             <div class="ax-page-body">
               <div class="ax-page-stack">
-                <div class="ax-page-canvas ax-page-canvas--wide" data-testid="axis-results-body">
-                  {/* Empty / error states */}
-                  <Show when={!result()}>
+                <div class="ax-page-canvas" data-testid="axis-results-body">
+                  {/* Empty / error states — skip Optimise / Saved, which have their own empty copy. */}
+                  <Show when={!result() && tab() !== 'optimise' && tab() !== 'saved'}>
                     <div class="ax-empty">Run a script to populate results.</div>
                   </Show>
                   <Show when={result()?.status === 'error'}>
-                    <div class="ax-error border border-[color-mix(in_srgb,var(--color-red)_40%,transparent)] bg-[color-mix(in_srgb,var(--color-red)_8%,transparent)] p-2 rounded-[var(--radius-surface)]">
+                    <div class="ax-callout">
                       {result()?.error || 'Run error'}
                     </div>
                   </Show>
@@ -677,7 +627,7 @@ export const ResultsModal: Component = () => {
                       when={normalizedEvents().length > 0}
                       fallback={<div class="ax-empty">No strategy events in this run.</div>}
                     >
-                      <ul class="ax-list">
+                      <ul class="ax-list ax-event-list">
                         <For each={normalizedEvents()}>
                           {(ev) => {
                             const kind = String(ev.type || ev.event || ev.kind || '?');
@@ -693,13 +643,13 @@ export const ResultsModal: Component = () => {
                                   : 'ax-event-dir ax-event-dir--flat';
                             return (
                               <li class="ax-row ax-event-row">
-                                <span class="ax-mono text-text-faint w-[118px] flex-shrink-0">{t}</span>
+                                <span class="ax-mono ax-event-time">{t}</span>
                                 <span class="ax-event-kind">{kind}</span>
                                 <Show when={dir}>
                                   <span class={dirClass}>{dir}</span>
                                 </Show>
-                                <span class="text-text-dim w-16 truncate">{String(ev.id || '')}</span>
-                                <span class="text-text flex-1 truncate text-right ax-mono">
+                                <span class="ax-event-id">{String(ev.id || '')}</span>
+                                <span class="ax-mono ax-event-price">
                                   {ev.price !== undefined && ev.price !== null
                                     ? Number(ev.price).toFixed(2)
                                     : '—'}
@@ -803,7 +753,7 @@ export const ResultsModal: Component = () => {
 
                   {/* Raw */}
                   <Show when={result() && tab() === 'raw'}>
-                    <pre class="ax-code" data-testid="axis-results-raw">{rawJson()}</pre>
+                    <StudioJson value={result()} testId="axis-results-raw" />
                   </Show>
 
                   {/* Saved runs (storage-backed) — only when the active plugin
@@ -822,10 +772,10 @@ export const ResultsModal: Component = () => {
                       }
                     >
                       <div class="ax-stack ax-stack--compact" data-testid="axis-results-saved">
-                        <div class="flex items-center gap-2 py-2">
+                        <div class="ax-toolbar">
                           <span class="ax-card-kicker">Storage</span>
-                          <span class="text-text-dim ax-mono">{storageEngineId()}</span>
-                          <span class="flex-1" />
+                          <span class="ax-mono">{storageEngineId()}</span>
+                          <span class="ax-toolbar-spacer" />
                           <button
                             type="button"
                             class="ax-btn ax-btn--ghost"
@@ -841,20 +791,17 @@ export const ResultsModal: Component = () => {
                         <Show when={savedRunsResource.loading && savedRuns().length === 0}>
                           <div class="ax-empty">
                             <Icons.loader class="animate-spin" />
-                            <span class="ml-2">Loading saved runs…</span>
+                            Loading saved runs…
                           </div>
                         </Show>
 
                         <Show when={savedRunsError()}>
-                          <div
-                            class="ax-error border border-[color-mix(in_srgb,var(--color-red)_40%,transparent)] bg-[color-mix(in_srgb,var(--color-red)_8%,transparent)] p-2 rounded-[var(--radius-surface)]"
-                            data-testid="axis-results-saved-error"
-                          >
-                            <div class="font-medium">Failed to list saved runs</div>
-                            <div class="text-text-dim text-xs mt-1">{savedRunsError()}</div>
+                          <div class="ax-callout" data-testid="axis-results-saved-error">
+                            <div>Failed to list saved runs</div>
+                            <StudioHint>{savedRunsError()}</StudioHint>
                             <button
                               type="button"
-                              class="ax-btn ax-btn--ghost mt-2"
+                              class="ax-btn ax-btn--ghost"
                               onClick={reloadSavedRuns}
                             >
                               <Icons.refresh />
@@ -872,117 +819,153 @@ export const ResultsModal: Component = () => {
                               </Show>
                               . Run a strategy to persist the first result.
                             </div>
-                            <div class="text-text-dim text-xs mt-2">
+                            <p class="ax-hint">
                               Stored in <span class="ax-mono">{storageEngineId()}</span>; FIFO cap
                               {' '}
                               <span class="ax-mono">{MAX_RESULTS_PER_SCRIPT}</span>
                               {' '}
                               runs per script.
-                            </div>
+                            </p>
                           </div>
                         </Show>
 
                         <Show when={savedRuns().length > 0}>
-                          <ul class="ax-list" data-testid="axis-results-saved-list">
+                          <ul class="ax-list ax-list--entity" data-testid="axis-results-saved-list">
                             <For each={savedRuns()}>
                               {(run) => {
                                 const market = savedRunMarket(run);
                                 const stats = readSavedStats(run.stats);
                                 return (
                                   <li class="ax-row" data-testid="axis-results-saved-row">
-                                    <div class="flex-1 min-w-0">
-                                      <div class="flex items-center gap-2 flex-wrap">
-                                        <span class="ax-mono text-text truncate">
-                                          {run.label || defaultSavedLabel(run)}
-                                        </span>
-                                        <span
-                                          class={`ax-chip text-xs ${
-                                            run.scriptKind === 'strategy'
-                                              ? 'is-on'
-                                              : ''
-                                          }`}
-                                          title={`Script kind: ${run.scriptKind ?? 'unknown'}`}
-                                        >
-                                          {run.scriptKind ?? 'unknown'}
-                                        </span>
-                                        <Show when={market.symbol || market.timeframe}>
-                                          <span class="text-text-dim ax-mono text-xs truncate">
-                                            {market.symbol}
-                                            <Show when={market.symbol && market.timeframe}>
-                                              <span class="text-text-faint"> · </span>
-                                            </Show>
-                                            {market.timeframe}
+                                    <div class="ax-entity">
+                                      <div class="ax-entity-body">
+                                        <div class="ax-entity-head">
+                                          <span class="ax-card-title">
+                                            {run.label || defaultSavedLabel(run)}
                                           </span>
-                                        </Show>
+                                          <span
+                                            class={`ax-chip ax-chip--tag${
+                                              run.scriptKind === 'strategy' ? ' is-on' : ''
+                                            }`}
+                                            title={`Script kind: ${run.scriptKind ?? 'unknown'}`}
+                                          >
+                                            {run.scriptKind ?? 'unknown'}
+                                          </span>
+                                          <Show when={market.symbol || market.timeframe}>
+                                            <span class="ax-card-kicker">
+                                              {market.symbol}
+                                              {market.symbol && market.timeframe ? ' · ' : ''}
+                                              {market.timeframe}
+                                            </span>
+                                          </Show>
+                                        </div>
+                                        <p class="ax-hint">
+                                          <span class="ax-mono">{formatSavedAt(run.startedAt)}</span>
+                                          {' · '}
+                                          {formatSavedDuration(run.durationMs)}
+                                          <Show when={stats.trades} keyed>
+                                            {(trades) => <> · {trades} trades</>}
+                                          </Show>
+                                          <Show when={stats.winRate} keyed>
+                                            {(winRate) => <> · {winRate.toFixed(1)}% win</>}
+                                          </Show>
+                                          <Show when={stats.totalPnl} keyed>
+                                            {(totalPnl) => (
+                                              <>
+                                                {' · '}
+                                                <span class={totalPnl >= 0 ? 'ax-table-pos' : 'ax-table-neg'}>
+                                                  P&amp;L {formatMoney(totalPnl)}
+                                                </span>
+                                              </>
+                                            )}
+                                          </Show>
+                                        </p>
                                       </div>
-                                      <div class="flex items-center gap-3 mt-1 text-xs text-text-dim flex-wrap">
-                                        <span class="ax-mono">{formatSavedAt(run.startedAt)}</span>
-                                        <span class="text-text-faint">·</span>
-                                        <span>{formatSavedDuration(run.durationMs)}</span>
-                                        <Show when={stats.trades} keyed>
-                                          {(trades) => (
-                                            <>
-                                              <span class="text-text-faint">·</span>
-                                              <span>{trades} trades</span>
-                                            </>
-                                          )}
-                                        </Show>
-                                        <Show when={stats.winRate} keyed>
-                                          {(winRate) => (
-                                            <>
-                                              <span class="text-text-faint">·</span>
-                                              <span>{winRate.toFixed(1)}% win</span>
-                                            </>
-                                          )}
-                                        </Show>
-                                        <Show when={stats.totalPnl} keyed>
-                                          {(totalPnl) => (
-                                            <>
-                                              <span class="text-text-faint">·</span>
-                                              <span class={totalPnl >= 0 ? 'text-positive' : 'text-negative'}>
-                                                P&amp;L {formatMoney(totalPnl)}
-                                              </span>
-                                            </>
-                                          )}
-                                        </Show>
+                                      <div class="ax-entity-actions">
+                                        <button
+                                          type="button"
+                                          class="ax-btn ax-btn--ghost"
+                                          title="Restore this run into the in-memory Results view"
+                                          data-testid="axis-results-saved-restore"
+                                          onClick={() => void restoreSavedRun(run)}
+                                        >
+                                          <Icons.check />
+                                          Restore
+                                        </button>
+                                        <button
+                                          type="button"
+                                          class="ax-btn ax-btn--ghost ax-btn--danger"
+                                          title="Delete this saved run (irreversible)"
+                                          data-testid="axis-results-saved-delete"
+                                          onClick={() => void deleteSavedRun(run)}
+                                        >
+                                          <Icons.trash />
+                                          Delete
+                                        </button>
                                       </div>
-                                    </div>
-                                    <div class="flex items-center gap-1 flex-shrink-0">
-                                      <button
-                                        type="button"
-                                        class="ax-btn ax-btn--ghost"
-                                        title="Restore this run into the in-memory Results view"
-                                        data-testid="axis-results-saved-restore"
-                                        onClick={() => void restoreSavedRun(run)}
-                                      >
-                                        <Icons.check />
-                                        Restore
-                                      </button>
-                                      <button
-                                        type="button"
-                                        class="ax-btn ax-btn--ghost ax-btn--danger"
-                                        title="Delete this saved run (irreversible)"
-                                        data-testid="axis-results-saved-delete"
-                                        onClick={() => void deleteSavedRun(run)}
-                                      >
-                                        <Icons.trash />
-                                        Delete
-                                      </button>
                                     </div>
                                   </li>
                                 );
                               }}
                             </For>
                           </ul>
-                          <div class="text-text-dim text-xs">
+                          <p class="ax-hint">
                             {savedRuns().length} run{savedRuns().length === 1 ? '' : 's'} ·
-                            {' '}FIFO cap <span class="ax-mono">{MAX_RESULTS_PER_SCRIPT}</span>
-                          </div>
+                            FIFO cap <span class="ax-mono">{MAX_RESULTS_PER_SCRIPT}</span>
+                          </p>
                         </Show>
                       </div>
                     </Show>
                   </Show>
                 </div>
+                <StudioFooter
+                  status={(() => {
+                    const r = result();
+                    if (!r) return 'No run yet';
+                    const ms = r.meta?.ms;
+                    return `${r.meta?.script_name || 'run'} · ${r.status || '—'} · ${
+                      typeof ms === 'number' ? `${Math.round(ms)} ms` : '—'
+                    }`;
+                  })()}
+                >
+                  <Show when={copied()}>
+                    <span class="ax-hint ax-hint--accent">Copied</span>
+                  </Show>
+                  <StudioButton
+                    variant="ghost"
+                    title="Copy current tab"
+                    onClick={() => {
+                      const r = result();
+                      if (!r) return;
+                      if (tab() === 'raw') flashCopied(rawJson());
+                      else if (tab() === 'strategy') {
+                        const rep = report();
+                        flashCopied(rep ? tradesToCsv(rep.trades) : '');
+                      } else flashCopied(rawJson());
+                    }}
+                  >
+                    <Icons.copy />
+                    Copy
+                  </StudioButton>
+                  <StudioButton
+                    variant="ghost"
+                    title="Export full run JSON"
+                    onClick={exportJson}
+                    disabled={!result()}
+                  >
+                    <Icons.fileJson />
+                    JSON
+                  </StudioButton>
+                  <StudioButton
+                    variant="ghost"
+                    title="Export closed trades CSV"
+                    onClick={exportTradesCsv}
+                    disabled={!report()?.trades.length}
+                  >
+                    <Icons.fileCsv />
+                    CSV
+                  </StudioButton>
+                </StudioFooter>
               </div>
             </div>
           </div>

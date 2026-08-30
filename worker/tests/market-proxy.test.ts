@@ -301,11 +301,10 @@ describe('handleMarket mexc proxy', () => {
     }
   });
 
-  it('proxies ticker/24hr full book (no symbols filter)', async () => {
+  it('proxies ticker/24hr full book when query is omitted', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
-      // MEXC always returns the full book; no `?symbols=` query is forwarded.
       expect(url).toBe('https://api.mexc.com/api/v3/ticker/24hr');
       return new Response(
         JSON.stringify([{ symbol: 'BTCUSDT', lastPrice: '1', priceChangePercent: '2' }]),
@@ -323,6 +322,84 @@ describe('handleMarket mexc proxy', () => {
       expect(res!.status).toBe(200);
       const body = (await res!.json()) as Array<{ symbol: string }>;
       expect(body[0]?.symbol).toBe('BTCUSDT');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('forwards optional ticker/24hr symbol= and caches separately from all', async () => {
+    let calls = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      calls += 1;
+      const url = String(input);
+      expect(url).toBe('https://api.mexc.com/api/v3/ticker/24hr?symbol=BTCUSDT');
+      return new Response(
+        JSON.stringify({ symbol: 'BTCUSDT', lastPrice: '1', priceChangePercent: '2' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }) as typeof fetch;
+
+    try {
+      const path = '/api/market/mexc/ticker/24hr?symbol=btcusdt';
+      const r1 = await handleMarket(req(path), env, origin, '/api/market/mexc/ticker/24hr');
+      expect(r1!.status).toBe(200);
+      expect(r1!.headers.get('X-Axis-Market-Cache')).toBe('MISS');
+      const body = (await r1!.json()) as { symbol: string };
+      expect(body.symbol).toBe('BTCUSDT');
+
+      const r2 = await handleMarket(req(path), env, origin, '/api/market/mexc/ticker/24hr');
+      expect(r2!.headers.get('X-Axis-Market-Cache')).toBe('HIT');
+      expect(calls).toBe(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('rejects ticker/24hr symbols= batch', async () => {
+    const res = await handleMarket(
+      req(`/api/market/mexc/ticker/24hr?symbols=${encodeURIComponent('["BTCUSDT"]')}`),
+      env,
+      origin,
+      '/api/market/mexc/ticker/24hr',
+    );
+    expect(res!.status).toBe(400);
+    const body = (await res!.json()) as { message: string };
+    expect(body.message).toContain('symbols=');
+  });
+
+  it('rejects invalid ticker/24hr symbol', async () => {
+    const res = await handleMarket(
+      req('/api/market/mexc/ticker/24hr?symbol=bad!'),
+      env,
+      origin,
+      '/api/market/mexc/ticker/24hr',
+    );
+    expect(res!.status).toBe(400);
+    const body = (await res!.json()) as { message: string };
+    expect(body.message).toBe('invalid symbol');
+  });
+
+  it('accepts MEXC-native interval 1M', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      expect(url).toContain('api.mexc.com/api/v3/klines');
+      expect(url).toContain('interval=1M');
+      return new Response(JSON.stringify([[1_700_000_000_000, '1', '2', '0.5', '1.5', '10']]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    try {
+      const res = await handleMarket(
+        req('/api/market/mexc/klines?symbol=BTCUSDT&interval=1M&limit=2'),
+        env,
+        origin,
+        '/api/market/mexc/klines',
+      );
+      expect(res!.status).toBe(200);
     } finally {
       globalThis.fetch = originalFetch;
     }

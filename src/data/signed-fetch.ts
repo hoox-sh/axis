@@ -29,12 +29,7 @@
 import { getCredentialForVenue } from './credentials';
 import { signVenueRequest, type VenueId } from './venues';
 import type { ProviderVenue } from './provider';
-import { store } from '../store';
-import {
-  DEFAULT_ONCHAIN_WORKER_BASE,
-  looksLikeOnchainWorkerEndpoint,
-  normalizeEndpointBase,
-} from '../onchain/proxy';
+import { resolveMarketWorkerBase } from './market-worker';
 
 export type SignedFetchOpts = {
   venue: VenueId;
@@ -46,14 +41,6 @@ export type SignedFetchOpts = {
   /** AXIS Worker origin for `/api/market/binance/signed/…`. */
   workerBase?: string;
 };
-
-function resolveSignedWorkerBase(explicit?: string): string {
-  const fromCfg = normalizeEndpointBase(explicit);
-  if (fromCfg && looksLikeOnchainWorkerEndpoint(fromCfg)) return fromCfg;
-  const fromStore = normalizeEndpointBase(store.endpoint);
-  if (fromStore && looksLikeOnchainWorkerEndpoint(fromStore)) return fromStore;
-  return DEFAULT_ONCHAIN_WORKER_BASE;
-}
 
 function queryRecord(query?: Record<string, string | number | undefined>): Record<string, string> {
   const out: Record<string, string> = {};
@@ -123,7 +110,7 @@ export async function fetchSignedJson(opts: SignedFetchOpts): Promise<unknown> {
     !opts.skipWorkerProxy &&
     (opts.path === '/api/v3/klines' || opts.path.endsWith('/klines'))
   ) {
-    const worker = resolveSignedWorkerBase(opts.workerBase);
+    const worker = resolveMarketWorkerBase(opts.workerBase);
     const q = queryString(opts.query);
     const url = `${worker.replace(/\/+$/, '')}/api/market/binance/signed/klines${q ? `?${q}` : ''}`;
     const res = await fetch(url, {
