@@ -887,9 +887,12 @@ async function runAndApplyInner(
 
   // Per-script cache: silent multi-indicator live re-runs must not thrash
   // Scriptlogs/Results (only the focused id updates store.lastRun).
+  // Live ticks also skip durable saveResult — otherwise Saved runs grows
+  // by one row per second while a stream is attached.
   setLastRun(withAxisSource(result, script), {
     scriptId: indicatorId ?? EDITOR_RUN_KEY,
     focus: !silent,
+    persistence: silent || opts.liveTick ? 'skip' : 'auto',
   });
   if (openResults && detectScriptKind(script) === 'strategy' && store.resultsAutoOpen) {
     setStore('resultsPanel', 'open', true);
@@ -1690,7 +1693,11 @@ async function runAndApplyInner(
       // Run cache was under EDITOR_RUN_KEY — migrate so tables/results follow
       // the real script id and delete clears them with the card.
       try {
-        setLastRun(withAxisSource(result, script), { scriptId: newId, focus: !silent });
+        setLastRun(withAxisSource(result, script), {
+          scriptId: newId,
+          focus: !silent,
+          persistence: silent || opts.liveTick ? 'skip' : 'auto',
+        });
         setLastRun(null, { scriptId: EDITOR_RUN_KEY });
       } catch {
         /* store optional */

@@ -13,6 +13,7 @@
  * Run: `bun run test:e2e:smoke`
  */
 import { test, expect } from '@playwright/test';
+import { openStudio } from './studio';
 
 test.describe('AXIS smoke @smoke', () => {
   test.beforeEach(async ({ page }) => {
@@ -76,11 +77,7 @@ test.describe('AXIS smoke @smoke', () => {
 
   test('opens and closes plugin Manager', async ({ page }) => {
     await page.goto('/');
-    // Plugins is a studio catalog page (topbar hook is sr-only). Open via Runtime rail.
-    await page.getByTestId('axis-btn-runtimes').click();
-    await expect(page.getByTestId('axis-runtimes-hub')).toBeVisible();
-    await page.getByRole('button', { name: 'Plugins', exact: true }).click();
-    await expect(page.getByTestId('axis-manager')).toBeVisible();
+    await openStudio(page, 'plugins');
     await expect(page.getByRole('tab', { name: 'Catalog' })).toBeVisible();
     await page.getByTestId('axis-plugins-close').click();
     await expect(page.getByTestId('axis-manager')).toHaveCount(0);
@@ -88,8 +85,7 @@ test.describe('AXIS smoke @smoke', () => {
 
   test('opens Runtime studio page', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('axis-btn-runtimes').click();
-    await expect(page.getByTestId('axis-runtimes-hub')).toBeVisible();
+    await openStudio(page, 'runtime');
     await page.getByTestId('axis-runtimes-close').click();
     await expect(page.getByTestId('axis-runtimes-hub')).toHaveCount(0);
   });
@@ -100,11 +96,10 @@ test.describe('AXIS smoke @smoke', () => {
     await expect(page.getByTestId('axis-btn-architecture')).toBeHidden();
     await expect(page.getByTestId('axis-btn-runtimes')).toBeHidden();
     await expect(page.getByTestId('axis-btn-settings')).toBeHidden();
-    await page.getByTestId('axis-btn-studio').click();
-    await expect(page.getByTestId('axis-runtimes-hub')).toBeVisible();
-    await page.getByRole('button', { name: 'Wire', exact: true }).click();
+    await openStudio(page, 'runtime');
+    await page.getByTestId('axis-studio-rail-wire').click();
     await expect(page.getByTestId('axis-architecture-modal')).toBeVisible();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByTestId('axis-studio-rail-settings').click();
     await expect(page.getByTestId('axis-settings')).toBeVisible();
     await page.getByTestId('axis-settings-close').click();
     await expect(page.getByTestId('axis-settings')).toHaveCount(0);
@@ -112,8 +107,7 @@ test.describe('AXIS smoke @smoke', () => {
 
   test('opens Architecture modal and applies Offline Lab', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('axis-btn-architecture').click();
-    await expect(page.getByTestId('axis-architecture-modal')).toBeVisible();
+    await openStudio(page, 'wire');
     await page.getByTestId('axis-arch-preset-offline-lab').click();
     // Drift titles like "Offline Lab +2" mean the live wiring, not the recipe.
     await expect(page.getByTestId('axis-architecture-title')).toHaveText('Wire · Offline Lab');
@@ -135,8 +129,9 @@ test.describe('AXIS smoke @smoke', () => {
 
   test('opens Settings dialog', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('axis-btn-settings').click();
+    await openStudio(page, 'settings');
     await expect(page.getByRole('dialog', { name: /Settings/i })).toBeVisible();
-    await page.getByRole('button', { name: 'Cancel' }).click();
+    await page.getByTestId('axis-settings-close').click();
+    await expect(page.getByTestId('axis-settings')).toHaveCount(0);
   });
 });

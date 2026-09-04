@@ -592,6 +592,7 @@ export const ResultsModal: Component = () => {
                   class="ax-btn--icon"
                   ariaLabel="Close"
                   title="Close"
+                  testId="axis-results-close"
                   onClick={close}
                 >
                   <Icons.x />

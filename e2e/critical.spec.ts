@@ -11,6 +11,7 @@
  * plots/events and empty Binance REST so CI stays offline-safe.
  */
 import { test, expect } from '@playwright/test';
+import { openStudio } from './studio';
 
 test.describe('AXIS critical journeys @critical', () => {
   test.beforeEach(async ({ page }) => {
@@ -48,16 +49,21 @@ test.describe('AXIS critical journeys @critical', () => {
     await page.getByTestId('axis-select-engine').selectOption('server');
     await page.getByTestId('axis-btn-run').click();
 
-    // Runner opens results panel on non-silent run
-    await expect(page.getByTestId('axis-results')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Strategy').first()).toBeVisible();
+    // Strategies auto-open Results; indicators do not. Open it if the overlay
+    // is not already up — do not click the topbar while the overlay covers it.
+    const results = page.getByTestId('axis-results');
+    if ((await results.count()) === 0) {
+      await page.getByTestId('axis-btn-results').click();
+    }
+    await expect(results).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('tab', { name: 'Strategy' })).toBeVisible();
   });
 
   test('Results toggle and Scripts panel', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('axis-btn-results').click();
     await expect(page.getByTestId('axis-results')).toBeVisible();
-    await page.getByTestId('axis-btn-results').click();
+    await page.getByTestId('axis-results-close').click();
     await expect(page.getByTestId('axis-results')).toHaveCount(0);
 
     await page.getByTestId('axis-btn-indicators').click();
@@ -73,9 +79,8 @@ test.describe('AXIS critical journeys @critical', () => {
 
   test('Settings dialog has testid and closes', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('axis-btn-settings').click();
-    await expect(page.getByTestId('axis-settings')).toBeVisible();
-    await page.getByRole('button', { name: 'Cancel' }).click();
+    await openStudio(page, 'settings');
+    await page.getByTestId('axis-settings-close').click();
     await expect(page.getByTestId('axis-settings')).toHaveCount(0);
   });
 });

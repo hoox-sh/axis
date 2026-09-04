@@ -1607,10 +1607,22 @@ function readResultMeta(result: unknown): {
   symbol?: unknown;
   timeframe?: unknown;
   axisSource?: unknown;
+  deferred?: unknown;
+  skipped?: unknown;
+  superseded?: unknown;
 } {
   if (result == null || typeof result !== 'object') return {};
   const m = (result as { meta?: Record<string, unknown> }).meta;
   return (m && typeof m === 'object') ? m : {};
+}
+
+/**
+ * Live ticks, deferred silent re-runs, and hidden skips must not fill the
+ * Saved-runs store. Those payloads are in-memory only.
+ */
+function isEphemeralRunResult(result: unknown): boolean {
+  const meta = readResultMeta(result);
+  return meta.deferred === true || meta.skipped != null || meta.superseded === true;
 }
 
 /**
@@ -1637,6 +1649,9 @@ function buildResultMeta(result: unknown, scriptId: string): ResultMeta {
   };
 }
 
+/** Serializes fire-and-forget saves so IDB FIFO trim cannot race itself. */
+let persistTail: Promise<void> = Promise.resolve();
+
 /**
  * Fire-and-forget save — UI never blocks on the storage backend. Errors are
  * logged via {@link appendLog} but never propagate, so a transient IDB failure
@@ -1644,10 +1659,19 @@ function buildResultMeta(result: unknown, scriptId: string): ResultMeta {
  */
 function persistRunResult(stored: StoredRunResult, scriptId: string): void {
   if (typeof window === 'undefined') return;
-  saveRunResult(stored).catch((err: unknown) => {
-    const message = err instanceof Error ? err.message : String(err);
-    appendLog('warn', `Failed to persist run result for ${scriptId}: ${message}`, 'library');
-  });
+  persistTail = persistTail
+    .catch(() => undefined)
+    .then(() =>
+      saveRunResult(stored).catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        appendLog('warn', `Failed to persist run result for ${scriptId}: ${message}`, 'library');
+      }),
+    );
+}
+
+/** Drain queued run-result saves. Test-only. */
+export function _flushRunResultPersistForTests(): Promise<void> {
+  return persistTail;
 }
 
 /**
@@ -1701,7 +1725,10 @@ export function setLastRun(result: unknown, opts: SetLastRunOpts = {}): string |
   // Persist (fire-and-forget) when the caller did not opt out and the active
   // backend supports `saveResult`. We always compute the meta eagerly so the
   // returned id is stable even if the backend has not flushed yet.
+  // Silent live ticks pass `persistence: 'skip'` — without that, every-tick
+  // re-runs would write a new Saved-run row about once a second.
   if (opts.persistence === 'skip') return null;
+  if (isEphemeralRunResult(result)) return null;
   if (!supportsRunResults()) return null;
 
   const meta = buildResultMeta(result, id);

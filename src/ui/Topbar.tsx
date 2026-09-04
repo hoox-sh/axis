@@ -893,9 +893,10 @@ export const Topbar: Component<{
           <Icons.studio />
           <span class="axis-tb-btn-label">Studio</span>
         </button>
-        {/* Hidden hooks — e2e / palette / docs still open a specific studio page */}
+        {/* Hidden hooks — command palette / docs dispatch click(); e2e uses Studio. */}
         <button
           type="button"
+          hidden
           class="sr-only"
           tabindex={-1}
           data-testid="axis-btn-architecture"
@@ -904,6 +905,7 @@ export const Topbar: Component<{
         />
         <button
           type="button"
+          hidden
           class="sr-only"
           tabindex={-1}
           data-testid="axis-btn-runtimes"
@@ -912,6 +914,7 @@ export const Topbar: Component<{
         />
         <button
           type="button"
+          hidden
           class="sr-only"
           tabindex={-1}
           data-testid="axis-btn-settings"
@@ -920,6 +923,7 @@ export const Topbar: Component<{
         />
         <button
           type="button"
+          hidden
           class="sr-only"
           tabindex={-1}
           data-testid="axis-btn-workers"
@@ -928,6 +932,7 @@ export const Topbar: Component<{
         />
         <button
           type="button"
+          hidden
           class="sr-only"
           tabindex={-1}
           data-testid="axis-btn-plugins"

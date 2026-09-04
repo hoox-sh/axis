@@ -76,6 +76,7 @@ export function AppPage(props: {
                     type="button"
                     class={`ax-page-rail-item${props.page === item.id ? ' is-on' : ''}`}
                     aria-current={props.page === item.id ? 'page' : undefined}
+                    data-testid={`axis-studio-rail-${item.id}`}
                     onClick={() => props.onNavigate(item.id)}
                   >
                     {item.id === 'runtime' ? (
@@ -96,6 +97,7 @@ export function AppPage(props: {
                     type="button"
                     class={`ax-page-rail-item${props.page === item.id ? ' is-on' : ''}`}
                     aria-current={props.page === item.id ? 'page' : undefined}
+                    data-testid={`axis-studio-rail-${item.id}`}
                     onClick={() => props.onNavigate(item.id)}
                   >
                     {item.id === 'workers' ? (
