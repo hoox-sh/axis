@@ -9,13 +9,17 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-08-29 · 315 commits · describe-tag: `v2.1.0`_
+_Generated/updated: 2026-09-04 · 320 commits · describe-tag: `v2.1.1`_
 
 ---
 
 ## [Unreleased]
 
 _Upcoming changes._
+
+---
+
+## [2.2.0] — 2026-09-04
 
 ### Added
 
@@ -793,9 +797,17 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-08 (233 commits)
+### 2026-09 (1 commits)
+
+#### Fixes
+
+- `16499ac7` (2026-09-04) — fix(results): skip live-tick persist and unstick studio e2e
+
+### 2026-08 (237 commits)
 
 #### Security
 
@@ -806,6 +818,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Features
 
+- `783a1003` (2026-08-30) — feat(ui): fullscreen studio overlay, Results JSON tree, and market proxy hardening
+- `9081a559` (2026-08-29) — feat(worker): MEXC public REST through /api/market/mexc/* proxy
 - `fb193c25` (2026-08-29) — feat(panel): per-panel icon in FloatableShell header
 - `9196e4cb` (2026-08-29) — feat(ui): storage-change migration dialog
 - `008fb22a` (2026-08-29) — feat(storage): persist strategy/indicator run results via StoragePlugin
@@ -906,6 +920,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `defaccea` (2026-08-29) — fix(data): try MEXC Worker proxy first, direct host as fallback
 - `167921f2` (2026-08-29) — fix(worker): update CORS product hosts to pynescript.online (retire .ai)
 - `8426f3d9` (2026-08-29) — fix(editor): remove duplicate 'Open in new tab' entry
 - `6178bced` (2026-08-29) — fix(ui): status bar chips wobble on hover
@@ -1039,6 +1054,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `862631e6` (2026-08-29) — chore(release): prepare v2.1.1
 - `40668dbc` (2026-08-29) — chore(release): prepare v2.1.0
 - `f34c76cf` (2026-08-26) — chore(release): bump to v2.0.27 — PYNE wheel 0.4.0, hline linestyle, multi-chart fix
 - `d323c8fd` (2026-08-24) — chore(release): v2.0.26
