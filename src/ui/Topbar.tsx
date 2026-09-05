@@ -24,8 +24,8 @@
  *
  * ## Groups
  * - **Brand** — logo + AXIS chart
- * - **Market** — Symbol, Interval, Chart type, Compare
- * - **Data** — Source (+ CSV upload), Load, Reload
+ * - **Market** — Venue, Symbol, Interval, Chart type, Compare
+ * - **Data** — Source config (+ CSV upload, Datasets), Load, Reload
  * - **Compute** — Engine, Stream, Run, Live, Replay
  * - **Layout** — multi-chart layout menu
  * - **Panels** — List → Editor → Library → Scripts → Layers → DSM →
@@ -302,6 +302,32 @@ export const Topbar: Component<{
       {/* ── Market ──────────────────────────────────────────── */}
       <Show when={store.topbar.market}>
         <div class="axis-tb-group" data-tb-group="market">
+        <TopbarField
+          label="Venue"
+          variant="select"
+          class="min-w-[8em]"
+          testId="axis-select-source"
+          value={venueToken()}
+          title="Exchange / data venue — native CEX, CCXT long-tail, or local"
+          onChange={(e) => onVenueChange(e.currentTarget.value)}
+        >
+          <optgroup label="CEX">
+            <For each={venueOptions().filter((o) => o.group === 'native')}>
+              {(o) => <option value={o.value}>{o.label}</option>}
+            </For>
+          </optgroup>
+          <optgroup label="CCXT">
+            <For each={venueOptions().filter((o) => o.group === 'ccxt')}>
+              {(o) => <option value={o.value}>{o.label}</option>}
+            </For>
+          </optgroup>
+          <optgroup label="Other">
+            <For each={venueOptions().filter((o) => o.group === 'other' || o.group === 'plugin')}>
+              {(o) => <option value={o.value}>{o.label}</option>}
+            </For>
+          </optgroup>
+        </TopbarField>
+
         <Show when={sourceNeedsSymbol()}>
           <div class="flex items-stretch gap-0.5" data-testid="axis-symbol-control">
             <TopbarField
@@ -411,32 +437,6 @@ export const Topbar: Component<{
       {/* ── Data ────────────────────────────────────────────── */}
       <Show when={store.topbar.data}>
         <div class="axis-tb-group" data-tb-group="data" data-axis-source={store.source}>
-        <TopbarField
-          label="Venue"
-          variant="select"
-          class="min-w-[8em]"
-          testId="axis-select-source"
-          value={venueToken()}
-          title="Exchange / data venue — native CEX, CCXT long-tail, or local"
-          onChange={(e) => onVenueChange(e.currentTarget.value)}
-        >
-          <optgroup label="CEX">
-            <For each={venueOptions().filter((o) => o.group === 'native')}>
-              {(o) => <option value={o.value}>{o.label}</option>}
-            </For>
-          </optgroup>
-          <optgroup label="CCXT">
-            <For each={venueOptions().filter((o) => o.group === 'ccxt')}>
-              {(o) => <option value={o.value}>{o.label}</option>}
-            </For>
-          </optgroup>
-          <optgroup label="Other">
-            <For each={venueOptions().filter((o) => o.group === 'other' || o.group === 'plugin')}>
-              {(o) => <option value={o.value}>{o.label}</option>}
-            </For>
-          </optgroup>
-        </TopbarField>
-
         <PluginConfigRow
           onApplied={() => void loadHistorical({ force: true })}
           hideKeys={venueToken() === 'ccxt:' ? [] : ['exchange']}
