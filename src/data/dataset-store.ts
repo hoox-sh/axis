@@ -132,8 +132,8 @@ function activeSink(): DatasetSink {
 }
 
 /**
- * Read a dataset: memory mirror first, then the active sink.
- * Returns a copy — callers must not mutate.
+ * Read a dataset through the active sink (bars-cache is memory-warm, so this
+ * is cheap) and refresh the mirror. Returns a copy — callers must not mutate.
  */
 export async function getDataset(
   sourceId: string,
@@ -141,13 +141,12 @@ export async function getDataset(
   interval: string,
 ): Promise<Bar[]> {
   const key = keyFor(sourceId, symbol, interval);
-  const mem = memory.get(key);
-  if (mem) return mem.slice();
   const bars = await activeSink().get(key);
   if (bars?.length) {
     remember(key, bars);
     return bars.slice();
   }
+  memory.delete(key);
   return [];
 }
 
@@ -165,11 +164,11 @@ export async function putDatasetBars(
   const key = keyFor(sourceId, symbol, interval);
   const incoming = bars.filter((b) => b && Number.isFinite(b.time));
   if (!incoming.length) {
-    const existing = memory.get(key) ?? [];
-    return { bars: existing.slice(), added: 0, conflicts: 0 };
+    const existing = await activeSink().get(key);
+    return { bars: existing?.slice() ?? [], added: 0, conflicts: 0 };
   }
 
-  const current = memory.get(key) ?? (await activeSink().get(key)) ?? [];
+  const current = (await activeSink().get(key)) ?? [];
   const merged = mergeWithConflictPolicy(current, incoming, {
     policy: opts?.policy ?? mergePolicy,
   });
@@ -177,13 +176,12 @@ export async function putDatasetBars(
   remember(key, merged.bars);
   notify(key, merged.bars);
 
-  // Session mode = memory only; every other mode persists through its sink.
-  if (persistenceMode !== 'session') {
-    try {
-      await activeSink().put(key, merged.bars);
-    } catch (err: unknown) {
-      console.warn(`[dataset-store] sink put failed for ${key}`, err);
-    }
+  // The active sink owns durability: session sink = memory, local = IDB,
+  // git/worker = remote docs. Session mode is memory-only by construction.
+  try {
+    await activeSink().put(key, merged.bars);
+  } catch (err: unknown) {
+    console.warn(`[dataset-store] sink put failed for ${key}`, err);
   }
   return { bars: merged.bars, added: merged.added, conflicts: merged.conflicts.length };
 }
@@ -202,12 +200,10 @@ export async function replaceDataset(
   const clean = bars.filter((b) => b && Number.isFinite(b.time));
   remember(key, clean);
   notify(key, clean);
-  if (persistenceMode !== 'session') {
-    try {
-      await activeSink().replace(key, clean);
-    } catch (err: unknown) {
-      console.warn(`[dataset-store] sink replace failed for ${key}`, err);
-    }
+  try {
+    await activeSink().replace(key, clean);
+  } catch (err: unknown) {
+    console.warn(`[dataset-store] sink replace failed for ${key}`, err);
   }
   return clean.slice();
 }

@@ -32,10 +32,34 @@ describe('dataset-validate · repairBars', () => {
     expect(res.stats.removed).toBe(1);
   });
 
-  it('snaps misaligned timestamps to the interval grid', () => {
+  it('snaps individually off-phase bars to the dominant phase', () => {
+    // 1h series on the :00 phase; one bar drifted to :05
+    const step = 3600;
+    const t0 = 1_788_000_000; // arbitrary epoch, on no particular phase
+    const onPhase = (i: number) => t0 + i * step;
+    const drifted = onPhase(3) + 300;
+    const res = repairBars(
+      [bar(onPhase(0)), bar(onPhase(1)), bar(onPhase(2)), bar(drifted), bar(onPhase(4))],
+      '1h',
+    );
+    expect(res.bars.map((b) => b.time)).toContain(onPhase(3));
+    expect(res.bars.map((b) => b.time)).not.toContain(drifted);
+    expect(res.stats.snapped).toBe(1);
+  });
+
+  it('preserves consistent venue phase offsets (no epoch snapping)', () => {
+    // Daily series opening at 08:00 UTC — a legitimate phase offset
+    const step = 86_400;
+    const t0 = Date.UTC(2026, 0, 1, 8) / 1000;
+    const res = repairBars([bar(t0), bar(t0 + step), bar(t0 + 2 * step)], '1d');
+    expect(res.bars.map((b) => b.time)).toEqual([t0, t0 + step, t0 + 2 * step]);
+    expect(res.stats.snapped).toBe(0);
+  });
+
+  it('skips snapping when there is no dominant phase (too little signal)', () => {
     const res = repairBars([bar(65), bar(185)], '1m');
-    expect(res.bars.map((b) => b.time)).toEqual([60, 180]);
-    expect(res.stats.snapped).toBe(2);
+    expect(res.stats.snapped).toBe(0);
+    expect(res.bars.map((b) => b.time)).toEqual([65, 185]);
   });
 
   it('dedupes by open time (first wins) and sorts', () => {

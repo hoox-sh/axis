@@ -212,7 +212,11 @@ export const Topbar: Component<{
     if (!file) return;
     setLoading(true);
     try {
-      const bars = await parseOhlcvFile(file);
+      const parsed = await parseOhlcvFile(file);
+      // Repair pass: drop corrupt rows, dedupe, sort, snap to interval grid
+      const { repairBars } = await import('../data/dataset-validate');
+      const { bars } = repairBars(parsed, store.interval);
+      if (!bars.length) throw new Error('no valid bars after repair');
       setUploadedBars(bars, file.name);
       setUploadLabel(file.name);
       setStore('source', 'csv-upload');

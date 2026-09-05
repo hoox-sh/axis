@@ -29,12 +29,13 @@
 import type { Bar } from '../store/types';
 import {
   barsCacheKey,
-  getCachedBars,
   listCachedSeries,
   sliceBarsForLoad,
   type BarLoadWindow,
   type BarsCacheMeta,
 } from './bars-cache';
+import { getDataset } from './dataset-store';
+import { repairBars } from './dataset-validate';
 
 /** Source plugin id registered in the sources catalog. */
 export const DATA_MANAGER_SOURCE_ID = 'data-manager';
@@ -120,9 +121,10 @@ export async function resolveDataManagerBars(
   if (selection?.sourceId) {
     const sSym = selection.symbol || sym;
     const sIv = selection.interval || iv;
-    const raw = await getCachedBars(selection.sourceId, sSym, sIv);
+    const raw = await getDataset(selection.sourceId, sSym, sIv);
     if (raw.length) {
-      const bars = sliceBarsForLoad(raw, windowFromSelection(selection));
+      const { bars: repaired } = repairBars(raw, sIv);
+      const bars = sliceBarsForLoad(repaired, windowFromSelection(selection));
       if (!bars.length) return null;
       return {
         sourceId: selection.sourceId,
@@ -148,8 +150,9 @@ export async function resolveDataManagerBars(
 
   if (!pick) return null;
 
-  const raw = await getCachedBars(pick.sourceId, pick.symbol, pick.interval);
+  const raw = await getDataset(pick.sourceId, pick.symbol, pick.interval);
   if (!raw.length) return null;
+  const { bars: repaired } = repairBars(raw, pick.interval);
 
   // Stick series selection (preserve any prior load window if same key)
   const sameKey =
@@ -164,7 +167,7 @@ export async function resolveDataManagerBars(
     sameKey ? windowFromSelection(selection) : null,
   );
 
-  const bars = sliceBarsForLoad(raw, windowFromSelection(selection));
+  const bars = sliceBarsForLoad(repaired, windowFromSelection(selection));
   if (!bars.length) return null;
 
   return {

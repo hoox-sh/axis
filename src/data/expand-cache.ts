@@ -33,7 +33,7 @@ import type { SourcePlugin } from '../plugins/types';
 import { pluginKey } from '../plugins/types';
 import { store } from '../store';
 import { normalizeHistoricalBars, sanitizeBar } from './parse-bars';
-import { getCachedBars, putCachedBars } from './bars-cache';
+import { getDataset, putDatasetBars } from './dataset-store';
 import { intervalToSec } from './bars-gaps';
 import {
   DATA_MANAGER_SOURCE_ID,
@@ -124,7 +124,7 @@ export async function expandCachedSeriesToNow(
 
   let bars: Bar[] = [];
   try {
-    bars = await getCachedBars(srcId, sym, iv);
+    bars = await getDataset(srcId, sym, iv);
   } catch {
     bars = [];
   }
@@ -191,7 +191,7 @@ export async function expandCachedSeriesToNow(
         const page = normalizeHistoricalBars(raw, { limit: pageLimit });
         if (page.length) {
           const before = bars.length;
-          bars = await putCachedBars(srcId, sym, iv, page);
+          bars = (await putDatasetBars(srcId, sym, iv, page)).bars;
           return {
             bars,
             added: Math.max(0, bars.length - before),
@@ -241,7 +241,7 @@ export async function expandCachedSeriesToNow(
       // Keep bars that advance or refresh the series (overlap on newest is fine)
       const incoming = page.filter((b) => b.time >= newest);
       if (incoming.length) {
-        bars = await putCachedBars(srcId, sym, iv, incoming);
+        bars = (await putDatasetBars(srcId, sym, iv, incoming)).bars;
       }
 
       // Overlapped into existing cache — done
@@ -256,7 +256,7 @@ export async function expandCachedSeriesToNow(
     }
 
     try {
-      bars = await getCachedBars(srcId, sym, iv);
+      bars = await getDataset(srcId, sym, iv);
     } catch {
       /* keep last bars */
     }
@@ -306,7 +306,7 @@ export function noteDataManagerLiveBar(bar: Bar): void {
     const pending = livePendingBars.get(key);
     livePendingBars.delete(key);
     if (!pending) return;
-    void putCachedBars(sel.sourceId, sel.symbol, sel.interval, [pending]).catch(() => {
+    void putDatasetBars(sel.sourceId, sel.symbol, sel.interval, [pending]).catch(() => {
       /* cache write best-effort */
     });
   }, delay);

@@ -37,7 +37,6 @@
 import type { Bar } from '../store/types';
 import { sanitizeBar } from './parse-bars';
 import {
-  alignDown,
   findBarGaps,
   intervalToSec,
   validateBarCoverage,
@@ -65,7 +64,15 @@ export interface RepairResult {
 }
 
 /**
- * Repair a raw bar series: sanitize → snap to grid → dedupe → sort.
+ * Repair a raw bar series: sanitize → phase-aware snap → sort → dedupe.
+ *
+ * Snapping is **phase-aware**: the dominant open-time phase (`t mod step`) is
+ * inferred from the series and only bars deviating from it are snapped to the
+ * nearest dominant-phase grid point. Consistent venue phase offsets (e.g.
+ * daily bars opening 08:00 UTC) are preserved — snapping to the epoch grid
+ * would corrupt them. Snapping requires ≥3 bars and ≥60% phase agreement;
+ * otherwise it is skipped (too little signal, snapping would be guesswork).
+ *
  * Never throws; always returns a usable (possibly empty) series.
  */
 export function repairBars(
@@ -88,15 +95,9 @@ export function repairBars(
   }
   if (!clean.length) return { bars: [], stats };
 
-  // 2. Snap misaligned open times back to the interval grid
+  // 2. Phase-aware snap of individually misaligned bars
   if (snap && step > 1) {
-    for (const bar of clean) {
-      const aligned = alignDown(bar.time, step);
-      if (aligned !== bar.time) {
-        bar.time = aligned;
-        stats.snapped += 1;
-      }
-    }
+    stats.snapped = snapToDominantPhase(clean, step);
   }
 
   // 3. Sort (stable) + count reorders
@@ -123,6 +124,48 @@ export function repairBars(
   }
 
   return { bars: out, stats };
+}
+
+/** Minimum bars before phase inference is trusted. */
+const PHASE_MIN_BARS = 3;
+/** Minimum share of bars on the dominant phase to trust it. */
+const PHASE_AGREEMENT = 0.6;
+
+/**
+ * Snap individually misaligned bars to the series' dominant open-time phase.
+ * Returns the number of snapped bars. Mutates `bars` in place.
+ */
+function snapToDominantPhase(bars: Bar[], step: number): number {
+  if (bars.length < PHASE_MIN_BARS) return 0;
+
+  // Phase histogram (t mod step)
+  const phaseCount = new Map<number, number>();
+  for (const bar of bars) {
+    const phase = ((bar.time % step) + step) % step;
+    phaseCount.set(phase, (phaseCount.get(phase) ?? 0) + 1);
+  }
+  let dominantPhase = -1;
+  let dominantCount = 0;
+  for (const [phase, count] of phaseCount) {
+    if (count > dominantCount) {
+      dominantPhase = phase;
+      dominantCount = count;
+    }
+  }
+  if (dominantPhase < 0 || dominantCount / bars.length < PHASE_AGREEMENT) return 0;
+
+  let snapped = 0;
+  for (const bar of bars) {
+    const phase = ((bar.time % step) + step) % step;
+    if (phase === dominantPhase) continue;
+    // Nearest grid point carrying the dominant phase
+    const base = Math.round((bar.time - dominantPhase) / step) * step + dominantPhase;
+    if (base !== bar.time && Number.isFinite(base) && base >= 0) {
+      bar.time = base;
+      snapped += 1;
+    }
+  }
+  return snapped;
 }
 
 export interface GapClassification {
