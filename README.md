@@ -12,9 +12,13 @@
   <img src="docs/images/gifs/load-and-run.gif" alt="Load history then run an RSI indicator" width="820" />
 </p>
 
-| Chart | Drawings | Studio |
+| Chart | Drawings | On-chain |
 | --- | --- | --- |
-| [panes](docs/images/app/chart-panes.png) | [fib](docs/images/app/drawings-fib.png) | [runtime](docs/images/studio/runtime.png) |
+| <img src="docs/images/landing/axis-chart.png" alt="Price, volume, and RSI panes" width="300" /> | <img src="docs/images/landing/axis-drawings.png" alt="Fibonacci retracement on BTCUSDT" width="300" /> | <img src="docs/images/landing/axis-onchain.png" alt="Aave TVL overlay beside BTCUSDT" width="300" /> |
+
+| Editor | Results | Studio |
+| --- | --- | --- |
+| <img src="docs/images/landing/axis-editor.png" alt="Pine editor with a v6 RSI script" width="300" /> | <img src="docs/images/landing/axis-results.png" alt="Strategy results: equity curve and closed trades" width="300" /> | <img src="docs/images/landing/axis-studio.png" alt="Studio Wire: Live Crypto recipe" width="300" /> |
 
 Full set: [Interface gallery](https://hoox.sh/axis/docs/enduser/guides/screenshots) · files in [`docs/images/`](docs/images/).
 

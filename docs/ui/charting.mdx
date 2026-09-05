@@ -132,12 +132,18 @@ Engine plot series honor Pine Script™ `plot.style_*` via `mapPlotStyleToSeries
 
 ### Multi-chart layouts
 
+<img src="/images/app/chart-layout-2x2.png" alt="2×2 multi-chart grid with BTCUSDT loaded in the active slot" />
+
 - Modes: **1 / 2H / 2V / 4** (`store.chartLayout`)  
 - Per-slot symbol/interval via registry; active slot drives topbar + Run  
 - **Named layouts** save/load (optional chrome snapshot)  
 - **Recipes** in Layouts menu: Scalp 1m+5m, Swing HTF, Quad, BTC majors (`layout-recipes.ts`)
 
 ### Bar Replay
+
+<img src="/images/app/bar-replay.png" alt="Bar replay strip on BTCUSDT: scrub, play, and speed" />
+
+<img src="/images/gifs/bar-replay.gif" alt="Scrubbing and playing bar replay over loaded history" />
 
 Topbar **Replay** → session over loaded OHLCV (`bar-replay.ts`):
 
@@ -146,6 +152,10 @@ Topbar **Replay** → session over loaded OHLCV (`bar-replay.ts`):
 - Mutually exclusive with Live  
 
 ### Compare & volume profile
+
+<img src="/images/app/compare.png" alt="ETHUSDT percent overlay compared against BTCUSDT" />
+
+<img src="/images/app/layers.png" alt="Layers panel: panes, volume profile overlay, scripts, drawings" />
 
 - **Compare** control: second symbol as % or absolute overlay (`compare-overlay.ts`)  
 - **Volume profile** toggle in Layers → OHLCV approximation histogram (`volume-profile.ts`)

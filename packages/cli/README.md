@@ -4,6 +4,10 @@
 
 Requires **Node ≥ 20** to run the published binary, and **Bun ≥ 1.2** for `axis install` / `axis dev` / `axis deploy pages` (those shell out to Bun).
 
+<p align="center">
+  <img src="../../docs/images/cli/help.png" alt="axis --help" width="720" />
+</p>
+
 ## Install
 
 ```bash
@@ -46,6 +50,10 @@ Global flags: `--json`, `--quiet`, `-y/--yes`. `--json` is machine-only (no bann
 | `axis health [--oauth] [--url …]` | Probe `/health` (+ GitHub device OAuth start) |
 | `axis whoami` | Cloudflare account |
 | `axis dev` / `axis dev worker` / `axis dev desktop` | Local servers |
+
+<p align="center">
+  <img src="../../docs/images/cli/doctor.png" alt="axis doctor: required checks passed" width="720" />
+</p>
 
 ## Typical production flow
 

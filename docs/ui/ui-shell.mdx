@@ -123,12 +123,16 @@ See `ui/panels/dock-layout.ts`, `FloatableShell.tsx`.
 
 ## Watchlist
 
+<img src="/images/app/watchlist.png" alt="Watchlist rail with BTCUSDT selected and live 24h quotes" />
+
 - Default universe includes majors (`BTCUSDT`, …)
 - `refreshSec` clamped 5–120
 - Source-aware labels (e.g. CSV mode)
 - Click sets symbol and loads through active source
 
 ## Status bar
+
+<img src="/images/app/statusbar.png" alt="Connection HUD: LIVE, tick, engine, and source/stream/storage chips" />
 
 Single row:
 
@@ -165,7 +169,11 @@ Script `log.*` output and editor line-timing live on a separate path — see [De
 
 ## Theming
 
-`store.theme` → `document.documentElement data-theme` (`dark` \| `light`). Void dark is default product aesthetic.
+<img src="/images/app/theme-panel.png" alt="Settings → Theme: Void Dark preset and chart color tokens" />
+
+<img src="/images/gifs/theme-switch.gif" alt="Switching chart theme presets" />
+
+`store.theme` → `document.documentElement data-theme` (`dark` \| `light`). Void dark is default product aesthetic. Settings → **Theme** picks a curated preset (void / classic / mono / boutique) and edits chart tokens live.
 
 ## Accessibility / test hooks
 
