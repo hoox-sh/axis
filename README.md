@@ -4,6 +4,20 @@
 
 **Website:** [hoox.sh/axis](https://hoox.sh/axis) · **Docs:** [hoox.sh/axis/docs](https://hoox.sh/axis/docs) · **Repo:** [hoox-sh/axis](https://github.com/hoox-sh/axis)
 
+<p align="center">
+  <img src="docs/images/landing/axis-hero.png" alt="AXIS workspace: BTCUSDT candles, watchlist, RSI pane, and Pine editor" width="920" />
+</p>
+
+<p align="center">
+  <img src="docs/images/gifs/load-and-run.gif" alt="Load history then run an RSI indicator" width="820" />
+</p>
+
+| Chart | Drawings | Studio |
+| --- | --- | --- |
+| [panes](docs/images/app/chart-panes.png) | [fib](docs/images/app/drawings-fib.png) | [runtime](docs/images/studio/runtime.png) |
+
+Full set: [Interface gallery](https://hoox.sh/axis/docs/enduser/guides/screenshots) · files in [`docs/images/`](docs/images/).
+
 **Installable PWA**, **fully pluggable**, runs against the local **[pyne](https://github.com/hoox-sh/pyne)** Pro API,
 a Cloudflare Worker, or **fully offline** with the in-browser Pyodide engine.
 

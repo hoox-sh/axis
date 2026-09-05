@@ -62,3 +62,7 @@ venv/
 
 # opencode local session dir (has its own node_modules)
 .opencode/
+
+# Screenshot capture scratch
+docs/images/.tmp-video/
+docs/images/.tmp-gif/

@@ -15,6 +15,10 @@ _Generated/updated: 2026-09-05 · 321 commits · describe-tag: `v2.2.0`_
 
 ## [Unreleased]
 
+### Added
+
+- **Docs / README / landing stills**: Playwright capture of the PWA, Studio, and CLI (`docs/images/`, `bun scripts/capture-screenshots.ts`). Interface gallery plus GIFs for Load→Run, palette, Studio rail, drawings, replay, on-chain, and theme. Landing hero crops under `docs/images/landing/`.
+
 ### Fixed
 
 - **load-symbol tests**: isolate leftover `scripts` / `live.preferAfterLoad` so CI does not start mock-poll (off-by-one bars) or reapply SMA after history load.

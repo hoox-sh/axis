@@ -28,6 +28,8 @@ description: "packages/cli — install, doctor, Worker setup (D1/OAuth), secrets
 
 The **AXIS CLI** (`@hoox-sh/axis-cli` under `packages/cli`) is the **CLI-first** operator entry for local install, Worker bootstrap, Cloudflare® secrets, deploy, and health checks. It wraps Bun + Wrangler with AXIS-specific paths and defaults (Worker name `pynescript-axis`, D1 `pynescript`, OAuth device flow).
 
+<img src="/images/cli/help.png" alt="axis --help listing install, doctor, setup, deploy, health" />
+
 Requires **Node ≥ 20** to run the published binary (`npm i -g @hoox-sh/axis-cli`) and **Bun ≥ 1.2** for install/dev/build commands that shell out to Bun. Product version follows root `package.json`; the CLI package (`@hoox-sh/axis-cli`) is versioned independently and publishes on `v*` tags via `.github/workflows/release.yml`.
 
 ## Conceptual model
