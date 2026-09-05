@@ -10,8 +10,16 @@ import { spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+function arg(name: string, fallback: string): string {
+  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
+  return hit ? hit.slice(name.length + 3) : fallback;
+}
+
 const ROOT = resolve(import.meta.dir, '..');
-const OUT = join(ROOT, 'docs', 'images');
+const VIEWPORT = arg('viewport', '1920x1080');
+const [VIEW_W, VIEW_H] = VIEWPORT.split('x').map((n) => Number(n) || 1920);
+const DPR = Number(arg('dpr', '2')) || 2;
+const OUT = resolve(ROOT, arg('out', 'docs/images'));
 const URL = process.env.AXIS_CAPTURE_URL || 'https://axis.hoox.sh';
 
 const RSI = `//@version=6
@@ -80,9 +88,10 @@ async function main() {
   mkdirSync(join(OUT, 'app'), { recursive: true });
 
   const browser = await chromium.launch({ headless: true });
+  console.log(`Fix pass ${VIEW_W}×${VIEW_H} @${DPR}x → ${OUT}`);
   const context = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
-    deviceScaleFactor: 2,
+    viewport: { width: VIEW_W, height: VIEW_H },
+    deviceScaleFactor: DPR,
     colorScheme: 'dark',
   });
   await context.addInitScript((doc: string) => {

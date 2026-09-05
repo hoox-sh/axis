@@ -38,7 +38,9 @@
     "docker:smoke": "make docker-smoke",
     "docker:push": "make docker-push",
     "capture:screenshots": "bun scripts/capture-screenshots.ts",
-    "capture:fix": "bun scripts/capture-fix.ts"
+    "capture:fix": "bun scripts/capture-fix.ts",
+    "capture:1080p": "bun scripts/capture-screenshots.ts --viewport=1920x1080 --dpr=2 --skip-gifs",
+    "capture:1440p": "bun scripts/capture-screenshots.ts --viewport=2560x1440 --dpr=2 --out=docs/images/2560x1440 --skip-gifs --skip-cli --skip-mobile"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.0",

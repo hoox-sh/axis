@@ -5,8 +5,9 @@
  * Capture AXIS PWA stills + GIFs for docs, README, and the product landing page.
  *
  *   bun scripts/capture-screenshots.ts
- *   AXIS_CAPTURE_URL=http://127.0.0.1:3000 bun scripts/capture-screenshots.ts
- *   bun scripts/capture-screenshots.ts --skip-gifs
+ *   bun scripts/capture-screenshots.ts --viewport=1920x1080 --dpr=2
+ *   bun scripts/capture-screenshots.ts --viewport=2560x1440 --dpr=2 --out=docs/images/2560x1440 --skip-gifs --skip-cli
+ *   AXIS_CAPTURE_URL=http://127.0.0.1:3000 bun scripts/capture-screenshots.ts --skip-gifs
  *
  * Default host is the public demo (working engine + Binance). Local Vite works
  * for chrome stills; Run/Results need a live Pro API.
@@ -17,13 +18,27 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, existsSync, copyFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
+function arg(name: string, fallback: string): string {
+  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
+  return hit ? hit.slice(name.length + 3) : fallback;
+}
+
 const ROOT = resolve(import.meta.dir, '..');
-const OUT = join(ROOT, 'docs', 'images');
+const VIEWPORT = arg('viewport', process.env.AXIS_CAPTURE_VIEWPORT || '1920x1080');
+const [VIEW_W, VIEW_H] = VIEWPORT.split('x').map((n) => Number(n) || 0);
+const DPR = Number(arg('dpr', process.env.AXIS_CAPTURE_DPR || '2')) || 2;
+const OUT = resolve(ROOT, arg('out', 'docs/images'));
 const URL = process.env.AXIS_CAPTURE_URL || 'https://axis.hoox.sh';
 const SKIP_GIFS = process.argv.includes('--skip-gifs');
 const SKIP_CLI = process.argv.includes('--skip-cli');
+const SKIP_MOBILE = process.argv.includes('--skip-mobile');
 const GIFS_ONLY = process.argv.includes('--gifs-only');
 const DATE = new Date().toISOString().slice(0, 10);
+
+if (!VIEW_W || !VIEW_H) {
+  console.error(`Bad --viewport=${VIEWPORT} (want WxH, e.g. 1920x1080)`);
+  process.exit(2);
+}
 
 const RSI = `//@version=6
 indicator("RSI", overlay=false)
@@ -91,6 +106,30 @@ async function dismissOverlays(page: Page) {
   await page.keyboard.press('Escape').catch(() => undefined);
   await page.keyboard.press('Escape').catch(() => undefined);
   await page.waitForTimeout(200);
+}
+
+const EXTRA_PANELS = [
+  'axis-btn-indicators',
+  'axis-btn-library',
+  'axis-btn-layers',
+  'axis-btn-datasource',
+  'axis-btn-onchain',
+  'axis-btn-alerts',
+  'axis-btn-scriptlogs-top',
+  'axis-btn-systemlogs',
+  'axis-btn-dataview',
+];
+
+async function closeExtras(page: Page, keep: string[] = []) {
+  for (const id of EXTRA_PANELS) {
+    if (keep.includes(id)) continue;
+    const btn = page.getByTestId(id);
+    if (!(await btn.count())) continue;
+    if ((await btn.getAttribute('aria-pressed')) === 'true') {
+      await btn.click({ force: true });
+      await page.waitForTimeout(120);
+    }
+  }
 }
 
 async function waitShell(page: Page) {
@@ -163,6 +202,7 @@ async function runScript(page: Page): Promise<boolean> {
 
 async function openPanel(page: Page, testId: string) {
   await dismissOverlays(page);
+  await closeExtras(page, [testId]);
   const btn = page.getByTestId(testId);
   if (!(await btn.count())) throw new Error(`missing ${testId}`);
   await btn.click({ timeout: 8_000, force: true });
@@ -248,6 +288,7 @@ async function seedContext(context: BrowserContext) {
 
 async function captureStills(page: Page) {
   await dismissOverlays(page);
+  await closeExtras(page);
 
   await section('workspace / chrome', async () => {
     await shot(page, 'app/workspace.png');
@@ -320,6 +361,7 @@ async function captureStills(page: Page) {
 
   await section('drawings', async () => {
     await dismissOverlays(page);
+    await closeExtras(page);
     const toolbar = page.getByTestId('axis-drawing-toolbar');
     await shot(page, 'app/drawings-toolbar.png', toolbar);
     const fibGroup = page.locator('[data-drawing-group="fib"] button').first();
@@ -342,6 +384,7 @@ async function captureStills(page: Page) {
 
   await section('compare / replay / layout', async () => {
     await dismissOverlays(page);
+    await closeExtras(page);
     const compare = page.getByTestId('axis-compare-enabled');
     if (await compare.count()) {
       await compare.click({ force: true });
@@ -456,6 +499,7 @@ async function captureStills(page: Page) {
 
   await section('landing hero', async () => {
     await dismissOverlays(page);
+    await closeExtras(page);
     await setEditorDoc(page, RSI);
     await runScript(page);
     await closeResults(page);
@@ -489,10 +533,13 @@ async function captureGifs(browser: Awaited<ReturnType<typeof chromium.launch>>)
 
   async function record(name: string, run: (page: Page) => Promise<void>) {
     const context = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
+      viewport: { width: Math.min(VIEW_W, 1920), height: Math.min(VIEW_H, 1080) },
       deviceScaleFactor: 1,
       colorScheme: 'dark',
-      recordVideo: { dir: tmp, size: { width: 1280, height: 800 } },
+      recordVideo: {
+        dir: tmp,
+        size: { width: Math.min(VIEW_W, 1920), height: Math.min(VIEW_H, 1080) },
+      },
     });
     await seedContext(context);
     const page = await context.newPage();
@@ -512,7 +559,7 @@ async function captureGifs(browser: Awaited<ReturnType<typeof chromium.launch>>)
     const webm = await video.path();
     const gif = join(OUT, 'gifs', `${name}.gif`);
     try {
-      ffmpegGif(webm, gif, 1280);
+      ffmpegGif(webm, gif, 1600);
       captured.push(`gifs/${name}.gif`);
       const kb = Math.round(statSync(gif).size / 1024);
       log(`  ✓ gifs/${name}.gif (${kb} KB)`);
@@ -689,7 +736,7 @@ function composeOg() {
 
 function writeManifests() {
   const common = `Captured ${DATE} from ${URL}
-Viewport desktop 1440×900 @2x; mobile 390×844 @2x.
+Viewport desktop ${VIEW_W}×${VIEW_H} @${DPR}x (file ${VIEW_W * DPR}×${VIEW_H * DPR}px); mobile 390×844 @2x.
 Seed: BTCUSDT 1d Binance REST, void dark, SMA Cross / RSI v6.
 No secrets. Chart data is public CEX OHLCV.
 `;
@@ -698,20 +745,6 @@ No secrets. Chart data is public CEX OHLCV.
   ensureDir(join(OUT, 'cli'));
   ensureDir(join(OUT, 'landing'));
   ensureDir(join(OUT, 'gifs'));
-  writeFileSync(join(OUT, 'README.md'), `# AXIS interface screenshots
-
-| Dir | Contents |
-| --- | --- |
-| [\`app/\`](app/) | PWA chrome, chart, editor, research panels |
-| [\`studio/\`](studio/) | Runtime / Wire / Settings / Workers / Plugins |
-| [\`cli/\`](cli/) | \`axis --help\` and \`axis doctor\` |
-| [\`landing/\`](landing/) | Finish-cut hero + feature tiles for hoox.sh/axis |
-| [\`gifs/\`](gifs/) | Short looping tours |
-
-Gallery: [Interface gallery](../enduser/guides/screenshots.mdx).
-
-${common}
-`);
   writeFileSync(join(OUT, 'app/MANIFEST.md'), `# App stills\n\n${common}\nFiles:\n${captured.filter((c) => c.startsWith('app/')).map((c) => `- \`${c}\``).join('\n')}\n`);
   writeFileSync(join(OUT, 'studio/MANIFEST.md'), `# Studio stills\n\n${common}\nFiles:\n${captured.filter((c) => c.startsWith('studio/')).map((c) => `- \`${c}\``).join('\n')}\n`);
   writeFileSync(join(OUT, 'cli/MANIFEST.md'), `# CLI stills\n\nDark terminal render of AXIS CLI stdout. Not a live TTY recording.\n\n${common}\n`);
@@ -724,13 +757,13 @@ async function main() {
   ensureDir(join(OUT, 'studio'));
   ensureDir(join(OUT, 'landing'));
   ensureDir(join(OUT, 'gifs'));
-  log(`Capturing ${URL} → ${OUT}`);
+  log(`Capturing ${URL} → ${OUT}  (${VIEW_W}×${VIEW_H} @${DPR}x)`);
 
   const browser = await chromium.launch({ headless: true });
   if (!GIFS_ONLY) {
     const context = await browser.newContext({
-      viewport: { width: 1440, height: 900 },
-      deviceScaleFactor: 2,
+      viewport: { width: VIEW_W, height: VIEW_H },
+      deviceScaleFactor: DPR,
       colorScheme: 'dark',
     });
     await seedContext(context);
@@ -744,15 +777,17 @@ async function main() {
     await captureStills(page);
     await context.close();
 
-    await captureMobile(async () =>
-      browser.newContext({
-        viewport: { width: 390, height: 844 },
-        deviceScaleFactor: 2,
-        colorScheme: 'dark',
-        isMobile: true,
-        hasTouch: true,
-      }),
-    );
+    if (!SKIP_MOBILE) {
+      await captureMobile(async () =>
+        browser.newContext({
+          viewport: { width: 390, height: 844 },
+          deviceScaleFactor: 2,
+          colorScheme: 'dark',
+          isMobile: true,
+          hasTouch: true,
+        }),
+      );
+    }
   }
 
   if (!SKIP_GIFS) {
