@@ -26,12 +26,12 @@
  * @module workers/catalog
  */
 
-import { DEFAULT_ONCHAIN_WORKER_BASE } from '../onchain/proxy';
+import { DEFAULT_AXIS_WORKER_BASE } from '../data/worker-origin';
 import { DEFAULT_PYNE_AGENT_PLUGIN_URL } from '../plugins/loader';
 import type { WorkerCatalogEntry, WorkerId } from './types';
 
 /** Production AXIS Cloudflare Worker (workers.dev). */
-export const DEFAULT_AXIS_WORKER_BASE = DEFAULT_ONCHAIN_WORKER_BASE;
+export { DEFAULT_AXIS_WORKER_BASE };
 
 /** Local wrangler default for `worker/` package. */
 export const LOCAL_AXIS_WORKER_BASE = 'http://127.0.0.1:8787';

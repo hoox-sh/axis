@@ -14,6 +14,7 @@ import type {
   TwoPointDrawing,
 } from '../../drawing-types';
 import { distToSegment, extendSegment, nearPoint } from '../geometry';
+import { fontSizeOf } from '../tool-settings';
 import { registerToolHandler, type ToolViewCtx } from './registry';
 import {
   DRAWING_POINTS_MAX,
@@ -252,7 +253,7 @@ registerToolHandler({
       'stroke-width': String(clampStrokeWidth(ctx.strokeWidth)),
       'pointer-events': 'all',
     });
-    ctx.label(bx + padX, by + th - padY, String(text), ctx.stroke, 11);
+    ctx.label(bx + padX, by + th - padY, String(text), ctx.stroke, fontSizeOf(d, 11));
     ctx.circle(a.x, a.y, ctx.selected ? 5 : 3, ctx.stroke, true);
   },
   hit(d, ctx) {
@@ -312,7 +313,7 @@ registerToolHandler({
       'stroke-width': '1',
       'pointer-events': 'all',
     });
-    ctx.label(c.x + 8, c.y - 6, String(text), '#0b0c10', 11);
+    ctx.label(c.x + 8, c.y - 6, String(text), '#0b0c10', fontSizeOf(d, 11));
     if (ctx.selected) ctx.circle(c.x, c.y, 5, ctx.stroke, true);
   },
   hit(d, ctx) {
@@ -429,7 +430,7 @@ registerToolHandler({
     if (d.kind !== 'highlighter') return;
     const fo = clampOpacity(ctx.fillOpacity, 0.35);
     paintStroke(pts(d), ctx, {
-      width: Math.max(8, clampStrokeWidth(ctx.strokeWidth) * 2),
+      width: Math.max(4, clampStrokeWidth(ctx.strokeWidth, 8)),
       opacity: String(Math.min(0.45, Math.max(0.2, fo + 0.15))),
       round: true,
     });

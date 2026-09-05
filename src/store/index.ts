@@ -280,6 +280,7 @@ const DEFAULTS: AppState = {
     width: 1.5,
     lineStyle: 'solid',
     fillOpacity: 0.15,
+    byKind: {},
   },
   drawingUi: {
     magnet: 'off',
@@ -675,10 +676,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       drawingTool: 'cursor',
       drawings: normalizeUserDrawings(bag.drawings) as Drawing[],
 
-      drawingPrefs: {
-        ...DEFAULTS.drawingPrefs,
-        ...(bag.drawingPrefs && typeof bag.drawingPrefs === 'object' ? bag.drawingPrefs : {}),
-      },
+      drawingPrefs: hydrateDrawingPrefs(bag.drawingPrefs),
       drawingUi: {
         ...DEFAULTS.drawingUi,
         ...(bag.drawingUi && typeof bag.drawingUi === 'object' ? bag.drawingUi : {}),
@@ -916,6 +914,31 @@ function hydrateOnchain(raw: unknown): OnchainState {
   };
 }
 
+/** Restore drawing style prefs; `byKind` is a shallow map of per-tool extras. */
+function hydrateDrawingPrefs(raw: unknown): AppState['drawingPrefs'] {
+  const base: AppState['drawingPrefs'] = {
+    ...DEFAULTS.drawingPrefs,
+    byKind: { ...(DEFAULTS.drawingPrefs.byKind || {}) },
+  };
+  if (!raw || typeof raw !== 'object') return base;
+  const p = raw as Partial<AppState['drawingPrefs']>;
+  const next: AppState['drawingPrefs'] = {
+    ...base,
+    ...(typeof p.color === 'string' ? { color: p.color } : {}),
+    ...(typeof p.width === 'number' && Number.isFinite(p.width) ? { width: p.width } : {}),
+    ...(p.lineStyle === 'solid' || p.lineStyle === 'dashed' || p.lineStyle === 'dotted'
+      ? { lineStyle: p.lineStyle }
+      : {}),
+    ...(typeof p.fillOpacity === 'number' && Number.isFinite(p.fillOpacity)
+      ? { fillOpacity: p.fillOpacity }
+      : {}),
+  };
+  if (p.byKind && typeof p.byKind === 'object' && !Array.isArray(p.byKind)) {
+    next.byKind = { ...base.byKind, ...p.byKind };
+  }
+  return next;
+}
+
 function hydrateTopbar(raw: unknown): TopbarSettings {
   const base = { ...DEFAULTS.topbar };
   if (!raw || typeof raw !== 'object') return base;
@@ -1144,7 +1167,10 @@ function seedStoreState(overlay: Partial<AppState> | null | undefined): AppState
     crosshair: { ...DEFAULTS.crosshair },
     preEval: { ...DEFAULTS.preEval, diagnostics: [] },
     presentation: { ...DEFAULTS.presentation },
-    drawingPrefs: { ...DEFAULTS.drawingPrefs },
+    drawingPrefs: {
+      ...DEFAULTS.drawingPrefs,
+      byKind: { ...(DEFAULTS.drawingPrefs.byKind || {}) },
+    },
     drawingUi: {
       ...DEFAULTS.drawingUi,
       lastToolByGroup: { ...DEFAULTS.drawingUi.lastToolByGroup },
@@ -3593,9 +3619,22 @@ export function setSelectedDrawingId(id: string | null) {
 
 /**
  * Merge default stroke/fill prefs for new placements (and toolbar when no selection).
+ * `byKind` is deep-merged per kind so one tool update does not wipe others.
  */
 export function setDrawingPrefs(patch: Partial<AppState['drawingPrefs']>) {
-  setStore('drawingPrefs', { ...store.drawingPrefs, ...patch });
+  const prev = store.drawingPrefs;
+  const next: AppState['drawingPrefs'] = { ...prev, ...patch };
+  if (patch.byKind && typeof patch.byKind === 'object') {
+    const merged: NonNullable<AppState['drawingPrefs']['byKind']> = {
+      ...(prev.byKind || {}),
+    };
+    for (const key of Object.keys(patch.byKind)) {
+      const kind = key as keyof typeof patch.byKind;
+      merged[kind] = { ...(prev.byKind?.[kind] || {}), ...(patch.byKind[kind] || {}) };
+    }
+    next.byKind = merged;
+  }
+  setStore('drawingPrefs', next);
   persist();
 }
 

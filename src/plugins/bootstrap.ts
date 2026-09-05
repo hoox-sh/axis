@@ -27,18 +27,59 @@
  * @module plugins/bootstrap
  */
 
-import { ensureSourcesRegistered } from '../sources/catalog';
-import { ensureStreamsRegistered } from '../streams/catalog';
-import { ensureEnginesRegistered } from '../engines/catalog';
-import { ensureStoragesRegistered } from '../storage/catalog';
-import { ensureOnchainDatasetsRegistered } from '../onchain/catalog';
+import { registry } from './registry';
+import {
+  ensureSourcesRegistered,
+  _resetSourceRegistrationFlag,
+} from '../sources/catalog';
+import {
+  ensureStreamsRegistered,
+  _resetStreamRegistrationFlag,
+} from '../streams/catalog';
+import {
+  ensureEnginesRegistered,
+  _resetEngineRegistrationFlag,
+} from '../engines/catalog';
+import {
+  ensureStoragesRegistered,
+  _resetStorageRegistrationFlag,
+} from '../storage/catalog';
+import {
+  ensureOnchainDatasetsRegistered,
+  _resetOnchainDatasetRegistrationFlag,
+} from '../onchain/catalog';
 import { _resetHpoRegistrationFlag, ensureHpoRegistered } from './hpo';
 
 let done = false;
 
-/** Ensure built-in source/stream/engine/storage/dataset plugins are registered once. */
+function builtinsHealthy(): boolean {
+  return !!(
+    registry.getSource('binance-rest') &&
+    registry.getStream('binance-ws') &&
+    registry.getEngine('server')
+  );
+}
+
+/** Reset per-catalog idempotency flags so the next ensure* call re-registers. */
+function resetCatalogFlags(): void {
+  _resetSourceRegistrationFlag();
+  _resetStreamRegistrationFlag();
+  _resetEngineRegistrationFlag();
+  _resetStorageRegistrationFlag();
+  _resetOnchainDatasetRegistrationFlag();
+  _resetHpoRegistrationFlag();
+}
+
+/**
+ * Ensure built-in source/stream/engine/storage/dataset plugins are registered.
+ * Idempotent while the registry still has core plugins. After `registry.clear()`
+ * (tests), a later call re-registers even if this module thought it was done.
+ */
 export function ensureBuiltins(): void {
-  if (done) return;
+  if (done && builtinsHealthy()) return;
+  if (done && !builtinsHealthy()) {
+    resetCatalogFlags();
+  }
   ensureSourcesRegistered();
   ensureStreamsRegistered();
   ensureEnginesRegistered();
@@ -53,8 +94,12 @@ export function registerBuiltins(): void {
   ensureBuiltins();
 }
 
-/** @internal test helper — does not clear registry; only resets local flag */
+/**
+ * @internal test helper — reset bootstrap + catalog flags.
+ * Does not clear the registry; callers that `registry.clear()` should also
+ * call this so the next {@link ensureBuiltins} re-registers.
+ */
 export function _resetBootstrapFlag() {
   done = false;
-  _resetHpoRegistrationFlag();
+  resetCatalogFlags();
 }

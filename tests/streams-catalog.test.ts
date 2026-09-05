@@ -23,6 +23,7 @@ import {
 } from '../src/streams/catalog';
 import { registry } from '../src/plugins/registry';
 import { _resetBootstrapFlag } from '../src/plugins/bootstrap';
+import { clearDataManagerSelection } from '../src/data/data-manager-source';
 
 let restoreWs: (() => void) | null = null;
 
@@ -30,6 +31,7 @@ beforeEach(() => {
   registry.clear();
   _resetStreamRegistrationFlag();
   _resetBootstrapFlag();
+  clearDataManagerSelection();
   ensureStreamsRegistered();
   restoreWs = MockWebSocket.install();
 });

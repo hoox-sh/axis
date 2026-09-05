@@ -1,7 +1,7 @@
 [package]
 name = "axis"
 version = "2.0.0"
-description = "AXIS — open charting desktop app for Pine Script™ (HOOX)"
+description = "AXIS — open charting desktop app: CEX data, drawings, on-chain, PYNE (HOOX)"
 authors = ["jango_blockchained"]
 license = "AGPL-3.0-only"
 repository = "https://github.com/hoox-sh/axis"

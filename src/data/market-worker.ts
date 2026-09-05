@@ -27,13 +27,13 @@
 
 import { store } from '../store';
 import {
-  DEFAULT_ONCHAIN_WORKER_BASE,
+  DEFAULT_AXIS_WORKER_BASE,
   looksLikeOnchainWorkerEndpoint,
   normalizeEndpointBase,
-} from '../onchain/proxy';
+} from './worker-origin';
 
 /** Default production AXIS Worker (market + on-chain proxy). */
-export const DEFAULT_MARKET_WORKER_BASE = DEFAULT_ONCHAIN_WORKER_BASE;
+export const DEFAULT_MARKET_WORKER_BASE = DEFAULT_AXIS_WORKER_BASE;
 
 /**
  * Resolve Worker origin for market proxy (no trailing slash).

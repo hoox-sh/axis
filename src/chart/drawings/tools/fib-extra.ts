@@ -6,13 +6,13 @@
  */
 
 import {
-  FIB_LEVELS,
   type Drawing,
   type MultiPointDrawing,
   type Point,
   type TwoPointDrawing,
 } from '../../drawing-types';
 import { distToSegment, extendSegment, nearPoint } from '../geometry';
+import { fibLevelsOf, isFibReversed, showPctOf } from '../tool-settings';
 import { registerToolHandler, type ToolViewCtx } from './registry';
 import { clampStrokeWidth, isFinitePoint, sanitizePoints, sanitizeStrokeColor } from './safe';
 
@@ -86,7 +86,9 @@ registerToolHandler({
     const angle = Math.atan2(b.y - a.y, b.x - a.x);
     // Guide radius (level 1)
     ctx.line(a.x, a.y, b.x, b.y, ctx.stroke, 1, '2 2');
-    for (const lvl of FIB_LEVELS) {
+    const levels = fibLevelsOf(d);
+    const showPct = showPctOf(d, true);
+    for (const lvl of levels) {
       if (lvl === 0) continue;
       const r = base * lvl;
       const path = semiArcPath(a.x, a.y, r, angle);
@@ -95,10 +97,11 @@ registerToolHandler({
         d: path,
         ...strokeAttrs(ctx, lvl !== 1),
       });
-      // Label at the mid-arc (direction of p2)
-      const lx = a.x + r * Math.cos(angle);
-      const ly = a.y + r * Math.sin(angle);
-      ctx.label(lx + 4, ly - 3, `${(lvl * 100).toFixed(1)}%`, ctx.stroke, 10);
+      if (showPct) {
+        const lx = a.x + r * Math.cos(angle);
+        const ly = a.y + r * Math.sin(angle);
+        ctx.label(lx + 4, ly - 3, `${(lvl * 100).toFixed(1)}%`, ctx.stroke, 10);
+      }
     }
     if (ctx.selected) {
       ctx.circle(a.x, a.y, 5, ctx.stroke, true);
@@ -115,7 +118,7 @@ registerToolHandler({
     if (nearPoint(ctx.x, ctx.y, b.x, b.y, ctx.tol + 2)) return true;
     const base = Math.hypot(b.x - a.x, b.y - a.y) || 1;
     const dist = Math.hypot(ctx.x - a.x, ctx.y - a.y);
-    for (const lvl of FIB_LEVELS) {
+    for (const lvl of fibLevelsOf(d)) {
       if (lvl === 0) continue;
       if (Math.abs(dist - base * lvl) <= ctx.tol) return true;
     }
@@ -161,12 +164,15 @@ registerToolHandler({
       Math.hypot(c.x - a.x, c.y - a.y),
       40,
     );
-    for (const lvl of FIB_LEVELS) {
+    const levels = fibLevelsOf(d);
+    const showPct = showPctOf(d, true);
+    for (const raw of levels) {
+      const lvl = isFibReversed(d) ? 1 - raw : raw;
       const ang = angB + delta * lvl;
       const ex = a.x + Math.cos(ang) * armLen;
       const ey = a.y + Math.sin(ang) * armLen;
       const ray = extendSegment(a.x, a.y, ex, ey, 'right', ctx.width, ctx.height);
-      const isArm = lvl === 0 || lvl === 1;
+      const isArm = raw === 0 || raw === 1;
       ctx.line(
         a.x,
         a.y,
@@ -176,13 +182,15 @@ registerToolHandler({
         isArm ? ctx.strokeWidth : Math.max(1, ctx.strokeWidth - 0.5),
         isArm ? ctx.dash : '3 3',
       );
-      ctx.label(
-        a.x + Math.cos(ang) * (armLen * 0.55) + 4,
-        a.y + Math.sin(ang) * (armLen * 0.55) - 3,
-        `${(lvl * 100).toFixed(1)}%`,
-        ctx.stroke,
-        10,
-      );
+      if (showPct) {
+        ctx.label(
+          a.x + Math.cos(ang) * (armLen * 0.55) + 4,
+          a.y + Math.sin(ang) * (armLen * 0.55) - 3,
+          `${(raw * 100).toFixed(1)}%`,
+          ctx.stroke,
+          10,
+        );
+      }
     }
     // Arc guide between arms at unit length
     const steps = 24;
@@ -247,7 +255,9 @@ registerToolHandler({
     const cy = a.y;
     const base = Math.hypot(b.x - a.x, b.y - a.y) || 1;
     ctx.line(a.x, a.y, b.x, b.y, ctx.stroke, 1, '2 2');
-    for (const lvl of FIB_LEVELS) {
+    const levels = fibLevelsOf(d);
+    const showPct = showPctOf(d, true);
+    for (const lvl of levels) {
       if (lvl === 0) continue;
       const r = base * lvl;
       ctx.el('circle', {
@@ -256,7 +266,7 @@ registerToolHandler({
         r: String(r),
         ...strokeAttrs(ctx, lvl !== 1),
       });
-      ctx.label(cx + r + 4, cy - 3, `${(lvl * 100).toFixed(1)}%`, ctx.stroke, 10);
+      if (showPct) ctx.label(cx + r + 4, cy - 3, `${(lvl * 100).toFixed(1)}%`, ctx.stroke, 10);
     }
     if (ctx.selected) {
       ctx.circle(a.x, a.y, 5, ctx.stroke, true);
@@ -273,7 +283,7 @@ registerToolHandler({
     if (nearPoint(ctx.x, ctx.y, b.x, b.y, ctx.tol + 2)) return true;
     const base = Math.hypot(b.x - a.x, b.y - a.y) || 1;
     const dist = Math.hypot(ctx.x - a.x, ctx.y - a.y);
-    for (const lvl of FIB_LEVELS) {
+    for (const lvl of fibLevelsOf(d)) {
       if (lvl === 0) continue;
       if (Math.abs(dist - base * lvl) <= ctx.tol) return true;
     }

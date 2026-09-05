@@ -5,11 +5,12 @@
 
 import { describe, expect, it, beforeEach } from 'bun:test';
 import { getActiveSource, getActiveStream } from '../src/plugins/active';
-import { ensureBuiltins } from '../src/plugins/bootstrap';
+import { ensureBuiltins, _resetBootstrapFlag } from '../src/plugins/bootstrap';
 import { setStore } from '../src/store';
 
 describe('gateway-aware active resolution', () => {
   beforeEach(() => {
+    _resetBootstrapFlag();
     ensureBuiltins();
   });
 

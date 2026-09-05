@@ -42,6 +42,10 @@ beforeEach(() => {
   setStore('endpoint', 'http://run.test:5002');
   setStore('scripts', []);
   setStore('resultsPanel', { open: false, height: 220 });
+  setStore('resultsFocusId', null);
+  setStore('runResults', {});
+  setStore('lastRun', null);
+  setStore('lastRunMs', null);
   setLastRun(null);
   setActivePlugin('engine', 'server');
 });
@@ -54,7 +58,9 @@ afterEach(() => {
 describe('runScript isolate', () => {
   it('does not write lastRun or status when isolate is set', async () => {
     setStore('status', 'ready');
-    setLastRun({ status: 'success', plots: [1], events: [], series: {} } as never);
+    setLastRun({ status: 'success', plots: [1], events: [], series: {} } as never, {
+      focus: true,
+    });
     restoreFetch = mockFetch(async () =>
       jsonResponse({
         status: 'success',

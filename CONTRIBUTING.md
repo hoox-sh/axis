@@ -1,6 +1,6 @@
 # Contributing to AXIS
 
-Thanks for helping with **AXIS** — the charting PWA for Pine Script™ evaluation.
+Thanks for helping with **AXIS** — the open charting PWA (CEX data, drawings, on-chain overlays, Pine Script™ via PYNE).
 
 ## Sister repos & websites
 

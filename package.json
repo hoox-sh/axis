@@ -1,6 +1,6 @@
 {
   "name": "axis",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "license": "AGPL-3.0-only",
   "author": "jango_blockchained",
@@ -10,7 +10,7 @@
     "dev:datafeed": "bun packages/datafeed/src/index.ts",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "bun test tests/ worker/tests/",
+    "test": "bun test --max-concurrency=1 tests/ worker/tests/",
     "test:cli": "bun --cwd packages/cli test",
     "typecheck": "bunx tsc --noEmit",
     "test:unit": "bun test tests/",
@@ -62,7 +62,30 @@
     "vite": "^6.3.0",
     "vite-plugin-solid": "^2.11.0"
   },
-  "description": "AXIS \u2014 installable charting PWA for Pine Script. Part of HOOX: hoox.sh/axis",
+  "description": "AXIS — open charting PWA: CEX OHLCV, drawings, on-chain overlays, and Pine Script™ via PYNE (local API, Cloudflare Worker, or Pyodide). Part of HOOX: hoox.sh/axis",
+  "keywords": [
+    "axis",
+    "hoox",
+    "pyne",
+    "charting",
+    "pwa",
+    "trading",
+    "cryptocurrency",
+    "ohlcv",
+    "technical-analysis",
+    "drawings",
+    "on-chain",
+    "defi",
+    "pine-script",
+    "solidjs",
+    "cloudflare-workers",
+    "tauri",
+    "pyodide",
+    "lightweight-charts",
+    "vite",
+    "typescript",
+    "bun"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/hoox-sh/axis.git"

@@ -8,6 +8,7 @@
 
 import { DRAWING_COLORS, type Drawing, type TextDrawing } from '../../drawing-types';
 import { nearPoint } from '../geometry';
+import { fontSizeOf } from '../tool-settings';
 import { registerToolHandler, type ToolViewCtx } from './registry';
 import {
   isFinitePoint,
@@ -64,7 +65,7 @@ registerToolHandler({
     ctx.circle(c.x, c.y, ctx.selected ? 5 : 3, stroke, true);
     const text = sanitizeDrawingText(td.text || td.meta?.text);
     if (text) {
-      ctx.label(c.x + 6, c.y - stemH - 4, text, stroke, 10);
+      ctx.label(c.x + 6, c.y - stemH - 4, text, stroke, fontSizeOf(d, 10));
     }
   },
   hit(d, ctx) {
@@ -121,7 +122,7 @@ registerToolHandler({
       stroke: 'none',
       'pointer-events': 'all',
     });
-    ctx.label(c.x + 6 + padX, c.y + 4, String(text), '#0b0c10', 11);
+    ctx.label(c.x + 6 + padX, c.y + 4, String(text), '#0b0c10', fontSizeOf(d, 11));
     ctx.circle(c.x, c.y, ctx.selected ? 5 : 3, ctx.stroke, true);
     void padY;
   },

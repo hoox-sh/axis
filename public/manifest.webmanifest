@@ -1,7 +1,7 @@
 {
     "name": "AXIS — open charting PWA",
     "short_name": "AXIS",
-    "description": "AXIS: open charting PWA for Pine Script™. Runs locally, on Cloudflare, or fully offline. ",
+    "description": "AXIS: open charting PWA. CEX OHLCV, drawings, on-chain overlays, Pine Script™ via PYNE. Local, Cloudflare, or fully offline.",
     "start_url": "./",
     "scope": "./",
     "id": "/pynescript-axis",
@@ -9,7 +9,7 @@
     "orientation": "any",
     "background_color": "#0a0b10",
     "theme_color": "#0a0b10",
-    "categories": ["finance", "productivity", "developer"],
+    "categories": ["finance", "productivity", "developer", "utilities"],
     "icons": [
         { "src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
         { "src": "/assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

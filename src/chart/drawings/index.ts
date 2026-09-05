@@ -130,6 +130,36 @@ export {
 } from './tool-catalog';
 export type { ToolGroupId, ToolGroupDef } from './tool-catalog';
 
+export {
+  ALL_DRAWING_KINDS,
+  settingsForKind,
+  hasSetting,
+  widthsForKind,
+  defaultFibLevels,
+  defaultKindPrefs,
+  resolvedPrefsForTool,
+  clampFontSize,
+  clampRiskReward,
+  sanitizeFibLevels,
+  fibLevelsOf,
+  isFibReversed,
+  showPriceOf,
+  showPctOf,
+  showStatsOf,
+  fontSizeOf,
+  riskRewardOf,
+  arrowStartOf,
+  arrowEndOf,
+  positionStopPrice,
+  extendModeOf,
+  isTextEditableKind,
+  drawingTextOf,
+  FIB_TIME_LEVELS,
+  isDrawingKind,
+  defaultExtendFlags,
+} from './tool-settings';
+export type { ToolSettingId, KindDrawingPrefs } from './tool-settings';
+
 // ── Copy / merge / symbol filter (multi-chart prep) ──────────────────────────
 export {
   newDrawingId,

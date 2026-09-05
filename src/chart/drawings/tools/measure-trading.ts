@@ -7,6 +7,7 @@
 
 import { DRAWING_COLORS, type Drawing, type Point, type TwoPointDrawing } from '../../drawing-types';
 import { distToSegment, nearRectEdge } from '../geometry';
+import { positionStopPrice, riskRewardOf, showStatsOf } from '../tool-settings';
 import { registerToolHandler } from './registry';
 import {
   clampOpacity,
@@ -69,7 +70,9 @@ registerToolHandler({
         bars = 0;
       }
     }
-    ctx.label(left + 4, 14, bars ? `${bars} bars` : 'range', ctx.stroke, 11);
+    if (showStatsOf(d, true)) {
+      ctx.label(left + 4, 14, bars ? `${bars} bars` : 'range', ctx.stroke, 11);
+    }
     if (ctx.selected) {
       ctx.circle(x1, ctx.height / 2, 5, ctx.stroke, true);
       ctx.circle(x2, ctx.height / 2, 5, ctx.stroke, true);
@@ -124,16 +127,18 @@ registerToolHandler({
       'stroke-width': String(clampStrokeWidth(ctx.strokeWidth)),
       'pointer-events': 'all',
     });
-    const dPrice = t.p2.price - t.p1.price;
-    const denom = t.p1.price || 1;
-    const pct = (dPrice / denom) * 100;
-    ctx.label(
-      6,
-      top + 14,
-      `${dPrice >= 0 ? '+' : ''}${dPrice.toFixed(2)} (${pct.toFixed(2)}%)`,
-      ctx.stroke,
-      11,
-    );
+    if (showStatsOf(d, true)) {
+      const dPrice = t.p2.price - t.p1.price;
+      const denom = t.p1.price || 1;
+      const pct = (dPrice / denom) * 100;
+      ctx.label(
+        6,
+        top + 14,
+        `${dPrice >= 0 ? '+' : ''}${dPrice.toFixed(2)} (${pct.toFixed(2)}%)`,
+        ctx.stroke,
+        11,
+      );
+    }
     if (ctx.selected) {
       ctx.circle(ctx.width / 2, y1, 5, ctx.stroke, true);
       ctx.circle(ctx.width / 2, y2, 5, ctx.stroke, true);
@@ -166,9 +171,7 @@ function paintPosition(
   if (!a || !b) return;
   const entry = t.p1.price;
   const target = t.p2.price;
-  // Risk = same magnitude opposite of reward for a simple 1:1 R default zone
-  const reward = target - entry;
-  const stop = entry - reward;
+  const stop = positionStopPrice(entry, target, riskRewardOf(d, 1));
   const yEntry = ctx.priceToY(entry);
   const yTarget = ctx.priceToY(target);
   const yStop = ctx.priceToY(stop);
@@ -208,10 +211,11 @@ function paintPosition(
   const pnl = dir === 'long' ? target - entry : entry - target;
   const denom = entry || 1;
   const pct = (pnl / denom) * 100;
+  const rr = riskRewardOf(d, 1);
   ctx.label(
     x1 + 4,
     profitTop + 12,
-    `${dir.toUpperCase()} ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} (${pct.toFixed(2)}%)`,
+    `${dir.toUpperCase()} ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} (${pct.toFixed(2)}%) · ${rr.toFixed(2)}R`,
     ctx.stroke,
     11,
   );
@@ -233,7 +237,7 @@ function hitPosition(
   if (!a || !b) return false;
   const entry = t.p1.price;
   const target = t.p2.price;
-  const stop = entry - (target - entry);
+  const stop = positionStopPrice(entry, target, riskRewardOf(d, 1));
   const yEntry = ctx.priceToY(entry);
   const yTarget = ctx.priceToY(target);
   const yStop = ctx.priceToY(stop);

@@ -68,6 +68,7 @@ import {
   setSlotManager,
 } from './chart-registry';
 import { reportUiError } from '../ui/boot-errors';
+import { resolvedPrefsForTool } from './drawings/tool-settings';
 import { getThemeManager } from '../theme';
 import {
   drawingsForSymbol,
@@ -364,11 +365,33 @@ function ensureDrawingLayer() {
     layer.setStayInMode(!!store.drawingUi?.stayInMode);
     layer.setLockAll(!!store.drawingUi?.lockAll);
     layer.setHideDrawings(!!store.drawingUi?.hideDrawings);
+    const prefs = store.drawingPrefs;
+    const toolPrefs = resolvedPrefsForTool(
+      {
+        color: prefs?.color ?? '#939fff',
+        width: prefs?.width ?? 1.5,
+        lineStyle: prefs?.lineStyle ?? 'solid',
+        fillOpacity: prefs?.fillOpacity ?? 0.15,
+        byKind: prefs?.byKind,
+      },
+      store.drawingTool,
+    );
     layer.setStylePrefs({
-      color: store.drawingPrefs?.color ?? '#939fff',
-      width: store.drawingPrefs?.width ?? 1.5,
-      lineStyle: store.drawingPrefs?.lineStyle ?? 'solid',
-      fillOpacity: store.drawingPrefs?.fillOpacity ?? 0.15,
+      color: toolPrefs.color,
+      width: toolPrefs.width,
+      lineStyle: toolPrefs.lineStyle,
+      fillOpacity: toolPrefs.fillOpacity,
+      extendLeft: toolPrefs.extendLeft,
+      extendRight: toolPrefs.extendRight,
+      fontSize: toolPrefs.fontSize,
+      showPrice: toolPrefs.showPrice,
+      showPct: toolPrefs.showPct,
+      showStats: toolPrefs.showStats,
+      reverse: toolPrefs.reverse,
+      arrowStart: toolPrefs.arrowStart,
+      arrowEnd: toolPrefs.arrowEnd,
+      rr: toolPrefs.rr,
+      fibLevels: toolPrefs.fibLevels,
     });
     // Layer → store: selection + tool (toolbar style bar / afterPlace)
     layer.setOnSelectionChange((id) => setSelectedDrawingId(id));

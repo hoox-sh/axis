@@ -79,7 +79,20 @@ import {
   sanitizeDrawingText,
   sanitizePoints,
   sanitizeStrokeColor,
+  safePrompt,
 } from './drawings/tools/safe';
+import {
+  arrowEndOf,
+  arrowStartOf,
+  drawingTextOf,
+  extendModeOf,
+  fibLevelsOf,
+  isFibReversed,
+  isTextEditableKind,
+  showPctOf,
+  showPriceOf,
+  showStatsOf,
+} from './drawings/tool-settings';
 // Register extended tool handlers (side effects)
 import './drawings/tools';
 
@@ -95,12 +108,23 @@ export type SelectionChangeHandler = (id: string | null) => void;
 /** Fired when the layer changes the tool (e.g. auto-cursor after place). */
 export type ToolChangeHandler = (tool: DrawingToolId) => void;
 
-/** Defaults applied to newly placed drawings (mirrors store `drawingPrefs`). */
+/** Defaults applied to newly placed drawings (mirrors store `drawingPrefs` + byKind). */
 export type StylePrefs = {
   color: string;
   width: number;
   lineStyle: DrawingLineStyle;
   fillOpacity: number;
+  extendLeft?: boolean;
+  extendRight?: boolean;
+  fontSize?: number;
+  showPrice?: boolean;
+  showPct?: boolean;
+  showStats?: boolean;
+  reverse?: boolean;
+  arrowStart?: boolean;
+  arrowEnd?: boolean;
+  rr?: number;
+  fibLevels?: number[];
 };
 
 /**
@@ -402,13 +426,15 @@ export class DrawingLayer {
   /**
    * Patch the selected drawing's style/geometry and emit.
    * No-op (returns false) when nothing selected, missing id, lockAll, or per-drawing locked.
+   * Pass `{ allowLocked: true }` to toggle lock (or unlock) a locked drawing.
    */
-  updateSelected(patch: Partial<Drawing>): boolean {
+  updateSelected(patch: Partial<Drawing>, opts?: { allowLocked?: boolean }): boolean {
     if (!this.selectedId) return false;
     const idx = this.drawings.findIndex((d) => d.id === this.selectedId);
     if (idx < 0) return false;
     const cur = this.drawings[idx]!;
-    if (this.lockAll || resolveDrawingStyle(cur).locked) return false;
+    const locked = resolveDrawingStyle(cur).locked;
+    if (!opts?.allowLocked && (this.lockAll || locked)) return false;
     this.drawings[idx] = { ...cur, ...patch } as Drawing;
     this.emit();
     this.redrawUser();
@@ -659,18 +685,37 @@ export class DrawingLayer {
       if (s) meta.symbol = s;
       else delete meta.symbol;
     }
+    const prefs = this.stylePrefs;
+    const width = d.lineWidth ?? d.style?.width ?? prefs.width;
+    const lineStyle = d.lineStyle ?? d.style?.lineStyle ?? prefs.lineStyle;
+    const fillOpacity = d.fillOpacity ?? prefs.fillOpacity;
+    if (prefs.showPrice != null && meta.showPrice == null) meta.showPrice = prefs.showPrice;
+    if (prefs.showPct != null && meta.showPct == null) meta.showPct = prefs.showPct;
+    if (prefs.showStats != null && meta.showStats == null) meta.showStats = prefs.showStats;
+    if (prefs.reverse != null && meta.reverse == null) meta.reverse = prefs.reverse;
+    if (prefs.arrowStart != null && meta.arrowStart == null) meta.arrowStart = prefs.arrowStart;
+    if (prefs.arrowEnd != null && meta.arrowEnd == null) meta.arrowEnd = prefs.arrowEnd;
+    if (prefs.rr != null && meta.rr == null) meta.rr = prefs.rr;
+    if (prefs.fibLevels && meta.fibLevels == null) meta.fibLevels = prefs.fibLevels.slice();
+    const extendLeft = d.style?.extendLeft ?? prefs.extendLeft;
+    const extendRight = d.style?.extendRight ?? prefs.extendRight;
+    const fontSize = d.style?.fontSize ?? prefs.fontSize;
     return {
       ...d,
       id: d.id || uid(),
       color,
-      lineWidth: d.lineWidth ?? this.stylePrefs.width,
-      lineStyle: d.lineStyle ?? this.stylePrefs.lineStyle,
-      fillOpacity: d.fillOpacity ?? this.stylePrefs.fillOpacity,
+      lineWidth: width,
+      lineStyle,
+      fillOpacity,
       style: {
+        ...(d.style || {}),
         color,
-        width: d.lineWidth ?? this.stylePrefs.width,
-        lineStyle: d.lineStyle ?? this.stylePrefs.lineStyle,
-        opacity: 1,
+        width,
+        lineStyle,
+        opacity: d.style?.opacity ?? 1,
+        ...(extendLeft != null ? { extendLeft } : {}),
+        ...(extendRight != null ? { extendRight } : {}),
+        ...(fontSize != null ? { fontSize } : {}),
       },
       meta: Object.keys(meta).length ? meta : d.meta,
     };
@@ -1192,20 +1237,46 @@ export class DrawingLayer {
     }
   }
 
-  /** Finish open-ended polyline/path on double-click. */
+  /** Finish open-ended polyline/path on double-click, or re-edit text drawings. */
   private handleDblClick = (e: MouseEvent) => {
-    if (!this.draft || !needsNPoints(this.draft.tool)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const handler = getToolHandler(this.draft.tool);
-    const minPts = Math.max(handler?.minPoints ?? 2, 2);
-    const pts = sanitizePoints(this.draft.points);
-    if (pts.length < minPts) {
-      this.draft = null;
-      this.clearDraftDom();
+    if (this.draft && needsNPoints(this.draft.tool)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const handler = getToolHandler(this.draft.tool);
+      const minPts = Math.max(handler?.minPoints ?? 2, 2);
+      const pts = sanitizePoints(this.draft.points);
+      if (pts.length < minPts) {
+        this.draft = null;
+        this.clearDraftDom();
+        return;
+      }
+      this.commitDraftPoints(pts);
       return;
     }
-    this.commitDraftPoints(pts);
+    if (this.lockAll) return;
+    const hit = this.hitTest(e) || this.selectedId;
+    if (!hit) return;
+    const d = this.drawings.find((x) => x.id === hit);
+    if (!d || !isTextEditableKind(d.kind)) return;
+    if (resolveDrawingStyle(d).locked) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const fallback =
+      d.kind === 'priceLabel' && 'p1' in d && d.p1
+        ? d.p1.price.toFixed(2)
+        : 'Note';
+    const current = drawingTextOf(d) || fallback;
+    const next = safePrompt('Label text', current);
+    if (!next || next === current) return;
+    const idx = this.drawings.findIndex((x) => x.id === d.id);
+    if (idx < 0) return;
+    this.drawings[idx] = {
+      ...d,
+      text: next,
+      meta: { ...(d.meta || {}), text: next },
+    } as Drawing;
+    this.emit();
+    this.redrawUser();
   };
 
   private commitDraftPoints(points: Point[]) {
@@ -2183,7 +2254,9 @@ export class DrawingLayer {
       if (y == null) return;
       const w = this.host.clientWidth;
       line(g, 0, y, w, y, stroke, sw, dash, 'stroke');
-      label(g, 6, y - 4, d.price.toFixed(2), stroke);
+      if (showPriceOf(d, true)) {
+        label(g, 6, y - 4, d.price.toFixed(2), stroke, st.fontSize);
+      }
       if (selected) {
         circle(g, w / 2, y, 5, stroke, true);
       }
@@ -2196,6 +2269,13 @@ export class DrawingLayer {
       if (x == null) return;
       const h = this.host.clientHeight;
       line(g, x, 0, x, h, stroke, sw, dash, 'stroke');
+      if (showPriceOf(d, true)) {
+        const ms = d.time * 1000;
+        const stamp = Number.isFinite(ms)
+          ? new Date(ms).toISOString().slice(0, 16).replace('T', ' ')
+          : String(d.time);
+        label(g, x + 4, 12, stamp, stroke, Math.min(11, st.fontSize));
+      }
       if (selected) {
         circle(g, x, h / 2, 5, stroke, true);
       }
@@ -2207,7 +2287,7 @@ export class DrawingLayer {
       const c = this.toXY(d.p1);
       if (!c) return;
       const text = sanitizeDrawingText(d.text ?? d.meta?.text ?? '');
-      label(g, c.x + 4, c.y - 4, text, stroke, 12);
+      label(g, c.x + 4, c.y - 4, text, stroke, st.fontSize);
       circle(g, c.x, c.y, selected ? 5 : 3, stroke, selected);
       return;
     }
@@ -2239,13 +2319,25 @@ export class DrawingLayer {
     if (!a || !b) return;
 
     if (d.kind === 'trend' || d.kind === 'measure' || d.kind === 'arrow') {
-      line(g, a.x, a.y, b.x, b.y, stroke, sw, dash);
-      if (d.kind === 'arrow') {
+      const w = this.host.clientWidth;
+      const h = this.host.clientHeight;
+      const mode = extendModeOf(d, { extendLeft: st.extendLeft, extendRight: st.extendRight });
+      const ext =
+        d.kind === 'trend' && mode !== 'none'
+          ? extendSegment(a.x, a.y, b.x, b.y, mode, w, h)
+          : { x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+      line(g, ext.x1, ext.y1, ext.x2, ext.y2, stroke, sw, dash);
+      const headAtEnd = d.kind === 'arrow' || arrowEndOf(d, false);
+      const headAtStart = arrowStartOf(d, false);
+      if (headAtEnd) {
         paintArrowHead(g, a.x, a.y, b.x, b.y, stroke, Math.max(8, sw * 3));
+      }
+      if (headAtStart) {
+        paintArrowHead(g, b.x, b.y, a.x, a.y, stroke, Math.max(8, sw * 3));
       }
       circle(g, a.x, a.y, selected ? 5 : 3, stroke, selected);
       circle(g, b.x, b.y, selected ? 5 : 3, stroke, selected);
-      if (d.kind === 'measure') {
+      if (d.kind === 'measure' && showStatsOf(d, true)) {
         const bars = Math.abs(
           barIndexApprox(this.chart, p1.time) - barIndexApprox(this.chart, p2.time),
         );
@@ -2266,31 +2358,28 @@ export class DrawingLayer {
     }
 
     if (d.kind === 'ray' || d.kind === 'extend') {
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
       const w = this.host.clientWidth;
       const h = this.host.clientHeight;
-      const len = Math.hypot(dx, dy);
-      const scale = len > 0.001 ? 5000 / len : 1;
-      let x1 = a.x;
-      let y1 = a.y;
-      let x2 = b.x;
-      let y2 = b.y;
-      if (d.kind === 'ray') {
-        x2 = a.x + dx * scale;
-        y2 = a.y + dy * scale;
-      } else {
-        // extend both directions through p1→p2
-        x1 = a.x - dx * scale;
-        y1 = a.y - dy * scale;
-        x2 = a.x + dx * scale;
-        y2 = a.y + dy * scale;
-      }
+      const mode = extendModeOf(d, { extendLeft: st.extendLeft, extendRight: st.extendRight });
+      const ext =
+        mode === 'none'
+          ? { x1: a.x, y1: a.y, x2: b.x, y2: b.y }
+          : extendSegment(a.x, a.y, b.x, b.y, mode, w, h);
+      let x1 = ext.x1;
+      let y1 = ext.y1;
+      let x2 = ext.x2;
+      let y2 = ext.y2;
       x1 = Math.max(-w, Math.min(2 * w, x1));
       y1 = Math.max(-h, Math.min(2 * h, y1));
       x2 = Math.max(-w, Math.min(2 * w, x2));
       y2 = Math.max(-h, Math.min(2 * h, y2));
       line(g, x1, y1, x2, y2, stroke, sw, dash);
+      if (arrowEndOf(d, false)) {
+        paintArrowHead(g, a.x, a.y, b.x, b.y, stroke, Math.max(8, sw * 3));
+      }
+      if (arrowStartOf(d, false)) {
+        paintArrowHead(g, b.x, b.y, a.x, a.y, stroke, Math.max(8, sw * 3));
+      }
       circle(g, a.x, a.y, selected ? 5 : 3, stroke, selected);
       circle(g, b.x, b.y, selected ? 5 : 3, stroke, selected);
       return;
@@ -2347,21 +2436,47 @@ export class DrawingLayer {
     }
 
     if (d.kind === 'fib') {
-      const lo = Math.min(p1.price, p2.price);
-      const hi = Math.max(p1.price, p2.price);
-      const span = hi - lo || 1;
+      const levels = fibLevelsOf(d);
+      const prices = fibLevelPrices(p1.price, p2.price, levels, isFibReversed(d));
       const x1 = Math.min(a.x, b.x);
       const x2 = Math.max(a.x, b.x);
-      const right = Math.max(x2, this.host.clientWidth - 8);
-      for (const lvl of FIB_LEVELS) {
-        const price =
-          p1.price >= p2.price
-            ? p1.price - span * lvl
-            : p1.price + span * lvl;
-        const y = this.priceToYSafe(price);
+      let left = x1;
+      let right = x2;
+      if (st.extendLeft) left = Math.min(x1, 8);
+      if (st.extendRight) right = Math.max(x2, this.host.clientWidth - 8);
+      const showPct = showPctOf(d, true);
+      const showPx = showPriceOf(d, true);
+      const fo = Math.max(0, Math.min(1, st.fillOpacity));
+      const ys: number[] = [];
+      for (let i = 0; i < levels.length; i++) {
+        const y = this.priceToYSafe(prices[i]!);
         if (y == null) continue;
-        line(g, x1, y, right, y, stroke, Math.max(1, sw - 0.5), lvl === 0.5 ? undefined : '3 3');
-        label(g, right - 4, y - 3, `${(lvl * 100).toFixed(1)}%  ${price.toFixed(2)}`, stroke, 10, 'end');
+        ys.push(y);
+        const lvl = levels[i]!;
+        line(g, left, y, right, y, stroke, Math.max(1, sw - 0.5), lvl === 0.5 ? undefined : '3 3');
+        if (showPct || showPx) {
+          const bits: string[] = [];
+          if (showPct) bits.push(`${(lvl * 100).toFixed(1)}%`);
+          if (showPx) bits.push(prices[i]!.toFixed(2));
+          label(g, right - 4, y - 3, bits.join('  '), stroke, 10, 'end');
+        }
+      }
+      if (fo > 0.01) {
+        for (let i = 0; i < ys.length - 1; i++) {
+          const top = Math.min(ys[i]!, ys[i + 1]!);
+          const hh = Math.abs(ys[i]! - ys[i + 1]!);
+          if (hh < 1) continue;
+          el(g, 'rect', {
+            x: String(left),
+            y: String(top),
+            width: String(Math.max(1, right - left)),
+            height: String(hh),
+            fill: stroke,
+            'fill-opacity': String(fo),
+            stroke: 'none',
+            'pointer-events': 'none',
+          });
+        }
       }
       line(g, a.x, a.y, b.x, b.y, DRAWING_COLORS.muted, 1, '2 2');
       if (selected) {
@@ -2679,13 +2794,30 @@ function barIndexApprox(chart: IChartApi, time: number): number {
 /**
  * Pure helper for tests: Fibonacci level prices between two endpoints.
  * Direction follows high→low when `p1 >= p2`, else low→high.
+ * `reverse` swaps the anchors; `levels` defaults to classic retracement ratios.
  */
-export function fibPrices(p1: number, p2: number): number[] {
-  const lo = Math.min(p1, p2);
-  const hi = Math.max(p1, p2);
+export function fibPrices(
+  p1: number,
+  p2: number,
+  levels: readonly number[] = FIB_LEVELS,
+  reverse = false,
+): number[] {
+  return fibLevelPrices(p1, p2, levels, reverse);
+}
+
+function fibLevelPrices(
+  p1: number,
+  p2: number,
+  levels: readonly number[],
+  reverse = false,
+): number[] {
+  const a = reverse ? p2 : p1;
+  const b = reverse ? p1 : p2;
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
   const span = hi - lo || 1;
-  const fromHigh = p1 >= p2;
-  return FIB_LEVELS.map((lvl) => (fromHigh ? p1 - span * lvl : p1 + span * lvl));
+  const fromHigh = a >= b;
+  return levels.map((lvl) => (fromHigh ? a - span * lvl : a + span * lvl));
 }
 
 /** Stable signature for script drawing payloads (skip no-op live re-applies). */

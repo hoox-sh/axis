@@ -6,14 +6,20 @@
  */
 
 import {
-  FIB_EXT_LEVELS,
-  FIB_LEVELS,
   type Drawing,
   type MultiPointDrawing,
   type Point,
   type TwoPointDrawing,
 } from '../../drawing-types';
 import { channelEdges, distToSegment, fibExtensionPrices, fibPrices } from '../geometry';
+import {
+  defaultExtendFlags,
+  extendModeOf,
+  fibLevelsOf,
+  isFibReversed,
+  showPctOf,
+  showPriceOf,
+} from '../tool-settings';
 import { registerToolHandler } from './registry';
 import { isFinitePoint, sanitizePoints, sanitizeStrokeColor } from './safe';
 
@@ -64,15 +70,35 @@ registerToolHandler({
     ctx.line(ax.x, ax.y, bx.x, bx.y, ctx.stroke, 1, '2 2');
     ctx.line(bx.x, bx.y, cx.x, cyFix(bx, cx).y, ctx.stroke, 1, '2 2');
     const span = Math.abs(b!.price - a!.price) || 1;
-    const dir = b!.price >= a!.price ? 1 : -1;
+    const reverse = isFibReversed(d);
+    const dir = reverse
+      ? b!.price >= a!.price
+        ? -1
+        : 1
+      : b!.price >= a!.price
+        ? 1
+        : -1;
     const x1 = Math.min(ax.x, bx.x, cx.x);
-    const right = Math.max(ax.x, bx.x, cx.x, ctx.width - 8);
-    for (const lvl of FIB_EXT_LEVELS) {
+    const ext = defaultExtendFlags('fibext');
+    const mode = extendModeOf(d, ext);
+    let right = Math.max(ax.x, bx.x, cx.x);
+    if (mode === 'right' || mode === 'both') right = Math.max(right, ctx.width - 8);
+    let left = x1;
+    if (mode === 'left' || mode === 'both') left = Math.min(x1, 8);
+    const levels = fibLevelsOf(d);
+    const showPct = showPctOf(d, true);
+    const showPx = showPriceOf(d, true);
+    for (const lvl of levels) {
       const price = c!.price + dir * span * lvl;
       const y = ctx.priceToY(price);
       if (y == null) continue;
-      ctx.line(x1, y, right, y, ctx.stroke, Math.max(1, ctx.strokeWidth - 0.5), lvl === 1 ? undefined : '3 3');
-      ctx.label(right - 4, y - 3, `${(lvl * 100).toFixed(1)}%  ${price.toFixed(2)}`, ctx.stroke, 10, 'end');
+      ctx.line(left, y, right, y, ctx.stroke, Math.max(1, ctx.strokeWidth - 0.5), lvl === 1 ? undefined : '3 3');
+      if (showPct || showPx) {
+        const bits: string[] = [];
+        if (showPct) bits.push(`${(lvl * 100).toFixed(1)}%`);
+        if (showPx) bits.push(price.toFixed(2));
+        ctx.label(right - 4, y - 3, bits.join('  '), ctx.stroke, 10, 'end');
+      }
     }
     if (ctx.selected) {
       ctx.circle(ax.x, ax.y, 5, ctx.stroke, true);
@@ -91,8 +117,15 @@ registerToolHandler({
     // Hit level lines loosely
     const [a, b, c] = p;
     const span = Math.abs(b!.price - a!.price) || 1;
-    const dir = b!.price >= a!.price ? 1 : -1;
-    for (const lvl of FIB_EXT_LEVELS) {
+    const reverse = isFibReversed(d);
+    const dir = reverse
+      ? b!.price >= a!.price
+        ? -1
+        : 1
+      : b!.price >= a!.price
+        ? 1
+        : -1;
+    for (const lvl of fibLevelsOf(d)) {
       const price = c!.price + dir * span * lvl;
       const y = ctx.priceToY(price);
       if (y != null && Math.abs(ctx.y - y) <= ctx.tol) return true;
@@ -132,13 +165,14 @@ registerToolHandler({
     const b = ctx.toXY(t.p2);
     if (!a || !b) return;
     const dt = t.p2.time - t.p1.time || 1;
-    const levels = [0, 1, 1.618, 2.618, 3.618, 4.236];
+    const levels = fibLevelsOf(d);
+    const showPct = showPctOf(d, true);
     for (const lvl of levels) {
-      const time = t.p1.time + dt * lvl;
+      const time = t.p1.time + dt * (isFibReversed(d) ? -lvl : lvl);
       const x = ctx.timeToX(time);
       if (x == null) continue;
       ctx.line(x, 0, x, ctx.height, ctx.stroke, Math.max(1, ctx.strokeWidth - 0.5), lvl === 0 || lvl === 1 ? undefined : '3 3');
-      ctx.label(x + 3, 12, String(lvl), ctx.stroke, 10);
+      if (showPct) ctx.label(x + 3, 12, String(lvl), ctx.stroke, 10);
     }
     if (ctx.selected) {
       ctx.circle(a.x, a.y, 5, ctx.stroke, true);
@@ -149,8 +183,8 @@ registerToolHandler({
     const t = asTwo(d, 'fibtime');
     if (!t) return false;
     const dt = t.p2.time - t.p1.time || 1;
-    for (const lvl of [0, 1, 1.618, 2.618, 3.618, 4.236]) {
-      const x = ctx.timeToX(t.p1.time + dt * lvl);
+    for (const lvl of fibLevelsOf(d)) {
+      const x = ctx.timeToX(t.p1.time + dt * (isFibReversed(d) ? -lvl : lvl));
       if (x != null && Math.abs(ctx.x - x) <= ctx.tol) return true;
     }
     return false;
@@ -189,13 +223,14 @@ registerToolHandler({
     if (!a1 || !a2 || !b1 || !b2) return;
     ctx.line(a1.x, a1.y, a2.x, a2.y, ctx.stroke, ctx.strokeWidth);
     ctx.line(b1.x, b1.y, b2.x, b2.y, ctx.stroke, ctx.strokeWidth);
-    // Interpolate parallel levels
-    for (const lvl of FIB_LEVELS) {
+    const levels = fibLevelsOf(d);
+    for (const lvl of levels) {
       if (lvl === 0 || lvl === 1) continue;
-      const x1 = a1.x + (b1.x - a1.x) * lvl;
-      const y1 = a1.y + (b1.y - a1.y) * lvl;
-      const x2 = a2.x + (b2.x - a2.x) * lvl;
-      const y2 = a2.y + (b2.y - a2.y) * lvl;
+      const t = isFibReversed(d) ? 1 - lvl : lvl;
+      const x1 = a1.x + (b1.x - a1.x) * t;
+      const y1 = a1.y + (b1.y - a1.y) * t;
+      const x2 = a2.x + (b2.x - a2.x) * t;
+      const y2 = a2.y + (b2.y - a2.y) * t;
       ctx.line(x1, y1, x2, y2, ctx.stroke, Math.max(1, ctx.strokeWidth - 0.5), '3 3');
     }
     if (ctx.selected) {
@@ -221,6 +256,5 @@ registerToolHandler({
   },
 });
 
-// keep fibPrices import used for potential extension
 void fibPrices;
 void fibExtensionPrices;

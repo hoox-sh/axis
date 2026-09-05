@@ -7,6 +7,7 @@
 
 import { DRAWING_COLORS, type Drawing, type TwoPointDrawing } from '../../drawing-types';
 import { distToSegment, nearRectEdge } from '../geometry';
+import { arrowEndOf, arrowStartOf, showStatsOf } from '../tool-settings';
 import { registerToolHandler, type ToolHitCtx, type ToolViewCtx } from './registry';
 import {
   clampOpacity,
@@ -96,19 +97,26 @@ registerToolHandler({
     // Solid segment to p2, then dashed projection past tip
     ctx.line(a.x, a.y, b.x, b.y, ctx.stroke, ctx.strokeWidth, dash);
     ctx.line(b.x, b.y, tip.x, tip.y, ctx.stroke, Math.max(1, ctx.strokeWidth - 0.25), dash);
-    paintArrowHead(ctx, a.x, a.y, tip.x, tip.y, ctx.stroke, Math.max(8, ctx.strokeWidth * 3));
-    const dPrice = t.p2.price - t.p1.price;
-    const denom = t.p1.price || 1;
-    const pct = (dPrice / denom) * 100;
-    const midX = (a.x + tip.x) / 2;
-    const midY = (a.y + tip.y) / 2;
-    ctx.label(
-      midX + 6,
-      midY - 6,
-      `Forecast ${dPrice >= 0 ? '+' : ''}${dPrice.toFixed(2)} (${pct.toFixed(2)}%)`,
-      ctx.stroke,
-      11,
-    );
+    if (arrowEndOf(d, true)) {
+      paintArrowHead(ctx, a.x, a.y, tip.x, tip.y, ctx.stroke, Math.max(8, ctx.strokeWidth * 3));
+    }
+    if (arrowStartOf(d, false)) {
+      paintArrowHead(ctx, tip.x, tip.y, a.x, a.y, ctx.stroke, Math.max(8, ctx.strokeWidth * 3));
+    }
+    if (showStatsOf(d, true)) {
+      const dPrice = t.p2.price - t.p1.price;
+      const denom = t.p1.price || 1;
+      const pct = (dPrice / denom) * 100;
+      const midX = (a.x + tip.x) / 2;
+      const midY = (a.y + tip.y) / 2;
+      ctx.label(
+        midX + 6,
+        midY - 6,
+        `Forecast ${dPrice >= 0 ? '+' : ''}${dPrice.toFixed(2)} (${pct.toFixed(2)}%)`,
+        ctx.stroke,
+        11,
+      );
+    }
     if (ctx.selected) {
       ctx.circle(a.x, a.y, 5, ctx.stroke, true);
       ctx.circle(b.x, b.y, 5, ctx.stroke, true);
@@ -182,14 +190,16 @@ registerToolHandler({
     const dPrice = t.p2.price - t.p1.price;
     const denom = t.p1.price || 1;
     const pct = (dPrice / denom) * 100;
-    const barPart = bars ? `${bars} bars · ` : '';
-    ctx.label(
-      left + 4,
-      top + 14,
-      `${barPart}${dPrice >= 0 ? '+' : ''}${dPrice.toFixed(2)} (${pct.toFixed(2)}%)`,
-      ctx.stroke,
-      11,
-    );
+    if (showStatsOf(d, true)) {
+      const barPart = bars ? `${bars} bars · ` : '';
+      ctx.label(
+        left + 4,
+        top + 14,
+        `${barPart}${dPrice >= 0 ? '+' : ''}${dPrice.toFixed(2)} (${pct.toFixed(2)}%)`,
+        ctx.stroke,
+        11,
+      );
+    }
     if (ctx.selected) {
       ctx.circle(a.x, a.y, 5, ctx.stroke, true);
       ctx.circle(b.x, b.y, 5, ctx.stroke, true);

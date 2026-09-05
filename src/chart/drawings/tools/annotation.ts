@@ -7,6 +7,7 @@
 
 import type { Drawing, TextDrawing } from '../../drawing-types';
 import { nearPoint } from '../geometry';
+import { fontSizeOf } from '../tool-settings';
 import { registerToolHandler } from './registry';
 import {
   isFinitePoint,
@@ -57,7 +58,7 @@ registerToolHandler({
       stroke: 'none',
       'pointer-events': 'all',
     });
-    ctx.label(c.x + 6 + padX, c.y + 4, text, '#0b0c10', 11);
+    ctx.label(c.x + 6 + padX, c.y + 4, text, '#0b0c10', fontSizeOf(d, 11));
     ctx.circle(c.x, c.y, ctx.selected ? 5 : 3, ctx.stroke, true);
     void padY;
   },

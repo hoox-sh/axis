@@ -29,13 +29,19 @@ User tools and apply-pipeline bugs that do not wait on a PYNE export change.
 
 ### P1 — User-tool settings (AXIS)
 
-Shared style bar today: color, width, dash, Fill **only** for rect/ellipse.
+Done:
 
-- Fill control for channel, triangle, gannBox, date/price ranges, rotatedRect, highlighter.
-- Highlighter width: stop `create 12` × paint `sw * 6`.
+- Shared style bar: color (presets + custom), width, dash, fill for shapes / ranges / fib / highlighter / positions.
+- Per-tool extras via `src/chart/drawings/tool-settings.ts` + settings popover (`axis-drawing-settings`).
+- Last-used style per kind (`drawingPrefs.byKind`).
+- `extendLeft` / `extendRight` UI + paint (trend, ray, extend, info line, channel, fib).
+- Fib level editor, reverse, show % / price, fill between levels.
+- Text re-edit (popover + double-click), font size.
+- Per-drawing lock in the style bar (unlock bypasses `updateSelected` lock gate).
+- Long/short risk-reward (`meta.rr`).
+- Highlighter width honors `style.width` (create default 8).
 - hray: 1-click (price only).
 - xabcd / headShoulders: commit on 5th point.
-- Optional later: fib level editor, text re-edit, `extendLeft`/`extendRight` UI, lock in the style bar.
 
 ### P2 — PYNE export (pynescript repo)
 

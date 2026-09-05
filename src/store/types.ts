@@ -164,6 +164,7 @@ export type { ProviderSession };
 /**
  * Default stroke/fill applied when the layer places a new drawing.
  * Seeded onto {@link DrawingLayer} style prefs; style bar edits this when nothing is selected.
+ * `byKind` remembers last-used extras per tool (extend, fib levels, RR, …).
  */
 export interface DrawingPrefs {
   color: string;
@@ -171,6 +172,13 @@ export interface DrawingPrefs {
   lineStyle: 'solid' | 'dashed' | 'dotted';
   /** Rect fill opacity 0–1 (also used as create default via layer `stylePrefs`). */
   fillOpacity: number;
+  /** Last-used style extras keyed by drawing kind. */
+  byKind?: Partial<
+    Record<
+      import('../chart/drawing-types').DrawingKind,
+      import('../chart/drawings/tool-settings').KindDrawingPrefs
+    >
+  >;
 }
 
 /**

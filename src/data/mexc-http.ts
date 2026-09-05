@@ -37,7 +37,7 @@
  * @module data/mexc-http
  */
 
-import { normalizeEndpointBase } from '../onchain/proxy';
+import { normalizeEndpointBase } from './worker-origin';
 import {
   DEFAULT_MARKET_WORKER_BASE,
   resolveMarketWorkerBase,

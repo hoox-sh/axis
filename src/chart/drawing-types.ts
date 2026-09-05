@@ -134,6 +134,7 @@ export interface DrawingBase {
     opacity?: number;
     extendRight?: boolean;
     extendLeft?: boolean;
+    fontSize?: number;
   };
   /**
    * Free-form metadata.
@@ -141,6 +142,10 @@ export interface DrawingBase {
    * - `meta.symbol` anchors the drawing to a chart symbol (uppercased ticker);
    *   the layer only paints drawings for the active symbol (plus untagged legacy)
    * - `meta.hidden` hides the drawing in the layer / Layers panel
+   * - `meta.fibLevels` custom fib ratios; `meta.reverse` flips fib direction
+   * - `meta.showPrice` / `meta.showPct` / `meta.showStats` label toggles
+   * - `meta.arrowStart` / `meta.arrowEnd` line caps
+   * - `meta.rr` long/short risk:reward (stop distance = reward / rr)
    */
   meta?: {
     text?: string;
@@ -148,6 +153,14 @@ export interface DrawingBase {
     /** Uppercased ticker this drawing belongs to (e.g. `BTCUSDT`). */
     symbol?: string;
     hidden?: boolean;
+    fibLevels?: number[];
+    reverse?: boolean;
+    showPrice?: boolean;
+    showPct?: boolean;
+    showStats?: boolean;
+    arrowStart?: boolean;
+    arrowEnd?: boolean;
+    rr?: number;
     [key: string]: unknown;
   };
 }
@@ -252,6 +265,19 @@ export const DRAWING_COLORS = {
   muted: 'rgba(147, 159, 255, 0.55)',
 } as const;
 
+/** Default extend flags when a drawing omits `style.extendLeft` / `extendRight`. */
+export function defaultExtendFlags(kind: DrawingKind): {
+  extendLeft: boolean;
+  extendRight: boolean;
+} {
+  if (kind === 'ray' || kind === 'hray') return { extendLeft: false, extendRight: true };
+  if (kind === 'extend' || kind === 'channel') return { extendLeft: true, extendRight: true };
+  if (kind === 'fib' || kind === 'fibext' || kind === 'fibchannel') {
+    return { extendLeft: false, extendRight: true };
+  }
+  return { extendLeft: false, extendRight: false };
+}
+
 /**
  * Resolve paint + lock flags from dual legacy/unified drawing fields.
  * Precedence: nested `style.*` → flat `color`/`lineWidth`/`lineStyle` → defaults.
@@ -263,13 +289,25 @@ export function resolveDrawingStyle(d: DrawingBase): {
   lineStyle: DrawingLineStyle;
   fillOpacity: number;
   locked: boolean;
+  extendLeft: boolean;
+  extendRight: boolean;
+  fontSize: number;
 } {
+  const ext = defaultExtendFlags(d.kind);
+  const fontRaw = d.style?.fontSize;
+  const fontSize =
+    typeof fontRaw === 'number' && Number.isFinite(fontRaw)
+      ? Math.max(8, Math.min(32, Math.round(fontRaw)))
+      : 12;
   return {
     color: d.style?.color || d.color || DRAWING_COLORS.default,
     width: d.style?.width ?? d.lineWidth ?? 1.5,
     lineStyle: d.style?.lineStyle ?? d.lineStyle ?? 'solid',
     fillOpacity: d.fillOpacity ?? 0.15,
     locked: Boolean(d.locked ?? d.meta?.locked),
+    extendLeft: d.style?.extendLeft ?? ext.extendLeft,
+    extendRight: d.style?.extendRight ?? ext.extendRight,
+    fontSize,
   };
 }
 

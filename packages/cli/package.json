@@ -48,10 +48,15 @@
   "keywords": [
     "axis",
     "hoox",
+    "pyne",
     "cli",
     "cloudflare",
     "workers",
-    "pine-script"
+    "charting",
+    "pwa",
+    "pine-script",
+    "deploy",
+    "wrangler"
   ],
   "files": [
     "bin",

@@ -56,7 +56,7 @@ export const DRAWING_LIST_MAX = 2_000;
 const DRAWING_ID_MAX = 128;
 
 /** Max extra meta keys (excluding text) kept from garbage JSON. */
-const META_KEYS_MAX = 16;
+const META_KEYS_MAX = 24;
 
 /** Max meta key name length. */
 const META_KEY_MAX = 32;
@@ -78,6 +78,8 @@ export interface DrawingStyle {
   opacity: number;
   /** Rays (default true): extend past the second point. */
   extendRight?: boolean;
+  extendLeft?: boolean;
+  fontSize?: number;
 }
 
 export interface DrawingMeta {
@@ -349,8 +351,22 @@ function buildStyle(
   const extRaw = styleRaw?.extendRight ?? raw.extendRight;
   if (typeof extRaw === 'boolean') {
     style.extendRight = extRaw;
-  } else if (kind === 'ray') {
+  } else if (kind === 'ray' || kind === 'hray') {
     style.extendRight = true;
+  } else if (kind === 'extend' || kind === 'channel') {
+    style.extendRight = true;
+  }
+
+  const extLeftRaw = styleRaw?.extendLeft ?? raw.extendLeft;
+  if (typeof extLeftRaw === 'boolean') {
+    style.extendLeft = extLeftRaw;
+  } else if (kind === 'extend' || kind === 'channel') {
+    style.extendLeft = true;
+  }
+
+  const fontRaw = asFiniteNumber(styleRaw?.fontSize) ?? asFiniteNumber(raw.fontSize);
+  if (fontRaw != null) {
+    style.fontSize = Math.max(8, Math.min(32, Math.round(fontRaw)));
   }
 
   return style;
@@ -382,6 +398,21 @@ function buildMeta(
       }
       if (key === 'text') continue; // applied below from pickText / sanitized path
       if (key.length === 0 || key.length > META_KEY_MAX || !META_KEY_RE.test(key)) {
+        continue;
+      }
+      if (key === 'fibLevels' && Array.isArray(raw.meta[key])) {
+        const levels: number[] = [];
+        for (const item of raw.meta[key] as unknown[]) {
+          const n = asFiniteNumber(item);
+          if (n == null) continue;
+          levels.push(Math.max(-10, Math.min(20, n)));
+          if (levels.length >= 24) break;
+        }
+        if (levels.length) {
+          base.fibLevels = levels;
+          kept += 1;
+          if (kept >= META_KEYS_MAX) break;
+        }
         continue;
       }
       const val = sanitizeMetaScalar(raw.meta[key]);

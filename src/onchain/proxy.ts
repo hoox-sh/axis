@@ -43,6 +43,16 @@
 import { store } from '../store';
 import { DEFILLAMA_DEFAULT_BASE } from './defillama';
 import { GECKOTERMINAL_DEFAULT_BASE } from './geckoterminal';
+import {
+  DEFAULT_AXIS_WORKER_BASE,
+  looksLikeOnchainWorkerEndpoint,
+  normalizeEndpointBase,
+} from '../data/worker-origin';
+
+export {
+  looksLikeOnchainWorkerEndpoint,
+  normalizeEndpointBase,
+};
 
 /** Path prefix on the AXIS Worker for DefiLlama allowlisted proxy. */
 export const ONCHAIN_LLAMA_PROXY_PATH = '/api/onchain/llama';
@@ -54,60 +64,7 @@ export const ONCHAIN_GECKO_PROXY_PATH = '/api/onchain/gecko';
  * Default production AXIS Worker (on-chain proxy + scripts/run when bound).
  * Keep in sync with `worker/wrangler.toml` name / workers.dev URL.
  */
-export const DEFAULT_ONCHAIN_WORKER_BASE =
-  'https://pynescript-axis.cryptolinx.workers.dev';
-
-/**
- * Normalize an origin/base URL (no trailing slash).
- * Returns empty string if unusable.
- */
-export function normalizeEndpointBase(raw: string | undefined | null): string {
-  const s = String(raw || '').trim();
-  if (!s) return '';
-  // Strip trailing slashes; also strip accidental /api/run suffix if pasted
-  let base = s.replace(/\/+$/, '');
-  base = base.replace(/\/api\/run\/?$/i, '');
-  base = base.replace(/\/api\/?$/i, '');
-  if (!/^https?:\/\//i.test(base)) return '';
-  return base;
-}
-
-/**
- * True when `endpoint` is likely an AXIS Cloudflare Worker that serves
- * `/api/onchain/*` — not a VPS Flask/nginx SPA host.
- *
- * Matches:
- * - `*.workers.dev`
- * - host containing `pynescript-axis`
- * - local wrangler (`localhost` / `127.0.0.1` on port **8787**)
- * - path already includes `/api/onchain`
- */
-export function looksLikeOnchainWorkerEndpoint(
-  endpoint: string | undefined | null,
-): boolean {
-  const raw = String(endpoint || '').trim();
-  if (!raw) return false;
-  const lower = raw.toLowerCase();
-  if (lower.includes('/api/onchain')) return true;
-  try {
-    const u = new URL(raw.includes('://') ? raw : `https://${raw}`);
-    const host = u.hostname.toLowerCase();
-    if (host.endsWith('.workers.dev')) return true;
-    if (host.includes('pynescript-axis')) return true;
-    const port = u.port || (u.protocol === 'https:' ? '443' : '80');
-    if (
-      (host === 'localhost' || host === '127.0.0.1') &&
-      port === '8787'
-    ) {
-      return true;
-    }
-  } catch {
-    if (/\.workers\.dev/i.test(raw)) return true;
-    if (/pynescript-axis/i.test(raw)) return true;
-    if (/:8787\b/.test(raw) && /localhost|127\.0\.0\.1/i.test(raw)) return true;
-  }
-  return false;
-}
+export const DEFAULT_ONCHAIN_WORKER_BASE = DEFAULT_AXIS_WORKER_BASE;
 
 /**
  * Resolve the Worker origin used for on-chain proxy paths (no trailing slash).

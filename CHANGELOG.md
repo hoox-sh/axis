@@ -9,13 +9,34 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-04 · 320 commits · describe-tag: `v2.1.1`_
+_Generated/updated: 2026-09-05 · 321 commits · describe-tag: `v2.2.0`_
 
 ---
 
 ## [Unreleased]
 
 _Upcoming changes._
+
+---
+
+## [2.3.0] — 2026-09-05
+
+### Fixed
+
+- **CI unit tests**: plugin bootstrap now re-registers after `registry.clear()` (catalog flags reset together). Store/runner tests reset `resultsFocusId` so `setLastRun` is not skipped. Data-manager selection is cleared in stream catalog tests. CI pins Bun `1.3.14` (`latest` was racing global store/registry). `bun test --max-concurrency=1` for deterministic unit runs. Worker origin URL helpers live in `src/data/worker-origin.ts` so `store` → HTTP client → market-worker → on-chain proxy no longer hits a TDZ on import.
+
+### Changed
+
+- **Repo description & tags**: GitHub / package / PWA / desktop copy no longer frames AXIS as “for Pine Script”. Tagline covers CEX OHLCV, drawings, on-chain overlays, and Pine Script™ via PYNE; extra GitHub topics and package keywords.
+
+### Added
+
+- **Per-tool drawing settings**: style bar grows context chips (extend L/R, show price, lock, custom color) plus a gear popover for fib levels, text/font size, risk/reward, arrow caps, and stats toggles. Last-used extras persist per kind in `drawingPrefs.byKind`. Paint honors extend flags, custom fib ratios (including reverse), highlighter width, long/short RR, and double-click text re-edit.
+
+### Tests
+
+- **Tool settings catalog** — `tests/tool-settings.test.ts`: every drawing kind has controls; ray/highlighter/long defaults; fib + RR helpers; normalize keeps `meta.fibLevels`.
+- **Store `byKind` merge** — `setDrawingPrefs` deep-merges per tool without wiping siblings.
 
 ---
 
@@ -799,13 +820,19 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (1 commits)
+### 2026-09 (2 commits)
 
 #### Fixes
 
 - `16499ac7` (2026-09-04) — fix(results): skip live-tick persist and unstick studio e2e
+
+#### Chores
+
+- `e84b8325` (2026-09-04) — chore(release): prepare v2.2.0
 
 ### 2026-08 (237 commits)
 

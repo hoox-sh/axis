@@ -115,6 +115,12 @@ export interface DrawingMeta {
   locked?: boolean;
   arrowStart?: boolean;
   arrowEnd?: boolean;
+  reverse?: boolean;
+  showPrice?: boolean;
+  showPct?: boolean;
+  showStats?: boolean;
+  /** long/short risk:reward (stop distance = reward / rr). */
+  rr?: number;
   /** long/short or measure direction hint */
   direction?: 'long' | 'short' | 'up' | 'down' | string;
   [key: string]: unknown;

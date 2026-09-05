@@ -1,6 +1,6 @@
 # AXIS
 
-**AXIS**  — installable charting PWA for Pine Script™.
+**AXIS** — installable open charting PWA: CEX OHLCV, drawings, on-chain overlays, and Pine Script™ via PYNE.
 
 **Website:** [hoox.sh/axis](https://hoox.sh/axis) · **Docs:** [hoox.sh/axis/docs](https://hoox.sh/axis/docs) · **Repo:** [hoox-sh/axis](https://github.com/hoox-sh/axis)
 

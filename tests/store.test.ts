@@ -71,6 +71,7 @@ import {
   loadEditorDoc,
   setDrawingTool,
   setDrawings,
+  setDrawingPrefs,
   clearDrawings,
   deleteSelectedDrawing,
   STORAGE_KEY,
@@ -116,8 +117,17 @@ function resetStoreBasics() {
   setStore('statusMessage', 'Ready.');
   setStore('lastRun', null);
   setStore('lastRunMs', null);
+  setStore('resultsFocusId', null);
+  setStore('runResults', {});
   setStore('drawingTool', 'cursor');
   setStore('drawings', []);
+  setStore('drawingPrefs', {
+    color: '#939fff',
+    width: 1.5,
+    lineStyle: 'solid',
+    fillOpacity: 0.15,
+    byKind: {},
+  });
   setStore('lastValueNamesVisible', true);
   localStorage.removeItem(STORAGE_KEY);
 }
@@ -164,7 +174,7 @@ describe('logs and status', () => {
   });
 
   it('setLastRun captures meta.ms', () => {
-    setLastRun({ status: 'success', plots: [], events: [], meta: { ms: 42.5 } });
+    setLastRun({ status: 'success', plots: [], events: [], meta: { ms: 42.5 } }, { focus: true });
     expect(store.lastRunMs).toBe(42.5);
   });
 });
@@ -478,13 +488,22 @@ describe('editor doc + drawings', () => {
     clearDrawings();
     expect(store.drawings).toEqual([]);
   });
+
+  it('setDrawingPrefs deep-merges byKind per tool', () => {
+    setDrawingPrefs({ color: '#ffffff', byKind: { trend: { extendRight: true } } });
+    setDrawingPrefs({ byKind: { fib: { reverse: true }, trend: { extendLeft: true } } });
+    expect(store.drawingPrefs.color).toBe('#ffffff');
+    expect(store.drawingPrefs.byKind?.trend?.extendRight).toBe(true);
+    expect(store.drawingPrefs.byKind?.trend?.extendLeft).toBe(true);
+    expect(store.drawingPrefs.byKind?.fib?.reverse).toBe(true);
+  });
 });
 
 describe('persist', () => {
   it('writes AXIS key without bars/logs/lastRun', async () => {
     loadBars(makeBars(3), 'BTCUSDT', '1d', 'binance');
     appendLog('info', 'x');
-    setLastRun({ status: 'success', plots: [], events: [] });
+    setLastRun({ status: 'success', plots: [], events: [] }, { focus: true });
     setStore('symbol', 'SOLUSDT');
     persist();
     await new Promise((r) => setTimeout(r, 250));
@@ -500,7 +519,7 @@ describe('persist', () => {
   it('never persists bars, lastRun, logs, indicatorSeries, chartDataGen, selectedDrawingId', () => {
     loadBars(makeBars(5), 'BTCUSDT', '1d', 'binance');
     appendLog('error', 'ephemeral log');
-    setLastRun({ status: 'success', plots: [{ name: 'x' }], events: [] });
+    setLastRun({ status: 'success', plots: [{ name: 'x' }], events: [] }, { focus: true });
     setIndicatorSeries('ind1', {
       name: 'RSI',
       series: { RSI: [1, 2, 3] },

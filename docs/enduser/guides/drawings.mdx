@@ -64,6 +64,25 @@ flowchart TB
 
 Colors: default accent `#939fff`, up/down/measure variants in `DRAWING_COLORS`.
 
+### Style bar and per-tool settings
+
+The floating style bar (next to the rail) edits **the selected drawing**, or the **defaults for the active tool** when nothing is selected. Last-used extras are stored per tool (`drawingPrefs.byKind`).
+
+| Control | Where | Tools |
+| --- | --- | --- |
+| Color / width / dash | Style bar | All place tools |
+| Custom color | Style bar native picker | All place tools |
+| Fill | Style bar slider | Shapes, ranges, fib, highlighter, positions |
+| Extend L / R | Style bar arrows | Trend, ray, extend, info line, channel, fib |
+| Show price | Style bar `$` | Horizontal/vertical lines, fib labels |
+| Lock | Style bar (selection) | Selected drawing |
+| Text / font size | Settings popover (gear); double-click on chart | Text, note, callout, flag, price label |
+| Fib levels / reverse / % | Settings popover | Fibonacci family |
+| Risk/reward | Settings popover | Long / short |
+| Arrow caps | Settings popover | Trend, ray, arrow, forecast |
+
+Gear button: `axis-drawing-settings`. Popover: `axis-drawing-settings-popover`.
+
 ### Layers & templates
 
 - **Layers** panel lists user drawings (select, hide, delete)  
