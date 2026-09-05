@@ -15,11 +15,12 @@ import {
 
 function fireBeforeInstallPrompt(): { prompt: ReturnType<typeof mock> } {
   const prompt = mock(async () => {});
-  const ev = new Event('beforeinstallprompt') as BeforeInstallPromptEvent;
-  Object.assign(ev, {
+  const ev = {
+    type: 'beforeinstallprompt',
+    preventDefault() {},
     prompt,
     userChoice: Promise.resolve({ outcome: 'accepted' as const }),
-  });
+  } as unknown as BeforeInstallPromptEvent;
   window.dispatchEvent(ev);
   return { prompt };
 }

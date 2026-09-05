@@ -31,7 +31,7 @@ export function pwaInstallAvailable(): boolean {
 }
 
 function onBeforeInstallPrompt(e: Event): void {
-  e.preventDefault();
+  if (typeof e.preventDefault === 'function') e.preventDefault();
   if (dismissedThisSession) return;
   deferred = e as BeforeInstallPromptEvent;
   setAvailable(true);
