@@ -6,4 +6,10 @@ Seed: BTCUSDT 1d Binance REST, void dark, SMA Cross / RSI v6.
 No secrets. Chart data is public CEX OHLCV.
 
 Files:
-
+- `studio/runtime.png`
+- `studio/wire.png`
+- `studio/settings.png`
+- `studio/workers.png`
+- `studio/plugins.png`
+- `studio/plugins-catalog.png`
+- `studio/plugins-install.png`

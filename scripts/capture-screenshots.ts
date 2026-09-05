@@ -132,6 +132,29 @@ async function closeExtras(page: Page, keep: string[] = []) {
   }
 }
 
+async function setPressed(page: Page, testId: string, on: boolean): Promise<boolean> {
+  const btn = page.getByTestId(testId);
+  if (!(await btn.count())) return false;
+  const pressed = (await btn.getAttribute('aria-pressed')) === 'true';
+  if (pressed === on) return false;
+  await btn.click({ force: true });
+  await page.waitForTimeout(200);
+  return true;
+}
+
+/** Watchlist on, editor off unless the shot is about the editor. */
+async function chrome(page: Page, opts?: { editor?: boolean; watchlist?: boolean }) {
+  await setPressed(page, 'axis-btn-watchlist', opts?.watchlist ?? true);
+  const editorOn = opts?.editor ?? false;
+  const editorChanged = await setPressed(page, 'axis-btn-editor', editorOn);
+  if (editorChanged && !editorOn) await fitChart(page);
+}
+
+/** Let LWC relayout after the editor dock closes. */
+async function fitChart(page: Page) {
+  await page.waitForTimeout(500);
+}
+
 async function waitShell(page: Page) {
   await page.getByTestId('axis-topbar').waitFor({ state: 'visible', timeout: 45_000 });
   await page.locator('[data-axis-panes], canvas, [data-testid="axis-watchlist"]').first().waitFor({
@@ -289,19 +312,24 @@ async function seedContext(context: BrowserContext) {
 async function captureStills(page: Page) {
   await dismissOverlays(page);
   await closeExtras(page);
+  await chrome(page);
 
   await section('workspace / chrome', async () => {
+    await chrome(page);
     await shot(page, 'app/workspace.png');
     await shot(page, 'app/load-ready.png');
     await shot(page, 'app/topbar.png', page.getByTestId('axis-topbar'));
     await shot(page, 'app/watchlist.png', page.getByTestId('axis-watchlist'));
     await shot(page, 'app/statusbar.png', page.getByTestId('axis-statusbar'));
     await shot(page, 'app/chart-panes.png', page.locator('[data-axis-panes]').first());
+    await chrome(page, { editor: true });
     await shot(page, 'app/editor.png', page.getByTestId('axis-editor'));
+    await chrome(page);
   });
 
   await section('command palette', async () => {
     await dismissOverlays(page);
+    await chrome(page);
     await page.keyboard.press('Control+K');
     await page.getByTestId('axis-command-palette').waitFor({ state: 'visible', timeout: 8_000 });
     await page.getByTestId('axis-command-palette-input').fill('theme');
@@ -312,6 +340,7 @@ async function captureStills(page: Page) {
   });
 
   await section('scripts / library / layers', async () => {
+    await chrome(page);
     await openPanel(page, 'axis-btn-indicators');
     await shot(page, 'app/scripts-panel.png', page.getByTestId('axis-indicators'));
     await openPanel(page, 'axis-btn-library');
@@ -335,7 +364,32 @@ async function captureStills(page: Page) {
     await dismissOverlays(page);
   });
 
+  await section('drawings', async () => {
+    await dismissOverlays(page);
+    await closeExtras(page);
+    await chrome(page);
+    const toolbar = page.getByTestId('axis-drawing-toolbar');
+    await shot(page, 'app/drawings-toolbar.png', toolbar);
+    const fibGroup = page.locator('[data-drawing-group="fib"] button').first();
+    if (await fibGroup.count()) {
+      await fibGroup.click({ force: true });
+      const fibItem = page.locator('[data-drawing-flyout] button').first();
+      if (await fibItem.count()) await fibItem.click({ force: true });
+      const box = await page.locator('[data-axis-panes]').first().boundingBox();
+      if (box) {
+        await page.mouse.click(box.x + box.width * 0.28, box.y + box.height * 0.62);
+        await page.waitForTimeout(120);
+        await page.mouse.click(box.x + box.width * 0.72, box.y + box.height * 0.28);
+        await page.waitForTimeout(400);
+      }
+      await shot(page, 'app/drawings-fib.png');
+      await shot(page, 'landing/axis-drawings.png');
+      await page.locator('[data-drawing-group="select"] button').first().click({ force: true }).catch(() => undefined);
+    }
+  });
+
   await section('on-chain', async () => {
+    await chrome(page);
     await openPanel(page, 'axis-btn-onchain');
     const chip = page.locator('[data-testid="axis-onchain-popular-chips"] button').first();
     if (await chip.count()) {
@@ -359,32 +413,10 @@ async function captureStills(page: Page) {
     await dismissOverlays(page);
   });
 
-  await section('drawings', async () => {
-    await dismissOverlays(page);
-    await closeExtras(page);
-    const toolbar = page.getByTestId('axis-drawing-toolbar');
-    await shot(page, 'app/drawings-toolbar.png', toolbar);
-    const fibGroup = page.locator('[data-drawing-group="fib"] button').first();
-    if (await fibGroup.count()) {
-      await fibGroup.click({ force: true });
-      const fibItem = page.locator('[data-drawing-flyout] button').first();
-      if (await fibItem.count()) await fibItem.click({ force: true });
-      const box = await page.locator('[data-axis-panes]').first().boundingBox();
-      if (box) {
-        await page.mouse.click(box.x + box.width * 0.28, box.y + box.height * 0.62);
-        await page.waitForTimeout(120);
-        await page.mouse.click(box.x + box.width * 0.72, box.y + box.height * 0.28);
-        await page.waitForTimeout(400);
-      }
-      await shot(page, 'app/drawings-fib.png');
-      await shot(page, 'landing/axis-drawings.png');
-      await page.locator('[data-drawing-group="select"] button').first().click({ force: true }).catch(() => undefined);
-    }
-  });
-
   await section('compare / replay / layout', async () => {
     await dismissOverlays(page);
     await closeExtras(page);
+    await chrome(page);
     const compare = page.getByTestId('axis-compare-enabled');
     if (await compare.count()) {
       await compare.click({ force: true });
@@ -422,10 +454,7 @@ async function captureStills(page: Page) {
 
   await section('editor extras / debug', async () => {
     await dismissOverlays(page);
-    if (!(await page.getByTestId('axis-editor').isVisible().catch(() => false))) {
-      await page.getByTestId('axis-btn-editor').click({ force: true });
-      await page.waitForTimeout(400);
-    }
+    await chrome(page, { editor: true });
     await shot(page, 'app/editor-problems.png', page.getByTestId('axis-editor'));
     const debugBtn = page.getByTestId('axis-btn-inline-debug');
     if (await debugBtn.count()) {
@@ -439,6 +468,7 @@ async function captureStills(page: Page) {
       await shot(page, 'app/scriptlogs.png', page.getByTestId('axis-scriptlogs'));
     }
     await dismissOverlays(page);
+    await chrome(page);
   });
 
   await section('results / strategy / HPO', async () => {
@@ -500,14 +530,17 @@ async function captureStills(page: Page) {
   await section('landing hero', async () => {
     await dismissOverlays(page);
     await closeExtras(page);
+    await chrome(page, { editor: true });
     await setEditorDoc(page, RSI);
     await runScript(page);
     await closeResults(page);
     await page.waitForTimeout(800);
+    await shot(page, 'landing/axis-editor.png', page.getByTestId('axis-editor'));
+    await chrome(page);
+    await page.waitForTimeout(400);
     await shot(page, 'app/run-rsi.png');
     await shot(page, 'landing/axis-hero.png');
     await shot(page, 'landing/axis-chart.png', page.locator('[data-axis-panes]').first());
-    await shot(page, 'landing/axis-editor.png', page.getByTestId('axis-editor'));
   });
 }
 
@@ -547,6 +580,7 @@ async function captureGifs(browser: Awaited<ReturnType<typeof chromium.launch>>)
       await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 60_000 });
       await waitShell(page);
       await loadHistory(page);
+      await chrome(page, { editor: name === 'load-and-run' });
       await run(page);
     } catch (err) {
       failures.push(`gif ${name}: ${(err as Error).message}`);

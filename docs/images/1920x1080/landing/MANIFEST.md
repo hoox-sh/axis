@@ -1,17 +1,10 @@
 # Landing crops
 
-Finish-cut tiles for [hoox.sh/axis](https://hoox.sh/axis). Hero is a full workspace still — landing CSS supplies the CRT frame (no fake browser chrome). Copied to `hoox-landing-page/public/images/axis-demo.png` and `public/images/axis/`.
+Hero is a full workspace still (no fake browser chrome — landing CSS supplies the CRT frame).
+Tiles are locator crops. OG is a 1200×630 composite.
 
-This folder is the **1920×1080 @2x** (3840×2160) series. QHD tiles: [`../2560x1440/landing/`](../2560x1440/landing/).
+Captured 2026-09-05 from https://axis.hoox.sh
+Viewport desktop 1920×1080 @2x (file 3840×2160px); mobile 390×844 @2x.
+Seed: BTCUSDT 1d Binance REST, void dark, SMA Cross / RSI v6.
+No secrets. Chart data is public CEX OHLCV.
 
-| File | Role |
-| --- | --- |
-| `axis-hero.png` (+ `.webp`) | Replace product hero |
-| `axis-chart.png` | Feature tile |
-| `axis-editor.png` | Feature tile |
-| `axis-drawings.png` | Feature tile |
-| `axis-onchain.png` | Feature tile |
-| `axis-results.png` | Feature tile |
-| `axis-studio.png` | Feature tile |
-| `axis-mobile.png` | Narrow viewport |
-| `axis-og.png` | 1200×630 composite |

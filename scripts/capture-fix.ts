@@ -67,6 +67,27 @@ async function closeExtras(page: Page, keep: string[] = []) {
   }
 }
 
+async function setPressed(page: Page, testId: string, on: boolean): Promise<boolean> {
+  const btn = page.getByTestId(testId);
+  if (!(await btn.count())) return false;
+  const pressed = (await btn.getAttribute('aria-pressed')) === 'true';
+  if (pressed === on) return false;
+  await btn.click({ force: true });
+  await page.waitForTimeout(200);
+  return true;
+}
+
+async function chrome(page: Page, opts?: { editor?: boolean; watchlist?: boolean }) {
+  await setPressed(page, 'axis-btn-watchlist', opts?.watchlist ?? true);
+  const editorOn = opts?.editor ?? false;
+  const editorChanged = await setPressed(page, 'axis-btn-editor', editorOn);
+  if (editorChanged && !editorOn) await fitChart(page);
+}
+
+async function fitChart(page: Page) {
+  await page.waitForTimeout(500);
+}
+
 async function waitReady(page: Page) {
   await page.getByTestId('axis-topbar').waitFor({ state: 'visible', timeout: 45_000 });
   await page.waitForTimeout(800);
@@ -107,10 +128,12 @@ async function main() {
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await closeExtras(page);
+  await chrome(page);
 
   // Drawings: chart + toolbar + fib
   console.log('— drawings —');
   await closeExtras(page);
+  await chrome(page);
   const toolbar = page.getByTestId('axis-drawing-toolbar');
   await shot(page, 'app/drawings-toolbar.png', toolbar);
   const fibGroup = page.locator('[data-drawing-group="fib"] button').first();
@@ -131,6 +154,7 @@ async function main() {
   // Volume profile
   console.log('— volume profile —');
   await closeExtras(page);
+  await chrome(page);
   await page.getByTestId('axis-btn-layers').click({ force: true });
   await page.waitForTimeout(300);
   const vpToggle = page.getByTestId('axis-layers').getByText(/volume profile/i).first();
@@ -144,6 +168,7 @@ async function main() {
   // On-chain: chart + panel
   console.log('— on-chain —');
   await closeExtras(page);
+  await chrome(page);
   await page.getByTestId('axis-btn-onchain').click({ force: true });
   await page.waitForTimeout(400);
   await shot(page, 'app/onchain-panel.png', page.getByTestId('axis-onchain'));
@@ -164,6 +189,7 @@ async function main() {
 
   // Compare
   console.log('— compare —');
+  await chrome(page);
   const compare = page.getByTestId('axis-compare-enabled');
   if (await compare.count()) {
     await compare.click({ force: true });
@@ -179,6 +205,7 @@ async function main() {
 
   // Bar replay
   console.log('— replay —');
+  await chrome(page);
   await page.getByTestId('axis-btn-bar-replay').click({ force: true });
   await page.waitForTimeout(400);
   if (await page.getByTestId('axis-bar-replay-controls').count()) {
@@ -190,6 +217,7 @@ async function main() {
 
   // 2x2
   console.log('— layout 2x2 —');
+  await chrome(page);
   await page.getByTestId('axis-btn-layouts').click({ force: true });
   await page.waitForTimeout(200);
   await page.getByTestId('axis-layout-mode-4').click({ force: true });

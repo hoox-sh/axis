@@ -19,11 +19,11 @@ Files:
 - `app/layers.png`
 - `app/volume-profile.png`
 - `app/data-source-manager.png`
+- `app/drawings-toolbar.png`
+- `app/drawings-fib.png`
 - `app/onchain-tvl.png`
 - `app/onchain-dex.png`
 - `app/alerts.png`
-- `app/drawings-toolbar.png`
-- `app/drawings-fib.png`
 - `app/compare.png`
 - `app/bar-replay.png`
 - `app/chart-layout-2x2.png`

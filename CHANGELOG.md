@@ -18,7 +18,7 @@ _Generated/updated: 2026-09-05 · 321 commits · describe-tag: `v2.2.0`_
 ### Added
 
 - **Docs / README / landing stills**: Playwright capture of the PWA, Studio, and CLI (`docs/images/`, `bun scripts/capture-screenshots.ts`). Interface gallery plus GIFs for Load→Run, palette, Studio rail, drawings, replay, on-chain, and theme. Landing hero crops under `docs/images/landing/`.
-- **Screenshot series**: recapture at **1920×1080 @2x** (3840×2160, docs default) and **2560×1440 @2x** (5120×2880 under `docs/images/2560x1440/`). `bun run capture:1080p` / `capture:1440p`.
+- **Screenshot series**: recapture at **1920×1080 @2x** (3840×2160, docs default) and **2560×1440 @2x** (5120×2880 under `docs/images/2560x1440/`). `bun run capture:1080p` / `capture:1440p`. Chart-first stills close the editor unless the shot is the editor itself; watchlist stays open.
 
 ### Fixed
 
