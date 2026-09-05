@@ -67,7 +67,10 @@ import {
   UI_SCALE_STEP,
   applyUiScale,
   toggleOnchainPanel,
+  persist,
 } from '../store';
+import { setPersistenceMode } from '../data/dataset-store';
+import type { AppState } from '../store/types';
 import { Icons } from './icons';
 import { HooxLoader } from './HooxLoader';
 import { probeEndpoint } from '../indicators/runner';
@@ -541,6 +544,47 @@ export const SettingsDialog: Component<Props> = (props) => {
                 data-testid="axis-settings-data"
                 class="sc-settings-content"
               >
+                {/* ── Dataset persistence (DSM main switch) ── */}
+                <div class="sc-settings-section" data-testid="axis-settings-dataset-persistence">
+                  <div class="sc-settings-section-title">Dataset persistence</div>
+                  <p class="sc-settings-field-hint mt-0">
+                    Where the Data Source Manager saves OHLCV datasets. AXIS loads
+                    datasets first (instant paint) and completes them in the
+                    background. <code class="font-mono text-[0.9em]">Session</code> keeps
+                    data in memory only; <code class="font-mono text-[0.9em]">Local</code>{' '}
+                    stores it in this browser; <code class="font-mono text-[0.9em]">Git</code>/
+                    <code class="font-mono text-[0.9em]">Worker</code> sync via your storage
+                    plugin.
+                  </p>
+                  <div class="sc-settings-field">
+                    <label class="sc-settings-field-label" for="axis-dataset-persistence">
+                      Save datasets to
+                    </label>
+                    <select
+                      id="axis-dataset-persistence"
+                      class="sc-input w-full"
+                      data-testid="axis-settings-dataset-persistence-select"
+                      value={store.datasetPersistence}
+                      onChange={(e) => {
+                        const mode = e.currentTarget.value as AppState['datasetPersistence'];
+                        setStore('datasetPersistence', mode);
+                        setPersistenceMode(mode);
+                        persist();
+                      }}
+                    >
+                      <option value="session">Session (memory only)</option>
+                      <option value="local">Local (this browser)</option>
+                      <option value="git">Git (storage plugin)</option>
+                      <option value="worker">Worker (cloud sync)</option>
+                    </select>
+                    <p class="sc-settings-field-hint">
+                      Default Local. Git / Worker require the matching storage plugin to be
+                      configured; writes are queued and retried, and failures never block
+                      the chart.
+                    </p>
+                  </div>
+                </div>
+
                 {/* ── Source & stream plugins (incl. advanced fields hidden from the Topbar row) ── */}
                 <div class="sc-settings-section" data-testid="axis-settings-plugins">
                   <div class="sc-settings-section-title">Source &amp; stream plugins</div>

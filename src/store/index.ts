@@ -133,6 +133,7 @@ import {
   type PriceScaleDecimalsMode,
 } from '../chart/price-precision';
 import { saveRunResult, supportsRunResults } from '../storage/service';
+import { setPersistenceMode } from '../data/dataset-store';
 import type { ResultMeta, RunResult, StoredRunResult } from '../plugins/types';
 
 // Stable ID generation — uses timestamp prefix + counter to survive reloads
@@ -164,6 +165,14 @@ let persistWriteWarned = false;
 export const HISTORY_BARS_DEFAULT = 500;
 export const HISTORY_BARS_MIN = 50;
 export const HISTORY_BARS_MAX = 100_000;
+
+/** Valid {@link AppState.datasetPersistence} values. */
+const DATASET_PERSISTENCE_MODES = ['session', 'local', 'git', 'worker'] as const;
+
+/** Hydrate the dataset persistence switch (invalid / missing → `local`). */
+function hydrateDatasetPersistence(raw: unknown): 'session' | 'local' | 'git' | 'worker' {
+  return DATASET_PERSISTENCE_MODES.includes(raw as never) ? (raw as never) : 'local';
+}
 
 /**
  * Default docked editor width = 30% of viewport (clamped).
@@ -208,6 +217,7 @@ const DEFAULTS: AppState = {
   interval: '15m',
   exchange: 'binance',
   historyBars: HISTORY_BARS_DEFAULT,
+  datasetPersistence: 'local',
   source: 'binance-rest',
   engine: 'server',
   endpoint: 'https://pynescript.online',
@@ -476,6 +486,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       historyBars: clampHistoryBars(
         bag.historyBars ?? (bag as { barLimit?: unknown }).barLimit ?? DEFAULTS.historyBars,
       ),
+      datasetPersistence: hydrateDatasetPersistence(bag.datasetPersistence),
       live: {
         ...DEFAULTS.live,
         ...liveBag,
@@ -1225,6 +1236,13 @@ function seedStoreState(overlay: Partial<AppState> | null | undefined): AppState
  */
 export const [store, setStore] = createStore<AppState>(seedStoreState(loadPersisted()));
 
+// Sync the DatasetStore sink with the persisted persistence switch (boot).
+try {
+  setPersistenceMode(store.datasetPersistence);
+} catch {
+  /* dataset-store optional at boot */
+}
+
 // Apply theme + density as soon as the store hydrates (before first paint when possible)
 {
   const chartTheme = store.chartTheme || defaultChartThemeState();
@@ -1288,6 +1306,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     endpoint: s.endpoint,
     engine: s.engine,
     historyBars: s.historyBars,
+    datasetPersistence: s.datasetPersistence,
     theme: s.theme,
     chartType: s.chartType,
     chartTheme: unwrap(s.chartTheme),

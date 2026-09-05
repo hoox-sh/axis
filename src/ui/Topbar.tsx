@@ -72,6 +72,8 @@ import { listSources } from '../sources/catalog';
 import { listEngines, preloadPyodide } from '../engines/catalog';
 import { setUploadedBars, getUploadedFileName } from '../sources/upload-store';
 import { DATA_MANAGER_SOURCE_ID } from '../data/data-manager-source';
+import { dataSourceManagerState } from '../data/data-source-manager';
+import { intervalToSec } from '../data/bars-gaps';
 import { engineOptionLabel } from './plugin-badges';
 import { Icons } from './icons';
 import { pwaInstallAvailable, promptPwaInstall, dismissPwaInstallPrompt } from '../pwa/install-prompt';
@@ -477,6 +479,8 @@ export const Topbar: Component<{
             <span class="truncate axis-tb-btn-label">Datasets…</span>
           </button>
         </Show>
+
+        <SliceProgressChip />
 
         <CachedDatasetsModal
           open={datasetsOpen()}
@@ -987,6 +991,46 @@ export const Topbar: Component<{
 
 function ccxtExchangeFromStore(): string {
   return activeCcxtExchange();
+}
+
+/**
+ * Sliced-backfill progress chip — shows `loaded / expected` bars while a DSM
+ * job is completing the current dataset in the background (auto-slice load).
+ */
+function SliceProgressChip() {
+  const active = createMemo(() => {
+    const sym = store.symbol.trim().toUpperCase();
+    return dataSourceManagerState.jobs.find(
+      (j) =>
+        (j.status === 'running' || j.status === 'pending' || j.status === 'paused') &&
+        j.symbol === sym &&
+        j.interval === store.interval &&
+        (j.sourceId === store.source || store.source === DATA_MANAGER_SOURCE_ID),
+    );
+  });
+  const expected = createMemo(() => {
+    const j = active();
+    if (!j) return 0;
+    const step = intervalToSec(j.interval);
+    if (step <= 0) return 0;
+    return Math.max(0, Math.floor((j.targetToSec - j.targetFromSec) / step) + 1);
+  });
+  return (
+    <Show when={!!active()}>
+      <button
+        type="button"
+        class="sc-btn sc-btn-ghost is-loading"
+        data-testid="axis-chip-slice-progress"
+        title="DSM is completing this dataset in the background (sliced backfill)"
+        onClick={() => toggleDataSourcePanel()}
+      >
+        <HooxLoader size="xs" />
+        <span class="axis-tb-btn-label font-mono">
+          {active()!.barsFetched}/{expected()}
+        </span>
+      </button>
+    </Show>
+  );
 }
 
 function CcxtKeyChip(props: { onOpen: () => void }) {

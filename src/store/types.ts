@@ -325,6 +325,12 @@ export interface AppState {
    * Persisted. Sources may clamp further to venue max (e.g. Binance 1000).
    */
   historyBars: number;
+  /**
+   * Where DSM datasets persist (Settings → Data main switch).
+   * `session` = memory only; `local` = IndexedDB (default);
+   * `git` / `worker` = storage-plugin sync. Persisted.
+   */
+  datasetPersistence: 'session' | 'local' | 'git' | 'worker';
   /** Historical data source plugin id (mirrors activePlugins.source) */
   source: SourceId;
   engine: string;
