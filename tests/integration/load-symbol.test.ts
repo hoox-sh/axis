@@ -48,10 +48,21 @@ beforeEach(async () => {
   ensureBuiltins();
   clearLogs();
   setStore('bars', []);
+  setStore('scripts', []);
   setStore('source', 'mock-walk');
   setStore('historyBars', 500);
   setStore('status', 'idle');
   setStore('statusMessage', '');
+  // Default preferAfterLoad is true — a leftover live stream from another
+  // file would append a tick after load (+1 bar) and reapply leftover SMA.
+  setStore('live', {
+    active: false,
+    needsRerun: false,
+    lastBarTime: 0,
+    streamId: 'binance-ws',
+    preferAfterLoad: false,
+    rerunOn: 'every-tick',
+  });
 });
 
 function dynSource(

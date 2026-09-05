@@ -15,7 +15,11 @@ _Generated/updated: 2026-09-05 · 321 commits · describe-tag: `v2.2.0`_
 
 ## [Unreleased]
 
-_Upcoming changes._
+### Fixed
+
+- **load-symbol tests**: isolate leftover `scripts` / `live.preferAfterLoad` so CI does not start mock-poll (off-by-one bars) or reapply SMA after history load.
+
+---
 
 ---
 
