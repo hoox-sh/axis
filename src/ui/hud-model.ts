@@ -197,6 +197,28 @@ export function deriveHud(input: HudInput): HudSnapshot {
   };
 }
 
+/** HUD Live chip copy — success “LIVE” only while the socket is actually open. */
+export function liveBadgeLabel(opts: {
+  liveActive: boolean;
+  streamStatus: string;
+}): string {
+  if (!opts.liveActive) return 'OFF';
+  if (opts.streamStatus === 'connected') return 'LIVE';
+  if (opts.streamStatus === 'connecting') return 'Reconnecting…';
+  return 'Offline';
+}
+
+/** Visual state for the HUD Live chip (success only when receiving). */
+export function liveBadgeTone(opts: {
+  liveActive: boolean;
+  streamStatus: string;
+}): 'off' | 'live' | 'reconnect' | 'offline' {
+  if (!opts.liveActive) return 'off';
+  if (opts.streamStatus === 'connected') return 'live';
+  if (opts.streamStatus === 'connecting') return 'reconnect';
+  return 'offline';
+}
+
 /** Sticky-panel title/body copy for a chip given the current snapshot. */
 export function hudChipHelp(id: HudChipId, snap: HudSnapshot): { title: string; body: string } {
   switch (id) {
@@ -252,7 +274,7 @@ export function hudChipHelp(id: HudChipId, snap: HudSnapshot): { title: string; 
     case 'live':
       return {
         title: 'LIVE — stream arm',
-        body: 'Whether the live market stream is armed. Independent of ENG/RUN/MODE.',
+        body: 'Whether the live market stream is armed and currently open. Shows Reconnecting… / Offline while the socket is down. Independent of ENG/RUN/MODE.',
       };
     case 'src':
       return {

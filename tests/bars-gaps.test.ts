@@ -19,9 +19,11 @@ function bar(t: number): Bar {
 describe('bars-gaps', () => {
   it('intervalToSec maps AXIS intervals', () => {
     expect(intervalToSec('1m')).toBe(60);
+    expect(intervalToSec('15m')).toBe(900);
     expect(intervalToSec('1h')).toBe(3600);
     expect(intervalToSec('1d')).toBe(86_400);
     expect(intervalToSec('1w')).toBe(604_800);
+    expect(intervalToSec('1M')).toBe(30 * 86_400);
   });
 
   it('alignDown floors to step', () => {

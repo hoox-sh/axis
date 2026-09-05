@@ -35,7 +35,7 @@ Global flags: `--json`, `--quiet`, `-y/--yes`. `--json` is machine-only (no bann
 | Command | Purpose |
 |---------|---------|
 | `axis install` | `bun install` for app, `worker/`, and CLI |
-| `axis doctor` | Toolchain + `wrangler.toml` + optional Cloudflare auth |
+| `axis doctor` | Toolchain + optional Cloudflare auth. Missing `worker/wrangler.toml` warns until `axis setup` (expected on a fresh clone). |
 | `axis doctor --remote` | Also probe deployed Worker `/health` |
 | `axis setup` | Full bootstrap (install → toml → local D1) |
 | `axis setup worker` | Ensure `worker/wrangler.toml` (copy from example) |

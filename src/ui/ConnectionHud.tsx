@@ -49,6 +49,8 @@ import { formatLatency, formatTickAge, transportLabel } from './telemetry';
 import {
   deriveHud,
   hudChipHelp,
+  liveBadgeLabel,
+  liveBadgeTone,
   type HudChipId,
   type HudSnapshot,
 } from './hud-model';
@@ -317,7 +319,7 @@ function PlaneChip(props: {
           ? 'err'
           : t().state === 'open'
             ? 'ok'
-            : t().state === 'connecting'
+            : t().state === 'connecting' || t().state === 'degraded'
               ? 'load'
               : 'idle'
       }
@@ -446,18 +448,12 @@ function LiveBadge(props: {
 }) {
   let anchor: HTMLSpanElement | undefined;
   const st = () => store.stream.status;
-  const label = () => {
-    if (!store.live.active) return 'OFF';
-    if (st() === 'connected') return 'LIVE';
-    if (st() === 'connecting') return '…';
-    if (st() === 'error') return 'ERR';
-    return 'OFF';
-  };
+  const label = () => liveBadgeLabel({ liveActive: store.live.active, streamStatus: st() });
   const cls = () => {
-    if (!store.live.active) return 'text-text-faint border-border';
-    if (st() === 'connected') return 'text-accent-2 border-accent-2/50';
-    if (st() === 'connecting') return 'text-orange border-orange/40';
-    if (st() === 'error') return 'text-red border-red/40';
+    const tone = liveBadgeTone({ liveActive: store.live.active, streamStatus: st() });
+    if (tone === 'live') return 'text-accent-2 border-accent-2/50';
+    if (tone === 'reconnect') return 'text-orange border-orange/40';
+    if (tone === 'offline') return 'text-red border-red/40';
     return 'text-text-faint border-border';
   };
   const active = () => props.sticky.openChip() === 'live';

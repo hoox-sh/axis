@@ -82,7 +82,7 @@ When using `bun run axis setup -- --flag`, keep the `--` so Bun forwards flags t
 | Command | Role |
 | --- | --- |
 | `axis install` | `bun install` root + `worker/` + CLI |
-| `axis doctor` [`--remote`] | Toolchain, `wrangler.toml`, CF auth, optional live `/health` |
+| `axis doctor` [`--remote`] | Toolchain, CF auth, optional live `/health`. Missing `worker/wrangler.toml` is a warning until `axis setup` (expected on a fresh clone). |
 | `axis setup` | Bootstrap: install → ensure toml → local D1 |
 | `axis setup worker` | Copy `wrangler.toml.example` → `wrangler.toml` if missing |
 | `axis setup d1 --local\|--remote` [`--create`] | Apply `worker/schemas/scripts.sql` |

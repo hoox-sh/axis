@@ -58,7 +58,7 @@ install:
 	cd worker && bun install
 
 dev:
-	@echo "AXIS on http://127.0.0.1:3000 — start pyne API with: (cd ../pynescript && make run)"
+	@echo "AXIS on http://127.0.0.1:3000 — start pyne API with: (cd ../pyne && make run)  # dir sometimes still named pynescript"
 	bun run dev
 
 test:
@@ -141,16 +141,26 @@ docker-up:
 	@echo "PWA → http://127.0.0.1:$${AXIS_PORT:-8081}"
 
 docker-up-api:
-	@test -d "$${PYNE_ROOT:-../pynescript}" || \
-		(echo "error: PYNE_ROOT=$${PYNE_ROOT:-../pynescript} not found (sister pyne/pynescript repo)" >&2; exit 1)
-	GIT_SHA=$(GIT_SHA) VERSION=$(VERSION) docker compose --profile api up --build -d
+	@root="$${PYNE_ROOT}"; \
+	if [ -z "$$root" ]; then \
+	  if [ -d ../pyne ]; then root=../pyne; \
+	  elif [ -d ../pynescript ]; then root=../pynescript; \
+	  fi; \
+	fi; \
+	test -d "$$root" || (echo "error: PYNE_ROOT not found (clone hoox-sh/pyne as ../pyne; dir sometimes still named pynescript)" >&2; exit 1); \
+	GIT_SHA=$(GIT_SHA) VERSION=$(VERSION) PYNE_ROOT=$$root docker compose --profile api up --build -d
 	@echo "PWA → http://127.0.0.1:$${AXIS_PORT:-8081}"
 	@echo "API → http://127.0.0.1:$${API_PORT:-5002}"
 
 docker-up-proxy:
-	@test -d "$${PYNE_ROOT:-../pynescript}" || \
-		(echo "error: PYNE_ROOT=$${PYNE_ROOT:-../pynescript} not found" >&2; exit 1)
-	GIT_SHA=$(GIT_SHA) VERSION=$(VERSION) docker compose --profile proxy up --build -d
+	@root="$${PYNE_ROOT}"; \
+	if [ -z "$$root" ]; then \
+	  if [ -d ../pyne ]; then root=../pyne; \
+	  elif [ -d ../pynescript ]; then root=../pynescript; \
+	  fi; \
+	fi; \
+	test -d "$$root" || (echo "error: PYNE_ROOT not found (clone hoox-sh/pyne as ../pyne; dir sometimes still named pynescript)" >&2; exit 1); \
+	GIT_SHA=$(GIT_SHA) VERSION=$(VERSION) PYNE_ROOT=$$root docker compose --profile proxy up --build -d
 	@echo "Proxy (same-origin /run) → http://127.0.0.1:$${PROXY_PORT:-8080}"
 
 docker-up-prod:

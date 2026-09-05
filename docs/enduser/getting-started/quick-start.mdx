@@ -26,6 +26,15 @@ description: "First historical load, first Pine Run, live stream, and reading th
 
 Fifteen-minute path from empty AXIS to plots, strategy stats, and optional live updates.
 
+AXIS is a charting app you run in the browser (or install as a PWA / desktop app). You pick **where candles come from**, **whether they keep updating**, **who runs your Pine Script™**, and **where scripts are saved**. The status bar uses short chips for those four planes:
+
+| Chip | Means |
+| --- | --- |
+| **SRC** | **Source** — historical candles (Binance REST, CSV, mock, …) |
+| **STR** | **Stream** — live ticks while **Live** is on (WebSocket or mock poll) |
+| **ENG** | **Engine** — who calculates (this tab / a local server / a Worker) |
+| **STO** | **Storage** — where scripts live (this browser, cloud, or git) |
+
 ## Abstract
 
 1. Ensure AXIS is running ([Installation](/axis/docs/enduser/getting-started/installation)).

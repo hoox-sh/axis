@@ -306,8 +306,24 @@ function mockTickers(symbols: string[]): Record<string, WatchTicker> {
   return next;
 }
 
-/** Chart intervals offered when jumping from a watchlist row (UI constant). */
-export const WATCHLIST_INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d', '1w'] as const;
+/** Chart intervals offered in the topbar, settings, DSM, and watchlist jump. */
+export const WATCHLIST_INTERVALS = [
+  '1m',
+  '3m',
+  '5m',
+  '15m',
+  '30m',
+  '1h',
+  '2h',
+  '4h',
+  '6h',
+  '8h',
+  '12h',
+  '1d',
+  '3d',
+  '1w',
+  '1M',
+] as const;
 
 /** REST fallback poll intervals (seconds) exposed in settings UI. */
 export const WATCHLIST_REFRESH_OPTIONS = [

@@ -53,10 +53,15 @@ export interface CoverageReport {
 
 /** AXIS interval string → bar step in seconds. */
 export function intervalToSec(interval: string): number {
-  const m = /^(\d+)([mhdw])$/.exec(String(interval || '').trim());
+  const raw = String(interval || '').trim();
+  // Monthly (`1M`) is calendar-ish; 30d is the gap-fill step.
+  const month = /^(\d+)M$/.exec(raw);
+  if (month) return Math.max(1, parseInt(month[1]!, 10) * 30 * 86_400);
+  const m = /^(\d+)([smhdw])$/.exec(raw);
   if (!m) return 86_400;
   const n = parseInt(m[1]!, 10);
   const mult: Record<string, number> = {
+    s: 1,
     m: 60,
     h: 3_600,
     d: 86_400,

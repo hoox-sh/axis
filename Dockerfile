@@ -23,7 +23,7 @@ ARG BUN_VERSION=1.3.14
 ARG PYTHON_VERSION=3.12
 ARG NGINX_VERSION=1.27-alpine
 ARG GIT_SHA=dev
-ARG VERSION=2.0.0
+ARG VERSION=2.3.0
 
 # ---------------------------------------------------------------------------
 # deps — install JS toolchain
@@ -43,7 +43,7 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
 FROM deps AS build
 
 ARG GIT_SHA=dev
-ARG VERSION=2.0.0
+ARG VERSION=2.3.0
 
 COPY index.html vite.config.ts tsconfig.json bunfig.toml ./
 COPY public ./public
@@ -74,7 +74,7 @@ RUN bun run build \
 FROM python:${PYTHON_VERSION}-slim AS pwa
 
 ARG GIT_SHA=dev
-ARG VERSION=2.0.0
+ARG VERSION=2.3.0
 
 LABEL org.opencontainers.image.title="AXIS PWA" \
       org.opencontainers.image.description="HOOX AXIS charting PWA (static dist)" \
@@ -106,7 +106,7 @@ USER appuser
 EXPOSE 8081
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD python -c "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/' % os.environ.get('PORT','8081'), timeout=3)"
+  CMD python -c "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % os.environ.get('PORT','8081'), timeout=3)"
 
 ENTRYPOINT ["/usr/local/bin/entrypoint-pwa.sh"]
 CMD ["python", "axis_pwa_server.py"]
@@ -117,7 +117,7 @@ CMD ["python", "axis_pwa_server.py"]
 FROM nginx:${NGINX_VERSION} AS pwa-nginx
 
 ARG GIT_SHA=dev
-ARG VERSION=2.0.0
+ARG VERSION=2.3.0
 
 LABEL org.opencontainers.image.title="AXIS PWA (nginx)" \
       org.opencontainers.image.description="HOOX AXIS static dist behind nginx" \

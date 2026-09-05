@@ -128,9 +128,12 @@ export function mapAxisNetworkToGecko(network: string): string {
  * Unknown / unsupported intervals fall back to 1h.
  */
 export function mapAxisIntervalToGecko(interval: string): GeckoIntervalMap {
-  const iv = String(interval || '')
-    .trim()
-    .toLowerCase();
+  const raw = String(interval || '').trim();
+  // `1M` (month) must not be lowercased to `1m` (minute).
+  if (/^\d+M$/.test(raw)) {
+    return { timeframe: 'day', aggregate: 1 };
+  }
+  const iv = raw.toLowerCase();
 
   switch (iv) {
     case '1m':
@@ -145,6 +148,9 @@ export function mapAxisIntervalToGecko(interval: string): GeckoIntervalMap {
     case '15min':
     case '15':
       return { timeframe: 'minute', aggregate: 15 };
+    case '3m':
+    case '3min':
+      return { timeframe: 'minute', aggregate: 1 };
     case '30m':
     case '30min':
       // Not a native Gecko minute aggregate — closest is 15m
@@ -154,12 +160,20 @@ export function mapAxisIntervalToGecko(interval: string): GeckoIntervalMap {
     case '60':
     case 'h':
       return { timeframe: 'hour', aggregate: 1 };
+    case '2h':
+    case '120m':
+      return { timeframe: 'hour', aggregate: 1 };
     case '4h':
     case '240m':
     case '240':
       return { timeframe: 'hour', aggregate: 4 };
+    case '6h':
+    case '8h':
+      return { timeframe: 'hour', aggregate: 4 };
     case '12h':
       return { timeframe: 'hour', aggregate: 12 };
+    case '3d':
+      return { timeframe: 'day', aggregate: 1 };
     case '1d':
     case 'd':
     case 'day':

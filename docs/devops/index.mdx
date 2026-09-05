@@ -59,7 +59,7 @@ flowchart LR
 | Mode | Command sketch | Ports |
 | --- | --- | --- |
 | Dev AXIS | `bun run dev` / `bun run axis dev` | Vite (often `:3000`) |
-| Dev + Flask | + `make -C ../pynescript run` | `:5002` |
+| Dev + Flask | + `make -C ../pyne run` (checkout sometimes named `pynescript`) | `:5002` |
 | Static dist | `bun run build` + `python axis_pwa_server.py` | `:8081` |
 | Worker local | `bun run axis dev worker` / `cd worker && bun run dev` | `:8787` |
 | CF Worker prod | `bun run axis:deploy` | HTTPS workers.dev / custom |

@@ -19,7 +19,7 @@
 #   TAG        default latest
 #   PLATFORMS  default linux/amd64 (local); release uses amd64+arm64
 #   GIT_SHA    default dev (OCI revision label + build arg only)
-#   VERSION    default 2.0.0 (release images are tagged pwa-v<VERSION>)
+#   VERSION    default 2.3.1 (release images are tagged pwa-v<VERSION>)
 #   CACHE_DIR  default /tmp/axis-buildx-cache
 #   BUN_VERSION default 1.3.14
 
@@ -48,7 +48,7 @@ variable "GIT_SHA" {
 }
 
 variable "VERSION" {
-  default = "2.0.0"
+  default = "2.3.1"
 }
 
 variable "CACHE_DIR" {

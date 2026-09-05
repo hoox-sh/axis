@@ -42,7 +42,7 @@ Part of the **[HOOX](https://hoox.sh)** open trading stack:
 
 ```bash
 # Typical local trio
-make -C ../pynescript run   # pyne Pro API :5002
+make -C ../pyne run         # pyne Pro API :5002 (clone hoox-sh/pyne; dir sometimes still named pynescript)
 bun run dev                 # this repo :3000
 
 # Optional desktop shell (Tauri 2 — needs Rust + system webview libs)
@@ -61,7 +61,7 @@ cd packages/cli && bun install && bun run build && cd ../..
 bun run axis --help
 
 bun run axis:install                          # app + worker + CLI deps
-bun run axis:doctor                           # toolchain + wrangler.toml
+bun run axis:doctor                           # toolchain; wrangler.toml warns until `axis setup`
 bun run axis setup -- --github-client-id Ov23li…
 bun run axis setup -- d1 --remote             # apply D1 schema on CF
 bun run axis -- secret put ADMIN_TOKEN

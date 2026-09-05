@@ -169,6 +169,12 @@ describe('multiplex', () => {
     fireReconnect?.();
     expect(store.stream.status).toBe('connecting');
     expect(store.telemetry.stream.state).toBe('degraded');
+    const warnOnce = store.logs.filter((l) => l.level === 'warn' && /reconnect/i.test(l.message));
+    expect(warnOnce).toHaveLength(1);
+
+    fireReconnect?.();
+    const warnAgain = store.logs.filter((l) => l.level === 'warn' && /reconnect/i.test(l.message));
+    expect(warnAgain).toHaveLength(1);
 
     stopLive();
     expect(store.live.active).toBe(false);

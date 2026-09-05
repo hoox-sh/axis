@@ -166,7 +166,7 @@ export const HISTORY_BARS_MIN = 50;
 export const HISTORY_BARS_MAX = 100_000;
 
 /**
- * Default docked editor width = 50% of viewport (clamped).
+ * Default docked editor width = 30% of viewport (clamped).
  * Used for factory defaults / layout reset — not for overwriting user prefs.
  */
 export function defaultEditorWidthPx(viewportWidth?: number): number {
@@ -179,9 +179,9 @@ export function defaultEditorWidthPx(viewportWidth?: number): number {
           window.innerWidth > 0
         ? window.innerWidth
         : 1280;
-  const half = Math.round(vw * 0.5);
+  const target = Math.round(vw * 0.3);
   const max = Math.floor(vw * 0.9);
-  return Math.min(Math.max(half, 1), Math.max(1, max));
+  return Math.min(Math.max(target, 1), Math.max(1, max));
 }
 
 /** Clamp history bar count into a safe range for REST kline APIs. */
@@ -205,7 +205,7 @@ const DEFAULTS: AppState = {
     exactOnCandle: true,
   },
   symbol: 'BTCUSDT',
-  interval: '1d',
+  interval: '15m',
   exchange: 'binance',
   historyBars: HISTORY_BARS_DEFAULT,
   source: 'binance-rest',
@@ -307,7 +307,7 @@ const DEFAULTS: AppState = {
   panelChrome: defaultPanelChromeMap(),
   chartLayout: defaultChartLayout({
     symbol: 'BTCUSDT',
-    interval: '1d',
+    interval: '15m',
     exchange: 'binance',
   }),
   savedLayouts: [],

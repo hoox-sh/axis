@@ -607,6 +607,23 @@ button.sc-btn:focus-visible {
   background: color-mix(in srgb, var(--color-accent-2) 18%, var(--color-bg-hover));
 }
 
+/* Live armed but socket down — not a success badge */
+.sc-btn.is-live-reconnecting,
+.sc-btn.is-live-reconnecting[aria-pressed="true"] {
+  color: var(--color-orange);
+  border-color: color-mix(in srgb, var(--color-orange) 52%, var(--color-border));
+  background: color-mix(in srgb, var(--color-orange) 12%, var(--color-bg-elev));
+  font-weight: 600;
+}
+
+.sc-btn.is-live-offline,
+.sc-btn.is-live-offline[aria-pressed="true"] {
+  color: var(--color-red);
+  border-color: color-mix(in srgb, var(--color-red) 45%, var(--color-border));
+  background: color-mix(in srgb, var(--color-red) 10%, var(--color-bg-elev));
+  font-weight: 600;
+}
+
 /* Bar replay on — primary accent (wins over generic aria-pressed) */
 .sc-btn.is-replay-on,
 .sc-btn.is-replay-on[aria-pressed="true"] {

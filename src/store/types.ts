@@ -594,7 +594,7 @@ export interface TopbarSettings {
   compute: boolean;
   /** Layout group: chart layout menu. */
   layout: boolean;
-  /** Panels group: all 14 panel toggle buttons. */
+  /** Panels group: panel toggle buttons. */
   panels: boolean;
   /** Individual panel toggles (inside panels group). */
   panelsWatchlist: boolean;

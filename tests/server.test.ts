@@ -82,6 +82,21 @@ describe('Static server', () => {
         expect(r.headers.get('access-control-allow-origin')).toBe('*');
     });
 
+    it('GET /health is text/plain ok, not SPA HTML', async () => {
+        const r = await fetch(`http://127.0.0.1:${PORT}/health`);
+        expect(r.status).toBe(200);
+        expect(r.headers.get('content-type') || '').toContain('text/plain');
+        const text = await r.text();
+        expect(text.trim()).toBe('ok');
+        expect(text).not.toContain('<html');
+    });
+
+    it('GET /healthz matches /health', async () => {
+        const r = await fetch(`http://127.0.0.1:${PORT}/healthz`);
+        expect(r.status).toBe(200);
+        expect((await r.text()).trim()).toBe('ok');
+    });
+
     it('sets ETag and honors If-None-Match', async () => {
         const r1 = await fetch(`http://127.0.0.1:${PORT}/src/main.js`);
         const etag = r1.headers.get('etag');

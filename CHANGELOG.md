@@ -15,19 +15,29 @@ _Generated/updated: 2026-09-05 · 321 commits · describe-tag: `v2.2.0`_
 
 ## [Unreleased]
 
-### Added
+---
 
-- **Docs / README / landing stills**: Playwright capture of the PWA, Studio, and CLI (`docs/images/`, `bun scripts/capture-screenshots.ts`). Interface gallery plus GIFs for Load→Run, palette, Studio rail, drawings, replay, on-chain, and theme. Landing hero crops under `docs/images/landing/`.
-- **Screenshot series**: recapture at **1920×1080 @2x** (3840×2160, docs default) and **2560×1440 @2x** (5120×2880 under `docs/images/2560x1440/`). `bun run capture:1080p` / `capture:1440p`. Chart-first stills close the editor unless the shot is the editor itself; watchlist stays open.
-- **Docs / README wiring**: chart-first stills and unused GIFs placed on the matching guides (replay, compare, 2×2 layouts, Layers, on-chain DEX, Studio workers/settings/install, strategy results, `axis doctor`) plus README landing tiles. Gallery tables list the full set.
+## [2.3.1] — 2026-09-05
 
 ### Fixed
 
-- **load-symbol tests**: isolate leftover `scripts` / `live.preferAfterLoad` so CI does not start mock-poll (off-by-one bars) or reapply SMA after history load.
+- **Doctor**: missing gitignored `worker/wrangler.toml` is a warning until `axis setup`, not a hard fail.
+- **Live badge**: show Reconnecting… / Offline while the websocket is down; one reconnect warning per disconnect burst.
+- **Static PWA server**: `GET /health` is `ok` (not SPA HTML); OPTIONS 204; favicon served.
+- **Versions**: product identity is 2.3.1 everywhere (About, Tauri, docs).
+- **Desk / PYNE path**: sibling repo is `../pyne` (fallback `../pynescript`).
 
----
+### Added
 
----
+- Modest **Install app** chip on `beforeinstallprompt` (no nag).
+- Quick Start defines SRC / STR / ENG / STO in plain language.
+
+### Changed
+
+- **Default editor width** is 30% of the viewport (was 50%) on first load and layout reset.
+- **Default chart interval** is `15m` (was `1d`).
+- **Timeframes**: topbar / settings / DSM / watchlist interval list now includes `3m`, `30m`, `2h`, `6h`, `8h`, `12h`, `3d`, and `1M` alongside the previous set.
+- **Topbar Inputs**: removed the Inputs button and its Studio/Settings visibility toggle. Script inputs still open from the Scripts list, command palette, and the existing inputs modal.
 
 ## [2.3.0] — 2026-09-05
 

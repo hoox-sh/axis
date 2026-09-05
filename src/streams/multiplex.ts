@@ -223,6 +223,9 @@ export function startLive(
   });
   appendLog('info', `Live start · ${stream.name} · ${sym} ${iv}`, 'stream');
 
+  /** One warn per disconnect burst; subsequent retries stay quiet until open again. */
+  let reconnectWarned = false;
+
   const lastBar = store.bars.length ? store.bars[store.bars.length - 1] : null;
   let lastSeenBarTime = lastBar?.time ?? 0;
 
@@ -290,6 +293,7 @@ export function startLive(
       try {
         if (s.state === 'open') {
           if (!store.live.active) return;
+          reconnectWarned = false;
           setStore('stream', 'status', 'connected');
           setTelemetryState('stream', 'open', {
             detail: s.detail || s.url || `${sym} ${iv}`,
@@ -300,12 +304,18 @@ export function startLive(
           if (!store.live.active) return;
           setStore('stream', 'status', 'connecting');
           setTelemetryState('stream', 'degraded', { detail: s.detail || 'reconnecting' });
-          appendLog('warn', `Stream reconnecting${s.detail ? ` · ${s.detail}` : ''}`, 'stream');
+          if (!reconnectWarned) {
+            reconnectWarned = true;
+            appendLog('warn', `Stream reconnecting${s.detail ? ` · ${s.detail}` : ''}`, 'stream');
+          }
         } else if (s.state === 'closed') {
-          // Only flip disconnected when live was stopped or exhausted — reconnect path uses degraded
+          // Exhausted reconnect while Live is still armed → Offline, not a success Live chip
           if (!store.live.active) {
             setStore('stream', 'status', 'disconnected');
             setTelemetryState('stream', 'closed');
+          } else if (s.detail === 'reconnect exhausted') {
+            setStore('stream', 'status', 'disconnected');
+            setTelemetryState('stream', 'closed', { detail: s.detail });
           }
         }
       } catch {

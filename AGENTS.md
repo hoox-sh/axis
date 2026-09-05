@@ -120,7 +120,7 @@ make docker-bake            # local PWA image
 
 ### Tag
 
-Semver follows root `package.json` `version` (e.g. `2.0.1` → tag `v2.0.1`).
+Semver follows root `package.json` `version` (e.g. `2.3.1` → tag `v2.3.1`).
 
 ```bash
 # After changelog + version bump are committed on main
@@ -257,7 +257,7 @@ and this repo’s builtins — never invent “TV JS” APIs or invent Pine iden
 | Product | GitHub | Local path | Website |
 |---------|--------|------------|---------|
 | **HOOX** | [hoox-sh/hoox](https://github.com/hoox-sh/hoox) | `/home/jango/Git/hoox` | [hoox.sh](https://hoox.sh) · [docs.hoox.sh](https://docs.hoox.sh) |
-| **PYNE** | [hoox-sh/pyne](https://github.com/hoox-sh/pyne) | `/home/jango/Git/pynescript` | [hoox.sh/pyne](https://hoox.sh/pyne) · [docs](https://hoox.sh/pyne/docs) |
+| **PYNE** | [hoox-sh/pyne](https://github.com/hoox-sh/pyne) | `/home/jango/Git/pyne` (checkout is sometimes still named `pynescript`) | [hoox.sh/pyne](https://hoox.sh/pyne) · [docs](https://hoox.sh/pyne/docs) |
 | **AXIS** (this repo) | [hoox-sh/axis](https://github.com/hoox-sh/axis) | `/home/jango/Git/axis` | [hoox.sh/axis](https://hoox.sh/axis) · [docs](https://hoox.sh/axis/docs) |
 
 Also: `pine-worker` / `pyne-worker` for edge evaluation.

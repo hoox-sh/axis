@@ -68,19 +68,30 @@ export type StreamPlugin = UnifiedStreamPlugin;
 
 const INTERVAL_MAP: Record<string, string> = {
   '1m': '1m',
+  '3m': '3m',
   '5m': '5m',
   '15m': '15m',
+  '30m': '30m',
   '1h': '1h',
+  '2h': '2h',
   '4h': '4h',
+  '6h': '6h',
+  '8h': '8h',
+  '12h': '12h',
   '1d': '1d',
+  '3d': '3d',
   '1w': '1w',
+  '1M': '1M',
 };
 
 function intervalToSec(iv: string): number {
-  const m = /^(\d+)([mhdw])$/.exec(iv || '');
+  const raw = String(iv || '').trim();
+  const month = /^(\d+)M$/.exec(raw);
+  if (month) return parseInt(month[1]!, 10) * 30 * 86400;
+  const m = /^(\d+)([smhdw])$/.exec(raw);
   if (!m) return 86400;
   const n = parseInt(m[1], 10);
-  const mult: Record<string, number> = { m: 60, h: 3600, d: 86400, w: 604800 };
+  const mult: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400, w: 604800 };
   return n * (mult[m[2]] || 86400);
 }
 

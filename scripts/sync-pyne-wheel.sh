@@ -18,10 +18,19 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYNE_ROOT="${PYNE_ROOT:-$(cd "${ROOT}/../pynescript" 2>/dev/null && pwd || true)}"
+if [[ -z "${PYNE_ROOT:-}" ]]; then
+  if [[ -d "${ROOT}/../pyne" ]]; then
+    PYNE_ROOT="$(cd "${ROOT}/../pyne" && pwd)"
+  elif [[ -d "${ROOT}/../pynescript" ]]; then
+    PYNE_ROOT="$(cd "${ROOT}/../pynescript" && pwd)"
+  else
+    PYNE_ROOT=""
+  fi
+fi
 if [[ -z "${PYNE_ROOT}" || ! -d "${PYNE_ROOT}/src/pynescript" ]]; then
   echo "error: PYNE_ROOT not found (expected sister repo with src/pynescript)" >&2
-  echo "  set PYNE_ROOT=/path/to/pyne (or pynescript)" >&2
+  echo "  clone https://github.com/hoox-sh/pyne as ../pyne (dir is sometimes still named pynescript)" >&2
+  echo "  or set PYNE_ROOT=/path/to/pyne" >&2
   exit 1
 fi
 

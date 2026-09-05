@@ -125,8 +125,8 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
       {
         title: 'Clone / open pyne',
         detail:
-          'Sister repo pynescript (local path often ../pynescript or GitHub hoox-sh/pyne).',
-        command: 'cd ../pynescript   # or your pyne checkout',
+          'Sister repo GitHub hoox-sh/pyne. Clone as ../pyne; local checkouts are sometimes still named pynescript.',
+        command: 'cd ../pyne   # or ../pynescript if that is the local dir',
       },
       {
         title: 'Start Pro API (loopback)',

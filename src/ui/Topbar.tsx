@@ -28,7 +28,7 @@
  * - **Data** — Source (+ CSV upload), Load, Reload
  * - **Compute** — Engine, Stream, Run, Live, Replay
  * - **Layout** — multi-chart layout menu
- * - **Panels** — List → Editor → Library → Scripts → Inputs → Layers → DSM →
+ * - **Panels** — List → Editor → Library → Scripts → Layers → DSM →
  *   On-Chain → Alerts → Values → Results → Script Logs → System Logs → Status
  * - **System** — Fullscreen, Chart only, Studio, Theme (`ml-auto`)
  *
@@ -55,7 +55,6 @@ import {
   toggleDataViewPanel,
   toggleLayerPanel,
   toggleAlertsPanel,
-  openScriptSettings,
   updateChartSlot,
   isPanelOpen,
   toggleLibraryPanel,
@@ -75,6 +74,7 @@ import { setUploadedBars, getUploadedFileName } from '../sources/upload-store';
 import { DATA_MANAGER_SOURCE_ID } from '../data/data-manager-source';
 import { engineOptionLabel } from './plugin-badges';
 import { Icons } from './icons';
+import { pwaInstallAvailable, promptPwaInstall, dismissPwaInstallPrompt } from '../pwa/install-prompt';
 import { HooxLogo } from './HooxLogo';
 import { HooxLoader } from './HooxLoader';
 import { ChartLayoutMenu } from './ChartLayoutMenu';
@@ -588,25 +588,47 @@ export const Topbar: Component<{
 
         <button
           type="button"
-          class={`sc-btn ${store.live.active ? 'is-live-on' : 'sc-btn-ghost'}`}
+          class={`sc-btn ${
+            !store.live.active
+              ? 'sc-btn-ghost'
+              : store.stream.status === 'connected'
+                ? 'is-live-on'
+                : store.stream.status === 'connecting'
+                  ? 'is-live-reconnecting'
+                  : 'is-live-offline'
+          }`}
           onClick={toggleLive}
           data-testid="axis-btn-live"
           aria-pressed={store.live.active}
           title={
-            store.live.active
-              ? 'Stop live stream'
-              : `Start live stream (${
+            !store.live.active
+              ? `Start live stream (${
                   streams().find((s) => s.id === defaultStreamForSource(store.source))?.name ||
                   defaultStreamForSource(store.source)
                 })`
+              : store.stream.status === 'connected'
+                ? 'Stop live stream'
+                : store.stream.status === 'connecting'
+                  ? 'Live stream reconnecting — click to stop'
+                  : 'Live stream offline — click to stop'
           }
         >
-          {store.live.active ? (
+          {store.live.active && store.stream.status === 'connected' ? (
             <Icons.wifi class="text-accent-2" />
+          ) : store.live.active ? (
+            <Icons.wifi class="text-orange" />
           ) : (
             <Icons.wifiOff />
           )}
-          <span class="axis-tb-btn-label">Live</span>
+          <span class="axis-tb-btn-label">
+            {!store.live.active
+              ? 'Live'
+              : store.stream.status === 'connected'
+                ? 'Live'
+                : store.stream.status === 'connecting'
+                  ? 'Reconnecting…'
+                  : 'Offline'}
+          </span>
         </button>
 
         <button
@@ -698,19 +720,6 @@ export const Topbar: Component<{
         >
           <Icons.scripts />
           <span class="axis-tb-btn-label">Scripts</span>
-        </button>
-        </Show>
-
-        <Show when={store.topbar.panelsInputs}>
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost"
-          onClick={() => openScriptSettings(null)}
-          title="Script settings — edit input.* parameters"
-          data-testid="axis-btn-script-settings"
-        >
-          <Icons.inputs />
-          <span class="axis-tb-btn-label">Inputs</span>
         </button>
         </Show>
 
@@ -939,6 +948,26 @@ export const Topbar: Component<{
           aria-label="Open Plugins"
           onClick={() => props.onOpenPlugins?.()}
         />
+
+        <Show when={pwaInstallAvailable()}>
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost"
+            onClick={() => {
+              void promptPwaInstall();
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              dismissPwaInstallPrompt();
+            }}
+            title="Install AXIS as an app (right-click to hide)"
+            data-testid="axis-btn-pwa-install"
+            aria-label="Install app"
+          >
+            <Icons.download />
+            <span class="axis-tb-btn-label">Install app</span>
+          </button>
+        </Show>
 
         <button
           type="button"

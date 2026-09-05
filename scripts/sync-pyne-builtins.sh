@@ -3,7 +3,17 @@
 # Usage: ./scripts/sync-pyne-builtins.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYNE="${PYNE_ROOT:-$(cd "${ROOT}/../pynescript" 2>/dev/null && pwd || true)}"
+if [[ -z "${PYNE_ROOT:-}" ]]; then
+  if [[ -d "${ROOT}/../pyne" ]]; then
+    PYNE="$(cd "${ROOT}/../pyne" && pwd)"
+  elif [[ -d "${ROOT}/../pynescript" ]]; then
+    PYNE="$(cd "${ROOT}/../pynescript" && pwd)"
+  else
+    PYNE=""
+  fi
+else
+  PYNE="${PYNE_ROOT}"
+fi
 SRC="${PYNE}/src/pynescript/langserver/providers/builtin_metadata.json"
 DEST="${ROOT}/src/editor/data/pyne-builtins.json"
 if [[ ! -f "${SRC}" ]]; then

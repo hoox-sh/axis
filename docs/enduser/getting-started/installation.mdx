@@ -24,7 +24,7 @@ description: "Install AXIS via the AXIS CLI, Vite+Solid dev, static dist PWA, de
 
 # Installation
 
-AXIS ships as the **`axis`** package (Solid + Vite), version **2.0.1**. Primary path is the product UI under `src/`. Legacy static shell (`main.js`, root `style.css`) is not the product UI—prefer `bun run dev` or built `dist/`.
+AXIS ships as the **`axis`** package (Solid + Vite), version **2.3.1**. Primary path is the product UI under `src/`. Legacy static shell (`main.js`, root `style.css`) is not the product UI—prefer `bun run dev` or built `dist/`.
 
 <img src="/images/cli/help.png" alt="AXIS CLI help: install, doctor, setup, deploy, health" />
 
@@ -58,7 +58,7 @@ bun install
 cd packages/cli && bun install && cd ../..
 
 bun run axis:install          # app + worker/ + CLI deps
-bun run axis:doctor           # toolchain, wrangler.toml, optional CF auth
+bun run axis:doctor           # toolchain + optional CF auth; wrangler.toml warns until `axis setup`
 bun run axis setup            # ensure wrangler.toml + local D1 schema
 # or: make axis-install && make axis-doctor && make axis-setup
 ```
@@ -79,8 +79,9 @@ Full command surface: [AXIS CLI](/axis/docs/devops/cli).
 ## Dev AXIS
 
 ```bash
-# Terminal 1 — Pro API (server engine) from sister pyne / pynescript repo
-make -C ../pynescript run    # Flask :5002
+# Terminal 1 — Pro API (server engine) from sister pyne repo
+# Clone https://github.com/hoox-sh/pyne as ../pyne (local dir is sometimes still named pynescript)
+make -C ../pyne run          # Flask :5002
 
 # Terminal 2 — AXIS
 bun run dev                  # Vite :3000
@@ -150,7 +151,7 @@ Browser origin → Pro API must allow your AXIS origin. Flask uses `ALLOWED_ORIG
 
 - Manifest: void theme `#0a0b10`, name AXIS
 - Service Worker: cache-first shell; network-first `/api/*`; offline API returns structured failure so Pyodide path remains usable
-- Chrome/Edge: install icon in the omnibox
+- Chrome/Edge: install icon in the omnibox; AXIS also shows a modest **Install app** chip in the topbar when the browser fires `beforeinstallprompt` (right-click hides it for the session)
 
 ## Verification checklist
 
@@ -163,7 +164,7 @@ Browser origin → Pro API must allow your AXIS origin. Flask uses `ALLOWED_ORIG
 | Manager | Catalog lists built-ins |
 | Workers Manager | Health cards for local/prod backends |
 | Theme | Dark/light toggle persists |
-| `axis doctor` | Toolchain + wrangler green |
+| `axis doctor` | Required toolchain green. Missing `worker/wrangler.toml` is a warning on a fresh clone until `axis setup` (copies `wrangler.toml.example`). |
 
 ## Failure modes
 

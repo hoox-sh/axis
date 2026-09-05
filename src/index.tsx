@@ -37,6 +37,7 @@ import { ErrorBoundary } from 'solid-js';
 import { render } from 'solid-js/web';
 import { isEditorView } from './editor/editor-bridge';
 import { registerAxisServiceWorker } from './pwa/register-sw';
+import { listenForPwaInstallPrompt } from './pwa/install-prompt';
 import { errorFallback } from './ui/ErrorFallback';
 import { installBootErrorHandlers, reportUiError } from './ui/boot-errors';
 import './index.css';
@@ -46,6 +47,8 @@ installBootErrorHandlers();
 
 // Production PWA only (skipped in Vite DEV). Idempotent — safe if called once.
 void registerAxisServiceWorker();
+// Capture beforeinstallprompt even in production without nags until the chip shows.
+listenForPwaInstallPrompt();
 
 const root = document.getElementById('app');
 if (root) {

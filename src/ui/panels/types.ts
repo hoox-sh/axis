@@ -122,8 +122,8 @@ export const PANEL_META: Record<
     defaultDock: 'right',
     minW: 1,
     minH: 1,
-    /** ~50vw; {@link defaultPanelChromeMap} recomputes from window when available. */
-    defaultW: 640,
+    /** ~30vw; {@link defaultPanelChromeMap} recomputes from window when available. */
+    defaultW: 384,
     defaultH: 520,
     defaultX: 780,
     defaultY: 48,
@@ -270,10 +270,10 @@ export function defaultPanelChromeMap(): PanelChromeMap {
     editor: defaultPanelChrome('editor', {
       open: true,
       dock: 'right',
-      // 50vw at map-build time (layout reset / factory chrome)
+      // 30vw at map-build time (layout reset / factory chrome)
       w:
         typeof window !== 'undefined' && Number.isFinite(window.innerWidth)
-          ? Math.min(Math.max(Math.round(window.innerWidth * 0.5), 1), Math.floor(window.innerWidth * 0.9))
+          ? Math.min(Math.max(Math.round(window.innerWidth * 0.3), 1), Math.floor(window.innerWidth * 0.9))
           : PANEL_META.editor.defaultW,
       x: PANEL_META.editor.defaultX,
       y: PANEL_META.editor.defaultY,

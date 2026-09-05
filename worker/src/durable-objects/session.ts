@@ -115,16 +115,20 @@ function krakenPair(symbol: string): string {
 }
 
 const OKX_CHANNEL: Record<string, string> = {
-    '1m': 'candle1m', '5m': 'candle5m', '15m': 'candle15m',
-    '1h': 'candle1H', '4h': 'candle4H', '1d': 'candle1D', '1w': 'candle1W',
+    '1m': 'candle1m', '3m': 'candle3m', '5m': 'candle5m', '15m': 'candle15m',
+    '30m': 'candle30m', '1h': 'candle1H', '2h': 'candle2H', '4h': 'candle4H',
+    '6h': 'candle6H', '12h': 'candle12H', '1d': 'candle1D', '3d': 'candle3D',
+    '1w': 'candle1W', '1M': 'candle1M',
 };
 
 const BYBIT_TOPIC: Record<string, string> = {
-    '1m': '1', '5m': '5', '15m': '15', '1h': '60', '4h': '240', '1d': 'D', '1w': 'W',
+    '1m': '1', '3m': '3', '5m': '5', '15m': '15', '30m': '30',
+    '1h': '60', '2h': '120', '4h': '240', '6h': '360', '12h': '720',
+    '1d': 'D', '1w': 'W', '1M': 'M',
 };
 
 const KRAKEN_INTERVAL: Record<string, number> = {
-    '1m': 1, '5m': 5, '15m': 15, '1h': 60, '4h': 240, '1d': 1440, '1w': 10080,
+    '1m': 1, '5m': 5, '15m': 15, '30m': 30, '1h': 60, '4h': 240, '1d': 1440, '1w': 10080,
 };
 
 const MEXC_KLINE: Record<string, string> = {

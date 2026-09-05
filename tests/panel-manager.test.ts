@@ -85,14 +85,14 @@ describe('resetPanelToDefault / setAllPanelsChartOverlay', () => {
     const c = getPanelChrome('editor');
     expect(c.open).toBe(true);
     expect(c.dock).toBe('right');
-    // Factory editor width is ~50vw (clamped)
+    // Factory editor width is ~30vw (clamped)
     const expectW =
       typeof window !== 'undefined' && Number.isFinite(window.innerWidth)
         ? Math.min(
-            Math.max(Math.round(window.innerWidth * 0.5), 1),
+            Math.max(Math.round(window.innerWidth * 0.3), 1),
             Math.floor(window.innerWidth * 0.9),
           )
-        : 640;
+        : 384;
     expect(c.w).toBe(expectW);
     expect(c.chartOverlay).toBe(false);
   });

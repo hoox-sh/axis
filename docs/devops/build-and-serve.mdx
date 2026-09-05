@@ -72,10 +72,13 @@ Behavior (`frontend/axis_pwa_server.py`):
 
 | Rule | Detail |
 | --- | --- |
-| Root | Serves `frontend/dist` |
+| Root | Serves `dist/` |
 | Cache | `/assets/*` → `immutable` long cache; else `no-cache` |
+| `GET /health` (`/healthz`) | `200` `text/plain` `ok` — never SPA-fallback to `index.html` |
+| `OPTIONS` | `204` with CORS headers (not 501) |
+| `/favicon.ico` | Serves `assets/icon-192.png` when present |
 | SPA fallback | Unknown paths → `/index.html` |
-| **Never rewrite** | `/assets/`, `/plugins/`, `/vendor/`, `/pyodide/`, or extensions including `.js/.css/.whl/.wasm/.zip/.py/.json…` |
+| **Never rewrite** | `/health`, `/favicon.ico`, `/assets/`, `/plugins/`, `/vendor/`, `/pyodide/`, or extensions including `.js/.css/.whl/.wasm/.zip/.py/.json…` |
 
 This SPA exception list exists because Pyodide + micropip die with opaque `BadZipFile` when HTML is returned for a wheel URL. The engine’s `assertZipAsset` detects that class of failure early.
 

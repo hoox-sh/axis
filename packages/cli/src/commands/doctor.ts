@@ -71,11 +71,11 @@ export async function collectDoctorChecks(options: {
   checks.push({
     id: "wrangler-toml",
     ok: hasToml,
-    required: true,
+    required: false,
     label: "worker/wrangler.toml",
     detail: hasToml
       ? paths.wranglerToml
-      : "missing — run: axis setup worker",
+      : "missing — expected until you run: axis setup  (copies worker/wrangler.toml.example)",
   });
 
   if (hasToml) {
@@ -188,7 +188,7 @@ export async function collectDoctorChecks(options: {
     ok: Boolean(pyneFound),
     required: false,
     label: "Sister PYNE repo",
-    detail: pyneFound ?? "optional local engine at ../pynescript",
+    detail: pyneFound ?? "optional local engine at ../pyne (checkout sometimes named pynescript)",
   });
 
   return checks;

@@ -639,12 +639,6 @@ export function SettingsPage(props: {
                   onChange={(v) => setStore('topbar', 'panelsScripts', v)}
                 />
                 <StudioToggle
-                  id="topbar-panels-inputs"
-                  checked={store.topbar.panelsInputs}
-                  label="Inputs"
-                  onChange={(v) => setStore('topbar', 'panelsInputs', v)}
-                />
-                <StudioToggle
                   id="topbar-panels-layers"
                   checked={store.topbar.panelsLayers}
                   label="Layers"

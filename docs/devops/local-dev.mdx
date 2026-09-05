@@ -47,7 +47,7 @@ flowchart TB
 
 ```bash
 bun run axis:install   # app + worker + CLI
-bun run axis:doctor
+bun run axis:doctor           # missing worker/wrangler.toml is a warning until `axis setup`
 ```
 
 ### Frontend (preferred product path)
@@ -66,10 +66,10 @@ bun run desktop:dev    # Vite + native window (see devops/desktop)
 
 ### Flask Pro API (engine backend)
 
-From the pyne / pynescript checkout (sister repo):
+From the pyne checkout (sister repo; clone [hoox-sh/pyne](https://github.com/hoox-sh/pyne) as `../pyne` — the local directory is sometimes still named `pynescript`):
 
 ```bash
-make -C ../pynescript run   # Flask → :5002
+make -C ../pyne run   # Flask → :5002
 ```
 
 Set PWA endpoint to `http://127.0.0.1:5002` for the **server** engine. Workers Manager and Settings can probe this URL.

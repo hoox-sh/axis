@@ -13,9 +13,36 @@ import {
   deriveHud,
   isLocalEndpoint,
   isWorkerEndpoint,
+  liveBadgeLabel,
+  liveBadgeTone,
   normalizeExecMode,
   transportToPath,
 } from '../src/ui/hud-model';
+
+describe('liveBadgeLabel / liveBadgeTone', () => {
+  it('is OFF when Live is not armed', () => {
+    expect(liveBadgeLabel({ liveActive: false, streamStatus: 'connected' })).toBe('OFF');
+    expect(liveBadgeTone({ liveActive: false, streamStatus: 'connected' })).toBe('off');
+  });
+
+  it('is LIVE only while the socket is open', () => {
+    expect(liveBadgeLabel({ liveActive: true, streamStatus: 'connected' })).toBe('LIVE');
+    expect(liveBadgeTone({ liveActive: true, streamStatus: 'connected' })).toBe('live');
+  });
+
+  it('shows Reconnecting… while connecting, not a success Live badge', () => {
+    expect(liveBadgeLabel({ liveActive: true, streamStatus: 'connecting' })).toBe(
+      'Reconnecting…',
+    );
+    expect(liveBadgeTone({ liveActive: true, streamStatus: 'connecting' })).toBe('reconnect');
+  });
+
+  it('shows Offline when armed but disconnected or in error', () => {
+    expect(liveBadgeLabel({ liveActive: true, streamStatus: 'disconnected' })).toBe('Offline');
+    expect(liveBadgeLabel({ liveActive: true, streamStatus: 'error' })).toBe('Offline');
+    expect(liveBadgeTone({ liveActive: true, streamStatus: 'disconnected' })).toBe('offline');
+  });
+});
 
 describe('hud-model helpers', () => {
   it('detects local endpoints', () => {

@@ -671,8 +671,8 @@ export const SettingsDialog: Component<Props> = (props) => {
                 <div class="sc-settings-section">
                   <div class="sc-settings-section-title">Panels</div>
                   <p class="sc-settings-field-hint text-[0.75em]">
-                    All 14 panel toggle buttons (watchlist, editor, library, scripts,
-                    inputs, layers, DSM, on-chain, alerts, values, results, script logs,
+                    Panel toggle buttons (watchlist, editor, library, scripts,
+                    layers, DSM, on-chain, alerts, values, results, script logs,
                     system logs, status)
                   </p>
                   <StudioToggle
@@ -722,16 +722,6 @@ export const SettingsDialog: Component<Props> = (props) => {
                       checked={store.topbar.panelsScripts}
                       label="Show scripts"
                       onChange={(v) => setStore('topbar', 'panelsScripts', v)}
-                    />
-                  </div>
-
-                  <div class="sc-settings-section">
-                    <div class="sc-settings-section-title">Inputs</div>
-                    <StudioToggle
-                      id="topbar-panels-inputs"
-                      checked={store.topbar.panelsInputs}
-                      label="Show inputs"
-                      onChange={(v) => setStore('topbar', 'panelsInputs', v)}
                     />
                   </div>
 

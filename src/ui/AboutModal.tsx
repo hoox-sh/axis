@@ -29,8 +29,8 @@ import { installFocusTrap } from './focus-trap';
 import { Icons } from './icons';
 import { HooxLogo } from './HooxLogo';
 
-/** App + engine versions shown in the about chrome (keep near package.json). */
-const AXIS_VERSION = '2.0.30';
+/** App + engine versions shown in the about chrome (keep in sync with package.json). */
+const AXIS_VERSION = '2.3.1';
 const PYNE_VERSION = '0.4.2';
 
 const LINKS = {

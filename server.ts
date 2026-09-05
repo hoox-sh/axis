@@ -95,7 +95,25 @@ const server = Bun.serve({
         }
 
         const url = new URL(req.url);
-        const path = safeJoin(ROOT, url.pathname);
+        if (url.pathname === '/health' || url.pathname === '/healthz') {
+            return new Response('ok\n', {
+                status: 200,
+                headers: {
+                    'Content-Type': 'text/plain; charset=utf-8',
+                    'Cache-Control': 'no-cache',
+                    ...CORS_HEADERS,
+                    ...SECURITY_HEADERS,
+                },
+            });
+        }
+        let reqPath = url.pathname;
+        if (reqPath === '/favicon.ico') {
+            const icon = join(ROOT, 'public', 'assets', 'icon-192.png');
+            if (existsSync(icon) && statSync(icon).isFile()) {
+                reqPath = '/public/assets/icon-192.png';
+            }
+        }
+        const path = safeJoin(ROOT, reqPath);
         if (!path) return new Response('Forbidden', { status: 403 });
 
         if (existsSync(path) && statSync(path).isFile()) {

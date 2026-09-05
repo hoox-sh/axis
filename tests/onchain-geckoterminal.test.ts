@@ -117,6 +117,10 @@ describe('mapAxisIntervalToGecko', () => {
       timeframe: 'day',
       aggregate: 1,
     });
+    expect(mapAxisIntervalToGecko('1M')).toEqual({
+      timeframe: 'day',
+      aggregate: 1,
+    });
   });
 
   it('falls back unknown intervals to 1h', () => {
