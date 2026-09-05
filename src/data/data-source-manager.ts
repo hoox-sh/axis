@@ -41,12 +41,14 @@ import { getSource, sourcePageLimit } from '../sources/catalog';
 import { DATA_MANAGER_SOURCE_ID } from './data-manager-source';
 import { normalizeHistoricalBars } from './parse-bars';
 import {
-  getCachedBars,
   getCachedBarCount,
-  putCachedBars,
   sliceBarsForLoad,
   type BarLoadWindow,
 } from './bars-cache';
+import {
+  getDataset,
+  putDatasetBars,
+} from './dataset-store';
 import {
   findBarGaps,
   intervalToSec,
@@ -389,7 +391,7 @@ function pumpQueue(): void {
 
 async function refreshJobFromCache(j: InternalJob): Promise<Bar[]> {
   try {
-    const cached = await getCachedBars(j.sourceId, j.symbol, j.interval);
+    const cached = await getDataset(j.sourceId, j.symbol, j.interval);
     if (cached.length) {
       j.barsFetched = cached.length;
       j.oldestSec = cached[0]!.time;
@@ -454,17 +456,17 @@ async function fetchWalkPage(
   );
   if (pageBars.length) {
     try {
-      const merged = await putCachedBars(j.sourceId, j.symbol, j.interval, pageBars);
-      if (merged.length) {
-        j.barsFetched = merged.length;
-        j.oldestSec = merged[0]!.time;
-        j.newestSec = merged[merged.length - 1]!.time;
+      const merged = await putDatasetBars(j.sourceId, j.symbol, j.interval, pageBars);
+      if (merged.bars.length) {
+        j.barsFetched = merged.bars.length;
+        j.oldestSec = merged.bars[0]!.time;
+        j.newestSec = merged.bars[merged.bars.length - 1]!.time;
         j.updatedAt = Date.now();
         syncJob(j);
       }
     } catch (err: unknown) {
       // Cache write failure should not kill the job mid-page — keep going with page data
-      console.warn('[data-source-manager] putCachedBars failed', err);
+      console.warn('[data-source-manager] putDatasetBars failed', err);
       if (!j.oldestSec || pageBars[0]!.time < j.oldestSec) j.oldestSec = pageBars[0]!.time;
       if (!j.newestSec || pageBars[pageBars.length - 1]!.time > j.newestSec) {
         j.newestSec = pageBars[pageBars.length - 1]!.time;
@@ -533,7 +535,7 @@ async function walkBackRange(
 
     // Early exit when the full window is already dense (resume of complete cache)
     try {
-      const cached = await getCachedBars(j.sourceId, j.symbol, j.interval);
+      const cached = await getDataset(j.sourceId, j.symbol, j.interval);
       const report = validateBarCoverage(cached, windowFrom, windowTo, j.interval);
       if (report.complete) return 'ok';
     } catch {
@@ -678,7 +680,7 @@ async function runJob(j: InternalJob): Promise<void> {
       j.phase = 'validate';
       syncJob(j);
 
-      cached = await getCachedBars(j.sourceId, j.symbol, j.interval);
+      cached = await getDataset(j.sourceId, j.symbol, j.interval);
       const report = validateBarCoverage(
         cached,
         j.targetFromSec,
@@ -747,7 +749,7 @@ async function runJob(j: InternalJob): Promise<void> {
     }
 
     // Final validation
-    const finalCached = await getCachedBars(j.sourceId, j.symbol, j.interval);
+    const finalCached = await getDataset(j.sourceId, j.symbol, j.interval);
     const finalReport = validateBarCoverage(
       finalCached,
       j.targetFromSec,
@@ -831,7 +833,7 @@ export async function applyCachedToChart(
 
   let bars: Bar[];
   try {
-    bars = await getCachedBars(srcId, sym, iv);
+    bars = await getDataset(srcId, sym, iv);
   } catch {
     bars = [];
   }

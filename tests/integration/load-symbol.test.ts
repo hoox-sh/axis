@@ -129,7 +129,7 @@ describe('loadSymbolData', () => {
     expect(store.telemetry.source.error).toMatch(/network down/i);
   });
 
-  it('falls back to bars-cache when venue fetch fails', async () => {
+  it('paints from bars-cache (DSM-first) without hitting the venue', async () => {
     const cached = makeBars(8);
     await putCachedBars('offline-src', 'BTCUSDT', '1h', cached);
     registerDynamicSource(
@@ -141,8 +141,8 @@ describe('loadSymbolData', () => {
     expect(ok).toBe(true);
     expect(store.bars.length).toBe(8);
     expect(store.status).toBe('ready');
-    expect(store.statusMessage).toMatch(/Offline|cached/i);
-    expect(store.telemetry.source.state).toBe('degraded');
+    expect(store.statusMessage).toMatch(/cached|DSM/i);
+    expect(store.telemetry.source.state).toBe('open');
   });
 
   it('handles non-Error throw values', async () => {

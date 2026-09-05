@@ -66,7 +66,7 @@ import {
 } from '../store';
 import { CHART_TYPES } from '../chart/chart-type';
 import { startLive, stopLive, listStreams, defaultStreamForSource } from '../streams/multiplex';
-import { loadSymbolData } from '../data/load-symbol';
+import { loadSymbolData, reloadChart } from '../data/load-symbol';
 import { parseOhlcvFile } from '../data/parse-bars';
 import { listSources } from '../sources/catalog';
 import { listEngines, preloadPyodide } from '../engines/catalog';
@@ -504,11 +504,11 @@ export const Topbar: Component<{
         <button
           type="button"
           class={`sc-btn sc-btn-ghost sc-btn-icon ${loading() ? 'is-loading' : ''}`}
-          onClick={() => void loadHistorical({ force: true })}
+          onClick={() => void reloadChart()}
           disabled={loading()}
           aria-busy={loading() || undefined}
           data-testid="axis-btn-reload-chart"
-          title="Reload chart — refetch bars for the current symbol / interval"
+          title="Reload chart — force venue refetch for the current symbol / interval (bypasses dataset cache)"
           aria-label="Reload chart"
         >
           {loading() ? <HooxLoader size="xs" /> : <Icons.refresh />}

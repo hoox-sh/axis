@@ -51,7 +51,6 @@ import { classifyTransport } from '../ui/telemetry';
 import { defaultStreamForSource } from '../streams/catalog';
 import { pluginKey } from '../plugins/types';
 import { normalizeHistoricalBars } from './parse-bars';
-import { getCachedBars } from './bars-cache';
 import { announce, announceError } from '../ui/sr-announce';
 
 /**
@@ -79,7 +78,8 @@ export function _currentLoadGeneration(): number {
   return loadGeneration;
 }
 
-function exchangeForSource(sourceId: string): string {
+/** Map a source plugin id to the chart exchange label (exported for DSM orchestrator). */
+export function exchangeForSource(sourceId: string): string {
   const venue = store.provider?.sourceId === sourceId
     ? store.provider.venue
     : undefined;
@@ -142,15 +142,23 @@ export function normalizeLoadSymbol(
 /**
  * Fetch OHLCV via the given historical source and push into chart + store.
  *
+ * **DSM-first** (default): paints from the DatasetStore instantly, then
+ * auto-completes the dataset in the background (validate → sliced backfill →
+ * progressive repaint). Falls back to the direct venue fetch when nothing is
+ * cached, seeding the store on success.
+ *
  * @param symbol - Ticker (uppercased for CEX; case preserved for DEX pools);
  *   defaults to `store.symbol`
  * @param interval - AXIS interval string (`1m`…`1w`); defaults to `store.interval`
  * @param sourceId - Source plugin id; defaults to `store.source`
+ * @param opts - `preferDataset: false` forces the venue fetch (Reload button)
+ *   and merges the result into the dataset store.
  */
 export async function loadSymbolData(
   symbol: string = store.symbol,
   interval: string = store.interval,
   sourceId: string = store.source,
+  opts?: { preferDataset?: boolean },
 ): Promise<boolean> {
   // DEX pool symbols (network:0x… / base58) are case-sensitive — do not force upper.
   const srcId = String(sourceId || store.source || '');
@@ -218,6 +226,44 @@ export async function loadSymbolData(
     }
   }
 
+  // ── DSM-first: paint from the dataset store, complete in background ──
+  if (opts?.preferDataset !== false && srcId !== 'csv-upload') {
+    const { paintDataset, ensureDatasetComplete, announceDatasetPaint } = await import(
+      './dsm-orchestrator'
+    );
+    const painted = await paintDataset(sym, iv, srcId);
+    if (painted && painted.length) {
+      if (!stillCurrent()) return false;
+      const ms = performance.now() - t0;
+      setTelemetryState('source', 'open', {
+        latencyMs: ms,
+        detail: `${painted.length} bars · ${label} (dataset)`,
+        error: null,
+      });
+      announceDatasetPaint(painted, sym, iv);
+      // Auto-complete: validate + sliced backfill + progressive repaints
+      ensureDatasetComplete(sym, iv, srcId);
+      if (stillCurrent()) {
+        try {
+          const { reapplyChartScripts } = await import('../indicators/reapply');
+          await reapplyChartScripts({ stillCurrent });
+        } catch {
+          /* re-run optional */
+        }
+      }
+      if (restartLiveAfter && stillCurrent()) {
+        const streamId = store.live.streamId || defaultStreamForSource(srcId);
+        try {
+          const { startLive } = await import('../streams/multiplex');
+          if (stillCurrent()) startLive(streamId, sym, iv);
+        } catch {
+          /* ignore live restart failures */
+        }
+      }
+      return stillCurrent();
+    }
+  }
+
   try {
     // Global history depth (Settings) wins over per-source plugin config for limit
     const limit = clampHistoryBars(store.historyBars);
@@ -282,6 +328,15 @@ export async function loadSymbolData(
       }
     }
 
+    // Seed / merge into the dataset store (conflict-resolved) so the next
+    // load paints instantly and the DSM can complete the series.
+    try {
+      const { seedDatasetFromBars } = await import('./dsm-orchestrator');
+      seedDatasetFromBars(srcId, sym, iv, normalized);
+    } catch {
+      /* seeding is best-effort */
+    }
+
     if (!stillCurrent()) return false;
 
     const ms = performance.now() - t0;
@@ -321,9 +376,11 @@ export async function loadSymbolData(
     // Stale failure must not overwrite a newer load's telemetry/status
     if (!stillCurrent()) return false;
 
-    // Offline / network fail: restore last DSM/venue series from bars-cache when warm
+    // Offline / network fail: restore last DSM/venue series from the dataset
+    // store when warm (honours the active persistence sink)
     try {
-      const cached = await getCachedBars(srcId, sym, iv);
+      const { getDataset } = await import('./dataset-store');
+      const cached = await getDataset(srcId, sym, iv);
       if (cached.length && stillCurrent()) {
         const exchange = exchangeForSource(srcId);
         loadBars(cached, sym, iv, exchange);
@@ -375,9 +432,12 @@ export async function loadSymbolData(
 }
 
 /**
- * Force-refetch the current symbol/interval/source and repaint the chart.
- * Always hits the source (unlike topbar Load’s same-symbol skip path).
+ * Force-refetch the current symbol/interval/source from the venue and repaint
+ * the chart. Bypasses the dataset-first paint (Reload escape hatch) but still
+ * merges the fresh bars into the dataset store.
  */
 export async function reloadChart(): Promise<boolean> {
-  return loadSymbolData(store.symbol, store.interval, store.source);
+  return loadSymbolData(store.symbol, store.interval, store.source, {
+    preferDataset: false,
+  });
 }
