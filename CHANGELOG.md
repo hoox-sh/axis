@@ -9,11 +9,32 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-05 · 321 commits · describe-tag: `v2.2.0`_
+_Generated/updated: 2026-09-06 · 336 commits · describe-tag: `v2.3.1`_
 
 ---
 
 ## [Unreleased]
+
+### Added
+
+- **DSM-first data plane**: AXIS now loads datasets first — the chart paints instantly from the DatasetStore (repaired), then a background DSM job auto-completes the series (validate → classify gaps → sliced walk-back backfill) with progressive repaints as slices land. Venue REST remains the fallback/seed path; the Reload button forces a venue refetch (`preferDataset: false`).
+- **DatasetStore** (`src/data/dataset-store.ts`): single source of truth for OHLCV datasets with pluggable persistence sinks — `session` (memory only), `local` (IndexedDB, default), `git` / `worker` (storage-plugin documents, debounced + retried, never blocking the chart). All consumers (chart loads, DSM jobs, live ticks, compare, CSV upload) read/write through it.
+- **Dataset validation & repair** (`src/data/dataset-validate.ts`): `repairBars` drops corrupt rows, dedupes, sorts, and snaps individually off-phase bars to the series' dominant open-time phase (≥3 bars, ≥60% agreement — consistent venue offsets are preserved). `classifyGaps` splits gaps into **fillable** vs **legitimate** (weekend closures for session venues, declared maintenance windows) so the DSM stops chasing phantom gaps. `validateDataset` composes both into a report.
+- **Dataset merge with conflict detection** (`src/data/merge-datasets.ts`): overlapping timestamps whose OHLCV disagree beyond a relative tolerance are conflicts, auto-resolved by policy (`newest-wins` default, `keep-current`, `prefer-incoming`); non-overlapping bars always union.
+- **Settings → Data → Dataset persistence** main switch: `Session | Local | Git | Worker` (default Local), persisted as `store.datasetPersistence` and synced to the DatasetStore on boot/change.
+- **Sliced-backfill progress chip** in the topbar Data group: live `loaded / expected` bar count while a DSM job completes the current dataset in the background.
+
+### Changed
+
+- **Topbar order**: the Venue picker moved to the front of the Market group (Venue → Symbol → Interval → Type → Compare) since it determines valid symbols/intervals; the Data group keeps plugin config, upload, datasets, Load, and Reload.
+- **DSM job engine** reads and writes now route through the DatasetStore (session-mode safe, progressive repaints fire on every merged slice); `expand-cache` (cache→now + live ticks) and the Data Manager source do the same, with a repair pass on Data Manager resolves and CSV uploads.
+
+### Tests
+
+- `tests/dataset-validate.test.ts` — repair (corrupt rows, phase-aware snap, dedupe, sort), gap classification (24/7 vs session venues, maintenance windows), dataset reports.
+- `tests/merge-datasets.test.ts` — conflict detection tolerance, merge policies, union/sort behavior.
+- `tests/dataset-store.test.ts` — sink routing (session vs local), conflict-resolved merges, replace/remove, change subscription.
+- `tests/integration/load-symbol.test.ts` — DSM-first cache paint without hitting the venue.
 
 ---
 
@@ -842,13 +863,39 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (2 commits)
+### 2026-09 (17 commits)
+
+#### Features
+
+- `da5e96d7` (2026-09-06) — feat(data): route all dataset paths through the DatasetStore
+- `f597806b` (2026-09-06) — feat(ui): dataset persistence switch + sliced-backfill progress chip
+- `257342d1` (2026-09-06) — feat(data): DSM-first load pipeline with progressive paint
+- `a5caf0ab` (2026-09-06) — feat(data): DatasetStore with pluggable persistence sinks
+- `d105e161` (2026-09-06) — feat(data): dataset merge with conflict detection & policies
+- `19c92dd1` (2026-09-06) — feat(data): dataset validation & repair with gap classification
+- `a63c3b69` (2026-09-06) — feat(ui): move Venue picker to front of Market group
+- `be830abe` (2026-09-05) — feat(chart): per-tool drawing settings (v2.3.0)
 
 #### Fixes
 
+- `520869dc` (2026-09-05) — fix: setup review — doctor, live HUD, static health, 2.3.1
 - `16499ac7` (2026-09-04) — fix(results): skip live-tick persist and unstick studio e2e
+
+#### Documentation
+
+- `d10a9ea4` (2026-09-05) — docs(screenshots): wire stills into README and matching guides
+- `adcb846d` (2026-09-05) — docs(screenshots): close editor except on editor-focused stills
+- `3211bfe0` (2026-09-05) — docs(screenshots): recapture at 1920x1080 and 2560x1440
+- `9b820a77` (2026-09-05) — docs(screenshots): capture PWA, Studio, and CLI stills plus GIFs
+
+#### Tests
+
+- `2c9643b3` (2026-09-05) — test(pwa): stub beforeinstallprompt without DOM Event
+- `c0d88523` (2026-09-05) — test(load-symbol): isolate live stream and leftover scripts
 
 #### Chores
 
