@@ -1197,18 +1197,22 @@ export function localPreevaluate(source: string): EditorDiagnostic[] {
       }
       i += 1;
     }
-  }
-
-  if (inStr) {
-    out.push(
-      diag(source, {
-        line: strLine,
-        col: strCol,
-        message: `Unclosed string literal (${inStr})`,
-        severity: 'error',
-        source: 'preeval-local',
-      }),
-    );
+    // Pine strings do not span lines — an unterminated quote ends with its
+    // line. Resetting here keeps one bad string from putting the whole rest
+    // of the file "inside a string" (which silently suppressed every later
+    // bracket / structural diagnostic).
+    if (inStr) {
+      out.push(
+        diag(source, {
+          line: strLine,
+          col: strCol,
+          message: `Unclosed string literal (${inStr})`,
+          severity: 'error',
+          source: 'preeval-local',
+        }),
+      );
+      inStr = null;
+    }
   }
 
   while (stack.length) {
@@ -1345,15 +1349,14 @@ export function remoteToEditorDiagnostics(
   return out;
 }
 
-function rangesOverlap(a: EditorDiagnostic, b: EditorDiagnostic): boolean {
-  return a.from < b.to && b.from < a.to;
-}
-
 /**
  * Union local structural/member checks with remote parse diagnostics.
  *
  * - Remote `null` (down / cooldown) → local only, so unknown-member marks still show
- * - Remote syntax **errors** win the same span (drop overlapping local structural errors)
+ * - Remote syntax **errors** win only on the same line (drop the local error
+ *   there as a duplicate of the same parse failure). Wide remote spans must
+ *   not shadow unrelated semantic errors further down the file, or one early
+ *   parse error would hide every later diagnostic (the "cascade" bug).
  * - Local typo / unknown-member marks always stay (remote parse does not know them)
  * - Style noise is filtered on the remote side ({@link isRemoteStyleNoise})
  */
@@ -1366,7 +1369,7 @@ export function mergePreevalDiagnostics(
   const keptLocal = local.filter((l) => {
     if (l.severity === 'typo' || l.source === 'preeval-typo') return true;
     if (l.severity !== 'error') return true;
-    return !remoteErrors.some((r) => rangesOverlap(l, r));
+    return !remoteErrors.some((r) => r.line === l.line);
   });
   return dedupeDiagnostics([...remote, ...keptLocal]);
 }

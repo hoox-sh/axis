@@ -41,6 +41,11 @@ export const voidEditorTheme = EditorView.theme(
       color: 'var(--color-text)',
       fontSize: '13px',
     },
+    // Visible focus indicator for the editor surface (keyboard navigation).
+    '&.cm-focused': {
+      outline: '1px solid color-mix(in srgb, var(--color-accent) 55%, transparent)',
+      outlineOffset: '-1px',
+    },
     '.cm-scroller': {
       overflow: 'auto',
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
@@ -49,6 +54,9 @@ export const voidEditorTheme = EditorView.theme(
     '.cm-content': {
       caretColor: 'var(--color-accent)',
       minHeight: '100%',
+      // Long tokens (long string literals / URLs) must break in wrap mode —
+      // CM's lineWrapping alone cannot split them, so lines still clipped.
+      overflowWrap: 'anywhere',
     },
     '.cm-cursor, .cm-dropCursor': {
       borderLeftColor: 'var(--color-accent)',

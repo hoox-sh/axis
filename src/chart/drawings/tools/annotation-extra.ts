@@ -88,17 +88,18 @@ registerToolHandler({
   id: 'anchoredText',
   label: 'Anchored text',
   arity: 1,
-  create(points, color) {
+  textPrompt: { title: 'Anchored text', fallback: 'Text' },
+  create(points, color, text) {
     const pts = sanitizePoints(points);
     if (!pts[0]) return null;
-    const text = safePrompt('Anchored text', 'Text');
+    const label = sanitizeDrawingText(text ?? safePrompt('Anchored text', 'Text')) || 'Text';
     return {
       id: '',
       kind: 'anchoredText',
       p1: pts[0],
-      text,
+      text: label,
       color: sanitizeStrokeColor(color),
-      meta: { text },
+      meta: { text: label },
     } as TextDrawing;
   },
   paint(d, ctx) {

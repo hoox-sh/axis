@@ -173,7 +173,8 @@ body {
   --color-border-soft: #cccdd6;
   --color-text: #1a1b24;
   --color-text-dim: #5c5f6e;
-  --color-text-faint: #8b8e9c;
+  /* AA on #f4f3f8 (was #8b8e9c ≈ 2.9:1) */
+  --color-text-faint: #666a78;
   --color-accent: oklch(0.55 0.16 277);
   --color-accent-hover: oklch(0.48 0.14 277);
   --color-accent-2: #2e9e58;
@@ -248,11 +249,14 @@ textarea {
   outline: none;
 }
 
-/* Keyboard focus for buttons — accent border only, no outer glow */
+/* Keyboard focus for buttons — accent border only, no outer glow.
+   Icon-only ghost buttons with a transparent resting border get an outline
+   ring instead, so focus stays visible on every chrome surface. */
 .sc-btn:focus-visible {
   border-color: var(--color-accent);
   box-shadow: none;
-  outline: none;
+  outline: 1px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
+  outline-offset: 0;
 }
 
 select.sc-input:focus-visible,
@@ -2229,6 +2233,20 @@ body.axis-panel-dragging {
   color: var(--color-accent) !important;
   background: color-mix(in srgb, var(--color-accent) 10%, transparent) !important;
   border-color: transparent !important;
+}
+/* Transparent-resting-border buttons must keep a visible keyboard focus ring */
+.axis-editor-tools .axis-editor-tool-btn:focus-visible,
+.axis-editor-overflow-btn:focus-visible,
+.axis-editor-tabbar-actions .sc-btn:focus-visible,
+.axis-editor-status-btn:focus-visible {
+  border-color: var(--color-accent) !important;
+  outline: 1px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
+  outline-offset: 0;
+}
+.axis-editor-tab:focus-visible,
+.axis-editor-tabs [role='tab']:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
+  outline-offset: -1px;
 }
 .axis-editor-tool-icon {
   display: inline-flex;

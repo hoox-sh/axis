@@ -96,11 +96,18 @@ export interface ToolHandler {
   hit?: (d: Drawing, ctx: ToolHitCtx) => boolean;
   /**
    * Build a drawing entity from collected anchors (after arity satisfied).
-   * Layer assigns id / style defaults after.
+   * Layer assigns id / style defaults after. `text` comes from the layer's
+   * in-app prompt when {@link textPrompt} is set (blocking `window.prompt`
+   * is never used).
    */
-  create?: (points: Point[], color: string) => Drawing | null;
+  create?: (points: Point[], color: string, text?: string) => Drawing | null;
   /** Optional draft preview while placing (points include hover as last). */
   paintDraft?: (points: Point[], ctx: ToolViewCtx) => void;
+  /**
+   * When set, the layer collects text via the in-app prompt dialog before
+   * calling {@link create} and passes it as the third argument.
+   */
+  textPrompt?: { title: string; fallback: string };
 }
 
 const handlers = new Map<string, ToolHandler>();
@@ -137,9 +144,9 @@ export function registerToolHandler(h: ToolHandler): void {
         }
       : undefined,
     create: create
-      ? (points, color) => {
+      ? (points, color, text) => {
           try {
-            return create(points, color);
+            return create(points, color, text);
           } catch (err) {
             console.warn(`[drawings] create ${h.id} failed`, err);
             return null;

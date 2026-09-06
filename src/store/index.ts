@@ -284,6 +284,7 @@ const DEFAULTS: AppState = {
   lastRun: null,
   runResults: {},
   resultsFocusId: null,
+  newestRunId: null,
   indicatorSeries: {},
   logs: [],
   // Drawing integration — mirrored to DrawingLayer via manager-access / toolbar
@@ -630,6 +631,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       lastRun: null,
       runResults: {},
       resultsFocusId: null,
+      newestRunId: null,
       indicatorSeries: {},
       logs: [],
       bars: [],
@@ -1774,6 +1776,9 @@ export function setLastRun(result: unknown, opts: SetLastRunOpts = {}): string |
       // reconcile replaces keys (plain setStore merges nested objects)
       setStore('runResults', reconcile(prev));
     }
+    if (store.newestRunId === id) {
+      setStore('newestRunId', Object.keys(prev)[0] ?? null);
+    }
     if (store.resultsFocusId === id) {
       setResultsFocusId(Object.keys(prev).filter((k) => k !== id)[0] ?? null);
     }
@@ -1781,6 +1786,9 @@ export function setLastRun(result: unknown, opts: SetLastRunOpts = {}): string |
   }
 
   setStore('runResults', id, result as never);
+  // Track the newest run overall so the Results selector can flag a stale
+  // focus (AXIS-ED-RESULTS-STALE: footer showed a newer run than the panel).
+  if (store.newestRunId !== id) setStore('newestRunId', id);
 
   if (opts.focus || store.resultsFocusId == null) {
     setStore('resultsFocusId', id);

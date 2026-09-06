@@ -102,6 +102,17 @@ export const SystemLogs: Component = () => {
 
   const last = () => store.logs[store.logs.length - 1];
 
+  /**
+   * Expanded body height, clamped to the viewport. Reserve room for topbar,
+   * workspace and the Status strip so System Logs can never clip them.
+   */
+  const clampLogsBodyHeight = (): number => {
+    const preferred = Math.max(80, store.logsPanel.height - 28);
+    const reserved = 260; // topbar + workspace minimum + status strip
+    const max = Math.max(80, (typeof window !== 'undefined' ? window.innerHeight : 900) - reserved);
+    return Math.min(preferred, max);
+  };
+
   return (
     <Show when={isPanelOpen('logs')}>
       <div
@@ -182,7 +193,11 @@ export const SystemLogs: Component = () => {
           <div
             ref={listRef}
             class="overflow-auto border-t border-border-soft font-mono text-[10px] bg-bg-base"
-            style={{ height: `${Math.max(80, store.logsPanel.height - 28)}px` }}
+            style={{
+              // Clamp against the viewport so a persisted oversized height can
+              // never push the Status strip (rendered below) off-screen.
+              height: `${clampLogsBodyHeight()}px`,
+            }}
           >
             <Show
               when={store.logs.length > 0}

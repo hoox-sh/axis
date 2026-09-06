@@ -56,6 +56,14 @@ export const KeyboardSettingsPanel: Component = () => {
 
   const conflicts = createMemo(() => detectConflicts(DEFAULT_BINDINGS, overrides()));
 
+  // Scope per shortcut id — cross-scope pairs on one chord are intentional
+  // layering (app.escape vs chart.cancel-draft), not conflicts to flag.
+  const scopeOf = createMemo(() => {
+    const m = new Map<string, ShortcutDef['scope']>();
+    for (const def of DEFAULT_BINDINGS) if (!m.has(def.id)) m.set(def.id, def.scope);
+    return m;
+  });
+
   const { recording, start, stop } = useRecordChord((chord) => {
     if (recordingId() != null) {
       setShortcutOverride(recordingId()!, chord);
@@ -76,9 +84,15 @@ export const KeyboardSettingsPanel: Component = () => {
   };
 
   const conflictFor = (id: string): string[] => {
+    const scope = scopeOf().get(id);
     const list: string[] = [];
     for (const ids of conflicts().values()) {
-      if (ids.includes(id) && ids.length > 1) list.push(...ids.filter((x) => x !== id));
+      if (!ids.includes(id) || ids.length < 2) continue;
+      for (const other of ids) {
+        if (other === id) continue;
+        // Same scope only — cross-scope chords layer by design.
+        if (scopeOf().get(other) === scope) list.push(other);
+      }
     }
     return list;
   };
@@ -119,7 +133,7 @@ export const KeyboardSettingsPanel: Component = () => {
                 <span class="axis-keyboard-chord" role="cell">
                   <Show when={isRecording()}>
                     <span class="axis-keyboard-recording" data-testid={`axis-keyboard-recording-${def.id}`}>
-                      Press a key…
+                      Press a key… (Esc records Escape)
                     </span>
                   </Show>
                   <Show when={!isRecording() && chord}>

@@ -249,6 +249,9 @@ export const EditorProblems: Component<EditorProblemsProps> = (props) => {
         <span
           class="text-[10px] font-mono tabular-nums text-text-dim"
           data-testid="axis-editor-problems-count"
+          role="status"
+          aria-live="polite"
+          aria-label={`${props.diagnostics.length} problems`}
         >
           {props.diagnostics.length}
         </span>
@@ -265,6 +268,7 @@ export const EditorProblems: Component<EditorProblemsProps> = (props) => {
           type="button"
           class="sc-btn sc-btn-ghost px-1 py-0"
           title="Copy all problems to clipboard"
+          aria-label="Copy all problems to clipboard"
           data-testid="axis-editor-problems-copy-all"
           disabled={!props.diagnostics.length}
           onClick={() => void copyAll()}

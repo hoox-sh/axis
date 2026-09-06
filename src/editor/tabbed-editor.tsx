@@ -91,6 +91,7 @@ import { ColorToolsPanel } from './ColorToolsPanel';
 import { SymbolEmojiManager } from './SymbolEmojiManager';
 import { scanPineColors } from './pine-colors';
 import { Icons } from '../ui/icons';
+import { announce } from '../ui/sr-announce';
 
 export { countDocStats, cursorLineCol } from './doc-stats';
 
@@ -241,6 +242,29 @@ export const TabbedEditor: Component<Props> = (props) => {
       setProblemsOpen(true);
     }
     prevProblemsCount = n;
+  });
+
+  // Screen-reader announcement when the problem set changes (AXIS-ED-A11Y-LIVE):
+  // diagnostics were visual-only before (gutter / Problems panel).
+  let announceRuns = 0;
+  let prevAnnounceKey = '';
+  createEffect(() => {
+    const diags = editorDiagnostics();
+    announceRuns += 1;
+    if (announceRuns === 1) return; // initial mount — nothing changed
+    const counts = countDiagnostics(diags);
+    const key = `${diags.length}|${counts.errors}|${counts.warnings}`;
+    if (key === prevAnnounceKey) return;
+    prevAnnounceKey = key;
+    untrack(() => {
+      const msg =
+        counts.errors > 0
+          ? `${counts.errors} error${counts.errors === 1 ? '' : 's'}, ${counts.warnings} warning${counts.warnings === 1 ? '' : 's'} in Problems`
+          : counts.warnings > 0
+            ? `${counts.warnings} warning${counts.warnings === 1 ? '' : 's'} in Problems`
+            : 'No problems';
+      announce(msg);
+    });
   });
 
   const scheduleDraft = (doc: string, name?: string) => {
@@ -729,45 +753,50 @@ export const TabbedEditor: Component<Props> = (props) => {
         class="axis-editor-tabbar flex items-stretch bg-bg-base border-b-2 border-border flex-shrink-0 min-h-[2rem]"
         data-testid="axis-editor-tabbar"
       >
-        <div class="axis-editor-tabs flex items-stretch min-w-0 flex-1 overflow-x-auto">
+        <div
+          class="axis-editor-tabs flex items-stretch min-w-0 flex-1 overflow-x-auto"
+          role="tablist"
+          aria-label="Editor tabs"
+        >
           <For each={tabs()}>
             {(tab, idx) => (
-              <button
-                type="button"
+              <div
+                role="tab"
+                tabIndex={0}
+                aria-selected={idx() === activeTab()}
                 class={`axis-editor-tab flex items-center gap-1.5 px-2.5 py-1 text-[11px] border-r border-border-soft cursor-pointer whitespace-nowrap select-none ${
                   idx() === activeTab()
                     ? 'is-active bg-bg-panel text-text'
                     : 'text-text-dim hover:bg-bg-hover hover:text-text'
                 }`}
                 onClick={() => switchTab(idx())}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    switchTab(idx());
+                  }
+                }}
               >
                 {tab.dirty && (
                   <span class="inline-block w-1.5 h-1.5 rounded-full bg-orange flex-shrink-0" />
                 )}
                 <span class="max-w-[140px] overflow-hidden text-ellipsis">{tab.name}</span>
                 {tabs().length > 1 && (
-                  <span
-                    role="button"
-                    tabindex={0}
-                    class="text-text-faint hover:text-red text-sm px-0.5 leading-none hover:bg-bg-hover rounded"
+                  <button
+                    type="button"
+                    class="text-text-faint hover:text-red text-sm px-0.5 leading-none hover:bg-bg-hover rounded bg-transparent border-none cursor-pointer"
                     onClick={(e) => {
                       e.stopPropagation();
                       closeTab(idx());
                     }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        closeTab(idx());
-                      }
-                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
                     title="Close tab"
                     aria-label={`Close ${tab.name}`}
                   >
                     ×
-                  </span>
+                  </button>
                 )}
-              </button>
+              </div>
             )}
           </For>
           <button

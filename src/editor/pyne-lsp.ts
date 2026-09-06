@@ -41,15 +41,26 @@
 
 import {
   autocompletion,
+  closeCompletion,
   completionKeymap,
+  completionStatus,
   snippetCompletion,
   startCompletion,
   type Completion,
   type CompletionContext,
   type CompletionResult,
 } from '@codemirror/autocomplete';
-import { hoverTooltip, keymap, showTooltip, type EditorView, type Tooltip } from '@codemirror/view';
-import { Extension, StateField, type EditorState } from '@codemirror/state';
+import {
+  closeHoverTooltips,
+  hasHoverTooltips,
+  hoverTooltip,
+  keymap,
+  showTooltip,
+  type Command,
+  type EditorView,
+  type Tooltip,
+} from '@codemirror/view';
+import { Extension, StateEffect, StateField, type EditorState } from '@codemirror/state';
 import builtinsJson from './data/pyne-builtins.json';
 import { store } from '../store';
 import {
@@ -572,6 +583,7 @@ function compactParamHintSig(
  * Shown below the call while the cursor is inside it (empty selection).
  */
 export function buildParamHintTooltip(state: EditorState): Tooltip | null {
+  if (state.field(pineParamHintDismissedFlag, false)) return null;
   const text = state.doc.toString();
   const sel = state.selection.main;
   if (!sel.empty) return null;
@@ -660,11 +672,50 @@ export function buildParamHintTooltip(state: EditorState): Tooltip | null {
 export const pineParamHintField = StateField.define<Tooltip | null>({
   create: (state) => buildParamHintTooltip(state),
   update(tip, tr) {
-    if (!tr.docChanged && !tr.selection) return tip;
+    const dismissed = tr.effects.some((e) => e.is(setParamHintDismissed));
+    if (dismissed && !tr.docChanged && !tr.selection) return null;
+    if (!tr.docChanged && !tr.selection && !dismissed) return tip;
     return buildParamHintTooltip(tr.state);
   },
   provide: (f) => showTooltip.from(f),
 });
+
+/** Escape dismisses signature hints until the cursor moves / doc changes. */
+const setParamHintDismissed = StateEffect.define<undefined>();
+const pineParamHintDismissedFlag = StateField.define<boolean>({
+  create: () => false,
+  update(v, tr) {
+    for (const e of tr.effects) {
+      if (e.is(setParamHintDismissed)) return true;
+      if (e.is(clearParamHintDismissed)) return false;
+    }
+    if (tr.docChanged || tr.selection) return false;
+    return v;
+  },
+});
+const clearParamHintDismissed = StateEffect.define<undefined>();
+
+/**
+ * Escape dismisses the topmost editor overlay (suggest widget → hover docs →
+ * signature hints), matching Monaco / VS Code muscle memory. Returns false so
+ * other Escape consumers run when no overlay is open.
+ */
+export const escapeDismissEditorOverlay: Command = (view) => {
+  const st = view.state;
+  if (completionStatus(st) != null) {
+    closeCompletion(view);
+    return true;
+  }
+  if (hasHoverTooltips(st)) {
+    view.dispatch({ effects: closeHoverTooltips });
+    return true;
+  }
+  if (st.field(pineParamHintField, false) != null) {
+    view.dispatch({ effects: setParamHintDismissed.of(undefined) });
+    return true;
+  }
+  return false;
+};
 
 function cmType(kind?: string): string {
   switch ((kind || '').toLowerCase()) {
@@ -800,6 +851,39 @@ export function lookupBuiltinMember(name: string): BuiltinMeta | undefined {
   return undefined;
 }
 
+/**
+ * User-assigned local bindings in the buffer (`x = …`, `var y = …`,
+ * `[a, b] = …`). Powers context-aware completion ranking.
+ */
+export function scanLocalBindings(source: string): Set<string> {
+  const names = new Set<string>();
+  const re =
+    /(?:^|\n)[ \t]*(?:(?:var|varip)\s+)*(?:\[([^\]]+)\]|([A-Za-z_]\w*))\s*=(?![=>])/g;
+  for (let m = re.exec(source); m; m = re.exec(source)) {
+    if (m[2]) {
+      names.add(m[2]!);
+    } else if (m[1]) {
+      for (const part of m[1].split(',')) {
+        const name = part.trim().match(/^[A-Za-z_]\w*/)?.[0];
+        if (name) names.add(name);
+      }
+    }
+  }
+  return names;
+}
+
+/** True when the cursor sits at a statement start (indentation / block head). */
+function isStatementStart(textBefore: string): boolean {
+  const t = textBefore.replace(/\s+$/, '');
+  return t === '' || /[:{]\s*$/.test(t);
+}
+
+/** True when the cursor sits in a value position (`=`, `(`, `,`, operator …). */
+function isValuePosition(textBefore: string): boolean {
+  const t = textBefore.replace(/\s+$/, '');
+  return /[=(:,?+\-*/]\s*$|^\s*$/.test(t) || /\b(if|else|for|while)\s*$/.test(t);
+}
+
 /** Local (metadata) completion — always available offline. */
 export function pyneCompleteLocal(context: CompletionContext): CompletionResult | null {
   initIndex();
@@ -869,6 +953,30 @@ export function pyneCompleteLocal(context: CompletionContext): CompletionResult 
       category: 'local',
     });
   }
+
+  // Contextual ranking (AXIS-ED-AC-CONTEXT): rank by prefix quality, then by
+  // what fits the cursor position — user locals / series in value position,
+  // keywords + statement builtins at statement start.
+  const locals = scanLocalBindings(fullSource);
+  for (const name of locals) {
+    if (prefix && !name.toLowerCase().startsWith(prefix.toLowerCase())) continue;
+    if (filtered.some((f) => f.label === name)) continue;
+    filtered.push({ label: name, kind: 'variable', detail: 'local', category: 'local' });
+  }
+  const stmt = isStatementStart(textBefore);
+  const value = !stmt && isValuePosition(textBefore);
+  const p = prefix.toLowerCase();
+  const score = (m: BuiltinMeta): number => {
+    let s = 0;
+    const l = m.label.toLowerCase();
+    if (p && l.startsWith(p)) s += 50;
+    if (m.category === 'local' || locals.has(m.label)) s += 40;
+    if (stmt && m.kind === 'keyword') s += 40;
+    if (value && (m.kind === 'variable' || m.kind === 'constant' || m.category === 'series')) s += 30;
+    if (stmt && (m.kind === 'variable' || m.kind === 'constant') && !locals.has(m.label)) s -= 15;
+    return s;
+  };
+  filtered.sort((a, b) => score(b) - score(a));
 
   if (!filtered.length) return null;
   return {
@@ -1472,15 +1580,20 @@ export function pyneHoverLocal(
   if (declFact) return hoverFromFact(hit.from, hit.to, declFact);
 
   // 3. Facts / keywords / types / series / namespaces (before catalog — `close`
-  // is a series builtin, not `strategy.close`)
+  // is a series builtin, not `strategy.close`). For dotted words the exact
+  // catalog member (`input.int`) beats the last-segment *type* fact fallback
+  // (`int`) so hovers show signature + params, not namespace-level docs.
+  const exactMeta = lookupBuiltin(hit.word);
+  const exactMember = !!exactMeta && !isThinModuleStub(exactMeta);
   const fact =
     lookupHoverFact(hit.word) ||
-    (hit.word.includes('.') ? lookupHoverFact(hit.word.split('.').pop() || '') : null) ||
+    (hit.word.includes('.') && !exactMember
+      ? lookupHoverFact(hit.word.split('.').pop() || '')
+      : null) ||
     (seg.count > 1 ? lookupHoverFact(seg.name, { prefer: 'namespace' }) : null);
   if (fact) return hoverFromFact(hit.from, hit.to, fact);
-
   // 4. Builtins catalog — exact names only (never `Foo.new` → `array.new`)
-  const meta = lookupBuiltin(hit.word);
+  const meta = exactMeta;
   if (meta && isThinModuleStub(meta)) {
     const ns = lookupHoverFact(meta.label || hit.word, { prefer: 'namespace' });
     if (ns) return hoverFromFact(hit.from, hit.to, ns);
@@ -1607,6 +1720,11 @@ export function pyneLspExtensions(intel?: EditorIntelSettings): Extension[] {
   initIndex();
   const cfg = intel ?? readEditorIntel(store.editorIntel) ?? DEFAULT_EDITOR_INTEL;
   const out: Extension[] = [];
+  // Escape dismisses overlays (suggest / hover / signature) before any other
+  // Escape consumer — mounted first so it wins over completionKeymap.
+  if (cfg.autocompleteEnabled || cfg.hoverEnabled || cfg.signatureHints) {
+    out.push(keymap.of([{ key: "Escape", run: escapeDismissEditorOverlay }]));
+  }
   if (cfg.autocompleteEnabled) {
     out.push(
       autocompletion({
@@ -1630,7 +1748,7 @@ export function pyneLspExtensions(intel?: EditorIntelSettings): Extension[] {
       }),
     );
   }
-  if (cfg.signatureHints) out.push(pineParamHintField);
+  if (cfg.signatureHints) out.push(pineParamHintField, pineParamHintDismissedFlag);
   return out;
 }
 

@@ -79,8 +79,9 @@ import {
   sanitizeDrawingText,
   sanitizePoints,
   sanitizeStrokeColor,
-  safePrompt,
 } from './drawings/tools/safe';
+import { promptDrawingText, isDrawingTextPromptOpen } from './drawings/tools/text-prompt';
+import { announceError } from '../ui/sr-announce';
 import {
   arrowEndOf,
   arrowStartOf,
@@ -643,7 +644,12 @@ export class DrawingLayer {
   deleteSelected() {
     if (!this.selectedId) return;
     const cur = this.drawings.find((d) => d.id === this.selectedId);
-    if (cur && (this.lockAll || resolveDrawingStyle(cur).locked)) return;
+    if (cur && (this.lockAll || resolveDrawingStyle(cur).locked)) {
+      this.flashLockedNotice(
+        this.lockAll ? 'Drawings are locked — unlock all before deleting' : 'Drawing is locked — unlock it before deleting',
+      );
+      return;
+    }
     this.drawings = this.drawings.filter((d) => d.id !== this.selectedId);
     this.setSelectedId(null);
     this.emit();
@@ -789,7 +795,9 @@ export class DrawingLayer {
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     this.svg.addEventListener('contextmenu', onCtx);
-    window.addEventListener('keydown', onKey);
+    // Capture phase so editor/palette Escape consumers (which preventDefault
+    // in bubble handlers) can never block draft cancellation.
+    window.addEventListener('keydown', onKey, true);
     // Shortcut Hub → cancel draft / clear selection (Esc). The Hub owns the
     // chord; this window event is the layer-side receiver.
     const onCancelDraftEvent = () => this.cancelDraft();
@@ -801,7 +809,7 @@ export class DrawingLayer {
     this.unsubs.push(() => window.removeEventListener('pointermove', onMove));
     this.unsubs.push(() => window.removeEventListener('pointerup', onUp));
     this.unsubs.push(() => this.svg.removeEventListener('contextmenu', onCtx));
-    this.unsubs.push(() => window.removeEventListener('keydown', onKey));
+    this.unsubs.push(() => window.removeEventListener('keydown', onKey, true));
     this.unsubs.push(() => window.removeEventListener('axis-drawing-cancel-draft', onCancelDraftEvent));
 
     // Pan/zoom only — do NOT redraw on crosshair (that rebuilt pine SVG every
@@ -1025,8 +1033,60 @@ export class DrawingLayer {
     }
   }
 
+  /**
+   * Transient toast + screen-reader notice for blocked actions (locked erase,
+   * delete) — these were silent no-ops before (AXIS-UI-DRAW-ERASER-LOCK).
+   */
+  private flashLockedNotice(text: string) {
+    announceError(text);
+    try {
+      if (typeof document === 'undefined') return;
+      const el = document.createElement('div');
+      el.textContent = text;
+      el.setAttribute('data-testid', 'axis-drawing-flash');
+      Object.assign(el.style, {
+        position: 'fixed',
+        left: '50%',
+        bottom: '72px',
+        transform: 'translateX(-50%)',
+        zIndex: '70',
+        padding: '4px 10px',
+        background: 'var(--color-bg-elev, #171821)',
+        color: 'var(--color-text, #eceef4)',
+        border: '1px solid var(--color-border, #3a3d4a)',
+        borderRadius: '6px',
+        fontSize: '11px',
+        pointerEvents: 'none',
+        opacity: '1',
+        transition: 'opacity 0.3s ease',
+      } as CSSStyleDeclaration);
+      document.body.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+      }, 1400);
+      setTimeout(() => el.remove(), 1800);
+    } catch {
+      /* ignore */
+    }
+  }
+
   /** Escape cancels draft/selection; Delete/Backspace removes selected (not from inputs). */
   private handleKey(e: KeyboardEvent) {
+    const target = e.target as HTMLElement | null;
+    const tag = target?.tagName;
+    const inEditable =
+      tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!target?.isContentEditable;
+    // Mid-placement draft (measure / trend / …): Escape always cancels, even
+    // when another surface already preventDefault'd the event (editor overlays,
+    // palette). Runs in capture phase so bubble-phase consumers can't eat it.
+    if (e.key === 'Escape' && this.draft && !inEditable && !isDrawingTextPromptOpen()) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.draft = null;
+      this.clearDraftDom();
+      this.setSelectedId(null);
+      return;
+    }
     // The shortcut Hub owns these chords once mounted (capture phase +
     // preventDefault). This legacy handler stays as a fallback only; subtask
     // 09 of the keyboard-shortcuts feature retires it.
@@ -1038,8 +1098,7 @@ export class DrawingLayer {
     }
     if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedId) {
       // Don't steal from inputs
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (inEditable) return;
       e.preventDefault();
       this.deleteSelected();
     }
@@ -1121,11 +1180,18 @@ export class DrawingLayer {
     }
 
     if (this.tool === 'eraser') {
-      if (this.lockAll) return;
+      if (this.lockAll) {
+        // Clear affordance instead of a silent no-op (AXIS-UI-DRAW-ERASER-LOCK)
+        this.flashLockedNotice('Drawings are locked — unlock all before erasing');
+        return;
+      }
       const hit = this.hitTest(e);
       if (!hit) return;
       const target = this.drawings.find((d) => d.id === hit);
-      if (target && resolveDrawingStyle(target).locked) return;
+      if (target && resolveDrawingStyle(target).locked) {
+        this.flashLockedNotice('Drawing is locked — select it and toggle the lock to erase');
+        return;
+      }
       this.drawings = this.drawings.filter((d) => d.id !== hit);
       if (this.selectedId === hit) this.setSelectedId(null);
       else this.redrawUser();
@@ -1167,22 +1233,24 @@ export class DrawingLayer {
     }
 
     if (this.tool === 'text') {
-      const labelText = window.prompt('Label text', 'Note');
-      if (labelText == null) return;
-      const text = sanitizeDrawingText(labelText);
-      if (!text) return;
-      this.drawings.push(
-        this.applyCreateStyle({
-          id: uid(),
-          kind: 'text',
-          p1: pt,
-          text,
-          color: this.defaultColor('text'),
-        }),
-      );
-      this.emit();
-      this.redrawUser();
-      this.afterPlace();
+      // In-app prompt (focus lands in the input; Enter commits, Esc cancels).
+      void promptDrawingText({ title: 'Label text', value: 'Note' }).then((labelText) => {
+        if (labelText == null) return;
+        const text = sanitizeDrawingText(labelText);
+        if (!text) return;
+        this.drawings.push(
+          this.applyCreateStyle({
+            id: uid(),
+            kind: 'text',
+            p1: pt,
+            text,
+            color: this.defaultColor('text'),
+          }),
+        );
+        this.emit();
+        this.redrawUser();
+        this.afterPlace();
+      });
       return;
     }
 
@@ -1190,13 +1258,26 @@ export class DrawingLayer {
     const handler = getToolHandler(this.tool);
     const arity = toolArity(this.tool);
     if (arity === 1 && handler?.create) {
-      const created = handler.create([pt], this.defaultColor(this.tool));
-      if (created) {
-        created.id = uid();
-        this.drawings.push(this.applyCreateStyle(created));
-        this.emit();
-        this.redrawUser();
-        this.afterPlace();
+      const place = (text?: string) => {
+        const created = handler.create!([pt], this.defaultColor(this.tool), text);
+        if (created) {
+          created.id = uid();
+          this.drawings.push(this.applyCreateStyle(created));
+          this.emit();
+          this.redrawUser();
+          this.afterPlace();
+        }
+      };
+      if (handler.textPrompt) {
+        void promptDrawingText({
+          title: handler.textPrompt.title,
+          value: handler.textPrompt.fallback,
+        }).then((t) => {
+          if (t == null) return;
+          place(t);
+        });
+      } else {
+        place();
       }
       return;
     }
@@ -1286,17 +1367,20 @@ export class DrawingLayer {
         ? d.p1.price.toFixed(2)
         : 'Note';
     const current = drawingTextOf(d) || fallback;
-    const next = safePrompt('Label text', current);
-    if (!next || next === current) return;
-    const idx = this.drawings.findIndex((x) => x.id === d.id);
-    if (idx < 0) return;
-    this.drawings[idx] = {
-      ...d,
-      text: next,
-      meta: { ...(d.meta || {}), text: next },
-    } as Drawing;
-    this.emit();
-    this.redrawUser();
+    // In-app prompt for text edits (never a blocking window.prompt).
+    void promptDrawingText({ title: 'Label text', value: current }).then((raw) => {
+      const next = raw == null ? '' : sanitizeDrawingText(raw);
+      if (!next || next === current) return;
+      const idx = this.drawings.findIndex((x) => x.id === d.id);
+      if (idx < 0) return;
+      this.drawings[idx] = {
+        ...d,
+        text: next,
+        meta: { ...(d.meta || {}), text: next },
+      } as Drawing;
+      this.emit();
+      this.redrawUser();
+    });
   };
 
   private commitDraftPoints(points: Point[]) {
@@ -1314,9 +1398,26 @@ export class DrawingLayer {
     // Refuse zero-length 2-pt geometry (would paint as a single handle)
     if (minPts >= 2 && anchorsTooClose(clean[0]!, clean[clean.length - 1]!)) return;
 
+    // Text-prompt tools collect their label via the in-app prompt first.
+    if (handler?.textPrompt) {
+      void promptDrawingText({
+        title: handler.textPrompt.title,
+        value: handler.textPrompt.fallback,
+      }).then((t) => {
+        if (t == null) return;
+        this.pushCreatedDrawing(tool, clean, t);
+      });
+      return;
+    }
+    this.pushCreatedDrawing(tool, clean);
+  }
+
+  /** Build + apply a committed drawing from sanitized anchors (final step). */
+  private pushCreatedDrawing(tool: DrawingToolId, clean: Point[], text?: string) {
+    const handler = getToolHandler(tool);
     let drawing: Drawing | null = null;
     if (handler?.create) {
-      drawing = handler.create(clean, this.defaultColor(tool));
+      drawing = handler.create(clean, this.defaultColor(tool), text);
     } else if (clean.length >= 2 && needsTwoPoints(tool)) {
       const p1 = { time: clean[0]!.time, price: clean[0]!.price };
       const p2 = { time: clean[1]!.time, price: clean[1]!.price };
@@ -1384,7 +1485,8 @@ export class DrawingLayer {
         return;
       }
       if (handler?.create && points.length >= (typeof handler.arity === 'number' ? handler.arity : 2)) {
-        const d = handler.create(points, DRAWING_COLORS.muted);
+        // Empty text keeps preview non-prompting (handlers fall back to 'Note').
+        const d = handler.create(points, DRAWING_COLORS.muted, '');
         if (d) {
           d.id = 'draft';
           this.paintDrawing(this.gDraft, d, true);

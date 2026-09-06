@@ -237,6 +237,14 @@ export const DrawingToolbar: Component = () => {
   /** Which flyout menu is open (`null` = none). */
   const [openGroup, setOpenGroup] = createSignal<ToolGroupId | null>(null);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
+  /** Per-group inline clamp so tall flyouts never spill past the viewport. */
+  const [flyoutClamp, setFlyoutClamp] = createSignal<Partial<Record<ToolGroupId, Record<string, string>>>>(
+    {},
+  );
+  /** Inline clamp for the settings popover (open up vs down + max-height). */
+  const [settingsClamp, setSettingsClamp] = createSignal<Record<string, string>>({});
+  let rootRef: HTMLDivElement | undefined;
+  let railRef: HTMLDivElement | undefined;
 
   const selected = createMemo(() => {
     const id = store.selectedDrawingId;
@@ -342,6 +350,64 @@ export const DrawingToolbar: Component = () => {
     });
   });
 
+  /** Measure available space around an anchor within the nearest clipping ancestor. */
+  const measureSpace = (
+    anchor: HTMLElement | null,
+    gap = 8,
+    from: 'top' | 'bottom' = 'top',
+  ): { below: number; above: number } => {
+    if (!anchor) return { below: 0, above: 0 };
+    const r = anchor.getBoundingClientRect();
+    // The chart slot is overflow-hidden; clamp to the nearest clipping ancestor (or window).
+    let limitTop = 0;
+    let limitBottom = window.innerHeight;
+    for (let el = anchor.parentElement; el; el = el.parentElement) {
+      const s = window.getComputedStyle(el);
+      if (/(hidden|clip)/.test(`${s.overflow} ${s.overflowY}`)) {
+        const c = el.getBoundingClientRect();
+        limitTop = Math.max(limitTop, c.top);
+        limitBottom = Math.min(limitBottom, c.bottom);
+        break;
+      }
+    }
+    const topEdge = from === 'top' ? r.top : r.bottom;
+    return {
+      below: Math.max(0, limitBottom - topEdge - gap),
+      above: Math.max(0, r.bottom - limitTop - gap),
+    };
+  };
+
+  /** Anchor rect after the popup renders; measured on the group wrapper, not the popup. */
+  const scheduleFlyoutClamp = (groupId: ToolGroupId) => {
+    requestAnimationFrame(() => {
+      const wrap = rootRef?.querySelector<HTMLElement>(`[data-drawing-group="${groupId}"]`);
+      if (!wrap) return;
+      const { below, above } = measureSpace(wrap);
+      setFlyoutClamp((prev) => ({
+        ...prev,
+        [groupId]:
+          below >= 160 || below >= above
+            ? { top: '0', bottom: 'auto', 'max-height': `${Math.max(120, below)}px` }
+            : { top: 'auto', bottom: '0', 'max-height': `${Math.max(120, above)}px` },
+      }));
+    });
+  };
+
+  const scheduleSettingsClamp = () => {
+    requestAnimationFrame(() => {
+      const wrap = rootRef?.querySelector<HTMLElement>('[data-drawing-settings]');
+      if (!wrap) return;
+      const btn = wrap.querySelector<HTMLElement>('button');
+      const { below, above } = measureSpace(btn ?? wrap, 8, 'bottom');
+      // Popover hangs from `top-full` (down) or `bottom-full`+margin (up).
+      setSettingsClamp(
+        below >= 200 || below >= above
+          ? { top: '100%', bottom: 'auto', 'margin-top': '0.25rem', 'margin-bottom': '0', 'max-height': `${Math.max(120, below)}px` }
+          : { top: 'auto', bottom: '100%', 'margin-top': '0', 'margin-bottom': '0.25rem', 'max-height': `${Math.max(120, above)}px` },
+      );
+    });
+  };
+
   /** Activate a tool in store + layer; remember it as the group's last tool. */
   const selectTool = (id: DrawingToolId) => {
     setDrawingTool(id);
@@ -368,6 +434,7 @@ export const DrawingToolbar: Component = () => {
         return;
       }
       setOpenGroup(groupId);
+      scheduleFlyoutClamp(groupId);
       return;
     }
     const last = store.drawingUi.lastToolByGroup[groupId] as DrawingToolId | undefined;
@@ -411,9 +478,10 @@ export const DrawingToolbar: Component = () => {
   // top-14 clears symbol chip + script badge row; badges are offset right of the
   // rail so they stay clear of this ChartHost-sibling toolbar/style bar.
   return (
-    <div class="absolute left-2 top-14 z-20 flex items-start gap-1.5 pointer-events-none">
+    <div ref={rootRef} class="absolute left-2 top-14 z-20 flex items-start gap-1.5 pointer-events-none">
       {/* Left rail */}
       <div
+        ref={railRef}
         class="pointer-events-auto flex flex-col gap-0.5 p-1 bg-bg-panel/95 border border-border rounded-[var(--radius-sc)]"
         role="toolbar"
         aria-label="Drawing tools"
@@ -462,8 +530,9 @@ export const DrawingToolbar: Component = () => {
                 </button>
                 <Show when={g.flyout && openGroup() === g.id}>
                   <div
-                    class="absolute left-full top-0 ml-1 min-w-[9.5em] p-1 flex flex-col gap-0.5 bg-bg-elev border border-border rounded-[var(--radius-input)] shadow-lg z-50"
+                    class="absolute left-full top-0 ml-1 min-w-[9.5em] p-1 flex flex-col gap-0.5 overflow-y-auto bg-bg-elev border border-border rounded-[var(--radius-input)] shadow-lg z-50"
                     role="menu"
+                    style={flyoutClamp()[g.id]}
                     data-drawing-flyout
                   >
                     <For each={g.tools}>
@@ -801,7 +870,13 @@ export const DrawingToolbar: Component = () => {
               aria-label="Drawing settings"
               aria-expanded={settingsOpen()}
               data-testid="axis-drawing-settings"
-              onClick={() => setSettingsOpen((v) => !v)}
+              onClick={() => {
+                setSettingsOpen((v) => {
+                  const next = !v;
+                  if (next) scheduleSettingsClamp();
+                  return next;
+                });
+              }}
             >
               <Icons.settings size={14} strokeWidth={2.25} />
             </button>
@@ -812,6 +887,7 @@ export const DrawingToolbar: Component = () => {
               class="pointer-events-auto absolute left-0 top-full mt-1 w-[18.5rem] max-h-[min(70vh,28rem)] overflow-y-auto p-2 flex flex-col gap-2 bg-bg-elev border border-border rounded-[var(--radius-input)] shadow-lg z-50"
               role="dialog"
               aria-label="Drawing settings"
+              style={settingsClamp()}
               data-testid="axis-drawing-settings-popover"
             >
               <div class="text-[11px] font-semibold text-text px-0.5">

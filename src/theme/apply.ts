@@ -56,6 +56,73 @@ function tok(tokens: ThemeTokens, key: string, fallback: string): string {
   return v != null && String(v).trim() ? String(v) : fallback;
 }
 
+// ── Contrast floors (WCAG-ish) ──────────────────────────────────────────────
+// Chart presets drive UI label colors (`scale.text` → `--color-text-dim`), and
+// some presets (Graphite, mono) ship subdued values ≈2.4–3.9:1. These helpers
+// numerically mix a color toward the body-text color until it clears a floor.
+
+type RGB = { r: number; g: number; b: number; a: number };
+
+function toRgb(c: string): RGB | null {
+  const m = /^#([0-9a-f]{3,8})$/i.exec(c.trim());
+  if (!m) return null;
+  let h = m[1]!;
+  if (h.length === 3 || h.length === 4) h = [...h].map((x) => x + x).join('');
+  if (h.length !== 6 && h.length !== 8) return null;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const a = h.length === 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1;
+  return { r, g, b, a };
+}
+
+function rgbToCss({ r, g, b, a }: RGB): string {
+  const hx = (n: number) => Math.round(Math.min(255, Math.max(0, n))).toString(16).padStart(2, '0');
+  const base = `#${hx(r)}${hx(g)}${hx(b)}`;
+  return a >= 0.999 ? base : `${base}${hx(a * 255)}`;
+}
+
+function mixRgb(a: RGB, b: RGB, t: number): RGB {
+  return {
+    r: a.r + (b.r - a.r) * t,
+    g: a.g + (b.g - a.g) * t,
+    b: a.b + (b.b - a.b) * t,
+    a: a.a,
+  };
+}
+
+function relLuminance({ r, g, b }: RGB): number {
+  const lin = (v: number) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+function contrastRatio(fg: RGB, bg: RGB): number {
+  const l1 = relLuminance(fg);
+  const l2 = relLuminance(bg);
+  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+}
+
+/**
+ * Mix `color` toward `text` (numeric sRGB interpolation) until it reaches
+ * `min` contrast against `bg`. Returns the original value when unparseable
+ * (color-mix / var() strings pass through untouched) or already sufficient.
+ */
+function ensureContrast(color: string, bg: string, text: string, min: number): string {
+  const c = toRgb(color);
+  const b = toRgb(bg);
+  const t = toRgb(text);
+  if (!c || !b || !t) return color;
+  if (contrastRatio(c, b) >= min) return color;
+  for (let i = 1; i <= 10; i++) {
+    const m = mixRgb(c, t, i / 10);
+    if (contrastRatio(m, b) >= min) return rgbToCss(m);
+  }
+  return rgbToCss(t);
+}
+
 /**
  * Map resolved theme tokens → full product chrome CSS variables
  * (`--color-*` used by Tailwind / index.css) so presets recolor the whole UI.
@@ -68,7 +135,6 @@ export function buildChromeCssVars(
   const panel = tok(tokens, 'chart.panel', base === 'light' ? '#ebeaf2' : '#111218');
   const elev = tok(tokens, 'chart.elev', base === 'light' ? '#e0dfe8' : '#171821');
   const fg = tok(tokens, 'chart.fg_color', base === 'light' ? '#1a1b24' : '#c8cad4');
-  const dim = tok(tokens, 'scale.text', base === 'light' ? '#5c5f6e' : '#8b8e9c');
   const border = tok(tokens, 'scale.border', base === 'light' ? '#b8b6c4' : '#3a3d4a');
   const accent = tok(tokens, 'ui.accent', base === 'light' ? '#5a6ad4' : '#939fff');
   const up = tok(tokens, 'ui.up', tok(tokens, 'bar.up.color', '#5ecf8a'));
@@ -79,6 +145,20 @@ export function buildChromeCssVars(
     base === 'light'
       ? fg
       : tok(tokens, 'chart.fg_color', '#eceef4');
+
+  // Secondary labels: presets drive these via `scale.text`; enforce a contrast
+  // floor so subdued presets (Graphite / mono) stay legible in the app chrome.
+  const dim = ensureContrast(tok(tokens, 'scale.text', base === 'light' ? '#5c5f6e' : '#8b8e9c'), bg, text, 4);
+  // Faint labels: mix *away from* the surface (darken on light, lighten on
+  // dark) — the old single-direction mix washed light themes out further.
+  const faintRaw = (() => {
+    const d = toRgb(dim);
+    const b = toRgb(bg);
+    const t = toRgb(text);
+    if (!d || !b || !t) return `color-mix(in srgb, ${dim} 70%, ${bg} 30%)`;
+    return rgbToCss(mixRgb(d, base === 'light' ? t : b, 0.3));
+  })();
+  const faint = ensureContrast(faintRaw, base === 'light' ? bg : panel, text, 3.2);
 
   const mixBlack = base === 'light' ? '#0a0b10' : '#000000';
   const mixWhite = base === 'light' ? '#ffffff' : '#ffffff';
@@ -99,7 +179,7 @@ export function buildChromeCssVars(
     // Text
     '--color-text': text,
     '--color-text-dim': dim,
-    '--color-text-faint': `color-mix(in srgb, ${dim} 70%, ${bg} 30%)`,
+    '--color-text-faint': faint,
 
     // Accents / signals
     '--color-accent': accent,

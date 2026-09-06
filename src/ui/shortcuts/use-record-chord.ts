@@ -71,6 +71,11 @@ export function useRecordChord(onRecord: (chord: string) => void): RecordChordAp
       window.removeEventListener('keydown', listener, true);
       listener = null;
     }
+    try {
+      document.body?.removeAttribute?.('data-axis-recording-chord');
+    } catch {
+      /* non-DOM test environments */
+    }
     setRecording(false);
   };
 
@@ -81,11 +86,21 @@ export function useRecordChord(onRecord: (chord: string) => void): RecordChordAp
       const chord = chordFromEvent(e);
       if (!chord) return; // no usable key (e.g. modifier-only event)
       e.preventDefault();
+      // Capture-phase + immediate stop: no other Escape consumer (studio page
+      // close, chart draft cancel, editor overlays) may steal the recorded key.
+      e.stopImmediatePropagation?.();
       e.stopPropagation();
       stop();
       onRecord(chord);
     };
     window.addEventListener('keydown', listener, true);
+    // Cross-layer guard: studio page close / chart handlers check this before
+    // acting on Escape while a recording session is open.
+    try {
+      document.body?.setAttribute?.('data-axis-recording-chord', '1');
+    } catch {
+      /* non-DOM test environments */
+    }
   };
 
   onCleanup(stop);

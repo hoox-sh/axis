@@ -519,6 +519,12 @@ export interface AppState {
    */
   resultsFocusId: string | null;
   /**
+   * Key of the most recent {@link runResults} write (newest run overall).
+   * Lets the Results selector flag "stale" when focus lags the footer
+   * (AXIS-ED-RESULTS-STALE). Ephemeral — not persisted.
+   */
+  newestRunId: string | null;
+  /**
    * Ephemeral last plot series per applied indicator (for cross-indicator
    * `input.source` picks). Not persisted — rebuilt on re-run.
    */

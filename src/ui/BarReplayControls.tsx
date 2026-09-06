@@ -124,9 +124,23 @@ export const BarReplayControls: Component = () => {
       if (st.active) applyVisibleToChart(false);
       armTimer(st.active && st.playing);
     });
+    // Escape exits replay (single press). Drawing-draft cancel runs earlier in
+    // the capture phase and stops propagation, so this only fires when idle.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (!isReplayActive()) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
+      e.preventDefault();
+      exitBarReplay();
+      setState(getReplayState());
+    };
+    document.addEventListener('keydown', onKey);
     onCleanup(() => {
       unsub();
       clearTimer();
+      document.removeEventListener('keydown', onKey);
     });
   });
 

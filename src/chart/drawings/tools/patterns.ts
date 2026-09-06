@@ -211,18 +211,19 @@ registerToolHandler({
   id: 'callout',
   label: 'Callout',
   arity: 2,
-  create(points, color) {
+  textPrompt: { title: 'Callout text', fallback: 'Note' },
+  create(points, color, text) {
     const p = sanitizePoints(points);
     if (p.length < 2) return null;
-    const text = safePrompt('Callout text', 'Note');
+    const label = sanitizeDrawingText(text ?? safePrompt('Callout text', 'Note')) || 'Note';
     return {
       id: '',
       kind: 'callout',
       p1: p[0]!,
       p2: p[1]!,
       color: sanitizeStrokeColor(color),
-      text,
-      meta: { text },
+      text: label,
+      meta: { text: label },
     };
   },
   paint(d, ctx) {
@@ -282,15 +283,16 @@ registerToolHandler({
   id: 'note',
   label: 'Note',
   arity: 1,
-  create(points, color) {
+  textPrompt: { title: 'Note text', fallback: 'Note' },
+  create(points, color, text) {
     const p = sanitizePoints(points);
     if (!p[0]) return null;
-    const text = safePrompt('Note text', 'Note');
+    const label = sanitizeDrawingText(text ?? safePrompt('Note text', 'Note')) || 'Note';
     return {
       id: '',
       kind: 'note',
       p1: p[0],
-      text,
+      text: label,
       color: sanitizeStrokeColor(color),
     } as TextDrawing;
   },

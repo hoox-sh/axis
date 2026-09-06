@@ -61,6 +61,13 @@ export const ScriptRunSelect: Component<ScriptRunSelectProps> = (props) => {
     return opts[0]?.id ?? EDITOR_RUN_KEY;
   });
 
+  /** True when a newer run exists than the one shown (AXIS-ED-RESULTS-STALE). */
+  const stale = createMemo(() => {
+    const newest = store.newestRunId;
+    if (!newest) return false;
+    return value() !== newest && !!(store.runResults?.[newest] ?? null);
+  });
+
   return (
     <Show when={show()}>
       <label
@@ -72,6 +79,15 @@ export const ScriptRunSelect: Component<ScriptRunSelectProps> = (props) => {
         title="Which script’s last run is shown"
       >
         <span class="sr-only">Script</span>
+        <Show when={stale()}>
+          <span
+            class="text-orange text-[9px] font-semibold whitespace-nowrap"
+            title="A newer run finished — pick its script below to view it"
+            data-testid={`${testId()}-stale`}
+          >
+            new run
+          </span>
+        </Show>
         <select
           class={studio() ? 'ax-select' : 'sc-input text-[0.78em] py-0.5 px-1 max-w-full min-w-0'}
           data-testid={testId()}

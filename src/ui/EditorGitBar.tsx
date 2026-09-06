@@ -179,6 +179,7 @@ export const EditorGitBar: Component<EditorGitBarProps> = (props) => {
         type="button"
         class="sc-btn sc-btn-ghost px-1.5 text-[10px]"
         title={pullTitle()}
+        aria-label={pullTitle()}
         disabled={busy()}
         data-testid="axis-btn-editor-git-pull"
         onClick={() => void onPull()}
@@ -192,6 +193,7 @@ export const EditorGitBar: Component<EditorGitBarProps> = (props) => {
         type="button"
         class="sc-btn sc-btn-ghost px-1.5 text-[10px]"
         title={pushTitle()}
+        aria-label={pushTitle()}
         disabled={busy()}
         data-testid="axis-btn-editor-git-push"
         onClick={() => void onPush()}

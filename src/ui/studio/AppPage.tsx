@@ -36,6 +36,8 @@ export function AppPage(props: {
 
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
+      // A shortcut-recording session owns Escape (capture phase + stop).
+      if (document.body?.hasAttribute('data-axis-recording-chord')) return;
       e.preventDefault();
       props.onClose();
     }

@@ -245,8 +245,11 @@ export const Topbar: Component<{
   };
 
   const toggleReplay = () => {
-    if (isReplayActive()) {
+    // Trust both the subscribed UI state and the module session — a missed
+    // emission must never turn an exit click into a start (double-click bug).
+    if (replayOn() || isReplayActive()) {
       exitBarReplay();
+      setReplayOn(false);
       setStatus('ready', 'Bar replay ended');
       return;
     }
@@ -682,6 +685,7 @@ export const Topbar: Component<{
           class={`sc-btn sc-btn-ghost ${isPanelOpen('watchlist') || store.watchlist.open ? 'is-active' : ''}`}
           onClick={props.onToggleWatchlist}
           title="Toggle watchlist"
+          aria-label="Watchlist"
           aria-pressed={isPanelOpen('watchlist') || store.watchlist.open}
           data-testid="axis-btn-watchlist"
         >
@@ -698,6 +702,7 @@ export const Topbar: Component<{
           }`}
           onClick={props.onToggleEditor}
           title="Toggle docked editor"
+          aria-label="Editor"
           aria-pressed={!!(store.editor.open && store.editor.mode === 'docked')}
           data-testid="axis-btn-editor"
         >
@@ -715,6 +720,7 @@ export const Topbar: Component<{
           class={`sc-btn sc-btn-ghost ${isPanelOpen('library') ? 'is-active' : ''}`}
           onClick={() => toggleLibraryPanel()}
           title="Script library — load / save Pine scripts"
+          aria-label="Library"
           aria-pressed={isPanelOpen('library')}
           data-testid="axis-btn-library"
         >
@@ -729,6 +735,7 @@ export const Topbar: Component<{
           class={`sc-btn sc-btn-ghost ${isPanelOpen('indicators') || store.indicatorPanel.open ? 'is-active' : ''}`}
           onClick={() => toggleIndicatorPanel()}
           title="Toggle scripts list — applied Pine indicators & strategies"
+          aria-label="Scripts"
           aria-pressed={isPanelOpen('indicators') || store.indicatorPanel.open}
           data-testid="axis-btn-indicators"
         >
@@ -743,6 +750,7 @@ export const Topbar: Component<{
           class={`sc-btn sc-btn-ghost ${isPanelOpen('layers') || store.layerPanel.open ? 'is-active' : ''}`}
           onClick={() => toggleLayerPanel()}
           title="Layers — left slide-in: panes, scripts, drawings"
+          aria-label="Layers"
           aria-pressed={isPanelOpen('layers') || store.layerPanel.open}
           data-testid="axis-btn-layers"
         >
@@ -757,6 +765,7 @@ export const Topbar: Component<{
           class={`sc-btn sc-btn-ghost ${isPanelOpen('datasource') ? 'is-active' : ''}`}
           onClick={() => toggleDataSourcePanel()}
           title="Data Source Manager — background OHLCV backfill"
+          aria-label="Data Source Manager"
           aria-pressed={isPanelOpen('datasource')}
           data-testid="axis-btn-datasource"
         >
@@ -771,6 +780,7 @@ export const Topbar: Component<{
           class={`sc-btn sc-btn-ghost ${isPanelOpen('onchain') ? 'is-active' : ''}`}
           onClick={() => toggleOnchainPanel()}
           title="On-Chain — DefiLlama protocol TVL overlays"
+          aria-label="On-Chain"
           aria-pressed={isPanelOpen('onchain')}
           data-testid="axis-btn-onchain"
         >
@@ -785,6 +795,7 @@ export const Topbar: Component<{
           class={`sc-btn sc-btn-ghost ${isPanelOpen('alerts') || store.alertsPanel.open ? 'is-active' : ''}`}
           onClick={() => toggleAlertsPanel()}
           title="Price alerts — create, toggle, webhook"
+          aria-label="Alerts"
           aria-pressed={isPanelOpen('alerts') || store.alertsPanel.open}
           data-testid="axis-btn-alerts"
         >
@@ -799,6 +810,7 @@ export const Topbar: Component<{
           class={`sc-btn sc-btn-ghost ${isPanelOpen('dataview') || store.dataViewPanel.open ? 'is-active' : ''}`}
           onClick={() => toggleDataViewPanel()}
           title="Data window — OHLCV & plot values at crosshair"
+          aria-label="Values"
           aria-pressed={isPanelOpen('dataview') || store.dataViewPanel.open}
           data-testid="axis-btn-dataview"
         >
@@ -812,6 +824,7 @@ export const Topbar: Component<{
           type="button"
           class={`sc-btn sc-btn-ghost ${store.resultsPanel.open ? 'is-active' : ''}`}
           title="Results & export"
+          aria-label="Results"
           data-testid="axis-btn-results"
           aria-pressed={store.resultsPanel.open}
           onClick={() => {
@@ -829,6 +842,7 @@ export const Topbar: Component<{
           type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('scriptlogs') ? 'is-active' : ''}`}
           title="Script Logs — Pine log.* from the last run"
+          aria-label="Script Logs"
           data-testid="axis-btn-scriptlogs-top"
           aria-pressed={isPanelOpen('scriptlogs')}
           onClick={() => toggleScriptLogsPanel()}
@@ -843,6 +857,7 @@ export const Topbar: Component<{
           type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('logs') ? 'is-active' : ''}`}
           title="System Logs — app / transport / boot telemetry"
+          aria-label="System Logs"
           data-testid="axis-btn-systemlogs"
           aria-pressed={isPanelOpen('logs')}
           onClick={() => toggleSystemLogsPanel()}
@@ -857,6 +872,7 @@ export const Topbar: Component<{
           type="button"
           class={`sc-btn sc-btn-ghost ${isPanelOpen('statusbar') ? 'is-active' : ''}`}
           title="Status — connection HUD and status message"
+          aria-label="Status"
           data-testid="axis-btn-statusbar"
           aria-pressed={isPanelOpen('statusbar')}
           onClick={() => toggleStatusBarPanel()}
