@@ -157,6 +157,7 @@ export interface ActivePlugins {
 import type { Drawing, DrawingToolId } from '../chart/drawing-types';
 import type { ChartThemeState } from '../theme';
 import type { ProviderSession } from '../data/provider';
+import type { ShortcutOverrides } from '../ui/shortcuts/types';
 export type { Drawing, DrawingToolId };
 export type { ChartThemeState };
 export type { ProviderSession };
@@ -253,6 +254,15 @@ export interface TelemetryState {
    * bundle. **Default false** — opt-in privacy. Persisted with hud.
    */
   shareOnError: boolean;
+}
+
+/**
+ * Keyboard shortcut overrides persisted on the app store.
+ * `overrides` maps a {@link ShortcutId} to a user-chosen chord string, or
+ * `null` to clear the default binding entirely.
+ */
+export interface ShortcutSlice {
+  overrides: ShortcutOverrides;
 }
 
 /**
@@ -447,6 +457,11 @@ export interface AppState {
    * (default 80 chars). Persisted. Default on.
    */
   editorRulerEnabled: boolean;
+  /**
+   * Keyboard shortcut overrides — id → user-chosen chord (or `null` to clear
+   * the default binding). Persisted. See {@link ShortcutSlice}.
+   */
+  shortcuts: ShortcutSlice;
   /**
    * Soft line wrap in the Pine editor. Persisted. Default on.
    * Toggle from the editor stats strip “wrap” control.

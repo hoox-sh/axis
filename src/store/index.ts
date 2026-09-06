@@ -60,7 +60,9 @@ import type {
   TransportClass,
   TelemetryState,
   TopbarSettings,
+  ShortcutSlice,
 } from './types';
+import type { ShortcutOverrides } from '../ui/shortcuts/types';
 import {
   DEFAULT_EDITOR_INTEL,
   EDITOR_INTEL_REV,
@@ -267,6 +269,7 @@ const DEFAULTS: AppState = {
   debugPinsEnabled: false,
   editorRulerEnabled: true,
   editorWrapEnabled: true,
+  shortcuts: { overrides: {} },
   editorIntel: { ...DEFAULT_EDITOR_INTEL },
   stream: { status: 'disconnected' },
   status: 'ready',
@@ -595,6 +598,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         typeof (bag as { editorRulerEnabled?: boolean }).editorRulerEnabled === 'boolean'
           ? !!(bag as { editorRulerEnabled?: boolean }).editorRulerEnabled
           : DEFAULTS.editorRulerEnabled,
+      shortcuts: hydrateShortcuts((bag as { shortcuts?: unknown }).shortcuts),
       editorWrapEnabled:
         typeof (bag as { editorWrapEnabled?: boolean }).editorWrapEnabled === 'boolean'
           ? !!(bag as { editorWrapEnabled?: boolean }).editorWrapEnabled
@@ -898,6 +902,19 @@ export function resetPersistQuotaFlag(): void {
   persistWriteWarned = false;
 }
 
+/** Restore durable shortcut overrides; unknown shapes fall back to empty. */
+function hydrateShortcuts(raw: unknown): ShortcutSlice {
+  if (!raw || typeof raw !== 'object') return { overrides: {} };
+  const bag = raw as { overrides?: unknown };
+  if (!bag.overrides || typeof bag.overrides !== 'object') return { overrides: {} };
+  const overrides: ShortcutOverrides = {};
+  for (const [id, chord] of Object.entries(bag.overrides as Record<string, unknown>)) {
+    if (chord === null) overrides[id] = null;
+    else if (typeof chord === 'string' && chord.trim()) overrides[id] = chord.trim();
+  }
+  return { overrides };
+}
+
 /** Restore durable compare prefs; always clear bars / loading / error. */
 function hydrateCompare(raw: unknown): CompareState {
   const base = { ...DEFAULTS.compare };
@@ -1189,6 +1206,7 @@ function seedStoreState(overlay: Partial<AppState> | null | undefined): AppState
     },
     strategyUi: { ...DEFAULTS.strategyUi },
     stream: { ...DEFAULTS.stream },
+    shortcuts: { overrides: { ...DEFAULTS.shortcuts.overrides } },
     compare: { ...DEFAULTS.compare, bars: [] },
     onchain: { ...DEFAULTS.onchain },
     chartTheme: defaultChartThemeState(),
@@ -1343,6 +1361,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     debugPinsEnabled: s.debugPinsEnabled,
     editorRulerEnabled: s.editorRulerEnabled,
     editorWrapEnabled: s.editorWrapEnabled,
+    shortcuts: unwrap(s.shortcuts ?? { overrides: {} }),
     editorIntel: readEditorIntel(s.editorIntel),
     lastValueLabelsVisible: s.lastValueLabelsVisible,
     lastValueNamesVisible: s.lastValueNamesVisible,
@@ -2923,6 +2942,18 @@ export function setEditorRulerEnabled(on: boolean) {
 /** Toggle the 80-column recommended line-length ruler in the Pine editor. */
 export function toggleEditorRulerEnabled() {
   setStore('editorRulerEnabled', !store.editorRulerEnabled);
+  persist();
+}
+
+/** Set a keyboard shortcut override (chord string) or clear it (`null`). */
+export function setShortcutOverride(id: string, chord: string | null): void {
+  setStore('shortcuts', 'overrides', id, chord);
+  persist();
+}
+
+/** Clear all keyboard shortcut overrides back to defaults. */
+export function resetShortcuts(): void {
+  setStore('shortcuts', 'overrides', reconcile({}));
   persist();
 }
 
