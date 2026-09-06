@@ -153,6 +153,7 @@ git push origin --tags
 | **All** | `bun packages/cli/bin/axis.js deploy all` | Worker then Pages |
 | **Health** | `bun run axis:health` | Probe deployed Worker `/health` |
 | **GHCR / Docker** | `make docker-push` | Multi-arch bake release (needs registry login) |
+| **npm CLI** | tag `v*` / `cli-v*` push, or Release (npm) workflow dispatch | `.github/workflows/release.yml` → `@hoox-sh/axis-cli`; org secret `NPM_TOKEN_HOOXSH` |
 
 ```bash
 # Typical product publish after tag
@@ -163,6 +164,7 @@ bun run axis:health
 
 - Production Worker must **not** ship `ALLOW_OPEN_KEYS=1` with real D1; bind `API_KEYS` KV (see harden-perf audit).
 - Never invent CF resource IDs — use `worker/wrangler.toml` / dashboard values.
+- **npm CLI release**: every `v*` tag publishes `@hoox-sh/axis-cli` when its `packages/cli` version is missing from the registry (skips otherwise). For a CLI-only release bump `packages/cli/package.json` and tag `cli-vX.Y.Z` — the workflow fails on a mismatched `cli-v*` tag. Publishing runs typecheck + tests + build, `npm publish --provenance`, registry verification, and a Node-only smoke test of the published tarball.
 
 ### Sync
 
@@ -198,7 +200,8 @@ bun run axis:health -- --oauth
 5. `git tag -a vX.Y.Z -m "AXIS vX.Y.Z"`.
 6. `git push origin main && git push origin vX.Y.Z`.
 7. Publish: `axis deploy all` (or Worker/Pages separately) + `axis:health`.
-8. Sync: `git fetch` / status clean; pyne scripts if needed.
+8. npm CLI: publish happens automatically from the tag (see Publish table). If the CLI changed, bump `packages/cli/package.json` first so the tag ships it.
+9. Sync: `git fetch` / status clean; pyne scripts if needed.
 
 ## Pine Script™ / naming parity (critical)
 

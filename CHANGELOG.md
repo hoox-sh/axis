@@ -20,6 +20,11 @@ _Generated/updated: 2026-09-06 · 340 commits · describe-tag: `v2.4.0`_
 - **Global keyboard shortcuts**: app-level chord dispatch hub (`src/ui/shortcuts/`) with capture-phase handling, dialog-skip guard, per-user persisted overrides on the app store, and a live shortcut registry — wired to the command palette, editor, and chart canvas.
   - **Recorder**: Settings → Keyboard → record chord, plus a **Shortcuts modal** listing default bindings with live rendering.
 - **Editor line ops** (`src/editor/cm-line-ops.ts`): `Prec.high` keymap extensions (duplicate line, toggle comment, indent/unindent, delete line) for the Pine editor; palette extensions render recorded chords.
+- **CLI npm release pipeline** (`.github/workflows/release.yml`): full publish flow for `@hoox-sh/axis-cli` via org secret `NPM_TOKEN_HOOXSH` —
+  - tag/version guard: `cli-v*` tags must equal `cli-v<packages/cli version>` (hard fail on mismatch); root `v*` tags publish the CLI when its version is missing from the registry and skip cleanly otherwise; `workflow_dispatch` gains a `force` re-attempt input.
+  - post-publish **registry verification** (`npm view` with propagation retries).
+  - **Node-only smoke test**: fetches the published tarball, installs it into a clean directory with `--ignore-scripts`, and asserts `axis --version` / `axis --help` on Node (no Bun, no repo).
+  - step summary now reports tag kind, registry verify, and smoke results.
 
 ### Fixed
 

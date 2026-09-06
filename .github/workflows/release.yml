@@ -1,12 +1,25 @@
 # Copyright (C) 2024-2026 jango_blockchained
 # SPDX-License-Identifier: AGPL-3.0-only
 
-# npm release for the AXIS CLI (`packages/cli` → @hoox-sh/axis-cli).
+# Full npm release pipeline for the AXIS CLI (`packages/cli` → @hoox-sh/axis-cli).
 #
-# Triggers on version tags (v*) and workflow_dispatch. Requires the
-# org secret `NPM_TOKEN_HOOXSH` (automation token with publish rights
-# for the @hoox-sh scope). Skips cleanly when the package version is
-# already on the registry, so re-running a tag never fails.
+# Triggers:
+#   - tag push `v*`     → root release tags; publishes the CLI when its
+#                         package version is missing from the registry, skips
+#                         cleanly when already published (re-runs stay green).
+#   - tag push `cli-v*` → explicit CLI-only release; the tag MUST equal
+#                         `cli-v<packages/cli version>` or the job fails.
+#   - workflow_dispatch → manual run; optional `force` re-attempts publish
+#                         (idempotent tolerance keeps a retry green).
+#
+# Requires the org secret `NPM_TOKEN_HOOXSH` (automation token with publish
+# rights for the @hoox-sh scope). Provenance needs the public repo +
+# `id-token: write`.
+#
+# Pipeline: install → typecheck + test + build → tag/version guard →
+# registry check → pack dry-run → publish (provenance, idempotent) →
+# registry verify → Node smoke test of the published tarball → public
+# access check → summary.
 #
 # Other v* tag components (not this workflow):
 #   - Desktop installers + GitHub Release: .github/workflows/desktop.yml
@@ -18,8 +31,13 @@ name: Release (npm)
 
 on:
   push:
-    tags: ['v*']
+    tags: ['v*', 'cli-v*']
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Re-attempt publish even if the version is already on the registry'
+        type: boolean
+        default: false
 
 concurrency:
   group: release-npm-${{ github.ref }}
@@ -58,6 +76,7 @@ jobs:
           bun run build
           test -f dist/index.js
           test -f LICENSE
+          test -x bin/axis.js
 
       - name: Setup Node (npm registry auth)
         uses: actions/setup-node@v4
@@ -65,15 +84,37 @@ jobs:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Version + tag guard
+        id: guard
+        run: |
+          PKG_VER=$(node -p "require('./packages/cli/package.json').version")
+          echo "version=${PKG_VER}" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.ref_type }}" != "tag" ]]; then
+            echo "tag_match=dispatch" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          REF="${{ github.ref_name }}"
+          if [[ "$REF" == "cli-v${PKG_VER}" ]]; then
+            echo "tag_match=cli" >> "$GITHUB_OUTPUT"
+          elif [[ "$REF" == cli-v* ]]; then
+            echo "::error::Tag ${REF} must equal cli-v${PKG_VER} (packages/cli/package.json version). Bump the CLI version and re-tag."
+            exit 1
+          elif [[ "$REF" == "v${PKG_VER}" ]]; then
+            echo "tag_match=root" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_match=other" >> "$GITHUB_OUTPUT"
+            echo "::warning::Tag ${REF} is a root release tag; @hoox-sh/axis-cli@${PKG_VER} publishes only if missing from the registry."
+          fi
+
       - name: Check registry version
         id: check
         run: |
-          PKG_VER=$(node -p "require('./packages/cli/package.json').version")
+          PKG_VER="${{ steps.guard.outputs.version }}"
           # Authenticated view so a restricted first publish is still detected.
           REG_VER=$(npm view "@hoox-sh/axis-cli@$PKG_VER" version 2>/dev/null || true)
           echo "local=${PKG_VER}" >> "$GITHUB_OUTPUT"
           echo "registry=${REG_VER:-<none>}" >> "$GITHUB_OUTPUT"
-          if [ "${PKG_VER}" = "${REG_VER}" ]; then
+          if [ -n "${REG_VER}" ] && [ "${{ inputs.force || 'false' }}" != "true" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "@hoox-sh/axis-cli@${PKG_VER} already published — will skip"
           else
@@ -125,6 +166,49 @@ jobs:
           fi
           exit "$code"
 
+      - name: Verify registry version
+        id: verify
+        run: |
+          VER="${{ steps.guard.outputs.version }}"
+          for i in 1 2 3 4 5 6; do
+            if npm view "@hoox-sh/axis-cli@$VER" version >/dev/null 2>&1; then
+              echo "Registry confirmed: @hoox-sh/axis-cli@$VER"
+              exit 0
+            fi
+            echo "waiting for registry propagation ($i/6)…"
+            sleep 5
+          done
+          echo "::error::@hoox-sh/axis-cli@$VER not visible on the registry."
+          exit 1
+
+      - name: Smoke test published package (Node)
+        id: smoke
+        run: |
+          set -e
+          VER="${{ steps.guard.outputs.version }}"
+          SMOKE="$(mktemp -d)"
+          cd "$SMOKE"
+          TGZ=""
+          for i in 1 2 3 4 5 6; do
+            TGZ="$(npm pack "@hoox-sh/axis-cli@$VER" --silent 2>/dev/null | tail -1 || true)"
+            if [ -n "$TGZ" ] && [ -f "$TGZ" ]; then break; fi
+            echo "waiting for tarball propagation ($i/6)…"
+            sleep 5
+          done
+          if [ -z "$TGZ" ] || [ ! -f "$TGZ" ]; then
+            echo "::error::Could not fetch @hoox-sh/axis-cli@$VER tarball from the registry."
+            exit 1
+          fi
+          # Clean Node-only consumer: no Bun, no repo, no install scripts.
+          npm install --no-save --ignore-scripts --no-audit --no-fund "$PWD/$TGZ" >/dev/null
+          GOT="$(./node_modules/.bin/axis --version)"
+          if [ "$GOT" != "$VER" ]; then
+            echo "::error::axis --version printed '${GOT}', expected '${VER}'."
+            exit 1
+          fi
+          ./node_modules/.bin/axis --help | grep -q "deploy"
+          echo "Smoke OK: @hoox-sh/axis-cli@$VER runs on Node $(node --version)"
+
       - name: Ensure public access
         if: always() && steps.check.outcome == 'success'
         working-directory: packages/cli
@@ -140,6 +224,16 @@ jobs:
       - name: Summary
         if: always()
         run: |
+          TM="${{ steps.guard.outputs.tag_match }}"
+          case "$TM" in
+            cli) TAG_LABEL="CLI release" ;;
+            root) TAG_LABEL="root release" ;;
+            dispatch) TAG_LABEL="manual dispatch" ;;
+            *) TAG_LABEL="other" ;;
+          esac
+          PUBLISHED="${{ steps.check.outputs.skip != 'true' && 'yes' || 'skipped (already published)' }}"
+          VERIFY="${{ steps.verify.outcome == 'success' && 'pass' || steps.verify.outcome || 'skipped' }}"
+          SMOKE="${{ steps.smoke.outcome == 'success' && 'pass' || steps.smoke.outcome || 'skipped' }}"
           {
             echo "## npm release"
             echo ""
@@ -148,8 +242,10 @@ jobs:
             echo "| Package | [\`@hoox-sh/axis-cli\`](https://www.npmjs.com/package/@hoox-sh/axis-cli) |"
             echo "| Local version | \`${{ steps.check.outputs.local }}\` |"
             echo "| Registry version | \`${{ steps.check.outputs.registry }}\` |"
-            echo "| Published | \`${{ steps.check.outputs.skip != 'true' && 'yes' || 'skipped (already published)' }}\` |"
-            echo "| Tag | \`${{ github.ref_name }}\` |"
+            echo "| Published | \`${PUBLISHED}\` |"
+            echo "| Tag | \`${{ github.ref_name }}\` (${TAG_LABEL}) |"
+            echo "| Registry verify | \`${VERIFY}\` |"
+            echo "| Smoke (Node) | \`${SMOKE}\` |"
             echo ""
             echo "Same tag also drives desktop (GitHub Release) and Docker (GHCR) workflows."
             echo "Worker / Pages deploy remains \`axis deploy all\`."
