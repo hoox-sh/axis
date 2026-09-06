@@ -88,7 +88,8 @@ export function applyArchitecture(
   if (
     config.engine === 'pyodide' &&
     typeof document !== 'undefined' &&
-    typeof document.querySelector === 'function'
+    typeof document.querySelector === 'function' &&
+    typeof document.head?.appendChild === 'function'
   ) {
     void preloadPyodide();
   }

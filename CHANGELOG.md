@@ -15,6 +15,16 @@ _Generated/updated: 2026-09-06 · 340 commits · describe-tag: `v2.4.0`_
 
 ## [Unreleased]
 
+### Added
+
+- **Global keyboard shortcuts**: app-level chord dispatch hub (`src/ui/shortcuts/`) with capture-phase handling, dialog-skip guard, per-user persisted overrides on the app store, and a live shortcut registry — wired to the command palette, editor, and chart canvas.
+  - **Recorder**: Settings → Keyboard → record chord, plus a **Shortcuts modal** listing default bindings with live rendering.
+- **Editor line ops** (`src/editor/cm-line-ops.ts`): `Prec.high` keymap extensions (duplicate line, toggle comment, indent/unindent, delete line) for the Pine editor; palette extensions render recorded chords.
+
+### Fixed
+
+- **Architecture apply guard**: `applyArchitecture` only preloads Pyodide when a real DOM append target exists. The unit-test document stub now exposes `querySelector`, which previously flipped the browser-detection gate and made `prefetchPyodideAssets` throw on `document.head.appendChild` under `applyArchitecture` tests (`commits Offline Lab`, `clears the stream slot`).
+
 ---
 
 ## [2.4.1] — 2026-09-06
