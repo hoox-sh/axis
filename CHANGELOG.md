@@ -9,7 +9,7 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-06 · 337 commits · describe-tag: `v2.3.1`_
+_Generated/updated: 2026-09-06 · 338 commits · describe-tag: `v2.3.1`_
 
 ---
 
@@ -880,9 +880,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (18 commits)
+### 2026-09 (19 commits)
 
 #### Features
 
@@ -897,6 +899,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `7ee49cc4` (2026-09-06) — fix(data): DatasetStore memory-first, DSM paint/gaps, v2.4.0
 - `520869dc` (2026-09-05) — fix: setup review — doctor, live HUD, static health, 2.3.1
 - `16499ac7` (2026-09-04) — fix(results): skip live-tick persist and unstick studio e2e
 
