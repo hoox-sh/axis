@@ -41,6 +41,7 @@ import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { bracketMatching } from '@codemirror/language';
 import { pyneScript } from './pyne-language';
 import { voidEditorExtensions } from './cm-void';
+import { buildRunKeymap } from './cm-line-ops';
 import { pyneLspExtensions } from './pyne-lsp';
 import { store } from '../store';
 import { readEditorIntel } from './editor-intel';
@@ -156,6 +157,12 @@ interface Props {
   debugPinsEnabled?: boolean;
   /** Optional Alt-P handler (toggle chart debug pins). */
   onToggleDebugPins?: () => void;
+  /** Optional Mod-Shift-L handler (toggle 80-column ruler). */
+  onToggleRuler?: () => void;
+  /** Optional Mod-Shift-D handler (toggle inline debug annotations). */
+  onToggleInlineDebug?: () => void;
+  /** Optional Mod-Shift-B handler (toggle profiler gutter). */
+  onToggleProfiler?: () => void;
   /**
    * Run-error / diagnostic underlines + gutter (always shown when provided).
    * Parent typically computes via {@link diagnosticsFromLastRun}.
@@ -372,37 +379,21 @@ export const PyneEditor: Component<Props> = (props) => {
   };
 
   onMount(() => {
-    const runKeymap = keymap.of([
-      {
-        key: 'Mod-Enter',
-        run: () => {
-          props.onRun?.();
-          return true;
-        },
+    // Run/format/debug-toggling keymap, wrapped in Prec.high so it beats the
+    // default CM keymap mounted below. Mod-S / Mod-G are owned by the shortcut
+    // Hub (tabbed-editor provides fallbacks), so they are not bound here.
+    const runKeymap = buildRunKeymap({
+      onRun: () => props.onRun?.(),
+      onFormat: () => formatDoc(),
+      onToggleDebugPins: () => {
+        if (!props.onToggleDebugPins) return false;
+        props.onToggleDebugPins();
+        return true;
       },
-      {
-        key: 'Shift-Alt-f',
-        run: () => {
-          formatDoc();
-          return true;
-        },
-      },
-      {
-        key: 'Mod-Shift-f',
-        run: () => {
-          formatDoc();
-          return true;
-        },
-      },
-      {
-        key: 'Alt-p',
-        run: () => {
-          if (!props.onToggleDebugPins) return false;
-          props.onToggleDebugPins();
-          return true;
-        },
-      },
-    ]);
+      onToggleRuler: () => props.onToggleRuler?.(),
+      onToggleInlineDebug: () => props.onToggleInlineDebug?.(),
+      onToggleProfiler: () => props.onToggleProfiler?.(),
+    });
 
     const wrapOn = props.wrapEnabled !== false;
 

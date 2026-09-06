@@ -49,7 +49,10 @@ import {
   toggleDebugPinsEnabled,
   toggleEditorWrapEnabled,
   toggleEditorRulerEnabled,
+  toggleInlineDebugEnabled,
+  toggleProfilerEnabled,
 } from '../store';
+import { matchEvent, resolveBinding } from '../ui/shortcuts';
 import { saveDraft, loadDraft } from '../storage/service';
 import { normalizeRunProfile, type RunProfile } from '../results/profiler';
 import {
@@ -380,6 +383,36 @@ export const TabbedEditor: Component<Props> = (props) => {
     window.addEventListener('axis-editor-run', onRunEvent);
 
     /**
+     * Mod-S / Mod-G fallbacks. The shortcut Hub owns these chords when it is
+     * mounted (capture phase + preventDefault), so this bubble-phase listener
+     * only fires when the Hub is absent — e.g. while the editor surface or
+     * tab strip has focus today. Overrides from the store are honored.
+     */
+    const onShortcutKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      const overrides = store.shortcuts?.overrides ?? {};
+      const saveChord = resolveBinding({ id: 'app.save' }, overrides);
+      if (saveChord && matchEvent(e, saveChord)) {
+        e.preventDefault();
+        void saveActiveToLibrary();
+        return;
+      }
+      const gotoChord = resolveBinding({ id: 'editor.goto-line' }, overrides);
+      if (gotoChord && matchEvent(e, gotoChord)) {
+        e.preventDefault();
+        setEditorOpen(true);
+        const raw = window.prompt('Go to line', '1');
+        if (raw == null) return;
+        const line = Number.parseInt(raw, 10);
+        if (!Number.isFinite(line) || line < 1) return;
+        window.dispatchEvent(
+          new CustomEvent('axis-editor-goto-line', { detail: { line } }),
+        );
+      }
+    };
+    window.addEventListener('keydown', onShortcutKeyDown);
+
+    /**
      * PYNE Agent plugin bridge:
      * - `axis-agent-insert-script` → replace active tab body
      * - `axis-agent-open-script` → new tab (via loadLibraryDocs)
@@ -443,6 +476,7 @@ export const TabbedEditor: Component<Props> = (props) => {
       window.removeEventListener('axis-editor-git-push', onGitPush);
       window.removeEventListener('axis-editor-git-pull', onGitPull);
       window.removeEventListener('axis-editor-run', onRunEvent);
+      window.removeEventListener('keydown', onShortcutKeyDown);
       window.removeEventListener('axis-agent-insert-script', onAgentInsert);
       window.removeEventListener('axis-agent-open-script', onAgentOpen);
     });
@@ -784,6 +818,9 @@ export const TabbedEditor: Component<Props> = (props) => {
           debugPinsEnabled={store.debugPinsEnabled}
           debugPins={debugPinAnns()}
           onToggleDebugPins={() => toggleDebugPinsEnabled()}
+          onToggleRuler={() => toggleEditorRulerEnabled()}
+          onToggleInlineDebug={() => toggleInlineDebugEnabled()}
+          onToggleProfiler={() => toggleProfilerEnabled()}
           diagnostics={editorDiagnostics()}
           rulerEnabled={store.editorRulerEnabled}
           wrapEnabled={store.editorWrapEnabled}
