@@ -270,6 +270,10 @@ export const App: Component = () => {
 
     const unsubPanelWin = installPanelWindowBridge();
 
+    // Shortcut Hub → open Settings (Mod-,)
+    const onOpenSettingsEvent = () => openSettings('general');
+    window.addEventListener('axis-open-settings', onOpenSettingsEvent);
+
     /**
      * Window-level file drop (capture).
      * Must always preventDefault on dragover+drop of Files — otherwise the
@@ -376,6 +380,7 @@ export const App: Component = () => {
       unsubPanelWin();
       unsubDesktop?.();
       unsubPresentation();
+      window.removeEventListener('axis-open-settings', onOpenSettingsEvent);
       setPresentationRoot(null);
       window.removeEventListener('dragenter', onWinDragEnter, winOpts);
       window.removeEventListener('dragover', onWinDragOver, winOpts);

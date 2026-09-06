@@ -353,7 +353,7 @@ export const TabbedEditor: Component<Props> = (props) => {
       };
     }
 
-    // Command palette → Save to Library / Git Push / Git Pull
+    // Command palette / shortcut Hub → Save to Library / Git Push / Git Pull
     const onSaveLibrary = () => {
       void saveActiveToLibrary();
     };
@@ -363,9 +363,21 @@ export const TabbedEditor: Component<Props> = (props) => {
     const onGitPull = () => {
       void pullActiveFromLibrary();
     };
+    // Shortcut Hub → Run (Mod-Enter). Mirrors the Run button flow.
+    const onRunEvent = () => {
+      void (async () => {
+        const { isScriptRunBlocked } = await import('./preevaluate');
+        if (isScriptRunBlocked()) return;
+        const saved = await ensureSavedForRun();
+        if (!saved.ok || !saved.doc.trim()) return;
+        if (isScriptRunBlocked()) return;
+        props.onRun?.(saved.doc);
+      })();
+    };
     window.addEventListener('axis-editor-save-library', onSaveLibrary);
     window.addEventListener('axis-editor-git-push', onGitPush);
     window.addEventListener('axis-editor-git-pull', onGitPull);
+    window.addEventListener('axis-editor-run', onRunEvent);
 
     /**
      * PYNE Agent plugin bridge:
@@ -430,6 +442,7 @@ export const TabbedEditor: Component<Props> = (props) => {
       window.removeEventListener('axis-editor-save-library', onSaveLibrary);
       window.removeEventListener('axis-editor-git-push', onGitPush);
       window.removeEventListener('axis-editor-git-pull', onGitPull);
+      window.removeEventListener('axis-editor-run', onRunEvent);
       window.removeEventListener('axis-agent-insert-script', onAgentInsert);
       window.removeEventListener('axis-agent-open-script', onAgentOpen);
     });

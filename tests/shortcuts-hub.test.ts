@@ -4,11 +4,12 @@
  */
 
 /**
- * ShortcutHub dispatch core: chord matching, override reactivity, and the
- * dialog / editable-target skip guard. Uses the shared AXIS DOM stub (see
- * tests/setup.ts) — no jsdom dependency. The component's `onMount` wiring is
- * a thin `window.addEventListener` wrapper around {@link dispatchShortcut},
- * which is what these tests exercise.
+ * ShortcutHub dispatch core: chord matching, override reactivity, the
+ * dialog / editable-target skip guard, and the app-level bindings registered
+ * by actions.ts (palette toggle, save/run/settings/escape CustomEvents).
+ * Uses the shared AXIS DOM stub (see tests/setup.ts) — no jsdom dependency.
+ * The component's `onMount` wiring is a thin `window.addEventListener`
+ * wrapper around {@link dispatchShortcut}, which is what these tests exercise.
  */
 
 import './setup';
@@ -18,7 +19,8 @@ import {
   dispatchShortcut,
   registerShortcut,
 } from '../src/ui/shortcuts/Hub';
-import { resetShortcuts, setShortcutOverride } from '../src/store';
+import { isPaletteOpen, closePalette } from '../src/ui/shortcuts/palette-bridge';
+import { resetShortcuts, setShortcutOverride, isPanelOpen } from '../src/store';
 
 /** Minimal HTMLElement so `target instanceof HTMLElement` works in the stub env. */
 class FakeHTMLElement {
@@ -55,12 +57,41 @@ function makeKeyEvent(init: {
   return ev as unknown as KeyboardEvent;
 }
 
+/** Listener-based window stub that records dispatched CustomEvents. */
+function installWindowEventStub() {
+  const originalWindow = globalThis.window;
+  const listeners: Record<string, Array<(e: Event) => void>> = {};
+  const fired: string[] = [];
+  // @ts-expect-error test stub
+  globalThis.window = {
+    addEventListener(type: string, fn: (e: Event) => void) {
+      (listeners[type] ??= []).push(fn);
+    },
+    removeEventListener(type: string, fn: (e: Event) => void) {
+      listeners[type] = (listeners[type] ?? []).filter((x) => x !== fn);
+    },
+    dispatchEvent(ev: Event) {
+      fired.push(ev.type);
+      for (const fn of listeners[ev.type] ?? []) fn(ev);
+      return true;
+    },
+  };
+  return {
+    fired,
+    restore() {
+      // @ts-expect-error restore
+      globalThis.window = originalWindow;
+    },
+  };
+}
+
 describe('ShortcutHub dispatch', () => {
   const originalHTMLElement = (globalThis as { HTMLElement?: unknown }).HTMLElement;
   const cleanups: Array<() => void> = [];
 
   beforeEach(() => {
     resetShortcuts();
+    closePalette();
     (globalThis as { HTMLElement: unknown }).HTMLElement = FakeHTMLElement;
     cleanups.length = 0;
   });
@@ -85,12 +116,11 @@ describe('ShortcutHub dispatch', () => {
     expect(consumed).toBe(true);
   });
 
-  it('does nothing for an unregistered chord', () => {
+  it('does nothing for a chord with no registered action', () => {
+    // editor.toggle-comment (Mod-/) is in the table but its action lives in
+    // the editor keymap (subtask 05) — not registered in this test env.
     let calls = 0;
-    cleanups.push(registerShortcut('app.run', () => {
-      calls++;
-    }));
-    const consumed = dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'k', ctrlKey: true }));
+    const consumed = dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: '/', ctrlKey: true }));
     expect(calls).toBe(0);
     expect(consumed).toBe(false);
   });
@@ -108,7 +138,39 @@ describe('ShortcutHub dispatch', () => {
     expect(calls).toBe(1);
   });
 
-  it('skips dispatch when a modal dialog is open', () => {
+  it('skips app.escape when a modal dialog is open', () => {
+    let calls = 0;
+    cleanups.push(registerShortcut('app.escape', () => {
+      calls++;
+    }));
+    const origQuery = document.querySelector.bind(document);
+    document.querySelector = ((sel: string) =>
+      sel.includes('axis-command-palette') ? ({} as Element) : origQuery(sel)) as typeof document.querySelector;
+    try {
+      const consumed = dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'Escape' }));
+      expect(calls).toBe(0);
+      expect(consumed).toBe(false);
+    } finally {
+      document.querySelector = origQuery;
+    }
+  });
+
+  it('skips app.escape when focus is in an editable input', () => {
+    let calls = 0;
+    cleanups.push(registerShortcut('app.escape', () => {
+      calls++;
+    }));
+    const input = new FakeHTMLElement();
+    input.tagName = 'INPUT';
+    const consumed = dispatchShortcut(
+      buildDispatchTable(),
+      makeKeyEvent({ key: 'Escape', target: input }),
+    );
+    expect(calls).toBe(0);
+    expect(consumed).toBe(false);
+  });
+
+  it('fires app.open-palette even when a dialog is open (global open chord)', () => {
     let calls = 0;
     cleanups.push(registerShortcut('app.open-palette', () => {
       calls++;
@@ -118,26 +180,11 @@ describe('ShortcutHub dispatch', () => {
       sel.includes('axis-command-palette') ? ({} as Element) : origQuery(sel)) as typeof document.querySelector;
     try {
       const consumed = dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'k', ctrlKey: true }));
-      expect(calls).toBe(0);
-      expect(consumed).toBe(false);
+      expect(calls).toBe(1);
+      expect(consumed).toBe(true);
     } finally {
       document.querySelector = origQuery;
     }
-  });
-
-  it('skips dispatch when focus is in an editable input', () => {
-    let calls = 0;
-    cleanups.push(registerShortcut('app.open-palette', () => {
-      calls++;
-    }));
-    const input = new FakeHTMLElement();
-    input.tagName = 'INPUT';
-    const consumed = dispatchShortcut(
-      buildDispatchTable(),
-      makeKeyEvent({ key: 'k', ctrlKey: true, target: input }),
-    );
-    expect(calls).toBe(0);
-    expect(consumed).toBe(false);
   });
 
   it('calls preventDefault when the binding matches', () => {
@@ -169,5 +216,84 @@ describe('ShortcutHub dispatch', () => {
     );
     expect(calls).toBe(0);
     expect(consumed).toBe(false);
+  });
+});
+
+describe('app-level bindings (actions.ts)', () => {
+  const originalHTMLElement = (globalThis as { HTMLElement?: unknown }).HTMLElement;
+  let win: ReturnType<typeof installWindowEventStub>;
+
+  beforeEach(() => {
+    resetShortcuts();
+    closePalette();
+    (globalThis as { HTMLElement: unknown }).HTMLElement = FakeHTMLElement;
+    win = installWindowEventStub();
+  });
+
+  afterEach(() => {
+    win.restore();
+    if (originalHTMLElement === undefined) {
+      delete (globalThis as { HTMLElement?: unknown }).HTMLElement;
+    } else {
+      (globalThis as { HTMLElement: unknown }).HTMLElement = originalHTMLElement;
+    }
+  });
+
+  it('Mod-K toggles the palette open signal', () => {
+    expect(isPaletteOpen()).toBe(false);
+    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'k', ctrlKey: true }));
+    expect(isPaletteOpen()).toBe(true);
+    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'k', ctrlKey: true }));
+    expect(isPaletteOpen()).toBe(false);
+  });
+
+  it('Mod-Shift-P toggles the palette open signal', () => {
+    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'P', ctrlKey: true, shiftKey: true }));
+    expect(isPaletteOpen()).toBe(true);
+  });
+
+  it('Mod-S fires axis-editor-save-library', () => {
+    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 's', ctrlKey: true }));
+    expect(win.fired).toContain('axis-editor-save-library');
+  });
+
+  it('Mod-Enter fires axis-editor-run', () => {
+    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'Enter', ctrlKey: true }));
+    expect(win.fired).toContain('axis-editor-run');
+  });
+
+  it('Mod-, fires axis-open-settings', () => {
+    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: ',', ctrlKey: true }));
+    expect(win.fired).toContain('axis-open-settings');
+  });
+
+  it('Shift-? fires axis-shortcuts-open', () => {
+    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: '?', shiftKey: true }));
+    expect(win.fired).toContain('axis-shortcuts-open');
+  });
+
+  it('Esc fires axis-escape when nothing is open', () => {
+    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'Escape' }));
+    expect(win.fired).toContain('axis-escape');
+  });
+
+  it('Esc does not fire axis-escape while the palette is open (no double-fire)', () => {
+    const origQuery = document.querySelector.bind(document);
+    document.querySelector = ((sel: string) =>
+      sel.includes('axis-command-palette') ? ({} as Element) : origQuery(sel)) as typeof document.querySelector;
+    try {
+      dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'Escape' }));
+      expect(win.fired).not.toContain('axis-escape');
+    } finally {
+      document.querySelector = origQuery;
+    }
+  });
+
+  it('Mod-\\ toggles the editor panel', () => {
+    const before = isPanelOpen('editor');
+    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: '\\', ctrlKey: true }));
+    expect(isPanelOpen('editor')).toBe(!before);
+    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: '\\', ctrlKey: true }));
+    expect(isPanelOpen('editor')).toBe(before);
   });
 });

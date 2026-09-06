@@ -37,8 +37,6 @@ import {
   createEffect,
   createMemo,
   createSignal,
-  onCleanup,
-  onMount,
 } from 'solid-js';
 import {
   store,
@@ -92,6 +90,11 @@ import {
   toggleChartOnlyFullscreen,
 } from './presentation';
 import { openAboutModal } from './AboutModal';
+import {
+  isPaletteOpen,
+  openPalette,
+  closePalette,
+} from './shortcuts/palette-bridge';
 
 /** Optional host hooks (e.g. desktop shell git bridge). */
 type AxisHostWindow = Window & {
@@ -131,19 +134,8 @@ export type CommandPaletteProps = {
   onOpenArchitecture?: () => void;
 };
 
-function isEditableTarget(t: EventTarget | null): boolean {
-  if (!(t instanceof HTMLElement)) return false;
-  const tag = t.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-  if (t.isContentEditable) return true;
-  // CodeMirror / Monaco surfaces
-  if (t.closest?.('.cm-editor, .cm-content, [role="textbox"]')) return true;
-  return false;
-}
-
 /** Global ⌘K command search overlay. */
 export const CommandPalette: Component<CommandPaletteProps> = (props) => {
-  const [open, setOpen] = createSignal(false);
   const [query, setQuery] = createSignal('');
   const [active, setActive] = createSignal(0);
   let inputEl: HTMLInputElement | undefined;
@@ -307,17 +299,13 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
     if (active() >= n) setActive(n > 0 ? n - 1 : 0);
   });
 
-  const openPalette = () => {
-    setQuery('');
-    setActive(0);
-    setOpen(true);
-  };
-
-  const closePalette = () => {
-    setOpen(false);
-    setQuery('');
-    setActive(0);
-  };
+  // Reset search state whenever the palette opens (Hub may open it directly).
+  createEffect(() => {
+    if (isPaletteOpen()) {
+      setQuery('');
+      setActive(0);
+    }
+  });
 
   const runCommand = async (cmd: CommandDef | undefined) => {
     if (!cmd) return;
@@ -343,49 +331,11 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
     });
   };
 
-  onMount(() => {
-    const onKey = (e: KeyboardEvent) => {
-      // Open: Ctrl/Cmd+K (allow even from inputs — standard palette UX)
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (open()) closePalette();
-        else openPalette();
-        return;
-      }
-
-      if (!open()) return;
-
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        closePalette();
-        return;
-      }
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        move(1);
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        move(-1);
-        return;
-      }
-      if (e.key === 'Enter') {
-        // Don't steal Enter from nested form controls if any
-        if (isEditableTarget(e.target) && e.target !== inputEl) return;
-        e.preventDefault();
-        void runActive();
-      }
-    };
-
-    document.addEventListener('keydown', onKey, true);
-    onCleanup(() => document.removeEventListener('keydown', onKey, true));
-  });
+  // Keyboard dispatch moved to the shortcut Hub (Mod-K / Esc) and the
+  // palette input's own onKeyDown (arrows / Enter / Esc while focused).
 
   createEffect(() => {
-    if (open()) {
+    if (isPaletteOpen()) {
       queueMicrotask(() => inputEl?.focus());
     }
   });
@@ -396,7 +346,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
   };
 
   return (
-    <Show when={open()}>
+    <Show when={isPaletteOpen()}>
       <div
         class="axis-cmd-palette-backdrop"
         role="presentation"
