@@ -25,6 +25,7 @@ _Generated/updated: 2026-09-06 · 340 commits · describe-tag: `v2.4.0`_
   - post-publish **registry verification** (`npm view` with propagation retries).
   - **Node-only smoke test**: fetches the published tarball, installs it into a clean directory with `--ignore-scripts`, and asserts `axis --version` / `axis --help` on Node (no Bun, no repo).
   - step summary now reports tag kind, registry verify, and smoke results.
+- **`@hoox-sh/axis-cli` 0.2.2** — first CLI-only release via the new pipeline: `cli-v0.2.2` tag → `Release (npm)` workflow (provenance publish, registry verification, Node-only smoke test of the published tarball). Code identical to 0.2.1; release exercises the full publish path end-to-end.
 
 ### Fixed
 
