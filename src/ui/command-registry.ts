@@ -134,6 +134,28 @@ export interface CommandActions {
   saveToLibrary?: () => void | Promise<void>;
   /** Focus (and soft-format) the docked CodeMirror surface. */
   focusEditor?: () => void;
+  /** Focus the active chart pane (Mod-Alt-0). */
+  focusChart?: () => void;
+  /** Open the keyboard-shortcuts modal (Shift-?). */
+  openShortcuts?: () => void;
+  /** Clear all shortcut overrides back to defaults. */
+  resetShortcuts?: () => void;
+  /** Open the Pine snippet picker (id selects a starter when provided). */
+  insertSnippet?: (id: string) => void;
+  /** Grep across the script library. */
+  findAcrossScripts?: () => void;
+  /** Open the recent-scripts list (last 10). */
+  openRecentScripts?: () => void;
+  /** Advance to the next curated chart theme preset. */
+  cycleTheme?: () => void;
+  /** Persist the current workspace as a URL hash snapshot. */
+  saveWorkspaceSnapshot?: () => void;
+  /** Restore a workspace snapshot from the URL hash. */
+  loadWorkspaceSnapshot?: () => void;
+  /** Quick-select a drawing tool by id (trend, fib, rect, …). */
+  selectDrawingTool?: (id: string) => void;
+  /** Collapse / restore all panels (compact chrome). */
+  toggleCompactPanels?: () => void;
   /** Host-injected git push (only when `window.axisGitPush` exists). */
   gitPush?: () => void | Promise<void>;
   /** Host-injected git pull (only when `window.axisGitPull` exists). */
@@ -797,6 +819,115 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     category: 'actions',
     keywords: ['git', 'pull', 'fetch', 'remote', 'sync', 'download'],
   },
+  // Keyboard shortcuts (Shift-? / Settings → Keyboard)
+  {
+    id: 'help.shortcuts',
+    title: 'Show keyboard shortcuts',
+    category: 'navigation',
+    keywords: ['shortcuts', 'help', 'keys', 'hotkeys', 'chords'],
+  },
+  {
+    id: 'help.reset-shortcuts',
+    title: 'Reset keyboard shortcuts to defaults',
+    category: 'actions',
+    keywords: ['reset', 'restore', 'defaults', 'shortcuts', 'bindings'],
+  },
+  // Pine snippets
+  {
+    id: 'snippet.insert',
+    title: 'Insert Pine snippet…',
+    category: 'actions',
+    keywords: ['snippet', 'template', 'boilerplate', 'insert', 'starter'],
+  },
+  // Library / navigation
+  {
+    id: 'search.across',
+    title: 'Find across scripts',
+    category: 'navigation',
+    keywords: ['find', 'grep', 'search', 'across', 'library'],
+  },
+  {
+    id: 'scripts.recent',
+    title: 'Recent scripts',
+    category: 'navigation',
+    keywords: ['recent', 'last', 'history', 'library', 'scripts'],
+  },
+  // Theme
+  {
+    id: 'theme.cycle',
+    title: 'Cycle chart theme',
+    category: 'theme',
+    keywords: ['theme', 'cycle', 'next', 'rotate', 'preset'],
+  },
+  // Workspace snapshots (URL hash)
+  {
+    id: 'workspace.snapshot',
+    title: 'Save workspace snapshot (URL hash)',
+    category: 'actions',
+    keywords: ['workspace', 'snapshot', 'url', 'hash', 'save', 'share'],
+  },
+  {
+    id: 'workspace.load-snapshot',
+    title: 'Load workspace snapshot',
+    category: 'actions',
+    keywords: ['workspace', 'snapshot', 'url', 'hash', 'load'],
+  },
+  // Panels
+  {
+    id: 'panel.compact',
+    title: 'Toggle compact panels',
+    category: 'panels',
+    keywords: ['compact', 'collapse', 'panels', 'chrome', 'hide'],
+  },
+  {
+    id: 'panel.focus-editor',
+    title: 'Focus editor',
+    category: 'panels',
+    keywords: ['focus', 'editor', 'code', 'panel'],
+  },
+  {
+    id: 'panel.focus-chart',
+    title: 'Focus chart',
+    category: 'panels',
+    keywords: ['focus', 'chart', 'pane'],
+  },
+  // Drawing tool quick-select (letter chord hints come from the registry)
+  {
+    id: 'draw.trend',
+    title: 'Drawing tool: Trend line',
+    category: 'chart',
+    keywords: ['draw', 'trend', 'line', 'tool'],
+  },
+  {
+    id: 'draw.fib',
+    title: 'Drawing tool: Fibonacci',
+    category: 'chart',
+    keywords: ['draw', 'fib', 'fibonacci', 'retracement', 'tool'],
+  },
+  {
+    id: 'draw.rect',
+    title: 'Drawing tool: Rectangle',
+    category: 'chart',
+    keywords: ['draw', 'rect', 'rectangle', 'box', 'tool'],
+  },
+  {
+    id: 'draw.text',
+    title: 'Drawing tool: Text',
+    category: 'chart',
+    keywords: ['draw', 'text', 'label', 'note', 'tool'],
+  },
+  {
+    id: 'draw.hline',
+    title: 'Drawing tool: Horizontal line',
+    category: 'chart',
+    keywords: ['draw', 'hline', 'horizontal', 'tool'],
+  },
+  {
+    id: 'draw.brush',
+    title: 'Drawing tool: Brush',
+    category: 'chart',
+    keywords: ['draw', 'brush', 'freehand', 'tool'],
+  },
 ] as const;
 
 /**
@@ -903,6 +1034,30 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.jumpToLine) byId.set('editor.goto-line', actions.jumpToLine);
   if (actions.saveToLibrary) byId.set('editor.save-library', () => void actions.saveToLibrary?.());
   if (actions.focusEditor) byId.set('editor.focus', actions.focusEditor);
+  if (actions.focusChart) byId.set('panel.focus-chart', actions.focusChart);
+  if (actions.openShortcuts) byId.set('help.shortcuts', actions.openShortcuts);
+  if (actions.resetShortcuts) byId.set('help.reset-shortcuts', actions.resetShortcuts);
+  if (actions.insertSnippet) {
+    byId.set('snippet.insert', () => actions.insertSnippet?.(''));
+  }
+  if (actions.findAcrossScripts) byId.set('search.across', actions.findAcrossScripts);
+  if (actions.openRecentScripts) byId.set('scripts.recent', actions.openRecentScripts);
+  if (actions.cycleTheme) byId.set('theme.cycle', actions.cycleTheme);
+  if (actions.saveWorkspaceSnapshot) {
+    byId.set('workspace.snapshot', actions.saveWorkspaceSnapshot);
+  }
+  if (actions.loadWorkspaceSnapshot) {
+    byId.set('workspace.load-snapshot', actions.loadWorkspaceSnapshot);
+  }
+  if (actions.toggleCompactPanels) byId.set('panel.compact', actions.toggleCompactPanels);
+  if (actions.selectDrawingTool) {
+    byId.set('draw.trend', () => actions.selectDrawingTool?.('trend'));
+    byId.set('draw.fib', () => actions.selectDrawingTool?.('fib'));
+    byId.set('draw.rect', () => actions.selectDrawingTool?.('rect'));
+    byId.set('draw.text', () => actions.selectDrawingTool?.('text'));
+    byId.set('draw.hline', () => actions.selectDrawingTool?.('hline'));
+    byId.set('draw.brush', () => actions.selectDrawingTool?.('brush'));
+  }
   if (actions.gitPush) byId.set('git.push', () => void actions.gitPush?.());
   if (actions.gitPull) byId.set('git.pull', () => void actions.gitPull?.());
 

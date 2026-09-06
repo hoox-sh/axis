@@ -54,6 +54,7 @@ import {
   toggleSystemLogsPanel,
   toggleStatusBarPanel,
   toggleLibraryPanel,
+  setLibraryPanelOpen,
   toggleDataSourcePanel,
   toggleOnchainPanel,
   toggleProfilerEnabled,
@@ -61,6 +62,8 @@ import {
   toggleDebugPinsEnabled,
   toggleEditorRulerEnabled,
   setChartGridMode,
+  setDrawingTool,
+  resetShortcuts,
   openScriptSettings,
   resetUiLayout,
   persist,
@@ -95,6 +98,11 @@ import {
   openPalette,
   closePalette,
 } from './shortcuts/palette-bridge';
+import { getDisplay } from './shortcuts/registry';
+import { detectPlatform } from './shortcuts/keys';
+import type { ShortcutId } from './shortcuts/types';
+import { PINE_SNIPPETS } from './shortcuts/pine-snippets';
+import { THEME_PRESETS } from '../theme/presets';
 
 /** Optional host hooks (e.g. desktop shell git bridge). */
 type AxisHostWindow = Window & {
@@ -112,11 +120,49 @@ function emitWindowEvent(name: string, detail?: Record<string, unknown>) {
   }
 }
 
+/**
+ * Command id → bindable shortcut id. Palette chips render the *live* chord
+ * (respecting user overrides + platform) instead of a static literal.
+ */
+const COMMAND_SHORTCUT_IDS: Readonly<Record<string, ShortcutId>> = {
+  'action.run': 'app.run',
+  'editor.save-library': 'app.save',
+  'editor.goto-line': 'editor.goto-line',
+  'help.shortcuts': 'app.show-shortcuts',
+  'help.reset-shortcuts': 'palette.reset-shortcuts',
+  'snippet.insert': 'palette.insert-snippet',
+  'search.across': 'palette.find-across',
+  'scripts.recent': 'palette.recent',
+  'theme.cycle': 'palette.theme-cycle',
+  'workspace.snapshot': 'palette.snapshot',
+  'panel.compact': 'palette.compact-panels',
+  'panel.focus-editor': 'panel.focus-editor',
+  'panel.focus-chart': 'panel.focus-chart',
+  'draw.trend': 'chart.tool-trend',
+  'draw.fib': 'chart.tool-fib',
+  'draw.rect': 'chart.tool-rect',
+  'draw.text': 'chart.tool-text',
+  'draw.hline': 'chart.tool-hline',
+  'draw.brush': 'chart.tool-brush',
+};
+
+/** Resolve the live shortcut hint for a command (falls back to static). */
+function liveShortcutFor(cmd: { id: string; shortcut?: string }): string | undefined {
+  const sid = COMMAND_SHORTCUT_IDS[cmd.id];
+  if (sid) {
+    const live = getDisplay(sid, store.shortcuts?.overrides ?? {}, detectPlatform());
+    if (live) return live;
+  }
+  return cmd.shortcut;
+}
+
 export type CommandPaletteProps = {
   /** Docked editor document accessor for Run Script. */
   editorRef?: {
     getDoc: () => string;
     ensureSavedForRun?: () => Promise<{ ok: boolean; doc: string }>;
+    /** Insert text at the current selection (snippet picker). */
+    insertAtCursor?: (text: string) => boolean;
   };
   onOpenSettings?: () => void;
   /** Open Settings → Theme tab (chart colors). */
@@ -138,6 +184,7 @@ export type CommandPaletteProps = {
 export const CommandPalette: Component<CommandPaletteProps> = (props) => {
   const [query, setQuery] = createSignal('');
   const [active, setActive] = createSignal(0);
+  const [snippetPickerOpen, setSnippetPickerOpen] = createSignal(false);
   let inputEl: HTMLInputElement | undefined;
   let listEl: HTMLDivElement | undefined;
 
@@ -271,6 +318,55 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
           el?.focus?.();
         });
       },
+      focusChart: () => {
+        queueMicrotask(() => {
+          const el = document.querySelector<HTMLElement>('[data-testid="axis-chart-pane"]');
+          el?.focus?.();
+        });
+      },
+      openShortcuts: () => emitWindowEvent('axis-open-shortcuts'),
+      resetShortcuts: () => {
+        resetShortcuts();
+        emitWindowEvent('axis-shortcuts-reset');
+      },
+      insertSnippet: (id) => {
+        if (id) {
+          const snippet = PINE_SNIPPETS.find((s) => s.id === id);
+          if (snippet) {
+            setEditorOpen(true);
+            queueMicrotask(() => {
+              props.editorRef?.insertAtCursor?.(snippet.code);
+            });
+          }
+          return;
+        }
+        // No id → open the snippet sub-palette
+        setSnippetPickerOpen(true);
+      },
+      findAcrossScripts: () => {
+        setLibraryPanelOpen(true);
+        emitWindowEvent('axis-library-find');
+      },
+      openRecentScripts: () => {
+        setLibraryPanelOpen(true);
+        emitWindowEvent('axis-library-recent');
+      },
+      cycleTheme: () => {
+        const current = store.chartTheme?.presetId || 'void-dark';
+        const idx = THEME_PRESETS.findIndex((p) => p.id === current);
+        const next = THEME_PRESETS[(idx + 1) % THEME_PRESETS.length];
+        setChartThemePreset(next.id);
+      },
+      saveWorkspaceSnapshot: () => {
+        persist();
+        emitWindowEvent('axis-workspace-snapshot-save');
+      },
+      loadWorkspaceSnapshot: () => emitWindowEvent('axis-workspace-snapshot-load'),
+      selectDrawingTool: (id) => {
+        const tool = id as Parameters<typeof setDrawingTool>[0];
+        setDrawingTool(tool);
+      },
+      toggleCompactPanels: () => emitWindowEvent('axis-panels-compact'),
       // Prefer host bridge when present; else fire editor events (EditorGitBar / tabbed-editor).
       gitPush: () => {
         if (typeof host?.axisGitPush === 'function') {
@@ -304,8 +400,18 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
     if (isPaletteOpen()) {
       setQuery('');
       setActive(0);
+      setSnippetPickerOpen(false);
     }
   });
+
+  const runSnippet = (snippet: (typeof PINE_SNIPPETS)[number]) => {
+    setSnippetPickerOpen(false);
+    closePalette();
+    setEditorOpen(true);
+    queueMicrotask(() => {
+      props.editorRef?.insertAtCursor?.(snippet.code);
+    });
+  };
 
   const runCommand = async (cmd: CommandDef | undefined) => {
     if (!cmd) return;
@@ -384,15 +490,26 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
                 // Local handling so CM / other capture listeners don't fight
                 if (e.key === 'ArrowDown') {
                   e.preventDefault();
+                  if (snippetPickerOpen()) return;
                   move(1);
                 } else if (e.key === 'ArrowUp') {
                   e.preventDefault();
+                  if (snippetPickerOpen()) return;
                   move(-1);
                 } else if (e.key === 'Enter') {
                   e.preventDefault();
+                  if (snippetPickerOpen()) {
+                    const first = PINE_SNIPPETS[0];
+                    if (first) runSnippet(first);
+                    return;
+                  }
                   void runActive();
                 } else if (e.key === 'Escape') {
                   e.preventDefault();
+                  if (snippetPickerOpen()) {
+                    setSnippetPickerOpen(false);
+                    return;
+                  }
                   closePalette();
                 }
               }}
@@ -410,40 +527,64 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
             ref={listEl}
           >
             <Show
-              when={results().length > 0}
+              when={snippetPickerOpen()}
               fallback={
-                <div class="axis-cmd-palette-empty" data-testid="axis-command-palette-empty">
-                  No matching commands
-                </div>
+                <Show
+                  when={results().length > 0}
+                  fallback={
+                    <div class="axis-cmd-palette-empty" data-testid="axis-command-palette-empty">
+                      No matching commands
+                    </div>
+                  }
+                >
+                  <For each={results()}>
+                    {(cmd, i) => (
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={i() === active()}
+                        data-cmd-id={cmd.id}
+                        data-cmd-index={i()}
+                        data-testid={`axis-cmd-${cmd.id}`}
+                        class={`axis-cmd-palette-item ${i() === active() ? 'is-active' : ''}`}
+                        onMouseEnter={() => setActive(i())}
+                        onClick={() => {
+                          setActive(i());
+                          void runCommand(cmd);
+                        }}
+                      >
+                        <span class="axis-cmd-palette-item-main">
+                          <span class="axis-cmd-palette-item-title">{cmd.title}</span>
+                          <Show when={cmd.category}>
+                            <span class="axis-cmd-palette-item-cat">
+                              {categoryLabel(cmd.category)}
+                            </span>
+                          </Show>
+                        </span>
+                        <Show when={liveShortcutFor(cmd)}>
+                          <kbd class="axis-cmd-palette-item-shortcut">
+                            {liveShortcutFor(cmd)}
+                          </kbd>
+                        </Show>
+                      </button>
+                    )}
+                  </For>
+                </Show>
               }
             >
-              <For each={results()}>
-                {(cmd, i) => (
+              <For each={PINE_SNIPPETS}>
+                {(snippet) => (
                   <button
                     type="button"
                     role="option"
-                    aria-selected={i() === active()}
-                    data-cmd-id={cmd.id}
-                    data-cmd-index={i()}
-                    data-testid={`axis-cmd-${cmd.id}`}
-                    class={`axis-cmd-palette-item ${i() === active() ? 'is-active' : ''}`}
-                    onMouseEnter={() => setActive(i())}
-                    onClick={() => {
-                      setActive(i());
-                      void runCommand(cmd);
-                    }}
+                    data-testid={`axis-snippet-${snippet.id}`}
+                    class="axis-cmd-palette-item"
+                    onClick={() => runSnippet(snippet)}
                   >
                     <span class="axis-cmd-palette-item-main">
-                      <span class="axis-cmd-palette-item-title">{cmd.title}</span>
-                      <Show when={cmd.category}>
-                        <span class="axis-cmd-palette-item-cat">
-                          {categoryLabel(cmd.category)}
-                        </span>
-                      </Show>
+                      <span class="axis-cmd-palette-item-title">{snippet.title}</span>
+                      <span class="axis-cmd-palette-item-cat">{snippet.description}</span>
                     </span>
-                    <Show when={cmd.shortcut}>
-                      <kbd class="axis-cmd-palette-item-shortcut">{cmd.shortcut}</kbd>
-                    </Show>
                   </button>
                 )}
               </For>
