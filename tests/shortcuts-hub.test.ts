@@ -20,7 +20,7 @@ import {
   registerShortcut,
 } from '../src/ui/shortcuts/Hub';
 import { isPaletteOpen, closePalette } from '../src/ui/shortcuts/palette-bridge';
-import { resetShortcuts, setShortcutOverride, isPanelOpen } from '../src/store';
+import { resetShortcuts, setShortcutOverride, isPanelOpen, store, setDrawingTool } from '../src/store';
 
 /** Minimal HTMLElement so `target instanceof HTMLElement` works in the stub env. */
 class FakeHTMLElement {
@@ -295,5 +295,54 @@ describe('app-level bindings (actions.ts)', () => {
     expect(isPanelOpen('editor')).toBe(!before);
     dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: '\\', ctrlKey: true }));
     expect(isPanelOpen('editor')).toBe(before);
+  });
+});
+
+describe('chart-level bindings (actions.ts)', () => {
+  const originalHTMLElement = (globalThis as { HTMLElement?: unknown }).HTMLElement;
+  let win: ReturnType<typeof installWindowEventStub>;
+
+  beforeEach(() => {
+    resetShortcuts();
+    closePalette();
+    setDrawingTool('cursor');
+    (globalThis as { HTMLElement: unknown }).HTMLElement = FakeHTMLElement;
+    win = installWindowEventStub();
+  });
+
+  afterEach(() => {
+    win.restore();
+    if (originalHTMLElement === undefined) {
+      delete (globalThis as { HTMLElement?: unknown }).HTMLElement;
+    } else {
+      (globalThis as { HTMLElement: unknown }).HTMLElement = originalHTMLElement;
+    }
+  });
+
+  it('E dispatches setDrawingTool(eraser)', () => {
+    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'e' }));
+    expect(store.drawingTool).toBe('eraser');
+  });
+
+  it('Alt-1 dispatches setChartGridMode(1)', () => {
+    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: '1', altKey: true }));
+    expect(store.chartLayout.mode).toBe('1');
+  });
+
+  it('single-letter chart chord does NOT dispatch inside an input', () => {
+    const input = new FakeHTMLElement();
+    input.tagName = 'INPUT';
+    const consumed = dispatchShortcut(
+      buildDispatchTable(),
+      makeKeyEvent({ key: 'e', target: input }),
+    );
+    expect(consumed).toBe(false);
+    expect(store.drawingTool).toBe('cursor');
+  });
+
+  it('Esc fires axis-drawing-cancel-draft (chart draft cancel)', () => {
+    dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'Escape' }));
+    expect(win.fired).toContain('axis-drawing-cancel-draft');
+    expect(win.fired).toContain('axis-escape');
   });
 });

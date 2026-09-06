@@ -114,7 +114,18 @@ function isInOpenDialog(target: EventTarget | null): boolean {
  *   shortcuts) are global and fire regardless of focus.
  */
 function shouldSkip(id: ShortcutId, target: EventTarget | null): boolean {
-  if (id.startsWith('editor.') || id.startsWith('chart.')) return false;
+  if (id.startsWith('editor.')) return false;
+  if (id.startsWith('chart.')) {
+    // Don't steal chart letters while the user is typing in an input /
+    // textarea / contenteditable / CodeMirror surface.
+    if (typeof HTMLElement !== 'undefined' && target instanceof HTMLElement) {
+      const tag = target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      if (target.isContentEditable) return true;
+      if (target.closest?.('.cm-editor, .cm-content, [role="textbox"]')) return true;
+    }
+    return false;
+  }
   if (id === 'app.open-palette' || id === 'app.open-palette-alt') return false;
   if (id === 'app.escape') return isInOpenDialog(target);
   return false;

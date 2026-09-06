@@ -651,6 +651,17 @@ export class DrawingLayer {
   }
 
   /**
+   * Cancel an in-progress drawing draft and clear selection (Hub
+   * `chart.cancel-draft`). Mirrors the Escape branch of the legacy keydown
+   * handler; the Hub owns the chord once mounted.
+   */
+  cancelDraft() {
+    this.draft = null;
+    this.clearDraftDom();
+    this.setSelectedId(null);
+  }
+
+  /**
    * After a successful place: if stay-in-mode is off, switch to cursor and notify store.
    * Does not implement undo/history.
    */
@@ -779,6 +790,10 @@ export class DrawingLayer {
     window.addEventListener('pointerup', onUp);
     this.svg.addEventListener('contextmenu', onCtx);
     window.addEventListener('keydown', onKey);
+    // Shortcut Hub → cancel draft / clear selection (Esc). The Hub owns the
+    // chord; this window event is the layer-side receiver.
+    const onCancelDraftEvent = () => this.cancelDraft();
+    window.addEventListener('axis-drawing-cancel-draft', onCancelDraftEvent);
     this.unsubs.push(() => this.svg.removeEventListener('click', onClick));
     this.unsubs.push(() => this.svg.removeEventListener('dblclick', this.handleDblClick));
     this.unsubs.push(() => this.svg.removeEventListener('pointerdown', onDown));
@@ -787,6 +802,7 @@ export class DrawingLayer {
     this.unsubs.push(() => window.removeEventListener('pointerup', onUp));
     this.unsubs.push(() => this.svg.removeEventListener('contextmenu', onCtx));
     this.unsubs.push(() => window.removeEventListener('keydown', onKey));
+    this.unsubs.push(() => window.removeEventListener('axis-drawing-cancel-draft', onCancelDraftEvent));
 
     // Pan/zoom only — do NOT redraw on crosshair (that rebuilt pine SVG every
     // mousemove and looked like hide/show flicker).
@@ -1011,6 +1027,10 @@ export class DrawingLayer {
 
   /** Escape cancels draft/selection; Delete/Backspace removes selected (not from inputs). */
   private handleKey(e: KeyboardEvent) {
+    // The shortcut Hub owns these chords once mounted (capture phase +
+    // preventDefault). This legacy handler stays as a fallback only; subtask
+    // 09 of the keyboard-shortcuts feature retires it.
+    if (e.defaultPrevented) return;
     if (e.key === 'Escape') {
       this.draft = null;
       this.clearDraftDom();
