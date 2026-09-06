@@ -86,15 +86,16 @@ function memUser(userId: string): Map<string, ScriptRow> {
 }
 
 function rowToMeta(r: ScriptRow): ScriptMeta {
-  return {
+  const meta: ScriptMeta = {
     id: r.id,
     name: r.name,
-    description: r.description || undefined,
-    path: r.path || undefined,
     revision: r.revision,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
+  if (r.description) meta.description = r.description;
+  if (r.path) meta.path = r.path;
+  return meta;
 }
 
 function newRevision(): string {
@@ -109,15 +110,18 @@ async function listD1(db: D1Database, userId: string): Promise<ScriptMeta[]> {
     )
     .bind(userId)
     .all<Omit<ScriptRow, 'content'>>();
-  return (res.results || []).map((r) => ({
-    id: r.id,
-    name: r.name,
-    description: r.description || undefined,
-    path: r.path || undefined,
-    revision: r.revision,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-  }));
+  return (res.results || []).map((r) => {
+    const meta: ScriptMeta = {
+      id: r.id,
+      name: r.name,
+      revision: r.revision,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    };
+    if (r.description) meta.description = r.description;
+    if (r.path) meta.path = r.path;
+    return meta;
+  });
 }
 
 async function getD1(db: D1Database, userId: string, id: string): Promise<ScriptRow | null> {
@@ -237,7 +241,12 @@ export async function handleScripts(
           .bind(userId, content, name ?? null, now)
           .run();
       } else {
-        memDrafts.set(userId, { content, name, updated_at: now });
+        const draft: { content: string; name?: string; updated_at: number } = {
+          content,
+          updated_at: now,
+        };
+        if (name) draft.name = name;
+        memDrafts.set(userId, draft);
       }
       return corsJson({ status: 'success' }, 200, origin);
     }
@@ -295,7 +304,8 @@ export async function handleScripts(
   }
 
   // --- Item /api/scripts/:id ---
-  const id = decodeURIComponent(parts[0]);
+  // Reached after the parts.length === 0 and parts[0] === '_draft' guards above.
+  const id = decodeURIComponent(parts[0]!);
 
   if (req.method === 'GET') {
     let row: ScriptRow | null = null;

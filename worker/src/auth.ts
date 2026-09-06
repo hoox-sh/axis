@@ -65,7 +65,7 @@ async function hashKey(key: string): Promise<string> {
 export function extractBearer(req: Request): string {
   const auth = req.headers.get('Authorization') || '';
   const m = /^Bearer\s+(.+)$/i.exec(auth);
-  if (m) return m[1].trim();
+  if (m) return m[1]!.trim();
   const url = new URL(req.url);
   return (url.searchParams.get('key') || '').trim();
 }
