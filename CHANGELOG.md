@@ -9,11 +9,17 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-06 · 340 commits · describe-tag: `v2.4.0`_
+_Generated/updated: 2026-09-07 · 353 commits · describe-tag: `cli-v0.2.2`_
 
 ---
 
 ## [Unreleased]
+
+_Nothing yet — see the latest version section below._
+
+---
+
+## [2.4.2] — 2026-09-07
 
 ### Added
 
@@ -928,12 +934,22 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (21 commits)
+### 2026-09 (34 commits)
 
 #### Features
 
+- `e00b6c97` (2026-09-06) — feat(shortcuts): shortcuts modal + Settings → Keyboard recorder
+- `6efa590a` (2026-09-06) — feat(shortcuts): palette extensions with live shortcut rendering
+- `47706d85` (2026-09-06) — feat(shortcuts): wire chart keymap through the dispatch hub
+- `acc5ce93` (2026-09-06) — feat(shortcuts): editor keymap extensions with Prec.high line ops
+- `e07ecb8c` (2026-09-06) — feat(shortcuts): wire app-level bindings through the dispatch hub
+- `2795ac72` (2026-09-06) — feat(shortcuts): capture-phase dispatch hub with dialog-skip guard
+- `50467b3d` (2026-09-06) — feat(shortcuts): persisted overrides slice on the app store
+- `902741d1` (2026-09-06) — feat(shortcuts): chord parser, registry, and default bindings
 - `da5e96d7` (2026-09-06) — feat(data): route all dataset paths through the DatasetStore
 - `f597806b` (2026-09-06) — feat(ui): dataset persistence switch + sliced-backfill progress chip
 - `257342d1` (2026-09-06) — feat(data): DSM-first load pipeline with progressive paint
@@ -945,6 +961,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `7d9f2dec` (2026-09-07) — fix(ui): resolve 23 UI-review findings across editor, drawings, panels, themes
+- `464a9497` (2026-09-06) — fix(architecture): only preload Pyodide when the DOM can host asset links
 - `8d5daf5c` (2026-09-06) — fix(worker): clean up tsc errors under noUncheckedIndexedAccess & exactOptionalPropertyTypes
 - `7ee49cc4` (2026-09-06) — fix(data): DatasetStore memory-first, DSM paint/gaps, v2.4.0
 - `520869dc` (2026-09-05) — fix: setup review — doctor, live HUD, static health, 2.3.1
@@ -959,6 +977,10 @@ Security and performance release from the multi-agent **harden-perf** audit
 - `3211bfe0` (2026-09-05) — docs(screenshots): recapture at 1920x1080 and 2560x1440
 - `9b820a77` (2026-09-05) — docs(screenshots): capture PWA, Studio, and CLI stills plus GIFs
 
+#### CI
+
+- `637cfa87` (2026-09-06) — ci(cli): full npm release pipeline with tag guard, registry verify, Node smoke
+
 #### Tests
 
 - `2c9643b3` (2026-09-05) — test(pwa): stub beforeinstallprompt without DOM Event
@@ -966,6 +988,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `fa49a6c1` (2026-09-06) — chore(cli): release @hoox-sh/axis-cli 0.2.2
+- `36ba501c` (2026-09-06) — chore(release): v2.4.1 — worker tsc compliance
 - `e84b8325` (2026-09-04) — chore(release): prepare v2.2.0
 
 ### 2026-08 (237 commits)
