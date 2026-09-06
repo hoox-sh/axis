@@ -9,11 +9,24 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-06 · 338 commits · describe-tag: `v2.3.1`_
+_Generated/updated: 2026-09-06 · 340 commits · describe-tag: `v2.4.0`_
 
 ---
 
 ## [Unreleased]
+
+---
+
+## [2.4.1] — 2026-09-06
+
+### Fixed
+
+- **Worker typecheck**: clean `tsc --noEmit` under the strict `worker/tsconfig.json` (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`).
+  - `auth.extractBearer`: regex capture non-null assertion — match guarantees the capture.
+  - `scripts.rowToMeta` / `listD1`: build `ScriptMeta` with optional `description` / `path` only when set (no implicit `undefined`).
+  - `scripts.handleScripts` draft put: include `name` only when defined; `parts[0]` non-null after the `_draft` / empty-path guards.
+
+No runtime behavior change; only type compliance so `worker tsc` matches the pre-push gate.
 
 ---
 
@@ -882,9 +895,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (19 commits)
+### 2026-09 (21 commits)
 
 #### Features
 
@@ -899,12 +914,14 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `8d5daf5c` (2026-09-06) — fix(worker): clean up tsc errors under noUncheckedIndexedAccess & exactOptionalPropertyTypes
 - `7ee49cc4` (2026-09-06) — fix(data): DatasetStore memory-first, DSM paint/gaps, v2.4.0
 - `520869dc` (2026-09-05) — fix: setup review — doctor, live HUD, static health, 2.3.1
 - `16499ac7` (2026-09-04) — fix(results): skip live-tick persist and unstick studio e2e
 
 #### Documentation
 
+- `eecca17d` (2026-09-06) — docs(changelog): regenerate full history for v2.4.0
 - `e9df22fe` (2026-09-06) — docs(changelog): DSM-first dataset store, validation, persistence switch
 - `d10a9ea4` (2026-09-05) — docs(screenshots): wire stills into README and matching guides
 - `adcb846d` (2026-09-05) — docs(screenshots): close editor except on editor-focused stills

@@ -30,7 +30,7 @@ import { Icons } from './icons';
 import { HooxLogo } from './HooxLogo';
 
 /** App + engine versions shown in the about chrome (keep in sync with package.json). */
-const AXIS_VERSION = '2.4.0';
+const AXIS_VERSION = '2.4.1';
 const PYNE_VERSION = '0.4.4';
 
 const LINKS = {

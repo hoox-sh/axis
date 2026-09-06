@@ -1,6 +1,6 @@
 [package]
 name = "axis"
-version = "2.4.0"
+version = "2.4.1"
 description = "AXIS — open charting desktop app: CEX data, drawings, on-chain, PYNE (HOOX)"
 authors = ["jango_blockchained"]
 license = "AGPL-3.0-only"
