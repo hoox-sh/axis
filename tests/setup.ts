@@ -134,6 +134,9 @@ export function installDocumentStub() {
     getElementById(id: string) {
       return nodes.get(id) || null;
     },
+    querySelector() {
+      return null;
+    },
   };
 
   if (typeof (globalThis as { ResizeObserver?: unknown }).ResizeObserver === 'undefined') {
