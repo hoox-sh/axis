@@ -117,4 +117,16 @@ describe('dataset-store', () => {
     expect(lastLen).toBe(1);
     unsub();
   });
+
+  it('getDataset keeps the memory mirror across a persistence-mode switch', async () => {
+    await putDatasetBars('binance-rest', 'BTCUSDT', '1d', [bar(60, 1), bar(120, 2)]);
+    setPersistenceMode('session');
+    expect((await getDataset('binance-rest', 'BTCUSDT', '1d')).map((b) => b.time)).toEqual([
+      60, 120,
+    ]);
+    setPersistenceMode('git');
+    expect((await getDataset('binance-rest', 'BTCUSDT', '1d')).length).toBe(2);
+    setPersistenceMode('local');
+    expect((await getDataset('binance-rest', 'BTCUSDT', '1d')).length).toBe(2);
+  });
 });

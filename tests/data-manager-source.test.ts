@@ -10,6 +10,8 @@ import {
   DATA_MANAGER_SOURCE_ID,
 } from '../src/data/data-manager-source';
 import { putCachedBars, _resetBarsCacheForTests } from '../src/data/bars-cache';
+import { _resetDatasetStoreForTests } from '../src/data/dataset-store';
+import { _resetDatasetSinksForTests } from '../src/data/dataset-sinks';
 import {
   ensureSourcesRegistered,
   getSource,
@@ -24,6 +26,8 @@ function bar(t: number): Bar {
 
 describe('data-manager source', () => {
   beforeEach(async () => {
+    _resetDatasetStoreForTests();
+    _resetDatasetSinksForTests();
     await _resetBarsCacheForTests();
     clearDataManagerSelection();
     _resetSourceRegistrationFlag();

@@ -34,7 +34,7 @@
  */
 
 import type { Bar } from '../store/types';
-import { clampHistoryBars, loadBars, setStatus, store } from '../store';
+import { clampHistoryBars, loadBars, setBarsQuiet, setStatus, store } from '../store';
 import { getManager, setDataToChart } from '../chart/manager-access';
 import {
   getDataset,
@@ -42,10 +42,15 @@ import {
   putDatasetBars,
   subscribeDatasets,
 } from './dataset-store';
-import { repairBars, validateDataset } from './dataset-validate';
+import {
+  repairBars,
+  validateDataset,
+  venueClassForSourceCaps,
+} from './dataset-validate';
 import { intervalToSec } from './bars-gaps';
 import { startBackfill } from './data-source-manager';
 import { exchangeForSource } from './load-symbol';
+import { getSource } from '../sources/catalog';
 import { announce } from '../ui/sr-announce';
 
 /** Throttle window for progressive repaints (ms). */
@@ -68,6 +73,8 @@ let activeKey: string | null = null;
 let unsubscribe: (() => void) | null = null;
 let repaintTimer: ReturnType<typeof setTimeout> | null = null;
 let repaintPending = false;
+/** Bumped on every `paintDataset` so a slower prior load cannot paint. */
+let paintGen = 0;
 
 function stopStreaming(): void {
   if (unsubscribe) {
@@ -97,7 +104,7 @@ function paintFull(bars: Bar[], sym: string, iv: string, srcId: string): void {
 }
 
 /** Throttled progressive repaint — extends the chart without viewport reset. */
-function scheduleRepaint(sym: string, iv: string, srcId: string): void {
+function scheduleRepaint(sym: string, iv: string, srcId: string, gen: number): void {
   if (repaintTimer) {
     repaintPending = true;
     return;
@@ -105,12 +112,13 @@ function scheduleRepaint(sym: string, iv: string, srcId: string): void {
   repaintTimer = setTimeout(() => {
     repaintTimer = null;
     const run = async () => {
-      if (!activeKey) return;
+      if (!activeKey || gen !== paintGen) return;
       const [srcIdFromKey, symFromKey, ivFromKey] = activeKey.split('|');
-      const bars = await getDataset(srcIdFromKey ?? srcId, symFromKey ?? sym, ivFromKey ?? iv);
-      if (!bars.length || activeKey !== keyFor(srcId, sym, iv)) return;
-      const exchange = exchangeForSource(srcId);
-      loadBars(bars, sym, iv, exchange);
+      const raw = await getDataset(srcIdFromKey ?? srcId, symFromKey ?? sym, ivFromKey ?? iv);
+      if (!raw.length || gen !== paintGen || activeKey !== keyFor(srcId, sym, iv)) return;
+      const { bars } = repairBars(raw, iv);
+      if (!bars.length) return;
+      setBarsQuiet(bars);
       const manager = getManager();
       if (manager) {
         try {
@@ -125,7 +133,7 @@ function scheduleRepaint(sym: string, iv: string, srcId: string): void {
       }
       if (repaintPending) {
         repaintPending = false;
-        scheduleRepaint(sym, iv, srcId);
+        scheduleRepaint(sym, iv, srcId, gen);
       }
     };
     void run();
@@ -141,14 +149,18 @@ export async function paintDataset(
   symbol: string,
   interval: string,
   sourceId: string,
+  opts?: { stillCurrent?: () => boolean },
 ): Promise<Bar[] | null> {
   const sym = String(symbol || '').trim();
   const iv = String(interval || store.interval || '1d');
   const srcId = String(sourceId || store.source || '');
   const key = keyFor(srcId, sym, iv);
+  const gen = ++paintGen;
 
   stopStreaming();
   const raw = await getDataset(srcId, sym, iv);
+  if (gen !== paintGen) return null;
+  if (opts?.stillCurrent && !opts.stillCurrent()) return null;
   if (!raw.length) return null;
 
   const { bars } = repairBars(raw, iv);
@@ -156,7 +168,7 @@ export async function paintDataset(
 
   activeKey = key;
   unsubscribe = subscribeDatasets((changedKey) => {
-    if (changedKey === activeKey) scheduleRepaint(sym, iv, srcId);
+    if (changedKey === activeKey) scheduleRepaint(sym, iv, srcId, gen);
   });
 
   paintFull(bars, sym, iv, srcId);
@@ -198,7 +210,7 @@ export function ensureDatasetComplete(
       if (!raw.length) return;
       const { bars } = repairBars(raw, iv);
       const report = validateDataset(bars, targetFromSec, targetToSec, iv, {
-        venueClass: '24/7',
+        venueClass: venueClassForSourceCaps(getSource(srcId)?.capabilities),
       });
       result.gapsFillable = report.fillableGaps.length;
       result.gapsLegitimate = report.legitimateGaps.length;
@@ -261,4 +273,5 @@ export function announceDatasetPaint(bars: Bar[], sym: string, iv: string): void
 /** @internal test helper — stop streaming + clear timers. */
 export function _resetDsmOrchestratorForTests(): void {
   stopStreaming();
+  paintGen = 0;
 }

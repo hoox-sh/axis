@@ -41,6 +41,7 @@ import {
   type BarLoadWindow,
   type BarsCacheMeta,
 } from '../data/bars-cache';
+import { listMemoryDatasets } from '../data/dataset-store';
 import { buildCoverageMap, type CoverageSegment } from '../data/bars-gaps';
 import {
   applyCachedToChart,
@@ -338,15 +339,30 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
     setError('');
     try {
       const list = await listCachedSeries();
-      setRows(list);
+      const byKey = new Map(list.map((r) => [r.key, r] as const));
+      for (const m of listMemoryDatasets()) {
+        if (byKey.has(m.key)) continue;
+        byKey.set(m.key, {
+          key: m.key,
+          sourceId: m.sourceId,
+          symbol: m.symbol,
+          interval: m.interval,
+          count: m.barCount,
+          oldestSec: m.oldestSec,
+          newestSec: m.newestSec,
+          updatedAt: Date.now(),
+        });
+      }
+      const merged = [...byKey.values()];
+      setRows(merged);
       const cur = selectedKey();
-      if (cur && !list.some((r) => metaKey(r) === cur)) {
-        const next = list[0] ? metaKey(list[0]) : null;
+      if (cur && !merged.some((r) => metaKey(r) === cur)) {
+        const next = merged[0] ? metaKey(merged[0]) : null;
         setSelectedKey(next);
-        syncLoadDefaults(list[0] ?? null);
-      } else if (!cur && list[0]) {
-        setSelectedKey(metaKey(list[0]));
-        syncLoadDefaults(list[0]);
+        syncLoadDefaults(merged[0] ?? null);
+      } else if (!cur && merged[0]) {
+        setSelectedKey(metaKey(merged[0]));
+        syncLoadDefaults(merged[0]);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));

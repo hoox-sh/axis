@@ -43,6 +43,7 @@ import {
   mergeWithConflictPolicy,
   type MergePolicy,
 } from './merge-datasets';
+import { repairBars } from './dataset-validate';
 
 /** Soft cap on memory-mirrored series (matches bars-cache series cap). */
 const MEMORY_MAX_SERIES = 48;
@@ -99,12 +100,19 @@ export function getPersistenceMode(): PersistenceMode {
 }
 
 /**
- * Switch the durable sink. Memory mirror is preserved so the chart keeps
- * painting while the new sink warms up.
+ * Switch the durable sink. Memory mirror stays the read source; series are
+ * copied into the new sink so a Settings switch cannot drop the active view.
  */
 export function setPersistenceMode(mode: PersistenceMode): void {
   if (mode === persistenceMode) return;
   persistenceMode = mode;
+  const sink = activeSink();
+  for (const [key, bars] of memory) {
+    if (!bars.length) continue;
+    void sink.replace(key, bars).catch((err: unknown) => {
+      console.warn(`[dataset-store] copy to ${mode} failed for ${key}`, err);
+    });
+  }
 }
 
 /** Current conflict-resolution policy for dataset merges. */
@@ -132,8 +140,8 @@ function activeSink(): DatasetSink {
 }
 
 /**
- * Read a dataset through the active sink (bars-cache is memory-warm, so this
- * is cheap) and refresh the mirror. Returns a copy — callers must not mutate.
+ * Read a dataset. Memory mirror wins (never wiped on a sink miss); the active
+ * sink is consulted only when the mirror is cold. Returns a copy.
  */
 export async function getDataset(
   sourceId: string,
@@ -141,12 +149,13 @@ export async function getDataset(
   interval: string,
 ): Promise<Bar[]> {
   const key = keyFor(sourceId, symbol, interval);
+  const mem = memory.get(key);
+  if (mem?.length) return mem.slice();
   const bars = await activeSink().get(key);
   if (bars?.length) {
     remember(key, bars);
     return bars.slice();
   }
-  memory.delete(key);
   return [];
 }
 
@@ -163,27 +172,26 @@ export async function putDatasetBars(
 ): Promise<PutResult> {
   const key = keyFor(sourceId, symbol, interval);
   const incoming = bars.filter((b) => b && Number.isFinite(b.time));
+  const current =
+    memory.get(key) ?? (await activeSink().get(key)) ?? [];
   if (!incoming.length) {
-    const existing = await activeSink().get(key);
-    return { bars: existing?.slice() ?? [], added: 0, conflicts: 0 };
+    return { bars: current.slice(), added: 0, conflicts: 0 };
   }
 
-  const current = (await activeSink().get(key)) ?? [];
   const merged = mergeWithConflictPolicy(current, incoming, {
     policy: opts?.policy ?? mergePolicy,
   });
+  const { bars: repaired } = repairBars(merged.bars, interval);
 
-  remember(key, merged.bars);
-  notify(key, merged.bars);
+  remember(key, repaired);
+  notify(key, repaired);
 
-  // The active sink owns durability: session sink = memory, local = IDB,
-  // git/worker = remote docs. Session mode is memory-only by construction.
   try {
-    await activeSink().put(key, merged.bars);
+    await activeSink().put(key, repaired);
   } catch (err: unknown) {
     console.warn(`[dataset-store] sink put failed for ${key}`, err);
   }
-  return { bars: merged.bars, added: merged.added, conflicts: merged.conflicts.length };
+  return { bars: repaired, added: merged.added, conflicts: merged.conflicts.length };
 }
 
 /**
@@ -197,7 +205,10 @@ export async function replaceDataset(
   bars: readonly Bar[],
 ): Promise<Bar[]> {
   const key = keyFor(sourceId, symbol, interval);
-  const clean = bars.filter((b) => b && Number.isFinite(b.time));
+  const { bars: clean } = repairBars(
+    bars.filter((b) => b && Number.isFinite(b.time)),
+    interval,
+  );
   remember(key, clean);
   notify(key, clean);
   try {

@@ -7,6 +7,7 @@ import {
   classifyGaps,
   validateDataset,
   findClassifiedGaps,
+  venueClassForSourceCaps,
 } from '../src/data/dataset-validate';
 import type { BarGap } from '../src/data/bars-gaps';
 import type { Bar } from '../src/store/types';
@@ -155,5 +156,12 @@ describe('dataset-validate · validateDataset', () => {
     const bars = [bar(MON), bar(MON + 2 * DAY)];
     const { fillable } = findClassifiedGaps(bars, MON, MON + 2 * DAY, '1d');
     expect(fillable).toHaveLength(1);
+  });
+
+  it('venueClassForSourceCaps defaults to 24/7 unless calendar is sessions', () => {
+    expect(venueClassForSourceCaps(undefined)).toBe('24/7');
+    expect(venueClassForSourceCaps({})).toBe('24/7');
+    expect(venueClassForSourceCaps({ calendar: '24/7' })).toBe('24/7');
+    expect(venueClassForSourceCaps({ calendar: 'sessions' })).toBe('sessions');
   });
 });

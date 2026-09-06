@@ -9,11 +9,15 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-06 · 336 commits · describe-tag: `v2.3.1`_
+_Generated/updated: 2026-09-06 · 337 commits · describe-tag: `v2.3.1`_
 
 ---
 
 ## [Unreleased]
+
+---
+
+## [2.4.0] — 2026-09-06
 
 ### Added
 
@@ -24,16 +28,25 @@ _Generated/updated: 2026-09-06 · 336 commits · describe-tag: `v2.3.1`_
 - **Settings → Data → Dataset persistence** main switch: `Session | Local | Git | Worker` (default Local), persisted as `store.datasetPersistence` and synced to the DatasetStore on boot/change.
 - **Sliced-backfill progress chip** in the topbar Data group: live `loaded / expected` bar count while a DSM job completes the current dataset in the background.
 
+### Fixed
+
+- **DatasetStore reads** are memory-first and never wipe the mirror on a sink miss; switching persistence copies in-memory series into the new sink.
+- **Git/Worker sinks** return pending bars from `get` (no empty merge during DSM walk-back), serialize per-key flushes so a retry cannot clobber a newer put, and write-through to IndexedDB as a durable front. `onSinkError` lands in system logs.
+- **Progressive paint** no longer goes through `loadBars` (that re-fitted the viewport every slice). `paintDataset` is generation-guarded so a slower prior load cannot paint over a newer symbol.
+- **DSM jobs** repair + `validateDataset` / fillable gaps (not raw `validateBarCoverage`); `ensureDatasetComplete` uses the source calendar class. In-flight jobs for the same key are reused; the progress chip counts bars in the target window.
+
 ### Changed
 
 - **Topbar order**: the Venue picker moved to the front of the Market group (Venue → Symbol → Interval → Type → Compare) since it determines valid symbols/intervals; the Data group keeps plugin config, upload, datasets, Load, and Reload.
 - **DSM job engine** reads and writes now route through the DatasetStore (session-mode safe, progressive repaints fire on every merged slice); `expand-cache` (cache→now + live ticks) and the Data Manager source do the same, with a repair pass on Data Manager resolves and CSV uploads.
+- **Reload** shows the same loading spinner / `loadSeq` as Load.
 
 ### Tests
 
 - `tests/dataset-validate.test.ts` — repair (corrupt rows, phase-aware snap, dedupe, sort), gap classification (24/7 vs session venues, maintenance windows), dataset reports.
 - `tests/merge-datasets.test.ts` — conflict detection tolerance, merge policies, union/sort behavior.
-- `tests/dataset-store.test.ts` — sink routing (session vs local), conflict-resolved merges, replace/remove, change subscription.
+- `tests/dataset-store.test.ts` — sink routing (session vs local), conflict-resolved merges, replace/remove, change subscription, persistence-mode switch.
+- `tests/dataset-sinks.test.ts` — remote `get` returns pending bars before flush.
 - `tests/integration/load-symbol.test.ts` — DSM-first cache paint without hitting the venue.
 
 ---
@@ -865,9 +878,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (17 commits)
+### 2026-09 (18 commits)
 
 #### Features
 
@@ -887,6 +902,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `e9df22fe` (2026-09-06) — docs(changelog): DSM-first dataset store, validation, persistence switch
 - `d10a9ea4` (2026-09-05) — docs(screenshots): wire stills into README and matching guides
 - `adcb846d` (2026-09-05) — docs(screenshots): close editor except on editor-focused stills
 - `3211bfe0` (2026-09-05) — docs(screenshots): recapture at 1920x1080 and 2560x1440

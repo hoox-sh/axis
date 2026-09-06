@@ -151,8 +151,8 @@ function splitKey(key: string): [string, string, string] {
 
 // ── remote (git / worker via storage plugins) ──────────────────────────
 
-/** Debounce window for remote dataset pushes (ms). */
-const REMOTE_PUSH_DEBOUNCE_MS = 2_000;
+/** Debounce window for remote dataset pushes (ms). Local IDB is the durable front. */
+const REMOTE_PUSH_DEBOUNCE_MS = 15_000;
 /** Retry cap per failed remote write. */
 const REMOTE_PUSH_RETRIES = 3;
 
@@ -160,6 +160,8 @@ interface RemotePending {
   bars: Bar[];
   timer: ReturnType<typeof setTimeout> | null;
   retries: number;
+  flushing: boolean;
+  gen: number;
 }
 
 const remotePending = new Map<string, RemotePending>();
@@ -187,8 +189,14 @@ async function storagePlugin(mode: 'git' | 'worker') {
 export function remoteSink(mode: 'git' | 'worker'): DatasetSink {
   const flush = async (key: string): Promise<void> => {
     const pending = remotePending.get(key);
-    if (!pending) return;
-    remotePending.delete(key);
+    if (!pending || pending.flushing) return;
+    pending.flushing = true;
+    if (pending.timer) {
+      clearTimeout(pending.timer);
+      pending.timer = null;
+    }
+    const gen = pending.gen;
+    const snapshot = pending.bars;
     try {
       const plugin = await storagePlugin(mode);
       if (!plugin) throw new Error(`storage plugin "${storageIdFor(mode)}" not registered`);
@@ -201,51 +209,95 @@ export function remoteSink(mode: 'git' | 'worker'): DatasetSink {
           description: 'AXIS dataset (OHLCV)',
           tags: ['dataset'],
           updatedAt: Date.now(),
-          content: JSON.stringify({ v: 1, key, bars: pending.bars }),
+          content: JSON.stringify({ v: 1, key, bars: snapshot }),
         },
         {},
       );
-    } catch (err: unknown) {
-      if (pending.retries < REMOTE_PUSH_RETRIES) {
-        pending.retries += 1;
-        remotePending.set(key, pending);
-        setTimeout(() => void flush(key), REMOTE_PUSH_DEBOUNCE_MS * pending.retries);
+      const current = remotePending.get(key);
+      if (!current) return;
+      current.flushing = false;
+      if (current.gen === gen) {
+        remotePending.delete(key);
       } else {
+        current.timer = setTimeout(() => void flush(key), REMOTE_PUSH_DEBOUNCE_MS);
+      }
+    } catch (err: unknown) {
+      const current = remotePending.get(key);
+      if (!current) return;
+      current.flushing = false;
+      if (current.retries < REMOTE_PUSH_RETRIES) {
+        current.retries += 1;
+        setTimeout(() => void flush(key), REMOTE_PUSH_DEBOUNCE_MS * current.retries);
+      } else {
+        remotePending.delete(key);
         reportSinkError(mode, key, err);
       }
     }
   };
 
+  const emptyPending = (): RemotePending => ({
+    bars: [],
+    timer: null,
+    retries: 0,
+    flushing: false,
+    gen: 0,
+  });
+
   return {
     mode,
     async get(key) {
+      const pending = remotePending.get(key);
       try {
         const plugin = await storagePlugin(mode);
-        if (!plugin) return null;
-        const doc = await plugin.read(datasetDocId(key), {});
-        if (!doc?.content) return null;
-        const parsed = JSON.parse(doc.content) as { bars?: Bar[] };
-        return Array.isArray(parsed.bars) ? parsed.bars : null;
+        let remote: Bar[] = [];
+        if (plugin) {
+          const doc = await plugin.read(datasetDocId(key), {});
+          if (doc?.content) {
+            const parsed = JSON.parse(doc.content) as { bars?: Bar[] };
+            if (Array.isArray(parsed.bars)) remote = parsed.bars;
+          }
+        }
+        if (pending?.bars.length) return mergeSorted(remote, pending.bars);
+        if (remote.length) return remote;
+        return localSink.get(key);
       } catch {
-        return null;
+        if (pending?.bars.length) return pending.bars.slice();
+        return localSink.get(key);
       }
     },
     async put(key, bars) {
-      const pending = remotePending.get(key) ?? { bars: [], timer: null, retries: 0 };
+      void localSink.put(key, bars).catch(() => {
+        /* local front is best-effort; remote pending still holds */
+      });
+      const pending = remotePending.get(key) ?? emptyPending();
       pending.bars = mergeSorted(pending.bars, bars);
+      pending.gen += 1;
+      pending.retries = 0;
       if (pending.timer) clearTimeout(pending.timer);
-      pending.timer = setTimeout(() => void flush(key), REMOTE_PUSH_DEBOUNCE_MS);
+      if (!pending.flushing) {
+        pending.timer = setTimeout(() => void flush(key), REMOTE_PUSH_DEBOUNCE_MS);
+      }
       remotePending.set(key, pending);
       return pending.bars.length;
     },
     async replace(key, bars) {
-      remotePending.set(key, { bars: [...bars], timer: null, retries: 0 });
+      void localSink.replace(key, bars).catch(() => {
+        /* local front is best-effort */
+      });
+      const pending = remotePending.get(key) ?? emptyPending();
+      pending.bars = [...bars];
+      pending.gen += 1;
+      pending.retries = 0;
+      remotePending.set(key, pending);
       await flush(key);
     },
     async remove(key) {
       const pending = remotePending.get(key);
       if (pending?.timer) clearTimeout(pending.timer);
       remotePending.delete(key);
+      void localSink.remove(key).catch(() => {
+        /* ignore */
+      });
       try {
         const plugin = await storagePlugin(mode);
         await plugin?.remove?.(datasetDocId(key), {});

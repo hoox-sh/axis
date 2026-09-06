@@ -21,7 +21,7 @@ function fireBeforeInstallPrompt(): { prompt: ReturnType<typeof mock> } {
     prompt,
     userChoice: Promise.resolve({ outcome: 'accepted' as const }),
   } as unknown as BeforeInstallPromptEvent;
-  window.dispatchEvent(ev);
+  globalThis.window.dispatchEvent(ev);
   return { prompt };
 }
 

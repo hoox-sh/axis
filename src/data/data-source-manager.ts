@@ -48,13 +48,18 @@ import {
 import {
   getDataset,
   putDatasetBars,
+  replaceDataset,
 } from './dataset-store';
 import {
-  findBarGaps,
   intervalToSec,
-  validateBarCoverage,
   type BarGap,
 } from './bars-gaps';
+import {
+  repairBars,
+  validateDataset,
+  venueClassForSourceCaps,
+  type DatasetReport,
+} from './dataset-validate';
 
 export type DataSourceJobStatus =
   | 'pending'
@@ -140,6 +145,34 @@ const waitQueue: string[] = [];
 
 function nowSec(): number {
   return Math.floor(Date.now() / 1000);
+}
+
+function countBarsInWindow(bars: readonly Bar[], fromSec: number, toSec: number): number {
+  let n = 0;
+  for (const b of bars) {
+    if (b && b.time >= fromSec && b.time <= toSec) n += 1;
+  }
+  return n;
+}
+
+function jobVenueClass(sourceId: string) {
+  return venueClassForSourceCaps(getSource(sourceId)?.capabilities);
+}
+
+function validateJobBars(
+  bars: readonly Bar[],
+  j: InternalJob,
+): { repaired: Bar[]; report: DatasetReport } {
+  const { bars: repaired, stats } = repairBars(bars, j.interval);
+  if (stats.removed || stats.deduped || stats.snapped || stats.reordered) {
+    void replaceDataset(j.sourceId, j.symbol, j.interval, repaired).catch(() => {
+      /* persist is best-effort */
+    });
+  }
+  const report = validateDataset(repaired, j.targetFromSec, j.targetToSec, j.interval, {
+    venueClass: jobVenueClass(j.sourceId),
+  });
+  return { repaired, report };
 }
 
 function jobId(): string {
@@ -283,6 +316,24 @@ export function startBackfill(opts: StartBackfillOpts = {}): string {
     throw new Error('Past date must be before now');
   }
 
+  for (const existing of internals.values()) {
+    if (
+      existing.sourceId === sourceId &&
+      existing.symbol === symbol &&
+      existing.interval === interval &&
+      (existing.status === 'running' ||
+        existing.status === 'pending' ||
+        existing.status === 'paused')
+    ) {
+      if (targetFromSec < existing.targetFromSec) existing.targetFromSec = targetFromSec;
+      if (targetToSec > existing.targetToSec) existing.targetToSec = targetToSec;
+      existing.updatedAt = Date.now();
+      syncJob(existing);
+      if (existing.status === 'paused') resumeBackfill(existing.id);
+      return existing.id;
+    }
+  }
+
   const id = jobId();
   const abort = new AbortController();
   const internal: InternalJob = {
@@ -393,7 +444,7 @@ async function refreshJobFromCache(j: InternalJob): Promise<Bar[]> {
   try {
     const cached = await getDataset(j.sourceId, j.symbol, j.interval);
     if (cached.length) {
-      j.barsFetched = cached.length;
+      j.barsFetched = countBarsInWindow(cached, j.targetFromSec, j.targetToSec);
       j.oldestSec = cached[0]!.time;
       j.newestSec = cached[cached.length - 1]!.time;
     } else {
@@ -458,7 +509,7 @@ async function fetchWalkPage(
     try {
       const merged = await putDatasetBars(j.sourceId, j.symbol, j.interval, pageBars);
       if (merged.bars.length) {
-        j.barsFetched = merged.bars.length;
+        j.barsFetched = countBarsInWindow(merged.bars, j.targetFromSec, j.targetToSec);
         j.oldestSec = merged.bars[0]!.time;
         j.newestSec = merged.bars[merged.bars.length - 1]!.time;
         j.updatedAt = Date.now();
@@ -536,7 +587,11 @@ async function walkBackRange(
     // Early exit when the full window is already dense (resume of complete cache)
     try {
       const cached = await getDataset(j.sourceId, j.symbol, j.interval);
-      const report = validateBarCoverage(cached, windowFrom, windowTo, j.interval);
+      const { report } = validateJobBars(cached, {
+        ...j,
+        targetFromSec: windowFrom,
+        targetToSec: windowTo,
+      });
       if (report.complete) return 'ok';
     } catch {
       /* ignore */
@@ -604,7 +659,8 @@ function needsNetworkBackfill(
   interval: string,
 ): boolean {
   if (!cached.length) return true;
-  const report = validateBarCoverage(cached, fromSec, toSec, interval);
+  const { bars: repaired } = repairBars(cached, interval);
+  const report = validateDataset(repaired, fromSec, toSec, interval);
   if (!report.complete) return true;
   const step = intervalToSec(interval);
   if (report.newestSec == null || toSec - report.newestSec > step * 1.5) return true;
@@ -681,15 +737,10 @@ async function runJob(j: InternalJob): Promise<void> {
       syncJob(j);
 
       cached = await getDataset(j.sourceId, j.symbol, j.interval);
-      const report = validateBarCoverage(
-        cached,
-        j.targetFromSec,
-        j.targetToSec,
-        j.interval,
-      );
-      j.gapsFound = report.gaps.length;
+      const { report } = validateJobBars(cached, j);
+      j.gapsFound = report.fillableGaps.length;
       j.datasetComplete = report.complete;
-      j.barsFetched = report.barCount || cached.length;
+      j.barsFetched = report.barCount || countBarsInWindow(cached, j.targetFromSec, j.targetToSec);
       j.oldestSec = report.oldestSec;
       j.newestSec = report.newestSec;
       j.updatedAt = Date.now();
@@ -702,8 +753,8 @@ async function runJob(j: InternalJob): Promise<void> {
         return;
       }
 
-      // No discrete gaps but still sparse — force another full walk from now
-      if (!report.gaps.length) {
+      // No discrete fillable gaps but still sparse — force another full walk from now
+      if (!report.fillableGaps.length) {
         if (
           round < 2 &&
           (report.barCount < report.expectedBars * 0.85 ||
@@ -732,8 +783,8 @@ async function runJob(j: InternalJob): Promise<void> {
         break;
       }
 
-      // Prefer largest gaps first (trailing hole is usually biggest)
-      const gaps = report.gaps
+      // Prefer largest fillable gaps first (trailing hole is usually biggest)
+      const gaps = report.fillableGaps
         .slice()
         .sort((a, b) => b.missingBars - a.missingBars)
         .slice(0, 48);
@@ -750,15 +801,10 @@ async function runJob(j: InternalJob): Promise<void> {
 
     // Final validation
     const finalCached = await getDataset(j.sourceId, j.symbol, j.interval);
-    const finalReport = validateBarCoverage(
-      finalCached,
-      j.targetFromSec,
-      j.targetToSec,
-      j.interval,
-    );
-    j.gapsFound = finalReport.gaps.length;
+    const { report: finalReport } = validateJobBars(finalCached, j);
+    j.gapsFound = finalReport.fillableGaps.length;
     j.datasetComplete = finalReport.complete;
-    j.barsFetched = finalReport.barCount || finalCached.length;
+    j.barsFetched = finalReport.barCount || countBarsInWindow(finalCached, j.targetFromSec, j.targetToSec);
     j.oldestSec = finalReport.oldestSec;
     j.newestSec = finalReport.newestSec;
     j.phase = 'done';
@@ -767,7 +813,7 @@ async function runJob(j: InternalJob): Promise<void> {
     if (finalReport.complete) {
       setJobStatus(j, 'complete');
     } else {
-      const n = finalReport.gaps.length;
+      const n = finalReport.fillableGaps.length;
       const sparse =
         finalReport.expectedBars > 0 &&
         finalReport.barCount < finalReport.expectedBars * 0.85;

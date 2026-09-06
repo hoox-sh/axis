@@ -82,7 +82,7 @@ export function _resetPwaInstallPromptForTests(): void {
   dismissedThisSession = false;
   listening = false;
   setAvailable(false);
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
     window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
     window.removeEventListener('appinstalled', onAppInstalled);
   }

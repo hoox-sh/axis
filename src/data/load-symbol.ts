@@ -231,7 +231,7 @@ export async function loadSymbolData(
     const { paintDataset, ensureDatasetComplete, announceDatasetPaint } = await import(
       './dsm-orchestrator'
     );
-    const painted = await paintDataset(sym, iv, srcId);
+    const painted = await paintDataset(sym, iv, srcId, { stillCurrent });
     if (painted && painted.length) {
       if (!stillCurrent()) return false;
       const ms = performance.now() - t0;

@@ -134,6 +134,7 @@ import {
 } from '../chart/price-precision';
 import { saveRunResult, supportsRunResults } from '../storage/service';
 import { setPersistenceMode } from '../data/dataset-store';
+import { onSinkError } from '../data/dataset-sinks';
 import type { ResultMeta, RunResult, StoredRunResult } from '../plugins/types';
 
 // Stable ID generation — uses timestamp prefix + counter to survive reloads
@@ -1239,6 +1240,10 @@ export const [store, setStore] = createStore<AppState>(seedStoreState(loadPersis
 // Sync the DatasetStore sink with the persisted persistence switch (boot).
 try {
   setPersistenceMode(store.datasetPersistence);
+  onSinkError((mode, key, err) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    appendLog('warn', `Dataset ${mode} write failed for ${key}: ${msg}`, 'dsm');
+  });
 } catch {
   /* dataset-store optional at boot */
 }
@@ -2199,6 +2204,18 @@ if (typeof window !== 'undefined') {
  * Replace chart history (full load). Bumps `chartDataGen` so ChartHost rebinds series data.
  * Persists symbol/interval/exchange; bars themselves are not written to localStorage.
  */
+/**
+ * Update `store.bars` without bumping `chartDataGen` or persisting.
+ * Used for DSM progressive slices so ChartHost does not re-fit the viewport.
+ */
+export function setBarsQuiet(bars: Bar[]) {
+  batch(() => {
+    setStore('bars', bars);
+    const slotId = getActiveSlotId() || store.chartLayout?.activeId;
+    if (slotId) setSlotBars(slotId, bars, false);
+  });
+}
+
 export function loadBars(bars: Bar[], symbol: string, interval: string, exchange: string) {
   // One reactive flush for Topbar + ChartHost + StatusBar (not 5 micro-updates)
   batch(() => {

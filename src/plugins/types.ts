@@ -102,6 +102,11 @@ export interface PluginCapabilities {
   /** Instrument class (spot vs perps). Default spot. */
   market?: 'spot' | 'linear' | 'inverse' | 'option';
   /**
+   * Trading calendar for dataset gap classification. Default `'24/7'`
+   * (crypto). `'sessions'` excuses weekend holes at daily+ intervals.
+   */
+  calendar?: '24/7' | 'sessions';
+  /**
    * True when the stream emits **venue candles** (same aggregation as REST).
    * False/omit for ticker-bucketed or synthetic bars.
    */

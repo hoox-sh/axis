@@ -340,6 +340,24 @@ describe('data-source-manager', () => {
     expect(dataSourceManagerState.jobs.find((j) => j.id === id)).toBeUndefined();
   });
 
+  it('reuses an in-flight job for the same source/symbol/interval', () => {
+    const from = Math.floor(Date.now() / 1000) - 86_400;
+    const a = startBackfill({
+      sourceId: 'mock-walk',
+      symbol: 'DEDUP',
+      interval: '1d',
+      targetFromSec: from,
+    });
+    const b = startBackfill({
+      sourceId: 'mock-walk',
+      symbol: 'DEDUP',
+      interval: '1d',
+      targetFromSec: from - 86_400,
+    });
+    expect(a).toBe(b);
+    cancelBackfill(a);
+  });
+
   it('rejects unknown source and bad date range', () => {
     expect(() =>
       startBackfill({ sourceId: 'nope', symbol: 'BTC', interval: '1d' }),

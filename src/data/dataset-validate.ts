@@ -47,6 +47,13 @@ import {
 /** Venue trading calendar class — drives legitimate-gap detection. */
 export type VenueClass = '24/7' | 'sessions';
 
+/** Resolve calendar class from a source plugin's capabilities (default 24/7). */
+export function venueClassForSourceCaps(
+  caps?: { calendar?: VenueClass } | null,
+): VenueClass {
+  return caps?.calendar === 'sessions' ? 'sessions' : '24/7';
+}
+
 export interface RepairStats {
   /** Bars dropped entirely (corrupt / unsalvageable). */
   removed: number;

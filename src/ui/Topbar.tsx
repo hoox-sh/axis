@@ -213,7 +213,7 @@ export const Topbar: Component<{
     setLoading(true);
     try {
       const parsed = await parseOhlcvFile(file);
-      // Repair pass: drop corrupt rows, dedupe, sort, snap to interval grid
+      // File timeframe is unknown — snap against the chart's current interval.
       const { repairBars } = await import('../data/dataset-validate');
       const { bars } = repairBars(parsed, store.interval);
       if (!bars.length) throw new Error('no valid bars after repair');
@@ -512,7 +512,13 @@ export const Topbar: Component<{
         <button
           type="button"
           class={`sc-btn sc-btn-ghost sc-btn-icon ${loading() ? 'is-loading' : ''}`}
-          onClick={() => void reloadChart()}
+          onClick={() => {
+            const seq = ++loadSeq;
+            setLoading(true);
+            void reloadChart().finally(() => {
+              if (seq === loadSeq) setLoading(false);
+            });
+          }}
           disabled={loading()}
           aria-busy={loading() || undefined}
           data-testid="axis-btn-reload-chart"
