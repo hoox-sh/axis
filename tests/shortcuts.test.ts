@@ -199,3 +199,83 @@ describe('getDefaultChord', () => {
     expect(getDefaultChord('palette.recent')).toBeUndefined();
   });
 });
+
+describe('useRecordChord', () => {
+  let listeners: Set<(e: KeyboardEvent) => void>;
+  let origWindow: unknown;
+
+  const installWindowStub = () => {
+    listeners = new Set();
+    origWindow = (globalThis as { window?: unknown }).window;
+    (globalThis as { window: unknown }).window = {
+      addEventListener: (type: string, fn: (e: KeyboardEvent) => void) => {
+        if (type === 'keydown') listeners.add(fn);
+      },
+      removeEventListener: (type: string, fn: (e: KeyboardEvent) => void) => {
+        if (type === 'keydown') listeners.delete(fn);
+      },
+    };
+  };
+
+  const restoreWindow = () => {
+    if (origWindow === undefined) delete (globalThis as { window?: unknown }).window;
+    else (globalThis as { window: unknown }).window = origWindow;
+  };
+
+  const fire = (e: Partial<KeyboardEvent>) => {
+    for (const fn of [...listeners]) fn(e as KeyboardEvent);
+  };
+
+  it('records the next keydown as a canonical chord', async () => {
+    installWindowStub();
+    try {
+      const { useRecordChord } = await import('../src/ui/shortcuts/use-record-chord');
+      let recorded = '';
+      const api = useRecordChord((chord) => {
+        recorded = chord;
+      });
+      api.start();
+      expect(api.recording()).toBe(true);
+      fire({
+        key: 'k',
+        code: 'KeyK',
+        ctrlKey: true,
+        metaKey: false,
+        altKey: false,
+        shiftKey: false,
+        preventDefault() {},
+        stopPropagation() {},
+      } as Partial<KeyboardEvent>);
+      expect(recorded).toBe('Mod-K');
+      expect(api.recording()).toBe(false);
+    } finally {
+      restoreWindow();
+    }
+  });
+
+  it('does not listen outside an active recording session', async () => {
+    installWindowStub();
+    try {
+      const { useRecordChord } = await import('../src/ui/shortcuts/use-record-chord');
+      let recorded = '';
+      const api = useRecordChord((chord) => {
+        recorded = chord;
+      });
+      // No start() — a keydown must not be captured
+      fire({
+        key: 'k',
+        code: 'KeyK',
+        ctrlKey: true,
+        metaKey: false,
+        altKey: false,
+        shiftKey: false,
+        preventDefault() {},
+        stopPropagation() {},
+      } as Partial<KeyboardEvent>);
+      expect(recorded).toBe('');
+      expect(api.recording()).toBe(false);
+    } finally {
+      restoreWindow();
+    }
+  });
+});

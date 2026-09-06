@@ -324,7 +324,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
           el?.focus?.();
         });
       },
-      openShortcuts: () => emitWindowEvent('axis-open-shortcuts'),
+      openShortcuts: () => emitWindowEvent('axis-shortcuts-open'),
       resetShortcuts: () => {
         resetShortcuts();
         emitWindowEvent('axis-shortcuts-reset');

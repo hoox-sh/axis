@@ -41,6 +41,7 @@ import { WorkspaceSnapshotMenu } from '../WorkspaceSnapshotMenu';
 import { ThemePanel } from '../ThemePanel';
 import { PluginConfigRow } from '../PluginConfigRow';
 import { EditorIntelPanel, ExchangeCredentialsPanel } from '../SettingsDialog';
+import { KeyboardSettingsPanel } from '../shortcuts/Settings';
 import type { SettingsTabId } from '../studio/types';
 import { isSettingsTabId } from '../studio/types';
 import {
@@ -62,6 +63,7 @@ const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'editor', label: 'Editor', hint: 'Lint · hover · complete' },
   { id: 'theme', label: 'Theme', hint: 'Bars · canvas · chart.bg_color' },
   { id: 'topbar', label: 'Topbar', hint: 'Show/hide topbar buttons' },
+  { id: 'keyboard', label: 'Keyboard', hint: 'Shortcut chords · conflicts' },
 ];
 
 export function SettingsPage(props: {
@@ -698,10 +700,26 @@ export function SettingsPage(props: {
             </div>
           </div>
         </Show>
+
+        <Show when={tab() === 'keyboard'}>
+          <div
+            id="axis-settings-panel-keyboard"
+            role="tabpanel"
+            aria-labelledby="axis-settings-tab-keyboard"
+            data-testid="axis-settings-keyboard"
+          >
+            <StudioSection
+              title="Keyboard shortcuts"
+              lead="Record a chord for any binding. Conflicts are flagged but still saved — resolve them manually."
+            >
+              <KeyboardSettingsPanel />
+            </StudioSection>
+          </div>
+        </Show>
       </div>
       <StudioFooter status={footerStatus}>
         <StudioButton variant="ghost" onClick={closeWithoutSave}>
-          {tab() === 'theme' || tab() === 'editor' || tab() === 'data' || tab() === 'topbar' ? 'Close' : 'Cancel'}
+          {tab() === 'theme' || tab() === 'editor' || tab() === 'data' || tab() === 'topbar' || tab() === 'keyboard' ? 'Close' : 'Cancel'}
         </StudioButton>
         <Show when={tab() === 'general'}>
           <StudioButton variant="primary" onClick={save}>

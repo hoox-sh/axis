@@ -167,7 +167,7 @@ function codeToKey(code: string): string {
 }
 
 /** Normalize an event's key, falling back to `code` when `key` is missing/dead. */
-function normalizeEventKey(key: string | undefined, code: string | undefined): string {
+export function normalizeEventKey(key: string | undefined, code: string | undefined): string {
   if (key && key !== 'Dead') {
     if (key.length === 1) return key.toLowerCase();
     return key;

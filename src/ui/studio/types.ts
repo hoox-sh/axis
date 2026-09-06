@@ -14,7 +14,7 @@
 
 export type StudioPageId = 'runtime' | 'wire' | 'settings' | 'workers' | 'plugins';
 
-export type SettingsTabId = 'general' | 'data' | 'editor' | 'theme' | 'topbar';
+export type SettingsTabId = 'general' | 'data' | 'editor' | 'theme' | 'topbar' | 'keyboard';
 
 export function isStudioPageId(v: unknown): v is StudioPageId {
   return (
@@ -27,7 +27,14 @@ export function isStudioPageId(v: unknown): v is StudioPageId {
 }
 
 export function isSettingsTabId(v: unknown): v is SettingsTabId {
-  return v === 'general' || v === 'data' || v === 'editor' || v === 'theme' || v === 'topbar';
+  return (
+    v === 'general' ||
+    v === 'data' ||
+    v === 'editor' ||
+    v === 'theme' ||
+    v === 'topbar' ||
+    v === 'keyboard'
+  );
 }
 
 export type AppPageProps = {

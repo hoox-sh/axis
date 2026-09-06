@@ -315,6 +315,106 @@ button.sc-btn:focus-visible {
   border-color: var(--color-border-soft);
 }
 
+/* Keyboard shortcut chip (Shortcuts modal + Settings → Keyboard) */
+.sc-kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72em;
+  color: var(--color-text-dim);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-xs);
+  padding: 0.05em 0.35em;
+  background: var(--color-bg-elev);
+  white-space: nowrap;
+}
+
+/* Settings → Keyboard binding table (collapses to stacked rows < 720px) */
+.axis-keyboard-table {
+  display: flex;
+  flex-direction: column;
+  border: var(--border-w) solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.axis-keyboard-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.75em;
+  align-items: center;
+  padding: 0.5em 0.75em;
+  border-top: var(--border-w) solid var(--color-border);
+}
+.axis-keyboard-row:first-child {
+  border-top: none;
+}
+.axis-keyboard-head {
+  background: var(--color-bg-elev);
+  color: var(--color-text-faint);
+  font-size: 0.72em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.axis-keyboard-binding {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  min-width: 0;
+}
+.axis-keyboard-title {
+  color: var(--color-text);
+  font-size: 0.9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.axis-keyboard-scope {
+  color: var(--color-text-faint);
+  font-size: 0.72em;
+}
+.axis-keyboard-chord {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  min-width: 0;
+}
+.axis-keyboard-recording {
+  color: var(--color-accent);
+  font-size: 0.85em;
+  font-weight: 600;
+  animation: axis-pulse 1.2s ease-in-out infinite;
+}
+.axis-keyboard-conflict {
+  color: var(--color-yellow);
+  font-size: 0.72em;
+}
+.axis-keyboard-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+@keyframes axis-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (max-width: 719px) {
+  .axis-keyboard-row {
+    grid-template-columns: 1fr;
+    gap: 0.4em;
+    padding: 0.6em 0.75em;
+  }
+  .axis-keyboard-head {
+    display: none;
+  }
+  .axis-keyboard-actions {
+    justify-content: flex-start;
+  }
+}
+
 /* Icon baseline — Lucide 1em tracks root font / density */
 .sc-icon {
   flex-shrink: 0;

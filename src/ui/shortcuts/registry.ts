@@ -38,6 +38,8 @@ export const DEFAULT_BINDINGS: readonly ShortcutDef[] = [
   { id: 'app.open-settings', chord: 'Mod-,', description: 'Open settings', scope: 'app' },
   { id: 'app.open-palette-alt', chord: 'Mod-Shift-P', description: 'Open command palette (alt)', scope: 'app' },
   { id: 'app.show-shortcuts', chord: 'Shift-?', description: 'Show keyboard shortcuts', scope: 'app' },
+  // Alias: Shift+/ (non-US layouts) maps to the same id; getDisplay shows the first entry.
+  { id: 'app.show-shortcuts', chord: 'Shift-/', description: 'Show keyboard shortcuts', scope: 'app' },
   { id: 'app.escape', chord: 'Esc', description: 'Close topmost modal / cancel', scope: 'app' },
 
   // --- Editor ---
