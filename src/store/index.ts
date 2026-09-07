@@ -131,6 +131,11 @@ import {
 import { beginRunEpoch, releaseRunStatus } from '../indicators/run-helpers';
 import { detectScriptKind } from '../indicators/script-meta';
 import {
+  buildStrategyReport,
+  strategyStatsSnapshot,
+  type StrategyStatsSnapshot,
+} from '../results/strategy';
+import {
   normalizePriceScaleDecimalsMode,
   type PriceScaleDecimalsMode,
 } from '../chart/price-precision';
@@ -1716,8 +1721,26 @@ function buildResultMeta(result: unknown, scriptId: string): ResultMeta {
     scriptKind: detectRunScriptKind(result),
     label: undefined,
     inputs: extractRunInputs(result),
+    stats: computeResultStatsSnapshot(result),
     schemaVersion: 1,
   };
+}
+
+/**
+ * JSON-safe strategy stats snapshot for the Saved tab (rich rows without a
+ * payload round-trip). Never throws — a malformed events bag persists as
+ * `undefined` and the UI falls back to legacy shallow stats.
+ */
+function computeResultStatsSnapshot(result: unknown): StrategyStatsSnapshot | undefined {
+  try {
+    const events = (result as { events?: unknown } | null | undefined)?.events;
+    if (!Array.isArray(events) || events.length === 0) return undefined;
+    const rep = buildStrategyReport(events as never);
+    if (!rep.trades.length) return undefined;
+    return strategyStatsSnapshot(rep.stats);
+  } catch {
+    return undefined;
+  }
 }
 
 /** Serializes fire-and-forget saves so IDB FIFO trim cannot race itself. */

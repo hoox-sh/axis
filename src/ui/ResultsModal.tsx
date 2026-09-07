@@ -56,6 +56,11 @@ import {
   type ClosedTrade,
   type StrategyEvent,
 } from '../results/strategy';
+import {
+  buildPositionViews,
+  type PositionView,
+  type StreamEventView,
+} from '../results/positions';
 import { eventsToMarkers, normalizeStrategyEvents } from '../results/events';
 import { getManager } from '../chart/manager-access';
 import { Icons } from './icons';
@@ -84,6 +89,8 @@ type TabId =
   | 'metrics'
   | 'raw'
   | 'saved';
+
+type EventsView = 'stream' | 'positions';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'events', label: 'Events' },
@@ -199,6 +206,13 @@ interface SavedStatsSummary {
   trades?: number;
   winRate?: number;
   totalPnl?: number;
+  returnPct?: number;
+  /** `null` = ∞ (no losing trades); absent = unknown (legacy row). */
+  profitFactor?: number | null;
+  maxDD?: number;
+  avgTrade?: number;
+  wins?: number;
+  losses?: number;
 }
 
 function readSavedStats(raw: unknown): SavedStatsSummary {
@@ -208,7 +222,48 @@ function readSavedStats(raw: unknown): SavedStatsSummary {
   if (typeof v.trades === 'number') out.trades = v.trades;
   if (typeof v.winRate === 'number') out.winRate = v.winRate;
   if (typeof v.totalPnl === 'number') out.totalPnl = v.totalPnl;
+  if (typeof v.returnPct === 'number') out.returnPct = v.returnPct;
+  if (typeof v.maxDD === 'number') out.maxDD = v.maxDD;
+  if (typeof v.avgTrade === 'number') out.avgTrade = v.avgTrade;
+  if (typeof v.wins === 'number') out.wins = v.wins;
+  if (typeof v.losses === 'number') out.losses = v.losses;
+  if (v.profitFactor === null) out.profitFactor = null;
+  else if (typeof v.profitFactor === 'number') out.profitFactor = v.profitFactor;
   return out;
+}
+
+function formatSavedPct(n: number | undefined, digits = 2): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  const sign = n >= 0 ? '+' : '';
+  return `${sign}${(n * 100).toFixed(digits)}%`;
+}
+
+function formatSavedPf(pf: number | null | undefined): string {
+  if (pf == null) return '∞';
+  if (!Number.isFinite(pf)) return '∞';
+  return pf.toFixed(2);
+}
+
+/** `unix seconds | epoch ms` → local `YYYY-MM-DD HH:MM` (events grid). */
+function formatEventTime(t: unknown): string {
+  const n = Number(t);
+  if (!Number.isFinite(n) || n <= 0) return '—';
+  const ms = n > 1e12 ? n : n * 1000;
+  try {
+    return new Date(ms).toISOString().slice(0, 16).replace('T', ' ');
+  } catch {
+    return String(t);
+  }
+}
+
+function formatFillQty(q: number): string {
+  return q % 1 === 0 ? String(q) : q.toFixed(4);
+}
+
+/** Position-fill price: 2 decimals for typical symbols, formatNum fallback. */
+function formatPosPrice(n: number): string {
+  if (!Number.isFinite(n)) return '—';
+  return Math.abs(n) >= 1 ? n.toFixed(2) : formatNum(n);
 }
 
 /** Fullscreen results studio overlay. */
@@ -256,6 +311,30 @@ export const ResultsModal: Component = () => {
       fillMode: fillMode(),
     });
   });
+
+  // ── Events tab views ─────────────────────────────────────────────────
+  // `stream` = classic chronological list (enriched), `positions` = Open ⇄ Close.
+  const [eventsView, setEventsView] = createSignal<EventsView>('stream');
+
+  const positionData = createMemo(() => {
+    const r = result();
+    if (!r) return null;
+    void store.chartDataGen;
+    void store.strategyUi?.slippageNextOpen;
+    const bars = untrack(() => store.bars || []);
+    return buildPositionViews((r.events || []) as StrategyEvent[], bars, {
+      fillMode: fillMode(),
+    });
+  });
+
+  const streamEvents = createMemo<StreamEventView[]>(() => positionData()?.stream ?? []);
+
+  const jumpToTime = (t: number) => {
+    const n = Number(t);
+    if (!Number.isFinite(n) || n <= 0) return;
+    // scrollToTime expects unix seconds — events may carry epoch ms.
+    getManager()?.scrollToTime(n > 1e12 ? n / 1000 : n);
+  };
 
   /** Re-paint chart trade markers when strategy UI prefs change (no re-run). */
   const reapplyTradeMarkers = () => {
@@ -625,41 +704,235 @@ export const ResultsModal: Component = () => {
                   {/* Events */}
                   <Show when={result() && tab() === 'events'}>
                     <Show
-                      when={normalizedEvents().length > 0}
+                      when={streamEvents().length > 0}
                       fallback={<div class="ax-empty">No strategy events in this run.</div>}
                     >
-                      <ul class="ax-list ax-event-list">
-                        <For each={normalizedEvents()}>
-                          {(ev) => {
-                            const kind = String(ev.type || ev.event || ev.kind || '?');
-                            const t = ev.time
-                              ? new Date(ev.time * 1000).toISOString().slice(0, 16).replace('T', ' ')
-                              : '—';
-                            const dir = String(ev.dir || ev.direction || '');
-                            const dirClass =
-                              dir.toLowerCase() === 'long'
-                                ? 'ax-event-dir ax-event-dir--long'
-                                : dir.toLowerCase() === 'short'
-                                  ? 'ax-event-dir ax-event-dir--short'
-                                  : 'ax-event-dir ax-event-dir--flat';
-                            return (
-                              <li class="ax-row ax-event-row">
-                                <span class="ax-mono ax-event-time">{t}</span>
-                                <span class="ax-event-kind">{kind}</span>
-                                <Show when={dir}>
-                                  <span class={dirClass}>{dir}</span>
-                                </Show>
-                                <span class="ax-event-id">{String(ev.id || '')}</span>
-                                <span class="ax-mono ax-event-price">
-                                  {ev.price !== undefined && ev.price !== null
-                                    ? Number(ev.price).toFixed(2)
-                                    : '—'}
-                                </span>
-                              </li>
-                            );
-                          }}
-                        </For>
-                      </ul>
+                      <div class="ax-stack ax-stack--compact" data-testid="axis-events-views">
+                        <div class="ax-toolbar">
+                          <span class="ax-card-kicker">View</span>
+                          <div
+                            class="ax-view-switch"
+                            role="group"
+                            aria-label="Events view"
+                            data-testid="axis-events-view-switch"
+                          >
+                            <button
+                              type="button"
+                              class={`ax-view-switch-btn${eventsView() === 'stream' ? ' is-on' : ''}`}
+                              aria-pressed={eventsView() === 'stream'}
+                              title="Chronological event stream with fill details"
+                              data-testid="axis-events-view-stream"
+                              onClick={() => setEventsView('stream')}
+                            >
+                              Stream
+                            </button>
+                            <button
+                              type="button"
+                              class={`ax-view-switch-btn${eventsView() === 'positions' ? ' is-on' : ''}`}
+                              aria-pressed={eventsView() === 'positions'}
+                              title="Open ⇄ Close — entries left, exits right (pyramiding-aware)"
+                              data-testid="axis-events-view-positions"
+                              onClick={() => setEventsView('positions')}
+                            >
+                              Open ⇄ Close
+                            </button>
+                          </div>
+                          <span class="ax-toolbar-spacer" />
+                          <span class="ax-plot-meta">
+                            {streamEvents().length} event{streamEvents().length === 1 ? '' : 's'}
+                            {' · '}
+                            {positionData()?.positions.length ?? 0} position
+                            {(positionData()?.positions.length ?? 0) === 1 ? '' : 's'}
+                          </span>
+                        </div>
+
+                        {/* Stream — classic chronological list, enriched */}
+                        <Show when={eventsView() === 'stream'}>
+                          <ul class="ax-list ax-event-list" data-testid="axis-events-stream">
+                            <For each={streamEvents()}>
+                              {(ev) => {
+                                const kind = String(ev.type || ev.event || ev.kind || '?');
+                                const dir = String(ev.dir || ev.direction || '');
+                                const dirClass =
+                                  dir.toLowerCase() === 'long'
+                                    ? 'ax-event-dir ax-event-dir--long'
+                                    : dir.toLowerCase() === 'short'
+                                      ? 'ax-event-dir ax-event-dir--short'
+                                      : 'ax-event-dir ax-event-dir--flat';
+                                const isClose =
+                                  kind.toLowerCase().includes('close') ||
+                                  kind.toLowerCase().includes('exit');
+                                const fromEntry = typeof ev.from_entry === 'string' ? ev.from_entry : '';
+                                return (
+                                  <li class="ax-row ax-event-row">
+                                    <span class="ax-mono ax-event-time">{formatEventTime(ev.time)}</span>
+                                    <span class="ax-event-kind">{kind}</span>
+                                    <Show when={dir}>
+                                      <span class={dirClass}>{dir}</span>
+                                    </Show>
+                                    <span class="ax-event-id" title={`Order id: ${String(ev.id || '')}`}>
+                                      {String(ev.id || '')}
+                                    </span>
+                                    <Show when={fromEntry}>
+                                      <span class="ax-event-from" title={`from_entry: ${fromEntry}`}>
+                                        ← {fromEntry}
+                                      </span>
+                                    </Show>
+                                    <Show
+                                      when={isClose}
+                                      fallback={
+                                        <Show
+                                          when={ev.fills != null}
+                                          fallback={<span class="ax-event-qty" />}
+                                        >
+                                          <span
+                                            class="ax-event-qty"
+                                            title={`Position qty ${formatFillQty(ev.posQty ?? 0)} · avg ${formatPosPrice(ev.posAvg ?? 0)}`}
+                                          >
+                                            #{ev.fills} · ×{formatFillQty(ev.posQty ?? 0)}
+                                          </span>
+                                        </Show>
+                                      }
+                                    >
+                                      <span
+                                        class="ax-event-qty"
+                                        title={`Qty still open after this close: ${formatFillQty(ev.remaining ?? 0)}`}
+                                      >
+                                        left ×{formatFillQty(ev.remaining ?? 0)}
+                                      </span>
+                                    </Show>
+                                    <span class="ax-mono ax-event-price">
+                                      {ev.price !== undefined && ev.price !== null
+                                        ? Number(ev.price).toFixed(2)
+                                        : '—'}
+                                    </span>
+                                    <Show when={isClose && ev.pnl != null}>
+                                      <span
+                                        class={`ax-event-pnl ${
+                                          (ev.pnl ?? 0) >= 0 ? 'ax-table-pos' : 'ax-table-neg'
+                                        }`}
+                                      >
+                                        {formatMoney(ev.pnl ?? 0)}
+                                      </span>
+                                    </Show>
+                                    <Show when={isClose && ev.pnl == null}>
+                                      <span class="ax-event-pnl ax-event-pnl--none">—</span>
+                                    </Show>
+                                  </li>
+                                );
+                              }}
+                            </For>
+                          </ul>
+                        </Show>
+
+                        {/* Open ⇄ Close — per-position two-column grid */}
+                        <Show when={eventsView() === 'positions'}>
+                          <div class="ax-pos-grid" data-testid="axis-events-positions">
+                            <For each={positionData()?.positions ?? []}>
+                              {(p: PositionView) => (
+                                <div
+                                  class={`ax-pos-row is-${p.dir}${p.status === 'open' ? ' is-open' : ''}`}
+                                  data-testid="axis-events-position-row"
+                                >
+                                  {/* LEFT — opens */}
+                                  <div class="ax-pos-cell ax-pos-cell--open">
+                                    <div class="ax-pos-head">
+                                      <span
+                                        class={`ax-event-dir ${
+                                          p.dir === 'long' ? 'ax-event-dir--long' : 'ax-event-dir--short'
+                                        }`}
+                                      >
+                                        {p.dir}
+                                      </span>
+                                      <span class="ax-pos-id" title={`Entry id: ${p.id}`}>
+                                        {p.id}
+                                        {p.cycle > 1 ? ` #${p.cycle}` : ''}
+                                      </span>
+                                      <span class="ax-toolbar-spacer" />
+                                      <span
+                                        class="ax-pos-avg ax-mono"
+                                        title={`${p.opens.length} entry fill${p.opens.length === 1 ? '' : 's'} · total ${formatFillQty(p.totalQty)}`}
+                                      >
+                                        {p.opens.length}× @ {formatPosPrice(p.avgPrice)}
+                                      </span>
+                                    </div>
+                                    <ul class="ax-pos-fills">
+                                      <For each={p.opens}>
+                                        {(f) => (
+                                          <li
+                                            class="ax-pos-fill"
+                                            title="Jump to entry fill"
+                                            onClick={() => jumpToTime(f.time)}
+                                          >
+                                            <span class="ax-mono ax-pos-fill-time">
+                                              {formatEventTime(f.time)}
+                                            </span>
+                                            <span class="ax-mono">@ {formatPosPrice(f.price)}</span>
+                                            <span class="ax-mono">× {formatFillQty(f.qty)}</span>
+                                          </li>
+                                        )}
+                                      </For>
+                                    </ul>
+                                  </div>
+
+                                  {/* RIGHT — closes */}
+                                  <div class="ax-pos-cell ax-pos-cell--close">
+                                    <Show
+                                      when={p.closes.length > 0}
+                                      fallback={
+                                        <div class="ax-pos-open" title="No exit fills yet">
+                                          — open · {formatFillQty(p.openQty)} left —
+                                        </div>
+                                      }
+                                    >
+                                      <ul class="ax-pos-fills">
+                                        <For each={p.closes}>
+                                          {(c) => (
+                                            <li
+                                              class="ax-pos-fill"
+                                              title="Jump to exit fill"
+                                              onClick={() => jumpToTime(c.time)}
+                                            >
+                                              <span class="ax-mono ax-pos-fill-time">
+                                                {formatEventTime(c.time)}
+                                              </span>
+                                              <span class="ax-mono">@ {formatPosPrice(c.price)}</span>
+                                              <span class="ax-mono">× {formatFillQty(c.qty)}</span>
+                                              <span
+                                                class={`ax-mono ax-pos-fill-pnl ${
+                                                  c.pnl >= 0 ? 'ax-table-pos' : 'ax-table-neg'
+                                                }`}
+                                              >
+                                                {formatMoney(c.pnl)}
+                                              </span>
+                                            </li>
+                                          )}
+                                        </For>
+                                      </ul>
+                                      <div class="ax-pos-summary">
+                                        <span class="ax-chip ax-chip--tag">Closed</span>
+                                        <Show when={p.openQty > 1e-9}>
+                                          <span class="ax-pos-remaining">
+                                            partial · {formatFillQty(p.openQty)} left
+                                          </span>
+                                        </Show>
+                                        <span class="ax-toolbar-spacer" />
+                                        <span
+                                          class={`ax-mono ${
+                                            p.realizedPnl >= 0 ? 'ax-table-pos' : 'ax-table-neg'
+                                          }`}
+                                        >
+                                          {formatMoney(p.realizedPnl)}
+                                        </span>
+                                      </div>
+                                    </Show>
+                                  </div>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
+                      </div>
                     </Show>
                   </Show>
 
@@ -860,26 +1133,83 @@ export const ResultsModal: Component = () => {
                                             </span>
                                           </Show>
                                         </div>
+
+                                        {/* Rich strategy stats (snapshot persisted at save time) */}
+                                        <Show when={stats.trades != null}>
+                                          <div
+                                            class="ax-saved-stats"
+                                            data-testid="axis-results-saved-stats"
+                                          >
+                                            <span class="ax-saved-stat" title="Closed trades">
+                                              <span class="ax-saved-stat-k">Trades</span>
+                                              <span class="ax-saved-stat-v">{stats.trades}</span>
+                                            </span>
+                                            <span class="ax-saved-stat" title="Wins / losses">
+                                              <span class="ax-saved-stat-k">W / L</span>
+                                              <span class="ax-saved-stat-v">
+                                                {stats.wins ?? '—'} / {stats.losses ?? '—'}
+                                              </span>
+                                            </span>
+                                            <span class="ax-saved-stat" title="Win rate">
+                                              <span class="ax-saved-stat-k">Win %</span>
+                                              <span class="ax-saved-stat-v">
+                                                {stats.winRate != null ? `${stats.winRate.toFixed(1)}%` : '—'}
+                                              </span>
+                                            </span>
+                                            <span class="ax-saved-stat" title="Profit factor (∞ = no losses)">
+                                              <span class="ax-saved-stat-k">PF</span>
+                                              <span class="ax-saved-stat-v">
+                                                {formatSavedPf(stats.profitFactor)}
+                                              </span>
+                                            </span>
+                                            <span class="ax-saved-stat" title="Net money P&L">
+                                              <span class="ax-saved-stat-k">Net P&L</span>
+                                              <span
+                                                class={`ax-saved-stat-v ${
+                                                  (stats.totalPnl ?? 0) >= 0
+                                                    ? 'ax-table-pos'
+                                                    : 'ax-table-neg'
+                                                }`}
+                                              >
+                                                {formatMoney(stats.totalPnl ?? 0)}
+                                              </span>
+                                            </span>
+                                            <span
+                                              class="ax-saved-stat"
+                                              title="Compounded per-trade price return"
+                                            >
+                                              <span class="ax-saved-stat-k">Return %</span>
+                                              <span
+                                                class={`ax-saved-stat-v ${
+                                                  (stats.returnPct ?? 0) >= 0
+                                                    ? 'ax-table-pos'
+                                                    : 'ax-table-neg'
+                                                }`}
+                                              >
+                                                {formatSavedPct(stats.returnPct)}
+                                              </span>
+                                            </span>
+                                            <span class="ax-saved-stat" title="Max drawdown">
+                                              <span class="ax-saved-stat-k">Max DD</span>
+                                              <span class="ax-saved-stat-v ax-table-neg">
+                                                {stats.maxDD != null
+                                                  ? `−${(stats.maxDD * 100).toFixed(2)}%`
+                                                  : '—'}
+                                              </span>
+                                            </span>
+                                            <span class="ax-saved-stat" title="Average trade P&L">
+                                              <span class="ax-saved-stat-k">Avg trade</span>
+                                              <span class="ax-saved-stat-v">
+                                                {formatMoney(stats.avgTrade ?? 0)}
+                                              </span>
+                                            </span>
+                                          </div>
+                                        </Show>
+
                                         <p class="ax-hint">
                                           <span class="ax-mono">{formatSavedAt(run.startedAt)}</span>
                                           {' · '}
                                           {formatSavedDuration(run.durationMs)}
-                                          <Show when={stats.trades} keyed>
-                                            {(trades) => <> · {trades} trades</>}
-                                          </Show>
-                                          <Show when={stats.winRate} keyed>
-                                            {(winRate) => <> · {winRate.toFixed(1)}% win</>}
-                                          </Show>
-                                          <Show when={stats.totalPnl} keyed>
-                                            {(totalPnl) => (
-                                              <>
-                                                {' · '}
-                                                <span class={totalPnl >= 0 ? 'ax-table-pos' : 'ax-table-neg'}>
-                                                  P&amp;L {formatMoney(totalPnl)}
-                                                </span>
-                                              </>
-                                            )}
-                                          </Show>
                                         </p>
                                       </div>
                                       <div class="ax-entity-actions">

@@ -89,6 +89,10 @@ export interface ClosedTrade {
   pnl: number;
   /** Fractional move vs entry price (independent of qty). */
   pnlPct: number;
+  /** Bars held (entry → exit resolved against loaded bars; absent when unknown). */
+  barsHeld?: number;
+  /** Entry fills that built this trade (pyramiding averages into `entry`). */
+  entryFills?: number;
 }
 
 /** Aggregate metrics over {@link ClosedTrade}[]. */
@@ -103,6 +107,117 @@ export interface StrategyStats {
   wins: number;
   losses: number;
   trades: number;
+  /** Σ wins money PnL (optional — absent in legacy callers). */
+  grossProfit?: number;
+  /** Σ |losses| money PnL (optional — absent in legacy callers). */
+  grossLoss?: number;
+  /** Compounded per-trade price return: Π(1 + pnlPct) − 1 (optional). */
+  returnPct?: number;
+}
+
+/** One entry fill of a position (Open ⇄ Close view, left column). */
+export interface PositionFill {
+  time: number;
+  price: number;
+  qty: number;
+}
+
+/** One exit fill of a position (right column) with realized P&L. */
+export interface PositionCloseFill {
+  time: number;
+  price: number;
+  qty: number;
+  /** Money PnL attributed to this close `(exit − avg) × qty × sign`. */
+  pnl: number;
+  /** Price move vs the cycle's avg entry price. */
+  pnlPct: number;
+}
+
+/** One position "cycle" for the Open ⇄ Close events view. */
+export interface PositionView {
+  /** Entry order id (engine id or `_default`). */
+  id: string;
+  /** 1-based open-cycle for this id (re-opens after a full close). */
+  cycle: number;
+  dir: 'long' | 'short';
+  /** Entry fills — pyramiding appends here; avg price = Σ(p·q)/Σq. */
+  opens: PositionFill[];
+  /** Exit fills with per-fill P&L. */
+  closes: PositionCloseFill[];
+  /** Total entered qty (Σ entry fills). */
+  totalQty: number;
+  /** Qty still open after all closes. */
+  openQty: number;
+  /** Volume-weighted average entry price. */
+  avgPrice: number;
+  /** Realized P&L (Σ close-fill pnl). */
+  realizedPnl: number;
+  status: 'open' | 'closed';
+  /** First entry fill time. */
+  entryTime: number;
+  /** Last close fill time (null while open). */
+  exitTime: number | null;
+}
+
+/** A normalized stream event enriched with position context (Stream view). */
+export interface StreamEventView extends StrategyEvent {
+  /** Closes: money P&L attributed to this fill. */
+  pnl?: number;
+  /** Closes: price move vs avg entry. */
+  pnlPct?: number;
+  /** Entries: position qty after this fill. */
+  posQty?: number;
+  /** Entries: position avg price after this fill. */
+  posAvg?: number;
+  /** Entries: fill count so far. */
+  fills?: number;
+  /** Closes: qty still open after this close. */
+  remaining?: number;
+  /** Open cycle index (1-based) this event belongs to. */
+  cycle?: number;
+}
+
+/** Full output of the shared pairing walker. */
+export interface StrategyWalk {
+  trades: ClosedTrade[];
+  stats: StrategyStats;
+  positions: PositionView[];
+  stream: StreamEventView[];
+}
+
+/**
+ * JSON-safe stats snapshot persisted in `ResultMeta.stats` (Saved tab).
+ * `profitFactor: null` means ∞ (no losing trades) — JSON cannot store Infinity.
+ */
+export interface StrategyStatsSnapshot {
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  profitFactor: number | null;
+  totalPnl: number;
+  returnPct: number;
+  maxDD: number;
+  avgTrade: number;
+  avgWin: number;
+  avgLoss: number;
+}
+
+/** Compact a report into the persisted snapshot (pure, JSON-safe). */
+export function strategyStatsSnapshot(stats: StrategyStats): StrategyStatsSnapshot {
+  return {
+    trades: stats.trades,
+    wins: stats.wins,
+    losses: stats.losses,
+    winRate: stats.winRate,
+    profitFactor: Number.isFinite(stats.profitFactor) ? Number(stats.profitFactor.toFixed(4)) : null,
+    totalPnl: Number(stats.totalPnl.toFixed(6)),
+    returnPct: Number((stats.returnPct ?? 0).toFixed(6)),
+    maxDD: Number(stats.maxDD.toFixed(6)),
+    avgTrade: Number(stats.avgTrade.toFixed(6)),
+    avgWin: Number(stats.avgWin.toFixed(6)),
+    avgLoss: Number(stats.avgLoss.toFixed(6)),
+  };
 }
 
 export interface BuildStrategyReportOptions {
@@ -128,26 +243,71 @@ function emptyStats(): StrategyStats {
   };
 }
 
+/** Bars store `time` in unix seconds; events may carry seconds or ms. */
+function toBarEpoch(t: number): number {
+  return t > 1e12 ? t / 1000 : t;
+}
+
 /**
- * Build closed trades and summary stats from raw engine/strategy events.
- * @param bars - Optional OHLCV for price resolution when events lack price/ohlc
- * @param opts - Fill model prefs (close vs next-open slippage)
+ * Bars held between entry and exit (bisect over loaded bar times).
+ * Returns undefined when bars/times cannot resolve both edges.
  */
-export function buildStrategyReport(
+function barsBetween(bars: Bar[] | undefined, entryTime: number, exitTime: number): number | undefined {
+  if (!bars?.length || !Number.isFinite(entryTime) || !Number.isFinite(exitTime)) return undefined;
+  const et = toBarEpoch(entryTime);
+  const xt = toBarEpoch(exitTime);
+  const bisect = (t: number): number => {
+    let lo = 0;
+    let hi = bars.length - 1;
+    let ans = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const bt = Number(bars[mid]?.time);
+      if (!Number.isFinite(bt)) return ans;
+      if (bt <= t) {
+        ans = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return ans;
+  };
+  const i0 = bisect(et);
+  const i1 = bisect(xt);
+  if (i0 < 0 || i1 < i0) return undefined;
+  return i1 - i0;
+}
+
+/** Mutable open-position cycle used while walking events. */
+interface OpenCycle {
+  id: string;
+  cycle: number;
+  dir: 'long' | 'short';
+  time: number;
+  /** Volume-weighted average entry price so far. */
+  entry: number;
+  qty: number;
+  fills: PositionFill[];
+  /** View record being built for this cycle (shared reference). */
+  view: PositionView;
+}
+
+/**
+ * Shared pairing walker: pairs entry/exit events into closed trades, summary
+ * stats, per-position cycles (pyramiding-aware), and an enriched event stream.
+ *
+ * Pyramiding semantics match the pyne broker: additional entries into a live
+ * position average into it (`entry = Σ(p·q)/Σq`), closes realize
+ * `(exit − avg) × close_qty × sign` and reduce the open qty.
+ */
+export function walkStrategyEvents(
   events: StrategyEvent[] | Record<string, unknown>[],
   bars?: Bar[],
   opts: BuildStrategyReportOptions = {},
-): {
-  trades: ClosedTrade[];
-  stats: StrategyStats;
-} {
-  // Defensive: never throw on garbage engine payloads (runner applies report in UI path)
-  if (!Array.isArray(events)) {
-    return {
-      trades: [],
-      stats: emptyStats(),
-    };
-  }
+): StrategyWalk {
+  const empty: StrategyWalk = { trades: [], stats: emptyStats(), positions: [], stream: [] };
+  if (!Array.isArray(events)) return empty;
   const normalized = normalizeStrategyEvents(events, {
     bars,
     includeOrders: true,
@@ -164,11 +324,12 @@ export function buildStrategyReport(
       return a.i - b.i;
     })
     .map(({ e }) => e);
-  const open = new Map<
-    string,
-    { entry: number; time: number; dir: string; qty: number }
-  >();
+
+  const open = new Map<string, OpenCycle>();
+  const cycleCount = new Map<string, number>();
+  const positions: PositionView[] = [];
   const trades: ClosedTrade[] = [];
+  const stream: StreamEventView[] = [];
 
   const eventQty = (ev: StrategyEvent, fallback = 1): number => {
     // Prefer engine-filled qty; explicit 0 is no-fill (already filtered on closes).
@@ -179,21 +340,15 @@ export function buildStrategyReport(
     return Math.abs(n);
   };
 
-  /**
-   * Money PnL from prices + size.
-   * Engine `profit` is used only when it is a non-zero finite number (some hosts
-   * stamp `profit: 0` as a placeholder, which previously zeroed every trade).
-   */
-  const moneyPnl = (
-    o: { entry: number; dir: string; qty: number },
+  /** Money PnL for a close fill vs the cycle's avg entry price. */
+  const closePnl = (
+    cycle: OpenCycle,
     exitPrice: number,
     closeQty: number,
     engineProfit: unknown,
   ): number => {
-    const q = Number.isFinite(closeQty) && closeQty > 0 ? closeQty : o.qty || 1;
-    const sign = o.dir.includes('short') ? -1 : 1;
-    const fromPrices = (exitPrice - o.entry) * sign * q;
-
+    const sign = cycle.dir === 'short' ? -1 : 1;
+    const fromPrices = (exitPrice - cycle.entry) * sign * closeQty;
     if (typeof engineProfit === 'number' && Number.isFinite(engineProfit)) {
       // Placeholder zero must not wipe a real price move
       if (engineProfit === 0 && Math.abs(fromPrices) > 1e-12) return fromPrices;
@@ -202,30 +357,105 @@ export function buildStrategyReport(
     return fromPrices;
   };
 
-  const pushClosed = (
-    openId: string,
-    o: { entry: number; time: number; dir: string; qty: number },
-    exitTime: number,
-    exitPrice: number,
+  const openEntry = (ev: StrategyEvent, t: number, p: number): void => {
+    const kind = String(ev.type || ev.event || ev.kind || '').toLowerCase();
+    const rawDir = String(ev.dir || ev.direction || '').toLowerCase();
+    // Guard String(null) → "null" if a caller bypasses normalize
+    const dir: 'long' | 'short' =
+      rawDir && rawDir !== 'null' && rawDir !== 'undefined'
+        ? rawDir.includes('short')
+          ? 'short'
+          : 'long'
+        : kind === 'short' || rawDir.includes('short')
+          ? 'short'
+          : 'long';
+    const id = String(ev.id || '_default');
+    const q = eventQty(ev, 1);
+    let cycle = open.get(id);
+    if (cycle) {
+      // Pyramiding: average into the live position
+      const nextQty = cycle.qty + q;
+      cycle.entry = nextQty > 0 ? (cycle.entry * cycle.qty + p * q) / nextQty : p;
+      cycle.qty = nextQty;
+      cycle.fills.push({ time: t, price: p, qty: q });
+      cycle.view.avgPrice = cycle.entry;
+      cycle.view.totalQty = nextQty;
+      cycle.view.openQty += q;
+      // `cycle.fills` IS `view.opens` — push once.
+    } else {
+      const n = (cycleCount.get(id) ?? 0) + 1;
+      cycleCount.set(id, n);
+      const view: PositionView = {
+        id,
+        cycle: n,
+        dir,
+        opens: [{ time: t, price: p, qty: q }],
+        closes: [],
+        totalQty: q,
+        openQty: q,
+        avgPrice: p,
+        realizedPnl: 0,
+        status: 'open',
+        entryTime: t,
+        exitTime: null,
+      };
+      positions.push(view);
+      cycle = {
+        id,
+        cycle: n,
+        dir,
+        time: t,
+        entry: p,
+        qty: q,
+        fills: view.opens,
+        view,
+      };
+      open.set(id, cycle);
+    }
+    stream.push({
+      ...ev,
+      posQty: cycle.qty,
+      posAvg: cycle.entry,
+      fills: cycle.fills.length,
+      cycle: cycle.cycle,
+    });
+  };
+
+  const closeFill = (
+    ev: StrategyEvent,
+    cycle: OpenCycle,
+    t: number,
+    p: number,
     closeQty: number,
-    engineProfit?: unknown,
-  ) => {
-    const qty = Number.isFinite(closeQty) && closeQty > 0 ? closeQty : o.qty || 1;
-    const pnl = moneyPnl(o, exitPrice, qty, engineProfit);
-    // Percent is price move (qty-independent) so 10% long is always +0.10
-    const priceMove = (exitPrice - o.entry) * (o.dir.includes('short') ? -1 : 1);
-    const pnlPct = o.entry !== 0 ? priceMove / o.entry : 0;
+    engineProfit: unknown,
+  ): void => {
+    const sign = cycle.dir === 'short' ? -1 : 1;
+    const pnl = closePnl(cycle, p, closeQty, engineProfit);
+    const priceMove = (p - cycle.entry) * sign;
+    const pnlPct = cycle.entry !== 0 ? priceMove / cycle.entry : 0;
+    cycle.view.closes.push({ time: t, price: p, qty: closeQty, pnl, pnlPct });
+    cycle.view.realizedPnl += pnl;
+    cycle.view.openQty = Math.max(0, cycle.view.openQty - closeQty);
+    cycle.qty = Math.max(0, cycle.qty - closeQty);
     trades.push({
-      id: openId || '_default',
-      dir: o.dir,
-      entryTime: o.time,
-      entry: o.entry,
-      exitTime,
-      exit: exitPrice,
-      qty,
+      id: cycle.id || '_default',
+      dir: cycle.dir,
+      entryTime: cycle.time,
+      entry: cycle.entry,
+      exitTime: t,
+      exit: p,
+      qty: closeQty,
       pnl,
       pnlPct,
+      barsHeld: barsBetween(bars, cycle.time, t),
+      entryFills: cycle.fills.length,
     });
+    stream.push({ ...ev, pnl, pnlPct, remaining: cycle.view.openQty, cycle: cycle.cycle });
+    if (cycle.qty <= 1e-12) {
+      cycle.view.status = 'closed';
+      cycle.view.exitTime = t;
+      open.delete(cycle.id);
+    }
   };
 
   for (const ev of sorted) {
@@ -238,22 +468,10 @@ export function buildStrategyReport(
       continue;
     }
     const kind = String(ev.type || ev.event || ev.kind || '').toLowerCase();
-    const id = String(ev.id || '_default');
+    const time = Number(t);
+    const price = Number(p);
     if (kind.includes('entry') || kind === 'long' || kind === 'short') {
-      const rawDir = String(ev.dir || ev.direction || '').toLowerCase();
-      // Guard String(null) → "null" if a caller bypasses normalize
-      const dir =
-        rawDir && rawDir !== 'null' && rawDir !== 'undefined'
-          ? rawDir
-          : kind === 'short' || rawDir.includes('short')
-            ? 'short'
-            : 'long';
-      open.set(id, {
-        entry: Number(p),
-        time: Number(t),
-        dir: dir.includes('short') ? 'short' : 'long',
-        qty: eventQty(ev, 1),
-      });
+      openEntry(ev, time, price);
     } else if (
       kind.includes('close') ||
       kind.includes('exit') ||
@@ -265,10 +483,11 @@ export function buildStrategyReport(
       const engineProfit = (ev as Record<string, unknown>).profit;
       if (isCloseAll) {
         // strategy.close_all — flatten every open at this bar
-        for (const [openId, o] of open) {
-          pushClosed(openId, o, Number(t), Number(p), o.qty, engineProfit);
-        }
+        const cycles = [...open.values()];
         open.clear();
+        for (const cycle of cycles) {
+          closeFill(ev, cycle, time, price, cycle.qty, engineProfit);
+        }
         continue;
       }
 
@@ -277,35 +496,31 @@ export function buildStrategyReport(
       // Reverse closes often stamp the *new* entry id (pyne) — sole-open and
       // opposite-dir fallback recover the real open position.
       const matchId = resolveExitMatchId(ev);
-      let o = open.get(matchId);
-      let closedId = matchId;
-      if (!o && matchId !== id) {
-        o = open.get(id);
-        if (o) closedId = id;
+      let cycle = open.get(matchId);
+      if (!cycle && matchId !== String(ev.id || '_default')) {
+        cycle = open.get(String(ev.id || '_default'));
       }
-      if (!o && open.size === 1) {
-        closedId = open.keys().next().value as string;
-        o = open.get(closedId);
+      if (!cycle && open.size === 1) {
+        cycle = open.values().next().value;
       }
       // Reverse: close says id=newEntry but direction matches the open we flatten
-      if (!o && open.size > 0) {
+      if (!cycle && open.size > 0) {
         const closeDir = String(ev.dir || ev.direction || '').toLowerCase();
         if (closeDir === 'long' || closeDir === 'short') {
-          for (const [oid, oo] of open) {
-            if (oo.dir === closeDir || (closeDir.includes('short') && oo.dir.includes('short'))) {
-              o = oo;
-              closedId = oid;
+          for (const c of open.values()) {
+            if (c.dir === (closeDir.includes('short') ? 'short' : 'long')) {
+              cycle = c;
               break;
             }
           }
         }
       }
-      if (o) {
-        open.delete(closedId);
-        // Partial closes: use event qty when smaller than open; else full open qty
-        const cq = eventQty(ev, o.qty);
-        pushClosed(closedId, o, Number(t), Number(p), cq, engineProfit);
-      }
+      if (!cycle) continue;
+      // Partial closes: use event qty when smaller than open; else full open qty
+      const cq = Math.min(eventQty(ev, cycle.qty), cycle.qty);
+      closeFill(ev, cycle, time, price, cq, engineProfit);
+    } else {
+      stream.push({ ...ev });
     }
   }
 
@@ -331,6 +546,14 @@ export function buildStrategyReport(
     if (dd > maxDD) maxDD = dd;
   }
 
+  // Compounded per-trade price return (clamped per leg so a single −101% short
+  // leg cannot flip the product's sign).
+  let compounded = 1;
+  for (const t of trades) {
+    compounded *= Math.max(-0.9999, Math.min(10, 1 + t.pnlPct));
+  }
+  const returnPct = trades.length ? compounded - 1 : 0;
+
   return {
     trades,
     stats: {
@@ -344,8 +567,30 @@ export function buildStrategyReport(
       wins: wins.length,
       losses: losses.length,
       trades: trades.length,
+      grossProfit,
+      grossLoss,
+      returnPct,
     },
+    positions,
+    stream,
   };
+}
+
+/**
+ * Build closed trades and summary stats from raw engine/strategy events.
+ * @param bars - Optional OHLCV for price resolution when events lack price/ohlc
+ * @param opts - Fill model prefs (close vs next-open slippage)
+ */
+export function buildStrategyReport(
+  events: StrategyEvent[] | Record<string, unknown>[],
+  bars?: Bar[],
+  opts: BuildStrategyReportOptions = {},
+): {
+  trades: ClosedTrade[];
+  stats: StrategyStats;
+} {
+  const walk = walkStrategyEvents(events, bars, opts);
+  return { trades: walk.trades, stats: walk.stats };
 }
 
 export function formatPct(n: number): string {

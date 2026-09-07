@@ -15,7 +15,15 @@ _Generated/updated: 2026-09-07 · 353 commits · describe-tag: `cli-v0.2.2`_
 
 ## [Unreleased]
 
-_Nothing yet — see the latest version section below._
+### Added
+
+- **Results panel — events views & richer reports** (spec: `.opencode/specs/2026-09-07-results-views-design.md`):
+  - **Events tab view switcher**: `Stream` (classic chronological list, now enriched with entry fill count / running position qty+avg, `from_entry`, remaining qty after closes, and per-fill P&L on close/exit rows) and **Open ⇄ Close** — a two-column grid with one row per position: entries on the left (fill list, pyramiding averages into the position, total qty @ avg price), exits on the right (each close fill with P&L, partial-close remainder, Open/Closed badge). Re-opens after a full close form new cycles (`id #2`); `close_all` flattens every open cycle; rows click-jump to the fill on the chart.
+  - **Strategy tab — single column**: fill options → stats cards (12: trades, win rate, W/L, PF, net profit, **Return %** (compounded per-trade), max DD, avg trade/win/loss, gross profit/loss) → equity chart → closed-trades table below it, with new **Bars** (bars held) and **Fills** (pyramided entry count) columns.
+  - **Saved runs tab — rich stats**: `buildResultMeta` now persists a JSON-safe strategy stats snapshot (`StrategyStatsSnapshot`) computed from the run's events (`profitFactor: null` = ∞); saved rows render a stats grid (trades, W/L, win %, PF, net P&L, return %, max DD, avg trade); legacy saved rows fall back gracefully.
+  - **Pyramiding parity**: entry fills into a live position now average into the trade P&L (`entry = Σ(p·q)/Σq`) matching the pyne broker `(px − avg) × close_qty`; per-position cycles and the enriched stream are computed by a single shared walker (`walkStrategyEvents` in `src/results/strategy.ts`, re-exported via `src/results/positions.ts`).
+
+_Nothing else yet — see the latest version section below._
 
 ---
 

@@ -155,12 +155,13 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
           </p>
         }
       >
-        <div class="ax-strat-split">
-          <div class="ax-strat-col">
-            {/* Stats cards */}
-            <div class="ax-grid ax-grid--3" data-testid="axis-strategy-stats">
+        {/* Single column: stats → equity → trades below */}
+        <div class="ax-strat-col">
+          {/* Stats cards */}
+          <div class="ax-grid ax-grid--4" data-testid="axis-strategy-stats">
             <StudioStat label="# Trades" value={String(props.stats.trades)} />
             <StudioStat label="Win rate" value={`${props.stats.winRate.toFixed(1)}%`} />
+            <StudioStat label="Wins / Losses" value={`${props.stats.wins} / ${props.stats.losses}`} />
             <StudioStat
               label="Profit factor"
               value={
@@ -175,12 +176,24 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
               testId="axis-strategy-net"
             />
             <StudioStat
+              label="Return %"
+              value={formatPct(props.stats.returnPct ?? 0)}
+              testId="axis-strategy-return"
+            />
+            <StudioStat
               label="Max DD"
               value={`${(props.stats.maxDD * 100).toFixed(2)}%`}
             />
+            <StudioStat label="Avg trade" value={formatMoney(props.stats.avgTrade)} />
+            <StudioStat label="Avg win" value={formatMoney(props.stats.avgWin)} />
+            <StudioStat label="Avg loss" value={formatMoney(props.stats.avgLoss)} />
             <StudioStat
-              label="Avg trade"
-              value={formatMoney(props.stats.avgTrade)}
+              label="Gross profit"
+              value={formatMoney(props.stats.grossProfit ?? 0)}
+            />
+            <StudioStat
+              label="Gross loss"
+              value={formatMoney(props.stats.grossLoss ?? 0)}
             />
           </div>
 
@@ -195,11 +208,9 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
             </div>
             <EquityChart steps={buildCumulativeEquity(props.trades)} />
           </div>
-          </div>
 
-          <div class="ax-strat-col">
-            {/* Trades table + export */}
-            <div class="ax-section">
+          {/* Trades table + export */}
+          <div class="ax-section">
             <div class="ax-toolbar">
               <h3 class="ax-section-title">Closed trades</h3>
               <span class="ax-toolbar-spacer" />
@@ -223,10 +234,12 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
                     <th>ID</th>
                     <th>Dir</th>
                     <th>Qty</th>
+                    <th>Fills</th>
                     <th>Entry time</th>
                     <th>Entry</th>
                     <th>Exit time</th>
                     <th>Exit</th>
+                    <th>Bars</th>
                     <th>P&L</th>
                     <th>%</th>
                   </tr>
@@ -235,7 +248,11 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
                   <For each={props.trades}>
                     {(t) => (
                       <tr
-                        title="Jump to entry on chart"
+                        title={
+                          t.entryFills && t.entryFills > 1
+                            ? `Pyramided position · ${t.entryFills} entry fills · avg entry ${t.entry.toFixed(2)}`
+                            : 'Jump to entry on chart'
+                        }
                         onClick={() => props.onJumpToTrade?.(t, 'entry')}
                       >
                         <td>{t.id}</td>
@@ -244,6 +261,9 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
                           {(t.qty ?? 1) % 1 === 0
                             ? String(t.qty ?? 1)
                             : (t.qty ?? 1).toFixed(4)}
+                        </td>
+                        <td title={t.entryFills && t.entryFills > 1 ? 'Pyramided entry fills' : undefined}>
+                          {t.entryFills ?? 1}
                         </td>
                         <td
                           class="ax-table-link"
@@ -266,6 +286,9 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
                           {formatTradeTime(t.exitTime)}
                         </td>
                         <td>{t.exit.toFixed(2)}</td>
+                        <td title="Bars held (entry → exit)">
+                          {t.barsHeld != null ? String(t.barsHeld) : '—'}
+                        </td>
                         <td class={t.pnl >= 0 ? 'ax-table-pos' : 'ax-table-neg'}>
                           {formatMoney(t.pnl)}
                         </td>
@@ -278,7 +301,6 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
                 </tbody>
               </table>
             </div>
-          </div>
           </div>
         </div>
       </Show>

@@ -112,6 +112,34 @@ describe('setLastRun persistence', () => {
     expect(list[0]?.runId).toBe(runId);
   });
 
+  it('persists a rich strategy stats snapshot in meta (Saved tab)', async () => {
+    setLastRun(
+      {
+        status: 'success',
+        plots: [],
+        series: {},
+        events: [
+          { time: 1, type: 'entry', id: 'L', dir: 'long', price: 100 },
+          { time: 2, type: 'close', id: 'L', price: 120 },
+        ],
+        meta: { script_name: 'strat', ms: 5 },
+      },
+      { scriptId: 'strat-x', focus: true },
+    );
+    await _flushRunResultPersistForTests();
+    const list = await listRunResults('strat-x');
+    expect(list).toHaveLength(1);
+    const stats = list[0]?.stats as Record<string, unknown> | undefined;
+    expect(stats).toBeTruthy();
+    expect(stats?.trades).toBe(1);
+    expect(stats?.wins).toBe(1);
+    expect(stats?.losses).toBe(0);
+    expect(stats?.winRate).toBe(100);
+    expect(stats?.profitFactor).toBeNull(); // ∞ (no losses) — JSON-safe
+    expect(stats?.totalPnl).toBeCloseTo(20);
+    expect(stats?.returnPct).toBeCloseTo(0.2);
+  });
+
   it('does not grow Saved runs on repeated skip (live-tick shape)', async () => {
     setLastRun(okResult('user'), { scriptId: 'ind-a', focus: true });
     await _flushRunResultPersistForTests();
