@@ -14,27 +14,29 @@ import { resolve, join } from 'node:path';
 const ROOT = resolve(import.meta.dir, '..');
 const PORT = 18099;  // use a non-default port to avoid conflicts
 let server: ReturnType<typeof Bun.serve> | undefined;
+let child: Bun.Subprocess | undefined;
 
 beforeAll(async () => {
     // Spawn the server in a child process so we test the real entry point.
-    const proc = Bun.spawn(['bun', 'run', join(ROOT, 'server.ts')], {
-        cwd: join(ROOT, '..'),
+    child = Bun.spawn(['bun', 'run', join(ROOT, 'server.ts')], {
+        cwd: ROOT,
         env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', NODE_ENV: 'test' },
         stdout: 'pipe', stderr: 'pipe',
     });
-    // Wait until the server is accepting connections.
-    for (let i = 0; i < 50; i++) {
+    // Wait until the server is accepting connections (cold CI can be slow).
+    for (let i = 0; i < 100; i++) {
         try {
-            const r = await fetch(`http://127.0.0.1:${PORT}/`);
-            if (r.ok) { server = proc as any; return; }
+            const r = await fetch(`http://127.0.0.1:${PORT}/health`);
+            if (r.ok) { server = child as any; return; }
         } catch (_) { /* not ready */ }
         await new Promise((r) => setTimeout(r, 100));
     }
-    throw new Error('Server did not start within 5s');
-});
+    throw new Error('Server did not start within 10s');
+}, 20000);
 
 afterAll(() => {
-    // The child process will be killed when this test runner exits.
+    // Kill the spawned child so it never outlives the test runner.
+    child?.kill();
 });
 
 describe('Static server', () => {

@@ -55,7 +55,9 @@ const [coarsePointer, setCoarsePointer] = createSignal(
 );
 
 // Keep signals in sync (module scope — one listener set for the app lifetime).
-if (typeof window !== 'undefined') {
+// Guarded defensively: test stubs may provide a window without event APIs —
+// degrade to static defaults instead of throwing at import time.
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   let raf = 0;
   window.addEventListener('resize', () => {
     if (raf) return;
@@ -65,10 +67,13 @@ if (typeof window !== 'undefined') {
     });
   });
 
-  const coarseMql = window.matchMedia('(pointer: coarse)');
-  const onCoarseChange = () => setCoarsePointer(coarseMql.matches);
-  if (coarseMql.addEventListener) coarseMql.addEventListener('change', onCoarseChange);
-  else coarseMql.addListener?.(onCoarseChange);
+  // Test stubs may provide a window without matchMedia — degrade gracefully.
+  const coarseMql = window.matchMedia?.('(pointer: coarse)');
+  if (coarseMql) {
+    const onCoarseChange = () => setCoarsePointer(coarseMql.matches);
+    if (coarseMql.addEventListener) coarseMql.addEventListener('change', onCoarseChange);
+    else coarseMql.addListener?.(onCoarseChange);
+  }
 }
 
 /** Reactive viewport mode (`phone` | `tablet` | `desktop`). */
