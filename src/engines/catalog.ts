@@ -538,7 +538,7 @@ export function prefetchPyodideAssets(indexUrl?: string): void {
   if (typeof location !== 'undefined') {
     const origin = location.origin;
     for (const path of [
-      '/vendor/hoox_pyne-0.4.2-py3-none-any.whl',
+      '/vendor/pynescript-0.5.0-py3-none-any.whl',
       '/vendor/antlr4_python3_runtime-4.13.2-py3-none-any.whl',
       '/pyodide/pynescript_runtime.py',
     ]) {
@@ -655,7 +655,6 @@ export const pyodideEngine: EnginePlugin & {
   async _ensure() {
     if (this._pyodide) return this._pyodide;
     if (this._loadPromise) return this._loadPromise;
-    const self = this;
     const cfg = resolveConfig(this.configSchema, pyodidePluginConfig());
     const indexUrl = resolvePyodideIndexUrl(String(cfg.indexUrl || LOCAL_PYODIDE_INDEX));
     this._loadPromise = (async () => {
@@ -680,7 +679,7 @@ export const pyodideEngine: EnginePlugin & {
       // which are not needed for in-browser evaluate and are NOT vendored under
       // /pyodide/v0.26.2/ — micropip would 404 them on the self-hosted index.
       // Second positional arg alone is keep_going, not deps (micropip 0.6).
-      const wheelUrl = `${origin}/vendor/hoox_pyne-0.4.2-py3-none-any.whl`;
+      const wheelUrl = `${origin}/vendor/pynescript-0.5.0-py3-none-any.whl`;
       const antlrUrl = `${origin}/vendor/antlr4_python3_runtime-4.13.2-py3-none-any.whl`;
       await assertZipAsset(wheelUrl, 'pynescript wheel');
       await assertZipAsset(antlrUrl, 'antlr4 wheel');
@@ -706,10 +705,10 @@ export const pyodideEngine: EnginePlugin & {
         );
       }
       await py.runPythonAsync(runtimePy);
-      self._pyodide = py;
+      this._pyodide = py;
       return py;
     })().catch((err) => {
-      self._loadPromise = null;
+      this._loadPromise = null;
       throw err;
     });
     return this._loadPromise;

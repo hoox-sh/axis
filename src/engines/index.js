@@ -52,7 +52,7 @@ import { getState } from '../state.js';
 function resolveConfig(schema, config) {
     const out = {};
     for (const [k, def] of Object.entries(schema || {})) {
-        out[k] = def && Object.prototype.hasOwnProperty.call(def, 'default') ? def.default : undefined;
+        out[k] = def && Object.hasOwn(def, 'default') ? def.default : undefined;
     }
     for (const [k, v] of Object.entries(config || {})) {
         if (v !== undefined) out[k] = v;
@@ -159,18 +159,17 @@ export const pyodideEngine = {
     async _ensure() {
         if (this._pyodide) return this._pyodide;
         if (this._loadPromise) return this._loadPromise;
-        const self = this;
         const cfg = resolveConfig(this.configSchema, {});
         // Overall timeout: 90s should be plenty for CDN + wheel + runtime
         const TIMEOUT_MS = 90_000;
         const timer = setTimeout(() => {
-            self._loadPromise = null;
-            self._emitProgress('');
+            this._loadPromise = null;
+            this._emitProgress('');
         }, TIMEOUT_MS);
         this._loadPromise = (async () => {
             try {
                 const origin = location.origin;
-                self._emitProgress('Loading Pyodide runtime…');
+                this._emitProgress('Loading Pyodide runtime…');
                 // Inject Pyodide loader if not already present.
                 if (typeof loadPyodide !== 'function') {
                     try {
@@ -180,16 +179,16 @@ export const pyodideEngine = {
                         throw new Error(`Failed to load Pyodide from CDN: ${e.message}. Check your internet connection.`);
                     }
                 }
-                self._emitProgress('Initialising Pyodide…');
+                this._emitProgress('Initialising Pyodide…');
                 const timeoutPy = AbortSignal.timeout(TIMEOUT_MS - 10_000);
                 const py = await window.loadPyodide({ indexURL: cfg.indexUrl, signal: timeoutPy });
 
-                self._emitProgress('Installing micropip…');
+                this._emitProgress('Installing micropip…');
                 await py.loadPackage('micropip');
 
-                self._emitProgress('Installing pynescript…');
+                this._emitProgress('Installing pynescript…');
                 const micropip = py.pyimport('micropip');
-                const wheelUrl = `${origin}/vendor/pynescript-0.4.0-py3-none-any.whl`;
+                const wheelUrl = `${origin}/vendor/pynescript-0.5.0-py3-none-any.whl`;
                 const antlrUrl = `${origin}/vendor/antlr4_python3_runtime-4.13.2-py3-none-any.whl`;
                 // Guard against SPA HTML fallback → micropip BadZipFile
                 const wheelRes = await fetch(wheelUrl);
@@ -215,7 +214,7 @@ export const pyodideEngine = {
                     throw new Error(`Failed to load browser wheels from ${origin}: ${e.message}`);
                 }
 
-                self._emitProgress('Loading Pine runtime…');
+                this._emitProgress('Loading Pine runtime…');
                 const runtimeResp = await fetch(`${origin}/pyodide/pynescript_runtime.py`);
                 if (!runtimeResp.ok) throw new Error(`Failed to load pynescript_runtime.py: HTTP ${runtimeResp.status}`);
                 const runtimePy = await runtimeResp.text();
@@ -224,13 +223,13 @@ export const pyodideEngine = {
                 }
                 await py.runPythonAsync(runtimePy);
 
-                self._emitProgress('');
+                this._emitProgress('');
                 clearTimeout(timer);
-                self._pyodide = py;
+                this._pyodide = py;
                 return py;
             } catch (err) {
-                self._loadPromise = null;
-                self._emitProgress('');
+                this._loadPromise = null;
+                this._emitProgress('');
                 clearTimeout(timer);
                 throw err;
             }
