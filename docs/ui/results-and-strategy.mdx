@@ -33,9 +33,10 @@ Results UI turns opaque engine payloads into **operator-consumable tables, metri
 | Module | Role |
 | --- | --- |
 | `results/events.ts` | Normalize heterogeneous event shapes; markers; equity series |
-| `results/strategy.ts` | Pair trades; stats; equity SVG helpers; CSV |
-| `ui/ResultsPanel.tsx` | Tabs, export, jump-to-time |
-| `ui/StrategyReport.tsx` | Stats cards, equity curve, trades table, CSV |
+| `results/strategy.ts` | Shared walker `walkStrategyEvents` → trades, stats, positions, stream; CSV |
+| `results/positions.ts` | Pyramiding-aware position cycles (avg-entry parity with the pyne broker, per-fill P&L) |
+| `ui/ResultsModal.tsx` | Tabs, Events Stream/Open⇄Close switcher, export, jump-to-time |
+| `ui/StrategyReport.tsx` | Stats cards (return %, bars-held, fills), equity curve, trades table, CSV |
 | `ui/StatusBar.tsx` | Compact trade summary |
 
 ## Conceptual model
@@ -77,8 +78,8 @@ Sketch (`buildStrategyReport`):
 
 | Tab | Data source |
 | --- | --- |
-| Events | `normalizedEvents` |
-| Strategy | `report.trades` + `report.stats` |
+| Events | `normalizedEvents` — **Stream** (chronological) or **Open⇄Close** (position cycles via `results/positions.ts`) view |
+| Strategy | `report.trades` + `report.stats` (single column: stats → equity → trades) |
 | Plots | `series` / `plots` summary |
 | Metrics | meta + context + stats subset |
 | Raw | `JSON.stringify(lastRun)` |

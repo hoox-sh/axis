@@ -64,12 +64,14 @@ flowchart TB
 
 | Tab | Operator value |
 | --- | --- |
-| **Events** | Chronological normalized stream (kind, time, price, id, dir) |
-| **Strategy** | Closed trades table + summary metrics |
+| **Events** | Chronological normalized stream (kind, time, price, id, dir) with a **Stream / Open⇄Close view switcher** — the Open⇄Close view groups events into pyramiding-aware position cycles (avg-entry parity with the pyne broker, per-fill P&L, jump-to-bar) |
+| **Strategy** | Single column: stats → equity → closed trades below, with return %, bars-held, and fill-count detail |
 | **Optimise** | Strategy-only `input.*` search — [Hyperparameter Optimisation](/axis/docs/enduser/guides/hyperparameter-optimisation) |
 | **Plots** | Series inventory (points, last value) |
 | **Metrics** | Runtime, status, engine, source, bars, high-level stats |
 | **Raw** | Pretty-printed JSON for support / diffs |
+
+Saved runs persist a JSON-safe strategy stats snapshot, so script-library rows show win %, profit factor, return %, max drawdown, and average trade at a glance. A shared walker (`walkStrategyEvents` in `src/results/strategy.ts`, positions in `src/results/positions.ts`) feeds trades, stats, positions, and the events stream.
 
 ### Strategy metrics
 

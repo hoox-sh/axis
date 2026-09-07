@@ -100,7 +100,21 @@ Integrated labels: `ui/TopbarField.tsx` (`.axis-tb-field*`).
 
 ### Command palette
 
-**Ctrl/Cmd+K** — `CommandPalette` + `command-registry.ts`: panels, theme, layouts, Run, symbol focus, editor toggles (ruler, debug, pins, profiler), jump to line, git push/pull, save library.
+**Ctrl/Cmd+K** — `CommandPalette` + `command-registry.ts`: panels, theme, layouts, Run, symbol focus, editor toggles (ruler, debug, pins, profiler), jump to line, git push/pull, save library. Palette entries render any recorded shortcut chords.
+
+### Keyboard shortcuts
+
+Global chord dispatch hub (`src/ui/shortcuts/`): capture-phase handling with a **dialog-skip guard** so shortcuts never fire while a modal is open. Wired to three scopes:
+
+- **App-level** — palette, Run, panel toggles, replay, layouts
+- **Chart** — keymap routed through the dispatch hub (cancel draft, layouts, replay)
+- **Editor** — `src/editor/cm-line-ops.ts` `Prec.high` line ops: duplicate line, toggle comment, indent/unindent, delete line
+
+Recorder and discovery:
+
+- **Recorder**: Settings → Keyboard → record a chord; per-user overrides persist on the app store
+- **Shortcuts modal**: lists default bindings with live rendering
+- **Conflict flags**: scope-aware (`app.escape` vs `chart.cancel-draft` layer by design — no false conflict)
 
 ### Alerts panel
 
@@ -120,6 +134,16 @@ Left/right docks with **2+ open panels** lay out **horizontally** (row), not sta
 - Bottom dock still stacks vertically  
 
 See `ui/panels/dock-layout.ts`, `FloatableShell.tsx`.
+
+## Mobile shell (phones / tablets)
+
+`src/ui/mobile/MobileShell.tsx` + `src/ui/responsive.ts` — reactive `phone | tablet | desktop` mode from viewport + `pointer: coarse` (desktop ≥1024px is unchanged):
+
+- **Phones (≤767px)**: compact header (brand · venue · symbol · interval) + bottom tab bar (**Chart · Panels · Editor · Studio · More**) replace the Topbar/StatusBar. Panels and More open as **nav overlays**.
+- **Panel sheets**: docked/floating panels render as full-viewport sheets — one at a time, dismiss via **swipe-down** on the title bar. Desktop panel geometry is bypassed, never overwritten, so phone↔desktop switches preserve layouts. Phones boot chart-first.
+- **Force-single chart**: 2H/2V/4 layouts collapse to the active slot with a slot-switcher chip row; other slots stay preserved in `store.chartLayout`.
+- **Tablets (768–1023px)**: desktop shell with a horizontally scrollable topbar.
+- Dialogs become **bottom sheets**; safe-area insets, `100dvh` root, ≥44px touch targets.
 
 ## Watchlist
 

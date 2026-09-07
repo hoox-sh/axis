@@ -13,6 +13,12 @@ _Generated/updated: 2026-09-07 · 357 commits · describe-tag: `v2.4.3`_
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Docs synced to v2.5.0**: `docs/index.mdx` + `docs/enduser/getting-started/installation.mdx` version stamps; `docs/ui/ui-shell.mdx` gains **Keyboard shortcuts** (dispatch hub, scopes, recorder, Shortcuts modal) and **Mobile shell (phones / tablets)** sections; `docs/ui/index.mdx` subsystem table mentions shortcuts + mobile shell; `docs/ui/results-and-strategy.mdx` and `docs/enduser/guides/strategy-and-results.mdx` document the v2.4.3 results overhaul (Events Stream/Open⇄Close position-cycle views, single-column strategy tab, saved-run stats snapshots, shared `walkStrategyEvents` walker).
+
 ## [2.5.0] — 2026-09-07
 
 ### Added
