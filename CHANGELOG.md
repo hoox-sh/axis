@@ -9,11 +9,11 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-07 · 355 commits · describe-tag: `v2.4.2`_
+_Generated/updated: 2026-09-07 · 357 commits · describe-tag: `v2.4.3`_
 
 ---
 
-## [Unreleased]
+## [2.5.0] — 2026-09-07
 
 ### Added
 
@@ -25,6 +25,15 @@ _Generated/updated: 2026-09-07 · 355 commits · describe-tag: `v2.4.2`_
   - **Tablet**: desktop shell kept, topbar becomes horizontally scrollable.
   - **Dialogs → bottom sheets** on phones (`sc-dialog`), safe-area insets (`viewport-fit=cover`, `env(safe-area-inset-*)`), `100dvh` app root, `interactive-widget=resizes-content` for soft-keyboard handling, ≥44px touch targets in mobile chrome (`pointer: coarse`).
   - **Studio tables** wrap cells on phones instead of forcing horizontal overflow.
+- **PYNE runtime 0.5.0**: vendored `pynescript-0.5.0-py3-none-any.whl` (built from the sister pyne repo via `scripts/sync-pyne-wheel.sh`); stale 0.4.x wheels dropped; hard-coded wheel paths in `src/engines/catalog.ts` / `src/engines/index.js` updated (`hoox_pyne-0.4.2` / `pynescript-0.4.0` → `pynescript-0.5.0`). Pine language builtins unchanged.
+
+### Changed
+
+- **Zero Biome lint errors** (368 → 0) across 641 checked files:
+  - **Tooling**: Biome 2.5 (`biome.json`, lint-only — Prettier keeps formatting), `lint` / `lint:fix` scripts, Prettier 3.9 pinned (`.prettierrc` single-quote/width-100, `.prettierignore`), project `opencode.json` enabling LSP + formatter.
+  - **Real fixes**: regex `exec`-loops → `matchAll()` (pine-colors, preevaluate, pyne-lsp, script-inputs, library-publish, …), `type="button"` on ~18 buttons, keyboard handlers (Enter/Escape) + `tabIndex`/ARIA value semantics on interactive widgets, `role="region"` divs → `<section>`, global-shadowing renames (`escape` → `escapeHtml`, `valueOf` → `readFieldValue`), duplicate object keys removed, `const enum` → `enum` (isolatedModules safety).
+  - **Justified suppressions** (each with reason): intentional control-char sanitization regexes (injection safety), CSS `env(safe-area-inset)` fallbacks, backdrop click-away surfaces, custom-widget rows with nested buttons, sticky-regex tokenizer.
+  - Verified regression-free: `tsc --noEmit` clean; test suite identical to pre-change baseline (pre-existing `server.test.ts` hook timeout + `window.matchMedia` cross-file pollution unaffected).
 
 ---
 
@@ -959,12 +968,15 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (36 commits)
+### 2026-09 (38 commits)
 
 #### Features
 
+- `716a26eb` (2026-09-07) — feat(ui): mobile-first responsive shell (phone sheets, tab bar, force-single chart)
 - `74418b05` (2026-09-07) — feat(results): events views (Open⇄Close), single-column strategy tab, rich saved stats
 - `e00b6c97` (2026-09-06) — feat(shortcuts): shortcuts modal + Settings → Keyboard recorder
 - `6efa590a` (2026-09-06) — feat(shortcuts): palette extensions with live shortcut rendering
@@ -1012,6 +1024,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `9ae3e3da` (2026-09-07) — chore(release): v2.4.3 — results events views, single-column strategy, saved stats
 - `aaf4d9ac` (2026-09-07) — chore(release): v2.4.2 — UI review fixes, keyboard shortcuts, line ops
 - `fa49a6c1` (2026-09-06) — chore(cli): release @hoox-sh/axis-cli 0.2.2
 - `36ba501c` (2026-09-06) — chore(release): v2.4.1 — worker tsc compliance
