@@ -2008,6 +2008,14 @@ span.ax-json-twist {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* Phone: let table cells wrap instead of forcing horizontal overflow */
+@media (max-width: 767px) {
+  .ax-table td,
+  .ax-table th {
+    white-space: normal;
+    word-break: break-word;
+  }
+}
 .ax-table tbody tr:hover td {
   background: var(--color-bg-hover);
 }

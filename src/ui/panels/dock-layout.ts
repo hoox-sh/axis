@@ -41,6 +41,7 @@ import {
   FIXED_APP_SHELL_PANELS,
   isPanelInChartOverlayMode,
 } from './panel-manager';
+import { isPhoneViewport } from '../responsive';
 
 /**
  * Stable start→end order within a dock.
@@ -77,11 +78,19 @@ export const DOCK_HOST_IDS = {
   right: 'axis-dock-right',
   bottom: 'axis-dock-bottom',
   float: 'axis-float-root',
+  mobile: 'axis-mobile-sheets',
 } as const;
 
 /** Resolve portal mount element for a dock target (null if not in DOM yet). */
 export function dockHostElement(dock: PanelDock): HTMLElement | null {
   if (typeof document === 'undefined') return null;
+  // Mobile: every panel portals into the sheet host (full-viewport sheets)
+  if (isPhoneViewport()) {
+    return (
+      document.getElementById(DOCK_HOST_IDS.mobile) ||
+      (typeof document.body !== 'undefined' ? document.body : null)
+    );
+  }
   if (dock === 'left') return document.getElementById(DOCK_HOST_IDS.left);
   if (dock === 'right') return document.getElementById(DOCK_HOST_IDS.right);
   if (dock === 'bottom') return document.getElementById(DOCK_HOST_IDS.bottom);

@@ -113,6 +113,12 @@ import {
 } from './ui/panels/FloatableShell';
 import { DockColumn, FloatRoot } from './ui/panels/DockColumn';
 import {
+  MobileHeader,
+  MobileTabBar,
+  MobileOverlays,
+} from './ui/mobile/MobileShell';
+import { isPhoneViewport } from './ui/responsive';
+import {
   bridgeSubscribe,
   bridgePublish,
   writeSharedDoc,
@@ -144,6 +150,13 @@ export const App: Component = () => {
     setSettingsTab(tab);
     openStudio('settings');
   };
+  /** Shared props for the mobile chrome (header / tab bar / overlays). */
+  const mobileChrome = () => ({
+    onOpenStudio: openStudioHome,
+    onOpenStudioPage: (page: StudioPageId) => openStudio(page),
+    studioOpen: () => studioPage() !== null,
+    editorRef,
+  });
   const [catalogTick, setCatalogTick] = createSignal(0);
   /** File drag-over highlight for .pine drop-to-library. */
   const [pineDropActive, setPineDropActive] = createSignal(false);
@@ -397,26 +410,32 @@ export const App: Component = () => {
       data-chart-only={store.presentation?.chartOnly ? '1' : '0'}
       ref={(el) => setPresentationRoot(el)}
     >
-      <Topbar
-        onToggleEditor={() => {
-          if (store.editor.mode === 'popout') {
-            // Bring back docked
-            setEditorMode('docked');
-            setEditorOpen(true);
-            return;
-          }
-          setEditorOpen(!store.editor.open);
-        }}
-        onToggleWatchlist={() => setWatchlistOpen(!store.watchlist.open)}
-        onOpenSettings={(tab) => openSettings(tab || 'general')}
-        onOpenPlugins={() => openStudio('plugins')}
-        onOpenWorkers={() => openStudio('workers')}
-        onOpenArchitecture={() => openStudio('wire')}
-        onOpenRuntime={() => openStudio('runtime')}
-        onOpenStudio={openStudioHome}
-        catalogTick={catalogTick()}
-        editorRef={editorRef}
-      />
+      {/* Phone: app-style header. ≥768px: full desktop topbar. */}
+      <Show
+        when={!isPhoneViewport()}
+        fallback={<MobileHeader {...mobileChrome()} />}
+      >
+        <Topbar
+          onToggleEditor={() => {
+            if (store.editor.mode === 'popout') {
+              // Bring back docked
+              setEditorMode('docked');
+              setEditorOpen(true);
+              return;
+            }
+            setEditorOpen(!store.editor.open);
+          }}
+          onToggleWatchlist={() => setWatchlistOpen(!store.watchlist.open)}
+          onOpenSettings={(tab) => openSettings(tab || 'general')}
+          onOpenPlugins={() => openStudio('plugins')}
+          onOpenWorkers={() => openStudio('workers')}
+          onOpenArchitecture={() => openStudio('wire')}
+          onOpenRuntime={() => openStudio('runtime')}
+          onOpenStudio={openStudioHome}
+          catalogTick={catalogTick()}
+          editorRef={editorRef}
+        />
+      </Show>
 
       {/* Main workspace: dock columns claim flex space; chart fills the middle */}
       <div class="flex-1 flex min-h-0 min-w-0 overflow-hidden" data-axis-workspace>
@@ -472,6 +491,9 @@ export const App: Component = () => {
       {/* Float portal host before panel trees so first paint can attach */}
       <FloatRoot />
 
+      {/* Mobile sheet portal host — panels become full-viewport sheets on phones */}
+      <div id="axis-mobile-sheets" class="axis-mobile-sheets" aria-hidden="false" />
+
       {/* Panel Solid trees (DOM portaled into dock columns / float root) */}
       <Watchlist />
       <LayerPanel />
@@ -521,8 +543,16 @@ export const App: Component = () => {
       <ResultsModal />
       <ScriptLogsPanel />
 
-      <SystemLogs />
-      <StatusBar />
+      <Show when={!isPhoneViewport()}>
+        <SystemLogs />
+        <StatusBar />
+      </Show>
+
+      {/* Phone: bottom tab bar + panels/more overlays */}
+      <Show when={isPhoneViewport()}>
+        <MobileTabBar {...mobileChrome()} />
+        <MobileOverlays {...mobileChrome()} />
+      </Show>
 
       {/* Opt-in error diagnostic share (telemetry.shareOnError) */}
       <ErrorShareToast />

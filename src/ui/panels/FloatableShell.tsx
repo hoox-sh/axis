@@ -88,6 +88,12 @@ import {
   isChartOverlayEligible,
   isPanelInChartOverlayMode,
 } from './panel-manager';
+import { isPhoneViewport } from '../responsive';
+import {
+  activeMobileSheet,
+  closeMobileSheet,
+  openMobileSheet,
+} from './mobile-sheet';
 
 /** Props for a dockable panel wrapper (title falls back to PANEL_META). */
 export interface FloatableShellProps {
@@ -209,6 +215,8 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   /** Hover-slide preference + dock eligibility (persisted chrome). */
   const hoverSlideOn = () => {
     const d = dock();
+    // Mobile: sheets replace hover-slide entirely
+    if (isPhoneViewport()) return false;
     // Chart overlay / float: no peek strip
     return (
       isPanelHoverSlide(props.id) &&
@@ -267,6 +275,16 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     }
   });
 
+  // Mobile: opening a panel (tab bar / panels list) shows it as the sheet.
+  // Only on open *transitions* — already-open panels must not steal the
+  // viewport at boot; phones start chart-first.
+  let prevMobileOpen = chrome().open;
+  createEffect(() => {
+    const open = chrome().open;
+    if (isPhoneViewport() && open && !prevMobileOpen) openMobileSheet(props.id);
+    prevMobileOpen = open;
+  });
+
   const resolveMount = () => {
     // Chart-overlay edge docks portal into the float root (not dock columns)
     const next = dockHostElement(effectivePortalDock(chrome()));
@@ -302,7 +320,10 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     document.body.classList.remove('axis-panel-dragging');
   };
 
-  const close = () => setPanelOpen(props.id, false);
+  const close = () => {
+    setPanelOpen(props.id, false);
+    closeMobileSheet(props.id);
+  };
 
   /** Ensure float chrome has on-screen geometry and usable size. */
   const seedFloatGeometry = (fromRect?: DOMRect | null) => {
@@ -405,6 +426,8 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   };
 
   const beginMoveDrag = (clientX: number, clientY: number) => {
+    // Mobile: no drag-to-float — sheets are fixed full-viewport
+    if (isPhoneViewport()) return;
     setMenuOpen(false);
     const c = getPanelChrome(props.id);
     // Undock to float on drag from docked layout (one portal hop)
@@ -499,11 +522,49 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   };
 
   /**
+   * Title bar pointer routing: desktop keeps drag-to-undock; phones get a
+   * swipe-down-to-dismiss gesture (with live translate feedback).
+   */
+  const onSheetHandlePointerDown = (e: PointerEvent) => {
+    if (!isPhoneViewport()) {
+      onHandlePointerDown(e);
+      return;
+    }
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, input, select, textarea, .axis-panel-menu')) return;
+    const startY = e.clientY;
+    let dismissed = false;
+    const onMove = (ev: PointerEvent) => {
+      if (dismissed) return;
+      const dy = ev.clientY - startY;
+      if (rootEl && dy > 0) rootEl.style.transform = `translateY(${dy}px)`;
+      if (dy > 72) {
+        dismissed = true;
+        cleanup();
+        close();
+      }
+    };
+    const cleanup = () => {
+      if (rootEl) rootEl.style.transform = '';
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', cleanup);
+    };
+    const onUp = () => cleanup();
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', cleanup);
+  };
+
+  /**
    * Title bar: **drag to undock/move** only after the pointer moves past
    * {@link MOVE_PX}. A plain click must not float a docked panel out.
    * (Buttons / menu / inputs are ignored.)
    */
   const onHandlePointerDown = (e: PointerEvent) => {
+    // Mobile: title bar is inert (sheets are fixed; no drag/undock)
+    if (isPhoneViewport()) return;
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
     if (target.closest('button, a, input, select, textarea, .axis-panel-menu')) return;
@@ -552,6 +613,11 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   const onHamburgerPointerDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
     e.stopPropagation();
+    // Mobile: tap opens the menu directly (no hold-to-drag)
+    if (isPhoneViewport()) {
+      setMenuOpen((o) => !o);
+      return;
+    }
     e.preventDefault();
 
     const startX = e.clientX;
@@ -723,6 +789,22 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   };
 
   const shellStyle = (): JSX.CSSProperties => {
+    // Mobile: fixed full-viewport sheet under the header / above the tab bar.
+    // Desktop geometry (x/y/w/h, dock side, hover-slide) is bypassed — never
+    // read or written — so phone↔desktop switches never clobber the layout.
+    if (isPhoneViewport()) {
+      return {
+        position: 'fixed',
+        left: '0',
+        right: '0',
+        top: 'calc(var(--axis-mobile-header-h, 48px) + env(safe-area-inset-top, 0px))',
+        bottom: 'calc(var(--axis-mobile-tabbar-h, 58px) + env(safe-area-inset-bottom, 0px))',
+        width: 'auto',
+        height: 'auto',
+        'z-index': '60',
+        'pointer-events': 'auto',
+      };
+    }
     const c = chrome();
     const d = dock();
     const order = dockStackCssOrder(props.id);
@@ -931,6 +1013,8 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   };
 
   const dockClass = () => {
+    // Mobile: dedicated sheet chrome (no dock/float styling)
+    if (isPhoneViewport()) return 'axis-mobile-sheet';
     if (isOverlay()) return 'axis-panel-float sc-float-panel';
     const d = dock();
     if (d === 'left') return 'axis-panel-dock axis-panel-dock-left';
@@ -940,10 +1024,12 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   };
 
   const showSideWidthResize = () => {
+    if (isPhoneViewport()) return false;
     if (hoverCollapsed() || isOverlay()) return false;
     return dock() === 'left' || dock() === 'right';
   };
   const showBottomHeightResize = () => {
+    if (isPhoneViewport()) return false;
     if (hoverCollapsed() || isOverlay()) return false;
     // Editor always fills height — no vertical split handles
     if (props.id === 'editor') return false;
@@ -956,7 +1042,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
 
   // Boolean Show (not keyed on HTMLElement) — host swaps must not remount children
   return (
-    <Show when={!!mountEl()}>
+    <Show when={!!mountEl() && (!isPhoneViewport() || activeMobileSheet() === props.id)}>
       <Portal mount={mountEl()!}>
           <div
             ref={rootEl}
@@ -981,10 +1067,10 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
               if (hoverCollapsed()) expandHoverSlide();
             }}
           >
-            {/* Title bar — drag (move) to undock/move; click alone stays docked */}
+            {/* Title bar — desktop: drag (move) to undock/move; phone: swipe down to dismiss */}
             <div
               class="axis-panel-handle sc-float-panel-header cursor-grab active:cursor-grabbing select-none relative"
-              onPointerDown={onHandlePointerDown}
+              onPointerDown={onSheetHandlePointerDown}
               title={
                 hoverCollapsed()
                   ? `${title()} — hover to expand`
@@ -1195,7 +1281,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
             </Show>
 
             {/* Float / chart-overlay: borders. Editor keeps full viewport height — width-only resize. */}
-            <Show when={isOverlay()}>
+            <Show when={isOverlay() && !isPhoneViewport()}>
               <div
                 class="sc-resize-handle absolute right-0 top-0 bottom-0"
                 role="separator"

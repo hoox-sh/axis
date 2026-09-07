@@ -15,7 +15,16 @@ _Generated/updated: 2026-09-07 · 355 commits · describe-tag: `v2.4.2`_
 
 ## [Unreleased]
 
-_Nothing yet — see the latest version section below._
+### Added
+
+- **Mobile-first responsive shell** (phones ≤767px, tablets 768–1023px; desktop ≥1024px unchanged):
+  - **Viewport signal** (`src/ui/responsive.ts`): reactive `phone | tablet | desktop` mode + `pointer: coarse` detection — all JS layout branching keys off this instead of CSS-only hacks, because panel geometry is persisted px state.
+  - **App-style phone shell**: compact header (brand · venue picker · symbol picker via SymbolModal · interval select) + bottom tab bar (Chart · Panels · Editor · Studio · More) replace the desktop Topbar/StatusBar; Panels list and More drawer (Run, Live, Studio pages, Settings, theme, About) open as nav overlays.
+  - **Panel sheets** (`FloatableShell` mobile mode): docked/floating panels render as full-viewport sheets under the header / above the tab bar — one active sheet at a time (`src/ui/panels/mobile-sheet.ts`); drag-to-undock, resize handles, and hover-slide are disabled on phones. Sheets dismiss via **swipe-down** on the title bar (grabber affordance + live translate feedback) or the close button. Desktop geometry is **bypassed, never overwritten**, so phone↔desktop switches preserve the user's layout. Phones boot chart-first (open panels don't steal the viewport).
+  - **Chart force-single on phones**: 2H/2V/4 layouts collapse to the active slot with a slot-switcher chip row; other slots stay preserved in `store.chartLayout`.
+  - **Tablet**: desktop shell kept, topbar becomes horizontally scrollable.
+  - **Dialogs → bottom sheets** on phones (`sc-dialog`), safe-area insets (`viewport-fit=cover`, `env(safe-area-inset-*)`), `100dvh` app root, `interactive-widget=resizes-content` for soft-keyboard handling, ≥44px touch targets in mobile chrome (`pointer: coarse`).
+  - **Studio tables** wrap cells on phones instead of forcing horizontal overflow.
 
 ---
 

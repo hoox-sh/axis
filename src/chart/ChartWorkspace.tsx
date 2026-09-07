@@ -31,6 +31,7 @@ import { ChartHost } from './ChartHost';
 import { setActiveSlotId } from './chart-registry';
 import { BarReplayControls } from '../ui/BarReplayControls';
 import { onchainManagerState } from '../onchain/manager';
+import { isPhoneViewport } from '../ui/responsive';
 
 /** Root chart area for the main app shell (replaces bare ChartHost). */
 export const ChartWorkspace: Component = () => {
@@ -41,7 +42,12 @@ export const ChartWorkspace: Component = () => {
   });
 
   const mode = () => store.chartLayout?.mode || '1';
+  // Mobile: force a single chart regardless of layout mode — other slots stay
+  // preserved in store and can be re-activated via the slot switcher chip.
+  const effMode = () => (isPhoneViewport() ? '1' : mode());
   const slots = () => store.chartLayout?.slots || [];
+  const visibleSlots = () =>
+    isPhoneViewport() ? slots().filter((s) => s.id === activeId()) : slots();
   const activeId = () => store.chartLayout?.activeId;
   /** Attached on-chain series count (price-pane overlays; subtle chrome only). */
   const onchainCount = () => onchainManagerState.series?.length ?? 0;
@@ -55,11 +61,11 @@ export const ChartWorkspace: Component = () => {
       data-chart-only={chartOnly() ? '1' : '0'}
     >
       <div
-        class={`flex-1 min-h-0 min-w-0 grid gap-[2px] bg-border ${gridClassForMode(mode())}`}
+        class={`flex-1 min-h-0 min-w-0 grid gap-[2px] bg-border ${gridClassForMode(effMode())}`}
         data-axis-chart-workspace
-        data-layout-mode={mode()}
+        data-layout-mode={effMode()}
       >
-        <For each={slots()}>
+        <For each={visibleSlots()}>
           {(slot) => {
             // Stable per-slot host: Solid reuses by list index; slot.id is the
             // PaneManager key. Layout mode changes that keep the same slot id
@@ -123,6 +129,31 @@ export const ChartWorkspace: Component = () => {
           }}
         </For>
       </div>
+      {/* Mobile slot switcher — multi-chart layouts collapse to one chart on
+          phones; this chip row re-activates the hidden slots. */}
+      <Show when={isPhoneViewport() && slots().length > 1}>
+        <div class="axis-mobile-slot-switch" data-testid="axis-mobile-slot-switch">
+          <For each={slots()}>
+            {(slot) => (
+              <button
+                type="button"
+                class={`axis-slot-badge ${activeId() === slot.id ? 'is-active' : ''}`}
+                data-testid={`axis-mobile-slot-${slot.id}`}
+                onClick={() => {
+                  try {
+                    setActiveChartSlot(slot.id);
+                  } catch {
+                    /* store update must not kill workspace */
+                  }
+                }}
+              >
+                {slot.symbol}
+                <span class="axis-slot-tf">{slot.interval}</span>
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
       {/* Shared replay strip — only paints when a session is active */}
       <BarReplayControls />
     </div>

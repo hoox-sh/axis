@@ -33,6 +33,7 @@ import {
   panelsOnDock,
 } from './dock-layout';
 import { getHoverSlideExpandedMap } from './hover-slide';
+import { isPhoneViewport } from '../responsive';
 import type { PanelDock } from './types';
 
 type Side = Extract<PanelDock, 'left' | 'right' | 'bottom'>;
@@ -58,14 +59,19 @@ export const DockColumn: Component<{ side: Side }> = (props) => {
     return panelsOnDock(props.side);
   });
   const empty = () => ids().length === 0;
+  // Mobile: panels portal into the sheet host — columns collapse to zero
+  // (open panels still count here, but their sheets are fixed overlays)
+  const collapsed = () => isPhoneViewport();
   const width = createMemo(() => {
     if (props.side === 'bottom') return undefined;
+    if (collapsed()) return 0;
     void store.panelChrome;
     void getHoverSlideExpandedMap();
     return empty() ? 0 : dockColumnWidth(props.side);
   });
   const bottomHeight = createMemo(() => {
     if (props.side !== 'bottom' || empty()) return 0;
+    if (collapsed()) return 0;
     void store.panelChrome;
     void getHoverSlideExpandedMap();
     // Sum layout heights (peek when hover-slide collapsed)
@@ -80,7 +86,10 @@ export const DockColumn: Component<{ side: Side }> = (props) => {
     <div
       id={HOST[props.side]}
       class={`axis-dock-col axis-dock-col-${props.side}`}
-      classList={{ 'is-empty': empty() }}
+      classList={{
+        'is-empty': empty(),
+        'is-mobile-collapsed': collapsed() && !empty(),
+      }}
       data-dock={props.side}
       data-dock-count={ids().length}
       style={
