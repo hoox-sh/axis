@@ -36,7 +36,7 @@
  * Style edits on a selection dual-write legacy flat fields + nested `style`.
  */
 
-import { Component, For, Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
+import { type Component, For, Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
 import {
   store,
   clearDrawingsForSymbol,

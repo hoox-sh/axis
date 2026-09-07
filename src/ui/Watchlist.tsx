@@ -44,7 +44,7 @@
  * Independent of chart kline streams — see `src/data/watchlist-live.ts`.
  */
 
-import { Component, For, createSignal, createEffect, onCleanup, Show } from 'solid-js';
+import { type Component, For, createSignal, createEffect, onCleanup, Show } from 'solid-js';
 import {
   store,
   setStore,
@@ -295,13 +295,22 @@ export const Watchlist: Component = () => {
               const active = () => store.symbol === sym;
               const change = () => tick()?.change;
               return (
+                // biome-ignore lint/a11y/useSemanticElements: row contains a nested remove <button>; wrapping in <button> would be invalid HTML
                 <div
                   class={`flex items-center justify-between gap-1 px-2 py-1.5 cursor-pointer border-b border-border-soft text-[12px] ${
                     active()
                       ? 'bg-accent/10 border-l-2 border-l-accent pl-[6px]'
                       : 'border-l-2 border-l-transparent hover:bg-bg-hover'
                   }`}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => void select(sym)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      void select(sym);
+                    }
+                  }}
                 >
                   <span class={`font-semibold truncate ${active() ? 'text-accent' : 'text-text'}`}>
                     {sym.replace(/USDT$/i, '').replace(/USD$/i, '')}
@@ -321,6 +330,7 @@ export const Watchlist: Component = () => {
                       </span>
                     </Show>
                     <button
+                      type="button"
                       class="text-text-faint hover:text-red text-sm leading-none px-0.5"
                       title={`Remove ${sym}`}
                       onClick={(e) => {

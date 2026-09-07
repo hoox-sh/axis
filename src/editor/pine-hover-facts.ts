@@ -554,7 +554,7 @@ export function declarationTypeFact(
     if (/^\s+[A-Za-z_][\w.]*\s*=/.test(after)) return fact;
     return null;
   }
-  if (/^\s*[<\[]/.test(after)) return fact;
+  if (/^\s*[<[]/.test(after)) return fact;
   if (/^\s+[A-Za-z_][\w]*\s*(?:=|:=|,|\)|$)/.test(after)) return fact;
   return null;
 }

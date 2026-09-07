@@ -23,7 +23,7 @@
  * @module editor/SymbolEmojiManager
  */
 
-import { Component, For, Show, createMemo, createSignal } from 'solid-js';
+import { type Component, For, Show, createMemo, createSignal } from 'solid-js';
 import { copyToClipboard } from '../ui/clipboard';
 import {
   PINE_SYMBOLS,

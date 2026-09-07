@@ -179,7 +179,7 @@ export function normalizeChartLayout(
     }
   }
 
-  let activeId =
+  const activeId =
     typeof raw?.activeId === 'string' && slots.some((s) => s.id === raw.activeId)
       ? raw!.activeId!
       : slots[0]!.id;

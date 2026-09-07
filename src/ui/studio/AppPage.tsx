@@ -45,6 +45,7 @@ export function AppPage(props: {
 
   return (
     <Show when={props.open}>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop captures Escape to close the page; no semantic role fits a dismiss surface */}
       <div class="ax-page-backdrop" onKeyDown={onKey} role="presentation">
         <div
           class="ax-page"

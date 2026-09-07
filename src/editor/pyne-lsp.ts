@@ -60,7 +60,7 @@ import {
   type EditorView,
   type Tooltip,
 } from '@codemirror/view';
-import { Extension, StateEffect, StateField, type EditorState } from '@codemirror/state';
+import { type Extension, StateEffect, StateField, type EditorState } from '@codemirror/state';
 import builtinsJson from './data/pyne-builtins.json';
 import { store } from '../store';
 import {
@@ -1145,8 +1145,7 @@ export function peelLeadingSignature(md: string): { signature: string | null; re
 export function appendInlineMarkdown(parent: HTMLElement, text: string): void {
   const re = /(\*\*[^*\n]+\*\*|`[^`\n]+`)/g;
   let last = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
+  for (const m of text.matchAll(re)) {
     if (m.index > last) {
       parent.appendChild(document.createTextNode(text.slice(last, m.index)));
     }
@@ -1219,8 +1218,7 @@ export function renderHoverMarkdown(root: HTMLElement, md: string): void {
     | { kind: 'prose'; text: string };
   const blocks: Block[] = [];
   let cursor = 0;
-  let fm: RegExpExecArray | null;
-  while ((fm = fenceRe.exec(src)) !== null) {
+  for (const fm of src.matchAll(fenceRe)) {
     if (fm.index > cursor) {
       blocks.push({ kind: 'prose', text: src.slice(cursor, fm.index) });
     }

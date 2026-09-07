@@ -24,7 +24,7 @@
  * @module ui/AboutModal
  */
 
-import { Component, Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { type Component, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { installFocusTrap } from './focus-trap';
 import { Icons } from './icons';
 import { HooxLogo } from './HooxLogo';
@@ -82,6 +82,7 @@ export const AboutModal: Component = () => {
 
   return (
     <Show when={aboutOpen()}>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop is an intentional click-away dismiss surface for the dialog */}
       <div
         class="sc-dialog-backdrop"
         onClick={onBackdrop}

@@ -49,9 +49,9 @@ import {
   shouldUseRemoteLsp,
   type RemoteDiagnostic,
 } from './pyne-lsp-client';
-import {
-  type DiagnosticSeverity,
-  type EditorDiagnostic,
+import type {
+  DiagnosticSeverity,
+  EditorDiagnostic,
 } from './diagnostics';
 import { setPreEval, store } from '../store';
 import builtinsJson from './data/pyne-builtins.json';
@@ -524,8 +524,7 @@ function collectFnsFromLine(
   functions: Map<string, string[]>,
 ): void {
   USER_FN_RE.lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = USER_FN_RE.exec(text))) {
+  for (const m of text.matchAll(USER_FN_RE)) {
     const name = m[1]!;
     if (!BARE_CALL_SKIP.has(name)) names.add(name);
     addFnParams(m[2] || '', names, functions, name);
@@ -571,8 +570,7 @@ function collectUserDeclarationMap(source: string): {
     // identifiers; only the alias becomes a binding (IMPORT_AS_RE below).
     if (/^\s*import\b/.test(text)) {
       IMPORT_AS_RE.lastIndex = 0;
-      let im: RegExpExecArray | null;
-      while ((im = IMPORT_AS_RE.exec(text))) names.add(im[1]!);
+      for (const im of text.matchAll(IMPORT_AS_RE)) names.add(im[1]!);
       continue;
     }
 

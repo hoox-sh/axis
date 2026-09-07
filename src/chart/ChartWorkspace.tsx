@@ -24,7 +24,7 @@
  * @module chart/ChartWorkspace
  */
 
-import { Component, For, Show, createEffect } from 'solid-js';
+import { type Component, For, Show, createEffect } from 'solid-js';
 import { store, setActiveChartSlot } from '../store';
 import { gridClassForMode } from './layout';
 import { ChartHost } from './ChartHost';

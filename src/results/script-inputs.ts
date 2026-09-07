@@ -314,8 +314,7 @@ export function collectImportAliases(source: string): Set<string> {
   const out = new Set<string>();
   if (!source) return out;
   IMPORT_ALIAS_RE.lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = IMPORT_ALIAS_RE.exec(source)) !== null) {
+  for (const m of source.matchAll(IMPORT_ALIAS_RE)) {
     out.add(m[3] || m[2]!);
   }
   return out;
@@ -847,8 +846,7 @@ export function collectStringConsts(source: string): Map<string, string> {
   if (!source) return map;
   const re =
     /(?:^|[\n;])\s*(?:string\s+)?([A-Za-z_]\w*)\s*=\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(source)) !== null) {
+  for (const m of source.matchAll(re)) {
     const name = m[1]!;
     const lit = parseLiteral(m[2]!);
     if (typeof lit === 'string') map.set(name, lit);
@@ -904,9 +902,8 @@ export function parseScriptInputs(
     parsePineEnums(source),
     extraSources?.length ? collectPineEnumsFromSources(extraSources) : undefined,
   );
-  let m: RegExpExecArray | null;
   CALL_RE.lastIndex = 0;
-  while ((m = CALL_RE.exec(source)) !== null) {
+  for (const m of source.matchAll(CALL_RE)) {
     const kind = m[1]; // undefined for bare input(
     const openIdx = m.index + m[0].length - 1;
     const closeIdx = findMatchingParen(source, openIdx);
@@ -1243,7 +1240,7 @@ export function lookupInputOverride(
   if (!overrides) return undefined;
   for (const k of [d.title, d.id, d.varName]) {
     const s = typeof k === 'string' ? k.trim() : '';
-    if (s && Object.prototype.hasOwnProperty.call(overrides, s)) return overrides[s];
+    if (s && Object.hasOwn(overrides, s)) return overrides[s];
   }
   return undefined;
 }

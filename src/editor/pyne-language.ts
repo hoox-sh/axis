@@ -396,7 +396,7 @@ const pyneParser: StreamParser<PineHighlightState> = {
       return 'punctuation';
     }
 
-    if (stream.match(/[{}()\[\],;]/)) {
+    if (stream.match(/[{}()[\],;]/)) {
       const ch = stream.current();
       state.afterDot = false;
       state.afterLibAlias = false;

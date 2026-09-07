@@ -32,7 +32,7 @@
  * @module ui/mobile/MobileShell
  */
 
-import { Component, For, Show, createMemo, createSignal } from 'solid-js';
+import { type Component, For, Show, createMemo, createSignal } from 'solid-js';
 import {
   store,
   setStore,
@@ -414,7 +414,8 @@ export const MobileOverlays: Component<MobileChromeProps> = (props) => {
               <Icons.radio size={16} />
               <span>{store.live.active ? 'Stop live' : 'Start live'}</span>
             </button>
-            <div class="axis-msep" role="separator" />
+            {/* Decorative divider — visual only, not exposed as an interactive separator */}
+            <div class="axis-msep" />
             <button
               type="button"
               class="axis-mpanel-row"
@@ -470,7 +471,8 @@ export const MobileOverlays: Component<MobileChromeProps> = (props) => {
               <Icons.settings size={16} />
               <span>Settings</span>
             </button>
-            <div class="axis-msep" role="separator" />
+            {/* Decorative divider — visual only, not exposed as an interactive separator */}
+            <div class="axis-msep" />
             <button type="button" class="axis-mpanel-row" onClick={toggleTheme}>
               <Icons.moon size={16} />
               <span>Toggle theme</span>

@@ -32,7 +32,7 @@
  * (same import path).
  */
 
-import { Component, For, Show, createSignal, createEffect } from 'solid-js';
+import { type Component, For, Show, createSignal, createEffect } from 'solid-js';
 import type { ScriptMeta, ScriptVersion } from '../plugins/types';
 import {
   listScripts,
@@ -824,8 +824,9 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
   return (
     <div class="flex flex-col gap-3 text-[11px]">
       <div class="sc-field">
-        <label class="text-[10px] text-text-dim uppercase tracking-wider">Storage backend</label>
+        <label class="text-[10px] text-text-dim uppercase tracking-wider" for="library-storage-backend">Storage backend</label>
         <select
+          id="library-storage-backend"
           class="sc-input"
           value={backend()}
           onChange={(e) => promptStorageChange(getActiveStorageId(), e.currentTarget.value)}
@@ -863,6 +864,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
             autocomplete="off"
           />
           <button
+            type="button"
             class="sc-btn sc-btn-ghost text-[10px]"
             onClick={() => {
               saveCloudCfg(cloudEndpoint(), cloudKey());
@@ -1059,6 +1061,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
           </Show>
 
           <button
+            type="button"
             class="sc-btn sc-btn-ghost text-[10px]"
             onClick={() => persistGit()}
             data-testid="axis-git-save"
@@ -1093,6 +1096,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
           onInput={(e) => setDesc(e.currentTarget.value)}
         />
         <button
+          type="button"
           class="sc-btn sc-btn-primary inline-flex items-center gap-1 justify-center"
           disabled={busy()}
           onClick={() => void onSave()}
@@ -1124,6 +1128,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
 
       <div class="flex gap-1.5 flex-wrap">
         <button
+          type="button"
           class="sc-btn sc-btn-ghost text-[10px] inline-flex items-center gap-1"
           onClick={() => void refresh()}
           disabled={busy()}
@@ -1131,10 +1136,11 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
           {busy() ? <HooxLoader size="xs" /> : null}
           Refresh
         </button>
-        <button class="sc-btn sc-btn-ghost text-[10px]" onClick={() => void onExport()}>
+        <button type="button" class="sc-btn sc-btn-ghost text-[10px]" onClick={() => void onExport()}>
           Export JSON
         </button>
         <button
+          type="button"
           class="sc-btn sc-btn-ghost text-[10px]"
           onClick={() => fileInput?.click()}
           title="Import .pyne / .pine files or library JSON"

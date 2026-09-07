@@ -288,7 +288,7 @@ easing = input.enum(Easing.linear, "easing")
       'ease_in',
       'ease_out',
     ]);
-    expect(enums.get('Easing')?.members[1]!.title).toBe('Ease in');
+    expect(enums.get('Easing')?.members[1]?.title).toBe('Ease in');
     const defs = parseScriptInputs(src);
     expect(defs[0]!.type).toBe('enum');
     expect(defs[0]!.default).toBe('Easing.linear');

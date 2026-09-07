@@ -5,11 +5,11 @@
  * Fibonacci pack — extension (3-pt), time zones, fib channel.
  */
 
-import {
-  type Drawing,
-  type MultiPointDrawing,
-  type Point,
-  type TwoPointDrawing,
+import type {
+  Drawing,
+  MultiPointDrawing,
+  Point,
+  TwoPointDrawing,
 } from '../../drawing-types';
 import { channelEdges, distToSegment, fibExtensionPrices, fibPrices } from '../geometry';
 import {

@@ -23,7 +23,7 @@
  * Direction encodes which way “grow” maps to client delta.
  */
 
-import { Component, onCleanup } from 'solid-js';
+import { type Component, onCleanup } from 'solid-js';
 
 export type ResizeDirection = 'grow-right' | 'grow-left' | 'grow-up' | 'grow-down';
 
@@ -88,11 +88,7 @@ export const ResizeHandle: Component<Props> = (props) => {
         break;
     }
     const min = props.min ?? 1;
-    const max =
-      props.max ??
-      (isVertical(props.direction)
-        ? Math.floor(window.innerWidth * 0.9)
-        : Math.floor(window.innerHeight * 0.9));
+    const max = maxSize();
     props.setSize(Math.min(Math.max(raw, min), max));
   };
 
@@ -117,13 +113,23 @@ export const ResizeHandle: Component<Props> = (props) => {
   const orientation = () => (isVertical(props.direction) ? 'vertical' : 'horizontal');
   const handleClass = () =>
     isVertical(props.direction) ? 'sc-resize-handle' : 'sc-pane-resize-handle';
+  const maxSize = () =>
+    props.max ??
+    (isVertical(props.direction)
+      ? Math.floor(window.innerWidth * 0.9)
+      : Math.floor(window.innerHeight * 0.9));
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: draggable grip relies on div hit-strip styling; <hr> default borders/pseudo-elements would break it
     <div
       class={`${handleClass()} ${props.class || ''}`}
       role="separator"
       aria-orientation={orientation()}
+      aria-valuenow={props.getSize()}
+      aria-valuemin={props.min ?? 1}
+      aria-valuemax={maxSize()}
       title="Drag to resize"
+      tabIndex={0}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

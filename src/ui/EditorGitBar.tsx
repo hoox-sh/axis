@@ -26,7 +26,7 @@
  * @module ui/EditorGitBar
  */
 
-import { Component, createEffect, createSignal, Show } from 'solid-js';
+import { type Component, createEffect, createSignal, Show } from 'solid-js';
 import type { ScriptMeta } from '../plugins/types';
 import { setStatus, store } from '../store';
 import {

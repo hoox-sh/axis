@@ -26,7 +26,7 @@
  * @module chart/ChartHost
  */
 
-import { Component, Show, createEffect, createMemo, onMount, onCleanup, untrack } from 'solid-js';
+import { type Component, Show, createEffect, createMemo, onMount, onCleanup, untrack } from 'solid-js';
 import { PaneManager } from './pane-manager';
 import { DrawingToolbar } from './DrawingToolbar';
 import { PyneTableHud } from './PyneTableHud';
@@ -129,7 +129,7 @@ function safePaint(
 
 /** One chart cell: multi-pane LWC + optional drawing chrome when active. */
 export const ChartHost: Component<ChartHostProps> = (props) => {
-  let hostEl: HTMLDivElement | undefined;
+  let hostEl: HTMLElement | undefined;
   let panesEl: HTMLDivElement | undefined;
   let localManager: PaneManager | undefined;
   /** False after host teardown — drops late rAF / RO callbacks. */
@@ -743,7 +743,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
   };
 
   return (
-    <div
+    <section
       ref={(el) => {
         hostEl = el;
       }}
@@ -751,7 +751,6 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       data-axis-chart-host
       data-slot={slotId()}
       data-active={isActive() ? '1' : '0'}
-      role="region"
       aria-label={chartAriaLabel()}
     >
       <div
@@ -794,6 +793,6 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
           </div>
         )}
       </Show>
-    </div>
+    </section>
   );
 };

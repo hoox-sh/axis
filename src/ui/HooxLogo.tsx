@@ -23,7 +23,7 @@
  * Sizes: xs / m / l presets or raw px via `HooxLogoSize`.
  */
 
-import { Component, JSX, onCleanup, onMount, splitProps } from 'solid-js';
+import { type Component, type JSX, onCleanup, onMount, splitProps } from 'solid-js';
 
 /** Preset or raw pixel size for the brand mark. */
 export type HooxLogoSize = 'xs' | 'm' | 'l' | number;
@@ -194,6 +194,7 @@ export const HooxLogo: Component<HooxLogoProps> = (props) => {
   });
 
   return (
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: hover flicker is a decorative logo animation driven by pointerenter
     <svg
       ref={(el) => {
         svgEl = el;

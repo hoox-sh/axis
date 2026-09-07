@@ -43,9 +43,7 @@ function fakeAttachment(
     key,
     instrument: {
       chainId: 'all',
-      protocolId: key,
       metric: 'tvl',
-      symbol,
       ...extras?.instrument,
       protocolId: extras?.instrument?.protocolId ?? key,
       symbol,
@@ -59,8 +57,6 @@ function fakeAttachment(
     finality: 'unknown',
     lastTvl: points.length ? points[points.length - 1]!.value : null,
     ...rest,
-    key,
-    label,
   };
 }
 

@@ -31,7 +31,7 @@
  */
 
 import {
-  Component,
+  type Component,
   For,
   Show,
   createEffect,
@@ -336,6 +336,7 @@ export const ScriptSettingsModal: Component = () => {
 
   return (
     <Show when={open()}>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop click-to-close is intentional; dialog handles keyboard */}
       <div
         class="sc-dialog-backdrop"
         onClick={onBackdrop}
@@ -656,7 +657,6 @@ const InputField: Component<{
             <span
               class="sc-field-tooltip"
               title={tip()}
-              aria-label={tip()}
               data-tooltip={tip()}
             >
               ?
@@ -986,7 +986,7 @@ function dirtyStrategyOverrides(
     ) {
       continue;
     }
-    if (Object.prototype.hasOwnProperty.call(fromDefs, k)) bag[k] = fromDefs[k];
+    if (Object.hasOwn(fromDefs, k)) bag[k] = fromDefs[k];
   }
   return bag;
 }

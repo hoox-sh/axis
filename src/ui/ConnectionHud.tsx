@@ -35,7 +35,7 @@
  */
 
 import {
-  Component,
+  type Component,
   Show,
   createEffect,
   createMemo,
@@ -242,7 +242,19 @@ function ChipShell(props: {
   };
   const active = () => props.sticky.openChip() === props.id;
 
+  /** Open/pin/close the sticky info — shared by pointer click and keyboard. */
+  const activate = (e: MouseEvent | KeyboardEvent) => {
+    e.stopPropagation();
+    if (active() && props.sticky.pinned()) {
+      props.sticky.close();
+    } else {
+      props.sticky.open(props.id);
+      if (!props.sticky.pinned()) props.sticky.togglePin();
+    }
+  };
+
   return (
+    // biome-ignore lint/a11y/useSemanticElements: chip hosts the info panel's pin/close buttons; a real <button> would nest buttons (invalid HTML)
     <span
       ref={(el) => {
         anchor = el;
@@ -254,16 +266,13 @@ function ChipShell(props: {
       }`}
       data-testid={props.testId || `axis-hud-${props.id}`}
       data-hud-chip={props.id}
+      role="button"
+      tabIndex={0}
       onMouseEnter={() => props.sticky.open(props.id)}
       onMouseLeave={() => props.sticky.scheduleClose()}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (active() && props.sticky.pinned()) {
-          props.sticky.close();
-        } else {
-          props.sticky.open(props.id);
-          if (!props.sticky.pinned()) props.sticky.togglePin();
-        }
+      onClick={activate}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') activate(e);
       }}
     >
       <span class={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dot()}`} aria-hidden="true" />
@@ -283,6 +292,7 @@ function ChipShell(props: {
         </span>
       </Show>
       <Show when={active()}>
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: hover bridge keeps the info panel open while the pointer moves onto it; pointer-only affordance */}
         <div
           onMouseEnter={() => props.sticky.clearLeave()}
           onMouseLeave={() => props.sticky.scheduleClose()}
@@ -377,7 +387,15 @@ function TickPulse(props: {
   };
   const active = () => props.sticky.openChip() === 'tick';
 
+  /** Open/pin the sticky info — shared by pointer click and keyboard. */
+  const activate = (e: MouseEvent | KeyboardEvent) => {
+    e.stopPropagation();
+    props.sticky.open('tick');
+    if (!props.sticky.pinned()) props.sticky.togglePin();
+  };
+
   return (
+    // biome-ignore lint/a11y/useSemanticElements: chip hosts the info panel's pin/close buttons; a real <button> would nest buttons (invalid HTML)
     <span
       ref={(el) => {
         anchor = el;
@@ -387,12 +405,13 @@ function TickPulse(props: {
       }`}
       data-testid="axis-tick-indicator"
       data-hud-chip="tick"
+      role="button"
+      tabIndex={0}
       onMouseEnter={() => props.sticky.open('tick')}
       onMouseLeave={() => props.sticky.scheduleClose()}
-      onClick={(e) => {
-        e.stopPropagation();
-        props.sticky.open('tick');
-        if (!props.sticky.pinned()) props.sticky.togglePin();
+      onClick={activate}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') activate(e);
       }}
     >
       <span
@@ -424,6 +443,7 @@ function TickPulse(props: {
         {tick() ? formatTickAge(tick()!.at, now()) : '—'}
       </span>
       <Show when={active()}>
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: hover bridge keeps the info panel open while the pointer moves onto it; pointer-only affordance */}
         <div
           onMouseEnter={() => props.sticky.clearLeave()}
           onMouseLeave={() => props.sticky.scheduleClose()}
@@ -457,7 +477,16 @@ function LiveBadge(props: {
     return 'text-text-faint border-border';
   };
   const active = () => props.sticky.openChip() === 'live';
+
+  /** Open/pin the sticky info — shared by pointer click and keyboard. */
+  const activate = (e: MouseEvent | KeyboardEvent) => {
+    e.stopPropagation();
+    props.sticky.open('live');
+    if (!props.sticky.pinned()) props.sticky.togglePin();
+  };
+
   return (
+    // biome-ignore lint/a11y/useSemanticElements: chip hosts the info panel's pin/close buttons; a real <button> would nest buttons (invalid HTML)
     <span
       ref={(el) => {
         anchor = el;
@@ -467,16 +496,18 @@ function LiveBadge(props: {
       }`}
       data-hud-chip="live"
       data-testid="axis-hud-live"
+      role="button"
+      tabIndex={0}
       onMouseEnter={() => props.sticky.open('live')}
       onMouseLeave={() => props.sticky.scheduleClose()}
-      onClick={(e) => {
-        e.stopPropagation();
-        props.sticky.open('live');
-        if (!props.sticky.pinned()) props.sticky.togglePin();
+      onClick={activate}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') activate(e);
       }}
     >
       {label()}
       <Show when={active()}>
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: hover bridge keeps the info panel open while the pointer moves onto it; pointer-only affordance */}
         <div
           onMouseEnter={() => props.sticky.clearLeave()}
           onMouseLeave={() => props.sticky.scheduleClose()}

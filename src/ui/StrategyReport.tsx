@@ -22,7 +22,7 @@
  * CSV export. Fed by {@link buildStrategyReport} from `store.lastRun` events.
  */
 
-import { Component, For, Show, createMemo } from 'solid-js';
+import { type Component, For, Show, createMemo } from 'solid-js';
 import {
   buildCumulativeEquity,
   formatMoney,
@@ -265,6 +265,7 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
                         <td title={t.entryFills && t.entryFills > 1 ? 'Pyramided entry fills' : undefined}>
                           {t.entryFills ?? 1}
                         </td>
+                        {/* biome-ignore lint/a11y: data-table cell styled as a jump link; a <button> inside <td> would break the table cell layout */}
                         <td
                           class="ax-table-link"
                           title="Jump to entry"
@@ -276,6 +277,7 @@ export const StrategyReport: Component<StrategyReportProps> = (props) => {
                           {formatTradeTime(t.entryTime)}
                         </td>
                         <td>{t.entry.toFixed(2)}</td>
+                        {/* biome-ignore lint/a11y: data-table cell styled as a jump link; a <button> inside <td> would break the table cell layout */}
                         <td
                           title="Jump to exit"
                           onClick={(e) => {

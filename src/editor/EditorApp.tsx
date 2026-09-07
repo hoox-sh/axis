@@ -27,7 +27,7 @@
  * @module editor/EditorApp
  */
 
-import { Component, createSignal, onMount, onCleanup } from 'solid-js';
+import { type Component, createSignal, onMount, onCleanup } from 'solid-js';
 import { EditorPane } from './EditorPane';
 import {
   bridgeSubscribe,
@@ -108,6 +108,7 @@ export const EditorApp: Component = () => {
         </span>
         <span class="text-[10px] text-text-faint font-mono truncate flex-1">{runStatus()}</span>
         <button
+          type="button"
           class={`sc-btn ${isRunBusy() ? 'sc-btn-primary is-active' : 'sc-btn-ghost'} ${
             runBlocked() ? 'opacity-50 cursor-not-allowed' : ''
           }`}

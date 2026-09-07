@@ -28,7 +28,7 @@
  * @module ui/EquityChart
  */
 
-import { Component, For, Show, createMemo, createSignal } from 'solid-js';
+import { type Component, For, Show, createMemo, createSignal } from 'solid-js';
 import type { EquityStep } from '../results/strategy';
 import { formatMoney, formatPct } from '../results/strategy';
 
@@ -137,6 +137,7 @@ export const EquityChart: Component<{ steps: EquityStep[] }> = (props) => {
 
   return (
     <div class="ax-equity">
+      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: SVG hover tracking drives the equity-curve crosshair, not a control */}
       <svg
         viewBox={`0 0 ${W} ${H}`}
         class="ax-equity-svg"

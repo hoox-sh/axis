@@ -27,7 +27,7 @@
  * FloatableShell id `datasource`.
  */
 
-import { Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { type Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { store, isPanelOpen } from '../store';
 import { listSources } from '../sources/catalog';
 import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';

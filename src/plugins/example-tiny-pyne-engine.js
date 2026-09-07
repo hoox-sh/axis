@@ -85,6 +85,7 @@ function tokenize(src) {
     const re = /\s*(?:(\/\/[^\n]*)|(\d+(?:\.\d+)?)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|([A-Za-z_][\w]*)|([+\-*/%<>=!(),.])|(<=|>=|==|!=))/y;
     re.lastIndex = 0;
     let m;
+    // biome-ignore lint/suspicious/noAssignInExpressions: sticky-regex tokenizer requires the exec-loop idiom
     while ((m = re.exec(src))) {
         if (m[1] !== undefined) continue;
         if (m[2] !== undefined) tokens.push({ type: 'num', value: parseFloat(m[2]) });
@@ -174,8 +175,7 @@ function parseStatements(src) {
     // Split on ';' and newlines, parse each as `name = expr` or `expr`.
     const out = [];
     const re = /([^;]+)(;|$)/g;
-    let m;
-    while ((m = re.exec(src))) {
+    for (const m of src.matchAll(re)) {
         const stmt = m[1].trim();
         if (!stmt) continue;
         const assign = /^([A-Za-z_]\w*)\s*=\s*([\s\S]+)$/.exec(stmt);

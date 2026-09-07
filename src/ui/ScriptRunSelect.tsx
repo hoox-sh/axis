@@ -25,7 +25,7 @@
  * @module ui/ScriptRunSelect
  */
 
-import { Component, For, Show, createMemo } from 'solid-js';
+import { type Component, For, Show, createMemo } from 'solid-js';
 import {
   store,
   listRunResultOptions,

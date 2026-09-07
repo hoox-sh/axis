@@ -25,7 +25,7 @@
  */
 
 import {
-  Component,
+  type Component,
   For,
   Show,
   createEffect,
@@ -205,6 +205,7 @@ export const BarReplayControls: Component = () => {
 
   return (
     <Show when={st().active}>
+      {/* biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the overlay cluster */}
       <div
         class="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-2 py-1 bg-bg-panel/95 border-2 border-border shadow-[0_4px_20px_rgba(0,0,0,0.4)] pointer-events-auto"
         data-testid="axis-bar-replay-controls"

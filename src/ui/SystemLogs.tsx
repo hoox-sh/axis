@@ -27,7 +27,7 @@
  * @module ui/SystemLogs
  */
 
-import { Component, For, Show, createEffect, createSignal } from 'solid-js';
+import { type Component, For, Show, createEffect, createSignal } from 'solid-js';
 import { store, setStore, persist, clearLogs, isPanelOpen } from '../store';
 import type { LogEntry } from '../store/types';
 import { Icons } from './icons';
@@ -209,6 +209,7 @@ export const SystemLogs: Component = () => {
             >
               <For each={store.logs}>
                 {(entry) => (
+                  // biome-ignore lint/a11y: double-click copy is a mouse convenience; each row already exposes an explicit copy button
                   <div
                     class="group flex items-start gap-2 px-2 py-0.5 border-b border-border-soft/50 hover:bg-bg-hover/60"
                     onDblClick={(e) => void copyLine(entry, e)}

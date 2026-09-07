@@ -412,8 +412,7 @@ export function findNearestCallName(textBefore: string): string | null {
   const re =
     /\b((?:plotshape|plotchar|plotarrow|plotcandle|plotbar|plot|hline|line|label|box|polyline|table|strategy|indicator|alertcondition|alert|color)(?:\.\w+)?)\s*\(/g;
   let last: string | null = null;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(textBefore)) !== null) {
+  for (const m of textBefore.matchAll(re)) {
     last = m[1]!;
   }
   return last;

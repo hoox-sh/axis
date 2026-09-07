@@ -24,7 +24,7 @@
  * @module ui/panels/DockColumn
  */
 
-import { Component, createMemo } from 'solid-js';
+import { type Component, createMemo } from 'solid-js';
 import { store } from '../../store';
 import {
   DOCK_HOST_IDS,

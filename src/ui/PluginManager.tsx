@@ -28,7 +28,7 @@
  * `loadPluginFromUrl`; parent may pass `onChanged` to bump catalogTick.
  */
 
-import { Component, For, Show, createSignal, createMemo } from 'solid-js';
+import { type Component, For, Show, createSignal, createMemo } from 'solid-js';
 import {
   getInstalledPlugins,
   loadPluginFromUrl,
@@ -181,6 +181,7 @@ export const PluginManager: Component<Props> = (props) => {
 
   const tabBtn = (id: TabId, label: string) => (
     <button
+      type="button"
       role="tab"
       aria-selected={tab() === id}
       class={`flex-1 px-3 py-2.5 text-[12px] font-medium border-b-2 -mb-[2px] ${
@@ -246,6 +247,7 @@ export const PluginManager: Component<Props> = (props) => {
                 >
                   {([id, label]) => (
                     <button
+                      type="button"
                       class={`sc-btn text-[11px] px-3 ${
                         kindFilter() === id ? 'sc-btn-primary' : 'sc-btn-ghost'
                       }`}
@@ -299,6 +301,7 @@ export const PluginManager: Component<Props> = (props) => {
                                 </Show>
                               </div>
                               <button
+                                type="button"
                                 class={`sc-btn text-[10px] px-2 flex-shrink-0 ${
                                   active() ? 'sc-btn-ghost text-accent-2' : 'sc-btn-primary'
                                 }`}
@@ -352,11 +355,12 @@ export const PluginManager: Component<Props> = (props) => {
               <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 min-h-0 flex-1">
               <div class="flex flex-col gap-3 min-w-0">
               <div class="flex flex-col gap-1.5">
-                <label class="text-[11px] text-text-dim uppercase tracking-wider">
+                <label class="text-[11px] text-text-dim uppercase tracking-wider" for="plugin-url-input">
                   Load ES module from URL
                 </label>
                 <div class="flex gap-1.5">
                   <input
+                    id="plugin-url-input"
                     class="sc-input flex-1 min-w-0 font-mono text-[12px]"
                     placeholder="https://…/my-plugin.js or /plugins/example-….js"
                     value={url()}
@@ -364,6 +368,7 @@ export const PluginManager: Component<Props> = (props) => {
                     onKeyDown={(e) => e.key === 'Enter' && load()}
                   />
                   <button
+                    type="button"
                     class="sc-btn sc-btn-primary inline-flex items-center gap-1"
                     disabled={busy() || !url().trim()}
                     onClick={() => load()}
@@ -392,6 +397,7 @@ export const PluginManager: Component<Props> = (props) => {
                   <For each={EXAMPLES}>
                     {(ex) => (
                       <button
+                        type="button"
                         class="sc-btn sc-btn-ghost text-left text-[11px] font-mono justify-start py-2"
                         onClick={() => {
                           setUrl(ex.url);
@@ -432,6 +438,7 @@ export const PluginManager: Component<Props> = (props) => {
                             </div>
                           </div>
                           <button
+                            type="button"
                             class="sc-btn sc-btn-ghost px-2 text-[11px]"
                             title="Activate"
                             onClick={() => activate(p.kind, p.id)}
@@ -439,6 +446,7 @@ export const PluginManager: Component<Props> = (props) => {
                             Use
                           </button>
                           <button
+                            type="button"
                             class="sc-btn sc-btn-ghost px-1.5"
                             title="Remove"
                             onClick={() => {
@@ -481,6 +489,7 @@ export const PluginManager: Component<Props> = (props) => {
                 `Scripts backend: ${store.activePlugins?.storage || 'local'}`}
             </div>
             <button
+              type="button"
               class="sc-btn sc-btn-primary"
               onClick={() => {
                 if (!listSources().some((s) => s.id === store.source)) {
@@ -509,6 +518,7 @@ export const PluginManager: Component<Props> = (props) => {
 
   return (
     <Show when={props.open}>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop click-to-close is intentional; dialog handles keyboard */}
       <div
         class="sc-dialog-backdrop"
         onClick={onBackdrop}
@@ -530,7 +540,7 @@ export const PluginManager: Component<Props> = (props) => {
               <Icons.folder size={16} />
               Plugins
             </span>
-            <button class="sc-btn sc-btn-ghost px-2" onClick={props.onClose} aria-label="Close">
+            <button type="button" class="sc-btn sc-btn-ghost px-2" onClick={props.onClose} aria-label="Close">
               <Icons.x size={14} />
             </button>
           </div>

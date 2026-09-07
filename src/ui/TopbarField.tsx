@@ -31,7 +31,7 @@
  * @module ui/TopbarField
  */
 
-import { Component, JSX, Show, splitProps } from 'solid-js';
+import { type Component, type JSX, Show, splitProps } from 'solid-js';
 
 export type TopbarFieldVariant = 'input' | 'select' | 'static';
 

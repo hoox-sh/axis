@@ -114,7 +114,9 @@ export function collectOpenPaths(value: unknown, root = '$', maxDepth = 3): stri
     if (Array.isArray(v)) {
       if (v.length === 0 || v.length > JSON_EXPAND_MAX) return;
       out.push(path);
-      v.forEach((item, i) => walk(item, childPath(path, String(i)), depth + 1));
+      v.forEach((item, i) => {
+        walk(item, childPath(path, String(i)), depth + 1);
+      });
       return;
     }
     if (v && typeof v === 'object') {

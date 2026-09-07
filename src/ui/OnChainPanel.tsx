@@ -30,7 +30,7 @@
  * beyond calling existing load + attach helpers.
  */
 
-import { Component, For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { type Component, For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import {
   isPanelOpen,
   persist,
@@ -557,6 +557,7 @@ export const OnChainPanel: Component = () => {
                     <span>{popularBusy() ? 'Attaching…' : 'Attach top 5'}</span>
                   </button>
                 </div>
+                {/* biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the chip row */}
                 <div
                   class="sc-chip-row flex flex-wrap gap-1"
                   role="group"

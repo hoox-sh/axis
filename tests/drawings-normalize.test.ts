@@ -508,7 +508,7 @@ describe('normalizeDrawing — invalid / garbage', () => {
       '{"text":"ok","__proto__":{"polluted":true},"constructor":"x","nested":{"a":1},"fn":null,"custom":42,"bad-key":1}',
     ) as Record<string, unknown>;
     // Ensure __proto__ is an own enumerable key (JSON.parse behavior)
-    expect(Object.prototype.hasOwnProperty.call(meta, '__proto__')).toBe(true);
+    expect(Object.hasOwn(meta, '__proto__')).toBe(true);
 
     const d = normalizeDrawing({
       kind: 'hline',
@@ -518,8 +518,8 @@ describe('normalizeDrawing — invalid / garbage', () => {
     expect(d).not.toBeNull();
     expect(d!.meta?.text).toBe('ok');
     expect(d!.meta?.custom).toBe(42);
-    expect(Object.prototype.hasOwnProperty.call(d!.meta, '__proto__')).toBe(false);
-    expect(Object.prototype.hasOwnProperty.call(d!.meta, 'constructor')).toBe(false);
+    expect(Object.hasOwn(d!.meta, '__proto__')).toBe(false);
+    expect(Object.hasOwn(d!.meta, 'constructor')).toBe(false);
     expect(d!.meta?.nested).toBeUndefined();
     expect(d!.meta?.['bad-key']).toBeUndefined();
     // Must not pollute Object.prototype

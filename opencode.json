@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": true,
+  "formatter": {
+    "prettier": {
+      "command": ["bunx", "prettier", "--write"],
+      "extensions": [".ts", ".tsx", ".js", ".mjs", ".json", ".md", ".mdx", ".css"]
+    }
+  }
+}

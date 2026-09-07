@@ -26,7 +26,7 @@
  * @module ui/ErrorFallback
  */
 
-import { Component, Show, createSignal } from 'solid-js';
+import { type Component, Show, createSignal } from 'solid-js';
 import { formatErrorMessage } from './boot-errors';
 import { exportErrorDiagnosticNow } from './error-share';
 

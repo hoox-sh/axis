@@ -27,7 +27,7 @@
  * FloatableShell id `scriptlogs` (title **Script Logs**).
  */
 
-import { Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { type Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { store, isPanelOpen } from '../store';
 import {
   normalizePyneLogs,
@@ -155,6 +155,7 @@ export const ScriptLogsPanel: Component = () => {
         >
           <ScriptRunSelect testId="axis-scriptlogs-script" />
 
+          {/* biome-ignore lint/a11y/useSemanticElements: chip filter row; <fieldset> default styles would break the toolbar layout */}
           <div class="sc-chip-row" role="group" aria-label="Log level filter">
             <For each={FILTERS}>
               {(f) => (
@@ -255,6 +256,7 @@ export const ScriptLogsPanel: Component = () => {
                       if (line != null) flashDebugPinLine(line);
                     };
                     return (
+                      // biome-ignore lint/a11y: role is conditional — jumpable rows expose button semantics; non-jumpable rows stay inert (onJump guards)
                       <div
                         class={`group flex items-start gap-2 px-2 py-0.5 border-b border-border-soft/50 hover:bg-bg-hover/60 ${
                           jumpable() ? 'cursor-pointer' : ''

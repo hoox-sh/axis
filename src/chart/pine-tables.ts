@@ -291,7 +291,7 @@ export function buildTableGrid(
 }
 
 export function cellTextAlign(halign?: string): 'left' | 'right' | 'center' {
-  const h = String(halign || '').toLowerCase().replace('text\.', '');
+  const h = String(halign || '').toLowerCase().replace('text.', '');
   if (h.includes('left')) return 'left';
   if (h.includes('right')) return 'right';
   return 'center';
@@ -299,7 +299,7 @@ export function cellTextAlign(halign?: string): 'left' | 'right' | 'center' {
 
 /** Map Pine `text_valign` tokens (`text.*`-prefixed or bare) → CSS vertical-align. */
 export function cellTextVerticalAlign(valign?: string): 'top' | 'middle' | 'bottom' {
-  const v = String(valign || '').toLowerCase().replace('text\.', '');
+  const v = String(valign || '').toLowerCase().replace('text.', '');
   if (v.includes('top')) return 'top';
   if (v.includes('bottom')) return 'bottom';
   return 'middle';

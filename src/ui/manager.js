@@ -42,7 +42,7 @@ function loadInstalledPlugins() {
 }
 function saveInstalledPlugins(arr) { try { localStorage.setItem(PLUGINS_KEY, JSON.stringify(arr)); } catch (_) { /* ignore */ } }
 
-function escape(s) {
+function escapeHtml(s) {
     return String(s ?? '').replace(/[&<>"']/g, (c) => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     }[c]));
@@ -60,12 +60,12 @@ function renderAllPlugins() {
             const userLoaded = installed.has(`${p.kind}:${p.id}`);
             return `<tr>
                 <td><span class="kind-badge kind-${g.kind}">${g.kind}</span></td>
-                <td><strong>${escape(p.id)}</strong></td>
-                <td>${escape(p.name)}</td>
-                <td>${escape(p.description || '')}</td>
+                <td><strong>${escapeHtml(p.id)}</strong></td>
+                <td>${escapeHtml(p.name)}</td>
+                <td>${escapeHtml(p.description || '')}</td>
                 <td class="manager-actions">
                     ${userLoaded
-                        ? `<button class="btn btn-ghost btn-sm" data-action="remove" data-kind="${g.kind}" data-id="${escape(p.id)}">Remove</button>`
+                        ? `<button class="btn btn-ghost btn-sm" data-action="remove" data-kind="${g.kind}" data-id="${escapeHtml(p.id)}">Remove</button>`
                         : (g.items.find((x) => x.id === p.id && x.builtIn) ? '<span class="kind-builtin">built-in</span>' : '')}
                 </td>
             </tr>`;
@@ -85,13 +85,13 @@ function renderLibrary() {
         return `<div class="empty">No saved scripts. Use "Save current script" below to add one.</div>`;
     }
     const rows = lib.map((s) => `<tr>
-        <td>${escape(s.name)}</td>
-        <td>${escape(s.description || '')}</td>
+        <td>${escapeHtml(s.name)}</td>
+        <td>${escapeHtml(s.description || '')}</td>
         <td>${new Date(s.savedAt).toLocaleString()}</td>
         <td>${s.script.length} chars</td>
         <td class="manager-actions">
-            <button class="btn btn-ghost btn-sm" data-action="load-script" data-id="${escape(s.id)}">Load</button>
-            <button class="btn btn-ghost btn-sm" data-action="delete-script" data-id="${escape(s.id)}">Delete</button>
+            <button class="btn btn-ghost btn-sm" data-action="load-script" data-id="${escapeHtml(s.id)}">Load</button>
+            <button class="btn btn-ghost btn-sm" data-action="delete-script" data-id="${escapeHtml(s.id)}">Delete</button>
         </td>
     </tr>`).join('');
     return `<table class="manager-table"><thead><tr>
@@ -168,8 +168,12 @@ function open() {
     _backdrop.querySelectorAll('.manager-tabs .tab').forEach((t) => {
         t.addEventListener('click', () => {
             const name = t.dataset.mtab;
-            _backdrop.querySelectorAll('.manager-tabs .tab').forEach((x) => x.classList.toggle('tab-active', x === t));
-            _backdrop.querySelectorAll('[data-mtab-panel]').forEach((p) => p.hidden = p.dataset.mtabPanel !== name);
+            _backdrop.querySelectorAll('.manager-tabs .tab').forEach((x) => {
+                x.classList.toggle('tab-active', x === t);
+            });
+            _backdrop.querySelectorAll('[data-mtab-panel]').forEach((p) => {
+                p.hidden = p.dataset.mtabPanel !== name;
+            });
         });
     });
 

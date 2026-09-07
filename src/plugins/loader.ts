@@ -92,6 +92,7 @@ const ALLOWED_DATA_JS_MIMES = new Set([
 function normalizeForSchemeCheck(href: string): string {
   return href
     .replace(/^\uFEFF/, '')
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional C0/zero-width char stripping to defeat scheme obfuscation
     .replace(/[\u0000-\u001F\u007F\u200B-\u200D\uFEFF]/g, '')
     .toLowerCase()
     .trim();

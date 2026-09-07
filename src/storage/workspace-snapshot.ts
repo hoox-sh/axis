@@ -659,7 +659,7 @@ export function downloadSnapshot(
 ): void {
   const text = JSON.stringify(snap, null, 2);
   if (typeof document === 'undefined') return;
-  const safeName = (filename || 'axis-workspace.json').replace(/[^\w.\-]+/g, '_');
+  const safeName = (filename || 'axis-workspace.json').replace(/[^\w.-]+/g, '_');
   const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -675,7 +675,7 @@ export function defaultSnapshotFilename(snap: WorkspaceSnapshot): string {
   const stamp = (snap.createdAt || '').slice(0, 10) || 'export';
   const base = (snap.name || snap.symbol || 'workspace')
     .toLowerCase()
-    .replace(/[^\w.\-]+/g, '-')
+    .replace(/[^\w.-]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 48);
   return `axis-workspace-${base || 'export'}-${stamp}.json`;

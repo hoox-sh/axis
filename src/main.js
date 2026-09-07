@@ -175,7 +175,7 @@ async function handleUploadFile(file) {
     try {
         const text = await file.text();
         let parsed;
-        if (file.name.endsWith('.json') || /^[\s]*[\{\[]/.test(text)) {
+        if (file.name.endsWith('.json') || /^[\s]*[{[]/.test(text)) {
             parsed = JSON.parse(text);
         } else {
             parsed = parseCsv(text);

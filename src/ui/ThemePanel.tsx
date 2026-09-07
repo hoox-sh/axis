@@ -87,6 +87,7 @@ export const ThemePanel = (props: ThemePanelProps) => {
         title="Presets"
         lead="Switch the base palette. Any edit after that becomes a Custom override."
       >
+        {/* biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the chip row */}
         <div class="ax-chip-row" role="group" aria-label="Chart theme presets">
           <For each={presets()}>
             {(p) => (

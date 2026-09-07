@@ -198,7 +198,7 @@ export class TabbedEditor {
             tab.title = `${t.name}${t.dirty ? ' (unsaved)' : ''}`;
             tab.innerHTML = `
                 <span class="tab-dot"></span>
-                <span class="tab-name">${escape(t.name)}</span>
+                <span class="tab-name">${escapeHtml(t.name)}</span>
                 <button class="tab-close" title="Close">×</button>
             `;
             tab.addEventListener('click', (e) => {
@@ -219,7 +219,7 @@ export class TabbedEditor {
     }
 }
 
-function escape(s) {
+function escapeHtml(s) {
     return String(s ?? '').replace(/[&<>"']/g, (c) => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     }[c]));

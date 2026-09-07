@@ -108,9 +108,8 @@ export function parseLibraryImports(code: string): LibraryImportSpec[] {
   const out: LibraryImportSpec[] = []
   const seen = new Set<string>()
   IMPORT_RE.lastIndex = 0
-  let m: RegExpExecArray | null
   const src = String(code ?? '')
-  while ((m = IMPORT_RE.exec(src))) {
+  for (const m of src.matchAll(IMPORT_RE)) {
     const namespace = sanitizeIdent(m[1] || 'user')
     const name = sanitizeIdent(m[2] || 'Lib')
     const version = Number.parseInt(m[3] || '1', 10)

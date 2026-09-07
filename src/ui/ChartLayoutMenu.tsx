@@ -23,7 +23,7 @@
  * @module ui/ChartLayoutMenu
  */
 
-import { Component, For, Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { type Component, For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import {
   store,
   setChartGridMode,

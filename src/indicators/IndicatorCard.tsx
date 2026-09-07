@@ -28,7 +28,7 @@
  * @module indicators/IndicatorCard
  */
 
-import { Component, For, Show, createMemo, createSignal } from 'solid-js';
+import { type Component, For, Show, createMemo, createSignal } from 'solid-js';
 import type { Indicator } from '../store/types';
 import {
   setIndicatorColor,

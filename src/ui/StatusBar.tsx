@@ -27,7 +27,7 @@
  * @module ui/StatusBar
  */
 
-import { Component, Show, createMemo, untrack } from 'solid-js';
+import { type Component, Show, createMemo, untrack } from 'solid-js';
 import { store, isPanelOpen } from '../store';
 import { Icons } from './icons';
 import type { RunResult } from '../indicators/runner';

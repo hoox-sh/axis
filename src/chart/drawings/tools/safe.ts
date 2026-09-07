@@ -56,7 +56,7 @@ export function sanitizePoints(points: Point[] | null | undefined, max = DRAWING
  */
 export function sanitizeDrawingText(raw: unknown, max = DRAWING_TEXT_MAX): string {
   let s = raw == null ? '' : String(raw);
-  // eslint-disable-next-line no-control-regex
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional C0 control-char sanitization
   s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
   s = s.replace(/\s+/g, ' ').trim();
   if (s.length > max) s = s.slice(0, max);
@@ -72,7 +72,7 @@ export function sanitizeStrokeColor(raw: unknown, fallback = '#939fff'): string 
   const s = String(raw ?? '').trim();
   if (!s || s.length > 64) return fallback;
   // Newlines / control chars enable multi-statement CSS injection in style attrs.
-  // eslint-disable-next-line no-control-regex
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control-char rejection for CSS-injection safety
   if (/[\u0000-\u001F\u007F\u2028\u2029]/.test(s)) return fallback;
 
   const lower = s.toLowerCase();

@@ -27,7 +27,7 @@
  * FloatableShell id `layers`. Script settings opens per applied indicator.
  */
 
-import { Component, For, Show, createSignal, createMemo } from 'solid-js';
+import { type Component, For, Show, createSignal, createMemo } from 'solid-js';
 import {
   store,
   isPanelOpen,
@@ -508,6 +508,7 @@ export const LayerPanel: Component = () => {
                   const visible = () => !d.meta?.hidden;
                   const st = () => resolveDrawingStyle(d);
                   return (
+                    // biome-ignore lint/a11y/useSemanticElements: row contains nested buttons, so a real <button> would be invalid HTML
                     <div
                       class={`flex items-center gap-1.5 px-1 py-1 border cursor-pointer transition-colors ${
                         selected()

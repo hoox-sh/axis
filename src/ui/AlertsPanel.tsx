@@ -23,7 +23,7 @@
  * FloatableShell id `alerts`. Uses `src/alerts` (localStorage engine).
  */
 
-import { Component, For, Show, createMemo, createSignal } from 'solid-js';
+import { type Component, For, Show, createMemo, createSignal } from 'solid-js';
 import { store, isPanelOpen } from '../store';
 import {
   listAlerts,

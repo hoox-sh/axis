@@ -27,7 +27,7 @@
  * @module chart/PyneTableHud
  */
 
-import { Component, For, Show, createMemo } from 'solid-js';
+import { type Component, For, Show, createMemo } from 'solid-js';
 import { store, EDITOR_RUN_KEY } from '../store';
 import {
   buildTableGrid,
@@ -65,12 +65,11 @@ export const PyneTableHud: Component = () => {
           return (
             <div
               class={`absolute z-[6] pointer-events-none ${pineTablePositionClass(tb.position)}`}
-              role="table"
-              aria-label="Pine table"
               data-testid="axis-pine-table"
               data-owner={tb.ownerId || ''}
             >
               <table
+                aria-label="Pine table"
                 class="border-collapse text-[10px] font-mono shadow-lg"
                 style={{
                   'border': `${frameW()}px solid ${frame()}`,

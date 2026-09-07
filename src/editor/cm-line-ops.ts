@@ -31,12 +31,12 @@
 
 import {
   EditorSelection,
-  EditorState,
+  type EditorState,
   Prec,
   type Extension,
   type TransactionSpec,
 } from '@codemirror/state';
-import { EditorView, keymap, type KeyBinding } from '@codemirror/view';
+import { type EditorView, keymap, type KeyBinding } from '@codemirror/view';
 
 /** Callbacks for the editor "run" keymap (Mod-Enter, format, debug toggles). */
 export interface RunKeymapHandlers {

@@ -26,7 +26,7 @@
  */
 
 import {
-  Component,
+  type Component,
   Show,
   createMemo,
   createSignal,

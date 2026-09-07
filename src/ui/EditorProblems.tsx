@@ -29,7 +29,7 @@
  * @module ui/EditorProblems
  */
 
-import { Component, For, Show, createSignal, onCleanup } from 'solid-js';
+import { type Component, For, Show, createSignal, onCleanup } from 'solid-js';
 import type { DiagnosticSeverity, EditorDiagnostic } from '../editor/diagnostics';
 import {
   EDITOR_PROBLEMS_DEFAULT_HEIGHT,
@@ -217,12 +217,11 @@ export const EditorProblems: Component<EditorProblemsProps> = (props) => {
   const listHeight = () => Math.max(24, height() - 30);
 
   return (
-    <div
+    <section
       class={`flex flex-col min-h-0 flex-shrink-0 border-t-2 border-border bg-bg-base ${props.class ?? ''}`}
       style={{ height: `${height()}px` }}
       data-testid="axis-editor-problems"
       data-height={height()}
-      role="region"
       aria-label="Editor problems"
     >
       {/* Drag up to grow — top edge between editor buffer and problems */}
@@ -383,6 +382,6 @@ export const EditorProblems: Component<EditorProblemsProps> = (props) => {
           </ul>
         </Show>
       </div>
-    </div>
+    </section>
   );
 };

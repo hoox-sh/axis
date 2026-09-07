@@ -23,7 +23,7 @@
  */
 
 import {
-  Component,
+  type Component,
   For,
   Show,
   createEffect,
@@ -223,6 +223,7 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
 
   return (
     <Show when={props.open}>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop is an intentional click-away dismiss surface for the dialog */}
       <div
         class="sc-dialog-backdrop sc-dialog-backdrop--start sm:items-center"
         onClick={onBackdrop}

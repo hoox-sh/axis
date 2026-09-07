@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-export const enum ExitCode {
+export enum ExitCode {
   SUCCESS = 0,
   ERROR = 1,
   INVALID_USAGE = 2,

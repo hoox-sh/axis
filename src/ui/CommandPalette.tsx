@@ -31,7 +31,7 @@
  */
 
 import {
-  Component,
+  type Component,
   For,
   Show,
   createEffect,
@@ -453,6 +453,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
 
   return (
     <Show when={isPaletteOpen()}>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop click-to-close is intentional; palette input handles keyboard */}
       <div
         class="axis-cmd-palette-backdrop"
         role="presentation"
@@ -467,7 +468,6 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
           aria-modal="true"
           aria-label="Command palette"
           data-testid="axis-command-palette"
-          onMouseDown={(e) => e.stopPropagation()}
         >
           <div class="sc-dialog-accent" />
           <div class="axis-cmd-palette-search">

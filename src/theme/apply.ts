@@ -94,7 +94,7 @@ function mixRgb(a: RGB, b: RGB, t: number): RGB {
 function relLuminance({ r, g, b }: RGB): number {
   const lin = (v: number) => {
     const s = v / 255;
-    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
   };
   return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
 }

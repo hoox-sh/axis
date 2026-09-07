@@ -118,7 +118,7 @@ export function formatPineSource(
       continue;
     }
 
-    let spaces = countLeadingSpaces(line);
+    const spaces = countLeadingSpaces(line);
     let level = Math.round(spaces / indentSize);
     // Snap stray 1–2 space indents toward nearest level
     if (spaces > 0 && spaces < indentSize) level = 1;

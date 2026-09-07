@@ -24,7 +24,7 @@
  * @module ui/ErrorShareToast
  */
 
-import { Component, Show, createSignal } from 'solid-js';
+import { type Component, Show, createSignal } from 'solid-js';
 import { store } from '../store';
 import {
   acceptErrorShareOffer,

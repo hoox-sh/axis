@@ -197,6 +197,7 @@ export function StudioJson(props: { value: unknown; testId?: string }) {
   return (
     <div class="ax-json" data-testid={props.testId}>
       <div class="ax-toolbar ax-json-toolbar">
+        {/* biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the chip row */}
         <div class="ax-chip-row" role="group" aria-label="Raw view">
           <button
             type="button"

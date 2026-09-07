@@ -27,7 +27,7 @@
  * @module editor/PyneEditor
  */
 
-import { Component, createEffect, onMount, onCleanup } from 'solid-js';
+import { type Component, createEffect, onMount, onCleanup } from 'solid-js';
 import {
   EditorView,
   keymap,

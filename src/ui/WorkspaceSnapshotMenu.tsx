@@ -25,7 +25,7 @@
  * parse never mutates the store.
  */
 
-import { Component, createSignal, Show } from 'solid-js';
+import { type Component, createSignal, Show } from 'solid-js';
 import { reconcile } from 'solid-js/store';
 import {
   store,

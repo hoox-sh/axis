@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+.wrangler/
+src-tauri/target/
+public/pyodide/
+vendor/
+*.png
+*.ico
+bun.lockb

@@ -25,7 +25,7 @@
  */
 
 import {
-  Component,
+  type Component,
   For,
   Show,
   createEffect,

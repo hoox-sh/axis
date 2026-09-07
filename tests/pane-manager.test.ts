@@ -132,7 +132,7 @@ describe('PaneManager', () => {
       coordinateToPrice: () => 10,
     } as never;
 
-    let lastTime: unknown = undefined;
+    let lastTime: unknown ;
     pm.syncCrosshair((data) => {
       lastTime = data.time;
     });
@@ -167,7 +167,7 @@ describe('PaneManager', () => {
     } as never;
 
     let calls = 0;
-    let lastTime: unknown = undefined;
+    let lastTime: unknown ;
     pm.syncCrosshair((data) => {
       calls += 1;
       lastTime = data.time;

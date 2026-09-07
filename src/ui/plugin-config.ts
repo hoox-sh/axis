@@ -102,7 +102,7 @@ export function resolvePluginFieldValue(
 ): unknown {
   for (const t of targets) {
     const bag = bagOf(bags, t);
-    if (bag && Object.prototype.hasOwnProperty.call(bag, key)) return bag[key];
+    if (bag && Object.hasOwn(bag, key)) return bag[key];
   }
   for (const t of targets) {
     const f = t.schema[key];

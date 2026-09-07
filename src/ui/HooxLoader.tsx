@@ -23,7 +23,7 @@
  * Layouts: icon only, inline label, or stacked. Aliases: HooxLoaderXs/M/L.
  */
 
-import { Component, JSX, Show, splitProps } from 'solid-js';
+import { type Component, type JSX, Show, splitProps } from 'solid-js';
 import { HooxLogo, type HooxLogoSize, resolveLogoSize } from './HooxLogo';
 
 export type HooxLoaderProps = {

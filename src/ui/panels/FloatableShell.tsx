@@ -32,9 +32,9 @@
  */
 
 import {
-  Component,
+  type Component,
   For,
-  JSX,
+  type JSX,
   Show,
   createEffect,
   createSignal,
@@ -1085,7 +1085,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                 {(Icon) => (
                   <span
                     class="flex-shrink-0 text-text-dim opacity-70 pointer-events-none"
-                    aria-label={`Panel: ${title()}`}
+                    aria-hidden="true"
                     data-testid={`axis-panel-header-icon-${props.id}`}
                   >
                     <Icon size={14} />
@@ -1118,6 +1118,13 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                       const t = e.target as HTMLElement | null;
                       if (t?.closest?.('[role="menuitem"]')) setMenuOpen(false);
                     }}
+                    onKeyDown={(e) => {
+                      // Mirror onClick: keyboard activation of a menuitem closes the menu
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        const t = e.target as HTMLElement | null;
+                        if (t?.closest?.('[role="menuitem"]')) setMenuOpen(false);
+                      }
+                    }}
                   >
                     <For each={DOCK_MENU}>
                       {(item) => {
@@ -1136,7 +1143,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                         );
                       }}
                     </For>
-                    <div class="axis-panel-menu-sep" role="separator" />
+                    <hr class="axis-panel-menu-sep border-0" />
                     <Show when={isChartOverlayEligible(dock()) || isFloat()}>
                       <button
                         type="button"
@@ -1211,7 +1218,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                       <span>Reset to default</span>
                     </button>
                     <Show when={props.menuExtra}>
-                      <div class="axis-panel-menu-sep" role="separator" />
+                      <hr class="axis-panel-menu-sep border-0" />
                       {props.menuExtra}
                     </Show>
                   </div>
@@ -1282,32 +1289,44 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
 
             {/* Float / chart-overlay: borders. Editor keeps full viewport height — width-only resize. */}
             <Show when={isOverlay() && !isPhoneViewport()}>
+              {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
               <div
                 class="sc-resize-handle absolute right-0 top-0 bottom-0"
                 role="separator"
                 aria-orientation="vertical"
+                aria-valuenow={getPanelChrome(props.id).w}
+                tabIndex={0}
                 title="Drag to resize width"
                 onPointerDown={onFloatResizePointerDown('e')}
               />
+              {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
               <div
                 class="sc-resize-handle absolute left-0 top-0 bottom-0"
                 role="separator"
                 aria-orientation="vertical"
+                aria-valuenow={getPanelChrome(props.id).w}
+                tabIndex={0}
                 title="Drag to resize width"
                 onPointerDown={onFloatResizePointerDown('w')}
               />
               <Show when={props.id !== 'editor'}>
+                {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
                 <div
                   class="sc-pane-resize-handle absolute left-0 right-3 bottom-0"
                   role="separator"
                   aria-orientation="horizontal"
+                  aria-valuenow={getPanelChrome(props.id).h}
+                  tabIndex={0}
                   title="Drag to resize"
                   onPointerDown={onFloatResizePointerDown('s')}
                 />
+                {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
                 <div
                   class="sc-pane-resize-handle absolute left-0 right-0 top-0"
                   role="separator"
                   aria-orientation="horizontal"
+                  aria-valuenow={getPanelChrome(props.id).h}
+                  tabIndex={0}
                   title="Drag to resize"
                   onPointerDown={onFloatResizePointerDown('n')}
                 />

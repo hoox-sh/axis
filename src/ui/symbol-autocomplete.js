@@ -60,7 +60,7 @@ function rank(query, list) {
         if (s.base === q) { out.push({ s, score: 1 }); continue; }
         if (s.symbol.startsWith(q)) { out.push({ s, score: 2 }); continue; }
         if (s.base.startsWith(q)) { out.push({ s, score: 3 }); continue; }
-        if (s.symbol.includes(q) || s.base.includes(q)) { out.push({ s, score: 4 }); continue; }
+        if (s.symbol.includes(q) || s.base.includes(q)) { out.push({ s, score: 4 }); }
     }
     out.sort((a, b) => a.score - b.score);
     return out.slice(0, 12).map((o) => o.s);

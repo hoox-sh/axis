@@ -26,7 +26,7 @@
  * `onchainManagerState.series`. FloatableShell id `dataview`.
  */
 
-import { Component, For, Show, createMemo } from 'solid-js';
+import { type Component, For, Show, createMemo } from 'solid-js';
 import { store, isPanelOpen } from '../store';
 import { buildDataViewRows } from '../results/dataview';
 import type { RunResult } from '../indicators/runner';

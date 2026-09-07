@@ -187,11 +187,7 @@ export function resolveChartTimeToDate(time: unknown): Date | null {
       const ms = o.timestamp > 1e12 ? o.timestamp : o.timestamp * 1000;
       return new Date(ms);
     }
-    if (
-      typeof o.year === 'number' &&
-      typeof o.month === 'number' &&
-      typeof o.day === 'number'
-    ) {
+    if (typeof o.year === 'number' && typeof o.month === 'number' && typeof o.day === 'number') {
       return new Date(Date.UTC(o.year, o.month - 1, o.day));
     }
   }
@@ -243,7 +239,10 @@ function deepMerge(
  * Create a themed LWC chart in `container` (void bg, crosshair, aligned
  * right scale width). Optional `options` deep-merged last so callers can override.
  */
-export function createBaseChart(container: HTMLElement, options?: Record<string, unknown>): IChartApi {
+export function createBaseChart(
+  container: HTMLElement,
+  options?: Record<string, unknown>,
+): IChartApi {
   const tokens = activeTokens();
   let themeOpts: Record<string, unknown> = {};
   try {
@@ -349,15 +348,19 @@ function alignRightScale(chart: IChartApi) {
 }
 
 /** Japanese candlestick series with void up/down colors and aligned right scale. */
-export function createCandleSeries(chart: IChartApi, paneIndex?: number): ISeriesApi<'Candlestick'> {
+export function createCandleSeries(
+  chart: IChartApi,
+  paneIndex?: number,
+): ISeriesApi<'Candlestick'> {
   const tokens = activeTokens();
   const opts = {
     ...priceSeriesCommon(tokens),
     ...buildCandleSeriesOptions(tokens, { chartType: 'candles' }),
   };
-  const series = paneIndex !== undefined
-    ? chart.addSeries(CandlestickSeries, opts, paneIndex)
-    : chart.addSeries(CandlestickSeries, opts);
+  const series =
+    paneIndex !== undefined
+      ? chart.addSeries(CandlestickSeries, opts, paneIndex)
+      : chart.addSeries(CandlestickSeries, opts);
   alignRightScale(chart);
   return series;
 }
@@ -375,9 +378,10 @@ export function createHollowCandleSeries(
     ...priceSeriesCommon(tokens),
     ...buildCandleSeriesOptions(tokens, { chartType: 'hollow' }),
   };
-  const series = paneIndex !== undefined
-    ? chart.addSeries(CandlestickSeries, opts, paneIndex)
-    : chart.addSeries(CandlestickSeries, opts);
+  const series =
+    paneIndex !== undefined
+      ? chart.addSeries(CandlestickSeries, opts, paneIndex)
+      : chart.addSeries(CandlestickSeries, opts);
   alignRightScale(chart);
   return series;
 }
@@ -389,9 +393,10 @@ export function createBarSeries(chart: IChartApi, paneIndex?: number): ISeriesAp
     ...priceSeriesCommon(tokens),
     ...buildBarSeriesOptions(tokens),
   };
-  const series = paneIndex !== undefined
-    ? chart.addSeries(BarSeries, opts, paneIndex)
-    : chart.addSeries(BarSeries, opts);
+  const series =
+    paneIndex !== undefined
+      ? chart.addSeries(BarSeries, opts, paneIndex)
+      : chart.addSeries(BarSeries, opts);
   alignRightScale(chart);
   return series;
 }
@@ -405,9 +410,10 @@ export function createPriceLineSeries(chart: IChartApi, paneIndex?: number): ISe
     crosshairMarkerVisible: true,
     crosshairMarkerRadius: 3,
   };
-  const series = paneIndex !== undefined
-    ? chart.addSeries(LineSeries, opts, paneIndex)
-    : chart.addSeries(LineSeries, opts);
+  const series =
+    paneIndex !== undefined
+      ? chart.addSeries(LineSeries, opts, paneIndex)
+      : chart.addSeries(LineSeries, opts);
   alignRightScale(chart);
   return series;
 }
@@ -421,9 +427,10 @@ export function createPriceAreaSeries(chart: IChartApi, paneIndex?: number): ISe
     crosshairMarkerVisible: true,
     crosshairMarkerRadius: 3,
   };
-  const series = paneIndex !== undefined
-    ? chart.addSeries(AreaSeries, opts, paneIndex)
-    : chart.addSeries(AreaSeries, opts);
+  const series =
+    paneIndex !== undefined
+      ? chart.addSeries(AreaSeries, opts, paneIndex)
+      : chart.addSeries(AreaSeries, opts);
   alignRightScale(chart);
   return series;
 }
@@ -445,9 +452,10 @@ export function createPriceBaselineSeries(
     crosshairMarkerVisible: true,
     crosshairMarkerRadius: 3,
   };
-  const series = paneIndex !== undefined
-    ? chart.addSeries(BaselineSeries, opts, paneIndex)
-    : chart.addSeries(BaselineSeries, opts);
+  const series =
+    paneIndex !== undefined
+      ? chart.addSeries(BaselineSeries, opts, paneIndex)
+      : chart.addSeries(BaselineSeries, opts);
   alignRightScale(chart);
   return series;
 }
@@ -490,9 +498,10 @@ export function createVolumeSeries(chart: IChartApi, paneIndex?: number): ISerie
     lastValueVisible: true,
     priceLineVisible: false,
   };
-  const series = paneIndex !== undefined
-    ? chart.addSeries(HistogramSeries, opts, paneIndex)
-    : chart.addSeries(HistogramSeries, opts);
+  const series =
+    paneIndex !== undefined
+      ? chart.addSeries(HistogramSeries, opts, paneIndex)
+      : chart.addSeries(HistogramSeries, opts);
   try {
     chart.priceScale('right').applyOptions({
       scaleMargins: { top: 0.12, bottom: 0.02 },
@@ -534,7 +543,9 @@ export function createBgcolorSeries(chart: IChartApi, paneIndex?: number): ISeri
   }
   // Paint behind candle / overlay series when API is available (LWC v5)
   try {
-    (series as ISeriesApi<'Histogram'> & { setSeriesOrder?: (n: number) => void }).setSeriesOrder?.(0);
+    (series as ISeriesApi<'Histogram'> & { setSeriesOrder?: (n: number) => void }).setSeriesOrder?.(
+      0,
+    );
   } catch {
     /* ignore */
   }

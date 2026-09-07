@@ -30,42 +30,42 @@
 const FIELD_TEMPLATES = {
     string: (k, def, cur, s) => `
         <label class="settings-field">
-            <span class="settings-label">${escape(def.label || k)}</span>
+            <span class="settings-label">${escapeHtml(def.label || k)}</span>
             <input class="settings-input" type="text" data-key="${k}"
-                   value="${escape(String(cur ?? def.default ?? ''))}"
-                   ${def.placeholder ? `placeholder="${escape(def.placeholder)}"` : ''} />
-            ${def.description ? `<span class="settings-help">${escape(def.description)}</span>` : ''}
+                   value="${escapeHtml(String(cur ?? def.default ?? ''))}"
+                   ${def.placeholder ? `placeholder="${escapeHtml(def.placeholder)}"` : ''} />
+            ${def.description ? `<span class="settings-help">${escapeHtml(def.description)}</span>` : ''}
         </label>`,
     number: (k, def, cur) => `
         <label class="settings-field">
-            <span class="settings-label">${escape(def.label || k)}</span>
+            <span class="settings-label">${escapeHtml(def.label || k)}</span>
             <input class="settings-input" type="number" data-key="${k}"
                    value="${Number(cur ?? def.default ?? 0)}"
                    ${def.min !== undefined ? `min="${def.min}"` : ''}
                    ${def.max !== undefined ? `max="${def.max}"` : ''}
                    step="${def.step ?? 'any'}" />
-            ${def.description ? `<span class="settings-help">${escape(def.description)}</span>` : ''}
+            ${def.description ? `<span class="settings-help">${escapeHtml(def.description)}</span>` : ''}
         </label>`,
     boolean: (k, def, cur) => `
         <label class="settings-field settings-field-check">
             <input type="checkbox" data-key="${k}"
                    ${(cur ?? def.default) ? 'checked' : ''} />
             <span>
-                <span class="settings-label">${escape(def.label || k)}</span>
-                ${def.description ? `<span class="settings-help">${escape(def.description)}</span>` : ''}
+                <span class="settings-label">${escapeHtml(def.label || k)}</span>
+                ${def.description ? `<span class="settings-help">${escapeHtml(def.description)}</span>` : ''}
             </span>
         </label>`,
     select: (k, def, cur) => `
         <label class="settings-field">
-            <span class="settings-label">${escape(def.label || k)}</span>
+            <span class="settings-label">${escapeHtml(def.label || k)}</span>
             <select class="settings-input" data-key="${k}">
-                ${(def.options || []).map((o) => `<option value="${escape(String(o))}" ${String(cur ?? def.default) === String(o) ? 'selected' : ''}>${escape(String(o))}</option>`).join('')}
+                ${(def.options || []).map((o) => `<option value="${escapeHtml(String(o))}" ${String(cur ?? def.default) === String(o) ? 'selected' : ''}>${escapeHtml(String(o))}</option>`).join('')}
             </select>
-            ${def.description ? `<span class="settings-help">${escape(def.description)}</span>` : ''}
+            ${def.description ? `<span class="settings-help">${escapeHtml(def.description)}</span>` : ''}
         </label>`,
 };
 
-function escape(s) {
+function escapeHtml(s) {
     return String(s ?? '').replace(/[&<>"']/g, (c) => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     }[c]));
@@ -99,9 +99,9 @@ export function openSettings({ title, schema, current, onSave, onCancel }) {
     backdrop.className = 'settings-backdrop';
     const fields = Object.entries(schema || {}).map(([k, def]) => renderField(k, def, current?.[k])).join('');
     backdrop.innerHTML = `
-        <div class="settings-modal" role="dialog" aria-modal="true" aria-label="${escape(title)}">
+        <div class="settings-modal" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
             <div class="settings-header">
-                <span class="settings-title">${escape(title)}</span>
+                <span class="settings-title">${escapeHtml(title)}</span>
                 <button class="btn btn-ghost btn-sm" data-action="close" aria-label="Close">×</button>
             </div>
             <form class="settings-body">

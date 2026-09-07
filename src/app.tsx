@@ -40,7 +40,7 @@
  */
 
 import {
-  Component,
+  type Component,
   createSignal,
   onMount,
   onCleanup,
@@ -54,7 +54,7 @@ import { StatusBar } from './ui/StatusBar';
 import { Watchlist } from './ui/Watchlist';
 import { ChartWorkspace } from './chart/ChartWorkspace';
 import { IndicatorPanel } from './indicators/IndicatorPanel';
-import { type SettingsTabId, type StudioPageId } from './ui/studio';
+import type { SettingsTabId, StudioPageId } from './ui/studio';
 import { ResultsModal } from './ui/ResultsModal';
 import { SystemLogs } from './ui/SystemLogs';
 import { ScriptLogsPanel } from './ui/ScriptLogsPanel';
@@ -466,6 +466,7 @@ export const App: Component = () => {
             <div class="absolute bottom-3 right-3 z-20 flex items-center gap-2 px-2.5 py-1.5 bg-bg-panel border-2 border-accent text-[11px] text-accent shadow-[0_4px_20px_rgba(0,0,0,0.45)]">
               <span>Editor detached</span>
               <button
+                type="button"
                 class="sc-btn sc-btn-primary px-2 py-0.5 text-[10px]"
                 onClick={() => {
                   setEditorMode('docked');

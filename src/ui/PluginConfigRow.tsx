@@ -115,14 +115,14 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
     return out;
   });
 
-  const valueOf = (key: string): unknown => {
+  const readFieldValue = (key: string): unknown => {
     void store.pluginsConfig;
     return resolvePluginFieldValue(store.pluginsConfig, targets(), key);
   };
 
   const gatewayMode = createMemo((): GatewayMode | undefined => {
     if (!fields().some(([k]) => k === EXCHANGE_FIELD)) return undefined;
-    const g = String(valueOf('gateway') || 'auto');
+    const g = String(readFieldValue('gateway') || 'auto');
     return g === 'pyne' || g === 'sidecar' ? g : 'auto';
   });
 
@@ -135,7 +135,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
   };
 
   const exchangeOptions = createMemo<string[]>(() => {
-    const cur = String(valueOf(EXCHANGE_FIELD) ?? '').trim();
+    const cur = String(readFieldValue(EXCHANGE_FIELD) ?? '').trim();
     const set = new Set<string>(loadedExchanges());
     if (cur) set.add(cur);
     return [...set];
@@ -185,10 +185,10 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
     f.type === 'select' || (key === EXCHANGE_FIELD && exchangeAsSelect());
 
   const optionsFor = (key: string, f: FieldSchema): string[] =>
-    key === EXCHANGE_FIELD ? exchangeOptions() : f.options || [String(valueOf(key) ?? '')];
+    key === EXCHANGE_FIELD ? exchangeOptions() : f.options || [String(readFieldValue(key) ?? '')];
 
   const displayValue = (key: string, f: FieldSchema): string | number =>
-    f.type === 'number' ? Number(valueOf(key) ?? 0) : String(valueOf(key) ?? '');
+    f.type === 'number' ? Number(readFieldValue(key) ?? 0) : String(readFieldValue(key) ?? '');
 
   const onTextInput = (key: string, f: FieldSchema, raw: string) => {
     draftField(key, parseFieldValue(f, raw));
@@ -231,7 +231,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
           <input
             id={fieldId(key)}
             type="checkbox"
-            checked={Boolean(valueOf(key))}
+            checked={Boolean(readFieldValue(key))}
             onChange={(e) => applyField(key, e.currentTarget.checked)}
           />
         </label>
@@ -264,7 +264,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
           mono
           title={fieldTitle(key, f)}
           testId={`axis-cfg-${key}`}
-          value={String(valueOf(key) ?? '')}
+          value={String(readFieldValue(key) ?? '')}
           onChange={(e) => applyField(key, e.currentTarget.value)}
         >
           {selectOptions(key, f)}
@@ -280,7 +280,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
         <input
           id={fieldId(key)}
           type="checkbox"
-          checked={Boolean(valueOf(key))}
+          checked={Boolean(readFieldValue(key))}
           onChange={(e) => applyField(key, e.currentTarget.checked)}
         />
       }
@@ -307,7 +307,7 @@ export function PluginConfigRow(props: PluginConfigRowProps) {
         <select
           id={fieldId(key)}
           class="ax-input ax-select ax-input--mono"
-          value={String(valueOf(key) ?? '')}
+          value={String(readFieldValue(key) ?? '')}
           onChange={(e) => applyField(key, e.currentTarget.value)}
           title={fieldTitle(key, f)}
         >

@@ -187,7 +187,8 @@ describe('registerAxisServiceWorker', () => {
         controller: null,
         register,
         addEventListener: mock((type: string, fn: () => void) => {
-          (swListeners[type] ??= []).push(fn);
+          if (!swListeners[type]) swListeners[type] = [];
+          swListeners[type].push(fn);
         }),
       },
     };
@@ -231,7 +232,8 @@ describe('registerAxisServiceWorker', () => {
         controller: null,
         register,
         addEventListener: mock((type: string, fn: () => void) => {
-          (swListeners[type] ??= []).push(fn);
+          if (!swListeners[type]) swListeners[type] = [];
+          swListeners[type].push(fn);
         }),
       },
     };
@@ -273,7 +275,8 @@ describe('registerAxisServiceWorker', () => {
         controller: {}, // already controlled
         register,
         addEventListener: mock((type: string, fn: () => void) => {
-          (swListeners[type] ??= []).push(fn);
+          if (!swListeners[type]) swListeners[type] = [];
+          swListeners[type].push(fn);
         }),
       },
     };
@@ -312,7 +315,8 @@ describe('registerAxisServiceWorker', () => {
         controller: null,
         register,
         addEventListener: mock((type: string, fn: () => void) => {
-          (swListeners[type] ??= []).push(fn);
+          if (!swListeners[type]) swListeners[type] = [];
+          swListeners[type].push(fn);
         }),
       },
     };

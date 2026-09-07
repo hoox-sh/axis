@@ -30,7 +30,7 @@
  */
 
 import {
-  Component,
+  type Component,
   For,
   Show,
   createMemo,
@@ -710,6 +710,7 @@ export const ResultsModal: Component = () => {
                       <div class="ax-stack ax-stack--compact" data-testid="axis-events-views">
                         <div class="ax-toolbar">
                           <span class="ax-card-kicker">View</span>
+                          {/* biome-ignore lint/a11y/useSemanticElements: bordered inline-flex switch; <fieldset> default styles would break the toolbar layout */}
                           <div
                             class="ax-view-switch"
                             role="group"
@@ -859,16 +860,19 @@ export const ResultsModal: Component = () => {
                                     <ul class="ax-pos-fills">
                                       <For each={p.opens}>
                                         {(f) => (
-                                          <li
-                                            class="ax-pos-fill"
-                                            title="Jump to entry fill"
-                                            onClick={() => jumpToTime(f.time)}
-                                          >
-                                            <span class="ax-mono ax-pos-fill-time">
-                                              {formatEventTime(f.time)}
-                                            </span>
-                                            <span class="ax-mono">@ {formatPosPrice(f.price)}</span>
-                                            <span class="ax-mono">× {formatFillQty(f.qty)}</span>
+                                          <li>
+                                            <button
+                                              type="button"
+                                              class="ax-pos-fill"
+                                              title="Jump to entry fill"
+                                              onClick={() => jumpToTime(f.time)}
+                                            >
+                                              <span class="ax-mono ax-pos-fill-time">
+                                                {formatEventTime(f.time)}
+                                              </span>
+                                              <span class="ax-mono">@ {formatPosPrice(f.price)}</span>
+                                              <span class="ax-mono">× {formatFillQty(f.qty)}</span>
+                                            </button>
                                           </li>
                                         )}
                                       </For>
@@ -888,23 +892,26 @@ export const ResultsModal: Component = () => {
                                       <ul class="ax-pos-fills">
                                         <For each={p.closes}>
                                           {(c) => (
-                                            <li
-                                              class="ax-pos-fill"
-                                              title="Jump to exit fill"
-                                              onClick={() => jumpToTime(c.time)}
-                                            >
-                                              <span class="ax-mono ax-pos-fill-time">
-                                                {formatEventTime(c.time)}
-                                              </span>
-                                              <span class="ax-mono">@ {formatPosPrice(c.price)}</span>
-                                              <span class="ax-mono">× {formatFillQty(c.qty)}</span>
-                                              <span
-                                                class={`ax-mono ax-pos-fill-pnl ${
-                                                  c.pnl >= 0 ? 'ax-table-pos' : 'ax-table-neg'
-                                                }`}
+                                            <li>
+                                              <button
+                                                type="button"
+                                                class="ax-pos-fill"
+                                                title="Jump to exit fill"
+                                                onClick={() => jumpToTime(c.time)}
                                               >
-                                                {formatMoney(c.pnl)}
-                                              </span>
+                                                <span class="ax-mono ax-pos-fill-time">
+                                                  {formatEventTime(c.time)}
+                                                </span>
+                                                <span class="ax-mono">@ {formatPosPrice(c.price)}</span>
+                                                <span class="ax-mono">× {formatFillQty(c.qty)}</span>
+                                                <span
+                                                  class={`ax-mono ax-pos-fill-pnl ${
+                                                    c.pnl >= 0 ? 'ax-table-pos' : 'ax-table-neg'
+                                                  }`}
+                                                >
+                                                  {formatMoney(c.pnl)}
+                                                </span>
+                                              </button>
                                             </li>
                                           )}
                                         </For>

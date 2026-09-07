@@ -317,8 +317,7 @@ export function scanPineColors(source: string): PineColorHit[] {
 
   // Hex literals
   const hexRe = /#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/g;
-  let m: RegExpExecArray | null;
-  while ((m = hexRe.exec(source)) !== null) {
+  for (const m of source.matchAll(hexRe)) {
     if (commentMask[m.index]) continue;
     const rgba = parseHexColor(m[0]!);
     if (!rgba) continue;
@@ -337,7 +336,7 @@ export function scanPineColors(source: string): PineColorHit[] {
 
   // color.named
   const namedRe = /\bcolor\.(red|green|blue|black|white|gray|grey|orange|purple|yellow|aqua|fuchsia|lime|maroon|navy|olive|silver|teal)\b/gi;
-  while ((m = namedRe.exec(source)) !== null) {
+  for (const m of source.matchAll(namedRe)) {
     if (commentMask[m.index]) continue;
     // Skip if this is color.new / color.rgb / color.r etc. — named list is exact
     const rgba = parseNamedColor(m[0]!);
@@ -358,7 +357,7 @@ export function scanPineColors(source: string): PineColorHit[] {
 
   // color.rgb(...) / color.new(...)
   const callRe = /\bcolor\.(rgb|new)\s*\(/gi;
-  while ((m = callRe.exec(source)) !== null) {
+  for (const m of source.matchAll(callRe)) {
     if (commentMask[m.index]) continue;
     const open = m.index + m[0]!.length - 1;
     const call = readCallArgs(source, open);

@@ -28,7 +28,7 @@
  */
 
 import {
-  Component,
+  type Component,
   For,
   Show,
   createMemo,

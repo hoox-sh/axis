@@ -65,7 +65,8 @@ function installWindowEventStub() {
   // @ts-expect-error test stub
   globalThis.window = {
     addEventListener(type: string, fn: (e: Event) => void) {
-      (listeners[type] ??= []).push(fn);
+      if (!listeners[type]) listeners[type] = [];
+      listeners[type].push(fn);
     },
     removeEventListener(type: string, fn: (e: Event) => void) {
       listeners[type] = (listeners[type] ?? []).filter((x) => x !== fn);
@@ -119,7 +120,7 @@ describe('ShortcutHub dispatch', () => {
   it('does nothing for a chord with no registered action', () => {
     // editor.toggle-comment (Mod-/) is in the table but its action lives in
     // the editor keymap (subtask 05) — not registered in this test env.
-    let calls = 0;
+    const calls = 0;
     const consumed = dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: '/', ctrlKey: true }));
     expect(calls).toBe(0);
     expect(consumed).toBe(false);

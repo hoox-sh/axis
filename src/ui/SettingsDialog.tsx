@@ -36,7 +36,7 @@
  */
 
 import {
-  Component,
+  type Component,
   For,
   createEffect,
   createSignal,
@@ -905,6 +905,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                 <span>100%</span>
                 <span>{formatUiScalePct(UI_SCALE_MAX)}</span>
               </div>
+              {/* biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the chip row */}
               <div class="sc-chip-row" role="group" aria-label="Scale presets">
                 <For each={UI_SCALE_PRESETS}>
                   {(p) => (

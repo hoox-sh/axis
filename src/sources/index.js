@@ -44,7 +44,7 @@ function resolveConfig(schema, config) {
     // `config` wins; missing fields fall back to the schema's `default`.
     const out = {};
     for (const [k, def] of Object.entries(schema || {})) {
-        out[k] = def && Object.prototype.hasOwnProperty.call(def, 'default') ? def.default : undefined;
+        out[k] = def && Object.hasOwn(def, 'default') ? def.default : undefined;
     }
     for (const [k, v] of Object.entries(config || {})) {
         if (v !== undefined) out[k] = v;

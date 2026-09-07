@@ -22,7 +22,7 @@
  * Pure helpers re-exported from `plugin-badges-utils` (safe for unit tests).
  */
 
-import { Component, For, Show } from 'solid-js';
+import { type Component, For, Show } from 'solid-js';
 import type { PluginCapabilities } from '../plugins/types';
 import { CAP_META, capabilityKeys, type CapKey } from './plugin-badges-utils';
 

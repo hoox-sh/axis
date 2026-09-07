@@ -2975,6 +2975,7 @@ body.axis-panel-dragging {
 /* ── Mobile header ──────────────────────────────────────────────────── */
 .axis-mheader {
   height: var(--axis-mobile-header-h);
+  /* biome-ignore lint/suspicious/noDuplicateProperties: fallback for browsers without env() support */
   height: calc(var(--axis-mobile-header-h) + env(safe-area-inset-top, 0px));
   padding-top: env(safe-area-inset-top, 0px);
   z-index: 70;
@@ -3042,6 +3043,7 @@ body.axis-panel-dragging {
 /* ── Mobile bottom tab bar ──────────────────────────────────────────── */
 .axis-mtabbar {
   height: var(--axis-mobile-tabbar-h);
+  /* biome-ignore lint/suspicious/noDuplicateProperties: fallback for browsers without env() support */
   height: calc(var(--axis-mobile-tabbar-h) + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
   z-index: 70;

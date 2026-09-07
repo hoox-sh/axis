@@ -140,7 +140,7 @@ describe('play / pause / stop', () => {
   });
 
   it('play is no-op when already playing', () => {
-    let s = play(createReplay(5, { cursorIndex: 1 }), 5);
+    const s = play(createReplay(5, { cursorIndex: 1 }), 5);
     expect(s.playing).toBe(true);
     expect(play(s, 5)).toBe(s);
   });

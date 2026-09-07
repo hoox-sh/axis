@@ -27,7 +27,7 @@
  * effect.
  */
 
-import { Component, createMemo, onCleanup, onMount } from 'solid-js';
+import { type Component, createMemo, onCleanup, onMount } from 'solid-js';
 import { buildDispatchTable, dispatchShortcut } from './runtime';
 import './actions';
 

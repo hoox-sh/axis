@@ -23,7 +23,7 @@
  */
 
 import {
-  Component,
+  type Component,
   For,
   Show,
   createEffect,
@@ -545,6 +545,7 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
 
   return (
     <Show when={props.open}>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop is an intentional click-away dismiss surface for the dialog */}
       <div
         class="sc-dialog-backdrop"
         onClick={onBackdrop}

@@ -290,7 +290,7 @@ export function inferType2(rhs: string): PineType2 | null {
   // arithmetic → float if any float-ish operand, else int if all int-looking
   if (/[+\-*/%]/.test(s) && !/["']/.test(s)) {
     if (/\d+\.\d|\b(open|high|low|close|volume|hl2)\b|\bta\./i.test(s)) return 'float';
-    if (/^\s*[+\-]?[\d\s+\-*/%()]+\s*$/.test(s)) return 'int';
+    if (/^\s*[+-]?[\d\s+\-*/%()]+\s*$/.test(s)) return 'int';
     return 'float';
   }
 

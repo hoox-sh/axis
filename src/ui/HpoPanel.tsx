@@ -10,7 +10,7 @@
  * @module ui/HpoPanel
  */
 
-import { Component, For, Show, createEffect, createMemo, createSignal, onMount, untrack } from 'solid-js';
+import { type Component, For, Show, createEffect, createMemo, createSignal, onMount, untrack } from 'solid-js';
 import {
   loadEditorDoc,
   setEditorInputValues,

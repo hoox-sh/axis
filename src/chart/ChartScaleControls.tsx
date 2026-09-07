@@ -32,7 +32,7 @@
  */
 
 import {
-  Component,
+  type Component,
   Show,
   createEffect,
   createSignal,
@@ -294,6 +294,7 @@ export const ChartScaleControls: Component = () => {
     ].join(' ');
 
   const cluster = () => (
+    // biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the overlay cluster
     <div
       class="absolute z-[15] flex items-center gap-0.5 pointer-events-auto"
       style={{

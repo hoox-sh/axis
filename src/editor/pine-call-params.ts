@@ -870,13 +870,13 @@ function isRestToken(part: string): boolean {
 
 /** Qualifiers / primitives that may lead a typed Pine param (`series float source`). */
 const TYPE_TOKEN =
-  /^(series|simple|const|input|literal|int|float|bool|string|color|void|na|array|matrix|map|line|label|box|table|polyline|plot|hline|chart\.point|strategy_direction|int\/float|float\/int)(\<[^>]+\>)?$/i;
+  /^(series|simple|const|input|literal|int|float|bool|string|color|void|na|array|matrix|map|line|label|box|table|polyline|plot|hline|chart\.point|strategy_direction|int\/float|float\/int)(<[^>]+>)?$/i;
 
 function looksLikeTypeToken(w: string): boolean {
   const t = w.trim();
   if (!t) return false;
   if (TYPE_TOKEN.test(t)) return true;
-  return /[\/<>]/.test(t) && /^[\w./<>]+$/.test(t);
+  return /[/<>]/.test(t) && /^[\w./<>]+$/.test(t);
 }
 
 function looksLikeTypeString(s: string): boolean {
@@ -985,7 +985,7 @@ export function parseSignatureParams(raw: string): PineParamDef[] {
     const optionalMark = /\?$/.test(namePart);
     namePart = namePart.replace(/\?$/, '').trim();
     const bits = namePart.split(/\s+/);
-    let name = (bits[bits.length - 1] || namePart).replace(/[^\w]/g, '');
+    const name = (bits[bits.length - 1] || namePart).replace(/[^\w]/g, '');
     if (!name || isJunkParamName(name) || !/^[A-Za-z_][\w]*$/.test(name)) continue;
     const type = typeFromLeadingBits(bits);
     params.push({

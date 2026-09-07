@@ -34,7 +34,8 @@ describe('pwa install prompt', () => {
     // @ts-expect-error test stub
     globalThis.window = {
       addEventListener(type: string, fn: (e: Event) => void) {
-        (listeners[type] ??= []).push(fn);
+        if (!listeners[type]) listeners[type] = [];
+        listeners[type].push(fn);
       },
       removeEventListener(type: string, fn: (e: Event) => void) {
         listeners[type] = (listeners[type] ?? []).filter((x) => x !== fn);

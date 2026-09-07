@@ -35,8 +35,8 @@
  */
 
 import {
-  Component,
-  JSX,
+  type Component,
+  type JSX,
   Show,
   createMemo,
   createSignal,
@@ -569,6 +569,9 @@ const EditorOverflowMenu: Component<{
           onClick={(e) => {
             const t = e.target as HTMLElement | null;
             if (t?.closest?.('[role="menuitem"]')) close();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') close();
           }}
         >
           <Show when={props.onOpenLibrary}>

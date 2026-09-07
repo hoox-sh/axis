@@ -72,6 +72,7 @@ export function AppDrawer(props: AppDrawerProps) {
 
   return (
     <Show when={props.open}>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop is an intentional click-away/Escape dismiss surface for the drawer */}
       <div
         class="sc-drawer-backdrop"
         onClick={onBackdrop}

@@ -42,7 +42,7 @@
  * Editor popout (new tab) lives on the editor panel chrome, not the topbar.
  */
 
-import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { type Component, For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import {
   store,
   setStore,
@@ -966,7 +966,6 @@ export const Topbar: Component<{
           class="sr-only"
           tabindex={-1}
           data-testid="axis-btn-workers"
-          aria-hidden="true"
           onClick={() => props.onOpenWorkers?.()}
         />
         <button

@@ -26,7 +26,7 @@
  * @module ui/shortcuts/ShortcutsModal
  */
 
-import { Component, For, Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { type Component, For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { store } from '../../store';
 import { DEFAULT_BINDINGS, getDisplay } from './registry';
 import { detectPlatform } from './keys';
@@ -103,6 +103,7 @@ export const ShortcutsModal: Component = () => {
 
   return (
     <Show when={shortcutsOpen()}>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop is an intentional click-away dismiss surface for the dialog */}
       <div
         class="sc-dialog-backdrop"
         onClick={onBackdrop}

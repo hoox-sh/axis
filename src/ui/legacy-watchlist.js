@@ -29,7 +29,7 @@ import { getState } from '../state.js';
 const DEFAULT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
 
 let _symbols = [];
-let _prices = {};   // symbol → { price, change }
+const _prices = {};   // symbol → { price, change }
 let _timer = null;
 
 function el(id) { return document.getElementById(id); }

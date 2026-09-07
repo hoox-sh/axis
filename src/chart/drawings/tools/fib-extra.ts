@@ -5,11 +5,11 @@
  * Extra Fibonacci tools — arcs, wedge, circles (pixel-space radii / angles).
  */
 
-import {
-  type Drawing,
-  type MultiPointDrawing,
-  type Point,
-  type TwoPointDrawing,
+import type {
+  Drawing,
+  MultiPointDrawing,
+  Point,
+  TwoPointDrawing,
 } from '../../drawing-types';
 import { distToSegment, extendSegment, nearPoint } from '../geometry';
 import { fibLevelsOf, isFibReversed, showPctOf } from '../tool-settings';
