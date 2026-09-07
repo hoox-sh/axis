@@ -9,11 +9,17 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-07 · 353 commits · describe-tag: `cli-v0.2.2`_
+_Generated/updated: 2026-09-07 · 355 commits · describe-tag: `v2.4.2`_
 
 ---
 
 ## [Unreleased]
+
+_Nothing yet — see the latest version section below._
+
+---
+
+## [2.4.3] — 2026-09-07
 
 ### Added
 
@@ -22,8 +28,6 @@ _Generated/updated: 2026-09-07 · 353 commits · describe-tag: `cli-v0.2.2`_
   - **Strategy tab — single column**: fill options → stats cards (12: trades, win rate, W/L, PF, net profit, **Return %** (compounded per-trade), max DD, avg trade/win/loss, gross profit/loss) → equity chart → closed-trades table below it, with new **Bars** (bars held) and **Fills** (pyramided entry count) columns.
   - **Saved runs tab — rich stats**: `buildResultMeta` now persists a JSON-safe strategy stats snapshot (`StrategyStatsSnapshot`) computed from the run's events (`profitFactor: null` = ∞); saved rows render a stats grid (trades, W/L, win %, PF, net P&L, return %, max DD, avg trade); legacy saved rows fall back gracefully.
   - **Pyramiding parity**: entry fills into a live position now average into the trade P&L (`entry = Σ(p·q)/Σq`) matching the pyne broker `(px − avg) × close_qty`; per-position cycles and the enriched stream are computed by a single shared walker (`walkStrategyEvents` in `src/results/strategy.ts`, re-exported via `src/results/positions.ts`).
-
-_Nothing else yet — see the latest version section below._
 
 ---
 
@@ -944,12 +948,15 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (34 commits)
+### 2026-09 (36 commits)
 
 #### Features
 
+- `74418b05` (2026-09-07) — feat(results): events views (Open⇄Close), single-column strategy tab, rich saved stats
 - `e00b6c97` (2026-09-06) — feat(shortcuts): shortcuts modal + Settings → Keyboard recorder
 - `6efa590a` (2026-09-06) — feat(shortcuts): palette extensions with live shortcut rendering
 - `47706d85` (2026-09-06) — feat(shortcuts): wire chart keymap through the dispatch hub
@@ -996,6 +1003,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `aaf4d9ac` (2026-09-07) — chore(release): v2.4.2 — UI review fixes, keyboard shortcuts, line ops
 - `fa49a6c1` (2026-09-06) — chore(cli): release @hoox-sh/axis-cli 0.2.2
 - `36ba501c` (2026-09-06) — chore(release): v2.4.1 — worker tsc compliance
 - `e84b8325` (2026-09-04) — chore(release): prepare v2.2.0
