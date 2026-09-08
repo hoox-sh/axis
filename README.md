@@ -1,5 +1,7 @@
 # AXIS
 
+[![codecov](https://codecov.io/gh/hoox-sh/axis/graph/badge.svg)](https://codecov.io/gh/hoox-sh/axis)
+
 **AXIS** — installable open charting PWA: CEX OHLCV, drawings, on-chain overlays, and Pine Script™ via PYNE.
 
 **Website:** [hoox.sh/axis](https://hoox.sh/axis) · **Docs:** [hoox.sh/axis/docs](https://hoox.sh/axis/docs) · **Repo:** [hoox-sh/axis](https://github.com/hoox-sh/axis)
