@@ -333,7 +333,10 @@ jobs:
       - name: Checksums
         run: |
           VER="${{ steps.tag.outputs.version }}"
-          sha256sum "$CLI_ASSET" "$WORKER_ASSET" packages/cli/dist-bin/axis-cli-* > "SHA256SUMS-${VER}.txt"
+          # Bare filenames only, so `sha256sum -c` works after downloading
+          # the assets flat from the release.
+          sha256sum "$CLI_ASSET" "$WORKER_ASSET" > "SHA256SUMS-${VER}.txt"
+          (cd packages/cli/dist-bin && sha256sum axis-cli-*) >> "SHA256SUMS-${VER}.txt"
           echo "SUMS_ASSET=SHA256SUMS-${VER}.txt" >> "$GITHUB_ENV"
           cat "SHA256SUMS-${VER}.txt"
 
