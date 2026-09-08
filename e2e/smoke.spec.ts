@@ -180,4 +180,25 @@ test.describe('AXIS smoke @smoke', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('axis-workers-manager')).toBeVisible();
   });
+
+  test('Script Logs lives in the editor bottom bar, not the topbar', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    // Topbar entry removed.
+    await expect(page.getByTestId('axis-btn-scriptlogs-top')).toHaveCount(0);
+
+    // Docked editor is open by default — Logs toggle sits beside Symbols.
+    // EditorPane (CodeMirror) lazy-loads — wait for the toggle first.
+    await expect(page.getByTestId('axis-editor-logs-toggle')).toBeVisible({
+      timeout: 30_000,
+    });
+    // Toggle opens the editor-local pane above the statusbar.
+    await page.getByTestId('axis-editor-logs-toggle').click();
+    await expect(page.getByTestId('axis-editor-scriptlogs')).toBeVisible();
+
+    // Toggle again hides the pane.
+    await page.getByTestId('axis-editor-logs-toggle').click();
+    await expect(page.getByTestId('axis-editor-scriptlogs')).toHaveCount(0);
+  });
 });

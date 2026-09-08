@@ -22,7 +22,7 @@
  *
  * Visibility (show/hide entire strip): panel chrome `logs` — topbar **System Logs**.
  * Expand/collapse body: `store.logsPanel.open` (header toggle, like before).
- * Distinct from {@link ScriptLogsPanel} (Pine `log.*` from a run).
+ * Distinct from the editor Script Logs pane (Pine `log.*` from a run).
  *
  * @module ui/SystemLogs
  */

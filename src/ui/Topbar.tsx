@@ -60,7 +60,6 @@ import {
   toggleLibraryPanel,
   toggleDataSourcePanel,
   toggleOnchainPanel,
-  toggleScriptLogsPanel,
   toggleSystemLogsPanel,
   toggleStatusBarPanel,
 } from '../store';
@@ -834,21 +833,6 @@ export const Topbar: Component<{
         >
           <Icons.results />
           <span class="axis-tb-btn-label">Results</span>
-        </button>
-        </Show>
-
-        <Show when={store.topbar.panelsScriptLogs}>
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost ${isPanelOpen('scriptlogs') ? 'is-active' : ''}`}
-          title="Script Logs — Pine log.* from the last run"
-          aria-label="Script Logs"
-          data-testid="axis-btn-scriptlogs-top"
-          aria-pressed={isPanelOpen('scriptlogs')}
-          onClick={() => toggleScriptLogsPanel()}
-        >
-          <Icons.scriptLogs />
-          <span class="axis-tb-btn-label">Script Logs</span>
         </button>
         </Show>
 

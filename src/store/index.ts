@@ -2809,16 +2809,6 @@ export function toggleAlertsPanel() {
   setPanelOpen('alerts', !isPanelOpen('alerts'));
 }
 
-/** Open/close Script Logs panel (script `log.*` output — not system telemetry). */
-export function setScriptLogsPanelOpen(open: boolean) {
-  setPanelOpen('scriptlogs', open);
-}
-
-/** Toggle Script Logs panel visibility. */
-export function toggleScriptLogsPanel() {
-  setPanelOpen('scriptlogs', !isPanelOpen('scriptlogs'));
-}
-
 /** Open/close System Logs panel (app / transport telemetry). */
 export function setSystemLogsPanelOpen(open: boolean) {
   setPanelOpen('logs', open);

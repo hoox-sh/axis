@@ -50,7 +50,6 @@ import {
   toggleDataViewPanel,
   toggleLayerPanel,
   toggleAlertsPanel,
-  toggleScriptLogsPanel,
   toggleSystemLogsPanel,
   toggleStatusBarPanel,
   toggleLibraryPanel,
@@ -208,7 +207,11 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       toggleIndicators: () => toggleIndicatorPanel(),
       toggleDataView: () => toggleDataViewPanel(),
       toggleAlerts: () => toggleAlertsPanel(),
-      toggleScriptLogs: () => toggleScriptLogsPanel(),
+      toggleScriptLogs: () => {
+        // Script Logs now lives in the editor (statusbar Logs toggle above).
+        setEditorOpen(true);
+        window.dispatchEvent(new CustomEvent('axis-editor-show-logs'));
+      },
       toggleStatusBar: () => toggleStatusBarPanel(),
       toggleLibrary: () => toggleLibraryPanel(),
       toggleDataSource: () => toggleDataSourcePanel(),

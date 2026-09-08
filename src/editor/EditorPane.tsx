@@ -48,7 +48,6 @@ import {
   store,
   isPanelOpen,
   setEditorMode,
-  toggleScriptLogsPanel,
   toggleProfilerEnabled,
   toggleInlineDebugEnabled,
   toggleDebugPinsEnabled,
@@ -370,16 +369,6 @@ export const EditorPane: Component<Props> = (props) => {
         </EditorToolBtn>
         <span class="axis-editor-tools-sep" aria-hidden="true" />
       </Show>
-      <EditorToolBtn
-        id="scriptlogs"
-        label="Script Logs"
-        title="Script Logs — Pine log.* output from the last run (not system telemetry)"
-        testId="axis-btn-scriptlogs"
-        pressed={isPanelOpen('scriptlogs')}
-        onClick={() => toggleScriptLogsPanel()}
-      >
-        <Icons.scrollText size={12} />
-      </EditorToolBtn>
       <EditorToolBtn
         id="profiler"
         label="Profiler"

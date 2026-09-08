@@ -80,7 +80,6 @@ const MOBILE_PANELS: readonly PanelId[] = [
   'library',
   'datasource',
   'onchain',
-  'scriptlogs',
 ] as const;
 
 export interface MobileChromeProps {

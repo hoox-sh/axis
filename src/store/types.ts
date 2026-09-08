@@ -635,6 +635,7 @@ export interface TopbarSettings {
   panelsAlerts: boolean;
   panelsValues: boolean;
   panelsResults: boolean;
+  /** @deprecated Script Logs moved into the editor (statusbar Logs toggle); kept so old persisted bags still hydrate. */
   panelsScriptLogs: boolean;
   panelsSystemLogs: boolean;
   panelsStatus: boolean;

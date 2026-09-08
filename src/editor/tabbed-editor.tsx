@@ -89,6 +89,8 @@ import { readEditorIntel } from './editor-intel';
 import { countDocStats, cursorLineCol } from './doc-stats';
 import { ColorToolsPanel } from './ColorToolsPanel';
 import { SymbolEmojiManager } from './SymbolEmojiManager';
+import { ScriptLogsPane } from './ScriptLogsPane';
+import { normalizePyneLogs } from '../results/pyne-logs';
 import { scanPineColors } from './pine-colors';
 import { Icons } from '../ui/icons';
 import { announce } from '../ui/sr-announce';
@@ -225,6 +227,18 @@ export const TabbedEditor: Component<Props> = (props) => {
   const [problemsOpen, setProblemsOpen] = createSignal(false);
   const [colorsOpen, setColorsOpen] = createSignal(false);
   const [symbolsOpen, setSymbolsOpen] = createSignal(false);
+  const [logsOpen, setLogsOpen] = createSignal(false);
+
+  /** Live count for the statusbar Logs badge (same source the pane renders). */
+  const scriptLogCount = () => {
+    const r = store.lastRun;
+    if (r == null) return 0;
+    try {
+      return normalizePyneLogs(r).length;
+    } catch {
+      return 0;
+    }
+  };
 
   /** Active tab source (reactive) — color tools + badge count. */
   const activeDoc = createMemo(
@@ -405,6 +419,13 @@ export const TabbedEditor: Component<Props> = (props) => {
     window.addEventListener('axis-editor-git-push', onGitPush);
     window.addEventListener('axis-editor-git-pull', onGitPull);
     window.addEventListener('axis-editor-run', onRunEvent);
+    // Remote open for the Script Logs pane (palette command, deep links):
+    // ensure the editor is visible, then show the pane above the status bar.
+    const onShowLogs = () => {
+      setEditorOpen(true);
+      setLogsOpen(true);
+    };
+    window.addEventListener('axis-editor-show-logs', onShowLogs);
 
     /**
      * Mod-S / Mod-G fallbacks. The shortcut Hub owns these chords when it is
@@ -500,6 +521,7 @@ export const TabbedEditor: Component<Props> = (props) => {
       window.removeEventListener('axis-editor-git-push', onGitPush);
       window.removeEventListener('axis-editor-git-pull', onGitPull);
       window.removeEventListener('axis-editor-run', onRunEvent);
+      window.removeEventListener('axis-editor-show-logs', onShowLogs);
       window.removeEventListener('keydown', onShortcutKeyDown);
       window.removeEventListener('axis-agent-insert-script', onAgentInsert);
       window.removeEventListener('axis-agent-open-script', onAgentOpen);
@@ -896,13 +918,16 @@ export const TabbedEditor: Component<Props> = (props) => {
           }}
         />
       </Show>
+      <Show when={logsOpen()}>
+        <ScriptLogsPane open={logsOpen()} onClose={() => setLogsOpen(false)} />
+      </Show>
       {/* ── Status / action bar ─────────────────────────────────── */}
       <div
-        class="axis-editor-statusbar flex-shrink-0 flex items-center gap-1 px-1.5 py-0.5 border-t-2 border-border bg-bg-base text-[10px] font-mono tabular-nums select-none min-h-[1.75rem]"
+        class="axis-editor-statusbar flex-shrink-0 flex items-center flex-wrap gap-1 gap-y-0.5 px-1.5 py-0.5 border-t-2 border-border bg-bg-base text-[10px] font-mono tabular-nums select-none min-h-[1.75rem]"
         data-testid="axis-editor-stats"
       >
         {/* Stats cluster */}
-        <div class="axis-editor-statusbar-stats flex items-center gap-2 text-text-faint min-w-0">
+        <div class="axis-editor-statusbar-stats flex items-center gap-2 text-text-faint min-w-0 overflow-hidden whitespace-nowrap">
           <span data-testid="axis-editor-cursor" title="Cursor (line : column)" class="flex-shrink-0">
             <span class="text-text-dim">
               {cursor().line}:{cursor().col}
@@ -923,8 +948,9 @@ export const TabbedEditor: Component<Props> = (props) => {
 
         <span class="axis-editor-statusbar-sep" aria-hidden="true" />
 
-        {/* Diagnostics / panels */}
-        <div class="axis-editor-statusbar-actions flex items-center gap-0.5 min-w-0">
+        {/* Diagnostics / panels — wraps as a unit in narrow docks so the
+            buttons never squeeze under the view cluster. */}
+        <div class="axis-editor-statusbar-actions flex items-center gap-0.5 flex-shrink-0">
           <button
             type="button"
             class={`axis-editor-status-btn ${
@@ -1025,9 +1051,29 @@ export const TabbedEditor: Component<Props> = (props) => {
           >
             Symbols
           </button>
+          <button
+            type="button"
+            class={`axis-editor-status-btn ${logsOpen() ? 'is-active' : ''}`}
+            data-testid="axis-editor-logs-toggle"
+            title={
+              logsOpen()
+                ? 'Hide script logs'
+                : 'Show Pine log.* output from the last run'
+            }
+            aria-pressed={logsOpen()}
+            aria-expanded={logsOpen()}
+            onClick={() => setLogsOpen((o) => !o)}
+          >
+            Logs
+            <Show when={scriptLogCount() > 0}>
+              <span class="tabular-nums" data-testid="axis-editor-logs-badge">
+                {scriptLogCount()}
+              </span>
+            </Show>
+          </button>
         </div>
 
-        <div class="flex-1 min-w-[0.5rem]" />
+        <div class="flex-1 min-w-0" />
 
         {/* View cluster (right) — format via overflow menu / Shift+Alt+F */}
         <div class="axis-editor-statusbar-view flex items-center gap-0.5 flex-shrink-0">

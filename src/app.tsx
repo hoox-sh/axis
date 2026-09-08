@@ -59,7 +59,6 @@ import { IndicatorPanel } from './indicators/IndicatorPanel';
 import type { SettingsTabId, StudioPageId } from './ui/studio';
 import { ResultsModal } from './ui/ResultsModal';
 import { SystemLogs } from './ui/SystemLogs';
-import { ScriptLogsPanel } from './ui/ScriptLogsPanel';
 import { DataViewPanel } from './ui/DataViewPanel';
 import { LayerPanel } from './ui/LayerPanel';
 import { errorFallback } from './ui/ErrorFallback';
@@ -544,7 +543,6 @@ export const App: Component = () => {
         </Show>
       </Suspense>
       <ResultsModal />
-      <ScriptLogsPanel />
 
       <Show when={!isPhoneViewport()}>
         <SystemLogs />
