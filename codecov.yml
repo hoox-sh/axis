@@ -1,0 +1,37 @@
+# Codecov configuration — hoox-sh/axis
+# Local gate: `bun run test:coverage:gate` enforces 95% (scripts/check-coverage.mjs).
+
+codecov:
+  require_ci_to_pass: true
+
+coverage:
+  status:
+    project:
+      default:
+        target: 95%
+    patch:
+      default:
+        target: 90%
+
+flags:
+  unit:
+    carryforward: true
+  cli:
+    carryforward: true
+
+ignore:
+  - "vendor/"
+  - "pyodide/"
+  - "public/"
+  - "e2e/"
+  - "src-tauri/"
+  - "docs/"
+  - "brand/"
+  - "examples/"
+  - "scripts/"
+  - "**/coverage/"
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: false
