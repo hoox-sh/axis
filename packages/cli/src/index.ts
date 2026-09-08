@@ -5,13 +5,13 @@
  * AXIS CLI — install, doctor, setup, deploy, secrets, health.
  */
 
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { Command } from "commander";
 import { theme } from "./utils/theme.js";
 import { commanderExitCode, handleError, printWarn, type GlobalOpts } from "./utils/format.js";
 import { collectPreflight } from "./utils/preflight.js";
+import { ownPackage } from "./own-package.js";
 import { registerInstall } from "./commands/install.js";
 import { registerDoctor } from "./commands/doctor.js";
 import { registerSetup } from "./commands/setup.js";
@@ -21,9 +21,8 @@ import { registerHealth } from "./commands/health.js";
 import { registerDev } from "./commands/dev.js";
 import { registerWhoami } from "./commands/whoami.js";
 
-const pkgVersion: string = JSON.parse(
-  readFileSync(new URL("../package.json", import.meta.url), "utf-8")
-).version;
+/** Embedded at bundle/compile time — works in node dist, bun src, and the single-file binary. */
+const pkgVersion: string = ownPackage.version;
 
 export async function main(): Promise<void> {
   const program = new Command();

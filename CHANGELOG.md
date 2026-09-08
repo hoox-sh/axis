@@ -17,6 +17,14 @@ _Generated/updated: 2026-09-08 · 373 commits · describe-tag: `cli-v0.3.0`_
 
 ### Added
 
+- **Standalone CLI binaries (bun compile)**: `bun run build:binaries` (`packages/cli/scripts/build-binaries.ts`) cross-compiles the CLI into single-file executables for 7 targets — linux x64/arm64 (glibc + musl), macOS x64/arm64, Windows x64 — with a native `--version`/`--help` smoke test. Own package metadata is now embedded at bundle/compile time (`src/own-package.ts` static JSON import) and preflight recognizes a new `binary` install context (`$bunfs` → "standalone binary (bun compile)"), so version display, engine checks, and drift detection work without a package.json on disk. Binaries ship as `axis-cli-<version>-bun-<target>` release assets and are covered by `SHA256SUMS`.
+
+### Fixed
+
+- **Docker builds were broken by the git-hooks `prepare` script**: root `package.json` gained `"prepare": "git config core.hooksPath .githooks"` (commit `d5f0cf89`), which runs on every `bun install` — including inside the image `deps` stage, where git is not installed → exit 127 on every bake since then (v2.6.1 GHCR images never published). The Dockerfile now installs with `--ignore-scripts` (no dep needs lifecycle scripts; native binaries ship as platform optionalDeps) — verified with a local `build` target bake (`dist/.version` = 2.6.1). Stale version fallbacks (`2.3.0`/`2.3.1`) refreshed to `2.6.1` across `Dockerfile`, `docker-bake.hcl`, and `docker-compose.yml`.
+
+### Changed
+
 - **GitHub Release now carries CLI + worker artifacts**: a new `release-assets` job in `.github/workflows/release.yml` attaches, for every `v*` tag, the offline-install CLI tarball (`axis-cli-<cli-version>.tgz` via `npm pack` — verified with an offline `npm i -g` + `axis --version` smoke), a deployable worker source snapshot (`axis-worker-<tag-version>.tar.gz` — `LICENSE` + `worker/` minus `node_modules` / `.wrangler` / `.dev.vars`, sanity-checked for `wrangler.toml` + `src/index.ts`), and `SHA256SUMS-<tag-version>.txt`. The job waits for the desktop workflow to create the Release (creates it itself if desktop never does) and uploads with `--clobber`; existing tags can be backfilled via `gh workflow run release.yml --ref main -f tag=vX.Y.Z`.
 
 ## [2.6.1] — 2026-09-08

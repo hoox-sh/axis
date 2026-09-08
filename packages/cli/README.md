@@ -15,11 +15,21 @@ Requires **Node ≥ 20** to run the published binary, and **Bun ≥ 1.2** for `a
 npm install -g @hoox-sh/axis-cli
 axis --help
 
+# standalone binary (single file, no Node/Bun required)
+# download axis-cli-<version>-bun-<target> from the release assets:
+#   bun-linux-x64 | bun-linux-arm64 | bun-linux-x64-musl | bun-linux-arm64-musl
+#   bun-darwin-x64 | bun-darwin-arm64 | bun-windows-x64.exe
+curl -LO "https://github.com/hoox-sh/axis/releases/download/v<version>/axis-cli-<version>-bun-linux-x64"
+chmod +x axis-cli-*-bun-linux-x64 && ./axis-cli-*-bun-linux-x64 --version
+
 # from the AXIS monorepo
 bun install
 cd packages/cli && bun install && bun run build && cd ../..
 bun packages/cli/bin/axis.js --help
 ```
+
+Build the binaries yourself: `cd packages/cli && bun run build:binaries` (bun
+`--compile` cross-builds every target; native output is smoke-tested).
 
 CLI-first — install once, call `axis` anywhere:
 

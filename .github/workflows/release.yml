@@ -322,10 +322,18 @@ jobs:
           grep -qx 'worker/src/index.ts' /tmp/worker-list.txt
           echo "WORKER_ASSET=axis-worker-${VER}.tar.gz" >> "$GITHUB_ENV"
 
+      - name: Compile standalone binaries (bun build --compile)
+        working-directory: packages/cli
+        run: |
+          bun run build:binaries
+          ls -la dist-bin/
+          NATIVE="dist-bin/axis-cli-$(node -p "require('./package.json').version")-bun-linux-x64"
+          [ "$(./"$NATIVE" --version)" = "$(node -p "require('./package.json').version")" ]
+
       - name: Checksums
         run: |
           VER="${{ steps.tag.outputs.version }}"
-          sha256sum "$CLI_ASSET" "$WORKER_ASSET" > "SHA256SUMS-${VER}.txt"
+          sha256sum "$CLI_ASSET" "$WORKER_ASSET" packages/cli/dist-bin/axis-cli-* > "SHA256SUMS-${VER}.txt"
           echo "SUMS_ASSET=SHA256SUMS-${VER}.txt" >> "$GITHUB_ENV"
           cat "SHA256SUMS-${VER}.txt"
 
@@ -350,15 +358,16 @@ jobs:
           TAG="${{ steps.tag.outputs.tag }}"
           gh release upload "$TAG" \
             "$CLI_ASSET" "$WORKER_ASSET" "$SUMS_ASSET" \
+            packages/cli/dist-bin/axis-cli-* \
             --clobber
 
       - name: Verify assets on the release
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           gh release view "$TAG" --json assets --jq '.assets[].name' | tee /tmp/assets.txt
-          for f in "$CLI_ASSET" "$WORKER_ASSET" "$SUMS_ASSET"; do
-            grep -qx "$f" /tmp/assets.txt || {
-              echo "::error::Asset $f missing from release $TAG."
+          for f in "$CLI_ASSET" "$WORKER_ASSET" "$SUMS_ASSET" packages/cli/dist-bin/axis-cli-*; do
+            grep -qx "$(basename "$f")" /tmp/assets.txt || {
+              echo "::error::Asset $(basename "$f") missing from release $TAG."
               exit 1
             }
           done
@@ -373,6 +382,7 @@ jobs:
             echo "| Asset | Purpose |"
             echo "|-------|---------|"
             echo "| \`${CLI_ASSET:-<none>}\` | offline install: \`npm i -g ./axis-cli-*.tgz\` |"
+            echo "| \`packages/cli/dist-bin/axis-cli-*\` | single-file binaries (bun compile): linux x64/arm64 + musl, macOS x64/arm64, Windows x64 |"
             echo "| \`${WORKER_ASSET:-<none>}\` | deployable worker source snapshot (\`wrangler deploy\`) |"
             echo "| \`${SUMS_ASSET:-<none>}\` | sha256 checksums |"
             echo ""

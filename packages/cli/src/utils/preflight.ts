@@ -13,11 +13,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getPaths } from "./paths.js";
+import { ownPackage } from "../own-package.js";
 
 export type InstallContext =
   | "repo-checkout"
   | "npm-install"
   | "npx-cache"
+  | "binary"
   | "unknown";
 
 export type PreflightReport = {
@@ -33,15 +35,12 @@ export type PreflightReport = {
   driftFrom: string | null;
 };
 
-/** Own package.json — resolves correctly from both src/ and dist/ layouts. */
+/** Own package metadata — embedded at bundle/compile time (see own-package.ts). */
 function readOwnPackageJson(): { version: string; engines?: Record<string, string> } {
-  try {
-    return JSON.parse(
-      readFileSync(new URL("../package.json", import.meta.url), "utf-8")
-    ) as { version: string; engines?: Record<string, string> };
-  } catch {
-    return { version: "0.0.0" };
-  }
+  return {
+    version: ownPackage.version,
+    engines: ownPackage.engines,
+  };
 }
 
 /** Minimal semver-ish compare for `major.minor.patch` strings. */
@@ -68,6 +67,9 @@ export function detectInstallContext(
   if (p.includes("/_npx/") || p.includes("/npm-cache/")) return "npx-cache";
   if (p.includes("/node_modules/@hoox-sh/axis-cli/")) return "npm-install";
   if (p.includes("/packages/cli/")) return "repo-checkout";
+  // bun build --compile: bundled code lives in the virtual $bunfs
+  // (file:///$bunfs/... on unix, B:\$bunfs\... on windows).
+  if (p.toLowerCase().includes("$bunfs")) return "binary";
   return "unknown";
 }
 
@@ -117,6 +119,7 @@ const CONTEXT_LABEL: Record<InstallContext, string> = {
   "repo-checkout": "repo checkout (packages/cli)",
   "npm-install": "npm install (@hoox-sh/axis-cli)",
   "npx-cache": "npx cache",
+  binary: "standalone binary (bun compile)",
   unknown: "unknown install location",
 };
 

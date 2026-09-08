@@ -46,6 +46,11 @@ describe("detectInstallContext", () => {
     ).toBe("repo-checkout");
     expect(detectInstallContext("file:///somewhere/else/index.js")).toBe("unknown");
   });
+
+  test("classifies bun-compile standalone binaries ($bunfs)", () => {
+    expect(detectInstallContext("file:///$bunfs/root/index.js")).toBe("binary");
+    expect(detectInstallContext("file:///B:/$bunfs/root/index.js")).toBe("binary");
+  });
 });
 
 describe("checkEngines", () => {

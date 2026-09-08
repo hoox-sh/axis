@@ -156,7 +156,7 @@ git push origin --tags
 | **Health** | `axis health` | Probe deployed Worker `/health` |
 | **GHCR / Docker** | `make docker-push` | Multi-arch bake release (needs registry login) |
 | **npm CLI** | tag `v*` / `cli-v*` push, or Release (npm) workflow dispatch | `.github/workflows/release.yml` → `@hoox-sh/axis-cli`; org secret `NPM_TOKEN_HOOXSH` |
-| **Release assets** | automatic on `v*` tags (`release-assets` job) | `axis-cli-*.tgz`, `axis-worker-*.tar.gz` (deployable source snapshot), `SHA256SUMS-*.txt` attached to the GitHub Release; backfill an existing tag: `gh workflow run release.yml --ref main -f tag=vX.Y.Z` |
+| **Release assets** | automatic on `v*` tags (`release-assets` job) | `axis-cli-*.tgz`, single-file binaries `axis-cli-<ver>-bun-<target>` (`bun build --compile`; linux x64/arm64 + musl, macOS x64/arm64, Windows x64), `axis-worker-*.tar.gz` (deployable source snapshot), `SHA256SUMS-*.txt` attached to the GitHub Release; backfill an existing tag: `gh workflow run release.yml --ref main -f tag=vX.Y.Z` |
 
 ```bash
 # Typical product publish after tag
