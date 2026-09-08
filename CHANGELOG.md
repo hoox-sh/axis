@@ -15,6 +15,14 @@ _Generated/updated: 2026-09-08 · 365 commits · describe-tag: `v2.5.0`_
 
 ## [Unreleased]
 
+### Added
+
+- **CLI installation self-check** (`@hoox-sh/axis-cli` 0.3.0): every `axis` command self-verifies on start (`packages/cli/src/utils/preflight.ts`) — engine compliance (Node ≥ 20 / Bun ≥ 1.2), install context (npm install / npx cache / repo checkout), and **version drift** when a globally installed CLI is older than the repo checkout it operates on (warns `npm i -g @hoox-sh/axis-cli`). Warnings-only on stderr: skipped for `--version` / `--help`, silenced by `--quiet` / `--json`, never blocks or fails a command. `axis doctor` gains the optional **CLI installation** row (`cli-install` in `--json`). Tests: `packages/cli/tests/preflight.test.ts` (context detection, engines, drift, doctor row).
+
+### Changed
+
+- **Docs are CLI-first**: all `bun run axis:*` invocations across `README.md`, `AGENTS.md`, `docs/**` (cloudflare, local-dev, index, topologies, vps-demo), `worker/README.md`, and `packages/cli/README.md` replaced with the primary `axis <command>` form; `bun run axis:*` is now documented as a repo-only alias (alias tables flipped in `docs/devops/cli.mdx` and `docs/enduser/getting-started/installation.mdx`). New **Installation self-check** section in the CLI docs.
+
 ## [2.6.0] — 2026-09-08
 
 ### Added

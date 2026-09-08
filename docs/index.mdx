@@ -111,11 +111,11 @@ Full recipes: [Compose recipes](/axis/docs/enduser/getting-started/compose-recip
 
 ## Demo topologies
 
-- Dev: Vite `:3000` + Flask `:5002` (`bun run axis:install` then `bun run dev`)
+- Dev: Vite `:3000` + Flask `:5002` (`axis install` then `bun run dev`)
 - Desktop: `bun run desktop:dev` (Tauri 2)
 - Static: `bun run build` + `axis_pwa_server.py` `:8081`
-- Worker: `bun run axis dev worker` / wrangler on `:8787`
-- Prod: `bun run axis:deploy` → project `pynescript-axis`
+- Worker: `axis dev worker` / wrangler on `:8787`
+- Prod: `axis deploy` → project `pynescript-axis`
 
 See [topologies](/axis/docs/architecture/topologies), [AXIS CLI](/axis/docs/devops/cli), and [local dev](/axis/docs/devops/local-dev).
 

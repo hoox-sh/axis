@@ -28,12 +28,13 @@ bun run test:e2e:smoke   # Playwright smoke
 cd worker && bun run dev # wrangler :8787
 
 # AXIS CLI (setup / deploy / doctor) — packages/cli
-bun run axis --help
-bun run axis:install
-bun run axis:doctor
-bun run axis:setup -- --github-client-id Ov23li…
-bun run axis:deploy
-bun run axis:health -- --oauth
+axis --help
+axis install
+axis doctor
+axis setup --github-client-id Ov23li…
+axis deploy
+axis health --oauth
+# repo aliases (no global install): bun run axis:install / axis:doctor / axis:deploy / …
 ```
 
 ## Layout
@@ -148,18 +149,18 @@ git push origin --tags
 
 | Target | Command | Notes |
 |--------|---------|--------|
-| **Worker** (API/WS) | `bun run axis:deploy` or `make worker-deploy` / `axis deploy worker` | Wrangler → `pynescript-axis` |
+| **Worker** (API/WS) | `axis deploy` or `make worker-deploy` / `axis deploy worker` | Wrangler → `pynescript-axis` |
 | **Pages** (PWA static) | `make pages-deploy` or `axis deploy pages` | `vite build` + `wrangler pages deploy dist --project-name=pynescript-axis` |
-| **All** | `bun packages/cli/bin/axis.js deploy all` | Worker then Pages |
-| **Health** | `bun run axis:health` | Probe deployed Worker `/health` |
+| **All** | `axis deploy all` | Worker then Pages |
+| **Health** | `axis health` | Probe deployed Worker `/health` |
 | **GHCR / Docker** | `make docker-push` | Multi-arch bake release (needs registry login) |
 | **npm CLI** | tag `v*` / `cli-v*` push, or Release (npm) workflow dispatch | `.github/workflows/release.yml` → `@hoox-sh/axis-cli`; org secret `NPM_TOKEN_HOOXSH` |
 
 ```bash
 # Typical product publish after tag
 bun run build
-bun packages/cli/bin/axis.js deploy all
-bun run axis:health
+axis deploy all
+axis health
 ```
 
 - Production Worker must **not** ship `ALLOW_OPEN_KEYS=1` with real D1; bind `API_KEYS` KV (see harden-perf audit).
@@ -180,8 +181,8 @@ scripts/sync-pyne-builtins.sh
 scripts/sync-pyne-wheel.sh
 
 # Optional: doctor deployed stack
-bun run axis:doctor
-bun run axis:health -- --oauth
+axis doctor
+axis health --oauth
 ```
 
 | Sync target | When |

@@ -37,7 +37,7 @@ Production AXIS on Cloudflare® is a **split deploy**:
 
 **Evaluation truth:** Worker `/api/run` **proxies to `EXTERNAL_BACKEND`** unless the gated Pyodide path is fully implemented and enabled. You still need a Python host (VPS Flask, container, etc.) for real Pine Script™ fidelity today.
 
-Prefer the **[AXIS CLI](/axis/docs/devops/cli)** for setup and deploy (`bun run axis:deploy`).
+Prefer the **[AXIS CLI](/axis/docs/devops/cli)** for setup and deploy (`axis deploy`).
 
 ## Conceptual model
 
@@ -81,12 +81,11 @@ Production checklist:
 
 ```bash
 # Preferred: AXIS CLI
-bun run axis:deploy
-# or: bun run axis deploy worker
+axis deploy
 # or: make axis-deploy
 
 # Schema first (remote)
-bun run axis setup -- d1 --remote
+axis setup d1 --remote
 
 # Equivalent raw wrangler
 cd worker
@@ -123,7 +122,7 @@ bunx wrangler pages deploy dist --project-name=pynescript-axis
 ### Health check
 
 ```bash
-bun run axis:health
+axis health
 # or
 curl -sS https://<worker>/health
 # service: pynescript-axis-worker

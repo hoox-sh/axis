@@ -74,14 +74,15 @@ npm install -g @hoox-sh/axis-cli   # Node ≥ 20; Bun ≥ 1.2 for install/dev/bu
 cd packages/cli && bun install && bun run build && cd ../..
 bun run axis --help
 
-bun run axis:install                          # app + worker + CLI deps
-bun run axis:doctor                           # toolchain; wrangler.toml warns until `axis setup`
-bun run axis setup -- --github-client-id Ov23li…
-bun run axis setup -- d1 --remote             # apply D1 schema on CF
-bun run axis -- secret put ADMIN_TOKEN
-bun run axis:deploy                           # Worker pynescript-axis
-bun run axis:health -- --oauth                # live /health + device OAuth
+axis install                          # app + worker + CLI deps
+axis doctor                           # toolchain; wrangler.toml warns until `axis setup`
+axis setup --github-client-id Ov23li…
+axis setup d1 --remote                # apply D1 schema on CF
+axis secret put ADMIN_TOKEN
+axis deploy                           # Worker pynescript-axis
+axis health --oauth                   # live /health + device OAuth
 
+# Repo aliases (no global install): bun run axis:install / axis:doctor / axis:deploy / …
 # Make wrappers: make axis-doctor  make axis-deploy  make axis ARGS="…"
 ```
 
@@ -278,7 +279,7 @@ axis/                         (this repo root)
 - **Production split**: PWA on Cloudflare Pages (`https://axis.hoox.sh`); PYNE Pro API
   on Hetzner (`https://pynescript.online`, nginx → gunicorn `:5002`). Default store
   endpoint is `https://pynescript.online`. SSH: `ssh pynescript`.
-- **Cloudflare Worker**: `bun run axis:deploy` (or `make worker-deploy`). The Worker
+- **Cloudflare Worker**: `axis deploy` (or `make worker-deploy`). The Worker
   exposes `/api/run`, `/api/stream`, `/api/keys`, `/api/onchain/*` (DefiLlama +
   GeckoTerminal allowlisted proxy), Git OAuth device flow, etc. See `worker/README.md`,
   [Worker docs](https://hoox.sh/axis/docs/worker), and [AXIS CLI](https://hoox.sh/axis/docs/devops/cli).

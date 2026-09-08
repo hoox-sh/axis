@@ -62,8 +62,8 @@ flowchart LR
 | Dev + Flask | + `make -C ../pyne run` (checkout sometimes named `pynescript`) | `:5002` |
 | Static dist | `bun run build` + `python axis_pwa_server.py` | `:8081` |
 | Worker local | `bun run axis dev worker` / `cd worker && bun run dev` | `:8787` |
-| CF Worker prod | `bun run axis:deploy` | HTTPS workers.dev / custom |
-| Operator | `bun run axis:doctor` · `axis setup` · `axis health` | — |
+| CF Worker prod | `axis deploy` | HTTPS workers.dev / custom |
+| Operator | `axis doctor` · `axis setup` · `axis health` | — |
 
 ## Page map
 

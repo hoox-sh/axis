@@ -21,12 +21,14 @@ cd packages/cli && bun install && bun run build && cd ../..
 bun packages/cli/bin/axis.js --help
 ```
 
-Root package scripts:
+CLI-first — install once, call `axis` anywhere:
 
 ```bash
-bun run axis --help
-bun run axis:doctor
+axis --help
+axis doctor
 ```
+
+Repo aliases (no global install): `bun run axis --help` · `bun run axis:doctor` — see root `package.json` scripts.
 
 Global flags: `--json`, `--quiet`, `-y/--yes`. `--json` is machine-only (no banners mixed into stdout).
 

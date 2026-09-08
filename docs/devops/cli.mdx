@@ -62,9 +62,11 @@ make axis ARGS="--help"
 cd packages/cli && bun link && axis --help
 ```
 
-### Root package scripts & Make targets
+### Repo aliases (bun scripts & Make targets)
 
-| Invoke | Runs |
+`axis` is the primary interface. These aliases exist for working inside the repo checkout without a global install:
+
+| Alias | Runs |
 | --- | --- |
 | `bun run axis -- <args>` | `packages/cli/bin/axis.js` |
 | `bun run axis:install` | `axis install` |
@@ -98,6 +100,16 @@ When using `bun run axis setup -- --flag`, keep the `--` so Bun forwards flags t
 | `axis dev desktop` | Tauri desktop shell |
 
 Global flags: `--json`, `--quiet`, `-y` / `--yes`.
+
+### Installation self-check
+
+Every `axis` command starts with a lightweight, local-only self-check (skipped for `--version` / `--help`, silenced by `--quiet` / `--json`). It never blocks a command — it only prints stderr warnings when something is off:
+
+- **Runtime compliance** vs `engines` (Node ≥ 20, Bun ≥ 1.2)
+- **Install context** — npm install, npx cache, or repo checkout
+- **Version drift** — a globally installed CLI older than the repo checkout it is operating on (`npm i -g @hoox-sh/axis-cli` to update)
+
+The same check appears as the optional **CLI installation** row in `axis doctor` (and in `doctor --json` as `cli-install`).
 
 <img src="/images/cli/doctor.png" alt="axis doctor: required toolchain and wrangler checks passed" />
 

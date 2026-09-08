@@ -30,13 +30,13 @@ This Worker provides the **production backend** for the PWA. It can:
 **Preferred (AXIS CLI from repo root):**
 
 ```bash
-bun run axis:install
-bun run axis setup worker          # ensure wrangler.toml
-bun run axis setup d1 --local      # apply schemas/scripts.sql
-bun run axis setup oauth --github-client-id Ov23li…
-bun run axis dev worker            # wrangler :8787
-bun run axis:deploy                # production Worker
-bun run axis:health -- --oauth
+axis install
+axis setup worker          # ensure wrangler.toml
+axis setup d1 --local      # apply schemas/scripts.sql
+axis setup oauth --github-client-id Ov23li…
+axis dev worker            # wrangler :8787
+axis deploy                # production Worker
+axis health --oauth
 ```
 
 **Manual:**

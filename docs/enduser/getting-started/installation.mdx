@@ -57,22 +57,23 @@ Backend is optional when **Engine = Client-Side (Pyodide)** and sources/streams 
 bun install
 cd packages/cli && bun install && cd ../..
 
-bun run axis:install          # app + worker/ + CLI deps
-bun run axis:doctor           # toolchain + optional CF auth; wrangler.toml warns until `axis setup`
-bun run axis setup            # ensure wrangler.toml + local D1 schema
+axis install          # app + worker/ + CLI deps
+axis doctor           # toolchain + optional CF auth; wrangler.toml warns until `axis setup`
+axis setup            # ensure wrangler.toml + local D1 schema
+# repo aliases (no global install): bun run axis:install / axis:doctor / axis:setup
 # or: make axis-install && make axis-doctor && make axis-setup
 ```
 
-| Script / target | Equivalent |
+| Command | Repo alias (no global install) |
 | --- | --- |
-| `bun run axis` | `bun packages/cli/bin/axis.js` |
-| `bun run axis:install` | `axis install` |
-| `bun run axis:doctor` | `axis doctor` |
-| `bun run axis:setup` | `axis setup` |
-| `bun run axis:deploy` | `axis deploy worker` |
-| `bun run axis:health` | `axis health` |
-| `make axis ARGS="…"` | pass-through to the CLI |
-| `make axis-install` · `axis-doctor` · `axis-setup` · `axis-deploy` · `axis-health` | Make wrappers |
+| `axis` | `bun run axis` |
+| `axis install` | `bun run axis:install` |
+| `axis doctor` | `bun run axis:doctor` |
+| `axis setup` | `bun run axis:setup` |
+| `axis deploy worker` | `bun run axis:deploy` |
+| `axis health` | `bun run axis:health` |
+| `axis …` | `make axis ARGS="…"` pass-through |
+| `axis …` | `make axis-install` · `axis-doctor` · `axis-setup` · `axis-deploy` · `axis-health` |
 
 Full command surface: [AXIS CLI](/axis/docs/devops/cli).
 
@@ -111,17 +112,17 @@ In AXIS: open **Workers Manager** (topbar activity icon) or Settings → set **B
 ### Deploy checklist (prod)
 
 ```bash
-bun run axis setup -- --github-client-id Ov23li… --remote-d1
-bun run axis -- secret put ADMIN_TOKEN
-bun run axis -- secret put EXTERNAL_BACKEND
-bun run axis:deploy
-bun run axis:health -- --oauth
+axis setup --github-client-id Ov23li… --remote-d1
+axis secret put ADMIN_TOKEN
+axis secret put EXTERNAL_BACKEND
+axis deploy
+axis health --oauth
 ```
 
 ## Production build (static)
 
 ```bash
-bun run axis:install
+axis install
 bun run build                # → dist/
 python3 axis_pwa_server.py   # serves dist/ on :8081
 ```
