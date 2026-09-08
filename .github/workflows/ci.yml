@@ -38,6 +38,9 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Release versions in sync
+        run: bun scripts/check-versions.mjs
+
       - name: Unit + worker tests (coverage)
         run: bun run test:coverage
 

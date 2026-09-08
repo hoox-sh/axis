@@ -196,7 +196,7 @@ axis health --oauth
 ### Release checklist (agents)
 
 1. Update `CHANGELOG.md` `[Unreleased]` → version section; run `python3 scripts/generate-changelog.py`.
-2. Bump `package.json` `version` if not already.
+2. Bump `package.json` `version` if not already — **and keep it in sync** with `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and the `axis` stanza in `src-tauri/Cargo.lock` (desktop bundles take their version from Tauri, not the tag; v2.6.0 shipped `2.4.1`-named assets because of this drift). Verify with `bun run check:versions`.
 3. `git commit` (changelog + version + product commits already on branch).
 4. `bun run test` and `bun run build`.
 5. `git tag -a vX.Y.Z -m "AXIS vX.Y.Z"`.

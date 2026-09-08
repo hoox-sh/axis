@@ -1,6 +1,6 @@
 {
   "name": "axis",
-  "version": "2.6.0",
+  "version": "2.6.1",
   "private": true,
   "license": "AGPL-3.0-only",
   "author": "jango_blockchained",
@@ -13,6 +13,7 @@
     "test": "bun test --max-concurrency=1 tests/ worker/tests/",
     "test:cli": "bun --cwd packages/cli test",
     "typecheck": "bunx tsc --noEmit",
+    "check:versions": "bun scripts/check-versions.mjs",
     "lint": "biome check .",
     "lint:fix": "biome check --write --unsafe .",
     "prepare": "git config core.hooksPath .githooks",

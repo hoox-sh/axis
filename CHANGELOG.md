@@ -9,11 +9,17 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-08 · 365 commits · describe-tag: `v2.5.0`_
+_Generated/updated: 2026-09-08 · 373 commits · describe-tag: `cli-v0.3.0`_
 
 ---
 
 ## [Unreleased]
+
+## [2.6.1] — 2026-09-08
+
+### Fixed
+
+- **Desktop bundles carried the wrong version**: the v2.6.0 GitHub Release shipped desktop assets named `2.4.1` because `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock` were never bumped past v2.4.1 — `tauri-action` derives bundle versions from the Tauri config, not the git tag. All four version stamps are now `2.6.1`, and a new `bun run check:versions` guard (`scripts/check-versions.mjs`, enforced in CI + the desktop workflow) fails on any drift.
 
 ### Changed
 
@@ -1006,12 +1012,16 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (46 commits)
+### 2026-09 (54 commits)
 
 #### Features
 
+- `1fef94c3` (2026-09-08) — feat(ui): default TF 15m, studio opens on Settings, non-modal Workers, no top status
+- `77d8600e` (2026-09-08) — feat(cli): installation self-check on start + doctor cli-install row
 - `716a26eb` (2026-09-07) — feat(ui): mobile-first responsive shell (phone sheets, tab bar, force-single chart)
 - `74418b05` (2026-09-07) — feat(results): events views (Open⇄Close), single-column strategy tab, rich saved stats
 - `e00b6c97` (2026-09-06) — feat(shortcuts): shortcuts modal + Settings → Keyboard recorder
@@ -1043,8 +1053,14 @@ Security and performance release from the multi-agent **harden-perf** audit
 - `520869dc` (2026-09-05) — fix: setup review — doctor, live HUD, static health, 2.3.1
 - `16499ac7` (2026-09-04) — fix(results): skip live-tick persist and unstick studio e2e
 
+#### Refactors
+
+- `ac0d8a90` (2026-09-08) — refactor(editor): move Script Logs into the editor bottom bar
+
 #### Documentation
 
+- `055d73d5` (2026-09-08) — docs: CLI-first command surface (axis <cmd> primary, bun run axis:* as repo alias)
+- `9b75c459` (2026-09-08) — docs(readme): real badge row, stack cross-links, unified stack footer
 - `efa7e87c` (2026-09-08) — docs(readme): add official Codecov coverage badge
 - `e38a72f9` (2026-09-07) — docs: sync docs to v2.5.0 — shortcuts, mobile shell, results views
 - `eecca17d` (2026-09-06) — docs(changelog): regenerate full history for v2.4.0
@@ -1056,6 +1072,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### CI
 
+- `d5f0cf89` (2026-09-08) — ci(hooks): versioned .githooks — pre-commit biome (staged), pre-push tsc + lint
+- `cdb68ff9` (2026-09-08) — ci: split Codecov uploads per flag, bump action to v7, target 75%
 - `9fe171a6` (2026-09-08) — ci: upload unit + CLI coverage to Codecov
 - `637cfa87` (2026-09-06) — ci(cli): full npm release pipeline with tag guard, registry verify, Node smoke
 
@@ -1066,6 +1084,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `67723020` (2026-09-08) — chore(release): v2.6.0 — shortcut hub fix, keypress feedback
 - `a78a7fca` (2026-09-07) — chore(release): v2.5.0 — mobile shell, pyne 0.5.0, zero lint errors
 - `8d6a7c70` (2026-09-07) — chore(engines): vendor pynescript wheel 0.5.0 from pyne
 - `9ae3e3da` (2026-09-07) — chore(release): v2.4.3 — results events views, single-column strategy, saved stats

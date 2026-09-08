@@ -85,6 +85,9 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
+      - name: Release versions in sync
+        run: bun scripts/check-versions.mjs
+
       # Non-tag pushes / PRs: build only (no GitHub Release)
       - name: Build Tauri app
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
