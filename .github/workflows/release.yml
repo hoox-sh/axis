@@ -302,7 +302,8 @@ jobs:
           test -f dist/index.js
           CLI_VER=$(node -p "require('./package.json').version")
           npm pack --silent
-          mv "hoox-sh-axis-cli-${CLI_VER}.tgz" "../axis-cli-${CLI_VER}.tgz"
+          # GITHUB_WORKSPACE, not ../ — packages/cli/.. resolves to packages/.
+          mv "hoox-sh-axis-cli-${CLI_VER}.tgz" "${GITHUB_WORKSPACE}/axis-cli-${CLI_VER}.tgz"
           echo "CLI_ASSET=axis-cli-${CLI_VER}.tgz" >> "$GITHUB_ENV"
 
       - name: Build worker source bundle
@@ -316,8 +317,9 @@ jobs:
             --exclude=worker/.wrangler \
             --exclude=worker/.dev.vars \
             -czf "axis-worker-${VER}.tar.gz" LICENSE worker/
-          tar -tzf "axis-worker-${VER}.tar.gz" | grep -qx 'worker/wrangler.toml.example'
-          tar -tzf "axis-worker-${VER}.tar.gz" | grep -qx 'worker/src/index.ts'
+          tar -tzf "axis-worker-${VER}.tar.gz" > /tmp/worker-list.txt
+          grep -qx 'worker/wrangler.toml.example' /tmp/worker-list.txt
+          grep -qx 'worker/src/index.ts' /tmp/worker-list.txt
           echo "WORKER_ASSET=axis-worker-${VER}.tar.gz" >> "$GITHUB_ENV"
 
       - name: Checksums
