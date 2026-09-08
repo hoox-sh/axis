@@ -308,14 +308,15 @@ jobs:
       - name: Build worker source bundle
         run: |
           VER="${{ steps.tag.outputs.version }}"
-          # Deployable worker snapshot: source + schemas + wrangler config,
-          # no installs / local state / secrets.
+          # Deployable worker snapshot: source + schemas + wrangler config
+          # template, no installs / local state / secrets. wrangler.toml is
+          # gitignored (axis setup generates it) — the .example ships instead.
           tar \
             --exclude=worker/node_modules \
             --exclude=worker/.wrangler \
             --exclude=worker/.dev.vars \
             -czf "axis-worker-${VER}.tar.gz" LICENSE worker/
-          tar -tzf "axis-worker-${VER}.tar.gz" | grep -qx 'worker/wrangler.toml'
+          tar -tzf "axis-worker-${VER}.tar.gz" | grep -qx 'worker/wrangler.toml.example'
           tar -tzf "axis-worker-${VER}.tar.gz" | grep -qx 'worker/src/index.ts'
           echo "worker_asset=axis-worker-${VER}.tar.gz" >> "$GITHUB_ENV"
 
