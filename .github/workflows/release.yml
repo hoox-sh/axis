@@ -303,7 +303,7 @@ jobs:
           CLI_VER=$(node -p "require('./package.json').version")
           npm pack --silent
           mv "hoox-sh-axis-cli-${CLI_VER}.tgz" "../axis-cli-${CLI_VER}.tgz"
-          echo "cli_asset=axis-cli-${CLI_VER}.tgz" >> "$GITHUB_ENV"
+          echo "CLI_ASSET=axis-cli-${CLI_VER}.tgz" >> "$GITHUB_ENV"
 
       - name: Build worker source bundle
         run: |
@@ -318,13 +318,13 @@ jobs:
             -czf "axis-worker-${VER}.tar.gz" LICENSE worker/
           tar -tzf "axis-worker-${VER}.tar.gz" | grep -qx 'worker/wrangler.toml.example'
           tar -tzf "axis-worker-${VER}.tar.gz" | grep -qx 'worker/src/index.ts'
-          echo "worker_asset=axis-worker-${VER}.tar.gz" >> "$GITHUB_ENV"
+          echo "WORKER_ASSET=axis-worker-${VER}.tar.gz" >> "$GITHUB_ENV"
 
       - name: Checksums
         run: |
           VER="${{ steps.tag.outputs.version }}"
           sha256sum "$CLI_ASSET" "$WORKER_ASSET" > "SHA256SUMS-${VER}.txt"
-          echo "sums_asset=SHA256SUMS-${VER}.txt" >> "$GITHUB_ENV"
+          echo "SUMS_ASSET=SHA256SUMS-${VER}.txt" >> "$GITHUB_ENV"
           cat "SHA256SUMS-${VER}.txt"
 
       - name: Wait for the GitHub Release (created by desktop.yml)
