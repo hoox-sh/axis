@@ -10,7 +10,8 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { Command } from "commander";
 import { theme } from "./utils/theme.js";
-import { commanderExitCode, handleError } from "./utils/format.js";
+import { commanderExitCode, handleError, printWarn, type GlobalOpts } from "./utils/format.js";
+import { collectPreflight } from "./utils/preflight.js";
 import { registerInstall } from "./commands/install.js";
 import { registerDoctor } from "./commands/doctor.js";
 import { registerSetup } from "./commands/setup.js";
@@ -69,6 +70,23 @@ ${theme.dim("Docs:")} https://hoox.sh/axis/docs
   registerHealth(program);
   registerDev(program);
   registerWhoami(program);
+
+  // Installation self-check on every command start. Skipped for --version /
+  // --help (commander handles those before any action) and silenced for
+  // --quiet / --json (machine-readable contract). Warnings only — preflight
+  // must never block or fail a command. Note: commander does not bind `this`
+  // usefully inside hooks — read options from the hook's first argument.
+  program.hook("preAction", (hookCommand: Command) => {
+    const opts = (hookCommand?.opts?.() ?? {}) as GlobalOpts;
+    const quiet = Boolean(opts.quiet || opts.json);
+    void collectPreflight()
+      .then((pf) => {
+        for (const w of pf.warnings) printWarn(w, quiet);
+      })
+      .catch(() => {
+        /* preflight is best-effort by design */
+      });
+  });
 
   program.exitOverride();
 

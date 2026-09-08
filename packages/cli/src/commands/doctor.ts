@@ -16,6 +16,7 @@ import {
   getTomlVar,
 } from "../services/wrangler-toml.js";
 import { defaultWorkerUrl, probeHealth } from "../services/health.js";
+import { collectPreflight } from "../utils/preflight.js";
 import { theme, icons } from "../utils/theme.js";
 import {
   ExitCode,
@@ -55,6 +56,18 @@ export async function collectDoctorChecks(options: {
     required: true,
     label: "AXIS repo root",
     detail: paths.root,
+  });
+
+  // CLI installation self-check (context, engines, version drift vs repo).
+  const preflight = await collectPreflight();
+  checks.push({
+    id: "cli-install",
+    ok: preflight.ok,
+    required: false,
+    label: "CLI installation",
+    detail: preflight.ok
+      ? preflight.summary
+      : preflight.warnings.join(" · ").replace(/^axis: /, ""),
   });
 
   checks.push({
