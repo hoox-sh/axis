@@ -15,9 +15,17 @@ _Generated/updated: 2026-09-07 · 357 commits · describe-tag: `v2.4.3`_
 
 ## [Unreleased]
 
+### Added
+
+- **Keypress feedback for consumed shortcuts**: `dispatchShortcut` now emits an `axis-shortcut-fired` CustomEvent (id / chord / description — `src/ui/shortcuts/runtime.ts`) and a transient bottom-center chip (`src/ui/shortcuts/Feedback.tsx`, `data-testid="axis-shortcut-feedback"`, `aria-live="polite"`, pointer-events none, ~1.2 s auto-hide, platform-correct chord glyphs via `formatChord`) confirms every consumed binding — main shortcut keys no longer feel dead even when the side effect is subtle.
+
 ### Changed
 
 - **Docs synced to v2.5.0**: `docs/index.mdx` + `docs/enduser/getting-started/installation.mdx` version stamps; `docs/ui/ui-shell.mdx` gains **Keyboard shortcuts** (dispatch hub, scopes, recorder, Shortcuts modal) and **Mobile shell (phones / tablets)** sections; `docs/ui/index.mdx` subsystem table mentions shortcuts + mobile shell; `docs/ui/results-and-strategy.mdx` and `docs/enduser/guides/strategy-and-results.mdx` document the v2.4.3 results overhaul (Events Stream/Open⇄Close position-cycle views, single-column strategy tab, saved-run stats snapshots, shared `walkStrategyEvents` walker).
+
+### Fixed
+
+- **Keyboard shortcuts were dead: `ShortcutHub` was never mounted** (the component had zero importers, so the capture-phase keydown dispatcher in `src/ui/shortcuts/Hub.tsx` and the whole `src/ui/shortcuts/actions.ts` registration side effect never loaded) — `Ctrl/Cmd+K` / `Ctrl/Cmd+Shift+P` (command palette), `Shift+?` (shortcuts help), `Ctrl/Cmd+,` (settings), `Ctrl/Cmd+\` (toggle editor), `Esc`, and every `chart.*` binding (zoom / pan / tool letters / grid layouts) silently no-oped. The product shell (`src/app.tsx`) now mounts `<ShortcutHub />` (plus `<ShortcutFeedback />`). Only the parallel `Mod-S` / `Mod-G` handler in `src/editor/tabbed-editor.tsx` survived, which is why save worked while the palette was unreachable by keyboard. Guard tests: `tests/shortcut-feedback.test.ts` and the Playwright smoke `Mod-K opens and closes the command palette (shortcut hub guard)` in `e2e/smoke.spec.ts`.
 
 ## [2.5.0] — 2026-09-07
 

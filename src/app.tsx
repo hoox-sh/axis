@@ -51,6 +51,8 @@ import {
 } from 'solid-js';
 import { Topbar } from './ui/Topbar';
 import { StatusBar } from './ui/StatusBar';
+import { ShortcutHub } from './ui/shortcuts/Hub';
+import { ShortcutFeedback } from './ui/shortcuts/Feedback';
 import { Watchlist } from './ui/Watchlist';
 import { ChartWorkspace } from './chart/ChartWorkspace';
 import { IndicatorPanel } from './indicators/IndicatorPanel';
@@ -554,6 +556,12 @@ export const App: Component = () => {
         <MobileTabBar {...mobileChrome()} />
         <MobileOverlays {...mobileChrome()} />
       </Show>
+
+      {/* Keyboard shortcut dispatcher + fired-key feedback. ShortcutHub owns
+          the capture-phase keydown dispatch for every binding (Mod-K palette,
+          Shift-? help, chart tools, …); Feedback flashes a transient chip. */}
+      <ShortcutHub />
+      <ShortcutFeedback />
 
       {/* Opt-in error diagnostic share (telemetry.shareOnError) */}
       <ErrorShareToast />

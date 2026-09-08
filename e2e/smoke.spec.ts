@@ -134,4 +134,25 @@ test.describe('AXIS smoke @smoke', () => {
     await page.getByTestId('axis-settings-close').click();
     await expect(page.getByTestId('axis-settings')).toHaveCount(0);
   });
+
+  test('Mod-K opens and closes the command palette (shortcut hub guard)', async ({
+    page,
+  }) => {
+    // Guard for the 2026-09 regression: ShortcutHub was defined but never
+    // mounted, leaving Mod-K dead. If this test fails, the mount is gone.
+    await page.goto('/');
+    await expect(page.getByTestId('axis-topbar')).toBeVisible();
+
+    // `Mod` expands to meta on macOS, ctrl elsewhere (see ui/shortcuts/keys.ts).
+    const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
+    await page.keyboard.press(`${mod}+k`);
+
+    await expect(page.getByTestId('axis-command-palette')).toBeVisible();
+    // Keypress feedback chip confirms the chord was consumed.
+    await expect(page.getByTestId('axis-shortcut-feedback')).toBeVisible();
+
+    // Palette toggle chords are global — the same chord closes it again.
+    await page.keyboard.press(`${mod}+k`);
+    await expect(page.getByTestId('axis-command-palette')).toHaveCount(0);
+  });
 });

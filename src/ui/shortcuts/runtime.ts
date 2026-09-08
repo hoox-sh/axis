@@ -132,6 +132,25 @@ function shouldSkip(id: ShortcutId, target: EventTarget | null): boolean {
 }
 
 /**
+ * Fire the `axis-shortcut-fired` feedback event when a key was consumed. UI
+ * chrome (ui/shortcuts/Feedback.tsx) renders the transient confirmation; the
+ * dispatch core stays DOM-free apart from this opt-in CustomEvent, mirroring
+ * the defensive emit() pattern in actions.ts.
+ */
+function emitFired(row: DispatchRow): void {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+  try {
+    window.dispatchEvent(
+      new CustomEvent('axis-shortcut-fired', {
+        detail: { id: row.id, chord: row.chord, description: row.def.description },
+      }),
+    );
+  } catch {
+    /* test DOM without CustomEvent */
+  }
+}
+
+/**
  * Core dispatch: match the event against the table and invoke the registered
  * action. Returns `true` when the event was consumed (preventDefault called).
  * This is what the mounted listener runs on every capture-phase keydown.
@@ -151,5 +170,8 @@ export function dispatchShortcut(table: DispatchRow[], e: KeyboardEvent): boolea
   } catch (err) {
     console.warn('[shortcuts] action', row.id, err);
   }
+  // Emitted after the action starts so feedback confirms a consumed key even
+  // if the action itself threw (the error path already logs above).
+  emitFired(row);
   return true;
 }
