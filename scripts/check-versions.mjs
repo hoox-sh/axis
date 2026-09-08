@@ -24,14 +24,18 @@ function readJson(rel) {
 }
 
 function readCargoVersion(rel) {
-  const text = readFileSync(join(ROOT, rel), 'utf8');
+  // Windows runners check text files out with CRLF — normalize before matching.
+  const text = readFileSync(join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
   const m = text.match(/^version\s*=\s*"([^"]+)"/m);
   if (!m) throw new Error(`${rel}: no top-level version = "..." found`);
   return m[1];
 }
 
 function readLockVersion() {
-  const text = readFileSync(join(ROOT, 'src-tauri/Cargo.lock'), 'utf8');
+  const text = readFileSync(join(ROOT, 'src-tauri/Cargo.lock'), 'utf8').replace(
+    /\r\n/g,
+    '\n',
+  );
   const m = text.match(/\[\[package\]\]\nname = "axis"\nversion = "([^"]+)"/);
   if (!m) throw new Error('src-tauri/Cargo.lock: no [[package]] name = "axis" stanza found');
   return m[1];
