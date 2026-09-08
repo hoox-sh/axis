@@ -38,6 +38,9 @@ export function StudioHost(props: {
     <AppPage
       open={props.open}
       page={props.page}
+      // Workers is a tool sheet, not a blocking dialog: non-modal so the
+      // chart and editor stay interactive while it is open.
+      modal={props.page !== 'workers'}
       onNavigate={props.onNavigate}
       onClose={props.onClose}
       title={overrideTitle()}

@@ -15,6 +15,13 @@ _Generated/updated: 2026-09-08 · 365 commits · describe-tag: `v2.5.0`_
 
 ## [Unreleased]
 
+### Changed
+
+- **Default timeframe is now 15m**: the chart-slot fallback (`src/chart/layout.ts`) and workspace-snapshot build/parse fallbacks (`src/storage/workspace-snapshot.ts`) changed from `1d` to `15m`, matching the store default — new chart slots and restored snapshots without an interval start on the 15-minute TF.
+- **Studio opens on Settings**: `lastStudioPage` initial in `src/app.tsx` changed `runtime` → `settings` — the first Studio open (topbar button / palette) lands on Settings (subsequent opens still remember the last page).
+- **Workers page is non-modal**: `AppPage` (`src/ui/studio/AppPage.tsx`) gains a `modal` prop; `StudioHost` renders Workers non-modally — transparent click-through scrim (new `.ax-page-backdrop--nonmodal` sheet in `studio.css`), no focus trap, no Escape-steal — so the chart and editor stay interactive while Workers is open. Modality follows the active rail page; other pages are unchanged.
+- **Workers top status grid removed**: the aggregate Healthy / Health / Active backend summary deleted from `src/ui/workers/WorkersPage.tsx` — status now exists only per worker (inventory cards + detail pane + footer probe line). Guards: Playwright smoke `Workers page is non-modal` (scrim pointer-events, no top status, Escape does not close).
+
 ### Added
 
 - **Versioned git hooks** (`.githooks/`): **pre-commit** runs Biome (`check`) on staged files only (fast); **pre-push** runs `bun run typecheck` (tsc) + `bun run lint` (errors fail, warnings pass). Auto-configured via the root `prepare` script (`git config core.hooksPath .githooks`) on every `bun install`; bypass with `--no-verify`.

@@ -23,7 +23,6 @@ import {
   getWorkerCatalogEntry,
   probeAllWorkers,
   probeWorker,
-  matchCatalogForEndpoint,
   type WorkerCatalogEntry,
   type WorkerId,
   type WorkerProbeResult,
@@ -123,7 +122,6 @@ export function WorkersPage(props: {
 
   const selected = createMemo(() => getWorkerCatalogEntry(selectedId()));
   const selectedResult = createMemo(() => resultFor(snap(), selectedId()));
-  const matchedBackend = createMemo(() => matchCatalogForEndpoint(store.endpoint));
 
   let abort: AbortController | null = null;
   let probeGen = 0;
@@ -309,36 +307,6 @@ export function WorkersPage(props: {
   return (
     <div class="ax-page-stack">
       <div class="ax-page-canvas">
-        <div class="ax-grid ax-grid--3">
-          <StudioStat label="Healthy" value={snap()?.healthy ?? '—'} />
-          <StudioStat
-            label="Health"
-            value={
-              <StudioStatus
-                status={
-                  probing() && !snap()
-                    ? 'idle'
-                    : (snap()?.down ?? 0) > 0
-                      ? 'down'
-                      : (snap()?.degraded ?? 0) > 0
-                        ? 'degraded'
-                        : (snap()?.healthy ?? 0) > 0
-                          ? 'healthy'
-                          : 'unknown'
-                }
-              />
-            }
-          />
-          <StudioStat
-            label="Active backend"
-            value={
-              matchedBackend()
-                ? getWorkerCatalogEntry(matchedBackend()!)?.name || matchedBackend()
-                : '—'
-            }
-          />
-        </div>
-
         <Show when={probeError()}>
           <p class="ax-error">{probeError()}</p>
         </Show>

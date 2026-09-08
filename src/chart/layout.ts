@@ -101,7 +101,7 @@ export function createChartSlot(
   return {
     id: partial?.id || newSlotId(),
     symbol: (partial?.symbol || fallback?.symbol || 'BTCUSDT').toUpperCase(),
-    interval: partial?.interval || fallback?.interval || '1d',
+    interval: partial?.interval || fallback?.interval || '15m',
     chartType: normalizeChartType(partial?.chartType || DEFAULT_CHART_TYPE),
     exchange: partial?.exchange || fallback?.exchange || 'binance',
   };

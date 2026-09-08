@@ -155,4 +155,29 @@ test.describe('AXIS smoke @smoke', () => {
     await page.keyboard.press(`${mod}+k`);
     await expect(page.getByTestId('axis-command-palette')).toHaveCount(0);
   });
+
+  test('Workers page is non-modal: shell stays interactive, no top status', async ({
+    page,
+  }) => {
+    // Guard: Workers must not block the app (AppPage modal=false) and the
+    // aggregate top-status grid must stay removed (per-worker chips only).
+    await page.goto('/');
+    await openStudio(page, 'workers');
+    await expect(page.getByTestId('axis-workers-manager')).toBeVisible();
+
+    // Non-blocking proof: transparent click-through scrim.
+    const backdrop = page.locator('.ax-page-backdrop--nonmodal');
+    await expect(backdrop).toBeVisible();
+    await expect(backdrop).toHaveCSS('pointer-events', 'none');
+
+    // Top status grid removed — only per-worker cards keep a status chip.
+    await expect(page.getByText('Active backend', { exact: true })).toHaveCount(0);
+    await expect(
+      page.getByTestId('axis-workers-manager').getByTestId(/axis-worker-card-/),
+    ).not.toHaveCount(0);
+
+    // Non-modal pages do not steal Escape — the sheet stays open.
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('axis-workers-manager')).toBeVisible();
+  });
 });

@@ -290,7 +290,7 @@ export function buildWorkspaceSnapshot(
   const includeBars = !!options.includeBars;
   const includeSavedLayouts = options.includeSavedLayouts !== false;
   const symbol = String(storeLike.symbol || 'BTCUSDT').toUpperCase();
-  const interval = String(storeLike.interval || '1d');
+  const interval = String(storeLike.interval || '15m');
   const exchange = String(storeLike.exchange || 'binance');
   const chartType = normalizeChartType(storeLike.chartType ?? DEFAULT_CHART_TYPE);
 
@@ -426,7 +426,7 @@ export function parseSnapshotJson(text: string): WorkspaceSnapshot {
   }
 
   const symbol = requireString(raw, 'symbol', 'BTCUSDT').toUpperCase();
-  const interval = requireString(raw, 'interval', '1d');
+  const interval = requireString(raw, 'interval', '15m');
   const exchange = requireString(raw, 'exchange', 'binance');
   const chartType = normalizeChartType(raw.chartType);
 

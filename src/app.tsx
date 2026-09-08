@@ -141,7 +141,7 @@ import { StorageChangePrompt } from './ui/StorageChangePrompt';
 /** Primary charting workspace component mounted by `index.tsx`. */
 export const App: Component = () => {
   const [studioPage, setStudioPage] = createSignal<StudioPageId | null>(null);
-  const [lastStudioPage, setLastStudioPage] = createSignal<StudioPageId>('runtime');
+  const [lastStudioPage, setLastStudioPage] = createSignal<StudioPageId>('settings');
   const [settingsTab, setSettingsTab] = createSignal<SettingsTabId>('general');
   const openStudio = (page: StudioPageId) => {
     setLastStudioPage(page);
