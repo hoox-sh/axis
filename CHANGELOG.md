@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-07 · 357 commits · describe-tag: `v2.4.3`_
+_Generated/updated: 2026-09-08 · 365 commits · describe-tag: `v2.5.0`_
 
 ---
 
 ## [Unreleased]
+
+## [2.6.0] — 2026-09-08
 
 ### Added
 
@@ -984,9 +986,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (38 commits)
+### 2026-09 (46 commits)
 
 #### Features
 
@@ -1011,6 +1015,9 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `d4082f4c` (2026-09-08) — fix(shortcuts): mount ShortcutHub + keypress feedback
+- `c06a14cf` (2026-09-07) — fix(test): make CI test suite green (server hook timeout, matchMedia stubs)
+- `81f24c76` (2026-09-07) — fix(lint): resolve all Biome lint errors (368→0); add Biome + Prettier tooling
 - `7d9f2dec` (2026-09-07) — fix(ui): resolve 23 UI-review findings across editor, drawings, panels, themes
 - `464a9497` (2026-09-06) — fix(architecture): only preload Pyodide when the DOM can host asset links
 - `8d5daf5c` (2026-09-06) — fix(worker): clean up tsc errors under noUncheckedIndexedAccess & exactOptionalPropertyTypes
@@ -1020,6 +1027,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `efa7e87c` (2026-09-08) — docs(readme): add official Codecov coverage badge
+- `e38a72f9` (2026-09-07) — docs: sync docs to v2.5.0 — shortcuts, mobile shell, results views
 - `eecca17d` (2026-09-06) — docs(changelog): regenerate full history for v2.4.0
 - `e9df22fe` (2026-09-06) — docs(changelog): DSM-first dataset store, validation, persistence switch
 - `d10a9ea4` (2026-09-05) — docs(screenshots): wire stills into README and matching guides
@@ -1029,6 +1038,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### CI
 
+- `9fe171a6` (2026-09-08) — ci: upload unit + CLI coverage to Codecov
 - `637cfa87` (2026-09-06) — ci(cli): full npm release pipeline with tag guard, registry verify, Node smoke
 
 #### Tests
@@ -1038,6 +1048,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `a78a7fca` (2026-09-07) — chore(release): v2.5.0 — mobile shell, pyne 0.5.0, zero lint errors
+- `8d6a7c70` (2026-09-07) — chore(engines): vendor pynescript wheel 0.5.0 from pyne
 - `9ae3e3da` (2026-09-07) — chore(release): v2.4.3 — results events views, single-column strategy, saved stats
 - `aaf4d9ac` (2026-09-07) — chore(release): v2.4.2 — UI review fixes, keyboard shortcuts, line ops
 - `fa49a6c1` (2026-09-06) — chore(cli): release @hoox-sh/axis-cli 0.2.2
