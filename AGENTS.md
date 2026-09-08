@@ -106,6 +106,7 @@ EOF
 - Use **conventional commits** when possible: `feat`, `fix`, `perf`, `docs`, `refactor`, `test`, `ci`, `chore`.
 - One logical change per commit when practical; security/perf hardening can be a small stack.
 - **Do not** commit `.env`, wrangler secrets, or real production KV/D1 ids invented in docs.
+- **Git hooks** (versioned in `.githooks/`, auto-configured by the root `prepare` script on `bun install`): **pre-commit** runs Biome on staged files; **pre-push** runs `bun run typecheck` + `bun run lint` (errors fail, warnings pass). Skip with `--no-verify` only when you really mean it.
 
 ### Build
 

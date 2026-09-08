@@ -1,0 +1,19 @@
+#!/bin/sh
+# AXIS pre-push gate: typecheck + lint must pass before pushing.
+# Skip with `git push --no-verify` when you really mean it.
+
+echo "Running typecheck before push…"
+bun run typecheck
+if [ $? -ne 0 ]; then
+  echo "❌ Typecheck failed. Fix errors before pushing."
+  exit 1
+fi
+echo "✓ Typecheck passed."
+
+echo "Running lint before push…"
+bun run lint
+if [ $? -ne 0 ]; then
+  echo "❌ Lint failed. Fix errors before pushing (warnings are allowed, errors are not)."
+  exit 1
+fi
+echo "✓ Lint passed."

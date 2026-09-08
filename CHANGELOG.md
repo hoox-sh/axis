@@ -17,6 +17,8 @@ _Generated/updated: 2026-09-08 · 365 commits · describe-tag: `v2.5.0`_
 
 ### Added
 
+- **Versioned git hooks** (`.githooks/`): **pre-commit** runs Biome (`check`) on staged files only (fast); **pre-push** runs `bun run typecheck` (tsc) + `bun run lint` (errors fail, warnings pass). Auto-configured via the root `prepare` script (`git config core.hooksPath .githooks`) on every `bun install`; bypass with `--no-verify`.
+
 - **CLI installation self-check** (`@hoox-sh/axis-cli` 0.3.0): every `axis` command self-verifies on start (`packages/cli/src/utils/preflight.ts`) — engine compliance (Node ≥ 20 / Bun ≥ 1.2), install context (npm install / npx cache / repo checkout), and **version drift** when a globally installed CLI is older than the repo checkout it operates on (warns `npm i -g @hoox-sh/axis-cli`). Warnings-only on stderr: skipped for `--version` / `--help`, silenced by `--quiet` / `--json`, never blocks or fails a command. `axis doctor` gains the optional **CLI installation** row (`cli-install` in `--json`). Tests: `packages/cli/tests/preflight.test.ts` (context detection, engines, drift, doctor row).
 
 ### Changed

@@ -15,6 +15,7 @@
     "typecheck": "bunx tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write --unsafe .",
+    "prepare": "git config core.hooksPath .githooks",
     "test:unit": "bun test tests/",
     "test:coverage": "bun test --coverage --coverage-reporter=lcov --coverage-reporter=text --coverage-dir=coverage tests/ worker/tests/",
     "test:coverage:gate": "bun run test:coverage && bun scripts/check-coverage.mjs 95",
