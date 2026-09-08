@@ -24,8 +24,12 @@
 # Other v* tag components (not this workflow):
 #   - Desktop installers + GitHub Release: .github/workflows/desktop.yml
 #   - GHCR images:                       .github/workflows/docker.yml
-# Worker / Pages stay operator-driven (`axis deploy all`) — they need
-# Cloudflare credentials that are not in this job.
+# The `release-assets` job here attaches downloadable artifacts to the GitHub
+# Release for `v*` tags: the CLI tarball (npm pack), a deployable worker source
+# bundle, and SHA256SUMS. Existing tags can be backfilled via
+# workflow_dispatch with the `tag` input. Worker / Pages deploy stays
+# operator-driven (`axis deploy all`) — it needs Cloudflare credentials that
+# are not in this job.
 
 name: Release (npm)
 
@@ -38,6 +42,10 @@ on:
         description: 'Re-attempt publish even if the version is already on the registry'
         type: boolean
         default: false
+      tag:
+        description: 'Existing v* tag to (re)attach release assets to, e.g. v2.6.1'
+        type: string
+        required: false
 
 concurrency:
   group: release-npm-${{ github.ref }}
@@ -249,4 +257,121 @@ jobs:
             echo ""
             echo "Same tag also drives desktop (GitHub Release) and Docker (GHCR) workflows."
             echo "Worker / Pages deploy remains \`axis deploy all\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  release-assets:
+    name: Release assets (CLI tarball + worker bundle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Root release tags only — cli-v* tags carry no GitHub Release.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref_name, 'v')
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          case "$TAG" in
+            v*) ;;
+            *) echo "::error::Release assets attach to v* tags only (got: ${TAG})."; exit 1 ;;
+          esac
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Build + pack CLI tarball
+        working-directory: packages/cli
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+          test -f dist/index.js
+          CLI_VER=$(node -p "require('./package.json').version")
+          npm pack --silent
+          mv "hoox-sh-axis-cli-${CLI_VER}.tgz" "../axis-cli-${CLI_VER}.tgz"
+          echo "cli_asset=axis-cli-${CLI_VER}.tgz" >> "$GITHUB_ENV"
+
+      - name: Build worker source bundle
+        run: |
+          VER="${{ steps.tag.outputs.version }}"
+          # Deployable worker snapshot: source + schemas + wrangler config,
+          # no installs / local state / secrets.
+          tar \
+            --exclude=worker/node_modules \
+            --exclude=worker/.wrangler \
+            --exclude=worker/.dev.vars \
+            -czf "axis-worker-${VER}.tar.gz" LICENSE worker/
+          tar -tzf "axis-worker-${VER}.tar.gz" | grep -qx 'worker/wrangler.toml'
+          tar -tzf "axis-worker-${VER}.tar.gz" | grep -qx 'worker/src/index.ts'
+          echo "worker_asset=axis-worker-${VER}.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Checksums
+        run: |
+          VER="${{ steps.tag.outputs.version }}"
+          sha256sum "$CLI_ASSET" "$WORKER_ASSET" > "SHA256SUMS-${VER}.txt"
+          echo "sums_asset=SHA256SUMS-${VER}.txt" >> "$GITHUB_ENV"
+          cat "SHA256SUMS-${VER}.txt"
+
+      - name: Wait for the GitHub Release (created by desktop.yml)
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          for i in $(seq 1 36); do
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "Release $TAG found."
+              exit 0
+            fi
+            echo "waiting for release $TAG ($i/36)…"
+            sleep 20
+          done
+          # Not created by desktop.yml (skipped / failed) — create it so the
+          # artifacts still ship.
+          gh release create "$TAG" --title "AXIS $TAG" --generate-notes ||
+            gh release view "$TAG" >/dev/null
+
+      - name: Upload assets
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          gh release upload "$TAG" \
+            "$CLI_ASSET" "$WORKER_ASSET" "$SUMS_ASSET" \
+            --clobber
+
+      - name: Verify assets on the release
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          gh release view "$TAG" --json assets --jq '.assets[].name' | tee /tmp/assets.txt
+          for f in "$CLI_ASSET" "$WORKER_ASSET" "$SUMS_ASSET"; do
+            grep -qx "$f" /tmp/assets.txt || {
+              echo "::error::Asset $f missing from release $TAG."
+              exit 1
+            }
+          done
+
+      - name: Summary
+        if: always()
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          {
+            echo "## release assets"
+            echo ""
+            echo "| Asset | Purpose |"
+            echo "|-------|---------|"
+            echo "| \`${CLI_ASSET:-<none>}\` | offline install: \`npm i -g ./axis-cli-*.tgz\` |"
+            echo "| \`${WORKER_ASSET:-<none>}\` | deployable worker source snapshot (\`wrangler deploy\`) |"
+            echo "| \`${SUMS_ASSET:-<none>}\` | sha256 checksums |"
+            echo ""
+            echo "Tag: \`${TAG}\` — https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
           } >> "$GITHUB_STEP_SUMMARY"

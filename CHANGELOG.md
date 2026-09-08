@@ -15,6 +15,10 @@ _Generated/updated: 2026-09-08 · 373 commits · describe-tag: `cli-v0.3.0`_
 
 ## [Unreleased]
 
+### Added
+
+- **GitHub Release now carries CLI + worker artifacts**: a new `release-assets` job in `.github/workflows/release.yml` attaches, for every `v*` tag, the offline-install CLI tarball (`axis-cli-<cli-version>.tgz` via `npm pack` — verified with an offline `npm i -g` + `axis --version` smoke), a deployable worker source snapshot (`axis-worker-<tag-version>.tar.gz` — `LICENSE` + `worker/` minus `node_modules` / `.wrangler` / `.dev.vars`, sanity-checked for `wrangler.toml` + `src/index.ts`), and `SHA256SUMS-<tag-version>.txt`. The job waits for the desktop workflow to create the Release (creates it itself if desktop never does) and uploads with `--clobber`; existing tags can be backfilled via `gh workflow run release.yml --ref main -f tag=vX.Y.Z`.
+
 ## [2.6.1] — 2026-09-08
 
 ### Fixed
