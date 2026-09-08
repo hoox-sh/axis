@@ -54,11 +54,19 @@ jobs:
           bun run typecheck
           bun test --coverage --coverage-reporter=lcov --coverage-dir=coverage
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+      - name: Upload unit coverage to Codecov
+        uses: codecov/codecov-action@v7
         with:
-          files: ./coverage/lcov.info,packages/cli/coverage/lcov.info
-          flags: unit,cli
+          files: ./coverage/lcov.info
+          flags: unit
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload CLI coverage to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          files: packages/cli/coverage/lcov.info
+          flags: cli
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
