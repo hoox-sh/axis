@@ -49,6 +49,28 @@
 
 import { getState } from '../state.js';
 
+function formatPyodideBridgeError(err) {
+    if (err instanceof Error) {
+        const stack = typeof err.stack === 'string' ? err.stack.trim() : '';
+        const full = stack || err.message;
+        return full.length > 6000 ? `${full.slice(0, 6000)}…` : full;
+    }
+    return String(err);
+}
+
+// Safe bridge: pass JSON strings via globals + json.loads instead of
+// interpolating raw JSON into Python source (JSON null/true/false are
+// NameErrors in Python and crashed eval_code before Pine ever ran).
+function callPyodideRunScript(py, script, bars, mode) {
+    py.globals.set('_axis_script_json', JSON.stringify(script));
+    py.globals.set('_axis_bars_json', JSON.stringify(bars ?? []));
+    py.globals.set('_axis_mode_json', JSON.stringify(mode));
+    return py.runPython(
+        'run_script(__import__("json").loads(_axis_script_json), ' +
+        '__import__("json").loads(_axis_bars_json), ' +
+        '__import__("json").loads(_axis_mode_json))',
+    );
+}
 function resolveConfig(schema, config) {
     const out = {};
     for (const [k, def] of Object.entries(schema || {})) {
@@ -244,13 +266,11 @@ export const pyodideEngine = {
             if (mode === 'compile' || mode === 'auto') {
                 try { await py.loadPackage?.('numpy'); } catch (_) { /* fallback */ }
             }
-            const resultJson = py.runPython(
-                `run_script(${JSON.stringify(script)}, ${JSON.stringify(bars)}, ${JSON.stringify(mode)})`,
-            );
+            const resultJson = callPyodideRunScript(py, script, bars, mode);
             const result = JSON.parse(resultJson);
             return { ...result, meta: { ...(result.meta || {}), ms: performance.now() - t0 } };
         } catch (err) {
-            return { status: 'error', plots: [], series: {}, events: [], error: err.message, meta: { ms: performance.now() - t0 } };
+            return { status: 'error', plots: [], series: {}, events: [], drawings: [], error: formatPyodideBridgeError(err), meta: { ms: performance.now() - t0 } };
         }
     },
 };

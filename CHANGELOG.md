@@ -21,6 +21,7 @@ _Generated/updated: 2026-09-08 · 373 commits · describe-tag: `cli-v0.3.0`_
 
 ### Fixed
 
+- **Pyodide engine crashed on bars containing null (`eval_code` traceback + empty drawings)**: the browser bridge interpolated raw `JSON.stringify(bars)` into Python source, so JSON `null`/`true`/`false` became Python `NameError`s before Pine ever ran — surfacing only as a truncated `_pyodide/_base.py` traceback with `drawings: []`. `src/engines/catalog.ts`, `src/engines/index.js`, and `worker/src/pyodide_runtime.ts` now pass JSON strings via `globals` + `json.loads`, return `drawings: []` on bridge failures, and surface the full Python traceback (new `callPyodideRunScript` / `formatPyodideBridgeError`, covered by `tests/pyodide-bridge.test.ts`). `pyodide/pynescript_runtime.py` re-synced with the deployed `public/pyodide` copy (drawing-registry reset + compile-path GC).
 - **Docker builds were broken by the git-hooks `prepare` script**: root `package.json` gained `"prepare": "git config core.hooksPath .githooks"` (commit `d5f0cf89`), which runs on every `bun install` — including inside the image `deps` stage, where git is not installed → exit 127 on every bake since then (v2.6.1 GHCR images never published). The Dockerfile now installs with `--ignore-scripts` (no dep needs lifecycle scripts; native binaries ship as platform optionalDeps) — verified with a local `build` target bake (`dist/.version` = 2.6.1). Stale version fallbacks (`2.3.0`/`2.3.1`) refreshed to `2.6.1` across `Dockerfile`, `docker-bake.hcl`, and `docker-compose.yml`.
 
 ### Changed

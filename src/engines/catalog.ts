@@ -469,7 +469,53 @@ type PyodideLike = {
   };
   runPythonAsync: (code: string) => Promise<void>;
   runPython: (code: string) => string;
+  globals: {
+    set: (key: string, value: unknown) => void;
+  };
 };
+
+/**
+ * Format a Pyodide bridge failure with the full Python traceback.
+ * `err.message` alone is truncated (`…`) by Pyodide's eval_code wrapper —
+ * prefer `stack`, which carries the complete `Traceback (most recent call …)`.
+ */
+export function formatPyodideBridgeError(err: unknown): string {
+  if (err instanceof Error) {
+    const stack = typeof err.stack === 'string' ? err.stack.trim() : '';
+    // Pyodide stacks repeat the message on the first line; keep it all —
+    // the tail (actual Python exception) is what users need.
+    const full = stack || err.message;
+    return full.length > 6000 ? `${full.slice(0, 6000)}…` : full;
+  }
+  return String(err);
+}
+
+/**
+ * Invoke the in-browser `run_script` bridge without interpolating raw JSON
+ * into Python source. Direct interpolation emits JSON literals (`null`,
+ * `true`, `false`) that are `NameError`s in Python — any bar with a null
+ * field (gap, NaN→null) crashed eval_code before Pine ever ran, surfacing
+ * only as a truncated `_pyodide/_base.py` traceback. Passing JSON strings
+ * via `globals` + `json.loads` keeps parsing on the JSON side.
+ */
+export function callPyodideRunScript(
+  py: PyodideLike,
+  script: string,
+  bars: unknown,
+  mode: string,
+  libraries: unknown,
+): string {
+  py.globals.set('_axis_script_json', JSON.stringify(script));
+  py.globals.set('_axis_bars_json', JSON.stringify(bars ?? []));
+  py.globals.set('_axis_mode_json', JSON.stringify(mode));
+  py.globals.set('_axis_libs_json', JSON.stringify(libraries ?? []));
+  return py.runPython(
+    'run_script(__import__("json").loads(_axis_script_json), ' +
+      '__import__("json").loads(_axis_bars_json), ' +
+      '__import__("json").loads(_axis_mode_json), ' +
+      '__import__("json").loads(_axis_libs_json))',
+  );
+}
 
 /**
  * Normalize engine `overlay` flags. Runtimes may send bool or 0/1.
@@ -730,9 +776,7 @@ export const pyodideEngine: EnginePlugin & {
           /* interpret fallback handles missing numpy */
         }
       }
-      const resultJson = py.runPython(
-        `run_script(${JSON.stringify(script)}, ${JSON.stringify(bars)}, ${JSON.stringify(mode)}, ${JSON.stringify(libraries || [])})`,
-      );
+      const resultJson = callPyodideRunScript(py, script, bars, mode, libraries || []);
       const result = JSON.parse(resultJson) as RunResult & {
         overlay?: unknown;
         script_name?: string;
@@ -753,12 +797,13 @@ export const pyodideEngine: EnginePlugin & {
         },
       };
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = formatPyodideBridgeError(err);
       return {
         status: 'error',
         plots: [],
         series: {},
         events: [],
+        drawings: [],
         error: msg,
         meta: { ms: performance.now() - t0 },
       };

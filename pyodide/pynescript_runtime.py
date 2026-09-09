@@ -373,6 +373,16 @@ def _run_interpret(
     }
 
     evaluator = CustomEvaluator(context=context)
+
+    # Fresh drawing registries so leftover labels/lines from prior runs
+    # do not leak into this response (DrawingRegistry is process-global).
+    try:
+        from pynescript.ast.evaluator.builtins.drawing import DrawingRegistry
+
+        DrawingRegistry.reset()
+    except Exception:
+        pass
+
     for lib in libraries or []:
         if not isinstance(lib, dict):
             continue
@@ -632,6 +642,36 @@ def _run_compiled(script: str, bars: list[dict]) -> dict:
         for k in ("__position_size", "__netprofit", "__equity"):
             series_map.pop(k, None)
 
+    # Compile-path GC: trim append-only __drawings by declaration caps (defaults 50)
+    drawing_limits = {
+        "max_lines_count": 50,
+        "max_labels_count": 50,
+        "max_boxes_count": 50,
+        "max_polylines_count": 50,
+    }
+    try:
+        import re as _re
+        from pynescript.ast.evaluator.builtins.drawing import DrawingRegistry
+
+        _hard = {
+            "max_lines_count": 500,
+            "max_labels_count": 500,
+            "max_boxes_count": 500,
+            "max_polylines_count": 100,
+        }
+        for _key, _cap in _hard.items():
+            _m = _re.search(rf"\b{_key}\s*=\s*(\d+)", script or "")
+            if _m:
+                try:
+                    _n = int(_m.group(1))
+                    drawing_limits[_key] = max(1, min(_cap, _n))
+                except (TypeError, ValueError):
+                    pass
+        if isinstance(drawings, list) and drawings:
+            drawings = DrawingRegistry.gc_exported_drawings(drawings, drawing_limits)
+    except Exception:
+        pass
+
     json_series = {
         str(k): _json_safe_series(v)
         for k, v in (series_map or {}).items()
@@ -680,7 +720,13 @@ def _run_compiled(script: str, bars: list[dict]) -> dict:
             if _entry:
                 _plot_meta[_title] = _entry
 
+    compile_meta = {
+        "mode": "compile",
+        **drawing_limits,
+    }
+    # preserve existing meta keys below via update pattern
     _meta: dict = {
+        **compile_meta,
         "mode": "compile",
         "object_mode": bool(getattr(compiled, "object_mode", False)),
         "count": len(bars),

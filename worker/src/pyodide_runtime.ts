@@ -71,9 +71,18 @@ async function ensurePyodide(_env: Env): Promise<unknown> {
 export async function tryRunInWorker(script: string, bars: unknown[], env: Env): Promise<unknown | null> {
     if (env.PYODIDE_IN_WORKER !== 'enabled') return null;
     try {
-        const py = await ensurePyodide(env);
-        // @ts-expect-error - Pyodide dynamic
-        const json = await py.runPythonAsync(`run_script(${JSON.stringify(script)}, ${JSON.stringify(bars)})`);
+        const py = await ensurePyodide(env) as {
+            globals: { set: (k: string, v: unknown) => void };
+            runPythonAsync: (s: string) => Promise<unknown>;
+        };
+        // Pass JSON via globals + json.loads: raw JSON literals (null/true/false)
+        // are NameErrors in Python and crash eval_code before Pine runs.
+        py.globals.set('_axis_script_json', JSON.stringify(script));
+        py.globals.set('_axis_bars_json', JSON.stringify(bars ?? []));
+        const json = await py.runPythonAsync(
+            'run_script(__import__("json").loads(_axis_script_json), ' +
+            '__import__("json").loads(_axis_bars_json))',
+        );
         return JSON.parse(json as string);
     } catch (err) {
         return { status: 'error', error: err instanceof Error ? err.message : String(err) };
