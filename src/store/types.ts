@@ -458,6 +458,12 @@ export interface AppState {
    */
   editorRulerEnabled: boolean;
   /**
+   * Language Feature Bar above the editor status strip — one chip per
+   * language-feature group (hover / signature / complete / lint / marks /
+   * chips / remote). Persisted. Default on.
+   */
+  editorFeatureBarEnabled: boolean;
+  /**
    * Keyboard shortcut overrides — id → user-chosen chord (or `null` to clear
    * the default binding). Persisted. See {@link ShortcutSlice}.
    */

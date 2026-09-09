@@ -2139,6 +2139,10 @@ body.axis-panel-dragging {
   background: color-mix(in srgb, var(--color-accent) 10%, transparent);
   border-color: var(--color-border-soft);
 }
+/* Feature Bar: switched-off features stay dim so active ones stand out. */
+.axis-editor-status-btn.is-off {
+  opacity: 0.55;
+}
 .axis-editor-status-btn.is-error {
   color: var(--color-red);
 }
@@ -2152,6 +2156,74 @@ body.axis-panel-dragging {
 .axis-editor-status-btn.is-warn.is-active,
 .axis-editor-status-btn.is-typo.is-active {
   border-color: currentColor;
+}
+
+/* Language Feature Bar — chip row above the editor status strip */
+.axis-editor-featurebar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.15em 0.25em;
+  padding: 0.2em 0.45em;
+  border-top: 1px solid var(--color-border-soft);
+  background: var(--color-bg-base);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  user-select: none;
+}
+.axis-editor-feature-menu {
+  position: absolute;
+  left: 0.45em;
+  bottom: calc(100% + 4px);
+  z-index: 30;
+  min-width: 15rem;
+  max-width: min(22rem, 90%);
+  padding: 0.5em 0.6em 0.6em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  background: var(--color-bg-elev);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-chip);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  color: var(--color-text);
+  font-size: 10px;
+}
+.axis-editor-feature-menu-title {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.85em;
+  color: var(--color-text-faint);
+}
+.axis-editor-feature-menu-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  cursor: pointer;
+  line-height: 1.5;
+}
+.axis-editor-feature-menu-check input[type='checkbox'] {
+  accent-color: var(--color-accent);
+}
+.axis-editor-feature-menu-num {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  line-height: 1.5;
+}
+.axis-editor-feature-menu-num input[type='number'] {
+  width: 5.5em;
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-chip);
+  color: var(--color-text);
+  font: inherit;
+  padding: 0.1em 0.3em;
+}
+.axis-editor-feature-menu-suffix {
+  color: var(--color-text-faint);
 }
 
 /* Overflow menu section labels */

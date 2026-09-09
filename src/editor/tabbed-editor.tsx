@@ -90,6 +90,12 @@ import { countDocStats, cursorLineCol } from './doc-stats';
 import { ColorToolsPanel } from './ColorToolsPanel';
 import { SymbolEmojiManager } from './SymbolEmojiManager';
 import { ScriptLogsPane } from './ScriptLogsPane';
+import { LanguageFeatureBar } from './LanguageFeatureBar';
+import {
+  IDLE_EDITOR_ACTIVITY,
+  deriveFeatureActivity,
+  type FeatureActivity,
+} from './language-features';
 import { normalizePyneLogs } from '../results/pyne-logs';
 import { scanPineColors } from './pine-colors';
 import { Icons } from '../ui/icons';
@@ -245,6 +251,26 @@ export const TabbedEditor: Component<Props> = (props) => {
     () => props.editorRef?.getDoc?.() || tabs()[activeTab()]?.doc || '',
   );
   const colorHitCount = createMemo(() => scanPineColors(activeDoc()).length);
+
+  /**
+   * Live language-feature activity for the Feature Bar. Editor-observed
+   * signals (completion / signature / hover) come off the CodeMirror view;
+   * lint / marks / chips / remote derive from pre-eval state, rendered
+   * diagnostics, and color hits.
+   */
+  const pollFeatureActivity = (): FeatureActivity => {
+    const intel = readEditorIntel(store.editorIntel);
+    const observed = props.editorRef?.getLanguageActivity?.() ?? {
+      ...IDLE_EDITOR_ACTIVITY,
+    };
+    return deriveFeatureActivity({
+      observed,
+      lintPending: store.preEval?.pending === true,
+      diagnosticCount: editorDiagnostics().length,
+      colorHits: colorHitCount(),
+      intel,
+    });
+  };
 
   // Auto-expand only when the diagnostic count *increases* (e.g. after a run).
   // Forcing open whenever n > 0 re-opened the panel on every store/pre-eval tick
@@ -920,6 +946,10 @@ export const TabbedEditor: Component<Props> = (props) => {
       </Show>
       <Show when={logsOpen()}>
         <ScriptLogsPane open={logsOpen()} onClose={() => setLogsOpen(false)} />
+      </Show>
+      {/* ── Language Feature Bar ──────────────────────────────── */}
+      <Show when={store.editorFeatureBarEnabled}>
+        <LanguageFeatureBar getActivity={pollFeatureActivity} />
       </Show>
       {/* ── Status / action bar ─────────────────────────────────── */}
       <div

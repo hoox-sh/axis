@@ -274,6 +274,7 @@ const DEFAULTS: AppState = {
   debugPinsEnabled: false,
   editorRulerEnabled: true,
   editorWrapEnabled: true,
+  editorFeatureBarEnabled: true,
   shortcuts: { overrides: {} },
   editorIntel: { ...DEFAULT_EDITOR_INTEL },
   stream: { status: 'disconnected' },
@@ -609,6 +610,10 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         typeof (bag as { editorWrapEnabled?: boolean }).editorWrapEnabled === 'boolean'
           ? !!(bag as { editorWrapEnabled?: boolean }).editorWrapEnabled
           : DEFAULTS.editorWrapEnabled,
+      editorFeatureBarEnabled:
+        typeof (bag as { editorFeatureBarEnabled?: boolean }).editorFeatureBarEnabled === 'boolean'
+          ? !!(bag as { editorFeatureBarEnabled?: boolean }).editorFeatureBarEnabled
+          : DEFAULTS.editorFeatureBarEnabled,
       editorIntel: readEditorIntel((bag as { editorIntel?: unknown }).editorIntel),
       activePlugins: {
         ...DEFAULTS.activePlugins,
@@ -1368,6 +1373,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     debugPinsEnabled: s.debugPinsEnabled,
     editorRulerEnabled: s.editorRulerEnabled,
     editorWrapEnabled: s.editorWrapEnabled,
+    editorFeatureBarEnabled: s.editorFeatureBarEnabled,
     shortcuts: unwrap(s.shortcuts ?? { overrides: {} }),
     editorIntel: readEditorIntel(s.editorIntel),
     lastValueLabelsVisible: s.lastValueLabelsVisible,
@@ -2987,6 +2993,18 @@ export function setEditorWrapEnabled(on: boolean) {
 /** Toggle soft line wrap in the Pine editor. */
 export function toggleEditorWrapEnabled() {
   setStore('editorWrapEnabled', !store.editorWrapEnabled);
+  persist();
+}
+
+/** Show/hide the Language Feature Bar above the editor status strip (persisted; default on). */
+export function setEditorFeatureBarEnabled(on: boolean) {
+  setStore('editorFeatureBarEnabled', !!on);
+  persist();
+}
+
+/** Toggle the Language Feature Bar above the editor status strip. */
+export function toggleEditorFeatureBarEnabled() {
+  setStore('editorFeatureBarEnabled', !store.editorFeatureBarEnabled);
   persist();
 }
 

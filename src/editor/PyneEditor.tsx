@@ -37,12 +37,13 @@ import {
 } from '@codemirror/view';
 import { Compartment, EditorSelection, EditorState, type Extension } from '@codemirror/state';
 import { defaultKeymap, indentWithTab } from '@codemirror/commands';
+import { completionStatus } from '@codemirror/autocomplete';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { bracketMatching } from '@codemirror/language';
 import { pyneScript } from './pyne-language';
 import { voidEditorExtensions } from './cm-void';
 import { buildRunKeymap } from './cm-line-ops';
-import { pyneLspExtensions } from './pyne-lsp';
+import { pyneLspExtensions, pineParamHintField } from './pyne-lsp';
 import { store } from '../store';
 import { readEditorIntel } from './editor-intel';
 import {
@@ -70,6 +71,10 @@ import {
 import { formatPineSource } from './pine-format';
 import { colorChipsExtension } from './color-chips';
 import { addMissingTypeDeclarations } from './pine-declare-types';
+import {
+  IDLE_EDITOR_ACTIVITY,
+  type EditorObservedActivity,
+} from './language-features';
 
 /** Cursor position reported by {@link PyneEditorRef.getCursor}. */
 export type PyneEditorCursor = { line: number; col: number; offset: number };
@@ -87,6 +92,12 @@ export type PyneEditorRef = {
   focusLine?: (line: number) => void;
   /** Current selection head as 1-based line / column + absolute offset. */
   getCursor?: () => PyneEditorCursor;
+  /**
+   * Live language-feature activity: completion list open, signature hint
+   * shown, builtin hover card open. Powers the Language Feature Bar chips
+   * (colored while firing). All false when the view is not mounted.
+   */
+  getLanguageActivity?: () => EditorObservedActivity;
   /** Select + scroll to a diagnostic range (underlines / badge jump). */
   jumpToDiagnostic?: (diag: EditorDiagnostic) => boolean;
   /** Select absolute [from, to) range and scroll into view (color tools, etc.). */
@@ -204,6 +215,30 @@ export const PyneEditor: Component<Props> = (props) => {
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: next },
     });
+  };
+
+  /**
+   * Live language-feature activity for the Feature Bar. Completion and
+   * signature state read straight off CM state; hover cards are told apart
+   * from diagnostic hovers by their DOM root (`.cm-pine-hover` vs
+   * `.cm-diag-tooltip`).
+   */
+  const getLanguageActivity = (): EditorObservedActivity => {
+    if (!view) return { ...IDLE_EDITOR_ACTIVITY };
+    let complete = false;
+    try {
+      complete = completionStatus(view.state) != null;
+    } catch {
+      complete = false;
+    }
+    let signature = false;
+    try {
+      signature = view.state.field(pineParamHintField, false) != null;
+    } catch {
+      signature = false;
+    }
+    const hover = !!containerRef.querySelector('.cm-tooltip .cm-pine-hover');
+    return { hover, signature, complete };
   };
 
   /** 1-based line → selection + scrollIntoView (clamped to document). */
@@ -449,6 +484,7 @@ export const PyneEditor: Component<Props> = (props) => {
       props.editorRef.scrollToLine = scrollToLine;
       props.editorRef.focusLine = scrollToLine;
       props.editorRef.getCursor = getCursor;
+      props.editorRef.getLanguageActivity = getLanguageActivity;
       props.editorRef.selectRange = selectRange;
       props.editorRef.insertAtCursor = insertAtCursor;
       props.editorRef.formatDoc = formatDoc;

@@ -17,6 +17,7 @@ _Generated/updated: 2026-09-08 · 373 commits · describe-tag: `cli-v0.3.0`_
 
 ### Added
 
+- **Language Feature Bar above the editor status strip**: a chip row (Hover · Sig · Complete · Lint · Marks · Chips · Remote) where each chip is colored only while the feature is actually firing (open card / list / hint, running check, rendered marks) — dimmed while switched off — so the bar shows which features the current script uses and which could be disabled. Click toggles the master switch, long-press (~550ms) or right-click opens a popover with the group's full settings. The row itself is a persisted “Language Feature Bar” option (Settings → Editor intelligence → View, default on; `editorFeatureBarEnabled` in the store).
 - **Standalone CLI binaries (bun compile)**: `bun run build:binaries` (`packages/cli/scripts/build-binaries.ts`) cross-compiles the CLI into single-file executables for 7 targets — linux x64/arm64 (glibc + musl), macOS x64/arm64, Windows x64 — with a native `--version`/`--help` smoke test. Own package metadata is now embedded at bundle/compile time (`src/own-package.ts` static JSON import) and preflight recognizes a new `binary` install context (`$bunfs` → "standalone binary (bun compile)"), so version display, engine checks, and drift detection work without a package.json on disk. Binaries ship as `axis-cli-<version>-bun-<target>` release assets and are covered by `SHA256SUMS` (bare asset filenames — a flat download verifies with one `sha256sum -c`).
 
 ### Fixed
