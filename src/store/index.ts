@@ -274,6 +274,7 @@ const DEFAULTS: AppState = {
   debugPinsEnabled: false,
   editorRulerEnabled: true,
   editorWrapEnabled: true,
+  editorMinimapEnabled: true,
   editorFeatureBarEnabled: true,
   shortcuts: { overrides: {} },
   editorIntel: { ...DEFAULT_EDITOR_INTEL },
@@ -610,6 +611,10 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         typeof (bag as { editorWrapEnabled?: boolean }).editorWrapEnabled === 'boolean'
           ? !!(bag as { editorWrapEnabled?: boolean }).editorWrapEnabled
           : DEFAULTS.editorWrapEnabled,
+      editorMinimapEnabled:
+        typeof (bag as { editorMinimapEnabled?: boolean }).editorMinimapEnabled === 'boolean'
+          ? !!(bag as { editorMinimapEnabled?: boolean }).editorMinimapEnabled
+          : DEFAULTS.editorMinimapEnabled,
       editorFeatureBarEnabled:
         typeof (bag as { editorFeatureBarEnabled?: boolean }).editorFeatureBarEnabled === 'boolean'
           ? !!(bag as { editorFeatureBarEnabled?: boolean }).editorFeatureBarEnabled
@@ -1373,6 +1378,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     debugPinsEnabled: s.debugPinsEnabled,
     editorRulerEnabled: s.editorRulerEnabled,
     editorWrapEnabled: s.editorWrapEnabled,
+    editorMinimapEnabled: s.editorMinimapEnabled,
     editorFeatureBarEnabled: s.editorFeatureBarEnabled,
     shortcuts: unwrap(s.shortcuts ?? { overrides: {} }),
     editorIntel: readEditorIntel(s.editorIntel),
@@ -2993,6 +2999,18 @@ export function setEditorWrapEnabled(on: boolean) {
 /** Toggle soft line wrap in the Pine editor. */
 export function toggleEditorWrapEnabled() {
   setStore('editorWrapEnabled', !store.editorWrapEnabled);
+  persist();
+}
+
+/** Show/hide the interactive minimap in the Pine editor (persisted; default on). */
+export function setEditorMinimapEnabled(on: boolean) {
+  setStore('editorMinimapEnabled', !!on);
+  persist();
+}
+
+/** Toggle the interactive minimap in the Pine editor. */
+export function toggleEditorMinimapEnabled() {
+  setStore('editorMinimapEnabled', !store.editorMinimapEnabled);
   persist();
 }
 

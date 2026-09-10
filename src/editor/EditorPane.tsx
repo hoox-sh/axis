@@ -53,6 +53,7 @@ import {
   toggleDebugPinsEnabled,
   toggleEditorRulerEnabled,
   toggleEditorWrapEnabled,
+  toggleEditorMinimapEnabled,
   toggleLibraryPanel,
   saveEditorDoc,
   isScriptRunBlockedByPreEval,
@@ -410,6 +411,7 @@ export const EditorPane: Component<Props> = (props) => {
       onTogglePins={() => toggleDebugPinsEnabled()}
       onToggleRuler={() => toggleEditorRulerEnabled()}
       onToggleWrap={() => toggleEditorWrapEnabled()}
+      onToggleMinimap={() => toggleEditorMinimapEnabled()}
       onFormat={() => formatActiveDoc()}
       canDeclareTypes={canDeclareTypes()}
       onDeclareTypes={() => declareTypesActiveDoc()}
@@ -496,6 +498,7 @@ const EditorOverflowMenu: Component<{
   onTogglePins: () => void;
   onToggleRuler: () => void;
   onToggleWrap: () => void;
+  onToggleMinimap: () => void;
   onFormat: () => void;
   /** After a successful run — enable “Add type declarations”. */
   canDeclareTypes?: boolean;
@@ -620,6 +623,26 @@ const EditorOverflowMenu: Component<{
             <Icons.ruler size={14} />
             <span>Column ruler</span>
             <Show when={store.editorRulerEnabled}>
+              <Icons.check size={12} class="ml-auto opacity-80" />
+            </Show>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class={`axis-panel-menu-item ${
+              store.editorMinimapEnabled ? 'is-active' : ''
+            }`}
+            title={
+              store.editorMinimapEnabled
+                ? 'Minimap on — scaled overview on the right edge; click or drag to scroll'
+                : 'Show the interactive minimap on the right edge'
+            }
+            data-testid="axis-btn-editor-minimap"
+            onClick={() => props.onToggleMinimap()}
+          >
+            <Icons.panelRight size={14} />
+            <span>Minimap</span>
+            <Show when={store.editorMinimapEnabled}>
               <Icons.check size={12} class="ml-auto opacity-80" />
             </Show>
           </button>

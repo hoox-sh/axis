@@ -100,6 +100,7 @@ import { normalizePyneLogs } from '../results/pyne-logs';
 import { scanPineColors } from './pine-colors';
 import { Icons } from '../ui/icons';
 import { announce } from '../ui/sr-announce';
+import { detectPineVersion, detectScriptKind } from '../indicators/script-meta';
 
 export { countDocStats, cursorLineCol } from './doc-stats';
 
@@ -155,6 +156,48 @@ interface Props {
   onDocChange?: (doc: string) => void;
   editorRef?: PyneEditorRef;
 }
+
+/**
+ * Per-tab script metadata badges parsed from source: `//@version=` and the
+ * `strategy()` / `indicator()` / `library()` declaration. Falls back to
+ * `–` for unsaved or unparseable scripts.
+ */
+const TabMetaBadges = (props: { doc: string; tabName: string }) => {
+  const kind = () => {
+    switch (detectScriptKind(props.doc)) {
+      case 'strategy':
+        return 'STR';
+      case 'indicator':
+        return 'IND';
+      case 'library':
+        return 'LIB';
+      default:
+        return '–';
+    }
+  };
+  const version = () => {
+    const v = detectPineVersion(props.doc);
+    return v ? `v${v}` : '–';
+  };
+  return (
+    <span class="flex items-center gap-1 flex-shrink-0" title={`Script metadata for ${props.tabName}`}>
+      <span
+        class="text-[9px] font-semibold text-text-faint bg-bg-hover rounded px-1 py-px leading-tight"
+        title={version() === '–' ? 'No //@version= pragma found' : `Pine Script ${version()}`}
+        data-testid="axis-editor-tab-badge-version"
+      >
+        {version()}
+      </span>
+      <span
+        class="text-[9px] font-semibold text-text-faint bg-bg-hover rounded px-1 py-px leading-tight"
+        title={kind() === '–' ? 'No strategy/indicator/library declaration found' : `Script type ${kind()}`}
+        data-testid="axis-editor-tab-badge-kind"
+      >
+        {kind()}
+      </span>
+    </span>
+  );
+};
 
 /** Multi-tab editor UI with demos, draft autosave, and library integration. */
 export const TabbedEditor: Component<Props> = (props) => {
@@ -669,22 +712,32 @@ export const TabbedEditor: Component<Props> = (props) => {
   };
 
   /**
-   * Persist active tab via storage (library write / git commit).
+   * Persist tab `idx` via storage (library write / git commit).
+   * The active tab snapshots the live CM buffer first; background tabs
+   * save their stored doc. Pre-eval lint runs for the active tab only so
+   * saving a background tab never clobbers the visible diagnostics.
    * @returns whether the write succeeded and the document that was saved.
    */
-  const saveActiveToLibrary = async (): Promise<{ ok: boolean; doc: string }> => {
-    const tab = activeTabState();
-    const doc = activeDocText();
+  const saveTabToLibrary = async (
+    idx: number,
+  ): Promise<{ ok: boolean; doc: string }> => {
+    const tab = tabs()[idx];
+    const isActive = idx === activeTab();
+    const doc = isActive ? activeDocText() : tab?.doc || '';
     if (!doc.trim()) {
       setStatus('error', 'Editor is empty');
       return { ok: false, doc: '' };
     }
-    // Snapshot CM into tab state so libraryId/dirty updates stay consistent
-    setTabs((t) =>
-      t.map((tb, i) => (i === activeTab() ? { ...tb, doc } : tb)),
-    );
+    if (isActive) {
+      // Snapshot CM into tab state so libraryId/dirty updates stay consistent
+      setTabs((t) =>
+        t.map((tb, i) => (i === idx ? { ...tb, doc } : tb)),
+      );
+    }
     // Syntax diagnostics after save (editor does not lint while typing)
-    const pe = await runPreevalNow(doc);
+    const pe = isActive
+      ? await runPreevalNow(doc)
+      : { diagnostics: [] as Array<{ severity: string }> };
     const name = tab?.name || 'Script';
     try {
       const meta = await pushScript({
@@ -692,7 +745,7 @@ export const TabbedEditor: Component<Props> = (props) => {
         name,
         content: doc,
       });
-      onGitPushSuccess(meta);
+      onGitPushSuccess(meta, idx);
       const errN = pe.diagnostics.filter((d) => d.severity === 'error').length;
       const base = isGitStorageActive()
         ? `Committed & saved "${meta.name}" to git`
@@ -708,6 +761,10 @@ export const TabbedEditor: Component<Props> = (props) => {
       return { ok: false, doc };
     }
   };
+
+  /** Persist the active tab (Save buttons, command palette, Run gate). */
+  const saveActiveToLibrary = (): Promise<{ ok: boolean; doc: string }> =>
+    saveTabToLibrary(activeTab());
 
   /**
    * Before Run: write the active script to the library when unsaved.
@@ -763,10 +820,10 @@ export const TabbedEditor: Component<Props> = (props) => {
     }
   };
 
-  const onGitPushSuccess = (meta: { id: string; name: string }) => {
+  const onGitPushSuccess = (meta: { id: string; name: string }, idx = activeTab()) => {
     setTabs((t) =>
       t.map((tb, i) =>
-        i === activeTab()
+        i === idx
           ? { ...tb, dirty: false, libraryId: meta.id, name: meta.name }
           : tb,
       ),
@@ -829,6 +886,21 @@ export const TabbedEditor: Component<Props> = (props) => {
                   <span class="inline-block w-1.5 h-1.5 rounded-full bg-orange flex-shrink-0" />
                 )}
                 <span class="max-w-[140px] overflow-hidden text-ellipsis">{tab.name}</span>
+                <TabMetaBadges doc={tab.doc} tabName={tab.name} />
+                <button
+                  type="button"
+                  class="text-text-faint hover:text-accent text-sm px-0.5 leading-none hover:bg-bg-hover rounded bg-transparent border-none cursor-pointer flex items-center flex-shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void saveTabToLibrary(idx());
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  title={`Save ${tab.name} to library`}
+                  aria-label={`Save ${tab.name}`}
+                  data-testid={`axis-editor-tab-save-${idx()}`}
+                >
+                  <Icons.save size={12} />
+                </button>
                 {tabs().length > 1 && (
                   <button
                     type="button"
@@ -901,6 +973,7 @@ export const TabbedEditor: Component<Props> = (props) => {
           diagnostics={editorDiagnostics()}
           rulerEnabled={store.editorRulerEnabled}
           wrapEnabled={store.editorWrapEnabled}
+          minimapEnabled={store.editorMinimapEnabled}
         />
       </div>
       <Show when={problemsOpen()}>

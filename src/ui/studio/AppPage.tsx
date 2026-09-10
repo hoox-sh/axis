@@ -29,9 +29,8 @@ export function AppPage(props: {
   flush?: boolean;
   children: JSX.Element;
   /**
-   * Render non-modally: transparent click-through scrim, no focus trap, and
-   * no Escape-steal — the app behind stays interactive. Used by the Workers
-   * page; every other page defaults to the modal overlay.
+   * Render non-modally: no focus trap, and no Escape-steal. Used by the
+   * Workers page; every other page defaults to the modal overlay.
    */
   modal?: boolean;
 }) {

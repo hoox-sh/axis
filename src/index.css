@@ -1852,6 +1852,39 @@ body.axis-panel-dragging {
   min-height: 100%;
 }
 
+/* Indent grid: one 4ch cell per completed indent level (guides + dots). */
+.axis-pyne-editor .ax-indent-cell {
+  display: inline-block;
+  position: relative;
+  width: 4ch;
+}
+.axis-pyne-editor .ax-indent-cell > .ax-iguide {
+  position: absolute;
+  left: 0;
+  top: -0.15em;
+  bottom: -0.15em;
+  border-left: 1px solid color-mix(in srgb, var(--color-text-faint) 45%, transparent);
+}
+.axis-pyne-editor .ax-indent-dots {
+  color: color-mix(in srgb, var(--color-text-faint) 55%, transparent);
+}
+
+/* Interactive minimap: docked right, reserves its own column. */
+.axis-pyne-editor .ax-minimap {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  background: color-mix(in srgb, var(--color-bg-base) 82%, transparent);
+  border-left: 1px solid var(--color-border-soft);
+  cursor: pointer;
+  touch-action: none;
+}
+.axis-pyne-editor[data-minimap='on'] .cm-scroller {
+  padding-right: 76px;
+}
+
 /* Debug pin jump flash (editor ↔ chart). Keyframes global so CM baseTheme can use the name. */
 @keyframes cm-debug-pin-flash-kf {
   0% {

@@ -94,6 +94,24 @@ export const voidEditorTheme = EditorView.theme(
       whiteSpace: 'nowrap',
       boxSizing: 'border-box',
     },
+    // Fold gutter: compact toggle column next to line numbers.
+    '.cm-foldGutter': {
+      minWidth: '0',
+      width: 'auto',
+    },
+    '.cm-foldGutter .cm-gutterElement': {
+      padding: '0 0.2em',
+      minWidth: '0',
+      cursor: 'pointer',
+      color: 'var(--color-text-faint)',
+    },
+    '.cm-foldGutter .cm-gutterElement:hover': {
+      color: 'var(--color-accent)',
+    },
+    '.ax-fold-marker': {
+      fontSize: '10px',
+      lineHeight: '1',
+    },
     '.cm-panels': {
       backgroundColor: 'var(--color-bg-panel)',
       color: 'var(--color-text)',

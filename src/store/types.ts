@@ -473,6 +473,8 @@ export interface AppState {
    * Toggle from the editor stats strip “wrap” control.
    */
   editorWrapEnabled: boolean;
+  /** Interactive minimap on the editor right edge. Persisted. Default on. */
+  editorMinimapEnabled: boolean;
   /**
    * Editor intelligence — pre-eval / lint, hover cards, signature hints,
    * autocomplete, diagnostic marks, inline chips. Persisted.

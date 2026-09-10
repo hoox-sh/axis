@@ -70,6 +70,9 @@ import {
 } from './column-ruler';
 import { formatPineSource } from './pine-format';
 import { colorChipsExtension } from './color-chips';
+import { codeFoldingExtension } from './code-folding';
+import { indentGuidesExtension } from './indent-guides';
+import { EditorMinimap } from './minimap';
 import { addMissingTypeDeclarations } from './pine-declare-types';
 import {
   IDLE_EDITOR_ACTIVITY,
@@ -189,6 +192,11 @@ interface Props {
    * Default true (matches previous always-on wrap).
    */
   wrapEnabled?: boolean;
+  /**
+   * Interactive minimap on the right edge (click/drag scrolls).
+   * Default true; hidden automatically in narrow containers.
+   */
+  minimapEnabled?: boolean;
 }
 
 /** Soft-wrap extension set for the wrap compartment (empty = no wrap). */
@@ -200,6 +208,7 @@ export function lineWrapExtension(enabled: boolean): Extension {
 export const PyneEditor: Component<Props> = (props) => {
   let containerRef!: HTMLDivElement;
   let view: EditorView | undefined;
+  let minimap: EditorMinimap | undefined;
   /** Compartment so wrap can toggle without rebuilding the whole state. */
   const wrapCompartment = new Compartment();
   const lspCompartment = new Compartment();
@@ -394,6 +403,19 @@ export const PyneEditor: Component<Props> = (props) => {
     view.requestMeasure();
   };
 
+  const syncMinimap = () => {
+    if (!view) return;
+    const enabled = props.minimapEnabled !== false;
+    if (enabled && !minimap) {
+      minimap = new EditorMinimap(view, containerRef);
+    } else if (!enabled && minimap) {
+      minimap.destroy();
+      minimap = undefined;
+      containerRef.dataset.minimap = 'off';
+    }
+    minimap?.schedule();
+  };
+
   let lastIntelSig = '';
   const syncIntel = () => {
     if (!view) return;
@@ -438,6 +460,10 @@ export const PyneEditor: Component<Props> = (props) => {
         lineNumbers(),
         highlightActiveLine(),
         highlightActiveLineGutter(),
+        // Indent-based folding (Pine is a StreamLanguage: no syntax tree)
+        codeFoldingExtension(),
+        // Indent guides + leading-whitespace dots (4-space indent)
+        indentGuidesExtension(),
         wrapCompartment.of(lineWrapExtension(wrapOn)),
         bracketMatching(),
         highlightSelectionMatches(),
@@ -463,6 +489,7 @@ export const PyneEditor: Component<Props> = (props) => {
         ...voidEditorExtensions,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) props.onDocChange?.(update.state.doc.toString());
+          minimap?.schedule();
           if (update.selectionSet || update.docChanged) {
             const head = update.state.selection.main.head;
             const line = update.state.doc.lineAt(head);
@@ -528,12 +555,16 @@ export const PyneEditor: Component<Props> = (props) => {
     if (typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(() => {
         view?.requestMeasure();
+        minimap?.schedule();
       });
       ro.observe(containerRef);
     }
+    syncMinimap();
     onCleanup(() => {
       window.removeEventListener('axis-editor-goto-line', onGotoLine);
       ro?.disconnect();
+      minimap?.destroy();
+      minimap = undefined;
       if (view) registerDebugEditorView(null);
       view?.destroy();
       view = undefined;
@@ -574,6 +605,11 @@ export const PyneEditor: Component<Props> = (props) => {
   createEffect(() => {
     void props.wrapEnabled;
     syncWrap();
+  });
+
+  createEffect(() => {
+    void props.minimapEnabled;
+    syncMinimap();
   });
 
   createEffect(() => {
