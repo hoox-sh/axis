@@ -67,3 +67,7 @@ venv/
 # Screenshot capture scratch
 docs/images/.tmp-video/
 docs/images/.tmp-gif/
+
+# Local-only agent notes (kept locally, not on GitHub)
+.grok/
+AGENTS.md
