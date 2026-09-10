@@ -42,7 +42,7 @@ function runColumns(run: string): number {
 }
 
 /** Width-preserving indent grid for one leading-whitespace run. */
-class IndentWidget extends WidgetType {
+export class IndentWidget extends WidgetType {
   constructor(readonly run: string) {
     super();
   }
@@ -60,22 +60,23 @@ class IndentWidget extends WidgetType {
       const dots = document.createElement('span');
       dots.className = 'ax-indent-dots';
       dots.textContent = '·'.repeat(PINE_INDENT_WIDTH);
-      cell.append(guide, dots);
-      el.append(cell);
+      cell.appendChild(guide);
+      cell.appendChild(dots);
+      el.appendChild(cell);
       cols -= PINE_INDENT_WIDTH;
     }
     if (cols > 0) {
       const dots = document.createElement('span');
       dots.className = 'ax-indent-dots';
       dots.textContent = '·'.repeat(cols);
-      el.append(dots);
+      el.appendChild(dots);
     }
     return el;
   }
 }
 
 /** Leading-whitespace runs (spaces/tabs at line start) → indent grid. */
-const indentMatcher = new MatchDecorator({
+export const indentMatcher = new MatchDecorator({
   regexp: /^[ \t]+/g,
   decoration: (match) =>
     Decoration.replace({ widget: new IndentWidget(match[0]) }),

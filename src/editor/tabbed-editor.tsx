@@ -100,7 +100,7 @@ import { normalizePyneLogs } from '../results/pyne-logs';
 import { scanPineColors } from './pine-colors';
 import { Icons } from '../ui/icons';
 import { announce } from '../ui/sr-announce';
-import { detectPineVersion, detectScriptKind } from '../indicators/script-meta';
+import { detectPineVersion, detectScriptKind, scriptKindShort } from '../indicators/script-meta';
 
 export { countDocStats, cursorLineCol } from './doc-stats';
 
@@ -164,16 +164,9 @@ interface Props {
  */
 const TabMetaBadges = (props: { doc: string; tabName: string }) => {
   const kind = () => {
-    switch (detectScriptKind(props.doc)) {
-      case 'strategy':
-        return 'STR';
-      case 'indicator':
-        return 'IND';
-      case 'library':
-        return 'LIB';
-      default:
-        return '–';
-    }
+    // scriptKindShort is unit-covered; '?' (unknown) renders as '–' on tabs.
+    const short = scriptKindShort(detectScriptKind(props.doc));
+    return short === '?' ? '–' : short;
   };
   const version = () => {
     const v = detectPineVersion(props.doc);

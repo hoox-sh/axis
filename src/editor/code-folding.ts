@@ -69,7 +69,7 @@ export const pineIndentFoldService = foldService.of((state, from) => {
 });
 
 /** Fold gutter marker (open / closed) using void-theme classes. */
-function foldMarker(open: boolean): HTMLElement {
+export function foldMarker(open: boolean): HTMLElement {
   const el = document.createElement('span');
   el.className = `ax-fold-marker${open ? ' is-open' : ''}`;
   el.textContent = open ? '▾' : '▸';
