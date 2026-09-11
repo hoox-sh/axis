@@ -22,9 +22,27 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import sys
 import time
 import uuid
 from collections import deque
+
+_WARNED: set = set()
+
+
+def _warn_once(message: str) -> None:
+    """Warn on stderr once per unique message.
+
+    Used for drawing-registry / GC failures caused by a pyne wheel API change:
+    silently swallowing them would let `meta` advertise caps that were never
+    actually enforced. Warn-once so a persistent broken wheel does not spam
+    every run.
+    """
+    if message in _WARNED:
+        return
+    _WARNED.add(message)
+    sys.stderr.write(f"[pynescript_runtime] warning: {message}\n")
 
 
 # --- Lightweight port of backend/series.py ---------------------------------
@@ -514,7 +532,11 @@ def _run_interpret(
         if not DrawingRegistry.is_empty():
             drawings = DrawingRegistry.export_for_api(bar_times)
         drawing_limits = DrawingRegistry.limits_dict()
-    except Exception:
+    except Exception as _dr_err:
+        _warn_once(
+            "DrawingRegistry export/limits unavailable, drawings dropped and caps "
+            f"unknown ({type(_dr_err).__name__}: {_dr_err})"
+        )
         drawings = []
         drawing_limits = {}
 
@@ -611,6 +633,35 @@ def _json_safe_series(values) -> list:
     return out
 
 
+def _drawing_limits_from_script(script: str | None, defaults: dict, hard: dict) -> dict:
+    """Parse `max_*_count` declaration caps from Pine source, clamp to the
+    language-reference hard caps, and fold in defaults for omitted keys.
+
+    Ignores `//` and `/* */` comments so a cap mentioned inside a comment
+    can't be captured. Note: the strip is not string-aware, so a `//` or
+    `/* */` sequence inside a Pine string literal is treated as a comment
+    start — fail-safe (falls back to the default cap), but keep the parser
+    simple rather than lexing strings.
+    """
+    caps: dict = {**defaults}
+    if not script:
+        return caps
+    text = re.sub(r"/\*.*?\*/", "", script, flags=re.S)
+    for key, cap in hard.items():
+        found: int | None = None
+        for line in text.split("\n"):
+            trimmed = line.strip()
+            if trimmed.startswith("//"):
+                continue
+            m = re.search(rf"\b{key}\s*=\s*(\d+)", trimmed.split("//", 1)[0])
+            if m:
+                found = int(m.group(1))
+                break
+        if found is not None:
+            caps[key] = max(1, min(cap, found))
+    return caps
+
+
 def _run_compiled(script: str, bars: list[dict]) -> dict:
     """Numba/object compile path from the vendored pynescript wheel."""
     import numpy as np
@@ -643,34 +694,31 @@ def _run_compiled(script: str, bars: list[dict]) -> dict:
             series_map.pop(k, None)
 
     # Compile-path GC: trim append-only __drawings by declaration caps (defaults 50)
-    drawing_limits = {
+    _default_limits = {
         "max_lines_count": 50,
         "max_labels_count": 50,
         "max_boxes_count": 50,
         "max_polylines_count": 50,
     }
+    _hard = {
+        "max_lines_count": 500,
+        "max_labels_count": 500,
+        "max_boxes_count": 500,
+        "max_polylines_count": 100,
+    }
+    drawing_limits = _drawing_limits_from_script(script, _default_limits, _hard)
     try:
-        import re as _re
         from pynescript.ast.evaluator.builtins.drawing import DrawingRegistry
 
-        _hard = {
-            "max_lines_count": 500,
-            "max_labels_count": 500,
-            "max_boxes_count": 500,
-            "max_polylines_count": 100,
-        }
-        for _key, _cap in _hard.items():
-            _m = _re.search(rf"\b{_key}\s*=\s*(\d+)", script or "")
-            if _m:
-                try:
-                    _n = int(_m.group(1))
-                    drawing_limits[_key] = max(1, min(_cap, _n))
-                except (TypeError, ValueError):
-                    pass
         if isinstance(drawings, list) and drawings:
             drawings = DrawingRegistry.gc_exported_drawings(drawings, drawing_limits)
-    except Exception:
-        pass
+    except Exception as _gc_err:
+        # Don't fail closed silently: meta advertises the caps, so note the
+        # GC being skipped when the wheel API changes/moves.
+        _warn_once(
+            "drawing GC unavailable, __drawings left untrimmed while caps are "
+            f"still advertised ({type(_gc_err).__name__}: {_gc_err})"
+        )
 
     json_series = {
         str(k): _json_safe_series(v)
@@ -720,14 +768,9 @@ def _run_compiled(script: str, bars: list[dict]) -> dict:
             if _entry:
                 _plot_meta[_title] = _entry
 
-    compile_meta = {
+    _meta: dict = {
         "mode": "compile",
         **drawing_limits,
-    }
-    # preserve existing meta keys below via update pattern
-    _meta: dict = {
-        **compile_meta,
-        "mode": "compile",
         "object_mode": bool(getattr(compiled, "object_mode", False)),
         "count": len(bars),
         "ms": (time.perf_counter() - t0) * 1000,

@@ -50,6 +50,21 @@ describe('pyodide bridge', () => {
     expect(formatPyodideBridgeError(err)).toContain("NameError: name 'null' is not defined");
   });
 
+  it('trims long tracebacks in the middle, keeping the final Python exception', () => {
+    const err = new Error('truncated…');
+    const frames = Array.from(
+      { length: 400 },
+      (_, i) => `  File "run", line ${i + 1}, in frame\n    x = frame_${i}()`,
+    ).join('\n');
+    err.stack = `Error: truncated…\nTraceback (most recent call last):\n${frames}\nNameError: name 'null' is not defined`;
+    const msg = formatPyodideBridgeError(err);
+    expect(msg.length).toBeLessThan(6100);
+    expect(msg).toMatch(/chars trimmed/);
+    expect(msg).toContain("NameError: name 'null' is not defined");
+    // The head frame context is kept too — only the middle was cut.
+    expect(msg).toContain('Traceback (most recent call last)');
+  });
+
   it('run() returns drawings: [] + full traceback on bridge failure', async () => {
     const failing = mockPy(() => {
       const err = new Error('eval_code failed…');

@@ -45,6 +45,7 @@ export function installMemoryLocalStorage(): MemoryStorage {
 
 /** Minimal document for theme toggles + pane DOM ops. */
 export function installDocumentStub() {
+  // If document already has the AXIS stub marker, assume stub is already set up
   if (typeof document !== 'undefined' && (document as { __axisStub?: boolean }).__axisStub) {
     return;
   }
@@ -71,7 +72,23 @@ export function installDocumentStub() {
     className = '';
     style: FakeStyle & Record<string, string> = new FakeStyle() as FakeStyle &
       Record<string, string>;
-    dataset: Record<string, string> = {};
+    private _dataset: Record<string, string> = {};
+    get dataset(): Record<string, string> {
+      return new Proxy(this._dataset, {
+        set(target, property, value) {
+          if (typeof property !== 'string') return false;
+          const key = property.replace(/[A-Z]/g, (m: string) => `-${m.toLowerCase()}`);
+          target[key] = String(value);
+          return true;
+        },
+        get(target, property) {
+          if (typeof property !== 'string') return (target as unknown as Record<symbol, unknown>)[property as symbol];
+          // Convert camelCase to kebab-case for lookup
+          const key = property.replace(/[A-Z]/g, (m: string) => `-${m.toLowerCase()}`);
+          return target[key] ?? target[property];
+        },
+      });
+    }
     textContent = '';
     children: FakeEl[] = [];
     parent: FakeEl | null = null;
@@ -148,10 +165,10 @@ export function installDocumentStub() {
   }
 
   if (typeof (globalThis as { getComputedStyle?: unknown }).getComputedStyle === 'undefined') {
-    (globalThis as { getComputedStyle: (el: { style?: Record<string, string> }) => Record<string, string> }).getComputedStyle =
-      (el) => ({
+    (globalThis as unknown as Record<string, unknown>).getComputedStyle =
+      (el: { style?: Record<string, string> }) => ({
         position: el?.style?.position || 'static',
-        getPropertyValue: () => '',
+        getPropertyValue: (_name: string) => '',
       });
   }
 }

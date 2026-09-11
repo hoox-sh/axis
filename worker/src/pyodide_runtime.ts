@@ -64,6 +64,30 @@ async function ensurePyodide(_env: Env): Promise<unknown> {
 }
 
 /**
+ * @internal Same shape as the browser `formatPyodideBridgeError` — Pyodide's
+ * eval_code wrapper truncates `err.message` with `…`; the stack carries the
+ * full Python traceback, and the *tail* (final exception line) is what users
+ * need. The Worker cannot import `src/engines/catalog.ts` (pulls in the app
+ * store), so this mirrors it inline. Keep the budgets in sync with
+ * `TRACEBACK_KEEP_*` in `src/engines/catalog.ts` (and `src/engines/index.js`).
+ */
+const TRACEBACK_KEEP_MAX = 6000;
+const TRACEBACK_KEEP_HEAD = 2000;
+const TRACEBACK_KEEP_TAIL = TRACEBACK_KEEP_MAX - TRACEBACK_KEEP_HEAD;
+
+function formatBridgeError(err: unknown): string {
+    if (err instanceof Error) {
+        const stack = typeof err.stack === 'string' ? err.stack.trim() : '';
+        const full = stack || err.message;
+        if (full.length <= TRACEBACK_KEEP_MAX) return full;
+        const head = full.slice(0, TRACEBACK_KEEP_HEAD).replace(/\s+$/, '');
+        const tail = full.slice(-TRACEBACK_KEEP_TAIL).replace(/^\s+/, '');
+        return `${head} … [${full.length - TRACEBACK_KEEP_MAX} chars trimmed] …\n${tail}`;
+    }
+    return String(err);
+}
+
+/**
  * Attempt an in-worker run. Returns `null` when the feature flag is off
  * (caller should proxy). On runtime errors returns `{ status:'error', error }`
  * so the HTTP layer can still 200 an error envelope (or the caller may proxy).
@@ -85,6 +109,6 @@ export async function tryRunInWorker(script: string, bars: unknown[], env: Env):
         );
         return JSON.parse(json as string);
     } catch (err) {
-        return { status: 'error', error: err instanceof Error ? err.message : String(err) };
+        return { status: 'error', error: formatBridgeError(err) };
     }
 }

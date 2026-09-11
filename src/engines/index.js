@@ -49,11 +49,20 @@
 
 import { getState } from '../state.js';
 
+const TRACEBACK_KEEP_MAX = 6000;
+const TRACEBACK_KEEP_HEAD = 2000;
+const TRACEBACK_KEEP_TAIL = TRACEBACK_KEEP_MAX - TRACEBACK_KEEP_HEAD;
+
+// Mirrors catalog.ts: trim the middle of long tracebacks — the final Python
+// exception line (tail) is what users need, `…`-truncated messages hide it.
 function formatPyodideBridgeError(err) {
     if (err instanceof Error) {
         const stack = typeof err.stack === 'string' ? err.stack.trim() : '';
         const full = stack || err.message;
-        return full.length > 6000 ? `${full.slice(0, 6000)}…` : full;
+        if (full.length <= TRACEBACK_KEEP_MAX) return full;
+        const head = full.slice(0, TRACEBACK_KEEP_HEAD).replace(/\s+$/, '');
+        const tail = full.slice(-TRACEBACK_KEEP_TAIL).replace(/^\s+/, '');
+        return `${head} … [${full.length - TRACEBACK_KEEP_MAX} chars trimmed] …\n${tail}`;
     }
     return String(err);
 }

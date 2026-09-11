@@ -765,4 +765,91 @@ describe('QuotaExceededError handling', () => {
       localStorage.setItem = orig;
     }
   });
+
+  it('parsePersistedState strips ephemeral fields even with nested objects', () => {
+    const raw = JSON.stringify({
+      symbol: 'ETHUSDT',
+      bars: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+      lastRun: { status: 'success', plots: [{ name: 'x' }], events: [] },
+      logs: [{ id: '1', message: 'x' }],
+      live: { active: true, streamId: 'mock-poll' },
+      selectedDrawingId: 'd1',
+      indicatorSeries: { a: {} },
+      chartDataGen: 9,
+      telemetry: {
+        source: { id: 'x', state: 'open' },
+        hud: { compact: true, overlay: false },
+      },
+    });
+    const overlay = parsePersistedState(raw);
+    expect(overlay).toBeTruthy();
+    expect(overlay!.symbol).toBe('ETHUSDT');
+    expect(overlay!.bars).toEqual([]);
+    expect(overlay!.lastRun).toBeNull();
+    expect(overlay!.logs).toEqual([]);
+    expect(overlay!.live?.active).toBe(false);
+    expect(overlay!.live?.streamId).toBe('mock-poll');
+    expect(overlay!.selectedDrawingId).toBeNull();
+    expect(overlay!.indicatorSeries).toEqual({});
+    expect(overlay!.chartDataGen).toBe(0);
+    expect(overlay!.telemetry?.hud?.compact).toBe(true);
+    expect(overlay!.telemetry?.source?.state).not.toBe('open');
+  });
+
+  it('QuotaExceededError handles DOMException with code 22', () => {
+    expect(isQuotaExceededError({ code: 22 })).toBe(true);
+    expect(isQuotaExceededError({ code: 1014 })).toBe(true);
+    expect(isQuotaExceededError({ name: 'QuotaExceededError', code: 22 })).toBe(true);
+  });
+});
+
+describe('setActivePlugin edge cases', () => {
+  it('sets all flat fields correctly', () => {
+    setActivePlugin('source', 'binance-rest');
+    setActivePlugin('engine', 'pyodide');
+    setActivePlugin('stream', 'binance-ws');
+    setActivePlugin('storage', 'cloud');
+    expect(store.source).toBe('binance-rest');
+    expect(store.engine).toBe('pyodide');
+    expect(store.live.streamId).toBe('binance-ws');
+    expect(store.activePlugins.storage).toBe('cloud');
+  });
+
+  it('clears fields when called with empty strings', () => {
+    setActivePlugin('source', '');
+    setActivePlugin('engine', '');
+    setActivePlugin('stream', '');
+    setActivePlugin('storage', '');
+    expect(store.source).toBe('');
+    expect(store.engine).toBe('');
+    expect(store.live.streamId).toBe('');
+    expect(store.activePlugins.storage).toBe('');
+  });
+});
+
+describe('loadBars edge cases', () => {
+  it('handles empty bars array', () => {
+    loadBars([], 'TEST', '1d', 'binance');
+    expect(store.bars).toEqual([]);
+    expect(store.symbol).toBe('TEST');
+  });
+
+  it('handles single bar', () => {
+    loadBars([{ time: 1, open: 1, high: 1, low: 1, close: 1 }], 'TEST', '1d', 'binance');
+    expect(store.bars).toHaveLength(1);
+    expect(store.bars[0].close).toBe(1);
+  });
+});
+
+describe('addIndicator / removeIndicator edge cases', () => {
+  it('addIndicator with valid plot config', () => {
+    const id = addIndicator('RSI', 'plot(close)', 'price', { RSI: { color: '#f00' } });
+    expect(store.scripts.some((s) => s.id === id)).toBe(true);
+    expect(store.scripts.find((s) => s.id === id)?.plots.RSI.color).toBe('#f00');
+  });
+
+  it('removeIndicator non-existent id is a no-op', () => {
+    removeIndicator('non-existent-id');
+    expect(store.scripts.length).toBe(0);
+  });
 });

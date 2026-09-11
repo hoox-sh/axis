@@ -478,14 +478,24 @@ type PyodideLike = {
  * Format a Pyodide bridge failure with the full Python traceback.
  * `err.message` alone is truncated (`…`) by Pyodide's eval_code wrapper —
  * prefer `stack`, which carries the complete `Traceback (most recent call …)`.
+ * When the stack is too long, trim the *middle* — the head keeps the
+ * `eval_code` frame context and the tail keeps the final Python exception
+ * line (`NameError: …`), which is the part that matters.
  */
+
+/** Long-traceback budget: keep the head and the tail, drop the middle frames. */
+const TRACEBACK_KEEP_MAX = 6000;
+const TRACEBACK_KEEP_HEAD = 2000;
+const TRACEBACK_KEEP_TAIL = TRACEBACK_KEEP_MAX - TRACEBACK_KEEP_HEAD;
+
 export function formatPyodideBridgeError(err: unknown): string {
   if (err instanceof Error) {
     const stack = typeof err.stack === 'string' ? err.stack.trim() : '';
-    // Pyodide stacks repeat the message on the first line; keep it all —
-    // the tail (actual Python exception) is what users need.
     const full = stack || err.message;
-    return full.length > 6000 ? `${full.slice(0, 6000)}…` : full;
+    if (full.length <= TRACEBACK_KEEP_MAX) return full;
+    const head = full.slice(0, TRACEBACK_KEEP_HEAD).replace(/\s+$/, '');
+    const tail = full.slice(-TRACEBACK_KEEP_TAIL).replace(/^\s+/, '');
+    return `${head} … [${full.length - TRACEBACK_KEEP_MAX} chars trimmed] …\n${tail}`;
   }
   return String(err);
 }

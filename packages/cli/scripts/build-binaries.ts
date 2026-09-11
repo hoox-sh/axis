@@ -5,8 +5,10 @@
  *
  * Cross-compile the AXIS CLI into single-file executables (bun build
  * --compile) for the release platforms. Output: dist-bin/axis-cli-<version>-<target>
- * (".exe" appended for windows). The native linux-x64 binary is smoke-tested
- * (`axis --version`, `--help`) before the script exits.
+ * (".exe" appended for windows). When the host's native target is among the
+ * built ones, that binary is smoke-tested (`axis --version`, `--help`)
+ * before the script exits — executing a foreign-target ELF fails, so the
+ * smoke only ever runs on a matching host (classic CI: linux-x64).
  *
  * Usage: bun scripts/build-binaries.ts [target ...]
  *   no args  → all default targets
@@ -74,12 +76,21 @@ for (const { target, ext } of wanted) {
   console.error("ok");
 }
 
-const native = join(OUT, `axis-cli-${VERSION}-bun-linux-x64`);
-if (!only.length || only.includes("bun-linux-x64")) {
-  const ver = Bun.spawnSync({ cmd: [native, "--version"] });
-  const help = Bun.spawnSync({ cmd: [native, "--help"] });
+// Smoke-test only the host-native target when it was built: a bun --compile
+// binary of another target's ABI cannot execute here (e.g. linux-x64 ELF on
+// darwin-arm64), which would fail the script on non-release machines that are
+// legitimately cross-compiling.
+const HOST_TARGET =
+  process.platform === 'linux' || process.platform === 'darwin' || process.platform === 'win32'
+    ? `bun-${process.platform === 'win32' ? 'windows' : process.platform}-${process.arch}`
+    : undefined;
+const nativeTarget = wanted.find((t) => t.target === HOST_TARGET);
+if (nativeTarget) {
+  const native = join(OUT, `axis-cli-${VERSION}-${nativeTarget.target}${nativeTarget.ext ?? ''}`);
+  const ver = Bun.spawnSync({ cmd: [native, '--version'] });
+  const help = Bun.spawnSync({ cmd: [native, '--help'] });
   const verOk = ver.exitCode === 0 && ver.stdout.toString().trim() === VERSION;
-  const helpOk = help.exitCode === 0 && help.stdout.toString().includes("deploy");
+  const helpOk = help.exitCode === 0 && help.stdout.toString().includes('deploy');
   if (!verOk || !helpOk) {
     failed++;
     console.error(`smoke FAILED (version=${verOk}, help=${helpOk})`);
@@ -89,6 +100,10 @@ if (!only.length || only.includes("bun-linux-x64")) {
       `smoke ok: ${native} → --version ${ver.stdout.toString().trim()} · --help lists deploy`,
     );
   }
+} else {
+  console.error(
+    `smoke skipped: no native binary for ${process.platform}/${process.arch} in this build`,
+  );
 }
 
 if (failed > 0) process.exit(1);

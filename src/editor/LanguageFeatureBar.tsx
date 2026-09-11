@@ -84,6 +84,22 @@ const FeatureMenuRow: Component<{ setting: FeatureSetting }> = (props) => {
     );
   }
   const num = setting;
+  // Draft the raw keystrokes while focused and only clamp + commit on
+  // blur / Enter — clamping on every onChange snapped below-min values
+  // (e.g. typing "250" into a 400 → immediately "50") and made them
+  // un-typable.
+  const [draft, setDraft] = createSignal<string | null>(null);
+  const commit = (input: HTMLInputElement) => {
+    const raw = (draft() ?? '').trim();
+    setDraft(null);
+    if (!raw) {
+      input.value = String(intel()[num.key] as number);
+      return;
+    }
+    const fallback = intel()[num.key] as number;
+    const next = clampNum(raw, num.min, num.max, fallback);
+    if (next !== fallback) patchEditorIntel({ [num.key]: next } as never);
+  };
   return (
     <label class="axis-editor-feature-menu-num" title={num.hint || num.label}>
       <span>{num.label}</span>
@@ -92,15 +108,12 @@ const FeatureMenuRow: Component<{ setting: FeatureSetting }> = (props) => {
         min={num.min}
         max={num.max}
         step={num.step ?? 50}
-        value={intel()[num.key] as number}
-        onChange={(e) => {
-          const next = clampNum(e.currentTarget.value, num.min, num.max, intel()[num.key] as number);
-          if (next !== (intel()[num.key] as number)) {
-            patchEditorIntel({ [num.key]: next } as never);
-          } else {
-            e.currentTarget.value = String(next);
-          }
+        value={draft() ?? String(intel()[num.key] as number)}
+        onInput={(e) => setDraft(e.currentTarget.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
         }}
+        onBlur={(e) => commit(e.currentTarget)}
       />
       <span class="axis-editor-feature-menu-suffix">{num.suffix || ''}</span>
     </label>
@@ -165,6 +178,22 @@ export const LanguageFeatureBar: Component<LanguageFeatureBarProps> = (props) =>
   const onChipClick = (group: LanguageFeatureGroup) => {
     if (suppressClick) {
       suppressClick = false;
+      return;
+    }
+    // A menu already open on this chip: this click dismisses the popover —
+    // it must not flip the group's master switch (long-press opens, the most
+    // natural dismissal is a short press on the same chip).
+    if (openId() === group.id) {
+      setOpenId(null);
+      return;
+    }
+    // A popover open on another chip: switch the popover to this chip
+    // without flipping its master switch — otherwise comparing settings
+    // across chips toggles features unintentionally. A second click (with
+    // this chip's popover open) dismisses; toggling happens only when no
+    // popover is open.
+    if (openId() !== null) {
+      setOpenId(group.id);
       return;
     }
     patchEditorIntel({ [group.masterKey]: !intel()[group.masterKey] } as never);
