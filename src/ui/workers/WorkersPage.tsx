@@ -333,30 +333,44 @@ export function WorkersPage(props: {
               label="Show optional workers"
               hint="PYNE Agent and edge eval are optional — they do not replace the calculation backend."
             />
-            <div class="ax-grid ax-grid--2">
-              <For each={catalog()}>
-                {(w) => {
-                  const r = () => resultFor(snap(), w.id);
-                  const st = () => toStudioHealth(r()?.status);
-                  return (
-                    <StudioCard
-                      kicker={kindLabel(w.kind)}
-                      title={w.name}
-                      selected={selectedId() === w.id}
-                      onClick={() => setSelectedId(w.id)}
-                      testId={`axis-worker-card-${w.id}`}
-                    >
-                      <StudioStatus status={st()} />
-                      <StudioHint>
-                        {r()?.latencyMs != null ? `${r()!.latencyMs}ms · ` : ''}
-                        last probe {relativeTime(r()?.checkedAt)}
-                        <Show when={r()?.isActiveBackend}> · backend</Show>
-                        <Show when={r()?.isActiveEngine}> · engine</Show>
-                      </StudioHint>
-                    </StudioCard>
-                  );
-                }}
-              </For>
+            <div class="ax-grid ax-grid--2" aria-busy={!snap()}>
+              <Show
+                when={snap()}
+                fallback={
+                  <For each={[0, 1, 2, 3, 4, 5]}>
+                    {(_n) => (
+                      <div class="ax-skel" data-testid="axis-worker-skel" aria-hidden="true">
+                        <div class="ax-skel-line ax-skel-line--title" />
+                        <div class="ax-skel-line ax-skel-line--meta" />
+                      </div>
+                    )}
+                  </For>
+                }
+              >
+                <For each={catalog()}>
+                  {(w) => {
+                    const r = () => resultFor(snap(), w.id);
+                    const st = () => toStudioHealth(r()?.status);
+                    return (
+                      <StudioCard
+                        kicker={kindLabel(w.kind)}
+                        title={w.name}
+                        selected={selectedId() === w.id}
+                        onClick={() => setSelectedId(w.id)}
+                        testId={`axis-worker-card-${w.id}`}
+                      >
+                        <StudioStatus status={st()} />
+                        <StudioHint>
+                          {r()?.latencyMs != null ? `${r()!.latencyMs}ms · ` : ''}
+                          last probe {relativeTime(r()?.checkedAt)}
+                          <Show when={r()?.isActiveBackend}> · backend</Show>
+                          <Show when={r()?.isActiveEngine}> · engine</Show>
+                        </StudioHint>
+                      </StudioCard>
+                    );
+                  }}
+                </For>
+              </Show>
             </div>
           </StudioSection>
 
@@ -375,7 +389,15 @@ export function WorkersPage(props: {
           </div>
 
           <div class="ax-deck-pane ax-deck-pane--inspect">
-          <Show when={selected()} fallback={<StudioHint>Select a worker.</StudioHint>}>
+          <Show when={!snap()}>
+            <div class="ax-skel" data-testid="axis-worker-skel-inspect" aria-hidden="true">
+              <div class="ax-skel-line ax-skel-line--title" />
+              <div class="ax-skel-line ax-skel-line--meta" />
+              <div class="ax-skel-line" />
+              <div class="ax-skel-line ax-skel-line--meta" />
+            </div>
+          </Show>
+          <Show when={snap() && selected()} fallback={<Show when={snap()}><StudioHint>Select a worker.</StudioHint></Show>}>
             {(w) => {
               const r = () => selectedResult();
               const features = () => Object.entries(r()?.features || {});

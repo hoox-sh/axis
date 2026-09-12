@@ -17,9 +17,18 @@ _Generated/updated: 2026-09-12 · 397 commits · describe-tag: `v2.6.2`_
 
 ### Added
 
+- **Workers inventory skeleton**: while backends are probing, the Workers page shows pulse placeholder cards (and an inspector skeleton) instead of an empty grid.
+
 ### Fixed
 
+- **Minimap height restored**: short files no longer stretch the overview canvas to the full editor column — 2px per line, compressed only when the document exceeds the host.
+- **Update reload asks first**: Update now / Hard reload (and `hardReload` itself) open a confirm prompt with current → new version before the app reloads.
+- **Studio always opens Settings**: the topbar / palette Studio button lands on Settings every time (no longer restores the last rail page). Settings is the first Workspace rail item. The Studio click handler no longer falls through `??` into Runtime then Workers because those callbacks return `void`.
+- **Workers is a full-viewport studio page**: same overlay as Settings/Runtime/Wire/Plugins (not a half-width right sheet). Escape closes it.
+
 ### Changed
+
+
 
 ## [2.6.3] — 2026-09-12
 

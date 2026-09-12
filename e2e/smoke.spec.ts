@@ -90,13 +90,15 @@ test.describe('AXIS smoke @smoke', () => {
     await expect(page.getByTestId('axis-runtimes-hub')).toHaveCount(0);
   });
 
-  test('topbar Studio opens overlay; Wire and Settings stay in the rail', async ({ page }) => {
+  test('topbar Studio opens Settings first; Wire stays in the rail', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('axis-btn-studio')).toBeVisible();
     await expect(page.getByTestId('axis-btn-architecture')).toBeHidden();
     await expect(page.getByTestId('axis-btn-runtimes')).toBeHidden();
     await expect(page.getByTestId('axis-btn-settings')).toBeHidden();
-    await openStudio(page, 'runtime');
+    await page.getByTestId('axis-btn-studio').click();
+    await expect(page.getByTestId('axis-settings')).toBeVisible();
+    await expect(page.getByTestId('axis-studio-rail-settings')).toBeVisible();
     await page.getByTestId('axis-studio-rail-wire').click();
     await expect(page.getByTestId('axis-architecture-modal')).toBeVisible();
     await page.getByTestId('axis-studio-rail-settings').click();
@@ -156,29 +158,29 @@ test.describe('AXIS smoke @smoke', () => {
     await expect(page.getByTestId('axis-command-palette')).toHaveCount(0);
   });
 
-  test('Workers page is non-modal: shell stays interactive, no top status', async ({
+  test('Workers page is fullscreen like other studio pages, no top status', async ({
     page,
   }) => {
-    // Guard: Workers must not block the app (AppPage modal=false) and the
-    // aggregate top-status grid must stay removed (per-worker chips only).
     await page.goto('/');
     await openStudio(page, 'workers');
     await expect(page.getByTestId('axis-workers-manager')).toBeVisible();
 
-    // Non-blocking proof: transparent click-through scrim.
-    const backdrop = page.locator('.ax-page-backdrop--nonmodal');
-    await expect(backdrop).toBeVisible();
-    await expect(backdrop).toHaveCSS('pointer-events', 'none');
+    // Same full-viewport overlay as Settings/Runtime (not a half-width sheet).
+    const pageEl = page.getByTestId('axis-workers-manager');
+    await expect(pageEl).toHaveCSS('width', /px/);
+    const box = await pageEl.boundingBox();
+    const vp = page.viewportSize();
+    expect(box?.width ?? 0).toBeGreaterThan((vp?.width ?? 800) * 0.9);
 
     // Top status grid removed — only per-worker cards keep a status chip.
     await expect(page.getByText('Active backend', { exact: true })).toHaveCount(0);
     await expect(
-      page.getByTestId('axis-workers-manager').getByTestId(/axis-worker-card-/),
-    ).not.toHaveCount(0);
+      page.getByTestId('axis-workers-manager').getByTestId(/axis-worker-card-/).first(),
+    ).toBeVisible({ timeout: 15_000 });
 
-    // Non-modal pages do not steal Escape — the sheet stays open.
+    // Modal studio pages close on Escape.
     await page.keyboard.press('Escape');
-    await expect(page.getByTestId('axis-workers-manager')).toBeVisible();
+    await expect(page.getByTestId('axis-workers-manager')).toHaveCount(0);
   });
 
   test('Script Logs lives in the editor bottom bar, not the topbar', async ({

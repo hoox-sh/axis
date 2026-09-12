@@ -68,16 +68,15 @@
   overflow: hidden;
   animation: ax-page-in 180ms ease-out;
 }
-/* Non-modal tool page (Workers): right-side sheet, click-through left scrim. */
+/* Non-modal overlay: transparent click-through scrim, full-viewport page. */
 .ax-page-backdrop--nonmodal {
   background: transparent;
   pointer-events: none;
   animation: none;
 }
 .ax-page-backdrop--nonmodal .ax-page {
-  width: min(76rem, 96vw);
+  width: 100%;
   height: 100%;
-  margin-left: auto;
   pointer-events: auto;
   animation: none;
 }
@@ -1811,6 +1810,38 @@ span.ax-json-twist {
 .ax-results-script .ax-select:focus-visible {
   outline: none;
   border-color: var(--color-accent);
+}
+
+/* Loading skeleton (Workers inventory while probes run) */
+.ax-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: var(--ax-card-pad);
+  border: var(--border-w) solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-bg-elev);
+  min-height: 5.5rem;
+}
+.ax-skel-line {
+  height: 0.7rem;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-text-faint) 32%, var(--color-bg-elev));
+  animation: ax-skel-pulse 1.1s ease-in-out infinite;
+}
+.ax-skel-line--title {
+  width: 42%;
+  height: 0.95rem;
+}
+.ax-skel-line--meta {
+  width: 68%;
+}
+@keyframes ax-skel-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ax-skel-line { animation: none; }
 }
 
 /* Full-bleed two-column deck (Workers inspector) — no inner scroll */

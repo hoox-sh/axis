@@ -282,7 +282,10 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       openPlugins: () => props.onOpenPlugins?.(),
       openWorkers: () => props.onOpenWorkers?.(),
       openRuntime: () => props.onOpenRuntime?.(),
-      openStudio: () => props.onOpenStudio?.() ?? props.onOpenRuntime?.(),
+      openStudio: () => {
+        if (props.onOpenStudio) props.onOpenStudio();
+        else props.onOpenRuntime?.();
+      },
       openArchitecture: () => props.onOpenArchitecture?.(),
       openScriptSettings: () => openScriptSettings(null),
       openOptimise: () => {

@@ -16,6 +16,8 @@ import {
   checkForUpdates,
   dismissUpdate,
   getUpdateState,
+  appUpdateConfirmMessage,
+  confirmAppUpdate,
   hardReload,
   isNewerVersion,
   markUpdateAvailable,
@@ -168,6 +170,7 @@ describe('hardReload', () => {
     const deleted: string[] = [];
     const navigated: string[] = [];
     await hardReload({
+      skipConfirm: true,
       serviceWorker: { getRegistrations: async () => [{ unregister }] },
       caches: {
         keys: async () => ['axis-shell-v5', 'other-cache'],
@@ -189,12 +192,31 @@ describe('hardReload', () => {
     registerCloseGuardPredicate('editor-tabs', () => true);
     expect(isCloseGuardEnabled()).toBe(true);
     await hardReload({
+      skipConfirm: true,
       serviceWorker: { getRegistrations: async () => [] },
       caches: { keys: async () => [], delete: async () => true },
       location: { href: 'https://app.example/' },
       navigate: () => {},
     });
     expect(isCloseGuardEnabled()).toBe(false);
+  });
+
+  it('prompts before reloading and skips when the user cancels', async () => {
+    markUpdateAvailable(NEXT, 'manual', { canNotify: () => false });
+    const navigated: string[] = [];
+    const asked: string[] = [];
+    await hardReload({
+      confirm: (msg) => {
+        asked.push(msg);
+        return false;
+      },
+      location: { href: 'https://app.example/' },
+      navigate: (url) => navigated.push(url),
+    });
+    expect(asked).toEqual([appUpdateConfirmMessage(APP_VERSION, NEXT)]);
+    expect(navigated).toEqual([]);
+    expect(getUpdateState().status).toBe('update-available');
+    expect(confirmAppUpdate('1.0.0', '1.1.0', () => true)).toBe(true);
   });
 });
 

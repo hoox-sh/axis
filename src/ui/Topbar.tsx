@@ -906,9 +906,11 @@ export const Topbar: Component<{
         <button
           type="button"
           class="sc-btn sc-btn-ghost"
-          onClick={() =>
-            props.onOpenStudio?.() ?? props.onOpenRuntime?.() ?? props.onOpenWorkers?.()
-          }
+          onClick={() => {
+            if (props.onOpenStudio) props.onOpenStudio();
+            else if (props.onOpenRuntime) props.onOpenRuntime();
+            else props.onOpenWorkers?.();
+          }}
           title="Studio — Runtime, Wire, Settings, Workers, Plugins"
           data-testid="axis-btn-studio"
           aria-label="Open Studio"
@@ -933,7 +935,10 @@ export const Topbar: Component<{
           tabindex={-1}
           data-testid="axis-btn-runtimes"
           aria-label="Open Runtime"
-          onClick={() => props.onOpenRuntime?.() ?? props.onOpenWorkers?.()}
+          onClick={() => {
+            if (props.onOpenRuntime) props.onOpenRuntime();
+            else props.onOpenWorkers?.();
+          }}
         />
         <button
           type="button"

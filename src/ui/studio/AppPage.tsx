@@ -29,8 +29,8 @@ export function AppPage(props: {
   flush?: boolean;
   children: JSX.Element;
   /**
-   * Render non-modally: no focus trap, and no Escape-steal. Used by the
-   * Workers page; every other page defaults to the modal overlay.
+   * Render non-modally: no focus trap, and no Escape-steal.
+   * Defaults to the modal overlay (all current studio pages).
    */
   modal?: boolean;
 }) {

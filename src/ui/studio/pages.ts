@@ -26,6 +26,17 @@ export type StudioPageMeta = {
 
 export const STUDIO_PAGES: StudioPageMeta[] = [
   {
+    id: 'settings',
+    label: 'Settings',
+    kicker: 'Settings',
+    title: 'Settings',
+    purpose: 'Appearance, chart labels, live prefs, keys, editor intelligence, and theme.',
+    group: 'primary',
+    testId: 'axis-settings',
+    titleId: 'axis-settings-title',
+    closeTestId: 'axis-settings-close',
+  },
+  {
     id: 'runtime',
     label: 'Runtime',
     kicker: 'Runtime',
@@ -47,17 +58,6 @@ export const STUDIO_PAGES: StudioPageMeta[] = [
     testId: 'axis-architecture-modal',
     titleId: 'axis-architecture-title',
     closeTestId: 'axis-architecture-close',
-  },
-  {
-    id: 'settings',
-    label: 'Settings',
-    kicker: 'Settings',
-    title: 'Settings',
-    purpose: 'Appearance, chart labels, live prefs, keys, editor intelligence, and theme.',
-    group: 'primary',
-    testId: 'axis-settings',
-    titleId: 'axis-settings-title',
-    closeTestId: 'axis-settings-close',
   },
   {
     id: 'workers',

@@ -427,8 +427,8 @@ describe('EditorMinimap', () => {
       expect(h.fills.length).toBeGreaterThan(0);
       expect(h.strokes.length).toBe(1);
       expect(h.fakeHost.dataset.minimap).toBe('on');
-      expect(h.fakeCanvas.style.height).toBe(`${h.fakeHost.clientHeight}px`);
-      expect(h.fakeCanvas.height).toBe(h.fakeHost.clientHeight);
+      expect(h.fakeCanvas.style.height).toBe(`${DEMO_LINES.length * MINIMAP_ROW_HEIGHT}px`);
+      expect(h.fakeCanvas.height).toBe(DEMO_LINES.length * MINIMAP_ROW_HEIGHT);
       mm.destroy();
       expect(h.removed()).toBe(true);
     } finally {

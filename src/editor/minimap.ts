@@ -140,16 +140,17 @@ export class EditorMinimap {
     const rows = Math.ceil(lines / step);
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = MINIMAP_WIDTH;
-    const packedH = Math.max(1, rows * MINIMAP_ROW_HEIGHT);
-    // Always fill the column; map Y through packed rows so short files still
-    // span the strip (and clicks anywhere in the 72px column scroll).
-    const availH = Math.max(1, this.host.clientHeight || packedH);
-    const scale = availH / packedH;
-    const drawH = availH;
-    this.canvas.style.height = `${drawH}px`;
+    const h = Math.max(1, rows * MINIMAP_ROW_HEIGHT);
+    // Fit the document into the visible column: 2px/line at natural scale,
+    // compressed only when the doc exceeds the host. Short files stay short
+    // (do not stretch to host height).
+    const availH = Math.max(1, this.host.clientHeight || h);
+    const scale = Math.min(1, availH / h);
+    const drawH = Math.max(1, Math.round(h * scale));
     if (this.canvas.width !== Math.round(w * dpr) || this.canvas.height !== Math.round(drawH * dpr)) {
       this.canvas.width = Math.round(w * dpr);
       this.canvas.height = Math.round(drawH * dpr);
+      this.canvas.style.height = `${drawH}px`;
     }
     const ctx = this.canvas.getContext('2d');
     if (!ctx) return;

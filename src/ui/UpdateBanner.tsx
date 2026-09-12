@@ -29,6 +29,7 @@
 
 import { type Component, Show, createSignal } from 'solid-js';
 import {
+  confirmAppUpdate,
   dismissUpdate,
   getUpdateState,
   hardReload,
@@ -40,6 +41,13 @@ export const UpdateBanner: Component = () => {
   const [busy, setBusy] = createSignal(false);
   const state = () => getUpdateState();
   const update = () => state().update;
+
+  const askThen = (fn: () => void | Promise<void>) => {
+    const info = update();
+    if (!info) return;
+    if (!confirmAppUpdate(info.currentVersion, info.latestVersion)) return;
+    void fn();
+  };
 
   const onUpdate = () => {
     if (busy()) return;
@@ -57,7 +65,7 @@ export const UpdateBanner: Component = () => {
     if (busy()) return;
     setBusy(true);
     try {
-      await hardReload();
+      await hardReload({ skipConfirm: true });
     } finally {
       setBusy(false);
     }
@@ -83,7 +91,7 @@ export const UpdateBanner: Component = () => {
             type="button"
             class="sc-btn sc-btn-primary px-2.5 py-1 text-[11px]"
             data-testid="axis-update-reload"
-            onClick={onUpdate}
+            onClick={() => askThen(onUpdate)}
             disabled={busy()}
           >
             Update now
@@ -93,7 +101,7 @@ export const UpdateBanner: Component = () => {
             class="sc-btn px-2.5 py-1 text-[11px]"
             data-testid="axis-update-hard-reload"
             title="Unregister the service worker, delete cached app shells, then reload"
-            onClick={() => void onHardReload()}
+            onClick={() => askThen(() => void onHardReload())}
             disabled={busy()}
           >
             Hard reload

@@ -256,6 +256,37 @@ export interface ReloadDeps {
   };
   location?: { href: string };
   navigate?: (url: string) => void;
+  /** Confirm dialog before reload. Tests inject this; default is `window.confirm`. */
+  confirm?: (message: string) => boolean;
+  /** Skip the confirm prompt (banner already asked, or tests). */
+  skipConfirm?: boolean;
+}
+
+/** Prompt text for applying a detected update (soft or hard reload). */
+export function appUpdateConfirmMessage(currentVersion: string, latestVersion: string): string {
+  const from = normalizeVersion(currentVersion) || currentVersion;
+  const to = normalizeVersion(latestVersion) || latestVersion;
+  return `Update AXIS from v${from} to v${to}? The app will reload.`;
+}
+
+function defaultConfirm(message: string): boolean {
+  try {
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+      return window.confirm(message);
+    }
+  } catch {
+    /* tests / non-DOM */
+  }
+  return true;
+}
+
+/** Ask before reloading into a new version. Returns false if the user cancels. */
+export function confirmAppUpdate(
+  currentVersion: string,
+  latestVersion: string,
+  confirm: (message: string) => boolean = defaultConfirm,
+): boolean {
+  return confirm(appUpdateConfirmMessage(currentVersion, latestVersion));
 }
 
 /**
@@ -264,9 +295,14 @@ export interface ReloadDeps {
  * platform APIs are unavailable (tests, exotic webviews).
  */
 export async function hardReload(deps: ReloadDeps = {}): Promise<void> {
+  const latest = updateState().update?.latestVersion ?? normalizeVersion(APP_VERSION);
+  const current = updateState().update?.currentVersion ?? normalizeVersion(APP_VERSION);
+  if (!deps.skipConfirm) {
+    const ok = confirmAppUpdate(current, latest, deps.confirm);
+    if (!ok) return;
+  }
   setCloseGuardEnabled(false);
   const nav = deps.navigate ?? ((url: string) => globalThis.location.assign(url));
-  const latest = updateState().update?.latestVersion ?? normalizeVersion(APP_VERSION);
   setUpdateState((prev) => ({ ...prev, status: 'reloading' }));
   try {
     const sw =
