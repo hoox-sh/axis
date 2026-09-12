@@ -4,7 +4,7 @@
 
 /**
  * Settings studio canvas — product chrome. Engine / endpoint / exec mode
- * live on Runtime. Storage is a Wire slot.
+ * live on Runtime. Script storage (local / cloud Worker / git) lives here.
  *
  * @module ui/settings/SettingsPage
  */
@@ -40,6 +40,15 @@ import { UI_SCALE_PRESETS, formatUiScalePct } from '../ui-scale';
 import { WorkspaceSnapshotMenu } from '../WorkspaceSnapshotMenu';
 import { ThemePanel } from '../ThemePanel';
 import { PluginConfigRow } from '../PluginConfigRow';
+import { listStorages } from '../../storage/catalog';
+import { promptStorageChange } from '../../storage/service';
+import { getActiveStorageId } from '../../plugins/active';
+import {
+  generateDemoApiKey,
+  resolveCloudConfig,
+  writeStoredCloudConfig,
+} from '../../storage/cloud-config';
+import { probeCloudStorage } from '../../storage/cloud';
 import { EditorIntelPanel, ExchangeCredentialsPanel } from '../SettingsDialog';
 import { KeyboardSettingsPanel } from '../shortcuts/Settings';
 import type { SettingsTabId } from '../studio/types';
@@ -103,7 +112,13 @@ export function SettingsPage(props: {
   const [resultsAutoOpen, setResultsAutoOpen] = createSignal(
     store.resultsAutoOpen !== false,
   );
+  const [storage, setStorage] = createSignal(store.activePlugins?.storage || 'local');
+  const [cloudEndpoint, setCloudEndpoint] = createSignal(resolveCloudConfig().endpoint);
+  const [cloudApiKey, setCloudApiKey] = createSignal(resolveCloudConfig().apiKey);
+  const [cloudProbeMsg, setCloudProbeMsg] = createSignal('');
+  const [cloudProbing, setCloudProbing] = createSignal(false);
   const [reloading, setReloading] = createSignal(false);
+  const storages = () => listStorages();
   const [tab, setTab] = createSignal<SettingsTabId>(
     isSettingsTabId(props.initialTab) ? props.initialTab : 'general',
   );
@@ -127,6 +142,11 @@ export function SettingsPage(props: {
         setInvertTradeLabels(!!store.strategyUi?.invertTradeLabels);
         setExactOnCandle(store.strategyUi?.exactOnCandle !== false);
         setResultsAutoOpen(store.resultsAutoOpen !== false);
+        setStorage(store.activePlugins?.storage || 'local');
+        const cloud = resolveCloudConfig();
+        setCloudEndpoint(cloud.endpoint);
+        setCloudApiKey(cloud.apiKey);
+        setCloudProbeMsg('');
         setTab(isSettingsTabId(props.initialTab) ? props.initialTab : 'general');
       });
     }
@@ -170,6 +190,11 @@ export function SettingsPage(props: {
     });
     setStore('resultsAutoOpen', resultsAutoOpen());
     applyUiScale(nextUiScale);
+    const nextStorage = storage();
+    if (nextStorage === 'cloud') {
+      writeStoredCloudConfig(cloudEndpoint(), cloudApiKey());
+    }
+    promptStorageChange(getActiveStorageId(), nextStorage);
     flushPersist();
     setStatus(
       'ready',
@@ -478,6 +503,100 @@ export function SettingsPage(props: {
                   </For>
                 </StudioSelect>
               </StudioField>
+            </StudioSection>
+
+            <StudioSection
+              title="Script storage"
+              lead="Local browser, cloud Worker, or git. Switching copies the library and never deletes the source."
+              testId="axis-settings-storage"
+            >
+              <StudioField
+                label="Engine"
+                for="axis-studio-storage"
+                hint="Cloud needs a Worker URL + API key below. Git credentials stay in Script Library."
+              >
+                <StudioSelect
+                  id="axis-studio-storage"
+                  value={storage()}
+                  onChange={setStorage}
+                  testId="axis-studio-storage"
+                >
+                  <For each={storages()}>
+                    {(s) => (
+                      <option value={s.id}>
+                        {s.name}
+                        {s.builtIn ? '' : ' (plugin)'}
+                      </option>
+                    )}
+                  </For>
+                </StudioSelect>
+              </StudioField>
+              <Show when={storage() === 'cloud'}>
+                <StudioField label="Worker URL" for="axis-studio-cloud-endpoint">
+                  <StudioInput
+                    id="axis-studio-cloud-endpoint"
+                    mono
+                    value={cloudEndpoint()}
+                    placeholder="https://pynescript-axis.cryptolinx.workers.dev"
+                    spellcheck={false}
+                    testId="axis-studio-cloud-endpoint"
+                    onInput={setCloudEndpoint}
+                  />
+                </StudioField>
+                <StudioField
+                  label="Worker API key"
+                  for="axis-studio-cloud-apikey"
+                  hint="pn_… from /api/keys (admin) or Generate demo key for local wrangler with ALLOW_OPEN_KEYS=1."
+                >
+                  <StudioInput
+                    id="axis-studio-cloud-apikey"
+                    type="password"
+                    mono
+                    value={cloudApiKey()}
+                    placeholder="pn_…"
+                    spellcheck={false}
+                    autocomplete="off"
+                    testId="axis-studio-cloud-apikey"
+                    onInput={setCloudApiKey}
+                  />
+                </StudioField>
+                <div class="flex flex-wrap gap-1.5">
+                  <StudioButton
+                    variant="ghost"
+                    testId="axis-studio-cloud-generate"
+                    onClick={() => {
+                      setCloudApiKey(generateDemoApiKey());
+                      setCloudProbeMsg('Generated a local key. Save, then Test connection.');
+                    }}
+                  >
+                    Generate demo key
+                  </StudioButton>
+                  <StudioButton
+                    variant="ghost"
+                    testId="axis-studio-cloud-probe"
+                    disabled={cloudProbing()}
+                    onClick={() => {
+                      writeStoredCloudConfig(cloudEndpoint(), cloudApiKey());
+                      setCloudProbing(true);
+                      setCloudProbeMsg('');
+                      void probeCloudStorage({
+                        endpoint: cloudEndpoint(),
+                        apiKey: cloudApiKey(),
+                      }).then((r) => {
+                        setCloudProbeMsg(r.ok ? `✓ ${r.message}` : r.message);
+                        setCloudProbing(false);
+                      });
+                    }}
+                  >
+                    {cloudProbing() ? 'Testing…' : 'Test connection'}
+                  </StudioButton>
+                </div>
+                <Show when={cloudProbeMsg()}>
+                  <StudioHint class={cloudProbeMsg().startsWith('✓') ? '' : ''}>
+                    {cloudProbeMsg()}
+                  </StudioHint>
+                </Show>
+              </Show>
             </StudioSection>
 
             <StudioSection

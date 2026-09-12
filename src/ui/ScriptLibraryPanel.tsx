@@ -35,6 +35,12 @@
 import { type Component, For, Show, createSignal, createEffect } from 'solid-js';
 import type { ScriptMeta, ScriptVersion } from '../plugins/types';
 import {
+  generateDemoApiKey,
+  resolveCloudConfig,
+  writeStoredCloudConfig,
+} from '../storage/cloud-config';
+import { probeCloudStorage } from '../storage/cloud';
+import {
   listScripts,
   readScript,
   writeScript,
@@ -109,11 +115,11 @@ function shortRev(rev?: string): string {
   return rev.length > 10 ? rev.slice(0, 7) : rev;
 }
 
-/** One library row — name, kind, Pine version, last updated, optional git history. */
+/** One library row — name, kind, Pine version, last updated, optional version history. */
 const LibraryScriptCard: Component<{
   item: ScriptMeta;
   busy?: boolean;
-  /** Git storage active — show commit history controls. */
+  /** Active storage implements listVersions / readAtRevision. */
   versioning?: boolean;
   onLoad: () => void;
   onDelete: () => void;
@@ -258,7 +264,7 @@ const LibraryScriptCard: Component<{
             <Show when={revLabel()}>
               <span
                 class="inline-flex items-center px-1 py-px border border-border/40 font-mono text-[9px] text-text-faint rounded-[var(--radius-chip)]"
-                title={`Git revision ${props.item.revision}`}
+                title={`Revision ${props.item.revision}`}
                 data-testid="axis-library-git-rev"
               >
                 {revLabel()}
@@ -287,9 +293,9 @@ const LibraryScriptCard: Component<{
           <button
             type="button"
             class={`sc-btn sc-btn-ghost sc-btn-icon px-1.5 flex-shrink-0 ${historyOpen() ? 'is-active' : ''}`}
-            title="Git commit history"
+            title="Version history"
             aria-pressed={historyOpen()}
-            aria-label="Toggle git history"
+            aria-label="Toggle version history"
             disabled={props.busy}
             onClick={toggleHistory}
             data-testid="axis-library-history"
@@ -326,14 +332,14 @@ const LibraryScriptCard: Component<{
         >
           <div class="flex items-center justify-between gap-2">
             <span class="text-[9px] uppercase tracking-wider text-text-dim">
-              Git history
+              Version history
             </span>
             <button
               type="button"
               class="sc-btn sc-btn-ghost text-[9px] px-1 py-0.5 inline-flex items-center gap-1"
               disabled={historyBusy()}
               onClick={() => void loadHistory()}
-              title="Refresh commit list"
+              title="Refresh version list"
             >
               {historyBusy() ? <HooxLoader size="xs" /> : <Icons.refresh size={11} />}
               Refresh
@@ -345,11 +351,11 @@ const LibraryScriptCard: Component<{
           <Show
             when={!historyBusy() && versions().length === 0 && !historyErr()}
           >
-            <p class="text-text-faint text-[9px]">No commits found for this file.</p>
+            <p class="text-text-faint text-[9px]">No versions found for this script.</p>
           </Show>
           <Show when={historyBusy() && versions().length === 0}>
             <div class="flex items-center gap-1.5 text-text-faint text-[9px] py-1">
-              <HooxLoader size="xs" /> Loading commits…
+              <HooxLoader size="xs" /> Loading versions…
             </div>
           </Show>
           <ul class="flex flex-col gap-0.5">
@@ -384,7 +390,7 @@ const LibraryScriptCard: Component<{
                   <button
                     type="button"
                     class="sc-btn sc-btn-ghost px-1 py-0.5 text-[9px] flex-shrink-0"
-                    title="Load this revision into the editor (does not push)"
+                    title="Load this revision into the editor (does not write storage)"
                     disabled={!!actionSha() || props.busy}
                     onClick={() => void onLoadAt(v)}
                     data-testid="axis-library-history-load"
@@ -394,7 +400,7 @@ const LibraryScriptCard: Component<{
                   <button
                     type="button"
                     class="sc-btn sc-btn-ghost px-1 py-0.5 text-[9px] flex-shrink-0"
-                    title="Restore as new tip commit on the branch"
+                    title="Restore as the current library version"
                     disabled={!!actionSha() || props.busy}
                     onClick={() => void onRestore(v)}
                     data-testid="axis-library-history-restore"
@@ -412,18 +418,11 @@ const LibraryScriptCard: Component<{
 };
 
 function cloudCfg(): { endpoint: string; apiKey: string } {
-  const pc = store.pluginsConfig || {};
-  const c = (pc[pluginKey('storage', 'cloud')] || pc['cloud'] || {}) as Record<string, unknown>;
-  return {
-    endpoint: String(c.endpoint || store.endpoint || 'http://127.0.0.1:8787'),
-    apiKey: String(c.apiKey || ''),
-  };
+  return resolveCloudConfig();
 }
 
 function saveCloudCfg(endpoint: string, apiKey: string) {
-  const key = pluginKey('storage', 'cloud');
-  setStore('pluginsConfig', key, { endpoint: endpoint.replace(/\/$/, ''), apiKey });
-  persist();
+  writeStoredCloudConfig(endpoint, apiKey);
 }
 
 function gitCfg(): GitConfig {
@@ -631,7 +630,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
     }
   };
 
-  const versioning = () => isGit() && supportsScriptVersioning();
+  const versioning = () => supportsScriptVersioning();
 
   const onDelete = async (id: string, scriptName: string) => {
     if (!confirm(`Delete "${scriptName}"?`)) return;
@@ -863,16 +862,46 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
             spellcheck={false}
             autocomplete="off"
           />
-          <button
-            type="button"
-            class="sc-btn sc-btn-ghost text-[10px]"
-            onClick={() => {
-              saveCloudCfg(cloudEndpoint(), cloudKey());
-              void refresh();
-            }}
-          >
-            Save cloud settings
-          </button>
+          <div class="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              class="sc-btn sc-btn-ghost text-[10px]"
+              onClick={() => {
+                const key = generateDemoApiKey();
+                setCloudKey(key);
+                saveCloudCfg(cloudEndpoint(), key);
+              }}
+            >
+              Generate demo key
+            </button>
+            <button
+              type="button"
+              class="sc-btn sc-btn-ghost text-[10px]"
+              onClick={() => {
+                saveCloudCfg(cloudEndpoint(), cloudKey());
+                void probeCloudStorage({
+                  endpoint: cloudEndpoint(),
+                  apiKey: cloudKey(),
+                }).then((r) => {
+                  setError(r.ok ? '' : r.message);
+                  if (r.ok) setStatusLine(r.message);
+                  void refresh();
+                });
+              }}
+            >
+              Test connection
+            </button>
+            <button
+              type="button"
+              class="sc-btn sc-btn-ghost text-[10px]"
+              onClick={() => {
+                saveCloudCfg(cloudEndpoint(), cloudKey());
+                void refresh();
+              }}
+            >
+              Save cloud settings
+            </button>
+          </div>
         </div>
       </Show>
 

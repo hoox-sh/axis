@@ -50,4 +50,26 @@ describe('scripts extra', () => {
     const j = await r.json();
     expect(j.backend).toBe('memory');
   });
+
+  it('POST create also archives a version', async () => {
+    const created = await handleScripts(
+      req('/api/scripts', {
+        method: 'POST',
+        body: JSON.stringify({ name: 'N', content: 'plot(9)' }),
+      }),
+      env,
+      origin,
+      '/api/scripts',
+    );
+    const id = (await created.json()).script.id as string;
+    const list = await handleScripts(
+      req(`/api/scripts/${id}/versions`),
+      env,
+      origin,
+      `/api/scripts/${id}/versions`,
+    );
+    const j = await list.json();
+    expect(j.versions.length).toBe(1);
+    expect(j.versions[0].message).toContain('N');
+  });
 });

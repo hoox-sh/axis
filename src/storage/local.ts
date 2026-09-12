@@ -34,15 +34,17 @@
  * |---------|--------|
  * | 1 | `scripts` (keyPath `id`) + `kv` stores |
  * | 2 | adds `results` store (out-of-line `[scriptId, runId]` keys) with `byScript` index on `meta.scriptId` for cheap per-script listing. FIFO trim keeps at most {@link MAX_RESULTS_PER_SCRIPT} runs per script. |
+ * | 3 | adds `versions` store (out-of-line `[scriptId, sha]` keys) with `byScript` index on `scriptId`. FIFO trim keeps at most {@link MAX_VERSIONS_PER_SCRIPT} snapshots per script. |
  *
  * The version is exposed as {@link LOCAL_STORAGE_VERSION}. Migration is purely
- * additive — older stores (`scripts`, `kv`) are never recreated.
+ * additive — older stores (`scripts`, `kv`, `results`) are never recreated.
  */
 
 import type {
   ResultMeta,
   ScriptDocument,
   ScriptMeta,
+  ScriptVersion,
   StoragePlugin,
   StorageStatus,
   StoredRunResult,
@@ -54,21 +56,25 @@ const DB_NAME = 'pynescript.axis.storage';
 /**
  * IndexedDB schema version for the local storage plugin.
  *
- * Bumped to `2` to add the `results` object store for persisted run results
+ * Bumped to `3` to add the `versions` object store for script history
  * (see {@link LOCAL_STORAGE_VERSION}). Migration is purely additive — existing
- * `scripts` and `kv` stores and their records are never touched.
+ * stores and their records are never touched.
  */
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_SCRIPTS = 'scripts';
 const STORE_KV = 'kv';
 const STORE_RESULTS = 'results';
+const STORE_VERSIONS = 'versions';
 /** Index on `meta.scriptId` for cheap per-script listing. */
 const IDX_BY_SCRIPT = 'byScript';
+/** Index on `scriptId` for per-script version listing. */
+const IDX_VERSIONS_BY_SCRIPT = 'byScript';
 
 const LS_LIBRARY = 'pynescript.axis.library.v1';
 const LS_DRAFT = 'pynescript.axis.library.draft';
 const LS_MIGRATED = 'pynescript.axis.library.migrated';
 const LS_RESULTS = 'pynescript.axis.results.v1';
+const LS_VERSIONS = 'pynescript.axis.versions.v1';
 
 /**
  * Schema version exported for consumers that want to detect / migrate.
@@ -77,13 +83,19 @@ const LS_RESULTS = 'pynescript.axis.results.v1';
  * to decide whether to ignore the results store when running alongside the
  * `local` backend in a shared IDB context.
  */
-export const LOCAL_STORAGE_VERSION = 2;
+export const LOCAL_STORAGE_VERSION = 3;
 
 /**
  * FIFO cap on persisted runs per `scriptId` for the local storage plugin.
  * Oldest entries (by `meta.startedAt`) are evicted when exceeded.
  */
 export const MAX_RESULTS_PER_SCRIPT = 50;
+
+/**
+ * FIFO cap on version snapshots per `scriptId` for the local storage plugin.
+ * Oldest entries (by `committedAt`) are evicted when exceeded.
+ */
+export const MAX_VERSIONS_PER_SCRIPT = 50;
 
 const LEGACY_LIBRARY_KEYS = [
   'pynescript.axis.library.legacy',
@@ -110,6 +122,27 @@ const memKv = new Map<string, KvValue>();
  * `LS_RESULTS` on first read via {@link ensureMemResults}.
  */
 const memResults = new Map<string, Map<string, StoredRunResult>>();
+
+/** One persisted snapshot of a script (git-like local history). */
+interface StoredScriptVersion {
+  scriptId: string;
+  sha: string;
+  shortSha: string;
+  message: string;
+  author?: string;
+  committedAt: number;
+  content: string;
+  name: string;
+  description?: string;
+  path?: string;
+  tags?: string[];
+  scriptKind?: ScriptDocument['scriptKind'];
+  pineVersion?: string;
+}
+
+/** In-memory / localStorage mirror of the `versions` store. */
+const memVersions = new Map<string, StoredScriptVersion[]>();
+let memVersionsLoaded = false;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let migrated = false;
@@ -206,6 +239,16 @@ async function getDb(): Promise<IDBDatabase | null> {
           const rstore = db.createObjectStore(STORE_RESULTS);
           if (!rstore.indexNames.contains(IDX_BY_SCRIPT)) {
             rstore.createIndex(IDX_BY_SCRIPT, 'meta.scriptId', { unique: false });
+          }
+        }
+      }
+      // v3 — additive: script version snapshots. Out-of-line compound
+      // `[scriptId, sha]` keys + a `byScript` index on `scriptId`.
+      if (oldVersion < 3) {
+        if (!db.objectStoreNames.contains(STORE_VERSIONS)) {
+          const vstore = db.createObjectStore(STORE_VERSIONS);
+          if (!vstore.indexNames.contains(IDX_VERSIONS_BY_SCRIPT)) {
+            vstore.createIndex(IDX_VERSIONS_BY_SCRIPT, 'scriptId', { unique: false });
           }
         }
       }
@@ -479,6 +522,190 @@ async function idbRemoveResult(scriptId: string, runId: string): Promise<void> {
   await idbTxDone(tx);
 }
 
+// --- Versions (localStorage / in-memory fallback) ---
+
+type LsVersionsShape = Record<string, StoredScriptVersion[]>;
+
+function ensureMemVersions(): void {
+  if (memVersionsLoaded) return;
+  memVersionsLoaded = true;
+  const raw = lsGet(LS_VERSIONS);
+  if (!raw) return;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return;
+  }
+  if (!parsed || typeof parsed !== 'object') return;
+  for (const [scriptId, rows] of Object.entries(parsed as LsVersionsShape)) {
+    if (!Array.isArray(rows)) continue;
+    const kept = rows.filter(
+      (r) => r && typeof r === 'object' && typeof r.sha === 'string' && typeof r.content === 'string',
+    );
+    if (kept.length) memVersions.set(scriptId, kept);
+  }
+}
+
+function flushMemVersions(): void {
+  const out: LsVersionsShape = {};
+  for (const [scriptId, rows] of memVersions.entries()) {
+    out[scriptId] = rows;
+  }
+  lsSet(LS_VERSIONS, JSON.stringify(out));
+}
+
+function shortLocalRev(rev: string): string {
+  if (rev.startsWith('local-')) {
+    const rest = rev.slice('local-'.length);
+    return rest.length > 7 ? rest.slice(-7) : rest || rev.slice(0, 7);
+  }
+  return rev.length > 7 ? rev.slice(0, 7) : rev;
+}
+
+function versionFromDoc(doc: ScriptDocument, message: string): StoredScriptVersion {
+  const sha = String(doc.revision || `local-${doc.updatedAt || Date.now()}`);
+  return {
+    scriptId: doc.id,
+    sha,
+    shortSha: shortLocalRev(sha),
+    message,
+    author: 'this browser',
+    committedAt: doc.updatedAt || Date.now(),
+    content: doc.content,
+    name: doc.name,
+    description: doc.description,
+    path: doc.path,
+    tags: doc.tags,
+    scriptKind: doc.scriptKind,
+    pineVersion: doc.pineVersion,
+  };
+}
+
+function toScriptVersion(row: StoredScriptVersion): ScriptVersion {
+  return {
+    sha: row.sha,
+    shortSha: row.shortSha || shortLocalRev(row.sha),
+    message: row.message,
+    author: row.author,
+    committedAt: row.committedAt,
+  };
+}
+
+function trimVersionsToCap(rows: StoredScriptVersion[], protectedSha: string): StoredScriptVersion[] {
+  if (rows.length <= MAX_VERSIONS_PER_SCRIPT) return rows;
+  const sorted = [...rows].sort((a, b) => (a.committedAt || 0) - (b.committedAt || 0));
+  const over = rows.length - MAX_VERSIONS_PER_SCRIPT;
+  const drop = new Set<string>();
+  for (let i = 0; i < over; i++) {
+    const sha = sorted[i]?.sha;
+    if (sha && sha !== protectedSha) drop.add(sha);
+  }
+  return rows.filter((r) => !drop.has(r.sha));
+}
+
+function memAppendVersion(row: StoredScriptVersion): void {
+  ensureMemVersions();
+  let rows = memVersions.get(row.scriptId) || [];
+  rows = rows.filter((r) => r.sha !== row.sha);
+  rows.push(row);
+  memVersions.set(row.scriptId, trimVersionsToCap(rows, row.sha));
+  flushMemVersions();
+}
+
+function memListVersions(scriptId: string): StoredScriptVersion[] {
+  ensureMemVersions();
+  const rows = memVersions.get(scriptId) || [];
+  return [...rows].sort((a, b) => (b.committedAt || 0) - (a.committedAt || 0));
+}
+
+function memReadVersion(scriptId: string, sha: string): StoredScriptVersion | undefined {
+  ensureMemVersions();
+  return (memVersions.get(scriptId) || []).find((r) => r.sha === sha);
+}
+
+async function idbAppendVersion(row: StoredScriptVersion): Promise<void> {
+  const db = await getDb();
+  if (!db?.objectStoreNames.contains(STORE_VERSIONS)) {
+    memAppendVersion(row);
+    return;
+  }
+  const tx = db.transaction(STORE_VERSIONS, 'readwrite');
+  const store = tx.objectStore(STORE_VERSIONS);
+  store.put(row, [row.scriptId, row.sha]);
+  const idx = store.index(IDX_VERSIONS_BY_SCRIPT);
+  const all =
+    (await idbReq(
+      idx.getAll(IDBKeyRange.only(row.scriptId)) as IDBRequest<StoredScriptVersion[]>,
+    )) || [];
+  if (all.length > MAX_VERSIONS_PER_SCRIPT) {
+    all.sort((a, b) => (a.committedAt || 0) - (b.committedAt || 0));
+    const over = all.length - MAX_VERSIONS_PER_SCRIPT;
+    for (let i = 0; i < over; i++) {
+      const item = all[i];
+      if (item && item.sha !== row.sha) {
+        store.delete([item.scriptId, item.sha]);
+      }
+    }
+  }
+  await idbTxDone(tx);
+}
+
+async function idbListVersions(scriptId: string): Promise<StoredScriptVersion[]> {
+  const db = await getDb();
+  if (!db?.objectStoreNames.contains(STORE_VERSIONS)) {
+    return memListVersions(scriptId);
+  }
+  const tx = db.transaction(STORE_VERSIONS, 'readonly');
+  const idx = tx.objectStore(STORE_VERSIONS).index(IDX_VERSIONS_BY_SCRIPT);
+  const all =
+    (await idbReq(
+      idx.getAll(IDBKeyRange.only(scriptId)) as IDBRequest<StoredScriptVersion[]>,
+    )) || [];
+  await idbTxDone(tx);
+  return all.sort((a, b) => (b.committedAt || 0) - (a.committedAt || 0));
+}
+
+async function idbReadVersion(scriptId: string, sha: string): Promise<StoredScriptVersion | undefined> {
+  const db = await getDb();
+  if (!db?.objectStoreNames.contains(STORE_VERSIONS)) {
+    return memReadVersion(scriptId, sha);
+  }
+  const tx = db.transaction(STORE_VERSIONS, 'readonly');
+  const v = await idbReq(
+    tx.objectStore(STORE_VERSIONS).get([scriptId, sha]) as IDBRequest<StoredScriptVersion | undefined>,
+  );
+  await idbTxDone(tx);
+  return v;
+}
+
+async function appendVersionForWrite(prev: ScriptDocument | undefined, next: ScriptDocument): Promise<void> {
+  const unchanged =
+    prev &&
+    prev.content === next.content &&
+    prev.name === next.name &&
+    (prev.description || '') === (next.description || '');
+  if (unchanged) return;
+  const message = prev ? `Save ${next.name}` : `Create ${next.name}`;
+  await idbAppendVersion(versionFromDoc(next, message));
+}
+
+function storedVersionToDoc(row: StoredScriptVersion): ScriptDocument {
+  return {
+    id: row.scriptId,
+    name: row.name,
+    description: row.description,
+    path: row.path,
+    content: row.content,
+    updatedAt: row.committedAt,
+    createdAt: row.committedAt,
+    revision: row.sha,
+    tags: row.tags,
+    scriptKind: row.scriptKind,
+    pineVersion: row.pineVersion,
+  };
+}
+
 // --- Migration ---
 
 async function migrateOnce(): Promise<void> {
@@ -547,7 +774,7 @@ export const localStoragePlugin: StoragePlugin = {
   kind: 'storage',
   builtIn: true,
   description:
-    'Stores your Pine scripts in this browser (IndexedDB, with localStorage fallback). Works offline.',
+    'Stores your Pine scripts in this browser (IndexedDB, with localStorage fallback). Works offline. Keeps save history.',
   capabilities: { offline: true, results: true },
   configSchema: {
     namespace: { type: 'string', default: 'default', label: 'Namespace (advanced)' },
@@ -582,9 +809,10 @@ export const localStoragePlugin: StoragePlugin = {
       id: doc.id || newId(),
       createdAt: prev?.createdAt || doc.createdAt || now,
       updatedAt: now,
-      revision: `local-${now}`,
+      revision: `local-${now}_${Math.random().toString(36).slice(2, 8)}`,
     });
     await idbPut(next);
+    await appendVersionForWrite(prev, next);
     return toMeta(next);
   },
 
@@ -654,6 +882,20 @@ export const localStoragePlugin: StoragePlugin = {
     await idbRemoveResult(scriptId, runId);
   },
 
+  async listVersions(id, opts): Promise<ScriptVersion[]> {
+    await migrateOnce();
+    const limit = Math.min(100, Math.max(1, opts?.limit ?? 40));
+    const rows = await idbListVersions(id);
+    return rows.slice(0, limit).map(toScriptVersion);
+  },
+
+  async readAtRevision(id, rev): Promise<ScriptDocument> {
+    await migrateOnce();
+    const row = await idbReadVersion(id, rev);
+    if (!row) throw new Error(`Version not found: ${id}@${rev}`);
+    return storedVersionToDoc(row);
+  },
+
   async getStatus(): Promise<StorageStatus> {
     const offline = true;
     return {
@@ -675,20 +917,28 @@ export const localStoragePlugin: StoragePlugin = {
 export async function _clearLocalLibraryForTests() {
   migrated = false;
   memResultsLoaded = false;
+  memVersionsLoaded = false;
   memLibrary.clear();
   memKv.clear();
   memResults.clear();
+  memVersions.clear();
   lsRemove(LS_LIBRARY);
   lsRemove(LS_MIGRATED);
   lsRemove(`${LS_DRAFT}:draft`);
   lsRemove(`${LS_DRAFT}:migratedLibrary`);
   lsRemove(LS_RESULTS);
+  lsRemove(LS_VERSIONS);
   const db = await getDb();
   if (db) {
-    const tx = db.transaction([STORE_SCRIPTS, STORE_KV, STORE_RESULTS], 'readwrite');
+    const names = [STORE_SCRIPTS, STORE_KV, STORE_RESULTS];
+    if (db.objectStoreNames.contains(STORE_VERSIONS)) names.push(STORE_VERSIONS);
+    const tx = db.transaction(names, 'readwrite');
     tx.objectStore(STORE_SCRIPTS).clear();
     tx.objectStore(STORE_KV).clear();
     tx.objectStore(STORE_RESULTS).clear();
+    if (db.objectStoreNames.contains(STORE_VERSIONS)) {
+      tx.objectStore(STORE_VERSIONS).clear();
+    }
     await idbTxDone(tx);
   }
 }

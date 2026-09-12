@@ -47,7 +47,7 @@ import { appendLog, setActivePlugin } from '../store';
  * {@link import('../ui/StorageChangePrompt').StorageChangePrompt}, which
  * mounts a single global {@link import('../ui/StorageChangeDialog').default}
  * and applies the final `setActivePlugin('storage', …)` after the user picks
- * *Migrate*, *Start fresh*, or cancels.
+ * *Copy scripts*, *Switch without copying*, or cancels.
  *
  * Single module-level signal so every call site (ScriptLibraryPanel,
  * SettingsDialog, PluginsPage, PluginManager) shares one source of truth
@@ -272,14 +272,17 @@ export async function removeRunResult(
   }
 }
 
-/** True when the active storage can list/restore git commit history. */
+/** True when the active storage can list/restore version history. */
 export function supportsScriptVersioning(): boolean {
   const p = requireActive();
   return typeof p.listVersions === 'function' && typeof p.readAtRevision === 'function';
 }
 
+const VERSIONING_UNAVAILABLE =
+  'Script version history is not available on this storage engine';
+
 /**
- * List git commit history for a library script (newest first).
+ * List version history for a library script (newest first).
  * Throws when the active backend does not implement versioning.
  */
 export async function listScriptVersions(
@@ -288,19 +291,19 @@ export async function listScriptVersions(
 ): Promise<ScriptVersion[]> {
   const p = requireActive();
   if (typeof p.listVersions !== 'function') {
-    throw new Error('Script version history requires Git storage (GitHub / GitLab)');
+    throw new Error(VERSIONING_UNAVAILABLE);
   }
   return p.listVersions(id, { limit: opts?.limit });
 }
 
 /**
- * Read a library script body at a historical commit SHA.
- * Does not modify the remote tip — use {@link writeScript} to restore.
+ * Read a library script body at a historical revision.
+ * Does not modify the current tip — use {@link writeScript} to restore.
  */
 export async function readScriptVersion(id: string, rev: string): Promise<ScriptDocument> {
   const p = requireActive();
   if (typeof p.readAtRevision !== 'function') {
-    throw new Error('Script version history requires Git storage (GitHub / GitLab)');
+    throw new Error(VERSIONING_UNAVAILABLE);
   }
   return p.readAtRevision(id, rev);
 }
@@ -342,6 +345,69 @@ export async function exportLibraryJson(): Promise<ScriptDocument[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Copy between engines (never deletes the source)
+// ---------------------------------------------------------------------------
+
+/** One script that failed while copying between storage engines. */
+export interface CopyScriptFailure {
+  name: string;
+  id: string;
+  error: string;
+}
+
+/** Result of {@link copyScriptsBetweenStorages}. */
+export interface CopyScriptsResult {
+  copied: number;
+  failed: CopyScriptFailure[];
+  total: number;
+  aborted: boolean;
+}
+
+/**
+ * Copy every script from `fromId` onto `toId`. Source scripts are **never**
+ * removed — this is a duplicate, not a move.
+ */
+export async function copyScriptsBetweenStorages(
+  fromId: string,
+  toId: string,
+  opts?: {
+    abort?: { aborted: boolean };
+    onProgress?: (p: { current: number; total: number; name: string }) => void;
+  },
+): Promise<CopyScriptsResult> {
+  const fromPlugin = getStorage(fromId);
+  const toPlugin = getStorage(toId);
+  if (!fromPlugin) throw new Error(`Unknown source storage plugin: "${fromId}"`);
+  if (!toPlugin) throw new Error(`Unknown target storage plugin: "${toId}"`);
+
+  const scripts = await fromPlugin.list();
+  let copied = 0;
+  const failed: CopyScriptFailure[] = [];
+
+  for (let i = 0; i < scripts.length; i++) {
+    if (opts?.abort?.aborted) {
+      return { copied, failed, total: scripts.length, aborted: true };
+    }
+    const meta = scripts[i];
+    if (!meta) continue;
+    opts?.onProgress?.({ current: i, total: scripts.length, name: meta.name });
+    try {
+      const doc = await fromPlugin.read(meta.id);
+      await toPlugin.write(doc);
+      copied++;
+      opts?.onProgress?.({ current: i + 1, total: scripts.length, name: meta.name });
+    } catch (err) {
+      failed.push({
+        name: meta.name,
+        id: meta.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  return { copied, failed, total: scripts.length, aborted: false };
+}
+
+// ---------------------------------------------------------------------------
 // Storage change dialog glue
 // ---------------------------------------------------------------------------
 
@@ -360,16 +426,17 @@ export function getPendingStorageChange(): StorageChangeRequest | null {
  * to `newId`. Drop-in replacement for
  * `setActivePlugin('storage', newId)` at every UI call site — wraps the
  * flip in the {@link import('../ui/StorageChangeDialog').default} dialog so
- * the user can pick *Migrate* or *Start fresh* (or cancel).
+ * the user can pick *Copy scripts* or *Switch without copying* (or cancel).
  *
  * Short-circuits silently when:
  * - `newId` is empty (defensive)
  * - `oldId` and `newId` are identical (no real change → no dialog)
  * - `oldId` is empty (first-time set → no prior data to migrate)
  *
- * The dialog handles the actual per-script copy; once the user picks
- * *Migrate* or *Start fresh* the global prompt component calls
- * `setActivePlugin('storage', newId)` and clears the pending request.
+ * The dialog handles the actual per-script **copy** (source is never
+ * deleted); once the user picks *Copy scripts* or *Switch without copying*
+ * the global prompt component calls `setActivePlugin('storage', newId)`
+ * and clears the pending request.
  */
 export function promptStorageChange(oldId: string, newId: string): void {
   const from = String(oldId || '');

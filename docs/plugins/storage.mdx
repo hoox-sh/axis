@@ -52,7 +52,7 @@ flowchart TB
 | Fallback | `localStorage` keys `pynescript.axis.library.v1`, draft keys |
 | Migration | Older library keys (`pynescript.axis.library.v1`, editor docs) |
 | Memory | In-process maps when neither IDB nor LS exist (tests/SSR) |
-| Capabilities | Offline-friendly |
+| Capabilities | Offline-friendly; file versioning (snapshots on each save) |
 
 ### cloud (`frontend/src/storage/cloud.ts`)
 
@@ -60,7 +60,7 @@ flowchart TB
 | --- | --- |
 | Transport | `fetch` to Worker `/api/scripts` |
 | Auth | `Authorization: Bearer <api_key>` (`pn_…`) |
-| Config | `endpoint` (default `http://127.0.0.1:8787`), `apiKey` |
+| Config | `endpoint` (Worker URL — never the Pine engine host), `apiKey` (`pn_…`). Set in **Settings → Script storage** or Script Library. |
 | Concurrency | `If-Match` revision headers on write |
 | Partition | Worker hashes key → `userId`; rows scoped per user |
 
@@ -72,7 +72,7 @@ flowchart TB
 | Config | `provider`, `token`, `owner`, `repo`, `branch`, `basePath` (default `pine-library`), commit template |
 | Commit boundary | **Explicit Save only** — not every keystroke |
 | Drafts | `saveDraft` / `loadDraft` are no-ops; local dual-write handles drafts |
-| Version history | `listVersions` / `readAtRevision` — GitHub/GitLab commits for the script path |
+| Version history | `listVersions` / `readAtRevision` — GitHub/GitLab commits for the script path; local IndexedDB/localStorage snapshots; Worker `script_versions` |
 | Restore | `restoreScriptVersion` writes historical content as a **new** tip commit |
 | Capabilities | `needsNetwork`, `needsAuth` |
 
@@ -89,10 +89,11 @@ Contract: [StoragePlugin](/axis/docs/plugins/contracts).
 | `saveDraft` / `loadDraft` | Local first; also active if supported |
 | `exportLibraryJson` / `importLibraryJson` | Portable backup |
 | `getStorageStatus` | Connected / dirty / remote hints |
-| `supportsScriptVersioning` | True when active storage implements git history |
-| `listScriptVersions(id)` | Commit history for a script (git only) |
-| `readScriptVersion(id, rev)` | Content at a commit SHA (git only) |
+| `supportsScriptVersioning` | True when active storage implements version history (local, cloud, git) |
+| `listScriptVersions(id)` | Version history for a script |
+| `readScriptVersion(id, rev)` | Content at a revision |
 | `restoreScriptVersion(id, rev)` | Write historical content as the new tip |
+| `copyScriptsBetweenStorages(from, to)` | Copy library between engines — **never deletes the source** |
 
 ### Catalog helpers
 
@@ -134,6 +135,8 @@ Without D1, Worker keeps per-isolate in-memory maps (fine for `wrangler dev`).
 2. **Git PAT scope** — GitHub `contents:write`; GitLab `api` / `write_repository`.
 3. **Revisions** — local uses `local-${timestamp}`; cloud/git use remote revisions for conflict detection.
 4. **Active default** — `getActiveStorageId()` → `local` when unset.
+5. **Engine switch is a copy** — switching storage copies scripts onto the target and **never removes** them from the source.
+6. **Cloud credentials** — Worker URL + API key live in Settings (and Script Library). `store.endpoint` is the Pine engine and is never used as the scripts Worker base.
 
 ## Worked examples
 
@@ -148,14 +151,14 @@ await importLibraryJson(docs, { forceNewIds: true });
 ### Point cloud at local Worker
 
 1. `bun run axis dev worker` (or `cd worker && bun run dev`) → `:8787`
-2. Manager → storage `cloud`
-3. Config endpoint `http://127.0.0.1:8787`, key from `/api/keys` or `ALLOW_OPEN_KEYS=1` demo key
+2. Settings → Script storage → Cloud (Worker), or Manager → Script Library → backend `cloud`
+3. Worker URL `http://127.0.0.1:8787`, API key from **Generate demo key** (local `ALLOW_OPEN_KEYS=1`) or `/api/keys`
 
 ## Failure modes
 
 | Error | Cause |
 | --- | --- |
-| `Cloud storage requires an API key` | Empty `apiKey` |
+| `Cloud storage requires an API key` | Empty `apiKey` — set it in Settings → Script storage |
 | 401 `NO_KEY` / `INVALID_KEY` | Auth path; see [Worker auth](/axis/docs/worker/auth) |
 | 409 on write | `If-Match` revision conflict |
 | Git 401/404 | Token, owner/repo, or basePath wrong |

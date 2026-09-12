@@ -20,48 +20,29 @@
 /**
  * Built-in **cloud** storage plugin — AXIS Worker `/api/scripts` (D1 or memory).
  *
- * Config resolved from `pluginsConfig[storage:cloud]` / bare `cloud`, then
- * `store.endpoint`. Auth: `Authorization: Bearer <apiKey>` (Pro keys).
+ * Config resolved from `pluginsConfig[storage:cloud]` / bare `cloud`
+ * ({@link resolveCloudConfig}). Auth: `Authorization: Bearer <apiKey>`.
  * Optimistic concurrency via optional `If-Match` revision headers.
+ * Version history: `GET /api/scripts/:id/versions` (+ `/:rev`).
  */
 
 import type {
   ScriptDocument,
   ScriptMeta,
+  ScriptVersion,
   StoragePlugin,
   StorageStatus,
 } from '../plugins/types';
 import { metaFromScriptContent } from '../indicators/script-meta';
-import { store } from '../store';
-import { pluginKey } from '../plugins/types';
+import { defaultCloudEndpoint, resolveCloudConfig } from './cloud-config';
 
-/** Resolved cloud endpoint + API key (trailing slash stripped on endpoint). */
-export type CloudConfig = {
-  endpoint: string;
-  apiKey: string;
-};
-
-function resolveCloudConfig(config?: Record<string, unknown>): CloudConfig {
-  const fromSchema = {
-    endpoint: (config?.endpoint as string) || '',
-    apiKey: (config?.apiKey as string) || '',
-  };
-  // Prefer pluginsConfig storage:cloud, then bare cloud, then store.endpoint
-  const pc = store.pluginsConfig || {};
-  const saved =
-    pc[pluginKey('storage', 'cloud')] ||
-    pc['cloud'] ||
-    pc['storage:cloud'] ||
-    {};
-  const endpoint = String(
-    fromSchema.endpoint ||
-      saved.endpoint ||
-      store.endpoint ||
-      'http://127.0.0.1:8787',
-  ).replace(/\/$/, '');
-  const apiKey = String(fromSchema.apiKey || saved.apiKey || '');
-  return { endpoint, apiKey };
-}
+export type { CloudConfig } from './cloud-config';
+export {
+  defaultCloudEndpoint,
+  generateDemoApiKey,
+  resolveCloudConfig,
+  writeStoredCloudConfig,
+} from './cloud-config';
 
 async function api(
   path: string,
@@ -161,15 +142,15 @@ export const cloudStoragePlugin: StoragePlugin = {
   configSchema: {
     endpoint: {
       type: 'string',
-      default: 'http://127.0.0.1:8787',
+      default: defaultCloudEndpoint(),
       label: 'Worker URL',
-      description: 'AXIS Worker base URL (no trailing slash)',
+      description: 'AXIS Worker base URL (no trailing slash). Not the Pine engine host.',
     },
     apiKey: {
       type: 'string',
       default: '',
       label: 'API key',
-      description: 'Bearer key from /api/keys (pn_…)',
+      description: 'Bearer key from Settings or /api/keys (pn_…)',
       placeholder: 'pn_…',
     },
   },
@@ -234,17 +215,46 @@ export const cloudStoragePlugin: StoragePlugin = {
     return { content: String(draft.content), name: draft.name };
   },
 
+  async listVersions(id, opts): Promise<ScriptVersion[]> {
+    const { json } = await api(`/api/scripts/${encodeURIComponent(id)}/versions`, {
+      config: opts?.config,
+    });
+    const rows = (json.versions as Record<string, unknown>[]) || [];
+    const limit = Math.min(100, Math.max(1, opts?.limit ?? 40));
+    return rows.slice(0, limit).map(versionFromRemote);
+  },
+
+  async readAtRevision(id, rev, config): Promise<ScriptDocument> {
+    const { json } = await api(
+      `/api/scripts/${encodeURIComponent(id)}/versions/${encodeURIComponent(rev)}`,
+      { config },
+    );
+    const script = json.script as Record<string, unknown>;
+    if (!script) throw new Error(`Version not found: ${id}@${rev}`);
+    return docFromRemote(script);
+  },
+
   async getStatus(config): Promise<StorageStatus> {
     try {
       const cfg = resolveCloudConfig(config);
       if (!cfg.apiKey) {
-        return { connected: false, error: 'API key not set', remote: cfg.endpoint };
+        return {
+          connected: false,
+          error: 'API key not set — add it in Settings → Script storage',
+          remote: cfg.endpoint,
+        };
       }
       const res = await fetch(`${cfg.endpoint}/health`, {
         signal: AbortSignal.timeout(8_000),
       });
       if (!res.ok) {
         return { connected: false, error: `HTTP ${res.status}`, remote: cfg.endpoint };
+      }
+      try {
+        await api('/api/scripts', { config: cfg });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return { connected: false, error: msg, remote: cfg.endpoint };
       }
       return { connected: true, remote: cfg.endpoint, lastSyncAt: Date.now() };
     } catch (e: unknown) {
@@ -255,3 +265,34 @@ export const cloudStoragePlugin: StoragePlugin = {
     }
   },
 };
+
+function versionFromRemote(r: Record<string, unknown>): ScriptVersion {
+  const sha = String(r.sha || r.revision || '');
+  const committedAt = Number(r.committedAt ?? r.created_at ?? r.createdAt ?? Date.now());
+  return {
+    sha,
+    shortSha: String(r.shortSha || sha.slice(0, 7)),
+    message: String(r.message || `Save ${r.name || 'script'}`),
+    author: r.author ? String(r.author) : undefined,
+    committedAt: Number.isFinite(committedAt) ? committedAt : Date.now(),
+    url: r.url ? String(r.url) : undefined,
+  };
+}
+
+/**
+ * Probe Worker health + `/api/scripts` with the given (or stored) config.
+ * Used by Settings "Test connection".
+ */
+export async function probeCloudStorage(
+  config?: Record<string, unknown>,
+): Promise<{ ok: boolean; message: string }> {
+  const cfg = resolveCloudConfig(config);
+  if (!cfg.apiKey) {
+    return { ok: false, message: 'API key not set' };
+  }
+  const st = await cloudStoragePlugin.getStatus?.(cfg);
+  if (!st?.connected) {
+    return { ok: false, message: st?.error || 'Worker unreachable' };
+  }
+  return { ok: true, message: `Connected · ${cfg.endpoint}` };
+}

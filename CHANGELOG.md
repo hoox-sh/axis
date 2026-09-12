@@ -9,7 +9,7 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-12 · 397 commits · describe-tag: `v2.6.2`_
+_Generated/updated: 2026-09-12 · 399 commits · describe-tag: `v2.6.3`_
 
 ---
 
@@ -17,10 +17,22 @@ _Generated/updated: 2026-09-12 · 397 commits · describe-tag: `v2.6.2`_
 
 ### Added
 
+### Fixed
+
+### Changed
+
+## [2.6.4] — 2026-09-12
+
+### Added
+
+- **Script version history on every storage engine**: local (IndexedDB/`localStorage` snapshots, FIFO 50) and cloud Worker (`script_versions` + `GET /api/scripts/:id/versions`) now implement the same `listVersions` / `readAtRevision` contract as git. The library history panel is no longer git-only.
+- **Worker URL + API key in Settings**: Script storage credentials for the cloud Worker (`endpoint` + `pn_…` key, generate demo key, test connection) live in Settings → General / Studio Settings as well as Script Library. Switching to Cloud no longer requires hunting the library panel first.
 - **Workers inventory skeleton**: while backends are probing, the Workers page shows pulse placeholder cards (and an inspector skeleton) instead of an empty grid.
 
 ### Fixed
 
+- **Cloud script storage used the Pine engine URL**: `resolveCloudConfig` no longer falls back to `store.endpoint` (`:5002` / `/api/run`). Worker base defaults to wrangler `:8787` on localhost or the production workers.dev host.
+- **Storage engine switch deleted the source library**: copy between engines never calls `remove` on the source. Dialog primary action is **Copy scripts**; **Switch without copying** leaves both libraries as-is.
 - **Minimap height restored**: short files no longer stretch the overview canvas to the full editor column — 2px per line, compressed only when the document exceeds the host.
 - **Update reload asks first**: Update now / Hard reload (and `hardReload` itself) open a confirm prompt with current → new version before the app reloads.
 - **Studio always opens Settings**: the topbar / palette Studio button lands on Settings every time (no longer restores the last rail page). Settings is the first Workspace rail item. The Studio click handler no longer falls through `??` into Runtime then Workers because those callbacks return `void`.
@@ -28,7 +40,7 @@ _Generated/updated: 2026-09-12 · 397 commits · describe-tag: `v2.6.2`_
 
 ### Changed
 
-
+- Storage-change dialog copy: “Copy scripts” / “Switch without copying” instead of migrate-and-delete / start fresh.
 
 ## [2.6.3] — 2026-09-12
 
@@ -1081,9 +1093,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (78 commits)
+### 2026-09 (80 commits)
 
 #### Features
 
@@ -1114,6 +1128,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `99eb5f20` (2026-09-12) — fix(ui): Studio Settings home, Workers fullscreen, minimap height
+- `9e963eab` (2026-09-12) — fix(docker): skip missing VERSION stamp files in image build
 - `ff4674a1` (2026-09-12) — fix: harden PWA, editor, e2e, and Docker; release 2.6.2
 - `3a5de985` (2026-09-12) — fix(pwa): retry transient fetch failures in SW cache-first
 - `cb089b18` (2026-09-12) — fix(e2e): retry twice on CI runners

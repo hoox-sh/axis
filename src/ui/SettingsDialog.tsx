@@ -79,6 +79,12 @@ import { listEngines } from '../engines/catalog';
 import { listStorages } from '../storage/catalog';
 import { promptStorageChange } from '../storage/service';
 import { getActiveStorageId } from '../plugins/active';
+import {
+  generateDemoApiKey,
+  resolveCloudConfig,
+  writeStoredCloudConfig,
+} from '../storage/cloud-config';
+import { probeCloudStorage } from '../storage/cloud';
 import { CapabilityBadges, engineOptionLabel } from './plugin-badges';
 import { PluginConfigRow } from './PluginConfigRow';
 import { getEngine } from '../engines/catalog';
@@ -193,6 +199,10 @@ export const SettingsDialog: Component<Props> = (props) => {
   const [preferWs, setPreferWs] = createSignal(true);
   const [apiKey, setApiKey] = createSignal('');
   const [storage, setStorage] = createSignal(store.activePlugins?.storage || 'local');
+  const [cloudEndpoint, setCloudEndpoint] = createSignal(resolveCloudConfig().endpoint);
+  const [cloudApiKey, setCloudApiKey] = createSignal(resolveCloudConfig().apiKey);
+  const [cloudProbeMsg, setCloudProbeMsg] = createSignal('');
+  const [cloudProbing, setCloudProbing] = createSignal(false);
   const [chartInterval, setChartInterval] = createSignal(store.interval);
   const [historyBars, setHistoryBars] = createSignal(
     clampHistoryBars(store.historyBars ?? HISTORY_BARS_DEFAULT),
@@ -304,6 +314,10 @@ export const SettingsDialog: Component<Props> = (props) => {
         setEngine(store.engine);
         hydrateEngineFields(store.engine);
         setStorage(store.activePlugins?.storage || 'local');
+        const cloud = resolveCloudConfig();
+        setCloudEndpoint(cloud.endpoint);
+        setCloudApiKey(cloud.apiKey);
+        setCloudProbeMsg('');
         setChartInterval(store.interval);
         setHistoryBars(clampHistoryBars(store.historyBars ?? HISTORY_BARS_DEFAULT));
         setRefreshSec(store.watchlist.refreshSec || 15);
@@ -390,8 +404,11 @@ export const SettingsDialog: Component<Props> = (props) => {
     applyUiScale(nextUiScale);
     // setActivePlugin keeps flat engine/source fields + telemetry planes aligned
     setActivePlugin('engine', nextEngine);
-    // Storage changes open the migrate-or-fresh dialog; the actual engine
-    // flip happens after the user commits (or never, if they cancel).
+    // Persist Worker credentials before the copy dialog so cloud writes
+    // can authenticate. Source scripts are never deleted on switch.
+    if (nextStorage === 'cloud') {
+      writeStoredCloudConfig(cloudEndpoint(), cloudApiKey());
+    }
     promptStorageChange(getActiveStorageId(), nextStorage);
 
     // Always merge engine plugin config when any engine field is shown — include
@@ -1182,10 +1199,96 @@ export const SettingsDialog: Component<Props> = (props) => {
                 </For>
               </select>
               <p class="sc-settings-field-hint">
-                Where saved Pine scripts live (local browser, cloud Worker, or git). Configure
-                credentials under Manager → Script Library.
+                Where saved Pine scripts live (local browser, cloud Worker, or git). Switching
+                copies the library to the new engine and never deletes the source.
               </p>
             </div>
+
+            <Show when={storage() === 'cloud'}>
+              <div class="sc-settings-field" data-testid="axis-settings-cloud">
+                <label class="sc-settings-field-label" for="axis-cloud-endpoint">
+                  Worker URL
+                </label>
+                <input
+                  id="axis-cloud-endpoint"
+                  class="sc-input w-full font-mono"
+                  value={cloudEndpoint()}
+                  placeholder="https://pynescript-axis.cryptolinx.workers.dev"
+                  spellcheck={false}
+                  onInput={(e) => setCloudEndpoint(e.currentTarget.value)}
+                />
+                <label class="sc-settings-field-label mt-2" for="axis-cloud-apikey">
+                  Worker API key
+                </label>
+                <input
+                  id="axis-cloud-apikey"
+                  class="sc-input w-full font-mono"
+                  type="password"
+                  value={cloudApiKey()}
+                  placeholder="pn_…"
+                  spellcheck={false}
+                  autocomplete="off"
+                  onInput={(e) => setCloudApiKey(e.currentTarget.value)}
+                />
+                <div class="flex flex-wrap gap-1.5 mt-2">
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-ghost px-2 py-0.5 text-[11px]"
+                    data-testid="axis-settings-cloud-generate"
+                    onClick={() => {
+                      const key = generateDemoApiKey();
+                      setCloudApiKey(key);
+                      setCloudProbeMsg('Generated a local key. Save, then Test connection.');
+                    }}
+                  >
+                    Generate demo key
+                  </button>
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-ghost px-2 py-0.5 text-[11px]"
+                    data-testid="axis-settings-cloud-probe"
+                    disabled={cloudProbing()}
+                    onClick={() => {
+                      writeStoredCloudConfig(cloudEndpoint(), cloudApiKey());
+                      setCloudProbing(true);
+                      setCloudProbeMsg('');
+                      void probeCloudStorage({
+                        endpoint: cloudEndpoint(),
+                        apiKey: cloudApiKey(),
+                      }).then((r) => {
+                        setCloudProbeMsg(r.ok ? `✓ ${r.message}` : r.message);
+                        setCloudProbing(false);
+                      });
+                    }}
+                  >
+                    {cloudProbing() ? 'Testing…' : 'Test connection'}
+                  </button>
+                </div>
+                <Show when={cloudProbeMsg()}>
+                  <p
+                    class={`text-[10px] font-mono mt-0.5 break-words ${
+                      cloudProbeMsg().startsWith('✓') ? 'text-accent-2' : 'text-red'
+                    }`}
+                    data-testid="axis-settings-cloud-probe-msg"
+                  >
+                    {cloudProbeMsg()}
+                  </p>
+                </Show>
+                <p class="sc-settings-field-hint">
+                  Required for Cloud (Worker) script storage. Production keys come from{' '}
+                  <code class="font-mono">/api/keys</code> (admin). Local wrangler needs{' '}
+                  <code class="font-mono">ALLOW_OPEN_KEYS=1</code> or a minted key. This is not
+                  the Pine engine URL.
+                </p>
+              </div>
+            </Show>
+
+            <Show when={storage() === 'git'}>
+              <p class="sc-settings-field-hint" data-testid="axis-settings-git-hint">
+                GitHub / GitLab token, owner, and repo are configured in Script Library
+                (Connect with GitHub / GitLab).
+              </p>
+            </Show>
 
             </div>
 

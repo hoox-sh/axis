@@ -59,7 +59,7 @@ Manager → **Script Library**:
 
 | Control | Behavior |
 | --- | --- |
-| Backend select | `setActivePlugin('storage', id)` |
+| Backend select | Prompts to **copy** scripts onto the new engine (source is never deleted) |
 | Refresh | `list()` |
 | Name / description | Metadata for next write |
 | Save | Write current editor doc |
@@ -67,7 +67,8 @@ Manager → **Script Library**:
 | Delete | `remove` |
 | Export JSON | Full library dump |
 | Import JSON | Bulk write (`importLibraryJson`) |
-| Cloud endpoint + key | Saved under `pluginsConfig['storage:cloud']` |
+| Cloud endpoint + key | Settings → Script storage **and** this panel. Saved under `pluginsConfig['storage:cloud']` |
+| Version history | Every engine (local snapshots, Worker revisions, git commits). Open / Restore on a card |
 | Git fields | provider, token, owner, repo, branch, basePath, … |
 
 Status line: backend · remote · branch · connected · count.

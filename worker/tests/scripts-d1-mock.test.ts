@@ -19,6 +19,7 @@ type Row = Record<string, unknown>;
 function mockD1(opts?: { failList?: boolean }) {
   const scripts = new Map<string, Row>(); // key userId::id
   const drafts = new Map<string, Row>();
+  const versions = new Map<string, Row>(); // key userId::id::revision
 
   function key(userId: string, id: string) {
     return `${userId}::${id}`;
@@ -31,10 +32,22 @@ function mockD1(opts?: { failList?: boolean }) {
         bind(...args: unknown[]) {
           const chain = {
             async all<T>() {
-              if (opts?.failList && s.includes('FROM scripts') && s.includes('ORDER BY')) {
+              if (opts?.failList && s.includes('FROM scripts') && s.includes('ORDER BY') && !s.includes('script_versions')) {
                 throw new Error('no such table: scripts');
               }
               const userId = String(args[0]);
+              if (s.includes('FROM script_versions')) {
+                const id = String(args[1] ?? '');
+                const rows: T[] = [];
+                for (const [k, v] of versions) {
+                  if (k.startsWith(`${userId}::${id}::`)) rows.push(v as T);
+                }
+                rows.sort(
+                  (a, b) =>
+                    Number((b as Row).created_at || 0) - Number((a as Row).created_at || 0),
+                );
+                return { results: rows };
+              }
               const rows: T[] = [];
               for (const [k, v] of scripts) {
                 if (k.startsWith(userId + '::')) rows.push(v as T);
@@ -50,6 +63,12 @@ function mockD1(opts?: { failList?: boolean }) {
                 const userId = String(args[0]);
                 const row = drafts.get(userId);
                 return (row as T) ?? null;
+              }
+              if (s.includes('FROM script_versions')) {
+                const userId = String(args[0]);
+                const id = String(args[1]);
+                const rev = String(args[2] ?? '');
+                return (versions.get(`${userId}::${id}::${rev}`) as T) || null;
               }
               if (s.includes('FROM scripts') && s.includes('AND id')) {
                 const userId = String(args[0]);
@@ -67,6 +86,26 @@ function mockD1(opts?: { failList?: boolean }) {
                   updated_at,
                 });
                 return { meta: { changes: 1 } };
+              }
+              if (s.includes('script_versions')) {
+                if (s.includes('INSERT INTO')) {
+                  const [userId, id, revision, name, description, path, content, created_at, message] =
+                    args as (string | number | null)[];
+                  versions.set(`${userId}::${id}::${revision}`, {
+                    id,
+                    revision,
+                    name,
+                    description,
+                    path,
+                    content,
+                    created_at,
+                    message,
+                  });
+                  return { meta: { changes: 1 } };
+                }
+                if (s.includes('DELETE')) {
+                  return { meta: { changes: 0 } };
+                }
               }
               if (s.includes('INTO scripts') || (s.includes('ON CONFLICT') && s.includes('scripts'))) {
                 const [userId, id, name, description, path, content, revision, created_at, updated_at] =
@@ -177,5 +216,26 @@ describe('scripts D1 mock', () => {
       '/api/scripts',
     );
     expect(r.status).toBe(405);
+  });
+
+  it('PUT archives a D1 version snapshot', async () => {
+    const env = { ALLOW_OPEN_KEYS: '1', DB: mockD1() } as Env;
+    await handleScripts(
+      req('/api/scripts/s1', {
+        method: 'PUT',
+        body: JSON.stringify({ name: 'D1', content: 'plot(1)' }),
+      }),
+      env,
+      origin,
+      '/api/scripts/s1',
+    );
+    const list = await handleScripts(
+      req('/api/scripts/s1/versions'),
+      env,
+      origin,
+      '/api/scripts/s1/versions',
+    );
+    const j = await list.json();
+    expect(j.versions.length).toBeGreaterThanOrEqual(1);
   });
 });

@@ -39,9 +39,12 @@
  * | DELETE | `/:id`      | Remove; 404 if missing |
  * | GET    | `/_draft`   | Autosave draft or `null` |
  * | PUT    | `/_draft`   | Upsert draft content/name |
+ * | GET    | `/:id/versions` | Version history (newest first, no content) |
+ * | GET    | `/:id/versions/:rev` | Full script at a historical revision |
  *
  * Revisions are opaque (`rev_<time>_<rand>`). Optimistic concurrency uses
  * `If-Match` header or `revision` field; mismatch returns remote revision.
+ * Every successful PUT snapshots the new tip into `script_versions` (FIFO 50).
  */
 
 import type { Env } from './index';
@@ -71,10 +74,27 @@ export interface ScriptMeta {
 }
 
 // --- In-memory fallback (per isolate; fine for local dev / unit tests) ---
+/** Version snapshot stored alongside the live script row. */
+export interface ScriptVersionRow {
+  id: string;
+  revision: string;
+  name: string;
+  description?: string | null;
+  path?: string | null;
+  content: string;
+  created_at: number;
+  message?: string;
+}
+
+/** FIFO cap on version snapshots per script (per user). */
+const MAX_VERSIONS_PER_SCRIPT = 50;
+
 /** userId → (scriptId → row) */
 const memScripts = new Map<string, Map<string, ScriptRow>>();
 /** userId → single autosave draft */
 const memDrafts = new Map<string, { content: string; name?: string; updated_at: number }>();
+/** userId → (scriptId → versions, newest last) */
+const memVersions = new Map<string, Map<string, ScriptVersionRow[]>>();
 
 function memUser(userId: string): Map<string, ScriptRow> {
   let m = memScripts.get(userId);
@@ -83,6 +103,140 @@ function memUser(userId: string): Map<string, ScriptRow> {
     memScripts.set(userId, m);
   }
   return m;
+}
+
+function memUserVersions(userId: string): Map<string, ScriptVersionRow[]> {
+  let m = memVersions.get(userId);
+  if (!m) {
+    m = new Map();
+    memVersions.set(userId, m);
+  }
+  return m;
+}
+
+function rowToVersion(row: ScriptRow, message?: string): ScriptVersionRow {
+  const v: ScriptVersionRow = {
+    id: row.id,
+    revision: row.revision,
+    name: row.name,
+    content: row.content,
+    created_at: row.updated_at,
+  };
+  if (row.description != null) v.description = row.description;
+  if (row.path != null) v.path = row.path;
+  if (message) v.message = message;
+  else v.message = `Save ${row.name}`;
+  return v;
+}
+
+function versionMeta(v: ScriptVersionRow) {
+  const sha = v.revision;
+  return {
+    sha,
+    revision: sha,
+    shortSha: sha.slice(0, 7),
+    message: v.message || `Save ${v.name}`,
+    committedAt: v.created_at,
+    name: v.name,
+  };
+}
+
+function archiveMemVersion(userId: string, row: ScriptRow): void {
+  const buckets = memUserVersions(userId);
+  let list = buckets.get(row.id) || [];
+  list = list.filter((x) => x.revision !== row.revision);
+  list.push(rowToVersion(row));
+  if (list.length > MAX_VERSIONS_PER_SCRIPT) {
+    list = list.slice(list.length - MAX_VERSIONS_PER_SCRIPT);
+  }
+  buckets.set(row.id, list);
+}
+
+async function putVersionD1(db: D1Database, userId: string, row: ScriptRow): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO script_versions (user_id, id, revision, name, description, path, content, created_at, message)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, id, revision) DO UPDATE SET
+         name = excluded.name,
+         description = excluded.description,
+         path = excluded.path,
+         content = excluded.content,
+         created_at = excluded.created_at,
+         message = excluded.message`,
+    )
+    .bind(
+      userId,
+      row.id,
+      row.revision,
+      row.name,
+      row.description ?? null,
+      row.path ?? null,
+      row.content,
+      row.updated_at,
+      `Save ${row.name}`,
+    )
+    .run();
+}
+
+async function trimVersionsD1(db: D1Database, userId: string, id: string): Promise<void> {
+  await db
+    .prepare(
+      `DELETE FROM script_versions
+       WHERE user_id = ? AND id = ?
+         AND revision NOT IN (
+           SELECT revision FROM script_versions
+           WHERE user_id = ? AND id = ?
+           ORDER BY created_at DESC
+           LIMIT ?
+         )`,
+    )
+    .bind(userId, id, userId, id, MAX_VERSIONS_PER_SCRIPT)
+    .run();
+}
+
+async function listVersionsD1(
+  db: D1Database,
+  userId: string,
+  id: string,
+): Promise<ScriptVersionRow[]> {
+  const res = await db
+    .prepare(
+      `SELECT id, revision, name, description, path, content, created_at, message
+       FROM script_versions WHERE user_id = ? AND id = ?
+       ORDER BY created_at DESC`,
+    )
+    .bind(userId, id)
+    .all<ScriptVersionRow>();
+  return res.results || [];
+}
+
+async function getVersionD1(
+  db: D1Database,
+  userId: string,
+  id: string,
+  rev: string,
+): Promise<ScriptVersionRow | null> {
+  return db
+    .prepare(
+      `SELECT id, revision, name, description, path, content, created_at, message
+       FROM script_versions WHERE user_id = ? AND id = ? AND revision = ?`,
+    )
+    .bind(userId, id, rev)
+    .first<ScriptVersionRow>();
+}
+
+async function archiveVersion(db: D1Database | undefined, userId: string, row: ScriptRow): Promise<void> {
+  if (db) {
+    try {
+      await putVersionD1(db, userId, row);
+      await trimVersionsD1(db, userId, row.id);
+    } catch {
+      /* missing script_versions table — live write still succeeds */
+    }
+  } else {
+    archiveMemVersion(userId, row);
+  }
 }
 
 function rowToMeta(r: ScriptRow): ScriptMeta {
@@ -298,6 +452,7 @@ export async function handleScripts(
       };
       if (db) await putD1(db, userId, row);
       else memUser(userId).set(id, row);
+      await archiveVersion(db, userId, row);
       return corsJson({ status: 'success', script: { ...rowToMeta(row), content: row.content } }, 201, origin);
     }
     return corsJson({ status: 'error', code: 'METHOD', message: 'GET or POST required' }, 405, origin);
@@ -306,6 +461,67 @@ export async function handleScripts(
   // --- Item /api/scripts/:id ---
   // Reached after the parts.length === 0 and parts[0] === '_draft' guards above.
   const id = decodeURIComponent(parts[0]!);
+
+  // --- Versions: /api/scripts/:id/versions[/:rev] ---
+  if (parts[1] === 'versions') {
+    if (req.method !== 'GET') {
+      return corsJson({ status: 'error', code: 'METHOD', message: 'GET required' }, 405, origin);
+    }
+    const rev = parts[2] ? decodeURIComponent(parts[2]) : '';
+    if (rev) {
+      let row: ScriptVersionRow | null = null;
+      if (db) {
+        try {
+          row = await getVersionD1(db, userId, id, rev);
+        } catch {
+          row = null;
+        }
+      } else {
+        row = (memUserVersions(userId).get(id) || []).find((v) => v.revision === rev) || null;
+      }
+      if (!row) {
+        return corsJson(
+          { status: 'error', code: 'NOT_FOUND', message: `version ${rev} not found for ${id}` },
+          404,
+          origin,
+        );
+      }
+      return corsJson(
+        {
+          status: 'success',
+          script: {
+            id: row.id,
+            name: row.name,
+            description: row.description || undefined,
+            path: row.path || undefined,
+            revision: row.revision,
+            createdAt: row.created_at,
+            updatedAt: row.created_at,
+            content: row.content,
+          },
+        },
+        200,
+        origin,
+      );
+    }
+    let rows: ScriptVersionRow[] = [];
+    if (db) {
+      try {
+        rows = await listVersionsD1(db, userId, id);
+      } catch {
+        rows = [];
+      }
+    } else {
+      // Newest last in the archive buffer — reverse for newest-first listing.
+      // Insertion order is the tie-breaker when two saves share a timestamp.
+      rows = [...(memUserVersions(userId).get(id) || [])].reverse();
+    }
+    return corsJson(
+      { status: 'success', versions: rows.map(versionMeta) },
+      200,
+      origin,
+    );
+  }
 
   if (req.method === 'GET') {
     let row: ScriptRow | null = null;
@@ -364,6 +580,7 @@ export async function handleScripts(
     };
     if (db) await putD1(db, userId, row);
     else memUser(userId).set(id, row);
+    await archiveVersion(db, userId, row);
     return corsJson(
       { status: 'success', script: { ...rowToMeta(row), content: row.content } },
       prev ? 200 : 201,
@@ -390,4 +607,5 @@ export async function handleScripts(
 export function _clearMemScripts() {
   memScripts.clear();
   memDrafts.clear();
+  memVersions.clear();
 }

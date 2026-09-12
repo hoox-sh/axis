@@ -22,17 +22,13 @@
  *
  * Appears whenever the user switches the active storage plugin. Offers two
  * paths:
- * - **Migrate scripts** — copy every script from the old plugin to the new one
- *   (read full doc → write to new → remove from old), then signal completion
- *   via {@link StorageChangeDialogProps.onConfirm}.
- * - **Start fresh** — just switch, no copy.
+ * - **Copy scripts** — duplicate every script onto the new engine (source is
+ *   never deleted), then signal completion via
+ *   {@link StorageChangeDialogProps.onConfirm}.
+ * - **Switch without copying** — just switch, leave both libraries as-is.
  *
- * The dialog implements the migration orchestration itself (per AC: listScripts
- * + writeScript + removeScript on old) because the high-level service wrappers
- * in `storage/service.ts` resolve against the **active** plugin only and would
- * require flipping the active plugin mid-loop, which races with the call site
- * that triggered this dialog. Going through `getStorage(id)` directly avoids
- * the side effect.
+ * Copy orchestration lives in {@link copyScriptsBetweenStorages} so the
+ * active plugin stays pinned to the source until the user commits.
  *
  * Surface is a standard AXIS modal (`.sc-dialog-backdrop` + `.sc-dialog` +
  * `.sc-dialog-header` + `.sc-dialog-body` + `.sc-dialog-footer`), matching
@@ -53,7 +49,8 @@ import {
 } from 'solid-js';
 import { Icons } from './icons';
 import { installFocusTrap } from './focus-trap';
-import { getStorage } from '../storage/catalog';
+import { copyScriptsBetweenStorages } from '../storage/service';
+import { resolveCloudConfig } from '../storage/cloud-config';
 import { appendLog } from '../store';
 
 /** Storage change confirmation mode passed to {@link StorageChangeDialogProps.onConfirm}. */
@@ -73,10 +70,10 @@ export interface StorageChangeDialogProps {
   toEngineLabel: string;
   /**
    * Called once the user has committed to a mode.
-   * - `'migrate'` — fired **after** the bulk copy finishes (or partially succeeds).
+   * - `'migrate'` — fired **after** the bulk copy finishes successfully.
    *   The parent handler at the call site is expected to call `setActivePlugin`
    *   to commit the engine switch.
-   * - `'fresh'` — fired immediately when the user picks "Start fresh".
+   * - `'fresh'` — fired immediately when the user picks "Switch without copying".
    *
    * May return a promise; the dialog awaits it before settling so the parent
    * can update store state. Errors thrown here surface as an error state in
@@ -180,65 +177,37 @@ const StorageChangeDialog: Component<StorageChangeDialogProps> = (props) => {
   };
 
   /**
-   * Bulk copy orchestrator. Iterates the source plugin, copies each script to
-   * the destination, then removes it from the source. Resolves with a summary
-   * so the caller (the Migrate button) can decide whether to invoke
-   * {@link StorageChangeDialogProps.onConfirm}.
+   * Bulk **copy** orchestrator. Source scripts are never deleted.
    */
   const runMigration = async (handle: { aborted: boolean }): Promise<void> => {
-    const fromPlugin = getStorage(props.fromEngineId);
-    const toPlugin = getStorage(props.toEngineId);
-    if (!fromPlugin) {
-      throw new Error(`Unknown source storage plugin: "${props.fromEngineId}"`);
-    }
-    if (!toPlugin) {
-      throw new Error(`Unknown target storage plugin: "${props.toEngineId}"`);
-    }
-
-    const scripts = await fromPlugin.list();
-    setProgress({ current: 0, total: scripts.length, currentName: '' });
-
     appendLog(
       'info',
-      `Migrating ${scripts.length} scripts from ${props.fromEngineId} → ${props.toEngineId}`,
+      `Copying scripts ${props.fromEngineId} → ${props.toEngineId} (source kept)`,
       'library',
     );
 
-    let succeeded = 0;
-    const failed: FailedScript[] = [];
+    const result = await copyScriptsBetweenStorages(props.fromEngineId, props.toEngineId, {
+      abort: handle,
+      onProgress: (p) => {
+        setProgress({ current: p.current, total: p.total, currentName: p.name });
+      },
+    });
 
-    for (let i = 0; i < scripts.length; i++) {
-      if (handle.aborted) break;
-      const meta = scripts[i]!;
-      setProgress({ current: i, total: scripts.length, currentName: meta.name });
-      try {
-        const doc = await fromPlugin.read(meta.id);
-        await toPlugin.write(doc);
-        // Best-effort remove from source — data is already on the target, so
-        // a failure here is non-fatal but worth logging.
-        try {
-          await fromPlugin.remove(meta.id);
-        } catch (rmErr) {
-          appendLog(
-            'warn',
-            `Migrated "${meta.name}" but could not delete from ${props.fromEngineId}: ${
-              rmErr instanceof Error ? rmErr.message : String(rmErr)
-            }`,
-            'library',
-          );
-        }
-        succeeded++;
-        setProgress({ current: i + 1, total: scripts.length, currentName: meta.name });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        failed.push({ name: meta.name, error: msg });
-        appendLog('error', `Migration failed for "${meta.name}": ${msg}`, 'library');
-      }
-    }
+    setProgress({
+      current: result.copied,
+      total: result.total,
+      currentName: '',
+    });
 
-    if (handle.aborted) {
-      const msg = `Cancelled after copying ${succeeded} of ${scripts.length} scripts. ` +
-        `Some scripts may already exist on the destination — review before retrying.`;
+    const failed: FailedScript[] = result.failed.map((f) => ({
+      name: f.name,
+      error: f.error,
+    }));
+
+    if (result.aborted) {
+      const msg =
+        `Cancelled after copying ${result.copied} of ${result.total} scripts. ` +
+        `Source scripts were not removed.`;
       setErrorMsg(msg);
       setFailures(failed);
       setPhase('error');
@@ -247,9 +216,10 @@ const StorageChangeDialog: Component<StorageChangeDialogProps> = (props) => {
     }
 
     if (failed.length > 0) {
-      const summary = failed.length === scripts.length
-        ? `Migration failed for all ${scripts.length} scripts.`
-        : `Migrated ${succeeded} of ${scripts.length} scripts — ${failed.length} failed.`;
+      const summary =
+        failed.length === result.total
+          ? `Copy failed for all ${result.total} scripts. Source library is unchanged.`
+          : `Copied ${result.copied} of ${result.total} scripts — ${failed.length} failed. Source library is unchanged.`;
       setErrorMsg(summary);
       setFailures(failed);
       setPhase('error');
@@ -259,11 +229,9 @@ const StorageChangeDialog: Component<StorageChangeDialogProps> = (props) => {
 
     appendLog(
       'ok',
-      `Migrated ${succeeded} scripts ${props.fromEngineId} → ${props.toEngineId}`,
+      `Copied ${result.copied} scripts ${props.fromEngineId} → ${props.toEngineId} (source kept)`,
       'library',
     );
-    // All scripts copied successfully — hand off to the parent so it can
-    // commit `setActivePlugin('storage', ...)`.
     await props.onConfirm('migrate');
   };
 
@@ -292,7 +260,12 @@ const StorageChangeDialog: Component<StorageChangeDialogProps> = (props) => {
     void handleMigrate();
   };
 
-  /** Start-fresh button handler — just switch engines, no copy. */
+  const targetNeedsKey = () => {
+    if (props.toEngineId !== 'cloud') return false;
+    return !resolveCloudConfig().apiKey;
+  };
+
+  /** Switch-without-copying handler — source stays intact. */
   const handleFresh = async () => {
     setErrorMsg(null);
     try {
@@ -310,20 +283,20 @@ const StorageChangeDialog: Component<StorageChangeDialogProps> = (props) => {
       const p = progress();
       if (p.total === 0) return 'Reading script list from source storage…';
       if (p.currentName) {
-        return `Migrating ${p.current} of ${p.total}: ${p.currentName}`;
+        return `Copying ${p.current} of ${p.total}: ${p.currentName}`;
       }
-      return `Migrating 0 of ${p.total}…`;
+      return `Copying 0 of ${p.total}…`;
     }
     if (phase() === 'error') {
-      return errorMsg() ?? 'Migration failed.';
+      return errorMsg() ?? 'Copy failed.';
     }
-    return `Switch the active storage from ${props.fromEngineLabel} to ${props.toEngineLabel}.`;
+    return `Copy your library to ${props.toEngineLabel}. Scripts stay on ${props.fromEngineLabel} too — nothing is deleted.`;
   };
 
   /** Heading question shown above the body copy. */
   const heading = () => {
-    if (phase() === 'migrating') return 'Migrating scripts…';
-    if (phase() === 'error') return 'Migration incomplete';
+    if (phase() === 'migrating') return 'Copying scripts…';
+    if (phase() === 'error') return 'Copy incomplete';
     return `Switch storage engine?`;
   };
 
@@ -386,6 +359,12 @@ const StorageChangeDialog: Component<StorageChangeDialogProps> = (props) => {
             class="sc-dialog-body flex flex-col gap-3 text-[0.9em]"
           >
             <p class="text-text-dim leading-relaxed m-0">{bodyDescription()}</p>
+
+            <Show when={phase() === 'idle' && targetNeedsKey()}>
+              <p class="text-red text-[11px] m-0" data-testid="axis-storage-change-need-key">
+                Cloud API key is not set — add the Worker URL and key in Settings before copying.
+              </p>
+            </Show>
 
             <Show when={phase() === 'idle'}>
               <div class="border border-border-soft/80 rounded-[var(--radius-sc)] px-2.5 py-2 bg-bg-base/40 flex flex-col gap-1.5">
@@ -467,7 +446,7 @@ const StorageChangeDialog: Component<StorageChangeDialogProps> = (props) => {
                 data-testid="axis-storage-change-retry"
               >
                 <Icons.refresh />
-                Retry migration
+                Retry copy
               </button>
             </Show>
 
@@ -480,16 +459,22 @@ const StorageChangeDialog: Component<StorageChangeDialogProps> = (props) => {
                 data-testid="axis-storage-change-fresh"
               >
                 <Icons.eraser />
-                Start fresh
+                Switch without copying
               </button>
               <button
                 type="button"
                 class="sc-btn sc-btn-primary"
                 onClick={() => void handleMigrate()}
                 data-testid="axis-storage-change-migrate"
+                disabled={targetNeedsKey()}
+                title={
+                  targetNeedsKey()
+                    ? 'Set the Worker API key in Settings before copying'
+                    : 'Copy scripts to the new engine (keep the source library)'
+                }
               >
                 <Icons.shuffle />
-                Migrate scripts
+                Copy scripts
               </button>
             </Show>
           </div>

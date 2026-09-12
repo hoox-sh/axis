@@ -169,4 +169,61 @@ describe('handleScripts', () => {
     );
     expect(put3.status).toBe(200);
   });
+
+  it('archives versions on PUT and lists/reads them', async () => {
+    await handleScripts(
+      req('/api/scripts/v1', {
+        method: 'PUT',
+        body: JSON.stringify({ name: 'Hist', content: 'plot(1)' }),
+      }),
+      env,
+      origin,
+      '/api/scripts/v1',
+    );
+    await handleScripts(
+      req('/api/scripts/v1', {
+        method: 'PUT',
+        body: JSON.stringify({ name: 'Hist', content: 'plot(2)' }),
+      }),
+      env,
+      origin,
+      '/api/scripts/v1',
+    );
+
+    const list = await handleScripts(
+      req('/api/scripts/v1/versions'),
+      env,
+      origin,
+      '/api/scripts/v1/versions',
+    );
+    expect(list.status).toBe(200);
+    const lj = await list.json();
+    expect(lj.versions.length).toBe(2);
+    expect(lj.versions[0].sha || lj.versions[0].revision).toBeDefined();
+
+    const shas = lj.versions.map((v: { revision?: string; sha?: string }) => v.revision || v.sha);
+    const bodies: string[] = [];
+    for (const sha of shas) {
+      const get = await handleScripts(
+        req(`/api/scripts/v1/versions/${sha}`),
+        env,
+        origin,
+        `/api/scripts/v1/versions/${sha}`,
+      );
+      expect(get.status).toBe(200);
+      bodies.push((await get.json()).script.content);
+    }
+    expect(bodies).toContain('plot(1)');
+    expect(bodies).toContain('plot(2)');
+  });
+
+  it('404s unknown version', async () => {
+    const r = await handleScripts(
+      req('/api/scripts/missing/versions/nope'),
+      env,
+      origin,
+      '/api/scripts/missing/versions/nope',
+    );
+    expect(r.status).toBe(404);
+  });
 });

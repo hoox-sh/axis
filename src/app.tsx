@@ -566,7 +566,7 @@ export const App: Component = () => {
       {/* New deployed version → Update now / Hard reload / Later */}
       <UpdateBanner />
 
-      {/* Global storage-engine change dialog (Migrate / Start fresh). Host
+      {/* Global storage-engine change dialog (Copy scripts / Switch without copying). Host
           reads the shared signal from storage/service so every call site
           (ScriptLibraryPanel, SettingsDialog, PluginsPage, PluginManager)
           shares one dialog instance. */}

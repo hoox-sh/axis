@@ -26,13 +26,13 @@
  * (ScriptLibraryPanel dropdown, SettingsDialog save, PluginsPage catalog,
  * PluginManager modal) invoke
  * {@link import('../storage/service').promptStorageChange} instead of
- * `setActivePlugin('storage', …)` so the user is prompted to migrate or
- * start fresh before the engine flips.
+ * `setActivePlugin('storage', …)` so the user is prompted to copy scripts
+ * (source is never deleted) or switch without copying before the engine flips.
  *
  * The actual per-script copy is handled inside the dialog (it talks to
  * `getStorage(fromId)` / `getStorage(toId)` directly so the active plugin
  * can stay pinned to `fromId` until the user commits the switch). When the
- * user picks *Migrate* or *Start fresh* this host calls
+ * user picks *Copy scripts* or *Switch without copying* this host calls
  * `setActivePlugin('storage', to)` and clears the pending request. On
  * *Cancel* (or backdrop click / Escape) the request is dropped without
  * touching the active plugin.

@@ -129,10 +129,11 @@ describe('storage-cloud plugin', () => {
     ).rejects.toThrow(/API key/);
   });
 
-  it('getStatus probes /health', async () => {
+  it('getStatus probes /health then /api/scripts', async () => {
+    const urls: string[] = [];
     globalThis.fetch = mock(async (input: RequestInfo | URL) => {
-      expect(String(input)).toContain('/health');
-      return new Response(JSON.stringify({ status: 'healthy' }), { status: 200 });
+      urls.push(String(input));
+      return new Response(JSON.stringify({ status: 'healthy', scripts: [] }), { status: 200 });
     }) as typeof fetch;
 
     const st = await cloudStoragePlugin.getStatus?.({
@@ -140,6 +141,59 @@ describe('storage-cloud plugin', () => {
       apiKey: 'pn_' + 'a'.repeat(48),
     });
     expect(st?.connected).toBe(true);
+    expect(urls.some((u) => u.includes('/health'))).toBe(true);
+    expect(urls.some((u) => u.includes('/api/scripts'))).toBe(true);
+  });
+
+  it('listVersions maps remote history', async () => {
+    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+      expect(String(input)).toContain('/api/scripts/s1/versions');
+      return new Response(
+        JSON.stringify({
+          status: 'success',
+          versions: [
+            {
+              sha: 'rev_new',
+              shortSha: 'rev_new',
+              message: 'Save Remote',
+              committedAt: 2,
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+    const vers = await cloudStoragePlugin.listVersions!('s1', {
+      config: { endpoint: 'http://cloud.test', apiKey: 'pn_' + 'a'.repeat(48) },
+    });
+    expect(vers).toHaveLength(1);
+    expect(vers[0].sha).toBe('rev_new');
+  });
+
+  it('readAtRevision returns historical content', async () => {
+    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+      expect(String(input)).toContain('/versions/oldrev');
+      return new Response(
+        JSON.stringify({
+          status: 'success',
+          script: {
+            id: 's1',
+            name: 'Remote',
+            content: 'plot(old)',
+            revision: 'oldrev',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+    const doc = await cloudStoragePlugin.readAtRevision!(
+      's1',
+      'oldrev',
+      { endpoint: 'http://cloud.test', apiKey: 'pn_' + 'a'.repeat(48) },
+    );
+    expect(doc.content).toBe('plot(old)');
   });
 
   it('list surfaces 401 unauthorized', async () => {

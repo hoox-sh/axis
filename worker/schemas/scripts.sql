@@ -36,3 +36,22 @@ CREATE TABLE IF NOT EXISTS script_drafts (
   name TEXT,
   updated_at INTEGER NOT NULL
 );
+
+-- Per-write version history (git-like). Live row stays in `scripts`;
+-- every successful PUT/POST snapshots the new tip here. FIFO trim is
+-- applied in handleScripts (keeps 50 newest per user+id).
+CREATE TABLE IF NOT EXISTS script_versions (
+  user_id TEXT NOT NULL,
+  id TEXT NOT NULL,
+  revision TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  path TEXT,
+  content TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  message TEXT,
+  PRIMARY KEY (user_id, id, revision)
+);
+
+CREATE INDEX IF NOT EXISTS idx_script_versions_user_id_created
+  ON script_versions (user_id, id, created_at DESC);
