@@ -22,6 +22,9 @@ const PAGE_TEST_ID: Record<StudioRailPage, string> = {
 };
 
 export async function openStudio(page: Page, rail: StudioRailPage = 'runtime') {
+  // Wait for boot first: on slow runners the topbar buttons exist but are
+  // not actionable until hydration finishes.
+  await expect(page.getByTestId('axis-topbar')).toBeVisible({ timeout: 30_000 });
   // Studio remembers the last page; always pick the rail so this is not
   // order-dependent across tests in the same worker. The Studio button
   // toggles, so retry the click once if the rail does not appear (the
