@@ -22,10 +22,17 @@ const PAGE_TEST_ID: Record<StudioRailPage, string> = {
 };
 
 export async function openStudio(page: Page, rail: StudioRailPage = 'runtime') {
-  await page.getByTestId('axis-btn-studio').click();
   // Studio remembers the last page; always pick the rail so this is not
-  // order-dependent across tests in the same worker.
-  await expect(page.getByTestId(`axis-studio-rail-${rail}`)).toBeVisible();
+  // order-dependent across tests in the same worker. The Studio button
+  // toggles, so retry the click once if the rail does not appear (the
+  // overlay may have been left open by a slow transition).
+  await page.getByTestId('axis-btn-studio').click();
+  try {
+    await expect(page.getByTestId(`axis-studio-rail-${rail}`)).toBeVisible({ timeout: 5_000 });
+  } catch {
+    await page.getByTestId('axis-btn-studio').click();
+    await expect(page.getByTestId(`axis-studio-rail-${rail}`)).toBeVisible();
+  }
   await page.getByTestId(`axis-studio-rail-${rail}`).click();
   await expect(page.getByTestId(PAGE_TEST_ID[rail])).toBeVisible();
 }

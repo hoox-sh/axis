@@ -48,7 +48,7 @@ FROM deps AS build
 ARG GIT_SHA=dev
 ARG VERSION=2.6.1
 
-COPY index.html vite.config.ts tsconfig.json bunfig.toml ./
+COPY index.html vite.config.ts tsconfig.json bunfig.toml VERSION ./
 COPY public ./public
 COPY src ./src
 # vendor / pyodide also live under public/; root copies keep sync scripts working
