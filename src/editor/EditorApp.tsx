@@ -38,6 +38,7 @@ import {
 import { store, isScriptRunBlockedByPreEval } from '../store';
 import { applyThemeToDocument } from '../theme';
 import { runPreevalNow } from './preevaluate';
+import { UpdateBanner } from '../ui/UpdateBanner';
 
 /** Pop-out / new-tab editor shell; does not host the chart. */
 export const EditorApp: Component = () => {
@@ -101,6 +102,8 @@ export const EditorApp: Component = () => {
 
   return (
     <div class="h-screen flex flex-col bg-bg-base text-text overflow-hidden">
+      {/* New deployed version → Update now / Hard reload / Later */}
+      <UpdateBanner />
       <div class="flex items-center gap-2 px-2.5 py-1 bg-bg-panel border-b-2 border-border min-h-[32px] flex-shrink-0">
         <span class="font-semibold text-sm text-text">
           AXIS

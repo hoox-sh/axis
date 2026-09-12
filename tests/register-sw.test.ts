@@ -332,4 +332,44 @@ describe('registerAxisServiceWorker', () => {
     for (const fn of swListeners.controllerchange ?? []) fn();
     expect(reload).not.toHaveBeenCalled();
   });
+
+  it('routes a waiting worker to onUpdateAvailable instead of auto-activating', async () => {
+    const waiting = { postMessage: mock(() => {}) };
+    const registration = {
+      waiting: waiting as { postMessage: ReturnType<typeof mock> } | null,
+      addEventListener: mock(() => {}),
+      update: mock(async () => {}),
+    };
+    const register = mock(() => Promise.resolve(registration));
+    const onUpdateAvailable = mock((_info: { activate: () => void }) => {});
+
+    // @ts-expect-error test stub
+    globalThis.window = {};
+    // @ts-expect-error test stub
+    globalThis.navigator = {
+      serviceWorker: {
+        controller: {},
+        register,
+        addEventListener: mock(() => {}),
+      },
+    };
+    // @ts-expect-error test stub
+    globalThis.location = { protocol: 'https:', hostname: 'example.com' };
+
+    await registerAxisServiceWorker({ onUpdateAvailable });
+
+    expect(onUpdateAvailable).toHaveBeenCalledTimes(1);
+    // No silent activation: the banner owns the reload decision now
+    expect(waiting.postMessage).not.toHaveBeenCalled();
+
+    // The provided activate() still drives the SKIP_WAITING + reload path
+    const activate = onUpdateAvailable.mock.calls[0][0].activate as () => boolean;
+    expect(activate()).toBe(true);
+    expect(waiting.postMessage).toHaveBeenCalledWith(SKIP_WAITING_MESSAGE);
+
+    // Once nothing is waiting anymore (another tab won the race), activate
+    // reports false so the caller falls back to a plain reload.
+    registration.waiting = null;
+    expect(activate()).toBe(false);
+  });
 });

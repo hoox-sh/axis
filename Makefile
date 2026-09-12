@@ -7,7 +7,7 @@
 	axis axis-install axis-doctor axis-setup axis-deploy axis-health
 
 GIT_SHA ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
-VERSION ?= $(shell node -p "require('./package.json').version" 2>/dev/null || echo 2.0.0)
+VERSION ?= $(shell cat VERSION 2>/dev/null || node -p "require('./package.json').version" 2>/dev/null || echo 2.0.0)
 export GIT_SHA
 export VERSION
 

@@ -63,6 +63,7 @@ import { DataViewPanel } from './ui/DataViewPanel';
 import { LayerPanel } from './ui/LayerPanel';
 import { errorFallback } from './ui/ErrorFallback';
 import { ErrorShareToast } from './ui/ErrorShareToast';
+import { UpdateBanner } from './ui/UpdateBanner';
 import { reportUiError } from './ui/boot-errors';
 import { registerBuiltins } from './plugins/bootstrap';
 import { restoreInstalledPlugins } from './plugins/loader';
@@ -563,6 +564,9 @@ export const App: Component = () => {
 
       {/* Opt-in error diagnostic share (telemetry.shareOnError) */}
       <ErrorShareToast />
+
+      {/* New deployed version → Update now / Hard reload / Later */}
+      <UpdateBanner />
 
       {/* Global storage-engine change dialog (Migrate / Start fresh). Host
           reads the shared signal from storage/service so every call site

@@ -49,6 +49,7 @@
  */
 
 import { handleRun } from './runtime';
+import { WORKER_VERSION } from './version';
 import { handleKeys } from './keys';
 import { handleScripts } from './scripts';
 import { handleGitOAuth } from './git-oauth';
@@ -223,6 +224,7 @@ export default {
             {
               status: 'healthy',
               service: 'pynescript-axis-worker',
+              version: WORKER_VERSION,
               timestamp: Date.now(),
               features: {
                 scripts: true,

@@ -36,8 +36,14 @@
 import { ErrorBoundary } from 'solid-js';
 import { render } from 'solid-js/web';
 import { isEditorView } from './editor/editor-bridge';
-import { registerAxisServiceWorker } from './pwa/register-sw';
+import { isDevBuild, isTauriShell, registerAxisServiceWorker } from './pwa/register-sw';
 import { listenForPwaInstallPrompt } from './pwa/install-prompt';
+import { installCloseGuard } from './pwa/close-guard';
+import {
+  checkForUpdates,
+  setWaitingWorkerActivate,
+  startUpdatePolling,
+} from './update/update-manager';
 import { errorFallback } from './ui/ErrorFallback';
 import { installBootErrorHandlers, reportUiError } from './ui/boot-errors';
 import './index.css';
@@ -45,8 +51,39 @@ import './index.css';
 // Catch async boot failures (plugin restore, dynamic imports, etc.)
 installBootErrorHandlers();
 
+// Prompt on tab/window close while editor tabs hold unsaved edits
+// (predicates registered by the editor; no-op until one reports dirty).
+installCloseGuard();
+
 // Production PWA only (skipped in Vite DEV). Idempotent — safe if called once.
-void registerAxisServiceWorker();
+// A waiting service worker stores its activation and the version poll confirms
+// the deployed version number before surfacing the banner. The activation is
+// retained when the poll doesn't confirm (VERSION not bumped, offline, or
+// cached version.json) so the next successful poll still prompts.
+void registerAxisServiceWorker({
+  onUpdateAvailable: ({ activate }) => {
+    setWaitingWorkerActivate(activate);
+    void checkForUpdates().then((info) => {
+      if (info) return;
+      // Waiting worker exists but version.json matches: never sit silently.
+      // Banner stays VERSION-gated on purpose — bump VERSION to prompt.
+      try {
+        console.info(
+          '[axis] service worker update waiting; version.json unchanged — bump VERSION to surface the update banner',
+        );
+      } catch {
+        /* logging must never break the update flow */
+      }
+    });
+  },
+});
+// Poll the deployed /version.json (interval + focus/visibility/online).
+// Skipped in the Tauri shell: the bundled version.json never changes there
+// and desktop updates ship through the native updater, not the PWA path.
+// Skipped in Vite DEV to match register-sw (avoids noise + banner in dev).
+if (!isTauriShell() && !isDevBuild()) {
+  startUpdatePolling();
+}
 // Capture beforeinstallprompt even in production without nags until the chip shows.
 listenForPwaInstallPrompt();
 

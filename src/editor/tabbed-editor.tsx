@@ -100,6 +100,7 @@ import { normalizePyneLogs } from '../results/pyne-logs';
 import { scanPineColors } from './pine-colors';
 import { Icons } from '../ui/icons';
 import { announce } from '../ui/sr-announce';
+import { registerCloseGuardPredicate } from '../pwa/close-guard';
 import { detectPineVersion, detectScriptKind, scriptKindShort } from '../indicators/script-meta';
 
 export { countDocStats, cursorLineCol } from './doc-stats';
@@ -370,6 +371,13 @@ export const TabbedEditor: Component<Props> = (props) => {
   });
 
   onMount(() => {
+    // Window-close guard: prompt when any tab holds unsaved edits. The guard
+    // itself is installed once in index.tsx; this only reports dirty state.
+    // Single instance per shell today — a second mount would last-wins this id.
+    const unregisterCloseGuard = registerCloseGuardPredicate('editor-tabs', () =>
+      tabs().some((tab) => tab.dirty),
+    );
+    onCleanup(unregisterCloseGuard);
     // Click pin-able chips / pin gutter → crosshair + scroll to bar
     // (line flash is handled inside editor/inline-debug firePinJump)
     setDebugChipClickHandler((detail) => {

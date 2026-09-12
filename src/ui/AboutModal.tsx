@@ -28,9 +28,10 @@ import { type Component, Show, createSignal, onCleanup, onMount } from 'solid-js
 import { installFocusTrap } from './focus-trap';
 import { Icons } from './icons';
 import { HooxLogo } from './HooxLogo';
+import { APP_VERSION } from '../version';
 
-/** App + engine versions shown in the about chrome (keep in sync with package.json). */
-const AXIS_VERSION = '2.4.1';
+/** App + engine versions shown in the about chrome. */
+const AXIS_VERSION = APP_VERSION;
 const PYNE_VERSION = '0.4.4';
 
 const LINKS = {

@@ -36,7 +36,8 @@ let refreshing = false;
 /** Snapshot at register time: page already controlled by a SW. */
 let hadControllerAtRegister = false;
 
-function isDevBuild(): boolean {
+/** True in Vite dev (`bun run dev`) — HMR and SW fight over assets. */
+export function isDevBuild(): boolean {
   try {
     return Boolean(import.meta.env?.DEV);
   } catch {
@@ -45,7 +46,7 @@ function isDevBuild(): boolean {
 }
 
 /** True when running inside the Tauri desktop webview. */
-function isTauriShell(): boolean {
+export function isTauriShell(): boolean {
   try {
     if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) return true;
   } catch {
@@ -133,6 +134,19 @@ export function onWorkerInstalled(
   registration: { waiting: { postMessage: (msg: unknown) => void } | null },
 ): boolean {
   if (worker.state !== 'installed') return false;
+  return tryActivateWaitingWorker(registration);
+}
+
+/**
+ * Post `SKIP_WAITING` to the registration's waiting worker when there is one.
+ * Returns whether anything was activated — `reg.waiting` can turn `null`
+ * between detection and click (another tab activated it first), in which case
+ * callers must fall back to a plain reload instead of waiting for a
+ * `controllerchange` that will never fire.
+ */
+export function tryActivateWaitingWorker(registration: {
+  waiting: { postMessage: (msg: unknown) => void } | null;
+}): boolean {
   const waiting = registration.waiting;
   if (!waiting) return false;
   requestWaitingWorkerActivation(waiting);
@@ -141,8 +155,17 @@ export function onWorkerInstalled(
 
 /**
  * Register `/sw.js` once. Returns the registration or null when skipped/failed.
+ *
+ * When `opts.onUpdateAvailable` is provided, a waiting update is NOT
+ * auto-activated — the hook fires with an `activate()` callback so the app
+ * can surface an update banner first (see `update/update-manager`). Without
+ * the hook the legacy behavior is kept: activate + single reload.
  */
-export function registerAxisServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+export function registerAxisServiceWorker(
+  opts: {
+    onUpdateAvailable?: (info: { activate: () => boolean }) => void;
+  } = {},
+): Promise<ServiceWorkerRegistration | null> {
   if (registerPromise) return registerPromise;
 
   registerPromise = (async () => {
@@ -167,16 +190,22 @@ export function registerAxisServiceWorker(): Promise<ServiceWorkerRegistration |
         updateViaCache: 'none',
       });
 
-      // Waiting worker (stale tab / skipWaiting disabled): activate only with reload path.
+      const activateWaiting = () => tryActivateWaitingWorker(reg);
+
+      // Waiting worker (stale tab / skipWaiting disabled): with a UI hook the
+      // app shows an update banner first, otherwise activate with reload path.
       if (reg.waiting) {
-        requestWaitingWorkerActivation(reg.waiting);
+        if (opts.onUpdateAvailable) opts.onUpdateAvailable({ activate: activateWaiting });
+        else requestWaitingWorkerActivation(reg.waiting);
       }
 
       reg.addEventListener('updatefound', () => {
         const installing = reg.installing;
         if (!installing) return;
         installing.addEventListener('statechange', () => {
-          onWorkerInstalled(installing, reg);
+          if (installing.state !== 'installed' || !reg.waiting) return;
+          if (opts.onUpdateAvailable) opts.onUpdateAvailable({ activate: activateWaiting });
+          else onWorkerInstalled(installing, reg);
         });
       });
 

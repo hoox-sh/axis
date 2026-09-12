@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "vite",
     "dev:datafeed": "bun packages/datafeed/src/index.ts",
-    "build": "vite build",
+    "build": "bun scripts/sync-versions.mjs && vite build",
+    "sync:versions": "bun scripts/sync-versions.mjs",
     "preview": "vite preview",
     "test": "bun test --max-concurrency=1 tests/ worker/tests/",
     "test:cli": "bun --cwd packages/cli test",
