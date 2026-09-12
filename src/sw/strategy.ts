@@ -21,6 +21,7 @@
  *    are retried before surfacing so one reset never breaks an import.
  * 7. Navigation is network-first with shell fallback (fresh HTML when online).
  * 8. Navigation never rejects `respondWith` — offline shell HTML if cache miss.
+ * 9. Same-origin `/version.json` is bypass — the update probe must hit network.
  *
  * ## Manual checklist (DevTools → Application)
  *
@@ -32,7 +33,7 @@
  */
 
 /** Bump when shell precache or strategy semantics change. */
-export const SW_VERSION = 'v6';
+export const SW_VERSION = 'v7';
 
 export const CACHE_PREFIX = 'axis-';
 
@@ -42,6 +43,11 @@ export const CACHE_PREFIX = 'axis-';
  * Mirrored in `public/sw.js` / root `sw.js`.
  */
 export const RUNTIME_CACHE_MAX_ENTRIES = 96;
+
+/** Uncached static/CDN fetch: retry thrown network errors this many times. Mirrored in `public/sw.js`. */
+export const FETCH_RETRY_ATTEMPTS = 3;
+/** Per-attempt AbortController timeout (ms) for uncached fetches. */
+export const FETCH_RETRY_TIMEOUT_MS = 8000;
 
 export function shellCacheName(version: string = SW_VERSION): string {
   return `${CACHE_PREFIX}shell-${version}`;
@@ -91,6 +97,11 @@ export function isApiPath(pathname: string): boolean {
   return pathname === '/api' || pathname.startsWith('/api/');
 }
 
+/** Deployed-version probe — must not be intercepted (query is not part of pathname). */
+export function isVersionProbe(pathname: string): boolean {
+  return pathname === '/version.json' || pathname.endsWith('/version.json');
+}
+
 export type RequestClass =
   | 'api'
   | 'navigate'
@@ -123,6 +134,8 @@ export function classifyRequest(
   }
 
   if (isCdnHost(url.host)) return 'cdn';
+
+  if (url.origin === swOrigin && isVersionProbe(url.pathname)) return 'bypass';
 
   if (url.origin === swOrigin) return 'static';
 

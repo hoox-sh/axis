@@ -68,17 +68,16 @@
   overflow: hidden;
   animation: ax-page-in 180ms ease-out;
 }
-/* Non-modal tool page (Workers): transparent, click-through scrim. The page
-   itself spans the full width like every other studio page; only the
-   modality differs (no focus trap, no Escape-steal). */
+/* Non-modal tool page (Workers): right-side sheet, click-through left scrim. */
 .ax-page-backdrop--nonmodal {
   background: transparent;
   pointer-events: none;
   animation: none;
 }
 .ax-page-backdrop--nonmodal .ax-page {
-  width: 100%;
+  width: min(76rem, 96vw);
   height: 100%;
+  margin-left: auto;
   pointer-events: auto;
   animation: none;
 }

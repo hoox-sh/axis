@@ -25,17 +25,31 @@ export async function openStudio(page: Page, rail: StudioRailPage = 'runtime') {
   // Wait for boot first: on slow runners the topbar buttons exist but are
   // not actionable until hydration finishes.
   await expect(page.getByTestId('axis-topbar')).toBeVisible({ timeout: 30_000 });
-  // Studio remembers the last page; always pick the rail so this is not
-  // order-dependent across tests in the same worker. The Studio button
-  // toggles, so retry the click once if the rail does not appear (the
-  // overlay may have been left open by a slow transition).
-  await page.getByTestId('axis-btn-studio').click();
-  try {
-    await expect(page.getByTestId(`axis-studio-rail-${rail}`)).toBeVisible({ timeout: 5_000 });
-  } catch {
-    await page.getByTestId('axis-btn-studio').click();
-    await expect(page.getByTestId(`axis-studio-rail-${rail}`)).toBeVisible();
+  const railItem = page.getByTestId(`axis-studio-rail-${rail}`);
+  const studioBtn = page.getByTestId('axis-btn-studio');
+  // Studio is a toggle — a second click while the overlay is still opening
+  // closes it. Studio also remembers the last page; always pick the rail.
+  if (!(await railItem.isVisible())) {
+    await studioBtn.click();
+    const shown = await railItem
+      .waitFor({ state: 'visible', timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!shown) {
+      const late = await railItem
+        .waitFor({ state: 'visible', timeout: 10_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (
+        !late &&
+        (await railItem.count()) === 0 &&
+        (await studioBtn.getAttribute('aria-pressed')) !== 'true'
+      ) {
+        await studioBtn.click();
+      }
+      await expect(railItem).toBeVisible({ timeout: 15_000 });
+    }
   }
-  await page.getByTestId(`axis-studio-rail-${rail}`).click();
+  await railItem.click();
   await expect(page.getByTestId(PAGE_TEST_ID[rail])).toBeVisible();
 }

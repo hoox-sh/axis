@@ -23,7 +23,7 @@ import {
   stubAppNetwork,
 } from './charts';
 
-test.describe('Drawings overlay', () => {
+test.describe('Drawings overlay @critical', () => {
   test.beforeEach(async ({ page }) => {
     await stubAppNetwork(page);
   });
@@ -45,6 +45,7 @@ test.describe('Drawings overlay', () => {
     // Persisted drawings rehydrate on boot.
     await page.reload();
     await expect(page.getByTestId('axis-topbar')).toBeVisible();
+    await expect(page.locator('[data-axis-chart-host]')).toBeVisible();
     await expect
       .poll(() => drawingShapeCount(page), { timeout: 15_000 })
       .toBeGreaterThan(0);

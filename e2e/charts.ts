@@ -3,16 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-/**
- * DOM harness for chart/drawing e2e specs.
- *
- * Shared helpers to boot the app with fully stubbed network, load mock bars,
- * select drawing tools, click into the chart host, and count rendered drawing
- * shapes. Keeps specs focused on behavior; all Playwright boilerplate lives
- * here.
- *
- * Run: `bunx playwright test e2e/drawings.spec.ts`
- */
+/** Shared Playwright helpers for chart/drawing e2e specs. */
 
 import { expect, type Page } from '@playwright/test';
 
@@ -84,7 +75,11 @@ export async function clickChart(page: Page, xRatio = 0.3, yRatio = 0.4): Promis
   await page.mouse.click(box.x + box.width * xRatio, box.y + box.height * yRatio);
 }
 
-/** Number of rendered SVG shapes inside chart hosts (drawings overlay). */
+/** Number of user-drawing SVG shapes (excludes pyne fills/drawings and toolbar icons). */
 export async function drawingShapeCount(page: Page): Promise<number> {
-  return page.locator('[data-axis-chart-host] svg :is(line, path, rect, circle, ellipse)').count();
+  return page
+    .locator(
+      '[data-axis-chart-host] svg.axis-drawing-layer > g.axis-user-drawings :is(line, path, rect, circle, ellipse)',
+    )
+    .count();
 }

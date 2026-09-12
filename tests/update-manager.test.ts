@@ -27,6 +27,11 @@ import {
   versionJsonUrl,
 } from '../src/update/update-manager';
 import { APP_VERSION } from '../src/version';
+import {
+  _resetCloseGuardForTests,
+  isCloseGuardEnabled,
+  registerCloseGuardPredicate,
+} from '../src/pwa/close-guard';
 
 const RUNNING = APP_VERSION;
 const NEXT = '9.9.9-test';
@@ -40,6 +45,7 @@ function fetchJson(body: unknown, ok = true) {
 
 beforeEach(() => {
   _resetUpdateManagerForTests();
+  _resetCloseGuardForTests();
 });
 
 describe('normalizeVersion / isNewerVersion', () => {
@@ -178,6 +184,18 @@ describe('hardReload', () => {
     expect(navigated).toEqual(['https://app.example/?_axis_v=9.9.9-test']);
     expect(getUpdateState().status).toBe('reloading');
   });
+
+  it('disables the close-guard before unregistering and navigating', async () => {
+    registerCloseGuardPredicate('editor-tabs', () => true);
+    expect(isCloseGuardEnabled()).toBe(true);
+    await hardReload({
+      serviceWorker: { getRegistrations: async () => [] },
+      caches: { keys: async () => [], delete: async () => true },
+      location: { href: 'https://app.example/' },
+      navigate: () => {},
+    });
+    expect(isCloseGuardEnabled()).toBe(false);
+  });
 });
 
 describe('waiting worker activation', () => {
@@ -227,6 +245,27 @@ describe('waiting worker activation', () => {
     } finally {
       globalThis.location = original;
     }
+  });
+});
+
+describe('defaultSetStatus', () => {
+  it('does not clobber a non-ready store status', async () => {
+    const { store, setStatus } = await import('../src/store');
+    setStatus('running', 'Executing Pine Script…');
+    markUpdateAvailable(NEXT, 'manual', { canNotify: () => false });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(store.status).toBe('running');
+    expect(store.statusMessage).toBe('Executing Pine Script…');
+    setStatus('ready', 'Ready.');
+  });
+
+  it('mirrors update text onto the status line while idle/ready', async () => {
+    const { store, setStatus } = await import('../src/store');
+    setStatus('ready', 'Ready.');
+    markUpdateAvailable(NEXT, 'manual', { canNotify: () => false });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(store.status).toBe('ready');
+    expect(store.statusMessage).toMatch(/Update available/);
   });
 });
 

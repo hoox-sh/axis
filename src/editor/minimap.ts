@@ -97,8 +97,11 @@ export class EditorMinimap {
     };
     this.onScroll = () => this.schedule();
     this.canvas.addEventListener('pointerdown', this.onPointerDown);
+    this.canvas.addEventListener('lostpointercapture', this.onPointerUp);
+    this.canvas.addEventListener('pointercancel', this.onPointerUp);
     window.addEventListener('pointermove', this.onPointerMove);
     window.addEventListener('pointerup', this.onPointerUp);
+    window.addEventListener('pointercancel', this.onPointerUp);
     this.view.scrollDOM.addEventListener('scroll', this.onScroll, { passive: true });
     this.schedule();
   }
@@ -137,16 +140,16 @@ export class EditorMinimap {
     const rows = Math.ceil(lines / step);
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = MINIMAP_WIDTH;
-    const h = Math.max(1, rows * MINIMAP_ROW_HEIGHT);
-    // Fit the whole document into the visible container height: rows are
-    // 2px at natural scale, compressed when the doc exceeds the viewport.
-    const availH = Math.max(1, this.host.clientHeight || h);
-    const scale = Math.min(1, availH / h);
-    const drawH = Math.max(1, Math.round(h * scale));
+    const packedH = Math.max(1, rows * MINIMAP_ROW_HEIGHT);
+    // Always fill the column; map Y through packed rows so short files still
+    // span the strip (and clicks anywhere in the 72px column scroll).
+    const availH = Math.max(1, this.host.clientHeight || packedH);
+    const scale = availH / packedH;
+    const drawH = availH;
+    this.canvas.style.height = `${drawH}px`;
     if (this.canvas.width !== Math.round(w * dpr) || this.canvas.height !== Math.round(drawH * dpr)) {
       this.canvas.width = Math.round(w * dpr);
       this.canvas.height = Math.round(drawH * dpr);
-      this.canvas.style.height = `${drawH}px`;
     }
     const ctx = this.canvas.getContext('2d');
     if (!ctx) return;
@@ -205,8 +208,11 @@ export class EditorMinimap {
   destroy(): void {
     if (this.raf) cancelAnimationFrame(this.raf);
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
+    this.canvas.removeEventListener('lostpointercapture', this.onPointerUp);
+    this.canvas.removeEventListener('pointercancel', this.onPointerUp);
     window.removeEventListener('pointermove', this.onPointerMove);
     window.removeEventListener('pointerup', this.onPointerUp);
+    window.removeEventListener('pointercancel', this.onPointerUp);
     this.view.scrollDOM.removeEventListener('scroll', this.onScroll);
     this.canvas.remove();
   }

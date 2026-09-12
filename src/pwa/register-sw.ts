@@ -15,6 +15,8 @@
  *   reloads once on `controllerchange` so mixed old/new modules never stick.
  */
 
+import { setCloseGuardEnabled } from './close-guard';
+
 declare global {
   interface Window {
     /** Set while / after SW registration to prevent double-register across shells. */
@@ -113,6 +115,7 @@ function softReloadIfAppropriate(
     return false;
   }
   refreshing = true;
+  setCloseGuardEnabled(false);
   reload();
   return true;
 }

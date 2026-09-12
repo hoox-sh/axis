@@ -16,11 +16,12 @@ npm install -g @hoox-sh/axis-cli
 axis --help
 
 # standalone binary (single file, no Node/Bun required)
-# download axis-cli-<version>-bun-<target> from the release assets:
+# download axis-cli-<cli-version>-bun-<target> from the release assets:
 #   bun-linux-x64 | bun-linux-arm64 | bun-linux-x64-musl | bun-linux-arm64-musl
 #   bun-darwin-x64 | bun-darwin-arm64 | bun-windows-x64.exe
-curl -LO "https://github.com/hoox-sh/axis/releases/download/v<version>/axis-cli-<version>-bun-linux-x64"
-chmod +x axis-cli-*-bun-linux-x64 && ./axis-cli-*-bun-linux-x64 --version
+# Release tag = app VERSION (v2.6.2). Filename uses CLI package version (0.3.0).
+curl -LO "https://github.com/hoox-sh/axis/releases/download/v2.6.2/axis-cli-0.3.0-bun-linux-x64"
+chmod +x axis-cli-0.3.0-bun-linux-x64 && ./axis-cli-0.3.0-bun-linux-x64 --version
 
 # from the AXIS monorepo
 bun install

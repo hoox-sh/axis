@@ -21,7 +21,6 @@ import { registerHealth } from "./commands/health.js";
 import { registerDev } from "./commands/dev.js";
 import { registerWhoami } from "./commands/whoami.js";
 
-/** Embedded at bundle/compile time — works in node dist, bun src, and the single-file binary. */
 const pkgVersion: string = ownPackage.version;
 
 export async function main(): Promise<void> {

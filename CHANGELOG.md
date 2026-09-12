@@ -9,7 +9,7 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-08 · 373 commits · describe-tag: `cli-v0.3.0`_
+_Generated/updated: 2026-09-12 · 396 commits · describe-tag: `v2.6.1`_
 
 ---
 
@@ -17,11 +17,19 @@ _Generated/updated: 2026-09-08 · 373 commits · describe-tag: `cli-v0.3.0`_
 
 ### Added
 
+### Fixed
+
+### Changed
+
+## [2.6.2] — 2026-09-12
+
+### Added
+
 - **Editor minimap (interactive)**: a scaled canvas overview docked to the editor right edge — one row per line, accent viewport box, cursor line. Click/drag scrolls the editor; auto-hides in narrow containers. Toggle in the editor overflow menu (View → Minimap, persisted `editorMinimapEnabled`, default on).
 - **Foldable code sections**: indent-based folding for Pine (StreamLanguage has no syntax tree) with a void-styled fold gutter plus standard fold keybindings.
 - **Indent grid**: faint `·` dots for leading whitespace plus one vertical guide per completed 4-space indent level, width-preserving and viewport-scoped.
 - **Per-tab version/type badges + Save**: each editor tab shows `vN` (from `//@version=`, `–` fallback) and `STR`/`IND`/`LIB` (from the declaration call, `–` fallback) plus a Save button that persists that tab via the existing library/draft path.
-- **Workers page full width**: the non-modal Workers sheet now spans the full studio page width like Runtime/Wire/Settings/Plugins (modality unchanged: no focus trap, no Escape-steal).
+- **Workers stays a right-side non-modal sheet**: the Workers overlay remains a right-aligned sheet with a left scrim that click-throughs to the chart/editor (modality unchanged: no focus trap, no Escape-steal) — not a full-width page like Runtime/Wire/Settings/Plugins.
 
 - **Language Feature Bar above the editor status strip**: a chip row (Hover · Sig · Complete · Lint · Marks · Chips · Remote) where each chip is colored only while the feature is actually firing (open card / list / hint, running check, rendered marks) — dimmed while switched off — so the bar shows which features the current script uses and which could be disabled. Click toggles the master switch, long-press (~550ms) or right-click opens a popover with the group's full settings. The row itself is a persisted “Language Feature Bar” option (Settings → Editor intelligence → View, default on; `editorFeatureBarEnabled` in the store).
 - **Standalone CLI binaries (bun compile)**: `bun run build:binaries` (`packages/cli/scripts/build-binaries.ts`) cross-compiles the CLI into single-file executables for 7 targets — linux x64/arm64 (glibc + musl), macOS x64/arm64, Windows x64 — with a native `--version`/`--help` smoke test. Own package metadata is now embedded at bundle/compile time (`src/own-package.ts` static JSON import) and preflight recognizes a new `binary` install context (`$bunfs` → "standalone binary (bun compile)"), so version display, engine checks, and drift detection work without a package.json on disk. Binaries ship as `axis-cli-<version>-bun-<target>` release assets and are covered by `SHA256SUMS` (bare asset filenames — a flat download verifies with one `sha256sum -c`).
@@ -36,12 +44,22 @@ _Generated/updated: 2026-09-08 · 373 commits · describe-tag: `cli-v0.3.0`_
 - **Language Feature Bar nits**: clicking a chip whose settings menu is open now dismisses the popover instead of flipping the group's master switch (long-press opens the menu; the natural dismissal — a short press on the same chip — accidentally toggled the feature off). Number settings (Hover delay, Max options, …) now draft raw keystrokes and clamp/commit on blur or Enter, so values below a field's `min` can be typed instead of snapping mid-entry. Clicking a *different* chip while a popover is open switches the popover without toggling.
 - **Test DOM stub Symbol-safety**: `tests/setup.ts` `dataset` proxy now passes through non-string keys (e.g. `Symbol.toPrimitive`) instead of throwing on `console.log`/inspect, and the traceback-trim budgets are named constants kept in sync across `src/engines/catalog.ts`, `src/engines/index.js`, and `worker/src/pyodide_runtime.ts`.
 - **Docker builds were broken by the git-hooks `prepare` script**: root `package.json` gained `"prepare": "git config core.hooksPath .githooks"` (commit `d5f0cf89`), which runs on every `bun install` — including inside the image `deps` stage, where git is not installed → exit 127 on every bake since then (v2.6.1 GHCR images never published). The Dockerfile now installs with `--ignore-scripts` (no dep needs lifecycle scripts; native binaries ship as platform optionalDeps) — verified with a local `build` target bake (`dist/.version` = 2.6.1). Stale version fallbacks (`2.3.0`/`2.3.1`) refreshed to `2.6.1` across `Dockerfile`, `docker-bake.hcl`, and `docker-compose.yml`.
+- **Service worker no longer cache-first `/version.json` probes**: cache-busted `/version.json?t=*` polls were classified as same-origin static and stuffed unique entries into the 96-entry runtime cache, evicting hashed chunks and `/pyodide/*`. Those probes now bypass the SW. Cache names bumped `v6` → `v7` so poisoned runtime caches are dropped on activate.
+- **Close-guard disabled before update hard/soft reload**: the unsaved-work `beforeunload` prompt blocked Update now / Hard reload; the update path now disables the guard immediately before navigating.
+- **Drawings e2e counts user-drawing SVG only**: the chart overlay SVG count no longer includes chrome/grid paths, so the trend-line persistence assertion is not a false pass.
+- **`openStudio` no longer toggle-closes a slow overlay**: opening Studio while the sheet is still animating in no longer treats a second click as a close.
+- **CLI binary install URL documents app tag vs CLI version**: GitHub Release tags use the app `VERSION` (`v2.6.2`); standalone binaries are named with the CLI package version (`axis-cli-0.3.0-bun-linux-x64`). The CLI README curl snippet now uses both current values so the documented URL is not a 404.
+- **Docker build stamps `VITE_APP_VERSION` from the `VERSION` file**: compose/bake ARG fallbacks are no longer the Vite stamp, so `docker compose up --build` without `VERSION=` matches `/version.json`. `Dockerfile` `ARG VERSION=`, compose `${VERSION:-}`, and bake `variable "VERSION"` defaults join `sync:versions` / `check:versions`.
+- **Feature bar long-press/contextmenu no longer race-dismiss; dialog focus**: the chip popover no longer closes on the same pointer that opened it, and the settings dialog receives focus.
+- **Minimap pointercancel + full-height hit target**: `pointercancel` ends a drag the same way `pointerup` does, and the hit area spans the editor height so clicks near the gutter register.
+- **Workers non-modal sheet restored**: Workers is a right-aligned sheet again (not full-width), with a left scrim that click-throughs to the chart/editor.
+- **`IndentWidget.eq` so guides don't rebuild on every scroll**: indent-grid widgets compare equal across viewport updates, so CodeMirror does not reconstruct guides on each scroll.
 
 ### Changed
 
 - **Coverage push toward 80/85%**: ~260 new unit tests across gateway, signed-fetch, pine-logs, watchlist tickers/live, symbol catalog, bars-cache, streams catalog, workers probe, git-oauth, dataset sinks/expand, data-source-manager, credentials, and drawing coords (`createCoordContext` with stub scales — coords 36% → ~100%) — scoped core gate up 82.8% → ~90% (passes the 80% and 85% floors), app lines 80.1% → 82.6%. Fixed 5 wrong expectations in the generated data-coverage tests (walk-loop `expanded` semantics, same-bucket merge conflicts, sink-merge unions) and 2 cross-suite leaks (probe teardown deleting the shared `window` stub, a real-timer device-flow poll). Overall lcov sits at ~79.3% — the remainder is browser/chart/worker-runtime code (drawing layer, pane manager, pyne-lsp, durable session) that needs E2E rather than unit tests.
 - **Drawings e2e + chart DOM harness**: new `e2e/charts.ts` harness (stubbed network, mock-bar boot, toolbar tool selection, chart clicks, SVG shape counting) and `e2e/drawings.spec.ts` — draws a trend line via the real toolbar, asserts the SVG overlay renders, reloads to prove storage persistence, and switches tools. Covers the browser-bound drawing layer that unit tests cannot reach (no layout engine/canvas in bun).
-- **GitHub Release now carries CLI + worker artifacts**: a new `release-assets` job in `.github/workflows/release.yml` attaches, for every `v*` tag, the offline-install CLI tarball (`axis-cli-<cli-version>.tgz` via `npm pack` — verified with an offline `npm i -g` + `axis --version` smoke), a deployable worker source snapshot (`axis-worker-<tag-version>.tar.gz` — `LICENSE` + `worker/` minus `node_modules` / `.wrangler` / `.dev.vars`, sanity-checked for `wrangler.toml` + `src/index.ts`), and `SHA256SUMS-<tag-version>.txt`. The job waits for the desktop workflow to create the Release (creates it itself if desktop never does) and uploads with `--clobber`; existing tags can be backfilled via `gh workflow run release.yml --ref main -f tag=vX.Y.Z`.
+- **GitHub Release now carries CLI + worker artifacts**: a new `release-assets` job in `.github/workflows/release.yml` attaches, for every `v*` tag, the offline-install CLI tarball (`axis-cli-<cli-version>.tgz` via `npm pack` — verified with an offline `npm i -g` + `axis --version` smoke), a deployable worker source snapshot (`axis-worker-<tag-version>.tar.gz` — `LICENSE` + `worker/` minus `node_modules` / `.wrangler` / `.dev.vars`, sanity-checked for `wrangler.toml.example` + `src/index.ts`), and `SHA256SUMS-<tag-version>.txt`. The job waits for the desktop workflow to create the Release (creates it itself if desktop never does) and uploads with `--clobber`; existing tags can be backfilled via `gh workflow run release.yml --ref main -f tag=vX.Y.Z`.
 - **CLI binary smoke test runs on host-native targets**: `packages/cli/scripts/build-binaries.ts` no longer assumes a linux-x64 host — it smoke-tests whichever wanted target matches the running platform/arch (e.g. `bun-darwin-arm64`) and skips cleanly when none does, so `bun run build:binaries` cross-compiling on macOS/ARM64 dev machines no longer fails on the smoke step. Classic CI (ubuntu-x64) smoke is unchanged.
 - **Pyodide runtime surfaces drawing-GC failures instead of silently no-opping**: `pyodide/pynescript_runtime.py` (synced to `public/pyodide`) now warns once on stderr when `DrawingRegistry` export/limits or the compile-path `gc_exported_drawings` call fails (e.g. a pyne wheel API change/move) rather than swallowing the error while `meta` still advertises the caps. `max_*_count` declaration parsing now strips `//` and `/* */` comments so a cap mentioned in a comment isn't captured, and the redundant `"mode"` entry is dropped from `compile_meta`.
 
@@ -1044,12 +1062,18 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (54 commits)
+### 2026-09 (77 commits)
 
 #### Features
 
+- `a9f7bb6e` (2026-09-12) — feat(release): VERSION single source of truth with update manager and close guard
+- `319403fb` (2026-09-10) — feat(editor): minimap, folding, indent grid, tab badges, workers full width
+- `8e9e8d6b` (2026-09-10) — feat(editor): Language Feature Bar with live activity chips
+- `4d565427` (2026-09-08) — feat(cli): standalone binaries via bun compile; fix Docker prepare-hook break
 - `1fef94c3` (2026-09-08) — feat(ui): default TF 15m, studio opens on Settings, non-modal Workers, no top status
 - `77d8600e` (2026-09-08) — feat(cli): installation self-check on start + doctor cli-install row
 - `716a26eb` (2026-09-07) — feat(ui): mobile-first responsive shell (phone sheets, tab bar, force-single chart)
@@ -1073,6 +1097,18 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `3a5de985` (2026-09-12) — fix(pwa): retry transient fetch failures in SW cache-first
+- `cb089b18` (2026-09-12) — fix(e2e): retry twice on CI runners
+- `b3915c90` (2026-09-12) — fix(e2e): wait for boot in openStudio, upload failure artifacts
+- `8f8c91cd` (2026-09-12) — fix(docker): copy version-stamped files into build context
+- `60aa2c4e` (2026-09-12) — fix(ci, docker): copy VERSION into build stage, harden studio helper
+- `bd8d1c0c` (2026-09-11) — fix(pyodide, editor, cli): bridge traceback tail, feature-bar popover, host-native smoke
+- `364776c5` (2026-09-09) — fix(pyodide): pass bars via globals + json.loads, surface full traceback
+- `e4888c72` (2026-09-08) — fix(ci): SHA256SUMS used CI paths for binaries — sha256sum -c unusable
+- `7d16a7bb` (2026-09-08) — fix(ci): CLI tgz mv target — packages/cli/.. is packages/, not the root
+- `144ef3d3` (2026-09-08) — fix(ci): GITHUB_ENV var casing — release-assets referenced empty vars
+- `cdb188b9` (2026-09-08) — fix(ci): worker bundle sanity check — wrangler.toml is gitignored
+- `cb6f00f5` (2026-09-08) — fix(ci): check-versions fails on Windows runners — CRLF line endings
 - `d4082f4c` (2026-09-08) — fix(shortcuts): mount ShortcutHub + keypress feedback
 - `c06a14cf` (2026-09-07) — fix(test): make CI test suite green (server hook timeout, matchMedia stubs)
 - `81f24c76` (2026-09-07) — fix(lint): resolve all Biome lint errors (368→0); add Biome + Prettier tooling
@@ -1089,6 +1125,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `477084bf` (2026-09-08) — docs(changelog): note bare-filename SHA256SUMS for binaries
 - `055d73d5` (2026-09-08) — docs: CLI-first command surface (axis <cmd> primary, bun run axis:* as repo alias)
 - `9b75c459` (2026-09-08) — docs(readme): real badge row, stack cross-links, unified stack footer
 - `efa7e87c` (2026-09-08) — docs(readme): add official Codecov coverage badge
@@ -1102,6 +1139,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### CI
 
+- `60a0c8d6` (2026-09-08) — ci(release): attach CLI tarball + worker source bundle to GitHub Releases
 - `d5f0cf89` (2026-09-08) — ci(hooks): versioned .githooks — pre-commit biome (staged), pre-push tsc + lint
 - `cdb68ff9` (2026-09-08) — ci: split Codecov uploads per flag, bump action to v7, target 75%
 - `9fe171a6` (2026-09-08) — ci: upload unit + CLI coverage to Codecov
@@ -1109,11 +1147,16 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Tests
 
+- `079f1569` (2026-09-12) — test(e2e): drawings overlay spec with chart DOM harness
+- `3e6778ea` (2026-09-12) — test(coverage): lift scoped core gate 82.8% to 89.9%
+- `6527e3de` (2026-09-10) — test(editor): cover folding, indent grid, minimap class
 - `2c9643b3` (2026-09-05) — test(pwa): stub beforeinstallprompt without DOM Event
 - `c0d88523` (2026-09-05) — test(load-symbol): isolate live stream and leftover scripts
 
 #### Chores
 
+- `b327a28a` (2026-09-10) — chore: stop tracking .grok/ and AGENTS.md (local-only)
+- `28420c09` (2026-09-08) — chore(release): v2.6.1 — sync desktop version stamps + check:versions guard
 - `67723020` (2026-09-08) — chore(release): v2.6.0 — shortcut hub fix, keypress feedback
 - `a78a7fca` (2026-09-07) — chore(release): v2.5.0 — mobile shell, pyne 0.5.0, zero lint errors
 - `8d6a7c70` (2026-09-07) — chore(engines): vendor pynescript wheel 0.5.0 from pyne

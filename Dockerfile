@@ -23,7 +23,7 @@ ARG BUN_VERSION=1.3.14
 ARG PYTHON_VERSION=3.12
 ARG NGINX_VERSION=1.27-alpine
 ARG GIT_SHA=dev
-ARG VERSION=2.6.1
+ARG VERSION=2.6.2
 
 # ---------------------------------------------------------------------------
 # deps — install JS toolchain
@@ -46,7 +46,7 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
 FROM deps AS build
 
 ARG GIT_SHA=dev
-ARG VERSION=2.6.1
+ARG VERSION=2.6.2
 
 COPY index.html vite.config.ts tsconfig.json bunfig.toml VERSION ./
 # sync:versions (runs with `bun run build`) stamps these — keep them in context
@@ -64,15 +64,17 @@ COPY manifest.webmanifest ./manifest.webmanifest
 COPY examples ./examples
 
 ENV NODE_ENV=production \
-    VITE_GIT_SHA=${GIT_SHA} \
-    VITE_APP_VERSION=${VERSION}
-
-RUN bun run build \
+    VITE_GIT_SHA=${GIT_SHA}
+# VERSION file wins over ARG so compose-without-VERSION matches /version.json
+RUN AXIS_V="$(tr -d '[:space:]' < VERSION)" \
+ && test -n "$AXIS_V" \
+ && export VITE_APP_VERSION="$AXIS_V" \
+ && bun run build \
  && test -f dist/index.html \
  && test -d dist/assets \
  && test -f dist/sw.js \
  && printf '%s\n' "${GIT_SHA}" > dist/.git-sha \
- && printf '%s\n' "${VERSION}" > dist/.version
+ && printf '%s\n' "$AXIS_V" > dist/.version
 
 # ---------------------------------------------------------------------------
 # pwa — slim Python static server (matches VPS axis-pwa.service)
@@ -80,7 +82,7 @@ RUN bun run build \
 FROM python:${PYTHON_VERSION}-slim AS pwa
 
 ARG GIT_SHA=dev
-ARG VERSION=2.6.1
+ARG VERSION=2.6.2
 
 LABEL org.opencontainers.image.title="AXIS PWA" \
       org.opencontainers.image.description="HOOX AXIS charting PWA (static dist)" \
@@ -123,7 +125,7 @@ CMD ["python", "axis_pwa_server.py"]
 FROM nginx:${NGINX_VERSION} AS pwa-nginx
 
 ARG GIT_SHA=dev
-ARG VERSION=2.6.1
+ARG VERSION=2.6.2
 
 LABEL org.opencontainers.image.title="AXIS PWA (nginx)" \
       org.opencontainers.image.description="HOOX AXIS static dist behind nginx" \

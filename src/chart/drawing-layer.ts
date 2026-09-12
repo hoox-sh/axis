@@ -297,7 +297,9 @@ export class DrawingLayer {
     this.gScript = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     this.gScript.setAttribute('class', 'axis-pyne-drawings');
     this.gDraw = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    this.gDraw.setAttribute('class', 'axis-user-drawings');
     this.gDraft = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    this.gDraft.setAttribute('class', 'axis-user-draft');
     // Fills under lines/labels; user drawings on top
     this.svg.appendChild(this.gFill);
     this.svg.appendChild(this.gScript);

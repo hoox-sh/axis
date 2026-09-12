@@ -73,6 +73,9 @@ export function foldMarker(open: boolean): HTMLElement {
   const el = document.createElement('span');
   el.className = `ax-fold-marker${open ? ' is-open' : ''}`;
   el.textContent = open ? '▾' : '▸';
+  const label = open ? 'Unfold line' : 'Fold line';
+  el.title = label;
+  el.setAttribute('aria-label', label);
   return el;
 }
 

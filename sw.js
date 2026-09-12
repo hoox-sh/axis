@@ -15,18 +15,22 @@
  *   - CDN (esm.sh, jsdelivr, unpkg, cdnjs) → cache-first runtime
  *   - Same-origin /api/*    → network-first; cache only HTTP 200 basic;
  *     offline miss → 503 JSON (never cache opaque/errors as success)
+ *   - Same-origin /version.json → do not intercept (update poll must hit network)
  *   - Non-GET / other cross-origin → do not intercept
  *
  * Version bump (VERSION) when precache list or strategy semantics change.
  * Activate deletes old `axis-*` caches only; current shell/runtime kept.
  */
 
-const VERSION = 'v6';
+const VERSION = 'v7';
 const CACHE_PREFIX = 'axis-';
 const SHELL_CACHE = `${CACHE_PREFIX}shell-${VERSION}`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-${VERSION}`;
 /** Soft cap on runtime cache entries (hashed assets + pyodide + CDN). Keep in sync with src/sw/strategy.ts. */
 const RUNTIME_CACHE_MAX_ENTRIES = 96;
+/** Uncached static/CDN fetch retries. Keep in sync with src/sw/strategy.ts. */
+const FETCH_RETRY_ATTEMPTS = 3;
+const FETCH_RETRY_TIMEOUT_MS = 8000;
 
 /** Stable shell assets present in Vite dist and legacy root trees. */
 const SHELL_ASSETS = [
@@ -47,6 +51,10 @@ function isCdnHost(host) {
 
 function isApiPath(pathname) {
     return pathname === '/api' || pathname.startsWith('/api/');
+}
+
+function isVersionProbe(pathname) {
+    return pathname === '/version.json' || pathname.endsWith('/version.json');
 }
 
 /** Opaque / error must never be stored as a successful cache entry. */
@@ -139,17 +147,23 @@ async function putRuntime(cache, req, res) {
 }
 
 /**
- * Fetch with retries: a transient reset (starved server, flaky radio) must
- * not hard-fail an uncached asset — the browser surfaces it as a broken
- * import with no second chance. Throws only after the last attempt.
+ * Retry thrown network errors (not HTTP 4xx). Clone each attempt so a
+ * consumed body cannot poison later tries; abort hung sockets.
  */
-async function fetchWithRetry(req, attempts = 3) {
+async function fetchWithRetry(req, attempts = FETCH_RETRY_ATTEMPTS) {
     let lastErr;
     for (let i = 0; i < attempts; i++) {
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), FETCH_RETRY_TIMEOUT_MS);
         try {
-            return await fetch(req);
+            return await fetch(req.clone(), { signal: ac.signal });
         } catch (err) {
             lastErr = err;
+        } finally {
+            clearTimeout(timer);
+        }
+        if (i < attempts - 1) {
+            await new Promise((r) => setTimeout(r, i === 0 ? 50 : 100));
         }
     }
     throw lastErr;
@@ -258,6 +272,7 @@ function classify(req, url) {
     if (url.origin === self.location.origin && isApiPath(url.pathname)) return 'api';
     if (req.mode === 'navigate' || req.destination === 'document') return 'navigate';
     if (isCdnHost(url.host)) return 'cdn';
+    if (url.origin === self.location.origin && isVersionProbe(url.pathname)) return null;
     if (url.origin === self.location.origin) return 'static';
     return null;
 }

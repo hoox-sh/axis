@@ -398,8 +398,11 @@ def _run_interpret(
         from pynescript.ast.evaluator.builtins.drawing import DrawingRegistry
 
         DrawingRegistry.reset()
-    except Exception:
-        pass
+    except Exception as _reset_err:
+        _warn_once(
+            "DrawingRegistry.reset unavailable "
+            f"({type(_reset_err).__name__}: {_reset_err})"
+        )
 
     for lib in libraries or []:
         if not isinstance(lib, dict):

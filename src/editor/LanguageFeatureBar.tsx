@@ -18,19 +18,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * **Language Feature Bar** — one row above the editor status strip with a
- * chip per language-feature group (hover / signature / complete / lint /
- * marks / chips / remote).
- *
- * - Colored (`is-active`) while the feature is **firing** (open card / list /
- *   hint, running check, rendered marks) — not merely switched on — so the
- *   bar shows which features the current script actually uses, and which
- *   could be disabled (dimmed `is-off` while switched off).
- * - Click toggles the group's master switch.
- * - Long-press (~{@link FEATURE_BAR_LONG_PRESS_MS}) or right-click opens a
- *   popover with the group's full settings.
- * - Visibility itself is a persisted setting (`editorFeatureBarEnabled`,
- *   “Language Feature Bar” in Settings → Editor intelligence).
+ * Language Feature Bar — chip per language-feature group.
  *
  * Activity is polled off the parent's {@link LanguageFeatureBarProps.getActivity}
  * (tooltips / completion open and close outside Solid).
@@ -158,11 +146,19 @@ export const LanguageFeatureBar: Component<LanguageFeatureBarProps> = (props) =>
   let pressTimer: number | undefined;
   let suppressClick = false;
 
+  const menuDomId = (id: string) => `axis-editor-feature-menu-${id}`;
+
   const cancelPress = () => {
     if (pressTimer !== undefined) {
       window.clearTimeout(pressTimer);
       pressTimer = undefined;
     }
+  };
+
+  const clearSuppressSoon = () => {
+    window.setTimeout(() => {
+      suppressClick = false;
+    }, 0);
   };
 
   const onChipDown = (e: PointerEvent, group: LanguageFeatureGroup) => {
@@ -171,8 +167,13 @@ export const LanguageFeatureBar: Component<LanguageFeatureBarProps> = (props) =>
     pressTimer = window.setTimeout(() => {
       pressTimer = undefined;
       suppressClick = true;
-      setOpenId((cur) => (cur === group.id ? null : group.id));
+      setOpenId(group.id);
     }, FEATURE_BAR_LONG_PRESS_MS);
+  };
+
+  const onChipUpOrCancel = () => {
+    cancelPress();
+    clearSuppressSoon();
   };
 
   const onChipClick = (group: LanguageFeatureGroup) => {
@@ -180,18 +181,12 @@ export const LanguageFeatureBar: Component<LanguageFeatureBarProps> = (props) =>
       suppressClick = false;
       return;
     }
-    // A menu already open on this chip: this click dismisses the popover —
-    // it must not flip the group's master switch (long-press opens, the most
-    // natural dismissal is a short press on the same chip).
+    // Click must not toggle while a menu is open: dismiss this chip's
+    // popover, or switch to another chip's, without flipping a master switch.
     if (openId() === group.id) {
       setOpenId(null);
       return;
     }
-    // A popover open on another chip: switch the popover to this chip
-    // without flipping its master switch — otherwise comparing settings
-    // across chips toggles features unintentionally. A second click (with
-    // this chip's popover open) dismisses; toggling happens only when no
-    // popover is open.
     if (openId() !== null) {
       setOpenId(group.id);
       return;
@@ -203,25 +198,78 @@ export const LanguageFeatureBar: Component<LanguageFeatureBarProps> = (props) =>
   const onChipContext = (e: MouseEvent, group: LanguageFeatureGroup) => {
     e.preventDefault();
     cancelPress();
-    setOpenId((cur) => (cur === group.id ? null : group.id));
+    if (openId() === group.id) return;
+    suppressClick = true;
+    clearSuppressSoon();
+    setOpenId(group.id);
   };
 
   // Close the popover on outside pointer-down / Escape.
   createEffect(() => {
-    if (openId() === null) return;
+    const id = openId();
+    if (id === null) return;
+    const menuId = menuDomId(id);
+    queueMicrotask(() => {
+      const menu = document.getElementById(menuId);
+      if (!menu) return;
+      const first = menu.querySelector('input');
+      try {
+        (first ?? menu).focus();
+      } catch {
+        /* jsdom / unmounted */
+      }
+    });
     const onDocDown = (e: PointerEvent) => {
       const t = e.target as Node | null;
       if (barEl && t && barEl.contains(t)) return;
       setOpenId(null);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpenId(null);
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setOpenId(null);
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const menu = document.getElementById(menuId);
+      if (!menu) return;
+      const inputs = Array.from(menu.querySelectorAll('input'));
+      if (inputs.length === 0) {
+        e.preventDefault();
+        menu.focus();
+        return;
+      }
+      const first = inputs[0];
+      const last = inputs[inputs.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || active === menu) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener('pointerdown', onDocDown, true);
-    document.addEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, true);
     onCleanup(() => {
       document.removeEventListener('pointerdown', onDocDown, true);
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('keydown', onKey, true);
+      if (openId() !== null) return;
+      const chip = barEl?.querySelector(
+        `[data-testid="axis-editor-feature-${id}"]`,
+      ) as HTMLElement | null;
+      if (!chip) return;
+      const active = document.activeElement;
+      if (active && active !== document.body && barEl && !barEl.contains(active)) return;
+      try {
+        chip.focus();
+      } catch {
+        /* jsdom / unmounted */
+      }
     });
   });
 
@@ -248,9 +296,11 @@ export const LanguageFeatureBar: Component<LanguageFeatureBarProps> = (props) =>
               title={`${group.label}: ${active() ? 'active now' : enabled() ? 'on (idle)' : 'off'} — ${group.hint}`}
               aria-pressed={enabled()}
               aria-expanded={openId() === group.id}
+              aria-controls={menuDomId(group.id)}
               onPointerDown={(e) => onChipDown(e, group)}
-              onPointerUp={cancelPress}
-              onPointerLeave={cancelPress}
+              onPointerUp={onChipUpOrCancel}
+              onPointerCancel={onChipUpOrCancel}
+              onPointerLeave={onChipUpOrCancel}
               onClick={() => onChipClick(group)}
               onContextMenu={(e) => onChipContext(e, group)}
             >
@@ -263,9 +313,12 @@ export const LanguageFeatureBar: Component<LanguageFeatureBarProps> = (props) =>
         {(group) => (
           <div
             class="axis-editor-feature-menu"
+            id={menuDomId(group().id)}
             data-testid={`axis-editor-feature-menu-${group().id}`}
             role="dialog"
+            aria-modal="true"
             aria-label={`${group().label} settings`}
+            tabIndex={-1}
           >
             <div class="axis-editor-feature-menu-title">{group().label} settings</div>
             <For each={group().settings}>

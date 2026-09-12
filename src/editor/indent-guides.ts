@@ -47,6 +47,10 @@ export class IndentWidget extends WidgetType {
     super();
   }
 
+  eq(other: IndentWidget) {
+    return other.run === this.run;
+  }
+
   toDOM(): HTMLElement {
     const el = document.createElement('span');
     el.className = 'ax-indent';

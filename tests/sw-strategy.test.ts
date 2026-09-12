@@ -15,10 +15,14 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   SW_VERSION,
   CACHE_PREFIX,
   RUNTIME_CACHE_MAX_ENTRIES,
+  FETCH_RETRY_ATTEMPTS,
+  FETCH_RETRY_TIMEOUT_MS,
   runtimeCacheDropCount,
   shellCacheName,
   runtimeCacheName,
@@ -26,6 +30,7 @@ import {
   cachesToDelete,
   isCdnHost,
   isApiPath,
+  isVersionProbe,
   classifyRequest,
   shouldCacheStaticResponse,
   shouldCacheApiResponse,
@@ -36,12 +41,14 @@ describe('SW cache names', () => {
   it('uses axis-* shell and runtime names with version', () => {
     expect(shellCacheName()).toBe(`axis-shell-${SW_VERSION}`);
     expect(runtimeCacheName()).toBe(`axis-runtime-${SW_VERSION}`);
-    expect(SW_VERSION).toBe('v6');
+    expect(SW_VERSION).toBe('v7');
     expect(shellCacheName('v9')).toBe('axis-shell-v9');
     expect(isAxisCacheName(shellCacheName())).toBe(true);
     expect(isAxisCacheName('workbox-precache-v2')).toBe(false);
     expect(CACHE_PREFIX).toBe('axis-');
     expect(RUNTIME_CACHE_MAX_ENTRIES).toBeGreaterThan(0);
+    expect(FETCH_RETRY_ATTEMPTS).toBe(3);
+    expect(FETCH_RETRY_TIMEOUT_MS).toBe(8000);
   });
 
   it('runtimeCacheDropCount trims only when over the soft cap', () => {
@@ -166,12 +173,49 @@ describe('classifyRequest', () => {
     ).toBe('bypass');
   });
 
+  it('bypasses /version.json probes (query is not part of pathname)', () => {
+    expect(isVersionProbe('/version.json')).toBe(true);
+    expect(isVersionProbe('/axis/version.json')).toBe(true);
+    expect(isVersionProbe('/pyodide/v0.26.2/pyodide.js')).toBe(false);
+    expect(
+      classifyRequest(
+        { origin, pathname: '/version.json', host: 'app.example' },
+        { method: 'GET' },
+        origin,
+      ),
+    ).toBe('bypass');
+    // `/version.json?t=1` still classifies as bypass — URL.pathname omits the query.
+    expect(
+      classifyRequest(
+        { origin, pathname: new URL('https://app.example/version.json?t=1').pathname, host: 'app.example' },
+        { method: 'HEAD' },
+        origin,
+      ),
+    ).toBe('bypass');
+    expect(
+      classifyRequest(
+        { origin, pathname: '/pyodide/v0.26.2/pyodide.js', host: 'app.example' },
+        { method: 'GET' },
+        origin,
+      ),
+    ).toBe('static');
+  });
+
   it('isApiPath and isCdnHost helpers', () => {
     expect(isApiPath('/api/foo')).toBe(true);
     expect(isApiPath('/apis')).toBe(false);
     expect(isCdnHost('esm.sh')).toBe(true);
     expect(isCdnHost('cdn.jsdelivr.net')).toBe(true);
     expect(isCdnHost('evil.com')).toBe(false);
+  });
+});
+
+describe('shipping SW copies', () => {
+  it('public/sw.js and sw.js file contents are equal', () => {
+    const root = resolve(import.meta.dir, '..');
+    expect(readFileSync(resolve(root, 'public/sw.js'))).toEqual(
+      readFileSync(resolve(root, 'sw.js')),
+    );
   });
 });
 

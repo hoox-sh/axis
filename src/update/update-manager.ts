@@ -38,6 +38,7 @@
 import { createSignal } from 'solid-js';
 import { APP_VERSION } from '../version';
 import { announce } from '../ui/sr-announce';
+import { setCloseGuardEnabled } from '../pwa/close-guard';
 
 export type UpdateSource = 'version-poll' | 'service-worker' | 'manual';
 
@@ -134,8 +135,9 @@ export interface UpdateNotifyHooks {
 }
 
 function defaultSetStatus(message: string): void {
-  void import('../store').then(({ setStatus }) => {
+  void import('../store').then(({ setStatus, store }) => {
     try {
+      if (store.status !== 'ready') return;
       setStatus('ready', message);
     } catch {
       /* store unavailable (tests) */
@@ -262,6 +264,7 @@ export interface ReloadDeps {
  * platform APIs are unavailable (tests, exotic webviews).
  */
 export async function hardReload(deps: ReloadDeps = {}): Promise<void> {
+  setCloseGuardEnabled(false);
   const nav = deps.navigate ?? ((url: string) => globalThis.location.assign(url));
   const latest = updateState().update?.latestVersion ?? normalizeVersion(APP_VERSION);
   setUpdateState((prev) => ({ ...prev, status: 'reloading' }));
@@ -292,6 +295,7 @@ export async function hardReload(deps: ReloadDeps = {}): Promise<void> {
 
 /** Soft reload via an activated waiting worker, else a plain reload. */
 export function softReload(activate?: () => boolean | void): void {
+  setCloseGuardEnabled(false);
   const fn = activate ?? takeWaitingWorkerActivate() ?? undefined;
   try {
     if (fn) {

@@ -124,11 +124,15 @@ describe('code folding extension', () => {
 
   it('markers carry open state', () => {
     const open = foldMarker(true);
-    const closed = foldMarker(false);
     expect(open.textContent).toBe('▾');
-    expect(closed.textContent).toBe('▸');
     expect(open.className).toContain('is-open');
+    expect(open.title).toBe('Unfold line');
+    expect(open.getAttribute('aria-label')).toBe('Unfold line');
+    const closed = foldMarker(false);
+    expect(closed.textContent).toBe('▸');
     expect(closed.className).not.toContain('is-open');
+    expect(closed.title).toBe('Fold line');
+    expect(closed.getAttribute('aria-label')).toBe('Fold line');
   });
 
   it('fold service resolves indent ranges headlessly', () => {
@@ -183,6 +187,14 @@ describe('indent grid widget', () => {
     };
     expect(el.children.length).toBe(1);
     expect(el.children[0]?.className).toBe('ax-indent-cell');
+  });
+
+  it('eq compares the whitespace run', () => {
+    const a = new IndentWidget('    ');
+    const b = new IndentWidget('    ');
+    const c = new IndentWidget('        ');
+    expect(a.eq(b)).toBe(true);
+    expect(a.eq(c)).toBe(false);
   });
 });
 
@@ -319,6 +331,7 @@ function makeMinimapHarness(lines: string[], hostWidth = 800) {
   let appended: unknown = null;
   const fakeHost = {
     clientWidth: hostWidth,
+    clientHeight: 400,
     dataset: {} as Record<string, string>,
     appendChild(el: unknown) {
       appended = el;
@@ -414,6 +427,8 @@ describe('EditorMinimap', () => {
       expect(h.fills.length).toBeGreaterThan(0);
       expect(h.strokes.length).toBe(1);
       expect(h.fakeHost.dataset.minimap).toBe('on');
+      expect(h.fakeCanvas.style.height).toBe(`${h.fakeHost.clientHeight}px`);
+      expect(h.fakeCanvas.height).toBe(h.fakeHost.clientHeight);
       mm.destroy();
       expect(h.removed()).toBe(true);
     } finally {
@@ -465,6 +480,24 @@ describe('EditorMinimap', () => {
       h.windowHandlers.get('pointerup')?.forEach((fn) => { fn({} as never); });
       h.windowHandlers.get('pointermove')?.forEach((fn) => { fn(press(390) as never); });
       expect(h.fakeScroll.scrollTop).toBe(0);
+      mm.destroy();
+    } finally {
+      h.restore();
+    }
+  });
+
+  it('pointercancel ends a drag so later moves do not scroll', () => {
+    const h = makeMinimapHarness(DEMO_LINES);
+    try {
+      const mm = new EditorMinimap(h.fakeView as never, h.fakeHost as never);
+      h.runFrame();
+      const press = (clientY: number) => ({ clientX: 1564, clientY, pointerId: 7 });
+      h.canvasHandlers.get('pointerdown')?.forEach((fn) => { fn(press(390) as never); });
+      const afterDown = h.fakeScroll.scrollTop;
+      expect(afterDown).toBeGreaterThan(0);
+      h.windowHandlers.get('pointercancel')?.forEach((fn) => { fn({} as never); });
+      h.windowHandlers.get('pointermove')?.forEach((fn) => { fn(press(10) as never); });
+      expect(h.fakeScroll.scrollTop).toBe(afterDown);
       mm.destroy();
     } finally {
       h.restore();

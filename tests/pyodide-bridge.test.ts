@@ -40,8 +40,10 @@ describe('pyodide bridge', () => {
     expect(code).not.toContain('null');
     expect(code).not.toMatch(/run_script\(".*", \[/);
     // The null survived the round-trip inside the JSON payload.
-    expect(py.seen['_axis_bars_json']).toContain('null');
-    expect(JSON.parse(py.seen['_axis_bars_json'] as string)).toEqual(bars);
+    expect(py.seen._axis_bars_json).toContain('null');
+    expect(JSON.parse(py.seen._axis_bars_json as string)).toEqual(bars);
+    expect(JSON.parse(py.seen._axis_mode_json as string)).toBe('interpret');
+    expect(JSON.parse(py.seen._axis_libs_json as string)).toEqual([]);
   });
 
   it('prefers the full stack (Python traceback) over truncated message', () => {
@@ -71,17 +73,22 @@ describe('pyodide bridge', () => {
       err.stack = 'Error: eval_code failed…\nTraceback (most recent call last):\nNameError: name \'null\' is not defined';
       throw err;
     });
-    (pyodideEngine as unknown as { _pyodide: unknown })._pyodide = failing;
-    // Skip numpy load in test env.
-    (failing as Record<string, unknown>).loadPackage = async () => {};
-    const res = await pyodideEngine.run({
-      script: 'indicator("t")',
-      bars: [{ time: 1, open: 1, high: 1, low: 1, close: 1, volume: null }],
-      config: { mode: 'interpret' },
-    } as never);
-    expect(res.status).toBe('error');
-    expect((res as { drawings?: unknown }).drawings).toEqual([]);
-    expect(String(res.error)).toContain('null');
-    (pyodideEngine as unknown as { _pyodide: unknown })._pyodide = null;
+    const slot = pyodideEngine as unknown as { _pyodide: unknown };
+    const prev = slot._pyodide;
+    try {
+      slot._pyodide = failing;
+      // Skip numpy load in test env.
+      (failing as Record<string, unknown>).loadPackage = async () => {};
+      const res = await pyodideEngine.run({
+        script: 'indicator("t")',
+        bars: [{ time: 1, open: 1, high: 1, low: 1, close: 1, volume: null }],
+        config: { mode: 'interpret' },
+      } as never);
+      expect(res.status).toBe('error');
+      expect((res as { drawings?: unknown }).drawings).toEqual([]);
+      expect(String(res.error)).toContain('null');
+    } finally {
+      slot._pyodide = prev ?? null;
+    }
   });
 });

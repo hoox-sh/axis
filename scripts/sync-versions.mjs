@@ -17,6 +17,9 @@
  * - public/version.json (served at `/version.json`; polled by the update manager)
  * - src/version.ts (generated `APP_VERSION` for the app shell)
  * - worker/src/version.ts (generated `WORKER_VERSION` for `/health`)
+ * - Dockerfile (`ARG VERSION=x.y.z` only — not BUN_VERSION / PYTHON_VERSION)
+ * - docker-compose.yml (`${VERSION:-x.y.z}` build args + AXIS_VERSION env)
+ * - docker-bake.hcl (`variable "VERSION" { default = "x.y.z" }`)
  *
  * Usage: bun scripts/sync-versions.mjs [--check]
  *   --check  exit 1 on drift without writing (CI-friendly)
@@ -210,6 +213,47 @@ stamp('src-tauri/tauri.conf.json', () => String(readJson('src-tauri/tauri.conf.j
       drift.push(`${rel}: regenerate`);
       if (!CHECK) writeFileSync(join(ROOT, rel), content);
     }
+  }
+}
+
+// Docker fallbacks (ARG / compose ${VERSION:-} / bake variable default).
+// Patterns require the VERSION identifier so BUN_VERSION and other numbers
+// are never rewritten. Capture group 1 is always the semver.
+const SEMVER = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?`;
+const DOCKER_FALLBACKS = [
+  {
+    rel: 'Dockerfile',
+    re: new RegExp(`^ARG VERSION=(${SEMVER})$`, 'gm'),
+    replace: () => `ARG VERSION=${version}`,
+  },
+  {
+    rel: 'docker-compose.yml',
+    re: new RegExp(String.raw`\$\{VERSION:-(${SEMVER})\}`, 'g'),
+    replace: () => `\${VERSION:-${version}}`,
+  },
+  {
+    rel: 'docker-bake.hcl',
+    re: new RegExp(
+      String.raw`variable\s+"VERSION"\s*\{\s*default\s*=\s*"(${SEMVER})"`,
+      'g',
+    ),
+    replace: (full) => full.replace(/"[^"]+"$/, `"${version}"`),
+  },
+];
+
+for (const { rel, re, replace } of DOCKER_FALLBACKS) {
+  const path = join(ROOT, rel);
+  const text = readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
+  const matches = [...text.matchAll(re)];
+  if (matches.length === 0) {
+    throw new Error(`${rel}: no VERSION fallback matched (check stamp regex)`);
+  }
+  const unique = [...new Set(matches.map((m) => m[1]))];
+  if (unique.length === 1 && unique[0] === version) continue;
+  drift.push(`${rel}: ${unique.join(', ')} → ${version}`);
+  if (!CHECK) {
+    re.lastIndex = 0;
+    writeFileSync(path, text.replace(re, replace));
   }
 }
 
