@@ -9,7 +9,7 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-12 · 399 commits · describe-tag: `v2.6.3`_
+_Generated/updated: 2026-09-12 · 400 commits · describe-tag: `v2.6.4`_
 
 ---
 
@@ -20,6 +20,16 @@ _Generated/updated: 2026-09-12 · 399 commits · describe-tag: `v2.6.3`_
 ### Fixed
 
 ### Changed
+
+## [2.6.5] — 2026-09-12
+
+### Added
+
+- **AXIS CLI cloud-storage bootstrap** (`@hoox-sh/axis-cli` 0.3.1): `axis setup --prod` / `axis setup kv` create and bind `API_KEYS` KV; `axis keys create` / `validate` mint and check `pn_…` keys; `axis deploy` applies the remote D1 schema first; `axis health --scripts` and `axis doctor --remote` probe `/api/scripts` and `features.keys`. Typical prod path is now `setup --prod` → `secret put ADMIN_TOKEN` → `deploy all` → `keys create`.
+
+### Changed
+
+- CLI `run()` now times out Wrangler (`wrangler whoami` in doctor) with SIGTERM then SIGKILL so `axis doctor --json` cannot hang.
 
 ## [2.6.4] — 2026-09-12
 
@@ -1095,12 +1105,15 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (80 commits)
+### 2026-09 (81 commits)
 
 #### Features
 
+- `c111371a` (2026-09-12) — feat(storage): copy-on-switch, Worker settings, version history
 - `a9f7bb6e` (2026-09-12) — feat(release): VERSION single source of truth with update manager and close guard
 - `319403fb` (2026-09-10) — feat(editor): minimap, folding, indent grid, tab badges, workers full width
 - `8e9e8d6b` (2026-09-10) — feat(editor): Language Feature Bar with live activity chips

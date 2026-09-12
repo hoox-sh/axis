@@ -23,7 +23,7 @@ ARG BUN_VERSION=1.3.14
 ARG PYTHON_VERSION=3.12
 ARG NGINX_VERSION=1.27-alpine
 ARG GIT_SHA=dev
-ARG VERSION=2.6.4
+ARG VERSION=2.6.5
 
 # ---------------------------------------------------------------------------
 # deps — install JS toolchain
@@ -46,7 +46,7 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
 FROM deps AS build
 
 ARG GIT_SHA=dev
-ARG VERSION=2.6.4
+ARG VERSION=2.6.5
 
 COPY index.html vite.config.ts tsconfig.json bunfig.toml VERSION ./
 # sync:versions (runs with `bun run build`) stamps these — keep them in context
@@ -83,7 +83,7 @@ RUN AXIS_V="$(tr -d '[:space:]' < VERSION)" \
 FROM python:${PYTHON_VERSION}-slim AS pwa
 
 ARG GIT_SHA=dev
-ARG VERSION=2.6.4
+ARG VERSION=2.6.5
 
 LABEL org.opencontainers.image.title="AXIS PWA" \
       org.opencontainers.image.description="HOOX AXIS charting PWA (static dist)" \
@@ -126,7 +126,7 @@ CMD ["python", "axis_pwa_server.py"]
 FROM nginx:${NGINX_VERSION} AS pwa-nginx
 
 ARG GIT_SHA=dev
-ARG VERSION=2.6.4
+ARG VERSION=2.6.5
 
 LABEL org.opencontainers.image.title="AXIS PWA (nginx)" \
       org.opencontainers.image.description="HOOX AXIS static dist behind nginx" \

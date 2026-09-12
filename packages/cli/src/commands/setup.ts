@@ -2,7 +2,7 @@
  * Copyright (C) 2024-2026 jango_blockchained
  * SPDX-License-Identifier: AGPL-3.0-only
  *
- * axis setup — worker config, D1, OAuth client ids, full bootstrap
+ * axis setup — worker config, D1, API_KEYS KV, OAuth client ids, full bootstrap
  */
 
 import { existsSync } from "node:fs";
@@ -12,7 +12,11 @@ import { runWrangler } from "../utils/run.js";
 import {
   ensureWranglerToml,
   getD1DatabaseId,
+  getKvBindingId,
+  isPlaceholderId,
+  parseKvNamespaceId,
   setTomlVar,
+  upsertKvNamespace,
 } from "../services/wrangler-toml.js";
 import {
   CLIError,
@@ -31,8 +35,12 @@ export type SetupResult = {
   steps: string[];
   wranglerCreated?: boolean;
   d1Applied?: "local" | "remote" | "both" | false;
+  kvBound?: { binding: string; id: string; created: boolean } | false;
   oauthSet?: boolean;
 };
+
+const API_KEYS_BINDING = "API_KEYS";
+const USAGE_BINDING = "USAGE";
 
 async function setupWorkerToml(opts: GlobalOpts): Promise<boolean> {
   const paths = getPaths();
@@ -111,6 +119,100 @@ async function setupD1(
   }
 
   return applied;
+}
+
+/** Apply `schemas/scripts.sql` (idempotent). Used by `axis setup d1` and deploy. */
+export const applyScriptsSchema = setupD1;
+
+function parseKvList(stdout: string): Array<{ id?: string; title?: string }> {
+  try {
+    const parsed = JSON.parse(stdout) as unknown;
+    return Array.isArray(parsed) ? (parsed as Array<{ id?: string; title?: string }>) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function findExistingKvId(
+  workerDir: string,
+  titleHint: string
+): Promise<string | undefined> {
+  const listed = await runWrangler(workerDir, ["kv", "namespace", "list"], {
+    throwOnError: false,
+  });
+  if (listed.code !== 0) return undefined;
+  const hint = titleHint.toLowerCase();
+  for (const row of parseKvList(listed.stdout)) {
+    const title = String(row.title || "").toLowerCase();
+    const id = String(row.id || "");
+    if (id && (title.includes(hint) || title.endsWith(`-${hint}`))) return id;
+  }
+  return undefined;
+}
+
+/**
+ * Create (or reuse) a KV namespace and bind it in wrangler.toml.
+ * Required for production `/api/scripts` when D1 is bound (`API_KEYS_REQUIRED`).
+ */
+export async function setupKv(
+  opts: GlobalOpts,
+  flags: { binding?: string } = {}
+): Promise<{ binding: string; id: string; created: boolean }> {
+  const paths = getPaths();
+  if (!existsSync(paths.wranglerToml)) {
+    throw new CLIError(
+      "wrangler.toml missing",
+      ExitCode.NOT_FOUND,
+      "Run: axis setup worker"
+    );
+  }
+  const binding = (flags.binding || API_KEYS_BINDING).trim() || API_KEYS_BINDING;
+  const existing = getKvBindingId(paths.wranglerToml, binding);
+  if (existing && !isPlaceholderId(existing)) {
+    printOk(`KV ${binding} already bound (${existing})`, opts.quiet);
+    return { binding, id: existing, created: false };
+  }
+
+  printInfo(`Looking up existing KV namespace for ${binding}…`, opts.quiet);
+  let id = await findExistingKvId(paths.worker, binding);
+  let created = false;
+  if (!id) {
+    printInfo(`Creating KV namespace ${binding}…`, opts.quiet);
+    const createdRun = await runWrangler(
+      paths.worker,
+      ["kv", "namespace", "create", binding],
+      { throwOnError: false }
+    );
+    const out = `${createdRun.stdout}\n${createdRun.stderr}`;
+    id = parseKvNamespaceId(out);
+    if (createdRun.code !== 0 || !id) {
+      throw new CLIError(
+        `Failed to create KV namespace ${binding}`,
+        ExitCode.ERROR,
+        out.trim() || "wrangler kv namespace create failed"
+      );
+    }
+    created = true;
+    printOk(`Created KV ${binding} id=${id}`, opts.quiet);
+  } else {
+    printOk(`Reusing existing KV ${binding} id=${id}`, opts.quiet);
+  }
+
+  const wrote = upsertKvNamespace(paths.wranglerToml, binding, id);
+  if (wrote.changed) {
+    printOk(`wrangler.toml: bound ${binding}`, opts.quiet);
+  }
+  printWarn("Redeploy the Worker so the binding goes live: axis deploy worker", opts.quiet);
+  return { binding, id, created };
+}
+
+export function printCloudStorageNextSteps(quiet?: boolean): void {
+  printInfo("Cloud script storage — remaining steps:", quiet);
+  printInfo("  1. axis secret put ADMIN_TOKEN", quiet);
+  printInfo("  2. axis deploy all              # D1 schema + Worker + Pages", quiet);
+  printInfo("  3. axis keys create             # mint pn_… for Settings", quiet);
+  printInfo("  4. axis health --scripts", quiet);
+  printInfo("  5. Paste Worker URL + key in Settings → Script storage", quiet);
 }
 
 /** Default is local-only; `--remote` alone is remote-only; both flags apply both. */
@@ -210,11 +312,16 @@ export async function runSetupAll(
     remoteD1?: boolean;
     githubClientId?: string;
     skipInstall?: boolean;
+    kv?: boolean;
+    prod?: boolean;
   }
 ): Promise<SetupResult> {
   printHeader("AXIS setup", opts.quiet);
   const steps: string[] = [];
   const result: SetupResult = { steps };
+  const prod = Boolean(flags.prod);
+  const remoteD1 = Boolean(flags.remoteD1 || prod);
+  const doKv = Boolean(flags.kv || prod);
 
   if (!flags.skipInstall) {
     await runInstall(opts);
@@ -227,15 +334,25 @@ export async function runSetupAll(
   try {
     result.d1Applied = await setupD1(opts, {
       local: true,
-      remote: flags.remoteD1,
+      remote: remoteD1,
     });
-    steps.push(flags.remoteD1 ? "d1:local+remote" : "d1:local");
+    steps.push(remoteD1 ? "d1:local+remote" : "d1:local");
   } catch (e) {
     printWarn(
       e instanceof Error ? e.message : String(e),
       opts.quiet
     );
     result.d1Applied = false;
+  }
+
+  if (doKv) {
+    try {
+      result.kvBound = await setupKv(opts, { binding: API_KEYS_BINDING });
+      steps.push("kv:API_KEYS");
+    } catch (e) {
+      printWarn(e instanceof Error ? e.message : String(e), opts.quiet);
+      result.kvBound = false;
+    }
   }
 
   if (flags.githubClientId) {
@@ -245,10 +362,11 @@ export async function runSetupAll(
     steps.push("oauth");
   }
 
-  printOk(
-    "Setup finished. Deploy: axis deploy worker  |  Diagnose: axis doctor --remote",
-    opts.quiet
-  );
+  printOk("Setup finished.", opts.quiet);
+  if (doKv || remoteD1) printCloudStorageNextSteps(opts.quiet);
+  else {
+    printInfo("Next: axis doctor  ·  Prod cloud storage: axis setup --prod", opts.quiet);
+  }
 
   if (opts.json) printJson({ ok: true, ...result });
   return result;
@@ -257,8 +375,10 @@ export async function runSetupAll(
 export function registerSetup(program: Command): void {
   const setup = program
     .command("setup")
-    .description("Bootstrap AXIS (deps, wrangler.toml, D1, OAuth)")
+    .description("Bootstrap AXIS (deps, wrangler.toml, D1, API_KEYS KV, OAuth)")
     .option("--remote-d1", "Also apply D1 schema to remote")
+    .option("--kv", "Create and bind API_KEYS KV (required for prod /api/scripts)")
+    .option("--prod", "Production bootstrap: remote D1 + API_KEYS KV")
     .option("--github-client-id <id>", "Set GITHUB_OAUTH_CLIENT_ID in toml")
     .option("--skip-install", "Skip bun install")
     .action(async function (this: Command) {
@@ -266,12 +386,16 @@ export function registerSetup(program: Command): void {
         remoteD1?: boolean;
         githubClientId?: string;
         skipInstall?: boolean;
+        kv?: boolean;
+        prod?: boolean;
       };
       await wrapAction(async (g) => {
         await runSetupAll(g, {
           remoteD1: o.remoteD1,
           githubClientId: o.githubClientId,
           skipInstall: o.skipInstall,
+          kv: o.kv,
+          prod: o.prod,
         });
       }).call(this);
     });
@@ -308,6 +432,28 @@ export function registerSetup(program: Command): void {
           create: o.create,
         });
         if (g.json) printJson({ ok: true, applied });
+      }).call(this);
+    });
+
+  setup
+    .command("kv")
+    .description("Create and bind API_KEYS KV (prod script library auth)")
+    .option("--binding <name>", "KV binding name", API_KEYS_BINDING)
+    .option("--usage", `Also create/bind ${USAGE_BINDING}`)
+    .action(async function (this: Command) {
+      const o = this.optsWithGlobals() as GlobalOpts & {
+        binding?: string;
+        usage?: boolean;
+      };
+      await wrapAction(async (g) => {
+        printHeader("AXIS setup kv", g.quiet);
+        const bound = await setupKv(g, { binding: o.binding || API_KEYS_BINDING });
+        let usage: { binding: string; id: string; created: boolean } | undefined;
+        if (o.usage) {
+          usage = await setupKv(g, { binding: USAGE_BINDING });
+        }
+        printCloudStorageNextSteps(g.quiet);
+        if (g.json) printJson({ ok: true, kv: bound, usage });
       }).call(this);
     });
 

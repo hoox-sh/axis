@@ -35,6 +35,8 @@ describe("axis bin", () => {
     expect(r.stdout).toContain("doctor");
     expect(r.stdout).toContain("deploy");
     expect(r.stdout).toContain("health");
+    expect(r.stdout).toContain("keys");
+    expect(r.stdout).toContain("setup kv");
   });
 
   test("unknown command exits non-zero without throwing a wrapper dump", async () => {
@@ -53,7 +55,7 @@ describe("axis bin", () => {
     };
     expect(Array.isArray(parsed.checks)).toBe(true);
     expect(r.stdout).not.toContain("AXIS doctor");
-  });
+  }, 15_000);
 
   test("node can run the published bin via dist/", async () => {
     const dist = join(here, "..", "dist", "index.js");

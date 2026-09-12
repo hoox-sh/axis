@@ -20,5 +20,14 @@ describe("axis doctor checks", () => {
       expect(toml!.detail).toContain("axis setup");
       expect(toml!.detail).toContain("wrangler.toml.example");
     }
-  });
+  }, 15_000);
+
+  test("api-keys-kv is present when wrangler.toml exists", async () => {
+    const checks = await collectDoctorChecks({});
+    const toml = checks.find((c) => c.id === "wrangler-toml");
+    if (!toml?.ok) return;
+    const kv = checks.find((c) => c.id === "api-keys-kv");
+    expect(kv).toBeTruthy();
+    expect(kv?.label).toContain("API_KEYS");
+  }, 15_000);
 });

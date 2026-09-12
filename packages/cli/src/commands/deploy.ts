@@ -9,7 +9,12 @@ import { existsSync } from "node:fs";
 import type { Command } from "commander";
 import { getPaths } from "../utils/paths.js";
 import { run, runWrangler } from "../utils/run.js";
-import { defaultWorkerUrl, probeHealth } from "../services/health.js";
+import {
+  defaultWorkerUrl,
+  healthFeatures,
+  probeHealth,
+} from "../services/health.js";
+import { applyScriptsSchema, printCloudStorageNextSteps } from "./setup.js";
 import {
   CLIError,
   ExitCode,
@@ -33,7 +38,7 @@ export function parseDeployedWorkerUrl(output: string): string | undefined {
 
 export async function deployWorker(
   opts: GlobalOpts,
-  flags: { skipHealth?: boolean; url?: string } = {}
+  flags: { skipHealth?: boolean; url?: string; skipSchema?: boolean } = {}
 ): Promise<{ url?: string }> {
   const paths = getPaths();
   if (!existsSync(paths.wranglerToml)) {
@@ -45,6 +50,20 @@ export async function deployWorker(
   }
 
   printHeader("AXIS deploy worker", opts.quiet);
+
+  if (!flags.skipSchema) {
+    try {
+      printInfo("Applying remote D1 scripts schema…", opts.quiet);
+      await applyScriptsSchema(opts, { remote: true });
+    } catch (e) {
+      printWarn(
+        `D1 schema not applied: ${e instanceof Error ? e.message : String(e)}`,
+        opts.quiet
+      );
+      printWarn("Fix with: axis setup d1 --remote", opts.quiet);
+    }
+  }
+
   printInfo("wrangler deploy…", opts.quiet);
 
   // Always capture so a failure never re-invokes deploy, and so we can parse the URL.
@@ -75,6 +94,14 @@ export async function deployWorker(
     const health = await probeHealth(deployedUrl);
     if (health.ok) {
       printOk(`Health OK: ${health.url}`, opts.quiet);
+      const feats = healthFeatures(health.body);
+      if (feats.d1 && !feats.keys) {
+        printWarn(
+          "D1 is bound but API_KEYS KV is not — /api/scripts returns 503 API_KEYS_REQUIRED",
+          opts.quiet
+        );
+        printWarn("Fix: axis setup kv && axis deploy worker", opts.quiet);
+      }
     } else {
       printWarn(
         `Deployed but health check failed: ${health.error || health.status} (${deployedUrl})`,
@@ -129,10 +156,14 @@ export async function deployPages(opts: GlobalOpts): Promise<void> {
   if (opts.json) printJson({ ok: true, target: "pages", project: PAGES_PROJECT });
 }
 
-export async function deployAll(opts: GlobalOpts): Promise<void> {
-  await deployWorker(opts);
+export async function deployAll(
+  opts: GlobalOpts,
+  flags: { skipHealth?: boolean; url?: string; skipSchema?: boolean } = {}
+): Promise<void> {
+  await deployWorker(opts, flags);
   await deployPages(opts);
   printOk("Deploy all complete", opts.quiet);
+  printCloudStorageNextSteps(opts.quiet);
 }
 
 export function registerDeploy(program: Command): void {
@@ -140,15 +171,21 @@ export function registerDeploy(program: Command): void {
     .command("deploy")
     .description("Deploy Worker and/or Cloudflare Pages")
     .option("--skip-health", "Skip post-deploy /health probe")
+    .option("--skip-schema", "Skip remote D1 schema apply before Worker deploy")
     .option("--url <url>", "Worker URL for health probe")
     .action(async function (this: Command) {
       // default: worker
       const o = this.optsWithGlobals() as GlobalOpts & {
         skipHealth?: boolean;
+        skipSchema?: boolean;
         url?: string;
       };
       await wrapAction(async (g) => {
-        await deployWorker(g, { skipHealth: o.skipHealth, url: o.url });
+        await deployWorker(g, {
+          skipHealth: o.skipHealth,
+          skipSchema: o.skipSchema,
+          url: o.url,
+        });
       }).call(this);
     });
 
@@ -156,14 +193,20 @@ export function registerDeploy(program: Command): void {
     .command("worker")
     .description("Deploy Cloudflare Worker (pynescript-axis)")
     .option("--skip-health", "Skip post-deploy /health probe")
+    .option("--skip-schema", "Skip remote D1 schema apply before Worker deploy")
     .option("--url <url>", "Worker URL for health probe")
     .action(async function (this: Command) {
       const o = this.optsWithGlobals() as GlobalOpts & {
         skipHealth?: boolean;
+        skipSchema?: boolean;
         url?: string;
       };
       await wrapAction(async (g) => {
-        await deployWorker(g, { skipHealth: o.skipHealth, url: o.url });
+        await deployWorker(g, {
+          skipHealth: o.skipHealth,
+          skipSchema: o.skipSchema,
+          url: o.url,
+        });
       }).call(this);
     });
 
@@ -174,6 +217,22 @@ export function registerDeploy(program: Command): void {
 
   deploy
     .command("all")
-    .description("Deploy Worker then Pages")
-    .action(wrapAction(deployAll));
+    .description("Deploy Worker then Pages (applies D1 schema first)")
+    .option("--skip-health", "Skip post-deploy /health probe")
+    .option("--skip-schema", "Skip remote D1 schema apply")
+    .option("--url <url>", "Worker URL for health probe")
+    .action(async function (this: Command) {
+      const o = this.optsWithGlobals() as GlobalOpts & {
+        skipHealth?: boolean;
+        skipSchema?: boolean;
+        url?: string;
+      };
+      await wrapAction(async (g) => {
+        await deployAll(g, {
+          skipHealth: o.skipHealth,
+          skipSchema: o.skipSchema,
+          url: o.url,
+        });
+      }).call(this);
+    });
 }

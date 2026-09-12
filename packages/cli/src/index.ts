@@ -18,6 +18,7 @@ import { registerSetup } from "./commands/setup.js";
 import { registerDeploy } from "./commands/deploy.js";
 import { registerSecrets } from "./commands/secrets.js";
 import { registerHealth } from "./commands/health.js";
+import { registerKeys } from "./commands/keys.js";
 import { registerDev } from "./commands/dev.js";
 import { registerWhoami } from "./commands/whoami.js";
 
@@ -29,7 +30,7 @@ export async function main(): Promise<void> {
   program
     .name("axis")
     .description(
-      "AXIS CLI — install, doctor, Worker setup (D1/OAuth), secrets, deploy, health"
+      "AXIS CLI — install, doctor, Worker setup (D1/KV/OAuth), keys, secrets, deploy, health"
     )
     .version(pkgVersion)
     .option("--json", "JSON output where supported")
@@ -47,10 +48,17 @@ export async function main(): Promise<void> {
 ${theme.dim("Typical flow:")}
   axis install
   axis doctor
-  axis setup --github-client-id Ov23li…
-  axis setup d1 --remote
-  axis deploy worker
-  axis health --oauth
+  axis setup --prod --github-client-id Ov23li…
+  axis secret put ADMIN_TOKEN
+  axis deploy all
+  axis keys create
+  axis health --scripts
+
+${theme.dim("Cloud script storage:")}
+  axis setup kv                 # bind API_KEYS (required when D1 is on)
+  axis setup d1 --remote        # scripts + versions schema
+  axis keys create              # mint pn_… for Settings
+  axis keys validate --key pn_…
 
 ${theme.dim("Secrets (prod):")}
   axis secret put ADMIN_TOKEN
@@ -66,6 +74,7 @@ ${theme.dim("Docs:")} https://hoox.sh/axis/docs
   registerDeploy(program);
   registerSecrets(program);
   registerHealth(program);
+  registerKeys(program);
   registerDev(program);
   registerWhoami(program);
 

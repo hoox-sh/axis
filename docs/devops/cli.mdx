@@ -86,14 +86,18 @@ When using `bun run axis setup -- --flag`, keep the `--` so Bun forwards flags t
 | `axis install` | `bun install` root + `worker/` + CLI |
 | `axis doctor` [`--remote`] | Toolchain, CF auth, optional live `/health`. Missing `worker/wrangler.toml` is a warning until `axis setup` (expected on a fresh clone). |
 | `axis setup` | Bootstrap: install → ensure toml → local D1 |
+| `axis setup --prod` | Production bootstrap: remote D1 schema + `API_KEYS` KV |
 | `axis setup worker` | Copy `wrangler.toml.example` → `wrangler.toml` if missing |
-| `axis setup d1 --local\|--remote` [`--create`] | Apply `worker/schemas/scripts.sql` |
+| `axis setup d1 --local\|--remote` [`--create`] | Apply `worker/schemas/scripts.sql` (scripts + version history) |
+| `axis setup kv [--usage]` | Create and bind `API_KEYS` KV (required when D1 is on) |
 | `axis setup oauth --github-client-id …` | Set public OAuth App id in `[vars]` (or `--secret`) |
+| `axis keys create [--tier hobby]` | Mint a `pn_…` key via `POST /api/keys` (`ADMIN_TOKEN`) |
+| `axis keys validate --key pn_…` | Validate a key against the Worker |
 | `axis secret put\|list\|delete` | Wrangler secrets (`ADMIN_TOKEN`, `EXTERNAL_BACKEND`, …) |
-| `axis deploy` / `deploy worker` | Deploy Worker `pynescript-axis` |
+| `axis deploy` / `deploy worker` | Apply remote D1 schema, then deploy Worker `pynescript-axis` |
 | `axis deploy pages` | Vite build + Pages project |
-| `axis deploy all` | Worker then Pages |
-| `axis health [--oauth] [--url …]` | Probe `/health` and optional GitHub device start |
+| `axis deploy all` | Schema + Worker + Pages |
+| `axis health [--oauth] [--scripts] [--url …]` | Probe `/health`, optional OAuth start, optional `/api/scripts` |
 | `axis whoami` | Cloudflare® account |
 | `axis dev` | Vite product UI |
 | `axis dev worker` | Local wrangler Worker |
@@ -118,13 +122,13 @@ The same check appears as the optional **CLI installation** row in `axis doctor`
 ```bash
 axis install
 axis doctor
-axis setup --github-client-id Ov23li… --remote-d1
+axis setup --prod --github-client-id Ov23li…
 axis secret put ADMIN_TOKEN
 axis secret put EXTERNAL_BACKEND
-# Optional but recommended for gated /api/run:
-# axis secret put (or wrangler vars) REQUIRE_RUN_AUTH / bind API_KEYS
-axis deploy worker
-axis health --oauth
+axis deploy all
+axis keys create
+axis health --scripts --oauth
+# Paste Worker URL + pn_… into Settings → Script storage
 ```
 
 | Item | Guidance |
@@ -132,7 +136,7 @@ axis health --oauth
 | `GITHUB_OAUTH_CLIENT_ID` | Public OAuth App id; Device Flow enabled on GitHub; **env wins over body `clientId`** |
 | `GITLAB_OAUTH_CLIENT_ID` | Same for GitLab when using git storage |
 | `ADMIN_TOKEN` / `EXTERNAL_BACKEND` | Prefer `axis secret put` (not committed vars) |
-| `API_KEYS` KV | Bind in prod; D1 without KV fails closed (`API_KEYS_REQUIRED`) |
+| `API_KEYS` KV | `axis setup kv` then `axis deploy worker`. D1 without KV fails closed (`API_KEYS_REQUIRED`) |
 | `ALLOW_OPEN_KEYS` | `"0"` in production |
 | `REQUIRE_RUN_AUTH` | `"1"` to force Bearer on `/api/run` even without KV |
 | Project name | Frozen: `pynescript-axis` |
@@ -143,6 +147,8 @@ axis health --oauth
 | --- | --- |
 | `AXIS_ROOT` | Force monorepo root |
 | `AXIS_WORKER_URL` | Default health / deploy probe URL |
+| `AXIS_ADMIN_TOKEN` | Admin token for `axis keys create` |
+| `AXIS_API_KEY` | Default key for `axis keys validate` |
 | `CLOUDFLARE_API_TOKEN` | Non-interactive Wrangler auth |
 | `AXIS_CLI_SRC=1` | Load `src/` instead of `dist/` |
 
@@ -151,8 +157,8 @@ axis health --oauth
 | Path | Role |
 | --- | --- |
 | `packages/cli/bin/axis.js` | Bin entry (Bun) |
-| `packages/cli/src/commands/*` | Commander handlers (`install`, `doctor`, `setup`, `deploy`, `secrets`, `health`, `dev`, `whoami`) |
-| `packages/cli/src/services/wrangler-toml.ts` | Minimal toml var helpers |
+| `packages/cli/src/commands/*` | Commander handlers (`install`, `doctor`, `setup`, `keys`, `deploy`, `secrets`, `health`, `dev`, `whoami`) |
+| `packages/cli/src/services/wrangler-toml.ts` | Toml vars, D1 id, KV binding upsert |
 | `packages/cli/src/services/health.ts` | `/health` + OAuth probes |
 | Root `package.json` `axis` / `axis:*` scripts | Convenience wrappers |
 | Root `Makefile` `axis` / `axis-*` | Make wrappers |

@@ -23,6 +23,8 @@ export type RunOptions = {
   /** Reject on non-zero exit. Default true. */
   throwOnError?: boolean;
   input?: string;
+  /** Kill the child after this many ms. */
+  timeout?: number;
 };
 
 function mergeEnv(
@@ -52,12 +54,24 @@ export async function run(
         stdio: opts.input != null ? ["pipe", "inherit", "inherit"] : "inherit",
         shell: false,
       });
+      let killTimer: ReturnType<typeof setTimeout> | null = null;
+      const timer =
+        opts.timeout && opts.timeout > 0
+          ? setTimeout(() => {
+              child.kill("SIGTERM");
+              killTimer = setTimeout(() => child.kill("SIGKILL"), 400);
+            }, opts.timeout)
+          : null;
       if (opts.input != null && child.stdin) {
         child.stdin.write(opts.input);
         child.stdin.end();
       }
       child.on("error", reject);
-      child.on("close", (c) => resolve(c ?? 1));
+      child.on("close", (c) => {
+        if (timer) clearTimeout(timer);
+        if (killTimer) clearTimeout(killTimer);
+        resolve(c ?? 1);
+      });
     });
     if (throwOnError && code !== 0) {
       throw new Error(`${cmd} ${args.join(" ")} exited ${code}`);
@@ -84,8 +98,18 @@ export async function run(
       child.stdin.write(opts.input);
       child.stdin.end();
     }
+    let killTimer: ReturnType<typeof setTimeout> | null = null;
+    const timer =
+      opts.timeout && opts.timeout > 0
+        ? setTimeout(() => {
+            child.kill("SIGTERM");
+            killTimer = setTimeout(() => child.kill("SIGKILL"), 400);
+          }, opts.timeout)
+        : null;
     child.on("error", reject);
     child.on("close", (code) => {
+      if (timer) clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
       resolve({ code: code ?? 1, stdout, stderr });
     });
   });

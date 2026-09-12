@@ -120,6 +120,117 @@ export function getD1DatabaseId(tomlPath: string): string | null {
   return any?.[1] ?? null;
 }
 
+/** True for empty / REPLACE_* placeholders (not a real Cloudflare id). */
+export function isPlaceholderId(id: string | null | undefined): boolean {
+  const s = String(id || "").trim();
+  return !s || /REPLACE/i.test(s);
+}
+
+/**
+ * Read `id` from an uncommented `[[kv_namespaces]]` block with the given binding.
+ * Commented example blocks (the `# [[kv_namespaces]]` form) are ignored.
+ */
+export function getKvBindingId(tomlPath: string, binding: string): string | null {
+  if (!existsSync(tomlPath)) return null;
+  const lines = readTomlText(tomlPath).split(/\r?\n/);
+  let inBlock = false;
+  let currentBinding = "";
+  let currentId = "";
+  const finish = (): string | null =>
+    currentBinding === binding && currentId ? currentId : null;
+
+  for (const line of lines) {
+    if (/^\s*#/.test(line)) continue;
+    if (/^\[\[kv_namespaces\]\]\s*$/.test(line)) {
+      const hit = finish();
+      if (hit) return hit;
+      inBlock = true;
+      currentBinding = "";
+      currentId = "";
+      continue;
+    }
+    if (inBlock && /^\s*\[/.test(line)) {
+      const hit = finish();
+      if (hit) return hit;
+      inBlock = false;
+      currentBinding = "";
+      currentId = "";
+    }
+    if (!inBlock) continue;
+    const b = line.match(/^\s*binding\s*=\s*"([^"]+)"/);
+    if (b) currentBinding = b[1] ?? "";
+    const id = line.match(/^\s*id\s*=\s*"([^"]+)"/);
+    if (id) currentId = id[1] ?? "";
+  }
+  return finish();
+}
+
+/**
+ * Parse `id = "…"` / `"id": "…"` from `wrangler kv namespace create` output.
+ */
+export function parseKvNamespaceId(output: string): string | undefined {
+  const m =
+    output.match(/id\s*=\s*"([0-9a-f]{32})"/i) ||
+    output.match(/"id"\s*:\s*"([0-9a-f]{32})"/i) ||
+    output.match(/\bid\s*[:=]\s*([0-9a-f]{32})\b/i);
+  return m?.[1];
+}
+
+function kvBlock(binding: string, id: string): string {
+  return `[[kv_namespaces]]\nbinding = "${binding}"\nid = "${id}"\n`;
+}
+
+/**
+ * Uncomment or insert a `[[kv_namespaces]]` binding with `id`.
+ * Replaces a commented example block when present.
+ */
+export function upsertKvNamespace(
+  tomlPath: string,
+  binding: string,
+  id: string
+): { changed: boolean; previous?: string | null } {
+  const previous = getKvBindingId(tomlPath, binding);
+  if (previous === id) return { changed: false, previous };
+
+  let text = readTomlText(tomlPath);
+  const esc = escapeRegExp(binding);
+
+  // Commented example: # [[kv_namespaces]] / # binding = "API_KEYS" / # id = "…"
+  const commented = new RegExp(
+    `^#\\s*\\[\\[kv_namespaces\\]\\]\\s*\\n#\\s*binding\\s*=\\s*"${esc}"\\s*\\n#\\s*id\\s*=\\s*"[^"]*"\\s*\\n?`,
+    "m"
+  );
+  if (commented.test(text)) {
+    text = text.replace(commented, kvBlock(binding, id));
+    writeFileSync(tomlPath, text, "utf-8");
+    return { changed: true, previous };
+  }
+
+  // Active block with this binding — replace id only.
+  const active = new RegExp(
+    `(^\\[\\[kv_namespaces\\]\\]\\s*\\nbinding\\s*=\\s*"${esc}"\\s*\\nid\\s*=\\s*")[^"]*(")`,
+    "m"
+  );
+  if (active.test(text)) {
+    text = text.replace(active, `$1${id}$2`);
+    writeFileSync(tomlPath, text, "utf-8");
+    return { changed: true, previous };
+  }
+
+  const d1 = text.search(/^\[\[d1_databases\]\]/m);
+  const insertAt = d1 >= 0 ? d1 : text.length;
+  const prefix = text.slice(0, insertAt);
+  const suffix = text.slice(insertAt);
+  const pad =
+    prefix.endsWith("\n\n") || prefix.length === 0
+      ? ""
+      : prefix.endsWith("\n")
+        ? "\n"
+        : "\n\n";
+  writeFileSync(tomlPath, `${prefix}${pad}${kvBlock(binding, id)}${suffix}`, "utf-8");
+  return { changed: true, previous };
+}
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

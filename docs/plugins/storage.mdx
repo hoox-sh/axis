@@ -150,9 +150,9 @@ await importLibraryJson(docs, { forceNewIds: true });
 
 ### Point cloud at local Worker
 
-1. `bun run axis dev worker` (or `cd worker && bun run dev`) → `:8787`
-2. Settings → Script storage → Cloud (Worker), or Manager → Script Library → backend `cloud`
-3. Worker URL `http://127.0.0.1:8787`, API key from **Generate demo key** (local `ALLOW_OPEN_KEYS=1`) or `/api/keys`
+1. `axis setup --prod` then `axis secret put ADMIN_TOKEN` then `axis deploy all`
+2. `axis keys create` — paste the `pn_…` key into Settings → Script storage
+3. Local demo: `axis dev worker` (`:8787`) + Settings **Generate demo key** when `ALLOW_OPEN_KEYS=1`
 
 ## Failure modes
 

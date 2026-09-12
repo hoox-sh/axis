@@ -12,10 +12,17 @@ import { getPaths } from "../utils/paths.js";
 import { runWrangler, which } from "../utils/run.js";
 import {
   getD1DatabaseId,
+  getKvBindingId,
   getTomlName,
   getTomlVar,
+  isPlaceholderId,
 } from "../services/wrangler-toml.js";
-import { defaultWorkerUrl, probeHealth } from "../services/health.js";
+import {
+  defaultWorkerUrl,
+  healthFeatures,
+  probeHealth,
+  probeScripts,
+} from "../services/health.js";
 import { collectPreflight } from "../utils/preflight.js";
 import { theme, icons } from "../utils/theme.js";
 import {
@@ -133,6 +140,19 @@ export async function collectDoctorChecks(options: {
           ? 'currently "1" (dev open) — set "0" for prod'
           : allowOpen ?? "(unset)",
     });
+
+    const kvId = getKvBindingId(paths.wranglerToml, "API_KEYS");
+    const kvOk = Boolean(kvId && !isPlaceholderId(kvId));
+    const d1NeedsKeys = d1Ok && allowOpen !== "1";
+    checks.push({
+      id: "api-keys-kv",
+      ok: kvOk,
+      required: d1NeedsKeys,
+      label: "API_KEYS KV binding",
+      detail: kvOk
+        ? String(kvId)
+        : "missing — axis setup kv  (D1 without KV → 503 API_KEYS_REQUIRED)",
+    });
   }
 
   checks.push({
@@ -149,6 +169,7 @@ export async function collectDoctorChecks(options: {
   try {
     const r = await runWrangler(paths.worker, ["whoami"], {
       throwOnError: false,
+      timeout: 8_000,
     });
     const out = `${r.stdout}\n${r.stderr}`;
     cfOk =
@@ -170,6 +191,7 @@ export async function collectDoctorChecks(options: {
   if (options.remote) {
     const url = options.workerUrl || defaultWorkerUrl();
     const health = await probeHealth(url);
+    const feats = healthFeatures(health.body);
     checks.push({
       id: "remote-health",
       ok: health.ok,
@@ -179,6 +201,38 @@ export async function collectDoctorChecks(options: {
         ? `${url} → healthy`
         : health.error || `HTTP ${health.status ?? "?"} ${url}`,
     });
+    if (health.ok) {
+      checks.push({
+        id: "remote-d1",
+        ok: feats.d1 === true,
+        required: false,
+        label: "Remote D1 bound",
+        detail: feats.d1
+          ? "features.d1=true"
+          : "features.d1=false — apply schema: axis setup d1 --remote",
+      });
+      checks.push({
+        id: "remote-keys",
+        ok: feats.keys === true,
+        required: feats.d1 === true,
+        label: "Remote API_KEYS KV",
+        detail: feats.keys
+          ? "features.keys=true"
+          : "features.keys=false — axis setup kv && axis deploy worker",
+      });
+      const scripts = await probeScripts(url);
+      checks.push({
+        id: "remote-scripts",
+        ok: scripts.ok,
+        required: feats.d1 === true,
+        label: "Remote /api/scripts",
+        detail: scripts.ok
+          ? "route up (401 NO_KEY without a Bearer — expected)"
+          : scripts.code === "API_KEYS_REQUIRED"
+            ? "503 API_KEYS_REQUIRED — axis setup kv && axis deploy worker"
+            : scripts.error || `HTTP ${scripts.status ?? "?"}`,
+      });
+    }
   }
 
   // Optional: rust/cargo for Tauri
@@ -250,7 +304,7 @@ export async function runDoctor(
       `${theme.error(icons.fail)} ${hardFail.length} required check(s) failed\n`
     );
     process.stdout.write(
-      `${theme.dim("Hint: axis install && axis setup")}\n`
+      `${theme.dim("Hint: axis install && axis setup --prod")}\n`
     );
     process.exit(ExitCode.ERROR);
   }
@@ -259,8 +313,8 @@ export async function runDoctor(
 export function registerDoctor(program: Command): void {
   program
     .command("doctor")
-    .description("Diagnose toolchain, wrangler.toml, Cloudflare auth")
-    .option("--remote", "Also probe deployed Worker /health")
+    .description("Diagnose toolchain, wrangler.toml, D1/KV, Cloudflare auth")
+    .option("--remote", "Also probe deployed Worker /health + /api/scripts")
     .option("--url <url>", "Worker base URL for --remote")
     .action(async function (this: Command) {
       const opts = this.optsWithGlobals() as GlobalOpts & {

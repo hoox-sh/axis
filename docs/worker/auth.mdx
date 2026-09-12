@@ -104,6 +104,16 @@ Tiers: `free` \| `hobby` \| `pro` \| `team` \| `enterprise`.
 
 Without `ADMIN_TOKEN` set, **create always fails** (`isAdmin` false).
 
+CLI:
+
+```bash
+axis setup kv                 # create + bind API_KEYS
+axis secret put ADMIN_TOKEN
+axis deploy worker
+axis keys create --tier hobby # prints pn_… once
+axis keys validate --key pn_…
+```
+
 Without KV on validate: accepts well-formed `pn_[a-f0-9]{48}` as hobby (dev).
 
 ### ALLOW_OPEN_KEYS

@@ -5,9 +5,28 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   defaultWorkerUrl,
+  healthFeatures,
   isHealthyPayload,
   probeHealth,
 } from "../src/services/health.js";
+
+describe("healthFeatures", () => {
+  test("reads Worker /health feature flags", () => {
+    expect(
+      healthFeatures({
+        status: "healthy",
+        features: { scripts: true, d1: true, keys: false, onchain: true },
+      })
+    ).toEqual({
+      scripts: true,
+      d1: true,
+      keys: false,
+      onchain: true,
+      market: false,
+    });
+    expect(healthFeatures(null)).toEqual({});
+  });
+});
 
 describe("isHealthyPayload", () => {
   test("requires 2xx plus status healthy or ok", () => {

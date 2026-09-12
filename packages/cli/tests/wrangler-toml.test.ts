@@ -12,6 +12,10 @@ import {
   setTomlVar,
   getD1DatabaseId,
   getTomlName,
+  getKvBindingId,
+  isPlaceholderId,
+  parseKvNamespaceId,
+  upsertKvNamespace,
 } from "../src/services/wrangler-toml.js";
 
 describe("wrangler-toml helpers", () => {
@@ -72,5 +76,59 @@ database_id = "ae203eba-a4c4-49ce-8b7c-edcea914d3d9"
     const toml = join(dir, "wrangler.toml");
     writeFileSync(toml, 'name = "pynescript-axis"\n');
     expect(getTomlName(toml)).toBe("pynescript-axis");
+  });
+
+  test("getKvBindingId ignores commented example blocks", () => {
+    const toml = join(dir, "wrangler.toml");
+    writeFileSync(
+      toml,
+      `# [[kv_namespaces]]
+# binding = "API_KEYS"
+# id = "REPLACE_WITH_KV_ID"
+`
+    );
+    expect(getKvBindingId(toml, "API_KEYS")).toBeNull();
+  });
+
+  test("upsertKvNamespace uncommented example and writes id", () => {
+    const toml = join(dir, "wrangler.toml");
+    writeFileSync(
+      toml,
+      `name = "pynescript-axis"\n\n# [[kv_namespaces]]\n# binding = "API_KEYS"\n# id = "REPLACE_WITH_KV_ID"\n\n[[d1_databases]]\nbinding = "DB"\n`
+    );
+    const r = upsertKvNamespace(toml, "API_KEYS", "a".repeat(32));
+    expect(r.changed).toBe(true);
+    expect(getKvBindingId(toml, "API_KEYS")).toBe("a".repeat(32));
+    expect(readFileSync(toml, "utf-8")).not.toContain("# [[kv_namespaces]]");
+  });
+
+  test("upsertKvNamespace is idempotent for the same id", () => {
+    const toml = join(dir, "wrangler.toml");
+    writeFileSync(
+      toml,
+      `[[kv_namespaces]]\nbinding = "API_KEYS"\nid = "${"b".repeat(32)}"\n`
+    );
+    const r = upsertKvNamespace(toml, "API_KEYS", "b".repeat(32));
+    expect(r.changed).toBe(false);
+  });
+
+  test("isPlaceholderId", () => {
+    expect(isPlaceholderId("REPLACE_WITH_KV_ID")).toBe(true);
+    expect(isPlaceholderId("")).toBe(true);
+    expect(isPlaceholderId("a".repeat(32))).toBe(false);
+  });
+
+  test("parseKvNamespaceId reads wrangler create output", () => {
+    expect(
+      parseKvNamespaceId(`
+[[kv_namespaces]]
+binding = "API_KEYS"
+id = "0123456789abcdef0123456789abcdef"
+`)
+    ).toBe("0123456789abcdef0123456789abcdef");
+    expect(parseKvNamespaceId(`{"id":"0123456789abcdef0123456789abcdef"}`)).toBe(
+      "0123456789abcdef0123456789abcdef"
+    );
+    expect(parseKvNamespaceId("nope")).toBeUndefined();
   });
 });

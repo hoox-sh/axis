@@ -115,5 +115,5 @@ describe("doctor cli-install row", () => {
     expect(row?.required).toBe(false);
     expect(row?.detail).toBeTruthy();
     expect(row?.detail?.length ?? 0).toBeGreaterThan(0);
-  });
+  }, 15_000);
 });

@@ -20,10 +20,12 @@ main = "src/index.ts"
 [observability]
 enabled = true
 
-# KV namespaces — created via `wrangler kv namespace create <NAME>` then
-# the returned id is pasted here.  The placeholders below are intentionally
-# invalid; deploy will fail until you set them.  For local dev, `wrangler
-# dev` provisions local versions automatically.
+# KV namespaces — create + bind with:
+#   axis setup kv
+# (or: wrangler kv namespace create API_KEYS, then paste id).
+# Required in prod when D1 is bound: otherwise /api/scripts returns 503
+# API_KEYS_REQUIRED. Local wrangler dev provisions a local KV automatically
+# once the binding is present.
 # [[kv_namespaces]]
 # binding = "API_KEYS"
 # id = "REPLACE_WITH_KV_ID"
@@ -33,9 +35,8 @@ enabled = true
 # id = "REPLACE_WITH_KV_ID"
 
 # D1 database — created via `wrangler d1 create pynescript`.
-# Schema: from this directory run
-#   wrangler d1 execute pynescript --remote --file=schemas/scripts.sql
-#   wrangler d1 execute pynescript --local  --file=schemas/scripts.sql
+# Schema (scripts + versions): axis setup d1 --local|--remote
+#   (or wrangler d1 execute pynescript --remote --file=schemas/scripts.sql)
 # Binding name MUST be "DB" (code uses env.DB) — not the database name.
 [[d1_databases]]
 binding = "DB"
