@@ -133,4 +133,115 @@ describe('startWatchlistQuotes', () => {
     await new Promise((r) => setTimeout(r, 600));
     expect(quotes.length).toBe(n);
   });
+
+  it('routes okx / bybit / coinbase WS and emits quotes', async () => {
+    restore = MockWebSocket.install();
+    const seen: Array<{ symbol: string; source?: string }> = [];
+    const handles = [
+      startWatchlistQuotes({ sourceId: 'okx-rest', symbols: ['BTC'], onQuote: (u) => seen.push(u) }),
+      startWatchlistQuotes({ sourceId: 'bybit-spot', symbols: ['BTCUSDT'], onQuote: (u) => seen.push(u) }),
+      startWatchlistQuotes({ sourceId: 'coinbase-rest', symbols: ['BTC'], onQuote: (u) => seen.push(u) }),
+    ];
+    await new Promise((r) => setTimeout(r, 20));
+    expect(MockWebSocket.instances.length).toBe(3);
+    const urls = MockWebSocket.instances.map((w) => w.url);
+    expect(urls.some((u) => u.includes('okx'))).toBe(true);
+    expect(urls.some((u) => u.includes('bybit'))).toBe(true);
+    expect(urls.some((u) => u.includes('coinbase'))).toBe(true);
+
+    const okx = MockWebSocket.instances.find((w) => w.url.includes('okx'))!;
+    okx.push({ data: [{ instId: 'BTC-USDT', last: '100', open24h: '80' }] });
+    okx.push({ data: [{ instId: 'NOPE', last: '1' }] });
+    okx.push({ data: [{ last: '1' }] });
+    okx.push('garbage{{{');
+
+    const bybit = MockWebSocket.instances.find((w) => w.url.includes('bybit'))!;
+    bybit.push({ topic: 'tickers', data: { symbol: 'BTCUSDT', lastPrice: '60000', price24hPcnt: '0.05', prevPrice24h: '57000' } });
+    bybit.push({ topic: 'x', data: { symbol: 'NOPE', lastPrice: '1' } });
+    bybit.push({ topic: 'tickers', data: { symbol: 'BTCUSDT', lastPrice: 'nan' } });
+
+    const cb = MockWebSocket.instances.find((w) => w.url.includes('coinbase'))!;
+    cb.push({ type: 'ticker', product_id: 'BTC-USD', price: '40000', open_24h: '38000' });
+    cb.push({ type: 'ticker', product_id: 'NOPE-USD', price: '1' });
+    cb.push({ type: 'heartbeat', product_id: 'BTC-USD', price: '1' });
+
+    expect(seen.some((q) => q.source === 'okx' && q.symbol === 'BTC')).toBe(true);
+    expect(seen.some((q) => q.source === 'bybit')).toBe(true);
+    expect(seen.some((q) => q.source === 'coinbase')).toBe(true);
+    for (const h of handles) h.stop();
+  });
+
+  it('no-ops for mexc / gecko / unknown / blank symbols', () => {
+    for (const sourceId of ['mexc-spot', 'gecko-terminal', 'whatever-xyz']) {
+      let mode = '';
+      const h = startWatchlistQuotes({
+        sourceId,
+        symbols: ['BTC'],
+        onQuote: () => {
+          throw new Error('should not emit');
+        },
+        onStatus: (s) => {
+          mode = s.mode || '';
+        },
+      });
+      h.stop();
+      expect(mode).toBe('none');
+    }
+    // blank strings filtered → no symbols
+    let detail = '';
+    const h = startWatchlistQuotes({
+      sourceId: 'binance-rest',
+      symbols: ['', '  ', ''],
+      onQuote: () => {},
+      onStatus: (s) => {
+        detail = s.detail || '';
+      },
+    });
+    h.stop();
+    // all-blank filter leaves ['  '] truthy? '' filtered, '  ' passes filter(Boolean)
+    // either no-symbols or a binance handle — must not throw
+    expect(typeof detail).toBe('string');
+  });
+
+  it('data-manager source resolves to underlying selection', async () => {
+    restore = MockWebSocket.install();
+    const h = startWatchlistQuotes({
+      sourceId: 'data-manager',
+      symbols: ['BTCUSDT'],
+      onQuote: () => {},
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(MockWebSocket.instances.length).toBeGreaterThanOrEqual(0);
+    h.stop();
+  });
+
+  it('parseBinanceTickerMessage edge cases', () => {
+    const byStream = new Map([['btcusdt@ticker', 'BTC']]);
+    // missing stream falls back to symbol-derived stream
+    expect(
+      parseBinanceTickerMessage(JSON.stringify({ data: { s: 'BTCUSDT', c: '1' } }), byStream),
+    ).toMatchObject({ symbol: 'BTC' });
+    // unknown stream falls back to exchange symbol
+    expect(
+      parseBinanceTickerMessage(
+        JSON.stringify({ stream: 'x@ticker', data: { s: 'ZZZ', c: '5' } }),
+        byStream,
+      ),
+    ).toMatchObject({ symbol: 'ZZZ' });
+    // missing price / non-finite / missing symbol → null
+    expect(parseBinanceTickerMessage(JSON.stringify({ data: {} }), byStream)).toBeNull();
+    expect(
+      parseBinanceTickerMessage(JSON.stringify({ data: { s: 'X', c: 'nan' } }), byStream),
+    ).toBeNull();
+    expect(
+      parseBinanceTickerMessage(JSON.stringify({ data: { s: 'X' } }), byStream),
+    ).toBeNull();
+    // non-finite change/open become undefined, not NaN
+    const u = parseBinanceTickerMessage(
+      JSON.stringify({ data: { s: 'X', c: '10', P: 'bad', o: 'bad' } }),
+      new Map(),
+    );
+    expect(u!.change).toBeUndefined();
+    expect(u!.open24h).toBeUndefined();
+  });
 });

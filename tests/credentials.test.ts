@@ -25,6 +25,8 @@ import './setup';
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import {
   CREDENTIALS_MEMORY_ONLY,
+  activeCcxtExchange,
+  activeCcxtGateway,
   ccxtCredentialId,
   clearCredentials,
   deleteCredential,
@@ -37,8 +39,10 @@ import {
   putCcxtCredential,
   putCredential,
   redactSecrets,
+  subscribeCredentials,
 } from '../src/data/credentials';
-import { flushPersist, parsePersistedState, STORAGE_KEY, store } from '../src/store';
+import { flushPersist, parsePersistedState, STORAGE_KEY, setStore, store } from '../src/store';
+import { reconcile } from 'solid-js/store';
 
 const SECRET = 's3cr3t-NEVER-PERSIST-9f3a';
 const API_KEY = 'ak_LIVE_never_dump';
@@ -161,6 +165,70 @@ describe('redactSecrets', () => {
     expect(json).not.toContain(PASSPHRASE);
     expect(json).not.toContain('hunter2');
     expect(json).not.toContain('tok_live');
+  });
+});
+
+describe('subscribeCredentials', () => {
+  it('notifies listeners and tolerates throwing subscribers', () => {
+    const seen: string[] = [];
+    const unsubOk = subscribeCredentials(() => {
+      seen.push('ok');
+    });
+    const unsubBad = subscribeCredentials(() => {
+      throw new Error('listener-boom');
+    });
+    putCredential({ venue: 'kraken', apiKey: 'k', secret: 's' });
+    expect(seen).toEqual(['ok']);
+    unsubOk();
+    unsubBad();
+    putCredential({ venue: 'kraken', apiKey: 'k2', secret: 's2' });
+    expect(seen).toEqual(['ok']);
+  });
+});
+
+describe('ccxt gateway helpers', () => {
+  it('reads exchange/gateway from source or stream config', () => {
+    // Snapshot value (not reference — setStore mutates in place) and restore
+    // exactly with reconcile so later suites see a pristine pluginsConfig.
+    const prev = JSON.parse(JSON.stringify(store.pluginsConfig ?? {}));
+    try {
+      // Stream-only (source key explicitly absent — setStore merges).
+      setStore('pluginsConfig', {
+        'source:ccxt-rest': undefined as never,
+        'stream:ccxt-ws': { exchange: 'okx', gateway: 'sidecar' },
+      });
+      expect(activeCcxtExchange()).toBe('okx');
+      expect(activeCcxtGateway()).toBe('sidecar');
+      // Source wins when both present.
+      setStore('pluginsConfig', {
+        'source:ccxt-rest': { exchange: ' ByBit ', gateway: 'pyne' },
+      });
+      expect(activeCcxtExchange()).toBe('bybit');
+      expect(activeCcxtGateway()).toBe('pyne');
+      // Unknown gateway falls back to auto.
+      setStore('pluginsConfig', {
+        'source:ccxt-rest': { exchange: 'okx', gateway: 'weird' },
+      });
+      expect(activeCcxtGateway()).toBe('auto');
+    } finally {
+      setStore('pluginsConfig', reconcile(prev));
+    }
+  });
+
+  it('putCcxtCredential requires an exchange id', () => {
+    expect(() =>
+      putCcxtCredential({ exchange: '  ', apiKey: 'k', secret: 's' }),
+    ).toThrow(/exchange/i);
+  });
+});
+
+describe('venue id replacement', () => {
+  it('drops the previous id when a custom id replaces it', () => {
+    putCredential({ id: 'first', venue: 'mexc', apiKey: 'a', secret: 's' });
+    expect(getCredential('first')).toBeDefined();
+    putCredential({ id: 'second', venue: 'mexc', apiKey: 'b', secret: 's' });
+    expect(getCredential('first')).toBeUndefined();
+    expect(getCredentialForVenue('mexc')?.apiKey).toBe('b');
   });
 });
 

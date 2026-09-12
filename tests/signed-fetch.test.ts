@@ -84,4 +84,129 @@ describe('signed-fetch', () => {
       restore();
     }
   });
+
+  it('throws when vault has no credentials', async () => {
+    let threw = false;
+    try {
+      await fetchSignedJson({ venue: 'binance', path: '/api/v3/klines' });
+    } catch (e) {
+      threw = true;
+      expect(String(e)).toContain('no API key');
+    }
+    expect(threw).toBe(true);
+  });
+
+  it('hasSignedCreds is false when secret is missing', () => {
+    putCredential({ venue: 'coinbase', apiKey: 'k', secret: '' });
+    expect(hasSignedCreds('coinbase')).toBe(false);
+  });
+
+  it('throws signed HTTP on 401 without worker fallback', async () => {
+    // coinbase secrets are base64-decoded per Exchange auth
+    putCredential({ venue: 'coinbase', apiKey: 'k', secret: 'c2VjcmV0' });
+    const restore = mockFetch(async () => new Response('{}', { status: 401 }));
+    try {
+      let threw = false;
+      try {
+        await fetchSignedJson({ venue: 'coinbase', path: '/x', skipWorkerProxy: true });
+      } catch (e) {
+        threw = true;
+        expect(String(e)).toContain('401');
+      }
+      expect(threw).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('falls back to worker proxy for binance klines after CORS failure', async () => {
+    putCredential({ venue: 'binance', apiKey: 'mk', secret: 's3cret' });
+    let calls = 0;
+    let workerUrl = '';
+    const restore = mockFetch(async (input) => {
+      calls += 1;
+      if (calls === 1) throw new Error('CORS blocked');
+      workerUrl = String(input);
+      expect(workerUrl).toContain('/api/market/binance/signed/klines');
+      expect(workerUrl).toContain('symbol=BTCUSDT');
+      return jsonResponse([{ ok: true }]);
+    });
+    try {
+      const data = await fetchSignedJson({
+        venue: 'binance',
+        path: '/api/v3/klines',
+        query: { symbol: 'BTCUSDT', empty: '', skip: undefined },
+      });
+      expect(calls).toBe(2);
+      expect(JSON.stringify(data)).toContain('ok');
+    } finally {
+      restore();
+    }
+  });
+
+  it('throws worker HTTP error when proxy is non-ok', async () => {
+    putCredential({ venue: 'binance', apiKey: 'mk', secret: 's3cret' });
+    let calls = 0;
+    const restore = mockFetch(async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('CORS blocked');
+      return new Response('{}', { status: 502 });
+    });
+    try {
+      let threw = false;
+      try {
+        await fetchSignedJson({ venue: 'binance', path: '/api/v3/klines' });
+      } catch (e) {
+        threw = true;
+        expect(String(e)).toContain('502');
+      }
+      expect(threw).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('throws signed fetch failed when no worker path applies', async () => {
+    putCredential({ venue: 'coinbase', apiKey: 'k', secret: 'c2VjcmV0' });
+    const restore = mockFetch(async () => {
+      throw new Error('offline');
+    });
+    try {
+      let threw = false;
+      try {
+        await fetchSignedJson({ venue: 'coinbase', path: '/x' });
+      } catch (e) {
+        threw = true;
+        expect(String(e)).toContain('signed fetch failed');
+      }
+      expect(threw).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('rethrows abort errors instead of falling back', async () => {
+    putCredential({ venue: 'binance', apiKey: 'mk', secret: 's3cret' });
+    const ctl = new AbortController();
+    ctl.abort();
+    const restore = mockFetch(async () => {
+      throw new DOMException('aborted', 'AbortError');
+    });
+    try {
+      let threw = false;
+      try {
+        await fetchSignedJson({
+          venue: 'binance',
+          path: '/api/v3/klines',
+          signal: ctl.signal,
+          skipWorkerProxy: true,
+        });
+      } catch {
+        threw = true;
+      }
+      expect(threw).toBe(true);
+    } finally {
+      restore();
+    }
+  });
 });

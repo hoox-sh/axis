@@ -6,6 +6,7 @@ import {
   startBackfill,
   cancelBackfill,
   dismissJob,
+  getDataSourceJobs,
   jobProgress,
   pastDateInputToSec,
   dateInputToEndSec,
@@ -371,5 +372,90 @@ describe('data-source-manager', () => {
         targetToSec: 1000,
       }),
     ).toThrow(/Past date/);
+  });
+
+  it('rejects empty symbol and data-manager source', () => {
+    expect(() =>
+      startBackfill({ sourceId: 'mock-walk', symbol: '  ', interval: '1d' }),
+    ).toThrow(/Symbol required/);
+    expect(() =>
+      startBackfill({ sourceId: 'data-manager', symbol: 'BTC', interval: '1d' }),
+    ).toThrow(/cache reader/);
+  });
+
+  it('marks jobs error when the source throws', async () => {
+    const src: SourcePlugin = {
+      id: 'err-src',
+      name: 'Err',
+      kind: 'source',
+      builtIn: false,
+      async fetchHistorical() {
+        throw new Error('venue-down');
+      },
+    };
+    registry.registerSource(src);
+    try {
+      const id = startBackfill({
+        sourceId: 'err-src',
+        symbol: 'BTCUSDT',
+        interval: '1d',
+        targetFromSec: Math.floor(Date.now() / 1000) - 86_400,
+      });
+      const job = await _waitForJob(id, 10_000);
+      expect(job!.status).toBe('error');
+      expect(job!.error).toContain('venue-down');
+      // Progress on a failed job with no bars stays at 0
+      expect(jobProgress(job!)).toBe(0);
+    } finally {
+      try {
+        registry.unregisterSource('err-src');
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+
+  it('cancel/dismiss unknown ids are safe no-ops', () => {
+    expect(() => cancelBackfill('dsj_missing')).not.toThrow();
+    expect(() => dismissJob('dsj_missing')).not.toThrow();
+    expect(getDataSourceJobs()).toBeDefined();
+  });
+
+  it('jobProgress covers zero-span and gapfill blends', async () => {
+    const id = startBackfill({
+      sourceId: 'mock-walk',
+      symbol: 'PROG',
+      interval: '1d',
+      targetFromSec: Math.floor(Date.now() / 1000) - 86_400,
+    });
+    const job = await _waitForJob(id, 10_000);
+    expect(job!.status).toBe('complete');
+    expect(jobProgress(job!)).toBe(1);
+    // Synthetic blends: gapfill penalty, complete-but-partial, zero span
+    const base = { ...job! };
+    expect(
+      jobProgress({ ...base, phase: 'gapfill', gapsFound: 3, datasetComplete: false }),
+    ).toBeLessThan(1);
+    expect(jobProgress({ ...base, status: 'complete', datasetComplete: false })).toBeLessThanOrEqual(
+      0.99,
+    );
+    expect(
+      jobProgress({
+        ...base,
+        targetFromSec: 100,
+        targetToSec: 100,
+        datasetComplete: false,
+        oldestSec: 100,
+      }),
+    ).toBe(0.5);
+  });
+
+  it('date helpers tolerate garbage', () => {
+    expect(pastDateInputToSec('')).toBeNull();
+    expect(pastDateInputToSec('2024-13-40')).not.toBeNull(); // Date.UTC rolls over; still finite
+    expect(dateInputToEndSec('nope')).toBeNull();
+    expect(secToDateInput(null)).toBe('');
+    expect(secToDateInput(NaN)).toBe('');
+    expect(secToDateInput(undefined)).toBe('');
   });
 });

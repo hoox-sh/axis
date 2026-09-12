@@ -3,15 +3,16 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import {
   gatewayBase,
+  gatewayDeleteSession,
   gatewayFetch,
   gatewayPutSession,
+  gatewayWs,
   isRemotePageOrigin,
   probeSidecar,
   DATAFEED_DEFAULT_PORT,
-  type GatewayMode,
 } from '../src/data/gateway';
 
 describe('gatewayBase', () => {
@@ -162,6 +163,196 @@ describe('gatewayPutSession', () => {
       expect(String(capturedInit?.body)).toContain('"apiKey":"AK"');
     } finally {
       globalThis.fetch = origFetch;
+    }
+  });
+
+  it('throws for direct mode', async () => {
+    let threw = false;
+    try {
+      await gatewayPutSession('direct', {
+        exchange: 'binance',
+        credentialId: 'x',
+        apiKey: 'k',
+        secret: 's',
+      });
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(true);
+  });
+
+  it('throws on non-ok session status', async () => {
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = ((..._args: unknown[]) =>
+      Promise.resolve(new Response('nope', { status: 500 }))) as unknown as typeof fetch;
+    try {
+      let threw = false;
+      try {
+        await gatewayPutSession('pyne', {
+          exchange: 'binance',
+          credentialId: 'x',
+          apiKey: 'k',
+          secret: 's',
+        });
+      } catch (e) {
+        threw = true;
+        expect(String(e)).toContain('500');
+      }
+      expect(threw).toBe(true);
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  it('accepts ok JSON responses', async () => {
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = ((..._args: unknown[]) =>
+      Promise.resolve(new Response('{}', { status: 200 }))) as unknown as typeof fetch;
+    try {
+      await gatewayPutSession('pyne', {
+        exchange: 'binance',
+        credentialId: 'x',
+        apiKey: 'k',
+        secret: 's',
+      });
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+});
+
+describe('gatewayBase edge cases', () => {
+  it('strips www and matches subdomains of product hosts', () => {
+    expect(gatewayBase('pyne', undefined, 'https://www.pynescript.online/x')).toBe(
+      'https://www.pynescript.online/datafeed',
+    );
+    expect(gatewayBase('pyne', undefined, 'https://api.pynescript.online')).toBe(
+      'https://api.pynescript.online/datafeed',
+    );
+    expect(gatewayBase('pyne', undefined, 'https://server1.pynescript.online')).toBe(
+      'https://server1.pynescript.online/datafeed',
+    );
+  });
+
+  it('falls back to product origin for invalid page origins', () => {
+    // invalid URL → not remote → loopback default
+    expect(gatewayBase('pyne', undefined, 'not-a-url')).toBe(
+      'http://127.0.0.1:5002/datafeed',
+    );
+    // auto with explicit endpoint on invalid origin
+    expect(gatewayBase('auto', 'http://h:1', 'not-a-url')).toBe('http://h:1/datafeed');
+  });
+
+  it('auto resolves explicit endpoint on remote pages', () => {
+    expect(gatewayBase('auto', 'http://h:1', 'https://axis.hoox.sh')).toBe(
+      'http://h:1/datafeed',
+    );
+    expect(gatewayBase('auto', undefined, 'not-a-url')).toBe(
+      'http://127.0.0.1:5002/datafeed',
+    );
+  });
+
+  it('isRemotePageOrigin covers ipv6 loopbacks and empty', () => {
+    expect(isRemotePageOrigin('http://[::1]:3000')).toBe(false);
+    expect(isRemotePageOrigin('http://[::1]')).toBe(false);
+    expect(isRemotePageOrigin('')).toBe(false);
+    expect(isRemotePageOrigin(null)).toBe(false);
+  });
+});
+
+describe('probeSidecar', () => {
+  it('returns true on ok, caches, and false on network failure', async () => {
+    const origFetch = globalThis.fetch;
+    const origNow = Date.now;
+    let now = 1_000_000;
+    Date.now = () => now;
+    let calls = 0;
+    try {
+      globalThis.fetch = ((..._args: unknown[]) => {
+        calls += 1;
+        return Promise.resolve(new Response('ok', { status: 200 }));
+      }) as unknown as typeof fetch;
+      expect(await probeSidecar(59991)).toBe(true);
+      expect(calls).toBe(1);
+      // cached within TTL — no second fetch
+      expect(await probeSidecar(59991)).toBe(true);
+      expect(calls).toBe(1);
+      // expire TTL, then fail
+      now += 31_000;
+      globalThis.fetch = ((..._args: unknown[]) =>
+        Promise.reject(new Error('down'))) as unknown as typeof fetch;
+      expect(await probeSidecar(59991)).toBe(false);
+      expect(calls).toBe(1);
+      // non-ok response maps to false
+      now += 31_000;
+      globalThis.fetch = ((..._args: unknown[]) =>
+        Promise.resolve(new Response('x', { status: 500 }))) as unknown as typeof fetch;
+      expect(await probeSidecar(59992)).toBe(false);
+    } finally {
+      globalThis.fetch = origFetch;
+      Date.now = origNow;
+    }
+  });
+});
+
+describe('gatewayDeleteSession', () => {
+  it('no-ops for direct mode', async () => {
+    await gatewayDeleteSession('direct', 'ccxt:binance');
+  });
+
+  it('sends cred + exchange params and swallows fetch errors', async () => {
+    const origFetch = globalThis.fetch;
+    let captured = '';
+    globalThis.fetch = ((url: string | URL | Request) => {
+      captured = String(url);
+      return Promise.reject(new Error('down'));
+    }) as typeof fetch;
+    try {
+      await gatewayDeleteSession('pyne', 'ccxt:binance');
+      expect(captured).toContain('/datafeed/session');
+      expect(captured).toContain('cred=');
+      expect(captured).toContain('exchange=binance');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  it('keeps plain cred ids as exchange', async () => {
+    const origFetch = globalThis.fetch;
+    let captured = '';
+    globalThis.fetch = ((url: string | URL | Request) => {
+      captured = String(url);
+      return Promise.resolve(new Response('ok', { status: 200 }));
+    }) as typeof fetch;
+    try {
+      await gatewayDeleteSession('pyne', 'bybit');
+      expect(captured).toContain('exchange=bybit');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+});
+
+describe('gatewayWs', () => {
+  it('throws for direct mode', () => {
+    expect(() => gatewayWs('direct', '/ws')).toThrow();
+  });
+
+  it('opens ws:// for http bases and wss:// for https bases', () => {
+    const origWs = (globalThis as unknown as { WebSocket?: unknown }).WebSocket;
+    const seen: string[] = [];
+    (globalThis as unknown as { WebSocket: unknown }).WebSocket = class {
+      constructor(url: string) {
+        seen.push(url);
+      }
+    };
+    try {
+      gatewayWs('pyne', '/ws', undefined, 'http://localhost:3000');
+      expect(seen[0]).toContain('ws://127.0.0.1:5002/datafeed/ws');
+      gatewayWs('pyne', '/ws', undefined, 'https://axis.hoox.sh');
+      expect(seen[1]).toContain('wss://pynescript.online/datafeed/ws');
+    } finally {
+      (globalThis as unknown as { WebSocket?: unknown }).WebSocket = origWs;
     }
   });
 });

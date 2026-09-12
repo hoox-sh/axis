@@ -128,4 +128,129 @@ describe('pyneLogsToText', () => {
   it('returns empty string for no entries', () => {
     expect(pyneLogsToText([])).toBe('');
   });
+
+  it('sanitizes tabs and newlines in messages', () => {
+    const text = pyneLogsToText([
+      { id: '1', level: 'info', message: 'a\tb\nc\nd', barIndex: null, time: null },
+    ]);
+    expect(text).not.toContain('\n\n');
+    expect(text.split('\n')).toHaveLength(2);
+    expect(text).toContain('a b c d');
+  });
+});
+
+describe('normalizePyneLogs edge shapes', () => {
+  it('maps numeric severities and aliases', () => {
+    const entries = normalizePyneLogs({
+      logs: [
+        { level: '2', message: 'bad' },
+        { level: '3', message: 'bad3' },
+        { level: '1', message: 'warn1' },
+        { level: 'err', message: 'e' },
+        { level: 'fatal', message: 'f' },
+        { level: 'critical', message: 'c' },
+        { level: 'debug', message: 'd' },
+        { level: 'trace', message: 't' },
+        { level: 'log', message: 'l' },
+        { level: '???', message: 'q' },
+      ],
+    });
+    expect(entries.map((e) => e.level)).toEqual([
+      'error',
+      'error',
+      'warning',
+      'error',
+      'error',
+      'error',
+      'info',
+      'info',
+      'info',
+      'info',
+    ]);
+  });
+
+  it('reads pine_logs / messages / result / data nestings', () => {
+    expect(
+      normalizePyneLogs({ pine_logs: [{ message: 'a' }] })[0]!.message,
+    ).toBe('a');
+    expect(
+      normalizePyneLogs({ pineLogs: [{ message: 'b' }] })[0]!.message,
+    ).toBe('b');
+    expect(
+      normalizePyneLogs({ messages: [{ message: 'c' }] })[0]!.message,
+    ).toBe('c');
+    expect(
+      normalizePyneLogs({ result: { logs: [{ message: 'd' }] } })[0]!.message,
+    ).toBe('d');
+    expect(
+      normalizePyneLogs({ data: { pineLogs: [{ message: 'e' }] } })[0]!.message,
+    ).toBe('e');
+    expect(
+      normalizePyneLogs({ result: { meta: { logs: [{ message: 'f' }] } } })[0]!
+        .message,
+    ).toBe('f');
+    expect(normalizePyneLogs({ result: 42 })).toEqual([]);
+    expect(normalizePyneLogs(42)).toEqual([]);
+  });
+
+  it('handles single-item tuples and empty tuples', () => {
+    expect(normalizePyneLogs([[]])).toEqual([]);
+    expect(normalizePyneLogs([['only']])[0]).toMatchObject({
+      level: 'info',
+      message: 'only',
+    });
+    expect(normalizePyneLogs([['']])).toEqual([]);
+  });
+
+  it('handles message-first tuples and numeric levels', () => {
+    const entries = normalizePyneLogs([
+      ['hello', 'error'],
+      ['msg', '1', 7, 99],
+      ['2', 'oops'],
+    ]);
+    expect(entries[0]).toMatchObject({ level: 'error', message: 'hello' });
+    expect(entries[1]).toMatchObject({ level: 'warning', barIndex: 7, time: 99 });
+    expect(entries[2]).toMatchObject({ level: 'error' });
+  });
+
+  it('handles primitive items with level prefixes', () => {
+    const entries = normalizePyneLogs([
+      'warn: careful',
+      'ERROR: boom',
+      '  info  :  hi  ',
+      'plain message',
+      '   ',
+      42,
+      true,
+      null,
+    ]);
+    expect(entries[0]).toMatchObject({ level: 'warning', message: 'careful' });
+    expect(entries[1]).toMatchObject({ level: 'error', message: 'boom' });
+    expect(entries[3]).toMatchObject({ level: 'info', message: 'plain message' });
+    expect(entries.find((e) => e.message === '42')).toMatchObject({ level: 'info' });
+    expect(entries.find((e) => e.message === 'true')).toBeDefined();
+  });
+
+  it('skips empty objects and stringifies object messages', () => {
+    expect(normalizePyneLogs({ logs: [{}] })).toEqual([]);
+    expect(normalizePyneLogs({ logs: [{ level: 'error' }] })).toHaveLength(1);
+    const entries = normalizePyneLogs({
+      logs: [{ message: { a: 1 }, line: '3', bar: 'x', time: 'bad', id: '' }],
+    });
+    expect(entries[0]!.message).toBe('{"a":1}');
+    expect(entries[0]!.line).toBe(3);
+    expect(entries[0]!.barIndex).toBeNull();
+    const floored = normalizePyneLogs({ logs: [{ message: 'm', line: 2.9 }] });
+    expect(floored[0]!.line).toBe(2);
+    const zeroLine = normalizePyneLogs({ logs: [{ message: 'm', line: 0 }] });
+    expect(zeroLine[0]!.line).toBeNull();
+  });
+
+  it('filterPyneLogs tolerates non-Set levels', () => {
+    const sample: PyneLogEntry[] = [{ id: '1', level: 'info', message: 'i' }];
+    expect(filterPyneLogs(sample, 'all')).toHaveLength(1);
+    // @ts-expect-error runtime tolerance
+    expect(filterPyneLogs(sample, null)).toHaveLength(1);
+    expect(filterPyneLogs(null as unknown as PyneLogEntry[], 'all')).toEqual([]);
+  });
 });
