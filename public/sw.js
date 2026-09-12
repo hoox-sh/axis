@@ -9,7 +9,8 @@
  *
  * Strategy:
  *   - Navigation (HTML)     → network-first, shell cache fallback
- *   - Same-origin static    → cache-first (shell for precache paths, else runtime)
+ *   - Same-origin static    → cache-first with fetch retry (shell for precache
+ *     paths, else runtime); a transient reset must not fail an uncached asset
  *     includes /pyodide/* + /vendor/* for offline pyodide engine
  *   - CDN (esm.sh, jsdelivr, unpkg, cdnjs) → cache-first runtime
  *   - Same-origin /api/*    → network-first; cache only HTTP 200 basic;
@@ -20,7 +21,7 @@
  * Activate deletes old `axis-*` caches only; current shell/runtime kept.
  */
 
-const VERSION = 'v5';
+const VERSION = 'v6';
 const CACHE_PREFIX = 'axis-';
 const SHELL_CACHE = `${CACHE_PREFIX}shell-${VERSION}`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-${VERSION}`;
@@ -137,11 +138,37 @@ async function putRuntime(cache, req, res) {
     await trimRuntimeCache(cache);
 }
 
+/**
+ * Fetch with retries: a transient reset (starved server, flaky radio) must
+ * not hard-fail an uncached asset — the browser surfaces it as a broken
+ * import with no second chance. Throws only after the last attempt.
+ */
+async function fetchWithRetry(req, attempts = 3) {
+    let lastErr;
+    for (let i = 0; i < attempts; i++) {
+        try {
+            return await fetch(req);
+        } catch (err) {
+            lastErr = err;
+        }
+    }
+    throw lastErr;
+}
+
 async function cacheFirst(req, cacheName) {
     const cache = await caches.open(cacheName);
     const cached = await cache.match(req);
     if (cached) return cached;
-    const res = await fetch(req);
+    let res;
+    try {
+        res = await fetchWithRetry(req);
+    } catch (err) {
+        // Still offline/broken after retries — serve a raced cache hit if one
+        // landed meanwhile, else let the browser report the failure.
+        const raced = await cache.match(req);
+        if (raced) return raced;
+        throw err;
+    }
     if (shouldCacheStaticResponse(res)) {
         try {
             if (cacheName === RUNTIME_CACHE) {

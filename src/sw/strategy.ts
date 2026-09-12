@@ -17,7 +17,8 @@
  * 4. Never treat opaque / error responses as cacheable success.
  * 5. Non-GET is not handled by the SW (browser default).
  * 6. Self-hosted pyodide + vendor paths are same-origin static → cache-first
- *    after first successful fetch (offline engine).
+ *    after first successful fetch (offline engine); transient fetch failures
+ *    are retried before surfacing so one reset never breaks an import.
  * 7. Navigation is network-first with shell fallback (fresh HTML when online).
  * 8. Navigation never rejects `respondWith` — offline shell HTML if cache miss.
  *
@@ -31,7 +32,7 @@
  */
 
 /** Bump when shell precache or strategy semantics change. */
-export const SW_VERSION = 'v5';
+export const SW_VERSION = 'v6';
 
 export const CACHE_PREFIX = 'axis-';
 

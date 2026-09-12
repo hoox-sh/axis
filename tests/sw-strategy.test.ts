@@ -36,7 +36,7 @@ describe('SW cache names', () => {
   it('uses axis-* shell and runtime names with version', () => {
     expect(shellCacheName()).toBe(`axis-shell-${SW_VERSION}`);
     expect(runtimeCacheName()).toBe(`axis-runtime-${SW_VERSION}`);
-    expect(SW_VERSION).toBe('v5');
+    expect(SW_VERSION).toBe('v6');
     expect(shellCacheName('v9')).toBe('axis-shell-v9');
     expect(isAxisCacheName(shellCacheName())).toBe(true);
     expect(isAxisCacheName('workbox-precache-v2')).toBe(false);
