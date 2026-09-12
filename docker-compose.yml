@@ -30,7 +30,7 @@ x-pwa-build: &pwa-build
   args:
     BUN_VERSION: ${BUN_VERSION:-1.3.14}
     GIT_SHA: ${GIT_SHA:-dev}
-    VERSION: ${VERSION:-2.6.2}
+    VERSION: ${VERSION:-2.6.3}
 
 services:
   # ── AXIS static PWA (python server, matches VPS axis-pwa) ───────────
@@ -44,7 +44,7 @@ services:
       HOST: "0.0.0.0"
       PORT: "8081"
       AXIS_GIT_SHA: ${GIT_SHA:-dev}
-      AXIS_VERSION: ${VERSION:-2.6.2}
+      AXIS_VERSION: ${VERSION:-2.6.3}
     healthcheck:
       test:
         [
@@ -103,7 +103,7 @@ services:
       args:
         BUN_VERSION: ${BUN_VERSION:-1.3.14}
         GIT_SHA: ${GIT_SHA:-dev}
-        VERSION: ${VERSION:-2.6.2}
+        VERSION: ${VERSION:-2.6.3}
     image: ${AXIS_NGINX_IMAGE:-axis-pwa-nginx:local}
     ports:
       - "${PROXY_PORT:-8080}:80"

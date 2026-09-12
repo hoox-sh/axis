@@ -9,7 +9,7 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-12 · 396 commits · describe-tag: `v2.6.1`_
+_Generated/updated: 2026-09-12 · 397 commits · describe-tag: `v2.6.2`_
 
 ---
 
@@ -20,6 +20,12 @@ _Generated/updated: 2026-09-12 · 396 commits · describe-tag: `v2.6.1`_
 ### Fixed
 
 ### Changed
+
+## [2.6.3] — 2026-09-12
+
+### Fixed
+
+- **Docker image build failed on `sync:versions`**: `bun run build` stamps Dockerfile/compose/bake VERSION fallbacks, but the image context did not copy those files → `ENOENT /app/Dockerfile` during GHCR bake. Missing stamp files are skipped, and the three files are copied into the build stage.
 
 ## [2.6.2] — 2026-09-12
 
@@ -1064,9 +1070,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (77 commits)
+### 2026-09 (78 commits)
 
 #### Features
 
@@ -1097,6 +1105,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `ff4674a1` (2026-09-12) — fix: harden PWA, editor, e2e, and Docker; release 2.6.2
 - `3a5de985` (2026-09-12) — fix(pwa): retry transient fetch failures in SW cache-first
 - `cb089b18` (2026-09-12) — fix(e2e): retry twice on CI runners
 - `b3915c90` (2026-09-12) — fix(e2e): wait for boot in openStudio, upload failure artifacts

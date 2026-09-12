@@ -19,8 +19,8 @@ axis --help
 # download axis-cli-<cli-version>-bun-<target> from the release assets:
 #   bun-linux-x64 | bun-linux-arm64 | bun-linux-x64-musl | bun-linux-arm64-musl
 #   bun-darwin-x64 | bun-darwin-arm64 | bun-windows-x64.exe
-# Release tag = app VERSION (v2.6.2). Filename uses CLI package version (0.3.0).
-curl -LO "https://github.com/hoox-sh/axis/releases/download/v2.6.2/axis-cli-0.3.0-bun-linux-x64"
+# Release tag = app VERSION (v2.6.3). Filename uses CLI package version (0.3.0).
+curl -LO "https://github.com/hoox-sh/axis/releases/download/v2.6.3/axis-cli-0.3.0-bun-linux-x64"
 chmod +x axis-cli-0.3.0-bun-linux-x64 && ./axis-cli-0.3.0-bun-linux-x64 --version
 
 # from the AXIS monorepo

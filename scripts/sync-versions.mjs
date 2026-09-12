@@ -25,7 +25,7 @@
  *   --check  exit 1 on drift without writing (CI-friendly)
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ROOT = join(import.meta.dir, '..');
@@ -243,6 +243,8 @@ const DOCKER_FALLBACKS = [
 
 for (const { rel, re, replace } of DOCKER_FALLBACKS) {
   const path = join(ROOT, rel);
+  // Image build context copies scripts/ + VERSION but not these files.
+  if (!existsSync(path)) continue;
   const text = readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
   const matches = [...text.matchAll(re)];
   if (matches.length === 0) {
