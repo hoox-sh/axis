@@ -98,6 +98,34 @@ export function getTomlVar(tomlPath: string, key: string): string | null {
   return stripQuotes(m[1]?.trim() ?? "") || null;
 }
 
+/** True when `KEY = …` is an uncommented assignment (including empty `""`). */
+export function hasTomlVar(tomlPath: string, key: string): boolean {
+  if (!existsSync(tomlPath)) return false;
+  const re = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=`, "m");
+  return re.test(readTomlText(tomlPath));
+}
+
+/**
+ * Comment out an active `[vars]` assignment so the name can be a Worker secret.
+ * Cloudflare error 10053: the same binding cannot be both a plaintext var and a secret.
+ */
+export function commentTomlVar(
+  tomlPath: string,
+  key: string
+): { changed: boolean; previous: string | null } {
+  const previous = getTomlVar(tomlPath, key);
+  if (!hasTomlVar(tomlPath, key)) return { changed: false, previous };
+  const text = readTomlText(tomlPath);
+  const activeRe = new RegExp(`^(\\s*)${escapeRegExp(key)}\\s*=\\s*.*$`, "m");
+  const next = text.replace(activeRe, (line) => {
+    const indent = line.match(/^\s*/)?.[0] ?? "";
+    return `${indent}# ${line.trim()}  # secret: axis secret put ${key}`;
+  });
+  if (next === text) return { changed: false, previous };
+  writeFileSync(tomlPath, next, "utf-8");
+  return { changed: true, previous };
+}
+
 export function getTomlName(tomlPath: string): string | null {
   if (!existsSync(tomlPath)) return null;
   const text = readTomlText(tomlPath);

@@ -19,9 +19,9 @@ axis --help
 # download axis-cli-<cli-version>-bun-<target> from the release assets:
 #   bun-linux-x64 | bun-linux-arm64 | bun-linux-x64-musl | bun-linux-arm64-musl
 #   bun-darwin-x64 | bun-darwin-arm64 | bun-windows-x64.exe
-# Release tag = app VERSION (v2.6.5). Filename uses CLI package version (0.3.1).
-curl -LO "https://github.com/hoox-sh/axis/releases/download/v2.6.5/axis-cli-0.3.1-bun-linux-x64"
-chmod +x axis-cli-0.3.1-bun-linux-x64 && ./axis-cli-0.3.1-bun-linux-x64 --version
+# Release tag = app VERSION (v2.6.6). Filename uses CLI package version (0.3.2).
+curl -LO "https://github.com/hoox-sh/axis/releases/download/v2.6.6/axis-cli-0.3.2-bun-linux-x64"
+chmod +x axis-cli-0.3.2-bun-linux-x64 && ./axis-cli-0.3.2-bun-linux-x64 --version
 
 # from the AXIS monorepo
 bun install
@@ -78,10 +78,10 @@ Global flags: `--json`, `--quiet`, `-y/--yes`. `--json` is machine-only (no bann
 axis install
 axis doctor
 axis setup --prod --github-client-id Ov23liekgk16zDDiHBz1
-axis secret put ADMIN_TOKEN
+axis secret put ADMIN_TOKEN        # comments empty [vars] stub, deploys, sets secret
 axis secret put EXTERNAL_BACKEND   # public HTTPS PYNE/Flask base
 axis deploy all                    # applies D1 schema, then Worker + Pages
-axis keys create                   # mint pn_… → Settings → Script storage
+axis keys create                   # --admin-token / AXIS_ADMIN_TOKEN / prompt
 axis health --scripts --oauth
 ```
 

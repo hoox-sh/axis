@@ -9,7 +9,7 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-12 · 400 commits · describe-tag: `v2.6.4`_
+_Generated/updated: 2026-09-12 · 401 commits · describe-tag: `v2.6.5`_
 
 ---
 
@@ -20,6 +20,12 @@ _Generated/updated: 2026-09-12 · 400 commits · describe-tag: `v2.6.4`_
 ### Fixed
 
 ### Changed
+
+## [2.6.6] — 2026-09-12
+
+### Fixed
+
+- **`axis secret put ADMIN_TOKEN` vs Cloudflare 10053** (`@hoox-sh/axis-cli` 0.3.2): empty `[vars] ADMIN_TOKEN = ""` is still a binding, so Wrangler refuses the secret. `axis secret put` now comments the plaintext var, deploys once to drop it, retries on 10053, then sets the secret. `axis keys create` prompts for the token (CLI cannot read Worker secrets) and doctor warns on a leftover `[vars]` stub.
 
 ## [2.6.5] — 2026-09-12
 
@@ -1107,12 +1113,15 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (81 commits)
+### 2026-09 (82 commits)
 
 #### Features
 
+- `1dc6c089` (2026-09-12) — feat(cli): cloud-storage setup, keys, and D1 schema deploy
 - `c111371a` (2026-09-12) — feat(storage): copy-on-switch, Worker settings, version history
 - `a9f7bb6e` (2026-09-12) — feat(release): VERSION single source of truth with update manager and close guard
 - `319403fb` (2026-09-10) — feat(editor): minimap, folding, indent grid, tab badges, workers full width

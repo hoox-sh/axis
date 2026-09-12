@@ -104,13 +104,14 @@ Tiers: `free` \| `hobby` \| `pro` \| `team` \| `enterprise`.
 
 Without `ADMIN_TOKEN` set, **create always fails** (`isAdmin` false).
 
+Do **not** leave `ADMIN_TOKEN = ""` in `[vars]`. That empty assignment is still a Worker binding, and Cloudflare error **10053** rejects `wrangler secret put ADMIN_TOKEN` (`Binding name already in use`). `axis secret put ADMIN_TOKEN` comments the stub, deploys to drop it, then sets the secret.
+
 CLI:
 
 ```bash
 axis setup kv                 # create + bind API_KEYS
-axis secret put ADMIN_TOKEN
-axis deploy worker
-axis keys create --tier hobby # prints pn_… once
+axis secret put ADMIN_TOKEN   # comments empty [vars] stub if present
+axis keys create --tier hobby # prompts, or --admin-token / AXIS_ADMIN_TOKEN
 axis keys validate --key pn_…
 ```
 

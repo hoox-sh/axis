@@ -16,6 +16,7 @@ import {
   isPlaceholderId,
   parseKvNamespaceId,
   setTomlVar,
+  hasTomlVar,
   upsertKvNamespace,
 } from "../services/wrangler-toml.js";
 import {
@@ -206,11 +207,32 @@ export async function setupKv(
   return { binding, id, created };
 }
 
-export function printCloudStorageNextSteps(quiet?: boolean): void {
+export function printCloudStorageNextSteps(
+  quiet?: boolean,
+  phase?: "after-kv" | "after-deploy"
+): void {
+  const paths = getPaths();
+  const tomlCollision =
+    existsSync(paths.wranglerToml) && hasTomlVar(paths.wranglerToml, "ADMIN_TOKEN");
   printInfo("Cloud script storage — remaining steps:", quiet);
-  printInfo("  1. axis secret put ADMIN_TOKEN", quiet);
-  printInfo("  2. axis deploy all              # D1 schema + Worker + Pages", quiet);
-  printInfo("  3. axis keys create             # mint pn_… for Settings", quiet);
+  if (tomlCollision) {
+    printInfo(
+      "  1. axis secret put ADMIN_TOKEN   # comments empty [vars] stub, deploys, then sets secret",
+      quiet
+    );
+  } else {
+    printInfo(
+      "  1. axis secret put ADMIN_TOKEN   # skip if already a Worker secret",
+      quiet
+    );
+  }
+  if (phase !== "after-deploy") {
+    printInfo("  2. axis deploy worker            # pick up API_KEYS + drop plaintext ADMIN_TOKEN", quiet);
+  }
+  printInfo(
+    "  3. axis keys create             # --admin-token / AXIS_ADMIN_TOKEN / prompt",
+    quiet
+  );
   printInfo("  4. axis health --scripts", quiet);
   printInfo("  5. Paste Worker URL + key in Settings → Script storage", quiet);
 }

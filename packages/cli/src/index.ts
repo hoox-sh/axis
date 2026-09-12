@@ -49,9 +49,9 @@ ${theme.dim("Typical flow:")}
   axis install
   axis doctor
   axis setup --prod --github-client-id Ov23li…
-  axis secret put ADMIN_TOKEN
+  axis secret put ADMIN_TOKEN   # clears empty [vars] stub if present
   axis deploy all
-  axis keys create
+  axis keys create              # --admin-token / AXIS_ADMIN_TOKEN / prompt
   axis health --scripts
 
 ${theme.dim("Cloud script storage:")}

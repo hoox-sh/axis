@@ -1,6 +1,6 @@
 {
   "name": "@hoox-sh/axis-cli",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "AXIS CLI — install, doctor, worker setup (D1/KV), keys, secrets, deploy, and health for the charting PWA",
   "type": "module",
   "license": "AGPL-3.0-only",

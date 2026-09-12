@@ -13,6 +13,8 @@ import {
   getD1DatabaseId,
   getTomlName,
   getKvBindingId,
+  hasTomlVar,
+  commentTomlVar,
   isPlaceholderId,
   parseKvNamespaceId,
   upsertKvNamespace,
@@ -116,6 +118,26 @@ database_id = "ae203eba-a4c4-49ce-8b7c-edcea914d3d9"
     expect(isPlaceholderId("REPLACE_WITH_KV_ID")).toBe(true);
     expect(isPlaceholderId("")).toBe(true);
     expect(isPlaceholderId("a".repeat(32))).toBe(false);
+  });
+
+  test("hasTomlVar is true for empty string assignments", () => {
+    const toml = join(dir, "wrangler.toml");
+    writeFileSync(toml, '[vars]\nADMIN_TOKEN = ""\nEXTERNAL_BACKEND = ""\n');
+    expect(hasTomlVar(toml, "ADMIN_TOKEN")).toBe(true);
+    expect(getTomlVar(toml, "ADMIN_TOKEN")).toBeNull();
+    expect(hasTomlVar(toml, "MISSING")).toBe(false);
+  });
+
+  test("commentTomlVar comments an empty ADMIN_TOKEN stub", () => {
+    const toml = join(dir, "wrangler.toml");
+    writeFileSync(toml, '[vars]\nADMIN_TOKEN = ""\nALLOW_OPEN_KEYS = "0"\n');
+    const r = commentTomlVar(toml, "ADMIN_TOKEN");
+    expect(r.changed).toBe(true);
+    const text = readFileSync(toml, "utf-8");
+    expect(hasTomlVar(toml, "ADMIN_TOKEN")).toBe(false);
+    expect(text).toMatch(/#\s*ADMIN_TOKEN\s*=/);
+    expect(getTomlVar(toml, "ALLOW_OPEN_KEYS")).toBe("0");
+    expect(commentTomlVar(toml, "ADMIN_TOKEN").changed).toBe(false);
   });
 
   test("parseKvNamespaceId reads wrangler create output", () => {

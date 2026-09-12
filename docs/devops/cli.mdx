@@ -123,10 +123,10 @@ The same check appears as the optional **CLI installation** row in `axis doctor`
 axis install
 axis doctor
 axis setup --prod --github-client-id Ov23li…
-axis secret put ADMIN_TOKEN
+axis secret put ADMIN_TOKEN   # comments empty [vars] ADMIN_TOKEN, deploys, then sets secret
 axis secret put EXTERNAL_BACKEND
 axis deploy all
-axis keys create
+axis keys create              # --admin-token / AXIS_ADMIN_TOKEN / prompt
 axis health --scripts --oauth
 # Paste Worker URL + pn_… into Settings → Script storage
 ```
@@ -135,7 +135,7 @@ axis health --scripts --oauth
 | --- | --- |
 | `GITHUB_OAUTH_CLIENT_ID` | Public OAuth App id; Device Flow enabled on GitHub; **env wins over body `clientId`** |
 | `GITLAB_OAUTH_CLIENT_ID` | Same for GitLab when using git storage |
-| `ADMIN_TOKEN` / `EXTERNAL_BACKEND` | Prefer `axis secret put` (not committed vars) |
+| `ADMIN_TOKEN` / `EXTERNAL_BACKEND` | Prefer `axis secret put`. An empty `[vars]` stub collides with secrets (Cloudflare 10053) |
 | `API_KEYS` KV | `axis setup kv` then `axis deploy worker`. D1 without KV fails closed (`API_KEYS_REQUIRED`) |
 | `ALLOW_OPEN_KEYS` | `"0"` in production |
 | `REQUIRE_RUN_AUTH` | `"1"` to force Bearer on `/api/run` even without KV |

@@ -8,12 +8,13 @@
 import { existsSync } from "node:fs";
 import type { Command } from "commander";
 import { getPaths } from "../utils/paths.js";
-import { getTomlVar } from "../services/wrangler-toml.js";
+import { getTomlVar, hasTomlVar } from "../services/wrangler-toml.js";
 import {
   defaultWorkerUrl,
   mintWorkerApiKey,
   validateWorkerApiKey,
 } from "../services/health.js";
+import { promptSecret } from "../utils/prompt.js";
 import {
   CLIError,
   ExitCode,
@@ -28,17 +29,48 @@ import {
 
 const TIERS = ["free", "hobby", "pro", "team", "enterprise"] as const;
 
-function resolveAdminToken(explicit?: string): string {
-  const fromFlag = String(explicit || "").trim();
-  if (fromFlag) return fromFlag;
-  const fromEnv = String(process.env.AXIS_ADMIN_TOKEN || "").trim();
-  if (fromEnv) return fromEnv;
+function adminTokenHint(tomlCollision: boolean): string {
+  const lines = [
+    "Pass --admin-token, AXIS_ADMIN_TOKEN, or enter it when prompted (CLI cannot read Worker secrets).",
+  ];
+  if (tomlCollision) {
+    lines.push(
+      "wrangler.toml still has [vars] ADMIN_TOKEN — that blocks secret put (10053) and leaves the Worker with an empty token. Run: axis secret put ADMIN_TOKEN"
+    );
+  } else {
+    lines.push("If minting 403s: axis secret put ADMIN_TOKEN, then retry.");
+  }
+  return lines.join(" ");
+}
+
+async function resolveAdminToken(
+  explicit: string | undefined,
+  opts: GlobalOpts
+): Promise<{ token: string; tomlCollision: boolean }> {
   const paths = getPaths();
+  const tomlCollision =
+    existsSync(paths.wranglerToml) && hasTomlVar(paths.wranglerToml, "ADMIN_TOKEN");
+  const fromFlag = String(explicit || "").trim();
+  if (fromFlag) return { token: fromFlag, tomlCollision };
+  const fromEnv = String(process.env.AXIS_ADMIN_TOKEN || "").trim();
+  if (fromEnv) return { token: fromEnv, tomlCollision };
   if (existsSync(paths.wranglerToml)) {
     const fromToml = getTomlVar(paths.wranglerToml, "ADMIN_TOKEN");
-    if (fromToml) return fromToml;
+    if (fromToml) return { token: fromToml, tomlCollision };
   }
-  return "";
+  if (process.stdin.isTTY && !opts.json) {
+    printInfo(
+      "Enter the ADMIN_TOKEN you set with `axis secret put ADMIN_TOKEN`.",
+      opts.quiet
+    );
+    try {
+      const typed = (await promptSecret("Admin token: ")).trim();
+      return { token: typed, tomlCollision };
+    } catch {
+      return { token: "", tomlCollision };
+    }
+  }
+  return { token: "", tomlCollision };
 }
 
 export async function runKeysCreate(
@@ -47,12 +79,18 @@ export async function runKeysCreate(
 ): Promise<void> {
   printHeader("AXIS keys create", opts.quiet);
   const base = flags.url || defaultWorkerUrl();
-  const token = resolveAdminToken(flags.adminToken);
+  const { token, tomlCollision } = await resolveAdminToken(flags.adminToken, opts);
   if (!token) {
     throw new CLIError(
       "ADMIN_TOKEN required to mint keys",
       ExitCode.UNAUTHENTICATED,
-      "axis secret put ADMIN_TOKEN   or   --admin-token / AXIS_ADMIN_TOKEN"
+      adminTokenHint(tomlCollision)
+    );
+  }
+  if (tomlCollision) {
+    printWarn(
+      "[vars] ADMIN_TOKEN is still set (often empty). axis secret put ADMIN_TOKEN will comment it out, deploy, then set the secret.",
+      opts.quiet
     );
   }
   const tier = (flags.tier || "hobby").toLowerCase();
@@ -71,7 +109,7 @@ export async function runKeysCreate(
       minted.error || "key mint failed",
       minted.status === 403 ? ExitCode.UNAUTHENTICATED : ExitCode.ERROR,
       minted.status === 403
-        ? "ADMIN_TOKEN rejected — axis secret put ADMIN_TOKEN, then axis deploy worker"
+        ? adminTokenHint(tomlCollision)
         : minted.status === 503
           ? "Worker needs API_KEYS KV — axis setup kv && axis deploy worker"
           : "Check axis health and that the Worker is deployed"

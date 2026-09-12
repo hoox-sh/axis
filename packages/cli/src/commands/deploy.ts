@@ -163,7 +163,7 @@ export async function deployAll(
   await deployWorker(opts, flags);
   await deployPages(opts);
   printOk("Deploy all complete", opts.quiet);
-  printCloudStorageNextSteps(opts.quiet);
+  printCloudStorageNextSteps(opts.quiet, "after-deploy");
 }
 
 export function registerDeploy(program: Command): void {

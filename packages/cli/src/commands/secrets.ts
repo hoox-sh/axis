@@ -9,6 +9,8 @@ import { existsSync } from "node:fs";
 import type { Command } from "commander";
 import { getPaths } from "../utils/paths.js";
 import { runWrangler } from "../utils/run.js";
+import { commentTomlVar, hasTomlVar } from "../services/wrangler-toml.js";
+import { promptSecret } from "../utils/prompt.js";
 import {
   CLIError,
   ExitCode,
@@ -16,6 +18,7 @@ import {
   printInfo,
   printJson,
   printOk,
+  printWarn,
   wrapAction,
   type GlobalOpts,
 } from "../utils/format.js";
@@ -40,6 +43,72 @@ function requireWorkerToml(): string {
   return paths.worker;
 }
 
+/** Cloudflare Workers API code 10053 — name already bound as a plaintext var. */
+export function isBindingNameInUse(output: string): boolean {
+  return /already in use/i.test(output) && /\b10053\b/.test(output);
+}
+
+/**
+ * Comment a colliding `[vars]` key and deploy so `wrangler secret put` can succeed.
+ * Returns true when a deploy ran.
+ */
+export async function dropPlaintextVarForSecret(
+  opts: GlobalOpts,
+  key: string
+): Promise<boolean> {
+  const paths = getPaths();
+  if (!existsSync(paths.wranglerToml) || !hasTomlVar(paths.wranglerToml, key)) {
+    return false;
+  }
+  commentTomlVar(paths.wranglerToml, key);
+  printWarn(
+    `[vars] ${key} commented out — Cloudflare forbids the same name as a var and a secret (10053).`,
+    opts.quiet
+  );
+  printInfo("Deploying Worker to drop the plaintext binding…", opts.quiet);
+  const deployed = await runWrangler(paths.worker, ["deploy"], {
+    inherit: !opts.quiet,
+    throwOnError: false,
+  });
+  if (deployed.code !== 0) {
+    throw new CLIError(
+      `Failed to drop [vars] ${key} (deploy exit ${deployed.code})`,
+      ExitCode.ERROR,
+      deployed.stderr || deployed.stdout || "Comment the var in wrangler.toml, then: axis deploy worker"
+    );
+  }
+  printOk("Plaintext var dropped", opts.quiet);
+  return true;
+}
+
+async function readSecretValue(
+  opts: GlobalOpts,
+  value?: string
+): Promise<string> {
+  if (value != null && value !== "") return value;
+  if (!process.stdin.isTTY) {
+    const chunks: Buffer[] = [];
+    for await (const c of process.stdin) chunks.push(c as Buffer);
+    return Buffer.concat(chunks).toString("utf-8").replace(/\n$/, "");
+  }
+  printInfo("Enter secret value (input hidden)…", opts.quiet);
+  return (await promptSecret("Secret: ")).trim();
+}
+
+async function wranglerSecretPut(
+  worker: string,
+  key: string,
+  secretValue: string,
+  opts: GlobalOpts
+) {
+  const input = secretValue.endsWith("\n") ? secretValue : `${secretValue}\n`;
+  return runWrangler(worker, ["secret", "put", key], {
+    inherit: !opts.quiet,
+    throwOnError: false,
+    input,
+  });
+}
+
 export async function secretPut(
   opts: GlobalOpts,
   name: string,
@@ -52,34 +121,57 @@ export async function secretPut(
   }
 
   printHeader(`AXIS secret put ${key}`, opts.quiet);
+  const secretValue = await readSecretValue(opts, value);
+  if (!secretValue) {
+    throw new CLIError(
+      "Empty secret value (pipe a value or pass --value)",
+      ExitCode.INVALID_USAGE
+    );
+  }
 
-  if (value != null && value !== "") {
-    await runWrangler(worker, ["secret", "put", key], {
-      inherit: true,
-      input: value,
+  await dropPlaintextVarForSecret(opts, key);
+
+  let put = await wranglerSecretPut(worker, key, secretValue, opts);
+  if (put.code !== 0) {
+    const detail = `${put.stderr}\n${put.stdout}`;
+    printWarn(
+      isBindingNameInUse(detail)
+        ? "Cloudflare 10053: name still a plaintext var on the live Worker. Deploying to drop it, then retrying…"
+        : `secret put exited ${put.code}; deploying Worker and retrying…`,
+      opts.quiet
+    );
+    const deployed = await runWrangler(worker, ["deploy"], {
+      inherit: !opts.quiet,
+      throwOnError: false,
     });
-  } else if (!process.stdin.isTTY) {
-    // Read from stdin pipe
-    const chunks: Buffer[] = [];
-    for await (const c of process.stdin) chunks.push(c as Buffer);
-    const v = Buffer.concat(chunks).toString("utf-8").replace(/\n$/, "");
-    if (!v) {
+    if (deployed.code !== 0) {
       throw new CLIError(
-        "Empty secret value (pipe a value or pass --value)",
-        ExitCode.INVALID_USAGE
+        `Failed to drop remote [vars] ${key} (deploy exit ${deployed.code})`,
+        ExitCode.ERROR,
+        deployed.stderr || deployed.stdout
       );
     }
-    await runWrangler(worker, ["secret", "put", key], {
-      inherit: true,
-      input: v,
-    });
-  } else {
-    // Interactive wrangler prompt
-    printInfo("Enter secret value when wrangler prompts…", opts.quiet);
-    await runWrangler(worker, ["secret", "put", key], { inherit: true });
+    put = await wranglerSecretPut(worker, key, secretValue, opts);
+  }
+
+  if (put.code !== 0) {
+    const detail = `${put.stderr}\n${put.stdout}`;
+    throw new CLIError(
+      `wrangler secret put ${key} failed (exit ${put.code})`,
+      ExitCode.ERROR,
+      isBindingNameInUse(detail)
+        ? `Binding already a [vars] entry. Comment ${key} out of wrangler.toml, then: axis deploy worker && axis secret put ${key}`
+        : "Comment any matching [vars] key, deploy the Worker, and retry."
+    );
   }
 
   printOk(`Secret ${key} set`, opts.quiet);
+  if (key === "ADMIN_TOKEN") {
+    printInfo(
+      "axis keys create cannot read Worker secrets — pass --admin-token, AXIS_ADMIN_TOKEN, or enter it when prompted.",
+      opts.quiet
+    );
+  }
   if (opts.json) printJson({ ok: true, name: key });
 }
 

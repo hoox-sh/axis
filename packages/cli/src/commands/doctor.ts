@@ -15,6 +15,7 @@ import {
   getKvBindingId,
   getTomlName,
   getTomlVar,
+  hasTomlVar,
   isPlaceholderId,
 } from "../services/wrangler-toml.js";
 import {
@@ -139,6 +140,17 @@ export async function collectDoctorChecks(options: {
         allowOpen === "1"
           ? 'currently "1" (dev open) — set "0" for prod'
           : allowOpen ?? "(unset)",
+    });
+
+    const adminVar = hasTomlVar(paths.wranglerToml, "ADMIN_TOKEN");
+    checks.push({
+      id: "admin-token-var",
+      ok: !adminVar,
+      required: false,
+      label: "ADMIN_TOKEN not a plaintext [vars]",
+      detail: adminVar
+        ? "plaintext [vars] ADMIN_TOKEN blocks wrangler secret put (10053) — axis secret put ADMIN_TOKEN"
+        : "ok (set with axis secret put ADMIN_TOKEN)",
     });
 
     const kvId = getKvBindingId(paths.wranglerToml, "API_KEYS");
