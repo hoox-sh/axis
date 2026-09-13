@@ -914,7 +914,7 @@ export const TabbedEditor: Component<Props> = (props) => {
                     title="Close tab"
                     aria-label={`Close ${tab.name}`}
                   >
-                    ×
+                    <Icons.x size={12} />
                   </button>
                 )}
               </div>
@@ -922,12 +922,12 @@ export const TabbedEditor: Component<Props> = (props) => {
           </For>
           <button
             type="button"
-            class="axis-editor-tab-add text-text-dim border-none bg-transparent px-2 cursor-pointer text-base hover:text-accent hover:bg-bg-hover flex-shrink-0"
+            class="axis-editor-tab-add text-text-dim border-none bg-transparent px-2 cursor-pointer hover:text-accent hover:bg-bg-hover flex-shrink-0 flex items-center"
             onClick={addTab}
             title="New tab"
             aria-label="New tab"
           >
-            +
+            <Icons.plus size={14} />
           </button>
         </div>
         <div

@@ -19,8 +19,11 @@ _Generated/updated: 2026-09-12 · 401 commits · describe-tag: `v2.6.5`_
 
 ### Fixed
 
+- Fold marker labels were inverted (expanded blocks announced “Unfold”). They now read **Fold block** / **Unfold block**.
+
 ### Changed
 
+- **Editor fold gutter**: 14px Lucide chevrons replace the 10px `▾`/`▸` glyphs (down = expanded, right = folded), with a clickable `⋯` placeholder on folded blocks. Tab close/add and header Run/Library/Profiler use the same icon set and size.
 - **Editor color tools**: one working color (picker overlay + any-form input + transparency) instead of a disconnected converter that stayed on `#939fff`. Chip captions use `#RRGGBB tN` so `color.new(...)` is not truncated; formats list copies the draft; Replace / Replace all / Jump; checkerboard swatches show Pine transparency.
 
 ## [2.6.6] — 2026-09-12

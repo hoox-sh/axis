@@ -112,8 +112,23 @@ export function installDocumentStub() {
       }
     }
     querySelector(sel: string) {
-      if (sel === 'span') return this.children.find((c) => c.tag === 'span') || null;
-      return null;
+      const tag = sel.replace(/^[.#].*/, '') || sel;
+      const walk = (nodes: FakeEl[]): FakeEl | null => {
+        for (const c of nodes) {
+          if (c.tag === sel || c.tag === tag) return c;
+          const inner = walk(c.children);
+          if (inner) return inner;
+        }
+        return null;
+      };
+      return walk(this.children);
+    }
+    dispatchEvent(ev: { type: string; preventDefault?: () => void }) {
+      const fns = this.listeners.get(ev.type);
+      if (fns) {
+        for (const fn of fns) fn(ev);
+      }
+      return true;
     }
     getBoundingClientRect() {
       return { width: 800, height: 200, top: 0, left: 0, right: 800, bottom: 200 };
@@ -144,6 +159,11 @@ export function installDocumentStub() {
     documentElement: docEl,
     body,
     createElement(tag: string) {
+      const el = new FakeEl();
+      el.tag = tag;
+      return el;
+    },
+    createElementNS(_ns: string, tag: string) {
       const el = new FakeEl();
       el.tag = tag;
       return el;

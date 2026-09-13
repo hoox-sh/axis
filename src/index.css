@@ -2426,8 +2426,8 @@ body.axis-panel-dragging {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 1.05em;
-  height: 1.05em;
+  width: 14px;
+  height: 14px;
 }
 .axis-editor-tool-label {
   display: inline-block;

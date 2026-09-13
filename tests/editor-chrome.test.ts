@@ -16,6 +16,7 @@ import {
   PINE_INDENT_WIDTH,
   codeFoldingExtension,
   foldMarker,
+  foldPlaceholder,
   indentColumn,
   pineFoldRange,
   pineIndentFoldService,
@@ -119,20 +120,36 @@ describe('code folding extension', () => {
   it('builds gutter + keymap + indent service', () => {
     const ext = codeFoldingExtension();
     expect(Array.isArray(ext)).toBe(true);
-    expect((ext as unknown[]).length).toBe(3);
+    expect((ext as unknown[]).length).toBe(4);
   });
 
-  it('markers carry open state', () => {
+  it('markers carry open state as Lucide chevron SVGs', () => {
     const open = foldMarker(true);
-    expect(open.textContent).toBe('▾');
+    expect(open.querySelector('svg')).toBeTruthy();
+    expect(open.querySelector('path')?.getAttribute('d')).toContain('6 6 6-6');
     expect(open.className).toContain('is-open');
-    expect(open.title).toBe('Unfold line');
-    expect(open.getAttribute('aria-label')).toBe('Unfold line');
+    expect(open.title).toBe('Fold block');
+    expect(open.getAttribute('aria-label')).toBe('Fold block');
+    expect(open.getAttribute('data-open')).toBe('1');
     const closed = foldMarker(false);
-    expect(closed.textContent).toBe('▸');
+    expect(closed.querySelector('svg')).toBeTruthy();
+    expect(closed.querySelector('path')?.getAttribute('d')).toContain('6-6-6-6');
     expect(closed.className).not.toContain('is-open');
-    expect(closed.title).toBe('Fold line');
-    expect(closed.getAttribute('aria-label')).toBe('Fold line');
+    expect(closed.title).toBe('Unfold block');
+    expect(closed.getAttribute('aria-label')).toBe('Unfold block');
+    expect(closed.getAttribute('data-open')).toBe('0');
+  });
+
+  it('fold placeholder is a clickable unfold chip', () => {
+    let clicked = 0;
+    const el = foldPlaceholder({} as never, () => {
+      clicked += 1;
+    });
+    expect(el.className).toBe('ax-fold-placeholder');
+    expect(el.textContent).toBe('⋯');
+    expect(el.getAttribute('aria-label')).toBe('Unfold block');
+    el.dispatchEvent({ type: 'mousedown', preventDefault() {} });
+    expect(clicked).toBe(1);
   });
 
   it('fold service resolves indent ranges headlessly', () => {

@@ -14,8 +14,8 @@
  * @module editor/code-folding
  */
 
-import { keymap } from '@codemirror/view';
-import { foldGutter, foldKeymap, foldService } from '@codemirror/language';
+import { keymap, type EditorView } from '@codemirror/view';
+import { codeFolding, foldGutter, foldKeymap, foldService } from '@codemirror/language';
 import type { EditorState } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 
@@ -68,20 +68,64 @@ export const pineIndentFoldService = foldService.of((state, from) => {
   return pineFoldRange(state, from);
 });
 
-/** Fold gutter marker (open / closed) using void-theme classes. */
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Lucide chevron paths (24×24). `open` = block is expanded (not folded). */
+function chevronSvg(open: boolean): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '14');
+  svg.setAttribute('height', '14');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2.4');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(SVG_NS, 'path');
+  // Down = expanded (click folds); right = folded (click unfolds).
+  path.setAttribute('d', open ? 'm6 9 6 6 6-6' : 'm9 18 6-6-6-6');
+  svg.appendChild(path);
+  return svg;
+}
+
+/**
+ * Fold gutter marker. `open` is true when the range is expanded
+ * (CodeMirror `markerDOM` convention).
+ */
 export function foldMarker(open: boolean): HTMLElement {
   const el = document.createElement('span');
   el.className = `ax-fold-marker${open ? ' is-open' : ''}`;
-  el.textContent = open ? '▾' : '▸';
-  const label = open ? 'Unfold line' : 'Fold line';
+  el.appendChild(chevronSvg(open));
+  const label = open ? 'Fold block' : 'Unfold block';
   el.title = label;
   el.setAttribute('aria-label', label);
+  el.setAttribute('data-open', open ? '1' : '0');
+  return el;
+}
+
+/** Clickable placeholder shown on the header line while a block is folded. */
+export function foldPlaceholder(
+  _view: EditorView,
+  onclick: (event: Event) => void,
+): HTMLElement {
+  const el = document.createElement('span');
+  el.className = 'ax-fold-placeholder';
+  el.textContent = '⋯';
+  el.title = 'Unfold block';
+  el.setAttribute('role', 'button');
+  el.setAttribute('aria-label', 'Unfold block');
+  el.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    onclick(e);
+  });
   return el;
 }
 
 /** Gutter + keymap + indent fold service for the Pine editor. */
 export function codeFoldingExtension(): Extension {
   return [
+    codeFolding({ placeholderDOM: foldPlaceholder }),
     foldGutter({ markerDOM: foldMarker }),
     keymap.of(foldKeymap),
     pineIndentFoldService,

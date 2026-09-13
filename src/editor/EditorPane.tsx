@@ -353,9 +353,9 @@ export const EditorPane: Component<Props> = (props) => {
           }}
         >
           {hasChartInstance() && store.status !== 'running' ? (
-            <Icons.refresh size={12} />
+            <Icons.refresh size={14} />
           ) : (
-            <Icons.play size={12} />
+            <Icons.play size={14} />
           )}
         </EditorToolBtn>
         <EditorToolBtn
@@ -366,7 +366,7 @@ export const EditorPane: Component<Props> = (props) => {
           pressed={isPanelOpen('library')}
           onClick={() => toggleLibraryPanel()}
         >
-          <Icons.folder size={12} />
+          <Icons.folder size={14} />
         </EditorToolBtn>
         <span class="axis-editor-tools-sep" aria-hidden="true" />
       </Show>
@@ -389,7 +389,7 @@ export const EditorPane: Component<Props> = (props) => {
           }
         }}
       >
-        <Icons.activity size={12} />
+        <Icons.activity size={14} />
       </EditorToolBtn>
     </div>
   );
@@ -452,7 +452,7 @@ export const EditorPane: Component<Props> = (props) => {
               }, 120);
             }}
           >
-            <Icons.panelLeft size={12} />
+            <Icons.panelLeft size={14} />
           </button>
         </div>
         <div class="flex-1 min-h-0 overflow-hidden">
