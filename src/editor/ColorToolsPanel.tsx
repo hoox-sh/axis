@@ -18,8 +18,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Editor **color tools**: chips for colors in the script, a small editor
- * (picker + transparency + apply), and a free-form format converter.
+ * Editor **color tools**: chips for colors in the script, one working color
+ * (picker + transparency + write-as), and click-to-copy format rows.
  *
  * @module editor/ColorToolsPanel
  */
@@ -31,18 +31,25 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  untrack,
 } from 'solid-js';
+import { copyToClipboard } from '../ui/clipboard';
 import {
+  alphaToTransp,
   colorFormats,
   formatReplacement,
   parseColorInput,
+  replaceAllColorHits,
   replaceColorHit,
   scanPineColors,
+  styleFromColorKind,
   toCssRgba,
   toHex6,
   uniqueColorChips,
+  type ColorFormats,
   type PineColorHit,
   type RgbaColor,
+  type UniqueColorChip,
   rgbaFromChannels,
   transpToAlpha,
 } from './pine-colors';
@@ -58,52 +65,53 @@ export type ColorToolsPanelProps = {
 
 type OutStyle = 'hex' | 'rgb' | 'new' | 'named';
 
+const WRITE_STYLES: { id: OutStyle; label: string; hint: string }[] = [
+  { id: 'hex', label: 'Hex', hint: 'Bare #RRGGBB, or color.new when transparent' },
+  { id: 'rgb', label: 'color.rgb', hint: 'color.rgb(r, g, b[, t])' },
+  { id: 'new', label: 'color.new', hint: 'color.new(#RRGGBB, t)' },
+  { id: 'named', label: 'Named', hint: 'color.red / color.blue / … when exact' },
+];
+
+const FORMAT_ROWS: {
+  id: string;
+  label: string;
+  pick: (f: ColorFormats) => string | null;
+}[] = [
+  { id: 'hex6', label: 'Hex', pick: (f) => f.hex6 },
+  { id: 'hex8', label: 'Hex + α', pick: (f) => f.hex8 },
+  { id: 'css', label: 'CSS', pick: (f) => f.cssRgba },
+  { id: 'pineRgb', label: 'color.rgb', pick: (f) => f.pineRgb },
+  { id: 'pineRgbT', label: 'color.rgb + t', pick: (f) => f.pineRgbTransp },
+  { id: 'pineNew', label: 'color.new', pick: (f) => f.pineNew },
+  { id: 'named', label: 'Named', pick: (f) => f.named },
+];
+
 function toColorInputValue(hex6: string): string {
   const s = hex6.trim();
   if (/^#[0-9a-fA-F]{6}$/.test(s)) return s;
   return '#000000';
 }
 
-async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.left = '-9999px';
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand('copy');
-      document.body.removeChild(ta);
-      return ok;
-    } catch {
-      return false;
-    }
-  }
+function chipCss(chip: UniqueColorChip): string {
+  return toCssRgba(
+    rgbaFromChannels(chip.r, chip.g, chip.b, transpToAlpha(chip.transp)),
+  );
 }
 
-/** Color chips + editor + converter for the Pine editor. */
+/** Color chips + editor + formats for the Pine editor. */
 export const ColorToolsPanel: Component<ColorToolsPanelProps> = (props) => {
   const hits = createMemo(() => scanPineColors(props.doc || ''));
   const chips = createMemo(() => uniqueColorChips(hits()));
 
   const [selectedKey, setSelectedKey] = createSignal<string | null>(null);
   const [selectedHit, setSelectedHit] = createSignal<PineColorHit | null>(null);
-
-  // Editor draft
   const [draftR, setDraftR] = createSignal(147);
   const [draftG, setDraftG] = createSignal(159);
   const [draftB, setDraftB] = createSignal(255);
   const [draftTransp, setDraftTransp] = createSignal(0);
+  const [textDraft, setTextDraft] = createSignal('#939FFF');
   const [outStyle, setOutStyle] = createSignal<OutStyle>('hex');
-  const [applyMsg, setApplyMsg] = createSignal('');
-
-  // Converter
-  const [convIn, setConvIn] = createSignal('#939fff');
-  const [copyFlash, setCopyFlash] = createSignal('');
+  const [status, setStatus] = createSignal('');
 
   const selectedChip = createMemo(() => {
     const k = selectedKey();
@@ -115,18 +123,38 @@ export const ColorToolsPanel: Component<ColorToolsPanelProps> = (props) => {
     setDraftR(c.r);
     setDraftG(c.g);
     setDraftB(c.b);
-    setDraftTransp(Math.round(100 * (1 - c.a / 255)));
+    setDraftTransp(alphaToTransp(c.a));
+    setTextDraft(toHex6(c));
     if (hit) setSelectedHit(hit);
   };
 
-  // Keep draft in sync when selecting a chip
-  createEffect(() => {
-    const chip = selectedChip();
-    if (!chip) return;
+  const seedFromChip = (chip: UniqueColorChip) => {
     seedFromRgba(
       rgbaFromChannels(chip.r, chip.g, chip.b, transpToAlpha(chip.transp)),
       chip.first,
     );
+    setOutStyle(styleFromColorKind(chip.first.kind));
+  };
+
+  // Keep selection attached to a live chip; seed draft when the key changes.
+  createEffect(() => {
+    const list = chips();
+    if (!list.length) {
+      untrack(() => {
+        setSelectedKey(null);
+        setSelectedHit(null);
+      });
+      return;
+    }
+    const k = untrack(() => selectedKey());
+    const chip = (k && list.find((c) => c.key === k)) || list[0];
+    if (!chip) return;
+    if (k !== chip.key) {
+      setSelectedKey(chip.key);
+      seedFromChip(chip);
+      return;
+    }
+    setSelectedHit(chip.first);
   });
 
   const draftRgba = createMemo(() =>
@@ -135,67 +163,107 @@ export const ColorToolsPanel: Component<ColorToolsPanelProps> = (props) => {
   const draftFmts = createMemo(() => colorFormats(draftRgba()));
   const draftPreview = createMemo(() => toCssRgba(draftRgba()));
   const draftHex = createMemo(() => toHex6(draftRgba()));
+  const replacement = createMemo(() =>
+    formatReplacement(draftR(), draftG(), draftB(), draftTransp(), outStyle()),
+  );
+  const textParsed = createMemo(() => parseColorInput(textDraft()));
+  const namedAvailable = createMemo(() => Boolean(draftFmts().named));
 
-  const convParsed = createMemo(() => parseColorInput(convIn()));
-  const convFmts = createMemo(() => {
-    const p = convParsed();
-    return p ? colorFormats(p) : null;
-  });
+  const formatEntries = createMemo(() =>
+    FORMAT_ROWS.map((row) => ({ ...row, value: row.pick(draftFmts()) })).filter(
+      (row): row is typeof row & { value: string } => Boolean(row.value),
+    ),
+  );
 
-  const selectChip = (key: string) => {
-    setSelectedKey(key);
-    setApplyMsg('');
-    const chip = chips().find((c) => c.key === key);
-    if (chip) {
-      props.onJump?.(chip.first);
-    }
+  const flash = (msg: string) => {
+    setStatus(msg);
+    window.setTimeout(() => setStatus((cur) => (cur === msg ? '' : cur)), 1600);
   };
 
-  const applyToHit = () => {
+  const selectChip = (key: string, jump: boolean) => {
+    const chip = chips().find((c) => c.key === key);
+    if (!chip) return;
+    setSelectedKey(key);
+    seedFromChip(chip);
+    setStatus('');
+    if (jump) props.onJump?.(chip.first);
+  };
+
+  const onChipKeyDown = (e: KeyboardEvent, index: number) => {
+    const list = chips();
+    if (!list.length) return;
+    let next = index;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = Math.min(list.length - 1, index + 1);
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = Math.max(0, index - 1);
+    else if (e.key === 'Enter' || e.key === ' ') {
+      const cur = list[index];
+      if (!cur) return;
+      e.preventDefault();
+      selectChip(cur.key, e.key === 'Enter');
+      return;
+    } else return;
+    const dest = list[next];
+    if (!dest) return;
+    e.preventDefault();
+    selectChip(dest.key, false);
+    const el = document.querySelector<HTMLElement>(
+      `[data-testid="axis-editor-color-chips"] [data-chip-index="${next}"]`,
+    );
+    el?.focus();
+  };
+
+  const applyRgb = (c: RgbaColor, syncText: boolean) => {
+    setDraftR(c.r);
+    setDraftG(c.g);
+    setDraftB(c.b);
+    if (c.a < 255) setDraftTransp(alphaToTransp(c.a));
+    if (syncText) setTextDraft(toHex6(c));
+  };
+
+  const resolveTargetHit = (): PineColorHit | null => {
     const hit = selectedHit();
-    if (!hit) {
-      setApplyMsg('Select a color in the script first');
+    if (!hit) return null;
+    const doc = props.doc || '';
+    if (doc.slice(hit.from, hit.to) === hit.text) return hit;
+    const chip = selectedChip();
+    if (!chip) return null;
+    return (
+      hits().find(
+        (h) =>
+          h.r === chip.r && h.g === chip.g && h.b === chip.b && h.transp === chip.transp,
+      ) ?? null
+    );
+  };
+
+  const applyToScript = (all: boolean) => {
+    const target = resolveTargetHit();
+    if (!target) {
+      flash('Select a color in the script first');
       return;
     }
-    // Re-find hit by range if doc drifted; prefer exact range still valid
-    let target = hit;
     const doc = props.doc || '';
-    if (doc.slice(hit.from, hit.to) !== hit.text) {
-      // Fall back to first current hit matching the selected chip key
-      const chip = selectedChip();
-      const again = chip
-        ? hits().find(
-            (h) =>
-              h.r === chip.r && h.g === chip.g && h.b === chip.b && h.transp === chip.transp,
-          )
-        : null;
-      if (!again) {
-        setApplyMsg('Color range moved — reselect a chip');
-        return;
-      }
-      target = again;
+    const text = replacement();
+    const chip = selectedChip();
+    let next: string;
+    if (all && chip) {
+      const matches = hits().filter(
+        (h) =>
+          h.r === chip.r && h.g === chip.g && h.b === chip.b && h.transp === chip.transp,
+      );
+      next = replaceAllColorHits(doc, matches, text);
+      flash(`Replaced ${matches.length} × ${text}`);
+    } else {
+      next = replaceColorHit(doc, target, text);
+      flash(`Replaced L${target.line}`);
     }
-    const replacement = formatReplacement(
-      draftR(),
-      draftG(),
-      draftB(),
-      draftTransp(),
-      outStyle(),
-    );
-    const next = replaceColorHit(doc, target, replacement);
     props.onApplyDoc(next);
-    setApplyMsg(`Applied ${replacement}`);
-    // Reselect by new key after apply
     const c = draftRgba();
-    setSelectedKey(
-      `${c.r},${c.g},${c.b},${Math.round(100 * (1 - c.a / 255))}`,
-    );
+    setSelectedKey(`${c.r},${c.g},${c.b},${Math.round(100 * (1 - c.a / 255))}`);
   };
 
-  const flashCopy = async (label: string, text: string) => {
-    const ok = await copyText(text);
-    setCopyFlash(ok ? `Copied ${label}` : 'Copy failed');
-    window.setTimeout(() => setCopyFlash(''), 1400);
+  const copyValue = async (label: string, text: string) => {
+    const ok = await copyToClipboard(text);
+    flash(ok ? `Copied ${label}` : 'Copy failed');
   };
 
   return (
@@ -204,157 +272,189 @@ export const ColorToolsPanel: Component<ColorToolsPanelProps> = (props) => {
       data-testid="axis-editor-colors"
     >
       <div class="px-2.5 pt-2 pb-1.5 flex flex-col gap-2">
-        {/* Chips from document */}
-        <div class="flex flex-col gap-1">
-          <div class="flex items-center justify-between gap-2">
-            <span class="sc-label !mb-0">Colors in script</span>
-            <span class="text-text-faint font-mono tabular-nums">
-              {chips().length} unique · {hits().length} hit{hits().length === 1 ? '' : 's'}
-            </span>
-          </div>
-          <Show
-            when={chips().length > 0}
-            fallback={
-              <p class="sc-hint m-0">
-                No colors found — use <code class="font-mono">#RRGGBB</code>,{' '}
-                <code class="font-mono">color.red</code>,{' '}
-                <code class="font-mono">color.rgb(...)</code>, or{' '}
-                <code class="font-mono">color.new(...)</code>.
-              </p>
-            }
-          >
-            <div
-              class="flex flex-wrap gap-1.5"
-              role="listbox"
-              aria-label="Colors in document"
-              data-testid="axis-editor-color-chips"
-            >
-              <For each={chips()}>
-                {(chip) => {
-                  const active = () => selectedKey() === chip.key;
-                  const css = () =>
-                    toCssRgba(
-                      rgbaFromChannels(
-                        chip.r,
-                        chip.g,
-                        chip.b,
-                        transpToAlpha(chip.transp),
-                      ),
-                    );
-                  return (
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={active()}
-                      title={`${chip.label} ×${chip.count} · L${chip.first.line}`}
-                      class={`inline-flex items-center gap-1.5 max-w-[12rem] px-1.5 py-0.5 rounded border text-left transition-colors ${
-                        active()
-                          ? 'border-accent bg-bg-hover text-text'
-                          : 'border-border-soft bg-bg-elev text-text-dim hover:border-border hover:text-text'
-                      }`}
-                      onClick={() => selectChip(chip.key)}
-                    >
-                      <span
-                        class="w-3.5 h-3.5 rounded-sm border border-border flex-shrink-0 shadow-inner"
-                        style={{ background: css() }}
-                        aria-hidden="true"
-                      />
-                      <span class="font-mono text-[10px] truncate">{chip.label}</span>
-                      <Show when={chip.count > 1}>
-                        <span class="text-text-faint tabular-nums">×{chip.count}</span>
-                      </Show>
-                    </button>
-                  );
-                }}
-              </For>
-            </div>
-          </Show>
+        <div class="flex items-center justify-between gap-2">
+          <span class="sc-label !mb-0">Colors in script</span>
+          <span class="text-text-faint font-mono tabular-nums min-w-0 truncate">
+            <Show when={status()}>
+              <span class="text-accent-2 mr-2">{status()}</span>
+            </Show>
+            {chips().length} unique · {hits().length} hit{hits().length === 1 ? '' : 's'}
+          </span>
         </div>
 
-        {/* Editor + converter grid */}
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-border-soft">
-          {/* Color editor */}
+        <Show
+          when={chips().length > 0}
+          fallback={
+            <p class="sc-hint m-0">
+              No colors found — use <code class="font-mono">#RRGGBB</code>,{' '}
+              <code class="font-mono">color.red</code>,{' '}
+              <code class="font-mono">color.rgb(...)</code>, or{' '}
+              <code class="font-mono">color.new(...)</code>.
+            </p>
+          }
+        >
+          <div
+            class="flex flex-wrap gap-1"
+            role="listbox"
+            aria-label="Colors in document"
+            data-testid="axis-editor-color-chips"
+          >
+            <For each={chips()}>
+              {(chip, index) => {
+                const active = () => selectedKey() === chip.key;
+                return (
+                  <button
+                    type="button"
+                    role="option"
+                    data-chip-index={index()}
+                    aria-selected={active()}
+                    title={`${chip.label} ×${chip.count} · L${chip.first.line} — double-click to jump`}
+                    class={`inline-flex items-center gap-1.5 max-w-[11rem] px-1.5 py-0.5 rounded border text-left transition-colors ${
+                      active()
+                        ? 'border-accent bg-bg-hover text-text'
+                        : 'border-border-soft bg-bg-elev text-text-dim hover:border-border hover:text-text'
+                    }`}
+                    onClick={() => selectChip(chip.key, false)}
+                    onDblClick={() => selectChip(chip.key, true)}
+                    onKeyDown={(e) => onChipKeyDown(e, index())}
+                  >
+                    <span
+                      class="axis-color-check w-3.5 h-3.5 rounded-sm border border-border flex-shrink-0 overflow-hidden"
+                      aria-hidden="true"
+                    >
+                      <span class="block w-full h-full" style={{ background: chipCss(chip) }} />
+                    </span>
+                    <span class="font-mono text-[10px] truncate">{chip.shortLabel}</span>
+                    <Show when={chip.count > 1}>
+                      <span class="text-text-faint tabular-nums">×{chip.count}</span>
+                    </Show>
+                  </button>
+                );
+              }}
+            </For>
+          </div>
+        </Show>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1.5 border-t border-border-soft">
           <div class="flex flex-col gap-2 min-w-0" data-testid="axis-editor-color-editor">
-            <span class="sc-label !mb-0">Editor</span>
+            <span class="sc-label !mb-0">Working color</span>
             <div class="flex items-center gap-2">
-              <span
-                class="w-9 h-9 rounded border-2 border-border flex-shrink-0"
-                style={{ background: draftPreview() }}
-                title={draftHex()}
-              />
-              <input
-                type="color"
-                class="w-9 h-9 p-0 border border-border rounded bg-transparent cursor-pointer"
-                value={toColorInputValue(draftHex())}
-                aria-label="Color picker"
-                onInput={(e) => {
-                  const v = e.currentTarget.value;
-                  const p = parseColorInput(v);
-                  if (!p) return;
-                  setDraftR(p.r);
-                  setDraftG(p.g);
-                  setDraftB(p.b);
-                }}
-              />
+              <div
+                class="axis-color-check axis-color-swatch w-10 h-10"
+                title={`${draftHex()} · t=${draftTransp()} — click to pick`}
+              >
+                <span class="axis-color-swatch-fill" style={{ background: draftPreview() }} />
+                <input
+                  type="color"
+                  class="axis-color-swatch-input"
+                  value={toColorInputValue(draftHex())}
+                  aria-label="Pick color"
+                  onInput={(e) => {
+                    const p = parseColorInput(e.currentTarget.value);
+                    if (p) applyRgb(p, true);
+                  }}
+                />
+              </div>
               <label class="flex flex-col gap-0.5 flex-1 min-w-0">
-                <span class="text-text-faint text-[10px]">Hex</span>
+                <span class="text-text-faint text-[10px]">Any form</span>
                 <input
                   type="text"
-                  class="sc-input font-mono text-[11px] py-1"
-                  value={draftHex()}
+                  class={`sc-input font-mono text-[11px] py-1 ${
+                    textDraft().trim() && !textParsed() ? 'border-orange' : ''
+                  }`}
+                  value={textDraft()}
                   spellcheck={false}
-                  onChange={(e) => {
-                    const p = parseColorInput(e.currentTarget.value);
-                    if (!p) return;
-                    setDraftR(p.r);
-                    setDraftG(p.g);
-                    setDraftB(p.b);
-                    if (p.a < 255) {
-                      setDraftTransp(Math.round(100 * (1 - p.a / 255)));
-                    }
+                  placeholder="#9141AC · color.new(#f00, 50)"
+                  aria-invalid={Boolean(textDraft().trim() && !textParsed())}
+                  aria-label="Color value"
+                  data-testid="axis-editor-color-input"
+                  onInput={(e) => {
+                    const v = e.currentTarget.value;
+                    setTextDraft(v);
+                    const p = parseColorInput(v);
+                    if (p) applyRgb(p, false);
+                  }}
+                  onBlur={() => {
+                    const p = textParsed();
+                    if (p) setTextDraft(toHex6(p));
                   }}
                 />
               </label>
             </div>
+
             <label class="flex flex-col gap-0.5">
-              <span class="text-text-faint text-[10px] flex justify-between">
-                <span>Transparency (Pine 0–100)</span>
-                <span class="font-mono tabular-nums text-text-dim">{draftTransp()}</span>
+              <span class="text-text-faint text-[10px] flex justify-between gap-2">
+                <span>Transparency</span>
+                <span class="font-mono tabular-nums text-text-dim">
+                  t={draftTransp()}
+                  <span class="text-text-faint"> · 0 opaque</span>
+                </span>
               </span>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                class="w-full accent-[var(--color-accent)]"
-                value={draftTransp()}
-                onInput={(e) => setDraftTransp(Number(e.currentTarget.value))}
-              />
+              <div class="flex items-center gap-2">
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  class="sc-range flex-1 m-0"
+                  value={draftTransp()}
+                  aria-label="Pine transparency"
+                  onInput={(e) => setDraftTransp(Number(e.currentTarget.value))}
+                />
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  class="sc-input font-mono w-14 py-0.5 text-center"
+                  value={draftTransp()}
+                  aria-label="Transparency 0–100"
+                  onInput={(e) => {
+                    const n = Number(e.currentTarget.value);
+                    if (Number.isFinite(n)) setDraftTransp(Math.max(0, Math.min(100, Math.round(n))));
+                  }}
+                />
+              </div>
             </label>
-            <div class="flex flex-wrap items-center gap-1.5">
+
+            <div class="flex flex-col gap-1">
               <span class="text-text-faint text-[10px]">Write as</span>
-              <For
-                each={
-                  [
-                    ['hex', 'hex / new'],
-                    ['rgb', 'color.rgb'],
-                    ['new', 'color.new'],
-                    ['named', 'named'],
-                  ] as [OutStyle, string][]
-                }
-              >
-                {([id, label]) => (
-                  <button
-                    type="button"
-                    class={`sc-chip ${outStyle() === id ? 'is-active' : ''}`}
-                    aria-pressed={outStyle() === id}
-                    onClick={() => setOutStyle(id)}
-                  >
-                    {label}
-                  </button>
-                )}
-              </For>
+              <div class="sc-chip-row">
+                <For each={WRITE_STYLES}>
+                  {(opt) => {
+                    const namedOff = () => opt.id === 'named' && !namedAvailable();
+                    return (
+                      <button
+                        type="button"
+                        class={`sc-chip ${outStyle() === opt.id ? 'is-active' : ''} ${
+                          namedOff() ? 'opacity-40 cursor-not-allowed' : ''
+                        }`}
+                        aria-pressed={outStyle() === opt.id}
+                        aria-disabled={namedOff()}
+                        title={
+                          namedOff()
+                            ? 'No exact Pine named color for this RGB'
+                            : opt.hint
+                        }
+                        disabled={namedOff()}
+                        onClick={() => setOutStyle(opt.id)}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  }}
+                </For>
+              </div>
             </div>
+
+            <p
+              class="m-0 font-mono text-[10px] text-text-dim truncate"
+              title={replacement()}
+              data-testid="axis-editor-color-preview"
+            >
+              {replacement()}
+            </p>
+
             <div class="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
@@ -363,29 +463,29 @@ export const ColorToolsPanel: Component<ColorToolsPanelProps> = (props) => {
                 disabled={!selectedHit()}
                 title={
                   selectedHit()
-                    ? `Replace ${selectedHit()!.text} at L${selectedHit()!.line}`
+                    ? `Replace ${selectedHit()?.text} at line ${selectedHit()?.line}`
                     : 'Select a chip from the script first'
                 }
-                onClick={() => applyToHit()}
+                onClick={() => applyToScript(false)}
               >
-                Apply to selection
+                {selectedHit() ? `Replace L${selectedHit()?.line}` : 'Replace'}
               </button>
+              <Show when={(selectedChip()?.count ?? 0) > 1}>
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost sc-btn-sm"
+                  data-testid="axis-editor-color-apply-all"
+                  title={`Replace all ${selectedChip()?.count} matching colors`}
+                  onClick={() => applyToScript(true)}
+                >
+                  Replace all {selectedChip()?.count}
+                </button>
+              </Show>
               <button
                 type="button"
-                class="sc-btn sc-btn-ghost sc-btn-sm font-mono"
-                title="Copy draft as Pine"
-                onClick={() =>
-                  void flashCopy(
-                    'Pine',
-                    formatReplacement(
-                      draftR(),
-                      draftG(),
-                      draftB(),
-                      draftTransp(),
-                      outStyle(),
-                    ),
-                  )
-                }
+                class="sc-btn sc-btn-ghost sc-btn-sm"
+                title="Copy replacement"
+                onClick={() => void copyValue('Pine', replacement())}
               >
                 Copy
               </button>
@@ -394,6 +494,7 @@ export const ColorToolsPanel: Component<ColorToolsPanelProps> = (props) => {
                   <button
                     type="button"
                     class="sc-btn sc-btn-ghost sc-btn-sm"
+                    title={`Jump to ${h().text}`}
                     onClick={() => props.onJump?.(h())}
                   >
                     Jump L{h().line}
@@ -401,99 +502,24 @@ export const ColorToolsPanel: Component<ColorToolsPanelProps> = (props) => {
                 )}
               </Show>
             </div>
-            <Show when={applyMsg()}>
-              <p class="sc-hint m-0 text-accent-2">{applyMsg()}</p>
-            </Show>
-            <p class="sc-hint m-0 font-mono text-[10px] truncate" title={draftFmts().pineNew}>
-              → {formatReplacement(draftR(), draftG(), draftB(), draftTransp(), outStyle())}
-            </p>
           </div>
 
-          {/* Converter */}
-          <div class="flex flex-col gap-2 min-w-0" data-testid="axis-editor-color-converter">
-            <span class="sc-label !mb-0">Converter</span>
-            <label class="flex flex-col gap-0.5">
-              <span class="text-text-faint text-[10px]">
-                Any form — hex, color.red, color.rgb, color.new, rgba
-              </span>
-              <input
-                type="text"
-                class="sc-input font-mono text-[11px] py-1"
-                value={convIn()}
-                spellcheck={false}
-                placeholder="#939fff or color.new(#f00, 50)"
-                data-testid="axis-editor-color-converter-input"
-                onInput={(e) => setConvIn(e.currentTarget.value)}
-              />
-            </label>
-            <Show
-              when={convFmts()}
-              fallback={
-                <p class="sc-hint m-0 text-orange">Unrecognized color string</p>
-              }
-            >
-              {(f) => (
-                <div class="flex flex-col gap-1">
-                  <div class="flex items-center gap-2 mb-0.5">
-                    <span
-                      class="w-5 h-5 rounded border border-border flex-shrink-0"
-                      style={{
-                        background: toCssRgba(convParsed()!),
-                      }}
-                    />
-                    <span class="text-text-faint text-[10px]">
-                      t={f().transp}
-                    </span>
-                    <Show when={copyFlash()}>
-                      <span class="text-accent-2 text-[10px] ml-auto">{copyFlash()}</span>
-                    </Show>
-                  </div>
-                  <For
-                    each={
-                      [
-                        ['hex6', f().hex6],
-                        ['hex8', f().hex8],
-                        ['css', f().cssRgba],
-                        ['pine rgb', f().pineRgb],
-                        ['pine rgb+t', f().pineRgbTransp],
-                        ['pine new', f().pineNew],
-                        ...(f().named ? ([['named', f().named!]] as [string, string][]) : []),
-                      ] as [string, string][]
-                    }
-                  >
-                    {([label, value]) => (
-                      <button
-                        type="button"
-                        class="flex items-center gap-2 w-full text-left px-1.5 py-0.5 rounded border border-transparent hover:border-border-soft hover:bg-bg-elev"
-                        title={`Copy ${label}`}
-                        onClick={() => void flashCopy(label, value)}
-                      >
-                        <span class="text-text-faint w-14 flex-shrink-0 text-[10px]">
-                          {label}
-                        </span>
-                        <code class="font-mono text-[10px] text-text truncate flex-1">
-                          {value}
-                        </code>
-                      </button>
-                    )}
-                  </For>
-                  <button
-                    type="button"
-                    class="sc-btn sc-btn-ghost sc-btn-sm self-start mt-0.5"
-                    onClick={() => {
-                      const p = convParsed();
-                      if (!p) return;
-                      seedFromRgba(p, null);
-                      setSelectedHit(null);
-                      setSelectedKey(null);
-                      setApplyMsg('Loaded into editor (no script selection)');
-                    }}
-                  >
-                    Load into editor
-                  </button>
-                </div>
+          <div class="flex flex-col gap-1 min-w-0" data-testid="axis-editor-color-converter">
+            <span class="sc-label !mb-0">Formats</span>
+            <p class="sc-hint m-0 mb-0.5">Click a row to copy. Same color as the editor.</p>
+            <For each={formatEntries()}>
+              {(row) => (
+                <button
+                  type="button"
+                  class="axis-color-format"
+                  title={`Copy ${row.label}`}
+                  onClick={() => void copyValue(row.label, row.value)}
+                >
+                  <span class="text-text-faint text-[10px]">{row.label}</span>
+                  <code class="font-mono text-[10px] text-text">{row.value}</code>
+                </button>
               )}
-            </Show>
+            </For>
           </div>
         </div>
       </div>

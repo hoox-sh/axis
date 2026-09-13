@@ -383,37 +383,48 @@ export function scanPineColors(source: string): PineColorHit[] {
   return hits;
 }
 
-/** Unique colors for chips (dedupe by rgba + preferred text). */
-export function uniqueColorChips(hits: PineColorHit[]): Array<{
+/** One unique color in the script (deduped by RGBA + transparency). */
+export type UniqueColorChip = {
   key: string;
   r: number;
   g: number;
   b: number;
   transp: number;
+  /** Preferred source snippet (shortest hit text). */
   label: string;
+  /** Compact chip caption: hex, or `hex tN` when transparent. */
+  shortLabel: string;
   count: number;
   first: PineColorHit;
-}> {
-  const map = new Map<
-    string,
-    {
-      key: string;
-      r: number;
-      g: number;
-      b: number;
-      transp: number;
-      label: string;
-      count: number;
-      first: PineColorHit;
-    }
-  >();
+};
+
+/** Chip caption that stays readable when `color.new(...)` is truncated. */
+export function chipShortLabel(
+  r: number,
+  g: number,
+  b: number,
+  transp: number,
+  sourceText?: string,
+): string {
+  const hex = toHex6({ r, g, b });
+  if (transp > 0) return `${hex} t${clampTransp(transp)}`;
+  const src = (sourceText || '').trim();
+  if (src && src.length <= 16 && !src.includes('(')) return src;
+  return hex;
+}
+
+/** Unique colors for chips (dedupe by rgba + preferred text). */
+export function uniqueColorChips(hits: PineColorHit[]): UniqueColorChip[] {
+  const map = new Map<string, UniqueColorChip>();
   for (const h of hits) {
     const key = `${h.r},${h.g},${h.b},${h.transp}`;
     const cur = map.get(key);
     if (cur) {
       cur.count += 1;
-      // Prefer shorter stable labels
-      if (h.text.length < cur.label.length) cur.label = h.text;
+      if (h.text.length < cur.label.length) {
+        cur.label = h.text;
+        cur.shortLabel = chipShortLabel(h.r, h.g, h.b, h.transp, h.text);
+      }
     } else {
       map.set(key, {
         key,
@@ -422,6 +433,7 @@ export function uniqueColorChips(hits: PineColorHit[]): Array<{
         b: h.b,
         transp: h.transp,
         label: h.text,
+        shortLabel: chipShortLabel(h.r, h.g, h.b, h.transp, h.text),
         count: 1,
         first: h,
       });
@@ -480,6 +492,18 @@ export function replaceColorHit(
   replacement: string,
 ): string {
   return doc.slice(0, hit.from) + replacement + doc.slice(hit.to);
+}
+
+/** Replace many hits; applies from the end so earlier offsets stay valid. */
+export function replaceAllColorHits(
+  doc: string,
+  hits: Array<Pick<PineColorHit, 'from' | 'to'>>,
+  replacement: string,
+): string {
+  const sorted = [...hits].sort((a, b) => b.from - a.from || b.to - a.to);
+  let next = doc;
+  for (const h of sorted) next = replaceColorHit(next, h, replacement);
+  return next;
 }
 
 /** Build replacement string from editor draft (hex + Pine transp). */

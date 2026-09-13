@@ -1127,7 +1127,7 @@ export const TabbedEditor: Component<Props> = (props) => {
             title={
               colorsOpen()
                 ? 'Hide color tools'
-                : 'Color chips, editor, and converter'
+                : 'Colors in script, picker, and formats'
             }
             aria-pressed={colorsOpen()}
             aria-expanded={colorsOpen()}

@@ -16,6 +16,8 @@ import {
   parseColorInput,
   parseHexColor,
   parseNamedColor,
+  chipShortLabel,
+  replaceAllColorHits,
   replaceColorHit,
   rewriteColorKeepingFormat,
   scanPineColors,
@@ -103,6 +105,15 @@ plot(low, color=color.new(#0000FF, 50))
     expect(chips.length).toBeGreaterThanOrEqual(1);
     const red = chips.find((c) => c.r === 255 && c.g === 0 && c.b === 0);
     expect(red!.count).toBeGreaterThanOrEqual(2);
+    expect(red!.shortLabel).toMatch(/^(color\.red|#FF0000)$/i);
+  });
+
+  it('chipShortLabel prefers hex + t for transparent / long calls', () => {
+    expect(chipShortLabel(145, 65, 172, 85, 'color.new(#9141AC, 85)')).toBe(
+      '#9141AC t85',
+    );
+    expect(chipShortLabel(255, 0, 0, 0, 'color.red')).toBe('color.red');
+    expect(chipShortLabel(0, 255, 0, 0, '#00FF00')).toBe('#00FF00');
   });
 });
 
@@ -113,6 +124,14 @@ describe('replaceColorHit / formatReplacement', () => {
     const hit = hits.find((h) => h.kind === 'named')!;
     const next = replaceColorHit(src, hit, '#00FF00');
     expect(next).toBe('plot(close, color=#00FF00)');
+  });
+
+  it('replaceAllColorHits rewrites every match from the end', () => {
+    const src = 'color.red\nplot(close, color=color.red)';
+    const hits = scanPineColors(src).filter((h) => h.kind === 'named');
+    expect(hits.length).toBe(2);
+    const next = replaceAllColorHits(src, hits, '#00FF00');
+    expect(next).toBe('#00FF00\nplot(close, color=#00FF00)');
   });
 
   it('formatReplacement respects style', () => {
