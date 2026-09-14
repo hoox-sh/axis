@@ -43,7 +43,10 @@ test.describe('AXIS critical journeys @critical', () => {
   test('load mock-walk → run → Results drawer opens', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('axis-select-source').selectOption('mock-walk');
-    await page.getByTestId('axis-btn-load').click();
+    const loadBtn = page.getByTestId('axis-btn-load');
+    if (await loadBtn.count()) {
+      await loadBtn.click();
+    }
     await expect(page.getByTestId('axis-statusbar')).toBeVisible({ timeout: 15_000 });
 
     await page.getByTestId('axis-select-engine').selectOption('server');
@@ -73,7 +76,10 @@ test.describe('AXIS critical journeys @critical', () => {
   test('drawing toolbar after bars load', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('axis-select-source').selectOption('mock-walk');
-    await page.getByTestId('axis-btn-load').click();
+    const loadBtn = page.getByTestId('axis-btn-load');
+    if (await loadBtn.count()) {
+      await loadBtn.click();
+    }
     await expect(page.getByTestId('axis-drawing-toolbar')).toBeVisible({ timeout: 15_000 });
   });
 

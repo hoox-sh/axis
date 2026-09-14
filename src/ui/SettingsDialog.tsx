@@ -234,6 +234,7 @@ export const SettingsDialog: Component<Props> = (props) => {
   const [exactOnCandle, setExactOnCandle] = createSignal(
     store.strategyUi?.exactOnCandle !== false,
   );
+  const [autoload, setAutoload] = createSignal(store.autoload !== false);
   const [probing, setProbing] = createSignal(false);
   const [reloading, setReloading] = createSignal(false);
   const [probeMsg, setProbeMsg] = createSignal('');
@@ -333,6 +334,7 @@ export const SettingsDialog: Component<Props> = (props) => {
         setSlippageNextOpen(!!store.strategyUi?.slippageNextOpen);
         setInvertTradeLabels(!!store.strategyUi?.invertTradeLabels);
         setExactOnCandle(store.strategyUi?.exactOnCandle !== false);
+        setAutoload(store.autoload !== false);
         setProbeMsg('');
         setTab(isSettingsTabId(props.initialTab) ? props.initialTab : 'general');
       });
@@ -376,6 +378,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     const nextSlippage = slippageNextOpen();
     const nextInvertLabels = invertTradeLabels();
     const nextExactMarks = exactOnCandle();
+    const nextAutoload = autoload();
     const nextExecMode = execMode();
     const nextPreferWs = preferWs();
     const writeEndpoint = needsEndpoint();
@@ -403,6 +406,7 @@ export const SettingsDialog: Component<Props> = (props) => {
       invertTradeLabels: nextInvertLabels,
       exactOnCandle: nextExactMarks,
     });
+    setStore('autoload', nextAutoload);
     applyUiScale(nextUiScale);
     // setActivePlugin keeps flat engine/source fields + telemetry planes aligned
     setActivePlugin('engine', nextEngine);
@@ -1375,6 +1379,25 @@ export const SettingsDialog: Component<Props> = (props) => {
                   Binance max 1000). Saved with your other settings.
                 </p>
               </div>
+
+              <label
+                class="sc-settings-check mb-2"
+                for="axis-autoload"
+              >
+                <input
+                  id="axis-autoload"
+                  type="checkbox"
+                  checked={autoload()}
+                  onChange={(e) => setAutoload(e.currentTarget.checked)}
+                  data-testid="axis-settings-autoload"
+                />
+                <span class="sc-settings-check-text">
+                  <span class="sc-settings-check-title">Autoload chart</span>
+                  <span class="sc-settings-check-hint">
+                    When on, symbol, interval, and venue changes fetch bars immediately and the topbar Load button is hidden. When off, change fields then click Load.
+                  </span>
+                </span>
+              </label>
 
               <label
                 class="sc-settings-check mb-2"

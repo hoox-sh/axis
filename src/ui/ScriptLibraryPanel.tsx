@@ -219,7 +219,7 @@ const LibraryScriptCard: Component<{
 
   return (
     <li
-      class="axis-list-row flex flex-col gap-1 border-b border-border-soft bg-bg-elev px-2 min-h-8 py-1 rounded"
+      class="flex flex-col gap-1 border-b border-border-soft bg-bg-elev px-2 min-h-8 py-1 rounded text-left"
       data-testid="axis-library-script-card"
       data-script-kind={kind()}
       data-pine-version={props.item.pineVersion || undefined}
@@ -1230,7 +1230,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
           }
         >
           <ul
-            class="flex flex-col gap-1"
+            class="flex flex-col gap-1 w-full text-left items-stretch m-0 p-0 list-none"
             data-testid="axis-library-script-list"
           >
             <For each={items()}>

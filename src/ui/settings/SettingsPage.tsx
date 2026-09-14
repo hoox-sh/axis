@@ -113,6 +113,7 @@ export function SettingsPage(props: {
   const [resultsAutoOpen, setResultsAutoOpen] = createSignal(
     store.resultsAutoOpen !== false,
   );
+  const [autoload, setAutoload] = createSignal(store.autoload !== false);
   const [storage, setStorage] = createSignal(store.activePlugins?.storage || 'local');
   const [cloudEndpoint, setCloudEndpoint] = createSignal(resolveCloudConfig().endpoint);
   const [cloudApiKey, setCloudApiKey] = createSignal(resolveCloudConfig().apiKey);
@@ -143,6 +144,7 @@ export function SettingsPage(props: {
         setInvertTradeLabels(!!store.strategyUi?.invertTradeLabels);
         setExactOnCandle(store.strategyUi?.exactOnCandle !== false);
         setResultsAutoOpen(store.resultsAutoOpen !== false);
+        setAutoload(store.autoload !== false);
         setStorage(store.activePlugins?.storage || 'local');
         const cloud = resolveCloudConfig();
         setCloudEndpoint(cloud.endpoint);
@@ -191,6 +193,7 @@ export function SettingsPage(props: {
       exactOnCandle: exactOnCandle(),
     });
     setStore('resultsAutoOpen', resultsAutoOpen());
+    setStore('autoload', autoload());
     applyUiScale(nextUiScale);
     const nextStorage = storage();
     if (nextStorage === 'cloud') {
@@ -354,6 +357,14 @@ export function SettingsPage(props: {
                   onChange={(v) => setHistoryBars(clampHistoryBars(v))}
                 />
               </StudioField>
+              <StudioToggle
+                id="axis-autoload"
+                testId="axis-settings-autoload"
+                checked={autoload()}
+                onChange={setAutoload}
+                label="Autoload chart"
+                hint="When on, symbol, interval, and venue changes fetch bars immediately and the topbar Load button is hidden. When off, change fields then click Load."
+              />
               <StudioToggle
                 id="axis-price-scale-labels"
                 testId="axis-settings-price-scale-labels"

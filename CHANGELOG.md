@@ -15,9 +15,23 @@ _Generated/updated: 2026-09-12 · 401 commits · describe-tag: `v2.6.5`_
 
 ## [Unreleased]
 
+### Added
+
+- **Autoload chart** (Settings → General): when on (default), symbol / interval / venue changes fetch immediately and the topbar Load button is hidden; when off, Load is shown and field changes wait for an explicit load.
+
+### Fixed
+
+- System Logs strip was locked to 28px and horizontally centered, so it could not expand. It is left-aligned and expands to the log body again.
+- Status-bar **N bars** opens the Data Source Manager.
+- Library script cards were forced into a 32px centered row.
+- Layouts menu is portaled out of the command bar so it is no longer clipped.
+- Plugins catalog **Use** activates the selected source / stream / engine / storage again.
+
 ### Changed
 
 - **Workstation chrome polish**: two-bar command + module switch, 4/8px grid, 1px hairline, periwinkle `#8B9CFF` on `#07080C` / `#0C0E14`, Live as a 6px pulse, HUD capsules, 32px watchlist rows, 32×32 drawing rail, 26px status strip, tablet overlay drawers, mobile Chart/List/Editor/More. Same product — density and grouping only.
+- Engine picker is a 3-icon switch (server / edge worker / Pyodide). Run, Live, and Replay share one action cluster.
+- **Default history depth is 5000 bars** (`HISTORY_BARS_DEFAULT`). Existing saved `historyBars` values are unchanged.
 
 ## [2.6.7] — 2026-09-14
 

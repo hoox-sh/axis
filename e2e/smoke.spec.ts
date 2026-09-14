@@ -57,7 +57,10 @@ test.describe('AXIS smoke @smoke', () => {
   test('loads mock-walk bars and runs mocked engine', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('axis-select-source').selectOption('mock-walk');
-    await page.getByTestId('axis-btn-load').click();
+    const loadBtn = page.getByTestId('axis-btn-load');
+    if (await loadBtn.count()) {
+      await loadBtn.click();
+    }
 
     // Status message — not getByText(/bars/i), which matches hidden <option>Bars
     await expect(page.getByTestId('axis-status-message')).toContainText(

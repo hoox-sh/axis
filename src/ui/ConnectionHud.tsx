@@ -44,8 +44,8 @@ import {
   onMount,
 } from 'solid-js';
 import { store, setStore, persist, setActivePlugin } from '../store';
-import type { PlaneTelemetry, TransportClass } from '../store/types';
-import { formatLatency, formatTickAge, transportLabel } from './telemetry';
+import type { PlaneTelemetry } from '../store/types';
+import { formatLatency, formatTickAge } from './telemetry';
 import {
   deriveHud,
   hudChipHelp,
@@ -325,7 +325,6 @@ function PlaneChip(props: {
               ? 'load'
               : 'idle'
       }
-      extra={transportLabel(t().transport as TransportClass)}
       sticky={props.sticky}
       snap={props.snap}
       testId={`axis-hud-${props.id}`}
@@ -414,12 +413,13 @@ function TickPulse(props: {
       />
       <span class="axis-status-capsule-code">tick</span>
       <span
-        class={`tabular-nums text-right w-[7.5ch] flex-shrink-0 overflow-hidden text-ellipsis ${dirColor()}`}
+        class={`tabular-nums text-right max-w-[7ch] flex-shrink-0 overflow-hidden text-ellipsis ${dirColor()}`}
+        title={(() => {
+          const t = tick();
+          return t ? `${priceText()} · ${formatTickAge(t.at, now())}` : undefined;
+        })()}
       >
         {priceText()}
-      </span>
-      <span class="text-text-faint tabular-nums w-[3ch] flex-shrink-0 text-right">
-        {tick() ? formatTickAge(tick()!.at, now()) : '—'}
       </span>
       <Show when={active()}>
         {/* biome-ignore lint/a11y/noStaticElementInteractions: hover bridge keeps the info panel open while the pointer moves onto it; pointer-only affordance */}
@@ -583,7 +583,7 @@ export const ConnectionHud: Component = () => {
 
   return (
     <div
-      class="flex items-center gap-1 flex-wrap min-w-0 flex-shrink-0 overflow-visible"
+      class="flex items-center gap-1 flex-nowrap min-w-0 flex-shrink-0 overflow-hidden"
       data-testid="axis-connection-hud"
       role="status"
       aria-label="Connection status"

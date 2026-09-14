@@ -170,7 +170,7 @@ let persistQuotaExceeded = false;
 let persistWriteWarned = false;
 
 /** Default / clamp bounds for {@link AppState.historyBars}. */
-export const HISTORY_BARS_DEFAULT = 500;
+export const HISTORY_BARS_DEFAULT = 5000;
 export const HISTORY_BARS_MIN = 50;
 export const HISTORY_BARS_MAX = 100_000;
 
@@ -231,6 +231,7 @@ const DEFAULTS: AppState = {
   interval: '15m',
   exchange: 'binance',
   historyBars: HISTORY_BARS_DEFAULT,
+  autoload: true,
   datasetPersistence: 'local',
   source: 'binance-rest',
   engine: 'server',
@@ -262,7 +263,7 @@ const DEFAULTS: AppState = {
   // Ephemeral presentation — never hydrate as on
   presentation: { fullscreen: false, chartOnly: false },
   editor: { open: true, width: defaultEditorWidthPx(), mode: 'docked' },
-  watchlist: { open: true, width: 260, symbols: [...DEFAULT_WATCHLIST], refreshSec: 15 },
+  watchlist: { open: true, width: 280, symbols: [...DEFAULT_WATCHLIST], refreshSec: 15 },
   indicatorPanel: { open: false, width: 224 },
   dataViewPanel: { open: false, width: 220 },
   layerPanel: { open: false, width: 220 },
@@ -504,6 +505,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       historyBars: clampHistoryBars(
         bag.historyBars ?? (bag as { barLimit?: unknown }).barLimit ?? DEFAULTS.historyBars,
       ),
+      autoload: typeof bag.autoload === 'boolean' ? bag.autoload : true,
       datasetPersistence: hydrateDatasetPersistence(bag.datasetPersistence),
       live: {
         ...DEFAULTS.live,
@@ -1278,6 +1280,11 @@ function seedStoreState(overlay: Partial<AppState> | null | undefined): AppState
  */
 export const [store, setStore] = createStore<AppState>(seedStoreState(loadPersisted()));
 
+/** True when market-field changes should fetch OHLCV automatically (default on). */
+export function isAutoloadEnabled(): boolean {
+  return store.autoload !== false;
+}
+
 // Sync the DatasetStore sink with the persisted persistence switch (boot).
 try {
   setPersistenceMode(store.datasetPersistence);
@@ -1352,6 +1359,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     endpoint: s.endpoint,
     engine: s.engine,
     historyBars: s.historyBars,
+    autoload: s.autoload !== false,
     datasetPersistence: s.datasetPersistence,
     theme: s.theme,
     chartType: s.chartType,

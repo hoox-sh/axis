@@ -24,6 +24,7 @@
  */
 
 import { type Component, For, Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import {
   store,
   setChartGridMode,
@@ -45,13 +46,34 @@ import { getSlotBars } from '../chart/chart-registry';
 export const ChartLayoutMenu: Component = () => {
   const [open, setOpen] = createSignal(false);
   const [saveName, setSaveName] = createSignal('');
-  let rootEl: HTMLDivElement | undefined;
+  const [panelPos, setPanelPos] = createSignal({ top: 0, left: 0 });
+  let btnEl: HTMLButtonElement | undefined;
+  let panelEl: HTMLDivElement | undefined;
+
+  const placePanel = () => {
+    const el = btnEl;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const width = Math.min(320, window.innerWidth - 24);
+    const left = Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8));
+    const top = r.bottom + 4;
+    setPanelPos({ top, left });
+  };
+
+  const close = () => setOpen(false);
 
   onMount(() => {
     const onDoc = (e: PointerEvent) => {
       if (!open()) return;
       const t = e.target as Node;
-      if (rootEl && !rootEl.contains(t)) setOpen(false);
+      if (btnEl?.contains(t) || panelEl?.contains(t)) return;
+      close();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    const onReposition = () => {
+      if (open()) placePanel();
     };
     // Auto-load when a slot is focused and has no bars yet
     const onSlot = (e: Event) => {
@@ -63,9 +85,15 @@ export const ChartLayoutMenu: Component = () => {
       void loadSymbolData(slot.symbol, slot.interval, store.source);
     };
     document.addEventListener('pointerdown', onDoc, true);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onReposition);
+    window.addEventListener('scroll', onReposition, true);
     window.addEventListener('axis-slot-activate', onSlot);
     onCleanup(() => {
       document.removeEventListener('pointerdown', onDoc, true);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onReposition);
+      window.removeEventListener('scroll', onReposition, true);
       window.removeEventListener('axis-slot-activate', onSlot);
     });
   });
@@ -107,8 +135,9 @@ export const ChartLayoutMenu: Component = () => {
   };
 
   return (
-    <div class="relative" ref={rootEl} data-testid="axis-chart-layout-menu">
+    <div class="relative" data-testid="axis-chart-layout-menu">
       <button
+        ref={btnEl}
         type="button"
         class={`sc-btn sc-btn-ghost ${open() ? 'is-active' : ''}`}
         title="Chart layouts — multi-chart grid and saved layouts"
@@ -116,7 +145,13 @@ export const ChartLayoutMenu: Component = () => {
         aria-haspopup="menu"
         aria-pressed={open()}
         data-testid="axis-btn-layouts"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setOpen((o) => {
+            const next = !o;
+            if (next) placePanel();
+            return next;
+          });
+        }}
       >
         <Icons.layers />
         <span class="hidden sm:inline">Layouts</span>
@@ -124,8 +159,11 @@ export const ChartLayoutMenu: Component = () => {
       </button>
 
       <Show when={open()}>
+        <Portal>
         <div
-          class="absolute right-0 top-full mt-1 z-[200] w-[min(320px,calc(100vw-24px))] bg-bg-panel border-2 border-border shadow-[0_8px_28px_rgba(0,0,0,0.45)] p-2 flex flex-col gap-2"
+          ref={panelEl}
+          class="fixed z-[200] w-[min(320px,calc(100vw-24px))] bg-bg-panel border-2 border-border shadow-[0_8px_28px_rgba(0,0,0,0.45)] p-2 flex flex-col gap-2"
+          style={{ top: `${panelPos().top}px`, left: `${panelPos().left}px` }}
           role="menu"
           aria-label="Chart layouts"
         >
@@ -241,6 +279,7 @@ export const ChartLayoutMenu: Component = () => {
             </Show>
           </div>
         </div>
+        </Portal>
       </Show>
     </div>
   );

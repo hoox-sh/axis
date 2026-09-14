@@ -21,7 +21,12 @@ import { listStreams } from '../../streams/catalog';
 import { listEngines } from '../../engines/catalog';
 import { listStorages } from '../../storage/catalog';
 import { promptStorageChange } from '../../storage/service';
-import { getActiveStorageId } from '../../plugins/active';
+import {
+  getActiveEngineId,
+  getActiveSourceId,
+  getActiveStorageId,
+  getActiveStreamId,
+} from '../../plugins/active';
 import { registry } from '../../plugins/registry';
 import { persist, setActivePlugin, store } from '../../store';
 import type { PluginBase } from '../../plugins/types';
@@ -117,49 +122,54 @@ export function PluginsPage(props: {
     return registry.listComponents();
   });
 
-  const activeSourceId = () => store.activePlugins?.source || store.source;
-  const activeStreamId = () => store.activePlugins?.stream || store.live.streamId;
-  const activeEngineId = () => store.activePlugins?.engine || store.engine;
-  const activeStorageId = () => store.activePlugins?.storage || 'local';
+  const activeSourceId = () => getActiveSourceId();
+  const activeStreamId = () => getActiveStreamId();
+  const activeEngineId = () => getActiveEngineId();
+  const activeStorageId = () => getActiveStorageId();
 
   const activeName = (items: PluginBase[], id: string) =>
     items.find((p) => p.id === id)?.name || id;
 
+  /** Live store read — do not snapshot active ids in catalogSections. */
+  const isRowActive = (kind: string, id: string) => {
+    if (kind === 'source') return getActiveSourceId() === id;
+    if (kind === 'stream') return getActiveStreamId() === id;
+    if (kind === 'engine') return getActiveEngineId() === id;
+    if (kind === 'storage') return getActiveStorageId() === id;
+    return false;
+  };
+
   const catalogSections = createMemo(() => {
+    tick();
     const sections: Array<{
       kind: Exclude<KindFilter, 'all'>;
       title: string;
       lead: string;
       items: PluginBase[];
-      activeId: string;
     }> = [
       {
         kind: 'source',
         title: 'Sources',
         lead: 'Historical OHLCV used by Load.',
         items: sources(),
-        activeId: activeSourceId(),
       },
       {
         kind: 'stream',
         title: 'Streams',
         lead: 'Live bars while the multiplex is running.',
         items: streams(),
-        activeId: activeStreamId(),
       },
       {
         kind: 'engine',
         title: 'Engines',
         lead: 'Which runtime evaluates Pine. Activate here; configure on Runtime.',
         items: engines(),
-        activeId: activeEngineId(),
       },
       {
         kind: 'storage',
         title: 'Storage',
         lead: 'Script library backend.',
         items: storages(),
-        activeId: activeStorageId(),
       },
     ];
     const f = kindFilter();
@@ -171,6 +181,7 @@ export function PluginsPage(props: {
     if (kind === 'source' || kind === 'stream' || kind === 'engine') {
       setActivePlugin(kind, id);
       refresh();
+      props.onChanged?.();
       return;
     }
     if (kind === 'storage') {
@@ -182,6 +193,7 @@ export function PluginsPage(props: {
       // active highlight tracks the in-flight request.
       promptStorageChange(getActiveStorageId(), id);
       refresh();
+      props.onChanged?.();
     }
   };
 
@@ -230,9 +242,7 @@ export function PluginsPage(props: {
   };
 
   const footerStatus = () =>
-    `Active · src ${store.source} · eng ${store.engine} · stm ${store.live.streamId} · stor ${
-      store.activePlugins?.storage || 'local'
-    }`;
+    `Active · src ${getActiveSourceId()} · eng ${getActiveEngineId()} · stm ${getActiveStreamId()} · stor ${getActiveStorageId()}`;
 
   return (
     <div class="ax-page-stack">
@@ -289,14 +299,19 @@ export function PluginsPage(props: {
                     <StudioList class="ax-list--entity">
                       <For each={section.items}>
                         {(p) => {
-                          const active = () => section.activeId === p.id;
+                          const kind = section.kind;
+                          const id = p.id;
+                          const active = () => {
+                            tick();
+                            return isRowActive(kind, id);
+                          };
                           return (
                             <StudioRow>
                               <div class="ax-entity">
                                 <div class="ax-entity-body">
                                   <div class="ax-entity-head">
                                     <span class="ax-card-title">{p.name}</span>
-                                    <span class="ax-card-kicker">{p.id}</span>
+                                    <span class="ax-card-kicker">{id}</span>
                                   </div>
                                   <CapabilityBadges
                                     capabilities={p.capabilities}
@@ -309,9 +324,11 @@ export function PluginsPage(props: {
                                 </div>
                                 <div class="ax-entity-actions">
                                   <StudioButton
+                                    type="button"
                                     variant={active() ? 'ghost' : 'primary'}
                                     disabled={active()}
-                                    onClick={() => activate(section.kind, p.id)}
+                                    testId={`axis-plugin-use-${id}`}
+                                    onClick={() => activate(kind, id)}
                                     title={active() ? 'Currently active' : `Use ${engineOptionLabel(p)}`}
                                   >
                                     {active() ? 'Active' : 'Use'}
@@ -464,34 +481,44 @@ export function PluginsPage(props: {
                 >
                   <StudioList class="ax-list--entity">
                     <For each={installed()}>
-                      {(p) => (
-                        <StudioRow>
-                          <div class="ax-entity">
-                            <div class="ax-entity-body">
-                              <div class="ax-entity-head">
-                                <span class="ax-card-title">{p.name}</span>
-                                <span class="ax-card-kicker">
-                                  {p.kind} · {p.id}
-                                </span>
+                      {(p) => {
+                        const kind = p.kind;
+                        const id = p.id;
+                        return (
+                          <StudioRow>
+                            <div class="ax-entity">
+                              <div class="ax-entity-body">
+                                <div class="ax-entity-head">
+                                  <span class="ax-card-title">{p.name}</span>
+                                  <span class="ax-card-kicker">
+                                    {kind} · {id}
+                                  </span>
+                                </div>
+                                <StudioHint>{p.url}</StudioHint>
                               </div>
-                              <StudioHint>{p.url}</StudioHint>
+                              <div class="ax-entity-actions">
+                                <StudioButton
+                                  type="button"
+                                  variant="ghost"
+                                  testId={`axis-plugin-use-${id}`}
+                                  onClick={() => activate(kind, id)}
+                                >
+                                  Use
+                                </StudioButton>
+                                <StudioButton
+                                  type="button"
+                                  variant="danger"
+                                  ariaLabel="Remove"
+                                  title="Remove"
+                                  onClick={() => removeInstalled(p)}
+                                >
+                                  <Icons.x />
+                                </StudioButton>
+                              </div>
                             </div>
-                            <div class="ax-entity-actions">
-                              <StudioButton variant="ghost" onClick={() => activate(p.kind, p.id)}>
-                                Use
-                              </StudioButton>
-                              <StudioButton
-                                variant="danger"
-                                ariaLabel="Remove"
-                                title="Remove"
-                                onClick={() => removeInstalled(p)}
-                              >
-                                <Icons.x />
-                              </StudioButton>
-                            </div>
-                          </div>
-                        </StudioRow>
-                      )}
+                          </StudioRow>
+                        );
+                      }}
                     </For>
                   </StudioList>
                 </Show>
@@ -508,7 +535,7 @@ export function PluginsPage(props: {
           >
             <StudioSection
               title="Script library"
-              lead={`Scripts backend: ${store.activePlugins?.storage || 'local'}. Storage is a Wire slot; activate a backend on Catalog.`}
+              lead={`Scripts backend: ${getActiveStorageId()}. Storage is a Wire slot; activate a backend on Catalog.`}
             >
               <ScriptLibraryPanel getDoc={props.getDoc} setDoc={props.setDoc} />
             </StudioSection>

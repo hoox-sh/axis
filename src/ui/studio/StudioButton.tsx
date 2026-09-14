@@ -24,7 +24,7 @@ export function StudioButton(props: {
   children: JSX.Element;
 }) {
   const variant = () => props.variant || 'ghost';
-  const mod =
+  const mod = () =>
     variant() === 'primary'
       ? 'ax-btn--primary'
       : variant() === 'danger'
@@ -33,9 +33,14 @@ export function StudioButton(props: {
   return (
     <button
       type={props.type || 'button'}
-      class={`ax-btn ${mod}${props.class ? ` ${props.class}` : ''}`}
+      class={`ax-btn ${mod()}${props.class ? ` ${props.class}` : ''}`}
       disabled={props.disabled}
-      onClick={props.onClick}
+      onClick={(e) => {
+        e.stopPropagation();
+        if ((props.type || 'button') !== 'submit') e.preventDefault();
+        if (props.disabled) return;
+        props.onClick?.(e);
+      }}
       title={props.title}
       data-testid={props.testId}
       aria-label={props.ariaLabel}

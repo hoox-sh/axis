@@ -102,7 +102,7 @@ export const PANEL_META: Record<
     defaultDock: 'left',
     minW: 1,
     minH: 1,
-    defaultW: 260,
+    defaultW: 280,
     defaultH: 420,
     defaultX: 16,
     defaultY: 56,
@@ -256,7 +256,7 @@ export function defaultPanelChromeMap(): PanelChromeMap {
     watchlist: defaultPanelChrome('watchlist', {
       open: true,
       dock: 'left',
-      w: 260,
+      w: 280,
       x: PANEL_META.watchlist.defaultX,
       y: PANEL_META.watchlist.defaultY,
     }),

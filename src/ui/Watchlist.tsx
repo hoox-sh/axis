@@ -287,7 +287,7 @@ export const Watchlist: Component = () => {
   };
 
   const cols =
-    'grid grid-cols-[minmax(0,1.15fr)_4.5rem_4.25rem_4.4rem_16px] items-center gap-x-1 px-2';
+    'grid grid-cols-[minmax(4.75rem,1fr)_max-content_max-content_max-content_1rem] items-center gap-x-2 px-2';
 
   return (
     <Show when={isPanelOpen('watchlist') || store.watchlist.open}>

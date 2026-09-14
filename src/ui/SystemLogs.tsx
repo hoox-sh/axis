@@ -125,7 +125,7 @@ export const SystemLogs: Component = () => {
   return (
     <Show when={isPanelOpen('logs')}>
       <div
-        class="axis-logs-strip flex flex-col border-t border-[#1C2230] bg-[#0C0E14] flex-shrink-0"
+        class="axis-logs-strip flex-shrink-0"
         data-axis-system-logs
         data-testid="axis-system-logs"
       >

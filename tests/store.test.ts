@@ -81,6 +81,7 @@ import {
   HISTORY_BARS_DEFAULT,
   HISTORY_BARS_MIN,
   HISTORY_BARS_MAX,
+  isAutoloadEnabled,
 } from '../src/store';
 import { SAMPLE_BARS, makeBars } from './fixtures/bars';
 import { getSlotBars, setSlotBars } from '../src/chart/chart-registry';
@@ -129,6 +130,7 @@ function resetStoreBasics() {
     byKind: {},
   });
   setStore('lastValueNamesVisible', true);
+  setStore('autoload', true);
   localStorage.removeItem(STORAGE_KEY);
 }
 
@@ -448,6 +450,28 @@ describe('layout helpers', () => {
   it('setLive', () => {
     setLive(true);
     expect(store.live.active).toBe(true);
+  });
+});
+
+describe('autoload', () => {
+  it('defaults true; hydrate false stays false; persist payload includes autoload', () => {
+    expect(store.autoload).toBe(true);
+    expect(isAutoloadEnabled()).toBe(true);
+    const missing = parsePersistedState(JSON.stringify({ symbol: 'BTCUSDT' }));
+    expect(missing?.autoload).toBe(true);
+    const off = parsePersistedState(JSON.stringify({ autoload: false }));
+    expect(off?.autoload).toBe(false);
+
+    setStore('autoload', false);
+    expect(isAutoloadEnabled()).toBe(false);
+    expect(flushPersist()).toBe(true);
+    const bag = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as { autoload?: boolean };
+    expect(bag.autoload).toBe(false);
+
+    setStore('autoload', true);
+    expect(isAutoloadEnabled()).toBe(true);
+    expect(flushPersist()).toBe(true);
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).autoload).toBe(true);
   });
 });
 

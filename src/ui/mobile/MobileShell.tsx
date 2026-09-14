@@ -182,7 +182,7 @@ const goChart = () => {
 };
 
 /** Mobile top chrome — replaces the desktop Topbar on phones. */
-export const MobileHeader: Component<MobileChromeProps> = (props) => {
+export const MobileHeader: Component<MobileChromeProps> = (_props) => {
   const venueToken = () => venueTokenFromState(store.source, activeCcxtExchange());
   const venueOptions = createMemo(() =>
     listVenueOptions(

@@ -336,6 +336,11 @@ export interface AppState {
    */
   historyBars: number;
   /**
+   * When true, market-field changes fetch OHLCV automatically; when false, user must Load.
+   * Persisted. Default true.
+   */
+  autoload: boolean;
+  /**
    * Where DSM datasets persist (Settings → Data main switch).
    * `session` = memory only; `local` = IndexedDB (default);
    * `git` / `worker` = storage-plugin sync. Persisted.

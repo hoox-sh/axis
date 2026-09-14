@@ -108,6 +108,7 @@ import {
   appendLog,
   applyUiScale,
   setStatus,
+  isAutoloadEnabled,
 } from './store';
 import {
   PanelDragOverlay,
@@ -198,15 +199,18 @@ export const App: Component = () => {
       });
     // Auto-load default symbol so the chart is not an empty void on first paint.
     // Live stream is on by default (`preferAfterLoad`); Load starts it, and if
-    // bars are already in memory we sync immediately.
+    // bars are already in memory we sync immediately. Autoload off + empty
+    // bars leaves the chart empty until the user clicks Load.
     if (!store.bars.length && store.source !== 'csv-upload') {
-      void loadSymbolData(store.symbol, store.interval, store.source).catch((err: unknown) => {
-        reportUiError(err, {
-          source: 'data',
-          context: 'Initial symbol load failed',
-          status: true,
+      if (isAutoloadEnabled()) {
+        void loadSymbolData(store.symbol, store.interval, store.source).catch((err: unknown) => {
+          reportUiError(err, {
+            source: 'data',
+            context: 'Initial symbol load failed',
+            status: true,
+          });
         });
-      });
+      }
     } else if (store.live.preferAfterLoad) {
       void import('./streams/multiplex')
         .then(({ syncLiveToPreference }) => syncLiveToPreference())

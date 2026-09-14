@@ -47,6 +47,7 @@ import {
   toggleOnchainPanel,
   toggleSystemLogsPanel,
   toggleStatusBarPanel,
+  isAutoloadEnabled,
 } from '../store';
 import { CHART_TYPES } from '../chart/chart-type';
 import { startLive, stopLive, listStreams, defaultStreamForSource } from '../streams/multiplex';
@@ -90,6 +91,24 @@ import {
 } from './presentation';
 
 const INTERVALS = [...WATCHLIST_INTERVALS];
+
+const ENGINE_SWITCH = [
+  { id: 'server', title: 'Server-Side' },
+  { id: 'pyne-worker', title: 'pyne-worker (edge)' },
+  { id: 'pyodide', title: 'Client-Side (Pyodide)' },
+] as const;
+
+const ENGINE_SWITCH_IDS: ReadonlySet<string> = new Set(ENGINE_SWITCH.map((e) => e.id));
+
+function autoloadOn(): boolean {
+  return isAutoloadEnabled();
+}
+
+function EngineSwitchGlyph(props: { id: (typeof ENGINE_SWITCH)[number]['id'] }) {
+  if (props.id === 'server') return <Icons.server />;
+  if (props.id === 'pyne-worker') return <Icons.cpu />;
+  return <Icons.runtimes />;
+}
 
 /**
  * Workspace top chrome. Parent owns settings/plugins modals and editor ref.
@@ -183,11 +202,24 @@ export const Topbar: Component<{
     const { sourceId } = parseVenueToken(token);
     if (sourceId === 'csv-upload' && !getUploadedFileName()) {
       fileInput?.click();
+      return;
     }
     if (sourceId === DATA_MANAGER_SOURCE_ID) {
       setDatasetsOpen(true);
+      return;
     }
+    if (autoloadOn()) void loadHistorical({ force: true });
   };
+
+  const selectEngine = (id: string) => {
+    if (!id || id === store.engine) return;
+    setActivePlugin('engine', id);
+    if (id === 'pyodide') void preloadPyodide();
+  };
+
+  const extraEngines = createMemo(() =>
+    engines().filter((en) => !ENGINE_SWITCH_IDS.has(en.id)),
+  );
 
   const onFilePicked = async (e: Event) => {
     const input = e.currentTarget as HTMLInputElement;
@@ -260,7 +292,7 @@ export const Topbar: Component<{
     if (aid) updateChartSlot(aid, { symbol: next });
     persist();
     if (forceLoad) void loadHistorical({ force: true });
-    else void loadHistorical();
+    else if (autoloadOn()) void loadHistorical();
   };
 
   return (
@@ -389,8 +421,7 @@ export const Topbar: Component<{
               const aid = store.chartLayout?.activeId;
               if (aid) updateChartSlot(aid, { interval: next });
               persist();
-              // Auto-reload so interval changes always paint
-              if (store.source !== 'csv-upload') {
+              if (autoloadOn() && store.source !== 'csv-upload') {
                 void loadSymbolData(store.symbol, next, store.source);
               }
             }}
@@ -474,24 +505,26 @@ export const Topbar: Component<{
           onClose={() => setDatasetsOpen(false)}
         />
 
-        <button
-          type="button"
-          class={`sc-btn sc-btn-primary ${loading() ? 'is-loading' : ''}`}
-          onClick={() => void loadHistorical({ force: true })}
-          disabled={loading()}
-          aria-busy={loading() || undefined}
-          data-testid="axis-btn-load"
-          title={
-            store.source === 'csv-upload'
-              ? 'Reload last uploaded file'
-              : store.source === DATA_MANAGER_SOURCE_ID
-                ? 'Load bars from Data Manager cache'
-                : `Load bars from ${store.source}`
-          }
-        >
-          {loading() ? <HooxLoader size="xs" /> : <Icons.download />}
-          <span class="axis-tb-btn-label">{loading() ? 'Loading…' : 'Load'}</span>
-        </button>
+        <Show when={!autoloadOn()}>
+          <button
+            type="button"
+            class={`sc-btn sc-btn-primary ${loading() ? 'is-loading' : ''}`}
+            onClick={() => void loadHistorical({ force: true })}
+            disabled={loading()}
+            aria-busy={loading() || undefined}
+            data-testid="axis-btn-load"
+            title={
+              store.source === 'csv-upload'
+                ? 'Reload last uploaded file'
+                : store.source === DATA_MANAGER_SOURCE_ID
+                  ? 'Load bars from Data Manager cache'
+                  : `Load bars from ${store.source}`
+            }
+          >
+            {loading() ? <HooxLoader size="xs" /> : <Icons.download />}
+            <span class="axis-tb-btn-label">{loading() ? 'Loading…' : 'Load'}</span>
+          </button>
+        </Show>
         <button
           type="button"
           class={`sc-btn sc-btn-ghost sc-btn-icon ${loading() ? 'is-loading' : ''}`}
@@ -513,37 +546,82 @@ export const Topbar: Component<{
       </div>
       </Show>
 
-      {/* ── Engine (select · Run · Live) ── */}
+      {/* ── Engine (switch · Run · Live · Replay) ── */}
       <Show when={store.topbar.compute}>
         <div class="axis-tb-group" data-tb-group="compute" data-axis-engine={store.engine}>
-        <TopbarField
-          label="Engine"
-          variant="select"
-          class="min-w-[7.5em] max-w-[12em]"
-          testId="axis-select-engine"
-          value={store.engine}
-          title={
-            store.engine === 'pyodide'
-              ? 'RUN=browser (Pyodide) · ENG=local — first load often 20–30s. HUD: ENG / RUN / MODE.'
-              : engines().find((en) => en.id === store.engine)?.description ||
-                'Calculation engine — maps to HUD ENG (local|remote) + RUN (browser|server|worker)'
-          }
-          onChange={(e) => {
-            const id = e.currentTarget.value;
-            setActivePlugin('engine', id);
-            if (id === 'pyodide') {
-              void preloadPyodide();
-            }
-          }}
+        <div class="relative inline-flex items-stretch">
+        <fieldset
+          class="axis-engine-switch"
+          data-testid="axis-engine-switch"
+          aria-label="Engine"
         >
-          <For each={engines()}>
-            {(en) => (
-              <option value={en.id} title={en.description || en.name}>
-                {en.name}
-              </option>
+          <For each={ENGINE_SWITCH}>
+            {(eng) => (
+              <button
+                type="button"
+                class={`axis-engine-switch-btn ${store.engine === eng.id ? 'is-active' : ''}`}
+                data-engine={eng.id}
+                aria-pressed={store.engine === eng.id}
+                title={
+                  eng.id === 'pyodide'
+                    ? 'Client-Side (Pyodide) · first load often 20–30s'
+                    : eng.title
+                }
+                aria-label={eng.title}
+                onClick={() => selectEngine(eng.id)}
+              >
+                <EngineSwitchGlyph id={eng.id} />
+              </button>
             )}
           </For>
-        </TopbarField>
+        </fieldset>
+          <select
+            class="axis-engine-switch-native"
+            data-testid="axis-select-engine"
+            value={store.engine}
+            tabindex={-1}
+            title={
+              store.engine === 'pyodide'
+                ? 'RUN=browser (Pyodide) · ENG=local — first load often 20–30s. HUD: ENG / RUN / MODE.'
+                : engines().find((en) => en.id === store.engine)?.description ||
+                  'Calculation engine — maps to HUD ENG (local|remote) + RUN (browser|server|worker)'
+            }
+            onChange={(e) => selectEngine(e.currentTarget.value)}
+          >
+            <For each={engines()}>
+              {(en) => (
+                <option value={en.id} title={en.description || en.name}>
+                  {en.name}
+                </option>
+              )}
+            </For>
+          </select>
+        </div>
+        <Show when={extraEngines().length > 0}>
+          <select
+            class="axis-engine-overflow"
+            title="More engines"
+            aria-label="More engines"
+            value={
+              extraEngines().some((en) => en.id === store.engine) ? store.engine : ''
+            }
+            onChange={(e) => {
+              const id = e.currentTarget.value;
+              if (id) selectEngine(id);
+            }}
+          >
+            <option value="" disabled>
+              More
+            </option>
+            <For each={extraEngines()}>
+              {(en) => (
+                <option value={en.id} title={en.description || en.name}>
+                  {en.name}
+                </option>
+              )}
+            </For>
+          </select>
+        </Show>
 
         <Show
           when={store.live.streamId !== defaultStreamForSource(store.source)}
@@ -564,7 +642,7 @@ export const Topbar: Component<{
           </TopbarField>
         </Show>
 
-        {/* Run is the cluster primary; Live is a 6px-dot status toggle */}
+        <div class="axis-action-cluster">
         <RunSplitButton
           getDoc={() => props.editorRef.getDoc()}
           ensureSavedForRun={
@@ -612,13 +690,7 @@ export const Topbar: Component<{
                   : 'Offline'}
           </span>
         </button>
-      </div>
-      </Show>
 
-      {/* ── Session (Replay · Layouts · Studio · Install · theme / FS) ─ */}
-      <Show when={store.topbar.system || store.topbar.layout || store.topbar.compute}>
-        <div class="axis-tb-group" data-tb-group="system">
-        <Show when={store.topbar.compute}>
         <button
           type="button"
           class={`sc-btn ${replayOn() ? 'is-replay-on' : 'sc-btn-ghost'}`}
@@ -637,8 +709,13 @@ export const Topbar: Component<{
           <Icons.play />
           <span class="axis-tb-btn-label">Replay</span>
         </button>
-        </Show>
+        </div>
+      </div>
+      </Show>
 
+      {/* ── Session (Layouts · Studio · Install · theme / FS) ─ */}
+      <Show when={store.topbar.system || store.topbar.layout}>
+        <div class="axis-tb-group" data-tb-group="system">
         <Show when={store.topbar.layout}>
           <ChartLayoutMenu />
         </Show>

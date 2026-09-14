@@ -1904,10 +1904,13 @@ span.ax-json-twist {
   flex-wrap: wrap;
 }
 .ax-entity-actions {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex-shrink: 0;
+  pointer-events: auto;
 }
 .ax-entity-actions > .ax-btn {
   min-height: 2.4rem;

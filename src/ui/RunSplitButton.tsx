@@ -33,6 +33,7 @@ import {
   onCleanup,
   onMount,
 } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import {
   store,
   setStatus,
@@ -58,7 +59,18 @@ export const RunSplitButton: Component<{
   class?: string;
 }> = (props) => {
   const [menuOpen, setMenuOpen] = createSignal(false);
+  const [menuPos, setMenuPos] = createSignal({ top: 0, left: 0 });
   let rootEl: HTMLDivElement | undefined;
+  let menuEl: HTMLDivElement | undefined;
+
+  const placeMenu = () => {
+    const el = rootEl;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const mw = menuEl?.offsetWidth || 232;
+    const left = Math.max(8, Math.min(r.right - mw, window.innerWidth - mw - 8));
+    setMenuPos({ top: r.bottom + 4, left });
+  };
 
   /** Prefer pre-eval source (reactive) so the label tracks editor edits. */
   const editorSource = createMemo(
@@ -102,16 +114,25 @@ export const RunSplitButton: Component<{
     const onDoc = (e: MouseEvent) => {
       if (!menuOpen()) return;
       const t = e.target as Node | null;
-      if (rootEl && t && !rootEl.contains(t)) closeMenu();
+      if (rootEl && t && rootEl.contains(t)) return;
+      if (menuEl && t && menuEl.contains(t)) return;
+      closeMenu();
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeMenu();
     };
+    const onReposition = () => {
+      if (menuOpen()) placeMenu();
+    };
     document.addEventListener('mousedown', onDoc);
     document.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onReposition);
+    window.addEventListener('scroll', onReposition, true);
     onCleanup(() => {
       document.removeEventListener('mousedown', onDoc);
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onReposition);
+      window.removeEventListener('scroll', onReposition, true);
     });
   });
 
@@ -186,7 +207,11 @@ export const RunSplitButton: Component<{
           disabled={disabled()}
           onClick={(e) => {
             e.stopPropagation();
-            setMenuOpen((o) => !o);
+            setMenuOpen((o) => {
+              const next = !o;
+              if (next) placeMenu();
+              return next;
+            });
           }}
         >
           <Icons.chevronDown size={14} />
@@ -194,11 +219,22 @@ export const RunSplitButton: Component<{
       </Show>
 
       <Show when={menuOpen() && hasInstance()}>
+        <Portal>
         <div
+          ref={(el) => {
+            menuEl = el;
+            if (el) placeMenu();
+          }}
           class="axis-run-menu"
           role="menu"
           aria-label="Run options"
           data-testid="axis-run-menu"
+          style={{
+            position: 'fixed',
+            top: `${menuPos().top}px`,
+            left: `${menuPos().left}px`,
+            right: 'auto',
+          }}
         >
           <button
             type="button"
@@ -215,6 +251,7 @@ export const RunSplitButton: Component<{
             </span>
           </button>
         </div>
+        </Portal>
       </Show>
     </div>
   );

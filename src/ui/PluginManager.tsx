@@ -41,13 +41,18 @@ import { listStreams } from '../streams/catalog';
 import { listEngines } from '../engines/catalog';
 import { listStorages } from '../storage/catalog';
 import { promptStorageChange } from '../storage/service';
-import { getActiveStorageId } from '../plugins/active';
+import {
+  getActiveEngineId,
+  getActiveSourceId,
+  getActiveStorageId,
+  getActiveStreamId,
+} from '../plugins/active';
 import { registry } from '../plugins/registry';
 import { ScriptLibraryPanel } from './ScriptLibraryPanel';
 import { CapabilityBadges, engineOptionLabel } from './plugin-badges';
 import { Icons } from './icons';
 import { HooxLoader } from './HooxLoader';
-import { persist, setStore, setActivePlugin, store } from '../store';
+import { persist, setActivePlugin, store } from '../store';
 import type { PluginBase } from '../plugins/types';
 
 interface Props {
@@ -90,9 +95,11 @@ export const PluginManager: Component<Props> = (props) => {
   const [installed, setInstalled] = createSignal<InstalledPlugin[]>(getInstalledPlugins());
   const [tab, setTab] = createSignal<TabId>(props.initialTab || 'catalog');
   const [kindFilter, setKindFilter] = createSignal<KindFilter>('all');
+  const [tick, setTick] = createSignal(0);
 
   const refresh = () => {
     setInstalled(getInstalledPlugins());
+    setTick((n) => n + 1);
     props.onChanged?.();
   };
 
@@ -122,36 +129,40 @@ export const PluginManager: Component<Props> = (props) => {
   const storages = createMemo(() => listStorages());
   const components = createMemo(() => registry.listComponents());
 
+  const isRowActive = (kind: string, id: string) => {
+    if (kind === 'source') return getActiveSourceId() === id;
+    if (kind === 'stream') return getActiveStreamId() === id;
+    if (kind === 'engine') return getActiveEngineId() === id;
+    if (kind === 'storage') return getActiveStorageId() === id;
+    return false;
+  };
+
   const catalogSections = createMemo(() => {
+    tick();
     const sections: Array<{
-      kind: KindFilter;
+      kind: Exclude<KindFilter, 'all'>;
       title: string;
       items: PluginBase[];
-      activeId: string;
     }> = [
       {
         kind: 'source',
         title: 'Sources (history)',
         items: sources(),
-        activeId: store.activePlugins?.source || store.source,
       },
       {
         kind: 'stream',
         title: 'Streams (live)',
         items: streams(),
-        activeId: store.activePlugins?.stream || store.live.streamId,
       },
       {
         kind: 'engine',
         title: 'Engines (calculation)',
         items: engines(),
-        activeId: store.activePlugins?.engine || store.engine,
       },
       {
         kind: 'storage',
         title: 'Storage (scripts)',
         items: storages(),
-        activeId: store.activePlugins?.storage || 'local',
       },
     ];
     const f = kindFilter();
@@ -167,6 +178,7 @@ export const PluginManager: Component<Props> = (props) => {
     if (kind === 'source' || kind === 'stream' || kind === 'engine') {
       setActivePlugin(kind, id);
       refresh();
+      props.onChanged?.();
       return;
     }
     if (kind === 'storage') {
@@ -176,6 +188,7 @@ export const PluginManager: Component<Props> = (props) => {
       // in-flight request.
       promptStorageChange(getActiveStorageId(), id);
       refresh();
+      props.onChanged?.();
     }
   };
 
@@ -276,7 +289,12 @@ export const PluginManager: Component<Props> = (props) => {
                     <ul class="flex flex-col gap-1.5 max-h-[min(420px,40vh)] overflow-auto pr-0.5">
                       <For each={section.items}>
                         {(p) => {
-                          const active = () => section.activeId === p.id;
+                          const kind = section.kind;
+                          const id = p.id;
+                          const active = () => {
+                            tick();
+                            return isRowActive(kind, id);
+                          };
                           return (
                             <li
                               class={`flex items-start gap-2 border-2 px-2.5 py-2 bg-bg-elev ${
@@ -286,7 +304,7 @@ export const PluginManager: Component<Props> = (props) => {
                               <div class="flex-1 min-w-0">
                                 <div class="text-text font-medium flex items-center gap-1.5 flex-wrap">
                                   {p.name}
-                                  <span class="text-text-faint font-mono text-[9px]">{p.id}</span>
+                                  <span class="text-text-faint font-mono text-[9px]">{id}</span>
                                 </div>
                                 <CapabilityBadges
                                   capabilities={p.capabilities}
@@ -306,7 +324,12 @@ export const PluginManager: Component<Props> = (props) => {
                                   active() ? 'sc-btn-ghost text-accent-2' : 'sc-btn-primary'
                                 }`}
                                 disabled={active()}
-                                onClick={() => activate(section.kind, p.id)}
+                                data-testid={`axis-plugin-use-${id}`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  activate(kind, id);
+                                }}
                                 title={
                                   active()
                                     ? 'Currently active'
@@ -423,51 +446,60 @@ export const PluginManager: Component<Props> = (props) => {
                 >
                   <ul class="flex flex-col gap-1.5 overflow-auto flex-1 max-h-[min(560px,60vh)]">
                     <For each={installed()}>
-                      {(p) => (
-                        <li class="flex items-center gap-2 border-2 border-border bg-bg-elev px-2.5 py-2">
-                          <div class="flex-1 min-w-0">
-                            <div class="text-text font-medium text-[12px]">{p.name}</div>
-                            <div class="text-text-faint font-mono text-[11px] truncate">
-                              {p.kind} · {p.id}
+                      {(p) => {
+                        const kind = p.kind;
+                        const id = p.id;
+                        return (
+                          <li class="flex items-center gap-2 border-2 border-border bg-bg-elev px-2.5 py-2">
+                            <div class="flex-1 min-w-0">
+                              <div class="text-text font-medium text-[12px]">{p.name}</div>
+                              <div class="text-text-faint font-mono text-[11px] truncate">
+                                {kind} · {id}
+                              </div>
+                              <div
+                                class="text-text-faint font-mono text-[10px] truncate"
+                                title={p.url}
+                              >
+                                {p.url}
+                              </div>
                             </div>
-                            <div
-                              class="text-text-faint font-mono text-[10px] truncate"
-                              title={p.url}
+                            <button
+                              type="button"
+                              class="sc-btn sc-btn-ghost px-2 text-[11px]"
+                              title="Activate"
+                              data-testid={`axis-plugin-use-${id}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                activate(kind, id);
+                              }}
                             >
-                              {p.url}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            class="sc-btn sc-btn-ghost px-2 text-[11px]"
-                            title="Activate"
-                            onClick={() => activate(p.kind, p.id)}
-                          >
-                            Use
-                          </button>
-                          <button
-                            type="button"
-                            class="sc-btn sc-btn-ghost px-1.5"
-                            title="Remove"
-                            onClick={() => {
-                              removePlugin(p.id, p.kind);
-                              // Fall back if we removed the active plugin
-                              if (p.kind === 'engine' && store.engine === p.id) {
-                                setActivePlugin('engine', 'server');
-                              }
-                              if (p.kind === 'source' && store.source === p.id) {
-                                setActivePlugin('source', 'binance-rest');
-                              }
-                              if (p.kind === 'stream' && store.live.streamId === p.id) {
-                                setActivePlugin('stream', 'binance-ws');
-                              }
-                              refresh();
-                            }}
-                          >
-                            <Icons.x size={13} />
-                          </button>
-                        </li>
-                      )}
+                              Use
+                            </button>
+                            <button
+                              type="button"
+                              class="sc-btn sc-btn-ghost px-1.5"
+                              title="Remove"
+                              onClick={() => {
+                                removePlugin(id, kind);
+                                // Fall back if we removed the active plugin
+                                if (kind === 'engine' && store.engine === id) {
+                                  setActivePlugin('engine', 'server');
+                                }
+                                if (kind === 'source' && store.source === id) {
+                                  setActivePlugin('source', 'binance-rest');
+                                }
+                                if (kind === 'stream' && store.live.streamId === id) {
+                                  setActivePlugin('stream', 'binance-ws');
+                                }
+                                refresh();
+                              }}
+                            >
+                              <Icons.x size={13} />
+                            </button>
+                          </li>
+                        );
+                      }}
                     </For>
                   </ul>
                 </Show>
@@ -483,10 +515,9 @@ export const PluginManager: Component<Props> = (props) => {
           <div class="flex items-center gap-2 px-3.5 py-2.5 border-t-2 border-border bg-bg-base flex-shrink-0">
             <div class="flex-1 text-[10px] text-text-faint truncate">
               {tab() === 'catalog' &&
-                `Active · src ${store.source} · eng ${store.engine} · stm ${store.live.streamId} · stor ${store.activePlugins?.storage || 'local'}`}
+                `Active · src ${getActiveSourceId()} · eng ${getActiveEngineId()} · stm ${getActiveStreamId()} · stor ${getActiveStorageId()}`}
               {tab() === 'install' && 'URL plugins re-load on next visit from localStorage'}
-              {tab() === 'library' &&
-                `Scripts backend: ${store.activePlugins?.storage || 'local'}`}
+              {tab() === 'library' && `Scripts backend: ${getActiveStorageId()}`}
             </div>
             <button
               type="button"

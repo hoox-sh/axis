@@ -28,7 +28,7 @@
  */
 
 import { type Component, Show, createMemo, untrack } from 'solid-js';
-import { store, isPanelOpen } from '../store';
+import { store, isPanelOpen, setDataSourcePanelOpen } from '../store';
 import { Icons } from './icons';
 import type { RunResult } from '../indicators/runner';
 import { buildStrategyReport, formatMoney } from '../results/strategy';
@@ -100,8 +100,17 @@ export const StatusBar: Component = () => {
           )}
         </Show>
 
-        <span class="text-text-faint font-mono text-[11px] tracking-tight flex-shrink-0 tabular-nums">
-          {store.bars.length} bars · {store.scripts.length} ind · {store.panes.length} panes
+        <span class="text-text-faint font-mono text-[11px] tracking-tight flex-shrink-0 tabular-nums inline-flex items-center gap-1">
+          <button
+            type="button"
+            class="hover:text-accent tabular-nums"
+            title="Open Data Source Manager"
+            data-testid="axis-statusbar-bars"
+            onClick={() => setDataSourcePanelOpen(true)}
+          >
+            {store.bars.length} bars
+          </button>
+          <span>· {store.scripts.length} ind · {store.panes.length} panes</span>
         </span>
       </div>
     </Show>
