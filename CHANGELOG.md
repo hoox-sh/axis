@@ -1196,7 +1196,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 #### Documentation
 
 - `477084bf` (2026-09-08) — docs(changelog): note bare-filename SHA256SUMS for binaries
-- `055d73d5` (2026-09-08) — docs: CLI-first command surface (axis <cmd> primary, bun run axis:* as repo alias)
+- `055d73d5` (2026-09-08) — docs: CLI-first command surface (axis command primary, bun run axis:* as repo alias)
 - `9b75c459` (2026-09-08) — docs(readme): real badge row, stack cross-links, unified stack footer
 - `efa7e87c` (2026-09-08) — docs(readme): add official Codecov coverage badge
 - `e38a72f9` (2026-09-07) — docs: sync docs to v2.5.0 — shortcuts, mobile shell, results views
