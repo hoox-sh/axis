@@ -213,6 +213,11 @@ function prefixIdents(span: string, names: string[], ns: string): string {
   return span.replace(identRe(names), `${ns}.$1`);
 }
 
+function prefixCalls(span: string, names: string[], ns: string): string {
+  const alt = names.map(escapeRe).join('|');
+  return span.replace(new RegExp(`(?<![\\w.])(${alt})\\s*(?=\\()`, 'g'), `${ns}.$1`);
+}
+
 function mapLine(line: string, transform: (span: string) => string): string {
   let out = '';
   let code = '';
@@ -417,9 +422,9 @@ function convertV4Span(span: string): string {
   s = s.replace(/(?<![\w.])resolution_gaps\b/g, 'timeframe_gaps');
   s = s.replace(/(?<![\w.])resolution\s*=/g, 'timeframe=');
   s = s.replace(/(?<![\w.])tickerid(?![\w.])/g, 'syminfo.tickerid');
-  s = prefixIdents(s, TICKER_FNS, 'ticker');
-  s = prefixIdents(s, TA_NAMES, 'ta');
-  s = prefixIdents(s, MATH_NAMES, 'math');
+  s = prefixCalls(s, TICKER_FNS, 'ticker');
+  s = prefixCalls(s, TA_NAMES, 'ta');
+  s = prefixCalls(s, MATH_NAMES, 'math');
   s = s.replace(/(?<![\w.])tostring\s*\(/g, 'str.tostring(');
   s = s.replace(/(?<![\w.])tonumber\s*\(/g, 'str.tonumber(');
   s = s.replace(BARE_REQUEST_RE, 'request.$1(');
@@ -440,9 +445,65 @@ function rewriteIff(source: string): string {
   return cur;
 }
 
+function unprefixUdfDefs(source: string): string {
+  const pat = /(?<![\w.])(ta|math|ticker|str|request)\.(\w+)\s*\(/;
+  let out = '';
+  let i = 0;
+  let inStr: string | null = null;
+  let escaped = false;
+  while (i < source.length) {
+    const ch = source[i];
+    if (inStr != null) {
+      out += ch;
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === inStr) inStr = null;
+      i += 1;
+      continue;
+    }
+    if (ch === '/' && source[i + 1] === '/') {
+      const nl = source.indexOf('\n', i);
+      const end = nl < 0 ? source.length : nl;
+      out += source.slice(i, end);
+      i = end;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      inStr = ch;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    const slice = source.slice(i);
+    const m = pat.exec(slice);
+    if (m && m.index === 0) {
+      const openIdx = i + m[0].length - 1;
+      const closeIdx = closeParen(source, openIdx);
+      if (closeIdx == null) {
+        out += ch;
+        i += 1;
+        continue;
+      }
+      let j = closeIdx + 1;
+      while (j < source.length && (source[j] === ' ' || source[j] === '\t')) j += 1;
+      if (source.startsWith('=>', j)) {
+        out += m[2] + source.slice(openIdx, closeIdx + 1);
+      } else {
+        out += source.slice(i, closeIdx + 1);
+      }
+      i = closeIdx + 1;
+      continue;
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
 function convertV4ToV5(source: string): string {
   let text = rewriteNamedCalls(source, 'tickerid', (inner) => `ticker.new(${inner})`);
   text = mapCodeSpans(text, convertV4Span);
+  text = unprefixUdfDefs(text);
   text = rewriteIff(text);
   text = rewriteNamedCalls(text, 'offset', (inner) => {
     const args = splitTopArgs(inner);

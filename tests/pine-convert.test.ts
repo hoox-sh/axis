@@ -92,6 +92,22 @@ plot(close)
     expect(out).toContain('math.abs(');
   });
 
+  it('does not prefix UDF defs or unpack names', () => {
+    const src = `//@version=4
+study("x")
+hma(src, len) => wma(src, len)
+minimax(X, p, min, max) => max - min
+[rsi, dev] = rsi(close, 14)
+plot(hma(close, 9))
+`;
+    const out = convertPineToV6(src);
+    expect(out).toContain('hma(src, len) =>');
+    expect(out).toContain('ta.wma(');
+    expect(out).toContain('minimax(X, p, min, max) =>');
+    expect(out).toContain('[rsi, dev] =');
+    expect(out).toContain('ta.rsi(');
+  });
+
   it('is idempotent on v6', () => {
     const src = `//@version=6
 indicator("x")

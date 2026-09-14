@@ -48,7 +48,7 @@ variable "GIT_SHA" {
 }
 
 variable "VERSION" {
-  default = "2.6.6"
+  default = "2.6.7"
 }
 
 variable "CACHE_DIR" {

@@ -15,6 +15,12 @@ _Generated/updated: 2026-09-12 · 401 commits · describe-tag: `v2.6.5`_
 
 ## [Unreleased]
 
+### Changed
+
+- **Workstation chrome polish**: two-bar command + module switch, 4/8px grid, 1px hairline, periwinkle `#8B9CFF` on `#07080C` / `#0C0E14`, Live as a 6px pulse, HUD capsules, 32px watchlist rows, 32×32 drawing rail, 26px status strip, tablet overlay drawers, mobile Chart/List/Editor/More. Same product — density and grouping only.
+
+## [2.6.7] — 2026-09-14
+
 ### Added
 
 - **Convert to Pine v6** in the editor overflow menu and command palette. Rewrites any older version (missing `//@version` counts as v1) toward v6: colors / `n` / timeframe names, `ta.*` / `math.*` / `request.*`, `study(` → `indicator(`, typed `input.*()`, `iff` / `offset`. Not a semantic v6 migrator.
@@ -25,10 +31,10 @@ _Generated/updated: 2026-09-12 · 401 commits · describe-tag: `v2.6.5`_
 ### Fixed
 
 - Fold marker labels were inverted (expanded blocks announced “Unfold”). They now read **Fold block** / **Unfold block**.
+- **Convert to Pine v6** no longer prefixes UDF definitions, parameters, or unpack targets that collide with `ta.*` / `math.*` (set01–04 older scripts parse 323/323 after convert).
 
 ### Changed
 
-- **Workstation chrome polish**: two-bar command + module switch, 4/8px grid, 1px hairline, periwinkle `#8B9CFF` on `#07080C` / `#0C0E14`, Live as a 6px pulse, HUD capsules, 32px watchlist rows, 32×32 drawing rail, 26px status strip, tablet overlay drawers, mobile Chart/List/Editor/More. Same product — density and grouping only.
 - **Cloudflare rename**: Worker script `pynescript-axis` → `worker-axis` (`https://worker.axis.hoox.sh`). Pages project `pynescript-axis` → `axis` (`https://axis.hoox.sh`; previews `*.axis.pages.dev`). Health JSON `service` is `worker-axis`. Legacy `pynescript-axis.pages.dev` and `pynescript-axis.*.workers.dev` hosts still match in CORS / client heuristics.
 - **Live stream on by default**: Settings → General → Enable live stream (`live.preferAfterLoad`, default on). Saving starts or stops the venue WebSocket; boot starts live when history is already loaded. Persist no longer writes a false default when the flag was missing.
 - **Server/Pyodide execution default is Auto** (try compiler, fall back to interpreter). Strict Compiler is not the default: Flask/Numba is not prewarmed, first compile JITs, and some Pine stays object-mode. HUD and first-run now follow the engine schema instead of showing Interpreter when mode was never saved.
