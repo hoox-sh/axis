@@ -772,7 +772,7 @@ export const OnChainPanel: Component = () => {
                           </div>
                         </div>
                         <Show when={s.error}>
-                          <span class="text-red text-[10px] truncate max-w-[7rem]" title={s.error}>
+                          <span class="text-red text-[10px] truncate max-w-[7rem]" title={s.error ?? undefined}>
                             {s.error}
                           </span>
                         </Show>
