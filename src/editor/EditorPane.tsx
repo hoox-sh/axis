@@ -69,6 +69,7 @@ import {
 import { countDebugPins } from '../results/debug-pins';
 import { runPreevalNow } from './preevaluate';
 import { formatPineSource } from './pine-format';
+import { convertPineToV6Result } from './pine-convert';
 import { addMissingTypeDeclarations } from './pine-declare-types';
 
 interface Props {
@@ -232,6 +233,55 @@ export const EditorPane: Component<Props> = (props) => {
       setStatus('error', msg || 'Format failed');
     }
   };
+
+  /**
+   * Rewrite the active buffer from any older Pine version toward v6.
+   * Overflow menu + command palette (`axis-editor-convert-v6`).
+   */
+  const convertActiveDocToV6 = () => {
+    try {
+      const ref = props.editorRef as {
+        convertToV6Doc?: () => boolean;
+        getDoc?: () => string;
+        setDoc?: (d: string) => void;
+      };
+      if (typeof ref.convertToV6Doc === 'function') {
+        const before = ref.getDoc?.() || '';
+        const from = convertPineToV6Result(before).fromVersion;
+        const changed = ref.convertToV6Doc();
+        const doc = ref.getDoc?.() || '';
+        if (changed) {
+          saveEditorDoc(doc);
+          setStatus('ready', from >= 6 ? 'Already Pine v6' : `Converted Pine v${from} → v6`);
+        } else {
+          setStatus('ready', 'Already Pine v6');
+        }
+        return;
+      }
+      const doc = ref.getDoc?.() || '';
+      if (!doc.trim()) {
+        setStatus('ready', 'Nothing to convert');
+        return;
+      }
+      const result = convertPineToV6Result(doc);
+      if (!result.changed) {
+        setStatus('ready', 'Already Pine v6');
+        return;
+      }
+      ref.setDoc?.(result.source);
+      saveEditorDoc(result.source);
+      setStatus('ready', `Converted Pine v${result.fromVersion} → v6`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setStatus('error', msg || 'Convert failed');
+    }
+  };
+
+  onMount(() => {
+    const onConvert = () => convertActiveDocToV6();
+    window.addEventListener('axis-editor-convert-v6', onConvert);
+    onCleanup(() => window.removeEventListener('axis-editor-convert-v6', onConvert));
+  });
 
   /** True after at least one successful engine run (enables type-declare). */
   const canDeclareTypes = createMemo(() => {
@@ -413,6 +463,7 @@ export const EditorPane: Component<Props> = (props) => {
       onToggleWrap={() => toggleEditorWrapEnabled()}
       onToggleMinimap={() => toggleEditorMinimapEnabled()}
       onFormat={() => formatActiveDoc()}
+      onConvertToV6={() => convertActiveDocToV6()}
       canDeclareTypes={canDeclareTypes()}
       onDeclareTypes={() => declareTypesActiveDoc()}
       onOpenLibrary={
@@ -500,6 +551,7 @@ const EditorOverflowMenu: Component<{
   onToggleWrap: () => void;
   onToggleMinimap: () => void;
   onFormat: () => void;
+  onConvertToV6: () => void;
   /** After a successful run — enable “Add type declarations”. */
   canDeclareTypes?: boolean;
   onDeclareTypes?: () => void;
@@ -697,6 +749,17 @@ const EditorOverflowMenu: Component<{
           >
             <Icons.alignLeft size={14} />
             <span>Format document</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class="axis-panel-menu-item"
+            title="Rewrite this script from any older Pine version to v6"
+            data-testid="axis-btn-editor-convert-v6"
+            onClick={() => props.onConvertToV6()}
+          >
+            <Icons.arrowUpRight size={14} />
+            <span>Convert to Pine v6</span>
           </button>
           <button
             type="button"

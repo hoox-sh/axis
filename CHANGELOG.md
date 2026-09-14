@@ -17,6 +17,8 @@ _Generated/updated: 2026-09-12 · 401 commits · describe-tag: `v2.6.5`_
 
 ### Added
 
+- **Convert to Pine v6** in the editor overflow menu and command palette. Rewrites any older version (missing `//@version` counts as v1) toward v6: colors / `n` / timeframe names, `ta.*` / `math.*` / `request.*`, `study(` → `indicator(`, typed `input.*()`, `iff` / `offset`. Not a semantic v6 migrator.
+
 ### Fixed
 
 - Fold marker labels were inverted (expanded blocks announced “Unfold”). They now read **Fold block** / **Unfold block**.

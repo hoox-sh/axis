@@ -69,6 +69,7 @@ import {
   refreshColumnRuler,
 } from './column-ruler';
 import { formatPineSource } from './pine-format';
+import { convertPineToV6 } from './pine-convert';
 import { colorChipsExtension } from './color-chips';
 import { codeFoldingExtension } from './code-folding';
 import { indentGuidesExtension } from './indent-guides';
@@ -109,6 +110,8 @@ export type PyneEditorRef = {
   insertAtCursor?: (text: string) => boolean;
   /** Format document (indent / whitespace). Returns true when changed. */
   formatDoc?: () => boolean;
+  /** Rewrite older Pine toward v6. Returns true when changed. */
+  convertToV6Doc?: () => boolean;
   /**
    * Insert missing Pine type1 (`series`/`simple`/`const`) + type2
    * (`int`/`float`/…) on untyped assignments. Optional series names from
@@ -330,6 +333,28 @@ export const PyneEditor: Component<Props> = (props) => {
     }
   };
 
+  const convertToV6Doc = (): boolean => {
+    if (!view) return false;
+    try {
+      const prev = view.state.doc.toString();
+      const next = convertPineToV6(prev);
+      if (next === prev) return false;
+      const head = view.state.selection.main.head;
+      const mapped =
+        prev.length > 0
+          ? Math.min(Math.round((head / prev.length) * next.length), next.length)
+          : 0;
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: next },
+        selection: EditorSelection.cursor(mapped),
+      });
+      view.focus();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   /**
    * Add missing type1/type2 declarations on untyped `name = expr` lines.
    * Cursor mapped by offset ratio (same strategy as format).
@@ -515,6 +540,7 @@ export const PyneEditor: Component<Props> = (props) => {
       props.editorRef.selectRange = selectRange;
       props.editorRef.insertAtCursor = insertAtCursor;
       props.editorRef.formatDoc = formatDoc;
+      props.editorRef.convertToV6Doc = convertToV6Doc;
       props.editorRef.declareTypesDoc = declareTypesDoc;
       props.editorRef.jumpToDiagnostic = (diag: EditorDiagnostic) => {
         if (!view) return false;

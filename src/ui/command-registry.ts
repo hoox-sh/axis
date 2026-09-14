@@ -134,6 +134,8 @@ export interface CommandActions {
   saveToLibrary?: () => void | Promise<void>;
   /** Focus (and soft-format) the docked CodeMirror surface. */
   focusEditor?: () => void;
+  /** Rewrite the active editor buffer toward Pine v6. */
+  convertToV6?: () => void;
   /** Focus the active chart pane (Mod-Alt-0). */
   focusChart?: () => void;
   /** Open the keyboard-shortcuts modal (Shift-?). */
@@ -808,6 +810,12 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     keywords: ['format', 'focus', 'code', 'cursor', 'editor', 'cm'],
   },
   {
+    id: 'editor.convert-v6',
+    title: 'Convert to Pine v6',
+    category: 'actions',
+    keywords: ['convert', 'version', 'v6', 'migrate', 'upgrade', 'pine', 'v4', 'v5'],
+  },
+  {
     id: 'git.push',
     title: 'Git Push',
     category: 'actions',
@@ -1034,6 +1042,7 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.jumpToLine) byId.set('editor.goto-line', actions.jumpToLine);
   if (actions.saveToLibrary) byId.set('editor.save-library', () => void actions.saveToLibrary?.());
   if (actions.focusEditor) byId.set('editor.focus', actions.focusEditor);
+  if (actions.convertToV6) byId.set('editor.convert-v6', actions.convertToV6);
   if (actions.focusChart) byId.set('panel.focus-chart', actions.focusChart);
   if (actions.openShortcuts) byId.set('help.shortcuts', actions.openShortcuts);
   if (actions.resetShortcuts) byId.set('help.reset-shortcuts', actions.resetShortcuts);

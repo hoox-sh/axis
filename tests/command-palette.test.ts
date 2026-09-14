@@ -173,6 +173,7 @@ describe('DEFAULT_COMMAND_SPECS', () => {
       'editor.goto-line',
       'editor.save-library',
       'editor.focus',
+      'editor.convert-v6',
       'git.push',
       'git.pull',
     ]) {
@@ -192,6 +193,7 @@ describe('DEFAULT_COMMAND_SPECS', () => {
       ['pin', 'editor.toggle-debug-pins'],
       ['problem', 'editor.toggle-inline-debug'],
       ['profiler', 'editor.toggle-profiler'],
+      ['convert v6', 'editor.convert-v6'],
       ['git', 'git.push'],
     ] as const) {
       const ranked = filterCommands([...DEFAULT_COMMAND_SPECS], query);

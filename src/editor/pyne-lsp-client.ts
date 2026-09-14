@@ -24,6 +24,7 @@
  * - `POST /lsp/completion` — `{ source, line, character }` → completion items
  * - `POST /lsp/hover` — same position → markdown/plaintext hover
  * - `POST /lsp/diagnostics` — `{ source }` → parse+lint pre-eval diagnostics
+ * - `POST /lsp/convert` — `{ source }` → rewrite toward Pine v6
  *
  * Used when engine is `server` and Backend URL is set (local `:5002` or remote).
  * Pyodide / offline mode falls back to client builtins in `pyne-lsp`

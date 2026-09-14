@@ -324,6 +324,10 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
           el?.focus?.();
         });
       },
+      convertToV6: () => {
+        setEditorOpen(true);
+        emitWindowEvent('axis-editor-convert-v6');
+      },
       focusChart: () => {
         queueMicrotask(() => {
           const el = document.querySelector<HTMLElement>('[data-testid="axis-chart-pane"]');
