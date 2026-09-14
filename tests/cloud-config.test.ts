@@ -54,6 +54,9 @@ describe('cloud-config', () => {
   });
 
   it('keeps a real Worker URL', () => {
+    expect(coerceWorkerEndpoint('https://worker.axis.hoox.sh')).toBe(
+      'https://worker.axis.hoox.sh',
+    );
     expect(coerceWorkerEndpoint('https://pynescript-axis.cryptolinx.workers.dev')).toBe(
       'https://pynescript-axis.cryptolinx.workers.dev',
     );

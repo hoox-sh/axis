@@ -693,7 +693,7 @@ export const ResultsModal: Component = () => {
                 <div class="ax-page-canvas" data-testid="axis-results-body">
                   {/* Empty / error states — skip Optimise / Saved, which have their own empty copy. */}
                   <Show when={!result() && tab() !== 'optimise' && tab() !== 'saved'}>
-                    <div class="ax-empty">Run a script to populate results.</div>
+                    <div class="ax-empty axis-empty-state">Run a script to populate results.</div>
                   </Show>
                   <Show when={result()?.status === 'error'}>
                     <div class="ax-callout">
@@ -705,7 +705,7 @@ export const ResultsModal: Component = () => {
                   <Show when={result() && tab() === 'events'}>
                     <Show
                       when={streamEvents().length > 0}
-                      fallback={<div class="ax-empty">No strategy events in this run.</div>}
+                      fallback={<div class="ax-empty axis-empty-state">No strategy events.</div>}
                     >
                       <div class="ax-stack ax-stack--compact" data-testid="axis-events-views">
                         <div class="ax-toolbar">
@@ -982,7 +982,7 @@ export const ResultsModal: Component = () => {
                   <Show when={result() && tab() === 'plots'}>
                     <Show
                       when={plotSeries().length > 0}
-                      fallback={<div class="ax-empty">No plots in this run.</div>}
+                      fallback={<div class="ax-empty axis-empty-state">No plots.</div>}
                     >
                       <div class="ax-grid ax-grid--2">
                         <For each={plotSeries()}>
@@ -1092,21 +1092,13 @@ export const ResultsModal: Component = () => {
                         </Show>
 
                         <Show when={!savedRunsResource.loading && !savedRunsError() && savedRuns().length === 0}>
-                          <div class="ax-empty" data-testid="axis-results-saved-empty">
+                          <div class="ax-empty axis-empty-state" data-testid="axis-results-saved-empty">
                             <div>
-                              No saved runs yet
+                              No saved runs
                               <Show when={savedRunsScriptId()}>
                                 {' '}for <code class="ax-mono">{savedRunsScriptId()}</code>
                               </Show>
-                              . Run a strategy to persist the first result.
                             </div>
-                            <p class="ax-hint">
-                              Stored in <span class="ax-mono">{storageEngineId()}</span>; FIFO cap
-                              {' '}
-                              <span class="ax-mono">{MAX_RESULTS_PER_SCRIPT}</span>
-                              {' '}
-                              runs per script.
-                            </p>
                           </div>
                         </Show>
 

@@ -201,21 +201,12 @@ export const IndicatorPanel: Component = () => {
             </div>
           </div>
 
-          <div class="flex-1 overflow-y-auto p-2 min-h-0">
+          <div class="flex-1 overflow-y-auto min-h-0">
             <Show
               when={store.scripts.length > 0}
               fallback={
-                <div class="text-text-faint text-[0.85em] italic p-2">
-                  No scripts on the chart.
-                  <div class="mt-2 not-italic text-text-dim normal-case tracking-normal leading-relaxed">
-                    Run Pine from the editor. Cards show{' '}
-                    <strong class="text-text font-medium">where</strong> Pine
-                    evaluates (engine),{' '}
-                    <strong class="text-text font-medium">how</strong> live
-                    re-runs (tick vs bar close — click the policy badge), and{' '}
-                    <strong class="text-text font-medium">which pane</strong>{' '}
-                    (overlay vs sub-pane). Hover icons for detail.
-                  </div>
+                <div class="axis-empty-state text-[12px] text-text-dim py-2">
+                  No scripts
                 </div>
               }
             >

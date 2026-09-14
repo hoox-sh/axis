@@ -18,8 +18,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Bottom status strip — Connection HUD (left) + status message + optional
- * strategy PnL summary from `store.lastRun`.
+ * Bottom 26px instrument strip — Live + HUD capsules + truncated status +
+ * optional strategy PnL from `store.lastRun`.
  *
  * Classic fixed footer chrome (no FloatableShell title bar). Visibility is
  * gated by panel chrome `statusbar` (topbar **Status** / command palette).
@@ -65,18 +65,14 @@ export const StatusBar: Component = () => {
   return (
     <Show when={isPanelOpen('statusbar')}>
       <div
-        class="flex items-center gap-[var(--ui-gap-sm)] px-2.5 py-0.5 bg-bg-panel border-t-2 border-border text-[0.85em] text-text-dim min-h-[var(--ui-statusbar-min-h)] flex-shrink-0 overflow-x-auto"
+        class="axis-statusbar flex-shrink-0"
         data-testid="axis-statusbar"
         role="status"
       >
-        {/* Left: connection / transport / tick HUD */}
         <ConnectionHud />
 
-        <span class="flex-1 min-w-2" />
-
-        {/* Right: status message + meta */}
         <span
-          class={`flex items-center gap-1.5 min-w-0 max-w-[42vw] ${color()}`}
+          class={`flex items-center gap-1.5 min-w-0 max-w-[28vw] text-[11px] ${color()}`}
           data-testid="axis-status-message"
         >
           {(store.status === 'running' || store.status === 'loading') && (
@@ -89,20 +85,22 @@ export const StatusBar: Component = () => {
           <span class="truncate">{store.statusMessage}</span>
         </span>
 
+        <span class="flex-1 min-w-2" />
+
         <Show when={strategySummary()}>
           {(stats) => (
             <span
-              class={`text-[0.85em] font-mono tracking-tight tabular-nums flex-shrink-0 ${
+              class={`text-[11px] font-mono tracking-tight tabular-nums flex-shrink-0 ${
                 stats().totalPnl >= 0 ? 'text-accent-2' : 'text-red'
               }`}
               title="Closed trades from last run"
             >
-              {stats().trades} trades · {formatMoney(stats().totalPnl)}
+              {stats().trades} · {formatMoney(stats().totalPnl)}
             </span>
           )}
         </Show>
 
-        <span class="text-text-faint font-mono text-[10px] tracking-tight flex-shrink-0 tabular-nums">
+        <span class="text-text-faint font-mono text-[11px] tracking-tight flex-shrink-0 tabular-nums">
           {store.bars.length} bars · {store.scripts.length} ind · {store.panes.length} panes
         </span>
       </div>

@@ -368,7 +368,7 @@ export const EditorPane: Component<Props> = (props) => {
    */
   const editorTools = (
     <div
-      class="axis-editor-tools"
+      class="axis-editor-tools h-7 gap-2"
       onPointerDown={(e) => e.stopPropagation()}
       data-testid="axis-editor-tools"
     >
@@ -394,6 +394,7 @@ export const EditorPane: Component<Props> = (props) => {
                   : 'Run script against loaded bars'
           }
           testId="axis-editor-btn-run"
+          tone={store.status === 'running' ? 'primary' : 'ghost'}
           pressed={store.status === 'running'}
           disabled={runBlocked() || store.status === 'running'}
           onClick={() => {
@@ -479,7 +480,7 @@ export const EditorPane: Component<Props> = (props) => {
   if (props.standalone) {
     return (
       <div class="flex flex-col h-full min-h-0 bg-bg-panel" data-testid="axis-editor">
-        <div class="flex items-center gap-1 px-2 py-1 border-b-2 border-border bg-bg-base flex-shrink-0 min-h-[28px]">
+        <div class="flex items-center gap-2 px-2 h-7 border-b border-border bg-bg-base flex-shrink-0">
           <span class="text-[10px] text-text-dim uppercase tracking-wider font-semibold mr-auto">
             Editor
           </span>
@@ -593,7 +594,7 @@ const EditorOverflowMenu: Component<{
     >
       <button
         type="button"
-        class={`sc-btn sc-btn-ghost px-1 axis-editor-overflow-btn ${
+        class={`sc-btn sc-btn-ghost px-1 h-7 rounded axis-editor-overflow-btn ${
           open() ? 'text-accent' : ''
         }`}
         title="More editor tools"
@@ -805,7 +806,7 @@ const EditorOverflowMenu: Component<{
 
 /**
  * Compact icon + always-visible label button for the editor header strip.
- * Active/pressed state is **icon/label color only** (no border / fill chrome).
+ * Ghost by default; Run uses primary only while `store.status === 'running'`.
  */
 const EditorToolBtn: Component<{
   id: string;
@@ -814,15 +815,20 @@ const EditorToolBtn: Component<{
   testId?: string;
   pressed?: boolean;
   disabled?: boolean;
+  /** Match command-bar Run: primary only while running; otherwise ghost. */
+  tone?: 'ghost' | 'primary';
   onClick: () => void;
   children: JSX.Element;
 }> = (props) => {
+  const primary = () => props.tone === 'primary';
   return (
     <button
       type="button"
-      class={`sc-btn sc-btn-ghost axis-editor-tool-btn ${
-        props.pressed ? 'is-tool-on' : ''
-      } ${props.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      class={`sc-btn axis-editor-tool-btn h-7 rounded ${
+        primary() ? 'sc-btn-primary is-active' : 'sc-btn-ghost'
+      } ${props.pressed && !primary() ? 'is-tool-on' : ''} ${
+        props.disabled ? 'opacity-50 cursor-not-allowed' : ''
+      }`}
       title={props.title}
       aria-label={props.label}
       aria-pressed={props.pressed}

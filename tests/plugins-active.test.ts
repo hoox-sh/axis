@@ -99,6 +99,18 @@ describe('active config', () => {
     expect(cfg.endpoint).toBe('http://example.test:5002');
   });
 
+  it('defaults server execution mode to auto from schema when unset', () => {
+    setActivePlugin('engine', 'server');
+    setStore('pluginsConfig', {});
+    expect(getActiveEngineConfig().mode).toBe('auto');
+  });
+
+  it('keeps an explicit interpret mode', () => {
+    setActivePlugin('engine', 'server');
+    setStore('pluginsConfig', { 'engine:server': { mode: 'interpret' } });
+    expect(getActiveEngineConfig().mode).toBe('interpret');
+  });
+
   it('surfaces execution mode and preferWs from pluginsConfig', () => {
     setActivePlugin('engine', 'server');
     setStore('pluginsConfig', {

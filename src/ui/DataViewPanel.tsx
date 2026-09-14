@@ -81,13 +81,27 @@ export const DataViewPanel: Component = () => {
   return (
     <Show when={isPanelOpen('dataview') || store.dataViewPanel.open}>
       <FloatableShell id="dataview" testId="axis-dataview">
-        <div class="flex-1 overflow-y-auto min-h-0 text-[0.85em]">
+        <div class="flex-1 overflow-y-auto min-h-0 text-[12px]">
           <Show
             when={store.bars.length > 0}
             fallback={
-              <div class="p-2.5 text-text-faint italic">Load data to inspect bars.</div>
+              <div class="axis-empty-state text-[12px] text-text-dim py-2">
+                No bar under crosshair
+              </div>
             }
           >
+            <Show
+              when={
+                (store.crosshair?.time != null && Number.isFinite(store.crosshair.time)) ||
+                (store.crosshair?.barIndex != null && Number.isFinite(store.crosshair.barIndex))
+              }
+              fallback={
+                <div class="axis-empty-state text-[12px] text-text-dim py-2">
+                  No bar under crosshair
+                </div>
+              }
+            >
+              <div>
             <Section label="Bar">
               <For each={metaRows()}>{(row) => <Row row={row} />}</For>
             </Section>
@@ -116,8 +130,10 @@ export const DataViewPanel: Component = () => {
                 onchainRows().length === 0
               }
             >
-              <div class="px-2.5 py-2 text-text-faint text-[0.9em]">
+              <div class="axis-empty-state px-2 py-2 text-[12px] text-text-dim">
                 Run a script, place drawings, or attach on-chain series to see values here.
+              </div>
+            </Show>
               </div>
             </Show>
           </Show>
@@ -139,7 +155,7 @@ const Section: Component<{ label: string; children: any }> = (props) => (
 const Row: Component<{
   row: { key: string; label: string; value: string; color?: string };
 }> = (props) => (
-  <div class="flex items-center justify-between gap-2 px-2.5 py-0.5 hover:bg-bg-hover/60">
+  <div class="axis-list-row flex items-center justify-between gap-2 h-8 px-2 hover:bg-bg-hover/60">
     <span class="flex items-center gap-1.5 text-text-dim min-w-0 truncate">
       <Show when={props.row.color}>
         <span

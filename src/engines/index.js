@@ -101,10 +101,10 @@ export const serverEngine = {
         mode: {
             type: 'select',
             options: ['interpret', 'compile', 'auto'],
-            default: 'interpret',
+            default: 'auto',
             label: 'Execution mode',
             description:
-                'interpret = AST interpreter; compile = Numba/numpy path; auto = try compile, fall back to interpret',
+                'auto = try compile, fall back to interpret; compile = Numba/numpy path; interpret = AST interpreter',
         },
         preferWs: {
             type: 'boolean',
@@ -173,10 +173,10 @@ export const pyodideEngine = {
         mode: {
             type: 'select',
             options: ['interpret', 'compile', 'auto'],
-            default: 'interpret',
+            default: 'auto',
             label: 'Execution mode',
             description:
-                'interpret = AST in browser; compile needs NumPy/object-mode; numeric Numba needs server engine',
+                'auto = try compile, fall back to interpret; compile needs NumPy/object-mode; numeric Numba needs server engine',
         },
     },
     _pyodide: null,
@@ -271,7 +271,7 @@ export const pyodideEngine = {
         const t0 = performance.now();
         try {
             const py = await this._ensure();
-            const mode = String(config?.mode || 'interpret');
+            const mode = String(config?.mode || 'auto');
             if (mode === 'compile' || mode === 'auto') {
                 try { await py.loadPackage?.('numpy'); } catch (_) { /* fallback */ }
             }

@@ -1046,7 +1046,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       <Portal mount={mountEl()!}>
           <div
             ref={rootEl}
-            class={`axis-panel-shell flex flex-col min-h-0 overflow-hidden ${dockClass()} ${props.class || ''}`}
+            class={`axis-panel-shell flex flex-col min-h-0 overflow-hidden rounded-md ${dockClass()} ${props.class || ''}`}
             classList={{
               'is-dragging': dragging(),
               'axis-panel-hover-slide': hoverSlideOn(),
@@ -1069,7 +1069,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
           >
             {/* Title bar — desktop: drag (move) to undock/move; phone: swipe down to dismiss */}
             <div
-              class="axis-panel-handle sc-float-panel-header cursor-grab active:cursor-grabbing select-none relative"
+              class="axis-panel-handle sc-float-panel-header cursor-grab active:cursor-grabbing select-none relative h-9 min-h-9"
               onPointerDown={onSheetHandlePointerDown}
               title={
                 hoverCollapsed()
@@ -1247,7 +1247,10 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
 
             <div
               class="flex-1 min-h-0 overflow-auto axis-panel-body"
-              classList={{ 'is-hover-hidden': hoverCollapsed() }}
+              classList={{
+                'is-hover-hidden': hoverCollapsed(),
+                'p-3': props.id !== 'editor',
+              }}
               aria-hidden={hoverCollapsed() || undefined}
             >
               {props.children}

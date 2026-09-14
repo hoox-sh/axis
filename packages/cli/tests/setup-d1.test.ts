@@ -38,12 +38,12 @@ describe("d1ApplyPlan", () => {
 describe("parseDeployedWorkerUrl", () => {
   test("returns the last workers.dev URL", () => {
     const out = `
-Uploaded pynescript-axis
-  https://pynescript-axis.cryptolinx.workers.dev
+Uploaded worker-axis
+  https://worker-axis.cryptolinx.workers.dev
 Current Version ID: abc
 `;
     expect(parseDeployedWorkerUrl(out)).toBe(
-      "https://pynescript-axis.cryptolinx.workers.dev"
+      "https://worker-axis.cryptolinx.workers.dev"
     );
   });
 

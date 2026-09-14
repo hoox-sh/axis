@@ -137,13 +137,18 @@ export function getActiveEngineConfig(): Record<string, unknown> {
   ensureBuiltins();
   const id = getActiveEngineId();
   const engine = registry.getEngine(id);
+  const schemaMode = engine?.configSchema?.mode?.default;
+  const withMode =
+    (base.mode == null || base.mode === '') && schemaMode != null
+      ? { ...base, mode: schemaMode }
+      : base;
 
   // pyne-worker: prefer pluginsConfig / a matching store.endpoint / production default
   // so a leftover Flask localhost URL does not override the edge host.
   if (id === 'pyne-worker') {
     try {
       // Lazy import path avoided — resolve inline to keep active.ts light
-      const fromCfg = String(base.endpoint || '').trim();
+      const fromCfg = String(withMode.endpoint || '').trim();
       const fromStore = String(store.endpoint || '').trim();
       const looksPw = (s: string) => /pyne-worker|pine-worker/i.test(s);
       const endpoint = (
@@ -151,10 +156,10 @@ export function getActiveEngineConfig(): Record<string, unknown> {
         (looksPw(fromStore) ? fromStore : '') ||
         'https://pyne-worker.cryptolinx.workers.dev'
       ).replace(/\/$/, '');
-      return { ...base, endpoint };
+      return { ...withMode, endpoint };
     } catch {
       return {
-        ...base,
+        ...withMode,
         endpoint: 'https://pyne-worker.cryptolinx.workers.dev',
       };
     }
@@ -163,7 +168,7 @@ export function getActiveEngineConfig(): Record<string, unknown> {
   // store.endpoint is the Settings field of record — must win over a stale
   // pluginsConfig.endpoint left over from older saves / presets.
   if (store.endpoint && (engine?.configSchema?.endpoint || id === 'server')) {
-    return { ...base, endpoint: store.endpoint };
+    return { ...withMode, endpoint: store.endpoint };
   }
-  return base;
+  return withMode;
 }

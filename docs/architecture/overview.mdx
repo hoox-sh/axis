@@ -94,7 +94,7 @@ Legacy parallel: `state.js`, `registry.js`, `main.js` — not product path. See 
 | Engine server | HTTP | `POST /run` batch; latency in HUD |
 | Engine pyodide | Local | Offline-capable after asset cache |
 
-Live pairs with history via `defaultStreamForSource`. Optional `live.preferAfterLoad` auto-starts WS after Load (default **off**).
+Live pairs with history via `defaultStreamForSource`. `live.preferAfterLoad` auto-starts WS after Load and on boot when bars exist (default **on**).
 
 ## Dual engines
 
@@ -129,10 +129,10 @@ Contract namespace conceptually: `pynescript.axis.plugins.v1` (fields: `id`, `na
 
 ## Edge plane (optional)
 
-Cloudflare project **`pynescript-axis`**:
+Cloudflare split:
 
-- Pages: static `dist/`  
-- Worker: `/api/run` proxy, keys/usage KV, scripts D1, stream DO fan-out  
+- Pages project **`axis`** (`https://axis.hoox.sh`): static `dist/`
+- Worker script **`worker-axis`** (`https://worker.axis.hoox.sh`): `/api/run` proxy, keys/usage KV, scripts D1, stream DO fan-out
 - AXIS still speaks engine/storage plugins—not raw CF APIs in UI components  
 
 ## Invariants

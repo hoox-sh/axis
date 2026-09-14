@@ -106,13 +106,13 @@ describe('minimap scroll mapping', () => {
 });
 
 describe('editor minimap store flag', () => {
-  it('defaults on and toggles', () => {
-    setEditorMinimapEnabled(true);
-    expect(store.editorMinimapEnabled).toBe(true);
-    toggleEditorMinimapEnabled();
+  it('defaults off and toggles', () => {
+    setEditorMinimapEnabled(false);
     expect(store.editorMinimapEnabled).toBe(false);
     toggleEditorMinimapEnabled();
     expect(store.editorMinimapEnabled).toBe(true);
+    toggleEditorMinimapEnabled();
+    expect(store.editorMinimapEnabled).toBe(false);
   });
 });
 

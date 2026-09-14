@@ -34,7 +34,7 @@ Index
 | ADR- | Declarative configSchema |
 | ADR- | URL-loadable plugins |
 | ADR- | Storage as a plugin |
-| ADR- | Frozen CF project id pynescript-axis |
+| ADR- | CF project id axis |
 | ADR- | Worker proxies first |
 | ADR- | Durable Object stream fan-out |
 | ADR- | State namespace migration |
@@ -121,11 +121,11 @@ Manager Script Library is backend-agnostic.
 Git commits only on explicit save; drafts local.
 Cloud uses Bearer Pro keys and optional optimistic concurrency.
 ---
-ADR-: Frozen CF project id pynescript-axis
+ADR-: CF project id axis
 Context
 Renaming Cloudflare Pages/Worker projects severs KV/D/R bindings, custom domains, and CI secrets. Product brand evolved to AXIS.
 Decision
-Keep infrastructure name pynescript-axis. Brand in UI/manifest/docs is AXIS. Health JSON may identify pynescript-axis-worker. Optional DNS aliases (axis.) point at the same project without rename.
+Pages project is axis. Worker script is worker-axis at https://worker.axis.hoox.sh. Health JSON service is worker-axis. Optional DNS aliases (axis.) point at the same project without rename.
 Consequences
 wrangler.toml name and Pages --project-name stay frozen.
 Docs call out the freeze explicitly (this ADR).
@@ -304,7 +304,7 @@ Interface surface
 | Engine server | src/engines/catalog.ts | Prefer WS ws(s)://{endpoint}/ws/run (preferWs default true), else POST {endpoint}/run?mode= with { script, data, mode, inputs?, profiler?, libraries? }. Modes interpret \| compile \| auto. Timeout scales with bar count (–s). Default endpoint http://localhost:. |
 | Engine pyodide | same file | Self-hosted Pyodide .. (/pyodide/v../), wheels /vendor/pynescript-..-py-none-any.whl + antlr, runtime /pyodide/pynescriptruntime.py. Numba is not in Wasm; compile / auto is object-mode. Cold load ~–s. |
 | AXIS Worker /api/run | worker/src/runtime.ts | PYODIDEINWORKER=enabled scaffold; else proxy EXTERNALBACKEND/run; else NOBACKEND. Caps: KiB script, k bars, req/min/IP, s upstream. |
-| HOOX pyne-worker | src/workers/catalog.ts | Not a built-in engine. Paste origin as Backend URL. Distinct from the AXIS Worker (pynescript-axis). |
+| HOOX pyne-worker | src/workers/catalog.ts | Not a built-in engine. Paste origin as Backend URL. Distinct from the AXIS Worker (worker-axis). |
 | PyneTS | — | TypeScript library. PYNE docs. Not referenced in AXIS source. |
 Payloads follow the PYNE evaluate contract. Defaults: Flask POST /run uses mode auto. See modes.
 Internals
@@ -320,7 +320,7 @@ Invariants & edge cases
 . AXIS ≠ execution. Strategy events on the Results panel are not HOOX orders. See AXIS and HOOX.
 . No none stream plugin in src/streams/catalog.ts. Pausing live data is stopLive(), not a plugin id.
 . Pyodide wheel version can lag PyPI (.. wheel vs hoox-pyne ..). Check vendor/.
-. CORS: Worker allows localhost, .hoox.sh, .pynescript.online, .pynescript-axis.pages.dev only.
+. CORS: Worker allows localhost, .hoox.sh, .pynescript.online, .axis.pages.dev only.
 Worked examples
 Local desk
 ``bash
@@ -392,8 +392,8 @@ Formal namespaces
 Contract namespace: pynescript.axis.plugins.v
 App state key: pynescript.axis.v
 App state prefix: pynescript.axis.
-CF project id: pynescript-axis (frozen)
-Health service id: pynescript-axis-worker
+CF Pages project id: axis
+Health service id: worker-axis
 `
 Related tracks
 End User — operator workflows
@@ -675,7 +675,7 @@ Deploy sketch
 bun run axis:deploy
 or: cd worker && bun run deploy
 cd frontend && bun run build
-wrangler pages deploy dist --project-name=pynescript-axis
+wrangler pages deploy dist --project-name=axis
 `
 Frozen id: never rename pynescript-axis lightly (ADR-).
 AXIS config:
@@ -795,7 +795,7 @@ Makefile note
 make pages-deploy may historically deploy the wrong tree — prefer:
 `bash
 cd frontend && bun run build
-wrangler pages deploy dist --project-name=pynescript-axis
+wrangler pages deploy dist --project-name=axis
 `
 Worked example — static desk demo
 `bash
@@ -933,7 +933,7 @@ description: "packages/cli — install, doctor, Worker setup (D/OAuth), secrets,
 ---
 AXIS CLI
 Abstract
-The AXIS CLI (@hoox-sh/axis-cli under packages/cli) is the CLI-first operator entry for local install, Worker bootstrap, Cloudflare secrets, deploy, and health checks. It wraps Bun + Wrangler with AXIS-specific paths and defaults (Worker name pynescript-axis, D pynescript, OAuth device flow).
+The AXIS CLI (@hoox-sh/axis-cli under packages/cli) is the CLI-first operator entry for local install, Worker bootstrap, Cloudflare secrets, deploy, and health checks. It wraps Bun + Wrangler with AXIS-specific paths and defaults (Worker name worker-axis, D pynescript, OAuth device flow).
 Requires Bun ≥ .. Product version: AXIS .. (CLI package version is independent).
 Conceptual model
 Install
@@ -969,7 +969,7 @@ Command surface
 | axis setup d --local\|--remote [--create] | Apply worker/schemas/scripts.sql |
 | axis setup oauth --github-client-id … | Set public OAuth App id in [vars] (or --secret) |
 | axis secret put\|list\|delete | Wrangler secrets (ADMINTOKEN, EXTERNALBACKEND, …) |
-| axis deploy / deploy worker | Deploy Worker pynescript-axis |
+| axis deploy / deploy worker | Deploy Worker worker-axis |
 | axis deploy pages | Vite build + Pages project |
 | axis deploy all | Worker then Pages |
 | axis health [--oauth] [--url …] | Probe /health and optional GitHub device start |
@@ -998,7 +998,7 @@ axis health --oauth
 | APIKEYS KV | Bind in prod; D without KV fails closed (APIKEYSREQUIRED) |
 | ALLOWOPENKEYS | "" in production |
 | REQUIRERUNAUTH | "" to force Bearer on /api/run even without KV |
-| Project name | Frozen: pynescript-axis |
+| Pages project | axis |
 Env overrides
 | Variable | Role |
 | --- | --- |
@@ -1057,7 +1057,7 @@ Production checklist:
 | Setting | Production guidance |
 | --- | --- |
 | EXTERNALBACKEND | Public HTTPS URL of Flask/PYNE API (axis secret put) |
-| ALLOWEDORIGIN | Extra exact origins (comma-separated); product hosts + .pynescript-axis.pages.dev are built-in — CORS |
+| ALLOWEDORIGIN | Extra exact origins (comma-separated); product hosts + .axis.pages.dev are built-in — CORS |
 | ADMINTOKEN | Secret, strong |
 | APIKEYS KV | Bind in prod — D without KV fails closed (APIKEYSREQUIRED) |
 | ALLOWOPENKEYS | "" or unset |
@@ -1082,7 +1082,7 @@ bun run deploy
 bun run axis deploy pages
 or
 bun run build
-bunx wrangler pages deploy dist --project-name=pynescript-axis
+bunx wrangler pages deploy dist --project-name=axis
 Make: make pages-deploy
 `
 . Point the PWA
@@ -1102,7 +1102,7 @@ Health check
 bun run axis:health
 or
 curl -sS https:///health
-service: pynescript-axis-worker
+service: worker-axis
 `
 Invariants & edge cases
 . Pages ≠ Worker host — CORS required unless same-origin routing via custom domain routes.
@@ -1157,7 +1157,7 @@ Exact product / HOOX / legacy PYNE hosts under:
 .pynescript.online / pynescript.online
 Examples: https://axis.hoox.sh, https://hoox.sh, https://pynescript.online.
 . Project-scoped Cloudflare Pages (not open .pages.dev)
-Only origins matching .pynescript-axis.pages.dev (and the apex pynescript-axis.pages.dev) are echoed. Arbitrary third-party Pages projects (evil.pages.dev, other apps) fall through to the allowlist fallback — they are not reflected.
+Only origins matching .axis.pages.dev (and the apex axis.pages.dev) are echoed. Arbitrary third-party Pages projects (evil.pages.dev, other apps) fall through to the allowlist fallback — they are not reflected.
 . ALLOWEDORIGIN allowlist
 Comma-separated exact origins in env.ALLOWEDORIGIN (e.g. https://a.example,https://b.example). If the request Origin is listed, echo it; otherwise return the first entry (default https://pynescript.online).
 CORS headers applied:
@@ -1180,7 +1180,7 @@ The server engine posts from the browser to the configured endpoint. Flask Pro A
 . Reflect or allow the PWA origin.
 . Accept Content-Type: application/json.
 Pyne always appends the same product Origin regex as Worker pickOrigin (including
-.pynescript-axis.pages.dev) even when systemd ALLOWEDORIGINS is a short list.
+.axis.pages.dev) even when systemd ALLOWEDORIGINS is a short list.
 GET /health (AXIS Settings probe) and POST /run are free CORS paths — they
 echo any Origin so a Pages preview can reach https://axis.hoox.sh without a
 per-preview allowlist entry.
@@ -1200,7 +1200,7 @@ Invariants & edge cases
 . Multiple prod domains — product regex + comma-separated ALLOWED_ORIGIN cover multi-host; unknown sites never get open reflection.
 . Vite vs — both covered for Worker; Flask config must match whichever you use.
 . Health checks from curl omit Origin — still work; browser calls need correct ACAO.
-. No open .pages.dev — only the frozen project pynescript-axis` previews are product-scoped.
+. No open .pages.dev — only the Pages project axis` previews are product-scoped.
 Failure modes
 | Browser console | Meaning |
 | --- | --- |
@@ -1388,7 +1388,7 @@ Keep open keys only in local/dev overlays, never in the committed prod-facing [v
 When env.DB (or script routes) are active and APIKEYS is unbound, do not accept open or shape-only keys.
 Prefer: require KV for any durable partition; reject with clear APIKEYSREQUIRED.
 . worker/src/index.ts
-Replace open (?:[\w-]+\.)pages\.dev with project-scoped host(s) (e.g. .pynescript-axis.pages.dev) and/or rely on ALLOWEDORIGIN list.
+Replace open (?:[\w-]+\.)pages\.dev with project-scoped host(s) (e.g. .axis.pages.dev) and/or rely on ALLOWEDORIGIN list.
 Update worker/tests/cors-origin.test.ts accordingly.
 . src/data/bars-cache.ts
 getCachedBars: if peekMemoryBars(key) is warm, return a slice immediately; on IDB hit, hydrate memory then return.
@@ -1480,8 +1480,8 @@ Page map
 Frozen names
 | Surface | Value |
 | --- | --- |
-| CF project | pynescript-axis |
-| Health service | pynescript-axis-worker |
+| CF Pages project | axis |
+| Health service | worker-axis |
 See also
 Worker
 Testing reference
@@ -1637,7 +1637,7 @@ Cloudflare → VPS nginx : (TLS)
 nginx proxies SPA to static server and Pro API paths (/run, /ws/, /health,
 /lsp/, …) to gunicorn :
 PWA Backend URL = https://axis.hoox.sh (same origin — no mixed content)
-Cloudflare Pages previews (.pynescript-axis.pages.dev) also use that Backend URL
+Cloudflare Pages previews (.axis.pages.dev) also use that Backend URL
 cross-origin — pyne must allow those Origins on /health and /run (always-on
 product regex; see CORS)
 Update deploy (from a machine that can SSH to the VPS):
@@ -1666,7 +1666,7 @@ Do not open UFW for , , or on a public VPS. Direct probes to http://:/health mus
 Workers Manager browser probes:
 On product hosts (axis.hoox.sh, …), pyne Pro is probed via same-origin /health (nginx), not http://...: (that would hit the client PC and always look “down”).
 Catalog publicEndpoint (https://axis.hoox.sh) is used when the default is loopback and the page is not local dev.
-CF Worker health stays on https://pynescript-axis..workers.dev/health (edge; independent of VPS UFW).
+CF Worker health stays on https://worker.axis.hoox.sh/health (edge; independent of VPS UFW).
 Minimal without TLS
 Static :, Flask :
 Prefer a hostname over raw IP when the page is HTTPS
@@ -1821,11 +1821,11 @@ Intent: browser AXIS + Cloudflare Worker data plane (keys, usage, optional D scr
 | Engine | server endpoint = Worker | Worker proxies /api/run → Flask or future in-worker runtime |
 | Storage | cloud | /api/scripts + Bearer Pro key |
 Setup
-. wrangler dev / deploy Worker project pynescript-axis (frozen name).
+. wrangler dev / deploy Worker script worker-axis (frozen name).
 . Endpoint → Worker origin.
 . Storage cloud → API key from admin /api/keys.
 . Script Library uses cloud list/read/write; If-Match on concurrent writes.
-Invariants: CF project id is infrastructure, not brand; health JSON may say pynescript-axis-worker.
+Invariants: CF project id is infrastructure, not brand; health JSON may say worker-axis.
 Failure modes: missing Bearer key; D unbound → memory store (dev only); DO session query params wrong.
 ---
 Git library
@@ -3309,7 +3309,7 @@ Infrastructure names
 | Term | Definition |
 | --- | --- |
 | pynescript-axis | Frozen CF Wrangler/Pages project id. |
-| pynescript-axis-worker | Health JSON service identity. |
+| worker-axis | Health JSON service identity. |
 | void | Brand pack / dark chrome aesthetic for AXIS docs/UI. |
 See also
 FAQ
@@ -3376,8 +3376,8 @@ Full recipes: Compose recipes.
 Infrastructure names (do not rename lightly)
 | Surface | Value |
 | --- | --- |
-| CF Wrangler / Pages project | pynescript-axis (frozen) |
-| Health JSON service | pynescript-axis-worker |
+| CF Pages project | axis |
+| Health JSON service | worker-axis |
 | Product brand | AXIS |
 Demo topologies
 Dev: Vite : + Flask : (bun run axis:install then bun run dev)
@@ -4636,8 +4636,8 @@ Namespaces & keys
 Infrastructure constants
 | Name | Value |
 | --- | --- |
-| CF project | pynescript-axis |
-| Health service | pynescript-axis-worker |
+| CF Pages project | axis |
+| Health service | worker-axis |
 | Pyodide version | .. (self-hosted path) |
 See also
 Plugins
@@ -6141,7 +6141,7 @@ cd frontend/worker
 wrangler deploy
 Pages (from frontend/)
 bun run build
-wrangler pages deploy dist --project-name=pynescript-axis
+wrangler pages deploy dist --project-name=axis
 or npm run deploy:pages from worker package
 `
 Makefile: make worker-deploy, make pages-deploy (note: some Makefile targets still point at legacy tree — prefer dist/ from Vite build; see build and serve).
@@ -6239,7 +6239,7 @@ Health feature flags
 `json
 {
 "status": "healthy",
-"service": "pynescript-axis-worker",
+"service": "worker-axis",
 "features": { "scripts": true, "d": true/false, "keys": true/false }
 }
 `
@@ -6374,7 +6374,7 @@ Infrastructure names (frozen)
 | --- | --- |
 | Wrangler / Pages project | pynescript-axis — do not rename lightly |
 | npm package | axis-worker |
-| Health JSON service | pynescript-axis-worker |
+| Health JSON service | worker-axis |
 | Product brand | AXIS |
 Custom domains / aliases may say axis.; leave the CF project id stable so KV/D IDs and CI stay valid.
 Interface surface

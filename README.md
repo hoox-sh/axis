@@ -79,14 +79,14 @@ axis doctor                           # toolchain; wrangler.toml warns until `ax
 axis setup --github-client-id Ov23li…
 axis setup d1 --remote                # apply D1 schema on CF
 axis secret put ADMIN_TOKEN
-axis deploy                           # Worker pynescript-axis
+axis deploy                           # Worker worker-axis
 axis health --oauth                   # live /health + device OAuth
 
 # Repo aliases (no global install): bun run axis:install / axis:doctor / axis:deploy / …
 # Make wrappers: make axis-doctor  make axis-deploy  make axis ARGS="…"
 ```
 
-Docs: [AXIS CLI](./docs/devops/cli.mdx) · [packages/cli/README.md](./packages/cli/README.md) · live demo [axis.hoox.sh](https://axis.hoox.sh) · Worker `https://pynescript-axis.cryptolinx.workers.dev`
+Docs: [AXIS CLI](./docs/devops/cli.mdx) · [packages/cli/README.md](./packages/cli/README.md) · live demo [axis.hoox.sh](https://axis.hoox.sh) · Worker `https://worker.axis.hoox.sh`
 
 See [docs/devops/desktop.mdx](./docs/devops/desktop.mdx) for platform prerequisites.
 
@@ -293,14 +293,14 @@ CORS is enforced by the **API you call** (pyne Pro API or the AXIS Worker), not 
 `backend/app.py` uses `flask-cors` with `ALLOWED_ORIGINS` (comma-separated). Defaults include
 `https://pynescript.online`, `https://app.pynescript.online`, and a **localhost/127.0.0.1 any-port** regex.
 Product Origins are **always appended** even when systemd sets a short list:
-`*.hoox.sh`, `*.pynescript.online`, and **`*.pynescript-axis.pages.dev`**
+`*.hoox.sh`, `*.pynescript.online`, and **`*.axis.pages.dev`**
 (not open `*.pages.dev`). `GET /health` and `POST /run` always reflect the request Origin
 so a Cloudflare Pages preview can probe/run against `https://pynescript.online`.
 
 | Origin style | Safe? | Notes |
 |--------------|-------|--------|
 | `localhost` / `127.0.0.1` (+ port) | Yes | Local AXIS / Vite; only your machine presents these Origins |
-| `*.pynescript-axis.pages.dev` | Yes | AXIS Pages project (apex + preview hashes) — always allowlisted |
+| `*.axis.pages.dev` | Yes | AXIS Pages project (apex + preview hashes) — always allowlisted |
 | Public demo host (`http://VPS:8081`) | Yes if listed | Needed when UI is on VPS and API is elsewhere (or same box) |
 | `*` | Demo-only | Reflects any Origin — fine for a public demo, not for production secrets |
 | `0.0.0.0` | **Skip** | Not a normal browser Origin; listening on `0.0.0.0` ≠ CORS |
@@ -319,7 +319,7 @@ Environment=ALLOWED_ORIGINS=https://pynescript.online,https://axis.hoox.sh,https
 
 ### AXIS Worker
 
-`worker/src/index.ts` `pickOrigin` echoes `localhost` / `127.0.0.1`, known product hosts (`*.hoox.sh`, `*.pynescript.online`), and **`*.pynescript-axis.pages.dev`** only (not open `*.pages.dev`); otherwise comma-separated `ALLOWED_ORIGIN` (first entry is fallback). See [CORS docs](https://hoox.sh/axis/docs/devops/cors-and-origins).
+`worker/src/index.ts` `pickOrigin` echoes `localhost` / `127.0.0.1`, known product hosts (`*.hoox.sh`, `*.pynescript.online`), and **`*.axis.pages.dev`** only (not open `*.pages.dev`); otherwise comma-separated `ALLOWED_ORIGIN` (first entry is fallback). See [CORS docs](https://hoox.sh/axis/docs/devops/cors-and-origins).
 Smoke:
 
 ```bash

@@ -183,7 +183,9 @@ function hydrateDatasetPersistence(raw: unknown): 'session' | 'local' | 'git' | 
 }
 
 /**
- * Default docked editor width = 30% of viewport (clamped).
+ * Default docked editor width = 30% of viewport.
+ * Prefers 360–420px when the viewport can host that range; otherwise keeps
+ * the 1…90% safety clamp so small viewports are not forced wide.
  * Used for factory defaults / layout reset — not for overwriting user prefs.
  */
 export function defaultEditorWidthPx(viewportWidth?: number): number {
@@ -197,8 +199,12 @@ export function defaultEditorWidthPx(viewportWidth?: number): number {
         ? window.innerWidth
         : 1280;
   const target = Math.round(vw * 0.3);
-  const max = Math.floor(vw * 0.9);
-  return Math.min(Math.max(target, 1), Math.max(1, max));
+  const max = Math.max(1, Math.floor(vw * 0.9));
+  const raw = Math.min(Math.max(target, 1), max);
+  const prefMin = 360;
+  const prefMax = 420;
+  if (max < prefMin) return raw;
+  return Math.min(Math.max(raw, prefMin), Math.min(prefMax, max));
 }
 
 /** Clamp history bar count into a safe range for REST kline APIs. */
@@ -256,7 +262,7 @@ const DEFAULTS: AppState = {
   // Ephemeral presentation — never hydrate as on
   presentation: { fullscreen: false, chartOnly: false },
   editor: { open: true, width: defaultEditorWidthPx(), mode: 'docked' },
-  watchlist: { open: true, width: 200, symbols: [...DEFAULT_WATCHLIST], refreshSec: 15 },
+  watchlist: { open: true, width: 260, symbols: [...DEFAULT_WATCHLIST], refreshSec: 15 },
   indicatorPanel: { open: false, width: 224 },
   dataViewPanel: { open: false, width: 220 },
   layerPanel: { open: false, width: 220 },
@@ -274,7 +280,7 @@ const DEFAULTS: AppState = {
   debugPinsEnabled: false,
   editorRulerEnabled: true,
   editorWrapEnabled: true,
-  editorMinimapEnabled: true,
+  editorMinimapEnabled: false,
   editorFeatureBarEnabled: true,
   shortcuts: { overrides: {} },
   editorIntel: { ...DEFAULT_EDITOR_INTEL },
@@ -1368,7 +1374,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     logsPanel: unwrap(s.logsPanel),
     live: {
       streamId: s.live?.streamId,
-      preferAfterLoad: !!s.live?.preferAfterLoad,
+      preferAfterLoad: s.live?.preferAfterLoad !== false,
       rerunOn: s.live?.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick',
     },
     drawingTool: s.drawingTool,

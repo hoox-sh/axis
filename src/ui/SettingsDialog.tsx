@@ -94,6 +94,7 @@ import {
   WATCHLIST_REFRESH_OPTIONS,
 } from '../data/watchlist-tickers';
 import { loadSymbolData, reloadChart } from '../data/load-symbol';
+import { syncLiveToPreference } from '../streams/multiplex';
 import { getManager } from '../chart/manager-access';
 import { UI_SCALE_PRESETS, formatUiScalePct } from './ui-scale';
 import { WorkspaceSnapshotMenu } from './WorkspaceSnapshotMenu';
@@ -150,12 +151,12 @@ const EXEC_MODE_OPTIONS: { value: EngineExecMode; label: string; hint: string }[
   {
     value: 'compile',
     label: 'Compiler',
-    hint: 'Numba/numpy path — faster; some constructs stay object-mode',
+    hint: 'Numba/numpy path — faster after first JIT; Flask is not prewarmed. Some Pine stays object-mode',
   },
   {
     value: 'auto',
     label: 'Auto',
-    hint: 'Try compile first; fall back to interpret on failure',
+    hint: 'Try compile first (best default on Server); fall back to interpret on failure',
   },
 ];
 
@@ -390,6 +391,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     setStore('watchlist', 'refreshSec', nextRefresh);
     setStore('live', 'preferAfterLoad', nextPreferAfterLoad);
     setStore('live', 'rerunOn', nextRerunOn);
+    syncLiveToPreference();
     setStore('telemetry', 'hud', 'compact', nextHudCompact);
     setStore('telemetry', 'shareOnError', nextShareOnError);
     setStore('uiScale', nextUiScale);
@@ -1213,7 +1215,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                   id="axis-cloud-endpoint"
                   class="sc-input w-full font-mono"
                   value={cloudEndpoint()}
-                  placeholder="https://pynescript-axis.cryptolinx.workers.dev"
+                  placeholder="https://worker.axis.hoox.sh"
                   spellcheck={false}
                   onInput={(e) => setCloudEndpoint(e.currentTarget.value)}
                 />
@@ -1506,14 +1508,15 @@ export const SettingsDialog: Component<Props> = (props) => {
                   <input
                     id="axis-prefer-live"
                     type="checkbox"
+                    data-testid="axis-settings-live-enabled"
                     checked={preferAfterLoad()}
                     onChange={(e) => setPreferAfterLoad(e.currentTarget.checked)}
                   />
                   <span class="sc-settings-check-text">
-                    <span class="sc-settings-check-title">Auto-start live after Load</span>
+                    <span class="sc-settings-check-title">Enable live stream</span>
                     <span class="sc-settings-check-hint">
-                      Prefer WebSocket feed immediately after historical REST load. On by default
-                      (live mode preferred).
+                      On by default. Connects the venue WebSocket after bars load (and on boot
+                      when history is already there). Turn off for replay-only or offline work.
                     </span>
                   </span>
                 </label>

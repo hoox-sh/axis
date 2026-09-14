@@ -26,9 +26,9 @@ description: "AXIS local alerts: price crosses, drawings, Pine conditions, on-ch
 
 ## Abstract
 
-AXIS ships a **client-side alert book** (`src/alerts/`) with an Alerts panel. Kinds cover price, percent change, drawing touch, Pine conditions, and on-chain TVL spikes. State persists in `axis.alerts.v1`. Optional browser notifications and a webhook URL are local to the PWA.
+AXIS ships a **client-side alert book** (`src/alerts/`) with an Alerts panel. Kinds cover price, percent change, drawing touch, indicator plot conditions, and on-chain TVL spikes. State persists in `axis.alerts.v1`. Delivery is local to the PWA: browser notifications, an optional HTTPS webhook, and an optional **L2 webhook** (richer JSON: `channel: "l2"`, message, params snapshot).
 
-These alerts are **not** HOOX `trade-worker` orders and are **not** the PYNE Pro API `alert()` L2 webhook export — though a Pine `alert()` / `alertcondition()` can surface as `pine_condition` if the engine returns it.
+These alerts are **not** HOOX `trade-worker` orders. Pointing the L2 field at a PYNE/HOOX gateway is possible and **dangerous** — you are then inventing an execution path the PWA does not certify. Pine **`alert()`** and **`alertcondition()`** (and strategy `alert_message` on fills) fire as `pine_alert` rows when you arm them in the panel. Interpret runs export `alerts` / `alert_conditions`; AXIS delivers only the **last bar** so a full backtest does not dump history. Plot-vs-threshold remains `pine_condition`.
 
 <img src="/images/app/alerts.png" alt="Alerts panel: price-cross form and empty book" />
 
@@ -52,14 +52,17 @@ Kinds implemented in `src/alerts/`:
 | `price_cross` | Price crosses a level |
 | `price_above` / `price_below` | Price vs level |
 | `pct_change` | Bar-to-bar (or window) percent move |
-| `drawing_touch` | User drawing intersects price |
-| `pine_condition` | Engine-exported Pine condition / `alert()` |
+| `drawing_touch` | Price touches a user drawing’s levels (hline, fib, trend anchors) |
+| `pine_condition` | Applied indicator plot vs threshold (`>`, `<`, `cross`, …) |
+| `pine_alert` | Pine `alert()` / `alertcondition()` (and strategy `alert_message`) on the last bar |
 | `onchain_tvl_spike` | DefiLlama TVL jump (see On-Chain) |
 | `onchain_event` | Catalogued on-chain event |
 
 UI: `src/ui/AlertsPanel.tsx`. Persistence key: **`axis.alerts.v1`**.
 
-PYNE language `alert()` / `alertcondition()` on Flask / pyne-worker is documented at [PYNE alerts](/pyne/docs/runtime/alerts). Pointing AXIS's local webhook at the HOOX gateway is possible and **dangerous** — you are then inventing an execution path the PWA does not certify.
+Delivery: enable **Notifications** in the panel (browser permission), optionally set a compact webhook URL, and/or an L2 webhook. Both URLs must be `https` (no loopback / private IPs). Live ticks from the chart stream evaluate price, drawing, and indicator kinds; on-chain kinds still fire from the on-chain events plane.
+
+PYNE language `alert()` / `alertcondition()` on Flask / pyne-worker is documented at [PYNE alerts](/pyne/docs/runtime/alerts).
 
 ## Internals
 
@@ -80,8 +83,10 @@ PYNE language `alert()` / `alertcondition()` on Flask / pyne-worker is documente
 
 1. Open Alerts panel.
 2. Add `price_cross` on the active symbol / TF.
-3. Enable browser notifications in the browser, then in the panel.
-4. For Pine: run a script that calls `alertcondition`; confirm `pine_condition` rows after a successful engine run.
+3. Enable browser notifications in the browser, then tick **Browser notification** on the form.
+4. For an indicator: apply a script, pick its plot, set `>` / `<` / `cross` vs a threshold.
+5. For a drawing: place a horizontal line (or fib), pick it in the form, optionally set a tolerance.
+6. For Pine `alert()` / `alertcondition()`: run a strategy, open Alerts, kind **pine alert**, pick the script and `alert()` / `alertcondition()` / both. Optional title filter from the last run. In-browser compile records these in the compiled loop; the Flask/pyne-worker engine uses interpret for scripts that call them.
 
 On-chain: attach a TVL series, then add `onchain_tvl_spike` (default ~10% day-over-day in `buildTvlSpikeEvents`).
 
@@ -90,6 +95,7 @@ On-chain: attach a TVL series, then add `onchain_tvl_spike` (default ~10% day-ov
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | No rows | Engine not running / no stream | Start live or replay bars |
+| Pine `alert()` never fires | No `pine_alert` row armed; or remote compile without AXIS fallback | Arm **pine alert**; AXIS uses interpret on Flask/pyne-worker when the script calls `alert()` / `alertcondition()`. In-browser compile records them in the compiled loop. |
 | Pine kind never fires | Engine dropped alerts | Use Flask interpret; see [PYNE alerts](/pyne/docs/runtime/alerts) |
 | On-chain silent | Proxy HTML / CORS | Use Worker `/api/onchain`, not the SPA origin |
 | Webhook posted a trade | You pointed it at HOOX | Use [pyne-worker](/docs/enduser/guides/pyne-live-trading) instead |

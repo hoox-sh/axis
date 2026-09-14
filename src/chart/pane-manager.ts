@@ -2132,6 +2132,8 @@ export class PaneManager {
             const voidLike = getThemeManager().getVoidLike();
             pricePane.series['candle'].applyOptions({
               priceLineColor: dir === 'up' ? voidLike.up : voidLike.down,
+              priceLineWidth: 1,
+              priceLineStyle: 2,
             });
           }
         } catch {

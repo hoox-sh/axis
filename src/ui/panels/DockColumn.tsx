@@ -33,7 +33,7 @@ import {
   panelsOnDock,
 } from './dock-layout';
 import { getHoverSlideExpandedMap } from './hover-slide';
-import { isPhoneViewport } from '../responsive';
+import { isPhoneViewport, isTabletSideDockOverlay } from '../responsive';
 import type { PanelDock } from './types';
 
 type Side = Extract<PanelDock, 'left' | 'right' | 'bottom'>;
@@ -47,8 +47,9 @@ const HOST: Record<Side, string> = {
 /**
  * Dock column host — children are portaled in by {@link FloatableShell}.
  * Always in the DOM (so portals can attach); collapses when empty.
- * Width/height participate in the app flex layout so the chart area
- * shrinks between columns instead of panels overlaying the plot.
+ * Desktop: width/height participate in the app flex layout so the chart
+ * shrinks between columns. Tablet left/right: overlay the chart (negative
+ * margin, in-flow width cancelled) so the plot stays full-width.
  */
 export const DockColumn: Component<{ side: Side }> = (props) => {
   const ids = createMemo(() => {
@@ -62,6 +63,12 @@ export const DockColumn: Component<{ side: Side }> = (props) => {
   // Mobile: panels portal into the sheet host — columns collapse to zero
   // (open panels still count here, but their sheets are fixed overlays)
   const collapsed = () => isPhoneViewport();
+  // Tablet: left/right overlay the chart. Phone collapse still wins.
+  // Never overwrite persisted desktop geometry — overlay is layout-only.
+  const overlay = () =>
+    isTabletSideDockOverlay() &&
+    (props.side === 'left' || props.side === 'right') &&
+    !collapsed();
   const width = createMemo(() => {
     if (props.side === 'bottom') return undefined;
     if (collapsed()) return 0;
@@ -89,9 +96,11 @@ export const DockColumn: Component<{ side: Side }> = (props) => {
       classList={{
         'is-empty': empty(),
         'is-mobile-collapsed': collapsed() && !empty(),
+        'is-tablet-overlay': overlay() && !empty(),
       }}
       data-dock={props.side}
       data-dock-count={ids().length}
+      data-dock-overlay={overlay() && !empty() ? 'tablet' : undefined}
       style={
         empty()
           ? undefined
@@ -100,13 +109,25 @@ export const DockColumn: Component<{ side: Side }> = (props) => {
                 height: `${bottomHeight()}px`,
                 flex: '0 0 auto',
                 // Smooth column size when a hover-slide panel opens/closes
-                transition: 'height 0.22s cubic-bezier(0.22, 1, 0.36, 1)',
+                transition: 'height 0.16s ease-out',
               }
-            : {
-                width: `${width()}px`,
-                flex: '0 0 auto',
-                transition: 'width 0.22s cubic-bezier(0.22, 1, 0.36, 1)',
-              }
+            : overlay()
+              ? {
+                  // Visual width from chrome; negative margin so the chart
+                  // does not shrink. Overlay sits above the plot, below topbar.
+                  width: `${width()}px`,
+                  flex: '0 0 auto',
+                  ...(props.side === 'left'
+                    ? { 'margin-right': `-${width()}px` }
+                    : { 'margin-left': `-${width()}px` }),
+                  'z-index': '20',
+                  transition: 'width 0.16s ease-out, margin 0.16s ease-out',
+                }
+              : {
+                  width: `${width()}px`,
+                  flex: '0 0 auto',
+                  transition: 'width 0.16s ease-out',
+                }
       }
     />
   );

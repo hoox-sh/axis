@@ -7,10 +7,15 @@ import { describe, expect, it } from 'bun:test';
 import { defaultEditorWidthPx } from '../src/store';
 
 describe('defaultEditorWidthPx', () => {
-  it('is 30% of the viewport, clamped to 1…90%', () => {
-    expect(defaultEditorWidthPx(1000)).toBe(300);
-    expect(defaultEditorWidthPx(800)).toBe(240);
+  it('prefers 360–420 when the viewport can host it', () => {
+    expect(defaultEditorWidthPx(1000)).toBe(360);
+    expect(defaultEditorWidthPx(1280)).toBe(384);
+    expect(defaultEditorWidthPx(1920)).toBe(420);
+  });
+
+  it('keeps 1…90% safety on viewports too narrow for 360px', () => {
     expect(defaultEditorWidthPx(2)).toBe(1); // 30% rounds to 1, max=1
+    expect(defaultEditorWidthPx(300)).toBe(90);
   });
 
   it('falls back when viewport is invalid', () => {

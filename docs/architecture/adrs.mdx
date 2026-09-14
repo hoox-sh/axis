@@ -37,7 +37,7 @@ Formal ADRs for AXIS (product + `frontend/`). Status values: **Accepted** unless
 | [ADR-005](#adr-005-declarative-configschema) | Declarative configSchema |
 | [ADR-006](#adr-006-url-loadable-plugins) | URL-loadable plugins |
 | [ADR-007](#adr-007-storage-as-a-plugin) | Storage as a plugin |
-| [ADR-008](#adr-008-frozen-cf-project-id) | Frozen CF project id `pynescript-axis` |
+| [ADR-008](#adr-008-frozen-cf-project-id) | CF ids: Pages `axis`, Worker `worker-axis` |
 | [ADR-009](#adr-009-worker-proxies-first) | Worker proxies first |
 | [ADR-010](#adr-010-durable-object-stream-fan-out) | Durable Object stream fan-out |
 | [ADR-011](#adr-011-state-namespace-migration) | State namespace migration |
@@ -187,21 +187,26 @@ Script library began as localStorage-only; cloud and git were bolted differently
 
 ---
 
-## ADR-008: Frozen CF project id `pynescript-axis`
+## ADR-008: Frozen CF project id
 
 ### Context
 
-Renaming Cloudflare Pages/Worker projects severs KV/D1/R2 bindings, custom domains, and CI secrets. Product brand evolved to AXIS.
+Renaming Cloudflare Pages/Worker projects severs KV/D1/R2 bindings, custom domains, and CI secrets. Product brand evolved to AXIS. The original freeze used a single id `pynescript-axis` for both Pages and the Worker.
 
 ### Decision
 
-**Keep infrastructure name `pynescript-axis`.** Brand in UI/manifest/docs is AXIS. Health JSON may identify `pynescript-axis-worker`. Optional DNS aliases (`axis.*`) point at the same project without rename.
+**Pages project is `axis`.** Canonical URL `https://axis.hoox.sh` (custom domain). Preview hashes live on `*.axis.pages.dev`. The previous Pages id `pynescript-axis` remains a CORS legacy alias for old preview hosts.
+
+**Worker script is `worker-axis`.** Canonical URL `https://worker.axis.hoox.sh` (custom domain). Health JSON `service` is `worker-axis`. The pre-rename workers.dev host (`pynescript-axis.<account>.workers.dev`) is treated as a legacy alias in client host matching.
+
+Brand in UI/manifest/docs is AXIS.
 
 ### Consequences
 
-- `wrangler.toml` `name` and Pages `--project-name` stay frozen.
-- Docs call out the freeze explicitly (this ADR).
-- npm package name may lag brand.
+- `wrangler.toml` `name` is `worker-axis`; Pages `--project-name` is `axis`.
+- Canonical hosts: Pages `https://axis.hoox.sh`, Worker `https://worker.axis.hoox.sh`.
+- Docs call out the split explicitly (this ADR).
+- npm package name (`axis-worker`) may lag brand.
 
 ---
 
@@ -317,7 +322,7 @@ Operators need to see **how** data and calculation move (WS vs REST vs local vs 
 ### Consequences
 
 - UI never claims WS for historical load.
-- Auto-live after Load is **opt-in** (`preferAfterLoad`, default off).
+- Auto-live after Load is **on by default** (`preferAfterLoad`). Turn off in Settings → Live stream.
 - Plugin capabilities may declare `transport`; otherwise HUD classifies from id/capabilities.
 - See [Streams](/axis/docs/plugins/streams), [UI shell](/axis/docs/ui/ui-shell), [Overview](/axis/docs/architecture/overview).
 

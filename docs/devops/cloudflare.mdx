@@ -19,7 +19,7 @@
 
 ---
 title: "Cloudflare deployment"
-description: "Pages + Worker for AXIS: frozen project pynescript-axis, CLI deploy, bindings, security checklist."
+description: "Pages + Worker for AXIS: Pages axis.hoox.sh (project axis), Worker worker.axis.hoox.sh, CLI deploy, bindings, security checklist."
 ---
 
 # Cloudflare® deployment
@@ -33,7 +33,7 @@ Production AXIS on Cloudflare® is a **split deploy**:
 | **Pages** | Static PWA (`dist/`) |
 | **Worker** | JSON API + WebSocket (`worker/`) |
 
-**Project id:** `pynescript-axis` — frozen infrastructure name (dashboard, wrangler, CI). Do not rename without a full binding/domain migration.
+**Pages:** project `axis`, canonical `https://axis.hoox.sh`. **Worker:** script `worker-axis` at `https://worker.axis.hoox.sh`.
 
 **Evaluation truth:** Worker `/api/run` **proxies to `EXTERNAL_BACKEND`** unless the gated Pyodide path is fully implemented and enabled. You still need a Python host (VPS Flask, container, etc.) for real Pine Script™ fidelity today.
 
@@ -69,7 +69,7 @@ Production checklist:
 | Setting | Production guidance |
 | --- | --- |
 | `EXTERNAL_BACKEND` | Public HTTPS URL of Flask/PYNE API (`axis secret put`) |
-| `ALLOWED_ORIGIN` | Extra exact origins (comma-separated); product hosts + `*.pynescript-axis.pages.dev` are built-in — [CORS](/axis/docs/devops/cors-and-origins) |
+| `ALLOWED_ORIGIN` | Extra exact origins (comma-separated); product hosts + `*.axis.pages.dev` are built-in — [CORS](/axis/docs/devops/cors-and-origins) |
 | `ADMIN_TOKEN` | Secret, strong |
 | `API_KEYS` KV | **Bind in prod** — D1 without KV fails closed (`API_KEYS_REQUIRED`) |
 | `ALLOW_OPEN_KEYS` | `"0"` or unset |
@@ -99,7 +99,7 @@ bun run deploy
 bun run axis deploy pages
 # or
 bun run build
-bunx wrangler pages deploy dist --project-name=pynescript-axis
+bunx wrangler pages deploy dist --project-name=axis
 # Make: make pages-deploy
 ```
 
@@ -125,7 +125,7 @@ bunx wrangler pages deploy dist --project-name=pynescript-axis
 axis health
 # or
 curl -sS https://<worker>/health
-# service: pynescript-axis-worker
+# service: worker-axis
 ```
 
 ## Invariants & edge cases

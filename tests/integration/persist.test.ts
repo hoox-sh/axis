@@ -92,6 +92,7 @@ describe('persist hydrate', () => {
     expect(overlay!.logs).toEqual([]);
     expect(overlay!.lastRun).toBeNull();
     expect(overlay!.live?.active).toBe(false);
+    expect(overlay!.live?.preferAfterLoad).toBe(true);
   });
 
   it('v2 → v1 write-forward then parse works end-to-end', () => {

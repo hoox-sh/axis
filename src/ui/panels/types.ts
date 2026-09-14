@@ -102,7 +102,7 @@ export const PANEL_META: Record<
     defaultDock: 'left',
     minW: 1,
     minH: 1,
-    defaultW: 200,
+    defaultW: 260,
     defaultH: 420,
     defaultX: 16,
     defaultY: 56,
@@ -256,7 +256,7 @@ export function defaultPanelChromeMap(): PanelChromeMap {
     watchlist: defaultPanelChrome('watchlist', {
       open: true,
       dock: 'left',
-      w: 200,
+      w: 260,
       x: PANEL_META.watchlist.defaultX,
       y: PANEL_META.watchlist.defaultY,
     }),
@@ -270,10 +270,17 @@ export function defaultPanelChromeMap(): PanelChromeMap {
     editor: defaultPanelChrome('editor', {
       open: true,
       dock: 'right',
-      // 30vw at map-build time (layout reset / factory chrome)
+      // Prefer 360–420 when the viewport can host it (layout reset / factory chrome)
       w:
         typeof window !== 'undefined' && Number.isFinite(window.innerWidth)
-          ? Math.min(Math.max(Math.round(window.innerWidth * 0.3), 1), Math.floor(window.innerWidth * 0.9))
+          ? (() => {
+              const vw = window.innerWidth;
+              const target = Math.round(vw * 0.3);
+              const max = Math.max(1, Math.floor(vw * 0.9));
+              const raw = Math.min(Math.max(target, 1), max);
+              if (max < 360) return raw;
+              return Math.min(Math.max(raw, 360), Math.min(420, max));
+            })()
           : PANEL_META.editor.defaultW,
       x: PANEL_META.editor.defaultX,
       y: PANEL_META.editor.defaultY,
@@ -296,7 +303,7 @@ export function defaultPanelChromeMap(): PanelChromeMap {
     statusbar: defaultPanelChrome('statusbar', {
       open: true,
       dock: 'float',
-      h: 36,
+      h: 26,
       x: PANEL_META.statusbar.defaultX,
       y: PANEL_META.statusbar.defaultY,
     }),

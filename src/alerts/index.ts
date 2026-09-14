@@ -39,7 +39,7 @@ import {
   saveAlerts,
   upsertAlert,
 } from './storage';
-import { deliverAlert } from './webhook';
+import { deliverAlert, isAllowedWebhookUrl } from './webhook';
 import type {
   Alert,
   AlertCreateInput,
@@ -56,6 +56,8 @@ export type {
   AlertsStoreV1,
   EvaluateBar,
   EvaluateContext,
+  L2WebhookPayload,
+  PlotSampleRef,
   WebhookPayload,
 } from './types';
 
@@ -66,6 +68,7 @@ export {
   parseAlert,
   parseAlertsBlob,
   saveAlerts,
+  subscribeAlerts,
 } from './storage';
 
 export {
@@ -96,18 +99,80 @@ export type {
 } from './engine';
 
 export {
+  buildL2WebhookPayload,
   buildWebhookPayload,
   deliverAlert,
   fireWebhook,
+  formatAlertFireMessage,
+  isAllowedWebhookUrl,
   notifyBrowserAlert,
+  WEBHOOK_TIMEOUT_MS,
 } from './webhook';
 
 export {
+  ALERT_KIND_GROUPS,
   ALERT_KINDS,
+  alertKindGroup,
   formatAlertCondition,
   formatAlertKind,
   formatLastFired,
 } from './format';
+
+export {
+  buildAlertFromDraft,
+  isDrawingKind,
+  isIndicatorKind,
+  isOnchainKind,
+  isPctKind,
+  isPineAlertKind,
+  isPlotConditionKind,
+  isPriceKind,
+  type AlertFormDraft,
+  type AlertFormResult,
+} from './form';
+
+export {
+  DRAWING_FIB_RATIOS,
+  drawingAlertLabel,
+  drawingPricesById,
+  pricesFromDrawing,
+} from './drawing-levels';
+export type { DrawingLike } from './drawing-levels';
+
+export {
+  lastNumericSample,
+  listPlotKeys,
+  PINE_COMPARE_OPS,
+  plotSampleKey,
+  plotSamplesFromCache,
+  prevNumericSample,
+} from './indicator';
+export type { PineCompareOp } from './indicator';
+
+export {
+  collectPineAlertEvents,
+  evaluatePineAlertEventsPure,
+  scriptHasPineAlertCalls,
+  PINE_ALERT_CALL_RE,
+  eventMatchesPineAlert,
+  isPineScriptAlert,
+  listPineAlertTitles,
+  parsePineAlertConditions,
+  parsePineAlertEvents,
+  pineAlertsFromStrategyEvents,
+} from './pine';
+export type {
+  PineAlertEvent,
+  PineAlertEvalContext,
+  PineAlertFired,
+  PineAlertSource,
+} from './pine';
+
+export {
+  evaluatePineAlertsFromRun,
+  notifyPineAlertsFromRun,
+} from './pine-bridge';
+export type { EvaluatePineAlertsOpts } from './pine-bridge';
 
 /** Request browser Notification permission (UI gesture). */
 export async function requestNotificationPermission(): Promise<
@@ -143,10 +208,11 @@ export async function testWebhook(
 ): Promise<{ ok: boolean; status?: number; error?: string }> {
   const target = (url || '').trim();
   if (!target) return { ok: false, error: 'No webhook URL' };
-  try {
-    void new URL(target);
-  } catch {
-    return { ok: false, error: 'Invalid URL' };
+  if (!isAllowedWebhookUrl(target)) {
+    return {
+      ok: false,
+      error: 'URL not allowed (https only, no credentials or private/loopback host)',
+    };
   }
   const payload =
     opts?.payload ??
@@ -202,6 +268,7 @@ export function createAlert(input: AlertCreateInput): Alert {
   };
   if (input.interval != null) alert.interval = input.interval;
   if (input.webhookUrl != null) alert.webhookUrl = input.webhookUrl;
+  if (input.l2WebhookUrl != null) alert.l2WebhookUrl = input.l2WebhookUrl;
   if (input.notifyBrowser != null) alert.notifyBrowser = input.notifyBrowser;
   else alert.notifyBrowser = true;
   if (input.cooldownMs != null) alert.cooldownMs = input.cooldownMs;
@@ -228,6 +295,7 @@ export type CreateOnchainTvlSpikeAlertInput = {
    */
   symbol?: string;
   webhookUrl?: string;
+  l2WebhookUrl?: string;
   cooldownMs?: number;
   enabled?: boolean;
   notifyBrowser?: boolean;
@@ -267,6 +335,7 @@ export function createOnchainTvlSpikeAlert(
       direction,
     },
     webhookUrl: input.webhookUrl,
+    l2WebhookUrl: input.l2WebhookUrl,
     cooldownMs: input.cooldownMs,
     enabled: input.enabled,
     notifyBrowser: input.notifyBrowser,

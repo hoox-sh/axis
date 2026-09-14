@@ -55,17 +55,12 @@ import {
   type HudSnapshot,
 } from './hud-model';
 import { defaultStreamForSource } from '../streams/catalog';
-import { pluginKey } from '../plugins/types';
-
-function readEngineCfg(engineId: string): Record<string, unknown> {
-  const pc = store.pluginsConfig || {};
-  return (pc[pluginKey('engine', engineId)] || pc[engineId] || {}) as Record<string, unknown>;
-}
+import { getActiveEngineConfig } from '../plugins/active';
 
 function useHudSnapshot(): () => HudSnapshot {
   return createMemo(() => {
     const engineId = store.engine || store.activePlugins?.engine || 'server';
-    const cfg = readEngineCfg(engineId);
+    const cfg = getActiveEngineConfig();
     const tel = store.telemetry?.engine;
     return deriveHud({
       engineId,
@@ -105,18 +100,18 @@ function HudInfoPanel(props: {
   });
   return (
     <div
-      class="fixed z-[300] w-[min(320px,calc(100vw-24px))] border-2 border-border bg-bg-panel shadow-[0_8px_24px_rgba(0,0,0,0.55)] p-2.5 text-left"
+      class="axis-hud-info fixed z-[300] w-[min(320px,calc(100vw-24px))] text-left"
       style={{ left: `${pos().left}px`, bottom: `${pos().bottom}px` }}
       data-testid="axis-hud-info"
       role="dialog"
       aria-label={help().title}
     >
       <div class="flex items-start justify-between gap-2 mb-1.5">
-        <div class="text-[11px] font-semibold text-text tracking-tight">{help().title}</div>
+        <div class="text-[11px] font-medium text-text tracking-tight">{help().title}</div>
         <div class="flex items-center gap-1 flex-shrink-0">
           <button
             type="button"
-            class={`sc-btn sc-btn-ghost px-1.5 py-0 text-[9px] font-mono ${
+            class={`sc-btn sc-btn-ghost px-1.5 py-0 text-[10px] font-mono ${
               props.pinned ? 'text-accent' : 'text-text-faint'
             }`}
             title={props.pinned ? 'Unpin (auto-hide on leave)' : 'Pin open'}
@@ -141,10 +136,10 @@ function HudInfoPanel(props: {
           </button>
         </div>
       </div>
-      <p class="text-[10px] text-text-dim font-mono whitespace-pre-wrap leading-relaxed">
+      <p class="text-[11px] text-text-dim font-mono whitespace-pre-wrap leading-relaxed">
         {help().body}
       </p>
-      <div class="mt-2 pt-1.5 border-t border-border-soft grid grid-cols-2 gap-x-2 gap-y-0.5 text-[9px] font-mono text-text-faint">
+      <div class="mt-2 pt-1.5 border-t border-border-soft grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] font-mono text-text-faint">
         <span>ENG {props.snap.eng}</span>
         <span>RUN {props.snap.run}</span>
         <span>MODE {props.snap.mode}</span>
@@ -159,7 +154,7 @@ function HudInfoPanel(props: {
           <span class="col-span-2 text-red truncate">{props.snap.error}</span>
         </Show>
       </div>
-      <p class="mt-1.5 text-[9px] text-text-faint">
+      <p class="mt-1.5 text-[10px] text-text-faint">
         Hover for info · pin to keep · Esc closes
       </p>
     </div>
@@ -230,14 +225,15 @@ function ChipShell(props: {
   const dot = () => {
     switch (props.state) {
       case 'ok':
-        return 'bg-accent-2';
+        return 'is-ok';
       case 'warn':
+        return 'is-warn';
       case 'load':
-        return 'bg-orange animate-pulse';
+        return 'is-warn axis-live-dot--reconnect';
       case 'err':
-        return 'bg-red';
+        return 'is-err';
       default:
-        return 'bg-border';
+        return '';
     }
   };
   const active = () => props.sticky.openChip() === props.id;
@@ -259,10 +255,8 @@ function ChipShell(props: {
       ref={(el) => {
         anchor = el;
       }}
-      class={`relative inline-flex items-center gap-1 px-1.5 py-0.5 border-[1px] h-[22px] box-border flex-shrink-0 overflow-hidden cursor-default select-none transition-none ${
-        active()
-          ? 'border-accent bg-accent/10'
-          : 'border-border-soft bg-bg-elev/60'
+      class={`axis-status-capsule relative ${
+        active() ? 'is-active' : ''
       }`}
       data-testid={props.testId || `axis-hud-${props.id}`}
       data-hud-chip={props.id}
@@ -275,19 +269,17 @@ function ChipShell(props: {
         if (e.key === 'Enter' || e.key === ' ') activate(e);
       }}
     >
-      <span class={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dot()}`} aria-hidden="true" />
-      <span class="text-[9px] font-mono uppercase text-text-faint tracking-wide flex-shrink-0">
-        {props.label}
-      </span>
+      <span class={`axis-live-dot ${dot()}`} aria-hidden="true" />
+      <span class="axis-status-capsule-code">{props.label}</span>
       <span
-        class={`text-[10px] font-mono truncate max-w-[72px] ${
-          props.state === 'load' ? 'text-orange' : 'text-text'
+        class={`axis-status-capsule-val ${
+          props.state === 'load' ? 'text-orange' : ''
         }`}
       >
         {props.value}
       </span>
       <Show when={props.extra}>
-        <span class="text-[9px] font-mono text-text-faint tabular-nums flex-shrink-0">
+        <span class="text-[10px] font-mono text-text-faint tabular-nums flex-shrink-0">
           {props.extra}
         </span>
       </Show>
@@ -400,8 +392,8 @@ function TickPulse(props: {
       ref={(el) => {
         anchor = el;
       }}
-      class={`relative inline-flex items-center gap-1 px-1.5 py-0.5 border-[1px] font-mono text-[10px] h-[22px] box-border flex-shrink-0 overflow-hidden cursor-default transition-none ${
-        active() ? 'border-accent bg-accent/10' : 'border-border-soft'
+      class={`axis-status-capsule relative font-mono ${
+        active() ? 'is-active' : ''
       }`}
       data-testid="axis-tick-indicator"
       data-hud-chip="tick"
@@ -415,25 +407,12 @@ function TickPulse(props: {
       }}
     >
       <span
-        class="relative flex-shrink-0 overflow-hidden"
-        style={{ width: '8px', height: '8px' }}
+        class={`axis-live-dot ${
+          store.live.active && store.stream.status === 'connected' ? 'is-ok' : ''
+        } ${fresh() ? 'axis-live-dot--pulse' : ''}`}
         aria-hidden="true"
-      >
-        <span
-          class={`absolute inset-0 rounded-full ${
-            store.live.active && store.stream.status === 'connected'
-              ? 'bg-accent-2'
-              : 'bg-border'
-          }`}
-        />
-        <Show when={fresh()}>
-          <span
-            class="absolute left-0 top-0 rounded-full bg-accent-2 animate-ping opacity-40 pointer-events-none"
-            style={{ width: '8px', height: '8px' }}
-          />
-        </Show>
-      </span>
-      <span class="text-[9px] uppercase text-text-faint w-[2.5ch] flex-shrink-0">tick</span>
+      />
+      <span class="axis-status-capsule-code">tick</span>
       <span
         class={`tabular-nums text-right w-[7.5ch] flex-shrink-0 overflow-hidden text-ellipsis ${dirColor()}`}
       >
@@ -468,13 +447,20 @@ function LiveBadge(props: {
 }) {
   let anchor: HTMLSpanElement | undefined;
   const st = () => store.stream.status;
-  const label = () => liveBadgeLabel({ liveActive: store.live.active, streamStatus: st() });
+  const label = () => {
+    const raw = liveBadgeLabel({ liveActive: store.live.active, streamStatus: st() });
+    if (raw === 'OFF') return 'Live';
+    if (raw === 'LIVE') return 'Live';
+    if (raw === 'Reconnecting…') return 'Reconnecting';
+    return 'Offline';
+  };
+  const tone = () => liveBadgeTone({ liveActive: store.live.active, streamStatus: st() });
   const cls = () => {
-    const tone = liveBadgeTone({ liveActive: store.live.active, streamStatus: st() });
-    if (tone === 'live') return 'text-accent-2 border-accent-2/50';
-    if (tone === 'reconnect') return 'text-orange border-orange/40';
-    if (tone === 'offline') return 'text-red border-red/40';
-    return 'text-text-faint border-border';
+    const t = tone();
+    if (t === 'live') return 'is-live';
+    if (t === 'reconnect') return 'is-reconnect';
+    if (t === 'offline') return 'is-offline';
+    return 'is-idle';
   };
   const active = () => props.sticky.openChip() === 'live';
 
@@ -491,8 +477,8 @@ function LiveBadge(props: {
       ref={(el) => {
         anchor = el;
       }}
-      class={`relative px-1.5 py-0.5 border-[1px] text-[9px] font-mono tracking-wider flex-shrink-0 h-[22px] box-border inline-flex items-center cursor-default ring-1 transition-none ${cls()} ${
-        active() ? 'ring-accent' : 'ring-transparent'
+      class={`axis-live-btn axis-status-capsule relative ${cls()} ${
+        active() ? 'is-active' : ''
       }`}
       data-hud-chip="live"
       data-testid="axis-hud-live"
@@ -505,6 +491,7 @@ function LiveBadge(props: {
         if (e.key === 'Enter' || e.key === ' ') activate(e);
       }}
     >
+      <span class="axis-live-dot" aria-hidden="true" />
       {label()}
       <Show when={active()}>
         {/* biome-ignore lint/a11y/noStaticElementInteractions: hover bridge keeps the info panel open while the pointer moves onto it; pointer-only affordance */}
@@ -543,24 +530,29 @@ function PairingWarn() {
     <>
       <Show when={provider()}>
         <span
-          class="text-[9px] font-mono text-text-faint truncate max-w-[120px] flex-shrink-0"
+          class="axis-status-capsule text-text-faint truncate max-w-[120px]"
           title={`${provider()!.venue} ${provider()!.market} · ${provider()!.authMode}`}
           data-testid="axis-hud-provider"
         >
-          {provider()!.venue}
-          {provider()!.authMode === 'authenticated' ? '·key' : ''}
+          <span class="axis-live-dot" aria-hidden="true" />
+          <span class="axis-status-capsule-val max-w-[7em]">
+            {provider()!.venue}
+            {provider()!.authMode === 'authenticated' ? '·key' : ''}
+          </span>
         </span>
       </Show>
       <Show when={warn()}>
         {(w) => (
           <button
             type="button"
-            class="text-[9px] font-mono text-orange truncate max-w-[160px] flex-shrink-0 border border-orange/40 px-1 h-[22px]"
+            class="axis-status-capsule text-orange max-w-[160px]"
             title={w().text}
             data-testid="axis-hud-pair-fix"
             onClick={() => setActivePlugin('stream', w().expected)}
           >
-            ⚠ pair · Fix
+            <span class="axis-live-dot is-warn" aria-hidden="true" />
+            <span class="axis-status-capsule-code">pair</span>
+            <span class="axis-status-capsule-val">Fix</span>
           </button>
         )}
       </Show>
@@ -591,7 +583,7 @@ export const ConnectionHud: Component = () => {
 
   return (
     <div
-      class="flex items-center gap-1.5 flex-nowrap min-w-0 flex-shrink-0 overflow-visible"
+      class="flex items-center gap-1 flex-wrap min-w-0 flex-shrink-0 overflow-visible"
       data-testid="axis-connection-hud"
       role="status"
       aria-label="Connection status"
@@ -697,7 +689,7 @@ export const ConnectionHud: Component = () => {
       {/* Compact toggle (keeps SRC/STR/STO optional) */}
       <button
         type="button"
-        class="sc-btn sc-btn-ghost px-1 py-0 text-[9px] font-mono text-text-faint flex-shrink-0 h-[22px]"
+        class="axis-status-capsule text-text-faint cursor-pointer"
         title={compact() ? 'Expand SRC/STR/STO chips' : 'Compact HUD (hide SRC/STR/STO)'}
         data-testid="axis-hud-compact"
         onClick={() => {

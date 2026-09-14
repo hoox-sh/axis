@@ -41,7 +41,11 @@ describe('normalizeEndpointBase', () => {
 });
 
 describe('looksLikeOnchainWorkerEndpoint', () => {
-  it('matches workers.dev and wrangler local', () => {
+  it('matches custom domain, workers.dev, and wrangler local', () => {
+    expect(looksLikeOnchainWorkerEndpoint('https://worker.axis.hoox.sh')).toBe(true);
+    expect(
+      looksLikeOnchainWorkerEndpoint('https://worker-axis.cryptolinx.workers.dev'),
+    ).toBe(true);
     expect(
       looksLikeOnchainWorkerEndpoint('https://pynescript-axis.cryptolinx.workers.dev'),
     ).toBe(true);
@@ -89,13 +93,13 @@ describe('resolveDefiLlamaBaseUrl', () => {
     );
     expect(isWorkerLlamaProxy(resolveDefiLlamaBaseUrl())).toBe(true);
     // Must not hit SPA host
-    expect(resolveDefiLlamaBaseUrl()).not.toContain('axis.hoox.sh');
+    expect(new URL(resolveDefiLlamaBaseUrl()).hostname).not.toBe('axis.hoox.sh');
   });
 
-  it('uses Worker llama proxy when endpoint is workers.dev', () => {
-    setStore('endpoint', 'https://pynescript-axis.cryptolinx.workers.dev');
+  it('uses Worker llama proxy when endpoint is the Worker custom domain', () => {
+    setStore('endpoint', 'https://worker.axis.hoox.sh');
     expect(resolveDefiLlamaBaseUrl()).toBe(
-      `https://pynescript-axis.cryptolinx.workers.dev${ONCHAIN_LLAMA_PROXY_PATH}`,
+      `https://worker.axis.hoox.sh${ONCHAIN_LLAMA_PROXY_PATH}`,
     );
   });
 
@@ -121,10 +125,10 @@ describe('resolveGeckoTerminalBaseUrl', () => {
     );
   });
 
-  it('uses Worker gecko proxy for workers.dev endpoint', () => {
-    setStore('endpoint', 'https://pynescript-axis.cryptolinx.workers.dev');
+  it('uses Worker gecko proxy for the Worker custom domain', () => {
+    setStore('endpoint', 'https://worker.axis.hoox.sh');
     expect(resolveGeckoTerminalBaseUrl()).toBe(
-      `https://pynescript-axis.cryptolinx.workers.dev${ONCHAIN_GECKO_PROXY_PATH}`,
+      `https://worker.axis.hoox.sh${ONCHAIN_GECKO_PROXY_PATH}`,
     );
   });
 });

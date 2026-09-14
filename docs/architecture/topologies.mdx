@@ -76,8 +76,8 @@ make run   # separate process
 
 ```mermaid
 flowchart TB
-  U[Browser] --> P[CF Pages pynescript-axis]
-  U --> W[Worker same project]
+  U[Browser] --> P[CF Pages axis.hoox.sh]
+  U --> W[Worker worker.axis.hoox.sh]
   W -->|proxy /api/run| F[EXTERNAL_BACKEND Flask]
   W --> KV[KV keys/usage]
   W --> D1[D1 scripts]
@@ -92,10 +92,10 @@ flowchart TB
 axis deploy
 # or: cd worker && bun run deploy
 cd frontend && bun run build
-wrangler pages deploy dist --project-name=pynescript-axis
+wrangler pages deploy dist --project-name=axis
 ```
 
-**Frozen id:** never rename `pynescript-axis` lightly ([ADR-008](/axis/docs/architecture/adrs)).
+**Ids:** Pages project `axis` at `https://axis.hoox.sh`; Worker script `worker-axis` at `https://worker.axis.hoox.sh` ([ADR-008](/axis/docs/architecture/adrs)).
 
 AXIS config:
 

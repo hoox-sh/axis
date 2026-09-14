@@ -75,7 +75,7 @@ Then PWA endpoint = `https://axis.example.com` and the **server** engine posts t
   `204.168.138.51`). nginx `:443` reverse-proxies `/run`, `/optimize`, `/ws/`, `/health`,
   `/lsp/`, `/datafeed/`, … to gunicorn `127.0.0.1:5002`
 - PWA **Backend URL** = `https://pynescript.online` (cross-origin; product CORS regex)
-- Cloudflare Pages previews (`*.pynescript-axis.pages.dev`) use the same Backend URL
+- Cloudflare Pages previews (`*.axis.pages.dev`) use the same Backend URL
   — pyne must allow those Origins on `/health` and `/run` (always-on product regex;
   see [CORS](/axis/docs/devops/cors-and-origins))
 
@@ -115,8 +115,8 @@ Production VPS pattern (verified on `pynescript.online`):
 **Workers Manager** browser probes:
 
 - On **product API host** (`pynescript.online`), pyne Pro is probed via **same-origin** `/health` (nginx), not `http://127.0.0.1:5002` (that would hit the *client* PC and always look “down”).
-- From **CF Pages** (`axis.hoox.sh` / `*.pynescript-axis.pages.dev`) catalog `publicEndpoint` (`https://pynescript.online`) is used — never client loopback.
-- CF Worker health stays on `https://pynescript-axis.*.workers.dev/health` (edge; independent of VPS UFW).
+- From **CF Pages** (`axis.hoox.sh` / `*.axis.pages.dev`) catalog `publicEndpoint` (`https://pynescript.online`) is used — never client loopback.
+- CF Worker health stays on `https://worker.axis.hoox.sh/health` (edge; independent of VPS UFW).
 
 ### Minimal without TLS
 

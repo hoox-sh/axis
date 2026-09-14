@@ -26,7 +26,7 @@ description: "packages/cli — install, doctor, Worker setup (D1/OAuth), secrets
 
 ## Abstract
 
-The **AXIS CLI** (`@hoox-sh/axis-cli` under `packages/cli`) is the **CLI-first** operator entry for local install, Worker bootstrap, Cloudflare® secrets, deploy, and health checks. It wraps Bun + Wrangler with AXIS-specific paths and defaults (Worker name `pynescript-axis`, D1 `pynescript`, OAuth device flow).
+The **AXIS CLI** (`@hoox-sh/axis-cli` under `packages/cli`) is the **CLI-first** operator entry for local install, Worker bootstrap, Cloudflare® secrets, deploy, and health checks. It wraps Bun + Wrangler with AXIS-specific paths and defaults (Worker name `worker-axis`, D1 `pynescript`, OAuth device flow).
 
 <img src="/images/cli/help.png" alt="axis --help listing install, doctor, setup, deploy, health" />
 
@@ -94,7 +94,7 @@ When using `bun run axis setup -- --flag`, keep the `--` so Bun forwards flags t
 | `axis keys create [--tier hobby]` | Mint a `pn_…` key via `POST /api/keys` (`ADMIN_TOKEN`) |
 | `axis keys validate --key pn_…` | Validate a key against the Worker |
 | `axis secret put\|list\|delete` | Wrangler secrets (`ADMIN_TOKEN`, `EXTERNAL_BACKEND`, …) |
-| `axis deploy` / `deploy worker` | Apply remote D1 schema, then deploy Worker `pynescript-axis` |
+| `axis deploy` / `deploy worker` | Apply remote D1 schema, then deploy Worker `worker-axis` |
 | `axis deploy pages` | Vite build + Pages project |
 | `axis deploy all` | Schema + Worker + Pages |
 | `axis health [--oauth] [--scripts] [--url …]` | Probe `/health`, optional OAuth start, optional `/api/scripts` |
@@ -139,7 +139,8 @@ axis health --scripts --oauth
 | `API_KEYS` KV | `axis setup kv` then `axis deploy worker`. D1 without KV fails closed (`API_KEYS_REQUIRED`) |
 | `ALLOW_OPEN_KEYS` | `"0"` in production |
 | `REQUIRE_RUN_AUTH` | `"1"` to force Bearer on `/api/run` even without KV |
-| Project name | Frozen: `pynescript-axis` |
+| Worker script | `worker-axis` (`https://worker.axis.hoox.sh`) |
+| Pages project | `axis` (`https://axis.hoox.sh`) |
 
 ## Env overrides
 

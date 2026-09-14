@@ -118,7 +118,7 @@ Recorder and discovery:
 
 ### Alerts panel
 
-Dockable **Alerts** (`src/alerts/*` + `AlertsPanel.tsx`): local-first price alerts, webhook optional, list/create/toggle. Continuous server-side arming is not required for session use.
+Dockable **Alerts** (`src/alerts/*` + `AlertsPanel.tsx`): local-first book for **price**, **% change**, **drawing touch**, **indicator plots**, **Pine `alert()` / `alertcondition()`**, and on-chain kinds. Delivery: browser Notification, optional HTTPS webhook, optional L2 webhook. Live ticks evaluate price/drawing/plot kinds; strategy/indicator runs evaluate Pine `alert()` events (last bar). Continuous server-side arming is not required for session use.
 
 ### Workspace snapshots
 
@@ -174,7 +174,7 @@ Telemetry is ephemeral (`store.telemetry`); HUD compact mode and live prefs pers
 
 | Setting | Default | Effect |
 | --- | --- | --- |
-| Auto-start live after Load | off | `live.preferAfterLoad` → multiplex after successful Load |
+| Enable live stream | on | `live.preferAfterLoad` → multiplex after Load and on boot when bars exist |
 | Indicator re-run | every-tick | or `bar-close` only |
 | Compact connection HUD | off | hide plane chips |
 

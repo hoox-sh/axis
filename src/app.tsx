@@ -196,7 +196,9 @@ export const App: Component = () => {
           status: true,
         });
       });
-    // Auto-load default symbol so the chart is not an empty void on first paint
+    // Auto-load default symbol so the chart is not an empty void on first paint.
+    // Live stream is on by default (`preferAfterLoad`); Load starts it, and if
+    // bars are already in memory we sync immediately.
     if (!store.bars.length && store.source !== 'csv-upload') {
       void loadSymbolData(store.symbol, store.interval, store.source).catch((err: unknown) => {
         reportUiError(err, {
@@ -205,6 +207,12 @@ export const App: Component = () => {
           status: true,
         });
       });
+    } else if (store.live.preferAfterLoad) {
+      void import('./streams/multiplex')
+        .then(({ syncLiveToPreference }) => syncLiveToPreference())
+        .catch(() => {
+          /* live optional at boot */
+        });
     }
     // Pyodide: only warm when selected (or user switches later via Workers Manager).
     // Avoid ~14MB download contention on server-engine boots.

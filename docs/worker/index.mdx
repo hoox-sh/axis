@@ -57,12 +57,13 @@ flowchart TB
 
 | Surface | Value |
 | --- | --- |
-| Wrangler / Pages project | **`pynescript-axis`** — **do not rename** lightly |
+| Wrangler Worker script | **`worker-axis`** — canonical `https://worker.axis.hoox.sh` |
+| Pages project | **`axis`** — canonical `https://axis.hoox.sh` |
 | npm package | `axis-worker` |
-| Health JSON `service` | `pynescript-axis-worker` |
+| Health JSON `service` | `worker-axis` |
 | Product brand | **AXIS** |
 
-Custom domains / aliases may say `axis.*`; leave the CF project id stable so KV/D1 IDs and CI stay valid.
+Pages `--project-name` is `axis`; custom domain is `axis.hoox.sh`. Worker URL is `https://worker.axis.hoox.sh`.
 
 ## Interface surface
 

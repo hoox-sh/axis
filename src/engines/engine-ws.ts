@@ -320,7 +320,7 @@ class EngineWsClient {
               id,
               script: req.script,
               data: req.data,
-              mode: req.mode || 'interpret',
+              mode: req.mode || 'auto',
             };
             // Only send symbol when it's a real string (null fails API schema)
             if (typeof req.symbol === 'string' && req.symbol.length) {

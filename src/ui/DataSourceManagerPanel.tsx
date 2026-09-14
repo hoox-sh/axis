@@ -187,7 +187,7 @@ export const DataSourceManagerPanel: Component = () => {
   return (
     <Show when={isPanelOpen('datasource')}>
       <FloatableShell id="datasource" testId="axis-datasource">
-        <div class="flex-1 overflow-y-auto min-h-0 p-2 flex flex-col gap-3 text-[0.82rem]">
+        <div class="flex-1 overflow-y-auto min-h-0 flex flex-col gap-2 text-[12px]">
           <p class="text-muted m-0 leading-snug">
             Backfill OHLCV in the <strong>background</strong> down to a past date,
             then <strong>validate</strong> the series and <strong>fill gaps</strong>.
@@ -212,7 +212,7 @@ export const DataSourceManagerPanel: Component = () => {
           />
 
           <form
-            class="flex flex-col gap-2 border border-[var(--border)] rounded p-2"
+            class="flex flex-col gap-2 border border-border rounded-md p-2"
             onSubmit={onStart}
             data-testid="axis-datasource-form"
           >
@@ -332,7 +332,7 @@ export const DataSourceManagerPanel: Component = () => {
               >
                 <input
                   type="search"
-                  class="sc-input"
+                  class="axis-search sc-input h-7"
                   placeholder="Filter jobs…"
                   value={jobQuery()}
                   onInput={(e) => setJobQuery(e.currentTarget.value)}
@@ -371,13 +371,13 @@ export const DataSourceManagerPanel: Component = () => {
             <Show
               when={dataSourceManagerState.jobs.length}
               fallback={
-                <div class="text-muted text-[0.78rem] py-2">No jobs yet.</div>
+                <div class="axis-empty-state text-[12px] text-text-dim py-2">No jobs yet.</div>
               }
             >
               <Show
                 when={filteredJobs().length}
                 fallback={
-                  <div class="text-muted text-[0.78rem] py-2">
+                  <div class="axis-empty-state text-[12px] text-text-dim py-2">
                     No jobs match the current filter.
                   </div>
                 }

@@ -53,6 +53,7 @@ describe('parseAlert / parseAlertsBlob', () => {
       params: { price: 100 },
       createdAt: 1,
       webhookUrl: 'https://example.com/hook',
+      l2WebhookUrl: 'https://l2.example/alerts',
       cooldownMs: 1000,
       lastFiredAt: 2,
       notifyBrowser: false,
@@ -61,6 +62,7 @@ describe('parseAlert / parseAlertsBlob', () => {
     expect(a?.id).toBe('a1');
     expect(a?.params.price).toBe(100);
     expect(a?.webhookUrl).toContain('example');
+    expect(a?.l2WebhookUrl).toContain('l2.example');
     expect(a?.notifyBrowser).toBe(false);
   });
 
@@ -243,6 +245,37 @@ describe('evaluateAlerts with delivery', () => {
       kind: 'price_cross',
       firedAt: 2000,
     });
+  });
+
+  it('POSTs L2 payload to l2WebhookUrl', async () => {
+    const posts: { url: string; body: string }[] = [];
+    const fetchImpl = (async (url: RequestInfo | URL, init?: RequestInit) => {
+      posts.push({ url: String(url), body: String(init?.body ?? '') });
+      return new Response('ok', { status: 200 });
+    }) as typeof fetch;
+
+    createAlert({
+      id: 'l2',
+      name: 'L2 me',
+      symbol: 'BTCUSDT',
+      kind: 'price_above',
+      params: { price: 100 },
+      enabled: true,
+      l2WebhookUrl: 'https://l2.example/alert',
+      notifyBrowser: false,
+    });
+
+    const fired = await evaluateAlerts(
+      { symbol: 'BTCUSDT', price: 101 },
+      { deliver: true, now: 2000, fetchImpl },
+    );
+    expect(fired).toHaveLength(1);
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.url).toBe('https://l2.example/alert');
+    const payload = JSON.parse(posts[0]!.body);
+    expect(payload.channel).toBe('l2');
+    expect(payload.source).toBe('axis');
+    expect(payload.message).toContain('L2 me');
   });
 
   it('deliver:false skips webhook', async () => {

@@ -110,7 +110,7 @@ describe('probeAbortSignal parent branches', () => {
   });
 
   it('treats NaN timeout as the default budget', async () => {
-    globalThis.fetch = healthyFetch('pynescript-axis-worker');
+    globalThis.fetch = healthyFetch('worker-axis');
     const r = await probeWorker('axis-worker', {
       endpoint: DEFAULT_AXIS_WORKER_BASE,
       timeoutMs: NaN,
@@ -268,7 +268,7 @@ describe('probeWorker active-engine mapping', () => {
     try {
       setStore('endpoint', DEFAULT_AXIS_WORKER_BASE);
       setStore('engine', 'server');
-      globalThis.fetch = healthyFetch('pynescript-axis-worker');
+      globalThis.fetch = healthyFetch('worker-axis');
       const r = await probeWorker('axis-worker', {
         endpoint: DEFAULT_AXIS_WORKER_BASE,
         timeoutMs: 1000,

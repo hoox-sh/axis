@@ -55,7 +55,7 @@ flowchart TB
 | Engine `server` | `src/engines/catalog.ts` | Prefer **WS** `ws(s)://{endpoint}/ws/run` (`preferWs` default true), else **POST** `{endpoint}/run?mode=` with `{ script, data, mode, inputs?, profiler?, libraries? }`. Modes `interpret \| compile \| auto`. Timeout scales with bar count (45–180s). Default endpoint `http://localhost:5002`. Strategy HPO uses **`POST {endpoint}/optimize`**. |
 | Engine `pyodide` | same file | Self-hosted **Pyodide 0.26.2** (`/pyodide/v0.26.2/`), wheels `/vendor/pynescript-0.4.0-py3-none-any.whl` + antlr4, runtime `/pyodide/pynescript_runtime.py`. **Numba is not in Wasm**; `compile` / `auto` is object-mode. Cold load ~20–30s. |
 | AXIS Worker `/api/run` | `worker/src/runtime.ts` | `PYODIDE_IN_WORKER=enabled` scaffold; else **proxy `EXTERNAL_BACKEND/run`**; else 503 `NO_BACKEND`. Caps: 512 KiB script, 50k bars, 30 req/min/IP, 60s upstream. |
-| HOOX **pyne-worker** | `src/workers/catalog.ts` | Not a built-in engine. Paste origin as Backend URL. Distinct from the AXIS Worker (`pynescript-axis`). |
+| HOOX **pyne-worker** | `src/workers/catalog.ts` | Not a built-in engine. Paste origin as Backend URL. Distinct from the AXIS Worker (`worker-axis`). |
 | **PyneTS** | — | TypeScript library. [PYNE docs](/pyne/docs/pynets). **Not referenced** in AXIS source. |
 
 Payloads follow the [PYNE evaluate contract](/pyne/docs/api/contract). Defaults: Flask `POST /run` uses `mode` **`auto`**. See [modes](/pyne/docs/enduser/reference/modes).
@@ -76,7 +76,7 @@ Payloads follow the [PYNE evaluate contract](/pyne/docs/api/contract). Defaults:
 2. **AXIS ≠ execution.** Strategy events on the Results panel are not HOOX orders. See [AXIS and HOOX](/docs/enduser/guides/axis-and-hoox).
 3. **No `none` stream plugin** in `src/streams/catalog.ts`. Pausing live data is `stopLive()`, not a plugin id.
 4. Pyodide wheel version can lag PyPI (`0.3.7` wheel vs `hoox-pyne` 0.3.9). Check `vendor/`.
-5. CORS: Worker allows localhost, `*.hoox.sh`, `*.pynescript.online`, `*.pynescript-axis.pages.dev` only.
+5. CORS: Worker allows localhost, `*.hoox.sh`, `*.pynescript.online`, `*.axis.pages.dev` (plus legacy `*.pynescript-axis.pages.dev`) only.
 
 ## Worked examples
 

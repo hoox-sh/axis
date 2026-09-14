@@ -189,6 +189,33 @@ describe('engines catalog', () => {
     expect(r.meta?.transport).toBe('rest');
   });
 
+  it('server compile falls back to interpret when the script calls alert()', async () => {
+    let seenMode: string | undefined;
+    restoreFetch = mockFetch(async (url, init) => {
+      const body = JSON.parse(String(init?.body || '{}')) as { mode?: string };
+      seenMode = body.mode;
+      expect(String(url)).toContain('mode=interpret');
+      return jsonResponse({
+        status: 'success',
+        plots: [1],
+        series: { a: [1] },
+        events: [],
+        alerts: [{ message: 'up', source: 'alert', bar_index: 0 }],
+        meta: { script_name: 't' },
+        mode: 'interpret',
+      });
+    });
+    const r = await serverEngine.run({
+      script: '//@version=5\nstrategy("t")\nalert("up")\nplot(close)',
+      bars: SAMPLE_BARS,
+      config: { endpoint: 'http://engine.test:5002', mode: 'compile', preferWs: false },
+    });
+    expect(r.status).toBe('success');
+    expect(seenMode).toBe('interpret');
+    const metaAlerts = (r.meta as { alerts?: Array<{ message?: string }> } | undefined)?.alerts;
+    expect(metaAlerts?.[0]?.message).toBe('up');
+  });
+
   it('server run error status', async () => {
     restoreFetch = mockFetch(async () =>
       jsonResponse({ status: 'error', message: 'bad pine' }, 400),

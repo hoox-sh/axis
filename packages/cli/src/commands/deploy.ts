@@ -27,7 +27,7 @@ import {
   type GlobalOpts,
 } from "../utils/format.js";
 
-const PAGES_PROJECT = "pynescript-axis";
+const PAGES_PROJECT = "axis";
 
 /** Last workers.dev URL printed by `wrangler deploy`. */
 export function parseDeployedWorkerUrl(output: string): string | undefined {
@@ -191,7 +191,7 @@ export function registerDeploy(program: Command): void {
 
   deploy
     .command("worker")
-    .description("Deploy Cloudflare Worker (pynescript-axis)")
+    .description("Deploy Cloudflare Worker (worker-axis)")
     .option("--skip-health", "Skip post-deploy /health probe")
     .option("--skip-schema", "Skip remote D1 schema apply before Worker deploy")
     .option("--url <url>", "Worker URL for health probe")

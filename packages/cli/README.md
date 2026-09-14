@@ -61,7 +61,7 @@ Global flags: `--json`, `--quiet`, `-y/--yes`. `--json` is machine-only (no bann
 | `axis keys validate --key pn_…` | Validate a key against `/api/keys` |
 | `axis secret put ADMIN_TOKEN` | `wrangler secret put` |
 | `axis secret list` / `axis secret delete <name>` | List / delete secrets |
-| `axis deploy` / `axis deploy worker` | Deploy Worker `pynescript-axis` |
+| `axis deploy` / `axis deploy worker` | Deploy Worker `worker-axis` |
 | `axis deploy pages` | Vite build + Pages project |
 | `axis deploy all` | Worker then Pages |
 | `axis health [--oauth] [--scripts] [--url …]` | Probe `/health` (+ OAuth start and/or `/api/scripts`) |

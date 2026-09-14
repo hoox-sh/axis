@@ -103,7 +103,7 @@ export async function collectDoctorChecks(options: {
     const name = getTomlName(paths.wranglerToml);
     checks.push({
       id: "worker-name",
-      ok: name === "pynescript-axis",
+      ok: name === "worker-axis",
       required: true,
       label: "Worker project name",
       detail: name ?? "(unset)",

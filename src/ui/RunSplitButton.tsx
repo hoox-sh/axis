@@ -157,8 +157,8 @@ export const RunSplitButton: Component<{
     >
       <button
         type="button"
-        class={`sc-btn axis-run-main ${
-          isRunning() ? 'sc-btn-primary is-active' : 'sc-btn-ghost'
+        class={`sc-btn sc-btn-primary axis-run-main ${
+          isRunning() ? 'is-active' : ''
         } ${runBlocked() ? 'opacity-50 cursor-not-allowed' : ''}`}
         onClick={() => void gateAndRun('auto')}
         data-testid="axis-btn-run"

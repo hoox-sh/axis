@@ -30,7 +30,7 @@ import { DEFAULT_AXIS_WORKER_BASE } from '../data/worker-origin';
 import { DEFAULT_PYNE_AGENT_PLUGIN_URL } from '../plugins/loader';
 import type { WorkerCatalogEntry, WorkerId } from './types';
 
-/** Production AXIS Cloudflare Worker (workers.dev). */
+/** Production AXIS Cloudflare Worker (`https://worker.axis.hoox.sh`). */
 export { DEFAULT_AXIS_WORKER_BASE };
 
 /** Local wrangler default for `worker/` package. */
@@ -157,14 +157,14 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
     name: 'AXIS Worker',
     summary: 'Cloudflare edge data plane (run proxy, on-chain, scripts)',
     description:
-      'The AXIS Cloudflare Worker (`pynescript-axis`) is the edge data plane: ' +
+      'The AXIS Cloudflare Worker (`worker-axis`) is the edge data plane: ' +
       'allowlisted on-chain proxy, optional script library (D1), API keys (KV), ' +
       '`POST /api/run` (typically proxies to EXTERNAL_BACKEND), Git OAuth relay, ' +
-      'and Durable Object stream sessions. Production default is workers.dev.',
+      'and Durable Object stream sessions. Production default is worker.axis.hoox.sh.',
     usage:
       'Always on for On-Chain (DefiLlama / GeckoTerminal proxy) and cloud script library. ' +
       'Optionally set as calculation backend if EXTERNAL_BACKEND is bound on the Worker. ' +
-      'You do not need a local install — production workers.dev is the default.',
+      'You do not need a local install — production worker.axis.hoox.sh is the default.',
     icon: 'zap',
     kind: 'edge',
     roles: ['proxy', 'onchain', 'scripts', 'stream', 'oauth', 'calc'],
@@ -175,7 +175,7 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
     probe: 'http-health',
     healthPaths: ['/health', '/'],
     healthMarkers: ['status', 'service', 'features'],
-    serviceHint: 'pynescript-axis-worker',
+    serviceHint: 'worker-axis',
     capabilities: [
       'GET /health',
       'POST /api/run',
@@ -187,7 +187,7 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
     install: [
       {
         title: 'Production (default)',
-        detail: 'Use the deployed workers.dev host — no local install required.',
+        detail: 'Use the deployed worker.axis.hoox.sh host — no local install required.',
         command: DEFAULT_AXIS_WORKER_BASE,
       },
       {
@@ -214,7 +214,7 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
     usage:
       'Local edge loop: `cd worker && bun run dev`, then Use as calculation backend ' +
       'or point On-Chain / Backend URL at http://127.0.0.1:8787. ' +
-      'Skip this card if you only use production workers.dev.',
+      'Skip this card if you only use production worker.axis.hoox.sh.',
     icon: 'activity',
     kind: 'edge',
     roles: ['proxy', 'onchain', 'scripts', 'stream', 'oauth', 'calc'],
@@ -225,7 +225,7 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
     probe: 'http-health',
     healthPaths: ['/health', '/'],
     healthMarkers: ['status', 'service', 'features'],
-    serviceHint: 'pynescript-axis-worker',
+    serviceHint: 'worker-axis',
     capabilities: ['wrangler', 'GET /health', 'on-chain proxy', 'POST /api/run'],
     install: [
       {
@@ -370,7 +370,7 @@ export const WORKER_CATALOG: readonly WorkerCatalogEntry[] = [
     description:
       'Sister Cloudflare® Python Worker for edge evaluation (POST /run, alerts, cron, libraries). ' +
       'AXIS ships a dedicated **pyne-worker** engine plugin with this production origin. ' +
-      'Distinct from the AXIS data-plane Worker (pynescript-axis / on-chain proxy).',
+      'Distinct from the AXIS data-plane Worker (worker-axis / on-chain proxy).',
     usage:
       'Select engine **pyne-worker (edge)** in the topbar or Settings, or Use as calculation backend here. ' +
       'Set API key in Settings when the Worker secret API_KEY is required. ' +
@@ -478,7 +478,12 @@ export function matchCatalogForEndpoint(endpoint: string): WorkerId | null {
   if (/127\.0\.0\.1:5002|localhost:5002/.test(lower)) return 'pyne-pro';
   // Product VPS same-origin (nginx → Pro API). Not the CF Worker.
   if (isProductSameOriginApiHost(e)) return 'pyne-pro';
-  if (lower.includes('pynescript-axis') || lower.includes('workers.dev')) {
+  if (
+    lower.includes('worker.axis.hoox.sh') ||
+    lower.includes('worker-axis') ||
+    lower.includes('pynescript-axis') ||
+    lower.includes('workers.dev')
+  ) {
     return 'axis-worker';
   }
 

@@ -65,7 +65,7 @@ run({ script, bars, config?, signal? }): Promise<RunResult>
 | Key | Default | Notes |
 | --- | --- | --- |
 | `endpoint` | `http://localhost:5002` | Overridden by topbar / `store.endpoint` |
-| `mode` | `interpret` | `interpret` \| `compile` |
+| `mode` | `auto` | `interpret` \| `compile` \| `auto` (try compile, fall back to interpret) |
 
 **HTTP contract**
 
@@ -90,7 +90,7 @@ run({ script, bars, config?, signal? }): Promise<RunResult>
 
 ### pyne-worker engine
 
-Dedicated HOOX **pyne-worker** edge host (not `pynescript-axis`).
+Dedicated HOOX **pyne-worker** edge host (not `worker-axis`).
 
 | Key | Default | Notes |
 | --- | --- | --- |

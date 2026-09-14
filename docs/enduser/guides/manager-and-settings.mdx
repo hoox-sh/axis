@@ -183,9 +183,9 @@ Deep multi-page history and gap repair live in the [Data Source Manager](/axis/d
 
 | Mode | Behavior |
 | --- | --- |
-| `interpret` | Full AST interpreter (default) |
-| `compile` | Numba/numpy compiled path |
-| `auto` | Try compile; fall back to interpret on failure |
+| `interpret` | Full AST interpreter |
+| `compile` | Numba/numpy compiled path (first run JITs; Flask is not prewarmed) |
+| `auto` | Default on Server / Pyodide: try compile, fall back to interpret on failure |
 
 The Connection HUD engine chip shows the selected mode. Save persists via Solid store `persist()` into `pynescript.axis.v1`. Escape closes; Ctrl/Cmd+Enter saves.
 

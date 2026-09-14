@@ -28,20 +28,47 @@ const KIND_LABELS: Record<AlertKind, string> = {
   price_above: 'above',
   price_below: 'below',
   pct_change: 'pct change',
-  drawing_touch: 'drawing touch',
-  pine_condition: 'pine',
+  drawing_touch: 'drawing',
+  pine_condition: 'indicator',
+  pine_alert: 'pine alert',
   onchain_tvl_spike: 'TVL spike',
   onchain_event: 'on-chain event',
 };
 
-/** Kinds exposed in the Alerts panel create form. */
-export const ALERT_KINDS: readonly AlertKind[] = [
-  'price_cross',
-  'price_above',
-  'price_below',
-  'onchain_tvl_spike',
-  'onchain_event',
+/** Grouped kinds for the Alerts panel create form (`<optgroup>`). */
+export const ALERT_KIND_GROUPS: readonly {
+  id: 'price' | 'drawing' | 'indicator' | 'onchain';
+  label: string;
+  kinds: readonly AlertKind[];
+}[] = [
+  {
+    id: 'price',
+    label: 'Price',
+    kinds: ['price_cross', 'price_above', 'price_below', 'pct_change'],
+  },
+  { id: 'drawing', label: 'Drawing', kinds: ['drawing_touch'] },
+  { id: 'indicator', label: 'Indicator', kinds: ['pine_condition', 'pine_alert'] },
+  {
+    id: 'onchain',
+    label: 'On-chain',
+    kinds: ['onchain_tvl_spike', 'onchain_event'],
+  },
 ] as const;
+
+/** Kinds exposed in the Alerts panel create form. */
+export const ALERT_KINDS: readonly AlertKind[] = ALERT_KIND_GROUPS.flatMap((g) => [
+  ...g.kinds,
+]);
+
+/** Filter bucket for an alert kind (`all` is the list default). */
+export function alertKindGroup(
+  kind: AlertKind | string,
+): 'price' | 'drawing' | 'indicator' | 'onchain' | 'other' {
+  for (const g of ALERT_KIND_GROUPS) {
+    if ((g.kinds as readonly string[]).includes(kind)) return g.id;
+  }
+  return 'other';
+}
 
 /** Short human label for an alert kind. */
 export function formatAlertKind(kind: AlertKind | string): string {
@@ -92,14 +119,37 @@ export function formatAlertCondition(
 
   if (kind === 'drawing_touch') {
     if (Number.isFinite(price)) return `${label} @ ${formatNum(price)}`;
+    const prices = params.prices;
+    if (Array.isArray(prices) && prices.length) {
+      const first = Number(prices[0]);
+      if (Number.isFinite(first)) return `${label} @ ${formatNum(first)}`;
+    }
+    if (params.drawingId != null && String(params.drawingId)) {
+      return `${label} · ${String(params.drawingId)}`;
+    }
     return label;
   }
 
   if (kind === 'pine_condition') {
+    const plot = params.plotKey != null ? String(params.plotKey).trim() : '';
     const op = params.op != null ? String(params.op) : '';
     const thr = params.threshold;
-    if (op && thr != null) return `${label} ${op} ${thr}`;
-    return label;
+    const head = plot ? `${label} ${plot}` : label;
+    if (op && thr != null) return `${head} ${op} ${thr}`;
+    return head;
+  }
+
+  if (kind === 'pine_alert') {
+    const source =
+      params.source != null ? String(params.source).trim().toLowerCase() : 'any';
+    const title = params.title != null ? String(params.title).trim() : '';
+    if (source === 'alertcondition') {
+      return title ? `alertcondition · ${title}` : 'alertcondition()';
+    }
+    if (source === 'alert') {
+      return title ? `alert() · ${title}` : 'alert()';
+    }
+    return title ? `pine · ${title}` : 'alert() / alertcondition()';
   }
 
   if (kind === 'onchain_tvl_spike' || kind === 'onchain_event') {

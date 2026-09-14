@@ -26,10 +26,9 @@
 
 /**
  * Default production AXIS Worker (market + on-chain proxy + scripts/run).
- * Keep in sync with `worker/wrangler.toml` name / workers.dev URL.
+ * Keep in sync with `worker/wrangler.toml` name + custom domain.
  */
-export const DEFAULT_AXIS_WORKER_BASE =
-  'https://pynescript-axis.cryptolinx.workers.dev';
+export const DEFAULT_AXIS_WORKER_BASE = 'https://worker.axis.hoox.sh';
 
 /**
  * Normalize an origin/base URL (no trailing slash).
@@ -45,9 +44,23 @@ export function normalizeEndpointBase(raw: string | undefined | null): string {
   return base;
 }
 
+function isAxisWorkerHostname(host: string): boolean {
+  if (host.endsWith('.workers.dev')) return true;
+  if (host === 'worker.axis.hoox.sh' || host.endsWith('.worker.axis.hoox.sh')) {
+    return true;
+  }
+  // Wrangler script name (current) and pre-rename workers.dev host.
+  if (host.includes('worker-axis') || host.includes('pynescript-axis')) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * True when `endpoint` is likely an AXIS Cloudflare Worker
- * (`*.workers.dev`, `pynescript-axis`, wrangler `:8787`, `/api/onchain`).
+ * (`worker.axis.hoox.sh`, `worker-axis` / legacy `pynescript-axis`,
+ * `*.workers.dev`, wrangler `:8787`, `/api/onchain`).
+ * Does not match the VPS SPA host `axis.hoox.sh`.
  */
 export function looksLikeOnchainWorkerEndpoint(
   endpoint: string | undefined | null,
@@ -59,15 +72,15 @@ export function looksLikeOnchainWorkerEndpoint(
   try {
     const u = new URL(raw.includes('://') ? raw : `https://${raw}`);
     const host = u.hostname.toLowerCase();
-    if (host.endsWith('.workers.dev')) return true;
-    if (host.includes('pynescript-axis')) return true;
+    if (isAxisWorkerHostname(host)) return true;
     const port = u.port || (u.protocol === 'https:' ? '443' : '80');
     if ((host === 'localhost' || host === '127.0.0.1') && port === '8787') {
       return true;
     }
   } catch {
     if (/\.workers\.dev/i.test(raw)) return true;
-    if (/pynescript-axis/i.test(raw)) return true;
+    if (/worker\.axis\.hoox\.sh/i.test(raw)) return true;
+    if (/worker-axis|pynescript-axis/i.test(raw)) return true;
     if (/:8787\b/.test(raw) && /localhost|127\.0\.0\.1/i.test(raw)) return true;
   }
   return false;

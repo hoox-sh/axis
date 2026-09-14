@@ -344,6 +344,34 @@ class _Namespace:
             setattr(self, k, v)
 
 
+def _export_alerts(evaluator) -> tuple[list, list]:
+    """Pine alert() / alertcondition() records from the wheel evaluator."""
+    inner = getattr(evaluator, "_inner", evaluator)
+    alerts: list = []
+    alert_conditions: list = []
+    try:
+        from pynescript.ast.evaluator.builtins.alerts import (
+            export_alerts_from_evaluator,
+        )
+
+        alerts = list(export_alerts_from_evaluator(inner) or [])
+    except Exception:
+        raw = getattr(inner, "get_triggered_alerts", None)
+        items = raw() if callable(raw) else getattr(inner, "_triggered_alerts", None) or []
+        for a in items or []:
+            if hasattr(a, "to_dict"):
+                alerts.append(a.to_dict())
+            elif isinstance(a, dict):
+                alerts.append(dict(a))
+    try:
+        exp_c = getattr(inner, "export_alert_conditions", None)
+        if callable(exp_c):
+            alert_conditions = list(exp_c() or [])
+    except Exception:
+        alert_conditions = []
+    return alerts, alert_conditions
+
+
 # --- The run loop --------------------------------------------------------
 
 
@@ -597,18 +625,23 @@ def _run_interpret(
     if _plot_meta:
         meta["plot_meta"] = _plot_meta
 
-    return {
+    alerts, alert_conditions = _export_alerts(evaluator)
+    out = {
         "status": "success",
         "plots": plots_main,
         "series": series,
         "events": all_events,
         "drawings": drawings,
+        "alerts": alerts,
         "equity_curve": equity_curve,
         "overlay": overlay,
         "script_name": script_name,
         "script_type": script_type,
         "meta": meta,
     }
+    if alert_conditions:
+        out["alert_conditions"] = alert_conditions
+    return out
 
 
 def _json_safe_series(values) -> list:
@@ -665,10 +698,178 @@ def _drawing_limits_from_script(script: str | None, defaults: dict, hard: dict) 
     return caps
 
 
+_COMPILER_ALERTS_PATCHED = False
+
+_FREQ_ALIASES = {
+    "once_per_bar": "once_per_bar",
+    "freq_once_per_bar": "once_per_bar",
+    "alert.freq_once_per_bar": "once_per_bar",
+    "once_per_bar_close": "once_per_bar_close",
+    "freq_once_per_bar_close": "once_per_bar_close",
+    "alert.freq_once_per_bar_close": "once_per_bar_close",
+    "all": "all",
+    "freq_all": "all",
+    "alert.freq_all": "all",
+}
+
+
+def _norm_alert_freq(freq) -> str:
+    if freq is None:
+        return "once_per_bar"
+    s = str(freq).strip().lower().replace(" ", "_")
+    return _FREQ_ALIASES.get(s, "once_per_bar" if not s else s)
+
+
+def _truthy_cond(cond) -> bool:
+    """Pine na / NaN is false; numpy bools and numbers otherwise."""
+    if cond is None:
+        return False
+    try:
+        if cond != cond:  # NaN
+            return False
+    except Exception:
+        pass
+    try:
+        return bool(cond)
+    except Exception:
+        return False
+
+
+def _make_compile_alert_runtime():
+    """Module-level recorders injected into compiled execute() globals."""
+    alerts: list[dict] = []
+    conditions: list[dict] = []
+    fire_bars: dict[tuple, int] = {}
+
+    def record_alert(message, freq, bar_idx, time, title=None, source="alert"):
+        msg = "" if message is None else str(message)
+        title_s = None if title is None else str(title)
+        freq_n = _norm_alert_freq(freq)
+        src = "alertcondition" if str(source) == "alertcondition" else "alert"
+        if freq_n != "all":
+            key = (src, title_s or "", msg, freq_n)
+            last = fire_bars.get(key)
+            try:
+                bi = int(bar_idx) if bar_idx is not None else None
+            except (TypeError, ValueError):
+                bi = None
+            if bi is not None and last is not None and last == bi:
+                return
+            if bi is not None:
+                fire_bars[key] = bi
+        rec: dict = {
+            "message": msg or (title_s or "Alert"),
+            "freq": freq_n,
+            "source": src,
+        }
+        try:
+            if bar_idx is not None:
+                rec["bar_index"] = int(bar_idx)
+        except (TypeError, ValueError):
+            pass
+        try:
+            if time is not None and time == time:
+                rec["time"] = int(time)
+        except (TypeError, ValueError):
+            pass
+        if title_s:
+            rec["title"] = title_s
+        alerts.append(rec)
+
+    def record_alertcondition(cond, title, message, bar_idx, time):
+        ok = _truthy_cond(cond)
+        title_s = "Alert" if title is None else str(title)
+        msg = "Alert" if message is None else str(message)
+        rec: dict = {
+            "condition": ok,
+            "title": title_s,
+            "message": msg,
+        }
+        try:
+            if bar_idx is not None:
+                rec["bar_index"] = int(bar_idx)
+        except (TypeError, ValueError):
+            pass
+        try:
+            if time is not None and time == time:
+                rec["time"] = int(time)
+        except (TypeError, ValueError):
+            pass
+        conditions.append(rec)
+        if ok:
+            record_alert(msg, "once_per_bar", bar_idx, time, title_s, "alertcondition")
+
+    return alerts, conditions, record_alert, record_alertcondition
+
+
+def _visit_call_arg_expr(visitor, arg) -> str:
+    val = arg.value if hasattr(arg, "value") else arg
+    expr = visitor.visit(val)
+    return expr if isinstance(expr, str) else ""
+
+
+def _emit_compile_alert_call(func_id: str, arg_exprs: list[str]) -> str:
+    """Python snippet recorded into the compiled bar loop."""
+    time_expr = "time_arr[__bar_idx]"
+    if func_id == "alert":
+        if not arg_exprs:
+            return ""
+        message = arg_exprs[0]
+        freq = arg_exprs[1] if len(arg_exprs) > 1 else repr("once_per_bar")
+        return (
+            f"__record_alert({message}, {freq}, __bar_idx, {time_expr}, None, 'alert')"
+        )
+    # alertcondition(condition, title, message)
+    if not arg_exprs:
+        return ""
+    cond = arg_exprs[0]
+    title = arg_exprs[1] if len(arg_exprs) > 1 else repr("Alert")
+    message = arg_exprs[2] if len(arg_exprs) > 2 else repr("Alert")
+    return (
+        f"__record_alertcondition({cond}, {title}, {message}, __bar_idx, {time_expr})"
+    )
+
+
+def _patch_compiler_alerts() -> None:
+    """Make compile emit `alert()` / `alertcondition()` instead of no-ops.
+
+    The wheel's CompilerVisitor.visit_Call returns ``\"\"`` for those builtins
+    because Numba nopython cannot append Python dicts. AXIS forces object mode
+    and records firings via ``__record_alert*`` injected into execute globals.
+    """
+    global _COMPILER_ALERTS_PATCHED
+    if _COMPILER_ALERTS_PATCHED:
+        return
+    from pynescript.compiler.compiler import CompilerVisitor
+
+    orig = CompilerVisitor.visit_Call
+
+    def visit_Call(self, node):  # noqa: N802 — match visitor API
+        func = getattr(node, "func", None)
+        if func is not None and type(func).__name__ == "Specialize":
+            func = getattr(func, "value", func)
+        if func is not None and type(func).__name__ == "Name":
+            fid = getattr(func, "id", None)
+            if fid in ("alert", "alertcondition"):
+                self.object_mode = True
+                exprs: list[str] = []
+                for arg in getattr(node, "args", None) or []:
+                    expr = _visit_call_arg_expr(self, arg)
+                    if expr:
+                        exprs.append(expr)
+                return _emit_compile_alert_call(fid, exprs)
+        return orig(self, node)
+
+    CompilerVisitor.visit_Call = visit_Call
+    _COMPILER_ALERTS_PATCHED = True
+
+
 def _run_compiled(script: str, bars: list[dict]) -> dict:
     """Numba/object compile path from the vendored pynescript wheel."""
     import numpy as np
     from pynescript.compiler.engine import compile_script
+
+    _patch_compiler_alerts()
 
     if not bars:
         return {
@@ -676,23 +877,32 @@ def _run_compiled(script: str, bars: list[dict]) -> dict:
             "plots": [],
             "series": {},
             "events": [],
+            "alerts": [],
             "meta": {"mode": "compile", "count": 0},
         }
 
     t0 = time.perf_counter()
     compiled = compile_script(script)
+    alert_acc, cond_acc, record_alert, record_cond = _make_compile_alert_runtime()
+    g = getattr(getattr(compiled, "execute", None), "__globals__", None)
+    if isinstance(g, dict):
+        g["__record_alert"] = record_alert
+        g["__record_alertcondition"] = record_cond
     opens = [float(b.get("open", 0.0) or 0.0) for b in bars]
     highs = [float(b.get("high", 0.0) or 0.0) for b in bars]
     lows = [float(b.get("low", 0.0) or 0.0) for b in bars]
     closes = [float(b.get("close", 0.0) or 0.0) for b in bars]
     volumes = [float(b.get("volume", 1.0) or 1.0) for b in bars]
-    series_map = compiled.run(opens, highs, lows, closes, volumes)
+    times = [float(b.get("time", 0.0) or 0.0) for b in bars]
+    series_map = compiled.run(opens, highs, lows, closes, volumes, times)
 
     drawings = []
     events = []
+    packed_alerts = []
     if isinstance(series_map, dict):
         drawings = series_map.pop("__drawings", []) or []
         events = series_map.pop("__events", []) or []
+        packed_alerts = series_map.pop("__alerts", []) or []
         for k in ("__position_size", "__netprofit", "__equity"):
             series_map.pop(k, None)
 
@@ -784,16 +994,23 @@ def _run_compiled(script: str, bars: list[dict]) -> dict:
     }
     if _plot_meta:
         _meta["plot_meta"] = _plot_meta
-    return {
+    alerts_out = list(alert_acc)
+    if isinstance(packed_alerts, list) and packed_alerts:
+        alerts_out.extend(a for a in packed_alerts if isinstance(a, dict))
+    out = {
         "status": "success",
         "plots": plots_main,
         "series": json_series,
         "events": events if isinstance(events, list) else [],
         "drawings": drawings if isinstance(drawings, list) else [],
+        "alerts": alerts_out,
         "overlay": True,
         "script_name": "plot",
         "meta": _meta,
     }
+    if cond_acc:
+        out["alert_conditions"] = list(cond_acc)
+    return out
 
 
 def run_script(

@@ -34,10 +34,10 @@ describe("wrangler-toml helpers", () => {
   test("ensureWranglerToml copies example", () => {
     const example = join(dir, "wrangler.toml.example");
     const toml = join(dir, "wrangler.toml");
-    writeFileSync(example, 'name = "pynescript-axis"\n[vars]\nFOO = "1"\n');
+    writeFileSync(example, 'name = "worker-axis"\n[vars]\nFOO = "1"\n');
     const r = ensureWranglerToml(toml, example);
     expect(r.created).toBe(true);
-    expect(readFileSync(toml, "utf-8")).toContain("pynescript-axis");
+    expect(readFileSync(toml, "utf-8")).toContain("worker-axis");
     const r2 = ensureWranglerToml(toml, example);
     expect(r2.created).toBe(false);
   });
@@ -76,8 +76,8 @@ database_id = "ae203eba-a4c4-49ce-8b7c-edcea914d3d9"
 
   test("getTomlName reads the worker name", () => {
     const toml = join(dir, "wrangler.toml");
-    writeFileSync(toml, 'name = "pynescript-axis"\n');
-    expect(getTomlName(toml)).toBe("pynescript-axis");
+    writeFileSync(toml, 'name = "worker-axis"\n');
+    expect(getTomlName(toml)).toBe("worker-axis");
   });
 
   test("getKvBindingId ignores commented example blocks", () => {
@@ -96,7 +96,7 @@ database_id = "ae203eba-a4c4-49ce-8b7c-edcea914d3d9"
     const toml = join(dir, "wrangler.toml");
     writeFileSync(
       toml,
-      `name = "pynescript-axis"\n\n# [[kv_namespaces]]\n# binding = "API_KEYS"\n# id = "REPLACE_WITH_KV_ID"\n\n[[d1_databases]]\nbinding = "DB"\n`
+      `name = "worker-axis"\n\n# [[kv_namespaces]]\n# binding = "API_KEYS"\n# id = "REPLACE_WITH_KV_ID"\n\n[[d1_databases]]\nbinding = "DB"\n`
     );
     const r = upsertKvNamespace(toml, "API_KEYS", "a".repeat(32));
     expect(r.changed).toBe(true);

@@ -18,25 +18,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Main workspace top bar — grouped left→right:
- * Brand · Market · Data · Compute · Layout · Panels · System.
- * Scriptlogs + Profiler live on the editor header.
+ * Workspace chrome — command bar (32px) + module bar (28px).
  *
- * ## Groups
- * - **Brand** — logo + AXIS chart
- * - **Market** — Venue, Symbol, Interval, Chart type, Compare
- * - **Data** — Source config (+ CSV upload, Datasets), Load, Reload
- * - **Compute** — Engine, Stream, Run, Live, Replay
- * - **Layout** — multi-chart layout menu
- * - **Panels** — List → Editor → Library → Scripts → Layers → DSM →
- *   On-Chain → Alerts → Values → Results → Script Logs → System Logs → Status
- * - **System** — Fullscreen, Chart only, Studio, Theme (`ml-auto`)
- *
- * ## Actions
- * - **Load / Reload** → force `loadSymbolData` (historical via active source)
- * - **Run / Re-run** → {@link RunSplitButton} (`runFromEditor`; replace or add instance)
- * - **Live** → multiplex `startLive` / `stopLive`
- * - **Replay** → bar replay over loaded OHLCV (`startBarReplay` / `exitBarReplay`)
+ * Command clusters: identity · instrument · data · engine · session.
+ * Module bar: List → … → Results; System Logs / Status are trailing utilities.
  *
  * Plugin pickers re-read catalogs when `catalogTick` bumps (after plugin install).
  * Editor popout (new tab) lives on the editor panel chrome, not the topbar.
@@ -73,7 +58,6 @@ import { setUploadedBars, getUploadedFileName } from '../sources/upload-store';
 import { DATA_MANAGER_SOURCE_ID } from '../data/data-manager-source';
 import { dataSourceManagerState } from '../data/data-source-manager';
 import { intervalToSec } from '../data/bars-gaps';
-import { engineOptionLabel } from './plugin-badges';
 import { Icons } from './icons';
 import { pwaInstallAvailable, promptPwaInstall, dismissPwaInstallPrompt } from '../pwa/install-prompt';
 import { HooxLogo } from './HooxLogo';
@@ -280,11 +264,9 @@ export const Topbar: Component<{
   };
 
   return (
-    <header
-      class="flex items-center gap-[var(--ui-gap-sm)] px-2.5 py-1 bg-bg-panel border-b-2 border-border flex-shrink-0 min-h-[var(--ui-topbar-min-h)] flex-wrap"
-      data-testid="axis-topbar"
-    >
-      {/* ── Brand (click → About) ───────────────────────────── */}
+    <header class="axis-topbar" data-testid="axis-topbar">
+      <div class="axis-command-bar">
+      {/* ── Identity (click → About) ────────────────────────── */}
       <Show when={store.topbar.brand}>
         <button
           type="button"
@@ -341,7 +323,7 @@ export const Topbar: Component<{
             <TopbarField
               id="axis-symbol"
               label="Symbol"
-              class="min-w-[7em]"
+              class="min-w-[9.5em] axis-tb-field--anchor"
               mono
               value={store.symbol}
               spellcheck={false}
@@ -437,14 +419,13 @@ export const Topbar: Component<{
             )}
           </For>
         </TopbarField>
-
-        <CompareSymbolControl />
       </div>
       </Show>
 
       {/* ── Data ────────────────────────────────────────────── */}
       <Show when={store.topbar.data}>
         <div class="axis-tb-group" data-tb-group="data" data-axis-source={store.source}>
+        <CompareSymbolControl />
         <PluginConfigRow
           onApplied={() => void loadHistorical({ force: true })}
           hideKeys={venueToken() === 'ccxt:' ? [] : ['exchange']}
@@ -495,7 +476,7 @@ export const Topbar: Component<{
 
         <button
           type="button"
-          class={`sc-btn ${loading() ? 'is-loading' : ''}`}
+          class={`sc-btn sc-btn-primary ${loading() ? 'is-loading' : ''}`}
           onClick={() => void loadHistorical({ force: true })}
           disabled={loading()}
           aria-busy={loading() || undefined}
@@ -532,7 +513,7 @@ export const Topbar: Component<{
       </div>
       </Show>
 
-      {/* ── Compute (Engine · Stream · Run / Live / Replay) ── */}
+      {/* ── Engine (select · Run · Live) ── */}
       <Show when={store.topbar.compute}>
         <div class="axis-tb-group" data-tb-group="compute" data-axis-engine={store.engine}>
         <TopbarField
@@ -557,17 +538,8 @@ export const Topbar: Component<{
         >
           <For each={engines()}>
             {(en) => (
-              <option
-                value={en.id}
-                title={
-                  en.id === 'pyodide'
-                    ? 'ENG local · RUN browser (Pyodide)'
-                    : en.id === 'server'
-                      ? 'ENG local|remote (from endpoint) · RUN server (or worker if URL is edge)'
-                      : en.description
-                }
-              >
-                {engineOptionLabel(en)}
+              <option value={en.id} title={en.description || en.name}>
+                {en.name}
               </option>
             )}
           </For>
@@ -592,7 +564,7 @@ export const Topbar: Component<{
           </TopbarField>
         </Show>
 
-        {/* Action cluster: Run/Re-run · Live · Replay — Run is accent only while executing */}
+        {/* Run is the cluster primary; Live is a 6px-dot status toggle */}
         <RunSplitButton
           getDoc={() => props.editorRef.getDoc()}
           ensureSavedForRun={
@@ -604,14 +576,14 @@ export const Topbar: Component<{
 
         <button
           type="button"
-          class={`sc-btn ${
+          class={`axis-live-btn ${
             !store.live.active
-              ? 'sc-btn-ghost'
+              ? 'is-idle'
               : store.stream.status === 'connected'
-                ? 'is-live-on'
+                ? 'is-live'
                 : store.stream.status === 'connecting'
-                  ? 'is-live-reconnecting'
-                  : 'is-live-offline'
+                  ? 'is-reconnect'
+                  : 'is-offline'
           }`}
           onClick={toggleLive}
           data-testid="axis-btn-live"
@@ -629,24 +601,24 @@ export const Topbar: Component<{
                   : 'Live stream offline — click to stop'
           }
         >
-          {store.live.active && store.stream.status === 'connected' ? (
-            <Icons.wifi class="text-accent-2" />
-          ) : store.live.active ? (
-            <Icons.wifi class="text-orange" />
-          ) : (
-            <Icons.wifiOff />
-          )}
+          <span class="axis-live-dot" aria-hidden="true" />
           <span class="axis-tb-btn-label">
             {!store.live.active
               ? 'Live'
               : store.stream.status === 'connected'
                 ? 'Live'
                 : store.stream.status === 'connecting'
-                  ? 'Reconnecting…'
+                  ? 'Reconnecting'
                   : 'Offline'}
           </span>
         </button>
+      </div>
+      </Show>
 
+      {/* ── Session (Replay · Layouts · Studio · Install · theme / FS) ─ */}
+      <Show when={store.topbar.system || store.topbar.layout || store.topbar.compute}>
+        <div class="axis-tb-group" data-tb-group="system">
+        <Show when={store.topbar.compute}>
         <button
           type="button"
           class={`sc-btn ${replayOn() ? 'is-replay-on' : 'sc-btn-ghost'}`}
@@ -665,244 +637,13 @@ export const Topbar: Component<{
           <Icons.play />
           <span class="axis-tb-btn-label">Replay</span>
         </button>
-      </div>
-      </Show>
+        </Show>
 
-      {/* ── Layout ──────────────────────────────────────────── */}
-      <Show when={store.topbar.layout}>
-        <div class="axis-tb-group" data-tb-group="layout">
+        <Show when={store.topbar.layout}>
           <ChartLayoutMenu />
-        </div>
-      </Show>
-
-      {/* ── Panels (unique Icons.* per button — see ICON_MAP in icons.tsx) ─ */}
-      <Show when={store.topbar.panels}>
-        <div class="axis-tb-group" data-tb-group="panels">
-        <Show when={store.topbar.panelsWatchlist}>
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost ${isPanelOpen('watchlist') || store.watchlist.open ? 'is-active' : ''}`}
-          onClick={props.onToggleWatchlist}
-          title="Toggle watchlist"
-          aria-label="Watchlist"
-          aria-pressed={isPanelOpen('watchlist') || store.watchlist.open}
-          data-testid="axis-btn-watchlist"
-        >
-          <Icons.watchlist />
-          <span class="axis-tb-btn-label">List</span>
-        </button>
         </Show>
 
-        <Show when={store.topbar.panelsEditor}>
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost ${
-            store.editor.open && store.editor.mode === 'docked' ? 'is-active' : ''
-          }`}
-          onClick={props.onToggleEditor}
-          title="Toggle docked editor"
-          aria-label="Editor"
-          aria-pressed={!!(store.editor.open && store.editor.mode === 'docked')}
-          data-testid="axis-btn-editor"
-        >
-          <Icons.editor />
-          <span class="axis-tb-btn-label">Editor</span>
-          {store.editor.mode === 'popout' && (
-            <span class="text-orange ml-0.5 text-[0.72em]">ext</span>
-          )}
-        </button>
-        </Show>
-
-        <Show when={store.topbar.panelsLibrary}>
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost ${isPanelOpen('library') ? 'is-active' : ''}`}
-          onClick={() => toggleLibraryPanel()}
-          title="Script library — load / save Pine scripts"
-          aria-label="Library"
-          aria-pressed={isPanelOpen('library')}
-          data-testid="axis-btn-library"
-        >
-          <Icons.library />
-          <span class="axis-tb-btn-label">Library</span>
-        </button>
-        </Show>
-
-        <Show when={store.topbar.panelsScripts}>
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost ${isPanelOpen('indicators') || store.indicatorPanel.open ? 'is-active' : ''}`}
-          onClick={() => toggleIndicatorPanel()}
-          title="Toggle scripts list — applied Pine indicators & strategies"
-          aria-label="Scripts"
-          aria-pressed={isPanelOpen('indicators') || store.indicatorPanel.open}
-          data-testid="axis-btn-indicators"
-        >
-          <Icons.scripts />
-          <span class="axis-tb-btn-label">Scripts</span>
-        </button>
-        </Show>
-
-        <Show when={store.topbar.panelsLayers}>
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost ${isPanelOpen('layers') || store.layerPanel.open ? 'is-active' : ''}`}
-          onClick={() => toggleLayerPanel()}
-          title="Layers — left slide-in: panes, scripts, drawings"
-          aria-label="Layers"
-          aria-pressed={isPanelOpen('layers') || store.layerPanel.open}
-          data-testid="axis-btn-layers"
-        >
-          <Icons.layers />
-          <span class="axis-tb-btn-label">Layers</span>
-        </button>
-        </Show>
-
-        <Show when={store.topbar.panelsDsm}>
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost ${isPanelOpen('datasource') ? 'is-active' : ''}`}
-          onClick={() => toggleDataSourcePanel()}
-          title="Data Source Manager — background OHLCV backfill"
-          aria-label="Data Source Manager"
-          aria-pressed={isPanelOpen('datasource')}
-          data-testid="axis-btn-datasource"
-        >
-          <Icons.dataSource />
-          <span class="axis-tb-btn-label">DSM</span>
-        </button>
-        </Show>
-
-        <Show when={store.topbar.panelsOnchain}>
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost ${isPanelOpen('onchain') ? 'is-active' : ''}`}
-          onClick={() => toggleOnchainPanel()}
-          title="On-Chain — DefiLlama protocol TVL overlays"
-          aria-label="On-Chain"
-          aria-pressed={isPanelOpen('onchain')}
-          data-testid="axis-btn-onchain"
-        >
-          <Icons.onchain />
-          <span class="axis-tb-btn-label">On-Chain</span>
-        </button>
-        </Show>
-
-        <Show when={store.topbar.panelsAlerts}>
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost ${isPanelOpen('alerts') || store.alertsPanel.open ? 'is-active' : ''}`}
-          onClick={() => toggleAlertsPanel()}
-          title="Price alerts — create, toggle, webhook"
-          aria-label="Alerts"
-          aria-pressed={isPanelOpen('alerts') || store.alertsPanel.open}
-          data-testid="axis-btn-alerts"
-        >
-          <Icons.alerts />
-          <span class="axis-tb-btn-label">Alerts</span>
-        </button>
-        </Show>
-
-        <Show when={store.topbar.panelsValues}>
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost ${isPanelOpen('dataview') || store.dataViewPanel.open ? 'is-active' : ''}`}
-          onClick={() => toggleDataViewPanel()}
-          title="Data window — OHLCV & plot values at crosshair"
-          aria-label="Values"
-          aria-pressed={isPanelOpen('dataview') || store.dataViewPanel.open}
-          data-testid="axis-btn-dataview"
-        >
-          <Icons.dataView />
-          <span class="axis-tb-btn-label">Values</span>
-        </button>
-        </Show>
-
-        <Show when={store.topbar.panelsResults}>
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost ${store.resultsPanel.open ? 'is-active' : ''}`}
-          title="Results & export"
-          aria-label="Results"
-          data-testid="axis-btn-results"
-          aria-pressed={store.resultsPanel.open}
-          onClick={() => {
-            setStore('resultsPanel', 'open', !store.resultsPanel.open);
-            persist();
-          }}
-        >
-          <Icons.results />
-          <span class="axis-tb-btn-label">Results</span>
-        </button>
-        </Show>
-
-        <Show when={store.topbar.panelsSystemLogs}>
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost ${isPanelOpen('logs') ? 'is-active' : ''}`}
-          title="System Logs — app / transport / boot telemetry"
-          aria-label="System Logs"
-          data-testid="axis-btn-systemlogs"
-          aria-pressed={isPanelOpen('logs')}
-          onClick={() => toggleSystemLogsPanel()}
-        >
-          <Icons.systemLogs />
-          <span class="axis-tb-btn-label">System Logs</span>
-        </button>
-        </Show>
-
-        <Show when={store.topbar.panelsStatus}>
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost ${isPanelOpen('statusbar') ? 'is-active' : ''}`}
-          title="Status — connection HUD and status message"
-          aria-label="Status"
-          data-testid="axis-btn-statusbar"
-          aria-pressed={isPanelOpen('statusbar')}
-          onClick={() => toggleStatusBarPanel()}
-        >
-          <Icons.status />
-          <span class="axis-tb-btn-label">Status</span>
-        </button>
-        </Show>
-      </div>
-      </Show>
-
-      {/* ── System (pushed right via CSS) ───────────────────── */}
-      <Show when={store.topbar.system}>
-        <div class="axis-tb-group" data-tb-group="system">
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost sc-btn-icon ${store.presentation?.fullscreen ? 'is-active' : ''}`}
-          onClick={() => void toggleBrowserFullscreen()}
-          title={
-            store.presentation?.fullscreen
-              ? 'Exit fullscreen (F11)'
-              : 'Fullscreen — fill the display (F11)'
-          }
-          aria-pressed={!!store.presentation?.fullscreen}
-          aria-label="Toggle fullscreen"
-          data-testid="axis-btn-fullscreen"
-        >
-          <Icons.fullscreen />
-        </button>
-
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost sc-btn-icon ${store.presentation?.chartOnly ? 'is-active' : ''}`}
-          onClick={() => toggleChartOnlyMode()}
-          title={
-            store.presentation?.chartOnly
-              ? 'Exit chart only (Shift+F / Esc)'
-              : 'Chart only — hide chrome, chart fills the shell (Shift+F)'
-          }
-          aria-pressed={!!store.presentation?.chartOnly}
-          aria-label="Toggle chart-only mode"
-          data-testid="axis-btn-chart-only"
-        >
-          {store.presentation?.chartOnly ? <Icons.minimize /> : <Icons.maximize />}
-        </button>
-
+        <Show when={store.topbar.system}>
         <button
           type="button"
           class="sc-btn sc-btn-ghost"
@@ -997,6 +738,237 @@ export const Topbar: Component<{
         >
           {store.theme === 'dark' ? <Icons.sun /> : <Icons.moon />}
         </button>
+
+        <button
+          type="button"
+          class={`sc-btn sc-btn-ghost sc-btn-icon ${store.presentation?.fullscreen ? 'is-active' : ''}`}
+          onClick={() => void toggleBrowserFullscreen()}
+          title={
+            store.presentation?.fullscreen
+              ? 'Exit fullscreen (F11)'
+              : 'Fullscreen — fill the display (F11)'
+          }
+          aria-pressed={!!store.presentation?.fullscreen}
+          aria-label="Toggle fullscreen"
+          data-testid="axis-btn-fullscreen"
+        >
+          <Icons.fullscreen />
+        </button>
+
+        <button
+          type="button"
+          class={`sc-btn sc-btn-ghost sc-btn-icon ${store.presentation?.chartOnly ? 'is-active' : ''}`}
+          onClick={() => toggleChartOnlyMode()}
+          title={
+            store.presentation?.chartOnly
+              ? 'Exit chart only (Shift+F / Esc)'
+              : 'Chart only — hide chrome, chart fills the shell (Shift+F)'
+          }
+          aria-pressed={!!store.presentation?.chartOnly}
+          aria-label="Toggle chart-only mode"
+          data-testid="axis-btn-chart-only"
+        >
+          {store.presentation?.chartOnly ? <Icons.minimize /> : <Icons.maximize />}
+        </button>
+        </Show>
+      </div>
+      </Show>
+      </div>
+
+      {/* ── Module bar ──────────────────────────────────────── */}
+      <Show when={store.topbar.panels}>
+        <div class="axis-module-bar">
+        <div class="axis-modules" data-tb-group="panels">
+        <Show when={store.topbar.panelsWatchlist}>
+        <button
+          type="button"
+          class={`axis-module ${isPanelOpen('watchlist') || store.watchlist.open ? 'is-active' : ''}`}
+          onClick={props.onToggleWatchlist}
+          title="Toggle watchlist"
+          aria-label="Watchlist"
+          aria-pressed={isPanelOpen('watchlist') || store.watchlist.open}
+          data-testid="axis-btn-watchlist"
+        >
+          <Icons.watchlist />
+          <span class="axis-tb-btn-label">List</span>
+        </button>
+        </Show>
+
+        <Show when={store.topbar.panelsEditor}>
+        <button
+          type="button"
+          class={`axis-module ${
+            store.editor.open && store.editor.mode === 'docked' ? 'is-active' : ''
+          }`}
+          onClick={props.onToggleEditor}
+          title="Toggle docked editor"
+          aria-label="Editor"
+          aria-pressed={!!(store.editor.open && store.editor.mode === 'docked')}
+          data-testid="axis-btn-editor"
+        >
+          <Icons.editor />
+          <span class="axis-tb-btn-label">Editor</span>
+          {store.editor.mode === 'popout' && (
+            <span class="text-orange ml-0.5 text-[10px]">ext</span>
+          )}
+        </button>
+        </Show>
+
+        <Show when={store.topbar.panelsLibrary}>
+        <button
+          type="button"
+          class={`axis-module ${isPanelOpen('library') ? 'is-active' : ''}`}
+          onClick={() => toggleLibraryPanel()}
+          title="Script library — load / save Pine scripts"
+          aria-label="Library"
+          aria-pressed={isPanelOpen('library')}
+          data-testid="axis-btn-library"
+        >
+          <Icons.library />
+          <span class="axis-tb-btn-label">Library</span>
+        </button>
+        </Show>
+
+        <Show when={store.topbar.panelsScripts}>
+        <button
+          type="button"
+          class={`axis-module ${isPanelOpen('indicators') || store.indicatorPanel.open ? 'is-active' : ''}`}
+          onClick={() => toggleIndicatorPanel()}
+          title="Toggle scripts list — applied Pine indicators & strategies"
+          aria-label="Scripts"
+          aria-pressed={isPanelOpen('indicators') || store.indicatorPanel.open}
+          data-testid="axis-btn-indicators"
+        >
+          <Icons.scripts />
+          <span class="axis-tb-btn-label">Scripts</span>
+        </button>
+        </Show>
+
+        <Show when={store.topbar.panelsLayers}>
+        <button
+          type="button"
+          class={`axis-module ${isPanelOpen('layers') || store.layerPanel.open ? 'is-active' : ''}`}
+          onClick={() => toggleLayerPanel()}
+          title="Layers — left slide-in: panes, scripts, drawings"
+          aria-label="Layers"
+          aria-pressed={isPanelOpen('layers') || store.layerPanel.open}
+          data-testid="axis-btn-layers"
+        >
+          <Icons.layers />
+          <span class="axis-tb-btn-label">Layers</span>
+        </button>
+        </Show>
+
+        <Show when={store.topbar.panelsDsm}>
+        <button
+          type="button"
+          class={`axis-module ${isPanelOpen('datasource') ? 'is-active' : ''}`}
+          onClick={() => toggleDataSourcePanel()}
+          title="Data Source Manager — background OHLCV backfill"
+          aria-label="Data Source Manager"
+          aria-pressed={isPanelOpen('datasource')}
+          data-testid="axis-btn-datasource"
+        >
+          <Icons.dataSource />
+          <span class="axis-tb-btn-label">DSM</span>
+        </button>
+        </Show>
+
+        <Show when={store.topbar.panelsOnchain}>
+        <button
+          type="button"
+          class={`axis-module ${isPanelOpen('onchain') ? 'is-active' : ''}`}
+          onClick={() => toggleOnchainPanel()}
+          title="On-Chain — DefiLlama protocol TVL overlays"
+          aria-label="On-Chain"
+          aria-pressed={isPanelOpen('onchain')}
+          data-testid="axis-btn-onchain"
+        >
+          <Icons.onchain />
+          <span class="axis-tb-btn-label">On-Chain</span>
+        </button>
+        </Show>
+
+        <Show when={store.topbar.panelsAlerts}>
+        <button
+          type="button"
+          class={`axis-module ${isPanelOpen('alerts') || store.alertsPanel.open ? 'is-active' : ''}`}
+          onClick={() => toggleAlertsPanel()}
+          title="Price alerts — create, toggle, webhook"
+          aria-label="Alerts"
+          aria-pressed={isPanelOpen('alerts') || store.alertsPanel.open}
+          data-testid="axis-btn-alerts"
+        >
+          <Icons.alerts />
+          <span class="axis-tb-btn-label">Alerts</span>
+        </button>
+        </Show>
+
+        <Show when={store.topbar.panelsValues}>
+        <button
+          type="button"
+          class={`axis-module ${isPanelOpen('dataview') || store.dataViewPanel.open ? 'is-active' : ''}`}
+          onClick={() => toggleDataViewPanel()}
+          title="Data window — OHLCV & plot values at crosshair"
+          aria-label="Values"
+          aria-pressed={isPanelOpen('dataview') || store.dataViewPanel.open}
+          data-testid="axis-btn-dataview"
+        >
+          <Icons.dataView />
+          <span class="axis-tb-btn-label">Values</span>
+        </button>
+        </Show>
+
+        <Show when={store.topbar.panelsResults}>
+        <button
+          type="button"
+          class={`axis-module ${store.resultsPanel.open ? 'is-active' : ''}`}
+          title="Results & export"
+          aria-label="Results"
+          data-testid="axis-btn-results"
+          aria-pressed={store.resultsPanel.open}
+          onClick={() => {
+            setStore('resultsPanel', 'open', !store.resultsPanel.open);
+            persist();
+          }}
+        >
+          <Icons.results />
+          <span class="axis-tb-btn-label">Results</span>
+        </button>
+        </Show>
+        </div>
+
+        <div class="axis-module-utils">
+        <Show when={store.topbar.panelsSystemLogs}>
+        <button
+          type="button"
+          class={`axis-module-util ${isPanelOpen('logs') ? 'is-active' : ''}`}
+          title="System Logs — app / transport / boot telemetry"
+          aria-label="System Logs"
+          data-testid="axis-btn-systemlogs"
+          aria-pressed={isPanelOpen('logs')}
+          onClick={() => toggleSystemLogsPanel()}
+        >
+          <Icons.systemLogs />
+          <span class="axis-tb-btn-label">Logs</span>
+        </button>
+        </Show>
+
+        <Show when={store.topbar.panelsStatus}>
+        <button
+          type="button"
+          class={`axis-module-util ${isPanelOpen('statusbar') ? 'is-active' : ''}`}
+          title="Status — connection HUD and status message"
+          aria-label="Status"
+          data-testid="axis-btn-statusbar"
+          aria-pressed={isPanelOpen('statusbar')}
+          onClick={() => toggleStatusBarPanel()}
+        >
+          <Icons.status />
+          <span class="axis-tb-btn-label">Status</span>
+        </button>
+        </Show>
+        </div>
       </div>
       </Show>
     </header>

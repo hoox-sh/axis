@@ -27,12 +27,12 @@ export const EXEC_MODE_OPTIONS: { value: EngineExecMode; label: string; hint: st
   {
     value: 'compile',
     label: 'Compiler',
-    hint: 'Numba/numpy path — faster; some constructs stay object-mode',
+    hint: 'Numba/numpy path — faster after first JIT; Flask is not prewarmed. Some Pine stays object-mode',
   },
   {
     value: 'auto',
     label: 'Auto',
-    hint: 'Try compile first; fall back to interpret on failure',
+    hint: 'Try compile first (best default on Server); fall back to interpret on failure',
   },
 ];
 

@@ -51,6 +51,7 @@ describe('isRemotePageOrigin', () => {
 
   it('non-loopback origins are remote', () => {
     expect(isRemotePageOrigin('https://axis.hoox.sh')).toBe(true);
+    expect(isRemotePageOrigin('https://abc.axis.pages.dev')).toBe(true);
     expect(isRemotePageOrigin('https://abc.pynescript-axis.pages.dev')).toBe(true);
   });
 });
@@ -63,7 +64,7 @@ describe('gatewayBase remote-page resolution (hardened VPS)', () => {
   });
 
   it('pyne on Pages preview → product API origin cross-origin', () => {
-    expect(gatewayBase('pyne', undefined, 'https://abc.pynescript-axis.pages.dev')).toBe(
+    expect(gatewayBase('pyne', undefined, 'https://abc.axis.pages.dev')).toBe(
       'https://pynescript.online/datafeed',
     );
   });

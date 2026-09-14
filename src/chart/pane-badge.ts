@@ -164,6 +164,9 @@ export function mountPaneBadge(
     // Built-in panes (volume / equity / empty indicator) — name + optional hide
     const chip = document.createElement('div');
     chip.className = 'axis-pane-badge-chip';
+    chip.style.height = '22px';
+    chip.style.background = 'transparent';
+    chip.style.boxShadow = 'none';
     const name = document.createElement('span');
     name.className = 'axis-pane-badge-name';
     name.textContent = label;
@@ -179,6 +182,9 @@ export function mountPaneBadge(
     for (const script of scripts) {
       const chip = document.createElement('div');
       chip.className = 'axis-pane-badge-chip';
+      chip.style.height = '22px';
+      chip.style.background = 'transparent';
+      chip.style.boxShadow = 'none';
       chip.dataset.scriptId = script.id;
       if (!script.visible) chip.classList.add('is-hidden-script');
 

@@ -260,12 +260,34 @@ export const Watchlist: Component = () => {
           maximumFractionDigits: n < 1 ? 6 : 2,
         });
 
+  /** Always-signed 2-decimal % so +0.48% and −0.13% share a fixed tabular slot. */
+  const fmtChange = (n?: number) => {
+    if (n == null || !Number.isFinite(n)) return '—';
+    const sign = n >= 0 ? '+' : '−';
+    return `${sign}${Math.abs(n).toFixed(2)}%`;
+  };
+
+  /** 24h open when known; else previous from last × %; else em-dash. */
+  const closeOf = (tick?: WatchTicker): number | undefined => {
+    if (!tick) return undefined;
+    if (tick.open24h != null && Number.isFinite(tick.open24h)) return tick.open24h;
+    const px = tick.price;
+    const ch = tick.change;
+    if (px == null || ch == null || !Number.isFinite(px) || !Number.isFinite(ch)) return undefined;
+    if (ch === -100) return undefined;
+    const prev = px / (1 + ch / 100);
+    return Number.isFinite(prev) ? prev : undefined;
+  };
+
   const modeLabel = () => {
     const m = quoteMode();
     if (m === 'ws') return 'live';
     if (m === 'rest') return 'rest';
     return '';
   };
+
+  const cols =
+    'grid grid-cols-[minmax(0,1.15fr)_4.5rem_4.25rem_4.4rem_16px] items-center gap-x-1 px-2';
 
   return (
     <Show when={isPanelOpen('watchlist') || store.watchlist.open}>
@@ -275,7 +297,7 @@ export const Watchlist: Component = () => {
         headerExtra={
           <Show when={modeLabel()}>
             <span
-              class="text-[0.72em] font-mono text-text-faint px-1 uppercase tracking-wider"
+              class="inline-flex items-center gap-1 px-0.5"
               title={
                 quoteMode() === 'ws'
                   ? 'WebSocket live quotes'
@@ -283,56 +305,94 @@ export const Watchlist: Component = () => {
               }
               data-testid="axis-watchlist-quote-mode"
             >
-              {modeLabel()}
+              <span
+                class={`axis-live-dot inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
+                  quoteMode() === 'ws'
+                    ? 'axis-live-dot--pulse bg-accent-2'
+                    : quoteMode() === 'rest'
+                      ? 'bg-text-faint'
+                      : 'hidden'
+                }`}
+                aria-hidden="true"
+              />
+              <span class="text-[10px] font-mono text-text-faint uppercase tracking-wider leading-none">
+                {modeLabel()}
+              </span>
             </span>
           </Show>
         }
       >
         <div class="flex-1 overflow-y-auto min-h-0">
-          <For each={store.watchlist.symbols}>
-            {(sym) => {
-              const tick = () => prices()[sym];
-              const active = () => store.symbol === sym;
-              const change = () => tick()?.change;
-              return (
-                // biome-ignore lint/a11y/useSemanticElements: row contains a nested remove <button>; wrapping in <button> would be invalid HTML
-                <div
-                  class={`flex items-center justify-between gap-1 px-2 py-1.5 cursor-pointer border-b border-border-soft text-[12px] ${
-                    active()
-                      ? 'bg-accent/10 border-l-2 border-l-accent pl-[6px]'
-                      : 'border-l-2 border-l-transparent hover:bg-bg-hover'
-                  }`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => void select(sym)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      void select(sym);
-                    }
-                  }}
-                >
-                  <span class={`font-semibold truncate ${active() ? 'text-accent' : 'text-text'}`}>
-                    {sym.replace(/USDT$/i, '').replace(/USD$/i, '')}
-                    <span class="text-text-faint font-normal text-[10px]">
-                      {/USDT$/i.test(sym) ? 'USDT' : /USD$/i.test(sym) ? 'USD' : ''}
-                    </span>
-                  </span>
-                  <div class="flex items-center gap-1.5 flex-shrink-0">
-                    <span class="font-mono text-[11px] text-text-dim">{fmtPrice(tick()?.price)}</span>
-                    <Show when={change() != null}>
-                      <span
-                        class={`font-mono text-[10px] px-1 ${
-                          (change() ?? 0) >= 0 ? 'text-accent-2' : 'text-red'
-                        }`}
-                      >
-                        {(change()! >= 0 ? '+' : '') + change()!.toFixed(2)}%
+          <Show
+            when={store.watchlist.symbols.length > 0}
+            fallback={
+              <div class="axis-empty-state px-2 py-3 text-[11px] text-text-faint">No symbols</div>
+            }
+          >
+            <div
+              class={`${cols} h-5 text-[10px] uppercase tracking-wider text-text-faint select-none`}
+              aria-hidden="true"
+            >
+              <span>Sym</span>
+              <span class="text-right">Last</span>
+              <span class="text-right">Chg</span>
+              <span class="text-right">Close</span>
+              <span />
+            </div>
+            <For each={store.watchlist.symbols}>
+              {(sym) => {
+                const tick = () => prices()[sym];
+                const active = () => store.symbol === sym;
+                const ch = () => {
+                  const n = tick()?.change;
+                  return n != null && Number.isFinite(n) ? n : undefined;
+                };
+                return (
+                  // biome-ignore lint/a11y/useSemanticElements: row contains a nested remove <button>; wrapping in <button> would be invalid HTML
+                  <div
+                    class={`axis-wl-row group ${cols} h-8 cursor-pointer text-[12px] border-b border-border ${
+                      active() ? 'is-active' : 'hover:bg-white/[0.03]'
+                    }`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => void select(sym)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        void select(sym);
+                      }
+                    }}
+                  >
+                    <span
+                      class={`font-semibold truncate ${active() ? 'text-accent' : 'text-text'}`}
+                    >
+                      {sym.replace(/USDT$/i, '').replace(/USD$/i, '')}
+                      <span class="text-text-faint font-normal text-[10px]">
+                        {/USDT$/i.test(sym) ? 'USDT' : /USD$/i.test(sym) ? 'USD' : ''}
                       </span>
-                    </Show>
+                    </span>
+                    <span class="font-mono text-[11px] text-text text-right tabular-nums lining-nums">
+                      {fmtPrice(tick()?.price)}
+                    </span>
+                    <span
+                      class={`font-mono text-[11px] text-right tabular-nums lining-nums ${
+                        ch() == null
+                          ? 'text-text-faint'
+                          : (ch() ?? 0) >= 0
+                            ? 'axis-wl-change-up'
+                            : 'axis-wl-change-down'
+                      }`}
+                    >
+                      {fmtChange(ch())}
+                    </span>
+                    <span class="font-mono text-[11px] text-text-dim text-right tabular-nums lining-nums">
+                      {fmtPrice(closeOf(tick()))}
+                    </span>
                     <button
                       type="button"
-                      class="text-text-faint hover:text-red text-sm leading-none px-0.5"
+                      class="w-4 h-4 flex items-center justify-center text-[11px] leading-none text-text-faint opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:text-red focus-visible:opacity-100"
                       title={`Remove ${sym}`}
+                      aria-label={`Remove ${sym}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         removeWatchlistSymbol(sym);
@@ -341,16 +401,16 @@ export const Watchlist: Component = () => {
                       ×
                     </button>
                   </div>
-                </div>
-              );
-            }}
-          </For>
+                );
+              }}
+            </For>
+          </Show>
         </div>
 
-        <div class="border-t-2 border-border p-2 flex-shrink-0">
+        <div class="border-t border-border px-2 py-1.5 flex-shrink-0">
           <input
-            class="sc-input w-full text-[11px]"
-            placeholder="Add symbol… (BTC or BTCUSDT)"
+            class="sc-input w-full h-7 min-h-7 text-[11px] placeholder:text-text-faint bg-transparent"
+            placeholder="Add symbol…"
             value={addValue()}
             onInput={(e) => setAddValue(e.currentTarget.value)}
             onKeyDown={(e) => {

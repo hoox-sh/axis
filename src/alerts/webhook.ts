@@ -27,7 +27,7 @@
  * @module alerts/webhook
  */
 
-import type { Alert, WebhookPayload } from './types';
+import type { Alert, L2WebhookPayload, WebhookPayload } from './types';
 
 /** Default wall-clock budget for alert webhook POSTs. */
 export const WEBHOOK_TIMEOUT_MS = 8_000;
@@ -37,8 +37,9 @@ export function buildWebhookPayload(
   alert: Alert,
   price: number,
   firedAt: number,
+  message?: string,
 ): WebhookPayload {
-  return {
+  const payload: WebhookPayload = {
     alertId: alert.id,
     name: alert.name,
     symbol: alert.symbol,
@@ -46,6 +47,47 @@ export function buildWebhookPayload(
     kind: alert.kind,
     firedAt,
   };
+  const msg = (message || '').trim();
+  if (msg) payload.message = msg;
+  return payload;
+}
+
+/** Human message line used in browser notifications and L2 payloads. */
+export function formatAlertFireMessage(
+  alert: Alert,
+  price: number,
+  message?: string,
+): string {
+  const custom = (message || '').trim();
+  if (custom) return custom;
+  const last = alert.params?.lastMessage;
+  if (typeof last === 'string' && last.trim()) return last.trim();
+  const px = Number.isFinite(price) ? String(price) : '—';
+  return `${alert.symbol} ${alert.kind} @ ${px}`;
+}
+
+/**
+ * L2 webhook body — same identity as {@link buildWebhookPayload} plus
+ * `channel: "l2"`, a message line, and a params snapshot.
+ */
+export function buildL2WebhookPayload(
+  alert: Alert,
+  price: number,
+  firedAt: number,
+  message?: string,
+): L2WebhookPayload {
+  const line = formatAlertFireMessage(alert, price, message);
+  const payload: L2WebhookPayload = {
+    ...buildWebhookPayload(alert, price, firedAt, message),
+    channel: 'l2',
+    source: 'axis',
+    message: `${alert.name}: ${line}`,
+  };
+  if (alert.interval) payload.interval = alert.interval;
+  if (alert.params && Object.keys(alert.params).length) {
+    payload.params = { ...alert.params };
+  }
+  return payload;
 }
 
 /**
@@ -89,7 +131,7 @@ export function isAllowedWebhookUrl(url: string): boolean {
  */
 export async function fireWebhook(
   url: string,
-  payload: WebhookPayload,
+  payload: WebhookPayload | L2WebhookPayload,
   fetchImpl: typeof fetch = fetch,
   opts?: { timeoutMs?: number },
 ): Promise<boolean> {
@@ -140,13 +182,14 @@ export function notifyBrowserAlert(
   NotificationImpl: typeof Notification | undefined = typeof Notification !== 'undefined'
     ? Notification
     : undefined,
+  message?: string,
 ): boolean {
   if (alert.notifyBrowser === false) return false;
   if (!NotificationImpl) return false;
   try {
     if (NotificationImpl.permission !== 'granted') return false;
     const title = alert.name || `Alert: ${alert.symbol}`;
-    const body = `${alert.symbol} ${alert.kind} @ ${price}`;
+    const body = formatAlertFireMessage(alert, price, message);
     new NotificationImpl(title, { body, tag: `axis-alert-${alert.id}` });
     return true;
   } catch {
@@ -165,17 +208,28 @@ export async function deliverAlert(
   opts?: {
     fetchImpl?: typeof fetch;
     NotificationImpl?: typeof Notification;
+    /** Override body (Pine `alert()` message). */
+    message?: string;
   },
-): Promise<{ webhook: boolean; browser: boolean }> {
-  const payload = buildWebhookPayload(alert, price, firedAt);
+): Promise<{ webhook: boolean; l2: boolean; browser: boolean }> {
+  const fetchImpl = opts?.fetchImpl ?? fetch;
+  const message = opts?.message;
   let webhook = false;
+  let l2 = false;
   if (alert.webhookUrl) {
     webhook = await fireWebhook(
       alert.webhookUrl,
-      payload,
-      opts?.fetchImpl ?? fetch,
+      buildWebhookPayload(alert, price, firedAt, message),
+      fetchImpl,
     );
   }
-  const browser = notifyBrowserAlert(alert, price, opts?.NotificationImpl);
-  return { webhook, browser };
+  if (alert.l2WebhookUrl) {
+    l2 = await fireWebhook(
+      alert.l2WebhookUrl,
+      buildL2WebhookPayload(alert, price, firedAt, message),
+      fetchImpl,
+    );
+  }
+  const browser = notifyBrowserAlert(alert, price, opts?.NotificationImpl, message);
+  return { webhook, l2, browser };
 }

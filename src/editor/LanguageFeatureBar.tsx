@@ -278,7 +278,7 @@ export const LanguageFeatureBar: Component<LanguageFeatureBarProps> = (props) =>
   return (
     <div
       ref={barEl}
-      class="axis-editor-featurebar"
+      class="axis-editor-featurebar min-h-[22px]"
       data-testid="axis-editor-featurebar"
       role="toolbar"
       aria-label="Language features"
@@ -290,7 +290,7 @@ export const LanguageFeatureBar: Component<LanguageFeatureBarProps> = (props) =>
           return (
             <button
               type="button"
-              class={`axis-editor-status-btn ${active() ? 'is-active' : ''} ${enabled() ? '' : 'is-off'}`}
+              class={`axis-editor-feature-tab axis-editor-status-btn h-[22px] px-1.5 text-[10px] ${active() ? 'is-active' : ''} ${enabled() ? '' : 'is-off'}`}
               data-testid={`axis-editor-feature-${group.id}`}
               data-active={active() ? 'true' : 'false'}
               title={`${group.label}: ${active() ? 'active now' : enabled() ? 'on (idle)' : 'off'} — ${group.hint}`}

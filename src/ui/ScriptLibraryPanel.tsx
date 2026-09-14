@@ -219,7 +219,7 @@ const LibraryScriptCard: Component<{
 
   return (
     <li
-      class="flex flex-col gap-1 border-2 border-border bg-bg-elev px-2 py-1.5 rounded-[var(--radius-chip)]"
+      class="axis-list-row flex flex-col gap-1 border-b border-border-soft bg-bg-elev px-2 min-h-8 py-1 rounded"
       data-testid="axis-library-script-card"
       data-script-kind={kind()}
       data-pine-version={props.item.pineVersion || undefined}
@@ -821,7 +821,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
   };
 
   return (
-    <div class="flex flex-col gap-3 text-[11px]">
+    <div class="flex flex-col gap-2 text-[12px]">
       <div class="sc-field">
         <label class="text-[10px] text-text-dim uppercase tracking-wider" for="library-storage-backend">Storage backend</label>
         <select
@@ -844,7 +844,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
       </div>
 
       <Show when={isCloud()}>
-        <div class="border-2 border-border p-2.5 flex flex-col gap-2 bg-bg-elev rounded-[var(--radius-sc)]">
+        <div class="border border-border p-2 flex flex-col gap-2 bg-bg-elev rounded-md">
           <div class="text-[10px] text-text-dim uppercase tracking-wider">Cloud credentials</div>
           <input
             class="sc-input font-mono text-[11px]"
@@ -907,7 +907,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
 
       <Show when={isGit()}>
         <div
-          class="border-2 border-border p-2.5 flex flex-col gap-2 bg-bg-elev rounded-[var(--radius-sc)]"
+          class="border border-border p-2 flex flex-col gap-2 bg-bg-elev rounded-md"
           data-testid="axis-git-settings"
         >
           <div class="text-[10px] text-text-dim uppercase tracking-wider">Git repository</div>
@@ -1110,7 +1110,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
         </div>
       </Show>
 
-      <div class="border-2 border-border p-2.5 flex flex-col gap-2 bg-bg-elev rounded-[var(--radius-sc)]">
+      <div class="border border-border p-2 flex flex-col gap-2 bg-bg-elev rounded-md">
         <div class="text-[10px] text-text-dim uppercase tracking-wider">Save current editor</div>
         <input
           class="sc-input"
@@ -1187,7 +1187,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
       </div>
 
       <Show when={error()}>
-        <p class="text-red font-mono text-[10px]">{error()}</p>
+        <p class="axis-empty-state text-red font-mono text-[12px]">{error()}</p>
       </Show>
 
       <Show when={published().length > 0}>
@@ -1225,7 +1225,9 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
         </div>
         <Show
           when={items().length > 0}
-          fallback={<div class="text-text-faint p-2">No saved scripts yet.</div>}
+          fallback={
+            <div class="axis-empty-state text-[12px] text-text-dim py-2">No scripts</div>
+          }
         >
           <ul
             class="flex flex-col gap-1"
@@ -1272,7 +1274,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
 export const LibraryPanel: Component<ScriptLibraryPanelProps> = (props) => (
   <Show when={isPanelOpen('library')}>
     <FloatableShell id="library" testId="axis-library">
-      <div class="flex-1 overflow-y-auto min-h-0 p-2">
+      <div class="flex-1 overflow-y-auto min-h-0">
         <ScriptLibraryPanel
           getDoc={props.getDoc}
           setDoc={props.setDoc}

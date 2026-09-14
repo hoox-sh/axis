@@ -84,5 +84,10 @@ export const pointerCoarse = coarsePointer;
 export const isPhoneViewport = () => viewportMode() === 'phone';
 export const isTabletViewport = () => viewportMode() === 'tablet';
 export const isDesktopViewport = () => viewportMode() === 'desktop';
+/**
+ * Tablet left/right docks overlay the chart (in-flow width 0 + negative margin)
+ * instead of shrinking it. Phone sheets still win over this.
+ */
+export const isTabletSideDockOverlay = () => isTabletViewport();
 /** True when hover-gated UI should be replaced with tap equivalents. */
 export const isTouchPointer = () => coarsePointer();

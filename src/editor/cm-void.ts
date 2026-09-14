@@ -74,17 +74,18 @@ export const voidEditorTheme = EditorView.theme(
       backgroundColor: 'var(--color-bg-base)',
       color: 'var(--color-text-faint)',
       border: 'none',
-      borderRight: '2px solid var(--color-border)',
-      /* No fixed gutter min — each column sizes to its content */
-      minWidth: '0',
+      borderRight: '1px solid var(--color-border)',
+      minWidth: '48px',
     },
     /*
-     * Line numbers: width = digits of max line only (CM spacer 9 → 99 → 999…).
+     * Line numbers: 10px muted, width = digits of max line (CM spacer 9 → 99…).
      * Override library `.cm-lineNumbers .cm-gutterElement { minWidth: 20px }`.
      */
     '.cm-lineNumbers': {
       minWidth: '0',
       width: 'auto',
+      fontSize: '10px',
+      color: 'var(--color-text-faint)',
     },
     '.cm-lineNumbers .cm-gutterElement': {
       padding: '0 0.3em 0 0.15em',
@@ -93,6 +94,8 @@ export const voidEditorTheme = EditorView.theme(
       textAlign: 'right',
       whiteSpace: 'nowrap',
       boxSizing: 'border-box',
+      fontSize: '10px',
+      color: 'var(--color-text-faint)',
     },
     // Fold gutter: 14px Lucide chevrons, hit target aligned to line numbers.
     '.cm-foldGutter': {
@@ -146,10 +149,10 @@ export const voidEditorTheme = EditorView.theme(
       color: 'var(--color-text)',
     },
     '.cm-panels.cm-panels-top': {
-      borderBottom: '2px solid var(--color-border)',
+      borderBottom: '1px solid var(--color-border)',
     },
     '.cm-panels.cm-panels-bottom': {
-      borderTop: '2px solid var(--color-border)',
+      borderTop: '1px solid var(--color-border)',
     },
     '.cm-searchMatch': {
       backgroundColor: 'color-mix(in srgb, var(--color-orange) 35%, transparent)',

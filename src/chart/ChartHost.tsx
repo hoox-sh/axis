@@ -768,7 +768,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       </Show>
       <Show when={emptyHint()}>
         {(hint) => (
-          <div class="absolute inset-0 flex flex-col items-center justify-center gap-2 z-[5] pointer-events-none px-6">
+          <div class="axis-empty-state absolute inset-0 flex flex-col items-center justify-center gap-2 z-[5] pointer-events-none px-6">
             <div
               class={`text-[11px] tracking-[0.18em] uppercase font-medium ${
                 isActive() && store.status === 'error' ? 'text-red' : 'text-text-faint'

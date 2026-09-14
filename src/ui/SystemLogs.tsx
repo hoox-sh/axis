@@ -107,21 +107,30 @@ export const SystemLogs: Component = () => {
    * workspace and the Status strip so System Logs can never clip them.
    */
   const clampLogsBodyHeight = (): number => {
-    const preferred = Math.max(80, store.logsPanel.height - 28);
+    const preferred = Math.max(160, store.logsPanel.height - 28);
     const reserved = 260; // topbar + workspace minimum + status strip
     const max = Math.max(80, (typeof window !== 'undefined' ? window.innerHeight : 900) - reserved);
     return Math.min(preferred, max);
   };
 
+  const levelDot = (level: LogEntry['level']) =>
+    level === 'error'
+      ? 'bg-[#F07178]'
+      : level === 'ok'
+        ? 'bg-[#3DDC97]'
+        : level === 'warn'
+          ? 'bg-[#E8B84A]'
+          : 'bg-[#6B7382]';
+
   return (
     <Show when={isPanelOpen('logs')}>
       <div
-        class="flex flex-col border-t-2 border-border bg-bg-panel flex-shrink-0"
+        class="axis-logs-strip flex flex-col border-t border-[#1C2230] bg-[#0C0E14] flex-shrink-0"
         data-axis-system-logs
         data-testid="axis-system-logs"
       >
         {/* Collapsed header / expand toggle row */}
-        <div class="flex items-center gap-1.5 px-2 py-0.5 min-h-[24px]">
+        <div class="flex items-center gap-1.5 px-2 h-7 min-h-[28px]">
           <button
             type="button"
             class="sc-btn sc-btn-ghost px-1.5 py-0.5 text-[10px] inline-flex items-center gap-1"
@@ -147,16 +156,17 @@ export const SystemLogs: Component = () => {
           <Show when={!expanded() && last()}>
             <button
               type="button"
-              class={`flex-1 min-w-0 text-left text-[10px] font-mono truncate px-1 ${levelClass(last()!.level)}`}
+              class="flex-1 min-w-0 text-left text-[11px] font-mono px-1 text-[#9AA3B2] inline-flex items-center gap-1.5"
               title="Click to expand"
               onClick={toggleExpand}
             >
-              <span class="text-text-faint mr-1.5">{formatTs(last()!.ts)}</span>
-              {last()!.message}
+              <span class={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${levelDot(last()!.level)}`} />
+              <span class="text-[#6B7382] shrink-0">{formatTs(last()!.ts)}</span>
+              <span class="truncate min-w-0">{last()!.message}</span>
             </button>
           </Show>
           <Show when={!expanded() && !last()}>
-            <span class="flex-1 text-[10px] text-text-faint px-1">No log entries yet</span>
+            <span class="flex-1 text-[11px] text-[#6B7382] px-1">No log entries yet</span>
           </Show>
           <Show when={expanded()}>
             <div class="flex-1" />
@@ -192,7 +202,7 @@ export const SystemLogs: Component = () => {
         <Show when={expanded()}>
           <div
             ref={listRef}
-            class="overflow-auto border-t border-border-soft font-mono text-[10px] bg-bg-base"
+            class="overflow-auto border-t border-[#1C2230] font-mono text-[11px] bg-[#07080C]"
             style={{
               // Clamp against the viewport so a persisted oversized height can
               // never push the Status strip (rendered below) off-screen.
@@ -211,11 +221,15 @@ export const SystemLogs: Component = () => {
                 {(entry) => (
                   // biome-ignore lint/a11y: double-click copy is a mouse convenience; each row already exposes an explicit copy button
                   <div
-                    class="group flex items-start gap-2 px-2 py-0.5 border-b border-border-soft/50 hover:bg-bg-hover/60"
+                    class="group flex items-start gap-2 px-2 py-0.5 border-b border-[#1C2230]/50 hover:bg-white/[0.03]"
                     onDblClick={(e) => void copyLine(entry, e)}
                     title="Double-click to copy message"
                   >
-                    <span class="text-text-faint w-[72px] flex-shrink-0 select-none">
+                    <span
+                      class={`inline-block w-1.5 h-1.5 rounded-full shrink-0 mt-1 ${levelDot(entry.level)}`}
+                      title={entry.level}
+                    />
+                    <span class="text-[#6B7382] w-[72px] flex-shrink-0 select-none tabular-nums">
                       {formatTs(entry.ts)}
                     </span>
                     <span
@@ -223,10 +237,10 @@ export const SystemLogs: Component = () => {
                     >
                       {entry.level}
                     </span>
-                    <span class="text-text-faint w-14 flex-shrink-0 truncate select-none">
+                    <span class="text-[#6B7382] w-14 flex-shrink-0 truncate select-none">
                       {entry.source}
                     </span>
-                    <span class={`flex-1 min-w-0 break-all ${levelClass(entry.level)}`}>
+                    <span class="flex-1 min-w-0 break-all text-[#9AA3B2]">
                       {entry.message}
                     </span>
                     <button

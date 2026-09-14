@@ -34,6 +34,27 @@ export const ALERTS_STORAGE_KEY = 'axis.alerts.v1';
 /** In-memory fallback when localStorage is missing or throws. */
 let memoryStore: Alert[] | null = null;
 
+type AlertsListener = () => void;
+const listeners = new Set<AlertsListener>();
+
+/** Subscribe to persist writes. Returns an unsubscribe function. */
+export function subscribeAlerts(fn: AlertsListener): () => void {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
+}
+
+function notifyAlertsListeners(): void {
+  for (const fn of listeners) {
+    try {
+      fn();
+    } catch {
+      /* listener errors must not break persist */
+    }
+  }
+}
+
 function lsAvailable(): boolean {
   try {
     return typeof localStorage !== 'undefined' && localStorage !== null;
@@ -97,6 +118,9 @@ export function parseAlert(raw: unknown): Alert | null {
 
   if (typeof o.interval === 'string' && o.interval) alert.interval = o.interval;
   if (typeof o.webhookUrl === 'string' && o.webhookUrl) alert.webhookUrl = o.webhookUrl;
+  if (typeof o.l2WebhookUrl === 'string' && o.l2WebhookUrl) {
+    alert.l2WebhookUrl = o.l2WebhookUrl;
+  }
   if (typeof o.notifyBrowser === 'boolean') alert.notifyBrowser = o.notifyBrowser;
   if (typeof o.cooldownMs === 'number' && Number.isFinite(o.cooldownMs)) {
     alert.cooldownMs = o.cooldownMs;
@@ -161,6 +185,7 @@ export function saveAlerts(alerts: Alert[]): void {
   if (!lsSet(ALERTS_STORAGE_KEY, json)) {
     // localStorage unavailable — memory only (already set)
   }
+  notifyAlertsListeners();
 }
 
 /** Replace one alert by id (or no-op if missing). Returns updated list. */

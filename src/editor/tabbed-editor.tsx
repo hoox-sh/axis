@@ -856,7 +856,7 @@ export const TabbedEditor: Component<Props> = (props) => {
     <div class="flex flex-col h-full min-h-0 flex-1">
       {/* ── Tab strip + git/source actions ───────────────────────── */}
       <div
-        class="axis-editor-tabbar flex items-stretch bg-bg-base border-b-2 border-border flex-shrink-0 min-h-[2rem]"
+        class="axis-editor-tabbar flex items-stretch bg-bg-base border-b border-border flex-shrink-0 h-7 min-h-7"
         data-testid="axis-editor-tabbar"
       >
         <div
@@ -870,7 +870,7 @@ export const TabbedEditor: Component<Props> = (props) => {
                 role="tab"
                 tabIndex={0}
                 aria-selected={idx() === activeTab()}
-                class={`axis-editor-tab flex items-center gap-1.5 px-2.5 py-1 text-[11px] border-r border-border-soft cursor-pointer whitespace-nowrap select-none ${
+                class={`axis-editor-tab flex items-center gap-1.5 px-2 h-7 text-[11px] border-r border-border-soft cursor-pointer whitespace-nowrap select-none ${
                   idx() === activeTab()
                     ? 'is-active bg-bg-panel text-text'
                     : 'text-text-dim hover:bg-bg-hover hover:text-text'
@@ -1027,7 +1027,7 @@ export const TabbedEditor: Component<Props> = (props) => {
       </Show>
       {/* ── Status / action bar ─────────────────────────────────── */}
       <div
-        class="axis-editor-statusbar flex-shrink-0 flex items-center flex-wrap gap-1 gap-y-0.5 px-1.5 py-0.5 border-t-2 border-border bg-bg-base text-[10px] font-mono tabular-nums select-none min-h-[1.75rem]"
+        class="axis-editor-statusbar flex-shrink-0 flex items-center flex-wrap gap-1 gap-y-0.5 px-1.5 py-0 border-t border-border bg-bg-base text-[10px] font-mono tabular-nums select-none min-h-[22px]"
         data-testid="axis-editor-stats"
       >
         {/* Stats cluster */}

@@ -112,7 +112,7 @@ build:
 
 pages-deploy:
 	bun run build
-	bunx --yes wrangler pages deploy dist --project-name=pynescript-axis
+	bunx --yes wrangler pages deploy dist --project-name=axis
 
 clean:
 	rm -rf dist coverage test-results playwright-report .wrangler

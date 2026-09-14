@@ -42,6 +42,19 @@ describe('formatAlertCondition', () => {
     expect(s).toMatch(/pct/i);
     expect(s).toContain('2');
   });
+
+  it('formats drawing_touch and pine_condition', () => {
+    expect(
+      formatAlertCondition({ kind: 'drawing_touch', params: { price: 100 } }),
+    ).toMatch(/drawing/);
+    const pine = formatAlertCondition({
+      kind: 'pine_condition',
+      params: { plotKey: 'RSI', op: '>', threshold: 70 },
+    });
+    expect(pine).toContain('RSI');
+    expect(pine).toContain('>');
+    expect(pine).toContain('70');
+  });
 });
 
 describe('formatLastFired', () => {
@@ -59,11 +72,15 @@ describe('formatLastFired', () => {
 });
 
 describe('ALERT_KINDS', () => {
-  it('lists price + on-chain kinds for the create form', () => {
+  it('lists price, drawing, indicator, and on-chain kinds', () => {
     expect(ALERT_KINDS).toEqual([
       'price_cross',
       'price_above',
       'price_below',
+      'pct_change',
+      'drawing_touch',
+      'pine_condition',
+      'pine_alert',
       'onchain_tvl_spike',
       'onchain_event',
     ]);

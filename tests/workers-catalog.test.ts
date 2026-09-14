@@ -68,10 +68,7 @@ describe('workers catalog', () => {
       endpointsMatch('http://127.0.0.1:5002', 'http://127.0.0.1:5002/'),
     ).toBe(true);
     expect(
-      endpointsMatch(
-        'https://pynescript-axis.cryptolinx.workers.dev/api',
-        DEFAULT_AXIS_WORKER_BASE,
-      ),
+      endpointsMatch(`${DEFAULT_AXIS_WORKER_BASE}/api`, DEFAULT_AXIS_WORKER_BASE),
     ).toBe(true);
     expect(endpointsMatch('http://127.0.0.1:5002', LOCAL_AXIS_WORKER_BASE)).toBe(
       false,
@@ -82,6 +79,8 @@ describe('workers catalog', () => {
     expect(matchCatalogForEndpoint('http://127.0.0.1:5002')).toBe('pyne-pro');
     expect(matchCatalogForEndpoint('http://localhost:8787')).toBe('axis-worker-local');
     expect(matchCatalogForEndpoint(DEFAULT_AXIS_WORKER_BASE)).toBe('axis-worker');
+    expect(matchCatalogForEndpoint('https://worker.axis.hoox.sh')).toBe('axis-worker');
+    expect(matchCatalogForEndpoint('https://axis.hoox.sh')).not.toBe('axis-worker');
     expect(
       matchCatalogForEndpoint('https://pyne-agent-worker.cryptolinx.workers.dev'),
     ).toBe('pyne-agent');

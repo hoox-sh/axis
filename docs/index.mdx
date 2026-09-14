@@ -105,8 +105,11 @@ Full recipes: [Compose recipes](/axis/docs/enduser/getting-started/compose-recip
 
 | Surface | Value |
 | --- | --- |
-| CF Wrangler / Pages project | `pynescript-axis` (frozen) |
-| Health JSON service | `pynescript-axis-worker` |
+| CF Pages project | `axis` |
+| Pages URL | `https://axis.hoox.sh` |
+| CF Worker script | `worker-axis` |
+| Worker URL | `https://worker.axis.hoox.sh` |
+| Health JSON service | `worker-axis` |
 | Product brand | **AXIS** |
 
 ## Demo topologies
@@ -115,7 +118,7 @@ Full recipes: [Compose recipes](/axis/docs/enduser/getting-started/compose-recip
 - Desktop: `bun run desktop:dev` (Tauri 2)
 - Static: `bun run build` + `axis_pwa_server.py` `:8081`
 - Worker: `axis dev worker` / wrangler on `:8787`
-- Prod: `axis deploy` → project `pynescript-axis`
+- Prod: `axis deploy` → Worker `worker-axis` (`https://worker.axis.hoox.sh`) + Pages `https://axis.hoox.sh`
 
 See [topologies](/axis/docs/architecture/topologies), [AXIS CLI](/axis/docs/devops/cli), and [local dev](/axis/docs/devops/local-dev).
 

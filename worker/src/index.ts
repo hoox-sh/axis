@@ -118,11 +118,12 @@ const LOCAL_DEV_ORIGIN_RE = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i;
  */
 /**
  * Known product hosts only — not open `*.pages.dev` (any third-party Pages
- * project). AXIS Cloudflare Pages project is `pynescript-axis.pages.dev`.
- * Additional preview hosts can be listed in `ALLOWED_ORIGIN`.
+ * project). AXIS Cloudflare Pages project is `axis.pages.dev` (legacy
+ * `pynescript-axis.pages.dev` still echoed). Additional preview hosts can
+ * be listed in `ALLOWED_ORIGIN`.
  */
 const PRODUCT_ORIGIN_RE =
-  /^https:\/\/(?:(?:[\w-]+\.)*(?:hoox\.sh|pynescript\.online)|(?:[\w-]+\.)*pynescript-axis\.pages\.dev)$/i;
+  /^https:\/\/(?:(?:[\w-]+\.)*(?:hoox\.sh|pynescript\.online)|(?:[\w-]+\.)*(?:axis|pynescript-axis)\.pages\.dev)$/i;
 
 /**
  * Resolve `Access-Control-Allow-Origin` for this request.
@@ -223,7 +224,7 @@ export default {
           return jsonResponse(
             {
               status: 'healthy',
-              service: 'pynescript-axis-worker',
+              service: 'worker-axis',
               version: WORKER_VERSION,
               timestamp: Date.now(),
               features: {

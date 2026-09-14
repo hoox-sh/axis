@@ -144,13 +144,13 @@ export const ScriptLogsPane: Component<{ open: boolean; onClose: () => void }> =
 
   return (
     <section
-      class="flex flex-col min-h-0 flex-shrink-0 border-t-2 border-border bg-bg-base h-60"
+      class="flex flex-col min-h-0 flex-shrink-0 border-t border-border bg-bg-base h-60"
       data-testid="axis-editor-scriptlogs"
       aria-label="Script logs"
     >
       {/* Header: title + run picker + level filters + count + copy + close */}
       <div
-        class="flex items-center gap-1.5 px-2 py-1 border-b border-border-soft flex-shrink-0 flex-wrap"
+        class="flex items-center gap-1.5 px-2 h-7 border-b border-border-soft flex-shrink-0 flex-wrap"
         data-testid="axis-scriptlogs-toolbar"
       >
         <span class="text-[10px] uppercase tracking-wider text-text-faint font-semibold">
@@ -226,7 +226,7 @@ export const ScriptLogsPane: Component<{ open: boolean; onClose: () => void }> =
           when={hasRun()}
           fallback={
             <div
-              class="p-3 text-text-faint italic text-[0.95em]"
+              class="axis-empty-state px-2 py-2 text-[12px] text-text-dim"
               data-testid="axis-scriptlogs-empty"
             >
               Run a script that calls log.info / log.warning / log.error.
@@ -237,7 +237,7 @@ export const ScriptLogsPane: Component<{ open: boolean; onClose: () => void }> =
             when={allEntries().length > 0}
             fallback={
               <div
-                class="p-3 text-text-faint italic text-[0.95em]"
+                class="axis-empty-state px-2 py-2 text-[12px] text-text-dim"
                 data-testid="axis-scriptlogs-empty"
               >
                 No script logs in the last run.
@@ -247,7 +247,7 @@ export const ScriptLogsPane: Component<{ open: boolean; onClose: () => void }> =
             <Show
               when={filtered().length > 0}
               fallback={
-                <div class="p-3 text-text-faint italic text-[0.95em]">
+                <div class="axis-empty-state px-2 py-2 text-[12px] text-text-dim">
                   No {filter()} logs in the last run.
                 </div>
               }

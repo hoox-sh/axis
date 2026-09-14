@@ -207,13 +207,15 @@ export const BarReplayControls: Component = () => {
     <Show when={st().active}>
       {/* biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the overlay cluster */}
       <div
-        class="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-2 py-1 bg-bg-panel/95 border-2 border-border shadow-[0_4px_20px_rgba(0,0,0,0.4)] pointer-events-auto"
+        class="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 h-7 px-1.5 bg-[#0C0E14]/95 border border-[#1C2230] rounded-[6px] pointer-events-auto"
         data-testid="axis-bar-replay-controls"
         role="group"
         aria-label="Bar replay controls"
       >
         <span
-          class="text-[10px] font-mono uppercase tracking-wider text-accent px-1 select-none"
+          class={`text-[10px] font-mono uppercase tracking-wider px-1 select-none ${
+            st().playing ? 'text-[#E8B84A]' : 'text-[#6B7382]'
+          }`}
           title="Scrub or step to a start bar, then Play. Play at the end restarts from bar 1."
         >
           Replay
@@ -233,7 +235,7 @@ export const BarReplayControls: Component = () => {
 
         <button
           type="button"
-          class={`sc-btn px-1.5 ${st().playing ? 'border-accent text-accent' : ''}`}
+          class={`sc-btn px-1.5 ${st().playing ? 'border-[#E8B84A] text-[#E8B84A]' : ''}`}
           title={st().playing ? 'Pause' : 'Play'}
           aria-label={st().playing ? 'Pause' : 'Play'}
           data-testid="axis-bar-replay-play"

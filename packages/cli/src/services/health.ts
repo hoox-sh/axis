@@ -11,8 +11,7 @@ export type HealthResult = {
   error?: string;
 };
 
-const FALLBACK_WORKER_URL =
-  "https://pynescript-axis.cryptolinx.workers.dev";
+const FALLBACK_WORKER_URL = "https://worker.axis.hoox.sh";
 
 export function defaultWorkerUrl(): string {
   const fromEnv = process.env.AXIS_WORKER_URL?.trim();

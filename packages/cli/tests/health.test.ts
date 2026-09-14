@@ -55,7 +55,7 @@ describe("defaultWorkerUrl", () => {
   test("falls back to production worker", () => {
     delete process.env.AXIS_WORKER_URL;
     expect(defaultWorkerUrl()).toBe(
-      "https://pynescript-axis.cryptolinx.workers.dev"
+      "https://worker.axis.hoox.sh"
     );
   });
 });

@@ -90,6 +90,23 @@ const COLOR_PRESETS = [
 
 const LINE_STYLES: DrawingLineStyle[] = ['solid', 'dashed', 'dotted'];
 
+/** Chart-scope chords already in the shortcut registry — do not invent new ones. */
+const TOOL_SHORTCUT: Partial<Record<DrawingToolId, string>> = {
+  cursor: 'Q',
+  eraser: 'E',
+  measure: 'M',
+  trend: 'L',
+  fib: 'F',
+  rect: 'R',
+  text: 'T',
+  hline: 'H',
+  brush: 'X',
+};
+
+function titleWithShortcut(name: string, shortcut?: string) {
+  return shortcut ? `${name} (${shortcut})` : name;
+}
+
 type StylePatch = KindDrawingPrefs & { text?: string; locked?: boolean };
 
 function settingsKind(tool: DrawingToolId, selectedKind?: string | null): DrawingToolId {
@@ -468,21 +485,20 @@ export const DrawingToolbar: Component = () => {
     syncLayerFromStore();
   };
 
-  const iconPx = 18;
+  const iconPx = 16;
   const btnClass =
-    'sc-btn sc-btn-ghost w-9 h-9 min-w-9 min-h-9 p-0 flex items-center justify-center border border-transparent';
+    'axis-draw-btn sc-btn sc-btn-ghost w-8 h-8 min-w-8 min-h-8 !w-8 !h-8 !min-w-8 !min-h-8 p-0 flex items-center justify-center border border-transparent rounded-[4px]';
 
   const railGroups = () =>
     TOOL_GROUPS.filter((g) => g.id !== 'actions' && g.tools.length > 0);
 
-  // top-14 clears symbol chip + script badge row; badges are offset right of the
-  // rail so they stay clear of this ChartHost-sibling toolbar/style bar.
+  // top-14 clears symbol chip + script badge row; 8px from the chart's left edge.
   return (
     <div ref={rootRef} class="absolute left-2 top-14 z-20 flex items-start gap-1.5 pointer-events-none">
       {/* Left rail */}
       <div
         ref={railRef}
-        class="pointer-events-auto flex flex-col gap-0.5 p-1 bg-bg-panel/95 border border-border rounded-[var(--radius-sc)]"
+        class="axis-draw-rail pointer-events-auto flex flex-col gap-1 p-1 bg-[#0C0E14]/95 border border-[#1C2230] rounded-[6px]"
         role="toolbar"
         aria-label="Drawing tools"
         aria-orientation="vertical"
@@ -509,8 +525,11 @@ export const DrawingToolbar: Component = () => {
                   }`}
                   title={
                     g.flyout
-                      ? `${g.label} · ${toolLabel(primaryId())} · click for tools`
-                      : toolLabel(primaryId())
+                      ? titleWithShortcut(
+                          `${g.label} · ${toolLabel(primaryId())}`,
+                          TOOL_SHORTCUT[primaryId()],
+                        )
+                      : titleWithShortcut(toolLabel(primaryId()), TOOL_SHORTCUT[primaryId()])
                   }
                   aria-label={g.label}
                   aria-pressed={isActive()}
@@ -530,7 +549,7 @@ export const DrawingToolbar: Component = () => {
                 </button>
                 <Show when={g.flyout && openGroup() === g.id}>
                   <div
-                    class="absolute left-full top-0 ml-1 min-w-[9.5em] p-1 flex flex-col gap-0.5 overflow-y-auto bg-bg-elev border border-border rounded-[var(--radius-input)] shadow-lg z-50"
+                    class="absolute left-full top-0 ml-1 min-w-[9.5em] p-2 flex flex-col gap-0.5 overflow-y-auto bg-[#10131B] border border-[#1C2230] rounded-[6px] shadow-lg z-50"
                     role="menu"
                     style={flyoutClamp()[g.id]}
                     data-drawing-flyout
@@ -543,11 +562,12 @@ export const DrawingToolbar: Component = () => {
                             type="button"
                             role="menuitemradio"
                             aria-checked={active() === tid}
-                            class={`flex items-center gap-2 w-full px-2 py-1.5 text-left text-[12px] rounded-[var(--radius-sm)] border-0 bg-transparent cursor-pointer font-inherit ${
+                            class={`flex items-center gap-2 w-full px-2 py-1.5 text-left text-[12px] rounded-[4px] border-0 bg-transparent cursor-pointer font-inherit ${
                               active() === tid
-                                ? 'text-accent bg-accent/10 font-semibold'
-                                : 'text-text-dim hover:bg-bg-hover hover:text-text'
+                                ? 'text-[#8B9CFF] bg-[#8B9CFF]/10 font-semibold'
+                                : 'text-[#9AA3B2] hover:bg-white/[0.04] hover:text-[#E8EAEE]'
                             }`}
+                            title={titleWithShortcut(toolLabel(tid), TOOL_SHORTCUT[tid])}
                             onClick={() => selectTool(tid)}
                           >
                             <I size={15} strokeWidth={2.25} />
@@ -570,7 +590,7 @@ export const DrawingToolbar: Component = () => {
           class={`${btnClass} relative ${
             store.drawingUi.magnet !== 'off' ? 'text-accent' : 'text-text-dim'
           }`}
-          title={`Magnet: ${store.drawingUi.magnet} (click to cycle off → weak → strong)`}
+          title={`Magnet: ${store.drawingUi.magnet} (W)`}
           aria-label={`Magnet snap: ${store.drawingUi.magnet}`}
           aria-pressed={store.drawingUi.magnet !== 'off'}
           onClick={() => {
@@ -662,7 +682,7 @@ export const DrawingToolbar: Component = () => {
         <button
           type="button"
           class={`${btnClass} text-text-dim disabled:opacity-40`}
-          title="Delete selected (Del / Backspace)"
+          title="Delete selected (Delete)"
           aria-label="Delete selected drawing"
           disabled={!store.selectedDrawingId}
           onClick={() => getActiveDrawingLayer()?.deleteSelected()}
@@ -701,7 +721,7 @@ export const DrawingToolbar: Component = () => {
       <Show when={showStyleBar()}>
         <div class="relative" data-drawing-settings>
           <div
-            class="pointer-events-auto flex items-center gap-1 px-1.5 py-1 bg-bg-panel/95 border border-border rounded-[var(--radius-sc)]"
+            class="pointer-events-auto flex items-center gap-1 px-1.5 py-1 bg-[#0C0E14]/95 border border-[#1C2230] rounded-[6px]"
             role="toolbar"
             aria-label="Drawing style"
             data-testid="axis-drawing-stylebar"
@@ -884,7 +904,7 @@ export const DrawingToolbar: Component = () => {
 
           <Show when={settingsOpen()}>
             <div
-              class="pointer-events-auto absolute left-0 top-full mt-1 w-[18.5rem] max-h-[min(70vh,28rem)] overflow-y-auto p-2 flex flex-col gap-2 bg-bg-elev border border-border rounded-[var(--radius-input)] shadow-lg z-50"
+              class="pointer-events-auto absolute left-0 top-full mt-1 w-[18.5rem] max-h-[min(70vh,28rem)] overflow-y-auto p-2 flex flex-col gap-2 bg-[#10131B] border border-[#1C2230] rounded-[6px] shadow-lg z-50"
               role="dialog"
               aria-label="Drawing settings"
               style={settingsClamp()}

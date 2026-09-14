@@ -172,12 +172,12 @@ Dynamic plugins rehydrate from localStorage install list on boot (`restoreInstal
 
 **Setup**
 
-1. `wrangler dev` / deploy Worker project **`pynescript-axis`** (frozen name).
+1. `wrangler dev` / deploy Worker script **`worker-axis`** (`https://worker.axis.hoox.sh`).
 2. Endpoint → Worker origin.
 3. Storage cloud → API key from admin `/api/keys`.
 4. Script Library uses cloud list/read/write; If-Match on concurrent writes.
 
-**Invariants:** CF project id is infrastructure, not brand; health JSON may say `pynescript-axis-worker`.
+**Invariants:** Pages project is `axis` (`https://axis.hoox.sh`); Worker script is `worker-axis` (`https://worker.axis.hoox.sh`); health JSON `service` is `worker-axis`.
 
 **Failure modes:** missing Bearer key; D1 unbound → memory store (dev only); DO session query params wrong.
 

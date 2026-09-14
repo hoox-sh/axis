@@ -313,7 +313,7 @@ export const LayerPanel: Component = () => {
   return (
     <Show when={isPanelOpen('layers') || store.layerPanel.open}>
       <FloatableShell id="layers" testId="axis-layers">
-        <div class="flex-1 overflow-y-auto min-h-0 p-2 text-[0.85em] flex flex-col gap-2">
+        <div class="flex-1 overflow-y-auto min-h-0 text-[12px] flex flex-col gap-2">
           <Section title="Panes">
             <For each={[...store.panes].sort((a, b) => a.order - b.order)}>
               {(pane) => (
@@ -345,9 +345,7 @@ export const LayerPanel: Component = () => {
                   onchainManagerState.events.length > 0
                 }
                 fallback={
-                  <Empty>
-                    No on-chain series. Attach TVL from the On-Chain panel.
-                  </Empty>
+                  <Empty>No on-chain series</Empty>
                 }
               >
                 <For each={onchainManagerState.series}>
@@ -399,7 +397,7 @@ export const LayerPanel: Component = () => {
           <Section title="Scripts">
             <Show
               when={store.scripts.length > 0}
-              fallback={<Empty>No scripts on chart. Run Pine to add layers.</Empty>}
+              fallback={<Empty>No scripts</Empty>}
             >
               <For each={store.scripts}>
                 {(ind) => (
@@ -496,10 +494,7 @@ export const LayerPanel: Component = () => {
             <Show
               when={symbolDrawings().length > 0}
               fallback={
-                <Empty>
-                  No drawings for {store.symbol || 'this symbol'}. Use the left
-                  tool rail to place shapes.
-                </Empty>
+                <Empty>No drawings</Empty>
               }
             >
               <For each={symbolDrawings()}>
@@ -510,7 +505,7 @@ export const LayerPanel: Component = () => {
                   return (
                     // biome-ignore lint/a11y/useSemanticElements: row contains nested buttons, so a real <button> would be invalid HTML
                     <div
-                      class={`flex items-center gap-1.5 px-1 py-1 border cursor-pointer transition-colors ${
+                      class={`axis-list-row flex items-center gap-1.5 h-8 px-1 border-b cursor-pointer transition-colors ${
                         selected()
                           ? 'bg-accent/15 border-accent'
                           : 'bg-bg-elev border-border-soft hover:border-border'
@@ -530,7 +525,7 @@ export const LayerPanel: Component = () => {
                     >
                       <button
                         type="button"
-                        class={`w-5 h-5 text-[0.75em] flex items-center justify-center border-2 flex-shrink-0 ${
+                        class={`w-5 h-5 text-[0.75em] flex items-center justify-center border flex-shrink-0 rounded ${
                           visible()
                             ? 'border-accent bg-accent/15 text-accent'
                             : 'border-border bg-bg-hover text-text-dim'
@@ -631,7 +626,7 @@ export const LayerPanel: Component = () => {
               <Show
                 when={templates().length > 0}
                 fallback={
-                  <Empty>No templates yet. Save drawings as an analysis pack.</Empty>
+                  <Empty>No templates</Empty>
                 }
               >
                 <For each={templates()}>
@@ -743,7 +738,7 @@ const Section: Component<{ title: string; children: any }> = (props) => (
 );
 
 const Empty: Component<{ children: any }> = (props) => (
-  <div class="text-text-faint italic px-1 py-1 text-[0.85em]">{props.children}</div>
+  <div class="axis-empty-state text-[12px] text-text-dim px-1 py-2">{props.children}</div>
 );
 
 /** Compact USD for on-chain last values (e.g. TVL). */
@@ -771,12 +766,12 @@ const LayerRow: Component<{
   removeTitle?: string;
 }> = (props) => (
   <div
-    class="flex items-center gap-1.5 px-1 py-1 bg-bg-elev border border-border-soft hover:border-border"
+    class="axis-list-row flex items-center gap-1.5 h-8 px-1 bg-bg-elev border-b border-border-soft"
     data-testid={props.testId}
   >
     <button
       type="button"
-      class={`w-5 h-5 text-[0.75em] flex items-center justify-center border-2 flex-shrink-0 ${
+      class={`w-5 h-5 text-[0.75em] flex items-center justify-center border flex-shrink-0 rounded ${
         props.visible
           ? 'border-accent bg-accent/15 text-accent'
           : 'border-border bg-bg-hover text-text-dim'

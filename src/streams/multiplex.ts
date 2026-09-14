@@ -36,7 +36,7 @@
  *
  * ## Public API
  *
- * - {@link startLive} / {@link stopLive} — primary controls (Topbar, Load auto-live)
+ * - {@link startLive} / {@link stopLive} / {@link syncLiveToPreference} — Topbar, Load, Settings
  * - {@link getAvailableStreams} — catalog listing for UI
  * - Re-exports: {@link listStreams}, {@link defaultStreamForSource}, {@link StreamPlugin}
  *
@@ -75,6 +75,7 @@ import { sanitizeBar } from '../data/parse-bars';
 import { pluginKey } from '../plugins/types';
 import { classifyTransport } from '../ui/telemetry';
 import { HEAVY_BARS_THRESHOLD } from '../chart/heavy-data';
+import { noteLiveBarForAlerts } from '../alerts/tick';
 
 export type { StreamPlugin };
 export { listStreams, defaultStreamForSource };
@@ -246,6 +247,7 @@ export function startLive(
       const manager = getManager();
       if (manager) manager.appendBar(bar);
       noteTick(bar.close, bar.time);
+      noteLiveBarForAlerts(bar);
 
       // Data Manager: grow the underlying bars-cache dataset with live ticks
       noteDataManagerLiveBar(bar);
@@ -400,6 +402,20 @@ export function stopLive(opts?: StopLiveOpts) {
   // Drop in-flight gate so the next startLive can schedule reruns
   // (a hung prior runAndApply must not block suite / restarts forever).
   rerunInFlight = false;
+}
+
+/**
+ * Honour Settings “Enable live stream” (`live.preferAfterLoad`).
+ * Starts the paired WebSocket when bars are loaded; stops live when off.
+ */
+export function syncLiveToPreference(): void {
+  if (!store.live.preferAfterLoad) {
+    if (store.live.active) stopLive();
+    return;
+  }
+  if (!store.bars.length || store.live.active) return;
+  const streamId = store.live.streamId || defaultStreamForSource(store.source);
+  startLive(streamId, store.symbol, store.interval);
 }
 
 /** Visible applied sources that belong in the live re-run loop (not library()). */

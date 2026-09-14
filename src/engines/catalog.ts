@@ -60,6 +60,23 @@ import type { EnginePlugin, PlotSample, RunResult } from '../plugins/types';
 import { store, setTelemetryPlane, setTelemetryState, setStatus, appendLog } from '../store';
 import { registry } from '../plugins/registry';
 import { classifyTransport } from '../ui/telemetry';
+import { scriptHasPineAlertCalls } from '../alerts/pine';
+
+/**
+ * PYNE compile currently emits `alert()` / `alertcondition()` as empty
+ * statements (Numba nopython cannot collect Python AlertEvent dicts) and
+ * returns `alerts: []`. Interpret still records them. Remote Flask / worker
+ * compile therefore falls back to interpret when the script calls those
+ * builtins so AXIS `pine_alert` rows can fire. In-browser Pyodide compile
+ * records alerts itself (see `pynescript_runtime._patch_compiler_alerts`).
+ */
+function resolveServerRunMode(mode: string, script: string, profilerOn: boolean): string {
+  if (profilerOn) return 'interpret';
+  if ((mode === 'compile' || mode === 'auto') && scriptHasPineAlertCalls(script)) {
+    return 'interpret';
+  }
+  return mode;
+}
 
 function resolveConfig(
   schema: EnginePlugin['configSchema'],
@@ -183,7 +200,9 @@ export const serverEngine: EnginePlugin = {
       (this.configSchema!.endpoint.default as string)
     ).replace(/\/$/, '');
     const cfg = resolveConfig(this.configSchema, { ...(config || {}), endpoint });
-    const mode = String(cfg.mode || 'auto');
+    const modeRaw = String(cfg.mode || 'auto');
+    const profilerOn = cfg.profiler === true;
+    const mode = resolveServerRunMode(modeRaw, script, profilerOn);
     const preferWs = cfg.preferWs !== false;
     const apiKey = String(cfg.apiKey || '').trim();
     const t0 = performance.now();
@@ -207,12 +226,11 @@ export const serverEngine: EnginePlugin = {
         if (!client.isDead) {
           // Cap WS attempt so a dead /ws/run cannot exhaust the run budget.
           const wsBudget = Math.min(20_000, Math.max(8_000, Math.floor(timeoutMs / 4)));
-          const profilerOn = cfg.profiler === true;
           const wsResult = await client.run(
             {
               script,
               data: bars as unknown[],
-              mode: profilerOn ? 'interpret' : mode,
+              mode,
               // Always a string — API schema rejects null/omitted-as-null
               symbol: typeof store.symbol === 'string' && store.symbol ? store.symbol : 'CHART',
               ...(inputOverrides ? { inputs: inputOverrides } : {}),
@@ -251,6 +269,8 @@ export const serverEngine: EnginePlugin = {
           ) as RunResult['logs'] | undefined;
           const wsScriptType = (wsResult.meta as { script_type?: string } | undefined)
             ?.script_type;
+          const wsAlerts = (wsResult as { alerts?: unknown }).alerts;
+          const wsAlertConds = (wsResult as { alert_conditions?: unknown }).alert_conditions;
           return {
             status: 'success',
             plots: (wsResult.plots as (number | null)[]) || [],
@@ -262,6 +282,8 @@ export const serverEngine: EnginePlugin = {
             ...(Array.isArray(wsLogs) ? { logs: wsLogs } : {}),
             meta: {
               ...(typeof wsResult.meta === 'object' && wsResult.meta ? wsResult.meta : {}),
+              ...(Array.isArray(wsAlerts) ? { alerts: wsAlerts } : {}),
+              ...(Array.isArray(wsAlertConds) ? { alert_conditions: wsAlertConds } : {}),
               ms,
               transport: 'ws' as const,
               mode: (wsResult.mode || mode) as string,
@@ -314,8 +336,7 @@ export const serverEngine: EnginePlugin = {
           ? AbortSignal.any([restTimeout, signal])
           : restTimeout;
       // mode must be in the JSON body — Pro API validates body only (query is legacy).
-      const profilerOn = cfg.profiler === true;
-      const restMode = profilerOn ? 'interpret' : mode;
+      const restMode = mode;
       const restBody = {
         script,
         data: bars,
@@ -426,6 +447,10 @@ export const serverEngine: EnginePlugin = {
           ...(restScriptType ? { script_type: restScriptType } : {}),
           plot_meta: payload.plot_meta || payload.meta?.plot_meta || {},
           inputs: payload.inputs,
+          ...(Array.isArray(payload.alerts) ? { alerts: payload.alerts } : {}),
+          ...(Array.isArray(payload.alert_conditions)
+            ? { alert_conditions: payload.alert_conditions }
+            : {}),
           ...(restProfile ? { profile: restProfile } : {}),
           ...(Array.isArray(restLogs) ? { logs: restLogs } : {}),
         },
@@ -835,7 +860,7 @@ export function resolvePyneWorkerEndpoint(
   return DEFAULT_PYNE_WORKER_ENDPOINT;
 }
 
-/** True when a base URL targets the HOOX pyne-worker (not AXIS pynescript-axis). */
+/** True when a base URL targets the HOOX pyne-worker (not AXIS worker-axis). */
 export function looksLikePyneWorkerEndpoint(raw: string | undefined | null): boolean {
   const s = String(raw || '').toLowerCase();
   if (!s) return false;
@@ -846,7 +871,7 @@ export function looksLikePyneWorkerEndpoint(raw: string | undefined | null): boo
  * HOOX **pyne-worker** edge evaluator — same `/run` contract as Flask Pro API,
  * default origin production workers.dev. Optional `apiKey` for `X-API-Key`.
  *
- * Distinct from the AXIS data-plane Worker (`pynescript-axis` / engine `server`
+ * Distinct from the AXIS data-plane Worker (`worker-axis` / engine `server`
  * pointed at that host). Prefer this when you want edge Pine + alerts/cron mesh.
  */
 export const pyneWorkerEngine: EnginePlugin = {

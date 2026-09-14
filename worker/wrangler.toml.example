@@ -8,10 +8,15 @@
 #
 # wrangler.toml is gitignored so local secrets / client ids stay out of the repo.
 
-name = "pynescript-axis"
+name = "worker-axis"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 main = "src/index.ts"
+
+# Canonical production host (optional). workers.dev is worker-axis.<account>.workers.dev.
+# [[routes]]
+# pattern = "worker.axis.hoox.sh"
+# custom_domain = true
 
 # Static PWA assets are hosted by Cloudflare Pages — this Worker is the
 # JSON API and the WebSocket relay. Pages serves the frontend/ directory

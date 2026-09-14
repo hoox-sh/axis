@@ -21,9 +21,9 @@
  * Mobile chrome — phone (<768px) app-style shell replacing the desktop
  * Topbar/StatusBar chrome:
  *
- * - **{@link MobileHeader}** — brand (About), symbol picker, interval select
- * - **{@link MobileTabBar}** — bottom tabs: Chart · Panels · Editor · Studio · More
- * - **{@link MobileOverlays}** — panels list sheet + More drawer + symbol modal
+ * - **{@link MobileHeader}** — brand (About), symbol, interval, Live, venue
+ * - **{@link MobileTabBar}** — bottom tabs: Chart · List · Editor · More
+ * - **{@link MobileOverlays}** — More drawer (panels + studio) + symbol modal
  *
  * Panel content itself still renders through `FloatableShell` in sheet mode;
  * these components only host navigation. All actions reuse the same store
@@ -194,7 +194,7 @@ export const MobileHeader: Component<MobileChromeProps> = (props) => {
   return (
     <>
       <header
-        class="axis-mheader flex-shrink-0 flex items-center gap-1.5 px-2 bg-bg-panel border-b-2 border-border"
+        class="axis-mheader flex-shrink-0 flex items-center gap-1 px-2 bg-bg-panel border-b border-border"
         data-testid="axis-mobile-header"
       >
         <button
@@ -206,8 +206,52 @@ export const MobileHeader: Component<MobileChromeProps> = (props) => {
         >
           AXIS
         </button>
+        <button
+          type="button"
+          class="axis-msymbol"
+          data-testid="axis-mobile-symbol"
+          title="Change symbol"
+          onClick={() => setSymbolOpen(true)}
+        >
+          <span class="truncate">{store.symbol || '—'}</span>
+          <Icons.chevronDown size={12} />
+        </button>
         <select
-          class="axis-mvenue"
+          class="axis-minterval"
+          data-testid="axis-mobile-interval"
+          title="Interval"
+          aria-label="Interval"
+          value={store.interval}
+          onChange={(e) => onIntervalChange(e.currentTarget.value)}
+        >
+          <For each={[...WATCHLIST_INTERVALS]}>{(iv) => <option value={iv}>{iv}</option>}</For>
+        </select>
+        <button
+          type="button"
+          class="axis-live-btn h-7 px-1.5"
+          classList={{
+            'is-idle': !store.live.active,
+            'is-live': store.live.active && store.stream.status === 'connected',
+            'is-reconnect': store.live.active && store.stream.status === 'connecting',
+            'is-offline': store.live.active && store.stream.status !== 'connected' && store.stream.status !== 'connecting',
+          }}
+          data-testid="axis-mobile-live"
+          title={store.live.active ? 'Stop live' : 'Start live'}
+          aria-pressed={store.live.active}
+          onClick={toggleLive}
+        >
+          <span
+            class="axis-live-dot"
+            classList={{
+              'axis-live-dot--pulse': store.live.active && store.stream.status === 'connected',
+              'axis-live-dot--reconnect': store.live.active && store.stream.status === 'connecting',
+            }}
+            aria-hidden="true"
+          />
+          <span>Live</span>
+        </button>
+        <select
+          class="axis-mvenue max-w-[5.5rem]"
           data-testid="axis-mobile-venue"
           title="Exchange / data venue"
           aria-label="Venue"
@@ -230,26 +274,6 @@ export const MobileHeader: Component<MobileChromeProps> = (props) => {
             </For>
           </optgroup>
         </select>
-        <button
-          type="button"
-          class="axis-msymbol"
-          data-testid="axis-mobile-symbol"
-          title="Change symbol"
-          onClick={() => setSymbolOpen(true)}
-        >
-          <span class="truncate">{store.symbol || '—'}</span>
-          <Icons.chevronDown size={12} />
-        </button>
-        <select
-          class="axis-minterval"
-          data-testid="axis-mobile-interval"
-          title="Interval"
-          aria-label="Interval"
-          value={store.interval}
-          onChange={(e) => onIntervalChange(e.currentTarget.value)}
-        >
-          <For each={[...WATCHLIST_INTERVALS]}>{(iv) => <option value={iv}>{iv}</option>}</For>
-        </select>
       </header>
       <SymbolModal
         open={symbolOpen()}
@@ -268,13 +292,24 @@ export const MobileHeader: Component<MobileChromeProps> = (props) => {
 export const MobileTabBar: Component<MobileChromeProps> = (props) => {
   const chartTabActive = () =>
     !activeMobileSheet() && !panelsOpen() && !moreOpen() && !props.studioOpen();
+  const listTabActive = () => activeMobileSheet() === 'watchlist' && !moreOpen();
   const tabClass = (active: () => boolean) => ({
     'is-active': active(),
   });
 
+  const openListTab = () => {
+    setMoreOpen(false);
+    setPanelsOpen(false);
+    if (activeMobileSheet() === 'watchlist') {
+      goChart();
+      return;
+    }
+    openPanelRow('watchlist');
+  };
+
   return (
     <nav
-      class="axis-mtabbar flex-shrink-0 flex items-stretch border-t-2 border-border bg-bg-panel"
+      class="axis-mtabbar flex-shrink-0 flex items-stretch border-t border-border bg-bg-panel"
       data-testid="axis-mobile-tabbar"
     >
       <button
@@ -290,15 +325,13 @@ export const MobileTabBar: Component<MobileChromeProps> = (props) => {
       <button
         type="button"
         class="axis-mtab"
-        classList={tabClass(panelsOpen)}
+        classList={tabClass(listTabActive)}
         data-testid="axis-mobile-tab-panels"
-        onClick={() => {
-          setMoreOpen(false);
-          setPanelsOpen((o) => !o);
-        }}
+        data-tab="list"
+        onClick={openListTab}
       >
-        <Icons.panelLeft />
-        <span>Panels</span>
+        <Icons.watchlist />
+        <span>List</span>
       </button>
       <button
         type="button"
@@ -312,17 +345,16 @@ export const MobileTabBar: Component<MobileChromeProps> = (props) => {
       </button>
       <button
         type="button"
-        class="axis-mtab"
-        classList={tabClass(props.studioOpen)}
+        class="sr-only"
         data-testid="axis-mobile-tab-studio"
+        tabIndex={-1}
         onClick={() => {
           setPanelsOpen(false);
           setMoreOpen(false);
           props.onOpenStudio();
         }}
       >
-        <Icons.cpu />
-        <span>Studio</span>
+        Studio
       </button>
       <button
         type="button"
@@ -367,7 +399,7 @@ export const MobileOverlays: Component<MobileChromeProps> = (props) => {
                 return (
                   <button
                     type="button"
-                    class="axis-mpanel-row"
+                    class="axis-mpanel-row min-h-[44px]"
                     classList={{ 'is-open': open() }}
                     data-testid={`axis-mobile-panel-${id}`}
                     onClick={() => openPanelRow(id)}
@@ -399,25 +431,55 @@ export const MobileOverlays: Component<MobileChromeProps> = (props) => {
               <Icons.x />
             </button>
           </div>
-          <div class="axis-moverlay-body">
+          <div class="axis-moverlay-body flex flex-col gap-2">
             <button
               type="button"
-              class="axis-mpanel-row"
+              class="axis-mpanel-row min-h-[44px]"
               data-testid="axis-mobile-run"
               onClick={() => runScript(props.editorRef)}
             >
               <Icons.play size={16} />
               <span>Run script</span>
             </button>
-            <button type="button" class="axis-mpanel-row" onClick={toggleLive}>
-              <Icons.radio size={16} />
-              <span>{store.live.active ? 'Stop live' : 'Start live'}</span>
+            <button
+              type="button"
+              class="axis-mpanel-row min-h-[44px]"
+              onClick={() => {
+                setMoreOpen(false);
+                props.onOpenStudio();
+              }}
+            >
+              <Icons.cpu size={16} />
+              <span>Studio</span>
             </button>
+            {/* Decorative divider — visual only, not exposed as an interactive separator */}
+            <div class="axis-msep" />
+            <For each={MOBILE_PANELS}>
+              {(id) => {
+                const key = PANEL_ICON[id];
+                const open = () => isPanelOpen(id);
+                return (
+                  <button
+                    type="button"
+                    class="axis-mpanel-row min-h-[44px]"
+                    classList={{ 'is-open': open() }}
+                    data-testid={`axis-mobile-panel-${id}`}
+                    onClick={() => openPanelRow(id)}
+                  >
+                    <Show when={key ? Icons[key] : undefined} keyed>
+                      {(IC) => <IC size={16} />}
+                    </Show>
+                    <span class="truncate">{PANEL_META[id].title}</span>
+                    <span class="axis-mpanel-state">{open() ? 'Open' : ''}</span>
+                  </button>
+                );
+              }}
+            </For>
             {/* Decorative divider — visual only, not exposed as an interactive separator */}
             <div class="axis-msep" />
             <button
               type="button"
-              class="axis-mpanel-row"
+              class="axis-mpanel-row min-h-[44px]"
               onClick={() => {
                 setMoreOpen(false);
                 props.onOpenStudioPage('runtime');
@@ -428,7 +490,7 @@ export const MobileOverlays: Component<MobileChromeProps> = (props) => {
             </button>
             <button
               type="button"
-              class="axis-mpanel-row"
+              class="axis-mpanel-row min-h-[44px]"
               onClick={() => {
                 setMoreOpen(false);
                 props.onOpenStudioPage('wire');
@@ -439,7 +501,7 @@ export const MobileOverlays: Component<MobileChromeProps> = (props) => {
             </button>
             <button
               type="button"
-              class="axis-mpanel-row"
+              class="axis-mpanel-row min-h-[44px]"
               onClick={() => {
                 setMoreOpen(false);
                 props.onOpenStudioPage('workers');
@@ -450,7 +512,7 @@ export const MobileOverlays: Component<MobileChromeProps> = (props) => {
             </button>
             <button
               type="button"
-              class="axis-mpanel-row"
+              class="axis-mpanel-row min-h-[44px]"
               onClick={() => {
                 setMoreOpen(false);
                 props.onOpenStudioPage('plugins');
@@ -461,7 +523,7 @@ export const MobileOverlays: Component<MobileChromeProps> = (props) => {
             </button>
             <button
               type="button"
-              class="axis-mpanel-row"
+              class="axis-mpanel-row min-h-[44px]"
               onClick={() => {
                 setMoreOpen(false);
                 props.onOpenStudioPage('settings');
@@ -472,13 +534,13 @@ export const MobileOverlays: Component<MobileChromeProps> = (props) => {
             </button>
             {/* Decorative divider — visual only, not exposed as an interactive separator */}
             <div class="axis-msep" />
-            <button type="button" class="axis-mpanel-row" onClick={toggleTheme}>
+            <button type="button" class="axis-mpanel-row min-h-[44px]" onClick={toggleTheme}>
               <Icons.moon size={16} />
               <span>Toggle theme</span>
             </button>
             <button
               type="button"
-              class="axis-mpanel-row"
+              class="axis-mpanel-row min-h-[44px]"
               onClick={() => {
                 setMoreOpen(false);
                 openAboutModal();

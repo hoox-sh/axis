@@ -19,7 +19,7 @@
 
 ---
 title: "Worker bindings"
-description: "wrangler.toml vars, KV, D1, R2, Durable Objects — provision once, paste IDs, frozen project name."
+description: "wrangler.toml vars, KV, D1, R2, Durable Objects — provision once, paste IDs. Worker script worker-axis."
 ---
 
 # Worker bindings
@@ -28,7 +28,7 @@ description: "wrangler.toml vars, KV, D1, R2, Durable Objects — provision once
 
 Bindings and vars for the AXIS Worker are declared in `worker/wrangler.toml` (copy from `wrangler.toml.example` via `axis setup worker`). Many production bindings ship **commented** so clone-and-dev does not require Cloudflare® resources; `wrangler dev` synthesizes local substitutes where possible.
 
-**Project name is frozen:** `name = "pynescript-axis"`.
+**Worker script name:** `name = "worker-axis"`. Canonical host `worker.axis.hoox.sh`. Pages project is `axis`; canonical Pages host is `axis.hoox.sh`.
 
 ## Conceptual model
 
@@ -136,7 +136,7 @@ Class: `SessionDO` exported from `src/index.ts`.
 | `compatibility_flags` | `nodejs_compat` |
 | `[observability]` | `enabled = true` |
 
-Static PWA assets are **not** served by this Worker in the documented split: **Pages** serves `dist/`, Worker serves API/WS. Project name for Pages deploy remains `pynescript-axis`.
+Static PWA assets are **not** served by this Worker in the documented split: **Pages** serves `dist/` at `https://axis.hoox.sh`, Worker serves API/WS. Project name for Pages deploy is `axis`.
 
 ## Deploy commands
 
@@ -146,7 +146,7 @@ wrangler deploy
 
 # Pages (from frontend/)
 bun run build
-wrangler pages deploy dist --project-name=pynescript-axis
+wrangler pages deploy dist --project-name=axis
 # or npm run deploy:pages from worker package
 ```
 

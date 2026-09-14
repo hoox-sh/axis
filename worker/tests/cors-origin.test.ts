@@ -34,6 +34,10 @@ describe('pickOrigin', () => {
     expect(pickOrigin(req('https://app.pynescript.online'), env)).toBe(
       'https://app.pynescript.online',
     );
+    expect(pickOrigin(req('https://feat-onchain-data-plane.axis.pages.dev'), env)).toBe(
+      'https://feat-onchain-data-plane.axis.pages.dev',
+    );
+    expect(pickOrigin(req('https://axis.pages.dev'), env)).toBe('https://axis.pages.dev');
     expect(pickOrigin(req('https://feat-onchain-data-plane.pynescript-axis.pages.dev'), env)).toBe(
       'https://feat-onchain-data-plane.pynescript-axis.pages.dev',
     );

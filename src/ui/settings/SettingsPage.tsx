@@ -35,6 +35,7 @@ import {
   WATCHLIST_REFRESH_OPTIONS,
 } from '../../data/watchlist-tickers';
 import { loadSymbolData, reloadChart } from '../../data/load-symbol';
+import { syncLiveToPreference } from '../../streams/multiplex';
 import { getManager } from '../../chart/manager-access';
 import { UI_SCALE_PRESETS, formatUiScalePct } from '../ui-scale';
 import { WorkspaceSnapshotMenu } from '../WorkspaceSnapshotMenu';
@@ -177,6 +178,7 @@ export function SettingsPage(props: {
     setStore('watchlist', 'refreshSec', nextRefresh);
     setStore('live', 'preferAfterLoad', preferAfterLoad());
     setStore('live', 'rerunOn', rerunOn());
+    syncLiveToPreference();
     setStore('telemetry', 'hud', 'compact', hudCompact());
     setStore('telemetry', 'shareOnError', shareOnError());
     setStore('uiScale', nextUiScale);
@@ -198,7 +200,7 @@ export function SettingsPage(props: {
     flushPersist();
     setStatus(
       'ready',
-      `Settings saved · ${nextInterval} · ${nextHistoryBars} bars · refresh ${nextRefresh}s · live re-run=${rerunOn()}`,
+      `Settings saved · ${nextInterval} · ${nextHistoryBars} bars · refresh ${nextRefresh}s · live ${preferAfterLoad() ? 'on' : 'off'} · re-run=${rerunOn()}`,
     );
     if (
       store.symbol &&
@@ -454,10 +456,11 @@ export function SettingsPage(props: {
             <StudioSection title="Live stream">
               <StudioToggle
                 id="axis-prefer-live"
+                testId="axis-settings-live-enabled"
                 checked={preferAfterLoad()}
                 onChange={setPreferAfterLoad}
-                label="Auto-start live after Load"
-                hint="Prefer WebSocket feed immediately after historical REST load."
+                label="Enable live stream"
+                hint="On by default. Connects the venue WebSocket after bars load (and on boot when history is already there). Turn off for replay-only or offline work."
               />
               <StudioField
                 label="Indicator re-run on live bars"
@@ -537,7 +540,7 @@ export function SettingsPage(props: {
                     id="axis-studio-cloud-endpoint"
                     mono
                     value={cloudEndpoint()}
-                    placeholder="https://pynescript-axis.cryptolinx.workers.dev"
+                    placeholder="https://worker.axis.hoox.sh"
                     spellcheck={false}
                     testId="axis-studio-cloud-endpoint"
                     onInput={setCloudEndpoint}

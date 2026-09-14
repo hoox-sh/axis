@@ -102,7 +102,9 @@ export const ChartWorkspace: Component = () => {
                   data-axis-slot-badge
                 >
                   <span
-                    class={`axis-slot-badge ${isActive() ? 'is-active' : ''}`}
+                    class={`axis-slot-badge h-[22px] !shadow-none ${
+                      isActive() ? 'is-active !bg-[#8B9CFF]/[0.06]' : '!bg-transparent'
+                    }`}
                     title={slotTitle()}
                   >
                     {slot.symbol}

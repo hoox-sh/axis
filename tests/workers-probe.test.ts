@@ -35,7 +35,7 @@ describe('probeWorker http-health', () => {
       return new Response(
         JSON.stringify({
           status: 'healthy',
-          service: 'pynescript-axis-worker',
+          service: 'worker-axis',
           features: { onchain: true, d1: false, scripts: true },
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -47,7 +47,7 @@ describe('probeWorker http-health', () => {
       timeoutMs: 2000,
     });
     expect(r.status).toBe('healthy');
-    expect(r.service).toBe('pynescript-axis-worker');
+    expect(r.service).toBe('worker-axis');
     expect(r.features.onchain).toBe(true);
     expect(r.latencyMs).not.toBeNull();
     expect(r.error).toBeNull();

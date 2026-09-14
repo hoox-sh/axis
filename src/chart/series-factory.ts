@@ -73,24 +73,24 @@ import {
  * not invent fictional `TV.*` chart APIs.
  */
 export const VOID = {
-  bg: '#0a0b10',
-  panel: '#111218',
-  elev: '#171821',
-  grid: 'rgba(140, 130, 180, 0.07)',
-  text: '#c8cad4',
-  textDim: '#8b8e9c',
-  up: '#5ecf8a',
-  down: '#e85d4c',
-  border: '#3a3d4a',
-  /** hoox void pack accent oklch(0.74 0.16 277) */
-  indigo: '#939fff',
-  indigoSoft: 'rgba(147, 159, 255, 0.38)',
+  bg: '#07080C',
+  panel: '#0C0E14',
+  elev: '#10131B',
+  grid: 'rgba(255,255,255,0.05)',
+  text: '#E8EAEE',
+  textDim: '#9AA3B2',
+  up: '#3DDC97',
+  down: '#F07178',
+  border: '#1C2230',
+  /** AXIS void indigo */
+  indigo: '#8B9CFF',
+  indigoSoft: 'rgba(139, 156, 255, 0.38)',
   /** @deprecated use indigo */
-  flieder: '#939fff',
+  flieder: '#8B9CFF',
   /** @deprecated use indigoSoft */
-  fliederSoft: 'rgba(147, 159, 255, 0.38)',
-  green: '#8ef5a8',
-  orange: '#e8a03a',
+  fliederSoft: 'rgba(139, 156, 255, 0.38)',
+  green: '#3DDC97',
+  orange: '#E8B84A',
 };
 
 /**
@@ -99,16 +99,16 @@ export const VOID = {
  */
 export const TV = VOID;
 
-/** Plot colors: void indigo, lightgreen, orange, then muted fillers */
+/** Plot colors: void indigo, live green, warn, then muted fillers */
 export const PLOT_PALETTE = [
-  '#939fff',
-  '#8ef5a8',
-  '#e8a03a',
+  '#8B9CFF',
+  '#3DDC97',
+  '#E8B84A',
   '#6ec8d4',
   '#a7b4ff',
-  '#5ecf8a',
-  '#e85d4c',
-  '#8b8e9c',
+  '#3DDC97',
+  '#F07178',
+  '#9AA3B2',
 ];
 
 /**
@@ -307,13 +307,13 @@ export function createBaseChart(
       vertLine: {
         color: VOID.indigoSoft,
         width: 1 as LineWidth,
-        style: 2,
+        style: LineStyle.Solid,
         labelBackgroundColor: VOID.elev,
       },
       horzLine: {
         color: VOID.indigoSoft,
         width: 1 as LineWidth,
-        style: 2,
+        style: LineStyle.Solid,
         labelBackgroundColor: VOID.elev,
       },
     },
@@ -328,9 +328,27 @@ function priceSeriesCommon(tokens: ThemeTokens) {
   return {
     lastValueVisible: true,
     priceLineVisible: true,
-    priceLineColor: String(tokens['crosshair.color'] ?? VOID.indigoSoft),
+    priceLineColor: String(tokens['ui.accent'] ?? VOID.indigo),
     priceLineWidth: 1 as LineWidth,
-    priceLineStyle: 2,
+    priceLineStyle: LineStyle.Dashed,
+  };
+}
+
+/** Body 76% opacity; keep hollow / unfilled bodies transparent. Wick/border stay opaque. */
+function withCandleVisualDefaults(
+  opts: Record<string, unknown>,
+  hollow: boolean,
+): Record<string, unknown> {
+  const up = String(opts.upColor ?? VOID.up);
+  const down = String(opts.downColor ?? VOID.down);
+  const isClear = (c: string) =>
+    c === 'rgba(0,0,0,0)' || c === 'transparent' || c === 'rgba(0, 0, 0, 0)';
+  return {
+    ...opts,
+    upColor: hollow || isClear(up) ? up : colorWithAlpha(up, 0.76),
+    downColor: isClear(down) ? down : colorWithAlpha(down, 0.76),
+    borderVisible: true,
+    wickVisible: true,
   };
 }
 
@@ -353,10 +371,13 @@ export function createCandleSeries(
   paneIndex?: number,
 ): ISeriesApi<'Candlestick'> {
   const tokens = activeTokens();
-  const opts = {
-    ...priceSeriesCommon(tokens),
-    ...buildCandleSeriesOptions(tokens, { chartType: 'candles' }),
-  };
+  const opts = withCandleVisualDefaults(
+    {
+      ...priceSeriesCommon(tokens),
+      ...buildCandleSeriesOptions(tokens, { chartType: 'candles' }),
+    },
+    false,
+  );
   const series =
     paneIndex !== undefined
       ? chart.addSeries(CandlestickSeries, opts, paneIndex)
@@ -374,10 +395,13 @@ export function createHollowCandleSeries(
   paneIndex?: number,
 ): ISeriesApi<'Candlestick'> {
   const tokens = activeTokens();
-  const opts = {
-    ...priceSeriesCommon(tokens),
-    ...buildCandleSeriesOptions(tokens, { chartType: 'hollow' }),
-  };
+  const opts = withCandleVisualDefaults(
+    {
+      ...priceSeriesCommon(tokens),
+      ...buildCandleSeriesOptions(tokens, { chartType: 'hollow' }),
+    },
+    true,
+  );
   const series =
     paneIndex !== undefined
       ? chart.addSeries(CandlestickSeries, opts, paneIndex)
@@ -571,8 +595,11 @@ export function colorWithAlpha(color: string, alpha: number): string {
     const b = parseInt(h[2]! + h[2]!, 16);
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
-  if (/^rgba?\(/i.test(s)) return s;
-  return `rgba(147, 159, 255, ${alpha})`;
+  const mRgb = s.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (mRgb) {
+    return `rgba(${mRgb[1]}, ${mRgb[2]}, ${mRgb[3]}, ${alpha})`;
+  }
+  return `rgba(139, 156, 255, ${alpha})`;
 }
 
 /** Plot / overlay line series with crosshair marker. */

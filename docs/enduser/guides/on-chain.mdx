@@ -163,7 +163,7 @@ DefiLlama **raises** and **token unlocks** require Pro API (`pro-api.llama.fi`) 
 **Settings → General → On-Chain** is a short note only (no extra bindings):
 
 - By default the PWA calls **DefiLlama / GeckoTerminal directly** (public CORS).
-- Worker proxy (`{endpoint}/api/onchain/llama` / `…/gecko`) is used **only** when Backend URL is a real AXIS Worker (`*.workers.dev`, `pynescript-axis`, or wrangler `:8787`).
+- Worker proxy (`{endpoint}/api/onchain/llama` / `…/gecko`) is used **only** when Backend URL is a real AXIS Worker (`worker.axis.hoox.sh`, `worker-axis` / `*.workers.dev`, or wrangler `:8787`).
 - **Not a wallet** — public metrics only; no signing
 
 Keep **Backend URL** as the Pro API for Pine (`https://axis.hoox.sh` or local `:5002`). That host is **not** an on-chain proxy.

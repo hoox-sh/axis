@@ -38,7 +38,7 @@ flowchart TD
   ORIGIN --> W[Worker pickOrigin]
   W -->|localhost / 127.0.0.1| ECHO1[Echo]
   W -->|product hosts| ECHO2[Echo]
-  W -->|*.pynescript-axis.pages.dev| ECHO3[Echo]
+  W -->|*.axis.pages.dev| ECHO3[Echo]
   W -->|ALLOWED_ORIGIN list| ECHO4[Echo if listed]
   W -->|else| FALLBACK[First ALLOWED_ORIGIN]
   ORIGIN --> F[Flask CORS middleware]
@@ -65,11 +65,11 @@ Exact product / HOOX / legacy PYNE hosts under:
 - `*.hoox.sh` / `hoox.sh`
 - `*.pynescript.online` / `pynescript.online`
 
-Examples: `https://axis.hoox.sh`, `https://hoox.sh`, `https://pynescript.online`.
+Examples: `https://axis.hoox.sh` (canonical Pages), `https://hoox.sh`, `https://pynescript.online`.
 
 ### 3. Project-scoped Cloudflare® Pages (not open `*.pages.dev`)
 
-Only origins matching **`*.pynescript-axis.pages.dev`** (and the apex `pynescript-axis.pages.dev`) are echoed. Arbitrary third-party Pages projects (`evil.pages.dev`, other apps) fall through to the allowlist fallback — they are **not** reflected.
+Canonical Pages is **`https://axis.hoox.sh`** (product host above). Preview hashes on **`*.axis.pages.dev`** (and the apex `axis.pages.dev`) are also echoed. Legacy **`*.pynescript-axis.pages.dev`** still matches. Arbitrary third-party Pages projects (`evil.pages.dev`, other apps) fall through to the allowlist fallback — they are **not** reflected.
 
 ### 4. `ALLOWED_ORIGIN` allowlist
 
@@ -104,7 +104,7 @@ The **server** engine posts from the browser to the configured endpoint. Flask P
 3. Accept `Content-Type: application/json`.
 
 Pyne always appends the same product Origin regex as Worker `pickOrigin` (including
-`*.pynescript-axis.pages.dev`) even when systemd `ALLOWED_ORIGINS` is a short list.
+`*.axis.pages.dev`) even when systemd `ALLOWED_ORIGINS` is a short list.
 `GET /health` (AXIS Settings probe) and `POST /run` are **free CORS paths** — they
 echo any `Origin` so a Pages preview can reach `https://axis.hoox.sh` without a
 per-preview allowlist entry.
@@ -143,7 +143,7 @@ AXIS resilience for MEXC:
 2. **Multiple prod domains** — product regex + comma-separated `ALLOWED_ORIGIN` cover multi-host; unknown sites never get open reflection.
 3. **Vite vs 8081** — both covered for Worker; Flask config must match whichever you use.
 4. **Health checks** from curl omit Origin — still work; browser calls need correct ACAO.
-5. **No open `*.pages.dev`** — only the frozen project `pynescript-axis` previews are product-scoped.
+5. **No open `*.pages.dev`** — only the Pages project `axis` previews (`*.axis.pages.dev`) are product-scoped.
 
 ## Failure modes
 

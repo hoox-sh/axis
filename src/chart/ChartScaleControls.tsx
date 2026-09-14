@@ -284,19 +284,21 @@ export const ChartScaleControls: Component = () => {
 
   const btnClass = (active: boolean) =>
     [
-      'min-w-[1.65em] h-[1.65em] px-1',
+      'axis-scale-seg',
+      'h-[22px] min-w-[22px] px-1.5',
       'font-mono text-[11px] font-semibold leading-none',
-      'border-2 select-none',
+      'border-0 border-r border-[#1C2230] last:border-r-0',
+      'rounded-none select-none',
       'transition-colors',
       active
-        ? 'bg-accent/20 border-accent text-accent'
-        : 'bg-bg-panel/90 border-border text-text-dim hover:border-border-focus hover:text-text',
+        ? 'bg-[#8B9CFF]/15 text-[#8B9CFF]'
+        : 'bg-transparent text-[#9AA3B2] hover:text-[#E8EAEE] hover:bg-white/[0.04]',
     ].join(' ');
 
   const cluster = () => (
     // biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the overlay cluster
     <div
-      class="absolute z-[15] flex items-center gap-0.5 pointer-events-auto"
+      class="absolute z-[15] flex items-stretch h-[22px] overflow-hidden pointer-events-auto rounded-[4px] border border-[#1C2230] bg-[#0C0E14]/90"
       style={{
         right: `${inset().right}px`,
         bottom: `${inset().bottom}px`,

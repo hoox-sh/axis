@@ -286,6 +286,19 @@ describe('drawing_touch', () => {
     const a = baseAlert({ kind: 'drawing_touch', params: {} });
     expect(evaluateOne(a, { symbol: 'BTCUSDT', price: 100 }, 99, now)).toBe(false);
   });
+
+  it('uses live drawingPricesById when params.drawingId is set', () => {
+    const a = baseAlert({
+      kind: 'drawing_touch',
+      params: { drawingId: 'hline_1', tolerance: 0 },
+    });
+    const ctx: EvaluateContext = {
+      symbol: 'BTCUSDT',
+      price: 101,
+      drawingPricesById: { hline_1: [100] },
+    };
+    expect(evaluateOne(a, ctx, 99, now)).toBe(true);
+  });
 });
 
 describe('pine_condition', () => {
@@ -355,6 +368,27 @@ describe('pine_condition', () => {
       params: { condition: false },
     });
     expect(evaluateOne(a, { symbol: 'BTCUSDT', price: 1 }, undefined, now)).toBe(false);
+  });
+
+  it('reads plotSamples from context when value is omitted', () => {
+    const a = baseAlert({
+      kind: 'pine_condition',
+      params: { indicatorId: 'ind1', plotKey: 'RSI', op: '>', threshold: 70 },
+    });
+    const miss: EvaluateContext = { symbol: 'BTCUSDT', price: 1 };
+    expect(evaluateOne(a, miss, undefined, now)).toBe(false);
+    const hit: EvaluateContext = {
+      symbol: 'BTCUSDT',
+      price: 1,
+      plotSamples: { 'ind1:RSI': { value: 75, prevValue: 60 } },
+    };
+    expect(evaluateOne(a, hit, undefined, now)).toBe(true);
+    const still: EvaluateContext = {
+      symbol: 'BTCUSDT',
+      price: 1,
+      plotSamples: { 'ind1:RSI': { value: 80, prevValue: 72 } },
+    };
+    expect(evaluateOne(a, still, undefined, now)).toBe(false);
   });
 });
 

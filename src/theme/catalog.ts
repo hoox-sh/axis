@@ -61,7 +61,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     description: 'Chart canvas background (Pine: chart.bg_color)',
     type: 'color',
     pine: 'chart.bg_color',
-    default: '#0a0b10',
+    default: '#07080C',
   },
   {
     key: 'chart.fg_color',
@@ -70,7 +70,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     description: 'Chart text / foreground (Pine: chart.fg_color)',
     type: 'color',
     pine: 'chart.fg_color',
-    default: '#c8cad4',
+    default: '#E8EAEE',
   },
   {
     key: 'chart.panel',
@@ -78,7 +78,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     label: 'Panel',
     description: 'Elevated panel surface behind overlays',
     type: 'color',
-    default: '#111218',
+    default: '#0C0E14',
   },
   {
     key: 'chart.elev',
@@ -86,7 +86,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     label: 'Elevated',
     description: 'Crosshair label / tooltip surface',
     type: 'color',
-    default: '#171821',
+    default: '#10131B',
   },
 
   // ── Bars / candles ────────────────────────────────────────────────────
@@ -96,7 +96,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     label: 'Up body',
     description: 'Rising candle/bar body fill',
     type: 'color',
-    default: '#5ecf8a',
+    default: '#3DDC97',
   },
   {
     key: 'bar.up.border',
@@ -104,7 +104,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     label: 'Up border',
     description: 'Rising candle border',
     type: 'color',
-    default: '#5ecf8a',
+    default: '#3DDC97',
   },
   {
     key: 'bar.up.wick',
@@ -112,7 +112,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     label: 'Up wick',
     description: 'Rising candle wick',
     type: 'color',
-    default: '#5ecf8a',
+    default: '#3DDC97',
   },
   {
     key: 'bar.down.color',
@@ -120,7 +120,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     label: 'Down body',
     description: 'Falling candle/bar body fill',
     type: 'color',
-    default: '#e85d4c',
+    default: '#F07178',
   },
   {
     key: 'bar.down.border',
@@ -128,7 +128,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     label: 'Down border',
     description: 'Falling candle border',
     type: 'color',
-    default: '#e85d4c',
+    default: '#F07178',
   },
   {
     key: 'bar.down.wick',
@@ -136,7 +136,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     label: 'Down wick',
     description: 'Falling candle wick',
     type: 'color',
-    default: '#e85d4c',
+    default: '#F07178',
   },
   {
     key: 'bar.body_fill',
@@ -180,14 +180,14 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     group: 'grid',
     label: 'Vertical grid',
     type: 'color',
-    default: 'rgba(140, 130, 180, 0.07)',
+    default: 'rgba(255, 255, 255, 0.05)',
   },
   {
     key: 'grid.horz',
     group: 'grid',
     label: 'Horizontal grid',
     type: 'color',
-    default: 'rgba(140, 130, 180, 0.07)',
+    default: 'rgba(255, 255, 255, 0.05)',
   },
   {
     key: 'grid.visible',
@@ -203,14 +203,14 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     group: 'scale',
     label: 'Scale border',
     type: 'color',
-    default: '#3a3d4a',
+    default: '#1C2230',
   },
   {
     key: 'scale.text',
     group: 'scale',
     label: 'Scale text',
     type: 'color',
-    default: '#8b8e9c',
+    default: '#9AA3B2',
   },
 
   // ── Crosshair ─────────────────────────────────────────────────────────
@@ -219,14 +219,14 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     group: 'crosshair',
     label: 'Crosshair',
     type: 'color',
-    default: 'rgba(147, 159, 255, 0.38)',
+    default: 'rgba(139, 156, 255, 0.38)',
   },
   {
     key: 'crosshair.label_bg',
     group: 'crosshair',
     label: 'Crosshair label',
     type: 'color',
-    default: '#171821',
+    default: '#10131B',
   },
 
   // ── Volume ────────────────────────────────────────────────────────────
@@ -235,14 +235,14 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     group: 'volume',
     label: 'Volume up',
     type: 'color',
-    default: 'rgba(94, 207, 138, 0.45)',
+    default: 'rgba(61, 220, 151, 0.45)',
   },
   {
     key: 'volume.down',
     group: 'volume',
     label: 'Volume down',
     type: 'color',
-    default: 'rgba(232, 93, 76, 0.45)',
+    default: 'rgba(240, 113, 120, 0.45)',
   },
 
   // ── Line / area main series ───────────────────────────────────────────
@@ -251,7 +251,7 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     group: 'line',
     label: 'Line color',
     type: 'color',
-    default: '#939fff',
+    default: '#8B9CFF',
   },
   {
     key: 'line.width',
@@ -268,21 +268,21 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     group: 'area',
     label: 'Area line',
     type: 'color',
-    default: '#939fff',
+    default: '#8B9CFF',
   },
   {
     key: 'area.top',
     group: 'area',
     label: 'Area top fill',
     type: 'color',
-    default: 'rgba(147, 159, 255, 0.28)',
+    default: 'rgba(139, 156, 255, 0.28)',
   },
   {
     key: 'area.bottom',
     group: 'area',
     label: 'Area bottom fill',
     type: 'color',
-    default: 'rgba(147, 159, 255, 0.02)',
+    default: 'rgba(139, 156, 255, 0.02)',
   },
 
   // ── Baseline series ───────────────────────────────────────────────────
@@ -291,42 +291,42 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     group: 'baseline',
     label: 'Baseline top line',
     type: 'color',
-    default: '#5ecf8a',
+    default: '#3DDC97',
   },
   {
     key: 'baseline.bottom_line',
     group: 'baseline',
     label: 'Baseline bottom line',
     type: 'color',
-    default: '#e85d4c',
+    default: '#F07178',
   },
   {
     key: 'baseline.top_fill1',
     group: 'baseline',
     label: 'Baseline top fill 1',
     type: 'color',
-    default: 'rgba(94, 207, 138, 0.28)',
+    default: 'rgba(61, 220, 151, 0.28)',
   },
   {
     key: 'baseline.top_fill2',
     group: 'baseline',
     label: 'Baseline top fill 2',
     type: 'color',
-    default: 'rgba(94, 207, 138, 0.04)',
+    default: 'rgba(61, 220, 151, 0.04)',
   },
   {
     key: 'baseline.bottom_fill1',
     group: 'baseline',
     label: 'Baseline bottom fill 1',
     type: 'color',
-    default: 'rgba(232, 93, 76, 0.04)',
+    default: 'rgba(240, 113, 120, 0.04)',
   },
   {
     key: 'baseline.bottom_fill2',
     group: 'baseline',
     label: 'Baseline bottom fill 2',
     type: 'color',
-    default: 'rgba(232, 93, 76, 0.28)',
+    default: 'rgba(240, 113, 120, 0.28)',
   },
 
   // ── UI accents used by chart chrome (optional CSS bridge) ─────────────
@@ -336,21 +336,21 @@ export const THEME_TOKEN_DEFS: readonly ThemeTokenDef[] = [
     label: 'Accent',
     description: 'Brand accent (void indigo)',
     type: 'color',
-    default: '#939fff',
+    default: '#8B9CFF',
   },
   {
     key: 'ui.up',
     group: 'ui',
     label: 'UI up',
     type: 'color',
-    default: '#5ecf8a',
+    default: '#3DDC97',
   },
   {
     key: 'ui.down',
     group: 'ui',
     label: 'UI down',
     type: 'color',
-    default: '#e85d4c',
+    default: '#F07178',
   },
 ] as const;
 
@@ -407,8 +407,8 @@ export function catalogDefaults(): ThemeTokens {
  * Used when exposing host colors to engines / docs.
  */
 export function pineColorMap(tokens: ThemeTokens): Record<string, string> {
-  const bg = String(tokens['chart.bg_color'] ?? '#0a0b10');
-  const fg = String(tokens['chart.fg_color'] ?? '#c8cad4');
+  const bg = String(tokens['chart.bg_color'] ?? '#07080C');
+  const fg = String(tokens['chart.fg_color'] ?? '#E8EAEE');
   return {
     'chart.bg_color': bg,
     'chart.fg_color': fg,

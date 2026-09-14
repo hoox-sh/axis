@@ -4,12 +4,13 @@
 
 | Surface | Value | Notes |
 |---------|--------|--------|
-| **Wrangler / Pages project** | `pynescript-axis` | **Do not rename** in CF dashboard or `wrangler.toml` without migrating bindings, custom domains, and CI secrets. The CF project id is stable infrastructure. |
+| **Wrangler Worker script** | `worker-axis` | `worker/wrangler.toml` `name`. Canonical URL `https://worker.axis.hoox.sh`. |
+| **Pages project** | `axis` | CF project id. Canonical URL `https://axis.hoox.sh`. Previews: `*.axis.pages.dev`. |
 | **npm package** | `axis-worker` | Internal; can lag display brand. |
-| **Health JSON `service`** | `pynescript-axis-worker` | User-facing API identity (already AXIS). |
+| **Health JSON `service`** | `worker-axis` | Matches the Wrangler script name. |
 | **Product / UI brand** | **AXIS** | Manifest, titles, landing. |
 
-Optional later: add a CF **alias** or custom domain `axis.*` pointing at the same project — still leave the project name as `pynescript-axis` so deploys and KV/D1 ids stay put.
+Canonical URLs: Pages `https://axis.hoox.sh`, Worker `https://worker.axis.hoox.sh`. Pages `--project-name` is `axis`.
 
 ---
 
@@ -127,18 +128,18 @@ wrangler kv namespace create USAGE
 cd frontend/worker
 wrangler deploy
 
-# 3) Deploy the PWA as a Pages site (project name is intentional legacy id)
+# 3) Deploy the PWA as a Pages site (canonical https://axis.hoox.sh)
 cd ..
 bun run build   # produce frontend/dist
-wrangler pages deploy dist --project-name=pynescript-axis
+wrangler pages deploy dist --project-name=axis
 ```
 
 Prefer deploying **`dist/`** from the Vite Solid app, not the repo root
-(legacy `main.js` shell). Project name stays `pynescript-axis` (see
-naming table above).
+(legacy `main.js` shell). Pages project name is `axis`; custom
+domain is `axis.hoox.sh` (see naming table above).
 
-After deployment, the PWA's `Endpoint` field should be set to the
-`*.workers.dev` URL or your custom domain.
+After deployment, the PWA's `Endpoint` field should be set to
+`https://worker.axis.hoox.sh` (or wrangler `:8787` locally).
 
 ## Caching strategy
 

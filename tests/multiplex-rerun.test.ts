@@ -23,6 +23,7 @@ import { setStore, setActivePlugin, clearLogs, store } from '../src/store';
 import {
   startLive,
   stopLive,
+  syncLiveToPreference,
   _getRerunAttemptCountForTests,
   _resetMultiplexForTests,
 } from '../src/streams/multiplex';
@@ -165,5 +166,47 @@ describe('multiplex scheduleRerun', () => {
     await new Promise((r) => setTimeout(r, 500));
     expect(_getRerunAttemptCountForTests()).toBe(0);
     stopLive();
+  });
+});
+
+describe('syncLiveToPreference', () => {
+  it('starts live when preferAfterLoad is on and bars exist', () => {
+    registerDynamicStream({
+      id: 'pref-stream',
+      name: 'P',
+      kind: 'stream',
+      start({ onStatus }) {
+        onStatus({ state: 'open' });
+        return () => {};
+      },
+    });
+    setStore('live', {
+      active: false,
+      needsRerun: false,
+      lastBarTime: 0,
+      streamId: 'pref-stream',
+      preferAfterLoad: true,
+      rerunOn: 'every-tick',
+    });
+    syncLiveToPreference();
+    expect(store.live.active).toBe(true);
+    stopLive();
+  });
+
+  it('stops live when preferAfterLoad is off', () => {
+    registerDynamicStream({
+      id: 'pref-off',
+      name: 'Off',
+      kind: 'stream',
+      start({ onStatus }) {
+        onStatus({ state: 'open' });
+        return () => {};
+      },
+    });
+    startLive('pref-off', 'BTCUSDT', '1m');
+    expect(store.live.active).toBe(true);
+    setStore('live', 'preferAfterLoad', false);
+    syncLiveToPreference();
+    expect(store.live.active).toBe(false);
   });
 });

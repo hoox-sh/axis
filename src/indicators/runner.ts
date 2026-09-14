@@ -116,6 +116,7 @@ import {
 } from './run-helpers';
 import { resolveScriptDisplayName } from './run-target';
 import { detectScriptKind } from './script-meta';
+import { notifyPineAlertsFromRun } from '../alerts/pine-bridge';
 
 /** Engine result with `series` always present (empty object if missing). */
 export type RunResult = EngineRunResult & {
@@ -511,7 +512,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       profiler: !!store.profilerEnabled,
     };
     const transport = classifyTransport('engine', engine.id, engine.capabilities);
-    const mode = String(config.mode || 'interpret');
+    const mode = String(config.mode || 'auto');
     if (!isolate) {
       setTelemetryPlane('engine', {
         id: engine.id,
@@ -899,6 +900,19 @@ async function runAndApplyInner(
   }
   // Do not auto-open Scriptlogs aggressively; panel is user-toggled.
   if (result.status === 'error') return result;
+
+  try {
+    const last = bars.length ? bars[bars.length - 1] : undefined;
+    const lastClose = last && Number.isFinite(Number(last.close)) ? Number(last.close) : undefined;
+    notifyPineAlertsFromRun(result, {
+      indicatorId: indicatorId ?? EDITOR_RUN_KEY,
+      lastBarIndex: bars.length ? bars.length - 1 : undefined,
+      price: lastClose,
+      symbol: store.symbol,
+    });
+  } catch {
+    /* Pine alerts must not break chart apply */
+  }
 
   // Hide / detach after the engine returned: do not resurrect plots.
   if (indicatorId && !appliedScriptStillOnChart(indicatorId)) {

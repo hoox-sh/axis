@@ -31,6 +31,8 @@ export type AlertKind =
   | 'pct_change'
   | 'drawing_touch'
   | 'pine_condition'
+  /** Pine `alert()` / `alertcondition()` events from a strategy or indicator run. */
+  | 'pine_alert'
   /** TVL day-over-day spike/drop events from the on-chain plane. */
   | 'onchain_tvl_spike'
   /** Generic on-chain event match (optional `eventType` filter). */
@@ -41,7 +43,8 @@ export type AlertKind =
  * Common keys:
  * - price / prices — level(s) for price_* / drawing_touch
  * - pct, direction, basePrice — pct_change
- * - condition / value / threshold / op — pine_condition
+ * - condition / value / threshold / op — pine_condition (plot compare)
+ * - source / title / indicatorId / lastBarIndex — pine_alert (alert() / alertcondition())
  * - tolerance — drawing_touch
  * - protocolId, minAbsPct, direction — onchain_tvl_spike / onchain_event
  * - eventType — onchain_event (optional type filter)
@@ -61,8 +64,10 @@ export interface Alert {
   createdAt: number;
   /** Optional interval filter (empty/omitted = any). */
   interval?: string;
-  /** Optional HTTP endpoint POSTed on fire. */
+  /** Optional HTTP endpoint POSTed on fire (compact JSON). */
   webhookUrl?: string;
+  /** Optional L2 webhook (richer payload, same allowlist as {@link webhookUrl}). */
+  l2WebhookUrl?: string;
   /** Browser Notification on fire (default true when created via API). */
   notifyBrowser?: boolean;
   /** Minimum ms between fires. */
@@ -82,6 +87,7 @@ export interface AlertCreateInput {
   createdAt?: number;
   interval?: string;
   webhookUrl?: string;
+  l2WebhookUrl?: string;
   notifyBrowser?: boolean;
   cooldownMs?: number;
 }
@@ -98,6 +104,12 @@ export interface EvaluateBar {
   time?: number;
 }
 
+/** Last/prev plot sample for `pine_condition` (keyed `indicatorId:plotKey`). */
+export type PlotSampleRef = {
+  value: number;
+  prevValue?: number;
+};
+
 /** Market context passed to the pure evaluator. */
 export interface EvaluateContext {
   symbol: string;
@@ -110,9 +122,13 @@ export interface EvaluateContext {
   bars?: EvaluateBar[];
   /** Evaluation clock (epoch ms). */
   time?: number;
+  /** Live drawing prices keyed by drawing id (`drawing_touch`). */
+  drawingPricesById?: Record<string, number[]>;
+  /** Last/prev plot samples keyed by `indicatorId:plotKey` (`pine_condition`). */
+  plotSamples?: Record<string, PlotSampleRef>;
 }
 
-/** JSON body POSTed to webhooks. */
+/** JSON body POSTed to generic webhooks. */
 export interface WebhookPayload {
   alertId: string;
   name: string;
@@ -120,6 +136,20 @@ export interface WebhookPayload {
   price: number;
   kind: AlertKind;
   firedAt: number;
+  /** Pine `alert()` / `alertcondition()` message when present. */
+  message?: string;
+}
+
+/**
+ * Richer L2 webhook body (PYNE/HOOX-style export).
+ * Same identity fields as {@link WebhookPayload}, plus channel + message.
+ */
+export interface L2WebhookPayload extends WebhookPayload {
+  channel: 'l2';
+  source: 'axis';
+  interval?: string;
+  message: string;
+  params?: AlertParams;
 }
 
 /** Versioned localStorage blob. */

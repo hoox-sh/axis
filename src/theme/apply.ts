@@ -131,24 +131,24 @@ export function buildChromeCssVars(
   tokens: ThemeTokens,
   base: 'dark' | 'light',
 ): Record<string, string> {
-  const bg = tok(tokens, 'chart.bg_color', base === 'light' ? '#f4f3f8' : '#0a0b10');
-  const panel = tok(tokens, 'chart.panel', base === 'light' ? '#ebeaf2' : '#111218');
-  const elev = tok(tokens, 'chart.elev', base === 'light' ? '#e0dfe8' : '#171821');
-  const fg = tok(tokens, 'chart.fg_color', base === 'light' ? '#1a1b24' : '#c8cad4');
-  const border = tok(tokens, 'scale.border', base === 'light' ? '#b8b6c4' : '#3a3d4a');
-  const accent = tok(tokens, 'ui.accent', base === 'light' ? '#5a6ad4' : '#939fff');
-  const up = tok(tokens, 'ui.up', tok(tokens, 'bar.up.color', '#5ecf8a'));
-  const down = tok(tokens, 'ui.down', tok(tokens, 'bar.down.color', '#e85d4c'));
+  const bg = tok(tokens, 'chart.bg_color', base === 'light' ? '#F3F4F8' : '#07080C');
+  const panel = tok(tokens, 'chart.panel', base === 'light' ? '#EAEBF1' : '#0C0E14');
+  const elev = tok(tokens, 'chart.elev', base === 'light' ? '#E2E4EC' : '#10131B');
+  const fg = tok(tokens, 'chart.fg_color', base === 'light' ? '#1A1D26' : '#E8EAEE');
+  const border = tok(tokens, 'scale.border', base === 'light' ? '#C5CAD6' : '#1C2230');
+  const accent = tok(tokens, 'ui.accent', base === 'light' ? '#5A6AD4' : '#8B9CFF');
+  const up = tok(tokens, 'ui.up', tok(tokens, 'bar.up.color', '#3DDC97'));
+  const down = tok(tokens, 'ui.down', tok(tokens, 'bar.down.color', '#F07178'));
 
   // Primary body text: prefer slightly brighter than chart.fg for dark chrome
   const text =
     base === 'light'
       ? fg
-      : tok(tokens, 'chart.fg_color', '#eceef4');
+      : tok(tokens, 'chart.fg_color', '#E8EAEE');
 
   // Secondary labels: presets drive these via `scale.text`; enforce a contrast
   // floor so subdued presets (Graphite / mono) stay legible in the app chrome.
-  const dim = ensureContrast(tok(tokens, 'scale.text', base === 'light' ? '#5c5f6e' : '#8b8e9c'), bg, text, 4);
+  const dim = ensureContrast(tok(tokens, 'scale.text', base === 'light' ? '#5C6575' : '#9AA3B2'), bg, text, 4);
   // Faint labels: mix *away from* the surface (darken on light, lighten on
   // dark) — the old single-direction mix washed light themes out further.
   const faintRaw = (() => {
@@ -160,7 +160,7 @@ export function buildChromeCssVars(
   })();
   const faint = ensureContrast(faintRaw, base === 'light' ? bg : panel, text, 3.2);
 
-  const mixBlack = base === 'light' ? '#0a0b10' : '#000000';
+  const mixBlack = base === 'light' ? '#07080C' : '#000000';
   const mixWhite = base === 'light' ? '#ffffff' : '#ffffff';
 
   return {
@@ -191,9 +191,9 @@ export function buildChromeCssVars(
     '--color-red': down,
     '--color-purple': accent,
     // Warm warn — blend accent with a fixed amber so warn stays distinct
-    '--color-accent-3': `color-mix(in srgb, ${accent} 35%, #e8a03a 65%)`,
-    '--color-orange': `color-mix(in srgb, ${accent} 25%, #e8a03a 75%)`,
-    '--color-yellow': `color-mix(in srgb, ${accent} 20%, #e8a03a 80%)`,
+    '--color-accent-3': `color-mix(in srgb, ${accent} 35%, #E8B84A 65%)`,
+    '--color-orange': `color-mix(in srgb, ${accent} 25%, #E8B84A 75%)`,
+    '--color-yellow': `color-mix(in srgb, ${accent} 20%, #E8B84A 80%)`,
     '--color-cyan':
       base === 'light'
         ? `color-mix(in srgb, ${up} 35%, #0e8aaa 65%)`
@@ -215,7 +215,7 @@ export function buildChromeCssVars(
     '--color-editor-type':
       base === 'light'
         ? `color-mix(in srgb, ${accent} 30%, #c47a18 70%)`
-        : `color-mix(in srgb, ${accent} 22%, #e8a03a 78%)`,
+        : `color-mix(in srgb, ${accent} 22%, #E8B84A 78%)`,
 
     // Focus / shadows track theme depth
     '--ui-focus-ring': `0 0 0 1px color-mix(in srgb, ${accent} 40%, transparent)`,
@@ -292,11 +292,11 @@ export function buildChartOptionsFromTokens(
   const gridOn = tokens['grid.visible'] !== false;
   const gridVert = gridOn ? String(tokens['grid.vert'] ?? 'transparent') : 'transparent';
   const gridHorz = gridOn ? String(tokens['grid.horz'] ?? 'transparent') : 'transparent';
-  const bg = String(tokens['chart.bg_color'] ?? '#0a0b10');
-  const fg = String(tokens['scale.text'] ?? tokens['chart.fg_color'] ?? '#8b8e9c');
-  const border = String(tokens['scale.border'] ?? '#3a3d4a');
-  const cross = String(tokens['crosshair.color'] ?? 'rgba(147, 159, 255, 0.38)');
-  const labelBg = String(tokens['crosshair.label_bg'] ?? tokens['chart.elev'] ?? '#171821');
+  const bg = String(tokens['chart.bg_color'] ?? '#07080C');
+  const fg = String(tokens['scale.text'] ?? tokens['chart.fg_color'] ?? '#9AA3B2');
+  const border = String(tokens['scale.border'] ?? '#1C2230');
+  const cross = String(tokens['crosshair.color'] ?? 'rgba(139, 156, 255, 0.38)');
+  const labelBg = String(tokens['crosshair.label_bg'] ?? tokens['chart.elev'] ?? '#10131B');
 
   return {
     layout: {
@@ -362,8 +362,8 @@ export function applyThemeToChart(
   if (opts.applyPriceScale !== false) {
     try {
       chart.priceScale('right').applyOptions({
-        borderColor: String(tokens['scale.border'] ?? '#3a3d4a'),
-        textColor: String(tokens['scale.text'] ?? '#8b8e9c'),
+        borderColor: String(tokens['scale.border'] ?? '#1C2230'),
+        textColor: String(tokens['scale.text'] ?? '#9AA3B2'),
       });
     } catch {
       /* ignore */
@@ -378,8 +378,8 @@ export function buildCandleSeriesOptions(
   tokens: ThemeTokens,
   opts: ApplySeriesThemeOpts = {},
 ): Record<string, unknown> {
-  const up = String(tokens['bar.up.color'] ?? '#5ecf8a');
-  const down = String(tokens['bar.down.color'] ?? '#e85d4c');
+  const up = String(tokens['bar.up.color'] ?? '#3DDC97');
+  const down = String(tokens['bar.down.color'] ?? '#F07178');
   const upBorder = String(tokens['bar.up.border'] ?? up);
   const downBorder = String(tokens['bar.down.border'] ?? down);
   const upWick = String(tokens['bar.up.wick'] ?? up);
@@ -414,8 +414,8 @@ export function buildCandleSeriesOptions(
 /** OHLC bar series options. */
 export function buildBarSeriesOptions(tokens: ThemeTokens): Record<string, unknown> {
   return {
-    upColor: String(tokens['bar.up.color'] ?? '#5ecf8a'),
-    downColor: String(tokens['bar.down.color'] ?? '#e85d4c'),
+    upColor: String(tokens['bar.up.color'] ?? '#3DDC97'),
+    downColor: String(tokens['bar.down.color'] ?? '#F07178'),
     openVisible: true,
     thinBars: tokens['bar.thin_bars'] !== false,
   };
@@ -423,9 +423,9 @@ export function buildBarSeriesOptions(tokens: ThemeTokens): Record<string, unkno
 
 /** Line main-series options. */
 export function buildLineSeriesOptions(tokens: ThemeTokens): Record<string, unknown> {
-  const color = String(tokens['line.color'] ?? '#939fff');
+  const color = String(tokens['line.color'] ?? '#8B9CFF');
   const width = Number(tokens['line.width'] ?? 2);
-  const bg = String(tokens['chart.bg_color'] ?? '#0a0b10');
+  const bg = String(tokens['chart.bg_color'] ?? '#07080C');
   return {
     color,
     lineWidth: clampLineWidth(width),
@@ -436,12 +436,12 @@ export function buildLineSeriesOptions(tokens: ThemeTokens): Record<string, unkn
 
 /** Area main-series options. */
 export function buildAreaSeriesOptions(tokens: ThemeTokens): Record<string, unknown> {
-  const line = String(tokens['area.line'] ?? tokens['line.color'] ?? '#939fff');
-  const bg = String(tokens['chart.bg_color'] ?? '#0a0b10');
+  const line = String(tokens['area.line'] ?? tokens['line.color'] ?? '#8B9CFF');
+  const bg = String(tokens['chart.bg_color'] ?? '#07080C');
   return {
     lineColor: line,
-    topColor: String(tokens['area.top'] ?? 'rgba(147, 159, 255, 0.28)'),
-    bottomColor: String(tokens['area.bottom'] ?? 'rgba(147, 159, 255, 0.02)'),
+    topColor: String(tokens['area.top'] ?? 'rgba(139, 156, 255, 0.28)'),
+    bottomColor: String(tokens['area.bottom'] ?? 'rgba(139, 156, 255, 0.02)'),
     lineWidth: clampLineWidth(Number(tokens['line.width'] ?? 2)),
     crosshairMarkerBorderColor: bg,
     crosshairMarkerBackgroundColor: line,
@@ -450,15 +450,15 @@ export function buildAreaSeriesOptions(tokens: ThemeTokens): Record<string, unkn
 
 /** Baseline main-series options. */
 export function buildBaselineSeriesOptions(tokens: ThemeTokens): Record<string, unknown> {
-  const bg = String(tokens['chart.bg_color'] ?? '#0a0b10');
-  const accent = String(tokens['ui.accent'] ?? '#939fff');
+  const bg = String(tokens['chart.bg_color'] ?? '#07080C');
+  const accent = String(tokens['ui.accent'] ?? '#8B9CFF');
   return {
-    topLineColor: String(tokens['baseline.top_line'] ?? '#5ecf8a'),
-    topFillColor1: String(tokens['baseline.top_fill1'] ?? 'rgba(94, 207, 138, 0.28)'),
-    topFillColor2: String(tokens['baseline.top_fill2'] ?? 'rgba(94, 207, 138, 0.04)'),
-    bottomLineColor: String(tokens['baseline.bottom_line'] ?? '#e85d4c'),
-    bottomFillColor1: String(tokens['baseline.bottom_fill1'] ?? 'rgba(232, 93, 76, 0.04)'),
-    bottomFillColor2: String(tokens['baseline.bottom_fill2'] ?? 'rgba(232, 93, 76, 0.28)'),
+    topLineColor: String(tokens['baseline.top_line'] ?? '#3DDC97'),
+    topFillColor1: String(tokens['baseline.top_fill1'] ?? 'rgba(61, 220, 151, 0.28)'),
+    topFillColor2: String(tokens['baseline.top_fill2'] ?? 'rgba(61, 220, 151, 0.04)'),
+    bottomLineColor: String(tokens['baseline.bottom_line'] ?? '#F07178'),
+    bottomFillColor1: String(tokens['baseline.bottom_fill1'] ?? 'rgba(240, 113, 120, 0.04)'),
+    bottomFillColor2: String(tokens['baseline.bottom_fill2'] ?? 'rgba(240, 113, 120, 0.28)'),
     lineWidth: clampLineWidth(Number(tokens['line.width'] ?? 2)),
     crosshairMarkerBorderColor: bg,
     crosshairMarkerBackgroundColor: accent,
@@ -513,8 +513,8 @@ export function volumeColors(state: ChartThemeState | null | undefined): {
 } {
   const t = resolveTokens(state);
   return {
-    up: String(t['volume.up'] ?? 'rgba(94, 207, 138, 0.45)'),
-    down: String(t['volume.down'] ?? 'rgba(232, 93, 76, 0.45)'),
+    up: String(t['volume.up'] ?? 'rgba(61, 220, 151, 0.45)'),
+    down: String(t['volume.down'] ?? 'rgba(240, 113, 120, 0.45)'),
   };
 }
 
@@ -538,18 +538,18 @@ export function tokensToVoidLike(tokens: ThemeTokens): {
   orange: string;
 } {
   return {
-    bg: String(tokens['chart.bg_color'] ?? '#0a0b10'),
-    panel: String(tokens['chart.panel'] ?? '#111218'),
-    elev: String(tokens['chart.elev'] ?? '#171821'),
-    grid: String(tokens['grid.vert'] ?? 'rgba(140, 130, 180, 0.07)'),
-    text: String(tokens['chart.fg_color'] ?? '#c8cad4'),
-    textDim: String(tokens['scale.text'] ?? '#8b8e9c'),
-    up: String(tokens['bar.up.color'] ?? '#5ecf8a'),
-    down: String(tokens['bar.down.color'] ?? '#e85d4c'),
-    border: String(tokens['scale.border'] ?? '#3a3d4a'),
-    indigo: String(tokens['ui.accent'] ?? '#939fff'),
-    indigoSoft: String(tokens['crosshair.color'] ?? 'rgba(147, 159, 255, 0.38)'),
-    green: String(tokens['ui.up'] ?? tokens['bar.up.color'] ?? '#5ecf8a'),
+    bg: String(tokens['chart.bg_color'] ?? '#07080C'),
+    panel: String(tokens['chart.panel'] ?? '#0C0E14'),
+    elev: String(tokens['chart.elev'] ?? '#10131B'),
+    grid: String(tokens['grid.vert'] ?? 'rgba(139, 156, 255, 0.07)'),
+    text: String(tokens['chart.fg_color'] ?? '#E8EAEE'),
+    textDim: String(tokens['scale.text'] ?? '#9AA3B2'),
+    up: String(tokens['bar.up.color'] ?? '#3DDC97'),
+    down: String(tokens['bar.down.color'] ?? '#F07178'),
+    border: String(tokens['scale.border'] ?? '#1C2230'),
+    indigo: String(tokens['ui.accent'] ?? '#8B9CFF'),
+    indigoSoft: String(tokens['crosshair.color'] ?? 'rgba(139, 156, 255, 0.38)'),
+    green: String(tokens['ui.up'] ?? tokens['bar.up.color'] ?? '#3DDC97'),
     orange: '#e8a03a',
   };
 }

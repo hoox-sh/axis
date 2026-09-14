@@ -34,6 +34,9 @@ export type NormalizedRunResult = EngineRunResult & {
   series: Record<string, (number | string | null)[]>;
   plots: (number | null)[];
   events: NonNullable<EngineRunResult['events']>;
+  /** Pine `alert()` / `alertcondition()` firings (interpret). */
+  alerts?: Array<Record<string, unknown>>;
+  alert_conditions?: Array<Record<string, unknown>>;
 };
 
 // ── Plot sample / time coercion ─────────────────────────────────────
@@ -272,6 +275,22 @@ export function normalizeEngineResult(raw: unknown, ms?: number): NormalizedRunR
     result.profile = r.profile as Record<string, unknown>;
   } else if (metaRaw.profile && typeof metaRaw.profile === 'object') {
     result.profile = metaRaw.profile as Record<string, unknown>;
+  }
+  const alertsRaw = Array.isArray(r.alerts)
+    ? r.alerts
+    : Array.isArray(metaRaw.alerts)
+      ? metaRaw.alerts
+      : null;
+  if (alertsRaw) {
+    result.alerts = alertsRaw as Array<Record<string, unknown>>;
+  }
+  const condRaw = Array.isArray(r.alert_conditions)
+    ? r.alert_conditions
+    : Array.isArray(metaRaw.alert_conditions)
+      ? metaRaw.alert_conditions
+      : null;
+  if (condRaw) {
+    result.alert_conditions = condRaw as Array<Record<string, unknown>>;
   }
 
   return result;

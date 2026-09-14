@@ -239,6 +239,18 @@ export function evaluateOne(
           }
         }
       }
+      const drawingId =
+        params.drawingId != null && String(params.drawingId).trim()
+          ? String(params.drawingId).trim()
+          : '';
+      if (drawingId && ctx.drawingPricesById) {
+        const live = ctx.drawingPricesById[drawingId];
+        if (Array.isArray(live)) {
+          for (const p of live) {
+            if (typeof p === 'number' && Number.isFinite(p)) levels.push(p);
+          }
+        }
+      }
       if (levels.length === 0) return false;
 
       const touches = (level: number): boolean => {
@@ -278,8 +290,27 @@ export function evaluateOne(
         }
         return nowTrue;
       }
-      const value = numParam(params, 'value');
+      let value = numParam(params, 'value');
+      let prevValue = numParam(params, 'prevValue');
       const threshold = numParam(params, 'threshold');
+      if (value == null && ctx.plotSamples) {
+        const ind =
+          params.indicatorId != null ? String(params.indicatorId).trim() : '';
+        const plot = params.plotKey != null ? String(params.plotKey).trim() : '';
+        if (ind && plot) {
+          const sample = ctx.plotSamples[`${ind}:${plot}`];
+          if (sample && Number.isFinite(sample.value)) {
+            value = sample.value;
+            if (
+              prevValue == null &&
+              sample.prevValue != null &&
+              Number.isFinite(sample.prevValue)
+            ) {
+              prevValue = sample.prevValue;
+            }
+          }
+        }
+      }
       if (value == null || threshold == null) return false;
       const op = String(params.op ?? '>');
       let nowTrue = false;
@@ -305,14 +336,12 @@ export function evaluateOne(
           break;
         case 'cross':
         case 'crosses': {
-          const prevVal = numParam(params, 'prevValue');
-          if (prevVal == null) return false;
-          return crossesLevel(prevVal, value, threshold);
+          if (prevValue == null) return false;
+          return crossesLevel(prevValue, value, threshold);
         }
         default:
           return false;
       }
-      const prevValue = numParam(params, 'prevValue');
       if (prevValue == null) return nowTrue;
       let wasTrue = false;
       switch (op) {
