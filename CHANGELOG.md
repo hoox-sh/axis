@@ -15,6 +15,10 @@ _Generated/updated: 2026-09-16 · 414 commits · describe-tag: `v2.6.7`_
 
 ## [Unreleased]
 
+### Fixed
+
+- CI unit: SVG stub implements `replaceChildren`; on-chain health probe assertion no longer treats `worker.axis.hoox.sh` as the SPA host; Python runtime locks skip when numpy/antlr4 are missing on the runner.
+
 ## [2.6.8] — 2026-09-16
 
 ### Added

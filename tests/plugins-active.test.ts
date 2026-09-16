@@ -47,6 +47,8 @@ beforeEach(() => {
   setActivePlugin('storage', 'local');
   setStore('pluginsConfig', {});
   setStore('endpoint', 'http://example.test:5002');
+  const server = registry.getEngine('server');
+  if (server?.configSchema?.mode) server.configSchema.mode.default = 'auto';
   clearCredentials();
   applyProviderVaultAuth(undefined, false);
 });

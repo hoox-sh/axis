@@ -105,6 +105,21 @@ export function installDocumentStub() {
       if (c.id) nodes.set(c.id, c);
       return c;
     }
+    get firstChild() {
+      return this.children[0] ?? null;
+    }
+    get childNodes() {
+      return this.children;
+    }
+    removeChild(c: FakeEl) {
+      this.children = this.children.filter((x) => x !== c);
+      c.parent = null;
+      return c;
+    }
+    replaceChildren(...nodesIn: FakeEl[]) {
+      this.children = [];
+      for (const n of nodesIn) this.appendChild(n);
+    }
     remove() {
       if (this.id) nodes.delete(this.id);
       if (this.parent) {

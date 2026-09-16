@@ -47,7 +47,8 @@ describe('checkOnchainProxyHealth', () => {
     restoreFetch = mockFetch((input) => {
       const url = String(input);
       expect(url).toBe(`${DEFAULT_ONCHAIN_WORKER_BASE}${ONCHAIN_HEALTH_PATH}`);
-      expect(url).not.toContain('axis.hoox.sh');
+      // Worker host is worker.axis.hoox.sh — do not hit the SPA/Pro API origin.
+      expect(url.startsWith('https://axis.hoox.sh')).toBe(false);
       return jsonResponse({
         status: 'healthy',
         service: 'axis-onchain',
