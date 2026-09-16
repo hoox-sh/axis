@@ -27,11 +27,16 @@
  * @module indicators/IndicatorPanel
  */
 
-import { type Component, For, Show, createMemo } from 'solid-js';
+import { type Component, For, Show, createMemo, createSignal } from 'solid-js';
 import { store, isPanelOpen, setStore, persist, setStatus } from '../store';
 import { IndicatorCard } from './IndicatorCard';
 import { FloatableShell } from '../ui/panels/FloatableShell';
 import { Icons } from '../ui/icons';
+import {
+  applyBuiltinScript,
+  builtinCategoryLabel,
+  filterBuiltinScripts,
+} from './builtins';
 import {
   activeChartContext,
   cycleLiveRerunOn,
@@ -74,6 +79,10 @@ const CompChip: Component<{
 
 /** Shell + composition strip + list of {@link IndicatorCard}. */
 export const IndicatorPanel: Component = () => {
+  const [pickerOpen, setPickerOpen] = createSignal(false);
+  const [pickerQuery, setPickerQuery] = createSignal('');
+  const pickerHits = createMemo(() => filterBuiltinScripts(pickerQuery()));
+
   const streamId = () =>
     store.live?.streamId || store.activePlugins?.stream || '—';
   const eng = () => store.engine || store.activePlugins?.engine || 'server';
@@ -164,6 +173,53 @@ export const IndicatorPanel: Component = () => {
                 onClick={cycleRerun}
               />
             </div>
+            <div class="flex items-center justify-between gap-1 pt-0.5">
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 border border-border/50 rounded-[var(--radius-chip)] text-[10px] text-text-dim hover:border-accent/50 hover:text-accent"
+                data-testid="axis-scripts-add-builtin"
+                title="Add an original AXIS built-in study"
+                onClick={() => setPickerOpen((o) => !o)}
+              >
+                <Icons.plus size={10} />
+                Built-in
+              </button>
+            </div>
+            <Show when={pickerOpen()}>
+              <div class="pt-1 space-y-1" data-testid="axis-builtin-picker">
+                <input
+                  type="search"
+                  class="w-full bg-bg border border-border/50 rounded-[var(--radius-chip)] px-1.5 py-0.5 text-[11px] text-text outline-none focus:border-accent/50"
+                  placeholder="Search built-ins…"
+                  value={pickerQuery()}
+                  data-testid="axis-builtin-picker-input"
+                  spellcheck={false}
+                  onInput={(e) => setPickerQuery(e.currentTarget.value)}
+                />
+                <div class="max-h-40 overflow-y-auto space-y-px">
+                  <For each={pickerHits()}>
+                    {(script) => (
+                      <button
+                        type="button"
+                        class="w-full flex items-center justify-between gap-1 px-1 py-0.5 text-left text-[11px] text-text-dim hover:text-accent hover:bg-accent/10 rounded-[var(--radius-chip)]"
+                        data-testid={`axis-builtin-pick-${script.id}`}
+                        title={script.description}
+                        onClick={() => {
+                          void applyBuiltinScript(script.id);
+                          setPickerOpen(false);
+                          setPickerQuery('');
+                        }}
+                      >
+                        <span class="truncate">{script.title}</span>
+                        <span class="shrink-0 font-mono text-[9px] uppercase text-text-faint">
+                          {builtinCategoryLabel(script.category)}
+                        </span>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </div>
+            </Show>
             <div class="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[9px] text-text-faint">
               <span class="inline-flex items-center gap-0.5" title="Indicator">
                 <Icons.activity size={9} class="text-accent" /> ind
@@ -206,7 +262,7 @@ export const IndicatorPanel: Component = () => {
               when={store.scripts.length > 0}
               fallback={
                 <div class="axis-empty-state text-[12px] text-text-dim py-2">
-                  No scripts
+                  No scripts — Add a built-in or run the editor
                 </div>
               }
             >

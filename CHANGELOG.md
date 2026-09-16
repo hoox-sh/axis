@@ -17,6 +17,7 @@ _Generated/updated: 2026-09-12 · 401 commits · describe-tag: `v2.6.5`_
 
 ### Added
 
+- **First-party built-in scripts**: original AXIS Pine catalog (moving averages, channels, oscillators, trend, volume, volatility, pivots, session, and classic strategies). Scripts panel **Built-in** picker and command palette **Add built-in script…** (type `rsi` / `macd` to jump). These are AXIS originals — not TradingView® templates.
 - **Named watchlists**: create, rename, duplicate, and delete lists. Lists persist with the workspace (`watchlist.lists` + `activeId`); a legacy symbols-only payload becomes a **Main** list.
 - **Watchlist alerts**: row bell opens a compact price alert (cross / above / below) at last.
 - **Autoload chart** (Settings → General): when on (default), symbol / interval / venue changes fetch immediately and the topbar Load button is hidden; when off, Load is shown and field changes wait for an explicit load.

@@ -1,0 +1,109 @@
+# Copyright (C) 2024-2026 jango_blockchained
+#
+# This file is part of pynescript.
+#
+# pynescript is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# pynescript is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with pynescript.  If not, see <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+---
+title: "Built-in scripts"
+description: "Original AXIS studies you can apply from the Scripts panel — not third-party chart-host templates."
+---
+
+# Built-in scripts
+
+AXIS ships a **first-party** catalog of Pine `indicator()` / `strategy()` scripts so you can apply common studies without pasting or importing anyone else’s source.
+
+Every built-in starts with:
+
+```pine
+//@version=6
+// AXIS first-party built-in. Original source — not a TradingView® template.
+```
+
+They wrap public technical-analysis formulas through PYNE `ta.*` (SMA, RSI, ATR, …) or short original implementations of well-known public recurrences (McGinley Dynamic, Fisher Transform, floor pivots). They are **not** copies of TradingView® built-in templates.
+
+## Apply
+
+| Where | How |
+| --- | --- |
+| **Scripts** panel | **Built-in** → search → click a row. Runs onto the chart as a new instance. |
+| **⌘/Ctrl+K** | **Add built-in script…**, or type `rsi` / `macd` / `vwap` (two+ characters) to jump. |
+
+Applied scripts persist with the workspace like any other Run. Open Script Settings on the card to change inputs.
+
+## Inventory
+
+Grouped by catalog category. `covers` is the public TA idea, not a vendor product name.
+
+### Moving averages
+
+SMA, EMA, WMA, RMA (Wilder), VWMA, Hull, DEMA, TEMA, ALMA, KAMA, LSMA, median, SWMA, McGinley Dynamic, MA ribbon, percent envelope, MA cross (study).
+
+### Channels
+
+Bollinger Bands, %B, bandwidth, Keltner, Donchian, linear-regression channel / curve, short-vs-long Bollinger width.
+
+### Oscillators
+
+RSI, Stochastic, Stoch RSI, MACD, CCI, momentum, ROC, Williams %R, Awesome Oscillator, Ultimate Oscillator, TRIX, TSI, CMO, Fisher Transform, Coppock, KST, Relative Vigor, Relative Volatility, DPO, PPO, PVO, Balance of Power, Bull/Bear Power, Connors RSI, SMI, Woodie CCI, RCI, Ulcer Index, Mass Index, Choppiness, trend strength (ADX).
+
+### Trend
+
+Supertrend, ADX, DMI, Aroon / Aroon Osc, Parabolic SAR, Vortex, Ichimoku, Chande Kroll stop, Chandelier exit, volatility stop, Alligator, fractals, ZigZag.
+
+### Volume
+
+Volume, OBV, VWAP, VWAP bands, TWAP, CMF, Chaikin Oscillator, MFI, A/D, Ease of Movement, Elder Force, Klinger-style signed-volume EMAs, NVI, PVI, net volume, PVT.
+
+### Volatility / pivots / session
+
+ATR, true range, historical volatility, average range; floor pivots from the prior day, pivot high/low; close-vs-volume correlation; session background.
+
+### Strategies
+
+SMA cross, MACD cross, RSI mean-reversion, Bollinger bounce, Supertrend follow, SAR flip, Keltner break, Donchian break, momentum, stochastic cross, bar up/down, consecutive closes, inside bar, outside bar, pivot reversal, ATR expansion.
+
+## What we do not ship
+
+Some names that appear on closed chart hosts are **skipped** on purpose (proprietary scoring, extra market data, tick aggressor feeds, or chrome AXIS already has):
+
+| Skip | Why |
+| --- | --- |
+| Technical Ratings | Proprietary composite |
+| Dividend yield / open interest | Extra feeds |
+| Compare / multi-time-period charts | Host layout (AXIS Compare + multi-chart) |
+| Volume delta / CVD / up-down volume | Tick / aggressor data |
+| Auto Fib / pitchfork | Drawing tools |
+| Moon phases / seasonality / price target | Calendar or analyst data |
+| Advance/decline breadth | Market-wide series |
+| Chop Zone | Vendor-specific coloring |
+
+See `src/indicators/builtins/skipped.ts` for the full skip list.
+
+## Library starter pack vs built-ins
+
+| Pack | Role |
+| --- | --- |
+| Built-ins (`src/indicators/builtins/`) | Always in the app; apply from Scripts / ⌘K |
+| `examples/script-library-starter.json` | Importable v6 **language** examples (libraries, enums, MTF) for the Script Library |
+
+Prefer built-ins for “add RSI to this chart”. Prefer the starter pack when learning Pine v6 library/enum patterns.
+
+## See also
+
+- [Scripts (indicators & strategies)](/axis/docs/ui/indicators)
+- [Script library](/axis/docs/enduser/guides/script-library)
+- [Quick start](/axis/docs/enduser/getting-started/quick-start)

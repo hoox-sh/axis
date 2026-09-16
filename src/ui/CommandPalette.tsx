@@ -102,6 +102,12 @@ import { detectPlatform } from './shortcuts/keys';
 import type { ShortcutId } from './shortcuts/types';
 import { PINE_SNIPPETS } from './shortcuts/pine-snippets';
 import { THEME_PRESETS } from '../theme/presets';
+import {
+  applyBuiltinScript,
+  builtinCategoryLabel,
+  filterBuiltinScripts,
+  type BuiltinScript,
+} from '../indicators/builtins';
 
 /** Optional host hooks (e.g. desktop shell git bridge). */
 type AxisHostWindow = Window & {
@@ -184,6 +190,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
   const [query, setQuery] = createSignal('');
   const [active, setActive] = createSignal(0);
   const [snippetPickerOpen, setSnippetPickerOpen] = createSignal(false);
+  const [builtinPickerOpen, setBuiltinPickerOpen] = createSignal(false);
   let inputEl: HTMLInputElement | undefined;
   let listEl: HTMLDivElement | undefined;
 
@@ -350,8 +357,19 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
           }
           return;
         }
-        // No id → open the snippet sub-palette
+        // No id → stay in the palette and show the snippet list
+        setQuery('');
+        setBuiltinPickerOpen(false);
         setSnippetPickerOpen(true);
+      },
+      addBuiltinScript: (id) => {
+        if (id) {
+          void applyBuiltinScript(id);
+          return;
+        }
+        setQuery('');
+        setSnippetPickerOpen(false);
+        setBuiltinPickerOpen(true);
       },
       findAcrossScripts: () => {
         setLibraryPanelOpen(true);
@@ -397,7 +415,23 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
     });
   });
 
-  const results = createMemo(() => filterCommands(commands(), query()));
+  const builtinHits = createMemo(() => {
+    const q = query().trim();
+    if (q.length < 2) return [] as BuiltinScript[];
+    return filterBuiltinScripts(q).slice(0, 8);
+  });
+
+  const results = createMemo(() => {
+    const cmds = filterCommands(commands(), query());
+    const extras: CommandDef[] = builtinHits().map((b) => ({
+      id: `builtin.${b.id}`,
+      title: `Add ${b.title}`,
+      category: builtinCategoryLabel(b.category),
+      keywords: [...b.tags],
+      run: () => void applyBuiltinScript(b.id),
+    }));
+    return extras.length ? [...extras, ...cmds] : cmds;
+  });
 
   // Keep highlight in range when filter shrinks
   createEffect(() => {
@@ -411,6 +445,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       setQuery('');
       setActive(0);
       setSnippetPickerOpen(false);
+      setBuiltinPickerOpen(false);
     }
   });
 
@@ -423,9 +458,20 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
     });
   };
 
+  const runBuiltin = (script: BuiltinScript) => {
+    setBuiltinPickerOpen(false);
+    closePalette();
+    void applyBuiltinScript(script.id);
+  };
+
+  const pickerBuiltins = createMemo(() => filterBuiltinScripts(query()));
+
   const runCommand = async (cmd: CommandDef | undefined) => {
     if (!cmd) return;
-    closePalette();
+    // Sub-pickers render inside the palette — keep it open.
+    if (cmd.id !== 'snippet.insert' && cmd.id !== 'script.builtin') {
+      closePalette();
+    }
     try {
       await cmd.run();
     } catch {
@@ -485,7 +531,13 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
               ref={inputEl}
               type="text"
               class="axis-cmd-palette-input"
-              placeholder="Search commands…"
+              placeholder={
+                builtinPickerOpen()
+                  ? 'Search built-in scripts…'
+                  : snippetPickerOpen()
+                    ? 'Pine snippets'
+                    : 'Search commands…'
+              }
               value={query()}
               spellcheck={false}
               autocomplete="off"
@@ -500,11 +552,11 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
                 // Local handling so CM / other capture listeners don't fight
                 if (e.key === 'ArrowDown') {
                   e.preventDefault();
-                  if (snippetPickerOpen()) return;
+                  if (snippetPickerOpen() || builtinPickerOpen()) return;
                   move(1);
                 } else if (e.key === 'ArrowUp') {
                   e.preventDefault();
-                  if (snippetPickerOpen()) return;
+                  if (snippetPickerOpen() || builtinPickerOpen()) return;
                   move(-1);
                 } else if (e.key === 'Enter') {
                   e.preventDefault();
@@ -513,11 +565,20 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
                     if (first) runSnippet(first);
                     return;
                   }
+                  if (builtinPickerOpen()) {
+                    const first = pickerBuiltins()[0];
+                    if (first) runBuiltin(first);
+                    return;
+                  }
                   void runActive();
                 } else if (e.key === 'Escape') {
                   e.preventDefault();
                   if (snippetPickerOpen()) {
                     setSnippetPickerOpen(false);
+                    return;
+                  }
+                  if (builtinPickerOpen()) {
+                    setBuiltinPickerOpen(false);
                     return;
                   }
                   closePalette();
@@ -536,6 +597,9 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
             aria-label="Commands"
             ref={listEl}
           >
+            <Show
+              when={builtinPickerOpen()}
+              fallback={
             <Show
               when={snippetPickerOpen()}
               fallback={
@@ -598,6 +662,36 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
                   </button>
                 )}
               </For>
+            </Show>
+              }
+            >
+              <Show
+                when={pickerBuiltins().length > 0}
+                fallback={
+                  <div class="axis-cmd-palette-empty" data-testid="axis-builtin-picker-empty">
+                    No matching built-ins
+                  </div>
+                }
+              >
+                <For each={pickerBuiltins()}>
+                  {(script) => (
+                    <button
+                      type="button"
+                      role="option"
+                      data-testid={`axis-builtin-${script.id}`}
+                      class="axis-cmd-palette-item"
+                      onClick={() => runBuiltin(script)}
+                    >
+                      <span class="axis-cmd-palette-item-main">
+                        <span class="axis-cmd-palette-item-title">{script.title}</span>
+                        <span class="axis-cmd-palette-item-cat">
+                          {builtinCategoryLabel(script.category)} · {script.shorttitle}
+                        </span>
+                      </span>
+                    </button>
+                  )}
+                </For>
+              </Show>
             </Show>
           </div>
 

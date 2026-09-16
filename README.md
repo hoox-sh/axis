@@ -207,7 +207,7 @@ await loadPluginFromUrl('https://example.com/my-plugin.js');
 | **Chart themes** | Ten curated high-end presets (void, classic, mono, obsidian, graphite, pacific, dusk, porcelain, parchment, …) — no neon high-contrast default |
 | **Price scale** | Auto or 0–8 decimals from symbol + bars; Pine `plot.style_*` parity on overlays |
 | **Run** | Accent color only while a run is executing (ghost when idle) |
-| **Library / Plugins / Settings** | Script storage (import v6 starter pack), plugin catalog (incl. **component** URL), engine endpoint |
+| **Library / Plugins / Settings** | Script storage (import v6 starter pack), first-party built-in studies (Scripts → Built-in), plugin catalog (incl. **component** URL), engine endpoint |
 | **Workers Manager** | Health cards + install helpers for Flask / Worker / Pyodide / PWA / PYNE Agent |
 | **AXIS CLI** | `packages/cli` — install, doctor, setup, secrets, deploy, health |
 | **Desktop** | Optional Tauri 2 shell (`bun run desktop:dev`) |

@@ -20,3 +20,7 @@ Third-party marks
 -----------------
 Pine Script™ and TradingView® are trademarks of TradingView, Inc.
 Cloudflare® is a registered trademark of Cloudflare, Inc.
+
+AXIS built-in studies (`src/indicators/builtins/`) are original first-party
+Pine sources. They are not TradingView® templates and must not be replaced
+with scraped third-party corpora.

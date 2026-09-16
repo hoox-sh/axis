@@ -144,6 +144,8 @@ export interface CommandActions {
   resetShortcuts?: () => void;
   /** Open the Pine snippet picker (id selects a starter when provided). */
   insertSnippet?: (id: string) => void;
+  /** Open the built-in script picker, or apply `id` when provided. */
+  addBuiltinScript?: (id: string) => void | Promise<void>;
   /** Grep across the script library. */
   findAcrossScripts?: () => void;
   /** Open the recent-scripts list (last 10). */
@@ -847,6 +849,22 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     category: 'actions',
     keywords: ['snippet', 'template', 'boilerplate', 'insert', 'starter'],
   },
+  {
+    id: 'script.builtin',
+    title: 'Add built-in script…',
+    category: 'actions',
+    keywords: [
+      'builtin',
+      'built-in',
+      'indicator',
+      'strategy',
+      'sma',
+      'rsi',
+      'macd',
+      'catalog',
+      'study',
+    ],
+  },
   // Library / navigation
   {
     id: 'search.across',
@@ -1048,6 +1066,9 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.resetShortcuts) byId.set('help.reset-shortcuts', actions.resetShortcuts);
   if (actions.insertSnippet) {
     byId.set('snippet.insert', () => actions.insertSnippet?.(''));
+  }
+  if (actions.addBuiltinScript) {
+    byId.set('script.builtin', () => void actions.addBuiltinScript?.(''));
   }
   if (actions.findAcrossScripts) byId.set('search.across', actions.findAcrossScripts);
   if (actions.openRecentScripts) byId.set('scripts.recent', actions.openRecentScripts);

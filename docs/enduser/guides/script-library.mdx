@@ -73,13 +73,17 @@ Manager → **Script Library**:
 
 Status line: backend · remote · branch · connected · count.
 
+### Built-in studies (always in the app)
+
+Original AXIS Pine catalog — apply from **Scripts → Built-in** or ⌘K **Add built-in script…**. Not TradingView® templates. See [Built-in scripts](/axis/docs/enduser/guides/builtin-scripts).
+
 ### Pine Script™ v6 starter pack
 
-Repo ships a portable library dump of **v6** indicators, strategies, and helpers:
+Repo ships a portable library dump of **v6** language examples (libraries, enums, MTF):
 
 | Path | Role |
 | --- | --- |
-| `examples/script-library-starter.json` | Importable library JSON (`//@version=6` scripts: RSI, MACD, ATR, MTF, sessions, math lib, …) |
+| `examples/script-library-starter.json` | Importable library JSON (`//@version=6` helpers + sample studies) |
 
 **Import:** Manager → Script Library → **Import JSON** → pick the file (or any prior export). Uses `importLibraryJson` with new ids so it merges into the active backend (local / cloud / git).
 
