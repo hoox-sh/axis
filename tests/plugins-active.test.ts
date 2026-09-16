@@ -16,6 +16,7 @@ import { _resetSourceRegistrationFlag } from '../src/sources/catalog';
 import { _resetStreamRegistrationFlag } from '../src/streams/catalog';
 import { _resetEngineRegistrationFlag } from '../src/engines/catalog';
 import { _resetStorageRegistrationFlag } from '../src/storage/catalog';
+import { reconcile } from 'solid-js/store';
 import { setStore, setActivePlugin, applyProviderVaultAuth } from '../src/store';
 import { clearCredentials } from '../src/data/credentials';
 import {
@@ -45,7 +46,7 @@ beforeEach(() => {
   setActivePlugin('stream', 'binance-ws');
   setActivePlugin('engine', 'server');
   setActivePlugin('storage', 'local');
-  setStore('pluginsConfig', {});
+  setStore('pluginsConfig', reconcile({}));
   setStore('endpoint', 'http://example.test:5002');
   const server = registry.getEngine('server');
   if (server?.configSchema?.mode) server.configSchema.mode.default = 'auto';
@@ -103,7 +104,7 @@ describe('active config', () => {
 
   it('defaults server execution mode to auto from schema when unset', () => {
     setActivePlugin('engine', 'server');
-    setStore('pluginsConfig', {});
+    setStore('pluginsConfig', reconcile({}));
     expect(getActiveEngineConfig().mode).toBe('auto');
   });
 
