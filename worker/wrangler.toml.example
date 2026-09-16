@@ -65,7 +65,7 @@ class_name = "McpBridgeDO"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["McpBridgeDO"]
+new_sqlite_classes = ["McpBridgeDO"]
 # Later SessionDO enablement needs a new tag — never edit v1.
 # [[migrations]]
 # tag = "v2"

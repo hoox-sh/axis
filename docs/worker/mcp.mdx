@@ -68,7 +68,7 @@ Health JSON includes `features.mcp: true` and `features.mcpBridge` when the DO i
 
 ## Bindings
 
-`MCP_BRIDGE` Durable Object (`class_name = "McpBridgeDO"`, migration tag `v1` `new_classes`). Declared in `worker/wrangler.toml.example`. App-plane tools return `NO_MCP_BRIDGE` until this is deployed.
+`MCP_BRIDGE` Durable Object (`class_name = "McpBridgeDO"`, migration tag `v1` `new_sqlite_classes`). Declared in `worker/wrangler.toml.example`. App-plane tools return `NO_MCP_BRIDGE` until this is deployed. Cloudflare® no longer creates KV-backed DO namespaces (`new_classes`).
 
 Session name is the API-key partition (`userId` = first 32 hex chars of SHA-256 of the key). Optional suffix `userId:label` is allowed; foreign session ids are ignored.
 

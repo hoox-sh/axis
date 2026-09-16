@@ -15,6 +15,10 @@ _Generated/updated: 2026-09-17 · 421 commits · describe-tag: `v2.6.8`_
 
 ## [Unreleased]
 
+### Fixed
+
+- Worker MCP Durable Object uses `new_sqlite_classes` (`MCP_BRIDGE` / `McpBridgeDO`). Cloudflare® accounts no longer accept KV-backed `new_classes` (error 10099).
+
 ## [2.7.0] — 2026-09-17
 
 ### Added
