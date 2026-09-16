@@ -19,9 +19,9 @@ axis --help
 # download axis-cli-<cli-version>-bun-<target> from the release assets:
 #   bun-linux-x64 | bun-linux-arm64 | bun-linux-x64-musl | bun-linux-arm64-musl
 #   bun-darwin-x64 | bun-darwin-arm64 | bun-windows-x64.exe
-# Release tag = app VERSION (v2.6.6). Filename uses CLI package version (0.3.2).
-curl -LO "https://github.com/hoox-sh/axis/releases/download/v2.6.6/axis-cli-0.3.2-bun-linux-x64"
-chmod +x axis-cli-0.3.2-bun-linux-x64 && ./axis-cli-0.3.2-bun-linux-x64 --version
+# Release tag = app VERSION (v2.7.0). Filename uses CLI package version (0.3.3).
+curl -LO "https://github.com/hoox-sh/axis/releases/download/v2.7.0/axis-cli-0.3.3-bun-linux-x64"
+chmod +x axis-cli-0.3.3-bun-linux-x64 && ./axis-cli-0.3.3-bun-linux-x64 --version
 
 # from the AXIS monorepo
 bun install
@@ -96,9 +96,22 @@ Env overrides:
 | `AXIS_ROOT` | Force monorepo root |
 | `AXIS_WORKER_URL` | Default health/deploy probe URL |
 | `AXIS_ADMIN_TOKEN` | Admin token for `axis keys create` |
-| `AXIS_API_KEY` | Default key for `axis keys validate` / `health --scripts --key` |
+| `AXIS_API_KEY` | Default key for `axis keys validate` / `health --scripts --key` / `axis mcp` |
 | `CLOUDFLARE_API_TOKEN` | Wrangler auth (non-interactive) |
 | `AXIS_CLI_SRC=1` | Force bin to load `src/` over `dist/` (Bun only) |
+
+## MCP
+
+Remote MCP on the Worker (`POST /mcp`). Same Bearer key as cloud scripts.
+
+```bash
+axis mcp config --key pn_…                 # JSON for Cursor / Inspector
+axis mcp config --stdio --key pn_…         # spawn `axis mcp` from a local client
+axis mcp --key pn_…                        # stdio JSON-RPC → Worker
+# AXIS_API_KEY / AXIS_WORKER_URL also apply
+```
+
+Point the client at `https://worker.axis.hoox.sh/mcp` with `Authorization: Bearer pn_…`. App-plane tools (`app_invoke`) need an AXIS tab with **Settings → MCP** connected. Docs: [MCP (agents)](https://hoox.sh/axis/docs/enduser/guides/mcp) · [MCP server](https://hoox.sh/axis/docs/worker/mcp).
 
 ## License
 

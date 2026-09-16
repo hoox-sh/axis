@@ -54,9 +54,13 @@ No. Change Settings → Backend URL to `http://localhost:5002` or your Worker. D
 
 ## Data & privacy
 
+### Can an agent control AXIS?
+
+Yes. The Worker serves MCP at `POST /mcp` (Bearer `pn_…`). Worker tools (`axis_run`, scripts, on-chain) do not need a tab. Chart/editor/panels need **Settings → MCP** connected. Guide: [MCP (agents)](/axis/docs/enduser/guides/mcp).
+
 ### Where do API keys live?
 
-In **this browser’s** localStorage state / `pluginsConfig`. They are sent as HTTP headers only to endpoints you configure (cloud storage, etc.). They are not part of the Pine script body.
+In **this browser’s** localStorage state / `pluginsConfig`. They are sent as HTTP headers only to endpoints you configure (cloud storage, MCP bridge, etc.). They are not part of the Pine script body. Snapshots returned to MCP clients redact secret-like fields.
 
 ### Are OHLCV bars uploaded?
 

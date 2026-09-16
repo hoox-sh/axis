@@ -9,15 +9,17 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-16 · 414 commits · describe-tag: `v2.6.7`_
+_Generated/updated: 2026-09-17 · 421 commits · describe-tag: `v2.6.8`_
 
 ---
 
 ## [Unreleased]
 
+## [2.7.0] — 2026-09-17
+
 ### Added
 
-- **MCP server** on the Worker (`POST /mcp`, Bearer API key): tools for health, generic allowlisted `axis_request`, `/api/run`, scripts, keys, onchain, and market; resources and prompts. Live-app tools (`app_invoke` / `app_get` / `app_set`) RPC to a connected PWA via `McpBridgeDO` (`/api/mcp/bridge`). In-app host (`window.__AXIS_MCP__`) covers chart, editor, indicators, alerts, library, watchlist, panels, plugins, theme, drawings, workspace, logs. CLI: `axis mcp` (stdio proxy) and `axis mcp config`. Settings → General → Connect this tab to MCP.
+- **MCP server** on the Worker (`POST /mcp`, Bearer API key): tools for health, generic allowlisted `axis_request`, `/api/run`, scripts, keys, onchain, and market; resources and prompts. Live-app tools (`app_invoke` / `app_get` / `app_set`) RPC to a connected PWA via `McpBridgeDO` (`/api/mcp/bridge`). In-app host (`window.__AXIS_MCP__`) covers chart, editor, indicators, alerts, library, watchlist, panels, plugins, theme, drawings, workspace, logs. CLI: `axis mcp` (stdio proxy) and `axis mcp config` (`@hoox-sh/axis-cli` 0.3.3). Settings → General → Connect this tab to MCP. Docs: [MCP (agents)](https://hoox.sh/axis/docs/enduser/guides/mcp) · [MCP server](https://hoox.sh/axis/docs/worker/mcp).
 - Pane script badge **load source** (file icon, second after settings) opens that script in the docked editor.
 - Topbar and editor **Add ▾** menus include **Add built-in script…** (same picker as ⌘K).
 - **Screenshot** (camera, module bar, before Studio): capture price / all panes / workspace, drawings overlay, watermark, 1×/2×, copy or download PNG. Session icons (theme, fullscreen, chart-only, screenshot, Studio) sit on the right of the second topbar row.
@@ -1178,12 +1180,16 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (95 commits)
+### 2026-09 (102 commits)
 
 #### Features
 
+- `15be69c3` (2026-09-16) — feat(mcp): remote MCP server for Worker APIs and live-app control
+- `96310628` (2026-09-16) — feat(ui): load-source, Add built-in, and chart screenshot
 - `5de57792` (2026-09-16) — feat(scripts): first-party AXIS built-in Pine catalog
 - `fdf3b656` (2026-09-16) — feat(ui): named watchlists, overlay docks, Add, and pyne interpret fix
 - `3afd072d` (2026-09-14) — feat: pine alerts, live-by-default, and worker-axis rename
@@ -1278,6 +1284,10 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Tests
 
+- `d3e21123` (2026-09-16) — test(e2e): mock engine /run without intercepting runner.js
+- `077c6c69` (2026-09-16) — test(e2e): open editor before asserting Script Logs toggle
+- `8638f3c0` (2026-09-16) — test: wipe pluginsConfig with reconcile so engine mode stays auto
+- `1962bfb9` (2026-09-16) — test: unstick CI unit failures on bun SVG stub and Worker URL
 - `079f1569` (2026-09-12) — test(e2e): drawings overlay spec with chart DOM harness
 - `3e6778ea` (2026-09-12) — test(coverage): lift scoped core gate 82.8% to 89.9%
 - `6527e3de` (2026-09-10) — test(editor): cover folding, indent grid, minimap class
@@ -1299,6 +1309,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Other
 
+- `697e55ed` (2026-09-16) — release: 2.6.8 first-party built-in scripts and watchlist chrome
 - `d6e6fd9c` (2026-09-14) — release: 2.6.7 convert-to-v6 UDF-safe prefixes
 
 ### 2026-08 (237 commits)

@@ -82,7 +82,10 @@ Paste the returned IDs into your local `wrangler.toml` (from the example).
 
 | Path                | Method | Notes                                  |
 |---------------------|--------|----------------------------------------|
-| `/` or `/health`    | GET    | Health check                           |
+| `/` or `/health`    | GET    | Health check (`features.mcp`, `mcpBridge`) |
+| `/mcp`              | GET    | MCP discovery (public)                 |
+| `/mcp`              | POST   | MCP JSON-RPC (Bearer `pn_…`)           |
+| `/api/mcp/bridge`   | WS     | PWA control plane (`McpBridgeDO`)      |
 | `/api/run`          | POST   | `{ script, data, mode? }` → plots+events |
 | `/api/keys?action=create` | POST | `X-Admin-Token` required               |
 | `/api/keys?action=validate` | GET | `Authorization: Bearer …` or `?key=` |
@@ -116,6 +119,11 @@ Scripts are partitioned by a hash of the key. Without D1, an in-memory store is 
 WebSocket: open `wss://<worker>/api/stream?session=…&symbol=BTCUSDT&interval=1m`
 and the Worker routes to a Durable Object instance that fans a single
 upstream Binance kline stream to N clients.
+
+**MCP:** `POST /mcp` with `Authorization: Bearer <pn_…>` (same keys as scripts).
+`GET /mcp` lists tools without auth. App-plane tools (`app_invoke`) need a PWA
+tab on `wss://<worker>/api/mcp/bridge?key=…` and the `MCP_BRIDGE` Durable Object.
+Docs: [MCP server](https://hoox.sh/axis/docs/worker/mcp) · [MCP (agents)](https://hoox.sh/axis/docs/enduser/guides/mcp).
 
 ## Deploy
 

@@ -100,6 +100,8 @@ When using `bun run axis setup -- --flag`, keep the `--` so Bun forwards flags t
 | `axis deploy pages` | Vite build + Pages project |
 | `axis deploy all` | Schema + Worker + Pages |
 | `axis health [--oauth] [--scripts] [--url …]` | Probe `/health`, optional OAuth start, optional `/api/scripts` |
+| `axis mcp [--key pn_…]` | Stdio MCP proxy to Worker `POST /mcp` |
+| `axis mcp config [--stdio]` | Print MCP client JSON (remote URL or stdio spawn) |
 | `axis whoami` | Cloudflare® account |
 | `axis dev` | Vite product UI |
 | `axis dev worker` | Local wrangler Worker |
@@ -130,6 +132,7 @@ axis secret put EXTERNAL_BACKEND
 axis deploy all
 axis keys create              # --admin-token / AXIS_ADMIN_TOKEN / prompt
 axis health --scripts --oauth
+axis mcp config --key pn_…    # MCP client snippet (see [MCP server](/axis/docs/worker/mcp))
 # Paste Worker URL + pn_… into Settings → Script storage
 ```
 
@@ -151,7 +154,7 @@ axis health --scripts --oauth
 | `AXIS_ROOT` | Force monorepo root |
 | `AXIS_WORKER_URL` | Default health / deploy probe URL |
 | `AXIS_ADMIN_TOKEN` | Admin token for `axis keys create` |
-| `AXIS_API_KEY` | Default key for `axis keys validate` |
+| `AXIS_API_KEY` | Default key for `axis keys validate` / `axis mcp` |
 | `CLOUDFLARE_API_TOKEN` | Non-interactive Wrangler auth |
 | `AXIS_CLI_SRC=1` | Load `src/` instead of `dist/` |
 
@@ -160,10 +163,10 @@ axis health --scripts --oauth
 | Path | Role |
 | --- | --- |
 | `packages/cli/bin/axis.js` | Bin entry (Bun) |
-| `packages/cli/src/commands/*` | Commander handlers (`install`, `doctor`, `setup`, `keys`, `deploy`, `secrets`, `health`, `dev`, `whoami`) |
+| `packages/cli/src/commands/*` | Commander handlers (`install`, `doctor`, `setup`, `keys`, `deploy`, `secrets`, `health`, `dev`, `whoami`, `mcp`) |
 | `packages/cli/src/services/wrangler-toml.ts` | Toml vars, D1 id, KV binding upsert |
 | `packages/cli/src/services/health.ts` | `/health` + OAuth probes |
 | Root `package.json` `axis` / `axis:*` scripts | Convenience wrappers |
 | Root `Makefile` `axis` / `axis-*` | Make wrappers |
 
-See also: [Installation](/axis/docs/enduser/getting-started/installation), [Cloudflare® deployment](/axis/docs/devops/cloudflare), [Worker bindings](/axis/docs/worker/bindings), [Worker auth](/axis/docs/worker/auth), [packages/cli/README.md](https://github.com/hoox-sh/axis/blob/main/packages/cli/README.md).
+See also: [Installation](/axis/docs/enduser/getting-started/installation), [MCP (agents)](/axis/docs/enduser/guides/mcp), [MCP server](/axis/docs/worker/mcp), [Cloudflare® deployment](/axis/docs/devops/cloudflare), [Worker bindings](/axis/docs/worker/bindings), [Worker auth](/axis/docs/worker/auth), [packages/cli/README.md](https://github.com/hoox-sh/axis/blob/main/packages/cli/README.md).

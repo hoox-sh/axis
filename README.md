@@ -66,7 +66,7 @@ bun run desktop:build       # package installers under src-tauri/target/release/
 
 ### AXIS CLI (`packages/cli`)
 
-Operator entry for install, diagnostics, Worker bootstrap (D1 / OAuth), secrets, deploy, and health.
+Operator entry for install, diagnostics, Worker bootstrap (D1 / OAuth), secrets, deploy, health, and MCP.
 
 ```bash
 npm install -g @hoox-sh/axis-cli   # Node ≥ 20; Bun ≥ 1.2 for install/dev/build
@@ -81,12 +81,47 @@ axis setup d1 --remote                # apply D1 schema on CF
 axis secret put ADMIN_TOKEN
 axis deploy                           # Worker worker-axis
 axis health --oauth                   # live /health + device OAuth
+axis mcp config --key pn_…            # MCP client JSON for POST /mcp
 
 # Repo aliases (no global install): bun run axis:install / axis:doctor / axis:deploy / …
 # Make wrappers: make axis-doctor  make axis-deploy  make axis ARGS="…"
 ```
 
 Docs: [AXIS CLI](./docs/devops/cli.mdx) · [packages/cli/README.md](./packages/cli/README.md) · live demo [axis.hoox.sh](https://axis.hoox.sh) · Worker `https://worker.axis.hoox.sh`
+
+## MCP (agents)
+
+Remote **Model Context Protocol** server on the Worker so Claude, Cursor, Grok, or Inspector can **read and write** AXIS: load a symbol, edit Pine, run a script, inspect results, manage alerts and the library.
+
+| Plane | Live tab? | Tools |
+| --- | --- | --- |
+| **Worker** | No | `axis_health`, `axis_request`, `axis_run`, scripts, keys, on-chain, market |
+| **App** | Yes — this browser session | `app_invoke` / `app_get` / `app_set` (chart, editor, panels, …) |
+
+```bash
+axis keys create                      # pn_…  (ADMIN_TOKEN)
+axis mcp config --key pn_…            # client snippet
+axis mcp --key pn_…                   # stdio proxy → POST /mcp
+```
+
+```json
+{
+  "mcpServers": {
+    "axis": {
+      "url": "https://worker.axis.hoox.sh/mcp",
+      "headers": { "Authorization": "Bearer pn_…" }
+    }
+  }
+}
+```
+
+1. Paste the key into **Studio → Settings → Data** (cloud storage).
+2. Keep **Settings → General → MCP → Connect this tab** on (default).
+3. Point the client at `/mcp` with `Authorization: Bearer pn_…`.
+
+`GET /mcp` is public discovery. Tool calls use the same API-key auth as `/api/scripts`. App tools return `SESSION_OFFLINE` until a tab is bridged (`wss://…/api/mcp/bridge`).
+
+Docs: [MCP (agents)](https://hoox.sh/axis/docs/enduser/guides/mcp) · [MCP server](https://hoox.sh/axis/docs/worker/mcp) · in-tree [docs/enduser/guides/mcp.mdx](./docs/enduser/guides/mcp.mdx)
 
 See [docs/devops/desktop.mdx](./docs/devops/desktop.mdx) for platform prerequisites.
 
@@ -102,10 +137,11 @@ icons, ISC). Wrapper: `src/ui/icons.tsx`.
 | **Calc engines** | `src/engines/`, `src/workers/` | Pluggable Pine evaluation backends sharing one contract: local **pyne** Pro API (`:5002`), the Cloudflare **Worker**, or fully offline in-browser **Pyodide**. Workers Manager ships the catalog + health probes for each backend. |
 | **Pyodide runtime** | `public/pyodide/`, `public/vendor/`, `vendor/` | Vendored Python wheel stack so scripts run 100% client-side/offline; SW caches it for installs. Synced from pyne releases via `scripts/sync-pyne-wheel.sh`. |
 | **On-chain plane** | `src/onchain/` | Dataset plugins: DefiLlama TVL, GeckoTerminal pools/ohlcv, catalog + presets, events, jobs scheduler, alerts bridge, export, keys. |
-| **Worker** | `worker/` | Cloudflare Worker API: `/api/run`, `/api/stream` (+ Durable Object WebSocket sessions), KV API keys & usage meter, D1 persistent runs/scripts, R2 indicator bundle cache, Git OAuth for storage-git. |
+| **Worker** | `worker/` | Cloudflare Worker API: `/api/run`, `/api/stream` (+ Durable Object WebSocket sessions), **`POST /mcp`** (MCP), KV API keys & usage meter, D1 persistent runs/scripts, R2 indicator bundle cache, Git OAuth for storage-git. |
+| **MCP host** | `src/mcp/` | In-app capability dispatcher + Worker bridge (`window.__AXIS_MCP__`). |
 | **Proxy** | `worker/src/onchain.ts` ↔ `src/onchain/proxy.ts` | Allowlisted `/api/onchain/*` egress proxy in front of DefiLlama / GeckoTerminal — keeps third-party keys server-side and CORS-clean. |
 | **Desktop** | `src-tauri/`, `src/desktop/` | Tauri 2 native shell (menu, open-script, About) with per-platform installers built by CI. |
-| **CLI** | `packages/cli/` | [`@hoox-sh/axis-cli`](https://www.npmjs.com/package/@hoox-sh/axis-cli) — install, doctor, setup (OAuth/D1), secrets, deploy (Worker/Pages), health. Published to npm on `v*` tags via `.github/workflows/release.yml`. |
+| **CLI** | `packages/cli/` | [`@hoox-sh/axis-cli`](https://www.npmjs.com/package/@hoox-sh/axis-cli) — install, doctor, setup (OAuth/D1), secrets, deploy (Worker/Pages), health, `axis mcp`. Published to npm on `v*` tags via `.github/workflows/release.yml`. |
 | **Tests & ops** | `tests/`, `e2e/`, `scripts/`, `Makefile`, `.github/workflows/` | Bun unit + worker suites, Playwright smoke, changelog/pyne sync scripts, Docker bake, desktop + npm release pipelines. |
 
 ## Architecture
@@ -128,8 +164,8 @@ icons, ISC). Wrapper: `src/ui/icons.tsx`.
 ┌─────────────────────────── Backend (pluggable) ───────────────────────┐
 │  Local Flask `make run`      OR      Cloudflare Pages + Worker        │
 │  (dev only)                            • Pages: static PWA             │
-│                                        • Worker: /api/run, /api/stream│
-│                                        • Durable Object: live session  │
+│                                        • Worker: /api/run, /api/stream, /mcp │
+│                                        • Durable Object: live session + MCP bridge │
 │                                        • KV: API keys, usage meter     │
 │                                        • D1: persistent runs/scripts   │
 │                                        • R2: indicator bundle cache    │
@@ -209,10 +245,11 @@ await loadPluginFromUrl('https://example.com/my-plugin.js');
 | **Run** | Accent color only while a run is executing (ghost when idle) |
 | **Library / Plugins / Settings** | Script storage (import v6 starter pack), first-party built-in studies (Scripts → Built-in), plugin catalog (incl. **component** URL), engine endpoint |
 | **Workers Manager** | Health cards + install helpers for Flask / Worker / Pyodide / PWA / PYNE Agent |
-| **AXIS CLI** | `packages/cli` — install, doctor, setup, secrets, deploy, health |
+| **AXIS CLI** | `packages/cli` — install, doctor, setup, secrets, deploy, health, MCP |
+| **MCP** | Agents control Worker APIs and a connected tab (`POST /mcp`, Settings → MCP) |
 | **Desktop** | Optional Tauri 2 shell (`bun run desktop:dev`) |
 
-Docs: [On-Chain data](https://hoox.sh/axis/docs/enduser/guides/on-chain) · [Data Source Manager](https://hoox.sh/axis/docs/enduser/guides/data-source-manager) · [AXIS CLI](https://hoox.sh/axis/docs/devops/cli) · [UI shell](https://hoox.sh/axis/docs/ui/ui-shell)
+Docs: [On-Chain data](https://hoox.sh/axis/docs/enduser/guides/on-chain) · [Data Source Manager](https://hoox.sh/axis/docs/enduser/guides/data-source-manager) · [MCP (agents)](https://hoox.sh/axis/docs/enduser/guides/mcp) · [AXIS CLI](https://hoox.sh/axis/docs/devops/cli) · [UI shell](https://hoox.sh/axis/docs/ui/ui-shell)
 
 ## Local dev
 
@@ -263,10 +300,11 @@ axis/                         (this repo root)
     editor/                   CM6 Pine editor, diagnostics, profiler, pins
     chart/                    lightweight-charts host, drawings, on-chain overlays
     ui/                       Topbar, panels, On-Chain, command palette, settings
+    mcp/                      In-app MCP host (capabilities, snapshot, Worker WS bridge)
     store/                    Solid app state + persistence
     plugins/                  Unified registry contracts + loader (incl. dataset)
-  worker/                     Cloudflare Worker (API / onchain proxy / DO / D1)
-  packages/cli/               AXIS CLI (@hoox-sh/axis-cli) — setup / deploy / doctor
+  worker/                     Cloudflare Worker (API / onchain proxy / DO / D1 / MCP)
+  packages/cli/               AXIS CLI (@hoox-sh/axis-cli) — setup / deploy / doctor / mcp
   docs/                       Product docs (MDX; mirrored to hoox.sh/axis/docs)
   tests/                      Bun unit + integration tests
   e2e/                        Playwright
@@ -280,9 +318,10 @@ axis/                         (this repo root)
   on Hetzner (`https://pynescript.online`, nginx → gunicorn `:5002`). Default store
   endpoint is `https://pynescript.online`. SSH: `ssh pynescript`.
 - **Cloudflare Worker**: `axis deploy` (or `make worker-deploy`). The Worker
-  exposes `/api/run`, `/api/stream`, `/api/keys`, `/api/onchain/*` (DefiLlama +
+  exposes `/api/run`, `/api/stream`, `/mcp` (MCP), `/api/keys`, `/api/onchain/*` (DefiLlama +
   GeckoTerminal allowlisted proxy), Git OAuth device flow, etc. See `worker/README.md`,
-  [Worker docs](https://hoox.sh/axis/docs/worker), and [AXIS CLI](https://hoox.sh/axis/docs/devops/cli).
+  [Worker docs](https://hoox.sh/axis/docs/worker), [MCP server](https://hoox.sh/axis/docs/worker/mcp),
+  and [AXIS CLI](https://hoox.sh/axis/docs/devops/cli).
 
 ## CORS (AXIS browser origin → Pro API)
 

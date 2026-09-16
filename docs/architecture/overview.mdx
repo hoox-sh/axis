@@ -38,6 +38,7 @@ flowchart TB
     A --> R[restoreInstalledPlugins]
     A --> L[loadSymbolData]
     A --> P[prefetch/preload Pyodide]
+    A --> MCP[startMcpHost]
   end
   subgraph Runtime
     TOP[Topbar] -->|Load| SRC[SourcePlugin.fetchHistorical]

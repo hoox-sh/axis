@@ -38,6 +38,7 @@ AXIS is a charting PWA, not a language rewrite. Language fidelity lives in [PYNE
 2. A **Solid + Vite** product UI (chart, editor, results, manager, Workers Manager, on-chain panel) with a **mobile-first responsive shell** and **global keyboard shortcuts** (recordable, persisted)
 3. Optional backends: local Flask, offline Pyodide, Cloudflare® Worker (+ DO/KV/D1/R2 + `/api/onchain` proxy)
 4. **AXIS CLI** + optional **Tauri** desktop shell for operators
+5. **MCP** on the Worker (`POST /mcp`) so agents can drive APIs and a connected tab — [MCP (agents)](/axis/docs/enduser/guides/mcp)
 
 **Invariant (AXIS ≠ engine):** the shell never embeds a closed interpreter. Evaluation is always an engine plugin.
 

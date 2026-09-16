@@ -50,6 +50,9 @@ flowchart TB
   W --> KV[API_KEYS / USAGE KV]
   W --> D1[(D1 scripts)]
   W --> DO[SessionDO]
+  W --> MCP[McpBridgeDO]
+  Agent[MCP client] -->|POST /mcp| W
+  PWA -->|WS /api/mcp/bridge| MCP
   DO --> BIN[Binance WS]
 ```
 
@@ -116,6 +119,7 @@ Makefile: `make worker-dev`, `make worker-deploy`.
 | Admin `/api/keys` | Works (KV or shape-check) |
 | Usage KV increment on run | Works when `USAGE` bound |
 | `SessionDO` + `/api/stream` | Implemented; binding often commented until provisioned |
+| `POST /mcp` + `McpBridgeDO` | **Works today** when `MCP_BRIDGE` is bound |
 | `/api/scripts` + D1 schema | Implemented; memory fallback without D1 |
 | Pyodide scaffold | `pyodide_runtime.ts` + flag; **wheel pipeline incomplete** |
 | Response cache for `/api/run` | Deferred |
@@ -129,6 +133,7 @@ Makefile: `make worker-dev`, `make worker-deploy`.
 | [Data plane](/axis/docs/worker/data-plane) | Scripts, D1, drafts |
 | [Auth](/axis/docs/worker/auth) | Bearer keys, admin token |
 | [Bindings](/axis/docs/worker/bindings) | wrangler.toml, vars, provision |
+| [MCP server](/axis/docs/worker/mcp) | `POST /mcp`, tools, PWA bridge |
 
 ## See also
 

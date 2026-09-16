@@ -19,23 +19,25 @@
 
 ---
 title: "MCP server"
-description: "Remote MCP for AXIS — Worker APIs plus live-app request/response control (chart, editor, scripts, alerts, plugins)."
+description: "Remote MCP for AXIS — Streamable HTTP /mcp, Bearer keys, Worker tools, live-app capabilities, McpBridgeDO."
 ---
 
 # MCP server
 
 ## Abstract
 
-AXIS exposes a **Model Context Protocol** server on the Cloudflare Worker so agents (Claude, Cursor, Grok, Inspector) can **read and write** nearly every product surface.
+AXIS exposes a **Model Context Protocol** server on the Cloudflare Worker so agents can **request and respond** across the data plane and a connected PWA.
 
-Two planes:
-
-| Plane | Needs a live tab? | Tools |
+| Plane | Live tab? | Tools |
 | --- | --- | --- |
-| **Worker** | No | `axis_health`, `axis_request`, `axis_run`, scripts, keys, usage, onchain, market |
-| **App** | Yes — PWA connected to the MCP bridge | `app_invoke`, `app_get`, `app_set`, `app_capabilities`, `app_session_status` |
+| **Worker** | No | `axis_health`, `axis_request`, `axis_run`, `axis_scripts_*`, `axis_keys_*`, `axis_usage`, `axis_onchain`, `axis_market` |
+| **App** | Yes | `app_invoke`, `app_get`, `app_set`, `app_capabilities`, `app_session_status` |
 
-Auth is the same **Bearer API key** as `/api/scripts` (`pn_…`). Production fail-closes when D1 is bound without `API_KEYS` KV.
+Transport: **Streamable HTTP JSON-RPC 2.0** on `POST /mcp` (JSON body in / JSON body out). Protocol versions accepted: `2025-03-26`, `2025-06-18`, `2024-11-05`.
+
+Auth: same **Bearer API key** as `/api/scripts` (`pn_…`). `GET /mcp` is public discovery. Production fail-closes when D1 is bound without `API_KEYS` KV. Rate limit: 60 MCP calls / minute / key.
+
+End-user connect steps: [MCP (agents)](/axis/docs/enduser/guides/mcp).
 
 ## Conceptual model
 
@@ -52,20 +54,146 @@ flowchart LR
 
 ## Endpoints
 
-| Path | Method | Role |
+Canonical host: `https://worker.axis.hoox.sh`.
+
+| Path | Method | Auth | Role |
+| --- | --- | --- | --- |
+| `/mcp` | POST | Bearer | JSON-RPC: `initialize`, `tools/*`, `resources/*`, `prompts/*`, `ping` |
+| `/mcp` | GET | public | Discovery JSON (server name, tool names) |
+| `/mcp` | DELETE | — | No-op 204 (stateless) |
+| `/.well-known/oauth-protected-resource` | GET | public | Bearer resource metadata |
+| `/api/mcp/bridge` | WS | Bearer or `?key=` | PWA control plane → `McpBridgeDO` |
+
+Health JSON includes `features.mcp: true` and `features.mcpBridge` when the DO is bound.
+
+## Bindings
+
+`MCP_BRIDGE` Durable Object (`class_name = "McpBridgeDO"`, migration tag `v1` `new_classes`). Declared in `worker/wrangler.toml.example`. App-plane tools return `NO_MCP_BRIDGE` until this is deployed.
+
+Session name is the API-key partition (`userId` = first 32 hex chars of SHA-256 of the key). Optional suffix `userId:label` is allowed; foreign session ids are ignored.
+
+## Worker tools
+
+| Tool | Role |
+| --- | --- |
+| `axis_health` | Same payload as `GET /health` |
+| `axis_request` | Allowlisted Worker HTTP; returns `{ ok, status, body }` |
+| `axis_run` | `POST /api/run` — `script` required; optional `data`, `ticker`, `timeframe`, `inputs` |
+| `axis_scripts_list` | Cloud library metadata |
+| `axis_scripts_get` | `{ id }` full script |
+| `axis_scripts_put` | Create/upsert `{ name, content, id?, description?, path?, revision? }` |
+| `axis_scripts_delete` | `{ id }` |
+| `axis_keys_validate` | Current Bearer or `{ key }` |
+| `axis_keys_create` | `{ adminToken, tier? }` — same as `X-Admin-Token` |
+| `axis_usage` | Usage stub / KV counters |
+| `axis_onchain` | `{ path, query? }` suffix after `/api/onchain` |
+| `axis_market` | `{ path, query? }` suffix after `/api/market` |
+| `app_session_status` | Connected PWA count for this key |
+
+`axis_request` arguments: `method` (`GET` default), `path` (required, starts with `/`), optional `query`, `body`, `headers` (`Authorization` is injected from the MCP session).
+
+### `axis_request` allowlist
+
+Allowed: `GET /` `/health`; `POST /api/run`; `GET|POST /api/keys`; `GET /api/usage`; scripts CRUD (`/api/scripts`, `/_draft`, `/:id`, versions); `GET /api/onchain…`; `GET /api/market…`.
+
+Blocked: `/mcp` recursion, `/api/stream`, `/api/git/oauth`, path traversal, unknown methods.
+
+Resource `axis://allowlist` returns the live table.
+
+## App tools
+
+| Tool | Role |
+| --- | --- |
+| `app_capabilities` | Capability catalog from the connected tab |
+| `app_invoke` | `{ capability, payload? }` — wait for JSON result (default 20s) |
+| `app_get` | Sanitized snapshot; optional dotted `path` |
+| `app_set` | Allowlisted dotted `path` + `value` |
+
+No tab → `SESSION_OFFLINE`. Timeouts → `TIMEOUT`. Snapshots redact keys matching `apiKey|secret|passphrase|token|password|authorization|cookie` and summarize OHLCV unless `includeBars: true`.
+
+### Capability ids (`app_invoke`)
+
+| Id | Payload | Mutates |
 | --- | --- | --- |
-| `/mcp` | POST | Streamable HTTP JSON-RPC 2.0 (tools, resources, prompts) |
-| `/mcp` | GET | Public discovery document (tool names, no auth) |
-| `/.well-known/oauth-protected-resource` | GET | Bearer resource metadata |
-| `/api/mcp/bridge` | WS | PWA control plane (Bearer or `?key=`) |
+| `app.snapshot` | `{ includeBars? }` | no |
+| `app.get` | `{ path?, includeBars? }` | no |
+| `app.set` | `{ path, value }` | yes |
+| `app.command` | `{ id }` palette command | yes |
+| `app.shortcut` | `{ id }` shortcut id | yes |
+| `app.event` | `{ name, detail? }` — `name` must start with `axis-` | yes |
+| `chart.get` | — | no |
+| `chart.set` | `{ symbol?, interval?, exchange?, source?, chartType? }` | yes |
+| `chart.load` | `{ symbol?, interval?, source? }` | yes |
+| `chart.reload` | — | yes |
+| `chart.live` | `{ active? }` | yes |
+| `chart.layout` | `{ op: get\|grid\|save\|load\|delete, mode?, name?, id? }` | yes |
+| `chart.theme` | `{ presetId? }` | yes |
+| `chart.type` | `{ type }` | yes |
+| `chart.screenshot` | `{ scope?: price\|panes\|workspace, scale?: 1\|2 }` | no |
+| `chart.zoom` | `{ op: in\|out\|reset\|pan, delta?, bars? }` | yes |
+| `editor.get` | — | no |
+| `editor.set` | `{ doc, open? }` | yes |
+| `editor.run` | `{ doc? }` | yes |
+| `editor.diagnostics` | — | no |
+| `indicators.list` | — | no |
+| `indicators.add` | `{ name, code, paneId? }` | yes |
+| `indicators.remove` | `{ id }` | yes |
+| `indicators.update` | `{ id, name?, visible?, code?, inputValues? }` | yes |
+| `indicators.run` | re-run visible | yes |
+| `alerts.list` | — | no |
+| `alerts.create` | `{ name, kind, symbol?, params?, interval?, webhookUrl?, enabled? }` | yes |
+| `alerts.update` | `{ id, patch }` | yes |
+| `alerts.remove` | `{ id }` | yes |
+| `watchlist.get` | — | no |
+| `watchlist.add` / `remove` | `{ symbol }` | yes |
+| `watchlist.lists` | `{ op: create\|rename\|delete\|select, id?, name?, symbols? }` | yes |
+| `library.list` | `{ prefix? }` | no |
+| `library.read` | `{ id }` | no |
+| `library.write` | `{ name, content, id?, description? }` | yes |
+| `library.remove` | `{ id }` | yes |
+| `results.get` | last run + strategy UI | no |
+| `logs.get` | `{ limit? }` | no |
+| `logs.append` | `{ message, level?, source? }` | yes |
+| `logs.clear` | — | yes |
+| `panels.get` | — | no |
+| `panels.set` | `{ id, open?, dock?, chartOnly? }` | yes |
+| `plugins.list` | — | no |
+| `plugins.activate` | `{ kind: source\|stream\|engine\|storage, id }` | yes |
+| `theme.get` / `theme.set` | `{ theme?, presetId?, uiScale?, toggle? }` | set mutates |
+| `workspace.export` | `{ includeBars? }` | no |
+| `workspace.import` | `{ json }` or snapshot object | yes |
+| `drawings.list` | — | no |
+| `drawings.clear` | `{ symbol? }` | yes |
+| `drawings.tool` | `{ tool }` | yes |
+| `status.get` | status bar + telemetry | no |
 
-Worker URL: `https://worker.axis.hoox.sh/mcp`.
+`app_set` paths: `symbol`, `interval`, `source`, `engine`, `exchange`, `theme`, `chartType`, `uiScale`, `live.active`, `live.preferAfterLoad`, `editor.doc`, `editor.open`, `watchlist.open`.
 
-## Connect a client
+## Resources and prompts
 
-Mint a key (`axis keys create`) and paste it into Settings → Data (cloud storage) so the PWA can attach. Enable **Connect this tab to MCP** (Settings → General).
+| URI | Contents |
+| --- | --- |
+| `axis://health` | Health JSON |
+| `axis://capabilities` | Tool names + planes |
+| `axis://allowlist` | `axis_request` paths |
+| `axis://session` | Bridge status for this key |
 
-### Remote HTTP (Inspector, Cursor, Claude with URL support)
+Prompts (seed the agent; they still call tools):
+
+| Name | Args |
+| --- | --- |
+| `run_script` | `script` (required), `symbol?`, `interval?` |
+| `debug_last_run` | — |
+| `analyze_strategy` | — |
+| `load_symbol` | `symbol`, `interval?` |
+| `audit_workspace` | — |
+
+## Client config
+
+```bash
+axis mcp config --key pn_…
+axis mcp --key pn_…                 # stdio proxy
+```
 
 ```json
 {
@@ -78,61 +206,42 @@ Mint a key (`axis keys create`) and paste it into Settings → Data (cloud stora
 }
 ```
 
-Print the snippet: `axis mcp config --key pn_…`
+Local wrangler: `http://127.0.0.1:8787/mcp` with `ALLOW_OPEN_KEYS=1` still requires a non-empty Bearer.
 
-### Stdio proxy
+## Errors
 
-```bash
-axis mcp --key pn_…
-# or
-axis mcp config --stdio --key pn_…
-```
-
-The CLI forwards newline-delimited JSON-RPC from stdin to `POST /mcp`.
-
-## Worker tools
-
-`axis_request` is the generic **request/response** tool: any allowlisted Worker path (`GET /health`, `POST /api/run`, scripts CRUD, onchain, market). It is **not** an open proxy — stream, OAuth, and `/mcp` recursion are blocked.
-
-Convenience wrappers: `axis_run`, `axis_scripts_*`, `axis_keys_*`, `axis_onchain`, `axis_market`, `axis_usage`, `axis_health`.
-
-## App capabilities
-
-`app_invoke` with a capability id. Catalog: `app_capabilities` (or `axis://capabilities`).
-
-| Domain | Examples |
-| --- | --- |
-| Chart | `chart.load`, `chart.live`, `chart.layout`, `chart.theme`, `chart.screenshot`, `chart.zoom` |
-| Editor | `editor.get` / `set` / `run` / `diagnostics` |
-| Scripts | `indicators.list` / `add` / `remove` / `run` |
-| Alerts | `alerts.list` / `create` / `update` / `remove` |
-| Library | `library.list` / `read` / `write` / `remove` |
-| Watchlist | `watchlist.get` / `add` / `remove` / `lists` |
-| Chrome | `panels.set`, `theme.set`, `drawings.tool`, `workspace.export` |
-| Palette | `app.command`, `app.shortcut` |
-
-`app_get` / `app_set` use dotted paths (`symbol`, `interval`, `editor.doc`). Secret fields are redacted in snapshots.
-
-If no tab is connected, app tools return `SESSION_OFFLINE`. Bind `MCP_BRIDGE` (see `wrangler.toml`) and keep the PWA open.
-
-## Resources and prompts
-
-Resources: `axis://health`, `axis://capabilities`, `axis://allowlist`, `axis://session`.
-
-Prompts: `run_script`, `debug_last_run`, `analyze_strategy`, `load_symbol`, `audit_workspace`.
+| Code | Where | Meaning |
+| --- | --- | --- |
+| `NO_KEY` / `INVALID_KEY` | HTTP 401 | Missing or unknown Bearer |
+| `API_KEYS_REQUIRED` | HTTP 503 | D1 without KV |
+| `RATE` | HTTP 429 | 60/min/key |
+| `MCP_ALLOWLIST` | tool | Path not allowed |
+| `NO_MCP_BRIDGE` | tool | DO unbound |
+| `SESSION_OFFLINE` | app tool | No PWA socket |
+| `TIMEOUT` | app tool | Tab did not reply in 20s |
+| `UNKNOWN_CAPABILITY` / `PATH_DENIED` | app | Bad id or set path |
+| `-32601` | JSON-RPC | Unknown method |
 
 ## Implementation
 
 | Path | Role |
 | --- | --- |
-| `worker/src/mcp/` | JSON-RPC handler, catalog, allowlist, bridge DO |
-| `src/mcp/` | PWA host, dispatch, snapshot, WS client |
+| `worker/src/mcp/handler.ts` | Streamable HTTP JSON-RPC |
+| `worker/src/mcp/catalog.ts` | Tools / resources / prompts |
+| `worker/src/mcp/allowlist.ts` | `axis_request` gate |
+| `worker/src/mcp/proxy.ts` | In-isolate dispatch to existing handlers |
+| `worker/src/mcp/bridge.ts` | `McpBridgeDO` |
+| `src/mcp/` | PWA host, snapshot, dispatch, WS client |
 | `packages/cli/src/commands/mcp.ts` | `axis mcp` |
 
-In-page API for tests: `window.__AXIS_MCP__.invoke('chart.get')`.
+In-page: `window.__AXIS_MCP__.invoke('chart.get')`. Tests: `worker/tests/mcp-handler.test.ts`, `tests/mcp-dispatch.test.ts`, `packages/cli/tests/mcp.test.ts`.
+
+This is a **stateless** MCP handler (no deprecated `McpAgent` session DO). App state lives in the PWA + `McpBridgeDO`, not in an MCP session id.
 
 ## See also
 
+- [MCP (agents)](/axis/docs/enduser/guides/mcp)
 - [Auth](/axis/docs/worker/auth)
 - [Durable Objects](/axis/docs/worker/durable-objects)
+- [Bindings](/axis/docs/worker/bindings)
 - [AXIS CLI](/axis/docs/devops/cli)

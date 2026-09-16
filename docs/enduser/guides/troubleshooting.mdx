@@ -34,6 +34,7 @@ Failure domains:
 2. **Calc plane** — engine / endpoint / Pyodide assets  
 3. **Shell plane** — store, SW cache, plugins  
 4. **Storage plane** — library backends  
+5. **MCP plane** — `/mcp` auth, PWA bridge  
 
 ## Decision tree
 
@@ -118,6 +119,17 @@ Probe: Settings → Test endpoint (health GET).
 | Theme wrong | `data-theme` | Toggle theme once |
 | Lost multi-chart slots | `chartLayout` in store | Named layouts menu; re-apply recipe |
 
+## MCP
+
+| Symptom | Checks | Fix |
+| --- | --- | --- |
+| 401 on `/mcp` | Bearer `pn_…` | `axis keys create`; client `Authorization` header |
+| `SESSION_OFFLINE` | Tab open? Same key? | Settings → MCP on; Data tab has the key |
+| `NO_MCP_BRIDGE` | Worker health `features.mcpBridge` | Bind `MCP_BRIDGE` in wrangler.toml and deploy |
+| Bridge idle | Cloud API key | Settings → Data |
+
+Guide: [MCP (agents)](/axis/docs/enduser/guides/mcp).
+
 ## Logging
 
 - **System logs** drawer: boot, pyodide ready, live re-run errors (`appendLog`)  
@@ -139,6 +151,8 @@ Probe: Settings → Test endpoint (health GET).
 | Streams | `streams/multiplex.ts` |
 | Engines | `engines/catalog.ts` |
 | Store | `store/index.ts` |
+| MCP host | `src/mcp/` |
+| MCP Worker | `worker/src/mcp/` |
 
 ## See also
 
@@ -146,3 +160,4 @@ Probe: Settings → Test endpoint (health GET).
 - [FAQ](/axis/docs/enduser/reference/faq)
 - [DevOps](/axis/docs/devops)
 - [Worker](/axis/docs/worker)
+- [MCP (agents)](/axis/docs/enduser/guides/mcp)

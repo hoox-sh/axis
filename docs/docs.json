@@ -63,6 +63,7 @@
                   "enduser/guides/hyperparameter-optimisation",
                   "enduser/guides/drawings",
                   "enduser/guides/alerts",
+                  "enduser/guides/mcp",
                   "enduser/guides/screenshots",
                   "enduser/guides/troubleshooting"
                 ]
