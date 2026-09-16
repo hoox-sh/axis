@@ -54,6 +54,7 @@ import {
   onMount,
   Show,
 } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import {
   store,
   setStore,
@@ -89,6 +90,23 @@ const ALERT_KIND_OPTS: { id: PriceAlertKind; label: string }[] = [
   { id: 'price_below', label: 'Below' },
 ];
 
+/** Place the portaled alert pop; flip above the row when it would clip the viewport. */
+function placeWatchlistAlertPop(
+  anchor: { top: number; right: number; bottom: number },
+  pop: { width: number; height: number },
+  viewport: { width: number; height: number },
+): { top: number; left: number } {
+  const pad = 8;
+  const width = Math.max(1, pop.width);
+  const height = Math.max(1, pop.height);
+  const left = Math.max(pad, Math.min(anchor.right - width, viewport.width - width - pad));
+  const below = anchor.bottom - 2;
+  if (below + height <= viewport.height - pad) {
+    return { top: Math.max(pad, below), left };
+  }
+  return { top: Math.max(pad, anchor.top - height + 2), left };
+}
+
 export const Watchlist: Component = () => {
   const [prices, setPrices] = createSignal<Record<string, WatchTicker>>({});
   const [addValue, setAddValue] = createSignal('');
@@ -101,6 +119,9 @@ export const Watchlist: Component = () => {
   const [alertPrice, setAlertPrice] = createSignal('');
   const [alertError, setAlertError] = createSignal('');
   const [alertsTick, setAlertsTick] = createSignal(0);
+  const [alertPopPos, setAlertPopPos] = createSignal({ top: 0, left: 0 });
+  let alertAnchorEl: HTMLElement | undefined;
+  let alertPopEl: HTMLDivElement | undefined;
 
   const lists = createMemo(() => {
     void store.watchlist.activeId;
@@ -325,8 +346,14 @@ export const Watchlist: Component = () => {
   };
 
   const commitRename = () => {
+    if (!renameOn()) return;
     const id = activeList()?.id;
     if (id) renameWatchlist(id, renameValue());
+    setRenameOn(false);
+  };
+
+  const cancelRename = () => {
+    setRenameValue(activeList()?.name || '');
     setRenameOn(false);
   };
 
@@ -335,15 +362,80 @@ export const Watchlist: Component = () => {
     beginRename();
   };
 
-  const openAlert = (sym: string) => {
-    const last = prices()[sym]?.price;
-    setAlertSym(sym);
-    setAlertKind('price_cross');
-    setAlertPrice(
-      last != null && Number.isFinite(last) ? String(last) : '',
+  const placeAlertPop = () => {
+    const anchor = alertAnchorEl;
+    if (!anchor?.isConnected || typeof window === 'undefined') return;
+    const r = anchor.getBoundingClientRect();
+    const pop = alertPopEl;
+    setAlertPopPos(
+      placeWatchlistAlertPop(
+        r,
+        { width: pop?.offsetWidth || 200, height: pop?.offsetHeight || 160 },
+        { width: window.innerWidth, height: window.innerHeight },
+      ),
     );
-    setAlertError('');
   };
+
+  const emitWatchlistAlert = (open: boolean) => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('axis-watchlist-alert', { detail: { open } }));
+  };
+
+  const closeAlert = () => {
+    if (!alertSym()) {
+      alertAnchorEl = undefined;
+      return;
+    }
+    setAlertSym(null);
+    alertAnchorEl = undefined;
+    emitWatchlistAlert(false);
+  };
+
+  const openAlert = (sym: string, anchor?: HTMLElement) => {
+    const last = prices()[sym]?.price;
+    alertAnchorEl = anchor?.closest('.axis-wl-row') ?? anchor;
+    placeAlertPop();
+    const wasOpen = !!alertSym();
+    setAlertKind('price_cross');
+    setAlertPrice(last != null && Number.isFinite(last) ? String(last) : '');
+    setAlertError('');
+    setAlertSym(sym);
+    if (!wasOpen) emitWatchlistAlert(true);
+  };
+
+  createEffect(() => {
+    const open = isPanelOpen('watchlist') || store.watchlist.open;
+    if (!open) closeAlert();
+  });
+
+  createEffect(() => {
+    const sym = alertSym();
+    if (!sym) return;
+    if (!store.watchlist.symbols.includes(sym)) closeAlert();
+  });
+
+  createEffect(() => {
+    if (!alertSym()) return;
+    const onDoc = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (alertPopEl?.contains(t) || alertAnchorEl?.contains(t)) return;
+      closeAlert();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeAlert();
+    };
+    const onReposition = () => placeAlertPop();
+    document.addEventListener('pointerdown', onDoc, true);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onReposition);
+    window.addEventListener('scroll', onReposition, true);
+    onCleanup(() => {
+      document.removeEventListener('pointerdown', onDoc, true);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onReposition);
+      window.removeEventListener('scroll', onReposition, true);
+    });
+  });
 
   const commitAlert = () => {
     const sym = alertSym();
@@ -362,7 +454,7 @@ export const Watchlist: Component = () => {
       params: { price: n },
     });
     announce(`Alert created for ${sym}`);
-    setAlertSym(null);
+    closeAlert();
   };
 
   const fmtPrice = (n?: number) =>
@@ -472,10 +564,14 @@ export const Watchlist: Component = () => {
                     e.preventDefault();
                     commitRename();
                   } else if (e.key === 'Escape') {
-                    setRenameOn(false);
+                    e.preventDefault();
+                    cancelRename();
                   }
                 }}
-                onBlur={() => commitRename()}
+                onBlur={() => {
+                  if (!renameOn()) return;
+                  commitRename();
+                }}
               />
             }
           >
@@ -614,7 +710,7 @@ export const Watchlist: Component = () => {
                         data-testid={`axis-watchlist-alert-${sym}`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          openAlert(sym);
+                          openAlert(sym, e.currentTarget);
                         }}
                       >
                         <Icons.alerts size={11} />
@@ -632,73 +728,6 @@ export const Watchlist: Component = () => {
                         ×
                       </button>
                     </span>
-                    <Show when={alertSym() === sym}>
-                      <div
-                        class="axis-wl-alert-pop"
-                        role="dialog"
-                        aria-label={`Alert ${sym}`}
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => e.stopPropagation()}
-                        onPointerDown={(e) => e.stopPropagation()}
-                      >
-                        <div class="flex items-center justify-between gap-2 mb-1.5">
-                          <span class="text-[10px] uppercase tracking-wider text-text-faint">
-                            Alert {sym}
-                          </span>
-                          <button
-                            type="button"
-                            class="sc-btn sc-btn-ghost px-1"
-                            aria-label="Close"
-                            onClick={() => setAlertSym(null)}
-                          >
-                            <Icons.x size={12} />
-                          </button>
-                        </div>
-                        <div class="flex items-center gap-1 mb-1.5">
-                          <For each={ALERT_KIND_OPTS}>
-                            {(opt) => (
-                              <button
-                                type="button"
-                                class={`sc-btn sc-btn-ghost text-[10px] px-1.5 h-6 min-h-6 ${
-                                  alertKind() === opt.id ? 'is-active' : ''
-                                }`}
-                                aria-pressed={alertKind() === opt.id}
-                                onClick={() => setAlertKind(opt.id)}
-                              >
-                                {opt.label}
-                              </button>
-                            )}
-                          </For>
-                        </div>
-                        <input
-                          class="sc-input w-full h-7 min-h-7 text-[11px] font-mono mb-1.5"
-                          inputMode="decimal"
-                          placeholder="Price"
-                          value={alertPrice()}
-                          data-testid="axis-watchlist-alert-price"
-                          onInput={(e) => setAlertPrice(e.currentTarget.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              commitAlert();
-                            } else if (e.key === 'Escape') {
-                              setAlertSym(null);
-                            }
-                          }}
-                        />
-                        <Show when={alertError()}>
-                          <div class="text-[10px] text-red mb-1">{alertError()}</div>
-                        </Show>
-                        <button
-                          type="button"
-                          class="sc-btn sc-btn-primary w-full h-7 min-h-7 text-[11px]"
-                          data-testid="axis-watchlist-alert-create"
-                          onClick={() => commitAlert()}
-                        >
-                          Create alert
-                        </button>
-                      </div>
-                    </Show>
                   </div>
                 );
               }}
@@ -718,6 +747,84 @@ export const Watchlist: Component = () => {
           />
         </div>
       </FloatableShell>
+      <Show when={alertSym()}>
+        {(sym) => (
+          <Portal>
+            <div
+              ref={(el) => {
+                alertPopEl = el;
+                if (el) placeAlertPop();
+              }}
+              class="axis-wl-alert-pop"
+              role="dialog"
+              aria-label={`Alert ${sym()}`}
+              data-testid="axis-watchlist-alert-pop"
+              style={{
+                top: `${alertPopPos().top}px`,
+                left: `${alertPopPos().left}px`,
+              }}
+            >
+              <div class="flex items-center justify-between gap-2 mb-1.5">
+                <span class="text-[10px] uppercase tracking-wider text-text-faint">
+                  Alert {sym()}
+                </span>
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost px-1"
+                  aria-label="Close"
+                  onClick={() => closeAlert()}
+                >
+                  <Icons.x size={12} />
+                </button>
+              </div>
+              <div class="flex items-center gap-1 mb-1.5">
+                <For each={ALERT_KIND_OPTS}>
+                  {(opt) => (
+                    <button
+                      type="button"
+                      class={`sc-btn sc-btn-ghost text-[10px] px-1.5 h-6 min-h-6 ${
+                        alertKind() === opt.id ? 'is-active' : ''
+                      }`}
+                      aria-pressed={alertKind() === opt.id}
+                      onClick={() => setAlertKind(opt.id)}
+                    >
+                      {opt.label}
+                    </button>
+                  )}
+                </For>
+              </div>
+              <input
+                class="sc-input w-full h-7 min-h-7 text-[11px] font-mono mb-1.5"
+                inputMode="decimal"
+                placeholder="Price"
+                value={alertPrice()}
+                data-testid="axis-watchlist-alert-price"
+                onInput={(e) => setAlertPrice(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitAlert();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    closeAlert();
+                  }
+                }}
+              />
+              <Show when={alertError()}>
+                <div class="text-[10px] text-red mb-1">{alertError()}</div>
+              </Show>
+              <button
+                type="button"
+                class="sc-btn sc-btn-primary w-full h-7 min-h-7 text-[11px]"
+                data-testid="axis-watchlist-alert-create"
+                onClick={() => commitAlert()}
+              >
+                Create alert
+              </button>
+            </div>
+          </Portal>
+        )}
+      </Show>
     </Show>
   );
 };

@@ -202,6 +202,8 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   const stacked = () => stackN() > 1;
 
   const [menuOpen, setMenuOpen] = createSignal(false);
+  /** Watchlist only: portaled alert is outside the shell (event, not a DOM query). */
+  const [watchlistAlertOpen, setWatchlistAlertOpen] = createSignal(false);
   /**
    * Portal host element. Updated when dock side changes.
    * Boolean Show (not keyed on the element) so host switches move the
@@ -247,11 +249,18 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     window.dispatchEvent(new CustomEvent('axis-chart-reflow'));
   };
 
+  const hoverSlideBusy = () => {
+    if (menuOpen() || dragging()) return true;
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    if (rootEl && active && rootEl.contains(active)) return true;
+    return watchlistAlertOpen();
+  };
+
   const armHoverSlideHide = () => {
     clearHoverLeaveTimer();
     hoverLeaveTimer = setTimeout(() => {
       hoverLeaveTimer = undefined;
-      if (menuOpen() || dragging()) return;
+      if (hoverSlideBusy()) return;
       setPanelHoverSlideExpanded(props.id, false);
       requestChartReflow();
     }, HOVER_SLIDE_LEAVE_MS);
@@ -267,10 +276,24 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
 
   const scheduleCollapseHoverSlide = () => {
     if (!hoverSlideOn() || dragging()) return;
-    // Keep open while dock menu is expanded (user may move to menu items)
-    if (menuOpen()) return;
     armHoverSlideHide();
   };
+
+  // Re-arm the 3s hide when the dock menu or a drag ends (timer may have
+  // already fired while those blocked collapse).
+  createEffect((prev?: { menu: boolean; drag: boolean }) => {
+    const menu = menuOpen();
+    const drag = dragging();
+    if (
+      prev &&
+      hoverSlideOn() &&
+      hoverExpanded() &&
+      ((prev.menu && !menu) || (prev.drag && !drag))
+    ) {
+      armHoverSlideHide();
+    }
+    return { menu, drag };
+  });
 
   // Reset expanded state when preference / dock changes
   createEffect(() => {
@@ -678,11 +701,29 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     const onDocKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setMenuOpen(false);
     };
+    const onWatchlistAlert = (e: Event) => {
+      const open = !!(e as CustomEvent<{ open?: boolean }>).detail?.open;
+      setWatchlistAlertOpen(open);
+      if (!hoverSlideOn()) return;
+      if (open) {
+        clearHoverLeaveTimer();
+        setPanelHoverSlideExpanded(props.id, true);
+        requestChartReflow();
+        return;
+      }
+      if (hoverExpanded()) armHoverSlideHide();
+    };
     document.addEventListener('pointerdown', onDocPointerDown, true);
     document.addEventListener('keydown', onDocKey);
+    if (props.id === 'watchlist') {
+      window.addEventListener('axis-watchlist-alert', onWatchlistAlert);
+    }
     onCleanup(() => {
       document.removeEventListener('pointerdown', onDocPointerDown, true);
       document.removeEventListener('keydown', onDocKey);
+      if (props.id === 'watchlist') {
+        window.removeEventListener('axis-watchlist-alert', onWatchlistAlert);
+      }
       if (holdTimer != null) clearTimeout(holdTimer);
       clearHoverLeaveTimer();
     });
@@ -1035,7 +1076,19 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
             onPointerMove={() => {
               if (hoverSlideOn() && hoverExpanded()) armHoverSlideHide();
             }}
-            onPointerLeave={() => scheduleCollapseHoverSlide()}
+            onPointerLeave={(e) => {
+              const next = e.relatedTarget as Node | null;
+              if (next && rootEl?.contains(next)) return;
+              if (watchlistAlertOpen()) return;
+              scheduleCollapseHoverSlide();
+            }}
+            onFocusOut={(e) => {
+              if (!hoverSlideOn() || !hoverExpanded()) return;
+              const next = e.relatedTarget as Node | null;
+              if (next && rootEl?.contains(next)) return;
+              if (watchlistAlertOpen()) return;
+              armHoverSlideHide();
+            }}
             onPointerDown={() => {
               if (isOverlay()) bumpPanelZ(props.id);
               // Touch / click on peek strip should expand immediately
@@ -1131,7 +1184,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                           <Icons.check size={MENU_CHECK} class="ml-auto opacity-80" />
                         </Show>
                       </button>
-                      <Show when={isPanelChartOverlay(props.id) || isFloat()}>
+                      <Show when={isEdgeOverlay()}>
                         <div
                           class="axis-panel-menu-opacity"
                           data-testid={`axis-panel-overlay-opacity-${props.id}`}

@@ -1435,10 +1435,8 @@ button.axis-status-capsule {
 }
 
 .axis-wl-alert-pop {
-  position: absolute;
-  top: calc(100% - 2px);
-  right: 4px;
-  z-index: 20;
+  position: fixed;
+  z-index: 200;
   width: 12.5rem;
   padding: 0.5em;
   background: var(--color-bg-elev);

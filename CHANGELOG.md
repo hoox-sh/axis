@@ -23,6 +23,10 @@ _Generated/updated: 2026-09-12 · 401 commits · describe-tag: `v2.6.5`_
 
 ### Fixed
 
+- Watchlist rename **Escape** cancels (blur no longer saves the in-progress name).
+- Overlay opacity slider is shown only for edge chart overlays — float/window docks no longer expose a no-op control.
+- Hover-slide idle hide waits while the panel has focus, the dock menu is open, a drag is active, or the watchlist alert popover is open, and re-arms when those end so typing (or the portaled form) does not collapse the peek strip.
+- Watchlist price-alert popover is portaled (and flipped above the row when it would clip) so last-row Create is reachable; outside click / another row / removing the symbol dismisses it.
 - System Logs strip was locked to 28px and horizontally centered, so it could not expand. It is left-aligned and expands to the log body again.
 - Status-bar **N bars** opens the Data Source Manager.
 - Library script cards were forced into a 32px centered row.
