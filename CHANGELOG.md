@@ -24,6 +24,7 @@ _Generated/updated: 2026-09-12 · 401 commits · describe-tag: `v2.6.5`_
 
 ### Fixed
 
+- **Built-in studies:** Sessions uses `hour`/`minute` in the chosen timezone (PYNE `time()` ignores session args); VWAP / VWAP bands reset on the daily change; TRIX is triple-smoothed EMA (not TEMA); Rel Vol is Dorsey RVI; ZigZag plots confirmed pivots; pivot-reversal latches the last pivot for exits; applying a built-in no longer copies the editor input bag.
 - Watchlist rename **Escape** cancels (blur no longer saves the in-progress name).
 - Overlay opacity slider is shown only for edge chart overlays — float/window docks no longer expose a no-op control.
 - Hover-slide idle hide waits while the panel has focus, the dock menu is open, a drag is active, or the watchlist alert popover is open, and re-arms when those end so typing (or the portaled form) does not collapse the peek strip.

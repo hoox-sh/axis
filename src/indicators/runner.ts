@@ -281,6 +281,11 @@ export interface RunOptions {
   openResults?: boolean;
   /** Pine input.* overrides keyed by title (Script Settings) */
   inputs?: Record<string, unknown>;
+  /**
+   * Catalog / library apply: do not inherit the editor input or strategy draft.
+   * Empty `inputs: {}` is still “not provided” for applied-script re-runs.
+   */
+  skipEditorDraft?: boolean;
   /** Applied indicator id — used to resolve saved inputValues / strategyProps. */
   indicatorId?: string;
   /**
@@ -538,7 +543,9 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     const rawInputs =
       nonemptyBag(opts.inputs) ??
       nonemptyBag(applied?.inputValues) ??
-      (!indicatorId ? nonemptyBag(store.editorInputValues) : undefined);
+      (!indicatorId && !opts.skipEditorDraft
+        ? nonemptyBag(store.editorInputValues)
+        : undefined);
     // Expand plot:<indicatorId>:<plotKey> refs → full series arrays for the engine
     const inputs = resolveInputSourceValues(rawInputs, store.indicatorSeries);
     // Strategy Properties: rewrite strategy() kwargs on a run-time copy only.
@@ -551,6 +558,7 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
           ? applied.strategyProps
           : !indicatorId &&
               !isolate &&
+              !opts.skipEditorDraft &&
               store.editorStrategyProps &&
               Object.keys(store.editorStrategyProps).length
             ? store.editorStrategyProps
@@ -859,7 +867,9 @@ async function runAndApplyInner(
     }
   } else if (strategyProps === undefined || !nonemptyBag(strategyProps)) {
     strategyProps =
-      store.editorStrategyProps && Object.keys(store.editorStrategyProps).length
+      !opts.skipEditorDraft &&
+      store.editorStrategyProps &&
+      Object.keys(store.editorStrategyProps).length
         ? store.editorStrategyProps
         : {};
   }
@@ -1691,9 +1701,13 @@ async function runAndApplyInner(
       }
       // Prefer original opts/editor overrides (plot refs), not engine-expanded arrays
       const savedInputs =
-        nonemptyBag(opts.inputs) ?? nonemptyBag(store.editorInputValues);
+        nonemptyBag(opts.inputs) ??
+        (opts.skipEditorDraft ? undefined : nonemptyBag(store.editorInputValues));
       const savedStrategyProps =
-        nonemptyBag(opts.strategyProps) ?? nonemptyBag(store.editorStrategyProps);
+        nonemptyBag(opts.strategyProps) ??
+        (opts.skipEditorDraft
+          ? undefined
+          : nonemptyBag(store.editorStrategyProps));
       const newId = addIndicator(
         scriptName,
         script,

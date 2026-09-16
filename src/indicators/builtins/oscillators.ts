@@ -268,8 +268,10 @@ hline(30, "OS", color=${COL.emerald}, linestyle=hline.style_dashed)`,
       `len = input.int(18, "Length", minval=1)
 sig = input.int(9, "Signal", minval=1)
 src = input.source(close, "Source")
-t = ta.tema(src, len)
-trix = t[1] == 0 ? na : 100.0 * (t - t[1]) / t[1]
+e1 = ta.ema(src, len)
+e2 = ta.ema(e1, len)
+e3 = ta.ema(e2, len)
+trix = e3[1] == 0 ? na : 100.0 * (e3 - e3[1]) / e3[1]
 signal = ta.ema(trix, sig)
 plot(trix, "TRIX", color=${COL.indigo})
 plot(signal, "Signal", color=${COL.amber})
@@ -423,7 +425,7 @@ hline(0, "Zero", color=${COL.slate})`,
     id: 'rvi-vol',
     title: 'AXIS Rel Vol',
     shorttitle: 'RVol',
-    description: 'Relative Volatility Index (RSI of stdev)',
+    description: 'Dorsey Relative Volatility Index (RMA of stdev on up vs down days)',
     category: 'oscillator',
     overlay: false,
     covers: 'Relative Volatility Index',
@@ -437,7 +439,9 @@ rsiLen = input.int(14, "RSI", minval=1)
 sd = ta.stdev(close, stdevLen)
 up = close > close[1] ? sd : 0.0
 dn = close < close[1] ? sd : 0.0
-r = ta.rsi(up - dn, rsiLen)
+u = ta.rma(up, rsiLen)
+d = ta.rma(dn, rsiLen)
+r = (u + d) == 0 ? na : 100.0 * u / (u + d)
 plot(r, "RVI", color=${COL.cyan}, linewidth=2)
 hline(50, "Mid", color=${COL.slate})`,
     ),

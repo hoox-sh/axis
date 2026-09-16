@@ -76,7 +76,7 @@ plot(o, "OBV", color=${COL.indigo}, linewidth=2)`,
       'VWAP',
       true,
       `src = input.source(hlc3, "Source")
-v = ta.vwap(src)
+v = ta.vwap(src, timeframe.change("D"))
 plot(v, "VWAP", color=${COL.amber}, linewidth=2)`,
     ),
   }),
@@ -95,13 +95,14 @@ plot(v, "VWAP", color=${COL.amber}, linewidth=2)`,
       `src = input.source(hlc3, "Source")
 n1 = input.float(1.0, "Band 1", minval=0.1, step=0.1)
 n2 = input.float(2.0, "Band 2", minval=0.1, step=0.1)
-basis = ta.vwap(src)
-dev = ta.stdev(src - basis, 20)
+anchor = timeframe.change("D")
+[basis, u1v, l1v] = ta.vwap(src, anchor, n1)
+[mid2, u2v, l2v] = ta.vwap(src, anchor, n2)
 plot(basis, "VWAP", color=${COL.amber}, linewidth=2)
-u1 = plot(basis + n1 * dev, "Upper1", color=${COL.cyan})
-l1 = plot(basis - n1 * dev, "Lower1", color=${COL.cyan})
-plot(basis + n2 * dev, "Upper2", color=color.new(${COL.cyan}, 40))
-plot(basis - n2 * dev, "Lower2", color=color.new(${COL.cyan}, 40))
+u1 = plot(u1v, "Upper1", color=${COL.cyan})
+l1 = plot(l1v, "Lower1", color=${COL.cyan})
+plot(u2v, "Upper2", color=color.new(${COL.cyan}, 40))
+plot(l2v, "Lower2", color=color.new(${COL.cyan}, 40))
 fill(u1, l1, color=color.new(${COL.amber}, 92))`,
     ),
   }),

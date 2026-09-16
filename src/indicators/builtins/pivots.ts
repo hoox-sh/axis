@@ -122,7 +122,12 @@ hline(-1, "-1", color=${COL.rose}, linestyle=hline.style_dotted)`,
       true,
       `sess = input.session("0930-1600", "Session")
 tz = input.string("America/New_York", "Timezone")
-inSess = not na(time(timeframe.period, sess, tz))
+// PYNE time() ignores session args — compare clock in tz instead.
+hhmm = hour(time, tz) * 100 + minute(time, tz)
+start = str.tonumber(str.substring(sess, 0, 4))
+stop = str.tonumber(str.substring(sess, 5, 9))
+wrap = not na(start) and not na(stop) and stop <= start
+inSess = na(start) or na(stop) ? false : wrap ? hhmm >= start or hhmm < stop : hhmm >= start and hhmm < stop
 bgcolor(inSess ? color.new(${COL.indigo}, 92) : na, title="Session")`,
     ),
   }),

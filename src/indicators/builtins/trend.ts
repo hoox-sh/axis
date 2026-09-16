@@ -343,23 +343,20 @@ var float zz = na
 float thresh = nz(pivot) * dev / 100.0
 if na(pivot)
     pivot := src
-    zz := src
 else if dir >= 0
     if src > pivot
         pivot := src
-        zz := src
     else if src <= pivot - thresh
+        zz := pivot
         dir := -1
         pivot := src
-        zz := src
 else
     if src < pivot
         pivot := src
-        zz := src
     else if src >= pivot + thresh
+        zz := pivot
         dir := 1
         pivot := src
-        zz := src
 plot(zz, "ZigZag", color=${COL.amber}, linewidth=2, style=plot.style_linebr)`,
     ),
   }),

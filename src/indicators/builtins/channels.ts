@@ -72,7 +72,7 @@ basis = ta.sma(src, len)
 dev = mult * ta.stdev(src, len)
 upper = basis + dev
 lower = basis - dev
-pctB = (src - lower) / (upper - lower)
+pctB = upper == lower ? na : (src - lower) / (upper - lower)
 plot(pctB, "%B", color=${COL.indigo}, linewidth=2)
 hline(1.0, "Upper", color=${COL.rose}, linestyle=hline.style_dashed)
 hline(0.0, "Lower", color=${COL.emerald}, linestyle=hline.style_dashed)

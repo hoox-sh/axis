@@ -390,9 +390,11 @@ if strategy.position_size > 0 and close > high[1]
       `left = input.int(3, "Left", minval=1)
 right = input.int(3, "Right", minval=1)
 pl = ta.pivotlow(low, left, right)
+var float lastPl = na
 if not na(pl)
+    lastPl := pl
     strategy.entry("Long", strategy.long)
-if strategy.position_size > 0 and close < pl
+if strategy.position_size > 0 and not na(lastPl) and close < lastPl
     strategy.close("Long")`,
     ),
   }),

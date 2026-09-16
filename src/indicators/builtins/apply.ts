@@ -53,6 +53,7 @@ export async function applyBuiltinScript(
   setIndicatorPanelOpen(true);
   const result = await runAndApply(script.code, undefined, {
     openResults: false,
+    skipEditorDraft: true,
     ...opts,
   });
   return { ...result, builtinId: script.id };

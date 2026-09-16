@@ -7,7 +7,8 @@
  * First-party built-in catalog: original AXIS Pine, unique ids, searchable.
  */
 
-import { describe, expect, it } from 'bun:test';
+import './setup';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   AXIS_PINE_BANNER,
   BUILTIN_SCRIPTS,
@@ -20,6 +21,22 @@ import {
   listBuiltinCategories,
 } from '../src/indicators/builtins';
 import { DEFAULT_COMMAND_SPECS, filterCommands } from '../src/ui/command-registry';
+import { mockFetch, jsonResponse } from './helpers/mock-fetch';
+import { registry } from '../src/plugins/registry';
+import { ensureBuiltins, _resetBootstrapFlag } from '../src/plugins/bootstrap';
+import { _resetSourceRegistrationFlag } from '../src/sources/catalog';
+import { _resetStreamRegistrationFlag } from '../src/streams/catalog';
+import { _resetEngineRegistrationFlag } from '../src/engines/catalog';
+import { _resetStorageRegistrationFlag } from '../src/storage/catalog';
+import {
+  clearLogs,
+  setActivePlugin,
+  setEditorInputValues,
+  setStore,
+  store,
+} from '../src/store';
+import { SAMPLE_BARS } from './fixtures/bars';
+import { setManager } from '../src/chart/manager-access';
 
 describe('BUILTIN_SCRIPTS catalog', () => {
   it('ships a full original set (indicators + strategies)', () => {
@@ -101,12 +118,110 @@ describe('SKIPPED_STUDIES', () => {
   });
 });
 
+describe('BUILTIN_SCRIPTS formula bodies', () => {
+  const code = (id: string) => getBuiltinScript(id)!.code;
+
+  it('Sessions compares hour/minute in tz (does not use time(tf, session))', () => {
+    expect(code('sessions')).toContain('hour(time, tz)');
+    expect(code('sessions')).toContain('minute(time, tz)');
+    expect(code('sessions')).not.toMatch(/time\s*\(\s*timeframe\.period/);
+  });
+
+  it('VWAP / VWAP bands reset on the daily change', () => {
+    expect(code('vwap')).toContain('timeframe.change("D")');
+    expect(code('vwap-bands')).toContain('timeframe.change("D")');
+    expect(code('vwap-bands')).toContain('ta.vwap(src, anchor, n1)');
+  });
+
+  it('TRIX is triple-smoothed EMA, not TEMA', () => {
+    expect(code('trix')).toContain('ta.ema(src, len)');
+    expect(code('trix')).toContain('ta.ema(e1, len)');
+    expect(code('trix')).toContain('ta.ema(e2, len)');
+    expect(code('trix')).not.toContain('ta.tema');
+  });
+
+  it('Rel Vol is Dorsey RMA of up/down stdev', () => {
+    expect(code('rvi-vol')).toContain('ta.rma(up, rsiLen)');
+    expect(code('rvi-vol')).toContain('ta.rma(dn, rsiLen)');
+    expect(code('rvi-vol')).not.toContain('ta.rsi(up - dn');
+  });
+
+  it('ZigZag latches confirmed pivots only', () => {
+    expect(code('zigzag')).toContain('zz := pivot');
+    expect(code('zigzag')).not.toMatch(/if src > pivot\s+pivot := src\s+zz := src/);
+  });
+
+  it('pivot-reversal latches lastPl for the exit', () => {
+    expect(code('strat-pivot-rev')).toContain('var float lastPl');
+    expect(code('strat-pivot-rev')).toContain('close < lastPl');
+  });
+
+  it('%B guards a zero band width', () => {
+    expect(code('bb-pct')).toContain('upper == lower ? na');
+  });
+});
+
 describe('applyBuiltinScript', () => {
   it('returns an error result for unknown ids without throwing', async () => {
     const r = await applyBuiltinScript('not-a-builtin');
     expect(r.status).toBe('error');
     expect(r.error).toMatch(/unknown built-in/i);
     expect(r.builtinId).toBe('not-a-builtin');
+  });
+});
+
+describe('applyBuiltinScript skips editor draft', () => {
+  let restoreFetch: (() => void) | null = null;
+
+  beforeEach(() => {
+    registry.clear();
+    _resetSourceRegistrationFlag();
+    _resetStreamRegistrationFlag();
+    _resetEngineRegistrationFlag();
+    _resetStorageRegistrationFlag();
+    _resetBootstrapFlag();
+    ensureBuiltins();
+    clearLogs();
+    setStore('bars', SAMPLE_BARS);
+    setStore('endpoint', 'http://run.test:5002');
+    setStore('scripts', []);
+    setStore('resultsPanel', { open: false, height: 220 });
+    setActivePlugin('engine', 'server');
+    setEditorInputValues({ Length: 99, len: 99 });
+    setManager({
+      getPane: () => undefined,
+      createPane: () => undefined,
+      syncTimeScales: () => {},
+      syncOverlayLines: () => {},
+      syncOverlayOhlc: () => {},
+      syncBgcolorBands: () => {},
+      refreshBadges: () => {},
+      setTradeMarkers: () => {},
+      clearTradeMarkers: () => {},
+    } as never);
+    restoreFetch = mockFetch(async () =>
+      jsonResponse({
+        status: 'success',
+        plots: SAMPLE_BARS.map(() => 1),
+        series: { SMA: SAMPLE_BARS.map(() => 2) },
+        events: [],
+        meta: { overlay: true, script_name: 'AXIS SMA' },
+      }),
+    );
+  });
+
+  afterEach(() => {
+    restoreFetch?.();
+    restoreFetch = null;
+    setEditorInputValues({});
+    setManager(undefined);
+  });
+
+  it('does not persist the editor input bag on a new built-in card', async () => {
+    const r = await applyBuiltinScript('sma');
+    expect(r.status).toBe('success');
+    expect(store.scripts.length).toBe(1);
+    expect(store.scripts[0]?.inputValues).toBeUndefined();
   });
 });
 
