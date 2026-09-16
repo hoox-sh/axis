@@ -4,12 +4,12 @@
  */
 
 /**
- * Per-panel header icon invariants — the same glyph must appear next to the
- * hamburger menu in {@link FloatableShell} as on the Topbar toggle button.
+ * Per-panel header icon invariants — the same glyph is the dock-menu trigger
+ * in {@link FloatableShell} as on the Topbar toggle button (no separate hamburger).
  *
  * The mapping is centralized in {@link PANEL_ICON} (PanelId → IconName) and
  * rendered via `Icons[PANEL_ICON[panelId]]`. FloatableShell renders the icon
- * inside a `<span data-testid="axis-panel-header-icon-{panelId}">`.
+ * on the menu button (`data-testid="axis-panel-header-icon-{panelId}"`).
  *
  * Companion coverage lives in `tests/icons-map.test.ts` (PANEL_ICON covers
  * every PanelId + each entry resolves to ICON_MAP). This file locks in the
@@ -78,7 +78,13 @@ describe('panel header icon — FloatableShell render wiring', () => {
 
   it('FloatableShell wraps the icon in a Show keyed on the resolved component', () => {
     // <Show when={PanelHeaderIcon()} keyed> — only render when mapping resolves.
-    expect(floatableShellSrc).toMatch(/<Show when=\{PanelHeaderIcon\(\)\}\s+keyed>/);
+    expect(floatableShellSrc).toMatch(/<Show when=\{PanelHeaderIcon\(\)\}\s+keyed/);
+  });
+
+  it('panel header icon is the dock-menu trigger (no separate hamburger button)', () => {
+    expect(floatableShellSrc).toMatch(/aria-label="Panel menu"/);
+    expect(floatableShellSrc).toMatch(/onPointerDown=\{onPanelIconPointerDown\}/);
+    expect(floatableShellSrc).not.toMatch(/<Icons\.menu\s*\/>/);
   });
 
   it('FloatableShell imports PANEL_ICON alongside Icons (single source of truth)', () => {

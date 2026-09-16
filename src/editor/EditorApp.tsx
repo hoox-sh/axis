@@ -120,7 +120,7 @@ export const EditorApp: Component = () => {
           title={
             runBlocked()
               ? 'Fix script errors before running'
-              : 'Run script in main chart window'
+              : 'Add script in main chart window'
           }
           onClick={() => {
             if (isRunBusy() || runBlocked()) return;
@@ -128,7 +128,7 @@ export const EditorApp: Component = () => {
             if (doc.trim()) void onRun(doc);
           }}
         >
-          {isRunBusy() ? '▶ Running…' : runBlocked() ? '▶ Fix errors' : '▶ Run'}
+          {isRunBusy() ? '▶ Running…' : runBlocked() ? '▶ Fix errors' : '▶ Add'}
         </button>
       </div>
       <div class="flex-1 min-h-0 overflow-hidden">

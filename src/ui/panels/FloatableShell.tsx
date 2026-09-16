@@ -24,7 +24,7 @@
  * - Reads `getPanelChrome(id)`; title-bar **drag** (move past threshold) starts a
  *   global drag preview consumed by {@link PanelDragOverlay}. A plain click on
  *   the title does **not** undock/float the panel.
- * - Hamburger: click → dock menu; hold (~280ms) or drag → move panel.
+ * - Panel icon: click → dock menu; hold (~280ms) or drag → move panel.
  * - Dock menu: left/right/bottom/float/new tab; new tab may call `onPopoutWindow`.
  * - Float mode: free geometry via `setPanelGeometry` + `bumpPanelZ`.
  *
@@ -56,6 +56,8 @@ import {
   isPanelChartOverlay,
   setAllPanelsChartOverlay,
   isAllPanelsChartOverlay,
+  setPanelOverlayOpacity,
+  getPanelOverlayOpacity,
 } from '../../store';
 import { Icons, PANEL_ICON, type IconProps } from '../icons';
 import { ResizeHandle } from '../ResizeHandle';
@@ -71,7 +73,8 @@ import {
   dockHostElement,
   dockStackCount,
   dockStackCssOrder,
-  isLastInDockStack,
+  overlayDockHostElement,
+  overlayPanelsOnDock,
   panelsOnDock,
   panelDockLayoutHeight,
   panelDockLayoutWidth,
@@ -83,8 +86,8 @@ import {
   setPanelHoverSlideExpanded,
 } from './hover-slide';
 import {
-  chartOverlayGeometry,
   effectivePortalDock,
+  isChartEdgeOverlay,
   isChartOverlayEligible,
   isPanelInChartOverlayMode,
 } from './panel-manager';
@@ -108,7 +111,7 @@ export interface FloatableShellProps {
    */
   headerEnd?: JSX.Element;
   /**
-   * Extra items for the left hamburger menu (after dock options).
+   * Extra items for the panel-icon dock menu (after dock options).
    * Render buttons with `role="menuitem"` and class `axis-panel-menu-item`.
    */
   menuExtra?: JSX.Element;
@@ -176,21 +179,24 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   /**
    * Per-panel icon component (resolved from {@link PANEL_ICON} so the header
    * glyph matches the Topbar panel toggle). Returns undefined if the panel id
-   * has no icon mapping — caller falls back to hamburger-only chrome.
+   * has no icon mapping — caller falls back to a menu glyph.
    */
   const PanelHeaderIcon = (): Component<IconProps> | undefined => {
     const key = PANEL_ICON[props.id];
     return key ? Icons[key] : undefined;
   };
-  /** True when presenting as free/edge overlay (float, window, or chart-overlay flag). */
-  const isOverlay = () => isPanelInChartOverlayMode(chrome());
+  /** True when presenting as free float/window (not a docked chart overlay). */
   const isFloat = () => dock() === 'float' || dock() === 'window';
+  /** Edge chart overlay: dock-shaped, inner chart edge, plot does not shrink. */
+  const isEdgeOverlay = () => isChartEdgeOverlay(chrome());
+  /** Free float/window or edge overlay — used for z-bump / overlay chrome. */
+  const isOverlay = () => isPanelInChartOverlayMode(chrome());
   const stackN = () => {
     // Track full chrome map so peer open/dock changes re-flex this shell
     void store.panelChrome;
-    if (isOverlay()) return 1;
     const d = dock();
     if (d === 'float' || d === 'window') return 1;
+    if (isEdgeOverlay()) return Math.max(1, overlayPanelsOnDock(d).length);
     return dockStackCount(d);
   };
   const stacked = () => stackN() > 1;
@@ -241,17 +247,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     window.dispatchEvent(new CustomEvent('axis-chart-reflow'));
   };
 
-  const expandHoverSlide = () => {
-    if (!hoverSlideOn() || dragging()) return;
-    clearHoverLeaveTimer();
-    setPanelHoverSlideExpanded(props.id, true);
-    requestChartReflow();
-  };
-
-  const scheduleCollapseHoverSlide = () => {
-    if (!hoverSlideOn() || dragging()) return;
-    // Keep open while dock menu is expanded (user may move to menu items)
-    if (menuOpen()) return;
+  const armHoverSlideHide = () => {
     clearHoverLeaveTimer();
     hoverLeaveTimer = setTimeout(() => {
       hoverLeaveTimer = undefined;
@@ -259,6 +255,21 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       setPanelHoverSlideExpanded(props.id, false);
       requestChartReflow();
     }, HOVER_SLIDE_LEAVE_MS);
+  };
+
+  const expandHoverSlide = () => {
+    if (!hoverSlideOn() || dragging()) return;
+    setPanelHoverSlideExpanded(props.id, true);
+    requestChartReflow();
+    // Auto-hide after 3s idle (timer resets on pointer move)
+    armHoverSlideHide();
+  };
+
+  const scheduleCollapseHoverSlide = () => {
+    if (!hoverSlideOn() || dragging()) return;
+    // Keep open while dock menu is expanded (user may move to menu items)
+    if (menuOpen()) return;
+    armHoverSlideHide();
   };
 
   // Reset expanded state when preference / dock changes
@@ -286,8 +297,10 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   });
 
   const resolveMount = () => {
-    // Chart-overlay edge docks portal into the float root (not dock columns)
-    const next = dockHostElement(effectivePortalDock(chrome()));
+    // Edge overlay portals onto the chart inner-edge host; others use dock/float
+    const next = isEdgeOverlay()
+      ? overlayDockHostElement(dock())
+      : dockHostElement(effectivePortalDock(chrome()));
     // Only update when the host node actually changes (avoids Show thrash)
     setMountEl((prev) => (prev === next ? prev : next));
   };
@@ -374,14 +387,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       seedFloatGeometry(rect ?? null);
       bumpPanelZ(props.id);
     } else if (isPanelChartOverlay(props.id) && isChartOverlayEligible(d)) {
-      // Stay in chart-overlay mode at the new edge
-      const c = getPanelChrome(props.id);
-      const geo = chartOverlayGeometry(
-        { ...c, dock: d, chartOverlay: true },
-        window.innerWidth,
-        window.innerHeight,
-      );
-      setPanelGeometry(props.id, geo);
+      // Stay in chart-overlay mode at the new inner edge (dock-shaped, not float)
       bumpPanelZ(props.id);
     }
     if (d === 'window') {
@@ -608,9 +614,9 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   };
 
   /**
-   * Hamburger: click → expand dock menu; hold or drag → move panel.
+   * Panel icon: click → expand dock menu; hold or drag → move panel.
    */
-  const onHamburgerPointerDown = (e: PointerEvent) => {
+  const onPanelIconPointerDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
     e.stopPropagation();
     // Mobile: tap opens the menu directly (no hold-to-drag)
@@ -816,83 +822,17 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       ? 'width 0.22s cubic-bezier(0.22, 1, 0.36, 1), height 0.22s cubic-bezier(0.22, 1, 0.36, 1), flex-basis 0.22s cubic-bezier(0.22, 1, 0.36, 1), min-width 0.22s ease'
       : undefined;
 
-    // Chart overlay (edge dock) or free float/window — fixed over the chart
-    if (isOverlay()) {
-      // Keep editor/CM usable: never allow collapsed float chrome.
-      // pointer-events:auto is required — float root is pointer-events:none so
-      // empty overlay space clicks pass through; without this, CM is not editable
-      // and clicks hit the chart/topbar underneath.
-      const edgeOverlay =
-        !!c.chartOverlay && isChartOverlayEligible(d) && d !== 'float' && d !== 'window';
-      const vw = typeof window !== 'undefined' ? window.innerWidth || 1280 : 1280;
+    // Free float/window — fixed over the workspace
+    if (isFloat()) {
+      // pointer-events:auto — float root is pointer-events:none so empty
+      // overlay space clicks pass through; without this, CM is not editable.
       const vh = typeof window !== 'undefined' ? window.innerHeight || 800 : 800;
-      const geo = edgeOverlay ? chartOverlayGeometry(c, vw, vh) : null;
-      const w = Math.max(meta().minW, geo?.w ?? c.w ?? meta().defaultW);
-      // Editor float: always fill viewport under top edge (CSS tracks window resize)
-      const bottomPad = 36; // status / safe area
-      const top = Math.max(
-        0,
-        Math.min(geo?.y ?? (c.y > 8 ? c.y : 48), vh - 160),
-      );
-      const h = Math.max(meta().minH, geo?.h ?? c.h ?? meta().defaultH);
+      const w = Math.max(meta().minW, c.w ?? meta().defaultW);
+      const bottomPad = 36;
+      const top = Math.max(0, Math.min(c.y > 8 ? c.y : 48, vh - 160));
+      const h = Math.max(meta().minH, c.h ?? meta().defaultH);
       const z = String(Math.max(100, c.z || 20));
-      // Edge-anchor with right/left CSS so narrow viewports stay correct without
-      // depending on stale store x after a window resize.
-      if (edgeOverlay && d === 'right') {
-        const style: JSX.CSSProperties = {
-          position: 'fixed',
-          right: '0',
-          left: 'auto',
-          top: `${top}px`,
-          width: `${w}px`,
-          'z-index': z,
-          'min-width': `${meta().minW}px`,
-          'pointer-events': 'auto',
-        };
-        if (isEditor) {
-          style.height = `calc(100vh - ${top}px - ${bottomPad}px)`;
-          style['min-height'] = '200px';
-        } else {
-          style.height = `${h}px`;
-          style['min-height'] = `${Math.max(meta().minH, 120)}px`;
-        }
-        return style;
-      }
-      if (edgeOverlay && d === 'left') {
-        const style: JSX.CSSProperties = {
-          position: 'fixed',
-          left: '0',
-          right: 'auto',
-          top: `${top}px`,
-          width: `${w}px`,
-          'z-index': z,
-          'min-width': `${meta().minW}px`,
-          'pointer-events': 'auto',
-        };
-        if (isEditor) {
-          style.height = `calc(100vh - ${top}px - ${bottomPad}px)`;
-          style['min-height'] = '200px';
-        } else {
-          style.height = `${h}px`;
-          style['min-height'] = `${Math.max(meta().minH, 120)}px`;
-        }
-        return style;
-      }
-      if (edgeOverlay && d === 'bottom') {
-        return {
-          position: 'fixed',
-          left: '0',
-          right: '0',
-          bottom: `${bottomPad}px`,
-          top: 'auto',
-          width: '100%',
-          height: `${h}px`,
-          'z-index': z,
-          'min-height': `${Math.max(meta().minH, 80)}px`,
-          'pointer-events': 'auto',
-        };
-      }
-      const left = geo?.x ?? c.x;
+      const left = c.x;
       if (isEditor) {
         return {
           position: 'fixed',
@@ -909,13 +849,43 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       return {
         position: 'fixed',
         left: `${left}px`,
-        top: `${geo?.y ?? c.y}px`,
+        top: `${c.y}px`,
         width: `${w}px`,
         height: `${h}px`,
         'z-index': z,
         'min-width': `${meta().minW}px`,
         'min-height': `${Math.max(meta().minH, 120)}px`,
         'pointer-events': 'auto',
+      };
+    }
+    // Chart overlay: one column on the inner chart edge (stacked, not side-by-side)
+    if (isEdgeOverlay() && (d === 'left' || d === 'right')) {
+      const fullW = Math.max(meta().minW, c.w || meta().defaultW);
+      return {
+        position: 'relative',
+        width: `${fullW}px`,
+        height: 'auto',
+        flex: '1 1 auto',
+        'min-width': `${meta().minW}px`,
+        'min-height': `${meta().minH}px`,
+        order: String(order),
+        'z-index': 'auto',
+        'pointer-events': 'auto',
+        opacity: String(getPanelOverlayOpacity(props.id)),
+      };
+    }
+    if (isEdgeOverlay() && d === 'bottom') {
+      const fullH = Math.max(meta().minH, c.h || meta().defaultH);
+      return {
+        position: 'relative',
+        width: '100%',
+        height: `${fullH}px`,
+        flex: '0 0 auto',
+        'min-height': `${Math.max(meta().minH, 80)}px`,
+        order: String(order),
+        'z-index': 'auto',
+        'pointer-events': 'auto',
+        opacity: String(getPanelOverlayOpacity(props.id)),
       };
     }
     // Side docks: flow in the dock column (never position:fixed — that overlays the chart).
@@ -1015,22 +985,23 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   const dockClass = () => {
     // Mobile: dedicated sheet chrome (no dock/float styling)
     if (isPhoneViewport()) return 'axis-mobile-sheet';
-    if (isOverlay()) return 'axis-panel-float sc-float-panel';
+    if (isFloat()) return 'axis-panel-float sc-float-panel';
     const d = dock();
-    if (d === 'left') return 'axis-panel-dock axis-panel-dock-left';
-    if (d === 'right') return 'axis-panel-dock axis-panel-dock-right';
-    if (d === 'bottom') return 'axis-panel-dock axis-panel-dock-bottom';
+    const overlay = isEdgeOverlay() ? ' is-chart-overlay' : '';
+    if (d === 'left') return `axis-panel-dock axis-panel-dock-left${overlay}`;
+    if (d === 'right') return `axis-panel-dock axis-panel-dock-right${overlay}`;
+    if (d === 'bottom') return `axis-panel-dock axis-panel-dock-bottom${overlay}`;
     return 'axis-panel-float sc-float-panel';
   };
 
   const showSideWidthResize = () => {
     if (isPhoneViewport()) return false;
-    if (hoverCollapsed() || isOverlay()) return false;
+    if (hoverCollapsed() || isFloat()) return false;
     return dock() === 'left' || dock() === 'right';
   };
   const showBottomHeightResize = () => {
     if (isPhoneViewport()) return false;
-    if (hoverCollapsed() || isOverlay()) return false;
+    if (hoverCollapsed() || isFloat()) return false;
     // Editor always fills height — no vertical split handles
     if (props.id === 'editor') return false;
     const d = dock();
@@ -1052,6 +1023,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
               'axis-panel-hover-slide': hoverSlideOn(),
               'is-hover-collapsed': hoverCollapsed(),
               'is-hover-expanded': hoverSlideOn() && hoverExpanded(),
+              'is-chart-overlay': isEdgeOverlay(),
             }}
             style={shellStyle()}
             data-panel-id={props.id}
@@ -1060,6 +1032,9 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
             data-hover-slide={hoverSlideOn() ? '1' : '0'}
             data-testid={props.testId}
             onPointerEnter={() => expandHoverSlide()}
+            onPointerMove={() => {
+              if (hoverSlideOn() && hoverExpanded()) armHoverSlideHide();
+            }}
             onPointerLeave={() => scheduleCollapseHoverSlide()}
             onPointerDown={() => {
               if (isOverlay()) bumpPanelZ(props.id);
@@ -1077,21 +1052,9 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                   : 'Drag title to move or undock · click does not float · drop on edges to dock'
               }
             >
-              {/* Per-panel identity glyph (matches Topbar panel toggle). Non-interactive
-                  — purely a visual cue; hamburger menu + title still drive discovery.
-                  `keyed` so the children fn receives the Component value directly,
-                  not an Accessor (avoids `<accessor size=… />` swallowing props). */}
-              <Show when={PanelHeaderIcon()} keyed>
-                {(Icon) => (
-                  <span
-                    class="flex-shrink-0 text-text-dim opacity-70 pointer-events-none"
-                    aria-hidden="true"
-                    data-testid={`axis-panel-header-icon-${props.id}`}
-                  >
-                    <Icon size={14} />
-                  </span>
-                )}
-              </Show>
+              {/* Per-panel identity glyph is the dock-menu trigger (click = menu,
+                  hold/drag = move). `keyed` so the children fn receives the
+                  Component value directly, not an Accessor. */}
               <div
                 class="axis-panel-menu relative flex-shrink-0"
                 ref={menuWrapEl}
@@ -1099,14 +1062,17 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
               >
                 <button
                   type="button"
-                  class={`sc-btn sc-btn-ghost px-1 ${menuOpen() ? 'text-accent' : ''}`}
+                  class={`sc-btn sc-btn-ghost px-1 axis-panel-menu-btn ${menuOpen() ? 'is-open text-accent' : ''}`}
                   title="Click: dock options · Hold: drag panel"
                   aria-label="Panel menu"
                   aria-expanded={menuOpen()}
                   aria-haspopup="menu"
-                  onPointerDown={onHamburgerPointerDown}
+                  data-testid={`axis-panel-header-icon-${props.id}`}
+                  onPointerDown={onPanelIconPointerDown}
                 >
-                  <Icons.menu />
+                  <Show when={PanelHeaderIcon()} keyed fallback={<Icons.menu size={14} />}>
+                    {(Icon) => <Icon size={14} />}
+                  </Show>
                 </button>
                 <Show when={menuOpen()}>
                   <div
@@ -1151,7 +1117,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                         class={`axis-panel-menu-item ${
                           isPanelChartOverlay(props.id) || isFloat() ? 'is-active' : ''
                         }`}
-                        title="Float this panel over the chart (chart does not shrink)"
+                        title="Overlay this panel on the chart inner edge (chart does not shrink)"
                         data-testid={`axis-panel-chart-overlay-${props.id}`}
                         disabled={isFloat()}
                         onClick={() => {
@@ -1165,6 +1131,31 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                           <Icons.check size={MENU_CHECK} class="ml-auto opacity-80" />
                         </Show>
                       </button>
+                      <Show when={isPanelChartOverlay(props.id) || isFloat()}>
+                        <div
+                          class="axis-panel-menu-opacity"
+                          data-testid={`axis-panel-overlay-opacity-${props.id}`}
+                        >
+                          <span class="axis-panel-menu-opacity-label">Opacity</span>
+                          <input
+                            type="range"
+                            min="25"
+                            max="100"
+                            step="1"
+                            value={Math.round(getPanelOverlayOpacity(props.id) * 100)}
+                            aria-label="Overlay opacity"
+                            onInput={(e) => {
+                              setPanelOverlayOpacity(
+                                props.id,
+                                Number(e.currentTarget.value) / 100,
+                              );
+                            }}
+                          />
+                          <span class="axis-panel-menu-opacity-val">
+                            {Math.round(getPanelOverlayOpacity(props.id) * 100)}%
+                          </span>
+                        </div>
+                      </Show>
                     </Show>
                     <button
                       type="button"
@@ -1172,7 +1163,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                       class={`axis-panel-menu-item ${
                         isAllPanelsChartOverlay() ? 'is-active' : ''
                       }`}
-                      title="Enable or disable chart overlay for every panel"
+                      title="Overlay every panel on the chart — chart goes full width"
                       data-testid="axis-panel-chart-overlay-all"
                       onClick={() => onToggleAllChartOverlay()}
                     >
@@ -1193,7 +1184,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                         class={`axis-panel-menu-item ${
                           isPanelHoverSlide(props.id) ? 'is-active' : ''
                         }`}
-                        title="When docked: collapse to a strip, expand on hover, collapse on leave"
+                        title="When docked: collapse to a strip, expand on hover, hide after 3s idle"
                         data-testid={`axis-panel-hover-slide-${props.id}`}
                         onClick={() => {
                           setPanelHoverSlide(props.id, !isPanelHoverSlide(props.id));
@@ -1249,7 +1240,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
               class="flex-1 min-h-0 overflow-auto axis-panel-body"
               classList={{
                 'is-hover-hidden': hoverCollapsed(),
-                'p-3': props.id !== 'editor',
+                'p-3': props.id !== 'editor' && props.id !== 'watchlist',
               }}
               aria-hidden={hoverCollapsed() || undefined}
             >
@@ -1290,8 +1281,8 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
               />
             </Show>
 
-            {/* Float / chart-overlay: borders. Editor keeps full viewport height — width-only resize. */}
-            <Show when={isOverlay() && !isPhoneViewport()}>
+            {/* Free float: borders. Editor keeps full viewport height — width-only resize. */}
+            <Show when={isFloat() && !isPhoneViewport()}>
               {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
               <div
                 class="sc-resize-handle absolute right-0 top-0 bottom-0"

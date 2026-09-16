@@ -380,18 +380,16 @@ export const EditorPane: Component<Props> = (props) => {
               ? 'Running…'
               : runBlocked()
                 ? 'Fix errors'
-                : hasChartInstance()
-                  ? 'Re-run'
-                  : 'Run'
+                : 'Add'
           }
           title={
             store.status === 'running'
               ? 'Script is running…'
               : runBlocked()
-                ? `Fix ${store.preEval.diagnostics.filter((d) => d.severity === 'error').length || ''} script error(s) before running`
+                ? `Fix ${store.preEval.diagnostics.filter((d) => d.severity === 'error').length || ''} script error(s) before adding`
                 : hasChartInstance()
-                  ? 'Re-run replaces the matching script on the chart (topbar ▾ adds another instance)'
-                  : 'Run script against loaded bars'
+                  ? 'Add replaces the matching script on the chart (topbar ▾ adds another instance)'
+                  : 'Add script to the chart'
           }
           testId="axis-editor-btn-run"
           tone={store.status === 'running' ? 'primary' : 'ghost'}
@@ -403,10 +401,10 @@ export const EditorPane: Component<Props> = (props) => {
             if (doc.trim()) void onRun(doc, 'auto');
           }}
         >
-          {hasChartInstance() && store.status !== 'running' ? (
-            <Icons.refresh size={14} />
-          ) : (
+          {store.status === 'running' || runBlocked() ? (
             <Icons.play size={14} />
+          ) : (
+            <Icons.plus size={14} />
           )}
         </EditorToolBtn>
         <EditorToolBtn

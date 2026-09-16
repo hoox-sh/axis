@@ -19,8 +19,7 @@
 
 /**
  * Docked panel **hover slide** — collapse to a peek strip, expand on pointer
- * enter, collapse on leave (with a short delay so the pointer can cross the
- * strip without flicker).
+ * enter, collapse on leave / idle after {@link HOVER_SLIDE_LEAVE_MS} (3s).
  *
  * Preference lives on {@link PanelChrome.hoverSlide} (persisted). Runtime
  * expanded/collapsed state is ephemeral and only applies while docked.
@@ -38,8 +37,8 @@ export const HOVER_SLIDE_PEEK_SIDE = 28;
 /** Collapsed rail size (px) for bottom dock. */
 export const HOVER_SLIDE_PEEK_BOTTOM = 28;
 
-/** Delay before collapse after pointer leave (ms). */
-export const HOVER_SLIDE_LEAVE_MS = 280;
+/** Delay before collapse after pointer leave / idle (ms). */
+export const HOVER_SLIDE_LEAVE_MS = 3000;
 
 /**
  * Ephemeral expanded map — not persisted.

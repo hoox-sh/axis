@@ -67,6 +67,12 @@ import {
   addWatchlistSymbol,
   removeWatchlistSymbol,
   setWatchlistRefreshSec,
+  hydrateWatchlistState,
+  setActiveWatchlist,
+  createWatchlist,
+  renameWatchlist,
+  duplicateWatchlist,
+  deleteWatchlist,
   saveEditorDoc,
   loadEditorDoc,
   setDrawingTool,
@@ -113,6 +119,8 @@ function resetStoreBasics() {
     width: 200,
     symbols: ['BTCUSDT'],
     refreshSec: 15,
+    lists: [{ id: 'wl-main', name: 'Main', symbols: ['BTCUSDT'] }],
+    activeId: 'wl-main',
   });
   setStore('status', 'ready');
   setStore('statusMessage', 'Ready.');
@@ -334,14 +342,46 @@ describe('layout helpers', () => {
   it('watchlist symbols and refresh clamp', () => {
     addWatchlistSymbol('ethusdt');
     expect(store.watchlist.symbols).toContain('ETHUSDT');
+    expect(store.watchlist.lists[0]!.symbols).toContain('ETHUSDT');
     addWatchlistSymbol('ETHUSDT'); // no-op duplicate
     removeWatchlistSymbol('ETHUSDT');
     expect(store.watchlist.symbols).not.toContain('ETHUSDT');
+    expect(store.watchlist.lists[0]!.symbols).not.toContain('ETHUSDT');
 
     setWatchlistRefreshSec(1);
     expect(store.watchlist.refreshSec).toBe(5);
     setWatchlistRefreshSec(999);
     expect(store.watchlist.refreshSec).toBe(120);
+  });
+
+  it('named watchlists create, switch, rename, duplicate, delete', () => {
+    const id = createWatchlist('Alts', ['SOLUSDT']);
+    expect(store.watchlist.activeId).toBe(id);
+    expect(store.watchlist.symbols).toEqual(['SOLUSDT']);
+    expect(store.watchlist.lists.some((l) => l.name === 'Alts')).toBe(true);
+
+    setActiveWatchlist('wl-main');
+    expect(store.watchlist.activeId).toBe('wl-main');
+    expect(store.watchlist.symbols).toEqual(['BTCUSDT']);
+
+    addWatchlistSymbol('ETHUSDT');
+    expect(store.watchlist.lists.find((l) => l.id === 'wl-main')!.symbols).toContain('ETHUSDT');
+    expect(store.watchlist.lists.find((l) => l.id === id)!.symbols).toEqual(['SOLUSDT']);
+
+    renameWatchlist(id, 'Solana');
+    expect(store.watchlist.lists.find((l) => l.id === id)!.name).toBe('Solana');
+
+    const copyId = duplicateWatchlist(id);
+    expect(copyId).toBeTruthy();
+    expect(store.watchlist.activeId).toBe(copyId);
+    expect(store.watchlist.symbols).toEqual(['SOLUSDT']);
+
+    expect(deleteWatchlist('wl-main')).toBe(true);
+    expect(store.watchlist.lists.some((l) => l.id === 'wl-main')).toBe(false);
+    expect(deleteWatchlist(store.watchlist.lists[0]!.id)).toBe(true);
+    // last list is protected
+    expect(deleteWatchlist(store.watchlist.activeId)).toBe(false);
+    expect(store.watchlist.lists.length).toBe(1);
   });
 
   it('theme toggle', () => {
@@ -715,6 +755,47 @@ describe('parsePersistedState / corrupt hydrate', () => {
     expect(overlay?.interval).toBe('4h');
     expect(overlay?.activePlugins?.engine).toBe('pyodide');
     expect(overlay?.engine).toBe('pyodide');
+  });
+
+  it('hydrateWatchlistState migrates a legacy symbols-only payload', () => {
+    const legacy = hydrateWatchlistState({
+      open: true,
+      width: 240,
+      symbols: ['btcusdt', 'ETHUSDT', 'BTCUSDT'],
+      refreshSec: 9,
+    });
+    expect(legacy.lists.length).toBe(1);
+    expect(legacy.lists[0]!.name).toBe('Main');
+    expect(legacy.symbols).toEqual(['BTCUSDT', 'ETHUSDT']);
+    expect(legacy.activeId).toBe(legacy.lists[0]!.id);
+    expect(legacy.refreshSec).toBe(9);
+  });
+
+  it('hydrateWatchlistState restores named lists and activeId', () => {
+    const next = hydrateWatchlistState({
+      lists: [
+        { id: 'a', name: 'Majors', symbols: ['BTCUSDT'] },
+        { id: 'b', name: 'Alts', symbols: ['SOLUSDT', 'ADAUSDT'] },
+      ],
+      activeId: 'b',
+    });
+    expect(next.activeId).toBe('b');
+    expect(next.symbols).toEqual(['SOLUSDT', 'ADAUSDT']);
+    expect(next.lists.map((l) => l.name)).toEqual(['Majors', 'Alts']);
+  });
+
+  it('parsePersistedState keeps named watchlists', () => {
+    const overlay = parsePersistedState(
+      JSON.stringify({
+        watchlist: {
+          lists: [{ id: 'x', name: 'Bag', symbols: ['LINKUSDT'] }],
+          activeId: 'x',
+        },
+      }),
+    );
+    expect(overlay?.watchlist?.activeId).toBe('x');
+    expect(overlay?.watchlist?.symbols).toEqual(['LINKUSDT']);
+    expect(overlay?.watchlist?.lists[0]?.name).toBe('Bag');
   });
 
   it('parsePersistedState keeps lastValueNamesVisible false; missing key defaults true', () => {

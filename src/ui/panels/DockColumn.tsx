@@ -28,6 +28,7 @@ import { type Component, createMemo } from 'solid-js';
 import { store } from '../../store';
 import {
   DOCK_HOST_IDS,
+  OVERLAY_HOST_IDS,
   dockColumnWidth,
   panelDockLayoutHeight,
   panelsOnDock,
@@ -136,4 +137,19 @@ export const DockColumn: Component<{ side: Side }> = (props) => {
 /** Float/window portal host (panels use position:fixed). */
 export const FloatRoot: Component = () => (
   <div id={DOCK_HOST_IDS.float} class="axis-float-root" aria-hidden="true" />
+);
+
+type OverlaySide = Extract<PanelDock, 'left' | 'right' | 'bottom'>;
+
+/**
+ * Inner-edge overlay host — absolute on the chart cell so overlay panels
+ * keep dock layout but do not shrink the plot.
+ */
+export const ChartOverlayHost: Component<{ side: OverlaySide }> = (props) => (
+  <div
+    id={OVERLAY_HOST_IDS[props.side]}
+    class={`axis-chart-overlay-host axis-chart-overlay-host-${props.side}`}
+    data-overlay-dock={props.side}
+    aria-hidden="true"
+  />
 );

@@ -114,13 +114,25 @@ export interface LogEntry {
 /** docked = right sidebar; popout = external window/tab owns the editor UI */
 export type EditorMode = 'docked' | 'popout';
 
-/** Watchlist panel open state, width, symbols, and REST poll interval. */
+/** One named watchlist (symbols persist with the parent {@link WatchlistState}). */
+export interface WatchlistList {
+  id: string;
+  name: string;
+  symbols: string[];
+}
+
+/** Watchlist panel open state, width, named lists, and REST poll interval. */
 export interface WatchlistState {
   open: boolean;
   width: number;
+  /** Symbols of the active list (mirrors {@link lists}[{@link activeId}]). */
   symbols: string[];
   /** Live quote poll interval in seconds (5–120) */
   refreshSec: number;
+  /** Named watchlists. Always ≥1 after hydrate. */
+  lists: WatchlistList[];
+  /** Active list id (must exist in {@link lists}). */
+  activeId: string;
 }
 
 /** Docked Pine editor open/width/mode (also mirrored into panelChrome.editor). */

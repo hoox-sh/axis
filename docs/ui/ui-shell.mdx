@@ -150,6 +150,9 @@ See `ui/panels/dock-layout.ts`, `FloatableShell.tsx`.
 <img src="/images/app/watchlist.png" alt="Watchlist rail with BTCUSDT selected and live 24h quotes" />
 
 - Default universe includes majors (`BTCUSDT`, …)
+- Named lists persist (`watchlist.lists` + `activeId`); legacy `symbols`-only state migrates to a **Main** list
+- Create / rename / duplicate / delete lists from the panel header or the panel-icon menu
+- Row bell creates a price alert (cross / above / below) at last
 - `refreshSec` clamped 5–120
 - Source-aware labels (e.g. CSV mode)
 - Click sets symbol and loads through active source

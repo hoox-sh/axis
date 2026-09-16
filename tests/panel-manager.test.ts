@@ -8,9 +8,12 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import {
   chartOverlayGeometry,
+  clampOverlayOpacity,
+  DEFAULT_OVERLAY_OPACITY,
   defaultPanelPosition,
   effectivePortalDock,
   getDefaultPanelChrome,
+  isChartEdgeOverlay,
   isChartOverlayEligible,
   isPanelInChartOverlayMode,
   PANEL_IDS,
@@ -62,12 +65,14 @@ describe('chart overlay geometry', () => {
     expect(B.w).toBe(1000);
   });
 
-  it('effectivePortalDock routes overlay edge docks to float host', () => {
+  it('effectivePortalDock keeps overlay edge docks on their side (inner host)', () => {
     const c = { ...defaultPanelChromeMap().watchlist, chartOverlay: true, dock: 'left' as const };
-    expect(effectivePortalDock(c)).toBe('float');
+    expect(effectivePortalDock(c)).toBe('left');
     expect(isPanelInChartOverlayMode(c)).toBe(true);
     expect(isChartOverlayEligible('left')).toBe(true);
     expect(isChartOverlayEligible('float')).toBe(false);
+    expect(isChartEdgeOverlay(c)).toBe(true);
+    expect(isChartEdgeOverlay({ ...c, dock: 'float' })).toBe(false);
   });
 });
 
@@ -95,6 +100,16 @@ describe('resetPanelToDefault / setAllPanelsChartOverlay', () => {
         : 384;
     expect(c.w).toBe(expectW);
     expect(c.chartOverlay).toBe(false);
+  });
+
+  it('clampOverlayOpacity defaults to 75% and accepts percent or unit', () => {
+    expect(DEFAULT_OVERLAY_OPACITY).toBe(0.75);
+    expect(clampOverlayOpacity(undefined)).toBe(0.75);
+    expect(clampOverlayOpacity(0.75)).toBe(0.75);
+    expect(clampOverlayOpacity(75)).toBe(0.75);
+    expect(clampOverlayOpacity(0)).toBe(0.25);
+    expect(clampOverlayOpacity(2)).toBe(0.25);
+    expect(clampOverlayOpacity(100)).toBe(1);
   });
 
   it('setPanelChartOverlay enables overlay flag', () => {

@@ -66,11 +66,16 @@ export interface PanelChrome {
    */
   hoverSlide?: boolean;
   /**
-   * When true and dock is left/right/bottom, the panel floats over the chart
-   * edge (chart does not shrink). Ignored for float / window (already overlay).
+   * When true and dock is left/right/bottom, the panel sits on the chart
+   * inner edge (chart does not shrink). Ignored for float / window (already overlay).
    * See {@link ui/panels/panel-manager}.
    */
   chartOverlay?: boolean;
+  /**
+   * Overlay panel opacity (0.25–1). Used when {@link chartOverlay} is on.
+   * Default 0.75 (75%).
+   */
+  overlayOpacity?: number;
 }
 
 /** Full chrome map keyed by {@link PanelId}. */
@@ -238,6 +243,7 @@ export function defaultPanelChrome(id: PanelId, overrides?: Partial<PanelChrome>
     z: 20,
     hoverSlide: false,
     chartOverlay: false,
+    overlayOpacity: 0.75,
     ...overrides,
   };
 }

@@ -61,6 +61,8 @@ import type {
   TelemetryState,
   TopbarSettings,
   ShortcutSlice,
+  WatchlistList,
+  WatchlistState,
 } from './types';
 import type { ShortcutOverrides } from '../ui/shortcuts/types';
 import {
@@ -92,6 +94,8 @@ import {
 import type { PlotSample } from '../plugins/types';
 import {
   chartOverlayGeometry,
+  clampOverlayOpacity,
+  DEFAULT_OVERLAY_OPACITY,
   defaultPanelPosition,
   getDefaultPanelChrome,
   isChartOverlayEligible,
@@ -163,6 +167,95 @@ export const LEGACY_STORAGE_KEYS = [
 /** localStorage key for the docked/popout editor document body. */
 export const EDITOR_DOC_KEY = 'pynescript.axis.editor.doc';
 const DEFAULT_WATCHLIST = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
+const DEFAULT_WATCHLIST_ID = 'wl-main';
+
+function cloneWatchlistLists(lists: WatchlistList[]): WatchlistList[] {
+  return lists.map((l) => ({ id: l.id, name: l.name, symbols: [...l.symbols] }));
+}
+
+function cloneWatchlistState(w: WatchlistState): WatchlistState {
+  return {
+    ...w,
+    symbols: [...w.symbols],
+    lists: cloneWatchlistLists(w.lists),
+  };
+}
+
+function uniqueSymbols(raw: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const s of raw) {
+    const v = s.toUpperCase().trim();
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+  return out;
+}
+
+function parseWatchlistList(raw: unknown, fallbackId: string): WatchlistList | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const id = typeof o.id === 'string' && o.id.trim() ? o.id.trim() : fallbackId;
+  const name = typeof o.name === 'string' && o.name.trim() ? o.name.trim() : 'Watchlist';
+  const symbols = Array.isArray(o.symbols)
+    ? uniqueSymbols(o.symbols.filter((s): s is string => typeof s === 'string'))
+    : [];
+  return { id, name, symbols };
+}
+
+/**
+ * Hydrate watchlist chrome + named lists.
+ * Legacy payloads with only `symbols` become a single "Main" list.
+ */
+export function hydrateWatchlistState(raw: unknown): WatchlistState {
+  const bag = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const open = typeof bag.open === 'boolean' ? bag.open : true;
+  const widthNum = Number(bag.width);
+  const width = Number.isFinite(widthNum) && widthNum >= 1 ? widthNum : 280;
+  const refreshSec = Math.min(
+    120,
+    Math.max(5, Number(bag.refreshSec) || 15),
+  );
+
+  const lists: WatchlistList[] = [];
+  const seenIds = new Set<string>();
+  if (Array.isArray(bag.lists)) {
+    bag.lists.forEach((item, i) => {
+      const parsed = parseWatchlistList(item, `wl-${i + 1}`);
+      if (!parsed) return;
+      let id = parsed.id;
+      if (seenIds.has(id)) id = `${id}-${i}`;
+      seenIds.add(id);
+      lists.push({ ...parsed, id });
+    });
+  }
+
+  if (!lists.length) {
+    const fromBag = Array.isArray(bag.symbols)
+      ? uniqueSymbols(bag.symbols.filter((s): s is string => typeof s === 'string'))
+      : [];
+    lists.push({
+      id: DEFAULT_WATCHLIST_ID,
+      name: 'Main',
+      symbols: fromBag.length ? fromBag : [...DEFAULT_WATCHLIST],
+    });
+  }
+
+  const activeId =
+    typeof bag.activeId === 'string' && lists.some((l) => l.id === bag.activeId)
+      ? bag.activeId
+      : lists[0]!.id;
+  const active = lists.find((l) => l.id === activeId) ?? lists[0]!;
+  return {
+    open,
+    width,
+    refreshSec,
+    lists,
+    activeId,
+    symbols: [...active.symbols],
+  };
+}
 
 /** True after a QuotaExceededError (or equivalent) blocked a durable write this session. */
 let persistQuotaExceeded = false;
@@ -263,7 +356,12 @@ const DEFAULTS: AppState = {
   // Ephemeral presentation — never hydrate as on
   presentation: { fullscreen: false, chartOnly: false },
   editor: { open: true, width: defaultEditorWidthPx(), mode: 'docked' },
-  watchlist: { open: true, width: 280, symbols: [...DEFAULT_WATCHLIST], refreshSec: 15 },
+  watchlist: hydrateWatchlistState({
+    open: true,
+    width: 280,
+    symbols: [...DEFAULT_WATCHLIST],
+    refreshSec: 15,
+  }),
   indicatorPanel: { open: false, width: 224 },
   dataViewPanel: { open: false, width: 220 },
   layerPanel: { open: false, width: 220 },
@@ -534,28 +632,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         if (chrome === 'dark') return withPreset('void-dark');
         return defaultChartThemeState();
       })(),
-      watchlist: {
-        ...DEFAULTS.watchlist,
-        ...(bag.watchlist && typeof bag.watchlist === 'object' ? bag.watchlist : {}),
-        symbols:
-          bag.watchlist &&
-          typeof bag.watchlist === 'object' &&
-          Array.isArray((bag.watchlist as AppState['watchlist']).symbols) &&
-          (bag.watchlist as AppState['watchlist']).symbols.length
-            ? (bag.watchlist as AppState['watchlist']).symbols
-            : DEFAULTS.watchlist.symbols,
-        refreshSec: Math.min(
-          120,
-          Math.max(
-            5,
-            Number(
-              bag.watchlist && typeof bag.watchlist === 'object'
-                ? (bag.watchlist as AppState['watchlist']).refreshSec
-                : undefined,
-            ) || DEFAULTS.watchlist.refreshSec,
-          ),
-        ),
-      },
+      watchlist: hydrateWatchlistState(bag.watchlist),
       indicatorPanel: {
         ...DEFAULTS.indicatorPanel,
         ...(bag.indicatorPanel && typeof bag.indicatorPanel === 'object'
@@ -1051,6 +1128,8 @@ function mergePanelChrome(
         : typeof fromLegacy.chartOverlay === 'boolean'
           ? fromLegacy.chartOverlay
           : base[id].chartOverlay;
+    const overlayOpacityRaw =
+      fromDisk.overlayOpacity ?? fromLegacy.overlayOpacity ?? base[id].overlayOpacity;
     base[id] = {
       ...base[id],
       ...fromLegacy,
@@ -1064,6 +1143,7 @@ function mergePanelChrome(
       z: Number(fromDisk.z ?? fromLegacy.z ?? base[id].z) || base[id].z,
       hoverSlide: !!hoverSlideRaw,
       chartOverlay: !!chartOverlayRaw,
+      overlayOpacity: clampOverlayOpacity(overlayOpacityRaw ?? DEFAULT_OVERLAY_OPACITY),
     };
   }
   return base;
@@ -1207,10 +1287,7 @@ function seedStoreState(overlay: Partial<AppState> | null | undefined): AppState
     activePlugins: { ...DEFAULTS.activePlugins },
     live: { ...DEFAULTS.live },
     editor: { ...DEFAULTS.editor },
-    watchlist: {
-      ...DEFAULTS.watchlist,
-      symbols: [...DEFAULTS.watchlist.symbols],
-    },
+    watchlist: cloneWatchlistState(DEFAULTS.watchlist),
     indicatorPanel: { ...DEFAULTS.indicatorPanel },
     dataViewPanel: { ...DEFAULTS.dataViewPanel },
     layerPanel: { ...DEFAULTS.layerPanel },
@@ -3342,6 +3419,7 @@ export function resetPanelToDefault(id: PanelId): void {
     z: def.z,
     hoverSlide: !!def.hoverSlide,
     chartOverlay: !!def.chartOverlay,
+    overlayOpacity: clampOverlayOpacity(def.overlayOpacity ?? DEFAULT_OVERLAY_OPACITY),
   });
   // Mirror legacy layout fields
   mirrorPanelWidth(id, def.w);
@@ -3360,8 +3438,9 @@ export function resetPanelToDefault(id: PanelId): void {
 
 /**
  * Enable/disable **chart overlay** for one panel.
- * When on and docked left/right/bottom, the panel floats over the chart edge
- * (dock column does not shrink). Float/window docks are always overlays.
+ * When on and docked left/right/bottom, the panel sits on the chart inner
+ * edge (dock-shaped, plot does not shrink). Overlay-off panels stay on the
+ * outer frame. Float/window docks are always free overlays.
  */
 export function setPanelChartOverlay(id: PanelId, enabled: boolean): void {
   ensurePanelChrome();
@@ -3410,12 +3489,25 @@ export function isPanelChartOverlay(id: PanelId): boolean {
   return !!getPanelChrome(id).chartOverlay;
 }
 
+/** Overlay panel opacity (0.25–1), default 75%. */
+export function getPanelOverlayOpacity(id: PanelId): number {
+  return clampOverlayOpacity(getPanelChrome(id).overlayOpacity ?? DEFAULT_OVERLAY_OPACITY);
+}
+
+/** Persist overlay opacity for a panel (clamped 0.25–1). */
+export function setPanelOverlayOpacity(id: PanelId, opacity: number): void {
+  ensurePanelChrome();
+  if (!isManagedFloatablePanel(id)) return;
+  setStore('panelChrome', id, 'overlayOpacity', clampOverlayOpacity(opacity));
+  persist();
+}
+
 /**
  * Main panel-manager bulk control: set chart overlay on/off for **all**
  * managed floatable panels (every dock option / panel id).
  *
- * When `enabled` is true, edge-docked panels float over the chart.
- * When false, they return to normal dock columns (chart shrinks).
+ * When `enabled` is true, edge-docked panels overlay the chart inner edges
+ * and the plot goes full width. When false, they return to outer dock columns.
  */
 export function setAllPanelsChartOverlay(enabled: boolean): void {
   ensurePanelChrome();
@@ -3561,17 +3653,44 @@ export function setPaneVisible(id: string, visible: boolean) {
   persist();
 }
 
-/** Append a unique uppercase symbol to the watchlist. */
+function ensureWatchlistLists(): WatchlistList[] {
+  const lists = store.watchlist.lists;
+  if (Array.isArray(lists) && lists.length) return lists;
+  const symbols = uniqueSymbols(store.watchlist.symbols || []);
+  return [
+    {
+      id: store.watchlist.activeId || DEFAULT_WATCHLIST_ID,
+      name: 'Main',
+      symbols,
+    },
+  ];
+}
+
+function writeActiveWatchlistSymbols(next: string[]) {
+  const lists = ensureWatchlistLists();
+  const activeId = lists.some((l) => l.id === store.watchlist.activeId)
+    ? store.watchlist.activeId
+    : lists[0]!.id;
+  setStore('watchlist', 'symbols', next);
+  setStore('watchlist', 'activeId', activeId);
+  setStore(
+    'watchlist',
+    'lists',
+    lists.map((l) => (l.id === activeId ? { ...l, symbols: next } : l)),
+  );
+}
+
+/** Append a unique uppercase symbol to the active watchlist. */
 export function addWatchlistSymbol(symbol: string) {
   const sym = symbol.toUpperCase().trim();
   if (!sym || store.watchlist.symbols.includes(sym)) return;
-  setStore('watchlist', 'symbols', (s) => [...s, sym]);
+  writeActiveWatchlistSymbols([...store.watchlist.symbols, sym]);
   persist();
 }
 
-/** Remove a symbol from the watchlist. */
+/** Remove a symbol from the active watchlist. */
 export function removeWatchlistSymbol(symbol: string) {
-  setStore('watchlist', 'symbols', (s) => s.filter((x) => x !== symbol));
+  writeActiveWatchlistSymbols(store.watchlist.symbols.filter((x) => x !== symbol));
   persist();
 }
 
@@ -3580,6 +3699,87 @@ export function setWatchlistRefreshSec(sec: number) {
   const n = Math.min(120, Math.max(5, Math.round(Number(sec) || 15)));
   setStore('watchlist', 'refreshSec', n);
   persist();
+}
+
+function nextWatchlistName(lists: WatchlistList[]): string {
+  const used = new Set(lists.map((l) => l.name.toLowerCase()));
+  let n = lists.length + 1;
+  let label = `Watchlist ${n}`;
+  while (used.has(label.toLowerCase())) {
+    n += 1;
+    label = `Watchlist ${n}`;
+  }
+  return label;
+}
+
+/** Switch the active named watchlist (quotes follow `symbols`). */
+export function setActiveWatchlist(id: string) {
+  const lists = ensureWatchlistLists();
+  const next = lists.find((l) => l.id === id);
+  if (!next) return;
+  setStore('watchlist', 'lists', lists);
+  setStore('watchlist', 'activeId', next.id);
+  setStore('watchlist', 'symbols', [...next.symbols]);
+  persist();
+}
+
+/**
+ * Create a named watchlist and switch to it.
+ * Empty `symbols` starts a blank list; omit to copy nothing.
+ */
+export function createWatchlist(name?: string, symbols?: string[]): string {
+  const lists = ensureWatchlistLists();
+  const id = `wl_${Date.now().toString(36)}_${++idCounter}`;
+  const label = (name || '').trim() || nextWatchlistName(lists);
+  const nextSymbols = uniqueSymbols(symbols ?? []);
+  const list: WatchlistList = { id, name: label, symbols: nextSymbols };
+  setStore('watchlist', 'lists', [...lists, list]);
+  setStore('watchlist', 'activeId', id);
+  setStore('watchlist', 'symbols', [...nextSymbols]);
+  persist();
+  return id;
+}
+
+/** Rename a watchlist. Empty names are ignored. */
+export function renameWatchlist(id: string, name: string) {
+  const label = name.trim();
+  if (!label) return;
+  const lists = ensureWatchlistLists();
+  if (!lists.some((l) => l.id === id)) return;
+  setStore(
+    'watchlist',
+    'lists',
+    lists.map((l) => (l.id === id ? { ...l, name: label } : l)),
+  );
+  persist();
+}
+
+/** Duplicate a list (default: active) and switch to the copy. */
+export function duplicateWatchlist(id?: string): string | null {
+  const lists = ensureWatchlistLists();
+  const src = lists.find((l) => l.id === (id || store.watchlist.activeId));
+  if (!src) return null;
+  return createWatchlist(`${src.name} copy`, src.symbols);
+}
+
+/**
+ * Delete a named watchlist. Refuses to delete the last list.
+ * Switches to a neighbor when the active list is removed.
+ */
+export function deleteWatchlist(id: string): boolean {
+  const lists = ensureWatchlistLists();
+  if (lists.length <= 1) return false;
+  const idx = lists.findIndex((l) => l.id === id);
+  if (idx < 0) return false;
+  const nextLists = lists.filter((l) => l.id !== id);
+  const fallback = nextLists[Math.max(0, idx - 1)]!;
+  const activeId = store.watchlist.activeId === id ? fallback.id : store.watchlist.activeId;
+  const active = nextLists.find((l) => l.id === activeId) ?? fallback;
+  setStore('watchlist', 'lists', nextLists);
+  setStore('watchlist', 'activeId', active.id);
+  setStore('watchlist', 'symbols', [...active.symbols]);
+  persist();
+  return true;
 }
 
 /* ── Compare overlay ─────────────────────────────────────────────── */

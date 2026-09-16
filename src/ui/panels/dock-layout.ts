@@ -39,6 +39,7 @@ import {
 } from './hover-slide';
 import {
   FIXED_APP_SHELL_PANELS,
+  isChartOverlayEligible,
   isPanelInChartOverlayMode,
 } from './panel-manager';
 import { isPhoneViewport } from '../responsive';
@@ -81,6 +82,13 @@ export const DOCK_HOST_IDS = {
   mobile: 'axis-mobile-sheets',
 } as const;
 
+/** Inner-edge overlay hosts (absolute on the chart cell). */
+export const OVERLAY_HOST_IDS = {
+  left: 'axis-dock-left-overlay',
+  right: 'axis-dock-right-overlay',
+  bottom: 'axis-dock-bottom-overlay',
+} as const;
+
 /** Resolve portal mount element for a dock target (null if not in DOM yet). */
 export function dockHostElement(dock: PanelDock): HTMLElement | null {
   if (typeof document === 'undefined') return null;
@@ -102,6 +110,20 @@ export function dockHostElement(dock: PanelDock): HTMLElement | null {
 }
 
 /**
+ * Portal mount for an edge chart-overlay panel (inner chart edge).
+ * Falls back to the float root if the overlay host is not in the DOM yet.
+ */
+export function overlayDockHostElement(dock: PanelDock): HTMLElement | null {
+  if (typeof document === 'undefined') return null;
+  if (isPhoneViewport()) return dockHostElement(dock);
+  let el: HTMLElement | null = null;
+  if (dock === 'left') el = document.getElementById(OVERLAY_HOST_IDS.left);
+  else if (dock === 'right') el = document.getElementById(OVERLAY_HOST_IDS.right);
+  else if (dock === 'bottom') el = document.getElementById(OVERLAY_HOST_IDS.bottom);
+  return el || dockHostElement('float');
+}
+
+/**
  * Open panels currently docked to `dock`, in stack order.
  * Uses {@link isPanelOpen} so legacy open flags stay in sync.
  */
@@ -114,9 +136,25 @@ export function panelsOnDock(dock: PanelDock): PanelId[] {
     if (!isPanelOpen(id)) return false;
     const c = chrome[id] as PanelChrome | undefined;
     if (!c || c.dock !== dock) return false;
-    // Chart-overlay panels float over the plot — exclude from dock columns
+    // Chart-overlay panels sit on the chart inner edge — exclude from outer columns
     if (isPanelInChartOverlayMode(c)) return false;
     return true;
+  });
+}
+
+/**
+ * Open edge-overlay panels on `dock` (inner chart edge, same stack order).
+ */
+export function overlayPanelsOnDock(dock: PanelDock): PanelId[] {
+  if (dock === 'float' || dock === 'window') return [];
+  const chrome = store.panelChrome;
+  if (!chrome) return [];
+  return DOCK_STACK_ORDER.filter((id) => {
+    if (FIXED_APP_SHELL_PANELS.has(id)) return false;
+    if (!isPanelOpen(id)) return false;
+    const c = chrome[id] as PanelChrome | undefined;
+    if (!c || c.dock !== dock) return false;
+    return isPanelInChartOverlayMode(c) && isChartOverlayEligible(dock);
   });
 }
 

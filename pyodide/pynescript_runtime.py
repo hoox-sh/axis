@@ -84,7 +84,6 @@ def _patch_evaluator():
     arguments.  The base class uses ``isinstance(value, list)`` which is
     too strict for our wrapper."""
     from pynescript.ast.evaluator.builtins.arrays import ArrayBuiltinsMixin
-    from pynescript.ast.evaluator.builtins.strings import StringBuiltinsMixin
     from pynescript.ast.evaluator.builtins.technical_submodules.core import (
         TechnicalHelpers,
     )
@@ -108,38 +107,17 @@ def _patch_evaluator():
             return list(value)
         self._error(f"{message}. Got: {type(value).__name__}")
 
-    def _expect_int(self, value, message):
-        if isinstance(value, dict) and "default" in value:
-            return int(value["default"])
-        if isinstance(value, bool):
-            return int(value)
-        if isinstance(value, int):
-            return value
-        if isinstance(value, float) and value.is_integer():
-            return int(value)
-        self._error(f"{message}. Got: {type(value).__name__}")
+    ArrayBuiltinsMixin._expect_list = _expect_list
+
+    # pyne 0.5 unwraps PineSeries / last-sample; it does not unwrap input dicts.
+    _orig_expect_number = TechnicalHelpers._expect_number
 
     def _expect_number(self, value, message):
         if isinstance(value, dict) and "default" in value:
-            return float(value["default"])
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            self._error(f"{message}. Got: {type(value).__name__}")
+            value = value["default"]
+        return _orig_expect_number(self, value, message)
 
-    def _expect_series(self, args, length):
-        if len(args) != length:
-            self._error(f"ta.* function requires {length} argument(s), got {len(args)}")
-        series = self._expect_list(args[0], "First argument must be a list (series)")
-        period = self._expect_int(
-            args[1], "Second argument must be an integer (period)"
-        )
-        return series, period
-
-    ArrayBuiltinsMixin._expect_list = _expect_list
-    StringBuiltinsMixin._expect_int = _expect_int
     TechnicalHelpers._expect_number = _expect_number
-    TechnicalHelpers._expect_series = _expect_series
     ArrayBuiltinsMixin._patched_for_browser = True
 
     # --- Fix _call_builtin: only pass kwargs to handlers that accept them ---
@@ -235,20 +213,6 @@ def _patch_evaluator():
     ):
         if hasattr(expr_module, _name):
             setattr(expr_module, _name, _none_safe(getattr(expr_module, _name)))
-
-    # --- Fix AdvancedIndicators._builtin_ta_stdev: properly extract series ---
-    from pynescript.ast.evaluator.builtins.technical_submodules.advanced import (
-        AdvancedIndicators,
-    )
-
-    if not getattr(AdvancedIndicators, "_stdev_fixed", False):
-
-        def _patched_builtin_ta_stdev(self, args):
-            series, period = self._expect_series(args, length=2)
-            return self._stdev(series, period)
-
-        AdvancedIndicators._builtin_ta_stdev = _patched_builtin_ta_stdev
-        AdvancedIndicators._stdev_fixed = True
 
 
 class CustomEvaluator:

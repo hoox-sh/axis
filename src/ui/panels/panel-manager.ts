@@ -24,9 +24,11 @@
  * `setPanelChartOverlay`, {@link setAllPanelsChartOverlay}). This module owns
  * pure position/layout logic so shells and tests stay free of store cycles.
  *
- * **Chart overlay** — when on for a left/right/bottom dock, the panel floats
- * over the chart edge instead of taking dock-column space (chart does not
- * shrink). Float/window docks are already overlays.
+ * **Chart overlay** — when on for a left/right/bottom dock, the panel stays
+ * dock-shaped (not a free float) but paints on the **inner** chart edge so
+ * the plot does not shrink. Overlay-off panels still sit on the outer frame.
+ * Overlay-all: chart is full width; every overlay panel sits on top of it.
+ * Float/window docks are already free overlays.
  *
  * @module ui/panels/panel-manager
  */
@@ -75,9 +77,9 @@ export function isChartOverlayEligible(dock: PanelDock): boolean {
 }
 
 /**
- * Whether a panel should present as chart overlay (float over plot).
- * - `chartOverlay` flag + edge dock → overlay
- * - float / window → always overlay
+ * Whether a panel should present as chart overlay (over the plot, no shrink).
+ * - `chartOverlay` flag + edge dock → inner-edge overlay (still dock-shaped)
+ * - float / window → always a free overlay
  */
 export function isPanelInChartOverlayMode(chrome: PanelChrome): boolean {
   if (chrome.dock === 'float' || chrome.dock === 'window') return true;
@@ -85,14 +87,39 @@ export function isPanelInChartOverlayMode(chrome: PanelChrome): boolean {
 }
 
 /**
- * Portal host dock: edge panels with chart overlay use the float root so they
- * do not occupy left/right/bottom columns.
+ * True when the panel is an **edge** chart overlay (not a free float/window).
+ * These stay dock-shaped and portal onto the chart inner edge.
+ */
+export function isChartEdgeOverlay(chrome: PanelChrome): boolean {
+  return (
+    !!chrome.chartOverlay &&
+    isChartOverlayEligible(chrome.dock) &&
+    chrome.dock !== 'float' &&
+    chrome.dock !== 'window'
+  );
+}
+
+/**
+ * Portal host dock. Edge chart-overlay panels keep their side (they mount on
+ * the inner overlay host, not the float root). Float/window use the float host.
  */
 export function effectivePortalDock(chrome: PanelChrome): PanelDock {
-  if (isPanelInChartOverlayMode(chrome) && isChartOverlayEligible(chrome.dock)) {
-    return 'float';
-  }
   return chrome.dock;
+}
+
+/** Default overlay panel opacity (75%). */
+export const DEFAULT_OVERLAY_OPACITY = 0.75;
+/** Inclusive overlay opacity floor. */
+export const OVERLAY_OPACITY_MIN = 0.25;
+/** Inclusive overlay opacity cap. */
+export const OVERLAY_OPACITY_MAX = 1;
+
+/** Clamp overlay opacity. Values above 1 are treated as percents (75 → 0.75). */
+export function clampOverlayOpacity(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return DEFAULT_OVERLAY_OPACITY;
+  const unit = n > 1 ? n / 100 : n;
+  return Math.min(OVERLAY_OPACITY_MAX, Math.max(OVERLAY_OPACITY_MIN, unit));
 }
 
 /** Top chrome offset for edge overlays (approx topbar). */

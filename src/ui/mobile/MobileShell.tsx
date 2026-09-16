@@ -439,7 +439,7 @@ export const MobileOverlays: Component<MobileChromeProps> = (props) => {
               onClick={() => runScript(props.editorRef)}
             >
               <Icons.play size={16} />
-              <span>Run script</span>
+              <span>Add script</span>
             </button>
             <button
               type="button"

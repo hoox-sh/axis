@@ -351,7 +351,7 @@ export const Topbar: Component<{
         </TopbarField>
 
         <Show when={sourceNeedsSymbol()}>
-          <div class="flex items-stretch gap-0.5" data-testid="axis-symbol-control">
+          <div data-testid="axis-symbol-control">
             <TopbarField
               id="axis-symbol"
               label="Symbol"
@@ -385,17 +385,19 @@ export const Topbar: Component<{
               onBlur={(e) => {
                 commitSymbol(e.currentTarget.value, false);
               }}
+              trailing={
+                <button
+                  type="button"
+                  class="axis-tb-field-trailing-btn"
+                  data-testid="axis-symbol-browse"
+                  title="Browse symbols for current exchange (source / stream)"
+                  aria-label="Browse symbols"
+                  onClick={() => setSymbolModalOpen(true)}
+                >
+                  <Icons.search size={14} />
+                </button>
+              }
             />
-            <button
-              type="button"
-              class="sc-btn sc-btn-ghost px-1.5 self-stretch border border-border/40 rounded-[var(--radius-chip)]"
-              data-testid="axis-symbol-browse"
-              title="Browse symbols for current exchange (source / stream)"
-              aria-label="Browse symbols"
-              onClick={() => setSymbolModalOpen(true)}
-            >
-              <Icons.search />
-            </button>
           </div>
           <SymbolModal
             open={symbolModalOpen()}
@@ -429,34 +431,61 @@ export const Topbar: Component<{
             <For each={INTERVALS}>{(i) => <option value={i}>{i}</option>}</For>
           </TopbarField>
         </Show>
-
-        <TopbarField
-          id="axis-chart-type"
-          label="Type"
-          variant="select"
-          class="min-w-[5.5em]"
-          testId="axis-select-chart-type"
-          value={store.chartType}
-          title={
-            CHART_TYPES.find((t) => t.id === store.chartType)?.description || 'Price chart style'
-          }
-          onChange={(e) => setChartType(e.currentTarget.value)}
-        >
-          <For each={[...CHART_TYPES]}>
-            {(t) => (
-              <option value={t.id} title={t.description}>
-                {t.short}
-              </option>
-            )}
-          </For>
-        </TopbarField>
       </div>
+      </Show>
+
+      {/* ── Chart (type · compare · reload) ─────────────────── */}
+      <Show when={store.topbar.market || store.topbar.data}>
+        <div class="axis-tb-group" data-tb-group="chart">
+        <Show when={store.topbar.market}>
+          <TopbarField
+            id="axis-chart-type"
+            label="Type"
+            variant="select"
+            class="min-w-[5.5em]"
+            testId="axis-select-chart-type"
+            value={store.chartType}
+            title={
+              CHART_TYPES.find((t) => t.id === store.chartType)?.description || 'Price chart style'
+            }
+            onChange={(e) => setChartType(e.currentTarget.value)}
+          >
+            <For each={[...CHART_TYPES]}>
+              {(t) => (
+                <option value={t.id} title={t.description}>
+                  {t.short}
+                </option>
+              )}
+            </For>
+          </TopbarField>
+        </Show>
+        <Show when={store.topbar.data}>
+          <CompareSymbolControl />
+          <button
+            type="button"
+            class={`sc-btn sc-btn-ghost sc-btn-icon ${loading() ? 'is-loading' : ''}`}
+            onClick={() => {
+              const seq = ++loadSeq;
+              setLoading(true);
+              void reloadChart().finally(() => {
+                if (seq === loadSeq) setLoading(false);
+              });
+            }}
+            disabled={loading()}
+            aria-busy={loading() || undefined}
+            data-testid="axis-btn-reload-chart"
+            title="Reload chart — force venue refetch for the current symbol / interval (bypasses dataset cache)"
+            aria-label="Reload chart"
+          >
+            {loading() ? <HooxLoader size="xs" /> : <Icons.refresh />}
+          </button>
+        </Show>
+        </div>
       </Show>
 
       {/* ── Data ────────────────────────────────────────────── */}
       <Show when={store.topbar.data}>
         <div class="axis-tb-group" data-tb-group="data" data-axis-source={store.source}>
-        <CompareSymbolControl />
         <PluginConfigRow
           onApplied={() => void loadHistorical({ force: true })}
           hideKeys={venueToken() === 'ccxt:' ? [] : ['exchange']}
@@ -525,24 +554,6 @@ export const Topbar: Component<{
             <span class="axis-tb-btn-label">{loading() ? 'Loading…' : 'Load'}</span>
           </button>
         </Show>
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost sc-btn-icon ${loading() ? 'is-loading' : ''}`}
-          onClick={() => {
-            const seq = ++loadSeq;
-            setLoading(true);
-            void reloadChart().finally(() => {
-              if (seq === loadSeq) setLoading(false);
-            });
-          }}
-          disabled={loading()}
-          aria-busy={loading() || undefined}
-          data-testid="axis-btn-reload-chart"
-          title="Reload chart — force venue refetch for the current symbol / interval (bypasses dataset cache)"
-          aria-label="Reload chart"
-        >
-          {loading() ? <HooxLoader size="xs" /> : <Icons.refresh />}
-        </button>
       </div>
       </Show>
 
@@ -713,29 +724,16 @@ export const Topbar: Component<{
       </div>
       </Show>
 
-      {/* ── Session (Layouts · Studio · Install · theme / FS) ─ */}
-      <Show when={store.topbar.system || store.topbar.layout}>
-        <div class="axis-tb-group" data-tb-group="system">
-        <Show when={store.topbar.layout}>
+      {/* ── Layouts ─────────────────────────────────────────── */}
+      <Show when={store.topbar.layout}>
+        <div class="axis-tb-group" data-tb-group="layout">
           <ChartLayoutMenu />
-        </Show>
+        </div>
+      </Show>
 
-        <Show when={store.topbar.system}>
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost"
-          onClick={() => {
-            if (props.onOpenStudio) props.onOpenStudio();
-            else if (props.onOpenRuntime) props.onOpenRuntime();
-            else props.onOpenWorkers?.();
-          }}
-          title="Studio — Runtime, Wire, Settings, Workers, Plugins"
-          data-testid="axis-btn-studio"
-          aria-label="Open Studio"
-        >
-          <Icons.studio />
-          <span class="axis-tb-btn-label">Studio</span>
-        </button>
+      {/* ── Session (theme · FS · chart-only · studio) — trailing */}
+      <Show when={store.topbar.system}>
+        <div class="axis-tb-group" data-tb-group="system">
         {/* Hidden hooks — command palette / docs dispatch click(); e2e uses Studio. */}
         <button
           type="button"
@@ -847,8 +845,22 @@ export const Topbar: Component<{
         >
           {store.presentation?.chartOnly ? <Icons.minimize /> : <Icons.maximize />}
         </button>
-        </Show>
-      </div>
+
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost sc-btn-icon axis-tb-studio"
+          onClick={() => {
+            if (props.onOpenStudio) props.onOpenStudio();
+            else if (props.onOpenRuntime) props.onOpenRuntime();
+            else props.onOpenWorkers?.();
+          }}
+          title="Studio — Runtime, Wire, Settings, Workers, Plugins"
+          data-testid="axis-btn-studio"
+          aria-label="Open Studio"
+        >
+          <Icons.settings />
+        </button>
+        </div>
       </Show>
       </div>
 

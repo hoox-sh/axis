@@ -63,6 +63,8 @@ export type TopbarFieldProps = {
   spellcheck?: boolean;
   autocomplete?: string;
   name?: string;
+  /** Trailing control inside the field (e.g. symbol browse). */
+  trailing?: JSX.Element;
 };
 
 /**
@@ -89,6 +91,7 @@ export const TopbarField: Component<TopbarFieldProps> = (props) => {
     'spellcheck',
     'autocomplete',
     'name',
+    'trailing',
   ]);
 
   const variant = () => local.variant ?? 'input';
@@ -100,6 +103,7 @@ export const TopbarField: Component<TopbarFieldProps> = (props) => {
       variant() === 'select' ? 'axis-tb-field--select' : '',
       variant() === 'static' ? 'axis-tb-field--static' : '',
       local.disabled ? 'axis-tb-field--disabled' : '',
+      local.trailing ? 'axis-tb-field--trailing' : '',
       local.class || '',
     ]
       .filter(Boolean)
@@ -153,6 +157,10 @@ export const TopbarField: Component<TopbarFieldProps> = (props) => {
         >
           {local.children ?? local.value}
         </div>
+      </Show>
+
+      <Show when={!!local.trailing}>
+        <div class="axis-tb-field-trailing">{local.trailing}</div>
       </Show>
     </div>
   );

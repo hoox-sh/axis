@@ -114,7 +114,7 @@ import {
   PanelDragOverlay,
   installPanelWindowBridge,
 } from './ui/panels/FloatableShell';
-import { DockColumn, FloatRoot } from './ui/panels/DockColumn';
+import { ChartOverlayHost, DockColumn, FloatRoot } from './ui/panels/DockColumn';
 import {
   MobileHeader,
   MobileTabBar,
@@ -472,6 +472,10 @@ export const App: Component = () => {
           >
             <ChartWorkspace />
           </ErrorBoundary>
+          {/* Chart-overlay panels: dock-shaped, inner chart edges, no shrink */}
+          <ChartOverlayHost side="left" />
+          <ChartOverlayHost side="right" />
+          <ChartOverlayHost side="bottom" />
 
           {/* Popout placeholder when editor is external */}
           <Show when={store.editor.mode === 'popout' && !store.presentation?.chartOnly}>

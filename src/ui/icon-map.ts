@@ -195,8 +195,9 @@ export type IconName = keyof typeof ICON_MAP;
  * Per-panel icon routing — `PanelId → IconName`.
  *
  * Single source of truth for which glyph identifies a panel:
- * - `FloatableShell` panel header renders this next to the hamburger menu
- *   (`data-testid="axis-panel-header-icon-{panelId}"`).
+ * - `FloatableShell` panel header uses this glyph as the dock-menu trigger
+ *   (`data-testid="axis-panel-header-icon-{panelId}"`). Click opens the dock
+ *   menu; hold or drag moves the panel.
  * - `Topbar` panel-toggle buttons resolve the same glyph by reading this map,
  *   so a panel always carries the same icon from header to toggle.
  *

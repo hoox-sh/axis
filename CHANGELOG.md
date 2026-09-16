@@ -17,6 +17,8 @@ _Generated/updated: 2026-09-12 · 401 commits · describe-tag: `v2.6.5`_
 
 ### Added
 
+- **Named watchlists**: create, rename, duplicate, and delete lists. Lists persist with the workspace (`watchlist.lists` + `activeId`); a legacy symbols-only payload becomes a **Main** list.
+- **Watchlist alerts**: row bell opens a compact price alert (cross / above / below) at last.
 - **Autoload chart** (Settings → General): when on (default), symbol / interval / venue changes fetch immediately and the topbar Load button is hidden; when off, Load is shown and field changes wait for an explicit load.
 
 ### Fixed
@@ -26,9 +28,14 @@ _Generated/updated: 2026-09-12 · 401 commits · describe-tag: `v2.6.5`_
 - Library script cards were forced into a 32px centered row.
 - Layouts menu is portaled out of the command bar so it is no longer clipped.
 - Plugins catalog **Use** activates the selected source / stream / engine / storage again.
+- Pyodide interpret no longer crashes at bar 0 with `_expect_series() got an unexpected keyword argument`: the runtime was replacing pyne 0.5's helper (which takes `last_sample_ok` / `allow_period_only`) with a 2-arg shim. Drop the stale `ta.stdev` full-recompute override and wrap `_expect_number` (dict-`default` unwrap, then the wheel helper) instead of replacing it.
 
 ### Changed
 
+- Topbar / editor **Run** controls are labeled **Add** (same apply behavior; ▾ still adds another instance).
+- **Chart overlay** keeps dock layout: overlay-on panels sit on the chart inner edge (plot does not shrink). Overlay-all makes the chart full width with panels on top. Overlay-off panels stay on the outer frame. Overlay panels stack in a single column (not side-by-side). Menu includes an opacity slider (default 75%). Slide-on-hover hides after 3s idle.
+- Panel chrome: the per-panel icon is the dock menu (click) and drag handle (hold). The extra hamburger glyph is gone.
+- Topbar command bar: venue + symbol (search inside the field) + interval; type + compare + reload; thin dividers between groups; theme / fullscreen / chart-only / Studio (gear, accent, trailing) on the right.
 - **Workstation chrome polish**: two-bar command + module switch, 4/8px grid, 1px hairline, periwinkle `#8B9CFF` on `#07080C` / `#0C0E14`, Live as a 6px pulse, HUD capsules, 32px watchlist rows, 32×32 drawing rail, 26px status strip, tablet overlay drawers, mobile Chart/List/Editor/More. Same product — density and grouping only.
 - Engine picker is a 3-icon switch (server / edge worker / Pyodide). Run, Live, and Replay share one action cluster.
 - **Default history depth is 5000 bars** (`HISTORY_BARS_DEFAULT`). Existing saved `historyBars` values are unchanged.

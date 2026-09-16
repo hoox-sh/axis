@@ -13,6 +13,7 @@ import {
   dockStackCount,
   dockStackCssOrder,
   isLastInDockStack,
+  overlayPanelsOnDock,
   panelsOnDock,
 } from '../src/ui/panels/dock-layout.ts';
 import {
@@ -74,6 +75,18 @@ describe('panelsOnDock / stack order', () => {
     // indicators before editor in order ⇒ left of editor in a row
     expect(dockStackCssOrder('indicators')).toBeLessThan(dockStackCssOrder('editor'));
     expect(dockColumnWidth('right')).toBe(224 + 460);
+  });
+
+  it('chart-overlay panels leave the outer column and list on the inner host', () => {
+    setPanelDock('watchlist', 'left');
+    setPanelOpen('watchlist', true);
+    setPanelDock('layers', 'left');
+    setPanelOpen('layers', true);
+    setStore('panelChrome', 'layers', 'chartOverlay', true);
+
+    expect(panelsOnDock('left')).toEqual(['watchlist']);
+    expect(overlayPanelsOnDock('left')).toEqual(['layers']);
+    expect(dockColumnWidth('left')).toBe(getPanelChrome('watchlist').w);
   });
 
   it('single panel width is not summed', () => {

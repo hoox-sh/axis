@@ -18,10 +18,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Split Run / Re-run control for the topbar.
+ * Split Add control for the topbar.
  *
- * - **Run** when the editor script is not on the chart
- * - **Re-run** when a matching instance exists (replaces it)
+ * - **Add** when the editor script is not on the chart
+ * - **Add** when a matching instance exists (replaces it — same as former Re-run)
  * - Chevron menu → **Add another instance** (2nd / 3rd copy of the same script)
  */
 
@@ -93,19 +93,19 @@ export const RunSplitButton: Component<{
   const label = createMemo(() => {
     if (isRunning()) return 'Running…';
     if (runBlocked()) return 'Fix errors';
-    return hasInstance() ? 'Re-run' : 'Run';
+    return 'Add';
   });
 
   const title = createMemo(() => {
     if (isRunning()) return 'Running…';
-    if (runBlocked()) return 'Fix script errors in the editor before running';
+    if (runBlocked()) return 'Fix script errors in the editor before adding';
     if (hasInstance()) {
       const n = instanceCount();
       return n > 1
-        ? `Re-run replaces the focused instance (${n} on chart). Use ▾ to add another.`
-        : 'Re-run replaces the script already on the chart. Use ▾ to add another instance.';
+        ? `Add replaces the focused instance (${n} on chart). Use ▾ to add another.`
+        : 'Add replaces the script already on the chart. Use ▾ to add another instance.';
     }
-    return 'Run script against loaded bars (or use detached editor)';
+    return 'Add script to the chart (or use detached editor)';
   });
 
   const closeMenu = () => setMenuOpen(false);
@@ -187,10 +187,10 @@ export const RunSplitButton: Component<{
         disabled={disabled()}
         title={title()}
       >
-        {hasInstance() && !isRunning() && !runBlocked() ? (
-          <Icons.refresh />
-        ) : (
+        {isRunning() || runBlocked() ? (
           <Icons.play />
+        ) : (
+          <Icons.plus />
         )}
         <span class="axis-tb-btn-label">{label()}</span>
       </button>
@@ -201,7 +201,7 @@ export const RunSplitButton: Component<{
           class={`sc-btn sc-btn-ghost axis-run-caret ${menuOpen() ? 'is-active' : ''}`}
           aria-haspopup="menu"
           aria-expanded={menuOpen()}
-          aria-label="More run options"
+          aria-label="More add options"
           title="Add another instance of this script on the chart"
           data-testid="axis-btn-run-menu"
           disabled={disabled()}
@@ -227,7 +227,7 @@ export const RunSplitButton: Component<{
           }}
           class="axis-run-menu"
           role="menu"
-          aria-label="Run options"
+          aria-label="Add options"
           data-testid="axis-run-menu"
           style={{
             position: 'fixed',

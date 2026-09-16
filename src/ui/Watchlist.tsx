@@ -44,7 +44,16 @@
  * Independent of chart kline streams — see `src/data/watchlist-live.ts`.
  */
 
-import { type Component, For, createSignal, createEffect, onCleanup, Show } from 'solid-js';
+import {
+  type Component,
+  For,
+  createSignal,
+  createEffect,
+  createMemo,
+  onCleanup,
+  onMount,
+  Show,
+} from 'solid-js';
 import {
   store,
   setStore,
@@ -52,18 +61,76 @@ import {
   addWatchlistSymbol,
   removeWatchlistSymbol,
   isPanelOpen,
+  setActiveWatchlist,
+  createWatchlist,
+  renameWatchlist,
+  duplicateWatchlist,
+  deleteWatchlist,
 } from '../store';
 import { loadSymbolData } from '../data/load-symbol';
 import { fetchWatchlistTickers, type WatchTicker } from '../data/watchlist-tickers';
 import { startWatchlistQuotes } from '../data/watchlist-live';
+import {
+  createAlert,
+  listAlerts,
+  subscribeAlerts,
+  type AlertKind,
+} from '../alerts';
+import { Icons } from './icons';
 import { FloatableShell } from './panels/FloatableShell';
+import { announce } from './sr-announce';
 
 /** Dockable multi-symbol quote list with WS/REST lifecycle (see module docs). */
+type PriceAlertKind = Extract<AlertKind, 'price_cross' | 'price_above' | 'price_below'>;
+
+const ALERT_KIND_OPTS: { id: PriceAlertKind; label: string }[] = [
+  { id: 'price_cross', label: 'Cross' },
+  { id: 'price_above', label: 'Above' },
+  { id: 'price_below', label: 'Below' },
+];
+
 export const Watchlist: Component = () => {
   const [prices, setPrices] = createSignal<Record<string, WatchTicker>>({});
   const [addValue, setAddValue] = createSignal('');
   /** `ws` live, `rest` polling fallback, `off` idle/closed/no transport. */
   const [quoteMode, setQuoteMode] = createSignal<'ws' | 'rest' | 'off'>('off');
+  const [renameOn, setRenameOn] = createSignal(false);
+  const [renameValue, setRenameValue] = createSignal('');
+  const [alertSym, setAlertSym] = createSignal<string | null>(null);
+  const [alertKind, setAlertKind] = createSignal<PriceAlertKind>('price_cross');
+  const [alertPrice, setAlertPrice] = createSignal('');
+  const [alertError, setAlertError] = createSignal('');
+  const [alertsTick, setAlertsTick] = createSignal(0);
+
+  const lists = createMemo(() => {
+    void store.watchlist.activeId;
+    const raw = store.watchlist.lists;
+    if (Array.isArray(raw) && raw.length) return raw;
+    return [
+      {
+        id: store.watchlist.activeId || 'wl-main',
+        name: 'Main',
+        symbols: store.watchlist.symbols,
+      },
+    ];
+  });
+  const activeList = createMemo(() => {
+    const id = store.watchlist.activeId;
+    return lists().find((l) => l.id === id) ?? lists()[0];
+  });
+  const alertedSymbols = createMemo(() => {
+    void alertsTick();
+    const set = new Set<string>();
+    for (const a of listAlerts()) {
+      if (a.enabled) set.add(a.symbol.toUpperCase());
+    }
+    return set;
+  });
+
+  onMount(() => {
+    const unsub = subscribeAlerts(() => setAlertsTick((n) => n + 1));
+    onCleanup(unsub);
+  });
 
   type QuotePartial = {
     symbol: string;
@@ -252,6 +319,52 @@ export const Watchlist: Component = () => {
     setAddValue('');
   };
 
+  const beginRename = () => {
+    setRenameValue(activeList()?.name || '');
+    setRenameOn(true);
+  };
+
+  const commitRename = () => {
+    const id = activeList()?.id;
+    if (id) renameWatchlist(id, renameValue());
+    setRenameOn(false);
+  };
+
+  const onNewList = () => {
+    createWatchlist();
+    beginRename();
+  };
+
+  const openAlert = (sym: string) => {
+    const last = prices()[sym]?.price;
+    setAlertSym(sym);
+    setAlertKind('price_cross');
+    setAlertPrice(
+      last != null && Number.isFinite(last) ? String(last) : '',
+    );
+    setAlertError('');
+  };
+
+  const commitAlert = () => {
+    const sym = alertSym();
+    if (!sym) return;
+    const n = Number(alertPrice());
+    if (!Number.isFinite(n) || n <= 0) {
+      setAlertError('Enter a price greater than 0');
+      return;
+    }
+    const kind = alertKind();
+    const verb = kind === 'price_cross' ? 'crosses' : kind === 'price_above' ? 'above' : 'below';
+    createAlert({
+      name: `${sym} ${verb} ${n}`,
+      symbol: sym,
+      kind,
+      params: { price: n },
+    });
+    announce(`Alert created for ${sym}`);
+    setAlertSym(null);
+  };
+
   const fmtPrice = (n?: number) =>
     n == null
       ? '—'
@@ -287,17 +400,117 @@ export const Watchlist: Component = () => {
   };
 
   const cols =
-    'grid grid-cols-[minmax(4.75rem,1fr)_max-content_max-content_max-content_1rem] items-center gap-x-2 px-2';
+    'grid grid-cols-[minmax(4.25rem,1fr)_auto_auto_auto_1.75rem] items-center gap-x-1.5 px-2';
 
   return (
     <Show when={isPanelOpen('watchlist') || store.watchlist.open}>
       <FloatableShell
         id="watchlist"
         testId="axis-watchlist"
-        headerExtra={
+        menuExtra={
+          <>
+            <div class="axis-panel-menu-section">Watchlists</div>
+            <button
+              type="button"
+              role="menuitem"
+              class="axis-panel-menu-item"
+              data-testid="axis-watchlist-menu-new"
+              onClick={() => onNewList()}
+            >
+              <Icons.plus size={14} />
+              <span>New watchlist</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              class="axis-panel-menu-item"
+              data-testid="axis-watchlist-menu-rename"
+              onClick={() => beginRename()}
+            >
+              <Icons.pencil size={14} />
+              <span>Rename</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              class="axis-panel-menu-item"
+              data-testid="axis-watchlist-menu-duplicate"
+              onClick={() => duplicateWatchlist()}
+            >
+              <Icons.copy size={14} />
+              <span>Duplicate</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              class="axis-panel-menu-item"
+              data-testid="axis-watchlist-menu-delete"
+              disabled={lists().length <= 1}
+              onClick={() => {
+                const id = activeList()?.id;
+                if (id) deleteWatchlist(id);
+              }}
+            >
+              <Icons.trash size={14} />
+              <span>Delete list</span>
+            </button>
+          </>
+        }
+      >
+        <div class="axis-wl-toolbar flex items-center gap-1 px-2 py-1 border-b border-border flex-shrink-0">
+          <Show
+            when={!renameOn()}
+            fallback={
+              <input
+                class="axis-wl-list-rename sc-input h-6 min-h-6 text-[11px] flex-1 min-w-0"
+                value={renameValue()}
+                autofocus
+                data-testid="axis-watchlist-rename"
+                onInput={(e) => setRenameValue(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitRename();
+                  } else if (e.key === 'Escape') {
+                    setRenameOn(false);
+                  }
+                }}
+                onBlur={() => commitRename()}
+              />
+            }
+          >
+            <select
+              class="axis-wl-list-select flex-1 min-w-0"
+              title="Switch watchlist"
+              aria-label="Watchlist"
+              data-testid="axis-watchlist-list"
+              onChange={(e) => setActiveWatchlist(e.currentTarget.value)}
+            >
+              <For each={lists()}>
+                {(l) => (
+                  <option
+                    value={l.id}
+                    selected={l.id === (store.watchlist.activeId || activeList()?.id)}
+                  >
+                    {l.name}
+                  </option>
+                )}
+              </For>
+            </select>
+          </Show>
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost px-1"
+            title="New watchlist"
+            aria-label="New watchlist"
+            data-testid="axis-watchlist-new"
+            onClick={() => onNewList()}
+          >
+            <Icons.plus size={12} />
+          </button>
           <Show when={modeLabel()}>
             <span
-              class="inline-flex items-center gap-1 px-0.5"
+              class="inline-flex items-center gap-1 px-0.5 ml-auto"
               title={
                 quoteMode() === 'ws'
                   ? 'WebSocket live quotes'
@@ -320,8 +533,7 @@ export const Watchlist: Component = () => {
               </span>
             </span>
           </Show>
-        }
-      >
+        </div>
         <div class="flex-1 overflow-y-auto min-h-0">
           <Show
             when={store.watchlist.symbols.length > 0}
@@ -334,9 +546,9 @@ export const Watchlist: Component = () => {
               aria-hidden="true"
             >
               <span>Sym</span>
-              <span class="text-right">Last</span>
-              <span class="text-right">Chg</span>
-              <span class="text-right">Close</span>
+              <span class="text-right min-w-[4.5rem]">Last</span>
+              <span class="text-right min-w-[3.35rem]">Chg</span>
+              <span class="text-right min-w-[4.5rem]">Close</span>
               <span />
             </div>
             <For each={store.watchlist.symbols}>
@@ -347,10 +559,11 @@ export const Watchlist: Component = () => {
                   const n = tick()?.change;
                   return n != null && Number.isFinite(n) ? n : undefined;
                 };
+                const hasAlert = () => alertedSymbols().has(sym.toUpperCase());
                 return (
-                  // biome-ignore lint/a11y/useSemanticElements: row contains a nested remove <button>; wrapping in <button> would be invalid HTML
+                  // biome-ignore lint/a11y/useSemanticElements: row contains nested buttons; wrapping in <button> would be invalid HTML
                   <div
-                    class={`axis-wl-row group ${cols} h-8 cursor-pointer text-[12px] border-b border-border ${
+                    class={`axis-wl-row group ${cols} h-8 cursor-pointer text-[12px] border-b border-border relative ${
                       active() ? 'is-active' : 'hover:bg-white/[0.03]'
                     }`}
                     role="button"
@@ -371,11 +584,11 @@ export const Watchlist: Component = () => {
                         {/USDT$/i.test(sym) ? 'USDT' : /USD$/i.test(sym) ? 'USD' : ''}
                       </span>
                     </span>
-                    <span class="font-mono text-[11px] text-text text-right tabular-nums lining-nums">
+                    <span class="font-mono text-[11px] text-text text-right tabular-nums lining-nums min-w-[4.5rem]">
                       {fmtPrice(tick()?.price)}
                     </span>
                     <span
-                      class={`font-mono text-[11px] text-right tabular-nums lining-nums ${
+                      class={`font-mono text-[11px] text-right tabular-nums lining-nums min-w-[3.35rem] ${
                         ch() == null
                           ? 'text-text-faint'
                           : (ch() ?? 0) >= 0
@@ -385,21 +598,107 @@ export const Watchlist: Component = () => {
                     >
                       {fmtChange(ch())}
                     </span>
-                    <span class="font-mono text-[11px] text-text-dim text-right tabular-nums lining-nums">
+                    <span class="font-mono text-[11px] text-text-dim text-right tabular-nums lining-nums min-w-[4.5rem]">
                       {fmtPrice(closeOf(tick()))}
                     </span>
-                    <button
-                      type="button"
-                      class="w-4 h-4 flex items-center justify-center text-[11px] leading-none text-text-faint opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:text-red focus-visible:opacity-100"
-                      title={`Remove ${sym}`}
-                      aria-label={`Remove ${sym}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeWatchlistSymbol(sym);
-                      }}
-                    >
-                      ×
-                    </button>
+                    <span class="flex items-center justify-end gap-0.5">
+                      <button
+                        type="button"
+                        class={`w-4 h-4 flex items-center justify-center text-text-faint hover:text-accent focus-visible:opacity-100 ${
+                          hasAlert()
+                            ? 'text-accent opacity-100'
+                            : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+                        }`}
+                        title={hasAlert() ? `Alerts on ${sym}` : `Add alert for ${sym}`}
+                        aria-label={`Add alert for ${sym}`}
+                        data-testid={`axis-watchlist-alert-${sym}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openAlert(sym);
+                        }}
+                      >
+                        <Icons.alerts size={11} />
+                      </button>
+                      <button
+                        type="button"
+                        class="w-4 h-4 flex items-center justify-center text-[11px] leading-none text-text-faint opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:text-red focus-visible:opacity-100"
+                        title={`Remove ${sym}`}
+                        aria-label={`Remove ${sym}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeWatchlistSymbol(sym);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                    <Show when={alertSym() === sym}>
+                      <div
+                        class="axis-wl-alert-pop"
+                        role="dialog"
+                        aria-label={`Alert ${sym}`}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        <div class="flex items-center justify-between gap-2 mb-1.5">
+                          <span class="text-[10px] uppercase tracking-wider text-text-faint">
+                            Alert {sym}
+                          </span>
+                          <button
+                            type="button"
+                            class="sc-btn sc-btn-ghost px-1"
+                            aria-label="Close"
+                            onClick={() => setAlertSym(null)}
+                          >
+                            <Icons.x size={12} />
+                          </button>
+                        </div>
+                        <div class="flex items-center gap-1 mb-1.5">
+                          <For each={ALERT_KIND_OPTS}>
+                            {(opt) => (
+                              <button
+                                type="button"
+                                class={`sc-btn sc-btn-ghost text-[10px] px-1.5 h-6 min-h-6 ${
+                                  alertKind() === opt.id ? 'is-active' : ''
+                                }`}
+                                aria-pressed={alertKind() === opt.id}
+                                onClick={() => setAlertKind(opt.id)}
+                              >
+                                {opt.label}
+                              </button>
+                            )}
+                          </For>
+                        </div>
+                        <input
+                          class="sc-input w-full h-7 min-h-7 text-[11px] font-mono mb-1.5"
+                          inputMode="decimal"
+                          placeholder="Price"
+                          value={alertPrice()}
+                          data-testid="axis-watchlist-alert-price"
+                          onInput={(e) => setAlertPrice(e.currentTarget.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              commitAlert();
+                            } else if (e.key === 'Escape') {
+                              setAlertSym(null);
+                            }
+                          }}
+                        />
+                        <Show when={alertError()}>
+                          <div class="text-[10px] text-red mb-1">{alertError()}</div>
+                        </Show>
+                        <button
+                          type="button"
+                          class="sc-btn sc-btn-primary w-full h-7 min-h-7 text-[11px]"
+                          data-testid="axis-watchlist-alert-create"
+                          onClick={() => commitAlert()}
+                        >
+                          Create alert
+                        </button>
+                      </div>
+                    </Show>
                   </div>
                 );
               }}

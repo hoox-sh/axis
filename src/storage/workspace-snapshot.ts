@@ -71,7 +71,7 @@ export type EditorPrefsKey = (typeof EDITOR_PREFS_KEYS)[number];
 /** Panel chrome fields included in a workspace export (geometry + dock). */
 export type PanelChromeSnapshot = Pick<
   PanelChrome,
-  'open' | 'dock' | 'x' | 'y' | 'w' | 'h' | 'z' | 'hoverSlide' | 'chartOverlay'
+  'open' | 'dock' | 'x' | 'y' | 'w' | 'h' | 'z' | 'hoverSlide' | 'chartOverlay' | 'overlayOpacity'
 >;
 
 /** Applied-indicator metadata (code included so restore can re-run). */
@@ -244,6 +244,10 @@ function snapshotPanelChrome(
       z: Number(p.z) || 20,
       hoverSlide: !!p.hoverSlide,
       chartOverlay: !!p.chartOverlay,
+      overlayOpacity:
+        typeof p.overlayOpacity === 'number' && Number.isFinite(p.overlayOpacity)
+          ? p.overlayOpacity
+          : 0.75,
     };
   }
   return Object.keys(out).length ? out : undefined;
@@ -507,6 +511,10 @@ export function parseSnapshotJson(text: string): WorkspaceSnapshot {
         z: Number(p.z) || 20,
         hoverSlide: !!p.hoverSlide,
         chartOverlay: !!p.chartOverlay,
+        overlayOpacity:
+          typeof p.overlayOpacity === 'number' && Number.isFinite(p.overlayOpacity)
+            ? p.overlayOpacity
+            : 0.75,
       };
     }
     snap.panelChrome = chrome;

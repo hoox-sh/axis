@@ -451,7 +451,7 @@ button.sc-btn:focus-visible {
   /* 6px top clears 11px floating field labels on 28px controls */
   min-height: var(--ui-topbar-min-h);
   height: auto;
-  padding: 6px 8px 2px;
+  padding: 6px 8px 8px;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
@@ -485,8 +485,8 @@ button.sc-btn:focus-visible {
 .axis-command-bar .axis-tb-group + .axis-tb-group,
 .axis-command-bar [data-tb-group] + [data-tb-group] {
   margin-left: 0;
-  padding-left: 0;
-  border-left: none;
+  padding-left: 12px;
+  border-left: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
 }
 
 /* System cluster pins to the trailing edge */
@@ -1131,6 +1131,56 @@ button.sc-btn:focus-visible {
   text-overflow: ellipsis;
 }
 
+.axis-tb-field--trailing {
+  padding-right: 2px;
+}
+
+.axis-tb-field--trailing .axis-tb-field-control {
+  width: auto;
+  flex: 1;
+  padding-right: 2px;
+}
+
+.axis-tb-field-trailing {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 100%;
+}
+
+.axis-tb-field-trailing-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--ui-control-h) - 6px);
+  height: calc(var(--ui-control-h) - 6px);
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+
+.axis-tb-field-trailing-btn:hover,
+.axis-tb-field-trailing-btn:focus-visible {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  outline: none;
+}
+
+[data-testid="axis-topbar"] [data-testid="axis-btn-studio"].axis-tb-studio {
+  color: var(--color-accent);
+}
+
+[data-testid="axis-topbar"] [data-testid="axis-btn-studio"].axis-tb-studio:hover,
+[data-testid="axis-topbar"] [data-testid="axis-btn-studio"].axis-tb-studio:focus-visible {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-bg-elev));
+  border-color: color-mix(in srgb, var(--color-accent) 50%, var(--color-border));
+}
+
 /* Less-critical button captions: hide below sm (icons remain) */
 @media (max-width: 639px) {
   [data-testid="axis-topbar"] .axis-tb-btn-label {
@@ -1345,6 +1395,57 @@ button.axis-status-capsule {
 .axis-wl-change-down {
   color: var(--color-red);
   font-variant-numeric: tabular-nums lining-nums;
+}
+
+.axis-wl-list-select,
+.axis-wl-list-rename {
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+}
+
+.axis-wl-list-select {
+  appearance: none;
+  -webkit-appearance: none;
+  max-width: none;
+  height: 22px;
+  padding: 0 1.15em 0 0.4em;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-chip);
+  background-color: var(--color-bg-elev);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--color-text-dim) 50%),
+    linear-gradient(135deg, var(--color-text-dim) 50%, transparent 50%);
+  background-position:
+    calc(100% - 0.55em) 55%,
+    calc(100% - 0.32em) 55%;
+  background-size: 0.22em 0.22em, 0.22em 0.22em;
+  background-repeat: no-repeat;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 10px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.axis-wl-list-select:focus,
+.axis-wl-list-select:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.axis-wl-alert-pop {
+  position: absolute;
+  top: calc(100% - 2px);
+  right: 4px;
+  z-index: 20;
+  width: 12.5rem;
+  padding: 0.5em;
+  background: var(--color-bg-elev);
+  border: var(--border-w) solid var(--color-border);
+  border-radius: var(--radius-input);
+  box-shadow: var(--ui-shadow-panel);
+  cursor: default;
 }
 
 /* Drawing rail contract (consumed by DrawingToolbar) */
@@ -2243,6 +2344,53 @@ button.axis-status-capsule {
   opacity: 0;
 }
 
+/* Inner-edge chart overlay hosts — absolute on the chart cell.
+ * Overlay-off docks still shrink the plot; overlay-on panels sit on top. */
+.axis-chart-overlay-host {
+  position: absolute;
+  z-index: 40;
+  display: flex;
+  pointer-events: none;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+}
+.axis-chart-overlay-host > * {
+  display: contents;
+}
+.axis-chart-overlay-host .axis-panel-shell {
+  pointer-events: auto;
+}
+.axis-chart-overlay-host-left {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  flex-direction: column;
+  align-items: stretch;
+}
+.axis-chart-overlay-host-right {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  flex-direction: column;
+  align-items: stretch;
+}
+.axis-chart-overlay-host-bottom {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  flex-direction: column;
+  align-items: stretch;
+}
+.axis-panel-shell.is-chart-overlay {
+  box-shadow: var(--ui-shadow-panel);
+  border: var(--border-w) solid var(--color-border);
+}
+.axis-chart-overlay-host .axis-panel-shell[data-panel-id='editor'] {
+  height: auto !important;
+  flex: 1 1 auto !important;
+}
+
 /* Full-viewport host for position:fixed float panels (not clipped by flex overflow).
  * Root is pointer-events:none so empty space clicks pass through to the chart;
  * shells (any depth — Solid Portal may insert markers) must re-enable hits. */
@@ -2337,7 +2485,7 @@ body.axis-panel-dragging {
 }
 /* Alone in dock strip: grow to fill width (unless hover-slide is managing size) */
 .axis-dock-col[data-dock-count='1']
-  .axis-panel-shell[data-panel-id='editor']:not(.axis-panel-hover-slide) {
+  .axis-panel-shell[data-panel-id='editor']:not(.axis-panel-hover-slide):not(.is-chart-overlay) {
   flex: 1 1 auto !important;
   width: 100% !important;
 }
@@ -2553,11 +2701,21 @@ body.axis-panel-dragging {
   opacity: 0.95;
 }
 
-/* Panel hamburger dock menu (click expand · hold drag)
+/* Panel-icon dock menu (click expand · hold drag)
  * Font + icon size match editor overflow menuitems (12px text / 14px icons). */
 .axis-panel-menu {
   position: relative;
   z-index: 2;
+}
+.axis-panel-menu-btn {
+  color: var(--color-text-dim);
+  opacity: 0.88;
+}
+.axis-panel-menu-btn:hover,
+.axis-panel-menu-btn.is-open,
+.axis-panel-menu-btn[aria-expanded="true"] {
+  color: var(--color-accent);
+  opacity: 1;
 }
 .axis-panel-menu-pop {
   position: absolute;
@@ -2617,6 +2775,33 @@ body.axis-panel-dragging {
   margin: 0.25em 0.35em;
   background: var(--color-border);
   flex-shrink: 0;
+}
+
+.axis-panel-menu-opacity {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.35em 0.55em 0.5em;
+  color: var(--color-text-dim);
+  font-size: 11px;
+  font-weight: 500;
+}
+.axis-panel-menu-opacity-label {
+  flex-shrink: 0;
+}
+.axis-panel-menu-opacity input[type='range'] {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 0.35em;
+  margin: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+.axis-panel-menu-opacity-val {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.4em;
+  text-align: right;
 }
 
 /* Editor tab strip */

@@ -9,6 +9,7 @@ import { describe, expect, it, beforeEach } from 'bun:test';
 import {
   HOVER_SLIDE_PEEK_SIDE,
   HOVER_SLIDE_PEEK_BOTTOM,
+  HOVER_SLIDE_LEAVE_MS,
   clearPanelHoverSlideExpanded,
   hoverSlideLayoutSize,
   isPanelHoverSlideExpanded,
@@ -57,6 +58,10 @@ describe('isHoverSlideEligible', () => {
     expect(isHoverSlideEligible('bottom')).toBe(true);
     expect(isHoverSlideEligible('float')).toBe(false);
     expect(isHoverSlideEligible('window')).toBe(false);
+  });
+
+  it('auto-hides 3 seconds after idle / leave', () => {
+    expect(HOVER_SLIDE_LEAVE_MS).toBe(3000);
   });
 });
 
