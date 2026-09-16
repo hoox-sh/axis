@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-12 · 401 commits · describe-tag: `v2.6.5`_
+_Generated/updated: 2026-09-16 · 414 commits · describe-tag: `v2.6.7`_
 
 ---
 
 ## [Unreleased]
+
+## [2.6.8] — 2026-09-16
 
 ### Added
 
@@ -1162,12 +1164,18 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (82 commits)
+### 2026-09 (95 commits)
 
 #### Features
 
+- `5de57792` (2026-09-16) — feat(scripts): first-party AXIS built-in Pine catalog
+- `fdf3b656` (2026-09-16) — feat(ui): named watchlists, overlay docks, Add, and pyne interpret fix
+- `3afd072d` (2026-09-14) — feat: pine alerts, live-by-default, and worker-axis rename
+- `44bb0eaa` (2026-09-14) — feat(editor): convert older Pine to v6
 - `1dc6c089` (2026-09-12) — feat(cli): cloud-storage setup, keys, and D1 schema deploy
 - `c111371a` (2026-09-12) — feat(storage): copy-on-switch, Worker settings, version history
 - `a9f7bb6e` (2026-09-12) — feat(release): VERSION single source of truth with update manager and close guard
@@ -1197,6 +1205,13 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `0d99cdcb` (2026-09-16) — fix(scripts): builtin formula correctness and editor-draft isolation
+- `74c7b947` (2026-09-16) — fix(ui): watchlist rename Escape, overlay slider, hover-slide, alert pop
+- `a19488bd` (2026-09-15) — fix(ui): autoload, engine switch, layouts menu, and plugin Use
+- `14daa3d6` (2026-09-14) — fix(ui): OnChainPanel error title rejects null
+- `b3fc629b` (2026-09-13) — fix(editor): Lucide chevrons for fold gutter
+- `c862227b` (2026-09-13) — fix(editor): unify color tools around one working color
+- `bbf7bc9d` (2026-09-12) — fix(cli): drop empty ADMIN_TOKEN var before secret put
 - `99eb5f20` (2026-09-12) — fix(ui): Studio Settings home, Workers fullscreen, minimap height
 - `9e963eab` (2026-09-12) — fix(docker): skip missing VERSION stamp files in image build
 - `ff4674a1` (2026-09-12) — fix: harden PWA, editor, e2e, and Docker; release 2.6.2
@@ -1228,8 +1243,9 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `7655bb25` (2026-09-14) — docs(changelog): drop raw <cmd> so MDX sync can parse
 - `477084bf` (2026-09-08) — docs(changelog): note bare-filename SHA256SUMS for binaries
-- `055d73d5` (2026-09-08) — docs: CLI-first command surface (axis command primary, bun run axis:* as repo alias)
+- `055d73d5` (2026-09-08) — docs: CLI-first command surface (axis <cmd> primary, bun run axis:* as repo alias)
 - `9b75c459` (2026-09-08) — docs(readme): real badge row, stack cross-links, unified stack footer
 - `efa7e87c` (2026-09-08) — docs(readme): add official Codecov coverage badge
 - `e38a72f9` (2026-09-07) — docs: sync docs to v2.5.0 — shortcuts, mobile shell, results views
@@ -1268,6 +1284,10 @@ Security and performance release from the multi-agent **harden-perf** audit
 - `fa49a6c1` (2026-09-06) — chore(cli): release @hoox-sh/axis-cli 0.2.2
 - `36ba501c` (2026-09-06) — chore(release): v2.4.1 — worker tsc compliance
 - `e84b8325` (2026-09-04) — chore(release): prepare v2.2.0
+
+#### Other
+
+- `d6e6fd9c` (2026-09-14) — release: 2.6.7 convert-to-v6 UDF-safe prefixes
 
 ### 2026-08 (237 commits)
 
