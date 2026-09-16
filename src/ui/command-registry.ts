@@ -120,6 +120,10 @@ export interface CommandActions {
   toggleChartOnly?: () => void;
   /** Chart-only + browser fullscreen together (immersive chart). */
   toggleChartOnlyFullscreen?: () => void | Promise<void>;
+  /** Capture chart panes to PNG (download). */
+  takeScreenshot?: () => void | Promise<void>;
+  /** Capture chart panes to the clipboard. */
+  copyScreenshot?: () => void | Promise<void>;
   /** Column ruler in the Pine editor (optional; omitted when store lacks toggle). */
   toggleEditorRuler?: () => void;
   /** End-of-line log/error chips from last run. */
@@ -735,6 +739,18 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     keywords: ['factory', 'defaults', 'chrome', 'panels reset'],
   },
   {
+    id: 'action.screenshot',
+    title: 'Screenshot chart…',
+    category: 'actions',
+    keywords: ['capture', 'png', 'snapshot', 'export image', 'camera', 'save picture'],
+  },
+  {
+    id: 'action.screenshot-copy',
+    title: 'Copy screenshot',
+    category: 'actions',
+    keywords: ['clipboard', 'png', 'capture', 'copy image'],
+  },
+  {
     id: 'action.fullscreen',
     title: 'Toggle Fullscreen',
     category: 'navigation',
@@ -1046,6 +1062,12 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.openOptimise) byId.set('action.optimise-strategy', actions.openOptimise);
   if (actions.openAbout) byId.set('action.about', actions.openAbout);
   if (actions.resetUiLayout) byId.set('action.reset-ui', actions.resetUiLayout);
+  if (actions.takeScreenshot) {
+    byId.set('action.screenshot', () => void actions.takeScreenshot?.());
+  }
+  if (actions.copyScreenshot) {
+    byId.set('action.screenshot-copy', () => void actions.copyScreenshot?.());
+  }
   if (actions.toggleFullscreen) {
     byId.set('action.fullscreen', () => void actions.toggleFullscreen?.());
   }

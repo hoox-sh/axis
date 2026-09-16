@@ -167,11 +167,26 @@ Each pane’s top-left chip (`pane-badge.ts`): label + script actions when scrip
 | Icon | Action |
 | --- | --- |
 | Settings | Script inputs modal |
+| File / code | Load that script's source into the docked editor |
 | Eye | Show / hide series |
 | Refresh | Re-run script |
 | Trash | Remove from chart |
 
 Volume/equity without scripts: name + hide.
+
+### Screenshot
+
+Module-bar **camera** (before Studio) captures Lightweight Charts panes to PNG:
+
+| Option | Meaning |
+| --- | --- |
+| Price / Panes / Workspace | Price only, all visible panes stacked, or stacked panes plus a header band |
+| Drawings | Composite the SVG drawing overlay onto the pane |
+| Watermark | `AXIS · symbol · interval · time` footer |
+| Scale | 1× native chart pixels, or 2× |
+| Copy / Download | Clipboard `image/png`, or `axis-SYMBOL-TF-timestamp.png` |
+
+⌘K → **Screenshot chart…** / **Copy screenshot**. Last options persist in `localStorage`.
 
 ### Drawings toolbar
 

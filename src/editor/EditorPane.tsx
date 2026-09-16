@@ -60,12 +60,10 @@ import {
   setStatus,
 } from '../store';
 import { FloatableShell } from '../ui/panels/FloatableShell';
+import { RunSplitButton } from '../ui/RunSplitButton';
 import { Icons } from '../ui/icons';
 import { openEditorWindow, writeSharedDoc, bridgePublish } from './editor-bridge';
-import {
-  editorHasChartInstance,
-  runFromEditor,
-} from '../indicators/run-target';
+import { runFromEditor } from '../indicators/run-target';
 import { countDebugPins } from '../results/debug-pins';
 import { runPreevalNow } from './preevaluate';
 import { formatPineSource } from './pine-format';
@@ -112,14 +110,6 @@ export const EditorPane: Component<Props> = (props) => {
   };
 
   const runBlocked = () => isScriptRunBlockedByPreEval();
-
-  /** Reactive: pre-eval source + chart scripts decide Run vs Re-run label. */
-  const hasChartInstance = () => {
-    void store.scripts.length;
-    void store.resultsFocusId;
-    const src = store.preEval?.source || props.editorRef.getDoc?.() || '';
-    return editorHasChartInstance(src);
-  };
 
   const popoutLiveEditor = (mode: 'popup' | 'tab' = 'popup') => {
     try {
@@ -373,40 +363,15 @@ export const EditorPane: Component<Props> = (props) => {
       data-testid="axis-editor-tools"
     >
       <Show when={!props.standalone}>
-        <EditorToolBtn
-          id="run"
-          label={
-            store.status === 'running'
-              ? 'Running…'
-              : runBlocked()
-                ? 'Fix errors'
-                : 'Add'
-          }
-          title={
-            store.status === 'running'
-              ? 'Script is running…'
-              : runBlocked()
-                ? `Fix ${store.preEval.diagnostics.filter((d) => d.severity === 'error').length || ''} script error(s) before adding`
-                : hasChartInstance()
-                  ? 'Add replaces the matching script on the chart (topbar ▾ adds another instance)'
-                  : 'Add script to the chart'
-          }
-          testId="axis-editor-btn-run"
-          tone={store.status === 'running' ? 'primary' : 'ghost'}
-          pressed={store.status === 'running'}
-          disabled={runBlocked() || store.status === 'running'}
-          onClick={() => {
-            if (store.status === 'running' || runBlocked()) return;
-            const doc = props.editorRef.getDoc?.() || '';
-            if (doc.trim()) void onRun(doc, 'auto');
+        <RunSplitButton
+          compact
+          getDoc={() => props.editorRef.getDoc?.() || ''}
+          ensureSavedForRun={async () => {
+            const save = props.editorRef.ensureSavedForRun;
+            if (save) return save();
+            return { ok: true, doc: props.editorRef.getDoc?.() || '' };
           }}
-        >
-          {store.status === 'running' || runBlocked() ? (
-            <Icons.play size={14} />
-          ) : (
-            <Icons.plus size={14} />
-          )}
-        </EditorToolBtn>
+        />
         <EditorToolBtn
           id="library"
           label="Library"

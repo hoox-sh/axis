@@ -18,8 +18,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Pane corner badges — indicator name + script action icons (settings, eye,
- * re-run, remove). Imperative DOM so {@link PaneManager} can own chrome without
+ * Pane corner badges — indicator name + script action icons (settings, source,
+ * eye, re-run, remove). Imperative DOM so {@link PaneManager} can own chrome without
  * Solid mounts per pane.
  *
  * Layout notes (avoid top-left pile-up):
@@ -41,13 +41,15 @@ import {
   setPaneVisible,
   store,
 } from '../store';
+import { openScriptSourceInEditor } from '../editor/open-script-source';
 import { getManager } from './manager-access';
 
-type SvgKind = 'settings' | 'eye' | 'eyeOff' | 'refresh' | 'trash' | 'hide';
+type SvgKind = 'settings' | 'code' | 'eye' | 'eyeOff' | 'refresh' | 'trash' | 'hide';
 
 const SVG: Record<SvgKind, string> = {
   settings:
     '<path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
+  code: '<path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m10 12-2 2 2 2"/><path d="m14 16 2-2-2-2"/>',
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
   eyeOff:
     '<path d="M10.7 5.1A10.7 10.7 0 0 1 12 5c6.5 0 10 7 10 7a18.5 18.5 0 0 1-2.2 3.1"/><path d="M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7a10.3 10.3 0 0 0 4.4-1"/><path d="m2 2 20 20"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
@@ -201,6 +203,14 @@ export function mountPaneBadge(
           'settings',
           () => openScriptSettings(script.id),
           `axis-pane-settings-${script.id}`,
+        ),
+      );
+      chip.appendChild(
+        btn(
+          'Load source into editor',
+          'code',
+          () => openScriptSourceInEditor(script.code || '', script.name),
+          `axis-pane-source-${script.id}`,
         ),
       );
       chip.appendChild(

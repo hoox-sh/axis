@@ -94,8 +94,8 @@ import {
 import { openAboutModal } from './AboutModal';
 import {
   isPaletteOpen,
-  openPalette,
   closePalette,
+  getPaletteIntent,
 } from './shortcuts/palette-bridge';
 import { getDisplay } from './shortcuts/registry';
 import { detectPlatform } from './shortcuts/keys';
@@ -304,6 +304,14 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       toggleFullscreen: () => void toggleBrowserFullscreen(),
       toggleChartOnly: () => toggleChartOnlyMode(),
       toggleChartOnlyFullscreen: () => void toggleChartOnlyFullscreen(),
+      takeScreenshot: () =>
+        void import('../chart/screenshot')
+          .then((m) => m.downloadScreenshot())
+          .catch(() => undefined),
+      copyScreenshot: () =>
+        void import('../chart/screenshot')
+          .then((m) => m.copyScreenshot())
+          .catch(() => undefined),
       // Editor power commands
       toggleEditorRuler: () => toggleEditorRulerEnabled(),
       toggleInlineDebug: () => toggleInlineDebugEnabled(),
@@ -440,12 +448,14 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
   });
 
   // Reset search state whenever the palette opens (Hub may open it directly).
+  // `openBuiltinPicker()` sets intent=builtins before open.
   createEffect(() => {
     if (isPaletteOpen()) {
+      const intent = getPaletteIntent();
       setQuery('');
       setActive(0);
       setSnippetPickerOpen(false);
-      setBuiltinPickerOpen(false);
+      setBuiltinPickerOpen(intent === 'builtins');
     }
   });
 

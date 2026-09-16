@@ -15,6 +15,12 @@ _Generated/updated: 2026-09-16 · 414 commits · describe-tag: `v2.6.7`_
 
 ## [Unreleased]
 
+### Added
+
+- Pane script badge **load source** (file icon, second after settings) opens that script in the docked editor.
+- Topbar and editor **Add ▾** menus include **Add built-in script…** (same picker as ⌘K).
+- **Screenshot** (camera, module bar, before Studio): capture price / all panes / workspace, drawings overlay, watermark, 1×/2×, copy or download PNG. Session icons (theme, fullscreen, chart-only, screenshot, Studio) sit on the right of the second topbar row.
+
 ### Fixed
 
 - CI unit: SVG stub implements `replaceChildren`; on-chain health probe assertion no longer treats `worker.axis.hoox.sh` as the SPA host; Python runtime locks skip when numpy/antlr4 are missing on the runner.

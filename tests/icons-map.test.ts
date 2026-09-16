@@ -46,6 +46,7 @@ describe('ICON_MAP', () => {
       'fullscreen',
       'maximize',
       'minimize',
+      'screenshot',
     ] as const;
     for (const k of need) {
       expect(ICON_MAP[k]).toBeTruthy();

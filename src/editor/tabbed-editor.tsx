@@ -53,6 +53,7 @@ import {
   toggleProfilerEnabled,
 } from '../store';
 import { matchEvent, resolveBinding } from '../ui/shortcuts';
+import { subscribeOpenScriptSource } from './open-script-source';
 import { saveDraft, loadDraft } from '../storage/service';
 import { normalizeRunProfile, type RunProfile } from '../results/profiler';
 import {
@@ -464,6 +465,11 @@ export const TabbedEditor: Component<Props> = (props) => {
       };
     }
 
+    const unsubOpenSource = subscribeOpenScriptSource((detail) => {
+      props.editorRef?.loadLibraryDoc?.(detail.code, detail.name);
+      setStatus('ready', `Loaded “${detail.name}” into the editor`);
+    });
+
     // Command palette / shortcut Hub → Save to Library / Git Push / Git Pull
     const onSaveLibrary = () => {
       void saveActiveToLibrary();
@@ -587,6 +593,7 @@ export const TabbedEditor: Component<Props> = (props) => {
     window.addEventListener('axis-agent-open-script', onAgentOpen);
 
     onCleanup(() => {
+      unsubOpenSource();
       window.removeEventListener('axis-editor-save-library', onSaveLibrary);
       window.removeEventListener('axis-editor-git-push', onGitPush);
       window.removeEventListener('axis-editor-git-pull', onGitPull);

@@ -20,8 +20,9 @@
 /**
  * Workspace chrome — command bar (32px) + module bar (28px).
  *
- * Command clusters: identity · instrument · data · engine · session.
- * Module bar: List → … → Results; System Logs / Status are trailing utilities.
+ * Command clusters: identity · instrument · data · engine · layout.
+ * Module bar: List → … → Results; trailing Logs / Status plus session icons
+ * (theme · fullscreen · chart-only · screenshot · Studio).
  *
  * Plugin pickers re-read catalogs when `catalogTick` bumps (after plugin install).
  * Editor popout (new tab) lives on the editor panel chrome, not the topbar.
@@ -64,6 +65,7 @@ import { pwaInstallAvailable, promptPwaInstall, dismissPwaInstallPrompt } from '
 import { HooxLogo } from './HooxLogo';
 import { HooxLoader } from './HooxLoader';
 import { ChartLayoutMenu } from './ChartLayoutMenu';
+import { ScreenshotMenu } from './ScreenshotMenu';
 import { CompareSymbolControl } from './CompareSymbolControl';
 import { TopbarField } from './TopbarField';
 import { PluginConfigRow } from './PluginConfigRow';
@@ -730,143 +732,12 @@ export const Topbar: Component<{
           <ChartLayoutMenu />
         </div>
       </Show>
-
-      {/* ── Session (theme · FS · chart-only · studio) — trailing */}
-      <Show when={store.topbar.system}>
-        <div class="axis-tb-group" data-tb-group="system">
-        {/* Hidden hooks — command palette / docs dispatch click(); e2e uses Studio. */}
-        <button
-          type="button"
-          hidden
-          class="sr-only"
-          tabindex={-1}
-          data-testid="axis-btn-architecture"
-          aria-label="Open Architecture"
-          onClick={() => props.onOpenArchitecture?.()}
-        />
-        <button
-          type="button"
-          hidden
-          class="sr-only"
-          tabindex={-1}
-          data-testid="axis-btn-runtimes"
-          aria-label="Open Runtime"
-          onClick={() => {
-            if (props.onOpenRuntime) props.onOpenRuntime();
-            else props.onOpenWorkers?.();
-          }}
-        />
-        <button
-          type="button"
-          hidden
-          class="sr-only"
-          tabindex={-1}
-          data-testid="axis-btn-settings"
-          aria-label="Open settings"
-          onClick={() => props.onOpenSettings()}
-        />
-        <button
-          type="button"
-          hidden
-          class="sr-only"
-          tabindex={-1}
-          data-testid="axis-btn-workers"
-          onClick={() => props.onOpenWorkers?.()}
-        />
-        <button
-          type="button"
-          hidden
-          class="sr-only"
-          tabindex={-1}
-          data-testid="axis-btn-plugins"
-          aria-label="Open Plugins"
-          onClick={() => props.onOpenPlugins?.()}
-        />
-
-        <Show when={pwaInstallAvailable()}>
-          <button
-            type="button"
-            class="sc-btn sc-btn-ghost"
-            onClick={() => {
-              void promptPwaInstall();
-            }}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              dismissPwaInstallPrompt();
-            }}
-            title="Install AXIS as an app (right-click to hide)"
-            data-testid="axis-btn-pwa-install"
-            aria-label="Install app"
-          >
-            <Icons.download />
-            <span class="axis-tb-btn-label">Install app</span>
-          </button>
-        </Show>
-
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost sc-btn-icon"
-          onClick={toggleTheme}
-          title={store.theme === 'dark' ? 'Switch to light (soft void lift)' : 'Switch to dark void'}
-          aria-label="Toggle color theme"
-          data-testid="axis-btn-theme"
-        >
-          {store.theme === 'dark' ? <Icons.sun /> : <Icons.moon />}
-        </button>
-
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost sc-btn-icon ${store.presentation?.fullscreen ? 'is-active' : ''}`}
-          onClick={() => void toggleBrowserFullscreen()}
-          title={
-            store.presentation?.fullscreen
-              ? 'Exit fullscreen (F11)'
-              : 'Fullscreen — fill the display (F11)'
-          }
-          aria-pressed={!!store.presentation?.fullscreen}
-          aria-label="Toggle fullscreen"
-          data-testid="axis-btn-fullscreen"
-        >
-          <Icons.fullscreen />
-        </button>
-
-        <button
-          type="button"
-          class={`sc-btn sc-btn-ghost sc-btn-icon ${store.presentation?.chartOnly ? 'is-active' : ''}`}
-          onClick={() => toggleChartOnlyMode()}
-          title={
-            store.presentation?.chartOnly
-              ? 'Exit chart only (Shift+F / Esc)'
-              : 'Chart only — hide chrome, chart fills the shell (Shift+F)'
-          }
-          aria-pressed={!!store.presentation?.chartOnly}
-          aria-label="Toggle chart-only mode"
-          data-testid="axis-btn-chart-only"
-        >
-          {store.presentation?.chartOnly ? <Icons.minimize /> : <Icons.maximize />}
-        </button>
-
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost sc-btn-icon axis-tb-studio"
-          onClick={() => {
-            if (props.onOpenStudio) props.onOpenStudio();
-            else if (props.onOpenRuntime) props.onOpenRuntime();
-            else props.onOpenWorkers?.();
-          }}
-          title="Studio — Runtime, Wire, Settings, Workers, Plugins"
-          data-testid="axis-btn-studio"
-          aria-label="Open Studio"
-        >
-          <Icons.settings />
-        </button>
-        </div>
-      </Show>
       </div>
 
       {/* ── Module bar ──────────────────────────────────────── */}
-      <Show when={store.topbar.panels}>
+      <Show when={store.topbar.panels || store.topbar.system}>
         <div class="axis-module-bar">
+        <Show when={store.topbar.panels}>
         <div class="axis-modules" data-tb-group="panels">
         <Show when={store.topbar.panelsWatchlist}>
         <button
@@ -1026,7 +897,10 @@ export const Topbar: Component<{
         </button>
         </Show>
         </div>
+        </Show>
 
+        <div class="axis-module-trailing">
+        <Show when={store.topbar.panels}>
         <div class="axis-module-utils">
         <Show when={store.topbar.panelsSystemLogs}>
         <button
@@ -1056,6 +930,141 @@ export const Topbar: Component<{
           <Icons.status />
           <span class="axis-tb-btn-label">Status</span>
         </button>
+        </Show>
+        </div>
+        </Show>
+
+        <Show when={store.topbar.system}>
+        <div class="axis-tb-group" data-tb-group="system">
+        {/* Hidden hooks — command palette / docs dispatch click(); e2e uses Studio. */}
+        <button
+          type="button"
+          hidden
+          class="sr-only"
+          tabindex={-1}
+          data-testid="axis-btn-architecture"
+          aria-label="Open Architecture"
+          onClick={() => props.onOpenArchitecture?.()}
+        />
+        <button
+          type="button"
+          hidden
+          class="sr-only"
+          tabindex={-1}
+          data-testid="axis-btn-runtimes"
+          aria-label="Open Runtime"
+          onClick={() => {
+            if (props.onOpenRuntime) props.onOpenRuntime();
+            else props.onOpenWorkers?.();
+          }}
+        />
+        <button
+          type="button"
+          hidden
+          class="sr-only"
+          tabindex={-1}
+          data-testid="axis-btn-settings"
+          aria-label="Open settings"
+          onClick={() => props.onOpenSettings()}
+        />
+        <button
+          type="button"
+          hidden
+          class="sr-only"
+          tabindex={-1}
+          data-testid="axis-btn-workers"
+          onClick={() => props.onOpenWorkers?.()}
+        />
+        <button
+          type="button"
+          hidden
+          class="sr-only"
+          tabindex={-1}
+          data-testid="axis-btn-plugins"
+          aria-label="Open Plugins"
+          onClick={() => props.onOpenPlugins?.()}
+        />
+
+        <Show when={pwaInstallAvailable()}>
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost"
+            onClick={() => {
+              void promptPwaInstall();
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              dismissPwaInstallPrompt();
+            }}
+            title="Install AXIS as an app (right-click to hide)"
+            data-testid="axis-btn-pwa-install"
+            aria-label="Install app"
+          >
+            <Icons.download />
+            <span class="axis-tb-btn-label">Install app</span>
+          </button>
+        </Show>
+
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost sc-btn-icon"
+          onClick={toggleTheme}
+          title={store.theme === 'dark' ? 'Switch to light (soft void lift)' : 'Switch to dark void'}
+          aria-label="Toggle color theme"
+          data-testid="axis-btn-theme"
+        >
+          {store.theme === 'dark' ? <Icons.sun /> : <Icons.moon />}
+        </button>
+
+        <button
+          type="button"
+          class={`sc-btn sc-btn-ghost sc-btn-icon ${store.presentation?.fullscreen ? 'is-active' : ''}`}
+          onClick={() => void toggleBrowserFullscreen()}
+          title={
+            store.presentation?.fullscreen
+              ? 'Exit fullscreen (F11)'
+              : 'Fullscreen — fill the display (F11)'
+          }
+          aria-pressed={!!store.presentation?.fullscreen}
+          aria-label="Toggle fullscreen"
+          data-testid="axis-btn-fullscreen"
+        >
+          <Icons.fullscreen />
+        </button>
+
+        <button
+          type="button"
+          class={`sc-btn sc-btn-ghost sc-btn-icon ${store.presentation?.chartOnly ? 'is-active' : ''}`}
+          onClick={() => toggleChartOnlyMode()}
+          title={
+            store.presentation?.chartOnly
+              ? 'Exit chart only (Shift+F / Esc)'
+              : 'Chart only — hide chrome, chart fills the shell (Shift+F)'
+          }
+          aria-pressed={!!store.presentation?.chartOnly}
+          aria-label="Toggle chart-only mode"
+          data-testid="axis-btn-chart-only"
+        >
+          {store.presentation?.chartOnly ? <Icons.minimize /> : <Icons.maximize />}
+        </button>
+
+        <ScreenshotMenu />
+
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost sc-btn-icon axis-tb-studio"
+          onClick={() => {
+            if (props.onOpenStudio) props.onOpenStudio();
+            else if (props.onOpenRuntime) props.onOpenRuntime();
+            else props.onOpenWorkers?.();
+          }}
+          title="Studio — Runtime, Wire, Settings, Workers, Plugins"
+          data-testid="axis-btn-studio"
+          aria-label="Open Studio"
+        >
+          <Icons.settings />
+        </button>
+        </div>
         </Show>
         </div>
       </div>

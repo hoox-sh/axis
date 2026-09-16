@@ -158,6 +158,8 @@ describe('DEFAULT_COMMAND_SPECS', () => {
       'action.studio',
       'action.optimise-strategy',
       'action.settings-editor',
+      'action.screenshot',
+      'action.screenshot-copy',
     ]) {
       expect(ids.has(id)).toBe(true);
     }

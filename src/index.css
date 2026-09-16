@@ -489,9 +489,35 @@ button.sc-btn:focus-visible {
   border-left: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
 }
 
-/* System cluster pins to the trailing edge */
-.axis-tb-group[data-tb-group="system"] {
+/* System cluster pins to the trailing edge (command-bar fallback) */
+.axis-command-bar .axis-tb-group[data-tb-group="system"] {
   margin-left: auto;
+}
+
+/* Module-bar trailing: Logs/Status + session icons (theme…Studio) */
+.axis-module-trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  height: 28px;
+  flex-shrink: 0;
+}
+.axis-module-trailing .axis-module-utils {
+  margin-left: 0;
+}
+.axis-module-trailing .axis-tb-group[data-tb-group='system'] {
+  margin-left: 0;
+  gap: 2px;
+  height: 28px;
+  padding-left: 8px;
+  border-left: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+}
+.axis-module-trailing .sc-btn-icon {
+  min-height: 28px;
+  height: 28px;
+  width: 28px;
+  padding: 0;
 }
 
 /* Taller, softer dividers inside the topbar (e.g. compare sub-sep) */
@@ -3093,6 +3119,23 @@ body.axis-panel-dragging {
 }
 .axis-editor-tools::-webkit-scrollbar {
   display: none;
+}
+.axis-editor-tools .axis-run-split {
+  display: inline-flex;
+  align-items: stretch;
+  height: 1.65em;
+  flex-shrink: 0;
+}
+.axis-editor-tools .axis-run-split .axis-run-main.axis-editor-tool-btn {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.axis-editor-tools .axis-run-split .axis-run-caret.axis-editor-tool-btn {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  padding-left: 0.12em;
+  padding-right: 0.2em;
+  min-width: 1.2em;
 }
 .axis-editor-tools .axis-editor-tool-btn {
   flex-shrink: 0;

@@ -77,6 +77,7 @@
  * | vline | Slash | Vertical line |
  * | server / cpu / clock / zap | Server / Cpu / Clock / Zap | Engines |
  * | fullscreen / maximize / minimize | Fullscreen / Maximize2 / Minimize2 | Presentation |
+ * | screenshot | Camera | Chart screenshot |
  * | alignLeft / wrapText | AlignLeft / WrapText | Format / wrap |
  * | smile | Smile | Emoji picker |
  * | editor | FileCode | Editor panel |
@@ -173,6 +174,7 @@ export const ICON_MAP = {
   fullscreen: 'Fullscreen',
   maximize: 'Maximize2',
   minimize: 'Minimize2',
+  screenshot: 'Camera',
   alignLeft: 'AlignLeft',
   wrapText: 'WrapText',
   smile: 'Smile',

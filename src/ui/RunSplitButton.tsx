@@ -18,11 +18,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Split Add control for the topbar.
+ * Split Add control for the topbar and editor header.
  *
  * - **Add** when the editor script is not on the chart
  * - **Add** when a matching instance exists (replaces it — same as former Re-run)
- * - Chevron menu → **Add another instance** (2nd / 3rd copy of the same script)
+ * - Chevron menu → **Add another instance** (when a copy is already on the chart)
+ *   and **Add built-in script…** (catalog picker)
  */
 
 import {
@@ -47,6 +48,7 @@ import {
 } from '../indicators/run-target';
 import { reportUiError } from './boot-errors';
 import { Icons } from './icons';
+import { openBuiltinPicker } from './shortcuts/palette-bridge';
 
 export const RunSplitButton: Component<{
   getDoc: () => string;
@@ -57,6 +59,8 @@ export const RunSplitButton: Component<{
   ensureSavedForRun?: () => Promise<{ ok: boolean; doc: string }>;
   /** Optional class on the outer split group */
   class?: string;
+  /** Compact ghost chrome for the editor header strip. */
+  compact?: boolean;
 }> = (props) => {
   const [menuOpen, setMenuOpen] = createSignal(false);
   const [menuPos, setMenuPos] = createSignal({ top: 0, left: 0 });
@@ -107,6 +111,25 @@ export const RunSplitButton: Component<{
     }
     return 'Add script to the chart (or use detached editor)';
   });
+
+  const ids = () =>
+    props.compact
+      ? {
+          split: 'axis-editor-run-split',
+          main: 'axis-editor-btn-run',
+          caret: 'axis-editor-btn-run-menu',
+          menu: 'axis-editor-run-menu',
+          instance: 'axis-editor-btn-run-add-instance',
+          builtin: 'axis-editor-btn-run-add-builtin',
+        }
+      : {
+          split: 'axis-run-split',
+          main: 'axis-btn-run',
+          caret: 'axis-btn-run-menu',
+          menu: 'axis-run-menu',
+          instance: 'axis-btn-run-add-instance',
+          builtin: 'axis-btn-run-add-builtin',
+        };
 
   const closeMenu = () => setMenuOpen(false);
 
@@ -169,42 +192,57 @@ export const RunSplitButton: Component<{
   };
 
   const disabled = () => runBlocked() || isRunning();
+  const caretDisabled = () => isRunning();
 
   return (
     <div
-      class={`axis-run-split ${props.class || ''}`.trim()}
+      class={`axis-run-split ${props.compact ? 'is-compact' : ''} ${props.class || ''}`.trim()}
       ref={rootEl}
-      data-testid="axis-run-split"
+      data-testid={ids().split}
     >
       <button
         type="button"
-        class={`sc-btn sc-btn-primary axis-run-main ${
-          isRunning() ? 'is-active' : ''
-        } ${runBlocked() ? 'opacity-50 cursor-not-allowed' : ''}`}
+        class={`sc-btn axis-run-main ${
+          props.compact ? 'sc-btn-ghost axis-editor-tool-btn' : 'sc-btn-primary'
+        } ${isRunning() ? 'is-active' : ''} ${
+          runBlocked() ? 'opacity-50 cursor-not-allowed' : ''
+        }`}
         onClick={() => void gateAndRun('auto')}
-        data-testid="axis-btn-run"
+        data-testid={ids().main}
         aria-busy={isRunning()}
         disabled={disabled()}
         title={title()}
       >
-        {isRunning() || runBlocked() ? (
+        {props.compact ? (
+          <span class="axis-editor-tool-icon" aria-hidden="true">
+            {isRunning() || runBlocked() ? (
+              <Icons.play size={14} />
+            ) : (
+              <Icons.plus size={14} />
+            )}
+          </span>
+        ) : isRunning() || runBlocked() ? (
           <Icons.play />
         ) : (
           <Icons.plus />
         )}
-        <span class="axis-tb-btn-label">{label()}</span>
+        <span class={props.compact ? 'axis-editor-tool-label' : 'axis-tb-btn-label'}>
+          {label()}
+        </span>
       </button>
 
-      <Show when={hasInstance() && !isRunning() && !runBlocked()}>
+      <Show when={!isRunning()}>
         <button
           type="button"
-          class={`sc-btn sc-btn-ghost axis-run-caret ${menuOpen() ? 'is-active' : ''}`}
+          class={`sc-btn sc-btn-ghost axis-run-caret ${
+            props.compact ? 'axis-editor-tool-btn' : ''
+          } ${menuOpen() ? 'is-active' : ''}`}
           aria-haspopup="menu"
           aria-expanded={menuOpen()}
           aria-label="More add options"
-          title="Add another instance of this script on the chart"
-          data-testid="axis-btn-run-menu"
-          disabled={disabled()}
+          title="Add a built-in script, or another instance of this one"
+          data-testid={ids().caret}
+          disabled={caretDisabled()}
           onClick={(e) => {
             e.stopPropagation();
             setMenuOpen((o) => {
@@ -218,7 +256,7 @@ export const RunSplitButton: Component<{
         </button>
       </Show>
 
-      <Show when={menuOpen() && hasInstance()}>
+      <Show when={menuOpen()}>
         <Portal>
         <div
           ref={(el) => {
@@ -228,7 +266,7 @@ export const RunSplitButton: Component<{
           class="axis-run-menu"
           role="menu"
           aria-label="Add options"
-          data-testid="axis-run-menu"
+          data-testid={ids().menu}
           style={{
             position: 'fixed',
             top: `${menuPos().top}px`,
@@ -236,19 +274,34 @@ export const RunSplitButton: Component<{
             right: 'auto',
           }}
         >
+          <Show when={hasInstance() && !runBlocked()}>
+            <button
+              type="button"
+              role="menuitem"
+              class="axis-run-menu-item"
+              data-testid={ids().instance}
+              onClick={() => void gateAndRun('new')}
+            >
+              <span class="axis-run-menu-title">Add another instance</span>
+              <span class="axis-run-menu-hint">
+                {instanceCount() === 1
+                  ? 'Keep the current one; add a 2nd copy'
+                  : `${instanceCount()} on chart — add another`}
+              </span>
+            </button>
+          </Show>
           <button
             type="button"
             role="menuitem"
             class="axis-run-menu-item"
-            data-testid="axis-btn-run-add-instance"
-            onClick={() => void gateAndRun('new')}
+            data-testid={ids().builtin}
+            onClick={() => {
+              closeMenu();
+              openBuiltinPicker();
+            }}
           >
-            <span class="axis-run-menu-title">Add another instance</span>
-            <span class="axis-run-menu-hint">
-              {instanceCount() === 1
-                ? 'Keep the current one; add a 2nd copy'
-                : `${instanceCount()} on chart — add another`}
-            </span>
+            <span class="axis-run-menu-title">Add built-in script…</span>
+            <span class="axis-run-menu-hint">RSI, MACD, VWAP, Supertrend, …</span>
           </button>
         </div>
         </Portal>
