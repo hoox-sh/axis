@@ -9,7 +9,7 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-17 · 421 commits · describe-tag: `v2.6.8`_
+_Generated/updated: 2026-09-17 · 423 commits · describe-tag: `v2.7.0`_
 
 ---
 
@@ -1186,9 +1186,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (102 commits)
+### 2026-09 (104 commits)
 
 #### Features
 
@@ -1227,6 +1229,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `76a4d753` (2026-09-17) — fix(worker): MCP_BRIDGE Durable Object uses new_sqlite_classes
 - `0d99cdcb` (2026-09-16) — fix(scripts): builtin formula correctness and editor-draft isolation
 - `74c7b947` (2026-09-16) — fix(ui): watchlist rename Escape, overlay slider, hover-slide, alert pop
 - `a19488bd` (2026-09-15) — fix(ui): autoload, engine switch, layouts menu, and plugin Use
@@ -1265,9 +1268,9 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
-- `7655bb25` (2026-09-14) — docs(changelog): drop raw <cmd> so MDX sync can parse
+- `7655bb25` (2026-09-14) — docs(changelog): drop raw &lt;cmd&gt; so MDX sync can parse
 - `477084bf` (2026-09-08) — docs(changelog): note bare-filename SHA256SUMS for binaries
-- `055d73d5` (2026-09-08) — docs: CLI-first command surface (axis <cmd> primary, bun run axis:* as repo alias)
+- `055d73d5` (2026-09-08) — docs: CLI-first command surface (axis &lt;cmd&gt; primary, bun run axis:* as repo alias)
 - `9b75c459` (2026-09-08) — docs(readme): real badge row, stack cross-links, unified stack footer
 - `efa7e87c` (2026-09-08) — docs(readme): add official Codecov coverage badge
 - `e38a72f9` (2026-09-07) — docs: sync docs to v2.5.0 — shortcuts, mobile shell, results views
@@ -1313,6 +1316,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Other
 
+- `9ee19452` (2026-09-17) — release: 2.7.0 MCP server, docs, and CLI 0.3.3
 - `697e55ed` (2026-09-16) — release: 2.6.8 first-party built-in scripts and watchlist chrome
 - `d6e6fd9c` (2026-09-14) — release: 2.6.7 convert-to-v6 UDF-safe prefixes
 

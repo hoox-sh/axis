@@ -98,7 +98,7 @@ def load_commits() -> list[tuple[str, str, str, str]]:
         if len(parts) < 4:
             continue
         full, short, d = parts[0], parts[1], parts[2]
-        subject = "\t".join(parts[3:])
+        subject = "\t".join(parts[3:]).replace("<", "&lt;").replace(">", "&gt;")
         rows.append((full, short, d, subject))
     return rows
 
