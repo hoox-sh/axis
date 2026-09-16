@@ -53,3 +53,18 @@ export async function openStudio(page: Page, rail: StudioRailPage = 'runtime') {
   await railItem.click();
   await expect(page.getByTestId(PAGE_TEST_ID[rail])).toBeVisible();
 }
+
+/**
+ * Ensure the docked editor is open. Default chrome already has it open;
+ * do not click the topbar toggle just because the pane has not painted —
+ * that closes a still-loading lazy EditorPane.
+ */
+export async function openDockedEditor(page: Page) {
+  await expect(page.getByTestId('axis-topbar')).toBeVisible({ timeout: 30_000 });
+  const editorBtn = page.getByTestId('axis-btn-editor');
+  await expect(editorBtn).toBeVisible();
+  if ((await editorBtn.getAttribute('aria-pressed')) !== 'true') {
+    await editorBtn.click();
+  }
+  await expect(page.getByTestId('axis-editor')).toBeVisible({ timeout: 30_000 });
+}

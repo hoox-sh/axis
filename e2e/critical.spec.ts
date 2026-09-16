@@ -11,33 +11,21 @@
  * plots/events and empty Binance REST so CI stays offline-safe.
  */
 import { test, expect } from '@playwright/test';
+import { stubAppNetwork } from './charts';
 import { openStudio } from './studio';
 
 test.describe('AXIS critical journeys @critical', () => {
   test.beforeEach(async ({ page }) => {
-    await page.route('**/run**', async (route) => {
-      if (route.request().method() === 'OPTIONS') {
-        await route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*' } });
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          status: 'success',
-          plots: [1, 2, 3, 4, 5],
-          series: { close: [1, 2, 3, 4, 5] },
-          events: [
-            { kind: 'entry', id: 'L', direction: 'long', bar_time: 1, ohlc: [100, 101, 99, 100] },
-            { kind: 'close', id: 'L', bar_time: 5, ohlc: [110, 111, 109, 110] },
-          ],
-          meta: { script_name: 'critical', overlay: true, ms: 8 },
-        }),
-      });
+    await stubAppNetwork(page, {
+      status: 'success',
+      plots: [1, 2, 3, 4, 5],
+      series: { close: [1, 2, 3, 4, 5] },
+      events: [
+        { kind: 'entry', id: 'L', direction: 'long', bar_time: 1, ohlc: [100, 101, 99, 100] },
+        { kind: 'close', id: 'L', bar_time: 5, ohlc: [110, 111, 109, 110] },
+      ],
+      meta: { script_name: 'critical', overlay: true, ms: 8 },
     });
-    await page.route('**/api.binance.com/**', (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
-    );
   });
 
   test('load mock-walk → run → Results drawer opens', async ({ page }) => {

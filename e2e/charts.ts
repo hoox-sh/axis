@@ -7,9 +7,32 @@
 
 import { expect, type Page } from '@playwright/test';
 
+/**
+ * Engine `/run` API paths only.
+ *
+ * A glob of star-star/run/star-star also matches Vite chunks named
+ * runner-*.js, which starves the lazy editor (and anything else that
+ * imports runner.ts).
+ */
+export function isEngineRunUrl(url: URL): boolean {
+  const path = url.pathname.replace(/\/+$/, '') || '/';
+  return path === '/run' || path.endsWith('/run');
+}
+
+const DEFAULT_RUN_BODY = {
+  status: 'success',
+  plots: [1, 2, 3, 4, 5],
+  series: {},
+  events: [],
+  meta: { script_name: 'e2e', overlay: true, ms: 12 },
+};
+
 /** Stub Pro API run + venue traffic so specs never touch the network. */
-export async function stubAppNetwork(page: Page): Promise<void> {
-  await page.route('**/run**', async (route) => {
+export async function stubAppNetwork(
+  page: Page,
+  runBody: Record<string, unknown> = DEFAULT_RUN_BODY,
+): Promise<void> {
+  await page.route(isEngineRunUrl, async (route) => {
     if (route.request().method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*' } });
       return;
@@ -17,13 +40,7 @@ export async function stubAppNetwork(page: Page): Promise<void> {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        status: 'success',
-        plots: [1, 2, 3, 4, 5],
-        series: {},
-        events: [],
-        meta: { script_name: 'e2e', overlay: true, ms: 12 },
-      }),
+      body: JSON.stringify(runBody),
     });
   });
   await page.route('**/api.binance.com/**', (route) =>

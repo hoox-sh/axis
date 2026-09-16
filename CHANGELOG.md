@@ -18,7 +18,7 @@ _Generated/updated: 2026-09-16 · 414 commits · describe-tag: `v2.6.7`_
 ### Fixed
 
 - CI unit: SVG stub implements `replaceChildren`; on-chain health probe assertion no longer treats `worker.axis.hoox.sh` as the SPA host; Python runtime locks skip when numpy/antlr4 are missing on the runner.
-- E2E smoke: Script Logs test opens the editor if the logs toggle is hidden on first paint.
+- E2E: `/run` mock matches engine paths only (not Vite `runner-*.js`); Script Logs waits for the docked editor instead of toggling it closed while the lazy pane loads.
 
 ## [2.6.8] — 2026-09-16
 

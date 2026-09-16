@@ -10,18 +10,13 @@
  * "run" are not swallowed by the smoke route mock.
  */
 import { test, expect } from '@playwright/test';
+import { openDockedEditor } from './studio';
 
 test('Color tools uses one working color (formats match the picker) @smoke', async ({
   page,
 }) => {
   await page.goto('/');
-  await expect(page.getByTestId('axis-topbar')).toBeVisible({ timeout: 30_000 });
-  const editorBtn = page.getByTestId('axis-btn-editor');
-  await expect(editorBtn).toBeVisible();
-  if ((await editorBtn.getAttribute('aria-pressed')) !== 'true') {
-    await editorBtn.click();
-  }
-  await expect(page.getByTestId('axis-editor')).toBeVisible({ timeout: 30_000 });
+  await openDockedEditor(page);
   const toggle = page.getByTestId('axis-editor-colors-toggle');
   await expect(toggle).toBeVisible({ timeout: 30_000 });
   await toggle.click();

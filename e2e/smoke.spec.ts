@@ -13,37 +13,18 @@
  * Run: `bun run test:e2e:smoke`
  */
 import { test, expect } from '@playwright/test';
-import { openStudio } from './studio';
+import { stubAppNetwork } from './charts';
+import { openDockedEditor, openStudio } from './studio';
 
 test.describe('AXIS smoke @smoke', () => {
   test.beforeEach(async ({ page }) => {
-    // Mock Pro API run endpoint (server engine)
-    await page.route('**/run**', async (route) => {
-      if (route.request().method() === 'OPTIONS') {
-        await route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*' } });
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          status: 'success',
-          plots: [1, 2, 3, 4, 5],
-          series: {},
-          events: [],
-          meta: { script_name: 'smoke', overlay: true, ms: 12 },
-        }),
-      });
+    await stubAppNetwork(page, {
+      status: 'success',
+      plots: [1, 2, 3, 4, 5],
+      series: {},
+      events: [],
+      meta: { script_name: 'smoke', overlay: true, ms: 12 },
     });
-
-    // Avoid real exchange traffic during smoke
-    await page.route('**/api.binance.com/**', (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify([]),
-      }),
-    );
   });
 
   test('loads shell with topbar and chart host', async ({ page }) => {
@@ -194,21 +175,15 @@ test.describe('AXIS smoke @smoke', () => {
     // Topbar entry removed.
     await expect(page.getByTestId('axis-btn-scriptlogs-top')).toHaveCount(0);
 
-    // Logs toggle lives in the editor chrome. Compact / hover-slide docks can
-    // hide the pane on first paint — open the editor if the toggle is missing.
+    await openDockedEditor(page);
     const logsToggle = page.getByTestId('axis-editor-logs-toggle');
-    if (!(await logsToggle.isVisible().catch(() => false))) {
-      await page.getByTestId('axis-btn-editor').click();
-    }
-    await expect(logsToggle).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect(logsToggle).toBeVisible({ timeout: 30_000 });
     // Toggle opens the editor-local pane above the statusbar.
-    await page.getByTestId('axis-editor-logs-toggle').click();
+    await logsToggle.click();
     await expect(page.getByTestId('axis-editor-scriptlogs')).toBeVisible();
 
     // Toggle again hides the pane.
-    await page.getByTestId('axis-editor-logs-toggle').click();
+    await logsToggle.click();
     await expect(page.getByTestId('axis-editor-scriptlogs')).toHaveCount(0);
   });
 });
