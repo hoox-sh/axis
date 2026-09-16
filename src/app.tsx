@@ -138,6 +138,7 @@ import {
   setPresentationRoot,
 } from './ui/presentation';
 import { StorageChangePrompt } from './ui/StorageChangePrompt';
+import { startMcpHost } from './mcp';
 
 /** Primary charting workspace component mounted by `index.tsx`. */
 export const App: Component = () => {
@@ -294,6 +295,19 @@ export const App: Component = () => {
     });
 
     const unsubPanelWin = installPanelWindowBridge();
+    const stopMcp = startMcpHost({
+      getEditorDoc: () => editorRef.getDoc() || '',
+      setEditorDoc: (doc) => editorRef.setDoc?.(doc),
+      runEditor: async () => {
+        const { runFromEditor } = await import('./indicators/run-target');
+        const doc = editorRef.getDoc() || '';
+        if (!doc.trim()) return null;
+        return runFromEditor(doc, {
+          mode: 'auto',
+          inputs: store.editorInputValues || {},
+        });
+      },
+    });
 
     // Shortcut Hub → open Settings (Mod-,)
     const onOpenSettingsEvent = () => openSettings('general');
@@ -401,6 +415,7 @@ export const App: Component = () => {
     window.addEventListener('drop', onWinDrop, winOpts);
 
     onCleanup(() => {
+      stopMcp();
       unsub();
       unsubPanelWin();
       unsubDesktop?.();

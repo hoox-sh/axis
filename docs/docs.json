@@ -144,7 +144,8 @@
               "worker/durable-objects",
               "worker/data-plane",
               "worker/auth",
-              "worker/bindings"
+              "worker/bindings",
+              "worker/mcp"
             ]
           }
         ]

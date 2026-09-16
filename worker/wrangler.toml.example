@@ -58,8 +58,17 @@ database_id = "REPLACE_WITH_D1_DATABASE_ID"
 # name = "SESSIONS"
 # class_name = "SessionDO"
 
+# MCP ↔ PWA control plane (required for app_* MCP tools).
+[[durable_objects.bindings]]
+name = "MCP_BRIDGE"
+class_name = "McpBridgeDO"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["McpBridgeDO"]
+# Later SessionDO enablement needs a new tag — never edit v1.
 # [[migrations]]
-# tag = "v1"
+# tag = "v2"
 # new_sqlite_classes = ["SessionDO"]
 
 [vars]

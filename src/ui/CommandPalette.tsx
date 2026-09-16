@@ -37,7 +37,9 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  onCleanup,
 } from 'solid-js';
+import { setPaletteCommands, clearPaletteCommands } from '../mcp/commands';
 import {
   store,
   isPanelOpen,
@@ -422,6 +424,11 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       },
     });
   });
+
+  createEffect(() => {
+    setPaletteCommands(commands());
+  });
+  onCleanup(() => clearPaletteCommands());
 
   const builtinHits = createMemo(() => {
     const q = query().trim();

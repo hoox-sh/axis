@@ -74,6 +74,8 @@ export type WorkerHealthFeatures = {
   keys?: boolean;
   onchain?: boolean;
   market?: boolean;
+  mcp?: boolean;
+  mcpBridge?: boolean;
 };
 
 export function healthFeatures(body: unknown): WorkerHealthFeatures {
@@ -87,6 +89,8 @@ export function healthFeatures(body: unknown): WorkerHealthFeatures {
     keys: rec.keys === true,
     onchain: rec.onchain === true,
     market: rec.market === true,
+    mcp: rec.mcp === true,
+    mcpBridge: rec.mcpBridge === true,
   };
 }
 

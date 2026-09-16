@@ -76,6 +76,8 @@ Pages `--project-name` is `axis`; custom domain is `axis.hoox.sh`. Worker URL is
 | `/api/scripts`… | CRUD | Script library (Bearer) |
 | `/api/onchain/…` | GET | Public on-chain proxy (DefiLlama + GeckoTerminal allowlist; see below) |
 | `/api/stream` | WS | Session DO relay |
+| `/mcp` | POST | [MCP server](/axis/docs/worker/mcp) (Bearer) — Worker APIs + live-app control |
+| `/api/mcp/bridge` | WS | PWA MCP control plane |
 
 ### On-chain proxy routes (`worker/src/onchain.ts`)
 

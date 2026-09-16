@@ -17,6 +17,7 @@ _Generated/updated: 2026-09-16 · 414 commits · describe-tag: `v2.6.7`_
 
 ### Added
 
+- **MCP server** on the Worker (`POST /mcp`, Bearer API key): tools for health, generic allowlisted `axis_request`, `/api/run`, scripts, keys, onchain, and market; resources and prompts. Live-app tools (`app_invoke` / `app_get` / `app_set`) RPC to a connected PWA via `McpBridgeDO` (`/api/mcp/bridge`). In-app host (`window.__AXIS_MCP__`) covers chart, editor, indicators, alerts, library, watchlist, panels, plugins, theme, drawings, workspace, logs. CLI: `axis mcp` (stdio proxy) and `axis mcp config`. Settings → General → Connect this tab to MCP.
 - Pane script badge **load source** (file icon, second after settings) opens that script in the docked editor.
 - Topbar and editor **Add ▾** menus include **Add built-in script…** (same picker as ⌘K).
 - **Screenshot** (camera, module bar, before Studio): capture price / all panes / workspace, drawings overlay, watermark, 1×/2×, copy or download PNG. Session icons (theme, fullscreen, chart-only, screenshot, Studio) sit on the right of the second topbar row.

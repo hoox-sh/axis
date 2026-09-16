@@ -25,6 +25,8 @@ This Worker provides the **production backend** for the PWA. It can:
 - Cache indicator bundles in **R2** (optional, off by default).
 - Relay live datastreams to the browser via a **Durable Object** that opens
   one upstream WebSocket per session and fans it out to N clients.
+- Serve a **remote MCP server** at `POST /mcp` (Bearer API key) so agents can
+  call Worker APIs and, when a PWA tab is connected, control the live app.
 
 ## Local dev
 

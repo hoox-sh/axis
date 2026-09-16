@@ -58,6 +58,8 @@ Global flags: `--json`, `--quiet`, `-y/--yes`. `--json` is machine-only (no bann
 | `axis setup oauth --github-client-id Ov23li…` | Set OAuth client id in `[vars]` |
 | `axis setup oauth --github-client-id … --secret` | Or as Worker secret |
 | `axis keys create [--tier hobby]` | Mint a `pn_…` key (`ADMIN_TOKEN` required) |
+| `axis mcp [--key pn_…]` | Stdio MCP proxy to Worker `POST /mcp` |
+| `axis mcp config` | Print MCP client JSON (remote URL or `--stdio`) |
 | `axis keys validate --key pn_…` | Validate a key against `/api/keys` |
 | `axis secret put ADMIN_TOKEN` | `wrangler secret put` |
 | `axis secret list` / `axis secret delete <name>` | List / delete secrets |

@@ -35,6 +35,9 @@
  * | `/api/onchain/…`     | {@link handleOnchain}| public; DefiLlama + GeckoTerminal allowlisted proxy |
  * | `/api/market/…`      | {@link handleMarket}| public Binance + MEXC GET proxy; optional request-scoped signed Binance klines |
  * | GET `/api/stream`    | SessionDO upgrade    | requires `SESSIONS` DO binding |
+ * | POST `/mcp`          | MCP Streamable HTTP  | Bearer API key (same as scripts) |
+ * | GET `/mcp`           | MCP discovery JSON   | public |
+ * | GET `/api/mcp/bridge`| McpBridgeDO upgrade  | Bearer; PWA control plane |
  * | OPTIONS `*`          | CORS preflight       | 204 |
  *
  * ## Bindings (`Env`)
@@ -56,8 +59,10 @@ import { handleGitOAuth } from './git-oauth';
 import { handleOnchain } from './onchain';
 import { handleMarket } from './market';
 import { SessionDO } from './durable-objects/session';
+import { handleMcp, McpBridgeDO } from './mcp';
+import { requireApiKey } from './auth';
 
-export { SessionDO };
+export { SessionDO, McpBridgeDO };
 
 /** Worker bindings and wrangler `[vars]` consumed by handlers. All optional for local stubs. */
 export interface Env {
@@ -71,6 +76,8 @@ export interface Env {
   BUNDLES?: R2Bucket;
   /** Durable Object namespace for `/api/stream` WebSocket sessions. */
   SESSIONS?: DurableObjectNamespace;
+  /** Durable Object namespace for MCP ↔ PWA control-plane WebSockets. */
+  MCP_BRIDGE?: DurableObjectNamespace;
 
   /** Upstream Pine runtime base URL (e.g. local pyne `http://127.0.0.1:5002`). */
   EXTERNAL_BACKEND?: string;
@@ -97,7 +104,7 @@ const CORS_HEADERS = (origin: string): Record<string, string> => ({
   'Access-Control-Allow-Origin': origin,
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers':
-    'Content-Type, Authorization, X-Admin-Token, If-Match, X-Exchange-Key, X-Exchange-Secret, X-Exchange-Passphrase',
+    'Content-Type, Authorization, X-Admin-Token, If-Match, X-Exchange-Key, X-Exchange-Secret, X-Exchange-Passphrase, MCP-Protocol-Version, MCP-Session-Id, Last-Event-ID',
   'Access-Control-Max-Age': '86400',
   Vary: 'Origin',
 });
@@ -175,6 +182,35 @@ export default {
 
     const url = new URL(req.url);
 
+    const mcpRes = await handleMcp(req, env, origin, url.pathname);
+    if (mcpRes) return mcpRes;
+
+    // PWA MCP control plane: /api/mcp/bridge → McpBridgeDO (partitioned by API key)
+    if (url.pathname === '/api/mcp/bridge') {
+      if (!env.MCP_BRIDGE) {
+        return jsonResponse(
+          {
+            status: 'error',
+            code: 'NO_MCP_BRIDGE',
+            message: 'MCP_BRIDGE Durable Object not bound. Add the binding in wrangler.toml and deploy.',
+          },
+          { status: 503 },
+          origin,
+        );
+      }
+      const auth = await requireApiKey(req, env);
+      if (!auth.ok) {
+        return jsonResponse(
+          { status: 'error', code: auth.code, message: auth.message },
+          { status: auth.status },
+          origin,
+        );
+      }
+      const stub = env.MCP_BRIDGE.get(env.MCP_BRIDGE.idFromName(auth.ctx.userId));
+      const wsReq = new Request(`${url.origin}/ws?${url.searchParams.toString()}`, req);
+      return stub.fetch(wsReq);
+    }
+
     // WebSocket session relay: /api/stream?session=&symbol=&interval= → SessionDO
     // DO is named by `session` query (default "default"); request rewritten to /ws.
     if (url.pathname === '/api/stream') {
@@ -233,6 +269,8 @@ export default {
                 keys: !!env.API_KEYS,
                 onchain: true,
                 market: true,
+                mcp: true,
+                mcpBridge: !!env.MCP_BRIDGE,
               },
             },
             { status: 200 },

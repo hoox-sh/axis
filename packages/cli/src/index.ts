@@ -21,6 +21,7 @@ import { registerHealth } from "./commands/health.js";
 import { registerKeys } from "./commands/keys.js";
 import { registerDev } from "./commands/dev.js";
 import { registerWhoami } from "./commands/whoami.js";
+import { registerMcp } from "./commands/mcp.js";
 
 const pkgVersion: string = ownPackage.version;
 
@@ -30,7 +31,7 @@ export async function main(): Promise<void> {
   program
     .name("axis")
     .description(
-      "AXIS CLI — install, doctor, Worker setup (D1/KV/OAuth), keys, secrets, deploy, health"
+      "AXIS CLI — install, doctor, Worker setup (D1/KV/OAuth), keys, secrets, deploy, health, MCP"
     )
     .version(pkgVersion)
     .option("--json", "JSON output where supported")
@@ -53,6 +54,8 @@ ${theme.dim("Typical flow:")}
   axis deploy all
   axis keys create              # --admin-token / AXIS_ADMIN_TOKEN / prompt
   axis health --scripts
+  axis mcp config --key pn_…     # MCP client snippet
+  # axis mcp --key pn_…          # stdio MCP proxy
 
 ${theme.dim("Cloud script storage:")}
   axis setup kv                 # bind API_KEYS (required when D1 is on)
@@ -77,6 +80,7 @@ ${theme.dim("Docs:")} https://hoox.sh/axis/docs
   registerKeys(program);
   registerDev(program);
   registerWhoami(program);
+  registerMcp(program);
 
   // Installation self-check on every command start. Skipped for --version /
   // --help (commander handles those before any action) and silenced for

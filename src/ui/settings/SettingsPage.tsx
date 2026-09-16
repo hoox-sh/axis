@@ -9,7 +9,7 @@
  * @module ui/settings/SettingsPage
  */
 
-import { For, Show, createEffect, createSignal, untrack } from 'solid-js';
+import { For, Show, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
 import {
   store,
   setStore,
@@ -52,6 +52,14 @@ import {
 import { probeCloudStorage } from '../../storage/cloud';
 import { EditorIntelPanel, ExchangeCredentialsPanel } from '../SettingsDialog';
 import { KeyboardSettingsPanel } from '../shortcuts/Settings';
+import {
+  connectMcpBridge,
+  disconnectMcpBridge,
+  loadMcpPrefs,
+  mcpBridgeState,
+  onMcpBridge,
+  saveMcpPrefs,
+} from '../../mcp';
 import type { SettingsTabId } from '../studio/types';
 import { isSettingsTabId } from '../studio/types';
 import {
@@ -114,6 +122,8 @@ export function SettingsPage(props: {
     store.resultsAutoOpen !== false,
   );
   const [autoload, setAutoload] = createSignal(store.autoload !== false);
+  const [mcpConnect, setMcpConnect] = createSignal(loadMcpPrefs().connect);
+  const [mcpBridge, setMcpBridge] = createSignal(mcpBridgeState());
   const [storage, setStorage] = createSignal(store.activePlugins?.storage || 'local');
   const [cloudEndpoint, setCloudEndpoint] = createSignal(resolveCloudConfig().endpoint);
   const [cloudApiKey, setCloudApiKey] = createSignal(resolveCloudConfig().apiKey);
@@ -124,6 +134,9 @@ export function SettingsPage(props: {
   const [tab, setTab] = createSignal<SettingsTabId>(
     isSettingsTabId(props.initialTab) ? props.initialTab : 'general',
   );
+
+  const unsubMcp = onMcpBridge((s) => setMcpBridge(s));
+  onCleanup(() => unsubMcp());
 
   createEffect((was?: boolean) => {
     const open = true;
@@ -145,6 +158,8 @@ export function SettingsPage(props: {
         setExactOnCandle(store.strategyUi?.exactOnCandle !== false);
         setResultsAutoOpen(store.resultsAutoOpen !== false);
         setAutoload(store.autoload !== false);
+        setMcpConnect(loadMcpPrefs().connect);
+        setMcpBridge(mcpBridgeState());
         setStorage(store.activePlugins?.storage || 'local');
         const cloud = resolveCloudConfig();
         setCloudEndpoint(cloud.endpoint);
@@ -448,6 +463,36 @@ export function SettingsPage(props: {
                 label="Exact marks on candle"
                 hint="Circle on the fill bar body plus directional side arrows."
               />
+            </StudioSection>
+
+            <StudioSection
+              title="MCP"
+              lead="Remote agents (Claude, Cursor, Grok, Inspector) control this tab through the Worker MCP server at POST /mcp. Requires a Worker API key (Data → cloud storage)."
+            >
+              <StudioToggle
+                id="axis-mcp-connect"
+                testId="axis-settings-mcp-connect"
+                checked={mcpConnect()}
+                onChange={(v) => {
+                  setMcpConnect(v);
+                  saveMcpPrefs({ connect: v });
+                  if (v) void connectMcpBridge();
+                  else disconnectMcpBridge();
+                }}
+                label="Connect this tab to MCP"
+                hint="When on, this browser session answers app_invoke / app_get / app_set. Worker-only tools (axis_run, scripts, onchain) work without a tab."
+              />
+              <StudioHint>
+                {(() => {
+                  const b = mcpBridge();
+                  const session = b.session ? ` · session ${b.session.slice(0, 8)}…` : '';
+                  const err = b.error ? ` · ${b.error}` : '';
+                  const keyHint = cloudApiKey()
+                    ? ''
+                    : ' · set a Worker API key on the Data tab so the socket can authenticate.';
+                  return `Bridge: ${b.status}${session}${err}${keyHint}`;
+                })()}
+              </StudioHint>
             </StudioSection>
 
             <StudioSection

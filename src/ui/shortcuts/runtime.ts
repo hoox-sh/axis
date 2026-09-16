@@ -48,6 +48,27 @@ const actions = new Map<ShortcutId, Action>();
  * the previous registration (or removes it if none existed) — safe to call
  * more than once.
  */
+/**
+ * Invoke a registered shortcut action by id (MCP / tests — no keyboard event).
+ * Returns false when nothing is registered for `id`.
+ */
+export function fireShortcutById(id: string): boolean {
+  const action = actions.get(id as ShortcutId);
+  if (!action) return false;
+  const fake = {
+    preventDefault() {},
+    stopPropagation() {},
+    defaultPrevented: false,
+  } as unknown as KeyboardEvent;
+  try {
+    void action(fake);
+  } catch (err) {
+    console.warn('[shortcuts] fireShortcutById', id, err);
+    return false;
+  }
+  return true;
+}
+
 export function registerShortcut(id: ShortcutId, action: Action): () => void {
   const prev = actions.get(id);
   actions.set(id, action);
