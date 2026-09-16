@@ -190,12 +190,17 @@ test.describe('AXIS smoke @smoke', () => {
     page,
   }) => {
     await page.goto('/');
+    await expect(page.getByTestId('axis-topbar')).toBeVisible({ timeout: 30_000 });
     // Topbar entry removed.
     await expect(page.getByTestId('axis-btn-scriptlogs-top')).toHaveCount(0);
 
-    // Docked editor is open by default — Logs toggle sits beside Symbols.
-    // EditorPane (CodeMirror) lazy-loads — wait for the toggle first.
-    await expect(page.getByTestId('axis-editor-logs-toggle')).toBeVisible({
+    // Logs toggle lives in the editor chrome. Compact / hover-slide docks can
+    // hide the pane on first paint — open the editor if the toggle is missing.
+    const logsToggle = page.getByTestId('axis-editor-logs-toggle');
+    if (!(await logsToggle.isVisible().catch(() => false))) {
+      await page.getByTestId('axis-btn-editor').click();
+    }
+    await expect(logsToggle).toBeVisible({
       timeout: 30_000,
     });
     // Toggle opens the editor-local pane above the statusbar.
