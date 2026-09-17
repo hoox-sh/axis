@@ -412,9 +412,8 @@ export const SettingsDialog: Component<Props> = (props) => {
     setActivePlugin('engine', nextEngine);
     // Persist Worker credentials before the copy dialog so cloud writes
     // can authenticate. Source scripts are never deleted on switch.
-    if (nextStorage === 'cloud') {
-      writeStoredCloudConfig(cloudEndpoint(), cloudApiKey());
-    }
+    // Always persist (not only for cloud): the same pn_… key unlocks MCP.
+    writeStoredCloudConfig(cloudEndpoint(), cloudApiKey());
     promptStorageChange(getActiveStorageId(), nextStorage);
 
     // Always merge engine plugin config when any engine field is shown — include
@@ -1210,10 +1209,9 @@ export const SettingsDialog: Component<Props> = (props) => {
               </p>
             </div>
 
-            <Show when={storage() === 'cloud'}>
-              <div class="sc-settings-field" data-testid="axis-settings-cloud">
+            <div class="sc-settings-field" data-testid="axis-settings-cloud">
                 <label class="sc-settings-field-label" for="axis-cloud-endpoint">
-                  Worker URL
+                  Worker URL (cloud + MCP)
                 </label>
                 <input
                   id="axis-cloud-endpoint"
@@ -1224,7 +1222,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                   onInput={(e) => setCloudEndpoint(e.currentTarget.value)}
                 />
                 <label class="sc-settings-field-label mt-2" for="axis-cloud-apikey">
-                  Worker API key
+                  Worker API key (cloud + MCP)
                 </label>
                 <input
                   id="axis-cloud-apikey"
@@ -1281,13 +1279,13 @@ export const SettingsDialog: Component<Props> = (props) => {
                   </p>
                 </Show>
                 <p class="sc-settings-field-hint">
-                  Required for Cloud (Worker) script storage. Production keys come from{' '}
+                  One key for both: Cloud (Worker) script storage and the MCP
+                  server (`/mcp` + tab bridge). Production keys come from{' '}
                   <code class="font-mono">/api/keys</code> (admin). Local wrangler needs{' '}
                   <code class="font-mono">ALLOW_OPEN_KEYS=1</code> or a minted key. This is not
                   the Pine engine URL.
                 </p>
               </div>
-            </Show>
 
             <Show when={storage() === 'git'}>
               <p class="sc-settings-field-hint" data-testid="axis-settings-git-hint">

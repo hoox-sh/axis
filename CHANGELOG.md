@@ -9,15 +9,18 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-17 · 426 commits · describe-tag: `v2.7.1`_
+_Generated/updated: 2026-09-17 · 428 commits · describe-tag: `v2.7.2`_
 
 ---
 
 ## [Unreleased]
 
+## [2.8.0] — 2026-09-17
+
 ### Added
 
 - **Script Library tabs**: **Builtin** (110 first-party AXIS Pine scripts, searchable and grouped by category — Apply runs one onto the chart, Edit opens its source in the editor to fork under Personal) and **Personal** (the existing storage-backed user library: backend, save/import/export, published, version history).
+- **Unified Worker API key setting**: Settings → General → **Worker (cloud + MCP)** is now always visible (no longer hidden behind storage engine `cloud`). One `pn_…` Bearer unlocks both cloud script storage (`/api/scripts`) and the MCP server (`/mcp` + tab bridge); typing/generating/testing the key live-persists it and reconnects the bridge. MCP hints and the bridge idle error now point at this section instead of the stale “Data tab”.
 
 ## [2.7.2] — 2026-09-17
 
@@ -1206,12 +1209,15 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (107 commits)
+### 2026-09 (109 commits)
 
 #### Features
 
+- `b215b995` (2026-09-17) — feat(library): Builtin and Personal tabs in Script Library
 - `15be69c3` (2026-09-16) — feat(mcp): remote MCP server for Worker APIs and live-app control
 - `96310628` (2026-09-16) — feat(ui): load-source, Add built-in, and chart screenshot
 - `5de57792` (2026-09-16) — feat(scripts): first-party AXIS built-in Pine catalog
@@ -1247,6 +1253,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `d758a6c6` (2026-09-17) — fix(store): reload no longer wipes persisted state (TDZ in boot parse)
 - `695e22c4` (2026-09-17) — fix(watchlist): venue-correct quotes for MEXC, Kraken, and Data Manager
 - `bf1984ad` (2026-09-17) — fix(cli): cover mcp/mcpBridge in healthFeatures test
 - `07ee5f2a` (2026-09-17) — fix(docs): escape &lt; and &gt; in generated changelog subjects

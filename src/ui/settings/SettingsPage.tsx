@@ -211,11 +211,17 @@ export function SettingsPage(props: {
     setStore('autoload', autoload());
     applyUiScale(nextUiScale);
     const nextStorage = storage();
-    if (nextStorage === 'cloud') {
-      writeStoredCloudConfig(cloudEndpoint(), cloudApiKey());
-    }
+    // Single source of truth for the Worker Bearer (pn_…): cloud script
+    // storage (/api/scripts) and the MCP server (/mcp + bridge) share it.
+    // Persist always — not only when the cloud engine is active — so MCP
+    // can attach while local/git storage is selected.
+    writeStoredCloudConfig(cloudEndpoint(), cloudApiKey());
     promptStorageChange(getActiveStorageId(), nextStorage);
     flushPersist();
+    // Pick up a fresh Worker key for the MCP bridge without a reload.
+    if (mcpConnect() && cloudApiKey().trim()) {
+      void connectMcpBridge();
+    }
     setStatus(
       'ready',
       `Settings saved · ${nextInterval} · ${nextHistoryBars} bars · refresh ${nextRefresh}s · live ${preferAfterLoad() ? 'on' : 'off'} · re-run=${rerunOn()}`,
@@ -467,7 +473,7 @@ export function SettingsPage(props: {
 
             <StudioSection
               title="MCP"
-              lead="Remote agents (Claude, Cursor, Grok, Inspector) control this tab through the Worker MCP server at POST /mcp. Requires a Worker API key (Data → cloud storage)."
+              lead="Remote agents (Claude, Cursor, Grok, Inspector) control this tab through the Worker MCP server at POST /mcp. Requires the Worker API key below (Worker — cloud + MCP)."
             >
               <StudioToggle
                 id="axis-mcp-connect"
@@ -489,7 +495,7 @@ export function SettingsPage(props: {
                   const err = b.error ? ` · ${b.error}` : '';
                   const keyHint = cloudApiKey()
                     ? ''
-                    : ' · set a Worker API key on the Data tab so the socket can authenticate.';
+                    : ' · set a Worker API key below (Worker — cloud + MCP) so the socket can authenticate.';
                   return `Bridge: ${b.status}${session}${err}${keyHint}`;
                 })()}
               </StudioHint>
@@ -572,7 +578,7 @@ export function SettingsPage(props: {
               <StudioField
                 label="Engine"
                 for="axis-studio-storage"
-                hint="Cloud needs a Worker URL + API key below. Git credentials stay in Script Library."
+                hint="Pick cloud to persist scripts on the Worker. The Worker URL + API key below is shared with MCP. Git credentials stay in Script Library."
               >
                 <StudioSelect
                   id="axis-studio-storage"
@@ -590,71 +596,86 @@ export function SettingsPage(props: {
                   </For>
                 </StudioSelect>
               </StudioField>
-              <Show when={storage() === 'cloud'}>
-                <StudioField label="Worker URL" for="axis-studio-cloud-endpoint">
-                  <StudioInput
-                    id="axis-studio-cloud-endpoint"
-                    mono
-                    value={cloudEndpoint()}
-                    placeholder="https://worker.axis.hoox.sh"
-                    spellcheck={false}
-                    testId="axis-studio-cloud-endpoint"
-                    onInput={setCloudEndpoint}
-                  />
-                </StudioField>
-                <StudioField
-                  label="Worker API key"
-                  for="axis-studio-cloud-apikey"
-                  hint="pn_… from /api/keys (admin) or Generate demo key for local wrangler with ALLOW_OPEN_KEYS=1."
+            </StudioSection>
+
+            <StudioSection
+              title="Worker (cloud + MCP)"
+              lead="One key unlocks both: cloud script storage (/api/scripts) and the MCP server (/mcp + tab bridge). Stored in this browser only — sent as Authorization: Bearer."
+              testId="axis-settings-worker"
+            >
+              <StudioField label="Worker URL" for="axis-studio-cloud-endpoint">
+                <StudioInput
+                  id="axis-studio-cloud-endpoint"
+                  mono
+                  value={cloudEndpoint()}
+                  placeholder="https://worker.axis.hoox.sh"
+                  spellcheck={false}
+                  testId="axis-studio-cloud-endpoint"
+                  onInput={setCloudEndpoint}
+                />
+              </StudioField>
+              <StudioField
+                label="Worker API key"
+                for="axis-studio-cloud-apikey"
+                hint="pn_… from /api/keys (admin) or Generate demo key for local wrangler with ALLOW_OPEN_KEYS=1. Same key for cloud storage and MCP."
+              >
+                <StudioInput
+                  id="axis-studio-cloud-apikey"
+                  type="password"
+                  mono
+                  value={cloudApiKey()}
+                  placeholder="pn_…"
+                  spellcheck={false}
+                  autocomplete="off"
+                  testId="axis-studio-cloud-apikey"
+                  onInput={(v) => {
+                    setCloudApiKey(v);
+                    // Live-persist so MCP can attach without waiting for Save.
+                    writeStoredCloudConfig(cloudEndpoint(), v);
+                    if (mcpConnect() && v.trim()) void connectMcpBridge();
+                  }}
+                />
+              </StudioField>
+              <div class="flex flex-wrap gap-1.5">
+                <StudioButton
+                  variant="ghost"
+                  testId="axis-studio-cloud-generate"
+                  onClick={() => {
+                    const key = generateDemoApiKey();
+                    setCloudApiKey(key);
+                    writeStoredCloudConfig(cloudEndpoint(), key);
+                    setCloudProbeMsg('Generated a local key. Save, then Test connection.');
+                  }}
                 >
-                  <StudioInput
-                    id="axis-studio-cloud-apikey"
-                    type="password"
-                    mono
-                    value={cloudApiKey()}
-                    placeholder="pn_…"
-                    spellcheck={false}
-                    autocomplete="off"
-                    testId="axis-studio-cloud-apikey"
-                    onInput={setCloudApiKey}
-                  />
-                </StudioField>
-                <div class="flex flex-wrap gap-1.5">
-                  <StudioButton
-                    variant="ghost"
-                    testId="axis-studio-cloud-generate"
-                    onClick={() => {
-                      setCloudApiKey(generateDemoApiKey());
-                      setCloudProbeMsg('Generated a local key. Save, then Test connection.');
-                    }}
-                  >
-                    Generate demo key
-                  </StudioButton>
-                  <StudioButton
-                    variant="ghost"
-                    testId="axis-studio-cloud-probe"
-                    disabled={cloudProbing()}
-                    onClick={() => {
-                      writeStoredCloudConfig(cloudEndpoint(), cloudApiKey());
-                      setCloudProbing(true);
-                      setCloudProbeMsg('');
-                      void probeCloudStorage({
-                        endpoint: cloudEndpoint(),
-                        apiKey: cloudApiKey(),
-                      }).then((r) => {
-                        setCloudProbeMsg(r.ok ? `✓ ${r.message}` : r.message);
-                        setCloudProbing(false);
-                      });
-                    }}
-                  >
-                    {cloudProbing() ? 'Testing…' : 'Test connection'}
-                  </StudioButton>
-                </div>
-                <Show when={cloudProbeMsg()}>
-                  <StudioHint class={cloudProbeMsg().startsWith('✓') ? '' : ''}>
-                    {cloudProbeMsg()}
-                  </StudioHint>
-                </Show>
+                  Generate demo key
+                </StudioButton>
+                <StudioButton
+                  variant="ghost"
+                  testId="axis-studio-cloud-probe"
+                  disabled={cloudProbing()}
+                  onClick={() => {
+                    writeStoredCloudConfig(cloudEndpoint(), cloudApiKey());
+                    setCloudProbing(true);
+                    setCloudProbeMsg('');
+                    void probeCloudStorage({
+                      endpoint: cloudEndpoint(),
+                      apiKey: cloudApiKey(),
+                    }).then((r) => {
+                      setCloudProbeMsg(r.ok ? `✓ ${r.message}` : r.message);
+                      setCloudProbing(false);
+                      if (r.ok && mcpConnect() && cloudApiKey().trim()) {
+                        void connectMcpBridge();
+                      }
+                    });
+                  }}
+                >
+                  {cloudProbing() ? 'Testing…' : 'Test connection'}
+                </StudioButton>
+              </div>
+              <Show when={cloudProbeMsg()}>
+                <StudioHint class={cloudProbeMsg().startsWith('✓') ? '' : ''}>
+                  {cloudProbeMsg()}
+                </StudioHint>
               </Show>
             </StudioSection>
 

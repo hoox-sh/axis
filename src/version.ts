@@ -15,7 +15,7 @@
  */
 
 /** Baked single source of truth (repo-root VERSION at sync time). */
-export const BAKED_APP_VERSION: string = '2.7.2';
+export const BAKED_APP_VERSION: string = '2.8.0';
 
 /** Running app version: build-time override or baked VERSION. */
 export function appVersion(): string {

@@ -108,7 +108,8 @@ export async function connectMcpBridge(): Promise<void> {
     state = {
       status: 'idle',
       session: null,
-      error: 'No Worker API key — set one in Settings → Data (cloud storage) to attach this tab.',
+      error:
+        'No Worker API key — set one in Settings → General → Worker (cloud + MCP) to attach this tab.',
       lastEventAt: state.lastEventAt,
     };
     emit();
