@@ -9,11 +9,17 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-17 · 425 commits · describe-tag: `cli-v0.3.3`_
+_Generated/updated: 2026-09-17 · 426 commits · describe-tag: `v2.7.1`_
 
 ---
 
 ## [Unreleased]
+
+## [2.7.2] — 2026-09-17
+
+### Fixed
+
+- **Reload wiped all persisted state**: `parsePersistedState` threw during boot because `clampUiScale` read `UI_SCALE_STEP` before its declaration evaluated (TDZ); the blanket catch returned null and `loadPersisted` deleted the key, so every reload reset watchlist, settings, and everything else to defaults. Scale bounds moved above boot use; corrupt payloads are now backed up to `<key>.corrupt` with a console warning instead of silently deleted. Regression covered by `tests/persist-boot.test.ts` (fresh module-evaluation round-trip).
 
 ## [2.7.1] — 2026-09-17
 
@@ -1194,9 +1200,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (106 commits)
+### 2026-09 (107 commits)
 
 #### Features
 
@@ -1235,6 +1243,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `695e22c4` (2026-09-17) — fix(watchlist): venue-correct quotes for MEXC, Kraken, and Data Manager
 - `bf1984ad` (2026-09-17) — fix(cli): cover mcp/mcpBridge in healthFeatures test
 - `07ee5f2a` (2026-09-17) — fix(docs): escape &lt; and &gt; in generated changelog subjects
 - `76a4d753` (2026-09-17) — fix(worker): MCP_BRIDGE Durable Object uses new_sqlite_classes

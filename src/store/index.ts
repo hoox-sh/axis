@@ -267,6 +267,17 @@ export const HISTORY_BARS_DEFAULT = 5000;
 export const HISTORY_BARS_MIN = 50;
 export const HISTORY_BARS_MAX = 100_000;
 
+/**
+ * UI chrome scale bounds (percent of default density).
+ * Declared early: {@link clampUiScale} runs during boot hydration
+ * (`parsePersistedState` → `loadPersisted` at module load), so these must be
+ * initialized before the store seeds — otherwise the TDZ throw is swallowed
+ * by the parse try/catch and the stored key is wiped (full reset on reload).
+ */
+export const UI_SCALE_MIN = 0.8;
+export const UI_SCALE_MAX = 1.3;
+export const UI_SCALE_STEP = 0.05;
+
 /** Valid {@link AppState.datasetPersistence} values. */
 const DATASET_PERSISTENCE_MODES = ['session', 'local', 'git', 'worker'] as const;
 
@@ -970,7 +981,16 @@ function loadPersisted(): Partial<AppState> {
     if (current) {
       const overlay = parsePersistedState(current);
       if (overlay) return overlay;
-      // Corrupt v1 — clear so we do not keep failing on every reload
+      // Corrupt v1 — back it up (never silently delete user state) so the
+      // failure is diagnosable, then fall through to legacy keys / defaults.
+      warnPersistOnce(
+        '[axis] stored app state failed to parse; moved to backup key and started with defaults',
+      );
+      try {
+        localStorage.setItem(`${STORAGE_KEY}.corrupt`, current);
+      } catch {
+        /* quota — keep going */
+      }
       removeLocalStorage(STORAGE_KEY);
     }
     for (const legacy of LEGACY_STORAGE_KEYS) {
@@ -2693,11 +2713,7 @@ export function resetChartTheme() {
   setChartThemePreset(store.theme === 'light' ? 'void-light' : 'void-dark');
 }
 
-/** UI chrome scale bounds (percent of default density). */
-export const UI_SCALE_MIN = 0.8;
-export const UI_SCALE_MAX = 1.3;
-export const UI_SCALE_STEP = 0.05;
-
+/** UI chrome scale bounds (percent of default density) — see top-of-file decl. */
 /** Clamp/snap UI scale into [UI_SCALE_MIN, UI_SCALE_MAX] at UI_SCALE_STEP. */
 export function clampUiScale(raw: unknown): number {
   const n = typeof raw === 'number' ? raw : Number(raw);
