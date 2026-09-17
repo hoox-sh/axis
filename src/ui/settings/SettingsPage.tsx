@@ -492,11 +492,12 @@ export function SettingsPage(props: {
                 {(() => {
                   const b = mcpBridge();
                   const session = b.session ? ` · session ${b.session.slice(0, 8)}…` : '';
+                  const tabs = b.tabs != null ? ` · ${b.tabs} tab${b.tabs === 1 ? '' : 's'}` : '';
                   const err = b.error ? ` · ${b.error}` : '';
                   const keyHint = cloudApiKey()
                     ? ''
                     : ' · set a Worker API key below (Worker — cloud + MCP) so the socket can authenticate.';
-                  return `Bridge: ${b.status}${session}${err}${keyHint}`;
+                  return `Bridge: ${b.status}${session}${tabs}${err}${keyHint}`;
                 })()}
               </StudioHint>
             </StudioSection>

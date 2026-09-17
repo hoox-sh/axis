@@ -64,6 +64,17 @@ The PWA opens `wss://…/api/mcp/bridge?key=…`. The Worker partitions the sess
 
 Turn the toggle **off** if you do not want agents driving this browser.
 
+## Status-bar indicator
+
+The status bar shows an **MCP capsule**: socket state plus how many PWA tabs
+the Worker sees on your key's session (`MCP · 2 tabs`). Green means the bridge
+is open; amber is connecting/retrying; dim is idle (no key). The count polls
+every 20 seconds while connected. Click the capsule to open Settings → MCP.
+
+Note: MCP clients (Claude, Cursor, …) call `POST /mcp` statelessly, so there
+is no per-client presence — the capsule tracks bridge + tab attachment, which
+is what `app_*` tools need.
+
 ## Connect a client
 
 Print a snippet:
@@ -134,7 +145,8 @@ Pass these ids to **`app_invoke`** as `capability`, with a JSON `payload`.
 | Results / logs | `results.get`, `logs.get` / `append` / `clear` |
 | Chrome | `panels.get` / `set`, `theme.get` / `set`, `plugins.list` / `activate` |
 | Workspace | `workspace.export` / `import` |
-| Drawings | `drawings.list` / `clear` / `tool` |
+| Drawings | `drawings.list` / `add` / `update` / `remove` / `clear` / `tool` |
+| Settings | `settings.get` / `set` |
 | Status | `status.get` |
 
 `app_set` paths (anything else is `PATH_DENIED`): `symbol`, `interval`, `source`, `engine`, `exchange`, `theme`, `chartType`, `uiScale`, `live.active`, `live.preferAfterLoad`, `editor.doc`, `editor.open`, `watchlist.open`.
@@ -151,6 +163,14 @@ Example payloads:
 
 ```json
 { "capability": "alerts.create", "payload": { "name": "BTC 100k", "kind": "price_cross", "symbol": "BTCUSDT", "params": { "price": 100000 } } }
+```
+
+```json
+{ "capability": "drawings.add", "payload": { "kind": "trend", "points": [{ "time": 1700000000, "price": 67000 }, { "time": 1700003600, "price": 67600 }] } }
+```
+
+```json
+{ "capability": "settings.set", "payload": { "settings": { "interval": "1h", "historyBars": 5000 } } }
 ```
 
 Full argument tables: [MCP server](/axis/docs/worker/mcp).

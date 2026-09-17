@@ -74,9 +74,15 @@ export const APP_CAPABILITIES: readonly CapabilitySpec[] = [
   { id: 'workspace.export', domain: 'workspace', description: 'Export workspace snapshot JSON', mutates: false },
   { id: 'workspace.import', domain: 'workspace', description: 'Apply a workspace snapshot', mutates: true },
 
-  { id: 'drawings.list', domain: 'drawings', description: 'User drawings on the chart', mutates: false },
+  { id: 'drawings.list', domain: 'drawings', description: 'User drawings on the chart (optional symbol filter)', mutates: false },
+  { id: 'drawings.add', domain: 'drawings', description: 'Place a drawing: kind + time/price points', mutates: true },
+  { id: 'drawings.update', domain: 'drawings', description: 'Patch a drawing by id (points/style/meta/visible)', mutates: true },
+  { id: 'drawings.remove', domain: 'drawings', description: 'Delete a drawing by id', mutates: true },
   { id: 'drawings.clear', domain: 'drawings', description: 'Clear drawings (current symbol)', mutates: true },
   { id: 'drawings.tool', domain: 'drawings', description: 'Select drawing tool', mutates: true },
+
+  { id: 'settings.get', domain: 'settings', description: 'Sanitized app settings (no secrets)', mutates: false },
+  { id: 'settings.set', domain: 'settings', description: 'Patch allowlisted app settings', mutates: true },
 
   { id: 'status.get', domain: 'status', description: 'Status bar + telemetry HUD', mutates: false },
 ];

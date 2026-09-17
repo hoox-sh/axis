@@ -9,11 +9,19 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-17 · 428 commits · describe-tag: `v2.7.2`_
+_Generated/updated: 2026-09-17 · 429 commits · describe-tag: `v2.8.0`_
 
 ---
 
 ## [Unreleased]
+
+## [2.9.0] — 2026-09-17
+
+### Added
+
+- **MCP drawings control**: new `app_invoke` capabilities `drawings.add` (place a drawing by kind + time/price points, validated through the same normalizer as the chart layer), `drawings.update` (patch points/style/meta/visible by id; kind is immutable), and `drawings.remove` (delete by id). `drawings.list` accepts an optional `symbol` filter.
+- **MCP settings control**: new `settings.get` (sanitized app settings — endpoint, engine, interval, history bars, live prefs, UI scale, label/strategy/telemetry prefs; secrets never exposed) and `settings.set` (allowlisted patch with the same clamps as the Settings dialog; interval/history changes reload the chart, unknown engines and secret keys rejected).
+- **MCP/session status-bar indicator**: new `McpHud` capsule (socket state + attached-tab count for the key's session, click opens Settings → MCP). Backed by `GET /api/mcp/bridge` without `Upgrade`, which now returns the `McpBridgeDO` `{ connected }` count instead of `426`; the app polls it every 20 s while the bridge is open.
 
 ## [2.8.0] — 2026-09-17
 
@@ -1211,12 +1219,15 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (109 commits)
+### 2026-09 (110 commits)
 
 #### Features
 
+- `1d795fb6` (2026-09-17) — feat(settings): unified Worker API key for cloud storage and MCP
 - `b215b995` (2026-09-17) — feat(library): Builtin and Personal tabs in Script Library
 - `15be69c3` (2026-09-16) — feat(mcp): remote MCP server for Worker APIs and live-app control
 - `96310628` (2026-09-16) — feat(ui): load-source, Add built-in, and chart screenshot

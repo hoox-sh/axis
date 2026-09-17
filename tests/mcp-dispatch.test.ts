@@ -107,3 +107,151 @@ describe('MCP dispatch', () => {
     }
   });
 });
+
+describe('MCP drawings', () => {
+  beforeEach(() => {
+    setStore('drawings', []);
+    setStore('symbol', 'BTCUSDT');
+  });
+
+  it('add / list / update / remove round-trip', async () => {
+    const added = (await invokeCapability('drawings.add', {
+      kind: 'trend',
+      points: [
+        { time: 1700000000, price: 67000 },
+        { time: 1700003600, price: 67600 },
+      ],
+      style: { color: '#ff0000' },
+    })) as { id: string; kind: string };
+    expect(added.kind).toBe('trend');
+    expect(typeof added.id).toBe('string');
+
+    const list = (await invokeCapability('drawings.list')) as Array<{ id: string }>;
+    expect(list.some((d) => d.id === added.id)).toBe(true);
+
+    const filtered = (await invokeCapability('drawings.list', { symbol: 'BTCUSDT' })) as Array<{ id: string }>;
+    expect(filtered.some((d) => d.id === added.id)).toBe(true);
+    const other = (await invokeCapability('drawings.list', { symbol: 'ETHUSDT' })) as Array<unknown>;
+    expect(other.length).toBe(0);
+
+    const updated = (await invokeCapability('drawings.update', {
+      id: added.id,
+      visible: false,
+      style: { width: 3 },
+    })) as { id: string };
+    expect(updated.id).toBe(added.id);
+
+    const removed = (await invokeCapability('drawings.remove', { id: added.id })) as { ok: boolean };
+    expect(removed.ok).toBe(true);
+    const after = (await invokeCapability('drawings.list')) as Array<unknown>;
+    expect(after.some((d) => (d as { id: string }).id === added.id)).toBe(false);
+  });
+
+  it('rejects bad kind, empty points, short arity', async () => {
+    for (const [payload, code] of [
+      [{ kind: 'nope', points: [{ time: 1, price: 2 }] }, 'BAD_KIND'],
+      [{ kind: 'cursor', points: [{ time: 1, price: 2 }] }, 'BAD_KIND'],
+      [{ kind: 'trend', points: [] }, 'NO_POINTS'],
+      [{ kind: 'trend', points: [{ time: 1, price: 2 }] }, 'BAD_DRAWING'],
+      [{ kind: 'trend', points: [{ time: NaN, price: 2 }, { time: 3, price: 4 }] }, 'BAD_POINT'],
+    ] as Array<[Record<string, unknown>, string]>) {
+      try {
+        await invokeCapability('drawings.add', payload);
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect((err as McpInvokeError).code).toBe(code);
+      }
+    }
+  });
+
+  it('update rejects unknown id and kind change', async () => {
+    try {
+      await invokeCapability('drawings.update', { id: 'dw_missing', visible: true });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as McpInvokeError).code).toBe('NOT_FOUND');
+    }
+    const added = (await invokeCapability('drawings.add', {
+      kind: 'hline',
+      points: [{ time: 0, price: 70000 }],
+    })) as { id: string };
+    try {
+      await invokeCapability('drawings.update', { id: added.id, kind: 'trend' });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as McpInvokeError).code).toBe('KIND_IMMUTABLE');
+    }
+    try {
+      await invokeCapability('drawings.remove', { id: 'dw_missing' });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as McpInvokeError).code).toBe('NOT_FOUND');
+    }
+  });
+});
+
+describe('MCP settings', () => {
+  it('get returns sanitized settings without secrets', async () => {
+    const s = (await invokeCapability('settings.get')) as Record<string, unknown>;
+    expect(typeof s.endpoint).toBe('string');
+    expect(typeof s.interval).toBe('string');
+    expect(typeof s.historyBars).toBe('number');
+    expect(JSON.stringify(s)).not.toMatch(/apiKey|pn_/i);
+    const interval = await invokeCapability('settings.get', { key: 'interval' });
+    expect(interval).toBe(s.interval);
+  });
+
+  it('set patches allowlisted keys with validation', async () => {
+    const r = (await invokeCapability('settings.set', {
+      refreshSec: 30,
+      autoload: false,
+      'live.rerunOn': 'bar-close',
+      'strategyUi.invertTradeLabels': true,
+      'telemetry.hudCompact': true,
+    })) as { ok: boolean; updated: string[] };
+    expect(r.ok).toBe(true);
+    expect(r.updated).toContain('refreshSec');
+    const s = (await invokeCapability('settings.get')) as Record<string, unknown>;
+    expect(s.autoload).toBe(false);
+    expect((s.live as { rerunOn: string }).rerunOn).toBe('bar-close');
+    // restore defaults for other suites
+    await invokeCapability('settings.set', {
+      refreshSec: 15,
+      autoload: true,
+      'live.rerunOn': 'every-tick',
+      'strategyUi.invertTradeLabels': false,
+      'telemetry.hudCompact': false,
+    });
+  });
+
+  it('set reloads chart on interval change (mock-walk)', async () => {
+    setStore('source', 'mock-walk');
+    setStore('interval', '15m');
+    const r = (await invokeCapability('settings.set', { interval: '1h' })) as {
+      ok: boolean;
+      reloaded: boolean;
+      bars: number;
+    };
+    expect(r.ok).toBe(true);
+    expect(r.reloaded).toBe(true);
+    expect(r.bars).toBeGreaterThan(0);
+    setStore('source', 'binance-rest');
+  });
+
+  it('set rejects secrets, bad interval, unknown engine', async () => {
+    for (const [patch, code] of [
+      [{ apiKey: 'pn_secret' }, 'SETTING_DENIED'],
+      [{ cloudApiKey: 'pn_secret' }, 'SETTING_DENIED'],
+      [{ interval: '99y' }, 'BAD_INTERVAL'],
+      [{ engine: 'nope-engine' }, 'UNKNOWN_ENGINE'],
+      [{ 'live.rerunOn': 'sometimes' }, 'BAD_VALUE'],
+    ] as Array<[Record<string, unknown>, string]>) {
+      try {
+        await invokeCapability('settings.set', patch);
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect((err as McpInvokeError).code).toBe(code);
+      }
+    }
+  });
+});

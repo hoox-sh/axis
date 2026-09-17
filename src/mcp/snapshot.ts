@@ -70,6 +70,39 @@ function lastRunSummary(raw: unknown): unknown {
   };
 }
 
+/** Sanitized app settings for MCP `settings.get` (never includes secrets). */
+export function buildSettingsSnapshot(): Record<string, unknown> {
+  return {
+    endpoint: store.endpoint,
+    engine: store.engine,
+    interval: store.interval,
+    historyBars: store.historyBars,
+    refreshSec: store.watchlist?.refreshSec ?? null,
+    live: {
+      preferAfterLoad: store.live?.preferAfterLoad ?? null,
+      rerunOn: store.live?.rerunOn ?? null,
+    },
+    uiScale: store.uiScale,
+    autoload: store.autoload,
+    priceScaleLabelsVisible: store.priceScaleLabelsVisible,
+    lastValueLabelsVisible: store.lastValueLabelsVisible,
+    lastValueNamesVisible: store.lastValueNamesVisible,
+    strategyUi: store.strategyUi
+      ? {
+          slippageNextOpen: !!store.strategyUi.slippageNextOpen,
+          invertTradeLabels: !!store.strategyUi.invertTradeLabels,
+          exactOnCandle: store.strategyUi.exactOnCandle !== false,
+        }
+      : null,
+    telemetry: store.telemetry
+      ? {
+          hudCompact: !!store.telemetry.hud?.compact,
+          shareOnError: !!store.telemetry.shareOnError,
+        }
+      : null,
+  };
+}
+
 /** Build a JSON-safe snapshot of the live AXIS session. */
 export function buildAppSnapshot(opts: { includeBars?: boolean } = {}): Record<string, unknown> {
   const bars = store.bars || [];
@@ -141,6 +174,7 @@ export function buildAppSnapshot(opts: { includeBars?: boolean } = {}): Record<s
       tool: store.drawingTool,
       selectedId: store.selectedDrawingId ?? null,
     },
+    settings: buildSettingsSnapshot(),
     panels,
     alerts,
     logs: (store.logs || []).slice(-50).map((l) => ({

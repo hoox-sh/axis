@@ -33,6 +33,7 @@ import { Icons } from './icons';
 import type { RunResult } from '../indicators/runner';
 import { buildStrategyReport, formatMoney } from '../results/strategy';
 import { ConnectionHud } from './ConnectionHud';
+import { McpHud } from './McpHud';
 import { HooxLoader } from './HooxLoader';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -70,6 +71,7 @@ export const StatusBar: Component = () => {
         role="status"
       >
         <ConnectionHud />
+        <McpHud />
 
         <span
           class={`flex items-center gap-1.5 min-w-0 max-w-[28vw] text-[11px] ${color()}`}

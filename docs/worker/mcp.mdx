@@ -63,6 +63,7 @@ Canonical host: `https://worker.axis.hoox.sh`.
 | `/mcp` | DELETE | — | No-op 204 (stateless) |
 | `/.well-known/oauth-protected-resource` | GET | public | Bearer resource metadata |
 | `/api/mcp/bridge` | WS | Bearer or `?key=` | PWA control plane → `McpBridgeDO` |
+| `/api/mcp/bridge` | GET | Bearer | No `Upgrade` header → DO `/status`: `{ status, connected }` tab count (the app status bar polls this) |
 
 Health JSON includes `features.mcp: true` and `features.mcpBridge` when the DO is bound.
 
@@ -163,8 +164,13 @@ No tab → `SESSION_OFFLINE`. Timeouts → `TIMEOUT`. Snapshots redact keys matc
 | `workspace.export` | `{ includeBars? }` | no |
 | `workspace.import` | `{ json }` or snapshot object | yes |
 | `drawings.list` | — | no |
+| `drawings.add` | `{ kind, points: [{time, price}…], style?, meta?, symbol?, id? }` — kind arity validated, symbol defaults to active | yes |
+| `drawings.update` | `{ id, points?, style?, meta?, visible? }` — kind immutable | yes |
+| `drawings.remove` | `{ id }` | yes |
 | `drawings.clear` | `{ symbol? }` | yes |
 | `drawings.tool` | `{ tool }` | yes |
+| `settings.get` | `{ key? }` — sanitized settings, secrets never exposed | no |
+| `settings.set` | allowlisted patch (`endpoint`, `engine`, `interval`, `historyBars`, `refreshSec`, `live.*`, `uiScale`, `autoload`, label/strategy/telemetry prefs); interval/history changes reload | yes |
 | `status.get` | status bar + telemetry | no |
 
 `app_set` paths: `symbol`, `interval`, `source`, `engine`, `exchange`, `theme`, `chartType`, `uiScale`, `live.active`, `live.preferAfterLoad`, `editor.doc`, `editor.open`, `watchlist.open`.

@@ -37,7 +37,8 @@
  * | GET `/api/stream`    | SessionDO upgrade    | requires `SESSIONS` DO binding |
  * | POST `/mcp`          | MCP Streamable HTTP  | Bearer API key (same as scripts) |
  * | GET `/mcp`           | MCP discovery JSON   | public |
- * | GET `/api/mcp/bridge`| McpBridgeDO upgrade  | Bearer; PWA control plane |
+ * | GET `/api/mcp/bridge`| McpBridgeDO upgrade  | Bearer; PWA control plane (WS upgrade) |
+ * | GET `/api/mcp/bridge`| McpBridgeDO /status  | Bearer; no Upgrade header → `{ status, connected }` tab count |
  * | OPTIONS `*`          | CORS preflight       | 204 |
  *
  * ## Bindings (`Env`)
@@ -207,8 +208,18 @@ export default {
         );
       }
       const stub = env.MCP_BRIDGE.get(env.MCP_BRIDGE.idFromName(auth.ctx.userId));
-      const wsReq = new Request(`${url.origin}/ws?${url.searchParams.toString()}`, req);
-      return stub.fetch(wsReq);
+      // Plain GET (no WS upgrade) → DO /status: how many PWA tabs are attached
+      // to this key's session. Upgrades (and other methods) keep the /ws path.
+      const isUpgrade = (req.headers.get('Upgrade') || '').toLowerCase() === 'websocket';
+      const target = isUpgrade || req.method !== 'GET' ? '/ws' : '/status';
+      const wsReq = new Request(`${url.origin}${target}?${url.searchParams.toString()}`, req);
+      const res = await stub.fetch(wsReq);
+      if (target === '/status') {
+        const headers = new Headers(res.headers);
+        for (const [k, v] of Object.entries(CORS_HEADERS(origin))) headers.set(k, v);
+        return new Response(res.body, { status: res.status, headers });
+      }
+      return res;
     }
 
     // WebSocket session relay: /api/stream?session=&symbol=&interval= → SessionDO

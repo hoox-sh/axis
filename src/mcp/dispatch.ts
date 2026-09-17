@@ -13,6 +13,7 @@ import {
   store,
   setStore,
   persist,
+  flushPersist,
   loadEditorDoc,
   saveEditorDoc,
   addIndicator,
@@ -31,8 +32,14 @@ import {
   setChartThemePreset,
   toggleTheme,
   setUiScale,
+  clampUiScale,
+  clampHistoryBars,
   setLive,
+  setStatus,
   setDrawingTool,
+  setDrawings,
+  deleteDrawing,
+  patchDrawing,
   clearDrawings,
   clearDrawingsForSymbol,
   appendLog,
@@ -47,7 +54,9 @@ import {
 } from '../store';
 import { loadSymbolData, reloadChart } from '../data/load-symbol';
 import { startLive, stopLive } from '../streams/multiplex';
+import { syncLiveToPreference } from '../streams/multiplex';
 import { defaultStreamForSource } from '../streams/catalog';
+import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
 import { runFromEditor } from '../indicators/run-target';
 import { reapplyChartScripts } from '../indicators/reapply';
 import { createAlert, loadAlerts } from '../alerts';
@@ -67,9 +76,15 @@ import { PANEL_IDS } from '../ui/panels/panel-manager';
 import type { PanelDock, PanelId } from '../ui/panels/types';
 import { fireShortcutById } from '../ui/shortcuts/runtime';
 import type { DrawingToolId } from '../chart/drawing-types';
+import type { Drawing as StoreDrawing } from '../store/types';
+import type { ChartPoint, DrawingKind } from '../chart/drawings/types';
+import { TOOL_SPECS } from '../chart/drawings/defaults';
+import { DRAWING_LIST_MAX, normalizeDrawing } from '../chart/drawings/normalize';
+import { drawingsForSymbol, newDrawingId } from '../chart/drawings/sync';
+import { getEngine } from '../engines/catalog';
 import { APP_CAPABILITIES, findCapability, SETTABLE_PATHS } from './catalog';
 import { runPaletteCommand, listPaletteCommandIds } from './commands';
-import { buildAppSnapshot } from './snapshot';
+import { buildAppSnapshot, buildSettingsSnapshot } from './snapshot';
 import { getByPath, McpInvokeError } from './protocol';
 import type { ChartGridMode } from '../chart/layout';
 import type { ChartType } from '../chart/chart-type';
@@ -96,6 +111,53 @@ function str(v: unknown, fallback = ''): string {
 
 function fail(code: string, message: string): never {
   throw new McpInvokeError(code, message);
+}
+
+/** Drawing kinds an agent may place (cursor/eraser are tools, not drawings). */
+function assertPlaceableKind(kind: unknown): DrawingKind {
+  if (typeof kind !== 'string' || !(kind in TOOL_SPECS) || kind === 'cursor' || kind === 'eraser') {
+    fail('BAD_KIND', `Unknown drawing kind: ${String(kind)}`);
+  }
+  return kind as DrawingKind;
+}
+
+function assertDrawingPoint(p: unknown): ChartPoint {
+  const r = rec(p);
+  const time = Number(r.time);
+  const price = Number(r.price);
+  if (!Number.isFinite(time) || !Number.isFinite(price)) {
+    fail('BAD_POINT', 'Each point needs finite numeric {time, price}');
+  }
+  return { time, price };
+}
+
+/** Settings keys an agent may read/write. Secrets (API keys, tokens) are never exposed. */
+const SETTABLE_SETTINGS = new Set([
+  'endpoint',
+  'engine',
+  'interval',
+  'historyBars',
+  'refreshSec',
+  'live.preferAfterLoad',
+  'live.rerunOn',
+  'uiScale',
+  'autoload',
+  'priceScaleLabelsVisible',
+  'lastValueLabelsVisible',
+  'lastValueNamesVisible',
+  'strategyUi.slippageNextOpen',
+  'strategyUi.invertTradeLabels',
+  'strategyUi.exactOnCandle',
+  'telemetry.hudCompact',
+  'telemetry.shareOnError',
+]);
+
+function assertSettingKey(key: unknown): string {
+  const k = str(key);
+  if (!SETTABLE_SETTINGS.has(k)) {
+    fail('SETTING_DENIED', `Setting not allowlisted (secrets excluded): ${k}`);
+  }
+  return k;
 }
 
 function editorDoc(): string {
@@ -495,8 +557,79 @@ export async function invokeCapability(capability: string, payload: unknown = {}
       return { ok: true, symbol: store.symbol, interval: store.interval };
     }
 
-    case 'drawings.list':
+    case 'drawings.list': {
+      const symbol = str(p.symbol);
+      if (symbol) {
+        return drawingsForSymbol(store.drawings, symbol, { includeUntagged: true });
+      }
       return store.drawings;
+    }
+    case 'drawings.add': {
+      const kind = assertPlaceableKind(p.kind);
+      const rawPoints = Array.isArray(p.points) ? p.points : [];
+      if (!rawPoints.length) fail('NO_POINTS', 'points (non-empty {time, price}[]) required');
+      if (store.drawings.length >= DRAWING_LIST_MAX) {
+        fail('LIMIT', `Drawing list is full (${DRAWING_LIST_MAX}) — remove some first`);
+      }
+      const symbol = str(p.symbol || store.symbol).toUpperCase();
+      const drawing = normalizeDrawing({
+        id: str(p.id) || newDrawingId(),
+        kind,
+        points: rawPoints.map(assertDrawingPoint),
+        style: rec(p.style),
+        meta: { ...rec(p.meta), symbol },
+      });
+      if (!drawing) fail('BAD_DRAWING', 'Drawing failed validation (kind/points/style)');
+      if (store.drawings.some((d) => d.id === drawing.id)) {
+        drawing.id = newDrawingId();
+      }
+      // Dual-shaped output (normalize attaches legacy p1/p2/price/color) —
+      // same cast the store hydrate path uses.
+      setDrawings([...store.drawings, drawing as unknown as StoreDrawing]);
+      return { id: drawing.id, kind: drawing.kind, points: drawing.points };
+    }
+    case 'drawings.update': {
+      const id = str(p.id);
+      if (!id) fail('NO_ID', 'drawing id required');
+      const current = store.drawings.find((d) => d.id === id);
+      if (!current) fail('NOT_FOUND', `No drawing: ${id}`);
+      const cur = current as unknown as Record<string, unknown>;
+      if (p.kind !== undefined && str(p.kind) !== (cur.kind as string)) {
+        fail('KIND_IMMUTABLE', 'Drawing kind cannot change — remove and re-add instead');
+      }
+      const raw: Record<string, unknown> = { ...cur, id, kind: cur.kind };
+      let touched = false;
+      if (p.points !== undefined) {
+        const rawPoints = Array.isArray(p.points) ? p.points : [];
+        if (!rawPoints.length) fail('NO_POINTS', 'points must be a non-empty array');
+        raw.points = rawPoints.map(assertDrawingPoint);
+        touched = true;
+      }
+      if (p.style !== undefined) {
+        raw.style = { ...rec(cur.style), ...rec(p.style) };
+        touched = true;
+      }
+      if (p.meta !== undefined) {
+        raw.meta = { ...rec(cur.meta), ...rec(p.meta) };
+        touched = true;
+      }
+      if (p.visible !== undefined) {
+        raw.visible = Boolean(p.visible);
+        touched = true;
+      }
+      if (!touched) fail('EMPTY_PATCH', 'Nothing to update');
+      const merged = normalizeDrawing(raw);
+      if (!merged) fail('BAD_DRAWING', 'Updated drawing failed validation');
+      patchDrawing(id, merged as unknown as StoreDrawing);
+      return { id, kind: merged.kind, points: merged.points };
+    }
+    case 'drawings.remove': {
+      const id = str(p.id);
+      if (!id) fail('NO_ID', 'drawing id required');
+      if (!store.drawings.some((d) => d.id === id)) fail('NOT_FOUND', `No drawing: ${id}`);
+      deleteDrawing(id);
+      return { ok: true, id };
+    }
     case 'drawings.clear': {
       if (p.symbol) clearDrawingsForSymbol(str(p.symbol));
       else clearDrawings();
@@ -505,6 +638,123 @@ export async function invokeCapability(capability: string, payload: unknown = {}
     case 'drawings.tool': {
       setDrawingTool(str(p.tool) as DrawingToolId);
       return { tool: store.drawingTool };
+    }
+
+    case 'settings.get': {
+      const key = str(p.key);
+      const all = buildSettingsSnapshot();
+      return key ? getByPath(all, key) : all;
+    }
+    case 'settings.set': {
+      const patch = rec(p.settings ?? p.patch ?? payload);
+      const keys = Object.keys(patch);
+      if (!keys.length) fail('EMPTY_PATCH', 'settings object required');
+      const updated: string[] = [];
+      let chartDirty = false;
+      for (const key of keys) {
+        assertSettingKey(key);
+        const v = patch[key];
+        switch (key) {
+          case 'endpoint': {
+            const ep = str(v).trim();
+            if (!ep) fail('BAD_VALUE', 'endpoint must be a non-empty URL');
+            setStore('endpoint', ep);
+            break;
+          }
+          case 'engine': {
+            const id = str(v).trim();
+            if (!getEngine(id)) fail('UNKNOWN_ENGINE', `No engine: ${id}`);
+            setActivePlugin('engine', id);
+            break;
+          }
+          case 'interval': {
+            const iv = str(v).trim();
+            if (!(WATCHLIST_INTERVALS as readonly string[]).includes(iv)) {
+              fail('BAD_INTERVAL', `interval must be one of ${(WATCHLIST_INTERVALS as readonly string[]).join(', ')}`);
+            }
+            if (iv !== store.interval) {
+              setStore('interval', iv);
+              chartDirty = true;
+            }
+            break;
+          }
+          case 'historyBars': {
+            const n = clampHistoryBars(v);
+            if (n !== store.historyBars) {
+              setStore('historyBars', n);
+              chartDirty = true;
+            }
+            break;
+          }
+          case 'refreshSec':
+            setStore('watchlist', 'refreshSec', Math.min(120, Math.max(5, Math.round(Number(v) || 15))));
+            break;
+          case 'live.preferAfterLoad':
+            setStore('live', 'preferAfterLoad', Boolean(v));
+            syncLiveToPreference();
+            break;
+          case 'live.rerunOn': {
+            const mode = str(v);
+            if (mode !== 'every-tick' && mode !== 'bar-close') {
+              fail('BAD_VALUE', 'live.rerunOn must be every-tick or bar-close');
+            }
+            setStore('live', 'rerunOn', mode);
+            syncLiveToPreference();
+            break;
+          }
+          case 'uiScale': {
+            const s = clampUiScale(v);
+            setUiScale(s);
+            applyUiScale(s);
+            break;
+          }
+          case 'autoload':
+            setStore('autoload', Boolean(v));
+            break;
+          case 'priceScaleLabelsVisible':
+            setStore('priceScaleLabelsVisible', Boolean(v));
+            break;
+          case 'lastValueLabelsVisible':
+            setStore('lastValueLabelsVisible', Boolean(v));
+            break;
+          case 'lastValueNamesVisible':
+            setStore('lastValueNamesVisible', Boolean(v));
+            break;
+          case 'strategyUi.slippageNextOpen':
+          case 'strategyUi.invertTradeLabels':
+          case 'strategyUi.exactOnCandle': {
+            const field = key.split('.')[1] as
+              | 'slippageNextOpen'
+              | 'invertTradeLabels'
+              | 'exactOnCandle';
+            setStore('strategyUi', {
+              slippageNextOpen: !!store.strategyUi?.slippageNextOpen,
+              invertTradeLabels: !!store.strategyUi?.invertTradeLabels,
+              exactOnCandle: store.strategyUi?.exactOnCandle !== false,
+              [field]: Boolean(v),
+            });
+            break;
+          }
+          case 'telemetry.hudCompact':
+            setStore('telemetry', 'hud', 'compact', Boolean(v));
+            break;
+          case 'telemetry.shareOnError':
+            setStore('telemetry', 'shareOnError', Boolean(v));
+            break;
+          default:
+            fail('SETTING_DENIED', `Setting not allowlisted: ${key}`);
+        }
+        updated.push(key);
+      }
+      flushPersist();
+      let bars = store.bars.length;
+      let reloaded = false;
+      if (chartDirty && store.symbol) {
+        reloaded = await loadSymbolData(store.symbol, store.interval, store.source);
+        bars = store.bars.length;
+      }
+      setStatus('ready', `Settings saved · ${store.interval} · ${store.historyBars} bars (MCP)`);
+      return { ok: true, updated, reloaded, bars };
     }
 
     case 'status.get':
