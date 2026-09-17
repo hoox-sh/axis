@@ -18,6 +18,7 @@ _Generated/updated: 2026-09-17 · 423 commits · describe-tag: `v2.7.0`_
 ### Fixed
 
 - Worker MCP Durable Object uses `new_sqlite_classes` (`MCP_BRIDGE` / `McpBridgeDO`). Cloudflare® accounts no longer accept KV-backed `new_classes` (error 10099).
+- CLI `healthFeatures` test covers `mcp` / `mcpBridge` flags (fixes `v2.7.0` npm publish which failed on `health.test.ts`).
 
 ## [2.7.0] — 2026-09-17
 

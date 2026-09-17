@@ -23,6 +23,8 @@ describe("healthFeatures", () => {
       keys: false,
       onchain: true,
       market: false,
+      mcp: false,
+      mcpBridge: false,
     });
     expect(healthFeatures(null)).toEqual({});
   });
