@@ -171,8 +171,8 @@ describe('startWatchlistQuotes', () => {
     for (const h of handles) h.stop();
   });
 
-  it('no-ops for mexc / gecko / unknown / blank symbols', () => {
-    for (const sourceId of ['mexc-spot', 'gecko-terminal', 'whatever-xyz']) {
+  it('no-ops at the WS layer for mexc / kraken / gecko / ccxt / unknown (REST poll covers mexc+kraken)', () => {
+    for (const sourceId of ['mexc-spot', 'kraken-rest', 'gecko-terminal', 'ccxt-rest', 'whatever-xyz']) {
       let mode = '';
       const h = startWatchlistQuotes({
         sourceId,

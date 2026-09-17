@@ -35,8 +35,11 @@
  * | okx | Spot tickers list; match `okxInst` (`BTC-USDT`); change from open24h/sodUtc0 |
  * | bybit | Spot tickers; `price24hPcnt` fraction → % |
  * | coinbase | Per-product ticker + stats (capped at 12 symbols) |
+ * | mexc | Worker-proxied 24hr ticker (`symbol=` ≤8 symbols, else full book) |
+ * | kraken | Public `Ticker` (`c[0]` last, `o` open; legacy `XXBTZUSD` keys normalized) |
  * | mock | Deterministic seed + noise |
  * | csv | Empty map (no live quotes) |
+ * | kraken/gecko/ccxt/unknown | Empty map — never silently mix another venue's quotes |
  * | binance / default | `GET /api/v3/ticker/24hr?symbols=…` batch |
  *
  * Shared symbol helpers (`toUsdt`, `okxInst`, `coinbaseProduct`) are also used
@@ -45,6 +48,7 @@
 
 import { fetchBinanceJson } from './binance-http';
 import { fetchMexcJson } from './mexc-http';
+import { getDataManagerSelection } from './data-manager-source';
 
 /** One row’s quote state as stored by the Watchlist UI. */
 export interface WatchTicker {
@@ -83,6 +87,57 @@ export function coinbaseProduct(sym: string): string {
 }
 
 /**
+ * Resolve the effective source id for quotes. `data-manager` is a cache over
+ * an underlying venue — resolve to that venue so REST and WS agree. Without
+ * this the REST seed would fetch Binance while the WS mux follows the
+ * underlying selection (venue mixing).
+ */
+function resolveQuoteSourceId(sourceId: string): string {
+  const id = (sourceId || 'binance-rest').toLowerCase();
+  if (id === 'data-manager') {
+    try {
+      const sel = getDataManagerSelection()?.sourceId;
+      if (sel) return sel.toLowerCase();
+    } catch {
+      /* selection store unavailable (tests) — fall through */
+    }
+    return 'binance-rest';
+  }
+  return id;
+}
+
+/**
+ * Whether a source has REST 24h tickers worth polling when WS is unavailable.
+ *
+ * Binance / OKX / Bybit / Coinbase have both WS and REST. MEXC and Kraken
+ * have REST only (no ticker mux in `watchlist-live.ts` — MEXC WS is
+ * kline-only; Kraken quotes deliberately never fall back onto Binance), so
+ * the Watchlist must keep REST-polling instead of going `off` after the seed.
+ * CSV / upload / Gecko / CCXT-gateway / unknown return `{}` and must not poll
+ * (CCXT has no ticker endpoint on the gateway yet; Gecko pool symbols are not
+ * CEX pairs).
+ */
+export function sourceSupportsRestPoll(sourceId: string): boolean {
+  const id = resolveQuoteSourceId(sourceId);
+  if (id.includes('csv') || id.includes('upload')) return false;
+  if (id.includes('gecko')) return false;
+  if (id.includes('ccxt')) return false;
+  if (
+    id.includes('binance') ||
+    id.includes('okx') ||
+    id.includes('bybit') ||
+    id.includes('coinbase') ||
+    id.includes('mexc') ||
+    id.includes('kraken') ||
+    !id
+  ) {
+    return true;
+  }
+  if (id.includes('mock')) return false; // mock uses its own WS-like walk
+  return false;
+}
+
+/**
  * Fetch 24h last + change for symbols using the active source when possible.
  *
  * Keys in the result prefer the original watchlist symbol strings. On failure
@@ -93,7 +148,7 @@ export async function fetchWatchlistTickers(
   sourceId: string,
 ): Promise<Record<string, WatchTicker>> {
   if (!symbols.length) return {};
-  const id = (sourceId || 'binance-rest').toLowerCase();
+  const id = resolveQuoteSourceId(sourceId);
 
   try {
     if (id.includes('okx')) return await fetchOkx(symbols);
@@ -102,8 +157,9 @@ export async function fetchWatchlistTickers(
     if (id.includes('mock')) return mockTickers(symbols);
     if (id.includes('csv') || id.includes('upload')) return {};
     if (id.includes('mexc')) return await fetchMexc(symbols);
-    if (id.includes('kraken') || id.includes('gecko')) return {};
-    if (id.includes('binance') || id === 'data-manager' || !id) {
+    if (id.includes('kraken')) return await fetchKraken(symbols);
+    if (id.includes('gecko')) return {};
+    if (id.includes('binance') || !id) {
       return await fetchBinance(symbols);
     }
     return {};
@@ -290,6 +346,80 @@ async function fetchMexc(symbols: string[]): Promise<Record<string, WatchTicker>
     const t = bySym.get(toUsdt(orig));
     if (!t) continue;
     next[orig] = tickerFromMexc(t);
+  }
+  return next;
+}
+
+/** Kraken request pair (`BTCUSDT` → `XBTUSDT`; BTC → XBT). */
+function krakenTickerPair(sym: string): string {
+  const s = toUsdt(sym);
+  if (s.endsWith('USDT')) {
+    const base = s.slice(0, -4);
+    return `${base === 'BTC' ? 'XBT' : base}USDT`;
+  }
+  if (s.endsWith('USDC')) {
+    const base = s.slice(0, -4);
+    return `${base === 'BTC' ? 'XBT' : base}USDC`;
+  }
+  if (s.endsWith('USD')) {
+    const base = s.slice(0, -3);
+    return `${base === 'BTC' ? 'XBT' : base}USD`;
+  }
+  return s;
+}
+
+/**
+ * Canonicalize a Kraken `result` key for watchlist lookup.
+ *
+ * Kraken uses legacy `X`/`Z` asset prefixes (`XXBTZUSD` = XBT/USD,
+ * `XETHZUSD` = ETH/USD) while newer pairs are plain (`SOLUSD`). Both the
+ * raw and prefix-stripped forms are indexed so `XAUT`-style symbols (leading
+ * X, no legacy prefix) still match while `XETH…` resolves to ETH.
+ */
+function krakenKeyVariants(key: string): string[] {
+  let s = key.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  s = s.replace(/XBT/g, 'BTC');
+  s = s.replace(/Z(USD|EUR|JPY|GBP|CAD|AUD|USDT|USDC)$/, '$1');
+  const out = [s];
+  if (s.length > 6 && s.startsWith('X')) out.push(s.slice(1));
+  return [...new Set(out)];
+}
+
+/**
+ * Kraken public `Ticker` (direct fetch — same CORS posture as the existing
+ * Kraken OHLC history fetch, no Worker proxy needed). One request for all
+ * pairs; `c[0]` last, `o` today's open → change %.
+ * Unknown pairs surface as `error: ["EQuery:…"]` with a partial/empty result —
+ * missing rows are skipped, never mixed onto another venue.
+ */
+async function fetchKraken(symbols: string[]): Promise<Record<string, WatchTicker>> {
+  const pairs = [...new Set(symbols.map(krakenTickerPair))];
+  const url = `https://api.kraken.com/0/public/Ticker?pair=${pairs.join(',')}`;
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`kraken ${res.status}`);
+  const body = (await res.json()) as {
+    error?: string[];
+    result?: Record<string, { c?: [string, string]; o?: string }>;
+  };
+  const result = body.result && typeof body.result === 'object' ? body.result : {};
+  const entries = Object.entries(result);
+  if (!entries.length) throw new Error(`Kraken: ${(body.error || []).join(', ') || 'no tickers'}`);
+  const byKey = new Map<string, { c?: [string, string]; o?: string }>();
+  for (const [k, v] of entries) {
+    for (const variant of krakenKeyVariants(k)) {
+      if (!byKey.has(variant)) byKey.set(variant, v);
+    }
+  }
+  const next: Record<string, WatchTicker> = {};
+  for (const orig of symbols) {
+    const t = byKey.get(toUsdt(orig));
+    if (!t) continue;
+    const price = parseFloat(t.c?.[0] || '');
+    if (!Number.isFinite(price) || price <= 0) continue;
+    const open = parseFloat(t.o || '');
+    const open24h = Number.isFinite(open) && open > 0 ? open : undefined;
+    const change = open24h ? ((price - open24h) / open24h) * 100 : 0;
+    next[orig] = { price, change, open24h, source: 'kraken' };
   }
   return next;
 }

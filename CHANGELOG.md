@@ -9,14 +9,17 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-17 · 423 commits · describe-tag: `v2.7.0`_
+_Generated/updated: 2026-09-17 · 425 commits · describe-tag: `cli-v0.3.3`_
 
 ---
 
 ## [Unreleased]
 
+## [2.7.1] — 2026-09-17
+
 ### Fixed
 
+- **Watchlist venue coverage**: MEXC now REST-polls at `refreshSec` (badge `rest`) instead of freezing after one seed — MEXC WS is kline-only, so there is no ticker mux. Kraken gains genuine Kraken REST tickers (legacy `XXBTZUSD` keys normalized; never mixed onto Binance) with the same REST poll. Data Manager quotes resolve to the underlying venue for both REST and WS (previously the REST seed always fetched Binance while WS followed the selection). CCXT-gateway status honestly reports no ticker endpoint yet.
 - Worker MCP Durable Object uses `new_sqlite_classes` (`MCP_BRIDGE` / `McpBridgeDO`). Cloudflare® accounts no longer accept KV-backed `new_classes` (error 10099).
 - CLI `healthFeatures` test covers `mcp` / `mcpBridge` flags (fixes `v2.7.0` npm publish which failed on `health.test.ts`).
 
@@ -1189,9 +1192,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (104 commits)
+### 2026-09 (106 commits)
 
 #### Features
 
@@ -1230,6 +1235,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `bf1984ad` (2026-09-17) — fix(cli): cover mcp/mcpBridge in healthFeatures test
+- `07ee5f2a` (2026-09-17) — fix(docs): escape &lt; and &gt; in generated changelog subjects
 - `76a4d753` (2026-09-17) — fix(worker): MCP_BRIDGE Durable Object uses new_sqlite_classes
 - `0d99cdcb` (2026-09-16) — fix(scripts): builtin formula correctness and editor-draft isolation
 - `74c7b947` (2026-09-16) — fix(ui): watchlist rename Escape, overlay slider, hover-slide, alert pop

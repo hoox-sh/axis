@@ -11,4 +11,4 @@
  */
 
 /** Deployed worker version (repo-root VERSION at sync time). */
-export const WORKER_VERSION: string = '2.7.0';
+export const WORKER_VERSION: string = '2.7.1';

@@ -31,7 +31,11 @@
  * - **WS reconnecting**: keep last prices; do not start REST spam during backoff.
  * - **WS closed / error** (and not `mode: none`): start REST poll at
  *   `store.watchlist.refreshSec` (min 5s).
- * - **csv / no-WS sources**: one REST seed only; mode `off` after seed.
+ * - **MEXC / Kraken** (`mode: none` but REST-capable): REST seed + REST poll
+ *   at `refreshSec` — no venue ticker mux (MEXC WS is kline-only; Kraken
+ *   quotes are never mixed onto Binance).
+ * - **csv / gecko / ccxt / unknown** (`mode: none`, no REST): one REST seed
+ *   only; mode `off` after seed.
  *
  * Effect deps: panel open, symbol list, active `store.source`, refresh interval.
  * `onCleanup` always stops the mux and clears REST timers.
@@ -69,7 +73,7 @@ import {
   deleteWatchlist,
 } from '../store';
 import { loadSymbolData } from '../data/load-symbol';
-import { fetchWatchlistTickers, type WatchTicker } from '../data/watchlist-tickers';
+import { fetchWatchlistTickers, sourceSupportsRestPoll, type WatchTicker } from '../data/watchlist-tickers';
 import { startWatchlistQuotes } from '../data/watchlist-live';
 import {
   createAlert,
@@ -292,8 +296,14 @@ export const Watchlist: Component = () => {
             setQuoteMode(wsHealthy ? 'ws' : 'rest');
           } else if (s.state === 'closed') {
             if (s.mode === 'none') {
-              setQuoteMode('off');
-              // csv etc. — one seed already done
+              // csv / gecko / ccxt / unknown — one seed already done, nothing to poll.
+              // MEXC / Kraken have REST tickers but no WS mux, so keep REST-polling.
+              // (data-manager resolves to its underlying venue inside the helper.)
+              if (sourceSupportsRestPoll(source)) {
+                startRestFallback();
+              } else {
+                setQuoteMode('off');
+              }
               return;
             }
             wsHealthy = false;

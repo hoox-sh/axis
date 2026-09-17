@@ -29,12 +29,13 @@
  *
  * | Source id match | Transport |
  * |-----------------|-----------|
- * | binance (default), kraken | Binance combined stream: `wss://…/stream?streams=btcusdt@ticker/…` (chunked) |
+ * | binance (default) | Binance combined stream: `wss://…/stream?streams=btcusdt@ticker/…` (chunked) |
  * | okx | Single public WS; `subscribe` tickers by `instId` (batches of 20) |
  * | bybit | Spot public WS; `subscribe` `tickers.SYMBOL` (batches of 10) |
  * | coinbase | Exchange feed; one `ticker` channel over product_ids |
  * | mock | Local random walk (~500ms), no network |
- * | csv | No live quotes — status `mode: 'none'` |
+ * | mexc / kraken | No ticker mux — REST snapshots + REST poll (`watchlist-tickers.ts`) |
+ * | csv / gecko / ccxt / unknown | No live quotes — status `mode: 'none'` |
  *
  * ## 24h change model
  *
@@ -43,6 +44,7 @@
  * - **Binance**: exchange `%` in `P`; open in `o` → both forwarded.
  * - **OKX / Coinbase**: last + open24h (or sodUtc0); change = `(last−open)/open×100`.
  * - **Bybit**: `price24hPcnt` is a fraction → ×100 for %; `prevPrice24h` as open.
+ * - **MEXC / Kraken (REST)**: last + venue open (`openPrice` / `o`) → same formula.
  * - UI may recompute change from retained `open24h` when a frame only has last
  *   (see `mergeQuote` in Watchlist).
  *
@@ -94,8 +96,9 @@ const BINANCE_CHUNK = 40;
  * Start live watchlist quotes for the given symbols/source.
  *
  * Routes by `sourceId` substring. Returns `{ stop }`; no-op when source has no
- * WS (`csv`) or `symbols` is empty. Kraken (and unknown ids) fall through to
- * Binance public tickers for quote coverage.
+ * WS (`csv`, `gecko`, `ccxt`, unknown) or `symbols` is empty. MEXC and Kraken
+ * have no ticker mux (venue-correct REST snapshots + REST poll instead — never
+ * mixed onto Binance).
  */
 export function startWatchlistQuotes(opts: StartWatchlistQuotesOpts): QuoteMuxHandle {
   const symbols = opts.symbols.filter(Boolean);
@@ -134,12 +137,20 @@ export function startWatchlistQuotes(opts: StartWatchlistQuotesOpts): QuoteMuxHa
     opts.onStatus?.({
       state: 'closed',
       mode: 'none',
-      detail: 'Kraken watchlist quotes are not mixed onto Binance — no live mux yet',
+      detail: 'Kraken watchlist quotes use REST snapshots — never mixed onto Binance',
     });
     return { stop: () => {} };
   }
   if (id.includes('gecko')) {
     opts.onStatus?.({ state: 'closed', mode: 'none', detail: 'DEX source has no CEX quotes' });
+    return { stop: () => {} };
+  }
+  if (id.includes('ccxt')) {
+    opts.onStatus?.({
+      state: 'closed',
+      mode: 'none',
+      detail: 'CCXT gateway has no ticker endpoint yet — watchlist quotes unavailable',
+    });
     return { stop: () => {} };
   }
   // binance (and unknown CEX ids that already resolved as binance)

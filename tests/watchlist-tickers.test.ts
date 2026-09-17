@@ -9,6 +9,7 @@ import {
   coinbaseProduct,
   fetchWatchlistTickers,
   okxInst,
+  sourceSupportsRestPoll,
   toUsdt,
   WATCHLIST_INTERVALS,
   WATCHLIST_REFRESH_OPTIONS,
@@ -60,11 +61,11 @@ describe('fetchWatchlistTickers routing', () => {
     expect(Number.isFinite(a.BTC!.price)).toBe(true);
   });
 
-  it('csv / upload / kraken / gecko / unknown return empty', async () => {
+  it('csv / upload / gecko / ccxt / unknown return empty', async () => {
     expect(await fetchWatchlistTickers(['BTC'], 'csv-file')).toEqual({});
     expect(await fetchWatchlistTickers(['BTC'], 'upload')).toEqual({});
-    expect(await fetchWatchlistTickers(['BTC'], 'kraken-spot')).toEqual({});
     expect(await fetchWatchlistTickers(['BTC'], 'gecko')).toEqual({});
+    expect(await fetchWatchlistTickers(['BTC'], 'ccxt-rest')).toEqual({});
     expect(await fetchWatchlistTickers(['BTC'], 'some-unknown-venue')).toEqual({});
   });
 
@@ -215,6 +216,94 @@ describe('fetchWatchlistTickers routing', () => {
       expect(await fetchWatchlistTickers(['BTC'], 'mexc')).toEqual({});
     } finally {
       restore();
+    }
+  });
+
+  it('sourceSupportsRestPoll: mexc/kraken poll, csv/gecko/ccxt do not', () => {
+    expect(sourceSupportsRestPoll('mexc-rest')).toBe(true);
+    expect(sourceSupportsRestPoll('MEXC-REST')).toBe(true);
+    expect(sourceSupportsRestPoll('kraken-rest')).toBe(true);
+    expect(sourceSupportsRestPoll('binance-rest')).toBe(true);
+    expect(sourceSupportsRestPoll('okx-spot')).toBe(true);
+    expect(sourceSupportsRestPoll('bybit-spot')).toBe(true);
+    expect(sourceSupportsRestPoll('coinbase-rest')).toBe(true);
+    expect(sourceSupportsRestPoll('csv-file')).toBe(false);
+    expect(sourceSupportsRestPoll('upload')).toBe(false);
+    expect(sourceSupportsRestPoll('gecko-terminal')).toBe(false);
+    expect(sourceSupportsRestPoll('ccxt-rest')).toBe(false);
+    expect(sourceSupportsRestPoll('some-unknown-venue')).toBe(false);
+  });
+
+  it('kraken maps legacy result keys and computes change from open', async () => {
+    const seen: string[] = [];
+    const restore = mockFetch(async (input) => {
+      seen.push(String(input));
+      return jsonResponse({
+        error: [],
+        result: {
+          XXBTZUSDT: { c: ['65000.5', '1.2'], o: '64000.0' },
+          XETHZUSD: { c: ['3000', '5'], o: '3000' },
+        },
+      });
+    });
+    try {
+      const out = await fetchWatchlistTickers(['BTC', 'ETHUSD', 'SOL'], 'kraken-rest');
+      expect(seen[0]).toContain('api.kraken.com/0/public/Ticker');
+      expect(seen[0]).toContain('XBTUSDT');
+      expect(seen[0]).toContain('ETHUSD');
+      expect(out.BTC!.price).toBeCloseTo(65000.5);
+      expect(out.BTC!.change).toBeCloseTo(((65000.5 - 64000) / 64000) * 100, 5);
+      expect(out.BTC!.open24h).toBe(64000);
+      expect(out.BTC!.source).toBe('kraken');
+      expect(out.ETHUSD!.change).toBe(0);
+      expect(out.SOL).toBeUndefined();
+    } finally {
+      restore();
+    }
+  });
+
+  it('kraken empty result → empty (unknown pair, no venue mixing)', async () => {
+    const restore = mockFetch(async () =>
+      jsonResponse({ error: ['EQuery:Unknown asset pair'], result: {} }),
+    );
+    try {
+      expect(await fetchWatchlistTickers(['BTC'], 'kraken')).toEqual({});
+    } finally {
+      restore();
+    }
+  });
+
+  it('data-manager resolves to the underlying venue for REST', async () => {
+    const { setDataManagerSelection, clearDataManagerSelection } = await import(
+      '../src/data/data-manager-source'
+    );
+    const restore = mockFetch(async (input) => {
+      const url = String(input);
+      if (url.includes('api.kraken.com')) {
+        return jsonResponse({ error: [], result: { XXBTZUSDT: { c: ['1', '1'], o: '1' } } });
+      }
+      return jsonResponse([
+        { symbol: 'BTCUSDT', lastPrice: '2', priceChangePercent: '0' },
+      ]);
+    });
+    try {
+      setDataManagerSelection('kraken-rest', 'BTCUSDT', '1d');
+      const krakenOut = await fetchWatchlistTickers(['BTC'], 'data-manager');
+      expect(krakenOut.BTC!.source).toBe('kraken');
+      expect(sourceSupportsRestPoll('data-manager')).toBe(true);
+
+      setDataManagerSelection('csv-upload', 'BTCUSDT', '1d');
+      // csv underlying → no REST poll (nothing to poll)
+      expect(sourceSupportsRestPoll('data-manager')).toBe(false);
+      expect(await fetchWatchlistTickers(['BTC'], 'data-manager')).toEqual({});
+
+      clearDataManagerSelection();
+      // no selection → binance fallback (historical behaviour)
+      const fallback = await fetchWatchlistTickers(['BTC'], 'data-manager');
+      expect(fallback.BTC!.source).toBe('binance');
+    } finally {
+      restore();
+      clearDataManagerSelection();
     }
   });
 });
