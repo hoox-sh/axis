@@ -20,8 +20,9 @@
 /**
  * Script library UI — list / load / save / delete against the active storage plugin.
  *
- * Uses `storage/service` (listScripts, writeScript, …). Includes cloud/git
- * credential mini-forms and import/export (library JSON or `.pyne` / `.pine` files).
+ * Two tabs: **Builtin** (first-party AXIS Pine catalog — apply to chart or
+ * open in the editor) and **Personal** (storage-backed user scripts with
+ * cloud/git credential mini-forms and import/export).
  * Optional `getDoc` / `setDoc` wire the panel to the live editor document.
  *
  * {@link LibraryPanel} docks the same content in a floatable chrome panel
@@ -91,6 +92,14 @@ import {
   scriptKindShort,
   type ScriptKind,
 } from '../indicators/script-meta';
+import {
+  BUILTIN_SCRIPTS,
+  applyBuiltinScript,
+  builtinCategoryLabel,
+  filterBuiltinScripts,
+  listBuiltinCategories,
+  type BuiltinScript,
+} from '../indicators/builtins';
 import { Icons } from './icons';
 import { HooxLoader } from './HooxLoader';
 import { FloatableShell } from './panels/FloatableShell';
@@ -417,6 +426,91 @@ const LibraryScriptCard: Component<{
   );
 };
 
+/** One built-in catalog row — title, kind, category, Apply (chart) / Edit (editor). */
+const BuiltinScriptCard: Component<{
+  item: BuiltinScript;
+  busy?: boolean;
+  onApply: () => void;
+  onEdit: () => void;
+}> = (props) => {
+  return (
+    <li
+      class="flex flex-col gap-1 border-b border-border-soft bg-bg-elev px-2 min-h-8 py-1 rounded text-left"
+      data-testid="axis-library-builtin-card"
+      data-builtin-id={props.item.id}
+      data-script-kind={props.item.kind}
+    >
+      <div class="flex items-start gap-2">
+        <div class="flex-1 min-w-0">
+          <div
+            class="text-text font-medium truncate text-[12px]"
+            title={props.item.title}
+          >
+            {props.item.title}
+          </div>
+          <div
+            class="flex flex-wrap items-center gap-1 mt-1"
+            data-testid="axis-library-builtin-meta"
+          >
+            <span
+              class={`inline-flex items-center px-1 py-px border font-mono text-[9px] uppercase tracking-wide rounded-[var(--radius-chip)] ${kindChipClass(props.item.kind)}`}
+              title={
+                props.item.kind === 'strategy' ? 'Pine strategy()' : 'Pine indicator()'
+              }
+              data-testid="axis-library-builtin-kind"
+            >
+              {scriptKindShort(props.item.kind)}
+              <span class="sr-only"> {scriptKindLabel(props.item.kind)}</span>
+            </span>
+            <span
+              class="inline-flex items-center px-1 py-px border border-border/50 font-mono text-[9px] text-text-dim rounded-[var(--radius-chip)]"
+              data-testid="axis-library-builtin-category"
+            >
+              {builtinCategoryLabel(props.item.category)}
+            </span>
+            <Show when={props.item.overlay}>
+              <span
+                class="inline-flex items-center px-1 py-px border border-border/40 font-mono text-[9px] text-text-faint rounded-[var(--radius-chip)]"
+                title="Plots on the price chart"
+              >
+                overlay
+              </span>
+            </Show>
+          </div>
+          <Show when={props.item.description}>
+            <div
+              class="text-text-faint font-mono text-[9px] truncate mt-0.5"
+              title={props.item.description}
+            >
+              {props.item.description}
+            </div>
+          </Show>
+        </div>
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost px-1.5 text-[10px] flex-shrink-0"
+          title="Open in editor (fork into a personal script)"
+          disabled={props.busy}
+          onClick={() => props.onEdit()}
+          data-testid="axis-library-builtin-edit"
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost px-1.5 text-[10px] flex-shrink-0"
+          title="Run onto the chart now"
+          disabled={props.busy}
+          onClick={() => props.onApply()}
+          data-testid="axis-library-builtin-apply"
+        >
+          {props.busy ? '…' : 'Apply'}
+        </button>
+      </div>
+    </li>
+  );
+};
+
 function cloudCfg(): { endpoint: string; apiKey: string } {
   return resolveCloudConfig();
 }
@@ -446,11 +540,14 @@ export interface ScriptLibraryPanelProps {
 
 /** Library browser for Plugin Manager (and any host that supplies doc IO). */
 export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) => {
+  const [tab, setTab] = createSignal<'builtin' | 'personal'>('builtin');
   const [items, setItems] = createSignal<ScriptMeta[]>([]);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
   const [name, setName] = createSignal('');
   const [desc, setDesc] = createSignal('');
+  const [builtinQuery, setBuiltinQuery] = createSignal('');
+  const [applyingBuiltin, setApplyingBuiltin] = createSignal('');
   const [published, setPublished] = createSignal<PublishedIndex['libraries']>([]);
   const [lastImport, setLastImport] = createSignal('');
   const [statusLine, setStatusLine] = createSignal('');
@@ -631,6 +728,42 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
   };
 
   const versioning = () => supportsScriptVersioning();
+
+  /** Built-ins grouped by category in catalog order, filtered by search. */
+  const builtinGroups = () => {
+    const filtered = filterBuiltinScripts(builtinQuery());
+    const groups: { category: string; label: string; items: BuiltinScript[] }[] = [];
+    for (const category of listBuiltinCategories()) {
+      const inCat = filtered.filter((s) => s.category === category);
+      if (!inCat.length) continue;
+      groups.push({ category, label: builtinCategoryLabel(category), items: inCat });
+    }
+    return groups;
+  };
+  const builtinCount = () =>
+    builtinGroups().reduce((n, g) => n + g.items.length, 0);
+
+  const onApplyBuiltin = async (b: BuiltinScript) => {
+    setApplyingBuiltin(b.id);
+    setError('');
+    try {
+      await applyBuiltinScript(b.id);
+      setStatus('ready', `Applied built-in "${b.title}"`);
+      appendLog('ok', `Applied built-in script ${b.title}`, 'library');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      setStatus('error', msg);
+    } finally {
+      setApplyingBuiltin('');
+    }
+  };
+
+  const onEditBuiltin = (b: BuiltinScript) => {
+    props.setDoc?.(b.code, b.title);
+    setStatus('ready', `Opened built-in "${b.title}" (save to keep it)`);
+    appendLog('info', `Opened built-in script ${b.title} in editor`, 'library');
+  };
 
   const onDelete = async (id: string, scriptName: string) => {
     if (!confirm(`Delete "${scriptName}"?`)) return;
@@ -822,6 +955,81 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
 
   return (
     <div class="flex flex-col gap-2 text-[12px]">
+      <div
+        class="flex gap-1 border-b border-border pb-1"
+        role="tablist"
+        aria-label="Script library"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab() === 'builtin'}
+          class={`sc-btn sc-btn-ghost text-[11px] px-2 h-7 min-h-7 ${tab() === 'builtin' ? 'is-active' : ''}`}
+          onClick={() => setTab('builtin')}
+          data-testid="axis-library-tab-builtin"
+        >
+          Builtin ({BUILTIN_SCRIPTS.length})
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab() === 'personal'}
+          class={`sc-btn sc-btn-ghost text-[11px] px-2 h-7 min-h-7 ${tab() === 'personal' ? 'is-active' : ''}`}
+          onClick={() => setTab('personal')}
+          data-testid="axis-library-tab-personal"
+        >
+          Personal ({items().length})
+        </button>
+      </div>
+
+      <Show when={tab() === 'builtin'}>
+        <div class="flex flex-col gap-2" data-testid="axis-library-builtin-list">
+          <input
+            class="sc-input w-full h-7 min-h-7 text-[11px] placeholder:text-text-faint"
+            placeholder="Search built-ins… (rsi, macd, channel)"
+            value={builtinQuery()}
+            onInput={(e) => setBuiltinQuery(e.currentTarget.value)}
+            data-testid="axis-library-builtin-search"
+          />
+          <Show
+            when={builtinCount() > 0}
+            fallback={
+              <div class="axis-empty-state text-[12px] text-text-dim py-2">
+                No built-ins match “{builtinQuery()}”
+              </div>
+            }
+          >
+            <For each={builtinGroups()}>
+              {(group) => (
+                <div>
+                  <div class="text-[10px] text-text-dim uppercase tracking-wider mb-1">
+                    {group.label} ({group.items.length})
+                  </div>
+                  <ul class="flex flex-col gap-1 w-full text-left items-stretch m-0 p-0 list-none">
+                    <For each={group.items}>
+                      {(b) => (
+                        <BuiltinScriptCard
+                          item={b}
+                          busy={!!applyingBuiltin() || busy()}
+                          onApply={() => void onApplyBuiltin(b)}
+                          onEdit={() => onEditBuiltin(b)}
+                        />
+                      )}
+                    </For>
+                  </ul>
+                </div>
+              )}
+            </For>
+          </Show>
+          <p class="m-0 text-[9px] text-text-faint">
+            First-party AXIS originals — <strong>Apply</strong> runs one onto the
+            chart, <strong>Edit</strong> opens its Pine in the editor (then save it
+            under Personal to keep a copy).
+          </p>
+        </div>
+      </Show>
+
+      <Show when={tab() === 'personal'}>
       <div class="sc-field">
         <label class="text-[10px] text-text-dim uppercase tracking-wider" for="library-storage-backend">Storage backend</label>
         <select
@@ -1263,6 +1471,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
           </ul>
         </Show>
       </div>
+      </Show>
     </div>
   );
 };

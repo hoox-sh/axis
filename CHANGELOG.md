@@ -15,6 +15,10 @@ _Generated/updated: 2026-09-17 · 426 commits · describe-tag: `v2.7.1`_
 
 ## [Unreleased]
 
+### Added
+
+- **Script Library tabs**: **Builtin** (110 first-party AXIS Pine scripts, searchable and grouped by category — Apply runs one onto the chart, Edit opens its source in the editor to fork under Personal) and **Personal** (the existing storage-backed user library: backend, save/import/export, published, version history).
+
 ## [2.7.2] — 2026-09-17
 
 ### Fixed
