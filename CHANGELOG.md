@@ -17,6 +17,10 @@ _Generated/updated: 2026-09-18 · 430 commits · describe-tag: `v2.9.0`_
 
 ### Fixed
 
+- **Flaky suite: shared-Response fetch mock + stale DSM status** — `tests/git-oauth.test.ts` device-flow tests intermittently timed out because the queued fetch mock re-served one single-use `Response` (a leaked background task from another suite consumed its body → `res.json()` fell back to `{}` → endless `authorization_pending` polling). The mock now builds a fresh `Response` per call. Separately, `ensureDatasetComplete`'s detached closure announced `setStatus('ready')` unconditionally, clobbering newer loads/errors; it now takes `stillCurrent`, `load-symbol.ts` passes its generation guard, and the `_reset*Generation` test helpers advance (never zero) so stale guards can't re-arm.
+
+### Fixed
+
 - **MCP `structuredContent` always an object**: app-plane array results (`indicators.list`, `logs.get`, `alerts.list`, `library.list`, `drawings.list`) and primitive `app.get`/`settings.get` slices failed strict MCP clients (`expected record, received array/string`). Worker `jsonText` now envelopes non-objects as `{ result }`.
 - **MCP `chart.zoom` accepts `action` alias**: `{"action":"reset"}` previously fell back to `in`; now `op`/`action` are equivalent.
 - **MCP `drawings.tool` validates**: unknown tools now fail `BAD_TOOL`, missing tool fails `NO_TOOL` (previously set empty string).

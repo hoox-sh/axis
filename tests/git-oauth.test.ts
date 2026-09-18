@@ -39,21 +39,39 @@ afterEach(() => {
   (globalThis as unknown as { window?: unknown }).window = originalWindow;
 });
 
-function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
+function json(data: unknown, status = 200): { body: unknown; status: number } {
+  return { body: data, status };
 }
 
-function mockFetchSequence(responses: Response[] | ((url: string) => Response)) {
+/** Fresh single-use Response from mock payload parts. */
+function jsonResponse(parts: { body?: unknown; status?: number }): Response {
+  return new Response(
+    parts.body === undefined ? '' : JSON.stringify(parts.body),
+    {
+      status: parts.status ?? 200,
+      headers: { 'Content-Type': 'application/json' },
+    },
+  );
+}
+
+type MockPayload = { body?: unknown; status?: number } | ((url: string) => Response);
+
+/**
+ * Queued fetch mock. Builds a **fresh Response per call** — re-serving one
+ * Response instance breaks under concurrent consumers (single-use body →
+ * "Body already used" → `.json().catch(() => ({}))` → phantom pending
+ * polls). The last entry repeats, so background traffic from other suites
+ * can sip without starving the assertions under test.
+ */
+function mockFetchSequence(responses: MockPayload[]) {
   let calls = 0;
   const callsUrls: string[] = [];
   globalThis.fetch = mock(async (url: unknown) => {
     calls += 1;
     callsUrls.push(String(url));
-    if (typeof responses === 'function') return responses(String(url));
-    return responses[Math.min(calls - 1, responses.length - 1)];
+    const item = responses[Math.min(calls - 1, responses.length - 1)]!;
+    if (typeof item === 'function') return item(String(url));
+    return jsonResponse(item);
   }) as unknown as typeof fetch;
   return { calls: () => calls, urls: () => callsUrls };
 }
@@ -595,7 +613,7 @@ describe('fetchGitUser', () => {
     const seen: string[] = [];
     globalThis.fetch = mock(async (url: unknown) => {
       seen.push(String(url));
-      return json({ login: 'min' });
+      return jsonResponse(json({ login: 'min' }));
     }) as unknown as typeof fetch;
     const u = await fetchGitUser('github', 'tok-2', 'https://ghe.example/api/v3/');
     expect(u.login).toBe('min');

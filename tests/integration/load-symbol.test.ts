@@ -32,6 +32,7 @@ import {
   putCachedBars,
   _resetBarsCacheForTests,
 } from '../../src/data/bars-cache';
+import { _resetDataSourceManagerForTests } from '../../src/data/data-source-manager';
 import { makeBars } from '../fixtures/bars';
 import type { Bar } from '../../src/store/types';
 import type { SourcePlugin } from '../../src/plugins/types';
@@ -45,6 +46,10 @@ beforeEach(async () => {
   _resetBootstrapFlag();
   _resetLoadGeneration();
   await _resetBarsCacheForTests();
+  // Abort leaked backfill jobs: a cache paint in an earlier test fires
+  // ensureDatasetComplete → startBackfill detached; its network work must
+  // not bleed into later tests (or their mocks).
+  _resetDataSourceManagerForTests();
   ensureBuiltins();
   clearLogs();
   setStore('bars', []);
@@ -143,6 +148,29 @@ describe('loadSymbolData', () => {
     expect(store.status).toBe('ready');
     expect(store.statusMessage).toMatch(/cached|DSM/i);
     expect(store.telemetry.source.state).toBe('open');
+  });
+
+  it('stale background DSM announcement does not overwrite a newer error', async () => {
+    // Cache paint fires ensureDatasetComplete detached; a newer failing load
+    // must keep its error status even after the stale job finishes.
+    const cached = makeBars(8);
+    await putCachedBars('stale-src', 'BTCUSDT', '1h', cached);
+    registerDynamicSource(
+      dynSource('stale-src', async () => {
+        throw new Error('network down');
+      }),
+    );
+    expect(await loadSymbolData('BTCUSDT', '1h', 'stale-src')).toBe(true);
+    registerDynamicSource(
+      dynSource('boom-src', async () => {
+        throw new Error('boom-fail');
+      }),
+    );
+    expect(await loadSymbolData('X', '1m', 'boom-src')).toBe(false);
+    // Let any stale background announcement run to completion.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(store.status).toBe('error');
+    expect(store.statusMessage).toMatch(/boom-fail/i);
   });
 
   it('handles non-Error throw values', async () => {

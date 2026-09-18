@@ -186,6 +186,7 @@ export function ensureDatasetComplete(
   symbol: string,
   interval: string,
   sourceId: string,
+  opts?: { stillCurrent?: () => boolean },
 ): DatasetFirstResult {
   const sym = String(symbol || '').trim();
   const iv = String(interval || store.interval || '1d');
@@ -232,12 +233,15 @@ export function ensureDatasetComplete(
           applyWhenComplete: false,
         });
         const missing = report.expectedBars - report.barCount;
-        // Chart is already painted — background completion must not claim "loading"
+        // Chart is already painted — background completion must not claim "loading",
+        // nor clobber a newer load's status (error/success) when this job is stale.
+        if (opts?.stillCurrent && !opts.stillCurrent()) return;
         setStatus(
           'ready',
           `DSM completing ${sym} ${iv} — ${missing > 0 ? `${missing} bars` : 'recent bars'} in background`,
         );
       } else {
+        if (opts?.stillCurrent && !opts.stillCurrent()) return;
         setStatus('ready', `Dataset complete · ${report.barCount} bars · ${sym} ${iv}`, {
           toast: true,
           source: 'dsm',
@@ -279,5 +283,6 @@ export function announceDatasetPaint(bars: Bar[], sym: string, iv: string): void
 /** @internal test helper — stop streaming + clear timers. */
 export function _resetDsmOrchestratorForTests(): void {
   stopStreaming();
-  paintGen = 0;
+  // Advance (never zero): stale paint closures must not re-arm on reclaim.
+  paintGen += 1;
 }

@@ -62,9 +62,11 @@ let loadGeneration = 0;
 /** Abort controller for the active history fetch (cancelled on newer load). */
 let loadAbort: AbortController | null = null;
 
-/** @internal test helper — reset race token between suites */
+/** @internal test helper — invalidate in-flight loads between suites */
 export function _resetLoadGeneration(): void {
-  loadGeneration = 0;
+  // Advance (never zero): stale stillCurrent closures captured by background
+  // announcements must not re-arm when a later suite reclaims generation 1.
+  loadGeneration += 1;
   try {
     loadAbort?.abort();
   } catch {
@@ -241,8 +243,10 @@ export async function loadSymbolData(
         error: null,
       });
       announceDatasetPaint(painted, sym, iv);
-      // Auto-complete: validate + sliced backfill + progressive repaints
-      ensureDatasetComplete(sym, iv, srcId);
+      // Auto-complete: validate + sliced backfill + progressive repaints.
+      // Guarded by stillCurrent — a stale background job must not overwrite
+      // the status of a newer load (or a newer error).
+      ensureDatasetComplete(sym, iv, srcId, { stillCurrent });
       if (stillCurrent()) {
         try {
           const { reapplyChartScripts } = await import('../indicators/reapply');
