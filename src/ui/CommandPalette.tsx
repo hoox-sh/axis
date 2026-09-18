@@ -176,6 +176,8 @@ export type CommandPaletteProps = {
   onOpenThemeSettings?: () => void;
   /** Open Settings → Editor tab (lint / hover / complete). */
   onOpenEditorSettings?: () => void;
+  /** Open Settings → Notifications tab (toasts / flood control). */
+  onOpenNotificationSettings?: () => void;
   onOpenPlugins?: () => void;
   /** Open Workers catalog page. */
   onOpenWorkers?: () => void;
@@ -288,6 +290,8 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
         props.onOpenThemeSettings?.() ?? props.onOpenSettings?.(),
       openEditorSettings: () =>
         props.onOpenEditorSettings?.() ?? props.onOpenSettings?.(),
+      openNotificationSettings: () =>
+        props.onOpenNotificationSettings?.() ?? props.onOpenSettings?.(),
       openPlugins: () => props.onOpenPlugins?.(),
       openWorkers: () => props.onOpenWorkers?.(),
       openRuntime: () => props.onOpenRuntime?.(),

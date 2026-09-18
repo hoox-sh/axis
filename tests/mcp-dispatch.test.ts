@@ -81,6 +81,33 @@ describe('MCP dispatch', () => {
     expect(logs.some((l) => l.message === 'mcp')).toBe(true);
   });
 
+  it('logs.get filters by source and level', async () => {
+    clearLogs();
+    appendLog('info', 'mcp line', 'mcp');
+    appendLog('error', 'mcp boom', 'mcp');
+    appendLog('info', 'boot line', 'boot');
+    const mcpOnly = (await invokeCapability('logs.get', { source: 'mcp' })) as Array<{
+      source: string;
+    }>;
+    expect(mcpOnly.length).toBe(2);
+    expect(mcpOnly.every((l) => l.source === 'mcp')).toBe(true);
+    const errors = (await invokeCapability('logs.get', { level: 'error' })) as Array<{
+      level: string;
+    }>;
+    expect(errors.length).toBe(1);
+    expect(errors[0]?.level).toBe('error');
+    const both = (await invokeCapability('logs.get', { source: 'mcp', level: 'info', limit: 5 })) as Array<{
+      message: string;
+    }>;
+    expect(both.map((l) => l.message)).toEqual(['mcp line']);
+    try {
+      await invokeCapability('logs.get', { level: 'verbose' });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as McpInvokeError).code).toBe('BAD_LEVEL');
+    }
+  });
+
   it('editor get/set', async () => {
     saveEditorDoc('//@version=6\nindicator("t")');
     const before = (await invokeCapability('editor.get')) as { doc: string };
@@ -187,6 +214,53 @@ describe('MCP drawings', () => {
     } catch (err) {
       expect((err as McpInvokeError).code).toBe('NOT_FOUND');
     }
+    await invokeCapability('drawings.remove', { id: added.id });
+  });
+});
+
+describe('MCP indicators', () => {
+  it('remove detaches unknown ids loudly, removes known ones', async () => {
+    try {
+      await invokeCapability('indicators.remove', { id: 'ind_missing' });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as McpInvokeError).code).toBe('NOT_FOUND');
+    }
+    const { addIndicator } = await import('../src/store');
+    const id = addIndicator('MCP tmp', '//@version=6\nindicator("t")', 'price', {});
+    const out = (await invokeCapability('indicators.remove', { id })) as { ok: boolean };
+    expect(out.ok).toBe(true);
+    const list = (await invokeCapability('indicators.list')) as Array<{ id: string }>;
+    expect(list.some((s) => s.id === id)).toBe(false);
+    try {
+      await invokeCapability('indicators.remove', { id });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as McpInvokeError).code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('update syncs visibility and rejects unknown ids', async () => {
+    try {
+      await invokeCapability('indicators.update', { id: 'ind_missing', visible: false });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as McpInvokeError).code).toBe('NOT_FOUND');
+    }
+    const { addIndicator } = await import('../src/store');
+    const id = addIndicator('MCP vis', '//@version=6\nindicator("v")', 'price', {});
+    const out = (await invokeCapability('indicators.update', { id, visible: false })) as {
+      ok: boolean;
+      visible: boolean;
+    };
+    expect(out.ok).toBe(true);
+    expect(out.visible).toBe(false);
+    const list = (await invokeCapability('indicators.list')) as Array<{
+      id: string;
+      visible: boolean;
+    }>;
+    expect(list.find((s) => s.id === id)?.visible).toBe(false);
+    await invokeCapability('indicators.remove', { id });
   });
 });
 

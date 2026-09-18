@@ -940,7 +940,7 @@ export const ScriptLibraryPanel: Component<ScriptLibraryPanelProps> = (props) =>
           login ? ` as ${login}` : ''
         }`,
       );
-      appendLog('ok', `Git OAuth connected (${provider})`, 'git');
+      appendLog('ok', `Git OAuth connected (${provider})`, 'git', { toast: true });
     } catch (e: unknown) {
       if (ac.signal.aborted) return;
       const msg = e instanceof Error ? e.message : String(e);

@@ -238,7 +238,10 @@ export function ensureDatasetComplete(
           `DSM completing ${sym} ${iv} — ${missing > 0 ? `${missing} bars` : 'recent bars'} in background`,
         );
       } else {
-        setStatus('ready', `Dataset complete · ${report.barCount} bars · ${sym} ${iv}`);
+        setStatus('ready', `Dataset complete · ${report.barCount} bars · ${sym} ${iv}`, {
+          toast: true,
+          source: 'dsm',
+        });
       }
     } catch (err) {
       console.warn('[dsm-orchestrator] ensureDatasetComplete failed', err);
@@ -266,7 +269,10 @@ export function seedDatasetFromBars(
 
 /** Announce a cache-first paint for screen readers / status. */
 export function announceDatasetPaint(bars: Bar[], sym: string, iv: string): void {
-  setStatus('ready', `Loaded ${bars.length} cached bars · ${sym} ${iv} (DSM)`);
+  setStatus('ready', `Loaded ${bars.length} cached bars · ${sym} ${iv} (DSM)`, {
+    toast: true,
+    source: 'dsm',
+  });
   announce(`Loaded ${bars.length} cached bars ${sym} ${iv}`);
 }
 

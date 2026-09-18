@@ -63,6 +63,7 @@ import { DataViewPanel } from './ui/DataViewPanel';
 import { LayerPanel } from './ui/LayerPanel';
 import { errorFallback } from './ui/ErrorFallback';
 import { ErrorShareToast } from './ui/ErrorShareToast';
+import { Toasts } from './ui/Toasts';
 import { UpdateBanner } from './ui/UpdateBanner';
 import { reportUiError } from './ui/boot-errors';
 import { registerBuiltins } from './plugins/bootstrap';
@@ -594,6 +595,9 @@ export const App: Component = () => {
       {/* Opt-in error diagnostic share (telemetry.shareOnError) */}
       <ErrorShareToast />
 
+      {/* Transient system toasts (Settings → Notifications); always logged */}
+      <Toasts />
+
       {/* New deployed version → Update now / Hard reload / Later */}
       <UpdateBanner />
 
@@ -639,6 +643,7 @@ export const App: Component = () => {
           onOpenSettings={() => openSettings('general')}
           onOpenThemeSettings={() => openSettings('theme')}
           onOpenEditorSettings={() => openSettings('editor')}
+          onOpenNotificationSettings={() => openSettings('notifications')}
           onOpenPlugins={() => openStudio('plugins')}
           onOpenWorkers={() => openStudio('workers')}
           onOpenArchitecture={() => openStudio('wire')}

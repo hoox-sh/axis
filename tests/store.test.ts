@@ -26,6 +26,12 @@ import {
   setActivePlugin,
   appendLog,
   clearLogs,
+  notify,
+  dismissToast,
+  clearToasts,
+  hydrateNotifications,
+  notificationCategoryFor,
+  DEFAULT_NOTIFICATIONS,
   setLastRun,
   setStatus,
   setProfilerEnabled,
@@ -94,6 +100,11 @@ import { getSlotBars, setSlotBars } from '../src/chart/chart-registry';
 
 function resetStoreBasics() {
   clearLogs();
+  clearToasts();
+  setStore('notifications', {
+    ...DEFAULT_NOTIFICATIONS,
+    categories: { ...DEFAULT_NOTIFICATIONS.categories },
+  });
   setStore('bars', []);
   setStore('scripts', []);
   setStore('panes', [
@@ -181,6 +192,110 @@ describe('logs and status', () => {
     expect(store.status).toBe('error');
     expect(store.statusMessage).toBe('boom');
     expect(store.logs.some((l) => l.message === 'boom')).toBe(true);
+  });
+});
+
+describe('toasts and notifications', () => {
+  beforeEach(() => {
+    clearLogs();
+    clearToasts();
+    setStore('notifications', {
+      ...DEFAULT_NOTIFICATIONS,
+      categories: { ...DEFAULT_NOTIFICATIONS.categories },
+    });
+  });
+
+  it('notify writes a system log and raises a toast', () => {
+    notify('ok', 'Run finished', { source: 'run' });
+    expect(store.logs.some((l) => l.message === 'Run finished')).toBe(true);
+    expect(store.toasts.length).toBe(1);
+    expect(store.toasts[0]!.message).toBe('Run finished');
+    expect(store.toasts[0]!.source).toBe('run');
+  });
+
+  it('appendLog auto-toasts warn/error but not info/ok', () => {
+    appendLog('info', 'quiet info', 'system');
+    appendLog('ok', 'quiet ok', 'system');
+    expect(store.toasts.length).toBe(0);
+    appendLog('warn', 'loud warn', 'system');
+    appendLog('error', 'loud error', 'system');
+    expect(store.toasts.length).toBe(2);
+    // logs still record everything
+    expect(store.logs.length).toBe(4);
+  });
+
+  it('appendLog toast opt-out stays log-only', () => {
+    appendLog('error', 'silent boom', 'system', { toast: false });
+    expect(store.logs.some((l) => l.message === 'silent boom')).toBe(true);
+    expect(store.toasts.length).toBe(0);
+  });
+
+  it('dedupes repeats into ×N and caps visible toasts', () => {
+    setStore('notifications', 'dedupeWindowMs', 60000);
+    setStore('notifications', 'maxVisible', 2);
+    notify('ok', 'same message', { source: 'run' });
+    notify('ok', 'same message', { source: 'run' });
+    expect(store.toasts.length).toBe(1);
+    expect(store.toasts[0]!.count).toBe(2);
+    notify('ok', 'second', { source: 'run' });
+    notify('ok', 'third', { source: 'run' });
+    expect(store.toasts.length).toBe(2);
+  });
+
+  it('respects master switch, level floor, and category toggles', () => {
+    setStore('notifications', 'enabled', false);
+    notify('error', 'muted', { source: 'run' });
+    expect(store.toasts.length).toBe(0);
+    expect(store.logs.some((l) => l.message === 'muted')).toBe(true);
+
+    setStore('notifications', 'enabled', true);
+    setStore('notifications', 'levelMin', 'error');
+    notify('ok', 'below floor', { source: 'run' });
+    expect(store.toasts.length).toBe(0);
+
+    setStore('notifications', 'levelMin', 'info');
+    setStore('notifications', 'categories', 'run', false);
+    notify('ok', 'category off', { source: 'run' });
+    expect(store.toasts.length).toBe(0);
+  });
+
+  it('dismissToast removes one toast, clearToasts removes all', () => {
+    notify('ok', 'one', { source: 'run' });
+    notify('ok', 'two', { source: 'run' });
+    const id = store.toasts[0]!.id;
+    dismissToast(id);
+    expect(store.toasts.some((t) => t.id === id)).toBe(false);
+    clearToasts();
+    expect(store.toasts).toEqual([]);
+  });
+
+  it('notificationCategoryFor maps sources to categories', () => {
+    expect(notificationCategoryFor('run')).toBe('run');
+    expect(notificationCategoryFor('stream')).toBe('stream');
+    expect(notificationCategoryFor('dsm')).toBe('data');
+    expect(notificationCategoryFor('library')).toBe('scripts');
+    expect(notificationCategoryFor('settings')).toBe('workspace');
+    expect(notificationCategoryFor('nope-unknown')).toBe('system');
+  });
+
+  it('hydrateNotifications falls back to defaults on junk', () => {
+    const d = hydrateNotifications(undefined);
+    expect(d.enabled).toBe(true);
+    expect(d.categories.run).toBe(true);
+    const junk = hydrateNotifications({ levelMin: 'everything', maxVisible: 99 } as never);
+    expect(junk.levelMin).toBe(DEFAULT_NOTIFICATIONS.levelMin);
+    expect(junk.maxVisible).toBe(6);
+  });
+
+  it('persists notification prefs round-trip', () => {
+    setStore('notifications', 'levelMin', 'warn');
+    setStore('notifications', 'categories', 'stream', false);
+    flushPersist();
+    const raw = localStorage.getItem(STORAGE_KEY);
+    expect(raw).toBeTruthy();
+    const overlay = parsePersistedState(raw!);
+    expect(overlay?.notifications?.levelMin).toBe('warn');
+    expect(overlay?.notifications?.categories?.stream).toBe(false);
   });
 
   it('setLastRun captures meta.ms', () => {

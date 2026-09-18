@@ -119,14 +119,14 @@ export async function writeScript(
     pineVersion: derived.pineVersion,
   };
   const meta = await requireActive().write(full);
-  appendLog('ok', `Saved "${meta.name}" → ${getActiveStorageId()}`, 'library');
+  appendLog('ok', `Saved "${meta.name}" → ${getActiveStorageId()}`, 'library', { toast: true });
   return meta;
 }
 
 /** Delete a script from active storage and log. */
 export async function removeScript(id: string): Promise<void> {
   await requireActive().remove(id);
-  appendLog('info', `Deleted script ${id}`, 'library');
+  appendLog('ok', `Deleted script ${id}`, 'library', { toast: true });
 }
 
 /**
@@ -330,7 +330,7 @@ export async function restoreScriptVersion(
     scriptKind: doc.scriptKind,
     pineVersion: doc.pineVersion,
   });
-  appendLog('ok', `Restored "${meta.name}" from ${short}`, 'library');
+  appendLog('ok', `Restored "${meta.name}" from ${short}`, 'library', { toast: true });
   return meta;
 }
 

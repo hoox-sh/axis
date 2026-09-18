@@ -51,6 +51,7 @@ import {
 } from '../../storage/cloud-config';
 import { probeCloudStorage } from '../../storage/cloud';
 import { EditorIntelPanel, ExchangeCredentialsPanel } from '../SettingsDialog';
+import { NotificationsPanel } from './NotificationsPanel';
 import { KeyboardSettingsPanel } from '../shortcuts/Settings';
 import {
   connectMcpBridge,
@@ -82,6 +83,7 @@ const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'theme', label: 'Theme', hint: 'Bars · canvas · chart.bg_color' },
   { id: 'topbar', label: 'Topbar', hint: 'Show/hide topbar buttons' },
   { id: 'keyboard', label: 'Keyboard', hint: 'Shortcut chords · conflicts' },
+  { id: 'notifications', label: 'Notifications', hint: 'Toasts · categories · flood control' },
 ];
 
 export function SettingsPage(props: {
@@ -225,6 +227,7 @@ export function SettingsPage(props: {
     setStatus(
       'ready',
       `Settings saved · ${nextInterval} · ${nextHistoryBars} bars · refresh ${nextRefresh}s · live ${preferAfterLoad() ? 'on' : 'off'} · re-run=${rerunOn()}`,
+      { toast: true, source: 'settings' },
     );
     if (
       store.symbol &&
@@ -279,7 +282,11 @@ export function SettingsPage(props: {
         ? 'Editor intel applies live · Save not required'
         : tab() === 'topbar'
           ? 'Topbar applies live · Save not required'
-          : tab() === 'data'
+          : tab() === 'keyboard'
+            ? 'Shortcuts apply live · Save not required'
+            : tab() === 'notifications'
+              ? 'Notifications apply live · Save not required'
+              : tab() === 'data'
             ? 'Keys stay in this session · not written to disk'
             : `AXIS · scale ${formatUiScalePct(uiScale())}`;
 
@@ -910,10 +917,21 @@ export function SettingsPage(props: {
             </StudioSection>
           </div>
         </Show>
+
+        <Show when={tab() === 'notifications'}>
+          <div
+            id="axis-settings-panel-notifications"
+            role="tabpanel"
+            aria-labelledby="axis-settings-tab-notifications"
+            data-testid="axis-settings-notifications"
+          >
+            <NotificationsPanel />
+          </div>
+        </Show>
       </div>
       <StudioFooter status={footerStatus}>
         <StudioButton variant="ghost" onClick={closeWithoutSave}>
-          {tab() === 'theme' || tab() === 'editor' || tab() === 'data' || tab() === 'topbar' || tab() === 'keyboard' ? 'Close' : 'Cancel'}
+          {tab() === 'theme' || tab() === 'editor' || tab() === 'data' || tab() === 'topbar' || tab() === 'keyboard' || tab() === 'notifications' ? 'Close' : 'Cancel'}
         </StudioButton>
         <Show when={tab() === 'general'}>
           <StudioButton variant="primary" onClick={save}>

@@ -11,6 +11,7 @@
  */
 
 import { resolveCloudConfig } from '../storage/cloud-config';
+import { appendLog } from '../store';
 import { invokeCapability } from './dispatch';
 import { McpInvokeError, sessionIdFromApiKey } from './protocol';
 
@@ -23,6 +24,10 @@ export interface McpBridgeState {
   lastEventAt: number | null;
   /** PWA tabs attached to this key's Worker session (null = unknown). */
   tabs: number | null;
+  /** Last agent invoke received on this socket (null = none yet). */
+  lastInvokeAt: number | null;
+  /** Capability of the last agent invoke. */
+  lastCapability: string | null;
 }
 
 let ws: WebSocket | null = null;
@@ -32,6 +37,8 @@ let state: McpBridgeState = {
   error: null,
   lastEventAt: null,
   tabs: null,
+  lastInvokeAt: null,
+  lastCapability: null,
 };
 const listeners = new Set<(s: McpBridgeState) => void>();
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -82,12 +89,17 @@ async function handleFrame(raw: string): Promise<void> {
   if (type !== 'invoke') return;
   const id = String(msg.id || '');
   const capability = String(msg.capability || '');
+  state = { ...state, lastInvokeAt: Date.now(), lastCapability: capability || null };
+  emit();
+  const started = Date.now();
   try {
     const result = await invokeCapability(capability, msg.payload);
+    appendLog('info', `mcp ${capability || '?'} → ok · ${Date.now() - started}ms`, 'mcp');
     ws?.send(JSON.stringify({ type: 'result', id, result }));
   } catch (err) {
     const code = err instanceof McpInvokeError ? err.code : 'APP_ERROR';
     const message = err instanceof Error ? err.message : String(err);
+    appendLog('error', `mcp ${capability || '?'} → ${code} · ${message}`, 'mcp');
     ws?.send(JSON.stringify({ type: 'error', id, error: { code, message } }));
   }
 }
@@ -111,6 +123,7 @@ function setTabs(n: number | null): void {
   if (state.tabs === n) return;
   state = { ...state, tabs: n };
   emit();
+  if (n != null) appendLog('info', `MCP session tabs attached: ${n}`, 'mcp');
 }
 
 function stopTabsPoll(): void {
@@ -153,6 +166,23 @@ function startTabsPoll(): void {
   }, TABS_POLL_MS);
 }
 
+/**
+ * Check for a deployed app update when the bridge (re)connects. Throttled to
+ * one check per minute (reconnect backoff can fire every 15 s during an
+ * outage). Dynamic import keeps the bridge free of update-manager cycles.
+ */
+const CONNECT_UPDATE_THROTTLE_MS = 60_000;
+
+async function checkForUpdatesOnConnect(): Promise<void> {
+  try {
+    const { checkForUpdates, getUpdateState } = await import('../update/update-manager');
+    if (Date.now() - getUpdateState().lastCheckedAt < CONNECT_UPDATE_THROTTLE_MS) return;
+    await checkForUpdates();
+  } catch {
+    /* update prompt is best effort — never break the bridge */
+  }
+}
+
 /** Open (or refresh) the control-plane socket using the stored cloud API key. */
 export async function connectMcpBridge(): Promise<void> {
   stopped = false;
@@ -166,6 +196,8 @@ export async function connectMcpBridge(): Promise<void> {
         'No Worker API key — set one in Settings → General → Worker (cloud + MCP) to attach this tab.',
       lastEventAt: state.lastEventAt,
       tabs: null,
+      lastInvokeAt: null,
+      lastCapability: null,
     };
     emit();
     return;
@@ -176,21 +208,36 @@ export async function connectMcpBridge(): Promise<void> {
   const session = await sessionIdFromApiKey(cfg.apiKey);
   const url = new URL(workerWsUrl(cfg.endpoint));
   url.searchParams.set('key', cfg.apiKey);
-  state = { status: 'connecting', session, error: null, lastEventAt: Date.now(), tabs: null };
+  state = {
+    status: 'connecting',
+    session,
+    error: null,
+    lastEventAt: Date.now(),
+    tabs: null,
+    lastInvokeAt: null,
+    lastCapability: null,
+  };
   emit();
   try {
     const socket = new WebSocket(url.toString());
     ws = socket;
     socket.addEventListener('open', () => {
       attempt = 0;
-      state = { status: 'open', session, error: null, lastEventAt: Date.now(), tabs: null };
+      state = {
+        status: 'open',
+        session,
+        error: null,
+        lastEventAt: Date.now(),
+        tabs: null,
+        lastInvokeAt: null,
+        lastCapability: null,
+      };
       emit();
+      appendLog('ok', `MCP bridge open · session ${session.slice(0, 8)}… · this tab attached`, 'mcp');
       startTabsPoll();
-      try {
-        socket.send(JSON.stringify({ type: 'hello', session }));
-      } catch {
-        /* ignore */
-      }
+      // A fresh socket means fresh Worker contact — a good moment to notice a
+      // deployed app update (throttled; the interval poll is the backstop).
+      void checkForUpdatesOnConnect();
     });
     socket.addEventListener('message', (ev) => {
       state = { ...state, lastEventAt: Date.now() };
@@ -201,12 +248,14 @@ export async function connectMcpBridge(): Promise<void> {
       stopTabsPoll();
       state = { ...state, status: 'closed', tabs: null };
       emit();
+      appendLog('warn', 'MCP bridge closed — reconnecting', 'mcp');
       scheduleReconnect();
     });
     socket.addEventListener('error', () => {
       stopTabsPoll();
       state = { ...state, status: 'error', error: 'WebSocket error', tabs: null };
       emit();
+      appendLog('error', 'MCP bridge socket error', 'mcp');
     });
   } catch (err) {
     stopTabsPoll();
@@ -216,6 +265,8 @@ export async function connectMcpBridge(): Promise<void> {
       error: err instanceof Error ? err.message : String(err),
       lastEventAt: Date.now(),
       tabs: null,
+      lastInvokeAt: state.lastInvokeAt,
+      lastCapability: state.lastCapability,
     };
     emit();
     scheduleReconnect();

@@ -118,7 +118,7 @@ function EngineSwitchGlyph(props: { id: (typeof ENGINE_SWITCH)[number]['id'] }) 
 export const Topbar: Component<{
   onToggleEditor: () => void;
   onToggleWatchlist: () => void;
-  onOpenSettings: (tab?: 'general' | 'data' | 'editor' | 'theme') => void;
+  onOpenSettings: (tab?: 'general' | 'data' | 'editor' | 'theme' | 'notifications') => void;
   onOpenPlugins?: () => void;
   /** Open Workers catalog (backends / edge / Pyodide / SW). */
   onOpenWorkers?: () => void;

@@ -670,7 +670,10 @@ export function preloadPyodide(): Promise<unknown> {
           detail: 'ready · local',
           error: null,
         });
-        setStatus('ready', 'Pyodide ready · offline evaluate available');
+        setStatus('ready', 'Pyodide ready · offline evaluate available', {
+          toast: true,
+          source: 'engine',
+        });
         appendLog('ok', 'Pyodide runtime ready (~self-hosted)', 'pyodide');
       } else if (py && !reportHud()) {
         // Background warm only — leave MODE/ENG (server etc.) alone

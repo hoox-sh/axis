@@ -18,11 +18,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Application Settings modal — four tabs:
+ * Application Settings modal — tabs:
  * - **General**: engine, on-chain proxy note, storage, density, chart interval, live prefs, workspace
  * - **Data**: per-venue exchange API key / secret / passphrase (session vault)
  * - **Editor**: lint / hover / completions / marks / timings (applies live, no Save)
  * - **Theme**: chart Theme Manager (bar colors, chart.bg_color / chart.fg_color, …)
+ * - **Topbar**: show/hide topbar buttons (applies live, no Save)
+ * - **Notifications**: toast categories / severity floor / flood control (applies live, no Save)
  *
  * Local form state is seeded from `store` when the dialog opens (not on every
  * store mutation while open). Save snapshots form fields, writes
@@ -99,6 +101,7 @@ import { getManager } from '../chart/manager-access';
 import { UI_SCALE_PRESETS, formatUiScalePct } from './ui-scale';
 import { WorkspaceSnapshotMenu } from './WorkspaceSnapshotMenu';
 import { ThemePanel } from './ThemePanel';
+import { NotificationsPanel } from './settings/NotificationsPanel';
 import {
   StudioButton,
   StudioField,
@@ -171,10 +174,10 @@ function readEnginePluginConfig(engineId: string): Record<string, unknown> {
   return (pc[pluginKey('engine', engineId)] || pc[engineId] || {}) as Record<string, unknown>;
 }
 
-export type SettingsTabId = 'general' | 'data' | 'editor' | 'theme' | 'topbar';
+export type SettingsTabId = 'general' | 'data' | 'editor' | 'theme' | 'topbar' | 'notifications';
 
 function isSettingsTabId(v: unknown): v is SettingsTabId {
-  return v === 'general' || v === 'data' || v === 'editor' || v === 'theme' || v === 'topbar';
+  return v === 'general' || v === 'data' || v === 'editor' || v === 'theme' || v === 'topbar' || v === 'notifications';
 }
 
 interface Props {
@@ -190,6 +193,7 @@ const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'editor', label: 'Editor', hint: 'Lint · hover · complete · marks · timings' },
   { id: 'theme', label: 'Theme', hint: 'Bars · canvas · Pine chart.bg_color' },
   { id: 'topbar', label: 'Topbar', hint: 'Show/hide topbar buttons' },
+  { id: 'notifications', label: 'Notifications', hint: 'Toasts · categories · flood control' },
 ];
 
 /** Modal settings form; parent controls `open` / `onClose`. */
@@ -436,6 +440,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     setStatus(
       'ready',
       `Settings saved · ${nextInterval} · ${nextHistoryBars} bars · refresh ${nextRefresh}s · engine=${nextEngine}${modePart} · live re-run=${nextRerunOn}`,
+      { toast: true, source: 'settings' },
     );
     // Reload chart when interval or history depth changes
     if (
@@ -540,12 +545,14 @@ export const SettingsDialog: Component<Props> = (props) => {
                 ? 'Editor intel applies live · Save not required'
                 : tab() === 'topbar'
                   ? 'Topbar applies live · Save not required'
-                  : tab() === 'data'
+                  : tab() === 'notifications'
+                    ? 'Notifications apply live · Save not required'
+                    : tab() === 'data'
                     ? 'Keys stay in this session · not written to disk'
                     : `AXIS · scale ${formatUiScalePct(uiScale())}`}
           </div>
           <button type="button" class="sc-btn" onClick={closeWithoutSave}>
-            {tab() === 'theme' || tab() === 'editor' || tab() === 'data' || tab() === 'topbar'
+            {tab() === 'theme' || tab() === 'editor' || tab() === 'data' || tab() === 'topbar' || tab() === 'notifications'
               ? 'Close'
               : 'Cancel'}
           </button>
@@ -872,6 +879,25 @@ export const SettingsDialog: Component<Props> = (props) => {
                     />
                   </div>
                 </Show>
+              </div>
+            </Show>
+
+            {/* ── Notifications tab ─────────────────────────────────── */}
+            <Show when={tab() === 'notifications'}>
+              <div
+                id="axis-settings-panel-notifications"
+                role="tabpanel"
+                aria-labelledby="axis-settings-tab-notifications"
+                data-testid="axis-settings-notifications"
+                class="sc-settings-content"
+              >
+                <div class="sc-settings-section-title">Notifications</div>
+                <p class="sc-settings-field-hint mt-0">
+                  Toasts for runs, data, streams, engines, scripts, and system
+                  events. Every toast is also written to System Logs; warn/error
+                  entries toast automatically. Changes apply live (no Save).
+                </p>
+                <NotificationsPanel />
               </div>
             </Show>
 

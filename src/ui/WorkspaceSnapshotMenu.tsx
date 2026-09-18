@@ -237,7 +237,7 @@ export const WorkspaceSnapshotMenu: Component = () => {
       });
       downloadSnapshot(snap, defaultSnapshotFilename(snap));
       setMsg('Workspace exported');
-      setStatus('ready', 'Workspace snapshot downloaded');
+      setStatus('ready', 'Workspace snapshot downloaded', { toast: true, source: 'workspace' });
       appendLog('ok', 'Workspace snapshot exported', 'workspace');
     } catch (e: unknown) {
       const m = e instanceof Error ? e.message : String(e);
@@ -316,7 +316,10 @@ export const WorkspaceSnapshotMenu: Component = () => {
       flushPersist();
       emitReflow();
       setMsg(`Imported · ${snap.symbol} ${snap.interval}`);
-      setStatus('ready', `Workspace imported · ${snap.symbol} ${snap.interval}`);
+      setStatus('ready', `Workspace imported · ${snap.symbol} ${snap.interval}`, {
+        toast: true,
+        source: 'workspace',
+      });
       appendLog('ok', `Workspace snapshot imported (${snap.symbol} ${snap.interval})`, 'workspace');
     } catch (applyErr: unknown) {
       const m = applyErr instanceof Error ? applyErr.message : String(applyErr);

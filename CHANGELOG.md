@@ -9,11 +9,24 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-17 · 429 commits · describe-tag: `v2.8.0`_
+_Generated/updated: 2026-09-18 · 430 commits · describe-tag: `v2.9.0`_
 
 ---
 
 ## [Unreleased]
+
+## [2.10.0] — 2026-09-18
+
+### Added
+
+- **MCP agent-activity dot**: the status-bar capsule gains a second dot that lights while an agent invoke is in flight (bridge tracks `lastInvokeAt`/`lastCapability`; tooltip names the last call). The first dot keeps showing socket state + tab count.
+- **Faster app-update prompts**: version poll tightened to every 2 minutes and now also fires (throttled) whenever the MCP bridge connects, so open tabs notice a deploy without a manual full reload.
+- **Toast notifications + Settings → Notifications**: transient bottom-right toasts for runs, data loads, DSM completion, stream connect, Pyodide ready, library save/delete/restore, layouts, workspace import/export, settings saves, screenshots, and git connect. Every toast is written to System Logs; warn/error log entries raise a toast automatically. New Notifications tab (modal dialog, studio Settings page, command palette) holds the master switch, severity floor, per-category toggles (run / data / stream / engine / scripts / workspace / system), and flood control (auto-dismiss duration, max visible, repeat-dedupe window collapsing repeats to ×N). Prefs persist; toasts stay in-memory only.
+
+### Fixed
+
+- **MCP `indicators.remove` left ghost panes**: it deleted only the store row, so chart overlays and empty indicator sub-panes stayed painted (and the orphan panes persisted across reloads). It now uses the same detach path as the Layers panel (overlay cleanup, sub-pane destroy, orphan sweep). `indicators.update` routes `visible` through the chart-synced visibility path and rejects unknown ids.
+- **MCP activity in System Logs + filters**: bridge connects, disconnects, tab-count changes, and every agent invoke now log under source `mcp` (with outcome + duration). The System Logs strip gains source and level filters (count shows `shown/total`, copy follows the filter); `logs.get` accepts `{ source?, level? }`.
 
 ## [2.9.0] — 2026-09-17
 
@@ -1221,12 +1234,15 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (110 commits)
+### 2026-09 (111 commits)
 
 #### Features
 
+- `79f65da6` (2026-09-17) — feat(mcp): drawings control, settings control, session indicator
 - `1d795fb6` (2026-09-17) — feat(settings): unified Worker API key for cloud storage and MCP
 - `b215b995` (2026-09-17) — feat(library): Builtin and Personal tabs in Script Library
 - `15be69c3` (2026-09-16) — feat(mcp): remote MCP server for Worker APIs and live-app control

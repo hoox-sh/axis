@@ -53,6 +53,9 @@ import type {
   EditorMode,
   LogEntry,
   LogLevel,
+  NotificationCategory,
+  NotificationSettings,
+  ToastEntry,
   Drawing,
   DrawingToolId,
   PlaneTelemetry,
@@ -279,8 +282,25 @@ export const UI_SCALE_MAX = 1.3;
 export const UI_SCALE_STEP = 0.05;
 
 /** Valid {@link AppState.datasetPersistence} values. */
-const DATASET_PERSISTENCE_MODES = ['session', 'local', 'git', 'worker'] as const;
+/** Durable defaults for Settings → Notifications (toast flood control). */
+export const DEFAULT_NOTIFICATIONS: NotificationSettings = {
+  enabled: true,
+  levelMin: 'ok',
+  categories: {
+    run: true,
+    data: true,
+    stream: true,
+    engine: true,
+    scripts: true,
+    workspace: true,
+    system: true,
+  },
+  durationMs: 4500,
+  maxVisible: 3,
+  dedupeWindowMs: 5000,
+};
 
+const DATASET_PERSISTENCE_MODES = ['session', 'local', 'git', 'worker'] as const;
 /** Hydrate the dataset persistence switch (invalid / missing → `local`). */
 function hydrateDatasetPersistence(raw: unknown): 'session' | 'local' | 'git' | 'worker' {
   return DATASET_PERSISTENCE_MODES.includes(raw as never) ? (raw as never) : 'local';
@@ -410,6 +430,11 @@ const DEFAULTS: AppState = {
   newestRunId: null,
   indicatorSeries: {},
   logs: [],
+  toasts: [],
+  notifications: {
+    ...DEFAULT_NOTIFICATIONS,
+    categories: { ...DEFAULT_NOTIFICATIONS.categories },
+  },
   // Drawing integration — mirrored to DrawingLayer via manager-access / toolbar
   drawingTool: 'cursor',
   drawings: [],
@@ -912,6 +937,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       compare: hydrateCompare(bag.compare),
       onchain: hydrateOnchain((bag as { onchain?: unknown }).onchain),
       topbar: hydrateTopbar((bag as { topbar?: unknown }).topbar),
+      notifications: hydrateNotifications((bag as { notifications?: unknown }).notifications),
     };
   } catch {
     return null;
@@ -1117,6 +1143,44 @@ function hydrateTopbar(raw: unknown): TopbarSettings {
     panelsSystemLogs: bool('panelsSystemLogs'),
     panelsStatus: bool('panelsStatus'),
     system: bool('system'),
+  };
+}
+
+/** Restore durable notification prefs; unknown shapes fall back to defaults. */
+export function hydrateNotifications(raw: unknown): NotificationSettings {
+  const base = DEFAULT_NOTIFICATIONS;
+  if (!raw || typeof raw !== 'object') {
+    return { ...base, categories: { ...base.categories } };
+  }
+  const bag = raw as Partial<NotificationSettings> & Record<string, unknown>;
+  const levels: LogLevel[] = ['info', 'ok', 'warn', 'error'];
+  const levelMin: LogLevel =
+    typeof bag.levelMin === 'string' && (levels as string[]).includes(bag.levelMin)
+      ? (bag.levelMin as LogLevel)
+      : base.levelMin;
+  const num = (v: unknown, fallback: number, min: number, max: number) =>
+    typeof v === 'number' && Number.isFinite(v)
+      ? Math.min(max, Math.max(min, Math.round(v)))
+      : fallback;
+  const rawCats =
+    bag.categories && typeof bag.categories === 'object'
+      ? (bag.categories as Record<string, unknown>)
+      : {};
+  return {
+    enabled: typeof bag.enabled === 'boolean' ? bag.enabled : base.enabled,
+    levelMin,
+    categories: {
+      run: typeof rawCats.run === 'boolean' ? rawCats.run : true,
+      data: typeof rawCats.data === 'boolean' ? rawCats.data : true,
+      stream: typeof rawCats.stream === 'boolean' ? rawCats.stream : true,
+      engine: typeof rawCats.engine === 'boolean' ? rawCats.engine : true,
+      scripts: typeof rawCats.scripts === 'boolean' ? rawCats.scripts : true,
+      workspace: typeof rawCats.workspace === 'boolean' ? rawCats.workspace : true,
+      system: typeof rawCats.system === 'boolean' ? rawCats.system : true,
+    },
+    durationMs: num(bag.durationMs, base.durationMs, 1500, 30000),
+    maxVisible: num(bag.maxVisible, base.maxVisible, 1, 6),
+    dedupeWindowMs: num(bag.dedupeWindowMs, base.dedupeWindowMs, 0, 60000),
   };
 }
 
@@ -1331,11 +1395,16 @@ function seedStoreState(overlay: Partial<AppState> | null | undefined): AppState
     shortcuts: { overrides: { ...DEFAULTS.shortcuts.overrides } },
     compare: { ...DEFAULTS.compare, bars: [] },
     onchain: { ...DEFAULTS.onchain },
+    notifications: {
+      ...DEFAULT_NOTIFICATIONS,
+      categories: { ...DEFAULT_NOTIFICATIONS.categories },
+    },
     chartTheme: defaultChartThemeState(),
     panes: DEFAULTS.panes.map((p) => ({ ...p })),
     scripts: [],
     drawings: [],
     logs: [],
+    toasts: [],
     bars: [],
     runResults: {},
     indicatorSeries: {},
@@ -1510,6 +1579,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
       hud: telemetry?.hud || DEFAULTS.telemetry.hud,
       shareOnError: telemetry?.shareOnError === true,
     },
+    notifications: unwrap(s.notifications) ?? hydrateNotifications(undefined),
   };
 
   // Optional layout bags (may be undefined on older sessions)
@@ -1675,15 +1745,42 @@ installPersistFlushOnExit();
 
 const MAX_LOGS = 500;
 
-function statusToLevel(status: AppState['status']): LogLevel {
-  if (status === 'error') return 'error';
-  if (status === 'ready' || status === 'connected') return 'ok';
-  if (status === 'loading' || status === 'running') return 'info';
-  return 'warn';
+/** Severity rank for level-floor + overflow comparisons. */
+const LEVEL_RANK: Record<LogLevel, number> = { info: 0, ok: 1, warn: 2, error: 3 };
+
+/**
+ * Map a log `source` tag to a notification category for the
+ * Settings → Notifications per-category toggles.
+ */
+export function notificationCategoryFor(source: string | undefined): NotificationCategory {
+  const s = String(source || 'system').toLowerCase();
+  if (/(^|[/:_-])(run|runner|replay|backtest|strategy)([/:_-]|$)/.test(s)) return 'run';
+  if (
+    /(^|[/:_-])(dsm|data|dataset|source|venue|symbol|bars|load|watchlist|compare|onchain)([/:_-]|$)/.test(
+      s,
+    )
+  )
+    return 'data';
+  if (/(^|[/:_-])(stream|live|ws|socket|tick)([/:_-]|$)/.test(s)) return 'stream';
+  if (/(^|[/:_-])(engine|pyodide|pyne|probe|endpoint|exec|compile)([/:_-]|$)/.test(s))
+    return 'engine';
+  if (
+    /(^|[/:_-])(library|script|scripts|storage|plugin|plugins|git|mcp|import|export)([/:_-]|$)/.test(
+      s,
+    )
+  )
+    return 'scripts';
+  if (
+    /(^|[/:_-])(workspace|layout|snapshot|settings|theme|ui|topbar|screenshot|status|results)([/:_-]|$)/.test(
+      s,
+    )
+  )
+    return 'workspace';
+  return 'system';
 }
 
-/** Append a system log entry (ring buffer, max 500). Not persisted. */
-export function appendLog(level: LogLevel, message: string, source = 'system') {
+/** Raw log append without toast routing (notify() uses this to avoid loops). */
+function appendLogRaw(level: LogLevel, message: string, source = 'system') {
   const entry: LogEntry = {
     id: uid(),
     ts: Date.now(),
@@ -1695,6 +1792,129 @@ export function appendLog(level: LogLevel, message: string, source = 'system') {
     const next = [...logs, entry];
     return next.length > MAX_LOGS ? next.slice(next.length - MAX_LOGS) : next;
   });
+  return entry;
+}
+
+export interface NotifyOpts {
+  /** Origin tag (same vocabulary as log sources). Default `'system'`. */
+  source?: string;
+  /** Override the derived category. */
+  category?: NotificationCategory;
+  /** Skip the toast and only write the system log. */
+  logOnly?: boolean;
+}
+
+function pushToastEntry(level: LogLevel, message: string, source: string) {
+  const prefs = store.notifications || DEFAULT_NOTIFICATIONS;
+  const maxVisible = Math.min(6, Math.max(1, prefs.maxVisible || DEFAULT_NOTIFICATIONS.maxVisible));
+  const now = Date.now();
+  const windowMs = Math.max(0, prefs.dedupeWindowMs ?? DEFAULT_NOTIFICATIONS.dedupeWindowMs);
+
+  // Dedupe: same message + level + source inside the window bumps ×N.
+  if (windowMs > 0) {
+    const dup = [...store.toasts]
+      .reverse()
+      .find((t) => t.message === message && t.level === level && (t.source || '') === source);
+    if (dup && now - dup.ts < windowMs) {
+      setStore('toasts', (t) => t.id === dup.id, 'count', (c) => (typeof c === 'number' ? c + 1 : 2));
+      setStore('toasts', (t) => t.id === dup.id, 'ts', now);
+      return;
+    }
+  }
+
+  const entry: ToastEntry = {
+    id: uid(),
+    ts: now,
+    level,
+    message,
+    source,
+    count: 1,
+  };
+  setStore('toasts', (toasts) => {
+    const next = [...toasts, entry];
+    while (next.length > maxVisible) {
+      // Evict oldest lowest-severity toast first (info < ok < warn < error).
+      let idx = 0;
+      for (let i = 1; i < next.length; i++) {
+        if (LEVEL_RANK[next[i].level] < LEVEL_RANK[next[idx].level]) idx = i;
+      }
+      next.splice(idx, 1);
+    }
+    return next;
+  });
+}
+
+/**
+ * Raise a toast **and** write it to the system log strip.
+ *
+ * Flood control (Settings → Notifications): global `enabled`, per-category
+ * toggle, `levelMin` floor, `dedupeWindowMs` coalescing (×N), and
+ * `maxVisible` cap. When a toast is suppressed by prefs the system log
+ * entry is still written.
+ */
+export function notify(level: LogLevel, message: string, opts?: NotifyOpts | string) {
+  const source = typeof opts === 'string' ? opts : opts?.source || 'system';
+  const logOnly = typeof opts === 'object' && !!opts?.logOnly;
+  const msg = String(message || '').trim();
+  if (!msg) return;
+  appendLogRaw(level, msg, source);
+  if (logOnly) return;
+  const prefs = store.notifications || DEFAULT_NOTIFICATIONS;
+  if (!prefs.enabled) return;
+  if (LEVEL_RANK[level] < LEVEL_RANK[prefs.levelMin || 'ok']) return;
+  const category =
+    (typeof opts === 'object' && opts?.category) || notificationCategoryFor(source);
+  if (prefs.categories && prefs.categories[category] === false) return;
+  pushToastEntry(level, msg, source);
+}
+
+/** Dismiss one toast (auto-dismiss timer or close button). */
+export function dismissToast(id: string) {
+  setStore('toasts', (toasts) => toasts.filter((t) => t.id !== id));
+}
+
+/** Clear all visible toasts (logs are kept). */
+export function clearToasts() {
+  setStore('toasts', []);
+}
+
+export interface AppendLogOpts {
+  /**
+   * - `true`: always raise a toast for this entry (subject to global
+   *   enable + level floor + category toggle).
+   * - `false` / `'silent'`: never toast.
+   * - omitted (`'auto'`, default): warn/error entries toast, info/ok stay
+   *   in the log strip only. Use {@link notify} for success toasts.
+   */
+  toast?: boolean | 'auto' | 'silent';
+}
+
+/**
+ * Append a system log entry (ring buffer, max 500). Not persisted.
+ *
+ * warn/error entries also raise a toast by default (flood-controlled via
+ * Settings → Notifications); pass `{ toast: false }` for noisy paths.
+ */
+export function appendLog(
+  level: LogLevel,
+  message: string,
+  source?: string,
+  opts?: AppendLogOpts,
+) {
+  const src = source || 'system';
+  const mode = opts?.toast ?? 'auto';
+  if (mode === true) {
+    notify(level, message, { source: src });
+    return;
+  }
+  appendLogRaw(level, message, src);
+  if (mode === false || mode === 'silent') return;
+  if (level !== 'warn' && level !== 'error') return;
+  const prefs = store.notifications || DEFAULT_NOTIFICATIONS;
+  if (!prefs.enabled) return;
+  if (LEVEL_RANK[level] < LEVEL_RANK[prefs.levelMin || 'ok']) return;
+  if (prefs.categories && prefs.categories[notificationCategoryFor(src)] === false) return;
+  pushToastEntry(level, String(message || ''), src);
 }
 
 /** Clear in-memory system logs. */
@@ -2061,14 +2281,33 @@ export function listRunResultOptions(): RunResultOption[] {
   return out;
 }
 
+function statusToLevel(status: AppState['status']): LogLevel {
+  if (status === 'error') return 'error';
+  if (status === 'ready' || status === 'connected') return 'ok';
+  if (status === 'loading' || status === 'running') return 'info';
+  return 'warn';
+}
+
 /**
  * Set high-level status + optional message (also appends a log when message given).
+ *
+ * Error/warn messages toast automatically (flood-controlled); pass
+ * `{ toast: true }` to force a toast for success/info updates or
+ * `{ toast: false }` to keep a noisy path log-only. `source` overrides the
+ * log/toast origin tag (default is the status key) so toasts land in the
+ * right Settings → Notifications category.
  */
-export function setStatus(status: AppState['status'], message?: string) {
+export function setStatus(
+  status: AppState['status'],
+  message?: string,
+  opts?: { toast?: boolean | 'auto' | 'silent'; source?: string },
+) {
   setStore('status', status);
   if (message !== undefined) {
     setStore('statusMessage', message);
-    appendLog(statusToLevel(status), message, status);
+    appendLog(statusToLevel(status), message, opts?.source || status, {
+      toast: opts?.toast ?? 'auto',
+    });
   }
 }
 
@@ -2270,7 +2509,7 @@ export function saveChartLayout(name: string): SavedChartLayout {
   };
   setStore('savedLayouts', (list) => [snap, ...(list || [])].slice(0, 40));
   persist();
-  appendLog('ok', `Layout saved · ${snap.name}`, 'layout');
+  appendLog('ok', `Layout saved · ${snap.name}`, 'layout', { toast: true });
   return snap;
 }
 
@@ -2327,7 +2566,7 @@ export function loadChartLayout(id: string): boolean {
     setStore('historyBars', clampHistoryBars(found.historyBars));
   }
   persist();
-  appendLog('ok', `Layout loaded · ${found.name}`, 'layout');
+  appendLog('ok', `Layout loaded · ${found.name}`, 'layout', { toast: true });
   emitWindowEvent('axis-chart-reflow');
   return true;
 }
@@ -2835,7 +3074,7 @@ export function resetUiLayout(): void {
 
   flushPersist();
   appendLog('ok', 'UI layout reset to defaults', 'ui');
-  setStatus('ready', 'UI layout reset to defaults');
+  setStatus('ready', 'UI layout reset to defaults', { toast: true, source: 'ui' });
 }
 
 /* ── Layout helpers ─────────────────────────────────────────────── */

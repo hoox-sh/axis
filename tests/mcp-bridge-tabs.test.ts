@@ -5,9 +5,10 @@
 
 import './setup';
 import { describe, expect, it, afterEach } from 'bun:test';
-import { setStore } from '../src/store';
+import { clearLogs, setStore, store } from '../src/store';
 import { writeStoredCloudConfig } from '../src/storage/cloud-config';
 import {
+  connectMcpBridge,
   disconnectMcpBridge,
   mcpBridgeState,
   onMcpBridge,
@@ -15,6 +16,50 @@ import {
 } from '../src/mcp/bridge';
 
 const realFetch = globalThis.fetch;
+const realWebSocket = globalThis.WebSocket;
+
+type Listener = (ev: { data?: unknown }) => void;
+
+class FakeSocket {
+  static OPEN = 1;
+  static CONNECTING = 0;
+  static instances: FakeSocket[] = [];
+  readyState = FakeSocket.CONNECTING;
+  sent: string[] = [];
+  listeners = new Map<string, Listener[]>();
+  constructor(_url: string) {
+    FakeSocket.instances.push(this);
+  }
+  addEventListener(type: string, fn: Listener): void {
+    const list = this.listeners.get(type) ?? [];
+    list.push(fn);
+    this.listeners.set(type, list);
+  }
+  fire(type: string, ev: { data?: unknown } = {}): void {
+    if (type === 'open') this.readyState = FakeSocket.OPEN;
+    for (const fn of this.listeners.get(type) ?? []) fn(ev);
+  }
+  send(data: string): void {
+    this.sent.push(data);
+  }
+  close(): void {
+    this.readyState = 3;
+  }
+}
+
+let sockets: FakeSocket[] = [];
+
+function stubWebSocket(): void {
+  FakeSocket.instances = [];
+  sockets = FakeSocket.instances;
+  globalThis.WebSocket = FakeSocket as unknown as typeof WebSocket;
+}
+
+function sock(): FakeSocket {
+  const s = sockets[0];
+  if (!s) throw new Error('expected a bridge socket');
+  return s;
+}
 
 function stubFetch(handler: (url: string) => Response): void {
   globalThis.fetch = (async (input: string | URL | Request) => {
@@ -32,6 +77,7 @@ function json(body: unknown, status = 200): Response {
 
 afterEach(() => {
   globalThis.fetch = realFetch;
+  globalThis.WebSocket = realWebSocket;
   disconnectMcpBridge();
   setStore('pluginsConfig', 'storage:cloud', { endpoint: '', apiKey: '' });
 });
@@ -91,5 +137,33 @@ describe('MCP bridge tab count', () => {
     expect(await refreshBridgeTabs()).toBe(1);
     disconnectMcpBridge();
     expect(mcpBridgeState().tabs).toBeNull();
+  });
+
+  it('agent invoke frames set activity + reply on the socket', async () => {
+    clearLogs();
+    writeStoredCloudConfig('https://worker.axis.hoox.sh', `pn_${'f'.repeat(48)}`);
+    // No `version` key: the connect-triggered update check must stay a no-op.
+    stubFetch(() => json({ status: 'ok', connected: 1 }));
+    stubWebSocket();
+    await connectMcpBridge();
+    expect(sockets.length).toBe(1);
+    sock().fire('open');
+    // let the open-handler microtasks (hello, tabs poll, update check) settle
+    await new Promise((r) => setTimeout(r, 10));
+    expect(mcpBridgeState().status).toBe('open');
+
+    sock().fire('message', {
+      data: JSON.stringify({ type: 'invoke', id: 't1', capability: 'drawings.list' }),
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    const st = mcpBridgeState();
+    expect(st.lastCapability).toBe('drawings.list');
+    expect(typeof st.lastInvokeAt).toBe('number');
+    const frames = sock().sent.map((s) => JSON.parse(s) as Record<string, unknown>);
+    const reply = frames.find((f) => f.id === 't1');
+    expect(reply?.type).toBe('result');
+    const mcpLines = store.logs.filter((l) => l.source === 'mcp').map((l) => l.message);
+    expect(mcpLines.some((m) => m.includes('bridge open'))).toBe(true);
+    expect(mcpLines.some((m) => m.includes('drawings.list → ok'))).toBe(true);
   });
 });

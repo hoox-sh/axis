@@ -301,7 +301,9 @@ export function startLive(
             detail: s.detail || s.url || `${sym} ${iv}`,
             error: null,
           });
-          appendLog('ok', `Stream open${s.detail ? ` · ${s.detail}` : ''}`, 'stream');
+          appendLog('ok', `Stream open${s.detail ? ` · ${s.detail}` : ''}`, 'stream', {
+            toast: true,
+          });
         } else if (s.state === 'reconnecting') {
           if (!store.live.active) return;
           setStore('stream', 'status', 'connecting');

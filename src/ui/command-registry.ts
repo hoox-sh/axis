@@ -92,6 +92,8 @@ export interface CommandActions {
   openThemeSettings?: () => void;
   /** Open Settings on the Editor (lint / hover / complete) tab. */
   openEditorSettings?: () => void;
+  /** Open Settings on the Notifications (toasts / flood control) tab. */
+  openNotificationSettings?: () => void;
   setChartGridMode: (mode: '1' | '2h' | '2v' | '4') => void;
   runScript: () => void | Promise<void>;
   focusSymbol: () => void;
@@ -637,6 +639,21 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     ],
   },
   {
+    id: 'action.settings-notifications',
+    title: 'Open Notification Settings',
+    category: 'navigation',
+    keywords: [
+      'toast',
+      'toasts',
+      'notifications',
+      'alerts',
+      'notify',
+      'flood',
+      'dedupe',
+      'quiet',
+    ],
+  },
+  {
     id: 'action.studio',
     title: 'Open Studio',
     category: 'navigation',
@@ -1034,6 +1051,11 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
     byId.set('action.settings-editor', actions.openEditorSettings);
   } else if (actions.openSettings) {
     byId.set('action.settings-editor', actions.openSettings);
+  }
+  if (actions.openNotificationSettings) {
+    byId.set('action.settings-notifications', actions.openNotificationSettings);
+  } else if (actions.openSettings) {
+    byId.set('action.settings-notifications', actions.openSettings);
   }
   // Chart Theme → Settings Theme tab (prefer dedicated opener)
   if (actions.openThemeSettings) {

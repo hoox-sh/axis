@@ -66,14 +66,32 @@ Turn the toggle **off** if you do not want agents driving this browser.
 
 ## Status-bar indicator
 
-The status bar shows an **MCP capsule**: socket state plus how many PWA tabs
-the Worker sees on your key's session (`MCP · 2 tabs`). Green means the bridge
-is open; amber is connecting/retrying; dim is idle (no key). The count polls
-every 20 seconds while connected. Click the capsule to open Settings → MCP.
+The status bar shows an **MCP capsule** with two dots:
+
+- **Session dot** — bridge socket state (green open, amber connecting,
+  red error/off, dim idle) plus how many PWA tabs the Worker sees on your
+  key's session (`MCP · 2 tabs`). The count polls every 20 seconds while
+  connected.
+- **Activity dot** — lights up while an agent is actively driving this tab
+  (any `app_invoke` received in the last few seconds). Hover for the last
+  capability and when it ran.
+
+Click the capsule to open Settings → MCP.
 
 Note: MCP clients (Claude, Cursor, …) call `POST /mcp` statelessly, so there
-is no per-client presence — the capsule tracks bridge + tab attachment, which
-is what `app_*` tools need.
+is no per-client presence — the capsule tracks bridge + tab attachment and
+live invoke activity, which is what `app_*` tools need.
+
+## MCP in System Logs
+
+Every bridge event lands in **System Logs** (topbar **Logs**) with source
+`mcp`: connects, disconnects, session tab-count changes, and one line per
+agent invoke (`drawings.add → ok · 84ms`, errors with their code). Filter the
+strip by source (`mcp`) or level, or query programmatically with
+`logs.get` (`{ source?, level?, limit? }`).
+
+New app versions prompt via an update banner (version check every 2 minutes,
+on window focus, and when the bridge reconnects) — no manual reload hunting.
 
 ## Connect a client
 
@@ -138,7 +156,7 @@ Pass these ids to **`app_invoke`** as `capability`, with a JSON `payload`.
 | App | `app.snapshot`, `app.get`, `app.set`, `app.command`, `app.shortcut`, `app.event` |
 | Chart | `chart.get` / `set` / `load` / `reload` / `live` / `layout` / `theme` / `type` / `screenshot` / `zoom` |
 | Editor | `editor.get` / `set` / `run` / `diagnostics` |
-| Scripts | `indicators.list` / `add` / `remove` / `update` / `run` |
+| Scripts | `indicators.list` / `add` / `remove` / `update` / `run` (remove detaches chart panes like the Layers panel; code edits need `run` after) |
 | Alerts | `alerts.list` / `create` / `update` / `remove` |
 | Watchlist | `watchlist.get` / `add` / `remove` / `lists` |
 | Library | `library.list` / `read` / `write` / `remove` |

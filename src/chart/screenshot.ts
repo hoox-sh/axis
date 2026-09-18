@@ -375,7 +375,7 @@ export async function downloadScreenshot(
   const canvas = await captureScreenshot(opts);
   const blob = await canvasToBlob(canvas);
   downloadBlob(blob, screenshotFilename(store.symbol, store.interval));
-  setStatus('ready', 'Screenshot saved');
+  setStatus('ready', 'Screenshot saved', { toast: true, source: 'screenshot' });
 }
 
 export async function copyScreenshot(
@@ -384,9 +384,12 @@ export async function copyScreenshot(
   const canvas = await captureScreenshot(opts);
   const blob = await canvasToBlob(canvas);
   const ok = await copyBlob(blob);
-  if (ok) setStatus('ready', 'Screenshot copied');
+  if (ok) setStatus('ready', 'Screenshot copied', { toast: true, source: 'screenshot' });
   else {
     downloadBlob(blob, screenshotFilename(store.symbol, store.interval));
-    setStatus('ready', 'Clipboard unavailable — downloaded instead');
+    setStatus('ready', 'Clipboard unavailable — downloaded instead', {
+      toast: true,
+      source: 'screenshot',
+    });
   }
 }

@@ -17,7 +17,6 @@ import {
   loadEditorDoc,
   saveEditorDoc,
   addIndicator,
-  removeIndicator,
   updateIndicator,
   addWatchlistSymbol,
   removeWatchlistSymbol,
@@ -59,6 +58,8 @@ import { defaultStreamForSource } from '../streams/catalog';
 import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
 import { runFromEditor } from '../indicators/run-target';
 import { reapplyChartScripts } from '../indicators/reapply';
+import { detachIndicatorFromChart } from '../indicators/detach';
+import { setScriptChartVisible } from '../indicators/visibility';
 import { createAlert, loadAlerts } from '../alerts';
 import { removeAlert, upsertAlert } from '../alerts/storage';
 import type { Alert, AlertCreateInput, AlertKind } from '../alerts/types';
@@ -368,19 +369,26 @@ export async function invokeCapability(capability: string, payload: unknown = {}
     case 'indicators.remove': {
       const id = str(p.id);
       if (!id) fail('NO_ID', 'id required');
-      removeIndicator(id);
+      if (!store.scripts.some((s) => s.id === id)) fail('NOT_FOUND', `No indicator: ${id}`);
+      // Full UI path: clears chart overlays, destroys emptied sub-panes,
+      // sweeps orphan indicator panes, then removes + persists.
+      detachIndicatorFromChart(id);
       return { ok: true, id };
     }
     case 'indicators.update': {
       const id = str(p.id);
       if (!id) fail('NO_ID', 'id required');
+      if (!store.scripts.some((s) => s.id === id)) fail('NOT_FOUND', `No indicator: ${id}`);
       const patch: Parameters<typeof updateIndicator>[1] = {};
       if (p.name !== undefined) patch.name = str(p.name);
-      if (p.visible !== undefined) patch.visible = Boolean(p.visible);
       if (p.code !== undefined) patch.code = str(p.code);
       if (p.inputValues !== undefined) patch.inputValues = rec(p.inputValues);
-      updateIndicator(id, patch);
-      return { ok: true, id };
+      if (Object.keys(patch).length > 0) updateIndicator(id, patch);
+      // Visibility goes through the chart-synced path (clears plots / re-runs).
+      // NOTE: code changes do not auto-run — follow with indicators.run.
+      let visible: boolean | undefined;
+      if (p.visible !== undefined) visible = setScriptChartVisible(id, Boolean(p.visible));
+      return { ok: true, id, ...(visible !== undefined ? { visible } : {}) };
     }
     case 'indicators.run': {
       await reapplyChartScripts();
@@ -470,8 +478,18 @@ export async function invokeCapability(capability: string, payload: unknown = {}
         newestRunId: store.newestRunId,
         strategyUi: store.strategyUi,
       };
-    case 'logs.get':
-      return store.logs.slice(-(typeof p.limit === 'number' ? p.limit : 50));
+    case 'logs.get': {
+      const source = str(p.source);
+      const level = str(p.level);
+      if (level && !['info', 'ok', 'warn', 'error'].includes(level)) {
+        fail('BAD_LEVEL', 'level must be info|ok|warn|error');
+      }
+      const entries = store.logs.filter(
+        (l) =>
+          (!source || (l.source || 'system') === source) && (!level || l.level === level),
+      );
+      return entries.slice(-(typeof p.limit === 'number' ? p.limit : 50));
+    }
     case 'logs.append': {
       appendLog(
         (str(p.level || 'info') as 'info' | 'ok' | 'warn' | 'error') || 'info',

@@ -71,8 +71,8 @@ export function getUpdateState(): UpdateState {
   return updateState();
 }
 
-/** How often the deployed version is re-checked (5 min). */
-export const UPDATE_POLL_MS = 5 * 60 * 1000;
+/** How often the deployed version is re-checked (2 min — version.json is bytes). */
+export const UPDATE_POLL_MS = 2 * 60 * 1000;
 /** Minimum gap between checks triggered by focus/visibility/online (60 s). */
 export const UPDATE_CHECK_THROTTLE_MS = 60 * 1000;
 

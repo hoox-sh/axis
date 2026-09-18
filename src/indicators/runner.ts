@@ -834,7 +834,7 @@ export async function runAndApply(
   } finally {
     // Never leave interactive Run stuck on Running… after this generation ends
     if (!silent && ownsRunStatus(epoch) && store.status === 'running') {
-      setStatus('ready', 'Run finished');
+      setStatus('ready', 'Run finished', { toast: true, source: 'run' });
       releaseRunStatus(epoch);
     }
     // Interactive done → allow deferred live re-runs (latest bars)

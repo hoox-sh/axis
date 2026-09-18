@@ -27,7 +27,7 @@
  * @module ui/SystemLogs
  */
 
-import { type Component, For, Show, createEffect, createSignal } from 'solid-js';
+import { type Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { store, setStore, persist, clearLogs, isPanelOpen } from '../store';
 import type { LogEntry } from '../store/types';
 import { Icons } from './icons';
@@ -63,13 +63,35 @@ function logsAsText(logs: LogEntry[]): string {
 /** Classic collapsible system log strip (when System Logs pane is enabled). */
 export const SystemLogs: Component = () => {
   const [copied, setCopied] = createSignal(false);
+  const [sourceFilter, setSourceFilter] = createSignal('all');
+  const [levelFilter, setLevelFilter] = createSignal('all');
   let listRef: HTMLDivElement | undefined;
 
   /** Expanded body (collapsed shows last line only). */
   const expanded = () => !!store.logsPanel.open;
 
+  /** Sources present in the log, in first-seen order (for the filter). */
+  const sources = createMemo(() => {
+    const seen: string[] = [];
+    for (const l of store.logs) {
+      const s = l.source || 'system';
+      if (!seen.includes(s)) seen.push(s);
+    }
+    return seen;
+  });
+
+  const visible = createMemo(() => {
+    const src = sourceFilter();
+    const lvl = levelFilter();
+    return store.logs.filter(
+      (l) => (src === 'all' || (l.source || 'system') === src) && (lvl === 'all' || l.level === lvl),
+    );
+  });
+
+  const filtered = () => sourceFilter() !== 'all' || levelFilter() !== 'all';
+
   createEffect(() => {
-    void store.logs.length;
+    void visible().length;
     if (isPanelOpen('logs') && expanded() && listRef) {
       listRef.scrollTop = listRef.scrollHeight;
     }
@@ -87,7 +109,7 @@ export const SystemLogs: Component = () => {
   };
 
   const copyAll = async () => {
-    const text = logsAsText(store.logs);
+    const text = logsAsText(visible());
     if (!text) return;
     if (await copyToClipboard(text)) flashCopied(1200);
   };
@@ -100,7 +122,10 @@ export const SystemLogs: Component = () => {
     if (await copyToClipboard(text)) flashCopied(800);
   };
 
-  const last = () => store.logs[store.logs.length - 1];
+  const last = () => {
+    const v = visible();
+    return v[v.length - 1];
+  };
 
   /**
    * Expanded body height, clamped to the viewport. Reserve room for topbar,
@@ -145,13 +170,43 @@ export const SystemLogs: Component = () => {
           >
             <Icons.scrollText size={13} />
             <span class="uppercase tracking-wider text-text-dim">System Logs</span>
-            <span class="text-text-faint font-mono">({store.logs.length})</span>
+            <span class="text-text-faint font-mono">
+              ({filtered() ? `${visible().length}/${store.logs.length}` : store.logs.length})
+            </span>
             {expanded() ? (
               <Icons.chevronDown size={12} />
             ) : (
               <Icons.chevronUp size={12} />
             )}
           </button>
+
+          <Show when={expanded()}>
+            <select
+              class="sc-input px-1 py-0.5 text-[10px] font-mono max-w-28"
+              value={sourceFilter()}
+              onChange={(e) => setSourceFilter(e.currentTarget.value)}
+              title="Filter by source"
+              aria-label="Filter logs by source"
+              data-testid="axis-logs-filter-source"
+            >
+              <option value="all">all sources</option>
+              <For each={sources()}>{(s) => <option value={s}>{s}</option>}</For>
+            </select>
+            <select
+              class="sc-input px-1 py-0.5 text-[10px] font-mono"
+              value={levelFilter()}
+              onChange={(e) => setLevelFilter(e.currentTarget.value)}
+              title="Filter by level"
+              aria-label="Filter logs by level"
+              data-testid="axis-logs-filter-level"
+            >
+              <option value="all">all levels</option>
+              <option value="info">info</option>
+              <option value="ok">ok</option>
+              <option value="warn">warn</option>
+              <option value="error">error</option>
+            </select>
+          </Show>
 
           <Show when={!expanded() && last()}>
             <button
@@ -181,8 +236,8 @@ export const SystemLogs: Component = () => {
           <button
             type="button"
             class="sc-btn sc-btn-ghost px-1.5 py-0.5"
-            title="Copy all system logs"
-            disabled={!store.logs.length}
+            title={filtered() ? 'Copy filtered logs' : 'Copy all system logs'}
+            disabled={!visible().length}
             onClick={() => void copyAll()}
           >
             <Icons.copy size={13} />
@@ -210,14 +265,14 @@ export const SystemLogs: Component = () => {
             }}
           >
             <Show
-              when={store.logs.length > 0}
+              when={visible().length > 0}
               fallback={
                 <div class="p-3 text-text-faint uppercase tracking-wider">
-                  Waiting for system events…
+                  {filtered() ? 'No entries match the filter…' : 'Waiting for system events…'}
                 </div>
               }
             >
-              <For each={store.logs}>
+              <For each={visible()}>
                 {(entry) => (
                   // biome-ignore lint/a11y: double-click copy is a mouse convenience; each row already exposes an explicit copy button
                   <div

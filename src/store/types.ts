@@ -111,6 +111,54 @@ export interface LogEntry {
   source?: string;
 }
 
+/**
+ * Toast notification category — coarse activity bucket used for the
+ * Settings → Notifications per-category toggles and for mapping a log
+ * `source` to user-facing prefs. Keep this list small and stable.
+ */
+export type NotificationCategory =
+  | 'run'
+  | 'data'
+  | 'stream'
+  | 'engine'
+  | 'scripts'
+  | 'workspace'
+  | 'system';
+
+/** One transient toast (ephemeral — never persisted). */
+export interface ToastEntry {
+  id: string;
+  /** Epoch ms when the toast was raised. */
+  ts: number;
+  level: LogLevel;
+  message: string;
+  /** Origin tag (same vocabulary as {@link LogEntry.source}). */
+  source?: string;
+  /** Coalesced repeat count (>1 renders as “×N”). */
+  count: number;
+}
+
+/**
+ * Durable toast / notification preferences (Settings → Notifications).
+ * Flood control: master switch + per-category toggles + level floor +
+ * dedupe window + visible cap. Every toast is also written to the
+ * in-memory system log strip.
+ */
+export interface NotificationSettings {
+  /** Master switch — when false no toast is raised (logs still append). */
+  enabled: boolean;
+  /** Minimum severity that may raise a toast. Default `'ok'`. */
+  levelMin: LogLevel;
+  /** Per-category opt-outs. Missing keys hydrate as true. */
+  categories: Record<NotificationCategory, boolean>;
+  /** Auto-dismiss delay for non-sticky toasts (ms). Errors stick ~2× longer. */
+  durationMs: number;
+  /** Max toasts on screen; overflow drops the oldest lowest-severity entry. */
+  maxVisible: number;
+  /** Repeats of the same message inside this window bump ×N instead (ms). */
+  dedupeWindowMs: number;
+}
+
 /** docked = right sidebar; popout = external window/tab owns the editor UI */
 export type EditorMode = 'docked' | 'popout';
 
@@ -563,6 +611,14 @@ export interface AppState {
   >;
   /** In-memory system logs (not persisted) */
   logs: LogEntry[];
+  /**
+   * Active transient toasts (ephemeral — never hydrated from disk).
+   * Every toast is also appended to {@link logs}; selected log levels
+   * (warn/error) raise a toast automatically — see `notify` / `appendLog`.
+   */
+  toasts: ToastEntry[];
+  /** Toast / notification preferences (persisted). See Settings → Notifications. */
+  notifications: NotificationSettings;
 
   /**
    * Active interactive drawing tool (`cursor` or a place tool).

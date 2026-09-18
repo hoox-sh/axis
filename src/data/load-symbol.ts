@@ -345,7 +345,10 @@ export async function loadSymbolData(
       detail: `${normalized.length} bars · ${label}`,
       error: null,
     });
-    setStatus('ready', `Loaded ${normalized.length} bars · ${source.name}`);
+    setStatus('ready', `Loaded ${normalized.length} bars · ${source.name}`, {
+      toast: true,
+      source: 'data',
+    });
     announce(`Loaded ${normalized.length} bars ${sym} ${iv}`);
 
     // Restart / auto-start live on the new ticker after a full history paint
