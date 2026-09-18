@@ -93,6 +93,24 @@ Covers plugin URL schemes, storage-via-URL reject, poisoned localStorage, worker
 2. No real network (mock `fetch` / WebSocket).
 3. Prefer table-driven tests for catalog built-ins.
 4. Plugin fixtures live in `tests/fixtures/plugins/`.
+5. **Fresh `Response` per mock call.** `Response` bodies are single-use: a
+   queued mock that re-serves one instance breaks the second consumer
+   (`Body already used` → `.json().catch(() => ({}))` → phantom `{}`).
+   Build from payload parts per call (see `mockFetchSequence` in
+   `tests/git-oauth.test.ts`). Background tasks leaked from other suites
+   share the mock under full-suite runs — repeating the last entry is
+   fine, re-serving one body is not.
+6. **Background status writes need a staleness guard.** Fire-and-forget
+   jobs (`ensureDatasetComplete`, backfills) must take `stillCurrent` (or
+   equivalent) and skip user-visible `setStatus` when stale — otherwise a
+   slow job overwrites a newer load's status, in prod and in tests.
+7. **Generation resets advance, never zero.** `_resetLoadGeneration` /
+   `_resetDsmOrchestratorForTests` bump their counters so a stale closure
+   from an earlier test can never match a reclaimed generation-1 guard.
+8. **Abort leaked jobs in `beforeEach`.** Suites that trigger detached
+   backfills (`loadSymbolData` cache paints) call
+   `_resetDataSourceManagerForTests()` so network work doesn't bleed into
+   later tests and their mocks.
 
 ## Adding a unit test
 

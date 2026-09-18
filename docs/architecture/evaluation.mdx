@@ -100,11 +100,28 @@ Switch engine to `pyodide`. First run downloads/caches the self-hosted runtime. 
 
 Deploy AXIS Worker with `EXTERNAL_BACKEND` pointing at Flask or pyne-worker. Engine stays `server`; endpoint is the Worker origin. Still no trade-worker hop unless **that** backend forwards events.
 
+### Pyodide in Worker (scaffold — not production yet)
+
+Goal: a fully-CF deployment (no Flask) with the Worker evaluating Pine itself.
+
+```toml
+# worker/wrangler.toml
+PYODIDE_IN_WORKER = "enabled"   # default "disabled" — leave it there for now
+```
+
+Status: Pyodide boots per isolate, but the wheel install + `run_script`
+bridge are stubbed, so every run returns an error envelope (HTTP 200) and
+does **not** fall through to `EXTERNAL_BACKEND`. Enabling the flag today
+breaks evaluation. Completion checklist (R2 wheel, `BUNDLES` binding,
+micropip install, bridge, fail-open semantics) lives in
+`worker/RUNTIME.md`. Production recommendation stays `EXTERNAL_BACKEND`.
+
 ## Failure modes
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | 503 `NO_BACKEND` | Worker has no `EXTERNAL_BACKEND` and Pyodide-in-worker off | Set backend or use browser Pyodide |
+| 503 body `{ status: 'error', code: 'NO_BACKEND' }` to API consumers | Same as above, machine shape | Do **not** retry — the backend is absent, not busy. Fix config, then resend. (PYNE Agent treats this as skipped-with-note after 1 attempt.) |
 | Compile "slow / different" in Pyodide | No Numba | Use Flask for numeric compile |
 | Expecting pynets in the PWA | Not wired | Import `@hoox-sh/pynets` in your own app |
 | Strategy PnL on chart, no CEX fill | AXIS does not execute | [pyne-worker live trading](/docs/enduser/guides/pyne-live-trading) |
