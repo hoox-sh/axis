@@ -15,6 +15,14 @@ _Generated/updated: 2026-09-18 · 430 commits · describe-tag: `v2.9.0`_
 
 ## [Unreleased]
 
+### Fixed
+
+- **MCP `structuredContent` always an object**: app-plane array results (`indicators.list`, `logs.get`, `alerts.list`, `library.list`, `drawings.list`) and primitive `app.get`/`settings.get` slices failed strict MCP clients (`expected record, received array/string`). Worker `jsonText` now envelopes non-objects as `{ result }`.
+- **MCP `chart.zoom` accepts `action` alias**: `{"action":"reset"}` previously fell back to `in`; now `op`/`action` are equivalent.
+- **MCP `drawings.tool` validates**: unknown tools now fail `BAD_TOOL`, missing tool fails `NO_TOOL` (previously set empty string).
+- **Market Binance failover**: `403/451/429` from `data-api.binance.vision` now tries `api.binance.com` before surfacing; geo-block HTML no longer sticks on first upstream.
+- **PYNE Agent endpoint dead-end**: installing the agent plugin from the same-origin `/plugins/axis-pine-agent.js` left `endpoint` empty with no UI to set it, so every chat failed with `Set plugin config: endpoint = your pyne-agent-worker HTTPS URL`. Remote installs now seed the endpoint from the install origin and same-origin installs fall back to the production worker origin (backfilled on boot for existing installs); Workers Manager → PYNE Agent gains an editable **Agent endpoint** section (worker URL + API key, `component:pyne-agent`). Self-hosters (local `wrangler dev` in the sister `pyne-agent-worker` repo) override the URL there.
+
 ## [2.10.0] — 2026-09-18
 
 ### Added

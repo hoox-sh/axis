@@ -12,8 +12,10 @@
  */
 
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
-import { store, setStatus } from '../../store';
-import { loadPluginFromUrl, getInstalledPlugins } from '../../plugins/loader';
+import { persist, setStatus, store } from '../../store';
+import { DEFAULT_PYNE_AGENT_ENDPOINT, loadPluginFromUrl, getInstalledPlugins } from '../../plugins/loader';
+import { pluginKey } from '../../plugins/types';
+import { writePluginField } from '../plugin-config';
 import { preloadPyodide } from '../../engines/catalog';
 import { copyToClipboard } from '../clipboard';
 import { Icons } from '../icons';
@@ -278,6 +280,15 @@ export function WorkersPage(props: {
     setActionErr('');
     try {
       await loadPluginFromUrl(url);
+      // Same-origin module install seeds the production endpoint in the
+      // loader, but ensure it here too (e.g. plugin was already installed
+      // before the seeding existed and config is still empty).
+      const key = pluginKey('component', 'pyne-agent');
+      const prev = (store.pluginsConfig?.[key] || {}) as Record<string, unknown>;
+      if (!prev.endpoint || !String(prev.endpoint).trim()) {
+        writePluginField(key, 'endpoint', entry.defaultEndpoint || DEFAULT_PYNE_AGENT_ENDPOINT);
+        void persist();
+      }
       props.onChanged?.();
       setActionMsg('PYNE Agent plugin installed');
       setStatus('ready', 'PYNE Agent plugin loaded');
@@ -547,6 +558,52 @@ export function WorkersPage(props: {
                       </StudioHint>
                     </Show>
                   </StudioSection>
+
+                  <Show when={w().id === 'pyne-agent'}>
+                    <StudioSection
+                      title="Agent endpoint"
+                      lead="The plugin chats with this pyne-agent-worker origin (POST /v1/chat). Empty = the 'Set plugin config: endpoint' error. Production default is prefilled; point it at local wrangler dev when self-hosting the sister repo."
+                    >
+                      <StudioField
+                        label="Agent worker URL (no trailing slash)"
+                        hint="e.g. https://pyne-agent-worker.cryptolinx.workers.dev — or http://127.0.0.1:8787 for local wrangler dev"
+                      >
+                        <input
+                          class="ax-input ax-input--mono"
+                          data-testid="axis-pyne-agent-endpoint"
+                          placeholder={w().defaultEndpoint || 'https://pyne-agent-worker.cryptolinx.workers.dev'}
+                          value={String(
+                            ((store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] || {}) as Record<string, unknown>).endpoint ||
+                              (store.pluginsConfig?.['pyne-agent'] as Record<string, unknown> | undefined)?.endpoint ||
+                              '',
+                          )}
+                          onInput={(e) => {
+                            writePluginField(pluginKey('component', 'pyne-agent'), 'endpoint', e.currentTarget.value.trim().replace(/\/+$/, ''));
+                            void persist();
+                          }}
+                        />
+                      </StudioField>
+                      <StudioField
+                        label="API key (optional)"
+                        hint="Must match the worker API_KEY secret; leave empty for local open mode"
+                      >
+                        <input
+                          type="password"
+                          class="ax-input ax-input--mono"
+                          data-testid="axis-pyne-agent-apikey"
+                          placeholder="optional in local open mode"
+                          value={String(
+                            ((store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] || {}) as Record<string, unknown>).apiKey ||
+                              '',
+                          )}
+                          onInput={(e) => {
+                            writePluginField(pluginKey('component', 'pyne-agent'), 'apiKey', e.currentTarget.value);
+                            void persist();
+                          }}
+                        />
+                      </StudioField>
+                    </StudioSection>
+                  </Show>
 
                   <For each={w().install}>
                     {(step, i) => (

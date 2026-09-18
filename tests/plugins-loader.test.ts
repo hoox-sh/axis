@@ -20,6 +20,7 @@ import { _resetEngineRegistrationFlag, listEngines } from '../src/engines/catalo
 import { _resetStorageRegistrationFlag } from '../src/storage/catalog';
 import {
   PLUGINS_KEY,
+  DEFAULT_PYNE_AGENT_ENDPOINT,
   normalizePluginUrl,
   assertSafePluginUrl,
   loadPluginFromUrl,
@@ -27,6 +28,13 @@ import {
   getInstalledPlugins,
   restoreInstalledPlugins,
 } from '../src/plugins/loader';
+import { setStore, store } from '../src/store';
+import { reconcile } from 'solid-js/store';
+
+/** Replace (not merge) the pluginsConfig bag — plain setStore merges. */
+function resetPluginsConfig(): void {
+  setStore('pluginsConfig', reconcile({}));
+}
 
 const fixtures = join(import.meta.dir, 'fixtures/plugins');
 
@@ -150,6 +158,33 @@ describe('loadPluginFromUrl', () => {
     await expect(loadPluginFromUrl(url)).rejects.toThrow(/run/i);
     expect(registry.getEngine('no-run')).toBeUndefined();
     expect(getInstalledPlugins().some((p) => p.id === 'no-run')).toBe(false);
+  });
+
+  it('seeds pyne-agent endpoint for same-origin-style component installs', async () => {
+    resetPluginsConfig();
+    const entry = await loadPluginFromUrl(fileUrl('fake-axis-pine-agent.js'));
+    expect(entry.id).toBe('pyne-agent');
+    const bag = store.pluginsConfig?.['component:pyne-agent'] as
+      | Record<string, unknown>
+      | undefined;
+    expect(bag?.endpoint).toBe(DEFAULT_PYNE_AGENT_ENDPOINT);
+    resetPluginsConfig();
+    removePlugin('pyne-agent', 'component');
+  });
+
+  it('leaves endpoint unset for pyne-agent installs without a worker origin', async () => {
+    // Mirrors / third-party hosts serve no chat API — never guess an origin.
+    resetPluginsConfig();
+    const code = `export default { id: 'pyne-agent', name: 'Mirror', kind: 'component', mount() { return null; } }`;
+    const url = `data:text/javascript,${encodeURIComponent(code)}`;
+    const entry = await loadPluginFromUrl(url);
+    expect(entry.id).toBe('pyne-agent');
+    const bag = store.pluginsConfig?.['component:pyne-agent'] as
+      | Record<string, unknown>
+      | undefined;
+    expect(bag?.endpoint).toBeUndefined();
+    resetPluginsConfig();
+    removePlugin('pyne-agent', 'component');
   });
 });
 

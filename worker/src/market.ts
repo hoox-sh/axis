@@ -205,12 +205,24 @@ async function proxyPublicPath(
   if (hit) return cachedResponse(hit, origin, 'HIT');
 
   let lastErr = 'unreachable';
+  let lastStatus = 502;
+  let lastBody = '';
+  let lastContentType = 'application/json';
   for (const base of upstreams) {
     const upstreamUrl = `${base}${pathAndQuery}`;
     try {
       const upstream = await fetchUpstream(upstreamUrl);
       const text = await upstream.text();
       const contentType = upstream.headers.get('Content-Type') || 'application/json';
+      // Geo / WAF blocks (403/451) and rate limits (429) on one host should
+      // fail over to the next upstream instead of surfacing HTML to the PWA.
+      if (upstream.status === 403 || upstream.status === 451 || upstream.status === 429) {
+        lastErr = `${base} → HTTP ${upstream.status}`;
+        lastStatus = upstream.status;
+        lastBody = text;
+        lastContentType = contentType;
+        continue;
+      }
       if (upstream.ok || upstream.status === 400 || upstream.status === 404) {
         putCached(cacheKey, {
           body: text,
@@ -231,6 +243,21 @@ async function proxyPublicPath(
     } catch (err) {
       lastErr = err instanceof Error ? err.message : String(err);
     }
+  }
+
+  // All upstreams blocked — surface the last upstream body (usually Binance
+  // 403 HTML) with its status so callers can distinguish geo-block from
+  // network failure, plus a structured hint.
+  if (lastBody && (lastStatus === 403 || lastStatus === 451 || lastStatus === 429)) {
+    return new Response(lastBody, {
+      status: lastStatus,
+      headers: {
+        'Content-Type': lastContentType,
+        'X-Axis-Market-Cache': 'MISS',
+        'X-Axis-Market-Upstream': 'all-blocked',
+        ...corsHeaders(origin),
+      },
+    });
   }
 
   return json(

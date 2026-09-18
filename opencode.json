@@ -6,5 +6,20 @@
       "command": ["bunx", "prettier", "--write"],
       "extensions": [".ts", ".tsx", ".js", ".mjs", ".json", ".md", ".mdx", ".css"]
     }
+  },
+  "mcp": {
+    "axis": {
+      "type": "local",
+      "command": [
+        "bun",
+        "packages/cli/bin/axis.js",
+        "mcp",
+        "--url",
+        "https://worker.axis.hoox.sh/mcp"
+      ],
+      "environment": {
+        "AXIS_API_KEY": "{env:AXIS_API_KEY}"
+      }
+    }
   }
 }

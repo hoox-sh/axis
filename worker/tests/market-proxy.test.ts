@@ -452,4 +452,39 @@ describe('handleMarket mexc proxy', () => {
     expect(res!.status).toBe(204);
     expect(res!.headers.get('Access-Control-Allow-Origin')).toBe(o);
   });
+
+  it('fails over from vision 403 to api.binance.com', async () => {
+    const seen: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      seen.push(url);
+      if (url.startsWith('https://data-api.binance.vision')) {
+        return new Response('<html>403 Forbidden</html>', {
+          status: 403,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+      return new Response(
+        JSON.stringify([[1_700_000_000_000, '1', '2', '0.5', '1.5', '10']]),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }) as typeof fetch;
+
+    try {
+      const res = await handleMarket(
+        req('/api/market/binance/klines?symbol=BTCUSDT&interval=1d&limit=2'),
+        env,
+        origin,
+        '/api/market/binance/klines',
+      );
+      expect(res!.status).toBe(200);
+      expect(seen.length).toBe(2);
+      expect(seen[0]).toContain('data-api.binance.vision');
+      expect(seen[1]).toContain('api.binance.com');
+      expect(res!.headers.get('X-Axis-Market-Upstream')).toContain('api.binance.com');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

@@ -47,9 +47,10 @@ import { pluginKey, type ComponentPlugin, type DatasetPlugin, type EnginePlugin,
 
 /**
  * Same-origin copy of the PYNE Agent component plugin (avoids cross-origin
- * module CORS / CSP issues). Chat API host is **not** implied — set
- * `pluginsConfig.endpoint` in the plugin UI (or seed only when the install
- * URL is already an agent Worker origin).
+ * module CORS / CSP issues). Chat API host defaults to
+ * {@link DEFAULT_PYNE_AGENT_ENDPOINT} on install — override
+ * `pluginsConfig['component:pyne-agent'].endpoint` for a self-hosted worker
+ * (e.g. local `wrangler dev` in the sister `pyne-agent-worker` repo).
  */
 export const DEFAULT_PYNE_AGENT_PLUGIN_URL = '/plugins/axis-pine-agent.js';
 
@@ -174,26 +175,50 @@ function componentConfig(id: string): Record<string, unknown> {
 }
 
 /**
- * Seed agent API endpoint only when the install URL is already the Worker
- * origin. Same-origin `/plugins/axis-pine-agent.js` is just the module —
- * leave endpoint unset so chat stays disabled until the operator sets it.
+ * True when a hostname plausibly serves the agent Worker API itself
+ * (`POST /v1/chat`) rather than just mirroring the plugin file — the
+ * production worker, any `*.workers.dev` host, or local `wrangler dev`.
+ * A static CDN mirror must NOT become the chat endpoint (it serves no API).
+ */
+function isAgentWorkerHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return (
+    h.includes('pyne-agent') ||
+    h.endsWith('.workers.dev') ||
+    h === 'localhost' ||
+    h === '127.0.0.1' ||
+    h === '[::1]' ||
+    h === '0.0.0.0'
+  );
+}
+
+/**
+ * Seed agent API endpoint when missing.
+ * - Remote install from a worker-ish origin → use that origin.
+ * - Same-origin `/plugins/axis-pine-agent.js` (the documented default) →
+ *   fall back to the production agent origin so chat works out of the box.
+ * - Anything else (e.g. a static CDN mirror) → leave unset; the operator
+ *   sets `endpoint` in the plugin config (Workers Manager → PYNE Agent).
  */
 function seedPyneAgentConfig(pluginId: string, href: string): void {
   if (pluginId !== 'pyne-agent' && !href.includes('axis-pine-agent.js')) return;
   const key = pluginKey('component', 'pyne-agent');
   const prev = (store.pluginsConfig?.[key] || {}) as Record<string, unknown>;
-  if (prev.endpoint && String(prev.endpoint).trim()) return;
+  // componentConfig() merges the canonical bag under the legacy bare-id bag
+  // (legacy wins) — treat an endpoint in either as already configured.
+  const legacy = (store.pluginsConfig?.['pyne-agent'] || {}) as Record<string, unknown>;
+  if (String(prev.endpoint || '').trim() || String(legacy.endpoint || '').trim()) return;
   let endpoint = '';
-  try {
-    const u = new URL(href, typeof location !== 'undefined' ? location.origin : 'https://axis.local');
-    if (
-      u.hostname === 'pyne-agent-worker.cryptolinx.workers.dev' ||
-      u.hostname.endsWith('.pyne-agent-worker.cryptolinx.workers.dev')
-    ) {
-      endpoint = u.origin;
+  const trimmed = href.trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const u = new URL(trimmed);
+      if (isAgentWorkerHost(u.hostname)) endpoint = u.origin;
+    } catch {
+      /* leave unset */
     }
-  } catch {
-    /* leave unset */
+  } else if (trimmed.includes('axis-pine-agent.js')) {
+    endpoint = DEFAULT_PYNE_AGENT_ENDPOINT;
   }
   if (!endpoint) return;
   setStore('pluginsConfig', {
@@ -590,6 +615,19 @@ export async function restoreInstalledPlugins(): Promise<void> {
         `Restored ${list.length} installed plugin URL(s) (${listDynamicSourceIds().length} dynamic sources)`,
         'plugins',
       );
+    }
+    // Heal installs from before endpoint seeding: re-run the seeder against
+    // each actual installed agent URL (self-host origins win for their own
+    // installs; same-origin modules fall back to production). No-op once an
+    // endpoint is configured in either config bag.
+    try {
+      for (const item of list) {
+        if (item.id === 'pyne-agent' || item.url.includes('axis-pine-agent.js')) {
+          seedPyneAgentConfig('pyne-agent', migratePyneAgentPluginUrl(item.url));
+        }
+      }
+    } catch {
+      /* seeding is best-effort */
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

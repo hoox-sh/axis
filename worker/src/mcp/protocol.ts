@@ -123,15 +123,33 @@ export function pickProtocolVersion(requested: unknown): string {
   return MCP_PROTOCOL_VERSION;
 }
 
+function isPlainRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+/**
+ * MCP `structuredContent` must be a JSON object for strict clients
+ * (some validate `expected record`). App-plane capabilities legitimately
+ * return arrays (`indicators.list`, `logs.get`, …) and primitives
+ * (`app.get` with a dot path, `settings.get` with a key). Envelop those
+ * as `{ result }` so `content.text` and `structuredContent` stay in sync
+ * without breaking object payloads.
+ */
+export function ensureRecordContent(data: unknown): Record<string, unknown> {
+  if (isPlainRecord(data)) return data;
+  return { result: data ?? null };
+}
+
 export function jsonText(data: unknown, pretty = false): McpToolResult {
+  const payload = ensureRecordContent(data);
   return {
     content: [
       {
         type: 'text',
-        text: pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data),
+        text: pretty ? JSON.stringify(payload, null, 2) : JSON.stringify(payload),
       },
     ],
-    structuredContent: data,
+    structuredContent: payload,
   };
 }
 

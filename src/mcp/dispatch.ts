@@ -79,7 +79,7 @@ import { fireShortcutById } from '../ui/shortcuts/runtime';
 import type { DrawingToolId } from '../chart/drawing-types';
 import type { Drawing as StoreDrawing } from '../store/types';
 import type { ChartPoint, DrawingKind } from '../chart/drawings/types';
-import { TOOL_SPECS } from '../chart/drawings/defaults';
+import { TOOL_SPECS, ALL_DRAWING_TOOLS } from '../chart/drawings/defaults';
 import { DRAWING_LIST_MAX, normalizeDrawing } from '../chart/drawings/normalize';
 import { drawingsForSymbol, newDrawingId } from '../chart/drawings/sync';
 import { getEngine } from '../engines/catalog';
@@ -314,7 +314,7 @@ export async function invokeCapability(capability: string, payload: unknown = {}
       return canvasPng(canvas);
     }
     case 'chart.zoom': {
-      const op = str(p.op || 'in');
+      const op = str(p.op || p.action || 'in');
       if (op === 'in') zoomChartBy(typeof p.delta === 'number' ? p.delta : 0.2);
       else if (op === 'out') zoomChartBy(typeof p.delta === 'number' ? p.delta : -0.2);
       else if (op === 'reset') resetChartZoom();
@@ -654,7 +654,12 @@ export async function invokeCapability(capability: string, payload: unknown = {}
       return { count: store.drawings.length };
     }
     case 'drawings.tool': {
-      setDrawingTool(str(p.tool) as DrawingToolId);
+      const tool = str(p.tool || p.id);
+      if (!tool) fail('NO_TOOL', 'drawing tool required (e.g. cursor, trend, fib)');
+      if (!(ALL_DRAWING_TOOLS as readonly string[]).includes(tool)) {
+        fail('BAD_TOOL', `Unknown drawing tool: ${tool}`);
+      }
+      setDrawingTool(tool as DrawingToolId);
       return { tool: store.drawingTool };
     }
 

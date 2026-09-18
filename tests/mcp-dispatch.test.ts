@@ -329,3 +329,28 @@ describe('MCP settings', () => {
     }
   });
 });
+
+describe('MCP zoom + drawing tool aliases', () => {
+  it('chart.zoom accepts action alias for reset', async () => {
+    const out = (await invokeCapability('chart.zoom', { action: 'reset' })) as { ok: boolean; op: string };
+    expect(out.ok).toBe(true);
+    expect(out.op).toBe('reset');
+  });
+
+  it('drawings.tool validates unknown tools', async () => {
+    const out = (await invokeCapability('drawings.tool', { tool: 'cursor' })) as { tool: string };
+    expect(out.tool).toBe('cursor');
+    try {
+      await invokeCapability('drawings.tool', { tool: 'nope-tool' });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as McpInvokeError).code).toBe('BAD_TOOL');
+    }
+    try {
+      await invokeCapability('drawings.tool', {});
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as McpInvokeError).code).toBe('NO_TOOL');
+    }
+  });
+});
