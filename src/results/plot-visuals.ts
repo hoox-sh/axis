@@ -68,6 +68,11 @@ export interface PlotMetaEntry {
   /** `fill(plot1, plot2, …)` — series title of second plot edge */
   plot2?: string | null;
   /**
+   * Packed series key before uniquify (`plot` → `plot_2`). Fill edges
+   * look this up when `plot1`/`plot2` still name the original title.
+   */
+  orig_title?: string | null;
+  /**
    * `plotbar` / `plotcandle` — optional series titles for OHLC components when
    * the primary series is close-only or a handle (sibling packaging).
    */
@@ -407,6 +412,41 @@ function asBarTime(t: unknown): number | null {
 }
 
 /**
+ * Resolve a fill edge to a series array. Untitled `plot()` calls pack as
+ * `plot` / `plot_2` while fill meta still says `plot` for both — pick two
+ * distinct keys (direct, orig_title, then `title_N` siblings).
+ */
+export function seriesValuesForFillRef(
+  series: SeriesMap,
+  plotMeta: Record<string, PlotMetaEntry> | undefined | null,
+  ref: string,
+  used: Set<string>,
+): { key: string; values: unknown[] } | null {
+  const tryKey = (k: string): { key: string; values: unknown[] } | null => {
+    if (!k || used.has(k)) return null;
+    const arr = series[k];
+    return Array.isArray(arr) ? { key: k, values: arr } : null;
+  };
+  const direct = tryKey(ref);
+  if (direct) return direct;
+  const meta = plotMeta || {};
+  for (const [k, m] of Object.entries(meta)) {
+    if (m?.title === ref || m?.orig_title === ref) {
+      const hit = tryKey(k);
+      if (hit) return hit;
+    }
+  }
+  const prefix = `${ref}_`;
+  for (const k of Object.keys(series)) {
+    if (k === ref || k.startsWith(prefix)) {
+      const hit = tryKey(k);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/**
  * Resolve Pine `fill` entries into upper/lower series bands for the chart.
  * Requires `meta.plot1` / `meta.plot2` series titles (from plot handles).
  */
@@ -421,9 +461,13 @@ export function resolvePlotFillBands(
     const p1 = meta.plot1 ? String(meta.plot1) : '';
     const p2 = meta.plot2 ? String(meta.plot2) : '';
     if (!p1 || !p2) continue;
-    const a = series[p1];
-    const b = series[p2];
-    if (!Array.isArray(a) || !Array.isArray(b)) continue;
+    const used = new Set<string>();
+    const edge1 = seriesValuesForFillRef(series, plotMeta, p1, used);
+    if (edge1) used.add(edge1.key);
+    const edge2 = seriesValuesForFillRef(series, plotMeta, p2, used);
+    if (!edge1 || !edge2) continue;
+    const a = edge1.values;
+    const b = edge2.values;
     const n = Math.max(a.length, b.length, values.length);
     const upper: (number | null)[] = [];
     const lower: (number | null)[] = [];
@@ -453,8 +497,8 @@ export function resolvePlotFillBands(
       lower,
       colors,
       color: fallback,
-      plot1: p1,
-      plot2: p2,
+      plot1: edge1.key,
+      plot2: edge2.key,
     });
   }
   return out;

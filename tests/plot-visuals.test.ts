@@ -738,6 +738,31 @@ describe('splitSeriesByKind + buildPlotVisuals', () => {
     expect(visuals.fills).toHaveLength(1);
     expect(visuals.fills[0]!.name).toBe('band');
   });
+
+  it('resolves untitled plot() fill edges that packed as plot / plot_2', () => {
+    const series = {
+      plot: [10, 11, 12],
+      plot_2: [1, 2, 3],
+      fill: [null, null, null],
+    };
+    const meta = {
+      plot: { kind: 'plot' as const, title: 'plot', orig_title: 'plot' },
+      plot_2: { kind: 'plot' as const, title: 'plot_2', orig_title: 'plot' },
+      fill: {
+        kind: 'fill' as const,
+        title: 'fill',
+        plot1: 'plot',
+        plot2: 'plot',
+        color: 'rgba(0,0,255,0.2)',
+      },
+    };
+    const bands = resolvePlotFillBands(series, meta);
+    expect(bands).toHaveLength(1);
+    expect(bands[0]!.plot1).toBe('plot');
+    expect(bands[0]!.plot2).toBe('plot_2');
+    expect(bands[0]!.upper).toEqual([10, 11, 12]);
+    expect(bands[0]!.lower).toEqual([1, 2, 3]);
+  });
 });
 
 describe('plotbar / plotcandle OHLC', () => {

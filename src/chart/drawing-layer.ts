@@ -1808,8 +1808,8 @@ export class DrawingLayer {
     }
     const maxSamples = Math.max(64, Math.floor(cssW * 2));
 
-    // Segment into contiguous runs of finite pairs so na gaps split the band.
-    let runStart = -1;
+    // Segment into contiguous runs of finite pairs so na gaps (and color
+    // flips) split the band — one path per color so Ichimoku clouds paint.
     const flush = (from: number, to: number) => {
       if (to - from < 2) return; // need ≥2 samples (to exclusive)
       const span = to - from;
@@ -1853,21 +1853,9 @@ export class DrawingLayer {
         'data-fill': String(fill.name || ''),
       });
     };
-    for (let i = 0; i < n; i++) {
-      const ok =
-        fill.upper[i] != null &&
-        fill.lower[i] != null &&
-        Number.isFinite(fill.times[i]!) &&
-        Number.isFinite(fill.upper[i] as number) &&
-        Number.isFinite(fill.lower[i] as number);
-      if (ok) {
-        if (runStart < 0) runStart = i;
-      } else if (runStart >= 0) {
-        flush(runStart, i);
-        runStart = -1;
-      }
+    for (const run of fillBandRunBounds(n, fill.upper, fill.lower, fill.times, fill.colors)) {
+      flush(run.from, run.to);
     }
-    if (runStart >= 0) flush(runStart, n);
   }
 
   private redrawUserInner() {
@@ -1961,13 +1949,9 @@ export class DrawingLayer {
       d.t4 != null &&
       d.p4 != null
     ) {
-      // Quad between two lines: line1 (t1,p1→t2,p2) then reverse line2 (t4,p4→t3,p3)
-      const corners = [
-        { time: d.t1, price: d.p1 },
-        { time: d.t2, price: d.p2 },
-        { time: d.t4, price: d.p4 },
-        { time: d.t3, price: d.p3 },
-      ];
+      // Quad: each line ordered by time so opposite-direction line.new
+      // calls do not bowtie (line.fill / linefill.new).
+      const corners = linefillQuadCorners(d.t1, d.p1, d.t2, d.p2, d.t3, d.p3, d.t4, d.p4);
       const coords: { x: number; y: number }[] = [];
       for (const p of corners) {
         if (!Number.isFinite(p.time) || !Number.isFinite(p.price)) continue;
@@ -2996,9 +2980,82 @@ export function plotFillsSignature(
     const ll = n ? f.lower[n - 1] : null;
     const fu = n ? f.upper[0] : null;
     const fl = n ? f.lower[0] : null;
+    const lc = n && f.colors?.length ? f.colors[n - 1] : null;
+    const mid = n > 2 ? Math.floor(n / 2) : 0;
+    const mu = n > 2 ? f.upper[mid] : null;
     parts.push(
-      `${f.name}|${n}|${ft}|${lt}|${fu}|${fl}|${lu}|${ll}|${f.color || ''}`,
+      `${f.name}|${n}|${ft}|${lt}|${fu}|${fl}|${lu}|${ll}|${mu}|${lc || ''}|${f.color || ''}`,
     );
   }
   return parts.join(';');
+}
+
+/**
+ * Contiguous fill-band runs: na on either edge ends a run, and a color
+ * change starts a new one so each path can use a single fill.
+ */
+export function fillBandRunBounds(
+  n: number,
+  upper: ReadonlyArray<number | null>,
+  lower: ReadonlyArray<number | null>,
+  times: ReadonlyArray<number>,
+  colors: ReadonlyArray<string | null>,
+): Array<{ from: number; to: number }> {
+  const runs: Array<{ from: number; to: number }> = [];
+  let start = -1;
+  let color = '';
+  const colorAt = (i: number) => String(colors[i] || '');
+  const ok = (i: number) =>
+    upper[i] != null &&
+    lower[i] != null &&
+    Number.isFinite(times[i]!) &&
+    Number.isFinite(upper[i] as number) &&
+    Number.isFinite(lower[i] as number);
+  for (let i = 0; i < n; i++) {
+    if (ok(i)) {
+      const c = colorAt(i);
+      if (start < 0) {
+        start = i;
+        color = c;
+      } else if (c !== color) {
+        runs.push({ from: start, to: i });
+        start = i;
+        color = c;
+      }
+    } else if (start >= 0) {
+      runs.push({ from: start, to: i });
+      start = -1;
+    }
+  }
+  if (start >= 0) runs.push({ from: start, to: n });
+  return runs;
+}
+
+/**
+ * linefill.new / line.fill quad. Order each line by time so opposite
+ * endpoint order does not self-intersect.
+ */
+export function linefillQuadCorners(
+  t1: number,
+  p1: number,
+  t2: number,
+  p2: number,
+  t3: number,
+  p3: number,
+  t4: number,
+  p4: number,
+): Array<{ time: number; price: number }> {
+  const pair = (ta: number, pa: number, tb: number, pb: number) =>
+    ta <= tb
+      ? [
+          { time: ta, price: pa },
+          { time: tb, price: pb },
+        ]
+      : [
+          { time: tb, price: pb },
+          { time: ta, price: pa },
+        ];
+  const a = pair(t1, p1, t2, p2);
+  const b = pair(t3, p3, t4, p4);
+  return [a[0]!, a[1]!, b[1]!, b[0]!];
 }
