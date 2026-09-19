@@ -69,6 +69,14 @@ describe('MCP handler', () => {
     expect(body.tools).toContain('app_invoke');
   });
 
+  it('GET /mcp with SSE Accept is 405 (stateless, no event stream)', async () => {
+    const req = new Request('https://worker.axis.hoox.sh/mcp', {
+      headers: { Accept: 'text/event-stream' },
+    });
+    const res = await handleMcp(req, env, origin, '/mcp');
+    expect(res?.status).toBe(405);
+  });
+
   it('POST without key is 401', async () => {
     const req = new Request('https://worker.axis.hoox.sh/mcp', {
       method: 'POST',

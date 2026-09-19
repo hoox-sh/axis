@@ -202,6 +202,16 @@ export async function handleMcp(
   }
 
   if (req.method === 'GET') {
+    const accept = (req.headers.get('accept') || '').toLowerCase();
+    // Streamable HTTP clients open GET + Accept: text/event-stream for
+    // server-initiated SSE. This endpoint is stateless JSON-RPC POST — 405
+    // so they skip the stream instead of parsing discovery JSON as SSE.
+    if (accept.includes('text/event-stream')) {
+      return new Response(null, {
+        status: 405,
+        headers: jsonHeaders(origin, { Allow: 'POST, DELETE, OPTIONS' }),
+      });
+    }
     const url = new URL(req.url);
     return new Response(JSON.stringify(discoveryDoc(url), null, 2), {
       status: 200,

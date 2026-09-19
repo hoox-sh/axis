@@ -26,6 +26,7 @@ _Generated/updated: 2026-09-18 · 430 commits · describe-tag: `v2.9.0`_
 
 ### Fixed
 
+- **MCP streamable HTTP handshake**: `GET /mcp` with `Accept: text/event-stream` returns 405 (stateless JSON-RPC, no SSE). Grok and other Streamable HTTP clients no longer parse discovery JSON as an event stream.
 - **MCP invoke no longer fans out to every tab**: `McpBridgeDO` sends each `/invoke` to the newest attached socket only and ignores late replies from other tabs, so two open AXIS windows cannot both mutate the chart for one agent call.
 - **Worker key rotation reconnects the MCP bridge**: changing, clearing, or generating the `pn_…` key compares the hashed session, disconnects the old socket, and reconnects (300ms debounce while typing; only well-formed keys attempt a socket). Settings dialog Save uses the same path.
 - **PYNE Agent uses live plugin config**: chat submit and the floating launcher re-read `getConfig()` so Workers Manager endpoint/API key/persona edits apply without a reload.
