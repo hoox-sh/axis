@@ -37,8 +37,9 @@
  * | GET `/api/stream`    | SessionDO upgrade    | requires `SESSIONS` DO binding |
  * | POST `/mcp`          | MCP Streamable HTTP  | Bearer API key (same as scripts) |
  * | GET `/mcp`           | MCP discovery JSON   | public |
- * | GET `/api/mcp/bridge`| McpBridgeDO upgrade  | Bearer; PWA control plane (WS upgrade) |
+ * | GET `/api/mcp/bridge`| McpBridgeDO upgrade  | `?ticket=` (one-time) or Authorization header; never the long-lived key in the query |
  * | GET `/api/mcp/bridge`| McpBridgeDO /status  | Bearer; no Upgrade header → `{ status, connected }` tab count |
+ * | GET `/api/mcp/bridge?issue=ticket` | mint one-time WS ticket | Bearer |
  * | OPTIONS `*`          | CORS preflight       | 204 |
  *
  * ## Bindings (`Env`)
@@ -60,7 +61,7 @@ import { handleGitOAuth } from './git-oauth';
 import { handleOnchain } from './onchain';
 import { handleMarket } from './market';
 import { SessionDO } from './durable-objects/session';
-import { handleMcp, McpBridgeDO } from './mcp';
+import { handleMcp, McpBridgeDO, parseBridgeTicket, formatBridgeTicket } from './mcp';
 import { requireApiKey } from './auth';
 
 export { SessionDO, McpBridgeDO };
@@ -199,6 +200,58 @@ export default {
           origin,
         );
       }
+      const isUpgrade = (req.headers.get('Upgrade') || '').toLowerCase() === 'websocket';
+      const issueTicket = !isUpgrade && url.searchParams.get('issue') === 'ticket';
+
+      if (isUpgrade) {
+        const ticket = (url.searchParams.get('ticket') || '').trim();
+        let userId: string | null = null;
+        let nonce = '';
+        if (ticket) {
+          const parsed = parseBridgeTicket(ticket);
+          if (!parsed) {
+            return jsonResponse(
+              {
+                status: 'error',
+                code: 'INVALID_TICKET',
+                message: 'bridge ticket missing, expired, or already used',
+              },
+              { status: 401 },
+              origin,
+            );
+          }
+          userId = parsed.userId;
+          nonce = parsed.nonce;
+        } else {
+          // Browser WebSocket cannot set Authorization — prefer ?ticket=.
+          // Header auth remains for tests / non-browser clients. Never ?key=.
+          const header = req.headers.get('Authorization') || '';
+          if (!/^Bearer\s+\S+/i.test(header)) {
+            return jsonResponse(
+              { status: 'error', code: 'NO_KEY', message: 'bridge ticket or Authorization: Bearer required' },
+              { status: 401 },
+              origin,
+            );
+          }
+          const authReq = new Request(`${url.origin}${url.pathname}`, {
+            headers: { Authorization: header },
+          });
+          const auth = await requireApiKey(authReq, env);
+          if (!auth.ok) {
+            return jsonResponse(
+              { status: 'error', code: auth.code, message: auth.message },
+              { status: auth.status },
+              origin,
+            );
+          }
+          userId = auth.ctx.userId;
+        }
+        const stub = env.MCP_BRIDGE.get(env.MCP_BRIDGE.idFromName(userId));
+        const dest = new URL(`${url.origin}/ws`);
+        if (nonce) dest.searchParams.set('ticket', nonce);
+        return stub.fetch(new Request(dest, req));
+      }
+
       const auth = await requireApiKey(req, env);
       if (!auth.ok) {
         return jsonResponse(
@@ -208,18 +261,38 @@ export default {
         );
       }
       const stub = env.MCP_BRIDGE.get(env.MCP_BRIDGE.idFromName(auth.ctx.userId));
-      // Plain GET (no WS upgrade) → DO /status: how many PWA tabs are attached
-      // to this key's session. Upgrades (and other methods) keep the /ws path.
-      const isUpgrade = (req.headers.get('Upgrade') || '').toLowerCase() === 'websocket';
-      const target = isUpgrade || req.method !== 'GET' ? '/ws' : '/status';
-      const wsReq = new Request(`${url.origin}${target}?${url.searchParams.toString()}`, req);
-      const res = await stub.fetch(wsReq);
-      if (target === '/status') {
-        const headers = new Headers(res.headers);
-        for (const [k, v] of Object.entries(CORS_HEADERS(origin))) headers.set(k, v);
-        return new Response(res.body, { status: res.status, headers });
+
+      if (issueTicket || req.method === 'POST') {
+        const ticketRes = await stub.fetch(new Request(`${url.origin}/ticket`, { method: 'POST' }));
+        const payload = (await ticketRes.json()) as { nonce?: unknown; expiresIn?: unknown };
+        const nonce = typeof payload.nonce === 'string' ? payload.nonce : '';
+        if (!nonce) {
+          return jsonResponse(
+            { status: 'error', code: 'TICKET_FAILED', message: 'failed to mint bridge ticket' },
+            { status: 502 },
+            origin,
+          );
+        }
+        const expiresIn =
+          typeof payload.expiresIn === 'number' && Number.isFinite(payload.expiresIn)
+            ? payload.expiresIn
+            : 30;
+        return jsonResponse(
+          {
+            status: 'ok',
+            ticket: formatBridgeTicket(auth.ctx.userId, nonce),
+            expiresIn,
+          },
+          { status: 200 },
+          origin,
+        );
       }
-      return res;
+
+      // Plain GET → DO /status: how many PWA tabs are attached to this key.
+      const res = await stub.fetch(new Request(`${url.origin}/status`, req));
+      const headers = new Headers(res.headers);
+      for (const [k, v] of Object.entries(CORS_HEADERS(origin))) headers.set(k, v);
+      return new Response(res.body, { status: res.status, headers });
     }
 
     // WebSocket session relay: /api/stream?session=&symbol=&interval= → SessionDO

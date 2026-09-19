@@ -73,6 +73,14 @@ describe('writePluginField', () => {
     writePluginField('source:ccxt-rest', 'exchange', 'kraken');
     expect(bag()).toEqual({ gateway: 'pyne', exchange: 'kraken' });
   });
+
+  it('writes pyne-agent persona onto the component bag', () => {
+    restore();
+    writePluginField('component:pyne-agent', 'persona', 'trader');
+    expect(
+      (store.pluginsConfig as Record<string, Record<string, unknown>>)['component:pyne-agent'],
+    ).toEqual({ persona: 'trader' });
+  });
 });
 
 describe('fetchGatewayExchanges', () => {

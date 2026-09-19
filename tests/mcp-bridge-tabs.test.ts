@@ -13,6 +13,7 @@ import {
   mcpBridgeState,
   onMcpBridge,
   refreshBridgeTabs,
+  rotateMcpBridge,
 } from '../src/mcp/bridge';
 
 const realFetch = globalThis.fetch;
@@ -26,8 +27,10 @@ class FakeSocket {
   static instances: FakeSocket[] = [];
   readyState = FakeSocket.CONNECTING;
   sent: string[] = [];
+  url: string;
   listeners = new Map<string, Listener[]>();
-  constructor(_url: string) {
+  constructor(url: string) {
+    this.url = url;
     FakeSocket.instances.push(this);
   }
   addEventListener(type: string, fn: Listener): void {
@@ -72,6 +75,17 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+const TICKET = `${'a'.repeat(32)}.${'b'.repeat(32)}`;
+
+function stubBridgeHttp(connected = 1): void {
+  stubFetch((url) => {
+    if (url.includes('issue=ticket')) {
+      return json({ status: 'ok', ticket: TICKET, expiresIn: 30 });
+    }
+    return json({ status: 'ok', connected });
   });
 }
 
@@ -143,10 +157,12 @@ describe('MCP bridge tab count', () => {
     clearLogs();
     writeStoredCloudConfig('https://worker.axis.hoox.sh', `pn_${'f'.repeat(48)}`);
     // No `version` key: the connect-triggered update check must stay a no-op.
-    stubFetch(() => json({ status: 'ok', connected: 1 }));
+    stubBridgeHttp(1);
     stubWebSocket();
     await connectMcpBridge();
     expect(sockets.length).toBe(1);
+    expect(sock().url).toContain('ticket=');
+    expect(sock().url).not.toContain('key=pn_');
     sock().fire('open');
     // let the open-handler microtasks (hello, tabs poll, update check) settle
     await new Promise((r) => setTimeout(r, 10));
@@ -165,5 +181,98 @@ describe('MCP bridge tab count', () => {
     const mcpLines = store.logs.filter((l) => l.source === 'mcp').map((l) => l.message);
     expect(mcpLines.some((m) => m.includes('bridge open'))).toBe(true);
     expect(mcpLines.some((m) => m.includes('drawings.list → ok'))).toBe(true);
+  });
+});
+
+describe('MCP bridge key rotation', () => {
+  it('reconnects when the stored key hashes to a different session', async () => {
+    stubBridgeHttp();
+    stubWebSocket();
+    writeStoredCloudConfig('https://worker.axis.hoox.sh', `pn_${'a'.repeat(48)}`);
+    await connectMcpBridge();
+    expect(sockets.length).toBe(1);
+    sock().fire('open');
+    expect(mcpBridgeState().status).toBe('open');
+    const firstSession = mcpBridgeState().session;
+
+    writeStoredCloudConfig('https://worker.axis.hoox.sh', `pn_${'b'.repeat(48)}`);
+    await connectMcpBridge();
+    expect(sockets.length).toBe(2);
+    expect(mcpBridgeState().status).toBe('connecting');
+    expect(mcpBridgeState().session).not.toBe(firstSession);
+    expect(sockets[1]?.url).toContain('ticket=');
+    expect(sockets[1]?.url).not.toContain('key=pn_');
+  });
+
+  it('is a no-op while open on the same key session', async () => {
+    stubBridgeHttp();
+    stubWebSocket();
+    writeStoredCloudConfig('https://worker.axis.hoox.sh', `pn_${'a'.repeat(48)}`);
+    await connectMcpBridge();
+    sock().fire('open');
+    await connectMcpBridge();
+    expect(sockets.length).toBe(1);
+    expect(mcpBridgeState().status).toBe('open');
+  });
+
+  it('does not connect a partial key and drops the old socket', async () => {
+    stubBridgeHttp();
+    stubWebSocket();
+    writeStoredCloudConfig('https://worker.axis.hoox.sh', `pn_${'a'.repeat(48)}`);
+    await connectMcpBridge();
+    sock().fire('open');
+    writeStoredCloudConfig('https://worker.axis.hoox.sh', 'pn_abc');
+    await connectMcpBridge();
+    expect(mcpBridgeState().status).toBe('idle');
+    expect(sockets[0]?.readyState).toBe(3);
+  });
+
+  it('clears the session when the key is emptied', async () => {
+    stubBridgeHttp();
+    stubWebSocket();
+    writeStoredCloudConfig('https://worker.axis.hoox.sh', `pn_${'a'.repeat(48)}`);
+    await connectMcpBridge();
+    sock().fire('open');
+    writeStoredCloudConfig('https://worker.axis.hoox.sh', '');
+    await connectMcpBridge();
+    expect(mcpBridgeState().status).toBe('idle');
+    expect(mcpBridgeState().session).toBeNull();
+  });
+
+  it('debounces rotateMcpBridge ~300ms', async () => {
+    stubBridgeHttp();
+    stubWebSocket();
+    writeStoredCloudConfig('https://worker.axis.hoox.sh', `pn_${'a'.repeat(48)}`);
+    rotateMcpBridge();
+    rotateMcpBridge();
+    expect(sockets.length).toBe(0);
+    await new Promise((r) => setTimeout(r, 350));
+    expect(sockets.length).toBe(1);
+  });
+});
+
+describe('MCP bridge reconnect logs', () => {
+  it('logs the first close at info (no warn toast path)', async () => {
+    clearLogs();
+    stubBridgeHttp();
+    stubWebSocket();
+    writeStoredCloudConfig('https://worker.axis.hoox.sh', `pn_${'a'.repeat(48)}`);
+    await connectMcpBridge();
+    sock().fire('open');
+    sock().fire('close');
+    const line = store.logs.find((l) => l.message.includes('reconnecting'));
+    expect(line?.level).toBe('info');
+  });
+
+  it('logs ticket mint failures at info before the backoff ceiling', async () => {
+    clearLogs();
+    stubFetch(() => json({ status: 'error', code: 'NO_MCP_BRIDGE' }, 503));
+    stubWebSocket();
+    writeStoredCloudConfig('https://worker.axis.hoox.sh', `pn_${'a'.repeat(48)}`);
+    await connectMcpBridge();
+    expect(mcpBridgeState().status).toBe('error');
+    expect(sockets.length).toBe(0);
+    const line = store.logs.find((l) => l.message.includes('ticket failed'));
+    expect(line?.level).toBe('info');
   });
 });

@@ -48,6 +48,9 @@ export type ParsedBody =
   | { ok: true; batch: true; requests: JsonRpcRequest[] }
   | { ok: false; response: JsonRpcResponse };
 
+/** Max JSON-RPC requests in one HTTP POST. */
+export const MCP_MAX_BATCH = 10;
+
 /**
  * Parse a JSON-RPC body (single or batch). Empty / invalid JSON → parse error.
  */
@@ -55,6 +58,12 @@ export function parseJsonRpc(raw: unknown): ParsedBody {
   if (Array.isArray(raw)) {
     if (raw.length === 0) {
       return { ok: false, response: rpcError(null, JSONRPC_INVALID_REQUEST, 'empty batch') };
+    }
+    if (raw.length > MCP_MAX_BATCH) {
+      return {
+        ok: false,
+        response: rpcError(null, JSONRPC_INVALID_REQUEST, `batch exceeds ${MCP_MAX_BATCH} items`),
+      };
     }
     const requests: JsonRpcRequest[] = [];
     for (const item of raw) {

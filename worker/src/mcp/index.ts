@@ -10,7 +10,12 @@
  */
 
 export { handleMcp } from './handler';
-export { McpBridgeDO } from './bridge';
+export {
+  McpBridgeDO,
+  parseBridgeTicket,
+  formatBridgeTicket,
+  BRIDGE_TICKET_TTL_MS,
+} from './bridge';
 export { MCP_TOOLS, MCP_RESOURCES, MCP_PROMPTS } from './catalog';
 export { allowWorkerRequest, describeAllowlist } from './allowlist';
 export { MCP_SERVER_NAME, MCP_PROTOCOL_VERSION } from './protocol';

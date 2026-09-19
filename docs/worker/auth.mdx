@@ -83,7 +83,7 @@ When D1 is active but `API_KEYS` KV is **not** bound, inventable shape-only keys
 
 ### MCP (`POST /mcp`)
 
-Same `requireApiKey` as `/api/scripts`. Discovery `GET /mcp` is public. App-plane tools additionally need a PWA WebSocket on `/api/mcp/bridge` (same Bearer / `?key=`). See [MCP server](/axis/docs/worker/mcp).
+Same `requireApiKey` as `/api/scripts`. Discovery `GET /mcp` is public. App-plane tools additionally need a PWA WebSocket on `/api/mcp/bridge`: mint a 30s one-time ticket with `GET /api/mcp/bridge?issue=ticket` (`Authorization: Bearer`), then connect `wss://…/api/mcp/bridge?ticket=…`. WS upgrade rejects the long-lived `?key=` (`NO_KEY`). `?key=` remains HTTP `extractBearer` only (curl on `/mcp` / `/api/scripts`). See [MCP server](/axis/docs/worker/mcp).
 
 ### `/api/run` auth gate
 

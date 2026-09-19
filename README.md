@@ -115,11 +115,11 @@ axis mcp --key pn_…                   # stdio proxy → POST /mcp
 }
 ```
 
-1. Paste the key into **Studio → Settings → Data** (cloud storage).
+1. Paste the key into **Studio → Settings → General → Worker (cloud + MCP)**.
 2. Keep **Settings → General → MCP → Connect this tab** on (default).
 3. Point the client at `/mcp` with `Authorization: Bearer pn_…`.
 
-`GET /mcp` is public discovery. Tool calls use the same API-key auth as `/api/scripts`. App tools return `SESSION_OFFLINE` until a tab is bridged (`wss://…/api/mcp/bridge`).
+`GET /mcp` is public discovery. Tool calls use the same API-key auth as `/api/scripts`. App tools return `SESSION_OFFLINE` until a tab is bridged (`wss://…/api/mcp/bridge?ticket=…`).
 
 Docs: [MCP (agents)](https://hoox.sh/axis/docs/enduser/guides/mcp) · [MCP server](https://hoox.sh/axis/docs/worker/mcp) · in-tree [docs/enduser/guides/mcp.mdx](./docs/enduser/guides/mcp.mdx)
 

@@ -6,16 +6,23 @@
 import { describe, expect, it } from 'bun:test';
 import worker from '../src/index';
 import type { Env } from '../src/index';
+import { sessionIdFromApiKey } from '../src/mcp/protocol';
 
 const KEY = `pn_${'b'.repeat(48)}`;
+const TICKET_NONCE = 'c'.repeat(32);
 
 function fakeEnv(forwarded: string[], connected = 2): Env {
   const stub = {
     fetch: async (req: Request): Promise<Response> => {
       const url = new URL(req.url);
-      forwarded.push(url.pathname);
+      forwarded.push(`${url.pathname}${url.search}`);
       if (url.pathname === '/status') {
         return new Response(JSON.stringify({ status: 'ok', connected }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.pathname === '/ticket') {
+        return new Response(JSON.stringify({ nonce: TICKET_NONCE, expiresIn: 30 }), {
           headers: { 'Content-Type': 'application/json' },
         });
       }
@@ -25,7 +32,7 @@ function fakeEnv(forwarded: string[], connected = 2): Env {
   return {
     ALLOW_OPEN_KEYS: '1',
     MCP_BRIDGE: {
-      idFromName: () => ({}),
+      idFromName: (name: string) => ({ name }),
       get: () => stub,
     } as unknown as Env['MCP_BRIDGE'],
   };
@@ -61,6 +68,47 @@ describe('GET /api/mcp/bridge session status', () => {
     );
     expect(res.status).toBe(101);
     expect(forwarded).toEqual(['/ws']);
+  });
+
+  it('mints a one-time ticket on GET ?issue=ticket', async () => {
+    const forwarded: string[] = [];
+    const res = await fetchApp(
+      new Request('https://worker.axis.hoox.sh/api/mcp/bridge?issue=ticket', {
+        headers: { Authorization: `Bearer ${KEY}` },
+      }),
+      fakeEnv(forwarded),
+    );
+    expect(res.status).toBe(200);
+    expect(forwarded).toEqual(['/ticket']);
+    const body = (await res.json()) as { ticket: string; expiresIn: number };
+    const userId = await sessionIdFromApiKey(KEY);
+    expect(body.ticket).toBe(`${userId}.${TICKET_NONCE}`);
+    expect(body.expiresIn).toBe(30);
+  });
+
+  it('websocket upgrade with ?ticket= does not require the long-lived key', async () => {
+    const forwarded: string[] = [];
+    const userId = await sessionIdFromApiKey(KEY);
+    const res = await fetchApp(
+      new Request(`https://worker.axis.hoox.sh/api/mcp/bridge?ticket=${userId}.${TICKET_NONCE}`, {
+        headers: { Upgrade: 'websocket' },
+      }),
+      fakeEnv(forwarded),
+    );
+    expect(res.status).toBe(101);
+    expect(forwarded).toEqual([`/ws?ticket=${TICKET_NONCE}`]);
+  });
+
+  it('websocket upgrade with only ?key= is 401', async () => {
+    const res = await fetchApp(
+      new Request(`https://worker.axis.hoox.sh/api/mcp/bridge?key=${KEY}`, {
+        headers: { Upgrade: 'websocket' },
+      }),
+      fakeEnv([]),
+    );
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { code: string };
+    expect(body.code).toBe('NO_KEY');
   });
 
   it('missing key is 401 and missing binding is 503', async () => {

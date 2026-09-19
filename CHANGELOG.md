@@ -15,16 +15,24 @@ _Generated/updated: 2026-09-18 · 430 commits · describe-tag: `v2.9.0`_
 
 ## [Unreleased]
 
-### Fixed
+### Added
 
-- **Flaky suite: shared-Response fetch mock + stale DSM status** — `tests/git-oauth.test.ts` device-flow tests intermittently timed out because the queued fetch mock re-served one single-use `Response` (a leaked background task from another suite consumed its body → `res.json()` fell back to `{}` → endless `authorization_pending` polling). The mock now builds a fresh `Response` per call. Separately, `ensureDatasetComplete`'s detached closure announced `setStatus('ready')` unconditionally, clobbering newer loads/errors; it now takes `stillCurrent`, `load-symbol.ts` passes its generation guard, and the `_reset*Generation` test helpers advance (never zero) so stale guards can't re-arm.
+- **PYNE Agent persona** control on Workers Manager (auto / pine / axis / trader), same `writePluginField` path as the agent endpoint.
 
 ### Docs
 
+- MCP setup/troubleshooting now points at **Settings → General → Worker (cloud + MCP)** (Data tab is exchange credentials only). PYNE Agent guide documents the Workers Manager persona/endpoint controls.
 - **Pyodide-in-Worker use case + test conventions**: `worker/RUNTIME.md` rewritten to match the actual scaffold (boot wired, wheel/`run_script` stubbed — enabling the flag currently breaks evaluation; completion checklist included); `docs/architecture/evaluation.mdx` gains the scaffold status and the `NO_BACKEND` consumer contract (don't retry); `TESTING.md` records mock-hygiene, staleness-guard, and generation-advance conventions.
 
 ### Fixed
 
+- **MCP invoke no longer fans out to every tab**: `McpBridgeDO` sends each `/invoke` to the newest attached socket only and ignores late replies from other tabs, so two open AXIS windows cannot both mutate the chart for one agent call.
+- **Worker key rotation reconnects the MCP bridge**: changing, clearing, or generating the `pn_…` key compares the hashed session, disconnects the old socket, and reconnects (300ms debounce while typing; only well-formed keys attempt a socket). Settings dialog Save uses the same path.
+- **PYNE Agent uses live plugin config**: chat submit and the floating launcher re-read `getConfig()` so Workers Manager endpoint/API key/persona edits apply without a reload.
+- **MCP bridge WebSocket no longer puts the long-lived key in the query string**: the PWA mints a 30s single-use ticket over HTTP (`GET /api/mcp/bridge?issue=ticket`) and connects with `?ticket=`. Discovery stops advertising query bearer. JSON-RPC batches are capped at 10 items, charged per method against the 60/min limit, and bodies above 1 MiB fail closed before parse.
+- **MCP reconnect toasts**: socket blips log at `info` without a toast; warn/error toasts only after the backoff ceiling. Ticket-mint failures use the same ceiling.
+- **MCP bridge tickets survive Durable Object hibernation**: one-time nonces are stored in DO storage (30s TTL, single-use), so mint→upgrade is not lost if the isolate sleeps between the two requests. If the targeted tab disconnects mid-invoke, the Worker fails `SESSION_OFFLINE` instead of waiting out the 20s timeout.
+- **Flaky suite: shared-Response fetch mock + stale DSM status** — `tests/git-oauth.test.ts` device-flow tests intermittently timed out because the queued fetch mock re-served one single-use `Response` (a leaked background task from another suite consumed its body → `res.json()` fell back to `{}` → endless `authorization_pending` polling). The mock now builds a fresh `Response` per call. Separately, `ensureDatasetComplete`'s detached closure announced `setStatus('ready')` unconditionally, clobbering newer loads/errors; it now takes `stillCurrent`, `load-symbol.ts` passes its generation guard, and the `_reset*Generation` test helpers advance (never zero) so stale guards can't re-arm.
 - **MCP `structuredContent` always an object**: app-plane array results (`indicators.list`, `logs.get`, `alerts.list`, `library.list`, `drawings.list`) and primitive `app.get`/`settings.get` slices failed strict MCP clients (`expected record, received array/string`). Worker `jsonText` now envelopes non-objects as `{ result }`.
 - **MCP `chart.zoom` accepts `action` alias**: `{"action":"reset"}` previously fell back to `in`; now `op`/`action` are equivalent.
 - **MCP `drawings.tool` validates**: unknown tools now fail `BAD_TOOL`, missing tool fails `NO_TOOL` (previously set empty string).

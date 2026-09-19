@@ -56,11 +56,11 @@ flowchart LR
 ## Connect this tab
 
 1. Mint a key: `axis keys create` (needs `ADMIN_TOKEN`).
-2. **Studio → Settings → Data** — paste Worker URL (`https://worker.axis.hoox.sh` or `http://127.0.0.1:8787`) and the `pn_…` key into cloud storage.
+2. **Studio → Settings → General → Worker (cloud + MCP)** — paste Worker URL (`https://worker.axis.hoox.sh` or `http://127.0.0.1:8787`) and the `pn_…` key. Data tab is exchange credentials only.
 3. **Studio → Settings → General → MCP** — leave **Connect this tab to MCP** on (default).
 4. Confirm the hint shows `Bridge: open` (or `connecting`). `idle` with “No Worker API key” means step 2 is missing.
 
-The PWA opens `wss://…/api/mcp/bridge?key=…`. The Worker partitions the session by a hash of the key — another user’s key cannot attach to your tab.
+The PWA mints a short-lived one-time ticket over HTTP (`Authorization: Bearer`) then opens `wss://…/api/mcp/bridge?ticket=…` so the long-lived `pn_…` key never appears in the WebSocket URL. The Worker partitions the session by a hash of the key — another user’s key cannot attach to your tab.
 
 Turn the toggle **off** if you do not want agents driving this browser.
 
@@ -208,7 +208,7 @@ Full argument tables: [MCP server](/axis/docs/worker/mcp).
 | 401 `NO_KEY` / `INVALID_KEY` | Bearer on `/mcp`; mint with `axis keys create` |
 | 503 `API_KEYS_REQUIRED` | D1 bound without `API_KEYS` KV — `axis setup kv` |
 | `SESSION_OFFLINE` | Tab open, MCP toggle on, same `pn_…` as the client |
-| `Bridge: idle` / no API key | Settings → Data cloud key |
+| `Bridge: idle` / no API key | Settings → General → Worker (cloud + MCP) |
 | `Bridge: error` | Worker URL reachable; CORS; `MCP_BRIDGE` deployed |
 | App command unknown | Palette has not mounted yet — use `chart.*` / `editor.*` ids instead |
 

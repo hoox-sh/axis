@@ -38,6 +38,7 @@ import {
   StudioField,
   StudioFooter,
   StudioHint,
+  StudioSelect,
   StudioList,
   StudioRow,
   StudioSection,
@@ -372,7 +373,7 @@ export function WorkersPage(props: {
                       >
                         <StudioStatus status={st()} />
                         <StudioHint>
-                          {r()?.latencyMs != null ? `${r()!.latencyMs}ms · ` : ''}
+                          {r()?.latencyMs != null ? `${r()?.latencyMs}ms · ` : ''}
                           last probe {relativeTime(r()?.checkedAt)}
                           <Show when={r()?.isActiveBackend}> · backend</Show>
                           <Show when={r()?.isActiveEngine}> · engine</Show>
@@ -422,7 +423,7 @@ export function WorkersPage(props: {
                       />
                       <StudioStat
                         label="Latency"
-                        value={r()?.latencyMs != null ? `${r()!.latencyMs}ms` : '—'}
+                        value={r()?.latencyMs != null ? `${r()?.latencyMs}ms` : '—'}
                       />
                       <StudioStat label="Kind" value={kindLabel(w().kind)} />
                     </div>
@@ -601,6 +602,29 @@ export function WorkersPage(props: {
                             void persist();
                           }}
                         />
+                      </StudioField>
+                      <StudioField
+                        label="Persona"
+                        for="axis-pyne-agent-persona"
+                        hint="auto detects per message. pine writes scripts; axis can change the app via MCP; trader is market/risk."
+                      >
+                        <StudioSelect
+                          id="axis-pyne-agent-persona"
+                          testId="axis-pyne-agent-persona"
+                          value={String(
+                            ((store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] || {}) as Record<string, unknown>)
+                              .persona || 'auto',
+                          )}
+                          onChange={(v) => {
+                            writePluginField(pluginKey('component', 'pyne-agent'), 'persona', v);
+                            void persist();
+                          }}
+                        >
+                          <option value="auto">auto</option>
+                          <option value="pine">pine</option>
+                          <option value="axis">axis</option>
+                          <option value="trader">trader</option>
+                        </StudioSelect>
                       </StudioField>
                     </StudioSection>
                   </Show>

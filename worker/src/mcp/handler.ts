@@ -37,13 +37,17 @@ import {
 
 const MCP_RATE_LIMIT = 60;
 const MCP_RATE_WINDOW_MS = 60_000;
+/** Fail closed before JSON.parse — workspace.import can be large, 1 MiB is the ceiling. */
+export const MCP_MAX_BODY_BYTES = 1_048_576;
 const rateBuckets = new Map<string, { count: number; windowStart: number }>();
 
-function allowRate(key: string): boolean {
+function allowRate(key: string, n = 1): boolean {
+  if (n <= 0) return true;
   const now = Date.now();
   const b = rateBuckets.get(key);
   if (!b || now - b.windowStart > MCP_RATE_WINDOW_MS) {
-    rateBuckets.set(key, { count: 1, windowStart: now });
+    if (n > MCP_RATE_LIMIT) return false;
+    rateBuckets.set(key, { count: n, windowStart: now });
     if (rateBuckets.size > 5000) {
       for (const [k, v] of rateBuckets) {
         if (now - v.windowStart > MCP_RATE_WINDOW_MS * 2) rateBuckets.delete(k);
@@ -51,8 +55,9 @@ function allowRate(key: string): boolean {
     }
     return true;
   }
-  b.count += 1;
-  return b.count <= MCP_RATE_LIMIT;
+  if (b.count + n > MCP_RATE_LIMIT) return false;
+  b.count += n;
+  return true;
 }
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -170,7 +175,7 @@ function protectedResource(url: URL): unknown {
   return {
     resource: `${url.origin}/mcp`,
     authorization_servers: [] as string[],
-    bearer_methods_supported: ['header', 'query'],
+    bearer_methods_supported: ['header'],
     scopes_supported: ['axis'],
     resource_name: 'AXIS MCP',
   };
@@ -224,21 +229,39 @@ export async function handleMcp(
     );
   }
 
-  const rateKey = auth.ctx.userId || 'anon';
-  if (!allowRate(rateKey)) {
+  const cl = req.headers.get('content-length');
+  if (cl) {
+    const n = Number(cl);
+    if (Number.isFinite(n) && n > MCP_MAX_BODY_BYTES) {
+      return new Response(
+        JSON.stringify({ status: 'error', code: 'PAYLOAD_TOO_LARGE', message: 'MCP body too large' }),
+        { status: 413, headers: jsonHeaders(origin) },
+      );
+    }
+  }
+  const buf = await req.arrayBuffer();
+  if (buf.byteLength > MCP_MAX_BODY_BYTES) {
     return new Response(
-      JSON.stringify({ status: 'error', code: 'RATE', message: 'MCP rate limit exceeded' }),
-      { status: 429, headers: jsonHeaders(origin) },
+      JSON.stringify({ status: 'error', code: 'PAYLOAD_TOO_LARGE', message: 'MCP body too large' }),
+      { status: 413, headers: jsonHeaders(origin) },
     );
   }
-
-  const text = await req.text();
+  const text = new TextDecoder().decode(buf);
   const parsed = parseJsonText(text);
   if (!parsed.ok) {
     return new Response(JSON.stringify(parsed.response), {
       status: 200,
       headers: jsonHeaders(origin),
     });
+  }
+
+  const rateKey = auth.ctx.userId || 'anon';
+  const methodCount = parsed.batch ? parsed.requests.length : 1;
+  if (!allowRate(rateKey, methodCount)) {
+    return new Response(
+      JSON.stringify({ status: 'error', code: 'RATE', message: 'MCP rate limit exceeded' }),
+      { status: 429, headers: jsonHeaders(origin) },
+    );
   }
 
   const ctx: ToolContext = { env, origin, auth: auth.ctx };

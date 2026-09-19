@@ -122,7 +122,8 @@ upstream Binance kline stream to N clients.
 
 **MCP:** `POST /mcp` with `Authorization: Bearer <pn_…>` (same keys as scripts).
 `GET /mcp` lists tools without auth. App-plane tools (`app_invoke`) need a PWA
-tab on `wss://<worker>/api/mcp/bridge?key=…` and the `MCP_BRIDGE` Durable Object.
+tab on `wss://<worker>/api/mcp/bridge?ticket=…` (short-lived ticket minted with
+the Bearer key) and the `MCP_BRIDGE` Durable Object.
 Docs: [MCP server](https://hoox.sh/axis/docs/worker/mcp) · [MCP (agents)](https://hoox.sh/axis/docs/enduser/guides/mcp).
 
 ## Deploy

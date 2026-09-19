@@ -59,6 +59,7 @@ import {
   loadMcpPrefs,
   mcpBridgeState,
   onMcpBridge,
+  rotateMcpBridge,
   saveMcpPrefs,
 } from '../../mcp';
 import type { SettingsTabId } from '../studio/types';
@@ -221,9 +222,7 @@ export function SettingsPage(props: {
     promptStorageChange(getActiveStorageId(), nextStorage);
     flushPersist();
     // Pick up a fresh Worker key for the MCP bridge without a reload.
-    if (mcpConnect() && cloudApiKey().trim()) {
-      void connectMcpBridge();
-    }
+    rotateMcpBridge({ immediate: true });
     setStatus(
       'ready',
       `Settings saved · ${nextInterval} · ${nextHistoryBars} bars · refresh ${nextRefresh}s · live ${preferAfterLoad() ? 'on' : 'off'} · re-run=${rerunOn()}`,
@@ -640,7 +639,7 @@ export function SettingsPage(props: {
                     setCloudApiKey(v);
                     // Live-persist so MCP can attach without waiting for Save.
                     writeStoredCloudConfig(cloudEndpoint(), v);
-                    if (mcpConnect() && v.trim()) void connectMcpBridge();
+                    rotateMcpBridge();
                   }}
                 />
               </StudioField>
@@ -653,6 +652,7 @@ export function SettingsPage(props: {
                     setCloudApiKey(key);
                     writeStoredCloudConfig(cloudEndpoint(), key);
                     setCloudProbeMsg('Generated a local key. Save, then Test connection.');
+                    rotateMcpBridge({ immediate: true });
                   }}
                 >
                   Generate demo key
@@ -671,9 +671,7 @@ export function SettingsPage(props: {
                     }).then((r) => {
                       setCloudProbeMsg(r.ok ? `✓ ${r.message}` : r.message);
                       setCloudProbing(false);
-                      if (r.ok && mcpConnect() && cloudApiKey().trim()) {
-                        void connectMcpBridge();
-                      }
+                      if (r.ok) rotateMcpBridge({ immediate: true });
                     });
                   }}
                 >

@@ -41,10 +41,10 @@ Or the remote copy (needs CORS on the agent Worker):
 https://pyne-agent-worker.cryptolinx.workers.dev/plugin/axis-pine-agent.js
 ```
 
-3. Set **endpoint** to the agent Worker origin (no trailing slash), e.g. `https://pyne-agent-worker.cryptolinx.workers.dev`. Same-origin install still talks to this API host.
+3. Set **endpoint** to the agent Worker origin (no trailing slash), e.g. `https://pyne-agent-worker.cryptolinx.workers.dev`. Same-origin install still talks to this API host. Workers Manager → PYNE Agent also has an editable **Agent endpoint** (URL + API key).
 4. Set **API key** if required.
 5. Prefer **v6** / **strategy** or **indicator** when you know the target style.
-6. Pick a **persona** (`auto` detects per message): `pine` writes scripts, `axis` answers anything about the app and can change it for you (theme, layout, runs), `trader` does market analysis and risk coaching.
+6. In **Workers Manager → PYNE Agent**, pick a **Persona** (`auto` detects per message): `pine` writes scripts, `axis` answers anything about the app and can change it for you (theme, layout, runs), `trader` does market analysis and risk coaching.
 
 AXIS migrates a previously saved remote plugin URL to `/plugins/axis-pine-agent.js` on restore.
 

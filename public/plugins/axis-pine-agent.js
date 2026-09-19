@@ -975,7 +975,7 @@ function mountChat(el, api, config, opts = {}) {
     const text = String(input.value || "").trim();
     if (!text) return;
 
-    const live = cfg({ ...cfg(api?.getConfig?.() || {}), ...(config || {}) });
+    const live = cfg({ ...(config || {}), ...(api?.getConfig?.() || {}) });
     if (!live.endpoint) {
       addMsg("assistant", "Set plugin config: endpoint = your pyne-agent-worker HTTPS URL.", {
         error: true,
@@ -1081,7 +1081,7 @@ function openFloatingModal(api, config, modalOpts = {}) {
 }
 
 /** Compact launcher above editor bottom bars when AXIS does not mount slots. */
-function bootstrapFloating(config) {
+function bootstrapFloating(api) {
   if (typeof document === "undefined") return () => {};
   if (document.getElementById("pyne-agent-fab")) return () => {};
 
@@ -1126,16 +1126,13 @@ function bootstrapFloating(config) {
       closeModal();
       return;
     }
-    closeModal = openFloatingModal(
-      { getConfig: () => config || {} },
-      config,
-      {
-        onClosed: () => {
-          closeModal = null;
-          fab.setAttribute("aria-expanded", "false");
-        },
-      }
-    );
+    const live = api?.getConfig?.() || {};
+    closeModal = openFloatingModal(api || { getConfig: () => live }, live, {
+      onClosed: () => {
+        closeModal = null;
+        fab.setAttribute("aria-expanded", "false");
+      },
+    });
     fab.setAttribute("aria-expanded", "true");
   });
 
@@ -1224,7 +1221,7 @@ const plugin = {
           closeModal();
           return;
         }
-        closeModal = openFloatingModal(api, config, {
+        closeModal = openFloatingModal(api, api?.getConfig?.() || {}, {
           onClosed: () => {
             closeModal = null;
             btn.setAttribute("aria-expanded", "false");
@@ -1246,7 +1243,7 @@ const plugin = {
     const config = ctx?.getConfig?.() || {};
     // If AXIS never calls mount (component phase 2), still offer a compact launcher.
     if (typeof document !== "undefined" && !config.disableFloating) {
-      this._floatDispose = bootstrapFloating(config);
+      this._floatDispose = bootstrapFloating(ctx);
     }
     ctx?.setStatus?.("PYNE Agent ready", "info");
   },

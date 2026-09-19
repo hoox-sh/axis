@@ -42,8 +42,31 @@ let state: McpBridgeState = {
 };
 const listeners = new Set<(s: McpBridgeState) => void>();
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let rotateTimer: ReturnType<typeof setTimeout> | null = null;
 let stopped = true;
 let attempt = 0;
+let connectGen = 0;
+
+/** Matches Worker production key shape (`pn_` + 24 random bytes hex). */
+const WORKER_API_KEY_RE = /^pn_[a-f0-9]{48}$/;
+/** Must match `MCP_PREF_KEY` in `host.ts`. */
+const MCP_CONNECT_PREF_KEY = 'pynescript.axis.mcp.v1';
+const ROTATE_DEBOUNCE_MS = 300;
+const BACKOFF_CEILING_ATTEMPT = 5;
+
+export function isWellFormedWorkerApiKey(key: string): boolean {
+  return WORKER_API_KEY_RE.test(key.trim());
+}
+
+function mcpConnectEnabled(): boolean {
+  try {
+    const raw = globalThis.localStorage?.getItem(MCP_CONNECT_PREF_KEY);
+    if (!raw) return true;
+    return (JSON.parse(raw) as { connect?: unknown }).connect !== false;
+  } catch {
+    return true;
+  }
+}
 
 function emit(): void {
   const snap = { ...state };
@@ -107,12 +130,37 @@ async function handleFrame(raw: string): Promise<void> {
 function scheduleReconnect(): void {
   if (stopped) return;
   if (reconnectTimer) return;
-  const delay = Math.min(15_000, 500 * 2 ** Math.min(attempt, 5));
+  const delay = Math.min(15_000, 500 * 2 ** Math.min(attempt, BACKOFF_CEILING_ATTEMPT));
   attempt += 1;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     void connectMcpBridge();
   }, delay);
+}
+
+function logReconnect(ceilingLevel: 'warn' | 'error', message: string): void {
+  const atCeiling = attempt >= BACKOFF_CEILING_ATTEMPT;
+  appendLog(
+    atCeiling ? ceilingLevel : 'info',
+    message,
+    'mcp',
+    atCeiling ? undefined : { toast: false },
+  );
+}
+
+function teardownSocket(): void {
+  stopTabsPoll();
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  const socket = ws;
+  ws = null;
+  try {
+    socket?.close();
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Attached-tab count for this key's Worker session (null = unknown). */
@@ -183,17 +231,56 @@ async function checkForUpdatesOnConnect(): Promise<void> {
   }
 }
 
+function idleNoKey(): void {
+  teardownSocket();
+  state = {
+    status: 'idle',
+    session: null,
+    error:
+      'No Worker API key — set one in Settings → General → Worker (cloud + MCP) to attach this tab.',
+    lastEventAt: state.lastEventAt,
+    tabs: null,
+    lastInvokeAt: null,
+    lastCapability: null,
+  };
+  emit();
+}
+
+async function mintBridgeTicket(cfg: { endpoint: string; apiKey: string }): Promise<string> {
+  const res = await fetch(`${cfg.endpoint.replace(/\/$/, '')}/api/mcp/bridge?issue=ticket`, {
+    headers: { Authorization: `Bearer ${cfg.apiKey}`, Accept: 'application/json' },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) {
+    throw new Error(`bridge ticket HTTP ${res.status}`);
+  }
+  const body = (await res.json()) as { ticket?: unknown };
+  const ticket = typeof body.ticket === 'string' ? body.ticket.trim() : '';
+  if (!ticket) throw new Error('bridge ticket missing');
+  return ticket;
+}
+
 /** Open (or refresh) the control-plane socket using the stored cloud API key. */
 export async function connectMcpBridge(): Promise<void> {
-  stopped = false;
+  if (!mcpConnectEnabled()) {
+    disconnectMcpBridge();
+    return;
+  }
   const cfg = resolveCloudConfig();
-  if (!cfg.apiKey) {
-    stopTabsPoll();
+  const key = (cfg.apiKey || '').trim();
+  if (!key) {
+    stopped = true;
+    idleNoKey();
+    return;
+  }
+  if (!isWellFormedWorkerApiKey(key)) {
+    stopped = true;
+    teardownSocket();
     state = {
       status: 'idle',
       session: null,
       error:
-        'No Worker API key — set one in Settings → General → Worker (cloud + MCP) to attach this tab.',
+        'Worker API key is incomplete — paste a full pn_… key in Settings → General → Worker (cloud + MCP).',
       lastEventAt: state.lastEventAt,
       tabs: null,
       lastInvokeAt: null,
@@ -202,12 +289,13 @@ export async function connectMcpBridge(): Promise<void> {
     emit();
     return;
   }
+  const session = await sessionIdFromApiKey(key);
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-    return;
+    if (state.session === session) return;
+    teardownSocket();
   }
-  const session = await sessionIdFromApiKey(cfg.apiKey);
-  const url = new URL(workerWsUrl(cfg.endpoint));
-  url.searchParams.set('key', cfg.apiKey);
+  stopped = false;
+  const gen = ++connectGen;
   state = {
     status: 'connecting',
     session,
@@ -219,9 +307,22 @@ export async function connectMcpBridge(): Promise<void> {
   };
   emit();
   try {
+    const ticket = await mintBridgeTicket({ endpoint: cfg.endpoint, apiKey: key });
+    if (stopped || gen !== connectGen) return;
+    const url = new URL(workerWsUrl(cfg.endpoint));
+    url.searchParams.set('ticket', ticket);
     const socket = new WebSocket(url.toString());
+    if (stopped || gen !== connectGen) {
+      try {
+        socket.close();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     ws = socket;
     socket.addEventListener('open', () => {
+      if (ws !== socket) return;
       attempt = 0;
       state = {
         status: 'open',
@@ -240,52 +341,73 @@ export async function connectMcpBridge(): Promise<void> {
       void checkForUpdatesOnConnect();
     });
     socket.addEventListener('message', (ev) => {
+      if (ws !== socket) return;
       state = { ...state, lastEventAt: Date.now() };
       void handleFrame(String(ev.data || ''));
     });
     socket.addEventListener('close', () => {
-      if (ws === socket) ws = null;
+      if (ws !== socket) return;
+      ws = null;
       stopTabsPoll();
       state = { ...state, status: 'closed', tabs: null };
       emit();
-      appendLog('warn', 'MCP bridge closed — reconnecting', 'mcp');
+      if (stopped) return;
+      logReconnect('warn', 'MCP bridge closed — reconnecting');
       scheduleReconnect();
     });
     socket.addEventListener('error', () => {
+      if (ws !== socket) return;
       stopTabsPoll();
       state = { ...state, status: 'error', error: 'WebSocket error', tabs: null };
       emit();
-      appendLog('error', 'MCP bridge socket error', 'mcp');
+      if (stopped) return;
+      logReconnect('error', 'MCP bridge socket error');
     });
   } catch (err) {
+    if (stopped || gen !== connectGen) return;
     stopTabsPoll();
+    const message = err instanceof Error ? err.message : String(err);
     state = {
       status: 'error',
       session,
-      error: err instanceof Error ? err.message : String(err),
+      error: message,
       lastEventAt: Date.now(),
       tabs: null,
       lastInvokeAt: state.lastInvokeAt,
       lastCapability: state.lastCapability,
     };
     emit();
+    logReconnect('error', `MCP bridge ticket failed — ${message} — reconnecting`);
     scheduleReconnect();
   }
 }
 
+/**
+ * Re-sync the bridge to the stored Worker key.
+ * Debounced (~300ms) so Settings keystrokes do not open a socket on the first
+ * typed character. Save / generate pass `{ immediate: true }`.
+ */
+export function rotateMcpBridge(opts?: { immediate?: boolean }): void {
+  if (rotateTimer) {
+    clearTimeout(rotateTimer);
+    rotateTimer = null;
+  }
+  const run = (): void => {
+    rotateTimer = null;
+    void connectMcpBridge();
+  };
+  if (opts?.immediate) run();
+  else rotateTimer = setTimeout(run, ROTATE_DEBOUNCE_MS);
+}
+
 export function disconnectMcpBridge(): void {
   stopped = true;
-  stopTabsPoll();
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
+  connectGen += 1;
+  if (rotateTimer) {
+    clearTimeout(rotateTimer);
+    rotateTimer = null;
   }
-  try {
-    ws?.close();
-  } catch {
-    /* ignore */
-  }
-  ws = null;
+  teardownSocket();
   state = { ...state, status: 'closed', tabs: null };
   emit();
 }

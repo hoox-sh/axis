@@ -172,6 +172,13 @@ describe('loadPluginFromUrl', () => {
     removePlugin('pyne-agent', 'component');
   });
 
+  it('pyne-agent plugin prefers live getConfig over the mount snapshot', async () => {
+    const src = await Bun.file(new URL('../public/plugins/axis-pine-agent.js', import.meta.url)).text();
+    expect(src).toContain('cfg({ ...(config || {}), ...(api?.getConfig?.() || {}) })');
+    expect(src).toContain('bootstrapFloating(ctx)');
+    expect(src).toContain('api?.getConfig?.() || {}');
+  });
+
   it('leaves endpoint unset for pyne-agent installs without a worker origin', async () => {
     // Mirrors / third-party hosts serve no chat API — never guess an origin.
     resetPluginsConfig();

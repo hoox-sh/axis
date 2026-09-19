@@ -87,6 +87,7 @@ import {
   writeStoredCloudConfig,
 } from '../storage/cloud-config';
 import { probeCloudStorage } from '../storage/cloud';
+import { rotateMcpBridge } from '../mcp';
 import { CapabilityBadges, engineOptionLabel } from './plugin-badges';
 import { PluginConfigRow } from './PluginConfigRow';
 import { getEngine } from '../engines/catalog';
@@ -418,6 +419,7 @@ export const SettingsDialog: Component<Props> = (props) => {
     // can authenticate. Source scripts are never deleted on switch.
     // Always persist (not only for cloud): the same pn_… key unlocks MCP.
     writeStoredCloudConfig(cloudEndpoint(), cloudApiKey());
+    rotateMcpBridge({ immediate: true });
     promptStorageChange(getActiveStorageId(), nextStorage);
 
     // Always merge engine plugin config when any engine field is shown — include

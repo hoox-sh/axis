@@ -16,6 +16,7 @@ export { startMcpHost, loadMcpPrefs, saveMcpPrefs, type McpPrefs } from './host'
 export {
   connectMcpBridge,
   disconnectMcpBridge,
+  rotateMcpBridge,
   mcpBridgeState,
   onMcpBridge,
   type McpBridgeState,

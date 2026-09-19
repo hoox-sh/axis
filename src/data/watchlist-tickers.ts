@@ -35,11 +35,11 @@
  * | okx | Spot tickers list; match `okxInst` (`BTC-USDT`); change from open24h/sodUtc0 |
  * | bybit | Spot tickers; `price24hPcnt` fraction → % |
  * | coinbase | Per-product ticker + stats (capped at 12 symbols) |
- * | mexc | Worker-proxied 24hr ticker (`symbol=` ≤8 symbols, else full book) |
- * | kraken | Public `Ticker` (`c[0]` last, `o` open; legacy `XXBTZUSD` keys normalized) |
+ * | mexc | Worker-proxied 24hr ticker (`symbol=` ≤8 symbols, else full book); REST-only |
+ * | kraken | Public `Ticker` (`c[0]` last, `o` open; legacy `XXBTZUSD` keys normalized); REST-only |
  * | mock | Deterministic seed + noise |
  * | csv | Empty map (no live quotes) |
- * | kraken/gecko/ccxt/unknown | Empty map — never silently mix another venue's quotes |
+ * | gecko/ccxt/unknown | Empty map — never silently mix another venue's quotes |
  * | binance / default | `GET /api/v3/ticker/24hr?symbols=…` batch |
  *
  * Shared symbol helpers (`toUsdt`, `okxInst`, `coinbaseProduct`) are also used
@@ -140,8 +140,8 @@ export function sourceSupportsRestPoll(sourceId: string): boolean {
 /**
  * Fetch 24h last + change for symbols using the active source when possible.
  *
- * Keys in the result prefer the original watchlist symbol strings. On failure
- * for a non-Binance source, retries once via Binance (common USDT pairs).
+ * Keys in the result prefer the original watchlist symbol strings. Failed
+ * venues return `{}` — never mix another venue's quotes.
  */
 export async function fetchWatchlistTickers(
   symbols: string[],

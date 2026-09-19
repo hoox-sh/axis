@@ -4,15 +4,15 @@
  */
 
 import { describe, expect, it, beforeEach } from 'bun:test';
-import { handleMcp } from '../src/mcp/handler';
+import { handleMcp, MCP_MAX_BODY_BYTES, _resetMcpRateForTests } from '../src/mcp/handler';
 import { allowWorkerRequest, describeAllowlist } from '../src/mcp/allowlist';
 import { MCP_TOOLS } from '../src/mcp/catalog';
-import { _resetMcpRateForTests } from '../src/mcp/handler';
+import { MCP_MAX_BATCH } from '../src/mcp/jsonrpc';
 import type { Env } from '../src/index';
 
 const env: Env = { ALLOW_OPEN_KEYS: '1' };
 const origin = 'http://localhost:3000';
-const KEY = 'pn_' + 'a'.repeat(48);
+const KEY = `pn_${'a'.repeat(48)}`;
 
 function rpc(method: string, params?: unknown, id: number | string = 1): string {
   return JSON.stringify({ jsonrpc: '2.0', id, method, params });
@@ -29,8 +29,8 @@ async function post(body: string, key = KEY): Promise<{ status: number; json: un
   });
   const res = await handleMcp(req, env, origin, '/mcp');
   expect(res).toBeTruthy();
-  const json = await res!.json();
-  return { status: res!.status, json };
+  const json = await res?.json();
+  return { status: res?.status, json };
 }
 
 describe('MCP allowlist', () => {
@@ -63,7 +63,7 @@ describe('MCP handler', () => {
     const req = new Request('https://worker.axis.hoox.sh/mcp');
     const res = await handleMcp(req, env, origin, '/mcp');
     expect(res?.status).toBe(200);
-    const body = (await res!.json()) as { name: string; tools: string[] };
+    const body = (await res?.json()) as { name: string; tools: string[] };
     expect(body.name).toBe('axis');
     expect(body.tools).toContain('axis_health');
     expect(body.tools).toContain('app_invoke');
@@ -139,8 +139,52 @@ describe('MCP handler', () => {
     const req = new Request('https://worker.axis.hoox.sh/.well-known/oauth-protected-resource');
     const res = await handleMcp(req, env, origin, '/.well-known/oauth-protected-resource');
     expect(res?.status).toBe(200);
-    const body = (await res!.json()) as { resource: string; bearer_methods_supported: string[] };
+    const body = (await res?.json()) as { resource: string; bearer_methods_supported: string[] };
     expect(body.resource).toContain('/mcp');
-    expect(body.bearer_methods_supported).toContain('header');
+    expect(body.bearer_methods_supported).toEqual(['header']);
+  });
+
+  it('rejects JSON-RPC batches above the cap', async () => {
+    const items = Array.from({ length: MCP_MAX_BATCH + 1 }, (_, i) => ({
+      jsonrpc: '2.0',
+      id: i,
+      method: 'ping',
+    }));
+    const { status, json } = await post(JSON.stringify(items));
+    expect(status).toBe(200);
+    const body = json as { error: { code: number; message: string } };
+    expect(body.error.code).toBe(-32600);
+    expect(body.error.message).toContain('batch exceeds');
+  });
+
+  it('charges the rate limiter per RPC method in a batch', async () => {
+    const ping = rpc('ping', undefined, 1);
+    for (let i = 0; i < 58; i++) {
+      const r = await post(ping);
+      expect(r.status).toBe(200);
+    }
+    const batchOfTwo = JSON.stringify([
+      { jsonrpc: '2.0', id: 1, method: 'ping' },
+      { jsonrpc: '2.0', id: 2, method: 'ping' },
+    ]);
+    const ok = await post(batchOfTwo);
+    expect(ok.status).toBe(200);
+    const over = await post(rpc('ping', undefined, 99));
+    expect(over.status).toBe(429);
+  });
+
+  it('rejects oversized bodies before JSON.parse', async () => {
+    const req = new Request('https://worker.axis.hoox.sh/mcp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${KEY}`,
+      },
+      body: 'x'.repeat(MCP_MAX_BODY_BYTES + 8),
+    });
+    const res = await handleMcp(req, env, origin, '/mcp');
+    expect(res?.status).toBe(413);
+    const body = (await res?.json()) as { code: string };
+    expect(body.code).toBe('PAYLOAD_TOO_LARGE');
   });
 });

@@ -35,7 +35,7 @@ AXIS exposes a **Model Context Protocol** server on the Cloudflare Worker so age
 
 Transport: **Streamable HTTP JSON-RPC 2.0** on `POST /mcp` (JSON body in / JSON body out). Protocol versions accepted: `2025-03-26`, `2025-06-18`, `2024-11-05`.
 
-Auth: same **Bearer API key** as `/api/scripts` (`pn_…`). `GET /mcp` is public discovery. Production fail-closes when D1 is bound without `API_KEYS` KV. Rate limit: 60 MCP calls / minute / key.
+Auth: same **Bearer API key** as `/api/scripts` (`pn_…`). `GET /mcp` is public discovery. Production fail-closes when D1 is bound without `API_KEYS` KV. Rate limit: 60 RPC methods / minute / key (JSON-RPC batches charge per item, max 10; bodies above 1 MiB are rejected before parse).
 
 End-user connect steps: [MCP (agents)](/axis/docs/enduser/guides/mcp).
 
@@ -62,8 +62,9 @@ Canonical host: `https://worker.axis.hoox.sh`.
 | `/mcp` | GET | public | Discovery JSON (server name, tool names) |
 | `/mcp` | DELETE | — | No-op 204 (stateless) |
 | `/.well-known/oauth-protected-resource` | GET | public | Bearer resource metadata |
-| `/api/mcp/bridge` | WS | Bearer or `?key=` | PWA control plane → `McpBridgeDO` |
+| `/api/mcp/bridge` | WS | `?ticket=` (one-time, minted below) or `Authorization` header | PWA control plane → `McpBridgeDO`. Browser sockets cannot set Authorization; they never put the long-lived `pn_…` key in the query string. |
 | `/api/mcp/bridge` | GET | Bearer | No `Upgrade` header → DO `/status`: `{ status, connected }` tab count (the app status bar polls this) |
+| `/api/mcp/bridge?issue=ticket` | GET | Bearer | Mint a single-use WS ticket (`{ ticket, expiresIn }`, 30s TTL) |
 
 Health JSON includes `features.mcp: true` and `features.mcpBridge` when the DO is bound.
 
