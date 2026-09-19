@@ -39,6 +39,7 @@ function cfg(config) {
     apiKey: String(c.apiKey || c.api_key || ""),
     pineVersion: String(c.pineVersion || c.pine_version || "auto"),
     style: String(c.style || "auto"),
+    persona: String(c.persona || "auto"),
   };
 }
 
@@ -1000,6 +1001,7 @@ function mountChat(el, api, config, opts = {}) {
             session_id: sessionId || undefined,
             pine_version: live.pineVersion,
             style: live.style,
+            persona: live.persona,
           }),
         },
         api?.host?.fetch
@@ -1184,6 +1186,13 @@ const plugin = {
       default: "auto",
       label: "Script kind preference",
       options: ["auto", "indicator", "strategy", "library"],
+    },
+    persona: {
+      type: "select",
+      default: "auto",
+      label: "Persona",
+      description: "Pine coder, AXIS operator (changes the app via MCP), or trader",
+      options: ["auto", "pine", "axis", "trader"],
     },
   },
   slots: ["manager-tab", "topbar-action", "settings-section"],
