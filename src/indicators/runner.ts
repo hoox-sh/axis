@@ -966,7 +966,10 @@ async function runAndApplyInner(
   ).toLowerCase();
 
   const ohlcvTimes = getOhlcvTimesForApply(bars);
-  const plotMeta = (result.meta?.plot_meta || {}) as Record<string, PlotMetaEntry>;
+  const plotMeta = {
+    ...(((result as { plot_meta?: Record<string, PlotMetaEntry> }).plot_meta) || {}),
+    ...((result.meta?.plot_meta || {}) as Record<string, PlotMetaEntry>),
+  };
   const seriesMap = result.series || {};
   const split = splitSeriesByKind(seriesMap, plotMeta);
 

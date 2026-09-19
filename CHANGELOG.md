@@ -26,6 +26,7 @@ _Generated/updated: 2026-09-18 · 430 commits · describe-tag: `v2.9.0`_
 
 ### Fixed
 
+- **Compile `fill()` plot_meta**: auto/compile runs stamp `kind: fill` plus distinct `plot1`/`plot2` series keys (untitled `plot()` → `plot_N`) so AXIS paints bands instead of dropping them.
 - **Pine `fill` / `linefill` geometry**: untitled `plot()` fill edges no longer both bind to the first series (`plot` vs `plot_2`); per-bar fill color splits the SVG band so Ichimoku-style clouds flip; `line.fill` / `linefill.new` quads order each line by time so opposite `line.new` directions do not bowtie. Live re-runs pick up mid-band color/shape changes.
 - **MCP streamable HTTP handshake**: `GET /mcp` with `Accept: text/event-stream` returns 405 (stateless JSON-RPC, no SSE). Grok and other Streamable HTTP clients no longer parse discovery JSON as an event stream.
 - **MCP invoke no longer fans out to every tab**: `McpBridgeDO` sends each `/invoke` to the newest attached socket only and ignores late replies from other tabs, so two open AXIS windows cannot both mutate the chart for one agent call.
