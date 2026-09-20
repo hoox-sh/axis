@@ -284,11 +284,11 @@ export const SystemLogs: Component = () => {
                       class={`inline-block w-1.5 h-1.5 rounded-full shrink-0 mt-1 ${levelDot(entry.level)}`}
                       title={entry.level}
                     />
-                    <span class="text-[#6B7382] w-[72px] flex-shrink-0 select-none tabular-nums">
+                    <span class="text-[#6B7382] w-[13ch] shrink-0 select-none tabular-nums">
                       {formatTs(entry.ts)}
                     </span>
                     <span
-                      class={`w-10 flex-shrink-0 uppercase select-none ${levelClass(entry.level)}`}
+                      class={`w-[6ch] shrink-0 uppercase select-none ${levelClass(entry.level)}`}
                     >
                       {entry.level}
                     </span>

@@ -26,6 +26,8 @@ _Generated/updated: 2026-09-18 · 430 commits · describe-tag: `v2.9.0`_
 
 ### Fixed
 
+- **System / script log chrome**: expanded system-log rows size the timestamp to `13ch` so `HH:mm:ss.sss` no longer runs into the level; `.axis-empty-state` uses padding-inline (12px) so the editor Script Logs empty copy is inset when a run produced no `log.*` lines.
+- **Drawings no longer paint over the scales**: the SVG drawing layer is sized to LWC `paneSize()` (plot pane only), so fibs / rays / hlines clip at the price and time axes. Scale-control cluster (`A L $ N T`) and volume profile use the live `priceScale('right').width()` so last-value titles that widen the gutter no longer sit on the ticks.
 - **Compile `fill()` plot_meta**: auto/compile runs stamp `kind: fill` plus distinct `plot1`/`plot2` series keys (untitled `plot()` → `plot_N`) so AXIS paints bands instead of dropping them.
 - **Pine `fill` / `linefill` geometry**: untitled `plot()` fill edges no longer both bind to the first series (`plot` vs `plot_2`); per-bar fill color splits the SVG band so Ichimoku-style clouds flip; `line.fill` / `linefill.new` quads order each line by time so opposite `line.new` directions do not bowtie. Live re-runs pick up mid-band color/shape changes.
 - **MCP streamable HTTP handshake**: `GET /mcp` with `Accept: text/event-stream` returns 405 (stateless JSON-RPC, no SSE). Grok and other Streamable HTTP clients no longer parse discovery JSON as an event stream.

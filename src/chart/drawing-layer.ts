@@ -20,7 +20,11 @@
 /**
  * SVG overlay drawing layer on the Lightweight Charts price pane.
  *
- * Hosts two independent content groups under one full-pane SVG:
+ * The SVG is sized to the **plot pane** (LWC `paneSize()`), not the full host,
+ * so rays / fibs / hlines clip at the price and time scales instead of painting
+ * over axis labels.
+ *
+ * Hosts two independent content groups under one plot-sized SVG:
  * - **User group** (`gDraw` / draft): interactive annotations (trend, hline, fib, …)
  * - **Pine script group** (`gScript`): view-only line/label/box from the last `/run`
  *
@@ -68,6 +72,7 @@ import {
   logicalIndexToUnixTime,
   unixTimeToLogicalIndex,
 } from './drawings/coords';
+import { measureChartPlotRect } from './plot-rect';
 import {
   getToolHandler,
   type ToolHitCtx,
@@ -160,7 +165,7 @@ type DragState = {
 };
 
 /**
- * Full-pane SVG drawing controller for one LWC chart + price series.
+ * Plot-pane SVG drawing controller for one LWC chart + price series.
  *
  * Cursor tool: SVG `pointer-events: none` so empty areas pan/zoom LWC; painted
  * shapes opt in. Place tools flip the SVG to `pointer-events: auto` + crosshair.
@@ -244,6 +249,9 @@ export class DrawingLayer {
   private lastScriptSig = '';
   /** Skip setPlotFills DOM rebuild when fill payload is unchanged (live silent re-runs). */
   private lastFillSig = '';
+  /** Plot-pane size (excludes price/time scales) used for extend-to-edge paint. */
+  private plotW = 0;
+  private plotH = 0;
 
   /**
    * When true, this layer only paints Pine script drawings (no user tools /
@@ -283,7 +291,10 @@ export class DrawingLayer {
     );
     Object.assign(this.svg.style, {
       position: 'absolute',
-      inset: '0',
+      left: '0',
+      top: '0',
+      right: 'auto',
+      bottom: 'auto',
       width: '100%',
       height: '100%',
       zIndex: '4',
@@ -852,11 +863,29 @@ export class DrawingLayer {
     }
   }
 
-  private syncSize() {
+  /** Plot pane size in CSS pixels (falls back to last measured / host box). */
+  private canvas(): { width: number; height: number } {
+    if (this.plotW > 0 && this.plotH > 0) return { width: this.plotW, height: this.plotH };
     const r = this.host.getBoundingClientRect();
-    const w = r.width;
-    const h = r.height;
+    return {
+      width: r.width || this.host.clientWidth || 0,
+      height: r.height || this.host.clientHeight || 0,
+    };
+  }
+
+  private syncSize() {
+    const plot = measureChartPlotRect(this.chart, this.host);
+    const w = plot.width;
+    const h = plot.height;
     if (!isFiniteNum(w) || !isFiniteNum(h) || w < 0 || h < 0) return;
+    this.plotW = w;
+    this.plotH = h;
+    const left = isFiniteNum(plot.left) ? plot.left : 0;
+    const top = isFiniteNum(plot.top) ? plot.top : 0;
+    this.svg.style.left = `${left}px`;
+    this.svg.style.top = `${top}px`;
+    this.svg.style.width = `${w}px`;
+    this.svg.style.height = `${h}px`;
     this.svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
     this.svg.setAttribute('width', String(w));
     this.svg.setAttribute('height', String(h));
@@ -1533,8 +1562,8 @@ export class DrawingLayer {
           return null;
         }
       },
-      width: this.host.clientWidth || 0,
-      height: this.host.clientHeight || 0,
+      width: this.canvas().width,
+      height: this.canvas().height,
       el: (name, attrs) => el(g, name, attrs),
       line: (x1, y1, x2, y2, s, w, dsh, pe) => line(g, x1, y1, x2, y2, s, w, dsh, pe),
       circle: (x, y, r, s, filled) => circle(g, x, y, r, s, filled),
@@ -1635,8 +1664,8 @@ export class DrawingLayer {
         toXY: (p) => this.toXY(p),
         timeToX: (t) => this.timeToX(t),
         priceToY: (price) => this.priceToYSafe(price),
-        width: this.host.clientWidth,
-        height: this.host.clientHeight,
+        width: this.canvas().width,
+        height: this.canvas().height,
       };
       return handler.hit(d, ctx);
     }
@@ -1985,7 +2014,7 @@ export class DrawingLayer {
       if (isHline && d.p1 === d.p2) {
         const y = this.priceToYSafe(d.p1);
         if (y != null) {
-          line(g, 0, y, this.host.clientWidth, y, stroke, sw, dash, pe);
+          line(g, 0, y, this.canvas().width, y, stroke, sw, dash, pe);
           if (d.text != null && d.text !== '') {
             label(g, 6, y - 4, sanitizeDrawingText(d.text), stroke, 10);
           }
@@ -1998,7 +2027,7 @@ export class DrawingLayer {
       if ((!a || !b) && d.p1 === d.p2 && ext !== 'none') {
         const y = this.priceToYSafe(d.p1);
         if (y != null) {
-          line(g, 0, y, this.host.clientWidth, y, stroke, sw, dash, pe);
+          line(g, 0, y, this.canvas().width, y, stroke, sw, dash, pe);
           return;
         }
       }
@@ -2009,8 +2038,8 @@ export class DrawingLayer {
         b.x,
         b.y,
         ext,
-        this.host.clientWidth,
-        this.host.clientHeight,
+        this.canvas().width,
+        this.canvas().height,
       );
       line(g, x1, y1, x2, y2, stroke, sw, dash, pe);
       // Pine line.style_arrow_left|right|both — solid stroke + SVG heads
@@ -2360,7 +2389,7 @@ export class DrawingLayer {
       if (!Number.isFinite(d.price)) return;
       const y = this.priceToYSafe(d.price);
       if (y == null) return;
-      const w = this.host.clientWidth;
+      const w = this.canvas().width;
       line(g, 0, y, w, y, stroke, sw, dash, 'stroke');
       if (showPriceOf(d, true)) {
         label(g, 6, y - 4, d.price.toFixed(2), stroke, st.fontSize);
@@ -2375,7 +2404,7 @@ export class DrawingLayer {
       if (!Number.isFinite(d.time)) return;
       const x = this.timeToX(d.time);
       if (x == null) return;
-      const h = this.host.clientHeight;
+      const h = this.canvas().height;
       line(g, x, 0, x, h, stroke, sw, dash, 'stroke');
       if (showPriceOf(d, true)) {
         const ms = d.time * 1000;
@@ -2427,8 +2456,8 @@ export class DrawingLayer {
     if (!a || !b) return;
 
     if (d.kind === 'trend' || d.kind === 'measure' || d.kind === 'arrow') {
-      const w = this.host.clientWidth;
-      const h = this.host.clientHeight;
+      const w = this.canvas().width;
+      const h = this.canvas().height;
       const mode = extendModeOf(d, { extendLeft: st.extendLeft, extendRight: st.extendRight });
       const ext =
         d.kind === 'trend' && mode !== 'none'
@@ -2466,8 +2495,8 @@ export class DrawingLayer {
     }
 
     if (d.kind === 'ray' || d.kind === 'extend') {
-      const w = this.host.clientWidth;
-      const h = this.host.clientHeight;
+      const w = this.canvas().width;
+      const h = this.canvas().height;
       const mode = extendModeOf(d, { extendLeft: st.extendLeft, extendRight: st.extendRight });
       const ext =
         mode === 'none'
@@ -2551,7 +2580,7 @@ export class DrawingLayer {
       let left = x1;
       let right = x2;
       if (st.extendLeft) left = Math.min(x1, 8);
-      if (st.extendRight) right = Math.max(x2, this.host.clientWidth - 8);
+      if (st.extendRight) right = Math.max(x2, this.canvas().width - 8);
       const showPct = showPctOf(d, true);
       const showPx = showPriceOf(d, true);
       const fo = Math.max(0, Math.min(1, st.fillOpacity));

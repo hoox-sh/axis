@@ -129,6 +129,21 @@ strategy.entry("Long", strategy.long)
     );
   });
 
+  it('accepts line.fill as known (alias of linefill.new)', () => {
+    const src = `//@version=6
+indicator("t")
+if barstate.islast
+    l1 = line.new(bar_index - 3, high, bar_index, high)
+    l2 = line.new(bar_index, low, bar_index - 3, low)
+    line.fill(l1, l2, color=color.new(color.blue, 80))
+plot(close)
+`;
+    const diags = localPreevaluate(src);
+    expect(diags.filter((d) => /line\.fill/.test(d.message))).toEqual([]);
+    expect(isKnownBuiltinPath('line.fill')).toBe(true);
+    expect(isKnownBuiltinPath('linefill.new')).toBe(true);
+  });
+
   it('accepts plot.style_stepline / plotshape enums (not false typo)', () => {
     const src = `//@version=5
 indicator("t")

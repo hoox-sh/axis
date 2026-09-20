@@ -43,6 +43,7 @@ import {
 import { Portal } from 'solid-js/web';
 import { store, setStore, persist, setPriceScaleDecimals } from '../store';
 import { applyPriceScaleDecimals, getManager } from './manager-access';
+import { measureChartPlotRect } from './plot-rect';
 import { RIGHT_PRICE_SCALE_WIDTH } from './series-factory';
 import {
   cyclePriceScaleDecimalsMode,
@@ -116,8 +117,18 @@ export const ChartScaleControls: Component = () => {
     }
 
     const labels = store.priceScaleLabelsVisible !== false;
-    // Match PaneManager right-gutter width so we sit flush left of price labels
-    const rightW = labels ? RIGHT_PRICE_SCALE_WIDTH : 0;
+    // Live LWC scale width (last-value titles can grow the gutter past the
+    // 72px minimum). Fall back to the layout constant / measured time axis.
+    let rightW = labels ? RIGHT_PRICE_SCALE_WIDTH : 0;
+    try {
+      const pricePane = m.getPane?.('price');
+      const plot = measureChartPlotRect(pricePane?.chart, el);
+      if (plot.rightScale > 0) rightW = plot.rightScale;
+      else if (!labels) rightW = 0;
+      if (plot.timeScale > 0) timeH = plot.timeScale;
+    } catch {
+      /* keep fallbacks */
+    }
     setInset({
       right: rightW + GUTTER_GAP_PX,
       bottom: timeH + GUTTER_GAP_PX,

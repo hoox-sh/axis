@@ -1563,10 +1563,13 @@ button.axis-status-capsule {
   justify-content: flex-start;
   gap: 8px;
   min-height: 28px;
-  padding: 8px 0;
+  /* Longhands so Tailwind px-* / py-* on the same node still apply. */
+  padding-block: 8px;
+  padding-inline: 12px;
   color: var(--color-text-dim);
   font-size: 12px;
   text-align: left;
+  box-sizing: border-box;
 }
 .axis-logs-strip {
   display: flex;

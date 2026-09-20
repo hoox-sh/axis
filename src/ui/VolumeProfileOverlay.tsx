@@ -48,6 +48,7 @@ import {
   volumeProfileEnabled,
   type VolumeProfileResult,
 } from '../chart/volume-profile';
+import { measureChartPlotRect } from '../chart/plot-rect';
 import { RIGHT_PRICE_SCALE_WIDTH } from '../chart/series-factory';
 
 const HIST_WIDTH = 88;
@@ -77,6 +78,7 @@ export const VolumeProfileOverlay: Component = () => {
   const [paneBox, setPaneBox] = createSignal<{
     top: number;
     height: number;
+    rightScale: number;
   } | null>(null);
 
   let hostRef: HTMLDivElement | undefined;
@@ -101,9 +103,23 @@ export const VolumeProfileOverlay: Component = () => {
     }
     const hostRect = hostRef.getBoundingClientRect();
     const paneRect = paneEl.getBoundingClientRect();
+    let rightScale = RIGHT_PRICE_SCALE_WIDTH;
+    try {
+      const plot = measureChartPlotRect(mgr.getPane?.('price')?.chart, paneEl);
+      if (plot.rightScale > 0) rightScale = plot.rightScale;
+      setPaneBox({
+        top: paneRect.top - hostRect.top,
+        height: plot.height > 0 ? plot.height : paneRect.height,
+        rightScale,
+      });
+      return;
+    } catch {
+      /* fall through */
+    }
     setPaneBox({
       top: paneRect.top - hostRect.top,
       height: paneRect.height,
+      rightScale,
     });
   };
 
@@ -236,7 +252,7 @@ export const VolumeProfileOverlay: Component = () => {
             style={{
               top: `${lay().top}px`,
               height: `${lay().height}px`,
-              right: `${RIGHT_PRICE_SCALE_WIDTH + 4}px`,
+              right: `${(paneBox()?.rightScale ?? RIGHT_PRICE_SCALE_WIDTH) + 4}px`,
               width: `${HIST_WIDTH}px`,
             }}
             data-testid="axis-volume-profile"
