@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-18 · 430 commits · describe-tag: `v2.9.0`_
+_Generated/updated: 2026-09-21 · 441 commits · describe-tag: `v2.10.0`_
 
 ---
 
 ## [Unreleased]
+
+## [2.11.0] — 2026-09-21
 
 ### Added
 
@@ -1271,12 +1273,15 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (111 commits)
+### 2026-09 (122 commits)
 
 #### Features
 
+- `12b6ab81` (2026-09-19) — feat(plugins): PYNE Agent Persona field (pine/axis/trader)
 - `79f65da6` (2026-09-17) — feat(mcp): drawings control, settings control, session indicator
 - `1d795fb6` (2026-09-17) — feat(settings): unified Worker API key for cloud storage and MCP
 - `b215b995` (2026-09-17) — feat(library): Builtin and Personal tabs in Script Library
@@ -1315,6 +1320,13 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `7d02544b` (2026-09-20) — fix(chart,ui): clip drawings to plot, catalog line.fill, log chrome
+- `c23c446c` (2026-09-19) — fix(chart): merge top-level compile plot_meta so fill bands apply
+- `c1b1fdc1` (2026-09-19) — fix(chart): fill edges, color-split bands, and linefill quads
+- `8da70490` (2026-09-19) — fix(mcp): 405 SSE GET on /mcp so streamable HTTP clients handshake
+- `5a122934` (2026-09-19) — fix(mcp): single-tab invoke, key rotation, and WS tickets
+- `1b6c2093` (2026-09-18) — fix(tests): deterministic fetch mocks + stale DSM status guard
+- `8c648982` (2026-09-18) — fix(plugins): PYNE Agent endpoint seeding + Workers config UI
 - `d758a6c6` (2026-09-17) — fix(store): reload no longer wipes persisted state (TDZ in boot parse)
 - `695e22c4` (2026-09-17) — fix(watchlist): venue-correct quotes for MEXC, Kraken, and Data Manager
 - `bf1984ad` (2026-09-17) — fix(cli): cover mcp/mcpBridge in healthFeatures test
@@ -1352,12 +1364,17 @@ Security and performance release from the multi-agent **harden-perf** audit
 - `520869dc` (2026-09-05) — fix: setup review — doctor, live HUD, static health, 2.3.1
 - `16499ac7` (2026-09-04) — fix(results): skip live-tick persist and unstick studio e2e
 
+#### Performance
+
+- `09b00fb3` (2026-09-21) — perf(chart): keep large OHLCV histories interactive
+
 #### Refactors
 
 - `ac0d8a90` (2026-09-08) — refactor(editor): move Script Logs into the editor bottom bar
 
 #### Documentation
 
+- `f16f868b` (2026-09-19) — docs: pyodide-in-worker use case, NO_BACKEND contract, test conventions
 - `7655bb25` (2026-09-14) — docs(changelog): drop raw &lt;cmd&gt; so MDX sync can parse
 - `477084bf` (2026-09-08) — docs(changelog): note bare-filename SHA256SUMS for binaries
 - `055d73d5` (2026-09-08) — docs: CLI-first command surface (axis &lt;cmd&gt; primary, bun run axis:* as repo alias)
@@ -1393,6 +1410,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `1b9357fa` (2026-09-18) — chore(release): AXIS v2.10.0 — toasts, notification settings, MCP activity
 - `b327a28a` (2026-09-10) — chore: stop tracking .grok/ and AGENTS.md (local-only)
 - `28420c09` (2026-09-08) — chore(release): v2.6.1 — sync desktop version stamps + check:versions guard
 - `67723020` (2026-09-08) — chore(release): v2.6.0 — shortcut hub fix, keypress feedback
