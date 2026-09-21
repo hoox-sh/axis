@@ -152,6 +152,17 @@ describe('shapeSeriesToMarkers', () => {
     const unset = shapeSeriesToMarkers([1], [true], {});
     expect(unset[0]!.size).toBeUndefined();
   });
+
+  it('caps dense plotshape series to the newest MAX_CHART_MARKERS', async () => {
+    const { MAX_CHART_MARKERS } = await import('../src/chart/heavy-data');
+    const n = MAX_CHART_MARKERS + 50;
+    const times = Array.from({ length: n }, (_, i) => i + 1);
+    const values = times.map(() => true);
+    const markers = shapeSeriesToMarkers(times, values, { title: 'all' });
+    expect(markers).toHaveLength(MAX_CHART_MARKERS);
+    expect(markers[0]!.time).toBe(n - MAX_CHART_MARKERS + 1);
+    expect(markers[markers.length - 1]!.time).toBe(n);
+  });
 });
 
 describe('mapShapeSize', () => {

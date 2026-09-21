@@ -19,6 +19,11 @@ _Generated/updated: 2026-09-18 · 430 commits · describe-tag: `v2.9.0`_
 
 - **PYNE Agent persona** control on Workers Manager (auto / pine / axis / trader), same `writePluginField` path as the agent endpoint.
 
+### Changed
+
+- **Large OHLCV histories stay interactive**: 10k–100k candle loads lower LWC `minBarSpacing` so fit-content can actually show the full series, precompute conflation on every pane (user-visible priority at 25k+), skip duplicate full `setData` (DSM paint + ChartHost), and throttle progressive backfill paints. Pan/zoom no longer walks the whole series for plot fills, line-break primitives, or volume profile (visible window only); time-scale sync is rAF-coalesced from the price pane; plotshape markers cap at 2,500 newest; Data Window / crosshair updates stop tracking the 45k-bar array identity.
+- **Data Source Manager panel + Dataset manager modal**: job card / coverage map / formatters split out; the panel inherits the chart symbol and interval, uses filter chips with counts (Issues instead of Error), and puts Dataset manager in the header. The modal gets a focus trap, two-step delete (no native confirm), sort-by-header, success banner, and arrow keys that no longer steal from date/search inputs.
+
 ### Docs
 
 - MCP setup/troubleshooting now points at **Settings → General → Worker (cloud + MCP)** (Data tab is exchange credentials only). PYNE Agent guide documents the Workers Manager persona/endpoint controls.
@@ -26,6 +31,7 @@ _Generated/updated: 2026-09-18 · 430 commits · describe-tag: `v2.9.0`_
 
 ### Fixed
 
+- **Dataset manager never throws and always delivers**: `startBackfill` clamps bad dates, remaps the cache-reader source, and always returns a job id. Venue failures retry with backoff then complete as **Partial** with whatever bars are already cached (jobs no longer die as `error`). Empty-cache loads subscribe for progressive paint and kick a background walk after the first page.
 - **System / script log chrome**: expanded system-log rows size the timestamp to `13ch` so `HH:mm:ss.sss` no longer runs into the level; `.axis-empty-state` uses padding-inline (12px) so the editor Script Logs empty copy is inset when a run produced no `log.*` lines.
 - **Drawings no longer paint over the scales**: the SVG drawing layer is sized to LWC `paneSize()` (plot pane only), so fibs / rays / hlines clip at the price and time axes. Scale-control cluster (`A L $ N T`) and volume profile use the live `priceScale('right').width()` so last-value titles that widen the gutter no longer sit on the ticks.
 - **Compile `fill()` plot_meta**: auto/compile runs stamp `kind: fill` plus distinct `plot1`/`plot2` series keys (untitled `plot()` → `plot_N`) so AXIS paints bands instead of dropping them.

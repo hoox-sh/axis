@@ -73,6 +73,7 @@ import {
   unixTimeToLogicalIndex,
 } from './drawings/coords';
 import { measureChartPlotRect } from './plot-rect';
+import { indexRangeForSortedTimes } from './heavy-data';
 import {
   getToolHandler,
   type ToolHitCtx,
@@ -1837,6 +1838,12 @@ export class DrawingLayer {
     }
     const maxSamples = Math.max(64, Math.floor(cssW * 2));
 
+    // Walk only the visible time window — fillBandRunBounds used to scan
+    // every bar on pan/zoom (45k-point Ichimoku clouds hitch the main thread).
+    const win = indexRangeForSortedTimes(fill.times, tMin, tMax);
+    const winFrom = Math.max(0, win.from - 1);
+    const winTo = Math.min(n, win.to + 1);
+
     // Segment into contiguous runs of finite pairs so na gaps (and color
     // flips) split the band — one path per color so Ichimoku clouds paint.
     const flush = (from: number, to: number) => {
@@ -1882,7 +1889,14 @@ export class DrawingLayer {
         'data-fill': String(fill.name || ''),
       });
     };
-    for (const run of fillBandRunBounds(n, fill.upper, fill.lower, fill.times, fill.colors)) {
+    for (const run of fillBandRunBounds(
+      n,
+      fill.upper,
+      fill.lower,
+      fill.times,
+      fill.colors,
+      { from: winFrom, to: winTo },
+    )) {
       flush(run.from, run.to);
     }
   }
@@ -3029,6 +3043,7 @@ export function fillBandRunBounds(
   lower: ReadonlyArray<number | null>,
   times: ReadonlyArray<number>,
   colors: ReadonlyArray<string | null>,
+  window?: { from?: number; to?: number },
 ): Array<{ from: number; to: number }> {
   const runs: Array<{ from: number; to: number }> = [];
   let start = -1;
@@ -3040,7 +3055,9 @@ export function fillBandRunBounds(
     Number.isFinite(times[i]!) &&
     Number.isFinite(upper[i] as number) &&
     Number.isFinite(lower[i] as number);
-  for (let i = 0; i < n; i++) {
+  const i0 = Math.max(0, window?.from ?? 0);
+  const i1 = Math.min(n, window?.to ?? n);
+  for (let i = i0; i < i1; i++) {
     if (ok(i)) {
       const c = colorAt(i);
       if (start < 0) {
@@ -3056,7 +3073,7 @@ export function fillBandRunBounds(
       start = -1;
     }
   }
-  if (start >= 0) runs.push({ from: start, to: n });
+  if (start >= 0) runs.push({ from: start, to: i1 });
   return runs;
 }
 

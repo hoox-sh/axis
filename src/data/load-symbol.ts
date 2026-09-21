@@ -335,10 +335,14 @@ export async function loadSymbolData(
     // Seed / merge into the dataset store (conflict-resolved) so the next
     // load paints instantly and the DSM can complete the series.
     try {
-      const { seedDatasetFromBars } = await import('./dsm-orchestrator');
+      const { seedDatasetFromBars, ensureDatasetComplete } = await import(
+        './dsm-orchestrator'
+      );
       seedDatasetFromBars(srcId, sym, iv, normalized);
+      // First page is on the chart — DSM walks the rest in the background.
+      ensureDatasetComplete(sym, iv, srcId, { stillCurrent });
     } catch {
-      /* seeding is best-effort */
+      /* seeding / background complete is best-effort */
     }
 
     if (!stillCurrent()) return false;

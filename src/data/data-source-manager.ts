@@ -27,6 +27,8 @@
  * 3. **Gap-fill** — download missing ranges, re-validate until complete or stuck.
  *
  * All network work runs in detached async jobs (never blocks the chart path).
+ * The public API never throws: invalid input is clamped or settled, venue
+ * failures retry then complete as Partial with whatever bars are cached.
  *
  * @module data/data-source-manager
  */
@@ -38,7 +40,11 @@ import { pluginKey } from '../plugins/types';
 import type { SourcePlugin } from '../plugins/types';
 import { getManager, setDataToChart } from '../chart/manager-access';
 import { getSource, sourcePageLimit } from '../sources/catalog';
-import { DATA_MANAGER_SOURCE_ID } from './data-manager-source';
+import {
+  DATA_MANAGER_SOURCE_ID,
+  getDataManagerSelection,
+  resolveDataManagerBars,
+} from './data-manager-source';
 import { normalizeHistoricalBars } from './parse-bars';
 import {
   getCachedBarCount,
@@ -93,7 +99,10 @@ export interface DataSourceJob {
   gapsFilled: number;
   /** True when series is contiguous from targetFrom → targetTo. */
   datasetComplete: boolean;
+  /** Last recoverable failure (retry note or partial-complete reason). Never a throw. */
   error: string | null;
+  /** Venue page retries so far this run. */
+  retries: number;
   createdAt: number;
   updatedAt: number;
   /** Paint chart when job reaches complete (if symbol still matches). */
@@ -115,6 +124,8 @@ interface InternalJob extends DataSourceJob {
   abort: AbortController;
   /** Pause flag checked between pages. */
   paused: boolean;
+  /** Venue page retries exhausted — skip further network, deliver cache. */
+  venueDead: boolean;
 }
 
 const MAX_CONCURRENT = 1;
@@ -124,6 +135,8 @@ const MAX_BARS_PER_JOB = 50_000;
 const MAX_RETAINED_JOBS = 40;
 const PAGE_YIELD_MS = 50;
 const DEFAULT_LOOKBACK_SEC = 90 * 86_400;
+/** First attempt + this many retries per walk page before giving up that page. */
+const MAX_PAGE_RETRIES = 4;
 
 interface ManagerState {
   jobs: DataSourceJob[];
@@ -195,6 +208,27 @@ function yieldGap(ms = PAGE_YIELD_MS): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function pageRetryDelayMs(attempt: number): number {
+  return Math.min(4_000, 250 * 2 ** Math.max(0, attempt));
+}
+
+/** Sleep `ms` or return early when the job is aborted. */
+async function yieldGapOrAbort(j: InternalJob, ms: number): Promise<boolean> {
+  if (j.abort.signal.aborted) return true;
+  await new Promise<void>((resolve) => {
+    const onAbort = () => {
+      clearTimeout(t);
+      resolve();
+    };
+    const t = setTimeout(() => {
+      j.abort.signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    j.abort.signal.addEventListener('abort', onAbort, { once: true });
+  });
+  return j.abort.signal.aborted;
+}
+
 function publicJob(j: InternalJob): DataSourceJob {
   const {
     id,
@@ -213,6 +247,7 @@ function publicJob(j: InternalJob): DataSourceJob {
     gapsFilled,
     datasetComplete,
     error,
+    retries,
     createdAt,
     updatedAt,
     applyWhenComplete,
@@ -234,6 +269,7 @@ function publicJob(j: InternalJob): DataSourceJob {
     gapsFilled,
     datasetComplete,
     error,
+    retries,
     createdAt,
     updatedAt,
     applyWhenComplete,
@@ -286,58 +322,16 @@ function setJobStatus(j: InternalJob, status: DataSourceJobStatus, error: string
   syncJob(j);
 }
 
-/**
- * Enqueue a background backfill. Returns the job id **immediately**;
- * network work continues detached (not awaited by the caller).
- */
-export function startBackfill(opts: StartBackfillOpts = {}): string {
-  const sourceId = String(opts.sourceId || store.source || 'binance-rest');
-  const symbol = String(opts.symbol || store.symbol || '').trim().toUpperCase();
-  const interval = String(opts.interval || store.interval || '1d');
-  const targetToSec =
-    typeof opts.targetToSec === 'number' && Number.isFinite(opts.targetToSec)
-      ? Math.floor(opts.targetToSec)
-      : nowSec();
-  const targetFromSec =
-    typeof opts.targetFromSec === 'number' && Number.isFinite(opts.targetFromSec)
-      ? Math.floor(opts.targetFromSec)
-      : targetToSec - DEFAULT_LOOKBACK_SEC;
-
-  if (!symbol) {
-    throw new Error('Symbol required');
-  }
-  if (sourceId === DATA_MANAGER_SOURCE_ID) {
-    throw new Error('Data Manager is a cache reader — pick an exchange source to backfill');
-  }
-  if (!getSource(sourceId)) {
-    throw new Error(`Unknown source: ${sourceId}`);
-  }
-  if (targetFromSec >= targetToSec) {
-    throw new Error('Past date must be before now');
-  }
-
-  for (const existing of internals.values()) {
-    if (
-      existing.sourceId === sourceId &&
-      existing.symbol === symbol &&
-      existing.interval === interval &&
-      (existing.status === 'running' ||
-        existing.status === 'pending' ||
-        existing.status === 'paused')
-    ) {
-      if (targetFromSec < existing.targetFromSec) existing.targetFromSec = targetFromSec;
-      if (targetToSec > existing.targetToSec) existing.targetToSec = targetToSec;
-      existing.updatedAt = Date.now();
-      syncJob(existing);
-      if (existing.status === 'paused') resumeBackfill(existing.id);
-      return existing.id;
-    }
-  }
-
-  const id = jobId();
-  const abort = new AbortController();
-  const internal: InternalJob = {
-    id,
+function makeJob(
+  sourceId: string,
+  symbol: string,
+  interval: string,
+  targetFromSec: number,
+  targetToSec: number,
+  applyWhenComplete: boolean,
+): InternalJob {
+  return {
+    id: jobId(),
     sourceId,
     symbol,
     interval,
@@ -353,17 +347,137 @@ export function startBackfill(opts: StartBackfillOpts = {}): string {
     gapsFilled: 0,
     datasetComplete: false,
     error: null,
+    retries: 0,
     createdAt: Date.now(),
     updatedAt: Date.now(),
-    applyWhenComplete: !!opts.applyWhenComplete,
-    abort,
+    applyWhenComplete,
+    abort: new AbortController(),
     paused: false,
+    venueDead: false,
   };
-  internals.set(id, internal);
+}
+
+function enqueueJob(internal: InternalJob): string {
+  internals.set(internal.id, internal);
   syncJob(internal);
-  waitQueue.push(id);
+  waitQueue.push(internal.id);
   pumpQueue();
-  return id;
+  return internal.id;
+}
+
+/**
+ * Enqueue a background backfill. Returns the job id **immediately** and
+ * never throws — invalid input is clamped or settled as a complete job
+ * that still delivers whatever is already cached.
+ */
+export function startBackfill(opts: StartBackfillOpts = {}): string {
+  try {
+    let sourceId = String(opts.sourceId || store.source || 'binance-rest');
+    let symbol = String(opts.symbol ?? store.symbol ?? '')
+      .trim()
+      .toUpperCase();
+    let interval = String(opts.interval || store.interval || '1d');
+    let targetToSec =
+      typeof opts.targetToSec === 'number' && Number.isFinite(opts.targetToSec)
+        ? Math.floor(opts.targetToSec)
+        : nowSec();
+    let targetFromSec =
+      typeof opts.targetFromSec === 'number' && Number.isFinite(opts.targetFromSec)
+        ? Math.floor(opts.targetFromSec)
+        : targetToSec - DEFAULT_LOOKBACK_SEC;
+
+    if (!symbol) {
+      symbol = String(store.symbol || '')
+        .trim()
+        .toUpperCase();
+    }
+
+    // Data Manager is a cache reader — remap to the selected venue when known.
+    if (sourceId === DATA_MANAGER_SOURCE_ID) {
+      try {
+        const sel = getDataManagerSelection();
+        if (
+          sel?.sourceId &&
+          sel.sourceId !== DATA_MANAGER_SOURCE_ID &&
+          getSource(sel.sourceId)
+        ) {
+          sourceId = sel.sourceId;
+          if (!String(opts.symbol ?? '').trim()) symbol = sel.symbol || symbol;
+          if (!opts.interval) interval = sel.interval || interval;
+        }
+      } catch {
+        /* selection lookup is best-effort */
+      }
+    }
+
+    if (targetFromSec > targetToSec) {
+      const swap = targetFromSec;
+      targetFromSec = targetToSec;
+      targetToSec = swap;
+    }
+    if (targetFromSec === targetToSec) {
+      targetFromSec = targetToSec - DEFAULT_LOOKBACK_SEC;
+    }
+
+    if (!symbol) {
+      const settled = makeJob(
+        sourceId,
+        'UNKNOWN',
+        interval,
+        targetFromSec,
+        targetToSec,
+        !!opts.applyWhenComplete,
+      );
+      settled.phase = 'done';
+      internals.set(settled.id, settled);
+      setJobStatus(settled, 'complete', 'Symbol required');
+      return settled.id;
+    }
+
+    for (const existing of internals.values()) {
+      if (
+        existing.sourceId === sourceId &&
+        existing.symbol === symbol &&
+        existing.interval === interval &&
+        (existing.status === 'running' ||
+          existing.status === 'pending' ||
+          existing.status === 'paused')
+      ) {
+        if (targetFromSec < existing.targetFromSec) existing.targetFromSec = targetFromSec;
+        if (targetToSec > existing.targetToSec) existing.targetToSec = targetToSec;
+        existing.updatedAt = Date.now();
+        syncJob(existing);
+        if (existing.status === 'paused') resumeBackfill(existing.id);
+        return existing.id;
+      }
+    }
+
+    return enqueueJob(
+      makeJob(
+        sourceId,
+        symbol,
+        interval,
+        targetFromSec,
+        targetToSec,
+        !!opts.applyWhenComplete,
+      ),
+    );
+  } catch (err: unknown) {
+    const settled = makeJob(
+      String(opts.sourceId || store.source || 'binance-rest'),
+      String(opts.symbol || store.symbol || 'UNKNOWN')
+        .trim()
+        .toUpperCase() || 'UNKNOWN',
+      String(opts.interval || store.interval || '1d'),
+      nowSec() - DEFAULT_LOOKBACK_SEC,
+      nowSec(),
+      !!opts.applyWhenComplete,
+    );
+    settled.phase = 'done';
+    internals.set(settled.id, settled);
+    setJobStatus(settled, 'complete', errMessage(err));
+    return settled.id;
+  }
 }
 
 /** Cancel a job (in-flight page aborts; no further pages). */
@@ -474,23 +588,50 @@ async function fetchWalkPage(
   windowFrom: number,
   windowTo: number,
 ): Promise<{ rawOldest: number; pageBars: Bar[] } | null> {
-  let raw: unknown;
-  try {
-    raw = await source.fetchHistorical({
-      symbol: j.symbol,
-      interval: j.interval,
-      endTime: cursorEnd,
-      limit: pageLimit,
-      signal: j.abort.signal,
-      config: {
-        ...sourceConfig(j.sourceId),
+  let raw: unknown = null;
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt <= MAX_PAGE_RETRIES; attempt++) {
+    if (j.abort.signal.aborted) {
+      throw j.abort.signal.reason ?? new DOMException('Aborted', 'AbortError');
+    }
+    try {
+      raw = await source.fetchHistorical({
+        symbol: j.symbol,
+        interval: j.interval,
+        endTime: cursorEnd,
         limit: pageLimit,
-        fallback: false,
-      },
-    });
-  } catch (err: unknown) {
-    // Re-throw aborts / real network errors to the job runner
-    throw err;
+        signal: j.abort.signal,
+        config: {
+          ...sourceConfig(j.sourceId),
+          limit: pageLimit,
+          fallback: false,
+        },
+      });
+      lastErr = null;
+      j.venueDead = false;
+      if (j.error && j.error.startsWith('Retrying')) j.error = null;
+      break;
+    } catch (err: unknown) {
+      if (isAbortError(err) || j.abort.signal.aborted) throw err;
+      lastErr = err;
+      j.retries += 1;
+      j.error = `Retrying (${attempt + 1}/${MAX_PAGE_RETRIES}): ${errMessage(err)}`;
+      j.updatedAt = Date.now();
+      syncJob(j);
+      if (attempt < MAX_PAGE_RETRIES) {
+        const aborted = await yieldGapOrAbort(j, pageRetryDelayMs(attempt));
+        if (aborted) throw new DOMException('Aborted', 'AbortError');
+        continue;
+      }
+    }
+  }
+  if (lastErr) {
+    // Page exhausted retries — stop this walk, keep whatever we already have.
+    j.venueDead = true;
+    j.error = errMessage(lastErr);
+    j.updatedAt = Date.now();
+    syncJob(j);
+    return null;
   }
   // normalizeHistoricalBars never throws — drops partial/malformed rows
   const rawPage = normalizeHistoricalBars(raw, { limit: pageLimit });
@@ -559,7 +700,11 @@ async function walkBackRange(
       result = await fetchWalkPage(j, source, pageLimit, cursorEnd, windowFrom, windowTo);
     } catch (err: unknown) {
       if (isAbortError(err) || j.abort.signal.aborted) return 'cancelled';
-      throw err;
+      j.retries += 1;
+      j.error = errMessage(err);
+      j.updatedAt = Date.now();
+      syncJob(j);
+      return 'ok';
     }
 
     if (!result) return 'ok'; // venue empty
@@ -681,8 +826,8 @@ async function runJob(j: InternalJob): Promise<void> {
   syncJob(j);
 
   const source = getSource(j.sourceId);
-  if (!source) {
-    setJobStatus(j, 'error', `Unknown source: ${j.sourceId}`);
+  if (!source || j.sourceId === DATA_MANAGER_SOURCE_ID) {
+    await deliverCacheOnlyJob(j);
     return;
   }
 
@@ -719,6 +864,19 @@ async function runJob(j: InternalJob): Promise<void> {
         return;
       }
       cached = await refreshJobFromCache(j);
+    }
+
+    // Venue is gone — do not chase gaps; deliver whatever is cached.
+    if (j.venueDead) {
+      j.phase = 'done';
+      j.datasetComplete = false;
+      setJobStatus(
+        j,
+        'complete',
+        j.error || 'Partial: venue unavailable',
+      );
+      if (j.applyWhenComplete && j.barsFetched > 0) void applyJobToChart(j.id);
+      return;
     }
 
     // Phase 2–3: validate coverage and fill remaining gaps
@@ -778,6 +936,7 @@ async function runJob(j: InternalJob): Promise<void> {
             setJobStatus(j, 'paused');
             return;
           }
+          if (j.venueDead) break;
           continue;
         }
         break;
@@ -797,6 +956,7 @@ async function runJob(j: InternalJob): Promise<void> {
         setJobStatus(j, 'paused');
         return;
       }
+      if (j.venueDead) break;
     }
 
     // Final validation
@@ -817,24 +977,69 @@ async function runJob(j: InternalJob): Promise<void> {
       const sparse =
         finalReport.expectedBars > 0 &&
         finalReport.barCount < finalReport.expectedBars * 0.85;
-      setJobStatus(
-        j,
-        'complete',
+      const coverageNote =
         n > 0
           ? `Partial: ${n} gap${n === 1 ? '' : 's'} remain (venue may lack data)`
           : sparse
             ? `Partial: ${finalReport.barCount}/${finalReport.expectedBars} bars`
-            : null,
-      );
+            : null;
+      const note = [coverageNote, j.error].filter(Boolean).join(' · ') || null;
+      setJobStatus(j, 'complete', note);
     }
-    if (j.applyWhenComplete) void applyJobToChart(j.id);
+    if (j.applyWhenComplete && j.barsFetched > 0) void applyJobToChart(j.id);
   } catch (err: unknown) {
     if (isAbortError(err) || j.abort.signal.aborted) {
       setJobStatus(j, 'cancelled');
       return;
     }
-    setJobStatus(j, 'error', errMessage(err));
+    // Never error-out: deliver whatever is already cached.
+    try {
+      await refreshJobFromCache(j);
+    } catch {
+      /* ignore */
+    }
+    j.phase = 'done';
+    setJobStatus(
+      j,
+      'complete',
+      errMessage(err) || 'Partial: venue unavailable',
+    );
+    if (j.applyWhenComplete && j.barsFetched > 0) void applyJobToChart(j.id);
   }
+}
+
+/** Cache-reader / unknown source: deliver stored bars, no network. */
+async function deliverCacheOnlyJob(j: InternalJob): Promise<void> {
+  try {
+    if (j.sourceId === DATA_MANAGER_SOURCE_ID) {
+      const resolved = await resolveDataManagerBars(j.symbol, j.interval);
+      if (resolved?.bars.length) {
+        j.barsFetched = resolved.bars.length;
+        j.oldestSec = resolved.bars[0]!.time;
+        j.newestSec = resolved.bars[resolved.bars.length - 1]!.time;
+        j.datasetComplete = true;
+        j.phase = 'done';
+        setJobStatus(j, 'complete');
+        if (j.applyWhenComplete) {
+          void applyCachedToChart(resolved.sourceId, resolved.symbol, resolved.interval);
+        }
+        return;
+      }
+    } else {
+      await refreshJobFromCache(j);
+    }
+  } catch {
+    /* cache read is best-effort */
+  }
+  j.phase = 'done';
+  j.datasetComplete = j.barsFetched > 0;
+  const note = getSource(j.sourceId)
+    ? j.barsFetched
+      ? null
+      : 'No cached dataset'
+    : `Unknown source: ${j.sourceId}`;
+  setJobStatus(j, 'complete', note);
+  if (j.applyWhenComplete && j.barsFetched > 0) void applyJobToChart(j.id);
 }
 
 /**
@@ -860,6 +1065,20 @@ export async function applyJobToChart(
  * expanded tail reaches the chart.
  */
 export async function applyCachedToChart(
+  sourceId: string,
+  symbol: string,
+  interval: string,
+  window?: BarLoadWindow | null,
+): Promise<boolean> {
+  try {
+    return await applyCachedToChartInner(sourceId, symbol, interval, window);
+  } catch (err) {
+    console.warn('[applyCachedToChart] failed', err);
+    return false;
+  }
+}
+
+async function applyCachedToChartInner(
   sourceId: string,
   symbol: string,
   interval: string,

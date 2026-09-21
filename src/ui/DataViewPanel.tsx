@@ -26,7 +26,7 @@
  * `onchainManagerState.series`. FloatableShell id `dataview`.
  */
 
-import { type Component, For, Show, createMemo } from 'solid-js';
+import { type Component, For, Show, createMemo, untrack } from 'solid-js';
 import { store, isPanelOpen } from '../store';
 import { buildDataViewRows } from '../results/dataview';
 import type { RunResult } from '../indicators/runner';
@@ -37,6 +37,7 @@ import type { PlotSample } from '../plugins/types';
 /** Crosshair-synced OHLCV / plot / drawing / on-chain value inspector. */
 export const DataViewPanel: Component = () => {
   const rows = createMemo(() => {
+    if (!(isPanelOpen('dataview') || store.dataViewPanel.open)) return [];
     const r = store.lastRun as RunResult | null;
     const plotMeta = (r?.meta?.plot_meta || {}) as Record<
       string,
@@ -44,6 +45,10 @@ export const DataViewPanel: Component = () => {
     >;
     // Depend on drawings so place/drag updates refresh values
     void store.drawings;
+    void store.chartDataGen;
+    void store.bars.length;
+    void store.crosshair?.time;
+    void store.crosshair?.barIndex;
     // Touch each on-chain field through the store proxy for fine-grained refresh
     const onchainSeries = onchainManagerState.series.map((s) => ({
       id: s.id,
@@ -59,8 +64,10 @@ export const DataViewPanel: Component = () => {
       loading: s.loading,
       error: s.error,
     }));
+    // Do not track the 45k-bar array identity — length + gen cover reloads.
+    const bars = untrack(() => store.bars);
     return buildDataViewRows({
-      bars: store.bars,
+      bars,
       time: store.crosshair?.time,
       barIndex: store.crosshair?.barIndex,
       symbol: store.symbol,

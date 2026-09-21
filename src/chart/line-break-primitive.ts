@@ -127,14 +127,37 @@ class LineBreakRenderer implements IPrimitivePaneRenderer {
         /* mock / disposed */
       }
       const mapped: { x: number; y: number }[][] = [];
+      const maxPts = Math.max(64, Math.floor((mediaSize?.width || 800) * 2));
       for (const seg of segs) {
+        if (!seg.length) continue;
+        const head = seg[0]!;
+        const tail = seg[seg.length - 1]!;
+        if (tail.time < fromT || head.time > toT) continue;
+        const step = seg.length > maxPts ? Math.ceil(seg.length / maxPts) : 1;
         const pts: { x: number; y: number }[] = [];
-        for (const p of seg) {
+        for (let i = 0; i < seg.length; i += step) {
+          const p = seg[i]!;
           if (p.time < fromT || p.time > toT) continue;
           const x = ts.timeToCoordinate(p.time as Time);
           const y = series.priceToCoordinate(p.value);
           if (x == null || y == null || !Number.isFinite(x) || !Number.isFinite(y)) continue;
           pts.push({ x, y });
+        }
+        if (step > 1) {
+          const last = seg[seg.length - 1]!;
+          if (last.time >= fromT && last.time <= toT) {
+            const x = ts.timeToCoordinate(last.time as Time);
+            const y = series.priceToCoordinate(last.value);
+            if (
+              x != null &&
+              y != null &&
+              Number.isFinite(x) &&
+              Number.isFinite(y) &&
+              (pts.length === 0 || pts[pts.length - 1]!.x !== x)
+            ) {
+              pts.push({ x, y });
+            }
+          }
         }
         if (pts.length) mapped.push(pts);
       }

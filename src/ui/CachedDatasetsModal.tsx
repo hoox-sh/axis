@@ -25,7 +25,9 @@
 import {
   type Component,
   For,
+  Match,
   Show,
+  Switch,
   createEffect,
   createMemo,
   createSignal,
@@ -55,6 +57,11 @@ import {
 } from '../data/data-manager-source';
 import { defaultStreamForSource } from '../streams/catalog';
 import { Icons } from './icons';
+import { installFocusTrap } from './focus-trap';
+import { announce } from './sr-announce';
+import { CompleteMap } from './dsm/CompleteMap';
+import { DsmField } from './dsm/Field';
+import { fmtDuration, fmtMillis, fmtTime } from './dsm/format';
 
 export interface CachedDatasetsModalProps {
   open: boolean;
@@ -63,28 +70,22 @@ export interface CachedDatasetsModalProps {
 
 type SortKey = 'updated' | 'bars' | 'symbol' | 'span';
 
-function fmtTime(sec: number | null): string {
-  if (sec == null || !Number.isFinite(sec)) return '—';
-  try {
-    return new Date(sec * 1000).toISOString().slice(0, 16).replace('T', ' ');
-  } catch {
-    return String(sec);
-  }
-}
+const SORT_OPTIONS: readonly { id: SortKey; label: string }[] = [
+  { id: 'updated', label: 'Updated' },
+  { id: 'bars', label: 'Bars' },
+  { id: 'symbol', label: 'Symbol' },
+  { id: 'span', label: 'Span' },
+];
 
-function fmtDuration(fromSec: number | null, toSec: number | null): string {
-  if (fromSec == null || toSec == null || toSec < fromSec) return '—';
-  const days = Math.max(0, Math.round((toSec - fromSec) / 86_400));
-  if (days < 2) {
-    const hours = Math.max(0, Math.round((toSec - fromSec) / 3_600));
-    return `${hours}h`;
-  }
-  if (days < 60) return `${days}d`;
-  const months = Math.round(days / 30);
-  if (months < 24) return `${months}mo`;
-  const years = Math.round(days / 365);
-  return `${years}y`;
-}
+const LOAD_PRESETS = [
+  { id: 'full', label: 'Full', title: 'Full series in cache' },
+  { id: '30d', label: '30d', title: 'Last 30 days' },
+  { id: '90d', label: '90d', title: 'Last 90 days' },
+  { id: '1k', label: '1k', title: 'Newest 1,000 bars' },
+  { id: '5k', label: '5k', title: 'Newest 5,000 bars' },
+] as const;
+
+type LoadPreset = (typeof LOAD_PRESETS)[number]['id'];
 
 function metaKey(m: BarsCacheMeta): string {
   return m.key || `${m.sourceId}|${m.symbol}|${m.interval}`;
@@ -108,84 +109,31 @@ function matchesQuery(row: BarsCacheMeta, q: string): boolean {
     .every((tok) => hay.includes(tok));
 }
 
-/** Horizontal coverage strip: green = data, red = gap. */
-const CompleteMap: Component<{
-  segments: CoverageSegment[];
-  complete: boolean;
-  barCount: number;
-  expectedBars: number;
-  gaps: number;
-}> = (props) => {
-  return (
-    <div class="flex flex-col gap-1" data-testid="axis-complete-map">
-      <div class="flex items-center justify-between text-[0.72rem] text-muted">
-        <span>Data complete map</span>
-        <span>
-          {props.complete
-            ? 'Full coverage'
-            : props.gaps > 0
-              ? `${props.gaps} gap${props.gaps === 1 ? '' : 's'}`
-              : 'Partial'}
-          {' · '}
-          {props.barCount.toLocaleString()}
-          {props.expectedBars > 0 ? ` / ~${props.expectedBars.toLocaleString()}` : ''} bars
-        </span>
-      </div>
-      <div
-        class="h-4 rounded overflow-hidden flex border border-[var(--border)]"
-        role="img"
-        aria-label={
-          props.complete
-            ? 'Complete coverage'
-            : `Coverage map with ${props.gaps} gaps`
-        }
-      >
-        <Show
-          when={props.segments.length}
-          fallback={<div class="flex-1 bg-[var(--border)]" title="No data" />}
-        >
-          <For each={props.segments}>
-            {(seg) => (
-              <div
-                class="h-full min-w-[2px]"
-                style={{
-                  flex: `${Math.max(seg.weight, 0.005)} 0 0`,
-                  background:
-                    seg.kind === 'data'
-                      ? 'color-mix(in srgb, var(--color-green, #5ecf8a) 75%, transparent)'
-                      : 'color-mix(in srgb, var(--color-red, #e85d4c) 70%, transparent)',
-                }}
-                title={`${seg.kind === 'data' ? 'Data' : 'Gap'}: ${fmtTime(seg.fromSec)} → ${fmtTime(seg.toSec)}`}
-              />
-            )}
-          </For>
-        </Show>
-      </div>
-      <div class="flex gap-3 text-[0.68rem] text-muted">
-        <span class="inline-flex items-center gap-1">
-          <span
-            class="inline-block w-2.5 h-2.5 rounded-sm"
-            style={{
-              background:
-                'color-mix(in srgb, var(--color-green, #5ecf8a) 75%, transparent)',
-            }}
-          />
-          Data
-        </span>
-        <span class="inline-flex items-center gap-1">
-          <span
-            class="inline-block w-2.5 h-2.5 rounded-sm"
-            style={{
-              background:
-                'color-mix(in srgb, var(--color-red, #e85d4c) 70%, transparent)',
-            }}
-          />
-          Gap
-        </span>
-      </div>
-    </div>
-  );
-};
+function isTypingTarget(el: EventTarget | null): boolean {
+  if (!el || typeof el !== 'object') return false;
+  const tag = (el as HTMLElement).tagName;
+  return tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
+}
+
+function sortRows(list: BarsCacheMeta[], sort: SortKey): BarsCacheMeta[] {
+  return list.slice().sort((a, b) => {
+    switch (sort) {
+      case 'bars':
+        return (b.count || 0) - (a.count || 0);
+      case 'symbol': {
+        const c = a.symbol.localeCompare(b.symbol);
+        return c !== 0 ? c : a.interval.localeCompare(b.interval);
+      }
+      case 'span': {
+        const sa = (a.newestSec ?? 0) - (a.oldestSec ?? 0);
+        const sb = (b.newestSec ?? 0) - (b.oldestSec ?? 0);
+        return sb - sa;
+      }
+      default:
+        return (b.updatedAt || 0) - (a.updatedAt || 0);
+    }
+  });
+}
 
 /** Modal: browse local OHLCV datasets from the Data Source Manager cache. */
 export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) => {
@@ -196,23 +144,24 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
   const [msg, setMsg] = createSignal('');
+  const [pendingDelete, setPendingDelete] = createSignal(false);
 
-  // Table filters
   const [query, setQuery] = createSignal('');
   const [filterSource, setFilterSource] = createSignal('');
   const [filterInterval, setFilterInterval] = createSignal('');
   const [sortKey, setSortKey] = createSignal<SortKey>('updated');
 
-  // Load window
   const [fromDate, setFromDate] = createSignal('');
   const [toDate, setToDate] = createSignal('');
   const [maxBars, setMaxBars] = createSignal('');
 
-  const selected = () => {
+  let searchEl: HTMLInputElement | undefined;
+
+  const selected = createMemo(() => {
     const k = selectedKey();
     if (!k) return null;
     return rows().find((r) => metaKey(r) === k) ?? null;
-  };
+  });
 
   const sourceOptions = createMemo(() => {
     const set = new Set(rows().map((r) => r.sourceId).filter(Boolean));
@@ -228,32 +177,13 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
     const q = query().trim();
     const src = filterSource();
     const iv = filterInterval();
-    const sort = sortKey();
-    let list = rows().filter((r) => {
+    const list = rows().filter((r) => {
       if (src && r.sourceId !== src) return false;
       if (iv && r.interval !== iv) return false;
       if (!matchesQuery(r, q)) return false;
       return true;
     });
-    list = list.slice().sort((a, b) => {
-      switch (sort) {
-        case 'bars':
-          return (b.count || 0) - (a.count || 0);
-        case 'symbol': {
-          const c = a.symbol.localeCompare(b.symbol);
-          return c !== 0 ? c : a.interval.localeCompare(b.interval);
-        }
-        case 'span': {
-          const sa = (a.newestSec ?? 0) - (a.oldestSec ?? 0);
-          const sb = (b.newestSec ?? 0) - (b.oldestSec ?? 0);
-          return sb - sa;
-        }
-        case 'updated':
-        default:
-          return (b.updatedAt || 0) - (a.updatedAt || 0);
-      }
-    });
-    return list;
+    return sortRows(list, sortKey());
   });
 
   const totalBarsCached = createMemo(() =>
@@ -264,7 +194,14 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
     () => !!(query().trim() || filterSource() || filterInterval()),
   );
 
-  const coverage = () => {
+  const tableState = createMemo(() => {
+    if (loading() && !rows().length) return 'loading' as const;
+    if (!rows().length) return 'empty' as const;
+    if (!filteredRows().length) return 'filtered' as const;
+    return 'rows' as const;
+  });
+
+  const coverage = createMemo(() => {
     const meta = selected();
     const b = bars();
     if (!meta || !b.length) {
@@ -274,12 +211,10 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
         barCount: 0,
         expectedBars: 0,
         gaps: 0,
-        oldest: null as number | null,
-        newest: null as number | null,
       };
     }
-    const from = meta.oldestSec ?? b[0]!.time;
-    const to = meta.newestSec ?? b[b.length - 1]!.time;
+    const from = meta.oldestSec ?? b[0]?.time ?? 0;
+    const to = meta.newestSec ?? b[b.length - 1]?.time ?? from;
     const { segments, report } = buildCoverageMap(b, from, to, meta.interval);
     return {
       segments,
@@ -287,10 +222,8 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
       barCount: report.barCount,
       expectedBars: report.expectedBars,
       gaps: report.gaps.length,
-      oldest: report.oldestSec,
-      newest: report.newestSec,
     };
-  };
+  });
 
   const loadWindow = createMemo((): BarLoadWindow => {
     const fromSec = pastDateInputToSec(fromDate());
@@ -373,6 +306,9 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
 
   createEffect(() => {
     if (!props.open) return;
+    setPendingDelete(false);
+    setError('');
+    setMsg('');
     void refresh();
   });
 
@@ -396,36 +332,48 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
     });
   });
 
-  createEffect(() => {
-    if (!props.open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        props.onClose();
-        return;
-      }
-      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-      const list = filteredRows();
-      if (!list.length) return;
-      const cur = selectedKey();
-      const idx = list.findIndex((r) => metaKey(r) === cur);
-      let next = idx;
-      if (e.key === 'ArrowDown') next = Math.min(list.length - 1, Math.max(0, idx) + 1);
-      else next = Math.max(0, (idx < 0 ? 0 : idx) - 1);
-      if (next !== idx && list[next]) {
-        e.preventDefault();
-        selectRow(list[next]!);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    onCleanup(() => window.removeEventListener('keydown', onKey));
-  });
-
   const selectRow = (row: BarsCacheMeta) => {
     setSelectedKey(metaKey(row));
     syncLoadDefaults(row);
+    setPendingDelete(false);
     setError('');
     setMsg('');
+  };
+
+  const moveSelection = (dir: 1 | -1) => {
+    const list = filteredRows();
+    if (!list.length) return;
+    const cur = selectedKey();
+    const idx = list.findIndex((r) => metaKey(r) === cur);
+    const next = Math.min(list.length - 1, Math.max(0, (idx < 0 ? 0 : idx) + dir));
+    const row = list[next];
+    if (row && next !== idx) selectRow(row);
+  };
+
+  const onDialogKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (pendingDelete()) {
+        setPendingDelete(false);
+        return;
+      }
+      props.onClose();
+      return;
+    }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') {
+      return;
+    }
+    if (isTypingTarget(e.target)) return;
+    const list = filteredRows();
+    if (!list.length) return;
+    e.preventDefault();
+    const first = list[0];
+    const last = list[list.length - 1];
+    if (e.key === 'Home' && first) selectRow(first);
+    else if (e.key === 'End' && last) selectRow(last);
+    else if (e.key === 'ArrowDown') moveSelection(1);
+    else moveSelection(-1);
   };
 
   const onBackdrop = (e: MouseEvent) => {
@@ -440,12 +388,7 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
     setMsg('');
     try {
       const win = loadWindow();
-      // Validate date range when both set
-      if (
-        win.fromSec != null &&
-        win.toSec != null &&
-        win.fromSec > win.toSec
-      ) {
+      if (win.fromSec != null && win.toSec != null && win.fromSec > win.toSec) {
         setError('From date must be on or before To date.');
         return;
       }
@@ -457,43 +400,37 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
 
       setDataManagerSelection(meta.sourceId, meta.symbol, meta.interval, win);
       setActivePlugin('source', DATA_MANAGER_SOURCE_ID);
-      // Venue stream for live candles (not mock-poll)
       const streamId = defaultStreamForSource(DATA_MANAGER_SOURCE_ID);
       setActivePlugin('stream', streamId);
       setStore('symbol', meta.symbol);
       setStore('interval', meta.interval);
       persist();
-      const ok = await applyCachedToChart(
-        meta.sourceId,
-        meta.symbol,
-        meta.interval,
-        win,
-      );
+      const ok = await applyCachedToChart(meta.sourceId, meta.symbol, meta.interval, win);
       if (!ok) {
         setError('Could not load bars onto the chart.');
-      } else {
-        // Restart live on the venue stream when already live / prefer-after-load
-        const restartLive = !!store.live.active || !!store.live.preferAfterLoad;
-        if (restartLive) {
-          try {
-            const { startLive } = await import('../streams/multiplex');
-            startLive(streamId, meta.symbol, meta.interval);
-          } catch {
-            /* live optional */
-          }
-        }
-        const after = await getCachedBars(meta.sourceId, meta.symbol, meta.interval);
-        const parts = [
-          `Loaded ${meta.symbol} ${meta.interval}`,
-          `${after.length.toLocaleString()} bars in dataset`,
-        ];
-        if (after.length > n) {
-          parts.push(`+${(after.length - n).toLocaleString()} filled to now`);
-        }
-        if (win.maxBars) parts.push(`max ${win.maxBars.toLocaleString()}`);
-        parts.push(`stream ${streamId}`);
-        setMsg(parts.join(' · '));
+        return;
       }
+      const restartLive = !!store.live.active || !!store.live.preferAfterLoad;
+      if (restartLive) {
+        try {
+          const { startLive } = await import('../streams/multiplex');
+          startLive(streamId, meta.symbol, meta.interval);
+        } catch {
+          /* live optional */
+        }
+      }
+      const after = await getCachedBars(meta.sourceId, meta.symbol, meta.interval);
+      const parts = [
+        `Loaded ${meta.symbol} ${meta.interval}`,
+        `${after.length.toLocaleString()} bars in dataset`,
+      ];
+      if (after.length > n) {
+        parts.push(`+${(after.length - n).toLocaleString()} filled to now`);
+      }
+      if (win.maxBars) parts.push(`max ${win.maxBars.toLocaleString()}`);
+      parts.push(`stream ${streamId}`);
+      setMsg(parts.join(' · '));
+      announce(`Loaded ${n} bars ${meta.symbol} ${meta.interval}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -504,14 +441,13 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
   const onDelete = async () => {
     const meta = selected();
     if (!meta) return;
-    if (!confirm(`Delete cached ${meta.symbol} ${meta.interval} (${meta.sourceId})?`)) {
-      return;
-    }
     setBusy(true);
     setError('');
     try {
       await clearCachedBars(meta.sourceId, meta.symbol, meta.interval);
       setMsg('Dataset removed from cache.');
+      setPendingDelete(false);
+      announce(`Deleted ${meta.symbol} ${meta.interval} dataset`);
       await refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
@@ -520,7 +456,7 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
     }
   };
 
-  const applyPreset = (preset: 'full' | '1k' | '5k' | '30d' | '90d') => {
+  const applyPreset = (preset: LoadPreset) => {
     const meta = selected();
     if (!meta) return;
     if (preset === 'full') {
@@ -543,14 +479,14 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
     setToDate(secToDateInput(newest));
   };
 
+  const toggleSort = (key: SortKey) => {
+    setSortKey(key);
+  };
+
   return (
     <Show when={props.open}>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop is an intentional click-away dismiss surface for the dialog */}
-      <div
-        class="sc-dialog-backdrop"
-        onClick={onBackdrop}
-        role="presentation"
-      >
+      <div class="sc-dialog-backdrop" onClick={onBackdrop} role="presentation">
         <div
           class="sc-dialog w-[min(960px,calc(100vw-2*var(--ui-dialog-margin)))] max-h-[min(88vh,820px)] flex flex-col"
           role="dialog"
@@ -558,6 +494,13 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
           aria-labelledby="axis-cached-datasets-title"
           data-testid="axis-cached-datasets-modal"
           tabIndex={-1}
+          onKeyDown={onDialogKey}
+          ref={(el) => {
+            if (!el) return;
+            const dispose = installFocusTrap(el, { autoFocus: false });
+            queueMicrotask(() => searchEl?.focus());
+            onCleanup(dispose);
+          }}
         >
           <div class="sc-dialog-accent" />
           <div class="sc-dialog-header">
@@ -579,6 +522,7 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                 onClick={() => void refresh()}
                 disabled={loading()}
                 title="Refresh list"
+                aria-label="Refresh dataset list"
               >
                 <Icons.refresh />
               </button>
@@ -603,19 +547,23 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
               </div>
             </Show>
             <Show when={msg() && !error()}>
-              <div class="text-[11px] text-muted">{msg()}</div>
+              <div
+                class="text-[11px] text-[var(--color-green,#5ecf8a)] border border-[color-mix(in_srgb,var(--color-green,#5ecf8a)_35%,transparent)] bg-[color-mix(in_srgb,var(--color-green,#5ecf8a)_10%,transparent)] px-2 py-1.5 rounded"
+                role="status"
+              >
+                {msg()}
+              </div>
             </Show>
 
-            {/* Filter bar */}
             <div
               class="flex flex-wrap items-end gap-2"
               data-testid="axis-cached-datasets-filters"
             >
-              <label class="flex flex-col gap-0.5 min-w-[10rem] flex-1">
-                <span class="text-muted text-[0.68rem] uppercase tracking-wide">
-                  Filter
-                </span>
+              <DsmField label="Filter" class="min-w-[10rem] flex-1">
                 <input
+                  ref={(el) => {
+                    searchEl = el;
+                  }}
                   type="search"
                   class="sc-input"
                   placeholder="Symbol, source, interval…"
@@ -625,11 +573,8 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                   autocomplete="off"
                   spellcheck={false}
                 />
-              </label>
-              <label class="flex flex-col gap-0.5 w-[8.5rem]">
-                <span class="text-muted text-[0.68rem] uppercase tracking-wide">
-                  Source
-                </span>
+              </DsmField>
+              <DsmField label="Source" class="w-[8.5rem]">
                 <select
                   class="sc-input"
                   value={filterSource()}
@@ -637,15 +582,10 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                   data-testid="axis-cached-datasets-filter-source"
                 >
                   <option value="">All sources</option>
-                  <For each={sourceOptions()}>
-                    {(s) => <option value={s}>{s}</option>}
-                  </For>
+                  <For each={sourceOptions()}>{(s) => <option value={s}>{s}</option>}</For>
                 </select>
-              </label>
-              <label class="flex flex-col gap-0.5 w-[6.5rem]">
-                <span class="text-muted text-[0.68rem] uppercase tracking-wide">
-                  Interval
-                </span>
+              </DsmField>
+              <DsmField label="Interval" class="w-[6.5rem]">
                 <select
                   class="sc-input"
                   value={filterInterval()}
@@ -653,27 +593,21 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                   data-testid="axis-cached-datasets-filter-interval"
                 >
                   <option value="">All</option>
-                  <For each={intervalOptions()}>
-                    {(iv) => <option value={iv}>{iv}</option>}
-                  </For>
+                  <For each={intervalOptions()}>{(iv) => <option value={iv}>{iv}</option>}</For>
                 </select>
-              </label>
-              <label class="flex flex-col gap-0.5 w-[7.5rem]">
-                <span class="text-muted text-[0.68rem] uppercase tracking-wide">
-                  Sort
-                </span>
+              </DsmField>
+              <DsmField label="Sort" class="w-[7.5rem]">
                 <select
                   class="sc-input"
                   value={sortKey()}
                   onChange={(e) => setSortKey(e.currentTarget.value as SortKey)}
                   data-testid="axis-cached-datasets-sort"
                 >
-                  <option value="updated">Updated</option>
-                  <option value="bars">Bars</option>
-                  <option value="symbol">Symbol</option>
-                  <option value="span">Span</option>
+                  <For each={SORT_OPTIONS}>
+                    {(opt) => <option value={opt.id}>{opt.label}</option>}
+                  </For>
                 </select>
-              </label>
+              </DsmField>
               <Show when={filtersActive()}>
                 <button
                   type="button"
@@ -699,91 +633,112 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-3 min-h-0 flex-1">
-              {/* Table */}
               <div
-                class="border border-[var(--border)] rounded overflow-auto min-h-[12rem] max-h-[min(48vh,380px)]"
+                class="border border-border rounded overflow-auto min-h-[12rem] max-h-[min(48vh,380px)]"
                 data-testid="axis-cached-datasets-list"
               >
-                <Show
-                  when={!loading() || rows().length}
-                  fallback={
+                <Switch>
+                  <Match when={tableState() === 'loading'}>
                     <div class="p-3 text-muted text-[0.78rem]">Loading…</div>
-                  }
-                >
-                  <Show
-                    when={rows().length}
-                    fallback={
-                      <div class="p-3 text-muted text-[0.78rem] leading-snug">
-                        No downloaded datasets yet. Run a background backfill in
-                        the Data Source Manager first.
-                      </div>
-                    }
-                  >
-                    <Show
-                      when={filteredRows().length}
-                      fallback={
-                        <div class="p-3 text-muted text-[0.78rem]">
-                          No datasets match the current filters.
-                        </div>
-                      }
-                    >
-                      <table class="w-full text-left border-collapse text-[0.78rem]">
-                        <thead class="sticky top-0 z-[1] bg-[var(--bg-elevated,var(--color-bg-elevated,var(--bg)))] shadow-[0_1px_0_var(--border)]">
-                          <tr class="text-[0.68rem] uppercase tracking-wide text-muted">
-                            <th class="px-2 py-1.5 font-medium">Symbol</th>
-                            <th class="px-2 py-1.5 font-medium">TF</th>
-                            <th class="px-2 py-1.5 font-medium">Source</th>
-                            <th class="px-2 py-1.5 font-medium text-right">Bars</th>
-                            <th class="px-2 py-1.5 font-medium">Span</th>
-                          </tr>
-                        </thead>
-                        <tbody class="divide-y divide-[var(--border)]">
-                          <For each={filteredRows()}>
-                            {(row) => {
-                              const k = () => metaKey(row);
-                              const active = () => selectedKey() === k();
-                              return (
-                                <tr
-                                  class={`cursor-pointer transition-colors ${
-                                    active()
-                                      ? 'bg-[color-mix(in_srgb,var(--color-accent)_18%,transparent)]'
-                                      : 'hover:bg-[var(--bg-hover,var(--color-bg-hover))]'
-                                  }`}
-                                  onClick={() => selectRow(row)}
-                                  data-testid={`axis-cached-dataset-${k()}`}
-                                  aria-selected={active()}
+                  </Match>
+                  <Match when={tableState() === 'empty'}>
+                    <div class="p-3 text-muted text-[0.78rem] leading-snug">
+                      No downloaded datasets yet. Run a background backfill in the
+                      Data Source Manager first.
+                    </div>
+                  </Match>
+                  <Match when={tableState() === 'filtered'}>
+                    <div class="p-3 text-muted text-[0.78rem]">
+                      No datasets match the current filters.
+                    </div>
+                  </Match>
+                  <Match when={tableState() === 'rows'}>
+                    <table class="w-full text-left border-collapse text-[0.78rem]">
+                      <thead class="sticky top-0 z-[1] bg-[var(--bg-elevated,var(--color-bg-elevated,var(--bg)))] shadow-[0_1px_0_var(--border)]">
+                        <tr class="text-[0.68rem] uppercase tracking-wide text-muted">
+                          <th class="px-2 py-1.5 font-medium">
+                            <button
+                              type="button"
+                              class="hover:text-text"
+                              onClick={() => toggleSort('symbol')}
+                            >
+                              Symbol{sortKey() === 'symbol' ? ' ▾' : ''}
+                            </button>
+                          </th>
+                          <th class="px-2 py-1.5 font-medium">TF</th>
+                          <th class="px-2 py-1.5 font-medium">Source</th>
+                          <th class="px-2 py-1.5 font-medium text-right">
+                            <button
+                              type="button"
+                              class="hover:text-text"
+                              onClick={() => toggleSort('bars')}
+                            >
+                              Bars{sortKey() === 'bars' ? ' ▾' : ''}
+                            </button>
+                          </th>
+                          <th class="px-2 py-1.5 font-medium">
+                            <button
+                              type="button"
+                              class="hover:text-text"
+                              onClick={() => toggleSort('span')}
+                            >
+                              Span{sortKey() === 'span' ? ' ▾' : ''}
+                            </button>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-border">
+                        <For each={filteredRows()}>
+                          {(row) => {
+                            const k = () => metaKey(row);
+                            const active = () => selectedKey() === k();
+                            return (
+                              <tr
+                                class={`cursor-pointer transition-colors ${
+                                  active()
+                                    ? 'bg-[color-mix(in_srgb,var(--color-accent)_18%,transparent)]'
+                                    : 'hover:bg-[var(--bg-hover,var(--color-bg-hover))]'
+                                }`}
+                                onClick={() => selectRow(row)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    selectRow(row);
+                                  }
+                                }}
+                                tabIndex={active() ? 0 : -1}
+                                aria-selected={active()}
+                                data-testid={`axis-cached-dataset-${k()}`}
+                              >
+                                <td class="px-2 py-1.5 font-medium whitespace-nowrap">
+                                  {row.symbol}
+                                </td>
+                                <td class="px-2 py-1.5 text-muted whitespace-nowrap">
+                                  {row.interval}
+                                </td>
+                                <td
+                                  class="px-2 py-1.5 text-muted truncate max-w-[8rem]"
+                                  title={row.sourceId}
                                 >
-                                  <td class="px-2 py-1.5 font-medium whitespace-nowrap">
-                                    {row.symbol}
-                                  </td>
-                                  <td class="px-2 py-1.5 text-muted whitespace-nowrap">
-                                    {row.interval}
-                                  </td>
-                                  <td
-                                    class="px-2 py-1.5 text-muted truncate max-w-[8rem]"
-                                    title={row.sourceId}
-                                  >
-                                    {row.sourceId}
-                                  </td>
-                                  <td class="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
-                                    {row.count.toLocaleString()}
-                                  </td>
-                                  <td class="px-2 py-1.5 text-muted whitespace-nowrap">
-                                    {fmtDuration(row.oldestSec, row.newestSec)}
-                                  </td>
-                                </tr>
-                              );
-                            }}
-                          </For>
-                        </tbody>
-                      </table>
-                    </Show>
-                  </Show>
-                </Show>
+                                  {row.sourceId}
+                                </td>
+                                <td class="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                                  {row.count.toLocaleString()}
+                                </td>
+                                <td class="px-2 py-1.5 text-muted whitespace-nowrap">
+                                  {fmtDuration(row.oldestSec, row.newestSec)}
+                                </td>
+                              </tr>
+                            );
+                          }}
+                        </For>
+                      </tbody>
+                    </table>
+                  </Match>
+                </Switch>
               </div>
 
-              {/* Details + load window */}
-              <div class="border border-[var(--border)] rounded p-2.5 flex flex-col gap-2.5 min-h-[12rem] overflow-y-auto">
+              <div class="border border-border rounded p-2.5 flex flex-col gap-2.5 min-h-[12rem] overflow-y-auto">
                 <Show
                   when={selected()}
                   fallback={
@@ -814,19 +769,9 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                           <span class="text-muted">Span</span>
                           <span>{fmtDuration(meta().oldestSec, meta().newestSec)}</span>
                           <span class="text-muted">Updated</span>
-                          <span class="tabular-nums">
-                            {meta().updatedAt
-                              ? new Date(meta().updatedAt)
-                                  .toISOString()
-                                  .slice(0, 16)
-                                  .replace('T', ' ')
-                              : '—'}
-                          </span>
+                          <span class="tabular-nums">{fmtMillis(meta().updatedAt)}</span>
                           <span class="text-muted">Cache key</span>
-                          <span
-                            class="truncate font-mono text-[0.68rem]"
-                            title={meta().key}
-                          >
+                          <span class="truncate font-mono text-[0.68rem]" title={meta().key}>
                             {meta().key}
                           </span>
                         </div>
@@ -840,58 +785,32 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                         />
 
                         <div
-                          class="border-t border-[var(--border)] pt-2 flex flex-col gap-2"
+                          class="border-t border-border pt-2 flex flex-col gap-2"
                           data-testid="axis-cached-datasets-load-window"
                         >
                           <div class="flex items-center justify-between gap-2">
-                            <div class="text-[0.72rem] uppercase tracking-wide text-muted font-medium">
+                            <div class="text-[0.68rem] uppercase tracking-wide text-muted font-medium">
                               Load to chart
                             </div>
-                            <div class="flex flex-wrap gap-1">
-                              <button
-                                type="button"
-                                class="sc-btn sc-btn-ghost sc-btn-sm text-[0.68rem]"
-                                onClick={() => applyPreset('full')}
-                                title="Full series in cache"
-                              >
-                                Full
-                              </button>
-                              <button
-                                type="button"
-                                class="sc-btn sc-btn-ghost sc-btn-sm text-[0.68rem]"
-                                onClick={() => applyPreset('30d')}
-                              >
-                                30d
-                              </button>
-                              <button
-                                type="button"
-                                class="sc-btn sc-btn-ghost sc-btn-sm text-[0.68rem]"
-                                onClick={() => applyPreset('90d')}
-                              >
-                                90d
-                              </button>
-                              <button
-                                type="button"
-                                class="sc-btn sc-btn-ghost sc-btn-sm text-[0.68rem]"
-                                onClick={() => applyPreset('1k')}
-                              >
-                                1k
-                              </button>
-                              <button
-                                type="button"
-                                class="sc-btn sc-btn-ghost sc-btn-sm text-[0.68rem]"
-                                onClick={() => applyPreset('5k')}
-                              >
-                                5k
-                              </button>
+                            {/* biome-ignore lint/a11y/useSemanticElements: chip row; fieldset default styles break the compact toolbar */}
+                            <div class="sc-chip-row" role="group" aria-label="Load window presets">
+                              <For each={LOAD_PRESETS}>
+                                {(p) => (
+                                  <button
+                                    type="button"
+                                    class="sc-chip"
+                                    onClick={() => applyPreset(p.id)}
+                                    title={p.title}
+                                  >
+                                    {p.label}
+                                  </button>
+                                )}
+                              </For>
                             </div>
                           </div>
 
                           <div class="grid grid-cols-2 gap-2">
-                            <label class="flex flex-col gap-0.5">
-                              <span class="text-muted text-[0.68rem] uppercase tracking-wide">
-                                From (UTC)
-                              </span>
+                            <DsmField label="From (UTC)">
                               <input
                                 type="date"
                                 class="sc-input"
@@ -901,11 +820,8 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                                 onInput={(e) => setFromDate(e.currentTarget.value)}
                                 data-testid="axis-cached-datasets-from"
                               />
-                            </label>
-                            <label class="flex flex-col gap-0.5">
-                              <span class="text-muted text-[0.68rem] uppercase tracking-wide">
-                                To (UTC)
-                              </span>
+                            </DsmField>
+                            <DsmField label="To (UTC)">
                               <input
                                 type="date"
                                 class="sc-input"
@@ -915,13 +831,10 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                                 onInput={(e) => setToDate(e.currentTarget.value)}
                                 data-testid="axis-cached-datasets-to"
                               />
-                            </label>
+                            </DsmField>
                           </div>
 
-                          <label class="flex flex-col gap-0.5">
-                            <span class="text-muted text-[0.68rem] uppercase tracking-wide">
-                              Max bars (optional)
-                            </span>
+                          <DsmField label="Max bars (optional)">
                             <input
                               type="number"
                               class="sc-input"
@@ -932,7 +845,7 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                               onInput={(e) => setMaxBars(e.currentTarget.value)}
                               data-testid="axis-cached-datasets-max-bars"
                             />
-                          </label>
+                          </DsmField>
 
                           <div
                             class="text-[0.72rem] text-muted"
@@ -955,16 +868,40 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
           </div>
 
           <div class="sc-dialog-footer">
-            <button
-              type="button"
-              class="sc-btn sc-btn-ghost"
-              disabled={!selected() || busy()}
-              onClick={() => void onDelete()}
-              title="Remove from local cache"
+            <Show
+              when={pendingDelete()}
+              fallback={
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost"
+                  disabled={!selected() || busy()}
+                  onClick={() => setPendingDelete(true)}
+                  title="Remove from local cache"
+                >
+                  <Icons.trash />
+                  <span>Delete</span>
+                </button>
+              }
             >
-              <Icons.trash />
-              <span>Delete</span>
-            </button>
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-red text-[0.78rem] truncate">Delete this dataset?</span>
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost sc-btn-sm"
+                  onClick={() => setPendingDelete(false)}
+                >
+                  No
+                </button>
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost sc-btn-sm text-red"
+                  disabled={busy()}
+                  onClick={() => void onDelete()}
+                >
+                  Yes, delete
+                </button>
+              </div>
+            </Show>
             <div class="flex-1" />
             <button type="button" class="sc-btn sc-btn-ghost" onClick={() => props.onClose()}>
               Close
@@ -975,6 +912,7 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
               disabled={!selected() || busy() || previewCount() <= 0}
               onClick={() => void onLoad()}
               data-testid="axis-cached-datasets-load"
+              aria-busy={busy() || undefined}
             >
               <Icons.download />
               <span>

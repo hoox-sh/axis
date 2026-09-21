@@ -76,6 +76,21 @@ describe('fillBandRunBounds', () => {
       { from: 2, to: 4 },
     ]);
   });
+
+  it('window option walks only the requested slice', () => {
+    const runs = fillBandRunBounds(
+      6,
+      [1, 2, 3, 4, 5, 6],
+      [0, 1, 2, 3, 4, 5],
+      [1, 2, 3, 4, 5, 6],
+      ['a', 'a', 'a', 'b', 'b', 'b'],
+      { from: 2, to: 5 },
+    );
+    expect(runs).toEqual([
+      { from: 2, to: 3 },
+      { from: 3, to: 5 },
+    ]);
+  });
 });
 
 describe('linefillQuadCorners', () => {

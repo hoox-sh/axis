@@ -39,9 +39,11 @@ import { getManager, setDataToChart } from '../chart/manager-access';
 import {
   getDataset,
   keyFor,
+  peekDataset,
   putDatasetBars,
   subscribeDatasets,
 } from './dataset-store';
+import { isHeavyBarLoad, isVeryHeavyBarLoad } from '../chart/heavy-data';
 import {
   repairBars,
   validateDataset,
@@ -55,6 +57,14 @@ import { announce } from '../ui/sr-announce';
 
 /** Throttle window for progressive repaints (ms). */
 const REPAINT_THROTTLE_MS = 750;
+const REPAINT_THROTTLE_HEAVY_MS = 1100;
+const REPAINT_THROTTLE_VERY_HEAVY_MS = 1600;
+
+function repaintThrottleMs(barCount: number): number {
+  if (isVeryHeavyBarLoad(barCount)) return REPAINT_THROTTLE_VERY_HEAVY_MS;
+  if (isHeavyBarLoad(barCount)) return REPAINT_THROTTLE_HEAVY_MS;
+  return REPAINT_THROTTLE_MS;
+}
 
 export interface DatasetFirstResult {
   /** Bars painted from the dataset (0 = nothing cached). */
@@ -75,6 +85,8 @@ let repaintTimer: ReturnType<typeof setTimeout> | null = null;
 let repaintPending = false;
 /** Bumped on every `paintDataset` so a slower prior load cannot paint. */
 let paintGen = 0;
+/** Skip progressive setData when the series fingerprint is unchanged. */
+let lastRepaintSig = '';
 
 function stopStreaming(): void {
   if (unsubscribe) {
@@ -87,6 +99,7 @@ function stopStreaming(): void {
   }
   activeKey = null;
   repaintPending = false;
+  lastRepaintSig = '';
 }
 
 /** Paint bars onto chart + store (full refresh semantics). */
@@ -109,15 +122,32 @@ function scheduleRepaint(sym: string, iv: string, srcId: string, gen: number): v
     repaintPending = true;
     return;
   }
+  const peeked = peekDataset(srcId, sym, iv);
+  const delay = repaintThrottleMs(peeked?.length ?? 0);
   repaintTimer = setTimeout(() => {
     repaintTimer = null;
     const run = async () => {
       if (!activeKey || gen !== paintGen) return;
       const [srcIdFromKey, symFromKey, ivFromKey] = activeKey.split('|');
-      const raw = await getDataset(srcIdFromKey ?? srcId, symFromKey ?? sym, ivFromKey ?? iv);
-      if (!raw.length || gen !== paintGen || activeKey !== keyFor(srcId, sym, iv)) return;
-      const { bars } = repairBars(raw, iv);
-      if (!bars.length) return;
+      const sid = srcIdFromKey ?? srcId;
+      const s = symFromKey ?? sym;
+      const interval = ivFromKey ?? iv;
+      // Memory is already repaired on put — skip copy + second repair on 45k bars.
+      let bars = peekDataset(sid, s, interval);
+      if (!bars?.length) {
+        bars = await getDataset(sid, s, interval);
+      }
+      if (!bars.length || gen !== paintGen || activeKey !== keyFor(srcId, sym, iv)) return;
+      const n = bars.length;
+      const sig = `${n}|${bars[0]?.time ?? 0}|${bars[n - 1]?.time ?? 0}|${bars[n - 1]?.close ?? 0}`;
+      if (sig === lastRepaintSig) {
+        if (repaintPending) {
+          repaintPending = false;
+          scheduleRepaint(sym, iv, srcId, gen);
+        }
+        return;
+      }
+      lastRepaintSig = sig;
       setBarsQuiet(bars);
       const manager = getManager();
       if (manager) {
@@ -137,7 +167,7 @@ function scheduleRepaint(sym: string, iv: string, srcId: string, gen: number): v
       }
     };
     void run();
-  }, REPAINT_THROTTLE_MS);
+  }, delay);
 }
 
 /**
@@ -158,18 +188,23 @@ export async function paintDataset(
   const gen = ++paintGen;
 
   stopStreaming();
-  const raw = await getDataset(srcId, sym, iv);
+  activeKey = key;
+  unsubscribe = subscribeDatasets((changedKey) => {
+    if (changedKey === activeKey) scheduleRepaint(sym, iv, srcId, gen);
+  });
+
+  let raw: Bar[] = [];
+  try {
+    raw = await getDataset(srcId, sym, iv);
+  } catch {
+    raw = [];
+  }
   if (gen !== paintGen) return null;
   if (opts?.stillCurrent && !opts.stillCurrent()) return null;
   if (!raw.length) return null;
 
   const { bars } = repairBars(raw, iv);
   if (!bars.length) return null;
-
-  activeKey = key;
-  unsubscribe = subscribeDatasets((changedKey) => {
-    if (changedKey === activeKey) scheduleRepaint(sym, iv, srcId, gen);
-  });
 
   paintFull(bars, sym, iv, srcId);
   return bars;
@@ -207,8 +242,24 @@ export function ensureDatasetComplete(
 
   void (async () => {
     try {
-      const raw = await getDataset(srcId, sym, iv);
-      if (!raw.length) return;
+      let raw: Bar[] = [];
+      try {
+        raw = await getDataset(srcId, sym, iv);
+      } catch {
+        raw = [];
+      }
+      if (!raw.length) {
+        // Empty cache — still hustle: start a walk-back so first pages land.
+        result.jobId = startBackfill({
+          sourceId: srcId,
+          symbol: sym,
+          interval: iv,
+          targetFromSec,
+          targetToSec,
+          applyWhenComplete: false,
+        });
+        return;
+      }
       const { bars } = repairBars(raw, iv);
       const report = validateDataset(bars, targetFromSec, targetToSec, iv, {
         venueClass: venueClassForSourceCaps(getSource(srcId)?.capabilities),

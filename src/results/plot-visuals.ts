@@ -29,6 +29,8 @@
  * @module results/plot-visuals
  */
 
+import { MAX_CHART_MARKERS } from '../chart/heavy-data';
+
 export type PlotKind =
   | 'plot'
   | 'hline'
@@ -826,7 +828,9 @@ export function shapeSeriesToMarkers(
   const prefix = opts?.idPrefix || meta.title || 'shape';
   const size = mapShapeSize(meta.size ?? meta.text_size);
 
-  for (let i = 0; i < n; i++) {
+  // Walk newest-first so a 45k-bar `plotshape(true)` caps at MAX_CHART_MARKERS
+  // without allocating a marker per bar.
+  for (let i = n - 1; i >= 0 && out.length < MAX_CHART_MARKERS; i--) {
     if (!isTruthyPlotValue(valArr[i])) continue;
     const t = asBarTime(times[i]);
     if (t == null) continue;
@@ -853,6 +857,7 @@ export function shapeSeriesToMarkers(
     if (size != null) marker.size = size;
     out.push(marker);
   }
+  out.reverse();
   return out;
 }
 

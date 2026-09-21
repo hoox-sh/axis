@@ -59,11 +59,12 @@ flowchart TB
 ## How to use
 
 1. Open **Data** (Data Sources panel).
-2. Set **symbol**, **source / exchange**, **timeframe**, and **accumulate to** (UTC date).
+2. Set **symbol**, **source / exchange**, **timeframe**, and **accumulate to** (UTC date). Symbol and timeframe follow the chart until you edit them.
 3. Optionally check **Apply to chart when complete**.
 4. Click **Start background backfill** — the job id appears immediately; work continues detached.
-5. Watch phases: **Backfilling** → **Validating** → **Filling gaps** → **Complete** (or **Partial**).
+5. Watch phases: **Backfilling** → **Validating** → **Filling gaps** → **Complete** (or **Partial**). Filter jobs with All / Active / Done / Issues.
 6. Click **Load to chart** when ready (or rely on apply-when-complete).
+7. **Browse datasets** (header icon or the button) opens the Dataset manager: coverage map, date range / max bars, then load onto the chart.
 
 Pause / resume / cancel apply between pages. Multiple jobs queue with low concurrency (rate-limit friendly).
 
@@ -104,6 +105,8 @@ Use Load for desk-speed symbol switches; use the manager when you need years of 
 | `src/data/bars-cache.ts` | Memory-first + IDB durable OHLCV cache |
 | `src/data/bars-gaps.ts` | Gap detection / coverage report |
 | `src/ui/DataSourceManagerPanel.tsx` | Panel UI |
+| `src/ui/CachedDatasetsModal.tsx` | Dataset manager modal |
+| `src/ui/dsm/` | Job card, coverage map, shared formatters |
 | `src/plugins/types.ts` | `SourceOpts`: `startTime?`, `endTime?`, `signal?` |
 | `src/sources/catalog.ts` | Venue date params + `sourcePageLimit` |
 

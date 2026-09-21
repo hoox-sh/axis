@@ -41,6 +41,7 @@ import {
 } from 'solid-js';
 import { store } from '../store';
 import { getManager } from '../chart/manager-access';
+import { barIndexRangeForTimeWindow } from '../chart/heavy-data';
 import {
   computeVolumeProfile,
   formatVpPrice,
@@ -164,7 +165,33 @@ export const VolumeProfileOverlay: Component = () => {
     if (!volumeProfileEnabled()) return null;
     const bars = store.bars;
     if (!bars.length) return null;
-    const profile = computeVolumeProfile(bars, { mode: 'uniform', rows: 24 });
+    // Visible-range profile — scanning 45k bars every poll hitchs the UI and
+    // is the wrong session anyway (the overlay sits on the current viewport).
+    let fromIndex = 0;
+    let toIndex = bars.length - 1;
+    try {
+      const ts = getManager()?.getPane?.('price')?.chart?.timeScale?.();
+      const vr = ts?.getVisibleRange?.() as { from?: number; to?: number } | null | undefined;
+      if (
+        vr &&
+        Number.isFinite(vr.from as number) &&
+        Number.isFinite(vr.to as number)
+      ) {
+        const win = barIndexRangeForTimeWindow(bars, Number(vr.from), Number(vr.to));
+        if (win.to > win.from) {
+          fromIndex = win.from;
+          toIndex = win.to - 1;
+        }
+      }
+    } catch {
+      /* full-history fallback */
+    }
+    const profile = computeVolumeProfile(bars, {
+      mode: 'uniform',
+      rows: 24,
+      fromIndex,
+      toIndex,
+    });
     const box = paneBox();
     if (!profile.bins.length || !box || box.height <= 0) return null;
 

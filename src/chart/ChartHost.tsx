@@ -40,7 +40,7 @@ import {
   clearCompareBars,
 } from '../store';
 import { HooxLoader } from '../ui/HooxLoader';
-import { barIndexAtTimeBinary } from './heavy-data';
+import { barIndexAtTimeBinary, createRafCoalescer } from './heavy-data';
 import {
   getManager,
   setManager,
@@ -137,6 +137,8 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
   /** Coalesced double-rAF reflow handles (cancelled on unmount). */
   let reflowRafOuter = 0;
   let reflowRafInner = 0;
+  /** Coalesce LWC crosshair → store (Data Window) to one update per frame. */
+  const crosshairRaf = createRafCoalescer();
 
   const slotId = () => props.slotId || 'main';
   const isActive = () => props.active !== false;
@@ -264,15 +266,18 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
           data?.time != null && Number.isFinite(Number(data.time))
             ? Number(data.time)
             : null;
-        // Pointer left the chart: clear so Data Window falls back to last (live) bar
+        // Pointer left the chart: clear immediately so Data Window falls back
         if (t == null) {
+          crosshairRaf.cancel();
           setCrosshair(null, null);
           return;
         }
-        const bl = bars();
-        const barIndex =
-          bl.length > 0 ? barIndexAtTimeBinary(bl, t) : null;
-        setCrosshair(t, barIndex != null && barIndex >= 0 ? barIndex : null);
+        crosshairRaf.schedule(() => {
+          if (!alive || !isActive()) return;
+          const bl = bars();
+          const barIndex = bl.length > 0 ? barIndexAtTimeBinary(bl, t) : null;
+          setCrosshair(t, barIndex != null && barIndex >= 0 ? barIndex : null);
+        });
       });
     } catch (err: unknown) {
       reportUiError(err, {
@@ -684,6 +689,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     const owned = localManager;
     alive = false;
     cancelReflow();
+    crosshairRaf.cancel();
 
     // Optional subsystems first (need live LWC charts).
     try {

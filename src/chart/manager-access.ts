@@ -39,6 +39,7 @@ import {
 import {
   heavyTimeScaleOptions,
   isHeavyBarLoad,
+  isVeryHeavyBarLoad,
   mapBarsToVolumeData,
 } from './heavy-data';
 import {
@@ -182,6 +183,8 @@ let manager: PaneManager | undefined;
 let drawingLayer: DrawingLayer | undefined;
 /** ThemeManager unregister for the active price series */
 let priceSeriesThemeUnreg: (() => void) | undefined;
+/** Skip duplicate full-history setData (loadBars + ChartHost both paint). */
+let lastOhlcvPaintSig = '';
 
 /**
  * Active chart manager (multi-chart) or legacy singleton.
@@ -212,6 +215,7 @@ export function setManager(m: PaneManager | undefined, slotId?: string) {
       }
       priceSeriesThemeUnreg = undefined;
     }
+    if (m !== manager) lastOhlcvPaintSig = '';
     manager = m;
   }
 }
@@ -592,19 +596,55 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
 
     ensurePriceSeries(chartType);
 
-    // Tune LWC conflation for this history size before the heavy setData paint
-    const tsHeavy = heavyTimeScaleOptions(bars.length);
+    const n = bars.length;
+    const first = n ? bars[0] : null;
+    const last = n ? bars[n - 1] : null;
+    const paintSig = `${n}|${first?.time ?? 0}|${last?.time ?? 0}|${last?.close ?? 0}|${chartType}`;
+    const skipSeries =
+      paintSig === lastOhlcvPaintSig && !clearScriptState && clearMarkers === false;
+
+    // Tune LWC conflation for this history size before the heavy setData paint.
+    // Apply to every pane — indicator charts used to keep default 0.5px min
+    // spacing and never precomputed, so 45k overlay series stayed janky.
+    const tsHeavy = heavyTimeScaleOptions(n);
+    const veryHeavy = isVeryHeavyBarLoad(n);
     try {
-      pricePane?.chart.timeScale().applyOptions(tsHeavy as never);
-      volPane?.chart.timeScale().applyOptions({
-        enableConflation: tsHeavy.enableConflation,
-        conflationThresholdFactor: tsHeavy.conflationThresholdFactor,
-        // Volume follows price range — no need to precompute twice
-        precomputeConflationOnInit: false,
-      } as never);
+      const allPanes =
+        typeof mgr.getAllPanes === 'function' ? mgr.getAllPanes() : [pricePane, volPane];
+      for (const pane of allPanes) {
+        if (!pane?.chart) continue;
+        const isPrice = pane === pricePane || pane.id === 'price';
+        pane.chart.timeScale().applyOptions({
+          enableConflation: tsHeavy.enableConflation,
+          conflationThresholdFactor: tsHeavy.conflationThresholdFactor,
+          minBarSpacing: tsHeavy.minBarSpacing,
+          precomputeConflationOnInit: isPrice || veryHeavy ? tsHeavy.precomputeConflationOnInit : false,
+          precomputeConflationPriority: tsHeavy.precomputeConflationPriority,
+        } as never);
+      }
     } catch {
       /* conflation options optional on older mocks */
     }
+
+    if (skipSeries) {
+      if (fit) {
+        const runFit = () => {
+          try {
+            if (typeof mgr.afterDataReload === 'function') mgr.afterDataReload();
+            else pricePane?.chart.timeScale().fitContent();
+          } catch {
+            /* fit optional */
+          }
+        };
+        if (isHeavyBarLoad(n) && typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(runFit);
+        } else {
+          runFit();
+        }
+      }
+      return;
+    }
+    lastOhlcvPaintSig = paintSig;
 
     if (pricePane?.series['candle']) {
       // Full replace invalidates incremental HA live state (re-seeded by mapper)

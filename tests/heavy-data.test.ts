@@ -7,10 +7,16 @@ import { describe, expect, it } from 'bun:test';
 import {
   CONFLATION_BARS_THRESHOLD,
   HEAVY_BARS_THRESHOLD,
+  MAX_CHART_MARKERS,
+  VERY_HEAVY_BARS_THRESHOLD,
   barIndexAtTimeBinary,
+  barIndexRangeForTimeWindow,
+  capNewest,
   createRafCoalescer,
   heavyTimeScaleOptions,
+  indexRangeForSortedTimes,
   isHeavyBarLoad,
+  isVeryHeavyBarLoad,
   mapBarsToVolumeData,
 } from '../src/chart/heavy-data';
 import type { Bar } from '../src/store/types';
@@ -22,10 +28,16 @@ describe('heavy-data thresholds', () => {
     expect(isHeavyBarLoad(0)).toBe(false);
   });
 
+  it('detects 25k+ loads', () => {
+    expect(isVeryHeavyBarLoad(VERY_HEAVY_BARS_THRESHOLD)).toBe(true);
+    expect(isVeryHeavyBarLoad(VERY_HEAVY_BARS_THRESHOLD - 1)).toBe(false);
+  });
+
   it('enables conflation for mid and precompute for heavy', () => {
     const small = heavyTimeScaleOptions(100);
     expect(small.enableConflation).toBe(false);
     expect(small.precomputeConflationOnInit).toBe(false);
+    expect(small.minBarSpacing).toBe(0.5);
 
     const mid = heavyTimeScaleOptions(CONFLATION_BARS_THRESHOLD);
     expect(mid.enableConflation).toBe(true);
@@ -35,6 +47,48 @@ describe('heavy-data thresholds', () => {
     expect(heavy.enableConflation).toBe(true);
     expect(heavy.precomputeConflationOnInit).toBe(true);
     expect(heavy.conflationThresholdFactor).toBe(1);
+    expect(heavy.minBarSpacing).toBe(0.001);
+    expect(heavy.precomputeConflationPriority).toBe('background');
+
+    const very = heavyTimeScaleOptions(VERY_HEAVY_BARS_THRESHOLD);
+    expect(very.precomputeConflationOnInit).toBe(true);
+    expect(very.precomputeConflationPriority).toBe('user-visible');
+    expect(very.minBarSpacing).toBe(0.001);
+  });
+});
+
+describe('indexRangeForSortedTimes', () => {
+  it('returns inclusive/exclusive window', () => {
+    const times = [10, 20, 30, 40, 50];
+    expect(indexRangeForSortedTimes(times, 20, 40)).toEqual({ from: 1, to: 4 });
+    expect(indexRangeForSortedTimes(times, 0, 100)).toEqual({ from: 0, to: 5 });
+    expect(indexRangeForSortedTimes(times, 25, 35)).toEqual({ from: 2, to: 3 });
+    expect(indexRangeForSortedTimes([], 0, 1)).toEqual({ from: 0, to: 0 });
+  });
+
+  it('matches barIndexRangeForTimeWindow', () => {
+    const bars = [10, 20, 30, 40].map((time) => ({ time }));
+    expect(barIndexRangeForTimeWindow(bars, 20, 30)).toEqual({ from: 1, to: 3 });
+  });
+});
+
+describe('capNewest', () => {
+  it('keeps the tail and no-ops under the cap', () => {
+    expect(capNewest([1, 2, 3], 10)).toEqual([1, 2, 3]);
+    expect(capNewest([1, 2, 3, 4, 5], 3)).toEqual([3, 4, 5]);
+    expect(capNewest([1, 2, 3], 0)).toEqual([]);
+    expect(MAX_CHART_MARKERS).toBeGreaterThan(1000);
+  });
+});
+
+describe('45k-bar windowing', () => {
+  it('indexRangeForSortedTimes is O(log n) on a 45k series', () => {
+    const n = 45_000;
+    const times = Array.from({ length: n }, (_, i) => i * 60);
+    const win = indexRangeForSortedTimes(times, times[40_000]!, times[40_200]!);
+    expect(win).toEqual({ from: 40_000, to: 40_201 });
+    const full = indexRangeForSortedTimes(times, 0, times[n - 1]!);
+    expect(full).toEqual({ from: 0, to: n });
   });
 });
 

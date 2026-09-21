@@ -359,37 +359,64 @@ describe('data-source-manager', () => {
     cancelBackfill(a);
   });
 
-  it('rejects unknown source and bad date range', () => {
-    expect(() =>
-      startBackfill({ sourceId: 'nope', symbol: 'BTC', interval: '1d' }),
-    ).toThrow(/Unknown source/);
-    expect(() =>
-      startBackfill({
-        sourceId: 'mock-walk',
-        symbol: 'BTC',
-        interval: '1d',
-        targetFromSec: 2000,
-        targetToSec: 1000,
-      }),
-    ).toThrow(/Past date/);
+  it('never throws; unknown source still delivers a complete job', async () => {
+    const id = startBackfill({ sourceId: 'nope', symbol: 'BTC', interval: '1d' });
+    expect(id).toMatch(/^dsj_/);
+    const job = await _waitForJob(id, 5_000);
+    expect(job!.status).toBe('complete');
+    expect(job!.error).toMatch(/Unknown source/);
+    expect(job!.datasetComplete).toBe(false);
   });
 
-  it('rejects empty symbol and data-manager source', () => {
-    expect(() =>
-      startBackfill({ sourceId: 'mock-walk', symbol: '  ', interval: '1d' }),
-    ).toThrow(/Symbol required/);
-    expect(() =>
-      startBackfill({ sourceId: 'data-manager', symbol: 'BTC', interval: '1d' }),
-    ).toThrow(/cache reader/);
+  it('never throws; inverted date range is swapped', () => {
+    const id = startBackfill({
+      sourceId: 'mock-walk',
+      symbol: 'BTC',
+      interval: '1d',
+      targetFromSec: 2000,
+      targetToSec: 1000,
+    });
+    expect(id).toMatch(/^dsj_/);
+    const job = getDataSourceJobs().find((j) => j.id === id);
+    expect(job).toBeTruthy();
+    expect(job!.targetFromSec).toBeLessThan(job!.targetToSec);
+    cancelBackfill(id);
   });
 
-  it('marks jobs error when the source throws', async () => {
+  it('blank symbol falls back to the chart symbol', () => {
+    const id = startBackfill({
+      sourceId: 'mock-walk',
+      symbol: '  ',
+      interval: '1d',
+      targetFromSec: Math.floor(Date.now() / 1000) - 86_400,
+    });
+    expect(id).toMatch(/^dsj_/);
+    const job = getDataSourceJobs().find((j) => j.id === id);
+    expect(job!.symbol.length).toBeGreaterThan(0);
+    cancelBackfill(id);
+  });
+
+  it('data-manager source delivers cache instead of throwing', async () => {
+    const id = startBackfill({
+      sourceId: 'data-manager',
+      symbol: 'BTC',
+      interval: '1d',
+    });
+    expect(id).toMatch(/^dsj_/);
+    const job = await _waitForJob(id, 5_000);
+    expect(job!.status).toBe('complete');
+    expect(job!.status).not.toBe('error');
+  });
+
+  it('retries venue throws then completes with whatever it has', async () => {
+    let calls = 0;
     const src: SourcePlugin = {
       id: 'err-src',
       name: 'Err',
       kind: 'source',
       builtIn: false,
       async fetchHistorical() {
+        calls += 1;
         throw new Error('venue-down');
       },
     };
@@ -401,10 +428,13 @@ describe('data-source-manager', () => {
         interval: '1d',
         targetFromSec: Math.floor(Date.now() / 1000) - 86_400,
       });
-      const job = await _waitForJob(id, 10_000);
-      expect(job!.status).toBe('error');
+      const job = await _waitForJob(id, 15_000);
+      expect(job!.status).toBe('complete');
+      expect(job!.status).not.toBe('error');
       expect(job!.error).toContain('venue-down');
-      // Progress on a failed job with no bars stays at 0
+      expect(job!.retries).toBeGreaterThan(0);
+      expect(calls).toBeGreaterThan(1);
+      expect(job!.datasetComplete).toBe(false);
       expect(jobProgress(job!)).toBe(0);
     } finally {
       try {

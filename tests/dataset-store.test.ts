@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import {
   getDataset,
+  peekDataset,
   putDatasetBars,
   replaceDataset,
   removeDataset,
@@ -40,6 +41,16 @@ describe('dataset-store', () => {
     expect(bars.map((b) => b.time)).toEqual([60, 120]);
   });
 
+  it('peekDataset returns the live memory array without copying', async () => {
+    await putDatasetBars('binance-rest', 'BTCUSDT', '1d', [bar(60, 1), bar(120, 2)]);
+    const peeked = peekDataset('binance-rest', 'BTCUSDT', '1d');
+    const copied = await getDataset('binance-rest', 'BTCUSDT', '1d');
+    expect(peeked).not.toBeNull();
+    expect(peeked!.map((b) => b.time)).toEqual([60, 120]);
+    expect(copied).not.toBe(peeked);
+    expect(peekDataset('binance-rest', 'NOSUCH', '1d')).toBeNull();
+  });
+
   it('merges overlapping writes with newest-wins by default', async () => {
     await putDatasetBars('binance-rest', 'BTCUSDT', '1d', [bar(60, 100)]);
     const res = await putDatasetBars('binance-rest', 'BTCUSDT', '1d', [bar(60, 999)]);
@@ -72,6 +83,13 @@ describe('dataset-store', () => {
     const { getCachedBars } = await import('../src/data/bars-cache');
     const cached = await getCachedBars('binance-rest', 'BTCUSDT', '1d');
     expect(cached.map((b) => b.time)).toEqual([60]);
+  });
+
+  it('getDataset never throws when the git sink has no plugin', async () => {
+    setPersistenceMode('git');
+    const bars = await getDataset('binance-rest', 'NOSINK', '1d');
+    expect(Array.isArray(bars)).toBe(true);
+    expect(bars).toHaveLength(0);
   });
 
   it('get falls back to the local sink when memory is cold', async () => {

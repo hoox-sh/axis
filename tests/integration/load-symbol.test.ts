@@ -33,6 +33,7 @@ import {
   _resetBarsCacheForTests,
 } from '../../src/data/bars-cache';
 import { _resetDataSourceManagerForTests } from '../../src/data/data-source-manager';
+import { _resetDsmOrchestratorForTests } from '../../src/data/dsm-orchestrator';
 import { makeBars } from '../fixtures/bars';
 import type { Bar } from '../../src/store/types';
 import type { SourcePlugin } from '../../src/plugins/types';
@@ -50,6 +51,7 @@ beforeEach(async () => {
   // ensureDatasetComplete → startBackfill detached; its network work must
   // not bleed into later tests (or their mocks).
   _resetDataSourceManagerForTests();
+  _resetDsmOrchestratorForTests();
   ensureBuiltins();
   clearLogs();
   setStore('bars', []);
@@ -236,7 +238,8 @@ describe('loadSymbolData', () => {
     let seenLimit: unknown;
     registerDynamicSource(
       dynSource('limit-src', async ({ config }) => {
-        seenLimit = config?.limit;
+        // First call is the blocking chart load; DSM may fetch more pages after.
+        if (seenLimit == null) seenLimit = config?.limit;
         return makeBars(3);
       }),
     );

@@ -82,7 +82,7 @@ import {
   type ChartType,
   DEFAULT_CHART_TYPE,
 } from './chart-type';
-import { createRafCoalescer } from './heavy-data';
+import { MAX_CHART_MARKERS, capNewest, createRafCoalescer } from './heavy-data';
 import type { Bar } from '../store/types';
 import { resizePane, store } from '../store';
 import type { TradeMarker } from '../results/events';
@@ -496,6 +496,10 @@ export class PaneManager {
   private hoveredPaneId: string | null = null;
   /** Coalesce multi-pane crosshair mirrors to one frame (heavy histories). */
   private crosshairRaf = createRafCoalescer();
+  /** Coalesce time-scale sync so pan/zoom does not fan out to every pane per event. */
+  private timeSyncRaf = createRafCoalescer();
+  /** Latest logical range waiting for the time-sync rAF. */
+  private pendingTimeRange: { from: number; to: number } | null = null;
   /** Coalesce ResizeObserver → applyOptions to one pass per animation frame. */
   private resizeRaf = createRafCoalescer();
   /** Pane ids that need a measured resize on the next rAF flush. */
@@ -1046,6 +1050,8 @@ export class PaneManager {
       }
     }
     this.timeSyncUnsubs = [];
+    this.pendingTimeRange = null;
+    this.timeSyncRaf.cancel();
 
     const panes = this.getAllPanes().filter((p) => p.visible);
     if (panes.length < 2) {
@@ -1053,16 +1059,30 @@ export class PaneManager {
       return;
     }
 
-    for (const srcPane of panes) {
-      const src = srcPane.chart;
-      const handler = (range: { from: number; to: number } | null) => {
-        if (this.suppressSync || !range) return;
+    // Price pane is the only user-driven scroller; secondary panes have
+    // handleScroll/Scale locked. Subscribing every pane used to bounce
+    // range-change events across 45k-point charts on every pan tick.
+    const price =
+      this.panes.get('price')?.visible !== false ? this.panes.get('price') : null;
+    const srcPane = price ?? panes[0];
+    if (!srcPane) {
+      this.alignRightScales();
+      return;
+    }
+    const src = srcPane.chart;
+    const handler = (range: { from: number; to: number } | null) => {
+      if (this.suppressSync || !range) return;
+      this.pendingTimeRange = range;
+      this.timeSyncRaf.schedule(() => {
+        const next = this.pendingTimeRange;
+        this.pendingTimeRange = null;
+        if (!next) return;
         this.suppressSync = true;
         try {
           for (const pane of this.getAllPanes()) {
             if (!pane.visible || pane.chart === src) continue;
             try {
-              pane.chart.timeScale().setVisibleLogicalRange(range);
+              pane.chart.timeScale().setVisibleLogicalRange(next);
             } catch {
               /* ignore per-pane */
             }
@@ -1070,16 +1090,16 @@ export class PaneManager {
         } finally {
           this.suppressSync = false;
         }
-      };
-      src.timeScale().subscribeVisibleLogicalRangeChange(handler);
-      this.timeSyncUnsubs.push(() => {
-        try {
-          src.timeScale().unsubscribeVisibleLogicalRangeChange(handler);
-        } catch {
-          /* ignore */
-        }
       });
-    }
+    };
+    src.timeScale().subscribeVisibleLogicalRangeChange(handler);
+    this.timeSyncUnsubs.push(() => {
+      try {
+        src.timeScale().unsubscribeVisibleLogicalRangeChange(handler);
+      } catch {
+        /* ignore */
+      }
+    });
 
     this.alignTimeRangesFromPrice();
     this.alignRightScales();
@@ -1168,7 +1188,10 @@ export class PaneManager {
       }
       return base;
     });
-    this.shapeMarkersByOwner.set(owner, list);
+    this.shapeMarkersByOwner.set(
+      owner,
+      list.length > MAX_CHART_MARKERS ? capNewest(list, MAX_CHART_MARKERS) : list,
+    );
     const pane = (paneId && String(paneId).trim()) || 'price';
     this.shapePaneByOwner.set(owner, pane);
     this.rebuildShapeMarkerList();
@@ -2993,6 +3016,8 @@ export class PaneManager {
 
   dispose() {
     this.crosshairRaf.cancel();
+    this.timeSyncRaf.cancel();
+    this.pendingTimeRange = null;
     this.resizeRaf.cancel();
     this.pendingResizePaneIds.clear();
     this.candleMarkers = null;

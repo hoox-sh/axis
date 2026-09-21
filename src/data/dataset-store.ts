@@ -135,6 +135,19 @@ export function keyFor(sourceId: string, symbol: string, interval: string): stri
   return datasetKey(sourceId, symbol, interval);
 }
 
+/**
+ * Warm memory series without copying. `null` when the mirror is cold.
+ * Callers must not mutate the returned array (live ticks / merges replace it).
+ */
+export function peekDataset(
+  sourceId: string,
+  symbol: string,
+  interval: string,
+): Bar[] | null {
+  const mem = memory.get(keyFor(sourceId, symbol, interval));
+  return mem?.length ? mem : null;
+}
+
 function activeSink(): DatasetSink {
   return sinkForMode(persistenceMode);
 }
@@ -149,14 +162,18 @@ export async function getDataset(
   interval: string,
 ): Promise<Bar[]> {
   const key = keyFor(sourceId, symbol, interval);
-  const mem = memory.get(key);
+  const mem = peekDataset(sourceId, symbol, interval);
   if (mem?.length) return mem.slice();
-  const bars = await activeSink().get(key);
-  if (bars?.length) {
-    remember(key, bars);
-    return bars.slice();
+  try {
+    const bars = await activeSink().get(key);
+    if (bars?.length) {
+      remember(key, bars);
+      return bars.slice();
+    }
+  } catch (err: unknown) {
+    console.warn(`[dataset-store] sink get failed for ${key}`, err);
   }
-  return [];
+  return mem?.length ? mem.slice() : [];
 }
 
 /**
