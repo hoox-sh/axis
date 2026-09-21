@@ -40,6 +40,7 @@ import {
   onCleanup,
 } from 'solid-js';
 import { setPaletteCommands, clearPaletteCommands } from '../mcp/commands';
+import { noteLibraryCommand } from './library/commands';
 import {
   store,
   isPanelOpen,
@@ -386,12 +387,12 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
         setBuiltinPickerOpen(true);
       },
       findAcrossScripts: () => {
+        noteLibraryCommand('find');
         setLibraryPanelOpen(true);
-        emitWindowEvent('axis-library-find');
       },
       openRecentScripts: () => {
+        noteLibraryCommand('recent');
         setLibraryPanelOpen(true);
-        emitWindowEvent('axis-library-recent');
       },
       cycleTheme: () => {
         const current = store.chartTheme?.presetId || 'void-dark';

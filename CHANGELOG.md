@@ -15,6 +15,10 @@ _Generated/updated: 2026-09-21 · 441 commits · describe-tag: `v2.10.0`_
 
 ## [Unreleased]
 
+### Changed
+
+- **Script Library and Layers panels**: list chrome is split into `ui/library` and `ui/layers`. The library search covers built-ins and personal scripts (with a jump to matches on the other tab); Find across scripts and Recent scripts from the command palette now focus that search or show newest personal scripts. Personal scripts filter by kind. Layers sections show counts, drawing rows use labelled eye toggles instead of a nested button, and the drawing list can be filtered.
+
 ## [2.11.0] — 2026-09-21
 
 ### Added

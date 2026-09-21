@@ -24,10 +24,11 @@
  * hideable per-item, and removable. Visibility toggles hit both store and
  * chart manager / drawing layer.
  *
- * FloatableShell id `layers`. Script settings opens per applied indicator.
+ * Presentational pieces live under `ui/layers/`. FloatableShell id `layers`.
+ * Script settings opens per applied indicator.
  */
 
-import { type Component, For, Show, createSignal, createMemo } from 'solid-js';
+import { type Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import {
   store,
   isPanelOpen,
@@ -55,13 +56,8 @@ import {
   detachOnchainSeries,
   setOnchainEventsVisible,
 } from '../onchain/manager';
-import { Icons } from './icons';
 import { FloatableShell } from './panels/FloatableShell';
-import {
-  toolLabel,
-  resolveDrawingStyle,
-  type Drawing,
-} from '../chart/drawing-types';
+import { toolLabel, type Drawing } from '../chart/drawing-types';
 import {
   listTemplates,
   saveTemplate,
@@ -71,7 +67,6 @@ import {
   exportTemplateJson,
   exportAllTemplatesJson,
   importTemplates,
-  type DrawingTemplateSummary,
   type LoadTemplateMode,
 } from '../chart/drawings/templates';
 import {
@@ -81,11 +76,17 @@ import {
   mergeLayerDrawingsForSymbol,
   tagDrawingsSymbol,
 } from '../chart/drawings/sync';
+import { announce } from './sr-announce';
+import { DrawingList } from './layers/drawings';
+import { drawingMatchesQuery, onchainSeriesSub } from './layers/format';
+import { LayerEmpty, LayerRow, LayerSection } from './layers/rows';
+import { DrawingTemplates } from './layers/templates';
 
 /** Pane / indicator / drawing visibility and remove actions. */
 export const LayerPanel: Component = () => {
   /** Bump to re-read localStorage template catalog. */
   const [tplTick, setTplTick] = createSignal(0);
+  const [drawingQuery, setDrawingQuery] = createSignal('');
   const templates = createMemo(() => {
     void tplTick();
     return listTemplates();
@@ -95,6 +96,20 @@ export const LayerPanel: Component = () => {
   const symbolDrawings = createMemo(() =>
     visibleDrawingsForActiveSymbol(store.symbol),
   );
+  const filteredDrawings = createMemo(() =>
+    symbolDrawings().filter((d) => drawingMatchesQuery(d, drawingQuery())),
+  );
+  const onchainCount = createMemo(
+    () =>
+      onchainManagerState.series.length +
+      (onchainManagerState.events.length > 0 ? 1 : 0),
+  );
+
+  // A filter typed for the previous ticker should not hide the next symbol's rows.
+  createEffect(() => {
+    void store.symbol;
+    setDrawingQuery('');
+  });
 
   const refreshTemplates = () => setTplTick((n) => n + 1);
 
@@ -129,15 +144,14 @@ export const LayerPanel: Component = () => {
 
   const onClearDrawings = () => {
     const visible = symbolDrawings();
-    if (
-      visible.length &&
-      !confirm(`Clear drawings for ${store.symbol || 'this symbol'}?`)
-    ) {
+    const symbol = store.symbol || 'this symbol';
+    if (visible.length && !confirm(`Clear drawings for ${symbol}?`)) {
       return;
     }
     clearDrawingsForSymbol(store.symbol);
     setSelectedDrawingId(null);
     syncLayerDrawings([]);
+    announce(`Cleared drawings for ${symbol}`);
   };
 
   /**
@@ -151,6 +165,9 @@ export const LayerPanel: Component = () => {
     const next = mergeDrawings(store.drawings, clones, 'append');
     setDrawings(next);
     syncLayerDrawings(visibleDrawingsForActiveSymbol(store.symbol));
+    announce(
+      `Duplicated ${clones.length} drawing${clones.length === 1 ? '' : 's'} on ${store.symbol || 'this symbol'}`,
+    );
   };
 
   /**
@@ -166,6 +183,9 @@ export const LayerPanel: Component = () => {
     setDrawings(kept as Drawing[]);
     setSelectedDrawingId(null);
     syncLayerDrawings(kept as Drawing[]);
+    announce(
+      `Kept ${kept.length} drawing${kept.length === 1 ? '' : 's'} for ${store.symbol || 'this symbol'}`,
+    );
   };
 
   /**
@@ -177,6 +197,7 @@ export const LayerPanel: Component = () => {
     const next = tagDrawingsSymbol(store.drawings, store.symbol) as Drawing[];
     setDrawings(next);
     syncLayerDrawings(visibleDrawingsForActiveSymbol(store.symbol));
+    announce(`Tagged drawings with ${store.symbol || 'this symbol'}`);
   };
 
   /** Select drawing in store + live layer (shows handles on chart). */
@@ -236,6 +257,7 @@ export const LayerPanel: Component = () => {
       },
     });
     refreshTemplates();
+    announce(`Saved template ${name.trim()}`);
   };
 
   const onLoadTemplate = (id: string, mode: LoadTemplateMode) => {
@@ -264,12 +286,14 @@ export const LayerPanel: Component = () => {
     setDrawings(next);
     setSelectedDrawingId(null);
     syncLayerDrawings(visibleDrawingsForActiveSymbol(store.symbol));
+    announce(`${mode === 'replace' ? 'Loaded' : 'Merged'} template ${tpl.name}`);
   };
 
   const onDeleteTemplate = (id: string, name: string) => {
     if (!confirm(`Delete template "${name}"?`)) return;
     deleteTemplate(id);
     refreshTemplates();
+    announce(`Deleted template ${name}`);
   };
 
   const onExportTemplate = (id: string) => {
@@ -301,6 +325,8 @@ export const LayerPanel: Component = () => {
       const n = importTemplates(text, { forceNewIds: true });
       if (n === 0) {
         window.alert('No templates found in file.');
+      } else {
+        announce(`Imported ${n} template${n === 1 ? '' : 's'}`);
       }
       refreshTemplates();
     } catch (err: unknown) {
@@ -313,8 +339,8 @@ export const LayerPanel: Component = () => {
   return (
     <Show when={isPanelOpen('layers') || store.layerPanel.open}>
       <FloatableShell id="layers" testId="axis-layers">
-        <div class="flex-1 overflow-y-auto min-h-0 text-[12px] flex flex-col gap-2">
-          <Section title="Panes">
+        <div class="flex-1 overflow-y-auto min-h-0 text-[12px] flex flex-col gap-3">
+          <LayerSection title="Panes" count={store.panes.length}>
             <For each={[...store.panes].sort((a, b) => a.order - b.order)}>
               {(pane) => (
                 <LayerRow
@@ -326,42 +352,31 @@ export const LayerPanel: Component = () => {
                 />
               )}
             </For>
-          </Section>
+          </LayerSection>
 
-          <Section title="Overlays">
+          <LayerSection title="Overlays">
             <LayerRow
               label="Volume profile"
               sub="OHLCV estimate · fixed range"
               visible={volumeProfileEnabled()}
               onToggle={() => toggleVolumeProfileEnabled()}
             />
-          </Section>
+          </LayerSection>
 
-          <Section title="On-Chain">
+          <LayerSection title="On-chain" count={onchainCount()}>
             <div data-testid="axis-layers-onchain" class="flex flex-col gap-0.5">
               <Show
                 when={
                   onchainManagerState.series.length > 0 ||
                   onchainManagerState.events.length > 0
                 }
-                fallback={
-                  <Empty>No on-chain series</Empty>
-                }
+                fallback={<LayerEmpty>No on-chain series</LayerEmpty>}
               >
                 <For each={onchainManagerState.series}>
                   {(s) => (
                     <LayerRow
                       label={s.label || s.key || s.id}
-                      sub={[
-                        s.provider || s.providerId,
-                        s.loading ? 'loading…' : null,
-                        s.error ? 'error' : null,
-                        s.lastTvl != null
-                          ? `$${formatCompactUsd(s.lastTvl)}`
-                          : null,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
+                      sub={onchainSeriesSub(s)}
                       visible={s.visible !== false}
                       onToggle={() =>
                         setOnchainSeriesVisible(s.id, s.visible === false)
@@ -392,424 +407,65 @@ export const LayerPanel: Component = () => {
                 </Show>
               </Show>
             </div>
-          </Section>
+          </LayerSection>
 
-          <Section title="Scripts">
+          <LayerSection title="Scripts" count={store.scripts.length}>
             <Show
               when={store.scripts.length > 0}
-              fallback={<Empty>No scripts</Empty>}
+              fallback={<LayerEmpty>No scripts on the chart</LayerEmpty>}
             >
-              <For each={store.scripts}>
-                {(ind) => (
-                  <LayerRow
-                    label={ind.name}
-                    sub={ind.paneId}
-                    visible={ind.visible}
-                    onToggle={() => onToggleIndicator(ind.id)}
-                    onSettings={() => openScriptSettings(ind.id)}
-                    onRemove={() => onRemoveIndicator(ind.id, ind.paneId)}
-                  />
-                )}
-              </For>
-            </Show>
-          </Section>
-
-          <Section title="Drawings">
-            <div
-              class="flex items-center gap-2 px-1.5 py-1.5 mb-1 bg-bg-elev border border-border-soft"
-              data-testid="axis-layers-active-tool"
-            >
-              <span class="text-[0.78em] uppercase tracking-wider text-text-faint flex-shrink-0">
-                Tool
-              </span>
-              <span
-                class={`flex-1 truncate font-medium ${
-                  store.drawingTool !== 'cursor' ? 'text-accent' : 'text-text-dim'
-                }`}
-              >
-                {toolLabel(store.drawingTool)}
-              </span>
-              <Show when={store.selectedDrawingId}>
-                <span class="text-[0.78em] font-mono text-accent flex-shrink-0">sel</span>
-              </Show>
-            </div>
-            <div class="flex items-center justify-between gap-2 px-1 py-0.5 mb-0.5 flex-wrap">
-              <span class="text-text-dim">
-                {store.symbol || 'Symbol'}{' '}
-                <span class="text-text-faint font-mono">
-                  ({symbolDrawings().length}
-                  {store.drawings.length !== symbolDrawings().length
-                    ? ` / ${store.drawings.length}`
-                    : ''}
-                  )
-                </span>
-              </span>
-              <div class="flex items-center gap-1 flex-wrap justify-end">
-                <button
-                  type="button"
-                  class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
-                  disabled={!symbolDrawings().length}
-                  title={`Duplicate drawings for ${store.symbol} with new IDs`}
-                  data-testid="axis-layers-duplicate-drawings"
-                  onClick={onDuplicateDrawings}
-                >
-                  Duplicate
-                </button>
-                <button
-                  type="button"
-                  class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
-                  disabled={!store.drawings.length}
-                  title={`Keep only drawings for ${store.symbol} (untagged kept; other symbols removed)`}
-                  data-testid="axis-layers-keep-symbol"
-                  onClick={onKeepThisSymbol}
-                >
-                  This symbol
-                </button>
-                <button
-                  type="button"
-                  class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
-                  disabled={!store.drawings.length}
-                  title={`Tag all drawings with symbol ${store.symbol}`}
-                  data-testid="axis-layers-tag-symbol"
-                  onClick={onTagWithSymbol}
-                >
-                  Tag symbol
-                </button>
-                <button
-                  type="button"
-                  class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
-                  disabled={!symbolDrawings().length}
-                  title={`Clear drawings for ${store.symbol}`}
-                  onClick={onClearDrawings}
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-            <div class="px-1 pb-1 text-[0.75em] text-text-faint leading-snug">
-              Drawings are anchored to the chart symbol ({store.symbol || '—'}).
-              Other symbols keep their own drawings. Tag symbol migrates untagged
-              legacy items onto the current ticker.
-            </div>
-            <Show
-              when={symbolDrawings().length > 0}
-              fallback={
-                <Empty>No drawings</Empty>
-              }
-            >
-              <For each={symbolDrawings()}>
-                {(d) => {
-                  const selected = () => store.selectedDrawingId === d.id;
-                  const visible = () => !d.meta?.hidden;
-                  const st = () => resolveDrawingStyle(d);
-                  return (
-                    // biome-ignore lint/a11y/useSemanticElements: row contains nested buttons, so a real <button> would be invalid HTML
-                    <div
-                      class={`axis-list-row flex items-center gap-1.5 h-8 px-1 border-b cursor-pointer transition-colors ${
-                        selected()
-                          ? 'bg-accent/15 border-accent'
-                          : 'bg-bg-elev border-border-soft hover:border-border'
-                      }`}
-                      data-drawing-id={d.id}
-                      data-selected={selected() ? '1' : '0'}
-                      role="button"
-                      tabIndex={0}
-                      title="Click to select on chart"
-                      onClick={() => onSelectDrawing(d.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          onSelectDrawing(d.id);
-                        }
-                      }}
-                    >
-                      <button
-                        type="button"
-                        class={`w-5 h-5 text-[0.75em] flex items-center justify-center border flex-shrink-0 rounded ${
-                          visible()
-                            ? 'border-accent bg-accent/15 text-accent'
-                            : 'border-border bg-bg-hover text-text-dim'
-                        }`}
-                        title={visible() ? 'Hide' : 'Show'}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleDrawingVisible(d);
-                        }}
-                      >
-                        {visible() ? '●' : '○'}
-                      </button>
-                      <span
-                        class="w-2.5 h-2.5 rounded-sm flex-shrink-0 border border-border-soft"
-                        style={{ background: st().color }}
-                        title={st().color}
+              <ul class="flex flex-col gap-0.5 m-0 p-0 list-none" aria-label="Chart scripts">
+                <For each={store.scripts}>
+                  {(ind) => (
+                    <li>
+                      <LayerRow
+                        label={ind.name}
+                        sub={ind.paneId}
+                        visible={ind.visible}
+                        onToggle={() => onToggleIndicator(ind.id)}
+                        onSettings={() => openScriptSettings(ind.id)}
+                        onRemove={() => onRemoveIndicator(ind.id, ind.paneId)}
                       />
-                      <div class="min-w-0 flex-1">
-                        <div
-                          class={`truncate font-medium leading-tight ${
-                            selected() ? 'text-accent' : 'text-text'
-                          }`}
-                        >
-                          {drawingListLabel(d)}
-                        </div>
-                        <div class="text-[0.78em] text-text-faint font-mono truncate">
-                          {toolLabel(d.kind)}
-                          {st().locked ? ' · locked' : ''}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        class="sc-btn sc-btn-ghost px-1 text-text-faint hover:text-red"
-                        title="Remove drawing"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRemoveDrawing(d.id);
-                        }}
-                      >
-                        <Icons.x />
-                      </button>
-                    </div>
-                  );
-                }}
-              </For>
-            </Show>
-            <div class="px-1 mt-1 text-[0.78em] text-text-faint">
-              Script drawings refresh on each run (not listed).
-            </div>
-
-            {/* Drawing templates (analysis packs) */}
-            <div
-              class="mt-2 pt-2 border-t border-border-soft"
-              data-testid="axis-drawing-templates"
-            >
-              <div class="flex items-center justify-between gap-2 px-1 py-0.5 mb-0.5">
-                <span class="text-text-dim">
-                  Templates{' '}
-                  <span class="text-text-faint font-mono">({templates().length})</span>
-                </span>
-                <div class="flex items-center gap-1">
-                  <button
-                    type="button"
-                    class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
-                    disabled={!symbolDrawings().length}
-                    title={`Save drawings for ${store.symbol} as a named template`}
-                    data-testid="axis-tpl-save"
-                    onClick={onSaveTemplate}
-                  >
-                    Save
-                  </button>
-                  <label
-                    class="sc-btn sc-btn-ghost px-1.5 text-[0.85em] cursor-pointer"
-                    title="Import template JSON"
-                  >
-                    Import
-                    <input
-                      type="file"
-                      accept="application/json,.json"
-                      class="sr-only"
-                      data-testid="axis-tpl-import"
-                      onChange={onImportTemplatesFile}
-                    />
-                  </label>
-                  <Show when={templates().length > 0}>
-                    <button
-                      type="button"
-                      class="sc-btn sc-btn-ghost px-1.5 text-[0.85em]"
-                      title="Export all templates as JSON"
-                      data-testid="axis-tpl-export-all"
-                      onClick={onExportAllTemplates}
-                    >
-                      Export
-                    </button>
-                  </Show>
-                </div>
-              </div>
-              <Show
-                when={templates().length > 0}
-                fallback={
-                  <Empty>No templates</Empty>
-                }
-              >
-                <For each={templates()}>
-                  {(t: DrawingTemplateSummary) => (
-                    <div
-                      class="flex items-center gap-1.5 px-1 py-1 bg-bg-elev border border-border-soft hover:border-border"
-                      data-template-id={t.id}
-                    >
-                      <div class="min-w-0 flex-1">
-                        <div class="text-text truncate font-medium leading-tight">
-                          {t.name}
-                        </div>
-                        <div class="text-[0.78em] text-text-faint font-mono truncate">
-                          {t.drawingCount} drawing{t.drawingCount === 1 ? '' : 's'}
-                          {t.meta?.symbol ? ` · ${t.meta.symbol}` : ''}
-                          {t.meta?.interval ? ` ${t.meta.interval}` : ''}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        class="sc-btn sc-btn-ghost px-1 text-[0.85em]"
-                        title="Replace current drawings with this template"
-                        onClick={() => onLoadTemplate(t.id, 'replace')}
-                      >
-                        Load
-                      </button>
-                      <button
-                        type="button"
-                        class="sc-btn sc-btn-ghost px-1 text-[0.85em]"
-                        title="Merge template drawings into current set"
-                        onClick={() => onLoadTemplate(t.id, 'merge')}
-                      >
-                        +
-                      </button>
-                      <button
-                        type="button"
-                        class="sc-btn sc-btn-ghost px-1 text-[0.85em]"
-                        title="Export this template as JSON"
-                        onClick={() => onExportTemplate(t.id)}
-                      >
-                        <Icons.download />
-                      </button>
-                      <button
-                        type="button"
-                        class="sc-btn sc-btn-ghost px-1 text-text-faint hover:text-red"
-                        title="Delete template"
-                        onClick={() => onDeleteTemplate(t.id, t.name)}
-                      >
-                        <Icons.x />
-                      </button>
-                    </div>
+                    </li>
                   )}
                 </For>
-              </Show>
-            </div>
-          </Section>
+              </ul>
+            </Show>
+          </LayerSection>
+
+          <LayerSection title="Drawings" count={symbolDrawings().length}>
+            <DrawingList
+              symbol={store.symbol}
+              drawings={symbolDrawings()}
+              filtered={filteredDrawings()}
+              totalCount={store.drawings.length}
+              selectedId={store.selectedDrawingId}
+              toolName={toolLabel(store.drawingTool)}
+              toolActive={store.drawingTool !== 'cursor'}
+              query={drawingQuery()}
+              onQuery={setDrawingQuery}
+              onDuplicate={onDuplicateDrawings}
+              onKeepSymbol={onKeepThisSymbol}
+              onTagSymbol={onTagWithSymbol}
+              onClear={onClearDrawings}
+              onSelect={onSelectDrawing}
+              onToggleVisible={onToggleDrawingVisible}
+              onRemove={onRemoveDrawing}
+            />
+            <DrawingTemplates
+              symbol={store.symbol}
+              templates={templates()}
+              canSave={symbolDrawings().length > 0}
+              onSave={onSaveTemplate}
+              onImport={(e) => void onImportTemplatesFile(e)}
+              onExportAll={onExportAllTemplates}
+              onLoad={onLoadTemplate}
+              onExport={onExportTemplate}
+              onDelete={onDeleteTemplate}
+            />
+          </LayerSection>
         </div>
       </FloatableShell>
     </Show>
   );
 };
-
-/** Short human label for a drawing row. */
-function drawingListLabel(d: Drawing): string {
-  switch (d.kind) {
-    case 'hline':
-      return `H · ${Number(d.price).toFixed(2)}`;
-    case 'vline':
-      return `V · ${formatBarTime(d.time)}`;
-    case 'text':
-      return (d.text || d.meta?.text || 'Text').slice(0, 32);
-    case 'measure': {
-      const dp = d.p2.price - d.p1.price;
-      return `Δ ${dp >= 0 ? '+' : ''}${dp.toFixed(2)}`;
-    }
-    case 'fib':
-      return `Fib · ${Math.min(d.p1.price, d.p2.price).toFixed(0)}–${Math.max(d.p1.price, d.p2.price).toFixed(0)}`;
-    case 'trend':
-    case 'ray':
-    case 'extend':
-    case 'arrow':
-      return `${toolLabel(d.kind)} · ${d.p1.price.toFixed(1)}→${d.p2.price.toFixed(1)}`;
-    case 'rect':
-    case 'ellipse':
-      return toolLabel(d.kind);
-    default:
-      return toolLabel((d as Drawing).kind);
-  }
-}
-
-function formatBarTime(t: number): string {
-  if (!Number.isFinite(t)) return '—';
-  // unix seconds vs ms
-  const ms = t > 1e12 ? t : t * 1000;
-  try {
-    return new Date(ms).toISOString().slice(0, 16).replace('T', ' ');
-  } catch {
-    return String(t);
-  }
-}
-
-const Section: Component<{ title: string; children: any }> = (props) => (
-  <div>
-    <div class="text-[0.78em] uppercase tracking-wider text-text-faint font-semibold mb-1 px-0.5">
-      {props.title}
-    </div>
-    <div class="flex flex-col gap-0.5">{props.children}</div>
-  </div>
-);
-
-const Empty: Component<{ children: any }> = (props) => (
-  <div class="axis-empty-state text-[12px] text-text-dim px-1 py-2">{props.children}</div>
-);
-
-/** Compact USD for on-chain last values (e.g. TVL). */
-function formatCompactUsd(n: number): string {
-  if (!Number.isFinite(n)) return '—';
-  const abs = Math.abs(n);
-  if (abs >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
-  if (abs >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
-  if (abs >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
-  if (abs >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
-  return n.toFixed(0);
-}
-
-const LayerRow: Component<{
-  label: string;
-  sub?: string;
-  visible: boolean;
-  locked?: boolean;
-  onToggle: () => void;
-  onSettings?: () => void;
-  onRemove?: () => void;
-  /** Optional root data-testid (e.g. axis-layers-onchain-*). */
-  testId?: string;
-  /** Tooltip for the remove/detach control. */
-  removeTitle?: string;
-}> = (props) => (
-  <div
-    class="axis-list-row flex items-center gap-1.5 h-8 px-1 bg-bg-elev border-b border-border-soft"
-    data-testid={props.testId}
-  >
-    <button
-      type="button"
-      class={`w-5 h-5 text-[0.75em] flex items-center justify-center border flex-shrink-0 rounded ${
-        props.visible
-          ? 'border-accent bg-accent/15 text-accent'
-          : 'border-border bg-bg-hover text-text-dim'
-      } ${props.locked ? 'opacity-50 cursor-not-allowed' : ''}`}
-      disabled={props.locked}
-      title={props.visible ? 'Hide' : 'Show'}
-      onClick={() => !props.locked && props.onToggle()}
-    >
-      {props.visible ? '●' : '○'}
-    </button>
-    <div class="min-w-0 flex-1">
-      <div class="text-text truncate font-medium leading-tight">{props.label}</div>
-      <Show when={props.sub}>
-        <div class="text-[0.78em] text-text-faint font-mono truncate">{props.sub}</div>
-      </Show>
-    </div>
-    <Show when={props.onSettings}>
-      <button
-        type="button"
-        class="sc-btn sc-btn-ghost px-1"
-        title="Script settings"
-        onClick={props.onSettings}
-      >
-        <Icons.settings />
-      </button>
-    </Show>
-    <Show when={props.onRemove}>
-      <button
-        type="button"
-        class="sc-btn sc-btn-ghost px-1 text-text-faint hover:text-red"
-        title={props.removeTitle || 'Remove'}
-        data-testid={
-          props.testId ? `${props.testId}-detach` : undefined
-        }
-        onClick={props.onRemove}
-      >
-        <Icons.x />
-      </button>
-    </Show>
-  </div>
-);
