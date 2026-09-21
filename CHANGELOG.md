@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-21 · 441 commits · describe-tag: `v2.10.0`_
+_Generated/updated: 2026-09-22 · 443 commits · describe-tag: `v2.11.0`_
 
 ---
 
 ## [Unreleased]
+
+## [2.12.0] — 2026-09-22
 
 ### Changed
 
@@ -1279,12 +1281,15 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (122 commits)
+### 2026-09 (124 commits)
 
 #### Features
 
+- `1f46feda` (2026-09-22) — feat(ui): polish script library and layers panels
 - `12b6ab81` (2026-09-19) — feat(plugins): PYNE Agent Persona field (pine/axis/trader)
 - `79f65da6` (2026-09-17) — feat(mcp): drawings control, settings control, session indicator
 - `1d795fb6` (2026-09-17) — feat(settings): unified Worker API key for cloud storage and MCP
@@ -1414,6 +1419,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `6e28ccf6` (2026-09-21) — chore(release): AXIS v2.11.0 — large-history chart, DSM, MCP
 - `1b9357fa` (2026-09-18) — chore(release): AXIS v2.10.0 — toasts, notification settings, MCP activity
 - `b327a28a` (2026-09-10) — chore: stop tracking .grok/ and AGENTS.md (local-only)
 - `28420c09` (2026-09-08) — chore(release): v2.6.1 — sync desktop version stamps + check:versions guard
