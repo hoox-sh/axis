@@ -7,9 +7,10 @@
 //   https://<your-worker>/plugin/axis-pine-agent.js
 //
 // Contract namespace: pynescript.axis.plugins.v1
-// Kind: component (manager-tab + topbar-action). AXIS may still be phase-2
-// for component mounting; this module also attaches a compact launcher when
-// the host does not call mount() (best-effort global bootstrap).
+// Kind: component. Slots: manager-tab, topbar-action, settings-section.
+// The current AXIS host calls init() and does not mount slots. The compact
+// launcher is the live UI; mount() stays for a later host. One file, no
+// imports — the loader's blob fallback cannot resolve sibling modules.
 //
 // Pine Script™ and TradingView® are trademarks of TradingView, Inc.
 // Cloudflare® is a registered trademark of Cloudflare, Inc.
@@ -32,15 +33,41 @@ const MODAL_DEFAULT = {
   minH: 280,
 };
 
+/** Workers AI™ validate retries can run for minutes. Shorter aborts look like failure. */
+const CHAT_TIMEOUT_MS = 180000;
+
+/**
+ * Plugin config. A non-http(s) endpoint becomes "" so the API key is never
+ * sent to a relative or unexpected origin.
+ */
 function cfg(config) {
   const c = config || {};
   return {
-    endpoint: String(c.endpoint || DEFAULT_ENDPOINT).replace(/\/$/, ""),
-    apiKey: String(c.apiKey || c.api_key || ""),
-    pineVersion: String(c.pineVersion || c.pine_version || "auto"),
-    style: String(c.style || "auto"),
-    persona: String(c.persona || "auto"),
+    endpoint: normalizeEndpoint(c.endpoint || DEFAULT_ENDPOINT),
+    apiKey: String(c.apiKey || c.api_key || "").trim(),
+    pineVersion: String(c.pineVersion || c.pine_version || "auto").trim() || "auto",
+    style: String(c.style || "auto").trim() || "auto",
+    persona: String(c.persona || "auto").trim() || "auto",
   };
+}
+
+function normalizeEndpoint(raw) {
+  const s = String(raw || "").trim().replace(/\/+$/, "");
+  if (!s) return "";
+  try {
+    const url = new URL(s);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+    if (!url.host) return "";
+  } catch {
+    return "";
+  }
+  return s;
+}
+
+function explainEndpoint(raw) {
+  const s = String(raw ?? "").trim();
+  if (s && !normalizeEndpoint(s)) return "Endpoint must be an http:// or https:// URL.";
+  return "Set plugin config: endpoint = your pyne-agent-worker HTTPS URL.";
 }
 
 async function agentFetch(endpoint, apiKey, path, init = {}, hostFetch) {
@@ -59,7 +86,7 @@ async function agentFetch(endpoint, apiKey, path, init = {}, hostFetch) {
   return data;
 }
 
-const PLUGIN_UI_VERSION = "0.1.6";
+const PLUGIN_UI_VERSION = "0.1.7";
 
 function injectStyles() {
   const id = "pyne-agent-styles";
@@ -72,8 +99,11 @@ function injectStyles() {
   }
   style.setAttribute("data-v", PLUGIN_UI_VERSION);
   style.textContent = `
-    .pyne-agent-root {
+    .pyne-agent-host {
       display: flex; flex-direction: column; height: 100%; min-height: 0;
+    }
+    .pyne-agent-root {
+      display: flex; flex-direction: column; height: 100%; min-height: 320px;
       font-family: ui-sans-serif, system-ui, sans-serif;
       color: var(--color-text, #e8eaed);
       background: var(--color-bg-panel, #0f1419);
@@ -86,10 +116,12 @@ function injectStyles() {
       padding: 8px 10px; border-bottom: 1px solid var(--color-border-soft, #2a3441);
       display: flex; align-items: center; justify-content: space-between; gap: 8px;
       background: var(--color-bg-elev, #151b23);
-      cursor: grab; user-select: none; flex-shrink: 0;
-      touch-action: none;
+      flex-shrink: 0;
     }
-    .pyne-agent-header:active { cursor: grabbing; }
+    .pyne-agent-header.is-draggable {
+      cursor: grab; user-select: none; touch-action: none;
+    }
+    .pyne-agent-header.is-draggable:active { cursor: grabbing; }
     .pyne-agent-header h3 {
       margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
       color: var(--color-text, #e8eaed);
@@ -99,11 +131,18 @@ function injectStyles() {
       display: inline-flex; align-items: center; gap: 5px;
       color: var(--color-text-dim, #8b98a5); font-size: 10px;
       min-height: 1.2em;
+      max-width: 46%;
+      overflow: hidden;
     }
     .pyne-agent-status.is-thinking {
       color: var(--color-accent, #5b7cfa);
     }
-    .pyne-agent-status-label { line-height: 1; }
+    .pyne-agent-status-label {
+      line-height: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .pyne-agent-status-dots {
       display: none;
       align-items: center;
@@ -260,6 +299,11 @@ function injectStyles() {
       border-color: var(--color-accent, #5b7cfa);
       color: var(--color-accent, #5b7cfa);
     }
+    .pyne-agent-codebox-actions button:focus-visible,
+    .pyne-agent-form button[type="submit"]:focus-visible {
+      outline: none;
+      border-color: var(--color-accent, #5b7cfa);
+    }
     .pyne-agent-codebox-actions button.is-primary {
       background: color-mix(in srgb, var(--color-accent, #5b7cfa) 18%, var(--color-bg-elev, #171821));
       border-color: var(--color-accent, #5b7cfa);
@@ -311,14 +355,15 @@ function injectStyles() {
     }
     .pyne-agent-form button:disabled { opacity: 0.5; cursor: not-allowed; }
     .pyne-agent-legal {
-      font-size: 9px; color: var(--color-text-faint, #6b7785);
+      font-size: 10px; color: var(--color-text-dim, #8b98a5);
       padding: 0 10px 6px; flex-shrink: 0;
+      line-height: 1.35;
     }
 
     /* Compact launcher — theme accent, standard radius, above bottom chrome */
     .pyne-agent-launch {
       position: fixed;
-      z-index: 99998;
+      z-index: 90;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -360,11 +405,11 @@ function injectStyles() {
     /* Floating modal shell (default position — not an AXIS panel) */
     .pyne-agent-float {
       position: fixed;
-      z-index: 99999;
+      z-index: 92;
       display: flex;
       flex-direction: column;
-      min-width: ${MODAL_DEFAULT.minW}px;
-      min-height: ${MODAL_DEFAULT.minH}px;
+      min-width: min(${MODAL_DEFAULT.minW}px, calc(100vw - 16px));
+      min-height: min(${MODAL_DEFAULT.minH}px, calc(100vh - 16px));
       box-sizing: border-box;
     }
     .pyne-agent-float .pyne-agent-root {
@@ -408,7 +453,6 @@ function placeLauncher(btn) {
   const pad = 8;
   const editor =
     document.querySelector('[data-testid="axis-editor"]') ||
-    document.querySelector(".axis-editor-statusbar")?.closest?.('[data-testid="axis-editor"]') ||
     document.querySelector(".axis-editor-statusbar")?.parentElement;
 
   if (editor && editor.getBoundingClientRect) {
@@ -445,14 +489,35 @@ function placeLauncher(btn) {
   btn.style.top = "auto";
 }
 
+function modalMins() {
+  const vw = window.innerWidth || MODAL_DEFAULT.minW;
+  const vh = window.innerHeight || MODAL_DEFAULT.minH;
+  return {
+    minW: Math.min(MODAL_DEFAULT.minW, Math.max(160, vw - 16)),
+    minH: Math.min(MODAL_DEFAULT.minH, Math.max(180, vh - 16)),
+  };
+}
+
+/** Keep a free-floating shell inside the viewport, including after resize. */
+function clampGeo(geo) {
+  const { minW, minH } = modalMins();
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  geo.w = Math.max(minW, Math.min(geo.w, Math.max(minW, vw - 8)));
+  geo.h = Math.max(minH, Math.min(geo.h, Math.max(minH, vh - 8)));
+  geo.x = Math.min(Math.max(0, geo.x), Math.max(0, vw - Math.min(geo.w, vw)));
+  geo.y = Math.min(Math.max(0, geo.y), Math.max(0, vh - Math.min(geo.h, vh)));
+}
+
 /**
  * Default modal position: bottom-right of the editor area (or viewport),
  * above bottom chrome — free float, not a dock panel.
  * @returns {{ x: number, y: number, w: number, h: number }}
  */
 function defaultModalGeometry() {
-  const w = Math.min(MODAL_DEFAULT.w, Math.max(MODAL_DEFAULT.minW, window.innerWidth - 24));
-  const h = Math.min(MODAL_DEFAULT.h, Math.max(MODAL_DEFAULT.minH, window.innerHeight - 80));
+  const { minW, minH } = modalMins();
+  const w = Math.min(MODAL_DEFAULT.w, Math.max(minW, window.innerWidth - 24));
+  const h = Math.min(MODAL_DEFAULT.h, Math.max(minH, window.innerHeight - 80));
   const pad = 12;
 
   const editor = document.querySelector('[data-testid="axis-editor"]');
@@ -468,7 +533,9 @@ function defaultModalGeometry() {
       let y = er.bottom - statusH - h - pad;
       x = Math.min(Math.max(8, x), window.innerWidth - w - 8);
       y = Math.min(Math.max(8, y), window.innerHeight - h - 8);
-      return { x: Math.round(x), y: Math.round(y), w, h };
+      const geo = { x: Math.round(x), y: Math.round(y), w, h };
+      clampGeo(geo);
+      return geo;
     }
   }
 
@@ -478,7 +545,9 @@ function defaultModalGeometry() {
     : 48;
   const x = Math.max(8, window.innerWidth - w - pad);
   const y = Math.max(8, window.innerHeight - h - bottomReserve);
-  return { x: Math.round(x), y: Math.round(y), w, h };
+  const geo = { x: Math.round(x), y: Math.round(y), w, h };
+  clampGeo(geo);
+  return geo;
 }
 
 /**
@@ -510,13 +579,15 @@ function enableFloatChrome(shell, header, resizeEl, geo) {
     if (!drag) return;
     const dx = ev.clientX - drag.sx;
     const dy = ev.clientY - drag.sy;
+    const { minW, minH } = modalMins();
     if (drag.mode === "move") {
       geo.x = Math.max(0, Math.min(window.innerWidth - 48, drag.ox + dx));
       geo.y = Math.max(0, Math.min(window.innerHeight - 40, drag.oy + dy));
     } else {
-      geo.w = Math.max(MODAL_DEFAULT.minW, Math.min(window.innerWidth - geo.x - 8, drag.ow + dx));
-      geo.h = Math.max(MODAL_DEFAULT.minH, Math.min(window.innerHeight - geo.y - 8, drag.oh + dy));
+      geo.w = Math.max(minW, Math.min(window.innerWidth - geo.x - 8, drag.ow + dx));
+      geo.h = Math.max(minH, Math.min(window.innerHeight - geo.y - 8, drag.oh + dy));
     }
+    clampGeo(geo);
     applyGeometry(shell, geo);
   };
 
@@ -619,6 +690,98 @@ function parseReplySegments(text) {
     parts.push({ type: "text", text: raw.trim() });
   }
   return parts;
+}
+
+/** Drop a trailing `_Validation:` / `_Note:` footnote. Underscores are not italics here. */
+function splitValidationNote(text) {
+  const raw = String(text || "");
+  const m = raw.match(/\n+_(?:Validation|Note):\s*([\s\S]*?)_\s*$/i);
+  if (!m) return { text: raw.trim(), note: "" };
+  return {
+    text: raw.slice(0, m.index).trim(),
+    note: String(m[1] || "").replace(/\s*\.$/, "").trim(),
+  };
+}
+
+function stripValidationNotes(text) {
+  return splitValidationNote(text).text;
+}
+
+/**
+ * Status + plain-text validation line for one chat reply.
+ * @param {string} reply
+ * @param {Record<string, unknown> | null | undefined} validation
+ */
+function presentReply(reply, validation) {
+  const split = splitValidationNote(reply);
+  const v = validation && typeof validation === "object" ? validation : null;
+  if (v && v.available && !v.skipped) {
+    if (v.validated) return { text: split.text, status: "validated", detail: "" };
+    const last = v.last && typeof v.last === "object" ? v.last : {};
+    const err = String(last.error || last.reason || split.note || "").trim();
+    const line = err ? `Validation failed: ${err}` : "Validation failed.";
+    const head = err.slice(0, Math.min(48, err.length));
+    const already = Boolean(head) && split.text.includes(head);
+    return {
+      text: already ? split.text : split.text ? `${split.text}\n\n${line}` : line,
+      status: "validation failed",
+      detail: err,
+    };
+  }
+  // Misconfigured backend: the worker appends `_Note: …` and skips validation.
+  if (split.note && !/not configured/i.test(split.note)) {
+    return {
+      text: split.text ? `${split.text}\n\n${split.note}` : split.note,
+      status: "",
+      detail: "",
+    };
+  }
+  return { text: split.text, status: "", detail: "" };
+}
+
+function isNetworkError(e) {
+  if (typeof TypeError !== "undefined" && e instanceof TypeError) return true;
+  const msg = e instanceof Error ? e.message : String(e || "");
+  return /failed to fetch|networkerror|load failed|network request failed/i.test(msg);
+}
+
+/** @param {unknown} e */
+function describeChatError(e) {
+  const msg = e instanceof Error ? e.message : String(e || "");
+  if (/session not found/i.test(msg)) {
+    return {
+      kind: "session",
+      text: "Session expired. Send again to start a new one.",
+      status: "session expired",
+    };
+  }
+  if (isNetworkError(e)) {
+    return {
+      kind: "network",
+      text: "Could not reach the agent worker (check the endpoint and that this origin is allowed).",
+      status: "offline",
+    };
+  }
+  const name = e && typeof e === "object" && "name" in e ? String(e.name) : "";
+  if (name === "AbortError") {
+    return {
+      kind: "timeout",
+      text: "The agent timed out. Try a shorter request.",
+      status: "timed out",
+    };
+  }
+  return { kind: "error", text: msg || "Request failed", status: "error" };
+}
+
+function shortModel(model) {
+  const tail = String(model || "").split("/").filter(Boolean).pop() || String(model || "");
+  return tail.length > 18 ? `${tail.slice(0, 16)}…` : tail;
+}
+
+function deliveryStatus(result) {
+  if (result === "inserted") return "Added to editor";
+  if (result === "opened") return "Opened in a new tab";
+  return String(result || "");
 }
 
 /** Inline `code` + **bold**. */
@@ -750,10 +913,15 @@ function deliverScript(mode, code, api, name) {
     }
   }
 
-  // AXIS host bridge (tabbed editor listens for these)
+  // AXIS host bridge. The editor listens only while its panel is mounted.
   const eventName =
     mode === "insert" ? "axis-agent-insert-script" : "axis-agent-open-script";
   if (typeof window !== "undefined" && typeof CustomEvent === "function") {
+    const editorOpen =
+      typeof document !== "undefined" &&
+      typeof document.querySelector === "function" &&
+      document.querySelector('[data-testid="axis-editor"]');
+    if (!editorOpen) throw new Error("editor closed");
     window.dispatchEvent(
       new CustomEvent(eventName, {
         detail: { code: pine, name: title, source: "pyne-agent" },
@@ -779,10 +947,10 @@ function mountChat(el, api, config, opts = {}) {
   const root = document.createElement("div");
   root.className = "pyne-agent-root";
   root.innerHTML = `
-    <div class="pyne-agent-header" data-header>
+    <div class="pyne-agent-header${opts.floating ? " is-draggable" : ""}" data-header>
       <div>
         <h3>PYNE Agent</h3>
-        <small>Cloudflare® Workers AI™ · AXIS plugin</small>
+        <small>Cloudflare® Workers AI™ · v${PLUGIN_UI_VERSION}</small>
       </div>
       <div class="pyne-agent-header-actions">
         <small class="pyne-agent-status" data-status role="status" aria-live="polite">
@@ -796,10 +964,10 @@ function mountChat(el, api, config, opts = {}) {
         }
       </div>
     </div>
-    <div class="pyne-agent-msgs" data-msgs></div>
+    <div class="pyne-agent-msgs" data-msgs aria-live="polite"></div>
     <form class="pyne-agent-form" data-form>
-      <textarea data-input placeholder="Ask in natural language… e.g. RSI divergence strategy with ATR stops (v6)"></textarea>
-      <button type="submit" data-send>Send</button>
+      <textarea data-input aria-label="Message" placeholder="Ask in natural language… e.g. RSI divergence strategy with ATR stops (v6)"></textarea>
+      <button type="submit" data-send title="Send (Ctrl+Enter)">Send</button>
     </form>
     <div class="pyne-agent-legal">
       Pine Script™ and TradingView® are trademarks of TradingView, Inc.
@@ -826,18 +994,30 @@ function mountChat(el, api, config, opts = {}) {
 
   let sessionId = null;
   let busy = false;
+  let alive = true;
+  /** @type {AbortController | null} */
+  let inflight = null;
+  let copyTimer = 0;
 
-  function setStatus(t) {
+  function setStatus(t, title) {
     if (!status) return;
     const raw = String(t ?? "");
-    // Normalize "thinking…" / "thinking..." → animated thinking state
     const thinking = /^\s*thinking[.…\s]*$/i.test(raw);
     status.classList.toggle("is-thinking", thinking);
     const label = thinking ? "thinking" : raw;
     if (statusLabel) statusLabel.textContent = label;
     else status.textContent = label;
     status.setAttribute("aria-busy", thinking ? "true" : "false");
+    if (title) status.title = String(title);
+    else status.removeAttribute("title");
   }
+
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
+      ev.preventDefault();
+      form.requestSubmit();
+    }
+  });
 
   /**
    * @param {string} code
@@ -880,9 +1060,14 @@ function mountChat(el, api, config, opts = {}) {
       insertBtn.title = "Replace the active editor tab with this script";
       insertBtn.addEventListener("click", () => {
         try {
-          setStatus(deliverScript("insert", code, api));
-        } catch {
-          setStatus("insert failed");
+          if (typeof window.confirm === "function") {
+            const ok = window.confirm("Replace the active editor tab with this script?");
+            if (!ok) return;
+          }
+          setStatus(deliveryStatus(deliverScript("insert", code, api)));
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "";
+          setStatus(msg === "editor closed" ? "Open the editor first" : "insert failed");
         }
       });
       actions.appendChild(insertBtn);
@@ -893,9 +1078,10 @@ function mountChat(el, api, config, opts = {}) {
       openBtn.title = "Open this script in a new editor tab";
       openBtn.addEventListener("click", () => {
         try {
-          setStatus(deliverScript("open", code, api));
-        } catch {
-          setStatus("open failed");
+          setStatus(deliveryStatus(deliverScript("open", code, api)));
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "";
+          setStatus(msg === "editor closed" ? "Open the editor first" : "open failed");
         }
       });
       actions.appendChild(openBtn);
@@ -905,10 +1091,27 @@ function mountChat(el, api, config, opts = {}) {
     copyBtn.type = "button";
     copyBtn.textContent = "Copy";
     copyBtn.addEventListener("click", async () => {
+      const prevLabel = statusLabel?.textContent || "ready";
+      const prevTitle = status?.getAttribute("title") || "";
       try {
         await navigator.clipboard.writeText(code);
         setStatus("copied");
+        if (copyTimer) clearTimeout(copyTimer);
+        copyTimer = window.setTimeout(() => {
+          copyTimer = 0;
+          if (!alive) return;
+          if (statusLabel?.textContent === "copied") setStatus(prevLabel, prevTitle);
+        }, 1600);
       } catch {
+        try {
+          const sel = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(codeEl);
+          sel?.removeAllRanges();
+          sel?.addRange(range);
+        } catch {
+          /* selection is best-effort */
+        }
         setStatus("copy failed");
       }
     });
@@ -928,21 +1131,15 @@ function mountChat(el, api, config, opts = {}) {
       return;
     }
 
-    // Formatted assistant reply: prose + monospace code boxes
     let segments = parseReplySegments(text);
     const pineExtra = msgOpts.pine ? String(msgOpts.pine).trim() : "";
     const hasPineFence = segments.some(
       (s) => s.type === "code" && looksLikePine(s.code, s.lang)
     );
 
-    // If API returned extracted pine but the reply had no fence, attach a box
+    // Extracted pine with no fence in the reply still needs a code box.
     if (pineExtra && !hasPineFence) {
       segments = [...segments, { type: "code", code: pineExtra, lang: "pine" }];
-    }
-
-    // Deduplicate: if fence body matches extracted pine, keep fence only
-    if (pineExtra && hasPineFence) {
-      /* already in segments */
     }
 
     if (!segments.length) {
@@ -975,11 +1172,10 @@ function mountChat(el, api, config, opts = {}) {
     const text = String(input.value || "").trim();
     if (!text) return;
 
+    const merged = { ...(config || {}), ...(api?.getConfig?.() || {}) };
     const live = cfg({ ...(config || {}), ...(api?.getConfig?.() || {}) });
     if (!live.endpoint) {
-      addMsg("assistant", "Set plugin config: endpoint = your pyne-agent-worker HTTPS URL.", {
-        error: true,
-      });
+      addMsg("assistant", explainEndpoint(merged.endpoint), { error: true });
       return;
     }
 
@@ -989,6 +1185,10 @@ function mountChat(el, api, config, opts = {}) {
     addMsg("user", text);
     input.value = "";
 
+    const ac = new AbortController();
+    inflight = ac;
+    const timer = window.setTimeout(() => ac.abort(), CHAT_TIMEOUT_MS);
+
     try {
       const data = await agentFetch(
         live.endpoint,
@@ -996,6 +1196,7 @@ function mountChat(el, api, config, opts = {}) {
         "/v1/chat",
         {
           method: "POST",
+          signal: ac.signal,
           body: JSON.stringify({
             message: text,
             session_id: sessionId || undefined,
@@ -1006,22 +1207,47 @@ function mountChat(el, api, config, opts = {}) {
         },
         api?.host?.fetch
       );
+      if (!alive) return;
       sessionId = data.session_id || sessionId;
-      addMsg("assistant", data.reply || "(empty)", { pine: data.pine || null });
-      setStatus(data.model ? `ok · ${data.model}` : "ok");
+      const presented = presentReply(data.reply || "", data.validation);
+      const pine = data.pine ? String(data.pine) : "";
+      const body = presented.text || (pine ? "" : "(empty)");
+      addMsg("assistant", body, { pine: pine || null });
+      const model = data.model ? String(data.model) : "";
+      const label = presented.status || (model ? `ok · ${shortModel(model)}` : "ok");
+      const title = [model, presented.detail].filter(Boolean).join(" — ");
+      setStatus(label, title);
     } catch (e) {
-      addMsg("assistant", e instanceof Error ? e.message : String(e), { error: true });
-      setStatus("error");
+      if (!alive) return;
+      const info = ac.signal.aborted
+        ? describeChatError(Object.assign(new Error("aborted"), { name: "AbortError" }))
+        : describeChatError(e);
+      if (info.kind === "session") sessionId = null;
+      addMsg("assistant", info.text, { error: true });
+      setStatus(info.status);
     } finally {
+      clearTimeout(timer);
+      if (inflight === ac) inflight = null;
+      if (!alive) return;
       busy = false;
       sendBtn.disabled = false;
     }
   });
 
   return () => {
+    alive = false;
+    if (copyTimer) clearTimeout(copyTimer);
+    inflight?.abort();
     el.innerHTML = "";
   };
 }
+
+/** Active float closer. Opening another dialog must run this, not node.remove(). */
+let closeActiveModal = () => {};
+/** Launcher teardown. A second init must keep this instead of replacing it with a noop. */
+let floatCleanup = () => {};
+/** True after mount(); init must not attach a second launcher on top of a slot. */
+let slotMounted = false;
 
 /**
  * Open a free-floating (non-panel) agent modal at the default position.
@@ -1031,16 +1257,15 @@ function mountChat(el, api, config, opts = {}) {
  * @returns {() => void} dispose / close (idempotent)
  */
 function openFloatingModal(api, config, modalOpts = {}) {
-  const existing = document.getElementById("pyne-agent-float-root");
-  if (existing) {
-    existing.remove();
-  }
+  closeActiveModal();
+  const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
   injectStyles();
   const shell = document.createElement("div");
   shell.className = "pyne-agent-float";
   shell.id = "pyne-agent-float-root";
   shell.setAttribute("role", "dialog");
+  shell.setAttribute("aria-modal", "false");
   shell.setAttribute("aria-label", "PYNE Agent");
 
   const geo = defaultModalGeometry();
@@ -1062,13 +1287,43 @@ function openFloatingModal(api, config, modalOpts = {}) {
   let chromeDispose = () => {};
   let unmount = () => {};
 
+  const onResize = () => {
+    clampGeo(geo);
+    applyGeometry(shell, geo);
+  };
+
   const close = () => {
     if (closed) return;
     closed = true;
+    window.removeEventListener("keydown", onKey);
+    window.removeEventListener("resize", onResize);
+    if (closeActiveModal === close) closeActiveModal = () => {};
     chromeDispose();
     unmount();
     shell.remove();
     modalOpts.onClosed?.();
+    if (opener && opener.isConnected) {
+      try {
+        opener.focus();
+      } catch {
+        /* host may have removed the opener */
+      }
+    }
+  };
+
+  const onKey = (ev) => {
+    if (ev.key !== "Escape") return;
+    const field = host.querySelector("[data-input]");
+    if (
+      field instanceof HTMLTextAreaElement &&
+      document.activeElement === field &&
+      field.value.trim()
+    ) {
+      field.blur();
+      return;
+    }
+    ev.preventDefault();
+    close();
   };
 
   unmount = mountChat(host, api, config, { onClose: close, floating: true });
@@ -1076,14 +1331,19 @@ function openFloatingModal(api, config, modalOpts = {}) {
   if (header) {
     chromeDispose = enableFloatChrome(shell, header, resizeEl, geo);
   }
+  window.addEventListener("keydown", onKey);
+  window.addEventListener("resize", onResize);
+  const field = host.querySelector("[data-input]");
+  if (field instanceof HTMLElement) field.focus();
 
+  closeActiveModal = close;
   return close;
 }
 
 /** Compact launcher above editor bottom bars when AXIS does not mount slots. */
 function bootstrapFloating(api) {
   if (typeof document === "undefined") return () => {};
-  if (document.getElementById("pyne-agent-fab")) return () => {};
+  if (document.getElementById("pyne-agent-fab")) return floatCleanup;
 
   injectStyles();
   const fab = document.createElement("button");
@@ -1092,33 +1352,30 @@ function bootstrapFloating(api) {
   fab.id = "pyne-agent-fab";
   fab.setAttribute("aria-expanded", "false");
   fab.setAttribute("aria-haspopup", "dialog");
+  fab.setAttribute("aria-controls", "pyne-agent-float-root");
   fab.title = "Open PYNE Agent";
   fab.innerHTML = `<span class="pyne-agent-launch-dot" aria-hidden="true"></span><span>Agent</span>`;
   document.body.appendChild(fab);
   placeLauncher(fab);
 
   let closeModal = null;
-  let moTimer = 0;
-
-  const reposition = () => placeLauncher(fab);
-  window.addEventListener("resize", reposition);
-
-  // Re-place when editor dock/layout changes (throttled)
+  /** @type {ResizeObserver | null} */
   let layoutObs = null;
-  if (typeof MutationObserver !== "undefined") {
-    layoutObs = new MutationObserver(() => {
-      if (moTimer) return;
-      moTimer = window.setTimeout(() => {
-        moTimer = 0;
-        reposition();
-      }, 120);
-    });
-    layoutObs.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["style", "class"],
-    });
+  const observed = new WeakSet();
+
+  const reposition = () => {
+    if (!fab.isConnected) return;
+    placeLauncher(fab);
+    const editor = document.querySelector('[data-testid="axis-editor"]');
+    if (editor && layoutObs && !observed.has(editor)) {
+      observed.add(editor);
+      layoutObs.observe(editor);
+    }
+  };
+  window.addEventListener("resize", reposition);
+  if (typeof ResizeObserver !== "undefined") {
+    layoutObs = new ResizeObserver(() => placeLauncher(fab));
+    reposition();
   }
 
   fab.addEventListener("click", () => {
@@ -1126,6 +1383,7 @@ function bootstrapFloating(api) {
       closeModal();
       return;
     }
+    reposition();
     const live = api?.getConfig?.() || {};
     closeModal = openFloatingModal(api || { getConfig: () => live }, live, {
       onClosed: () => {
@@ -1136,20 +1394,25 @@ function bootstrapFloating(api) {
     fab.setAttribute("aria-expanded", "true");
   });
 
-  return () => {
+  let done = false;
+  const cleanup = () => {
+    if (done) return;
+    done = true;
+    if (floatCleanup === cleanup) floatCleanup = () => {};
     if (closeModal) closeModal();
     window.removeEventListener("resize", reposition);
-    if (moTimer) clearTimeout(moTimer);
     layoutObs?.disconnect();
     fab.remove();
   };
+  floatCleanup = cleanup;
+  return cleanup;
 }
 
 const plugin = {
   id: "pyne-agent",
   name: "PYNE Agent",
   kind: "component",
-  version: "0.1.6",
+  version: "0.1.7",
   description:
     "Natural-language PYNE script authoring via Cloudflare® Workers AI™ and a private Vectorize™ knowledge base (v5/v6 docs + open corpus). AXIS sister plugin for HOOX / PYNE.",
   builtIn: false,
@@ -1166,7 +1429,7 @@ const plugin = {
       placeholder: "https://pyne-agent-worker.example.workers.dev",
     },
     apiKey: {
-      type: "string",
+      type: "password",
       default: "",
       label: "API key",
       description: "X-API-Key / Bearer token for the worker",
@@ -1200,6 +1463,8 @@ const plugin = {
    * @param {Record<string, unknown>} api
    */
   mount(slot, el, api) {
+    slotMounted = true;
+    floatCleanup();
     const config = {
       ...(api?.getConfig?.() || {}),
     };
@@ -1221,7 +1486,7 @@ const plugin = {
           closeModal();
           return;
         }
-        closeModal = openFloatingModal(api, api?.getConfig?.() || {}, {
+        closeModal = openFloatingModal(api, api?.getConfig?.() || config, {
           onClosed: () => {
             closeModal = null;
             btn.setAttribute("aria-expanded", "false");
@@ -1241,16 +1506,22 @@ const plugin = {
 
   async init(ctx) {
     const config = ctx?.getConfig?.() || {};
-    // If AXIS never calls mount (component phase 2), still offer a compact launcher.
-    if (typeof document !== "undefined" && !config.disableFloating) {
+    // Host calls init and does not mount slots yet. Skip when a slot is already up.
+    if (typeof document !== "undefined" && !config.disableFloating && !slotMounted) {
       this._floatDispose = bootstrapFloating(ctx);
     }
     ctx?.setStatus?.("PYNE Agent ready", "info");
   },
 
   async dispose() {
+    slotMounted = false;
     try {
       this._floatDispose?.();
+    } catch {
+      /* ignore */
+    }
+    try {
+      closeActiveModal();
     } catch {
       /* ignore */
     }
@@ -1266,4 +1537,9 @@ export {
   looksLikePine,
   scriptNameFromPine,
   deliverScript,
+  cfg,
+  explainEndpoint,
+  presentReply,
+  stripValidationNotes,
+  describeChatError,
 };

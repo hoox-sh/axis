@@ -17,6 +17,7 @@ _Generated/updated: 2026-09-23 · 446 commits · describe-tag: `v2.12.0`_
 
 ### Changed
 
+- **PYNE Agent plugin 0.1.7**: same-origin `/plugins/axis-pine-agent.js` matches pyne-agent-worker. Chat reads the live Workers Manager endpoint, API key, and persona on each send. A non-http(s) endpoint is refused. Closing the panel aborts the request. Validation status is plain text. Add to editor confirms, and says so when the editor panel is closed. The launcher sits under dialogs.
 - **Studio Settings**: General splits chart chrome (appearance, labels, strategy marks, results) from live data, script storage, the Worker key, and MCP. UI scale presets preview until Save; Cancel, Escape, and the studio rail restore the saved scale. Topbar, keyboard, and theme use the same studio controls. Arrow keys move the settings tabs.
 
 ### Fixed
