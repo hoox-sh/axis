@@ -246,7 +246,14 @@ hline(0, "Zero", color=${COL.slate})`,
       `s7 = input.int(7, "Short", minval=1)
 s14 = input.int(14, "Mid", minval=1)
 s28 = input.int(28, "Long", minval=1)
-u = ta.uo(s7, s14, s28)
+// Williams UO: buying pressure / true range, weighted 4:2:1.
+prev = close[1]
+bp = close - math.min(low, prev)
+trRange = math.max(high, prev) - math.min(low, prev)
+aFast = math.sum(bp, s7) / math.sum(trRange, s7)
+aMid = math.sum(bp, s14) / math.sum(trRange, s14)
+aSlow = math.sum(bp, s28) / math.sum(trRange, s28)
+u = 100.0 * (4.0 * aFast + 2.0 * aMid + aSlow) / 7.0
 plot(u, "UO", color=${COL.indigo}, linewidth=2)
 hline(70, "OB", color=${COL.rose}, linestyle=hline.style_dashed)
 hline(30, "OS", color=${COL.emerald}, linestyle=hline.style_dashed)`,
