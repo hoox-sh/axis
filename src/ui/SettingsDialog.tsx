@@ -2114,6 +2114,13 @@ export const EditorIntelPanel: Component = () => {
         title="Editor intelligence"
         lead="Pre-eval, hover cards, completions, underlines, and inline chips. Changes apply immediately."
       >
+        <IntelCheck
+          id="axis-intel-feature-bar"
+          label="Language Feature Bar"
+          hint="Chip row above the editor status strip: hover / signature / complete / lint / marks / chips / remote. Click toggles a feature, long-press opens its settings."
+          checked={store.editorFeatureBarEnabled}
+          onChange={(v) => setEditorFeatureBarEnabled(v)}
+        />
         <div class="ax-toolbar">
           <StudioButton
             variant="ghost"
@@ -2126,18 +2133,6 @@ export const EditorIntelPanel: Component = () => {
       </StudioSection>
 
       <div class="ax-catalog-grid">
-      <StudioSection title="View">
-        <div class="ax-toggle-grid">
-        <IntelCheck
-          id="axis-intel-feature-bar"
-          label="Language Feature Bar"
-          hint="Chip row above the editor status strip: hover / signature / complete / lint / marks / chips / remote. Click toggles a feature, long-press opens its settings."
-          checked={store.editorFeatureBarEnabled}
-          onChange={(v) => setEditorFeatureBarEnabled(v)}
-        />
-        </div>
-      </StudioSection>
-
       <StudioSection title="Pre-eval / lint">
         <div class="ax-toggle-grid">
         <IntelCheck

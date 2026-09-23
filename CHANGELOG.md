@@ -15,6 +15,15 @@ _Generated/updated: 2026-09-23 · 446 commits · describe-tag: `v2.12.0`_
 
 ## [Unreleased]
 
+### Changed
+
+- **Studio Settings**: General splits chart chrome (appearance, labels, strategy marks, results) from live data, script storage, the Worker key, and MCP. UI scale presets preview until Save; Cancel, Escape, and the studio rail restore the saved scale. Topbar, keyboard, and theme use the same studio controls. Arrow keys move the settings tabs.
+
+### Fixed
+
+- **Chart arrows behind Studio**: Left/Right no longer pan the chart while a modal is open, so the settings tab strip receives them.
+- **Script storage label**: the storage select is labeled Storage. It lists storage backends.
+
 ## [2.13.0] — 2026-09-23
 
 ### Added

@@ -27,6 +27,7 @@
 
 import { type Component, For, Show, createMemo, createSignal } from 'solid-js';
 import { store, resetShortcuts, setShortcutOverride } from '../../store';
+import { StudioButton } from '../studio';
 import { DEFAULT_BINDINGS, detectConflicts, getDisplay } from './registry';
 import { detectPlatform } from './keys';
 import { useRecordChord } from './use-record-chord';
@@ -98,19 +99,11 @@ export const KeyboardSettingsPanel: Component = () => {
   };
 
   return (
-    <div class="flex flex-col gap-4" data-testid="axis-settings-keyboard">
-      <div class="flex items-center justify-between gap-3">
-        <div class="sc-hint">
-          Record a chord for any binding. Conflicts are flagged but still saved — resolve them manually.
-        </div>
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost"
-          onClick={() => resetShortcuts()}
-          data-testid="axis-keyboard-reset"
-        >
+    <div class="ax-stack ax-stack--tight">
+      <div class="ax-toolbar">
+        <StudioButton variant="ghost" testId="axis-keyboard-reset" onClick={() => resetShortcuts()}>
           Reset to defaults
-        </button>
+        </StudioButton>
       </div>
 
       {/* biome-ignore lint/a11y/useSemanticElements: custom flex/grid table layout requires divs */}
@@ -166,24 +159,24 @@ export const KeyboardSettingsPanel: Component = () => {
                   <Show
                     when={isRecording()}
                     fallback={
-                      <button
-                        type="button"
-                        class="sc-btn sc-btn-ghost sc-btn-sm"
+                      <StudioButton
+                        variant="ghost"
+                        class="ax-btn--compact"
                         onClick={() => beginRecord(def.id)}
-                        data-testid={`axis-keyboard-record-${def.id}`}
+                        testId={`axis-keyboard-record-${def.id}`}
                       >
                         Record
-                      </button>
+                      </StudioButton>
                     }
                   >
-                    <button
-                      type="button"
-                      class="sc-btn sc-btn-ghost sc-btn-sm"
+                    <StudioButton
+                      variant="ghost"
+                      class="ax-btn--compact"
                       onClick={cancelRecord}
-                      data-testid={`axis-keyboard-cancel-${def.id}`}
+                      testId={`axis-keyboard-cancel-${def.id}`}
                     >
                       Cancel
-                    </button>
+                    </StudioButton>
                   </Show>
                 </span>
               </div>

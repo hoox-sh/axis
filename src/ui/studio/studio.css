@@ -615,6 +615,11 @@
   min-width: var(--ax-control-h);
   padding-inline: 0.7rem;
 }
+.ax-btn--compact {
+  min-height: 2.15rem;
+  padding: 0.28rem 0.75rem;
+  font-size: 0.9rem;
+}
 
 .ax-inline {
   display: flex;
@@ -1997,6 +2002,37 @@ span.ax-json-twist {
 .ax-page .sc-settings-field-hint {
   font-size: var(--ax-hint);
   color: var(--color-text-dim);
+}
+
+/* Settings → Keyboard, hosted in the studio canvas. */
+.ax-page .axis-keyboard-table {
+  border-color: var(--color-border-soft);
+  border-radius: var(--radius-surface);
+  background: var(--color-bg-panel);
+}
+.ax-page .axis-keyboard-head {
+  background: transparent;
+  font-size: var(--ax-kicker);
+  letter-spacing: 0.14em;
+  color: var(--color-text-faint);
+}
+.ax-page .axis-keyboard-row {
+  padding: 0.7rem 0.95rem;
+  gap: 1rem;
+  border-top-color: var(--color-border-soft);
+}
+.ax-page .axis-keyboard-row:hover:not(.axis-keyboard-head) {
+  background: var(--color-bg-hover);
+}
+.ax-page .axis-keyboard-title {
+  font-size: 1rem;
+}
+.ax-page .axis-keyboard-scope {
+  font-size: var(--ax-hint);
+}
+.ax-page .axis-keyboard-chord .sc-kbd {
+  font-size: var(--ax-mono);
+  padding: 0.15rem 0.45rem;
 }
 
 .ax-toggle-grid {

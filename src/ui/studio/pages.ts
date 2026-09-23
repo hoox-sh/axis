@@ -30,7 +30,7 @@ export const STUDIO_PAGES: StudioPageMeta[] = [
     label: 'Settings',
     kicker: 'Settings',
     title: 'Settings',
-    purpose: 'Appearance, chart labels, live prefs, keys, editor intelligence, and theme.',
+    purpose: 'Chart chrome, live data, storage, editor, theme, and notifications.',
     group: 'primary',
     testId: 'axis-settings',
     titleId: 'axis-settings-title',

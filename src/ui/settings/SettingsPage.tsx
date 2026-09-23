@@ -9,13 +9,12 @@
  * @module ui/settings/SettingsPage
  */
 
-import { For, Show, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
+import { For, Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
 import {
   store,
   setStore,
   flushPersist,
   setStatus,
-  setUiScale,
   clampUiScale,
   clampHistoryBars,
   resetUiLayout,
@@ -28,6 +27,7 @@ import {
   applyUiScale,
   toggleOnchainPanel,
 } from '../../store';
+import type { TopbarSettings } from '../../store/types';
 import { Icons } from '../icons';
 import { HooxLoader } from '../HooxLoader';
 import {
@@ -61,6 +61,7 @@ import {
   onMcpBridge,
   rotateMcpBridge,
   saveMcpPrefs,
+  type McpBridgeState,
 } from '../../mcp';
 import type { SettingsTabId } from '../studio/types';
 import { isSettingsTabId } from '../studio/types';
@@ -73,19 +74,174 @@ import {
   StudioInput,
   StudioSection,
   StudioSelect,
+  StudioStatus,
   StudioTabs,
   StudioToggle,
+  type StudioHealth,
 } from '../studio';
 
 const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
-  { id: 'general', label: 'General', hint: 'Density · chart · live' },
+  { id: 'general', label: 'General', hint: 'Chart chrome · live · storage' },
   { id: 'data', label: 'Data', hint: 'Exchange keys · provider' },
   { id: 'editor', label: 'Editor', hint: 'Lint · hover · complete' },
   { id: 'theme', label: 'Theme', hint: 'Bars · canvas · chart.bg_color' },
-  { id: 'topbar', label: 'Topbar', hint: 'Show/hide topbar buttons' },
+  { id: 'topbar', label: 'Topbar', hint: 'Show or hide topbar groups' },
   { id: 'keyboard', label: 'Keyboard', hint: 'Shortcut chords · conflicts' },
   { id: 'notifications', label: 'Notifications', hint: 'Toasts · categories · flood control' },
 ];
+
+/** Tabs that write as you edit. General is the only tab with Save / Cancel. */
+const LIVE_TABS = new Set<SettingsTabId>([
+  'data',
+  'editor',
+  'theme',
+  'topbar',
+  'keyboard',
+  'notifications',
+]);
+
+type ProbeTone = 'ok' | 'err' | 'info';
+
+type TopbarToggle = {
+  key: keyof TopbarSettings;
+  id: string;
+  label: string;
+  hint: string;
+};
+
+const TOPBAR_GROUPS: TopbarToggle[] = [
+  { key: 'brand', id: 'topbar-brand', label: 'Brand', hint: 'AXIS wordmark.' },
+  {
+    key: 'market',
+    id: 'topbar-market',
+    label: 'Market',
+    hint: 'Symbol, interval, chart type, and compare.',
+  },
+  {
+    key: 'data',
+    id: 'topbar-data',
+    label: 'Data',
+    hint: 'Venue, plugin config, Load, and Reload.',
+  },
+  {
+    key: 'compute',
+    id: 'topbar-compute',
+    label: 'Compute',
+    hint: 'Engine, stream, Run, Live, and Replay.',
+  },
+  { key: 'layout', id: 'topbar-layout', label: 'Layout', hint: 'Chart layout menu.' },
+  {
+    key: 'panels',
+    id: 'topbar-panels',
+    label: 'Panels',
+    hint: 'Panel buttons. Turn individual buttons on below.',
+  },
+  {
+    key: 'system',
+    id: 'topbar-system',
+    label: 'System',
+    hint: 'Fullscreen, chart-only, Studio, and theme.',
+  },
+];
+
+const TOPBAR_PANELS: TopbarToggle[] = [
+  { key: 'panelsWatchlist', id: 'topbar-panels-watchlist', label: 'Watchlist', hint: 'Symbol list.' },
+  { key: 'panelsEditor', id: 'topbar-panels-editor', label: 'Editor', hint: 'Pine editor dock.' },
+  { key: 'panelsLibrary', id: 'topbar-panels-library', label: 'Library', hint: 'Script library.' },
+  { key: 'panelsScripts', id: 'topbar-panels-scripts', label: 'Scripts', hint: 'Running scripts.' },
+  { key: 'panelsLayers', id: 'topbar-panels-layers', label: 'Layers', hint: 'Drawings and plots.' },
+  { key: 'panelsDsm', id: 'topbar-panels-dsm', label: 'DSM', hint: 'Data Source Manager.' },
+  { key: 'panelsOnchain', id: 'topbar-panels-onchain', label: 'On-Chain', hint: 'Protocol metrics.' },
+  { key: 'panelsAlerts', id: 'topbar-panels-alerts', label: 'Alerts', hint: 'Price and script alerts.' },
+  { key: 'panelsValues', id: 'topbar-panels-values', label: 'Values', hint: 'Data window.' },
+  { key: 'panelsResults', id: 'topbar-panels-results', label: 'Results', hint: 'Strategy results.' },
+  {
+    key: 'panelsSystemLogs',
+    id: 'topbar-panels-systemlogs',
+    label: 'System Logs',
+    hint: 'Boot, data, and engine log.',
+  },
+  { key: 'panelsStatus', id: 'topbar-panels-status', label: 'Status', hint: 'Connection status strip.' },
+];
+
+function settingsFooterStatus(tab: SettingsTabId, scaleLabel: string): string {
+  switch (tab) {
+    case 'theme':
+      return 'Theme applies live · Save not required';
+    case 'editor':
+      return 'Editor intel applies live · Save not required';
+    case 'topbar':
+      return 'Topbar applies live · Save not required';
+    case 'keyboard':
+      return 'Shortcuts apply live · Save not required';
+    case 'notifications':
+      return 'Notifications apply live · Save not required';
+    case 'data':
+      return 'Exchange keys stay in this session · not written to disk';
+    default:
+      return `AXIS · scale ${scaleLabel}`;
+  }
+}
+
+function bridgeHealth(status: McpBridgeState['status']): StudioHealth {
+  switch (status) {
+    case 'open':
+      return 'healthy';
+    case 'connecting':
+      return 'degraded';
+    case 'error':
+      return 'down';
+    default:
+      return 'idle';
+  }
+}
+
+function bridgeDetail(b: McpBridgeState, hasKey: boolean): string {
+  const parts: string[] = [];
+  if (b.session) parts.push(`session ${b.session.slice(0, 8)}…`);
+  if (b.tabs != null) parts.push(`${b.tabs} tab${b.tabs === 1 ? '' : 's'}`);
+  if (b.error) parts.push(b.error);
+  if (!hasKey) parts.push('set a Worker API key in the section above');
+  return parts.join(' · ');
+}
+
+function SettingsTabPanel(props: {
+  id: SettingsTabId;
+  active: SettingsTabId;
+  children: JSX.Element;
+}) {
+  return (
+    <Show when={props.active === props.id}>
+      <div
+        id={`axis-settings-panel-${props.id}`}
+        role="tabpanel"
+        aria-labelledby={`axis-settings-tab-${props.id}`}
+        data-testid={`axis-settings-${props.id}`}
+      >
+        {props.children}
+      </div>
+    </Show>
+  );
+}
+
+function TopbarToggleGrid(props: { items: TopbarToggle[]; columns?: 2 | 3 }) {
+  return (
+    <div class={props.columns === 3 ? 'ax-toggle-grid ax-toggle-grid--3' : 'ax-toggle-grid'}>
+      <For each={props.items}>
+        {(item) => (
+          <StudioToggle
+            id={item.id}
+            testId={item.id}
+            checked={!!store.topbar[item.key]}
+            label={item.label}
+            hint={item.hint}
+            onChange={(v) => setStore('topbar', item.key, v)}
+          />
+        )}
+      </For>
+    </div>
+  );
+}
 
 export function SettingsPage(props: {
   onClose: () => void;
@@ -131,6 +287,7 @@ export function SettingsPage(props: {
   const [cloudEndpoint, setCloudEndpoint] = createSignal(resolveCloudConfig().endpoint);
   const [cloudApiKey, setCloudApiKey] = createSignal(resolveCloudConfig().apiKey);
   const [cloudProbeMsg, setCloudProbeMsg] = createSignal('');
+  const [cloudProbeTone, setCloudProbeTone] = createSignal<ProbeTone | ''>('');
   const [cloudProbing, setCloudProbing] = createSignal(false);
   const [reloading, setReloading] = createSignal(false);
   const storages = () => listStorages();
@@ -139,39 +296,11 @@ export function SettingsPage(props: {
   );
 
   const unsubMcp = onMcpBridge((s) => setMcpBridge(s));
-  onCleanup(() => unsubMcp());
-
-  createEffect((was?: boolean) => {
-    const open = true;
-    if (open && !was) {
-      untrack(() => {
-        setChartInterval(store.interval);
-        setHistoryBars(clampHistoryBars(store.historyBars ?? HISTORY_BARS_DEFAULT));
-        setRefreshSec(store.watchlist.refreshSec || 15);
-        setPreferAfterLoad(!!store.live.preferAfterLoad);
-        setRerunOn(store.live.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick');
-        setHudCompact(!!store.telemetry?.hud?.compact);
-        setShareOnError(!!store.telemetry?.shareOnError);
-        setUiScaleLocal(clampUiScale(store.uiScale ?? 1));
-        setPriceScaleLabels(store.priceScaleLabelsVisible !== false);
-        setLastValueLabels(store.lastValueLabelsVisible !== false);
-        setLastValueNames(store.lastValueNamesVisible !== false);
-        setSlippageNextOpen(!!store.strategyUi?.slippageNextOpen);
-        setInvertTradeLabels(!!store.strategyUi?.invertTradeLabels);
-        setExactOnCandle(store.strategyUi?.exactOnCandle !== false);
-        setResultsAutoOpen(store.resultsAutoOpen !== false);
-        setAutoload(store.autoload !== false);
-        setMcpConnect(loadMcpPrefs().connect);
-        setMcpBridge(mcpBridgeState());
-        setStorage(store.activePlugins?.storage || 'local');
-        const cloud = resolveCloudConfig();
-        setCloudEndpoint(cloud.endpoint);
-        setCloudApiKey(cloud.apiKey);
-        setCloudProbeMsg('');
-        setTab(isSettingsTabId(props.initialTab) ? props.initialTab : 'general');
-      });
-    }
-    return open;
+  // Scale is a live preview. Leaving the page (Cancel, Escape, rail) puts
+  // the document back on the saved value. Save writes the store first.
+  onCleanup(() => {
+    unsubMcp();
+    applyUiScale(store.uiScale);
   });
 
   createEffect(() => {
@@ -274,20 +403,7 @@ export function SettingsPage(props: {
     });
   };
 
-  const footerStatus =
-    tab() === 'theme'
-      ? 'Theme applies live · Save not required'
-      : tab() === 'editor'
-        ? 'Editor intel applies live · Save not required'
-        : tab() === 'topbar'
-          ? 'Topbar applies live · Save not required'
-          : tab() === 'keyboard'
-            ? 'Shortcuts apply live · Save not required'
-            : tab() === 'notifications'
-              ? 'Notifications apply live · Save not required'
-              : tab() === 'data'
-            ? 'Keys stay in this session · not written to disk'
-            : `AXIS · scale ${formatUiScalePct(uiScale())}`;
+  const footerStatus = () => settingsFooterStatus(tab(), formatUiScalePct(uiScale()));
 
   return (
     <div class="ax-page-stack">
@@ -300,13 +416,7 @@ export function SettingsPage(props: {
         testId="axis-settings-tabs"
       />
       <div class="ax-page-canvas">
-        <Show when={tab() === 'general'}>
-          <div
-            id="axis-settings-panel-general"
-            role="tabpanel"
-            aria-labelledby="axis-settings-tab-general"
-            data-testid="axis-settings-general"
-          >
+        <SettingsTabPanel id="general" active={tab()}>
             <div class="ax-split">
             <div class="ax-split-col">
             <StudioSection title="Appearance" testId="axis-ui-scale-field">
@@ -339,10 +449,7 @@ export function SettingsPage(props: {
                       <StudioChip
                         pressed={Math.abs(uiScale() - p.value) < 0.01}
                         title={p.hint}
-                        onClick={() => {
-                          previewScale(p.value);
-                          setUiScale(p.value);
-                        }}
+                        onClick={() => previewScale(p.value)}
                       >
                         {p.label}
                       </StudioChip>
@@ -419,35 +526,6 @@ export function SettingsPage(props: {
             </StudioSection>
 
             <StudioSection
-              title="Workspace"
-              lead="Chart reload refetches OHLCV. UI reset restores panel layout and density only. Engine and endpoint live on Runtime."
-              testId="axis-settings-workspace"
-            >
-              <div class="ax-chip-row">
-                <StudioButton
-                  variant="ghost"
-                  testId="axis-settings-reload-chart"
-                  disabled={reloading()}
-                  onClick={() => void onReloadChart()}
-                >
-                  {reloading() ? <HooxLoader size="xs" /> : <Icons.refresh />}
-                  {reloading() ? 'Reloading…' : 'Reload chart'}
-                </StudioButton>
-                <StudioButton
-                  variant="ghost"
-                  testId="axis-settings-reset-ui"
-                  onClick={onResetUi}
-                >
-                  <Icons.reset />
-                  Reset UI layout
-                </StudioButton>
-                <WorkspaceSnapshotMenu />
-              </div>
-            </StudioSection>
-            </div>
-
-            <div class="ax-split-col">
-            <StudioSection
               title="Strategy fills & marks"
               lead="Historical and live default: execute on signal bar close. Marker options also live on Results → Strategy."
             >
@@ -478,37 +556,6 @@ export function SettingsPage(props: {
             </StudioSection>
 
             <StudioSection
-              title="MCP"
-              lead="Remote agents (Claude, Cursor, Grok, Inspector) control this tab through the Worker MCP server at POST /mcp. Requires the Worker API key below (Worker — cloud + MCP)."
-            >
-              <StudioToggle
-                id="axis-mcp-connect"
-                testId="axis-settings-mcp-connect"
-                checked={mcpConnect()}
-                onChange={(v) => {
-                  setMcpConnect(v);
-                  saveMcpPrefs({ connect: v });
-                  if (v) void connectMcpBridge();
-                  else disconnectMcpBridge();
-                }}
-                label="Connect this tab to MCP"
-                hint="When on, this browser session answers app_invoke / app_get / app_set. Worker-only tools (axis_run, scripts, onchain) work without a tab."
-              />
-              <StudioHint>
-                {(() => {
-                  const b = mcpBridge();
-                  const session = b.session ? ` · session ${b.session.slice(0, 8)}…` : '';
-                  const tabs = b.tabs != null ? ` · ${b.tabs} tab${b.tabs === 1 ? '' : 's'}` : '';
-                  const err = b.error ? ` · ${b.error}` : '';
-                  const keyHint = cloudApiKey()
-                    ? ''
-                    : ' · set a Worker API key below (Worker — cloud + MCP) so the socket can authenticate.';
-                  return `Bridge: ${b.status}${session}${tabs}${err}${keyHint}`;
-                })()}
-              </StudioHint>
-            </StudioSection>
-
-            <StudioSection
               title="Results"
               lead="The fullscreen Results overlay opens from the Topbar, command palette, or a script card. Strategies can open it automatically on run."
             >
@@ -522,6 +569,35 @@ export function SettingsPage(props: {
               />
             </StudioSection>
 
+            <StudioSection
+              title="Workspace"
+              lead="Chart reload refetches OHLCV. UI reset restores panel layout and density only. Engine and endpoint live on Runtime."
+              testId="axis-settings-workspace"
+            >
+              <div class="ax-toolbar">
+                <StudioButton
+                  variant="ghost"
+                  testId="axis-settings-reload-chart"
+                  disabled={reloading()}
+                  onClick={() => void onReloadChart()}
+                >
+                  {reloading() ? <HooxLoader size="xs" /> : <Icons.refresh />}
+                  {reloading() ? 'Reloading…' : 'Reload chart'}
+                </StudioButton>
+                <StudioButton
+                  variant="ghost"
+                  testId="axis-settings-reset-ui"
+                  onClick={onResetUi}
+                >
+                  <Icons.reset />
+                  Reset UI layout
+                </StudioButton>
+                <WorkspaceSnapshotMenu />
+              </div>
+            </StudioSection>
+            </div>
+
+            <div class="ax-split-col">
             <StudioSection title="Live stream">
               <StudioToggle
                 id="axis-prefer-live"
@@ -583,9 +659,9 @@ export function SettingsPage(props: {
               testId="axis-settings-storage"
             >
               <StudioField
-                label="Engine"
+                label="Storage"
                 for="axis-studio-storage"
-                hint="Pick cloud to persist scripts on the Worker. The Worker URL + API key below is shared with MCP. Git credentials stay in Script Library."
+                hint="Pick cloud to keep scripts on the Worker. The URL and API key below are shared with MCP. Git credentials stay in Script Library."
               >
                 <StudioSelect
                   id="axis-studio-storage"
@@ -624,7 +700,7 @@ export function SettingsPage(props: {
               <StudioField
                 label="Worker API key"
                 for="axis-studio-cloud-apikey"
-                hint="pn_… from /api/keys (admin) or Generate demo key for local wrangler with ALLOW_OPEN_KEYS=1. Same key for cloud storage and MCP."
+                hint="pn_… from /api/keys (admin), or Generate demo key for local wrangler with ALLOW_OPEN_KEYS=1. Saved in this browser as you type."
               >
                 <StudioInput
                   id="axis-studio-cloud-apikey"
@@ -643,7 +719,7 @@ export function SettingsPage(props: {
                   }}
                 />
               </StudioField>
-              <div class="flex flex-wrap gap-1.5">
+              <div class="ax-toolbar">
                 <StudioButton
                   variant="ghost"
                   testId="axis-studio-cloud-generate"
@@ -651,6 +727,7 @@ export function SettingsPage(props: {
                     const key = generateDemoApiKey();
                     setCloudApiKey(key);
                     writeStoredCloudConfig(cloudEndpoint(), key);
+                    setCloudProbeTone('info');
                     setCloudProbeMsg('Generated a local key. Save, then Test connection.');
                     rotateMcpBridge({ immediate: true });
                   }}
@@ -665,11 +742,13 @@ export function SettingsPage(props: {
                     writeStoredCloudConfig(cloudEndpoint(), cloudApiKey());
                     setCloudProbing(true);
                     setCloudProbeMsg('');
+                    setCloudProbeTone('');
                     void probeCloudStorage({
                       endpoint: cloudEndpoint(),
                       apiKey: cloudApiKey(),
                     }).then((r) => {
-                      setCloudProbeMsg(r.ok ? `✓ ${r.message}` : r.message);
+                      setCloudProbeTone(r.ok ? 'ok' : 'err');
+                      setCloudProbeMsg(r.message);
                       setCloudProbing(false);
                       if (r.ok) rotateMcpBridge({ immediate: true });
                     });
@@ -679,9 +758,47 @@ export function SettingsPage(props: {
                 </StudioButton>
               </div>
               <Show when={cloudProbeMsg()}>
-                <StudioHint class={cloudProbeMsg().startsWith('✓') ? '' : ''}>
+                <p
+                  class={
+                    cloudProbeTone() === 'ok'
+                      ? 'ax-hint ax-hint--accent'
+                      : cloudProbeTone() === 'err'
+                        ? 'ax-error'
+                        : 'ax-hint'
+                  }
+                  role="status"
+                  data-testid="axis-studio-cloud-probe-msg"
+                >
                   {cloudProbeMsg()}
-                </StudioHint>
+                </p>
+              </Show>
+            </StudioSection>
+
+            <StudioSection
+              title="MCP"
+              lead="Remote agents (Claude, Cursor, Grok, Inspector) control this tab through the Worker MCP server at POST /mcp. Uses the Worker API key in the section above."
+            >
+              <StudioToggle
+                id="axis-mcp-connect"
+                testId="axis-settings-mcp-connect"
+                checked={mcpConnect()}
+                onChange={(v) => {
+                  setMcpConnect(v);
+                  saveMcpPrefs({ connect: v });
+                  if (v) void connectMcpBridge();
+                  else disconnectMcpBridge();
+                }}
+                label="Connect this tab to MCP"
+                hint="When on, this browser session answers app_invoke / app_get / app_set. Worker-only tools (axis_run, scripts, onchain) work without a tab."
+              />
+              <div class="ax-inline">
+                <StudioStatus
+                  status={bridgeHealth(mcpBridge().status)}
+                  label={`Bridge ${mcpBridge().status}`}
+                />
+              </div>
+              <Show when={bridgeDetail(mcpBridge(), !!cloudApiKey())}>
+                <StudioHint>{bridgeDetail(mcpBridge(), !!cloudApiKey())}</StudioHint>
               </Show>
             </StudioSection>
 
@@ -697,29 +814,24 @@ export function SettingsPage(props: {
                 {' · '}
                 local <code>http://127.0.0.1:8787</code>
               </StudioHint>
-              <StudioButton
-                variant="ghost"
-                testId="axis-settings-open-onchain"
-                onClick={() => {
-                  toggleOnchainPanel();
-                  props.onClose();
-                }}
-              >
-                Open On-Chain panel
-              </StudioButton>
+              <div class="ax-toolbar">
+                <StudioButton
+                  variant="ghost"
+                  testId="axis-settings-open-onchain"
+                  onClick={() => {
+                    toggleOnchainPanel();
+                    props.onClose();
+                  }}
+                >
+                  Open On-Chain panel
+                </StudioButton>
+              </div>
             </StudioSection>
             </div>
             </div>
-          </div>
-        </Show>
+        </SettingsTabPanel>
 
-        <Show when={tab() === 'data'}>
-          <div
-            id="axis-settings-panel-data"
-            role="tabpanel"
-            aria-labelledby="axis-settings-tab-data"
-            data-testid="axis-settings-data"
-          >
+        <SettingsTabPanel id="data" active={tab()}>
             <div class="ax-split">
               <StudioSection
                 title="Source & stream plugins"
@@ -730,206 +842,51 @@ export function SettingsPage(props: {
               </StudioSection>
               <ExchangeCredentialsPanel />
             </div>
-          </div>
-        </Show>
+        </SettingsTabPanel>
 
-        <Show when={tab() === 'editor'}>
-          <div
-            id="axis-settings-panel-editor"
-            role="tabpanel"
-            aria-labelledby="axis-settings-tab-editor"
-            data-testid="axis-settings-editor"
-          >
+        <SettingsTabPanel id="editor" active={tab()}>
             <EditorIntelPanel />
-          </div>
-        </Show>
+        </SettingsTabPanel>
 
-        <Show when={tab() === 'theme'}>
-          <div
-            id="axis-settings-panel-theme"
-            role="tabpanel"
-            aria-labelledby="axis-settings-tab-theme"
-            data-testid="axis-settings-theme"
-          >
-            <StudioSection
-              title="Chart theme"
-              lead="Presets and per-group colors. Pine host: chart.bg_color / chart.fg_color. Changes apply live."
-            >
-              <ThemePanel />
-            </StudioSection>
-          </div>
-        </Show>
+        <SettingsTabPanel id="theme" active={tab()}>
+            <ThemePanel />
+        </SettingsTabPanel>
 
-        <Show when={tab() === 'topbar'}>
-          <div
-            id="axis-settings-panel-topbar"
-            role="tabpanel"
-            aria-labelledby="axis-settings-tab-topbar"
-            data-testid="axis-settings-topbar"
-          >
-            <div class="ax-split">
-            <StudioSection
-              title="Topbar groups"
-              lead="Control which topbar groups are shown. Changes apply immediately and are persisted."
-            >
-              <div class="ax-toggle-grid">
-              <StudioToggle
-                id="topbar-brand"
-                checked={store.topbar.brand}
-                label="Show brand"
-                onChange={(v) => setStore('topbar', 'brand', v)}
-              />
-              <StudioToggle
-                id="topbar-market"
-                checked={store.topbar.market}
-                label="Show market (symbol, interval, chart type, compare)"
-                onChange={(v) => setStore('topbar', 'market', v)}
-              />
-              <StudioToggle
-                id="topbar-data"
-                checked={store.topbar.data}
-                label="Show data (venue, plugin config, load, reload)"
-                onChange={(v) => setStore('topbar', 'data', v)}
-              />
-              <StudioToggle
-                id="topbar-compute"
-                checked={store.topbar.compute}
-                label="Show compute (engine, stream, run, live, replay)"
-                onChange={(v) => setStore('topbar', 'compute', v)}
-              />
-              <StudioToggle
-                id="topbar-layout"
-                checked={store.topbar.layout}
-                label="Show layout menu"
-                onChange={(v) => setStore('topbar', 'layout', v)}
-              />
-              <StudioToggle
-                id="topbar-panels"
-                checked={store.topbar.panels}
-                label="Show panels group"
-                onChange={(v) => setStore('topbar', 'panels', v)}
-              />
-              <StudioToggle
-                id="topbar-system"
-                checked={store.topbar.system}
-                label="Show system (fullscreen, chart-only, studio, theme)"
-                onChange={(v) => setStore('topbar', 'system', v)}
-              />
-              </div>
-            </StudioSection>
-
-            <Show when={store.topbar.panels}>
-              <StudioSection title="Panel buttons" lead="Individual panel toggle buttons.">
-                <div class="ax-toggle-grid">
-                <StudioToggle
-                  id="topbar-panels-watchlist"
-                  checked={store.topbar.panelsWatchlist}
-                  label="Watchlist"
-                  onChange={(v) => setStore('topbar', 'panelsWatchlist', v)}
-                />
-                <StudioToggle
-                  id="topbar-panels-editor"
-                  checked={store.topbar.panelsEditor}
-                  label="Editor"
-                  onChange={(v) => setStore('topbar', 'panelsEditor', v)}
-                />
-                <StudioToggle
-                  id="topbar-panels-library"
-                  checked={store.topbar.panelsLibrary}
-                  label="Library"
-                  onChange={(v) => setStore('topbar', 'panelsLibrary', v)}
-                />
-                <StudioToggle
-                  id="topbar-panels-scripts"
-                  checked={store.topbar.panelsScripts}
-                  label="Scripts"
-                  onChange={(v) => setStore('topbar', 'panelsScripts', v)}
-                />
-                <StudioToggle
-                  id="topbar-panels-layers"
-                  checked={store.topbar.panelsLayers}
-                  label="Layers"
-                  onChange={(v) => setStore('topbar', 'panelsLayers', v)}
-                />
-                <StudioToggle
-                  id="topbar-panels-dsm"
-                  checked={store.topbar.panelsDsm}
-                  label="DSM"
-                  onChange={(v) => setStore('topbar', 'panelsDsm', v)}
-                />
-                <StudioToggle
-                  id="topbar-panels-onchain"
-                  checked={store.topbar.panelsOnchain}
-                  label="On-Chain"
-                  onChange={(v) => setStore('topbar', 'panelsOnchain', v)}
-                />
-                <StudioToggle
-                  id="topbar-panels-alerts"
-                  checked={store.topbar.panelsAlerts}
-                  label="Alerts"
-                  onChange={(v) => setStore('topbar', 'panelsAlerts', v)}
-                />
-                <StudioToggle
-                  id="topbar-panels-values"
-                  checked={store.topbar.panelsValues}
-                  label="Values"
-                  onChange={(v) => setStore('topbar', 'panelsValues', v)}
-                />
-                <StudioToggle
-                  id="topbar-panels-results"
-                  checked={store.topbar.panelsResults}
-                  label="Results"
-                  onChange={(v) => setStore('topbar', 'panelsResults', v)}
-                />
-                <StudioToggle
-                  id="topbar-panels-systemlogs"
-                  checked={store.topbar.panelsSystemLogs}
-                  label="System Logs"
-                  onChange={(v) => setStore('topbar', 'panelsSystemLogs', v)}
-                />
-                <StudioToggle
-                  id="topbar-panels-status"
-                  checked={store.topbar.panelsStatus}
-                  label="Status"
-                  onChange={(v) => setStore('topbar', 'panelsStatus', v)}
-                />
-                </div>
+        <SettingsTabPanel id="topbar" active={tab()}>
+            <div class="ax-split-col">
+              <StudioSection
+                title="Topbar groups"
+                lead="Choose which groups stay in the top bar. Changes apply immediately."
+              >
+                <TopbarToggleGrid items={TOPBAR_GROUPS} />
               </StudioSection>
-            </Show>
+              <Show when={store.topbar.panels}>
+                <StudioSection
+                  title="Panel buttons"
+                  lead="Buttons inside the Panels group. Hidden when that group is off."
+                >
+                  <TopbarToggleGrid items={TOPBAR_PANELS} columns={3} />
+                </StudioSection>
+              </Show>
             </div>
-          </div>
-        </Show>
+        </SettingsTabPanel>
 
-        <Show when={tab() === 'keyboard'}>
-          <div
-            id="axis-settings-panel-keyboard"
-            role="tabpanel"
-            aria-labelledby="axis-settings-tab-keyboard"
-            data-testid="axis-settings-keyboard"
-          >
+        <SettingsTabPanel id="keyboard" active={tab()}>
             <StudioSection
               title="Keyboard shortcuts"
-              lead="Record a chord for any binding. Conflicts are flagged but still saved — resolve them manually."
+              lead="Record a chord for any binding. Same-scope conflicts are flagged and still saved."
             >
               <KeyboardSettingsPanel />
             </StudioSection>
-          </div>
-        </Show>
+        </SettingsTabPanel>
 
-        <Show when={tab() === 'notifications'}>
-          <div
-            id="axis-settings-panel-notifications"
-            role="tabpanel"
-            aria-labelledby="axis-settings-tab-notifications"
-            data-testid="axis-settings-notifications"
-          >
+        <SettingsTabPanel id="notifications" active={tab()}>
             <NotificationsPanel />
-          </div>
-        </Show>
+        </SettingsTabPanel>
       </div>
-      <StudioFooter status={footerStatus}>
+      <StudioFooter status={footerStatus()}>
         <StudioButton variant="ghost" onClick={closeWithoutSave}>
-          {tab() === 'theme' || tab() === 'editor' || tab() === 'data' || tab() === 'topbar' || tab() === 'keyboard' || tab() === 'notifications' ? 'Close' : 'Cancel'}
+          {LIVE_TABS.has(tab()) ? 'Close' : 'Cancel'}
         </StudioButton>
         <Show when={tab() === 'general'}>
           <StudioButton variant="primary" onClick={save}>

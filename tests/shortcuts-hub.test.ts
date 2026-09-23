@@ -139,6 +139,28 @@ describe('ShortcutHub dispatch', () => {
     expect(calls).toBe(1);
   });
 
+  it('skips chart pan while a modal dialog is open', () => {
+    let calls = 0;
+    cleanups.push(registerShortcut('chart.pan-right', () => {
+      calls++;
+    }));
+    const open = dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'ArrowRight' }));
+    expect(calls).toBe(1);
+    expect(open).toBe(true);
+
+    calls = 0;
+    const origQuery = document.querySelector.bind(document);
+    document.querySelector = ((sel: string) =>
+      sel.includes('[role="dialog"]') ? ({} as Element) : origQuery(sel)) as typeof document.querySelector;
+    try {
+      const consumed = dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'ArrowRight' }));
+      expect(calls).toBe(0);
+      expect(consumed).toBe(false);
+    } finally {
+      document.querySelector = origQuery;
+    }
+  });
+
   it('skips app.escape when a modal dialog is open', () => {
     let calls = 0;
     cleanups.push(registerShortcut('app.escape', () => {

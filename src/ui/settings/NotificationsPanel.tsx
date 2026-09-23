@@ -93,7 +93,6 @@ export const NotificationsPanel: Component = () => {
       <StudioSection
         title="Toasts"
         lead="Transient bottom-right notices. Every toast is also written to System Logs; warn/error log entries raise a toast automatically."
-        testId="axis-settings-notifications"
       >
         <StudioToggle
           id="axis-notify-enabled"
