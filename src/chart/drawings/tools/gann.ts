@@ -10,6 +10,7 @@
 
 import type { Drawing, Point, TwoPointDrawing } from '../../drawing-types';
 import { distToSegment, extendSegment, nearRectEdge } from '../geometry';
+import { resolveLevelPaint } from '../level-palette';
 import { registerToolHandler, type ToolHitCtx, type ToolViewCtx } from './registry';
 import {
   clampOpacity,
@@ -108,12 +109,13 @@ registerToolHandler({
     const rays = fanRaySegments(a, b, ctx.width, ctx.height);
     for (const r of rays) {
       const is11 = r.label === '1x1';
+      const color = resolveLevelPaint(t, r.label, ctx.stroke);
       ctx.line(
         r.x1,
         r.y1,
         r.x2,
         r.y2,
-        ctx.stroke,
+        color,
         is11 ? ctx.strokeWidth : Math.max(1, ctx.strokeWidth - 0.25),
         is11 ? ctx.dash : '3 3',
       );
@@ -130,7 +132,7 @@ registerToolHandler({
         const len = Math.hypot(dx, dy) || 1;
         const lx = r.x1 + (dx / len) * 48;
         const ly = r.y1 + (dy / len) * 48;
-        ctx.label(lx + 2, ly - 2, r.label, ctx.stroke, 9);
+        ctx.label(lx + 2, ly - 2, r.label, resolveLevelPaint(t, r.label, ctx.stroke), 9);
       }
     }
   },
@@ -154,7 +156,15 @@ registerToolHandler({
     const b = ctx.toXY(pts[1]!);
     if (!a || !b) return;
     for (const r of fanRaySegments(a, b, ctx.width, ctx.height)) {
-      ctx.line(r.x1, r.y1, r.x2, r.y2, ctx.stroke, ctx.strokeWidth, '4 4');
+      ctx.line(
+        r.x1,
+        r.y1,
+        r.x2,
+        r.y2,
+        resolveLevelPaint({ kind: 'gannFan' }, r.label, ctx.stroke),
+        ctx.strokeWidth,
+        '4 4',
+      );
     }
   },
 });
@@ -191,13 +201,14 @@ registerToolHandler({
     const h = y2 - y1;
     const sw = clampStrokeWidth(ctx.strokeWidth);
     const fo = clampOpacity(ctx.fillOpacity, 0.08);
+    const border = resolveLevelPaint(t, 'border', ctx.stroke);
     // Fill
     ctx.el('rect', {
       x: String(x1),
       y: String(y1),
       width: String(Math.max(1, w)),
       height: String(Math.max(1, h)),
-      fill: ctx.stroke,
+      fill: border,
       'fill-opacity': String(Math.min(0.2, Math.max(0.04, fo))),
       stroke: 'none',
       'pointer-events': 'none',
@@ -209,7 +220,7 @@ registerToolHandler({
       width: String(Math.max(1, w)),
       height: String(Math.max(1, h)),
       fill: 'none',
-      stroke: ctx.stroke,
+      stroke: border,
       'stroke-width': String(sw),
       'pointer-events': 'stroke',
       ...(ctx.dash ? { 'stroke-dasharray': ctx.dash } : {}),
@@ -220,8 +231,8 @@ registerToolHandler({
       const y = y1 + h * f;
       const dash = f === 0.5 ? undefined : '3 3';
       const gridSw = f === 0.5 ? sw : Math.max(1, sw - 0.5);
-      ctx.line(x, y1, x, y2, ctx.stroke, gridSw, dash);
-      ctx.line(x1, y, x2, y, ctx.stroke, gridSw, dash);
+      ctx.line(x, y1, x, y2, resolveLevelPaint(t, `v:${f}`, ctx.stroke), gridSw, dash);
+      ctx.line(x1, y, x2, y, resolveLevelPaint(t, `h:${f}`, ctx.stroke), gridSw, dash);
     }
     if (ctx.selected) {
       ctx.circle(a.x, a.y, 5, ctx.stroke, true);
@@ -330,13 +341,14 @@ registerToolHandler({
     const side = sq.side;
     const sw = clampStrokeWidth(ctx.strokeWidth);
     const fo = clampOpacity(ctx.fillOpacity, 0.06);
+    const border = resolveLevelPaint(t, 'border', ctx.stroke);
     // Fill
     ctx.el('rect', {
       x: String(minX),
       y: String(minY),
       width: String(side),
       height: String(side),
-      fill: ctx.stroke,
+      fill: border,
       'fill-opacity': String(Math.min(0.15, Math.max(0.03, fo))),
       stroke: 'none',
       'pointer-events': 'none',
@@ -348,14 +360,14 @@ registerToolHandler({
       width: String(side),
       height: String(side),
       fill: 'none',
-      stroke: ctx.stroke,
+      stroke: border,
       'stroke-width': String(sw),
       'pointer-events': 'stroke',
       ...(ctx.dash ? { 'stroke-dasharray': ctx.dash } : {}),
     });
     // Diagonals
-    ctx.line(sq.x1, sq.y1, sq.x2, sq.y2, ctx.stroke, Math.max(1, sw - 0.25), '3 3');
-    ctx.line(sq.x2, sq.y1, sq.x1, sq.y2, ctx.stroke, Math.max(1, sw - 0.25), '3 3');
+    ctx.line(sq.x1, sq.y1, sq.x2, sq.y2, resolveLevelPaint(t, 'diagA', ctx.stroke), Math.max(1, sw - 0.25), '3 3');
+    ctx.line(sq.x2, sq.y1, sq.x1, sq.y2, resolveLevelPaint(t, 'diagB', ctx.stroke), Math.max(1, sw - 0.25), '3 3');
     if (ctx.selected) {
       ctx.circle(a.x, a.y, 5, ctx.stroke, true);
       // Far corner of the square (pixel-sized)

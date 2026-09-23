@@ -54,6 +54,7 @@ export type ToolSettingId =
   | 'fibLevels'
   | 'reverse'
   | 'rr'
+  | 'multiColor'
   | 'lock';
 
 /** Last-used / default extras for one drawing kind (persisted under drawingPrefs.byKind). */
@@ -73,6 +74,10 @@ export interface KindDrawingPrefs {
   arrowEnd?: boolean;
   rr?: number;
   fibLevels?: number[];
+  /** `false` forces single-color paint on the next create of this kind. */
+  multiColor?: boolean;
+  /** Per-level `#rgb` / `#rrggbb` overrides copied onto new drawings. */
+  levelColors?: Record<string, string>;
 }
 
 const BASE: ToolSettingId[] = ['color', 'width', 'lineStyle'];
@@ -159,6 +164,20 @@ const FIB_KINDS = kindSet(
   'fibArc',
   'fibWedge',
   'fibCircles',
+);
+
+const MULTI_COLOR_KINDS = kindSet(
+  'fib',
+  'fibext',
+  'fibtime',
+  'fibchannel',
+  'fibArc',
+  'fibWedge',
+  'fibCircles',
+  'gannFan',
+  'gannBox',
+  'gannSquare',
+  'pitchfork',
 );
 
 const RR_KINDS = kindSet('long', 'short');
@@ -260,6 +279,7 @@ export function settingsForKind(kind: DrawingKind | DrawingToolId): ReadonlySet<
     out.add('reverse');
     out.add('showPct');
   }
+  if (MULTI_COLOR_KINDS.has(kind)) out.add('multiColor');
   if (RR_KINDS.has(kind)) out.add('rr');
   return out;
 }

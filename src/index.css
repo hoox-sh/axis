@@ -1473,16 +1473,162 @@ button.axis-status-capsule {
 }
 
 /* Drawing rail contract (consumed by DrawingToolbar) */
+.axis-draw-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+.axis-draw-shell {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
 .axis-draw-rail {
   display: flex;
   flex-direction: column;
   gap: 4px;
   padding: 4px;
-  margin: 8px;
+  margin: 0;
   background: var(--color-bg-panel);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-panel);
+  box-shadow: var(--ui-shadow-panel);
   box-sizing: border-box;
+  pointer-events: auto;
+  max-height: min(90vh, 100%);
+  transition: max-height 160ms ease, max-width 160ms ease;
+}
+.axis-draw-shell[data-dock="top"] .axis-draw-rail {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  max-width: min(920px, calc(100vw - 16px));
+}
+.axis-draw-shell[data-dock="top"] .axis-draw-sep {
+  width: 1px;
+  height: 22px;
+  margin: 0 2px;
+}
+.axis-draw-handle,
+.axis-draw-style-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: grab;
+  touch-action: none;
+  flex: 0 0 auto;
+}
+.axis-draw-handle {
+  width: 32px;
+  height: 14px;
+}
+.axis-draw-shell[data-dock="top"] .axis-draw-handle {
+  width: 14px;
+  height: 32px;
+}
+.axis-draw-style-handle {
+  width: 14px;
+  height: 28px;
+  align-self: stretch;
+}
+.axis-draw-handle:hover,
+.axis-draw-handle:focus-visible,
+.axis-draw-style-handle:hover,
+.axis-draw-style-handle:focus-visible {
+  color: var(--color-text);
+  background: var(--color-bg-hover);
+}
+.axis-draw-handle:active,
+.axis-draw-style-handle:active,
+.axis-draw-shell[data-dragging="tools"] .axis-draw-handle,
+.axis-draw-stylebar[data-dragging="1"] .axis-draw-style-handle {
+  cursor: grabbing;
+}
+.axis-draw-shell[data-dock="left"] .axis-draw-grip,
+.axis-draw-shell[data-dock="float"] .axis-draw-grip {
+  transform: rotate(90deg);
+}
+.axis-draw-shell[data-slide="collapsed"][data-dock="left"] .axis-draw-rail,
+.axis-draw-shell[data-slide="collapsed"][data-dock="float"] .axis-draw-rail {
+  max-height: 22px;
+  overflow: hidden;
+}
+.axis-draw-shell[data-slide="collapsed"][data-dock="top"] .axis-draw-rail {
+  max-width: 28px;
+  overflow: hidden;
+}
+.axis-draw-menu,
+.axis-draw-pop {
+  background: var(--color-bg-elev);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--ui-shadow-panel);
+}
+.axis-draw-menu {
+  position: absolute;
+  left: calc(100% + 6px);
+  top: 0;
+  z-index: 60;
+  min-width: 11.5rem;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: auto;
+}
+.axis-draw-shell[data-dock="top"] .axis-draw-menu {
+  left: 0;
+  top: calc(100% + 6px);
+}
+.axis-draw-menu button,
+.axis-draw-menu label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.axis-draw-menu button:hover,
+.axis-draw-menu label:hover {
+  background: var(--color-bg-hover);
+}
+.axis-draw-menu button[aria-checked="true"] {
+  color: var(--color-accent);
+}
+.axis-draw-stylebar {
+  position: absolute;
+  z-index: 1;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: calc(100% - 12px);
+  padding: 4px 6px;
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--ui-shadow-panel);
+}
+.axis-draw-shell[data-dock="top"] [data-drawing-flyout] {
+  left: 0;
+  top: 100%;
+  margin-left: 0;
+  margin-top: 4px;
 }
 .axis-draw-btn {
   width: 32px;

@@ -112,6 +112,9 @@ describe('Gann drawing tools', () => {
     h.paint!(d, ctx as never);
     // Classic set: 1x1, 1x2, 2x1, 1x3, 3x1, 1x4, 4x1 → 7 rays
     expect(ctx._lines.length).toBeGreaterThanOrEqual(7);
+    const strokes = new Set(ctx._lines.map((l) => l.stroke));
+    expect(strokes.size).toBeGreaterThan(1);
+    expect(strokes.has('#2962FF')).toBe(true);
   });
 
   it('gannFan hit is true near the 1x1 ray and false far away', () => {

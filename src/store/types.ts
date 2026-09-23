@@ -260,6 +260,19 @@ export interface DrawingUi {
   hideDrawings: boolean;
   /** Global lock: blocks drag/resize/delete of all user drawings. */
   lockAll: boolean;
+  /**
+   * Tool rail placement over the chart.
+   * `left` is a vertical rail, `top` is a horizontal bar, `float` follows `toolbarX/Y`.
+   */
+  toolbarDock: 'left' | 'top' | 'float';
+  /** When docked, collapse to the handle until the pointer is over the rail. */
+  toolbarSlide: boolean;
+  /** Float origin in CSS px, relative to the chart host. */
+  toolbarX: number;
+  toolbarY: number;
+  /** Style-bar origin. `null` keeps it beside (or under) the tool rail. */
+  stylebarX: number | null;
+  stylebarY: number | null;
 }
 
 /** How a plane moves data (for Connection HUD badges). */

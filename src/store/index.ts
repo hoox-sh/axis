@@ -451,6 +451,12 @@ const DEFAULTS: AppState = {
     lastToolByGroup: {},
     hideDrawings: false,
     lockAll: false,
+    toolbarDock: 'left',
+    toolbarSlide: false,
+    toolbarX: 8,
+    toolbarY: 56,
+    stylebarX: null,
+    stylebarY: null,
   },
   // Ephemeral selection — reset on hydrate
   selectedDrawingId: null,

@@ -12,6 +12,7 @@ import type {
   TwoPointDrawing,
 } from '../../drawing-types';
 import { distToSegment, extendSegment, nearPoint } from '../geometry';
+import { levelKey, resolveLevelPaint } from '../level-palette';
 import { fibLevelsOf, isFibReversed, showPctOf } from '../tool-settings';
 import { registerToolHandler, type ToolViewCtx } from './registry';
 import { clampStrokeWidth, isFinitePoint, sanitizePoints, sanitizeStrokeColor } from './safe';
@@ -45,11 +46,11 @@ function semiArcPath(cx: number, cy: number, r: number, angle: number): string {
   return `M ${x0} ${y0} A ${r} ${r} 0 0 1 ${x1} ${y1}`;
 }
 
-function strokeAttrs(ctx: ToolViewCtx, dashed?: boolean): Record<string, string> {
+function strokeAttrs(ctx: ToolViewCtx, dashed?: boolean, color?: string): Record<string, string> {
   const sw = clampStrokeWidth(ctx.strokeWidth);
   const attrs: Record<string, string> = {
     fill: 'none',
-    stroke: ctx.stroke,
+    stroke: color || ctx.stroke,
     'stroke-width': String(Math.max(1, sw - (dashed ? 0.5 : 0))),
     'pointer-events': 'stroke',
   };
@@ -93,14 +94,15 @@ registerToolHandler({
       const r = base * lvl;
       const path = semiArcPath(a.x, a.y, r, angle);
       if (!path) continue;
+      const color = resolveLevelPaint(d, levelKey(lvl), ctx.stroke);
       ctx.el('path', {
         d: path,
-        ...strokeAttrs(ctx, lvl !== 1),
+        ...strokeAttrs(ctx, lvl !== 1, color),
       });
       if (showPct) {
         const lx = a.x + r * Math.cos(angle);
         const ly = a.y + r * Math.sin(angle);
-        ctx.label(lx + 4, ly - 3, `${(lvl * 100).toFixed(1)}%`, ctx.stroke, 10);
+        ctx.label(lx + 4, ly - 3, `${(lvl * 100).toFixed(1)}%`, color, 10);
       }
     }
     if (ctx.selected) {
@@ -173,12 +175,13 @@ registerToolHandler({
       const ey = a.y + Math.sin(ang) * armLen;
       const ray = extendSegment(a.x, a.y, ex, ey, 'right', ctx.width, ctx.height);
       const isArm = raw === 0 || raw === 1;
+      const color = resolveLevelPaint(d, levelKey(raw), ctx.stroke);
       ctx.line(
         a.x,
         a.y,
         ray.x2,
         ray.y2,
-        ctx.stroke,
+        color,
         isArm ? ctx.strokeWidth : Math.max(1, ctx.strokeWidth - 0.5),
         isArm ? ctx.dash : '3 3',
       );
@@ -187,7 +190,7 @@ registerToolHandler({
           a.x + Math.cos(ang) * (armLen * 0.55) + 4,
           a.y + Math.sin(ang) * (armLen * 0.55) - 3,
           `${(raw * 100).toFixed(1)}%`,
-          ctx.stroke,
+          color,
           10,
         );
       }
@@ -260,13 +263,14 @@ registerToolHandler({
     for (const lvl of levels) {
       if (lvl === 0) continue;
       const r = base * lvl;
+      const color = resolveLevelPaint(d, levelKey(lvl), ctx.stroke);
       ctx.el('circle', {
         cx: String(cx),
         cy: String(cy),
         r: String(r),
-        ...strokeAttrs(ctx, lvl !== 1),
+        ...strokeAttrs(ctx, lvl !== 1, color),
       });
-      if (showPct) ctx.label(cx + r + 4, cy - 3, `${(lvl * 100).toFixed(1)}%`, ctx.stroke, 10);
+      if (showPct) ctx.label(cx + r + 4, cy - 3, `${(lvl * 100).toFixed(1)}%`, color, 10);
     }
     if (ctx.selected) {
       ctx.circle(a.x, a.y, 5, ctx.stroke, true);

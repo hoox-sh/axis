@@ -143,6 +143,10 @@ export interface DrawingBase {
    *   the layer only paints drawings for the active symbol (plus untagged legacy)
    * - `meta.hidden` hides the drawing in the layer / Layers panel
    * - `meta.fibLevels` custom fib ratios; `meta.reverse` flips fib direction
+   * - `meta.multiColor` — `false` forces the single stroke on fib / Gann /
+   *   pitchfork; omitted means classic multi-color on those kinds
+   * - `meta.levelColors` — per-level `#rgb` / `#rrggbb` overrides keyed by
+   *   level id (`0.618`, `1x1`, `h:0.5`, `median`, …)
    * - `meta.showPrice` / `meta.showPct` / `meta.showStats` label toggles
    * - `meta.arrowStart` / `meta.arrowEnd` line caps
    * - `meta.rr` long/short risk:reward (stop distance = reward / rr)
@@ -154,6 +158,10 @@ export interface DrawingBase {
     symbol?: string;
     hidden?: boolean;
     fibLevels?: number[];
+    /** `false` forces one stroke color; omitted = multi-color on fib/Gann/pitchfork. */
+    multiColor?: boolean;
+    /** Per-level `#rgb` / `#rrggbb` overrides. */
+    levelColors?: Record<string, string>;
     reverse?: boolean;
     showPrice?: boolean;
     showPct?: boolean;

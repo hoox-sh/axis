@@ -100,6 +100,7 @@ import {
   showPriceOf,
   showStatsOf,
 } from './drawings/tool-settings';
+import { levelKey, resolveLevelPaint } from './drawings/level-palette';
 // Register extended tool handlers (side effects)
 import './drawings/tools';
 
@@ -132,6 +133,10 @@ export type StylePrefs = {
   arrowEnd?: boolean;
   rr?: number;
   fibLevels?: number[];
+  /** `false` stamps single-color paint; omitted leaves the kind default. */
+  multiColor?: boolean;
+  /** Per-level `#rgb` / `#rrggbb` overrides copied onto new drawings. */
+  levelColors?: Record<string, string>;
 };
 
 /**
@@ -728,6 +733,8 @@ export class DrawingLayer {
     if (prefs.arrowEnd != null && meta.arrowEnd == null) meta.arrowEnd = prefs.arrowEnd;
     if (prefs.rr != null && meta.rr == null) meta.rr = prefs.rr;
     if (prefs.fibLevels && meta.fibLevels == null) meta.fibLevels = prefs.fibLevels.slice();
+    if (prefs.multiColor != null && meta.multiColor == null) meta.multiColor = prefs.multiColor;
+    if (prefs.levelColors && meta.levelColors == null) meta.levelColors = { ...prefs.levelColors };
     const extendLeft = d.style?.extendLeft ?? prefs.extendLeft;
     const extendRight = d.style?.extendRight ?? prefs.extendRight;
     const fontSize = d.style?.fontSize ?? prefs.fontSize;
@@ -2598,31 +2605,32 @@ export class DrawingLayer {
       const showPct = showPctOf(d, true);
       const showPx = showPriceOf(d, true);
       const fo = Math.max(0, Math.min(1, st.fillOpacity));
-      const ys: number[] = [];
+      const ys: { y: number; color: string }[] = [];
       for (let i = 0; i < levels.length; i++) {
         const y = this.priceToYSafe(prices[i]!);
         if (y == null) continue;
-        ys.push(y);
         const lvl = levels[i]!;
-        line(g, left, y, right, y, stroke, Math.max(1, sw - 0.5), lvl === 0.5 ? undefined : '3 3');
+        const color = resolveLevelPaint(d, levelKey(lvl), stroke);
+        ys.push({ y, color });
+        line(g, left, y, right, y, color, Math.max(1, sw - 0.5), lvl === 0.5 ? undefined : '3 3');
         if (showPct || showPx) {
           const bits: string[] = [];
           if (showPct) bits.push(`${(lvl * 100).toFixed(1)}%`);
           if (showPx) bits.push(prices[i]!.toFixed(2));
-          label(g, right - 4, y - 3, bits.join('  '), stroke, 10, 'end');
+          label(g, right - 4, y - 3, bits.join('  '), color, 10, 'end');
         }
       }
       if (fo > 0.01) {
         for (let i = 0; i < ys.length - 1; i++) {
-          const top = Math.min(ys[i]!, ys[i + 1]!);
-          const hh = Math.abs(ys[i]! - ys[i + 1]!);
+          const top = Math.min(ys[i]!.y, ys[i + 1]!.y);
+          const hh = Math.abs(ys[i]!.y - ys[i + 1]!.y);
           if (hh < 1) continue;
           el(g, 'rect', {
             x: String(left),
             y: String(top),
             width: String(Math.max(1, right - left)),
             height: String(hh),
-            fill: stroke,
+            fill: ys[i]!.color,
             'fill-opacity': String(fo),
             stroke: 'none',
             'pointer-events': 'none',

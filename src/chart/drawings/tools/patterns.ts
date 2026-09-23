@@ -14,6 +14,7 @@ import type {
   TwoPointDrawing,
 } from '../../drawing-types';
 import { distToSegment, extendSegment, nearPoint } from '../geometry';
+import { resolveLevelPaint } from '../level-palette';
 import { fontSizeOf } from '../tool-settings';
 import { registerToolHandler, type ToolViewCtx } from './registry';
 import {
@@ -177,11 +178,15 @@ registerToolHandler({
     });
     const rB = rail(b.x, b.y);
     const rC = rail(c.x, c.y);
-    ctx.line(med.x1, med.y1, med.x2, med.y2, ctx.stroke, ctx.strokeWidth, ctx.dash);
-    ctx.line(rB.x1, rB.y1, rB.x2, rB.y2, ctx.stroke, Math.max(1, ctx.strokeWidth - 0.25), '3 3');
-    ctx.line(rC.x1, rC.y1, rC.x2, rC.y2, ctx.stroke, Math.max(1, ctx.strokeWidth - 0.25), '3 3');
+    const median = resolveLevelPaint(d, 'median', ctx.stroke);
+    const upper = resolveLevelPaint(d, 'upper', ctx.stroke);
+    const lower = resolveLevelPaint(d, 'lower', ctx.stroke);
+    const handle = resolveLevelPaint(d, 'handle', ctx.stroke);
+    ctx.line(med.x1, med.y1, med.x2, med.y2, median, ctx.strokeWidth, ctx.dash);
+    ctx.line(rB.x1, rB.y1, rB.x2, rB.y2, upper, Math.max(1, ctx.strokeWidth - 0.25), '3 3');
+    ctx.line(rC.x1, rC.y1, rC.x2, rC.y2, lower, Math.max(1, ctx.strokeWidth - 0.25), '3 3');
     // Handle BC
-    ctx.line(b.x, b.y, c.x, c.y, ctx.stroke, 1, '2 2');
+    ctx.line(b.x, b.y, c.x, c.y, handle, 1, '2 2');
     if (ctx.selected) {
       ctx.circle(a.x, a.y, 5, ctx.stroke, true);
       ctx.circle(b.x, b.y, 5, ctx.stroke, true);

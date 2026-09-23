@@ -21,12 +21,14 @@
  * Chart-style left drawing rail for AXIS (UX parity with common charting UIs).
  *
  * ## Layout
- * - Vertical **tool groups** from {@link TOOL_GROUPS} (select / lines / fib / …)
+ * - Tool rail with a drag handle. Dock left (vertical), dock top (horizontal),
+ *   or float anywhere over the chart. Docked rails can slide in to the handle.
+ * - Tool groups from {@link TOOL_GROUPS} (select / lines / fib / …)
  * - Per-group **flyouts** when `g.flyout` is set; otherwise click activates last tool
  * - Utility toggles: magnet (cycle), stay-in-mode, lock-all, hide drawings
  * - Delete selected / clear all
- * - Floating **style bar** (colors, width, line style, rect fill) when a place tool
- *   is active or a drawing is selected
+ * - **Style bar** (colors, width, line style, level colors) with its own handle.
+ *   It tracks the rail until dragged; double-click the handle restores that.
  *
  * ## Store ↔ layer sync
  * Store owns persisted tool, drawings, prefs, and UI flags. The active
@@ -49,6 +51,16 @@ import {
 import type { Drawing, DrawingKind, DrawingToolId, DrawingLineStyle } from './drawing-types';
 import { toolLabel, resolveDrawingStyle, DRAWING_COLORS } from './drawing-types';
 import { Icons } from '../ui/icons';
+import { DrawingToolIcon } from './drawings/tool-icons';
+import { levelSwatches } from './drawings/level-palette';
+import {
+  autoStylebarPos,
+  clampToHost,
+  finitePx,
+  sanitizeToolbarDock,
+  snapToolbarDock,
+  type ToolbarDock,
+} from './drawings/toolbar/chrome';
 import { getActiveDrawingLayer } from './drawing-layer';
 import { visibleDrawingsForActiveSymbol, setHideDrawingsAll } from './manager-access';
 import {
@@ -133,6 +145,8 @@ function buildDrawingPatch(sel: Drawing, patch: StylePatch): Partial<Drawing> {
   if (patch.arrowEnd != null) meta.arrowEnd = patch.arrowEnd;
   if (patch.rr != null) meta.rr = clampRiskReward(patch.rr);
   if (patch.fibLevels != null) meta.fibLevels = sanitizeFibLevels(patch.fibLevels, defaultFibLevels(sel.kind));
+  if (patch.multiColor != null) meta.multiColor = patch.multiColor;
+  if (patch.levelColors != null) meta.levelColors = { ...patch.levelColors };
   if (patch.locked != null) meta.locked = patch.locked;
   if (patch.text != null) meta.text = patch.text;
   const next: Partial<Drawing> = {
@@ -147,71 +161,6 @@ function buildDrawingPatch(sel: Drawing, patch: StylePatch): Partial<Drawing> {
   };
   return next;
 }
-
-const TOOL_ICONS: Partial<Record<DrawingToolId, typeof Icons.cursor>> = {
-  cursor: Icons.cursor,
-  eraser: Icons.eraser,
-  hline: Icons.minus,
-  hray: Icons.minus,
-  crossline: Icons.extend,
-  vline: Icons.vline,
-  trend: Icons.trend,
-  ray: Icons.ray,
-  extend: Icons.extend,
-  infoLine: Icons.trend,
-  trendAngle: Icons.trend,
-  channel: Icons.layers,
-  pitchfork: Icons.fib,
-  gannFan: Icons.fib,
-  gannBox: Icons.square,
-  gannSquare: Icons.square,
-  rect: Icons.square,
-  rotatedRect: Icons.square,
-  ellipse: Icons.circle,
-  triangle: Icons.shapes,
-  arrow: Icons.arrowUpRight,
-  arrowMarkUp: Icons.arrowUpRight,
-  arrowMarkDown: Icons.arrowUpRight,
-  polyline: Icons.trend,
-  path: Icons.pencil,
-  arc: Icons.circle,
-  curve: Icons.trend,
-  brush: Icons.pencil,
-  highlighter: Icons.pencil,
-  fib: Icons.fib,
-  fibext: Icons.fib,
-  fibtime: Icons.fib,
-  fibchannel: Icons.fib,
-  fibArc: Icons.fib,
-  fibWedge: Icons.fib,
-  fibCircles: Icons.fib,
-  measure: Icons.ruler,
-  dateRange: Icons.ruler,
-  priceRange: Icons.ruler,
-  datePriceRange: Icons.ruler,
-  text: Icons.type,
-  anchoredText: Icons.type,
-  priceLabel: Icons.pin,
-  callout: Icons.type,
-  note: Icons.pin,
-  flag: Icons.pin,
-  long: Icons.arrowUpRight,
-  short: Icons.arrowUpRight,
-  forecast: Icons.trend,
-  xabcd: Icons.shapes,
-  headShoulders: Icons.shapes,
-};
-
-const GROUP_ICONS: Partial<Record<ToolGroupId, typeof Icons.cursor>> = {
-  select: Icons.cursor,
-  lines: Icons.trend,
-  fib: Icons.fib,
-  shapes: Icons.shapes,
-  annotation: Icons.pencil,
-  measure: Icons.ruler,
-  trading: Icons.trend,
-  actions: Icons.settings,
-};
 
 /**
  * Push toolbar-relevant store fields onto the live layer (no-op if layer not ready).
@@ -242,6 +191,8 @@ function syncLayerFromStore() {
     arrowEnd: resolved.arrowEnd,
     rr: resolved.rr,
     fibLevels: resolved.fibLevels,
+    multiColor: resolved.multiColor,
+    levelColors: resolved.levelColors ? { ...resolved.levelColors } : undefined,
   });
 }
 
@@ -262,6 +213,234 @@ export const DrawingToolbar: Component = () => {
   const [settingsClamp, setSettingsClamp] = createSignal<Record<string, string>>({});
   let rootRef: HTMLDivElement | undefined;
   let railRef: HTMLDivElement | undefined;
+  let styleRef: HTMLDivElement | undefined;
+  let slideTimer: number | undefined;
+  const [menuOpen, setMenuOpen] = createSignal(false);
+  const [slideOpen, setSlideOpen] = createSignal(false);
+  const [liveTools, setLiveTools] = createSignal<{ x: number; y: number } | null>(null);
+  const [liveStyle, setLiveStyle] = createSignal<{ x: number; y: number } | null>(null);
+  const [dragging, setDragging] = createSignal<'tools' | 'style' | null>(null);
+  const [railSize, setRailSize] = createSignal({ w: 46, h: 40 });
+
+  const dock = (): ToolbarDock => sanitizeToolbarDock(store.drawingUi.toolbarDock);
+  const slideEnabled = () => dock() !== 'float' && store.drawingUi.toolbarSlide === true;
+
+  const clearSlideTimer = () => {
+    if (slideTimer != null) window.clearTimeout(slideTimer);
+    slideTimer = undefined;
+  };
+
+  onCleanup(() => clearSlideTimer());
+
+  const hostBox = (): DOMRect | null => {
+    const host = rootRef?.closest('[data-axis-chart-host]') as HTMLElement | null;
+    return host ? host.getBoundingClientRect() : null;
+  };
+
+  const railAnchor = () => {
+    const live = liveTools();
+    if (live) return live;
+    if (dock() === 'top') return { x: 8, y: 8 };
+    if (dock() === 'float') {
+      return {
+        x: finitePx(store.drawingUi.toolbarX, 8),
+        y: finitePx(store.drawingUi.toolbarY, 56),
+      };
+    }
+    return { x: 8, y: 56 };
+  };
+
+  const styleOrigin = () => {
+    const live = liveStyle();
+    if (live) return live;
+    const x = store.drawingUi.stylebarX;
+    const y = store.drawingUi.stylebarY;
+    if (typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y)) {
+      return { x, y };
+    }
+    const rail = railAnchor();
+    const size = railSize();
+    return autoStylebarPos(dock(), { x: rail.x, y: rail.y, w: size.w, h: size.h });
+  };
+
+  const slideState = () => {
+    if (!slideEnabled()) return 'open';
+    if (slideOpen() || openGroup() || menuOpen() || settingsOpen() || dragging()) return 'open';
+    return 'collapsed';
+  };
+
+  createEffect(() => {
+    dock();
+    slideState();
+    openGroup();
+    queueMicrotask(() => {
+      const w = railRef?.offsetWidth ?? 0;
+      const h = railRef?.offsetHeight ?? 0;
+      if (w < 1 || h < 1) return;
+      setRailSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+    });
+  });
+
+  const rememberRailSize = (pos: { x: number; y: number }, el: HTMLElement | undefined) => {
+    const host = hostBox();
+    const box = el?.getBoundingClientRect();
+    if (!host || !box) return pos;
+    return clampToHost(pos.x, pos.y, host.width, host.height, box.width, box.height);
+  };
+
+  let toolPointerHandled = false;
+
+  const onToolPointerDown = (e: PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const handle = e.currentTarget as HTMLElement;
+    const host = hostBox();
+    if (!host || !railRef) return;
+    const pid = e.pointerId;
+    try {
+      handle.setPointerCapture(pid);
+    } catch {
+      /* Synthetic pointers and some browsers reject capture; move listeners still run. */
+    }
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const railBox = railRef.getBoundingClientRect();
+    const origX = railBox.left - host.left;
+    const origY = railBox.top - host.top;
+    let moved = false;
+    setDragging('tools');
+    const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== pid) return;
+      if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 4) return;
+      moved = true;
+      const hb = hostBox();
+      const bar = railRef?.getBoundingClientRect();
+      if (!hb || !bar) return;
+      setLiveTools(
+        clampToHost(
+          origX + (ev.clientX - startX),
+          origY + (ev.clientY - startY),
+          hb.width,
+          hb.height,
+          bar.width,
+          bar.height,
+        ),
+      );
+    };
+    const up = (ev: PointerEvent) => {
+      if (ev.pointerId !== pid) return;
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+      setDragging(null);
+      if (ev.type !== 'pointerup') {
+        setLiveTools(null);
+        return;
+      }
+      toolPointerHandled = true;
+      if (!moved) {
+        setOpenGroup(null);
+        setSettingsOpen(false);
+        setMenuOpen((v) => !v);
+        return;
+      }
+      const pos = liveTools();
+      setLiveTools(null);
+      if (!pos) return;
+      const nextDock = snapToolbarDock(pos.x, pos.y);
+      if (nextDock === 'float') setDrawingUi({ toolbarDock: 'float', toolbarX: pos.x, toolbarY: pos.y });
+      else setDrawingUi({ toolbarDock: nextDock });
+      setMenuOpen(false);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+  };
+
+  const onToolKeyDown = (e: KeyboardEvent) => {
+    if (dock() !== 'float') return;
+    const step = e.shiftKey ? 16 : 4;
+    const dir: Record<string, [number, number] | undefined> = {
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+    };
+    const d = dir[e.key];
+    if (!d) return;
+    e.preventDefault();
+    const cur = railAnchor();
+    const next = rememberRailSize({ x: cur.x + d[0], y: cur.y + d[1] }, railRef);
+    setDrawingUi({ toolbarDock: 'float', toolbarX: next.x, toolbarY: next.y });
+  };
+
+  const onStylePointerDown = (e: PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const handle = e.currentTarget as HTMLElement;
+    const host = hostBox();
+    const bar = styleRef;
+    if (!host || !bar) return;
+    const pid = e.pointerId;
+    try {
+      handle.setPointerCapture(pid);
+    } catch {
+      /* See tool-handle capture note. */
+    }
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const box = bar.getBoundingClientRect();
+    const origX = box.left - host.left;
+    const origY = box.top - host.top;
+    let moved = false;
+    setDragging('style');
+    const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== pid) return;
+      if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 4) return;
+      moved = true;
+      const hb = hostBox();
+      const size = styleRef?.getBoundingClientRect();
+      if (!hb || !size) return;
+      setLiveStyle(
+        clampToHost(
+          origX + (ev.clientX - startX),
+          origY + (ev.clientY - startY),
+          hb.width,
+          hb.height,
+          size.width,
+          size.height,
+        ),
+      );
+    };
+    const up = (ev: PointerEvent) => {
+      if (ev.pointerId !== pid) return;
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+      setDragging(null);
+      if (!moved) return;
+      const pos = liveStyle();
+      setLiveStyle(null);
+      if (!pos) return;
+      setDrawingUi({ stylebarX: pos.x, stylebarY: pos.y });
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+  };
+
+  const resetStylebar = () => {
+    setLiveStyle(null);
+    setDrawingUi({ stylebarX: null, stylebarY: null });
+  };
+
+  const placeFree = () => {
+    const pos = rememberRailSize(railAnchor(), railRef);
+    setDrawingUi({ toolbarDock: 'float', toolbarX: pos.x, toolbarY: pos.y });
+    setMenuOpen(false);
+  };
 
   const selected = createMemo(() => {
     const id = store.selectedDrawingId;
@@ -301,6 +480,11 @@ export const DrawingToolbar: Component = () => {
         arrowEnd: arrowEndOf(sel, sel.kind === 'arrow' || sel.kind === 'forecast'),
         rr: riskRewardOf(sel, 1),
         fibLevels: fibLevelsOf(sel),
+        multiColor: sel.meta?.multiColor,
+        levelColors:
+          sel.meta?.levelColors && typeof sel.meta.levelColors === 'object'
+            ? { ...sel.meta.levelColors }
+            : {},
         text: drawingTextOf(sel),
       };
     }
@@ -324,6 +508,8 @@ export const DrawingToolbar: Component = () => {
       arrowEnd: !!prefs.arrowEnd,
       rr: prefs.rr ?? 1,
       fibLevels: prefs.fibLevels ? [...prefs.fibLevels] : [...defaultFibLevels(active())],
+      multiColor: prefs.multiColor,
+      levelColors: prefs.levelColors ? { ...prefs.levelColors } : {},
       text: '',
     };
   });
@@ -345,18 +531,27 @@ export const DrawingToolbar: Component = () => {
 
   // Close flyout / settings on outside click / Escape
   createEffect(() => {
-    if (!openGroup() && !settingsOpen()) return;
+    if (!openGroup() && !settingsOpen() && !menuOpen()) return;
     const onDoc = (e: PointerEvent) => {
       const t = e.target as HTMLElement | null;
       if (t?.closest?.('[data-drawing-flyout]') || t?.closest?.('[data-drawing-group]')) return;
       if (t?.closest?.('[data-drawing-settings]')) return;
+      if (t?.closest?.('[data-drawing-toolbar-handle]') || t?.closest?.('[data-drawing-dock]')) {
+        if (!t?.closest?.('[data-drawing-dock]')) {
+          setOpenGroup(null);
+          setSettingsOpen(false);
+        }
+        return;
+      }
       setOpenGroup(null);
       setSettingsOpen(false);
+      setMenuOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setOpenGroup(null);
         setSettingsOpen(false);
+        setMenuOpen(false);
       }
     };
     document.addEventListener('pointerdown', onDoc, true);
@@ -399,6 +594,20 @@ export const DrawingToolbar: Component = () => {
     requestAnimationFrame(() => {
       const wrap = rootRef?.querySelector<HTMLElement>(`[data-drawing-group="${groupId}"]`);
       if (!wrap) return;
+      if (dock() === 'top') {
+        const { below } = measureSpace(wrap, 8, 'bottom');
+        setFlyoutClamp((prev) => ({
+          ...prev,
+          [groupId]: {
+            top: '100%',
+            bottom: 'auto',
+            left: '0',
+            'margin-top': '4px',
+            'max-height': `${Math.max(120, below)}px`,
+          },
+        }));
+        return;
+      }
       const { below, above } = measureSpace(wrap);
       setFlyoutClamp((prev) => ({
         ...prev,
@@ -450,6 +659,8 @@ export const DrawingToolbar: Component = () => {
         setOpenGroup(null);
         return;
       }
+      setSettingsOpen(false);
+      setMenuOpen(false);
       setOpenGroup(groupId);
       scheduleFlyoutClamp(groupId);
       return;
@@ -492,18 +703,103 @@ export const DrawingToolbar: Component = () => {
   const railGroups = () =>
     TOOL_GROUPS.filter((g) => g.id !== 'actions' && g.tools.length > 0);
 
-  // top-14 clears symbol chip + script badge row; 8px from the chart's left edge.
+  // Memos: the component function runs once. Reading these in JSX keeps dock and drag reactive.
+  const anchor = createMemo(railAnchor);
+  const styleAt = createMemo(styleOrigin);
+
   return (
-    <div ref={rootRef} class="absolute left-2 top-14 z-20 flex items-start gap-1.5 pointer-events-none">
-      {/* Left rail */}
+    <div ref={rootRef} class="axis-draw-overlay">
+      <div
+        class="axis-draw-shell"
+        data-dock={dock()}
+        data-slide={slideState()}
+        data-dragging={dragging() === 'tools' ? 'tools' : undefined}
+        data-testid="axis-drawing-toolbar"
+        style={{ left: `${anchor().x}px`, top: `${anchor().y}px` }}
+        onPointerEnter={() => {
+          clearSlideTimer();
+          setSlideOpen(true);
+        }}
+        onPointerLeave={() => {
+          clearSlideTimer();
+          slideTimer = window.setTimeout(() => setSlideOpen(false), 300);
+        }}
+      >
+      {/* Tool rail */}
       <div
         ref={railRef}
-        class="axis-draw-rail pointer-events-auto flex flex-col gap-1 p-1 bg-[#0C0E14]/95 border border-[#1C2230] rounded-[6px]"
+        class="axis-draw-rail"
         role="toolbar"
         aria-label="Drawing tools"
-        aria-orientation="vertical"
-        data-testid="axis-drawing-toolbar"
+        aria-orientation={dock() === 'top' ? 'horizontal' : 'vertical'}
       >
+        <div class="relative" data-drawing-dock>
+          <button
+            type="button"
+            class="axis-draw-handle"
+            data-testid="axis-drawing-toolbar-handle"
+            aria-label="Move drawing tools"
+            aria-expanded={menuOpen()}
+            aria-haspopup="menu"
+            title="Drag to move. Drop on the left or top edge to dock."
+            onPointerDown={onToolPointerDown}
+            onClick={() => {
+              if (toolPointerHandled) {
+                toolPointerHandled = false;
+                return;
+              }
+              setOpenGroup(null);
+              setSettingsOpen(false);
+              setMenuOpen((v) => !v);
+            }}
+            onKeyDown={onToolKeyDown}
+          >
+            <Icons.grip size={14} strokeWidth={2.25} class="axis-draw-grip" />
+          </button>
+          <Show when={menuOpen()}>
+            <div class="axis-draw-menu" role="menu" aria-label="Drawing toolbar placement">
+              <button
+                type="button"
+                role="menuitemradio"
+                aria-checked={dock() === 'left'}
+                onClick={() => {
+                  setDrawingUi({ toolbarDock: 'left' });
+                  setMenuOpen(false);
+                }}
+              >
+                Dock left
+              </button>
+              <button
+                type="button"
+                role="menuitemradio"
+                aria-checked={dock() === 'top'}
+                onClick={() => {
+                  setDrawingUi({ toolbarDock: 'top' });
+                  setMenuOpen(false);
+                }}
+              >
+                Dock top
+              </button>
+              <button
+                type="button"
+                role="menuitemradio"
+                aria-checked={dock() === 'float'}
+                onClick={placeFree}
+              >
+                Free position
+              </button>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={store.drawingUi.toolbarSlide === true}
+                  disabled={dock() === 'float'}
+                  onChange={(e) => setDrawingUi({ toolbarSlide: e.currentTarget.checked })}
+                />
+                Slide in
+              </label>
+            </div>
+          </Show>
+        </div>
         <For each={railGroups()}>
           {(g) => {
             const primaryId = () => {
@@ -511,18 +807,12 @@ export const DrawingToolbar: Component = () => {
               if (last && g.tools.includes(last)) return last;
               return g.tools[0]!;
             };
-            const GIcon = () => {
-              const tid = primaryId();
-              return TOOL_ICONS[tid] || GROUP_ICONS[g.id] || Icons.cursor;
-            };
             const isActive = () => g.tools.includes(active());
             return (
               <div class="relative" data-drawing-group={g.id}>
                 <button
                   type="button"
-                  class={`${btnClass} ${
-                    isActive() ? 'bg-accent/10 text-accent border-accent' : 'text-text-dim'
-                  }`}
+                  class={`${btnClass} ${isActive() ? 'is-active' : ''}`}
                   title={
                     g.flyout
                       ? titleWithShortcut(
@@ -537,26 +827,28 @@ export const DrawingToolbar: Component = () => {
                   aria-expanded={g.flyout ? openGroup() === g.id : undefined}
                   onClick={() => onGroupClick(g.id)}
                 >
-                  {(() => {
-                    const I = GIcon();
-                    return <I size={iconPx} strokeWidth={2.25} />;
-                  })()}
+                  <DrawingToolIcon id={primaryId()} size={iconPx} strokeWidth={1.75} />
                   <Show when={g.flyout}>
-                    <span class="absolute right-0.5 bottom-0.5 text-text-faint opacity-80">
+                    <span
+                      class={`absolute right-0.5 bottom-0.5 text-text-faint opacity-80 ${
+                        dock() === 'top' ? 'rotate-90' : ''
+                      }`}
+                    >
                       <Icons.chevronRight size={8} strokeWidth={2.5} />
                     </span>
                   </Show>
                 </button>
                 <Show when={g.flyout && openGroup() === g.id}>
                   <div
-                    class="absolute left-full top-0 ml-1 min-w-[9.5em] p-2 flex flex-col gap-0.5 overflow-y-auto bg-[#10131B] border border-[#1C2230] rounded-[6px] shadow-lg z-50"
+                    class={`axis-draw-pop absolute z-50 min-w-[9.5em] p-2 flex flex-col gap-0.5 overflow-y-auto ${
+                      dock() === 'top' ? 'left-0 top-full mt-1' : 'left-full top-0 ml-1'
+                    }`}
                     role="menu"
                     style={flyoutClamp()[g.id]}
                     data-drawing-flyout
                   >
                     <For each={g.tools}>
                       {(tid) => {
-                        const I = TOOL_ICONS[tid] || Icons.cursor;
                         return (
                           <button
                             type="button"
@@ -564,13 +856,13 @@ export const DrawingToolbar: Component = () => {
                             aria-checked={active() === tid}
                             class={`flex items-center gap-2 w-full px-2 py-1.5 text-left text-[12px] rounded-[4px] border-0 bg-transparent cursor-pointer font-inherit ${
                               active() === tid
-                                ? 'text-[#8B9CFF] bg-[#8B9CFF]/10 font-semibold'
-                                : 'text-[#9AA3B2] hover:bg-white/[0.04] hover:text-[#E8EAEE]'
+                                ? 'text-accent bg-accent/10 font-semibold'
+                                : 'text-text-dim hover:bg-white/[0.04] hover:text-text'
                             }`}
                             title={titleWithShortcut(toolLabel(tid), TOOL_SHORTCUT[tid])}
                             onClick={() => selectTool(tid)}
                           >
-                            <I size={15} strokeWidth={2.25} />
+                            <DrawingToolIcon id={tid} size={15} strokeWidth={1.75} />
                             <span>{toolLabel(tid)}</span>
                           </button>
                         );
@@ -583,7 +875,7 @@ export const DrawingToolbar: Component = () => {
           }}
         </For>
 
-        <div class="h-px bg-border-soft my-0.5" />
+        <div class="axis-draw-sep h-px bg-border-soft my-0.5" />
 
         <button
           type="button"
@@ -657,7 +949,7 @@ export const DrawingToolbar: Component = () => {
           )}
         </button>
 
-        <div class="h-px bg-border-soft my-0.5" />
+        <div class="axis-draw-sep h-px bg-border-soft my-0.5" />
 
         <button
           type="button"
@@ -716,16 +1008,37 @@ export const DrawingToolbar: Component = () => {
           </span>
         </Show>
       </div>
+      </div>
 
-      {/* Floating style bar */}
       <Show when={showStyleBar()}>
-        <div class="relative" data-drawing-settings>
-          <div
-            class="pointer-events-auto flex items-center gap-1 px-1.5 py-1 bg-[#0C0E14]/95 border border-[#1C2230] rounded-[6px]"
-            role="toolbar"
-            aria-label="Drawing style"
-            data-testid="axis-drawing-stylebar"
-          >
+        <div
+          ref={styleRef}
+          class="axis-draw-stylebar"
+          data-dragging={dragging() === 'style' ? '1' : undefined}
+          role="toolbar"
+          aria-label="Drawing style"
+          data-testid="axis-drawing-stylebar"
+          data-drawing-settings
+          style={{
+            left: `${styleAt().x}px`,
+            top: `${styleAt().y}px`,
+            'z-index': dragging() === 'style' ? '40' : undefined,
+          }}
+        >
+            <button
+              type="button"
+              class="axis-draw-style-handle"
+              data-testid="axis-drawing-stylebar-handle"
+              aria-label="Move drawing style"
+              title="Drag to move. Double-click to dock beside the tools."
+              onPointerDown={onStylePointerDown}
+              onDblClick={(e) => {
+                e.preventDefault();
+                resetStylebar();
+              }}
+            >
+              <Icons.grip size={14} strokeWidth={2.25} />
+            </button>
             <For each={[...COLOR_PRESETS]}>
               {(c) => (
                 <button
@@ -891,6 +1204,8 @@ export const DrawingToolbar: Component = () => {
               aria-expanded={settingsOpen()}
               data-testid="axis-drawing-settings"
               onClick={() => {
+                setOpenGroup(null);
+                setMenuOpen(false);
                 setSettingsOpen((v) => {
                   const next = !v;
                   if (next) scheduleSettingsClamp();
@@ -900,11 +1215,10 @@ export const DrawingToolbar: Component = () => {
             >
               <Icons.settings size={14} strokeWidth={2.25} />
             </button>
-          </div>
 
           <Show when={settingsOpen()}>
             <div
-              class="pointer-events-auto absolute left-0 top-full mt-1 w-[18.5rem] max-h-[min(70vh,28rem)] overflow-y-auto p-2 flex flex-col gap-2 bg-[#10131B] border border-[#1C2230] rounded-[6px] shadow-lg z-50"
+              class="axis-draw-pop pointer-events-auto absolute left-0 top-full mt-1 w-[18.5rem] max-h-[min(70vh,28rem)] overflow-y-auto p-2 flex flex-col gap-2 z-50"
               role="dialog"
               aria-label="Drawing settings"
               style={settingsClamp()}
@@ -1010,6 +1324,53 @@ export const DrawingToolbar: Component = () => {
                   />
                   Reverse
                 </label>
+              </Show>
+
+              <Show when={hasSetting(activeKind(), 'multiColor')}>
+                <label class="flex items-center gap-2 text-[11px] text-text">
+                  <input
+                    type="checkbox"
+                    checked={styleTarget().multiColor !== false}
+                    onChange={(e) => applyStyle({ multiColor: e.currentTarget.checked })}
+                  />
+                  Classic level colors
+                </label>
+                <div class="flex flex-wrap gap-1">
+                  <For each={levelSwatches(String(activeKind()))}>
+                    {(sw) => {
+                      const current = () => {
+                        const custom = styleTarget().levelColors?.[sw.key];
+                        return typeof custom === 'string' && /^#[0-9a-fA-F]{6}$/.test(custom)
+                          ? custom
+                          : /^#[0-9a-fA-F]{6}$/.test(sw.color)
+                            ? sw.color
+                            : '#787B86';
+                      };
+                      return (
+                        <label class="flex flex-col items-center gap-0.5" title={sw.label}>
+                          <input
+                            type="color"
+                            class="w-5 h-5 p-0 border border-border-soft rounded-sm bg-transparent cursor-pointer"
+                            aria-label={`${sw.label} color`}
+                            value={current()}
+                            onInput={(e) => {
+                              const next = { ...(styleTarget().levelColors || {}), [sw.key]: e.currentTarget.value };
+                              applyStyle({ levelColors: next });
+                            }}
+                          />
+                          <span class="text-[9px] font-mono text-text-faint">{sw.label}</span>
+                        </label>
+                      );
+                    }}
+                  </For>
+                </div>
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost text-[11px] self-start px-2 py-0.5"
+                  onClick={() => applyStyle({ levelColors: {} })}
+                >
+                  Reset colors
+                </button>
               </Show>
 
               <Show when={hasSetting(activeKind(), 'fibLevels')}>

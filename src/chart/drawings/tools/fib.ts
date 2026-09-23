@@ -20,6 +20,7 @@ import {
   showPctOf,
   showPriceOf,
 } from '../tool-settings';
+import { levelKey, resolveLevelPaint } from '../level-palette';
 import { registerToolHandler } from './registry';
 import { isFinitePoint, sanitizePoints, sanitizeStrokeColor } from './safe';
 
@@ -92,12 +93,13 @@ registerToolHandler({
       const price = c!.price + dir * span * lvl;
       const y = ctx.priceToY(price);
       if (y == null) continue;
-      ctx.line(left, y, right, y, ctx.stroke, Math.max(1, ctx.strokeWidth - 0.5), lvl === 1 ? undefined : '3 3');
+      const color = resolveLevelPaint(d, levelKey(lvl), ctx.stroke);
+      ctx.line(left, y, right, y, color, Math.max(1, ctx.strokeWidth - 0.5), lvl === 1 ? undefined : '3 3');
       if (showPct || showPx) {
         const bits: string[] = [];
         if (showPct) bits.push(`${(lvl * 100).toFixed(1)}%`);
         if (showPx) bits.push(price.toFixed(2));
-        ctx.label(right - 4, y - 3, bits.join('  '), ctx.stroke, 10, 'end');
+        ctx.label(right - 4, y - 3, bits.join('  '), color, 10, 'end');
       }
     }
     if (ctx.selected) {
@@ -171,8 +173,9 @@ registerToolHandler({
       const time = t.p1.time + dt * (isFibReversed(d) ? -lvl : lvl);
       const x = ctx.timeToX(time);
       if (x == null) continue;
-      ctx.line(x, 0, x, ctx.height, ctx.stroke, Math.max(1, ctx.strokeWidth - 0.5), lvl === 0 || lvl === 1 ? undefined : '3 3');
-      if (showPct) ctx.label(x + 3, 12, String(lvl), ctx.stroke, 10);
+      const color = resolveLevelPaint(d, levelKey(lvl), ctx.stroke);
+      ctx.line(x, 0, x, ctx.height, color, Math.max(1, ctx.strokeWidth - 0.5), lvl === 0 || lvl === 1 ? undefined : '3 3');
+      if (showPct) ctx.label(x + 3, 12, String(lvl), color, 10);
     }
     if (ctx.selected) {
       ctx.circle(a.x, a.y, 5, ctx.stroke, true);
@@ -221,8 +224,8 @@ registerToolHandler({
     const b1 = ctx.toXY(edges.b1);
     const b2 = ctx.toXY(edges.b2);
     if (!a1 || !a2 || !b1 || !b2) return;
-    ctx.line(a1.x, a1.y, a2.x, a2.y, ctx.stroke, ctx.strokeWidth);
-    ctx.line(b1.x, b1.y, b2.x, b2.y, ctx.stroke, ctx.strokeWidth);
+    ctx.line(a1.x, a1.y, a2.x, a2.y, resolveLevelPaint(d, levelKey(0), ctx.stroke), ctx.strokeWidth);
+    ctx.line(b1.x, b1.y, b2.x, b2.y, resolveLevelPaint(d, levelKey(1), ctx.stroke), ctx.strokeWidth);
     const levels = fibLevelsOf(d);
     for (const lvl of levels) {
       if (lvl === 0 || lvl === 1) continue;
@@ -231,7 +234,8 @@ registerToolHandler({
       const y1 = a1.y + (b1.y - a1.y) * t;
       const x2 = a2.x + (b2.x - a2.x) * t;
       const y2 = a2.y + (b2.y - a2.y) * t;
-      ctx.line(x1, y1, x2, y2, ctx.stroke, Math.max(1, ctx.strokeWidth - 0.5), '3 3');
+      const color = resolveLevelPaint(d, levelKey(lvl), ctx.stroke);
+      ctx.line(x1, y1, x2, y2, color, Math.max(1, ctx.strokeWidth - 0.5), '3 3');
     }
     if (ctx.selected) {
       ctx.circle(a1.x, a1.y, 5, ctx.stroke, true);

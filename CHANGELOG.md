@@ -15,6 +15,19 @@ _Generated/updated: 2026-09-22 · 443 commits · describe-tag: `v2.11.0`_
 
 ## [Unreleased]
 
+### Added
+
+- **Movable drawing toolbar**: a grip docks the tool rail to the left or the top of the chart, or leaves it floating. Docked rails can slide in to the grip. The style bar has its own grip; double-click puts it back beside the rail.
+
+### Changed
+
+- **Classic colors on Fibonacci and Gann drawings**: retracement, extension, time zones, channel, arcs, wedge, circles, Gann fan, box, square, and pitchfork paint each level in a fixed palette (0.618 teal, Gann 1×1 blue). Drawing settings can turn that off or recolor one level.
+- **Drawing tool icons** are separate silhouettes, so the Gann fan, box, square, and Fibonacci tools no longer share one glyph.
+
+### Fixed
+
+- **AXIS Ultimate plots a value**: the built-in no longer calls `ta.uo` (the compiler emitted that as empty). It now plots the Williams Ultimate Oscillator from buying pressure and true range. The engine `ta.uo` compiles to the same formula.
+
 ## [2.12.0] — 2026-09-22
 
 ### Changed
