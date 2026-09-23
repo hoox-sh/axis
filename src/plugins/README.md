@@ -17,7 +17,7 @@
 #
 # SPDX-License-Identifier: AGPL-3.0-only
 
-# frontend/src/plugins/ — Example plugins
+# src/plugins/ — Example plugins
 
 This directory holds **example plugins** that you can load into the running
 PWA via the **Manager → Plugins → Load from URL** dialog.  Each one is a
@@ -28,13 +28,13 @@ registry contract.
 
 The simplest way to try an example:
 
-1. Start the PWA: `make run-frontend`
-2. Open `http://localhost:8081`
+1. Start the PWA: `bun run dev`
+2. Open the Vite URL (`http://localhost:3000`)
 3. Click **📦 Manager** in the top bar → **Plugins** tab
 4. Paste the URL of an example file, e.g.
 
    ```
-   http://localhost:8081/plugins/example-coingecko-source.js
+   http://localhost:3000/plugins/example-coingecko-source.js
    (files live under `public/plugins/` so production `dist/` serves them)
    ```
 

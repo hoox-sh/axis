@@ -55,7 +55,7 @@ flowchart LR
 wss://<worker>/api/stream?session=<name>&symbol=BTCUSDT&interval=1m
 ```
 
-`frontend/worker/src/index.ts`:
+`worker/src/index.ts`:
 
 - Requires `env.SESSIONS` binding; else `503` `NO_DO`.
 - `idFromName(session || 'default')`.
@@ -84,7 +84,7 @@ Query: `symbol` (default `BTCUSDT`), `interval` (default `1m`).
 
 ### Example plugin
 
-`frontend/public/plugins/example-cf-do-stream.js` maps kline fields to `Bar` and builds the Worker URL from config `endpoint`.
+`public/plugins/example-cf-do-stream.js` maps kline fields to `Bar` and builds the Worker URL from config `endpoint`.
 
 ## Internals
 

@@ -98,10 +98,10 @@ bun run axis dev worker
 
 | Target | Intent |
 | --- | --- |
-| `make run-frontend` | Historical Bun static server (`frontend/server.ts`) on `:8081` — **legacy shell path** |
+| `python axis_pwa_server.py` | Serve built `dist/` on `:8081` (not Vite) |
 | `make worker-dev` | Wrangler dev |
 | `make worker-install` | Install worker deps |
-| `make test-frontend` | Bun unit tests under `frontend/tests/` |
+| `bun run test:unit` | Bun unit tests under `tests/` |
 
 For the **Solid** product, prefer `bun run dev` / `bun run build` over the legacy `server.ts` unless you are debugging the old tree ([legacy shell](/axis/docs/reference/legacy-shell)).
 
@@ -109,16 +109,16 @@ For the **Solid** product, prefer `bun run dev` / `bun run build` over the legac
 
 | Path | Role |
 | --- | --- |
-| `frontend/src/index.tsx` | App entry |
-| `frontend/vite.config.*` | Vite / Solid plugin |
-| `frontend/src/engines/catalog.ts` | Default engine endpoint |
-| `frontend/worker/wrangler.toml` | Local vars |
-| `frontend/public/plugins/` | Example modules served at `/plugins/` |
+| `src/index.tsx` | App entry |
+| `vite.config.*` | Vite / Solid plugin |
+| `src/engines/catalog.ts` | Default engine endpoint |
+| `worker/wrangler.toml` | Local vars |
+| `public/plugins/` | Example modules served at `/plugins/` |
 
 ## Worked loop
 
 1. Terminal A: `make run` (Flask).
-2. Terminal B: `cd frontend && bun run dev`.
+2. Terminal B: `bun run dev`.
 3. Open Vite URL; set engine **Server-Side**, endpoint `http://127.0.0.1:5002`.
 4. Load `mock-walk` if venues are blocked.
 5. Optional Terminal C: Worker with `ALLOW_OPEN_KEYS=1` for cloud library experiments.
@@ -138,7 +138,7 @@ Manager → Plugins → Load from URL.
 1. **CORS** — Flask must allow the Vite origin; Worker `pickOrigin` allows `:3000` and `:8081`.
 2. **Pyodide local** — needs vendor wheels under `public/` (copied to dist on build).
 3. **Two endpoints** — topbar endpoint for engine vs cloud storage plugin config can differ (Flask vs Worker).
-4. **Legacy Makefile message** still mentions AXIS and `:8081` Bun server.
+4. **`make`** prints the Vite URL `:3000`. Compose serves the built PWA on `:8081`.
 
 ## Failure modes
 

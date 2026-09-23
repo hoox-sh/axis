@@ -28,7 +28,7 @@ description: "Pre-Solid static shell vs current AXIS product path — what to ig
 
 AXIS’s shipping product path is **Solid + Vite**. An older **static shell** remains in the repo for historical scripts and some Bun tests. Do not document or extend the legacy shell as the primary UI.
 
-Source of truth: `frontend/LEGACY.md`.
+Source of truth: `LEGACY.md`.
 
 ## Conceptual model
 
@@ -44,23 +44,23 @@ flowchart LR
 
 | Path | Role |
 | --- | --- |
-| `frontend/src/main.js` | Old bootstrap (chart.js, legacy-topbar.js, …) |
-| `frontend/style.css` | TV-blue-era tokens |
-| `frontend/pyne-editor.js` | Pre-Solid CM6 wiring (renamed from `pine-editor.js`) |
-| `frontend/server.ts` | Bun static server for old tree |
-| Root / frontend `sw.js` (static shell SW) | Service worker for old shell |
+| `src/main.js` | Old bootstrap (chart.js, legacy-topbar.js, …) |
+| `style.css` | TV-blue-era tokens |
+| `pyne-editor.js` | Pre-Solid CM6 wiring (renamed from `pine-editor.js`) |
+| `server.ts` | Bun static server for old tree |
+| `sw.js` | Service worker for the old shell |
 
-Makefile `make run-frontend` still prints AXIS and runs `bun run frontend/server.ts` on `:8081` — useful for legacy debugging, **not** the Solid product path.
+There is no `frontend/` directory and no `make run-frontend` target. The product path is `bun run dev`. A static demo of `dist/` is `python axis_pwa_server.py` (default port 8081) after `bun run build`.
 
 ## What is current
 
 | Path | Role |
 | --- | --- |
-| `frontend/src/index.tsx`, `app.tsx` | Solid app |
-| `frontend/src/chart/ChartHost.tsx` | LWC panes |
-| `frontend/src/ui/*` | Topbar, Settings, Results, Manager, … |
-| `frontend/public/` + `bun run build` | Production PWA assets |
-| `frontend/axis_pwa_server.py` | Serve **dist** for demos |
+| `src/index.tsx`, `app.tsx` | Solid app |
+| `src/chart/ChartHost.tsx` | LWC panes |
+| `src/ui/*` | Topbar, Settings, Results, Manager, … |
+| `public/` + `bun run build` | Production PWA assets |
+| `axis_pwa_server.py` | Serve **dist** for demos |
 
 ## Migration residue
 

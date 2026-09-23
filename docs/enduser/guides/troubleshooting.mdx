@@ -84,7 +84,7 @@ Probe: Settings → Test endpoint (health GET).
 
 | Symptom | Checks | Fix |
 | --- | --- | --- |
-| Live toggle no effect | Stream = `none`? | Select `binance-ws` or `mock-poll` |
+| Live toggle no effect | Live is off (`stream: null`) | Select `binance-ws` or `mock-poll` |
 | WS errors | Console; venue symbol format | Uppercase `BTCUSDT` style |
 | Reconnect loop | Network flap | Logs drawer; stop/start Live |
 | DO stream | Worker session query | Worker docs; example plugin |

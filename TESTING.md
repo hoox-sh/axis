@@ -3,10 +3,8 @@
 ## Quick commands
 
 ```bash
-cd frontend
-
 bun run test                 # unit + worker tests
-bun run test:unit            # frontend/tests only
+bun run test:unit            # tests/ only
 bun run test:coverage        # lcov + text under coverage/
 bun run test:coverage:gate   # coverage + scoped line gate
 bun run test:security        # tests/security/
@@ -14,34 +12,26 @@ bun run test:e2e:smoke       # Playwright @smoke (builds + preview)
 bun run test:all             # coverage gate + security
 ```
 
-From repo root:
-
-```bash
-bun run test:frontend
-bun run test:frontend:coverage
-```
-
 ## Layout
 
 ```
-frontend/tests/
+tests/
   setup.ts                 # localStorage / document stubs
   fixtures/                # bars, plugin modules
   helpers/                 # mock-fetch, mock-ws
   *.test.ts                # unit suites
   integration/             # run-pipeline, load-symbol, library-service
-  security/                # (Phase D)
-frontend/scripts/check-coverage.mjs
-frontend/e2e/
+  security/
+scripts/check-coverage.mjs
+e2e/
   smoke.spec.ts            # @smoke Playwright
-frontend/playwright.config.ts
-frontend/worker/tests/     # auth, keys, runtime, scripts
+playwright.config.ts
+worker/tests/              # auth, keys, runtime, scripts
 ```
 
 ## E2E (Playwright)
 
 ```bash
-cd frontend
 bun install
 bunx playwright install chromium
 bun run test:e2e:smoke       # @smoke only (PR CI)

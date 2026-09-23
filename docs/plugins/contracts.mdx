@@ -26,7 +26,7 @@ description: "Formal TypeScript interfaces for AXIS source, stream, engine, stor
 
 ## Abstract
 
-All AXIS plugins share `PluginBase` and a discriminant `kind`. Contracts live in `frontend/src/plugins/types.ts`. Catalogs and the dynamic loader assert these shapes before registration; the UI never calls plugins that failed assertion.
+All AXIS plugins share `PluginBase` and a discriminant `kind`. Contracts live in `src/plugins/types.ts`. Catalogs and the dynamic loader assert these shapes before registration; the UI never calls plugins that failed assertion.
 
 Namespace (localStorage / config): **`pynescript.axis.plugins.v1`**.
 

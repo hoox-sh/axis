@@ -140,7 +140,7 @@ Export: JSON run dump; trades CSV. Click a trade to scroll the chart to entry/ex
 
 ### 5. Live (optional)
 
-Toggle **Live**. Stream plugin pushes bars; AXIS may re-run silently when `needsRerun` is set. Stream = **None** freezes time. Mock poll works offline after engine warm-up.
+Toggle **Live**. A stream plugin pushes bars; AXIS may re-run silently when `needsRerun` is set. Live off (`stream: null`, not a `none` plugin) freezes time. Mock poll works offline after engine warm-up.
 
 ### 6. Save a script (optional)
 
@@ -197,7 +197,7 @@ Load → Run smoke indicator → toggle Live. No Flask required.
 | --- | --- |
 | CORS on `/run` | Fix `ALLOWED_ORIGINS` / use Pyodide |
 | No trades in Strategy | Need entry+exit pair events; open strategy script |
-| Live no updates | Stream not `none`; network; check logs drawer |
+| Live no updates | Turn Live on and pick a stream (`binance-ws` or `mock-poll`); check the network and the logs drawer |
 | Pyodide first run slow | Expected warm-up; assets self-hosted under origin |
 
 ## See also

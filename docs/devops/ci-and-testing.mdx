@@ -26,7 +26,7 @@ description: "GitHub Actions for AXIS: unit coverage gate, Playwright smoke, wor
 
 ## Abstract
 
-AXIS quality gates live primarily under `frontend/` (Bun tests) and `frontend/worker/tests/`, orchestrated by GitHub Actions (`.github/workflows/ci.yml`, `axis-nightly.yml`). Deep test conventions are documented in [Testing reference](/axis/docs/reference/testing) and `frontend/TESTING.md`.
+AXIS quality gates live primarily under the repo root (Bun tests) and `worker/tests/`, orchestrated by GitHub Actions (`.github/workflows/ci.yml`, `axis-nightly.yml`). Deep test conventions are documented in [Testing reference](/axis/docs/reference/testing) and `TESTING.md`.
 
 ## Conceptual model
 
@@ -45,7 +45,6 @@ flowchart TB
 ## Interface surface — local commands
 
 ```bash
-cd frontend
 bun run test                 # tests/ + worker/tests/
 bun run test:unit
 bun run test:coverage:gate   # lcov + scripts/check-coverage.mjs 95
@@ -59,14 +58,14 @@ bun run test:all             # gate + security
 Worker:
 
 ```bash
-cd frontend/worker
+cd worker
 npm run typecheck
 ```
 
 Repo Makefile:
 
 ```bash
-make test-frontend
+bun run test:unit
 make worker-typecheck
 ```
 
@@ -78,7 +77,7 @@ make worker-typecheck
 | --- | --- |
 | Frontend tests / coverage | Bun install, coverage, artifact `axis-coverage-lcov` |
 | `axis-e2e` | Playwright `@smoke` on PR |
-| Worker typecheck | `frontend/worker` tsc |
+| Worker typecheck | `worker` tsc |
 | Related | Python suite remains for pynescript core |
 
 ### axis-nightly.yml
@@ -94,11 +93,11 @@ Schedule: `0 4 * * *` UTC + `workflow_dispatch`.
 
 | Path | Role |
 | --- | --- |
-| `frontend/TESTING.md` | Authoritative testing guide |
-| `frontend/scripts/check-coverage.mjs` | Scoped line gate |
-| `frontend/playwright.config.ts` | webServer build+preview `:4173` |
-| `frontend/e2e/` | Specs with `@smoke` / `@critical` tags |
-| `frontend/worker/tests/` | auth, keys, scripts, runtime |
+| `TESTING.md` | Authoritative testing guide |
+| `scripts/check-coverage.mjs` | Scoped line gate |
+| `playwright.config.ts` | webServer build+preview `:4173` |
+| `e2e/` | Specs with `@smoke` / `@critical` tags |
+| `worker/tests/` | auth, keys, scripts, runtime |
 | `.github/workflows/ci.yml` | PR gates |
 | `.github/workflows/axis-nightly.yml` | Nightly |
 

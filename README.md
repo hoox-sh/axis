@@ -389,9 +389,9 @@ curl -sS -X POST https://pynescript.online/run \
 |----------------|--------------------------------------|
 | `script`       | Last Pine source                     |
 | `symbol`/`interval` | Last market selection            |
-| `engine`       | `server` or `pyodide`                |
-| `source`       | `binance-rest`/`mock-walk`/`csv-upload` |
-| `stream`       | `binance-ws`/`mock-poll`/`none`      |
+| `engine`       | `server`, `pyne-worker`, or `pyodide` |
+| `source`       | `binance-rest` / `mock-walk` / `csv-upload` (catalog has more) |
+| `stream`       | `binance-ws` / `mock-poll`, or Live off (`null`). There is no `none` plugin. |
 | `endpoint`     | Backend URL                          |
 | `mode`         | `local` or `cloud`                   |
 | `apiKey`       | stored **only in this browser**      |
@@ -399,7 +399,7 @@ curl -sS -X POST https://pynescript.online/run \
 
 ## Verification
 
-- `make run-frontend` then open `http://localhost:8081`.
+- `bun run dev` then open `http://localhost:3000`. A built `dist/` can be served with `python axis_pwa_server.py` on `:8081`.
 - App loads, chart shows BTC/USDT, top bar exposes Engine / Source / Stream
   pickers. DevTools → Application → Manifest + Service Workers confirms PWA.
 - Engine = `pyodide` + Source = `mock-walk`: go offline (DevTools → Network

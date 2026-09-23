@@ -26,7 +26,7 @@ description: "AXIS unit, worker, security, coverage gate, and Playwright e2e con
 
 ## Abstract
 
-AXIS tests are **Bun-first** under `frontend/`, with Playwright for browser smoke and a scoped coverage ratchet. Canonical human guide: `frontend/TESTING.md`. This page is the reference map for agents and contributors.
+AXIS tests are **Bun-first** under the repo root, with Playwright for browser smoke and a scoped coverage ratchet. Canonical human guide: `TESTING.md`. This page is the reference map for agents and contributors.
 
 ## Conceptual model
 
@@ -43,10 +43,8 @@ flowchart TB
 ## Commands
 
 ```bash
-cd frontend
-
 bun run test                 # unit + worker tests
-bun run test:unit            # frontend/tests only
+bun run test:unit            # tests only
 bun run test:coverage        # lcov + text → coverage/
 bun run test:coverage:gate   # coverage + 95% scoped gate
 bun run test:security        # tests/security/
@@ -56,29 +54,21 @@ bun run test:e2e             # all
 bun run test:all             # gate + security
 ```
 
-Root:
-
-```bash
-bun run test:frontend
-bun run test:frontend:coverage
-make test-frontend
-```
-
 ## Layout
 
 ```
-frontend/tests/
+tests/
   setup.ts
   fixtures/
   helpers/
   *.test.ts
   integration/
   security/
-frontend/scripts/check-coverage.mjs
-frontend/e2e/
+scripts/check-coverage.mjs
+e2e/
   smoke.spec.ts
-frontend/playwright.config.ts
-frontend/worker/tests/
+playwright.config.ts
+worker/tests/
   auth.test.ts
   keys-*.test.ts
   scripts*.test.ts
@@ -128,7 +118,7 @@ Smoke mocks `/run` and Binance. Use `data-testid` attributes (`axis-btn-load`, `
 
 ## Adding a unit test
 
-1. Create `frontend/tests/<area>.test.ts`.
+1. Create `tests/<area>.test.ts`.
 2. Import setup if needed.
 3. Use fixtures under `tests/fixtures/`.
 4. Run `bun run test:unit` and `bun run test:coverage:gate`.

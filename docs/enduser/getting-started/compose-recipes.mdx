@@ -42,9 +42,9 @@ Built-in ids (catalog may grow via URL plugins):
 
 | Kind | Built-ins |
 | --- | --- |
-| Source | `binance-rest`, `mock-walk`, `csv-upload`, (+ examples e.g. CoinGecko) |
-| Stream | `binance-ws`, `mock-poll`, `none`, (+ CF DO example) |
-| Engine | `server`, `pyodide` |
+| Source | `binance-rest`, `okx-rest`, `bybit-rest`, `coinbase-rest`, `kraken-rest`, `mexc-rest`, `geckoterminal-ohlcv`, `ccxt-rest`, `mock-walk`, `csv-upload`, `data-manager`, plus URL plugins |
+| Stream | `binance-ws`, `okx-ws`, `bybit-ws`, `coinbase-ws`, `kraken-ws`, `mexc-ws`, `ccxt-ws`, `mock-poll`. There is no `none` stream. Live off is `stream: null` / `enabled: false`. |
+| Engine | `server`, `pyne-worker`, `pyodide` |
 | Storage | `local`, `cloud`, `git` |
 
 ## Recipe matrix
@@ -53,8 +53,8 @@ Built-in ids (catalog may grow via URL plugins):
 | --- | --- | --- | --- | --- | --- | --- |
 | Offline lab | mock-walk | mock-poll | pyodide | local | first boot only | no |
 | Desk research | binance-rest | binance-ws | server → Flask | local | yes | Flask |
-| Multi-venue desk | binance-rest + URL sources | binance-ws / none | server | local | yes | Flask |
-| CSV desk | csv-upload | none / mock-poll | server or pyodide | local | no* | optional |
+| Multi-venue desk | binance-rest + URL sources | binance-ws, or Live off | server | local | yes | Flask |
+| CSV desk | csv-upload | Live off, or mock-poll | server or pyodide | local | no* | optional |
 | AXIS at the edge | venue REST | venue WS / DO | server → Worker | cloud | yes | Worker (+ optional Flask proxy) |
 | Repo library | any | any | any | git | yes (save/list) | git host API |
 
@@ -101,7 +101,7 @@ Built-in ids (catalog may grow via URL plugins):
 
 ```bash
 make run                 # :5002
-cd frontend && bun run dev
+bun run dev
 ```
 
 Settings → Backend URL `http://localhost:5002` → Test. Symbol like `BTCUSDT`, interval `1h` / `1d`.
@@ -119,7 +119,7 @@ Settings → Backend URL `http://localhost:5002` → Test. Symbol like `BTCUSDT`
 | Axis | Pattern |
 | --- | --- |
 | Source | Built-in `binance-rest` **or** Manager → Install URL plugin (e.g. CoinGecko example) → **Use** |
-| Stream | Match venue when available; else `none` for historical-only |
+| Stream | Match the venue when it has a built-in stream. Otherwise leave Live off (`stream: null`). |
 | Engine | Usually `server` for parity |
 | Storage | `local` or `git` for shared research |
 
@@ -142,7 +142,7 @@ Dynamic plugins rehydrate from localStorage install list on boot (`restoreInstal
 | Axis | Id |
 | --- | --- |
 | Source | `csv-upload` |
-| Stream | `none` (typical) or `mock-poll` for artificial advance |
+| Stream | Live off (typical) or `mock-poll` for artificial advance |
 | Engine | `pyodide` (airgap) or `server` |
 | Storage | `local` |
 
@@ -215,7 +215,7 @@ Dynamic plugins rehydrate from localStorage install list on boot (`restoreInstal
 flowchart TD
   A{Need real venue data?} -->|no| B[Offline lab or CSV]
   A -->|yes| C{Need live?}
-  C -->|no| D[Source + stream none + engine]
+  C -->|no| D[Source + Live off + engine]
   C -->|yes| E{Own Worker / multi-client?}
   E -->|no| F[Desk research]
   E -->|yes| G[AXIS at the edge]
@@ -228,7 +228,7 @@ flowchart TD
 
 | Concern | Path |
 | --- | --- |
-| Active selection | `frontend/src/store` `activePlugins` |
+| Active selection | `src/store` `activePlugins` |
 | Built-in catalogs | `sources/catalog.ts`, `streams/*`, `engines/catalog.ts`, `storage/catalog.ts` |
 | URL plugins | `plugins/loader.ts` |
 | Compose UI | `ui/Topbar.tsx`, `ui/PluginManager.tsx`, `ui/SettingsDialog.tsx` |

@@ -64,31 +64,32 @@ flowchart LR
 | `dataset` | On-chain / alternate series | `fetchDataset(opts) → OnchainDataset` — [Datasets](/axis/docs/plugins/datasets) |
 | `component` | UI slots (phase 2 + URL agents) | `mount(slot, el, api)` — e.g. [PYNE Agent](/axis/docs/plugins/pyne-agent) |
 
-Built-ins register at bootstrap (`frontend/src/plugins/bootstrap.ts`). Dynamic plugins install from URL (`loader.ts`) and persist under `localStorage` key `pynescript.axis.plugins.v1`.
+Built-ins register at bootstrap (`src/plugins/bootstrap.ts`). Dynamic plugins install from URL (`loader.ts`) and persist under `localStorage` key `pynescript.axis.plugins.v1`.
 
 ## Interface surface
 
 | Module | Path |
 | --- | --- |
-| Contracts | [`frontend/src/plugins/types.ts`](https://github.com/hoox-sh/pynescript/blob/main/frontend/src/plugins/types.ts) |
-| Registry | [`frontend/src/plugins/registry.ts`](https://github.com/hoox-sh/pynescript/blob/main/frontend/src/plugins/registry.ts) |
-| Bootstrap | [`frontend/src/plugins/bootstrap.ts`](https://github.com/hoox-sh/pynescript/blob/main/frontend/src/plugins/bootstrap.ts) |
-| Active resolution | [`frontend/src/plugins/active.ts`](https://github.com/hoox-sh/pynescript/blob/main/frontend/src/plugins/active.ts) |
-| Dynamic loader | [`frontend/src/plugins/loader.ts`](https://github.com/hoox-sh/pynescript/blob/main/frontend/src/plugins/loader.ts) |
-| Public barrel | [`frontend/src/plugins/index.ts`](https://github.com/hoox-sh/pynescript/blob/main/frontend/src/plugins/index.ts) |
-| Source catalog | [`frontend/src/sources/catalog.ts`](https://github.com/hoox-sh/pynescript/blob/main/frontend/src/sources/catalog.ts) |
-| Stream catalog | [`frontend/src/streams/catalog.ts`](https://github.com/hoox-sh/pynescript/blob/main/frontend/src/streams/catalog.ts) |
-| Engine catalog | [`frontend/src/engines/catalog.ts`](https://github.com/hoox-sh/pynescript/blob/main/frontend/src/engines/catalog.ts) |
-| Storage catalog | [`frontend/src/storage/catalog.ts`](https://github.com/hoox-sh/pynescript/blob/main/frontend/src/storage/catalog.ts) |
+| Contracts | [`src/plugins/types.ts`](https://github.com/hoox-sh/axis/blob/main/src/plugins/types.ts) |
+| Registry | [`src/plugins/registry.ts`](https://github.com/hoox-sh/axis/blob/main/src/plugins/registry.ts) |
+| Bootstrap | [`src/plugins/bootstrap.ts`](https://github.com/hoox-sh/axis/blob/main/src/plugins/bootstrap.ts) |
+| Active resolution | [`src/plugins/active.ts`](https://github.com/hoox-sh/axis/blob/main/src/plugins/active.ts) |
+| Dynamic loader | [`src/plugins/loader.ts`](https://github.com/hoox-sh/axis/blob/main/src/plugins/loader.ts) |
+| Public barrel | [`src/plugins/index.ts`](https://github.com/hoox-sh/axis/blob/main/src/plugins/index.ts) |
+| Source catalog | [`src/sources/catalog.ts`](https://github.com/hoox-sh/axis/blob/main/src/sources/catalog.ts) |
+| Stream catalog | [`src/streams/catalog.ts`](https://github.com/hoox-sh/axis/blob/main/src/streams/catalog.ts) |
+| Engine catalog | [`src/engines/catalog.ts`](https://github.com/hoox-sh/axis/blob/main/src/engines/catalog.ts) |
+| Storage catalog | [`src/storage/catalog.ts`](https://github.com/hoox-sh/axis/blob/main/src/storage/catalog.ts) |
 
 ## Built-in inventory (quick)
 
 | Kind | Built-in IDs |
 | --- | --- |
-| Sources | `binance-rest`, `okx-rest`, `bybit-rest`, `coinbase-rest`, `mock-walk`, `csv-upload` |
-| Streams | `binance-ws`, `okx-ws`, `bybit-ws`, `coinbase-ws`, `kraken-ws`, `mock-poll` |
-| Engines | `server`, `pyodide` |
+| Sources | `binance-rest`, `okx-rest`, `bybit-rest`, `coinbase-rest`, `kraken-rest`, `mexc-rest`, `geckoterminal-ohlcv`, `ccxt-rest`, `mock-walk`, `csv-upload`, `data-manager` |
+| Streams | `binance-ws`, `okx-ws`, `bybit-ws`, `coinbase-ws`, `kraken-ws`, `mexc-ws`, `ccxt-ws`, `mock-poll` |
+| Engines | `server`, `pyne-worker`, `pyodide` |
 | Storage | `local`, `cloud`, `git` |
+| Datasets | `defillama-tvl` |
 | Components | `hyperparameter-optimisation` (Results → Optimise) |
 
 Defaults when selection is missing (`active.ts`): source `binance-rest`, stream `binance-ws`, engine `server`, storage `local`.

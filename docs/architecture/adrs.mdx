@@ -19,12 +19,12 @@
 
 ---
 title: "Architecture Decision Records"
-description: "ADR-001 through ADR-015 for AXIS: registry, AXIS≠engine, Solid+Vite, dual engines, configSchema, URL load, storage, CF project id, proxies, DO fan-out, migration, CORS, results export, transport preference + telemetry, on-chain data plane."
+description: "ADR-001 through ADR-015 for AXIS: registry, AXIS≠engine, Solid+Vite, three built-in engines, configSchema, URL load, storage, CF project id, proxies, DO fan-out, migration, CORS, results export, transport preference + telemetry, on-chain data plane."
 ---
 
 # Architecture Decision Records
 
-Formal ADRs for AXIS (product + `frontend/`). Status values: **Accepted** unless noted. Dates are conceptual product epochs, not git archaeology.
+Formal ADRs for AXIS (product + the repo root). Status values: **Accepted** unless noted. Dates are conceptual product epochs, not git archaeology.
 
 ## Index
 
@@ -33,7 +33,7 @@ Formal ADRs for AXIS (product + `frontend/`). Status values: **Accepted** unless
 | [ADR-001](#adr-001-pluggable-unified-registry) | Pluggable unified registry |
 | [ADR-002](#adr-002-axis--engine) | AXIS ≠ engine |
 | [ADR-003](#adr-003-solid--vite-product-ui) | Solid + Vite product UI |
-| [ADR-004](#adr-004-dual-engines-server--pyodide) | Dual engines (server + Pyodide) |
+| [ADR-004](#adr-004-built-in-engines) | Three built-in engines (server, pyne-worker, Pyodide) |
 | [ADR-005](#adr-005-declarative-configschema) | Declarative configSchema |
 | [ADR-006](#adr-006-url-loadable-plugins) | URL-loadable plugins |
 | [ADR-007](#adr-007-storage-as-a-plugin) | Storage as a plugin |
@@ -57,7 +57,7 @@ Early AXIS registered sources/streams/engines in separate ad hoc maps. Operators
 
 ### Decision
 
-Adopt a **unified `PluginRegistry`** (`frontend/src/plugins/registry.ts`) with kinds:
+Adopt a **unified `PluginRegistry`** (`src/plugins/registry.ts`) with kinds:
 
 `source | stream | engine | storage | component(reserved)`
 
@@ -108,22 +108,23 @@ Product path is **SolidJS + Vite + Tailwind 4**, entry `src/index.tsx` / `app.ts
 
 ---
 
-## ADR-004: Dual engines (server + Pyodide)
+## ADR-004: Built-in engines
 
 ### Context
 
-Researchers need server fidelity and offline demos. A single transport cannot satisfy both without compromise.
+Researchers need server fidelity, an edge evaluator, and offline demos. A single transport cannot satisfy all three.
 
 ### Decision
 
-Ship two built-in engines:
+Ship three built-in engines (`BUILTIN_ENGINES` in `src/engines/catalog.ts`). `pyne-worker` is `builtIn: true`. It is not a URL you paste onto the `server` engine.
 
 | Id | Role |
 | --- | --- |
-| `server` | `POST {endpoint}/run?mode=` with `{ script, data: bars }` |
-| `pyodide` | Browser Python + vendored pynescript / antlr wheels |
+| `server` | WebSocket `/ws/run`, then `POST {endpoint}/run`. Default endpoint `http://localhost:5002` (Flask Pro API) or the AXIS Worker. |
+| `pyne-worker` | HOOX edge evaluator. Same `/run` contract, default origin the production pyne-worker. |
+| `pyodide` | In-browser Python + vendored pynescript / antlr wheels. |
 
-Both implement the same `EnginePlugin` contract and return `RunResult`.
+All three implement `EnginePlugin` and return `RunResult`.
 
 ### Consequences
 
@@ -396,7 +397,7 @@ flowchart LR
 | Phase | Capability | Primary surfaces |
 | --- | --- | --- |
 | **1 — TVL** | DefiLlama protocol TVL scalar history + search | `defillama-tvl` dataset, `src/onchain/defillama.ts`, llama proxy |
-| **2 — DEX** | GeckoTerminal pool OHLCV + pool search; optional `geckoterminal-ohlcv` source for DSM multi-page backfill | `geckoterminal` dataset, `src/onchain/geckoterminal.ts`, gecko proxy |
+| **2 — DEX** | GeckoTerminal pool OHLCV + pool search | source `geckoterminal-ohlcv`, `src/onchain/geckoterminal.ts`, gecko proxy. Not a `DatasetPlugin`. |
 | **3 — Events** | Derived day-over-day TVL spike/drop events (`tvl_spike` / `tvl_drop`) | `src/onchain/events.ts` → chart markers |
 | **4 — Alerts** | Bridge events into alerts engine (`onchain_tvl_spike` / `onchain_event`) | `src/onchain/alerts-bridge.ts`, `src/alerts/engine.ts` |
 

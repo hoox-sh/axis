@@ -19,14 +19,14 @@
 
 ---
 title: "Datasets"
-description: "On-chain / alternate series dataset plugins — fetchDataset contract, DefiLlama TVL, GeckoTerminal DEX OHLCV."
+description: "Dataset plugins — fetchDataset contract. The only built-in is defillama-tvl. GeckoTerminal pool candles are the geckoterminal-ohlcv source."
 ---
 
 # Datasets
 
 ## Abstract
 
-A **dataset** plugin loads non-OHLCV (or alternate OHLCV) series for the chart host (protocol TVL, DEX pool candles, funding, events). Kind is `dataset` on the unified registry. Phase 1 surfaces DefiLlama protocol TVL; Phase 2 adds GeckoTerminal pool OHLCV and derived TVL events. UI: [On-Chain panel](/axis/docs/enduser/guides/on-chain). Contract: `src/plugins/types.ts` (`DatasetPlugin`) and `src/onchain/types.ts`.
+A **dataset** plugin loads an alternate series through `fetchDataset`. The only built-in is `defillama-tvl` (`BUILTIN_DATASETS` in `src/onchain/catalog.ts`). GeckoTerminal pool candles are source `geckoterminal-ohlcv`, with the client in `src/onchain/geckoterminal.ts` and the Worker gecko proxy. They are not a dataset id. Derived TVL spike events come from `src/onchain/events.ts`. UI: [On-Chain panel](/axis/docs/enduser/guides/on-chain).
 
 ## Conceptual model
 
@@ -83,8 +83,8 @@ interface DatasetPlugin {
 
 | id | Name | Network | Notes |
 | --- | --- | --- | --- |
-| `defillama-tvl` | DefiLlama TVL | yes | Protocol TVL history; browser uses Worker llama proxy by default |
-| `geckoterminal` | GeckoTerminal | yes | DEX pool OHLCV + pool search; browser uses Worker gecko proxy by default |
+| `defillama-tvl` | DatasetPlugin | yes | Protocol TVL history; browser uses the Worker llama proxy by default |
+| `geckoterminal-ohlcv` | source, not a dataset | yes | DEX pool OHLCV. Client `src/onchain/geckoterminal.ts`; browser uses the Worker gecko proxy |
 
 Helpers (not only plugins):
 

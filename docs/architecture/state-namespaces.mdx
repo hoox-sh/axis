@@ -71,7 +71,7 @@ flowchart TB
 
 ## App state key `pynescript.axis.v1`
 
-Solid store (`frontend/src/store/index.ts`):
+Solid store (`src/store/index.ts`):
 
 **Persisted (representative):**
 
@@ -150,7 +150,7 @@ Revisions: cloud may expose `revision` / If-Match; git uses blob SHAs via forge 
 
 ## URL hash state (legacy helper)
 
-`frontend/src/state-hash.js` (legacy state path):
+`src/state-hash.js` (legacy state path):
 
 | Feature | Detail |
 | --- | --- |
@@ -182,12 +182,12 @@ Solid-first product may not wire this by default; treat as optional share mechan
 
 | Path | Role |
 | --- | --- |
-| `frontend/src/store/index.ts` | Solid persistence |
-| `frontend/src/store/types.ts` | `AppState` |
-| `frontend/src/state.js` | Legacy state |
-| `frontend/src/state-hash.js` | Hash sync |
-| `frontend/src/storage/local.ts` | IDB library |
-| `frontend/src/plugins/loader.ts` | Installed plugin list |
+| `src/store/index.ts` | Solid persistence |
+| `src/store/types.ts` | `AppState` |
+| `src/state.js` | Legacy state |
+| `src/state-hash.js` | Hash sync |
+| `src/storage/local.ts` | IDB library |
+| `src/plugins/loader.ts` | Installed plugin list |
 
 ## See also
 

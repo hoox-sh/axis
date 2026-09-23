@@ -26,7 +26,7 @@ description: "PluginRegistry singleton: ordered maps per kind, listeners, built-
 
 ## Abstract
 
-`PluginRegistry` (`frontend/src/plugins/registry.ts`) is the **single in-memory source of truth** for every installed plugin of every kind. Catalogs, the dynamic loader, active resolution, and Manager UI all read/write through this class (or thin wrappers that call it).
+`PluginRegistry` (`src/plugins/registry.ts`) is the **single in-memory source of truth** for every installed plugin of every kind. Catalogs, the dynamic loader, active resolution, and Manager UI all read/write through this class (or thin wrappers that call it).
 
 ## Conceptual model
 
@@ -92,9 +92,9 @@ Dynamic uninstall paths must never silently delete `binance-rest` / `server` / `
 
 | Concern | Path |
 | --- | --- |
-| Class + singleton | `frontend/src/plugins/registry.ts` |
-| Idempotent builtins | `frontend/src/plugins/bootstrap.ts` → `ensureBuiltins()` |
-| Active set | `frontend/src/plugins/active.ts` |
+| Class + singleton | `src/plugins/registry.ts` |
+| Idempotent builtins | `src/plugins/bootstrap.ts` → `ensureBuiltins()` |
+| Active set | `src/plugins/active.ts` |
 | Dynamic register helpers | `sources/catalog.ts` `registerDynamicSource`, etc. |
 
 ### Bootstrap

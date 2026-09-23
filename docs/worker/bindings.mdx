@@ -143,10 +143,10 @@ Static PWA assets are **not** served by this Worker in the documented split: **P
 ## Deploy commands
 
 ```bash
-cd frontend/worker
+cd worker
 wrangler deploy
 
-# Pages (from frontend/)
+# Pages (repo root)
 bun run build
 wrangler pages deploy dist --project-name=axis
 # or npm run deploy:pages from worker package

@@ -26,7 +26,7 @@ description: "Script library API: /api/scripts, D1 schema, drafts, revisions, an
 
 ## Abstract
 
-The Worker **data plane** for user scripts is `frontend/worker/src/scripts.ts` — REST under `/api/scripts` with Bearer auth ([auth](/axis/docs/worker/auth)). Persistence prefers **D1** (`env.DB`); without D1, per-isolate **in-memory** maps support local `wrangler dev`.
+The Worker **data plane** for user scripts is `worker/src/scripts.ts` — REST under `/api/scripts` with Bearer auth ([auth](/axis/docs/worker/auth)). Persistence prefers **D1** (`env.DB`); without D1, per-isolate **in-memory** maps support local `wrangler dev`.
 
 The PWA **cloud** storage plugin is the primary client.
 

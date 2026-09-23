@@ -1,4 +1,4 @@
-# frontend/worker/ — Cloudflare Worker for AXIS
+# worker/ — Cloudflare Worker for AXIS
 
 ## Cloudflare project naming (keep stable)
 
@@ -17,8 +17,7 @@ Canonical URLs: Pages `https://axis.hoox.sh`, Worker `https://worker.axis.hoox.s
 This Worker provides the **production backend** for the PWA. It can:
 
 - Proxy `POST /api/run` to an external Python backend (Flask) — works today.
-- Run Pine scripts in-Worker via Pyodide (not yet implemented, see
-  `RUNTIME.md` below).
+- Run Pine in-worker via Pyodide when `PYODIDE_IN_WORKER=enabled`. The path exists and defaults to **disabled** (`worker/wrangler.toml.example`). See `RUNTIME.md`.
 - Hold **API keys in KV** (with admin-only `X-Admin-Token`).
 - Meter usage in KV (per-key, 30-day TTL).
 - Persist runs/scripts in **D1** (optional, off by default).
@@ -136,12 +135,12 @@ wrangler kv namespace create USAGE
 # (optional) wrangler r2 bucket create indicator-bundles
 
 # 2) Deploy the Worker
-cd frontend/worker
+cd worker
 wrangler deploy
 
 # 3) Deploy the PWA as a Pages site (canonical https://axis.hoox.sh)
 cd ..
-bun run build   # produce frontend/dist
+bun run build   # produce dist/
 wrangler pages deploy dist --project-name=axis
 ```
 

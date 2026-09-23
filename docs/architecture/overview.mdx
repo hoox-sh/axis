@@ -19,7 +19,7 @@
 
 ---
 title: "Architecture overview"
-description: "End-to-end AXIS architecture: Solid AXIS UI, unified registry, dual engines, chart apply pipeline, and optional edge plane."
+description: "End-to-end AXIS architecture: Solid AXIS UI, unified registry, three built-in engines, chart apply pipeline, and optional edge plane."
 ---
 
 # Architecture overview
@@ -97,12 +97,13 @@ Legacy parallel: `state.js`, `registry.js`, `main.js` — not product path. See 
 
 Live pairs with history via `defaultStreamForSource`. `live.preferAfterLoad` auto-starts WS after Load and on boot when bars exist (default **on**).
 
-## Dual engines
+## Built-in engines
 
 | Engine | Transport | Fidelity host |
 | --- | --- | --- |
-| `server` | HTTP JSON `{ script, data }` → `/run` | Flask or Worker→Flask |
-| `pyodide` | In-worker-thread-ish browser Python | Self-hosted wheels + `pynescript_runtime.py` |
+| `server` | WebSocket `/ws/run`, then `POST /run` | Flask Pro API or AXIS Worker |
+| `pyne-worker` | `POST /run` (optional WS) | HOOX pyne-worker. Built-in. Not a pasted Backend URL on `server`. |
+| `pyodide` | In-browser Python | Self-hosted Pyodide 0.26.2 + vendored wheel + `pynescript_runtime.py` |
 
 Timeout policy in runner scales with bar length (clamped). Live re-runs use shorter silent timeouts.
 

@@ -26,7 +26,7 @@ description: "Script library backends: local (IndexedDB), cloud (Worker /api/scr
 
 ## Abstract
 
-**Storage** plugins persist the user’s Pine library and drafts. Built-ins: `local`, `cloud`, `git` — registered from `frontend/src/storage/catalog.ts`. High-level UI/editor APIs go through `frontend/src/storage/service.ts`, which always dual-writes drafts to **local** for crash recovery.
+**Storage** plugins persist the user’s Pine library and drafts. Built-ins: `local`, `cloud`, `git` — registered from `src/storage/catalog.ts`. High-level UI/editor APIs go through `src/storage/service.ts`, which always dual-writes drafts to **local** for crash recovery.
 
 Dynamic `kind: 'storage'` install via URL is **not supported** (`loader.ts` throws).
 
@@ -44,7 +44,7 @@ flowchart TB
 
 ## Built-in plugins
 
-### local (`frontend/src/storage/local.ts`)
+### local (`src/storage/local.ts`)
 
 | Concern | Detail |
 | --- | --- |
@@ -54,7 +54,7 @@ flowchart TB
 | Memory | In-process maps when neither IDB nor LS exist (tests/SSR) |
 | Capabilities | Offline-friendly; file versioning (snapshots on each save) |
 
-### cloud (`frontend/src/storage/cloud.ts`)
+### cloud (`src/storage/cloud.ts`)
 
 | Concern | Detail |
 | --- | --- |
@@ -64,7 +64,7 @@ flowchart TB
 | Concurrency | `If-Match` revision headers on write |
 | Partition | Worker hashes key → `userId`; rows scoped per user |
 
-### git (`frontend/src/storage/git.ts`)
+### git (`src/storage/git.ts`)
 
 | Concern | Detail |
 | --- | --- |

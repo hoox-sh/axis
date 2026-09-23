@@ -26,7 +26,7 @@ description: "Vite production build, dist layout, axis_pwa_server.py SPA rules, 
 
 ## Abstract
 
-Production AXIS assets are a **static site** produced by Vite (`bun run build` → `frontend/dist`). Serve them with any static host, Cloudflare Pages, or the repo’s `axis_pwa_server.py` SPA-aware server.
+Production AXIS assets are a **static site** produced by Vite (`bun run build` → `dist`). Serve them with any static host, Cloudflare Pages, or the repo’s `axis_pwa_server.py` SPA-aware server.
 
 Critical requirement: **real binary assets** for Pyodide (`.wasm`, `.whl`, `.zip`) must not be rewritten to `index.html`.
 
@@ -62,13 +62,12 @@ flowchart LR
 ### axis_pwa_server.py
 
 ```bash
-cd frontend
 bun run build
 python axis_pwa_server.py
 # HOST / PORT env; default 0.0.0.0:8081 → dist/
 ```
 
-Behavior (`frontend/axis_pwa_server.py`):
+Behavior (`axis_pwa_server.py`):
 
 | Rule | Detail |
 | --- | --- |
@@ -95,24 +94,23 @@ This SPA exception list exists because Pyodide + micropip die with opaque `BadZi
 
 | Path | Role |
 | --- | --- |
-| `frontend/package.json` | Build scripts |
-| `frontend/axis_pwa_server.py` | Threading HTTP SPA server |
-| `frontend/src/engines/catalog.ts` | Asset URL expectations |
-| `frontend/LEGACY.md` | Product path vs old shell |
+| `package.json` | Build scripts |
+| `axis_pwa_server.py` | Threading HTTP SPA server |
+| `src/engines/catalog.ts` | Asset URL expectations |
+| `LEGACY.md` | Product path vs old shell |
 
 ### Makefile note
 
 `make pages-deploy` may historically deploy the wrong tree — **prefer**:
 
 ```bash
-cd frontend && bun run build
+bun run build
 wrangler pages deploy dist --project-name=axis
 ```
 
 ## Worked example — static desk demo
 
 ```bash
-cd frontend
 bun install
 bun run build
 PORT=8081 python axis_pwa_server.py

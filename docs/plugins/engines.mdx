@@ -45,7 +45,7 @@ flowchart TB
   HTTP --> FLASK[Flask :5002]
   HTTP --> WRK[Worker /api/run]
   WRK -->|EXTERNAL_BACKEND| FLASK
-  WRK -.->|PYODIDE_IN_WORKER planned| EDGE[In-worker Pyodide]
+  WRK -.->|PYODIDE_IN_WORKER=enabled| EDGE[In-worker Pyodide]
   RUN -->|pyodide| WASM[Browser Pyodide + wheels]
 ```
 
@@ -117,7 +117,7 @@ Dedicated HOOX **pyne-worker** edge host (not `worker-axis`).
 
 1. Prefetch assets (`prefetchPyodideAssets`) — wasm, stdlib zip, micropip wheels.
 2. `loadPyodide({ indexURL })`.
-3. `micropip.install` same-origin `/vendor/pynescript-0.2.0-py3-none-any.whl` and antlr runtime wheel.
+3. `micropip.install` same-origin `/vendor/pynescript-0.5.0-py3-none-any.whl` and the antlr4 4.13.2 wheel.
 4. Fetch `/pyodide/pynescript_runtime.py` and `runPythonAsync` it.
 
 **Refreshing the pyne wheel** (after pyne compiler/runtime changes):
@@ -141,12 +141,12 @@ Keep the hard-coded wheel filename in `src/engines/catalog.ts` / `index.js` in s
 
 | Path | Role |
 | --- | --- |
-| `frontend/src/engines/catalog.ts` | `serverEngine`, `pyodideEngine`, registration |
-| `frontend/src/indicators/runner.ts` | UI run orchestration |
-| `frontend/public/vendor/*.whl` | Shipped wheels |
-| `frontend/public/pyodide/` | Self-hosted Pyodide + runtime py |
-| `frontend/worker/src/runtime.ts` | Edge `/api/run` |
-| `frontend/worker/RUNTIME.md` | In-worker Python plan |
+| `src/engines/catalog.ts` | `serverEngine`, `pyneWorkerEngine`, `pyodideEngine` |
+| `src/indicators/runner.ts` | UI run orchestration |
+| `public/vendor/*.whl` | Shipped wheels |
+| `public/pyodide/` | Self-hosted Pyodide + runtime py |
+| `worker/src/runtime.ts` | Edge `/api/run` |
+| `worker/RUNTIME.md` | Gated in-worker Python (`PYODIDE_IN_WORKER`, default disabled) |
 
 ## Invariants & edge cases
 

@@ -50,7 +50,7 @@ flowchart LR
 
 ```bash
 make run
-cd frontend && bun install && bun run dev
+bun install && bun run dev
 ```
 
 **Notes:** Vite may proxy `/run`; Settings endpoint can still point absolute at `:5002`. CORS must allow Vite origin.
@@ -65,7 +65,7 @@ flowchart LR
 ```
 
 ```bash
-cd frontend && bun run build
+bun run build
 python3 axis_pwa_server.py
 make run   # separate process
 ```
@@ -91,7 +91,7 @@ flowchart TB
 ```bash
 axis deploy
 # or: cd worker && bun run deploy
-cd frontend && bun run build
+bun run build
 wrangler pages deploy dist --project-name=axis
 ```
 
