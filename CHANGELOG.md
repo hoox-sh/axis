@@ -22,6 +22,9 @@ _Generated/updated: 2026-09-23 · 446 commits · describe-tag: `v2.12.0`_
 
 ### Fixed
 
+- **ZigZag** plots confirmed pivots and the live extreme. It was holding the last confirmed pivot as a flat line, so a rally never left that price.
+- **plotshape markers** (fractals, MA crosses) stay on the chart. The engine sends `true` for a hit; that value was coerced to empty and the series was all blank.
+- **Pine `time` sent to the engine is milliseconds.** Chart bars are unix seconds. `hour()` / `minute()` / session highlights were reading a ~15 minute slice of the whole history, so AXIS Sessions never lit.
 - **Chart arrows behind Studio**: Left/Right no longer pan the chart while a modal is open, so the settings tab strip receives them.
 - **Script storage label**: the storage select is labeled Storage. It lists storage backends.
 

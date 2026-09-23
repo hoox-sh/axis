@@ -73,6 +73,10 @@ export function coercePlotSample(v: unknown): number | null {
 const CSS_COLOR_RE = /^(#[0-9a-f]{3,8}|rgba?\(|hsla?\(|color\()/i;
 
 export function coerceSeriesSample(v: unknown): number | string | null {
+  // plotshape / plotchar export JSON `true` for a marker and null otherwise.
+  // A boolean must stay truthy — coercePlotSample maps every boolean to null,
+  // which drops fractals and cross markers.
+  if (typeof v === 'boolean') return v ? 1 : null;
   if (typeof v === 'string') {
     const s = v.trim();
     if (CSS_COLOR_RE.test(s)) return s;

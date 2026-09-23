@@ -131,6 +131,11 @@ describe('coerceSeriesSample', () => {
     expect(coerceSeriesSample('nope')).toBeNull();
     expect(coerceSeriesSample(null)).toBeNull();
   });
+
+  it('keeps plotshape true as 1 so markers are not dropped', () => {
+    expect(coerceSeriesSample(true)).toBe(1);
+    expect(coerceSeriesSample(false)).toBeNull();
+  });
 });
 
 describe('normalizeSeriesMap / plots / events', () => {

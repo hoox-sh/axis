@@ -168,6 +168,8 @@ describe('engines catalog', () => {
       expect(body.mode).toBe('compile');
       expect(body.script).toBe('plot(close)');
       expect(Array.isArray(body.data)).toBe(true);
+      const first = body.data?.[0] as { time?: number } | undefined;
+      expect(first?.time).toBe(SAMPLE_BARS[0]!.time * 1000);
       return jsonResponse({
         status: 'success',
         plots: [1, 2, 3],

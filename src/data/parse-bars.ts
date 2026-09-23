@@ -87,6 +87,27 @@ function toUnixSeconds(raw: unknown): number | null {
   return normalizeBarTime(raw);
 }
 
+/**
+ * Pine `time` is unix milliseconds. Chart bars store unix seconds.
+ * Values already in ms (>= 1e11) pass through.
+ */
+export function barTimeToPineMs(time: number): number {
+  if (!Number.isFinite(time) || time <= 0) return time;
+  return time < 1e11 ? Math.round(time * 1000) : Math.round(time);
+}
+
+/** Copy bars with `time` in Pine milliseconds. Non-bar rows pass through. */
+export function barsForPine<T>(bars: T): T {
+  if (!Array.isArray(bars)) return bars;
+  return bars.map((bar) => {
+    if (!bar || typeof bar !== 'object') return bar;
+    const rec = bar as { time?: unknown };
+    const n = typeof rec.time === 'number' ? rec.time : Number(rec.time);
+    if (!Number.isFinite(n) || n <= 0 || n >= 1e11) return bar;
+    return { ...rec, time: Math.round(n * 1000) };
+  }) as T;
+}
+
 function num(raw: unknown): number | null {
   if (raw == null || raw === '') return null;
   const n = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(/,/g, ''));

@@ -57,6 +57,7 @@ export const DEFAULT_PYNE_WORKER_ENDPOINT =
   'https://pyne-worker.cryptolinx.workers.dev';
 
 import type { EnginePlugin, PlotSample, RunResult } from '../plugins/types';
+import { barsForPine } from '../data/parse-bars';
 import { store, setTelemetryPlane, setTelemetryState, setStatus, appendLog } from '../store';
 import { registry } from '../plugins/registry';
 import { classifyTransport } from '../ui/telemetry';
@@ -215,6 +216,8 @@ export const serverEngine: EnginePlugin = {
       inputs && typeof inputs === 'object' && Object.keys(inputs).length
         ? inputs
         : undefined;
+    // Chart bars are unix seconds. Pine `time` / hour() / session clocks are ms.
+    const pineBars = barsForPine(bars);
 
     // ── WSS-first path (short budget so REST still has time) ──────
     // Gunicorn default workers do NOT speak WebSocket — connect can hang then
@@ -229,7 +232,7 @@ export const serverEngine: EnginePlugin = {
           const wsResult = await client.run(
             {
               script,
-              data: bars as unknown[],
+              data: pineBars as unknown[],
               mode,
               // Always a string — API schema rejects null/omitted-as-null
               symbol: typeof store.symbol === 'string' && store.symbol ? store.symbol : 'CHART',
@@ -339,7 +342,7 @@ export const serverEngine: EnginePlugin = {
       const restMode = mode;
       const restBody = {
         script,
-        data: bars,
+        data: pineBars,
         mode: restMode,
         ...(inputOverrides ? { inputs: inputOverrides } : {}),
         ...(profilerOn ? { profiler: true } : {}),
@@ -814,7 +817,7 @@ export const pyodideEngine: EnginePlugin & {
           /* interpret fallback handles missing numpy */
         }
       }
-      const resultJson = callPyodideRunScript(py, script, bars, mode, libraries || []);
+      const resultJson = callPyodideRunScript(py, script, barsForPine(bars), mode, libraries || []);
       const result = JSON.parse(resultJson) as RunResult & {
         overlay?: unknown;
         script_name?: string;

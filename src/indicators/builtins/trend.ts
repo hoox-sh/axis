@@ -339,25 +339,31 @@ plotshape(dn, "Down fractal", shape.triangleup, location.belowbar, ${COL.emerald
 src = input.source(close, "Source")
 var float pivot = na
 var int dir = 0
-var float zz = na
+// Plot only confirmed pivots (na elsewhere) so linebr connects swings.
+// The last bar also plots the live extreme, otherwise a rally never
+// leaves the previous confirmed pivot.
+float point = na
 float thresh = nz(pivot) * dev / 100.0
 if na(pivot)
     pivot := src
+    point := src
 else if dir >= 0
     if src > pivot
         pivot := src
     else if src <= pivot - thresh
-        zz := pivot
+        point := pivot
         dir := -1
         pivot := src
 else
     if src < pivot
         pivot := src
     else if src >= pivot + thresh
-        zz := pivot
+        point := pivot
         dir := 1
         pivot := src
-plot(zz, "ZigZag", color=${COL.amber}, linewidth=2, style=plot.style_linebr)`,
+if barstate.islast
+    point := pivot
+plot(point, "ZigZag", color=${COL.amber}, linewidth=2, style=plot.style_linebr)`,
     ),
   }),
 ];

@@ -146,9 +146,13 @@ describe('BUILTIN_SCRIPTS formula bodies', () => {
     expect(code('rvi-vol')).not.toContain('ta.rsi(up - dn');
   });
 
-  it('ZigZag latches confirmed pivots only', () => {
-    expect(code('zigzag')).toContain('zz := pivot');
-    expect(code('zigzag')).not.toMatch(/if src > pivot\s+pivot := src\s+zz := src/);
+  it('ZigZag plots confirmed pivots and the live extreme', () => {
+    const src = code('zigzag');
+    expect(src).toContain('float point = na');
+    expect(src).toContain('point := pivot');
+    expect(src).toContain('barstate.islast');
+    expect(src).not.toContain('var float zz');
+    expect(src).not.toMatch(/if src > pivot\s+pivot := src\s+point := src/);
   });
 
   it('pivot-reversal latches lastPl for the exit', () => {
