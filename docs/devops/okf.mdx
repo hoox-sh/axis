@@ -1,0 +1,56 @@
+# Copyright (C) 2024-2026 jango_blockchained
+#
+# This file is part of pynescript.
+#
+# pynescript is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# pynescript is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with pynescript.  If not, see <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+---
+title: "OKF bundle"
+description: "Compiled Open Knowledge Format cache of the AXIS repo, refreshed on every commit."
+---
+
+# OKF bundle
+
+## Abstract
+
+`okf/` is an [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md) v0.2 bundle. It is the compiled map of this repo: one concept per source directory and per doc, with imports already linked. Agents read `okf/index.md` and then one concept instead of searching the tree.
+
+## Refresh
+
+The pre-commit hook (`.githooks/`, installed by `bun install`) runs the pipeline against the git index and stages the generated bundle into the commit. Unstaged edits, including unstaged edits to curated playbooks, are not part of that commit's bundle.
+
+```bash
+bun run okf:enrich    # draft, link, and lint from the working tree
+bun run okf:check     # fail if the committed bundle would change
+bun run okf:lint      # conformance errors and producer warnings
+bun run okf:query chart drawings
+bun run okf:context src/chart
+```
+
+`OKF_SKIP=1` skips the hook refresh. CI runs `okf:check`, so a commit that bypasses the hook still cannot merge a stale bundle.
+
+Generated concepts (`okf_lock: generated`) are replaced when their sources change. Curated playbooks (`okf_lock: human`) are kept. Put hand-written knowledge in `okf/playbooks/` with that lock. The draft records exports, imports, and the first non-license comment. It does not call a model.
+
+## Layout
+
+| Path | Role |
+| --- | --- |
+| `okf/index.md` | Bundle root. Declares `okf_version: "0.2"`. |
+| `okf/log.md` | Newest-first compile history. |
+| `okf/code/` | One concept per source directory. |
+| `okf/docs/` | Outlines of `docs/`. |
+| `okf/playbooks/` | Curated reading guide and product map. |
+| `scripts/okf/` | Compiler, linter, and query CLI. |

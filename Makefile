@@ -4,7 +4,8 @@
 .PHONY: help install dev test test-unit test-e2e typecheck worker-install worker-dev worker-typecheck worker-deploy build pages-deploy clean \
 	docker-builder docker-bake docker-bake-all docker-bake-nginx docker-up docker-up-api docker-up-proxy docker-up-prod \
 	docker-down docker-logs docker-ps docker-push docker-pull docker-rebuild docker-shell docker-health docker-smoke docker-clean \
-	axis axis-install axis-doctor axis-setup axis-deploy axis-health
+	axis axis-install axis-doctor axis-setup axis-deploy axis-health \
+	okf-enrich okf-lint okf-check
 
 GIT_SHA ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 VERSION ?= $(shell cat VERSION 2>/dev/null || node -p "require('./package.json').version" 2>/dev/null || echo 2.0.0)
@@ -24,6 +25,9 @@ help:
 	@echo "  build             Production Vite build"
 	@echo "  pages-deploy      Build + deploy Cloudflare Pages"
 	@echo "  clean             Remove dist/coverage/test-results"
+	@echo "  okf-enrich        Draft and link the OKF bundle"
+	@echo "  okf-lint          Lint the OKF bundle"
+	@echo "  okf-check         Fail if the bundle does not match the tree"
 	@echo ""
 	@echo "AXIS CLI (packages/cli)"
 	@echo "  axis              bun packages/cli/bin/axis.js …"
@@ -116,6 +120,15 @@ pages-deploy:
 
 clean:
 	rm -rf dist coverage test-results playwright-report .wrangler
+
+okf-enrich:
+	bun scripts/okf/cli.ts enrich
+
+okf-lint:
+	bun scripts/okf/cli.ts lint
+
+okf-check:
+	bun scripts/okf/cli.ts enrich --check
 
 # ── Docker Buildx / Compose ─────────────────────────────────────────
 

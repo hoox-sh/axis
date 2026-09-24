@@ -165,7 +165,8 @@
               "devops/cloudflare",
               "devops/vps-demo",
               "devops/cors-and-origins",
-              "devops/ci-and-testing"
+              "devops/ci-and-testing",
+              "devops/okf"
             ]
           }
         ]

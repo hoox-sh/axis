@@ -45,7 +45,12 @@
     "capture:screenshots": "bun scripts/capture-screenshots.ts",
     "capture:fix": "bun scripts/capture-fix.ts",
     "capture:1080p": "bun scripts/capture-screenshots.ts --viewport=1920x1080 --dpr=2 --skip-gifs",
-    "capture:1440p": "bun scripts/capture-screenshots.ts --viewport=2560x1440 --dpr=2 --out=docs/images/2560x1440 --skip-gifs --skip-cli --skip-mobile"
+    "capture:1440p": "bun scripts/capture-screenshots.ts --viewport=2560x1440 --dpr=2 --out=docs/images/2560x1440 --skip-gifs --skip-cli --skip-mobile",
+    "okf:enrich": "bun scripts/okf/cli.ts enrich",
+    "okf:check": "bun scripts/okf/cli.ts enrich --check",
+    "okf:lint": "bun scripts/okf/cli.ts lint",
+    "okf:query": "bun scripts/okf/cli.ts query",
+    "okf:context": "bun scripts/okf/cli.ts context"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.0",

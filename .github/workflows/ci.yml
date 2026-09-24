@@ -41,6 +41,9 @@ jobs:
       - name: Release versions in sync
         run: bun scripts/check-versions.mjs
 
+      - name: OKF bundle is current
+        run: bun run okf:check
+
       - name: Unit + worker tests (coverage)
         run: bun run test:coverage
 

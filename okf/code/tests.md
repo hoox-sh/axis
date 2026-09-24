@@ -1,0 +1,304 @@
+---
+type: "Code Module"
+title: "tests"
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 227 more files."
+resource: "tests"
+tags: [code, tests]
+status: stable
+generated:
+  by: process:axis-okf/1
+  at: 2026-09-24T03:05:44Z
+sources:
+  - id: tree
+    resource: "tests"
+    title: "tests"
+    author: process:git
+okf_lock: generated
+---
+
+# Files
+
+* `alerts-engine.test.ts`
+* `alerts-form.test.ts`
+* `alerts-format.test.ts`
+* `alerts-pine.test.ts`
+* `alerts-storage.test.ts`
+* `architecture-plan.test.ts`
+* `bar-replay.test.ts`
+* `bars-cache-coverage.test.ts`
+* `bars-cache.test.ts`
+* `bars-gaps.test.ts`
+* `binance-http.test.ts`
+* `boot-errors.test.ts`
+* `builtin-scripts.test.ts`
+* `chart-layout.test.ts`
+* `chart-registry.test.ts`
+* `chart-type.test.ts`
+* `chart.test.ts`
+* `clipboard.test.ts`
+* `close-guard.test.ts`
+* `cloud-config.test.ts`
+* `color-chips.test.ts`
+* `column-ruler.test.ts`
+* `command-palette.test.ts`
+* `compare-overlay.test.ts`
+* `coverage-stretch.test.ts`
+* `credentials.test.ts`
+* `data-coverage.test.ts`
+* `data-manager-source.test.ts`
+* `data-source-manager.test.ts`
+* `datafeed-active-resolution.test.ts`
+* `datafeed-ccxt-rest.test.ts`
+* `datafeed-ccxt-ws.test.ts`
+* `datafeed-gateway.test.ts`
+* `dataset-sinks.test.ts`
+* `dataset-store.test.ts`
+* `dataset-validate.test.ts`
+* `debug-pins.test.ts`
+* `desktop-shell.test.ts`
+* `dock-layout.test.ts`
+* `drawing-sync.test.ts`
+* `drawing-templates.test.ts`
+* `drawing-toolbar-chrome.test.ts`
+* `drawings-annotation-extra.test.ts`
+* `drawings-coords.test.ts`
+* `drawings-draft.test.ts`
+* `drawings-fib-extra.test.ts`
+* `drawings-gann.test.ts`
+* `drawings-geometry.test.ts`
+* `drawings-level-palette.test.ts`
+* `drawings-normalize.test.ts`
+* `drawings-parity-extra.test.ts`
+* `drawings-patterns-extra.test.ts`
+* `drawings-plot-clip.test.ts`
+* `drawings-safe.test.ts`
+* `drawings-shapes-extra.test.ts`
+* `drawings-snap.test.ts`
+* `drawings-tool-icons.test.ts`
+* `drawings-trading-extra.test.ts`
+* `drawings-trend-place.test.ts`
+* `drawings.test.ts`
+* `dsm-ui.test.ts`
+* `editor-chrome.test.ts`
+* `editor-default-width.test.ts`
+* `editor-diagnostics.test.ts`
+* `editor-feature-bar.test.ts`
+* `editor-git-sync.test.ts`
+* `editor-intel-marks.test.ts`
+* `editor-intel.test.ts`
+* `editor-menu.test.ts`
+* `editor-problems.test.ts`
+* `editor-shortcuts.test.ts`
+* `editor-stats.test.ts`
+* `engine-ws.test.ts`
+* `engines-catalog.test.ts`
+* `error-share.test.ts`
+* `expand-cache.test.ts`
+* `focus-trap.test.ts`
+* `git-config-safety.test.ts`
+* `git-oauth-client.test.ts`
+* `git-oauth.test.ts`
+* `heavy-data.test.ts`
+* `hoox-logo.test.ts`
+* `hpo-plugin.test.ts`
+* `hud-model.test.ts`
+* `icons-map.test.ts`
+* `import-pyne-files.test.ts`
+* `indicators-reapply.test.ts`
+* `inline-debug.test.ts`
+* `last-value-labels.test.ts`
+* `layers-ui.test.ts`
+* `layout-recipes.test.ts`
+* `library-publish.test.ts`
+* `library-ui.test.ts`
+* `line-break-primitive.test.ts`
+* `logs-layout.test.ts`
+* `manager-access.test.ts`
+* `mcp-bridge-tabs.test.ts`
+* `mcp-dispatch.test.ts`
+* `merge-datasets.test.ts`
+* `mexc-http.test.ts`
+* `multiplex-heavy-rerun.test.ts`
+* `multiplex-rerun.test.ts`
+* `onchain-adapters.test.ts`
+* `onchain-alerts-format.test.ts`
+* `onchain-alerts.test.ts`
+* `onchain-cache.test.ts`
+* `onchain-defillama.test.ts`
+* `onchain-events.test.ts`
+* `onchain-export.test.ts`
+* `onchain-gecko-source.test.ts`
+* `onchain-geckoterminal.test.ts`
+* `onchain-health.test.ts`
+* `onchain-jobs.test.ts`
+* `onchain-keys.test.ts`
+* `onchain-load-symbol.test.ts`
+* `onchain-manager-events.test.ts`
+* `onchain-overlay.test.ts`
+* `onchain-presets.test.ts`
+* `onchain-proxy.test.ts`
+* `open-script-source.test.ts`
+* `optimize-space.test.ts`
+* `overlay-sync.test.ts`
+* `palette-bridge.test.ts`
+* `pane-badge.test.ts`
+* `pane-manager.test.ts`
+* `panel-drop-zones.test.ts`
+* `panel-hover-slide.test.ts`
+* `panel-icon.test.ts`
+* `panel-manager.test.ts`
+* `parse-bars.test.ts`
+* `persist-boot.test.ts`
+* `pine-call-params.test.ts`
+* `pine-colors.test.ts`
+* `pine-convert.test.ts`
+* `pine-declare-types.test.ts`
+* `pine-format.test.ts`
+* `pine-language.test.ts` — Easing
+* `pine-symbols.test.ts`
+* `pine-tables.test.ts`
+* `plot-fills-signature.test.ts`
+* `plot-rect.test.ts`
+* `plot-sources.test.ts`
+* `plot-visuals.test.ts`
+* `plugin-badges.test.ts`
+* `plugin-config.test.ts`
+* `plugin-registry.test.ts`
+* `plugins-active.test.ts`
+* `plugins-loader.test.ts`
+* `positions.test.ts`
+* `preevaluate.test.ts` — Side, members
+* `price-precision.test.ts`
+* `profiler.test.ts`
+* `provider-session.test.ts`
+* `pwa-install-prompt.test.ts`
+* `pyne-doc-annotations.test.ts`
+* `pyne-drawings.test.ts`
+* `pyne-logs.test.ts`
+* `pyne-lsp.test.ts`
+* `pynescript-compile-alerts.py` — load_runtime, main
+* `pynescript-interpret-ta.py` — load_runtime, main
+* `pynescript-runtime.test.ts`
+* `pyodide-bridge.test.ts`
+* `reconnect-ws.test.ts`
+* `register-sw.test.ts`
+* `registry-storage.test.ts`
+* `registry.test.ts`
+* `results-coverage.test.ts`
+* `run-helpers.test.ts`
+* `run-results-focus.test.ts`
+* `run-results-persist.test.ts`
+* `run-target.test.ts`
+* `runner-extra.test.ts`
+* `runner-hardening.test.ts`
+* `runner-ohlcv-times.test.ts`
+* `runner-overlay.test.ts`
+* `screenshot.test.ts`
+* `script-inputs.test.ts` — Calculation, Easing, Frequency, StartOn
+* `script-meta.test.ts`
+* `series-factory.test.ts`
+* `server.test.ts`
+* `settings-credentials.test.ts`
+* `setup.ts` — MemoryStorage, installAxisTestEnv, installDocumentStub, installMemoryLocalStorage, installWindowStub
+* `shortcut-feedback.test.ts`
+* `shortcuts-hub.test.ts`
+* `shortcuts-store.test.ts`
+* `shortcuts.test.ts`
+* `signed-fetch.test.ts`
+* `sources-catalog.test.ts`
+* `state.test.ts`
+* `storage-change-prompt.test.ts`
+* `storage-cloud.test.ts`
+* `storage-copy.test.ts`
+* `storage-git-gitlab.test.ts`
+* `storage-git-versions.test.ts`
+* `storage-git.test.ts`
+* `storage-local-results.test.ts`
+* `storage-local-versions.test.ts`
+* `storage-local.test.ts`
+* `storage-service-results.test.ts`
+* `store-append-scale.test.ts`
+* `store.test.ts`
+* `strategy-extra.test.ts`
+* `strategy-props.test.ts`
+* `strategy-report.test.ts`
+* `strategy.test.ts`
+* `streams-catalog-coverage.test.ts`
+* `streams-catalog-extra.test.ts`
+* `streams-catalog.test.ts`
+* `streams-multiplex.test.ts`
+* `studio-json.test.ts`
+* `sw-strategy.test.ts`
+* `symbol-catalog.test.ts`
+* `telemetry.test.ts`
+* `theme-manager.test.ts`
+* `tool-catalog.test.ts`
+* `tool-settings.test.ts`
+* `topbar-field.test.ts`
+* `ui-scale.test.ts`
+* `update-manager.test.ts`
+* `venue-picker.test.ts`
+* `venue-sign.test.ts`
+* `version.test.ts`
+* `volume-profile.test.ts`
+* `watchlist-live.test.ts`
+* `watchlist-tickers.test.ts`
+* `worker-scripts-extra.test.ts`
+* `workers-catalog.test.ts`
+* `workers-probe-coverage.test.ts`
+* `workers-probe.test.ts`
+* `workspace-snapshot.test.ts`
+
+# Packages
+
+`@codemirror/language`, `@codemirror/state`, `@codemirror/view`, `bun:test`, `lightweight-charts`, `node:fs`, `node:path`, `node:url`, `solid-js/store`
+
+# Depends on
+
+* [src](/code/src.md)
+* [src/alerts](/code/src/alerts.md)
+* [src/chart](/code/src/chart.md)
+* [src/chart/drawings](/code/src/chart/drawings.md)
+* [src/chart/drawings/toolbar](/code/src/chart/drawings/toolbar.md)
+* [src/chart/drawings/tools](/code/src/chart/drawings/tools.md)
+* [src/data](/code/src/data.md)
+* [src/data/venues](/code/src/data/venues.md)
+* [src/desktop](/code/src/desktop.md)
+* [src/editor](/code/src/editor.md)
+* [src/engines](/code/src/engines.md)
+* [src/indicators](/code/src/indicators.md)
+* [src/indicators/builtins](/code/src/indicators/builtins.md)
+* [src/mcp](/code/src/mcp.md)
+* [src/onchain](/code/src/onchain.md)
+* [src/optimize](/code/src/optimize.md)
+* [src/plugins](/code/src/plugins.md)
+* [src/pwa](/code/src/pwa.md)
+* [src/results](/code/src/results.md)
+* [src/sources](/code/src/sources.md)
+* [src/storage](/code/src/storage.md)
+* [src/store](/code/src/store.md)
+* [src/streams](/code/src/streams.md)
+* [src/sw](/code/src/sw.md)
+* [src/theme](/code/src/theme.md)
+* [src/ui](/code/src/ui.md)
+* [src/ui/architecture](/code/src/ui/architecture.md)
+* [src/ui/dsm](/code/src/ui/dsm.md)
+* [src/ui/layers](/code/src/ui/layers.md)
+* [src/ui/library](/code/src/ui/library.md)
+* [src/ui/panels](/code/src/ui/panels.md)
+* [src/ui/shortcuts](/code/src/ui/shortcuts.md)
+* [src/ui/studio](/code/src/ui/studio.md)
+* [src/update](/code/src/update.md)
+* [src/workers](/code/src/workers.md)
+* [tests/fixtures](/code/tests/fixtures.md)
+* [tests/helpers](/code/tests/helpers.md)
+* [worker/src](/code/worker/src.md)
+
+# Nested
+
+* [tests/bench](/code/tests/bench.md)
+* [tests/fixtures](/code/tests/fixtures.md)
+* [tests/helpers](/code/tests/helpers.md)
+* [tests/integration](/code/tests/integration.md)
+* [tests/okf](/code/tests/okf.md)
+* [tests/security](/code/tests/security.md)
