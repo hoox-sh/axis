@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-23 · 446 commits · describe-tag: `v2.12.0`_
+_Generated/updated: 2026-09-24 · 454 commits · describe-tag: `v2.13.0`_
 
 ---
 
 ## [Unreleased]
+
+## [2.14.0] — 2026-09-24
 
 ### Added
 
@@ -1320,12 +1322,17 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (127 commits)
+### 2026-09 (135 commits)
 
 #### Features
 
+- `1d289805` (2026-09-24) — feat(chart): center the loading splash and tuck the tool arrow in
+- `3ef62fe6` (2026-09-24) — feat(okf): compile an OKF bundle on every commit
+- `15b2ba38` (2026-09-23) — feat(ui): polish studio settings layout and live scale
 - `e3f8dea3` (2026-09-23) — feat(chart): dockable drawing toolbar and classic level colors
 - `1f46feda` (2026-09-22) — feat(ui): polish script library and layers panels
 - `12b6ab81` (2026-09-19) — feat(plugins): PYNE Agent Persona field (pine/axis/trader)
@@ -1367,6 +1374,9 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `9c05483b` (2026-09-24) — fix(okf): drop unused initializers
+- `6920e022` (2026-09-23) — fix(chart): zigzag pivots, plotshape markers, and Pine bar time
+- `c0e07b55` (2026-09-23) — fix(plugin): ship PYNE Agent 0.1.7
 - `ebe7d7a6` (2026-09-23) — fix(indicators): plot Ultimate Oscillator without ta.uo
 - `7d02544b` (2026-09-20) — fix(chart,ui): clip drawings to plot, catalog line.fill, log chrome
 - `c23c446c` (2026-09-19) — fix(chart): merge top-level compile plot_meta so fill bands apply
@@ -1422,6 +1432,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `7643ae3c` (2026-09-23) — docs: match AXIS 2.13.0 catalogs, engines, and repo paths
 - `f16f868b` (2026-09-19) — docs: pyodide-in-worker use case, NO_BACKEND contract, test conventions
 - `7655bb25` (2026-09-14) — docs(changelog): drop raw &lt;cmd&gt; so MDX sync can parse
 - `477084bf` (2026-09-08) — docs(changelog): note bare-filename SHA256SUMS for binaries
@@ -1458,6 +1469,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `9ad5b004` (2026-09-23) — chore(release): AXIS v2.13.0 — drawing toolbar and classic colors
 - `ee32dab4` (2026-09-22) — chore(release): AXIS v2.12.0 — library and layers panels
 - `6e28ccf6` (2026-09-21) — chore(release): AXIS v2.11.0 — large-history chart, DSM, MCP
 - `1b9357fa` (2026-09-18) — chore(release): AXIS v2.10.0 — toasts, notification settings, MCP activity
