@@ -130,7 +130,7 @@ function enrich(flags: Flags): number {
 }
 
 function stageGenerated(next: Map<string, string>): void {
-  let listed: string[] = [];
+  let listed: string[];
   try {
     listed = execFileSync('git', ['ls-files', '-z', '--', 'okf'], { cwd: ROOT, encoding: 'utf8' }).split('\0');
   } catch {

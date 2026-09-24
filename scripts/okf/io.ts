@@ -159,7 +159,7 @@ export function applyBundle(
   for (const [rel, text] of next) {
     if (skip.has(rel)) continue;
     const abs = join(dir, rel);
-    let current = '';
+    let current: string;
     try {
       current = readFileSync(abs, 'utf8');
     } catch {
@@ -227,7 +227,7 @@ export function readBundleFiles(dir: string): Map<string, string> {
 /** Bundle markdown as the index will commit it. Unstaged edits are read from the index; clean files are read from disk. */
 export function readBundleFromIndex(root: string, bundleRel = 'okf'): Map<string, string> {
   const files = readBundleFiles(join(root, bundleRel));
-  let dirty: string[] = [];
+  let dirty: string[];
   try {
     dirty = nulSplit(git(root, ['diff', '-z', '--name-only', '--', bundleRel]));
   } catch {
