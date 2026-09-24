@@ -32,6 +32,9 @@ import type { DrawingLineStyle } from '../../drawing-types';
 export const StyleDivider: Component = () => (
   <span class="axis-draw-style-sep" aria-hidden="true" />
 );
+export const StyleDividerThin: Component = () => (
+  <span class="axis-draw-style-sep axis-draw-style-sep-thin" aria-hidden="true" />
+);
 
 export const ColorSwatch: Component<{
   color: string;
@@ -86,7 +89,10 @@ export const WidthChip: Component<{
   <button
     type="button"
     class="axis-draw-chip"
-    classList={{ 'is-active': props.active }}
+    classList={{
+      'is-active': props.active,
+      'is-pressed': props.active,
+    }}
     title={`Width ${props.width}`}
     aria-label={`Line width ${props.width}`}
     aria-pressed={props.active}

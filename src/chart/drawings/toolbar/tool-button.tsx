@@ -43,7 +43,10 @@ export const ToolRailButton: Component<{
   <button
     type="button"
     class="axis-draw-btn"
-    classList={{ 'is-active': !!props.active }}
+    classList={{
+      'is-active': !!props.active,
+      'is-pressed': !!props.pressed,
+    }}
     title={props.title}
     aria-label={props.label}
     aria-pressed={props.pressed ?? props.active ?? false}
