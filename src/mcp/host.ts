@@ -13,7 +13,13 @@ import { invokeCapability, setMcpHostHooks, type McpHostHooks } from './dispatch
 import { buildAppSnapshot } from './snapshot';
 import { APP_CAPABILITIES } from './catalog';
 import { McpInvokeError } from './protocol';
-import { connectMcpBridge, disconnectMcpBridge, mcpBridgeState } from './bridge';
+import { resolveCloudConfig } from '../storage/cloud-config';
+import {
+  connectMcpBridge,
+  disconnectMcpBridge,
+  isWellFormedWorkerApiKey,
+  mcpBridgeState,
+} from './bridge';
 
 export interface AxisMcpApi {
   invoke: (capability: string, payload?: unknown) => Promise<unknown>;
@@ -63,6 +69,22 @@ async function invoke(capability: string, payload?: unknown): Promise<unknown> {
     }
     throw new McpInvokeError('INVOKE_FAILED', err instanceof Error ? err.message : String(err));
   }
+}
+
+/**
+ * Attach this tab to the Worker MCP bridge.
+ * A missing or incomplete `pn_` key opens Settings → General instead.
+ */
+export function requestMcpConnect(): void {
+  const { apiKey } = resolveCloudConfig();
+  if (!isWellFormedWorkerApiKey(apiKey)) {
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('axis-open-settings'));
+    }
+    return;
+  }
+  if (!loadMcpPrefs().connect) saveMcpPrefs({ connect: true });
+  void connectMcpBridge();
 }
 
 /** Install the in-page API and optionally open the Worker control-plane socket. */

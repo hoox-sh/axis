@@ -29,11 +29,14 @@ import type { JSX } from 'solid-js';
 
 const FALLBACK = 'M8 2.4 L13.4 8 L8 13.6 L2.6 8 Z';
 
-/** Highlighter is a filled swipe; every other glyph is stroke-only. */
+/** Highlighter is a translucent swipe. */
 const FILLED = new Set(['highlighter']);
+/** Solid silhouettes — the select cursor is a filled pointer, not a stroke outline. */
+const SOLID = new Set(['cursor']);
 
 const GLYPH: Record<string, string> = {
-  cursor: 'M3.2 2.2 L3.2 11.4 L6.4 8.8 L9.4 13.8 L11.8 12.6 L8.6 7.8 L13 7.4 Z',
+  /* Pointer stays in the top-left of the 16 box so the flyout caret owns the corner. */
+  cursor: 'M2.2 1.5 L2.2 11.2 L5.15 8.35 L7.7 12.85 L9.55 11.9 L6.95 7.35 L10.7 7.05 Z',
   eraser: 'M3.2 9.2 L9.4 4.6 L12.2 8 L6 12.6 Z M5.6 7.4 L8.4 10.8',
 
   trend: 'M3 12.8 L13 3.2',
@@ -105,6 +108,7 @@ export function DrawingToolIcon(props: {
   class?: string;
 }): JSX.Element {
   const filled = () => FILLED.has(props.id);
+  const solid = () => SOLID.has(props.id);
   return (
     <svg
       viewBox="0 0 16 16"
@@ -120,9 +124,9 @@ export function DrawingToolIcon(props: {
     >
       <path
         d={toolIconPath(props.id)}
-        fill={filled() ? 'currentColor' : 'none'}
-        fill-opacity={filled() ? 0.4 : undefined}
-        stroke={filled() ? 'none' : 'currentColor'}
+        fill={filled() || solid() ? 'currentColor' : 'none'}
+        fill-opacity={solid() ? 1 : filled() ? 0.4 : undefined}
+        stroke={filled() || solid() ? 'none' : 'currentColor'}
       />
     </svg>
   );

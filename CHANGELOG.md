@@ -18,11 +18,14 @@ _Generated/updated: 2026-09-23 · 446 commits · describe-tag: `v2.12.0`_
 ### Added
 
 - **OKF bundle**: `okf/` is an Open Knowledge Format v0.2 cache of the repo (one concept per source directory and doc, imports already linked). The pre-commit hook drafts, links, and lints it from the git index and stages it into the commit. `bun run okf:query` and `bun run okf:context` read that cache. `bun run okf:check` fails CI when the bundle is stale. Curated notes in `okf/playbooks/` stay put (`okf_lock: human`).
+- **Connect MCP**: the chart loading splash and the status bar offer Connect MCP while the bridge is down. A saved Worker key attaches this tab. Without one, the button opens Settings → General.
 
 ### Changed
 
 - **PYNE Agent plugin 0.1.7**: same-origin `/plugins/axis-pine-agent.js` matches pyne-agent-worker. Chat reads the live Workers Manager endpoint, API key, and persona on each send. A non-http(s) endpoint is refused. Closing the panel aborts the request. Validation status is plain text. Add to editor confirms, and says so when the editor panel is closed. The launcher sits under dialogs.
 - **Studio Settings**: General splits chart chrome (appearance, labels, strategy marks, results) from live data, script storage, the Worker key, and MCP. UI scale presets preview until Save; Cancel, Escape, and the studio rail restore the saved scale. Topbar, keyboard, and theme use the same studio controls. Arrow keys move the settings tabs.
+- **Chart loading splash**: the HOOX mark, caption, and status line sit in the center of the chart on desktop and phone. The shared list empty-state style no longer pins them to the top-left.
+- **Drawing toolbar**: the select tool is a filled pointer. The menu arrow sits inside the tool button — the icon selects the tool, the arrow opens the menu. The magnet mark stays inside its button.
 
 ### Fixed
 

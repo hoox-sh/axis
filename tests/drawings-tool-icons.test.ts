@@ -32,6 +32,14 @@ describe('drawing tool icons', () => {
     expect(new Set(paths).size).toBe(ids.length);
   });
 
+  it('draws the select cursor as a filled pointer clear of the flyout corner', () => {
+    const cursor = toolIconPath('cursor');
+    expect(cursor).toBe(
+      'M2.2 1.5 L2.2 11.2 L5.15 8.35 L7.7 12.85 L9.55 11.9 L6.95 7.35 L10.7 7.05 Z',
+    );
+    expect(cursor).not.toContain('13.8');
+  });
+
   it('separates cursor from eraser and trend from ray from extend', () => {
     expect(toolIconPath('cursor')).not.toBe(toolIconPath('eraser'));
     const trend = toolIconPath('trend');

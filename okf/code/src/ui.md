@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 70 more files."
+description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 71 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:05:44Z
+  at: 2026-09-24T06:42:13Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -38,6 +38,7 @@ okf_lock: generated
 * `HooxLogo.tsx` — HooxLogo, HooxLogoPaths, HooxLogoProps, HooxLogoSize, resolveLogoSize
 * `HpoPanel.tsx` — HpoPanel
 * `LayerPanel.tsx` — LayerPanel
+* `McpConnectCta.tsx` — McpConnectCta, mcpNeedsConnect
 * `McpHud.tsx` — MCP_ACTIVITY_WINDOW_MS, McpHud
 * `OnChainPanel.tsx` — OnChainPanel
 * `PluginConfigRow.tsx` — PluginConfigRow, PluginConfigRowProps

@@ -24,7 +24,8 @@
  * - Tool rail with a drag handle. Dock left (vertical), dock top (horizontal),
  *   or float anywhere over the chart. Docked rails can slide in to the handle.
  * - Tool groups from {@link TOOL_GROUPS} (select / lines / fib / …)
- * - Per-group **flyouts** when `g.flyout` is set; otherwise click activates last tool
+ * - Per-group **flyouts** when `g.flyout` is set. The button face selects the
+ *   last tool; the corner arrow inside the button opens the menu.
  * - Utility toggles: magnet (cycle), stay-in-mode, lock-all, hide drawings
  * - Delete selected / clear all
  * - **Style bar** (colors, width, line style, level colors) with its own handle.
@@ -647,11 +648,8 @@ export const DrawingToolbar: Component = () => {
     syncLayerFromStore();
   };
 
-  /**
-   * Group button: open/close flyout, or immediately select last/default tool
-   * for non-flyout groups (e.g. select → cursor).
-   */
-  const onGroupClick = (groupId: ToolGroupId) => {
+  /** Open or close a group's tool menu. The corner arrow calls this. */
+  const toggleFlyout = (groupId: ToolGroupId) => {
     const g = TOOL_GROUPS.find((x) => x.id === groupId);
     if (!g || !g.tools.length) return;
     if (g.flyout) {
@@ -809,35 +807,43 @@ export const DrawingToolbar: Component = () => {
             };
             const isActive = () => g.tools.includes(active());
             return (
-              <div class="relative" data-drawing-group={g.id}>
+              <div
+                class={`axis-draw-tool ${isActive() ? 'is-active' : ''}`}
+                data-drawing-group={g.id}
+                data-open={g.flyout && openGroup() === g.id ? '1' : undefined}
+              >
                 <button
                   type="button"
                   class={`${btnClass} ${isActive() ? 'is-active' : ''}`}
-                  title={
-                    g.flyout
-                      ? titleWithShortcut(
-                          `${g.label} · ${toolLabel(primaryId())}`,
-                          TOOL_SHORTCUT[primaryId()],
-                        )
-                      : titleWithShortcut(toolLabel(primaryId()), TOOL_SHORTCUT[primaryId()])
-                  }
-                  aria-label={g.label}
+                  title={titleWithShortcut(toolLabel(primaryId()), TOOL_SHORTCUT[primaryId()])}
+                  aria-label={toolLabel(primaryId())}
                   aria-pressed={isActive()}
-                  aria-haspopup={g.flyout ? 'menu' : undefined}
-                  aria-expanded={g.flyout ? openGroup() === g.id : undefined}
-                  onClick={() => onGroupClick(g.id)}
+                  onClick={() => selectTool(primaryId())}
                 >
-                  <DrawingToolIcon id={primaryId()} size={iconPx} strokeWidth={1.75} />
-                  <Show when={g.flyout}>
-                    <span
-                      class={`absolute right-0.5 bottom-0.5 text-text-faint opacity-80 ${
-                        dock() === 'top' ? 'rotate-90' : ''
-                      }`}
-                    >
-                      <Icons.chevronRight size={8} strokeWidth={2.5} />
-                    </span>
-                  </Show>
+                  <DrawingToolIcon id={primaryId()} size={15} strokeWidth={1.75} />
                 </button>
+                <Show when={g.flyout}>
+                  <button
+                    type="button"
+                    class={`axis-draw-caret ${dock() === 'top' ? 'is-down' : ''}`}
+                    aria-label={`More ${g.label} tools`}
+                    aria-haspopup="menu"
+                    aria-expanded={openGroup() === g.id}
+                    title={`${g.label} tools`}
+                    onClick={() => toggleFlyout(g.id)}
+                  >
+                    <svg viewBox="0 0 8 8" width="7" height="7" aria-hidden="true">
+                      <path
+                        d="M2.1 1.25 L5.75 4 L2.1 6.75"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </button>
+                </Show>
                 <Show when={g.flyout && openGroup() === g.id}>
                   <div
                     class={`axis-draw-pop absolute z-50 min-w-[9.5em] p-2 flex flex-col gap-0.5 overflow-y-auto ${
@@ -854,10 +860,8 @@ export const DrawingToolbar: Component = () => {
                             type="button"
                             role="menuitemradio"
                             aria-checked={active() === tid}
-                            class={`flex items-center gap-2 w-full px-2 py-1.5 text-left text-[12px] rounded-[4px] border-0 bg-transparent cursor-pointer font-inherit ${
-                              active() === tid
-                                ? 'text-accent bg-accent/10 font-semibold'
-                                : 'text-text-dim hover:bg-white/[0.04] hover:text-text'
+                            class={`axis-draw-flyout-item ${
+                              active() === tid ? 'is-active' : ''
                             }`}
                             title={titleWithShortcut(toolLabel(tid), TOOL_SHORTCUT[tid])}
                             onClick={() => selectTool(tid)}
@@ -875,11 +879,11 @@ export const DrawingToolbar: Component = () => {
           }}
         </For>
 
-        <div class="axis-draw-sep h-px bg-border-soft my-0.5" />
+        <div class="axis-draw-sep" />
 
         <button
           type="button"
-          class={`${btnClass} relative ${
+          class={`${btnClass} ${
             store.drawingUi.magnet !== 'off' ? 'text-accent' : 'text-text-dim'
           }`}
           title={`Magnet: ${store.drawingUi.magnet} (W)`}
@@ -895,7 +899,7 @@ export const DrawingToolbar: Component = () => {
         >
           <Icons.magnet size={iconPx} strokeWidth={2.25} />
           <Show when={store.drawingUi.magnet === 'weak' || store.drawingUi.magnet === 'strong'}>
-            <span class="absolute -top-0.5 -right-0.5 text-[8px] font-mono font-bold leading-none text-accent">
+            <span class="axis-draw-badge">
               {store.drawingUi.magnet === 'strong' ? 'S' : 'W'}
             </span>
           </Show>
@@ -949,7 +953,7 @@ export const DrawingToolbar: Component = () => {
           )}
         </button>
 
-        <div class="axis-draw-sep h-px bg-border-soft my-0.5" />
+        <div class="axis-draw-sep" />
 
         <button
           type="button"

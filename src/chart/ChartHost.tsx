@@ -40,6 +40,7 @@ import {
   clearCompareBars,
 } from '../store';
 import { HooxLoader } from '../ui/HooxLoader';
+import { McpConnectCta } from '../ui/McpConnectCta';
 import { barIndexAtTimeBinary, createRafCoalescer } from './heavy-data';
 import {
   getManager,
@@ -189,8 +190,11 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
 
   const emptyHint = createMemo(() => {
     if (bars().length > 0) return null;
-    if (isActive() && store.status === 'loading') {
-      return { title: 'Loading market data…', sub: store.statusMessage || '' };
+    if (isActive() && (store.status === 'loading' || store.status === 'running')) {
+      return {
+        title: store.status === 'running' ? 'Running…' : 'Loading market data…',
+        sub: store.statusMessage || '',
+      };
     }
     if (isActive() && store.status === 'error') {
       return { title: 'Could not load chart', sub: store.statusMessage || 'Try again' };
@@ -774,28 +778,22 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       </Show>
       <Show when={emptyHint()}>
         {(hint) => (
-          <div class="axis-empty-state absolute inset-0 flex flex-col items-center justify-center gap-2 z-[5] pointer-events-none px-6">
-            <div
-              class={`text-[11px] tracking-[0.18em] uppercase font-medium ${
-                isActive() && store.status === 'error' ? 'text-red' : 'text-text-faint'
-              }`}
-            >
-              {hint().title}
+          <div class="axis-chart-boot" data-testid="axis-chart-boot">
+            <div class="axis-chart-boot-cluster">
+              <Show when={isActive() && (store.status === 'loading' || store.status === 'running')}>
+                <HooxLoader size={56} layout="icon" data-testid="axis-chart-boot-logo" />
+              </Show>
+              <div
+                class="axis-chart-boot-title"
+                data-tone={isActive() && store.status === 'error' ? 'error' : 'idle'}
+              >
+                {hint().title}
+              </div>
+              <Show when={hint().sub}>
+                <div class="axis-chart-boot-sub">{hint().sub}</div>
+              </Show>
+              <McpConnectCta />
             </div>
-            <Show when={hint().sub}>
-              <div class="text-[11px] text-text-faint/80 font-mono text-center max-w-md">
-                {hint().sub}
-              </div>
-            </Show>
-            <Show when={isActive() && (store.status === 'loading' || store.status === 'running')}>
-              <div class="mt-3">
-                <HooxLoader
-                  size="l"
-                  layout="stack"
-                  label={store.status === 'running' ? 'Running' : 'Loading'}
-                />
-              </div>
-            </Show>
           </div>
         )}
       </Show>

@@ -12,7 +12,13 @@
 export { APP_CAPABILITIES, findCapability, SETTABLE_PATHS } from './catalog';
 export { invokeCapability, setMcpHostHooks, type McpHostHooks } from './dispatch';
 export { buildAppSnapshot } from './snapshot';
-export { startMcpHost, loadMcpPrefs, saveMcpPrefs, type McpPrefs } from './host';
+export {
+  startMcpHost,
+  loadMcpPrefs,
+  saveMcpPrefs,
+  requestMcpConnect,
+  type McpPrefs,
+} from './host';
 export {
   connectMcpBridge,
   disconnectMcpBridge,

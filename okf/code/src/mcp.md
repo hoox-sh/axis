@@ -7,7 +7,7 @@ tags: [code, mcp]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-09-24T06:42:13Z
 sources:
   - id: tree
     resource: "src/mcp"
@@ -22,8 +22,8 @@ okf_lock: generated
 * `catalog.ts` — APP_CAPABILITIES, SETTABLE_PATHS, findCapability
 * `commands.ts` — clearPaletteCommands, listPaletteCommandIds, runPaletteCommand, setPaletteCommand, setPaletteCommands
 * `dispatch.ts` — McpHostHooks, invokeCapability, setMcpHostHooks
-* `host.ts` — AxisMcpApi, McpPrefs, loadMcpPrefs, saveMcpPrefs, startMcpHost
-* `index.ts` — APP_CAPABILITIES, McpInvokeError, SETTABLE_PATHS, buildAppSnapshot, connectMcpBridge, disconnectMcpBridge, findCapability, invokeCapability, loadMcpPrefs, mcpBridgeState, onMcpBridge, rotateMcpBridge
+* `host.ts` — AxisMcpApi, McpPrefs, loadMcpPrefs, requestMcpConnect, saveMcpPrefs, startMcpHost
+* `index.ts` — APP_CAPABILITIES, McpInvokeError, SETTABLE_PATHS, buildAppSnapshot, connectMcpBridge, disconnectMcpBridge, findCapability, invokeCapability, loadMcpPrefs, mcpBridgeState, onMcpBridge, requestMcpConnect
 * `protocol.ts` — AppInvokeRequest, AppInvokeResponse, CapabilitySpec, McpInvokeError, getByPath, sessionIdFromApiKey
 * `snapshot.ts` — buildAppSnapshot, buildSettingsSnapshot
 

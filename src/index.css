@@ -1487,7 +1487,7 @@ button.axis-status-capsule {
 .axis-draw-rail {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   padding: 4px;
   margin: 0;
   background: var(--color-bg-panel);
@@ -1504,6 +1504,16 @@ button.axis-status-capsule {
   flex-wrap: wrap;
   align-items: center;
   max-width: min(920px, calc(100vw - 16px));
+}
+.axis-draw-sep {
+  align-self: stretch;
+  background: var(--color-border-soft);
+  flex: 0 0 auto;
+}
+.axis-draw-shell[data-dock="left"] .axis-draw-sep,
+.axis-draw-shell[data-dock="float"] .axis-draw-sep {
+  height: 1px;
+  margin: 3px 4px;
 }
 .axis-draw-shell[data-dock="top"] .axis-draw-sep {
   width: 1px;
@@ -1630,7 +1640,14 @@ button.axis-status-capsule {
   margin-left: 0;
   margin-top: 4px;
 }
+.axis-draw-tool {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+}
 .axis-draw-btn {
+  position: relative;
   width: 32px;
   height: 32px;
   min-width: 32px;
@@ -1646,13 +1663,94 @@ button.axis-status-capsule {
   cursor: pointer;
   box-sizing: border-box;
 }
-.axis-draw-btn:hover {
+.axis-draw-tool .axis-draw-btn svg {
+  transform: translate(-1px, -1px);
+}
+.axis-draw-btn:hover,
+.axis-draw-tool:hover .axis-draw-btn:not([aria-pressed='true']) {
   background: var(--color-bg-hover);
   color: var(--color-text);
 }
 .axis-draw-btn.is-active {
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+}
+.axis-draw-tool.is-active .axis-draw-btn {
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+.axis-draw-shell[data-dock='top'] .axis-draw-tool.is-active .axis-draw-btn {
+  box-shadow: inset 0 2px 0 var(--color-accent);
+}
+.axis-draw-caret {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--color-text-faint);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  line-height: 0;
+}
+.axis-draw-caret.is-down svg {
+  transform: rotate(90deg);
+}
+.axis-draw-caret:hover,
+.axis-draw-tool[data-open='1'] .axis-draw-caret {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
+}
+.axis-draw-caret:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: -1px;
+}
+.axis-draw-badge {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  font-size: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-accent);
+  pointer-events: none;
+}
+.axis-draw-flyout-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-dim);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+}
+.axis-draw-flyout-item svg {
+  flex: 0 0 auto;
+}
+.axis-draw-flyout-item:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+}
+.axis-draw-flyout-item.is-active,
+.axis-draw-flyout-item[aria-checked='true'] {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  font-weight: 600;
 }
 .axis-scale-seg {
   display: inline-flex;
@@ -1716,6 +1814,73 @@ button.axis-status-capsule {
   font-size: 12px;
   text-align: left;
   box-sizing: border-box;
+}
+
+/* Chart page-load splash — logo, caption, and MCP connect, dead center. */
+.axis-chart-boot {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  pointer-events: none;
+  text-align: center;
+}
+.axis-chart-boot-cluster {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  max-width: 28rem;
+}
+.axis-chart-boot-title {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--color-text-faint);
+  line-height: 1.4;
+}
+.axis-chart-boot-title[data-tone='error'] {
+  color: var(--color-red);
+}
+.axis-chart-boot-sub {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: color-mix(in srgb, var(--color-text-faint) 82%, transparent);
+  line-height: 1.45;
+}
+.axis-mcp-cta {
+  pointer-events: auto;
+  margin-top: 4px;
+}
+.axis-mcp-cta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: var(--radius-chip);
+  border: 1px solid var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.axis-mcp-cta-chip:hover {
+  background: color-mix(in srgb, var(--color-accent) 26%, transparent);
+  color: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
 }
 .axis-logs-strip {
   display: flex;
