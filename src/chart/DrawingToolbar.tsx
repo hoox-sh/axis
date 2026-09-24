@@ -49,11 +49,36 @@ import {
   patchDrawing,
   setDrawings,
 } from '../store';
-import type { Drawing, DrawingKind, DrawingToolId, DrawingLineStyle } from './drawing-types';
-import { toolLabel, resolveDrawingStyle, DRAWING_COLORS } from './drawing-types';
+import type { Drawing, DrawingKind, DrawingToolId } from './drawing-types';
+import { toolLabel, resolveDrawingStyle } from './drawing-types';
 import { Icons } from '../ui/icons';
 import { DrawingToolIcon } from './drawings/tool-icons';
 import { levelSwatches } from './drawings/level-palette';
+import {
+  COLOR_PRESETS,
+  GRIP_ICON_PX,
+  GRIP_ICON_STROKE,
+  LINE_STYLES,
+  NUDGE_LARGE_PX,
+  NUDGE_PX,
+  TOOL_ICON_PX,
+  TOOL_ICON_STROKE,
+  TOOL_SHORTCUT,
+  UTILITY_ICON_PX,
+  UTILITY_ICON_STROKE,
+  titleWithShortcut,
+} from './drawings/toolbar/shortcuts';
+import { createToolbarDrag, nudgeDelta } from './drawings/toolbar/use-toolbar-drag';
+import { RailBadge, RailSeparator, ToolCaret, ToolRailButton } from './drawings/toolbar/tool-button';
+import { ToolFlyout } from './drawings/toolbar/tool-flyout';
+import { DockMenu } from './drawings/toolbar/dock-menu';
+import {
+  LineStyleChip,
+  StyleDivider,
+  SwatchRow,
+  ToggleChip,
+  WidthChip,
+} from './drawings/toolbar/style-controls';
 import {
   autoStylebarPos,
   clampToHost,
@@ -92,33 +117,7 @@ import {
   type KindDrawingPrefs,
 } from './drawings/tool-settings';
 
-const COLOR_PRESETS = [
-  DRAWING_COLORS.default,
-  DRAWING_COLORS.up,
-  DRAWING_COLORS.down,
-  DRAWING_COLORS.measure,
-  '#eceef4',
-  '#8b8e9c',
-] as const;
-
-const LINE_STYLES: DrawingLineStyle[] = ['solid', 'dashed', 'dotted'];
-
-/** Chart-scope chords already in the shortcut registry — do not invent new ones. */
-const TOOL_SHORTCUT: Partial<Record<DrawingToolId, string>> = {
-  cursor: 'Q',
-  eraser: 'E',
-  measure: 'M',
-  trend: 'L',
-  fib: 'F',
-  rect: 'R',
-  text: 'T',
-  hline: 'H',
-  brush: 'X',
-};
-
-function titleWithShortcut(name: string, shortcut?: string) {
-  return shortcut ? `${name} (${shortcut})` : name;
-}
+/** Resolved store/layer style patch for the style bar. */
 
 type StylePatch = KindDrawingPrefs & { text?: string; locked?: boolean };
 
@@ -176,24 +175,15 @@ function syncLayerFromStore() {
   layer.setStayInMode(store.drawingUi.stayInMode);
   layer.setLockAll(store.drawingUi.lockAll);
   const resolved = resolvedPrefsForTool(store.drawingPrefs, store.drawingTool);
+  const { color, width, lineStyle, fillOpacity, ...rest } = resolved;
   layer.setStylePrefs({
-    color: resolved.color,
-    width: resolved.width,
-    lineStyle: resolved.lineStyle,
-    fillOpacity: resolved.fillOpacity,
-    extendLeft: resolved.extendLeft,
-    extendRight: resolved.extendRight,
-    fontSize: resolved.fontSize,
-    showPrice: resolved.showPrice,
-    showPct: resolved.showPct,
-    showStats: resolved.showStats,
-    reverse: resolved.reverse,
-    arrowStart: resolved.arrowStart,
-    arrowEnd: resolved.arrowEnd,
-    rr: resolved.rr,
-    fibLevels: resolved.fibLevels,
-    multiColor: resolved.multiColor,
-    levelColors: resolved.levelColors ? { ...resolved.levelColors } : undefined,
+    color,
+    width,
+    lineStyle,
+    fillOpacity,
+    ...rest,
+    fibLevels: rest.fibLevels ? [...rest.fibLevels] : undefined,
+    levelColors: rest.levelColors ? { ...rest.levelColors } : undefined,
   });
 }
 
@@ -291,84 +281,42 @@ export const DrawingToolbar: Component = () => {
 
   let toolPointerHandled = false;
 
-  const onToolPointerDown = (e: PointerEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const handle = e.currentTarget as HTMLElement;
+  const resolveToolPos = (dx: number, dy: number) => {
     const host = hostBox();
-    if (!host || !railRef) return;
-    const pid = e.pointerId;
-    try {
-      handle.setPointerCapture(pid);
-    } catch {
-      /* Synthetic pointers and some browsers reject capture; move listeners still run. */
-    }
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const railBox = railRef.getBoundingClientRect();
-    const origX = railBox.left - host.left;
-    const origY = railBox.top - host.top;
-    let moved = false;
-    setDragging('tools');
-    const move = (ev: PointerEvent) => {
-      if (ev.pointerId !== pid) return;
-      if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 4) return;
-      moved = true;
-      const hb = hostBox();
-      const bar = railRef?.getBoundingClientRect();
-      if (!hb || !bar) return;
-      setLiveTools(
-        clampToHost(
-          origX + (ev.clientX - startX),
-          origY + (ev.clientY - startY),
-          hb.width,
-          hb.height,
-          bar.width,
-          bar.height,
-        ),
-      );
-    };
-    const up = (ev: PointerEvent) => {
-      if (ev.pointerId !== pid) return;
-      handle.removeEventListener('pointermove', move);
-      handle.removeEventListener('pointerup', up);
-      handle.removeEventListener('pointercancel', up);
-      setDragging(null);
-      if (ev.type !== 'pointerup') {
-        setLiveTools(null);
-        return;
-      }
-      toolPointerHandled = true;
-      if (!moved) {
+    const bar = railRef?.getBoundingClientRect();
+    if (!host || !bar) return null;
+    const anchor = railAnchor();
+    return clampToHost(anchor.x + dx, anchor.y + dy, host.width, host.height, bar.width, bar.height);
+  };
+
+  const onToolPointerDown = createToolbarDrag(
+    (dx, dy) => resolveToolPos(dx, dy),
+    {
+      onLive: (pos) => setLiveTools(pos),
+      onTap: () => {
+        toolPointerHandled = true;
         setOpenGroup(null);
         setSettingsOpen(false);
         setMenuOpen((v) => !v);
-        return;
-      }
-      const pos = liveTools();
-      setLiveTools(null);
-      if (!pos) return;
-      const nextDock = snapToolbarDock(pos.x, pos.y);
-      if (nextDock === 'float') setDrawingUi({ toolbarDock: 'float', toolbarX: pos.x, toolbarY: pos.y });
-      else setDrawingUi({ toolbarDock: nextDock });
-      setMenuOpen(false);
-    };
-    handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', up);
-    handle.addEventListener('pointercancel', up);
-  };
+      },
+      onDrop: (moved) => {
+        if (!moved) return;
+        const pos = liveTools();
+        setLiveTools(null);
+        if (!pos) return;
+        const nextDock = snapToolbarDock(pos.x, pos.y);
+        if (nextDock === 'float')
+          setDrawingUi({ toolbarDock: 'float', toolbarX: pos.x, toolbarY: pos.y });
+        else setDrawingUi({ toolbarDock: nextDock });
+        setMenuOpen(false);
+      },
+    },
+    (on) => setDragging(on ? 'tools' : null),
+  );
 
   const onToolKeyDown = (e: KeyboardEvent) => {
     if (dock() !== 'float') return;
-    const step = e.shiftKey ? 16 : 4;
-    const dir: Record<string, [number, number] | undefined> = {
-      ArrowLeft: [-step, 0],
-      ArrowRight: [step, 0],
-      ArrowUp: [0, -step],
-      ArrowDown: [0, step],
-    };
-    const d = dir[e.key];
+    const d = nudgeDelta(e.key, e.shiftKey, NUDGE_PX, NUDGE_LARGE_PX);
     if (!d) return;
     e.preventDefault();
     const cur = railAnchor();
@@ -376,61 +324,35 @@ export const DrawingToolbar: Component = () => {
     setDrawingUi({ toolbarDock: 'float', toolbarX: next.x, toolbarY: next.y });
   };
 
-  const onStylePointerDown = (e: PointerEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const handle = e.currentTarget as HTMLElement;
+  const resolveStylePos = (dx: number, dy: number) => {
     const host = hostBox();
-    const bar = styleRef;
-    if (!host || !bar) return;
-    const pid = e.pointerId;
-    try {
-      handle.setPointerCapture(pid);
-    } catch {
-      /* See tool-handle capture note. */
-    }
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const box = bar.getBoundingClientRect();
-    const origX = box.left - host.left;
-    const origY = box.top - host.top;
-    let moved = false;
-    setDragging('style');
-    const move = (ev: PointerEvent) => {
-      if (ev.pointerId !== pid) return;
-      if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 4) return;
-      moved = true;
-      const hb = hostBox();
-      const size = styleRef?.getBoundingClientRect();
-      if (!hb || !size) return;
-      setLiveStyle(
-        clampToHost(
-          origX + (ev.clientX - startX),
-          origY + (ev.clientY - startY),
-          hb.width,
-          hb.height,
-          size.width,
-          size.height,
-        ),
-      );
-    };
-    const up = (ev: PointerEvent) => {
-      if (ev.pointerId !== pid) return;
-      handle.removeEventListener('pointermove', move);
-      handle.removeEventListener('pointerup', up);
-      handle.removeEventListener('pointercancel', up);
-      setDragging(null);
-      if (!moved) return;
-      const pos = liveStyle();
-      setLiveStyle(null);
-      if (!pos) return;
-      setDrawingUi({ stylebarX: pos.x, stylebarY: pos.y });
-    };
-    handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', up);
-    handle.addEventListener('pointercancel', up);
+    const size = styleRef?.getBoundingClientRect();
+    if (!host || !size) return null;
+    const origin = styleOrigin();
+    return clampToHost(
+      origin.x + dx,
+      origin.y + dy,
+      host.width,
+      host.height,
+      size.width,
+      size.height,
+    );
   };
+
+  const onStylePointerDown = createToolbarDrag(
+    (dx, dy) => resolveStylePos(dx, dy),
+    {
+      onLive: (pos) => setLiveStyle(pos),
+      onDrop: (moved) => {
+        if (!moved) return;
+        const pos = liveStyle();
+        setLiveStyle(null);
+        if (!pos) return;
+        setDrawingUi({ stylebarX: pos.x, stylebarY: pos.y });
+      },
+    },
+    (on) => setDragging(on ? 'style' : null),
+  );
 
   const resetStylebar = () => {
     setLiveStyle(null);
@@ -694,10 +616,6 @@ export const DrawingToolbar: Component = () => {
     syncLayerFromStore();
   };
 
-  const iconPx = 16;
-  const btnClass =
-    'axis-draw-btn sc-btn sc-btn-ghost w-8 h-8 min-w-8 min-h-8 !w-8 !h-8 !min-w-8 !min-h-8 p-0 flex items-center justify-center border border-transparent rounded-[4px]';
-
   const railGroups = () =>
     TOOL_GROUPS.filter((g) => g.id !== 'actions' && g.tools.length > 0);
 
@@ -752,50 +670,20 @@ export const DrawingToolbar: Component = () => {
             }}
             onKeyDown={onToolKeyDown}
           >
-            <Icons.grip size={14} strokeWidth={2.25} class="axis-draw-grip" />
+            <Icons.grip size={GRIP_ICON_PX} strokeWidth={GRIP_ICON_STROKE} class="axis-draw-grip" />
           </button>
           <Show when={menuOpen()}>
-            <div class="axis-draw-menu" role="menu" aria-label="Drawing toolbar placement">
-              <button
-                type="button"
-                role="menuitemradio"
-                aria-checked={dock() === 'left'}
-                onClick={() => {
-                  setDrawingUi({ toolbarDock: 'left' });
-                  setMenuOpen(false);
-                }}
-              >
-                Dock left
-              </button>
-              <button
-                type="button"
-                role="menuitemradio"
-                aria-checked={dock() === 'top'}
-                onClick={() => {
-                  setDrawingUi({ toolbarDock: 'top' });
-                  setMenuOpen(false);
-                }}
-              >
-                Dock top
-              </button>
-              <button
-                type="button"
-                role="menuitemradio"
-                aria-checked={dock() === 'float'}
-                onClick={placeFree}
-              >
-                Free position
-              </button>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={store.drawingUi.toolbarSlide === true}
-                  disabled={dock() === 'float'}
-                  onChange={(e) => setDrawingUi({ toolbarSlide: e.currentTarget.checked })}
-                />
-                Slide in
-              </label>
-            </div>
+            <DockMenu
+              dock={dock()}
+              slideChecked={store.drawingUi.toolbarSlide === true}
+              slideDisabled={dock() === 'float'}
+              onDock={(d) => {
+                setDrawingUi({ toolbarDock: d });
+                setMenuOpen(false);
+              }}
+              onFree={placeFree}
+              onSlide={(checked) => setDrawingUi({ toolbarSlide: checked })}
+            />
           </Show>
         </div>
         <For each={railGroups()}>
@@ -808,88 +696,50 @@ export const DrawingToolbar: Component = () => {
             const isActive = () => g.tools.includes(active());
             return (
               <div
-                class={`axis-draw-tool ${isActive() ? 'is-active' : ''}`}
+                class="axis-draw-tool"
+                classList={{ 'is-active': isActive() }}
                 data-drawing-group={g.id}
                 data-open={g.flyout && openGroup() === g.id ? '1' : undefined}
               >
-                <button
-                  type="button"
-                  class={`${btnClass} ${isActive() ? 'is-active' : ''}`}
+                <ToolRailButton
                   title={titleWithShortcut(toolLabel(primaryId()), TOOL_SHORTCUT[primaryId()])}
-                  aria-label={toolLabel(primaryId())}
-                  aria-pressed={isActive()}
-                  onClick={() => selectTool(primaryId())}
+                  label={toolLabel(primaryId())}
+                  active={isActive()}
+                  onSelect={() => selectTool(primaryId())}
                 >
-                  <DrawingToolIcon id={primaryId()} size={15} strokeWidth={1.75} />
-                </button>
+                  <DrawingToolIcon id={primaryId()} size={TOOL_ICON_PX} strokeWidth={TOOL_ICON_STROKE} />
+                </ToolRailButton>
                 <Show when={g.flyout}>
-                  <button
-                    type="button"
-                    class={`axis-draw-caret ${dock() === 'top' ? 'is-down' : ''}`}
-                    aria-label={`More ${g.label} tools`}
-                    aria-haspopup="menu"
-                    aria-expanded={openGroup() === g.id}
+                  <ToolCaret
+                    label={`More ${g.label} tools`}
                     title={`${g.label} tools`}
-                    onClick={() => toggleFlyout(g.id)}
-                  >
-                    <svg viewBox="0 0 8 8" width="7" height="7" aria-hidden="true">
-                      <path
-                        d="M2.1 1.25 L5.75 4 L2.1 6.75"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.4"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
-                  </button>
+                    expanded={openGroup() === g.id}
+                    down={dock() === 'top'}
+                    onToggle={() => toggleFlyout(g.id)}
+                  />
                 </Show>
                 <Show when={g.flyout && openGroup() === g.id}>
-                  <div
-                    class={`axis-draw-pop absolute z-50 min-w-[9.5em] p-2 flex flex-col gap-0.5 overflow-y-auto ${
-                      dock() === 'top' ? 'left-0 top-full mt-1' : 'left-full top-0 ml-1'
-                    }`}
-                    role="menu"
-                    style={flyoutClamp()[g.id]}
-                    data-drawing-flyout
-                  >
-                    <For each={g.tools}>
-                      {(tid) => {
-                        return (
-                          <button
-                            type="button"
-                            role="menuitemradio"
-                            aria-checked={active() === tid}
-                            class={`axis-draw-flyout-item ${
-                              active() === tid ? 'is-active' : ''
-                            }`}
-                            title={titleWithShortcut(toolLabel(tid), TOOL_SHORTCUT[tid])}
-                            onClick={() => selectTool(tid)}
-                          >
-                            <DrawingToolIcon id={tid} size={15} strokeWidth={1.75} />
-                            <span>{toolLabel(tid)}</span>
-                          </button>
-                        );
-                      }}
-                    </For>
-                  </div>
+                  <ToolFlyout
+                    tools={[...g.tools]}
+                    activeId={active()}
+                    dockTop={dock() === 'top'}
+                    clamp={flyoutClamp()[g.id]}
+                    onSelect={(tid) => selectTool(tid)}
+                    onClose={() => setOpenGroup(null)}
+                  />
                 </Show>
               </div>
             );
           }}
         </For>
 
-        <div class="axis-draw-sep" />
+        <RailSeparator />
 
-        <button
-          type="button"
-          class={`${btnClass} ${
-            store.drawingUi.magnet !== 'off' ? 'text-accent' : 'text-text-dim'
-          }`}
+        <ToolRailButton
           title={`Magnet: ${store.drawingUi.magnet} (W)`}
-          aria-label={`Magnet snap: ${store.drawingUi.magnet}`}
-          aria-pressed={store.drawingUi.magnet !== 'off'}
-          onClick={() => {
+          label={`Magnet snap: ${store.drawingUi.magnet}`}
+          active={store.drawingUi.magnet !== 'off'}
+          onSelect={() => {
             const order = ['off', 'weak', 'strong'] as const;
             const i = order.indexOf(store.drawingUi.magnet);
             const next = order[(i + 1) % order.length]!;
@@ -897,72 +747,64 @@ export const DrawingToolbar: Component = () => {
             getActiveDrawingLayer()?.setMagnet(next);
           }}
         >
-          <Icons.magnet size={iconPx} strokeWidth={2.25} />
+          <Icons.magnet size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
           <Show when={store.drawingUi.magnet === 'weak' || store.drawingUi.magnet === 'strong'}>
-            <span class="axis-draw-badge">
-              {store.drawingUi.magnet === 'strong' ? 'S' : 'W'}
-            </span>
+            <RailBadge text={store.drawingUi.magnet === 'strong' ? 'S' : 'W'} />
           </Show>
-        </button>
-        <button
-          type="button"
-          class={`${btnClass} ${store.drawingUi.stayInMode ? 'text-accent' : 'text-text-dim'}`}
+        </ToolRailButton>
+        <ToolRailButton
           title="Stay in drawing mode"
-          aria-pressed={store.drawingUi.stayInMode}
-          onClick={() => {
+          label="Stay in drawing mode"
+          active={store.drawingUi.stayInMode}
+          onSelect={() => {
             const next = !store.drawingUi.stayInMode;
             setDrawingUi({ stayInMode: next });
             getActiveDrawingLayer()?.setStayInMode(next);
           }}
         >
-          <Icons.pin size={iconPx} strokeWidth={2.25} />
-        </button>
-        <button
-          type="button"
-          class={`${btnClass} ${store.drawingUi.lockAll ? 'text-accent' : 'text-text-dim'}`}
+          <Icons.pin size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
+        </ToolRailButton>
+        <ToolRailButton
           title="Lock all drawings"
-          aria-pressed={store.drawingUi.lockAll}
-          onClick={() => {
+          label="Lock all drawings"
+          active={store.drawingUi.lockAll}
+          onSelect={() => {
             const next = !store.drawingUi.lockAll;
             setDrawingUi({ lockAll: next });
             getActiveDrawingLayer()?.setLockAll(next);
           }}
         >
           {store.drawingUi.lockAll ? (
-            <Icons.lock size={iconPx} strokeWidth={2.25} />
+            <Icons.lock size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
           ) : (
-            <Icons.unlock size={iconPx} strokeWidth={2.25} />
+            <Icons.unlock size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
           )}
-        </button>
-        <button
-          type="button"
-          class={`${btnClass} ${store.drawingUi.hideDrawings ? 'text-accent' : 'text-text-dim'}`}
+        </ToolRailButton>
+        <ToolRailButton
           title="Hide drawings (user + Pine; selected user drawings still visible)"
-          aria-pressed={store.drawingUi.hideDrawings}
-          aria-label={store.drawingUi.hideDrawings ? 'Show drawings' : 'Hide drawings'}
-          onClick={() => {
+          label={store.drawingUi.hideDrawings ? 'Show drawings' : 'Hide drawings'}
+          active={store.drawingUi.hideDrawings}
+          onSelect={() => {
             const next = !store.drawingUi.hideDrawings;
             setDrawingUi({ hideDrawings: next });
             setHideDrawingsAll(next);
           }}
         >
           {store.drawingUi.hideDrawings ? (
-            <Icons.eyeOff size={iconPx} strokeWidth={2.25} />
+            <Icons.eyeOff size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
           ) : (
-            <Icons.eye size={iconPx} strokeWidth={2.25} />
+            <Icons.eye size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
           )}
-        </button>
+        </ToolRailButton>
 
-        <div class="axis-draw-sep" />
+        <RailSeparator />
 
-        <button
-          type="button"
-          class={`${btnClass} text-text-dim disabled:opacity-40`}
+        <ToolRailButton
           title={`Duplicate drawings for ${store.symbol} with new IDs`}
-          aria-label="Duplicate drawings"
-          data-testid="axis-drawing-duplicate"
+          label="Duplicate drawings"
+          testId="axis-drawing-duplicate"
           disabled={visibleDrawingsForActiveSymbol().length === 0}
-          onClick={() => {
+          onSelect={() => {
             const visible = visibleDrawingsForActiveSymbol();
             if (!visible.length) return;
             const clones = cloneDrawings(visible, { symbol: store.symbol });
@@ -973,25 +815,21 @@ export const DrawingToolbar: Component = () => {
             );
           }}
         >
-          <Icons.copy size={iconPx} strokeWidth={2.25} />
-        </button>
-        <button
-          type="button"
-          class={`${btnClass} text-text-dim disabled:opacity-40`}
+          <Icons.copy size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
+        </ToolRailButton>
+        <ToolRailButton
           title="Delete selected (Delete)"
-          aria-label="Delete selected drawing"
+          label="Delete selected drawing"
           disabled={!store.selectedDrawingId}
-          onClick={() => getActiveDrawingLayer()?.deleteSelected()}
+          onSelect={() => getActiveDrawingLayer()?.deleteSelected()}
         >
-          <Icons.trash size={iconPx} strokeWidth={2.25} />
-        </button>
-        <button
-          type="button"
-          class={`${btnClass} text-text-dim disabled:opacity-40`}
+          <Icons.trash size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
+        </ToolRailButton>
+        <ToolRailButton
           title={`Clear drawings for ${store.symbol}`}
-          aria-label="Clear drawings for symbol"
+          label="Clear drawings for symbol"
           disabled={visibleDrawingsForActiveSymbol().length === 0}
-          onClick={() => {
+          onSelect={() => {
             const n = visibleDrawingsForActiveSymbol().length;
             if (n && !confirm(`Clear drawings for ${store.symbol}?`)) return;
             // clearAll emits [] → onChange merges (other symbols kept); also
@@ -1000,12 +838,12 @@ export const DrawingToolbar: Component = () => {
             clearDrawingsForSymbol(store.symbol);
           }}
         >
-          <Icons.eraser size={iconPx} strokeWidth={2.25} />
-        </button>
+          <Icons.eraser size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
+        </ToolRailButton>
 
         <Show when={visibleDrawingsForActiveSymbol().length > 0}>
           <span
-            class="text-[10px] font-mono text-text-faint text-center py-0.5 tabular-nums"
+            class="axis-draw-count"
             title={`Drawings for ${store.symbol}`}
           >
             {visibleDrawingsForActiveSymbol().length}
@@ -1041,95 +879,56 @@ export const DrawingToolbar: Component = () => {
                 resetStylebar();
               }}
             >
-              <Icons.grip size={14} strokeWidth={2.25} />
+              <Icons.grip size={GRIP_ICON_PX} strokeWidth={GRIP_ICON_STROKE} />
             </button>
-            <For each={[...COLOR_PRESETS]}>
-              {(c) => (
-                <button
-                  type="button"
-                  class="w-5 h-5 rounded-sm border border-border-soft shrink-0 p-0 cursor-pointer"
-                  style={{
-                    'background-color': c,
-                    'box-shadow':
-                      styleTarget().color.toLowerCase() === c.toLowerCase()
-                        ? 'inset 0 0 0 1px var(--color-accent)'
-                        : 'none',
-                  }}
-                  title={c}
-                  aria-label={`Color ${c}`}
-                  onClick={() => applyStyle({ color: c })}
-                />
-              )}
-            </For>
-            <input
-              type="color"
-              class="w-5 h-5 p-0 border border-border-soft rounded-sm bg-transparent cursor-pointer shrink-0"
-              title="Custom color"
-              aria-label="Custom color"
-              value={
+            <SwatchRow
+              colors={COLOR_PRESETS}
+              current={styleTarget().color}
+              onPick={(c) => applyStyle({ color: c })}
+              customValue={
                 /^#[0-9a-fA-F]{6}$/.test(styleTarget().color)
                   ? styleTarget().color
                   : '#939fff'
               }
-              onInput={(e) => applyStyle({ color: e.currentTarget.value })}
+              onCustom={(c) => applyStyle({ color: c })}
             />
 
-            <span class="w-px h-5 bg-border-soft mx-0.5" />
+            <StyleDivider />
 
             <For each={[...widthsForKind(activeKind())]}>
               {(w) => (
-                <button
-                  type="button"
-                  class={`${btnClass} !w-7 !h-7 !min-w-7 !min-h-7 text-[10px] font-mono ${
-                    Math.abs(styleTarget().width - w) < 0.01
-                      ? 'text-accent border-accent'
-                      : 'text-text-dim'
-                  }`}
-                  title={`Width ${w}`}
-                  aria-pressed={Math.abs(styleTarget().width - w) < 0.01}
-                  onClick={() => applyStyle({ width: w })}
-                >
-                  {w === 1.5 ? '1½' : w}
-                </button>
+                <WidthChip
+                  width={w}
+                  active={Math.abs(styleTarget().width - w) < 0.01}
+                  onPick={(next) => applyStyle({ width: next })}
+                />
               )}
             </For>
 
-            <span class="w-px h-5 bg-border-soft mx-0.5" />
+            <StyleDivider />
 
             <For each={LINE_STYLES}>
               {(ls) => (
-                <button
-                  type="button"
-                  class={`${btnClass} !w-7 !h-7 !min-w-7 !min-h-7 ${
-                    styleTarget().lineStyle === ls ? 'text-accent border-accent' : 'text-text-dim'
-                  }`}
-                  title={ls}
-                  aria-pressed={styleTarget().lineStyle === ls}
-                  onClick={() => applyStyle({ lineStyle: ls })}
-                >
-                  <span
-                    class="block w-4 border-t border-current"
-                    style={{
-                      'border-style':
-                        ls === 'dashed' ? 'dashed' : ls === 'dotted' ? 'dotted' : 'solid',
-                      'border-width': '0 0 2px 0',
-                    }}
-                  />
-                </button>
+                <LineStyleChip
+                  style={ls}
+                  active={styleTarget().lineStyle === ls}
+                  onPick={(next) => applyStyle({ lineStyle: next })}
+                />
               )}
             </For>
 
             <Show when={hasSetting(activeKind(), 'fillOpacity')}>
-              <span class="w-px h-5 bg-border-soft mx-0.5" />
-              <label class="flex items-center gap-1 text-[10px] text-text-faint px-0.5" title="Fill opacity">
+              <StyleDivider />
+              <label class="axis-draw-fill" title="Fill opacity">
                 <span>Fill</span>
                 <input
                   type="range"
                   min={0}
                   max={100}
                   step={5}
-                  class="w-14 sc-range"
+                  class="axis-draw-range"
                   value={Math.round(styleTarget().fillOpacity * 100)}
+                  aria-label="Fill opacity"
                   onInput={(e) =>
                     applyStyle({ fillOpacity: Number(e.currentTarget.value) / 100 })
                   }
@@ -1138,54 +937,39 @@ export const DrawingToolbar: Component = () => {
             </Show>
 
             <Show when={hasSetting(activeKind(), 'extendLeft')}>
-              <button
-                type="button"
-                class={`${btnClass} !w-7 !h-7 !min-w-7 !min-h-7 text-[10px] font-mono ${
-                  styleTarget().extendLeft ? 'text-accent border-accent' : 'text-text-dim'
-                }`}
+              <ToggleChip
                 title="Extend left"
-                aria-pressed={styleTarget().extendLeft}
-                onClick={() => applyStyle({ extendLeft: !styleTarget().extendLeft })}
-              >
-                ←
-              </button>
+                label="←"
+                active={!!styleTarget().extendLeft}
+                onToggle={() => applyStyle({ extendLeft: !styleTarget().extendLeft })}
+              />
             </Show>
             <Show when={hasSetting(activeKind(), 'extendRight')}>
-              <button
-                type="button"
-                class={`${btnClass} !w-7 !h-7 !min-w-7 !min-h-7 text-[10px] font-mono ${
-                  styleTarget().extendRight ? 'text-accent border-accent' : 'text-text-dim'
-                }`}
+              <ToggleChip
                 title="Extend right"
-                aria-pressed={styleTarget().extendRight}
-                onClick={() => applyStyle({ extendRight: !styleTarget().extendRight })}
-              >
-                →
-              </button>
+                label="→"
+                active={!!styleTarget().extendRight}
+                onToggle={() => applyStyle({ extendRight: !styleTarget().extendRight })}
+              />
             </Show>
             <Show when={hasSetting(activeKind(), 'showPrice')}>
-              <button
-                type="button"
-                class={`${btnClass} !w-7 !h-7 !min-w-7 !min-h-7 text-[10px] ${
-                  styleTarget().showPrice ? 'text-accent border-accent' : 'text-text-dim'
-                }`}
+              <ToggleChip
                 title="Show price / time"
-                aria-pressed={styleTarget().showPrice}
-                onClick={() => applyStyle({ showPrice: !styleTarget().showPrice })}
-              >
-                $
-              </button>
+                label="$"
+                active={!!styleTarget().showPrice}
+                onToggle={() => applyStyle({ showPrice: !styleTarget().showPrice })}
+              />
             </Show>
 
             <Show when={styleTarget().mode === 'selection'}>
-              <span class="w-px h-5 bg-border-soft mx-0.5" />
+              <StyleDivider />
               <button
                 type="button"
-                class={`${btnClass} !w-7 !h-7 !min-w-7 !min-h-7 ${
-                  styleTarget().locked ? 'text-accent border-accent' : 'text-text-dim'
-                }`}
+                class="axis-draw-chip is-settings"
+                classList={{ 'is-active': !!styleTarget().locked }}
                 title={styleTarget().locked ? 'Unlock drawing' : 'Lock drawing'}
-                aria-pressed={styleTarget().locked}
+                aria-label={styleTarget().locked ? 'Unlock drawing' : 'Lock drawing'}
+                aria-pressed={!!styleTarget().locked}
                 onClick={() => applyStyle({ locked: !styleTarget().locked })}
               >
                 {styleTarget().locked ? (
@@ -1194,15 +978,14 @@ export const DrawingToolbar: Component = () => {
                   <Icons.unlock size={14} strokeWidth={2.25} />
                 )}
               </button>
-              <span class="text-[10px] text-text-faint px-1 uppercase tracking-wider">sel</span>
+              <span class="axis-draw-sel">sel</span>
             </Show>
 
-            <span class="w-px h-5 bg-border-soft mx-0.5" />
+            <StyleDivider />
             <button
               type="button"
-              class={`${btnClass} !w-7 !h-7 !min-w-7 !min-h-7 ${
-                settingsOpen() ? 'text-accent border-accent' : 'text-text-dim'
-              }`}
+              class="axis-draw-chip is-settings"
+              classList={{ 'is-active': settingsOpen() }}
               title="Drawing settings"
               aria-label="Drawing settings"
               aria-expanded={settingsOpen()}
@@ -1222,22 +1005,22 @@ export const DrawingToolbar: Component = () => {
 
           <Show when={settingsOpen()}>
             <div
-              class="axis-draw-pop pointer-events-auto absolute left-0 top-full mt-1 w-[18.5rem] max-h-[min(70vh,28rem)] overflow-y-auto p-2 flex flex-col gap-2 z-50"
+              class="axis-draw-pop axis-draw-settings-pop"
               role="dialog"
               aria-label="Drawing settings"
               style={settingsClamp()}
               data-testid="axis-drawing-settings-popover"
             >
-              <div class="text-[11px] font-semibold text-text px-0.5">
+              <div class="axis-draw-settings-title">
                 {toolLabel(activeKind())}
               </div>
 
               <Show when={hasSetting(activeKind(), 'text')}>
-                <label class="flex flex-col gap-0.5 text-[10px] text-text-faint">
+                <label class="axis-draw-field">
                   Text
                   <input
                     type="text"
-                    class="sc-input text-[12px] px-2 py-1"
+                    class="sc-input axis-draw-text-input"
                     value={styleTarget().text}
                     maxlength={200}
                     onChange={(e) => applyStyle({ text: e.currentTarget.value })}
@@ -1245,14 +1028,14 @@ export const DrawingToolbar: Component = () => {
                 </label>
               </Show>
               <Show when={hasSetting(activeKind(), 'fontSize')}>
-                <label class="flex items-center justify-between gap-2 text-[10px] text-text-faint">
+                <label class="axis-draw-field is-row">
                   Font size
                   <input
                     type="number"
                     min={8}
                     max={32}
                     step={1}
-                    class="sc-input w-16 text-[12px] px-1 py-0.5"
+                    class="sc-input axis-draw-number-input"
                     value={styleTarget().fontSize}
                     onChange={(e) =>
                       applyStyle({ fontSize: clampFontSize(Number(e.currentTarget.value)) })
@@ -1262,7 +1045,7 @@ export const DrawingToolbar: Component = () => {
               </Show>
 
               <Show when={hasSetting(activeKind(), 'showStats')}>
-                <label class="flex items-center gap-2 text-[11px] text-text">
+                <label class="axis-draw-check">
                   <input
                     type="checkbox"
                     checked={styleTarget().showStats}
@@ -1272,7 +1055,7 @@ export const DrawingToolbar: Component = () => {
                 </label>
               </Show>
               <Show when={hasSetting(activeKind(), 'showPct')}>
-                <label class="flex items-center gap-2 text-[11px] text-text">
+                <label class="axis-draw-check">
                   <input
                     type="checkbox"
                     checked={styleTarget().showPct}
@@ -1282,7 +1065,7 @@ export const DrawingToolbar: Component = () => {
                 </label>
               </Show>
               <Show when={hasSetting(activeKind(), 'arrowStart')}>
-                <label class="flex items-center gap-2 text-[11px] text-text">
+                <label class="axis-draw-check">
                   <input
                     type="checkbox"
                     checked={styleTarget().arrowStart}
@@ -1292,7 +1075,7 @@ export const DrawingToolbar: Component = () => {
                 </label>
               </Show>
               <Show when={hasSetting(activeKind(), 'arrowEnd')}>
-                <label class="flex items-center gap-2 text-[11px] text-text">
+                <label class="axis-draw-check">
                   <input
                     type="checkbox"
                     checked={styleTarget().arrowEnd}
@@ -1303,14 +1086,14 @@ export const DrawingToolbar: Component = () => {
               </Show>
 
               <Show when={hasSetting(activeKind(), 'rr')}>
-                <label class="flex items-center justify-between gap-2 text-[10px] text-text-faint">
+                <label class="axis-draw-field is-row">
                   Risk / reward
                   <input
                     type="number"
                     min={0.25}
                     max={10}
                     step={0.25}
-                    class="sc-input w-16 text-[12px] px-1 py-0.5"
+                    class="sc-input axis-draw-number-input"
                     value={styleTarget().rr}
                     onChange={(e) =>
                       applyStyle({ rr: clampRiskReward(Number(e.currentTarget.value)) })
@@ -1320,7 +1103,7 @@ export const DrawingToolbar: Component = () => {
               </Show>
 
               <Show when={hasSetting(activeKind(), 'reverse')}>
-                <label class="flex items-center gap-2 text-[11px] text-text">
+                <label class="axis-draw-check">
                   <input
                     type="checkbox"
                     checked={styleTarget().reverse}
@@ -1331,7 +1114,7 @@ export const DrawingToolbar: Component = () => {
               </Show>
 
               <Show when={hasSetting(activeKind(), 'multiColor')}>
-                <label class="flex items-center gap-2 text-[11px] text-text">
+                <label class="axis-draw-check">
                   <input
                     type="checkbox"
                     checked={styleTarget().multiColor !== false}
@@ -1339,7 +1122,7 @@ export const DrawingToolbar: Component = () => {
                   />
                   Classic level colors
                 </label>
-                <div class="flex flex-wrap gap-1">
+                <div class="axis-draw-levels">
                   <For each={levelSwatches(String(activeKind()))}>
                     {(sw) => {
                       const current = () => {
@@ -1351,10 +1134,10 @@ export const DrawingToolbar: Component = () => {
                             : '#787B86';
                       };
                       return (
-                        <label class="flex flex-col items-center gap-0.5" title={sw.label}>
+                        <label class="axis-draw-level" title={sw.label}>
                           <input
                             type="color"
-                            class="w-5 h-5 p-0 border border-border-soft rounded-sm bg-transparent cursor-pointer"
+                            class="axis-draw-level-swatch"
                             aria-label={`${sw.label} color`}
                             value={current()}
                             onInput={(e) => {
@@ -1362,7 +1145,7 @@ export const DrawingToolbar: Component = () => {
                               applyStyle({ levelColors: next });
                             }}
                           />
-                          <span class="text-[9px] font-mono text-text-faint">{sw.label}</span>
+                          <span class="axis-draw-level-label">{sw.label}</span>
                         </label>
                       );
                     }}
@@ -1370,7 +1153,7 @@ export const DrawingToolbar: Component = () => {
                 </div>
                 <button
                   type="button"
-                  class="sc-btn sc-btn-ghost text-[11px] self-start px-2 py-0.5"
+                  class="axis-draw-link"
                   onClick={() => applyStyle({ levelColors: {} })}
                 >
                   Reset colors
@@ -1378,15 +1161,15 @@ export const DrawingToolbar: Component = () => {
               </Show>
 
               <Show when={hasSetting(activeKind(), 'fibLevels')}>
-                <div class="flex flex-col gap-1">
-                  <div class="text-[10px] text-text-faint uppercase tracking-wider">Levels</div>
+                <div class="axis-draw-levels-col">
+                  <div class="axis-draw-levels-title">Levels</div>
                   <For each={styleTarget().fibLevels}>
                     {(lvl, i) => (
-                      <div class="flex items-center gap-1">
+                      <div class="axis-draw-level-row">
                         <input
                           type="number"
                           step={0.001}
-                          class="sc-input flex-1 text-[11px] px-1 py-0.5 font-mono"
+                          class="sc-input axis-draw-level-input"
                           value={lvl}
                           onChange={(e) => {
                             const next = styleTarget().fibLevels.slice();
@@ -1398,7 +1181,7 @@ export const DrawingToolbar: Component = () => {
                         />
                         <button
                           type="button"
-                          class={`${btnClass} !w-6 !h-6 !min-w-6 !min-h-6 text-text-dim`}
+                          class="axis-draw-chip is-mini"
                           title="Remove level"
                           aria-label="Remove fib level"
                           onClick={() => {
@@ -1415,7 +1198,7 @@ export const DrawingToolbar: Component = () => {
                   </For>
                   <button
                     type="button"
-                    class="sc-btn sc-btn-ghost text-[11px] self-start px-2 py-0.5"
+                    class="axis-draw-link"
                     onClick={() => {
                       const next = [...styleTarget().fibLevels, 1.618];
                       applyStyle({

@@ -9,11 +9,17 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-24 · 454 commits · describe-tag: `v2.13.0`_
+_Generated/updated: 2026-09-24 · 455 commits · describe-tag: `v2.14.0`_
 
 ---
 
 ## [Unreleased]
+
+## [2.15.0] — 2026-09-24
+
+### Changed
+
+- **Drawing toolbar polish**: extracted `drawings/toolbar/` primitives (`ToolRailButton`, `ToolCaret`, `ToolFlyout`, `DockMenu`, style controls, shared drag factory) so `DrawingToolbar` is a composition root. Unified 32px grid / 16px glyphs, 16px caret hit area, focus rings, pill count chip, and keyboard-nav flyouts. Settings popover uses matching field/check/level styles. No placement-math or glyph-path changes.
 
 ## [2.14.0] — 2026-09-24
 
@@ -1324,9 +1330,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (135 commits)
+### 2026-09 (136 commits)
 
 #### Features
 
@@ -1469,6 +1477,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `d62a2ee6` (2026-09-24) — chore(release): AXIS v2.14.0 — splash, toolbar, and studio
 - `9ad5b004` (2026-09-23) — chore(release): AXIS v2.13.0 — drawing toolbar and classic colors
 - `ee32dab4` (2026-09-22) — chore(release): AXIS v2.12.0 — library and layers panels
 - `6e28ccf6` (2026-09-21) — chore(release): AXIS v2.11.0 — large-history chart, DSM, MCP

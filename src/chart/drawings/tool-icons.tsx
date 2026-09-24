@@ -116,17 +116,19 @@ export function DrawingToolIcon(props: {
       height={props.size ?? 16}
       fill="none"
       stroke="currentColor"
-      stroke-width={props.strokeWidth ?? 1.75}
+      stroke-width={props.strokeWidth ?? 1.7}
       stroke-linecap="round"
       stroke-linejoin="round"
+      shape-rendering="geometricPrecision"
       aria-hidden="true"
-      class={props.class}
+      class={`axis-draw-glyph${props.class ? ` ${props.class}` : ''}`}
     >
       <path
         d={toolIconPath(props.id)}
         fill={filled() || solid() ? 'currentColor' : 'none'}
         fill-opacity={solid() ? 1 : filled() ? 0.4 : undefined}
         stroke={filled() || solid() ? 'none' : 'currentColor'}
+        stroke-width={filled() || solid() ? undefined : (props.strokeWidth ?? 1.7)}
       />
     </svg>
   );

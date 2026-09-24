@@ -1472,7 +1472,7 @@ button.axis-status-capsule {
   cursor: default;
 }
 
-/* Drawing rail contract (consumed by DrawingToolbar) */
+/* Drawing rail contract (consumed by DrawingToolbar) — 32px grid, 6px radii */
 .axis-draw-overlay {
   position: absolute;
   inset: 0;
@@ -1497,7 +1497,10 @@ button.axis-status-capsule {
   box-sizing: border-box;
   pointer-events: auto;
   max-height: min(90vh, 100%);
-  transition: max-height 160ms ease, max-width 160ms ease;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  transition: max-height 160ms ease, max-width 160ms ease, opacity 160ms ease;
 }
 .axis-draw-shell[data-dock="top"] .axis-draw-rail {
   flex-direction: row;
@@ -1527,7 +1530,7 @@ button.axis-status-capsule {
   justify-content: center;
   padding: 0;
   border: 0;
-  border-radius: 3px;
+  border-radius: 4px;
   background: transparent;
   color: var(--color-text-faint);
   cursor: grab;
@@ -1545,7 +1548,7 @@ button.axis-status-capsule {
 .axis-draw-style-handle {
   width: 14px;
   height: 28px;
-  align-self: stretch;
+  align-self: center;
 }
 .axis-draw-handle:hover,
 .axis-draw-handle:focus-visible,
@@ -1553,6 +1556,11 @@ button.axis-status-capsule {
 .axis-draw-style-handle:focus-visible {
   color: var(--color-text);
   background: var(--color-bg-hover);
+  outline: none;
+}
+.axis-draw-handle:focus-visible,
+.axis-draw-style-handle:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 .axis-draw-handle:active,
 .axis-draw-style-handle:active,
@@ -1597,7 +1605,7 @@ button.axis-status-capsule {
   top: calc(100% + 6px);
 }
 .axis-draw-menu button,
-.axis-draw-menu label {
+.axis-draw-menu label.axis-draw-menu-check {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1609,15 +1617,28 @@ button.axis-status-capsule {
   color: var(--color-text);
   font: inherit;
   font-size: 12px;
+  line-height: 1.3;
   text-align: left;
   cursor: pointer;
+  box-sizing: border-box;
 }
 .axis-draw-menu button:hover,
-.axis-draw-menu label:hover {
+.axis-draw-menu label.axis-draw-menu-check:hover {
   background: var(--color-bg-hover);
 }
+.axis-draw-menu button.is-active,
 .axis-draw-menu button[aria-checked="true"] {
   color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+.axis-draw-menu button:focus-visible,
+.axis-draw-menu label.axis-draw-menu-check:focus-within {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+.axis-draw-menu-check.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .axis-draw-stylebar {
   position: absolute;
@@ -1662,18 +1683,32 @@ button.axis-status-capsule {
   color: var(--color-text-dim);
   cursor: pointer;
   box-sizing: border-box;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
-.axis-draw-tool .axis-draw-btn svg {
-  transform: translate(-1px, -1px);
+.axis-draw-btn svg,
+.axis-draw-glyph {
+  display: block;
+  flex: 0 0 auto;
+  pointer-events: none;
 }
-.axis-draw-btn:hover,
-.axis-draw-tool:hover .axis-draw-btn:not([aria-pressed='true']) {
+.axis-draw-btn:hover {
   background: var(--color-bg-hover);
   color: var(--color-text);
+}
+.axis-draw-btn:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+.axis-draw-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  background: transparent;
 }
 .axis-draw-btn.is-active {
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent) 35%, transparent);
 }
 .axis-draw-tool.is-active .axis-draw-btn {
   box-shadow: inset 2px 0 0 var(--color-accent);
@@ -1683,16 +1718,16 @@ button.axis-status-capsule {
 }
 .axis-draw-caret {
   position: absolute;
-  right: 1px;
-  bottom: 1px;
+  right: 0;
+  bottom: 0;
   z-index: 1;
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   padding: 0;
   margin: 0;
-  border: 0;
-  border-radius: 2px;
-  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--color-bg-panel);
   color: var(--color-text-faint);
   display: inline-flex;
   align-items: center;
@@ -1700,28 +1735,75 @@ button.axis-status-capsule {
   cursor: pointer;
   line-height: 0;
 }
+.axis-draw-caret svg {
+  display: block;
+}
 .axis-draw-caret.is-down svg {
   transform: rotate(90deg);
 }
 .axis-draw-caret:hover,
-.axis-draw-tool[data-open='1'] .axis-draw-caret {
+.axis-draw-tool[data-open='1'] .axis-draw-caret,
+.axis-draw-caret.is-open {
   color: var(--color-text);
   background: color-mix(in srgb, var(--color-text) 10%, transparent);
 }
 .axis-draw-caret:focus-visible {
-  outline: 1px solid var(--color-accent);
-  outline-offset: -1px;
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
 }
 .axis-draw-badge {
   position: absolute;
-  top: 2px;
-  right: 3px;
+  top: 3px;
+  right: 4px;
+  min-width: 12px;
+  height: 12px;
+  padding: 0 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 8px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-weight: 700;
   line-height: 1;
   color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  border-radius: 999px;
   pointer-events: none;
+  box-sizing: border-box;
+}
+.axis-draw-count {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 16px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-faint);
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  border-radius: 999px;
+  box-sizing: border-box;
+}
+.axis-draw-flyout {
+  position: absolute;
+  z-index: 50;
+  min-width: 9.5rem;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  pointer-events: auto;
+}
+.axis-draw-flyout.is-side {
+  left: calc(100% + 4px);
+  top: 0;
+}
+.axis-draw-flyout.is-top {
+  left: 0;
+  top: calc(100% + 4px);
 }
 .axis-draw-flyout-item {
   display: flex;
@@ -1729,7 +1811,7 @@ button.axis-status-capsule {
   gap: 8px;
   width: 100%;
   padding: 6px 8px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
   color: var(--color-text-dim);
@@ -1738,6 +1820,7 @@ button.axis-status-capsule {
   line-height: 1.2;
   text-align: left;
   cursor: pointer;
+  box-sizing: border-box;
 }
 .axis-draw-flyout-item svg {
   flex: 0 0 auto;
@@ -1746,11 +1829,261 @@ button.axis-status-capsule {
   background: var(--color-bg-hover);
   color: var(--color-text);
 }
+.axis-draw-flyout-item:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+}
 .axis-draw-flyout-item.is-active,
 .axis-draw-flyout-item[aria-checked='true'] {
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 12%, transparent);
   font-weight: 600;
+}
+/* Style-bar micro-controls — 28px row, 6px swatches, 4px chips */
+.axis-draw-style-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 2px;
+  background: var(--color-border-soft);
+  flex: 0 0 auto;
+}
+.axis-draw-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 4px;
+  cursor: pointer;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+.axis-draw-swatch:hover {
+  border-color: var(--color-text-faint);
+}
+.axis-draw-swatch:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+.axis-draw-swatch.is-active {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-bg-panel), 0 0 0 1px var(--color-accent);
+}
+.axis-draw-swatch.is-custom {
+  background: conic-gradient(from 45deg, #f23645, #ff9800, #4caf50, #2962ff, #9c27b0, #f23645);
+}
+.axis-draw-swatch.is-custom::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+.axis-draw-swatch.is-custom::-webkit-color-swatch {
+  border: none;
+  border-radius: 2px;
+}
+.axis-draw-chip {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-dim);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  cursor: pointer;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.axis-draw-chip:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+}
+.axis-draw-chip:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+.axis-draw-chip.is-active {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+.axis-draw-chip.is-mini {
+  min-width: 24px;
+  height: 24px;
+  font-size: 14px;
+  line-height: 1;
+}
+.axis-draw-chip.is-settings {
+  font-size: 12px;
+}
+.axis-draw-line-preview {
+  display: block;
+  width: 16px;
+  border-bottom: 2px solid currentColor;
+}
+.axis-draw-line-preview[data-style="dashed"] {
+  border-bottom-style: dashed;
+}
+.axis-draw-line-preview[data-style="dotted"] {
+  border-bottom-style: dotted;
+}
+.axis-draw-line-preview[data-style="solid"] {
+  border-bottom-style: solid;
+}
+.axis-draw-fill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+  font-size: 10px;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+.axis-draw-range {
+  width: 3.5rem;
+  accent-color: var(--color-accent);
+}
+.axis-draw-sel {
+  font-size: 10px;
+  color: var(--color-text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0 2px;
+}
+.axis-draw-settings-pop {
+  width: 18.5rem;
+  max-height: min(70vh, 28rem);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  pointer-events: auto;
+  position: absolute;
+  left: 0;
+  z-index: 50;
+}
+.axis-draw-settings-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text);
+  padding: 0 2px;
+  line-height: 1.4;
+}
+.axis-draw-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--color-text-faint);
+}
+.axis-draw-field.is-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.axis-draw-text-input {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+.axis-draw-number-input {
+  width: 4rem;
+  font-size: 12px;
+  padding: 2px 4px;
+  font-variant-numeric: tabular-nums;
+}
+.axis-draw-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.axis-draw-check input[type="checkbox"] {
+  accent-color: var(--color-accent);
+}
+.axis-draw-levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.axis-draw-level {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+}
+.axis-draw-level-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+.axis-draw-level-label {
+  font-size: 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--color-text-faint);
+}
+.axis-draw-levels-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.axis-draw-levels-title {
+  font-size: 10px;
+  color: var(--color-text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.axis-draw-level-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.axis-draw-level-input {
+  flex: 1;
+  font-size: 11px;
+  padding: 2px 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.axis-draw-link {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+.axis-draw-link:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+}
+.axis-draw-link:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .axis-draw-rail,
+  .axis-draw-btn,
+  .axis-draw-chip,
+  .axis-draw-swatch {
+    transition: none;
+  }
 }
 .axis-scale-seg {
   display: inline-flex;

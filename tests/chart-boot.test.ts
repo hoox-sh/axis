@@ -31,13 +31,20 @@ describe('chart boot splash', () => {
 
   it('keeps the expand arrow inside the drawing-tool button', () => {
     const src = readFileSync(join(root, 'src/chart/DrawingToolbar.tsx'), 'utf8');
-    expect(src).toContain('class={`axis-draw-tool');
-    expect(src).toContain('axis-draw-caret');
+    expect(src).toContain('axis-draw-tool');
+    expect(src).toContain('ToolCaret');
     expect(src).not.toContain('Icons.chevronRight');
+    const primitives = readFileSync(
+      join(root, 'src/chart/drawings/toolbar/tool-button.tsx'),
+      'utf8',
+    );
+    expect(primitives).toContain('axis-draw-caret');
     const css = readFileSync(join(root, 'src/index.css'), 'utf8');
     const caret = css.slice(css.indexOf('.axis-draw-caret {'), css.indexOf('.axis-draw-caret.is-down'));
     expect(caret).toContain('position: absolute');
-    expect(caret).toContain('right: 1px');
-    expect(caret).toContain('bottom: 1px');
+    expect(caret).toContain('right: 0');
+    expect(caret).toContain('bottom: 0');
+    expect(caret).toContain('width: 16px');
+    expect(caret).toContain('height: 16px');
   });
 });
