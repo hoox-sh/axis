@@ -23,6 +23,7 @@
 * [src/theme](theme.md) - AXIS Theme Manager — public API.
 * [src/ui](ui.md) - src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 71 more files.
 * [src/update](update.md) - App update manager — polls the deployed /version.json and surfaces new releases as a banner + notification with a hard-reload action.
+* [src/utils](utils.md) - Shared emitter + singleton helpers.
 * [src/workers](workers.md) - AXIS workers catalog + health probes (Workers Manager).
 
 # Nested

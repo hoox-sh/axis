@@ -51,6 +51,7 @@ import type {
   ThemeTokenValue,
   ThemeTokens,
 } from './types';
+import { createEmitter, createSingleton } from '../utils/emitter';
 
 export type ThemeListener = (state: ChartThemeState, tokens: ThemeTokens) => void;
 
@@ -72,7 +73,7 @@ export class ThemeManager {
   private state: ChartThemeState = defaultChartThemeState();
   private charts = new Map<string, RegisteredChart>();
   private series = new Map<string, RegisteredSeries>();
-  private listeners = new Set<ThemeListener>();
+  private emitter = createEmitter<ThemeListener>();
   private chartSeq = 0;
   private seriesSeq = 0;
 
@@ -180,36 +181,24 @@ export class ThemeManager {
   }
 
   subscribe(fn: ThemeListener): () => void {
-    this.listeners.add(fn);
-    return () => {
-      this.listeners.delete(fn);
-    };
+    return this.emitter.on(fn);
   }
 
   private emit(): void {
-    const state = this.getState();
-    const tokens = this.getTokens();
-    for (const fn of this.listeners) {
-      try {
-        fn(state, tokens);
-      } catch {
-        /* listener errors must not break theme apply */
-      }
-    }
+    this.emitter.emit(this.getState(), this.getTokens());
   }
 }
 
-let singleton: ThemeManager | null = null;
+const holder = createSingleton(() => new ThemeManager());
 
 /** Process-wide ThemeManager (charts register here). */
 export function getThemeManager(): ThemeManager {
-  if (!singleton) singleton = new ThemeManager();
-  return singleton;
+  return holder.get();
 }
 
 /** Test helper — drop singleton. */
 export function resetThemeManagerForTests(): void {
-  singleton = null;
+  holder.reset();
 }
 
 // Re-export pine map helper for convenience

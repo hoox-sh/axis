@@ -7,7 +7,7 @@ tags: [code, theme]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:07:37Z
+  at: 2026-09-25T04:56:02Z
 sources:
   - id: tree
     resource: "src/theme"
@@ -29,6 +29,10 @@ okf_lock: generated
 # Packages
 
 `lightweight-charts`
+
+# Depends on
+
+* [src/utils](/code/src/utils.md)
 
 # Used by
 

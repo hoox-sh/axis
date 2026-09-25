@@ -66,6 +66,16 @@ import { fetchBinanceJson } from '../data/binance-http';
 import { fetchMexcJson } from '../data/mexc-http';
 import { mexcKlineInterval, mexcSpotSymbol } from '../data/venues/mexc';
 
+/** Throw on non-2xx venue response (keeps `Service HTTP <status>` message). */
+export function assertHttpOk(service: string, res: Response): void {
+  if (!res.ok) throw new Error(`${service} HTTP ${res.status}`);
+}
+
+/** Throw when a venue returns no usable bars (keeps caller message). */
+export function assertBars(service: string, bars: Bar[], message?: string): void {
+  if (!bars.length) throw new Error(message || `${service} returned no candles`);
+}
+
 /** Parsed DEX pool id for {@link geckoTerminalOhlcv}. */
 export interface GeckoPoolRef {
   network: string;
@@ -438,7 +448,7 @@ export const binanceRest: SourcePlugin = {
         if (!Array.isArray(row) || row.length < 5) return null;
         return barFromFields(row[0], row[1], row[2], row[3], row[4], row[5]);
       });
-      if (!bars.length) throw new Error('empty kline response');
+      assertBars('Binance', bars, 'empty kline response');
       return bars;
     } catch (err: unknown) {
       if (signal?.aborted) throw err;
@@ -655,7 +665,7 @@ export const okxRest: SourcePlugin = {
     }
     const url = `https://www.okx.com/api/v5/market/candles?${params}`;
     const res = await fetch(url, { cache: 'no-store', signal: fetchSignal(signal) });
-    if (!res.ok) throw new Error(`OKX HTTP ${res.status}`);
+    assertHttpOk('OKX', res);
     const json = await res.json();
     if (json.code !== '0' || !Array.isArray(json.data)) {
       throw new Error(json.msg || 'OKX empty response');
@@ -666,7 +676,7 @@ export const okxRest: SourcePlugin = {
       return barFromFields(row[0], row[1], row[2], row[3], row[4], row[5]);
     });
     const bars = newestFirst.reverse();
-    if (!bars.length) throw new Error('OKX returned no candles');
+    assertBars('OKX', bars, 'OKX returned no candles');
     return bars;
   },
 };
@@ -699,7 +709,7 @@ export const bybitRest: SourcePlugin = {
     }
     const url = `https://api.bybit.com/v5/market/kline?${params}`;
     const res = await fetch(url, { cache: 'no-store', signal: fetchSignal(signal) });
-    if (!res.ok) throw new Error(`Bybit HTTP ${res.status}`);
+    assertHttpOk('Bybit', res);
     const json = await res.json();
     const list = json?.result?.list;
     if (json.retCode !== 0 || !Array.isArray(list)) {
@@ -711,7 +721,7 @@ export const bybitRest: SourcePlugin = {
       return barFromFields(row[0], row[1], row[2], row[3], row[4], row[5]);
     });
     const bars = newestFirst.reverse();
-    if (!bars.length) throw new Error('Bybit returned no candles');
+    assertBars('Bybit', bars, 'Bybit returned no candles');
     return bars;
   },
 };
@@ -759,7 +769,7 @@ export const coinbaseRest: SourcePlugin = {
     const url = `https://api.exchange.coinbase.com/products/${encodeURIComponent(product)}/candles?granularity=${gran}&start=${new Date(cappedStart * 1000).toISOString()}&end=${new Date(end * 1000).toISOString()}`;
     void config;
     const res = await fetch(url, { cache: 'no-store', signal: fetchSignal(signal) });
-    if (!res.ok) throw new Error(`Coinbase HTTP ${res.status}`);
+    assertHttpOk('Coinbase', res);
     const data = await res.json();
     if (!Array.isArray(data) || !data.length) throw new Error('Coinbase empty response');
     // [time, low, high, open, close, volume] newest first — note field order
@@ -768,7 +778,7 @@ export const coinbaseRest: SourcePlugin = {
       // Coinbase: time, low, high, open, close, volume
       return barFromFields(row[0], row[3], row[2], row[1], row[4], row[5]);
     }).sort((a, b) => a.time - b.time);
-    if (!bars.length) throw new Error('Coinbase empty response');
+    assertBars('Coinbase', bars, 'Coinbase empty response');
     return bars;
   },
 };
@@ -822,7 +832,7 @@ export const krakenRest: SourcePlugin = {
     });
     const url = `https://api.kraken.com/0/public/OHLC?${params}`;
     const res = await fetch(url, { cache: 'no-store', signal: fetchSignal(signal) });
-    if (!res.ok) throw new Error(`Kraken HTTP ${res.status}`);
+    assertHttpOk('Kraken', res);
     const json = await res.json();
     if (Array.isArray(json?.error) && json.error.length) {
       throw new Error(`Kraken: ${json.error.join(', ')}`);
@@ -853,7 +863,7 @@ export const krakenRest: SourcePlugin = {
       if (hi != null && t > hi) return null;
       return barFromFields(row[0], row[1], row[2], row[3], row[4], row[6]);
     }).sort((a, b) => a.time - b.time);
-    if (!bars.length) throw new Error('Kraken returned no candles');
+    assertBars('Kraken', bars, 'Kraken returned no candles');
     return bars.length > limit ? bars.slice(-limit) : bars;
   },
 };
@@ -902,7 +912,7 @@ export const mexcRest: SourcePlugin = {
       if (!Array.isArray(row) || row.length < 6) return null;
       return barFromFields(row[0], row[1], row[2], row[3], row[4], row[5]);
     });
-    if (!bars.length) throw new Error('MEXC returned no candles');
+    assertBars('MEXC', bars, 'MEXC returned no candles');
     return bars;
   },
 };

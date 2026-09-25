@@ -42,6 +42,7 @@ import type {
   StoragePlugin,
   StreamPlugin,
 } from './types';
+import { createEmitter } from '../utils/emitter';
 
 type Listener = (event: { type: 'registered' | 'unregistered'; kind: PluginKind; id: string }) => void;
 
@@ -61,7 +62,7 @@ export class PluginRegistry {
   private _storages = new Map<string, StoragePlugin>();
   private _datasets = new Map<string, DatasetPlugin>();
   private _components = new Map<string, ComponentPlugin>();
-  private _listeners = new Set<Listener>();
+  private emitter = createEmitter<Listener>();
   /** Preserve registration order within each kind */
   private _sourceOrder: string[] = [];
   private _streamOrder: string[] = [];
@@ -70,36 +71,50 @@ export class PluginRegistry {
   private _datasetOrder: string[] = [];
 
   on(listener: Listener): () => void {
-    this._listeners.add(listener);
-    return () => this._listeners.delete(listener);
+    return this.emitter.on(listener);
   }
 
   private _emit(type: 'registered' | 'unregistered', kind: PluginKind, id: string) {
-    for (const l of this._listeners) {
-      try {
-        l({ type, kind, id });
-      } catch {
-        /* ignore listener errors */
-      }
-    }
+    this.emitter.emit({ type, kind, id });
   }
 
-  private _setOrdered(order: string[], id: string) {
-    if (!order.includes(id)) order.push(id);
+  private _registerOrdered<T extends { id: string }>(
+    map: Map<string, T>,
+    order: string[],
+    plugin: T,
+    kind: PluginKind,
+  ): void {
+    const isNew = !map.has(plugin.id);
+    map.set(plugin.id, plugin);
+    if (isNew && !order.includes(plugin.id)) order.push(plugin.id);
+    this._emit('registered', kind, plugin.id);
   }
 
-  private _removeOrdered(order: string[], id: string) {
+  private _unregisterOrdered<T extends { builtIn?: boolean }>(
+    map: Map<string, T>,
+    order: string[],
+    kind: PluginKind,
+    id: string,
+    opts?: { allowBuiltIn?: boolean },
+  ): boolean {
+    const p = map.get(id);
+    if (!p) return false;
+    if (p.builtIn && !opts?.allowBuiltIn) return false;
+    map.delete(id);
     const i = order.indexOf(id);
     if (i >= 0) order.splice(i, 1);
+    this._emit('unregistered', kind, id);
+    return true;
+  }
+
+  private _listOrdered<T>(map: Map<string, T>, order: string[]): T[] {
+    return order.map((id) => map.get(id)!).filter(Boolean);
   }
 
   // --- Source ---
   registerSource(source: SourcePlugin): this {
     this._assertSource(source);
-    const isNew = !this._sources.has(source.id);
-    this._sources.set(source.id, source);
-    if (isNew) this._setOrdered(this._sourceOrder, source.id);
-    this._emit('registered', 'source', source.id);
+    this._registerOrdered(this._sources, this._sourceOrder, source, 'source');
     return this;
   }
 
@@ -108,26 +123,17 @@ export class PluginRegistry {
   }
 
   listSources(): SourcePlugin[] {
-    return this._sourceOrder.map((id) => this._sources.get(id)!).filter(Boolean);
+    return this._listOrdered(this._sources, this._sourceOrder);
   }
 
   unregisterSource(id: string, opts?: { allowBuiltIn?: boolean }): boolean {
-    const p = this._sources.get(id);
-    if (!p) return false;
-    if (p.builtIn && !opts?.allowBuiltIn) return false;
-    this._sources.delete(id);
-    this._removeOrdered(this._sourceOrder, id);
-    this._emit('unregistered', 'source', id);
-    return true;
+    return this._unregisterOrdered(this._sources, this._sourceOrder, 'source', id, opts);
   }
 
   // --- Stream ---
   registerStream(stream: StreamPlugin): this {
     this._assertStream(stream);
-    const isNew = !this._streams.has(stream.id);
-    this._streams.set(stream.id, stream);
-    if (isNew) this._setOrdered(this._streamOrder, stream.id);
-    this._emit('registered', 'stream', stream.id);
+    this._registerOrdered(this._streams, this._streamOrder, stream, 'stream');
     return this;
   }
 
@@ -136,26 +142,17 @@ export class PluginRegistry {
   }
 
   listStreams(): StreamPlugin[] {
-    return this._streamOrder.map((id) => this._streams.get(id)!).filter(Boolean);
+    return this._listOrdered(this._streams, this._streamOrder);
   }
 
   unregisterStream(id: string, opts?: { allowBuiltIn?: boolean }): boolean {
-    const p = this._streams.get(id);
-    if (!p) return false;
-    if (p.builtIn && !opts?.allowBuiltIn) return false;
-    this._streams.delete(id);
-    this._removeOrdered(this._streamOrder, id);
-    this._emit('unregistered', 'stream', id);
-    return true;
+    return this._unregisterOrdered(this._streams, this._streamOrder, 'stream', id, opts);
   }
 
   // --- Engine ---
   registerEngine(engine: EnginePlugin): this {
     this._assertEngine(engine);
-    const isNew = !this._engines.has(engine.id);
-    this._engines.set(engine.id, engine);
-    if (isNew) this._setOrdered(this._engineOrder, engine.id);
-    this._emit('registered', 'engine', engine.id);
+    this._registerOrdered(this._engines, this._engineOrder, engine, 'engine');
     return this;
   }
 
@@ -164,26 +161,17 @@ export class PluginRegistry {
   }
 
   listEngines(): EnginePlugin[] {
-    return this._engineOrder.map((id) => this._engines.get(id)!).filter(Boolean);
+    return this._listOrdered(this._engines, this._engineOrder);
   }
 
   unregisterEngine(id: string, opts?: { allowBuiltIn?: boolean }): boolean {
-    const p = this._engines.get(id);
-    if (!p) return false;
-    if (p.builtIn && !opts?.allowBuiltIn) return false;
-    this._engines.delete(id);
-    this._removeOrdered(this._engineOrder, id);
-    this._emit('unregistered', 'engine', id);
-    return true;
+    return this._unregisterOrdered(this._engines, this._engineOrder, 'engine', id, opts);
   }
 
   // --- Storage (PR2) ---
   registerStorage(storage: StoragePlugin): this {
     this._assertStorage(storage);
-    const isNew = !this._storages.has(storage.id);
-    this._storages.set(storage.id, storage);
-    if (isNew) this._setOrdered(this._storageOrder, storage.id);
-    this._emit('registered', 'storage', storage.id);
+    this._registerOrdered(this._storages, this._storageOrder, storage, 'storage');
     return this;
   }
 
@@ -192,26 +180,17 @@ export class PluginRegistry {
   }
 
   listStorages(): StoragePlugin[] {
-    return this._storageOrder.map((id) => this._storages.get(id)!).filter(Boolean);
+    return this._listOrdered(this._storages, this._storageOrder);
   }
 
   unregisterStorage(id: string, opts?: { allowBuiltIn?: boolean }): boolean {
-    const p = this._storages.get(id);
-    if (!p) return false;
-    if (p.builtIn && !opts?.allowBuiltIn) return false;
-    this._storages.delete(id);
-    this._removeOrdered(this._storageOrder, id);
-    this._emit('unregistered', 'storage', id);
-    return true;
+    return this._unregisterOrdered(this._storages, this._storageOrder, 'storage', id, opts);
   }
 
   // --- Dataset ---
   registerDataset(dataset: DatasetPlugin): this {
     this._assertDataset(dataset);
-    const isNew = !this._datasets.has(dataset.id);
-    this._datasets.set(dataset.id, dataset);
-    if (isNew) this._setOrdered(this._datasetOrder, dataset.id);
-    this._emit('registered', 'dataset', dataset.id);
+    this._registerOrdered(this._datasets, this._datasetOrder, dataset, 'dataset');
     return this;
   }
 
@@ -220,17 +199,11 @@ export class PluginRegistry {
   }
 
   listDatasets(): DatasetPlugin[] {
-    return this._datasetOrder.map((id) => this._datasets.get(id)!).filter(Boolean);
+    return this._listOrdered(this._datasets, this._datasetOrder);
   }
 
   unregisterDataset(id: string, opts?: { allowBuiltIn?: boolean }): boolean {
-    const p = this._datasets.get(id);
-    if (!p) return false;
-    if (p.builtIn && !opts?.allowBuiltIn) return false;
-    this._datasets.delete(id);
-    this._removeOrdered(this._datasetOrder, id);
-    this._emit('unregistered', 'dataset', id);
-    return true;
+    return this._unregisterOrdered(this._datasets, this._datasetOrder, 'dataset', id, opts);
   }
 
   // --- Component (phase 2) ---
