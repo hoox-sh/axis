@@ -33,6 +33,7 @@ import type { SourcePlugin } from '../plugins/types';
 import { pluginKey } from '../plugins/types';
 import { store } from '../store';
 import { normalizeHistoricalBars, sanitizeBar } from './parse-bars';
+import { normalizeLoadSymbol } from './load-symbol';
 import { getDataset, putDatasetBars } from './dataset-store';
 import { intervalToSec } from './bars-gaps';
 import {
@@ -119,7 +120,9 @@ export async function expandCachedSeriesToNow(
   opts?: { signal?: AbortSignal; nowSec?: number; budgetMs?: number },
 ): Promise<ExpandCacheResult> {
   const srcId = String(sourceId || '').trim();
-  const sym = String(symbol || '').trim().toUpperCase();
+  // Dataset keys uppercase internally (barsCacheKey); the venue request must
+  // keep DEX pool case (Solana base58) — same rule as the load path.
+  const sym = normalizeLoadSymbol(String(symbol || ''), srcId);
   const iv = String(interval || '').trim();
 
   let bars: Bar[] = [];

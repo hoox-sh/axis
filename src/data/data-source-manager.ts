@@ -46,6 +46,7 @@ import {
   resolveDataManagerBars,
 } from './data-manager-source';
 import { normalizeHistoricalBars } from './parse-bars';
+import { normalizeLoadSymbol } from './load-symbol';
 import {
   getCachedBarCount,
   sliceBarsForLoad,
@@ -373,9 +374,12 @@ function enqueueJob(internal: InternalJob): string {
 export function startBackfill(opts: StartBackfillOpts = {}): string {
   try {
     let sourceId = String(opts.sourceId || store.source || 'binance-rest');
-    let symbol = String(opts.symbol ?? store.symbol ?? '')
-      .trim()
-      .toUpperCase();
+    // DEX pool symbols (network:0x… / base58) are case-sensitive — reuse the
+    // load path's normalization so backfills never corrupt the venue request.
+    let symbol = normalizeLoadSymbol(
+      String(opts.symbol ?? store.symbol ?? ''),
+      sourceId,
+    );
     let interval = String(opts.interval || store.interval || '1d');
     let targetToSec =
       typeof opts.targetToSec === 'number' && Number.isFinite(opts.targetToSec)
@@ -387,9 +391,7 @@ export function startBackfill(opts: StartBackfillOpts = {}): string {
         : targetToSec - DEFAULT_LOOKBACK_SEC;
 
     if (!symbol) {
-      symbol = String(store.symbol || '')
-        .trim()
-        .toUpperCase();
+      symbol = normalizeLoadSymbol(String(store.symbol || ''), sourceId);
     }
 
     // Data Manager is a cache reader — remap to the selected venue when known.
@@ -465,9 +467,10 @@ export function startBackfill(opts: StartBackfillOpts = {}): string {
   } catch (err: unknown) {
     const settled = makeJob(
       String(opts.sourceId || store.source || 'binance-rest'),
-      String(opts.symbol || store.symbol || 'UNKNOWN')
-        .trim()
-        .toUpperCase() || 'UNKNOWN',
+      normalizeLoadSymbol(
+        String(opts.symbol || store.symbol || 'UNKNOWN'),
+        String(opts.sourceId || store.source || 'binance-rest'),
+      ) || 'UNKNOWN',
       String(opts.interval || store.interval || '1d'),
       nowSec() - DEFAULT_LOOKBACK_SEC,
       nowSec(),

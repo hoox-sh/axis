@@ -15,6 +15,14 @@ _Generated/updated: 2026-09-24 · 455 commits · describe-tag: `v2.14.0`_
 
 ## [Unreleased]
 
+### Changed
+
+- **Pattern dedupe**: new `src/utils/emitter.ts` (`createEmitter` + `createSingleton`) shared by `ThemeManager` and `PluginRegistry`; registry's 5 ordered kinds collapsed to generic helpers; venue `assertHttpOk`/`assertBars` helpers in `sources/catalog.ts`. No public API or message changes.
+
+### Fixed
+
+- **DEX backfill symbol case**: `startBackfill` and `expandCachedSeriesToNow` reuse `normalizeLoadSymbol` so background jobs no longer uppercase case-sensitive pool addresses (e.g. Solana base58 via `geckoterminal-ohlcv`). Fixes the order-dependent `onchain-load-symbol` full-suite failure; suite is green (3144 pass / 0 fail).
+
 ## [2.15.0] — 2026-09-24
 
 ### Changed
