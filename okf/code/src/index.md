@@ -14,7 +14,7 @@
 * [src/optimize](optimize.md) - src/optimize contains client.ts, guard.ts, index.ts, and 2 more files.
 * [src/plugins](plugins.md) - Public entry for the AXIS plugin system.
 * [src/pwa](pwa.md) - src/pwa contains close-guard.ts, install-prompt.ts, register-sw.ts.
-* [src/results](results.md) - src/results contains dataview.ts, debug-pins.ts, events.ts, and 9 more files.
+* [src/results](results.md) - src/results contains dataview.ts, debug-pins.ts, events.ts, and 10 more files.
 * [src/sources](sources.md) - Legacy historical source plugins (pre-Solid path).
 * [src/storage](storage.md) - src/storage contains catalog.ts, cloud-config.ts, cloud.ts, and 13 more files.
 * [src/store](store.md) - AXIS Solid store — createStore hydration, persistence, and mutation helpers.

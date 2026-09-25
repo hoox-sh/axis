@@ -7,7 +7,7 @@ tags: [code, editor]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:07:37Z
+  at: 2026-09-25T05:15:59Z
 sources:
   - id: tree
     resource: "src/editor"
@@ -80,6 +80,7 @@ okf_lock: generated
 * [src](/code/src.md)
 * [src/chart](/code/src/chart.md)
 * [src/indicators](/code/src/indicators.md)
+* [src/results](/code/src/results.md)
 * [src/store](/code/src/store.md)
 * [src/ui](/code/src/ui.md)
 * [src/ui/studio](/code/src/ui/studio.md)

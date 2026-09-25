@@ -67,10 +67,11 @@ export function coercePlotSample(v: unknown): number | null {
 
 /**
  * CSS color strings pass through untouched — Pine `bgcolor` / `barcolor`
- * series are per-bar color samples (`rgba(…)` / hex), not numbers. Numeric
- * coercion would turn every bar into `null` and silently drop the plot.
+ * series are per-bar color samples (`rgba(…)`, hex, `color.red`) not numbers.
+ * Numeric coercion would turn every bar into `null` and silently drop the plot.
+ * Bare `color.*` tokens also pass — consumers resolve them to CSS.
  */
-const CSS_COLOR_RE = /^(#[0-9a-f]{3,8}|rgba?\(|hsla?\(|color\()/i;
+const CSS_COLOR_RE = /^(#[0-9a-f]{3,8}|rgba?\(|hsla?\(|color\.[a-z]+|color\()/i;
 
 export function coerceSeriesSample(v: unknown): number | string | null {
   // plotshape / plotchar export JSON `true` for a marker and null otherwise.

@@ -30,6 +30,7 @@
  */
 
 import { MAX_CHART_MARKERS } from '../chart/heavy-data';
+import { resolvePineColor } from './pine-color';
 
 export type PlotKind =
   | 'plot'
@@ -330,7 +331,9 @@ export function barcolorSeriesToMap(
     for (let i = 0; i < n; i++) {
       const t = times[i];
       if (t == null || !Number.isFinite(t)) continue;
-      const c = coerceBarColor(values[i]);
+      // Pine tokens (color.red, color.new(…)) resolve to CSS; anything else
+      // unresolvable is dropped so candle tinting never gets invalid CSS.
+      const c = resolvePineColor(coerceBarColor(values[i]));
       if (c) map.set(t, c);
     }
   }
@@ -474,15 +477,12 @@ export function resolvePlotFillBands(
     const upper: (number | null)[] = [];
     const lower: (number | null)[] = [];
     const colors: (string | null)[] = [];
-    const fallback =
-      (meta.color && isActiveColor(meta.color) ? meta.color.trim() : null) || DEFAULT_FILL_COLOR;
+    // Static script color resolves to CSS; per-bar tokens resolve per sample.
+    const fallback = resolvePineColor(meta.color) ?? DEFAULT_FILL_COLOR;
     for (let i = 0; i < n; i++) {
       upper.push(asFiniteNumber(a[i]));
       lower.push(asFiniteNumber(b[i]));
-      const raw = values[i];
-      if (isActiveColor(raw)) colors.push(String(raw).trim());
-      else if (raw == null) colors.push(fallback);
-      else colors.push(fallback);
+      colors.push(resolvePineColor(values[i]) ?? fallback);
     }
     // Need at least one pair of finite edges
     let ok = false;
@@ -550,13 +550,19 @@ export function bgcolorSeriesToHistogramData(
     const t = asBarTime(times[i]);
     if (t == null) continue;
     const raw = colorArr[i];
-    let color: string | null = null;
-    if (isActiveColor(raw)) color = raw.trim();
-    else if (raw === true || (typeof raw === 'number' && raw !== 0 && Number.isFinite(raw))) {
-      color = (fallbackColor && isActiveColor(fallbackColor) ? fallbackColor : DEFAULT_BG_COLOR).trim();
+    // Pine tokens resolve to CSS; transparent/null bars are omitted (no band).
+    const color = resolvePineColor(raw);
+    if (color) {
+      out.push({ time: t, value: 1, color });
+      continue;
     }
-    if (!color) continue;
-    out.push({ time: t, value: 1, color });
+    if (raw === true || (typeof raw === 'number' && raw !== 0 && Number.isFinite(raw))) {
+      out.push({
+        time: t,
+        value: 1,
+        color: resolvePineColor(fallbackColor) ?? DEFAULT_BG_COLOR,
+      });
+    }
   }
   return out;
 }
@@ -816,8 +822,7 @@ export function shapeSeriesToMarkers(
   if (!Array.isArray(times) || times.length === 0) return out;
   const valArr = Array.isArray(values) ? values : [];
   const n = Math.min(times.length, valArr.length);
-  const color =
-    (meta.color && isActiveColor(meta.color) ? meta.color : null) || DEFAULT_SHAPE_COLOR;
+  const color = resolvePineColor(meta.color) ?? DEFAULT_SHAPE_COLOR;
   const kindNorm = normalizePlotKind(meta.kind);
   const text =
     (meta.text && String(meta.text)) ||
@@ -834,11 +839,12 @@ export function shapeSeriesToMarkers(
     if (!isTruthyPlotValue(valArr[i])) continue;
     const t = asBarTime(times[i]);
     if (t == null) continue;
-    // Per-bar color if series value is a color string (rare)
+    // Per-bar color if series value is a resolvable color (rare)
     let c = color;
     const v = valArr[i];
-    if (typeof v === 'string' && isActiveColor(v) && !/^(true|false)$/i.test(v)) {
-      c = v.trim();
+    if (typeof v === 'string' && !/^(true|false)$/i.test(v.trim())) {
+      const rc = resolvePineColor(v);
+      if (rc) c = rc;
     }
     // plotarrow: shape + position depend on the signed sample
     const shape = mapShapeStyle(meta.style, meta.kind, v);
@@ -967,7 +973,10 @@ export function parseOhlcCell(
     const close = asFiniteNumber(v[3]);
     if (open == null || high == null || low == null || close == null) return null;
     let color: string | undefined;
-    if (v.length >= 5 && isActiveColor(v[4])) color = String(v[4]).trim();
+    if (v.length >= 5) {
+      const rc = resolvePineColor(v[4]);
+      if (rc) color = rc;
+    }
     return { open, high, low, close, color };
   }
 
@@ -979,7 +988,8 @@ export function parseOhlcCell(
     const close = asFiniteNumber(o.close ?? o.c ?? o.Close ?? o.C);
     if (open != null && high != null && low != null && close != null) {
       let color: string | undefined;
-      if (isActiveColor(o.color)) color = String(o.color).trim();
+      const rc = resolvePineColor(o.color);
+      if (rc) color = rc;
       return { open, high, low, close, color };
     }
     // Close-only object → flat OHLC
@@ -1092,9 +1102,7 @@ export function buildPlotVisuals(
     const data = lineSeriesToOverlayData(times, values);
     // Skip series with no real samples (pure whitespace / empty)
     if (!data.some((d) => d.value != null && Number.isFinite(d.value))) continue;
-    const color =
-      (meta.color && isActiveColor(meta.color) ? meta.color : null) ||
-      palette[colorIdx % palette.length];
+    const color = resolvePineColor(meta.color) ?? palette[colorIdx % palette.length];
     colorIdx += 1;
     lines.push({
       name: key,
@@ -1131,9 +1139,7 @@ export function buildPlotVisuals(
   for (const { key, values, meta } of split.ohlc) {
     const data = ohlcSeriesToBarData(times, values, series, meta);
     if (!data.length) continue;
-    const color =
-      (meta.color && isActiveColor(meta.color) ? meta.color : null) ||
-      palette[colorIdx % palette.length];
+    const color = resolvePineColor(meta.color) ?? palette[colorIdx % palette.length];
     colorIdx += 1;
     const kind: 'plotbar' | 'plotcandle' =
       normalizePlotKind(meta.kind) === 'plotcandle' ? 'plotcandle' : 'plotbar';

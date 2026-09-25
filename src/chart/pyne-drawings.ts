@@ -46,6 +46,16 @@ import {
   sanitizeDrawingText,
   sanitizeStrokeColor,
 } from './drawings/tools/safe';
+import { resolvePineColor } from '../results/pine-color';
+
+/**
+ * Resolve Pine color forms (`color.red`, `color.new(…)`) to CSS before SVG
+ * sanitization. Sanitizer security properties are unchanged — resolved CSS
+ * is still validated, unresolvable values still hit the fallback.
+ */
+function pineStrokeColor(raw: unknown, fallback: string): string {
+  return sanitizeStrokeColor(resolvePineColor(raw) ?? null, fallback);
+}
 
 /** Normalized Pine drawing for the SVG overlay. */
 export interface ScriptDrawing {
@@ -716,12 +726,12 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
         p1: points[0]!.price,
         t2: points[points.length - 1]!.time,
         p2: points[points.length - 1]!.price,
-        color: sanitizeStrokeColor(r.color, '#939fff'),
+        color: pineStrokeColor(r.color, '#939fff'),
         width: clampWidth(r.width, 1),
         style: normalizeLineStyle(r.style, 'solid'),
         closed: Boolean(r.closed),
         points,
-        bgcolor: sanitizeStrokeColor(
+        bgcolor: pineStrokeColor(
           r.fill_color ?? r.fillColor ?? r.bgcolor,
           'rgba(147,159,255,0.06)',
         ),
@@ -738,7 +748,7 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
         p1: price,
         t2: num(r.t2 ?? r.x2) ?? 1,
         p2: price,
-        color: sanitizeStrokeColor(r.color, '#787B86'),
+        color: pineStrokeColor(r.color, '#787B86'),
         width: clampWidth(r.width, 1),
         // Pine hline() uses `linestyle=` kwarg; drawings may carry either `style` or `linestyle`.
         style: normalizeLineStyle(r.style ?? r.linestyle, 'solid'),
@@ -763,7 +773,7 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
           p1,
           t2,
           p2,
-          color: sanitizeStrokeColor(r.color, '#939fff'),
+          color: pineStrokeColor(r.color, '#939fff'),
           width: clampWidth(r.width, 1),
           style: normalizeLineStyle(r.style, 'solid'),
           extend: normalizeExtend(r.extend, extendDefault),
@@ -780,8 +790,8 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
           p1,
           t2,
           p2,
-          color: sanitizeStrokeColor(r.color ?? r.border_color, '#939fff'),
-          bgcolor: sanitizeStrokeColor(r.bgcolor, 'rgba(147,159,255,0.08)'),
+          color: pineStrokeColor(r.color ?? r.border_color, '#939fff'),
+          bgcolor: pineStrokeColor(r.bgcolor, 'rgba(147,159,255,0.08)'),
           width: clampWidth(r.width ?? r.border_width, 1),
           text: sanitizeDrawingText(r.text, DRAWING_TEXT_MAX),
           forceOverlay: Boolean(r.force_overlay ?? r.forceOverlay),
@@ -793,8 +803,8 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
           type: 'label',
           t1,
           p1,
-          color: sanitizeStrokeColor(r.color, '#939fff'),
-          textcolor: sanitizeStrokeColor(r.textcolor ?? r.text_color, '#eceef4'),
+          color: pineStrokeColor(r.color, '#939fff'),
+          textcolor: pineStrokeColor(r.textcolor ?? r.text_color, '#eceef4'),
           text: sanitizeDrawingText(r.text, DRAWING_TEXT_MAX),
           style: normalizeLabelStyle(r.style, 'label_center'),
           yloc: normalizeYloc(r.yloc, 'price'),
@@ -817,7 +827,7 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
         if (t2 == null || p2 == null || t3 == null || p3 == null || t4 == null || p4 == null) {
           continue;
         }
-        const fillColor = sanitizeStrokeColor(
+        const fillColor = pineStrokeColor(
           r.bgcolor ?? r.color,
           'rgba(147,159,255,0.15)',
         );

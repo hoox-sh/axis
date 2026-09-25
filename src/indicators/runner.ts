@@ -91,6 +91,7 @@ import {
   splitSeriesByKind,
   type PlotMetaEntry,
 } from '../results/plot-visuals';
+import { resolvePineColor } from '../results/pine-color';
 import { getActiveDrawingLayer } from '../chart/drawing-layer';
 import {
   garbageCollectScriptDrawings,
@@ -137,6 +138,19 @@ let ohlcvTimesCache: {
 /** @internal test helper */
 export function _resetOhlcvTimesCacheForTests(): void {
   ohlcvTimesCache = null;
+}
+
+/**
+ * Overlay color precedence: panel override → resolved script color →
+ * palette fallback. Pine forms (`color.red`, `color.new(…)`) resolve to
+ * CSS; unresolvable/empty values fall through (never persist raw tokens).
+ */
+function pickOverlayColor(
+  userColor: unknown,
+  metaColor: unknown,
+  fallback: string | undefined,
+): string | undefined {
+  return resolvePineColor(userColor) ?? resolvePineColor(metaColor) ?? fallback;
 }
 
 /**
@@ -1191,11 +1205,11 @@ async function runAndApplyInner(
       // display.data_window / display.none: keep series for Data Window, skip pane
       if (!plotDisplayHas(meta?.display, PLOT_DISPLAY.pane)) continue;
       // Prefer panel color override → Pine plot color → palette
-      const userColor = userPlotColors[k]?.color;
-      const color =
-        (userColor && String(userColor)) ||
-        (meta?.color && String(meta.color)) ||
-        PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
+      const color = pickOverlayColor(
+        userPlotColors[k]?.color,
+        meta?.color,
+        PLOT_PALETTE[colorIdx % PLOT_PALETTE.length],
+      );
       colorIdx += 1;
       overlayLines.push({
         name: k,
@@ -1225,7 +1239,8 @@ async function runAndApplyInner(
         overlayLines.push({
           name: scriptName,
           data,
-          color: (userColor && String(userColor)) || PLOT_PALETTE[0],
+          color:
+            resolvePineColor(userColor) ?? PLOT_PALETTE[0],
         });
       }
     }
@@ -1257,11 +1272,11 @@ async function runAndApplyInner(
       if (!plotDisplayHas(meta?.display, PLOT_DISPLAY.pane)) continue;
       const data = ohlcSeriesToBarData(ohlcvTimes, values, seriesMap, meta);
       if (!data.length) continue;
-      const userColor = userPlotColors[key]?.color;
-      const color =
-        (userColor && String(userColor)) ||
-        (meta?.color && String(meta.color)) ||
-        PLOT_PALETTE[ohlcColorIdx % PLOT_PALETTE.length];
+      const color = pickOverlayColor(
+        userPlotColors[key]?.color,
+        meta?.color,
+        PLOT_PALETTE[ohlcColorIdx % PLOT_PALETTE.length],
+      );
       ohlcColorIdx += 1;
       const kind: 'plotbar' | 'plotcandle' =
         String(meta?.kind || '').toLowerCase() === 'plotcandle' ? 'plotcandle' : 'plotbar';
@@ -1693,8 +1708,10 @@ async function runAndApplyInner(
         for (const [k] of seriesEntries) {
           const meta = plotMeta[k];
           plots[k] = {
+            // Persist resolved CSS only — raw Pine tokens are invalid in
+            // the card swatch and would shadow later runs as overrides.
             color:
-              (meta?.color && String(meta.color)) ||
+              resolvePineColor(meta?.color) ??
               PLOT_PALETTE[colorIdx % PLOT_PALETTE.length],
           };
           colorIdx += 1;
