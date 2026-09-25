@@ -231,6 +231,11 @@ export const DrawingToolbar: Component = () => {
   const railAnchor = () => {
     const live = liveTools();
     if (live) return live;
+    return staticRailAnchor();
+  };
+
+  /** Persisted/dock rail position — no live signal (gesture-start drag base). */
+  const staticRailAnchor = () => {
     if (dock() === 'top') return { x: 8, y: 8 };
     if (dock() === 'float') {
       return {
@@ -241,9 +246,20 @@ export const DrawingToolbar: Component = () => {
     return { x: 8, y: 56 };
   };
 
+  /** Gesture-start anchor snapshot — resolve() deltas are measured from
+   * pointerdown, so adding them to the live position would compound every
+   * move event (~2x pointer speed). Snapshot once per gesture instead. */
+  let toolsDragBase: { x: number; y: number } | null = null;
+  let styleDragBase: { x: number; y: number } | null = null;
+
   const styleOrigin = () => {
     const live = liveStyle();
     if (live) return live;
+    return staticStyleOrigin();
+  };
+
+  /** Persisted stylebar position — no live signal (gesture-start drag base). */
+  const staticStyleOrigin = () => {
     const x = store.drawingUi.stylebarX;
     const y = store.drawingUi.stylebarY;
     if (typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y)) {
@@ -285,7 +301,7 @@ export const DrawingToolbar: Component = () => {
     const host = hostBox();
     const bar = railRef?.getBoundingClientRect();
     if (!host || !bar) return null;
-    const anchor = railAnchor();
+    const anchor = toolsDragBase ?? staticRailAnchor();
     return clampToHost(anchor.x + dx, anchor.y + dy, host.width, host.height, bar.width, bar.height);
   };
 
@@ -311,7 +327,12 @@ export const DrawingToolbar: Component = () => {
         setMenuOpen(false);
       },
     },
-    (on) => setDragging(on ? 'tools' : null),
+    (on) => {
+      // Snapshot the gesture-start base here (pointerdown): resolve() deltas
+      // are measured from gesture start and must not accumulate onto live.
+      toolsDragBase = on ? staticRailAnchor() : null;
+      setDragging(on ? 'tools' : null);
+    },
   );
 
   const onToolKeyDown = (e: KeyboardEvent) => {
@@ -328,7 +349,7 @@ export const DrawingToolbar: Component = () => {
     const host = hostBox();
     const size = styleRef?.getBoundingClientRect();
     if (!host || !size) return null;
-    const origin = styleOrigin();
+    const origin = styleDragBase ?? staticStyleOrigin();
     return clampToHost(
       origin.x + dx,
       origin.y + dy,
@@ -351,7 +372,10 @@ export const DrawingToolbar: Component = () => {
         setDrawingUi({ stylebarX: pos.x, stylebarY: pos.y });
       },
     },
-    (on) => setDragging(on ? 'style' : null),
+    (on) => {
+      styleDragBase = on ? staticStyleOrigin() : null;
+      setDragging(on ? 'style' : null);
+    },
   );
 
   const resetStylebar = () => {

@@ -25,6 +25,7 @@ _Generated/updated: 2026-09-24 · 455 commits · describe-tag: `v2.14.0`_
 - **Script plot colors**: new `resolvePineColor()` (`src/results/pine-color.ts`) resolves Pine forms (`color.red`, `color.new(…)`, `color.rgb(…)`) to CSS at every apply point (runner overlays, `buildPlotVisuals`, shapes/fills/bgcolor/barcolor, Pine drawings) so script colors no longer fall back to axis defaults; per-bar `color.*` tokens now survive series coercion. Suite is green (3149 pass / 0 fail).
 - **Persisted plot colors gain provenance**: panel picks store `custom: true`, so re-runs refresh auto-persisted script/palette colors from the fresh run (script color edits take effect) while explicit user picks survive. One-time self-heal: pre-existing persisted colors refresh on next run.
 - **Chart resize sync**: drawing layers no longer rebuild all SVG groups on every resize frame — the viewport tracks each frame while full repaints wait for resize settle (150ms), so overlays, indicator and drawing layers converge with the main chart instead of lagging it. Pane-manager resize paths batch rect reads before `applyOptions` writes (no layout thrash), and the ChartHost reflow safety net dropped from double- to single-rAF. Suite is green (3149 pass / 0 fail).
+- **Toolbar drag tracking**: the tool rail and style bar snapped the gesture-start anchor instead of accumulating pointer deltas onto the live position, which compounded every move event (~2x pointer speed). Drags now track 1:1; drop/dock/tap/slop unchanged. Suite is green (3152 pass / 0 fail).
 
 ## [2.15.0] — 2026-09-24
 
