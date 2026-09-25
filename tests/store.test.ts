@@ -401,6 +401,8 @@ describe('bars and indicators', () => {
     expect(store.scripts.find((s) => s.id === id)?.visible).toBe(false);
     setIndicatorColor(id, 'RSI', '#0f0');
     expect(store.scripts.find((s) => s.id === id)?.plots.RSI.color).toBe('#0f0');
+    // Explicit panel picks carry provenance so re-runs keep them
+    expect(store.scripts.find((s) => s.id === id)?.plots.RSI.custom).toBe(true);
     removeIndicator(id);
     expect(store.scripts.some((s) => s.id === id)).toBe(false);
   });

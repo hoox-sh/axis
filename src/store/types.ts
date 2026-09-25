@@ -82,8 +82,10 @@ export interface Indicator {
   /** Target pane id (price overlay or dedicated indicator pane). */
   paneId: string;
   visible: boolean;
-  /** Plot name → stroke color overrides for series paint. */
-  plots: Record<string, { color: string }>;
+  /** Plot name → stroke color for series paint.
+   * `custom` marks an explicit panel pick (IndicatorCard) which survives
+   * re-runs; auto-persisted script/palette colors refresh from fresh runs. */
+  plots: Record<string, { color: string; custom?: boolean }>;
   /** Last-known input values keyed by title (Script Settings) */
   inputValues?: Record<string, unknown>;
   /**

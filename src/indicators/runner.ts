@@ -1820,16 +1820,20 @@ async function runAndApplyInner(
         });
       }
     } else {
-      // Re-run replace: refresh source / name / pane; keep user plot colors
-      const plots: Record<string, { color: string }> = { ...(existing?.plots || {}) };
+      // Re-run replace: refresh source / name / pane. Explicit panel picks
+      // (custom) survive; auto-persisted colors refresh from the fresh run
+      // so script color edits take effect instead of sticking forever.
+      const plots: Record<string, { color: string; custom?: boolean }> = {
+        ...(existing?.plots || {}),
+      };
       let colorIdx = 0;
       if (seriesEntries.length) {
         for (const [k] of seriesEntries) {
-          if (plots[k]?.color) continue;
+          if (plots[k]?.custom) continue;
           const meta = plotMeta[k];
           plots[k] = {
             color:
-              (meta?.color && String(meta.color)) ||
+              resolvePineColor(meta?.color) ??
               PLOT_PALETTE[colorIdx % PLOT_PALETTE.length],
           };
           colorIdx += 1;

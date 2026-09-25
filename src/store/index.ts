@@ -971,11 +971,15 @@ export function sanitizePersistedScripts(raw: unknown): Indicator[] {
       typeof o.name === 'string' && o.name.trim() ? o.name.trim() : `Script ${i + 1}`;
     const paneId =
       typeof o.paneId === 'string' && o.paneId.trim() ? o.paneId.trim() : 'price';
-    const plots: Record<string, { color: string }> = {};
+    const plots: Record<string, { color: string; custom?: boolean }> = {};
     if (o.plots && typeof o.plots === 'object' && !Array.isArray(o.plots)) {
       for (const [k, v] of Object.entries(o.plots as Record<string, unknown>)) {
         if (v && typeof v === 'object' && typeof (v as { color?: unknown }).color === 'string') {
-          plots[k] = { color: String((v as { color: string }).color) };
+          const entry: { color: string; custom?: boolean } = {
+            color: String((v as { color: string }).color),
+          };
+          if ((v as { custom?: unknown }).custom === true) entry.custom = true;
+          plots[k] = entry;
         }
       }
     }
@@ -2662,7 +2666,7 @@ export function addIndicator(
   name: string,
   code: string,
   paneId: string,
-  plots: Record<string, { color: string }>,
+  plots: Record<string, { color: string; custom?: boolean }>,
   inputValues?: Record<string, unknown>,
   strategyProps?: Record<string, unknown>,
 ) {
@@ -2760,10 +2764,10 @@ export function toggleIndicator(id: string) {
   persist();
 }
 
-/** Override a single plot series color for an applied indicator. */
+/** Override a single plot series color for an applied indicator (explicit panel pick). */
 export function setIndicatorColor(id: string, plotName: string, color: string) {
   setStore('scripts', (s) => s.map((ind) =>
-    ind.id === id ? { ...ind, plots: { ...ind.plots, [plotName]: { color } } } : ind
+    ind.id === id ? { ...ind, plots: { ...ind.plots, [plotName]: { color, custom: true } } } : ind
   ));
   persist();
 }
