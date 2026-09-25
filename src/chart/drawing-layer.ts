@@ -154,6 +154,9 @@ function uid(): string {
   return `dw_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/** Quiet period after the last host resize before one full repaint at final geometry. */
+const RESIZE_SETTLE_MS = 150;
+
 /** True when two anchors are effectively the same (zero-length segment). */
 function anchorsTooClose(a: Point, b: Point): boolean {
   if (!isFinitePoint(a) || !isFinitePoint(b)) return true;
@@ -251,6 +254,10 @@ export class DrawingLayer {
   };
   /** Coalesce pan/zoom redraws — avoid thrashing gScript replace on every frame. */
   private redrawRaf = 0;
+  /** Resize storm: host RO firing faster than paints (window/panel drag). */
+  private resizeStorm = false;
+  /** Settle timer ending the storm with one full repaint at final geometry. */
+  private resizeSettleTimer: ReturnType<typeof setTimeout> | 0 = 0;
   /** Skip setScriptDrawings when payload is unchanged (live silent re-runs). */
   private lastScriptSig = '';
   /** Skip setPlotFills DOM rebuild when fill payload is unchanged (live silent re-runs). */
@@ -759,12 +766,17 @@ export class DrawingLayer {
     };
   }
 
-  /** Tear down listeners, SVG, and active singleton if this instance. */
+  /** Tear down listeners, SVG, timers, and active singleton if this instance. */
   destroy() {
     if (this.redrawRaf) {
       cancelAnimationFrame(this.redrawRaf);
       this.redrawRaf = 0;
     }
+    if (this.resizeSettleTimer) {
+      clearTimeout(this.resizeSettleTimer);
+      this.resizeSettleTimer = 0;
+    }
+    this.resizeStorm = false;
     for (const u of this.unsubs) u();
     this.unsubs = [];
     this.ro?.disconnect();
@@ -788,7 +800,7 @@ export class DrawingLayer {
       }
     });
     this.ro = new ResizeObserver(() => {
-      this.scheduleRedraw();
+      this.notifyHostResized();
     });
     this.ro.observe(this.host);
   }
@@ -846,7 +858,7 @@ export class DrawingLayer {
     });
 
     this.ro = new ResizeObserver(() => {
-      this.scheduleRedraw();
+      this.notifyHostResized();
     });
     this.ro.observe(this.host);
   }
@@ -858,8 +870,30 @@ export class DrawingLayer {
       this.redrawRaf = 0;
       // Skip work while the host is hidden (tab/panel collapsed)
       if (this.host.clientWidth <= 0 || this.host.clientHeight <= 0) return;
-      this.redraw();
+      // Viewport tracks every frame (cheap attrs); full group rebuilds wait
+      // for resize settle so drag-resize never repaints stale geometry.
+      this.syncSize();
+      if (this.resizeStorm) return;
+      this.redrawFillsInner();
+      this.redrawScriptInner();
+      this.redrawUserInner();
     });
+  }
+
+  /**
+   * Host resized (ResizeObserver or manager tick). Tracks the viewport every
+   * frame but defers full SVG rebuilds until the storm settles — one repaint
+   * at final geometry instead of one rebuild per resize frame.
+   */
+  notifyHostResized(): void {
+    this.resizeStorm = true;
+    if (this.resizeSettleTimer) clearTimeout(this.resizeSettleTimer);
+    this.resizeSettleTimer = setTimeout(() => {
+      this.resizeSettleTimer = 0;
+      this.resizeStorm = false;
+      this.scheduleRedraw();
+    }, RESIZE_SETTLE_MS);
+    this.scheduleRedraw();
   }
 
   /** Drop draft SVG without touching gDraw/gScript (avoids full-layer thrash). */

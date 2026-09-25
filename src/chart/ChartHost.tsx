@@ -135,9 +135,8 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
   let localManager: PaneManager | undefined;
   /** False after host teardown — drops late rAF / RO callbacks. */
   let alive = true;
-  /** Coalesced double-rAF reflow handles (cancelled on unmount). */
-  let reflowRafOuter = 0;
-  let reflowRafInner = 0;
+  /** Coalesced reflow handles (cancelled on unmount). */
+  let reflowRaf = 0;
   /** Coalesce LWC crosshair → store (Data Window) to one update per frame. */
   const crosshairRaf = createRafCoalescer();
 
@@ -146,38 +145,32 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
 
   const scheduleReflow = () => {
     if (!alive) return;
-    // Coalesce resize storms (panel chrome, RO, window) into one double-rAF
-    if (reflowRafOuter || reflowRafInner) return;
-    reflowRafOuter = requestAnimationFrame(() => {
-      reflowRafOuter = 0;
+    // Coalesce resize storms (panel chrome, RO, window) into one rAF tick.
+    // Pane-manager ResizeObservers own per-chart sizing on the same tick, so
+    // this stays a safety net — one frame, not two, so layers converge.
+    if (reflowRaf) return;
+    reflowRaf = requestAnimationFrame(() => {
+      reflowRaf = 0;
       if (!alive) return;
-      reflowRafInner = requestAnimationFrame(() => {
-        reflowRafInner = 0;
-        if (!alive) return;
-        try {
-          // Prefer the instance this host owns — avoids resizing a recreated
-          // slot manager after unmount, and skips disposed globals.
-          (localManager || getSlotManager(slotId()) || getManager())?.resizeAll();
-        } catch (err: unknown) {
-          reportUiError(err, {
-            source: 'chart',
-            context: 'Chart reflow failed',
-            status: false,
-            throttleMs: 5000,
-          });
-        }
-      });
+      try {
+        // Prefer the instance this host owns — avoids resizing a recreated
+        // slot manager after unmount, and skips disposed globals.
+        (localManager || getSlotManager(slotId()) || getManager())?.resizeAll();
+      } catch (err: unknown) {
+        reportUiError(err, {
+          source: 'chart',
+          context: 'Chart reflow failed',
+          status: false,
+          throttleMs: 5000,
+        });
+      }
     });
   };
 
   const cancelReflow = () => {
-    if (reflowRafOuter) {
-      cancelAnimationFrame(reflowRafOuter);
-      reflowRafOuter = 0;
-    }
-    if (reflowRafInner) {
-      cancelAnimationFrame(reflowRafInner);
-      reflowRafInner = 0;
+    if (reflowRaf) {
+      cancelAnimationFrame(reflowRaf);
+      reflowRaf = 0;
     }
   };
 

@@ -1761,22 +1761,30 @@ export class PaneManager {
 
   /**
    * Force every visible pane to measure its host div and re-apply LWC size.
-   * Call after symbol/history reloads so a layout thrash (empty overlay, flex)
-   * does not leave a stale canvas size.
+   * Reads all rects before any applyOptions write (no measure/mutate
+   * interleaving). Call after symbol/history reloads so a layout thrash
+   * (empty overlay, flex) does not leave a stale canvas size.
    */
   resizeAll() {
+    const measured: Array<{ width: number; height: number; id: string }> = [];
     for (const pane of this.getAllPanes()) {
       if (!pane.visible) continue;
       const el = document.getElementById(this.paneDomId(pane.id));
       if (!el) continue;
       const rect = el.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
-        try {
-          pane.chart.applyOptions({ width: rect.width, height: rect.height });
-          pane.chart.priceScale('right').applyOptions(this.rightScaleLayoutOptions());
-        } catch {
-          /* ignore */
-        }
+        measured.push({ width: rect.width, height: rect.height, id: pane.id });
+      }
+    }
+    const scaleOpts = this.rightScaleLayoutOptions();
+    for (const { width, height, id } of measured) {
+      const pane = this.panes.get(id);
+      if (!pane) continue;
+      try {
+        pane.chart.applyOptions({ width, height });
+        pane.chart.priceScale('right').applyOptions(scaleOpts);
+      } catch {
+        /* ignore */
       }
     }
     this.alignRightScales();
@@ -2975,13 +2983,16 @@ export class PaneManager {
 
   /**
    * Apply coalesced ResizeObserver measurements — one layout pass per rAF.
+   * All rect reads happen before any applyOptions write so panes never
+   * interleave measure/mutate (layout thrash) during resize storms.
    * Re-asserts right scale width and realigns secondaries once at the end.
    */
   private flushPendingPaneResizes() {
     if (!this.pendingResizePaneIds.size) return;
     const ids = [...this.pendingResizePaneIds];
     this.pendingResizePaneIds.clear();
-    let anySecondary = false;
+    // Phase 1: measure everything (reads only)
+    const measured: Array<{ paneId: string; width: number; height: number }> = [];
     for (const paneId of ids) {
       const pane = this.panes.get(paneId);
       if (!pane?.chart) continue;
@@ -2993,13 +3004,22 @@ export class PaneManager {
       if (!div || typeof div.getBoundingClientRect !== 'function') continue;
       const rect = div.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) continue;
+      measured.push({ paneId, width: rect.width, height: rect.height });
+    }
+    if (!measured.length) return;
+    // Phase 2: mutate everything (writes only)
+    let anySecondary = false;
+    const scaleOpts = this.rightScaleLayoutOptions();
+    for (const { paneId, width, height } of measured) {
+      const pane = this.panes.get(paneId);
+      if (!pane?.chart) continue;
       try {
-        pane.chart.applyOptions({ width: rect.width, height: rect.height });
+        pane.chart.applyOptions({ width, height });
       } catch {
         /* disposed */
       }
       try {
-        pane.chart.priceScale('right').applyOptions(this.rightScaleLayoutOptions());
+        pane.chart.priceScale('right').applyOptions(scaleOpts);
       } catch {
         /* ignore */
       }
