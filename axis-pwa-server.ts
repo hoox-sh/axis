@@ -58,7 +58,7 @@ const server = Bun.serve({
       });
     }
     if (pathname === "/") pathname = "/index.html";
-    if (pathname === "/favicon.ico") pathname = "/assets/icon-192.png";
+    if (pathname === "/favicon.ico") pathname = "/favicon.svg";
     // SPA fallback for client routes — not for static assets/plugins
     let filePath = join(ROOT, pathname);
     let file = Bun.file(filePath);

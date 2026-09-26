@@ -18,6 +18,7 @@ _Generated/updated: 2026-09-26 · 465 commits · describe-tag: `v2.15.0`_
 ### Added
 
 - **Right-click menus**: the chart plot, price scale, time scale, volume and indicator panes, script names, and drawings each open a menu for the actions that already exist there (reset view, scale, chart type, screenshot, script settings, drawing edit). Right-click a panel title to open its dock menu at the pointer.
+- **HOOX favicon and live tab title**: the browser icon is the HOOX mark. The tab title leads with the last price and its change versus the previous bar, and follows live updates.
 
 ## [2.16.0] — 2026-09-26
 

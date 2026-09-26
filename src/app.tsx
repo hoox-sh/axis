@@ -41,6 +41,7 @@
 
 import {
   type Component,
+  createEffect,
   createSignal,
   onMount,
   onCleanup,
@@ -134,6 +135,8 @@ import { filterPyneFiles } from './storage/import-pyne-files';
 import { importAndOpenPyneFiles } from './storage/import-pyne-open';
 import { isTauriShell } from './desktop/is-tauri';
 import { applyThemeToDocument } from './theme';
+import { formatChartTitle } from './ui/document-title';
+import { resolvePriceDecimals } from './chart/price-precision';
 import {
   installPresentationControls,
   setPresentationRoot,
@@ -178,11 +181,28 @@ export const App: Component = () => {
     getDoc: () => '',
   };
 
+  // Tab title tracks the last close (live path-updates included).
+  createEffect(() => {
+    const bars = store.bars;
+    const n = bars.length;
+    const last = n > 0 ? bars[n - 1] : undefined;
+    const prev = n > 1 ? bars[n - 2] : undefined;
+    const symbol = store.symbol;
+    const title = formatChartTitle({
+      symbol,
+      price: last?.close,
+      prevClose: prev?.close,
+      decimals: resolvePriceDecimals(store.priceScaleDecimals, { symbol, bars }),
+    });
+    if (typeof document !== 'undefined' && document.title !== title) {
+      document.title = title;
+    }
+  });
+
   onMount(() => {
     // Full chrome + chart CSS vars (not only data-theme)
     applyThemeToDocument(store.chartTheme);
     applyUiScale(store.uiScale);
-    document.title = 'AXIS';
     // Fullscreen API + chart-only shortcuts (F11 / Shift+F / Esc)
     const unsubPresentation = installPresentationControls();
     appendLog(

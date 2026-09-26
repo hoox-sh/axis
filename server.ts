@@ -108,9 +108,9 @@ const server = Bun.serve({
         }
         let reqPath = url.pathname;
         if (reqPath === '/favicon.ico') {
-            const icon = join(ROOT, 'public', 'assets', 'icon-192.png');
+            const icon = join(ROOT, 'public', 'favicon.svg');
             if (existsSync(icon) && statSync(icon).isFile()) {
-                reqPath = '/public/assets/icon-192.png';
+                reqPath = '/public/favicon.svg';
             }
         }
         const path = safeJoin(ROOT, reqPath);
