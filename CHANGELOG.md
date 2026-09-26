@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-26 · 465 commits · describe-tag: `v2.15.0`_
+_Generated/updated: 2026-09-26 · 468 commits · describe-tag: `v2.16.0`_
 
 ---
 
 ## [Unreleased]
+
+## [2.17.0] — 2026-09-26
 
 ### Added
 
@@ -1359,12 +1361,16 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (146 commits)
+### 2026-09 (149 commits)
 
 #### Features
 
+- `eaab5b13` (2026-09-26) — feat(ui): use the HOOX mark as the favicon and show price in the title
+- `a4df8e72` (2026-09-26) — feat(chart): add right-click menus on the chart and panels
 - `a6e06b62` (2026-09-26) — feat(theme): save named chart themes and bar colorings
 - `f88b9d4a` (2026-09-24) — feat(chart): enhance drawing toolbar visual polish
 - `7f9c044b` (2026-09-24) — feat(chart): drawing toolbar structure and pixel polish
@@ -1514,6 +1520,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `c58e45a3` (2026-09-26) — chore(release): AXIS v2.16.0 — named themes and bar colorings
 - `d62a2ee6` (2026-09-24) — chore(release): AXIS v2.14.0 — splash, toolbar, and studio
 - `9ad5b004` (2026-09-23) — chore(release): AXIS v2.13.0 — drawing toolbar and classic colors
 - `ee32dab4` (2026-09-22) — chore(release): AXIS v2.12.0 — library and layers panels
