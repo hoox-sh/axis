@@ -9,23 +9,31 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-24 · 455 commits · describe-tag: `v2.14.0`_
+_Generated/updated: 2026-09-26 · 465 commits · describe-tag: `v2.15.0`_
 
 ---
 
 ## [Unreleased]
 
+## [2.16.0] — 2026-09-26
+
+### Added
+
+- **Named chart themes**: Settings → Theme can save the current chart under a name. Each theme keeps a bar coloring. That coloring can also be saved on its own, applied into the selected theme, and updated across every theme that uses it. Editing one color on a built-in preset keeps the rest of that preset.
+
 ### Changed
 
 - **Pattern dedupe**: new `src/utils/emitter.ts` (`createEmitter` + `createSingleton`) shared by `ThemeManager` and `PluginRegistry`; registry's 5 ordered kinds collapsed to generic helpers; venue `assertHttpOk`/`assertBars` helpers in `sources/catalog.ts`. No public API or message changes.
+- **Drawing toolbar press states**: tool-rail buttons, carets, width chips, and style-bar chips show an accent pressed state. The style bar has a thin divider.
 
 ### Fixed
 
-- **DEX backfill symbol case**: `startBackfill` and `expandCachedSeriesToNow` reuse `normalizeLoadSymbol` so background jobs no longer uppercase case-sensitive pool addresses (e.g. Solana base58 via `geckoterminal-ohlcv`). Fixes the order-dependent `onchain-load-symbol` full-suite failure; suite is green (3144 pass / 0 fail).
-- **Script plot colors**: new `resolvePineColor()` (`src/results/pine-color.ts`) resolves Pine forms (`color.red`, `color.new(…)`, `color.rgb(…)`) to CSS at every apply point (runner overlays, `buildPlotVisuals`, shapes/fills/bgcolor/barcolor, Pine drawings) so script colors no longer fall back to axis defaults; per-bar `color.*` tokens now survive series coercion. Suite is green (3149 pass / 0 fail).
+- **DEX backfill symbol case**: `startBackfill` and `expandCachedSeriesToNow` reuse `normalizeLoadSymbol` so background jobs no longer uppercase case-sensitive pool addresses (e.g. Solana base58 via `geckoterminal-ohlcv`). Fixes the order-dependent `onchain-load-symbol` full-suite failure.
+- **Script plot colors**: `resolvePineColor()` resolves Pine forms (`color.red`, `color.new(…)`, `color.rgb(…)`) to CSS at every apply point (runner overlays, `buildPlotVisuals`, shapes/fills/bgcolor/barcolor, Pine drawings) so script colors no longer fall back to axis defaults; per-bar `color.*` tokens now survive series coercion.
 - **Persisted plot colors gain provenance**: panel picks store `custom: true`, so re-runs refresh auto-persisted script/palette colors from the fresh run (script color edits take effect) while explicit user picks survive. One-time self-heal: pre-existing persisted colors refresh on next run.
-- **Chart resize sync**: drawing layers no longer rebuild all SVG groups on every resize frame — the viewport tracks each frame while full repaints wait for resize settle (150ms), so overlays, indicator and drawing layers converge with the main chart instead of lagging it. Pane-manager resize paths batch rect reads before `applyOptions` writes (no layout thrash), and the ChartHost reflow safety net dropped from double- to single-rAF. Suite is green (3149 pass / 0 fail).
-- **Toolbar drag tracking**: the tool rail and style bar snapped the gesture-start anchor instead of accumulating pointer deltas onto the live position, which compounded every move event (~2x pointer speed). Drags now track 1:1; drop/dock/tap/slop unchanged. Suite is green (3152 pass / 0 fail).
+- **Chart resize sync**: drawing layers no longer rebuild all SVG groups on every resize frame — the viewport tracks each frame while full repaints wait for resize settle (150ms), so overlays, indicator and drawing layers converge with the main chart instead of lagging it. Pane-manager resize paths batch rect reads before `applyOptions` writes, and the ChartHost reflow safety net dropped from double- to single-rAF.
+- **Toolbar drag tracking**: the tool rail and style bar track pointer deltas onto the live position, so a drag follows the pointer 1:1. Drop, dock, tap, and slop are unchanged.
+- **Editor pre-eval typos**: `format.inherit` is recognized, `to` / `by` are not flagged as bare calls, and `for`-loop variables, UDT declarations, and multi-line signature parameters count as bindings.
 
 ## [2.15.0] — 2026-09-24
 
@@ -1344,12 +1352,17 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (136 commits)
+### 2026-09 (146 commits)
 
 #### Features
 
+- `a6e06b62` (2026-09-26) — feat(theme): save named chart themes and bar colorings
+- `f88b9d4a` (2026-09-24) — feat(chart): enhance drawing toolbar visual polish
+- `7f9c044b` (2026-09-24) — feat(chart): drawing toolbar structure and pixel polish
 - `1d289805` (2026-09-24) — feat(chart): center the loading splash and tuck the tool arrow in
 - `3ef62fe6` (2026-09-24) — feat(okf): compile an OKF bundle on every commit
 - `15b2ba38` (2026-09-23) — feat(ui): polish studio settings layout and live scale
@@ -1394,6 +1407,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `d18b6f7d` (2026-09-26) — fix(editor): silence false-positive pre-eval typo diagnostics
+- `1b341a4b` (2026-09-25) — fix(toolbar): snapshot gesture-start anchor for drag tracking
+- `095ccdc4` (2026-09-25) — fix(plots): keep explicit panel picks, refresh auto colors on re-run
+- `869a7cfc` (2026-09-25) — fix(plots): resolve Pine color forms to CSS at every apply point
+- `6f98cb3f` (2026-09-25) — fix(data): preserve DEX symbol case in backfill and cache expand
 - `9c05483b` (2026-09-24) — fix(okf): drop unused initializers
 - `6920e022` (2026-09-23) — fix(chart): zigzag pivots, plotshape markers, and Pine bar time
 - `c0e07b55` (2026-09-23) — fix(plugin): ship PYNE Agent 0.1.7
@@ -1444,10 +1462,12 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Performance
 
+- `57741698` (2026-09-25) — perf(chart): single-tick resize for charts, overlays and drawings
 - `09b00fb3` (2026-09-21) — perf(chart): keep large OHLCV histories interactive
 
 #### Refactors
 
+- `eac5016e` (2026-09-25) — refactor(patterns): share emitter/singleton, collapse registry, venue asserts
 - `ac0d8a90` (2026-09-08) — refactor(editor): move Script Logs into the editor bottom bar
 
 #### Documentation
