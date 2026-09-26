@@ -143,6 +143,7 @@ export const PINE_ENUM_PATHS: readonly string[] = [
   'position.bottom_right',
 
   // ── format / order / text / alert / math ─────────────────────────────────
+  'format.inherit',
   'format.mintick',
   'format.percent',
   'format.volume',

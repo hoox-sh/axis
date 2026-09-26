@@ -256,6 +256,10 @@ const BARE_CALL_SKIP = new Set([
   'na',
   'var',
   'varip',
+  // Range keywords — `for x = 0 to (n - 1) by 1` scans `to (` as a
+  // bare call without this. Reserved in Pine, never a UDF name.
+  'to',
+  'by',
   'simple',
   'series',
   'const',
@@ -499,6 +503,7 @@ const IMPORT_AS_RE = /\bimport\s+\S+\s+as\s+([A-Za-z_][A-Za-z0-9_]*)/g;
 const TUPLE_ASSIGN_RE =
   /^\s*(?:export\s+)?(?:varip|var)?\s*\[([^\]]+)\]\s*=/;
 const FOR_TUPLE_RE = /^\s*for\s+(?:var\s+)?\[([^\]]+)\]\s+in\b/;
+const FOR_IN_RE = /^\s*for\s+(?:var\s+)?([A-Za-z_]\w*)\s+in\b/;
 const ENUM_DECL_RE = /^\s*(?:export\s+)?enum\s+[A-Za-z_][\w]*\s*$/;
 const TYPE_DECL_RE = /^\s*(?:export\s+)?type\s+[A-Za-z_][\w]*(?:\s+extends\s+\S+)?\s*$/;
 const ENUM_MEMBER_LINE_RE = /^\s*([A-Za-z_]\w*)\s*(?:=.*)?$/;
@@ -517,6 +522,44 @@ function addFnParams(paramsRaw: string, into: Set<string>, fnMap: Map<string, st
     fnMap.set(fnName, names);
   }
 }
+
+/**
+ * Generic declaration matcher for bindings collection only (never for type
+ * insertion — see parseAssignLine). ASSIGN_RE only accepts built-in type2
+ * names, so UDT-typed declarations (`draft_line __line = ...`,
+ * `var interface __intf = ...`, `element e = na`) were missed and every use
+ * was flagged as a typo. This accepts any dotted type word(s) — generics
+ * included (`array <string>`) — followed by the bound name.
+ *
+ * Requires at least one type word before the name, so plain reassignments
+ * (`x = 1`), named-arg lines (`x1_offset = ...`), and `indicator(...)`
+ * headers (the `(` breaks the chain) never match.
+ */
+const GENERIC_ASSIGN_RE =
+  /^\s*(?:export\s+)?(?:varip|var)?\s*(?:[A-Za-z_][\w.]*(?:\s*<[^=<>]*(?:<[^=<>]*>[^=<>]*)*>)?(?:\[\])?\s+)+([A-Za-z_]\w*)\s*=(?![=>])/;
+
+function parseGenericAssignName(text: string): string | null {
+  if (text.includes(':=') || text.includes('=>')) return null;
+  const m = GENERIC_ASSIGN_RE.exec(text);
+  if (!m) return null;
+  const name = m[1]!;
+  if (BARE_CALL_SKIP.has(name)) return null;
+  return name;
+}
+
+/** True when `text` opens more parens than it closes (multi-line header). */
+function parenDepth(text: string): number {
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '(') depth += 1;
+    else if (c === ')') depth = Math.max(0, depth - 1);
+  }
+  return depth;
+}
+
+/** `export foo(` / `method bar(` at line start — may continue on next lines. */
+const FN_HEADER_START_RE = /^\s*(?:export\s+)?(?:method\s+)?[A-Za-z_][\w]*\s*\(/;
 
 function collectFnsFromLine(
   text: string,
@@ -562,16 +605,17 @@ function collectUserDeclarationMap(source: string): {
   // `enum` / `type` declaration bodies contribute member/field bindings.
   let blockKind: 'enum' | 'type' | null = null;
   let blockIndent = 0;
+  // Multi-line `foo(` … `) =>` headers are joined before parsing so their
+  // params become bindings (`addBackground(\n _from,\n ...) =>`).
+  let pendingHeader: string[] | null = null;
 
-  for (const raw of lines) {
-    const text = stripPineCommentsAndStrings(raw, inBlock);
-
+  const processLine = (text: string): void => {
     // `import a/b/C as alias` — path segments are library coordinates, not
     // identifiers; only the alias becomes a binding (IMPORT_AS_RE below).
     if (/^\s*import\b/.test(text)) {
       IMPORT_AS_RE.lastIndex = 0;
       for (const im of text.matchAll(IMPORT_AS_RE)) names.add(im[1]!);
-      continue;
+      return;
     }
 
     if (ENUM_DECL_RE.test(text)) {
@@ -579,17 +623,17 @@ function collectUserDeclarationMap(source: string): {
       if (nm && !BARE_CALL_SKIP.has(nm)) names.add(nm);
       blockKind = 'enum';
       blockIndent = text.length - text.trimStart().length;
-      continue;
+      return;
     }
     if (TYPE_DECL_RE.test(text)) {
       const nm = /^\s*(?:export\s+)?type\s+([A-Za-z_]\w*)/.exec(text)?.[1];
       if (nm && !BARE_CALL_SKIP.has(nm)) names.add(nm);
       blockKind = 'type';
       blockIndent = text.length - text.trimStart().length;
-      continue;
+      return;
     }
     if (blockKind) {
-      if (!text.trim()) continue;
+      if (!text.trim()) return;
       const indent = text.length - text.trimStart().length;
       if (indent <= blockIndent) {
         // Dedent closes the declaration body; fall through to normal parsing.
@@ -599,14 +643,14 @@ function collectUserDeclarationMap(source: string): {
         if (id && /^[A-Za-z_][A-Za-z0-9_]*$/.test(id) && !BARE_CALL_SKIP.has(id)) {
           names.add(id);
         }
-        continue;
+        return;
       } else {
         const id = TYPE_FIELD_LINE_RE.exec(text)?.[1];
         if (id && /^[A-Za-z_][A-Za-z0-9_]*$/.test(id) && !BARE_CALL_SKIP.has(id)) {
           names.add(id);
         }
         collectFnsFromLine(text, names, functions);
-        continue;
+        return;
       }
     }
 
@@ -615,6 +659,11 @@ function collectUserDeclarationMap(source: string): {
     const assign = parseAssignLine(text);
     if (assign && !BARE_CALL_SKIP.has(assign.name)) {
       names.add(assign.name);
+    } else if (!assign) {
+      // UDT-typed declarations (`draft_line __line = ...`,
+      // `var interface __intf = ...`) that ASSIGN_RE cannot see.
+      const generic = parseGenericAssignName(text);
+      if (generic) names.add(generic);
     }
 
     const tuple = TUPLE_ASSIGN_RE.exec(text);
@@ -625,6 +674,10 @@ function collectUserDeclarationMap(source: string): {
       }
     }
 
+    // `for element_ in ...` loop variables (tuple form handled above).
+    const forIn = FOR_IN_RE.exec(text);
+    if (forIn && !BARE_CALL_SKIP.has(forIn[1]!)) names.add(forIn[1]!);
+
     const forTuple = FOR_TUPLE_RE.exec(text);
     if (forTuple) {
       for (const part of forTuple[1]!.split(',')) {
@@ -632,7 +685,26 @@ function collectUserDeclarationMap(source: string): {
         if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(id) && !BARE_CALL_SKIP.has(id)) names.add(id);
       }
     }
+  };
+
+  for (const raw of lines) {
+    const text = stripPineCommentsAndStrings(raw, inBlock);
+    if (pendingHeader) {
+      pendingHeader.push(text);
+      if (parenDepth(pendingHeader.join('\n')) <= 0) {
+        processLine(pendingHeader.join('\n'));
+        pendingHeader = null;
+      }
+      continue;
+    }
+    if (!blockKind && FN_HEADER_START_RE.test(text) && parenDepth(text) > 0) {
+      pendingHeader = [text];
+      continue;
+    }
+    processLine(text);
   }
+  // Unbalanced tail (truncated buffer) still contributes what it has.
+  if (pendingHeader) processLine(pendingHeader.join('\n'));
   return { names, functions };
 }
 

@@ -884,4 +884,80 @@ plot(foo(1, 2))
     const diags = localPreevaluate(src);
     expect(diags.some((d) => /did you mean/.test(d.message))).toBe(false);
   });
+
+  it('knows format.inherit (catalog gap)', () => {
+    const src = `//@version=6
+indicator("t")
+plot(close, format=format.inherit)
+`;
+    expect(isKnownBuiltinPath('format.inherit')).toBe(true);
+    const diags = localPreevaluate(src);
+    expect(diags.some((d) => /format\.inherit/.test(d.message))).toBe(false);
+  });
+
+  it('does not treat the `to` range keyword as a bare call', () => {
+    const src = `//@version=6
+indicator("t")
+n = 3
+for x = 0 to (n - 1) by 1
+    plot(x)
+`;
+    const diags = localPreevaluate(src);
+    expect(diags.some((d) => /`to`/.test(d.message))).toBe(false);
+  });
+
+  it('indexes for-in loop variables', () => {
+    const src = `//@version=6
+indicator("t")
+array<int> elements = array.new_int(0)
+for element_ in elements
+    plot(element_)
+`;
+    expect(collectUserBindings(src).has('element_')).toBe(true);
+    const diags = localPreevaluate(src);
+    expect(diags.some((d) => /`element_`/.test(d.message))).toBe(false);
+  });
+
+  it('indexes UDT-typed declarations as bindings', () => {
+    const src = `//@version=6
+indicator("t")
+element e = na
+var interface __intf = na
+draft_line __line = na
+plot(e, __intf, __line)
+`;
+    const names = collectUserBindings(src);
+    expect(names.has('e')).toBe(true);
+    expect(names.has('__intf')).toBe(true);
+    expect(names.has('__line')).toBe(true);
+    const diags = localPreevaluate(src);
+    expect(diags.some((d) => /did you mean/.test(d.message))).toBe(false);
+  });
+
+  it('indexes params of multi-line method signatures', () => {
+    const src = `//@version=6
+indicator("t")
+export method addBackground(
+ setup  this,
+ series float   _from,
+ series float   _to
+ ) =>
+    this.offset(_from, _to)
+`;
+    expect(collectUserBindings(src).has('_from')).toBe(true);
+    expect(collectUserBindings(src).has('_to')).toBe(true);
+    const diags = localPreevaluate(src);
+    expect(diags.some((d) => /`_from`/.test(d.message))).toBe(false);
+    expect(diags.some((d) => /`_to`/.test(d.message))).toBe(false);
+  });
+
+  it('still flags genuine dotted-member typos', () => {
+    const src = `//@version=6
+indicator("t")
+plot(strategy.etry)
+`;
+    const hit = localPreevaluate(src).find((d) => /etry/.test(d.message));
+    expect(hit).toBeTruthy();
+    expect(hit!.message).toMatch(/strategy\.entry/);
+  });
 });
