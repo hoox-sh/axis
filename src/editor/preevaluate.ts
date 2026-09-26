@@ -507,8 +507,10 @@ const FOR_IN_RE = /^\s*for\s+(?:var\s+)?([A-Za-z_]\w*)\s+in\b/;
 const ENUM_DECL_RE = /^\s*(?:export\s+)?enum\s+[A-Za-z_][\w]*\s*$/;
 const TYPE_DECL_RE = /^\s*(?:export\s+)?type\s+[A-Za-z_][\w]*(?:\s+extends\s+\S+)?\s*$/;
 const ENUM_MEMBER_LINE_RE = /^\s*([A-Za-z_]\w*)\s*(?:=.*)?$/;
+// Allow `array <label> labels` (space before `<…>`) — common TV / library style.
+// One level of nesting (`array <array <int>>`) matches the inner group once.
 const TYPE_FIELD_LINE_RE =
-  /^\s+(?:(?:series|simple|const)\s+)?[A-Za-z_][\w.]*(?:<[^>]*>)?(?:\[\])?\s+([A-Za-z_]\w*)\s*(?:=.*)?$/;
+  /^\s+(?:(?:series|simple|const)\s+)?[A-Za-z_][\w.]*(?:\s*<[^=<>]*(?:<[^=<>]*>[^=<>]*)*>)?(?:\[\])?\s+([A-Za-z_]\w*)\s*(?:=.*)?$/;
 
 function addFnParams(paramsRaw: string, into: Set<string>, fnMap: Map<string, string[]>, fnName: string): void {
   const parsed = parseSignatureParams(`fn(${paramsRaw})`);
@@ -1568,9 +1570,10 @@ export function schedulePreeval(
     abort = null;
   }
 
-  // Clear marks while typing (optional); keep pending=false until idle starts.
-  // Never stamp the live buffer onto old diagnostics — that made combine
-  // treat stale rows as fresh (Problems kept the error after a fix).
+  // Optional mid-keystroke wipe (Settings → Clear marks while typing).
+  // Default off: keep last diagnostics until idle lint replaces them.
+  // When off, never stamp the live buffer onto old diagnostics — that would
+  // make a fixed typo look fresh until the next idle pass.
   if (cfg.preevalClearOnEdit) {
     const alreadyClear =
       pe &&

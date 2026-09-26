@@ -54,6 +54,7 @@ import {
   toggleEditorRulerEnabled,
   toggleEditorWrapEnabled,
   toggleEditorMinimapEnabled,
+  toggleEditorOutlineEnabled,
   toggleLibraryPanel,
   saveEditorDoc,
   isScriptRunBlockedByPreEval,
@@ -95,7 +96,7 @@ export const EditorPane: Component<Props> = (props) => {
       }
       if (!source.trim()) return;
       // Final pre-eval gate (catches race if debounce has not finished)
-      const pe = await runPreevalNow(source);
+      await runPreevalNow(source);
       if (isScriptRunBlockedByPreEval()) return;
       // Parent may override (e.g. app shell) — still pass through doc only for auto
       if (props.onRun && mode === 'auto') {
@@ -426,6 +427,7 @@ export const EditorPane: Component<Props> = (props) => {
       onToggleRuler={() => toggleEditorRulerEnabled()}
       onToggleWrap={() => toggleEditorWrapEnabled()}
       onToggleMinimap={() => toggleEditorMinimapEnabled()}
+      onToggleOutline={() => toggleEditorOutlineEnabled()}
       onFormat={() => formatActiveDoc()}
       onConvertToV6={() => convertActiveDocToV6()}
       canDeclareTypes={canDeclareTypes()}
@@ -514,6 +516,7 @@ const EditorOverflowMenu: Component<{
   onToggleRuler: () => void;
   onToggleWrap: () => void;
   onToggleMinimap: () => void;
+  onToggleOutline: () => void;
   onFormat: () => void;
   onConvertToV6: () => void;
   /** After a successful run — enable “Add type declarations”. */
@@ -646,19 +649,39 @@ const EditorOverflowMenu: Component<{
             type="button"
             role="menuitem"
             class={`axis-panel-menu-item ${
-              store.editorMinimapEnabled ? 'is-active' : ''
+              store.editorRightRail === 'minimap' ? 'is-active' : ''
             }`}
             title={
-              store.editorMinimapEnabled
+              store.editorRightRail === 'minimap'
                 ? 'Minimap on — scaled overview on the right edge; click or drag to scroll'
-                : 'Show the interactive minimap on the right edge'
+                : 'Show the interactive minimap on the right edge (replaces function tree)'
             }
             data-testid="axis-btn-editor-minimap"
             onClick={() => props.onToggleMinimap()}
           >
             <Icons.panelRight size={14} />
             <span>Minimap</span>
-            <Show when={store.editorMinimapEnabled}>
+            <Show when={store.editorRightRail === 'minimap'}>
+              <Icons.check size={12} class="ml-auto opacity-80" />
+            </Show>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class={`axis-panel-menu-item ${
+              store.editorRightRail === 'outline' ? 'is-active' : ''
+            }`}
+            title={
+              store.editorRightRail === 'outline'
+                ? 'Function tree on — selectable functions, types, and enums; click to jump'
+                : 'Show the function tree on the right (replaces minimap)'
+            }
+            data-testid="axis-btn-editor-outline"
+            onClick={() => props.onToggleOutline()}
+          >
+            <Icons.listTree size={14} />
+            <span>Function tree</span>
+            <Show when={store.editorRightRail === 'outline'}>
               <Icons.check size={12} class="ml-auto opacity-80" />
             </Show>
           </button>

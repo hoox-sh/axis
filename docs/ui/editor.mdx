@@ -39,6 +39,8 @@ The editor is the **source axis of intent**: Pine text the operator authorizes t
 | `pine-symbols.ts` + `SymbolEmojiManager.tsx` | TV-editor-safe glyph catalog + insert panel |
 | `pyne-lsp.ts` + `data/pyne-builtins.json` | Offline completion/hover corpus |
 | `column-ruler.ts` | 80-character guide line |
+| `minimap.ts` | Optional right-rail scroll overview |
+| `function-outline.ts` + `FunctionOutline.tsx` | Optional right-rail function / type / enum tree |
 | `diagnostics.ts` | Underlines, gutter, jump-to from last run |
 | `editor-intel.ts` | Settings bag for lint / hover / complete / marks / timings |
 | `inline-debug.ts` | EOL chips, pin gutter, line flash |
@@ -96,6 +98,8 @@ Icon-only (labels in tooltips / `aria-label`). **Open in new tab** is in the pan
 | **Debug** | Inline end-of-line log/error chips (`inlineDebugEnabled`) |
 | **Pins** | Chart markers + 📍 gutter (`debugPinsEnabled`); **Alt+P** |
 | **Ruler** | 80-column guide (`editorRulerEnabled`) |
+| **Overflow → Minimap** | Right-rail canvas overview (`editorRightRail: minimap`); click/drag scrolls |
+| **Overflow → Function tree** | Right-rail outline of functions, methods, types, enums (`editorRightRail: outline`); click jumps to the declaration. Mutually exclusive with Minimap |
 | **Panel icon → Open in new tab** | Editor in a full browser tab (vs **New window** popup) |
 
 Details: [Debugging](/axis/docs/ui/debugging).
@@ -143,7 +147,7 @@ Hover + param checklist are writing-time docs — not a TradingView® debug API.
 
 ### Diagnostics & Problems
 
-**Pre-eval (as you type)** — `schedulePreeval` waits the **idle delay** after the last keystroke (default `PREEVAL_IDLE_MS` = 1000 ms; tab switch uses a shorter beat). Marks clear while typing unless **Clear marks while typing** is off. Local parse/lint (`localPreevaluate`) plus `POST /lsp/diagnostics` when engine=server and remote lint is on. Severity **error** disables Run when **Block Run on errors** is on (topbar, editor, Mod-Enter, command palette). Warnings and typos do not block.
+**Pre-eval (as you type)** — `schedulePreeval` waits the **idle delay** after the last keystroke (default `PREEVAL_IDLE_MS` = 1000 ms; tab switch uses a shorter beat). Problems and underlines **stay** until the next idle check replaces them (optional **Clear marks while typing** hides them mid-keystroke). Local parse/lint (`localPreevaluate`) plus `POST /lsp/diagnostics` when engine=server and remote lint is on. Severity **error** disables Run when **Block Run on errors** is on (topbar, editor, Mod-Enter, command palette). Warnings and typos do not block.
 
 Every lint / hover / complete / underline / chip option lives in **Settings → Editor** (command palette: *Open Editor Settings*). Defaults match the previous hardcoded behavior.
 

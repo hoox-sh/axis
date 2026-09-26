@@ -271,7 +271,7 @@ describe('combineEditorDiagnostics', () => {
     expect(merged.some((d) => d.line === 3 && d.severity === 'error')).toBe(true);
   });
 
-  it('drops last-run when the buffer no longer matches stamped source', () => {
+  it('keeps last-run while the buffer is edited (Problems stay until a new run)', () => {
     const lastRun = {
       status: 'error',
       error: 'Runtime error on line 3: boom',
@@ -279,7 +279,7 @@ describe('combineEditorDiagnostics', () => {
     };
     expect(lastRunScriptSource(lastRun)).toBe(SAMPLE_DOC);
     const merged = combineEditorDiagnostics([], lastRun, SAMPLE_DOC + '\nplot(1)\n');
-    expect(merged).toEqual([]);
+    expect(merged.some((d) => d.line === 3 && d.severity === 'error')).toBe(true);
   });
 
   it('keeps last-run when stamped source still matches', () => {
@@ -293,14 +293,14 @@ describe('combineEditorDiagnostics', () => {
     expect(merged.some((d) => d.severity === 'typo')).toBe(true);
   });
 
-  it('drops pre-eval marks when the buffer no longer matches the linted source', () => {
+  it('keeps pre-eval marks while the buffer is edited (until idle re-lint)', () => {
     const merged = combineEditorDiagnostics(
       [typo],
       null,
       SAMPLE_DOC + '\nplot(1)\n',
       SAMPLE_DOC,
     );
-    expect(merged).toEqual([]);
+    expect(merged).toEqual([typo]);
   });
 
   it('keeps pre-eval marks when preSource still matches the buffer', () => {

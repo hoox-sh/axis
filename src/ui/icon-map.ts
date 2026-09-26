@@ -36,6 +36,7 @@
  * | settings | Settings | App settings only |
  * | sun / moon | Sun / Moon | Theme |
  * | watchlist | List | Watchlist panel |
+ * | listTree | ListTree | Editor function outline |
  * | search | Search | Symbol browse |
  * | menu | Menu | Hamburger |
  * | panelLeft / Right / Bottom | Panel* | Dock |
@@ -101,6 +102,7 @@ export const ICON_MAP = {
   sun: 'Sun',
   moon: 'Moon',
   watchlist: 'List',
+  listTree: 'ListTree',
   search: 'Search',
   menu: 'Menu',
   panelLeft: 'PanelLeft',

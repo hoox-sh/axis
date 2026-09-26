@@ -7,7 +7,7 @@ tags: [code, editor]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-25T05:15:59Z
+  at: 2026-09-26T22:31:42Z
 sources:
   - id: tree
     resource: "src/editor"
@@ -21,6 +21,7 @@ okf_lock: generated
 * `ColorToolsPanel.tsx` — ColorToolsPanel, ColorToolsPanelProps
 * `EditorApp.tsx` — EditorApp
 * `EditorPane.tsx` — EditorPane
+* `FunctionOutline.tsx` — FunctionOutline, FunctionOutlineProps
 * `LanguageFeatureBar.tsx` — LanguageFeatureBar, LanguageFeatureBarProps
 * `PyneEditor.tsx` — PyneEditor, PyneEditorCursor, PyneEditorRef, lineWrapExtension
 * `ScriptLogsPane.tsx` — ScriptLogsPane
@@ -34,6 +35,7 @@ okf_lock: generated
 * `doc-stats.ts` — countDocStats, cursorLineCol
 * `editor-bridge.ts` — BridgeMessage, EDITOR_CHANNEL, bridgePublish, bridgeSubscribe, isEditorView, openEditorWindow, readSharedDoc, writeSharedDoc
 * `editor-intel.ts` — DEFAULT_EDITOR_INTEL, DEFAULT_PREEVAL_IDLE_MS, EDITOR_INTEL_REV, EditorIntelSettings, INTEL_HOVER_MS_MAX, INTEL_HOVER_MS_MIN, INTEL_IDLE_MS_MAX, INTEL_IDLE_MS_MIN, INTEL_MAX_OPTIONS_MAX, INTEL_MAX_OPTIONS_MIN, INTEL_TAB_SWITCH_MS_MAX, INTEL_TAB_SWITCH_MS_MIN
+* `function-outline.ts` — OutlineEntry, OutlineKind, collectFunctionOutline, groupOutlineEntries
 * `git-sync.ts` — GitStatusMeta, PullLibraryResult, formatGitStatus, getEditorStorageId, isGitStorageActive, pullLibrary, pushScript, statusMetaFromPull
 * `indent-guides.ts` — IndentWidget, indentGuidesExtension, indentMatcher
 * `inline-debug.ts` — DebugChipClickDetail, INLINE_DEBUG_CHIP_MAX, InlineDebugAnnotation, applyDebugPins, applyInlineDebug, debugPinFlashField, debugPinStateField, flashDebugPinLine, flashDebugPinLineEffect, getRegisteredDebugEditorView, inlineDebugExtension, inlineDebugStateField

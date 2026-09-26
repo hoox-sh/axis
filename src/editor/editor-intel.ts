@@ -58,7 +58,10 @@ export type EditorIntelSettings = {
   preevalIdleMs: number;
   /** Lint shortly after switching editor tabs (ms). */
   preevalTabSwitchMs: number;
-  /** Wipe underlines on each keystroke (avoids mid-token noise). */
+  /**
+   * Wipe underlines / Problems on each keystroke (avoids mid-token noise).
+   * Default off — keep the last marks until idle re-lint replaces them.
+   */
   preevalClearOnEdit: boolean;
   /** Client structural checks (brackets, strings, entry point). */
   preevalLocal: boolean;
@@ -132,7 +135,7 @@ export const DEFAULT_EDITOR_INTEL: EditorIntelSettings = {
   preevalEnabled: true,
   preevalIdleMs: DEFAULT_PREEVAL_IDLE_MS,
   preevalTabSwitchMs: 200,
-  preevalClearOnEdit: true,
+  preevalClearOnEdit: false,
   preevalLocal: true,
   preevalRemote: true,
   preevalTypos: true,

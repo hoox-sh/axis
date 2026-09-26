@@ -204,7 +204,7 @@ export const LANGUAGE_FEATURE_GROUPS: LanguageFeatureGroup[] = [
       { kind: 'toggle', key: 'preevalRemote', label: 'Remote diagnostics', hint: 'POST /lsp/diagnostics when Backend URL is up.' },
       { kind: 'toggle', key: 'preevalTypos', label: 'Typo hints', hint: 'Unknown ta.* / bare-call typos.' },
       { kind: 'toggle', key: 'preevalBlockRun', label: 'Block Run on errors', hint: 'Severity error disables Run.' },
-      { kind: 'toggle', key: 'preevalClearOnEdit', label: 'Clear while typing', hint: 'Hide marks until idle.' },
+      { kind: 'toggle', key: 'preevalClearOnEdit', label: 'Clear while typing', hint: 'Hide marks / Problems until idle (default off).' },
       {
         kind: 'number',
         key: 'preevalIdleMs',

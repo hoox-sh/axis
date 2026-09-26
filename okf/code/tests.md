@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 233 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 234 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-26T15:10:49Z
+  at: 2026-09-26T22:31:42Z
 sources:
   - id: tree
     resource: "tests"
@@ -98,6 +98,7 @@ okf_lock: generated
 * `error-share.test.ts`
 * `expand-cache.test.ts`
 * `focus-trap.test.ts`
+* `function-outline.test.ts` — Point
 * `git-config-safety.test.ts`
 * `git-oauth-client.test.ts`
 * `git-oauth.test.ts`
@@ -171,7 +172,7 @@ okf_lock: generated
 * `plugins-active.test.ts`
 * `plugins-loader.test.ts`
 * `positions.test.ts`
-* `preevaluate.test.ts` — Side, members
+* `preevaluate.test.ts` — Side, draft_label, draft_line, element, members
 * `price-precision.test.ts`
 * `profiler.test.ts`
 * `provider-session.test.ts`

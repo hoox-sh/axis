@@ -106,12 +106,12 @@ describe('lint underlines apply to the editor state', () => {
     expect(merged.some((d) => /plt/.test(d.message))).toBe(true);
   });
 
-  it('drops pre-eval from Problems when the buffer moved on', () => {
+  it('keeps pre-eval in Problems while the buffer is edited', () => {
     const pre = localPreevaluate(BAD_SRC);
     const fixed = BAD_SRC.replace('plt(1)', 'plot(1)');
     expect(
       combineEditorDiagnostics(pre, null, fixed, BAD_SRC).some((d) => /plt/.test(d.message)),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('setDiagnosticsData builds underline decorations', () => {

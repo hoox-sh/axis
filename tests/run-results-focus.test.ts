@@ -58,7 +58,7 @@ describe('setLastRun multi-script', () => {
     );
   });
 
-  it('silent re-run of focused script updates lastRun', () => {
+  it('silent re-run of focused script leaves Results and Script logs unchanged', () => {
     setLastRun(
       { status: 'success', meta: { ms: 1, script_name: 'A1' }, plots: [], series: {}, events: [] },
       { scriptId: 'ind-a', focus: true },
@@ -67,8 +67,12 @@ describe('setLastRun multi-script', () => {
       { status: 'success', meta: { ms: 99, script_name: 'A2' }, plots: [], series: {}, events: [] },
       { scriptId: 'ind-a', focus: false },
     );
-    expect((store.lastRun as { meta?: { script_name?: string } })?.meta?.script_name).toBe('A2');
-    expect(store.lastRunMs).toBe(99);
+    expect((store.lastRun as { meta?: { script_name?: string } })?.meta?.script_name).toBe('A1');
+    expect(store.lastRunMs).toBe(1);
+    expect(store.resultsFocusId).toBe('ind-a');
+    expect((store.runResults['ind-a'] as { meta?: { script_name?: string } })?.meta?.script_name).toBe(
+      'A2',
+    );
   });
 
   it('focus: true switches Results/Scriptlogs to that script', () => {

@@ -2201,7 +2201,7 @@ export const EditorIntelPanel: Component = () => {
         <IntelCheck
           id="axis-intel-preeval-clear"
           label="Clear marks while typing"
-          hint="On: hide underlines until idle. Off: keep last marks until the next check lands."
+          hint="On: hide underlines and Problems until idle. Off (default): keep the last list until the next check lands."
           checked={intel().preevalClearOnEdit}
           onChange={(v) => set({ preevalClearOnEdit: v })}
         />

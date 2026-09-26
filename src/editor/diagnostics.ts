@@ -574,21 +574,26 @@ function diagMergeKey(d: EditorDiagnostic): string {
 
 /**
  * Union pre-eval marks with last-run engine errors.
- * Pre-eval for the current buffer is listed first (Problems / hover).
- * Last-run engine messages are still kept when they add detail — they are
- * only dropped when the buffer no longer matches the stamped run source.
- * Dedupes by line + severity + message (pre-eval wins on exact collision).
+ * Pre-eval is listed first (Problems / hover). Marks stay visible while the
+ * buffer is edited — idle lint / a new run replaces the store; callers that
+ * want a mid-keystroke wipe clear `pre` via {@link schedulePreeval}'s
+ * `preevalClearOnEdit`. Last-run engine messages need a stamped source and
+ * remap onto the live buffer. Dedupes by line + severity + message
+ * (pre-eval wins on exact collision).
+ *
+ * `preSource` is accepted for call-site compatibility; freshness is no longer
+ * gated here so Problems does not flush on every keystroke.
  */
 export function combineEditorDiagnostics(
   pre: readonly EditorDiagnostic[],
   lastRun: unknown,
   sourceDoc: string,
-  preSource?: string | null,
+  _preSource?: string | null,
 ): EditorDiagnostic[] {
-  const preFresh =
-    preSource == null || preSource === '' || preSource === sourceDoc ? pre : [];
+  void _preSource;
+  const preFresh = pre ?? [];
   const runSrc = lastRunScriptSource(lastRun);
-  const includeLast = runSrc != null && runSrc === sourceDoc;
+  const includeLast = runSrc != null;
   const last = includeLast ? diagnosticsFromLastRun(lastRun, sourceDoc) : [];
   if (!preFresh.length) return last;
   if (!last.length) return [...preFresh];

@@ -5,8 +5,8 @@
 
 /**
  * Durable saveResult is for user-initiated runs only.
- * Silent / live-tick re-runs must update in-memory lastRun without
- * appending a Saved-runs row every tick.
+ * Silent / live-tick re-runs refresh the per-script cache without
+ * rewriting Results / Script logs or appending a Saved-runs row.
  */
 
 import './setup';

@@ -63,6 +63,8 @@ import {
   toggleInlineDebugEnabled,
   toggleDebugPinsEnabled,
   toggleEditorRulerEnabled,
+  toggleEditorMinimapEnabled,
+  toggleEditorOutlineEnabled,
   setChartGridMode,
   setDrawingTool,
   resetShortcuts,
@@ -321,6 +323,11 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
           .catch(() => undefined),
       // Editor power commands
       toggleEditorRuler: () => toggleEditorRulerEnabled(),
+      toggleEditorMinimap: () => toggleEditorMinimapEnabled(),
+      toggleEditorOutline: () => {
+        setEditorOpen(true);
+        toggleEditorOutlineEnabled();
+      },
       toggleInlineDebug: () => toggleInlineDebugEnabled(),
       toggleDebugPins: () => toggleDebugPinsEnabled(),
       toggleProfiler: () => toggleProfilerEnabled(),

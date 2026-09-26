@@ -15,6 +15,18 @@ _Generated/updated: 2026-09-26 · 468 commits · describe-tag: `v2.16.0`_
 
 ## [Unreleased]
 
+### Added
+
+- **Editor function tree**: optional right-rail outline of Pine functions, methods, types, and enums (`editorRightRail: outline`). Click a name to jump. Mutually exclusive with the minimap; toggle from the editor overflow menu or command palette.
+
+### Changed
+
+- **Problems stay while typing**: the Problems list and underlines keep the last lint / run marks until idle re-lint (or a new run) replaces them. Optional Settings → Editor → **Clear marks while typing** still wipes mid-keystroke.
+
+### Fixed
+
+- **Pre-eval UDT fields with spaced generics**: `array <label> labels` / `array <line> lines` (and tab-indented draft arrays) are indexed as declared names again, so Progressbar-style libraries no longer get false `Unknown labels` / `Unknown lines` typos.
+
 ## [2.17.0] — 2026-09-26
 
 ### Added

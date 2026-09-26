@@ -40,6 +40,7 @@ import {
   untrack,
 } from 'solid-js';
 import { PyneEditor, type PyneEditorRef } from './PyneEditor';
+import { FunctionOutline } from './FunctionOutline';
 import {
   store,
   loadEditorDoc,
@@ -952,37 +953,50 @@ export const TabbedEditor: Component<Props> = (props) => {
           />
         </div>
       </div>
-      <div class="flex-1 min-h-0 overflow-hidden relative">
-        <PyneEditor
-          initialDoc={tabs()[activeTab()]?.doc}
-          onDocChange={onDocChange}
-          onCursorChange={(pos) => setCursor({ line: pos.line, col: pos.col })}
-          onRun={() => {
-            void (async () => {
-              const { isScriptRunBlocked } = await import('./preevaluate');
-              if (isScriptRunBlocked()) return;
-              const saved = await ensureSavedForRun();
-              if (!saved.ok || !saved.doc.trim()) return;
-              if (isScriptRunBlocked()) return;
-              props.onRun?.(saved.doc);
-            })();
-          }}
-          editorRef={props.editorRef}
-          profilerEnabled={store.profilerEnabled}
-          profilerProfile={profilerProfile()}
-          inlineDebugEnabled={store.inlineDebugEnabled}
-          inlineDebug={inlineDebugAnns()}
-          debugPinsEnabled={store.debugPinsEnabled}
-          debugPins={debugPinAnns()}
-          onToggleDebugPins={() => toggleDebugPinsEnabled()}
-          onToggleRuler={() => toggleEditorRulerEnabled()}
-          onToggleInlineDebug={() => toggleInlineDebugEnabled()}
-          onToggleProfiler={() => toggleProfilerEnabled()}
-          diagnostics={editorDiagnostics()}
-          rulerEnabled={store.editorRulerEnabled}
-          wrapEnabled={store.editorWrapEnabled}
-          minimapEnabled={store.editorMinimapEnabled}
-        />
+      <div class="flex flex-1 min-h-0 overflow-hidden relative">
+        <div class="flex-1 min-h-0 overflow-hidden relative">
+          <PyneEditor
+            initialDoc={tabs()[activeTab()]?.doc}
+            onDocChange={onDocChange}
+            onCursorChange={(pos) => setCursor({ line: pos.line, col: pos.col })}
+            onRun={() => {
+              void (async () => {
+                const { isScriptRunBlocked } = await import('./preevaluate');
+                if (isScriptRunBlocked()) return;
+                const saved = await ensureSavedForRun();
+                if (!saved.ok || !saved.doc.trim()) return;
+                if (isScriptRunBlocked()) return;
+                props.onRun?.(saved.doc);
+              })();
+            }}
+            editorRef={props.editorRef}
+            profilerEnabled={store.profilerEnabled}
+            profilerProfile={profilerProfile()}
+            inlineDebugEnabled={store.inlineDebugEnabled}
+            inlineDebug={inlineDebugAnns()}
+            debugPinsEnabled={store.debugPinsEnabled}
+            debugPins={debugPinAnns()}
+            onToggleDebugPins={() => toggleDebugPinsEnabled()}
+            onToggleRuler={() => toggleEditorRulerEnabled()}
+            onToggleInlineDebug={() => toggleInlineDebugEnabled()}
+            onToggleProfiler={() => toggleProfilerEnabled()}
+            diagnostics={editorDiagnostics()}
+            rulerEnabled={store.editorRulerEnabled}
+            wrapEnabled={store.editorWrapEnabled}
+            minimapEnabled={store.editorRightRail === 'minimap'}
+          />
+        </div>
+        <Show when={store.editorRightRail === 'outline'}>
+          <FunctionOutline
+            doc={activeDoc()}
+            activeLine={cursor().line}
+            onSelect={(line) => {
+              const ref = props.editorRef;
+              if (ref?.scrollToLine) ref.scrollToLine(line);
+              else ref?.focusLine?.(line);
+            }}
+          />
+        </Show>
       </div>
       <Show when={problemsOpen()}>
         <EditorProblems

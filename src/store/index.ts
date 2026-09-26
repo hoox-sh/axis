@@ -431,6 +431,7 @@ const DEFAULTS: AppState = {
   debugPinsEnabled: false,
   editorRulerEnabled: true,
   editorWrapEnabled: true,
+  editorRightRail: 'off' as const,
   editorMinimapEnabled: false,
   editorFeatureBarEnabled: true,
   shortcuts: { overrides: {} },
@@ -776,10 +777,13 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         typeof (bag as { editorWrapEnabled?: boolean }).editorWrapEnabled === 'boolean'
           ? !!(bag as { editorWrapEnabled?: boolean }).editorWrapEnabled
           : DEFAULTS.editorWrapEnabled,
-      editorMinimapEnabled:
-        typeof (bag as { editorMinimapEnabled?: boolean }).editorMinimapEnabled === 'boolean'
-          ? !!(bag as { editorMinimapEnabled?: boolean }).editorMinimapEnabled
-          : DEFAULTS.editorMinimapEnabled,
+      ...(() => {
+        const rail = hydrateEditorRightRail(bag);
+        return {
+          editorRightRail: rail,
+          editorMinimapEnabled: rail === 'minimap',
+        };
+      })(),
       editorFeatureBarEnabled:
         typeof (bag as { editorFeatureBarEnabled?: boolean }).editorFeatureBarEnabled === 'boolean'
           ? !!(bag as { editorFeatureBarEnabled?: boolean }).editorFeatureBarEnabled
@@ -1618,7 +1622,8 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     debugPinsEnabled: s.debugPinsEnabled,
     editorRulerEnabled: s.editorRulerEnabled,
     editorWrapEnabled: s.editorWrapEnabled,
-    editorMinimapEnabled: s.editorMinimapEnabled,
+    editorRightRail: normalizeEditorRightRail(s.editorRightRail),
+    editorMinimapEnabled: normalizeEditorRightRail(s.editorRightRail) === 'minimap',
     editorFeatureBarEnabled: s.editorFeatureBarEnabled,
     shortcuts: unwrap(s.shortcuts ?? { overrides: {} }),
     editorIntel: readEditorIntel(s.editorIntel),
@@ -1995,8 +2000,9 @@ export type SetLastRunOpts = {
    */
   scriptId?: string | null;
   /**
-   * When true, switch Results/Scriptlogs focus to this script (user-initiated
-   * Run). Silent live re-runs pass false so other scripts do not thrash the UI.
+   * When true, show this run in Results and Script logs (user-initiated Run).
+   * Silent live re-runs pass false: the per-script cache updates, the open
+   * panels do not.
    */
   focus?: boolean;
   /**
@@ -2015,6 +2021,19 @@ function applyLastRunMs(result: unknown) {
     const ms = (result as { meta?: { ms?: number } }).meta?.ms;
     if (typeof ms === 'number') setStore('lastRunMs', ms);
   }
+}
+
+/**
+ * Snapshot a run for the open panels.
+ * `setStore` merges objects and keeps the same node, so Results / Script logs
+ * must not share that node with `runResults` — a later live tick would
+ * rewrite the panels in place.
+ */
+function copyRunPayload(result: unknown): unknown {
+  const raw = unwrap(result);
+  if (Array.isArray(raw)) return raw.slice();
+  if (raw != null && typeof raw === 'object') return { ...(raw as Record<string, unknown>) };
+  return raw;
 }
 
 /**
@@ -2174,9 +2193,11 @@ export function _flushRunResultPersistForTests(): Promise<void> {
 /**
  * Store an indicator/strategy run payload for Results / Scriptlogs / Data View.
  *
- * Always writes {@link AppState.runResults}[scriptId]. Updates focused
- * {@link AppState.lastRun} only when this script is focused, or when
- * `focus: true` / no focus yet (auto-select first run).
+ * Always writes {@link AppState.runResults}[scriptId].
+ * Results and Script logs (`lastRun`) update only when `focus: true`
+ * (a user-initiated Run) or when nothing is focused yet.
+ * Silent and live re-runs refresh the per-script cache and leave the
+ * open panels on the last published run.
  *
  * When `opts.persistence !== 'skip'` and the active storage plugin supports
  * {@link StoragePlugin.saveResult}, the run is also persisted to durable
@@ -2212,16 +2233,14 @@ export function setLastRun(result: unknown, opts: SetLastRunOpts = {}): string |
   }
 
   setStore('runResults', id, result as never);
-  // Track the newest run overall so the Results selector can flag a stale
-  // focus (AXIS-ED-RESULTS-STALE: footer showed a newer run than the panel).
   if (store.newestRunId !== id) setStore('newestRunId', id);
 
-  if (opts.focus || store.resultsFocusId == null) {
+  // Open Results / Script logs stay on the last run the user published.
+  // Live ticks pass focus:false so they cannot rewrite that view.
+  const publish = opts.focus === true || store.resultsFocusId == null;
+  if (publish) {
     setStore('resultsFocusId', id);
-  }
-
-  if (store.resultsFocusId === id) {
-    setStore('lastRun', result as never);
+    setStore('lastRun', copyRunPayload(result) as never);
     applyLastRunMs(result);
   }
 
@@ -3662,16 +3681,58 @@ export function toggleEditorWrapEnabled() {
   persist();
 }
 
-/** Show/hide the interactive minimap in the Pine editor (persisted; default on). */
-export function setEditorMinimapEnabled(on: boolean) {
-  setStore('editorMinimapEnabled', !!on);
+/** Normalize a persisted / incoming right-rail mode. */
+export function normalizeEditorRightRail(
+  raw: unknown,
+): 'off' | 'minimap' | 'outline' {
+  return raw === 'minimap' || raw === 'outline' || raw === 'off' ? raw : 'off';
+}
+
+/**
+ * Hydrate right-rail mode from a persisted bag.
+ * Prefers `editorRightRail`; falls back to legacy `editorMinimapEnabled`.
+ */
+export function hydrateEditorRightRail(bag: unknown): 'off' | 'minimap' | 'outline' {
+  const rec = bag && typeof bag === 'object' ? (bag as Record<string, unknown>) : {};
+  if (
+    rec.editorRightRail === 'minimap' ||
+    rec.editorRightRail === 'outline' ||
+    rec.editorRightRail === 'off'
+  ) {
+    return rec.editorRightRail;
+  }
+  if (typeof rec.editorMinimapEnabled === 'boolean') {
+    return rec.editorMinimapEnabled ? 'minimap' : 'off';
+  }
+  return DEFAULTS.editorRightRail;
+}
+
+/** Set the editor right rail (`off` | `minimap` | `outline`). Persisted. */
+export function setEditorRightRail(mode: 'off' | 'minimap' | 'outline') {
+  const next = normalizeEditorRightRail(mode);
+  setStore('editorRightRail', next);
+  setStore('editorMinimapEnabled', next === 'minimap');
   persist();
 }
 
-/** Toggle the interactive minimap in the Pine editor. */
+/** Show/hide the interactive minimap (sets rail to minimap or off). */
+export function setEditorMinimapEnabled(on: boolean) {
+  setEditorRightRail(on ? 'minimap' : 'off');
+}
+
+/** Toggle the interactive minimap; turns off the outline when enabling. */
 export function toggleEditorMinimapEnabled() {
-  setStore('editorMinimapEnabled', !store.editorMinimapEnabled);
-  persist();
+  setEditorRightRail(store.editorRightRail === 'minimap' ? 'off' : 'minimap');
+}
+
+/** Toggle the function/type outline rail; turns off the minimap when enabling. */
+export function toggleEditorOutlineEnabled() {
+  setEditorRightRail(store.editorRightRail === 'outline' ? 'off' : 'outline');
+}
+
+/** Show/hide the function outline rail. */
+export function setEditorOutlineEnabled(on: boolean) {
+  setEditorRightRail(on ? 'outline' : 'off');
 }
 
 /** Show/hide the Language Feature Bar above the editor status strip (persisted; default on). */

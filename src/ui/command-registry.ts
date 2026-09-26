@@ -128,6 +128,10 @@ export interface CommandActions {
   copyScreenshot?: () => void | Promise<void>;
   /** Column ruler in the Pine editor (optional; omitted when store lacks toggle). */
   toggleEditorRuler?: () => void;
+  /** Interactive minimap on the editor right rail. */
+  toggleEditorMinimap?: () => void;
+  /** Function / type / enum outline on the editor right rail. */
+  toggleEditorOutline?: () => void;
   /** End-of-line log/error chips from last run. */
   toggleInlineDebug?: () => void;
   /** Chart markers for log bar_index/time pins. */
@@ -808,6 +812,26 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     keywords: ['ruler', 'column', 'guide', 'indent guide', '80'],
   },
   {
+    id: 'editor.toggle-minimap',
+    title: 'Toggle Editor Minimap',
+    category: 'actions',
+    keywords: ['minimap', 'overview', 'scroll map', 'right rail'],
+  },
+  {
+    id: 'editor.toggle-outline',
+    title: 'Toggle Function Tree',
+    category: 'actions',
+    keywords: [
+      'outline',
+      'function tree',
+      'symbols',
+      'goto',
+      'types',
+      'enums',
+      'right rail',
+    ],
+  },
+  {
     id: 'editor.toggle-inline-debug',
     title: 'Toggle Inline Debug',
     category: 'actions',
@@ -1098,6 +1122,8 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
     byId.set('action.chart-only-fullscreen', () => void actions.toggleChartOnlyFullscreen?.());
   }
   if (actions.toggleEditorRuler) byId.set('editor.toggle-ruler', actions.toggleEditorRuler);
+  if (actions.toggleEditorMinimap) byId.set('editor.toggle-minimap', actions.toggleEditorMinimap);
+  if (actions.toggleEditorOutline) byId.set('editor.toggle-outline', actions.toggleEditorOutline);
   if (actions.toggleInlineDebug) byId.set('editor.toggle-inline-debug', actions.toggleInlineDebug);
   if (actions.toggleDebugPins) byId.set('editor.toggle-debug-pins', actions.toggleDebugPins);
   if (actions.toggleProfiler) byId.set('editor.toggle-profiler', actions.toggleProfiler);

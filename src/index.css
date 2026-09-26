@@ -3270,6 +3270,25 @@ body.axis-panel-dragging {
   padding-right: 76px;
 }
 
+/* Function / type / enum outline — right rail sibling of the CM host. */
+.ax-function-outline {
+  width: 168px;
+  max-width: 40%;
+  background: color-mix(in srgb, var(--color-bg-base) 88%, transparent);
+  border-left: 1px solid var(--color-border-soft);
+}
+.ax-function-outline-item:hover {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+.ax-function-outline-item.is-active {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  color: var(--color-accent);
+}
+.ax-function-outline-item:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 0;
+}
+
 /* Debug pin jump flash (editor ↔ chart). Keyframes global so CM baseTheme can use the name. */
 @keyframes cm-debug-pin-flash-kf {
   0% {

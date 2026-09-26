@@ -568,7 +568,15 @@ export interface AppState {
    * Toggle from the editor stats strip “wrap” control.
    */
   editorWrapEnabled: boolean;
-  /** Interactive minimap on the editor right edge. Persisted. Default off. */
+  /**
+   * Editor right rail: interactive minimap **or** function/type outline.
+   * Mutually exclusive modes. Persisted. Default `off`.
+   */
+  editorRightRail: 'off' | 'minimap' | 'outline';
+  /**
+   * @deprecated Prefer {@link editorRightRail}. Kept in sync for older
+   * persisted bags (`true` ≡ rail `minimap`).
+   */
   editorMinimapEnabled: boolean;
   /**
    * Editor intelligence — pre-eval / lint, hover cards, signature hints,
@@ -581,7 +589,8 @@ export interface AppState {
   statusMessage: string;
   /**
    * Pre-eval (parse/lint) for the active editor buffer after Save / Run.
-   * Cleared while typing. Ephemeral — drives underlines + Run gating. Not persisted.
+   * Ephemeral — drives underlines, Problems, and Run gating. Not persisted.
+   * Idle lint replaces the set; optional clear-on-edit can wipe mid-keystroke.
    */
   preEval: {
     /** Editor diagnostics for current buffer (empty while pending first pass). */
@@ -605,8 +614,9 @@ export interface AppState {
   };
   lastRunMs: number | null;
   /**
-   * Focused script run payload for Results / Scriptlogs / debug chrome.
-   * Always mirrors {@link runResults}[{@link resultsFocusId}] (or null).
+   * Run shown in Results, Script logs, and debug chrome.
+   * Published on a user-initiated run (`focus: true`) or the first run.
+   * Live re-runs update {@link runResults} only, so these panels stay put.
    * Not persisted.
    */
   lastRun: unknown | null;
@@ -622,9 +632,8 @@ export interface AppState {
    */
   resultsFocusId: string | null;
   /**
-   * Key of the most recent {@link runResults} write (newest run overall).
-   * Lets the Results selector flag "stale" when focus lags the footer
-   * (AXIS-ED-RESULTS-STALE). Ephemeral — not persisted.
+   * Key of the most recent {@link runResults} write.
+   * Ephemeral — not persisted. Not shown in Results or Script logs.
    */
   newestRunId: string | null;
   /**

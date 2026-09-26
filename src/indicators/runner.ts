@@ -910,10 +910,9 @@ async function runAndApplyInner(
     };
   }
 
-  // Per-script cache: silent multi-indicator live re-runs must not thrash
-  // Scriptlogs/Results (only the focused id updates store.lastRun).
-  // Live ticks also skip durable saveResult — otherwise Saved runs grows
-  // by one row per second while a stream is attached.
+  // Per-script cache. Silent / live re-runs pass focus:false so they do
+  // not rewrite Script logs or Results. Live ticks also skip durable
+  // saveResult — otherwise Saved runs grows by one row per second.
   setLastRun(withAxisSource(result, script), {
     scriptId: indicatorId ?? EDITOR_RUN_KEY,
     focus: !silent,

@@ -687,7 +687,9 @@ describe('schedulePreeval idle lint', () => {
     expect(PREEVAL_DEBOUNCE_MS).toBe(PREEVAL_IDLE_MS);
   });
 
-  it('clears marks immediately without pending for the whole idle window', () => {
+  it('clears marks immediately when clear-on-edit is on', () => {
+    resetEditorIntel();
+    patchEditorIntel({ preevalClearOnEdit: true });
     setPreEval({
       diagnostics: [
         {
@@ -710,9 +712,10 @@ describe('schedulePreeval idle lint', () => {
     expect(store.preEval.diagnostics).toEqual([]);
     expect(store.preEval.pending).toBe(false);
     cancelPreeval();
+    resetEditorIntel();
   });
 
-  it('does not stamp the live buffer onto stale diagnostics when clear-on-edit is off', () => {
+  it('keeps Problems visible while typing when clear-on-edit is off (default)', () => {
     resetEditorIntel();
     patchEditorIntel({ preevalClearOnEdit: false });
     const linted = '//@version=6\nindicator("t")\nplt(close)\n';
@@ -732,16 +735,18 @@ describe('schedulePreeval idle lint', () => {
       source: linted,
     });
     schedulePreeval(fixed, 60_000);
+    // Do not stamp the live buffer onto stale rows (would look "fresh").
     expect(store.preEval.source).toBe(linted);
     expect(store.preEval.diagnostics.some((d) => /plt/.test(d.message))).toBe(true);
+    // Problems / underlines stay until idle re-lint replaces the store.
     expect(
       combineEditorDiagnostics(
         store.preEval.diagnostics,
         null,
         fixed,
         store.preEval.source,
-      ),
-    ).toEqual([]);
+      ).some((d) => /plt/.test(d.message)),
+    ).toBe(true);
     cancelPreeval();
     resetEditorIntel();
   });
@@ -932,6 +937,32 @@ plot(e, __intf, __line)
     expect(names.has('__line')).toBe(true);
     const diags = localPreevaluate(src);
     expect(diags.some((d) => /did you mean/.test(d.message))).toBe(false);
+  });
+
+  it('indexes type fields with spaced generics (array <label> labels)', () => {
+    const src = `//@version=6
+library("t")
+export type draft_label
+    float y
+export type draft_line
+    float y1
+export type element
+    array <label>       labels
+    array <line>        lines
+\tarray <draft_label> __draft_labels
+\tarray <draft_line>  __draft_lines
+    bool                hide = false
+method set_color(series label _label, series color _color) => _label
+`;
+    const names = collectUserBindings(src);
+    for (const n of ['labels', 'lines', '__draft_labels', '__draft_lines', 'hide', '_label']) {
+      expect(names.has(n), n).toBe(true);
+    }
+    const diags = localPreevaluate(src);
+    expect(diags.some((d) => /`labels`/.test(d.message))).toBe(false);
+    expect(diags.some((d) => /`lines`/.test(d.message))).toBe(false);
+    expect(diags.some((d) => /`__draft_labels`/.test(d.message))).toBe(false);
+    expect(diags.some((d) => /`__draft_lines`/.test(d.message))).toBe(false);
   });
 
   it('indexes params of multi-line method signatures', () => {
