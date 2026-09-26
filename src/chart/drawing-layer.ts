@@ -64,6 +64,7 @@ import {
   type ScriptDrawing,
 } from './pyne-drawings';
 import { snapToBars, type BarLike, type MagnetMode } from './drawings/snap';
+import { cloneDrawing } from './drawings/sync';
 import { strokeDashFor } from './drawings/svg-primitives';
 import {
   DRAWING_FUTURE_BARS,
@@ -442,6 +443,21 @@ export class DrawingLayer {
     return this.selectedId;
   }
 
+  /**
+   * Topmost user drawing under a viewport point.
+   * Same geometry test as pointer selection; safe when the SVG is `pointer-events: none`.
+   */
+  hitTestClient(clientX: number, clientY: number): string | null {
+    if (!isFiniteNum(clientX) || !isFiniteNum(clientY)) return null;
+    return this.hitTest({ clientX, clientY } as MouseEvent);
+  }
+
+  /** Drop an in-progress placement draft. Does not clear selection. */
+  abortPlacement(): void {
+    this.draft = null;
+    this.clearDraftDom();
+  }
+
   /** Select a drawing (or null); notifies store and re-paints handles. */
   setSelectedId(id: string | null) {
     if (this.selectedId === id) return;
@@ -683,6 +699,64 @@ export class DrawingLayer {
   }
 
   /**
+   * Clone one user drawing (new id) and select the copy.
+   * No-op when the drawing is missing or locked.
+   */
+  duplicateById(id: string): string | null {
+    const cur = this.drawings.find((d) => d.id === id);
+    if (!cur) return null;
+    if (this.lockAll || resolveDrawingStyle(cur).locked) {
+      this.flashLockedNotice(
+        this.lockAll
+          ? 'Drawings are locked — unlock all before duplicating'
+          : 'Drawing is locked — unlock it before duplicating',
+      );
+      return null;
+    }
+    const copy = cloneDrawing(cur) as Drawing;
+    this.drawings.push(copy);
+    this.emit();
+    this.setSelectedId(copy.id);
+    return copy.id;
+  }
+
+  /**
+   * Move a drawing to the front (last painted) or back (first painted).
+   * Locked drawings stay put.
+   */
+  reorderDrawing(id: string, where: 'front' | 'back'): boolean {
+    const idx = this.drawings.findIndex((d) => d.id === id);
+    if (idx < 0) return false;
+    const cur = this.drawings[idx];
+    if (!cur) return false;
+    if (this.lockAll || resolveDrawingStyle(cur).locked) {
+      this.flashLockedNotice(
+        this.lockAll
+          ? 'Drawings are locked — unlock all before reordering'
+          : 'Drawing is locked — unlock it before reordering',
+      );
+      return false;
+    }
+    if (where === 'front' && idx === this.drawings.length - 1) {
+      this.setSelectedId(id);
+      return true;
+    }
+    if (where === 'back' && idx === 0) {
+      this.setSelectedId(id);
+      return true;
+    }
+    const [item] = this.drawings.splice(idx, 1);
+    if (!item) return false;
+    if (where === 'front') this.drawings.push(item);
+    else this.drawings.unshift(item);
+    this.emit();
+    // setSelectedId skips the repaint when the id is unchanged
+    if (this.selectedId === id) this.redrawUser();
+    else this.setSelectedId(id);
+    return true;
+  }
+
+  /**
    * Cancel an in-progress drawing draft and clear selection (Hub
    * `chart.cancel-draft`). Mirrors the Escape branch of the legacy keydown
    * handler; the Hub owns the chord once mounted.
@@ -813,11 +887,11 @@ export class DrawingLayer {
     const onUp = (e: PointerEvent) => this.handlePointerUp(e);
     const onKey = (e: KeyboardEvent) => this.handleKey(e);
     const onCtx = (e: Event) => {
-      // Right-click cancels an in-progress draft while a place tool is active
+      // Right-click cancels an in-progress draft while a place tool is active.
+      // The chart context menu also calls abortPlacement in capture phase.
       if (this.tool !== 'cursor') {
         e.preventDefault();
-        this.draft = null;
-        this.clearDraftDom();
+        this.abortPlacement();
       }
     };
 

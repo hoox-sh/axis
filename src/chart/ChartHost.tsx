@@ -26,8 +26,9 @@
  * @module chart/ChartHost
  */
 
-import { type Component, Show, createEffect, createMemo, onMount, onCleanup, untrack } from 'solid-js';
+import { type Component, Show, createEffect, createMemo, createSignal, onMount, onCleanup, untrack } from 'solid-js';
 import { PaneManager } from './pane-manager';
+import { ChartContextMenu } from './ChartContextMenu';
 import { DrawingToolbar } from './DrawingToolbar';
 import { PyneTableHud } from './PyneTableHud';
 import { ChartScaleControls } from './ChartScaleControls';
@@ -132,6 +133,7 @@ function safePaint(
 export const ChartHost: Component<ChartHostProps> = (props) => {
   let hostEl: HTMLElement | undefined;
   let panesEl: HTMLDivElement | undefined;
+  const [contextHost, setContextHost] = createSignal<HTMLElement | undefined>(undefined);
   let localManager: PaneManager | undefined;
   /** False after host teardown — drops late rAF / RO callbacks. */
   let alive = true;
@@ -749,6 +751,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     <section
       ref={(el) => {
         hostEl = el;
+        setContextHost(el);
       }}
       class="flex-1 flex flex-col min-h-0 min-w-0 relative bg-bg-base h-full"
       data-axis-chart-host
@@ -763,6 +766,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
         class="flex-1 flex flex-col min-h-0 min-w-0 w-full"
         data-axis-panes
       />
+      <ChartContextMenu host={contextHost()} slotId={slotId()} />
       <Show when={isActive() && bars().length > 0}>
         <DrawingToolbar />
         <PyneTableHud />

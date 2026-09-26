@@ -25,6 +25,7 @@
  *   global drag preview consumed by {@link PanelDragOverlay}. A plain click on
  *   the title does **not** undock/float the panel.
  * - Panel icon: click → dock menu; hold (~280ms) or drag → move panel.
+ * - Title-bar right-click opens that same dock menu at the pointer.
  * - Dock menu: left/right/bottom/float/new tab; new tab may call `onPopoutWindow`.
  * - Float mode: free geometry via `setPanelGeometry` + `bumpPanelZ`.
  *
@@ -42,6 +43,7 @@ import {
   onMount,
 } from 'solid-js';
 import { Portal } from 'solid-js/web';
+import { clampMenuPosition } from '../context-menu';
 import {
   store,
   getPanelChrome,
@@ -202,6 +204,14 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
   const stacked = () => stackN() > 1;
 
   const [menuOpen, setMenuOpen] = createSignal(false);
+  /** Viewport point when the dock menu was opened from a right-click. */
+  const [menuCursor, setMenuCursor] = createSignal<{ x: number; y: number } | null>(null);
+  let menuPopEl: HTMLDivElement | undefined;
+  const cursorMenuStyle = (): JSX.CSSProperties | undefined => {
+    const at = menuCursor();
+    if (!at) return undefined;
+    return { position: 'fixed', left: `${at.x}px`, top: `${at.y}px` };
+  };
   /** Watchlist only: portaled alert is outside the shell (event, not a DOM query). */
   const [watchlistAlertOpen, setWatchlistAlertOpen] = createSignal(false);
   /**
@@ -644,6 +654,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     e.stopPropagation();
     // Mobile: tap opens the menu directly (no hold-to-drag)
     if (isPhoneViewport()) {
+      setMenuCursor(null);
       setMenuOpen((o) => !o);
       return;
     }
@@ -682,6 +693,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
       if (!pendingDrag) {
+        setMenuCursor(null);
         setMenuOpen((o) => !o);
       }
     };
@@ -690,6 +702,33 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
   };
+
+  // Right-click position can sit past the viewport edge — pull it back once measured.
+  createEffect(() => {
+    const at = menuCursor();
+    const open = menuOpen();
+    if (!open || !at) return;
+    queueMicrotask(() => {
+      if (!menuOpen()) return;
+      const el = menuPopEl;
+      if (!el || typeof el.getBoundingClientRect !== 'function') return;
+      const cur = menuCursor();
+      if (!cur) return;
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return;
+      const next = clampMenuPosition(
+        cur.x,
+        cur.y,
+        r.width,
+        r.height,
+        window.innerWidth || 0,
+        window.innerHeight || 0,
+      );
+      if (Math.abs(next.x - cur.x) > 0.5 || Math.abs(next.y - cur.y) > 0.5) {
+        setMenuCursor(next);
+      }
+    });
+  });
 
   // Close dock menu on outside click / Escape
   onMount(() => {
@@ -700,6 +739,10 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     };
     const onDocKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setMenuOpen(false);
+    };
+    // Shortcut hub consumes Escape on window capture and emits this instead.
+    const onAxisEscape = () => {
+      if (menuOpen()) setMenuOpen(false);
     };
     const onWatchlistAlert = (e: Event) => {
       const open = !!(e as CustomEvent<{ open?: boolean }>).detail?.open;
@@ -715,12 +758,14 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     };
     document.addEventListener('pointerdown', onDocPointerDown, true);
     document.addEventListener('keydown', onDocKey);
+    window.addEventListener('axis-escape', onAxisEscape);
     if (props.id === 'watchlist') {
       window.addEventListener('axis-watchlist-alert', onWatchlistAlert);
     }
     onCleanup(() => {
       document.removeEventListener('pointerdown', onDocPointerDown, true);
       document.removeEventListener('keydown', onDocKey);
+      window.removeEventListener('axis-escape', onAxisEscape);
       if (props.id === 'watchlist') {
         window.removeEventListener('axis-watchlist-alert', onWatchlistAlert);
       }
@@ -1098,12 +1143,25 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
             {/* Title bar — desktop: drag (move) to undock/move; phone: swipe down to dismiss */}
             <div
               class="axis-panel-handle sc-float-panel-header cursor-grab active:cursor-grabbing select-none relative h-9 min-h-9"
+              role="toolbar"
+              aria-label={title()}
               onPointerDown={onSheetHandlePointerDown}
               title={
                 hoverCollapsed()
                   ? `${title()} — hover to expand`
-                  : 'Drag title to move or undock · click does not float · drop on edges to dock'
+                  : 'Drag title to move or undock · right-click for menu · drop on edges to dock'
               }
+              onContextMenu={(e) => {
+                const t = e.target as HTMLElement | null;
+                if (t?.closest?.('[role="menu"]')) {
+                  e.preventDefault();
+                  return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                setMenuCursor({ x: e.clientX, y: e.clientY });
+                setMenuOpen(true);
+              }}
             >
               {/* Per-panel identity glyph is the dock-menu trigger (click = menu,
                   hold/drag = move). `keyed` so the children fn receives the
@@ -1129,9 +1187,12 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                 </button>
                 <Show when={menuOpen()}>
                   <div
+                    ref={menuPopEl}
                     class="axis-panel-menu-pop"
+                    classList={{ 'is-cursor': !!menuCursor() }}
                     role="menu"
                     aria-label="Panel menu"
+                    style={cursorMenuStyle()}
                     onClick={(e) => {
                       // Close after any menuitem action (dock items + menuExtra)
                       const t = e.target as HTMLElement | null;

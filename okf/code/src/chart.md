@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T20:35:52Z
+  at: 2026-09-26T14:54:54Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -18,6 +18,7 @@ okf_lock: generated
 
 # Files
 
+* `ChartContextMenu.tsx` — ChartContextMenu
 * `ChartHost.tsx` — ChartHost, ChartHostProps, applyDebugPinsToChart, getActiveDrawingLayer, getDrawingLayer, getManager, getReplayState, getVisibleBars, isReplayActive, jumpToDebugPin, setDataToChart, startReplaySession
 * `ChartScaleControls.tsx` — ChartScaleControls
 * `ChartWorkspace.tsx` — ChartWorkspace
@@ -27,6 +28,8 @@ okf_lock: generated
 * `chart-registry.ts` — ChartSlotRuntime, disposeSlotChart, getActiveDrawingLayer, getActiveManager, getActiveSlotId, getSlotBars, getSlotChartDataGen, getSlotDrawingLayer, getSlotManager, getSlotRuntime, removeSlotRuntime, setActiveDrawingLayer
 * `chart-type.ts` — CHART_TYPES, ChartType, ChartTypeInfo, DEFAULT_CHART_TYPE, OhlcDatum, PriceSeriesDatum, ValueDatum, chartTypeInfo, isOhlcChartType, lastBarDirection, mapBarUpdate, mapBarsToPriceData
 * `compare-overlay.ts` — AlignedPair, ApplyCompareOpts, COMPARE_COLOR, COMPARE_MAIN_PCT_COLOR, COMPARE_MAIN_PCT_KEY, COMPARE_PRICE_SCALE_ID, COMPARE_SERIES_KEY, CompareMode, LinePoint, TimedClose, alignAbsolute, alignByTime
+* `context-actions.ts` — CHART_SCALE_EVENT, ChartMenuEnv, dispatchChartMenu, scrollChartToLatest
+* `context-menu.ts` — ChartHit, ChartMenuContext, ChartMenuKind, ChartMenuScript, ChartRegion, PaneHitBox, buildChartMenu, chartMenuLabel, classifyChartPointer, pointerPrice
 * `crosshair-sync.ts`
 * `drawing-layer.ts` — DrawingChangeHandler, DrawingLayer, SelectionChangeHandler, StylePrefs, ToolChangeHandler, fibPrices, fillBandRunBounds, getActiveDrawingLayer, linefillQuadCorners, plotFillsSignature, shiftDrawing
 * `drawing-types.ts` — DRAWING_COLORS, Drawing, DrawingBase, DrawingKind, DrawingLineStyle, DrawingToolId, FIB_EXT_LEVELS, FIB_LEVELS, HLineDrawing, MultiPointDrawing, Point, TextDrawing
@@ -55,6 +58,7 @@ okf_lock: generated
 
 # Depends on
 
+* [src/alerts](/code/src/alerts.md)
 * [src/chart/drawings](/code/src/chart/drawings.md)
 * [src/chart/drawings/toolbar](/code/src/chart/drawings/toolbar.md)
 * [src/chart/drawings/tools](/code/src/chart/drawings/tools.md)

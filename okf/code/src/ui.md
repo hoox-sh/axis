@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 72 more files."
+description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 74 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-26T11:59:11Z
+  at: 2026-09-26T14:54:54Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -27,6 +27,7 @@ okf_lock: generated
 * `CommandPalette.tsx` — CommandPalette, CommandPaletteProps
 * `CompareSymbolControl.tsx` — CompareSymbolControl
 * `ConnectionHud.tsx` — ConnectionHud
+* `ContextMenu.tsx` — ContextMenu
 * `DataSourceManagerPanel.tsx` — DataSourceManagerPanel
 * `DataViewPanel.tsx` — DataViewPanel
 * `EditorGitBar.tsx` — EditorGitBar, EditorGitBarProps
@@ -70,6 +71,7 @@ okf_lock: generated
 * `boot-errors.ts` — ReportUiErrorOpts, _resetReportThrottleForTests, formatErrorMessage, installBootErrorHandlers, reportUiError
 * `clipboard.ts` — copyToClipboard
 * `command-registry.ts` — CommandActions, CommandCategory, CommandDef, CommandId, CommandSpec, DEFAULT_COMMAND_SPECS, RankedCommand, buildDefaultCommands, filterCommands, scoreCommand, scoreMatch
+* `context-menu.ts` — ContextMenuEntry, ContextMenuItem, ContextMenuSep, clampMenuPosition
 * `editor-problems.ts` — EDITOR_PROBLEMS_DEFAULT_HEIGHT, EDITOR_PROBLEMS_HEIGHT_KEY, EDITOR_PROBLEMS_MIN_HEIGHT, EditorProblem, clampProblemsHeight, countProblemsBySeverity, diagnosticsToProblems, formatProblemForCopy, formatProblemLine, formatProblemSource, formatProblemsListForCopy, severityRank
 * `error-share.ts` — AXIS_DIAGNOSTIC_VERSION, BuildDiagnosticOpts, ErrorDiagnosticPayload, ErrorShareOffer, _resetErrorShareThrottleForTests, acceptErrorShareOffer, buildErrorDiagnosticPayload, dismissErrorShareOffer, endpointHostOnly, exportErrorDiagnosticNow, isErrorShareEnabled, isSecretFieldName
 * `exchange-credentials-form.ts` — EMPTY_EXCHANGE_CREDENTIAL_FORM, EXCHANGE_CREDENTIAL_VENUES, EXCHANGE_CREDENTIAL_VENUE_LABELS, ExchangeCredentialFormState, ExchangeCredentialVenue, ccxtNeedsPassword, defaultExchangeCredentialVenue, exchangeVenueLabel, isExchangeCredentialVenue, normalizeCcxtExchangeId, venueNeedsPassphrase

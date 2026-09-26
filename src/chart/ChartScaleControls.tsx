@@ -45,6 +45,7 @@ import { store, setStore, persist, setPriceScaleDecimals } from '../store';
 import { applyPriceScaleDecimals, getManager } from './manager-access';
 import { measureChartPlotRect } from './plot-rect';
 import { RIGHT_PRICE_SCALE_WIDTH } from './series-factory';
+import { CHART_SCALE_EVENT } from './context-actions';
 import {
   cyclePriceScaleDecimalsMode,
   normalizePriceScaleDecimalsMode,
@@ -155,7 +156,9 @@ export const ChartScaleControls: Component = () => {
     const t2 = window.setTimeout(measure, 200);
 
     const onResize = () => measure();
+    const onScaleEvent = () => syncFromManager();
     window.addEventListener('resize', onResize);
+    window.addEventListener(CHART_SCALE_EVENT, onScaleEvent);
 
     // Pane height / multi-pane layout changes
     let ro: ResizeObserver | null = null;
@@ -170,6 +173,7 @@ export const ChartScaleControls: Component = () => {
       clearTimeout(t1);
       clearTimeout(t2);
       window.removeEventListener('resize', onResize);
+      window.removeEventListener(CHART_SCALE_EVENT, onScaleEvent);
       ro?.disconnect();
     });
   });
