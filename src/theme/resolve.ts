@@ -43,6 +43,7 @@ export function defaultChartThemeState(): ChartThemeState {
     presetId: 'void-dark',
     base: 'dark',
     overrides: {},
+    barThemeId: null,
   };
 }
 
@@ -59,8 +60,9 @@ export function normalizeOverrides(raw: unknown): ThemeTokens {
     if (!def) continue;
     const coerced = coerceTokenValue(def, v);
     if (coerced === undefined) continue;
-    // Skip values identical to catalog default — keeps payload small
-    if (valuesEqual(coerced, def.default)) continue;
+    // Keep catalog-default values. A preset may differ from the catalog, and a
+    // bar coloring has to be able to put the catalog color back on top of it.
+    // withTokenOverride still drops a value when it matches the active preset.
     out[key] = coerced;
   }
   return out;
@@ -133,7 +135,11 @@ export function hydrateChartTheme(raw: unknown): ChartThemeState {
       ? bag.base
       : getPreset(presetId).base;
   const overrides = normalizeOverrides(bag.overrides ?? bag.tokens);
-  return { presetId, base, overrides };
+  const barThemeId =
+    typeof bag.barThemeId === 'string' && bag.barThemeId.trim()
+      ? bag.barThemeId.trim()
+      : null;
+  return { presetId, base, overrides, barThemeId };
 }
 
 /**
@@ -172,6 +178,28 @@ export function getColor(
 }
 
 /**
+ * Custom themes resolve against void-dark / void-light, not the named preset
+ * they started from. Snapshot that preset first so one edit does not repaint
+ * the rest of the chart with the void palette.
+ */
+function freezeNamedPreset(state: ChartThemeState): ChartThemeState {
+  const resolved = resolveTokens(state);
+  const baseId = state.base === 'light' ? 'void-light' : 'void-dark';
+  const baseTokens = getPreset(baseId).tokens;
+  const overrides: ThemeTokens = {};
+  for (const [key, value] of Object.entries(resolved)) {
+    const baseVal = baseTokens[key];
+    if (baseVal === undefined || !valuesEqual(value, baseVal)) overrides[key] = value;
+  }
+  return {
+    presetId: 'custom',
+    base: state.base,
+    overrides,
+    barThemeId: state.barThemeId ?? null,
+  };
+}
+
+/**
  * Apply a single override; returns new state (immutable).
  * Sets `presetId` to `custom` when the value differs from the active preset.
  */
@@ -186,19 +214,30 @@ export function withTokenOverride(
   const coerced = coerceTokenValue(def, value);
   if (coerced === undefined) return state;
 
-  const preset = getPreset(
+  const activePreset = getPreset(
     state.presetId === 'custom'
       ? state.base === 'light'
         ? 'void-light'
         : 'void-dark'
       : state.presetId,
   );
-  const nextOverrides = { ...normalizeOverrides(state.overrides) };
-  const presetVal = preset.tokens[canon] ?? def.default;
+  const presetVal = activePreset.tokens[canon] ?? def.default;
+  const working =
+    state.presetId !== 'custom' && !valuesEqual(coerced, presetVal)
+      ? freezeNamedPreset(state)
+      : state;
 
-  if (valuesEqual(coerced, presetVal) && state.presetId !== 'custom') {
-    delete nextOverrides[canon];
-  } else if (valuesEqual(coerced, presetVal) && state.presetId === 'custom') {
+  const comparePreset = getPreset(
+    working.presetId === 'custom'
+      ? working.base === 'light'
+        ? 'void-light'
+        : 'void-dark'
+      : working.presetId,
+  );
+  const nextOverrides = { ...normalizeOverrides(working.overrides) };
+  const compareVal = comparePreset.tokens[canon] ?? def.default;
+
+  if (valuesEqual(coerced, compareVal)) {
     delete nextOverrides[canon];
   } else {
     nextOverrides[canon] = coerced;
@@ -206,14 +245,17 @@ export function withTokenOverride(
 
   // Stay on named preset if no overrides remain and value matches preset
   const hasOverrides = Object.keys(nextOverrides).length > 0;
-  if (!hasOverrides && valuesEqual(coerced, presetVal) && state.presetId !== 'custom') {
-    return { ...state, overrides: {} };
+  // A bar edit breaks the link to a saved bar coloring. Other edits keep it.
+  const barThemeId = def.group === 'bar' ? null : (working.barThemeId ?? null);
+  if (!hasOverrides && valuesEqual(coerced, compareVal) && working.presetId !== 'custom') {
+    return { ...working, overrides: {}, barThemeId };
   }
 
   return {
-    presetId: hasOverrides || state.presetId === 'custom' ? (hasOverrides ? 'custom' : state.presetId) : state.presetId,
-    base: state.base,
+    presetId: hasOverrides || working.presetId === 'custom' ? (hasOverrides ? 'custom' : working.presetId) : working.presetId,
+    base: working.base,
     overrides: nextOverrides,
+    barThemeId,
   };
 }
 
@@ -224,6 +266,7 @@ export function withPreset(presetId: string): ChartThemeState {
     presetId: p.id,
     base: p.base,
     overrides: {},
+    barThemeId: null,
   };
 }
 
@@ -264,10 +307,15 @@ export function themesEqual(a: ChartThemeState, b: ChartThemeState): boolean {
 
 /** Snapshot for persist / debug. */
 export function serializeTheme(state: ChartThemeState): ChartThemeState {
+  const barThemeId =
+    typeof state.barThemeId === 'string' && state.barThemeId.trim()
+      ? state.barThemeId.trim()
+      : null;
   return {
     presetId: state.presetId,
     base: state.base,
     overrides: normalizeOverrides(state.overrides),
+    barThemeId,
   };
 }
 

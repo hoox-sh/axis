@@ -217,7 +217,7 @@ export interface ActivePlugins {
 }
 
 import type { Drawing, DrawingToolId } from '../chart/drawing-types';
-import type { ChartThemeState } from '../theme';
+import type { BarColorTheme, ChartThemeState, SavedCustomTheme } from '../theme';
 import type { ProviderSession } from '../data/provider';
 import type { ShortcutOverrides } from '../ui/shortcuts/types';
 export type { Drawing, DrawingToolId };
@@ -463,6 +463,21 @@ export interface AppState {
    * Persisted. See `src/theme/`.
    */
   chartTheme: ChartThemeState;
+  /**
+   * Named custom chart themes. Each one stores its own bar coloring.
+   * Persisted.
+   */
+  savedChartThemes: SavedCustomTheme[];
+  /**
+   * Bar colorings saved on their own. A chart theme may link one by id
+   * and still keeps its own copy of the tokens.
+   * Persisted.
+   */
+  savedBarThemes: BarColorTheme[];
+  /** Id of the saved chart theme last applied. Null when a built-in preset is active. */
+  activeSavedThemeId: string | null;
+  /** Id of the library bar coloring currently applied. Null after a manual bar edit. */
+  activeBarThemeId: string | null;
   /**
    * UI density / chrome scale (text, icons, controls, gaps).
    * 0.8–1.3, default 1. Applied as CSS ``--ui-scale`` on ``<html>``.

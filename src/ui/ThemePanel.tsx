@@ -46,6 +46,7 @@ import {
   StudioSection,
   StudioToggle,
 } from './studio';
+import { BarColorLibrary, SavedThemeLibrary } from './ThemeLibrary';
 
 export interface ThemePanelProps {
   /** Compact spacing for Settings embed. */
@@ -125,10 +126,27 @@ export const ThemePanel = (props: ThemePanelProps) => {
         </StudioHint>
       </StudioSection>
 
+      <StudioSection
+        title="Saved themes"
+        lead="Name the current chart colors and keep them. Each theme includes its bar coloring."
+      >
+        <SavedThemeLibrary />
+      </StudioSection>
+
       {/* ── Token groups ────────────────────────────────────────── */}
       <For each={groups()}>
         {(group) => (
-          <StudioSection title={group.label} lead={group.description}>
+          <StudioSection
+            title={group.label}
+            lead={
+              group.id === 'bar'
+                ? 'Body, border, and wick. The bar coloring can be saved on its own and is stored inside the selected theme.'
+                : group.description
+            }
+          >
+            <Show when={group.id === 'bar'}>
+              <BarColorLibrary />
+            </Show>
             <div class="ax-token-grid">
               <For each={group.defs}>
                 {(def) => (

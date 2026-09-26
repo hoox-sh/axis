@@ -161,6 +161,16 @@ describe('theme resolve', () => {
     expect(t['chart.bg_color']).toBe(catalogDefaults()['chart.bg_color']);
   });
 
+  it('a token edit on a named preset keeps the rest of that preset', () => {
+    const porcelain = getPreset('porcelain');
+    const next = withTokenOverride(withPreset('porcelain'), 'bar.up.color', '#112233');
+    const tokens = resolveTokens(next);
+    expect(next.presetId).toBe('custom');
+    expect(tokens['bar.up.color']).toBe('#112233');
+    expect(tokens['chart.bg_color']).toBe(porcelain.tokens['chart.bg_color']);
+    expect(tokens['bar.down.color']).toBe(porcelain.tokens['bar.down.color']);
+  });
+
   it("withTokenOverride('chart.color_background') sets chart.bg_color and marks custom", () => {
     const base = defaultChartThemeState();
     const next = withTokenOverride(base, 'chart.color_background', '#112233');
@@ -229,13 +239,13 @@ describe('theme resolve', () => {
       'bar.up.color': '#abcdef',
       'chart.color_background': '#112233',
       'totally.fake': '#000',
-      'bar.body_fill': true, // same as default → dropped
+      'bar.body_fill': true,
     });
     expect(n['bar.up.color']).toBe('#abcdef');
     expect(n['chart.bg_color']).toBe('#112233');
     expect(n['totally.fake']).toBeUndefined();
-    // default-equal boolean skipped
-    expect(n['bar.body_fill']).toBeUndefined();
+    // Catalog defaults stay so a preset that uses another value can be overridden back.
+    expect(n['bar.body_fill']).toBe(true);
     expect(normalizeOverrides(null)).toEqual({});
     expect(normalizeOverrides([])).toEqual({});
   });

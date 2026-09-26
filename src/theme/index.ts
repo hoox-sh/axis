@@ -37,6 +37,9 @@ export type {
   ThemeTokenDef,
   ThemeTokens,
   ChartThemeState,
+  BarColorTheme,
+  EmbeddedBarTheme,
+  SavedCustomTheme,
   ThemePreset,
   ApplyChartThemeOpts,
   ApplySeriesThemeOpts,
@@ -105,3 +108,25 @@ export {
 } from './apply';
 
 export { ThemeManager, getThemeManager, resetThemeManagerForTests } from './manager';
+
+export {
+  MAX_SAVED_THEMES,
+  MAX_BAR_THEMES,
+  barTokenKeys,
+  clampThemeName,
+  newThemeId,
+  barTokensFromState,
+  fillBarTokens,
+  coerceBarTokenBag,
+  barTokensEqual,
+  withBarColorTheme,
+  captureCustomTheme,
+  attachBarTheme,
+  syncBarThemeIntoCharts,
+  detachBarThemeRef,
+  hydrateBarColorTheme,
+  hydrateSavedCustomTheme,
+  hydrateBarColorThemes,
+  hydrateSavedChartThemes,
+  nextThemeName,
+} from './library';

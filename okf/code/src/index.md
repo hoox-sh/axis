@@ -21,7 +21,7 @@
 * [src/streams](streams.md) - Legacy live datastream plugins (pre-Solid path).
 * [src/sw](sw.md) - Pure service-worker strategy helpers (unit-testable).
 * [src/theme](theme.md) - AXIS Theme Manager — public API.
-* [src/ui](ui.md) - src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 71 more files.
+* [src/ui](ui.md) - src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 72 more files.
 * [src/update](update.md) - App update manager — polls the deployed /version.json and surfaces new releases as a banner + notification with a hard-reload action.
 * [src/utils](utils.md) - Shared emitter + singleton helpers.
 * [src/workers](workers.md) - AXIS workers catalog + health probes (Workers Manager).
@@ -31,4 +31,4 @@
 * [chart](chart/) - Solid chart host — mounts PaneManager for one layout slot.
 * [data](data/) - Background Data Source Manager — multi-page OHLCV backfill to a past date.
 * [indicators](indicators/) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, detach.ts, and 6 more files.
-* [ui](ui/) - src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 71 more files.
+* [ui](ui/) - src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 72 more files.

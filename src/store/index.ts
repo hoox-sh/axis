@@ -130,9 +130,26 @@ import {
   hydrateChartTheme,
   withPreset,
   withTokenOverride,
+  withBarColorTheme,
   applyThemeToDocument,
   getThemeManager,
+  getTokenDef,
+  attachBarTheme,
+  barTokensEqual,
+  barTokensFromState,
+  captureCustomTheme,
+  clampThemeName,
+  detachBarThemeRef,
+  hydrateBarColorThemes,
+  hydrateSavedChartThemes,
+  MAX_BAR_THEMES,
+  MAX_SAVED_THEMES,
+  newThemeId,
+  nextThemeName,
+  syncBarThemeIntoCharts,
+  type BarColorTheme,
   type ChartThemeState,
+  type SavedCustomTheme,
   type ThemeTokenValue,
 } from '../theme';
 import { beginRunEpoch, releaseRunStatus } from '../indicators/run-helpers';
@@ -383,6 +400,10 @@ const DEFAULTS: AppState = {
   },
   theme: 'dark',
   chartTheme: defaultChartThemeState(),
+  savedChartThemes: [],
+  savedBarThemes: [],
+  activeSavedThemeId: null,
+  activeBarThemeId: null,
   uiScale: 1,
   // Ephemeral presentation — never hydrate as on
   presentation: { fullscreen: false, chartOnly: false },
@@ -599,6 +620,23 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       )
         ? 'https://pynescript.online'
         : rawEndpoint;
+
+    const savedChartThemes = hydrateSavedChartThemes(
+      (bag as { savedChartThemes?: unknown }).savedChartThemes,
+    );
+    const savedBarThemes = hydrateBarColorThemes(
+      (bag as { savedBarThemes?: unknown }).savedBarThemes,
+    );
+    const chartThemeIds = new Set(savedChartThemes.map((theme) => theme.id));
+    const barThemeIds = new Set(savedBarThemes.map((theme) => theme.id));
+    const activeSavedThemeId =
+      typeof bag.activeSavedThemeId === 'string' && chartThemeIds.has(bag.activeSavedThemeId)
+        ? bag.activeSavedThemeId
+        : null;
+    const activeBarThemeId =
+      typeof bag.activeBarThemeId === 'string' && barThemeIds.has(bag.activeBarThemeId)
+        ? bag.activeBarThemeId
+        : null;
 
     return {
       ...DEFAULTS,
@@ -940,6 +978,10 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
             .filter((l) => l && typeof l === 'object' && typeof l.id === 'string')
             .slice(0, 40)
         : [],
+      savedChartThemes,
+      savedBarThemes,
+      activeSavedThemeId,
+      activeBarThemeId,
       compare: hydrateCompare(bag.compare),
       onchain: hydrateOnchain((bag as { onchain?: unknown }).onchain),
       topbar: hydrateTopbar((bag as { topbar?: unknown }).topbar),
@@ -1410,6 +1452,10 @@ function seedStoreState(overlay: Partial<AppState> | null | undefined): AppState
       categories: { ...DEFAULT_NOTIFICATIONS.categories },
     },
     chartTheme: defaultChartThemeState(),
+    savedChartThemes: [],
+    savedBarThemes: [],
+    activeSavedThemeId: null,
+    activeBarThemeId: null,
     panes: DEFAULTS.panes.map((p) => ({ ...p })),
     scripts: [],
     drawings: [],
@@ -1540,6 +1586,10 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     theme: s.theme,
     chartType: s.chartType,
     chartTheme: unwrap(s.chartTheme),
+    savedChartThemes: unwrap(s.savedChartThemes ?? []),
+    savedBarThemes: unwrap(s.savedBarThemes ?? []),
+    activeSavedThemeId: s.activeSavedThemeId ?? null,
+    activeBarThemeId: s.activeBarThemeId ?? null,
     strategyUi: unwrap(s.strategyUi),
     uiScale: s.uiScale,
     editor: unwrap(s.editor),
@@ -2560,12 +2610,16 @@ export function loadChartLayout(id: string): boolean {
     const next = hydrateChartTheme(foundChartTheme);
     setStore('chartTheme', next);
     setStore('theme', next.base);
+    setStore('activeSavedThemeId', null);
+    setStore('activeBarThemeId', next.barThemeId ?? null);
     applyThemeToDocument(next);
     getThemeManager().setState(next);
   } else if (found.theme === 'dark' || found.theme === 'light') {
     setStore('theme', found.theme);
     const chartTheme = withPreset(found.theme === 'light' ? 'void-light' : 'void-dark');
     setStore('chartTheme', chartTheme);
+    setStore('activeSavedThemeId', null);
+    setStore('activeBarThemeId', null);
     applyThemeToDocument(chartTheme);
     getThemeManager().setState(chartTheme);
   }
@@ -2920,7 +2974,11 @@ export function toggleTheme() {
   setStore('theme', next);
   const presetId = next === 'light' ? 'void-light' : 'void-dark';
   const chartTheme = withPreset(presetId);
-  setStore('chartTheme', chartTheme);
+  batch(() => {
+    setStore('chartTheme', chartTheme);
+    setStore('activeSavedThemeId', null);
+    setStore('activeBarThemeId', null);
+  });
   applyThemeToDocument(chartTheme);
   getThemeManager().setState(chartTheme);
   persist();
@@ -2929,8 +2987,12 @@ export function toggleTheme() {
 /** Apply a named chart theme preset (void-dark, void-light, classic, …). */
 export function setChartThemePreset(presetId: string) {
   const chartTheme = withPreset(presetId);
-  setStore('chartTheme', chartTheme);
-  setStore('theme', chartTheme.base);
+  batch(() => {
+    setStore('chartTheme', chartTheme);
+    setStore('theme', chartTheme.base);
+    setStore('activeSavedThemeId', null);
+    setStore('activeBarThemeId', null);
+  });
   applyThemeToDocument(chartTheme);
   getThemeManager().setState(chartTheme);
   persist();
@@ -2939,9 +3001,13 @@ export function setChartThemePreset(presetId: string) {
 /** Override one chart theme token (supports aliases like chart.bg_color). */
 export function setChartThemeToken(key: string, value: ThemeTokenValue) {
   const next = withTokenOverride(store.chartTheme || defaultChartThemeState(), key, value);
-  setStore('chartTheme', next);
-  // keep chrome theme base in sync
-  setStore('theme', next.base);
+  const barEdit = getTokenDef(key)?.group === 'bar';
+  batch(() => {
+    setStore('chartTheme', next);
+    // keep chrome theme base in sync
+    setStore('theme', next.base);
+    if (barEdit) setStore('activeBarThemeId', null);
+  });
   applyThemeToDocument(next);
   getThemeManager().setState(next);
   persist();
@@ -2960,6 +3026,244 @@ export function setChartThemeState(state: ChartThemeState) {
 /** Reset overrides by re-applying the void preset for the current chrome theme. */
 export function resetChartTheme() {
   setChartThemePreset(store.theme === 'light' ? 'void-light' : 'void-dark');
+}
+
+export type ThemeLibraryWrite = 'ok' | 'empty' | 'duplicate' | 'missing';
+
+function paintChartTheme(next: ChartThemeState) {
+  applyThemeToDocument(next);
+  getThemeManager().setState(next);
+}
+
+function upsertByName<T extends { id: string; name: string }>(
+  list: readonly T[],
+  name: string,
+  id: string,
+  item: T,
+  limit: number,
+): T[] {
+  const without = list.filter((row) => row.id !== id && row.name.toLowerCase() !== name.toLowerCase());
+  return [item, ...without].slice(0, limit);
+}
+
+/**
+ * Save the live chart as a named theme, including its bar coloring.
+ * A matching name replaces that theme.
+ */
+export function saveCustomTheme(name: string): SavedCustomTheme {
+  const trimmed = clampThemeName(name) || nextThemeName(store.savedChartThemes || [], 'Theme');
+  const existing = (store.savedChartThemes || []).find(
+    (theme) => theme.name.toLowerCase() === trimmed.toLowerCase(),
+  );
+  const item = captureCustomTheme({
+    id: existing?.id ?? newThemeId('thm'),
+    name: trimmed,
+    state: store.chartTheme || defaultChartThemeState(),
+    barThemes: store.savedBarThemes || [],
+    activeBarThemeId: store.activeBarThemeId,
+    previousBar: existing?.barTheme ?? null,
+  });
+  batch(() => {
+    setStore('savedChartThemes', (list) =>
+      upsertByName(list || [], item.name, item.id, item, MAX_SAVED_THEMES),
+    );
+    setStore('activeSavedThemeId', item.id);
+    setStore('chartTheme', 'barThemeId', item.barTheme.refId);
+    setStore('activeBarThemeId', item.barTheme.refId);
+  });
+  persist();
+  appendLog('ok', `Theme saved · ${item.name}`, 'theme', { toast: true });
+  return item;
+}
+
+/** Write the live chart, including its bar coloring, over a saved theme. */
+export function updateCustomTheme(id: string): boolean {
+  const prev = (store.savedChartThemes || []).find((theme) => theme.id === id);
+  if (!prev) return false;
+  const item = captureCustomTheme({
+    id: prev.id,
+    name: prev.name,
+    state: store.chartTheme || defaultChartThemeState(),
+    barThemes: store.savedBarThemes || [],
+    activeBarThemeId: store.activeBarThemeId,
+    previousBar: prev.barTheme,
+  });
+  batch(() => {
+    setStore('savedChartThemes', (list) =>
+      (list || []).map((theme) => (theme.id === id ? item : theme)),
+    );
+    setStore('activeSavedThemeId', item.id);
+    setStore('chartTheme', 'barThemeId', item.barTheme.refId);
+    setStore('activeBarThemeId', item.barTheme.refId);
+  });
+  persist();
+  appendLog('ok', `Theme updated · ${item.name}`, 'theme', { toast: true });
+  return true;
+}
+
+export function renameCustomTheme(id: string, name: string): ThemeLibraryWrite {
+  const trimmed = clampThemeName(name);
+  if (!trimmed) return 'empty';
+  const list = store.savedChartThemes || [];
+  const prev = list.find((theme) => theme.id === id);
+  if (!prev) return 'missing';
+  if (list.some((theme) => theme.id !== id && theme.name.toLowerCase() === trimmed.toLowerCase())) {
+    return 'duplicate';
+  }
+  const barName =
+    prev.barTheme.refId == null && prev.barTheme.name === `${prev.name} bars`
+      ? `${trimmed} bars`
+      : prev.barTheme.name;
+  setStore(
+    'savedChartThemes',
+    (rows) =>
+      (rows || []).map((theme) =>
+        theme.id === id
+          ? { ...theme, name: trimmed, barTheme: { ...theme.barTheme, name: barName }, updatedAt: Date.now() }
+          : theme,
+      ),
+  );
+  persist();
+  return 'ok';
+}
+
+export function deleteCustomTheme(id: string) {
+  batch(() => {
+    setStore('savedChartThemes', (list) => (list || []).filter((theme) => theme.id !== id));
+    if (store.activeSavedThemeId === id) setStore('activeSavedThemeId', null);
+  });
+  persist();
+}
+
+/** Apply a saved theme, including the bar coloring stored inside it. */
+export function applyCustomTheme(id: string): boolean {
+  const found = (store.savedChartThemes || []).find((theme) => theme.id === id);
+  if (!found) return false;
+  const painted = withBarColorTheme(
+    hydrateChartTheme(found.theme),
+    found.barTheme.tokens,
+    found.barTheme.refId,
+  );
+  const lib = found.barTheme.refId
+    ? (store.savedBarThemes || []).find((bar) => bar.id === found.barTheme.refId)
+    : undefined;
+  const linked = lib && barTokensEqual(barTokensFromState(painted), lib.tokens) ? lib.id : null;
+  batch(() => {
+    setStore('chartTheme', linked === painted.barThemeId ? painted : { ...painted, barThemeId: linked });
+    setStore('theme', painted.base);
+    setStore('activeSavedThemeId', found.id);
+    setStore('activeBarThemeId', linked);
+  });
+  paintChartTheme(store.chartTheme);
+  persist();
+  appendLog('ok', `Theme applied · ${found.name}`, 'theme', { toast: true });
+  return true;
+}
+
+/**
+ * Save the live bar colors on their own.
+ * When a chart theme is selected, that palette is stored inside it too.
+ * A matching name replaces the library entry and every theme that links it.
+ */
+export function saveBarColorTheme(name: string): BarColorTheme {
+  const trimmed = clampThemeName(name) || nextThemeName(store.savedBarThemes || [], 'Bars');
+  const existing = (store.savedBarThemes || []).find(
+    (bar) => bar.name.toLowerCase() === trimmed.toLowerCase(),
+  );
+  const item: BarColorTheme = {
+    id: existing?.id ?? newThemeId('bar'),
+    name: trimmed,
+    tokens: barTokensFromState(store.chartTheme),
+    updatedAt: Date.now(),
+  };
+  const activeId = store.activeSavedThemeId;
+  batch(() => {
+    setStore('savedBarThemes', (list) =>
+      upsertByName(list || [], item.name, item.id, item, MAX_BAR_THEMES),
+    );
+    setStore('savedChartThemes', (list) => {
+      const synced = syncBarThemeIntoCharts(list || [], item);
+      if (!activeId) return synced;
+      return synced.map((theme) => (theme.id === activeId ? attachBarTheme(theme, item) : theme));
+    });
+    setStore('activeBarThemeId', item.id);
+    setStore('chartTheme', 'barThemeId', item.id);
+  });
+  persist();
+  appendLog('ok', `Bar coloring saved · ${item.name}`, 'theme', { toast: true });
+  return item;
+}
+
+/** Replace a library bar coloring with the live bars, and themes that use it. */
+export function updateBarColorTheme(id: string): boolean {
+  const prev = (store.savedBarThemes || []).find((bar) => bar.id === id);
+  if (!prev) return false;
+  const item: BarColorTheme = {
+    ...prev,
+    tokens: barTokensFromState(store.chartTheme),
+    updatedAt: Date.now(),
+  };
+  batch(() => {
+    setStore('savedBarThemes', (list) => (list || []).map((bar) => (bar.id === id ? item : bar)));
+    setStore('savedChartThemes', (list) => syncBarThemeIntoCharts(list || [], item));
+    setStore('activeBarThemeId', item.id);
+    setStore('chartTheme', 'barThemeId', item.id);
+  });
+  persist();
+  appendLog('ok', `Bar coloring updated · ${item.name}`, 'theme', { toast: true });
+  return true;
+}
+
+export function renameBarColorTheme(id: string, name: string): ThemeLibraryWrite {
+  const trimmed = clampThemeName(name);
+  if (!trimmed) return 'empty';
+  const list = store.savedBarThemes || [];
+  const prev = list.find((bar) => bar.id === id);
+  if (!prev) return 'missing';
+  if (list.some((bar) => bar.id !== id && bar.name.toLowerCase() === trimmed.toLowerCase())) {
+    return 'duplicate';
+  }
+  const item: BarColorTheme = { ...prev, name: trimmed, tokens: { ...prev.tokens }, updatedAt: Date.now() };
+  batch(() => {
+    setStore('savedBarThemes', (rows) => (rows || []).map((bar) => (bar.id === id ? item : bar)));
+    setStore('savedChartThemes', (rows) => syncBarThemeIntoCharts(rows || [], item));
+  });
+  persist();
+  return 'ok';
+}
+
+export function deleteBarColorTheme(id: string) {
+  batch(() => {
+    setStore('savedBarThemes', (list) => (list || []).filter((bar) => bar.id !== id));
+    setStore('savedChartThemes', (list) => detachBarThemeRef(list || [], id));
+    if (store.activeBarThemeId === id) setStore('activeBarThemeId', null);
+    if (store.chartTheme?.barThemeId === id) setStore('chartTheme', 'barThemeId', null);
+  });
+  persist();
+}
+
+/**
+ * Put a saved bar coloring on the chart.
+ * The selected chart theme stores that coloring as its own.
+ */
+export function applyBarColorTheme(id: string): boolean {
+  const bar = (store.savedBarThemes || []).find((item) => item.id === id);
+  if (!bar) return false;
+  const painted = withBarColorTheme(store.chartTheme || defaultChartThemeState(), bar.tokens, bar.id);
+  const activeId = store.activeSavedThemeId;
+  batch(() => {
+    setStore('chartTheme', painted);
+    setStore('theme', painted.base);
+    setStore('activeBarThemeId', bar.id);
+    if (activeId) {
+      setStore('savedChartThemes', (list) =>
+        (list || []).map((theme) => (theme.id === activeId ? attachBarTheme(theme, bar) : theme)),
+      );
+    }
+  });
+  paintChartTheme(painted);
+  persist();
+  return true;
 }
 
 /** UI chrome scale bounds (percent of default density) — see top-of-file decl. */

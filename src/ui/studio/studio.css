@@ -2049,6 +2049,41 @@ span.ax-json-twist {
   gap: 1rem 1.5rem;
   align-items: start;
 }
+.ax-theme-library {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.ax-theme-library form {
+  margin: 0;
+}
+.ax-theme-library + .ax-token-grid {
+  margin-top: 1.25rem;
+}
+.ax-theme-swatches {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+}
+.ax-theme-swatch {
+  width: 0.8rem;
+  height: 0.8rem;
+  border: var(--border-w) solid var(--color-border);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.ax-theme-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.ax-theme-rename {
+  width: 100%;
+}
+@media (max-width: 52rem) {
+  .ax-theme-library .ax-entity {
+    flex-direction: column;
+  }
+}
 @media (max-width: 52rem) {
   .ax-catalog-grid,
   .ax-toggle-grid,

@@ -84,7 +84,7 @@ const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'general', label: 'General', hint: 'Chart chrome · live · storage' },
   { id: 'data', label: 'Data', hint: 'Exchange keys · provider' },
   { id: 'editor', label: 'Editor', hint: 'Lint · hover · complete' },
-  { id: 'theme', label: 'Theme', hint: 'Bars · canvas · chart.bg_color' },
+  { id: 'theme', label: 'Theme', hint: 'Saved themes · bar coloring · canvas' },
   { id: 'topbar', label: 'Topbar', hint: 'Show or hide topbar groups' },
   { id: 'keyboard', label: 'Keyboard', hint: 'Shortcut chords · conflicts' },
   { id: 'notifications', label: 'Notifications', hint: 'Toasts · categories · flood control' },

@@ -57,6 +57,14 @@ import {
   setChartGridMode,
   saveChartLayout,
   loadChartLayout,
+  saveCustomTheme,
+  saveBarColorTheme,
+  applyCustomTheme,
+  applyBarColorTheme,
+  updateBarColorTheme,
+  deleteBarColorTheme,
+  setChartThemeToken,
+  setChartThemePreset,
   setActiveChartSlot,
   setEditorWidth,
   defaultEditorWidthPx,
@@ -95,6 +103,7 @@ import {
   HISTORY_BARS_MAX,
   isAutoloadEnabled,
 } from '../src/store';
+import { defaultChartThemeState } from '../src/theme';
 import { SAMPLE_BARS, makeBars } from './fixtures/bars';
 import { getSlotBars, setSlotBars } from '../src/chart/chart-registry';
 
@@ -124,6 +133,11 @@ function resetStoreBasics() {
   });
   setStore('live', { active: false, needsRerun: false, lastBarTime: 0, streamId: 'binance-ws' });
   setStore('theme', 'dark');
+  setStore('chartTheme', defaultChartThemeState());
+  setStore('savedChartThemes', []);
+  setStore('savedBarThemes', []);
+  setStore('activeSavedThemeId', null);
+  setStore('activeBarThemeId', null);
   setStore('editor', { open: true, width: 460, mode: 'docked' });
   setStore('watchlist', {
     open: true,
@@ -507,6 +521,57 @@ describe('layout helpers', () => {
     expect(store.theme).not.toBe(before);
     toggleTheme();
     expect(store.theme).toBe(before);
+  });
+
+  it('saves a named theme with a separate bar coloring inside it', () => {
+    setChartThemeToken('chart.bg_color', '#112233');
+    setChartThemeToken('bar.up.color', '#3ddc97');
+    const mint = saveBarColorTheme('Mint');
+    const night = saveCustomTheme('Night');
+    expect(night.barTheme.refId).toBe(mint.id);
+    expect(night.barTheme.name).toBe('Mint');
+    expect(night.theme.overrides['chart.bg_color']).toBe('#112233');
+    expect(store.activeSavedThemeId).toBe(night.id);
+    expect(store.activeBarThemeId).toBe(mint.id);
+
+    setChartThemeToken('bar.up.color', '#abcdef');
+    expect(store.activeBarThemeId).toBeNull();
+    expect(store.activeSavedThemeId).toBe(night.id);
+    expect(store.chartTheme.overrides['chart.bg_color']).toBe('#112233');
+
+    expect(applyCustomTheme(night.id)).toBe(true);
+    expect(store.chartTheme.overrides['bar.up.color']).toBe('#3ddc97');
+    expect(store.chartTheme.overrides['chart.bg_color']).toBe('#112233');
+    expect(store.activeBarThemeId).toBe(mint.id);
+
+    const rose = saveBarColorTheme('Rose');
+    expect(store.savedChartThemes.find((theme) => theme.id === night.id)?.barTheme.refId).toBe(rose.id);
+    const day = saveCustomTheme('Day');
+    expect(day.barTheme.refId).toBe(rose.id);
+
+    setChartThemePreset('void-dark');
+    expect(store.activeSavedThemeId).toBeNull();
+    expect(applyCustomTheme(night.id)).toBe(true);
+    setChartThemeToken('bar.down.color', '#111111');
+    expect(updateBarColorTheme(rose.id)).toBe(true);
+    const nightAfter = store.savedChartThemes.find((theme) => theme.id === night.id);
+    const dayAfter = store.savedChartThemes.find((theme) => theme.id === day.id);
+    expect(nightAfter?.barTheme.tokens['bar.down.color']).toBe('#111111');
+    expect(dayAfter?.barTheme.refId).toBe(rose.id);
+    expect(dayAfter?.barTheme.tokens['bar.down.color']).toBe('#111111');
+
+    deleteBarColorTheme(rose.id);
+    const detached = store.savedChartThemes.find((theme) => theme.id === night.id);
+    expect(detached?.barTheme.refId).toBeNull();
+    expect(detached?.barTheme.tokens['bar.down.color']).toBe('#111111');
+    expect(store.chartTheme.overrides['chart.bg_color']).toBe('#112233');
+
+    expect(flushPersist()).toBe(true);
+    const parsed = parsePersistedState(localStorage.getItem(STORAGE_KEY) || '');
+    expect(parsed?.savedChartThemes?.map((theme) => theme.name).sort()).toEqual(['Day', 'Night']);
+    expect(parsed?.savedBarThemes?.some((bar) => bar.name === 'Mint')).toBe(true);
+    expect(parsed?.savedBarThemes?.some((bar) => bar.name === 'Rose')).toBe(false);
+    expect(parsed?.savedChartThemes?.find((theme) => theme.name === 'Night')?.barTheme.name).toBe('Rose');
   });
 
   it('chart grid mode and saved layouts', () => {

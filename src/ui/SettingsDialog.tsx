@@ -192,7 +192,7 @@ const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'general', label: 'General', hint: 'Engine · density · chart · live' },
   { id: 'data', label: 'Data', hint: 'Exchange keys · provider' },
   { id: 'editor', label: 'Editor', hint: 'Lint · hover · complete · marks · timings' },
-  { id: 'theme', label: 'Theme', hint: 'Bars · canvas · Pine chart.bg_color' },
+  { id: 'theme', label: 'Theme', hint: 'Saved themes · bar coloring · canvas' },
   { id: 'topbar', label: 'Topbar', hint: 'Show/hide topbar buttons' },
   { id: 'notifications', label: 'Notifications', hint: 'Toasts · categories · flood control' },
 ];

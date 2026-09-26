@@ -97,8 +97,47 @@ export interface ChartThemeState {
   /**
    * Partial overrides on top of the selected preset defaults.
    * Keys may be aliases; they are normalized on write.
+   * Bar-group keys are the live bar coloring.
    */
   overrides: ThemeTokens;
+  /**
+   * Library id of the bar coloring applied to this chart, when the live
+   * bar tokens still match that entry. Cleared when a bar token is edited.
+   */
+  barThemeId?: string | null;
+}
+
+/**
+ * Named bar coloring (body, border, wick, fill, thickness).
+ * Saved on its own and embedded inside a {@link SavedCustomTheme}.
+ */
+export interface BarColorTheme {
+  id: string;
+  name: string;
+  /** Full resolved `bar.*` token set, including values that match the catalog. */
+  tokens: ThemeTokens;
+  updatedAt: number;
+}
+
+/** Bar coloring stored inside a saved chart theme. */
+export interface EmbeddedBarTheme {
+  /** Library id when this coloring was saved separately. */
+  refId: string | null;
+  name: string;
+  tokens: ThemeTokens;
+}
+
+/**
+ * Named custom chart theme.
+ * `theme` is the full chart snapshot. `barTheme` is that theme's bar coloring
+ * (its own copy, optionally linked to a {@link BarColorTheme}).
+ */
+export interface SavedCustomTheme {
+  id: string;
+  name: string;
+  theme: ChartThemeState;
+  barTheme: EmbeddedBarTheme;
+  updatedAt: number;
 }
 
 /** Built-in named preset (full token set). */
