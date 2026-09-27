@@ -58,6 +58,7 @@ import {
   onMount,
   Show,
 } from 'solid-js';
+import { effectMs } from './effects';
 import { Portal } from 'solid-js/web';
 import {
   store,
@@ -152,11 +153,15 @@ const WatchlistRow: Component<{
   let lastPrice: number | undefined;
   createEffect(() => {
     const p = props.tick?.price;
+    const ms = effectMs('watchlist.tick');
     if (p == null || !Number.isFinite(p)) return;
-    if (lastPrice != null && p !== lastPrice) {
+    if (lastPrice != null && p !== lastPrice && ms > 0) {
       setFlash(p > lastPrice ? 'up' : 'down');
-      const id = window.setTimeout(() => setFlash(''), 180);
-      onCleanup(() => window.clearTimeout(id));
+      const id = window.setTimeout(() => setFlash(''), ms);
+      onCleanup(() => {
+        window.clearTimeout(id);
+        setFlash('');
+      });
     }
     lastPrice = p;
   });
@@ -776,28 +781,34 @@ export const Watchlist: Component = () => {
           </Show>
         </div>
 
-        <div class="border-t border-border px-2 py-1.5 flex-shrink-0 flex items-center gap-1">
-          <input
-            class="sc-input flex-1 min-w-0 h-7 min-h-7 text-[11px] placeholder:text-text-faint bg-transparent"
-            placeholder="Add symbol…"
-            aria-label="Add symbol"
-            data-testid="axis-watchlist-add"
-            value={addValue()}
-            onInput={(e) => setAddValue(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') onAdd();
-            }}
-          />
-          <button
-            type="button"
-            class="sc-btn sc-btn-ghost h-7 min-h-7 px-1.5 text-[11px]"
-            title="Browse symbols for this venue"
-            aria-label="Browse symbols"
-            data-testid="axis-watchlist-browse"
-            onClick={() => setBrowseOpen(true)}
-          >
-            Browse
-          </button>
+        <div class="border-t border-border px-2 py-1.5 flex-shrink-0">
+          <div class="axis-wl-add">
+            <input
+              class="sc-input h-7 min-h-7 text-[11px] placeholder:text-text-faint bg-transparent"
+              placeholder="Add symbol…"
+              aria-label="Add symbol"
+              data-testid="axis-watchlist-add"
+              value={addValue()}
+              onInput={(e) => setAddValue(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onAdd();
+                else if (e.key === 'ArrowDown' || (e.key === ' ' && e.ctrlKey)) {
+                  e.preventDefault();
+                  setBrowseOpen(true);
+                }
+              }}
+            />
+            <button
+              type="button"
+              class="axis-tb-field-trailing-btn"
+              title="Browse symbols for this venue"
+              aria-label="Browse symbols"
+              data-testid="axis-watchlist-browse"
+              onClick={() => setBrowseOpen(true)}
+            >
+              <Icons.search size={14} />
+            </button>
+          </div>
         </div>
       </FloatableShell>
       <SymbolModal

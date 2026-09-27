@@ -1425,18 +1425,45 @@ button.axis-status-capsule {
   border-left-color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 6%, transparent);
 }
+/* Duration and strength come from the UI effect manager (`watchlist.tick`). */
 .axis-wl-row.is-flash-up {
-  animation: axis-wl-flash-up 180ms ease-out;
+  animation-name: axis-wl-flash-up;
+  animation-duration: var(--axis-fx-watchlist-tick-duration, 180ms);
+  animation-timing-function: ease-out;
 }
 .axis-wl-row.is-flash-down {
-  animation: axis-wl-flash-down 180ms ease-out;
+  animation-name: axis-wl-flash-down;
+  animation-duration: var(--axis-fx-watchlist-tick-duration, 180ms);
+  animation-timing-function: ease-out;
+}
+.axis-fx-sample {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input, 4px);
+  background: var(--color-bg-elev, transparent);
 }
 @keyframes axis-wl-flash-up {
-  from { background-color: color-mix(in srgb, var(--color-accent-2) 32%, transparent); }
+  from {
+    background-color: color-mix(
+      in srgb,
+      var(--color-accent-2) var(--axis-fx-watchlist-tick-up, 32%),
+      transparent
+    );
+  }
   to { background-color: transparent; }
 }
 @keyframes axis-wl-flash-down {
-  from { background-color: color-mix(in srgb, var(--color-red) 28%, transparent); }
+  from {
+    background-color: color-mix(
+      in srgb,
+      var(--color-red) var(--axis-fx-watchlist-tick-down, 28%),
+      transparent
+    );
+  }
   to { background-color: transparent; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1444,6 +1471,23 @@ button.axis-status-capsule {
   .axis-wl-row.is-flash-down {
     animation: none;
   }
+}
+.axis-wl-add {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.axis-wl-add .sc-input {
+  width: 100%;
+  margin: 0;
+  padding-right: 26px;
+}
+.axis-wl-add .axis-tb-field-trailing-btn {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 .axis-wl-change-up {
   color: var(--color-accent-2);

@@ -32,6 +32,7 @@ export {
   getBuiltinScript,
   listBuiltinCategories,
 } from './catalog';
+export { DRAWING_BUILTINS } from './drawings';
 export { AXIS_PINE_BANNER, COL } from './pine';
 export { SKIPPED_STUDIES } from './skipped';
 export type { BuiltinCategory, BuiltinKind, BuiltinScript, SkippedStudy } from './types';

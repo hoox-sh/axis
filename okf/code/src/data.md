@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:08:48Z
+  at: 2026-09-27T14:41:44Z
 sources:
   - id: tree
     resource: "src/data"
@@ -19,12 +19,12 @@ okf_lock: generated
 # Files
 
 * `bars-cache.ts` — BARS_CACHE_MAX, BARS_CACHE_MAX_SERIES, BarLoadWindow, BarsCacheMeta, BarsCacheRecord, _resetBarsCacheForTests, barsCacheKey, clearCachedBars, countBarsForLoad, flushPendingIdbPuts, getCachedBarCount, getCachedBars
-* `bars-gaps.ts` — BarGap, CoverageReport, CoverageSegment, alignDown, buildCoverageMap, findBarGaps, intervalToSec, mergeGaps, validateBarCoverage
+* `bars-gaps.ts` — BarGap, CoverageReport, CoverageSegment, alignDown, buildCoverageMap, expectedBarsInSpan, findBarGaps, intervalToSec, mergeGaps, validateBarCoverage
 * `binance-http.ts` — BINANCE_REST_HOSTS, BinanceFetchOpts, BinanceRestPath, DEFAULT_MARKET_WORKER_BASE, binanceKlineWsUrls, binanceTickerWsUrls, fetchBinanceJson, resolveMarketWorkerBase
 * `ccxt-session.ts` — bindCcxtSession, unbindCcxtSession
 * `credentials.ts` — CREDENTIALS_MEMORY_ONLY, CredentialMeta, ExchangeCredential, activeCcxtExchange, activeCcxtGateway, ccxtCredentialId, clearCredentials, deleteCredential, getCcxtCredential, getCredential, getCredentialForVenue, hasCcxtCredential
 * `data-manager-source.ts` — DATA_MANAGER_SOURCE_ID, DataManagerSelection, ResolvedCacheSeries, clearDataManagerSelection, dataManagerCacheKey, dataManagerLabel, getDataManagerSelection, resolveDataManagerBars, setDataManagerSelection
-* `data-source-manager.ts` — DataSourceJob, DataSourceJobPhase, DataSourceJobStatus, StartBackfillOpts, _resetDataSourceManagerForTests, _waitForJob, applyCachedToChart, applyJobToChart, cancelBackfill, dataSourceManagerState, dateInputToEndSec, defaultPastDateInput
+* `data-source-manager.ts` — DSM_MAX_BARS_PER_JOB, DSM_MAX_PAGES, DataSourceJob, DataSourceJobPhase, DataSourceJobStatus, StartBackfillOpts, _resetDataSourceManagerForTests, _waitForJob, applyCachedToChart, applyJobToChart, cancelBackfill, dataSourceManagerState
 * `dataset-sinks.ts` — DatasetSink, PERSISTENCE_MODES, PersistenceMode, SinkErrorListener, _resetDatasetSinksForTests, datasetKey, localSink, onSinkError, remoteSink, sessionSink, sinkForMode
 * `dataset-store.ts` — DatasetMeta, PutResult, _resetDatasetStoreForTests, getDataset, getMergePolicy, getPersistenceMode, keyFor, listMemoryDatasets, peekDataset, putDatasetBars, removeDataset, replaceDataset
 * `dataset-validate.ts` — ClassifyOpts, DatasetReport, GapClassification, RepairResult, RepairStats, ValidateOpts, VenueClass, classifyGaps, findClassifiedGaps, repairBars, validateDataset, venueClassForSourceCaps

@@ -180,6 +180,30 @@ describe('OKF query', () => {
     expect(context).toContain('Draws the visible range');
     expect(context).toContain('code/src.md');
   });
+
+  it('resolves a file to its directory and does not treat ui as a substring of builtins', () => {
+    const bundle = sample('2026-09-24T00:00:00Z', [
+      {
+        path: 'src/ui/StatusBar.tsx',
+        kind: 'code',
+        text: '/** Status strip. */\nexport function StatusBar() { return null; }\n',
+      },
+      {
+        path: 'src/indicators/builtins/index.ts',
+        kind: 'code',
+        text: '/** Built-in scripts. */\nexport const BUILTIN_SCRIPTS = [];\n',
+      },
+    ]);
+    const concepts = loadConcepts(bundle);
+    const hits = searchConcepts(concepts, ['ui']);
+    expect(hits[0]?.id).toBe('code/src/ui');
+    expect(hits.some((hit) => hit.id === 'code/src/indicators/builtins')).toBe(false);
+    const context = renderContext(bundle, 'src/ui/StatusBar.tsx', 0, 6000);
+    expect(context).toContain('resource: "src/ui"');
+    expect(context).not.toContain('src/indicators/builtins');
+    const nested = renderContext(bundle, 'src/chart/view.ts', 0, 6000);
+    expect(nested).toContain('resource: "src/chart"');
+  });
 });
 
 describe('OKF apply', () => {

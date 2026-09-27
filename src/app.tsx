@@ -101,6 +101,7 @@ const AboutModal = lazy(() =>
 
 // Ensure built-in source/stream/engine plugins are registered before first paint.
 registerBuiltins();
+import { installUiEffects } from './ui/effects';
 import {
   store,
   setEditorOpen,
@@ -203,6 +204,7 @@ export const App: Component = () => {
     // Full chrome + chart CSS vars (not only data-theme)
     applyThemeToDocument(store.chartTheme);
     applyUiScale(store.uiScale);
+    installUiEffects();
     // Fullscreen API + chart-only shortcuts (F11 / Shift+F / Esc)
     const unsubPresentation = installPresentationControls();
     appendLog(

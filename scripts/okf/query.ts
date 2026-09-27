@@ -20,6 +20,15 @@ function field(fm: ConceptDoc['frontmatter'], key: string): string {
   return typeof value === 'string' ? value : '';
 }
 
+/** Path and identifier pieces. `builtins` does not contain the term `ui`. */
+function segments(value: string): string[] {
+  return value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+function normalizeQuery(idOrPath: string): string {
+  return idOrPath.replace(/\\/g, '/').replace(/^\.?\//, '').replace(/\.md$/, '').replace(/\/$/, '');
+}
+
 export function searchConcepts(concepts: ConceptDoc[], terms: string[]): Hit[] {
   const needles = terms.map((term) => term.toLowerCase()).filter(Boolean);
   const hits: Hit[] = [];
@@ -28,13 +37,23 @@ export function searchConcepts(concepts: ConceptDoc[], terms: string[]): Hit[] {
     const description = field(concept.frontmatter, 'description');
     const resource = field(concept.frontmatter, 'resource');
     const tags = Array.isArray(concept.frontmatter.tags) ? concept.frontmatter.tags.join(' ') : '';
-    const haystack = `${concept.id} ${title} ${description} ${resource} ${tags}`.toLowerCase();
+    const idSegs = segments(concept.id);
+    const resSegs = segments(resource);
+    const titleSegs = segments(title);
+    const descSegs = segments(description);
+    const tagSegs = segments(tags);
     let score = 0;
     for (const needle of needles) {
-      if (concept.id.toLowerCase() === needle || resource.toLowerCase() === needle) score += 8;
-      else if (concept.id.toLowerCase().includes(needle) || resource.toLowerCase().includes(needle)) score += 4;
-      else if (title.toLowerCase().includes(needle)) score += 3;
-      else if (haystack.includes(needle)) score += 1;
+      const primary = segments(needle)[0] ?? '';
+      if (!primary) continue;
+      const raw = needle.toLowerCase();
+      const id = concept.id.toLowerCase();
+      const res = resource.toLowerCase();
+      if (id === raw || res === raw || id === `code/${raw}`) score += 8;
+      else if (resSegs.at(-1) === primary || idSegs.at(-1) === primary) score += 6;
+      else if (resSegs.includes(primary) || idSegs.includes(primary)) score += 4;
+      else if (titleSegs.includes(primary) || tagSegs.includes(primary)) score += 3;
+      else if (descSegs.includes(primary)) score += 1;
       else score -= 2;
     }
     if (needles.length === 0 || score > 0) {
@@ -52,16 +71,42 @@ export function searchConcepts(concepts: ConceptDoc[], terms: string[]): Hit[] {
   return hits.sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : 1)).slice(0, 12);
 }
 
+/**
+ * Exact id / resource, otherwise the deepest directory concept that contains
+ * the path. A file such as `src/ui/StatusBar.tsx` belongs to `src/ui`, not to
+ * whichever module sorts first.
+ */
+function conceptById(concepts: ConceptDoc[], idOrPath: string): ConceptDoc | undefined {
+  const id = normalizeQuery(idOrPath);
+  const exact = concepts.find(
+    (concept) =>
+      concept.id === id ||
+      concept.id === `code/${id}` ||
+      concept.path === idOrPath ||
+      concept.path === `${id}.md` ||
+      field(concept.frontmatter, 'resource') === id,
+  );
+  if (exact) return exact;
+  let best: ConceptDoc | undefined;
+  let bestLen = -1;
+  for (const concept of concepts) {
+    const resource = field(concept.frontmatter, 'resource').replace(/\/$/, '');
+    if (!resource) continue;
+    if (id === resource || id.startsWith(`${resource}/`)) {
+      if (resource.length > bestLen) {
+        best = concept;
+        bestLen = resource.length;
+      }
+    }
+  }
+  return best;
+}
+
 export function formatHits(hits: Hit[]): string {
   if (hits.length === 0) return 'No matching concepts.';
   return hits
     .map((hit) => `${hit.id}\n  ${hit.type} — ${hit.description || hit.title}\n  resource: ${hit.resource || hit.path}`)
     .join('\n');
-}
-
-function conceptById(concepts: ConceptDoc[], idOrPath: string): ConceptDoc | undefined {
-  const id = idOrPath.replace(/\.md$/, '').replace(/^\//, '');
-  return concepts.find((concept) => concept.id === id || concept.path === idOrPath || field(concept.frontmatter, 'resource') === idOrPath);
 }
 
 export function renderContext(files: Map<string, string>, start: string, depth: number, maxChars: number): string {

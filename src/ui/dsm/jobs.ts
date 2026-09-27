@@ -8,6 +8,8 @@
  */
 
 import type { DataSourceJob } from '../../data/data-source-manager';
+import { expectedBarsInSpan } from '../../data/bars-gaps';
+import { fmtDuration } from './format';
 
 export type JobFilter = 'all' | 'active' | 'done' | 'issues';
 
@@ -100,6 +102,35 @@ export function jobStatusTone(job: DataSourceJob): JobStatusTone {
   if (job.status === 'complete') return job.datasetComplete ? 'ok' : 'warn';
   if (job.status === 'error') return 'bad';
   return 'muted';
+}
+
+/** Fetched vs dense expected bars, window length, and page count. */
+export function jobQuantityLine(job: DataSourceJob): string {
+  const expected = expectedBarsInSpan(job.targetFromSec, job.targetToSec, job.interval);
+  const got = job.barsFetched.toLocaleString();
+  const nearFull =
+    job.datasetComplete && expected > 0 && job.barsFetched >= Math.floor(expected * 0.98);
+  const bars =
+    expected > 0 && !nearFull ? `${got} / ~${expected.toLocaleString()} bars` : `${got} bars`;
+  const pages = `${job.pagesFetched} page${job.pagesFetched === 1 ? '' : 's'}`;
+  const span = fmtDuration(job.targetFromSec, job.targetToSec);
+  return span === '—' ? `${bars} · ${pages}` : `${bars} · ${span} · ${pages}`;
+}
+
+/** Retries, gaps, and coverage. Empty while a clean job is still running. */
+export function jobHealthLine(job: DataSourceJob): string {
+  const parts: string[] = [];
+  const retries = job.retries ?? 0;
+  if (retries > 0) parts.push(`${retries} ${retries === 1 ? 'retry' : 'retries'}`);
+  if (job.gapsFound > 0) {
+    const gaps = `${job.gapsFound} gap${job.gapsFound === 1 ? '' : 's'}`;
+    parts.push(job.gapsFilled ? `${gaps}, filled ${job.gapsFilled}` : gaps);
+  } else if (job.datasetComplete) {
+    parts.push('full coverage');
+  } else if (job.status === 'complete') {
+    parts.push('partial coverage');
+  }
+  return parts.join(' · ');
 }
 
 export function jobStatusClass(tone: JobStatusTone): string {

@@ -29,6 +29,7 @@
 import { CHANNEL_BUILTINS } from './channels';
 import { MA_BUILTINS } from './ma';
 import { OSCILLATOR_BUILTINS } from './oscillators';
+import { DRAWING_BUILTINS } from './drawings';
 import { PIVOT_BUILTINS } from './pivots';
 import { STRATEGY_BUILTINS } from './strategies';
 import { TREND_BUILTINS } from './trend';
@@ -45,6 +46,7 @@ export const BUILTIN_SCRIPTS: readonly BuiltinScript[] = [
   ...VOLUME_BUILTINS,
   ...VOLATILITY_BUILTINS,
   ...PIVOT_BUILTINS,
+  ...DRAWING_BUILTINS,
   ...STRATEGY_BUILTINS,
 ];
 
@@ -113,6 +115,8 @@ export function builtinCategoryLabel(category: BuiltinCategory): string {
       return 'Pivots';
     case 'session':
       return 'Session';
+    case 'drawing':
+      return 'Drawings';
     case 'strategy':
       return 'Strategies';
     default:

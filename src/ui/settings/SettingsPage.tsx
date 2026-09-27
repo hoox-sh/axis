@@ -40,6 +40,7 @@ import { getManager } from '../../chart/manager-access';
 import { UI_SCALE_PRESETS, formatUiScalePct } from '../ui-scale';
 import { WorkspaceSnapshotMenu } from '../WorkspaceSnapshotMenu';
 import { ThemePanel } from '../ThemePanel';
+import { EffectsPanel } from '../effects/EffectsPanel';
 import { PluginConfigRow } from '../PluginConfigRow';
 import { listStorages } from '../../storage/catalog';
 import { promptStorageChange } from '../../storage/service';
@@ -84,7 +85,7 @@ const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'general', label: 'General', hint: 'Chart chrome · live · storage' },
   { id: 'data', label: 'Data', hint: 'Exchange keys · provider' },
   { id: 'editor', label: 'Editor', hint: 'Lint · hover · complete' },
-  { id: 'theme', label: 'Theme', hint: 'Saved themes · bar coloring · canvas' },
+  { id: 'theme', label: 'Theme', hint: 'Saved themes · bar coloring · motion' },
   { id: 'topbar', label: 'Topbar', hint: 'Show or hide topbar groups' },
   { id: 'keyboard', label: 'Keyboard', hint: 'Shortcut chords · conflicts' },
   { id: 'notifications', label: 'Notifications', hint: 'Toasts · categories · flood control' },
@@ -866,7 +867,10 @@ export function SettingsPage(props: {
         </SettingsTabPanel>
 
         <SettingsTabPanel id="theme" active={tab()}>
-            <ThemePanel />
+            <div class="ax-stack">
+              <ThemePanel />
+              <EffectsPanel />
+            </div>
         </SettingsTabPanel>
 
         <SettingsTabPanel id="topbar" active={tab()}>

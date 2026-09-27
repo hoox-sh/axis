@@ -102,6 +102,12 @@ describe('BUILTIN_SCRIPTS catalog', () => {
     expect(cats).toContain('strategy');
     expect(builtinsInCategory('moving-average').length).toBeGreaterThan(5);
     expect(builtinCategoryLabel('oscillator')).toBe('Oscillators');
+    expect(builtinCategoryLabel('drawing')).toBe('Drawings');
+    const draw = getBuiltinScript('drawings');
+    expect(draw?.overlay).toBe(true);
+    for (const token of ['line.new', 'linefill.new', 'box.new', 'label.new', 'polyline.new', 'table.new']) {
+      expect(draw?.code).toContain(token);
+    }
   });
 });
 

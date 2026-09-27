@@ -7,7 +7,7 @@ tags: [builtins, code, indicators]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:07:37Z
+  at: 2026-09-27T10:08:34Z
 sources:
   - id: tree
     resource: "src/indicators/builtins"
@@ -21,7 +21,8 @@ okf_lock: generated
 * `apply.ts` — ApplyBuiltinResult, applyBuiltinScript
 * `catalog.ts` — BUILTIN_SCRIPTS, builtinCategoryLabel, builtinsInCategory, filterBuiltinScripts, getBuiltinScript, listBuiltinCategories
 * `channels.ts` — CHANNEL_BUILTINS
-* `index.ts` — AXIS_PINE_BANNER, BUILTIN_SCRIPTS, BuiltinCategory, BuiltinKind, BuiltinScript, COL, SKIPPED_STUDIES, SkippedStudy, applyBuiltinScript, builtinCategoryLabel, builtinsInCategory, filterBuiltinScripts
+* `drawings.ts` — DRAWING_BUILTINS
+* `index.ts` — AXIS_PINE_BANNER, BUILTIN_SCRIPTS, BuiltinCategory, BuiltinKind, BuiltinScript, COL, DRAWING_BUILTINS, SKIPPED_STUDIES, SkippedStudy, applyBuiltinScript, builtinCategoryLabel, builtinsInCategory
 * `ma.ts` — MA_BUILTINS
 * `oscillators.ts` — OSCILLATOR_BUILTINS
 * `pine.ts` — AXIS_PINE_BANNER, COL, def, pineIndicator, pineStrategy
@@ -40,6 +41,7 @@ okf_lock: generated
 
 # Used by
 
+* [src/editor](/code/src/editor.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/ui](/code/src/ui.md)
 * [src/ui/library](/code/src/ui/library.md)

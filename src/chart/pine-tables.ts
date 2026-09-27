@@ -150,10 +150,25 @@ export function normalizePineTable(
     maxR = Math.max(maxR, c.row);
     maxC = Math.max(maxC, c.col);
   }
-  const declaredRows = asFiniteInt(raw.rows) ?? 0;
-  const declaredCols = asFiniteInt(raw.columns ?? (raw as { cols?: unknown }).cols) ?? 0;
-  const rows = Math.max(1, declaredRows, maxR + 1);
-  const columns = Math.max(1, declaredCols, maxC + 1);
+  let declaredRows = asFiniteInt(raw.rows) ?? 0;
+  let declaredCols = asFiniteInt(raw.columns ?? (raw as { cols?: unknown }).cols) ?? 0;
+  const cellRows = maxR + 1;
+  const cellCols = maxC + 1;
+  // Older engines stored Pine's (columns, rows) under the opposite names.
+  // That union with the real cell span painted a square of empty cells.
+  if (
+    declaredRows > 0 &&
+    declaredCols > 0 &&
+    declaredRows !== declaredCols &&
+    declaredRows === cellCols &&
+    declaredCols === cellRows
+  ) {
+    const swap = declaredRows;
+    declaredRows = declaredCols;
+    declaredCols = swap;
+  }
+  const rows = Math.max(1, declaredRows, cellRows);
+  const columns = Math.max(1, declaredCols, cellCols);
 
   return {
     type: 'table',

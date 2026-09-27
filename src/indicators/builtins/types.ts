@@ -39,6 +39,7 @@ export type BuiltinCategory =
   | 'volatility'
   | 'pivot'
   | 'session'
+  | 'drawing'
   | 'strategy';
 
 /** One original AXIS built-in script. */

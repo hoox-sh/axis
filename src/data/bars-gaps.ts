@@ -71,6 +71,20 @@ export function intervalToSec(interval: string): number {
 }
 
 /**
+ * Dense bar count for `[fromSec, toSec]` at `interval`.
+ * Inclusive of both ends: the same formula coverage validation uses.
+ * Returns 0 when the window is empty or the timestamps are not finite.
+ */
+export function expectedBarsInSpan(fromSec: number, toSec: number, interval: string): number {
+  if (!Number.isFinite(fromSec) || !Number.isFinite(toSec)) return 0;
+  const from = Math.floor(fromSec);
+  const to = Math.floor(toSec);
+  if (to < from) return 0;
+  const step = intervalToSec(interval);
+  return Math.floor((to - from) / step) + 1;
+}
+
+/**
  * Align a unix-sec timestamp down to the interval grid (floor).
  * Uses UTC open times matching typical venue klines.
  */
@@ -175,7 +189,6 @@ export function validateBarCoverage(
   interval: string,
   opts?: { gapFactor?: number },
 ): CoverageReport {
-  const step = intervalToSec(interval);
   if (!Number.isFinite(fromSec) || !Number.isFinite(toSec)) {
     return {
       barCount: 0,
@@ -195,7 +208,7 @@ export function validateBarCoverage(
     .sort((a, b) => a.time - b.time);
 
   const gaps = findBarGaps(list, from, to, interval, opts);
-  const expectedBars = to >= from ? Math.floor((to - from) / step) + 1 : 0;
+  const expectedBars = expectedBarsInSpan(from, to, interval);
   // Density floor: gap finder can miss pathological cases; require ~85% of expected
   const denseEnough =
     expectedBars <= 0 || inWin.length >= Math.max(1, Math.floor(expectedBars * 0.85));

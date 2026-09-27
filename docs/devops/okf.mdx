@@ -40,6 +40,8 @@ bun run okf:query chart drawings
 bun run okf:context src/chart
 ```
 
+A directory path resolves to that concept. A file path resolves to the deepest directory concept that contains it. Query terms match path segments, so `ui` does not match `builtins`.
+
 `OKF_SKIP=1` skips the hook refresh. CI runs `okf:check`, so a commit that bypasses the hook still cannot merge a stale bundle.
 
 Generated concepts (`okf_lock: generated`) are replaced when their sources change. Curated playbooks (`okf_lock: human`) are kept. Put hand-written knowledge in `okf/playbooks/` with that lock. The draft records exports, imports, and the first non-license comment. It does not call a model.

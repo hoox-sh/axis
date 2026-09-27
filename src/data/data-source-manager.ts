@@ -130,8 +130,10 @@ interface InternalJob extends DataSourceJob {
 }
 
 const MAX_CONCURRENT = 1;
-const MAX_PAGES = 200;
-const MAX_BARS_PER_JOB = 50_000;
+/** Walk stops after this many venue pages. */
+export const DSM_MAX_PAGES = 200;
+/** Walk stops after this many bars and keeps the newest. */
+export const DSM_MAX_BARS_PER_JOB = 50_000;
 /** Cap retained terminal jobs so the manager UI/store cannot grow without bound. */
 const MAX_RETAINED_JOBS = 40;
 const PAGE_YIELD_MS = 50;
@@ -695,7 +697,7 @@ async function walkBackRange(
   while (pages < maxPages) {
     if (j.abort.signal.aborted) return 'cancelled';
     if (j.paused) return 'paused';
-    if (j.barsFetched >= MAX_BARS_PER_JOB) return 'ok';
+    if (j.barsFetched >= DSM_MAX_BARS_PER_JOB) return 'ok';
 
     pages += 1;
     let result: { rawOldest: number; pageBars: Bar[] } | null;
@@ -776,7 +778,7 @@ async function fillGaps(
       gap.fromSec,
       gap.toSec,
       gap.toSec,
-      Math.min(MAX_PAGES, Math.ceil(gap.missingBars / Math.max(1, pageLimit)) + 4),
+      Math.min(DSM_MAX_PAGES, Math.ceil(gap.missingBars / Math.max(1, pageLimit)) + 4),
     );
     if (outcome !== 'ok') return outcome;
 
@@ -856,7 +858,7 @@ async function runJob(j: InternalJob): Promise<void> {
         j.targetFromSec,
         j.targetToSec,
         j.targetToSec,
-        MAX_PAGES,
+        DSM_MAX_PAGES,
       );
       if (walk === 'cancelled') {
         setJobStatus(j, 'cancelled');
@@ -929,7 +931,7 @@ async function runJob(j: InternalJob): Promise<void> {
             j.targetFromSec,
             j.targetToSec,
             j.targetToSec,
-            MAX_PAGES,
+            DSM_MAX_PAGES,
           );
           if (walk === 'cancelled') {
             setJobStatus(j, 'cancelled');

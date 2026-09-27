@@ -61,7 +61,7 @@ import { installFocusTrap } from './focus-trap';
 import { announce } from './sr-announce';
 import { CompleteMap } from './dsm/CompleteMap';
 import { DsmField } from './dsm/Field';
-import { fmtDuration, fmtMillis, fmtTime } from './dsm/format';
+import { fmtDuration, fmtMillis, fmtTime, loadWindowSpanLabel } from './dsm/format';
 
 export interface CachedDatasetsModalProps {
   open: boolean;
@@ -236,6 +236,18 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
   });
 
   const previewCount = createMemo(() => countBarsForLoad(bars(), loadWindow()));
+
+  const previewSpan = createMemo(() => {
+    const meta = selected();
+    const win = loadWindow();
+    return loadWindowSpanLabel({
+      count: previewCount(),
+      interval: meta?.interval || '1d',
+      maxBars: win.maxBars ?? null,
+      fromSec: win.fromSec ?? meta?.oldestSec ?? null,
+      toSec: win.toSec ?? meta?.newestSec ?? null,
+    });
+  });
 
   const dateBounds = createMemo(() => {
     const meta = selected();
@@ -848,15 +860,23 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
                           </DsmField>
 
                           <div
-                            class="text-[0.72rem] text-muted"
+                            class="text-[0.72rem] text-muted leading-snug"
                             data-testid="axis-cached-datasets-preview-count"
                           >
                             Will load{' '}
                             <strong class="text-text tabular-nums">
                               {previewCount().toLocaleString()}
                             </strong>{' '}
-                            of {meta().count.toLocaleString()} cached bars
-                            {previewCount() === 0 ? ' — adjust range or max bars' : ''}
+                            bars
+                            <Show when={previewSpan() !== '—'}>
+                              {' · '}
+                              <span class="text-text tabular-nums">{previewSpan()}</span>
+                            </Show>
+                            <span>
+                              {' '}
+                              of {meta().count.toLocaleString()} cached
+                            </span>
+                            {previewCount() === 0 ? ' — adjust the range or max bars' : ''}
                           </div>
                         </div>
                       </>

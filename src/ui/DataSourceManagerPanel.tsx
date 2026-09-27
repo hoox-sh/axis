@@ -29,9 +29,11 @@
 
 import { type Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { store, isPanelOpen } from '../store';
-import { listSources } from '../sources/catalog';
+import { listSources, sourcePageLimit } from '../sources/catalog';
 import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
 import {
+  DSM_MAX_BARS_PER_JOB,
+  DSM_MAX_PAGES,
   dataSourceManagerState,
   startBackfill,
   cancelBackfill,
@@ -47,6 +49,7 @@ import { Icons } from './icons';
 import { FloatableShell } from './panels/FloatableShell';
 import { CachedDatasetsModal } from './CachedDatasetsModal';
 import { announce } from './sr-announce';
+import { estimateBackfill } from './dsm/estimate';
 import { DsmField } from './dsm/Field';
 import { JobCard } from './dsm/JobCard';
 import {
@@ -93,6 +96,17 @@ export const DataSourceManagerPanel: Component = () => {
     if (next) setInterval(next);
   });
 
+  const estimate = createMemo(() =>
+    estimateBackfill({
+      fromSec: pastDateInputToSec(pastDate()),
+      nowSec: Math.floor(Date.now() / 1000),
+      interval: interval(),
+      pageLimit: sourcePageLimit(sourceId()),
+      maxBars: DSM_MAX_BARS_PER_JOB,
+      maxPages: DSM_MAX_PAGES,
+    }),
+  );
+
   const filterCounts = createMemo(() => countJobsByFilter(dataSourceManagerState.jobs));
 
   const filteredJobs = createMemo(() => {
@@ -110,6 +124,10 @@ export const DataSourceManagerPanel: Component = () => {
     const from = pastDateInputToSec(pastDate());
     if (from == null) {
       setFormError('Enter a valid past date (YYYY-MM-DD).');
+      return;
+    }
+    if (from > Math.floor(Date.now() / 1000)) {
+      setFormError('Pick a UTC date in the past.');
       return;
     }
     const sym = (symbol().trim() || store.symbol || '').toUpperCase();
@@ -256,6 +274,37 @@ export const DataSourceManagerPanel: Component = () => {
                 data-testid="axis-datasource-past-date"
               />
             </DsmField>
+
+            <div
+              class="grid grid-cols-3 gap-2 border-t border-border pt-1.5"
+              data-testid="axis-datasource-estimate"
+              aria-live="polite"
+            >
+              <div title="Clock time from that UTC date through now">
+                <div class="text-muted text-[0.68rem] uppercase tracking-wide">Span</div>
+                <div class="tabular-nums text-[13px] font-medium truncate">{estimate().spanLabel}</div>
+              </div>
+              <div
+                title={`Dense ${interval()} bars from that date through now, including the current bar`}
+              >
+                <div class="text-muted text-[0.68rem] uppercase tracking-wide">Bars</div>
+                <div class="tabular-nums text-[13px] font-medium truncate">{estimate().barsLabel}</div>
+              </div>
+              <div title={`Venue requests at ${estimate().pageLimit.toLocaleString()} bars each`}>
+                <div class="text-muted text-[0.68rem] uppercase tracking-wide">Pages</div>
+                <div class="tabular-nums text-[13px] font-medium truncate">
+                  {estimate().pagesLabel}
+                </div>
+              </div>
+            </div>
+            <Show when={estimate().note}>
+              <p
+                class="text-amber-400 text-[0.72rem] m-0 leading-snug"
+                data-testid="axis-datasource-estimate-note"
+              >
+                {estimate().note}
+              </p>
+            </Show>
 
             <label class="flex items-center gap-2 cursor-pointer select-none">
               <input

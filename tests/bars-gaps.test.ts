@@ -3,6 +3,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import {
+  expectedBarsInSpan,
   intervalToSec,
   alignDown,
   findBarGaps,
@@ -24,6 +25,13 @@ describe('bars-gaps', () => {
     expect(intervalToSec('1d')).toBe(86_400);
     expect(intervalToSec('1w')).toBe(604_800);
     expect(intervalToSec('1M')).toBe(30 * 86_400);
+  });
+
+  it('expectedBarsInSpan is inclusive of both ends', () => {
+    expect(expectedBarsInSpan(0, 90 * 86_400, '1d')).toBe(91);
+    expect(expectedBarsInSpan(0, 90 * 86_400, '1m')).toBe(129_601);
+    expect(expectedBarsInSpan(10, 5, '1h')).toBe(0);
+    expect(expectedBarsInSpan(Number.NaN, 10, '1h')).toBe(0);
   });
 
   it('alignDown floors to step', () => {

@@ -104,6 +104,7 @@ import { Icons } from '../ui/icons';
 import { announce } from '../ui/sr-announce';
 import { registerCloseGuardPredicate } from '../pwa/close-guard';
 import { detectPineVersion, detectScriptKind, scriptKindShort } from '../indicators/script-meta';
+import { DRAWING_BUILTINS } from '../indicators/builtins/drawings';
 
 export { countDocStats, cursorLineCol } from './doc-stats';
 
@@ -137,7 +138,14 @@ plot(macdLine, "MACD", color=color.blue)
 plot(signalLine, "Signal", color=color.orange)
 plot(histLine, "Hist", color=color.gray, style=plot.style_histogram)
 `,
+  drawings: DRAWING_BUILTINS[0]?.code ?? '',
 };
+
+const EXAMPLE_MENU: ReadonlyArray<{ id: keyof typeof DEMOS; label: string }> = [
+  { id: 'drawings', label: 'Drawings' },
+  { id: 'rsi-overlay', label: 'RSI' },
+  { id: 'macd', label: 'MACD' },
+];
 
 let tabIdCounter = 0;
 const newTab = (name: string, doc: string, libraryId?: string): Tab => ({
@@ -441,6 +449,7 @@ export const TabbedEditor: Component<Props> = (props) => {
           (!prev[0]!.doc.trim() ||
             prev[0]!.doc === DEMOS['rsi-overlay'] ||
             prev[0]!.doc === DEMOS.macd ||
+            prev[0]!.doc === DEMOS.drawings ||
             prev[0]!.name === 'Script 1');
 
         let nextTabs: Tab[];
@@ -627,6 +636,36 @@ export const TabbedEditor: Component<Props> = (props) => {
       setActiveTab(newIdx);
     });
     props.editorRef?.setDoc?.('');
+  };
+
+  const openExample = (id: keyof typeof DEMOS) => {
+    const doc = DEMOS[id];
+    const name =
+      id === 'drawings' ? 'Drawings' : id === 'macd' ? 'MACD' : 'RSI';
+    let snapshot = tabs();
+    if (props.editorRef?.getDoc) {
+      const currentDoc = props.editorRef.getDoc();
+      const cur = activeTab();
+      snapshot = snapshot.map((tab, i) => (i === cur ? { ...tab, doc: currentDoc } : tab));
+    }
+    const onlyPlaceholder =
+      snapshot.length === 1 &&
+      !snapshot[0]!.libraryId &&
+      !snapshot[0]!.dirty &&
+      (!snapshot[0]!.doc.trim() ||
+        snapshot[0]!.doc === DEMOS['rsi-overlay'] ||
+        snapshot[0]!.doc === DEMOS.macd ||
+        snapshot[0]!.doc === DEMOS.drawings);
+    const next = onlyPlaceholder
+      ? [newTab(name, doc)]
+      : [...snapshot, newTab(name, doc)];
+    const idx = next.length - 1;
+    batch(() => {
+      setTabs(next);
+      setActiveTab(idx);
+    });
+    props.editorRef?.setDoc?.(doc);
+    scheduleDraft(doc, name);
   };
 
   const closeTab = (idx: number) => {
@@ -937,6 +976,23 @@ export const TabbedEditor: Component<Props> = (props) => {
           >
             <Icons.plus size={14} />
           </button>
+          <select
+            class="h-7 min-h-7 bg-transparent text-[11px] text-text-dim border-0 px-1 cursor-pointer"
+            aria-label="Example scripts"
+            title="Open an example script in a new tab"
+            data-testid="axis-editor-examples"
+            value=""
+            onChange={(e) => {
+              const id = e.currentTarget.value as keyof typeof DEMOS;
+              e.currentTarget.value = '';
+              if (id in DEMOS) openExample(id);
+            }}
+          >
+            <option value="">Examples</option>
+            <For each={EXAMPLE_MENU}>
+              {(item) => <option value={item.id}>{item.label}</option>}
+            </For>
+          </select>
         </div>
         <div
           class="axis-editor-tabbar-actions flex items-center gap-0.5 px-1.5 flex-shrink-0 border-l border-border-soft"

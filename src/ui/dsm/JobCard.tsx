@@ -7,8 +7,8 @@ import {
   type DataSourceJob,
 } from '../../data/data-source-manager';
 import { Icons } from '../icons';
-import { fmtTime } from './format';
-import { jobStatusClass, jobStatusTone, statusLabel } from './jobs';
+import { fmtDuration, fmtTime } from './format';
+import { jobHealthLine, jobQuantityLine, jobStatusClass, jobStatusTone, statusLabel } from './jobs';
 
 export const JobCard: Component<{
   job: DataSourceJob;
@@ -25,19 +25,9 @@ export const JobCard: Component<{
   const running = () => props.job.status === 'running' || props.job.status === 'pending';
   const noteMuted = () => running();
 
-  const stats = () => {
-    const j = props.job;
-    const parts = [`${j.barsFetched.toLocaleString()} bars`, `${j.pagesFetched} page${j.pagesFetched === 1 ? '' : 's'}`];
-    if ((j.retries ?? 0) > 0) parts.push(`${j.retries} ${j.retries === 1 ? 'retry' : 'retries'}`);
-    if (j.gapsFound > 0) {
-      parts.push(`${j.gapsFound} gap${j.gapsFound === 1 ? '' : 's'}${j.gapsFilled ? `, filled ${j.gapsFilled}` : ''}`);
-    } else if (j.datasetComplete) {
-      parts.push('coverage full');
-    } else if (j.status === 'complete') {
-      parts.push('coverage partial');
-    }
-    return parts.join(' · ');
-  };
+  const quantity = () => jobQuantityLine(props.job);
+  const health = () => jobHealthLine(props.job);
+  const windowLabel = () => fmtDuration(props.job.targetFromSec, props.job.targetToSec);
 
   return (
     <article
@@ -73,8 +63,14 @@ export const JobCard: Component<{
         />
       </div>
 
-      <div class="text-[0.72rem] text-muted leading-snug">{stats()}</div>
-      <div class="text-[0.72rem] text-muted tabular-nums">
+      <div class="text-[0.72rem] text-muted leading-snug tabular-nums">{quantity()}</div>
+      <Show when={health()}>
+        <div class="text-[0.72rem] text-muted leading-snug">{health()}</div>
+      </Show>
+      <div
+        class="text-[0.72rem] text-muted tabular-nums"
+        title={windowLabel() === '—' ? undefined : `Requested window ${windowLabel()}`}
+      >
         {fmtTime(props.job.oldestSec ?? props.job.targetFromSec)}
         {' → '}
         {fmtTime(props.job.newestSec ?? props.job.targetToSec)}

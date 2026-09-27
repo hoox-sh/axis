@@ -53,6 +53,24 @@ describe('normalizePineTable', () => {
     expect(tb?.columns).toBe(4);
   });
 
+  it('does not paint a square when rows and columns were stored swapped', () => {
+    const tb = normalizePineTable({
+      type: 'table',
+      rows: 2,
+      columns: 6,
+      cells: [
+        { row: 0, col: 0, text: 'Drawing' },
+        { row: 0, col: 1, text: 'Sample' },
+        { row: 5, col: 0, text: 'Polyline' },
+        { row: 5, col: 1, text: 'path' },
+      ],
+    });
+    expect(tb?.rows).toBe(6);
+    expect(tb?.columns).toBe(2);
+    expect(buildTableGrid(tb!).length).toBe(6);
+    expect(buildTableGrid(tb!)[0]?.length).toBe(2);
+  });
+
   it('returns null for non-table', () => {
     expect(normalizePineTable({ type: 'line' })).toBeNull();
   });

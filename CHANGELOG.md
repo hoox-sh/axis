@@ -15,6 +15,16 @@ _Generated/updated: 2026-09-26 · 468 commits · describe-tag: `v2.16.0`_
 
 ## [Unreleased]
 
+### Added
+
+- **Drawing example**: AXIS Drawings places a line, linefill, box, label, polyline, and table. Open it from the editor Examples menu or apply it from Scripts.
+- **UI effect manager**: Settings → Theme → Motion tunes short chrome flashes. The watchlist price flash is the first effect (duration, up tint, down tint). Later effects register the same way. Reduced motion turns flashes off without forgetting the tune.
+
+### Changed
+
+- **Watchlist add field**: the symbol browse control is a lens inside the input, matching the topbar symbol field.
+- **Data panel estimate**: the backfill form shows the span, dense bar count, and page count for the past date and timeframe. A job past 50,000 bars says how much of that timeframe one run keeps. Job cards show fetched versus expected bars and the window length. Dataset load preview includes the span of the bars that will load.
+
 ## [2.17.1] — 2026-09-27
 
 ### Added

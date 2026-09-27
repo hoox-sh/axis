@@ -7,7 +7,7 @@ tags: [code, settings, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:05:44Z
+  at: 2026-09-27T14:41:44Z
 sources:
   - id: tree
     resource: "src/ui/settings"
@@ -35,6 +35,7 @@ okf_lock: generated
 * [src/store](/code/src/store.md)
 * [src/streams](/code/src/streams.md)
 * [src/ui](/code/src/ui.md)
+* [src/ui/effects](/code/src/ui/effects.md)
 * [src/ui/shortcuts](/code/src/ui/shortcuts.md)
 * [src/ui/studio](/code/src/ui/studio.md)
 
