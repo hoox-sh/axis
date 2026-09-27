@@ -15,16 +15,21 @@ _Generated/updated: 2026-09-26 · 468 commits · describe-tag: `v2.16.0`_
 
 ## [Unreleased]
 
+## [2.17.1] — 2026-09-27
+
 ### Added
 
 - **Editor function tree**: optional right-rail outline of Pine functions, methods, types, and enums (`editorRightRail: outline`). Click a name to jump. Mutually exclusive with the minimap; toggle from the editor overflow menu or command palette.
 
 ### Changed
 
+- **Quiet trader shell**: a new session opens on the chart. The status row is Live, last price, and a Compose chip. Diagnostics expands the raw engine, source, stream, and storage chips. Layouts can switch between Trader and Operator. The Data tab keeps the Data Source Manager name in its tooltip.
 - **Problems stay while typing**: the Problems list and underlines keep the last lint / run marks until idle re-lint (or a new run) replaces them. Optional Settings → Editor → **Clear marks while typing** still wipes mid-keystroke.
 
 ### Fixed
 
+- **Calm live state**: reconnect stays an amber dot and a tooltip. Routine loads and reconnects stay in the log. A toast fires when retries are exhausted or the stream recovers from a long outage.
+- **Chart failures**: an empty chart shows a title, one sentence, and one action. HTML from a venue is not printed as a token dump.
 - **Pre-eval UDT fields with spaced generics**: `array <label> labels` / `array <line> lines` (and tab-indented draft arrays) are indexed as declared names again, so Progressbar-style libraries no longer get false `Unknown labels` / `Unknown lines` typos.
 
 ## [2.17.0] — 2026-09-26
