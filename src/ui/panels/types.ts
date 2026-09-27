@@ -254,13 +254,13 @@ export function isHoverSlideEligible(dock: PanelDock): boolean {
 }
 
 /**
- * Fresh chrome map for DEFAULTS / reset — watchlist+editor open by default;
- * dataview/layers float closed.
+ * Fresh chrome map for DEFAULTS / reset — trader layout: chart + status.
+ * Watchlist, editor, and system logs stay closed until the operator layout.
  */
 export function defaultPanelChromeMap(): PanelChromeMap {
   return {
     watchlist: defaultPanelChrome('watchlist', {
-      open: true,
+      open: false,
       dock: 'left',
       w: 280,
       x: PANEL_META.watchlist.defaultX,
@@ -274,7 +274,7 @@ export function defaultPanelChromeMap(): PanelChromeMap {
       y: PANEL_META.indicators.defaultY,
     }),
     editor: defaultPanelChrome('editor', {
-      open: true,
+      open: false,
       dock: 'right',
       // Prefer 360–420 when the viewport can host it (layout reset / factory chrome)
       w:
@@ -293,7 +293,7 @@ export function defaultPanelChromeMap(): PanelChromeMap {
     }),
     // Classic fixed bottom strips (not FloatableShell); chrome.open = show/hide
     logs: defaultPanelChrome('logs', {
-      open: true,
+      open: false,
       dock: 'float',
       h: 160,
       x: PANEL_META.logs.defaultX,

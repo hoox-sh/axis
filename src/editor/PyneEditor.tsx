@@ -483,6 +483,7 @@ export const PyneEditor: Component<Props> = (props) => {
       doc: props.initialDoc ?? '',
       extensions: [
         lineNumbers(),
+        EditorState.tabSize.of(4),
         highlightActiveLine(),
         highlightActiveLineGutter(),
         // Indent-based folding (Pine is a StreamLanguage: no syntax tree)

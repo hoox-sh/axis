@@ -72,7 +72,7 @@ Grouped left→right (`axis-tb-group`, `data-tb-group`):
 | **data** | Source (+ CSV upload), Load, Reload (icon-only) |
 | **compute** | Engine, Stream, **Run**, Live, Replay |
 | **layout** | Multi-chart layouts + recipes |
-| **panels** | List, Editor, Library, **Data** (Source Manager), **Scripts**, Layers, Alerts, Data window, Inputs, Results |
+| **panels** | List, Editor, Library, **Data** (Data Source Manager), **Scripts**, Layers, Alerts, Data window, Inputs, Results |
 | **system** | Second-row trailing: theme, fullscreen, chart-only, **screenshot**, Studio |
 
 | Control | Effect |
@@ -164,14 +164,17 @@ See `ui/panels/dock-layout.ts`, `FloatableShell.tsx`.
 Single row:
 
 - **Left — Connection HUD** (`ConnectionHud`, `data-testid="axis-connection-hud"`)
-  - LIVE badge (off / connecting / live / err)
-  - Tick pulse (fixed-width price + age; ping does not resize layout)
-  - Engine chip (id · interpret/compile · latency)
-  - Plane chips SRC / STR / ENG / STO with transport badges **WS / REST / LOCAL / BROKER**
-  - Source↔stream pairing warning when mismatched
-- **Right** — `status` / `statusMessage`, strategy snippet, log toggle, bar/ind/pane counts
+  - Live control. The word stays Live. An amber dot means reconnecting; the tooltip carries attempt and backoff. Offline is the failure state.
+  - Tick pulse (fixed-width price + age)
+  - **Compose** chip — engine, source, stream, and storage. Opens Data or Studio.
+  - **Diagnostics** expands the raw eng / run / mode / path / src / str / sto chips. The preference persists (`telemetry.hud.diagnostics`).
+- **Right** — `status` / `statusMessage`, strategy snippet, bar / scripts / pane counts
 
-Telemetry is ephemeral (`store.telemetry`); HUD compact mode and live prefs persist via settings.
+Connect MCP is a command-palette and mobile More action, not a status-bar chip.
+
+Routine “loaded N bars” and stream reconnect lines stay in System logs. A toast fires when retries are exhausted, or when the stream recovers from an outage longer than 8s.
+
+Telemetry planes are ephemeral (`store.telemetry`). Diagnostics, compact HUD, and live prefs persist.
 
 ### Live settings (Settings dialog)
 
@@ -179,7 +182,8 @@ Telemetry is ephemeral (`store.telemetry`); HUD compact mode and live prefs pers
 | --- | --- | --- |
 | Enable live stream | on | `live.preferAfterLoad` → multiplex after Load and on boot when bars exist |
 | Indicator re-run | every-tick | or `bar-close` only |
-| Compact connection HUD | off | hide plane chips |
+| Compact connection HUD | off | When diagnostics are on, hide source / stream / storage chips |
+| Connection diagnostics | off | Status row shows Compose instead of raw chips |
 
 ## Logs
 

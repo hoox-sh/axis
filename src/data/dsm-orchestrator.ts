@@ -325,7 +325,7 @@ export function seedDatasetFromBars(
 /** Announce a cache-first paint for screen readers / status. */
 export function announceDatasetPaint(bars: Bar[], sym: string, iv: string): void {
   setStatus('ready', `Loaded ${bars.length} cached bars · ${sym} ${iv} (DSM)`, {
-    toast: true,
+    toast: false,
     source: 'dsm',
   });
   announce(`Loaded ${bars.length} cached bars ${sym} ${iv}`);

@@ -54,6 +54,7 @@ import {
   setLive,
   toggleTheme,
   resetUiLayout,
+  applyShellLayout,
   setChartGridMode,
   saveChartLayout,
   loadChartLayout,
@@ -241,6 +242,16 @@ describe('toasts and notifications', () => {
   it('appendLog toast opt-out stays log-only', () => {
     appendLog('error', 'silent boom', 'system', { toast: false });
     expect(store.logs.some((l) => l.message === 'silent boom')).toBe(true);
+    expect(store.toasts.length).toBe(0);
+  });
+
+  it('collapses a reconnect burst into one log line and does not toast it', () => {
+    appendLog('warn', 'Stream reconnecting · attempt 1/8', 'stream', { toast: false });
+    appendLog('warn', 'Stream reconnecting · attempt 2/8', 'stream', { toast: false });
+    const rows = store.logs.filter((l) => l.message.startsWith('Stream reconnecting'));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.message).toContain('attempt 2/8');
+    expect(rows[0]!.count).toBe(2);
     expect(store.toasts.length).toBe(0);
   });
 
@@ -659,7 +670,11 @@ describe('layout helpers', () => {
 
     expect(store.symbol).toBe('ETHUSDT');
     expect(store.uiScale).toBe(1);
-    expect(store.editor.open).toBe(true);
+    expect(store.editor.open).toBe(false);
+    expect(store.watchlist.open).toBe(false);
+    expect(store.panelChrome.logs.open).toBe(false);
+    expect(store.panelChrome.statusbar.open).toBe(true);
+    expect(store.telemetry.hud.diagnostics).toBe(false);
     expect(store.editor.width).toBe(defaultEditorWidthPx());
     expect(store.editor.mode).toBe('docked');
     expect(getPanelChrome('editor').dock).toBe('right');
@@ -667,6 +682,18 @@ describe('layout helpers', () => {
     expect(getPanelChrome('layers').open).toBe(false);
     expect(store.watchlist.symbols).toContain('CUSTOMUSDT');
     expect(store.drawingTool).toBe('cursor');
+  });
+
+  it('applyShellLayout opens the operator docks and trader closes them', () => {
+    applyShellLayout('operator');
+    expect(store.editor.open).toBe(true);
+    expect(store.watchlist.open).toBe(true);
+    expect(store.panelChrome.logs.open).toBe(true);
+    applyShellLayout('trader');
+    expect(store.editor.open).toBe(false);
+    expect(store.watchlist.open).toBe(false);
+    expect(store.panelChrome.logs.open).toBe(false);
+    expect(store.panelChrome.statusbar.open).toBe(true);
   });
 
   it('setLive', () => {

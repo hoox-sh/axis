@@ -108,6 +108,8 @@ export interface CommandActions {
   openRuntime?: () => void;
   /** Open the studio overlay (last page, or Runtime). */
   openStudio?: () => void;
+  /** Attach this tab to the Worker MCP bridge (Settings if the key is missing). */
+  connectMcp?: () => void;
   /** Open the architecture / compose-recipe wiring modal. */
   openArchitecture?: () => void;
   openScriptSettings?: () => void;
@@ -350,9 +352,10 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
   },
   {
     id: 'panel.datasource',
-    title: 'Toggle Data Source Manager',
+    title: 'Toggle Data',
     category: 'panels',
     keywords: [
+      'dsm',
       'data source',
       'datasource',
       'backfill',
@@ -656,6 +659,12 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
       'dedupe',
       'quiet',
     ],
+  },
+  {
+    id: 'action.connect-mcp',
+    title: 'Connect MCP',
+    category: 'navigation',
+    keywords: ['mcp', 'agent', 'bridge', 'studio', 'connect'],
   },
   {
     id: 'action.studio',
@@ -1100,6 +1109,7 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
     byId.set('theme.parchment', () => actions.setChartThemePreset?.('parchment'));
   }
   if (actions.openStudio) byId.set('action.studio', actions.openStudio);
+  if (actions.connectMcp) byId.set('action.connect-mcp', actions.connectMcp);
   if (actions.openRuntime) byId.set('action.runtime', actions.openRuntime);
   if (actions.openPlugins) byId.set('action.plugins', actions.openPlugins);
   if (actions.openWorkers) byId.set('action.workers', actions.openWorkers);

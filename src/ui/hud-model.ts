@@ -197,15 +197,52 @@ export function deriveHud(input: HudInput): HudSnapshot {
   };
 }
 
-/** HUD Live chip copy — success “LIVE” only while the socket is actually open. */
+/**
+ * HUD Live chip copy.
+ * The visible word stays “Live” while the socket reconnects — tone carries
+ * the state. “Offline” is only the armed-but-down failure label.
+ * “OFF” / “LIVE” remain the machine labels for tests and tone mapping.
+ */
 export function liveBadgeLabel(opts: {
   liveActive: boolean;
   streamStatus: string;
 }): string {
   if (!opts.liveActive) return 'OFF';
   if (opts.streamStatus === 'connected') return 'LIVE';
-  if (opts.streamStatus === 'connecting') return 'Reconnecting…';
+  if (opts.streamStatus === 'connecting') return 'Live';
   return 'Offline';
+}
+
+/** Visible word on the Live control. Reconnecting keeps the word Live. */
+export function liveBadgeWord(tone: ReturnType<typeof liveBadgeTone>): 'Live' | 'Offline' {
+  return tone === 'offline' ? 'Offline' : 'Live';
+}
+
+/**
+ * Tooltip for the Live control. Attempt / backoff stay here, not in the label.
+ * `detail` is the stream plane string (`attempt 1/8 in 1000ms`).
+ */
+export function liveIndicatorTitle(opts: {
+  liveActive: boolean;
+  streamStatus: string;
+  detail?: string | null;
+  startHint?: string;
+}): string {
+  if (!opts.liveActive) return opts.startHint || 'Start live stream';
+  if (opts.streamStatus === 'connected') return 'Live — click to stop';
+  if (opts.streamStatus === 'connecting') {
+    const d = String(opts.detail || '').trim();
+    const extra = d && d.toLowerCase() !== 'reconnecting' ? ` · ${d}` : '';
+    return `Reconnecting${extra} — click to stop`;
+  }
+  return 'Offline — click to stop';
+}
+
+/** Short human name for the Compose chip (engine class, not an acronym). */
+export function composeCaption(snap: Pick<HudSnapshot, 'run'>): string {
+  if (snap.run === 'browser') return 'Pyodide';
+  if (snap.run === 'worker') return 'Worker';
+  return 'Server';
 }
 
 /** Visual state for the HUD Live chip (success only when receiving). */
@@ -274,7 +311,7 @@ export function hudChipHelp(id: HudChipId, snap: HudSnapshot): { title: string; 
     case 'live':
       return {
         title: 'LIVE — stream arm',
-        body: 'Whether the live market stream is armed and currently open. Shows Reconnecting… / Offline while the socket is down. Independent of ENG/RUN/MODE.',
+        body: 'Whether the live market stream is armed. The label stays Live; the dot turns amber while reconnecting and the tooltip shows attempt and backoff. Offline only after the socket gives up. Independent of engine, runtime, and path.',
       };
     case 'src':
       return {

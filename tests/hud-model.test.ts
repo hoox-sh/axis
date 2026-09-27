@@ -13,8 +13,11 @@ import {
   deriveHud,
   isLocalEndpoint,
   isWorkerEndpoint,
+  composeCaption,
   liveBadgeLabel,
   liveBadgeTone,
+  liveBadgeWord,
+  liveIndicatorTitle,
   normalizeExecMode,
   transportToPath,
 } from '../src/ui/hud-model';
@@ -30,11 +33,24 @@ describe('liveBadgeLabel / liveBadgeTone', () => {
     expect(liveBadgeTone({ liveActive: true, streamStatus: 'connected' })).toBe('live');
   });
 
-  it('shows Reconnecting… while connecting, not a success Live badge', () => {
-    expect(liveBadgeLabel({ liveActive: true, streamStatus: 'connecting' })).toBe(
-      'Reconnecting…',
-    );
+  it('keeps the word Live while reconnecting, and does not use the success tone', () => {
+    expect(liveBadgeLabel({ liveActive: true, streamStatus: 'connecting' })).toBe('Live');
     expect(liveBadgeTone({ liveActive: true, streamStatus: 'connecting' })).toBe('reconnect');
+    expect(liveBadgeWord('reconnect')).toBe('Live');
+    expect(liveBadgeWord('offline')).toBe('Offline');
+    expect(
+      liveIndicatorTitle({
+        liveActive: true,
+        streamStatus: 'connecting',
+        detail: 'attempt 1/8 in 1000ms',
+      }),
+    ).toBe('Reconnecting · attempt 1/8 in 1000ms — click to stop');
+  });
+
+  it('names the compose chip in words', () => {
+    expect(composeCaption({ run: 'server' })).toBe('Server');
+    expect(composeCaption({ run: 'browser' })).toBe('Pyodide');
+    expect(composeCaption({ run: 'worker' })).toBe('Worker');
   });
 
   it('shows Offline when armed but disconnected or in error', () => {

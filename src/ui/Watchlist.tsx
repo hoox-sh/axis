@@ -73,6 +73,7 @@ import {
   deleteWatchlist,
 } from '../store';
 import { loadSymbolData } from '../data/load-symbol';
+import { SymbolModal } from './SymbolModal';
 import { fetchWatchlistTickers, sourceSupportsRestPoll, type WatchTicker } from '../data/watchlist-tickers';
 import { startWatchlistQuotes } from '../data/watchlist-live';
 import {
@@ -111,9 +112,136 @@ function placeWatchlistAlertPop(
   return { top: Math.max(pad, anchor.top - height + 2), left };
 }
 
+function fmtPrice(n?: number): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: n < 1 ? 4 : 2,
+    maximumFractionDigits: n < 1 ? 6 : 2,
+  });
+}
+
+/** Always-signed 2-decimal % so +0.48% and −0.13% share a fixed tabular slot. */
+function fmtChange(n?: number): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  const sign = n > 0 ? '+' : n < 0 ? '−' : '\u00a0';
+  return `${sign}${Math.abs(n).toFixed(2)}%`;
+}
+
+/** 24h open when known; else previous from last × %; else undefined. */
+function closeOf(tick?: WatchTicker): number | undefined {
+  if (!tick) return undefined;
+  if (tick.open24h != null && Number.isFinite(tick.open24h)) return tick.open24h;
+  const px = tick.price;
+  const ch = tick.change;
+  if (px == null || ch == null || !Number.isFinite(px) || !Number.isFinite(ch)) return undefined;
+  if (ch === -100) return undefined;
+  const prev = px / (1 + ch / 100);
+  return Number.isFinite(prev) ? prev : undefined;
+}
+
+const WatchlistRow: Component<{
+  sym: string;
+  tick?: WatchTicker;
+  active: boolean;
+  alerted: boolean;
+  cols: string;
+  onSelect: (sym: string) => void;
+  onAlert: (sym: string, el: HTMLElement) => void;
+}> = (props) => {
+  const [flash, setFlash] = createSignal<'up' | 'down' | ''>('');
+  let lastPrice: number | undefined;
+  createEffect(() => {
+    const p = props.tick?.price;
+    if (p == null || !Number.isFinite(p)) return;
+    if (lastPrice != null && p !== lastPrice) {
+      setFlash(p > lastPrice ? 'up' : 'down');
+      const id = window.setTimeout(() => setFlash(''), 180);
+      onCleanup(() => window.clearTimeout(id));
+    }
+    lastPrice = p;
+  });
+  const ch = () => {
+    const n = props.tick?.change;
+    return n != null && Number.isFinite(n) ? n : undefined;
+  };
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: row contains nested buttons; wrapping in <button> would be invalid HTML
+    <div
+      class={`axis-wl-row group ${props.cols} cursor-pointer text-[12px] border-b border-border relative`}
+      classList={{
+        'is-active': props.active,
+        'is-flash-up': flash() === 'up',
+        'is-flash-down': flash() === 'down',
+      }}
+      role="button"
+      tabIndex={0}
+      onClick={() => props.onSelect(props.sym)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          props.onSelect(props.sym);
+        }
+      }}
+    >
+      <span class={`font-semibold truncate ${props.active ? 'text-accent' : 'text-text'}`}>
+        {props.sym.replace(/USDT$/i, '').replace(/USD$/i, '')}
+        <span class="text-text-faint font-normal text-[10px]">
+          {/USDT$/i.test(props.sym) ? 'USDT' : /USD$/i.test(props.sym) ? 'USD' : ''}
+        </span>
+      </span>
+      <span class="font-mono text-[12px] font-medium text-text text-right tabular-nums lining-nums min-w-[4.75rem]">
+        {fmtPrice(props.tick?.price)}
+      </span>
+      <span
+        class={`font-mono text-[11px] text-right tabular-nums lining-nums min-w-[4.6rem] ${
+          ch() == null ? 'text-text-faint' : (ch() ?? 0) >= 0 ? 'axis-wl-change-up' : 'axis-wl-change-down'
+        }`}
+      >
+        {fmtChange(ch())}
+      </span>
+      <span
+        class="font-mono text-[10px] text-text-faint text-right tabular-nums lining-nums min-w-[4.25rem]"
+        title="Previous close"
+      >
+        {fmtPrice(closeOf(props.tick))}
+      </span>
+      <span class="flex items-center justify-end gap-0.5">
+        <button
+          type="button"
+          class={`w-4 h-4 flex items-center justify-center text-text-faint hover:text-accent focus-visible:opacity-100 ${
+            props.alerted ? 'text-accent opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+          }`}
+          title={props.alerted ? `Alerts on ${props.sym}` : `Add alert for ${props.sym}`}
+          aria-label={`Add alert for ${props.sym}`}
+          data-testid={`axis-watchlist-alert-${props.sym}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            props.onAlert(props.sym, e.currentTarget);
+          }}
+        >
+          <Icons.alerts size={11} />
+        </button>
+        <button
+          type="button"
+          class="w-4 h-4 flex items-center justify-center text-[11px] leading-none text-text-faint opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:text-red focus-visible:opacity-100"
+          title={`Remove ${props.sym}`}
+          aria-label={`Remove ${props.sym}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            removeWatchlistSymbol(props.sym);
+          }}
+        >
+          ×
+        </button>
+      </span>
+    </div>
+  );
+};
+
 export const Watchlist: Component = () => {
   const [prices, setPrices] = createSignal<Record<string, WatchTicker>>({});
   const [addValue, setAddValue] = createSignal('');
+  const [browseOpen, setBrowseOpen] = createSignal(false);
   /** `ws` live, `rest` polling fallback, `off` idle/closed/no transport. */
   const [quoteMode, setQuoteMode] = createSignal<'ws' | 'rest' | 'off'>('off');
   const [renameOn, setRenameOn] = createSignal(false);
@@ -467,33 +595,6 @@ export const Watchlist: Component = () => {
     closeAlert();
   };
 
-  const fmtPrice = (n?: number) =>
-    n == null
-      ? '—'
-      : n.toLocaleString(undefined, {
-          minimumFractionDigits: n < 1 ? 4 : 2,
-          maximumFractionDigits: n < 1 ? 6 : 2,
-        });
-
-  /** Always-signed 2-decimal % so +0.48% and −0.13% share a fixed tabular slot. */
-  const fmtChange = (n?: number) => {
-    if (n == null || !Number.isFinite(n)) return '—';
-    const sign = n >= 0 ? '+' : '−';
-    return `${sign}${Math.abs(n).toFixed(2)}%`;
-  };
-
-  /** 24h open when known; else previous from last × %; else em-dash. */
-  const closeOf = (tick?: WatchTicker): number | undefined => {
-    if (!tick) return undefined;
-    if (tick.open24h != null && Number.isFinite(tick.open24h)) return tick.open24h;
-    const px = tick.price;
-    const ch = tick.change;
-    if (px == null || ch == null || !Number.isFinite(px) || !Number.isFinite(ch)) return undefined;
-    if (ch === -100) return undefined;
-    const prev = px / (1 + ch / 100);
-    return Number.isFinite(prev) ? prev : undefined;
-  };
-
   const modeLabel = () => {
     const m = quoteMode();
     if (m === 'ws') return 'live';
@@ -652,111 +753,64 @@ export const Watchlist: Component = () => {
               aria-hidden="true"
             >
               <span>Sym</span>
-              <span class="text-right min-w-[4.5rem]">Last</span>
-              <span class="text-right min-w-[3.35rem]">Chg</span>
-              <span class="text-right min-w-[4.5rem]">Close</span>
+              <span class="text-right min-w-[4.75rem]">Last</span>
+              <span class="text-right min-w-[4.6rem]">Chg</span>
+              <span class="text-right min-w-[4.25rem] text-text-faint" title="Previous close">
+                Prev
+              </span>
               <span />
             </div>
             <For each={store.watchlist.symbols}>
-              {(sym) => {
-                const tick = () => prices()[sym];
-                const active = () => store.symbol === sym;
-                const ch = () => {
-                  const n = tick()?.change;
-                  return n != null && Number.isFinite(n) ? n : undefined;
-                };
-                const hasAlert = () => alertedSymbols().has(sym.toUpperCase());
-                return (
-                  // biome-ignore lint/a11y/useSemanticElements: row contains nested buttons; wrapping in <button> would be invalid HTML
-                  <div
-                    class={`axis-wl-row group ${cols} h-8 cursor-pointer text-[12px] border-b border-border relative ${
-                      active() ? 'is-active' : 'hover:bg-white/[0.03]'
-                    }`}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => void select(sym)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        void select(sym);
-                      }
-                    }}
-                  >
-                    <span
-                      class={`font-semibold truncate ${active() ? 'text-accent' : 'text-text'}`}
-                    >
-                      {sym.replace(/USDT$/i, '').replace(/USD$/i, '')}
-                      <span class="text-text-faint font-normal text-[10px]">
-                        {/USDT$/i.test(sym) ? 'USDT' : /USD$/i.test(sym) ? 'USD' : ''}
-                      </span>
-                    </span>
-                    <span class="font-mono text-[11px] text-text text-right tabular-nums lining-nums min-w-[4.5rem]">
-                      {fmtPrice(tick()?.price)}
-                    </span>
-                    <span
-                      class={`font-mono text-[11px] text-right tabular-nums lining-nums min-w-[3.35rem] ${
-                        ch() == null
-                          ? 'text-text-faint'
-                          : (ch() ?? 0) >= 0
-                            ? 'axis-wl-change-up'
-                            : 'axis-wl-change-down'
-                      }`}
-                    >
-                      {fmtChange(ch())}
-                    </span>
-                    <span class="font-mono text-[11px] text-text-dim text-right tabular-nums lining-nums min-w-[4.5rem]">
-                      {fmtPrice(closeOf(tick()))}
-                    </span>
-                    <span class="flex items-center justify-end gap-0.5">
-                      <button
-                        type="button"
-                        class={`w-4 h-4 flex items-center justify-center text-text-faint hover:text-accent focus-visible:opacity-100 ${
-                          hasAlert()
-                            ? 'text-accent opacity-100'
-                            : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
-                        }`}
-                        title={hasAlert() ? `Alerts on ${sym}` : `Add alert for ${sym}`}
-                        aria-label={`Add alert for ${sym}`}
-                        data-testid={`axis-watchlist-alert-${sym}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openAlert(sym, e.currentTarget);
-                        }}
-                      >
-                        <Icons.alerts size={11} />
-                      </button>
-                      <button
-                        type="button"
-                        class="w-4 h-4 flex items-center justify-center text-[11px] leading-none text-text-faint opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:text-red focus-visible:opacity-100"
-                        title={`Remove ${sym}`}
-                        aria-label={`Remove ${sym}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeWatchlistSymbol(sym);
-                        }}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  </div>
-                );
-              }}
+              {(sym) => (
+                <WatchlistRow
+                  sym={sym}
+                  tick={prices()[sym]}
+                  active={store.symbol === sym}
+                  alerted={alertedSymbols().has(sym.toUpperCase())}
+                  cols={cols}
+                  onSelect={(s) => void select(s)}
+                  onAlert={openAlert}
+                />
+              )}
             </For>
           </Show>
         </div>
 
-        <div class="border-t border-border px-2 py-1.5 flex-shrink-0">
+        <div class="border-t border-border px-2 py-1.5 flex-shrink-0 flex items-center gap-1">
           <input
-            class="sc-input w-full h-7 min-h-7 text-[11px] placeholder:text-text-faint bg-transparent"
+            class="sc-input flex-1 min-w-0 h-7 min-h-7 text-[11px] placeholder:text-text-faint bg-transparent"
             placeholder="Add symbol…"
+            aria-label="Add symbol"
+            data-testid="axis-watchlist-add"
             value={addValue()}
             onInput={(e) => setAddValue(e.currentTarget.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') onAdd();
             }}
           />
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost h-7 min-h-7 px-1.5 text-[11px]"
+            title="Browse symbols for this venue"
+            aria-label="Browse symbols"
+            data-testid="axis-watchlist-browse"
+            onClick={() => setBrowseOpen(true)}
+          >
+            Browse
+          </button>
         </div>
       </FloatableShell>
+      <SymbolModal
+        open={browseOpen()}
+        initialQuery={addValue() || store.symbol}
+        onClose={() => setBrowseOpen(false)}
+        onSelect={(sym) => {
+          const next = sym.toUpperCase().trim();
+          if (next) addWatchlistSymbol(next);
+          setAddValue('');
+          setBrowseOpen(false);
+        }}
+      />
       <Show when={alertSym()}>
         {(sym) => (
           <Portal>

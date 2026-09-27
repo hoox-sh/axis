@@ -812,11 +812,11 @@ export const SettingsDialog: Component<Props> = (props) => {
                   </div>
 
                   <div class="sc-settings-section">
-                    <div class="sc-settings-section-title">DSM</div>
+                    <div class="sc-settings-section-title">Data</div>
                     <StudioToggle
                       id="topbar-panels-dsm"
                       checked={store.topbar.panelsDsm}
-                      label="Show DSM"
+                      label="Show Data"
                       onChange={(v) => setStore('topbar', 'panelsDsm', v)}
                     />
                   </div>
@@ -1605,7 +1605,7 @@ export const SettingsDialog: Component<Props> = (props) => {
                   <span class="sc-settings-check-text">
                     <span class="sc-settings-check-title">Compact connection HUD</span>
                     <span class="sc-settings-check-hint">
-                      Hide SRC/STR/ENG/STO plane chips; keep Live · Tick · Engine latency.
+                      When diagnostics are expanded, hide source, stream, and storage chips.
                     </span>
                   </span>
                 </label>

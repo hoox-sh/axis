@@ -54,7 +54,7 @@ function levelStyle(level: LogLevel): {
 function delayFor(level: LogLevel): number {
   const base = Math.min(
     30000,
-    Math.max(1500, store.notifications?.durationMs || 4500),
+    Math.max(1500, store.notifications?.durationMs || 4000),
   );
   return level === 'error' ? Math.min(30000, base * 2) : base;
 }
@@ -65,10 +65,28 @@ const ToastCard: Component<{ toast: ToastEntry }> = (props) => {
   const I = st().icon;
 
   let timer: ReturnType<typeof setTimeout> | undefined;
-  timer = setTimeout(() => dismissToast(t().id), delayFor(t().level));
-  onCleanup(() => {
+  let remaining = delayFor(t().level);
+  let started = Date.now();
+  const clearTimer = () => {
     if (timer) clearTimeout(timer);
-  });
+    timer = undefined;
+  };
+  const arm = () => {
+    clearTimer();
+    started = Date.now();
+    timer = setTimeout(() => dismissToast(t().id), remaining);
+  };
+  arm();
+  onCleanup(clearTimer);
+  const pause = () => {
+    if (!timer) return;
+    remaining = Math.max(400, remaining - (Date.now() - started));
+    clearTimer();
+  };
+  const resume = () => {
+    if (timer) return;
+    arm();
+  };
 
   const openLogs = () => {
     dismissToast(t().id);
@@ -80,11 +98,14 @@ const ToastCard: Component<{ toast: ToastEntry }> = (props) => {
   };
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: pointer pause is not a click target; the card's buttons stay keyboard-operable
     <div
       role={t().level === 'error' || t().level === 'warn' ? 'alert' : 'status'}
       data-testid="axis-toast"
       data-toast-level={t().level}
       class="pointer-events-auto w-[min(92vw,22rem)] border border-border-soft bg-bg-elev shadow-lg rounded-[var(--radius-sc)] overflow-hidden"
+      onMouseEnter={pause}
+      onMouseLeave={resume}
     >
       <div class="flex items-start gap-2 px-2.5 py-2">
         <span class={`mt-1 inline-block w-1.5 h-1.5 rounded-full shrink-0 ${st().bar}`} />

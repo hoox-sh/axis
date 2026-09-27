@@ -162,9 +162,9 @@ export const NotificationsPanel: Component = () => {
             max={30}
             step={0.5}
             testId="axis-notify-duration"
-            value={Math.round((prefs().durationMs || 4500) / 100) / 10}
+            value={Math.round((prefs().durationMs || 4000) / 100) / 10}
             onChange={(v) => {
-              const s = Math.min(30, Math.max(1.5, Number(v) || 4.5));
+              const s = Math.min(30, Math.max(1.5, Number(v) || 4));
               setStore('notifications', 'durationMs', Math.round(s * 1000));
               touch();
             }}
@@ -173,7 +173,7 @@ export const NotificationsPanel: Component = () => {
         <StudioField
           label="Max visible toasts"
           for="axis-notify-max"
-          hint="Overflow drops the oldest lowest-severity toast first. 1–6."
+          hint="Calm default is 2. Overflow drops the oldest lowest-severity toast. 1–6."
         >
           <StudioInput
             id="axis-notify-max"
@@ -183,12 +183,12 @@ export const NotificationsPanel: Component = () => {
             max={6}
             step={1}
             testId="axis-notify-max"
-            value={prefs().maxVisible ?? 3}
+            value={prefs().maxVisible ?? 2}
             onChange={(v) => {
               setStore(
                 'notifications',
                 'maxVisible',
-                Math.min(6, Math.max(1, Math.round(Number(v) || 3))),
+                Math.min(6, Math.max(1, Math.round(Number(v) || 2))),
               );
               touch();
             }}

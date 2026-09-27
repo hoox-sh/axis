@@ -31,6 +31,8 @@ import {
   saveChartLayout,
   loadChartLayout,
   deleteChartLayout,
+  applyShellLayout,
+  isPanelOpen,
 } from '../store';
 import { CHART_GRID_MODES, type ChartGridMode } from '../chart/layout';
 import {
@@ -99,6 +101,14 @@ export const ChartLayoutMenu: Component = () => {
   });
 
   const mode = () => store.chartLayout?.mode || '1';
+  const shellKind = () => {
+    const watch = isPanelOpen('watchlist');
+    const editor = isPanelOpen('editor');
+    const logs = isPanelOpen('logs');
+    if (!watch && !editor && !logs) return 'trader';
+    if (watch && editor && logs) return 'operator';
+    return 'custom';
+  };
   const saved = () => store.savedLayouts || [];
 
   const pickMode = (m: ChartGridMode) => {
@@ -167,6 +177,38 @@ export const ChartLayoutMenu: Component = () => {
           role="menu"
           aria-label="Chart layouts"
         >
+          <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5">
+            Workspace
+          </div>
+          <div class="grid grid-cols-2 gap-1">
+            <button
+              type="button"
+              role="menuitem"
+              class={`sc-btn py-1.5 text-[11px] ${shellKind() === 'trader' ? 'border-accent text-accent bg-accent/10' : ''}`}
+              title="Chart and status. Watchlist, editor, and logs stay closed."
+              data-testid="axis-layout-shell-trader"
+              onClick={() => {
+                applyShellLayout('trader');
+                setOpen(false);
+              }}
+            >
+              Trader
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              class={`sc-btn py-1.5 text-[11px] ${shellKind() === 'operator' ? 'border-accent text-accent bg-accent/10' : ''}`}
+              title="Watchlist, editor, and system logs around the chart."
+              data-testid="axis-layout-shell-operator"
+              onClick={() => {
+                applyShellLayout('operator');
+                setOpen(false);
+              }}
+            >
+              Operator
+            </button>
+          </div>
+
           <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5">
             Grid
           </div>

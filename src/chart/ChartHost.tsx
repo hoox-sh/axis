@@ -39,9 +39,16 @@ import {
   setCompareBars,
   setCompareLoadState,
   clearCompareBars,
+  setActivePlugin,
+  setDataSourcePanelOpen,
 } from '../store';
+import { loadSymbolData } from '../data/load-symbol';
 import { HooxLoader } from '../ui/HooxLoader';
-import { McpConnectCta } from '../ui/McpConnectCta';
+import {
+  DATA_PLANE_DOCS_URL,
+  classifyDataPlaneNotice,
+  type DataPlaneActionId,
+} from '../ui/data-plane-notice';
 import { barIndexAtTimeBinary, createRafCoalescer } from './heavy-data';
 import {
   getManager,
@@ -49,7 +56,6 @@ import {
   getDrawingLayer,
   setDrawingLayer,
   setDataToChart,
-  getActiveDrawingLayer,
   applyDebugPinsToChart,
   clearScriptPaneLayers,
 } from './manager-access';
@@ -187,20 +193,49 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     if (bars().length > 0) return null;
     if (isActive() && (store.status === 'loading' || store.status === 'running')) {
       return {
-        title: store.status === 'running' ? 'Running…' : 'Loading market data…',
-        sub: store.statusMessage || '',
+        title: store.status === 'running' ? 'Running' : 'Loading market data',
+        sentence: '',
+        action: null as DataPlaneActionId | null,
+        actionLabel: '',
+        loading: true,
       };
     }
-    if (isActive() && store.status === 'error') {
-      return { title: 'Could not load chart', sub: store.statusMessage || 'Try again' };
+    if (!isActive()) {
+      return {
+        title: 'Empty chart',
+        sentence: 'Focus this chart to load it.',
+        action: null as DataPlaneActionId | null,
+        actionLabel: '',
+        loading: false,
+      };
     }
+    const notice = classifyDataPlaneNotice({
+      status: store.status,
+      message: store.statusMessage,
+      symbol: props.symbol || store.symbol,
+      interval: props.interval || store.interval,
+    });
+    return { ...notice, loading: false };
+  });
+
+  const runNoticeAction = (action: DataPlaneActionId) => {
     const sym = props.symbol || store.symbol;
     const iv = props.interval || store.interval;
-    return {
-      title: 'Load data to begin',
-      sub: `${sym} · ${iv} — click to focus, then press Load`,
-    };
-  });
+    if (action === 'open-data') {
+      setDataSourcePanelOpen(true);
+      return;
+    }
+    if (action === 'use-mock') {
+      setActivePlugin('source', 'mock-walk');
+      void loadSymbolData(sym, iv, 'mock-walk');
+      return;
+    }
+    if (action === 'docs') {
+      window.open(DATA_PLANE_DOCS_URL, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    void loadSymbolData(sym, iv, store.source);
+  };
 
   onMount(() => {
     if (!panesEl) return;
@@ -767,7 +802,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
         data-axis-panes
       />
       <ChartContextMenu host={contextHost()} slotId={slotId()} />
-      <Show when={isActive() && bars().length > 0}>
+      <Show when={isActive() && bars().length > 0 && !store.presentation?.chartOnly}>
         <DrawingToolbar />
         <PyneTableHud />
         <VolumeProfileOverlay />
@@ -777,7 +812,7 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
         {(hint) => (
           <div class="axis-chart-boot" data-testid="axis-chart-boot">
             <div class="axis-chart-boot-cluster">
-              <Show when={isActive() && (store.status === 'loading' || store.status === 'running')}>
+              <Show when={hint().loading}>
                 <HooxLoader size={56} layout="icon" data-testid="axis-chart-boot-logo" />
               </Show>
               <div
@@ -786,10 +821,21 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
               >
                 {hint().title}
               </div>
-              <Show when={hint().sub}>
-                <div class="axis-chart-boot-sub">{hint().sub}</div>
+              <Show when={hint().sentence}>
+                <div class="axis-chart-boot-sub">{hint().sentence}</div>
               </Show>
-              <McpConnectCta />
+              <Show when={hint().action} keyed>
+                {(action) => (
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-primary mt-2"
+                    data-testid="axis-chart-notice-action"
+                    onClick={() => runNoticeAction(action)}
+                  >
+                    {hint().actionLabel}
+                  </button>
+                )}
+              </Show>
             </div>
           </div>
         )}

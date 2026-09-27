@@ -118,6 +118,19 @@ function errMessage(err: unknown): string {
   return 'Unknown load error';
 }
 
+/** One sentence for the status row and toast. Raw text stays on telemetry. */
+function loadErrorSentence(msg: string): string {
+  const flat = String(msg || '').replace(/\s+/g, ' ').trim();
+  if (/unexpected token|not valid json|<!doctype|<html/i.test(flat)) {
+    return 'Venue returned a page, not market data.';
+  }
+  if (/failed to fetch|network error|cors/i.test(flat)) {
+    return 'Venue unreachable.';
+  }
+  const line = (flat.split(/\s+at\s+/)[0] || flat).replace(/^load failed:\s*/i, '');
+  return line.slice(0, 140) || 'The venue did not return candles.';
+}
+
 /**
  * Normalize a ticker for {@link loadSymbolData} / history fetch.
  *
@@ -354,7 +367,7 @@ export async function loadSymbolData(
       error: null,
     });
     setStatus('ready', `Loaded ${normalized.length} bars · ${source.name}`, {
-      toast: true,
+      toast: false,
       source: 'data',
     });
     announce(`Loaded ${normalized.length} bars ${sym} ${iv}`);
@@ -436,8 +449,10 @@ export async function loadSymbolData(
       error: msg,
       latencyMs: performance.now() - t0,
     });
-    setStatus('error', `Load failed: ${msg}`);
-    announceError(`Load failed: ${msg}`);
+    const sentence = loadErrorSentence(msg);
+    // Chart notice + status row carry the failure. Raw text stays on telemetry.
+    setStatus('error', sentence, { toast: false, source: 'data' });
+    announceError(sentence);
     return false;
   }
 }

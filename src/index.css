@@ -1360,8 +1360,16 @@ button.sc-btn:focus-visible {
   cursor: default;
   user-select: none;
 }
+.axis-status-capsule:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
 .axis-status-capsule.is-active {
   border-color: var(--color-accent);
+}
+.axis-status-capsule-code.is-word {
+  text-transform: none;
+  letter-spacing: 0;
 }
 .axis-status-capsule-code {
   color: var(--color-text-faint);
@@ -1405,14 +1413,37 @@ button.axis-status-capsule {
 .axis-wl-row {
   /* Layout (grid vs flex) is owned by the watchlist row markup. */
   align-items: center;
-  height: 32px;
-  min-height: 32px;
+  height: 28px;
+  min-height: 28px;
   border-left: 1px solid transparent;
   box-sizing: border-box;
+}
+.axis-wl-row:hover {
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
 }
 .axis-wl-row.is-active {
   border-left-color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+}
+.axis-wl-row.is-flash-up {
+  animation: axis-wl-flash-up 180ms ease-out;
+}
+.axis-wl-row.is-flash-down {
+  animation: axis-wl-flash-down 180ms ease-out;
+}
+@keyframes axis-wl-flash-up {
+  from { background-color: color-mix(in srgb, var(--color-accent-2) 32%, transparent); }
+  to { background-color: transparent; }
+}
+@keyframes axis-wl-flash-down {
+  from { background-color: color-mix(in srgb, var(--color-red) 28%, transparent); }
+  to { background-color: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .axis-wl-row.is-flash-up,
+  .axis-wl-row.is-flash-down {
+    animation: none;
+  }
 }
 .axis-wl-change-up {
   color: var(--color-accent-2);
@@ -2139,6 +2170,30 @@ button.axis-status-capsule {
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 14%, transparent);
 }
+.axis-chart-scale-controls button[data-tip] {
+  position: relative;
+}
+.axis-chart-scale-controls button[data-tip]:hover::after,
+.axis-chart-scale-controls button[data-tip]:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 40;
+  padding: 3px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg-elev);
+  color: var(--color-text);
+  font-family: var(--ui-font-sans, system-ui, sans-serif);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
 
 /* Shared list / search / empty / logs */
 .axis-list-row {
@@ -2196,11 +2251,9 @@ button.axis-status-capsule {
   max-width: 28rem;
 }
 .axis-chart-boot-title {
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--color-text-faint);
+  color: var(--color-text);
   line-height: 1.4;
 }
 .axis-chart-boot-title[data-tone='error'] {
@@ -4732,6 +4785,8 @@ body.axis-panel-dragging {
   /* biome-ignore lint/suspicious/noDuplicateProperties: fallback for browsers without env() support */
   height: calc(var(--axis-mobile-header-h) + env(safe-area-inset-top, 0px));
   padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
   z-index: 70;
 }
 
@@ -4800,6 +4855,8 @@ body.axis-panel-dragging {
   /* biome-ignore lint/suspicious/noDuplicateProperties: fallback for browsers without env() support */
   height: calc(var(--axis-mobile-tabbar-h) + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
   z-index: 70;
 }
 

@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 75 more files."
+description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 76 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-26T15:10:49Z
+  at: 2026-09-27T03:35:42Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -72,12 +72,13 @@ okf_lock: generated
 * `clipboard.ts` — copyToClipboard
 * `command-registry.ts` — CommandActions, CommandCategory, CommandDef, CommandId, CommandSpec, DEFAULT_COMMAND_SPECS, RankedCommand, buildDefaultCommands, filterCommands, scoreCommand, scoreMatch
 * `context-menu.ts` — ContextMenuEntry, ContextMenuItem, ContextMenuSep, clampMenuPosition
+* `data-plane-notice.ts` — DATA_PLANE_DOCS_URL, DataPlaneActionId, DataPlaneNotice, classifyDataPlaneNotice, cleanStatusLine
 * `document-title.ts` — ChartTitleInput, formatChartTitle
 * `editor-problems.ts` — EDITOR_PROBLEMS_DEFAULT_HEIGHT, EDITOR_PROBLEMS_HEIGHT_KEY, EDITOR_PROBLEMS_MIN_HEIGHT, EditorProblem, clampProblemsHeight, countProblemsBySeverity, diagnosticsToProblems, formatProblemForCopy, formatProblemLine, formatProblemSource, formatProblemsListForCopy, severityRank
 * `error-share.ts` — AXIS_DIAGNOSTIC_VERSION, BuildDiagnosticOpts, ErrorDiagnosticPayload, ErrorShareOffer, _resetErrorShareThrottleForTests, acceptErrorShareOffer, buildErrorDiagnosticPayload, dismissErrorShareOffer, endpointHostOnly, exportErrorDiagnosticNow, isErrorShareEnabled, isSecretFieldName
 * `exchange-credentials-form.ts` — EMPTY_EXCHANGE_CREDENTIAL_FORM, EXCHANGE_CREDENTIAL_VENUES, EXCHANGE_CREDENTIAL_VENUE_LABELS, ExchangeCredentialFormState, ExchangeCredentialVenue, ccxtNeedsPassword, defaultExchangeCredentialVenue, exchangeVenueLabel, isExchangeCredentialVenue, normalizeCcxtExchangeId, venueNeedsPassphrase
 * `focus-trap.ts` — installFocusTrap, listFocusable
-* `hud-model.ts` — EngTopology, ExecMode, HudChipId, HudInput, HudSnapshot, PathClass, RunClass, deriveHud, hudChipHelp, isLocalEndpoint, isWorkerEndpoint, liveBadgeLabel
+* `hud-model.ts` — EngTopology, ExecMode, HudChipId, HudInput, HudSnapshot, PathClass, RunClass, composeCaption, deriveHud, hudChipHelp, isLocalEndpoint, isWorkerEndpoint
 * `icon-map.ts` — ICON_MAP, IconName, PANEL_ICON, findDuplicateIconGlyphs
 * `icons.tsx` — ICON_MAP, IconLabel, IconProps, Icons, PANEL_ICON, findDuplicateIconGlyphs
 * `legacy-topbar.js` — initTopbar, setLiveIndicator

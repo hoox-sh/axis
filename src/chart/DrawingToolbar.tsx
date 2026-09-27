@@ -88,6 +88,7 @@ import {
   type ToolbarDock,
 } from './drawings/toolbar/chrome';
 import { getActiveDrawingLayer } from './drawing-layer';
+import { isPhoneViewport } from '../ui/responsive';
 import { visibleDrawingsForActiveSymbol, setHideDrawingsAll } from './manager-access';
 import {
   TOOL_GROUPS,
@@ -214,7 +215,8 @@ export const DrawingToolbar: Component = () => {
   const [railSize, setRailSize] = createSignal({ w: 46, h: 40 });
 
   const dock = (): ToolbarDock => sanitizeToolbarDock(store.drawingUi.toolbarDock);
-  const slideEnabled = () => dock() !== 'float' && store.drawingUi.toolbarSlide === true;
+  const slideEnabled = () =>
+    dock() !== 'float' && (store.drawingUi.toolbarSlide === true || isPhoneViewport());
 
   const clearSlideTimer = () => {
     if (slideTimer != null) window.clearTimeout(slideTimer);

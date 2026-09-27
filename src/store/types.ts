@@ -111,6 +111,8 @@ export interface LogEntry {
   message: string;
   /** Origin tag (e.g. `boot`, `library`, status key). */
   source?: string;
+  /** Collapsed repeats of the same line (reconnect bursts). Absent means 1. */
+  count?: number;
 }
 
 /**
@@ -322,8 +324,12 @@ export interface TelemetryState {
   /** Rolling run latency samples (ms), newest last */
   runLatencySamples: number[];
   lastTick: TickTelemetry | null;
-  /** Layout prefs (may be persisted via rest of store carefully) */
-  hud: { compact: boolean; overlay: boolean };
+  /**
+   * Layout prefs (persisted).
+   * `diagnostics` expands the raw ENG/RUN/PATH/SRC chips. Default off:
+   * the status row shows Live, tick, and one Compose chip.
+   */
+  hud: { compact: boolean; overlay: boolean; diagnostics: boolean };
   /**
    * When true, UI errors may prompt to copy/download a redacted diagnostic
    * bundle. **Default false** — opt-in privacy. Persisted with hud.

@@ -54,9 +54,10 @@ export const voidEditorTheme = EditorView.theme(
     '.cm-content': {
       caretColor: 'var(--color-accent)',
       minHeight: '100%',
-      // Long tokens (long string literals / URLs) must break in wrap mode —
-      // CM's lineWrapping alone cannot split them, so lines still clipped.
-      overflowWrap: 'anywhere',
+      // Wrap at spaces. `anywhere` split identifiers (`color` / `.purple`).
+      // Only unbroken tokens longer than the pane (URLs) may break.
+      overflowWrap: 'break-word',
+      wordBreak: 'normal',
     },
     '.cm-cursor, .cm-dropCursor': {
       borderLeftColor: 'var(--color-accent)',

@@ -55,7 +55,9 @@ function logsAsText(logs: LogEntry[]): string {
   return logs
     .map(
       (l) =>
-        `${formatTs(l.ts)}\t${l.level.toUpperCase()}\t[${l.source || 'system'}]\t${l.message}`,
+        `${formatTs(l.ts)} · ${l.level.toUpperCase()} · ${l.source || 'system'} · ${l.message}${
+          l.count && l.count > 1 ? ` ×${l.count}` : ''
+        }`,
     )
     .join('\n');
 }
@@ -169,7 +171,7 @@ export const SystemLogs: Component = () => {
             data-testid="axis-systemlogs-expand"
           >
             <Icons.scrollText size={13} />
-            <span class="uppercase tracking-wider text-text-dim">System Logs</span>
+            <span class="text-text-dim">System logs</span>
             <span class="text-text-faint font-mono">
               ({filtered() ? `${visible().length}/${store.logs.length}` : store.logs.length})
             </span>
@@ -208,17 +210,26 @@ export const SystemLogs: Component = () => {
             </select>
           </Show>
 
-          <Show when={!expanded() && last()}>
-            <button
-              type="button"
-              class="flex-1 min-w-0 text-left text-[11px] font-mono px-1 text-[#9AA3B2] inline-flex items-center gap-1.5"
-              title="Click to expand"
-              onClick={toggleExpand}
-            >
-              <span class={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${levelDot(last()!.level)}`} />
-              <span class="text-[#6B7382] shrink-0">{formatTs(last()!.ts)}</span>
-              <span class="truncate min-w-0">{last()!.message}</span>
-            </button>
+          <Show when={!expanded() ? last() : undefined}>
+            {(entry) => (
+              <button
+                type="button"
+                class="flex-1 min-w-0 text-left text-[11px] font-mono px-1 text-[#9AA3B2] inline-flex items-center gap-1.5"
+                title="Click to expand"
+                onClick={toggleExpand}
+              >
+                <span class={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${levelDot(entry().level)}`} />
+                <span class="text-[#6B7382] shrink-0 tabular-nums">{formatTs(entry().ts)}</span>
+                <span class={`shrink-0 uppercase ${levelClass(entry().level)}`}>{entry().level}</span>
+                <span class="text-[#6B7382] shrink-0 truncate max-w-[8ch]">{entry().source || 'system'}</span>
+                <span class="truncate min-w-0">
+                  {entry().message}
+                  <Show when={(entry().count || 0) > 1}>
+                    <span class="text-accent"> ×{entry().count}</span>
+                  </Show>
+                </span>
+              </button>
+            )}
           </Show>
           <Show when={!expanded() && !last()}>
             <span class="flex-1 text-[11px] text-[#6B7382] px-1">No log entries yet</span>
@@ -295,8 +306,11 @@ export const SystemLogs: Component = () => {
                     <span class="text-[#6B7382] w-14 flex-shrink-0 truncate select-none">
                       {entry.source}
                     </span>
-                    <span class="flex-1 min-w-0 break-all text-[#9AA3B2]">
+                    <span class="flex-1 min-w-0 break-words text-[#9AA3B2]">
                       {entry.message}
+                      <Show when={(entry.count || 0) > 1}>
+                        <span class="text-accent"> ×{entry.count}</span>
+                      </Show>
                     </span>
                     <button
                       type="button"

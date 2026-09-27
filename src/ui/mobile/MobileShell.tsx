@@ -32,7 +32,7 @@
  * @module ui/mobile/MobileShell
  */
 
-import { type Component, For, Show, createMemo, createSignal } from 'solid-js';
+import { type Component, For, Show, createMemo, createSignal, onCleanup } from 'solid-js';
 import {
   store,
   setStore,
@@ -69,6 +69,10 @@ import {
 import { SymbolModal } from '../SymbolModal';
 import { openAboutModal } from '../AboutModal';
 import type { StudioPageId } from '../studio';
+import { liveBadgeTone, liveIndicatorTitle } from '../hud-model';
+import { requestMcpConnect } from '../../mcp/host';
+import { mcpBridgeState, onMcpBridge } from '../../mcp/bridge';
+import { mcpNeedsConnect } from '../McpConnectCta';
 
 /** Panels surfaced in the mobile Panels sheet (stack order, minus chrome strips). */
 const MOBILE_PANELS: readonly PanelId[] = [
@@ -236,8 +240,17 @@ export const MobileHeader: Component<MobileChromeProps> = (_props) => {
             'is-offline': store.live.active && store.stream.status !== 'connected' && store.stream.status !== 'connecting',
           }}
           data-testid="axis-mobile-live"
-          title={store.live.active ? 'Stop live' : 'Start live'}
+          title={liveIndicatorTitle({
+            liveActive: store.live.active,
+            streamStatus: store.stream.status,
+            detail: store.telemetry?.stream?.detail,
+            startHint: 'Start live',
+          })}
           aria-pressed={store.live.active}
+          data-live-tone={liveBadgeTone({
+            liveActive: store.live.active,
+            streamStatus: store.stream.status,
+          })}
           onClick={toggleLive}
         >
           <span
@@ -375,6 +388,9 @@ export const MobileTabBar: Component<MobileChromeProps> = (props) => {
 
 /** Mobile overlay sheets — panels list + More drawer (+ symbol modal host). */
 export const MobileOverlays: Component<MobileChromeProps> = (props) => {
+  const [bridge, setBridge] = createSignal(mcpBridgeState());
+  const unsub = onMcpBridge(setBridge);
+  onCleanup(unsub);
   return (
     <>
       {/* ── Panels sheet (nav overlay above panel sheets) ──── */}
@@ -452,6 +468,21 @@ export const MobileOverlays: Component<MobileChromeProps> = (props) => {
               <Icons.cpu size={16} />
               <span>Studio</span>
             </button>
+            <Show when={mcpNeedsConnect(bridge().status)}>
+              <button
+                type="button"
+                class="axis-mpanel-row min-h-[44px]"
+                data-testid="axis-mobile-connect-mcp"
+                title="Connect this tab so an agent can drive the chart"
+                onClick={() => {
+                  setMoreOpen(false);
+                  requestMcpConnect();
+                }}
+              >
+                <Icons.zap size={16} />
+                <span>Connect MCP</span>
+              </button>
+            </Show>
             {/* Decorative divider — visual only, not exposed as an interactive separator */}
             <div class="axis-msep" />
             <For each={MOBILE_PANELS}>

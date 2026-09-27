@@ -333,6 +333,21 @@ export const App: Component = () => {
     // Shortcut Hub → open Settings (Mod-,)
     const onOpenSettingsEvent = () => openSettings('general');
     window.addEventListener('axis-open-settings', onOpenSettingsEvent);
+    const onOpenStudioEvent = (ev: Event) => {
+      const page = (ev as CustomEvent<{ page?: StudioPageId }>).detail?.page;
+      if (
+        page === 'runtime' ||
+        page === 'wire' ||
+        page === 'workers' ||
+        page === 'plugins' ||
+        page === 'settings'
+      ) {
+        openStudio(page);
+        return;
+      }
+      openStudio('wire');
+    };
+    window.addEventListener('axis-open-studio', onOpenStudioEvent);
 
     /**
      * Window-level file drop (capture).
@@ -442,6 +457,7 @@ export const App: Component = () => {
       unsubDesktop?.();
       unsubPresentation();
       window.removeEventListener('axis-open-settings', onOpenSettingsEvent);
+      window.removeEventListener('axis-open-studio', onOpenStudioEvent);
       setPresentationRoot(null);
       window.removeEventListener('dragenter', onWinDragEnter, winOpts);
       window.removeEventListener('dragover', onWinDragOver, winOpts);

@@ -150,7 +150,7 @@ const TOPBAR_PANELS: TopbarToggle[] = [
   { key: 'panelsLibrary', id: 'topbar-panels-library', label: 'Library', hint: 'Script library.' },
   { key: 'panelsScripts', id: 'topbar-panels-scripts', label: 'Scripts', hint: 'Running scripts.' },
   { key: 'panelsLayers', id: 'topbar-panels-layers', label: 'Layers', hint: 'Drawings and plots.' },
-  { key: 'panelsDsm', id: 'topbar-panels-dsm', label: 'DSM', hint: 'Data Source Manager.' },
+  { key: 'panelsDsm', id: 'topbar-panels-dsm', label: 'Data', hint: 'Data Source Manager (DSM).' },
   { key: 'panelsOnchain', id: 'topbar-panels-onchain', label: 'On-Chain', hint: 'Protocol metrics.' },
   { key: 'panelsAlerts', id: 'topbar-panels-alerts', label: 'Alerts', hint: 'Price and script alerts.' },
   { key: 'panelsValues', id: 'topbar-panels-values', label: 'Values', hint: 'Data window.' },
@@ -257,6 +257,10 @@ export function SettingsPage(props: {
     store.live.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick',
   );
   const [hudCompact, setHudCompact] = createSignal(!!store.telemetry?.hud?.compact);
+  const [hudDiagnostics, setHudDiagnostics] = createSignal(
+    store.telemetry?.hud?.diagnostics === true,
+  );
+  createEffect(() => setHudDiagnostics(store.telemetry?.hud?.diagnostics === true));
   const [shareOnError, setShareOnError] = createSignal(!!store.telemetry?.shareOnError);
   const [uiScale, setUiScaleLocal] = createSignal(clampUiScale(store.uiScale ?? 1));
   const [priceScaleLabels, setPriceScaleLabels] = createSignal(
@@ -329,6 +333,7 @@ export function SettingsPage(props: {
     setStore('live', 'rerunOn', rerunOn());
     syncLiveToPreference();
     setStore('telemetry', 'hud', 'compact', hudCompact());
+    setStore('telemetry', 'hud', 'diagnostics', hudDiagnostics());
     setStore('telemetry', 'shareOnError', shareOnError());
     setStore('uiScale', nextUiScale);
     setStore('priceScaleLabelsVisible', priceScaleLabels());
@@ -622,11 +627,23 @@ export function SettingsPage(props: {
                 </StudioSelect>
               </StudioField>
               <StudioToggle
+                id="axis-hud-diagnostics"
+                testId="axis-settings-hud-diagnostics"
+                checked={hudDiagnostics()}
+                onChange={(v) => {
+                  setHudDiagnostics(v);
+                  setStore('telemetry', 'hud', 'diagnostics', v);
+                  flushPersist();
+                }}
+                label="Connection diagnostics"
+                hint="Expand the status row to engine, path, source, stream, and storage."
+              />
+              <StudioToggle
                 id="axis-hud-compact"
                 checked={hudCompact()}
                 onChange={setHudCompact}
                 label="Compact connection HUD"
-                hint="Hide SRC/STR/ENG/STO plane chips; keep Live · Tick · Engine latency."
+                hint="When diagnostics are expanded, hide source, stream, and storage chips."
               />
               <StudioToggle
                 id="axis-share-on-error"

@@ -224,8 +224,9 @@ export function startLive(
   });
   appendLog('info', `Live start · ${stream.name} · ${sym} ${iv}`, 'stream');
 
-  /** One warn per disconnect burst; subsequent retries stay quiet until open again. */
-  let reconnectWarned = false;
+  /** Wall clock when this burst entered reconnect. Recover toasts only after a long outage. */
+  let outageSince = 0;
+  const LONG_OUTAGE_MS = 8000;
 
   const lastBar = store.bars.length ? store.bars[store.bars.length - 1] : null;
   let lastSeenBarTime = lastBar?.time ?? 0;
@@ -295,31 +296,40 @@ export function startLive(
       try {
         if (s.state === 'open') {
           if (!store.live.active) return;
-          reconnectWarned = false;
+          const since = outageSince;
+          outageSince = 0;
+          const recovered = since > 0 && Date.now() - since >= LONG_OUTAGE_MS;
           setStore('stream', 'status', 'connected');
           setTelemetryState('stream', 'open', {
             detail: s.detail || s.url || `${sym} ${iv}`,
             error: null,
           });
+          // Routine opens stay in the log. Toast only after a long outage.
           appendLog('ok', `Stream open${s.detail ? ` · ${s.detail}` : ''}`, 'stream', {
-            toast: true,
+            toast: recovered,
           });
         } else if (s.state === 'reconnecting') {
           if (!store.live.active) return;
+          if (!outageSince) outageSince = Date.now();
           setStore('stream', 'status', 'connecting');
           setTelemetryState('stream', 'degraded', { detail: s.detail || 'reconnecting' });
-          if (!reconnectWarned) {
-            reconnectWarned = true;
-            appendLog('warn', `Stream reconnecting${s.detail ? ` · ${s.detail}` : ''}`, 'stream');
-          }
+          // Log only. Identical bursts collapse to one line. No toast.
+          appendLog(
+            'warn',
+            `Stream reconnecting${s.detail ? ` · ${s.detail}` : ''}`,
+            'stream',
+            { toast: false },
+          );
         } else if (s.state === 'closed') {
           // Exhausted reconnect while Live is still armed → Offline, not a success Live chip
           if (!store.live.active) {
             setStore('stream', 'status', 'disconnected');
             setTelemetryState('stream', 'closed');
           } else if (s.detail === 'reconnect exhausted') {
+            outageSince = 0;
             setStore('stream', 'status', 'disconnected');
             setTelemetryState('stream', 'closed', { detail: s.detail });
+            appendLog('error', 'Stream offline · retries exhausted', 'stream', { toast: true });
           }
         }
       } catch {

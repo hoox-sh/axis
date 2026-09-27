@@ -43,14 +43,16 @@ import {
   onCleanup,
   onMount,
 } from 'solid-js';
-import { store, setStore, persist, setActivePlugin } from '../store';
+import { store, setStore, persist, setActivePlugin, setDataSourcePanelOpen } from '../store';
 import type { PlaneTelemetry } from '../store/types';
 import { formatLatency, formatTickAge } from './telemetry';
 import {
+  composeCaption,
   deriveHud,
   hudChipHelp,
-  liveBadgeLabel,
   liveBadgeTone,
+  liveBadgeWord,
+  liveIndicatorTitle,
   type HudChipId,
   type HudSnapshot,
 } from './hud-model';
@@ -411,7 +413,7 @@ function TickPulse(props: {
         } ${fresh() ? 'axis-live-dot--pulse' : ''}`}
         aria-hidden="true"
       />
-      <span class="axis-status-capsule-code">tick</span>
+      <span class="axis-status-capsule-code is-word">Last</span>
       <span
         class={`tabular-nums text-right max-w-[7ch] flex-shrink-0 overflow-hidden text-ellipsis ${dirColor()}`}
         title={(() => {
@@ -447,14 +449,15 @@ function LiveBadge(props: {
 }) {
   let anchor: HTMLSpanElement | undefined;
   const st = () => store.stream.status;
-  const label = () => {
-    const raw = liveBadgeLabel({ liveActive: store.live.active, streamStatus: st() });
-    if (raw === 'OFF') return 'Live';
-    if (raw === 'LIVE') return 'Live';
-    if (raw === 'Reconnecting…') return 'Reconnecting';
-    return 'Offline';
-  };
   const tone = () => liveBadgeTone({ liveActive: store.live.active, streamStatus: st() });
+  const label = () => liveBadgeWord(tone());
+  const tip = () =>
+    liveIndicatorTitle({
+      liveActive: store.live.active,
+      streamStatus: st(),
+      detail: store.telemetry?.stream?.detail,
+      startHint: 'Live stream is off',
+    });
   const cls = () => {
     const t = tone();
     if (t === 'live') return 'is-live';
@@ -484,6 +487,7 @@ function LiveBadge(props: {
       data-testid="axis-hud-live"
       role="button"
       tabIndex={0}
+      title={tip()}
       onMouseEnter={() => props.sticky.open('live')}
       onMouseLeave={() => props.sticky.scheduleClose()}
       onClick={activate}
@@ -560,12 +564,156 @@ function PairingWarn() {
   );
 }
 
+/** One chip for source × stream × engine × storage. Click opens Data or Studio. */
+function ComposeChip(props: { snap: () => HudSnapshot }) {
+  const [open, setOpen] = createSignal(false);
+  let btn: HTMLButtonElement | undefined;
+  const [pos, setPos] = createSignal({ left: 8, bottom: 36 });
+
+  const place = () => {
+    const r = btn?.getBoundingClientRect();
+    if (!r) return;
+    setPos({
+      left: Math.max(8, Math.min(r.left, window.innerWidth - 260)),
+      bottom: Math.max(8, window.innerHeight - r.top + 6),
+    });
+  };
+
+  const close = () => setOpen(false);
+
+  onMount(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    const onPtr = (e: PointerEvent) => {
+      if (!open()) return;
+      const t = e.target as Node | null;
+      if (btn?.contains(t)) return;
+      if (t && (t as HTMLElement).closest?.('[data-testid="axis-compose-menu"]')) return;
+      close();
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('pointerdown', onPtr, true);
+    onCleanup(() => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointerdown', onPtr, true);
+    });
+  });
+
+  const snap = () => props.snap();
+  const src = () => store.telemetry?.source;
+  const str = () => store.telemetry?.stream;
+  const sto = () => store.telemetry?.storage;
+  const warn = () => {
+    const expected = defaultStreamForSource(store.source);
+    const actual = store.live.streamId || store.activePlugins?.stream;
+    if (!actual || actual === expected) return '';
+    if (store.source === 'mock-walk' || store.source === 'csv-upload') return '';
+    return `Stream ${actual} does not match ${expected}`;
+  };
+
+  const openData = () => {
+    close();
+    setDataSourcePanelOpen(true);
+  };
+  const openStudio = () => {
+    close();
+    window.dispatchEvent(new CustomEvent('axis-open-studio', { detail: { page: 'wire' } }));
+  };
+
+  return (
+    <>
+      <button
+        ref={btn}
+        type="button"
+        class={`axis-status-capsule ${open() ? 'is-active' : ''}`}
+        data-testid="axis-hud-compose"
+        title="Source, stream, engine, and storage. Open Data or Studio."
+        aria-expanded={open()}
+        aria-haspopup="dialog"
+        onClick={() => {
+          setOpen((v) => {
+            const next = !v;
+            if (next) place();
+            return next;
+          });
+        }}
+      >
+        <span
+          class={`axis-live-dot ${warn() ? 'is-warn' : snap().error ? 'is-err' : ''}`}
+          aria-hidden="true"
+        />
+        <span class="axis-status-capsule-code is-word">Compose</span>
+        <span class="axis-status-capsule-val">{composeCaption(snap())}</span>
+      </button>
+      <Show when={open()}>
+        <div
+          class="axis-hud-info fixed z-[300] w-[min(280px,calc(100vw-24px))] text-left"
+          style={{ left: `${pos().left}px`, bottom: `${pos().bottom}px` }}
+          data-testid="axis-compose-menu"
+          role="dialog"
+          aria-label="Compose"
+        >
+          <div class="text-[11px] font-medium text-text mb-1.5">Compose</div>
+          <div class="grid grid-cols-[5.5rem_1fr] gap-x-2 gap-y-0.5 text-[11px] font-mono">
+            <span class="text-text-faint">Engine</span>
+            <span class="truncate text-text-dim" title={snap().product}>
+              {composeCaption(snap())} · {snap().eng}
+            </span>
+            <span class="text-text-faint">Run</span>
+            <span class="truncate text-text-dim">{snap().mode}</span>
+            <span class="text-text-faint">Path</span>
+            <span class="text-text-dim">{snap().showPath ? snap().path : 'in tab'}</span>
+            <span class="text-text-faint">Source</span>
+            <span class="truncate text-text-dim" title={src()?.id}>
+              {src()?.name || src()?.id || '—'}
+            </span>
+            <span class="text-text-faint">Stream</span>
+            <span class="truncate text-text-dim" title={str()?.id}>
+              {str()?.name || str()?.id || '—'}
+            </span>
+            <span class="text-text-faint">Storage</span>
+            <span class="truncate text-text-dim" title={sto()?.id}>
+              {sto()?.name || sto()?.id || '—'}
+            </span>
+          </div>
+          <Show when={warn()}>
+            <p class="mt-1.5 text-[10px] text-orange">{warn()}</p>
+          </Show>
+          <Show when={snap().error}>
+            <p class="mt-1.5 text-[10px] text-red truncate">{snap().error}</p>
+          </Show>
+          <div class="mt-2 flex gap-1">
+            <button
+              type="button"
+              class="sc-btn sc-btn-ghost flex-1 text-[11px]"
+              data-testid="axis-compose-data"
+              onClick={openData}
+            >
+              Data
+            </button>
+            <button
+              type="button"
+              class="sc-btn sc-btn-ghost flex-1 text-[11px]"
+              data-testid="axis-compose-studio"
+              onClick={openStudio}
+            >
+              Studio
+            </button>
+          </div>
+        </div>
+      </Show>
+    </>
+  );
+}
+
 /** Status-bar connection chips + sticky detail panel. */
 export const ConnectionHud: Component = () => {
   const snap = useHudSnapshot();
   const sticky = useStickyInfo();
   const tel = () => store.telemetry;
   const compact = () => tel()?.hud?.compact;
+  const diagnostics = () => tel()?.hud?.diagnostics === true;
 
   // Persist compact preference already exists; ensure hud object present
   createEffect(() => {
@@ -591,114 +739,111 @@ export const ConnectionHud: Component = () => {
       <LiveBadge sticky={sticky} snap={snap} />
       <TickPulse sticky={sticky} snap={snap} />
 
-      {/* ENG local | remote */}
-      <ChipShell
-        id="eng"
-        label="eng"
-        value={snap().eng}
-        state={engState()}
-        sticky={sticky}
-        snap={snap}
-        testId="axis-hud-eng"
-      />
-
-      {/* RUN browser | server | worker */}
-      <ChipShell
-        id="run"
-        label="run"
-        value={snap().loading ? 'loading…' : snap().run}
-        state={snap().loading ? 'load' : engState()}
-        sticky={sticky}
-        snap={snap}
-        testId="axis-hud-run"
-      />
-
-      {/* MODE interpret | compile | auto */}
-      <ChipShell
-        id="mode"
-        label="mode"
-        value={snap().mode}
-        state={engState()}
-        extra={formatLatency(snap().latencyMs)}
-        sticky={sticky}
-        snap={snap}
-        testId="axis-engine-chip"
-      />
-
-      {/* PATH WS | REST — not for browser */}
-      <Show when={snap().showPath}>
-        <ChipShell
-          id="path"
-          label="path"
-          value={snap().path}
-          state={snap().path === 'WS' ? 'ok' : 'idle'}
-          sticky={sticky}
-          snap={snap}
-          testId="axis-hud-path"
-        />
-      </Show>
-
-      <Show when={!compact()}>
-        <Show when={tel()?.source}>
-          {(p) => (
-            <PlaneChip
-              label="src"
-              plane={p()}
-              id="src"
-              sticky={sticky}
-              snap={snap}
-            />
-          )}
-        </Show>
-        <Show when={tel()?.stream}>
-          {(p) => (
-            <PlaneChip
-              label="str"
-              plane={p()}
-              id="str"
-              sticky={sticky}
-              snap={snap}
-            />
-          )}
-        </Show>
-        <Show when={tel()?.storage}>
-          {(p) => (
-            <PlaneChip
-              label="sto"
-              plane={p()}
-              id="sto"
-              sticky={sticky}
-              snap={snap}
-            />
-          )}
-        </Show>
-        <PairingWarn />
-      </Show>
-
-      {/* ONC — optional 5th plane; surface when active/error (incl. compact) */}
-      <Show when={showOnchainPlane(tel()?.onchain, compact())}>
-        <PlaneChip
-          label="onc"
-          plane={tel()!.onchain!}
-          id="onc"
-          sticky={sticky}
-          snap={snap}
-        />
-      </Show>
-
-      {/* Compact toggle (keeps SRC/STR/STO optional) */}
       <button
         type="button"
-        class="axis-status-capsule text-text-faint cursor-pointer"
-        title={compact() ? 'Expand SRC/STR/STO chips' : 'Compact HUD (hide SRC/STR/STO)'}
-        data-testid="axis-hud-compact"
+        class={`axis-status-capsule text-text-faint cursor-pointer ${diagnostics() ? 'is-active' : ''}`}
+        title={
+          diagnostics()
+            ? 'Hide connection diagnostics'
+            : 'Show connection diagnostics (engine, source, stream, storage)'
+        }
+        aria-pressed={diagnostics()}
+        data-testid="axis-hud-diagnostics"
         onClick={() => {
-          setStore('telemetry', 'hud', 'compact', !compact());
+          setStore('telemetry', 'hud', 'diagnostics', !diagnostics());
           persist();
         }}
       >
-        {compact() ? '···' : '·'}
+        <span class="axis-status-capsule-code is-word">
+          {diagnostics() ? 'Hide' : 'Diagnostics'}
+        </span>
       </button>
+
+      <Show
+        when={diagnostics()}
+        fallback={
+          <>
+            <ComposeChip snap={snap} />
+            <Show when={showOnchainPlane(tel()?.onchain, true)}>
+              <PlaneChip
+                label="Chain"
+                plane={tel()!.onchain!}
+                id="onc"
+                sticky={sticky}
+                snap={snap}
+              />
+            </Show>
+          </>
+        }
+      >
+        {/* Raw diagnostics — abbreviations stay in this mode only. */}
+        <ChipShell
+          id="eng"
+          label="eng"
+          value={snap().eng}
+          state={engState()}
+          sticky={sticky}
+          snap={snap}
+          testId="axis-hud-eng"
+        />
+        <ChipShell
+          id="run"
+          label="run"
+          value={snap().loading ? 'loading…' : snap().run}
+          state={snap().loading ? 'load' : engState()}
+          sticky={sticky}
+          snap={snap}
+          testId="axis-hud-run"
+        />
+        <ChipShell
+          id="mode"
+          label="mode"
+          value={snap().mode}
+          state={engState()}
+          extra={formatLatency(snap().latencyMs)}
+          sticky={sticky}
+          snap={snap}
+          testId="axis-engine-chip"
+        />
+        <Show when={snap().showPath}>
+          <ChipShell
+            id="path"
+            label="path"
+            value={snap().path}
+            state={snap().path === 'WS' ? 'ok' : 'idle'}
+            sticky={sticky}
+            snap={snap}
+            testId="axis-hud-path"
+          />
+        </Show>
+        <Show when={!compact()}>
+          <Show when={tel()?.source}>
+            {(p) => (
+              <PlaneChip label="src" plane={p()} id="src" sticky={sticky} snap={snap} />
+            )}
+          </Show>
+          <Show when={tel()?.stream}>
+            {(p) => (
+              <PlaneChip label="str" plane={p()} id="str" sticky={sticky} snap={snap} />
+            )}
+          </Show>
+          <Show when={tel()?.storage}>
+            {(p) => (
+              <PlaneChip label="sto" plane={p()} id="sto" sticky={sticky} snap={snap} />
+            )}
+          </Show>
+          <PairingWarn />
+        </Show>
+        <Show when={showOnchainPlane(tel()?.onchain, compact())}>
+          <PlaneChip
+            label="onc"
+            plane={tel()!.onchain!}
+            id="onc"
+            sticky={sticky}
+            snap={snap}
+          />
+        </Show>
+      </Show>
     </div>
   );
 };

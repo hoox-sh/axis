@@ -312,8 +312,8 @@ export const DEFAULT_NOTIFICATIONS: NotificationSettings = {
     workspace: true,
     system: true,
   },
-  durationMs: 4500,
-  maxVisible: 3,
+  durationMs: 4000,
+  maxVisible: 2,
   dedupeWindowMs: 5000,
 };
 
@@ -407,9 +407,9 @@ const DEFAULTS: AppState = {
   uiScale: 1,
   // Ephemeral presentation — never hydrate as on
   presentation: { fullscreen: false, chartOnly: false },
-  editor: { open: true, width: defaultEditorWidthPx(), mode: 'docked' },
+  editor: { open: false, width: defaultEditorWidthPx(), mode: 'docked' },
   watchlist: hydrateWatchlistState({
-    open: true,
+    open: false,
     width: 280,
     symbols: [...DEFAULT_WATCHLIST],
     refreshSec: 15,
@@ -474,7 +474,7 @@ const DEFAULTS: AppState = {
     hideDrawings: false,
     lockAll: false,
     toolbarDock: 'left',
-    toolbarSlide: false,
+    toolbarSlide: true,
     toolbarX: 8,
     toolbarY: 56,
     stylebarX: null,
@@ -490,7 +490,7 @@ const DEFAULTS: AppState = {
     // onchain?: optional 5th plane — created by health probe; never in DEFAULTS/hydrate
     runLatencySamples: [],
     lastTick: null,
-    hud: { compact: false, overlay: false },
+    hud: { compact: false, overlay: false, diagnostics: false },
     // Privacy: never prompt to share error data unless the user opts in
     shareOnError: false,
   },
@@ -855,6 +855,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         hud: {
           compact: false,
           overlay: false,
+          diagnostics: false,
           ...(bag.telemetry &&
           typeof bag.telemetry === 'object' &&
           (bag.telemetry as TelemetryState).hud &&
@@ -1486,7 +1487,7 @@ function seedStoreState(overlay: Partial<AppState> | null | undefined): AppState
       storage: idlePlane('local', 'Local', 'local'),
       runLatencySamples: [],
       lastTick: null,
-      hud: { compact: false, overlay: false },
+      hud: { compact: false, overlay: false, diagnostics: false },
       shareOnError: false,
     },
     errorShareOffer: null,
@@ -1845,6 +1846,10 @@ export function notificationCategoryFor(source: string | undefined): Notificatio
 }
 
 /** Raw log append without toast routing (notify() uses this to avoid loops). */
+function isReconnectLog(message: string): boolean {
+  return message.startsWith('Stream reconnecting');
+}
+
 function appendLogRaw(level: LogLevel, message: string, source = 'system') {
   const entry: LogEntry = {
     id: uid(),
@@ -1854,6 +1859,23 @@ function appendLogRaw(level: LogLevel, message: string, source = 'system') {
     source,
   };
   setStore('logs', (logs) => {
+    const last = logs.length ? logs[logs.length - 1] : undefined;
+    const sameBurst =
+      !!last &&
+      last.level === level &&
+      (last.source || 'system') === source &&
+      (last.message === message ||
+        (isReconnectLog(last.message) && isReconnectLog(message)));
+    if (last && sameBurst) {
+      const next = logs.slice();
+      next[next.length - 1] = {
+        ...last,
+        ts: entry.ts,
+        message,
+        count: (last.count || 1) + 1,
+      };
+      return next;
+    }
     const next = [...logs, entry];
     return next.length > MAX_LOGS ? next.slice(next.length - MAX_LOGS) : next;
   });
@@ -3336,6 +3358,21 @@ export function toggleChartOnly(): void {
   setChartOnly(!store.presentation?.chartOnly);
 }
 
+/**
+ * Workspace chrome presets. Panel open state is what persists, so the last
+ * layout is the one the user left on screen.
+ * - `trader` — chart and the status row
+ * - `operator` — watchlist, editor, and system logs as well
+ */
+export function applyShellLayout(kind: 'trader' | 'operator'): void {
+  const operator = kind === 'operator';
+  setChartOnly(false);
+  setPanelOpen('watchlist', operator);
+  setPanelOpen('editor', operator);
+  setPanelOpen('logs', operator);
+  setPanelOpen('statusbar', true);
+}
+
 /** Exit chart-only (and report previous state). */
 export function exitChartOnly(): boolean {
   const was = !!store.presentation?.chartOnly;
@@ -3380,6 +3417,7 @@ export function resetUiLayout(): void {
 
   setStore('telemetry', 'hud', 'compact', false);
   setStore('telemetry', 'hud', 'overlay', false);
+  setStore('telemetry', 'hud', 'diagnostics', false);
 
   setStore('drawingTool', 'cursor');
   setStore('selectedDrawingId', null);
@@ -3388,6 +3426,7 @@ export function resetUiLayout(): void {
   setStore('drawingUi', 'hideDrawings', false);
   setStore('drawingUi', 'lockAll', false);
   setStore('drawingUi', 'lastToolByGroup', reconcile({}));
+  setStore('drawingUi', 'toolbarSlide', true);
 
   // Chart pane strip (price + volume) — restore heights/visibility
   setStore(

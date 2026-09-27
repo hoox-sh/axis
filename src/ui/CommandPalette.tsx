@@ -302,6 +302,9 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
         if (props.onOpenStudio) props.onOpenStudio();
         else props.onOpenRuntime?.();
       },
+      connectMcp: () => {
+        void import('../mcp/host').then((m) => m.requestMcpConnect());
+      },
       openArchitecture: () => props.onOpenArchitecture?.(),
       openScriptSettings: () => openScriptSettings(null),
       openOptimise: () => {

@@ -91,6 +91,7 @@ import {
   toggleBrowserFullscreen,
   toggleChartOnlyMode,
 } from './presentation';
+import { liveBadgeTone, liveBadgeWord, liveIndicatorTitle } from './hud-model';
 
 const INTERVALS = [...WATCHLIST_INTERVALS];
 
@@ -679,28 +680,24 @@ export const Topbar: Component<{
           onClick={toggleLive}
           data-testid="axis-btn-live"
           aria-pressed={store.live.active}
-          title={
-            !store.live.active
-              ? `Start live stream (${
-                  streams().find((s) => s.id === defaultStreamForSource(store.source))?.name ||
-                  defaultStreamForSource(store.source)
-                })`
-              : store.stream.status === 'connected'
-                ? 'Stop live stream'
-                : store.stream.status === 'connecting'
-                  ? 'Live stream reconnecting — click to stop'
-                  : 'Live stream offline — click to stop'
-          }
+          title={liveIndicatorTitle({
+            liveActive: store.live.active,
+            streamStatus: store.stream.status,
+            detail: store.telemetry?.stream?.detail,
+            startHint: `Start live stream (${
+              streams().find((s) => s.id === defaultStreamForSource(store.source))?.name ||
+              defaultStreamForSource(store.source)
+            })`,
+          })}
         >
           <span class="axis-live-dot" aria-hidden="true" />
           <span class="axis-tb-btn-label">
-            {!store.live.active
-              ? 'Live'
-              : store.stream.status === 'connected'
-                ? 'Live'
-                : store.stream.status === 'connecting'
-                  ? 'Reconnecting'
-                  : 'Offline'}
+            {liveBadgeWord(
+              liveBadgeTone({
+                liveActive: store.live.active,
+                streamStatus: store.stream.status,
+              }),
+            )}
           </span>
         </button>
 
@@ -824,13 +821,13 @@ export const Topbar: Component<{
           type="button"
           class={`axis-module ${isPanelOpen('datasource') ? 'is-active' : ''}`}
           onClick={() => toggleDataSourcePanel()}
-          title="Data Source Manager — background OHLCV backfill"
-          aria-label="Data Source Manager"
+          title="Data — Data Source Manager (DSM), background OHLCV backfill"
+          aria-label="Data"
           aria-pressed={isPanelOpen('datasource')}
           data-testid="axis-btn-datasource"
         >
           <Icons.dataSource />
-          <span class="axis-tb-btn-label">DSM</span>
+          <span class="axis-tb-btn-label">Data</span>
         </button>
         </Show>
 
@@ -906,8 +903,8 @@ export const Topbar: Component<{
         <button
           type="button"
           class={`axis-module-util ${isPanelOpen('logs') ? 'is-active' : ''}`}
-          title="System Logs — app / transport / boot telemetry"
-          aria-label="System Logs"
+          title="System logs — app, transport, and boot"
+          aria-label="System logs"
           data-testid="axis-btn-systemlogs"
           aria-pressed={isPanelOpen('logs')}
           onClick={() => toggleSystemLogsPanel()}
@@ -1105,7 +1102,7 @@ function SliceProgressChip() {
         type="button"
         class="sc-btn sc-btn-ghost is-loading"
         data-testid="axis-chip-slice-progress"
-        title="DSM is completing this dataset in the background (sliced backfill)"
+        title="Data is completing this dataset in the background"
         onClick={() => toggleDataSourcePanel()}
       >
         <HooxLoader size="xs" />

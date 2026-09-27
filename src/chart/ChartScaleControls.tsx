@@ -313,7 +313,7 @@ export const ChartScaleControls: Component = () => {
   const cluster = () => (
     // biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the overlay cluster
     <div
-      class="absolute z-[15] flex items-stretch h-[22px] overflow-hidden pointer-events-auto rounded-[4px] border border-[#1C2230] bg-[#0C0E14]/90"
+      class="axis-chart-scale-controls absolute z-[15] flex items-stretch h-[22px] overflow-visible pointer-events-auto rounded-[4px] border border-[#1C2230] bg-[#0C0E14]/90"
       style={{
         right: `${inset().right}px`,
         bottom: `${inset().bottom}px`,
@@ -325,7 +325,8 @@ export const ChartScaleControls: Component = () => {
       <button
         type="button"
         class={btnClass(autoOn())}
-        title="Auto scale price axis (A)"
+        title="Auto scale"
+        data-tip="Auto scale"
         aria-pressed={autoOn()}
         aria-label="Auto scale"
         data-testid="axis-chart-scale-auto"
@@ -336,9 +337,10 @@ export const ChartScaleControls: Component = () => {
       <button
         type="button"
         class={btnClass(logOn())}
-        title="Logarithmic price scale (L)"
+        title="Log scale"
+        data-tip="Log scale"
         aria-pressed={logOn()}
-        aria-label="Logarithmic scale"
+        aria-label="Log scale"
         data-testid="axis-chart-scale-log"
         onClick={onLog}
       >
@@ -347,9 +349,10 @@ export const ChartScaleControls: Component = () => {
       <button
         type="button"
         class={btnClass(labelsOn())}
-        title="Show right price scale labels ($)"
+        title="Price labels"
+        data-tip="Price labels"
         aria-pressed={labelsOn()}
-        aria-label="Price scale labels"
+        aria-label="Price labels"
         data-testid="axis-chart-scale-labels"
         onClick={onLabels}
       >
@@ -358,9 +361,10 @@ export const ChartScaleControls: Component = () => {
       <button
         type="button"
         class={btnClass(namesOn())}
-        title="Show series last-value labels on the right (N)"
+        title="Last value"
+        data-tip="Last value"
         aria-pressed={namesOn()}
-        aria-label="Series last-value labels"
+        aria-label="Last value"
         data-testid="axis-chart-scale-names"
         onClick={onNames}
       >
@@ -369,9 +373,10 @@ export const ChartScaleControls: Component = () => {
       <button
         type="button"
         class={btnClass(titlesOn())}
-        title="Show plot names on last-value labels (T)"
+        title="Plot names"
+        data-tip="Plot names"
         aria-pressed={titlesOn()}
-        aria-label="Plot name labels"
+        aria-label="Plot names"
         data-testid="axis-chart-scale-titles"
         onClick={onTitles}
       >
@@ -382,10 +387,15 @@ export const ChartScaleControls: Component = () => {
         class={btnClass(decimalsMode() === 'auto')}
         title={
           decimalsMode() === 'auto'
-            ? `Price scale decimals: auto (currently ${decimalsEffective()} from symbol/data) — click to fix 0…8`
-            : `Price scale decimals: fixed ${decimalsMode()} — click to cycle (auto → 0…8)`
+            ? `Decimals, auto (${decimalsEffective()})`
+            : `Decimals, fixed ${decimalsMode()}`
         }
-        aria-label="Price scale decimals"
+        data-tip={
+          decimalsMode() === 'auto'
+            ? `Decimals, auto (${decimalsEffective()})`
+            : `Decimals, fixed ${decimalsMode()}`
+        }
+        aria-label="Price decimals"
         aria-pressed={decimalsMode() === 'auto'}
         data-testid="axis-chart-scale-decimals"
         onClick={onDecimals}
