@@ -65,7 +65,7 @@ function usage(): string {
     '',
     '  enrich [--check] [--stage] [--from-index]   draft, link, and lint the bundle',
     '  lint [--strict] [--format text|json]        conformance plus producer warnings',
-    '  query <terms...>                            search titles, paths, and descriptions',
+    '  query <terms...>                            search paths, titles, descriptions, and file names',
     '  context <path-or-id> [--depth N]            one concept plus neighbor blurbs',
     '',
     'OKF_SKIP=1 skips the pre-commit refresh.',

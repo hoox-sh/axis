@@ -40,7 +40,7 @@ bun run okf:query chart drawings
 bun run okf:context src/chart
 ```
 
-A directory path resolves to that concept. A file path resolves to the deepest directory concept that contains it. Query terms match path segments, so `ui` does not match `builtins`.
+A directory path resolves to that concept. A file path resolves to the deepest directory concept that contains it. Query terms match path segments and the file names listed on a concept, so `ui` does not match `builtins`, and `drawings.ts` finds the directory that contains it. `AGENTS.md` is gitignored and is not part of this bundle. The shared reading guide is `okf/playbooks/read-this-first.md`.
 
 `OKF_SKIP=1` skips the hook refresh. CI runs `okf:check`, so a commit that bypasses the hook still cannot merge a stale bundle.
 

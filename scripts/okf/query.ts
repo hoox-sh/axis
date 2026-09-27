@@ -25,6 +25,28 @@ function segments(value: string): string[] {
   return value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 }
 
+/**
+ * Stems of files listed under `# Files`. The extension is dropped so `ts`
+ * is not a query term, and `index` is skipped because nearly every module has one.
+ */
+function fileStems(body: string): string[] {
+  const heading = '\n# Files\n';
+  const at = body.startsWith('# Files\n') ? '# Files\n'.length : body.indexOf(heading);
+  if (at < 0) return [];
+  const from = body.startsWith('# Files\n') ? at : at + heading.length;
+  const rest = body.slice(from);
+  const next = rest.indexOf('\n# ');
+  const block = next < 0 ? rest : rest.slice(0, next);
+  const stems: string[] = [];
+  for (const line of block.matchAll(/^\* `([^`]+)`/gm)) {
+    const stem = line[1].replace(/\.[^.]+$/, '');
+    for (const seg of segments(stem)) {
+      if (seg !== 'index') stems.push(seg);
+    }
+  }
+  return stems;
+}
+
 function normalizeQuery(idOrPath: string): string {
   return idOrPath.replace(/\\/g, '/').replace(/^\.?\//, '').replace(/\.md$/, '').replace(/\/$/, '');
 }
@@ -42,6 +64,7 @@ export function searchConcepts(concepts: ConceptDoc[], terms: string[]): Hit[] {
     const titleSegs = segments(title);
     const descSegs = segments(description);
     const tagSegs = segments(tags);
+    const fileSegs = fileStems(concept.body);
     let score = 0;
     for (const needle of needles) {
       const primary = segments(needle)[0] ?? '';
@@ -53,6 +76,7 @@ export function searchConcepts(concepts: ConceptDoc[], terms: string[]): Hit[] {
       else if (resSegs.at(-1) === primary || idSegs.at(-1) === primary) score += 6;
       else if (resSegs.includes(primary) || idSegs.includes(primary)) score += 4;
       else if (titleSegs.includes(primary) || tagSegs.includes(primary)) score += 3;
+      else if (fileSegs.includes(primary)) score += 2;
       else if (descSegs.includes(primary)) score += 1;
       else score -= 2;
     }

@@ -193,11 +193,18 @@ describe('OKF query', () => {
         kind: 'code',
         text: '/** Built-in scripts. */\nexport const BUILTIN_SCRIPTS = [];\n',
       },
+      {
+        path: 'src/indicators/builtins/drawings.ts',
+        kind: 'code',
+        text: '/** Drawing samples. */\nexport const DRAWING_BUILTINS = [];\n',
+      },
     ]);
     const concepts = loadConcepts(bundle);
     const hits = searchConcepts(concepts, ['ui']);
     expect(hits[0]?.id).toBe('code/src/ui');
     expect(hits.some((hit) => hit.id === 'code/src/indicators/builtins')).toBe(false);
+    const drawings = searchConcepts(concepts, ['drawings']);
+    expect(drawings.some((hit) => hit.id === 'code/src/indicators/builtins')).toBe(true);
     const context = renderContext(bundle, 'src/ui/StatusBar.tsx', 0, 6000);
     expect(context).toContain('resource: "src/ui"');
     expect(context).not.toContain('src/indicators/builtins');

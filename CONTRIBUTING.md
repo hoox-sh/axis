@@ -40,7 +40,7 @@ bun run okf:check
 
 `bun install` points git at `.githooks/`. The pre-commit hook lints staged files with Biome, then drafts and stages the `okf/` bundle so the commit carries a current map of the repo. Skip that refresh with `OKF_SKIP=1`.
 
-Read `okf/index.md` before searching the tree. `bun run okf:context <path>` prints one module and its neighbors. Curated notes live in `okf/playbooks/` (`okf_lock: human`). Generated concepts are rewritten when their sources change.
+Read `okf/index.md` and `okf/playbooks/read-this-first.md` before searching the tree. `bun run okf:context <path>` prints one module and its neighbors. A file path opens the deepest directory concept that contains it. `bun run okf:query <terms>` matches path segments and file names (`ui` does not match `builtins`). Curated notes live in `okf/playbooks/` (`okf_lock: human`). Generated concepts are rewritten when their sources change. The local `AGENTS.md` is gitignored and is not part of the bundle.
 
 ## Style
 
