@@ -1657,10 +1657,11 @@ async function runAndApplyInner(
             );
           }
         }
-      } else if (result.status !== 'error' && (!silent || Array.isArray(drawings))) {
+      } else if (!silent || Array.isArray(drawings)) {
         // Empty `drawings: []` on a successful run must clear even on silent
-        // live re-runs. A failed tick keeps the last good gallery.
-        // Omit-the-field (`undefined`) still skips clear when silent.
+        // live re-runs. Error runs return before this block, so a failed tick
+        // keeps the last good gallery. Omit-the-field (`undefined`) still
+        // skips clear when silent.
         priceLayer?.clearScriptDrawings(indicatorId ?? EDITOR_RUN_KEY);
         if (!overlay && paneId !== 'price') {
           try {
