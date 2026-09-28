@@ -15,6 +15,10 @@ _Generated/updated: 2026-09-28 · 475 commits · describe-tag: `v2.17.0`_
 
 ## [Unreleased]
 
+### Fixed
+
+- **Drawing tool menu**: the group flyout (Fib, Gann, and the rest) opens beside the rail with the full tool name. It is no longer clipped to the rail edge.
+
 ## [2.18.0] — 2026-09-28
 
 ### Added

@@ -1583,6 +1583,13 @@ button.axis-status-capsule {
   align-items: center;
   max-width: min(920px, calc(100vw - 16px));
 }
+/* Flyouts and the dock menu hang outside the rail. overflow-x:hidden would
+   slice them at the rail edge (Fib labels showed as "ib …"). */
+.axis-draw-rail:has([data-drawing-flyout]),
+.axis-draw-rail:has(.axis-draw-menu),
+.axis-draw-rail:has([data-drawing-settings] .axis-draw-pop) {
+  overflow: visible;
+}
 .axis-draw-sep {
   align-self: stretch;
   background: var(--color-border-soft);
@@ -1902,6 +1909,7 @@ button.axis-status-capsule {
   gap: 8px;
   width: 100%;
   padding: 6px 8px;
+  white-space: nowrap;
   border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
