@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-26 · 468 commits · describe-tag: `v2.16.0`_
+_Generated/updated: 2026-09-28 · 475 commits · describe-tag: `v2.17.0`_
 
 ---
 
 ## [Unreleased]
+
+## [2.18.0] — 2026-09-28
 
 ### Added
 
@@ -1394,12 +1396,17 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (149 commits)
+### 2026-09 (156 commits)
 
 #### Features
 
+- `7551dfec` (2026-09-27) — feat(ui): tune chrome motion and polish data, watchlist, and drawings
+- `4f2fc64b` (2026-09-27) — feat(ui): quiet the trader shell and collapse the connection HUD
+- `00c19cce` (2026-09-27) — feat(editor): function tree, sticky Problems, and quieter live runs
 - `eaab5b13` (2026-09-26) — feat(ui): use the HOOX mark as the favicon and show price in the title
 - `a4df8e72` (2026-09-26) — feat(chart): add right-click menus on the chart and panels
 - `a6e06b62` (2026-09-26) — feat(theme): save named chart themes and bar colorings
@@ -1449,6 +1456,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `5e7b07d7` (2026-09-28) — fix(chart): place script drawings on the candle clock
+- `11f60823` (2026-09-27) — fix(okf): match file names in query and align the agent guide
 - `d18b6f7d` (2026-09-26) — fix(editor): silence false-positive pre-eval typo diagnostics
 - `1b341a4b` (2026-09-25) — fix(toolbar): snapshot gesture-start anchor for drag tracking
 - `095ccdc4` (2026-09-25) — fix(plots): keep explicit panel picks, refresh auto colors on re-run
@@ -1551,6 +1560,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `b94be4bb` (2026-09-27) — chore(release): AXIS v2.17.1 — quiet trader shell
+- `1f81f4c8` (2026-09-26) — chore(release): AXIS v2.17.0 — context menus, favicon, and live title
 - `c58e45a3` (2026-09-26) — chore(release): AXIS v2.16.0 — named themes and bar colorings
 - `d62a2ee6` (2026-09-24) — chore(release): AXIS v2.14.0 — splash, toolbar, and studio
 - `9ad5b004` (2026-09-23) — chore(release): AXIS v2.13.0 — drawing toolbar and classic colors
