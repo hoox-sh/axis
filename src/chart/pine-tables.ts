@@ -230,8 +230,13 @@ export type CollectTablesOpts = {
   runResults: Record<string, unknown> | null | undefined;
   /** Editor preview key — only used when no chart scripts are applied */
   editorKey?: string;
-  /** Fallback last-run when runResults empty (legacy) */
+  /**
+   * Focused run. Used when that script is visible but its cache entry has
+   * no table (a later failed tick replaced the cache).
+   */
   lastRun?: unknown;
+  /** Script id that owns {@link lastRun}. Ignored when it is not visible. */
+  lastRunOwnerId?: string | null;
 };
 
 /**
@@ -257,6 +262,10 @@ export function collectVisiblePineTables(opts: CollectTablesOpts): PineTable[] {
   if (ids.size > 0) {
     for (const id of ids) {
       if (id in results) pushAll(results[id], id);
+    }
+    const focus = opts.lastRunOwnerId?.trim();
+    if (focus && ids.has(focus) && !out.some((tb) => tb.ownerId === focus)) {
+      pushAll(opts.lastRun, focus);
     }
   } else if (opts.editorKey && opts.editorKey in results) {
     // No applied scripts — editor preview only (never sticky lastRun orphans)

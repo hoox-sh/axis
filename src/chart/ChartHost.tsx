@@ -804,9 +804,11 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
       <ChartContextMenu host={contextHost()} slotId={slotId()} />
       <Show when={isActive() && bars().length > 0 && !store.presentation?.chartOnly}>
         <DrawingToolbar />
-        <PyneTableHud />
         <VolumeProfileOverlay />
         <ChartScaleControls />
+      </Show>
+      <Show when={isActive() && bars().length > 0}>
+        <PyneTableHud />
       </Show>
       <Show when={emptyHint()}>
         {(hint) => (

@@ -1608,7 +1608,8 @@ async function runAndApplyInner(
           script,
           (result.meta as Record<string, unknown> | undefined) ?? null,
         );
-        const normalized = normalizeScriptDrawings(drawings);
+        const barSample = bars.length ? Number(bars[bars.length - 1]!.time) : null;
+        const normalized = normalizeScriptDrawings(drawings, barSample);
         const kept = garbageCollectScriptDrawings(normalized, limits);
         // Non-overlay scripts: force_overlay → price pane; rest → indicator pane Y
         let keptCount = 0;
@@ -1656,8 +1657,9 @@ async function runAndApplyInner(
             );
           }
         }
-      } else if (!silent || Array.isArray(drawings)) {
-        // Empty `drawings: []` must clear even on silent live re-runs.
+      } else if (result.status !== 'error' && (!silent || Array.isArray(drawings))) {
+        // Empty `drawings: []` on a successful run must clear even on silent
+        // live re-runs. A failed tick keeps the last good gallery.
         // Omit-the-field (`undefined`) still skips clear when silent.
         priceLayer?.clearScriptDrawings(indicatorId ?? EDITOR_RUN_KEY);
         if (!overlay && paneId !== 'price') {

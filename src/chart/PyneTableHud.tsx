@@ -44,6 +44,7 @@ export const PyneTableHud: Component = () => {
     void store.scripts;
     void store.runResults;
     void store.lastRun;
+    void store.resultsFocusId;
     const scriptIds = (store.scripts || [])
       .filter((s) => s.visible !== false)
       .map((s) => s.id);
@@ -52,6 +53,7 @@ export const PyneTableHud: Component = () => {
       runResults: store.runResults,
       editorKey: EDITOR_RUN_KEY,
       lastRun: store.lastRun,
+      lastRunOwnerId: store.resultsFocusId,
     });
   });
 

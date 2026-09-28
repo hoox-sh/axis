@@ -22,7 +22,10 @@ _Generated/updated: 2026-09-26 · 468 commits · describe-tag: `v2.16.0`_
 
 ### Changed
 
+- **Future drawings**: Pine lines, boxes, polylines, linefills, and labels can sit up to 500 bars past the last candle. The right margin grows to fit that point.
+- **Drawing gallery**: AXIS Drawings places its line, linefill, box, label, and polyline on the candle clock. Pine drawing times are milliseconds; the chart bars are unix seconds, and the mismatch was pinning every anchor to the last candle. The corner table stays up in chart-only mode, and a failed live tick no longer clears the last good gallery.
 - **OKF query**: `okf:query` also matches file names listed on a concept, so `drawings.ts` finds `src/indicators/builtins`. Path segments stay whole words (`ui` does not match `builtins`). The shared agent instructions are `okf/playbooks/read-this-first.md`. `AGENTS.md` stays gitignored and is not compiled into the bundle.
+- **Watchlist tick flash**: the watchlist toolbar bolt turns the quote flash on or off. The same switch is Settings → Theme → Motion.
 - **Watchlist add field**: the symbol browse control is a lens inside the input, matching the topbar symbol field.
 - **Data panel estimate**: the backfill form shows the span, dense bar count, and page count for the past date and timeframe. A job past 50,000 bars says how much of that timeframe one run keeps. Job cards show fetched versus expected bars and the window length. Dataset load preview includes the span of the bars that will load.
 

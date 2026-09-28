@@ -52,6 +52,7 @@ import {
 } from './drawing-types';
 import {
   DEFAULT_DRAWING_LIMITS,
+  alignDrawingTimeToBars,
   clampTimeToLastBar,
   dedupeScriptLabelsAtSameTime,
   garbageCollectScriptDrawings,
@@ -544,7 +545,10 @@ export class DrawingLayer {
     // Labels clamp to last bar at paint; geometry (line/box/…) keeps
     // bar_index+1 / varip future endpoints (logical extrapolation).
     const next = dedupeScriptLabelsAtSameTime(
-      garbageCollectScriptDrawings(normalizeScriptDrawings(raw), limits),
+      garbageCollectScriptDrawings(
+        normalizeScriptDrawings(raw, this.lastBarTime()),
+        limits,
+      ),
     );
     const owner = ownerId && String(ownerId).trim();
     if (owner) {
@@ -1109,9 +1113,10 @@ export class DrawingLayer {
     if (!Number.isFinite(time)) return null;
     try {
       const bars = this.barsProvider?.() ?? null;
-      let t = time;
+      const last = this.lastBarTime();
+      let t = alignDrawingTimeToBars(time, last);
       if (opts?.clampToLastBar) {
-        t = clampTimeToLastBar(t, this.lastBarTime());
+        t = clampTimeToLastBar(t, last);
       }
       if (!Number.isFinite(t)) return null;
       let x: number | null = null;
@@ -1161,9 +1166,9 @@ export class DrawingLayer {
    * Prefer unix-second time; if unmapped (including future times past last bar),
    * extrapolate via logical index. Compile-mode `bar_index` falls back last.
    *
-   * User drawings may sit up to {@link DRAWING_FUTURE_BARS} past series end
-   * (default). Pine **labels** pass `clampToLastBar: true` so `timenow` stays
-   * on the last candle; lines/boxes/polylines do not (last-bar / varip +1).
+   * User drawings and Pine script drawings may sit up to
+   * {@link DRAWING_FUTURE_BARS} (500) past the series end. Script paint grows
+   * the right margin so a future anchor stays mappable.
    */
   private toXY(
     p: Point,
@@ -2034,8 +2039,8 @@ export class DrawingLayer {
   }
 
   /**
-   * Script (Pine) paint. Clamp only when {@link scriptPaintClampsToLastBar}
-   * says so (labels). Geometry uses logical extrapolation past the last bar.
+   * Script (Pine) paint. Future anchors extrapolate up to
+   * {@link DRAWING_FUTURE_BARS} (500) and grow the right margin to match.
    */
   private toXYScript(
     p: Point,
@@ -2043,7 +2048,7 @@ export class DrawingLayer {
   ): { x: number; y: number } | null {
     return this.toXY(p, {
       clampToLastBar: scriptPaintClampsToLastBar(type),
-      growRightOffset: false,
+      growRightOffset: true,
     });
   }
 

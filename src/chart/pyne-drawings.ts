@@ -545,13 +545,15 @@ export function labelBubbleLayout(
 
 /**
  * True when Pine script paint should snap this kind to the last bar.
- * Labels (`timenow`) stay on the last candle. Geometry that uses
- * `bar_index + 1` / `varip` updates must keep the future endpoint.
+ *
+ * No kind is pinned. Lines, boxes, polylines, linefills, and labels may sit
+ * up to {@link DRAWING_FUTURE_BARS} (500) past the last candle. Paint grows
+ * the right margin so that future point stays on the time scale.
  */
 export function scriptPaintClampsToLastBar(
-  type: ScriptDrawing['type'] | string | null | undefined,
+  _type: ScriptDrawing['type'] | string | null | undefined,
 ): boolean {
-  return type === 'label';
+  return false;
 }
 
 /**
@@ -579,13 +581,39 @@ export function clampTimeToLastBar(
 }
 
 /**
+ * Match a Pine drawing time to the chart's bar clock.
+ *
+ * The engine stamps `line` / `box` / `label` / `polyline` times in
+ * milliseconds (`time` / `xloc.bar_index` both come back as ms). AXIS bars
+ * are unix seconds. Leaving the ms value in place puts every anchor ~500
+ * bars past the series, and script paint then pins them all to the last
+ * candle — lines and fills collapse to zero width.
+ *
+ * Bar indexes (small integers) stay as indexes. Already-aligned times are
+ * unchanged, so a second pass is a no-op.
+ *
+ * @param t - Drawing time, or a bar index
+ * @param barSample - One chart bar time (usually the last bar); null skips
+ */
+export function alignDrawingTimeToBars(
+  t: number,
+  barSample: number | null | undefined,
+): number {
+  if (!Number.isFinite(t) || barSample == null || !Number.isFinite(barSample)) return t;
+  // Chart seconds, Pine milliseconds.
+  if (barSample < 1e12 && t > 1e12) return Math.floor(t / 1000);
+  // Chart milliseconds, drawing already in unix seconds (not a bar index).
+  if (barSample > 1e12 && t > 1e9 && t < 1e12) return Math.floor(t * 1000);
+  return t;
+}
+
+/**
  * Clamp t1/t2/polyline point times past {@link lastBarTime} (immutable).
  * No-op when lastBarTime is missing or nothing is in the future.
  * Drops polyline vertices with non-finite price; leaves finite coords as-is.
  *
- * Do not use this for script **paint** — labels already clamp via
- * {@link scriptPaintClampsToLastBar}; lines/boxes/polylines must keep
- * `bar_index + 1` / `varip` endpoints.
+ * Do not use this for script **paint**. Paint projects every kind up to
+ * 500 bars past the last candle instead of snapping future anchors back.
  */
 export function clampScriptDrawingTimes(
   drawings: ScriptDrawing[],
@@ -700,8 +728,13 @@ export function dedupeScriptLabelsAtSameTime(drawings: ScriptDrawing[]): ScriptD
  * payload cannot allocate unboundedly before caller GC. Callers may still apply
  * tighter declaration limits via {@link garbageCollectScriptDrawings}.
  */
-export function normalizeScriptDrawings(raw: unknown[] | undefined | null): ScriptDrawing[] {
+export function normalizeScriptDrawings(
+  raw: unknown[] | undefined | null,
+  barSample?: number | null,
+): ScriptDrawing[] {
   if (!Array.isArray(raw) || !raw.length) return [];
+  const align = (t: number | null): number | null =>
+    t == null ? null : alignDrawingTimeToBars(t, barSample);
   let out: ScriptDrawing[] = [];
   let i = 0;
   for (const item of raw) {
@@ -717,7 +750,10 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
     // Polylines often only carry `points` (API) or `arg0` (compile fallback) —
     // handle before t1/p1 gate.
     if (type === 'polyline') {
-      const points = parsePolylinePoints(r.points ?? r.arg0 ?? r.pts);
+      const points = parsePolylinePoints(r.points ?? r.arg0 ?? r.pts).map((p) => ({
+        time: alignDrawingTimeToBars(p.time, barSample),
+        price: p.price,
+      }));
       if (points.length < 2) continue;
       out.push({
         id: `pine_poly_${i++}`,
@@ -744,9 +780,9 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
       out.push({
         id: `pine_hline_${i++}`,
         type: 'line',
-        t1: num(r.t1 ?? r.x1 ?? r.bar) ?? 0,
+        t1: align(num(r.t1 ?? r.x1 ?? r.bar)) ?? 0,
         p1: price,
-        t2: num(r.t2 ?? r.x2) ?? 1,
+        t2: align(num(r.t2 ?? r.x2)) ?? 1,
         p2: price,
         color: pineStrokeColor(r.color, '#787B86'),
         width: clampWidth(r.width, 1),
@@ -757,12 +793,12 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
       });
     } else {
       // Time/index: API t1/time · compile x1/left/x · bar index fallback
-      const t1 = num(r.t1 ?? r.time ?? r.x1 ?? r.left ?? r.x ?? r.bar);
+      const t1 = align(num(r.t1 ?? r.time ?? r.x1 ?? r.left ?? r.x ?? r.bar));
       const p1 = num(r.p1 ?? r.price ?? r.y1 ?? r.top ?? r.y);
       if (t1 == null || p1 == null) continue;
 
       if (type === 'line' || type === 'trend' || type === 'ray' || type === 'segment') {
-        const t2 = num(r.t2 ?? r.x2 ?? r.right);
+        const t2 = align(num(r.t2 ?? r.x2 ?? r.right));
         const p2 = num(r.p2 ?? r.y2 ?? r.bottom);
         if (t2 == null || p2 == null) continue;
         const extendDefault = type === 'ray' ? 'right' : 'none';
@@ -780,7 +816,7 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
           forceOverlay: Boolean(r.force_overlay ?? r.forceOverlay),
         });
       } else if (type === 'box' || type === 'rect' || type === 'rectangle') {
-        const t2 = num(r.t2 ?? r.x2 ?? r.right);
+        const t2 = align(num(r.t2 ?? r.x2 ?? r.right));
         const p2 = num(r.p2 ?? r.y2 ?? r.bottom);
         if (t2 == null || p2 == null) continue;
         out.push({
@@ -818,11 +854,11 @@ export function normalizeScriptDrawings(raw: unknown[] | undefined | null): Scri
         });
       } else if (type === 'linefill' || type === 'line_fill') {
         // pyne export: line1 (t1/p1→t2/p2) + line2 (t3/p3→t4/p4)
-        const t2 = num(r.t2 ?? r.x2);
+        const t2 = align(num(r.t2 ?? r.x2));
         const p2 = num(r.p2 ?? r.y2);
-        const t3 = num(r.t3 ?? r.x3);
+        const t3 = align(num(r.t3 ?? r.x3));
         const p3 = num(r.p3 ?? r.y3);
-        const t4 = num(r.t4 ?? r.x4);
+        const t4 = align(num(r.t4 ?? r.x4));
         const p4 = num(r.p4 ?? r.y4);
         if (t2 == null || p2 == null || t3 == null || p3 == null || t4 == null || p4 == null) {
           continue;

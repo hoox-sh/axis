@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-26T14:54:54Z
+  at: 2026-09-28T13:34:37Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -47,7 +47,7 @@ okf_lock: generated
 * `pine-tables.ts` — CollectTablesOpts, PineTable, PineTableCell, buildTableGrid, cellTextAlign, cellTextVerticalAlign, collectVisiblePineTables, isPineTable, normalizePineTable, parsePineTableCell, pineTablePositionClass, tablesFromRunPayload
 * `plot-rect.ts` — ChartPlotRect, PlotRectChart, PlotRectHost, measureChartPlotRect
 * `price-precision.ts` — PRICE_SCALE_DECIMALS_MAX, PRICE_SCALE_DECIMALS_MIN, PriceFormatOpts, PriceScaleDecimalsMode, clampPriceDecimals, countSignificantDecimals, cyclePriceScaleDecimalsMode, decimalsFromMagnitude, detectDecimalsFromBars, detectDecimalsFromSymbol, formatPriceWithDecimals, normalizePriceScaleDecimalsMode
-* `pyne-drawings.ts` — DEFAULT_DRAWING_LIMITS, DrawingLimits, ScriptDrawing, YLOC_PAD_PX, clampScriptDrawingTimes, clampTimeToLastBar, dedupeScriptLabelsAtSameTime, garbageCollectScriptDrawings, labelBubbleLayout, labelFontSizePx, normalizeExtend, normalizeLabelStyle
+* `pyne-drawings.ts` — DEFAULT_DRAWING_LIMITS, DrawingLimits, ScriptDrawing, YLOC_PAD_PX, alignDrawingTimeToBars, clampScriptDrawingTimes, clampTimeToLastBar, dedupeScriptLabelsAtSameTime, garbageCollectScriptDrawings, labelBubbleLayout, labelFontSizePx, normalizeExtend
 * `screenshot.ts` — DEFAULT_SCREENSHOT_OPTIONS, ScreenshotOptions, ScreenshotScale, ScreenshotScope, canvasToBlob, captureScreenshot, copyBlob, copyScreenshot, downloadBlob, downloadScreenshot, loadScreenshotOptions, saveScreenshotOptions
 * `series-factory.ts` — PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH, TV, VOID, colorWithAlpha, createAreaSeries, createBarSeries, createBaseChart, createBgcolorSeries, createCandleSeries, createHollowCandleSeries, createLineSeries
 * `volume-profile.ts` — DEFAULT_VALUE_AREA_PCT, DEFAULT_VP_ROWS, VolumeDistribution, VolumeProfileBin, VolumeProfileOptions, VolumeProfileResult, VpBar, computeVolumeProfile, expandValueArea, formatVpPrice, formatVpVolume, priceToBinIndex

@@ -131,6 +131,28 @@ describe('collectVisiblePineTables', () => {
     });
     expect(visible.length).toBe(0);
   });
+
+  it('uses the focused run when that script cache has no table', () => {
+    const visible = collectVisiblePineTables({
+      scriptIds: ['draw'],
+      runResults: { draw: { drawings: [] } },
+      lastRun: { drawings: [sampleTable] },
+      lastRunOwnerId: 'draw',
+    });
+    expect(visible.length).toBe(1);
+    expect(visible[0]!.ownerId).toBe('draw');
+    expect(visible[0]!.cells?.[0]?.text).toBe('A');
+  });
+
+  it('does not pull a focused run that belongs to another script', () => {
+    const visible = collectVisiblePineTables({
+      scriptIds: ['draw'],
+      runResults: {},
+      lastRun: { drawings: [sampleTable] },
+      lastRunOwnerId: 'other',
+    });
+    expect(visible.length).toBe(0);
+  });
 });
 
 describe('tablesFromRunPayload', () => {

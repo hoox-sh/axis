@@ -151,6 +151,84 @@ describe('normalizeScriptDrawings', () => {
     expect(normalizeScriptDrawings(null)).toHaveLength(0);
   });
 
+  it('scales Pine millisecond times onto unix-second bars', () => {
+    const last = 1_790_594_700;
+    const span = 16 * 300;
+    const list = normalizeScriptDrawings(
+      [
+        {
+          type: 'line',
+          t1: (last - span) * 1000,
+          p1: 83078.24,
+          t2: last * 1000,
+          p2: 83078.24,
+          color: '#FDD835',
+          width: 3,
+        },
+        {
+          type: 'linefill',
+          t1: (last - span) * 1000,
+          p1: 83078.24,
+          t2: last * 1000,
+          p2: 83078.24,
+          t3: (last - span) * 1000,
+          p3: 82676.47,
+          t4: last * 1000,
+          p4: 82676.47,
+          color: 'rgba(253,216,53,0.2)',
+        },
+        {
+          type: 'box',
+          t1: (last - 12 * 300) * 1000,
+          p1: 83078.24,
+          t2: (last - 6 * 300) * 1000,
+          p2: 82877.35,
+        },
+        {
+          type: 'label',
+          t1: last * 1000,
+          p1: 83078.24,
+          text: 'Label',
+        },
+        {
+          type: 'polyline',
+          points: [
+            { time: (last - 14 * 300) * 1000, price: 82676.47 },
+            { time: (last - 8 * 300) * 1000, price: 83078.24 },
+            { time: (last - 2 * 300) * 1000, price: 82877.35 },
+          ],
+          color: '#E040FB',
+          width: 3,
+        },
+        { type: 'table', position: 'top_right', rows: 6, columns: 2, cells: [] },
+      ],
+      last,
+    );
+    expect(list.map((d) => d.type)).toEqual(['line', 'linefill', 'box', 'label', 'polyline']);
+    expect(list[0]).toMatchObject({ t1: last - span, t2: last, p1: 83078.24, p2: 83078.24 });
+    expect(list[1]).toMatchObject({ t1: last - span, t4: last, p3: 82676.47 });
+    expect(list[2]).toMatchObject({ t1: last - 12 * 300, t2: last - 6 * 300 });
+    expect(list[3]).toMatchObject({ t1: last, text: 'Label' });
+    expect(list[4]!.points).toEqual([
+      { time: last - 14 * 300, price: 82676.47 },
+      { time: last - 8 * 300, price: 83078.24 },
+      { time: last - 2 * 300, price: 82877.35 },
+    ]);
+    // Second pass against the same bar clock does not scale again.
+    const again = normalizeScriptDrawings(list, last);
+    expect(again[0]).toMatchObject({ t1: last - span, t2: last });
+    expect(again[4]!.points?.[0]?.time).toBe(last - 14 * 300);
+  });
+
+  it('leaves bar_index anchors alone when the series is in unix seconds', () => {
+    const last = 1_790_594_700;
+    const list = normalizeScriptDrawings(
+      [{ type: 'line', t1: 10, p1: 1, t2: 26, p2: 2 }],
+      last,
+    );
+    expect(list[0]).toMatchObject({ t1: 10, t2: 26 });
+  });
+
   it('maps linefill quads from pyne export', () => {
     const list = normalizeScriptDrawings([
       {
@@ -748,8 +826,8 @@ describe('dedupeScriptLabelsAtSameTime', () => {
 });
 
 describe('scriptPaintClampsToLastBar', () => {
-  it('clamps only labels so last-bar / varip geometry can extend past the series', () => {
-    expect(scriptPaintClampsToLastBar('label')).toBe(true);
+  it('lets every script drawing extend into the future instead of pinning to the last bar', () => {
+    expect(scriptPaintClampsToLastBar('label')).toBe(false);
     expect(scriptPaintClampsToLastBar('line')).toBe(false);
     expect(scriptPaintClampsToLastBar('box')).toBe(false);
     expect(scriptPaintClampsToLastBar('polyline')).toBe(false);

@@ -58,7 +58,7 @@ import {
   onMount,
   Show,
 } from 'solid-js';
-import { effectMs } from './effects';
+import { effectEnabled, effectMs, prefersReducedMotion, setEffectEnabled } from './effects';
 import { Portal } from 'solid-js/web';
 import {
   store,
@@ -719,6 +719,27 @@ export const Watchlist: Component = () => {
             onClick={() => onNewList()}
           >
             <Icons.plus size={12} />
+          </button>
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost px-1"
+            classList={{
+              'text-accent': effectEnabled('watchlist.tick'),
+              'text-text-faint': !effectEnabled('watchlist.tick'),
+            }}
+            aria-pressed={effectEnabled('watchlist.tick')}
+            title={
+              prefersReducedMotion()
+                ? 'Tick flash stays off while reduced motion is on'
+                : effectEnabled('watchlist.tick')
+                  ? 'Tick flash on'
+                  : 'Tick flash off'
+            }
+            aria-label={effectEnabled('watchlist.tick') ? 'Disable tick flash' : 'Enable tick flash'}
+            data-testid="axis-watchlist-tick-flash"
+            onClick={() => setEffectEnabled('watchlist.tick', !effectEnabled('watchlist.tick'))}
+          >
+            <Icons.zap size={12} />
           </button>
           <Show when={modeLabel()}>
             <span
