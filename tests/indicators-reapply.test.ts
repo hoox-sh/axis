@@ -300,6 +300,13 @@ describe('detachIndicatorFromChart', () => {
     setStore('panes', [
       { id: 'price', type: 'price', height: 400, order: 0, visible: true },
     ]);
+    setManager(undefined);
+    setDrawingLayer(undefined);
+  });
+
+  afterEach(() => {
+    setManager(undefined);
+    setDrawingLayer(undefined);
   });
 
   it('removes script from store without throwing when no manager', () => {
@@ -316,6 +323,76 @@ describe('detachIndicatorFromChart', () => {
     expect(sanitizeOverlayOwnerId(id)).toBeTruthy();
     expect(ownedOverlayPrefix(id)).toContain('overlay_');
     expect(ownedOverlayPrefix(id)).toContain('__');
+  });
+
+  it('last script clears drawings, fills, barcolor, and markers', () => {
+    const owner: string[] = [];
+    let drawings = 0;
+    let fills = 0;
+    let barColors = 0;
+    let shapes = 0;
+    let trades = 0;
+    setManager({
+      removeOverlaysForOwner: (pane: string, sid: string) => {
+        owner.push(`${pane}:${sid}`);
+      },
+      clearShapeMarkers: () => {
+        shapes += 1;
+      },
+      clearTradeMarkers: () => {
+        trades += 1;
+      },
+      clearBarColors: () => {
+        barColors += 1;
+      },
+    } as never);
+    setDrawingLayer({
+      clearScriptDrawings: () => {
+        drawings += 1;
+      },
+      clearPlotFills: () => {
+        fills += 1;
+      },
+    } as never);
+    const id = addIndicator('Draw', 'indicator("Draw")\nline.new(0, 1, 1, 2)', 'price', {});
+    detachIndicatorFromChart(id);
+    expect(store.scripts.some((s) => s.id === id)).toBe(false);
+    expect(owner.some((x) => x.endsWith(`:${id}`))).toBe(true);
+    expect(drawings).toBeGreaterThanOrEqual(1);
+    expect(fills).toBeGreaterThanOrEqual(1);
+    expect(barColors).toBe(1);
+    expect(shapes).toBe(1);
+    expect(trades).toBe(1);
+  });
+
+  it('with a sibling script, owner-clears drawings / fills / barcolor', () => {
+    const fills: string[] = [];
+    const barColors: string[] = [];
+    const drawings: string[] = [];
+    setManager({
+      removeOverlaysForOwner: () => {},
+      clearShapeMarkers: () => {},
+      clearTradeMarkers: () => {},
+      clearBarColors: (owner?: string) => {
+        barColors.push(owner || '');
+      },
+    } as never);
+    setDrawingLayer({
+      clearScriptDrawings: (owner?: string) => {
+        drawings.push(owner || '');
+      },
+      clearPlotFills: (owner?: string) => {
+        fills.push(owner || '');
+      },
+    } as never);
+    addIndicator('A', 'indicator("A")\nplot(1)', 'price', {});
+    const b = addIndicator('B', 'indicator("B")\nline.new(0, 1, 1, 2)', 'price', {});
+    detachIndicatorFromChart(b);
+    expect(store.scripts.some((s) => s.id === b)).toBe(false);
+    expect(store.scripts).toHaveLength(1);
+    expect(fills).toEqual([b]);
+    expect(barColors).toEqual([b]);
+    expect(drawings).toEqual([b]);
   });
 });
 

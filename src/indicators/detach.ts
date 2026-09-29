@@ -21,7 +21,7 @@
  * Detach an applied indicator from the chart without wrecking sibling scripts.
  *
  * Guarantees:
- * - Owner-scoped series/markers removed (no full-pane wipe when siblings share a pane)
+ * - Owner-scoped series/markers/drawings/fills/barcolor removed (siblings stay)
  * - Overlay scripts also clear price-pane owner keys
  * - Sub-pane destroyed only when empty; store pane row cleaned up
  * - No leftover empty private panes
@@ -37,6 +37,7 @@ import {
   getDrawingLayer,
   getActiveDrawingLayer,
 } from '../chart/manager-access';
+import { clearScriptChartOverlays } from './visibility';
 
 /**
  * Clear chart series for one script, remove it from the store, and destroy its
@@ -60,28 +61,16 @@ export function detachIndicatorFromChart(id: string): void {
   const isSubPane = paneId !== 'price' && paneId !== 'volume';
 
   if (manager) {
-    // Owner-scoped clear on the script's pane
+    // Same owner-scoped overlay / drawing / fill / barcolor path as hide.
+    // Pine geometry is keyed by script id, so a sibling on the chart must not
+    // keep this script's lines after delete.
     try {
-      if (typeof manager.removeOverlaysForOwner === 'function') {
-        manager.removeOverlaysForOwner(paneId, id);
-      } else {
-        const others = store.scripts.filter((s) => s.id !== id && s.paneId === paneId);
-        if (others.length === 0) manager.removeOverlays(paneId);
-      }
+      clearScriptChartOverlays(id, paneId);
     } catch {
       /* chart dispose races */
     }
-    // Overlay scripts paint on price — always clear owner keys there too
-    if (paneId !== 'price') {
-      try {
-        if (typeof manager.removeOverlaysForOwner === 'function') {
-          manager.removeOverlaysForOwner('price', id);
-        }
-      } catch {
-        /* ignore */
-      }
-    } else {
-      // Was on price: also scrub any private sub-pane leftovers for this id
+    // Overlay scripts paint on price — also scrub any private sub-pane leftovers
+    if (paneId === 'price') {
       try {
         const privateId = `ind_${String(id).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 56)}`;
         if (manager.getPane?.(privateId)) {
@@ -110,34 +99,6 @@ export function detachIndicatorFromChart(id: string): void {
         /* ignore */
       }
     }
-    try {
-      manager.clearShapeMarkers?.(id);
-    } catch {
-      /* optional */
-    }
-    // Strategy long/short entry/exit labels (price-pane candle markers)
-    try {
-      manager.clearTradeMarkers?.(id);
-    } catch {
-      /* optional */
-    }
-    try {
-      if (isSubPane) clearScriptPaneLayer?.(paneId);
-    } catch {
-      /* optional */
-    }
-    // Overlay scripts paint Pine geometry on the price drawing layer (full
-    // replace, not owner-scoped). Clear when this was the only script so
-    // lines/labels/boxes do not linger after delete.
-    try {
-      const others = store.scripts.filter((s) => s.id !== id);
-      if (others.length === 0) {
-        (getActiveDrawingLayer() ?? getDrawingLayer())?.clearScriptDrawings?.();
-        clearScriptPaneLayers?.();
-      }
-    } catch {
-      /* optional */
-    }
   }
 
   removeIndicator(id);
@@ -151,7 +112,9 @@ export function detachIndicatorFromChart(id: string): void {
       if ((store.scripts || []).length === 0) {
         setLastRun(null, { scriptId: EDITOR_RUN_KEY });
         setLastRun(null, { scriptId: id });
-        (getActiveDrawingLayer() ?? getDrawingLayer())?.clearScriptDrawings?.();
+        const layer = getActiveDrawingLayer() ?? getDrawingLayer();
+        layer?.clearScriptDrawings?.();
+        layer?.clearPlotFills?.();
         clearScriptPaneLayers?.();
       }
     }
