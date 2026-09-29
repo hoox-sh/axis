@@ -17,7 +17,9 @@ _Generated/updated: 2026-09-28 · 475 commits · describe-tag: `v2.17.0`_
 
 ### Fixed
 
+- **Pre-eval typo checker**: comma-separated multi-declarations (`const string A = 'x', const string B = 'y'`, `var series bool L = na, var series bool S = na`) now index every name instead of only the first per line, and single-line function bodies after `=>` contribute their bindings too. Large scripts no longer drown in false `Unknown COL2 / __GRID / __MTG / ATS … did you mean …?` marks. `dayofweek.sunday` … `dayofweek.saturday` are known builtins, so `dayofweek == dayofweek.monday` is no longer flagged.
 - **Drawing tool menu**: the group flyout (Fib, Gann, and the rest) opens beside the rail with the full tool name. It is no longer clipped to the rail edge.
+- **Script delete**: removing a chart script owner-clears its Pine drawings, plot fills, and barcolor. Lines no longer stay on the chart when another script is still applied.
 
 ## [2.18.0] — 2026-09-28
 

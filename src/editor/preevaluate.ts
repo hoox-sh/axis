@@ -504,6 +504,7 @@ const TUPLE_ASSIGN_RE =
   /^\s*(?:export\s+)?(?:varip|var)?\s*\[([^\]]+)\]\s*=/;
 const FOR_TUPLE_RE = /^\s*for\s+(?:var\s+)?\[([^\]]+)\]\s+in\b/;
 const FOR_IN_RE = /^\s*for\s+(?:var\s+)?([A-Za-z_]\w*)\s+in\b/;
+const FOR_RANGE_RE = /^\s*for\s+(?:var\s+)?([A-Za-z_]\w*)\s*=\s*\S+\s+to\b/;
 const ENUM_DECL_RE = /^\s*(?:export\s+)?enum\s+[A-Za-z_][\w]*\s*$/;
 const TYPE_DECL_RE = /^\s*(?:export\s+)?type\s+[A-Za-z_][\w]*(?:\s+extends\s+\S+)?\s*$/;
 const ENUM_MEMBER_LINE_RE = /^\s*([A-Za-z_]\w*)\s*(?:=.*)?$/;
@@ -538,7 +539,7 @@ function addFnParams(paramsRaw: string, into: Set<string>, fnMap: Map<string, st
  * headers (the `(` breaks the chain) never match.
  */
 const GENERIC_ASSIGN_RE =
-  /^\s*(?:export\s+)?(?:varip|var)?\s*(?:[A-Za-z_][\w.]*(?:\s*<[^=<>]*(?:<[^=<>]*>[^=<>]*)*>)?(?:\[\])?\s+)+([A-Za-z_]\w*)\s*=(?![=>])/;
+  /^\s*(?:export\s+)?(?:varip|var)?\s*(?:[A-Za-z_][\w.]*(?:\s*<[^=<>]*(?:<[^=<>]*>[^=<>]*)*>)?(?:\s*\[\])?\s+)+([A-Za-z_]\w*)\s*=(?![=>])/;
 
 function parseGenericAssignName(text: string): string | null {
   if (text.includes(':=') || text.includes('=>')) return null;
@@ -547,6 +548,51 @@ function parseGenericAssignName(text: string): string | null {
   const name = m[1]!;
   if (BARE_CALL_SKIP.has(name)) return null;
   return name;
+}
+
+/**
+ * Split stripped line text on top-level commas (nesting depth 0).
+ * Strings are already removed by {@link stripPineCommentsAndStrings}, so
+ * `array.from('a', 'b')` commas stay protected by paren depth.
+ */
+function splitTopLevelCommas(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '(' || c === '[' || c === '{') depth += 1;
+    else if (c === ')' || c === ']' || c === '}') depth = Math.max(0, depth - 1);
+    else if (c === ',' && depth === 0) {
+      parts.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts;
+}
+
+/**
+ * Index every `type name = value` binding in one comma segment.
+ * Handles comma-separated multi-declarations
+ * (`const string A = 'x', const string B = 'y'`) and single-line function
+ * bodies after `=>` (`f(...) => float m = ..., float u = ..., m + u`).
+ */
+function collectSegmentAssignNames(segment: string, names: Set<string>): void {
+  const assign = parseAssignLine(segment);
+  if (assign) {
+    if (!BARE_CALL_SKIP.has(assign.name)) names.add(assign.name);
+    return;
+  }
+  const arrow = segment.indexOf('=>');
+  if (arrow >= 0) {
+    for (const sub of splitTopLevelCommas(segment.slice(arrow + 2))) {
+      collectSegmentAssignNames(sub, names);
+    }
+    return;
+  }
+  const generic = parseGenericAssignName(segment);
+  if (generic) names.add(generic);
 }
 
 /** True when `text` opens more parens than it closes (multi-line header). */
@@ -658,14 +704,13 @@ function collectUserDeclarationMap(source: string): {
 
     collectFnsFromLine(text, names, functions);
 
-    const assign = parseAssignLine(text);
-    if (assign && !BARE_CALL_SKIP.has(assign.name)) {
-      names.add(assign.name);
-    } else if (!assign) {
-      // UDT-typed declarations (`draft_line __line = ...`,
-      // `var interface __intf = ...`) that ASSIGN_RE cannot see.
-      const generic = parseGenericAssignName(text);
-      if (generic) names.add(generic);
+    // Comma-separated multi-declarations (`const string A = 'x', const string
+    // B = 'y'`, `var series bool L = na, var series bool S = na`, single-line
+    // `=>` bodies). Only the first name used to be indexed, so every later
+    // sibling was flagged as a typo of an earlier one (COL2 → COL1,
+    // __GRID → _grid, ATS → ATR).
+    for (const segment of splitTopLevelCommas(text)) {
+      collectSegmentAssignNames(segment, names);
     }
 
     const tuple = TUPLE_ASSIGN_RE.exec(text);
@@ -679,6 +724,10 @@ function collectUserDeclarationMap(source: string): {
     // `for element_ in ...` loop variables (tuple form handled above).
     const forIn = FOR_IN_RE.exec(text);
     if (forIn && !BARE_CALL_SKIP.has(forIn[1]!)) names.add(forIn[1]!);
+
+    // `for i = 0 to ...` loop counters.
+    const forRange = FOR_RANGE_RE.exec(text);
+    if (forRange && !BARE_CALL_SKIP.has(forRange[1]!)) names.add(forRange[1]!);
 
     const forTuple = FOR_TUPLE_RE.exec(text);
     if (forTuple) {

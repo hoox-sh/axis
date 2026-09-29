@@ -991,4 +991,74 @@ plot(strategy.etry)
     expect(hit).toBeTruthy();
     expect(hit!.message).toMatch(/strategy\.entry/);
   });
+
+  it('knows dayofweek.* constants (not false typos)', () => {
+    expect(isKnownBuiltinPath('dayofweek.monday')).toBe(true);
+    expect(isKnownBuiltinPath('dayofweek.sunday')).toBe(true);
+    expect(isKnownBuiltinPath('dayofweek.saturday')).toBe(true);
+    const src = [
+      '//@version=5',
+      'indicator("t")',
+      'var series int week_start_day = dayofweek.monday',
+      'plot(dayofweek == week_start_day ? 1 : 0)',
+    ].join('\n');
+    expect(
+      checkUnknownBuiltinMembers(src).filter((d) => /dayofweek\.monday/.test(d.message)),
+    ).toEqual([]);
+  });
+
+  it('indexes every name in comma-separated multi-declarations', () => {
+    const src = [
+      '//@version=5',
+      'strategy("m")',
+      "const string FUTURES = 'Futures', const string SPOT = 'Spot', const string LEVERAGED = 'ETF'",
+      "const string COL1 = 'COLLUM_01', const string COL2 = 'COLLUM_02'",
+      "const color CL_GR_1 = #4EF9FFFF, const color CL_GR_4 = #AFFF00FF",
+      'var series bool __GRID_LONG = na, var series bool __GRID_SHORT = na',
+      'var series float __SIGNAL = na, var series float __GRID = na, var series float __MTG = 0.55',
+      'var series int __MTP_TP1_LVL = 0, var series int __MTP_SL1_LVL = 0, var series int __MTP_ST1_LVL = 0',
+      'var series float __ORX_SUM = 0, var series float __ORX_CTX = 0, var series float __ORX_COM = 0',
+      'series float __POS_SUM = 0, series float __POS_COM = 0',
+      'simple string __TR_MARKET = input.string(FUTURES, options=[FUTURES, SPOT, LEVERAGED])',
+      'plot(close)',
+    ].join('\n');
+    const names = collectUserBindings(src);
+    for (const n of [
+      'FUTURES', 'SPOT', 'LEVERAGED', 'COL1', 'COL2', 'CL_GR_1', 'CL_GR_4',
+      '__GRID_LONG', '__GRID_SHORT', '__SIGNAL', '__GRID', '__MTG',
+      '__MTP_TP1_LVL', '__MTP_SL1_LVL', '__MTP_ST1_LVL',
+      '__ORX_SUM', '__ORX_CTX', '__ORX_COM', '__POS_SUM', '__POS_COM',
+    ]) {
+      expect(names.has(n), n).toBe(true);
+    }
+    expect(checkUnknownBuiltinMembers(src).filter((d) => /did you mean/.test(d.message))).toEqual([]);
+  });
+
+  it('indexes single-line function bodies after => (upSum, _dist, _perc)', () => {
+    const src = [
+      '//@version=6',
+      'indicator("f")',
+      'f_cmo(series float _src, series int _len) => float mom = ta.change(_src), float upSum = math.sum(math.max(mom, 0), _len), float downSum = math.sum(-math.min(mom, 0), _len), (upSum - downSum) / (upSum + downSum)',
+      'f_dist(series float _s1, series float _s2) => series float _dist = math.max(_s1, _s2) - math.min(_s1, _s2), series float _perc = _dist / math.max(_s1, _s2) * 100, [_dist, _perc]',
+      'plot(f_cmo(close, 9))',
+    ].join('\n');
+    const names = collectUserBindings(src);
+    for (const n of ['mom', 'upSum', 'downSum', '_dist', '_perc']) {
+      expect(names.has(n), n).toBe(true);
+    }
+    expect(checkUnknownBuiltinMembers(src).filter((d) => /did you mean/.test(d.message))).toEqual([]);
+  });
+
+  it('indexes spaced array generics (float [] SERIES_FIBO) and for-range counters', () => {
+    const src = [
+      '//@version=6',
+      'indicator("g")',
+      'var series float [] SERIES_FIBO = array.from(.000, .236)',
+      'for i = 0 to array.size(SERIES_FIBO) - 1 by 1',
+      '    plot(array.get(SERIES_FIBO, i))',
+    ].join('\n');
+    expect(collectUserBindings(src).has('SERIES_FIBO')).toBe(true);
+    expect(collectUserBindings(src).has('i')).toBe(true);
+    expect(checkUnknownBuiltinMembers(src).filter((d) => /did you mean/.test(d.message))).toEqual([]);
+  });
 });
