@@ -1,0 +1,56 @@
+AXIS COMMERCIAL LICENCE — v1.0
+Copyright (c) 2026 HOOX · AXIS · hoox-sh
+https://github.com/hoox-sh/axis — https://hoox.sh/axis
+
+Price: EUR 349 one-time, per organisation, lifetime. Ex-VAT.
+Checkout: Polar.sh (Merchant-of-Record). Receipt = proof. No keys, no activation.
+
+NOTE: AXIS is AGPL-3.0-only (NOT -or-later). This Commercial Licence is an
+alternative to the AGPL for holders of a valid purchase receipt. You may
+choose EITHER the AGPL OR this Commercial Licence for the same code.
+
+1. WHAT YOU MAY DO (without AGPL obligations)
+   (a) Use, modify, and run AXIS inside closed-source products.
+   (b) Distribute AXIS (source or build, modified or not, white-label /
+       OEM embed) inside closed products without publishing your changes.
+   (c) Host AXIS as a service / SaaS for third parties without offering
+       Corresponding Source to network users (AGPL s13 waived between
+       licensor and you).
+   (d) Keep internal modifications private.
+
+2. SCOPE
+   (a) One legal entity per purchase. Unlimited developers, products,
+       domains, and deployments within that entity.
+   (b) Lifetime for the 2.x product line, plus all patch/minor releases
+       up to purchase date. A future paid major (3.x) may need a new licence.
+   (c) Subsidiaries and clients need their own licence. No resale of the
+       licence standalone.
+
+3. WHAT YOU MAY NOT DO
+   (a) Remove copyright notices.
+   (b) Claim endorsement by HOOX / AXIS.
+   (c) Use TradingView® / Pine Script™ / Cloudflare® marks beyond
+       nominative interoperability references. AXIS is independent and
+       unaffiliated with TradingView, Inc. and Cloudflare, Inc.
+
+4. WHAT YOU DO NOT GET
+   No warranty, no support, no SLA, no hosted service, no stream/evaluate
+   quota. Hosted AXIS Pro SaaS is a separate product (see docs/reference/
+   commercial.mdx). This licence is legal permission only — "buy once,
+   file the receipt, nothing else to do". Software is provided AS IS.
+
+5. PROOF
+   Your Polar receipt (order ID + purchaser email + date) IS the licence
+   certificate. Keep it. No licence keys, no activation, no callbacks.
+
+6. AGPL REMAINS
+   Public code stays AGPL-3.0-only for everyone else. Your commercial use
+   neither relicenses upstream nor obliges contributions back.
+
+7. TERMINATION
+   Terminates on chargeback fraud or transfer in breach of 2(c). On
+   termination, AGPL terms apply to further use.
+
+8. LAW
+   Governing law: Germany (EU). VAT handled by Polar as Merchant-of-Record.
+   Buy: https://hoox.sh/axis (Plans plate) — Polar checkout links.
