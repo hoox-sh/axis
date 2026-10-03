@@ -19,7 +19,7 @@ import {
   type VpBar,
 } from '../src/chart/volume-profile.ts';
 
-function bar(low: number, high: number, close: number, volume: number): VpBar {
+function bar(low: number, high: number, close: number, volume?: number): VpBar {
   return { low, high, close, volume };
 }
 
@@ -218,10 +218,10 @@ describe('computeVolumeProfile', () => {
     expect(r.vaHigh).toBeCloseTo(10, 8);
   });
 
-  it('returns bins with zero volume but null POC when no volume', () => {
+  it('returns no bins and null POC when no volume (overlay hides)', () => {
     const bars = [bar(1, 2, 1.5, 0), bar(2, 3, 2.5)];
     const r = computeVolumeProfile(bars, { rows: 4 });
-    expect(r.bins.length).toBe(4);
+    expect(r.bins.length).toBe(0);
     expect(r.totalVolume).toBe(0);
     expect(r.poc).toBeNull();
   });

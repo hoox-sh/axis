@@ -79,10 +79,17 @@ import {
   mapBarUpdate,
   lastBarDirection,
   normalizeChartType,
+  createHaCacheHolder,
   type ChartType,
+  type HaCacheHolder,
   DEFAULT_CHART_TYPE,
 } from './chart-type';
-import { MAX_CHART_MARKERS, capNewest, createRafCoalescer } from './heavy-data';
+import {
+  MAX_CHART_MARKERS,
+  barIndexAtTimeBinary,
+  capNewest,
+  createRafCoalescer,
+} from './heavy-data';
 import type { Bar } from '../store/types';
 import { resizePane, store } from '../store';
 import type { TradeMarker } from '../results/events';
@@ -539,8 +546,10 @@ export class PaneManager {
    */
   private overlaySeriesKinds = new Map<string, PlotSeriesKind | 'plotbar' | 'plotcandle'>();
   /**
-   * Last applied data fingerprint per series key — enables last-bar
-   * `series.update` on silent live re-runs when only the tip changed.
+   * Last applied data fingerprint per pane-qualified series key
+   * (`${paneId}:${seriesKey}`) — enables last-bar `series.update` on silent
+   * live re-runs when only the tip changed. Qualified so the same plot name
+   * on price + indicator panes never shares a fingerprint.
    */
   private overlayDataMeta = new Map<string, SeriesApplyMeta>();
   /**
@@ -550,6 +559,8 @@ export class PaneManager {
   private overlayLineBreaks = new Map<string, LineBreakPrimitive>();
   /** ThemeManager chart unregister fns keyed by pane id */
   private themeUnregs = new Map<string, () => void>();
+  /** Per-chart Heikin-Ashi incremental state (multi-chart safe). */
+  private haHolder: HaCacheHolder = createHaCacheHolder();
 
   constructor(container: HTMLElement, hostKey = '') {
     this.container = container;
@@ -653,6 +664,27 @@ export class PaneManager {
 
   setPriceChartType(type: ChartType) {
     this.priceChartType = normalizeChartType(type);
+  }
+
+  /** Pane-qualified fingerprint key for overlay smart-apply meta. */
+  private overlayMetaKey(paneId: string, seriesKey: string): string {
+    return `${paneId}:${seriesKey}`;
+  }
+
+  /** Drop both qualified + legacy bare meta entries (post-upgrade safety). */
+  private deleteOverlayMeta(paneId: string, seriesKey: string): void {
+    this.overlayDataMeta.delete(`${paneId}:${seriesKey}`);
+    this.overlayDataMeta.delete(seriesKey);
+  }
+
+  /** Reset per-chart Heikin-Ashi live state (full history replace / type switch). */
+  resetHaCache(): void {
+    this.haHolder.cache = null;
+  }
+
+  /** Expose HA holder so full-history paint seeds this chart (not the global). */
+  getHaHolder(): HaCacheHolder {
+    return this.haHolder;
   }
 
   /** Drop markers plugin handle before removing the host series (chart type switch). */
@@ -1415,12 +1447,18 @@ export class PaneManager {
     const seriesMarkers = Array.from(byKey.values()).sort(
       (a, b) => (a.time as number) - (b.time as number),
     );
+    // Cap merged output: a per-bar strategy + shapes + debug pins can exceed
+    // MAX_CHART_MARKERS even when each owner bag is capped. Keep newest.
+    const capped =
+      seriesMarkers.length > MAX_CHART_MARKERS
+        ? capNewest(seriesMarkers, MAX_CHART_MARKERS)
+        : seriesMarkers;
 
     try {
       if (!this.candleMarkers) {
-        this.candleMarkers = createSeriesMarkers(candle, seriesMarkers);
+        this.candleMarkers = createSeriesMarkers(candle, capped);
       } else {
-        this.candleMarkers.setMarkers(seriesMarkers);
+        this.candleMarkers.setMarkers(capped);
       }
     } catch {
       // Host series may have been removed mid-swap; clear stale plugin handle
@@ -1469,12 +1507,14 @@ export class PaneManager {
         continue;
       }
       const sorted = markers.sort((a, b) => (a.time as number) - (b.time as number));
+      const capped =
+        sorted.length > MAX_CHART_MARKERS ? capNewest(sorted, MAX_CHART_MARKERS) : sorted;
       try {
         const existing = this.paneShapePlugins.get(paneId);
         if (existing) {
-          existing.setMarkers(sorted);
+          existing.setMarkers(capped);
         } else {
-          this.paneShapePlugins.set(paneId, createSeriesMarkers(host, sorted));
+          this.paneShapePlugins.set(paneId, createSeriesMarkers(host, capped));
         }
       } catch {
         this.paneShapePlugins.delete(paneId);
@@ -1484,21 +1524,43 @@ export class PaneManager {
 
   /**
    * Center all panes on a bar time (unix seconds). Used when clicking a trade row.
+   * Falls back to a bar-index window from `store.bars` when the time is outside
+   * the current data (interval-agnostic — no fixed ±days window).
    */
   scrollToTime(time: number, halfWindow = 40) {
     if (!Number.isFinite(time)) return;
     const t = time as UTCTimestamp;
+    const half = Number.isFinite(halfWindow) && halfWindow > 0 ? Math.floor(halfWindow) : 40;
+    let fallbackLogical: { from: number; to: number } | null = null;
+    try {
+      const bars = store.bars;
+      if (Array.isArray(bars) && bars.length) {
+        const idx = barIndexAtTimeBinary(bars, time);
+        if (idx >= 0) fallbackLogical = { from: idx - half, to: idx + half };
+      }
+    } catch {
+      fallbackLogical = null;
+    }
     for (const pane of this.getAllPanes()) {
       if (!pane.visible) continue;
       try {
         const ts = pane.chart.timeScale();
         const coord = ts.timeToCoordinate(t);
         if (coord == null) {
-          // Time outside current data — try a tight visible range
-          ts.setVisibleRange({
-            from: (time - 86400 * 14) as UTCTimestamp,
-            to: (time + 86400 * 14) as UTCTimestamp,
-          });
+          // Time outside current data — center on the nearest bar index.
+          if (fallbackLogical) {
+            this.suppressSync = true;
+            try {
+              ts.setVisibleLogicalRange(fallbackLogical);
+            } finally {
+              this.suppressSync = false;
+            }
+          } else {
+            ts.setVisibleRange({
+              from: (time - 86400 * 14) as UTCTimestamp,
+              to: (time + 86400 * 14) as UTCTimestamp,
+            });
+          }
           continue;
         }
         const logical = ts.coordinateToLogical(coord);
@@ -1506,8 +1568,8 @@ export class PaneManager {
         this.suppressSync = true;
         try {
           ts.setVisibleLogicalRange({
-            from: logical - halfWindow,
-            to: logical + halfWindow,
+            from: logical - half,
+            to: logical + half,
           });
         } finally {
           this.suppressSync = false;
@@ -1974,6 +2036,7 @@ export class PaneManager {
     line: OverlayLineSpec,
     seriesKind: PlotSeriesKind,
     breakStyle: boolean,
+    forceFull = false,
   ): void {
     if (!breakStyle || isHistogramSeriesKind(seriesKind)) {
       this.dropLineBreak(series, key);
@@ -1989,13 +2052,17 @@ export class PaneManager {
         return;
       }
     }
-    prim.setPoints(line.data, {
-      color: line.color || VOID.indigo,
-      lineWidth: line.linewidth != null ? Math.max(1, Math.min(4, Math.round(line.linewidth))) : 2,
-      lineStyle: normalizeLineStyleToken(line.linestyle),
-      stepped: seriesKind === 'stepline',
-      area: seriesKind === 'area',
-    });
+    prim.setPoints(
+      line.data,
+      {
+        color: line.color || VOID.indigo,
+        lineWidth: line.linewidth != null ? Math.max(1, Math.min(4, Math.round(line.linewidth))) : 2,
+        lineStyle: normalizeLineStyleToken(line.linestyle),
+        stepped: seriesKind === 'stepline',
+        area: seriesKind === 'area',
+      },
+      forceFull,
+    );
   }
 
   /**
@@ -2129,12 +2196,13 @@ export class PaneManager {
       const pricePane = this.panes.get('price');
       const chartType = normalizeChartType(store.chartType ?? this.priceChartType);
       if (pricePane?.series['candle']) {
-        // Non-HA: O(1) from the single tick. HA: use store history + HA cache
-        // (mapBarUpdate is O(1) after full paint; never filter+sort 10k bars).
+        // Non-HA: O(1) from the single tick. HA: use this chart's holder +
+        // store history (mapBarUpdate is O(1) after full paint seeded into
+        // the holder; never filter+sort 10k bars).
         const storeBars = store.bars;
         const barsForMap: readonly Bar[] =
           chartType === 'heikinashi' && storeBars?.length ? storeBars : [bar];
-        const point = mapBarUpdate(barsForMap, chartType);
+        const point = mapBarUpdate(barsForMap, chartType, this.haHolder);
         if (point && Number.isFinite(point.time)) {
           const ohlcOk =
             'close' in point
@@ -2150,15 +2218,25 @@ export class PaneManager {
             });
           }
         }
-        // Tint last-price line to bar direction
+        // Tint last-price line to bar direction (O(1): HA reuses the point
+        // just computed instead of a full-history transform).
         try {
-          const dirBars =
-            storeBars?.length && storeBars[storeBars.length - 1]?.time === bar.time
-              ? storeBars
-              : storeBars?.length
+          let dir: 'up' | 'down' | null = null;
+          if (chartType === 'heikinashi') {
+            if (point && 'close' in point) {
+              const o = (point as { open: number }).open;
+              const c = (point as { close: number }).close;
+              if (Number.isFinite(o) && Number.isFinite(c)) dir = c >= o ? 'up' : 'down';
+            }
+          } else {
+            const dirBars =
+              storeBars?.length && storeBars[storeBars.length - 1]?.time === bar.time
                 ? storeBars
-                : [bar];
-          const dir = lastBarDirection(dirBars, chartType);
+                : storeBars?.length
+                  ? storeBars
+                  : [bar];
+            dir = lastBarDirection(dirBars, chartType);
+          }
           if (dir) {
             const voidLike = getThemeManager().getVoidLike();
             pricePane.series['candle'].applyOptions({
@@ -2206,7 +2284,7 @@ export class PaneManager {
       safeRemoveSeries(pane.chart, pane.series[k]);
       delete pane.series[k];
       this.overlaySeriesKinds.delete(`${paneId}:${k}`);
-      this.overlayDataMeta.delete(k);
+      this.deleteOverlayMeta(paneId, k);
       this.forgetLastValueTitle(paneId, k);
     }
     for (const name of Object.keys(pane.priceLines)) {
@@ -2244,7 +2322,7 @@ export class PaneManager {
         safeRemoveSeries(pane.chart, pane.series[k]);
         delete pane.series[k];
         this.overlaySeriesKinds.delete(`${paneId}:${k}`);
-        this.overlayDataMeta.delete(k);
+        this.deleteOverlayMeta(paneId, k);
         this.forgetLastValueTitle(paneId, k);
       }
     }
@@ -2331,7 +2409,7 @@ export class PaneManager {
       safeRemoveSeries(pane.chart, pane.series[k]);
       delete pane.series[k];
       this.overlaySeriesKinds.delete(`${paneId}:${k}`);
-      this.overlayDataMeta.delete(k);
+      this.deleteOverlayMeta(paneId, k);
     }
 
     // Exclusive panes: also drop other owners’ price lines (hlines)
@@ -2420,7 +2498,7 @@ export class PaneManager {
         safeRemoveSeries(pane.chart, pane.series[k]);
         delete pane.series[k];
         this.overlaySeriesKinds.delete(`${paneId}:${k}`);
-        this.overlayDataMeta.delete(k);
+        this.deleteOverlayMeta(paneId, k);
       }
     }
 
@@ -2452,14 +2530,16 @@ export class PaneManager {
         safeRemoveSeries(pane.chart, existing);
         delete pane.series[key];
         this.overlaySeriesKinds.delete(kindKey);
-        this.overlayDataMeta.delete(key);
+        this.deleteOverlayMeta(paneId, key);
       }
       const seriesNow = pane.series[key];
       const histFamily = isHistogramSeriesKind(seriesKind);
       const breakStyle = isBreakPlotStyle(line.style);
       if (seriesNow) {
         // Tip-only path skips full toLwcLineData when length + lastTime match
-        applyOverlayLineDataSmart(seriesNow, line.data, key, this.overlayDataMeta, forceFull);
+        // (meta keyed per pane so same plot name on two panes never collides).
+        const metaKey = this.overlayMetaKey(paneId, key);
+        applyOverlayLineDataSmart(seriesNow, line.data, metaKey, this.overlayDataMeta, forceFull);
         try {
           const labels = this.plotLabelOptions(line);
           const opts: Record<string, unknown> = {
@@ -2500,7 +2580,7 @@ export class PaneManager {
         } catch {
           /* ignore */
         }
-        this.syncLineBreakPrimitive(seriesNow, key, line, seriesKind, breakStyle);
+        this.syncLineBreakPrimitive(seriesNow, key, line, seriesKind, breakStyle, forceFull);
       } else {
         try {
           const c = line.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
@@ -2533,10 +2613,16 @@ export class PaneManager {
             }
           }
           // First paint always maps full series (incl. na whitespace slots)
-          applyOverlayLineDataSmart(series, line.data, key, this.overlayDataMeta, forceFull);
+          applyOverlayLineDataSmart(
+            series,
+            line.data,
+            this.overlayMetaKey(paneId, key),
+            this.overlayDataMeta,
+            forceFull,
+          );
           pane.series[key] = series;
           this.overlaySeriesKinds.set(kindKey, seriesKind);
-          this.syncLineBreakPrimitive(series, key, line, seriesKind, breakStyle);
+          this.syncLineBreakPrimitive(series, key, line, seriesKind, breakStyle, forceFull);
         } catch {
           /* chart may be disposed mid-apply */
         }
@@ -2569,7 +2655,7 @@ export class PaneManager {
           this.dropLineBreak(pane.series[fallbackKey], fallbackKey);
           safeRemoveSeries(pane.chart, pane.series[fallbackKey]);
           delete pane.series[fallbackKey];
-          this.overlayDataMeta.delete(fallbackKey);
+          this.deleteOverlayMeta(paneId, fallbackKey);
         }
 
         const opts = {
@@ -2600,11 +2686,11 @@ export class PaneManager {
             pane.priceLines[plKey] = { line: pl, host };
           } catch {
             // Fall through to constant series if createPriceLine unavailable (tests/mocks)
-            this._hlineAsSeries(pane, line, price, c, lw);
+            this._hlineAsSeries(pane, line, price, c, lw, ownerId);
           }
         }
       } else {
-        this._hlineAsSeries(pane, line, price, c, lw);
+        this._hlineAsSeries(pane, line, price, c, lw, ownerId);
       }
       colorIdx += 1;
     }
@@ -2665,9 +2751,10 @@ export class PaneManager {
     price: number,
     color: string,
     lineWidth: number,
+    ownerId?: string,
   ) {
     if (!Number.isFinite(price)) return;
-    const key = `overlay_${line.name}`;
+    const key = makeOverlayLineKey(line.name, ownerId);
     const mapped =
       line.data.length > 0
         ? line.data
@@ -2776,7 +2863,7 @@ export class PaneManager {
         safeRemoveSeries(pane.chart, pane.series[k]);
         delete pane.series[k];
         this.overlaySeriesKinds.delete(`${paneId}:${k}`);
-        this.overlayDataMeta.delete(k);
+        this.deleteOverlayMeta(paneId, k);
       }
     }
 
@@ -2820,13 +2907,19 @@ export class PaneManager {
         safeRemoveSeries(pane.chart, existing);
         delete pane.series[key];
         this.overlaySeriesKinds.delete(kindKey);
-        this.overlayDataMeta.delete(key);
+        this.deleteOverlayMeta(paneId, key);
       }
 
       const c = spec.color || PLOT_PALETTE[colorIdx % PLOT_PALETTE.length];
       const seriesNow = pane.series[key];
       if (seriesNow) {
-        applySeriesDataSmart(seriesNow, mapped, key, this.overlayDataMeta, forceFull);
+        applySeriesDataSmart(
+          seriesNow,
+          mapped,
+          this.overlayMetaKey(paneId, key),
+          this.overlayDataMeta,
+          forceFull,
+        );
         try {
           const opts: Record<string, unknown> = {
             lastValueVisible: this.lastValueLabelsVisible,
@@ -2919,7 +3012,7 @@ export class PaneManager {
       if (!want.has(k)) {
         safeRemoveSeries(pane.chart, pane.series[k]);
         delete pane.series[k];
-        this.overlayDataMeta.delete(k);
+        this.deleteOverlayMeta(pane.id, k);
       }
     }
 
@@ -2944,12 +3037,24 @@ export class PaneManager {
       };
       if (existing) {
         applyTitle(existing);
-        applySeriesDataSmart(existing, mapped, key, this.overlayDataMeta, forceFull);
+        applySeriesDataSmart(
+          existing,
+          mapped,
+          this.overlayMetaKey(pane.id, key),
+          this.overlayDataMeta,
+          forceFull,
+        );
       } else {
         try {
           const series = createBgcolorSeries(pane.chart);
           applyTitle(series);
-          applySeriesDataSmart(series, mapped, key, this.overlayDataMeta, forceFull);
+          applySeriesDataSmart(
+            series,
+            mapped,
+            this.overlayMetaKey(pane.id, key),
+            this.overlayDataMeta,
+            forceFull,
+          );
           pane.series[key] = series;
           try {
             series.setSeriesOrder(0);

@@ -15,11 +15,11 @@ import { join } from 'node:path';
 const root = join(import.meta.dir, '..');
 
 describe('chart boot splash', () => {
-  it('centers the logo, caption, and MCP connect action on the chart', () => {
+  it('centers the logo, caption, and notice action on the chart', () => {
     const host = readFileSync(join(root, 'src/chart/ChartHost.tsx'), 'utf8');
     expect(host).toContain('class="axis-chart-boot"');
     expect(host).toContain('axis-chart-boot-cluster');
-    expect(host).toContain('<McpConnectCta />');
+    expect(host).toContain('axis-chart-notice-action');
     expect(host).not.toContain('axis-empty-state absolute');
 
     const css = readFileSync(join(root, 'src/index.css'), 'utf8');

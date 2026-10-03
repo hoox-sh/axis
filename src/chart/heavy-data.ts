@@ -205,6 +205,8 @@ export function mapBarsToVolumeData(
 /**
  * Coalesce multi-pane crosshair mirrors to one rAF tick.
  * Pointer moves fire ~60–120/s; each call used to hit every pane synchronously.
+ * The no-rAF fallback (tests/SSR) is re-entrancy safe: a schedule from inside
+ * a running callback queues for one extra drain instead of recursing.
  */
 export function createRafCoalescer(): {
   schedule: (fn: () => void) => void;
@@ -212,13 +214,30 @@ export function createRafCoalescer(): {
 } {
   let raf = 0;
   let pending: (() => void) | null = null;
+  let flushing = false;
+  const drainSync = (): void => {
+    if (flushing) return;
+    flushing = true;
+    try {
+      while (pending) {
+        const run = pending;
+        pending = null;
+        try {
+          run?.();
+        } catch {
+          /* caller owns errors */
+        }
+      }
+    } finally {
+      flushing = false;
+    }
+  };
   return {
     schedule(fn: () => void) {
       pending = fn;
       if (raf) return;
       if (typeof requestAnimationFrame !== 'function') {
-        pending?.();
-        pending = null;
+        drainSync();
         return;
       }
       raf = requestAnimationFrame(() => {

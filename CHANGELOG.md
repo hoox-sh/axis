@@ -9,14 +9,20 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-09-28 · 475 commits · describe-tag: `v2.17.0`_
+_Generated/updated: 2026-10-03 · 482 commits · describe-tag: `v2.18.0`_
 
 ---
 
 ## [Unreleased]
 
+## [2.18.1] — 2026-10-03
+
 ### Fixed
 
+- **Chart engine (Heikin-Ashi)**: per-chart incremental HA cache instead of a shared singleton, so multi-chart slots no longer thrash each other; live ticks stay O(1) and the price-line tint reuses the computed HA point instead of a second full-history transform. Non-finite bars return null instead of pushing NaN to Lightweight Charts.
+- **Chart overlays**: smart-apply fingerprints are pane-qualified (`pane:key`), so the same plot name on price + indicator panes never shares tip state; hline fallback series are owner-scoped like price lines.
+- **Chart paint**: `plot.style_*br` primitives sample head/mid/tail plus a sparse hash (and honor recompute `forceFull`), so mid-history rewrites repaint; merged candle + indicator markers are capped at `MAX_CHART_MARKERS`; full-history paint dedup samples first/mid/last OHLCV so gap-fill corrections repaint; `scrollToTime` centers on the nearest bar index instead of a fixed ±14d window.
+- **Chart lifecycle**: inactive-slot paints restore the global active slot in `finally`; price-series swaps create before removing so a failed create never leaves the pane empty; price-series theme subscriptions are tracked per slot; compare alignment skips re-sort when sorted and memoizes on refs + endpoints; rAF coalescer drain is re-entrancy safe; empty volume profiles return no bins so the overlay hides.
 - **Pre-eval typo checker**: comma-separated multi-declarations (`const string A = 'x', const string B = 'y'`, `var series bool L = na, var series bool S = na`) now index every name instead of only the first per line, and single-line function bodies after `=>` contribute their bindings too. Large scripts no longer drown in false `Unknown COL2 / __GRID / __MTG / ATS … did you mean …?` marks. `dayofweek.sunday` … `dayofweek.saturday` are known builtins, so `dayofweek == dayofweek.monday` is no longer flagged.
 - **Drawing tool menu**: the group flyout (Fib, Gann, and the rest) opens beside the rail with the full tool name. It is no longer clipped to the rail edge.
 - **Script delete**: removing a chart script owner-clears its Pine drawings, plot fills, and barcolor. Lines no longer stay on the chart when another script is still applied.
@@ -1404,12 +1410,21 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-09 (156 commits)
+### 2026-10 (1 commits)
 
 #### Features
 
+- `f3d2133d` (2026-10-02) — feat(licensing): add Commercial (EUR 349) + Pro SaaS plans
+
+### 2026-09 (162 commits)
+
+#### Features
+
+- `bc2e748a` (2026-09-29) — feat(brand): add email signature templates
 - `7551dfec` (2026-09-27) — feat(ui): tune chrome motion and polish data, watchlist, and drawings
 - `4f2fc64b` (2026-09-27) — feat(ui): quiet the trader shell and collapse the connection HUD
 - `00c19cce` (2026-09-27) — feat(editor): function tree, sticky Problems, and quieter live runs
@@ -1462,6 +1477,10 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `b063f231` (2026-09-29) — fix(chart): owner-clear drawings, fills, and barcolor on script delete
+- `6f829378` (2026-09-29) — fix(editor): index every name in comma-separated Pine declarations
+- `cb9e0cf2` (2026-09-28) — fix(chart): stop the drawing rail from clipping tool menus
+- `921cd58e` (2026-09-28) — fix(chart): drop the unreachable drawing-clear status check
 - `5e7b07d7` (2026-09-28) — fix(chart): place script drawings on the candle clock
 - `11f60823` (2026-09-27) — fix(okf): match file names in query and align the agent guide
 - `d18b6f7d` (2026-09-26) — fix(editor): silence false-positive pre-eval typo diagnostics
@@ -1566,6 +1585,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Chores
 
+- `7ea9e8ef` (2026-09-28) — chore(release): AXIS v2.18.0 — script drawings and watchlist flash
 - `b94be4bb` (2026-09-27) — chore(release): AXIS v2.17.1 — quiet trader shell
 - `1f81f4c8` (2026-09-26) — chore(release): AXIS v2.17.0 — context menus, favicon, and live title
 - `c58e45a3` (2026-09-26) — chore(release): AXIS v2.16.0 — named themes and bar colorings

@@ -34,6 +34,7 @@ import {
   lastBarDirection,
   normalizeChartType,
   resetHeikinAshiCache,
+  resetHaCacheHolder,
   type ChartType,
 } from './chart-type';
 import {
@@ -181,10 +182,25 @@ function clearChartScriptState(mgr: PaneManager, layer: DrawingLayer | undefined
  */
 let manager: PaneManager | undefined;
 let drawingLayer: DrawingLayer | undefined;
-/** ThemeManager unregister for the active price series */
-let priceSeriesThemeUnreg: (() => void) | undefined;
+/** ThemeManager unregisters per chart slot (multi-chart safe). */
+const priceSeriesThemeUnregs = new Map<string, () => void>();
 /** Skip duplicate full-history setData (loadBars + ChartHost both paint). */
 let lastOhlcvPaintSig = '';
+
+function priceThemeKey(slotId?: string | null): string {
+  return slotId || getActiveSlotId() || '__legacy__';
+}
+
+function clearPriceThemeUnreg(key: string): void {
+  const unreg = priceSeriesThemeUnregs.get(key);
+  if (!unreg) return;
+  try {
+    unreg();
+  } catch {
+    /* ignore */
+  }
+  priceSeriesThemeUnregs.delete(key);
+}
 
 /**
  * Active chart manager (multi-chart) or legacy singleton.
@@ -208,12 +224,7 @@ export function setManager(m: PaneManager | undefined, slotId?: string) {
     if (m === undefined && manager !== undefined) {
       // Active manager cleared — drop theme subscription so reapplyAll cannot
       // touch a series whose chart was removed.
-      try {
-        priceSeriesThemeUnreg?.();
-      } catch {
-        /* ignore */
-      }
-      priceSeriesThemeUnreg = undefined;
+      clearPriceThemeUnreg(priceThemeKey(id));
     }
     if (m !== manager) lastOhlcvPaintSig = '';
     manager = m;
@@ -420,6 +431,22 @@ export type SetDataToChartOpts = {
 };
 
 /**
+ * Fingerprint for full-history paint dedup. Samples first/mid/last OHLCV so
+ * mid-history gap-fill corrections (same endpoints, changed middle) still
+ * repaint instead of hitting the `skipSeries` fast path.
+ */
+export function ohlcvPaintSig(bars: Bar[], chartType: ChartType): string {
+  const n = bars.length;
+  if (!n) return `0|||${chartType}`;
+  const first = bars[0]!;
+  const mid = bars[Math.floor(n / 2)]!;
+  const last = bars[n - 1]!;
+  const fmt = (b: Bar | undefined): string =>
+    b ? `${b.time}|${b.open}|${b.high}|${b.low}|${b.close}|${b.volume ?? ''}` : '';
+  return `${n}|${fmt(first)}|${fmt(mid)}|${fmt(last)}|${chartType}`;
+}
+
+/**
  * Apply price-scale decimal precision to the main price series (+ crosshair).
  * Mode from {@link store.priceScaleDecimals}; auto uses symbol + bars.
  */
@@ -458,6 +485,8 @@ export function applyPriceScaleDecimals(opts?: {
 /**
  * Ensure the price pane has a series matching `chartType`.
  * Swaps LWC series when the style changes; rebinds markers + drawing layer.
+ * Creates the replacement before removing the old series so a failed create
+ * never leaves the pane without a price series.
  */
 export function ensurePriceSeries(chartType?: ChartType): void {
   const mgr = getManager();
@@ -470,6 +499,20 @@ export function ensurePriceSeries(chartType?: ChartType): void {
     const currentType = mgr.getPriceChartType();
     const existing = pricePane.series['candle'];
     if (existing && currentType === type) return;
+    const themeKey = priceThemeKey();
+
+    // Create the replacement first — on throw the old series stays live.
+    let next: ReturnType<typeof createPriceSeries>;
+    try {
+      next = createPriceSeries(pricePane.chart, type);
+    } catch (err: unknown) {
+      reportUiError(err, {
+        source: 'chart',
+        context: 'Price series create failed',
+        status: false,
+      });
+      return;
+    }
 
     // Drop markers plugin before removing the host series
     try {
@@ -479,12 +522,7 @@ export function ensurePriceSeries(chartType?: ChartType): void {
     }
 
     if (existing) {
-      try {
-        priceSeriesThemeUnreg?.();
-      } catch {
-        /* ignore */
-      }
-      priceSeriesThemeUnreg = undefined;
+      clearPriceThemeUnreg(themeKey);
       try {
         pricePane.chart.removeSeries(existing);
       } catch {
@@ -493,16 +531,17 @@ export function ensurePriceSeries(chartType?: ChartType): void {
       delete pricePane.series['candle'];
     }
 
-    pricePane.series['candle'] = createPriceSeries(pricePane.chart, type);
+    pricePane.series['candle'] = next;
     mgr.setPriceChartType(type);
 
     try {
-      priceSeriesThemeUnreg = getThemeManager().registerPriceSeries(
+      const unreg = getThemeManager().registerPriceSeries(
         pricePane.series['candle'],
         type,
       );
+      priceSeriesThemeUnregs.set(themeKey, unreg);
     } catch {
-      priceSeriesThemeUnreg = undefined;
+      priceSeriesThemeUnregs.delete(themeKey);
     }
 
     // Respect chart [N] last-value / name labels pref on the new series
@@ -597,9 +636,7 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
     ensurePriceSeries(chartType);
 
     const n = bars.length;
-    const first = n ? bars[0] : null;
-    const last = n ? bars[n - 1] : null;
-    const paintSig = `${n}|${first?.time ?? 0}|${last?.time ?? 0}|${last?.close ?? 0}|${chartType}`;
+    const paintSig = ohlcvPaintSig(bars, chartType);
     const skipSeries =
       paintSig === lastOhlcvPaintSig && !clearScriptState && clearMarkers === false;
 
@@ -647,9 +684,17 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
     lastOhlcvPaintSig = paintSig;
 
     if (pricePane?.series['candle']) {
-      // Full replace invalidates incremental HA live state (re-seeded by mapper)
+      // Full replace invalidates incremental HA live state (re-seeded by mapper
+      // into this chart's holder, not the legacy global).
+      const holder =
+        typeof mgr.getHaHolder === 'function' ? mgr.getHaHolder() : undefined;
+      if (chartType !== 'heikinashi') {
+        resetHeikinAshiCache();
+        resetHaCacheHolder(holder);
+      }
+      const data = mapBarsToPriceData(bars, chartType, holder);
+      // Legacy global stays in sync for non-holder callers (tests / older doubles).
       if (chartType !== 'heikinashi') resetHeikinAshiCache();
-      const data = mapBarsToPriceData(bars, chartType);
       pricePane.series['candle'].setData(data as never);
       // Re-detect decimals after history lands (auto uses symbol + bars)
       try {
@@ -669,7 +714,17 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
         }
       }
 
-      const dir = lastBarDirection(bars, chartType);
+      // Price-line tint: reuse painted HA datum (O(1)) instead of a second
+      // full-history HA transform on 10k+ bars.
+      let dir: 'up' | 'down' | null = null;
+      if (chartType === 'heikinashi') {
+        const lastPt = data.length ? data[data.length - 1] : null;
+        if (lastPt && 'close' in lastPt) {
+          dir = lastPt.close >= (lastPt as { open: number }).open ? 'up' : 'down';
+        }
+      } else {
+        dir = lastBarDirection(bars, chartType);
+      }
       if (dir) {
         try {
           const voidLike = getThemeManager().getVoidLike();

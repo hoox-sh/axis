@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-28T13:34:37Z
+  at: 2026-10-03T08:37:09Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -26,7 +26,7 @@ okf_lock: generated
 * `PyneTableHud.tsx` — PyneTableHud
 * `bar-replay.ts` — REPLAY_SPEEDS, REPLAY_TICK_MS, ReplayState, createReplay, formatReplaySpeedLabel, getReplayBarsLength, getReplayState, getVisibleBars, idleReplay, isAtEnd, isAtStart, isReplayActive
 * `chart-registry.ts` — ChartSlotRuntime, disposeSlotChart, getActiveDrawingLayer, getActiveManager, getActiveSlotId, getSlotBars, getSlotChartDataGen, getSlotDrawingLayer, getSlotManager, getSlotRuntime, removeSlotRuntime, setActiveDrawingLayer
-* `chart-type.ts` — CHART_TYPES, ChartType, ChartTypeInfo, DEFAULT_CHART_TYPE, OhlcDatum, PriceSeriesDatum, ValueDatum, chartTypeInfo, isOhlcChartType, lastBarDirection, mapBarUpdate, mapBarsToPriceData
+* `chart-type.ts` — CHART_TYPES, ChartType, ChartTypeInfo, DEFAULT_CHART_TYPE, HaCache, HaCacheHolder, OhlcDatum, PriceSeriesDatum, ValueDatum, chartTypeInfo, createHaCacheHolder, isOhlcChartType
 * `compare-overlay.ts` — AlignedPair, ApplyCompareOpts, COMPARE_COLOR, COMPARE_MAIN_PCT_COLOR, COMPARE_MAIN_PCT_KEY, COMPARE_PRICE_SCALE_ID, COMPARE_SERIES_KEY, CompareMode, LinePoint, TimedClose, alignAbsolute, alignByTime
 * `context-actions.ts` — CHART_SCALE_EVENT, ChartMenuEnv, dispatchChartMenu, scrollChartToLatest
 * `context-menu.ts` — ChartHit, ChartMenuContext, ChartMenuKind, ChartMenuScript, ChartRegion, PaneHitBox, buildChartMenu, chartMenuLabel, classifyChartPointer, pointerPrice
@@ -38,8 +38,8 @@ okf_lock: generated
 * `last-value-labels.ts` — lastValueNamesOn, seriesLabelTitle
 * `layout-recipes.ts` — LAYOUT_RECIPES, LayoutRecipe, LayoutRecipeSeed, LayoutRecipeSlotSpec, MAJOR_SYMBOLS, applyLayoutRecipe, findLayoutRecipe, recipeToLayout, resolveRecipeSlots
 * `layout.ts` — CHART_GRID_MODES, ChartGridMode, ChartLayoutState, ChartSlot, SavedChartLayout, createChartSlot, defaultChartLayout, findSlot, gridClassForMode, isChartGridMode, normalizeChartLayout, slotCountForMode
-* `line-break-primitive.ts` — LineBreakOverlayPoint, LineBreakPrimitive, LineBreakPrimitiveOpts
-* `manager-access.ts` — SetDataToChartOpts, applyDebugPinsToChart, applyPriceScaleDecimals, clearScriptPaneLayer, clearScriptPaneLayers, ensurePriceSeries, ensureScriptPaneLayer, getActiveDrawingLayer, getDrawingLayer, getManager, jumpToDebugPin, setDataToChart
+* `line-break-primitive.ts` — LineBreakOverlayPoint, LineBreakPrimitive, LineBreakPrimitiveOpts, lineBreakPointsSig
+* `manager-access.ts` — SetDataToChartOpts, applyDebugPinsToChart, applyPriceScaleDecimals, clearScriptPaneLayer, clearScriptPaneLayers, ensurePriceSeries, ensureScriptPaneLayer, getActiveDrawingLayer, getDrawingLayer, getManager, jumpToDebugPin, ohlcvPaintSig
 * `onchain-events.ts` — ONCHAIN_EVENTS_SERIES_KEY, OnchainEventInput, OnchainEventMarker, applyOnchainEventMarkers, clearOnchainEventMarkers, eventsToMarkers
 * `onchain-overlay.ts` — ONCHAIN_PRICE_SCALE_ID, ONCHAIN_SERIES_PREFIX, OnchainLineSpec, applyOnchainOverlays, clearOnchainOverlays
 * `pane-badge.ts` — mountPaneBadge, refreshAllPaneBadges, refreshPaneBadge, setPaneBadgeLabel

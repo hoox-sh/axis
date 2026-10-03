@@ -128,8 +128,12 @@ export function isOhlcChartType(type: ChartType): boolean {
 /**
  * Incremental HA state so live ticks are O(1), not O(n) full transforms
  * on 10k+ histories.
+ *
+ * Each `PaneManager` owns a holder (`{ cache }`) so multi-chart slots do not
+ * thrash a shared singleton. The module-global `haCache` remains only as the
+ * legacy default for callers that do not pass a holder (unit tests).
  */
-type HaCache = {
+export type HaCache = {
   /** Time of the last painted HA bar. */
   lastTime: number;
   lastOpen: number;
@@ -139,11 +143,24 @@ type HaCache = {
   prevClose: number;
 };
 
+/** Per-chart holder for incremental HA state (one per PaneManager). */
+export type HaCacheHolder = { cache: HaCache | null };
+
+/** Create an empty per-chart HA holder. */
+export function createHaCacheHolder(): HaCacheHolder {
+  return { cache: null };
+}
+
 let haCache: HaCache | null = null;
 
 /** Drop HA live cache (full history replace / chart-type switch). */
 export function resetHeikinAshiCache(): void {
   haCache = null;
+}
+
+/** Drop a per-chart holder (full history replace / chart-type switch). */
+export function resetHaCacheHolder(holder: HaCacheHolder | null | undefined): void {
+  if (holder) holder.cache = null;
 }
 
 function haCandleFrom(
@@ -163,12 +180,29 @@ function haCandleFrom(
 }
 
 export function toHeikinAshi(bars: readonly Bar[]): Bar[] {
-  const n = bars.length;
+  return toHeikinAshiInto(bars, undefined);
+}
+
+/**
+ * HA transform that seeds `holder.cache` when provided, else the legacy
+ * module-global cache. Drops non-finite rows first so one NaN candle cannot
+ * poison every later HA open (parity with `toOhlcData` poison-row drops).
+ */
+export function toHeikinAshiInto(
+  bars: readonly Bar[],
+  holder?: HaCacheHolder | null,
+): Bar[] {
+  const clean: Bar[] = [];
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i]!;
+    if (isFinitePriceBar(b)) clean.push(b);
+  }
+  const n = clean.length;
   const out: Bar[] = new Array(n);
   let prevOpen = 0;
   let prevClose = 0;
   for (let i = 0; i < n; i++) {
-    const b = bars[i]!;
+    const b = clean[i]!;
     const ha = haCandleFrom(b, prevOpen, prevClose, i === 0);
     out[i] = {
       time: b.time,
@@ -183,25 +217,30 @@ export function toHeikinAshi(bars: readonly Bar[]): Bar[] {
     prevClose = ha.close;
   }
   // Seed live cache from full paint
+  let next: HaCache | null = null;
   if (n >= 1) {
     const last = out[n - 1]!;
     const prev = n >= 2 ? out[n - 2]! : last;
-    haCache = {
+    next = {
       lastTime: last.time,
       lastOpen: last.open,
       lastClose: last.close,
       prevOpen: n >= 2 ? prev.open : last.open,
       prevClose: n >= 2 ? prev.close : last.close,
     };
-  } else {
-    haCache = null;
   }
+  if (holder) holder.cache = next;
+  else haCache = next;
   return out;
 }
 
 /** Source bars for painting: HA transform or identity. */
-export function sourceBarsForChartType(bars: readonly Bar[], type: ChartType): Bar[] {
-  if (type === 'heikinashi') return toHeikinAshi(bars);
+export function sourceBarsForChartType(
+  bars: readonly Bar[],
+  type: ChartType,
+  holder?: HaCacheHolder | null,
+): Bar[] {
+  if (type === 'heikinashi') return toHeikinAshiInto(bars, holder ?? undefined);
   // Identity pass-through avoids allocs for candles/line/…
   return bars as Bar[];
 }
@@ -264,11 +303,20 @@ function toCloseData(bars: readonly Bar[]): ValueDatum[] {
 /**
  * Map store OHLCV → Lightweight Charts series data for the active chart type.
  * Pre-sized loops avoid `.map` intermediate GC on 10k+ bars.
+ * Pass a per-chart `holder` so Heikin-Ashi seeds that chart's live cache
+ * instead of the legacy global (multi-chart safe).
  */
-export function mapBarsToPriceData(bars: readonly Bar[], type: ChartType): PriceSeriesDatum[] {
-  if (!bars.length) return [];
+export function mapBarsToPriceData(
+  bars: readonly Bar[],
+  type: ChartType,
+  holder?: HaCacheHolder | null,
+): PriceSeriesDatum[] {
+  if (!bars.length) {
+    if (holder) holder.cache = null;
+    return [];
+  }
   if (type === 'heikinashi') {
-    return toOhlcData(toHeikinAshi(bars));
+    return toOhlcData(toHeikinAshiInto(bars, holder ?? undefined));
   }
   if (isOhlcChartType(type)) return toOhlcData(bars);
   return toCloseData(bars);
@@ -277,18 +325,21 @@ export function mapBarsToPriceData(bars: readonly Bar[], type: ChartType): Price
 /**
  * Map a single bar update for live ticks — O(1) for candles/line and HA.
  *
- * For Heikin-Ashi, uses {@link haCache} seeded by the last full
- * {@link mapBarsToPriceData} / {@link toHeikinAshi} pass.
+ * For Heikin-Ashi, uses the holder cache (or legacy global when omitted)
+ * seeded by the last full {@link mapBarsToPriceData} / {@link toHeikinAshi}
+ * pass. Returns null for non-finite bars so NaN candles never reach LWC.
  */
 export function mapBarUpdate(
   bars: readonly Bar[],
   type: ChartType,
+  holder?: HaCacheHolder | null,
 ): PriceSeriesDatum | null {
   if (!bars.length) return null;
   const last = bars[bars.length - 1]!;
+  if (!isFinitePriceBar(last)) return null;
 
   if (type === 'heikinashi') {
-    return mapHeikinAshiUpdate(bars, last);
+    return mapHeikinAshiUpdate(bars, last, holder ?? undefined);
   }
 
   if (isOhlcChartType(type)) {
@@ -303,41 +354,51 @@ export function mapBarUpdate(
   return { time: last.time, value: last.close };
 }
 
-function mapHeikinAshiUpdate(bars: readonly Bar[], last: Bar): OhlcDatum | null {
+function mapHeikinAshiUpdate(
+  bars: readonly Bar[],
+  last: Bar,
+  holder?: HaCacheHolder | null,
+): OhlcDatum | null {
+  const getCache = (): HaCache | null => (holder ? holder.cache : haCache);
+  const setCache = (c: HaCache | null): void => {
+    if (holder) holder.cache = c;
+    else haCache = c;
+  };
+  const cache = getCache();
   // Cold cache or history gap → full recompute once (seeds cache)
-  if (!haCache || bars.length === 1) {
-    const all = toHeikinAshi(bars);
+  if (!cache || bars.length === 1) {
+    const all = toHeikinAshiInto(bars, holder ?? undefined);
     const h = all[all.length - 1];
     if (!h) return null;
     return { time: h.time, open: h.open, high: h.high, low: h.low, close: h.close };
   }
 
-  if (last.time === haCache.lastTime) {
+  if (last.time === cache.lastTime) {
     // Same bar tick: recompute last HA from cached previous HA open/close
-    const ha = haCandleFrom(last, haCache.prevOpen, haCache.prevClose, bars.length === 1);
-    haCache = {
-      ...haCache,
+    const ha = haCandleFrom(last, cache.prevOpen, cache.prevClose, bars.length === 1);
+    setCache({
+      ...cache,
       lastOpen: ha.open,
       lastClose: ha.close,
-    };
+    });
     return { time: last.time, open: ha.open, high: ha.high, low: ha.low, close: ha.close };
   }
 
-  if (last.time > haCache.lastTime) {
+  if (last.time > cache.lastTime) {
     // New bar: previous last becomes prev
-    const ha = haCandleFrom(last, haCache.lastOpen, haCache.lastClose, false);
-    haCache = {
+    const ha = haCandleFrom(last, cache.lastOpen, cache.lastClose, false);
+    setCache({
       lastTime: last.time,
       lastOpen: ha.open,
       lastClose: ha.close,
-      prevOpen: haCache.lastOpen,
-      prevClose: haCache.lastClose,
-    };
+      prevOpen: cache.lastOpen,
+      prevClose: cache.lastClose,
+    });
     return { time: last.time, open: ha.open, high: ha.high, low: ha.low, close: ha.close };
   }
 
   // Time went backwards (history rewrite) — full recompute
-  const all = toHeikinAshi(bars);
+  const all = toHeikinAshiInto(bars, holder ?? undefined);
   const h = all[all.length - 1];
   if (!h) return null;
   return { time: h.time, open: h.open, high: h.high, low: h.low, close: h.close };

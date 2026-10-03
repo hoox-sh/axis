@@ -325,15 +325,23 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     if (existing.length) {
       if (isActive()) safePaint(existing, { fit: true }, 'Initial chart paint');
       else {
-        // Inactive: apply directly on this manager
+        // Inactive: apply directly on this manager (restore in finally so a
+        // throw never leaves the global active slot stolen).
+        const prev = getManager();
+        const prevActiveId =
+          store.chartLayout?.activeId || getActiveSlotId() || null;
+        setActiveSlotId(id);
+        setManager(manager, id);
         try {
           if (!alive) return;
-          const prev = getManager();
-          const prevActiveId =
-            store.chartLayout?.activeId || getActiveSlotId() || null;
-          setActiveSlotId(id);
-          setManager(manager, id);
           safePaint(existing, { fit: true }, 'Inactive slot paint');
+        } catch (err: unknown) {
+          reportUiError(err, {
+            source: 'chart',
+            context: 'Inactive slot paint failed',
+            status: false,
+          });
+        } finally {
           // restore previous active (layout wins; fall back to pre-steal id)
           const activeId = store.chartLayout?.activeId || prevActiveId;
           if (activeId && activeId !== id) {
@@ -343,12 +351,6 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
           } else if (prev && prev !== manager) {
             setManager(prev);
           }
-        } catch (err: unknown) {
-          reportUiError(err, {
-            source: 'chart',
-            context: 'Inactive slot paint failed',
-            status: false,
-          });
         }
       }
     } else if (isActive() && store.bars.length) {
@@ -426,27 +428,27 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
     // lightweight re-apply without stealing active manager for long
     untrack(() => {
       if (!alive) return;
+      const price = m.getPane('price');
+      if (!price?.series['candle']) return;
+      const prevActiveId =
+        store.chartLayout?.activeId || getActiveSlotId() || null;
+      setActiveSlotId(id);
+      setManager(m, id);
       try {
-        const price = m.getPane('price');
-        if (price?.series['candle']) {
-          const prevActiveId =
-            store.chartLayout?.activeId || getActiveSlotId() || null;
-          setActiveSlotId(id);
-          setManager(m, id);
-          safePaint(bl, { fit: false, clearMarkers: false }, 'Inactive slot re-paint');
-          const aid = store.chartLayout?.activeId || prevActiveId;
-          if (aid && aid !== id) {
-            setActiveSlotId(aid);
-            const am = getSlotManager(aid);
-            if (am) setManager(am, aid);
-          }
-        }
+        safePaint(bl, { fit: false, clearMarkers: false }, 'Inactive slot re-paint');
       } catch (err: unknown) {
         reportUiError(err, {
           source: 'chart',
           context: 'Inactive slot re-paint failed',
           status: false,
         });
+      } finally {
+        const aid = store.chartLayout?.activeId || prevActiveId;
+        if (aid && aid !== id) {
+          setActiveSlotId(aid);
+          const am = getSlotManager(aid);
+          if (am) setManager(am, aid);
+        }
       }
     });
   });

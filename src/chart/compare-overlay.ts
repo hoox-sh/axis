@@ -79,16 +79,24 @@ export function extractCloses(
   return out;
 }
 
+/** True when already sorted ascending by time (skips copy+sort). */
+function isSortedByTime(rows: ReadonlyArray<TimedClose>): boolean {
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i]!.time < rows[i - 1]!.time) return false;
+  }
+  return true;
+}
+
 /**
  * Inner-join two close series on matching timestamps (sorted ascending).
- * Uses two-pointer scan — O(n + m).
+ * Uses two-pointer scan — O(n + m). Inputs already sorted skip the copy+sort.
  */
 export function alignByTime(
   main: ReadonlyArray<TimedClose>,
   compare: ReadonlyArray<TimedClose>,
 ): AlignedPair[] {
-  const a = [...main].sort((x, y) => x.time - y.time);
-  const b = [...compare].sort((x, y) => x.time - y.time);
+  const a = isSortedByTime(main) ? main : [...main].sort((x, y) => x.time - y.time);
+  const b = isSortedByTime(compare) ? compare : [...compare].sort((x, y) => x.time - y.time);
   const out: AlignedPair[] = [];
   let i = 0;
   let j = 0;
@@ -175,16 +183,70 @@ export function buildCompareSeriesData(
   mode: CompareMode,
   includeMainPercent = false,
 ): { compare: LinePoint[]; mainPercent: LinePoint[] } {
+  // Memoize on refs + lengths + endpoints: ChartHost re-runs this effect on
+  // unrelated triggers (label prefs, chartDataGen) with identical arrays.
+  // store.bars mutates in place on live ticks, so refs alone are not enough.
+  const cached = compareDataMemo;
+  if (
+    cached &&
+    cached.mainBars === mainBars &&
+    cached.compareBars === compareBars &&
+    cached.mode === mode &&
+    cached.includeMainPercent === includeMainPercent &&
+    cached.mainLen === mainBars.length &&
+    cached.compareLen === compareBars.length &&
+    cached.mainFirst === mainBars[0]?.time &&
+    cached.mainLast === mainBars[mainBars.length - 1]?.time &&
+    cached.mainLastClose === mainBars[mainBars.length - 1]?.close &&
+    cached.compareLast === compareBars[compareBars.length - 1]?.time &&
+    cached.compareLastClose === compareBars[compareBars.length - 1]?.close
+  ) {
+    return cached.result;
+  }
+  let result: { compare: LinePoint[]; mainPercent: LinePoint[] };
   if (mode === 'absolute') {
     const { compare } = alignAbsolute(mainBars, compareBars);
-    return { compare, mainPercent: [] };
+    result = { compare, mainPercent: [] };
+  } else {
+    const { main, compare } = normalizeToPercent(mainBars, compareBars);
+    result = {
+      compare,
+      mainPercent: includeMainPercent ? main : [],
+    };
   }
-  const { main, compare } = normalizeToPercent(mainBars, compareBars);
-  return {
-    compare,
-    mainPercent: includeMainPercent ? main : [],
+  compareDataMemo = {
+    mainBars,
+    compareBars,
+    mode,
+    includeMainPercent,
+    mainLen: mainBars.length,
+    compareLen: compareBars.length,
+    mainFirst: mainBars[0]?.time,
+    mainLast: mainBars[mainBars.length - 1]?.time,
+    mainLastClose: mainBars[mainBars.length - 1]?.close,
+    compareLast: compareBars[compareBars.length - 1]?.time,
+    compareLastClose: compareBars[compareBars.length - 1]?.close,
+    result,
   };
+  return result;
 }
+
+type CompareDataMemo = {
+  mainBars: ReadonlyArray<{ time: number; close: number }>;
+  compareBars: ReadonlyArray<{ time: number; close: number }>;
+  mode: CompareMode;
+  includeMainPercent: boolean;
+  mainLen: number;
+  compareLen: number;
+  mainFirst: number | undefined;
+  mainLast: number | undefined;
+  mainLastClose: number | undefined;
+  compareLast: number | undefined;
+  compareLastClose: number | undefined;
+  result: { compare: LinePoint[]; mainPercent: LinePoint[] };
+};
+
+let compareDataMemo: CompareDataMemo | null = null;
 
 /** Remove compare series keys from the price pane (no-op if missing). */
 export function clearCompareOverlay(manager: PaneManager | undefined | null): void {

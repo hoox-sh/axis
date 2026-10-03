@@ -74,6 +74,34 @@ function pineLineStyleToLwc(style: LineBreakPrimitiveOpts['lineStyle']): LineSty
   return LineStyle.Solid;
 }
 
+/**
+ * Change signature for overlay points + style. Samples head/mid/tail plus a
+ * sparse hash so mid-history rewrites (same length + same tip) still repaint.
+ * O(~16) samples — negligible vs segment split on 10k+ points.
+ */
+export function lineBreakPointsSig(
+  points: ReadonlyArray<LineBreakOverlayPoint>,
+  opts: LineBreakPrimitiveOpts,
+): string {
+  const n = points.length;
+  if (!n) {
+    return `0|||${opts.color}|${opts.lineWidth}|${opts.lineStyle}|${opts.stepped ? 1 : 0}|${opts.area ? 1 : 0}`;
+  }
+  const first = points[0]!;
+  const mid = points[Math.floor(n / 2)]!;
+  const last = points[n - 1]!;
+  let hash = 0;
+  const step = Math.max(1, Math.floor(n / 16));
+  for (let i = 0; i < n; i += step) {
+    const p = points[i]!;
+    const t = Number(p.time) || 0;
+    const v = Number(p.value);
+    const q = Number.isFinite(v) ? Math.round(v * 1e6) : 0;
+    hash = (hash * 31 + (t % 2147483647) + q) | 0;
+  }
+  return `${n}|${first.time}:${first.value ?? ''}|${mid.time}:${mid.value ?? ''}|${last.time}:${last.value ?? ''}|${hash}|${opts.color}|${opts.lineWidth}|${opts.lineStyle}|${opts.stepped ? 1 : 0}|${opts.area ? 1 : 0}`;
+}
+
 function strokeSegment(
   ctx: CanvasRenderingContext2D,
   pts: { x: number; y: number }[],
@@ -259,11 +287,14 @@ export class LineBreakPrimitive implements ISeriesPrimitive<Time> {
     return this._paneViews;
   }
 
-  setPoints(points: ReadonlyArray<LineBreakOverlayPoint>, opts?: Partial<LineBreakPrimitiveOpts>): void {
+  setPoints(
+    points: ReadonlyArray<LineBreakOverlayPoint>,
+    opts?: Partial<LineBreakPrimitiveOpts>,
+    force = false,
+  ): void {
     const nextOpts = opts ? { ...this._opts, ...opts } : this._opts;
-    const last = points.length ? points[points.length - 1] : undefined;
-    const sig = `${points.length}|${last?.time ?? ''}|${last?.value ?? ''}|${nextOpts.color}|${nextOpts.lineWidth}|${nextOpts.lineStyle}|${nextOpts.stepped ? 1 : 0}|${nextOpts.area ? 1 : 0}`;
-    if (sig === this._pointsSig) return;
+    const sig = lineBreakPointsSig(points, nextOpts);
+    if (!force && sig === this._pointsSig) return;
     this._pointsSig = sig;
     this._points = points.slice();
     this._opts = nextOpts;

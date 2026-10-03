@@ -243,8 +243,10 @@ export function computeVolumeProfile(
   }
 
   if (totalVolume <= 0) {
+    // No tradeable volume — return no bins so the overlay hides instead of
+    // painting `rows` zero-volume bars.
     return {
-      bins,
+      bins: [],
       poc: null,
       vaHigh: null,
       vaLow: null,
