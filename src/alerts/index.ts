@@ -387,6 +387,26 @@ export type EvaluateAlertsOptions = {
   now?: number;
 };
 
+/** Fired-alert broadcast for UI surfaces (e.g. fullscreen overlay). */
+export interface FiredAlertEvent {
+  alerts: Alert[];
+  price: number;
+  symbol: string;
+  at: number;
+}
+
+type FiredAlertListener = (e: FiredAlertEvent) => void;
+
+const firedAlertListeners = new Set<FiredAlertListener>();
+
+/** Subscribe to fired price alerts. Returns unsubscribe. Never throws. */
+export function subscribeFiredAlerts(fn: FiredAlertListener): () => void {
+  firedAlertListeners.add(fn);
+  return () => {
+    firedAlertListeners.delete(fn);
+  };
+}
+
 /**
  * Evaluate all stored alerts for the given market context.
  *
@@ -408,6 +428,22 @@ export async function evaluateAlerts(
 
   const updated = applyFired(alerts, fired, false);
   saveAlerts(updated);
+
+  if (fired.length > 0) {
+    const event: FiredAlertEvent = {
+      alerts: fired,
+      price: ctx.price,
+      symbol: ctx.symbol,
+      at: now,
+    };
+    for (const fn of firedAlertListeners) {
+      try {
+        fn(event);
+      } catch {
+        /* listener faults must not break alert delivery */
+      }
+    }
+  }
 
   if (deliver) {
     await Promise.all(
