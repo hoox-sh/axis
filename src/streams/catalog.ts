@@ -180,8 +180,34 @@ export const mockPollStream: StreamPlugin = {
           volume: (cur.volume ?? 0) + Math.random() * 50,
           closed: false,
         };
-      } else {
-        // New interval slot — multiplex treats time advance as bar-close
+        if (stopped) return;
+        onBar({ ...cur });
+        return;
+      }
+      // Slot advanced — possibly by several steps while the tab was hidden
+      // and this 1s timer was throttled. Emit every missed closed slot so
+      // aggregation never shows gaps, then the current open slot.
+      let guard = 0;
+      while (cur.time + step <= slot && guard < 10_000) {
+        guard += 1;
+        const open = cur.close;
+        const close = Math.max(0.01, open + (Math.random() - 0.48) * open * 0.008);
+        cur = {
+          time: cur.time + step,
+          open,
+          high: Math.max(open, close),
+          low: Math.min(open, close),
+          close,
+          volume: 50 + Math.random() * 200,
+          closed: true,
+        };
+        if (stopped) return;
+        // The final slot is the still-forming candle, not a closed one.
+        if (cur.time === slot) cur = { ...cur, closed: false };
+        onBar({ ...cur });
+      }
+      // Wall clock ran backwards or step changed — fall back to single emit.
+      if (guard === 0) {
         const open = cur.close;
         const close = Math.max(0.01, open + drift);
         cur = {
@@ -191,11 +217,11 @@ export const mockPollStream: StreamPlugin = {
           low: Math.min(open, close),
           close,
           volume: 50 + Math.random() * 200,
-          closed: true,
+          closed: false,
         };
+        if (stopped) return;
+        onBar({ ...cur });
       }
-      if (stopped) return;
-      onBar({ ...cur });
     };
 
     tick();

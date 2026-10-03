@@ -9,11 +9,17 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-03 · 482 commits · describe-tag: `v2.18.0`_
+_Generated/updated: 2026-10-03 · 483 commits · describe-tag: `v2.18.1`_
 
 ---
 
 ## [Unreleased]
+
+## [2.18.2] — 2026-10-03
+
+### Fixed
+
+- **Background-tab data gaps**: live ticks no longer depend on `requestAnimationFrame` alone — the multiplex queues every tick in order with a timer fallback, so hidden/throttled tabs keep every closed slot instead of only the newest. `mock-poll` emits each missed intermediate slot on wake. New `data/background-catchup` auto-detects trailing staleness / fillable holes on `visibilitychange` / `focus` / `online` (and after long WS outages), REST-expands the dataset toward now, repaints without viewport reset, and queues a DSM backfill — the chart always delivers correct data.
 
 ## [2.18.1] — 2026-10-03
 
@@ -1412,13 +1418,19 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (1 commits)
+### 2026-10 (2 commits)
 
 #### Features
 
 - `f3d2133d` (2026-10-02) — feat(licensing): add Commercial (EUR 349) + Pro SaaS plans
+
+#### Fixes
+
+- `54ae5acc` (2026-10-03) — fix(chart): harden engine overlays, HA cache, paint and lifecycle
 
 ### 2026-09 (162 commits)
 

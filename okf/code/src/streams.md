@@ -7,7 +7,7 @@ tags: [code, streams]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:07:37Z
+  at: 2026-10-03T13:27:01Z
 sources:
   - id: tree
     resource: "src/streams"
@@ -21,7 +21,7 @@ okf_lock: generated
 * `binance.ts` — StreamPlugin, binanceStream
 * `catalog.ts` — BUILTIN_STREAMS, StreamPlugin, _resetStreamRegistrationFlag, binanceStream, bybitStream, ccxtWsStream, coinbaseStream, defaultStreamForSource, ensureStreamsRegistered, foldVenueCandle, getStream, krakenStream
 * `index.js` — binanceWs, mockPoll, none
-* `multiplex.ts` — HEAVY_LIVE_RERUN_BARS, StopLiveOpts, StopLiveReason, StreamPlugin, _getLiveEpochForTests, _getRerunAttemptCountForTests, _resetMultiplexForTests, defaultStreamForSource, effectiveLiveRerunMode, getAvailableStreams, listStreams, scheduleLiveRerun
+* `multiplex.ts` — HEAVY_LIVE_RERUN_BARS, StopLiveOpts, StopLiveReason, StreamPlugin, _getLiveEpochForTests, _getPendingLiveBarCountForTests, _getRerunAttemptCountForTests, _resetMultiplexForTests, defaultStreamForSource, effectiveLiveRerunMode, getAvailableStreams, listStreams
 * `reconnect-ws.ts` — RECONNECT_DEFAULTS, ReconnectableWsOpts, WsStatus, nextBackoffMs, openReconnectableWs
 * `ws-venues.ts` — VENUE_WS_HOSTS, VenueId, VenueWsConfig, buildVenueWs
 

@@ -116,10 +116,22 @@ let rerunTimer: ReturnType<typeof setTimeout> | null = null;
 let rerunInFlight = false;
 /** Test-only: increments each time a debounced live re-run is attempted. */
 let rerunAttemptCount = 0;
-/** Latest bar waiting for rAF flush (trade-ticker coalescing). */
-let pendingLiveBar: Bar | null = null;
-/** rAF handle for {@link pendingLiveBar}; cancelled on stop. */
+/**
+ * Live bars waiting for paint flush.
+ *
+ * Queue (not a single slot): `requestAnimationFrame` never fires in a hidden
+ * tab, so keeping only the newest bar would silently drop whole closed slots
+ * and leave gaps in aggregation. Every sanitized tick is appended here and
+ * flushed in order — at most one rAF paint per frame while visible, via a
+ * `setTimeout` fallback while hidden / throttled.
+ */
+let pendingLiveBars: Bar[] = [];
+/** rAF handle for the queued flush; cancelled on stop. */
 let liveBarRaf = 0;
+/** Fallback timer when rAF is unavailable or the tab is hidden/throttled. */
+let liveBarTimer: ReturnType<typeof setTimeout> | null = null;
+/** Safety flush so a throttled hidden tab still advances (ms). */
+const LIVE_BAR_FALLBACK_MS = 250;
 
 /** @internal Test helper — live re-run attempts since last reset. */
 export function _getRerunAttemptCountForTests(): number {
@@ -131,13 +143,31 @@ export function _getLiveEpochForTests(): number {
   return liveEpoch;
 }
 
-/** Cancel coalesced live-bar rAF (stop / test reset). */
+/** @internal Test helper — queued live bars awaiting flush. */
+export function _getPendingLiveBarCountForTests(): number {
+  return pendingLiveBars.length;
+}
+
+/** True when the page is hidden (rAF will not fire) — best-effort. */
+function isPageHidden(): boolean {
+  try {
+    return typeof document !== 'undefined' && document.visibilityState === 'hidden';
+  } catch {
+    return false;
+  }
+}
+
+/** Cancel queued live-bar flush (stop / test reset). */
 function cancelPendingLiveBarFlush(): void {
-  pendingLiveBar = null;
+  pendingLiveBars = [];
   if (liveBarRaf && typeof cancelAnimationFrame === 'function') {
     cancelAnimationFrame(liveBarRaf);
   }
   liveBarRaf = 0;
+  if (liveBarTimer) {
+    clearTimeout(liveBarTimer);
+    liveBarTimer = null;
+  }
 }
 
 /** @internal Test helper — clear multiplex timers/gates between cases. */
@@ -235,37 +265,76 @@ export function startLive(
   const isCurrent = () => liveEpoch === epoch && store.live.active;
 
   /**
-   * Apply the latest coalesced bar to store + chart.
-   * Trade-level streams (Coinbase ticker) can fire 10–100+/s; rAF keeps UI ≤1 paint/frame.
+   * Apply queued live bars to store + chart in order.
+   * Trade-level streams (Coinbase ticker) can fire 10–100+/s; rAF keeps UI
+   * ≤1 paint/frame while visible. Hidden tabs fall back to a timer so no
+   * closed slot is ever dropped — the queue (not a single slot) guarantees
+   * every bar advances aggregation, even under background throttling.
    */
   const flushPendingBar = () => {
     liveBarRaf = 0;
-    const bar = pendingLiveBar;
-    pendingLiveBar = null;
-    if (!bar || !isCurrent()) return;
+    if (liveBarTimer) {
+      clearTimeout(liveBarTimer);
+      liveBarTimer = null;
+    }
+    if (!isCurrent()) {
+      pendingLiveBars = [];
+      return;
+    }
+    const queue = pendingLiveBars;
+    pendingLiveBars = [];
+    if (!queue.length) return;
     try {
-      appendBar(bar);
-      const manager = getManager();
-      if (manager) manager.appendBar(bar);
-      noteTick(bar.close, bar.time);
-      noteLiveBarForAlerts(bar);
-
-      // Data Manager: grow the underlying bars-cache dataset with live ticks
-      noteDataManagerLiveBar(bar);
-
-      const timeAdvanced = lastSeenBarTime > 0 && bar.time > lastSeenBarTime;
-      lastSeenBarTime = bar.time;
-      // Heavy histories: throttle every-tick → bar-close to avoid full engine re-encode
-      const mode = effectiveLiveRerunMode(
-        store.live.rerunOn,
-        store.bars?.length ?? 0,
-      );
-      if (mode === 'every-tick' || bar.closed || timeAdvanced) {
-        scheduleRerun();
+      // Coalesce same-slot updates (open-bar ticks) but keep every distinct
+      // bar time so closed slots are never skipped after background gaps.
+      const ordered: Bar[] = [];
+      for (const b of queue) {
+        const prev = ordered[ordered.length - 1];
+        if (prev && prev.time === b.time) ordered[ordered.length - 1] = b;
+        else ordered.push(b);
       }
+      let shouldRerun = false;
+      for (const bar of ordered) {
+        if (!isCurrent()) break;
+        appendBar(bar);
+        const manager = getManager();
+        if (manager) manager.appendBar(bar);
+        noteTick(bar.close, bar.time);
+        noteLiveBarForAlerts(bar);
+
+        // Data Manager: grow the underlying bars-cache dataset with live ticks
+        noteDataManagerLiveBar(bar);
+
+        const timeAdvanced = lastSeenBarTime > 0 && bar.time > lastSeenBarTime;
+        lastSeenBarTime = Math.max(lastSeenBarTime, bar.time);
+        // Heavy histories: throttle every-tick → bar-close to avoid full engine re-encode
+        const mode = effectiveLiveRerunMode(
+          store.live.rerunOn,
+          store.bars?.length ?? 0,
+        );
+        if (mode === 'every-tick' || bar.closed || timeAdvanced) {
+          shouldRerun = true;
+        }
+      }
+      if (shouldRerun && isCurrent()) scheduleRerun();
     } catch {
       /* never let a single tick tear down the live session / UI */
     }
+  };
+
+  /** Schedule a queue flush: rAF while visible, timer fallback while hidden. */
+  const scheduleLiveBarFlush = () => {
+    if (liveBarRaf || liveBarTimer) return;
+    const canRaf =
+      !isPageHidden() && typeof requestAnimationFrame === 'function';
+    if (canRaf) {
+      liveBarRaf = requestAnimationFrame(flushPendingBar);
+      // Safety net: if rAF never fires (tab hidden mid-frame), the timer
+      // still advances the queue under background throttling.
+      liveBarTimer = setTimeout(flushPendingBar, LIVE_BAR_FALLBACK_MS);
+      return;
+    }
+    liveBarTimer = setTimeout(flushPendingBar, 0);
   };
 
   // Per-plugin config (Topbar config row → store.pluginsConfig) — e.g. ccxt-ws exchange id
@@ -282,14 +351,14 @@ export function startLive(
       // Drop partial / NaN OHLCV so a bad venue tick cannot poison the chart
       const bar = sanitizeBar(raw);
       if (!bar) return;
-      // Keep only the newest bar until the next animation frame
-      pendingLiveBar = bar;
-      if (liveBarRaf) return;
-      if (typeof requestAnimationFrame === 'function') {
-        liveBarRaf = requestAnimationFrame(flushPendingBar);
-      } else {
-        flushPendingBar();
+      // Queue every tick in order — a single newest-only slot would drop
+      // closed bars while rAF is paused in a hidden tab.
+      pendingLiveBars.push(bar);
+      // Bound memory when a hidden tab queues hours of 1s ticks.
+      if (pendingLiveBars.length > 5000) {
+        pendingLiveBars.splice(0, pendingLiveBars.length - 5000);
       }
+      scheduleLiveBarFlush();
     },
     onStatus: (s) => {
       if (liveEpoch !== epoch) return;
@@ -308,6 +377,15 @@ export function startLive(
           appendLog('ok', `Stream open${s.detail ? ` · ${s.detail}` : ''}`, 'stream', {
             toast: recovered,
           });
+          if (recovered) {
+            // WS was down for a while (backgrounded tab, network drop) — REST
+            // backfill any slots the socket missed so aggregation stays dense.
+            void import('../data/background-catchup')
+              .then(({ repairChartGapsAfterBackground }) =>
+                repairChartGapsAfterBackground('reconnect'),
+              )
+              .catch(() => {});
+          }
         } else if (s.state === 'reconnecting') {
           if (!store.live.active) return;
           if (!outageSince) outageSince = Date.now();
@@ -361,6 +439,21 @@ export function startLive(
   }
 
   currentStop = stop;
+
+  // Background-tab safety net: DSM auto-identifies + repairs holes left while
+  // hidden (visibility / focus / online), so the chart always delivers correct
+  // data even after rAF + timer throttling. Installed once, idempotent.
+  try {
+    void import('../data/background-catchup').then(({ startBackgroundCatchup }) => {
+      try {
+        startBackgroundCatchup();
+      } catch {
+        /* ignore */
+      }
+    }).catch(() => {});
+  } catch {
+    /* catch-up is best-effort */
+  }
 
   // Visible chart scripts start immediately — do not wait for the first tick
   // or a manual Run. Hidden scripts stay out of the live loop.

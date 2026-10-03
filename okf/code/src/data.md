@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-27T14:41:44Z
+  at: 2026-10-03T13:27:01Z
 sources:
   - id: tree
     resource: "src/data"
@@ -18,6 +18,7 @@ okf_lock: generated
 
 # Files
 
+* `background-catchup.ts` — BACKGROUND_CATCHUP_THROTTLE_MS, TrailingGap, _resetBackgroundCatchupForTests, _resetBackgroundCatchupListenersForTests, _setBackgroundCatchupLastRepairForTests, detectTrailingGap, repairChartGapsAfterBackground, startBackgroundCatchup
 * `bars-cache.ts` — BARS_CACHE_MAX, BARS_CACHE_MAX_SERIES, BarLoadWindow, BarsCacheMeta, BarsCacheRecord, _resetBarsCacheForTests, barsCacheKey, clearCachedBars, countBarsForLoad, flushPendingIdbPuts, getCachedBarCount, getCachedBars
 * `bars-gaps.ts` — BarGap, CoverageReport, CoverageSegment, alignDown, buildCoverageMap, expectedBarsInSpan, findBarGaps, intervalToSec, mergeGaps, validateBarCoverage
 * `binance-http.ts` — BINANCE_REST_HOSTS, BinanceFetchOpts, BinanceRestPath, DEFAULT_MARKET_WORKER_BASE, binanceKlineWsUrls, binanceTickerWsUrls, fetchBinanceJson, resolveMarketWorkerBase
