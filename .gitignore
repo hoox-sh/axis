@@ -64,6 +64,9 @@ venv/
 # opencode local session dir (has its own node_modules)
 .opencode/
 
+# Local git worktrees (isolated agent branches)
+.worktrees/
+
 # Screenshot capture scratch
 docs/images/.tmp-video/
 docs/images/.tmp-gif/
