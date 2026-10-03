@@ -9,11 +9,13 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-03 · 483 commits · describe-tag: `v2.18.1`_
+_Generated/updated: 2026-10-03 · 493 commits · describe-tag: `v2.18.2`_
 
 ---
 
 ## [Unreleased]
+
+## [2.19.0] — 2026-10-03
 
 ### Added
 
@@ -1424,17 +1426,35 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (2 commits)
+### 2026-10 (12 commits)
 
 #### Features
 
+- `5c5f0b51` (2026-10-03) — feat(extras): fullscreen alert overlay + styles
+- `ea7139be` (2026-10-03) — feat(extras): watchlist ticker marquee band
+- `f04c1d20` (2026-10-03) — feat(extras): current-price trend card overlay
+- `095576c0` (2026-10-03) — feat(extras): Extra menu + module-bar button after Results
+- `e4dd2867` (2026-10-03) — feat(alerts): subscribeFiredAlerts broadcast for UI overlays
+- `e8ede505` (2026-10-03) — feat(extras): trendOverTicks helper for price-card arrow
+- `704e770d` (2026-10-03) — feat(extras): persisted extras slice + panelsExtra topbar flag
 - `f3d2133d` (2026-10-02) — feat(licensing): add Commercial (EUR 349) + Pro SaaS plans
 
 #### Fixes
 
+- `85358351` (2026-10-03) — fix(live): keep every tick in background tabs + DSM auto gap repair
 - `54ae5acc` (2026-10-03) — fix(chart): harden engine overlays, HA cache, paint and lifecycle
+
+#### Chores
+
+- `db4e3862` (2026-10-03) — chore: ignore local git worktrees
+
+#### Merges
+
+- `6051219e` (2026-10-03) — Merge branch 'feat/extra-widgets' — Extra chrome widgets
 
 ### 2026-09 (162 commits)
 
