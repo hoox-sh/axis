@@ -7,7 +7,7 @@ tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-27T14:41:44Z
+  at: 2026-10-03T17:53:16Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -168,6 +168,7 @@ okf_lock: generated
 * [src/ui/architecture](/code/src/ui/architecture.md)
 * [src/ui/dsm](/code/src/ui/dsm.md)
 * [src/ui/effects](/code/src/ui/effects.md)
+* [src/ui/extras](/code/src/ui/extras.md)
 * [src/ui/layers](/code/src/ui/layers.md)
 * [src/ui/library](/code/src/ui/library.md)
 * [src/ui/mobile](/code/src/ui/mobile.md)
