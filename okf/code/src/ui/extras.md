@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui/extras"
-description: "src/ui/extras contains CurrentPriceCard.tsx, ExtraMenu.tsx, format.ts, and 2 more files."
+description: "src/ui/extras contains CurrentPriceCard.tsx, ExtraMenu.tsx, PriceTicker.tsx, and 3 more files."
 resource: "src/ui/extras"
 tags: [code, extras, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-03T17:57:29Z
+  at: 2026-10-03T17:58:58Z
 sources:
   - id: tree
     resource: "src/ui/extras"
@@ -20,7 +20,8 @@ okf_lock: generated
 
 * `CurrentPriceCard.tsx` — CurrentPriceCard
 * `ExtraMenu.tsx` — ExtraMenu, anyExtraEnabled
-* `format.ts` — formatExtraPrice
+* `PriceTicker.tsx` — PriceTicker, formatTickerRow
+* `format.ts` — formatExtraPrice, formatTickerRow
 * `state.ts` — anyExtraEnabled
 * `trend.ts` — TickTrend, trendOverTicks
 
@@ -30,6 +31,7 @@ okf_lock: generated
 
 # Depends on
 
+* [src/data](/code/src/data.md)
 * [src/store](/code/src/store.md)
 * [src/ui](/code/src/ui.md)
 

@@ -1466,6 +1466,30 @@ button.axis-status-capsule {
   }
   to { background-color: transparent; }
 }
+/* Extra widgets: ticker marquee band */
+.axis-extra-ticker {
+  overflow: hidden;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-border);
+}
+.axis-extra-ticker-track {
+  display: inline-flex;
+  gap: 2rem;
+  padding: 2px 0;
+  animation: axis-ticker-scroll var(--ticker-speed, 30s) linear infinite;
+}
+.axis-extra-ticker:hover .axis-extra-ticker-track {
+  animation-play-state: paused;
+}
+@keyframes axis-ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.axis-extra-tick.is-up { color: var(--color-accent-2); }
+.axis-extra-tick.is-down { color: var(--color-red); }
+@media (prefers-reduced-motion: reduce) {
+  .axis-extra-ticker-track { animation: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   .axis-wl-row.is-flash-up,
   .axis-wl-row.is-flash-down {

@@ -28,3 +28,13 @@ export function formatExtraPrice(p: number): string {
   if (!Number.isFinite(p)) return '—';
   return p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+
+/** One marquee item: `SYM 97,412.50 +1.2%` (dashes when unknown). */
+export function formatTickerRow(q: { symbol: string; price: number; change?: number }): string {
+  const p = formatExtraPrice(q.price);
+  const c =
+    q.change === undefined || !Number.isFinite(q.change)
+      ? '—'
+      : `${q.change >= 0 ? '+' : ''}${q.change.toFixed(1)}%`;
+  return `${q.symbol} ${p} ${c}`;
+}
