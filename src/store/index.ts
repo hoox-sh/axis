@@ -63,6 +63,7 @@ import type {
   TransportClass,
   TelemetryState,
   TopbarSettings,
+  ExtrasState,
   ShortcutSlice,
   WatchlistList,
   WatchlistState,
@@ -277,6 +278,54 @@ export function hydrateWatchlistState(raw: unknown): WatchlistState {
   };
 }
 
+/** Restore Extra chrome prefs; unknown shapes fall back to defaults. */
+export function hydrateExtras(raw: unknown): ExtrasState {
+  const base = DEFAULTS.extras;
+  if (!raw || typeof raw !== 'object') {
+    return {
+      priceCard: { ...base.priceCard },
+      ticker: { ...base.ticker, symbols: [] },
+      alertOverlay: { ...base.alertOverlay },
+    };
+  }
+  const bag = raw as Record<string, unknown>;
+  const pc = (bag.priceCard && typeof bag.priceCard === 'object'
+    ? (bag.priceCard as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
+  const ti = (bag.ticker && typeof bag.ticker === 'object'
+    ? (bag.ticker as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
+  const ao = (bag.alertOverlay && typeof bag.alertOverlay === 'object'
+    ? (bag.alertOverlay as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
+  const color = (v: unknown, fallback: string) =>
+    typeof v === 'string' && v.trim() ? v.trim().slice(0, 32) : fallback;
+  return {
+    priceCard: {
+      enabled: typeof pc.enabled === 'boolean' ? pc.enabled : false,
+      tickLength:
+        typeof pc.tickLength === 'number' && Number.isFinite(pc.tickLength)
+          ? Math.min(100, Math.max(2, Math.round(pc.tickLength)))
+          : 20,
+    },
+    ticker: {
+      enabled: typeof ti.enabled === 'boolean' ? ti.enabled : false,
+      symbols: Array.isArray(ti.symbols)
+        ? ti.symbols.filter((s): s is string => typeof s === 'string' && !!s.trim()).slice(0, 20)
+        : [],
+      speed:
+        typeof ti.speed === 'number' && Number.isFinite(ti.speed)
+          ? Math.min(3, Math.max(0.5, ti.speed))
+          : 1,
+    },
+    alertOverlay: {
+      enabled: typeof ao.enabled === 'boolean' ? ao.enabled : false,
+      upColor: color(ao.upColor, '#3DDC97'),
+      downColor: color(ao.downColor, '#F07178'),
+    },
+  };
+}
+
 /** True after a QuotaExceededError (or equivalent) blocked a durable write this session. */
 let persistQuotaExceeded = false;
 /** One-shot console warning for quota / private-mode write failures. */
@@ -355,7 +404,7 @@ export function clampHistoryBars(n: unknown): number {
   return Math.min(HISTORY_BARS_MAX, Math.max(HISTORY_BARS_MIN, Math.round(v)));
 }
 
-const DEFAULTS: AppState = {
+export const DEFAULTS: AppState = {
   bars: [],
   chartDataGen: 0,
   chartType: DEFAULT_CHART_TYPE,
@@ -414,6 +463,11 @@ const DEFAULTS: AppState = {
     symbols: [...DEFAULT_WATCHLIST],
     refreshSec: 15,
   }),
+  extras: {
+    priceCard: { enabled: false, tickLength: 20 },
+    ticker: { enabled: false, symbols: [], speed: 1 },
+    alertOverlay: { enabled: false, upColor: '#3DDC97', downColor: '#F07178' },
+  },
   indicatorPanel: { open: false, width: 224 },
   dataViewPanel: { open: false, width: 220 },
   layerPanel: { open: false, width: 220 },
@@ -534,6 +588,7 @@ const DEFAULTS: AppState = {
     panelsAlerts: true,
     panelsValues: true,
     panelsResults: true,
+    panelsExtra: true,
     panelsScriptLogs: true,
     panelsSystemLogs: true,
     panelsStatus: true,
@@ -714,6 +769,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         return defaultChartThemeState();
       })(),
       watchlist: hydrateWatchlistState(bag.watchlist),
+      extras: hydrateExtras(bag.extras),
       indicatorPanel: {
         ...DEFAULTS.indicatorPanel,
         ...(bag.indicatorPanel && typeof bag.indicatorPanel === 'object'
@@ -1173,7 +1229,7 @@ function hydrateDrawingPrefs(raw: unknown): AppState['drawingPrefs'] {
   return next;
 }
 
-function hydrateTopbar(raw: unknown): TopbarSettings {
+export function hydrateTopbar(raw: unknown): TopbarSettings {
   const base = { ...DEFAULTS.topbar };
   if (!raw || typeof raw !== 'object') return base;
   const t = raw as Record<string, unknown>;
@@ -1196,6 +1252,7 @@ function hydrateTopbar(raw: unknown): TopbarSettings {
     panelsAlerts: bool('panelsAlerts'),
     panelsValues: bool('panelsValues'),
     panelsResults: bool('panelsResults'),
+    panelsExtra: bool('panelsExtra'),
     panelsScriptLogs: bool('panelsScriptLogs'),
     panelsSystemLogs: bool('panelsSystemLogs'),
     panelsStatus: bool('panelsStatus'),
@@ -1603,6 +1660,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     scripts: unwrap(s.scripts),
     panes: unwrap(s.panes),
     watchlist: unwrap(s.watchlist),
+    extras: unwrap(s.extras),
     indicatorPanel: unwrap(s.indicatorPanel),
     dataViewPanel: unwrap(s.dataViewPanel),
     layerPanel: unwrap(s.layerPanel),
