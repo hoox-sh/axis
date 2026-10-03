@@ -65,6 +65,7 @@ import { LayerPanel } from './ui/LayerPanel';
 import { errorFallback } from './ui/ErrorFallback';
 import { ErrorShareToast } from './ui/ErrorShareToast';
 import { Toasts } from './ui/Toasts';
+import { CurrentPriceCard } from './ui/extras/CurrentPriceCard';
 import { UpdateBanner } from './ui/UpdateBanner';
 import { reportUiError } from './ui/boot-errors';
 import { registerBuiltins } from './plugins/bootstrap';
@@ -511,6 +512,7 @@ export const App: Component = () => {
         {/* Center: chart shrinks when left/right columns open (not overlaid).
             Nested ErrorBoundary keeps topbar/status alive if chart host dies. */}
         <div class="flex-1 flex min-w-0 min-h-0 overflow-hidden bg-bg-base relative">
+          <CurrentPriceCard />
           <ErrorBoundary
             fallback={errorFallback({
               variant: 'inline',
