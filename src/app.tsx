@@ -66,6 +66,7 @@ import { errorFallback } from './ui/ErrorFallback';
 import { ErrorShareToast } from './ui/ErrorShareToast';
 import { Toasts } from './ui/Toasts';
 import { CurrentPriceCard } from './ui/extras/CurrentPriceCard';
+import { FullscreenAlert } from './ui/extras/FullscreenAlert';
 import { UpdateBanner } from './ui/UpdateBanner';
 import { reportUiError } from './ui/boot-errors';
 import { registerBuiltins } from './plugins/bootstrap';
@@ -637,6 +638,9 @@ export const App: Component = () => {
 
       {/* Transient system toasts (Settings → Notifications); always logged */}
       <Toasts />
+
+      {/* Extra fullscreen price-alert overlay (module-bar Extra menu) */}
+      <FullscreenAlert />
 
       {/* New deployed version → Update now / Hard reload / Later */}
       <UpdateBanner />

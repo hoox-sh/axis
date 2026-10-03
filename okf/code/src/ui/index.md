@@ -5,7 +5,7 @@
 * [src/ui/architecture](architecture.md) - src/ui/architecture contains apply.ts, plan.ts.
 * [src/ui/dsm](dsm.md) - src/ui/dsm contains CompleteMap.tsx, Field.tsx, JobCard.tsx, and 3 more files.
 * [src/ui/effects](effects.md) - UI effect manager — tuned chrome motion.
-* [src/ui/extras](extras.md) - src/ui/extras contains CurrentPriceCard.tsx, ExtraMenu.tsx, PriceTicker.tsx, and 3 more files.
+* [src/ui/extras](extras.md) - src/ui/extras contains CurrentPriceCard.tsx, ExtraMenu.tsx, FullscreenAlert.tsx, and 4 more files.
 * [src/ui/layers](layers.md) - src/ui/layers contains drawings.tsx, format.ts, rows.tsx, and 1 more file.
 * [src/ui/library](library.md) - src/ui/library contains CloudForm.tsx, Field.tsx, GitForm.tsx, and 3 more files.
 * [src/ui/mobile](mobile.md) - Mobile chrome — phone (<768px) app-style shell replacing the desktop Topbar/StatusBar chrome: - MobileHeader — brand (About), symbol, interval, Live, venue - MobileTabBar —…

@@ -15,6 +15,10 @@ _Generated/updated: 2026-10-03 · 483 commits · describe-tag: `v2.18.1`_
 
 ## [Unreleased]
 
+### Added
+
+- **Extra chrome widgets**: module-bar `Extra` button (after Results) with dropdown toggles for a current-price trend card (tick-length slider), a watchlist ticker marquee (symbol pick + speed), and a fullscreen direction-colored price-alert overlay.
+
 ## [2.18.2] — 2026-10-03
 
 ### Fixed
