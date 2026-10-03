@@ -4,7 +4,7 @@
  */
 import './setup';
 import { describe, expect, it } from 'bun:test';
-import { anyExtraEnabled } from '../src/ui/extras/state';
+import { anyExtraEnabled, defaultTickerSymbols } from '../src/ui/extras/state';
 import { DEFAULTS } from '../src/store';
 
 describe('anyExtraEnabled', () => {
@@ -15,5 +15,17 @@ describe('anyExtraEnabled', () => {
     expect(
       anyExtraEnabled({ ...DEFAULTS.extras, ticker: { enabled: true, symbols: [], speed: 1 } }),
     ).toBe(true);
+  });
+});
+
+describe('defaultTickerSymbols', () => {
+  it('keeps an existing selection', () => {
+    expect(defaultTickerSymbols(['BTCUSDT', 'ETHUSDT'], ['ETHUSDT'])).toEqual(['ETHUSDT']);
+  });
+  it('seeds from the watchlist when empty, capped at 20', () => {
+    expect(defaultTickerSymbols(['BTCUSDT'], [])).toEqual(['BTCUSDT']);
+    expect(defaultTickerSymbols([], [])).toEqual([]);
+    const many = Array.from({ length: 25 }, (_, i) => `S${i}`);
+    expect(defaultTickerSymbols(many, [])).toHaveLength(20);
   });
 });

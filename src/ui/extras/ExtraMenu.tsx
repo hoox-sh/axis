@@ -30,7 +30,7 @@ import { type Component, For, Show, createSignal, onCleanup, onMount } from 'sol
 import { Portal } from 'solid-js/web';
 import { store, setStore, persist } from '../../store';
 import { Icons } from '../icons';
-import { anyExtraEnabled } from './state';
+import { anyExtraEnabled, defaultTickerSymbols } from './state';
 
 export { anyExtraEnabled };
 
@@ -157,7 +157,18 @@ export const ExtraMenu: Component = () => {
                 type="checkbox"
                 checked={store.extras.ticker.enabled}
                 onChange={(e) => {
-                  setStore('extras', 'ticker', 'enabled', e.currentTarget.checked);
+                  const on = e.currentTarget.checked;
+                  setStore('extras', 'ticker', 'enabled', on);
+                  if (on) {
+                    // Seed from the watchlist so the band appears immediately —
+                    // an empty symbol list would keep it hidden behind its gate.
+                    setStore(
+                      'extras',
+                      'ticker',
+                      'symbols',
+                      defaultTickerSymbols(store.watchlist.symbols, store.extras.ticker.symbols),
+                    );
+                  }
                   persist();
                 }}
                 data-testid="axis-extra-ticker-toggle"

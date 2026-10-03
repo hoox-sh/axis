@@ -26,7 +26,7 @@
  * @module ui/extras/PriceTicker
  */
 
-import { type Component, For, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
+import { type Component, For, createEffect, createSignal, onCleanup } from 'solid-js';
 import { store } from '../../store';
 import { startWatchlistQuotes, type QuoteMuxHandle, type QuoteUpdate } from '../../data/watchlist-live';
 import { fetchWatchlistTickers } from '../../data/watchlist-tickers';
@@ -69,10 +69,8 @@ export const PriceTicker: Component = () => {
     });
   };
 
-  onMount(() => {
-    start();
-    onCleanup(stop);
-  });
+  // Single effect owns the lifecycle (runs on mount too) — a separate
+  // onMount start would open a second mux on every mount.
   createEffect(() => {
     // Restart when symbols / source change
     void store.extras.ticker.symbols.join(',');

@@ -29,3 +29,16 @@ import type { ExtrasState } from '../../store/types';
 export function anyExtraEnabled(e: ExtrasState): boolean {
   return !!(e.priceCard.enabled || e.ticker.enabled || e.alertOverlay.enabled);
 }
+
+/**
+ * Default ticker selection: keep an existing non-empty pick, otherwise seed
+ * from the watchlist (capped). Without this the ticker band — gated on a
+ * non-empty symbol list — never appears after just flipping the toggle.
+ */
+export function defaultTickerSymbols(
+  watchlistSymbols: readonly string[],
+  current: readonly string[],
+): string[] {
+  if (current.length) return [...current];
+  return watchlistSymbols.filter((s) => typeof s === 'string' && !!s.trim()).slice(0, 20);
+}
