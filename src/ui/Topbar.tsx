@@ -65,6 +65,7 @@ import { pwaInstallAvailable, promptPwaInstall, dismissPwaInstallPrompt } from '
 import { HooxLogo } from './HooxLogo';
 import { HooxLoader } from './HooxLoader';
 import { ChartLayoutMenu } from './ChartLayoutMenu';
+import { ExtraMenu } from './extras/ExtraMenu';
 import { ScreenshotMenu } from './ScreenshotMenu';
 import { CompareSymbolControl } from './CompareSymbolControl';
 import { TopbarField } from './TopbarField';
@@ -892,6 +893,10 @@ export const Topbar: Component<{
           <Icons.results />
           <span class="axis-tb-btn-label">Results</span>
         </button>
+        </Show>
+
+        <Show when={store.topbar.panelsExtra}>
+        <ExtraMenu />
         </Show>
         </div>
         </Show>

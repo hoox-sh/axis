@@ -862,6 +862,16 @@ export const SettingsDialog: Component<Props> = (props) => {
                   </div>
 
                   <div class="sc-settings-section">
+                    <div class="sc-settings-section-title">Extra</div>
+                    <StudioToggle
+                      id="topbar-panels-extra"
+                      checked={store.topbar.panelsExtra}
+                      label="Show extra"
+                      onChange={(v) => setStore('topbar', 'panelsExtra', v)}
+                    />
+                  </div>
+
+                  <div class="sc-settings-section">
                     <div class="sc-settings-section-title">System Logs</div>
                     <StudioToggle
                       id="topbar-panels-systemlogs"
