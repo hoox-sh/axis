@@ -1494,7 +1494,8 @@ button.axis-status-capsule {
 .axis-extra-price {
   position: absolute;
   top: 8px;
-  left: 8px;
+  /* Right-aligned, clearing the fixed 72px price-scale gutter (series-factory). */
+  right: 80px;
   z-index: 15;
   display: flex;
   gap: 8px;
