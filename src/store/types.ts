@@ -500,6 +500,7 @@ export interface AppState {
   };
   editor: EditorLayoutState;
   watchlist: WatchlistState;
+  extras: ExtrasState;
   indicatorPanel: { open: boolean; width: number };
   /** Data Window (OHLCV + series at crosshair) */
   dataViewPanel: { open: boolean; width: number };
@@ -735,6 +736,13 @@ export interface AppState {
   topbar: TopbarSettings;
 }
 
+/** Extra chrome widgets toggled from the module-bar Extra menu. */
+export interface ExtrasState {
+  priceCard: { enabled: boolean; tickLength: number };
+  ticker: { enabled: boolean; symbols: string[]; speed: number };
+  alertOverlay: { enabled: boolean; upColor: string; downColor: string };
+}
+
 /** Topbar button visibility settings (persisted). */
 export interface TopbarSettings {
   /** Brand logo + title — always visible in practice, but kept for parity. */
@@ -761,6 +769,7 @@ export interface TopbarSettings {
   panelsAlerts: boolean;
   panelsValues: boolean;
   panelsResults: boolean;
+  panelsExtra: boolean;
   /** @deprecated Script Logs moved into the editor (statusbar Logs toggle); kept so old persisted bags still hydrate. */
   panelsScriptLogs: boolean;
   panelsSystemLogs: boolean;
