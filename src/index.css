@@ -1543,6 +1543,27 @@ button.axis-status-capsule {
 @media (prefers-reduced-motion: reduce) {
   .axis-extra-alert { animation: none; }
 }
+/* Extra widgets: quote dock panel */
+.axis-quote-sym {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  padding: 2px 0 6px;
+}
+.axis-quote-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-variant-numeric: tabular-nums;
+}
+.axis-quote-label { opacity: 0.6; }
+.axis-quote-value { text-align: right; }
+.axis-quote-up { color: var(--color-accent-2); }
+.axis-quote-down { color: var(--color-red); }
+.axis-quote-flat { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .axis-wl-row.is-flash-up,
   .axis-wl-row.is-flash-down {

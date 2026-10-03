@@ -84,6 +84,7 @@ const MOBILE_PANELS: readonly PanelId[] = [
   'library',
   'datasource',
   'onchain',
+  'quote',
 ] as const;
 
 export interface MobileChromeProps {

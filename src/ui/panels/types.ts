@@ -38,7 +38,8 @@ export type PanelId =
   | 'alerts'
   | 'library'
   | 'datasource'
-  | 'onchain';
+  | 'onchain'
+  | 'quote';
 
 /**
  * Where a panel lives:
@@ -225,6 +226,16 @@ export const PANEL_META: Record<
     defaultX: 920,
     defaultY: 80,
   },
+  quote: {
+    title: 'Quote',
+    defaultDock: 'right',
+    minW: 1,
+    minH: 1,
+    defaultW: 280,
+    defaultH: 420,
+    defaultX: 940,
+    defaultY: 56,
+  },
 };
 
 /** Drag overlay target (null = no zone / invalid). */
@@ -355,6 +366,13 @@ export function defaultPanelChromeMap(): PanelChromeMap {
       w: 320,
       x: PANEL_META.onchain.defaultX,
       y: PANEL_META.onchain.defaultY,
+    }),
+    quote: defaultPanelChrome('quote', {
+      open: false,
+      dock: 'right',
+      w: 280,
+      x: PANEL_META.quote.defaultX,
+      y: PANEL_META.quote.defaultY,
     }),
   };
 }

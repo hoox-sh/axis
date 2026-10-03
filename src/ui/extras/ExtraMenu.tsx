@@ -28,7 +28,7 @@
 
 import { type Component, For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { Portal } from 'solid-js/web';
-import { store, setStore, persist } from '../../store';
+import { store, setStore, persist, isPanelOpen, setPanelOpen } from '../../store';
 import { Icons } from '../icons';
 import { anyExtraEnabled, defaultTickerSymbols } from './state';
 
@@ -249,6 +249,17 @@ export const ExtraMenu: Component = () => {
                   data-testid="axis-extra-alert-down"
                 />
               </span>
+            </label>
+            {/* ── Quote panel ── */}
+            <label class="flex items-center gap-2 text-[12px] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isPanelOpen('quote')}
+                onChange={(e) => setPanelOpen('quote', e.currentTarget.checked)}
+                data-testid="axis-extra-quote-toggle"
+              />
+              <span>Quote panel</span>
+              <span class="ml-auto text-text-faint text-[11px]">right dock</span>
             </label>
           </div>
         </Portal>
