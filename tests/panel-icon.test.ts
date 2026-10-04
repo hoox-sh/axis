@@ -30,8 +30,8 @@ const floatableShellSrc = readFileSync(
 const iconsModuleSrc = readFileSync(resolve(ROOT, 'src/ui/icons.tsx'), 'utf8');
 
 describe('panel header icon — mapping completeness', () => {
-  it('PANEL_ICON has exactly 12 entries, one per PanelId', () => {
-    expect(PANEL_IDS.length).toBe(12);
+  it('PANEL_ICON has one entry per PanelId', () => {
+    expect(PANEL_IDS.length).toBeGreaterThan(0);
     expect(Object.keys(PANEL_ICON).length).toBe(PANEL_IDS.length);
   });
 

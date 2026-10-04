@@ -222,6 +222,7 @@ export const PANEL_ICON: Record<PanelId, IconName> = {
   library: 'library',
   datasource: 'dataSource',
   onchain: 'onchain',
+  quote: 'trend',
 };
 
 /** Lucide names bound more than once (must be empty for {@link ICON_MAP}). */

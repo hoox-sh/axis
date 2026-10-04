@@ -3948,6 +3948,7 @@ export function isPanelOpen(id: PanelId): boolean {
     case 'library':
     case 'datasource':
     case 'onchain':
+    case 'quote':
       // Chrome-only (no legacy flat flag)
       return chromeOpen;
     case 'dataview':
@@ -4000,6 +4001,7 @@ const DOCK_STACK_IDS: PanelId[] = [
   'library',
   'datasource',
   'onchain',
+  'quote',
   'editor',
   'logs',
   'scriptlogs',

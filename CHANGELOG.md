@@ -15,9 +15,17 @@ _Generated/updated: 2026-10-03 · 493 commits · describe-tag: `v2.18.2`_
 
 ## [Unreleased]
 
+### Added
+
+- **Quote dock panel**: full quote sheet (price + trend, 24h change/range, day open, last O/H/L/C, 24h volume, tick time, venue) as a right-dock panel with multirow stacking, toggled from the Extra menu.
+
 ### Fixed
 
 - **Extra chrome widgets (review hardening)**: ticker starts once per mount and REST-seeds underneath live quotes instead of wiping them; color pickers no longer sit inside the checkbox label so picking a color can't toggle the overlay; alert direction treats `0` levels as real levels; disabling the overlay clears any visible/stale alert; price card ignores ticks from a previous symbol; persisted ticker symbols are trimmed + deduped and overlay colors must be `#rrggbb`; alert-broadcast test now covers the firing path.
+- **Ticker auto-seed**: enabling the price ticker copies the watchlist symbols when nothing is selected, so the band appears immediately; single quote-mux lifecycle per mount.
+- **Price card alignment**: overlay sits top-right, clear of the 72px price-scale gutter.
+- **Extra menu polish**: dropdown rebuilt with Studio inputs — toggle switches with hints, `ax-range` sliders in labeled fields (controls appear only when their widget is on), `StudioColorInput` swatches for alert colors, `ax-chip` pills for ticker symbols.
+- **Quote sheet correctness**: day window anchored to an injectable clock (was date-sensitive in tests); 24h high/low loop instead of `Math.max(...spread)` which overflows the stack on large histories; live tick ignored when it belongs to a previous symbol.
 
 ## [2.19.0] — 2026-10-03
 

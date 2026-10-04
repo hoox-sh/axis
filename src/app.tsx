@@ -61,6 +61,7 @@ import type { SettingsTabId, StudioPageId } from './ui/studio';
 import { ResultsModal } from './ui/ResultsModal';
 import { SystemLogs } from './ui/SystemLogs';
 import { DataViewPanel } from './ui/DataViewPanel';
+import { QuotePanel } from './ui/QuotePanel';
 import { LayerPanel } from './ui/LayerPanel';
 import { errorFallback } from './ui/ErrorFallback';
 import { ErrorShareToast } from './ui/ErrorShareToast';
@@ -572,6 +573,7 @@ export const App: Component = () => {
       <Watchlist />
       <LayerPanel />
       <DataViewPanel />
+      <QuotePanel />
       <IndicatorPanel />
       <Suspense fallback={null}>
         <AlertsPanel />

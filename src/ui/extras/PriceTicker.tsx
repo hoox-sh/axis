@@ -83,6 +83,8 @@ export const PriceTicker: Component = () => {
     });
   };
 
+  // Single effect owns the lifecycle (runs on mount too) — a separate
+  // onMount start would open a second mux on every mount.
   createEffect(() => {
     // Restart when symbols / source change (runs once on mount too).
     void store.extras.ticker.symbols.join(',');

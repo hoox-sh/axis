@@ -1494,7 +1494,8 @@ button.axis-status-capsule {
 .axis-extra-price {
   position: absolute;
   top: 8px;
-  left: 8px;
+  /* Right-aligned, clearing the fixed 72px price-scale gutter (series-factory). */
+  right: 80px;
   z-index: 15;
   display: flex;
   gap: 8px;
@@ -1542,6 +1543,60 @@ button.axis-status-capsule {
 @media (prefers-reduced-motion: reduce) {
   .axis-extra-alert { animation: none; }
 }
+/* Extra widgets: menu panel rows (Studio primitives) */
+.axis-extra-menu-head {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  padding: 2px 0 4px;
+}
+.axis-extra-menu-row {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.axis-extra-menu-row--last {
+  border-bottom: 0;
+  padding-bottom: 2px;
+}
+.axis-extra-menu-row .ax-field {
+  padding-left: 2px;
+}
+.axis-extra-menu-row fieldset.ax-chip-row {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.axis-extra-menu-colors {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+/* Extra widgets: quote dock panel */
+.axis-quote-sym {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  padding: 2px 0 6px;
+}
+.axis-quote-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-variant-numeric: tabular-nums;
+}
+.axis-quote-label { opacity: 0.6; }
+.axis-quote-value { text-align: right; }
+.axis-quote-up { color: var(--color-accent-2); }
+.axis-quote-down { color: var(--color-red); }
+.axis-quote-flat { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .axis-wl-row.is-flash-up,
   .axis-wl-row.is-flash-down {
