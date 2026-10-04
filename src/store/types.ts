@@ -308,6 +308,8 @@ export interface TickTelemetry {
   dir: 'up' | 'down' | 'flat';
   /** Wall-clock ms when this tick was recorded. */
   at: number;
+  /** Symbol this tick belongs to — guards against stale ticks after symbol switch. */
+  symbol?: string;
 }
 
 /** Connection HUD + run-latency telemetry (mostly ephemeral). */

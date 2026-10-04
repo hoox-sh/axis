@@ -51,20 +51,34 @@ export const PriceTicker: Component = () => {
   const start = () => {
     stop();
     const symbols = store.extras.ticker.symbols;
-    if (!symbols.length) return;
-    // REST seed so the band paints instantly
-    void fetchWatchlistTickers(symbols, store.source)
+    if (!symbols.length) {
+      // Clear stale quotes so a later re-enable never flashes old prices.
+      setQuotes({});
+      return;
+    }
+    const requested = [...symbols];
+    const sourceId = store.source;
+    // REST seed so the band paints instantly. Merge under live quotes so
+    // WS ticks that arrive before the fetch resolves are not wiped.
+    void fetchWatchlistTickers(requested, sourceId)
       .then((seed) => {
         const next: Record<string, QuoteUpdate> = {};
         for (const [k, t] of Object.entries(seed)) {
           next[k] = { symbol: k, price: t.price, change: t.change };
         }
-        setQuotes(next);
+        setQuotes((q) => {
+          const merged: Record<string, QuoteUpdate> = { ...next };
+          for (const s of requested) {
+            const live = q[s];
+            if (live) merged[s] = live;
+          }
+          return merged;
+        });
       })
       .catch(() => {});
     mux = startWatchlistQuotes({
-      sourceId: store.source,
-      symbols,
+      sourceId,
+      symbols: requested,
       onQuote: (u) => setQuotes((q) => ({ ...q, [u.symbol]: u })),
     });
   };
@@ -72,7 +86,7 @@ export const PriceTicker: Component = () => {
   // Single effect owns the lifecycle (runs on mount too) — a separate
   // onMount start would open a second mux on every mount.
   createEffect(() => {
-    // Restart when symbols / source change
+    // Restart when symbols / source change (runs once on mount too).
     void store.extras.ticker.symbols.join(',');
     void store.source;
     start();
@@ -88,6 +102,11 @@ export const PriceTicker: Component = () => {
       };
     });
 
+  const doubled = () => {
+    const r = rows();
+    return [...r, ...r];
+  };
+
   return (
     <div
       class="axis-extra-ticker"
@@ -95,7 +114,7 @@ export const PriceTicker: Component = () => {
       style={{ '--ticker-speed': `${30 / store.extras.ticker.speed}s` }}
     >
       <div class="axis-extra-ticker-track">
-        <For each={[...rows(), ...rows()]}>
+        <For each={doubled()}>
           {(r) => <span class={`axis-extra-tick ${r.up ? 'is-up' : 'is-down'}`}>{r.text}</span>}
         </For>
       </div>

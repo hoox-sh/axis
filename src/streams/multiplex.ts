@@ -299,7 +299,7 @@ export function startLive(
         appendBar(bar);
         const manager = getManager();
         if (manager) manager.appendBar(bar);
-        noteTick(bar.close, bar.time);
+        noteTick(bar.close, bar.time, sym);
         noteLiveBarForAlerts(bar);
 
         // Data Manager: grow the underlying bars-cache dataset with live ticks

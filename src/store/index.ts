@@ -298,8 +298,9 @@ export function hydrateExtras(raw: unknown): ExtrasState {
   const ao = (bag.alertOverlay && typeof bag.alertOverlay === 'object'
     ? (bag.alertOverlay as Record<string, unknown>)
     : {}) as Record<string, unknown>;
+  const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
   const color = (v: unknown, fallback: string) =>
-    typeof v === 'string' && v.trim() ? v.trim().slice(0, 32) : fallback;
+    typeof v === 'string' && HEX_COLOR_RE.test(v.trim()) ? v.trim() : fallback;
   return {
     priceCard: {
       enabled: typeof pc.enabled === 'boolean' ? pc.enabled : false,
@@ -311,7 +312,13 @@ export function hydrateExtras(raw: unknown): ExtrasState {
     ticker: {
       enabled: typeof ti.enabled === 'boolean' ? ti.enabled : false,
       symbols: Array.isArray(ti.symbols)
-        ? ti.symbols.filter((s): s is string => typeof s === 'string' && !!s.trim()).slice(0, 20)
+        ? [
+            ...new Set(
+              ti.symbols
+                .filter((s): s is string => typeof s === 'string' && !!s.trim())
+                .map((s) => (s as string).trim()),
+            ),
+          ].slice(0, 20)
         : [],
       speed:
         typeof ti.speed === 'number' && Number.isFinite(ti.speed)
@@ -3056,14 +3063,16 @@ export function recordRunLatency(ms: number) {
 }
 
 /** Record last live tick price/time and bump stream `lastEventAt`. */
-export function noteTick(price: number, time: number) {
-  const prev = store.telemetry?.lastTick?.price;
+export function noteTick(price: number, time: number, symbol: string = store.symbol) {
+  const prevTick = store.telemetry?.lastTick;
+  // Direction is only meaningful within the same symbol stream.
   let dir: 'up' | 'down' | 'flat' = 'flat';
-  if (prev != null) {
+  if (prevTick != null && (prevTick.symbol === undefined || prevTick.symbol === symbol)) {
+    const prev = prevTick.price;
     if (price > prev) dir = 'up';
     else if (price < prev) dir = 'down';
   }
-  setStore('telemetry', 'lastTick', { time, price, dir, at: Date.now() });
+  setStore('telemetry', 'lastTick', { time, price, dir, at: Date.now(), symbol });
   setTelemetryPlane('stream', { lastEventAt: Date.now() });
 }
 

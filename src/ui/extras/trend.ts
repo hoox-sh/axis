@@ -19,7 +19,8 @@
 
 /**
  * Tick-trend helper for the Extra price card: compare the last close against
- * the close N ticks ago. Pure — no store access, safe for unit tests.
+ * the first close of the trailing N-bar window. Pure — no store access, safe
+ * for unit tests.
  *
  * @module ui/extras/trend
  */
@@ -28,7 +29,7 @@ import type { Bar } from '../../store/types';
 
 export type TickTrend = 'up' | 'down' | 'flat';
 
-/** Compare the last close against the close N ticks ago (N clamped 2–100). */
+/** Compare the last close against the first close of the trailing N-bar window (N clamped 2–100). */
 export function trendOverTicks(bars: readonly Bar[], n: number): TickTrend {
   const len = Array.isArray(bars) ? bars.length : 0;
   if (len < 2) return 'flat';
