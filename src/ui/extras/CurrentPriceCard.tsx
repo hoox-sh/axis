@@ -19,7 +19,7 @@
 
 /**
  * Current-price overlay card (chart top-left): big price + trend arrow from
- * the last N ticks. Reads store only — no new subscriptions.
+ * the live tick against the last N closes. Reads store only — no new subscriptions.
  *
  * @module ui/extras/CurrentPriceCard
  */
@@ -43,23 +43,31 @@ export const CurrentPriceCard: Component = () => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     onCleanup(() => window.clearInterval(id));
   });
-  const price = () => {
+  /**
+   * Stream-scoped live tick price (NaN when absent or belonging to a previous
+   * symbol — e.g. symbol switch before the first new tick arrives).
+   */
+  const livePrice = () => {
     const tick = store.telemetry?.lastTick;
+    return tick &&
+      (tick.symbol === undefined || tick.symbol === store.symbol) &&
+      Number.isFinite(tick.price)
+      ? (tick.price as number)
+      : NaN;
+  };
+  const price = () => {
+    const live = livePrice();
     const bars = store.bars;
-    // Live tick is stream-scoped: ignore it when it belongs to a previous
-    // symbol (symbol switch before the first new tick arrives).
-    const live =
-      tick && (tick.symbol === undefined || tick.symbol === store.symbol) && Number.isFinite(tick.price)
-        ? tick.price
-        : NaN;
     const last = bars.length ? bars[bars.length - 1]?.close : NaN;
     if (Number.isFinite(live)) return live as number;
     return Number.isFinite(last) ? (last as number) : NaN;
   };
-  const trend = () => trendOverTicks(store.bars, store.extras.priceCard.tickLength);
+  /** Trend head is the live tick when available — the arrow reacts to every tick, not just bar closes. */
+  const trend = () => trendOverTicks(store.bars, store.extras.priceCard.tickLength, livePrice());
   /**
-   * Left name badge: remaining time to the current-bar close; live local
-   * clock while no bars are loaded. Tooltip carries local + UTC time.
+   * Left name badge: remaining time to the current-bar close (dash-prefixed,
+   * e.g. `-4:32`); live local clock while no bars are loaded. Tooltip carries
+   * local + UTC time.
    */
   const badge = () => {
     const bars = store.bars;
@@ -71,7 +79,8 @@ export const CurrentPriceCard: Component = () => {
     const d = new Date(now());
     const tip = `Local ${formatClockLocal(d)} · UTC ${formatClockUtc(d)}`;
     if (Number.isFinite(remaining)) {
-      return { text: formatCountdown(remaining as number), title: `Bar closes in ${formatCountdown(remaining as number)} · ${tip}` };
+      const text = `-${formatCountdown(remaining as number)}`;
+      return { text, title: `Bar closes in ${text} · ${tip}` };
     }
     return { text: formatClockLocal(d), title: tip };
   };

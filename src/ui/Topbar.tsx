@@ -1070,10 +1070,11 @@ export const Topbar: Component<{
         </div>
         </Show>
         </div>
-        <Show when={store.extras.ticker.enabled && store.extras.ticker.symbols.length > 0}>
-          <PriceTicker />
-        </Show>
       </div>
+      </Show>
+      {/* Price ticker marquee — full-width band under the module bar (app top), never a module-bar row item. */}
+      <Show when={store.extras.ticker.enabled && store.extras.ticker.symbols.length > 0}>
+        <PriceTicker />
       </Show>
     </header>
   );

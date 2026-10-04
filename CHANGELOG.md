@@ -9,9 +9,17 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-05 · 504 commits · describe-tag: `v2.19.0`_
+_Generated/updated: 2026-10-05 · 505 commits · describe-tag: `v2.20.0`_
 
 ---
+
+## [2.20.1] — 2026-10-04
+
+### Fixed
+
+- **Price-card trend on live ticks**: the Extra price-card arrow now heads the trailing-N trend with the stream-scoped live tick (falls back to the last bar close when no tick), so it reacts to every tick instead of only bar closes.
+- **Price-card countdown prefix**: the bar-close badge reads `-M:SS` (e.g. `-4:32`).
+- **Ticker marquee placement**: the marquee is a full-width band under the module bar (app top) — no longer a squeezed item on the right side of the topbar row.
 
 ## [2.20.0] — 2026-10-04
 
@@ -1450,12 +1458,15 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (23 commits)
+### 2026-10 (24 commits)
 
 #### Features
 
+- `102d7542` (2026-10-05) — feat(extras): float-only time + price panels under topbar
 - `aa66af89` (2026-10-04) — feat(watchlist,extras): big-price rows + ticker direction/change options
 - `1d63aabd` (2026-10-04) — feat(extras): polish Extra menu + harden quote sheet
 - `92fdb90b` (2026-10-03) — feat(extras): Quote dock panel with full quote sheet

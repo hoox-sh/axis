@@ -20,4 +20,14 @@ describe('trendOverTicks', () => {
     expect(trendOverTicks([bar(5)], 20)).toBe('flat');
     expect(trendOverTicks([bar(1), bar(2)], 500)).toBe('up');
   });
+
+  it('heads the trend with the live tick when finite', () => {
+    const bars = [bar(1), bar(2), bar(3)];
+    // Live tick above the window base → up even though last close is flat-ish
+    expect(trendOverTicks(bars, 3, 10)).toBe('up');
+    expect(trendOverTicks(bars, 3, 0.5)).toBe('down');
+    // Non-finite live price falls back to the last bar close
+    expect(trendOverTicks(bars, 3, NaN)).toBe('up');
+    expect(trendOverTicks(bars, 3, undefined)).toBe('up');
+  });
 });
