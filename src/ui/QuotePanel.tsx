@@ -66,7 +66,12 @@ export const QuotePanel: Component = () => {
     const tick = store.telemetry?.lastTick;
     const bars = store.bars;
     const last = bars.length ? bars[bars.length - 1] : null;
-    const live = tick && Number.isFinite(tick.price) ? (tick.price as number) : NaN;
+    // Live tick is stream-scoped: ignore it when it belongs to a previous
+    // symbol (symbol switch before the first new tick arrives).
+    const live =
+      tick && (tick.symbol === undefined || tick.symbol === store.symbol) && Number.isFinite(tick.price)
+        ? (tick.price as number)
+        : NaN;
     const price = Number.isFinite(live) ? live : (last && Number.isFinite(last.close) ? (last.close as number) : NaN);
     const venue =
       store.provider?.venue && store.provider.venue !== 'generic' && store.provider.venue !== 'cache'

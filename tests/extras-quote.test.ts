@@ -25,6 +25,7 @@ describe('buildQuoteRows', () => {
       bars,
       lastPrice: 104,
       lastTickAt: Date.UTC(2026, 9, 3, 12, 0, 0),
+      nowMs: Date.UTC(2026, 9, 3, 12, 0, 0),
     });
     const byLabel = Object.fromEntries(rows.map((r) => [r.label, r]));
     expect(byLabel['Price']?.value).toContain('104.00');

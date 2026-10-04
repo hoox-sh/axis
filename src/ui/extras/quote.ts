@@ -45,6 +45,8 @@ export interface QuoteInput {
   lastTickAt: number | null;
   /** REST 24h change % when available (preferred over day-bar math). */
   change24h?: number;
+  /** Day-window anchor (wall ms). Defaults to now — inject in tests. */
+  nowMs?: number;
 }
 
 /** Compact volume: 1.24M / 8.5K / 30. */
@@ -74,16 +76,24 @@ export function buildQuoteRows(input: QuoteInput): QuoteRow[] {
   const trend = trendOverTicks(bars, 20);
   const tone = trend === 'up' ? 'up' : trend === 'down' ? 'down' : 'flat';
 
-  const now = new Date();
+  const now = new Date(input.nowMs ?? Date.now());
   const dayStartSec = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 1000);
   const dayBars = bars.filter((b) => b && Number.isFinite(b.time) && b.time >= dayStartSec);
   const dayOpen = dayBars.length ? dayBars[0]!.open : (last?.open ?? NaN);
-  const high24 = dayBars.length
-    ? Math.max(...dayBars.map((b) => b.high).filter(Number.isFinite))
-    : (last?.high ?? NaN);
-  const low24 = dayBars.length
-    ? Math.min(...dayBars.map((b) => b.low).filter(Number.isFinite))
-    : (last?.low ?? NaN);
+  let high24 = last?.high ?? NaN;
+  let low24 = last?.low ?? NaN;
+  if (dayBars.length) {
+    // Loop instead of Math.max(...spread): histories reach 100k bars and
+    // spreading that many args blows the call stack.
+    high24 = -Infinity;
+    low24 = Infinity;
+    for (const b of dayBars) {
+      if (Number.isFinite(b.high) && b.high > high24) high24 = b.high;
+      if (Number.isFinite(b.low) && b.low < low24) low24 = b.low;
+    }
+    if (high24 === -Infinity) high24 = NaN;
+    if (low24 === Infinity) low24 = NaN;
+  }
   const vol24 = dayBars.length
     ? dayBars.reduce((a, b) => a + (Number.isFinite(b.volume) ? (b.volume as number) : 0), 0)
     : (last?.volume ?? NaN);

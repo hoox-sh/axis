@@ -18,8 +18,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Extra menu — module-bar dropdown with checkboxes for the extra chrome
- * widgets (price card, ticker marquee, fullscreen alert overlay).
+ * Extra menu — module-bar dropdown with switches for the extra chrome
+ * widgets (price card, ticker marquee, fullscreen alert overlay, quote
+ * panel). Inputs are Studio form primitives (`StudioToggle`, `ax-range`
+ * sliders, `StudioColorInput`) so the panel matches Settings styling.
  *
  * Open/close + positioning follow {@link ../ChartLayoutMenu}.
  *
@@ -30,6 +32,7 @@ import { type Component, For, Show, createSignal, onCleanup, onMount } from 'sol
 import { Portal } from 'solid-js/web';
 import { store, setStore, persist, isPanelOpen, setPanelOpen } from '../../store';
 import { Icons } from '../icons';
+import { StudioColorInput, StudioField, StudioToggle } from '../studio';
 import { anyExtraEnabled, defaultTickerSymbols } from './state';
 
 function toggleTickerSymbol(sym: string, on: boolean): void {
@@ -115,49 +118,60 @@ export const ExtraMenu: Component = () => {
         <Portal>
           <div
             ref={panelEl}
-            class="fixed z-[200] w-[min(320px,calc(100vw-24px))] bg-bg-panel border-2 border-border shadow-[0_8px_28px_rgba(0,0,0,0.45)] p-2 flex flex-col gap-2"
+            class="fixed z-[200] w-[min(340px,calc(100vw-24px))] bg-bg-panel border-2 border-border rounded-lg shadow-[0_8px_28px_rgba(0,0,0,0.45)] px-3 py-2.5 flex flex-col"
             style={{ top: `${panelPos().top}px`, left: `${panelPos().left}px` }}
             role="menu"
             aria-label="Extra widgets"
           >
+            <div class="axis-extra-menu-head">Extra widgets</div>
+
             {/* ── Price card ── */}
-            <label class="flex items-center gap-2 text-[12px] cursor-pointer">
-              <input
-                type="checkbox"
+            <div class="axis-extra-menu-row">
+              <StudioToggle
+                id="axis-extra-price-toggle"
                 checked={store.extras.priceCard.enabled}
-                onChange={(e) => {
-                  setStore('extras', 'priceCard', 'enabled', e.currentTarget.checked);
+                label="Price card"
+                hint="Chart overlay · trend arrow"
+                testId="axis-extra-price-toggle"
+                onChange={(v) => {
+                  setStore('extras', 'priceCard', 'enabled', v);
                   persist();
                 }}
-                data-testid="axis-extra-price-toggle"
               />
-              <span>Price card</span>
-              <span class="ml-auto text-text-faint font-mono text-[11px]">
-                N={store.extras.priceCard.tickLength}
-              </span>
-            </label>
-            <input
-              type="range"
-              min={2}
-              max={100}
-              step={1}
-              value={store.extras.priceCard.tickLength}
-              onInput={(e) => {
-                setStore('extras', 'priceCard', 'tickLength', Number(e.currentTarget.value));
-                persist();
-              }}
-              title="Ticks for trend arrow (2–100)"
-              aria-label="Trend tick length"
-              data-testid="axis-extra-price-n"
-            />
+              <Show when={store.extras.priceCard.enabled}>
+                <StudioField
+                  label={`Trend window · ${store.extras.priceCard.tickLength} ticks`}
+                  for="axis-extra-price-n"
+                >
+                  <input
+                    id="axis-extra-price-n"
+                    class="ax-range"
+                    type="range"
+                    min={2}
+                    max={100}
+                    step={1}
+                    value={store.extras.priceCard.tickLength}
+                    onInput={(e) => {
+                      setStore('extras', 'priceCard', 'tickLength', Number(e.currentTarget.value));
+                      persist();
+                    }}
+                    title="Ticks for trend arrow (2–100)"
+                    aria-label="Trend tick length"
+                    data-testid="axis-extra-price-n"
+                  />
+                </StudioField>
+              </Show>
+            </div>
 
             {/* ── Ticker ── */}
-            <label class="flex items-center gap-2 text-[12px] cursor-pointer">
-              <input
-                type="checkbox"
+            <div class="axis-extra-menu-row">
+              <StudioToggle
+                id="axis-extra-ticker-toggle"
                 checked={store.extras.ticker.enabled}
-                onChange={(e) => {
-                  const on = e.currentTarget.checked;
+                label="Price ticker"
+                hint="Marquee band under the module bar"
+                testId="axis-extra-ticker-toggle"
+                onChange={(on) => {
                   setStore('extras', 'ticker', 'enabled', on);
                   if (on) {
                     // Seed from the watchlist so the band appears immediately —
@@ -171,103 +185,111 @@ export const ExtraMenu: Component = () => {
                   }
                   persist();
                 }}
-                data-testid="axis-extra-ticker-toggle"
               />
-              <span>Price ticker</span>
-              <span class="ml-auto text-text-faint font-mono text-[11px]">
-                {store.extras.ticker.speed.toFixed(1)}×
-              </span>
-            </label>
-            <input
-              type="range"
-              min={0.5}
-              max={3}
-              step={0.5}
-              value={store.extras.ticker.speed}
-              onInput={(e) => {
-                setStore('extras', 'ticker', 'speed', Number(e.currentTarget.value));
-                persist();
-              }}
-              title="Marquee speed (0.5×–3×)"
-              aria-label="Ticker speed"
-              data-testid="axis-extra-ticker-speed"
-            />
-            <Show
-              when={store.watchlist.symbols.length > 0}
-              fallback={<div class="text-[11px] text-text-faint">Watchlist is empty — add symbols to tick them.</div>}
-            >
-              <div class="flex flex-wrap gap-1">
-                <For each={store.watchlist.symbols}>
-                  {(sym) => (
-                    <label class="flex items-center gap-1 text-[11px] border border-border rounded px-1.5 py-0.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={store.extras.ticker.symbols.includes(sym)}
-                        onChange={(e) => toggleTickerSymbol(sym, e.currentTarget.checked)}
-                        data-testid={`axis-extra-ticker-sym-${sym}`}
-                      />
-                      <span class="font-mono">{sym}</span>
-                    </label>
-                  )}
-                </For>
-              </div>
-            </Show>
+              <Show when={store.extras.ticker.enabled}>
+                <StudioField
+                  label={`Marquee speed · ${store.extras.ticker.speed.toFixed(1)}×`}
+                  for="axis-extra-ticker-speed"
+                >
+                  <input
+                    id="axis-extra-ticker-speed"
+                    class="ax-range"
+                    type="range"
+                    min={0.5}
+                    max={3}
+                    step={0.5}
+                    value={store.extras.ticker.speed}
+                    onInput={(e) => {
+                      setStore('extras', 'ticker', 'speed', Number(e.currentTarget.value));
+                      persist();
+                    }}
+                    title="Marquee speed (0.5×–3×)"
+                    aria-label="Ticker speed"
+                    data-testid="axis-extra-ticker-speed"
+                  />
+                </StudioField>
+                <Show
+                  when={store.watchlist.symbols.length > 0}
+                  fallback={<div class="ax-hint">Watchlist is empty — add symbols to tick them.</div>}
+                >
+                  <fieldset class="ax-chip-row">
+                    <legend class="sr-only">Ticker symbols</legend>
+                    <For each={store.watchlist.symbols}>
+                      {(sym) => {
+                        const on = () => store.extras.ticker.symbols.includes(sym);
+                        return (
+                          <label class={`ax-chip${on() ? ' is-on' : ''}`}>
+                            <input
+                              type="checkbox"
+                              class="sr-only"
+                              checked={on()}
+                              onChange={(e) => toggleTickerSymbol(sym, e.currentTarget.checked)}
+                              data-testid={`axis-extra-ticker-sym-${sym}`}
+                            />
+                            <span class="font-mono">{sym}</span>
+                          </label>
+                        );
+                      }}
+                    </For>
+                  </fieldset>
+                </Show>
+              </Show>
+            </div>
 
             {/* ── Fullscreen alert ── */}
-            <div class="flex items-center gap-2 text-[12px]">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={store.extras.alertOverlay.enabled}
-                  onChange={(e) => {
-                    setStore('extras', 'alertOverlay', 'enabled', e.currentTarget.checked);
-                    persist();
-                  }}
-                  data-testid="axis-extra-alert-toggle"
-                />
-                <span>Fullscreen alert</span>
-              </label>
-              <span class="ml-auto flex items-center gap-1">
-                <input
-                  type="color"
-                  value={store.extras.alertOverlay.upColor}
-                  onInput={(e) => {
-                    e.stopPropagation();
-                    setStore('extras', 'alertOverlay', 'upColor', e.currentTarget.value);
-                    persist();
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  title="Up color"
-                  aria-label="Alert up color"
-                  data-testid="axis-extra-alert-up"
-                />
-                <input
-                  type="color"
-                  value={store.extras.alertOverlay.downColor}
-                  onInput={(e) => {
-                    e.stopPropagation();
-                    setStore('extras', 'alertOverlay', 'downColor', e.currentTarget.value);
-                    persist();
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  title="Down color"
-                  aria-label="Alert down color"
-                  data-testid="axis-extra-alert-down"
-                />
-              </span>
+            <div class="axis-extra-menu-row">
+              <StudioToggle
+                id="axis-extra-alert-toggle"
+                checked={store.extras.alertOverlay.enabled}
+                label="Fullscreen alert"
+                hint="Viewport flash on price alerts"
+                testId="axis-extra-alert-toggle"
+                onChange={(v) => {
+                  setStore('extras', 'alertOverlay', 'enabled', v);
+                  persist();
+                }}
+              />
+              <Show when={store.extras.alertOverlay.enabled}>
+                <div class="axis-extra-menu-colors">
+                  <StudioField label="Up" for="axis-extra-alert-up">
+                    <StudioColorInput
+                      id="axis-extra-alert-up"
+                      value={store.extras.alertOverlay.upColor}
+                      testId="axis-extra-alert-up"
+                      onChange={(v) => {
+                        // Store accepts #rrggbb only (validated on hydrate).
+                        if (!/^#[0-9a-fA-F]{6}$/.test(v.trim())) return;
+                        setStore('extras', 'alertOverlay', 'upColor', v.trim());
+                        persist();
+                      }}
+                    />
+                  </StudioField>
+                  <StudioField label="Down" for="axis-extra-alert-down">
+                    <StudioColorInput
+                      id="axis-extra-alert-down"
+                      value={store.extras.alertOverlay.downColor}
+                      testId="axis-extra-alert-down"
+                      onChange={(v) => {
+                        if (!/^#[0-9a-fA-F]{6}$/.test(v.trim())) return;
+                        setStore('extras', 'alertOverlay', 'downColor', v.trim());
+                        persist();
+                      }}
+                    />
+                  </StudioField>
+                </div>
+              </Show>
             </div>
+
             {/* ── Quote panel ── */}
-            <div class="flex items-center gap-2 text-[12px]">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isPanelOpen('quote')}
-                  onChange={(e) => setPanelOpen('quote', e.currentTarget.checked)}
-                  data-testid="axis-extra-quote-toggle"
-                />
-                <span>Quote panel</span>
-              </label>
-              <span class="ml-auto text-text-faint text-[11px]">right dock</span>
+            <div class="axis-extra-menu-row axis-extra-menu-row--last">
+              <StudioToggle
+                id="axis-extra-quote-toggle"
+                checked={isPanelOpen('quote')}
+                label="Quote panel"
+                hint="Right dock · full quote sheet"
+                testId="axis-extra-quote-toggle"
+                onChange={(v) => setPanelOpen('quote', v)}
+              />
             </div>
           </div>
         </Portal>
