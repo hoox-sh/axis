@@ -1,8 +1,8 @@
-// Copyright (C) 2024-2026 jango_blockchained
+// Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 //
-// This file is part of pynescript.
+// This file is part of axis.
 //
-// pynescript is free software: you can redistribute it and/or modify
+// axis is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.

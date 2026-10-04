@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2024-2026 jango_blockchained
+ * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
  * SPDX-License-Identifier: AGPL-3.0-only
  *
  * Minimal wrangler.toml helpers (vars only — no full TOML parser).

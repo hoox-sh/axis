@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2026 HOOX · AXIS · hoox-sh
+ * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 import './setup';

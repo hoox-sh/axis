@@ -15,6 +15,10 @@ _Generated/updated: 2026-10-03 · 493 commits · describe-tag: `v2.18.2`_
 
 ## [Unreleased]
 
+### Changed
+
+- **License headers**: unified all own-file headers to `Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)` / `part of axis` (was `pynescript`). Comment-only, no behavior change.
+
 ### Added
 
 - **Quote dock panel**: full quote sheet (price + trend, 24h change/range, day open, last O/H/L/C, 24h volume, tick time, venue) as a right-dock panel with multirow stacking, toggled from the Extra menu.

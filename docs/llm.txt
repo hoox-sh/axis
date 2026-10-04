@@ -5,18 +5,18 @@ Public: https://hoox.sh/axis/docs
 Repository: https://github.com/hoox-sh/pyne
 
 FILE: ../axis/docs/architecture/adrs.mdx
-Copyright (C) - jangoblockchained
-This file is part of pynescript.
-pynescript is free software: you can redistribute it and/or modify
+Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+This file is part of axis.
+axis is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
 the Free Software Foundation, either version of the License, or
 (at your option) any later version.
-pynescript is distributed in the hope that it will be useful,
+axis is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
-along with pynescript. If not, see .
+along with axis. If not, see .
 SPDX-License-Identifier: AGPL-.-only
 ---
 title: "Architecture Decision Records"

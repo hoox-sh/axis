@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Copyright (C) 2024-2026 jango_blockchained
+ * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
  * SPDX-License-Identifier: AGPL-3.0-only
  *
  * AXIS CLI binary. Prefers dist/ (Node-compatible). Falls back to src/ when

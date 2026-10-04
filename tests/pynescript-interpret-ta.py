@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2026 HOOX · AXIS · hoox-sh
+# Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
 # SPDX-License-Identifier: AGPL-3.0-only
 """Interpret-mode lock: ta.sma / ta.stdev must run against the vendored wheel."""
 
