@@ -15,6 +15,7 @@ import {
   getDefaultPanelChrome,
   isChartEdgeOverlay,
   isChartOverlayEligible,
+  isFloatOnlyPanel,
   isPanelInChartOverlayMode,
   PANEL_IDS,
 } from '../src/ui/panels/panel-manager.ts';
@@ -46,6 +47,26 @@ describe('panel defaults', () => {
     const pos = defaultPanelPosition('editor', 1200, 800);
     expect(pos.x).toBeGreaterThan(400);
     expect(pos.w).toBe(PANEL_META.editor.defaultW);
+  });
+
+  it('price/time are float-only, moveable, defaulting under the topbar', () => {
+    for (const id of ['time', 'price'] as const) {
+      expect(isFloatOnlyPanel(id)).toBe(true);
+      // Float-only: factory dock is float, geometry defaults sit just under the topbar (~48px + gap)
+      expect(PANEL_META[id].defaultDock).toBe('float');
+      expect(getDefaultPanelChrome(id).dock).toBe('float');
+      expect(PANEL_META[id].defaultY).toBeLessThanOrEqual(64);
+      expect(defaultPanelPosition(id, 1280, 800).y).toBeLessThanOrEqual(64);
+    }
+    // No layout docks: coercion keeps float…
+    setPanelDock('price', 'left');
+    expect(getPanelChrome('price').dock).toBe('float');
+    // …while free geometry moves still apply (title-drag moveable)
+    setPanelGeometry('price', { x: 500, y: 200 });
+    const c = getPanelChrome('price');
+    expect(c.x).toBe(500);
+    expect(c.y).toBe(200);
+    expect(c.dock).toBe('float');
   });
 });
 

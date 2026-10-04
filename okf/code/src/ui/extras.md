@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui/extras"
-description: "src/ui/extras contains CurrentPriceCard.tsx, ExtraMenu.tsx, FullscreenAlert.tsx, and 5 more files."
+description: "src/ui/extras contains CurrentPriceCard.tsx, ExtraMenu.tsx, FullscreenAlert.tsx, and 6 more files."
 resource: "src/ui/extras"
 tags: [code, extras, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-04T18:51:22Z
+  at: 2026-10-04T22:24:20Z
 sources:
   - id: tree
     resource: "src/ui/extras"
@@ -25,6 +25,7 @@ okf_lock: generated
 * `format.ts` — formatExtraPrice, formatTickerRow
 * `quote.ts` — QuoteInput, QuoteRow, buildQuoteRows, formatCompactVolume, formatTickTime
 * `state.ts` — anyExtraEnabled, defaultTickerSymbols
+* `timebadge.ts` — barCloseRemainingMs, formatClockLocal, formatClockUtc, formatCountdown, intervalToMs
 * `trend.ts` — TickTrend, trendOverTicks
 
 # Packages

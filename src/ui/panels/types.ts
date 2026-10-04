@@ -39,7 +39,9 @@ export type PanelId =
   | 'library'
   | 'datasource'
   | 'onchain'
-  | 'quote';
+  | 'quote'
+  | 'time'
+  | 'price';
 
 /**
  * Where a panel lives:
@@ -236,6 +238,27 @@ export const PANEL_META: Record<
     defaultX: 940,
     defaultY: 56,
   },
+  /** Float-only compact panels (see FLOAT_ONLY_PANELS): normal width, ~2 rows. */
+  time: {
+    title: 'Time',
+    defaultDock: 'float',
+    minW: 1,
+    minH: 1,
+    defaultW: 280,
+    defaultH: 108,
+    defaultX: 72,
+    defaultY: 56,
+  },
+  price: {
+    title: 'Price',
+    defaultDock: 'float',
+    minW: 1,
+    minH: 1,
+    defaultW: 280,
+    defaultH: 108,
+    defaultX: 368,
+    defaultY: 56,
+  },
 };
 
 /** Drag overlay target (null = no zone / invalid). */
@@ -373,6 +396,22 @@ export function defaultPanelChromeMap(): PanelChromeMap {
       w: 280,
       x: PANEL_META.quote.defaultX,
       y: PANEL_META.quote.defaultY,
+    }),
+    time: defaultPanelChrome('time', {
+      open: false,
+      dock: 'float',
+      w: 280,
+      h: 108,
+      x: PANEL_META.time.defaultX,
+      y: PANEL_META.time.defaultY,
+    }),
+    price: defaultPanelChrome('price', {
+      open: false,
+      dock: 'float',
+      w: 280,
+      h: 108,
+      x: PANEL_META.price.defaultX,
+      y: PANEL_META.price.defaultY,
     }),
   };
 }

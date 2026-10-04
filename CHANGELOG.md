@@ -9,11 +9,11 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-03 · 493 commits · describe-tag: `v2.18.2`_
+_Generated/updated: 2026-10-05 · 504 commits · describe-tag: `v2.19.0`_
 
 ---
 
-## [Unreleased]
+## [2.20.0] — 2026-10-04
 
 ### Changed
 
@@ -23,6 +23,8 @@ _Generated/updated: 2026-10-03 · 493 commits · describe-tag: `v2.18.2`_
 
 - **Watchlist big-price rows**: `!` button after the alert bell toggles an expanded row — full-cell-width big price (auto-shrinks for long prices / extra decimals) with symbol, change, and prev close in a sub-row.
 - **Ticker marquee options**: travel direction (left/right) and a 24h-change toggle join speed + symbol picks in the Extra menu; persisted with the ticker state.
+- **Float-only time + price panels**: compact Extras (normal width, ~2 rows, float only — no layout docks, title-drag moveable). Time shows the candle-close countdown + local/UTC clocks; Price shows the big last price + 24h change for the chart symbol. Both default side-by-side just under the topbar.
+- **Price-card time badge**: left name badge on the current-price overlay — bar-close countdown while bars load, live clock otherwise (tooltip: local + UTC).
 - **Quote dock panel**: full quote sheet (price + trend, 24h change/range, day open, last O/H/L/C, 24h volume, tick time, venue) as a right-dock panel with multirow stacking, toggled from the Extra menu.
 
 ### Fixed
@@ -1446,12 +1448,17 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (12 commits)
+### 2026-10 (23 commits)
 
 #### Features
 
+- `aa66af89` (2026-10-04) — feat(watchlist,extras): big-price rows + ticker direction/change options
+- `1d63aabd` (2026-10-04) — feat(extras): polish Extra menu + harden quote sheet
+- `92fdb90b` (2026-10-03) — feat(extras): Quote dock panel with full quote sheet
 - `5c5f0b51` (2026-10-03) — feat(extras): fullscreen alert overlay + styles
 - `ea7139be` (2026-10-03) — feat(extras): watchlist ticker marquee band
 - `f04c1d20` (2026-10-03) — feat(extras): current-price trend card overlay
@@ -1463,15 +1470,23 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `dac8a48d` (2026-10-04) — fix(tests): derive panel-icon count from PANEL_IDS
+- `1977e11b` (2026-10-04) — fix(extras): harden extra chrome widgets after review
+- `ed39d933` (2026-10-03) — fix(extras): align price card right, clear of price scale
+- `ec1c4994` (2026-10-03) — fix(extras): ticker auto-seeds watchlist symbols, single mux lifecycle
 - `85358351` (2026-10-03) — fix(live): keep every tick in background tabs + DSM auto gap repair
 - `54ae5acc` (2026-10-03) — fix(chart): harden engine overlays, HA cache, paint and lifecycle
 
 #### Chores
 
+- `eb4ace84` (2026-10-04) — chore(license): unify headers under HOOX AXIS / axis
+- `8949d283` (2026-10-03) — chore(release): 2.19.0 — Extra chrome widgets
 - `db4e3862` (2026-10-03) — chore: ignore local git worktrees
 
 #### Merges
 
+- `129c9656` (2026-10-04) — Merge branch 'feat/quote-panel' — Quote dock panel + Extra menu polish
+- `277bb465` (2026-10-04) — Merge branch 'main' into feat/quote-panel
 - `6051219e` (2026-10-03) — Merge branch 'feat/extra-widgets' — Extra chrome widgets
 
 ### 2026-09 (162 commits)

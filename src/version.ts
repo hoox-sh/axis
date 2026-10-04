@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+ * Copyright (c) 2026 HOOX · AXIS · hoox-sh
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
@@ -15,7 +15,7 @@
  */
 
 /** Baked single source of truth (repo-root VERSION at sync time). */
-export const BAKED_APP_VERSION: string = '2.19.0';
+export const BAKED_APP_VERSION: string = '2.20.0';
 
 /** Running app version: build-time override or baked VERSION. */
 export function appVersion(): string {

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+ * Copyright (c) 2026 HOOX · AXIS · hoox-sh
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
@@ -11,4 +11,4 @@
  */
 
 /** Deployed worker version (repo-root VERSION at sync time). */
-export const WORKER_VERSION: string = '2.19.0';
+export const WORKER_VERSION: string = '2.20.0';

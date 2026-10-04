@@ -1551,6 +1551,18 @@ button.axis-status-capsule {
   font-variant-numeric: tabular-nums;
 }
 .axis-extra-price-value { font-size: 15px; font-weight: 650; }
+/* Left name badge on the price card: bar-close countdown (live clock fallback). */
+.axis-extra-price-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--color-text-dim, #8b93a3);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .axis-extra-trend-up { color: var(--color-accent-2); }
 .axis-extra-trend-down { color: var(--color-red); }
 .axis-extra-trend-flat { color: var(--color-text-faint, #6b7382); }
@@ -1641,6 +1653,39 @@ button.axis-status-capsule {
 .axis-quote-up { color: var(--color-accent-2); }
 .axis-quote-down { color: var(--color-red); }
 .axis-quote-flat { color: inherit; }
+/* Float-only mini panels (time / price extras): normal width, ~2 rows. */
+.axis-mini-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: 100%;
+}
+.axis-mini-big {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums lining-nums;
+  white-space: nowrap;
+}
+.axis-mini-tag {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  opacity: 0.55;
+}
+.axis-mini-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.axis-mini-dim { opacity: 0.55; }
 @media (prefers-reduced-motion: reduce) {
   .axis-wl-row.is-flash-up,
   .axis-wl-row.is-flash-down {

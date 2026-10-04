@@ -103,6 +103,7 @@ import {
   defaultPanelPosition,
   getDefaultPanelChrome,
   isChartOverlayEligible,
+  isFloatOnlyPanel,
   isManagedFloatablePanel,
   PANEL_IDS,
 } from '../ui/panels/panel-manager';
@@ -3951,6 +3952,8 @@ export function isPanelOpen(id: PanelId): boolean {
     case 'datasource':
     case 'onchain':
     case 'quote':
+    case 'time':
+    case 'price':
       // Chrome-only (no legacy flat flag)
       return chromeOpen;
     case 'dataview':
@@ -4055,28 +4058,31 @@ function mirrorPanelWidth(id: PanelId, w: number) {
  */
 export function setPanelDock(id: PanelId, dock: PanelDock) {
   ensurePanelChrome();
+  // Float-only panels (time / price extras) never leave the float window —
+  // coerces workspace restores, MCP calls, and stray menu paths.
+  const target = isFloatOnlyPanel(id) && dock !== 'float' ? 'float' : dock;
   const prev = getPanelChrome(id).dock;
-  setStore('panelChrome', id, 'dock', dock);
-  if (dock === 'window' && id === 'editor') {
+  setStore('panelChrome', id, 'dock', target);
+  if (target === 'window' && id === 'editor') {
     setStore('editor', 'mode', 'popout');
-  } else if (id === 'editor' && dock !== 'window') {
+  } else if (id === 'editor' && target !== 'window') {
     setStore('editor', 'mode', 'docked');
   }
-  if (dock === 'float' || dock === 'window') {
+  if (target === 'float' || target === 'window') {
     bumpPanelZ(id);
     // Hover-slide only applies when docked
     clearPanelHoverSlideExpanded(id);
   } else {
     // Do not force-match peer widths — each panel keeps its own w
-    rebalanceDockStack(dock);
+    rebalanceDockStack(target);
     // Re-arm collapsed peek when hover-slide is on
-    if (getPanelChrome(id).hoverSlide && isHoverSlideEligible(dock)) {
+    if (getPanelChrome(id).hoverSlide && isHoverSlideEligible(target)) {
       setPanelHoverSlideExpanded(id, false);
     } else {
       clearPanelHoverSlideExpanded(id);
     }
   }
-  if (prev !== dock && (prev === 'left' || prev === 'right' || prev === 'bottom')) {
+  if (prev !== target && (prev === 'left' || prev === 'right' || prev === 'bottom')) {
     rebalanceDockStack(prev);
   }
   persist();
@@ -4253,7 +4259,7 @@ export function setAllPanelsChartOverlay(enabled: boolean): void {
   ensurePanelChrome();
   const on = !!enabled;
   for (const id of PANEL_IDS) {
-    if (!isManagedFloatablePanel(id)) continue;
+    if (!isManagedFloatablePanel(id) || isFloatOnlyPanel(id)) continue;
     const cur = getPanelChrome(id);
     // Always write the flag so float panels keep preference for later docks
     setStore('panelChrome', id, 'chartOverlay', on);
@@ -4268,9 +4274,11 @@ export function setAllPanelsChartOverlay(enabled: boolean): void {
   requestPanelChartReflow();
 }
 
-/** True when every managed panel has chart overlay enabled. */
+/** True when every managed dockable panel has chart overlay enabled. */
 export function isAllPanelsChartOverlay(): boolean {
-  return PANEL_IDS.filter(isManagedFloatablePanel).every((id) => !!getPanelChrome(id).chartOverlay);
+  return PANEL_IDS.filter((id) => isManagedFloatablePanel(id) && !isFloatOnlyPanel(id)).every(
+    (id) => !!getPanelChrome(id).chartOverlay,
+  );
 }
 
 /**

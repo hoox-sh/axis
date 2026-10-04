@@ -316,7 +316,7 @@ export const ExtraMenu: Component = () => {
             </div>
 
             {/* ── Quote panel ── */}
-            <div class="axis-extra-menu-row axis-extra-menu-row--last">
+            <div class="axis-extra-menu-row">
               <StudioToggle
                 id="axis-extra-quote-toggle"
                 checked={isPanelOpen('quote')}
@@ -324,6 +324,30 @@ export const ExtraMenu: Component = () => {
                 hint="Right dock · full quote sheet"
                 testId="axis-extra-quote-toggle"
                 onChange={(v) => setPanelOpen('quote', v)}
+              />
+            </div>
+
+            {/* ── Time panel (float only) ── */}
+            <div class="axis-extra-menu-row">
+              <StudioToggle
+                id="axis-extra-time-toggle"
+                checked={isPanelOpen('time')}
+                label="Time panel"
+                hint="Float only · candle countdown"
+                testId="axis-extra-time-toggle"
+                onChange={(v) => setPanelOpen('time', v)}
+              />
+            </div>
+
+            {/* ── Price panel (float only) ── */}
+            <div class="axis-extra-menu-row axis-extra-menu-row--last">
+              <StudioToggle
+                id="axis-extra-price-toggle"
+                checked={isPanelOpen('price')}
+                label="Price panel"
+                hint="Float only · big last price"
+                testId="axis-extra-price-toggle"
+                onChange={(v) => setPanelOpen('price', v)}
               />
             </div>
           </div>

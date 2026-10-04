@@ -24,13 +24,25 @@
  * @module ui/extras/CurrentPriceCard
  */
 
-import { type Component, Show } from 'solid-js';
+import { type Component, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { store } from '../../store';
 import { trendOverTicks } from './trend';
 import { formatExtraPrice } from './format';
+import {
+  barCloseRemainingMs,
+  formatClockLocal,
+  formatClockUtc,
+  formatCountdown,
+} from './timebadge';
 
 /** Current-price overlay card (chart top-left). Reads store only. */
 export const CurrentPriceCard: Component = () => {
+  /** Wall-clock tick so the left time badge counts down live. */
+  const [now, setNow] = createSignal(Date.now());
+  onMount(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    onCleanup(() => window.clearInterval(id));
+  });
   const price = () => {
     const tick = store.telemetry?.lastTick;
     const bars = store.bars;
@@ -45,9 +57,30 @@ export const CurrentPriceCard: Component = () => {
     return Number.isFinite(last) ? (last as number) : NaN;
   };
   const trend = () => trendOverTicks(store.bars, store.extras.priceCard.tickLength);
+  /**
+   * Left name badge: remaining time to the current-bar close; live local
+   * clock while no bars are loaded. Tooltip carries local + UTC time.
+   */
+  const badge = () => {
+    const bars = store.bars;
+    const last = bars.length ? bars[bars.length - 1] : undefined;
+    const remaining =
+      last && Number.isFinite(last.time)
+        ? barCloseRemainingMs(last.time * 1000, store.interval, now())
+        : NaN;
+    const d = new Date(now());
+    const tip = `Local ${formatClockLocal(d)} · UTC ${formatClockUtc(d)}`;
+    if (Number.isFinite(remaining)) {
+      return { text: formatCountdown(remaining as number), title: `Bar closes in ${formatCountdown(remaining as number)} · ${tip}` };
+    }
+    return { text: formatClockLocal(d), title: tip };
+  };
   return (
     <Show when={store.extras.priceCard.enabled && store.bars.length > 0}>
       <div class="axis-extra-price" data-testid="axis-extra-price">
+        <span class="axis-extra-price-badge" title={badge().title} data-testid="axis-extra-price-badge">
+          {badge().text}
+        </span>
         <span class="axis-extra-price-value">{formatExtraPrice(price())}</span>
         <span class={`axis-extra-trend axis-extra-trend-${trend()}`}>
           {trend() === 'up' ? '▲' : trend() === 'down' ? '▼' : '●'}

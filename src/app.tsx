@@ -62,6 +62,8 @@ import { ResultsModal } from './ui/ResultsModal';
 import { SystemLogs } from './ui/SystemLogs';
 import { DataViewPanel } from './ui/DataViewPanel';
 import { QuotePanel } from './ui/QuotePanel';
+import { TimePanel } from './ui/TimePanel';
+import { PricePanel } from './ui/PricePanel';
 import { LayerPanel } from './ui/LayerPanel';
 import { errorFallback } from './ui/ErrorFallback';
 import { ErrorShareToast } from './ui/ErrorShareToast';
@@ -574,6 +576,8 @@ export const App: Component = () => {
       <LayerPanel />
       <DataViewPanel />
       <QuotePanel />
+      <TimePanel />
+      <PricePanel />
       <IndicatorPanel />
       <Suspense fallback={null}>
         <AlertsPanel />

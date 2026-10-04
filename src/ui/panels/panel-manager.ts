@@ -52,6 +52,8 @@ export const PANEL_IDS: readonly PanelId[] = [
   'datasource',
   'onchain',
   'quote',
+  'time',
+  'price',
   'editor',
   'logs',
   'scriptlogs',
@@ -66,6 +68,17 @@ export const FIXED_APP_SHELL_PANELS: ReadonlySet<PanelId> = new Set([
   'logs',
   'statusbar',
 ]);
+
+/**
+ * Panels that may only float — no layout docks. The shell hides dock menu
+ * entries, drag drops stay float, and setPanelDock coerces to float.
+ */
+export const FLOAT_ONLY_PANELS: ReadonlySet<PanelId> = new Set(['time', 'price']);
+
+/** True for float-only panels (time / price extras). */
+export function isFloatOnlyPanel(id: PanelId): boolean {
+  return FLOAT_ONLY_PANELS.has(id);
+}
 
 /** Factory chrome for one panel (dock, size, default float position). */
 export function getDefaultPanelChrome(id: PanelId): PanelChrome {

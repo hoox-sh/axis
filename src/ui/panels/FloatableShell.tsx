@@ -121,6 +121,12 @@ export interface FloatableShellProps {
   /** Called when user chooses "New tab" (shell still sets dock=window) */
   onPopoutWindow?: () => void;
   testId?: string;
+  /**
+   * Float-only panel (time / price extras): dock menu offers Float alone,
+   * drag drops stay float. Prefer deriving from `isFloatOnlyPanel(id)` —
+   * this prop is the explicit override.
+   */
+  floatOnly?: boolean;
 }
 
 type DragMode = 'move' | 'resize' | null;
@@ -544,7 +550,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     const onUp = (ev: PointerEvent) => {
       if (!drag) return;
       const zone = hitDropZone(ev.clientX, ev.clientY);
-      const nextDock = dropZoneToDock(zone);
+      const nextDock = props.floatOnly ? 'float' : dropZoneToDock(zone);
       if (nextDock !== 'float') {
         setPanelDock(props.id, nextDock);
       }
@@ -1206,7 +1212,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                       }
                     }}
                   >
-                    <For each={DOCK_MENU}>
+                    <For each={DOCK_MENU.filter((item) => !props.floatOnly || item.dock === 'float')}>
                       {(item) => {
                         const ItemIcon = item.Icon;
                         const active = () => dock() === item.dock;
@@ -1224,7 +1230,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                       }}
                     </For>
                     <hr class="axis-panel-menu-sep border-0" />
-                    <Show when={isChartOverlayEligible(dock()) || isFloat()}>
+                    <Show when={!props.floatOnly && (isChartOverlayEligible(dock()) || isFloat())}>
                       <button
                         type="button"
                         role="menuitem"
@@ -1291,7 +1297,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
                         <Icons.check size={MENU_CHECK} class="ml-auto opacity-80" />
                       </Show>
                     </button>
-                    <Show when={isHoverSlideEligible(dock()) && !isPanelChartOverlay(props.id)}>
+                    <Show when={!props.floatOnly && isHoverSlideEligible(dock()) && !isPanelChartOverlay(props.id)}>
                       <button
                         type="button"
                         role="menuitem"
