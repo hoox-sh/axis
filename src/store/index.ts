@@ -324,6 +324,8 @@ export function hydrateExtras(raw: unknown): ExtrasState {
         typeof ti.speed === 'number' && Number.isFinite(ti.speed)
           ? Math.min(3, Math.max(0.5, ti.speed))
           : 1,
+      direction: ti.direction === 'right' ? 'right' : 'left',
+      showChange: typeof ti.showChange === 'boolean' ? ti.showChange : true,
     },
     alertOverlay: {
       enabled: typeof ao.enabled === 'boolean' ? ao.enabled : false,
@@ -472,7 +474,7 @@ export const DEFAULTS: AppState = {
   }),
   extras: {
     priceCard: { enabled: false, tickLength: 20 },
-    ticker: { enabled: false, symbols: [], speed: 1 },
+    ticker: { enabled: false, symbols: [], speed: 1, direction: 'left', showChange: true },
     alertOverlay: { enabled: false, upColor: '#3DDC97', downColor: '#F07178' },
   },
   indicatorPanel: { open: false, width: 224 },

@@ -84,6 +84,7 @@ import {
   type AlertKind,
 } from '../alerts';
 import { Icons } from './icons';
+import { bigPriceSizeClass } from './watchlist-row';
 import { FloatableShell } from './panels/FloatableShell';
 import { announce } from './sr-announce';
 
@@ -145,9 +146,11 @@ const WatchlistRow: Component<{
   tick?: WatchTicker;
   active: boolean;
   alerted: boolean;
+  expanded: boolean;
   cols: string;
   onSelect: (sym: string) => void;
   onAlert: (sym: string, el: HTMLElement) => void;
+  onExpand: (sym: string) => void;
 }> = (props) => {
   const [flash, setFlash] = createSignal<'up' | 'down' | ''>('');
   let lastPrice: number | undefined;
@@ -169,52 +172,24 @@ const WatchlistRow: Component<{
     const n = props.tick?.change;
     return n != null && Number.isFinite(n) ? n : undefined;
   };
-  return (
-    // biome-ignore lint/a11y/useSemanticElements: row contains nested buttons; wrapping in <button> would be invalid HTML
-    <div
-      class={`axis-wl-row group ${props.cols} cursor-pointer text-[12px] border-b border-border relative`}
-      classList={{
-        'is-active': props.active,
-        'is-flash-up': flash() === 'up',
-        'is-flash-down': flash() === 'down',
-      }}
-      role="button"
-      tabIndex={0}
-      onClick={() => props.onSelect(props.sym)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          props.onSelect(props.sym);
-        }
-      }}
-    >
-      <span class={`font-semibold truncate ${props.active ? 'text-accent' : 'text-text'}`}>
-        {props.sym.replace(/USDT$/i, '').replace(/USD$/i, '')}
-        <span class="text-text-faint font-normal text-[10px]">
-          {/USDT$/i.test(props.sym) ? 'USDT' : /USD$/i.test(props.sym) ? 'USD' : ''}
-        </span>
-      </span>
-      <span class="font-mono text-[12px] font-medium text-text text-right tabular-nums lining-nums min-w-[4.75rem]">
-        {fmtPrice(props.tick?.price)}
-      </span>
-      <span
-        class={`font-mono text-[11px] text-right tabular-nums lining-nums min-w-[4.6rem] ${
-          ch() == null ? 'text-text-faint' : (ch() ?? 0) >= 0 ? 'axis-wl-change-up' : 'axis-wl-change-down'
-        }`}
-      >
-        {fmtChange(ch())}
-      </span>
-      <span
-        class="font-mono text-[10px] text-text-faint text-right tabular-nums lining-nums min-w-[4.25rem]"
-        title="Previous close"
-      >
-        {fmtPrice(closeOf(props.tick))}
-      </span>
+  const chClass = () =>
+    ch() == null
+      ? 'text-text-faint'
+      : (ch() ?? 0) >= 0
+        ? 'axis-wl-change-up'
+        : 'axis-wl-change-down';
+
+  /** Icon cluster shared by the compact grid cell and the expanded header. */
+  const iconBtns = (alwaysShow: boolean) => {
+    const reveal = alwaysShow
+      ? 'opacity-100'
+      : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100';
+    return (
       <span class="flex items-center justify-end gap-0.5">
         <button
           type="button"
           class={`w-4 h-4 flex items-center justify-center text-text-faint hover:text-accent focus-visible:opacity-100 ${
-            props.alerted ? 'text-accent opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+            props.alerted ? 'text-accent opacity-100' : reveal
           }`}
           title={props.alerted ? `Alerts on ${props.sym}` : `Add alert for ${props.sym}`}
           aria-label={`Add alert for ${props.sym}`}
@@ -228,7 +203,23 @@ const WatchlistRow: Component<{
         </button>
         <button
           type="button"
-          class="w-4 h-4 flex items-center justify-center text-[11px] leading-none text-text-faint opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:text-red focus-visible:opacity-100"
+          class={`w-4 h-4 flex items-center justify-center text-[12px] leading-none font-bold focus-visible:opacity-100 ${
+            props.expanded ? 'text-accent opacity-100' : `text-text-faint hover:text-accent ${reveal}`
+          }`}
+          title={props.expanded ? `Compact view for ${props.sym}` : `Big price view for ${props.sym}`}
+          aria-label={`Big price view for ${props.sym}`}
+          aria-pressed={props.expanded}
+          data-testid={`axis-watchlist-expand-${props.sym}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            props.onExpand(props.sym);
+          }}
+        >
+          !
+        </button>
+        <button
+          type="button"
+          class={`w-4 h-4 flex items-center justify-center text-[11px] leading-none text-text-faint hover:text-red focus-visible:opacity-100 ${reveal}`}
           title={`Remove ${props.sym}`}
           aria-label={`Remove ${props.sym}`}
           onClick={(e) => {
@@ -239,6 +230,88 @@ const WatchlistRow: Component<{
           ×
         </button>
       </span>
+    );
+  };
+
+  const priceText = () => fmtPrice(props.tick?.price);
+
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: row contains nested buttons; wrapping in <button> would be invalid HTML
+    <div
+      class={`axis-wl-row group ${props.cols} cursor-pointer text-[12px] border-b border-border relative`}
+      classList={{
+        'is-active': props.active,
+        'is-expanded': props.expanded,
+        'is-flash-up': flash() === 'up',
+        'is-flash-down': flash() === 'down',
+      }}
+      role="button"
+      tabIndex={0}
+      onClick={() => props.onSelect(props.sym)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          props.onSelect(props.sym);
+        }
+      }}
+    >
+      <Show
+        when={props.expanded}
+        fallback={
+          <>
+            <span class={`font-semibold truncate ${props.active ? 'text-accent' : 'text-text'}`}>
+              {props.sym.replace(/USDT$/i, '').replace(/USD$/i, '')}
+              <span class="text-text-faint font-normal text-[10px]">
+                {/USDT$/i.test(props.sym) ? 'USDT' : /USD$/i.test(props.sym) ? 'USD' : ''}
+              </span>
+            </span>
+            <span class="font-mono text-[12px] font-medium text-text text-right tabular-nums lining-nums min-w-[4.75rem]">
+              {priceText()}
+            </span>
+            <span
+              class={`font-mono text-[11px] text-right tabular-nums lining-nums min-w-[4.6rem] ${chClass()}`}
+            >
+              {fmtChange(ch())}
+            </span>
+            <span
+              class="font-mono text-[10px] text-text-faint text-right tabular-nums lining-nums min-w-[4.25rem]"
+              title="Previous close"
+            >
+              {fmtPrice(closeOf(props.tick))}
+            </span>
+            {iconBtns(false)}
+          </>
+        }
+      >
+        <div class="axis-wl-expanded">
+          <div class="axis-wl-expanded-top">
+            <span
+              class={`axis-wl-big-price ${bigPriceSizeClass(priceText())}`}
+              title={`Last price ${priceText()}`}
+            >
+              {priceText()}
+            </span>
+            {iconBtns(true)}
+          </div>
+          <div class="axis-wl-expanded-sub">
+            <span class={`font-semibold ${props.active ? 'text-accent' : 'text-text'}`}>
+              {props.sym.replace(/USDT$/i, '').replace(/USD$/i, '')}
+              <span class="text-text-faint font-normal">
+                {/USDT$/i.test(props.sym) ? 'USDT' : /USD$/i.test(props.sym) ? 'USD' : ''}
+              </span>
+            </span>
+            <span class={`font-mono tabular-nums lining-nums ${chClass()}`}>
+              {fmtChange(ch())}
+            </span>
+            <span
+              class="font-mono text-text-faint tabular-nums lining-nums"
+              title="Previous close"
+            >
+              Prev {fmtPrice(closeOf(props.tick))}
+            </span>
+          </div>
+        </div>
+      </Show>
     </div>
   );
 };
@@ -257,6 +330,8 @@ export const Watchlist: Component = () => {
   const [alertError, setAlertError] = createSignal('');
   const [alertsTick, setAlertsTick] = createSignal(0);
   const [alertPopPos, setAlertPopPos] = createSignal({ top: 0, left: 0 });
+  /** Symbols pinned to the big-price row layout (session-local). */
+  const [expandedSyms, setExpandedSyms] = createSignal<Set<string>>(new Set());
   let alertAnchorEl: HTMLElement | undefined;
   let alertPopEl: HTMLDivElement | undefined;
 
@@ -522,6 +597,21 @@ export const Watchlist: Component = () => {
   const emitWatchlistAlert = (open: boolean) => {
     if (typeof window === 'undefined') return;
     window.dispatchEvent(new CustomEvent('axis-watchlist-alert', { detail: { open } }));
+  };
+
+  const toggleExpanded = (sym: string) => {
+    const key = sym.toUpperCase();
+    setExpandedSyms((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+        announce(`${sym} compact view`);
+      } else {
+        next.add(key);
+        announce(`${sym} big price view`);
+      }
+      return next;
+    });
   };
 
   const closeAlert = () => {
@@ -793,9 +883,11 @@ export const Watchlist: Component = () => {
                   tick={prices()[sym]}
                   active={store.symbol === sym}
                   alerted={alertedSymbols().has(sym.toUpperCase())}
+                  expanded={expandedSyms().has(sym.toUpperCase())}
                   cols={cols}
                   onSelect={(s) => void select(s)}
                   onAlert={openAlert}
+                  onExpand={toggleExpanded}
                 />
               )}
             </For>

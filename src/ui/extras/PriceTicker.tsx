@@ -97,7 +97,10 @@ export const PriceTicker: Component = () => {
     store.extras.ticker.symbols.map((s) => {
       const q = quotes()[s];
       return {
-        text: formatTickerRow({ symbol: s, price: q?.price ?? NaN, change: q?.change }),
+        text: formatTickerRow(
+          { symbol: s, price: q?.price ?? NaN, change: q?.change },
+          { showChange: store.extras.ticker.showChange },
+        ),
         up: (q?.change ?? 0) >= 0,
       };
     });
@@ -111,6 +114,7 @@ export const PriceTicker: Component = () => {
     <div
       class="axis-extra-ticker"
       data-testid="axis-extra-ticker"
+      data-ticker-dir={store.extras.ticker.direction}
       style={{ '--ticker-speed': `${30 / store.extras.ticker.speed}s` }}
     >
       <div class="axis-extra-ticker-track">

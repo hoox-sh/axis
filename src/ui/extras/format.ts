@@ -29,9 +29,16 @@ export function formatExtraPrice(p: number): string {
   return p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/** One marquee item: `SYM 97,412.50 +1.2%` (dashes when unknown). */
-export function formatTickerRow(q: { symbol: string; price: number; change?: number }): string {
+/**
+ * One marquee item: `SYM 97,412.50 +1.2%` (dashes when unknown).
+ * With `{ showChange: false }` the change % is omitted: `SYM 97,412.50`.
+ */
+export function formatTickerRow(
+  q: { symbol: string; price: number; change?: number },
+  opts?: { showChange?: boolean },
+): string {
   const p = formatExtraPrice(q.price);
+  if (opts?.showChange === false) return `${q.symbol} ${p}`;
   const c =
     q.change === undefined || !Number.isFinite(q.change)
       ? '—'

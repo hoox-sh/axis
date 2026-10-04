@@ -208,6 +208,41 @@ export const ExtraMenu: Component = () => {
                     data-testid="axis-extra-ticker-speed"
                   />
                 </StudioField>
+                <StudioField label="Marquee direction" for="axis-extra-ticker-dir">
+                  <fieldset
+                    class="ax-chip-row"
+                    id="axis-extra-ticker-dir"
+                  >
+                    <legend class="sr-only">Marquee direction</legend>
+                    <For each={(['left', 'right'] as const)}>
+                      {(dir) => (
+                        <button
+                          type="button"
+                          class={`ax-chip${store.extras.ticker.direction === dir ? ' is-on' : ''}`}
+                          aria-pressed={store.extras.ticker.direction === dir}
+                          data-testid={`axis-extra-ticker-dir-${dir}`}
+                          onClick={() => {
+                            setStore('extras', 'ticker', 'direction', dir);
+                            persist();
+                          }}
+                        >
+                          <span class="font-mono">{dir === 'left' ? '← Left' : 'Right →'}</span>
+                        </button>
+                      )}
+                    </For>
+                  </fieldset>
+                </StudioField>
+                <StudioToggle
+                  id="axis-extra-ticker-change"
+                  checked={store.extras.ticker.showChange}
+                  label="Show 24h change"
+                  hint="Change % after each price"
+                  testId="axis-extra-ticker-change"
+                  onChange={(v) => {
+                    setStore('extras', 'ticker', 'showChange', v);
+                    persist();
+                  }}
+                />
                 <Show
                   when={store.watchlist.symbols.length > 0}
                   fallback={<div class="ax-hint">Watchlist is empty — add symbols to tick them.</div>}

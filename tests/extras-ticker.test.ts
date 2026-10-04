@@ -13,4 +13,11 @@ describe('formatTickerRow', () => {
     expect(formatTickerRow({ symbol: 'ETHUSDT', price: 3842, change: undefined }))
       .toBe('ETHUSDT 3,842.00 —');
   });
+
+  it('omits the change with showChange: false', () => {
+    expect(formatTickerRow({ symbol: 'BTCUSDT', price: 97412.5, change: 1.2 }, { showChange: false }))
+      .toBe('BTCUSDT 97,412.50');
+    expect(formatTickerRow({ symbol: 'ETHUSDT', price: 3842, change: undefined }, { showChange: false }))
+      .toBe('ETHUSDT 3,842.00');
+  });
 });

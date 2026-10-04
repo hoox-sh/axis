@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 77 more files."
+description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 78 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-03T18:26:58Z
+  at: 2026-10-04T21:43:58Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -98,6 +98,7 @@ okf_lock: generated
 * `tabbed-editor.js` — TabbedEditor
 * `telemetry.ts` — classifyTransport, connDotClass, formatLatency, formatTickAge, idlePlane, pushSample, transportLabel
 * `ui-scale.ts` — UI_SCALE_PRESETS, formatUiScalePct
+* `watchlist-row.ts` — bigPriceSizeClass
 
 # Packages
 

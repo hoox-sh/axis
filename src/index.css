@@ -1425,6 +1425,46 @@ button.axis-status-capsule {
   border-left-color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 6%, transparent);
 }
+/* Big-price expanded row: stacked layout, price takes the full cell width
+   and ellipsizes before the icon cluster (which stays right-aligned). */
+.axis-wl-row.is-expanded {
+  display: block;
+  height: auto;
+  min-height: 0;
+  padding: 4px 8px 5px;
+}
+.axis-wl-expanded {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.axis-wl-expanded-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.axis-wl-big-price {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+/* Longer prices / more decimals step down so the row never wraps. */
+.axis-wl-big-1 { font-size: 20px; line-height: 1.15; }
+.axis-wl-big-2 { font-size: 16px; line-height: 1.2; }
+.axis-wl-big-3 { font-size: 12.5px; line-height: 1.25; }
+.axis-wl-expanded-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 10.5px;
+  min-width: 0;
+}
 /* Duration and strength come from the UI effect manager (`watchlist.tick`). */
 .axis-wl-row.is-flash-up {
   animation-name: axis-wl-flash-up;
@@ -1480,6 +1520,10 @@ button.axis-status-capsule {
 }
 .axis-extra-ticker:hover .axis-extra-ticker-track {
   animation-play-state: paused;
+}
+/* Marquee direction (Extra menu) — right reverses travel. */
+.axis-extra-ticker[data-ticker-dir="right"] .axis-extra-ticker-track {
+  animation-direction: reverse;
 }
 @keyframes axis-ticker-scroll {
   from { transform: translateX(0); }

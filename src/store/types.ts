@@ -741,7 +741,15 @@ export interface AppState {
 /** Extra chrome widgets toggled from the module-bar Extra menu. */
 export interface ExtrasState {
   priceCard: { enabled: boolean; tickLength: number };
-  ticker: { enabled: boolean; symbols: string[]; speed: number };
+  ticker: {
+    enabled: boolean;
+    symbols: string[];
+    speed: number;
+    /** Marquee travel direction. */
+    direction: 'left' | 'right';
+    /** Include the 24h change % after the price. */
+    showChange: boolean;
+  };
   alertOverlay: { enabled: boolean; upColor: string; downColor: string };
 }
 

@@ -21,6 +21,8 @@ _Generated/updated: 2026-10-03 · 493 commits · describe-tag: `v2.18.2`_
 
 ### Added
 
+- **Watchlist big-price rows**: `!` button after the alert bell toggles an expanded row — full-cell-width big price (auto-shrinks for long prices / extra decimals) with symbol, change, and prev close in a sub-row.
+- **Ticker marquee options**: travel direction (left/right) and a 24h-change toggle join speed + symbol picks in the Extra menu; persisted with the ticker state.
 - **Quote dock panel**: full quote sheet (price + trend, 24h change/range, day open, last O/H/L/C, 24h volume, tick time, venue) as a right-dock panel with multirow stacking, toggled from the Extra menu.
 
 ### Fixed

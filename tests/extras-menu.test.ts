@@ -13,7 +13,10 @@ describe('anyExtraEnabled', () => {
   });
   it('true when any extra on', () => {
     expect(
-      anyExtraEnabled({ ...DEFAULTS.extras, ticker: { enabled: true, symbols: [], speed: 1 } }),
+      anyExtraEnabled({
+        ...DEFAULTS.extras,
+        ticker: { enabled: true, symbols: [], speed: 1, direction: 'left', showChange: true },
+      }),
     ).toBe(true);
   });
 });

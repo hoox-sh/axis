@@ -9,7 +9,13 @@ import { DEFAULTS, hydrateTopbar, parsePersistedState } from '../src/store';
 describe('extras store', () => {
   it('defaults all extras off with sane settings', () => {
     expect(DEFAULTS.extras.priceCard).toEqual({ enabled: false, tickLength: 20 });
-    expect(DEFAULTS.extras.ticker).toEqual({ enabled: false, symbols: [], speed: 1 });
+    expect(DEFAULTS.extras.ticker).toEqual({
+      enabled: false,
+      symbols: [],
+      speed: 1,
+      direction: 'left',
+      showChange: true,
+    });
     expect(DEFAULTS.extras.alertOverlay).toEqual({
       enabled: false,
       upColor: '#3DDC97',
@@ -33,6 +39,19 @@ describe('extras store', () => {
       JSON.stringify({ extras: { ticker: { enabled: true, symbols: ['BTCUSDT', ' BTCUSDT ', 'ETHUSDT', 42, ''] } } }),
     );
     expect(parsed?.extras?.ticker.symbols).toEqual(['BTCUSDT', 'ETHUSDT']);
+  });
+
+  it('hydrates ticker direction + showChange, falls back on garbage', () => {
+    const ok = parsePersistedState(
+      JSON.stringify({ extras: { ticker: { direction: 'right', showChange: false } } }),
+    );
+    expect(ok?.extras?.ticker.direction).toBe('right');
+    expect(ok?.extras?.ticker.showChange).toBe(false);
+    const bad = parsePersistedState(
+      JSON.stringify({ extras: { ticker: { direction: 'up', showChange: 'yes' } } }),
+    );
+    expect(bad?.extras?.ticker.direction).toBe('left');
+    expect(bad?.extras?.ticker.showChange).toBe(true);
   });
 
   it('falls back to default colors for non-hex values', () => {
