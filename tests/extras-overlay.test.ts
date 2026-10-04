@@ -31,4 +31,9 @@ describe('alertDirection', () => {
     expect(alertDirection(alert('price_cross', { price: 110 }), 100)).toBe('down');
     expect(alertDirection(alert('pine_alert'), 100)).toBe('up');
   });
+  it('treats a zero level as a real level (not missing)', () => {
+    expect(alertDirection(alert('price_cross', { price: 0 }), 0)).toBe('up');
+    expect(alertDirection(alert('price_cross', { price: 0 }), -1)).toBe('down');
+    expect(alertDirection(alert('price_cross', { threshold: 0 }), 0.5)).toBe('up');
+  });
 });

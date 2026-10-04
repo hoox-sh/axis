@@ -32,13 +32,13 @@ import { store, setStore, persist } from '../../store';
 import { Icons } from '../icons';
 import { anyExtraEnabled } from './state';
 
-export { anyExtraEnabled };
-
 function toggleTickerSymbol(sym: string, on: boolean): void {
+  const key = sym.trim();
+  if (!key) return;
   const cur = store.extras.ticker.symbols;
   const next = on
-    ? [...cur, sym].filter((s, i, a) => a.indexOf(s) === i).slice(0, 20)
-    : cur.filter((s) => s !== sym);
+    ? [...cur, key].filter((s, i, a) => a.indexOf(s) === i).slice(0, 20)
+    : cur.filter((s) => s !== key);
   setStore('extras', 'ticker', 'symbols', next);
   persist();
 }
@@ -203,25 +203,29 @@ export const ExtraMenu: Component = () => {
             </Show>
 
             {/* ── Fullscreen alert ── */}
-            <label class="flex items-center gap-2 text-[12px] cursor-pointer">
-              <input
-                type="checkbox"
-                checked={store.extras.alertOverlay.enabled}
-                onChange={(e) => {
-                  setStore('extras', 'alertOverlay', 'enabled', e.currentTarget.checked);
-                  persist();
-                }}
-                data-testid="axis-extra-alert-toggle"
-              />
-              <span>Fullscreen alert</span>
+            <div class="flex items-center gap-2 text-[12px]">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={store.extras.alertOverlay.enabled}
+                  onChange={(e) => {
+                    setStore('extras', 'alertOverlay', 'enabled', e.currentTarget.checked);
+                    persist();
+                  }}
+                  data-testid="axis-extra-alert-toggle"
+                />
+                <span>Fullscreen alert</span>
+              </label>
               <span class="ml-auto flex items-center gap-1">
                 <input
                   type="color"
                   value={store.extras.alertOverlay.upColor}
                   onInput={(e) => {
+                    e.stopPropagation();
                     setStore('extras', 'alertOverlay', 'upColor', e.currentTarget.value);
                     persist();
                   }}
+                  onClick={(e) => e.stopPropagation()}
                   title="Up color"
                   aria-label="Alert up color"
                   data-testid="axis-extra-alert-up"
@@ -230,15 +234,17 @@ export const ExtraMenu: Component = () => {
                   type="color"
                   value={store.extras.alertOverlay.downColor}
                   onInput={(e) => {
+                    e.stopPropagation();
                     setStore('extras', 'alertOverlay', 'downColor', e.currentTarget.value);
                     persist();
                   }}
+                  onClick={(e) => e.stopPropagation()}
                   title="Down color"
                   aria-label="Alert down color"
                   data-testid="axis-extra-alert-down"
                 />
               </span>
-            </label>
+            </div>
           </div>
         </Portal>
       </Show>

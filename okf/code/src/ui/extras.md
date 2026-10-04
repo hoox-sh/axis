@@ -7,7 +7,7 @@ tags: [code, extras, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-03T18:01:46Z
+  at: 2026-10-04T08:59:23Z
 sources:
   - id: tree
     resource: "src/ui/extras"
@@ -19,7 +19,7 @@ okf_lock: generated
 # Files
 
 * `CurrentPriceCard.tsx` — CurrentPriceCard
-* `ExtraMenu.tsx` — ExtraMenu, anyExtraEnabled
+* `ExtraMenu.tsx` — ExtraMenu
 * `FullscreenAlert.tsx` — AlertDirection, FullscreenAlert, alertDirection
 * `PriceTicker.tsx` — PriceTicker, formatTickerRow
 * `format.ts` — formatExtraPrice, formatTickerRow

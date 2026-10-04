@@ -25,7 +25,7 @@
  * @module ui/extras/FullscreenAlert
  */
 
-import { type Component, Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { type Component, Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { store } from '../../store';
 import { subscribeFiredAlerts, type Alert, type FiredAlertEvent } from '../../alerts';
@@ -45,11 +45,12 @@ export function alertDirection(alert: Pick<Alert, 'kind' | 'params'>, price: num
       return d === 'down' ? 'down' : 'up';
     }
     default: {
-      const level =
-        Number(alert.params?.price) ||
-        Number(alert.params?.threshold) ||
-        Number.NaN;
-      if (Number.isFinite(level) && Number.isFinite(price)) {
+      const num = (v: unknown): number | null => {
+        const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
+        return Number.isFinite(n) ? (n as number) : null;
+      };
+      const level = num(alert.params?.price) ?? num(alert.params?.threshold);
+      if (level !== null && Number.isFinite(price)) {
         return price >= level ? 'up' : 'down';
       }
       return 'up';
@@ -82,6 +83,18 @@ export const FullscreenAlert: Component = () => {
     });
   });
 
+  // Never resurrect a dismissed/hidden alert: enabling the toggle must not
+  // re-show a stale event after the overlay was hidden or timed out.
+  createEffect(() => {
+    if (!store.extras.alertOverlay.enabled) {
+      if (timer) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+      setEvent(null);
+    }
+  });
+
   const dir = () => {
     const e = event();
     if (!e || !e.alerts[0]) return 'up' as AlertDirection;
@@ -99,9 +112,12 @@ export const FullscreenAlert: Component = () => {
           style={{ '--alert-color': color() }}
           onClick={() => setEvent(null)}
           onKeyDown={(e) => {
-            if (e.key === 'Escape' || e.key === 'Enter') setEvent(null);
+            // Document-level Escape already dismisses; kept so the clickable
+            // overlay has a keyboard equivalent (button handles Enter/Space).
+            if (e.key === 'Escape') setEvent(null);
           }}
           role="alertdialog"
+          aria-modal="true"
           aria-label="Price alert"
         >
           <div class="axis-extra-alert-card">
@@ -111,7 +127,11 @@ export const FullscreenAlert: Component = () => {
             <button
               type="button"
               class="sc-btn sc-btn-ghost axis-extra-alert-close"
-              onClick={() => setEvent(null)}
+              ref={(el) => el.focus()}
+              onClick={(e) => {
+                e.stopPropagation();
+                setEvent(null);
+              }}
               data-testid="axis-extra-alert-close"
             >
               Dismiss

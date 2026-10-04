@@ -34,7 +34,12 @@ export const CurrentPriceCard: Component = () => {
   const price = () => {
     const tick = store.telemetry?.lastTick;
     const bars = store.bars;
-    const live = tick && Number.isFinite(tick.price) ? tick.price : NaN;
+    // Live tick is stream-scoped: ignore it when it belongs to a previous
+    // symbol (symbol switch before the first new tick arrives).
+    const live =
+      tick && (tick.symbol === undefined || tick.symbol === store.symbol) && Number.isFinite(tick.price)
+        ? tick.price
+        : NaN;
     const last = bars.length ? bars[bars.length - 1]?.close : NaN;
     if (Number.isFinite(live)) return live as number;
     return Number.isFinite(last) ? (last as number) : NaN;

@@ -15,6 +15,10 @@ _Generated/updated: 2026-10-03 · 493 commits · describe-tag: `v2.18.2`_
 
 ## [Unreleased]
 
+### Fixed
+
+- **Extra chrome widgets (review hardening)**: ticker starts once per mount and REST-seeds underneath live quotes instead of wiping them; color pickers no longer sit inside the checkbox label so picking a color can't toggle the overlay; alert direction treats `0` levels as real levels; disabling the overlay clears any visible/stale alert; price card ignores ticks from a previous symbol; persisted ticker symbols are trimmed + deduped and overlay colors must be `#rrggbb`; alert-broadcast test now covers the firing path.
+
 ## [2.19.0] — 2026-10-03
 
 ### Added

@@ -27,4 +27,24 @@ describe('extras store', () => {
     expect(parsed?.extras?.priceCard.enabled).toBe(true);
     expect(parsed?.extras?.priceCard.tickLength).toBe(100);
   });
+
+  it('trims + dedupes ticker symbols', () => {
+    const parsed = parsePersistedState(
+      JSON.stringify({ extras: { ticker: { enabled: true, symbols: ['BTCUSDT', ' BTCUSDT ', 'ETHUSDT', 42, ''] } } }),
+    );
+    expect(parsed?.extras?.ticker.symbols).toEqual(['BTCUSDT', 'ETHUSDT']);
+  });
+
+  it('falls back to default colors for non-hex values', () => {
+    const parsed = parsePersistedState(
+      JSON.stringify({ extras: { alertOverlay: { enabled: true, upColor: 'red', downColor: '#GGGGGG' } } }),
+    );
+    expect(parsed?.extras?.alertOverlay.upColor).toBe('#3DDC97');
+    expect(parsed?.extras?.alertOverlay.downColor).toBe('#F07178');
+    const ok = parsePersistedState(
+      JSON.stringify({ extras: { alertOverlay: { enabled: true, upColor: '#123abc', downColor: '#ABCDEF' } } }),
+    );
+    expect(ok?.extras?.alertOverlay.upColor).toBe('#123abc');
+    expect(ok?.extras?.alertOverlay.downColor).toBe('#ABCDEF');
+  });
 });
