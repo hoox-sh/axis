@@ -57,8 +57,9 @@ describe('editor panel menu — duplicate New tab removal', () => {
     // The DOCK_MENU constant in FloatableShell is the single source of
     // truth for "New tab" inside the panel header dropdown.
     expect(floatableShellSrc).toMatch(/dock:\s*'window'[\s\S]{0,40}label:\s*'New tab'/);
-    // Confirm the DOCK_MENU is rendered via <For each={DOCK_MENU}>
-    expect(floatableShellSrc).toContain('<For each={DOCK_MENU}>');
+    // Confirm the DOCK_MENU is rendered via <For each={DOCK_MENU...}>
+    // (may carry a .filter for floatOnly panels — prefix-match survives that).
+    expect(floatableShellSrc).toContain('<For each={DOCK_MENU');
   });
 
   it('FloatableShell renders the menuExtra slot only when truthy (no orphan slot)', () => {

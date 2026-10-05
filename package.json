@@ -12,6 +12,7 @@
     "sync:versions": "bun scripts/sync-versions.mjs",
     "preview": "vite preview",
     "test": "bun test --max-concurrency=1 tests/ worker/tests/",
+    "test:fast": "bun test --isolate --parallel tests/ worker/tests/",
     "test:cli": "bun --cwd packages/cli test",
     "typecheck": "bunx tsc --noEmit",
     "check:versions": "bun scripts/check-versions.mjs",

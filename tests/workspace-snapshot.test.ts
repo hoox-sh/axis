@@ -71,7 +71,12 @@ function sampleSource() {
       hideDrawings: false,
       lockAll: false,
     },
-    panelChrome: defaultPanelChromeMap(),
+    // panelChrome is snapshotted verbatim (legacy `editor.*` feeds
+    // `editorPrefs`, not panelChrome) — open the editor chrome explicitly.
+    panelChrome: {
+      ...defaultPanelChromeMap(),
+      editor: { ...defaultPanelChromeMap().editor, open: true },
+    },
     scripts: [
       {
         id: 'ind_1',

@@ -649,8 +649,12 @@ describe('layout helpers', () => {
     setActiveChartSlot(slotB.id);
     setActiveChartSlot(slotA.id);
 
-    // Allow refreshAfterSlotBarsRestore rAF callbacks to fire
-    await new Promise<void>((r) => setTimeout(r, 50));
+    // Allow refreshAfterSlotBarsRestore rAF callbacks to fire. Poll for
+    // the condition — a fixed sleep flakes under full-suite CPU load.
+    const deadline = Date.now() + 2000;
+    while (store.bars !== btc && Date.now() < deadline) {
+      await new Promise<void>((r) => setTimeout(r, 10));
+    }
 
     expect(store.bars).toBe(btc);
     expect(store.symbol).toBe('BTCUSDT');
