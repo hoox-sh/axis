@@ -36,9 +36,14 @@
 
 import { fetchOHLCV, fetchMarkets, watchOHLCV, putCredential, deleteCredential, closeAll } from './gateway';
 import type { SessionBody, WatchStream } from './types';
+// Static import: bun bundles package.json into dist/ and embeds it into
+// `bun build --compile` binaries (same pattern as CLI own-package.ts), so
+// /health reports the real version in every mode. Never read it from disk
+// here — import.meta.dir points into the virtual $bunfs when compiled.
+import ownPackageJson from '../package.json';
 
 const PORT = Number(process.env.DATAFEED_PORT ?? 5003);
-const VERSION = '0.1.0';
+const VERSION: string = (ownPackageJson as { version: string }).version;
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -66,29 +71,59 @@ function corsHeaders(): Record<string, string> {
 
 // ── Server ─────────────────────────────────────────────────────────
 
-const server = Bun.serve({
+interface WatchData {
+  stream: WatchStream;
+}
+
+type WatchConn = {
+  stream: WatchStream;
+  closed: boolean;
+  notifyClosed: () => void;
+};
+
+/** Live connections by socket — lets close() settle the open() loop. */
+const conns = new WeakMap<object, WatchConn>();
+
+const server = Bun.serve<WatchData>({
   port: PORT,
 
   // Bun WebSocket handler — receives the `data` from server.upgrade()
   websocket: {
+    // Tiny 1m OHLCV JSON bars: compression costs more CPU than bytes saved.
+    perMessageDeflate: false,
+    idleTimeout: 120,
+    maxPayloadLength: 64 * 1024,
     open(ws) {
-      const data = (ws as any).data as { stream?: WatchStream } | undefined;
-      const stream = data?.stream;
+      const stream = ws.data.stream;
       if (!stream) { ws.close(1011, 'no stream'); return; }
+      let notifyClosed!: () => void;
+      const closedBar = new Promise<null>((res) => { notifyClosed = () => res(null); });
+      conns.set(ws, { stream, closed: false, notifyClosed });
       (async () => {
         try {
-          while (true) {
-            const bar = await stream.next();
+          while (!conns.get(ws)?.closed) {
+            const bar = await Promise.race([stream.next(), closedBar]);
+            if (bar === null || conns.get(ws)?.closed) break;
             ws.send(JSON.stringify(bar));
           }
         } catch {
           try { ws.close(); } catch { /* ignore */ }
+        } finally {
+          stream.close();
+          conns.delete(ws);
         }
       })();
     },
     message() { /* client messages ignored — this is a broadcast stream */ },
-    close(_ws) { /* stream cleanup via abort on next call */ },
-  } as any,
+    close(ws) {
+      const conn = conns.get(ws);
+      if (conn && !conn.closed) {
+        conn.closed = true;
+        conn.notifyClosed();
+        conn.stream.close();
+      }
+    },
+  },
 
   async fetch(req) {
     const url = new URL(req.url);
@@ -172,9 +207,9 @@ const server = Bun.serve({
       const credId = url.searchParams.get('cred') ?? undefined;
       const stream = watchOHLCV(exchange, symbol, timeframe, credId);
 
-      const upgraded = (server as any).upgrade(req, { data: { stream } });
+      const upgraded = server.upgrade(req, { data: { stream } });
       if (!upgraded) return err('websocket upgrade failed', 500);
-      return undefined as any;
+      return undefined as unknown as Response;
     }
 
     return err('not found', 404);
