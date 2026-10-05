@@ -7,7 +7,7 @@ tags: [code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-03T17:57:29Z
+  at: 2026-10-05T05:34:44Z
 sources:
   - id: tree
     resource: "src"
@@ -29,6 +29,7 @@ okf_lock: generated
 * `state-hash.js` — applyHashState, pushHashState, watchHashState
 * `state.js` — STORAGE_KEY, getState, initState, resetState
 * `version.ts` — APP_VERSION, BAKED_APP_VERSION, appVersion
+* `vite-env.d.ts`
 
 # Other files
 
