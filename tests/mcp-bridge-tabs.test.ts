@@ -4,7 +4,7 @@
  */
 
 import './setup';
-import { describe, expect, it, afterEach } from 'bun:test';
+import { describe, expect, it, afterEach, beforeEach } from 'bun:test';
 import { clearLogs, setStore, store } from '../src/store';
 import { writeStoredCloudConfig } from '../src/storage/cloud-config';
 import {
@@ -89,12 +89,19 @@ function stubBridgeHttp(connected = 1): void {
   });
 }
 
-afterEach(() => {
+function resetBridgeEnv(): void {
   globalThis.fetch = realFetch;
   globalThis.WebSocket = realWebSocket;
   disconnectMcpBridge();
+  // The store (and its persisted bag) is shared across files in serial
+  // (non-isolated) runs — reset BEFORE each test so an earlier suite's
+  // stored key can't leak into the no-key assertions below.
   setStore('pluginsConfig', 'storage:cloud', { endpoint: '', apiKey: '' });
-});
+}
+
+beforeEach(resetBridgeEnv);
+
+afterEach(resetBridgeEnv);
 
 describe('MCP bridge tab count', () => {
   it('null without an API key (no fetch)', async () => {

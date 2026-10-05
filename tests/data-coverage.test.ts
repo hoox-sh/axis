@@ -96,8 +96,11 @@ describe('expand-cache coverage', () => {
   });
 
   it('no-ops for offline sources with cached bars', async () => {
-    await putCachedBars('csv-upload', 'BTCUSDT', '1h', [bar(1000), bar(4600)]);
-    const r = await expandCachedSeriesToNow('csv-upload', 'BTCUSDT', '1h');
+    // Unique symbol: the bars cache is shared across files in serial
+    // (non-isolated) runs — a generic BTCUSDT key can pick up bars another
+    // suite stored under the same source+symbol+timeframe.
+    await putCachedBars('csv-upload', 'COVUSDT', '1h', [bar(1000), bar(4600)]);
+    const r = await expandCachedSeriesToNow('csv-upload', 'COVUSDT', '1h');
     expect(r.expanded).toBe(false);
     expect(r.bars.length).toBe(2);
   });
