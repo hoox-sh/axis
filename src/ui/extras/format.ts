@@ -45,3 +45,53 @@ export function formatTickerRow(
       : `${q.change >= 0 ? '+' : ''}${q.change.toFixed(1)}%`;
   return `${q.symbol} ${p} ${c}`;
 }
+
+/** Raw quote fields the ticker needs — extra keys are ignored. */
+export interface TickerQuote {
+  price?: number;
+  change?: number;
+}
+
+/**
+ * One marquee row, pre-split for styling. Kept separate from the joined
+ * {@link formatTickerRow} string so the band can dim the symbol, render the
+ * price tabular, and color the change on its own.
+ */
+export interface TickerRow {
+  symbol: string;
+  /** Pre-formatted price (`—` while unknown). */
+  price: string;
+  /** Signed 24h pct, or `null` when hidden / unknown. */
+  change: string | null;
+  /** Direction for the up/down treatment — unknown reads as up (neutral). */
+  up: boolean;
+  /** False while the REST seed or first WS tick has not landed. */
+  hasPrice: boolean;
+  hasChange: boolean;
+}
+
+/**
+ * Build display rows for the ticker band, in the caller's symbol order.
+ * Pure (no Solid) so it stays unit-testable; missing or non-finite values
+ * degrade to `—` instead of throwing.
+ */
+export function buildTickerRows(
+  symbols: readonly string[],
+  quotes: Readonly<Record<string, TickerQuote | undefined>>,
+  opts?: { showChange?: boolean },
+): TickerRow[] {
+  const showChange = opts?.showChange !== false;
+  return symbols.map((symbol) => {
+    const q = quotes[symbol];
+    const price = typeof q?.price === 'number' && Number.isFinite(q.price) ? q.price : NaN;
+    const change = typeof q?.change === 'number' && Number.isFinite(q.change) ? q.change : null;
+    return {
+      symbol,
+      price: formatExtraPrice(price),
+      change: showChange && change !== null ? `${change >= 0 ? '+' : ''}${change.toFixed(1)}%` : null,
+      up: change === null || change >= 0,
+      hasPrice: Number.isFinite(price),
+      hasChange: change !== null,
+    };
+  });
+}

@@ -21,18 +21,57 @@
  * Watchlist price ticker — full-width marquee band under the module bar.
  *
  * REST-seeds instantly, then follows the watchlist quote mux for the selected
- * symbols only. Pauses on hover; collapses when disabled or empty.
+ * symbols only. Pauses on hover/focus; collapses when disabled or empty.
+ *
+ * The track holds two identical `.axis-extra-ticker-set` halves and scrolls
+ * `translateX(-50%)`, so one period is exactly one half. Spacing lives on the
+ * set (not a flex `gap`) — a gap would make the half a gap-width short and the
+ * band would visibly skip every cycle. The clone half is `aria-hidden` so
+ * assistive tech does not hear every symbol twice.
  *
  * @module ui/extras/PriceTicker
  */
 
-import { type Component, For, createEffect, createSignal, onCleanup } from 'solid-js';
+import {
+  type Component,
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+} from 'solid-js';
 import { store } from '../../store';
 import { startWatchlistQuotes, type QuoteMuxHandle, type QuoteUpdate } from '../../data/watchlist-live';
 import { fetchWatchlistTickers } from '../../data/watchlist-tickers';
-import { formatTickerRow } from './format';
+import { buildTickerRows, formatTickerRow, type TickerRow } from './format';
 
 export { formatTickerRow };
+
+/** One band item: dim symbol, tabular price, colored change. */
+const TickerItem: Component<{ row: TickerRow }> = (props) => (
+  <span
+    class="axis-extra-tick"
+    classList={{
+      'is-up': props.row.up,
+      'is-down': !props.row.up,
+      'is-pending': !props.row.hasPrice,
+    }}
+  >
+    <span class="axis-extra-tick-sym">{props.row.symbol}</span>
+    <span class="axis-extra-tick-price">{props.row.price}</span>
+    <Show when={props.row.change}>
+      {(change) => (
+        <span class="axis-extra-tick-change">
+          <span class="axis-extra-tick-arrow" aria-hidden="true">
+            {props.row.up ? '▲' : '▼'}
+          </span>
+          {change()}
+        </span>
+      )}
+    </Show>
+  </span>
+);
 
 /** Watchlist price ticker marquee band. */
 export const PriceTicker: Component = () => {
@@ -93,22 +132,11 @@ export const PriceTicker: Component = () => {
   });
   onCleanup(stop);
 
-  const rows = () =>
-    store.extras.ticker.symbols.map((s) => {
-      const q = quotes()[s];
-      return {
-        text: formatTickerRow(
-          { symbol: s, price: q?.price ?? NaN, change: q?.change },
-          { showChange: store.extras.ticker.showChange },
-        ),
-        up: (q?.change ?? 0) >= 0,
-      };
-    });
-
-  const doubled = () => {
-    const r = rows();
-    return [...r, ...r];
-  };
+  const rows = createMemo(() =>
+    buildTickerRows(store.extras.ticker.symbols, quotes(), {
+      showChange: store.extras.ticker.showChange,
+    }),
+  );
 
   return (
     <div
@@ -118,9 +146,13 @@ export const PriceTicker: Component = () => {
       style={{ '--ticker-speed': `${30 / store.extras.ticker.speed}s` }}
     >
       <div class="axis-extra-ticker-track">
-        <For each={doubled()}>
-          {(r) => <span class={`axis-extra-tick ${r.up ? 'is-up' : 'is-down'}`}>{r.text}</span>}
-        </For>
+        <div class="axis-extra-ticker-set">
+          <For each={rows()}>{(row) => <TickerItem row={row} />}</For>
+        </div>
+        {/* Clone — hidden from assistive tech, shown only to close the loop. */}
+        <div class="axis-extra-ticker-set" aria-hidden="true">
+          <For each={rows()}>{(row) => <TickerItem row={row} />}</For>
+        </div>
       </div>
     </div>
   );
