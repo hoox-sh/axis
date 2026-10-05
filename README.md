@@ -142,6 +142,7 @@ icons, ISC). Wrapper: `src/ui/icons.tsx`.
 | **Proxy** | `worker/src/onchain.ts` ↔ `src/onchain/proxy.ts` | Allowlisted `/api/onchain/*` egress proxy in front of DefiLlama / GeckoTerminal — keeps third-party keys server-side and CORS-clean. |
 | **Desktop** | `src-tauri/`, `src/desktop/` | Tauri 2 native shell (menu, open-script, About) with per-platform installers built by CI. |
 | **CLI** | `packages/cli/` | [`@hoox-sh/axis-cli`](https://www.npmjs.com/package/@hoox-sh/axis-cli) — install, doctor, setup (OAuth/D1), secrets, deploy (Worker/Pages), health, `axis mcp`. Published to npm on `v*` tags via `.github/workflows/release.yml`. |
+| **Datafeed sidecar** | `packages/datafeed/` | Optional local Bun CCXT Pro gateway (`@hoox-sh/axis-datafeed`, `bun run dev:datafeed`, `build:bin` standalone binaries) mirroring the PYNE `/datafeed` contract (`/health`, `/ohlcv`, `/watch`). |
 | **Tests & ops** | `tests/`, `e2e/`, `scripts/`, `Makefile`, `.github/workflows/` | Bun unit + worker suites, Playwright smoke, changelog/pyne sync scripts, Docker bake, desktop + npm release pipelines. |
 
 ## Architecture
@@ -247,6 +248,10 @@ await loadPluginFromUrl('https://example.com/my-plugin.js');
 | **Workers Manager** | Health cards + install helpers for Flask / Worker / Pyodide / PWA / PYNE Agent |
 | **AXIS CLI** | `packages/cli` — install, doctor, setup, secrets, deploy, health, MCP |
 | **MCP** | Agents control Worker APIs and a connected tab (`POST /mcp`, Settings → MCP) |
+| **Extra chrome** | Module-bar `Extra` menu: live price-card trend, watchlist ticker marquee (direction/speed/24h toggle), fullscreen price-alert overlay, float-only time + price panels, quote dock sheet |
+| **Background catchup** | Live ticks queue in order with timer fallback + auto backfill on `visibilitychange`/`focus`/`online` — hidden tabs keep every closed slot |
+| **Chart engine** | Per-chart Heikin-Ashi cache, pane-qualified overlay fingerprints, future Pine drawings (≤500 bars past last candle) |
+| **Editor outline** | Optional right-rail function/method/type tree (`editorRightRail: outline`), Trader/Operator layouts |
 | **Desktop** | Optional Tauri 2 shell (`bun run desktop:dev`) |
 
 Docs: [On-Chain data](https://hoox.sh/axis/docs/enduser/guides/on-chain) · [Data Source Manager](https://hoox.sh/axis/docs/enduser/guides/data-source-manager) · [MCP (agents)](https://hoox.sh/axis/docs/enduser/guides/mcp) · [AXIS CLI](https://hoox.sh/axis/docs/devops/cli) · [UI shell](https://hoox.sh/axis/docs/ui/ui-shell)
@@ -305,6 +310,7 @@ axis/                         (this repo root)
     plugins/                  Unified registry contracts + loader (incl. dataset)
   worker/                     Cloudflare Worker (API / onchain proxy / DO / D1 / MCP)
   packages/cli/               AXIS CLI (@hoox-sh/axis-cli) — setup / deploy / doctor / mcp
+  packages/datafeed/          Optional Bun CCXT Pro sidecar (health + ohlcv + watch gateway)
   docs/                       Product docs (MDX; mirrored to hoox.sh/axis/docs)
   tests/                      Bun unit + integration tests
   e2e/                        Playwright
