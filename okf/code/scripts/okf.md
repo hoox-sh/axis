@@ -7,7 +7,7 @@ tags: [code, okf, scripts]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:12:15Z
+  at: 2026-10-05T05:34:29Z
 sources:
   - id: tree
     resource: "scripts/okf"
@@ -27,7 +27,7 @@ okf_lock: generated
 
 # Packages
 
-`node:child_process`, `node:crypto`, `node:fs`, `node:path`
+`node:fs`, `node:path`
 
 # Used by
 

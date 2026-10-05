@@ -12,7 +12,6 @@
  * every commit. Human-locked concepts (`okf_lock: human`) are never rewritten.
  */
 
-import { createHash } from 'node:crypto';
 import { posix } from 'node:path';
 import type { InputFile } from './io';
 import { isRecord, parseYaml, PRODUCER, quote, sortedUnique, splitFrontmatter, withoutStamp } from './yaml';
@@ -683,7 +682,7 @@ function classifyExisting(text: string): 'human' | 'generated' | 'keep' {
 }
 
 function digestOf(files: Map<string, string>): string {
-  const hash = createHash('sha256');
+  const hash = new Bun.CryptoHasher('sha256');
   for (const key of [...files.keys()].sort()) {
     if (key === 'log.md') continue;
     hash.update(key);

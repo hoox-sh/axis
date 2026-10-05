@@ -7,7 +7,7 @@ tags: [code, scripts]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:05:44Z
+  at: 2026-10-05T05:34:29Z
 sources:
   - id: tree
     resource: "scripts"
@@ -34,7 +34,7 @@ okf_lock: generated
 
 # Packages
 
-`@playwright/test`, `node:child_process`, `node:fs`, `node:path`
+`@playwright/test`, `bun`, `node:fs`, `node:path`
 
 # Nested
 

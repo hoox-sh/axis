@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { execFileSync } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 
@@ -85,11 +84,17 @@ function walk(dir: string, root: string, out: string[]): void {
 }
 
 function git(root: string, args: string[]): string {
-  return execFileSync('git', args, {
+  // Bun-native spawnSync (no Node child_process polyfill, 1.4 fast path).
+  const result = Bun.spawnSync(['git', ...args], {
     cwd: root,
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
+    stdout: 'pipe',
+    stderr: 'pipe',
   });
+  if (result.exitCode !== 0) {
+    const stderr = result.stderr?.toString().trim() || `git ${args.join(' ')} failed`;
+    throw new Error(stderr);
+  }
+  return result.stdout.toString();
 }
 
 function nulSplit(text: string): string[] {

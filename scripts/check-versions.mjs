@@ -18,18 +18,21 @@
  * Usage: bun scripts/check-versions.mjs
  */
 
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ROOT = join(import.meta.dir, '..');
 
-function readJson(rel) {
-  return JSON.parse(readFileSync(join(ROOT, rel), 'utf8'));
+async function readText(rel) {
+  return await Bun.file(join(ROOT, rel)).text();
 }
 
-function readCargoVersion(rel) {
+async function readJson(rel) {
+  return JSON.parse(await readText(rel));
+}
+
+async function readCargoVersion(rel) {
   // Windows runners check text files out with CRLF — normalize before matching.
-  const text = readFileSync(join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
+  const text = (await readText(rel)).replace(/\r\n/g, '\n');
   // Scoped to the [package] section: an unscoped ^version match could hit a
   // dependency's `version = "…"` requirement above it instead.
   const section = text.match(/^\[package\][\s\S]*?(?=^\[|(?![\s\S]))/m);
@@ -38,8 +41,8 @@ function readCargoVersion(rel) {
   return m[1];
 }
 
-function readLockVersion() {
-  const text = readFileSync(join(ROOT, 'src-tauri/Cargo.lock'), 'utf8').replace(
+async function readLockVersion() {
+  const text = (await readText('src-tauri/Cargo.lock')).replace(
     /\r\n/g,
     '\n',
   );
@@ -48,8 +51,8 @@ function readLockVersion() {
   return m[1];
 }
 
-function readGeneratedConst(rel, name) {
-  const text = readFileSync(join(ROOT, rel), 'utf8');
+async function readGeneratedConst(rel, name) {
+  const text = await readText(rel);
   const m = text.match(new RegExp(`export const ${name}: string = ['"]([^'"]+)['"]`));
   if (!m) throw new Error(`${rel}: no exported const ${name} found (run bun run sync:versions)`);
   return m[1];
@@ -57,8 +60,8 @@ function readGeneratedConst(rel, name) {
 
 const SEMVER = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?`;
 
-function readPatternVersion(rel, re) {
-  const text = readFileSync(join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
+async function readPatternVersion(rel, re) {
+  const text = (await readText(rel)).replace(/\r\n/g, '\n');
   const matches = [...text.matchAll(re)].map((m) => m[1]);
   if (matches.length === 0) {
     throw new Error(`${rel}: no VERSION fallback found (run bun run sync:versions)`);
@@ -73,28 +76,28 @@ function readPatternVersion(rel, re) {
 }
 
 const versions = new Map([
-  ['VERSION', readFileSync(join(ROOT, 'VERSION'), 'utf8').trim()],
-  ['package.json', String(readJson('package.json').version)],
-  ['src-tauri/tauri.conf.json', String(readJson('src-tauri/tauri.conf.json').version)],
-  ['src-tauri/Cargo.toml', readCargoVersion('src-tauri/Cargo.toml')],
-  ['src-tauri/Cargo.lock', readLockVersion()],
-  ['public/version.json', String(readJson('public/version.json').version)],
-  ['src/version.ts', readGeneratedConst('src/version.ts', 'BAKED_APP_VERSION')],
-  ['worker/src/version.ts', readGeneratedConst('worker/src/version.ts', 'WORKER_VERSION')],
+  ['VERSION', (await readText('VERSION')).trim()],
+  ['package.json', String((await readJson('package.json')).version)],
+  ['src-tauri/tauri.conf.json', String((await readJson('src-tauri/tauri.conf.json')).version)],
+  ['src-tauri/Cargo.toml', await readCargoVersion('src-tauri/Cargo.toml')],
+  ['src-tauri/Cargo.lock', await readLockVersion()],
+  ['public/version.json', String((await readJson('public/version.json')).version)],
+  ['src/version.ts', await readGeneratedConst('src/version.ts', 'BAKED_APP_VERSION')],
+  ['worker/src/version.ts', await readGeneratedConst('worker/src/version.ts', 'WORKER_VERSION')],
   [
     'Dockerfile ARG VERSION',
-    readPatternVersion('Dockerfile', new RegExp(`^ARG VERSION=(${SEMVER})$`, 'gm')),
+    await readPatternVersion('Dockerfile', new RegExp(`^ARG VERSION=(${SEMVER})$`, 'gm')),
   ],
   [
     'docker-compose.yml VERSION fallback',
-    readPatternVersion(
+    await readPatternVersion(
       'docker-compose.yml',
       new RegExp(String.raw`\$\{VERSION:-(${SEMVER})\}`, 'g'),
     ),
   ],
   [
     'docker-bake.hcl VERSION',
-    readPatternVersion(
+    await readPatternVersion(
       'docker-bake.hcl',
       new RegExp(String.raw`variable\s+"VERSION"\s*\{\s*default\s*=\s*"(${SEMVER})"`, 'g'),
     ),

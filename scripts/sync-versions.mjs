@@ -25,32 +25,42 @@
  *   --check  exit 1 on drift without writing (CI-friendly)
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ROOT = join(import.meta.dir, '..');
 const CHECK = process.argv.includes('--check');
 
-function readVersion() {
-  const v = readFileSync(join(ROOT, 'VERSION'), 'utf8').trim();
+async function readText(rel) {
+  return await Bun.file(join(ROOT, rel)).text();
+}
+
+async function fileExists(rel) {
+  return await Bun.file(join(ROOT, rel)).exists();
+}
+
+async function writeText(rel, text) {
+  await Bun.write(join(ROOT, rel), text);
+}
+
+async function readVersion() {
+  const v = (await readText('VERSION')).trim();
   if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(v)) {
     throw new Error(`VERSION: expected semver, got ${JSON.stringify(v)}`);
   }
   return v;
 }
 
-function readJson(rel) {
-  return JSON.parse(readFileSync(join(ROOT, rel), 'utf8'));
+async function readJson(rel) {
+  return JSON.parse(await readText(rel));
 }
 
-function writeJson(rel, obj) {
-  writeFileSync(join(ROOT, rel), `${JSON.stringify(obj, null, 2)}\n`);
+async function writeJson(rel, obj) {
+  await writeText(rel, `${JSON.stringify(obj, null, 2)}\n`);
 }
 
-function setCargoVersion(rel, version) {
-  const path = join(ROOT, rel);
+async function setCargoVersion(rel, version) {
   // Windows runners check text files out with CRLF — normalize before matching.
-  const text = readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
+  const text = (await readText(rel)).replace(/\r\n/g, '\n');
   // Scoped to the [package] section so a dependency `version = "…"` above it
   // is never stamped by accident.
   const section = text.match(/^\[package\][\s\S]*?(?=^\[|(?![\s\S]))/m);
@@ -61,17 +71,16 @@ function setCargoVersion(rel, version) {
     /^version\s*=\s*"[^"]+"/m,
     `version = "${version}"`,
   );
-  writeFileSync(path, text.replace(section[0], () => stamped));
+  await writeText(rel, text.replace(section[0], () => stamped));
 }
 
-function setLockVersion(version) {
-  const path = join(ROOT, 'src-tauri/Cargo.lock');
-  const text = readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
+async function setLockVersion(version) {
+  const text = (await readText('src-tauri/Cargo.lock')).replace(/\r\n/g, '\n');
   const re = /\[\[package\]\]\nname = "axis"\nversion = "[^"]+"/;
   if (!re.test(text)) {
     throw new Error('src-tauri/Cargo.lock: no [[package]] name = "axis" stanza found');
   }
-  writeFileSync(path, text.replace(re, `[[package]]\nname = "axis"\nversion = "${version}"`));
+  await writeText('src-tauri/Cargo.lock', text.replace(re, `[[package]]\nname = "axis"\nversion = "${version}"`));
 }
 
 const LICENSE_HEADER = `/**
@@ -131,47 +140,47 @@ export const WORKER_VERSION: string = '${version}';
 `;
 }
 
-const version = readVersion();
+const version = await readVersion();
 const drift = [];
 
-function stamp(rel, get, set) {
-  const current = get();
+async function stamp(rel, get, set) {
+  const current = await get();
   if (current !== version) {
     drift.push(`${rel}: ${current} → ${version}`);
-    if (!CHECK) set();
+    if (!CHECK) await set();
   }
 }
 
 // package.json / tauri.conf.json
-stamp('package.json', () => String(readJson('package.json').version), () => {
-  const pkg = readJson('package.json');
+await stamp('package.json', async () => String((await readJson('package.json')).version), async () => {
+  const pkg = await readJson('package.json');
   pkg.version = version;
-  writeJson('package.json', pkg);
+  await writeJson('package.json', pkg);
 });
-stamp('src-tauri/tauri.conf.json', () => String(readJson('src-tauri/tauri.conf.json').version), () => {
-  const conf = readJson('src-tauri/tauri.conf.json');
+await stamp('src-tauri/tauri.conf.json', async () => String((await readJson('src-tauri/tauri.conf.json')).version), async () => {
+  const conf = await readJson('src-tauri/tauri.conf.json');
   conf.version = version;
-  writeJson('src-tauri/tauri.conf.json', conf);
+  await writeJson('src-tauri/tauri.conf.json', conf);
 });
 
 // Cargo.toml / Cargo.lock (regex helpers above)
 {
-  const text = readFileSync(join(ROOT, 'src-tauri/Cargo.toml'), 'utf8').replace(/\r\n/g, '\n');
+  const text = (await readText('src-tauri/Cargo.toml')).replace(/\r\n/g, '\n');
   const section = text.match(/^\[package\][\s\S]*?(?=^\[|(?![\s\S]))/m);
   const m = section?.[0].match(/^version\s*=\s*"([^"]+)"/m);
   const current = m ? m[1] : '<missing>';
   if (current !== version) {
     drift.push(`src-tauri/Cargo.toml: ${current} → ${version}`);
-    if (!CHECK) setCargoVersion('src-tauri/Cargo.toml', version);
+    if (!CHECK) await setCargoVersion('src-tauri/Cargo.toml', version);
   }
 }
 {
-  const text = readFileSync(join(ROOT, 'src-tauri/Cargo.lock'), 'utf8').replace(/\r\n/g, '\n');
+  const text = (await readText('src-tauri/Cargo.lock')).replace(/\r\n/g, '\n');
   const m = text.match(/\[\[package\]\]\nname = "axis"\nversion = "([^"]+)"/);
   const current = m ? m[1] : '<missing>';
   if (current !== version) {
     drift.push(`src-tauri/Cargo.lock: ${current} → ${version}`);
-    if (!CHECK) setLockVersion(version);
+    if (!CHECK) await setLockVersion(version);
   }
 }
 
@@ -181,14 +190,14 @@ stamp('src-tauri/tauri.conf.json', () => String(readJson('src-tauri/tauri.conf.j
 {
   let current = null;
   try {
-    current = String(readJson('public/version.json').version);
+    current = String((await readJson('public/version.json')).version);
   } catch {
     current = '<missing>';
   }
   if (current !== version) {
     drift.push(`public/version.json: ${current} → ${version}`);
     if (!CHECK) {
-      writeJson('public/version.json', {
+      await writeJson('public/version.json', {
         version,
         buildTime: new Date().toISOString(),
       });
@@ -205,13 +214,13 @@ stamp('src-tauri/tauri.conf.json', () => String(readJson('src-tauri/tauri.conf.j
   for (const [rel, content] of targets) {
     let current = null;
     try {
-      current = readFileSync(join(ROOT, rel), 'utf8');
+      current = await readText(rel);
     } catch {
       current = null;
     }
     if (current !== content) {
       drift.push(`${rel}: regenerate`);
-      if (!CHECK) writeFileSync(join(ROOT, rel), content);
+      if (!CHECK) await writeText(rel, content);
     }
   }
 }
@@ -242,10 +251,9 @@ const DOCKER_FALLBACKS = [
 ];
 
 for (const { rel, re, replace } of DOCKER_FALLBACKS) {
-  const path = join(ROOT, rel);
   // Image build context copies scripts/ + VERSION but not these files.
-  if (!existsSync(path)) continue;
-  const text = readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
+  if (!(await fileExists(rel))) continue;
+  const text = (await readText(rel)).replace(/\r\n/g, '\n');
   const matches = [...text.matchAll(re)];
   if (matches.length === 0) {
     throw new Error(`${rel}: no VERSION fallback matched (check stamp regex)`);
@@ -255,7 +263,7 @@ for (const { rel, re, replace } of DOCKER_FALLBACKS) {
   drift.push(`${rel}: ${unique.join(', ')} → ${version}`);
   if (!CHECK) {
     re.lastIndex = 0;
-    writeFileSync(path, text.replace(re, replace));
+    await writeText(rel, text.replace(re, replace));
   }
 }
 

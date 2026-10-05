@@ -13,19 +13,19 @@
  * Default min 70% if no arg; package.json uses 95% (ratchet: 70→80→87→90→95).
  */
 
-import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const min = Number(process.argv[2] || 70);
 const lcovPath = resolve(process.argv[3] || 'coverage/lcov.info');
 
-if (!existsSync(lcovPath)) {
+const lcovFile = Bun.file(lcovPath);
+if (!(await lcovFile.exists())) {
   console.error(`check-coverage: missing ${lcovPath}`);
   console.error('Run: bun test --coverage --coverage-reporter=lcov --coverage-dir=coverage');
   process.exit(1);
 }
 
-const text = readFileSync(lcovPath, 'utf8');
+const text = await lcovFile.text();
 
 /** Paths that count toward the Phase A gate (substring match on SF path). */
 const INCLUDE = [

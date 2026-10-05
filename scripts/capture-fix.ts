@@ -6,8 +6,10 @@
  * copy landing hero crops, mobile, CLI, OG.
  */
 import { chromium, type Locator, type Page } from '@playwright/test';
-import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { $ } from 'bun';
+// mkdir stays on node:fs — Bun has no recursive-mkdir API;
+// all reads/writes/spawns below are Bun-native.
+import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 function arg(name: string, fallback: string): string {
@@ -259,7 +261,7 @@ async function main() {
   await mp.getByTestId('axis-topbar').waitFor({ state: 'visible', timeout: 45_000 });
   await mp.waitForTimeout(2_000);
   await mp.screenshot({ path: join(OUT, 'app/workspace-mobile.png'), type: 'png', animations: 'disabled' });
-  copyFileSync(join(OUT, 'app/workspace-mobile.png'), join(OUT, 'landing/axis-mobile.png'));
+  await Bun.write(join(OUT, 'landing/axis-mobile.png'), Bun.file(join(OUT, 'app/workspace-mobile.png')));
   console.log('  ✓ app/workspace-mobile.png');
   await mobile.close();
   await browser.close();
@@ -277,31 +279,40 @@ async function main() {
   for (const [src, dst] of copies) {
     const a = join(OUT, src);
     const b = join(OUT, dst);
-    if (existsSync(a)) {
-      copyFileSync(a, b);
+    if (await Bun.file(a).exists()) {
+      await Bun.write(b, Bun.file(a));
       console.log('  copy', src, '→', dst);
     }
   }
 
-  spawnSync('convert', [join(OUT, 'landing/axis-hero.png'), '-quality', '92', join(OUT, 'landing/axis-hero.webp')]);
-  const og = spawnSync(
-    'convert',
+  Bun.spawnSync(['convert', join(OUT, 'landing/axis-hero.png'), '-quality', '92', join(OUT, 'landing/axis-hero.webp')], { stdout: 'pipe', stderr: 'pipe' });
+  const og = Bun.spawnSync(
     [
+      'convert',
       '-size', '1200x630', 'xc:#050505',
       '(', join(OUT, 'landing/axis-hero.png'), '-resize', '1100x', ')',
       '-gravity', 'center', '-composite',
       join(OUT, 'landing/axis-og.png'),
     ],
-    { encoding: 'utf8' },
+    { stdout: 'pipe', stderr: 'pipe' },
   );
-  if (og.status === 0) console.log('  ✓ landing/axis-og.png');
-  else console.log('  ! og', og.stderr?.slice(0, 200));
+  if (og.exitCode === 0) console.log('  ✓ landing/axis-og.png');
+  else console.log('  ! og', og.stderr.toString().slice(0, 200));
 
   // CLI
   console.log('— cli —');
   const bin = join(ROOT, 'packages/cli/bin/axis.js');
-  const help = spawnSync('bun', [bin, '--help'], { encoding: 'utf8', cwd: ROOT });
-  const doctor = spawnSync('bun', [bin, 'doctor'], { encoding: 'utf8', cwd: ROOT, timeout: 30_000 });
+  const help = await $`bun ${bin} --help`.cwd(ROOT).nothrow().quiet();
+  const doctorProc = Bun.spawn(['bun', bin, 'doctor'], { cwd: ROOT, stdout: 'pipe', stderr: 'pipe' });
+  const doctorTimer = setTimeout(() => { try { doctorProc.kill(); } catch { /* already exited */ } }, 30_000);
+  const [doctorOut, doctorErr] = await Promise.all([
+    new Response(doctorProc.stdout).text(),
+    new Response(doctorProc.stderr).text(),
+  ]);
+  await doctorProc.exited;
+  clearTimeout(doctorTimer);
+  const helpText = (help.stdout.toString() || help.stderr.toString() || '').trim();
+  const doctorText = (doctorOut || doctorErr || '').trim();
   const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
   const html = (cmd: string, body: string) => `<!doctype html><html><head><meta charset="utf-8"><style>
     html,body{margin:0;background:#050505;color:#e8e6e3;font:14px/1.45 ui-monospace, "IBM Plex Mono", monospace}
@@ -310,9 +321,9 @@ async function main() {
   const b2 = await chromium.launch({ headless: true });
   const c2 = await b2.newContext({ viewport: { width: 1100, height: 740 }, deviceScaleFactor: 2 });
   const p2 = await c2.newPage();
-  await p2.setContent(html('axis --help', (help.stdout || help.stderr || '').trim()));
+  await p2.setContent(html('axis --help', helpText));
   await p2.screenshot({ path: join(OUT, 'cli/help.png'), fullPage: true, type: 'png' });
-  await p2.setContent(html('axis doctor', (doctor.stdout || doctor.stderr || '').trim()));
+  await p2.setContent(html('axis doctor', doctorText));
   await p2.screenshot({ path: join(OUT, 'cli/doctor.png'), fullPage: true, type: 'png' });
   console.log('  ✓ cli/help.png cli/doctor.png');
   await b2.close();

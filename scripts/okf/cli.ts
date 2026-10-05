@@ -12,7 +12,6 @@
  *   bun scripts/okf/cli.ts context <path-or-id> [--depth 1]
  */
 
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { compileBundle, isHumanConcept } from './compile';
@@ -129,10 +128,22 @@ function enrich(flags: Flags): number {
   return reportLint(findings, false, flags.format);
 }
 
+function gitSync(root: string, args: string[], input?: { stdout: 'pipe' | 'inherit' }): string {
+  const result = Bun.spawnSync(['git', ...args], {
+    cwd: root,
+    stdout: input?.stdout === 'inherit' ? 'inherit' : 'pipe',
+    stderr: 'pipe',
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr?.toString().trim() || `git ${args.join(' ')} failed`);
+  }
+  return result.stdout?.toString() ?? '';
+}
+
 function stageGenerated(next: Map<string, string>): void {
   let listed: string[];
   try {
-    listed = execFileSync('git', ['ls-files', '-z', '--', 'okf'], { cwd: ROOT, encoding: 'utf8' }).split('\0');
+    listed = gitSync(ROOT, ['ls-files', '-z', '--', 'okf']).split('\0');
   } catch {
     listed = [];
   }
@@ -152,7 +163,8 @@ function stageGenerated(next: Map<string, string>): void {
     if (!next.has(rel)) paths.push(path);
   }
   if (paths.length === 0) return;
-  execFileSync('git', ['add', '-A', '--', ...paths], { cwd: ROOT, stdio: 'inherit' });
+  const staged = Bun.spawnSync(['git', 'add', '-A', '--', ...paths], { cwd: ROOT, stdout: 'inherit', stderr: 'pipe' });
+  if (staged.exitCode !== 0) throw new Error(staged.stderr?.toString().trim() || 'git add failed');
 }
 
 function main(): number {
