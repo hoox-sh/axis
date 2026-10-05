@@ -13,6 +13,27 @@ _Generated/updated: 2026-10-05 · 505 commits · describe-tag: `v2.20.0`_
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Bun-native scripts**: `scripts/*.mjs`, `scripts/okf/*`, and `scripts/capture-*.ts` moved from `node:fs/crypto/child_process` to `Bun.file`/`Bun.write`/`Bun.CryptoHasher`/`Bun.spawnSync`/`Bun.$` (kept `mkdirSync`/`unlinkSync` and ImageMagick/ffmpeg where Bun has no equivalent); capture `webp()` step uses `Bun.Image` (byte-identical output at q92, ~1.2x faster).
+- **Datafeed WS hardening**: `/watch` sockets now clean up their ccxt watcher on disconnect (previously leaked one watcher per dropped client), with typed `Bun.serve` data, `perMessageDeflate: false`, and socket timeouts.
+- **Test runner**: `bun test --isolate --parallel` benchmarked at ~12.5s vs ~37.8s serial with an identical failure set (see `test:fast` proposal).
+
+### Fixed
+
+- **Typecheck green**: added the missing `src/vite-env.d.ts` (`vite/client` types) — `bunx tsc --noEmit` went from 8 pre-existing `ImportMeta.env` / CSS-module errors to zero.
+- **Flaky UI tests**: `workspace-snapshot` sample now opens the editor chrome it asserts on; `editor-menu` matches the `<For each={DOCK_MENU…}>` prefix (source gained a floatOnly filter); `store` rapid-switch waits on condition instead of a fixed 50ms sleep. Full suite: 3272 pass, 0 fail.
+- **Datafeed version drift**: `/health` version now comes from `packages/datafeed/package.json` via static import (bundler-embedded, compile-safe — same pattern as CLI `own-package.ts`) instead of a hardcoded string.
+
+### Added
+
+- **Datafeed standalone binaries**: new `packages/datafeed/scripts/build-binaries.ts` cross-compiles the sidecar (`bun build --compile`, same 7 targets as the CLI) with a boot + `GET /health` smoke test; added `protobufjs` (ccxt's optional peer dep, required by the bundler) and a `build:bin` script.
+- **`test:fast` script**: `bun test --isolate --parallel` (~12s vs ~38s serial). Known caveat: `tests/background-catchup.test.ts` intermittently segfaults a Bun 1.4.2 test worker under parallel load (upstream runtime crash, not a test failure) — CI keeps the serial `test`.
+
+---
+
 ## [2.20.1] — 2026-10-04
 
 ### Fixed
