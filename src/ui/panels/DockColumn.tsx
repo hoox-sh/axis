@@ -109,25 +109,25 @@ export const DockColumn: Component<{ side: Side }> = (props) => {
             ? {
                 height: `${bottomHeight()}px`,
                 flex: '0 0 auto',
-                // Smooth column size when a hover-slide panel opens/closes
-                transition: 'height 0.16s ease-out',
+                // No transition: open/close snaps instantly so the chart
+                // reflows exactly once. The shell plays the enter motion
+                // (compositor-only, `panel.open` tune) — layout never animates.
               }
             : overlay()
               ? {
                   // Visual width from chrome; negative margin so the chart
                   // does not shrink. Overlay sits above the plot, below topbar.
+                  // Instant snap (see above) — no width/margin transition.
                   width: `${width()}px`,
                   flex: '0 0 auto',
                   ...(props.side === 'left'
                     ? { 'margin-right': `-${width()}px` }
                     : { 'margin-left': `-${width()}px` }),
                   'z-index': '20',
-                  transition: 'width 0.16s ease-out, margin 0.16s ease-out',
                 }
               : {
                   width: `${width()}px`,
                   flex: '0 0 auto',
-                  transition: 'width 0.16s ease-out',
                 }
       }
     />

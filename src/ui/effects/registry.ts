@@ -68,4 +68,44 @@ export const WATCHLIST_TICK: EffectDef = {
   ],
 };
 
-export const BUILTIN_EFFECTS: readonly EffectDef[] = [WATCHLIST_TICK];
+/**
+ * Panel open — smooth, clean, snappy slide + fade.
+ * Compositor-only, so the plot never reflows mid-motion. Duration and slide
+ * share the shell cap of 200ms; disabled or reduced motion writes 0
+ * (instant snap). Replaces the old `travelPx` tune — unknown stored ids
+ * are dropped silently by `sanitizeTunes`.
+ */
+export const PANEL_OPEN: EffectDef = {
+  id: 'panel.open',
+  label: 'Panel open',
+  summary: 'Smooth slide + fade — fast, clean, snappy.',
+  enabled: true,
+  params: [
+    {
+      id: 'durationMs',
+      label: 'Duration',
+      hint: 'How long the engage sequence lasts. Capped at 200 ms.',
+      min: 40,
+      max: 200,
+      step: 10,
+      default: 180,
+      unit: 'ms',
+      cssVar: 'axis-fx-panel-open-duration',
+      toCss: ms,
+    },
+    {
+      id: 'slidePct',
+      label: 'Slide',
+      hint: 'How far off-edge the slide starts, in percent of the panel. 0 fades only.',
+      min: 0,
+      max: 100,
+      step: 5,
+      default: 100,
+      unit: '%',
+      cssVar: 'axis-fx-panel-open-slide',
+      toCss: pct,
+    },
+  ],
+};
+
+export const BUILTIN_EFFECTS: readonly EffectDef[] = [WATCHLIST_TICK, PANEL_OPEN];

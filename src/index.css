@@ -117,6 +117,11 @@
   --ui-dialog-section-gap: 1.15em;
   /* Keyboard focus — thin, no outer halo (inputs use border only) */
   --ui-focus-ring: 0 0 0 1px color-mix(in oklch, #8B9CFF 40%, transparent);
+  /* Panel open enter vector — full self-travel from the dock edge
+   * (compositor-only; dock classes below override the direction).
+   * Tuned by Settings → Theme → Motion (`panel.open`). */
+  --axis-panel-enter-x: 0px;
+  --axis-panel-enter-y: var(--axis-fx-panel-open-slide, 100%);
 
   /* Chart theme bridge — written by applyThemeToDocument (Theme Manager).
      Defaults match void-dark / Pine chart.bg_color · chart.fg_color. */
@@ -3450,6 +3455,41 @@ body.axis-panel-dragging {
   border-radius: var(--radius-panel);
   min-width: 0;
 }
+/* Desktop enter motion (phones use .axis-mobile-sheet instead — higher
+ * :not() specificity keeps the two from fighting over `animation`). */
+.axis-panel-shell:not(.axis-mobile-sheet) {
+  animation: axis-panel-in var(--axis-fx-panel-open-duration, 180ms) ease-out;
+}
+
+/* ── Panel open: smooth, clean, snappy ─────────────────────────────
+ * Short slide + fade, ease-out, compositor-only (transform/opacity).
+ * No brackets, flicker, or lock-blink. Close stays instant (Show unmount). */
+@keyframes axis-panel-in {
+  0% {
+    opacity: 0;
+    transform: translate(var(--axis-panel-enter-x), var(--axis-panel-enter-y));
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+
+/* Dock edge sets the slide direction (percent of the shell itself —
+ * the bar slides its full height; panels slide their full extent).
+ * Floats rise from below. */
+.axis-panel-shell.axis-panel-dock-left {
+  --axis-panel-enter-x: calc(-1 * var(--axis-fx-panel-open-slide, 100%));
+  --axis-panel-enter-y: 0px;
+}
+.axis-panel-shell.axis-panel-dock-right {
+  --axis-panel-enter-x: var(--axis-fx-panel-open-slide, 100%);
+  --axis-panel-enter-y: 0px;
+}
+.axis-panel-shell.axis-panel-dock-bottom {
+  --axis-panel-enter-x: 0px;
+  --axis-panel-enter-y: var(--axis-fx-panel-open-slide, 100%);
+}
 
 .axis-panel-dock-left {
   flex-shrink: 0;
@@ -3684,7 +3724,9 @@ body.axis-panel-dragging {
 
 /* ── Hover-slide (docked auto-hide rail) ───────────────────────── */
 .axis-panel-shell.axis-panel-hover-slide {
-  will-change: width, height;
+  /* Enter motion is transform/opacity-only; keep the hint compositor-side.
+   * Width/height flex here is layout-driven and stays transition-tuned inline. */
+  will-change: transform, opacity;
 }
 .axis-panel-shell.axis-panel-hover-slide.is-hover-collapsed {
   /* Peek rail — keep the handle reachable, hide body chrome */
@@ -5002,7 +5044,7 @@ body.axis-panel-dragging {
   border-radius: 0;
   border-left: none;
   border-right: none;
-  animation: axis-mobile-sheet-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: axis-mobile-sheet-in 180ms linear;
 }
 
 .axis-mobile-sheet .axis-panel-handle {
@@ -5171,7 +5213,7 @@ body.axis-panel-dragging {
   background: color-mix(in srgb, #000 62%, transparent);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
-  animation: axis-moverlay-in 160ms ease-out;
+  animation: axis-moverlay-in 160ms linear;
 }
 
 @keyframes axis-moverlay-in {
@@ -5297,7 +5339,7 @@ body.axis-panel-dragging {
     border-left: none;
     border-right: none;
     border-bottom: none;
-    animation: axis-mobile-sheet-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    animation: axis-mobile-sheet-in 180ms linear;
   }
   .sc-dialog-footer {
     padding-bottom: max(var(--ui-dialog-footer-pad-y), env(safe-area-inset-bottom, 0px));

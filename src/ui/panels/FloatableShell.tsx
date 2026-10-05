@@ -909,9 +909,12 @@ export const FloatableShell: Component<FloatableShellProps> = (props) => {
     const isEditor = props.id === 'editor';
     const slide = hoverSlideOn();
     const collapsed = slide && !hoverExpanded();
-    // Transition only when hover-slide is active (avoid animating normal resizes)
+    // Transition only when hover-slide is active (avoid animating normal resizes).
+    // Linear mechanical slide, tuned by the shared `panel.open` duration —
+    // no expo/spring curve, so the peek strip never wobbles.
+    const slideMs = 'var(--axis-fx-panel-open-duration, 120ms)';
     const slideTransition = slide
-      ? 'width 0.22s cubic-bezier(0.22, 1, 0.36, 1), height 0.22s cubic-bezier(0.22, 1, 0.36, 1), flex-basis 0.22s cubic-bezier(0.22, 1, 0.36, 1), min-width 0.22s ease'
+      ? `width ${slideMs} linear, height ${slideMs} linear, flex-basis ${slideMs} linear, min-width ${slideMs} linear`
       : undefined;
 
     // Free float/window — fixed over the workspace

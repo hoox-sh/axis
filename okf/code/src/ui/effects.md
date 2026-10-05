@@ -7,7 +7,7 @@ tags: [code, effects, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-27T14:41:44Z
+  at: 2026-10-05T22:09:44Z
 sources:
   - id: tree
     resource: "src/ui/effects"
@@ -21,7 +21,7 @@ okf_lock: generated
 * `EffectsPanel.tsx` — EffectsPanel
 * `index.ts` — EffectDef, EffectParamSpec, EffectPreviewSpec, EffectTune, UI_EFFECTS_STORAGE_KEY, applyUiEffects, effectActive, effectDirty, effectEnabled, effectMs, effectParam, getEffect
 * `manager.ts` — UI_EFFECTS_STORAGE_KEY, _resetUiEffectsForTests, _setReducedMotionForTests, applyUiEffects, effectActive, effectDirty, effectEnabled, effectMs, effectParam, getEffect, installUiEffects, listEffects
-* `registry.ts` — BUILTIN_EFFECTS, WATCHLIST_TICK
+* `registry.ts` — BUILTIN_EFFECTS, PANEL_OPEN, WATCHLIST_TICK
 * `resolve.ts` — clampEffectParam, effectCssVars, readEnabled, readParam, sanitizeTunes, tuneIsDirty
 * `types.ts` — EffectDef, EffectParamSpec, EffectPreviewSpec, EffectTune
 
