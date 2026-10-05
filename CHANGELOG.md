@@ -26,6 +26,7 @@ _Generated/updated: 2026-10-05 · 505 commits · describe-tag: `v2.20.0`_
 - **Typecheck green**: added the missing `src/vite-env.d.ts` (`vite/client` types) — `bunx tsc --noEmit` went from 8 pre-existing `ImportMeta.env` / CSS-module errors to zero.
 - **Flaky UI tests**: `workspace-snapshot` sample now opens the editor chrome it asserts on; `editor-menu` matches the `<For each={DOCK_MENU…}>` prefix (source gained a floatOnly filter); `store` rapid-switch waits on condition instead of a fixed 50ms sleep. Full suite: 3272 pass, 0 fail.
 - **Datafeed version drift**: `/health` version now comes from `packages/datafeed/package.json` via static import (bundler-embedded, compile-safe — same pattern as CLI `own-package.ts`) instead of a hardcoded string.
+- **CI-only test pollution**: `mcp-bridge-tabs` resets cloud config in `beforeEach` (was `afterEach`-only — an earlier suite's stored key leaked into the no-key assertion); the offline `expand-cache` test uses a unique symbol instead of the shared `csv-upload/BTCUSDT/1h` key.
 
 ### Added
 
