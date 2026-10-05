@@ -18,6 +18,7 @@
 * [src/sources](sources.md) - Legacy historical source plugins (pre-Solid path).
 * [src/storage](storage.md) - src/storage contains catalog.ts, cloud-config.ts, cloud.ts, and 13 more files.
 * [src/store](store.md) - AXIS Solid store — createStore hydration, persistence, and mutation helpers.
+* [src/stories](stories.md) - Default store state — empty alert list + creation form.
 * [src/streams](streams.md) - Legacy live datastream plugins (pre-Solid path).
 * [src/sw](sw.md) - Pure service-worker strategy helpers (unit-testable).
 * [src/theme](theme.md) - AXIS Theme Manager — public API.

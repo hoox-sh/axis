@@ -34,6 +34,7 @@ _Generated/updated: 2026-10-05 · 505 commits · describe-tag: `v2.20.0`_
 - **Panel open effect**: `panel.open` Motion tune (Settings → Theme → Motion) — duration (40–200ms, default 180) and slide distance (0–100% of the panel, default full) for a smooth slide + fade; disabled or reduced-motion zeroes both to an instant snap.
 - **Datafeed standalone binaries**: new `packages/datafeed/scripts/build-binaries.ts` cross-compiles the sidecar (`bun build --compile`, same 7 targets as the CLI) with a boot + `GET /health` smoke test; added `protobufjs` (ccxt's optional peer dep, required by the bundler) and a `build:bin` script.
 - **`test:fast` script**: `bun test --isolate --parallel` (~12s vs ~38s serial). Known caveat: `tests/background-catchup.test.ts` intermittently segfaults a Bun 1.4.2 test worker under parallel load (upstream runtime crash, not a test failure) — CI keeps the serial `test`.
+- **Storybook dev scaffolding**: `storybook-solidjs-vite` + `@storybook/addon-docs` with `storybook` / `build-storybook` scripts, `.storybook/` config (lucide-solid aliased to the prebuilt ESM bundle), and 19 `src/stories/` entries for brand/icons/panels/studio chrome.
 
 ---
 

@@ -1,0 +1,18 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Storybook preview overrides — loaded AFTER src/index.css.
+ *
+ * The app stylesheet locks `html, body` to `overflow: hidden; height: 100%`
+ * (correct for the PWA shell, wrong for the workshop): stories taller than
+ * the viewport clipped with no scrollbar. Restore document scrolling here
+ * so every story stays reachable. App layout itself is unaffected.
+ */
+
+html,
+body {
+  overflow: auto !important;
+  height: auto !important;
+  min-height: 100%;
+}
