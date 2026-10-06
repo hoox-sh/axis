@@ -61,6 +61,25 @@ describe('buildTickerRows', () => {
     });
   });
 
+  it('carries no per-row visual options — the band styles them from CSS vars', () => {
+    // Guard against re-stamping container-level prefs onto every row: the
+    // values are read once in `PriceTicker.cssVars`, not per item.
+    const [row] = buildTickerRows(['BTCUSDT'], quotes, {
+      itemSpacing: 3,
+      bandHeight: 40,
+      fontSize: 16,
+      opacity: 0.5,
+    } as never);
+    expect(Object.keys(row).sort()).toEqual([
+      'change',
+      'hasChange',
+      'hasPrice',
+      'price',
+      'symbol',
+      'up',
+    ]);
+  });
+
   it('treats a missing change as neutral, not down', () => {
     const [row] = buildTickerRows(['ETHUSDT'], { ETHUSDT: { price: 3842 } });
     expect(row.up).toBe(true);

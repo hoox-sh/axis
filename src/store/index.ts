@@ -279,6 +279,9 @@ export function hydrateWatchlistState(raw: unknown): WatchlistState {
   };
 }
 
+/** Max ticker drag offset (px). Keeps the band reachable but not off-screen. */
+export const TICKER_OFFSET_Y_MAX = 160;
+
 /** Restore Extra chrome prefs; unknown shapes fall back to defaults. */
 export function hydrateExtras(raw: unknown): ExtrasState {
   const base = DEFAULTS.extras;
@@ -327,6 +330,27 @@ export function hydrateExtras(raw: unknown): ExtrasState {
           : 1,
       direction: ti.direction === 'right' ? 'right' : 'left',
       showChange: typeof ti.showChange === 'boolean' ? ti.showChange : true,
+      itemSpacing:
+        typeof ti.itemSpacing === 'number' && Number.isFinite(ti.itemSpacing)
+          ? Math.min(3, Math.max(0, ti.itemSpacing))
+          : 1.5,
+      bandHeight:
+        typeof ti.bandHeight === 'number' && Number.isFinite(ti.bandHeight)
+          ? Math.min(40, Math.max(18, Math.round(ti.bandHeight)))
+          : 22,
+      fontSize:
+        typeof ti.fontSize === 'number' && Number.isFinite(ti.fontSize)
+          ? Math.min(16, Math.max(10, Math.round(ti.fontSize)))
+          : 11,
+      opacity:
+        typeof ti.opacity === 'number' && Number.isFinite(ti.opacity)
+          ? Math.min(1, Math.max(0.2, ti.opacity))
+          : 1,
+      draggable: typeof ti.draggable === 'boolean' ? ti.draggable : true,
+      offsetY:
+        typeof ti.offsetY === 'number' && Number.isFinite(ti.offsetY)
+          ? Math.min(TICKER_OFFSET_Y_MAX, Math.max(0, Math.round(ti.offsetY)))
+          : 0,
     },
     alertOverlay: {
       enabled: typeof ao.enabled === 'boolean' ? ao.enabled : false,
@@ -475,7 +499,19 @@ export const DEFAULTS: AppState = {
   }),
   extras: {
     priceCard: { enabled: false, tickLength: 20 },
-    ticker: { enabled: false, symbols: [], speed: 1, direction: 'left', showChange: true },
+    ticker: {
+      enabled: false,
+      symbols: [],
+      speed: 1,
+      direction: 'left',
+      showChange: true,
+      itemSpacing: 1.5,
+      bandHeight: 22,
+      fontSize: 11,
+      opacity: 1,
+      draggable: true,
+      offsetY: 0,
+    },
     alertOverlay: { enabled: false, upColor: '#3DDC97', downColor: '#F07178' },
   },
   indicatorPanel: { open: false, width: 224 },

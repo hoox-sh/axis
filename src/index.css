@@ -1533,30 +1533,40 @@ button.axis-status-capsule {
     #000 calc(100% - 28px),
     transparent 100%
   );
+  opacity: var(--ticker-opacity, 1);
+  transition: opacity 0.2s ease;
+  position: relative;
 }
 .axis-extra-ticker-track {
   display: flex;
   align-items: center;
-  height: 22px;
+  height: var(--ticker-band-height, 22px);
   animation: axis-ticker-scroll var(--ticker-speed, 30s) linear infinite;
   will-change: transform;
 }
 /* One loop period is exactly one set. Spacing lives here (not a flex `gap` on
  * the track) — a gap between 2N items makes the -50% half a gap-width short,
- * which shows up as a jump every cycle. */
+ * which shows up as a jump every cycle. Do not "clean this up" into a gap. */
 .axis-extra-ticker-set {
   display: flex;
   align-items: center;
   flex: none;
-  padding-right: 1.5rem;
+  padding-right: var(--ticker-item-gap, 1.5rem);
 }
+/* Hover pauses so a reader can read a row. Keyboard focus pauses too, but only
+ * when focus lands on a tick item — the pause/play toggle itself must stay
+ * operable, or `:focus-within` would pin the track while the button reads ⏸. */
 .axis-extra-ticker:hover .axis-extra-ticker-track,
-.axis-extra-ticker:focus-within .axis-extra-ticker-track {
+.axis-extra-ticker:focus-within:has(.axis-extra-tick:focus) .axis-extra-ticker-track {
   animation-play-state: paused;
 }
 /* Marquee direction (Extra menu) — right reverses travel. */
 .axis-extra-ticker[data-ticker-dir="right"] .axis-extra-ticker-track {
   animation-direction: reverse;
+}
+/* Explicit toggle — always wins over hover/focus above. */
+.axis-extra-ticker.is-paused .axis-extra-ticker-track {
+  animation-play-state: paused;
 }
 @keyframes axis-ticker-scroll {
   from { transform: translateX(0); }
@@ -1568,10 +1578,18 @@ button.axis-status-capsule {
   display: inline-flex;
   align-items: baseline;
   gap: 0.4em;
-  font-size: var(--ui-label);
+  font-size: var(--ticker-font-size, var(--ui-label, 11px));
   line-height: 1;
   color: var(--color-text-dim);
   font-variant-numeric: tabular-nums lining-nums;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.axis-extra-tick:hover {
+  opacity: 0.8;
 }
 .axis-extra-tick-sym {
   font-weight: 600;
@@ -1595,8 +1613,95 @@ button.axis-status-capsule {
 .axis-extra-tick.is-down .axis-extra-tick-change { color: var(--color-red); }
 /* Waiting on the REST seed / first tick. */
 .axis-extra-tick.is-pending .axis-extra-tick-price { color: var(--color-text-faint); }
+.axis-extra-tick.is-pinned .axis-extra-tick-sym {
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.axis-extra-ticker-handle {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 4px;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.axis-extra-ticker:hover .axis-extra-ticker-handle,
+.axis-extra-ticker:focus-within .axis-extra-ticker-handle {
+  opacity: 1;
+}
+.axis-extra-ticker.is-dragging {
+  /* Lift above the chart while the band is dragged over it. */
+  z-index: 3;
+}
+.axis-extra-ticker-handle:active {
+  cursor: grabbing;
+}
+/* Set by the drag handler so the marquee keeps scrolling under the cursor
+ * instead of selecting its own text. */
+body.axis-ticker-dragging {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+.axis-extra-ticker-handle-bar {
+  width: 28px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--color-text-faint);
+}
+.axis-extra-ticker-pause {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.axis-extra-ticker:hover .axis-extra-ticker-pause,
+.axis-extra-ticker:focus-within .axis-extra-ticker-pause {
+  opacity: 1;
+}
+.axis-extra-ticker-pause:hover {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-bg-panel) 80%, transparent);
+}
 @media (prefers-reduced-motion: reduce) {
   .axis-extra-ticker-track { animation: none; }
+}
+/* Extra menu section wrapper — the divider and padding live on the inner
+ * `.axis-extra-menu-row`; adding them here too doubles both. */
+.axis-extra-menu-section {
+  display: contents;
+}
+/* Trailing divider would otherwise hang below the last section's row. */
+.axis-extra-menu-section:last-child .axis-extra-menu-row {
+  border-bottom: 0;
+  padding-bottom: 2px;
+}
+.axis-extra-menu-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.375rem 0 0.25rem 0;
+}
+.axis-extra-menu-reset {
+  margin-top: 0.375rem;
+  align-self: flex-start;
 }
 /* Extra widgets: price card + fullscreen alert */
 .axis-extra-price {
@@ -1678,10 +1783,6 @@ button.axis-status-capsule {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-.axis-extra-menu-row--last {
-  border-bottom: 0;
-  padding-bottom: 2px;
 }
 .axis-extra-menu-row .ax-field {
   padding-left: 2px;

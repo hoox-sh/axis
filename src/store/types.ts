@@ -738,18 +738,33 @@ export interface AppState {
   topbar: TopbarSettings;
 }
 
+/** Marquee price ticker band state (persisted). */
+export interface TickerState {
+  enabled: boolean;
+  symbols: string[];
+  speed: number;
+  /** Marquee travel direction. */
+  direction: 'left' | 'right';
+  /** Include the 24h change % after the price. */
+  showChange: boolean;
+  /** Horizontal gap between ticker items (rem). */
+  itemSpacing: number;
+  /** Band height (px). */
+  bandHeight: number;
+  /** Font size (px). */
+  fontSize: number;
+  /** Band opacity (0.2–1). */
+  opacity: number;
+  /** Show drag handle for vertical repositioning. */
+  draggable: boolean;
+  /** Drag offset from the natural layout position (px). Clamped 0–160. */
+  offsetY: number;
+}
+
 /** Extra chrome widgets toggled from the module-bar Extra menu. */
 export interface ExtrasState {
   priceCard: { enabled: boolean; tickLength: number };
-  ticker: {
-    enabled: boolean;
-    symbols: string[];
-    speed: number;
-    /** Marquee travel direction. */
-    direction: 'left' | 'right';
-    /** Include the 24h change % after the price. */
-    showChange: boolean;
-  };
+  ticker: TickerState;
   alertOverlay: { enabled: boolean; upColor: string; downColor: string };
 }
 

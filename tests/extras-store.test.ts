@@ -15,6 +15,12 @@ describe('extras store', () => {
       speed: 1,
       direction: 'left',
       showChange: true,
+      itemSpacing: 1.5,
+      bandHeight: 22,
+      fontSize: 11,
+      opacity: 1,
+      draggable: true,
+      offsetY: 0,
     });
     expect(DEFAULTS.extras.alertOverlay).toEqual({
       enabled: false,
@@ -39,6 +45,25 @@ describe('extras store', () => {
       JSON.stringify({ extras: { ticker: { enabled: true, symbols: ['BTCUSDT', ' BTCUSDT ', 'ETHUSDT', 42, ''] } } }),
     );
     expect(parsed?.extras?.ticker.symbols).toEqual(['BTCUSDT', 'ETHUSDT']);
+  });
+
+  it('hydrates + clamps the ticker band offset, falls back on garbage', () => {
+    const ok = parsePersistedState(
+      JSON.stringify({ extras: { ticker: { offsetY: 42 } } }),
+    );
+    expect(ok?.extras?.ticker.offsetY).toBe(42);
+    const high = parsePersistedState(
+      JSON.stringify({ extras: { ticker: { offsetY: 5000 } } }),
+    );
+    expect(high?.extras?.ticker.offsetY).toBe(160);
+    const negative = parsePersistedState(
+      JSON.stringify({ extras: { ticker: { offsetY: -80 } } }),
+    );
+    expect(negative?.extras?.ticker.offsetY).toBe(0);
+    const bad = parsePersistedState(
+      JSON.stringify({ extras: { ticker: { offsetY: 'down' } } }),
+    );
+    expect(bad?.extras?.ticker.offsetY).toBe(0);
   });
 
   it('hydrates ticker direction + showChange, falls back on garbage', () => {
