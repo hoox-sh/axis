@@ -49,6 +49,7 @@
 
 import type { Env } from './index';
 import { requireApiKey } from './auth';
+import { SCRIPTS_CORS, jsonResponse } from './http';
 
 /** Full D1 / memory row including Pine source text. */
 export interface ScriptRow {
@@ -325,15 +326,7 @@ async function delD1(db: D1Database, userId: string, id: string): Promise<boolea
 
 /** JSON response with CORS headers required by the PWA (includes If-Match for revisions). */
 function corsJson(body: unknown, status: number, origin: string): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': origin,
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token, If-Match',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    },
-  });
+  return jsonResponse(body, { status, origin, cors: SCRIPTS_CORS });
 }
 
 /**

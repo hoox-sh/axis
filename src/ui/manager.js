@@ -23,7 +23,7 @@
  * export/import library JSON. Prefer Solid `PluginManager.tsx` + ScriptLibraryPanel.
  */
 
-import { registry, loadPluginFromUrl } from '../registry.js';
+import { legacyRegistry, loadPluginFromUrl } from '../registry.js';
 import { getState } from '../state.js';
 import { setScript, getScript } from '../../pyne-editor.js';
 import { setStatus } from './status.js';
@@ -50,9 +50,9 @@ function escapeHtml(s) {
 
 function renderAllPlugins() {
     const groups = [
-        { kind: 'source', title: 'Sources', items: registry.listSources() },
-        { kind: 'stream', title: 'Streams', items: registry.listStreams() },
-        { kind: 'engine', title: 'Engines', items: registry.listEngines() },
+        { kind: 'source', title: 'Sources', items: legacyRegistry.listSources() },
+        { kind: 'stream', title: 'Streams', items: legacyRegistry.listStreams() },
+        { kind: 'engine', title: 'Engines', items: legacyRegistry.listEngines() },
     ];
     const installed = new Set(loadInstalledPlugins().map((p) => `${p.kind}:${p.id}`));
     return groups.map((g) => {
@@ -297,7 +297,7 @@ async function loadPlugin(url, desc) {
 
 function removePlugin(kind, id) {
     if (!confirm(`Remove plugin "${id}"?`)) return;
-    // We don't have a registry.unregister in the current API; the entry is removed
+    // We don't have an unregister in the current API; the entry is removed
     // from the installed list so it won't be auto-reloaded on next page load.
     const installed = loadInstalledPlugins().filter((p) => !(p.kind === kind && p.id === id));
     saveInstalledPlugins(installed);

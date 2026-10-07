@@ -63,6 +63,7 @@ import { handleMarket } from './market';
 import { SessionDO } from './durable-objects/session';
 import { handleMcp, McpBridgeDO, parseBridgeTicket, formatBridgeTicket } from './mcp';
 import { requireApiKey } from './auth';
+import { API_CORS, errorResponse, jsonResponse, methodNotAllowed, preflight } from './http';
 
 export { SessionDO, McpBridgeDO };
 
@@ -102,14 +103,7 @@ export interface Env {
   GITLAB_OAUTH_CLIENT_ID?: string;
 }
 
-const CORS_HEADERS = (origin: string): Record<string, string> => ({
-  'Access-Control-Allow-Origin': origin,
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers':
-    'Content-Type, Authorization, X-Admin-Token, If-Match, X-Exchange-Key, X-Exchange-Secret, X-Exchange-Passphrase, MCP-Protocol-Version, MCP-Session-Id, Last-Event-ID',
-  'Access-Control-Max-Age': '86400',
-  Vary: 'Origin',
-});
+const CORS_HEADERS = API_CORS;
 
 /**
  * Local-dev browser origins (Vite :3000, axis_pwa :8081, arbitrary ports).
@@ -160,15 +154,8 @@ export function pickOrigin(req: Request, env: Env): string {
 }
 
 /** JSON body + CORS headers shared by all non-stream routes. */
-function jsonResponse(body: unknown, init: ResponseInit, origin: string): Response {
-  return new Response(JSON.stringify(body), {
-    ...init,
-    headers: {
-      ...(init.headers as Record<string, string> | undefined),
-      'Content-Type': 'application/json',
-      ...CORS_HEADERS(origin),
-    },
-  });
+function apiJson(body: unknown, status: number, origin: string): Response {
+  return jsonResponse(body, { status, origin, cors: CORS_HEADERS });
 }
 
 export default {
@@ -179,7 +166,7 @@ export default {
   async fetch(req: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const origin = pickOrigin(req, env);
     if (req.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS_HEADERS(origin) });
+      return preflight(CORS_HEADERS, origin);
     }
 
     const url = new URL(req.url);
@@ -190,14 +177,10 @@ export default {
     // PWA MCP control plane: /api/mcp/bridge → McpBridgeDO (partitioned by API key)
     if (url.pathname === '/api/mcp/bridge') {
       if (!env.MCP_BRIDGE) {
-        return jsonResponse(
-          {
-            status: 'error',
-            code: 'NO_MCP_BRIDGE',
-            message: 'MCP_BRIDGE Durable Object not bound. Add the binding in wrangler.toml and deploy.',
-          },
-          { status: 503 },
-          origin,
+        return errorResponse(
+          'NO_MCP_BRIDGE',
+          'MCP_BRIDGE Durable Object not bound. Add the binding in wrangler.toml and deploy.',
+          { status: 503, origin, cors: CORS_HEADERS },
         );
       }
       const isUpgrade = (req.headers.get('Upgrade') || '').toLowerCase() === 'websocket';
@@ -210,15 +193,11 @@ export default {
         if (ticket) {
           const parsed = parseBridgeTicket(ticket);
           if (!parsed) {
-            return jsonResponse(
-              {
-                status: 'error',
-                code: 'INVALID_TICKET',
-                message: 'bridge ticket missing, expired, or already used',
-              },
-              { status: 401 },
+            return errorResponse('INVALID_TICKET', 'bridge ticket missing, expired, or already used', {
+              status: 401,
               origin,
-            );
+              cors: CORS_HEADERS,
+            });
           }
           userId = parsed.userId;
           nonce = parsed.nonce;
@@ -227,22 +206,22 @@ export default {
           // Header auth remains for tests / non-browser clients. Never ?key=.
           const header = req.headers.get('Authorization') || '';
           if (!/^Bearer\s+\S+/i.test(header)) {
-            return jsonResponse(
-              { status: 'error', code: 'NO_KEY', message: 'bridge ticket or Authorization: Bearer required' },
-              { status: 401 },
+            return errorResponse('NO_KEY', 'bridge ticket or Authorization: Bearer required', {
+              status: 401,
               origin,
-            );
+              cors: CORS_HEADERS,
+            });
           }
           const authReq = new Request(`${url.origin}${url.pathname}`, {
             headers: { Authorization: header },
           });
           const auth = await requireApiKey(authReq, env);
           if (!auth.ok) {
-            return jsonResponse(
-              { status: 'error', code: auth.code, message: auth.message },
-              { status: auth.status },
+            return errorResponse(auth.code, auth.message, {
+              status: auth.status,
               origin,
-            );
+              cors: CORS_HEADERS,
+            });
           }
           userId = auth.ctx.userId;
         }
@@ -254,11 +233,11 @@ export default {
 
       const auth = await requireApiKey(req, env);
       if (!auth.ok) {
-        return jsonResponse(
-          { status: 'error', code: auth.code, message: auth.message },
-          { status: auth.status },
+        return errorResponse(auth.code, auth.message, {
+          status: auth.status,
           origin,
-        );
+          cors: CORS_HEADERS,
+        });
       }
       const stub = env.MCP_BRIDGE.get(env.MCP_BRIDGE.idFromName(auth.ctx.userId));
 
@@ -267,23 +246,23 @@ export default {
         const payload = (await ticketRes.json()) as { nonce?: unknown; expiresIn?: unknown };
         const nonce = typeof payload.nonce === 'string' ? payload.nonce : '';
         if (!nonce) {
-          return jsonResponse(
-            { status: 'error', code: 'TICKET_FAILED', message: 'failed to mint bridge ticket' },
-            { status: 502 },
+          return errorResponse('TICKET_FAILED', 'failed to mint bridge ticket', {
+            status: 502,
             origin,
-          );
+            cors: CORS_HEADERS,
+          });
         }
         const expiresIn =
           typeof payload.expiresIn === 'number' && Number.isFinite(payload.expiresIn)
             ? payload.expiresIn
             : 30;
-        return jsonResponse(
+        return apiJson(
           {
             status: 'ok',
             ticket: formatBridgeTicket(auth.ctx.userId, nonce),
             expiresIn,
           },
-          { status: 200 },
+          200,
           origin,
         );
       }
@@ -299,14 +278,10 @@ export default {
     // DO is named by `session` query (default "default"); request rewritten to /ws.
     if (url.pathname === '/api/stream') {
       if (!env.SESSIONS) {
-        return jsonResponse(
-          {
-            status: 'error',
-            code: 'NO_DO',
-            message: 'SESSIONS Durable Object not bound. Run `wrangler deploy` after provisioning.',
-          },
-          { status: 503 },
-          origin,
+        return errorResponse(
+          'NO_DO',
+          'SESSIONS Durable Object not bound. Run `wrangler deploy` after provisioning.',
+          { status: 503, origin, cors: CORS_HEADERS },
         );
       }
       const id = env.SESSIONS.idFromName(url.searchParams.get('session') ?? 'default');
@@ -341,7 +316,7 @@ export default {
       switch (url.pathname) {
         case '/':
         case '/health':
-          return jsonResponse(
+          return apiJson(
             {
               status: 'healthy',
               service: 'worker-axis',
@@ -357,42 +332,34 @@ export default {
                 mcpBridge: !!env.MCP_BRIDGE,
               },
             },
-            { status: 200 },
+            200,
             origin,
           );
         case '/api/run':
           return req.method !== 'POST'
-            ? jsonResponse(
-                { status: 'error', code: 'METHOD', message: 'POST required' },
-                { status: 405 },
-                origin,
-              )
+            ? methodNotAllowed('POST', { origin, cors: CORS_HEADERS })
             : await handleRun(req, env, origin);
         case '/api/keys':
           return await handleKeys(req, env, origin);
         case '/api/usage':
-          return jsonResponse(
+          return apiJson(
             { status: 'success', usage: { calls_used: 0, calls_remaining: null } },
-            { status: 200 },
+            200,
             origin,
           );
         default:
-          return jsonResponse(
-            { status: 'error', code: 'NOT_FOUND', message: `Endpoint ${url.pathname} not found` },
-            { status: 404 },
+          return errorResponse('NOT_FOUND', `Endpoint ${url.pathname} not found`, {
+            status: 404,
             origin,
-          );
+            cors: CORS_HEADERS,
+          });
       }
     } catch (err) {
-      return jsonResponse(
-        {
-          status: 'error',
-          code: 'INTERNAL',
-          message: err instanceof Error ? err.message : String(err),
-        },
-        { status: 500 },
+      return errorResponse('INTERNAL', err instanceof Error ? err.message : String(err), {
+        status: 500,
         origin,
-      );
+        cors: CORS_HEADERS,
+      });
     }
   },
 } satisfies ExportedHandler<Env>;

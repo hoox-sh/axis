@@ -18,6 +18,7 @@ import { handleScripts } from '../scripts';
 import { handleOnchain } from '../onchain';
 import { handleMarket } from '../market';
 import { allowWorkerRequest } from './allowlist';
+import { errorResponse, jsonResponse } from '../http';
 
 const INTERNAL_ORIGIN = 'https://axis.internal';
 
@@ -132,42 +133,25 @@ export async function proxyWorkerRequest(
 
   let res: Response;
   if (path === '/' || path === '/health') {
-    res = new Response(JSON.stringify(healthBody(env)), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    res = jsonResponse(healthBody(env));
   } else if (path === '/api/run') {
     res = await handleRun(req, env, origin);
   } else if (path === '/api/keys') {
     res = await handleKeys(req, env, origin);
   } else if (path === '/api/usage') {
-    res = new Response(
-      JSON.stringify({ status: 'success', usage: { calls_used: 0, calls_remaining: null } }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
-    );
+    res = jsonResponse({ status: 'success', usage: { calls_used: 0, calls_remaining: null } });
   } else if (path === '/api/scripts' || path.startsWith('/api/scripts/')) {
     res = await handleScripts(req, env, origin, path);
   } else if (path.startsWith('/api/onchain')) {
     const onchain = await handleOnchain(req, env, origin, path);
     res =
-      onchain ??
-      new Response(JSON.stringify({ status: 'error', code: 'NOT_FOUND', message: path }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      onchain ?? errorResponse('NOT_FOUND', path, { status: 404 });
   } else if (path.startsWith('/api/market')) {
     const market = await handleMarket(req, env, origin, path);
     res =
-      market ??
-      new Response(JSON.stringify({ status: 'error', code: 'NOT_FOUND', message: path }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      market ?? errorResponse('NOT_FOUND', path, { status: 404 });
   } else {
-    res = new Response(JSON.stringify({ status: 'error', code: 'NOT_FOUND', message: path }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    res = errorResponse('NOT_FOUND', path, { status: 404 });
   }
 
   const parsed = await readBody(res);

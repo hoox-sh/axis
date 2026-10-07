@@ -30,7 +30,7 @@
  * shipping new defaults.
  */
 
-import { registry } from './registry.js';
+import { legacyRegistry } from './registry.js';
 import { binanceRest, mockWalk, csvUpload } from './sources/index.js';
 import { binanceWs, mockPoll, none } from './streams/index.js';
 import { serverEngine, pyodideEngine } from './engines/index.js';
@@ -41,7 +41,7 @@ let registered = false;
 export function registerBuiltins() {
     if (registered) return;
     registered = true;
-    registry
+    legacyRegistry
         .registerSource(binanceRest)
         .registerSource(mockWalk)
         .registerSource(csvUpload)

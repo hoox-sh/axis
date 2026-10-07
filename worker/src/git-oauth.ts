@@ -47,52 +47,16 @@ export type GitOAuthProvider = 'github' | 'gitlab';
 const GITHUB_SCOPE = 'repo read:user';
 const GITLAB_SCOPE = 'api';
 
-// ── Simple in-memory rate limit (per isolate; best-effort on edge) ──
-// Prevents casual abuse of the public device-flow relay.
-const rateBuckets = new Map<string, { count: number; windowStart: number }>();
-
-function clientIp(req: Request): string {
-  return (
-    req.headers.get('cf-connecting-ip') ||
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    'unknown'
-  );
-}
-
-/**
- * @returns true if the request is allowed
- */
-function allowRate(key: string, limit: number, windowMs: number): boolean {
-  const now = Date.now();
-  const b = rateBuckets.get(key);
-  if (!b || now - b.windowStart > windowMs) {
-    rateBuckets.set(key, { count: 1, windowStart: now });
-    // Opportunistic prune when map grows large
-    if (rateBuckets.size > 5000) {
-      for (const [k, v] of rateBuckets) {
-        if (now - v.windowStart > windowMs * 2) rateBuckets.delete(k);
-      }
-    }
-    return true;
-  }
-  b.count += 1;
-  return b.count <= limit;
-}
+import { clientIp, jsonResponse } from './http';
+import { allowRate } from './rate-limit';
 
 function json(
-  body: unknown,
-  init: ResponseInit,
-  origin: string,
-  cors: (origin: string) => Record<string, string>,
+    body: unknown,
+    init: ResponseInit,
+    origin: string,
+    cors: (origin: string) => Record<string, string>,
 ): Response {
-  return new Response(JSON.stringify(body), {
-    ...init,
-    headers: {
-      ...(init.headers as Record<string, string> | undefined),
-      'Content-Type': 'application/json',
-      ...cors(origin),
-    },
-  });
+    return jsonResponse(body, { status: init.status, origin, cors, headers: init.headers as Record<string, string> });
 }
 
 async function readJsonBody(req: Request): Promise<Record<string, unknown>> {

@@ -9,14 +9,14 @@
  */
 
 import { describe, expect, it, beforeEach } from 'bun:test';
-import { registry, Registry } from '../src/registry.js';
+import { legacyRegistry, Registry } from '../src/registry.js';
 import { binanceRest, mockWalk, csvUpload } from '../src/sources/index.js';
 import { binanceWs, mockPoll, none } from '../src/streams/index.js';
 import { serverEngine, pyodideEngine } from '../src/engines/index.js';
 import { getState, initState } from '../src/state.js';
 
 beforeEach(() => {
-    registry.clear();
+    legacyRegistry.clear();
     // Reset state so csv-upload tests start clean
     const state = initState();
     state.assign({ uploadedBars: undefined });
@@ -24,47 +24,47 @@ beforeEach(() => {
 
 describe('Registry', () => {
     it('rejects a Source without fetchHistorical', () => {
-        expect(() => registry.registerSource({ id: 'bad', name: 'Bad', kind: 'source' }))
+        expect(() => legacyRegistry.registerSource({ id: 'bad', name: 'Bad', kind: 'source' }))
             .toThrow(/fetchHistorical/);
     });
 
     it('rejects a Source with the wrong kind', () => {
-        expect(() => registry.registerSource({ id: 'x', name: 'X', kind: 'stream', start: () => () => {} }))
+        expect(() => legacyRegistry.registerSource({ id: 'x', name: 'X', kind: 'stream', start: () => () => {} }))
             .toThrow(/kind must be 'source'/);
     });
 
     it('rejects a Stream without start', () => {
-        expect(() => registry.registerStream({ id: 's', name: 'S', kind: 'stream' }))
+        expect(() => legacyRegistry.registerStream({ id: 's', name: 'S', kind: 'stream' }))
             .toThrow(/start/);
     });
 
     it('rejects an Engine without run', () => {
-        expect(() => registry.registerEngine({ id: 'e', name: 'E', kind: 'engine' }))
+        expect(() => legacyRegistry.registerEngine({ id: 'e', name: 'E', kind: 'engine' }))
             .toThrow(/run/);
     });
 
     it('lists registered plugins in registration order', () => {
-        registry
+        legacyRegistry
             .registerSource(mockWalk)
             .registerSource(binanceRest)
             .registerStream(binanceWs)
             .registerEngine(serverEngine);
-        expect(registry.listSources().map((s) => s.id)).toEqual(['mock-walk', 'binance-rest']);
-        expect(registry.listStreams().map((s) => s.id)).toEqual(['binance-ws']);
-        expect(registry.listEngines().map((e) => e.id)).toEqual(['server']);
+        expect(legacyRegistry.listSources().map((s) => s.id)).toEqual(['mock-walk', 'binance-rest']);
+        expect(legacyRegistry.listStreams().map((s) => s.id)).toEqual(['binance-ws']);
+        expect(legacyRegistry.listEngines().map((e) => e.id)).toEqual(['server']);
     });
 
     it('getSource/getStream/getEngine round-trip', () => {
-        registry.registerSource(mockWalk).registerStream(none).registerEngine(pyodideEngine);
-        expect(registry.getSource('mock-walk')?.name).toBe('Mock Walk');
-        expect(registry.getStream('none')?.id).toBe('none');
-        expect(registry.getEngine('pyodide')?.id).toBe('pyodide');
-        expect(registry.getSource('missing')).toBeUndefined();
+        legacyRegistry.registerSource(mockWalk).registerStream(none).registerEngine(pyodideEngine);
+        expect(legacyRegistry.getSource('mock-walk')?.name).toBe('Mock Walk');
+        expect(legacyRegistry.getStream('none')?.id).toBe('none');
+        expect(legacyRegistry.getEngine('pyodide')?.id).toBe('pyodide');
+        expect(legacyRegistry.getSource('missing')).toBeUndefined();
     });
 
     it('summary() returns a serializable shape', () => {
-        registry.registerSource(mockWalk).registerEngine(serverEngine);
-        const s = registry.summary();
+        legacyRegistry.registerSource(mockWalk).registerEngine(serverEngine);
+        const s = legacyRegistry.summary();
         expect(s.sources).toHaveLength(1);
         expect(s.engines).toHaveLength(1);
         expect(s.streams).toHaveLength(0);

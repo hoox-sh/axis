@@ -29,6 +29,7 @@
 
 import { appendLog, setStatus } from '../store';
 import { maybeOfferErrorShare } from './error-share';
+import { createThrottle } from '../utils/throttle';
 
 /** Coerce any thrown value to a short user-facing string. */
 export function formatErrorMessage(err: unknown, maxLen = 240): string {
@@ -51,8 +52,8 @@ export function formatErrorMessage(err: unknown, maxLen = 240): string {
   return `${cleaned.slice(0, Math.max(0, maxLen - 1))}…`;
 }
 
-let lastReportAt = 0;
-let lastReportKey = '';
+/** Dedupe window per `${source}|${line}` so live ticks cannot flood the log. */
+const reportThrottle = createThrottle(2000);
 
 export type ReportUiErrorOpts = {
   /** Log source tag (default `system`). */
@@ -75,16 +76,12 @@ export function reportUiError(err: unknown, opts: ReportUiErrorOpts = {}): void 
   const line = context ? `${context}: ${msg}` : msg;
   const source = opts.source || 'system';
   const throttleMs = opts.throttleMs ?? 2000;
-  const key = `${source}|${line}`;
-  const now = Date.now();
-  if (key === lastReportKey && now - lastReportAt < throttleMs) {
+  if (!reportThrottle.allow(`${source}|${line}`, throttleMs)) {
     if (typeof console !== 'undefined' && console.error) {
       console.error(`[axis] ${line}`, err);
     }
     return;
   }
-  lastReportKey = key;
-  lastReportAt = now;
 
   if (typeof console !== 'undefined' && console.error) {
     console.error(`[axis] ${line}`, err);
@@ -108,8 +105,7 @@ export function reportUiError(err: unknown, opts: ReportUiErrorOpts = {}): void 
 
 /** @internal test helper — reset throttle state between cases. */
 export function _resetReportThrottleForTests(): void {
-  lastReportAt = 0;
-  lastReportKey = '';
+  reportThrottle.reset();
 }
 
 let installed = false;

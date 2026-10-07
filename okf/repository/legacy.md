@@ -7,7 +7,7 @@ tags: [doc, legacy]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-07T03:59:37Z
 sources:
   - id: tree
     resource: "LEGACY.md"
@@ -24,8 +24,14 @@ Repo path `LEGACY.md`.
 
 * What is legacy
 * What is current
+* Verified not reachable from the product
 
 # Mentions
 
 * [src](/code/src.md)
 * [src/chart](/code/src/chart.md)
+* [src/engines](/code/src/engines.md)
+* [src/plugins](/code/src/plugins.md)
+* [src/sources](/code/src/sources.md)
+* [src/streams](/code/src/streams.md)
+* [tests](/code/tests.md)

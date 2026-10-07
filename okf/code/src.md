@@ -7,7 +7,7 @@ tags: [code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-05T22:18:26Z
+  at: 2026-10-07T03:59:37Z
 sources:
   - id: tree
     resource: "src"
@@ -24,8 +24,8 @@ okf_lock: generated
 * `main.js`
 * `plugin-types.d.ts` — binanceRest, binanceWs, csvUpload, mockPoll, mockWalk, none, pyodideEngine, serverEngine
 * `registry-bootstrap.js` — registerBuiltins
-* `registry.d.ts` — Bar, ConfigSchema, Engine, EngineOpts, FieldSchema, Registry, RunResult, Source, SourceOpts, Stream, StreamOpts, loadPluginFromUrl
-* `registry.js` — Registry, loadPluginFromUrl, registry
+* `registry.d.ts` — Bar, ConfigSchema, Engine, EngineOpts, FieldSchema, Registry, RunResult, Source, SourceOpts, Stream, StreamOpts, legacyRegistry
+* `registry.js` — Registry, legacyRegistry, loadPluginFromUrl
 * `state-hash.js` — applyHashState, pushHashState, watchHashState
 * `state.js` — STORAGE_KEY, getState, initState, resetState
 * `version.ts` — APP_VERSION, BAKED_APP_VERSION, appVersion

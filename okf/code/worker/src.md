@@ -7,7 +7,7 @@ tags: [code, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:07:37Z
+  at: 2026-10-07T03:59:37Z
 sources:
   - id: tree
     resource: "worker/src"
@@ -20,11 +20,14 @@ okf_lock: generated
 
 * `auth.ts` — AuthContext, extractBearer, requireApiKey
 * `git-oauth.ts` — GitOAuthEnv, GitOAuthProvider, handleGitOAuth
+* `http.ts` — API_CORS, CorsOptions, ErrorBody, ErrorResponseOptions, JsonOptions, MARKET_CORS, MCP_CORS, ORIGIN_ONLY, READ_CORS, SCRIPTS_CORS, WRITE_CORS, clientIp
 * `index.ts` — Env, McpBridgeDO, SessionDO, pickOrigin
 * `keys.ts` — handleKeys
-* `market.ts` — _resetMarketCacheForTests, handleMarket
-* `onchain.ts` — _resetOnchainCacheForTests, handleOnchain
+* `market.ts` — _resetMarketCacheForTests, handleMarket, marketAllowlist
+* `onchain.ts` — _resetOnchainCacheForTests, handleOnchain, onchainAllowlist
+* `proxy-router.ts` — NotFoundBody, ProxyContext, ProxyHandler, ProxyRoute, ProxyRouter, ProxyRouterOptions, createProxyRouter, proxyJson
 * `pyodide_runtime.ts` — tryRunInWorker
+* `rate-limit.ts` — _resetRateLimitsForTests, allowRate
 * `runtime.ts` — _resetRunRateLimitForTests, handleRun
 * `scripts.ts` — ScriptMeta, ScriptRow, ScriptVersionRow, _clearMemScripts, handleScripts
 * `version.ts` — WORKER_VERSION

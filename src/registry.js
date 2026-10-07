@@ -99,8 +99,15 @@ class Registry {
     }
 }
 
-/** Process-wide singleton used by legacy bootstrap and tests. */
-export const registry = new Registry();
+/**
+ * Process-wide singleton used by legacy bootstrap and tests.
+ *
+ * Named `legacyRegistry`, not `registry`, so it cannot be confused with the
+ * shipping singleton in `src/plugins/registry.ts` — both were called
+ * `registry`, and picking the wrong one silently registers into a dead store.
+ * Nothing reachable from `src/index.tsx` imports this module.
+ */
+export const legacyRegistry = new Registry();
 export { Registry };
 
 /**
@@ -111,9 +118,9 @@ export async function loadPluginFromUrl(url) {
     const mod = await import(/* @vite-ignore */ url);
     const plugin = mod.default || mod.plugin || mod;
     if (!plugin || !plugin.kind) throw new Error(`Plugin at ${url} did not export a plugin object`);
-    if (plugin.kind === 'source') registry.registerSource(plugin);
-    else if (plugin.kind === 'stream') registry.registerStream(plugin);
-    else if (plugin.kind === 'engine') registry.registerEngine(plugin);
+    if (plugin.kind === 'source') legacyRegistry.registerSource(plugin);
+    else if (plugin.kind === 'stream') legacyRegistry.registerStream(plugin);
+    else if (plugin.kind === 'engine') legacyRegistry.registerEngine(plugin);
     else throw new Error(`Plugin at ${url} has unknown kind: ${plugin.kind}`);
     return plugin;
 }

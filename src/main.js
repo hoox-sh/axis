@@ -32,7 +32,7 @@
 
 import './registry-bootstrap.js';
 import { initState, getState } from './state.js';
-import { registry } from './registry.js';
+import { legacyRegistry } from './registry.js';
 import { initTopbar, setLiveIndicator } from './ui/legacy-topbar.js';
 import { setStatus } from './ui/status.js';
 import { initResults, renderResults } from './ui/results.js';
@@ -151,7 +151,7 @@ plot(ta.sma(close, length), "SMA")
 
 async function loadHistorical() {
     const state = getState();
-    const source = registry.getSource(state.get('source'));
+    const source = legacyRegistry.getSource(state.get('source'));
     if (!source) {
         setStatus(`Unknown source: ${state.get('source')}`, 'error');
         return;
@@ -226,7 +226,7 @@ function parseCsv(text) {
 function toggleLive() {
     if (liveStop) { liveStop(); liveStop = null; setLiveIndicator(false); return; }
     const state = getState();
-    const stream = registry.getStream(state.get('stream'));
+    const stream = legacyRegistry.getStream(state.get('stream'));
     if (!stream || stream.id === 'none') { setLiveIndicator(false); return; }
     setLiveIndicator(true);
     liveStop = stream.start({
@@ -241,7 +241,7 @@ function toggleLive() {
 
 async function runScript() {
     const state = getState();
-    const engine = registry.getEngine(state.get('engine'));
+    const engine = legacyRegistry.getEngine(state.get('engine'));
     if (!engine) { setStatus(`Unknown engine: ${state.get('engine')}`, 'error'); return; }
     if (!bars.length) { setStatus('No market data loaded. Click Load first.', 'error'); return; }
     const script = editor ? editor.getScript() : getScript();
@@ -410,18 +410,18 @@ function wireSettings() {
         const state = getState();
         const choice = prompt(
             'Configure which plugin?\n' +
-            registry.listEngines().map((p, i) => `${i + 1}. ${p.name} (engine)`).join('\n') +
+            legacyRegistry.listEngines().map((p, i) => `${i + 1}. ${p.name} (engine)`).join('\n') +
             '\n' +
-            registry.listSources().map((p, i) => `${i + 1 + registry.listEngines().length}. ${p.name} (source)`).join('\n') +
+            legacyRegistry.listSources().map((p, i) => `${i + 1 + legacyRegistry.listEngines().length}. ${p.name} (source)`).join('\n') +
             '\n' +
-            registry.listStreams().map((p, i) => `${i + 1 + registry.listEngines().length + registry.listSources().length}. ${p.name} (stream)`).join('\n') +
+            legacyRegistry.listStreams().map((p, i) => `${i + 1 + legacyRegistry.listEngines().length + legacyRegistry.listSources().length}. ${p.name} (stream)`).join('\n') +
             '\n\nEnter number:',
         );
         if (!choice) return;
         const n = parseInt(choice, 10);
-        const engines = registry.listEngines();
-        const sources = registry.listSources();
-        const streams = registry.listStreams();
+        const engines = legacyRegistry.listEngines();
+        const sources = legacyRegistry.listSources();
+        const streams = legacyRegistry.listStreams();
         const total = engines.length + sources.length + streams.length;
         if (Number.isNaN(n) || n < 1 || n > total) return;
         let plugin;
@@ -458,9 +458,9 @@ function repopulateDropdowns() {
             sel.appendChild(opt);
         }
     }
-    fill(eng, registry.listEngines(), state.get('engine'));
-    fill(src, registry.listSources(), state.get('source'));
-    fill(stm, registry.listStreams(), state.get('stream'));
+    fill(eng, legacyRegistry.listEngines(), state.get('engine'));
+    fill(src, legacyRegistry.listSources(), state.get('source'));
+    fill(stm, legacyRegistry.listStreams(), state.get('stream'));
 }
 
 function wireManager() {
@@ -649,7 +649,7 @@ async function bootstrap() {
 
     // Initial load
     await loadHistorical();
-    setStatus('Ready.', 'success', `${registry.listSources().length} src · ${registry.listEngines().length} eng · ${registry.listStreams().length} stream`);
+    setStatus('Ready.', 'success', `${legacyRegistry.listSources().length} src · ${legacyRegistry.listEngines().length} eng · ${legacyRegistry.listStreams().length} stream`);
 }
 
 if (document.readyState === 'loading') {

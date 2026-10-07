@@ -19,6 +19,7 @@ import {
   type AppInvokeRequest,
   type AppInvokeResponse,
 } from './protocol';
+import { jsonResponse } from '../http';
 
 /** One-time WS tickets expire quickly so logs/HAR never hold the long-lived key. */
 export const BRIDGE_TICKET_TTL_MS = 30_000;
@@ -49,11 +50,9 @@ interface Pending {
   ws: WebSocket;
 }
 
+/** WS-adjacent HTTP replies carry no CORS — the socket is the transport. */
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return jsonResponse(body, { status });
 }
 
 function attachmentTime(ws: WebSocket): number {

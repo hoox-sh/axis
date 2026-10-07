@@ -7,7 +7,7 @@ tags: [code, update]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:07:37Z
+  at: 2026-10-07T03:59:37Z
 sources:
   - id: tree
     resource: "src/update"
@@ -30,6 +30,7 @@ okf_lock: generated
 * [src/pwa](/code/src/pwa.md)
 * [src/store](/code/src/store.md)
 * [src/ui](/code/src/ui.md)
+* [src/utils](/code/src/utils.md)
 
 # Used by
 

@@ -21,6 +21,11 @@
  * Type contracts for the legacy plugin registry (`registry.js`).
  * JS sources stay untyped at runtime; tests and plugin authors import these
  * interfaces for IDE/TS checking. Solid-era plugins use `src/plugins/types.ts`.
+ *
+ * **Legacy.** Nothing reachable from `src/index.tsx` imports this module — it
+ * serves the pre-Solid shell described in `LEGACY.md`. The singleton is exported
+ * as `legacyRegistry` so it cannot be confused with the shipping
+ * `src/plugins/registry.ts`, which is a different class with a superset API.
  */
 
 export interface Bar {
@@ -127,5 +132,5 @@ export class Registry {
     summary(): { sources: Array<{ id: string; name: string; description: string }>; streams: Array<{ id: string; name: string; description: string }>; engines: Array<{ id: string; name: string; description: string }> };
 }
 
-export const registry: Registry;
+export const legacyRegistry: Registry;
 export function loadPluginFromUrl(url: string): Promise<Source | Stream | Engine>;

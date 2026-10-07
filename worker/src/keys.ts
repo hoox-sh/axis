@@ -33,6 +33,8 @@
  */
 
 import type { Env } from './index';
+import { ORIGIN_ONLY, errorResponse, jsonResponse } from './http';
+import { extractBearer } from './auth';
 
 /** Persisted KV payload for a minted API key. */
 interface KeyRecord {
@@ -65,56 +67,44 @@ export async function handleKeys(req: Request, env: Env, origin: string): Promis
     // --- Create ---
     if (url.searchParams.get('action') === 'create' || req.method === 'POST') {
         if (!isAdmin(req, env)) {
-            return new Response(JSON.stringify({ status: 'error', code: 'FORBIDDEN', message: 'admin token required' }), {
-                status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin },
-            });
+            return errorResponse('FORBIDDEN', 'admin token required', { status: 403, origin, cors: ORIGIN_ONLY });
         }
         const body = await req.json().catch(() => ({} as Record<string, unknown>));
         const tier = String((body as { tier?: unknown })?.tier ?? 'hobby') as KeyRecord['tier'];
         if (!['free', 'hobby', 'pro', 'team', 'enterprise'].includes(tier)) {
-            return new Response(JSON.stringify({ status: 'error', code: 'INVALID_TIER', message: 'unknown tier' }), {
-                status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin },
-            });
+            return errorResponse('INVALID_TIER', 'unknown tier', { status: 400, origin, cors: ORIGIN_ONLY });
         }
         const record: KeyRecord = { key: genKey(), tier, createdAt: Date.now() };
         if (kv) await kv.put(`key:${record.key}`, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 365 });
-        return new Response(JSON.stringify({ status: 'success', api_key: record.key, tier, created_at: record.createdAt }), {
-            status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin },
-        });
+        return jsonResponse(
+            { status: 'success', api_key: record.key, tier, created_at: record.createdAt },
+            { status: 200, origin, cors: ORIGIN_ONLY },
+        );
     }
 
     // --- Validate ---
     if (url.searchParams.get('action') === 'validate' || req.method === 'GET') {
-        const provided = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') || url.searchParams.get('key') || '';
+        const provided = extractBearer(req);
         if (!provided) {
-            return new Response(JSON.stringify({ status: 'error', code: 'NO_KEY', message: 'api_key required' }), {
-                status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin },
-            });
+            return errorResponse('NO_KEY', 'api_key required', { status: 400, origin, cors: ORIGIN_ONLY });
         }
         if (kv) {
             const raw = await kv.get(`key:${provided}`);
             if (!raw) {
-                return new Response(JSON.stringify({ status: 'error', code: 'INVALID_KEY', message: 'unknown key' }), {
-                    status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin },
-                });
+                return errorResponse('INVALID_KEY', 'unknown key', { status: 401, origin, cors: ORIGIN_ONLY });
             }
             const rec = JSON.parse(raw) as KeyRecord;
-            return new Response(JSON.stringify({ status: 'success', tier: rec.tier, created_at: rec.createdAt }), {
-                status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin },
-            });
+            return jsonResponse(
+                { status: 'success', tier: rec.tier, created_at: rec.createdAt },
+                { status: 200, origin, cors: ORIGIN_ONLY },
+            );
         }
         // No KV bound: accept any well-formed key (dev-only; does not prove issuance).
         if (!/^pn_[a-f0-9]{48}$/.test(provided)) {
-            return new Response(JSON.stringify({ status: 'error', code: 'INVALID_KEY', message: 'malformed key' }), {
-                status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin },
-            });
+            return errorResponse('INVALID_KEY', 'malformed key', { status: 401, origin, cors: ORIGIN_ONLY });
         }
-        return new Response(JSON.stringify({ status: 'success', tier: 'hobby' }), {
-            status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin },
-        });
+        return jsonResponse({ status: 'success', tier: 'hobby' }, { status: 200, origin, cors: ORIGIN_ONLY });
     }
 
-    return new Response(JSON.stringify({ status: 'error', code: 'METHOD', message: 'unsupported' }), {
-        status: 405, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin },
-    });
+    return errorResponse('METHOD', 'unsupported', { status: 405, origin, cors: ORIGIN_ONLY });
 }

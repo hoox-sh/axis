@@ -25,6 +25,7 @@ import {
   type JsonRpcResponse,
 } from './protocol';
 import { isNotification, parseJsonText, rpcError, rpcResult } from './jsonrpc';
+import { MCP_CORS, errorResponse } from '../http';
 import {
   callTool,
   getPrompt,
@@ -74,12 +75,7 @@ function wwwAuthenticate(_origin: string): Record<string, string> {
 function jsonHeaders(origin: string, extra?: Record<string, string>): Record<string, string> {
   return {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers':
-      'Content-Type, Authorization, MCP-Protocol-Version, MCP-Session-Id, Last-Event-ID, X-Admin-Token',
-    'Access-Control-Expose-Headers': 'MCP-Protocol-Version, MCP-Session-Id',
-    Vary: 'Origin',
+    ...MCP_CORS(origin),
     'MCP-Protocol-Version': MCP_PROTOCOL_VERSION,
     ...(extra ?? {}),
   };
@@ -225,7 +221,7 @@ export async function handleMcp(
   }
 
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ status: 'error', code: 'METHOD', message: 'POST required' }), {
+    return errorResponse('METHOD', 'POST required', {
       status: 405,
       headers: jsonHeaders(origin),
     });
@@ -233,28 +229,28 @@ export async function handleMcp(
 
   const auth = await requireApiKey(req, env);
   if (!auth.ok) {
-    return new Response(
-      JSON.stringify({ status: 'error', code: auth.code, message: auth.message }),
-      { status: auth.status, headers: { ...jsonHeaders(origin), ...wwwAuthenticate(origin) } },
-    );
+    return errorResponse(auth.code, auth.message, {
+      status: auth.status,
+      headers: { ...jsonHeaders(origin), ...wwwAuthenticate(origin) },
+    });
   }
 
   const cl = req.headers.get('content-length');
   if (cl) {
     const n = Number(cl);
     if (Number.isFinite(n) && n > MCP_MAX_BODY_BYTES) {
-      return new Response(
-        JSON.stringify({ status: 'error', code: 'PAYLOAD_TOO_LARGE', message: 'MCP body too large' }),
-        { status: 413, headers: jsonHeaders(origin) },
-      );
+      return errorResponse('PAYLOAD_TOO_LARGE', 'MCP body too large', {
+        status: 413,
+        headers: jsonHeaders(origin),
+      });
     }
   }
   const buf = await req.arrayBuffer();
   if (buf.byteLength > MCP_MAX_BODY_BYTES) {
-    return new Response(
-      JSON.stringify({ status: 'error', code: 'PAYLOAD_TOO_LARGE', message: 'MCP body too large' }),
-      { status: 413, headers: jsonHeaders(origin) },
-    );
+    return errorResponse('PAYLOAD_TOO_LARGE', 'MCP body too large', {
+      status: 413,
+      headers: jsonHeaders(origin),
+    });
   }
   const text = new TextDecoder().decode(buf);
   const parsed = parseJsonText(text);

@@ -43,6 +43,8 @@
 import type { Env } from './index';
 import { requireApiKey } from './auth';
 import { tryRunInWorker } from './pyodide_runtime';
+import { clientIp, jsonResponse } from './http';
+import { _resetRateLimitsForTests, allowRate } from './rate-limit';
 
 /** Max Pine source length (chars) accepted by `/api/run`. */
 const MAX_SCRIPT_CHARS = 512 * 1024;
@@ -53,33 +55,6 @@ const PROXY_TIMEOUT_MS = 60_000;
 /** Max runs per IP (or key) per window. */
 const RUN_RATE_LIMIT = 30;
 const RUN_RATE_WINDOW_MS = 60_000;
-
-// ── Best-effort in-isolate rate limit (same pattern as git-oauth) ──
-const rateBuckets = new Map<string, { count: number; windowStart: number }>();
-
-function clientIp(req: Request): string {
-  return (
-    req.headers.get('cf-connecting-ip') ||
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    'unknown'
-  );
-}
-
-function allowRate(key: string, limit: number, windowMs: number): boolean {
-  const now = Date.now();
-  const b = rateBuckets.get(key);
-  if (!b || now - b.windowStart > windowMs) {
-    rateBuckets.set(key, { count: 1, windowStart: now });
-    if (rateBuckets.size > 5000) {
-      for (const [k, v] of rateBuckets) {
-        if (now - v.windowStart > windowMs * 2) rateBuckets.delete(k);
-      }
-    }
-    return true;
-  }
-  b.count += 1;
-  return b.count <= limit;
-}
 
 /**
  * True when /api/run must authenticate.
@@ -106,26 +81,23 @@ function runAuthRequired(env: Env): boolean {
   return false;
 }
 
+/** `/api/run` error envelope — permissive CORS so browser callers can read `code`. */
 function jsonError(
-  status: number,
-  code: string,
-  message: string,
-  origin: string,
-  extraHeaders?: Record<string, string>,
+    status: number,
+    code: string,
+    message: string,
+    origin: string,
+    extraHeaders?: Record<string, string>,
 ): Response {
-  return new Response(JSON.stringify({ status: 'error', code, message }), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': origin,
-      ...(extraHeaders || {}),
-    },
-  });
+    return jsonResponse({ status: 'error', code, message }, {
+        status,
+        headers: { 'Access-Control-Allow-Origin': origin, ...(extraHeaders || {}) },
+    });
 }
 
 /** @internal test helper — clear rate buckets between tests. */
 export function _resetRunRateLimitForTests(): void {
-  rateBuckets.clear();
+    _resetRateLimitsForTests();
 }
 
 /** Client JSON body for `/api/run` (aligned with pyne Pro API). */
@@ -262,13 +234,7 @@ export async function handleRun(req: Request, env: Env, origin: string): Promise
     if (env.PYODIDE_IN_WORKER === 'enabled') {
         const pyResult = await tryRunInWorker(v.value.script, v.value.data, env);
         if (pyResult) {
-            return new Response(JSON.stringify(pyResult), {
-                status: 200,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': origin,
-                },
-            });
+            return jsonResponse(pyResult, { status: 200, headers: { 'Access-Control-Allow-Origin': origin } });
         }
         // Fall through to external if Pyodide failed to boot.
     }

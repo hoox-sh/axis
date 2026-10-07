@@ -36,6 +36,7 @@ import {
 } from '../store';
 import type { LogEntry } from '../store/types';
 import { copyToClipboard } from './clipboard';
+import { createThrottle } from '../utils/throttle';
 
 /** App version stamped into diagnostic bundles (keep in sync with package.json). */
 export const AXIS_DIAGNOSTIC_VERSION = '2.0.0';
@@ -289,13 +290,12 @@ export function isErrorShareEnabled(): boolean {
   return store.telemetry?.shareOnError === true;
 }
 
-let lastOfferKey = '';
-let lastOfferAt = 0;
+/** Dedupe window per `source|context|message` so identical errors offer once. */
+const offerThrottle = createThrottle(15_000);
 
 /** @internal test helper */
 export function _resetErrorShareThrottleForTests(): void {
-  lastOfferKey = '';
-  lastOfferAt = 0;
+  offerThrottle.reset();
   setStore('errorShareOffer', null);
 }
 
@@ -313,12 +313,9 @@ export function maybeOfferErrorShare(
   const key = `${opts.source || ''}|${opts.context || ''}|${msg}`;
   const now = Date.now();
   const throttleMs = opts.throttleMs ?? 15_000;
-  if (key === lastOfferKey && now - lastOfferAt < throttleMs) return false;
+  if (!offerThrottle.allow(key, throttleMs)) return false;
   // Don't stack offers
   if (store.errorShareOffer) return false;
-
-  lastOfferKey = key;
-  lastOfferAt = now;
 
   const payload = buildErrorDiagnosticPayload(err, opts);
   const summary = opts.context

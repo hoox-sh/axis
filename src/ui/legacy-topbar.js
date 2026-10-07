@@ -25,7 +25,7 @@
  * case-insensitive filesystems do not resolve `./ui/Topbar` here.
  */
 
-import { registry } from '../registry.js';
+import { legacyRegistry } from '../registry.js';
 import { getState } from '../state.js';
 import { setStatus } from './status.js';
 
@@ -66,9 +66,9 @@ export function initTopbar({ onRun, onLoad, onUpload, onLiveToggle, onSave, onRe
             sel.appendChild(opt);
         }
     }
-    fillSelect(els.engineSelect, registry.listEngines(), getState().get('engine'));
-    fillSelect(els.sourceSelect, registry.listSources(), getState().get('source'));
-    fillSelect(els.streamSelect, registry.listStreams(), getState().get('stream'));
+    fillSelect(els.engineSelect, legacyRegistry.listEngines(), getState().get('engine'));
+    fillSelect(els.sourceSelect, legacyRegistry.listSources(), getState().get('source'));
+    fillSelect(els.streamSelect, legacyRegistry.listStreams(), getState().get('stream'));
 
     // Restore symbol/interval/endpoint/api key.
     const s = getState().snapshot();

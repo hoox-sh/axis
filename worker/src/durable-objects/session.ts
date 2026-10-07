@@ -45,6 +45,7 @@
  */
 
 import type { Env } from '../index';
+import { errorResponse } from '../http';
 
 type VenueId = 'binance' | 'okx' | 'bybit' | 'coinbase' | 'kraken' | 'mexc';
 
@@ -236,16 +237,10 @@ export class SessionDO {
         const rawSym = url.searchParams.get('symbol');
         const rawIv = url.searchParams.get('interval');
         if (rawSym != null && sanitizeStreamSymbol(rawSym) == null) {
-            return new Response(JSON.stringify({ status: 'error', code: 'BAD_SYMBOL' }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' },
-            });
+            return errorResponse('BAD_SYMBOL', undefined, { status: 400 });
         }
         if (rawIv != null && sanitizeStreamInterval(rawIv) == null) {
-            return new Response(JSON.stringify({ status: 'error', code: 'BAD_INTERVAL' }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' },
-            });
+            return errorResponse('BAD_INTERVAL', undefined, { status: 400 });
         }
         this.sess.venue = venue;
         this.sess.symbol = symbol;

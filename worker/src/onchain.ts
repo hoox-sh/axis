@@ -37,6 +37,8 @@
  */
 
 import type { Env } from './index';
+import { READ_CORS, jsonResponse } from './http';
+import { createProxyRouter } from './proxy-router';
 
 const LLAMA_UPSTREAM = 'https://api.llama.fi';
 const GECKO_UPSTREAM = 'https://api.geckoterminal.com/api/v2';
@@ -80,30 +82,13 @@ interface CacheEntry {
 
 const memCache = new Map<string, CacheEntry>();
 
-function corsHeaders(origin: string): Record<string, string> {
-  return {
-    'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token, If-Match',
-    'Access-Control-Max-Age': '86400',
-    Vary: 'Origin',
-  };
-}
-
 function json(
   body: unknown,
   status: number,
   origin: string,
   extra?: Record<string, string>,
 ): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      ...corsHeaders(origin),
-      ...(extra || {}),
-    },
-  });
+  return jsonResponse(body, { status, origin, cors: READ_CORS, headers: extra });
 }
 
 function cachedResponse(entry: CacheEntry, origin: string, cacheStatus: string): Response {
@@ -112,7 +97,7 @@ function cachedResponse(entry: CacheEntry, origin: string, cacheStatus: string):
     headers: {
       'Content-Type': entry.contentType || 'application/json',
       'X-Axis-Onchain-Cache': cacheStatus,
-      ...corsHeaders(origin),
+      ...READ_CORS(origin),
     },
   });
 }
@@ -219,7 +204,7 @@ async function proxyJson(
     headers: {
       'Content-Type': contentType,
       'X-Axis-Onchain-Cache': 'MISS',
-      ...corsHeaders(origin),
+      ...READ_CORS(origin),
     },
   });
 }
@@ -235,185 +220,174 @@ function decodePathSegment(raw: string): string {
 }
 
 /**
+ * On-chain allowlist. Order matters: `/gecko/*` is a family fallback and sits
+ * after the two concrete GeckoTerminal routes so they keep winning.
+ */
+const ROUTER = createProxyRouter({
+  prefix: '/api/onchain',
+  cors: READ_CORS,
+  health: () => ({
+    status: 'healthy',
+    service: 'axis-onchain',
+    providers: {
+      defillama: {
+        id: 'defillama',
+        proxyBase: '/api/onchain/llama',
+        upstream: LLAMA_UPSTREAM,
+        paths: ['/protocols', '/protocol/:slug'],
+      },
+      geckoterminal: {
+        id: 'geckoterminal',
+        proxyBase: '/api/onchain/gecko',
+        upstream: GECKO_UPSTREAM,
+        paths: [
+          '/networks/:network/pools/:address/ohlcv/:timeframe',
+          '/search/pools',
+        ],
+      },
+    },
+    cache: { entries: memCache.size },
+  }),
+  routes: [
+    {
+      path: '/llama/protocols',
+      handle: ({ origin }) =>
+        proxyJson('llama:protocols', `${LLAMA_UPSTREAM}/protocols`, origin, PROTOCOLS_TTL_MS, 'DefiLlama'),
+    },
+    {
+      match: /^\/llama\/protocol\/([^/]+)\/?$/,
+      label: '/llama/protocol/:slug',
+      handle: ({ origin, params }) => {
+        const slug = decodePathSegment(params[0] || '');
+        if (!SLUG_RE.test(slug)) {
+          return json(
+            {
+              status: 'error',
+              code: 'BAD_SLUG',
+              message: 'Invalid protocol slug (use letters, digits, ._- only)',
+            },
+            400,
+            origin,
+          );
+        }
+        const normalized = slug.toLowerCase();
+        return proxyJson(
+          `llama:protocol:${normalized}`,
+          `${LLAMA_UPSTREAM}/protocol/${encodeURIComponent(normalized)}`,
+          origin,
+          PROTOCOL_TTL_MS,
+          'DefiLlama',
+        );
+      },
+    },
+    {
+      path: '/gecko/search/pools',
+      handle: ({ req, origin }) => {
+        const qs = pickQuery(req, GECKO_SEARCH_QUERY_KEYS);
+        return proxyJson(
+          `gecko:search:${qs}`,
+          `${GECKO_UPSTREAM}/search/pools${qs}`,
+          origin,
+          GECKO_SEARCH_TTL_MS,
+          'GeckoTerminal',
+        );
+      },
+    },
+    {
+      match: /^\/gecko\/networks\/([^/]+)\/pools\/([^/]+)\/ohlcv\/([^/]+)\/?$/,
+      label: '/gecko/networks/:network/pools/:address/ohlcv/:timeframe',
+      handle: ({ req, origin, params }) => {
+        const network = decodePathSegment(params[0] || '').toLowerCase();
+        const address = decodePathSegment(params[1] || '');
+        const timeframe = decodePathSegment(params[2] || '').toLowerCase();
+
+        if (!GECKO_NETWORK_RE.test(network)) {
+          return json(
+            {
+              status: 'error',
+              code: 'BAD_NETWORK',
+              message: 'Invalid network id (use lowercase letters, digits, underscore)',
+            },
+            400,
+            origin,
+          );
+        }
+        if (!isValidGeckoAddress(address)) {
+          return json(
+            {
+              status: 'error',
+              code: 'BAD_ADDRESS',
+              message:
+                'Invalid pool address (EVM 0x+40 hex or Solana-style base58 32–48 chars)',
+            },
+            400,
+            origin,
+          );
+        }
+        if (!GECKO_TIMEFRAME_RE.test(timeframe)) {
+          return json(
+            {
+              status: 'error',
+              code: 'BAD_TIMEFRAME',
+              message: 'Invalid timeframe (use day, hour, or minute)',
+            },
+            400,
+            origin,
+          );
+        }
+
+        const qs = pickQuery(req, GECKO_OHLCV_QUERY_KEYS);
+        const addrKey = address.toLowerCase().startsWith('0x') ? address.toLowerCase() : address;
+        const upstream = `${GECKO_UPSTREAM}/networks/${encodeURIComponent(network)}/pools/${encodeURIComponent(address)}/ohlcv/${encodeURIComponent(timeframe)}${qs}`;
+        return proxyJson(
+          `gecko:ohlcv:${network}:${addrKey}:${timeframe}:${qs}`,
+          upstream,
+          origin,
+          GECKO_OHLCV_TTL_MS,
+          'GeckoTerminal',
+        );
+      },
+    },
+    {
+      // Family fallback: reject unknown /api/onchain/gecko/* explicitly.
+      startsWith: '/gecko',
+      handle: ({ origin, req }) => {
+        const pathname = new URL(req.url).pathname;
+        return json(
+          {
+            status: 'error',
+            code: 'NOT_FOUND',
+            message: `Unknown GeckoTerminal path ${pathname}`,
+            hint:
+              'Use /api/onchain/gecko/networks/:network/pools/:address/ohlcv/:timeframe or /api/onchain/gecko/search/pools',
+          },
+          404,
+          origin,
+        );
+      },
+    },
+  ],
+  notFound: {
+    message: 'Unknown on-chain path /api/onchain%s',
+    extra: { hint: 'Use /api/onchain/health, /api/onchain/llama/…, or /api/onchain/gecko/…' },
+  },
+});
+
+/** Accepted on-chain paths, for docs and allowlist tests. */
+export function onchainAllowlist(): string[] {
+  return ROUTER.allowedPaths();
+}
+
+/**
  * Handle `/api/onchain/*` routes. Returns `null` if the path is not on-chain.
  */
-export async function handleOnchain(
+export function handleOnchain(
   req: Request,
   _env: Env,
   origin: string,
   pathname: string,
-): Promise<Response | null> {
-  if (!pathname.startsWith('/api/onchain')) return null;
-
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders(origin) });
-  }
-
-  if (req.method !== 'GET') {
-    return json(
-      { status: 'error', code: 'METHOD', message: 'GET required' },
-      405,
-      origin,
-    );
-  }
-
-  if (pathname === '/api/onchain' || pathname === '/api/onchain/' || pathname === '/api/onchain/health') {
-    return json(
-      {
-        status: 'healthy',
-        service: 'axis-onchain',
-        providers: {
-          defillama: {
-            id: 'defillama',
-            proxyBase: '/api/onchain/llama',
-            upstream: LLAMA_UPSTREAM,
-            paths: ['/protocols', '/protocol/:slug'],
-          },
-          geckoterminal: {
-            id: 'geckoterminal',
-            proxyBase: '/api/onchain/gecko',
-            upstream: GECKO_UPSTREAM,
-            paths: [
-              '/networks/:network/pools/:address/ohlcv/:timeframe',
-              '/search/pools',
-            ],
-          },
-        },
-        cache: { entries: memCache.size },
-      },
-      200,
-      origin,
-    );
-  }
-
-  // Path rewrite: /api/onchain/llama/... → api.llama.fi/...
-  if (pathname === '/api/onchain/llama/protocols') {
-    return proxyJson(
-      'llama:protocols',
-      `${LLAMA_UPSTREAM}/protocols`,
-      origin,
-      PROTOCOLS_TTL_MS,
-      'DefiLlama',
-    );
-  }
-
-  const protoMatch = /^\/api\/onchain\/llama\/protocol\/([^/]+)\/?$/.exec(pathname);
-  if (protoMatch) {
-    const slug = decodePathSegment(protoMatch[1] || '');
-    if (!SLUG_RE.test(slug)) {
-      return json(
-        {
-          status: 'error',
-          code: 'BAD_SLUG',
-          message: 'Invalid protocol slug (use letters, digits, ._- only)',
-        },
-        400,
-        origin,
-      );
-    }
-    const normalized = slug.toLowerCase();
-    return proxyJson(
-      `llama:protocol:${normalized}`,
-      `${LLAMA_UPSTREAM}/protocol/${encodeURIComponent(normalized)}`,
-      origin,
-      PROTOCOL_TTL_MS,
-      'DefiLlama',
-    );
-  }
-
-  // GeckoTerminal: /api/onchain/gecko/search/pools
-  if (pathname === '/api/onchain/gecko/search/pools') {
-    const qs = pickQuery(req, GECKO_SEARCH_QUERY_KEYS);
-    const cacheKey = `gecko:search:${qs}`;
-    return proxyJson(
-      cacheKey,
-      `${GECKO_UPSTREAM}/search/pools${qs}`,
-      origin,
-      GECKO_SEARCH_TTL_MS,
-      'GeckoTerminal',
-    );
-  }
-
-  // GeckoTerminal: /api/onchain/gecko/networks/:network/pools/:address/ohlcv/:timeframe
-  const ohlcvMatch =
-    /^\/api\/onchain\/gecko\/networks\/([^/]+)\/pools\/([^/]+)\/ohlcv\/([^/]+)\/?$/.exec(
-      pathname,
-    );
-  if (ohlcvMatch) {
-    const network = decodePathSegment(ohlcvMatch[1] || '').toLowerCase();
-    const address = decodePathSegment(ohlcvMatch[2] || '');
-    const timeframe = decodePathSegment(ohlcvMatch[3] || '').toLowerCase();
-
-    if (!GECKO_NETWORK_RE.test(network)) {
-      return json(
-        {
-          status: 'error',
-          code: 'BAD_NETWORK',
-          message: 'Invalid network id (use lowercase letters, digits, underscore)',
-        },
-        400,
-        origin,
-      );
-    }
-    if (!isValidGeckoAddress(address)) {
-      return json(
-        {
-          status: 'error',
-          code: 'BAD_ADDRESS',
-          message:
-            'Invalid pool address (EVM 0x+40 hex or Solana-style base58 32–48 chars)',
-        },
-        400,
-        origin,
-      );
-    }
-    if (!GECKO_TIMEFRAME_RE.test(timeframe)) {
-      return json(
-        {
-          status: 'error',
-          code: 'BAD_TIMEFRAME',
-          message: 'Invalid timeframe (use day, hour, or minute)',
-        },
-        400,
-        origin,
-      );
-    }
-
-    const qs = pickQuery(req, GECKO_OHLCV_QUERY_KEYS);
-    const addrKey = address.toLowerCase().startsWith('0x')
-      ? address.toLowerCase()
-      : address;
-    const cacheKey = `gecko:ohlcv:${network}:${addrKey}:${timeframe}:${qs}`;
-    const upstream = `${GECKO_UPSTREAM}/networks/${encodeURIComponent(network)}/pools/${encodeURIComponent(address)}/ohlcv/${encodeURIComponent(timeframe)}${qs}`;
-    return proxyJson(cacheKey, upstream, origin, GECKO_OHLCV_TTL_MS, 'GeckoTerminal');
-  }
-
-  // Reject other /api/onchain/gecko/* paths explicitly
-  if (pathname.startsWith('/api/onchain/gecko')) {
-    return json(
-      {
-        status: 'error',
-        code: 'NOT_FOUND',
-        message: `Unknown GeckoTerminal path ${pathname}`,
-        hint:
-          'Use /api/onchain/gecko/networks/:network/pools/:address/ohlcv/:timeframe or /api/onchain/gecko/search/pools',
-      },
-      404,
-      origin,
-    );
-  }
-
-  return json(
-    {
-      status: 'error',
-      code: 'NOT_FOUND',
-      message: `Unknown on-chain path ${pathname}`,
-      hint:
-        'Use /api/onchain/health, /api/onchain/llama/…, or /api/onchain/gecko/…',
-    },
-    404,
-    origin,
-  );
+): Promise<Response> | null {
+  return ROUTER.handle(req, origin, pathname);
 }
 
 /** Test helper — clear isolate memory cache. */

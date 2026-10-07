@@ -39,6 +39,7 @@ import { createSignal } from 'solid-js';
 import { APP_VERSION } from '../version';
 import { announce } from '../ui/sr-announce';
 import { setCloseGuardEnabled } from '../pwa/close-guard';
+import { createThrottle } from '../utils/throttle';
 
 export type UpdateSource = 'version-poll' | 'service-worker' | 'manual';
 
@@ -393,11 +394,10 @@ export function startUpdatePolling(opts: StartPollingOptions = {}): PollHandle {
   };
   const check = () =>
     checkForUpdates({ fetchImpl: opts.fetchImpl, hooks: opts.hooks });
-  let lastTrigger = 0;
+  // Focus + visibility + online all fire per user gesture burst; one check per window.
+  const burstThrottle = createThrottle(throttleMs);
   const throttled = () => {
-    const now = Date.now();
-    if (now - lastTrigger < throttleMs) return;
-    lastTrigger = now;
+    if (!burstThrottle.allow()) return;
     void check();
   };
   const onVisibility = () => {

@@ -43,6 +43,8 @@
  */
 
 import type { Env } from './index';
+import { MARKET_CORS, jsonResponse } from './http';
+import { createProxyRouter } from './proxy-router';
 
 /** Prefer vision data API (public market data), then classic spot API. */
 const BINANCE_UPSTREAMS = [
@@ -82,31 +84,13 @@ interface CacheEntry {
 
 const memCache = new Map<string, CacheEntry>();
 
-function corsHeaders(origin: string): Record<string, string> {
-  return {
-    'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers':
-      'Content-Type, Authorization, X-Admin-Token, If-Match, X-Exchange-Key, X-Exchange-Secret, X-Exchange-Passphrase',
-    'Access-Control-Max-Age': '86400',
-    Vary: 'Origin',
-  };
-}
-
 function json(
   body: unknown,
   status: number,
   origin: string,
   extra?: Record<string, string>,
 ): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      ...corsHeaders(origin),
-      ...(extra || {}),
-    },
-  });
+  return jsonResponse(body, { status, origin, cors: MARKET_CORS, headers: extra });
 }
 
 function cachedResponse(entry: CacheEntry, origin: string, cacheStatus: string): Response {
@@ -115,7 +99,7 @@ function cachedResponse(entry: CacheEntry, origin: string, cacheStatus: string):
     headers: {
       'Content-Type': entry.contentType || 'application/json',
       'X-Axis-Market-Cache': cacheStatus,
-      ...corsHeaders(origin),
+      ...MARKET_CORS(origin),
     },
   });
 }
@@ -237,7 +221,7 @@ async function proxyPublicPath(
           'Content-Type': contentType,
           'X-Axis-Market-Cache': 'MISS',
           'X-Axis-Market-Upstream': base,
-          ...corsHeaders(origin),
+          ...MARKET_CORS(origin),
         },
       });
     } catch (err) {
@@ -255,7 +239,7 @@ async function proxyPublicPath(
         'Content-Type': lastContentType,
         'X-Axis-Market-Cache': 'MISS',
         'X-Axis-Market-Upstream': 'all-blocked',
-        ...corsHeaders(origin),
+        ...MARKET_CORS(origin),
       },
     });
   }
@@ -420,248 +404,193 @@ export function _resetMarketCacheForTests(): void {
   memCache.clear();
 }
 
+/** 400 envelope shared by every query-validation failure. */
+function badRequest(origin: string, message: string): Response {
+  return json({ status: 'error', code: 'BAD_REQUEST', message }, 400, origin);
+}
+
+/**
+ * Binance signed klines — request-scoped `X-Exchange-Key` / `X-Exchange-Secret`
+ * (never stored, never cached).
+ */
+async function signedKlines(req: Request, url: URL, origin: string): Promise<Response> {
+  const apiKey = (req.headers.get('X-Exchange-Key') || '').trim();
+  const apiSecret = (req.headers.get('X-Exchange-Secret') || '').trim();
+  if (!apiKey || !apiSecret) {
+    return json(
+      {
+        status: 'error',
+        code: 'AUTH',
+        message: 'X-Exchange-Key and X-Exchange-Secret required',
+      },
+      401,
+      origin,
+    );
+  }
+
+  const parsed = parseKlinesQuery(url);
+  if (!parsed.ok) return badRequest(origin, parsed.message);
+
+  const qs = parsed.params;
+  qs.set('timestamp', String(Date.now()));
+  qs.set('recvWindow', '5000');
+  const query = qs.toString();
+  const signature = await hmacSha256Hex(apiSecret, query);
+  qs.set('signature', signature);
+
+  const upstreamUrl = `${BINANCE_SIGNED_UPSTREAM}/api/v3/klines?${qs}`;
+  try {
+    const upstream = await fetchSignedBinance(upstreamUrl, apiKey);
+    const text = await upstream.text();
+    const contentType = upstream.headers.get('Content-Type') || 'application/json';
+    return new Response(text, {
+      status: upstream.status,
+      headers: {
+        'Content-Type': contentType,
+        'X-Axis-Market-Cache': 'BYPASS',
+        'X-Axis-Market-Upstream': BINANCE_SIGNED_UPSTREAM,
+        ...MARKET_CORS(origin),
+      },
+    });
+  } catch (err) {
+    const lastErr = err instanceof Error ? err.message : 'unreachable';
+    return json(
+      {
+        status: 'error',
+        code: 'UPSTREAM_NETWORK',
+        message: `Binance signed upstream unreachable: ${lastErr}`,
+      },
+      502,
+      origin,
+    );
+  }
+}
+
+/** Binance 24h ticker: batch `symbols=[…]` (1–100) or a single `symbol=`. */
+function binanceTicker(url: URL, origin: string): Promise<Response> {
+  const symbolsRaw = url.searchParams.get('symbols');
+  const symbolOne = String(url.searchParams.get('symbol') || '')
+    .trim()
+    .toUpperCase();
+
+  let pathAndQuery = '';
+  if (symbolsRaw) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(symbolsRaw);
+    } catch {
+      return Promise.resolve(badRequest(origin, 'symbols must be JSON array'));
+    }
+    if (!Array.isArray(parsed) || !parsed.length || parsed.length > 100) {
+      return Promise.resolve(badRequest(origin, 'symbols array size 1–100'));
+    }
+    const syms: string[] = [];
+    for (const s of parsed) {
+      const u = String(s || '')
+        .trim()
+        .toUpperCase();
+      if (!SYMBOL_RE.test(u)) return Promise.resolve(badRequest(origin, `invalid symbol ${u}`));
+      syms.push(u);
+    }
+    pathAndQuery = `/api/v3/ticker/24hr?symbols=${JSON.stringify(syms)}`;
+  } else if (SYMBOL_RE.test(symbolOne)) {
+    pathAndQuery = `/api/v3/ticker/24hr?symbol=${symbolOne}`;
+  } else {
+    return Promise.resolve(badRequest(origin, 'provide symbols=[…] or symbol='));
+  }
+
+  return proxyBinancePath(pathAndQuery, origin, TICKER_TTL_MS, `ticker:${pathAndQuery}`);
+}
+
+/**
+ * Market allowlist. Literal paths only — every upstream path is fixed, so a
+ * client can never steer the Worker at an arbitrary venue URL.
+ */
+const ROUTER = createProxyRouter({
+  prefix: '/api/market',
+  cors: MARKET_CORS,
+  health: () => ({
+    status: 'healthy',
+    service: 'axis-market',
+    providers: {
+      binance: {
+        id: 'binance',
+        proxyBase: '/api/market/binance',
+        upstreams: [...BINANCE_UPSTREAMS],
+        paths: ['klines', 'ticker/24hr', 'exchangeInfo'],
+      },
+      mexc: {
+        id: 'mexc',
+        proxyBase: '/api/market/mexc',
+        upstreams: [...MEXC_UPSTREAMS],
+        paths: ['klines', 'ticker/24hr', 'exchangeInfo'],
+      },
+    },
+    signed: { binance: ['klines'] },
+  }),
+  routes: [
+    {
+      path: '/binance/klines',
+      handle: ({ url, origin }) => {
+        const parsed = parseKlinesQuery(url);
+        if (!parsed.ok) return badRequest(origin, parsed.message);
+        const pathAndQuery = `/api/v3/klines?${parsed.params}`;
+        return proxyBinancePath(pathAndQuery, origin, KLINES_TTL_MS, `klines:${pathAndQuery}`);
+      },
+    },
+    {
+      path: '/binance/signed/klines',
+      handle: ({ req, url, origin }) => signedKlines(req, url, origin),
+    },
+    {
+      path: '/binance/ticker/24hr',
+      handle: ({ url, origin }) => binanceTicker(url, origin),
+    },
+    {
+      path: '/binance/exchangeInfo',
+      // No query params — full spot catalog (cached longer).
+      handle: ({ origin }) =>
+        proxyBinancePath('/api/v3/exchangeInfo', origin, EXCHANGE_INFO_TTL_MS, 'exchangeInfo'),
+    },
+    {
+      path: '/mexc/klines',
+      handle: ({ url, origin }) => {
+        const parsed = parseMexcKlinesQuery(url);
+        if (!parsed.ok) return badRequest(origin, parsed.message);
+        const pathAndQuery = `/api/v3/klines?${parsed.params}`;
+        return proxyMexcPath(pathAndQuery, origin, MEXC_KLINES_TTL_MS, `mexc:klines:${pathAndQuery}`);
+      },
+    },
+    {
+      path: '/mexc/ticker/24hr',
+      handle: ({ url, origin }) => {
+        const parsed = parseMexcTickerQuery(url);
+        if (!parsed.ok) return badRequest(origin, parsed.message);
+        return proxyMexcPath(parsed.pathAndQuery, origin, MEXC_TICKER_TTL_MS, parsed.cacheKey);
+      },
+    },
+    {
+      path: '/mexc/exchangeInfo',
+      handle: ({ origin }) =>
+        proxyMexcPath('/api/v3/exchangeInfo', origin, MEXC_EXCHANGE_INFO_TTL_MS, 'mexc:exchangeInfo'),
+    },
+  ],
+  notFound: { message: 'Unknown market path /api/market%s' },
+});
+
+/** Accepted market paths, for docs and allowlist tests. */
+export function marketAllowlist(): string[] {
+  return ROUTER.allowedPaths();
+}
+
 /**
  * Handle `/api/market/*` routes. Returns `null` if the path is not market.
  */
-export async function handleMarket(
+export function handleMarket(
   req: Request,
   _env: Env,
   origin: string,
   pathname: string,
-): Promise<Response | null> {
-  if (!pathname.startsWith('/api/market')) return null;
-
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders(origin) });
-  }
-
-  if (req.method !== 'GET') {
-    return json(
-      { status: 'error', code: 'METHOD', message: 'GET required' },
-      405,
-      origin,
-    );
-  }
-
-  if (
-    pathname === '/api/market' ||
-    pathname === '/api/market/' ||
-    pathname === '/api/market/health'
-  ) {
-    return json(
-      {
-        status: 'healthy',
-        service: 'axis-market',
-        providers: {
-          binance: {
-            id: 'binance',
-            proxyBase: '/api/market/binance',
-            upstreams: [...BINANCE_UPSTREAMS],
-            paths: ['klines', 'ticker/24hr', 'exchangeInfo'],
-          },
-          mexc: {
-            id: 'mexc',
-            proxyBase: '/api/market/mexc',
-            upstreams: [...MEXC_UPSTREAMS],
-            paths: ['klines', 'ticker/24hr', 'exchangeInfo'],
-          },
-        },
-        signed: { binance: ['klines'] },
-      },
-      200,
-      origin,
-    );
-  }
-
-  const url = new URL(req.url);
-
-  if (pathname === '/api/market/binance/klines') {
-    const parsed = parseKlinesQuery(url);
-    if (!parsed.ok) {
-      return json(
-        { status: 'error', code: 'BAD_REQUEST', message: parsed.message },
-        400,
-        origin,
-      );
-    }
-    const pathAndQuery = `/api/v3/klines?${parsed.params}`;
-    return proxyBinancePath(pathAndQuery, origin, KLINES_TTL_MS, `klines:${pathAndQuery}`);
-  }
-
-  if (pathname === '/api/market/binance/signed/klines') {
-    const apiKey = (req.headers.get('X-Exchange-Key') || '').trim();
-    const apiSecret = (req.headers.get('X-Exchange-Secret') || '').trim();
-    if (!apiKey || !apiSecret) {
-      return json(
-        {
-          status: 'error',
-          code: 'AUTH',
-          message: 'X-Exchange-Key and X-Exchange-Secret required',
-        },
-        401,
-        origin,
-      );
-    }
-
-    const parsed = parseKlinesQuery(url);
-    if (!parsed.ok) {
-      return json(
-        { status: 'error', code: 'BAD_REQUEST', message: parsed.message },
-        400,
-        origin,
-      );
-    }
-
-    const qs = parsed.params;
-    qs.set('timestamp', String(Date.now()));
-    qs.set('recvWindow', '5000');
-    const query = qs.toString();
-    const signature = await hmacSha256Hex(apiSecret, query);
-    qs.set('signature', signature);
-
-    const upstreamUrl = `${BINANCE_SIGNED_UPSTREAM}/api/v3/klines?${qs}`;
-    try {
-      const upstream = await fetchSignedBinance(upstreamUrl, apiKey);
-      const text = await upstream.text();
-      const contentType = upstream.headers.get('Content-Type') || 'application/json';
-      return new Response(text, {
-        status: upstream.status,
-        headers: {
-          'Content-Type': contentType,
-          'X-Axis-Market-Cache': 'BYPASS',
-          'X-Axis-Market-Upstream': BINANCE_SIGNED_UPSTREAM,
-          ...corsHeaders(origin),
-        },
-      });
-    } catch (err) {
-      const lastErr = err instanceof Error ? err.message : 'unreachable';
-      return json(
-        {
-          status: 'error',
-          code: 'UPSTREAM_NETWORK',
-          message: `Binance signed upstream unreachable: ${lastErr}`,
-        },
-        502,
-        origin,
-      );
-    }
-  }
-
-  if (pathname === '/api/market/binance/ticker/24hr') {
-    // Prefer batch `symbols=["BTCUSDT",…]`; also allow single `symbol=`
-    const symbolsRaw = url.searchParams.get('symbols');
-    const symbolOne = String(url.searchParams.get('symbol') || '')
-      .trim()
-      .toUpperCase();
-
-    let pathAndQuery = '';
-    if (symbolsRaw) {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(symbolsRaw);
-      } catch {
-        return json(
-          { status: 'error', code: 'BAD_REQUEST', message: 'symbols must be JSON array' },
-          400,
-          origin,
-        );
-      }
-      if (!Array.isArray(parsed) || !parsed.length || parsed.length > 100) {
-        return json(
-          { status: 'error', code: 'BAD_REQUEST', message: 'symbols array size 1–100' },
-          400,
-          origin,
-        );
-      }
-      const syms: string[] = [];
-      for (const s of parsed) {
-        const u = String(s || '')
-          .trim()
-          .toUpperCase();
-        if (!SYMBOL_RE.test(u)) {
-          return json(
-            { status: 'error', code: 'BAD_REQUEST', message: `invalid symbol ${u}` },
-            400,
-            origin,
-          );
-        }
-        syms.push(u);
-      }
-      pathAndQuery = `/api/v3/ticker/24hr?symbols=${JSON.stringify(syms)}`;
-    } else if (SYMBOL_RE.test(symbolOne)) {
-      pathAndQuery = `/api/v3/ticker/24hr?symbol=${symbolOne}`;
-    } else {
-      return json(
-        {
-          status: 'error',
-          code: 'BAD_REQUEST',
-          message: 'provide symbols=[…] or symbol=',
-        },
-        400,
-        origin,
-      );
-    }
-
-    return proxyBinancePath(pathAndQuery, origin, TICKER_TTL_MS, `ticker:${pathAndQuery}`);
-  }
-
-  if (pathname === '/api/market/binance/exchangeInfo') {
-    // No query params — full spot catalog (cached longer)
-    return proxyBinancePath(
-      '/api/v3/exchangeInfo',
-      origin,
-      EXCHANGE_INFO_TTL_MS,
-      'exchangeInfo',
-    );
-  }
-
-  if (pathname === '/api/market/mexc/klines') {
-    const parsed = parseMexcKlinesQuery(url);
-    if (!parsed.ok) {
-      return json(
-        { status: 'error', code: 'BAD_REQUEST', message: parsed.message },
-        400,
-        origin,
-      );
-    }
-    const pathAndQuery = `/api/v3/klines?${parsed.params}`;
-    return proxyMexcPath(
-      pathAndQuery,
-      origin,
-      MEXC_KLINES_TTL_MS,
-      `mexc:klines:${pathAndQuery}`,
-    );
-  }
-
-  if (pathname === '/api/market/mexc/ticker/24hr') {
-    const parsed = parseMexcTickerQuery(url);
-    if (!parsed.ok) {
-      return json(
-        { status: 'error', code: 'BAD_REQUEST', message: parsed.message },
-        400,
-        origin,
-      );
-    }
-    return proxyMexcPath(
-      parsed.pathAndQuery,
-      origin,
-      MEXC_TICKER_TTL_MS,
-      parsed.cacheKey,
-    );
-  }
-
-  if (pathname === '/api/market/mexc/exchangeInfo') {
-    return proxyMexcPath(
-      '/api/v3/exchangeInfo',
-      origin,
-      MEXC_EXCHANGE_INFO_TTL_MS,
-      'mexc:exchangeInfo',
-    );
-  }
-
-  return json(
-    { status: 'error', code: 'NOT_FOUND', message: `Unknown market path ${pathname}` },
-    404,
-    origin,
-  );
+): Promise<Response> | null {
+  return ROUTER.handle(req, origin, pathname);
 }
