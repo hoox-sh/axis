@@ -9,11 +9,11 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-05 · 505 commits · describe-tag: `v2.20.0`_
+_Generated/updated: 2026-10-07 · 519 commits · describe-tag: `v2.20.1`_
 
 ---
 
-## [Unreleased]
+## [2.21.0] — 2026-10-07
 
 ### Changed
 
@@ -1496,12 +1496,16 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (24 commits)
+### 2026-10 (38 commits)
 
 #### Features
 
+- `5ab80821` (2026-10-06) — feat(ui): ticker band controls, drag handle, and menu polish
+- `3dbeacfb` (2026-10-06) — feat(ui): smooth clean snappy panel open
 - `102d7542` (2026-10-05) — feat(extras): float-only time + price panels under topbar
 - `aa66af89` (2026-10-04) — feat(watchlist,extras): big-price rows + ticker direction/change options
 - `1d63aabd` (2026-10-04) — feat(extras): polish Extra menu + harden quote sheet
@@ -1517,6 +1521,12 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `2f892a42` (2026-10-06) — fix(ui): seamless ticker loop and calmer price band
+- `2969fef5` (2026-10-05) — fix(tests): isolate cloud-config and cache keys across suites
+- `d7d2ed17` (2026-10-05) — fix(build): add vite-env.d.ts for vite/client types
+- `60f1fe56` (2026-10-05) — fix(tests): de-flake snapshot, menu and slot-switch tests
+- `5c8ce723` (2026-10-05) — fix(datafeed): plug WS close-leak, version from package.json
+- `34c65617` (2026-10-05) — fix(extras): live-tick trend, countdown prefix, ticker under topbar
 - `dac8a48d` (2026-10-04) — fix(tests): derive panel-icon count from PANEL_IDS
 - `1977e11b` (2026-10-04) — fix(extras): harden extra chrome widgets after review
 - `ed39d933` (2026-10-03) — fix(extras): align price card right, clear of price scale
@@ -1524,8 +1534,23 @@ Security and performance release from the multi-agent **harden-perf** audit
 - `85358351` (2026-10-03) — fix(live): keep every tick in background tabs + DSM auto gap repair
 - `54ae5acc` (2026-10-03) — fix(chart): harden engine overlays, HA cache, paint and lifecycle
 
+#### Performance
+
+- `5ed34ef1` (2026-10-05) — perf(scripts): prefer Bun-native file, hash, spawn and image APIs
+
+#### Refactors
+
+- `e3553e41` (2026-10-07) — refactor(worker): consolidate HTTP helpers and proxy routing
+
+#### Documentation
+
+- `cbb5bff0` (2026-10-05) — docs(readme): fix CLI release tag, add datafeed sidecar and recent highlights
+- `24422117` (2026-10-05) — docs(changelog): record CI test-isolation fixes
+- `c7959187` (2026-10-05) — docs(changelog): Unreleased entry for Bun-native session
+
 #### Chores
 
+- `670fe2dd` (2026-10-06) — chore(dev): add storybook scaffolding
 - `eb4ace84` (2026-10-04) — chore(license): unify headers under HOOX AXIS / axis
 - `8949d283` (2026-10-03) — chore(release): 2.19.0 — Extra chrome widgets
 - `db4e3862` (2026-10-03) — chore: ignore local git worktrees
