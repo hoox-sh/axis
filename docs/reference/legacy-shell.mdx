@@ -19,14 +19,14 @@
 
 ---
 title: "Legacy shell"
-description: "Pre-Solid static shell vs current AXIS product path — what to ignore and what still runs."
+description: "The pre-Solid static shell was removed in 2.21.0 — what was deleted and what replaced it."
 ---
 
-# Legacy shell
+# Legacy shell (removed)
 
 ## Abstract
 
-AXIS’s shipping product path is **Solid + Vite**. An older **static shell** remains in the repo for historical scripts and some Bun tests. Do not document or extend the legacy shell as the primary UI.
+AXIS’s product path is **Solid + Vite**. The pre-Solid static shell was **deleted in 2.21.0** (~3,900 lines). Before deletion the import graph was traced from `src/index.tsx`: no legacy file was reachable and none shipped in `dist/`.
 
 Source of truth: `LEGACY.md`.
 
@@ -34,21 +34,24 @@ Source of truth: `LEGACY.md`.
 
 ```mermaid
 flowchart LR
-  LEG[Legacy main.js tree]
-  CUR[Solid index.tsx]
-  LEG -.->|keep for tests| BUN[bun test static bits]
-  CUR --> SHIP[dist / Pages]
+  CUR[Solid index.tsx] --> SHIP[dist / Pages]
 ```
 
-## What is legacy
+## What was removed
 
-| Path | Role |
+| Deleted | Role |
 | --- | --- |
 | `src/main.js` | Old bootstrap (chart.js, legacy-topbar.js, …) |
-| `style.css` | TV-blue-era tokens |
-| `pyne-editor.js` | Pre-Solid CM6 wiring (renamed from `pine-editor.js`) |
+| `src/registry.js`, `src/registry.d.ts` | Pre-Solid plugin registry |
+| `src/registry-bootstrap.js`, `src/plugin-types.d.ts` | Legacy builtin registration + ambient typings |
+| `src/state.js`, `src/state-hash.js` | Pre-Solid store + URL hash hydration |
+| `src/{sources,streams,engines}/index.js` | Legacy builtin plugin barrels |
+| `src/ui/{manager,legacy-topbar,legacy-watchlist,…}.js` | Legacy DOM UI |
+| `pyne-editor.js` | Pre-Solid CM6 wiring |
+| `style.css`, `storage.js` | TV-blue tokens / unused |
 | `server.ts` | Bun static server for old tree |
-| `sw.js` | Service worker for the old shell |
+| Root `sw.js` | Duplicate of `public/sw.js` |
+| `tests/{registry,state,server}.test.ts` | Tests of deleted files only |
 
 There is no `frontend/` directory and no `make run-frontend` target. The product path is `bun run dev`. A static demo of `dist/` is `python axis_pwa_server.py` (default port 8081) after `bun run build`.
 
@@ -58,8 +61,10 @@ There is no `frontend/` directory and no `make run-frontend` target. The product
 | --- | --- |
 | `src/index.tsx`, `app.tsx` | Solid app |
 | `src/chart/ChartHost.tsx` | LWC panes |
+| `src/plugins/registry.ts` | Plugin registry (singleton `registry`) |
+| `src/{sources,streams,engines}/catalog.ts` | Builtin catalogs |
 | `src/ui/*` | Topbar, Settings, Results, Manager, … |
-| `public/` + `bun run build` | Production PWA assets |
+| `public/` + `bun run build` | Production PWA assets (`public/sw.js` is the only service worker) |
 | `axis_pwa_server.py` | Serve **dist** for demos |
 
 ## Migration residue
@@ -77,18 +82,18 @@ App state namespace: `pynescript.axis.v1`.
 
 ## Invariants
 
-1. **Do not port new features into `main.js`.**
-2. **Prefer Solid store** (`src/store`) over `state.js`.
-3. **Plugin registry** is the Solid path (`src/plugins/registry.ts`); dual registries in old JS should be treated as dead ends.
-4. **Pages deploy** should use Vite `dist/`, not the repo root static tree.
+1. **One plugin registry**: `src/plugins/registry.ts`, singleton `registry`. There is no longer a second one.
+2. **One service worker**: `public/sw.js`, served at `/sw.js` and registered by `src/pwa/register-sw.ts`.
+3. **One state store**: `src/store` (Solid). The pre-Solid `state.js` is gone.
+4. **Pages deploy** uses Vite `dist/`, not the repo root static tree.
 
 ## Failure modes
 
 | Confusion | Clarification |
 | --- | --- |
-| “UI doesn’t match docs” | You may be serving the legacy shell |
-| Plugin manager missing | Legacy topbar lacks Solid Manager |
-| Tests pass, UI wrong | Unit tests may still import legacy helpers |
+| “UI doesn’t match docs” | You may be serving a stale build or cache; `bun run build` then reload |
+| Plugin manager missing | A hard reload clears the old shell from cache |
+| Service worker looks stale | Only `public/sw.js` is served; unregister any older root `sw.js` |
 
 ## See also
 

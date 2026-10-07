@@ -274,11 +274,9 @@ make run                       # Flask on :5002
 bun run dev
 ```
 
-### Legacy static path (not recommended)
+### Offline demo
 
-`style.css`, `main.js`, `server.ts`, and root-level `index.html` without Vite
-are the pre-Solid shell. Prefer `bun run dev` or `dist/` from `bun run build`.
-See **`LEGACY.md`**.
+The pre-Solid static shell (`main.js`, root `style.css`, `server.ts`) was removed in 2.21.0 — use `bun run dev` or `dist/` from `bun run build`. See **`LEGACY.md`**.
 
 For an **offline-first** demo: set `Source = Mock Walk`, `Stream = Mock Poll`,
 `Engine = Client-Side (Pyodide)`. Disable network in DevTools — Run still works.

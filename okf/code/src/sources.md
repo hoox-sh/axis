@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/sources"
-description: "Legacy historical source plugins (pre-Solid path)."
+description: "src/sources contains catalog.ts, upload-store.ts."
 resource: "src/sources"
 tags: [code, sources]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-25T04:56:02Z
+  at: 2026-10-07T04:35:08Z
 sources:
   - id: tree
     resource: "src/sources"
@@ -19,12 +19,10 @@ okf_lock: generated
 # Files
 
 * `catalog.ts` — BUILTIN_SOURCES, GeckoPoolRef, SourceConfigSchema, SourcePlugin, _resetSourceRegistrationFlag, assertBars, assertHttpOk, binanceRest, bybitRest, ccxtRest, coinbaseRest, csvUpload
-* `index.js` — binanceRest, csvUpload, mockWalk, setUploadedBars
 * `upload-store.ts` — clearUploadedBars, getUploadedBars, getUploadedFileName, setUploadedBars
 
 # Depends on
 
-* [src](/code/src.md)
 * [src/data](/code/src/data.md)
 * [src/data/venues](/code/src/data/venues.md)
 * [src/onchain](/code/src/onchain.md)
@@ -33,7 +31,6 @@ okf_lock: generated
 
 # Used by
 
-* [src](/code/src.md)
 * [src/chart](/code/src/chart.md)
 * [src/data](/code/src/data.md)
 * [src/plugins](/code/src/plugins.md)

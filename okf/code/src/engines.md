@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/engines"
-description: "Legacy calculation engine plugins (pre-Solid path)."
+description: "src/engines contains catalog.ts, engine-ws.ts."
 resource: "src/engines"
 tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:07:37Z
+  at: 2026-10-07T04:35:08Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -20,7 +20,6 @@ okf_lock: generated
 
 * `catalog.ts` — BUILTIN_ENGINES, DEFAULT_PYNE_WORKER_ENDPOINT, LOCAL_PYODIDE_INDEX, LOCAL_PYODIDE_VERSION, _resetEngineRegistrationFlag, callPyodideRunScript, ensureEnginesRegistered, formatPyodideBridgeError, getEngine, listDynamicEngineIds, listEngines, looksLikePyneWorkerEndpoint
 * `engine-ws.ts` — EngineWsResult, EngineWsRunRequest, _resetEngineWsClients, endpointToRunWsUrl, getEngineWsClient, probeEngineWs
-* `index.js` — pyodideEngine, serverEngine
 
 # Packages
 
@@ -28,7 +27,6 @@ okf_lock: generated
 
 # Depends on
 
-* [src](/code/src.md)
 * [src/alerts](/code/src/alerts.md)
 * [src/data](/code/src/data.md)
 * [src/plugins](/code/src/plugins.md)

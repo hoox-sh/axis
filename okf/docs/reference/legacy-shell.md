@@ -1,13 +1,13 @@
 ---
 type: "Document"
 title: "Legacy shell"
-description: "Pre-Solid static shell vs current AXIS product path — what to ignore and what still runs."
+description: "The pre-Solid static shell was removed in 2.21.0 — what was deleted and what replaced it."
 resource: "docs/reference/legacy-shell.mdx"
 tags: [doc, docs, legacy-shell, reference]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-07T04:35:08Z
 sources:
   - id: tree
     resource: "docs/reference/legacy-shell.mdx"
@@ -24,7 +24,7 @@ Repo path `docs/reference/legacy-shell.mdx`.
 
 * Abstract
 * Conceptual model
-* What is legacy
+* What was removed
 * What is current
 * Migration residue
 * Invariants
@@ -36,4 +36,5 @@ Repo path `docs/reference/legacy-shell.mdx`.
 * [src](/code/src.md)
 * [src/chart](/code/src/chart.md)
 * [src/plugins](/code/src/plugins.md)
+* [src/pwa](/code/src/pwa.md)
 * [src/store](/code/src/store.md)

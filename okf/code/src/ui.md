@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 80 more files."
+description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 72 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-07T03:59:37Z
+  at: 2026-10-07T04:35:08Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -84,20 +84,12 @@ okf_lock: generated
 * `hud-model.ts` — EngTopology, ExecMode, HudChipId, HudInput, HudSnapshot, PathClass, RunClass, composeCaption, deriveHud, hudChipHelp, isLocalEndpoint, isWorkerEndpoint
 * `icon-map.ts` — ICON_MAP, IconName, PANEL_ICON, findDuplicateIconGlyphs
 * `icons.tsx` — ICON_MAP, IconLabel, IconProps, Icons, PANEL_ICON, findDuplicateIconGlyphs
-* `legacy-topbar.js` — initTopbar, setLiveIndicator
-* `legacy-watchlist.js` — destroyWatchlist, initWatchlist
-* `manager.js` — applyTheme, closeManager, initManager, openManager
 * `plugin-badges-utils.ts` — CAP_META, CapKey, capabilityKeys, engineOptionLabel
 * `plugin-badges.tsx` — CapKey, CapabilityBadges, capabilityKeys, engineOptionLabel
 * `plugin-config.ts` — ConfigTarget, GatewayMode, _resetGatewayExchangeCache, effectiveConfig, fetchGatewayExchanges, hasConfigFields, resolvePluginFieldValue, writePluginField
 * `presentation.ts` — enterBrowserFullscreen, exitBrowserFullscreen, installPresentationControls, isBrowserFullscreen, setChartOnlyMode, setPresentationRoot, toggleBrowserFullscreen, toggleChartOnlyFullscreen, toggleChartOnlyMode
 * `responsive.ts` — PHONE_MAX_WIDTH, TABLET_MAX_WIDTH, ViewportMode, isDesktopViewport, isPhoneViewport, isTabletSideDockOverlay, isTabletViewport, isTouchPointer, pointerCoarse, viewport
-* `results.js` — initResults, renderResults
-* `settings.js` — closeSettings, openSettings
 * `sr-announce.ts` — announce, announceError
-* `status.js` — initStatus, setStatus
-* `symbol-autocomplete.js` — attachSymbolAutocomplete
-* `tabbed-editor.js` — TabbedEditor
 * `telemetry.ts` — classifyTransport, connDotClass, formatLatency, formatTickAge, idlePlane, pushSample, transportLabel
 * `ui-scale.ts` — UI_SCALE_PRESETS, formatUiScalePct
 * `watchlist-row.ts` — bigPriceSizeClass

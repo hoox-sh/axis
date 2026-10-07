@@ -103,7 +103,7 @@ bun run axis dev worker
 | `make worker-install` | Install worker deps |
 | `bun run test:unit` | Bun unit tests under `tests/` |
 
-For the **Solid** product, prefer `bun run dev` / `bun run build` over the legacy `server.ts` unless you are debugging the old tree ([legacy shell](/axis/docs/reference/legacy-shell)).
+Use `bun run dev` for the product, or `bun run build` and serve `dist/`. The pre-Solid `server.ts` static tree was removed in 2.21.0 ([legacy shell](/axis/docs/reference/legacy-shell)).
 
 ## Internals — useful paths
 

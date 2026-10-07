@@ -7,7 +7,7 @@ tags: [doc, readme]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-07T04:35:08Z
 sources:
   - id: tree
     resource: "README.md"
@@ -31,7 +31,7 @@ Repo path `README.md`.
 * Built-in plugins
 * Product highlights
 * Local dev
-  * Legacy static path (not recommended)
+  * Offline demo
 * File map
 * Backend targets
 * CORS (AXIS browser origin → Pro API)

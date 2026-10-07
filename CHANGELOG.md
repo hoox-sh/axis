@@ -15,6 +15,10 @@ _Generated/updated: 2026-10-07 · 519 commits · describe-tag: `v2.20.1`_
 
 ## [2.21.0] — 2026-10-07
 
+### Removed
+
+- **Pre-Solid static shell (~3,900 lines)**: deleted the legacy pre-Solid tree — `src/main.js`, `src/registry.js` + `registry.d.ts`, `src/registry-bootstrap.js`, `src/plugin-types.d.ts`, `src/chart.js`, `src/state.js` + `state-hash.js`, the `src/{sources,streams,engines}/index.js` builtin barrels, the eight `src/ui/*.js` legacy DOM modules, root `pyne-editor.js` / `style.css` / `storage.js` / `sw.js` / `server.ts`, and `tests/{registry,state,server}.test.ts`. Before deleting, the real import graph was traced from `src/index.tsx`: **no** legacy file was reachable and none shipped in `dist/` after a build — the only consumers were those three tests. This leaves exactly one plugin registry (`src/plugins/registry.ts`), one service worker (`public/sw.js`), and one state store (`src/store`). `LEGACY.md` and `docs/reference/legacy-shell.mdx` rewritten to record what was removed and why it was safe.
+
 ### Changed
 
 - **Legacy plugin registry disambiguated**: `src/registry.js` exported its singleton as `registry`, the same name as the shipping `src/plugins/registry.ts` — two unrelated classes under one identifier, so a wrong import registered into a dead store with no error. The legacy singleton is now `legacyRegistry` (updated in `main.js`, `registry-bootstrap.js`, `ui/manager.js`, `ui/legacy-topbar.js`, `registry.d.ts`, and `tests/registry.test.ts`). Traced the import graph from `src/index.tsx` and confirmed **no** legacy file is reachable and none ships in `dist/`; `LEGACY.md` now records the full legacy file list, that finding, and why deleting the tree is a product decision rather than a refactor.

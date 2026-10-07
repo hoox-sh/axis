@@ -12,11 +12,13 @@
  * - [ ] Offline: shell + cached `/pyodide/*` + `/vendor/*` still work
  * - [ ] `/api/*` offline with no cache → 503 JSON OFFLINE
  * - [ ] Opaque / 4xx / 5xx responses are not stored as successful cache hits
+ *
+ * `public/sw.js` is the only service worker: it is what `/sw.js` serves and
+ * what `src/pwa/register-sw.ts` registers. The duplicate root `sw.js` that
+ * existed for the pre-Solid shell is gone, so there is no second copy to drift.
  */
 
 import { describe, expect, it } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import {
   SW_VERSION,
   CACHE_PREFIX,
@@ -207,15 +209,6 @@ describe('classifyRequest', () => {
     expect(isCdnHost('esm.sh')).toBe(true);
     expect(isCdnHost('cdn.jsdelivr.net')).toBe(true);
     expect(isCdnHost('evil.com')).toBe(false);
-  });
-});
-
-describe('shipping SW copies', () => {
-  it('public/sw.js and sw.js file contents are equal', () => {
-    const root = resolve(import.meta.dir, '..');
-    expect(readFileSync(resolve(root, 'public/sw.js'))).toEqual(
-      readFileSync(resolve(root, 'sw.js')),
-    );
   });
 });
 

@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/streams"
-description: "Legacy live datastream plugins (pre-Solid path)."
+description: "src/streams contains binance.ts, catalog.ts, multiplex.ts, and 2 more files."
 resource: "src/streams"
 tags: [code, streams]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-03T13:27:01Z
+  at: 2026-10-07T04:35:08Z
 sources:
   - id: tree
     resource: "src/streams"
@@ -20,7 +20,6 @@ okf_lock: generated
 
 * `binance.ts` — StreamPlugin, binanceStream
 * `catalog.ts` — BUILTIN_STREAMS, StreamPlugin, _resetStreamRegistrationFlag, binanceStream, bybitStream, ccxtWsStream, coinbaseStream, defaultStreamForSource, ensureStreamsRegistered, foldVenueCandle, getStream, krakenStream
-* `index.js` — binanceWs, mockPoll, none
 * `multiplex.ts` — HEAVY_LIVE_RERUN_BARS, StopLiveOpts, StopLiveReason, StreamPlugin, _getLiveEpochForTests, _getPendingLiveBarCountForTests, _getRerunAttemptCountForTests, _resetMultiplexForTests, defaultStreamForSource, effectiveLiveRerunMode, getAvailableStreams, listStreams
 * `reconnect-ws.ts` — RECONNECT_DEFAULTS, ReconnectableWsOpts, WsStatus, nextBackoffMs, openReconnectableWs
 * `ws-venues.ts` — VENUE_WS_HOSTS, VenueId, VenueWsConfig, buildVenueWs
