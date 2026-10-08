@@ -14,7 +14,7 @@ deployment (Pages + Worker + KV + D1 + R2) with no other infrastructure.
 
 ## What works today
 
-- `PYODIDE_IN_WORKER=enabled` loads Pyodide 0.26.2 (jsDelivr CDN) once per
+- `PYODIDE_IN_WORKER=enabled` loads Pyodide 0.29.5 (jsDelivr CDN) once per
   isolate (`pyReady` memo) and calls into it per `/api/run` request.
 - Python tracebacks are trimmed head+tail (`TRACEBACK_KEEP_*`, kept in sync
   with `src/engines/catalog.ts`).

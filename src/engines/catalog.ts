@@ -570,8 +570,8 @@ declare global {
   }
 }
 
-/** Self-hosted Pyodide (public/pyodide/v0.26.2 — ~14MB, no CDN required). */
-export const LOCAL_PYODIDE_VERSION = '0.26.2';
+/** Self-hosted Pyodide (public/pyodide/v0.29.5, Python 3.13 — ~12MB, no CDN required). */
+export const LOCAL_PYODIDE_VERSION = '0.29.5';
 export const LOCAL_PYODIDE_INDEX = `/pyodide/v${LOCAL_PYODIDE_VERSION}/`;
 
 /** Absolute indexURL with trailing slash (relative paths resolve against location.origin). */
@@ -604,8 +604,8 @@ export function prefetchPyodideAssets(indexUrl?: string): void {
     'pyodide.asm.wasm',
     'python_stdlib.zip',
     'pyodide-lock.json',
-    'micropip-0.6.0-py3-none-any.whl',
-    'packaging-23.2-py3-none-any.whl',
+    'micropip-0.11.1-py3-none-any.whl',
+    'packaging-26.2-py3-none-any.whl',
   ];
   for (const f of files) {
     const href = `${base}${f}`;
@@ -622,7 +622,7 @@ export function prefetchPyodideAssets(indexUrl?: string): void {
   if (typeof location !== 'undefined') {
     const origin = location.origin;
     for (const path of [
-      '/vendor/pynescript-0.5.0-py3-none-any.whl',
+      '/vendor/pynescript-0.6.8-py3-none-any.whl',
       '/vendor/antlr4_python3_runtime-4.13.2-py3-none-any.whl',
       '/pyodide/pynescript_runtime.py',
     ]) {
@@ -716,7 +716,7 @@ export const pyodideEngine: EnginePlugin & {
     indexUrl: {
       type: 'string',
       default: LOCAL_PYODIDE_INDEX,
-      label: 'Pyodide index URL (default: self-hosted /pyodide/v0.26.2/)',
+      label: 'Pyodide index URL (default: self-hosted /pyodide/v0.29.5/)',
     },
     // Same control as server — browser runtime accepts mode; pure Numba compile
     // still needs the server engine (Numba is not available in Wasm).
@@ -764,9 +764,9 @@ export const pyodideEngine: EnginePlugin & {
       //
       // deps=false: the pynescript METADATA requires click/requests/tqdm (CLI/API),
       // which are not needed for in-browser evaluate and are NOT vendored under
-      // /pyodide/v0.26.2/ — micropip would 404 them on the self-hosted index.
+      // /pyodide/v0.29.5/ — micropip would 404 them on the self-hosted index.
       // Second positional arg alone is keep_going, not deps (micropip 0.6).
-      const wheelUrl = `${origin}/vendor/pynescript-0.5.0-py3-none-any.whl`;
+      const wheelUrl = `${origin}/vendor/pynescript-0.6.8-py3-none-any.whl`;
       const antlrUrl = `${origin}/vendor/antlr4_python3_runtime-4.13.2-py3-none-any.whl`;
       await assertZipAsset(wheelUrl, 'pynescript wheel');
       await assertZipAsset(antlrUrl, 'antlr4 wheel');

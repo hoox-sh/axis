@@ -50,7 +50,7 @@ async function ensurePyodide(_env: Env): Promise<unknown> {
         //   2. Load from CDN at module init (simpler, slower cold start).
         // We use the CDN approach here and let the deploy pipeline swap it
         // for workerd-native in production.
-        const indexURL = 'https://cdn.jsdelivr.net/pyodide/v0.26.2/full/';
+        const indexURL = 'https://cdn.jsdelivr.net/pyodide/v0.29.5/full/';
         const { loadPyodide } = await import(/* @vite-ignore */ `${indexURL}pyodide.js`);
         const py = await (loadPyodide as (opts: { indexURL: string }) => Promise<unknown>)({ indexURL });
         // Stub: in production, load the wheel from R2.

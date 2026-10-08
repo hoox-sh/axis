@@ -103,7 +103,7 @@ Live pairs with history via `defaultStreamForSource`. `live.preferAfterLoad` aut
 | --- | --- | --- |
 | `server` | WebSocket `/ws/run`, then `POST /run` | Flask Pro API or AXIS Worker |
 | `pyne-worker` | `POST /run` (optional WS) | HOOX pyne-worker. Built-in. Not a pasted Backend URL on `server`. |
-| `pyodide` | In-browser Python | Self-hosted Pyodide 0.26.2 + vendored wheel + `pynescript_runtime.py` |
+| `pyodide` | In-browser Python | Self-hosted Pyodide 0.29.5 + vendored wheel + `pynescript_runtime.py` |
 
 Timeout policy in runner scales with bar length (clamped). Live re-runs use shorter silent timeouts.
 

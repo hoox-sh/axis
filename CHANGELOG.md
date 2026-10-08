@@ -13,6 +13,13 @@ _Generated/updated: 2026-10-07 · 519 commits · describe-tag: `v2.20.1`_
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Pyodide 0.26.2 → 0.29.5 (Python 3.13.2)**: self-hosted runtime replaced in place — same file layout (`pyodide.js` + `pyodide.asm.js`, no `.mjs` migration needed), so loader, prefetch, probe, and worker CDN paths only change version strings. Bundled micropip 0.6.0 → 0.11.1 and packaging 23.2 → 26.2 from the new lock file. Verified end-to-end in Node: 0.29.5 boots, wheel 0.6.8 unpacks, `run_script` interprets a real Pine script successfully.
+- **pynescript wheel 0.5.0 → 0.6.8**: rebuilt from the sister pyne repo via `scripts/sync-pyne-wheel.sh` (85 commits, incl. September 2026 Pine release-notes parity); stale wheels dropped, hard-coded paths in `src/engines/catalog.ts` updated. Editor builtin metadata already in sync; interpret lock (`ta.sma` / `ta.stdev`) passes.
+
 ## [2.21.0] — 2026-10-07
 
 ### Removed

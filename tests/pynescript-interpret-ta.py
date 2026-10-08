@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "public" / "pyodide" / "pynescript_runtime.py"
-WHEEL = ROOT / "vendor" / "pynescript-0.5.0-py3-none-any.whl"
+WHEEL = ROOT / "vendor" / "pynescript-0.6.8-py3-none-any.whl"
 
 
 def load_runtime():

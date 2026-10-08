@@ -111,13 +111,13 @@ Dedicated HOOX **pyne-worker** edge host (not `worker-axis`).
 
 | Key | Default |
 | --- | --- |
-| `indexUrl` | `/pyodide/v0.26.2/` (self-hosted) |
+| `indexUrl` | `/pyodide/v0.29.5/` (self-hosted) |
 
 **Boot pipeline (`_ensure`)**
 
 1. Prefetch assets (`prefetchPyodideAssets`) — wasm, stdlib zip, micropip wheels.
 2. `loadPyodide({ indexURL })`.
-3. `micropip.install` same-origin `/vendor/pynescript-0.5.0-py3-none-any.whl` and the antlr4 4.13.2 wheel.
+3. `micropip.install` same-origin `/vendor/pynescript-0.6.8-py3-none-any.whl` and the antlr4 4.13.2 wheel.
 4. Fetch `/pyodide/pynescript_runtime.py` and `runPythonAsync` it.
 
 **Refreshing the pyne wheel** (after pyne compiler/runtime changes):
@@ -135,7 +135,7 @@ Keep the hard-coded wheel filename in `src/engines/catalog.ts` / `index.js` in s
 
 **Capabilities:** `{ offline: true, needsNetwork: false }` after assets are cached same-origin.
 
-**Helpers:** `preloadPyodide()`, `LOCAL_PYODIDE_VERSION = '0.26.2'`.
+**Helpers:** `preloadPyodide()`, `LOCAL_PYODIDE_VERSION = '0.29.5'`.
 
 ## Internals
 

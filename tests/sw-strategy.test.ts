@@ -144,7 +144,7 @@ describe('classifyRequest', () => {
     ).toBe('cdn');
     expect(
       classifyRequest(
-        { origin, pathname: '/pyodide/v0.26.2/pyodide.js', host: 'app.example' },
+        { origin, pathname: '/pyodide/v0.29.5/pyodide.js', host: 'app.example' },
         { method: 'GET' },
         origin,
       ),
@@ -178,7 +178,7 @@ describe('classifyRequest', () => {
   it('bypasses /version.json probes (query is not part of pathname)', () => {
     expect(isVersionProbe('/version.json')).toBe(true);
     expect(isVersionProbe('/axis/version.json')).toBe(true);
-    expect(isVersionProbe('/pyodide/v0.26.2/pyodide.js')).toBe(false);
+    expect(isVersionProbe('/pyodide/v0.29.5/pyodide.js')).toBe(false);
     expect(
       classifyRequest(
         { origin, pathname: '/version.json', host: 'app.example' },
@@ -196,7 +196,7 @@ describe('classifyRequest', () => {
     ).toBe('bypass');
     expect(
       classifyRequest(
-        { origin, pathname: '/pyodide/v0.26.2/pyodide.js', host: 'app.example' },
+        { origin, pathname: '/pyodide/v0.29.5/pyodide.js', host: 'app.example' },
         { method: 'GET' },
         origin,
       ),

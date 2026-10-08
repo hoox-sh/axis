@@ -42,7 +42,7 @@ flowchart TB
   HTTP --> AXW[AXIS Worker /api/run]
   AXW -->|EXTERNAL_BACKEND| FLASK
   AXW -->|no backend| E503[503 NO_BACKEND]
-  ENG -->|pyodide| WASM[Pyodide 0.26.2 + pynescript wheel]
+  ENG -->|pyodide| WASM[Pyodide 0.29.5 (Python 3.13) + pynescript wheel]
   ENG -->|pyne-worker| PYW[HOOX pyne-worker POST /run]
   UI -.->|not an engine| PYNETS[PyneTS library]
   PYW -->|if TRADE_SERVICE| HOOX[HOOX trade-worker]
@@ -53,7 +53,7 @@ flowchart TB
 | Path | Implementation | Notes |
 | --- | --- | --- |
 | Engine `server` | `src/engines/catalog.ts` | Prefer **WS** `ws(s)://{endpoint}/ws/run` (`preferWs` default true), else **POST** `{endpoint}/run?mode=` with `{ script, data, mode, inputs?, profiler?, libraries? }`. Modes `interpret \| compile \| auto`. Timeout scales with bar count (45–180s). Default endpoint `http://localhost:5002`. Strategy HPO uses **`POST {endpoint}/optimize`**. |
-| Engine `pyodide` | same file | Self-hosted **Pyodide 0.26.2** (`/pyodide/v0.26.2/`), wheels `/vendor/pynescript-0.5.0-py3-none-any.whl` + `antlr4_python3_runtime-4.13.2`, runtime `/pyodide/pynescript_runtime.py`. **Numba is not in Wasm**; `compile` / `auto` is object-mode. Cold load ~20–30s. |
+| Engine `pyodide` | same file | Self-hosted **Pyodide 0.29.5** (`/pyodide/v0.29.5/`, Python 3.13), wheels `/vendor/pynescript-0.6.8-py3-none-any.whl` + `antlr4_python3_runtime-4.13.2`, runtime `/pyodide/pynescript_runtime.py`. **Numba is not in Wasm**; `compile` / `auto` is object-mode. Cold load ~20–30s. |
 | AXIS Worker `/api/run` | `worker/src/runtime.ts` | `PYODIDE_IN_WORKER=enabled` scaffold; else **proxy `EXTERNAL_BACKEND/run`**; else 503 `NO_BACKEND`. Caps: 512 KiB script, 50k bars, 30 req/min/IP, 60s upstream. |
 | Engine `pyne-worker` | `src/engines/catalog.ts` | Built-in (`builtIn: true`). `POST /run` to the HOOX edge worker. Default origin `https://pyne-worker.cryptolinx.workers.dev`. Distinct from engine `server` and from the AXIS Worker (`worker-axis`). |
 | **PyneTS** | — | TypeScript library. [PYNE docs](/pyne/docs/pynets). **Not referenced** in AXIS source. |
@@ -75,7 +75,7 @@ Payloads follow the [PYNE evaluate contract](/pyne/docs/api/contract). Defaults:
 1. **AXIS ≠ engine** (ADR-002). The shell never embeds a closed interpreter.
 2. **AXIS ≠ execution.** Strategy events on the Results panel are not HOOX orders. See [AXIS and HOOX](/docs/enduser/guides/axis-and-hoox).
 3. **No `none` stream plugin** in `src/streams/catalog.ts`. Pausing live data is `stopLive()`, not a plugin id.
-4. The vendored wheel is `pynescript-0.5.0-py3-none-any.whl`. Live PyPI `hoox-pyne` can be newer (0.6.7 as of this writing). Check `public/vendor/`.
+4. The vendored wheel is `pynescript-0.6.8-py3-none-any.whl`, built from the sister pyne repo with `scripts/sync-pyne-wheel.sh`. That script also prints a warning if the hard-coded path in `src/engines/catalog.ts` drifts from the wheel filename — update it when the version changes.
 5. CORS: Worker allows localhost, `*.hoox.sh`, `*.pynescript.online`, `*.axis.pages.dev` (plus legacy `*.pynescript-axis.pages.dev`) only.
 
 ## Worked examples
