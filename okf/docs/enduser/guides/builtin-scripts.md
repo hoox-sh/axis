@@ -7,7 +7,7 @@ tags: [doc, docs, enduser, guides]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-08T19:09:06Z
 sources:
   - id: tree
     resource: "docs/enduser/guides/builtin-scripts.mdx"
@@ -31,7 +31,7 @@ Repo path `docs/enduser/guides/builtin-scripts.mdx`.
   * Volume
   * Volatility / pivots / session
   * Strategies
-* What we do not ship
+* What AXIS does not ship
 * Library starter pack vs built-ins
 * See also
 

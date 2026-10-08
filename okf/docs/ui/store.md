@@ -7,7 +7,7 @@ tags: [doc, docs, store, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-08T19:09:06Z
 sources:
   - id: tree
     resource: "docs/ui/store.mdx"
@@ -28,7 +28,7 @@ Repo path `docs/ui/store.mdx`.
 * Defaults (product)
 * setActivePlugin
 * Logging
-* Legacy dual path
+* Legacy path (removed)
 * Invariants
 * Failure modes
 * Testing notes

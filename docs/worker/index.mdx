@@ -101,6 +101,10 @@ Responses may include `X-Axis-Onchain-Cache: HIT|MISS`. Product guide: [On-Chain
 
 Entry: `worker/src/index.ts`.
 
+### Shared HTTP plumbing (`http.ts` · `proxy-router.ts` · `rate-limit.ts`)
+
+Per-route CORS/JSON helpers were consolidated into `worker/src/http.ts` (read vs write method sets, base vs exchange vs MCP header sets, `preflight` / `methodNotAllowed` / `proxyJson` envelopes). The on-chain and market planes share the allowlisted `ProxyRouter` (`worker/src/proxy-router.ts`): prefix claim → preflight → non-`GET` 405 → literal health path → ordered route table → family `NOT_FOUND`. Rate limiting is shared via `worker/src/rate-limit.ts`. Pinned by `worker/tests/http.test.ts`, `proxy-router.test.ts`, `rate-limit.test.ts`.
+
 ## Local entrypoints
 
 ```bash

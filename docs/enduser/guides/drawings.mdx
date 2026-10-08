@@ -132,8 +132,19 @@ Engine `drawings[]` map through `pyne-drawings.ts` before paint:
 | `linefill` / `line_fill` | Filled quad between two line endpoints |
 | `force_overlay` (line/box/label) | Paint on the **price** pane even when the script is `overlay=false` |
 | `barcolor` series | Not SVG — per-bar candle body/wick tint via `plot-visuals` |
+| `table.*` | Chart overlay HUD by default, or the bottom **Tables** panel (see below) |
 
 Non-overlay scripts place ordinary geometry on the indicator pane Y-scale; user toolbar drawings always stay on price.
+
+### Pine tables: chart HUD vs bottom Tables panel
+
+Pine Script™ `table.*` drawings render as a chart overlay HUD (`PyneTableHud`) by default. Any script's tables can move off the chart into a bottom **Tables** tab — TradingView September 2026 parity:
+
+1. Chart **⋯ menu** (or the pane badge **⋯**) → **Move tables to bottom**.
+2. Tables stack **vertically in creation order**, stretch to the pane width with proportional columns from `table.cell(width=…)`, keep tooltips and merged cells, never truncate text (scrollbars when needed), and allow text **selection / copy** — unlike chart overlay tables.
+3. Move back via **Move tables to chart** (same menus).
+
+Placement persists per script (`store.pineTablesLocation[scriptId]`: `chart` default / `bottom`). One tab per script; the chart HUD hides moved tables.
 
 ## Internals
 

@@ -7,7 +7,7 @@ tags: [ci-and-testing, devops, doc, docs]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-08T19:09:06Z
 sources:
   - id: tree
     resource: "docs/devops/ci-and-testing.mdx"
@@ -31,6 +31,7 @@ Repo path `docs/devops/ci-and-testing.mdx`.
 * Internals
   * Coverage policy (summary)
   * E2E design
+  * Storybook
 * Invariants & edge cases
 * Failure modes
 * See also
@@ -38,3 +39,4 @@ Repo path `docs/devops/ci-and-testing.mdx`.
 # Mentions
 
 * [scripts](/code/scripts.md)
+* [src](/code/src.md)

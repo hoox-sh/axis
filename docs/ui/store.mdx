@@ -125,9 +125,9 @@ MAX_LOGS = 500
 
 `setStatus` maps app status to log levels for important transitions.
 
-## Legacy dual path
+## Legacy path (removed)
 
-Vanilla `state.js` remains for legacy shell with the same storage key family. Product AXIS uses Solid store only—do not dual-write new features to `state.js` unless maintaining legacy.
+The pre-Solid vanilla `state.js` shell was **removed in 2.21.0** (see [legacy shell](/axis/docs/reference/legacy-shell)). Product AXIS uses the Solid store only — there is no dual-write target anymore.
 
 ## Invariants
 

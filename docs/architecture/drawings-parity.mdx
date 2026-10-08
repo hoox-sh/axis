@@ -76,6 +76,14 @@ Still open:
 - `location.top` / `bottom` = pane edges, not bar (LWC markers only have above/below/in bar).
 - Per-bar `plot(..., color=expr)`, plotarrow length (`colorup`/`colordown`/`minheight`/`maxheight` wait on PYNE).
 
+## Pine tables: bottom Tables panel (shipped)
+
+`table.*` output paints in the chart HUD (`PyneTableHud`) by default. Per script, **Move tables to bottom** (chart ⋯ menu, pane badge ⋯, command palette) relocates that script's tables to `ui/TablesPanel.tsx`:
+
+- One tab per script, stacked vertically in creation order regardless of `position` / `force_overlay`.
+- Proportional column widths from `table.cell(width=…)` (`bottomPanelColumnFractions` in `chart/pine-tables.ts`), tooltips + merged cells preserved, text selectable.
+- Placement persists per script in `store.pineTablesLocation`; the HUD hides moved tables. Move back via **Move tables to chart**.
+
 ## Invariants
 
 - User drawings ≠ Pine drawings. Do not share hit-testing or magnet with script SVG (`pointer-events: none`).

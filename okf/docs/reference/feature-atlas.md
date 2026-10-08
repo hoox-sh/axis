@@ -7,7 +7,7 @@ tags: [doc, docs, feature-atlas, reference]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-08T19:09:06Z
 sources:
   - id: tree
     resource: "docs/reference/feature-atlas.mdx"
@@ -53,5 +53,7 @@ Repo path `docs/reference/feature-atlas.mdx`.
 * [src/streams](/code/src/streams.md)
 * [src/theme](/code/src/theme.md)
 * [src/ui](/code/src/ui.md)
+* [src/ui/effects](/code/src/ui/effects.md)
+* [src/utils](/code/src/utils.md)
 * [worker/src](/code/worker/src.md)
 * [worker/src/durable-objects](/code/worker/src/durable-objects.md)

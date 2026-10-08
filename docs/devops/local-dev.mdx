@@ -105,6 +105,15 @@ bun run axis dev worker
 
 Use `bun run dev` for the product, or `bun run build` and serve `dist/`. The pre-Solid `server.ts` static tree was removed in 2.21.0 ([legacy shell](/axis/docs/reference/legacy-shell)).
 
+### Storybook (component lab)
+
+```bash
+bun run storybook        # isolated UI on :6006 (`storybook-solidjs-vite`)
+bun run build-storybook  # static build
+```
+
+Stories live in `src/stories/` (topbar fields, theme tokens, studio primitives, draw tools, toasts, …). Covers chrome in isolation — no Flask/Worker needed.
+
 ## Internals — useful paths
 
 | Path | Role |

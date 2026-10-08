@@ -43,6 +43,7 @@ The shell is the non-canvas chrome: navigation of axes, market selection, modals
 | WirePage | `ui/wire/WirePage.tsx` | Compose-recipe wiring (source × stream × engine × storage × dataset) |
 | SystemLogs | `ui/SystemLogs.tsx` | Ring buffer of `store.logs` |
 | ResultsPanel | `ui/ResultsPanel.tsx` | Bottom drawer (see results doc) |
+| TablesPanel | `ui/TablesPanel.tsx` | Bottom **Tables** tab per script (`table.*` moved off-chart; see drawings guide) |
 | Icons | `ui/icons.tsx` | Lucide wrappers |
 | ResizeHandle | `ui/ResizeHandle.tsx` | Panel widths/heights |
 
@@ -153,9 +154,23 @@ See `ui/panels/dock-layout.ts`, `FloatableShell.tsx`.
 - Named lists persist (`watchlist.lists` + `activeId`); legacy `symbols`-only state migrates to a **Main** list
 - Create / rename / duplicate / delete lists from the panel header or the panel-icon menu
 - Row bell creates a price alert (cross / above / below) at last
+- Big-price rows (`ui/watchlist-row.ts`): direction tint + optional 24h change
 - `refreshSec` clamped 5–120
 - Source-aware labels (e.g. CSV mode)
 - Click sets symbol and loads through active source
+
+## Extras (price card · ticker · time/price panels)
+
+Optional floating widgets under the topbar (`ui/extras/`, toggled from the **Extra** menu):
+
+- **Current price card** — live tick for the active symbol with trend tint over recent ticks.
+- **Price ticker band** — marquee of watchlist symbols (seamless loop). Options: speed, direction, show 24h change, item spacing, band height, font size, opacity. Draggable when enabled; vertical offset resets from the menu. Symbol seed defaults to the watchlist (capped at 20).
+- **Time / Price panels** — float-only clock (`timebadge.ts`: local/UTC + bar-countdown prefix) and big-price readouts docked under the topbar.
+- State persists on `store.extras`; `anyExtraEnabled` drives the menu button state.
+
+## Panel motion
+
+Panel open/close runs a short ease-out height/opacity pass (`ui/effects/registry.ts`, `FloatableShell` / `DockColumn`) — snappy, no layout jump.
 
 ## Status bar
 

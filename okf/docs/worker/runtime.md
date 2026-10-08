@@ -7,7 +7,7 @@ tags: [doc, docs, runtime, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-08T19:09:06Z
 sources:
   - id: tree
     resource: "docs/worker/runtime.mdx"
@@ -44,3 +44,4 @@ Repo path `docs/worker/runtime.mdx`.
 # Mentions
 
 * [worker/src](/code/worker/src.md)
+* [worker/tests](/code/worker/tests.md)

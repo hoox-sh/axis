@@ -7,7 +7,7 @@ tags: [architecture, doc, docs, drawings-parity]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-08T19:09:06Z
 sources:
   - id: tree
     resource: "docs/architecture/drawings-parity.mdx"
@@ -27,6 +27,7 @@ Repo path `docs/architecture/drawings-parity.mdx`.
   * P1 — User-tool settings (AXIS)
   * P2 — PYNE export (pynescript repo)
   * P3 — Remaining Pine paint
+* Pine tables: bottom Tables panel (shipped)
 * Invariants
 * Tests
 

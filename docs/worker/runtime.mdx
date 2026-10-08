@@ -104,6 +104,9 @@ usage:{key} → count++, TTL 30 days
 | Path | Role |
 | --- | --- |
 | `worker/src/runtime.ts` | auth gate, rate limit, validate, meter, dispatch |
+| `worker/src/http.ts` | shared CORS / JSON / error-envelope helpers (single source; values pinned by `worker/tests/http.test.ts`) |
+| `worker/src/proxy-router.ts` | allowlisted route-table router for `/api/onchain/*` + `/api/market/*` (ordered; family fallbacks last — the allowlist is the security boundary) |
+| `worker/src/rate-limit.ts` | shared per-IP/per-key minute-window limiter (`allowRate`) |
 | `worker/src/pyodide_runtime.ts` | gated boot + `run_script` stub path |
 | `worker/RUNTIME.md` | architecture plan for wheels / R2 / cold start |
 | `worker/wrangler.toml` `[vars]` | `EXTERNAL_BACKEND`, `PYODIDE_IN_WORKER`, `REQUIRE_RUN_AUTH` |

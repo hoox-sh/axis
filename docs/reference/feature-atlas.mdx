@@ -109,6 +109,10 @@ mindmap
 | Bar replay | `src/chart/bar-replay.ts`, `ui/BarReplayControls.tsx` |
 | Compare / volume profile | `src/chart/compare-overlay.ts`, `volume-profile.ts` |
 | Drawings | `src/chart/drawing-layer.ts`, `drawings/*`, `pyne-drawings.ts`, `DrawingToolbar.tsx` |
+| Pine tables panel | `src/chart/pine-tables.ts`, `PyneTableHud.tsx`, `ui/TablesPanel.tsx`, `store.pineTablesLocation` |
+| Extras (ticker · price/time panels) | `src/ui/extras/*` (`PriceTicker.tsx`, `CurrentPriceCard.tsx`, `timebadge.ts`, `trend.ts`), `ui/PricePanel.tsx`, `ui/TimePanel.tsx` |
+| Watchlist rows | `src/ui/Watchlist.tsx`, `ui/watchlist-row.ts` |
+| Panel motion | `src/ui/effects/registry.ts`, `ui/panels/FloatableShell.tsx`, `DockColumn.tsx` |
 | Editor | `src/editor/*` (CM6, diagnostics, ruler, git-sync, inline-debug, symbols) |
 | Editor chrome | `ui/EditorGitBar.tsx`, `ui/EditorProblems.tsx` |
 | Alerts | `src/alerts/*`, `ui/AlertsPanel.tsx` |
@@ -126,6 +130,8 @@ mindmap
 | Feature | Primary paths |
 | --- | --- |
 | Router / CORS | `worker/src/index.ts` (`pickOrigin`) |
+| Shared HTTP / proxy / limits | `worker/src/http.ts`, `proxy-router.ts`, `rate-limit.ts` |
+| Client throttle | `src/utils/throttle.ts` |
 | Run (auth + rate limit) | `worker/src/runtime.ts`, `pyodide_runtime.ts` |
 | Auth / keys | `worker/src/auth.ts`, `keys.ts` |
 | Scripts | `worker/src/scripts.ts`, `schemas/scripts.sql` |
@@ -148,6 +154,7 @@ mindmap
 | Desktop CI | `.github/workflows/desktop.yml` |
 | CI | `.github/workflows/ci.yml` (coverage + e2e smoke) |
 | Coverage gate | `scripts/check-coverage.mjs` (scoped core ≥95%) |
+| Component lab | `.storybook/`, `src/stories/` (`bun run storybook` :6006) |
 | Harden/perf audit | `docs/devops/harden-perf-audit-2026-08-11.md` |
 
 ### Examples & tests

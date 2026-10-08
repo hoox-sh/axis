@@ -7,7 +7,7 @@ tags: [doc, docs, ui, ui-shell]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-08T19:09:06Z
 sources:
   - id: tree
     resource: "docs/ui/ui-shell.mdx"
@@ -33,6 +33,8 @@ Repo path `docs/ui/ui-shell.mdx`.
   * Panel docks (side-by-side)
 * Mobile shell (phones / tablets)
 * Watchlist
+* Extras (price card · ticker · time/price panels)
+* Panel motion
 * Status bar
   * Live settings (Settings dialog)
 * Logs

@@ -122,7 +122,7 @@ Open `http://127.0.0.1:8081`, engine endpoint `http://127.0.0.1:5002`.
 
 ## Invariants & edge cases
 
-1. **Service workers / offline** — product path uses Vite PWA assets; legacy root `sw.js` is not the shipping SW.
+1. **Service workers / offline** — product path uses Vite PWA assets; the legacy root `sw.js` was removed in 2.21.0. Only `public/sw.js` ships.
 2. **Relative pyodide index** — resolves against `location.origin`.
 3. **Do not hand-edit dist** — regenerate from build.
 
