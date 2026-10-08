@@ -65,6 +65,7 @@ export interface CommandActions {
   toggleLayers: () => void;
   toggleIndicators: () => void;
   toggleDataView: () => void;
+  toggleTables?: () => void;
   toggleAlerts?: () => void;
   toggleScriptLogs?: () => void;
   toggleStatusBar?: () => void;
@@ -325,6 +326,12 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     title: 'Toggle Data Window',
     category: 'panels',
     keywords: ['dataview', 'ohlcv', 'crosshair', 'values', 'data'],
+  },
+  {
+    id: 'panel.tables',
+    title: 'Toggle Tables',
+    category: 'panels',
+    keywords: ['tables', 'pine table', 'bottom panel', 'table.new', 'table.cell'],
   },
   {
     id: 'panel.alerts',
@@ -1045,6 +1052,7 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   ]);
 
   if (actions.toggleScriptLogs) byId.set('panel.scriptlogs', actions.toggleScriptLogs);
+  if (actions.toggleTables) byId.set('panel.tables', actions.toggleTables);
   if (actions.toggleStatusBar) byId.set('panel.statusbar', actions.toggleStatusBar);
   if (actions.toggleAlerts) byId.set('panel.alerts', actions.toggleAlerts);
   if (actions.toggleLibrary) byId.set('panel.library', actions.toggleLibrary);

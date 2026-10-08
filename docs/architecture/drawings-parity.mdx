@@ -10,7 +10,7 @@ AXIS has two independent render paths:
 | Path | Source | Paint |
 |---|---|---|
 | **User drawings** | Toolbar tools | `DrawingLayer` user SVG group, editable |
-| **Pine output** | PYNE `RunResult` | plots → LWC series; shapes/barcolor → candle markers; bgcolor → histogram; fill → SVG; line/label/box/polyline/linefill → script SVG; tables → HUD |
+| **Pine output** | PYNE `RunResult` | plots → LWC series; shapes/barcolor → candle markers; bgcolor → histogram; fill → SVG; line/label/box/polyline/linefill → script SVG; tables → chart HUD or bottom Tables panel |
 
 This plan is the work list from a four-agent audit of AXIS (`src/chart`, `src/results`, `src/indicators/runner.ts`) against PYNE (`pynescript` `drawing.py`, `evaluator.py`, `host.py`).
 
@@ -50,7 +50,7 @@ AXIS cannot paint fields the engine never serializes.
 | Gap | Where | Needed on the wire |
 |---|---|---|
 | Table cell keys `(row,col)` vs `(col,row)` | `drawing.py` `table.cell` vs `cell_set_*` | One index order |
-| Table style | `export_for_api` | halign, valign, width, tooltip, text_size, borders |
+| Table style | `export_for_api` | halign, valign, width, tooltip, text_size, borders (AXIS already parses `width` / `height` / `tooltip` / `merged_cells` / `force_overlay` when present; bottom panel uses them for proportional columns, hover tips, and merges) |
 | `table.cell` kwargs | ctor | width, halign, valign, size |
 | plotshape Y / `location.absolute` | `_coerce_plot_shape` | keep numeric series (or `{y, on}` cells) |
 | plotbar / plotcandle | evaluator | open/high/low/close (or sibling titles in `plot_meta`) |

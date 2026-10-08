@@ -211,6 +211,7 @@ describe('dispatchChartMenu', () => {
       hidePane: mark('hide-pane'),
       scriptSettings: (id) => calls.push(`settings:${id}`),
       scriptVisible: (id) => calls.push(`visible:${id}`),
+      scriptTables: (id) => calls.push(`tables:${id}`),
       scriptSource: (id) => calls.push(`source:${id}`),
       scriptRerun: (id) => calls.push(`rerun:${id}`),
       scriptRemove: (id) => calls.push(`remove:${id}`),

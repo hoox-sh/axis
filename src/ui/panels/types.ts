@@ -34,6 +34,7 @@ export type PanelId =
   | 'scriptlogs'
   | 'statusbar'
   | 'dataview'
+  | 'tables'
   | 'layers'
   | 'alerts'
   | 'library'
@@ -177,6 +178,16 @@ export const PANEL_META: Record<
     defaultH: 360,
     defaultX: 72,
     defaultY: 56,
+  },
+  tables: {
+    title: 'Tables',
+    defaultDock: 'bottom',
+    minW: 1,
+    minH: 80,
+    defaultW: 640,
+    defaultH: 220,
+    defaultX: 48,
+    defaultY: 480,
   },
   layers: {
     title: 'Layers',
@@ -354,6 +365,13 @@ export function defaultPanelChromeMap(): PanelChromeMap {
       y: PANEL_META.dataview.defaultY,
       w: 240,
       h: 380,
+    }),
+    tables: defaultPanelChrome('tables', {
+      open: false,
+      dock: 'bottom',
+      h: 220,
+      x: PANEL_META.tables.defaultX,
+      y: PANEL_META.tables.defaultY,
     }),
     layers: defaultPanelChrome('layers', {
       open: false,

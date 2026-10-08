@@ -35,6 +35,7 @@ import {
   cellTextVerticalAlign,
   collectVisiblePineTables,
   pineTablePositionClass,
+  splitTablesByLocation,
   type PineTable,
 } from './pine-tables';
 import { labelFontSizePx } from './pyne-drawings';
@@ -45,16 +46,19 @@ export const PyneTableHud: Component = () => {
     void store.runResults;
     void store.lastRun;
     void store.resultsFocusId;
+    void store.pineTablesLocation;
     const scriptIds = (store.scripts || [])
       .filter((s) => s.visible !== false)
       .map((s) => s.id);
-    return collectVisiblePineTables({
+    const all = collectVisiblePineTables({
       scriptIds,
       runResults: store.runResults,
       editorKey: EDITOR_RUN_KEY,
       lastRun: store.lastRun,
       lastRunOwnerId: store.resultsFocusId,
     });
+    // September 2026 parity: scripts moved to the bottom panel leave the chart.
+    return splitTablesByLocation(all, (store.pineTablesLocation || {}) as Record<string, 'chart' | 'bottom'>).chart;
   });
 
   return (
@@ -86,6 +90,7 @@ export const PyneTableHud: Component = () => {
                           {(cell) => (
                             <td
                               class="px-1.5 py-0.5 min-w-[1.5rem] max-w-[12rem]"
+                              title={cell?.tooltip || undefined}
                               style={{
                                 color: cell?.text_color || 'var(--color-text, #eceef4)',
                                 'background-color': cell?.bgcolor || undefined,

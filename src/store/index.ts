@@ -548,6 +548,7 @@ export const DEFAULTS: AppState = {
   lastRunMs: null,
   lastRun: null,
   runResults: {},
+  pineTablesLocation: {},
   resultsFocusId: null,
   newestRunId: null,
   indicatorSeries: {},
@@ -845,6 +846,9 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
           : DEFAULTS.editorStrategyProps,
       // Applied chart scripts (code + pane + colors) — durable so reopen re-paints
       scripts: sanitizePersistedScripts(bag.scripts),
+      pineTablesLocation: hydratePineTablesLocation(
+        (bag as { pineTablesLocation?: unknown }).pineTablesLocation,
+      ),
       // Ephemeral UI — never hydrate open modals / crosshair from disk
       scriptSettings: { open: false, indicatorId: null },
       crosshair: { time: null, barIndex: null },
@@ -1223,8 +1227,7 @@ function hydrateShortcuts(raw: unknown): ShortcutSlice {
 }
 
 /** Restore durable compare prefs; always clear bars / loading / error. */
-function hydrateCompare(raw: unknown): CompareState {
-  const base = { ...DEFAULTS.compare };
+function hydrateCompare(raw: unknown): CompareState {  const base = { ...DEFAULTS.compare };
   if (!raw || typeof raw !== 'object') return base;
   const c = raw as Partial<CompareState>;
   return {
@@ -1248,6 +1251,20 @@ function hydrateOnchain(raw: unknown): OnchainState {
     lastProtocolSlug: typeof o.lastProtocolSlug === 'string' ? o.lastProtocolSlug : '',
     lastProtocolName: typeof o.lastProtocolName === 'string' ? o.lastProtocolName : '',
   };
+}
+
+/** Restore per-script Pine table locations (`chart` default, `bottom` opt-in). */
+export function hydratePineTablesLocation(raw: unknown): Record<string, 'chart' | 'bottom'> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Record<string, 'chart' | 'bottom'> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const id = String(k || '').trim();
+    if (!id || id.length > 128) continue;
+    if (v === 'bottom') out[id] = 'bottom';
+    else if (v === 'chart') out[id] = 'chart';
+    // Unknown / legacy values coerce to chart (no bottom opt-in by default).
+  }
+  return out;
 }
 
 /** Restore drawing style prefs; `byKind` is a shallow map of per-tool extras. */
@@ -1571,6 +1588,7 @@ function seedStoreState(overlay: Partial<AppState> | null | undefined): AppState
     toasts: [],
     bars: [],
     runResults: {},
+    pineTablesLocation: {},
     indicatorSeries: {},
     editorInputValues: {},
     editorStrategyProps: {},
@@ -1704,6 +1722,7 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     editorInputValues: unwrap(s.editorInputValues),
     editorStrategyProps: unwrap(s.editorStrategyProps),
     scripts: unwrap(s.scripts),
+    pineTablesLocation: unwrap(s.pineTablesLocation ?? {}),
     panes: unwrap(s.panes),
     watchlist: unwrap(s.watchlist),
     extras: unwrap(s.extras),
@@ -2924,6 +2943,11 @@ export function removeIndicator(id: string) {
     delete nextResults[id];
     setStore('runResults', reconcile(nextResults));
   }
+  if ((store.pineTablesLocation || {})[id] != null) {
+    const nextLoc = { ...((store.pineTablesLocation || {}) as Record<string, 'chart' | 'bottom'>) };
+    delete nextLoc[id];
+    setStore('pineTablesLocation', reconcile(nextLoc));
+  }
   if (store.resultsFocusId === id) {
     setResultsFocusId(Object.keys(nextResults)[0] ?? null);
   }
@@ -2961,6 +2985,46 @@ export function setIndicatorSeries(
 export function toggleIndicator(id: string) {
   setStore('scripts', (s) => s.map((ind) => ind.id === id ? { ...ind, visible: !ind.visible } : ind));
   persist();
+}
+
+/** True when a script's Pine tables live in the bottom Tables panel. */
+export function isPineTablesInBottom(scriptId: string | null | undefined): boolean {
+  if (!scriptId) return false;
+  return (store.pineTablesLocation || {})[scriptId] === 'bottom';
+}
+
+/**
+ * Move a script's tables between the chart overlay and the bottom panel
+ * (September 2026 TradingView parity: "Move tables to bottom/chart").
+ * Opening the Tables panel when moving to bottom keeps the result visible.
+ */
+export function setPineTablesLocation(
+  scriptId: string,
+  location: 'chart' | 'bottom',
+  opts?: { openPanel?: boolean },
+): void {
+  const id = String(scriptId || '').trim();
+  if (!id) return;
+  if (location === 'chart') {
+    if ((store.pineTablesLocation || {})[id] == null) return;
+    const next = { ...((store.pineTablesLocation || {}) as Record<string, 'chart' | 'bottom'>) };
+    delete next[id];
+    setStore('pineTablesLocation', reconcile(next));
+  } else {
+    if ((store.pineTablesLocation || {})[id] === 'bottom') {
+      if (opts?.openPanel !== false) setPanelOpen('tables', true);
+      return;
+    }
+    setStore('pineTablesLocation', id, 'bottom');
+  }
+  persist();
+  if (location === 'bottom' && opts?.openPanel !== false) {
+    try {
+      setPanelOpen('tables', true);
+    } catch {
+      /* panel id registers below; placement still persists */
+    }
+  }
 }
 
 /** Override a single plot series color for an applied indicator (explicit panel pick). */
@@ -3622,6 +3686,16 @@ export function toggleDataViewPanel() {
   setPanelOpen('dataview', !isPanelOpen('dataview'));
 }
 
+/** Open/close bottom Tables panel (Pine `table.*` in September 2026 mode). */
+export function setTablesPanelOpen(open: boolean) {
+  setPanelOpen('tables', open);
+}
+
+/** Toggle bottom Tables panel visibility. */
+export function toggleTablesPanel() {
+  setPanelOpen('tables', !isPanelOpen('tables'));
+}
+
 /** Open/close Layers (drawings) panel — docks left as a slide-in column. */
 export function setLayerPanelOpen(open: boolean) {
   setPanelOpen('layers', open);
@@ -3983,6 +4057,7 @@ export function isPanelOpen(id: PanelId): boolean {
       // `logsPanel.open` separately so collapse does not hide the strip.
       return chromeOpen;
     case 'scriptlogs':
+    case 'tables':
     case 'statusbar':
     case 'library':
     case 'datasource':
@@ -4037,6 +4112,7 @@ const DOCK_STACK_IDS: PanelId[] = [
   'watchlist',
   'layers',
   'dataview',
+  'tables',
   'indicators',
   'alerts',
   'library',

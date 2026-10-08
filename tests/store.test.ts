@@ -1171,3 +1171,35 @@ describe('addIndicator / removeIndicator edge cases', () => {
     expect(store.scripts.length).toBe(0);
   });
 });
+
+describe('pineTablesLocation (September 2026 bottom tables)', () => {
+  it('hydrates only chart/bottom values', async () => {
+    const { hydratePineTablesLocation } = await import('../src/store/index');
+    expect(hydratePineTablesLocation({ a: 'bottom', b: 'chart', c: 'elsewhere', '': 'bottom' })).toEqual({
+      a: 'bottom',
+      b: 'chart',
+    });
+    expect(hydratePineTablesLocation(null)).toEqual({});
+  });
+
+  it('moves tables to bottom and back, then drops on remove', async () => {
+    const mod = await import('../src/store/index');
+    const id = mod.addIndicator('Tbl', 'indicator("t")', 'price', {});
+    expect(mod.isPineTablesInBottom(id)).toBe(false);
+    mod.setPineTablesLocation(id, 'bottom', { openPanel: false });
+    expect(mod.isPineTablesInBottom(id)).toBe(true);
+    expect(mod.store.pineTablesLocation[id]).toBe('bottom');
+    mod.setPineTablesLocation(id, 'chart', { openPanel: false });
+    expect(mod.isPineTablesInBottom(id)).toBe(false);
+    expect(id in mod.store.pineTablesLocation).toBe(false);
+    mod.setPineTablesLocation(id, 'bottom', { openPanel: false });
+    mod.removeIndicator(id);
+    expect(id in mod.store.pineTablesLocation).toBe(false);
+  });
+
+  it('persists pineTablesLocation round-trip', () => {
+    const mod2 = { pineTablesLocation: { s1: 'bottom' } };
+    const overlay = parsePersistedState(JSON.stringify({ ...mod2, scripts: [] }));
+    expect(overlay?.pineTablesLocation).toEqual({ s1: 'bottom' });
+  });
+});

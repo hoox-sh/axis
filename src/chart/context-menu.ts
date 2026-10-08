@@ -62,6 +62,8 @@ export type ChartMenuScript = {
   id: string;
   name: string;
   visible: boolean;
+  /** True when this script's tables live in the bottom panel. */
+  tablesInBottom?: boolean;
 };
 
 export type ChartMenuContext = {
@@ -207,6 +209,10 @@ function scriptRows(script: ChartMenuScript): ContextMenuEntry[] {
   return [
     item(`script.settings.${script.id}`, `${name} settings`),
     item(`script.visible.${script.id}`, script.visible ? `Hide ${name}` : `Show ${name}`),
+    item(
+      `script.tables.${script.id}`,
+      script.tablesInBottom ? `Move tables to chart` : `Move tables to bottom`,
+    ),
     item(`script.source.${script.id}`, `Open ${name} source`),
     item(`script.rerun.${script.id}`, `Re-run ${name}`),
     item(`script.remove.${script.id}`, `Remove ${name}`, { danger: true }),

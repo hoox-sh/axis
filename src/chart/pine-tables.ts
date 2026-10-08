@@ -36,7 +36,18 @@ export interface PineTableCell {
   text_halign?: string;
   text_valign?: string;
   text_size?: string | number;
+  /** Proportional width hint from `table.cell(width=…)` (bottom-panel layout). */
+  width?: number;
+  /** Proportional height hint from `table.cell(height=…)` (bottom-panel layout). */
+  height?: number;
+  /** Hover tooltip (`tooltip=` / `table.cell_set_tooltip`). */
+  tooltip?: string;
+  border_color?: string;
+  border_width?: number;
 }
+
+export type PineTableLocation = 'chart' | 'bottom';
+export type PineTablesLocationMap = Record<string, PineTableLocation>;
 
 export interface PineTable {
   type: string;
@@ -50,6 +61,12 @@ export interface PineTable {
   border_color?: string;
   border_width?: number;
   bgcolor?: string;
+  /** `force_overlay=true` — chart pane hint (ignored in the bottom panel). */
+  force_overlay?: boolean;
+  /** Merged ranges as [start_row, start_col, end_row, end_col]. */
+  merged_cells?: Array<[number, number, number, number]>;
+  /** Creation order within one run (bottom panel stacks first → last). */
+  seq?: number;
   /** Owning script id when aggregated from runResults */
   ownerId?: string;
 }
@@ -63,6 +80,15 @@ function asFiniteInt(v: unknown): number | null {
   if (typeof v === 'string' && v.trim() !== '') {
     const n = Number(v);
     if (Number.isFinite(n)) return Math.trunc(n);
+  }
+  return null;
+}
+
+function asFiniteNumber(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
   }
   return null;
 }
@@ -91,6 +117,10 @@ export function parsePineTableCell(raw: unknown): PineTableCell | null {
   const row = asFiniteInt(raw.row ?? raw.r);
   const col = asFiniteInt(raw.col ?? raw.column ?? raw.c);
   if (row == null || col == null || row < 0 || col < 0) return null;
+  const widthRaw = raw.width ?? raw.cell_width ?? raw.w;
+  const heightRaw = raw.height ?? raw.cell_height ?? raw.h;
+  const width = asFiniteNumber(widthRaw);
+  const height = asFiniteNumber(heightRaw);
   return {
     row,
     col,
@@ -120,6 +150,19 @@ export function parsePineTableCell(raw: unknown): PineTableCell | null {
           ? String(raw.valign)
           : undefined,
     text_size: (raw.text_size ?? raw.textSize ?? raw.size) as string | number | undefined,
+    width: width != null && width > 0 ? width : undefined,
+    height: height != null && height > 0 ? height : undefined,
+    tooltip:
+      raw.tooltip != null && String(raw.tooltip).trim() !== ''
+        ? String(raw.tooltip)
+        : undefined,
+    border_color:
+      raw.border_color != null
+        ? String(raw.border_color)
+        : raw.borderColor != null
+          ? String(raw.borderColor)
+          : undefined,
+    border_width: asFiniteInt(raw.border_width ?? raw.borderWidth) ?? undefined,
   };
 }
 
@@ -197,6 +240,18 @@ export function normalizePineTable(
         : r.bg_color != null
           ? String(r.bg_color)
           : undefined,
+    force_overlay: Boolean(
+      (raw as { force_overlay?: unknown }).force_overlay ??
+        (r.forceOverlay as unknown) ??
+        false,
+    ),
+    merged_cells: normalizeMergedCells(
+      (raw as { merged_cells?: unknown }).merged_cells ??
+        (raw as { mergedCells?: unknown }).mergedCells ??
+        r.merged_cells,
+      rows,
+      columns,
+    ),
     ownerId,
   };
 }
@@ -327,4 +382,101 @@ export function cellTextVerticalAlign(valign?: string): 'top' | 'middle' | 'bott
   if (v.includes('top')) return 'top';
   if (v.includes('bottom')) return 'bottom';
   return 'middle';
+}
+
+/** Normalize `merged_cells` ranges to [r0, c0, r1, c1] inside the table bounds. */
+export function normalizeMergedCells(
+  raw: unknown,
+  rows: number,
+  columns: number,
+): Array<[number, number, number, number]> | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const out: Array<[number, number, number, number]> = [];
+  for (const m of raw) {
+    if (!Array.isArray(m) || m.length < 4) continue;
+    const nums = m.slice(0, 4).map((n) => (typeof n === 'number' ? Math.trunc(n) : Number(n)));
+    if (nums.some((n) => !Number.isFinite(n))) continue;
+    const [a, b, c, d] = nums as [number, number, number, number];
+    const r0 = Math.min(a, c);
+    const r1 = Math.max(a, c);
+    const c0 = Math.min(b, d);
+    const c1 = Math.max(b, d);
+    if (r0 < 0 || c0 < 0 || r1 >= Math.max(1, rows) || c1 >= Math.max(1, columns)) continue;
+    if (r0 === r1 && c0 === c1) continue;
+    out.push([r0, c0, r1, c1]);
+  }
+  return out.length ? out : undefined;
+}
+
+/** True when a script's tables live in the bottom panel (not on the chart). */
+export function isTablesInBottom(
+  locationMap: PineTablesLocationMap | null | undefined,
+  ownerId: string | null | undefined,
+): boolean {
+  if (!ownerId) return false;
+  return (locationMap || {})[ownerId] === 'bottom';
+}
+
+/** Split visible tables into chart-overlay vs bottom-panel buckets. */
+export function splitTablesByLocation(
+  tables: readonly PineTable[],
+  locationMap: PineTablesLocationMap | null | undefined,
+): { chart: PineTable[]; bottom: PineTable[] } {
+  const chart: PineTable[] = [];
+  const bottom: PineTable[] = [];
+  for (const tb of tables) {
+    if (isTablesInBottom(locationMap, tb.ownerId)) bottom.push(tb);
+    else chart.push(tb);
+  }
+  return { chart, bottom };
+}
+
+/** Group bottom tables by owning script (one tab per script, creation order kept). */
+export function groupBottomTablesByOwner(
+  tables: readonly PineTable[],
+): Array<{ ownerId: string; tables: PineTable[] }> {
+  const order: string[] = [];
+  const groups = new Map<string, PineTable[]>();
+  for (const tb of tables) {
+    const owner = tb.ownerId || '';
+    if (!groups.has(owner)) {
+      groups.set(owner, []);
+      order.push(owner);
+    }
+    groups.get(owner)!.push(tb);
+  }
+  // Stable creation order inside each group (engine export ≈ creation order).
+  return order.map((ownerId) => ({
+    ownerId,
+    tables: (groups.get(ownerId) || []).map((tb, i) => ({ ...tb, seq: tb.seq ?? i })),
+  }));
+}
+
+/**
+ * Proportional column widths for the bottom panel.
+ *
+ * TradingView: a positive `width` in `table.cell()` is a relative proportion
+ * of the table's total width (not a % of the panel). Cells stretch to fit the
+ * allocated width without truncating text.
+ */
+export function bottomPanelColumnFractions(tb: PineTable): number[] {
+  const cols = Math.max(1, tb.columns || 1);
+  const weights = new Array<number>(cols).fill(1);
+  for (const c of tb.cells || []) {
+    if (c.col < 0 || c.col >= cols) continue;
+    const w = c.width != null && Number.isFinite(c.width) && c.width > 0 ? c.width : 1;
+    weights[c.col] = Math.max(weights[c.col]!, w);
+  }
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (!(total > 0)) return weights.map(() => 1 / Math.max(1, cols));
+  return weights.map((w) => w / total);
+}
+
+/**
+ * Whether any bottom-panel row declares a positive height hint.
+ * When true the table stretches rows to fill the allocated pane height;
+ * otherwise it uses the minimum height that fits the text.
+ */
+export function bottomPanelHasHeightHints(tb: PineTable): boolean {
+  return (tb.cells || []).some((c) => c.height != null && c.height > 0);
 }

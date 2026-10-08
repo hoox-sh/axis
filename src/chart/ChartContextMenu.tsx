@@ -205,10 +205,16 @@ export const ChartContextMenu: Component<{
       const scale = scaleSnapshot(mgr);
       const pane = hit && mgr ? mgr.getPane(hit.paneId) : undefined;
       const isPrice = !!hit && (hit.paneId === 'price' || hit.paneType === 'price');
+      const tablesLoc = (store.pineTablesLocation || {}) as Record<string, string>;
       const paneScripts = hit
         ? store.scripts
             .filter((s) => (s.paneId || 'price') === hit.paneId)
-            .map((s) => ({ id: s.id, name: s.name || 'Script', visible: s.visible !== false }))
+            .map((s) => ({
+              id: s.id,
+              name: s.name || 'Script',
+              visible: s.visible !== false,
+              tablesInBottom: tablesLoc[s.id] === 'bottom',
+            }))
         : [];
 
       let ctx: ChartMenuContext;
@@ -219,6 +225,7 @@ export const ChartContextMenu: Component<{
             id: scriptRow.id,
             name: scriptRow.name || 'Script',
             visible: scriptRow.visible !== false,
+            tablesInBottom: tablesLoc[scriptRow.id] === 'bottom',
           },
         };
       } else if (drawing) {
@@ -376,6 +383,18 @@ export const ChartContextMenu: Component<{
         scriptVisible: (id) => {
           void import('../indicators/visibility').then(({ toggleScriptChartVisible }) => {
             toggleScriptChartVisible(id);
+          });
+        },
+        scriptTables: (id) => {
+          const inBottom = ((store.pineTablesLocation || {}) as Record<string, string>)[id] === 'bottom';
+          void import('../store').then(({ setPineTablesLocation, setStatus }) => {
+            setPineTablesLocation(id, inBottom ? 'chart' : 'bottom');
+            const s = store.scripts.find((x) => x.id === id);
+            const label = s?.name?.trim() || 'Script';
+            setStatus('ready', inBottom ? `${label} tables back on chart` : `${label} tables in bottom panel`, {
+              toast: false,
+              source: 'chart',
+            });
           });
         },
         scriptSource: (id) => {

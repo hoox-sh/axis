@@ -39,6 +39,7 @@ import {
   setActivePlugin,
   toggleIndicatorPanel,
   toggleDataViewPanel,
+  toggleTablesPanel,
   toggleLayerPanel,
   toggleAlertsPanel,
   updateChartSlot,
@@ -875,6 +876,18 @@ export const Topbar: Component<{
         >
           <Icons.dataView />
           <span class="axis-tb-btn-label">Values</span>
+        </button>
+        <button
+          type="button"
+          class={`axis-module ${isPanelOpen('tables') ? 'is-active' : ''}`}
+          onClick={() => toggleTablesPanel()}
+          title="Tables — Pine tables moved to the bottom panel"
+          aria-label="Tables"
+          aria-pressed={isPanelOpen('tables')}
+          data-testid="axis-btn-tables"
+        >
+          <Icons.barChart />
+          <span class="axis-tb-btn-label">Tables</span>
         </button>
         </Show>
 

@@ -61,6 +61,7 @@ import type { SettingsTabId, StudioPageId } from './ui/studio';
 import { ResultsModal } from './ui/ResultsModal';
 import { SystemLogs } from './ui/SystemLogs';
 import { DataViewPanel } from './ui/DataViewPanel';
+import { TablesPanel } from './ui/TablesPanel';
 import { QuotePanel } from './ui/QuotePanel';
 import { TimePanel } from './ui/TimePanel';
 import { PricePanel } from './ui/PricePanel';
@@ -575,6 +576,7 @@ export const App: Component = () => {
       <Watchlist />
       <LayerPanel />
       <DataViewPanel />
+      <TablesPanel />
       <QuotePanel />
       <TimePanel />
       <PricePanel />

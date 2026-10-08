@@ -636,6 +636,13 @@ export interface AppState {
    */
   runResults: Record<string, unknown>;
   /**
+   * Where each script's Pine tables are shown (September 2026 parity).
+   * `chart` (default) = HUD overlay on the pane; `bottom` = stacked in the
+   * bottom Tables panel with stretch-to-fit cells and selectable text.
+   * Persisted so reload keeps the placement.
+   */
+  pineTablesLocation: Record<string, 'chart' | 'bottom'>;
+  /**
    * Which key in {@link runResults} is shown in Results / Scriptlogs.
    * `null` until the first run (then auto-set). Ephemeral — not persisted.
    */

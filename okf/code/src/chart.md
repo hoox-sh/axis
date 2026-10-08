@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-03T08:37:09Z
+  at: 2026-10-08T14:45:00Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -44,7 +44,7 @@ okf_lock: generated
 * `onchain-overlay.ts` — ONCHAIN_PRICE_SCALE_ID, ONCHAIN_SERIES_PREFIX, OnchainLineSpec, applyOnchainOverlays, clearOnchainOverlays
 * `pane-badge.ts` — mountPaneBadge, refreshAllPaneBadges, refreshPaneBadge, setPaneBadgeLabel
 * `pane-manager.ts` — ManagedPane, OVERLAY_OHLC_PREFIX, OverlayLineSpec, OverlayOhlcSpec, OverlayOwnerOpts, OverlayPoint, OverlayTipPeek, PaneManager, inferOverlayTitle, isFiniteOhlcBar, makeBgcolorKey, makeOverlayLineKey
-* `pine-tables.ts` — CollectTablesOpts, PineTable, PineTableCell, buildTableGrid, cellTextAlign, cellTextVerticalAlign, collectVisiblePineTables, isPineTable, normalizePineTable, parsePineTableCell, pineTablePositionClass, tablesFromRunPayload
+* `pine-tables.ts` — CollectTablesOpts, PineTable, PineTableCell, PineTableLocation, PineTablesLocationMap, bottomPanelColumnFractions, bottomPanelHasHeightHints, buildTableGrid, cellTextAlign, cellTextVerticalAlign, collectVisiblePineTables, groupBottomTablesByOwner
 * `plot-rect.ts` — ChartPlotRect, PlotRectChart, PlotRectHost, measureChartPlotRect
 * `price-precision.ts` — PRICE_SCALE_DECIMALS_MAX, PRICE_SCALE_DECIMALS_MIN, PriceFormatOpts, PriceScaleDecimalsMode, clampPriceDecimals, countSignificantDecimals, cyclePriceScaleDecimalsMode, decimalsFromMagnitude, detectDecimalsFromBars, detectDecimalsFromSymbol, formatPriceWithDecimals, normalizePriceScaleDecimalsMode
 * `pyne-drawings.ts` — DEFAULT_DRAWING_LIMITS, DrawingLimits, ScriptDrawing, YLOC_PAD_PX, alignDrawingTimeToBars, clampScriptDrawingTimes, clampTimeToLastBar, dedupeScriptLabelsAtSameTime, garbageCollectScriptDrawings, labelBubbleLayout, labelFontSizePx, normalizeExtend

@@ -46,6 +46,7 @@ export type ChartMenuEnv = {
   hidePane: () => void;
   scriptSettings: (id: string) => void;
   scriptVisible: (id: string) => void;
+  scriptTables: (id: string) => void;
   scriptSource: (id: string) => void;
   scriptRerun: (id: string) => void;
   scriptRemove: (id: string) => void;
@@ -60,6 +61,7 @@ export type ChartMenuEnv = {
 const SCRIPT_PREFIXES = [
   ['script.settings.', 'scriptSettings'],
   ['script.visible.', 'scriptVisible'],
+  ['script.tables.', 'scriptTables'],
   ['script.source.', 'scriptSource'],
   ['script.rerun.', 'scriptRerun'],
   ['script.remove.', 'scriptRemove'],

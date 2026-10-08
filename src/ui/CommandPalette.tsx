@@ -51,6 +51,7 @@ import {
   setChartThemePreset,
   toggleIndicatorPanel,
   toggleDataViewPanel,
+  toggleTablesPanel,
   toggleLayerPanel,
   toggleAlertsPanel,
   toggleSystemLogsPanel,
@@ -220,6 +221,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       toggleLayers: () => toggleLayerPanel(),
       toggleIndicators: () => toggleIndicatorPanel(),
       toggleDataView: () => toggleDataViewPanel(),
+      toggleTables: () => toggleTablesPanel(),
       toggleAlerts: () => toggleAlertsPanel(),
       toggleScriptLogs: () => {
         // Script Logs now lives in the editor (statusbar Logs toggle above).

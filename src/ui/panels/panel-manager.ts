@@ -46,6 +46,7 @@ export const PANEL_IDS: readonly PanelId[] = [
   'watchlist',
   'layers',
   'dataview',
+  'tables',
   'indicators',
   'alerts',
   'library',

@@ -53,6 +53,7 @@ export const DOCK_STACK_ORDER: readonly PanelId[] = [
   'watchlist',
   'layers',
   'dataview',
+  'tables',
   'indicators',
   'alerts',
   'library',

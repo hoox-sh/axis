@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 72 more files."
+description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 73 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-07T04:35:08Z
+  at: 2026-10-08T14:45:00Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -60,6 +60,7 @@ okf_lock: generated
 * `StrategyReport.tsx` — StrategyReport, StrategyReportProps
 * `SymbolModal.tsx` — SymbolModal, SymbolModalProps
 * `SystemLogs.tsx` — SystemLogs
+* `TablesPanel.tsx` — TablesPanel
 * `ThemeLibrary.tsx` — BarColorLibrary, SavedThemeLibrary
 * `ThemePanel.tsx` — ThemePanel, ThemePanelProps
 * `TimePanel.tsx` — TimePanel

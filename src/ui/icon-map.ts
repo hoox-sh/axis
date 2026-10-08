@@ -217,6 +217,7 @@ export const PANEL_ICON: Record<PanelId, IconName> = {
   scriptlogs: 'scriptLogs',
   statusbar: 'status',
   dataview: 'dataView',
+  tables: 'barChart',
   layers: 'layers',
   alerts: 'alerts',
   library: 'library',

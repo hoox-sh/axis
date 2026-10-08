@@ -9,12 +9,18 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
+  bottomPanelColumnFractions,
+  bottomPanelHasHeightHints,
   buildTableGrid,
   cellTextVerticalAlign,
   collectVisiblePineTables,
+  groupBottomTablesByOwner,
+  isTablesInBottom,
+  normalizeMergedCells,
   normalizePineTable,
   parsePineTableCell,
   pineTablePositionClass,
+  splitTablesByLocation,
   tablesFromRunPayload,
 } from '../src/chart/pine-tables';
 
@@ -201,5 +207,87 @@ describe('parsePineTableCell valign/text_size', () => {
       textSize: 'small',
     });
     expect(c).toMatchObject({ row: 1, col: 2, text_valign: 'text.top', text_size: 'small' });
+  });
+
+  it('parses bottom-panel width/height/tooltip hints', () => {
+    const c = parsePineTableCell({ row: 0, col: 1, text: 'hi', width: 30, height: 12, tooltip: 'tip' });
+    expect(c).toMatchObject({ width: 30, height: 12, tooltip: 'tip' });
+    expect(parsePineTableCell({ row: 0, col: 0, text: 'x', width: 0 })?.width).toBeUndefined();
+    expect(parsePineTableCell({ row: 0, col: 0, text: 'x', tooltip: '   ' })?.tooltip).toBeUndefined();
+  });
+});
+
+describe('normalizePineTable bottom fields', () => {
+  it('keeps force_overlay and merged ranges', () => {
+    const tb = normalizePineTable({
+      type: 'table',
+      rows: 2,
+      columns: 2,
+      force_overlay: true,
+      merged_cells: [
+        [0, 0, 0, 1],
+        [5, 5, 6, 6],
+      ],
+      cells: [{ row: 0, col: 0, text: 'm' }],
+    });
+    expect(tb?.force_overlay).toBe(true);
+    expect(tb?.merged_cells).toEqual([[0, 0, 0, 1]]);
+  });
+});
+
+describe('normalizeMergedCells', () => {
+  it('drops out-of-bounds and single-cell merges', () => {
+    expect(normalizeMergedCells([[0, 0, 1, 1]], 2, 2)).toEqual([[0, 0, 1, 1]]);
+    expect(normalizeMergedCells([[0, 0, 0, 0]], 2, 2)).toBeUndefined();
+    expect(normalizeMergedCells([[0, 0, 9, 9]], 2, 2)).toBeUndefined();
+    expect(normalizeMergedCells('nope', 2, 2)).toBeUndefined();
+  });
+});
+
+describe('bottom panel location helpers', () => {
+  const a = normalizePineTable(sampleTable, 's1')!;
+  const b = normalizePineTable(sampleTable, 's2')!;
+
+  it('splits chart vs bottom by location map', () => {
+    const split = splitTablesByLocation([a, b], { s2: 'bottom' });
+    expect(split.chart.map((t) => t.ownerId)).toEqual(['s1']);
+    expect(split.bottom.map((t) => t.ownerId)).toEqual(['s2']);
+    expect(isTablesInBottom({ s2: 'bottom' }, 's2')).toBe(true);
+    expect(isTablesInBottom({ s2: 'bottom' }, 's1')).toBe(false);
+    expect(isTablesInBottom(undefined, 's1')).toBe(false);
+  });
+
+  it('groups bottom tables by owner in order', () => {
+    const groups = groupBottomTablesByOwner([a, b, { ...a }]);
+    expect(groups.map((g) => g.ownerId)).toEqual(['s1', 's2']);
+    expect(groups[0]!.tables.length).toBe(2);
+  });
+
+  it('computes proportional column fractions from width hints', () => {
+    const tb = normalizePineTable({
+      type: 'table',
+      rows: 1,
+      columns: 2,
+      cells: [
+        { row: 0, col: 0, text: 'a', width: 10 },
+        { row: 0, col: 1, text: 'b', width: 30 },
+      ],
+    })!;
+    const f = bottomPanelColumnFractions(tb);
+    expect(f[0]!).toBeCloseTo(0.25, 5);
+    expect(f[1]!).toBeCloseTo(0.75, 5);
+    const even = bottomPanelColumnFractions(normalizePineTable(sampleTable)!);
+    expect(even[0]!).toBeCloseTo(0.5, 5);
+  });
+
+  it('detects height hints', () => {
+    const withH = normalizePineTable({
+      type: 'table',
+      rows: 1,
+      columns: 1,
+      cells: [{ row: 0, col: 0, text: 'a', height: 20 }],
+    })!;
+    expect(bottomPanelHasHeightHints(withH)).toBe(true);
+    expect(bottomPanelHasHeightHints(normalizePineTable(sampleTable)!)).toBe(false);
   });
 });

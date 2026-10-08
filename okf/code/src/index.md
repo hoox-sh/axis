@@ -22,7 +22,7 @@
 * [src/streams](streams.md) - src/streams contains binance.ts, catalog.ts, multiplex.ts, and 2 more files.
 * [src/sw](sw.md) - Pure service-worker strategy helpers (unit-testable).
 * [src/theme](theme.md) - AXIS Theme Manager — public API.
-* [src/ui](ui.md) - src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 72 more files.
+* [src/ui](ui.md) - src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 73 more files.
 * [src/update](update.md) - App update manager — polls the deployed /version.json and surfaces new releases as a banner + notification with a hard-reload action.
 * [src/utils](utils.md) - src/utils contains emitter.ts, throttle.ts.
 * [src/workers](workers.md) - AXIS workers catalog + health probes (Workers Manager).
@@ -32,4 +32,4 @@
 * [chart](chart/) - Solid chart host — mounts PaneManager for one layout slot.
 * [data](data/) - Background Data Source Manager — multi-page OHLCV backfill to a past date.
 * [indicators](indicators/) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, detach.ts, and 6 more files.
-* [ui](ui/) - src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 72 more files.
+* [ui](ui/) - src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 73 more files.
