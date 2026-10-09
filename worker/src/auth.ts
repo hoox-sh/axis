@@ -61,6 +61,9 @@ async function hashKey(key: string): Promise<string> {
 /**
  * Pull API key from `Authorization: Bearer …` (preferred) or `?key=` query
  * (handy for WebSocket / simple curl). Header wins when both present.
+ *
+ * NOTE: return type stays `string` — classification lives in
+ * {@link classifyBearerToken} so existing callers are unaffected.
  */
 export function extractBearer(req: Request): string {
   const auth = req.headers.get('Authorization') || '';
@@ -68,6 +71,39 @@ export function extractBearer(req: Request): string {
   if (m) return m[1]!.trim();
   const url = new URL(req.url);
   return (url.searchParams.get('key') || '').trim();
+}
+
+/**
+ * Bearer key classification (verify-prep, NO enforcement).
+ *
+ * - `tenant-passthrough` — hosted `hx_live_…` tenant key (future quota via
+ *   console verify; today treated exactly like a self-host key).
+ * - `selfhost` — local `pn_…` self-host key.
+ * - `none` — missing or unrecognized shape (accept/reject still decided by
+ *   {@link requireApiKey} below; this is informational only).
+ */
+export type BearerKind = 'tenant-passthrough' | 'selfhost' | 'none';
+
+export interface BearerClassification {
+  kind: BearerKind;
+  /** Key family prefix (`hx_live` | `pn` | `""` when none). */
+  prefix: string;
+  /** The raw presented token (trimmed, never stored — hash before persisting). */
+  token: string;
+}
+
+/** Pure classifier — no I/O, no KV, no accept/reject decision. */
+export function classifyBearerToken(token: string): BearerClassification {
+  const t = (token ?? '').trim();
+  if (!t) return { kind: 'none', prefix: '', token: '' };
+  if (t.startsWith('hx_live_')) return { kind: 'tenant-passthrough', prefix: 'hx_live', token: t };
+  if (t.startsWith('pn_')) return { kind: 'selfhost', prefix: 'pn', token: t };
+  return { kind: 'none', prefix: '', token: t };
+}
+
+/** Classify the bearer on an incoming request (extract + classify). */
+export function classifyBearer(req: Request): BearerClassification {
+  return classifyBearerToken(extractBearer(req));
 }
 
 /**
@@ -123,11 +159,13 @@ export async function requireApiKey(
   }
 
   // Dev without KV: open mode or shape-only validation (no durable DB).
+  // hx_live_… tenant keys are accepted exactly like pn_ self-host keys here
+  // (classification only — no quota enforcement yet).
   if (openKeys) {
     return { ok: true, ctx: { key, userId: await hashKey(key), tier: 'hobby' } };
   }
 
-  if (/^pn_[a-f0-9]{48}$/.test(key)) {
+  if (/^pn_[a-f0-9]{48}$/.test(key) || /^hx_live_[A-Za-z0-9_-]{8,}$/.test(key)) {
     return { ok: true, ctx: { key, userId: await hashKey(key), tier: 'hobby' } };
   }
 

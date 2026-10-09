@@ -276,6 +276,8 @@ export default {
 
     // WebSocket session relay: /api/stream?session=&symbol=&interval= → SessionDO
     // DO is named by `session` query (default "default"); request rewritten to /ws.
+    // COMMERCIAL HOOK (verify-prep): future `axis:stream` verify (hx_live_… quota)
+    // plugs in here — open self-host path unchanged.
     if (url.pathname === '/api/stream') {
       if (!env.SESSIONS) {
         return errorResponse(
