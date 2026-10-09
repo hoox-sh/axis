@@ -34,10 +34,10 @@
  * | `/api/git/oauth/…`   | {@link handleGitOAuth}| public; device-flow proxy (GitHub/GitLab) |
  * | `/api/onchain/…`     | {@link handleOnchain}| public; DefiLlama + GeckoTerminal allowlisted proxy |
  * | `/api/market/…`      | {@link handleMarket}| public Binance + MEXC GET proxy; optional request-scoped signed Binance klines |
- * | GET `/api/stream`    | SessionDO upgrade    | requires `SESSIONS` DO binding |
+ * | GET `/api/stream`    | SessionDO upgrade    | requires `SESSIONS` DO binding; `hx_live_…` verifies live (`axis:stream`) + meters |
  * | POST `/mcp`          | MCP Streamable HTTP  | Bearer API key (same as scripts) |
  * | GET `/mcp`           | MCP discovery JSON   | public |
- * | GET `/api/mcp/bridge`| McpBridgeDO upgrade  | `?ticket=` (one-time) or Authorization header; never the long-lived key in the query |
+ * | GET `/api/mcp/bridge`| McpBridgeDO upgrade  | `?ticket=` (one-time) or Authorization header; `hx_live_…` verifies live; never the long-lived key in the query |
  * | GET `/api/mcp/bridge`| McpBridgeDO /status  | Bearer; no Upgrade header → `{ status, connected }` tab count |
  * | GET `/api/mcp/bridge?issue=ticket` | mint one-time WS ticket | Bearer |
  * | OPTIONS `*`          | CORS preflight       | 204 |
@@ -63,6 +63,7 @@ import { handleMarket } from './market';
 import { SessionDO } from './durable-objects/session';
 import { handleMcp, McpBridgeDO, parseBridgeTicket, formatBridgeTicket } from './mcp';
 import { requireApiKey } from './auth';
+import { gateTenantKey, meterTenantUsage } from './tenant';
 import { API_CORS, errorResponse, jsonResponse, methodNotAllowed, preflight } from './http';
 
 export { SessionDO, McpBridgeDO };
@@ -71,6 +72,8 @@ export { SessionDO, McpBridgeDO };
 export interface Env {
   /** KV: API key lookup (`key:<pn_…>` JSON). When unbound, dev accepts well-formed `pn_` keys. */
   API_KEYS?: KVNamespace;
+  /** KV: tenant verify cache (`hx:<hash16>` JSON). Optional — verify works without it (L1 + live). */
+  TENANT_KEYS?: KVNamespace;
   /** KV: optional per-key `/api/run` call counter. */
   USAGE?: KVNamespace;
   /** D1: scripts + script_drafts tables. When unbound, scripts use process memory. */
@@ -101,6 +104,15 @@ export interface Env {
   GITHUB_OAUTH_CLIENT_ID?: string;
   /** Public GitLab OAuth application id (device grant). */
   GITLAB_OAUTH_CLIENT_ID?: string;
+  /**
+   * Console base URL for live `hx_live_…` tenant verify + usage flush
+   * (e.g. `https://console.hoox.sh`). Unset = self-host: tenant verify is
+   * unavailable and tenant keys fall back to the legacy path (degraded) or
+   * fail closed when they have no legacy match.
+   */
+  CONSOLE_URL?: string;
+  /** Service key for usage-flush auth (hash-on-wire tenant hash otherwise). */
+  USAGE_SERVICE_KEY?: string;
 }
 
 const CORS_HEADERS = API_CORS;
@@ -154,8 +166,31 @@ export function pickOrigin(req: Request, env: Env): string {
 }
 
 /** JSON body + CORS headers shared by all non-stream routes. */
-function apiJson(body: unknown, status: number, origin: string): Response {
-  return jsonResponse(body, { status, origin, cors: CORS_HEADERS });
+function apiJson(
+  body: unknown,
+  status: number,
+  origin: string,
+  headers?: Record<string, string>,
+): Response {
+  return jsonResponse(body, { status, origin, cors: CORS_HEADERS, headers });
+}
+
+/**
+ * Tenant-gate denial as an error envelope (401 / 402 / 429 / 503).
+ * `Retry-After` is passed through on console rate limits.
+ */
+function tenantDeny(
+  gate: { status: number; code: string; message: string; retryAfter?: number },
+  origin: string,
+): Response {
+  return errorResponse(gate.code, gate.message, {
+    status: gate.status,
+    origin,
+    cors: CORS_HEADERS,
+    ...(gate.retryAfter !== undefined
+      ? { headers: { 'Retry-After': String(gate.retryAfter) } }
+      : {}),
+  });
 }
 
 export default {
@@ -163,7 +198,7 @@ export default {
    * Single `fetch` entry: CORS → stream DO upgrade → scripts → switch routes.
    * Uncaught handler errors become `{ status:'error', code:'INTERNAL' }` 500s.
    */
-  async fetch(req: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const origin = pickOrigin(req, env);
     if (req.method === 'OPTIONS') {
       return preflight(CORS_HEADERS, origin);
@@ -190,6 +225,7 @@ export default {
         const ticket = (url.searchParams.get('ticket') || '').trim();
         let userId: string | null = null;
         let nonce = '';
+        let bridgeHeaderDegraded = false;
         if (ticket) {
           const parsed = parseBridgeTicket(ticket);
           if (!parsed) {
@@ -212,34 +248,58 @@ export default {
               cors: CORS_HEADERS,
             });
           }
-          const authReq = new Request(`${url.origin}${url.pathname}`, {
-            headers: { Authorization: header },
-          });
-          const auth = await requireApiKey(authReq, env);
-          if (!auth.ok) {
-            return errorResponse(auth.code, auth.message, {
-              status: auth.status,
-              origin,
-              cors: CORS_HEADERS,
+          // SaaS tenant keys (hx_live_…) verify live against the console
+          // (`axis:stream` scope); all other bearers use the legacy path below.
+          const headerGate = await gateTenantKey(env, req, 'axis:stream');
+          if (headerGate) {
+            if (headerGate.decision === 'deny') return tenantDeny(headerGate, origin);
+            userId = headerGate.userId;
+            bridgeHeaderDegraded = headerGate.degraded;
+          } else {
+            const authReq = new Request(`${url.origin}${url.pathname}`, {
+              headers: { Authorization: header },
             });
+            const auth = await requireApiKey(authReq, env);
+            if (!auth.ok) {
+              return errorResponse(auth.code, auth.message, {
+                status: auth.status,
+                origin,
+                cors: CORS_HEADERS,
+              });
+            }
+            userId = auth.ctx.userId;
           }
-          userId = auth.ctx.userId;
         }
         const stub = env.MCP_BRIDGE.get(env.MCP_BRIDGE.idFromName(userId));
         const dest = new URL(`${url.origin}/ws`);
         if (nonce) dest.searchParams.set('ticket', nonce);
-        return stub.fetch(new Request(dest, req));
+        const bridgeUpgradeRes = await stub.fetch(new Request(dest, req));
+        // Mutate headers in place: rebuilding the Response would drop the upgrade webSocket.
+        if (bridgeHeaderDegraded) bridgeUpgradeRes.headers.set('X-Hoox-Verify', 'degraded');
+        return bridgeUpgradeRes;
       }
 
-      const auth = await requireApiKey(req, env);
-      if (!auth.ok) {
-        return errorResponse(auth.code, auth.message, {
-          status: auth.status,
-          origin,
-          cors: CORS_HEADERS,
-        });
+      // Tenant SaaS keys verify live here too; legacy bearers unchanged.
+      let bridgeDegraded = false;
+      let bridgeUserId: string | null = null;
+      const bridgeGate = await gateTenantKey(env, req, 'axis:stream');
+      if (bridgeGate) {
+        if (bridgeGate.decision === 'deny') return tenantDeny(bridgeGate, origin);
+        bridgeUserId = bridgeGate.userId;
+        bridgeDegraded = bridgeGate.degraded;
+      } else {
+        const auth = await requireApiKey(req, env);
+        if (!auth.ok) {
+          return errorResponse(auth.code, auth.message, {
+            status: auth.status,
+            origin,
+            cors: CORS_HEADERS,
+          });
+        }
+        bridgeUserId = auth.ctx.userId;
       }
-      const stub = env.MCP_BRIDGE.get(env.MCP_BRIDGE.idFromName(auth.ctx.userId));
+      const stub = env.MCP_BRIDGE.get(env.MCP_BRIDGE.idFromName(bridgeUserId));
+      const bridgeHeaders = bridgeDegraded ? { 'X-Hoox-Verify': 'degraded' } : undefined;
 
       if (issueTicket || req.method === 'POST') {
         const ticketRes = await stub.fetch(new Request(`${url.origin}/ticket`, { method: 'POST' }));
@@ -259,11 +319,12 @@ export default {
         return apiJson(
           {
             status: 'ok',
-            ticket: formatBridgeTicket(auth.ctx.userId, nonce),
+            ticket: formatBridgeTicket(bridgeUserId, nonce),
             expiresIn,
           },
           200,
           origin,
+          bridgeHeaders,
         );
       }
 
@@ -271,13 +332,15 @@ export default {
       const res = await stub.fetch(new Request(`${url.origin}/status`, req));
       const headers = new Headers(res.headers);
       for (const [k, v] of Object.entries(CORS_HEADERS(origin))) headers.set(k, v);
+      if (bridgeDegraded) headers.set('X-Hoox-Verify', 'degraded');
       return new Response(res.body, { status: res.status, headers });
     }
 
     // WebSocket session relay: /api/stream?session=&symbol=&interval= → SessionDO
     // DO is named by `session` query (default "default"); request rewritten to /ws.
-    // COMMERCIAL HOOK (verify-prep): future `axis:stream` verify (hx_live_… quota)
-    // plugs in here — open self-host path unchanged.
+    // SaaS tenant keys (hx_live_…) verify live (`axis:stream` scope) and meter
+    // one `streams` unit per session create. Open self-host path unchanged:
+    // non-tenant callers never touch the console.
     if (url.pathname === '/api/stream') {
       if (!env.SESSIONS) {
         return errorResponse(
@@ -286,10 +349,22 @@ export default {
           { status: 503, origin, cors: CORS_HEADERS },
         );
       }
+      let streamDegraded = false;
+      const streamGate = await gateTenantKey(env, req, 'axis:stream');
+      if (streamGate) {
+        if (streamGate.decision === 'deny') return tenantDeny(streamGate, origin);
+        streamDegraded = streamGate.degraded;
+        if (!streamDegraded) {
+          meterTenantUsage(env, streamGate, 'axis:stream', { streams: 1 }, ctx);
+        }
+      }
       const id = env.SESSIONS.idFromName(url.searchParams.get('session') ?? 'default');
       const stub = env.SESSIONS.get(id);
       const wsReq = new Request(`${url.origin}/ws?${url.searchParams.toString()}`, req);
-      return stub.fetch(wsReq);
+      const streamRes = await stub.fetch(wsReq);
+      // Mutate headers in place: rebuilding the Response would drop the upgrade webSocket.
+      if (streamDegraded) streamRes.headers.set('X-Hoox-Verify', 'degraded');
+      return streamRes;
     }
 
     try {

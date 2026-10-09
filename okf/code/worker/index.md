@@ -3,7 +3,7 @@
 # Concepts
 
 * [worker/src](src.md) - AXIS Cloudflare Worker entrypoint — JSON API + WebSocket relay for the charting PWA.
-* [worker/tests](tests.md) - worker/tests contains auth.test.ts, cors-origin.test.ts, git-oauth.test.ts, and 14 more files.
+* [worker/tests](tests.md) - worker/tests contains auth.test.ts, cors-origin.test.ts, git-oauth.test.ts, and 15 more files.
 
 # Nested
 

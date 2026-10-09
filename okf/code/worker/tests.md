@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "worker/tests"
-description: "worker/tests contains auth.test.ts, cors-origin.test.ts, git-oauth.test.ts, and 14 more files."
+description: "worker/tests contains auth.test.ts, cors-origin.test.ts, git-oauth.test.ts, and 15 more files."
 resource: "worker/tests"
 tags: [code, tests, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-07T03:59:37Z
+  at: 2026-10-09T06:42:54Z
 sources:
   - id: tree
     resource: "worker/tests"
@@ -35,6 +35,7 @@ okf_lock: generated
 * `scripts-d1-mock.test.ts`
 * `scripts.test.ts`
 * `session-sanitize.test.ts`
+* `tenant.test.ts`
 
 # Packages
 

@@ -27,6 +27,11 @@
  * 3. **503 `NO_BACKEND`** if neither path is available / Pyodide fails open.
  *
  * ## Auth & abuse controls
+ * - `hx_live_…` SaaS keys verify live against `{CONSOLE_URL}/api/v1/verify`
+ *   (`axis:run` scope) before the legacy gate; denials are 401 / 402
+ *   (upgrade at https://console.hoox.sh/billing) / 429, console outages fall
+ *   back to the legacy key (degraded) or fail closed 503. Verified runs meter
+ *   one `runs` unit to `{CONSOLE_URL}/api/v1/usage` (lossy).
  * - Auth is required when `API_KEYS` is bound, `REQUIRE_RUN_AUTH=1`, or a real
  *   compute path is configured (`EXTERNAL_BACKEND` non-empty or
  *   `PYODIDE_IN_WORKER=enabled`) and `ALLOW_OPEN_KEYS` is not `"1"`.
@@ -41,7 +46,8 @@
  */
 
 import type { Env } from './index';
-import { requireApiKey } from './auth';
+import { extractBearer, requireApiKey } from './auth';
+import { gateTenantKey, meterTenantUsage } from './tenant';
 import { tryRunInWorker } from './pyodide_runtime';
 import { clientIp, jsonResponse } from './http';
 import { _resetRateLimitsForTests, allowRate } from './rate-limit';
@@ -126,7 +132,12 @@ function validate(body: unknown): { ok: true; value: RunRequest } | { ok: false;
 }
 
 /** POST JSON body to `${EXTERNAL_BACKEND}/run`, preserving upstream status + body. */
-async function proxyToExternal(bodyText: string, env: Env, origin: string): Promise<Response> {
+async function proxyToExternal(
+    bodyText: string,
+    env: Env,
+    origin: string,
+    extraHeaders?: Record<string, string>,
+): Promise<Response> {
     const target = env.EXTERNAL_BACKEND?.replace(/\/$/, '');
     if (!target) {
         return new Response(
@@ -137,7 +148,14 @@ async function proxyToExternal(bodyText: string, env: Env, origin: string): Prom
                     'No EXTERNAL_BACKEND configured and PYODIDE_IN_WORKER is disabled. ' +
                     'Set EXTERNAL_BACKEND=<flask-url> OR PYODIDE_IN_WORKER=enabled (and ship the pynescript wheel in R2).',
             }),
-            { status: 503, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin } },
+            {
+                status: 503,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': origin,
+                    ...(extraHeaders || {}),
+                },
+            },
         );
     }
     let upstream: Response;
@@ -161,7 +179,11 @@ async function proxyToExternal(bodyText: string, env: Env, origin: string): Prom
             }),
             {
                 status: 504,
-                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': origin,
+                    ...(extraHeaders || {}),
+                },
             },
         );
     }
@@ -172,6 +194,7 @@ async function proxyToExternal(bodyText: string, env: Env, origin: string): Prom
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': origin,
             'Vary': 'Origin',
+            ...(extraHeaders || {}),
         },
     });
 }
@@ -181,10 +204,29 @@ async function proxyToExternal(bodyText: string, env: Env, origin: string): Prom
  * optional usage meter → Pyodide → external proxy fallback.
  */
 export async function handleRun(req: Request, env: Env, origin: string): Promise<Response> {
+    // ── SaaS tenant gate (hx_live_…): live console verify (`axis:run`) + meter.
+    // Non-tenant callers fall through to the legacy auth gate below, unchanged.
+    let verifyDegraded = false;
+    const gate = await gateTenantKey(env, req, 'axis:run');
+
     // ── Auth gate (KV / REQUIRE_RUN_AUTH / backend without open keys) ──
     let userId: string | null = null;
     let rawKey: string | null = null;
-    if (runAuthRequired(env)) {
+    if (gate) {
+        if (gate.decision === 'deny') {
+            return jsonError(
+                gate.status,
+                gate.code,
+                gate.message,
+                origin,
+                gate.retryAfter !== undefined ? { 'Retry-After': String(gate.retryAfter) } : undefined,
+            );
+        }
+        verifyDegraded = gate.degraded;
+        userId = gate.userId;
+        rawKey = extractBearer(req) || null;
+        if (!gate.degraded) meterTenantUsage(env, gate, 'axis:run', { runs: 1 });
+    } else if (runAuthRequired(env)) {
         const auth = await requireApiKey(req, env);
         if (!auth.ok) {
             return jsonError(auth.status, auth.code, auth.message, origin);
@@ -199,6 +241,10 @@ export async function handleRun(req: Request, env: Env, origin: string): Promise
         }
     }
 
+    // Degraded tenant verify (console unreachable, legacy key matched) rides
+    // along on every response below; absent otherwise.
+    const verifyHeaders = verifyDegraded ? { 'X-Hoox-Verify': 'degraded' } : undefined;
+
     // ── Rate limit (always) ──
     const ip = clientIp(req);
     const rateKey = userId ? `run:user:${userId}` : rawKey ? `run:key:${rawKey.slice(0, 16)}` : `run:ip:${ip}`;
@@ -208,14 +254,14 @@ export async function handleRun(req: Request, env: Env, origin: string): Promise
             'RATE_LIMIT',
             `Too many /api/run requests (max ${RUN_RATE_LIMIT}/${RUN_RATE_WINDOW_MS / 1000}s)`,
             origin,
-            { 'Retry-After': String(Math.ceil(RUN_RATE_WINDOW_MS / 1000)) },
+            { 'Retry-After': String(Math.ceil(RUN_RATE_WINDOW_MS / 1000)), ...(verifyHeaders || {}) },
         );
     }
 
     const body = await req.json().catch(() => null);
     const v = validate(body);
     if (!v.ok) {
-        return jsonError(400, 'BAD_REQUEST', v.err, origin);
+        return jsonError(400, 'BAD_REQUEST', v.err, origin, verifyHeaders);
     }
 
     // Best-effort usage meter; failures/unbound KV must not block runs.
@@ -234,11 +280,14 @@ export async function handleRun(req: Request, env: Env, origin: string): Promise
     if (env.PYODIDE_IN_WORKER === 'enabled') {
         const pyResult = await tryRunInWorker(v.value.script, v.value.data, env);
         if (pyResult) {
-            return jsonResponse(pyResult, { status: 200, headers: { 'Access-Control-Allow-Origin': origin } });
+            return jsonResponse(pyResult, {
+                status: 200,
+                headers: { 'Access-Control-Allow-Origin': origin, ...(verifyHeaders || {}) },
+            });
         }
         // Fall through to external if Pyodide failed to boot.
     }
 
     // 2) External backend (re-serialize parsed body — Request body is one-shot).
-    return proxyToExternal(JSON.stringify(body), env, origin);
+    return proxyToExternal(JSON.stringify(body), env, origin, verifyHeaders);
 }

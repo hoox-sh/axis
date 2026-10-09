@@ -39,6 +39,12 @@ enabled = true
 # binding = "USAGE"
 # id = "REPLACE_WITH_KV_ID"
 
+# Tenant verify cache (optional; worker runs without it via in-isolate L1).
+# Create with `wrangler kv namespace create TENANT_KEYS`, then paste id.
+# [[kv_namespaces]]
+# binding = "TENANT_KEYS"
+# id = "REPLACE_WITH_KV_ID"
+
 # D1 database — created via `wrangler d1 create pynescript`.
 # Schema (scripts + versions): axis setup d1 --local|--remote
 #   (or wrangler d1 execute pynescript --remote --file=schemas/scripts.sql)
@@ -82,6 +88,9 @@ ALLOWED_ORIGIN = "https://pynescript.online"
 #   axis secret put ADMIN_TOKEN
 # ADMIN_TOKEN = ""
 PYODIDE_IN_WORKER = "disabled"
+# Tenant commerce: verified usage flushes lossy to {CONSOLE_URL}/api/v1/usage
+# (2s budget); verify reads GET {CONSOLE_URL}/api/v1/verify with the key hash.
+CONSOLE_URL = "https://console.hoox.sh"
 # Local demos without KV: set to "1" to accept any Bearer key for /api/scripts
 ALLOW_OPEN_KEYS = "1"
 # Optional: OAuth App client ids for Connect with GitHub / GitLab (device flow).
