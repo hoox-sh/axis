@@ -249,7 +249,9 @@ export async function verifyTenant(
   opts?: VerifyOptions,
 ): Promise<VerifyResult> {
   const fetchFn = opts?.fetchFn ?? fetch;
-  const scope = (requiredScope || '').trim() || 'axis:run';
+  const scope = (requiredScope || '').trim();
+  // Fail closed on an empty scope — silently defaulting would mask caller bugs.
+  if (!scope) return entitlementFailure('(missing scope)');
   const hash = await sha256Hex(rawKey);
   const hash16 = hash.slice(0, 16);
   const ref = keyRef(hash);
@@ -602,7 +604,10 @@ export async function flushUsage(
     if (usageQueue.length === 0) return 0;
     const base = String(env.CONSOLE_URL ?? '').trim().replace(/\/+$/, '');
     if (!base) {
-      warn('usage_flush_no_console', { queued: usageQueue.length });
+      // No console: lossy-drop the queue (same as transport failure below) so
+      // an unconfigured deploy can never wedge the isolate at USAGE_QUEUE_MAX.
+      const dropped = usageQueue.splice(0, usageQueue.length).length;
+      warn('usage_flush_no_console', { queued: dropped, dropped });
       return 0;
     }
     const batch = usageQueue.splice(0, USAGE_BATCH_MAX);

@@ -415,7 +415,7 @@ export default {
         case '/api/run':
           return req.method !== 'POST'
             ? methodNotAllowed('POST', { origin, cors: CORS_HEADERS })
-            : await handleRun(req, env, origin);
+            : await handleRun(req, env, origin, ctx);
         case '/api/keys':
           return await handleKeys(req, env, origin);
         case '/api/usage':

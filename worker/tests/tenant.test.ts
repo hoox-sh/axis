@@ -21,6 +21,7 @@ import {
   clearUsageQueue,
   flushUsage,
   gateTenantKey,
+  meterTenantUsage,
   peekUsageQueue,
   queueUsage,
   sha256Hex,
@@ -253,6 +254,62 @@ describe('verifyTenant', () => {
     );
     expect(gate?.decision).toBe('allow');
     if (gate?.decision === 'allow') expect(gate.degraded).toBe(true);
+  });
+
+  it('empty scope fails closed without fetching', async () => {
+    clearTenantCache();
+    const env = envWith({ console: 'https://console.test' });
+    const r = await verifyTenant(env, 'hx_live_empty_scope', '' as never, {
+      fetchFn: async () => {
+        throw new Error('must not fetch on empty scope');
+      },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('ENTITLEMENT_REQUIRED');
+  });
+
+  it('meterTenantUsage flushes via ctx.waitUntil; degraded gates schedule nothing', async () => {
+    clearUsageQueue();
+    type Ctx = NonNullable<Parameters<typeof meterTenantUsage>[4]>;
+    const seen: Promise<unknown>[] = [];
+    const ctx = {
+      waitUntil: (p: Promise<unknown>) => {
+        seen.push(p);
+      },
+    } as unknown as Ctx;
+    meterTenantUsage(
+      envWith(),
+      {
+        decision: 'allow', userId: 'hx:test', tid: 't_ctx',
+        degraded: false, keyHash: 'h', keyHash16: 'abcd',
+      },
+      'axis:run',
+      { runs: 1 },
+      ctx,
+    );
+    expect(seen.length).toBe(1);
+    await seen[0];
+    // No CONSOLE_URL: lossy-drained, never retained.
+    expect(usageQueueDepth()).toBe(0);
+
+    const idle: Promise<unknown>[] = [];
+    const idleCtx = {
+      waitUntil: (p: Promise<unknown>) => {
+        idle.push(p);
+      },
+    } as unknown as Ctx;
+    meterTenantUsage(
+      envWith(),
+      {
+        decision: 'allow', userId: 'legacy', tid: '',
+        degraded: true, keyHash: '', keyHash16: '',
+      },
+      'axis:run',
+      { runs: 1 },
+      idleCtx,
+    );
+    expect(idle.length).toBe(0);
+    expect(usageQueueDepth()).toBe(0);
   });
 });
 

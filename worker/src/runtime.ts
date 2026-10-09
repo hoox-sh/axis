@@ -47,7 +47,7 @@
 
 import type { Env } from './index';
 import { extractBearer, requireApiKey } from './auth';
-import { gateTenantKey, meterTenantUsage } from './tenant';
+import { gateTenantKey, meterTenantUsage, sha256Hex } from './tenant';
 import { tryRunInWorker } from './pyodide_runtime';
 import { clientIp, jsonResponse } from './http';
 import { _resetRateLimitsForTests, allowRate } from './rate-limit';
@@ -203,7 +203,12 @@ async function proxyToExternal(
  * POST `/api/run` handler. Auth (when required) → rate limit → validate →
  * optional usage meter → Pyodide → external proxy fallback.
  */
-export async function handleRun(req: Request, env: Env, origin: string): Promise<Response> {
+export async function handleRun(
+    req: Request,
+    env: Env,
+    origin: string,
+    ctx?: ExecutionContext,
+): Promise<Response> {
     // ── SaaS tenant gate (hx_live_…): live console verify (`axis:run`) + meter.
     // Non-tenant callers fall through to the legacy auth gate below, unchanged.
     let verifyDegraded = false;
@@ -225,7 +230,7 @@ export async function handleRun(req: Request, env: Env, origin: string): Promise
         verifyDegraded = gate.degraded;
         userId = gate.userId;
         rawKey = extractBearer(req) || null;
-        if (!gate.degraded) meterTenantUsage(env, gate, 'axis:run', { runs: 1 });
+        if (!gate.degraded) meterTenantUsage(env, gate, 'axis:run', { runs: 1 }, ctx);
     } else if (runAuthRequired(env)) {
         const auth = await requireApiKey(req, env);
         if (!auth.ok) {
@@ -246,8 +251,17 @@ export async function handleRun(req: Request, env: Env, origin: string): Promise
     const verifyHeaders = verifyDegraded ? { 'X-Hoox-Verify': 'degraded' } : undefined;
 
     // ── Rate limit (always) ──
+    // Per-key bucket uses the key hash (never a raw-key prefix) so rate keys
+    // stay safe to log; hash failure falls back to the IP bucket.
     const ip = clientIp(req);
-    const rateKey = userId ? `run:user:${userId}` : rawKey ? `run:key:${rawKey.slice(0, 16)}` : `run:ip:${ip}`;
+    let rateKey = userId ? `run:user:${userId}` : `run:ip:${ip}`;
+    if (!userId && rawKey) {
+        try {
+            rateKey = `run:key:${(await sha256Hex(rawKey)).slice(0, 16)}`;
+        } catch {
+            /* fall back to the IP bucket — rate limiting must not block */
+        }
+    }
     if (!allowRate(rateKey, RUN_RATE_LIMIT, RUN_RATE_WINDOW_MS)) {
         return jsonError(
             429,
