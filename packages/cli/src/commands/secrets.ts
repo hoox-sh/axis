@@ -10,7 +10,7 @@ import type { Command } from "commander";
 import { getPaths } from "../utils/paths.js";
 import { runWrangler } from "../utils/run.js";
 import { commentTomlVar, hasTomlVar } from "../services/wrangler-toml.js";
-import { promptSecret } from "../utils/prompt.js";
+import { promptLine, promptSecret } from "../utils/prompt.js";
 import {
   CLIError,
   ExitCode,
@@ -49,7 +49,39 @@ export function isBindingNameInUse(output: string): boolean {
 }
 
 /**
+ * A failed `secret put` is retried through a Worker deploy ONLY for the 10053
+ * var/secret collision (the live Worker still holds the plaintext binding).
+ * Auth, network, and any other failure must surface as-is — a blind redeploy
+ * would hide the real error and ship an unrelated build (G10).
+ */
+export function requiresDeployRetry(detail: string): boolean {
+  return isBindingNameInUse(detail);
+}
+
+/**
+ * Confirm a destructive side effect. Non-interactive stdin (piped secret
+ * values, CI) cannot answer — it keeps the previous behavior and warns.
+ */
+async function confirmOrThrow(
+  opts: GlobalOpts,
+  question: string,
+  manualFix: string
+): Promise<void> {
+  if (opts.yes) return;
+  if (process.stdin.isTTY) {
+    const answer = (await promptLine(`${question} [y/N] `)).trim().toLowerCase();
+    if (answer === "y" || answer === "yes") return;
+    throw new CLIError("Aborted (no changes made)", ExitCode.ERROR, manualFix);
+  }
+  printWarn(
+    "Non-interactive stdin: proceeding without confirmation. Pass --yes to silence this, or run in a TTY to confirm.",
+    opts.quiet
+  );
+}
+
+/**
  * Comment a colliding `[vars]` key and deploy so `wrangler secret put` can succeed.
+ * The deploy is a side effect — it runs only after confirmation (or --yes).
  * Returns true when a deploy ran.
  */
 export async function dropPlaintextVarForSecret(
@@ -60,6 +92,11 @@ export async function dropPlaintextVarForSecret(
   if (!existsSync(paths.wranglerToml) || !hasTomlVar(paths.wranglerToml, key)) {
     return false;
   }
+  await confirmOrThrow(
+    opts,
+    `[vars] ${key} must be commented out and deployed before 'secret put' (Cloudflare 10053). Deploy now?`,
+    `Comment ${key} out of worker/wrangler.toml, then: axis deploy worker && axis secret put ${key}`
+  );
   commentTomlVar(paths.wranglerToml, key);
   printWarn(
     `[vars] ${key} commented out — Cloudflare forbids the same name as a var and a secret (10053).`,
@@ -134,10 +171,18 @@ export async function secretPut(
   let put = await wranglerSecretPut(worker, key, secretValue, opts);
   if (put.code !== 0) {
     const detail = `${put.stderr}\n${put.stdout}`;
-    printWarn(
-      isBindingNameInUse(detail)
-        ? "Cloudflare 10053: name still a plaintext var on the live Worker. Deploying to drop it, then retrying…"
-        : `secret put exited ${put.code}; deploying Worker and retrying…`,
+    // Retry through a deploy ONLY for the 10053 var/secret collision: the
+    // live Worker still holds the plaintext binding. Any other failure
+    // (auth, network, …) is thrown as-is — a blind redeploy would hide it
+    // and ship an unrelated build.
+    if (!requiresDeployRetry(detail)) {
+      throw new CLIError(
+        `wrangler secret put ${key} failed (exit ${put.code})`,
+        ExitCode.ERROR,
+        detail.trim() || "Check wrangler auth and retry (no deploy was run)"
+      );
+    }    printWarn(
+      "Cloudflare 10053: name still a plaintext var on the live Worker. Deploying to drop it, then retrying…",
       opts.quiet
     );
     const deployed = await runWrangler(worker, ["deploy"], {

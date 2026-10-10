@@ -12,10 +12,21 @@ const here = dirname(fileURLToPath(import.meta.url));
 const bin = join(here, "..", "bin", "axis.js");
 
 async function axis(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+  // Hermetic spawn: never inherit ambient credentials. run() merges over
+  // process.env, so keys must be overridden (empty = unset for the CLI's
+  // `|| ""` lookups). Otherwise a developer-shell AXIS_API_KEY would
+  // satisfy the key lookup — `mcp` would enter the stdio proxy and block
+  // on stdin — and `mcp config` would print the real secret into logs.
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    AXIS_CLI_SRC: "1",
+    AXIS_API_KEY: "",
+    AXIS_ADMIN_TOKEN: "",
+  };
   return run("bun", [bin, ...args], {
     throwOnError: false,
     cwd: join(here, ".."),
-    env: { ...process.env, AXIS_CLI_SRC: "1" },
+    env,
   });
 }
 
@@ -32,16 +43,22 @@ describe("mcp helpers", () => {
     expect(axis.headers?.Authorization).toBe("Bearer pn_abc");
   });
 
-  test("mcpClientConfig --stdio uses axis command", () => {
+  test("mcpClientConfig --stdio uses axis command with env key, never argv (G8)", () => {
     const cfg = mcpClientConfig({
       url: "https://worker.axis.hoox.sh/mcp",
       key: "pn_abc",
       stdio: true,
     });
-    const axis = (cfg.mcpServers as { axis: { command: string; args: string[] } }).axis;
+    const axis = (
+      cfg.mcpServers as {
+        axis: { command: string; args: string[]; env?: Record<string, string> };
+      }
+    ).axis;
     expect(axis.command).toBe("axis");
     expect(axis.args).toContain("mcp");
-    expect(axis.args).toContain("pn_abc");
+    // argv is visible via ps — the secret must not appear there.
+    expect(axis.args.join(" ")).not.toContain("pn_abc");
+    expect(axis.env?.AXIS_API_KEY).toBe("pn_abc");
   });
 });
 

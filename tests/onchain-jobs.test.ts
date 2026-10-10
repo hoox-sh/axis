@@ -227,4 +227,29 @@ describe('onchain jobs API', () => {
     }
     expect(listOnchainJobs().length).toBeLessThanOrEqual(20);
   });
+
+  it('cancel aborts the in-flight attach fetch (F1)', async () => {
+    const seen: { signal?: AbortSignal } = {};
+    _setAttachTvlForTests(
+      mock(async (_slugOrHit: unknown, _name?: string, opts?: { signal?: AbortSignal }) => {
+        seen.signal = opts?.signal;
+        await new Promise<void>((_resolve, reject) => {
+          opts?.signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+            once: true,
+          });
+        });
+        throw new Error('unreachable');
+      }) as never,
+    );
+    _seedOnchainAttachmentsForTests([fakeAttachment('att-1', 'aave')]);
+
+    const pending = refreshAttachment('att-1');
+    await new Promise((r) => setTimeout(r, 10));
+    const job = listOnchainJobs()[0];
+    if (!job) throw new Error('expected a queued job');
+    cancelOnchainJob(job.id);
+    await expect(pending).rejects.toThrow(/cancel/i);
+    expect(seen.signal?.aborted).toBe(true);
+    expect(listOnchainJobs()[0]?.status).toBe('cancelled');
+  });
 });

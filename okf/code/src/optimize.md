@@ -7,7 +7,7 @@ tags: [code, optimize]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:05:44Z
+  at: 2026-10-10T20:32:38Z
 sources:
   - id: tree
     resource: "src/optimize"
@@ -18,7 +18,7 @@ okf_lock: generated
 
 # Files
 
-* `client.ts` — RunStudyOpts, _holdoutOk, _pickWinnerForTests, _scoreStatsForTests, loadPersistedStudy, persistStudy, runHpoStudy
+* `client.ts` — RunStudyOpts, _holdoutOk, _pickWinnerForTests, _scoreStatsForTests, loadPersistedStudy, persistStudy, plannedEngineRuns, runHpoStudy, walkForwardWindowCount
 * `guard.ts` — beginStudy, endStudy, isStudyActive
 * `index.ts` — MAX_TRIALS, ObjectiveId, ParamSpec, SamplerId, StudySnapshot, ValidationSpec, beginStudy, defaultParamFromInput, endStudy, isStudyActive, loadPersistedStudy, persistStudy
 * `space.ts` — clampValue, defaultParamFromInput, isSearchableInput, randomAssignment, spaceReady, toPyneSpace
@@ -26,6 +26,7 @@ okf_lock: generated
 
 # Depends on
 
+* [src/engines](/code/src/engines.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/plugins](/code/src/plugins.md)
 * [src/results](/code/src/results.md)

@@ -374,6 +374,8 @@ export function foldVenueCandle(
   const step = stepSec > 0 ? stepSec : 60;
   const slot = Math.floor(startSec / step) * step;
   if (!cur || cur.time !== slot) {
+    // A new slot is the still-forming candle: never `closed` on its first tick.
+    // The previous slot's close is signalled by the caller (see coinbaseStream).
     return {
       time: slot,
       open: ohlcv.open,
@@ -381,7 +383,7 @@ export function foldVenueCandle(
       low: ohlcv.low,
       close: ohlcv.close,
       volume: ohlcv.volume,
-      closed: !!cur && cur.time !== slot,
+      closed: false,
     };
   }
   const addVol = opts?.mergeVolume !== false;
@@ -457,8 +459,14 @@ export const coinbaseStream: StreamPlugin = {
                 continue;
               }
               const mergeVolume = !(seededFromLast && cur && cur.time === Math.floor(startSec / step) * step);
+              const prev: Bar | null = cur;
+              const prevWasSeed = seededFromLast;
               cur = foldVenueCandle(cur, startSec, ohlcv, step, { mergeVolume });
               seededFromLast = false;
+              // Slot rolled over: the previous candle is now final — emit it closed
+              // before the new forming slot so bar-close consumers see the flag.
+              // The seeded lastBar is history, not a live event: never re-emit it.
+              if (prev && !prevWasSeed && prev.time !== cur.time) onBar({ ...prev, closed: true });
               onBar({ ...cur });
             }
           }
@@ -531,8 +539,15 @@ export const krakenStream: StreamPlugin = {
           if (!Array.isArray(msg) || !Array.isArray(msg[1])) return;
           const row = msg[1];
           if (row.length < 8) return;
+          // Kraken WS ohlc schema: [0] epoc_last (last update), [1] epoc_end (interval
+          // END). REST history keys bars by interval START (row[0]), so derive the start
+          // from the end — using row[1] directly put live bars one interval ahead.
+          const endSec = Math.floor(Number(row[1]));
+          if (!Number.isFinite(endSec) || endSec <= 0) return;
+          const startSec = endSec - intervalMin * 60;
+          if (!Number.isFinite(startSec) || startSec <= 0) return;
           onBar({
-            time: Math.floor(Number(row[1])), // etime
+            time: startSec,
             open: +row[2],
             high: +row[3],
             low: +row[4],
@@ -688,7 +703,10 @@ export const ccxtWsStream: StreamPlugin = {
       };
       ws.onerror = (ev: Event) => onError?.(new Error(String(ev)));
       ws.onopen = () => onStatus?.({ state: 'open' });
-      ws.onclose = () => onStatus?.({ state: 'closed' });
+      // No auto-reconnect here: report an unexpected drop so Live goes offline
+      // instead of staying green on a dead socket (multiplex keys off `closed`).
+      ws.onclose = () =>
+        onStatus?.(stopped ? { state: 'closed' } : { state: 'closed', detail: 'connection lost' });
     }).catch((err: unknown) => {
       if (!stopped) onError?.(err instanceof Error ? err : new Error(String(err)));
     });

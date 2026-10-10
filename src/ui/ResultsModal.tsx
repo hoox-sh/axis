@@ -571,10 +571,16 @@ export const ResultsModal: Component = () => {
     reloadSavedRuns();
   };
 
+  /** Tracked so unmount clears the pending reset (E17). */
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
   const flashCopied = async (text: string) => {
     if (await copyToClipboard(text)) {
       setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
+      if (copiedTimer !== undefined) clearTimeout(copiedTimer);
+      copiedTimer = setTimeout(() => {
+        copiedTimer = undefined;
+        setCopied(false);
+      }, 1200);
     }
   };
 
@@ -600,7 +606,13 @@ export const ResultsModal: Component = () => {
 
   onMount(() => {
     window.addEventListener('keydown', onKey);
-    onCleanup(() => window.removeEventListener('keydown', onKey));
+    onCleanup(() => {
+      window.removeEventListener('keydown', onKey);
+      if (copiedTimer !== undefined) {
+        clearTimeout(copiedTimer);
+        copiedTimer = undefined;
+      }
+    });
   });
 
   return (

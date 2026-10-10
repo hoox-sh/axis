@@ -166,6 +166,11 @@ import {
   type PriceScaleDecimalsMode,
 } from '../chart/price-precision';
 import { saveRunResult, supportsRunResults } from '../storage/service';
+import {
+  captureSecretsFromBags,
+  migratePlaintextSecrets,
+  sanitizePluginsConfigForPersist,
+} from '../storage/vault';
 import { setPersistenceMode } from '../data/dataset-store';
 import { onSinkError } from '../data/dataset-sinks';
 import type { ResultMeta, RunResult, StoredRunResult } from '../plugins/types';
@@ -185,6 +190,64 @@ export const STORAGE_KEY = 'pynescript.axis.v1';
 export const LEGACY_STORAGE_KEYS = [
   'pynescript.axis.v2',
 ] as const;
+
+/**
+ * Persisted-payload schema version (D21). Written by `buildPersistPayload`;
+ * blobs predating it parse as version 0 and migrate forward. Bump when a
+ * persisted shape changes incompatibly and extend {@link migratePersistedBag}.
+ */
+export const PERSIST_SCHEMA_VERSION = 1;
+
+/**
+ * Migrate a parsed (pre-validation) payload bag from `fromVersion` to
+ * {@link PERSIST_SCHEMA_VERSION}. Runs before field hydration so migrations
+ * see raw user data. Must never throw — unknown versions pass through and
+ * per-field validators below coerce anything unexpected to defaults.
+ */
+export function migratePersistedBag(
+  bag: Record<string, unknown>,
+  fromVersion: number,
+): Record<string, unknown> {
+  try {
+    if (!bag || typeof bag !== 'object' || Array.isArray(bag)) return bag;
+    if (!Number.isFinite(fromVersion) || fromVersion < 0) return bag;
+    if (fromVersion >= PERSIST_SCHEMA_VERSION) return bag;
+    // v0 → v1: no shape renames yet. Secrets used to persist in plaintext
+    // under pluginsConfig; they are stripped on write now and migrated to
+    // the session vault on read (see storage/vault).
+    return bag;
+  } catch {
+    return bag;
+  }
+}
+
+/** Read the schema version of a parsed blob (missing → 0, legacy). */
+export function persistedSchemaVersion(parsed: unknown): number {
+  try {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return 0;
+    const v = (parsed as Record<string, unknown>).schemaVersion;
+    return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Run a hydrator defensively (D7): one malformed section falls back to its
+ * default instead of voiding the whole blob.
+ */
+function safeHydrate<T>(label: string, fallback: T, fn: () => T): T {
+  try {
+    return fn();
+  } catch {
+    try {
+      warnPersistOnce(`[axis] ignoring malformed persisted section: ${label}`);
+    } catch {
+      /* logging must never break hydrate */
+    }
+    return fallback;
+  }
+}
 
 /** localStorage key for the docked/popout editor document body. */
 export const EDITOR_DOC_KEY = 'pynescript.axis.editor.doc';
@@ -233,8 +296,9 @@ function parseWatchlistList(raw: unknown, fallbackId: string): WatchlistList | n
 export function hydrateWatchlistState(raw: unknown): WatchlistState {
   const bag = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const open = typeof bag.open === 'boolean' ? bag.open : true;
-  const widthNum = Number(bag.width);
-  const width = Number.isFinite(widthNum) && widthNum >= 1 ? widthNum : 280;
+  // Drawer width is bounded both ways (D8): absurd values from corrupt or
+  // hand-edited blobs cannot push the layout off-screen.
+  const width = clampPanelWidth(bag.width, 280);
   const refreshSec = Math.min(
     120,
     Math.max(5, Number(bag.refreshSec) || 15),
@@ -438,7 +502,79 @@ export function clampHistoryBars(n: unknown): number {
   return Math.min(HISTORY_BARS_MAX, Math.max(HISTORY_BARS_MIN, Math.round(v)));
 }
 
+/** Bounds for the durable watchlist drawer width (D8 — was lower-bounded only). */
+export const WATCHLIST_WIDTH_MIN = 200;
+export const WATCHLIST_WIDTH_MAX = 640;
+
+/** Clamp a persisted drawer/panel width into usable bounds. */
+export function clampPanelWidth(n: unknown, fallback: number): number {
+  const v = typeof n === 'number' ? n : Number(n);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.min(WATCHLIST_WIDTH_MAX, Math.max(WATCHLIST_WIDTH_MIN, Math.round(v)));
+}
+
+/**
+ * Validate a market symbol from disk: uppercased alphanumerics + a small set
+ * of separators, length-capped. Anything else falls back to the default so a
+ * corrupt blob cannot poison venue requests (D8).
+ */
+export function hydrateMarketSymbol(raw: unknown): string {
+  const v = typeof raw === 'string' ? raw.trim().toUpperCase() : '';
+  if (!v || v.length > 32 || !/^[A-Z0-9._:\-/]+$/.test(v)) return DEFAULTS.symbol;
+  return v;
+}
+
+/** Validate a persisted interval (`15m`, `1h`, `1d`, …); else the default. */
+export function hydrateInterval(raw: unknown): string {
+  const v = typeof raw === 'string' ? raw.trim() : '';
+  if (!v || v.length > 8 || !/^[0-9]+[mhdwM]$/.test(v)) return DEFAULTS.interval;
+  return v;
+}
+
+/** Validate a persisted exchange id (lowercase alnum + dashes); else default. */
+export function hydrateExchange(raw: unknown): string {
+  const v = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (!v || v.length > 32 || !/^[a-z0-9][a-z0-9_-]*$/.test(v)) return DEFAULTS.exchange;
+  return v;
+}
+
+/** Validate a plugin id from disk (non-empty string, length-capped); else fallback. */
+export function hydratePluginId(raw: unknown, fallback: string): string {
+  const v = typeof raw === 'string' ? raw.trim() : '';
+  if (!v || v.length > 96) return fallback;
+  return v;
+}
+
+/**
+ * Sanitize a persisted pane list (D8): plain objects with string ids only,
+ * numeric geometry clamped, capped length. Unknown entries are dropped.
+ */
+export function sanitizePersistedPanes(raw: unknown): Pane[] {
+  if (!Array.isArray(raw)) return DEFAULTS.panes.map((p) => ({ ...p }));
+  const out: Pane[] = [];
+  const seen = new Set<string>();
+  for (const item of raw.slice(0, 12)) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const o = item as Record<string, unknown>;
+    const id = typeof o.id === 'string' && o.id.trim() ? o.id.trim().slice(0, 64) : '';
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const num = (v: unknown, fallback: number) =>
+      typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+    out.push({
+      id,
+      type: typeof o.type === 'string' ? (o.type as Pane['type']) : 'price',
+      height: Math.min(2000, Math.max(0, num(o.height, 0))),
+      order: Math.min(100, Math.max(0, Math.round(num(o.order, out.length)))),
+      visible: o.visible !== false,
+      label: typeof o.label === 'string' ? o.label.slice(0, 80) : id,
+    } as Pane);
+  }
+  return out.length ? out : DEFAULTS.panes.map((p) => ({ ...p }));
+}
+
 export const DEFAULTS: AppState = {
+  schemaVersion: PERSIST_SCHEMA_VERSION,
   bars: [],
   chartDataGen: 0,
   chartType: DEFAULT_CHART_TYPE,
@@ -697,7 +833,16 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return null;
     }
-    const bag = parsed as Record<string, unknown> & Partial<AppState>;
+    const rawBag = parsed as Record<string, unknown> & Partial<AppState>;
+    // Schema migration first (unknown versions pass through; validators
+    // below coerce anything unexpected to defaults).
+    const bag = migratePersistedBag(
+      rawBag,
+      persistedSchemaVersion(rawBag),
+    ) as Record<string, unknown> & Partial<AppState>;
+    // Plaintext secrets from pre-vault blobs move to the session vault.
+    // In-memory values stay for the running session; future persists strip them.
+    migratePlaintextSecrets((bag as { pluginsConfig?: unknown }).pluginsConfig);
     const source =
       (typeof bag.source === 'string' && bag.source) || DEFAULTS.source;
     const engine =
@@ -743,8 +888,20 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
 
     return {
       ...DEFAULTS,
-      ...bag,
+      // No `...bag` spread: unknown/legacy keys are dropped (D8) and every
+      // durable field below is validated with bounds. Ephemeral keys absent
+      // here (status, stream, toasts, …) fall back to seed defaults.
+      schemaVersion: PERSIST_SCHEMA_VERSION,
       endpoint,
+      symbol: hydrateMarketSymbol(bag.symbol),
+      interval: hydrateInterval(bag.interval),
+      exchange: hydrateExchange(bag.exchange),
+      source: hydratePluginId(bag.source, DEFAULTS.source),
+      engine: hydratePluginId(bag.engine, DEFAULTS.engine),
+      theme: bag.theme === 'light' || bag.theme === 'dark' ? bag.theme : DEFAULTS.theme,
+      panes: safeHydrate('panes', DEFAULTS.panes.map((p) => ({ ...p })), () =>
+        sanitizePersistedPanes(bag.panes),
+      ),
       chartType: normalizeChartType(bag.chartType),
       priceScaleLabelsVisible:
         typeof bag.priceScaleLabelsVisible === 'boolean'
@@ -802,10 +959,16 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       editor: {
         ...DEFAULTS.editor,
         ...(bag.editor && typeof bag.editor === 'object' ? bag.editor : {}),
+        // A persisted `popout` mode is always stale after reload (D11): the
+        // detached window is gone, so boot docked. A live popout
+        // re-announces itself through the editor-bridge `hello` handshake and
+        // flips back to popout then.
+        mode: 'docked' as EditorMode,
       },
       uiScale: clampUiScale(bag.uiScale ?? DEFAULTS.uiScale),
-      // Chart theme: hydrate when present; else default and sync base from chrome theme
-      chartTheme: (() => {
+      // Chart theme: hydrate when present; else default and sync base from chrome theme.
+      // Isolated (D7): a malformed theme falls back instead of voiding the blob.
+      chartTheme: safeHydrate('chartTheme', defaultChartThemeState(), () => {
         if (bag.chartTheme != null) {
           return hydrateChartTheme(bag.chartTheme);
         }
@@ -814,9 +977,13 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         if (chrome === 'light') return withPreset('void-light');
         if (chrome === 'dark') return withPreset('void-dark');
         return defaultChartThemeState();
-      })(),
-      watchlist: hydrateWatchlistState(bag.watchlist),
-      extras: hydrateExtras(bag.extras),
+      }),
+      watchlist: safeHydrate('watchlist', hydrateWatchlistState(undefined), () =>
+        hydrateWatchlistState(bag.watchlist),
+      ),
+      extras: safeHydrate('extras', hydrateExtras(undefined), () =>
+        hydrateExtras(bag.extras),
+      ),
       indicatorPanel: {
         ...DEFAULTS.indicatorPanel,
         ...(bag.indicatorPanel && typeof bag.indicatorPanel === 'object'
@@ -845,9 +1012,11 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
           ? ((bag as { editorStrategyProps: Record<string, unknown> }).editorStrategyProps)
           : DEFAULTS.editorStrategyProps,
       // Applied chart scripts (code + pane + colors) — durable so reopen re-paints
-      scripts: sanitizePersistedScripts(bag.scripts),
-      pineTablesLocation: hydratePineTablesLocation(
-        (bag as { pineTablesLocation?: unknown }).pineTablesLocation,
+      scripts: safeHydrate('scripts', [], () => sanitizePersistedScripts(bag.scripts)),
+      pineTablesLocation: safeHydrate('pineTablesLocation', {}, () =>
+        hydratePineTablesLocation(
+          (bag as { pineTablesLocation?: unknown }).pineTablesLocation,
+        ),
       ),
       // Ephemeral UI — never hydrate open modals / crosshair from disk
       scriptSettings: { open: false, indicatorId: null },
@@ -878,7 +1047,9 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         typeof (bag as { editorRulerEnabled?: boolean }).editorRulerEnabled === 'boolean'
           ? !!(bag as { editorRulerEnabled?: boolean }).editorRulerEnabled
           : DEFAULTS.editorRulerEnabled,
-      shortcuts: hydrateShortcuts((bag as { shortcuts?: unknown }).shortcuts),
+      shortcuts: safeHydrate('shortcuts', { overrides: {} }, () =>
+        hydrateShortcuts((bag as { shortcuts?: unknown }).shortcuts),
+      ),
       editorWrapEnabled:
         typeof (bag as { editorWrapEnabled?: boolean }).editorWrapEnabled === 'boolean'
           ? !!(bag as { editorWrapEnabled?: boolean }).editorWrapEnabled
@@ -894,7 +1065,9 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         typeof (bag as { editorFeatureBarEnabled?: boolean }).editorFeatureBarEnabled === 'boolean'
           ? !!(bag as { editorFeatureBarEnabled?: boolean }).editorFeatureBarEnabled
           : DEFAULTS.editorFeatureBarEnabled,
-      editorIntel: readEditorIntel((bag as { editorIntel?: unknown }).editorIntel),
+      editorIntel: safeHydrate('editorIntel', readEditorIntel(undefined), () =>
+        readEditorIntel((bag as { editorIntel?: unknown }).editorIntel),
+      ),
       activePlugins: {
         ...DEFAULTS.activePlugins,
         ...pluginsBag,
@@ -903,15 +1076,17 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         stream: pluginsBag?.stream || streamId,
         storage: pluginsBag?.storage || DEFAULTS.activePlugins.storage,
       },
-      provider: hydrateProviderSession(
-        (bag as { provider?: unknown }).provider,
-        pluginsBag?.source || source,
-        pluginsBag?.stream || streamId,
-        (() => {
-          const cfg = (bag as { pluginsConfig?: Record<string, unknown> }).pluginsConfig;
-          const src = cfg?.['source:ccxt-rest'] as Record<string, unknown> | undefined;
-          return typeof src?.exchange === 'string' ? src.exchange : undefined;
-        })(),
+      provider: safeHydrate('provider', { ...DEFAULT_PROVIDER }, () =>
+        hydrateProviderSession(
+          (bag as { provider?: unknown }).provider,
+          pluginsBag?.source || source,
+          pluginsBag?.stream || streamId,
+          (() => {
+            const cfg = (bag as { pluginsConfig?: Record<string, unknown> }).pluginsConfig;
+            const src = cfg?.['source:ccxt-rest'] as Record<string, unknown> | undefined;
+            return typeof src?.exchange === 'string' ? src.exchange : undefined;
+          })(),
+        ),
       ) as ProviderSession,
       pluginsConfig:
         bag.pluginsConfig && typeof bag.pluginsConfig === 'object'
@@ -983,10 +1158,16 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       presentation: { fullscreen: false, chartOnly: false },
       // Drawing tool always starts as cursor; list normalized for dual legacy/style fields
       drawingTool: 'cursor',
-      drawings: normalizeUserDrawings(bag.drawings) as Drawing[],
+      drawings: safeHydrate('drawings', [], () =>
+        normalizeUserDrawings(bag.drawings),
+      ) as Drawing[],
 
-      drawingPrefs: hydrateDrawingPrefs(bag.drawingPrefs),
-      drawingUi: {
+      drawingPrefs: safeHydrate(
+        'drawingPrefs',
+        hydrateDrawingPrefs(undefined),
+        () => hydrateDrawingPrefs(bag.drawingPrefs),
+      ),
+      drawingUi: safeHydrate('drawingUi', { ...DEFAULTS.drawingUi }, () => ({
         ...DEFAULTS.drawingUi,
         ...(bag.drawingUi && typeof bag.drawingUi === 'object' ? bag.drawingUi : {}),
         lastToolByGroup:
@@ -996,10 +1177,11 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
           typeof (bag.drawingUi as AppState['drawingUi']).lastToolByGroup === 'object'
             ? { ...(bag.drawingUi as AppState['drawingUi']).lastToolByGroup }
             : { ...DEFAULTS.drawingUi.lastToolByGroup },
-      },
+      })),
       // Ephemeral selection — never hydrate from disk
       selectedDrawingId: null,
-      panelChrome: mergePanelChrome(bag.panelChrome, {
+      panelChrome: safeHydrate('panelChrome', defaultPanelChromeMap(), () =>
+        mergePanelChrome(bag.panelChrome, {
         // Bridge legacy open/width into chrome on first load
         watchlist: {
           open:
@@ -1074,29 +1256,49 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
               ? (bag.alertsPanel as AppState['alertsPanel']).width
               : 280,
         },
-      }),
-      chartLayout: normalizeChartLayout(
-        (bag as { chartLayout?: ChartLayoutState }).chartLayout,
-        {
-          symbol: (typeof bag.symbol === 'string' && bag.symbol) || DEFAULTS.symbol,
-          interval: (typeof bag.interval === 'string' && bag.interval) || DEFAULTS.interval,
-          exchange: (typeof bag.exchange === 'string' && bag.exchange) || DEFAULTS.exchange,
-          chartType: normalizeChartType(bag.chartType),
-        },
+        }),
       ),
-      savedLayouts: Array.isArray((bag as { savedLayouts?: unknown }).savedLayouts)
-        ? ((bag as { savedLayouts: SavedChartLayout[] }).savedLayouts || [])
-            .filter((l) => l && typeof l === 'object' && typeof l.id === 'string')
-            .slice(0, 40)
-        : [],
+      chartLayout: safeHydrate(
+        'chartLayout',
+        defaultChartLayout({
+          symbol: DEFAULTS.symbol,
+          interval: DEFAULTS.interval,
+          exchange: DEFAULTS.exchange,
+        }),
+        () =>
+          normalizeChartLayout(
+            (bag as { chartLayout?: ChartLayoutState }).chartLayout,
+            {
+              symbol: hydrateMarketSymbol(bag.symbol),
+              interval: hydrateInterval(bag.interval),
+              exchange: hydrateExchange(bag.exchange),
+              chartType: normalizeChartType(bag.chartType),
+            },
+          ),
+      ),
+      savedLayouts: safeHydrate('savedLayouts', [], () =>
+        Array.isArray((bag as { savedLayouts?: unknown }).savedLayouts)
+          ? ((bag as { savedLayouts: SavedChartLayout[] }).savedLayouts || [])
+              .filter((l) => l && typeof l === 'object' && typeof l.id === 'string')
+              .slice(0, 40)
+          : [],
+      ),
       savedChartThemes,
       savedBarThemes,
       activeSavedThemeId,
       activeBarThemeId,
-      compare: hydrateCompare(bag.compare),
-      onchain: hydrateOnchain((bag as { onchain?: unknown }).onchain),
-      topbar: hydrateTopbar((bag as { topbar?: unknown }).topbar),
-      notifications: hydrateNotifications((bag as { notifications?: unknown }).notifications),
+      compare: safeHydrate('compare', hydrateCompare(undefined), () =>
+        hydrateCompare(bag.compare),
+      ),
+      onchain: safeHydrate('onchain', hydrateOnchain(undefined), () =>
+        hydrateOnchain((bag as { onchain?: unknown }).onchain),
+      ),
+      topbar: safeHydrate('topbar', hydrateTopbar(undefined), () =>
+        hydrateTopbar((bag as { topbar?: unknown }).topbar),
+      ),
+      notifications: safeHydrate('notifications', hydrateNotifications(undefined), () =>
+        hydrateNotifications((bag as { notifications?: unknown }).notifications),
+      ),
     };
   } catch {
     return null;
@@ -1160,8 +1362,36 @@ export function sanitizePersistedScripts(raw: unknown): Indicator[] {
 }
 
 /**
- * Hydrate durable fields from localStorage. Corrupt JSON is dropped (key cleared)
- * and never throws — boot always gets defaults + any valid overlay.
+ * Back up a corrupt blob to a capped sidecar key, then clear the source key
+ * only when the backup landed (D6). A single `.corrupt` sidecar per source is
+ * the cap — repeated corrupt boots overwrite it instead of growing storage.
+ * When the backup itself fails (quota), the source key is kept so user state
+ * is never silently deleted; boot still proceeds with defaults/legacy keys.
+ *
+ * @returns true when the source key was cleared (backed up or already empty)
+ */
+export function backupAndClearCorrupt(sourceKey: string, backupKey: string): boolean {
+  let raw: string | null = null;
+  try {
+    raw = readLocalStorage(sourceKey);
+  } catch {
+    return false;
+  }
+  if (!raw) return true;
+  try {
+    if (typeof localStorage === 'undefined' || localStorage == null) return false;
+    localStorage.setItem(backupKey, raw);
+  } catch {
+    return false;
+  }
+  removeLocalStorage(sourceKey);
+  return true;
+}
+
+/**
+ * Hydrate durable fields from localStorage. Corrupt JSON is backed up to a
+ * capped sidecar key (never silently deleted) and never throws — boot always
+ * gets defaults + any valid overlay.
  */
 function loadPersisted(): Partial<AppState> {
   try {
@@ -1175,12 +1405,7 @@ function loadPersisted(): Partial<AppState> {
       warnPersistOnce(
         '[axis] stored app state failed to parse; moved to backup key and started with defaults',
       );
-      try {
-        localStorage.setItem(`${STORAGE_KEY}.corrupt`, current);
-      } catch {
-        /* quota — keep going */
-      }
-      removeLocalStorage(STORAGE_KEY);
+      backupAndClearCorrupt(STORAGE_KEY, `${STORAGE_KEY}.corrupt`);
     }
     for (const legacy of LEGACY_STORAGE_KEYS) {
       const raw = readLocalStorage(legacy);
@@ -1194,7 +1419,12 @@ function loadPersisted(): Partial<AppState> {
         }
         return overlay;
       }
-      removeLocalStorage(legacy);
+      // Corrupt legacy blobs get the same capped backup treatment (D6) —
+      // previously they were removed unconditionally with no backup.
+      warnPersistOnce(
+        `[axis] legacy stored state ${legacy} failed to parse; moved to backup key`,
+      );
+      backupAndClearCorrupt(legacy, `${legacy}.corrupt`);
     }
   } catch {
     /* localStorage / parse — fall through to defaults */
@@ -1570,8 +1800,22 @@ function seedStoreState(overlay: Partial<AppState> | null | undefined): AppState
     strategyUi: { ...DEFAULTS.strategyUi },
     stream: { ...DEFAULTS.stream },
     shortcuts: { overrides: { ...DEFAULTS.shortcuts.overrides } },
+    editorIntel: { ...DEFAULTS.editorIntel },
     compare: { ...DEFAULTS.compare, bars: [] },
     onchain: { ...DEFAULTS.onchain },
+    // D9: topbar/extras were missing here, so the live store shared the
+    // DEFAULTS object by reference — a setStore path update would mutate
+    // DEFAULTS and poison parsePersistedState / reset helpers.
+    topbar: { ...DEFAULTS.topbar },
+    extras: {
+      ...DEFAULTS.extras,
+      priceCard: { ...DEFAULTS.extras.priceCard },
+      ticker: {
+        ...DEFAULTS.extras.ticker,
+        symbols: [...DEFAULTS.extras.ticker.symbols],
+      },
+      alertOverlay: { ...DEFAULTS.extras.alertOverlay },
+    },
     notifications: {
       ...DEFAULT_NOTIFICATIONS,
       categories: { ...DEFAULT_NOTIFICATIONS.categories },
@@ -1699,7 +1943,18 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
   const compare = s.compare;
   const telemetry = s.telemetry;
 
+  // Vault any plaintext secrets the running session holds in plugin bags
+  // (legacy src/ui forms write straight into the store) before the payload
+  // below strips them — reload in the same tab keeps working, localStorage
+  // never carries secrets at rest (D1).
+  try {
+    captureSecretsFromBags(s.pluginsConfig);
+  } catch {
+    /* capture must never break persist */
+  }
+
   const base: Record<string, unknown> = {
+    schemaVersion: PERSIST_SCHEMA_VERSION,
     symbol: s.symbol,
     interval: s.interval,
     exchange: s.exchange,
@@ -1726,6 +1981,9 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     panes: unwrap(s.panes),
     watchlist: unwrap(s.watchlist),
     extras: unwrap(s.extras),
+    topbar: unwrap(s.topbar),
+    onchain: unwrap(s.onchain),
+    drawingUi: unwrap(s.drawingUi),
     indicatorPanel: unwrap(s.indicatorPanel),
     dataViewPanel: unwrap(s.dataViewPanel),
     layerPanel: unwrap(s.layerPanel),
@@ -1757,7 +2015,11 @@ function buildPersistPayload(opts?: { slim?: boolean }): Record<string, unknown>
     priceScaleDecimals: normalizePriceScaleDecimalsMode(s.priceScaleDecimals),
     activePlugins: unwrap(s.activePlugins),
     provider: persistProviderSession(s.provider || DEFAULT_PROVIDER),
-    pluginsConfig: unwrap(s.pluginsConfig),
+    // Secrets (cloud apiKey, git token, agent key) are vaulted above and
+    // stripped here — the durable payload never carries them (D1).
+    pluginsConfig: sanitizePluginsConfigForPersist(
+      unwrap(s.pluginsConfig) as Record<string, Record<string, unknown>>,
+    ),
     compare: {
       enabled: !!compare?.enabled,
       symbol: (compare?.symbol || '').toUpperCase(),
@@ -2055,6 +2317,25 @@ function pushToastEntry(level: LogLevel, message: string, source: string) {
 }
 
 /**
+ * Single flood-control gate for toast routing (D19): global `enabled`,
+ * `levelMin` floor, and per-category toggle. `notify` and `appendLog` share
+ * it so the two paths cannot drift. Returns the resolved category when the
+ * toast may show, else `null` (callers still write the system log entry).
+ */
+export function toastGate(
+  level: LogLevel,
+  source: string,
+  categoryOverride?: NotificationCategory,
+): NotificationCategory | null {
+  const prefs = store.notifications || DEFAULT_NOTIFICATIONS;
+  if (!prefs.enabled) return null;
+  if (LEVEL_RANK[level] < LEVEL_RANK[prefs.levelMin || 'ok']) return null;
+  const category = categoryOverride || notificationCategoryFor(source);
+  if (prefs.categories && prefs.categories[category] === false) return null;
+  return category;
+}
+
+/**
  * Raise a toast **and** write it to the system log strip.
  *
  * Flood control (Settings → Notifications): global `enabled`, per-category
@@ -2069,12 +2350,9 @@ export function notify(level: LogLevel, message: string, opts?: NotifyOpts | str
   if (!msg) return;
   appendLogRaw(level, msg, source);
   if (logOnly) return;
-  const prefs = store.notifications || DEFAULT_NOTIFICATIONS;
-  if (!prefs.enabled) return;
-  if (LEVEL_RANK[level] < LEVEL_RANK[prefs.levelMin || 'ok']) return;
   const category =
-    (typeof opts === 'object' && opts?.category) || notificationCategoryFor(source);
-  if (prefs.categories && prefs.categories[category] === false) return;
+    typeof opts === 'object' ? opts?.category : undefined;
+  if (!toastGate(level, source, category)) return;
   pushToastEntry(level, msg, source);
 }
 
@@ -2120,10 +2398,7 @@ export function appendLog(
   appendLogRaw(level, message, src);
   if (mode === false || mode === 'silent') return;
   if (level !== 'warn' && level !== 'error') return;
-  const prefs = store.notifications || DEFAULT_NOTIFICATIONS;
-  if (!prefs.enabled) return;
-  if (LEVEL_RANK[level] < LEVEL_RANK[prefs.levelMin || 'ok']) return;
-  if (prefs.categories && prefs.categories[notificationCategoryFor(src)] === false) return;
+  if (!toastGate(level, src)) return;
   pushToastEntry(level, String(message || ''), src);
 }
 

@@ -488,4 +488,47 @@ describe('data-source-manager', () => {
     expect(secToDateInput(NaN)).toBe('');
     expect(secToDateInput(undefined)).toBe('');
   });
+
+  it('applyCachedToChart with onlyIfCurrent skips paint for a stale symbol', async () => {
+    const { applyCachedToChart } = await import('../src/data/data-source-manager');
+    const { putDatasetBars } = await import('../src/data/dataset-store');
+    const { setStore, store } = await import('../src/store');
+    const prev = {
+      symbol: store.symbol,
+      interval: store.interval,
+      source: store.source,
+      bars: store.bars,
+    };
+    try {
+      const seed = [1000, 1060, 1120].map((t) => bar(t));
+      await putDatasetBars('mock-walk', 'AAA', '1d', seed);
+      await putDatasetBars('mock-walk', 'BBB', '1d', seed);
+      setStore('symbol', 'BBB');
+      setStore('interval', '1d');
+      setStore('source', 'mock-walk');
+      setStore('bars', []);
+      // Background auto-apply for a stale key must not paint over the current chart
+      const skipped = await applyCachedToChart('mock-walk', 'AAA', '1d', null, {
+        onlyIfCurrent: true,
+      });
+      expect(skipped).toBe(false);
+      expect(store.bars).toHaveLength(0);
+      // The current key still paints through the same guard
+      const painted = await applyCachedToChart('mock-walk', 'BBB', '1d', null, {
+        onlyIfCurrent: true,
+      });
+      expect(painted).toBe(true);
+      expect(store.bars.length).toBeGreaterThan(0);
+      // Explicit UI apply (panel / datasets modal) bypasses the guard
+      setStore('bars', []);
+      const forced = await applyCachedToChart('mock-walk', 'AAA', '1d');
+      expect(forced).toBe(true);
+      expect(store.bars.length).toBeGreaterThan(0);
+    } finally {
+      setStore('symbol', prev.symbol);
+      setStore('interval', prev.interval);
+      setStore('source', prev.source);
+      setStore('bars', prev.bars);
+    }
+  });
 });

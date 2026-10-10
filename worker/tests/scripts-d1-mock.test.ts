@@ -107,8 +107,34 @@ function mockD1(opts?: { failList?: boolean }) {
                   return { meta: { changes: 0 } };
                 }
               }
-              if (s.includes('INTO scripts') || (s.includes('ON CONFLICT') && s.includes('scripts'))) {
-                const [userId, id, name, description, path, content, revision, created_at, updated_at] =
+              if (s.startsWith('UPDATE scripts')) {
+                // Compare-and-swap: args (name, description, path, content,
+                // revision, updated_at, userId, id, expectedRevision).
+                const [name, description, path, content, revision, updated_at] = args as (
+                  | string
+                  | number
+                  | null
+                )[];
+                const userId = String(args[6]);
+                const id = String(args[7]);
+                const expected = String(args[8]);
+                const row = scripts.get(key(userId, id));
+                if (!row || String(row.revision) !== expected) {
+                  return { meta: { changes: 0 } };
+                }
+                scripts.set(key(userId, id), {
+                  id,
+                  name,
+                  description,
+                  path,
+                  content,
+                  revision,
+                  created_at: row.created_at,
+                  updated_at,
+                });
+                return { meta: { changes: 1 } };
+              }
+              if (s.includes('INTO scripts') || (s.includes('ON CONFLICT') && s.includes('scripts'))) {                const [userId, id, name, description, path, content, revision, created_at, updated_at] =
                   args as (string | number | null)[];
                 scripts.set(key(String(userId), String(id)), {
                   id,
@@ -237,5 +263,98 @@ describe('scripts D1 mock', () => {
     );
     const j = await list.json();
     expect(j.versions.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('D1 PUT with If-Match uses compare-and-swap (A12)', async () => {
+    const env = { ALLOW_OPEN_KEYS: '1', DB: mockD1() } as Env;
+    const created = await handleScripts(
+      req('/api/scripts/s1', {
+        method: 'PUT',
+        body: JSON.stringify({ name: 'D1', content: 'v1' }),
+      }),
+      env,
+      origin,
+      '/api/scripts/s1',
+    );
+    const rev1 = (await created.json()).script.revision as string;
+
+    // Matching revision wins.
+    const swapped = await handleScripts(
+      req('/api/scripts/s1', {
+        method: 'PUT',
+        headers: { 'If-Match': rev1 },
+        body: JSON.stringify({ content: 'v2' }),
+      }),
+      env,
+      origin,
+      '/api/scripts/s1',
+    );
+    expect(swapped.status).toBe(200);
+    const rev2 = (await swapped.json()).script.revision as string;
+    expect(rev2).not.toBe(rev1);
+
+    // Stale revision loses with the remote tip (lost update prevented).
+    const stale = await handleScripts(
+      req('/api/scripts/s1', {
+        method: 'PUT',
+        headers: { 'If-Match': rev1 },
+        body: JSON.stringify({ content: 'v3-clobber' }),
+      }),
+      env,
+      origin,
+      '/api/scripts/s1',
+    );
+    expect(stale.status).toBe(409);
+    expect((await stale.json()).remoteRevision).toBe(rev2);
+
+    const get = await handleScripts(req('/api/scripts/s1'), env, origin, '/api/scripts/s1');
+    expect((await get.json()).script.content).toBe('v2');
+  });
+
+  it('D1 PUT with If-Match on a missing id is 404', async () => {
+    const env = { ALLOW_OPEN_KEYS: '1', DB: mockD1() } as Env;
+    const r = await handleScripts(
+      req('/api/scripts/nope', {
+        method: 'PUT',
+        headers: { 'If-Match': 'rev_anything' },
+        body: JSON.stringify({ content: 'x' }),
+      }),
+      env,
+      origin,
+      '/api/scripts/nope',
+    );
+    expect(r.status).toBe(404);
+  });
+
+  it('collection list honors ?limit= (A20)', async () => {
+    const env = { ALLOW_OPEN_KEYS: '1' } as Env;
+    for (const id of ['a', 'b', 'c']) {
+      await handleScripts(
+        req(`/api/scripts/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ name: id, content: id }),
+        }),
+        env,
+        origin,
+        `/api/scripts/${id}`,
+      );
+    }
+    const list = await handleScripts(req('/api/scripts?limit=2'), env, origin, '/api/scripts');
+    expect((await list.json()).scripts).toHaveLength(2);
+  });
+
+  it('413 on script body over the byte cap (A9)', async () => {
+    const env = { ALLOW_OPEN_KEYS: '1' } as Env;
+    const r = await handleScripts(
+      req('/api/scripts/s-big', {
+        method: 'PUT',
+        headers: { 'Content-Length': '999999999' },
+        body: JSON.stringify({ content: 'x' }),
+      }),
+      env,
+      origin,
+      '/api/scripts/s-big',
+    );
+    expect(r.status).toBe(413);
   });
 });

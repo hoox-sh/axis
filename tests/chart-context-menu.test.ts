@@ -127,7 +127,7 @@ describe('buildChartMenu', () => {
     expect(ids).toContain('type.candles');
     expect(ids).toContain('type.heikinashi');
     expect(ids).toContain('shot.save');
-    expect(ids).toContain('app.settings');
+    expect(ids).toContain('chart.settings');
     const candles = buildChartMenu({ kind: 'plot', scale, chartType: 'candles' }).find(
       (e) => e.type === 'item' && e.id === 'type.candles',
     );
@@ -149,7 +149,7 @@ describe('buildChartMenu', () => {
     const ids = buildChartMenu({ kind: 'time-scale' })
       .filter((e) => e.type === 'item')
       .map((e) => e.id);
-    expect(ids).toEqual(['view.reset', 'view.latest', 'app.settings']);
+    expect(ids).toEqual(['view.reset', 'view.latest', 'chart.settings']);
   });
 
   it('offers hide plus script rows on an indicator pane', () => {
@@ -207,7 +207,7 @@ describe('dispatchChartMenu', () => {
       addAlert: mark('alert'),
       saveShot: mark('shot'),
       copyShot: mark('shot-copy'),
-      openSettings: mark('settings'),
+      toggleChartSettings: mark('chart-settings'),
       hidePane: mark('hide-pane'),
       scriptSettings: (id) => calls.push(`settings:${id}`),
       scriptVisible: (id) => calls.push(`visible:${id}`),

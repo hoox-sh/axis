@@ -11,6 +11,7 @@
 import { describe, expect, it, afterEach } from 'bun:test';
 import { handleKeys } from '../src/keys';
 import { handleRun, _resetRunRateLimitForTests } from '../src/runtime';
+import { sha256Hex } from '../src/tenant';
 import type { Env } from '../src/index';
 
 const origin = 'http://localhost:3000';
@@ -64,6 +65,40 @@ describe('handleKeys', () => {
     );
     expect(r.status).toBe(400);
   });
+
+  it('validate fails closed when D1 is bound without KV (aligns with auth.ts)', async () => {
+    const key = 'pn_' + 'cd'.repeat(24);
+    const r = await handleKeys(
+      new Request(`http://x/api/keys?action=validate&key=${key}`),
+      { DB: {} as D1Database } as Env,
+      origin,
+    );
+    expect(r.status).toBe(503);
+    expect((await r.json()).code).toBe('API_KEYS_REQUIRED');
+  });
+
+  it('validate passes with ALLOW_OPEN_KEYS even when D1 is bound (local demo)', async () => {
+    const key = 'pn_' + 'cd'.repeat(24);
+    const r = await handleKeys(
+      new Request(`http://x/api/keys?action=validate&key=${key}`),
+      { DB: {} as D1Database, ALLOW_OPEN_KEYS: '1' } as Env,
+      origin,
+    );
+    expect(r.status).toBe(200);
+  });
+
+  it('wrong admin token is still 403 (timing-safe compare)', async () => {
+    const r = await handleKeys(
+      new Request('http://x/api/keys?action=create', {
+        method: 'POST',
+        headers: { 'X-Admin-Token': 'wrong', 'Content-Type': 'application/json' },
+        body: '{}',
+      }),
+      { ADMIN_TOKEN: 'secret' } as Env,
+      origin,
+    );
+    expect(r.status).toBe(403);
+  });
 });
 
 describe('handleRun', () => {
@@ -114,7 +149,47 @@ describe('handleRun', () => {
     expect(r.status).toBe(400);
   });
 
-  it('increments USAGE kv when bearer present', async () => {
+  it("accepts mode:'auto' (PWA default) and normalizes to interpret", async () => {
+    let proxied: unknown = null;
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      proxied = JSON.parse(String(init?.body ?? '{}'));
+      return new Response(JSON.stringify({ status: 'success', plots: [] }), { status: 200 });
+    }) as typeof fetch;
+
+    const r = await handleRun(
+      new Request('http://x/api/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          script: 'plot(1)',
+          data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+          mode: 'auto',
+        }),
+      }),
+      { EXTERNAL_BACKEND: 'http://flask.test', ALLOW_OPEN_KEYS: '1' } as Env,
+      origin,
+    );
+    expect(r.status).toBe(200);
+    expect((proxied as { mode?: string }).mode).toBe('interpret');
+  });
+
+  it('413 on body over the byte cap (Content-Length pre-check)', async () => {
+    const r = await handleRun(
+      new Request('http://x/api/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': '999999999' },
+        body: JSON.stringify({
+          script: 'plot(1)',
+          data: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+        }),
+      }),
+      {} as Env,
+      origin,
+    );
+    expect(r.status).toBe(413);
+  });
+
+  it('increments USAGE kv by key-hash prefix (never the raw key)', async () => {
     const store = new Map<string, string>();
     const USAGE = {
       get: async (k: string) => store.get(k) ?? null,
@@ -141,7 +216,10 @@ describe('handleRun', () => {
       { EXTERNAL_BACKEND: 'http://flask.test', USAGE } as unknown as Env,
       origin,
     );
-    expect(store.get(`usage:${key}`)).toBe('1');
+    const expected = `usage:${(await sha256Hex(key)).slice(0, 16)}`;
+    expect(store.get(expected)).toBe('1');
+    expect(store.get(`usage:${key}`)).toBeUndefined();
+    expect([...store.keys()].some((k) => k.includes(key))).toBe(false);
   });
 
   it('uses pyodide path when enabled and runtime returns result', async () => {

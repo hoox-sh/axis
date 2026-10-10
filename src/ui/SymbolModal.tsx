@@ -42,6 +42,7 @@ import {
   venueLabel,
 } from '../data/symbol-catalog';
 import { activeCcxtExchange, activeCcxtGateway } from '../data/credentials';
+import { installFocusTrap } from './focus-trap';
 import { Icons } from './icons';
 
 export type SymbolModalProps = {
@@ -236,6 +237,13 @@ export const SymbolModal: Component<SymbolModalProps> = (props) => {
           aria-labelledby="axis-symbol-modal-title"
           data-testid="axis-symbol-modal"
           tabIndex={-1}
+          ref={(el) => {
+            if (!el) return;
+            // Search input already takes focus on open (see effect above); the
+            // trap only adds Tab cycling and restores prior focus on close.
+            const dispose = installFocusTrap(el, { autoFocus: false });
+            onCleanup(dispose);
+          }}
         >
           <div class="sc-dialog-accent" />
           <div class="sc-dialog-header">

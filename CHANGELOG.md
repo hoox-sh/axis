@@ -9,19 +9,37 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-07 · 519 commits · describe-tag: `v2.20.1`_
+_Generated/updated: 2026-10-10 · 528 commits · describe-tag: `v2.21.0`_
 
 ---
 
-## [Unreleased]
+## [2.22.0] — 2026-10-10
+
+### Fixed
+
+- **Full-app review fix batch (2026-10-10, 152 items, plan `.opencode/plans/review-fixes-2026-10-10.md`)**: seven parallel review passes (Worker, engines, data/streams/chart, store/SW, UI, alerts/on-chain/MCP, CLI/desktop/CI) with every finding re-traced before fixing. Suite 3418 pass / 1 pre-existing fail (`tests/pane-badge.test.ts` stale expectation from `fa15352b`, untouched); typecheck clean; build passes; `bun run lint` exits 0; CLI 79/79.
+- **Worker `/api/run` accepts `mode:'auto'`**: the PWA default was rejected with 400 when the Worker was selected as engine; `auto` now normalizes to interpret/compile, with a contract test on the PWA request body.
+- **Worker hardening**: billing idempotency keys carry a per-isolate random prefix (no more cross-isolate dedupe); usage metering keyed by key hash; public on-chain/market proxies get per-IP rate limits, in-flight coalescing, and bounded cache keys; request bodies capped (32 MiB run / 8 MiB scripts) with Content-Length pre-checks; generic 500 bodies instead of raw `err.message`; upstream abort covers the body read with `redirect:'error'`; console verify has a 2 s timeout behind an IP pre-limit; script PUT is CAS (`UPDATE … WHERE revision=?` → 404/409); timing-safe admin-token compare with attempt gate; `clientIp` from `CF-Connecting-IP` only; `Vary: Origin` on CORS; `/api/stream` per-IP gated.
+- **Secrets out of localStorage**: Worker API key, git PAT, and agent key now live in a session vault (memory + sessionStorage) with boot migration of legacy values; persisted payloads strip secret keys; cloud endpoints require https (loopback excepted); MCP `alerts.*` no longer echoes webhook URLs.
+- **Service worker correctness**: `/api/*` responses are no longer cached (auth-ignoring cache could serve the previous account offline); `skipWaiting()` on install removed so updates wait for the banner instead of reloading mid-edit; unhashed pyodide/plugin files are network-first while hashed `/assets/*` stay cache-first; pyodide gets its own cache; `public/sw.js` and `src/sw/strategy.ts` parity is enforced by test.
+- **Persistence robustness**: persisted payload gains a schema version (`PERSIST_SCHEMA_VERSION=1`) with a migration hook; `topbar`/`onchain`/`drawingUi` are now persisted (they reset on every reload before); per-section hydration so one bad field no longer voids the blob; unknown keys dropped; numeric bounds validated; nested defaults cloned instead of aliased; corrupt-blob backup is capped and only clears after a successful write; cloud drafts serialize; update dismissals stick per session; stale editor popout resets to docked.
+- **Engine transport parity**: WS frames now carry `libraries`; one shared JSON sanitizer preserves `NaN` inside string literals on both transports; Pyodide receives script `inputs` (HPO and Script Settings overrides work) and reports unsupported fields instead of silently dropping them; WS/REST both honor abort signals; Pyodide load failures get a 30 s cooldown; cross-transport conformance fixture locks WS ≡ REST ≡ Pyodide.
+- **Live data and chart races**: progressive repaint stops on CSV upload; "apply when complete" re-checks the current symbol; DEX pool keys keep case; Kraken live bars align to interval start like history; DSM-first failures fall through to venue fetch; stale-run flag clears are epoch-guarded; dead ccxt sockets take Live offline; destroyed panes purge overlay meta and listeners; bar-color repaint respects Heikin-Ashi and replay; overlay color edits resolve owner-scoped keys; catch-up repaints respect replay; backfill validation is every 4th page; progressive repaint appends instead of full `setData`; single shared `exchangeForSource`; tick coalescing per bar slot; dead `src/streams/binance.ts` duplicate removed.
+- **Alerts correctness**: live bars carry the stream's symbol/interval and mismatches are dropped (no more BTC ticks firing ETH alerts); persisted per-symbol prices with a default cooldown stop reload re-fires; `pct_change` base latches at create; on-chain watermarks keyed per protocol; `data:`/`blob:` plugin URLs rejected in prod; `app.event` allowlisted; engine endpoint must be an https origin; per-tick alert path caches instead of parsing localStorage twice.
+- **MCP host**: `mutates` enforced in dispatch (same-origin page scripts are read-only; ticket-authenticated bridge traffic may mutate); `includeBars` returns bounded rows instead of `"[array N]"`; bridge replies on the originating socket; event allowlist of 22 real listeners.
+- **UI and design system**: shortcuts modal mounted; `--color-muted` defined (66 uses); extra price/alert cards use theme tokens; focus trap installed in settings/symbol/command modals with `focusin` containment; `ExtraMenu` is a dialog, not a menu; dead `SettingsDialog`/`AppDrawer`/`PluginManager`/`WorkersManager` deleted (live panels extracted to `settings/panels.tsx`); hardcoded hex replaced by tokens; off-palette fallbacks fixed; shared `.sc-popover` and `dismissOnOutside`; `FloatableShell` no longer builds `doc.write` HTML; shared 1 Hz clock; timers tracked and cleared; keyboard-recording pulse honors reduced-motion; non-null assertions narrowed.
+- **CLI, desktop, and CI**: `setup --prod` fails closed (exit 1) on D1/KV failure and writes `ALLOW_OPEN_KEYS=""`; deploy refuses open-keys configs with D1-but-no-KV; template ships the flag empty; doctor requires KV when D1 is bound; Tauri CSP added; Windows binary resolution and `.cmd` spawn fixed with tests; npm token scoped to publish steps; compose binds `127.0.0.1` with production Flask default; https enforced for admin/key traffic; secrets leave argv; `secret put` no longer redeploys by default; wrangler pinned with ENOENT-only fallback; Tauri read errors surfaced; nginx runs as non-root on 8080; pyodide downloads SHA-256-verified; workflow permissions scoped; `ref_name` via `env:`; e2e waits on state, not sleeps; unit coverage for CLI helpers and pure functions.
 
 ### Added
 
+- **Chart settings panel**: floating panel (chamfered SVG frame) opened from a new gear button in the price-scale cluster (`axis-chart-scale-settings`), anchored top-right of the active chart. Controls chart type, interval (reloads data), log / auto scale, and the last-value / plot-name / price-scale label toggles. Stays in sync with the scale cluster and chart context menu; closes on Escape. Open state is UI-only (`src/ui/chart-settings-state.ts`), not persisted.
+- **Chart settings entry points**: the chart context menu's “Chart settings” row now toggles this panel (id `chart.settings`, previously `app.settings`, which opened app Settings; app Settings stays reachable from the topbar and palette). New command-palette entry “Chart Settings”.
 - **Pine tables in the bottom panel (September 2026 parity)**: any script's `table.*` drawings can now move off the chart into a bottom Tables tab via “Move tables to bottom” (chart context menu, pane-badge table button), and back via “Move tables to chart” (same menus + Tables tab header). Bottom tables stack vertically in creation order regardless of `position` / `force_overlay`, stretch to the pane width with proportional `table.cell(width=…)` columns, never truncate text (scrollbars when needed), keep tooltips on hover, honor `merged_cells`, and allow text selection + per-table TSV copy — matching TradingView's bottom-panel rules. Placement persists per script (`pineTablesLocation`); chart HUD hides moved tables; new `Tables` bottom-docked panel, Topbar toggle, command-palette entry, and `panel.tables` chrome.
 - **Pine table model forward-fill**: `PineTableCell` now carries `width` / `height` / `tooltip` / border hints and `PineTable` carries `force_overlay` / `merged_cells`, parsed from either engine shape (interpret + compile) so proportional bottom sizing, tooltips, and merges work as soon as the engine emits them.
 
 ### Changed
 
+- **Studio UI elevation and motion**: layered shadow tokens (`--ax-shadow-ambient` / `-card` / `-raised`, `--ax-drop-shadow`) with light-theme variants; 150 ms transitions and focus rings on buttons, cards, chips, tabs, and rail items; press feedback on buttons and cards; all motion disabled under `prefers-reduced-motion`.
 - **Pyodide 0.26.2 → 0.29.5 (Python 3.13.2)**: self-hosted runtime replaced in place — same file layout (`pyodide.js` + `pyodide.asm.js`, no `.mjs` migration needed), so loader, prefetch, probe, and worker CDN paths only change version strings. Bundled micropip 0.6.0 → 0.11.1 and packaging 23.2 → 26.2 from the new lock file. Verified end-to-end in Node: 0.29.5 boots, wheel 0.6.8 unpacks, `run_script` interprets a real Pine script successfully.
 - **pynescript wheel 0.5.0 → 0.6.8**: rebuilt from the sister pyne repo via `scripts/sync-pyne-wheel.sh` (85 commits, incl. September 2026 Pine release-notes parity); stale wheels dropped, hard-coded paths in `src/engines/catalog.ts` updated. Editor builtin metadata already in sync; interpret lock (`ta.sma` / `ta.stdev`) passes.
 - **Docs review vs last 20 commits**: fixed stale post-2.21.0 references (pre-Solid `state.js`/`main.js`/`server.ts`/root `sw.js` now past-tense across `ui/store`, `architecture/{overview,state-namespaces,adrs}`, `devops/build-and-serve`), bumped `docs/index.mdx` to v2.21.0, and documented previously uncovered changes — Pine tables bottom panel (enduser drawings guide + parity invariant), extras ticker controls / float-only time+price panels / big-price watchlist rows / panel motion (`ui-shell`), shared Worker plumbing `http.ts`/`proxy-router.ts`/`rate-limit.ts` + client `throttle.ts` (`worker/runtime`, `worker/index`, feature atlas), and Storybook lab (`local-dev`, `ci-and-testing`, atlas).
@@ -1516,12 +1534,17 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (38 commits)
+### 2026-10 (47 commits)
 
 #### Features
 
+- `18d589fc` (2026-10-09) — feat(edge): live tenant verify + usage flush
+- `cc1e1b34` (2026-10-09) — feat(entitlements): tenant scope types + bearer classification (no enforcement)
+- `fa15352b` (2026-10-08) — feat(chart): pine tables in bottom panel (September 2026 parity)
 - `5ab80821` (2026-10-06) — feat(ui): ticker band controls, drag handle, and menu polish
 - `3dbeacfb` (2026-10-06) — feat(ui): smooth clean snappy panel open
 - `102d7542` (2026-10-05) — feat(extras): float-only time + price panels under topbar
@@ -1539,6 +1562,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `75f580b5` (2026-10-09) — fix(edge): run waitUntil ctx, hashed rate keys, scope fail-closed
 - `2f892a42` (2026-10-06) — fix(ui): seamless ticker loop and calmer price band
 - `2969fef5` (2026-10-05) — fix(tests): isolate cloud-config and cache keys across suites
 - `d7d2ed17` (2026-10-05) — fix(build): add vite-env.d.ts for vite/client types
@@ -1558,16 +1582,21 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Refactors
 
+- `b71179eb` (2026-10-07) — refactor: remove the pre-Solid static shell
 - `e3553e41` (2026-10-07) — refactor(worker): consolidate HTTP helpers and proxy routing
 
 #### Documentation
 
+- `9503fe6f` (2026-10-09) — docs: commercial licence upcoming, prices removed
+- `5fe7f2e7` (2026-10-08) — docs: review against last 20 commits, fix repo identity and voice
 - `cbb5bff0` (2026-10-05) — docs(readme): fix CLI release tag, add datafeed sidecar and recent highlights
 - `24422117` (2026-10-05) — docs(changelog): record CI test-isolation fixes
 - `c7959187` (2026-10-05) — docs(changelog): Unreleased entry for Bun-native session
 
 #### Chores
 
+- `e520a138` (2026-10-08) — chore(deps): pyodide 0.29.5 + pynescript wheel 0.6.8
+- `1709f092` (2026-10-07) — chore(release): 2.21.0
 - `670fe2dd` (2026-10-06) — chore(dev): add storybook scaffolding
 - `eb4ace84` (2026-10-04) — chore(license): unify headers under HOOX AXIS / axis
 - `8949d283` (2026-10-03) — chore(release): 2.19.0 — Extra chrome widgets

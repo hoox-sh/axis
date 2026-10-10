@@ -118,18 +118,24 @@ function putCached(key: string, entry: CacheEntry): void {
   memCache.set(key, entry);
 }
 
-async function fetchUpstream(url: string): Promise<Response> {
+async function fetchUpstream(url: string): Promise<{ status: number; text: string; contentType: string }> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), UPSTREAM_TIMEOUT_MS);
   try {
-    return await fetch(url, {
+    const res = await fetch(url, {
       method: 'GET',
       signal: ctrl.signal,
+      // Never follow a cross-origin redirect with the caller's implied trust (A10).
+      redirect: 'error',
       headers: {
         Accept: 'application/json',
         'User-Agent': 'axis-worker-onchain/1.0',
       },
     });
+    // Body read stays inside the abort window — a stalled sender must not pin
+    // the isolate after headers resolve (A10).
+    const text = await res.text();
+    return { status: res.status, text, contentType: res.headers.get('Content-Type') || 'application/json' };
   } finally {
     clearTimeout(t);
   }
@@ -160,6 +166,18 @@ function isValidGeckoAddress(address: string): boolean {
   return ETH_ADDRESS_RE.test(address) || SOL_ADDRESS_RE.test(address);
 }
 
+/** Coalesce concurrent identical upstream fetches (A5) — one flight per cache key. */
+const inflight = new Map<string, Promise<UpstreamOutcome>>();
+
+type UpstreamOutcome =
+  | { kind: 'response'; status: number; ok: boolean; text: string; contentType: string }
+  | { kind: 'network-error'; message: string };
+
+/** Keep cache keys bounded: client-controlled values are truncated (A5). */
+function keyPart(s: string): string {
+  return s.length > 256 ? s.slice(0, 256) : s;
+}
+
 async function proxyJson(
   cacheKey: string,
   upstreamUrl: string,
@@ -170,39 +188,56 @@ async function proxyJson(
   const hit = getCached(cacheKey);
   if (hit) return cachedResponse(hit, origin, 'HIT');
 
-  let upstream: Response;
-  try {
-    upstream = await fetchUpstream(upstreamUrl);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+  let pending = inflight.get(cacheKey);
+  if (!pending) {
+    pending = (async (): Promise<UpstreamOutcome> => {
+      try {
+        const up = await fetchUpstream(upstreamUrl);
+        return {
+          kind: 'response',
+          status: up.status,
+          ok: up.status >= 200 && up.status < 300,
+          text: up.text,
+          contentType: up.contentType,
+        };
+      } catch (err) {
+        return { kind: 'network-error', message: err instanceof Error ? err.message : String(err) };
+      }
+    })();
+    inflight.set(cacheKey, pending);
+    const done = pending;
+    void done.finally(() => {
+      if (inflight.get(cacheKey) === done) inflight.delete(cacheKey);
+    });
+  }
+  const up = await pending;
+
+  if (up.kind === 'network-error') {
     return json(
       {
         status: 'error',
         code: 'UPSTREAM_NETWORK',
-        message: `${providerLabel} upstream unreachable: ${msg}`,
+        message: `${providerLabel} upstream unreachable: ${up.message}`,
       },
       502,
       origin,
     );
   }
 
-  const text = await upstream.text();
-  const contentType = upstream.headers.get('Content-Type') || 'application/json';
-
   // Cache successful and 404 bodies briefly (404 avoids stampede on bad paths)
-  if (upstream.ok || upstream.status === 404) {
+  if (up.ok || up.status === 404) {
     putCached(cacheKey, {
-      body: text,
-      status: upstream.status,
-      contentType,
+      body: up.text,
+      status: up.status,
+      contentType: up.contentType,
       expiresAt: Date.now() + ttlMs,
     });
   }
 
-  return new Response(text, {
-    status: upstream.status,
+  return new Response(up.text, {
+    status: up.status,
     headers: {
-      'Content-Type': contentType,
+      'Content-Type': up.contentType,
       'X-Axis-Onchain-Cache': 'MISS',
       ...READ_CORS(origin),
     },
@@ -226,6 +261,8 @@ function decodePathSegment(raw: string): string {
 const ROUTER = createProxyRouter({
   prefix: '/api/onchain',
   cors: READ_CORS,
+  // Public, unauthenticated — per-IP window is the only abuse backstop (A5).
+  ipLimit: { limit: 120, windowMs: 60_000 },
   health: () => ({
     status: 'healthy',
     service: 'axis-onchain',
@@ -285,7 +322,7 @@ const ROUTER = createProxyRouter({
       handle: ({ req, origin }) => {
         const qs = pickQuery(req, GECKO_SEARCH_QUERY_KEYS);
         return proxyJson(
-          `gecko:search:${qs}`,
+          `gecko:search:${keyPart(qs)}`,
           `${GECKO_UPSTREAM}/search/pools${qs}`,
           origin,
           GECKO_SEARCH_TTL_MS,
@@ -340,7 +377,7 @@ const ROUTER = createProxyRouter({
         const addrKey = address.toLowerCase().startsWith('0x') ? address.toLowerCase() : address;
         const upstream = `${GECKO_UPSTREAM}/networks/${encodeURIComponent(network)}/pools/${encodeURIComponent(address)}/ohlcv/${encodeURIComponent(timeframe)}${qs}`;
         return proxyJson(
-          `gecko:ohlcv:${network}:${addrKey}:${timeframe}:${qs}`,
+          `gecko:ohlcv:${network}:${keyPart(addrKey)}:${timeframe}:${keyPart(qs)}`,
           upstream,
           origin,
           GECKO_OHLCV_TTL_MS,
@@ -393,4 +430,5 @@ export function handleOnchain(
 /** Test helper — clear isolate memory cache. */
 export function _resetOnchainCacheForTests(): void {
   memCache.clear();
+  inflight.clear();
 }

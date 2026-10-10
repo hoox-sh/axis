@@ -5,7 +5,13 @@
 
 import { describe, expect, it } from 'bun:test';
 import { defaultParamFromInput, randomAssignment, spaceReady, toPyneSpace } from '../src/optimize/space';
-import { _pickWinnerForTests, _scoreStatsForTests } from '../src/optimize/client';
+import {
+  _pickWinnerForTests,
+  _scoreStatsForTests,
+  plannedEngineRuns,
+  runHpoStudy,
+  walkForwardWindowCount,
+} from '../src/optimize/client';
 import type { ScriptInputDef } from '../src/results/script-inputs';
 
 function def(partial: Partial<ScriptInputDef> & Pick<ScriptInputDef, 'id' | 'title' | 'type'>): ScriptInputDef {
@@ -74,5 +80,48 @@ describe('HPO objective', () => {
       'holdout',
     );
     expect(w).toBeNull();
+  });
+});
+
+describe('HPO engine-run budget', () => {
+  const wf = {
+    mode: 'walk-forward' as const,
+    holdoutFrac: 0.3,
+    trainBars: 200,
+    testBars: 50,
+    stepBars: 50,
+  };
+
+  it('counts walk-forward windows exactly (2 runs each)', () => {
+    // starts 200..450 step 50 → 6 windows
+    expect(walkForwardWindowCount(500, 200, 50, 50)).toBe(6);
+    expect(plannedEngineRuns(100, 500, wf)).toBe(1200);
+  });
+
+  it('in-sample and holdout budgets are exact', () => {
+    expect(plannedEngineRuns(10, 500, { ...wf, mode: 'in-sample' })).toBe(10);
+    expect(plannedEngineRuns(10, 500, { ...wf, mode: 'holdout' })).toBe(20);
+  });
+
+  it('runHpoStudy rejects exact over-budget walk-forward up front', async () => {
+    const bars = new Array(500).fill({
+      time: 1,
+      open: 1,
+      high: 1,
+      low: 1,
+      close: 1,
+    }) as never;
+    const snap = await runHpoStudy({
+      script: 'plot(close)',
+      bars,
+      params: [],
+      nTrials: 100,
+      sampler: 'random',
+      objective: 'net_pnl',
+      validation: wf,
+      minTrades: 0,
+    });
+    expect(snap.status).toBe('error');
+    expect(String(snap.error)).toMatch(/TOO_MANY_RUNS: estimated 1200/);
   });
 });

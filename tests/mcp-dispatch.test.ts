@@ -7,6 +7,7 @@ import './setup';
 import { describe, expect, it, beforeEach } from 'bun:test';
 import { setStore, addWatchlistSymbol, appendLog, clearLogs, saveEditorDoc } from '../src/store';
 import { invokeCapability } from '../src/mcp/dispatch';
+import { _resetAlertsForTests } from '../src/alerts';
 import { APP_CAPABILITIES, findCapability, SETTABLE_PATHS } from '../src/mcp/catalog';
 import { buildAppSnapshot } from '../src/mcp/snapshot';
 import { McpInvokeError } from '../src/mcp/protocol';
@@ -72,6 +73,16 @@ describe('MCP dispatch', () => {
     const got = (await invokeCapability('watchlist.get')) as { symbols: string[] };
     expect(got.symbols).toContain('BBBUSDT');
     await invokeCapability('watchlist.remove', { symbol: 'BBBUSDT' });
+  });
+
+  it('D12 — app.set watchlist.open routes through setPanelOpen (dual-write)', async () => {
+    const { store, getPanelChrome } = await import('../src/store');
+    await invokeCapability('app.set', { path: 'watchlist.open', value: true });
+    expect(store.watchlist.open).toBe(true);
+    expect(getPanelChrome('watchlist').open).toBe(true);
+    await invokeCapability('app.set', { path: 'watchlist.open', value: false });
+    expect(store.watchlist.open).toBe(false);
+    expect(getPanelChrome('watchlist').open).toBe(false);
   });
 
   it('logs append + get', async () => {
@@ -351,6 +362,131 @@ describe('MCP zoom + drawing tool aliases', () => {
       throw new Error('should have thrown');
     } catch (err) {
       expect((err as McpInvokeError).code).toBe('NO_TOOL');
+    }
+  });
+});
+
+describe('MCP alerts redaction (F4)', () => {
+  beforeEach(() => {
+    _resetAlertsForTests();
+  });
+
+  it('create/list/update never echo webhook URLs', async () => {
+    const created = (await invokeCapability('alerts.create', {
+      name: 'hook-secret',
+      symbol: 'BTCUSDT',
+      kind: 'price_above',
+      params: { price: 100 },
+      webhookUrl: 'https://hooks.example/secret?token=abc123',
+    })) as Record<string, unknown>;
+    expect('webhookUrl' in created).toBe(false);
+    expect('l2WebhookUrl' in created).toBe(false);
+    expect(created.webhookHost).toBe('hooks.example');
+    expect(created.hasWebhook).toBe(true);
+    expect(created.hasL2Webhook).toBe(false);
+
+    const list = (await invokeCapability('alerts.list')) as Array<Record<string, unknown>>;
+    expect(list).toHaveLength(1);
+    expect(JSON.stringify(list)).not.toContain('abc123');
+    expect(list[0]?.webhookHost).toBe('hooks.example');
+
+    const updated = (await invokeCapability('alerts.update', {
+      id: created.id,
+      patch: { name: 'renamed' },
+    })) as Record<string, unknown>;
+    expect('webhookUrl' in updated).toBe(false);
+    expect(updated.webhookHost).toBe('hooks.example');
+    _resetAlertsForTests();
+  });
+});
+
+describe('MCP app.event allowlist + endpoint https (F5)', () => {
+  it('rejects non-allowlisted event names', async () => {
+    for (const name of ['axis-evil', 'not-axis', '', 'axis-open-settingsX']) {
+      try {
+        await invokeCapability('app.event', { name });
+        throw new Error(`should have thrown for ${name}`);
+      } catch (err) {
+        expect((err as McpInvokeError).code).toBe('EVENT_DENIED');
+      }
+    }
+  });
+
+  it('accepts allowlisted UI events without dispatching in tests', async () => {
+    const r = (await invokeCapability('app.event', { name: 'axis-open-settings' })) as {
+      ok: boolean;
+    };
+    expect(r.ok).toBe(true);
+  });
+
+  it('settings.set rejects cleartext http endpoints', async () => {
+    try {
+      await invokeCapability('settings.set', { endpoint: 'http://example.com/api' });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as McpInvokeError).code).toBe('BAD_VALUE');
+    }
+    const okHttps = (await invokeCapability('settings.set', {
+      endpoint: 'https://worker.axis.hoox.sh',
+    })) as { ok: boolean };
+    expect(okHttps.ok).toBe(true);
+    const okLoopback = (await invokeCapability('settings.set', {
+      endpoint: 'http://127.0.0.1:8787',
+    })) as { ok: boolean };
+    expect(okLoopback.ok).toBe(true);
+  });
+});
+
+describe('MCP mutates gate (F22)', () => {
+  it('denies mutating capabilities for in-page callers', async () => {
+    try {
+      await invokeCapability('logs.append', { message: 'x' }, { allowMutations: false });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as McpInvokeError).code).toBe('MUTATION_DENIED');
+    }
+    // Reads still pass.
+    const logs = (await invokeCapability('logs.get', { limit: 1 }, { allowMutations: false })) as unknown[];
+    expect(Array.isArray(logs)).toBe(true);
+  });
+
+  it('allows mutations for bridge-style callers', async () => {
+    const r = (await invokeCapability('logs.append', { message: 'f22' }, { allowMutations: true })) as {
+      ok: boolean;
+    };
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe('MCP targeted set + bounded bars (F9/F23)', () => {
+  it('app.set returns the targeted value, not a snapshot', async () => {
+    const v = await invokeCapability('app.set', { path: 'symbol', value: 'ethusdt' });
+    expect(v).toBe('ETHUSDT');
+    await invokeCapability('app.set', { path: 'symbol', value: 'BTCUSDT' });
+  });
+
+  it('chart.get returns a bar summary without a full snapshot', async () => {
+    const c = (await invokeCapability('chart.get')) as { bars: { count: number } };
+    expect(typeof c.bars.count).toBe('number');
+  });
+
+  it('includeBars returns bounded rows, never "[array N]"', async () => {
+    const bars = Array.from({ length: 500 }, (_, i) => ({
+      time: 1_700_000_000 + i * 60,
+      open: 1,
+      high: 2,
+      low: 0.5,
+      close: 1.5,
+    }));
+    setStore('bars', bars as never);
+    try {
+      const withBars = buildAppSnapshot({ includeBars: true });
+      expect(Array.isArray(withBars.bars)).toBe(true);
+      expect((withBars.bars as unknown[]).length).toBe(300);
+      const without = buildAppSnapshot();
+      expect((without.bars as { count: number }).count).toBe(500);
+    } finally {
+      setStore('bars', []);
     }
   });
 });

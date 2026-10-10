@@ -7,7 +7,7 @@ tags: [alerts, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-03T18:01:46Z
+  at: 2026-10-10T20:32:38Z
 sources:
   - id: tree
     resource: "src/alerts"
@@ -19,15 +19,15 @@ okf_lock: generated
 # Files
 
 * `drawing-levels.ts` — DRAWING_FIB_RATIOS, DrawingLike, drawingAlertLabel, drawingPricesById, pricesFromDrawing
-* `engine.ts` — DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT, OnchainEvalContext, OnchainEvalEvent, OnchainEvalFired, applyFired, becomesTrue, clearPrevPrices, crossesLevel, evaluateAlerts, evaluateOnchainEventAlertsPure, evaluateOne, eventAbsPct
+* `engine.ts` — DEFAULT_ALERT_COOLDOWN_MS, DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT, ONCHAIN_WATERMARK_MAP_KEY, OnchainEvalContext, OnchainEvalEvent, OnchainEvalFired, applyFired, approxEqual, becomesTrue, clearPrevPrices, crossesLevel, evaluateAlerts
 * `form.ts` — AlertFormDraft, AlertFormErr, AlertFormOk, AlertFormResult, OnchainDirection, PctDirection, buildAlertFromDraft, isDrawingKind, isIndicatorKind, isOnchainKind, isPctKind, isPineAlertKind
 * `format.ts` — ALERT_KINDS, ALERT_KIND_GROUPS, alertKindGroup, formatAlertCondition, formatAlertKind, formatLastFired
-* `index.ts` — ALERTS_STORAGE_KEY, ALERT_KINDS, ALERT_KIND_GROUPS, Alert, AlertCreateInput, AlertKind, AlertParams, AlertUpdatePatch, AlertsStoreV1, CreateOnchainTvlSpikeAlertInput, DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT, DRAWING_FIB_RATIOS
+* `index.ts` — ALERTS_STORAGE_KEY, ALERT_KINDS, ALERT_KIND_GROUPS, Alert, AlertCreateInput, AlertKind, AlertParams, AlertUpdatePatch, AlertsStoreV1, CreateOnchainTvlSpikeAlertInput, DEFAULT_ALERT_COOLDOWN_MS, DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT
 * `indicator.ts` — IndicatorSeriesLike, PINE_COMPARE_OPS, PineCompareOp, PlotSampleLike, lastNumericSample, listPlotKeys, plotSampleKey, plotSamplesFromCache, prevNumericSample
 * `pine-bridge.ts` — EvaluatePineAlertsOpts, evaluatePineAlertsFromRun, notifyPineAlertsFromRun
 * `pine.ts` — PINE_ALERT_CALL_RE, PineAlertEvalContext, PineAlertEvent, PineAlertFired, PineAlertSource, collectPineAlertEvents, evaluatePineAlertEventsPure, eventMatchesPineAlert, isPineScriptAlert, listPineAlertTitles, parsePineAlertConditions, parsePineAlertEvents
-* `storage.ts` — ALERTS_STORAGE_KEY, _setMemoryAlertsForTests, clearAlertsStorage, loadAlerts, parseAlert, parseAlertsBlob, removeAlert, saveAlerts, subscribeAlerts, upsertAlert
-* `tick.ts` — evaluateLiveAlerts, noteLiveBarForAlerts
+* `storage.ts` — ALERTS_STORAGE_KEY, _setMemoryAlertsForTests, clearAlertsStorage, lastAlertsPersistError, loadAlerts, parseAlert, parseAlertsBlob, removeAlert, saveAlerts, subscribeAlerts, upsertAlert
+* `tick.ts` — LiveBarStreamCtx, evaluateLiveAlerts, liveBarMatchesChart, noteLiveBarForAlerts
 * `types.ts` — Alert, AlertCreateInput, AlertKind, AlertParams, AlertUpdatePatch, AlertsStoreV1, EvaluateBar, EvaluateContext, L2WebhookPayload, PlotSampleRef, WebhookPayload
 * `webhook.ts` — WEBHOOK_TIMEOUT_MS, buildL2WebhookPayload, buildWebhookPayload, deliverAlert, fireWebhook, formatAlertFireMessage, isAllowedWebhookUrl, notifyBrowserAlert
 
@@ -35,6 +35,7 @@ okf_lock: generated
 
 * [src/chart/drawings](/code/src/chart/drawings.md)
 * [src/store](/code/src/store.md)
+* [src/utils](/code/src/utils.md)
 
 # Used by
 

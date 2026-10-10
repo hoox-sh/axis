@@ -38,10 +38,11 @@ test.describe('AXIS smoke @smoke', () => {
   test('loads mock-walk bars and runs mocked engine', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('axis-select-source').selectOption('mock-walk');
+    // The load button must exist — a silent skip here would mask a regression
+    // in the topbar wiring (G17).
     const loadBtn = page.getByTestId('axis-btn-load');
-    if (await loadBtn.count()) {
-      await loadBtn.click();
-    }
+    await expect(loadBtn).toBeVisible({ timeout: 15_000 });
+    await loadBtn.click();
 
     // Status message — not getByText(/bars/i), which matches hidden <option>Bars
     await expect(page.getByTestId('axis-status-message')).toContainText(
@@ -52,11 +53,11 @@ test.describe('AXIS smoke @smoke', () => {
     await page.getByTestId('axis-select-engine').selectOption('server');
     await page.getByTestId('axis-btn-run').click();
 
-    // After run, status or results should reflect success (no crash)
+    // After run, status or results should reflect success (no crash).
+    // Wait on the app's own state (run button re-armed), not a fixed sleep:
+    // fixed sleeps are flaky on slow CI and waste time on fast machines.
     await expect(page.getByTestId('axis-topbar')).toBeVisible();
-    await page.waitForTimeout(500);
-    // Page still interactive
-    await expect(page.getByTestId('axis-btn-run')).toBeEnabled();
+    await expect(page.getByTestId('axis-btn-run')).toBeEnabled({ timeout: 15_000 });
   });
 
   test('opens and closes plugin Manager', async ({ page }) => {

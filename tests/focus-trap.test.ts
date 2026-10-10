@@ -72,5 +72,29 @@ describe('installFocusTrap', () => {
     const dispose = installFocusTrap(null as unknown as HTMLElement);
     dispose();
   });
+
+  it('wires a focusin guard when document exists, removed on dispose', () => {
+    const added: string[] = [];
+    const removed: string[] = [];
+    const prev = (globalThis as Record<string, unknown>).document;
+    (globalThis as Record<string, unknown>).document = {
+      activeElement: null,
+      addEventListener: (type: string) => {
+        added.push(type);
+      },
+      removeEventListener: (type: string) => {
+        removed.push(type);
+      },
+    };
+    try {
+      const root = makeRoot([{ tag: 'button' }]);
+      const dispose = installFocusTrap(root, { autoFocus: false });
+      expect(added).toContain('focusin');
+      dispose();
+      expect(removed).toContain('focusin');
+    } finally {
+      (globalThis as Record<string, unknown>).document = prev;
+    }
+  });
 });
 

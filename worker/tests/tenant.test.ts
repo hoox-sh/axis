@@ -87,6 +87,20 @@ describe('bearer classification (self-host preserved)', () => {
 });
 
 describe('verifyTenant', () => {
+  it('live verify carries an abort budget (A11)', async () => {
+    clearTenantCache();
+    let seenSignal: AbortSignal | null | undefined;
+    const env = envWith({ console: 'https://console.test' });
+    const res = await verifyTenant(env, 'hx_live_timeout_probe', 'axis:stream', {
+      fetchFn: async (_url, init) => {
+        seenSignal = init?.signal as AbortSignal | null | undefined;
+        return okFetch()(String(_url), init);
+      },
+    });
+    expect(res.ok).toBe(true);
+    expect(seenSignal instanceof AbortSignal).toBe(true);
+  });
+
   it('cache hit skips fetch (L1), negative 401 cached too', async () => {
     clearTenantCache();
     clearUsageQueue();
@@ -352,13 +366,13 @@ describe('usage queue + flush', () => {
     expect(peekUsageQueue()).toEqual([]);
   });
 
-  it('idem key shape day:hash16:ctr; unknown tid dropped', async () => {
+  it('idem key shape day:hash16:isolate:ctr; unknown tid dropped', async () => {
     clearUsageQueue();
     const env = envWith();
     expect(queueUsage(env, { tid: '', scope: 'axis:run', units: { runs: 1 } })).toBeNull();
     expect(queueUsage(env, { tid: 'unknown', scope: 'axis:run', units: { runs: 1 } })).toBeNull();
     const e = queueUsage(env, { tid: 't_9', scope: 'axis:run', units: { runs: 1 }, keyHash16: '0123456789abcdef' });
-    expect(e?.idem).toMatch(/^\d{4}-\d{2}-\d{2}:0123456789abcdef:\d+$/);
+    expect(e?.idem).toMatch(/^\d{4}-\d{2}-\d{2}:0123456789abcdef:[0-9a-f-]{8}:\d+$/);
     expect(usageQueueDepth()).toBe(1);
     clearUsageQueue();
   });

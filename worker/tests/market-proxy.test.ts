@@ -9,6 +9,7 @@
 
 import { describe, expect, it, afterEach, beforeEach, mock } from 'bun:test';
 import { handleMarket, _resetMarketCacheForTests } from '../src/market';
+import { _resetRateLimitsForTests } from '../src/rate-limit';
 import type { Env } from '../src/index';
 
 const origin = 'http://localhost:3000';
@@ -20,6 +21,7 @@ function req(path: string, method = 'GET', headers?: HeadersInit): Request {
 
 beforeEach(() => {
   _resetMarketCacheForTests();
+  _resetRateLimitsForTests();
 });
 
 afterEach(() => {
@@ -486,5 +488,48 @@ describe('handleMarket mexc proxy', () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+});
+
+describe('handleMarket abuse controls (A5)', () => {
+  const klinesPath = '/api/market/binance/klines?symbol=BTCUSDT&interval=1d&limit=2';
+
+  it('coalesces concurrent identical fetches into one upstream flight', async () => {
+    let calls = 0;
+    const originalFetch = globalThis.fetch;
+    let release!: (v: Response) => void;
+    const gate = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return gate;
+    }) as typeof fetch;
+
+    try {
+      const p1 = handleMarket(req(klinesPath), env, origin, '/api/market/binance/klines');
+      const p2 = handleMarket(req(klinesPath), env, origin, '/api/market/binance/klines');
+      release(
+        new Response(JSON.stringify([[1_700_000_000_000, '1', '2', '0.5', '1.5', '10']]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      const [r1, r2] = await Promise.all([p1, p2]);
+      expect(r1!.status).toBe(200);
+      expect(r2!.status).toBe(200);
+      expect(calls).toBe(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('rate-limits per IP after the shared window', async () => {
+    let last: Response | null = null;
+    for (let i = 0; i < 121; i++) {
+      last = await handleMarket(req('/api/market/health'), env, origin, '/api/market/health');
+    }
+    expect(last!.status).toBe(429);
+    expect((await last!.json()).code).toBe('RATE_LIMIT');
   });
 });

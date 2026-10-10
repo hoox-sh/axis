@@ -29,6 +29,7 @@ import { type Component, Show, createEffect, createSignal, onCleanup, onMount } 
 import { Portal } from 'solid-js/web';
 import { store } from '../../store';
 import { subscribeFiredAlerts, type Alert, type FiredAlertEvent } from '../../alerts';
+import { installFocusTrap } from '../focus-trap';
 import { formatExtraPrice } from './format';
 
 export type AlertDirection = 'up' | 'down';
@@ -104,41 +105,52 @@ export const FullscreenAlert: Component = () => {
     dir() === 'up' ? store.extras.alertOverlay.upColor : store.extras.alertOverlay.downColor;
 
   return (
-    <Show when={event() && store.extras.alertOverlay.enabled}>
-      <Portal>
-        <div
-          class="axis-extra-alert"
-          data-testid="axis-extra-alert"
-          style={{ '--alert-color': color() }}
-          onClick={() => setEvent(null)}
-          onKeyDown={(e) => {
-            // Document-level Escape already dismisses; kept so the clickable
-            // overlay has a keyboard equivalent (button handles Enter/Space).
-            if (e.key === 'Escape') setEvent(null);
-          }}
-          role="alertdialog"
-          aria-modal="true"
-          aria-label="Price alert"
-        >
-          <div class="axis-extra-alert-card">
-            <div class="axis-extra-alert-sym">{event()!.symbol}</div>
-            <div class="axis-extra-alert-price">{formatExtraPrice(event()!.price)}</div>
-            <div class="axis-extra-alert-name">{event()!.alerts[0]?.name}</div>
-            <button
-              type="button"
-              class="sc-btn sc-btn-ghost axis-extra-alert-close"
-              ref={(el) => el.focus()}
-              onClick={(e) => {
-                e.stopPropagation();
-                setEvent(null);
+    <Show when={store.extras.alertOverlay.enabled}>
+      <Show when={event()} keyed>
+        {(e) => (
+          <Portal>
+            <div
+              class="axis-extra-alert"
+              data-testid="axis-extra-alert"
+              style={{ '--alert-color': color() }}
+              onClick={() => setEvent(null)}
+              onKeyDown={(ev) => {
+                // Document-level Escape already dismisses; kept so the clickable
+                // overlay has a keyboard equivalent (button handles Enter/Space).
+                if (ev.key === 'Escape') setEvent(null);
               }}
-              data-testid="axis-extra-alert-close"
+              role="alertdialog"
+              aria-modal="true"
+              aria-label="Price alert"
+              ref={(el) => {
+                if (!el) return;
+                // Tab cycles inside the overlay; dispose restores prior focus.
+                // Dismiss button autofocuses itself via its own ref below.
+                const dispose = installFocusTrap(el, { autoFocus: false });
+                onCleanup(dispose);
+              }}
             >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      </Portal>
+              <div class="axis-extra-alert-card">
+                <div class="axis-extra-alert-sym">{e.symbol}</div>
+                <div class="axis-extra-alert-price">{formatExtraPrice(e.price)}</div>
+                <div class="axis-extra-alert-name">{e.alerts[0]?.name}</div>
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost axis-extra-alert-close"
+                  ref={(el) => el.focus()}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    setEvent(null);
+                  }}
+                  data-testid="axis-extra-alert-close"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </Portal>
+        )}
+      </Show>
     </Show>
   );
 };

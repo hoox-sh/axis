@@ -57,13 +57,16 @@ export function compareSemver(a: string, b: string): number {
 export function detectInstallContext(
   moduleUrl: string = import.meta.url
 ): InstallContext {
-  const p = (() => {
+  const raw = (() => {
     try {
       return fileURLToPath(moduleUrl);
     } catch {
       return moduleUrl;
     }
   })();
+  // Windows reports backslash separators (C:\…\node_modules\…) — normalize so
+  // the substring checks below match on every platform.
+  const p = raw.replace(/\\/g, "/");
   if (p.includes("/_npx/") || p.includes("/npm-cache/")) return "npx-cache";
   if (p.includes("/node_modules/@hoox-sh/axis-cli/")) return "npm-install";
   if (p.includes("/packages/cli/")) return "repo-checkout";

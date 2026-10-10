@@ -41,6 +41,7 @@ import {
 } from 'solid-js';
 import { setPaletteCommands, clearPaletteCommands } from '../mcp/commands';
 import { noteLibraryCommand } from './library/commands';
+import { installFocusTrap } from './focus-trap';
 import {
   store,
   isPanelOpen,
@@ -108,6 +109,7 @@ import { detectPlatform } from './shortcuts/keys';
 import type { ShortcutId } from './shortcuts/types';
 import { PINE_SNIPPETS } from './shortcuts/pine-snippets';
 import { THEME_PRESETS } from '../theme/presets';
+import { toggleChartSettings } from './chart-settings-state';
 import {
   applyBuiltinScript,
   builtinCategoryLabel,
@@ -222,6 +224,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       toggleIndicators: () => toggleIndicatorPanel(),
       toggleDataView: () => toggleDataViewPanel(),
       toggleTables: () => toggleTablesPanel(),
+      toggleChartSettings: () => toggleChartSettings(),
       toggleAlerts: () => toggleAlertsPanel(),
       toggleScriptLogs: () => {
         // Script Logs now lives in the editor (statusbar Logs toggle above).
@@ -558,6 +561,13 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
           aria-modal="true"
           aria-label="Command palette"
           data-testid="axis-command-palette"
+          ref={(el) => {
+            if (!el) return;
+            // The input is focused by the open effect below; the trap adds Tab
+            // cycling and restores prior focus when the palette closes.
+            const dispose = installFocusTrap(el, { autoFocus: false });
+            onCleanup(dispose);
+          }}
         >
           <div class="sc-dialog-accent" />
           <div class="axis-cmd-palette-search">

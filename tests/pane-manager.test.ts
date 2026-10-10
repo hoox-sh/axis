@@ -11,6 +11,7 @@
 import './setup';
 import { describe, expect, it, beforeAll, beforeEach } from 'bun:test';
 import { installLightweightChartsMock } from './helpers/mock-lwc';
+import { setStore } from '../src/store';
 
 beforeAll(() => {
   installLightweightChartsMock();
@@ -763,5 +764,111 @@ describe('PaneManager', () => {
     pm.createPane('volume', 'volume', 'Volume', 80);
     pm.dispose();
     expect(pm.getAllPanes()).toHaveLength(0);
+  });
+
+  it('destroyPane purges pane-scoped meta + hover listener (recreate repaints)', () => {
+    pm.createPane('price', 'price', 'Price');
+    pm.syncOverlayLines(
+      'price',
+      [{ name: 'EMA', data: [{ time: 1_700_000_000, value: 1 }], color: '#0f0' }],
+      { ownerId: 's1' },
+    );
+    pm.rememberSeriesTitle('price', 'overlay_s1__EMA', 'EMA');
+    const internal = pm as unknown as {
+      overlayDataMeta: Map<string, unknown>;
+      overlaySeriesKinds: Map<string, unknown>;
+      lastValueTitleByKey: Map<string, string>;
+      pointerUnsubs: Array<() => void>;
+      panePointerUnsubs: Map<string, () => void>;
+    };
+    expect(
+      [...internal.overlayDataMeta.keys()].some((k) => k.startsWith('price:')),
+    ).toBe(true);
+    const unsubsBefore = internal.pointerUnsubs.length;
+    pm.destroyPane('price');
+    expect(
+      [...internal.overlayDataMeta.keys()].some((k) => k.startsWith('price:')),
+    ).toBe(false);
+    expect(
+      [...internal.overlaySeriesKinds.keys()].some((k) => k.startsWith('price:')),
+    ).toBe(false);
+    expect(
+      [...internal.lastValueTitleByKey.keys()].some((k) => k.startsWith('price:')),
+    ).toBe(false);
+    expect(internal.panePointerUnsubs.has('price')).toBe(false);
+    expect(internal.pointerUnsubs.length).toBe(unsubsBefore - 1);
+    // Recreate + re-apply repaints (no stale tip fast-path leaving it empty)
+    const again = pm.createPane('price', 'price', 'Price');
+    pm.syncOverlayLines(
+      'price',
+      [{ name: 'EMA', data: [{ time: 1_700_000_000, value: 1 }], color: '#0f0' }],
+      { ownerId: 's1' },
+    );
+    expect(Object.keys(again.series).some((k) => k.includes('s1'))).toBe(true);
+  });
+
+  it('setOverlayLineColor resolves owner-scoped series without owner id', () => {
+    const p = pm.createPane('price', 'price', 'Price');
+    let applied: unknown;
+    p.series['overlay_s1__Fast'] = {
+      setData: () => {},
+      applyOptions: (o: unknown) => {
+        applied = o;
+      },
+    } as never;
+    expect(pm.setOverlayLineColor('price', 'Fast', '#ff00aa')).toBe(true);
+    expect(applied).toEqual({ color: '#ff00aa' });
+    applied = undefined;
+    expect(pm.setOverlayLineColor('price', 'Fast', '#00ff00', 's1')).toBe(true);
+    expect(applied).toEqual({ color: '#00ff00' });
+    expect(pm.setOverlayLineColor('price', 'Missing', '#fff')).toBe(false);
+  });
+
+  it('applyBarColors maps through Heikin-Ashi and honors replay prefix', async () => {
+    const p = pm.createPane('price', 'price', 'Price');
+    let painted: Array<Record<string, unknown>> = [];
+    p.series['candle'] = {
+      setData: (d: never) => {
+        painted = d as never as Array<Record<string, unknown>>;
+      },
+      applyOptions: () => {},
+    } as never;
+    const bars = [1000, 1060, 1120].map((t, i) => ({
+      time: t,
+      open: 10 + i,
+      high: 12 + i,
+      low: 9 + i,
+      close: 11 + i,
+      volume: 5,
+    }));
+    setStore('bars', bars);
+    setStore('chartType', 'heikinashi');
+    try {
+      const n = pm.applyBarColors([{ time: 1060, color: '#ff0000' }], 's1');
+      expect(n).toBe(1);
+      expect(painted).toHaveLength(3);
+      // HA-transformed first open is (o+c)/2 = 10.5, not the raw candle open
+      expect(painted[0]!['open']).not.toBe(10);
+      expect(painted[1]!['color']).toBe('#ff0000');
+      expect(painted[0]!['color']).toBeUndefined();
+
+      const { startReplaySession, stopReplaySession } = await import(
+        '../src/chart/bar-replay'
+      );
+      startReplaySession(3, { cursorIndex: 0 });
+      try {
+        painted = [];
+        const nReplay = pm.applyBarColors([{ time: 1000, color: '#00ff00' }], 's1');
+        expect(nReplay).toBe(1);
+        // Only the scrubbed prefix reaches the chart during replay
+        expect(painted).toHaveLength(1);
+        expect(painted[0]!['color']).toBe('#00ff00');
+      } finally {
+        stopReplaySession();
+      }
+    } finally {
+      setStore('bars', []);
+      setStore('chartType', 'candles');
+    }
   });
 });

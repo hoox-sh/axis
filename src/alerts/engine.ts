@@ -36,6 +36,48 @@ import type { Alert, EvaluateContext } from './types';
 /** Per-symbol last evaluated price (for cross detection across ticks). */
 const prevPriceBySymbol = new Map<string, number>();
 
+/** localStorage key for persisted cross-tracking prices (F6: no re-fire on reload). */
+const PREV_PRICE_LS_KEY = 'axis.alerts.prevPrices.v1';
+
+/** Cap persisted symbols (keeps the blob tiny). */
+const PREV_PRICE_MAX = 100;
+
+/** Default minimum ms between fires for alerts created without `cooldownMs` (F6). */
+export const DEFAULT_ALERT_COOLDOWN_MS = 60_000;
+
+let prevPricesRestored = false;
+
+function restorePrevPrices(): void {
+  if (prevPricesRestored) return;
+  prevPricesRestored = true;
+  try {
+    if (typeof localStorage === 'undefined' || localStorage == null) return;
+    const raw = localStorage.getItem(PREV_PRICE_LS_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw) as unknown;
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+    for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        prevPriceBySymbol.set(normalizeSymbol(k), v);
+      }
+    }
+  } catch {
+    /* corrupt / unavailable — start fresh */
+  }
+}
+
+function persistPrevPrices(): void {
+  try {
+    if (typeof localStorage === 'undefined' || localStorage == null) return;
+    const entries = Array.from(prevPriceBySymbol.entries()).slice(-PREV_PRICE_MAX);
+    const obj: Record<string, number> = {};
+    for (const [k, v] of entries) obj[k] = v;
+    localStorage.setItem(PREV_PRICE_LS_KEY, JSON.stringify(obj));
+  } catch {
+    /* quota / private mode — cross-tracking stays memory-only */
+  }
+}
+
 /** Normalize symbol for matching (trim + upper). */
 export function normalizeSymbol(symbol: string): string {
   return String(symbol || '')
@@ -45,18 +87,29 @@ export function normalizeSymbol(symbol: string): string {
 
 /** Read last evaluated price for a symbol (undefined if never evaluated). */
 export function getPrevPrice(symbol: string): number | undefined {
+  restorePrevPrices();
   return prevPriceBySymbol.get(normalizeSymbol(symbol));
 }
 
 /** Store last evaluated price for a symbol. */
 export function setPrevPrice(symbol: string, price: number): void {
   if (!Number.isFinite(price)) return;
+  restorePrevPrices();
   prevPriceBySymbol.set(normalizeSymbol(symbol), price);
+  persistPrevPrices();
 }
 
 /** Clear cross-tracking state (tests / full reset). */
 export function clearPrevPrices(): void {
   prevPriceBySymbol.clear();
+  prevPricesRestored = true;
+  try {
+    if (typeof localStorage !== 'undefined' && localStorage != null) {
+      localStorage.removeItem(PREV_PRICE_LS_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
@@ -83,28 +136,41 @@ export function isInCooldown(alert: Alert, now: number): boolean {
   return now - alert.lastFiredAt < cd;
 }
 
+/** Relative tolerance for float price equality (≈ 1e-12 of the magnitude). */
+const REL_EPS = 1e-12;
+
+/**
+ * Float-safe equality for prices / plot values. Exact `===` misses levels that
+ * differ only by rounding (e.g. a computed drawing level vs a tick).
+ */
+export function approxEqual(a: number, b: number): boolean {
+  if (a === b) return true;
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  const scale = Math.max(1, Math.abs(a), Math.abs(b));
+  return Math.abs(a - b) <= REL_EPS * scale;
+}
+
 /**
  * True when price path from `prev` → `price` crosses `level`
  * (either direction). Touching exactly after being off-level counts.
+ * Starting on the level does not fire until the price leaves and re-crosses.
  * Requires a defined previous price; first tick never crosses.
  */
 export function crossesLevel(prev: number, price: number, level: number): boolean {
   if (!Number.isFinite(prev) || !Number.isFinite(price) || !Number.isFinite(level)) {
     return false;
   }
-  if (prev === price) return false;
-  // Strict cross: was on one side (or equal) and moved to the other side (or equal from opposite)
-  const wasBelow = prev < level;
-  const wasAbove = prev > level;
-  const nowBelow = price < level;
-  const nowAbove = price > level;
-  const nowEqual = price === level;
+  if (approxEqual(prev, price)) return false;
+  // Equality uses the float-safe comparison so rounding never flips a side.
+  const prevOn = approxEqual(prev, level);
+  const nowOn = approxEqual(price, level);
+  const wasBelow = !prevOn && prev < level;
+  const wasAbove = !prevOn && prev > level;
+  const nowBelow = !nowOn && price < level;
+  const nowAbove = !nowOn && price > level;
 
-  if (wasBelow && (nowAbove || nowEqual)) return true;
-  if (wasAbove && (nowBelow || nowEqual)) return true;
-  // Was exactly on level: only fire if we leave and ... no — classic level-crossing fires when
-  // moving through the level. Starting ON the level does not re-fire until we leave and re-cross.
-  if (prev === level) return false;
+  if (wasBelow && (nowAbove || nowOn)) return true;
+  if (wasAbove && (nowBelow || nowOn)) return true;
   return false;
 }
 
@@ -329,10 +395,10 @@ export function evaluateOne(
           break;
         case '==':
         case '=':
-          nowTrue = value === threshold;
+          nowTrue = approxEqual(value, threshold);
           break;
         case '!=':
-          nowTrue = value !== threshold;
+          nowTrue = !approxEqual(value, threshold);
           break;
         case 'cross':
         case 'crosses': {
@@ -359,10 +425,10 @@ export function evaluateOne(
           break;
         case '==':
         case '=':
-          wasTrue = prevValue === threshold;
+          wasTrue = approxEqual(prevValue, threshold);
           break;
         case '!=':
-          wasTrue = prevValue !== threshold;
+          wasTrue = !approxEqual(prevValue, threshold);
           break;
       }
       return becomesTrue(nowTrue, wasTrue);
@@ -551,14 +617,55 @@ export function eventMatchesOnchainAlert(
   return true;
 }
 
+/** Params key: per-protocol watermark map `{ [protocolKey]: unixSec }`. */
+export const ONCHAIN_WATERMARK_MAP_KEY = 'lastEventTimeByProtocol';
+
+/** Map key used for a legacy single `lastEventTime` (applies to every protocol). */
+const LEGACY_WATERMARK_KEY = '*';
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+/**
+ * Per-protocol watermark (unix seconds) for an on-chain alert, or `null`.
+ * Uses the per-protocol map when present; otherwise falls back to the legacy
+ * `params.lastEventTime` (kept so pre-existing alerts still behave).
+ */
+export function onchainWatermark(alert: Alert, protocolKey: string): number | null {
+  const map = alert.params?.[ONCHAIN_WATERMARK_MAP_KEY];
+  if (isRecord(map)) {
+    const exact = map[protocolKey];
+    if (typeof exact === 'number' && Number.isFinite(exact)) return exact;
+    const wildcard = map[LEGACY_WATERMARK_KEY];
+    if (typeof wildcard === 'number' && Number.isFinite(wildcard)) return wildcard;
+    return null;
+  }
+  return numParam(alert.params ?? {}, 'lastEventTime');
+}
+
+/** Protocol key for an event: batch context first, then `payload.protocolId`. */
+export function onchainEventProtocolKey(
+  event: OnchainEvalEvent,
+  ctx: OnchainEvalContext,
+): string {
+  const fromCtx = normalizeId(ctx.protocolId);
+  if (fromCtx) return fromCtx;
+  return event.payload && event.payload.protocolId != null
+    ? normalizeId(String(event.payload.protocolId))
+    : '';
+}
+
 /**
  * Evaluate on-chain alerts against a batch of events (pure).
  *
- * For each matching enabled alert (not in cooldown), fires at most once on
- * the **most recent** matching event with `time > params.lastEventTime`
- * (watermark avoids re-firing historical spikes on every reload).
+ * For each matching enabled alert (not in cooldown), fires at most once per
+ * batch on the **most recent** matching event beyond the watermark of its
+ * protocol. Watermarks are kept per protocol (`params.lastEventTimeByProtocol`)
+ * so one protocol's events cannot hide another protocol's older events.
+ * Matched protocols are consumed; `params.lastEventTime` mirrors the fire.
  *
- * @returns shallow alert copies with `lastFiredAt` and updated `lastEventTime`
+ * @returns shallow alert copies with `lastFiredAt` and updated watermarks
  *   plus the event that triggered each fire.
  */
 export function evaluateOnchainEventAlertsPure(
@@ -584,20 +691,41 @@ export function evaluateOnchainEventAlertsPure(
     }
     if (isInCooldown(alert, now)) continue;
 
-    const watermark = numParam(alert.params ?? {}, 'lastEventTime');
-    let best: OnchainEvalEvent | null = null;
+    // Latest matching event per protocol key beyond that key's watermark.
+    const latestByKey = new Map<string, OnchainEvalEvent>();
     for (const ev of sorted) {
+      const key = onchainEventProtocolKey(ev, ctx);
+      const watermark = onchainWatermark(alert, key);
       if (watermark != null && Number(ev.time) <= watermark) continue;
       if (!eventMatchesOnchainAlert(alert, ev, ctx)) continue;
-      best = ev; // ascending sort → last match is most recent
+      latestByKey.set(key, ev); // ascending sort → last match per key is most recent
+    }
+    if (latestByKey.size === 0) continue;
+
+    let best: OnchainEvalEvent | null = null;
+    for (const ev of latestByKey.values()) {
+      if (!best || Number(ev.time) > Number(best.time)) best = ev;
     }
     if (!best) continue;
+
+    const prevMap: Record<string, unknown> = isRecord(alert.params?.[ONCHAIN_WATERMARK_MAP_KEY])
+      ? { ...(alert.params[ONCHAIN_WATERMARK_MAP_KEY] as Record<string, unknown>) }
+      : {};
+    if (!isRecord(alert.params?.[ONCHAIN_WATERMARK_MAP_KEY])) {
+      // Migrate legacy single watermark so other protocols keep their floor.
+      const legacy = numParam(alert.params ?? {}, 'lastEventTime');
+      if (legacy != null) prevMap[LEGACY_WATERMARK_KEY] = legacy;
+    }
+    for (const [key, ev] of latestByKey) {
+      prevMap[key] = Number(ev.time);
+    }
 
     fired.push({
       alert: {
         ...alert,
         params: {
           ...alert.params,
+          [ONCHAIN_WATERMARK_MAP_KEY]: prevMap,
           lastEventTime: Number(best.time),
         },
         lastFiredAt: now,
@@ -623,6 +751,7 @@ export function evaluateAlerts(
   ctx: EvaluateContext,
   now: number = ctx.time ?? Date.now(),
 ): Alert[] {
+  restorePrevPrices();
   const sym = normalizeSymbol(ctx.symbol);
   const prev =
     ctx.prevPrice !== undefined ? ctx.prevPrice : prevPriceBySymbol.get(sym);
@@ -641,6 +770,7 @@ export function evaluateAlerts(
   // Advance cross-tracking after all alerts see the same prev
   if (Number.isFinite(ctx.price) && sym) {
     prevPriceBySymbol.set(sym, ctx.price);
+    persistPrevPrices();
   }
 
   return fired;

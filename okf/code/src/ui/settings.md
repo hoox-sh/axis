@@ -7,7 +7,7 @@ tags: [code, settings, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-27T14:41:44Z
+  at: 2026-10-10T20:32:38Z
 sources:
   - id: tree
     resource: "src/ui/settings"
@@ -20,6 +20,7 @@ okf_lock: generated
 
 * `NotificationsPanel.tsx` — NotificationsPanel
 * `SettingsPage.tsx` — SettingsPage
+* `panels.tsx` — EditorIntelPanel, ExchangeCredentialsPanel
 
 # Packages
 
@@ -29,6 +30,8 @@ okf_lock: generated
 
 * [src/chart](/code/src/chart.md)
 * [src/data](/code/src/data.md)
+* [src/data/venues](/code/src/data/venues.md)
+* [src/editor](/code/src/editor.md)
 * [src/mcp](/code/src/mcp.md)
 * [src/plugins](/code/src/plugins.md)
 * [src/storage](/code/src/storage.md)
@@ -41,5 +44,4 @@ okf_lock: generated
 
 # Used by
 
-* [src/ui](/code/src/ui.md)
 * [src/ui/studio](/code/src/ui/studio.md)

@@ -47,6 +47,15 @@ export type GitOAuthProvider = 'github' | 'gitlab';
 const GITHUB_SCOPE = 'repo read:user';
 const GITLAB_SCOPE = 'api';
 
+/** Forge round-trip budget — the relay must not hang on a slow forge (A15). */
+const FORGE_TIMEOUT_MS = 10_000;
+
+function forgeSignal(): RequestInit {
+  return typeof AbortSignal.timeout === 'function'
+    ? { signal: AbortSignal.timeout(FORGE_TIMEOUT_MS) }
+    : {};
+}
+
 import { clientIp, jsonResponse } from './http';
 import { allowRate } from './rate-limit';
 
@@ -105,6 +114,7 @@ async function startDevice(
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: formBody({ client_id: clientId, scope }),
+      ...forgeSignal(),
     });
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok || data.error) {
@@ -130,6 +140,7 @@ async function startDevice(
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: formBody({ client_id: clientId, scope }),
+    ...forgeSignal(),
   });
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok || data.error) {
@@ -165,6 +176,7 @@ async function pollDevice(
         device_code: deviceCode,
         grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
       }),
+      ...forgeSignal(),
     });
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     // Pending is not HTTP error — GitHub returns 200 with error field
@@ -199,6 +211,7 @@ async function pollDevice(
       device_code: deviceCode,
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
     }),
+    ...forgeSignal(),
   });
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (data.error) {

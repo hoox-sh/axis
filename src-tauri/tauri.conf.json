@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "AXIS",
-  "version": "2.21.0",
+  "version": "2.22.0",
   "identifier": "sh.hoox.axis",
   "build": {
     "frontendDist": "../dist",
@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; script-src 'self' 'wasm-unsafe-eval' https://pyne-agent-worker.cryptolinx.workers.dev; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: http: https:; font-src 'self' data: asset:; connect-src 'self' https: wss: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; worker-src 'self' blob:; child-src 'self' blob:; manifest-src 'self'"
     }
   },
   "bundle": {

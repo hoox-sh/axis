@@ -12,6 +12,7 @@
 
 import { resolveCloudConfig } from '../storage/cloud-config';
 import { appendLog } from '../store';
+import { fetchWithTimeout } from '../utils/fetch-timeout';
 import { invokeCapability } from './dispatch';
 import { McpInvokeError, sessionIdFromApiKey } from './protocol';
 
@@ -97,7 +98,7 @@ function workerWsUrl(httpBase: string): string {
   return u.toString();
 }
 
-async function handleFrame(raw: string): Promise<void> {
+async function handleFrame(raw: string, socket: WebSocket | null): Promise<void> {
   let msg: Record<string, unknown>;
   try {
     msg = JSON.parse(raw) as Record<string, unknown>;
@@ -106,7 +107,11 @@ async function handleFrame(raw: string): Promise<void> {
   }
   const type = String(msg.type || '');
   if (type === 'ping') {
-    ws?.send(JSON.stringify({ type: 'pong', t: Date.now() }));
+    try {
+      socket?.send(JSON.stringify({ type: 'pong', t: Date.now() }));
+    } catch {
+      /* closing socket — drop the pong */
+    }
     return;
   }
   if (type !== 'invoke') return;
@@ -114,16 +119,29 @@ async function handleFrame(raw: string): Promise<void> {
   const capability = String(msg.capability || '');
   state = { ...state, lastInvokeAt: Date.now(), lastCapability: capability || null };
   emit();
+  // F12: reply on the originating socket, not the module-global `ws` — the
+  // key may rotate mid-invoke and `ws` may already point at a new session.
+  const reply = (frame: unknown): void => {
+    try {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(frame));
+      }
+    } catch {
+      /* closing socket — drop the reply */
+    }
+  };
   const started = Date.now();
   try {
-    const result = await invokeCapability(capability, msg.payload);
+    // Bridge frames arrive over the Worker-authenticated session (ticket),
+    // so mutating capabilities are allowed here — unlike the in-page host.
+    const result = await invokeCapability(capability, msg.payload, { allowMutations: true });
     appendLog('info', `mcp ${capability || '?'} → ok · ${Date.now() - started}ms`, 'mcp');
-    ws?.send(JSON.stringify({ type: 'result', id, result }));
+    reply({ type: 'result', id, result });
   } catch (err) {
     const code = err instanceof McpInvokeError ? err.code : 'APP_ERROR';
     const message = err instanceof Error ? err.message : String(err);
     appendLog('error', `mcp ${capability || '?'} → ${code} · ${message}`, 'mcp');
-    ws?.send(JSON.stringify({ type: 'error', id, error: { code, message } }));
+    reply({ type: 'error', id, error: { code, message } });
   }
 }
 
@@ -192,10 +210,13 @@ export async function refreshBridgeTabs(): Promise<number | null> {
     return null;
   }
   try {
-    const res = await fetch(`${cfg.endpoint.replace(/\/$/, '')}/api/mcp/bridge`, {
-      headers: { Authorization: `Bearer ${cfg.apiKey}`, Accept: 'application/json' },
-      signal: AbortSignal.timeout(10_000),
-    });
+    const res = await fetchWithTimeout(
+      `${cfg.endpoint.replace(/\/$/, '')}/api/mcp/bridge`,
+      {
+        headers: { Authorization: `Bearer ${cfg.apiKey}`, Accept: 'application/json' },
+      },
+      { timeoutMs: 10_000 },
+    );
     if (!res.ok) return state.tabs;
     const body = (await res.json()) as { connected?: unknown };
     const n = typeof body.connected === 'number' && Number.isFinite(body.connected) ? body.connected : null;
@@ -247,10 +268,13 @@ function idleNoKey(): void {
 }
 
 async function mintBridgeTicket(cfg: { endpoint: string; apiKey: string }): Promise<string> {
-  const res = await fetch(`${cfg.endpoint.replace(/\/$/, '')}/api/mcp/bridge?issue=ticket`, {
-    headers: { Authorization: `Bearer ${cfg.apiKey}`, Accept: 'application/json' },
-    signal: AbortSignal.timeout(10_000),
-  });
+  const res = await fetchWithTimeout(
+    `${cfg.endpoint.replace(/\/$/, '')}/api/mcp/bridge?issue=ticket`,
+    {
+      headers: { Authorization: `Bearer ${cfg.apiKey}`, Accept: 'application/json' },
+    },
+    { timeoutMs: 10_000 },
+  );
   if (!res.ok) {
     throw new Error(`bridge ticket HTTP ${res.status}`);
   }
@@ -343,7 +367,7 @@ export async function connectMcpBridge(): Promise<void> {
     socket.addEventListener('message', (ev) => {
       if (ws !== socket) return;
       state = { ...state, lastEventAt: Date.now() };
-      void handleFrame(String(ev.data || ''));
+      void handleFrame(String((ev as { data?: unknown }).data || ''), socket);
     });
     socket.addEventListener('close', () => {
       if (ws !== socket) return;

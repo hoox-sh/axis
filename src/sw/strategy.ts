@@ -11,17 +11,24 @@
  *
  * ## Invariants (manual + unit)
  *
- * 1. Cache names are `axis-shell-*` / `axis-runtime-*` only.
- * 2. Activate deletes **old axis-*** caches and never the current pair.
- * 3. API (`/api/*`) is network-first; only cache HTTP 200 basic responses.
+ * 1. Cache names are `axis-shell-`, `axis-runtime-`, `axis-pyodide-` only.
+ * 2. Activate deletes **old axis-** caches and never the current set.
+ * 3. API (`/api/`) is network-only: responses are never written to cache
+ *    (D2 — cached 200s ignored auth/session). A stale entry from an older SW
+ *    may still serve an offline fallback, then 503 JSON.
  * 4. Never treat opaque / error responses as cacheable success.
  * 5. Non-GET is not handled by the SW (browser default).
- * 6. Self-hosted pyodide + vendor paths are same-origin static → cache-first
- *    after first successful fetch (offline engine); transient fetch failures
- *    are retried before surfacing so one reset never breaks an import.
- * 7. Navigation is network-first with shell fallback (fresh HTML when online).
- * 8. Navigation never rejects `respondWith` — offline shell HTML if cache miss.
- * 9. Same-origin `/version.json` is bypass — the update probe must hit network.
+ * 6. Same-origin static routing (D4): immutable paths (`/assets/` hashed
+ *    bundles, `/pyodide/v<ver>/` versioned engine) are cache-first; everything
+ *    else unhashed (plugins, `/vendor/` wheels, root files) is network-first
+ *    with cache fallback so a stale SW never pins old code.
+ * 7. Pyodide/vendor payloads live in their own cache with their own cap (D15)
+ *    so big engine files cannot evict hashed app assets (and vice versa).
+ * 8. Navigation is network-first with shell fallback (fresh HTML when online).
+ * 9. Navigation never rejects `respondWith` — offline shell HTML if cache miss.
+ * 10. Same-origin `/version.json` is bypass — the update probe must hit network.
+ * 11. `no-store` requests skip the cache read; `private`/`no-store`
+ *    responses are never stored.
  *
  * ## Manual checklist (DevTools → Application)
  *
@@ -33,16 +40,29 @@
  */
 
 /** Bump when shell precache or strategy semantics change. */
-export const SW_VERSION = 'v7';
+export const SW_VERSION = 'v8';
 
 export const CACHE_PREFIX = 'axis-';
 
 /**
- * Soft cap on `axis-runtime-*` entries (hashed assets, pyodide, CDN).
+ * Soft cap on `axis-runtime-*` entries (hashed assets, CDN).
  * FIFO trim after put — prevents unbounded Cache Storage growth.
  * Mirrored in `public/sw.js` / root `sw.js`.
  */
 export const RUNTIME_CACHE_MAX_ENTRIES = 96;
+
+/**
+ * Soft cap on `axis-pyodide-*` entries (engine + wheels). Separate from the
+ * runtime cap (D15) so multi-MB engine payloads cannot evict app assets.
+ * Mirrored in `public/sw.js`.
+ */
+export const PYODIDE_CACHE_MAX_ENTRIES = 32;
+
+/**
+ * API responses are never written to cache (D2). Kept as a named flag (not
+ * a deleted code path) so the parity test can assert both copies agree.
+ */
+export const API_CACHE_ENABLED = false;
 
 /** Uncached static/CDN fetch: retry thrown network errors this many times. Mirrored in `public/sw.js`. */
 export const FETCH_RETRY_ATTEMPTS = 3;
@@ -55,6 +75,15 @@ export function shellCacheName(version: string = SW_VERSION): string {
 
 export function runtimeCacheName(version: string = SW_VERSION): string {
   return `${CACHE_PREFIX}runtime-${version}`;
+}
+
+export function pyodideCacheName(version: string = SW_VERSION): string {
+  return `${CACHE_PREFIX}pyodide-${version}`;
+}
+
+/** Every cache the current SW owns (activate keeps exactly this set). */
+export function currentCacheNames(version: string = SW_VERSION): string[] {
+  return [shellCacheName(version), runtimeCacheName(version), pyodideCacheName(version)];
 }
 
 export function isAxisCacheName(name: string): boolean {
@@ -163,15 +192,54 @@ export function shouldCacheStaticResponse(res: ResponseLike): boolean {
 }
 
 /**
- * API: only cache same-origin basic HTTP 200 (not 204/206/opaque/errors).
+ * API: never cached (D2). Responses may carry auth/session context, so even
+ * HTTP 200 basic entries must not be stored. The SW still serves a stale
+ * entry written by an older worker as an offline fallback, then 503 JSON.
  */
-export function shouldCacheApiResponse(res: ResponseLike): boolean {
-  if (res.type === 'opaque' || res.type === 'error' || res.type === 'opaqueredirect') {
-    return false;
-  }
-  // API is same-origin; prefer basic. `default` can appear in some test/polyfill envs.
-  if (res.type !== 'basic' && res.type !== 'default') return false;
-  return res.status === 200;
+export function shouldCacheApiResponse(_res: ResponseLike): boolean {
+  return false;
+}
+
+/** True for same-origin engine/wheel payloads (own cache + cap, D15). */
+export function isPyodidePath(pathname: string): boolean {
+  return pathname === '/pyodide' || pathname.startsWith('/pyodide/') ||
+    pathname === '/vendor' || pathname.startsWith('/vendor/');
+}
+
+/**
+ * True for immutable same-origin statics: Vite hashed bundles and the
+ * versioned pyodide engine (safe for cache-first, D4). Everything else
+ * same-origin (plugins, unversioned wheels, root files) is network-first so
+ * a stale SW never pins old code.
+ */
+export function isImmutableStaticPath(pathname: string): boolean {
+  if (pathname === '/assets' || pathname.startsWith('/assets/')) return true;
+  return /^\/pyodide\/v[^/]+\//.test(pathname);
+}
+
+/** Cache-first for immutable statics, network-first otherwise (D4). */
+export function staticStrategy(pathname: string): 'cache-first' | 'network-first' {
+  return isImmutableStaticPath(pathname) ? 'cache-first' : 'network-first';
+}
+
+/**
+ * True when a request opts out of the cache read (`Cache-Control: no-store`
+ * or `cache: 'no-store'`). Mirrored in `public/sw.js` against real Requests.
+ */
+export function isNoStoreRequest(req: { cache?: string; cacheControl?: string | null }): boolean {
+  if (req.cache === 'no-store') return true;
+  const cc = String(req.cacheControl || '').toLowerCase();
+  return cc.split(',').map((s) => s.trim()).includes('no-store');
+}
+
+/**
+ * True when a response must not be stored (`Cache-Control: private` or
+ * `no-store`). Mirrored in `public/sw.js` against real Responses.
+ */
+export function isNonCacheableResponse(cacheControl: string | null | undefined): boolean {
+  const cc = String(cacheControl || '').toLowerCase();
+  const parts = cc.split(',').map((s) => s.trim());
+  return parts.includes('no-store') || parts.includes('private');
 }
 
 /** Offline API body used when network fails and cache miss. */

@@ -34,7 +34,9 @@
 
 import type { Env } from './index';
 import { ORIGIN_ONLY, errorResponse, jsonResponse } from './http';
+import { clientIp } from './http';
 import { extractBearer } from './auth';
+import { allowRate } from './rate-limit';
 
 /** Persisted KV payload for a minted API key. */
 interface KeyRecord {
@@ -43,11 +45,25 @@ interface KeyRecord {
     createdAt: number;
 }
 
-/** Constant-time enough for a shared admin secret; empty ADMIN_TOKEN disables create. */
+/** Timing-safe compare for a shared admin secret; empty ADMIN_TOKEN disables create. */
+function timingSafeEqual(a: string, b: string): boolean {
+    const ea = new TextEncoder().encode(a);
+    const eb = new TextEncoder().encode(b);
+    if (ea.length !== eb.length) return false;
+    let diff = 0;
+    for (let i = 0; i < ea.length; i++) diff |= (ea[i] ?? 0) ^ (eb[i] ?? 0);
+    return diff === 0;
+}
+
+/** Per-IP gate on admin-gated create attempts (A16) — same 403 either way. */
+function adminAttemptAllowed(req: Request): boolean {
+    return allowRate(`keys:admin:${clientIp(req)}`, 20, 60_000);
+}
+
 function isAdmin(req: Request, env: Env): boolean {
     if (!env.ADMIN_TOKEN) return false;
     const header = req.headers.get('X-Admin-Token') ?? '';
-    return header === env.ADMIN_TOKEN;
+    return timingSafeEqual(header, env.ADMIN_TOKEN);
 }
 
 /** Cryptographically random `pn_` + 48 hex key. */
@@ -66,7 +82,7 @@ export async function handleKeys(req: Request, env: Env, origin: string): Promis
 
     // --- Create ---
     if (url.searchParams.get('action') === 'create' || req.method === 'POST') {
-        if (!isAdmin(req, env)) {
+        if (!adminAttemptAllowed(req) || !isAdmin(req, env)) {
             return errorResponse('FORBIDDEN', 'admin token required', { status: 403, origin, cors: ORIGIN_ONLY });
         }
         const body = await req.json().catch(() => ({} as Record<string, unknown>));
@@ -100,6 +116,17 @@ export async function handleKeys(req: Request, env: Env, origin: string): Promis
             );
         }
         // No KV bound: accept any well-formed key (dev-only; does not prove issuance).
+        // Aligned with auth.ts: a bound D1 without KV must fail closed — a
+        // shape-only key would partition durable rows by an attacker-chosen
+        // token with no mint/revoke (A17).
+        const db = (env as unknown as { DB?: D1Database }).DB;
+        if (db && env.ALLOW_OPEN_KEYS !== '1' && env.ALLOW_OPEN_KEYS !== 'true') {
+            return errorResponse(
+                'API_KEYS_REQUIRED',
+                'API_KEYS KV is not bound while D1 is active. Bind API_KEYS and mint keys via /api/keys?action=create.',
+                { status: 503, origin, cors: ORIGIN_ONLY },
+            );
+        }
         if (!/^pn_[a-f0-9]{48}$/.test(provided)) {
             return errorResponse('INVALID_KEY', 'malformed key', { status: 401, origin, cors: ORIGIN_ONLY });
         }

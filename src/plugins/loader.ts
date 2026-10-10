@@ -404,6 +404,17 @@ export function assertPluginRemoteAllowed(
   assertSafePluginUrl(href);
   if (!isProdBuild(opts?.prod)) return;
   if (envAllowsAnyRemote()) return;
+  const lower = normalizeForSchemeCheck(href);
+  // F3: opaque origins carry no verifiable host — never load them as
+  // production plugins (dev/test fixtures stay allowed for inline modules).
+  // Remote integrity pinning (SRI) is deferred: it needs an integrity field
+  // on the persisted install entry plus install-time UX.
+  if (lower.startsWith('data:') || lower.startsWith('blob:')) {
+    throw new Error(
+      'data:/blob: plugin URLs are blocked in production (no verifiable origin). ' +
+        'Ship the module same-origin under /plugins/… instead.',
+    );
+  }
   if (!isRemoteHttpPluginUrl(href)) return;
 
   const base =

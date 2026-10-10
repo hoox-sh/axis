@@ -1120,19 +1120,21 @@ function SliceProgressChip() {
     return Math.max(0, Math.floor((j.targetToSec - j.targetFromSec) / step) + 1);
   });
   return (
-    <Show when={!!active()}>
-      <button
-        type="button"
-        class="sc-btn sc-btn-ghost is-loading"
-        data-testid="axis-chip-slice-progress"
-        title="Data is completing this dataset in the background"
-        onClick={() => toggleDataSourcePanel()}
-      >
-        <HooxLoader size="xs" />
-        <span class="axis-tb-btn-label font-mono">
-          {active()!.barsFetched}/{expected()}
-        </span>
-      </button>
+    <Show when={active()}>
+      {(a) => (
+        <button
+          type="button"
+          class="sc-btn sc-btn-ghost is-loading"
+          data-testid="axis-chip-slice-progress"
+          title="Data is completing this dataset in the background"
+          onClick={() => toggleDataSourcePanel()}
+        >
+          <HooxLoader size="xs" />
+          <span class="axis-tb-btn-label font-mono">
+            {a().barsFetched}/{expected()}
+          </span>
+        </button>
+      )}
     </Show>
   );
 }

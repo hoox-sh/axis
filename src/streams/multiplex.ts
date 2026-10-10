@@ -272,6 +272,11 @@ export function startLive(
    * every bar advances aggregation, even under background throttling.
    */
   const flushPendingBar = () => {
+    // Whichever of rAF / timer fires first flushes; cancel the other so it cannot
+    // run a second flush after the handle has been reset.
+    if (liveBarRaf && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(liveBarRaf);
+    }
     liveBarRaf = 0;
     if (liveBarTimer) {
       clearTimeout(liveBarTimer);
@@ -300,7 +305,9 @@ export function startLive(
         const manager = getManager();
         if (manager) manager.appendBar(bar);
         noteTick(bar.close, bar.time, sym);
-        noteLiveBarForAlerts(bar);
+        // F2 (cross-workstream): pass the stream's own identity so alerts
+        // evaluate against the stream symbol, dropping stale-stream bars.
+        noteLiveBarForAlerts(bar, { symbol: sym, interval: iv });
 
         // Data Manager: grow the underlying bars-cache dataset with live ticks
         noteDataManagerLiveBar(bar);
@@ -341,7 +348,9 @@ export function startLive(
   const streamCfg =
     ((store.pluginsConfig || {})[pluginKey('stream', stream.id)] as Record<string, unknown> | undefined) ||
     {};
-  const stop = stream.start({
+  let stop: () => void;
+  try {
+    stop = stream.start({
     symbol: sym,
     interval: iv,
     lastBar,
@@ -351,10 +360,13 @@ export function startLive(
       // Drop partial / NaN OHLCV so a bad venue tick cannot poison the chart
       const bar = sanitizeBar(raw);
       if (!bar) return;
-      // Queue every tick in order — a single newest-only slot would drop
-      // closed bars while rAF is paused in a hidden tab.
-      pendingLiveBars.push(bar);
-      // Bound memory when a hidden tab queues hours of 1s ticks.
+      // Queue in order, coalescing open-bar ticks of the same slot onto the tail.
+      // Only distinct slots grow the queue, so the cap below cannot evict a
+      // closed slot that a hidden tab's tick burst would otherwise have pushed out.
+      const tail = pendingLiveBars[pendingLiveBars.length - 1];
+      if (tail && tail.time === bar.time) pendingLiveBars[pendingLiveBars.length - 1] = bar;
+      else pendingLiveBars.push(bar);
+      // Bound memory when a hidden tab queues hours of distinct slots.
       if (pendingLiveBars.length > 5000) {
         pendingLiveBars.splice(0, pendingLiveBars.length - 5000);
       }
@@ -403,11 +415,17 @@ export function startLive(
           if (!store.live.active) {
             setStore('stream', 'status', 'disconnected');
             setTelemetryState('stream', 'closed');
-          } else if (s.detail === 'reconnect exhausted') {
+          } else {
+            // Any unexpected close while Live is armed (reconnect exhausted, or a
+            // plain socket drop from a non-reconnecting stream) → Offline, not Live.
             outageSince = 0;
             setStore('stream', 'status', 'disconnected');
             setTelemetryState('stream', 'closed', { detail: s.detail });
-            appendLog('error', 'Stream offline · retries exhausted', 'stream', { toast: true });
+            const why =
+              s.detail === 'reconnect exhausted'
+                ? 'retries exhausted'
+                : s.detail || 'connection closed';
+            appendLog('error', `Stream offline · ${why}`, 'stream', { toast: true });
           }
         }
       } catch {
@@ -426,7 +444,20 @@ export function startLive(
         /* ignore */
       }
     },
-  });
+    });
+  } catch (err: unknown) {
+    // Synchronous start failure: report it and disarm Live. Without this,
+    // live.active stays true with no socket behind it.
+    const msg = err instanceof Error && err.message ? err.message : 'Stream failed to start';
+    liveEpoch += 1;
+    cancelPendingLiveBarFlush();
+    setLive(false);
+    setStore('stream', 'status', 'error');
+    setTelemetryState('stream', 'error', { error: msg });
+    setStatus('error', `Live error: ${msg}`);
+    appendLog('error', msg, 'stream');
+    return;
+  }
 
   // If a nested stop/restart happened during start (unlikely), drop this stop
   if (liveEpoch !== epoch) {
@@ -587,15 +618,19 @@ function scheduleRerun() {
         });
       }
     } finally {
-      rerunInFlight = false;
-      // If more ticks arrived or interactive deferred us, schedule again
-      if (
-        store.live.active &&
-        store.live.needsRerun &&
-        !isInteractiveRunInFlight() &&
-        !isStudyActive()
-      ) {
-        scheduleRerun();
+      // A stale cycle (session stopped / restarted mid-run) must not clear the gate
+      // that a newer session's cycle now holds — stopLive already released it.
+      if (liveEpoch === epochAtSchedule) {
+        rerunInFlight = false;
+        // If more ticks arrived or interactive deferred us, schedule again
+        if (
+          store.live.active &&
+          store.live.needsRerun &&
+          !isInteractiveRunInFlight() &&
+          !isStudyActive()
+        ) {
+          scheduleRerun();
+        }
       }
     }
   }, debounceMs);

@@ -7,7 +7,7 @@ tags: [code, workers]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:07:37Z
+  at: 2026-10-10T20:32:38Z
 sources:
   - id: tree
     resource: "src/workers"
@@ -29,10 +29,10 @@ okf_lock: generated
 * [src/engines](/code/src/engines.md)
 * [src/plugins](/code/src/plugins.md)
 * [src/store](/code/src/store.md)
+* [src/utils](/code/src/utils.md)
 
 # Used by
 
-* [src/ui](/code/src/ui.md)
 * [src/ui/runtime](/code/src/ui/runtime.md)
 * [src/ui/workers](/code/src/ui/workers.md)
 * [tests](/code/tests.md)

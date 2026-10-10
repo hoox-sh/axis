@@ -107,14 +107,18 @@ describe('markUpdateAvailable', () => {
 });
 
 describe('dismissUpdate', () => {
-  it('returns to current and clears the payload, re-firing on next detection', () => {
+  it('returns to current and clears the payload; same version stays dismissed (D10)', () => {
     markUpdateAvailable(NEXT, 'manual', { canNotify: () => false });
     dismissUpdate();
     expect(getUpdateState().status).toBe('current');
     expect(getUpdateState().update).toBeNull();
+    // Re-detection of the dismissed version (poll/focus/online) stays quiet…
+    expect(markUpdateAvailable(NEXT, 'manual', { canNotify: () => false })).toBeNull();
+    expect(getUpdateState().status).toBe('current');
+    // …while a different version still re-prompts.
     expect(
-      markUpdateAvailable(NEXT, 'manual', { canNotify: () => false })?.latestVersion,
-    ).toBe(NEXT);
+      markUpdateAvailable('9.9.10-test', 'manual', { canNotify: () => false })?.latestVersion,
+    ).toBe('9.9.10-test');
   });
 });
 

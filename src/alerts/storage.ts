@@ -34,6 +34,22 @@ export const ALERTS_STORAGE_KEY = 'axis.alerts.v1';
 /** In-memory fallback when localStorage is missing or throws. */
 let memoryStore: Alert[] | null = null;
 
+/** Last localStorage persist failure (quota / blocked), if any. */
+let lastPersistError: string | null = null;
+
+/** Human status of the last {@link saveAlerts} persist attempt. */
+export function lastAlertsPersistError(): string | null {
+  return lastPersistError;
+}
+
+/** Cached parse of the last-seen LS blob (F13: one JSON.parse per change). */
+let cachedRaw: string | null | undefined;
+let cachedList: Alert[] | null = null;
+
+function cloneList(list: Alert[]): Alert[] {
+  return list.map((a) => ({ ...a, params: { ...a.params } }));
+}
+
 type AlertsListener = () => void;
 const listeners = new Set<AlertsListener>();
 
@@ -160,16 +176,20 @@ function serialize(alerts: Alert[]): string {
 /**
  * Load all alerts from localStorage (or memory fallback).
  * Always returns a new array of shallow-cloned alerts.
+ * The LS blob is parsed at most once per distinct raw value (F13).
  */
 export function loadAlerts(): Alert[] {
   const raw = lsGet(ALERTS_STORAGE_KEY);
   if (raw != null) {
+    if (cachedList && raw === cachedRaw) return cloneList(cachedList);
     const list = parseAlertsBlob(raw);
-    memoryStore = list.map((a) => ({ ...a, params: { ...a.params } }));
-    return memoryStore.map((a) => ({ ...a, params: { ...a.params } }));
+    cachedRaw = raw;
+    cachedList = list;
+    memoryStore = cloneList(list);
+    return cloneList(memoryStore);
   }
   if (memoryStore) {
-    return memoryStore.map((a) => ({ ...a, params: { ...a.params } }));
+    return cloneList(memoryStore);
   }
   return [];
 }
@@ -177,15 +197,30 @@ export function loadAlerts(): Alert[] {
 /**
  * Persist the full alert list. Updates memory fallback always;
  * writes localStorage when available.
+ * @returns true when the durable LS write succeeded (or LS is unavailable
+ *   and memory-only mode applies); false on quota/blocked failure — see
+ *   {@link lastAlertsPersistError} (F15).
  */
-export function saveAlerts(alerts: Alert[]): void {
-  const copy = alerts.map((a) => ({ ...a, params: { ...a.params } }));
+export function saveAlerts(alerts: Alert[]): boolean {
+  const copy = cloneList(alerts);
   memoryStore = copy;
-  const json = serialize(copy);
-  if (!lsSet(ALERTS_STORAGE_KEY, json)) {
-    // localStorage unavailable — memory only (already set)
+  cachedList = copy;
+  let ok = true;
+  if (lsAvailable()) {
+    const json = serialize(copy);
+    ok = lsSet(ALERTS_STORAGE_KEY, json);
+    if (ok) {
+      cachedRaw = json;
+      lastPersistError = null;
+    } else {
+      lastPersistError = 'alerts persist failed: localStorage quota or access denied';
+    }
+  } else {
+    cachedRaw = serialize(copy);
+    lastPersistError = null;
   }
   notifyAlertsListeners();
+  return ok;
 }
 
 /** Replace one alert by id (or no-op if missing). Returns updated list. */
@@ -210,12 +245,15 @@ export function removeAlert(id: string): boolean {
 /** Clear all alerts from storage (tests). */
 export function clearAlertsStorage(): void {
   memoryStore = null;
+  cachedRaw = undefined;
+  cachedList = null;
+  lastPersistError = null;
   lsRemove(ALERTS_STORAGE_KEY);
 }
 
 /** Test helper: seed memory without touching a real LS if desired. */
 export function _setMemoryAlertsForTests(alerts: Alert[] | null): void {
-  memoryStore = alerts
-    ? alerts.map((a) => ({ ...a, params: { ...a.params } }))
-    : null;
+  memoryStore = alerts ? cloneList(alerts) : null;
+  cachedRaw = undefined;
+  cachedList = null;
 }

@@ -116,11 +116,23 @@ async fn open_pine_scripts(app: AppHandle) -> Result<Option<Vec<OpenedPineScript
     }
   }
 
-  if out.is_empty() && !errors.is_empty() {
-    return Err(errors.join("; "));
+  if !errors.is_empty() {
+    // Fail explicit, never silently partial: the frontend already surfaces
+    // Err via status + logs (see src/desktop/shell.ts openScriptsFromMenu),
+    // so every unreadable file reaches the user with its path and reason.
+    // Partial successes are reported, not dropped without a trace — the
+    // message names each failed file so the user can fix and re-pick.
+    let detail = errors.join("; ");
+    if out.is_empty() {
+      return Err(detail);
+    }
+    return Err(format!(
+      "loaded {} file(s); {} unreadable: {}",
+      out.len(),
+      errors.len(),
+      detail
+    ));
   }
-  // Surface soft errors via empty list + frontend message when nothing valid
-  let _ = errors;
   Ok(Some(out))
 }
 
@@ -176,4 +188,18 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![open_pine_scripts])
     .run(tauri::generate_context!())
     .expect("error while running AXIS desktop");
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn pine_extensions_match_case_insensitively() {
+    assert!(is_pine_path(Path::new("rsi.pyne")));
+    assert!(is_pine_path(Path::new("Strat.PINE")));
+    assert!(is_pine_path(Path::new("a/b/indicator.pinev6")));
+    assert!(!is_pine_path(Path::new("notes.txt")));
+    assert!(!is_pine_path(Path::new("noext")));
+  }
 }

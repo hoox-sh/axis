@@ -58,8 +58,7 @@ help:
 	@echo "  docker-push       bake release (multi-arch push; needs login)"
 
 install:
-	bun install
-	cd worker && bun install
+	bun run install:all
 
 dev:
 	@echo "AXIS on http://127.0.0.1:3000 — start pyne API with: (cd ../pyne && make run)  # dir sometimes still named pynescript"
@@ -75,9 +74,7 @@ test-e2e:
 	bun run test:e2e
 
 typecheck:
-	bunx tsc --noEmit
-	cd worker && bun run typecheck
-	cd packages/cli && bun run typecheck
+	bun run typecheck:all
 
 worker-install:
 	cd worker && bun install
@@ -116,7 +113,9 @@ build:
 
 pages-deploy:
 	bun run build
-	bunx --yes wrangler pages deploy dist --project-name=axis
+	# Pinned to the worker's declared wrangler range (^4.114.0 → 4.114.0);
+	# keep in sync with worker/package.json devDependencies (G20).
+	bunx --yes wrangler@4.114.0 pages deploy dist --project-name=axis
 
 clean:
 	rm -rf dist coverage test-results playwright-report .wrangler
@@ -202,7 +201,12 @@ docker-health:
 
 docker-smoke: docker-bake
 	GIT_SHA=$(GIT_SHA) VERSION=$(VERSION) docker compose up -d
-	@sleep 2
+	@port=$${AXIS_PORT:-8081}; \
+	for i in $$(seq 1 30); do \
+	  if curl -fsS -o /dev/null "http://127.0.0.1:$$port/" 2>/dev/null; then break; fi; \
+	  if [ $$i -eq 30 ]; then echo "error: pwa not ready on :$$port" >&2; exit 1; fi; \
+	  sleep 2; \
+	done
 	@$(MAKE) docker-health
 	@echo "smoke ok"
 

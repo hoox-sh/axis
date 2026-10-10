@@ -5,8 +5,8 @@ import { type Component, For, Show } from 'solid-js';
 import type { CoverageSegment } from '../../data/bars-gaps';
 import { fmtTime } from './format';
 
-const DATA_FILL = 'color-mix(in srgb, var(--color-green, #5ecf8a) 75%, transparent)';
-const GAP_FILL = 'color-mix(in srgb, var(--color-red, #e85d4c) 70%, transparent)';
+const DATA_FILL = 'color-mix(in srgb, var(--color-green) 75%, transparent)';
+const GAP_FILL = 'color-mix(in srgb, var(--color-red) 70%, transparent)';
 
 /** Horizontal coverage strip: green = data, red = gap. */
 export const CompleteMap: Component<{

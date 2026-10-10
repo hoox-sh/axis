@@ -4,9 +4,11 @@
  */
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  assertHttpsForSecret,
   defaultWorkerUrl,
   healthFeatures,
   isHealthyPayload,
+  isLocalWorkerUrl,
   probeHealth,
 } from "../src/services/health.js";
 
@@ -59,6 +61,46 @@ describe("defaultWorkerUrl", () => {
     expect(defaultWorkerUrl()).toBe(
       "https://worker.axis.hoox.sh"
     );
+  });
+});
+
+describe("isLocalWorkerUrl", () => {
+  test("loopback http URLs are local", () => {
+    expect(isLocalWorkerUrl("http://localhost:8787")).toBe(true);
+    expect(isLocalWorkerUrl("http://127.0.0.1:8787")).toBe(true);
+    expect(isLocalWorkerUrl("http://[::1]:8787")).toBe(true);
+    expect(isLocalWorkerUrl("http://app.localhost:8787")).toBe(true);
+  });
+
+  test("remote hosts are not local", () => {
+    expect(isLocalWorkerUrl("https://worker.axis.hoox.sh")).toBe(false);
+    expect(isLocalWorkerUrl("http://worker.axis.hoox.sh")).toBe(false);
+    expect(isLocalWorkerUrl("http://localhost.evil.com")).toBe(false);
+    expect(isLocalWorkerUrl("not a url")).toBe(false);
+  });
+});
+
+describe("assertHttpsForSecret", () => {
+  test("allows https anywhere and http on loopback", () => {
+    expect(() =>
+      assertHttpsForSecret("https://worker.axis.hoox.sh", "keys")
+    ).not.toThrow();
+    expect(() =>
+      assertHttpsForSecret("http://127.0.0.1:8787", "keys")
+    ).not.toThrow();
+    expect(() =>
+      assertHttpsForSecret("http://localhost:8787", "keys")
+    ).not.toThrow();
+  });
+
+  test("refuses http to a non-local host (G7)", () => {
+    expect(() =>
+      assertHttpsForSecret("http://worker.axis.hoox.sh", "axis keys create")
+    ).toThrow(/cleartext/);
+  });
+
+  test("rejects malformed URLs", () => {
+    expect(() => assertHttpsForSecret("::bad::", "keys")).toThrow(/Invalid/);
   });
 });
 

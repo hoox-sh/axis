@@ -356,6 +356,11 @@ export interface ShortcutSlice {
 export interface AppState {
   bars: Bar[];
   /**
+   * Persisted-payload schema version (`PERSIST_SCHEMA_VERSION`). Blobs that
+   * predate versioning omit it (treated as 0 and migrated on read).
+   */
+  schemaVersion: number;
+  /**
    * Bumped only on full history loads (loadBars), not live appendBar.
    * ChartHost uses this so it does not full-setData on every tick.
    */

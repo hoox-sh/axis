@@ -52,6 +52,7 @@ import { downloadTextFile, seriesToCsv } from './export';
 import { resolveDefiLlamaBaseUrl } from './proxy';
 import { kickOnchainHealthProbe } from './health';
 import { instrumentCacheKey } from './keys';
+import { errMessage } from '../utils/errors';
 import type {
   EventPoint,
   OnchainInstrument,
@@ -165,12 +166,6 @@ function attachmentId(): string {
   return `ocs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function errMessage(err: unknown): string {
-  if (err instanceof Error && err.message) return err.message;
-  if (typeof err === 'string' && err) return err;
-  return 'Unknown error';
-}
-
 function sameProtocolMetric(
   a: OnchainInstrument,
   protocolId: string,
@@ -248,6 +243,7 @@ export type AttachDefiLlamaArg =
 export async function attachDefiLlamaTvl(
   slugOrHit: AttachDefiLlamaArg,
   name?: string,
+  opts?: { signal?: AbortSignal },
 ): Promise<OnchainSeriesAttachment> {
   // Non-blocking Connection HUD onchain plane (proxy health)
   kickOnchainHealthProbe();
@@ -337,7 +333,11 @@ export async function attachDefiLlamaTvl(
   setLastError(null);
 
   try {
-    const ds = await plugin.fetchDataset({ instrument, resolution: '1d' });
+    const ds = await plugin.fetchDataset({
+      instrument,
+      resolution: '1d',
+      signal: opts?.signal,
+    });
     const points: TimePoint[] = datasetToScalarPoints(ds);
     if (!points.length) {
       throw new Error(`No TVL points for protocol "${protocolId}"`);
@@ -385,10 +385,9 @@ export async function attachDefiLlamaTvl(
         if (idx >= 0) {
           s.attachments[idx] = attachment;
           s.series[idx] = attachment;
-        } else {
-          s.attachments.push(attachment);
-          s.series.push(attachment);
         }
+        // F11: when idx < 0 the row was detached mid-fetch — never resurrect
+        // it. The fresh dataset is still returned (and cached) for the caller.
         s.lastError = null;
         s.error = null;
       }),
@@ -396,6 +395,12 @@ export async function attachDefiLlamaTvl(
 
     return attachment;
   } catch (err) {
+    if (opts?.signal?.aborted) {
+      // Cancelled — clear the spinner if the row still exists, but don't
+      // surface a global error for an intentional abort.
+      patchSeriesRow(pendingId, { loading: false, error: null });
+      throw err instanceof Error ? err : new Error('Job cancelled');
+    }
     const msg = errMessage(err);
     patchSeriesRow(pendingId, { loading: false, error: msg });
     setLastError(msg);

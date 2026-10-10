@@ -256,10 +256,13 @@ export const App: Component = () => {
     }
     bridgePublish({ type: 'hello', role: 'main' });
 
-    // If we reloaded while popout was open, stay in docked until popout says hello
-    // (mode may be stale from localStorage)
-    if (store.editor.mode === 'popout') {
-      // keep mode; docked editor hidden until reattach or popout-closed
+    // A reloaded main window always boots docked (D11): a persisted `popout`
+    // mode is stale (the detached window is gone) and parse already forces
+    // `docked`. If a live popout is still out there it re-announces through
+    // the `hello` handshake below, which flips back to popout then — until
+    // that handshake, the docked editor stays hidden to avoid a double view.
+    if (store.editor.mode !== 'docked') {
+      setEditorMode('docked');
     }
 
     const unsub = bridgeSubscribe((msg) => {

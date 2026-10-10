@@ -49,7 +49,7 @@ import type { Env } from './index';
 import { extractBearer, requireApiKey } from './auth';
 import { gateTenantKey, meterTenantUsage, sha256Hex } from './tenant';
 import { tryRunInWorker } from './pyodide_runtime';
-import { clientIp, jsonResponse } from './http';
+import { clientIp, jsonResponse, readCappedJson } from './http';
 import { _resetRateLimitsForTests, allowRate } from './rate-limit';
 
 /** Max Pine source length (chars) accepted by `/api/run`. */
@@ -61,6 +61,8 @@ const PROXY_TIMEOUT_MS = 60_000;
 /** Max runs per IP (or key) per window. */
 const RUN_RATE_LIMIT = 30;
 const RUN_RATE_WINDOW_MS = 60_000;
+/** Fail closed before JSON.parse — 50k bars of OHLCV can be tens of MiB. */
+const RUN_MAX_BODY_BYTES = 32 * 1024 * 1024;
 
 /**
  * True when /api/run must authenticate.
@@ -110,7 +112,8 @@ export function _resetRunRateLimitForTests(): void {
 interface RunRequest {
     script: string;
     data: Array<{ time: number | string; open: number; high: number; low: number; close: number; volume?: number }>;
-    mode?: 'interpret' | 'compile';
+    /** `auto` (the PWA default) normalizes to `interpret` before execution. */
+    mode?: 'interpret' | 'compile' | 'auto';
 }
 
 /** Structural validation only — engines enforce bar shape and script syntax. */
@@ -125,8 +128,8 @@ function validate(body: unknown): { ok: true; value: RunRequest } | { ok: false;
     if (b.data.length > MAX_DATA_BARS) {
         return { ok: false, err: `data exceeds ${MAX_DATA_BARS} bars` };
     }
-    if (b.mode !== undefined && b.mode !== 'interpret' && b.mode !== 'compile') {
-        return { ok: false, err: 'mode must be "interpret" or "compile"' };
+    if (b.mode !== undefined && b.mode !== 'interpret' && b.mode !== 'compile' && b.mode !== 'auto') {
+        return { ok: false, err: 'mode must be "interpret", "compile", or "auto"' };
     }
     return { ok: true, value: b as unknown as RunRequest };
 }
@@ -211,6 +214,18 @@ export async function handleRun(
 ): Promise<Response> {
     // ── SaaS tenant gate (hx_live_…): live console verify (`axis:run`) + meter.
     // Non-tenant callers fall through to the legacy auth gate below, unchanged.
+    // A cheap IP pre-limit runs before the gate so console verify is never
+    // reachable past the abuse budget (A11).
+    const ip = clientIp(req);
+    if (!allowRate(`run:pre:${ip}`, RUN_RATE_LIMIT * 2, RUN_RATE_WINDOW_MS)) {
+        return jsonError(
+            429,
+            'RATE_LIMIT',
+            `Too many /api/run requests (max ${RUN_RATE_LIMIT * 2}/${RUN_RATE_WINDOW_MS / 1000}s)`,
+            origin,
+            { 'Retry-After': String(Math.ceil(RUN_RATE_WINDOW_MS / 1000)) },
+        );
+    }
     let verifyDegraded = false;
     const gate = await gateTenantKey(env, req, 'axis:run');
 
@@ -253,7 +268,7 @@ export async function handleRun(
     // ── Rate limit (always) ──
     // Per-key bucket uses the key hash (never a raw-key prefix) so rate keys
     // stay safe to log; hash failure falls back to the IP bucket.
-    const ip = clientIp(req);
+    // (`ip` was resolved before the tenant gate for the A11 pre-limit above.)
     let rateKey = userId ? `run:user:${userId}` : `run:ip:${ip}`;
     if (!userId && rawKey) {
         try {
@@ -272,17 +287,27 @@ export async function handleRun(
         );
     }
 
-    const body = await req.json().catch(() => null);
-    const v = validate(body);
+    const capped = await readCappedJson(req, RUN_MAX_BODY_BYTES);
+    if (!capped.ok) {
+        return jsonError(413, 'PAYLOAD_TOO_LARGE', 'run body too large', origin, verifyHeaders);
+    }
+    const v = validate(capped.value);
     if (!v.ok) {
         return jsonError(400, 'BAD_REQUEST', v.err, origin, verifyHeaders);
     }
+    // `auto` (PWA default) means interpret — normalize before execution/proxy
+    // so the upstream only ever sees a concrete mode.
+    if (v.value.mode === 'auto') v.value.mode = 'interpret';
 
     // Best-effort usage meter; failures/unbound KV must not block runs.
+    // Keyed by key-hash prefix — the raw secret never lands in KV (A21).
+    // Best-effort read-modify-write (KV has no atomic incr); lossy by design.
     if (rawKey && env.USAGE) {
         try {
-            const current = parseInt((await env.USAGE.get(`usage:${rawKey}`)) ?? '0', 10);
-            await env.USAGE.put(`usage:${rawKey}`, String(current + 1), {
+            const keyHash = await sha256Hex(rawKey);
+            const usageKey = `usage:${keyHash.slice(0, 16)}`;
+            const current = parseInt((await env.USAGE.get(usageKey)) ?? '0', 10);
+            await env.USAGE.put(usageKey, String(current + 1), {
                 expirationTtl: 60 * 60 * 24 * 30,
             });
         } catch {
@@ -303,5 +328,5 @@ export async function handleRun(
     }
 
     // 2) External backend (re-serialize parsed body — Request body is one-shot).
-    return proxyToExternal(JSON.stringify(body), env, origin, verifyHeaders);
+    return proxyToExternal(JSON.stringify(v.value), env, origin, verifyHeaders);
 }

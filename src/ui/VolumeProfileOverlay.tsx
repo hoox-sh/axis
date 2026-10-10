@@ -298,19 +298,25 @@ export const VolumeProfileOverlay: Component = () => {
                       ? Math.max(2, (b.volume / lay().maxVol) * (HIST_WIDTH - 4))
                       : 0;
                   const x = HIST_WIDTH - w;
+                  // Token-driven via CSS vars so light/void themes recolor the
+                  // histogram without re-running this memo.
                   const fill = b.isPoc
-                    ? 'rgba(147, 159, 255, 0.75)'
+                    ? 'color-mix(in srgb, var(--color-accent) 75%, transparent)'
                     : b.inVa
-                      ? 'rgba(147, 159, 255, 0.38)'
-                      : 'rgba(139, 142, 156, 0.22)';
+                      ? 'color-mix(in srgb, var(--color-accent) 38%, transparent)'
+                      : 'color-mix(in srgb, var(--color-text-faint) 22%, transparent)';
                   return (
                     <rect
                       x={x}
                       y={b.yTop}
                       width={w}
                       height={h}
-                      fill={fill}
-                      stroke={b.isPoc ? 'rgba(147, 159, 255, 0.9)' : 'none'}
+                      style={{
+                        fill,
+                        stroke: b.isPoc
+                          ? 'color-mix(in srgb, var(--color-accent) 90%, transparent)'
+                          : 'none',
+                      }}
                       stroke-width={b.isPoc ? 1 : 0}
                     />
                   );
@@ -322,7 +328,7 @@ export const VolumeProfileOverlay: Component = () => {
                   x2={HIST_WIDTH}
                   y1={pocY()!}
                   y2={pocY()!}
-                  stroke="rgba(147, 159, 255, 0.85)"
+                  style={{ stroke: 'color-mix(in srgb, var(--color-accent) 85%, transparent)' }}
                   stroke-width={1}
                   stroke-dasharray="3 2"
                 />

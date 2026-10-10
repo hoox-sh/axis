@@ -95,8 +95,12 @@ export type HooxLogoProps = {
 /**
  * CRT path-order flicker (port of landing `logo-flicker` opposite-pair stagger).
  * Uses CSS class toggles so we don't need GSAP.
+ *
+ * Every `setTimeout` id is pushed into `timers` so the owning component can
+ * clear them on unmount (E16) — a logo that unmounts mid-flicker must not
+ * keep mutating detached SVG paths.
  */
-function runHoverFlicker(svg: SVGSVGElement): Promise<void> {
+function runHoverFlicker(svg: SVGSVGElement, timers: number[]): Promise<void> {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     return Promise.resolve();
   }
@@ -129,30 +133,33 @@ function runHoverFlicker(svg: SVGSVGElement): Promise<void> {
   };
 
   return new Promise((resolve) => {
+    const later = (fn: () => void, ms: number) => {
+      timers.push(window.setTimeout(fn, ms));
+    };
     // Flicker out
     outOrder.forEach((idx, i) => {
       const p = paths[idx];
       if (!p) return;
       const t0 = i * STAGGER;
-      window.setTimeout(() => setOp(p, 0.35), t0);
-      window.setTimeout(() => setOp(p, 0.95), t0 + FLASH);
-      window.setTimeout(() => setOp(p, 0.15), t0 + DIP);
-      window.setTimeout(() => setOp(p, 0), t0 + OFF);
+      later(() => setOp(p, 0.35), t0);
+      later(() => setOp(p, 0.95), t0 + FLASH);
+      later(() => setOp(p, 0.15), t0 + DIP);
+      later(() => setOp(p, 0), t0 + OFF);
     });
 
     const outDone = outOrder.length * STAGGER + OFF + 80;
-    window.setTimeout(() => {
+    later(() => {
       // Flicker in
       inOrder.forEach((idx, i) => {
         const p = paths[idx];
         if (!p) return;
         const t0 = i * STAGGER;
-        window.setTimeout(() => setOp(p, 0.35), t0);
-        window.setTimeout(() => setOp(p, 0.08), t0 + FLASH);
-        window.setTimeout(() => setOp(p, 0.85), t0 + DIP);
-        window.setTimeout(() => setOp(p, 1), t0 + OFF);
+        later(() => setOp(p, 0.35), t0);
+        later(() => setOp(p, 0.08), t0 + FLASH);
+        later(() => setOp(p, 0.85), t0 + DIP);
+        later(() => setOp(p, 1), t0 + OFF);
       });
-      window.setTimeout(() => {
+      later(() => {
         for (const p of paths) {
           p.style.opacity = '';
         }
@@ -174,6 +181,7 @@ export const HooxLogo: Component<HooxLogoProps> = (props) => {
   ]);
   let svgEl: SVGSVGElement | undefined;
   let flickering = false;
+  let hoverTimers: number[] = [];
 
   const px = () => resolveLogoSize(local.size ?? 'm');
   const hoverOn = () => local.hoverFlicker ?? !local.animate;
@@ -181,7 +189,8 @@ export const HooxLogo: Component<HooxLogoProps> = (props) => {
   const onEnter = () => {
     if (!hoverOn() || !svgEl || flickering || local.animate) return;
     flickering = true;
-    void runHoverFlicker(svgEl).finally(() => {
+    hoverTimers = [];
+    void runHoverFlicker(svgEl, hoverTimers).finally(() => {
       flickering = false;
     });
   };
@@ -191,6 +200,8 @@ export const HooxLogo: Component<HooxLogoProps> = (props) => {
   });
   onCleanup(() => {
     flickering = false;
+    for (const t of hoverTimers) clearTimeout(t);
+    hoverTimers = [];
   });
 
   return (

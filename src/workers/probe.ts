@@ -27,11 +27,11 @@
 
 import { store } from '../store';
 import { getEngine, LOCAL_PYODIDE_INDEX, resolvePyodideIndexUrl } from '../engines/catalog';
+import { linkedAbortBudget } from '../utils/fetch-timeout';
 import {
   endpointsMatch,
   getWorkerCatalogEntry,
   listWorkerCatalog,
-  normalizeWorkerBase,
   resolveProbeEndpoint,
 } from './catalog';
 import type {
@@ -211,71 +211,73 @@ export async function probeWorker(
   };
 
   // Belt-and-suspenders: some environments ignore AbortSignal on fetch.
+  // The race timer + parent listener are always released once `run()` wins
+  // (F16: no dangling handles or leaked abort listeners on success).
+  let raceTimer: ReturnType<typeof setTimeout> | undefined;
+  let onParentAbort: (() => void) | undefined;
   const timedOut: Promise<WorkerProbeResult> = new Promise((resolve) => {
-    const t = setTimeout(() => {
+    const settle = (
+      status: WorkerProbeResult['status'],
+      detail: string,
+      error: string,
+    ): void => {
+      if (raceTimer !== undefined) {
+        clearTimeout(raceTimer);
+        raceTimer = undefined;
+      }
       resolve(
         entry
           ? baseResult(entry, {
-              status: 'down',
-              detail: 'Timeout',
+              status,
+              detail,
               endpoint:
                 opts?.endpoint ||
                 entry.defaultEndpoint ||
                 entry.localEndpoint ||
                 '',
-              error: 'Timeout',
+              error,
             })
           : {
               id,
-              status: 'down',
+              status,
               latencyMs: null,
-              detail: 'Timeout',
+              detail,
               endpoint: '',
               features: {},
               service: null,
               checkedAt: Date.now(),
-              error: 'Timeout',
+              error,
               isActiveBackend: false,
               isActiveEngine: false,
             },
       );
-    }, timeoutMs + 250);
-    opts?.signal?.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(t);
-        resolve(
-          entry
-            ? baseResult(entry, {
-                status: 'down',
-                detail: 'Aborted',
-                endpoint:
-                  opts?.endpoint ||
-                  entry.defaultEndpoint ||
-                  entry.localEndpoint ||
-                  '',
-                error: 'Aborted',
-              })
-            : {
-                id,
-                status: 'down',
-                latencyMs: null,
-                detail: 'Aborted',
-                endpoint: '',
-                features: {},
-                service: null,
-                checkedAt: Date.now(),
-                error: 'Aborted',
-                isActiveBackend: false,
-                isActiveEngine: false,
-              },
-        );
-      },
-      { once: true },
-    );
+    };
+    raceTimer = setTimeout(() => settle('down', 'Timeout', 'Timeout'), timeoutMs + 250);
+    if (opts?.signal) {
+      // Listener-only (never settle synchronously): an already-aborted
+      // signal never re-fires, so the fast `run()` abort path below still
+      // wins the race with its own Timeout/Aborted detail.
+      onParentAbort = () => settle('down', 'Aborted', 'Aborted');
+      opts.signal.addEventListener('abort', onParentAbort, { once: true });
+    }
   });
 
-  return Promise.race([run(), timedOut]);
+  try {
+    return await Promise.race([run(), timedOut]);
+  } finally {
+    if (raceTimer !== undefined) {
+      clearTimeout(raceTimer);
+      raceTimer = undefined;
+    }
+    if (onParentAbort && opts?.signal) {
+      try {
+        opts.signal.removeEventListener?.('abort', onParentAbort);
+      } catch {
+        /* ignore */
+      }
+      onParentAbort = undefined;
+    }
+  }
 }
 
 async function probeHttpHealth(
@@ -284,8 +286,27 @@ async function probeHttpHealth(
   opts?: ProbeWorkerOpts,
 ): Promise<WorkerProbeResult> {
   const timeoutMs = resolveTimeoutMs(opts);
-  // One budget for all paths so a dead host does not take N × timeoutMs
-  const signal = probeAbortSignal(timeoutMs, opts?.signal);
+  // One shared budget for all paths so a dead host does not take N ×
+  // timeoutMs. Disposed on every exit (F16: timer cleared + parent listener
+  // removed even on success).
+  const budget = linkedAbortBudget(timeoutMs, opts?.signal);
+  const { signal } = budget;
+  try {
+    return await probeHttpHealthPaths(entry, endpoint, signal);
+  } finally {
+    budget.dispose();
+  }
+}
+
+/**
+ * Sequential health-path sweep under a shared abort budget.
+ * Extracted so the budget owner can `dispose()` in a `finally`.
+ */
+async function probeHttpHealthPaths(
+  entry: WorkerCatalogEntry,
+  endpoint: string,
+  signal: AbortSignal,
+): Promise<WorkerProbeResult> {
   const paths = entry.healthPaths?.length ? entry.healthPaths : ['/health', '/'];
   const markers = entry.healthMarkers || ['status', 'service', 'endpoints'];
   const t0 = performance.now();
@@ -401,7 +422,21 @@ async function probePyodide(
 ): Promise<WorkerProbeResult> {
   const t0 = performance.now();
   const timeoutMs = resolveTimeoutMs(opts);
-  const signal = probeAbortSignal(timeoutMs, opts?.signal);
+  const budget = linkedAbortBudget(timeoutMs, opts?.signal);
+  const { signal } = budget;
+  try {
+    return await probePyodideInner(entry, signal, timeoutMs, t0);
+  } finally {
+    budget.dispose();
+  }
+}
+
+async function probePyodideInner(
+  entry: WorkerCatalogEntry,
+  signal: AbortSignal,
+  timeoutMs: number,
+  t0: number,
+): Promise<WorkerProbeResult> {
   const eng = getEngine('pyodide');
   const indexUrl = resolvePyodideIndexUrl(LOCAL_PYODIDE_INDEX);
   const features: Record<string, boolean | string | number | null> = {

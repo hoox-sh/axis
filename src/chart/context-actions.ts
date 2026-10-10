@@ -42,7 +42,7 @@ export type ChartMenuEnv = {
   addAlert: () => void;
   saveShot: () => void;
   copyShot: () => void;
-  openSettings: () => void;
+  toggleChartSettings: () => void;
   hidePane: () => void;
   scriptSettings: (id: string) => void;
   scriptVisible: (id: string) => void;
@@ -122,8 +122,8 @@ export function dispatchChartMenu(id: string, env: ChartMenuEnv): void {
     case 'shot.copy':
       env.copyShot();
       return;
-    case 'app.settings':
-      env.openSettings();
+    case 'chart.settings':
+      env.toggleChartSettings();
       return;
     case 'pane.hide':
       env.hidePane();

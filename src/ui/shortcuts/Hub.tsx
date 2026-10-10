@@ -29,6 +29,7 @@
 
 import { type Component, createMemo, onCleanup, onMount } from 'solid-js';
 import { buildDispatchTable, dispatchShortcut } from './runtime';
+import { ShortcutsModal } from './ShortcutsModal';
 import './actions';
 
 export {
@@ -39,8 +40,10 @@ export {
 } from './runtime';
 
 /**
- * Mount once from the product shell. Renders nothing; owns the capture-phase
- * keydown listener for the whole app.
+ * Mount once from the product shell. Owns the capture-phase keydown listener
+ * for the whole app and mounts the read-only {@link ShortcutsModal} (Shift-?
+ * / palette "Show keyboard shortcuts") beside it. Was never mounted before
+ * (E1): the modal only reacted to `axis-shortcuts-open` once rendered.
  */
 export const ShortcutHub: Component<{ children?: any }> = (props) => {
   const table = createMemo(buildDispatchTable);
@@ -53,5 +56,10 @@ export const ShortcutHub: Component<{ children?: any }> = (props) => {
     onCleanup(() => window.removeEventListener('keydown', onKey, true));
   });
 
-  return props.children ?? null;
+  return (
+    <>
+      {props.children ?? null}
+      <ShortcutsModal />
+    </>
+  );
 };

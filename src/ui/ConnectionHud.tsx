@@ -44,6 +44,7 @@ import {
   onMount,
 } from 'solid-js';
 import { store, setStore, persist, setActivePlugin, setDataSourcePanelOpen } from '../store';
+import { useNow } from './clock';
 import type { PlaneTelemetry } from '../store/types';
 import { formatLatency, formatTickAge } from './telemetry';
 import {
@@ -355,11 +356,7 @@ function TickPulse(props: {
 }) {
   let anchor: HTMLSpanElement | undefined;
   const tick = () => store.telemetry?.lastTick;
-  const [now, setNow] = createSignal(Date.now());
-  onMount(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    onCleanup(() => clearInterval(id));
-  });
+  const now = useNow();
   const fresh = () => {
     const t = tick();
     return !!t && now() - t.at < 2000;
@@ -533,17 +530,19 @@ function PairingWarn() {
   return (
     <>
       <Show when={provider()}>
-        <span
-          class="axis-status-capsule text-text-faint truncate max-w-[120px]"
-          title={`${provider()!.venue} ${provider()!.market} · ${provider()!.authMode}`}
-          data-testid="axis-hud-provider"
-        >
-          <span class="axis-live-dot" aria-hidden="true" />
-          <span class="axis-status-capsule-val max-w-[7em]">
-            {provider()!.venue}
-            {provider()!.authMode === 'authenticated' ? '·key' : ''}
+        {(p) => (
+          <span
+            class="axis-status-capsule text-text-faint truncate max-w-[120px]"
+            title={`${p().venue} ${p().market} · ${p().authMode}`}
+            data-testid="axis-hud-provider"
+          >
+            <span class="axis-live-dot" aria-hidden="true" />
+            <span class="axis-status-capsule-val max-w-[7em]">
+              {p().venue}
+              {p().authMode === 'authenticated' ? '·key' : ''}
+            </span>
           </span>
-        </span>
+        )}
       </Show>
       <Show when={warn()}>
         {(w) => (
@@ -765,13 +764,17 @@ export const ConnectionHud: Component = () => {
           <>
             <ComposeChip snap={snap} />
             <Show when={showOnchainPlane(tel()?.onchain, true)}>
-              <PlaneChip
-                label="Chain"
-                plane={tel()!.onchain!}
-                id="onc"
-                sticky={sticky}
-                snap={snap}
-              />
+              <Show when={tel()?.onchain}>
+                {(o) => (
+                  <PlaneChip
+                    label="Chain"
+                    plane={o()}
+                    id="onc"
+                    sticky={sticky}
+                    snap={snap}
+                  />
+                )}
+              </Show>
             </Show>
           </>
         }
@@ -835,13 +838,17 @@ export const ConnectionHud: Component = () => {
           <PairingWarn />
         </Show>
         <Show when={showOnchainPlane(tel()?.onchain, compact())}>
-          <PlaneChip
-            label="onc"
-            plane={tel()!.onchain!}
-            id="onc"
-            sticky={sticky}
-            snap={snap}
-          />
+          <Show when={tel()?.onchain}>
+            {(o) => (
+              <PlaneChip
+                label="onc"
+                plane={o()}
+                id="onc"
+                sticky={sticky}
+                snap={snap}
+              />
+            )}
+          </Show>
         </Show>
       </Show>
     </div>

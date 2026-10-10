@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-03T17:58:58Z
+  at: 2026-10-10T20:32:38Z
 sources:
   - id: tree
     resource: "src/data"
@@ -29,7 +29,7 @@ okf_lock: generated
 * `dataset-sinks.ts` — DatasetSink, PERSISTENCE_MODES, PersistenceMode, SinkErrorListener, _resetDatasetSinksForTests, datasetKey, localSink, onSinkError, remoteSink, sessionSink, sinkForMode
 * `dataset-store.ts` — DatasetMeta, PutResult, _resetDatasetStoreForTests, getDataset, getMergePolicy, getPersistenceMode, keyFor, listMemoryDatasets, peekDataset, putDatasetBars, removeDataset, replaceDataset
 * `dataset-validate.ts` — ClassifyOpts, DatasetReport, GapClassification, RepairResult, RepairStats, ValidateOpts, VenueClass, classifyGaps, findClassifiedGaps, repairBars, validateDataset, venueClassForSourceCaps
-* `dsm-orchestrator.ts` — DatasetFirstResult, _resetDsmOrchestratorForTests, announceDatasetPaint, ensureDatasetComplete, paintDataset, seedDatasetFromBars
+* `dsm-orchestrator.ts` — DatasetFirstResult, _resetDsmOrchestratorForTests, announceDatasetPaint, ensureDatasetComplete, paintDataset, seedDatasetFromBars, stopProgressiveRepaint
 * `expand-cache.ts` — ExpandCacheResult, _flushDataManagerLiveBarForTests, canExpandFromSource, expandCachedSeriesToNow, noteDataManagerLiveBar
 * `gateway.ts` — DATAFEED_DEFAULT_PORT, GatewayMode, GatewaySessionBody, gatewayBase, gatewayDeleteSession, gatewayFetch, gatewayPutSession, gatewayWs, isRemotePageOrigin, probeSidecar
 * `load-symbol.ts` — _currentLoadGeneration, _resetLoadGeneration, exchangeForSource, loadSymbolData, normalizeLoadSymbol, reloadChart
@@ -40,6 +40,7 @@ okf_lock: generated
 * `provider.ts` — DEFAULT_PROVIDER, ProviderAuthMode, ProviderGateway, ProviderMarket, ProviderSession, ProviderVenue, buildProviderSession, defaultStreamForSource, formatProviderLabel, hydrateProviderSession, isSourceStreamPaired, persistProviderSession
 * `signed-fetch.ts` — SignedFetchOpts, fetchSignedJson, hasSignedCreds
 * `symbol-catalog.ts` — FALLBACK_MAJORS, SymbolCatalogResult, SymbolEntry, SymbolVenue, compactPair, filterSymbols, listQuotes, loadSymbolCatalog, resolveSymbolVenue, venueLabel
+* `symbol-exchange.ts` — exchangeForSource, normalizeLoadSymbol
 * `venue-picker.ts` — NATIVE_VENUE_SOURCES, OTHER_VENUE_SOURCES, PINNED_CCXT, VenueGroup, VenueOption, applyVenueToken, exchangeIdFromToken, isCcxtVenueToken, listVenueOptions, parseVenueToken, prettyCcxtLabel, venueTokenFromState
 * `watchlist-live.ts` — QuoteMuxHandle, QuoteMuxStatus, QuoteUpdate, StartWatchlistQuotesOpts, parseBinanceTickerMessage, startWatchlistQuotes
 * `watchlist-tickers.ts` — WATCHLIST_INTERVALS, WATCHLIST_REFRESH_OPTIONS, WatchTicker, coinbaseProduct, fetchWatchlistTickers, okxInst, sourceSupportsRestPoll, toUsdt

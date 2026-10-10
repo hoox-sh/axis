@@ -7,7 +7,7 @@ tags: [code, data, venues]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:07:37Z
+  at: 2026-10-10T20:32:38Z
 sources:
   - id: tree
     resource: "src/data/venues"
@@ -32,5 +32,5 @@ okf_lock: generated
 * [src/data](/code/src/data.md)
 * [src/sources](/code/src/sources.md)
 * [src/streams](/code/src/streams.md)
-* [src/ui](/code/src/ui.md)
+* [src/ui/settings](/code/src/ui/settings.md)
 * [tests](/code/tests.md)

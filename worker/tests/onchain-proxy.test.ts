@@ -9,6 +9,7 @@
 
 import { describe, expect, it, beforeEach, afterEach, mock } from 'bun:test';
 import { handleOnchain, _resetOnchainCacheForTests } from '../src/onchain';
+import { _resetRateLimitsForTests } from '../src/rate-limit';
 import type { Env } from '../src/index';
 
 const origin = 'http://localhost:3000';
@@ -20,6 +21,7 @@ function req(path: string, method = 'GET'): Request {
 
 beforeEach(() => {
   _resetOnchainCacheForTests();
+  _resetRateLimitsForTests();
 });
 
 afterEach(() => {
@@ -272,8 +274,7 @@ describe('handleOnchain gecko proxy', () => {
     }
   });
 
-  it('proxies search/pools with query and caches', async () => {
-    let calls = 0;
+  it('proxies search/pools with query and caches', async () => {    let calls = 0;
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       calls += 1;
@@ -318,6 +319,58 @@ describe('handleOnchain gecko proxy', () => {
       );
       expect(r2!.headers.get('X-Axis-Onchain-Cache')).toBe('HIT');
       expect(calls).toBe(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('handleOnchain abuse controls (A5)', () => {
+  it('coalesces concurrent identical fetches into one upstream call', async () => {
+    let calls = 0;
+    const originalFetch = globalThis.fetch;
+    let release!: (v: Response) => void;
+    const gate = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return gate;
+    }) as typeof fetch;
+
+    try {
+      const p1 = handleOnchain(req('/api/onchain/llama/protocols'), env, origin, '/api/onchain/llama/protocols');
+      const p2 = handleOnchain(req('/api/onchain/llama/protocols'), env, origin, '/api/onchain/llama/protocols');
+      release(
+        new Response(JSON.stringify([{ slug: 'aave' }]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      const [r1, r2] = await Promise.all([p1, p2]);
+      expect(r1!.status).toBe(200);
+      expect(r2!.status).toBe(200);
+      expect(calls).toBe(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('rate-limits per IP after the shared window (A5)', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as typeof fetch;
+    try {
+      let last: Response | null = null;
+      for (let i = 0; i < 121; i++) {
+        _resetOnchainCacheForTests();
+        last = await handleOnchain(req('/api/onchain/health'), env, origin, '/api/onchain/health');
+      }
+      expect(last!.status).toBe(429);
+      expect((await last!.json()).code).toBe('RATE_LIMIT');
     } finally {
       globalThis.fetch = originalFetch;
     }

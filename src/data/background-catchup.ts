@@ -46,6 +46,7 @@
 
 import type { Bar } from '../store/types';
 import { intervalToSec } from './bars-gaps';
+import { getVisibleBars, isReplayActive } from '../chart/bar-replay';
 import { repairBars, validateDataset, venueClassForSourceCaps } from './dataset-validate';
 
 export interface TrailingGap {
@@ -214,7 +215,9 @@ export async function repairChartGapsAfterBackground(
             const { getManager, setDataToChart } = await import('../chart/manager-access');
             const manager = getManager();
             if (manager) {
-              setDataToChart(repaired, {
+              // Bar replay paints only the scrubbed prefix; the store keeps
+              // full history so catch-up never reveals future bars mid-replay.
+              setDataToChart(isReplayActive() ? getVisibleBars(repaired) : repaired, {
                 fit: false,
                 clearScriptState: false,
                 clearMarkers: false,

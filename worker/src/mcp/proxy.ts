@@ -11,14 +11,13 @@
  */
 
 import type { Env } from '../index';
-import { WORKER_VERSION } from '../version';
 import { handleRun } from '../runtime';
 import { handleKeys } from '../keys';
 import { handleScripts } from '../scripts';
 import { handleOnchain } from '../onchain';
 import { handleMarket } from '../market';
 import { allowWorkerRequest } from './allowlist';
-import { errorResponse, jsonResponse } from '../http';
+import { buildHealthBody, errorResponse, jsonResponse } from '../http';
 
 const INTERNAL_ORIGIN = 'https://axis.internal';
 
@@ -69,29 +68,22 @@ function buildUrl(path: string, query?: ProxyCall['query']): URL {
 }
 
 function healthBody(env: Env): unknown {
-  return {
-    status: 'healthy',
-    service: 'worker-axis',
-    version: WORKER_VERSION,
-    timestamp: Date.now(),
-    features: {
-      scripts: true,
-      d1: !!env.DB,
-      keys: !!env.API_KEYS,
-      onchain: true,
-      market: true,
-      mcp: true,
-    },
-  };
+  // Shared with the entry `/health` route (A22) — one builder, no drift.
+  return buildHealthBody({ db: !!env.DB, keys: !!env.API_KEYS, mcpBridge: !!env.MCP_BRIDGE });
 }
 
 /**
  * Execute an allowlisted Worker route and return status + parsed JSON.
+ *
+ * `ctx` is threaded through so usage-metering flushes survive past the
+ * response via `ctx.waitUntil` instead of being cancelled with the request
+ * lifetime (A13).
  */
 export async function proxyWorkerRequest(
   env: Env,
   origin: string,
   call: ProxyCall,
+  ctx?: ExecutionContext,
 ): Promise<ProxyResult> {
   const gate = allowWorkerRequest(call.method, call.path);
   if (!gate.ok) {
@@ -135,7 +127,7 @@ export async function proxyWorkerRequest(
   if (path === '/' || path === '/health') {
     res = jsonResponse(healthBody(env));
   } else if (path === '/api/run') {
-    res = await handleRun(req, env, origin);
+    res = await handleRun(req, env, origin, ctx);
   } else if (path === '/api/keys') {
     res = await handleKeys(req, env, origin);
   } else if (path === '/api/usage') {

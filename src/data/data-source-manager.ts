@@ -46,7 +46,7 @@ import {
   resolveDataManagerBars,
 } from './data-manager-source';
 import { normalizeHistoricalBars } from './parse-bars';
-import { normalizeLoadSymbol } from './load-symbol';
+import { exchangeForSource, normalizeLoadSymbol } from './symbol-exchange';
 import {
   getCachedBarCount,
   sliceBarsForLoad,
@@ -734,17 +734,21 @@ async function walkBackRange(
 
     if (rawOldest <= windowFrom) return 'ok';
 
-    // Early exit when the full window is already dense (resume of complete cache)
-    try {
-      const cached = await getDataset(j.sourceId, j.symbol, j.interval);
-      const { report } = validateJobBars(cached, {
-        ...j,
-        targetFromSec: windowFrom,
-        targetToSec: windowTo,
-      });
-      if (report.complete) return 'ok';
-    } catch {
-      /* ignore */
+    // Early exit when the full window is already dense (resume of complete cache).
+    // Re-validating the whole window every page is O(pages×n) — re-check every
+    // 4th page (always the first) instead.
+    if (pages % 4 === 1) {
+      try {
+        const cached = await getDataset(j.sourceId, j.symbol, j.interval);
+        const { report } = validateJobBars(cached, {
+          ...j,
+          targetFromSec: windowFrom,
+          targetToSec: windowTo,
+        });
+        if (report.complete) return 'ok';
+      } catch {
+        /* ignore */
+      }
     }
 
     await yieldGap();
@@ -880,7 +884,7 @@ async function runJob(j: InternalJob): Promise<void> {
         'complete',
         j.error || 'Partial: venue unavailable',
       );
-      if (j.applyWhenComplete && j.barsFetched > 0) void applyJobToChart(j.id);
+      if (j.applyWhenComplete && j.barsFetched > 0) void applyJobToChart(j.id, null, { onlyIfCurrent: true });
       return;
     }
 
@@ -912,7 +916,7 @@ async function runJob(j: InternalJob): Promise<void> {
       if (report.complete) {
         j.phase = 'done';
         setJobStatus(j, 'complete');
-        if (j.applyWhenComplete) void applyJobToChart(j.id);
+        if (j.applyWhenComplete) void applyJobToChart(j.id, null, { onlyIfCurrent: true });
         return;
       }
 
@@ -991,7 +995,7 @@ async function runJob(j: InternalJob): Promise<void> {
       const note = [coverageNote, j.error].filter(Boolean).join(' · ') || null;
       setJobStatus(j, 'complete', note);
     }
-    if (j.applyWhenComplete && j.barsFetched > 0) void applyJobToChart(j.id);
+    if (j.applyWhenComplete && j.barsFetched > 0) void applyJobToChart(j.id, null, { onlyIfCurrent: true });
   } catch (err: unknown) {
     if (isAbortError(err) || j.abort.signal.aborted) {
       setJobStatus(j, 'cancelled');
@@ -1009,7 +1013,7 @@ async function runJob(j: InternalJob): Promise<void> {
       'complete',
       errMessage(err) || 'Partial: venue unavailable',
     );
-    if (j.applyWhenComplete && j.barsFetched > 0) void applyJobToChart(j.id);
+    if (j.applyWhenComplete && j.barsFetched > 0) void applyJobToChart(j.id, null, { onlyIfCurrent: true });
   }
 }
 
@@ -1026,7 +1030,9 @@ async function deliverCacheOnlyJob(j: InternalJob): Promise<void> {
         j.phase = 'done';
         setJobStatus(j, 'complete');
         if (j.applyWhenComplete) {
-          void applyCachedToChart(resolved.sourceId, resolved.symbol, resolved.interval);
+          void applyCachedToChart(resolved.sourceId, resolved.symbol, resolved.interval, null, {
+            onlyIfCurrent: true,
+          });
         }
         return;
       }
@@ -1044,7 +1050,7 @@ async function deliverCacheOnlyJob(j: InternalJob): Promise<void> {
       : 'No cached dataset'
     : `Unknown source: ${j.sourceId}`;
   setJobStatus(j, 'complete', note);
-  if (j.applyWhenComplete && j.barsFetched > 0) void applyJobToChart(j.id);
+  if (j.applyWhenComplete && j.barsFetched > 0) void applyJobToChart(j.id, null, { onlyIfCurrent: true });
 }
 
 /**
@@ -1054,11 +1060,12 @@ async function deliverCacheOnlyJob(j: InternalJob): Promise<void> {
 export async function applyJobToChart(
   jobId: string,
   window?: BarLoadWindow | null,
+  opts?: { onlyIfCurrent?: boolean },
 ): Promise<boolean> {
   const j = internals.get(jobId);
   const meta = j || managerState.jobs.find((x) => x.id === jobId);
   if (!meta) return false;
-  return applyCachedToChart(meta.sourceId, meta.symbol, meta.interval, window);
+  return applyCachedToChart(meta.sourceId, meta.symbol, meta.interval, window, opts);
 }
 
 /**
@@ -1074,9 +1081,10 @@ export async function applyCachedToChart(
   symbol: string,
   interval: string,
   window?: BarLoadWindow | null,
+  opts?: { onlyIfCurrent?: boolean },
 ): Promise<boolean> {
   try {
-    return await applyCachedToChartInner(sourceId, symbol, interval, window);
+    return await applyCachedToChartInner(sourceId, symbol, interval, window, opts);
   } catch (err) {
     console.warn('[applyCachedToChart] failed', err);
     return false;
@@ -1088,10 +1096,21 @@ async function applyCachedToChartInner(
   symbol: string,
   interval: string,
   window?: BarLoadWindow | null,
+  opts?: { onlyIfCurrent?: boolean },
 ): Promise<boolean> {
-  const sym = String(symbol || '').trim().toUpperCase();
-  const iv = String(interval || store.interval || '1d');
   const srcId = String(sourceId || store.source || '');
+  const sym = normalizeLoadSymbol(symbol, srcId);
+  const iv = String(interval || store.interval || '1d');
+
+  // Background auto-apply ("apply when complete") must not paint over a newer
+  // symbol/interval/source the user has since loaded. Explicit UI applies
+  // (DSM panel / cached-datasets modal) bypass this guard.
+  if (opts?.onlyIfCurrent) {
+    const curSym = normalizeLoadSymbol(store.symbol, store.source);
+    if (sym !== curSym || iv !== store.interval || srcId !== store.source) {
+      return false;
+    }
+  }
 
   // Expand dataset toward now (venue REST) before painting
   try {
@@ -1142,27 +1161,6 @@ async function applyCachedToChartInner(
     /* re-run optional */
   }
   return true;
-}
-
-function exchangeForSource(sourceId: string): string {
-  switch (sourceId) {
-    case 'binance-rest':
-      return 'binance';
-    case 'okx-rest':
-      return 'okx';
-    case 'bybit-rest':
-      return 'bybit';
-    case 'coinbase-rest':
-      return 'coinbase';
-    case 'mock-walk':
-      return 'mock';
-    case 'csv-upload':
-      return 'upload';
-    case 'data-manager':
-      return 'cache';
-    default:
-      return store.exchange;
-  }
 }
 
 /**

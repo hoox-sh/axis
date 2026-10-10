@@ -68,6 +68,8 @@ export const USAGE_BATCH_MAX = 50;
 export const USAGE_QUEUE_MAX = 500;
 /** Inline flush budget so a slow console never blocks a request (fire-and-forget). */
 export const USAGE_FLUSH_TIMEOUT_MS = 2_000;
+/** Live console verify budget — verify must not pin a request (A11). */
+export const VERIFY_TIMEOUT_MS = 2_000;
 
 /** Scopes enforced by live tenant verify on this worker. */
 export type TenantScope = 'axis:stream' | 'axis:run';
@@ -312,6 +314,9 @@ export async function verifyTenant(
         Authorization: `Bearer ${hash}`,
         Accept: 'application/json',
       },
+      // Bound the console round trip — an unreachable console must degrade
+      // fast, never pin the isolate (A11).
+      ...(typeof AbortSignal.timeout === 'function' ? { signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS) } : {}),
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -517,6 +522,18 @@ const USAGE_SERVICE = 'axis-worker';
 
 const usageQueue: TenantUsageEvent[] = [];
 let usageSeq = 0;
+/**
+ * Per-isolate idempotency shard (A3). The usage idem key is
+ * `<day>:<hash16>:<isolate>:<counter>` — the random isolate prefix keeps two
+ * isolates from minting colliding keys when their counters agree.
+ */
+const USAGE_ISOLATE_PREFIX: string = (() => {
+  try {
+    return crypto.randomUUID().slice(0, 8);
+  } catch {
+    return Math.random().toString(36).slice(2, 10);
+  }
+})();
 
 function usageDay(): string {
   return new Date().toISOString().slice(0, 10);
@@ -540,7 +557,8 @@ export function queueUsage(_env: Env, input: QueueTenantUsageInput): TenantUsage
     if (units.streams === undefined && units.runs === undefined) units.runs = 1;
     const day = usageDay();
     const hash16 = String(input.keyHash16 ?? '').trim() || 'unknown';
-    const idem = String(input.idem ?? '').trim() || `${day}:${hash16}:${++usageSeq}`;
+    const idem =
+      String(input.idem ?? '').trim() || `${day}:${hash16}:${USAGE_ISOLATE_PREFIX}:${++usageSeq}`;
     const event: TenantUsageEvent = { tid, scope, units, idem, day };
     if (input.service !== undefined) event.service = input.service;
     else event.service = USAGE_SERVICE;

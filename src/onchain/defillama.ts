@@ -28,6 +28,8 @@
 
 import { normalizeProtocolSlug } from './adapters';
 import type { OnchainDataset, TimePoint } from './types';
+import { errMessage, isAbortError } from '../utils/errors';
+import { fetchWithTimeout } from '../utils/fetch-timeout';
 
 export const DEFILLAMA_PROVIDER_ID = 'defillama';
 export const DEFILLAMA_DEFAULT_BASE = 'https://api.llama.fi';
@@ -51,18 +53,6 @@ let protocolsCache: ProtocolsCache | null = null;
 
 function nowSec(): number {
   return Math.floor(Date.now() / 1000);
-}
-
-function errMessage(err: unknown): string {
-  if (err instanceof Error && err.message) return err.message;
-  if (typeof err === 'string' && err) return err;
-  return 'Unknown error';
-}
-
-function isAbortError(err: unknown): boolean {
-  if (!err || typeof err !== 'object') return false;
-  const name = (err as { name?: string }).name;
-  return name === 'AbortError' || name === 'TimeoutError';
 }
 
 /**
@@ -119,14 +109,15 @@ function resolveBaseUrl(baseUrl?: string): string {
  * Fetch protocol TVL history from DefiLlama and return an {@link OnchainDataset}.
  *
  * @param slug Protocol slug (e.g. `aave`, `uniswap`)
- * @param opts.signal AbortSignal
+ * @param opts.signal AbortSignal (cancels the request)
  * @param opts.baseUrl Override API root (Worker proxy). Default `https://api.llama.fi`
+ * @param opts.timeoutMs Hard cap per request (default 15 s)
  *
  * Note: browser CORS may fail; set `baseUrl` to a Worker proxy when needed.
  */
 export async function fetchDefiLlamaProtocolTvl(
   slug: string,
-  opts?: { signal?: AbortSignal; baseUrl?: string },
+  opts?: { signal?: AbortSignal; baseUrl?: string; timeoutMs?: number },
 ): Promise<OnchainDataset> {
   const normalized = normalizeProtocolSlug(slug);
   if (!normalized) {
@@ -138,11 +129,15 @@ export async function fetchDefiLlamaProtocolTvl(
 
   let res: Response;
   try {
-    res = await fetch(url, {
-      method: 'GET',
-      signal: opts?.signal,
-      headers: { Accept: 'application/json' },
-    });
+    res = await fetchWithTimeout(
+      url,
+      {
+        method: 'GET',
+        signal: opts?.signal,
+        headers: { Accept: 'application/json' },
+      },
+      { timeoutMs: opts?.timeoutMs },
+    );
   } catch (err) {
     if (isAbortError(err)) throw err;
     throw new Error(
@@ -236,7 +231,7 @@ export async function fetchDefiLlamaProtocolTvl(
 export async function searchDefiLlamaProtocols(
   query: string,
   limit = 20,
-  opts?: { signal?: AbortSignal; baseUrl?: string },
+  opts?: { signal?: AbortSignal; baseUrl?: string; timeoutMs?: number },
 ): Promise<DefiLlamaProtocolSummary[]> {
   const q = String(query || '')
     .trim()
@@ -272,6 +267,7 @@ export async function searchDefiLlamaProtocols(
 async function loadProtocolsList(opts?: {
   signal?: AbortSignal;
   baseUrl?: string;
+  timeoutMs?: number;
 }): Promise<DefiLlamaProtocolSummary[]> {
   const now = Date.now();
   if (protocolsCache && now - protocolsCache.fetchedAt < PROTOCOLS_TTL_MS) {
@@ -283,11 +279,15 @@ async function loadProtocolsList(opts?: {
 
   let res: Response;
   try {
-    res = await fetch(url, {
-      method: 'GET',
-      signal: opts?.signal,
-      headers: { Accept: 'application/json' },
-    });
+    res = await fetchWithTimeout(
+      url,
+      {
+        method: 'GET',
+        signal: opts?.signal,
+        headers: { Accept: 'application/json' },
+      },
+      { timeoutMs: opts?.timeoutMs },
+    );
   } catch (err) {
     if (isAbortError(err)) throw err;
     // Stale cache is better than nothing

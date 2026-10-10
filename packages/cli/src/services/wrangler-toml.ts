@@ -31,8 +31,26 @@ export function readTomlText(tomlPath: string): string {
 }
 
 /**
+ * Worker flag semantics (mirrors worker/src/auth.ts + runtime.ts): these values
+ * enable open keys. Anything else — including empty `""` — is off.
+ */
+export function isOpenKeysEnabled(value: string | null | undefined): boolean {
+  return /^(1|true|yes)$/i.test(String(value ?? "").trim());
+}
+
+/** Escape a value for a TOML basic string. Control characters are rejected. */
+export function tomlBasicString(value: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional — this regex rejects control characters in TOML values
+  if (/[\u0000-\u0008\u000a-\u001f\u007f]/.test(value)) {
+    throw new Error("TOML values cannot contain control characters or newlines");
+  }
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/**
  * Set or insert a simple KEY = "value" under [vars].
  * Handles commented `# KEY = "..."` lines by uncommenting + replacing.
+ * Replacements use function replacers so `$&` / `$1` inside values are literal.
  */
 export function setTomlVar(
   tomlPath: string,
@@ -40,8 +58,7 @@ export function setTomlVar(
   value: string
 ): { changed: boolean; previous?: string } {
   const text = readTomlText(tomlPath);
-  const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  const assign = `${key} = "${escaped}"`;
+  const assign = `${key} = ${tomlBasicString(value)}`;
 
   // Active assignment
   const activeRe = new RegExp(
@@ -52,7 +69,7 @@ export function setTomlVar(
   if (active) {
     const prev = stripQuotes(active[2]?.trim() ?? "");
     if (prev === value) return { changed: false, previous: prev };
-    const next = text.replace(activeRe, `$1${assign}`);
+    const next = text.replace(activeRe, (_m, indent: string) => `${indent}${assign}`);
     writeFileSync(tomlPath, next, "utf-8");
     return { changed: true, previous: prev };
   }
@@ -63,7 +80,7 @@ export function setTomlVar(
     "m"
   );
   if (commentRe.test(text)) {
-    const next = text.replace(commentRe, `$1${assign}`);
+    const next = text.replace(commentRe, (_m, indent: string) => `${indent}${assign}`);
     writeFileSync(tomlPath, next, "utf-8");
     return { changed: true };
   }
@@ -96,6 +113,60 @@ export function getTomlVar(tomlPath: string, key: string): string | null {
   const m = text.match(activeRe);
   if (!m) return null;
   return stripQuotes(m[1]?.trim() ?? "") || null;
+}
+
+/**
+ * Uncommented `[[name]]` array-table blocks as key → string maps. Commented
+ * example blocks are ignored (same rule as getKvBindingId).
+ */
+export function activeArrayTables(
+  tomlPath: string,
+  name: string
+): Array<Record<string, string>> {
+  if (!existsSync(tomlPath)) return [];
+  const out: Array<Record<string, string>> = [];
+  let current: Record<string, string> | null = null;
+  const header = new RegExp(`^\\[\\[${escapeRegExp(name)}\\]\\]\\s*$`);
+  for (const line of readTomlText(tomlPath).split(/\r?\n/)) {
+    if (/^\s*#/.test(line)) continue;
+    if (header.test(line)) {
+      current = {};
+      out.push(current);
+      continue;
+    }
+    if (/^\s*\[/.test(line)) {
+      current = null;
+      continue;
+    }
+    if (!current) continue;
+    const kv = line.match(/^\s*([A-Za-z_][\w-]*)\s*=\s*"([^"]*)"/);
+    if (kv) current[kv[1]!] = kv[2]!;
+  }
+  return out;
+}
+
+/** True when an uncommented `[[d1_databases]]` block binds `DB`. */
+export function hasD1DbBinding(tomlPath: string): boolean {
+  return activeArrayTables(tomlPath, "d1_databases").some((b) => b.binding === "DB");
+}
+
+/**
+ * Deploy guard: refuse when D1 is bound, API_KEYS KV is absent, and open keys
+ * are on — any Bearer would then partition the script library. Returns the
+ * refusal reason, or null when the deploy may proceed.
+ */
+export function deployOpenKeysViolation(input: {
+  d1Bound: boolean;
+  apiKeysKvBound: boolean;
+  allowOpenKeys: string | null | undefined;
+}): string | null {
+  if (!input.d1Bound || input.apiKeysKvBound) return null;
+  if (!isOpenKeysEnabled(input.allowOpenKeys)) return null;
+  return (
+    'ALLOW_OPEN_KEYS is "1"/"yes" while D1 is bound and API_KEYS KV is not — ' +
+    "any Bearer would partition the script library. Set ALLOW_OPEN_KEYS = \"\" " +
+    "and bind KV: axis setup kv"
+  );
 }
 
 /** True when `KEY = …` is an uncommented assignment (including empty `""`). */
@@ -240,7 +311,7 @@ export function upsertKvNamespace(
     "m"
   );
   if (active.test(text)) {
-    text = text.replace(active, `$1${id}$2`);
+    text = text.replace(active, (_m, pre: string, post: string) => `${pre}${id}${post}`);
     writeFileSync(tomlPath, text, "utf-8");
     return { changed: true, previous };
   }
@@ -264,11 +335,12 @@ function escapeRegExp(s: string): string {
 }
 
 function stripQuotes(s: string): string {
-  if (
-    (s.startsWith('"') && s.endsWith('"')) ||
-    (s.startsWith("'") && s.endsWith("'"))
-  ) {
-    return s.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  if (s.startsWith("'") && s.endsWith("'") && s.length >= 2) {
+    return s.slice(1, -1);
+  }
+  if (s.startsWith('"') && s.endsWith('"') && s.length >= 2) {
+    // Single pass so `\\"` decodes to `\"` (not a quote).
+    return s.slice(1, -1).replace(/\\(["\\])/g, "$1");
   }
   return s;
 }

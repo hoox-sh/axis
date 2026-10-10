@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/streams"
-description: "src/streams contains binance.ts, catalog.ts, multiplex.ts, and 2 more files."
+description: "src/streams contains catalog.ts, multiplex.ts, reconnect-ws.ts, and 1 more file."
 resource: "src/streams"
 tags: [code, streams]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-07T04:35:08Z
+  at: 2026-10-10T20:32:38Z
 sources:
   - id: tree
     resource: "src/streams"
@@ -18,7 +18,6 @@ okf_lock: generated
 
 # Files
 
-* `binance.ts` — StreamPlugin, binanceStream
 * `catalog.ts` — BUILTIN_STREAMS, StreamPlugin, _resetStreamRegistrationFlag, binanceStream, bybitStream, ccxtWsStream, coinbaseStream, defaultStreamForSource, ensureStreamsRegistered, foldVenueCandle, getStream, krakenStream
 * `multiplex.ts` — HEAVY_LIVE_RERUN_BARS, StopLiveOpts, StopLiveReason, StreamPlugin, _getLiveEpochForTests, _getPendingLiveBarCountForTests, _getRerunAttemptCountForTests, _resetMultiplexForTests, defaultStreamForSource, effectiveLiveRerunMode, getAvailableStreams, listStreams
 * `reconnect-ws.ts` — RECONNECT_DEFAULTS, ReconnectableWsOpts, WsStatus, nextBackoffMs, openReconnectableWs

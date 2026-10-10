@@ -29,6 +29,7 @@
 import {
   applyFired,
   clearPrevPrices,
+  DEFAULT_ALERT_COOLDOWN_MS,
   DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT,
   evaluateAlerts as evaluateAlertsPure,
 } from './engine';
@@ -39,7 +40,8 @@ import {
   saveAlerts,
   upsertAlert,
 } from './storage';
-import { deliverAlert, isAllowedWebhookUrl } from './webhook';
+import { deliverAlert, isAllowedWebhookUrl, WEBHOOK_TIMEOUT_MS } from './webhook';
+import { fetchWithTimeout } from '../utils/fetch-timeout';
 import type {
   Alert,
   AlertCreateInput,
@@ -64,6 +66,7 @@ export type {
 export {
   ALERTS_STORAGE_KEY,
   clearAlertsStorage,
+  lastAlertsPersistError,
   loadAlerts,
   parseAlert,
   parseAlertsBlob,
@@ -76,6 +79,7 @@ export {
   becomesTrue,
   clearPrevPrices,
   crossesLevel,
+  DEFAULT_ALERT_COOLDOWN_MS,
   DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT,
   evaluateOne,
   evaluateOnchainEventAlertsPure,
@@ -226,14 +230,18 @@ export async function testWebhook(
     } as import('./types').WebhookPayload);
   const fetchImpl = opts?.fetchImpl ?? fetch;
   try {
-    const res = await fetchImpl(target, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
+    const res = await fetchWithTimeout(
+      target,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-    });
+      { timeoutMs: WEBHOOK_TIMEOUT_MS, fetchImpl },
+    );
     if (!res.ok) return { ok: false, status: res.status, error: `HTTP ${res.status}` };
     return { ok: true, status: res.status };
   } catch (e) {
@@ -253,7 +261,9 @@ export function generateAlertId(): string {
 
 /**
  * Create and persist a new alert.
- * Defaults: `enabled: true`, `notifyBrowser: true`, empty `params` if omitted.
+ * Defaults: `enabled: true`, `notifyBrowser: true`,
+ * `cooldownMs: DEFAULT_ALERT_COOLDOWN_MS` when omitted (F6),
+ * empty `params` if omitted.
  */
 export function createAlert(input: AlertCreateInput): Alert {
   const now = Date.now();
@@ -272,6 +282,7 @@ export function createAlert(input: AlertCreateInput): Alert {
   if (input.notifyBrowser != null) alert.notifyBrowser = input.notifyBrowser;
   else alert.notifyBrowser = true;
   if (input.cooldownMs != null) alert.cooldownMs = input.cooldownMs;
+  else alert.cooldownMs = DEFAULT_ALERT_COOLDOWN_MS;
 
   upsertAlert(alert);
   return { ...alert, params: { ...alert.params } };
@@ -333,6 +344,8 @@ export function createOnchainTvlSpikeAlert(
       protocolId,
       minAbsPct,
       direction,
+      // Watermark seed (unix sec): history before creation never fires (F6).
+      lastEventTime: Math.floor(Date.now() / 1000),
     },
     webhookUrl: input.webhookUrl,
     l2WebhookUrl: input.l2WebhookUrl,
@@ -423,8 +436,24 @@ export async function evaluateAlerts(
   const now = opts.now ?? ctx.time ?? Date.now();
   const deliver = opts.deliver !== false;
   const alerts = loadAlerts();
+  // F8: latch a fixed pct_change base on first evaluation so the base does
+  // not slide every bar. Explicit params.basePrice always wins.
+  let latched = false;
+  if (Number.isFinite(ctx.price)) {
+    for (const a of alerts) {
+      if (a.kind !== 'pct_change') continue;
+      const cur = a.params?.basePrice;
+      if (typeof cur === 'number' && Number.isFinite(cur) && cur !== 0) continue;
+      if (typeof cur === 'string' && cur.trim() !== '' && Number.isFinite(Number(cur))) continue;
+      a.params = { ...a.params, basePrice: ctx.price };
+      latched = true;
+    }
+  }
   const fired = evaluateAlertsPure(alerts, ctx, now);
-  if (fired.length === 0) return [];
+  if (fired.length === 0) {
+    if (latched) saveAlerts(alerts);
+    return [];
+  }
 
   const updated = applyFired(alerts, fired, false);
   saveAlerts(updated);

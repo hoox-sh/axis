@@ -44,6 +44,7 @@ import {
 import { ContextMenu } from '../ui/ContextMenu';
 import type { ContextMenuEntry } from '../ui/context-menu';
 import { getActiveSlotId, getSlotDrawingLayer, getSlotManager } from './chart-registry';
+import { toggleChartSettings } from '../ui/chart-settings-state';
 import {
   CHART_SCALE_EVENT,
   dispatchChartMenu,
@@ -367,9 +368,7 @@ export const ChartContextMenu: Component<{
             setStatus('error', 'Screenshot failed', { toast: true, source: 'screenshot' });
           });
         },
-        openSettings: () => {
-          window.dispatchEvent(new CustomEvent('axis-open-settings'));
-        },
+        toggleChartSettings: () => toggleChartSettings(),
         hidePane: () => {
           if (!paneId || paneId === 'price') return;
           setPaneVisible(paneId, false);

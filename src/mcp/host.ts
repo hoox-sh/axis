@@ -62,7 +62,10 @@ export function saveMcpPrefs(prefs: McpPrefs): void {
 
 async function invoke(capability: string, payload?: unknown): Promise<unknown> {
   try {
-    return await invokeCapability(capability, payload);
+    // F22: the in-page API is reachable by any same-origin script, so
+    // mutating capabilities are denied here (user-consent UX deferred).
+    // Authenticated agent traffic flows through the Worker bridge instead.
+    return await invokeCapability(capability, payload, { allowMutations: false });
   } catch (err) {
     if (err instanceof McpInvokeError) {
       throw err;

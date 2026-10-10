@@ -27,6 +27,8 @@ export interface ToolContext {
   env: Env;
   origin: string;
   auth: AuthContext;
+  /** Entry `fetch` ExecutionContext — lets proxied handlers `waitUntil` (A13). */
+  executionCtx?: ExecutionContext | undefined;
 }
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -183,7 +185,7 @@ export async function callTool(ctx: ToolContext, name: string, argsUnknown: unkn
       if (args.body !== undefined) reqCall.body = args.body;
       const hdrs = headerBag(args.headers);
       if (hdrs) reqCall.headers = hdrs;
-      const res = await proxyWorkerRequest(ctx.env, ctx.origin, reqCall);
+      const res = await proxyWorkerRequest(ctx.env, ctx.origin, reqCall, ctx.executionCtx);
       return fromProxy(res);
     }
     case 'axis_run': {
@@ -197,7 +199,7 @@ export async function callTool(ctx: ToolContext, name: string, argsUnknown: unkn
         path: '/api/run',
         body,
         bearer: ctx.auth.key,
-      });
+      }, ctx.executionCtx);
       return fromProxy(res);
     }
     case 'axis_scripts_list': {

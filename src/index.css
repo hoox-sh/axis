@@ -34,6 +34,9 @@
   --color-text: #E8EAEE;
   --color-text-dim: #9AA3B2;
   --color-text-faint: #6B7382;
+  /* `text-muted` utility (used across ui/*): secondary copy, same as text-dim.
+     Resolves on <html> so [data-theme=light] overrides flow through. */
+  --color-muted: var(--color-text-dim);
 
   /* Periwinkle — primary brand accent */
   --color-accent: #8B9CFF;
@@ -667,7 +670,7 @@ button.sc-btn:focus-visible {
   background: var(--color-bg-panel, var(--color-bg-elev));
   border: 1px solid var(--color-border);
   border-radius: var(--radius-panel);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--ui-shadow-panel);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -855,7 +858,8 @@ button.sc-btn:focus-visible {
   .axis-live-btn.is-live .axis-live-dot,
   .axis-live-btn.is-reconnect .axis-live-dot,
   .axis-live-dot--reconnect,
-  .axis-live-dot--pulse {
+  .axis-live-dot--pulse,
+  .axis-keyboard-recording {
     animation: none;
   }
 }
@@ -1713,9 +1717,10 @@ body.axis-ticker-dragging {
   display: flex;
   gap: 8px;
   align-items: baseline;
-  background: rgba(18, 20, 28, 0.93);
+  /* Token-derived fill: follows void / light themes (was a hardcoded rgba). */
+  background: color-mix(in srgb, var(--color-bg-panel) 93%, transparent);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: var(--radius-panel);
   padding: 4px 10px;
   font-variant-numeric: tabular-nums;
 }
@@ -1725,9 +1730,9 @@ body.axis-ticker-dragging {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.06em;
-  color: var(--color-text-dim, #8b93a3);
+  color: var(--color-text-dim);
   border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: var(--radius-chip);
   padding: 1px 6px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -1749,9 +1754,10 @@ body.axis-ticker-dragging {
 }
 .axis-extra-alert-card {
   text-align: center;
-  background: rgba(10, 11, 16, 0.92);
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-void) 92%, transparent);
   border: 2px solid var(--alert-color);
-  border-radius: 12px;
+  border-radius: var(--radius-panel);
   padding: 24px 48px;
   display: flex;
   flex-direction: column;
@@ -2956,6 +2962,18 @@ body.axis-ticker-dragging {
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 14%, var(--color-bg-elev));
   font-weight: 600;
+}
+
+/* ── Popover shell (non-modal menus) ────────────────────────────────
+ * Shared chrome for anchored menus/popovers (chart layouts, screenshot,
+ * extra widgets). 1px hairline + panel radius + panel shadow token; callers add
+ * position, padding and layout utilities only. */
+.sc-popover {
+  background: var(--color-bg-panel);
+  border: var(--border-w) solid var(--color-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--ui-shadow-panel);
+  outline: none;
 }
 
 /* ── Dialog shell (user modals) ─────────────────────────────────────

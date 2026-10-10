@@ -7,7 +7,7 @@ tags: [code, onchain]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:07:37Z
+  at: 2026-10-10T20:32:38Z
 sources:
   - id: tree
     resource: "src/onchain"
@@ -46,6 +46,7 @@ okf_lock: generated
 * [src/plugins](/code/src/plugins.md)
 * [src/storage](/code/src/storage.md)
 * [src/store](/code/src/store.md)
+* [src/utils](/code/src/utils.md)
 
 # Used by
 

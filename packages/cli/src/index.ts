@@ -71,9 +71,12 @@ ${theme.dim("Docs:")} https://hoox.sh/axis/docs
 `
     );
 
+  // exitOverride before subcommand registration so commander errors from
+  // any subcommand throw (and get a mapped exit code) instead of exiting.
+  program.exitOverride();
+
   registerInstall(program);
-  registerDoctor(program);
-  registerSetup(program);
+  registerDoctor(program);  registerSetup(program);
   registerDeploy(program);
   registerSecrets(program);
   registerHealth(program);
@@ -98,8 +101,6 @@ ${theme.dim("Docs:")} https://hoox.sh/axis/docs
         /* preflight is best-effort by design */
       });
   });
-
-  program.exitOverride();
 
   try {
     await program.parseAsync(process.argv);

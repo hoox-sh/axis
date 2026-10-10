@@ -43,7 +43,7 @@ describe('SW cache names', () => {
   it('uses axis-* shell and runtime names with version', () => {
     expect(shellCacheName()).toBe(`axis-shell-${SW_VERSION}`);
     expect(runtimeCacheName()).toBe(`axis-runtime-${SW_VERSION}`);
-    expect(SW_VERSION).toBe('v7');
+    expect(SW_VERSION).toBe('v8');
     expect(shellCacheName('v9')).toBe('axis-shell-v9');
     expect(isAxisCacheName(shellCacheName())).toBe(true);
     expect(isAxisCacheName('workbox-precache-v2')).toBe(false);
@@ -229,11 +229,11 @@ describe('shouldCache*Response — no opaque-as-success', () => {
     expect(shouldCacheApiResponse({ ok: true, status: 204, type: 'basic' })).toBe(false);
   });
 
-  it('accepts 200 basic for api; 2xx basic/cors for static', () => {
-    expect(shouldCacheApiResponse({ ok: true, status: 200, type: 'basic' })).toBe(true);
+  it('accepts 2xx basic/cors for static; never caches api (D2)', () => {
+    expect(shouldCacheApiResponse({ ok: true, status: 200, type: 'basic' })).toBe(false);
     expect(shouldCacheStaticResponse({ ok: true, status: 200, type: 'basic' })).toBe(true);
     expect(shouldCacheStaticResponse({ ok: true, status: 200, type: 'cors' })).toBe(true);
-    // API must not cache cors/opaque from accidental cross-origin
+    // API must not cache cors/opaque from accidental cross-origin — or anything at all.
     expect(shouldCacheApiResponse({ ok: true, status: 200, type: 'cors' })).toBe(false);
   });
 

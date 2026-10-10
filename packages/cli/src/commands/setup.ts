@@ -134,19 +134,29 @@ function parseKvList(stdout: string): Array<{ id?: string; title?: string }> {
   }
 }
 
+/**
+ * Wrangler names KV namespaces `<worker>-<BINDING>` (e.g. `worker-axis-API_KEYS`).
+ * Exact title or `-<BINDING>` suffix only — a substring match would adopt an
+ * unrelated namespace such as `api_keys-backup`.
+ */
+export function kvTitleMatchesBinding(title: string, binding: string): boolean {
+  const t = title.trim().toLowerCase();
+  const b = binding.trim().toLowerCase();
+  return t === b || t.endsWith(`-${b}`);
+}
+
 async function findExistingKvId(
   workerDir: string,
-  titleHint: string
+  binding: string
 ): Promise<string | undefined> {
   const listed = await runWrangler(workerDir, ["kv", "namespace", "list"], {
     throwOnError: false,
   });
   if (listed.code !== 0) return undefined;
-  const hint = titleHint.toLowerCase();
   for (const row of parseKvList(listed.stdout)) {
-    const title = String(row.title || "").toLowerCase();
+    const title = String(row.title || "");
     const id = String(row.id || "");
-    if (id && (title.includes(hint) || title.endsWith(`-${hint}`))) return id;
+    if (id && kvTitleMatchesBinding(title, binding)) return id;
   }
   return undefined;
 }
@@ -328,6 +338,19 @@ async function setupOAuth(
   return changed;
 }
 
+/**
+ * `setup --prod` hard-fails (exit 1) when D1 or KV cannot be bound. Warn-and-
+ * continue left a deployable config with open keys and no durable key store.
+ */
+export function prodBootstrapError(what: string, cause: unknown): CLIError {
+  const detail = cause instanceof Error ? cause.message : String(cause);
+  return new CLIError(
+    `axis setup --prod: ${what} failed`,
+    ExitCode.ERROR,
+    `${detail}\nFix the error above, then re-run: axis setup --prod (prod never falls back to open keys)`
+  );
+}
+
 export async function runSetupAll(
   opts: GlobalOpts,
   flags: {
@@ -353,6 +376,13 @@ export async function runSetupAll(
   result.wranglerCreated = await setupWorkerToml(opts);
   steps.push("worker");
 
+  if (prod) {
+    // Fail closed: production never ships open keys. Written before D1/KV so a
+    // partial bootstrap cannot leave ALLOW_OPEN_KEYS="1" behind.
+    setTomlVar(getPaths().wranglerToml, "ALLOW_OPEN_KEYS", "");
+    steps.push("allow-open-keys:off");
+  }
+
   try {
     result.d1Applied = await setupD1(opts, {
       local: true,
@@ -360,6 +390,7 @@ export async function runSetupAll(
     });
     steps.push(remoteD1 ? "d1:local+remote" : "d1:local");
   } catch (e) {
+    if (prod) throw prodBootstrapError("D1 schema", e);
     printWarn(
       e instanceof Error ? e.message : String(e),
       opts.quiet
@@ -372,6 +403,7 @@ export async function runSetupAll(
       result.kvBound = await setupKv(opts, { binding: API_KEYS_BINDING });
       steps.push("kv:API_KEYS");
     } catch (e) {
+      if (prod) throw prodBootstrapError("API_KEYS KV binding", e);
       printWarn(e instanceof Error ? e.message : String(e), opts.quiet);
       result.kvBound = false;
     }

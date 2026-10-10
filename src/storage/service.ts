@@ -132,9 +132,17 @@ export async function removeScript(id: string): Promise<void> {
 /**
  * Persist editor draft: always local, plus active storage if it implements
  * `saveDraft` (failures on remote are swallowed — local remains source of truth).
+ *
+ * Draft PUTs are serialized through a promise chain (D13): rapid keystrokes
+ * across tabs/debounce windows used to fire overlapping cloud PUTs whose
+ * completion order was network luck (older content winning). Calls that land
+ * while a save is in flight coalesce to the latest payload and run once the
+ * chain drains — at most 2 writes per burst (in-flight + trailing).
  */
-export async function saveDraft(content: string, name?: string): Promise<void> {
-  const payload = { content, name };
+let draftTail: Promise<void> | null = null;
+let draftLatest: { content: string; name?: string } | null = null;
+
+async function runDraftSave(payload: { content: string; name?: string }): Promise<void> {
   await localAlways().saveDraft?.(payload);
   const active = requireActive();
   if (active.id !== 'local' && active.saveDraft) {
@@ -144,6 +152,30 @@ export async function saveDraft(content: string, name?: string): Promise<void> {
       /* active may be offline */
     }
   }
+}
+
+export function saveDraft(content: string, name?: string): Promise<void> {
+  // Coalesce: only the newest payload matters; a drain already running or
+  // queued will pick it up, so overlapping callers share one tail promise.
+  draftLatest = { content, name };
+  if (draftTail) return draftTail;
+  draftTail = (async () => {
+    for (;;) {
+      const next = draftLatest;
+      draftLatest = null;
+      if (!next) break;
+      await runDraftSave(next);
+    }
+  })().finally(() => {
+    draftTail = null;
+  });
+  return draftTail;
+}
+
+/** Test helper — reset the draft serializer between unit tests. */
+export function _resetDraftSerializerForTests(): void {
+  draftTail = null;
+  draftLatest = null;
 }
 
 /**

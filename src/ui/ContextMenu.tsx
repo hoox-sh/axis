@@ -29,6 +29,7 @@
 import { type Component, For, createSignal, onCleanup, onMount } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { clampMenuPosition, type ContextMenuEntry } from './context-menu';
+import { dismissOnOutside } from './dismiss-on-outside';
 
 export const ContextMenu: Component<{
   x: number;
@@ -88,24 +89,25 @@ export const ContextMenu: Component<{
         focusAt(buttons.length - 1);
       }
     };
-    const onPointer = (e: PointerEvent) => {
-      const t = e.target as Node | null;
-      if (root && t && root.contains(t)) return;
-      props.onClose();
-    };
     const onScroll = (e: Event) => {
       const t = e.target as Node | null;
       if (root && t && (t === root || root.contains(t))) return;
       props.onClose();
     };
     const onDismiss = () => props.onClose();
+    // Escape is handled above (capture + stopPropagation), so only the
+    // outside-pointer dismiss comes from the shared helper here.
+    const disposeDismiss = dismissOnOutside({
+      inside: () => [root],
+      onDismiss: () => props.onClose(),
+      escape: false,
+    });
     document.addEventListener('keydown', onKey, true);
-    document.addEventListener('pointerdown', onPointer, true);
     window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', onDismiss);
     onCleanup(() => {
+      disposeDismiss();
       document.removeEventListener('keydown', onKey, true);
-      document.removeEventListener('pointerdown', onPointer, true);
       window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onDismiss);
     });
@@ -117,7 +119,6 @@ export const ContextMenu: Component<{
         ref={root}
         class="axis-context-menu"
         role="dialog"
-        aria-modal="true"
         aria-label={props.label}
         data-testid="axis-context-menu"
         style={{ left: `${pos().x}px`, top: `${pos().y}px` }}

@@ -54,7 +54,6 @@
  */
 
 import { handleRun } from './runtime';
-import { WORKER_VERSION } from './version';
 import { handleKeys } from './keys';
 import { handleScripts } from './scripts';
 import { handleGitOAuth } from './git-oauth';
@@ -64,7 +63,16 @@ import { SessionDO } from './durable-objects/session';
 import { handleMcp, McpBridgeDO, parseBridgeTicket, formatBridgeTicket } from './mcp';
 import { requireApiKey } from './auth';
 import { gateTenantKey, meterTenantUsage } from './tenant';
-import { API_CORS, errorResponse, jsonResponse, methodNotAllowed, preflight } from './http';
+import {
+  API_CORS,
+  buildHealthBody,
+  clientIp,
+  errorResponse,
+  jsonResponse,
+  methodNotAllowed,
+  preflight,
+} from './http';
+import { allowRate } from './rate-limit';
 
 export { SessionDO, McpBridgeDO };
 
@@ -142,14 +150,23 @@ const PRODUCT_ORIGIN_RE =
 
 /**
  * Resolve `Access-Control-Allow-Origin` for this request.
- * Local-dev and known product Origins are echoed; otherwise fall back to
+ * Local-dev Origins are echoed only when no explicit `ALLOWED_ORIGIN` is
+ * configured (local `wrangler dev`) or when listed in it — an explicitly
+ * configured production allowlist is never bypassed by a localhost Origin
+ * (A19). Known product Origins are echoed; otherwise fall back to
  * `env.ALLOWED_ORIGIN` or the production default.
  * Exported for unit tests (`worker/tests/cors-origin.test.ts`).
  */
 export function pickOrigin(req: Request, env: Env): string {
   const reqOrigin = req.headers.get('Origin') ?? '';
+  const allowedRaw = String(env.ALLOWED_ORIGIN || '').trim();
   if (reqOrigin && LOCAL_DEV_ORIGIN_RE.test(reqOrigin)) {
-    return reqOrigin;
+    if (!allowedRaw) return reqOrigin;
+    const listed = allowedRaw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (listed.includes(reqOrigin)) return reqOrigin;
   }
   if (reqOrigin && PRODUCT_ORIGIN_RE.test(reqOrigin)) {
     return reqOrigin;
@@ -206,7 +223,7 @@ export default {
 
     const url = new URL(req.url);
 
-    const mcpRes = await handleMcp(req, env, origin, url.pathname);
+    const mcpRes = await handleMcp(req, env, origin, url.pathname, ctx);
     if (mcpRes) return mcpRes;
 
     // PWA MCP control plane: /api/mcp/bridge → McpBridgeDO (partitioned by API key)
@@ -349,6 +366,16 @@ export default {
           { status: 503, origin, cors: CORS_HEADERS },
         );
       }
+      // Non-tenant callers reach the shared session relay without a key, so a
+      // per-IP window is the only backstop here (A14).
+      if (!allowRate(`stream:ip:${clientIp(req)}`, 60, 60_000)) {
+        return errorResponse('RATE_LIMIT', 'Too many /api/stream requests', {
+          status: 429,
+          origin,
+          cors: CORS_HEADERS,
+          headers: { 'Retry-After': '60' },
+        });
+      }
       let streamDegraded = false;
       const streamGate = await gateTenantKey(env, req, 'axis:stream');
       if (streamGate) {
@@ -394,21 +421,7 @@ export default {
         case '/':
         case '/health':
           return apiJson(
-            {
-              status: 'healthy',
-              service: 'worker-axis',
-              version: WORKER_VERSION,
-              timestamp: Date.now(),
-              features: {
-                scripts: true,
-                d1: !!env.DB,
-                keys: !!env.API_KEYS,
-                onchain: true,
-                market: true,
-                mcp: true,
-                mcpBridge: !!env.MCP_BRIDGE,
-              },
-            },
+            buildHealthBody({ db: !!env.DB, keys: !!env.API_KEYS, mcpBridge: !!env.MCP_BRIDGE }),
             200,
             origin,
           );
@@ -432,7 +445,14 @@ export default {
           });
       }
     } catch (err) {
-      return errorResponse('INTERNAL', err instanceof Error ? err.message : String(err), {
+      // Never reflect internal failure detail to the caller (A8) — log
+      // server-side and return a generic envelope.
+      console.error(JSON.stringify({
+        type: 'worker_internal',
+        path: url.pathname,
+        error: err instanceof Error ? err.message : String(err),
+      }));
+      return errorResponse('INTERNAL', 'internal error', {
         status: 500,
         origin,
         cors: CORS_HEADERS,

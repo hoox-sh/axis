@@ -24,7 +24,8 @@
  * @module ui/extras/CurrentPriceCard
  */
 
-import { type Component, Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { type Component, Show } from 'solid-js';
+import { useNow } from '../clock';
 import { store } from '../../store';
 import { trendOverTicks } from './trend';
 import { formatExtraPrice } from './format';
@@ -38,11 +39,7 @@ import {
 /** Current-price overlay card (chart top-left). Reads store only. */
 export const CurrentPriceCard: Component = () => {
   /** Wall-clock tick so the left time badge counts down live. */
-  const [now, setNow] = createSignal(Date.now());
-  onMount(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    onCleanup(() => window.clearInterval(id));
-  });
+  const now = useNow();
   /**
    * Stream-scoped live tick price (NaN when absent or belonging to a previous
    * symbol — e.g. symbol switch before the first new tick arrives).

@@ -26,11 +26,18 @@ concurrency:
   group: desktop-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: write
+# No workflow-level permissions: each job declares the minimum it needs
+# (G15). The build job keeps contents:write because tauri-action attaches
+# bundles to the GitHub Release on version tags; non-tag builds only read.
+# NOTE: tauri-action is pinned to the mutable @v0 major tag. SHA-pinning to an
+# immutable commit needs network access to resolve SHAs — left as a manual
+# follow-up (verify with actionlint --verify when pinning).
 
 jobs:
   build:
+    # Release attach (tags) needs contents:write; plain builds only read.
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:

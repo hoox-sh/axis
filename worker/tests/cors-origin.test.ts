@@ -20,11 +20,22 @@ function req(origin?: string): Request {
 }
 
 describe('pickOrigin', () => {
-  it('echoes localhost and 127.0.0.1 on any port', () => {
-    expect(pickOrigin(req('http://localhost:3000'), env)).toBe('http://localhost:3000');
-    expect(pickOrigin(req('http://localhost:8081'), env)).toBe('http://localhost:8081');
-    expect(pickOrigin(req('http://127.0.0.1:5173'), env)).toBe('http://127.0.0.1:5173');
-    expect(pickOrigin(req('https://localhost'), env)).toBe('https://localhost');
+  it('echoes localhost and 127.0.0.1 when no explicit allowlist is set (local dev)', () => {
+    const open = {};
+    expect(pickOrigin(req('http://localhost:3000'), open)).toBe('http://localhost:3000');
+    expect(pickOrigin(req('http://localhost:8081'), open)).toBe('http://localhost:8081');
+    expect(pickOrigin(req('http://127.0.0.1:5173'), open)).toBe('http://127.0.0.1:5173');
+    expect(pickOrigin(req('https://localhost'), open)).toBe('https://localhost');
+  });
+
+  it('does not bypass an explicit ALLOWED_ORIGIN with localhost (A19)', () => {
+    expect(pickOrigin(req('http://localhost:3000'), env)).toBe('https://app.example.com');
+  });
+
+  it('echoes localhost when explicitly listed in ALLOWED_ORIGIN', () => {
+    const listed = { ALLOWED_ORIGIN: 'https://app.example.com,http://localhost:3000' };
+    expect(pickOrigin(req('http://localhost:3000'), listed)).toBe('http://localhost:3000');
+    expect(pickOrigin(req('http://localhost:8081'), listed)).toBe('https://app.example.com');
   });
 
   it('echoes product AXIS / HOOX / project-scoped Pages origins', () => {

@@ -28,6 +28,7 @@
 
 import { store } from '../store';
 import { pluginKey } from '../plugins/types';
+import { getGitToken } from './vault';
 
 /** Host API family for the git storage plugin. */
 export type GitProvider = 'github' | 'gitlab';
@@ -100,10 +101,17 @@ export function resolveGitConfig(config?: Record<string, unknown>): GitConfig {
 
   const oauthClientId = String(merged.oauthClientId || '').trim();
 
+  // PAT lives in the session vault when migrated; the persisted bag is only
+  // a legacy fallback (stripped from future payloads). An explicitly provided
+  // call-site token wins verbatim (even empty — same as the original merge);
+  // otherwise vault → legacy saved bag.
+  const callSiteToken =
+    config && 'token' in config ? String(config.token || '') : getGitToken(store.pluginsConfig);
+
   return {
     provider,
     apiBaseUrl,
-    token: String(merged.token || ''),
+    token: callSiteToken,
     owner: String(merged.owner || ''),
     repo: String(merged.repo || ''),
     projectId: String(merged.projectId || ''),

@@ -33,11 +33,18 @@ import { plotSamplesFromCache } from './indicator';
 import {
   evaluateAlerts,
   loadAlerts,
+  normalizeSymbol,
   type EvaluateBar,
   type EvaluateContext,
 } from './index';
 
 const LAST_BARS = 8;
+
+/** Stream-side identity of the bar being evaluated (F2). */
+export interface LiveBarStreamCtx {
+  symbol?: string;
+  interval?: string;
+}
 
 function lastBars(): EvaluateBar[] {
   const bars = store.bars;
@@ -58,13 +65,15 @@ function lastBars(): EvaluateBar[] {
   return out;
 }
 
-function buildContext(price: number): EvaluateContext {
-  const symbol = store.symbol || 'BTCUSDT';
+function buildContext(price: number, stream?: LiveBarStreamCtx): EvaluateContext {
+  const symbol =
+    (stream?.symbol && stream.symbol.trim() ? stream.symbol.trim() : store.symbol) ||
+    'BTCUSDT';
   const drawings = drawingsForSymbol(store.drawings, symbol, { includeUntagged: true });
   const ctx: EvaluateContext = {
     symbol,
     price,
-    interval: store.interval || undefined,
+    interval: stream?.interval || store.interval || undefined,
     bars: lastBars(),
     time: Date.now(),
     drawingPricesById: drawingPricesById(drawings),
@@ -74,23 +83,43 @@ function buildContext(price: number): EvaluateContext {
 }
 
 /**
+ * True when the delivering stream still matches the open chart (F2).
+ * A stale stream (e.g. after a symbol switch) must not evaluate its bars
+ * against the new symbol's alerts.
+ */
+export function liveBarMatchesChart(stream?: LiveBarStreamCtx): boolean {
+  if (!stream) return true;
+  if (stream.symbol && normalizeSymbol(stream.symbol) !== normalizeSymbol(store.symbol || 'BTCUSDT')) {
+    return false;
+  }
+  if (stream.interval && store.interval && String(stream.interval) !== String(store.interval)) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Evaluate persisted alerts against a live last price.
  * @returns fired alerts (empty when nothing is armed)
  */
-export async function evaluateLiveAlerts(price: number): Promise<void> {
+export async function evaluateLiveAlerts(price: number, stream?: LiveBarStreamCtx): Promise<void> {
   if (!Number.isFinite(price)) return;
+  if (!liveBarMatchesChart(stream)) return;
   const alerts = loadAlerts();
   if (alerts.length === 0) return;
-  await evaluateAlerts(buildContext(price));
+  await evaluateAlerts(buildContext(price, stream));
 }
 
 /**
  * Fire-and-forget entry from the live multiplex. Never throws.
  */
-export function noteLiveBarForAlerts(bar: { close?: number } | null | undefined): void {
+export function noteLiveBarForAlerts(
+  bar: { close?: number } | null | undefined,
+  stream?: LiveBarStreamCtx,
+): void {
   const close = bar && typeof bar.close === 'number' ? bar.close : NaN;
   if (!Number.isFinite(close)) return;
-  void evaluateLiveAlerts(close).catch(() => {
+  void evaluateLiveAlerts(close, stream).catch(() => {
     /* delivery / storage must not break the live session */
   });
 }

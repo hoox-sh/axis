@@ -7,7 +7,7 @@ tags: [code, indicators]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:05:44Z
+  at: 2026-10-10T20:32:38Z
 sources:
   - id: tree
     resource: "src/indicators"
@@ -24,7 +24,7 @@ okf_lock: generated
 * `reapply.ts` — ReapplyChartScriptsOpts, listReapplicableScripts, reapplyChartScripts
 * `run-helpers.ts` — NormalizedRunResult, _resetRunEpochForTests, beginRunEpoch, claimRunStatus, coercePlotSample, coerceSeriesSample, currentRunEpoch, formatRunError, getRunStatusEpoch, isInteractiveRunInFlight, isRunEpochCurrent, lineDataHasSample
 * `run-target.ts` — EditorRunMode, countChartScriptsForEditor, editorHasChartInstance, extractScriptTitle, findChartScriptForEditor, normalizeScriptSource, pickPreferredScript, resolveScriptDisplayName, runFromEditor
-* `runner.ts` — NormalizedRunResult, RunOptions, RunResult, _resetOhlcvTimesCacheForTests, _resetRunEpochForTests, beginRunEpoch, claimRunStatus, coercePlotSample, currentRunEpoch, formatRunError, getOhlcvTimesForApply, isInteractiveRunInFlight
+* `runner.ts` — NormalizedRunResult, RunOptions, RunResult, StrategyPropsPrecedenceOpts, _resetOhlcvTimesCacheForTests, _resetRunEpochForTests, beginRunEpoch, claimRunStatus, coercePlotSample, currentRunEpoch, formatRunError, getOhlcvTimesForApply
 * `script-meta.ts` — EngineFamily, LastRunStatus, LiveRerunOn, ScriptKind, activeChartContext, cycleLiveRerunOn, detectDeclaredOverlay, detectPineVersion, detectScriptKind, engineFamily, engineFamilyLabel, formatScriptUpdatedAt
 * `visibility.ts` — clearScriptChartOverlays, setScriptChartVisible, toggleScriptChartVisible
 

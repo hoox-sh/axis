@@ -80,38 +80,6 @@ export function _currentLoadGeneration(): number {
   return loadGeneration;
 }
 
-/** Map a source plugin id to the chart exchange label (exported for DSM orchestrator). */
-export function exchangeForSource(sourceId: string): string {
-  const venue = store.provider?.sourceId === sourceId
-    ? store.provider.venue
-    : undefined;
-  if (venue && venue !== 'generic' && venue !== 'cache') return venue;
-  switch (sourceId) {
-    case 'binance-rest':
-      return 'binance';
-    case 'okx-rest':
-      return 'okx';
-    case 'bybit-rest':
-      return 'bybit';
-    case 'coinbase-rest':
-      return 'coinbase';
-    case 'kraken-rest':
-      return 'kraken';
-    case 'mexc-rest':
-      return 'mexc';
-    case 'mock-walk':
-      return 'mock';
-    case 'csv-upload':
-      return 'upload';
-    case 'data-manager':
-      return store.provider?.venue && store.provider.venue !== 'cache'
-        ? store.provider.venue
-        : 'cache';
-    default:
-      return store.exchange;
-  }
-}
-
 function errMessage(err: unknown): string {
   if (err instanceof Error && err.message) return err.message;
   if (typeof err === 'string' && err) return err;
@@ -131,28 +99,9 @@ function loadErrorSentence(msg: string): string {
   return line.slice(0, 140) || 'The venue did not return candles.';
 }
 
-/**
- * Normalize a ticker for {@link loadSymbolData} / history fetch.
- *
- * CEX tickers are uppercased. DEX pool symbols (`network:0x…`, `network/…`,
- * Solana base58, or any `sourceId === 'geckoterminal-ohlcv'`) keep mixed case
- * because addresses are case-sensitive on some chains.
- */
-export function normalizeLoadSymbol(
-  symbol: string,
-  sourceId?: string | null,
-): string {
-  const rawSym = String(symbol || '').trim();
-  const srcId = String(sourceId || '');
-  if (
-    srcId === 'geckoterminal-ohlcv' ||
-    rawSym.includes(':') ||
-    rawSym.includes('/')
-  ) {
-    return rawSym;
-  }
-  return rawSym.toUpperCase();
-}
+// Shared leaf helpers (also used by DSM modules without importing this file).
+import { exchangeForSource, normalizeLoadSymbol } from './symbol-exchange';
+export { exchangeForSource, normalizeLoadSymbol };
 
 /**
  * Fetch OHLCV via the given historical source and push into chart + store.
@@ -179,6 +128,16 @@ export async function loadSymbolData(
   const srcId = String(sourceId || store.source || '');
   const sym = normalizeLoadSymbol(symbol, srcId);
   const iv = String(interval || store.interval || '1d');
+
+  // Another source takes the chart — stop dataset progressive repaints for the
+  // previous key (CSV upload / venue load) so a pending repaint cannot
+  // overwrite the new series.
+  try {
+    const { stopProgressiveRepaint } = await import('./dsm-orchestrator');
+    stopProgressiveRepaint();
+  } catch {
+    /* repaint stop is best-effort */
+  }
 
   // Claim this load as the newest; abort prior network + ignore stale completions.
   const gen = ++loadGeneration;
@@ -242,42 +201,48 @@ export async function loadSymbolData(
   }
 
   // ── DSM-first: paint from the dataset store, complete in background ──
+  // Best-effort: any failure (import / IDB / repair) falls through to the
+  // direct venue fetch below instead of rejecting into an unhandled error.
   if (opts?.preferDataset !== false && srcId !== 'csv-upload') {
-    const { paintDataset, ensureDatasetComplete, announceDatasetPaint } = await import(
-      './dsm-orchestrator'
-    );
-    const painted = await paintDataset(sym, iv, srcId, { stillCurrent });
-    if (painted && painted.length) {
-      if (!stillCurrent()) return false;
-      const ms = performance.now() - t0;
-      setTelemetryState('source', 'open', {
-        latencyMs: ms,
-        detail: `${painted.length} bars · ${label} (dataset)`,
-        error: null,
-      });
-      announceDatasetPaint(painted, sym, iv);
-      // Auto-complete: validate + sliced backfill + progressive repaints.
-      // Guarded by stillCurrent — a stale background job must not overwrite
-      // the status of a newer load (or a newer error).
-      ensureDatasetComplete(sym, iv, srcId, { stillCurrent });
-      if (stillCurrent()) {
-        try {
-          const { reapplyChartScripts } = await import('../indicators/reapply');
-          await reapplyChartScripts({ stillCurrent });
-        } catch {
-          /* re-run optional */
+    try {
+      const { paintDataset, ensureDatasetComplete, announceDatasetPaint } = await import(
+        './dsm-orchestrator'
+      );
+      const painted = await paintDataset(sym, iv, srcId, { stillCurrent });
+      if (painted?.length) {
+        if (!stillCurrent()) return false;
+        const ms = performance.now() - t0;
+        setTelemetryState('source', 'open', {
+          latencyMs: ms,
+          detail: `${painted.length} bars · ${label} (dataset)`,
+          error: null,
+        });
+        announceDatasetPaint(painted, sym, iv);
+        // Auto-complete: validate + sliced backfill + progressive repaints.
+        // Guarded by stillCurrent — a stale background job must not overwrite
+        // the status of a newer load (or a newer error).
+        ensureDatasetComplete(sym, iv, srcId, { stillCurrent });
+        if (stillCurrent()) {
+          try {
+            const { reapplyChartScripts } = await import('../indicators/reapply');
+            await reapplyChartScripts({ stillCurrent });
+          } catch {
+            /* re-run optional */
+          }
         }
-      }
-      if (restartLiveAfter && stillCurrent()) {
-        const streamId = store.live.streamId || defaultStreamForSource(srcId);
-        try {
-          const { startLive } = await import('../streams/multiplex');
-          if (stillCurrent()) startLive(streamId, sym, iv);
-        } catch {
-          /* ignore live restart failures */
+        if (restartLiveAfter && stillCurrent()) {
+          const streamId = store.live.streamId || defaultStreamForSource(srcId);
+          try {
+            const { startLive } = await import('../streams/multiplex');
+            if (stillCurrent()) startLive(streamId, sym, iv);
+          } catch {
+            /* ignore live restart failures */
+          }
         }
+        return stillCurrent();
       }
-      return stillCurrent();
+    } catch (dsmErr: unknown) {
+      console.warn('[load-symbol] dataset-first paint failed; falling back to venue fetch', dsmErr);
     }
   }
 

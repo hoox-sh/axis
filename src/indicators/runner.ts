@@ -287,6 +287,53 @@ function nonemptyBag(
   return Object.keys(v).length ? v : undefined;
 }
 
+type InputBag = Record<string, unknown> | undefined | null;
+
+/**
+ * Single precedence resolver for Pine input bags.
+ * Order: explicit opts → applied-script saved → editor draft. Empty `{}` is
+ * "not provided" at every level. (Unifies `runScript` and `runAndApplyInner`.)
+ */
+export function resolveInputPrecedence(
+  explicit: InputBag,
+  saved: InputBag,
+  editorDraft: InputBag,
+  allowEditorDraft: boolean,
+): Record<string, unknown> | undefined {
+  return (
+    nonemptyBag(explicit) ??
+    nonemptyBag(saved) ??
+    (allowEditorDraft ? nonemptyBag(editorDraft) : undefined)
+  );
+}
+
+export interface StrategyPropsPrecedenceOpts {
+  /** The editor draft may be used as the last resort. */
+  allowEditorDraft?: boolean;
+  /** An explicit bag (even `{}`) is authoritative and wins immediately. */
+  emptyExplicitWins?: boolean;
+}
+
+/**
+ * Single precedence resolver for `strategy()` property bags.
+ * Explicit opts win (optionally even when empty); then the applied-script
+ * saved bag; then the editor draft. Undefined when every source is empty.
+ * (Unifies `runScript` and `runAndApplyInner`.)
+ */
+export function resolveStrategyPrecedence(
+  explicit: InputBag,
+  saved: InputBag,
+  editorDraft: InputBag,
+  opts?: StrategyPropsPrecedenceOpts,
+): Record<string, unknown> | undefined {
+  if (explicit !== undefined && (opts?.emptyExplicitWins || nonemptyBag(explicit))) {
+    return explicit ?? undefined;
+  }
+  return (
+    nonemptyBag(saved) ?? (opts?.allowEditorDraft ? nonemptyBag(editorDraft) : undefined)
+  );
+}
+
 /** Options shared by {@link runScript} and {@link runAndApply}. */
 export interface RunOptions {
   /** Quiet status bar / fewer log lines (live re-runs) */
@@ -554,29 +601,26 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       typeof indicatorId === 'string' && indicatorId
         ? store.scripts.find((s) => s.id === indicatorId)
         : undefined;
-    const rawInputs =
-      nonemptyBag(opts.inputs) ??
-      nonemptyBag(applied?.inputValues) ??
-      (!indicatorId && !opts.skipEditorDraft
-        ? nonemptyBag(store.editorInputValues)
-        : undefined);
+    const rawInputs = resolveInputPrecedence(
+      opts.inputs,
+      applied?.inputValues,
+      store.editorInputValues,
+      !indicatorId && !opts.skipEditorDraft,
+    );
     // Expand plot:<indicatorId>:<plotKey> refs → full series arrays for the engine
     const inputs = resolveInputSourceValues(rawInputs, store.indicatorSeries);
     // Strategy Properties: rewrite strategy() kwargs on a run-time copy only.
     // Explicit opts.strategyProps (including {}) wins — empty bag = no rewrite.
     // Isolate studies already bake props into source; never merge editor leftovers.
-    const strategyProps =
-      opts.strategyProps !== undefined
-        ? opts.strategyProps
-        : applied?.strategyProps && Object.keys(applied.strategyProps).length
-          ? applied.strategyProps
-          : !indicatorId &&
-              !isolate &&
-              !opts.skipEditorDraft &&
-              store.editorStrategyProps &&
-              Object.keys(store.editorStrategyProps).length
-            ? store.editorStrategyProps
-            : undefined;
+    const strategyProps = resolveStrategyPrecedence(
+      opts.strategyProps,
+      applied?.strategyProps,
+      store.editorStrategyProps,
+      {
+        allowEditorDraft: !indicatorId && !isolate && !opts.skipEditorDraft,
+        emptyExplicitWins: true,
+      },
+    );
     const scriptForEngine = applyStrategyPropsToSource(script, strategyProps);
     let engineLibraries: import('../plugins/types').EngineLibrarySource[] | undefined;
     try {
@@ -866,27 +910,16 @@ async function runAndApplyInner(
 ): Promise<RunResult> {
   // Prefer explicit opts.inputs / strategyProps; else per-indicator saved; else editor.
   // Empty `{}` is "not provided" — never wipe saved Script Settings.
-  let inputs = nonemptyBag(opts.inputs);
-  let strategyProps = opts.strategyProps;
-  if (indicatorId) {
-    const ind = store.scripts.find((s) => s.id === indicatorId);
-    if (!inputs && ind?.inputValues && Object.keys(ind.inputValues).length) {
-      inputs = ind.inputValues;
-    }
-    // Explicit bag for this script only — never fall through to editorStrategyProps
-    if (strategyProps === undefined || !nonemptyBag(strategyProps)) {
-      strategyProps = ind?.strategyProps && Object.keys(ind.strategyProps).length
-        ? ind.strategyProps
-        : {};
-    }
-  } else if (strategyProps === undefined || !nonemptyBag(strategyProps)) {
-    strategyProps =
-      !opts.skipEditorDraft &&
-      store.editorStrategyProps &&
-      Object.keys(store.editorStrategyProps).length
-        ? store.editorStrategyProps
-        : {};
-  }
+  const ind = indicatorId ? store.scripts.find((s) => s.id === indicatorId) : undefined;
+  const inputs = resolveInputPrecedence(opts.inputs, ind?.inputValues, undefined, false);
+  // Explicit bag for this script only — never fall through to editorStrategyProps
+  const strategyProps =
+    resolveStrategyPrecedence(
+      opts.strategyProps,
+      ind?.strategyProps,
+      !opts.skipEditorDraft ? store.editorStrategyProps : undefined,
+      { allowEditorDraft: !indicatorId },
+    ) ?? {};
   // Capture the exact bars the engine will evaluate so the resulting series
   // align 1:1 with the time axis we build below. A live tick or an HPO
   // holdout slice must not desync series from bars (see getOhlcvTimesForApply).

@@ -51,7 +51,7 @@ import {
   writeStoredCloudConfig,
 } from '../../storage/cloud-config';
 import { probeCloudStorage } from '../../storage/cloud';
-import { EditorIntelPanel, ExchangeCredentialsPanel } from '../SettingsDialog';
+import { EditorIntelPanel, ExchangeCredentialsPanel } from './panels';
 import { NotificationsPanel } from './NotificationsPanel';
 import { KeyboardSettingsPanel } from '../shortcuts/Settings';
 import {

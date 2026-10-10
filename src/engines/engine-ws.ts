@@ -39,6 +39,8 @@
  * @module engines/engine-ws
  */
 
+import { parseEngineJson } from './json-sanitize';
+
 /** Payload sent on the `/ws/run` socket for one evaluation. */
 export type EngineWsRunRequest = {
   script: string;
@@ -101,6 +103,13 @@ type Pending = {
   timer: ReturnType<typeof setTimeout>;
 };
 
+/** Caller-initiated cancel; recognised by serverEngine so it does not fall back to REST. */
+function abortError(): Error {
+  const e = new Error('Aborted');
+  e.name = 'AbortError';
+  return e;
+}
+
 /** How long a dead client stays dead before a reconnect attempt is allowed. */
 const DEAD_COOLDOWN_MS = 45_000;
 
@@ -149,14 +158,19 @@ class EngineWsClient {
     if (this.isOpen) return;
     if (this.connectPromise) return this.connectPromise;
 
-    this.connectPromise = new Promise<void>((resolve, reject) => {
+    // The executor can fail synchronously (WebSocket ctor throws) *before*
+    // this assignment completes, so the executor must not clear
+    // `connectPromise` itself — that clear would be overwritten by the
+    // assignment below and the rejected promise would stick forever (after the
+    // dead cool-down every later call returned it). Clear it on settle instead,
+    // only when it still points at this attempt.
+    const attempt = new Promise<void>((resolve, reject) => {
       let settled = false;
       let ws: WebSocket;
       try {
         ws = new WebSocket(this.url);
       } catch (e) {
         this.markDead();
-        this.connectPromise = null;
         reject(e instanceof Error ? e : new Error(String(e)));
         return;
       }
@@ -171,7 +185,6 @@ class EngineWsClient {
           /* ignore */
         }
         this.ws = null;
-        this.connectPromise = null;
         this.markDead();
         reject(new Error('WebSocket connect timeout'));
       }, timeoutMs);
@@ -182,7 +195,6 @@ class EngineWsClient {
         clearTimeout(timer);
         this.dead = false;
         this.deadUntil = 0;
-        this.connectPromise = null;
         resolve();
       };
 
@@ -191,14 +203,12 @@ class EngineWsClient {
         settled = true;
         clearTimeout(timer);
         this.ws = null;
-        this.connectPromise = null;
         this.markDead();
         reject(new Error('WebSocket error'));
       };
 
       ws.onclose = () => {
         this.ws = null;
-        this.connectPromise = null;
         // Reject all in-flight (premature or mid-run close)
         for (const [id, p] of this.pending) {
           clearTimeout(p.timer);
@@ -217,8 +227,12 @@ class EngineWsClient {
         this.handleMessage(ev?.data);
       };
     });
-
-    return this.connectPromise;
+    this.connectPromise = attempt;
+    const clear = () => {
+      if (this.connectPromise === attempt) this.connectPromise = null;
+    };
+    attempt.then(clear, clear);
+    return attempt;
   }
 
   /**
@@ -241,7 +255,8 @@ class EngineWsClient {
         raw = String(data);
       }
       if (!raw || !raw.trim()) return;
-      const msg = JSON.parse(raw) as unknown;
+      // Same NaN/Infinity normalization as the REST path (string literals kept).
+      const msg = parseEngineJson(raw);
       if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return;
       const rec = msg as Record<string, unknown>;
       if (rec.type === 'pong') return;
@@ -284,9 +299,25 @@ class EngineWsClient {
     }
   }
 
-  run(req: EngineWsRunRequest, timeoutMs: number): Promise<EngineWsResult> {
+  /**
+   * Send one `run` frame and wait for its correlated reply.
+   *
+   * `signal` detaches the caller: the pending entry is dropped and the promise
+   * rejects with an `AbortError`. The socket stays up and the connection is
+   * *not* marked dead — a user cancel is not a transport failure. The server
+   * has no cancel frame, so the remote evaluation may still finish; its reply
+   * is then ignored (no pending entry).
+   */
+  run(
+    req: EngineWsRunRequest,
+    timeoutMs: number,
+    signal?: AbortSignal,
+  ): Promise<EngineWsResult> {
     if (this.isDead) {
       return Promise.reject(new Error('WebSocket client marked dead'));
+    }
+    if (signal?.aborted) {
+      return Promise.reject(abortError());
     }
     // Fast-fail connect (gunicorn without a WS worker often 404/hangs here).
     const connectMs = Math.min(4_000, Math.max(1_500, Math.floor(timeoutMs / 3)));
@@ -297,13 +328,25 @@ class EngineWsClient {
             reject(new Error('WebSocket client marked dead'));
             return;
           }
+          if (signal?.aborted) {
+            reject(abortError());
+            return;
+          }
           if (!this.ws || this.ws.readyState !== 1) {
             reject(new Error('WebSocket not open'));
             return;
           }
           const id = req.id || `r${++this.reqSeq}_${Date.now().toString(36)}`;
+          const onAbort = () => {
+            const p = this.pending.get(id);
+            if (!p) return;
+            clearTimeout(p.timer);
+            this.pending.delete(id);
+            p.reject(abortError());
+          };
           const timer = setTimeout(() => {
             this.pending.delete(id);
+            signal?.removeEventListener('abort', onAbort);
             // Mark dead so subsequent runs skip WS and go straight to REST.
             this.markDead();
             try {
@@ -313,7 +356,18 @@ class EngineWsClient {
             }
             reject(new Error('WebSocket run timeout'));
           }, timeoutMs);
-          this.pending.set(id, { resolve, reject, timer });
+          this.pending.set(id, {
+            resolve: (v) => {
+              signal?.removeEventListener('abort', onAbort);
+              resolve(v);
+            },
+            reject: (e) => {
+              signal?.removeEventListener('abort', onAbort);
+              reject(e);
+            },
+            timer,
+          });
+          signal?.addEventListener('abort', onAbort, { once: true });
           try {
             const frame: Record<string, unknown> = {
               type: 'run',
@@ -332,10 +386,16 @@ class EngineWsClient {
             if (req.profiler === true) {
               frame.profiler = true;
             }
+            // Published library() sources — without these, `import ns/Name/ver`
+            // fails on the WS path while the REST path sends them.
+            if (Array.isArray(req.libraries) && req.libraries.length) {
+              frame.libraries = req.libraries;
+            }
             this.ws.send(JSON.stringify(frame));
           } catch (e) {
             clearTimeout(timer);
             this.pending.delete(id);
+            signal?.removeEventListener('abort', onAbort);
             reject(e instanceof Error ? e : new Error(String(e)));
           }
         }),

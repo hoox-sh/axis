@@ -5,6 +5,7 @@
 
 import type { Command } from "commander";
 import {
+  assertHttpsForSecret,
   defaultWorkerUrl,
   healthFeatures,
   probeHealth,
@@ -83,6 +84,8 @@ export async function runHealth(
   let scriptsOk = true;
   let scriptsResult: Awaited<ReturnType<typeof probeScripts>> | undefined;
   if (flags.scripts) {
+    // An authenticated probe sends the Bearer key — never cleartext off-host.
+    if (flags.key) assertHttpsForSecret(base, "axis health --scripts");
     scriptsResult = await probeScripts(base, flags.key);
     scriptsOk = scriptsResult.ok;
     if (!opts.quiet) {

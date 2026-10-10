@@ -85,8 +85,9 @@ import { drawingsForSymbol, newDrawingId } from '../chart/drawings/sync';
 import { getEngine } from '../engines/catalog';
 import { APP_CAPABILITIES, findCapability, SETTABLE_PATHS } from './catalog';
 import { runPaletteCommand, listPaletteCommandIds } from './commands';
-import { buildAppSnapshot, buildSettingsSnapshot } from './snapshot';
+import { buildAppSnapshot, buildSettingsSnapshot, barSummary } from './snapshot';
 import { getByPath, McpInvokeError } from './protocol';
+import { isSecureCloudEndpoint } from '../storage/cloud-config';
 import type { ChartGridMode } from '../chart/layout';
 import type { ChartType } from '../chart/chart-type';
 
@@ -112,6 +113,77 @@ function str(v: unknown, fallback = ''): string {
 
 function fail(code: string, message: string): never {
   throw new McpInvokeError(code, message);
+}
+
+/**
+ * Window CustomEvents an MCP agent may dispatch (F5). Any same-origin script
+ * can already call `window.dispatchEvent` directly, so this allowlist locks
+ * the *agent contract* to UI affordances the app actually listens for —
+ * arbitrary `axis-*` names are rejected instead of broadcast blindly.
+ */
+const MCP_ALLOWED_EVENTS = new Set([
+  'axis-menu',
+  'axis-chart-reflow',
+  'axis-chart-scale',
+  'axis-drawing-cancel-draft',
+  'axis-editor-goto-line',
+  'axis-editor-convert-v6',
+  'axis-editor-save-library',
+  'axis-editor-git-push',
+  'axis-editor-git-pull',
+  'axis-editor-run',
+  'axis-editor-show-logs',
+  'axis-agent-insert-script',
+  'axis-agent-open-script',
+  'axis-results-tab',
+  'axis-open-settings',
+  'axis-open-studio',
+  'axis-slot-activate',
+  'axis-shortcuts-open',
+  'axis-shortcut-fired',
+  'axis-library-command',
+  'axis-escape',
+  'axis-watchlist-alert',
+]);
+
+function assertMcpEventName(name: string): string {
+  if (!MCP_ALLOWED_EVENTS.has(name)) {
+    fail('EVENT_DENIED', `event not allowlisted: ${name || '(empty)'}`);
+  }
+  return name;
+}
+
+/**
+ * MCP-safe alert view (F4): webhook URLs often carry tokens (`?key=…`), so
+ * the secret itself never leaves the app plane. Callers get the destination
+ * host plus presence flags; full URLs stay in local storage only.
+ */
+function sanitizeAlertForMcp(a: Alert): Record<string, unknown> {
+  const hostOf = (url: string | undefined): string | null => {
+    if (!url) return null;
+    try {
+      return new URL(url).host || null;
+    } catch {
+      return null;
+    }
+  };
+  return {
+    id: a.id,
+    name: a.name,
+    enabled: a.enabled,
+    symbol: a.symbol,
+    kind: a.kind,
+    interval: a.interval ?? null,
+    cooldownMs: a.cooldownMs ?? null,
+    notifyBrowser: a.notifyBrowser !== false,
+    lastFiredAt: a.lastFiredAt ?? null,
+    createdAt: a.createdAt,
+    params: { ...(a.params ?? {}) },
+    webhookHost: hostOf(a.webhookUrl),
+    hasWebhook: Boolean(a.webhookUrl),
+    l2WebhookHost: hostOf(a.l2WebhookUrl),
+    hasL2Webhook: Boolean(a.l2WebhookUrl),
+  };
 }
 
 /** Drawing kinds an agent may place (cursor/eraser are tools, not drawings). */
@@ -191,10 +263,28 @@ function startLiveNow(): void {
   startLive(streamId, store.symbol, store.interval);
 }
 
-export async function invokeCapability(capability: string, payload: unknown = {}): Promise<unknown> {
+export interface InvokeCapabilityOpts {
+  /**
+   * Must be true to run capabilities marked `mutates` (F22). The Worker
+   * bridge passes true (its frames arrive over an authenticated agent
+   * session); the in-page host passes false so any same-origin script
+   * reaching `window.__AXIS_MCP__` gets read-only access. Defaults to true
+   * for direct/programmatic callers (tests, internal flows).
+   */
+  allowMutations?: boolean;
+}
+
+export async function invokeCapability(
+  capability: string,
+  payload: unknown = {},
+  opts: InvokeCapabilityOpts = {},
+): Promise<unknown> {
   const spec = findCapability(capability);
   if (!spec && capability !== 'app.capabilities') {
     fail('UNKNOWN_CAPABILITY', `Unknown capability: ${capability}`);
+  }
+  if (spec?.mutates && opts.allowMutations === false) {
+    fail('MUTATION_DENIED', `Capability mutates state; in-page invoke is read-only: ${capability}`);
   }
   const p = rec(payload);
 
@@ -232,7 +322,7 @@ export async function invokeCapability(capability: string, payload: unknown = {}
     }
     case 'app.event': {
       const name = str(p.name);
-      if (!name.startsWith('axis-')) fail('EVENT_DENIED', 'event name must start with axis-');
+      assertMcpEventName(name);
       if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
         window.dispatchEvent(new CustomEvent(name, { detail: p.detail }));
       }
@@ -240,7 +330,6 @@ export async function invokeCapability(capability: string, payload: unknown = {}
     }
 
     case 'chart.get': {
-      const snap = buildAppSnapshot();
       return {
         symbol: store.symbol,
         interval: store.interval,
@@ -249,7 +338,8 @@ export async function invokeCapability(capability: string, payload: unknown = {}
         chartType: store.chartType,
         layout: store.chartLayout,
         live: store.live,
-        bars: snap.bars,
+        // F23: summaries only — no full buildAppSnapshot for a bar strip.
+        bars: barSummary(store.bars || []),
       };
     }
     case 'chart.set': {
@@ -396,7 +486,7 @@ export async function invokeCapability(capability: string, payload: unknown = {}
     }
 
     case 'alerts.list':
-      return loadAlerts();
+      return loadAlerts().map(sanitizeAlertForMcp);
     case 'alerts.create': {
       const input: AlertCreateInput = {
         name: str(p.name || 'Alert'),
@@ -407,7 +497,7 @@ export async function invokeCapability(capability: string, payload: unknown = {}
       if (p.interval) input.interval = str(p.interval);
       if (p.webhookUrl) input.webhookUrl = str(p.webhookUrl);
       if (typeof p.enabled === 'boolean') input.enabled = p.enabled;
-      return createAlert(input);
+      return sanitizeAlertForMcp(createAlert(input));
     }
     case 'alerts.update': {
       const id = str(p.id);
@@ -415,7 +505,7 @@ export async function invokeCapability(capability: string, payload: unknown = {}
       if (!existing) fail('NOT_FOUND', `alert ${id}`);
       const next: Alert = { ...existing, ...rec(p.patch), id };
       upsertAlert(next);
-      return next;
+      return sanitizeAlertForMcp(next);
     }
     case 'alerts.remove': {
       const id = str(p.id);
@@ -681,6 +771,11 @@ export async function invokeCapability(capability: string, payload: unknown = {}
           case 'endpoint': {
             const ep = str(v).trim();
             if (!ep) fail('BAD_VALUE', 'endpoint must be a non-empty URL');
+            // F5: never point the cloud backend at cleartext http (except
+            // loopback dev) — the Bearer key would travel unencrypted.
+            if (!isSecureCloudEndpoint(ep)) {
+              fail('BAD_VALUE', 'endpoint must be https (http is allowed only for localhost)');
+            }
             setStore('endpoint', ep);
             break;
           }
@@ -794,52 +889,67 @@ export async function invokeCapability(capability: string, payload: unknown = {}
 }
 
 function applySettable(path: string, value: unknown): unknown {
+  // F23: return the targeted value — never a full buildAppSnapshot per set.
   switch (path) {
     case 'symbol':
       setStore('symbol', str(value).toUpperCase());
-      break;
+      persist();
+      return store.symbol;
     case 'interval':
       setStore('interval', str(value));
-      break;
+      persist();
+      return store.interval;
     case 'source':
       setStore('source', str(value));
-      break;
+      persist();
+      return store.source;
     case 'engine':
       setStore('engine', str(value));
-      break;
+      persist();
+      return store.engine;
     case 'exchange':
       setStore('exchange', str(value));
-      break;
+      persist();
+      return store.exchange;
     case 'theme':
       if (value === 'dark' || value === 'light') setStore('theme', value);
       applyThemeToDocument(store.chartTheme);
-      break;
+      persist();
+      return store.theme;
     case 'chartType':
       setChartType(str(value) as ChartType);
-      break;
+      persist();
+      return store.chartType;
     case 'uiScale':
       setUiScale(Number(value));
-      break;
+      persist();
+      return store.uiScale;
     case 'live.active':
       if (value) startLiveNow();
       else stopLive();
       setLive(Boolean(value));
-      break;
+      persist();
+      return store.live.active;
     case 'live.preferAfterLoad':
       setStore('live', 'preferAfterLoad', Boolean(value));
-      break;
+      persist();
+      return store.live.preferAfterLoad;
     case 'editor.doc':
       writeEditorDoc(str(value));
-      break;
+      persist();
+      return editorDoc();
     case 'editor.open':
       setEditorOpen(Boolean(value));
-      break;
+      persist();
+      return store.editor.open;
     case 'watchlist.open':
-      setStore('watchlist', 'open', Boolean(value));
-      break;
+      // Route through setPanelOpen (D12) so panelChrome and the legacy flat
+      // flag stay dual-written like every other panel toggle.
+      setPanelOpen('watchlist', Boolean(value));
+      persist();
+      return store.watchlist?.open ?? null;
     default:
       fail('PATH_DENIED', path);
   }
-  persist();
-  return getByPath(buildAppSnapshot(), path);
+  return null;
 }

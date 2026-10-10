@@ -77,6 +77,7 @@ import {
 import { LineBreakPrimitive } from './line-break-primitive';
 import {
   mapBarUpdate,
+  mapBarsToPriceData,
   lastBarDirection,
   normalizeChartType,
   createHaCacheHolder,
@@ -95,6 +96,7 @@ import { resizePane, store } from '../store';
 import type { TradeMarker } from '../results/events';
 import type { ShapeMarkerSpec } from '../results/plot-visuals';
 import { mountPaneBadge, refreshPaneBadge, setPaneBadgeLabel } from './pane-badge';
+import { getVisibleBars, isReplayActive } from './bar-replay';
 import { reportUiError } from '../ui/boot-errors';
 import { getThemeManager } from '../theme';
 
@@ -492,6 +494,8 @@ export class PaneManager {
   private crosshairUnsubs: Array<() => void> = [];
   /** DOM pointer listeners for hover tracking (container + per-pane) */
   private pointerUnsubs: Array<() => void> = [];
+  /** Per-pane hover-listener unsubs so destroyPane detaches its own div listener. */
+  private panePointerUnsubs = new Map<string, () => void>();
   /**
    * Whether the pointer is over this manager’s pane container.
    * `null` = unknown (unit tests / no pointer events yet) — accept all moves.
@@ -677,6 +681,19 @@ export class PaneManager {
     this.overlayDataMeta.delete(seriesKey);
   }
 
+  /** Drop per-pane smart-apply meta + remembered titles for a destroyed pane. */
+  private purgePaneMeta(paneId: string): void {
+    const prefix = `${paneId}:`;
+    const dropPrefixed = (m: Map<string, unknown>): void => {
+      for (const key of Array.from(m.keys())) {
+        if (key === paneId || key.startsWith(prefix)) m.delete(key);
+      }
+    };
+    dropPrefixed(this.overlayDataMeta);
+    dropPrefixed(this.overlaySeriesKinds);
+    dropPrefixed(this.lastValueTitleByKey);
+  }
+
   /** Reset per-chart Heikin-Ashi live state (full history replace / type switch). */
   resetHaCache(): void {
     this.haHolder.cache = null;
@@ -737,13 +754,15 @@ export class PaneManager {
         this.hoveredPaneId = id;
       };
       div.addEventListener('pointerenter', onPaneEnter);
-      this.pointerUnsubs.push(() => {
+      const unsubPaneEnter = () => {
         try {
           div.removeEventListener('pointerenter', onPaneEnter);
         } catch {
           /* ignore */
         }
-      });
+      };
+      this.pointerUnsubs.push(unsubPaneEnter);
+      this.panePointerUnsubs.set(id, unsubPaneEnter);
     }
 
     const isSecondary = type !== 'price';
@@ -898,6 +917,22 @@ export class PaneManager {
     el?.remove();
     document.getElementById(this.handleDomId(id))?.remove();
     this.paneShapePlugins.delete(id);
+    // Detach this pane's hover listener: it closes over the removed div, so
+    // leaving it in pointerUnsubs leaks the node and can re-arm hoveredPaneId.
+    const paneUnsub = this.panePointerUnsubs.get(id);
+    if (paneUnsub) {
+      try {
+        paneUnsub();
+      } catch {
+        /* ignore */
+      }
+      this.panePointerUnsubs.delete(id);
+      this.pointerUnsubs = this.pointerUnsubs.filter((u) => u !== paneUnsub);
+    }
+    // Drop smart-apply fingerprints + remembered titles keyed `${paneId}:…` so
+    // a recreated pane with the same id repaints instead of hitting a stale
+    // tip fast-path and rendering empty.
+    this.purgePaneMeta(id);
     this.panes.delete(id);
     // Re-wire remaining panes so sync handlers don't point at removed charts
     if (opts?.rewire !== false) {
@@ -1349,31 +1384,34 @@ export class PaneManager {
   }
 
   /**
-   * Re-set candle data with optional barcolor fields (color/borderColor/wickColor).
-   * Returns number of bars that received a custom color.
-   */
+  * Re-set candle data with optional barcolor fields (color/borderColor/wickColor).
+  * Maps through the active chart type (with the visible replay prefix when a
+  * replay session is active) so barcolor repaints neither revert Heikin-Ashi
+  * transforms nor reveal future bars. Colors ride on OHLC-shaped rows only.
+  * Returns number of bars that received a custom color.
+  */
   private repaintCandlesWithBarColors(): number {
     const pricePane = this.getPane('price');
     const candle = pricePane?.series?.['candle'];
     if (!candle || typeof candle.setData !== 'function') return 0;
     const bars = Array.isArray(store.bars) ? store.bars : [];
     if (!bars.length) return 0;
+    // Bar replay paints only the scrubbed prefix; the store keeps full history.
+    const visible = isReplayActive() ? getVisibleBars(bars) : bars;
+    if (!visible.length) return 0;
+    const chartType = normalizeChartType(store.chartType ?? this.priceChartType);
+    const mapped = mapBarsToPriceData(visible, chartType, this.haHolder);
     let tinted = 0;
-    const data = bars.map((b) => {
-      const t = Number(b.time);
-      const row: Record<string, unknown> = {
-        time: t as UTCTimestamp,
-        open: b.open,
-        high: b.high,
-        low: b.low,
-        close: b.close,
-      };
-      const c = this.barColorByTime.get(t);
-      if (c) {
-        row.color = c;
-        row.borderColor = c;
-        row.wickColor = c;
-        tinted += 1;
+    const data = mapped.map((pt) => {
+      const row: Record<string, unknown> = { ...(pt as Record<string, unknown>) };
+      if ('open' in row) {
+        const c = this.barColorByTime.get(Number((pt as { time: number }).time));
+        if (c) {
+          row.color = c;
+          row.borderColor = c;
+          row.wickColor = c;
+          tinted += 1;
+        }
       }
       return row;
     });
@@ -2121,21 +2159,42 @@ export class PaneManager {
   }
 
   /**
-   * Apply a user color override to an overlay plot or hline on a pane.
-   * Returns true when a series/price-line was found and updated.
-   */
-  setOverlayLineColor(paneId: string, plotName: string, color: string): boolean {
+  * Apply a user color override to an overlay plot or hline on a pane.
+  * Overlay series are owner-scoped (`overlay_<owner>__<name>`), so the legacy
+  * bare key is tried first, then the owner key when `ownerId` is given, then
+  * any owner-scoped series for the same plot name (callers without an owner).
+  * Returns true when a series/price-line was found and updated.
+  */
+  setOverlayLineColor(paneId: string, plotName: string, color: string, ownerId?: string): boolean {
     const pane = this.panes.get(paneId);
     if (!pane || !color) return false;
     let ok = false;
-    const key = `overlay_${plotName}`;
-    const series = pane.series[key];
-    if (series) {
-      try {
-        series.applyOptions({ color });
-        ok = true;
-      } catch {
-        /* ignore */
+    const keys: string[] = [];
+    if (ownerId) keys.push(makeOverlayLineKey(plotName, ownerId));
+    keys.push(`overlay_${plotName}`);
+    for (const key of keys) {
+      const series = pane.series[key];
+      if (series) {
+        try {
+          series.applyOptions({ color });
+          ok = true;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    if (!ok) {
+      // Owner-scoped series (`overlay_<owner>__<name>`) from syncOverlayLines:
+      // match by plot-name suffix so owner-less callers still recolor.
+      const suffix = `__${plotName}`;
+      for (const [key, series] of Object.entries(pane.series)) {
+        if (!series || !key.startsWith('overlay_') || !key.endsWith(suffix)) continue;
+        try {
+          series.applyOptions({ color });
+          ok = true;
+        } catch {
+          /* ignore */
+        }
       }
     }
     const pl = pane.priceLines[plotName];

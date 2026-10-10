@@ -60,8 +60,8 @@ import type { EnginePlugin, PlotSample, RunResult } from '../plugins/types';
 import { barsForPine } from '../data/parse-bars';
 import { store, setTelemetryPlane, setTelemetryState, setStatus, appendLog } from '../store';
 import { registry } from '../plugins/registry';
-import { classifyTransport } from '../ui/telemetry';
 import { scriptHasPineAlertCalls } from '../alerts/pine';
+import { parseEngineJson } from './json-sanitize';
 
 /**
  * PYNE compile currently emits `alert()` / `alertcondition()` as empty
@@ -113,6 +113,85 @@ async function assertZipAsset(url: string, label: string): Promise<void> {
       `${label} is not a zip/wheel at ${url} (got ${buf.length} bytes, starts with ${JSON.stringify(head)})`,
     );
   }
+}
+
+/** localStorage key for engine origins the user already approved for API-key use. */
+const TRUSTED_ENGINE_ORIGINS_KEY = 'axis.engine.trustedOrigins.v1';
+
+/** Origins that never need a confirmation prompt (loopback dev backends). */
+export function isLoopbackOrigin(origin: string): boolean {
+  try {
+    const host = new URL(origin).hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+
+function readTrustedEngineOrigins(): string[] {
+  try {
+    const raw = localStorage.getItem(TRUSTED_ENGINE_ORIGINS_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((s): s is string => typeof s === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Confirm before sending an engine API key to a new origin.
+ *
+ * Same-origin, loopback, and previously-confirmed origins proceed silently.
+ * A fresh cross-origin endpoint prompts once via `window.confirm`; the answer
+ * is remembered in localStorage. Returns true when the key may be sent.
+ * Headless environments (no `location` / `confirm`, e.g. unit tests) allow —
+ * the backend still enforces auth.
+ */
+export function confirmEngineApiKeyTarget(endpoint: string, apiKey: string): boolean {
+  if (!apiKey) return true;
+  let origin = '';
+  try {
+    origin = new URL(endpoint).origin;
+  } catch {
+    return true;
+  }
+  if (typeof location === 'undefined') return true;
+  try {
+    if (origin === location.origin || isLoopbackOrigin(origin)) return true;
+  } catch {
+    return true;
+  }
+  const trusted = readTrustedEngineOrigins();
+  if (trusted.includes(origin)) return true;
+  const w =
+    typeof window !== 'undefined'
+      ? (window as Window & { confirm?: (msg: string) => boolean })
+      : undefined;
+  if (typeof w?.confirm !== 'function') return true;
+  let ok = false;
+  try {
+    ok =
+      w.confirm(
+        `Send your engine API key to ${origin}?\n\nThe backend runs your Pine Script and sees your key. Only confirm origins you trust.`,
+      ) === true;
+  } catch {
+    return true;
+  }
+  if (!ok) {
+    appendLog('warn', `API key withheld for unconfirmed engine origin ${origin}`, 'engine', {
+      toast: false,
+    });
+    return false;
+  }
+  try {
+    localStorage.setItem(TRUSTED_ENGINE_ORIGINS_KEY, JSON.stringify([...trusted, origin]));
+  } catch {
+    /* quota */
+  }
+  return true;
 }
 
 export const serverEngine: EnginePlugin = {
@@ -207,6 +286,17 @@ export const serverEngine: EnginePlugin = {
     const preferWs = cfg.preferWs !== false;
     const apiKey = String(cfg.apiKey || '').trim();
     const t0 = performance.now();
+    // B6: never send the key to a fresh cross-origin backend without consent.
+    if (!confirmEngineApiKeyTarget(endpoint, apiKey)) {
+      return {
+        status: 'error',
+        plots: [],
+        events: [],
+        series: {},
+        error: 'API key withheld for unconfirmed engine origin — approve it and re-run',
+        meta: { ms: performance.now() - t0, transport: 'rest' },
+      } satisfies RunResult;
+    }
     // Generous budget: compile + large OHLCV can exceed 30s on cold Numba.
     const timeoutMs = Math.min(
       180_000,
@@ -241,6 +331,7 @@ export const serverEngine: EnginePlugin = {
               ...(libraries?.length ? { libraries } : {}),
             },
             wsBudget,
+            signal,
           );
           const ms = performance.now() - t0;
           if (wsResult.status === 'error') {
@@ -306,8 +397,27 @@ export const serverEngine: EnginePlugin = {
             },
           } satisfies RunResult;
         }
-      } catch {
-        // Fall through to REST with a fresh timeout (see below).
+      } catch (err) {
+        // A user cancel must end the run here — falling through to REST would
+        // start a second evaluation the caller already abandoned.
+        if (signal?.aborted) {
+          return {
+            status: 'error',
+            plots: [],
+            events: [],
+            series: {},
+            error: 'Aborted',
+            meta: { ms: performance.now() - t0, transport: 'ws' },
+          } satisfies RunResult;
+        }
+        // Surface the fallback (previously silent) — REST still runs below.
+        // toast:false: once per run while WS is unavailable would flood toasts.
+        appendLog(
+          'warn',
+          `WebSocket run unavailable — using REST (${err instanceof Error ? err.message : String(err)})`,
+          'engine',
+          { toast: false },
+        );
       }
     }
 
@@ -375,11 +485,8 @@ export const serverEngine: EnginePlugin = {
         if (!text || !String(text).trim()) {
           throw new SyntaxError('empty body');
         }
-        // Python json.dumps can emit bare NaN; browsers reject that. Normalize first.
-        const cleaned = text
-          .replace(/\bNaN\b/g, 'null')
-          .replace(/\b-?Infinity\b/g, 'null');
-        payload = JSON.parse(cleaned);
+        // Python json.dumps can emit bare NaN; shared with the WS path.
+        payload = parseEngineJson(text);
         if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
           throw new SyntaxError('expected JSON object');
         }
@@ -496,9 +603,11 @@ type PyodideLike = {
     ) => Promise<void>;
   };
   runPythonAsync: (code: string) => Promise<void>;
-  runPython: (code: string) => string;
+  runPython: (code: string) => unknown;
   globals: {
     set: (key: string, value: unknown) => void;
+    /** PyProxy dict delete — optional so narrow test doubles still type-check. */
+    delete?: (key: string) => void;
   };
 };
 
@@ -542,17 +651,69 @@ export function callPyodideRunScript(
   bars: unknown,
   mode: string,
   libraries: unknown,
+  /**
+   * Pine input overrides. Passed as a 5th positional argument only when the
+   * loaded runtime accepts it — see {@link pyodideRuntimeAcceptsInputs}.
+   */
+  inputs?: Record<string, unknown>,
 ): string {
+  const globalsKeys = [
+    '_axis_script_json',
+    '_axis_bars_json',
+    '_axis_mode_json',
+    '_axis_libs_json',
+  ];
   py.globals.set('_axis_script_json', JSON.stringify(script));
   py.globals.set('_axis_bars_json', JSON.stringify(bars ?? []));
   py.globals.set('_axis_mode_json', JSON.stringify(mode));
   py.globals.set('_axis_libs_json', JSON.stringify(libraries ?? []));
-  return py.runPython(
+  let call =
     'run_script(__import__("json").loads(_axis_script_json), ' +
-      '__import__("json").loads(_axis_bars_json), ' +
-      '__import__("json").loads(_axis_mode_json), ' +
-      '__import__("json").loads(_axis_libs_json))',
-  );
+    '__import__("json").loads(_axis_bars_json), ' +
+    '__import__("json").loads(_axis_mode_json), ' +
+    '__import__("json").loads(_axis_libs_json)';
+  if (inputs !== undefined) {
+    py.globals.set('_axis_inputs_json', JSON.stringify(inputs));
+    globalsKeys.push('_axis_inputs_json');
+    call += ', __import__("json").loads(_axis_inputs_json)';
+  }
+  call += ')';
+  try {
+    return String(py.runPython(call));
+  } finally {
+    // Bars JSON can be megabytes; do not keep it alive in the Python globals
+    // between runs (the next run overwrites it anyway).
+    for (const key of globalsKeys) {
+      try {
+        py.globals.delete?.(key);
+      } catch {
+        /* best-effort cleanup */
+      }
+    }
+  }
+}
+
+const runtimeInputsSupport = new WeakMap<object, boolean>();
+
+/**
+ * True when the loaded `run_script` accepts an `inputs` parameter.
+ * Probed once per Pyodide instance via `inspect` so the JS side can forward
+ * Script Settings as soon as the runtime supports them, without a JS release.
+ */
+export function pyodideRuntimeAcceptsInputs(py: PyodideLike): boolean {
+  const cached = runtimeInputsSupport.get(py);
+  if (cached !== undefined) return cached;
+  let ok = false;
+  try {
+    ok =
+      py.runPython(
+        "'inputs' in __import__('inspect').signature(run_script).parameters",
+      ) === true;
+  } catch {
+    ok = false;
+  }
+  runtimeInputsSupport.set(py, ok);
+  return ok;
 }
 
 /**
@@ -574,11 +735,31 @@ declare global {
 export const LOCAL_PYODIDE_VERSION = '0.29.5';
 export const LOCAL_PYODIDE_INDEX = `/pyodide/v${LOCAL_PYODIDE_VERSION}/`;
 
-/** Absolute indexURL with trailing slash (relative paths resolve against location.origin). */
+/**
+ * Absolute indexURL with trailing slash (relative paths resolve against location.origin).
+ *
+ * The index is loaded with `import()` into the app origin, i.e. it executes
+ * JavaScript. Only **same-origin** absolute URLs are honoured; a cross-origin
+ * value (e.g. from a hand-edited or imported plugin config) falls back to the
+ * self-hosted runtime instead of running third-party code.
+ */
 export function resolvePyodideIndexUrl(configured?: string): string {
   const raw = (configured || LOCAL_PYODIDE_INDEX).trim() || LOCAL_PYODIDE_INDEX;
   if (/^https?:\/\//i.test(raw)) {
-    return raw.endsWith('/') ? raw : `${raw}/`;
+    let sameOrigin = false;
+    try {
+      sameOrigin = typeof location !== 'undefined' && new URL(raw).origin === location.origin;
+    } catch {
+      sameOrigin = false;
+    }
+    if (sameOrigin) return raw.endsWith('/') ? raw : `${raw}/`;
+    appendLog(
+      'warn',
+      'Pyodide indexUrl is cross-origin — ignored; using the self-hosted runtime',
+      'pyodide',
+      { toast: false },
+    );
+    return resolvePyodideIndexUrl(LOCAL_PYODIDE_INDEX);
   }
   const origin = typeof location !== 'undefined' ? location.origin : '';
   const path = raw.startsWith('/') ? raw : `/${raw}`;
@@ -700,9 +881,27 @@ export function preloadPyodide(): Promise<unknown> {
     });
 }
 
+/** After a failed cold load, wait this long before another full attempt. */
+const PYODIDE_LOAD_COOLDOWN_MS = 30_000;
+
+/** Warn once per session that Pyodide ignored a requested field. */
+let warnedUnsupportedFields = false;
+
+/** @internal test helper — clear cached instance, in-flight load and failure state. */
+export function _resetPyodideEngineState(): void {
+  pyodideEngine._pyodide = null;
+  pyodideEngine._partial = null;
+  pyodideEngine._loadPromise = null;
+  pyodideEngine._failure = null;
+  warnedUnsupportedFields = false;
+}
+
 export const pyodideEngine: EnginePlugin & {
   _pyodide: PyodideLike | null;
   _loadPromise: Promise<PyodideLike> | null;
+  /** Instance whose `loadPyodide()` succeeded but later setup failed — reused on retry. */
+  _partial: PyodideLike | null;
+  _failure: { at: number; message: string } | null;
   _ensure: () => Promise<PyodideLike>;
 } = {
   id: 'pyodide',
@@ -731,6 +930,8 @@ export const pyodideEngine: EnginePlugin & {
   },
   _pyodide: null,
   _loadPromise: null,
+  _partial: null,
+  _failure: null,
   async isReady() {
     try {
       await this._ensure();
@@ -742,6 +943,12 @@ export const pyodideEngine: EnginePlugin & {
   async _ensure() {
     if (this._pyodide) return this._pyodide;
     if (this._loadPromise) return this._loadPromise;
+    // Failure cool-down: a broken index/wheel otherwise re-downloads wasm on
+    // every single run (and a stuck worker never gets a chance to recover).
+    if (this._failure && Date.now() - this._failure.at < PYODIDE_LOAD_COOLDOWN_MS) {
+      const waitS = Math.ceil((PYODIDE_LOAD_COOLDOWN_MS - (Date.now() - this._failure.at)) / 1000);
+      throw new Error(`${this._failure.message} (retrying in ${waitS}s)`);
+    }
     const cfg = resolveConfig(this.configSchema, pyodidePluginConfig());
     const indexUrl = resolvePyodideIndexUrl(String(cfg.indexUrl || LOCAL_PYODIDE_INDEX));
     this._loadPromise = (async () => {
@@ -754,7 +961,10 @@ export const pyodideEngine: EnginePlugin & {
       if (typeof window === 'undefined' || typeof window.loadPyodide !== 'function') {
         throw new Error('loadPyodide not available');
       }
-      const py = await window.loadPyodide({ indexURL: indexUrl });
+      // Pyodide has no public destroy(): a runtime that loaded but failed setup
+      // is kept and reused on retry instead of leaking a second wasm heap.
+      const py = this._partial ?? (await window.loadPyodide({ indexURL: indexUrl }));
+      this._partial = py;
       // micropip + packaging served from same self-hosted index
       await py.loadPackage('micropip');
       const micropip = py.pyimport('micropip');
@@ -793,17 +1003,47 @@ export const pyodideEngine: EnginePlugin & {
       }
       await py.runPythonAsync(runtimePy);
       this._pyodide = py;
+      this._partial = null;
+      this._failure = null;
       return py;
     })().catch((err) => {
       this._loadPromise = null;
+      this._failure = {
+        at: Date.now(),
+        message: err instanceof Error ? err.message : String(err),
+      };
       throw err;
     });
     return this._loadPromise;
   },
-  async run({ script, bars, config, libraries }) {
+  async run({ script, bars, config, libraries, inputs, signal }) {
     const t0 = performance.now();
+    // The in-browser evaluator runs synchronously on the main thread, so a
+    // cancel can only be honoured before evaluation starts (see deferred B4).
+    if (signal?.aborted) {
+      return {
+        status: 'error',
+        plots: [],
+        series: {},
+        events: [],
+        drawings: [],
+        error: 'Aborted',
+        meta: { ms: 0, transport: 'local' },
+      };
+    }
     try {
       const py = await this._ensure();
+      if (signal?.aborted) {
+        return {
+          status: 'error',
+          plots: [],
+          series: {},
+          events: [],
+          drawings: [],
+          error: 'Aborted',
+          meta: { ms: performance.now() - t0, transport: 'local' },
+        };
+      }
       const cfg = resolveConfig(this.configSchema, {
         ...pyodidePluginConfig(),
         ...(config || {}),
@@ -817,7 +1057,31 @@ export const pyodideEngine: EnginePlugin & {
           /* interpret fallback handles missing numpy */
         }
       }
-      const resultJson = callPyodideRunScript(py, script, barsForPine(bars), mode, libraries || []);
+      // Forward Script Settings when the loaded runtime accepts them. Anything
+      // we cannot honour is reported in meta.unsupported — never dropped silently.
+      const inputBag =
+        inputs && typeof inputs === 'object' && Object.keys(inputs).length ? inputs : undefined;
+      const unsupported: string[] = [];
+      const forwardInputs = inputBag !== undefined && pyodideRuntimeAcceptsInputs(py);
+      if (inputBag !== undefined && !forwardInputs) unsupported.push('inputs');
+      if (cfg.profiler === true) unsupported.push('profiler');
+      if (unsupported.length && !warnedUnsupportedFields) {
+        warnedUnsupportedFields = true;
+        appendLog(
+          'warn',
+          `Browser runtime ignores ${unsupported.join(', ')} — use the server engine for these`,
+          'pyodide',
+          { toast: false },
+        );
+      }
+      const resultJson = callPyodideRunScript(
+        py,
+        script,
+        barsForPine(bars),
+        mode,
+        libraries || [],
+        forwardInputs ? inputBag : undefined,
+      );
       const result = JSON.parse(resultJson) as RunResult & {
         overlay?: unknown;
         script_name?: string;
@@ -835,6 +1099,7 @@ export const pyodideEngine: EnginePlugin & {
           ...(overlay !== undefined ? { overlay } : {}),
           script_name: scriptName,
           transport: 'local',
+          ...(unsupported.length ? { unsupported } : {}),
         },
       };
     } catch (err: unknown) {

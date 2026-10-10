@@ -24,6 +24,7 @@
  */
 
 import { type Component, For, Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { dismissOnOutside } from './dismiss-on-outside';
 import { Portal } from 'solid-js/web';
 import {
   store,
@@ -65,15 +66,6 @@ export const ChartLayoutMenu: Component = () => {
   const close = () => setOpen(false);
 
   onMount(() => {
-    const onDoc = (e: PointerEvent) => {
-      if (!open()) return;
-      const t = e.target as Node;
-      if (btnEl?.contains(t) || panelEl?.contains(t)) return;
-      close();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
     const onReposition = () => {
       if (open()) placePanel();
     };
@@ -86,14 +78,17 @@ export const ChartLayoutMenu: Component = () => {
       if (!slot) return;
       void loadSymbolData(slot.symbol, slot.interval, store.source);
     };
-    document.addEventListener('pointerdown', onDoc, true);
-    document.addEventListener('keydown', onKey);
+    const disposeDismiss = dismissOnOutside({
+      inside: () => [btnEl, panelEl],
+      onDismiss: () => {
+        if (open()) close();
+      },
+    });
     window.addEventListener('resize', onReposition);
     window.addEventListener('scroll', onReposition, true);
     window.addEventListener('axis-slot-activate', onSlot);
     onCleanup(() => {
-      document.removeEventListener('pointerdown', onDoc, true);
-      document.removeEventListener('keydown', onKey);
+      disposeDismiss();
       window.removeEventListener('resize', onReposition);
       window.removeEventListener('scroll', onReposition, true);
       window.removeEventListener('axis-slot-activate', onSlot);
@@ -172,7 +167,7 @@ export const ChartLayoutMenu: Component = () => {
         <Portal>
         <div
           ref={panelEl}
-          class="fixed z-[200] w-[min(320px,calc(100vw-24px))] bg-bg-panel border-2 border-border shadow-[0_8px_28px_rgba(0,0,0,0.45)] p-2 flex flex-col gap-2"
+          class="sc-popover fixed z-[200] w-[min(320px,calc(100vw-24px))] p-2 flex flex-col gap-2"
           style={{ top: `${panelPos().top}px`, left: `${panelPos().left}px` }}
           role="menu"
           aria-label="Chart layouts"

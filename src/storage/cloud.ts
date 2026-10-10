@@ -35,6 +35,7 @@ import type {
 } from '../plugins/types';
 import { metaFromScriptContent } from '../indicators/script-meta';
 import { defaultCloudEndpoint, resolveCloudConfig } from './cloud-config';
+import { requireSecureCloudEndpoint } from './cloud-config';
 
 export type { CloudConfig } from './cloud-config';
 export {
@@ -57,6 +58,8 @@ async function api(
   if (!cfg.apiKey) {
     throw new Error('Cloud storage requires an API key (Settings / storage config)');
   }
+  // Never send the Bearer key over cleartext http (https or http loopback only).
+  requireSecureCloudEndpoint(cfg.endpoint);
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${cfg.apiKey}`,

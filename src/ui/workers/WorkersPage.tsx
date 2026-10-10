@@ -16,6 +16,7 @@ import { persist, setStatus, store } from '../../store';
 import { DEFAULT_PYNE_AGENT_ENDPOINT, loadPluginFromUrl, getInstalledPlugins } from '../../plugins/loader';
 import { pluginKey } from '../../plugins/types';
 import { writePluginField } from '../plugin-config';
+import { AGENT_API_KEY_SLOT, getAgentApiKey, putSecret } from '../../storage/vault';
 import { preloadPyodide } from '../../engines/catalog';
 import { copyToClipboard } from '../clipboard';
 import { Icons } from '../icons';
@@ -500,7 +501,7 @@ export function WorkersPage(props: {
                         variant="ghost"
                         disabled={!!busyAction()}
                         onClick={() =>
-                          setBackend(w().localEndpoint!, `${w().name} (local)`, w().id)
+                          setBackend(w().localEndpoint ?? '', `${w().name} (local)`, w().id)
                         }
                       >
                         Use local endpoint
@@ -593,11 +594,11 @@ export function WorkersPage(props: {
                           class="ax-input ax-input--mono"
                           data-testid="axis-pyne-agent-apikey"
                           placeholder="optional in local open mode"
-                          value={String(
-                            ((store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] || {}) as Record<string, unknown>).apiKey ||
-                              '',
-                          )}
+                          value={getAgentApiKey(store.pluginsConfig)}
                           onInput={(e) => {
+                            // Session vault first (stripped from durable persist);
+                            // the bag keeps a session-compat copy like cloud keys.
+                            putSecret(AGENT_API_KEY_SLOT, e.currentTarget.value);
                             writePluginField(pluginKey('component', 'pyne-agent'), 'apiKey', e.currentTarget.value);
                             void persist();
                           }}

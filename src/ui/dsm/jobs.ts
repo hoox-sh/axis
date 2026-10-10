@@ -136,7 +136,7 @@ export function jobHealthLine(job: DataSourceJob): string {
 export function jobStatusClass(tone: JobStatusTone): string {
   switch (tone) {
     case 'ok':
-      return 'text-[var(--color-green,#5ecf8a)]';
+      return 'text-green';
     case 'warn':
       return 'text-amber-400';
     case 'run':

@@ -3,7 +3,7 @@
 # Concepts
 
 * [packages/cli/src](src.md) - AXIS CLI — install, doctor, setup, deploy, secrets, health.
-* [packages/cli/tests](tests.md) - CLI installation self-check: install-context detection, engine compliance, version drift vs the repo checkout, and the cli-install doctor row.
+* [packages/cli/tests](tests.md) - packages/cli/tests contains cli-entry.test.ts, doctor.test.ts, health.test.ts, and 8 more files.
 
 # Nested
 

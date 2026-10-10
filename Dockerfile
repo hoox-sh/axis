@@ -23,7 +23,7 @@ ARG BUN_VERSION=1.3.14
 ARG PYTHON_VERSION=3.12
 ARG NGINX_VERSION=1.27-alpine
 ARG GIT_SHA=dev
-ARG VERSION=2.21.0
+ARG VERSION=2.22.0
 
 # ---------------------------------------------------------------------------
 # deps — install JS toolchain
@@ -46,7 +46,7 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
 FROM deps AS build
 
 ARG GIT_SHA=dev
-ARG VERSION=2.21.0
+ARG VERSION=2.22.0
 
 COPY index.html vite.config.ts tsconfig.json bunfig.toml VERSION ./
 # sync:versions (runs with `bun run build`) stamps these — keep them in context
@@ -83,7 +83,7 @@ RUN AXIS_V="$(tr -d '[:space:]' < VERSION)" \
 FROM python:${PYTHON_VERSION}-slim AS pwa
 
 ARG GIT_SHA=dev
-ARG VERSION=2.21.0
+ARG VERSION=2.22.0
 
 LABEL org.opencontainers.image.title="AXIS PWA" \
       org.opencontainers.image.description="HOOX AXIS charting PWA (static dist)" \
@@ -122,11 +122,18 @@ CMD ["python", "axis_pwa_server.py"]
 
 # ---------------------------------------------------------------------------
 # pwa-nginx — nginx SPA host (production CDN-like static serving)
+#
+# Runs as the unprivileged `nginx` user on 8080 (G13): the shipped
+# conf.d/default.conf is rewritten from `listen 80` at build time because
+# docker/nginx.conf is owned outside this workstream and still says 80.
+# NOTE: base images are tag-pinned (BUN/PYTHON/NGINX_VERSION args) but not
+# digest-pinned — resolving immutable sha256 digests needs network access;
+# left as a manual follow-up (pin with `image@sha256:…` + verify the build).
 # ---------------------------------------------------------------------------
 FROM nginx:${NGINX_VERSION} AS pwa-nginx
 
 ARG GIT_SHA=dev
-ARG VERSION=2.21.0
+ARG VERSION=2.22.0
 
 LABEL org.opencontainers.image.title="AXIS PWA (nginx)" \
       org.opencontainers.image.description="HOOX AXIS static dist behind nginx" \
@@ -138,7 +145,15 @@ LABEL org.opencontainers.image.title="AXIS PWA (nginx)" \
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 80
+# Non-root on 8080: rewrite the listen port, hand cache/logs/run + html to
+# the nginx user, then drop privileges. (docker/nginx.proxy.conf, mounted by
+# the compose `proxy` profile, still says `listen 80` — see compose note.)
+RUN sed -i 's/listen 80;/listen 8080;/' /etc/nginx/conf.d/default.conf \
+ && chown -R nginx:nginx /usr/share/nginx/html /var/cache/nginx /var/log/nginx /var/run \
+ && chmod -R u+rwX,go+rX /usr/share/nginx/html
+
+USER nginx
+EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget -qO- http://127.0.0.1/ >/dev/null || exit 1
+  CMD wget -qO- http://127.0.0.1:8080/ >/dev/null || exit 1

@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, AppDrawer.tsx, and 73 more files."
+description: "src/ui contains AboutModal.tsx, AlertsPanel.tsx, BarReplayControls.tsx, and 73 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-08T14:45:00Z
+  at: 2026-10-10T20:32:38Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -20,10 +20,10 @@ okf_lock: generated
 
 * `AboutModal.tsx` — AboutModal, closeAboutModal, isAboutModalOpen, openAboutModal
 * `AlertsPanel.tsx` — AlertsPanel
-* `AppDrawer.tsx` — AppDrawer, AppDrawerProps, AppDrawerWidth
 * `BarReplayControls.tsx` — BarReplayControls, exitBarReplay, startBarReplay
 * `CachedDatasetsModal.tsx` — CachedDatasetsModal, CachedDatasetsModalProps
 * `ChartLayoutMenu.tsx` — ChartLayoutMenu
+* `ChartSettingsPanel.tsx` — ChartSettingsPanel, ChartSettingsPanelProps
 * `CommandPalette.tsx` — CommandPalette, CommandPaletteProps
 * `CompareSymbolControl.tsx` — CompareSymbolControl
 * `ConnectionHud.tsx` — ConnectionHud
@@ -43,7 +43,6 @@ okf_lock: generated
 * `McpHud.tsx` — MCP_ACTIVITY_WINDOW_MS, McpHud
 * `OnChainPanel.tsx` — OnChainPanel
 * `PluginConfigRow.tsx` — PluginConfigRow, PluginConfigRowProps
-* `PluginManager.tsx` — PluginManager
 * `PricePanel.tsx` — PricePanel
 * `QuotePanel.tsx` — QuotePanel
 * `ResizeHandle.tsx` — ResizeDirection, ResizeHandle
@@ -53,7 +52,6 @@ okf_lock: generated
 * `ScriptLibraryPanel.tsx` — LibraryPanel, ScriptLibraryPanel, ScriptLibraryPanelProps
 * `ScriptRunSelect.tsx` — ScriptRunSelect, ScriptRunSelectProps
 * `ScriptSettingsModal.tsx` — ScriptSettingsModal
-* `SettingsDialog.tsx` — EditorIntelPanel, EngineExecMode, ExchangeCredentialsPanel, SettingsDialog, SettingsTabId
 * `StatusBar.tsx` — StatusBar
 * `StorageChangeDialog.tsx` — StorageChangeDialogProps, StorageChangeMode
 * `StorageChangePrompt.tsx` — StorageChangePrompt
@@ -70,13 +68,15 @@ okf_lock: generated
 * `UpdateBanner.tsx` — UpdateBanner
 * `VolumeProfileOverlay.tsx` — VolumeProfileOverlay
 * `Watchlist.tsx` — Watchlist
-* `WorkersManager.tsx` — WorkersManager
 * `WorkspaceSnapshotMenu.tsx` — WorkspaceSnapshotMenu, createLiveWorkspaceSetters
 * `boot-errors.ts` — ReportUiErrorOpts, _resetReportThrottleForTests, formatErrorMessage, installBootErrorHandlers, reportUiError
+* `chart-settings-state.ts` — chartSettingsOpen, setChartSettingsOpen, toggleChartSettings
 * `clipboard.ts` — copyToClipboard
+* `clock.ts` — useNow
 * `command-registry.ts` — CommandActions, CommandCategory, CommandDef, CommandId, CommandSpec, DEFAULT_COMMAND_SPECS, RankedCommand, buildDefaultCommands, filterCommands, scoreCommand, scoreMatch
 * `context-menu.ts` — ContextMenuEntry, ContextMenuItem, ContextMenuSep, clampMenuPosition
 * `data-plane-notice.ts` — DATA_PLANE_DOCS_URL, DataPlaneActionId, DataPlaneNotice, classifyDataPlaneNotice, cleanStatusLine
+* `dismiss-on-outside.ts` — DismissOnOutsideOptions, dismissOnOutside
 * `document-title.ts` — ChartTitleInput, formatChartTitle
 * `editor-problems.ts` — EDITOR_PROBLEMS_DEFAULT_HEIGHT, EDITOR_PROBLEMS_HEIGHT_KEY, EDITOR_PROBLEMS_MIN_HEIGHT, EditorProblem, clampProblemsHeight, countProblemsBySeverity, diagnosticsToProblems, formatProblemForCopy, formatProblemLine, formatProblemSource, formatProblemsListForCopy, severityRank
 * `error-share.ts` — AXIS_DIAGNOSTIC_VERSION, BuildDiagnosticOpts, ErrorDiagnosticPayload, ErrorShareOffer, _resetErrorShareThrottleForTests, acceptErrorShareOffer, buildErrorDiagnosticPayload, dismissErrorShareOffer, endpointHostOnly, exportErrorDiagnosticNow, isErrorShareEnabled, isSecretFieldName
@@ -106,7 +106,6 @@ okf_lock: generated
 * [src/chart](/code/src/chart.md)
 * [src/chart/drawings](/code/src/chart/drawings.md)
 * [src/data](/code/src/data.md)
-* [src/data/venues](/code/src/data/venues.md)
 * [src/editor](/code/src/editor.md)
 * [src/engines](/code/src/engines.md)
 * [src/indicators](/code/src/indicators.md)
@@ -128,13 +127,10 @@ okf_lock: generated
 * [src/ui/layers](/code/src/ui/layers.md)
 * [src/ui/library](/code/src/ui/library.md)
 * [src/ui/panels](/code/src/ui/panels.md)
-* [src/ui/settings](/code/src/ui/settings.md)
 * [src/ui/shortcuts](/code/src/ui/shortcuts.md)
 * [src/ui/studio](/code/src/ui/studio.md)
-* [src/ui/workers](/code/src/ui/workers.md)
 * [src/update](/code/src/update.md)
 * [src/utils](/code/src/utils.md)
-* [src/workers](/code/src/workers.md)
 
 # Used by
 
@@ -143,7 +139,6 @@ okf_lock: generated
 * [src/data](/code/src/data.md)
 * [src/desktop](/code/src/desktop.md)
 * [src/editor](/code/src/editor.md)
-* [src/engines](/code/src/engines.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/storage](/code/src/storage.md)
 * [src/store](/code/src/store.md)

@@ -17,7 +17,6 @@ import { PANEL_IDS } from '../ui/panels/panel-manager';
 import { registry } from '../plugins/registry';
 import { getActiveEngineId, getActiveSourceId, getActiveStorageId, getActiveStreamId } from '../plugins/active';
 import { loadAlerts } from '../alerts';
-import { unwrap } from 'solid-js/store';
 
 const SECRET_KEY = /(apiKey|secret|passphrase|token|password|authorization|cookie)/i;
 
@@ -43,7 +42,11 @@ function redact(value: unknown, depth = 0): unknown {
   return value;
 }
 
-function barSummary(bars: Array<{ time?: number; close?: number }>) {
+/** Cap for `includeBars` payloads (F9: bounded, newest-last). */
+export const MCP_SNAPSHOT_BARS_MAX = 300;
+
+/** Summary strip used when `includeBars` is false (and by `chart.get`). */
+export function barSummary(bars: Array<{ time?: number; close?: number }>) {
   const n = bars.length;
   const first = n ? bars[0] : null;
   const last = n ? bars[n - 1] : null;
@@ -53,6 +56,30 @@ function barSummary(bars: Array<{ time?: number; close?: number }>) {
     lastTime: last?.time ?? null,
     lastClose: last?.close ?? null,
   };
+}
+
+/** Bounded newest-last plain OHLCV rows for `includeBars: true` (F9). */
+export function boundedBarRows(
+  bars: Array<{
+    time?: number;
+    open?: number;
+    high?: number;
+    low?: number;
+    close?: number;
+    volume?: number;
+  }>,
+  max: number = MCP_SNAPSHOT_BARS_MAX,
+): Array<Record<string, number | null>> {
+  const cap = Number.isFinite(max) && max > 0 ? Math.floor(max) : MCP_SNAPSHOT_BARS_MAX;
+  const tail = bars.length > cap ? bars.slice(-cap) : bars;
+  return tail.map((b) => ({
+    time: typeof b.time === 'number' && Number.isFinite(b.time) ? b.time : null,
+    open: typeof b.open === 'number' && Number.isFinite(b.open) ? b.open : null,
+    high: typeof b.high === 'number' && Number.isFinite(b.high) ? b.high : null,
+    low: typeof b.low === 'number' && Number.isFinite(b.low) ? b.low : null,
+    close: typeof b.close === 'number' && Number.isFinite(b.close) ? b.close : null,
+    ...(typeof b.volume === 'number' && Number.isFinite(b.volume) ? { volume: b.volume } : {}),
+  }));
 }
 
 function lastRunSummary(raw: unknown): unknown {
@@ -154,7 +181,6 @@ export function buildAppSnapshot(opts: { includeBars?: boolean } = {}): Record<s
       ? { mode: store.chartLayout.mode, activeId: store.chartLayout.activeId, slotCount: store.chartLayout.slots?.length }
       : null,
     chartTheme: store.chartTheme ? { presetId: store.chartTheme.presetId } : null,
-    bars: opts.includeBars ? unwrap(bars) : barSummary(bars),
     scripts,
     panes: (store.panes || []).map((p) => ({ id: p.id, type: p.type, visible: p.visible, height: p.height })),
     editor: {
@@ -200,5 +226,9 @@ export function buildAppSnapshot(opts: { includeBars?: boolean } = {}): Record<s
       ? { enabled: store.compare.enabled, symbol: store.compare.symbol, mode: store.compare.mode }
       : null,
   };
-  return redact(snap) as Record<string, unknown>;
+  const redacted = redact(snap) as Record<string, unknown>;
+  // F9: bars bypass the generic redact array cap (`[array N]` above 50) —
+  // summaries stay summaries, and full bars are bounded newest-last rows.
+  redacted.bars = opts.includeBars ? boundedBarRows(bars) : barSummary(bars);
+  return redacted;
 }

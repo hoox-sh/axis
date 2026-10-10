@@ -6,16 +6,26 @@
 /**
  * Safe, idempotent service-worker registration for the Solid/Vite product path.
  *
+ * Update flow (user consent first):
+ * - The SW never calls `skipWaiting` on install — a new worker stays
+ *   `waiting` until the page opts in.
+ * - With `onUpdateAvailable` (the app shell in `index.tsx`), a waiting worker
+ *   stores its activation and the version poll confirms the deployed version
+ *   before the update banner prompts. Reload happens only after the user
+ *   accepts (banner → `softReload`/`hardReload` in `update-manager`, which
+ *   disable the close guard explicitly as part of that consent).
+ * - Without the hook (legacy), a waiting worker is still activated, but the
+ *   automatic `controllerchange` reload below keeps the close guard ENABLED:
+ *   users with unsaved edits get the browser prompt instead of a silent
+ *   mid-edit reload.
+ *
  * - Skips Vite dev (`import.meta.env.DEV`) — HMR and SW fight over assets.
  * - Skips `file:` protocol.
  * - Skips Tauri desktop shell (custom asset protocol / no offline SW needed).
  * - Registers at most once per page load (module + `window` guard).
- * - SW install may call `skipWaiting`; activate calls `clients.claim`.
  * - Page posts `SKIP_WAITING` only when activating a waiting update, then
  *   reloads once on `controllerchange` so mixed old/new modules never stick.
  */
-
-import { setCloseGuardEnabled } from './close-guard';
 
 declare global {
   interface Window {
@@ -115,7 +125,11 @@ function softReloadIfAppropriate(
     return false;
   }
   refreshing = true;
-  setCloseGuardEnabled(false);
+  // D3: the automatic reload path keeps the close guard ENABLED on purpose.
+  // When the user has unsaved edits (editor tabs, …) the browser prompts
+  // instead of reloading mid-edit. User-consented reloads (update banner
+  // accept in update-manager) disable the guard explicitly as part of that
+  // consent — this path must not.
   reload();
   return true;
 }

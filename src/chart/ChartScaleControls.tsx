@@ -46,6 +46,8 @@ import { applyPriceScaleDecimals, getManager } from './manager-access';
 import { measureChartPlotRect } from './plot-rect';
 import { RIGHT_PRICE_SCALE_WIDTH } from './series-factory';
 import { CHART_SCALE_EVENT } from './context-actions';
+import { Icons } from '../ui/icons';
+import { chartSettingsOpen, toggleChartSettings } from '../ui/chart-settings-state';
 import {
   cyclePriceScaleDecimalsMode,
   normalizePriceScaleDecimalsMode,
@@ -401,6 +403,19 @@ export const ChartScaleControls: Component = () => {
         onClick={onDecimals}
       >
         .{priceScaleDecimalsLabel(decimalsMode())}
+      </button>
+      <button
+        type="button"
+        class={btnClass(chartSettingsOpen())}
+        title="Chart settings"
+        data-tip="Chart settings"
+        aria-label="Chart settings"
+        aria-pressed={chartSettingsOpen()}
+        aria-expanded={chartSettingsOpen()}
+        data-testid="axis-chart-scale-settings"
+        onClick={() => toggleChartSettings()}
+      >
+        <Icons.settings class="h-3 w-3" />
       </button>
     </div>
   );

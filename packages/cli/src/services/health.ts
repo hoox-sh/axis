@@ -18,6 +18,41 @@ export function defaultWorkerUrl(): string {
   return (fromEnv || FALLBACK_WORKER_URL).replace(/\/$/, "");
 }
 
+/** Loopback hosts where plain http:// is acceptable (local dev only). */
+export function isLocalWorkerUrl(base: string): boolean {
+  try {
+    // URL keeps IPv6 brackets in hostname ("[::1]") — strip them.
+    const host = new URL(base).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    return (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host.endsWith(".localhost")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Refuse to send a secret (admin token, API key) over http:// to a
+ * non-local host. Plain Error — callers surface it via wrapAction/handleError.
+ */
+export function assertHttpsForSecret(base: string, what: string): void {
+  let url: URL;
+  try {
+    url = new URL(base);
+  } catch {
+    throw new Error(`Invalid worker URL for ${what}: ${JSON.stringify(base)}`);
+  }
+  if (url.protocol === "http:" && !isLocalWorkerUrl(base)) {
+    throw new Error(
+      `${what} refuses http://${url.host} (non-local): the secret would cross ` +
+        `the network in cleartext. Use https:// or a localhost URL.`
+    );
+  }
+}
+
 /** True when an HTTP payload is a live AXIS/PYNE health document. */
 export function isHealthyPayload(httpStatus: number, body: unknown): boolean {
   if (httpStatus < 200 || httpStatus >= 300) return false;

@@ -50,6 +50,7 @@ import {
   loadEditorDoc,
   EDITOR_RUN_KEY,
 } from '../store';
+import { installFocusTrap } from './focus-trap';
 import {
   resolveScriptInputs,
   applyInputOverrides,
@@ -349,6 +350,12 @@ export const ScriptSettingsModal: Component = () => {
           aria-labelledby="axis-script-settings-title"
           data-testid="axis-script-settings"
           tabIndex={-1}
+          ref={(el) => {
+            if (!el) return;
+            // Tab cycles inside the dialog; dispose restores prior focus on close.
+            const dispose = installFocusTrap(el, { autoFocus: true });
+            onCleanup(dispose);
+          }}
         >
           <div class="sc-dialog-accent" />
           <div class="sc-dialog-header">
@@ -717,7 +724,7 @@ const InputField: Component<{
           <input
             id={id()}
             type="color"
-            class="h-8 w-10 border-2 border-border bg-bg-elev cursor-pointer p-0 rounded-[var(--radius-input)]"
+            class="h-8 w-10 border border-border bg-bg-elev cursor-pointer p-0 rounded-[var(--radius-input)]"
             value={toHexColor(val())}
             disabled={!enabled()}
             onInput={(e) => {
@@ -992,7 +999,8 @@ function dirtyStrategyOverrides(
 }
 
 function toHexColor(v: unknown): string {
-  const s = String(v ?? '#939fff');
+  // Fallback is the void accent (#8B9CFF, index.css @theme), not a legacy indigo.
+  const s = String(v ?? '#8B9CFF');
   if (/^#[0-9a-fA-F]{6}$/.test(s)) return s;
   if (/^#[0-9a-fA-F]{3}$/.test(s)) {
     const r = s[1];
@@ -1000,5 +1008,5 @@ function toHexColor(v: unknown): string {
     const b = s[3];
     return `#${r}${r}${g}${g}${b}${b}`;
   }
-  return '#939fff';
+  return '#8B9CFF';
 }

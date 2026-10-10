@@ -80,19 +80,38 @@ export function installFocusTrap(
     }
     const first = list[0]!;
     const last = list[list.length - 1]!;
-    const active = document.activeElement as HTMLElement | null;
+    const current = document.activeElement as HTMLElement | null;
     if (e.shiftKey) {
-      if (active === first || active === root || !root.contains(active)) {
+      if (current === first || current === root || !root.contains(current)) {
         e.preventDefault();
         last.focus();
       }
-    } else if (active === last) {
+    } else if (current === last) {
       e.preventDefault();
       first.focus();
     }
   };
 
   root.addEventListener('keydown', onKeyDown);
+
+  // Focus containment: Tab cycling alone cannot stop a pointer click or a
+  // programmatic `.focus()` from landing outside the dialog while it is open.
+  // `focusin` bubbles, so one document-level listener pulls focus back in.
+  const canUseDocumentFocus =
+    typeof document !== 'undefined' &&
+    typeof document.addEventListener === 'function';
+  const onFocusIn = (e: FocusEvent) => {
+    const t = e.target as Node | null;
+    if (t && root.contains(t)) return;
+    const list = listFocusable(root);
+    const target = list[0] || root;
+    try {
+      target.focus();
+    } catch {
+      /* ignore */
+    }
+  };
+  if (canUseDocumentFocus) document.addEventListener('focusin', onFocusIn);
 
   if (opts?.autoFocus !== false) {
     const list = listFocusable(root);
@@ -116,6 +135,7 @@ export function installFocusTrap(
 
   return () => {
     root.removeEventListener('keydown', onKeyDown);
+    if (canUseDocumentFocus) document.removeEventListener('focusin', onFocusIn);
     if (prev && typeof prev.focus === 'function') {
       try {
         // Only restore if still in document

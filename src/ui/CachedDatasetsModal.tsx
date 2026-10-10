@@ -560,7 +560,7 @@ export const CachedDatasetsModal: Component<CachedDatasetsModalProps> = (props) 
             </Show>
             <Show when={msg() && !error()}>
               <div
-                class="text-[11px] text-[var(--color-green,#5ecf8a)] border border-[color-mix(in_srgb,var(--color-green,#5ecf8a)_35%,transparent)] bg-[color-mix(in_srgb,var(--color-green,#5ecf8a)_10%,transparent)] px-2 py-1.5 rounded"
+                class="text-[11px] text-green border border-[color-mix(in_srgb,var(--color-green)_35%,transparent)] bg-[color-mix(in_srgb,var(--color-green)_10%,transparent)] px-2 py-1.5 rounded"
                 role="status"
               >
                 {msg()}

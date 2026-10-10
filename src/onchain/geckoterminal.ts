@@ -43,6 +43,8 @@
  */
 
 import type { Bar } from '../store/types';
+import { errMessage, isAbortError } from '../utils/errors';
+import { fetchWithTimeout } from '../utils/fetch-timeout';
 
 export const GECKOTERMINAL_PROVIDER_ID = 'geckoterminal';
 export const GECKOTERMINAL_DEFAULT_BASE =
@@ -219,18 +221,6 @@ function toUnixSeconds(ts: unknown): number | null {
   return Math.floor(n);
 }
 
-function errMessage(err: unknown): string {
-  if (err instanceof Error && err.message) return err.message;
-  if (typeof err === 'string' && err) return err;
-  return 'Unknown error';
-}
-
-function isAbortError(err: unknown): boolean {
-  if (!err || typeof err !== 'object') return false;
-  const name = (err as { name?: string }).name;
-  return name === 'AbortError' || name === 'TimeoutError';
-}
-
 function resolveBaseUrl(baseUrl?: string): string {
   const b = String(baseUrl || GECKOTERMINAL_DEFAULT_BASE)
     .trim()
@@ -369,6 +359,8 @@ export async function fetchGeckoPoolOhlcv(opts: {
   startTime?: number;
   signal?: AbortSignal;
   baseUrl?: string;
+  /** Hard cap per request (default 15 s). */
+  timeoutMs?: number;
 }): Promise<Bar[]> {
   const network = mapAxisNetworkToGecko(opts.network);
   const poolAddress = String(opts.poolAddress || '').trim();
@@ -400,11 +392,15 @@ export async function fetchGeckoPoolOhlcv(opts: {
 
   let res: Response;
   try {
-    res = await fetch(url, {
-      method: 'GET',
-      signal: opts.signal,
-      headers: { Accept: 'application/json' },
-    });
+    res = await fetchWithTimeout(
+      url,
+      {
+        method: 'GET',
+        signal: opts.signal,
+        headers: { Accept: 'application/json' },
+      },
+      { timeoutMs: opts.timeoutMs },
+    );
   } catch (err) {
     if (isAbortError(err)) throw err;
     throw new Error(
@@ -453,6 +449,8 @@ export type SearchGeckoPoolsOpts = {
   limit?: number;
   signal?: AbortSignal;
   baseUrl?: string;
+  /** Hard cap per request (default 15 s). */
+  timeoutMs?: number;
 };
 
 /**
@@ -493,11 +491,15 @@ export async function searchGeckoPools(
 
   let res: Response;
   try {
-    res = await fetch(url, {
-      method: 'GET',
-      signal: opts.signal,
-      headers: { Accept: 'application/json' },
-    });
+    res = await fetchWithTimeout(
+      url,
+      {
+        method: 'GET',
+        signal: opts.signal,
+        headers: { Accept: 'application/json' },
+      },
+      { timeoutMs: opts.timeoutMs },
+    );
   } catch (err) {
     if (isAbortError(err)) throw err;
     throw new Error(

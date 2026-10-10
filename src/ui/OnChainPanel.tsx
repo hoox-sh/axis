@@ -869,7 +869,7 @@ export const OnChainPanel: Component = () => {
                               aria-valuemax={100}
                             >
                               <div
-                                class="h-full bg-[var(--accent,var(--indigo,#6366f1))] transition-[width] duration-200"
+                                class="h-full bg-[var(--color-accent)] transition-[width] duration-200"
                                 style={{ width: `${pct()}%` }}
                               />
                             </div>

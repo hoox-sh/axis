@@ -182,6 +182,7 @@ export async function handleMcp(
   env: Env,
   origin: string,
   pathname: string,
+  ctx?: ExecutionContext,
 ): Promise<Response | null> {
   if (pathname === '/.well-known/oauth-protected-resource') {
     const url = new URL(req.url);
@@ -270,18 +271,18 @@ export async function handleMcp(
     );
   }
 
-  const ctx: ToolContext = { env, origin, auth: auth.ctx };
+  const toolCtx: ToolContext = { env, origin, auth: auth.ctx, executionCtx: ctx };
   if (parsed.batch) {
     const out: JsonRpcResponse[] = [];
     for (const item of parsed.requests) {
-      const res = await handleOne(ctx, item);
+      const res = await handleOne(toolCtx, item);
       if (res) out.push(res);
     }
     if (!out.length) return new Response(null, { status: 202, headers: jsonHeaders(origin) });
     return new Response(JSON.stringify(out), { status: 200, headers: jsonHeaders(origin) });
   }
 
-  const res = await handleOne(ctx, parsed.request);
+  const res = await handleOne(toolCtx, parsed.request);
   if (!res) return new Response(null, { status: 202, headers: jsonHeaders(origin) });
   return new Response(JSON.stringify(res), { status: 200, headers: jsonHeaders(origin) });
 }

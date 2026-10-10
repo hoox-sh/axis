@@ -7,7 +7,7 @@ tags: [cli, code, packages, services]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:06:45Z
+  at: 2026-10-10T20:32:38Z
 sources:
   - id: tree
     resource: "packages/cli/src/services"
@@ -18,8 +18,8 @@ okf_lock: generated
 
 # Files
 
-* `health.ts` — HealthResult, WorkerHealthFeatures, defaultWorkerUrl, healthFeatures, isHealthyPayload, mintWorkerApiKey, probeHealth, probeOAuthStart, probeScripts, validateWorkerApiKey
-* `wrangler-toml.ts` — commentTomlVar, ensureWranglerToml, getD1DatabaseId, getKvBindingId, getTomlName, getTomlVar, hasTomlVar, isPlaceholderId, parseKvNamespaceId, readTomlText, setTomlVar, upsertKvNamespace
+* `health.ts` — HealthResult, WorkerHealthFeatures, assertHttpsForSecret, defaultWorkerUrl, healthFeatures, isHealthyPayload, isLocalWorkerUrl, mintWorkerApiKey, probeHealth, probeOAuthStart, probeScripts, validateWorkerApiKey
+* `wrangler-toml.ts` — activeArrayTables, commentTomlVar, deployOpenKeysViolation, ensureWranglerToml, getD1DatabaseId, getKvBindingId, getTomlName, getTomlVar, hasD1DbBinding, hasTomlVar, isOpenKeysEnabled, isPlaceholderId
 
 # Packages
 

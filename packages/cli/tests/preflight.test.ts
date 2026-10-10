@@ -51,6 +51,23 @@ describe("detectInstallContext", () => {
     expect(detectInstallContext("file:///$bunfs/root/index.js")).toBe("binary");
     expect(detectInstallContext("file:///B:/$bunfs/root/index.js")).toBe("binary");
   });
+
+  test("normalizes Windows backslash separators before matching (G21)", () => {
+    expect(
+      detectInstallContext(
+        "file:///C:/Users/u/AppData/Roaming/npm/node_modules/@hoox-sh/axis-cli/dist/index.js"
+      )
+    ).toBe("npm-install");
+    // fileURLToPath on Windows yields C:\… — the matcher must still classify.
+    expect(
+      detectInstallContext("C:\\Users\\u\\Git\\axis\\packages\\cli\\src\\index.ts")
+    ).toBe("repo-checkout");
+    expect(
+      detectInstallContext(
+        "C:\\Users\\u\\.npm\\_npx\\abc\\node_modules\\@hoox-sh\\axis-cli\\dist\\index.js"
+      )
+    ).toBe("npx-cache");
+  });
 });
 
 describe("checkEngines", () => {

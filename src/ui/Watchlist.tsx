@@ -84,6 +84,7 @@ import {
   type AlertKind,
 } from '../alerts';
 import { Icons } from './icons';
+import { dismissOnOutside } from './dismiss-on-outside';
 import { bigPriceSizeClass } from './watchlist-row';
 import { FloatableShell } from './panels/FloatableShell';
 import { announce } from './sr-announce';
@@ -649,22 +650,15 @@ export const Watchlist: Component = () => {
 
   createEffect(() => {
     if (!alertSym()) return;
-    const onDoc = (e: PointerEvent) => {
-      const t = e.target as Node;
-      if (alertPopEl?.contains(t) || alertAnchorEl?.contains(t)) return;
-      closeAlert();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeAlert();
-    };
     const onReposition = () => placeAlertPop();
-    document.addEventListener('pointerdown', onDoc, true);
-    document.addEventListener('keydown', onKey);
+    const disposeDismiss = dismissOnOutside({
+      inside: () => [alertPopEl, alertAnchorEl],
+      onDismiss: () => closeAlert(),
+    });
     window.addEventListener('resize', onReposition);
     window.addEventListener('scroll', onReposition, true);
     onCleanup(() => {
-      document.removeEventListener('pointerdown', onDoc, true);
-      document.removeEventListener('keydown', onKey);
+      disposeDismiss();
       window.removeEventListener('resize', onReposition);
       window.removeEventListener('scroll', onReposition, true);
     });

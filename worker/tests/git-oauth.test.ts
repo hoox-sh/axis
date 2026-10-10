@@ -254,4 +254,35 @@ describe('handleGitOAuth', () => {
     expect(bodySeen).toContain('Iv1.env-wins');
     expect(bodySeen).not.toContain('Iv1.attacker');
   });
+
+  it('forge fetches carry an abort timeout (A15)', async () => {
+    let seenSignal: unknown;
+    // @ts-expect-error test override
+    globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      seenSignal = init?.signal;
+      return new Response(
+        JSON.stringify({
+          device_code: 'd',
+          user_code: 'U',
+          verification_uri: 'https://github.com/login/device',
+          expires_in: 900,
+          interval: 5,
+        }),
+        { status: 200 },
+      );
+    });
+
+    await handleGitOAuth(
+      new Request('http://x/api/git/oauth/device/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'github', clientId: 'Iv1.x' }),
+      }),
+      {},
+      'http://localhost:3000',
+      '/api/git/oauth/device/start',
+      cors,
+    );
+    expect(seenSignal instanceof AbortSignal).toBe(true);
+  });
 });

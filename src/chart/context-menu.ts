@@ -173,7 +173,7 @@ function viewRows(): ContextMenuEntry[] {
 }
 
 function settingsRow(): ContextMenuEntry[] {
-  return [sep('sep-settings'), item('app.settings', 'Chart settings')];
+  return [sep('sep-settings'), item('chart.settings', 'Chart settings')];
 }
 
 function shotRows(): ContextMenuEntry[] {

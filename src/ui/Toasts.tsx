@@ -40,13 +40,13 @@ function levelStyle(level: LogLevel): {
 } {
   switch (level) {
     case 'error':
-      return { bar: 'bg-[#F07178]', text: 'text-red', icon: Icons.alert };
+      return { bar: 'bg-red', text: 'text-red', icon: Icons.alert };
     case 'warn':
-      return { bar: 'bg-[#E8B84A]', text: 'text-orange', icon: Icons.alert };
+      return { bar: 'bg-orange', text: 'text-orange', icon: Icons.alert };
     case 'ok':
-      return { bar: 'bg-[#3DDC97]', text: 'text-accent-2', icon: Icons.check };
+      return { bar: 'bg-accent-2', text: 'text-accent-2', icon: Icons.check };
     default:
-      return { bar: 'bg-[#6B7382]', text: 'text-text-dim', icon: Icons.activity };
+      return { bar: 'bg-text-faint', text: 'text-text-dim', icon: Icons.activity };
   }
 }
 

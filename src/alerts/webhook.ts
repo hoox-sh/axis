@@ -27,6 +27,7 @@
  * @module alerts/webhook
  */
 
+import { fetchWithTimeout } from '../utils/fetch-timeout';
 import type { Alert, L2WebhookPayload, WebhookPayload } from './types';
 
 /** Default wall-clock budget for alert webhook POSTs. */
@@ -140,32 +141,22 @@ export async function fireWebhook(
     typeof opts?.timeoutMs === 'number' && Number.isFinite(opts.timeoutMs) && opts.timeoutMs > 0
       ? opts.timeoutMs
       : WEBHOOK_TIMEOUT_MS;
-  const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  if (ac) {
-    timer = setTimeout(() => {
-      try {
-        ac.abort();
-      } catch {
-        /* ignore */
-      }
-    }, timeoutMs);
-  }
   try {
-    const res = await fetchImpl(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
+    const res = await fetchWithTimeout(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-      signal: ac?.signal,
-    });
+      { timeoutMs, fetchImpl },
+    );
     return res.ok;
   } catch {
     return false;
-  } finally {
-    if (timer != null) clearTimeout(timer);
   }
 }
 

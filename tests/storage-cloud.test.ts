@@ -17,6 +17,7 @@ import { _resetSourceRegistrationFlag } from '../src/sources/catalog';
 import { _resetStreamRegistrationFlag } from '../src/streams/catalog';
 import { _resetEngineRegistrationFlag } from '../src/engines/catalog';
 import { setStore } from '../src/store';
+import { forgetSecret, CLOUD_API_KEY_SLOT } from '../src/storage/vault';
 
 class MemoryStorage {
   store = new Map<string, string>();
@@ -46,7 +47,7 @@ beforeEach(() => {
   _resetBootstrapFlag();
   ensureBuiltins();
   setStore('pluginsConfig', 'storage:cloud', {
-    endpoint: 'http://cloud.test',
+    endpoint: 'https://cloud.test',
     apiKey: 'pn_' + 'a'.repeat(48),
   });
 });
@@ -82,7 +83,7 @@ describe('storage-cloud plugin', () => {
     }) as typeof fetch;
 
     const list = await cloudStoragePlugin.list({
-      config: { endpoint: 'http://cloud.test', apiKey: 'pn_' + 'a'.repeat(48) },
+      config: { endpoint: 'https://cloud.test', apiKey: 'pn_' + 'a'.repeat(48) },
     });
     expect(list).toHaveLength(1);
     expect(list[0].name).toBe('Remote');
@@ -116,16 +117,20 @@ describe('storage-cloud plugin', () => {
         content: 'plot(1)',
         updatedAt: Date.now(),
       },
-      { endpoint: 'http://cloud.test', apiKey: 'pn_' + 'a'.repeat(48) },
+      { endpoint: 'https://cloud.test', apiKey: 'pn_' + 'a'.repeat(48) },
     );
     expect(meta.id).toBe('s2');
     expect(meta.revision).toBe('r2');
   });
 
   it('throws when API key missing', async () => {
-    setStore('pluginsConfig', 'storage:cloud', { endpoint: 'http://cloud.test', apiKey: '' });
+    // No key anywhere: empty call-site value, empty legacy bag, empty vault
+    // (the session vault can otherwise satisfy resolution — that is the D1
+    // migration working as intended).
+    forgetSecret(CLOUD_API_KEY_SLOT);
+    setStore('pluginsConfig', 'storage:cloud', { endpoint: 'https://cloud.test', apiKey: '' });
     await expect(
-      cloudStoragePlugin.list({ config: { endpoint: 'http://cloud.test', apiKey: '' } }),
+      cloudStoragePlugin.list({ config: { endpoint: 'https://cloud.test', apiKey: '' } }),
     ).rejects.toThrow(/API key/);
   });
 
@@ -137,7 +142,7 @@ describe('storage-cloud plugin', () => {
     }) as typeof fetch;
 
     const st = await cloudStoragePlugin.getStatus?.({
-      endpoint: 'http://cloud.test',
+      endpoint: 'https://cloud.test',
       apiKey: 'pn_' + 'a'.repeat(48),
     });
     expect(st?.connected).toBe(true);
@@ -164,7 +169,7 @@ describe('storage-cloud plugin', () => {
       );
     }) as typeof fetch;
     const vers = await cloudStoragePlugin.listVersions!('s1', {
-      config: { endpoint: 'http://cloud.test', apiKey: 'pn_' + 'a'.repeat(48) },
+      config: { endpoint: 'https://cloud.test', apiKey: 'pn_' + 'a'.repeat(48) },
     });
     expect(vers).toHaveLength(1);
     expect(vers[0].sha).toBe('rev_new');
@@ -191,7 +196,7 @@ describe('storage-cloud plugin', () => {
     const doc = await cloudStoragePlugin.readAtRevision!(
       's1',
       'oldrev',
-      { endpoint: 'http://cloud.test', apiKey: 'pn_' + 'a'.repeat(48) },
+      { endpoint: 'https://cloud.test', apiKey: 'pn_' + 'a'.repeat(48) },
     );
     expect(doc.content).toBe('plot(old)');
   });
@@ -200,9 +205,19 @@ describe('storage-cloud plugin', () => {
     globalThis.fetch = mock(async () => new Response('nope', { status: 401 })) as typeof fetch;
     await expect(
       cloudStoragePlugin.list({
-        config: { endpoint: 'http://cloud.test', apiKey: 'pn_' + 'a'.repeat(48) },
+        config: { endpoint: 'https://cloud.test', apiKey: 'pn_' + 'a'.repeat(48) },
       }),
     ).rejects.toThrow(/401|auth|key|unauthor/i);
+  });
+
+  it('D14 — refuses to send the Bearer key over cleartext http', async () => {
+    const spy = mock(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch;
+    globalThis.fetch = spy;
+    await expect(
+      cloudStoragePlugin.list({
+        config: { endpoint: 'http://cloud.test', apiKey: 'pn_' + 'a'.repeat(48) },
+      }),
+    ).rejects.toThrow(/https/);
   });
 
   it('write surfaces 409 conflict', async () => {
@@ -215,7 +230,7 @@ describe('storage-cloud plugin', () => {
           content: 'plot(1)',
           updatedAt: Date.now(),
         },
-        { endpoint: 'http://cloud.test', apiKey: 'pn_' + 'a'.repeat(48) },
+        { endpoint: 'https://cloud.test', apiKey: 'pn_' + 'a'.repeat(48) },
       ),
     ).rejects.toThrow(/409|conflict/i);
   });
@@ -246,12 +261,12 @@ describe('storage-cloud plugin', () => {
     }) as typeof fetch;
 
     const doc = await cloudStoragePlugin.read('s3', {
-      endpoint: 'http://cloud.test',
+      endpoint: 'https://cloud.test',
       apiKey: 'pn_' + 'a'.repeat(48),
     });
     expect(doc.content).toContain('plot');
     await cloudStoragePlugin.remove('s3', {
-      endpoint: 'http://cloud.test',
+      endpoint: 'https://cloud.test',
       apiKey: 'pn_' + 'a'.repeat(48),
     });
   });
@@ -259,7 +274,7 @@ describe('storage-cloud plugin', () => {
   it('getStatus reports disconnected on health fail', async () => {
     globalThis.fetch = mock(async () => new Response('down', { status: 503 })) as typeof fetch;
     const st = await cloudStoragePlugin.getStatus?.({
-      endpoint: 'http://cloud.test',
+      endpoint: 'https://cloud.test',
       apiKey: 'pn_' + 'a'.repeat(48),
     });
     expect(st?.connected).toBe(false);

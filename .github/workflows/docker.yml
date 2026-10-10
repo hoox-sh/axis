@@ -64,6 +64,12 @@ jobs:
 
       - name: Meta
         id: meta
+        # Script-injection safe: workflow inputs arrive via env, never
+        # interpolated into the shell (same G16 rule as release.yml).
+        env:
+          INPUT_TARGETS: ${{ github.event.inputs.targets }}
+          INPUT_PUSH: ${{ inputs.push }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           SHA_SHORT="${GITHUB_SHA::7}"
           echo "sha_short=${SHA_SHORT}" >> "$GITHUB_OUTPUT"
@@ -73,10 +79,10 @@ jobs:
             MULTIARCH=true
           else
             TAG="latest"
-            TARGET="${{ github.event.inputs.targets || 'all' }}"
+            TARGET="${INPUT_TARGETS:-all}"
             # `all` includes :local tags that bake-action --push tries to
             # push to docker.io. GHCR push must use the release group.
-            if [[ "${{ github.event_name }}" != "pull_request" && "${TARGET}" == "all" ]]; then
+            if [[ "${EVENT_NAME}" != "pull_request" && "${TARGET}" == "all" ]]; then
               TARGET="release"
             fi
             MULTIARCH=false
@@ -84,11 +90,13 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "bake_target=${TARGET}" >> "$GITHUB_OUTPUT"
           echo "multiarch=${MULTIARCH}" >> "$GITHUB_OUTPUT"
-          VER=$(node -p "require('./package.json').version" 2>/dev/null || echo "2.0.0")
+          # VERSION file is the single source of truth (G23) — never a
+          # hardcoded fallback that drifts from the release.
+          VER=$(cat VERSION 2>/dev/null || node -p "require('./package.json').version" 2>/dev/null || echo "2.21.0")
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
           PUSH=false
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
-            if [[ "${{ github.event_name }}" != "workflow_dispatch" || "${{ inputs.push }}" == "true" ]]; then
+          if [[ "${EVENT_NAME}" != "pull_request" ]]; then
+            if [[ "${EVENT_NAME}" != "workflow_dispatch" || "${INPUT_PUSH}" == "true" ]]; then
               PUSH=true
             fi
           fi
@@ -157,6 +165,8 @@ jobs:
 
       - name: Summary
         if: always()
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
         run: |
           {
             echo "## Docker bake"
@@ -168,5 +178,5 @@ jobs:
             echo "| Tag | \`${{ steps.meta.outputs.tag }}\` |"
             echo "| SHA | \`${{ steps.meta.outputs.sha_short }}\` |"
             echo "| Version | \`${{ steps.meta.outputs.version }}\` |"
-            echo "| Image | \`ghcr.io/${{ github.repository_owner }}/axis:pwa\` |"
+            echo "| Image | \`ghcr.io/${REPO_OWNER}/axis:pwa\` |"
           } >> "$GITHUB_STEP_SUMMARY"

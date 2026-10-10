@@ -7,7 +7,7 @@ tags: [cli, code, packages, utils]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:05:44Z
+  at: 2026-10-10T20:32:38Z
 sources:
   - id: tree
     resource: "packages/cli/src/utils"
@@ -23,7 +23,7 @@ okf_lock: generated
 * `paths.ts` — AxisPaths, findAxisRoot, getPaths
 * `preflight.ts` — InstallContext, PreflightReport, checkEngines, collectPreflight, compareSemver, detectInstallContext
 * `prompt.ts` — promptLine, promptSecret
-* `run.ts` — RunOptions, RunResult, run, runWrangler, which, wranglerCmd
+* `run.ts` — ResolveDeps, RunOptions, RunResult, SpawnPlan, planSpawn, quoteCmdArg, resolveOnPath, run, runWrangler, which, wranglerCmd, wranglerPackageSpec
 * `theme.ts` — icons, theme
 
 # Packages

@@ -58,7 +58,7 @@ describe('Series Factory', () => {
 
 describe('Stream Plugin', () => {
   it('has binance stream', async () => {
-    const { binanceStream } = await import('../src/streams/binance');
+    const { binanceStream } = await import('../src/streams/catalog');
     expect(binanceStream.id).toBe('binance-ws');
     expect(binanceStream.name).toBe('Binance WebSocket');
   });

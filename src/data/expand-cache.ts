@@ -33,7 +33,7 @@ import type { SourcePlugin } from '../plugins/types';
 import { pluginKey } from '../plugins/types';
 import { store } from '../store';
 import { normalizeHistoricalBars, sanitizeBar } from './parse-bars';
-import { normalizeLoadSymbol } from './load-symbol';
+import { normalizeLoadSymbol } from './symbol-exchange';
 import { getDataset, putDatasetBars } from './dataset-store';
 import { intervalToSec } from './bars-gaps';
 import {

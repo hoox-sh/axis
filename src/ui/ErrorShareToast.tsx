@@ -52,7 +52,7 @@ export const ErrorShareToast: Component = () => {
       {(o) => (
         <div
           class="fixed bottom-10 left-1/2 -translate-x-1/2 z-[80] max-w-md w-[min(92vw,28rem)]
-            border-2 border-border bg-bg-elev shadow-lg px-3 py-2.5 flex flex-col gap-2"
+            border border-border bg-bg-elev shadow-lg px-3 py-2.5 flex flex-col gap-2"
           data-testid="axis-error-share-toast"
           role="dialog"
           aria-label="Share error diagnostic"

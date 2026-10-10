@@ -142,12 +142,12 @@ export const SystemLogs: Component = () => {
 
   const levelDot = (level: LogEntry['level']) =>
     level === 'error'
-      ? 'bg-[#F07178]'
+      ? 'bg-red'
       : level === 'ok'
-        ? 'bg-[#3DDC97]'
+        ? 'bg-accent-2'
         : level === 'warn'
-          ? 'bg-[#E8B84A]'
-          : 'bg-[#6B7382]';
+          ? 'bg-orange'
+          : 'bg-text-faint';
 
   return (
     <Show when={isPanelOpen('logs')}>
@@ -214,14 +214,14 @@ export const SystemLogs: Component = () => {
             {(entry) => (
               <button
                 type="button"
-                class="flex-1 min-w-0 text-left text-[11px] font-mono px-1 text-[#9AA3B2] inline-flex items-center gap-1.5"
+                class="flex-1 min-w-0 text-left text-[11px] font-mono px-1 text-text-dim inline-flex items-center gap-1.5"
                 title="Click to expand"
                 onClick={toggleExpand}
               >
                 <span class={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${levelDot(entry().level)}`} />
-                <span class="text-[#6B7382] shrink-0 tabular-nums">{formatTs(entry().ts)}</span>
+                <span class="text-text-faint shrink-0 tabular-nums">{formatTs(entry().ts)}</span>
                 <span class={`shrink-0 uppercase ${levelClass(entry().level)}`}>{entry().level}</span>
-                <span class="text-[#6B7382] shrink-0 truncate max-w-[8ch]">{entry().source || 'system'}</span>
+                <span class="text-text-faint shrink-0 truncate max-w-[8ch]">{entry().source || 'system'}</span>
                 <span class="truncate min-w-0">
                   {entry().message}
                   <Show when={(entry().count || 0) > 1}>
@@ -232,7 +232,7 @@ export const SystemLogs: Component = () => {
             )}
           </Show>
           <Show when={!expanded() && !last()}>
-            <span class="flex-1 text-[11px] text-[#6B7382] px-1">No log entries yet</span>
+            <span class="flex-1 text-[11px] text-text-faint px-1">No log entries yet</span>
           </Show>
           <Show when={expanded()}>
             <div class="flex-1" />
@@ -268,7 +268,7 @@ export const SystemLogs: Component = () => {
         <Show when={expanded()}>
           <div
             ref={listRef}
-            class="overflow-auto border-t border-[#1C2230] font-mono text-[11px] bg-[#07080C]"
+            class="overflow-auto border-t border-border font-mono text-[11px] bg-void"
             style={{
               // Clamp against the viewport so a persisted oversized height can
               // never push the Status strip (rendered below) off-screen.
@@ -287,7 +287,7 @@ export const SystemLogs: Component = () => {
                 {(entry) => (
                   // biome-ignore lint/a11y: double-click copy is a mouse convenience; each row already exposes an explicit copy button
                   <div
-                    class="group flex items-start gap-2 px-2 py-0.5 border-b border-[#1C2230]/50 hover:bg-white/[0.03]"
+                    class="group flex items-start gap-2 px-2 py-0.5 border-b border-border/50 hover:bg-text/[0.03]"
                     onDblClick={(e) => void copyLine(entry, e)}
                     title="Double-click to copy message"
                   >
@@ -295,7 +295,7 @@ export const SystemLogs: Component = () => {
                       class={`inline-block w-1.5 h-1.5 rounded-full shrink-0 mt-1 ${levelDot(entry.level)}`}
                       title={entry.level}
                     />
-                    <span class="text-[#6B7382] w-[13ch] shrink-0 select-none tabular-nums">
+                    <span class="text-text-faint w-[13ch] shrink-0 select-none tabular-nums">
                       {formatTs(entry.ts)}
                     </span>
                     <span
@@ -303,10 +303,10 @@ export const SystemLogs: Component = () => {
                     >
                       {entry.level}
                     </span>
-                    <span class="text-[#6B7382] w-14 flex-shrink-0 truncate select-none">
+                    <span class="text-text-faint w-14 flex-shrink-0 truncate select-none">
                       {entry.source}
                     </span>
-                    <span class="flex-1 min-w-0 break-words text-[#9AA3B2]">
+                    <span class="flex-1 min-w-0 break-words text-text-dim">
                       {entry.message}
                       <Show when={(entry.count || 0) > 1}>
                         <span class="text-accent"> ×{entry.count}</span>

@@ -9,25 +9,39 @@
  *
  * Strategy:
  *   - Navigation (HTML)     → network-first, shell cache fallback
- *   - Same-origin static    → cache-first with fetch retry (shell for precache
- *     paths, else runtime); a transient reset must not fail an uncached asset
- *     includes /pyodide/* + /vendor/* for offline pyodide engine
+ *   - Same-origin immutable static (`/assets/`, `/pyodide/v<ver>/`)
+ *                           → cache-first (hashed/versioned; safe to pin)
+ *   - Same-origin other static (plugins, unversioned wheels, root files)
+ *                           → network-first with cache fallback (never pin
+ *     old code); pyodide/vendor payloads live in their own cache + cap
  *   - CDN (esm.sh, jsdelivr, unpkg, cdnjs) → cache-first runtime
- *   - Same-origin /api/*    → network-first; cache only HTTP 200 basic;
- *     offline miss → 503 JSON (never cache opaque/errors as success)
+ *   - Same-origin /api/*    → network-only; NEVER write to cache (responses
+ *     may carry auth/session context). A stale entry from an older SW may
+ *     serve an offline fallback, else 503 JSON. `no-store` requests skip
+ *     the cache read; `private`/`no-store` responses are never stored.
  *   - Same-origin /version.json → do not intercept (update poll must hit network)
  *   - Non-GET / other cross-origin → do not intercept
  *
+ * Activation (skipWaiting) NEVER happens on install: the page opts in via
+ * `SKIP_WAITING` postMessage only after the user consents through the update
+ * banner, so a reload never lands mid-edit. Automatic reloads keep the
+ * close guard enabled (see `src/pwa/register-sw.ts`).
+ *
  * Version bump (VERSION) when precache list or strategy semantics change.
- * Activate deletes old `axis-*` caches only; current shell/runtime kept.
+ * Activate deletes old `axis-*` caches only; current shell/runtime/pyodide kept.
  */
 
-const VERSION = 'v7';
+const VERSION = 'v8';
 const CACHE_PREFIX = 'axis-';
 const SHELL_CACHE = `${CACHE_PREFIX}shell-${VERSION}`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-${VERSION}`;
-/** Soft cap on runtime cache entries (hashed assets + pyodide + CDN). Keep in sync with src/sw/strategy.ts. */
+const PYODIDE_CACHE = `${CACHE_PREFIX}pyodide-${VERSION}`;
+/** Soft cap on runtime cache entries (hashed assets + CDN). Keep in sync with src/sw/strategy.ts. */
 const RUNTIME_CACHE_MAX_ENTRIES = 96;
+/** Soft cap on pyodide/vendor cache entries (own cap so engine files cannot evict app assets). Keep in sync. */
+const PYODIDE_CACHE_MAX_ENTRIES = 32;
+/** API responses are never written to cache (D2). Keep in sync with src/sw/strategy.ts. */
+const API_CACHE_ENABLED = false;
 /** Uncached static/CDN fetch retries. Keep in sync with src/sw/strategy.ts. */
 const FETCH_RETRY_ATTEMPTS = 3;
 const FETCH_RETRY_TIMEOUT_MS = 8000;
@@ -57,6 +71,40 @@ function isVersionProbe(pathname) {
     return pathname === '/version.json' || pathname.endsWith('/version.json');
 }
 
+/** Same-origin engine/wheel payloads → own cache + cap (D15). Mirrors strategy.ts. */
+function isPyodidePath(pathname) {
+    return pathname === '/pyodide' || pathname.startsWith('/pyodide/') ||
+        pathname === '/vendor' || pathname.startsWith('/vendor/');
+}
+
+/** Immutable statics (hashed bundles, versioned engine) → cache-first (D4). Mirrors strategy.ts. */
+function isImmutableStaticPath(pathname) {
+    if (pathname === '/assets' || pathname.startsWith('/assets/')) return true;
+    return /^\/pyodide\/v[^/]+\//.test(pathname);
+}
+
+/** `no-store` requests skip the cache read. Mirrors strategy.ts. */
+function isNoStoreRequest(req) {
+    try {
+        if (req.cache === 'no-store') return true;
+        const cc = String(req.headers ? req.headers.get('Cache-Control') || '' : '').toLowerCase();
+        return cc.split(',').map((s) => s.trim()).includes('no-store');
+    } catch {
+        return false;
+    }
+}
+
+/** `private` / `no-store` responses are never stored. Mirrors strategy.ts. */
+function isNonCacheableResponse(res) {
+    try {
+        const cc = String(res.headers ? res.headers.get('Cache-Control') || '' : '').toLowerCase();
+        const parts = cc.split(',').map((s) => s.trim());
+        return parts.includes('no-store') || parts.includes('private');
+    } catch {
+        return false;
+    }
+}
+
 /** Opaque / error must never be stored as a successful cache entry. */
 function shouldCacheStaticResponse(res) {
     if (!res) return false;
@@ -66,16 +114,17 @@ function shouldCacheStaticResponse(res) {
     if (res.type !== 'basic' && res.type !== 'cors' && res.type !== 'default') {
         return false;
     }
-    return res.ok === true && res.status >= 200 && res.status < 300;
+    if (res.ok !== true || res.status < 200 || res.status >= 300) return false;
+    return !isNonCacheableResponse(res);
 }
 
+/**
+ * API responses are NEVER cached (D2) — see API_CACHE_ENABLED. Kept as a
+ * function so the shape mirrors src/sw/strategy.ts for the parity test.
+ */
 function shouldCacheApiResponse(res) {
-    if (!res) return false;
-    if (res.type === 'opaque' || res.type === 'error' || res.type === 'opaqueredirect') {
-        return false;
-    }
-    if (res.type !== 'basic' && res.type !== 'default') return false;
-    return res.status === 200;
+    void res;
+    return false;
 }
 
 function offlineApiResponse() {
@@ -106,14 +155,17 @@ self.addEventListener('install', (event) => {
                 }
             }),
         );
-        self.skipWaiting();
+        // D3: NO skipWaiting here. The new worker stays `waiting` until the
+        // page opts in with a SKIP_WAITING postMessage after the user
+        // consents through the update banner — a version bump never reloads
+        // mid-edit on its own.
     })());
 });
 
 self.addEventListener('activate', (event) => {
     event.waitUntil((async () => {
         const names = await caches.keys();
-        const keep = new Set([SHELL_CACHE, RUNTIME_CACHE]);
+        const keep = new Set([SHELL_CACHE, RUNTIME_CACHE, PYODIDE_CACHE]);
         await Promise.all(
             names
                 .filter((n) => n.startsWith(CACHE_PREFIX) && !keep.has(n))
@@ -123,11 +175,11 @@ self.addEventListener('activate', (event) => {
     })());
 });
 
-/** After put into runtime cache, drop oldest entries past the soft cap. */
-async function trimRuntimeCache(cache) {
+/** After put into a capped cache, drop oldest entries past the soft cap. */
+async function trimCache(cache, maxEntries) {
     try {
         const keys = await cache.keys();
-        const drop = keys.length - RUNTIME_CACHE_MAX_ENTRIES;
+        const drop = keys.length - maxEntries;
         if (drop <= 0) return;
         for (let i = 0; i < drop; i++) {
             try {
@@ -141,9 +193,9 @@ async function trimRuntimeCache(cache) {
     }
 }
 
-async function putRuntime(cache, req, res) {
+async function putCapped(cache, maxEntries, req, res) {
     await cache.put(req, res);
-    await trimRuntimeCache(cache);
+    await trimCache(cache, maxEntries);
 }
 
 /**
@@ -169,7 +221,7 @@ async function fetchWithRetry(req, attempts = FETCH_RETRY_ATTEMPTS) {
     throw lastErr;
 }
 
-async function cacheFirst(req, cacheName) {
+async function cacheFirst(req, cacheName, maxEntries) {
     const cache = await caches.open(cacheName);
     const cached = await cache.match(req);
     if (cached) return cached;
@@ -185,11 +237,7 @@ async function cacheFirst(req, cacheName) {
     }
     if (shouldCacheStaticResponse(res)) {
         try {
-            if (cacheName === RUNTIME_CACHE) {
-                await putRuntime(cache, req, res.clone());
-            } else {
-                await cache.put(req, res.clone());
-            }
+            await putCapped(cache, maxEntries, req, res.clone());
         } catch {
             /* quota / opaque clone edge */
         }
@@ -215,17 +263,13 @@ function offlineShellResponse() {
     });
 }
 
-async function networkFirstStatic(req, cacheName) {
+async function networkFirstStatic(req, cacheName, maxEntries = Number.POSITIVE_INFINITY) {
     const cache = await caches.open(cacheName);
     try {
         const res = await fetch(req);
         if (shouldCacheStaticResponse(res)) {
             try {
-                if (cacheName === RUNTIME_CACHE) {
-                    await putRuntime(cache, req, res.clone());
-                } else {
-                    await cache.put(req, res.clone());
-                }
+                await putCapped(cache, maxEntries, req, res.clone());
             } catch {
                 /* ignore */
             }
@@ -242,13 +286,21 @@ async function networkFirstStatic(req, cacheName) {
     }
 }
 
+/**
+ * D2: network-only. Responses are never written (API_CACHE_ENABLED is false
+ * and shouldCacheApiResponse() is false) because cached 200s ignored
+ * auth/session context. A stale entry left by an older SW may still serve
+ * an offline fallback; `no-store` requests skip even that read.
+ */
 async function networkFirstApi(req) {
-    const cache = await caches.open(RUNTIME_CACHE);
+    const noStore = isNoStoreRequest(req);
+    const cache = noStore ? null : await caches.open(RUNTIME_CACHE);
     try {
         const res = await fetch(req);
-        if (shouldCacheApiResponse(res)) {
+        // Deliberately no cache write, even for HTTP 200.
+        if (API_CACHE_ENABLED && res && shouldCacheApiResponse(res)) {
             try {
-                await putRuntime(cache, req, res.clone());
+                await putCapped(cache, RUNTIME_CACHE_MAX_ENTRIES, req, res.clone());
             } catch {
                 /* ignore */
             }
@@ -256,8 +308,10 @@ async function networkFirstApi(req) {
         // Return network result even when non-200 (do not mask API errors with stale).
         return res;
     } catch {
-        const cached = await cache.match(req);
-        if (cached) return cached;
+        if (cache) {
+            const cached = await cache.match(req);
+            if (cached) return cached;
+        }
         return offlineApiResponse();
     }
 }
@@ -298,11 +352,21 @@ self.addEventListener('fetch', (event) => {
         return;
     }
     if (kind === 'cdn') {
-        event.respondWith(cacheFirst(req, RUNTIME_CACHE));
+        event.respondWith(cacheFirst(req, RUNTIME_CACHE, RUNTIME_CACHE_MAX_ENTRIES));
         return;
     }
-    // same-origin static (JS/CSS/wasm/whl/py/icons/plugins/…)
-    event.respondWith(cacheFirst(req, RUNTIME_CACHE));
+    // Same-origin static (JS/CSS/wasm/whl/py/icons/plugins/…):
+    // - engine/wheel payloads → own pyodide cache + cap (D15)
+    // - immutable hashed/versioned paths → cache-first (D4)
+    // - everything else unhashed → network-first so old code is never pinned
+    const engine = isPyodidePath(url.pathname);
+    const targetCache = engine ? PYODIDE_CACHE : RUNTIME_CACHE;
+    const targetCap = engine ? PYODIDE_CACHE_MAX_ENTRIES : RUNTIME_CACHE_MAX_ENTRIES;
+    if (isImmutableStaticPath(url.pathname)) {
+        event.respondWith(cacheFirst(req, targetCache, targetCap));
+    } else {
+        event.respondWith(networkFirstStatic(req, targetCache, targetCap));
+    }
 });
 
 // Allow the page to trigger an immediate skip-waiting via postMessage.

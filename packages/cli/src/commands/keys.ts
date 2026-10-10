@@ -10,6 +10,7 @@ import type { Command } from "commander";
 import { getPaths } from "../utils/paths.js";
 import { getTomlVar, hasTomlVar } from "../services/wrangler-toml.js";
 import {
+  assertHttpsForSecret,
   defaultWorkerUrl,
   mintWorkerApiKey,
   validateWorkerApiKey,
@@ -79,6 +80,8 @@ export async function runKeysCreate(
 ): Promise<void> {
   printHeader("AXIS keys create", opts.quiet);
   const base = flags.url || defaultWorkerUrl();
+  // The admin token is a Bearer-equivalent secret — never cleartext off-host.
+  assertHttpsForSecret(base, "axis keys create");
   const { token, tomlCollision } = await resolveAdminToken(flags.adminToken, opts);
   if (!token) {
     throw new CLIError(
@@ -146,6 +149,8 @@ export async function runKeysValidate(
     );
   }
   const base = flags.url || defaultWorkerUrl();
+  // The API key is a Bearer secret — never cleartext off-host.
+  assertHttpsForSecret(base, "axis keys validate");
   const result = await validateWorkerApiKey(base, key);
   if (!result.ok) {
     throw new CLIError(

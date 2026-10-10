@@ -76,7 +76,7 @@ export const UpdateBanner: Component = () => {
       {(u) => (
         <div
           class="fixed top-0 left-0 right-0 z-[90] flex items-center justify-center gap-2 px-3 py-2
-            bg-bg-panel border-b-2 border-accent shadow-[0_4px_20px_rgba(0,0,0,0.45)]"
+            bg-bg-panel border-b border-accent shadow-[0_4px_20px_rgba(0,0,0,0.45)]"
           data-testid="axis-update-banner"
           role="alert"
           aria-label="Application update available"

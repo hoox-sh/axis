@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 import { describe, expect, test } from "bun:test";
-import { isBindingNameInUse } from "../src/commands/secrets.js";
+import { isBindingNameInUse, requiresDeployRetry } from "../src/commands/secrets.js";
 
 describe("isBindingNameInUse", () => {
   test("matches Cloudflare 10053 var/secret collision", () => {
@@ -19,5 +19,15 @@ describe("isBindingNameInUse", () => {
   test("ignores unrelated wrangler errors", () => {
     expect(isBindingNameInUse("Authentication error [code: 9106]")).toBe(false);
     expect(isBindingNameInUse("already in use")).toBe(false);
+  });
+});
+
+describe("requiresDeployRetry", () => {
+  test("retries only the 10053 var/secret collision (G10)", () => {
+    const collision = `Binding name 'ADMIN_TOKEN' already in use [code: 10053]`;
+    expect(requiresDeployRetry(collision)).toBe(true);
+    expect(requiresDeployRetry("Authentication error [code: 9106]")).toBe(false);
+    expect(requiresDeployRetry("error: connect ETIMEDOUT")).toBe(false);
+    expect(requiresDeployRetry("")).toBe(false);
   });
 });

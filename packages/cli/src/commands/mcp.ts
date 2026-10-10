@@ -8,7 +8,7 @@
 
 import { createInterface } from "node:readline";
 import type { Command } from "commander";
-import { defaultWorkerUrl } from "../services/health.js";
+import { assertHttpsForSecret, defaultWorkerUrl } from "../services/health.js";
 import {
   CLIError,
   ExitCode,
@@ -28,9 +28,11 @@ export function mcpClientConfig(opts: {
   stdio?: boolean;
 }): Record<string, unknown> {
   if (opts.stdio) {
+    // The key travels via AXIS_API_KEY env only — never as a `--key` argv
+    // (argv is visible to other users via ps). The proxy still accepts
+    // --key for explicit one-shot runs; generated configs must not use it.
     const args = ["mcp"];
     if (opts.url) args.push("--url", opts.url);
-    if (opts.key) args.push("--key", opts.key);
     return {
       mcpServers: {
         axis: {
@@ -58,6 +60,8 @@ export async function postMcp(
   body: unknown,
   key: string
 ): Promise<{ status: number; json: unknown }> {
+  // Every POST carries the Bearer key — never cleartext off-host.
+  if (key) assertHttpsForSecret(url, "axis mcp");
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",

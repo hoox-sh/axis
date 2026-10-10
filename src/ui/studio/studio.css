@@ -25,6 +25,19 @@
   --ax-rail-w: 13.5rem;
   --ax-canvas-pad: clamp(1.5rem, 3vw, 3.25rem);
   --ax-canvas-max: none;
+  /* Elevation — layered ambient + directional shadows (flips for light theme) */
+  --ax-shadow-ambient: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --ax-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px rgba(0, 0, 0, 0.24);
+  --ax-shadow-raised: 0 2px 6px rgba(0, 0, 0, 0.34), 0 16px 40px rgba(0, 0, 0, 0.36);
+  /* Floating panels (chart settings): drop-shadow filter for SVG frames */
+  --ax-drop-shadow: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.5));
+}
+
+[data-theme="light"] {
+  --ax-drop-shadow: drop-shadow(0 18px 40px rgba(18, 24, 40, 0.16));
+  --ax-shadow-ambient: 0 1px 2px rgba(18, 24, 40, 0.08);
+  --ax-shadow-card: 0 1px 2px rgba(18, 24, 40, 0.06), 0 10px 28px rgba(18, 24, 40, 0.08);
+  --ax-shadow-raised: 0 2px 6px rgba(18, 24, 40, 0.08), 0 16px 40px rgba(18, 24, 40, 0.12);
 }
 
 /* ── Overlay ─────────────────────────────────────────────────────── */
@@ -156,6 +169,7 @@
   text-align: left;
   cursor: pointer;
   border-radius: var(--radius-surface);
+  transition: background-color 150ms ease-out, color 150ms ease-out;
 }
 .ax-page-rail-item::before {
   content: "";
@@ -171,6 +185,9 @@
   color: var(--color-text);
   background: var(--color-bg-hover);
   outline: none;
+}
+.ax-page-rail-item:focus-visible {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 45%, transparent);
 }
 .ax-page-rail-item.is-on {
   color: var(--color-text);
@@ -375,6 +392,7 @@
   padding: 0.35rem 0.95rem;
   cursor: pointer;
   letter-spacing: -0.01em;
+  transition: background-color 150ms ease-out, color 150ms ease-out;
 }
 .ax-view-switch-btn + .ax-view-switch-btn {
   border-left: var(--border-w) solid var(--color-border);
@@ -382,6 +400,9 @@
 .ax-view-switch-btn:hover {
   color: var(--color-text);
   background: var(--color-bg-hover);
+}
+.ax-view-switch-btn:active {
+  background: color-mix(in srgb, var(--color-bg-hover) 80%, var(--color-accent) 20%);
 }
 .ax-view-switch-btn.is-on {
   color: var(--color-bg-base);
@@ -576,14 +597,21 @@
   letter-spacing: -0.01em;
   cursor: pointer;
   border-radius: var(--radius-surface);
+  transition: background-color 150ms ease-out, border-color 150ms ease-out,
+    color 150ms ease-out, box-shadow 150ms ease-out, transform 120ms ease-out,
+    opacity 150ms ease-out;
 }
 .ax-btn:hover:not(:disabled) {
   background: var(--color-bg-hover);
   border-color: var(--color-border);
 }
+.ax-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
 .ax-btn:focus-visible {
   outline: none;
   border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 20%, transparent);
 }
 .ax-btn:disabled {
   opacity: 0.45;
@@ -593,11 +621,13 @@
   background: var(--color-accent);
   border-color: var(--color-accent);
   color: var(--color-bg-base);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--color-accent) 32%, transparent);
 }
 .ax-btn--primary:hover:not(:disabled) {
   background: var(--color-accent-hover);
   border-color: var(--color-accent-hover);
   color: var(--color-bg-base);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 38%, transparent);
 }
 .ax-btn--ghost {
   border-color: transparent;
@@ -809,24 +839,31 @@ textarea.ax-input.ax-input--mono {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.55rem;
+  gap: 0.5rem;
   padding: var(--ax-card-pad);
   border: var(--border-w) solid var(--color-border);
   background: var(--color-bg-panel);
   border-radius: var(--radius-surface);
   text-align: left;
   color: inherit;
+  box-shadow: var(--ax-shadow-ambient);
 }
 button.ax-card {
   cursor: pointer;
   font: inherit;
   width: 100%;
+  transition: border-color 150ms ease-out, background-color 150ms ease-out,
+    box-shadow 180ms ease-out, transform 120ms ease-out;
 }
 button.ax-card:hover,
 button.ax-card:focus-visible {
   border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
   background: color-mix(in srgb, var(--color-bg-hover) 50%, var(--color-bg-panel));
+  box-shadow: var(--ax-shadow-card);
   outline: none;
+}
+button.ax-card:active {
+  transform: scale(0.995);
 }
 .ax-card.is-on,
 button.ax-card.is-on,
@@ -863,6 +900,7 @@ button.ax-card[aria-pressed="true"] {
   background: var(--color-bg-panel);
   min-width: 0;
   border-radius: var(--radius-surface);
+  box-shadow: var(--ax-shadow-ambient);
 }
 .ax-stat-label {
   font-size: var(--ax-kicker);
@@ -903,6 +941,8 @@ button.ax-card[aria-pressed="true"] {
   font-weight: 500;
   cursor: pointer;
   border-radius: 999px;
+  transition: background-color 150ms ease-out, border-color 150ms ease-out,
+    color 150ms ease-out, transform 120ms ease-out;
 }
 span.ax-chip,
 .ax-chip--tag {
@@ -921,6 +961,12 @@ span.ax-chip,
   border-color: var(--color-border);
   background: var(--color-bg-hover);
   outline: none;
+}
+.ax-chip:active {
+  transform: scale(0.98);
+}
+.ax-chip:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 20%, transparent);
 }
 .ax-chip.is-on,
 .ax-chip[aria-pressed="true"],
@@ -1031,6 +1077,7 @@ span.ax-chip,
   padding: 1rem 1.15rem;
   background: var(--color-bg-elev);
   border: var(--border-w) solid var(--color-border-soft);
+  border-radius: var(--radius-input);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: var(--ax-mono);
   line-height: 1.5;
@@ -1205,11 +1252,15 @@ span.ax-json-twist {
   font-weight: 550;
   cursor: pointer;
   margin-bottom: calc(-1 * var(--border-w));
+  transition: color 150ms ease-out;
 }
 .ax-tab:hover,
 .ax-tab:focus-visible {
   color: var(--color-text);
   outline: none;
+}
+.ax-tab:focus-visible {
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--color-accent) 55%, transparent);
 }
 .ax-tab[aria-selected="true"] {
   color: var(--color-text);
@@ -2228,5 +2279,22 @@ span.ax-json-twist {
   .ax-page-canvas {
     padding-left: 1.25rem;
     padding-right: 1.25rem;
+  }
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .ax-btn,
+  button.ax-card,
+  .ax-chip,
+  .ax-tab,
+  .ax-view-switch-btn,
+  .ax-page-rail-item {
+    transition: none;
+  }
+  .ax-btn:active:not(:disabled),
+  button.ax-card:active,
+  .ax-chip:active {
+    transform: none;
   }
 }

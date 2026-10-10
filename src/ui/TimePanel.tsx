@@ -24,7 +24,8 @@
  * FloatableShell id `time` (`floatOnly` — no layout docks).
  */
 
-import { type Component, Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { type Component, Show } from 'solid-js';
+import { useNow } from './clock';
 import { store, isPanelOpen } from '../store';
 import { FloatableShell } from './panels/FloatableShell';
 import {
@@ -36,11 +37,7 @@ import {
 
 /** Float-only time panel (candle countdown + clocks). */
 export const TimePanel: Component = () => {
-  const [now, setNow] = createSignal(Date.now());
-  onMount(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    onCleanup(() => window.clearInterval(id));
-  });
+  const now = useNow();
 
   /** Remaining ms to the current bar close; NaN while no bars are loaded. */
   const remaining = () => {

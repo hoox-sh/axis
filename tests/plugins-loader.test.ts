@@ -23,6 +23,7 @@ import {
   DEFAULT_PYNE_AGENT_ENDPOINT,
   normalizePluginUrl,
   assertSafePluginUrl,
+  assertPluginRemoteAllowed,
   loadPluginFromUrl,
   removePlugin,
   getInstalledPlugins,
@@ -83,6 +84,24 @@ describe('assertSafePluginUrl', () => {
   it('allows https and relative', () => {
     expect(() => assertSafePluginUrl('https://cdn.example/p.js')).not.toThrow();
     expect(() => assertSafePluginUrl('/plugins/p.js')).not.toThrow();
+  });
+});
+
+describe('assertPluginRemoteAllowed prod gate (F3)', () => {
+  const inlineJs = `data:text/javascript,${encodeURIComponent('export default { id: "x", kind: "source" }')}`;
+
+  it('rejects data:/blob: plugin URLs in prod', () => {
+    expect(() => assertPluginRemoteAllowed(inlineJs, { prod: true })).toThrow(/production/i);
+    expect(() =>
+      assertPluginRemoteAllowed('blob:https://axis.hoox.sh/550e8400-e29b-41d4-a716-446655440000', {
+        prod: true,
+      }),
+    ).toThrow(/production/i);
+  });
+
+  it('keeps inline data: fixtures loadable outside prod', () => {
+    expect(() => assertPluginRemoteAllowed(inlineJs, { prod: false })).not.toThrow();
+    expect(() => assertPluginRemoteAllowed('/plugins/p.js', { prod: true })).not.toThrow();
   });
 });
 

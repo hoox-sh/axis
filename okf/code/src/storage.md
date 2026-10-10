@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/storage"
-description: "src/storage contains catalog.ts, cloud-config.ts, cloud.ts, and 13 more files."
+description: "src/storage contains catalog.ts, cloud-config.ts, cloud.ts, and 14 more files."
 resource: "src/storage"
 tags: [code, storage]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:05:44Z
+  at: 2026-10-10T20:32:38Z
 sources:
   - id: tree
     resource: "src/storage"
@@ -19,7 +19,7 @@ okf_lock: generated
 # Files
 
 * `catalog.ts` — BUILTIN_STORAGES, _resetStorageRegistrationFlag, ensureStoragesRegistered, getStorage, listStorages, registerDynamicStorage, unregisterDynamicStorage
-* `cloud-config.ts` — CloudConfig, coerceWorkerEndpoint, defaultCloudEndpoint, generateDemoApiKey, resolveCloudConfig, writeStoredCloudConfig
+* `cloud-config.ts` — CloudConfig, coerceWorkerEndpoint, defaultCloudEndpoint, generateDemoApiKey, isLocalhostEndpoint, isSecureCloudEndpoint, requireSecureCloudEndpoint, resolveCloudConfig, writeStoredCloudConfig
 * `cloud.ts` — CloudConfig, cloudStoragePlugin, defaultCloudEndpoint, generateDemoApiKey, probeCloudStorage, resolveCloudConfig, writeStoredCloudConfig
 * `git-config.ts` — DEFAULT_GIT_CONFIG, GitConfig, GitIndexCorruptError, GitProvider, assertGitConfig, assertSafeRepoPath, formatCommitMessage, indexPath, libraryDir, normalizeRepoPath, resolveGitConfig, resolveScriptRepoPath
 * `git-github.ts` — IndexFile, githubDeleteFile, githubGetFile, githubGetFileAtRef, githubList, githubListFileCommits, githubPutFile, githubRead, githubReadIndex, githubRemove, githubStatus, githubWrite
@@ -32,7 +32,8 @@ okf_lock: generated
 * `library-publish-io.ts` — PublishLibraryResult, _resetPublishedCacheForTests, formatImportSnippet, listPublishedLibraries, publishLibrary, readCachedLibrarySource, resolveLibrariesForScript, resolvePublishedLibrary
 * `library-publish.ts` — LibraryImportSpec, PUBLISHED_CACHE_KEY, PUBLISHED_INDEX_VERSION, PublishedIndex, PublishedLibrary, buildPublishedRecord, contentSha, defaultPublishNamespace, emptyPublishedIndex, formatImportSnippet, latestPublished, nextPublishedVersion
 * `local.ts` — LOCAL_STORAGE_VERSION, MAX_RESULTS_PER_SCRIPT, MAX_VERSIONS_PER_SCRIPT, _clearLocalLibraryForTests, _getMemResultsForTests, _resetLocalMigrationFlag, localStoragePlugin
-* `service.ts` — CopyScriptFailure, CopyScriptsResult, ResultMeta, StoredRunResult, _resetPendingStorageChangeForTests, cancelPendingStorageChange, copyScriptsBetweenStorages, exportLibraryJson, getActiveStoragePlugin, getPendingStorageChange, getStorageStatus, importLibraryJson
+* `service.ts` — CopyScriptFailure, CopyScriptsResult, ResultMeta, StoredRunResult, _resetDraftSerializerForTests, _resetPendingStorageChangeForTests, cancelPendingStorageChange, copyScriptsBetweenStorages, exportLibraryJson, getActiveStoragePlugin, getPendingStorageChange, getStorageStatus
+* `vault.ts` — AGENT_API_KEY_SLOT, AGENT_KEY_BAGS, CLOUD_API_KEY_SLOT, CLOUD_KEY_BAGS, GIT_TOKEN_BAGS, GIT_TOKEN_SLOT, VAULT_SESSION_PREFIX, _clearSecretMemoryForTests, captureSecretsFromBags, forgetSecret, getAgentApiKey, getCloudApiKey
 * `workspace-snapshot.ts` — BuildWorkspaceSnapshotOptions, EDITOR_PREFS_KEYS, EditorPrefsKey, EditorPrefsSnapshot, PanelChromeSnapshot, ScriptSnapshotMeta, WORKSPACE_SNAPSHOT_KIND, WORKSPACE_SNAPSHOT_VERSION, WorkspaceSnapshot, WorkspaceSnapshotApplyFields, WorkspaceSnapshotParseError, WorkspaceSnapshotSetters
 
 # Packages
@@ -67,6 +68,7 @@ okf_lock: generated
 * [src/ui/library](/code/src/ui/library.md)
 * [src/ui/plugins](/code/src/ui/plugins.md)
 * [src/ui/settings](/code/src/ui/settings.md)
+* [src/ui/workers](/code/src/ui/workers.md)
 * [tests](/code/tests.md)
 * [tests/integration](/code/tests/integration.md)
 * [tests/security](/code/tests/security.md)

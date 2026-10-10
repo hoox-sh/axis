@@ -11,8 +11,8 @@ export function DsmField(props: {
 }) {
   return (
     // biome-ignore lint/a11y/noLabelWithoutControl: the control is passed as children
-    <label class={`flex flex-col gap-0.5 ${props.class || ''}`}>
-      <span class="text-muted text-[0.68rem] uppercase tracking-wide">{props.label}</span>
+    <label class={`sc-field min-w-0 ${props.class || ''}`}>
+      <span class="sc-label">{props.label}</span>
       {props.children}
     </label>
   );

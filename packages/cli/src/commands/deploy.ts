@@ -14,6 +14,12 @@ import {
   healthFeatures,
   probeHealth,
 } from "../services/health.js";
+import {
+  deployOpenKeysViolation,
+  getKvBindingId,
+  getTomlVar,
+  hasD1DbBinding,
+} from "../services/wrangler-toml.js";
 import { applyScriptsSchema, printCloudStorageNextSteps } from "./setup.js";
 import {
   CLIError,
@@ -50,6 +56,19 @@ export async function deployWorker(
   }
 
   printHeader("AXIS deploy worker", opts.quiet);
+
+  const violation = deployOpenKeysViolation({
+    d1Bound: hasD1DbBinding(paths.wranglerToml),
+    apiKeysKvBound: Boolean(getKvBindingId(paths.wranglerToml, "API_KEYS")),
+    allowOpenKeys: getTomlVar(paths.wranglerToml, "ALLOW_OPEN_KEYS"),
+  });
+  if (violation) {
+    throw new CLIError(
+      "Refusing to deploy: open API keys with D1 and no API_KEYS KV",
+      ExitCode.ERROR,
+      violation
+    );
+  }
 
   if (!flags.skipSchema) {
     try {
@@ -132,25 +151,14 @@ export async function deployPages(opts: GlobalOpts): Promise<void> {
   }
 
   printInfo(`wrangler pages deploy → ${PAGES_PROJECT}…`, opts.quiet);
-  // Prefer worker local wrangler
-  try {
-    await runWrangler(
-      paths.worker,
-      [
-        "pages",
-        "deploy",
-        paths.dist,
-        `--project-name=${PAGES_PROJECT}`,
-      ],
-      { inherit: !opts.quiet }
-    );
-  } catch {
-    await run(
-      "bunx",
-      ["wrangler", "pages", "deploy", paths.dist, `--project-name=${PAGES_PROJECT}`],
-      { cwd: paths.root, inherit: !opts.quiet }
-    );
-  }
+  // Single attempt. runWrangler resolves the local worker wrangler first and
+  // only falls back to a version-pinned bunx/npx when the binary is missing
+  // (see wranglerCmd). A failed deploy is never retried through a second tool.
+  await runWrangler(
+    paths.worker,
+    ["pages", "deploy", paths.dist, `--project-name=${PAGES_PROJECT}`],
+    { inherit: !opts.quiet }
+  );
 
   printOk("Pages deploy finished", opts.quiet);
   if (opts.json) printJson({ ok: true, target: "pages", project: PAGES_PROJECT });

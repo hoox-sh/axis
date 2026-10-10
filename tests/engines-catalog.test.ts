@@ -20,9 +20,14 @@ import {
   registerDynamicEngine,
   ensureEnginesRegistered,
   resolvePyneWorkerEndpoint,
+  callPyodideRunScript,
+  confirmEngineApiKeyTarget,
+  isLoopbackOrigin,
   DEFAULT_PYNE_WORKER_ENDPOINT,
   _resetEngineRegistrationFlag,
 } from '../src/engines/catalog';
+import { parseEngineJson } from '../src/engines/json-sanitize';
+import { barsForPine } from '../src/data/parse-bars';
 import { _resetEngineWsClients } from '../src/engines/engine-ws';
 import { registry } from '../src/plugins/registry';
 import { _resetBootstrapFlag } from '../src/plugins/bootstrap';
@@ -469,5 +474,170 @@ describe('engines catalog', () => {
       },
     });
     expect(getEngine('dyn-eng')).toBeDefined();
+  });
+});
+
+describe('engine JSON sanitizer (shared REST + WS)', () => {
+  it('maps bare NaN/Infinity/-Infinity to null', () => {
+    const v = parseEngineJson('{"a":NaN,"b":Infinity,"c":-Infinity,"d":1}') as Record<
+      string,
+      unknown
+    >;
+    expect(v).toEqual({ a: null, b: null, c: null, d: 1 });
+  });
+
+  it('leaves the words inside string literals untouched', () => {
+    const v = parseEngineJson('{"t":"NaN Infinity -Infinity plot"}') as { t: string };
+    expect(v.t).toBe('NaN Infinity -Infinity plot');
+  });
+});
+
+describe('confirmEngineApiKeyTarget', () => {
+  it('allows empty keys without prompting', () => {
+    expect(confirmEngineApiKeyTarget('https://engine.example/run', '')).toBe(true);
+  });
+
+  it('isLoopbackOrigin matches loopback hosts only', () => {
+    expect(isLoopbackOrigin('http://localhost:5002')).toBe(true);
+    expect(isLoopbackOrigin('http://127.0.0.1:5002')).toBe(true);
+    expect(isLoopbackOrigin('https://engine.example')).toBe(false);
+  });
+
+  it('prompts once per new origin and honors decline', () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    const prevLocation = g.location;
+    const w = (globalThis as unknown as { window: Record<string, unknown> }).window;
+    const prevConfirm = w.confirm;
+    const seen: string[] = [];
+    let answer = false;
+    g.location = { origin: 'http://app.test' };
+    w.confirm = (msg: unknown) => {
+      seen.push(String(msg));
+      return answer;
+    };
+    try {
+      // Same-origin never prompts.
+      expect(confirmEngineApiKeyTarget('http://app.test/run', 'k')).toBe(true);
+      expect(seen).toHaveLength(0);
+      // Decline → withheld, and a decline is not remembered.
+      expect(confirmEngineApiKeyTarget('https://engine-new-a.example/run', 'k')).toBe(false);
+      expect(seen).toHaveLength(1);
+      // Approve → remembered; the second call is silent.
+      answer = true;
+      expect(confirmEngineApiKeyTarget('https://engine-new-b.example/run', 'k')).toBe(true);
+      expect(seen).toHaveLength(2);
+      expect(confirmEngineApiKeyTarget('https://engine-new-b.example/run', 'k')).toBe(true);
+      expect(seen).toHaveLength(2);
+    } finally {
+      if (prevLocation === undefined) delete g.location;
+      else g.location = prevLocation;
+      if (prevConfirm === undefined) delete w.confirm;
+      else w.confirm = prevConfirm;
+    }
+  });
+});
+
+describe('transport conformance (one fixture: WS = REST = Pyodide)', () => {
+  const SCRIPT = '//@version=6\nindicator("Conform")\nplot(close)';
+  const INPUTS = { Len: 14 };
+  const LIBS = [
+    {
+      namespace: 'n',
+      name: 'L',
+      version: 1,
+      source: '//@version=6\nlibrary("L")\nexport f() => 1',
+    },
+  ];
+
+  async function captureWsFrame(
+    data: unknown[],
+  ): Promise<Record<string, unknown>> {
+    installCatalogFakeWs();
+    const { getEngineWsClient } = await import('../src/engines/engine-ws');
+    const client = getEngineWsClient('http://engine.test:5002');
+    const runP = client.run(
+      {
+        script: SCRIPT,
+        data,
+        mode: 'auto',
+        inputs: INPUTS,
+        libraries: LIBS,
+      },
+      10_000,
+    );
+    const deadline = Date.now() + 2_000;
+    while (!CatalogFakeWS.instances[0] && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    const sock = CatalogFakeWS.instances[0];
+    expect(sock).toBeDefined();
+    if (!sock) throw new Error('WS instance not created');
+    sock.open();
+    const deadline2 = Date.now() + 2_000;
+    while (!sock.sent[0] && Date.now() < deadline2) {
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    const frame = JSON.parse(sock.sent[0] as string) as Record<string, unknown> & { id: string };
+    sock.onmessage?.({
+      data: JSON.stringify({
+        id: frame.id,
+        status: 'success',
+        plots: [],
+        series: {},
+        events: [],
+      }),
+    });
+    await runP;
+    return frame;
+  }
+
+  it('WS frame, REST body, and Pyodide globals carry the same payload', async () => {
+    const pineBars = barsForPine(SAMPLE_BARS);
+    const frame = await captureWsFrame(pineBars as unknown[]);
+
+    let restBody: Record<string, unknown> = {};
+    restoreFetch = mockFetch(async (_input, init) => {
+      restBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      return jsonResponse({
+        status: 'success',
+        plots: [],
+        series: {},
+        events: [],
+        mode: 'auto',
+      });
+    });
+    const r = await serverEngine.run({
+      script: SCRIPT,
+      bars: SAMPLE_BARS,
+      config: { endpoint: 'http://engine.test:5002', mode: 'auto', preferWs: false },
+      inputs: INPUTS,
+      libraries: LIBS as never,
+    });
+    expect(r.status).toBe('success');
+    expect(restBody.script).toBe(frame.script);
+    expect(restBody.mode).toBe(frame.mode);
+    expect(restBody.data).toEqual(frame.data);
+    expect(restBody.inputs).toEqual(frame.inputs);
+    expect(restBody.libraries).toEqual(frame.libraries);
+
+    // Pyodide leg: the same fixture arrives via globals + json.loads.
+    const seen: Record<string, string> = {};
+    const py = {
+      globals: {
+        set: (k: string, v: unknown) => {
+          seen[k] = String(v);
+        },
+      },
+      runPython: () => '{}',
+    };
+    callPyodideRunScript(py as never, SCRIPT, pineBars, 'auto', LIBS, INPUTS);
+    expect(JSON.parse(seen._axis_script_json!)).toBe(SCRIPT);
+    expect(JSON.parse(seen._axis_bars_json!)).toEqual(
+      JSON.parse(JSON.stringify(pineBars)),
+    );
+    expect(JSON.parse(seen._axis_bars_json!)).toEqual(restBody.data);
+    expect(JSON.parse(seen._axis_mode_json!)).toBe('auto');
+    expect(JSON.parse(seen._axis_libs_json!)).toEqual(LIBS);
+    expect(JSON.parse(seen._axis_inputs_json!)).toEqual(INPUTS);
   });
 });

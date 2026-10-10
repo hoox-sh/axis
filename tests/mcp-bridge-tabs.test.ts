@@ -7,6 +7,7 @@ import './setup';
 import { describe, expect, it, afterEach, beforeEach } from 'bun:test';
 import { clearLogs, setStore, store } from '../src/store';
 import { writeStoredCloudConfig } from '../src/storage/cloud-config';
+import { _clearSecretMemoryForTests } from '../src/storage/vault';
 import {
   connectMcpBridge,
   disconnectMcpBridge,
@@ -93,6 +94,10 @@ function resetBridgeEnv(): void {
   globalThis.fetch = realFetch;
   globalThis.WebSocket = realWebSocket;
   disconnectMcpBridge();
+  // The session vault (memory + same-tab mirror) outlives the store bag —
+  // clear it too so a previous suite's key can't leak into the no-key
+  // assertions below.
+  _clearSecretMemoryForTests();
   // The store (and its persisted bag) is shared across files in serial
   // (non-isolated) runs — reset BEFORE each test so an earlier suite's
   // stored key can't leak into the no-key assertions below.
@@ -255,6 +260,38 @@ describe('MCP bridge key rotation', () => {
     expect(sockets.length).toBe(0);
     await new Promise((r) => setTimeout(r, 350));
     expect(sockets.length).toBe(1);
+  });
+
+  it('ignores frames on a stale socket after rotation (F12)', async () => {
+    clearLogs();
+    stubBridgeHttp();
+    stubWebSocket();
+    writeStoredCloudConfig('https://worker.axis.hoox.sh', `pn_${'a'.repeat(48)}`);
+    await connectMcpBridge();
+    sock().fire('open');
+    writeStoredCloudConfig('https://worker.axis.hoox.sh', `pn_${'b'.repeat(48)}`);
+    await connectMcpBridge();
+    expect(sockets.length).toBe(2);
+    const stale = sockets[0];
+    const current = sockets[1];
+    if (!stale || !current) throw new Error('expected two bridge sockets');
+    current.fire('open');
+
+    // A late frame on the rotated-out socket is dropped: no reply, no activity.
+    stale.fire('message', {
+      data: JSON.stringify({ type: 'invoke', id: 'stale-1', capability: 'drawings.list' }),
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(stale.sent).toHaveLength(0);
+    expect(mcpBridgeState().lastCapability).not.toBe('drawings.list');
+
+    // The current socket still answers on itself.
+    current.fire('message', {
+      data: JSON.stringify({ type: 'invoke', id: 'live-1', capability: 'drawings.list' }),
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    const frames = current.sent.map((s) => JSON.parse(s) as Record<string, unknown>);
+    expect(frames.find((f) => f.id === 'live-1')?.type).toBe('result');
   });
 });
 

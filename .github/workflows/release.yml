@@ -60,8 +60,8 @@ jobs:
     name: Publish @hoox-sh/axis-cli
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_HOOXSH }}
+    # No job-level NODE_AUTH_TOKEN: the npm token is scoped to the steps that
+    # actually talk to the registry (G5), so build/test logs never carry it.
 
     steps:
       - name: Checkout
@@ -94,14 +94,19 @@ jobs:
 
       - name: Version + tag guard
         id: guard
+        # Script-injection safe: tag/force values arrive via env, never
+        # interpolated into the shell (G16).
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
           PKG_VER=$(node -p "require('./packages/cli/package.json').version")
           echo "version=${PKG_VER}" >> "$GITHUB_OUTPUT"
-          if [[ "${{ github.ref_type }}" != "tag" ]]; then
+          if [[ "${REF_TYPE}" != "tag" ]]; then
             echo "tag_match=dispatch" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          REF="${{ github.ref_name }}"
+          REF="${REF_NAME}"
           if [[ "$REF" == "cli-v${PKG_VER}" ]]; then
             echo "tag_match=cli" >> "$GITHUB_OUTPUT"
           elif [[ "$REF" == cli-v* ]]; then
@@ -116,13 +121,16 @@ jobs:
 
       - name: Check registry version
         id: check
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_HOOXSH }}
+          INPUT_FORCE: ${{ inputs.force }}
         run: |
           PKG_VER="${{ steps.guard.outputs.version }}"
           # Authenticated view so a restricted first publish is still detected.
           REG_VER=$(npm view "@hoox-sh/axis-cli@$PKG_VER" version 2>/dev/null || true)
           echo "local=${PKG_VER}" >> "$GITHUB_OUTPUT"
           echo "registry=${REG_VER:-<none>}" >> "$GITHUB_OUTPUT"
-          if [ -n "${REG_VER}" ] && [ "${{ inputs.force || 'false' }}" != "true" ]; then
+          if [ -n "${REG_VER}" ] && [ "${INPUT_FORCE:-false}" != "true" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "@hoox-sh/axis-cli@${PKG_VER} already published — will skip"
           else
@@ -155,6 +163,8 @@ jobs:
       - name: Publish to npm
         if: steps.check.outputs.skip != 'true'
         working-directory: packages/cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_HOOXSH }}
         run: |
           if [ -z "${NODE_AUTH_TOKEN}" ]; then
             echo "Org secret NPM_TOKEN_HOOXSH is missing or not available to this repo."
@@ -176,6 +186,8 @@ jobs:
 
       - name: Verify registry version
         id: verify
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_HOOXSH }}
         run: |
           VER="${{ steps.guard.outputs.version }}"
           for i in 1 2 3 4 5 6; do
@@ -220,6 +232,8 @@ jobs:
       - name: Ensure public access
         if: always() && steps.check.outcome == 'success'
         working-directory: packages/cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_HOOXSH }}
         run: |
           if npm access set status=public @hoox-sh/axis-cli; then
             npm access get status @hoox-sh/axis-cli
@@ -231,6 +245,8 @@ jobs:
 
       - name: Summary
         if: always()
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
           TM="${{ steps.guard.outputs.tag_match }}"
           case "$TM" in
@@ -251,7 +267,7 @@ jobs:
             echo "| Local version | \`${{ steps.check.outputs.local }}\` |"
             echo "| Registry version | \`${{ steps.check.outputs.registry }}\` |"
             echo "| Published | \`${PUBLISHED}\` |"
-            echo "| Tag | \`${{ github.ref_name }}\` (${TAG_LABEL}) |"
+            echo "| Tag | \`${REF_NAME}\` (${TAG_LABEL}) |"
             echo "| Registry verify | \`${VERIFY}\` |"
             echo "| Smoke (Node) | \`${SMOKE}\` |"
             echo ""
@@ -274,8 +290,11 @@ jobs:
     steps:
       - name: Resolve tag
         id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          TAG="${{ inputs.tag || github.ref_name }}"
+          TAG="${INPUT_TAG:-$REF_NAME}"
           case "$TAG" in
             v*) ;;
             *) echo "::error::Release assets attach to v* tags only (got: ${TAG})."; exit 1 ;;

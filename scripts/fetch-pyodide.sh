@@ -13,7 +13,7 @@ for f in pyodide.js pyodide.asm.js pyodide.asm.wasm python_stdlib.zip pyodide-lo
   curl -fsSL -o "$f" "$BASE/$f"
 done
 python3 - "$VERSION" <<'PY'
-import json, sys, urllib.request
+import hashlib, json, sys, urllib.request
 from pathlib import Path
 version = sys.argv[1]
 lock = json.loads(Path("pyodide-lock.json").read_text())
@@ -29,9 +29,21 @@ while changed:
                 changed = True
 base = f"https://cdn.jsdelivr.net/pyodide/v{version}/full"
 for n in sorted(need):
-    fn = lock["packages"][n]["file_name"]
+    info = lock["packages"][n]
+    fn = info["file_name"]
     print("→", fn)
     urllib.request.urlretrieve(f"{base}/{fn}", fn)
+    # G14: verify every lock-covered artifact against the lock's sha256.
+    # A mismatch (mirror tampering / truncated download) fails the fetch.
+    expected = info.get("sha256") or info.get("sha")
+    if not expected:
+        print(f"WARNING: no sha256 in lock for {n} ({fn}) — skipping verification")
+        continue
+    actual = hashlib.sha256(Path(fn).read_bytes()).hexdigest()
+    if actual != expected:
+        print(f"SHA-256 MISMATCH for {fn}: expected {expected}, got {actual}", file=sys.stderr)
+        sys.exit(1)
+    print("  sha256 ok:", fn)
 print("OK →", Path(".").resolve())
 PY
 du -sh "$DEST"

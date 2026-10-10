@@ -32,6 +32,8 @@
  * @module worker/http
  */
 
+import { WORKER_VERSION } from './version';
+
 /** Allowed request headers, narrowest set used by on-chain / scripts routes. */
 const BASE_HEADERS = 'Content-Type, Authorization, X-Admin-Token, If-Match';
 
@@ -75,9 +77,11 @@ export function corsHeaders(origin: string, opts: CorsOptions = {}): Record<stri
  *
  * For authenticated POST routes where the browser never needs a preflight
  * (`/api/run`, `/api/keys`) and the extra headers would only be noise.
+ * Carries `Vary: Origin` because the ACAO value depends on the request Origin.
  */
 export const ORIGIN_ONLY = (origin: string): Record<string, string> => ({
   'Access-Control-Allow-Origin': origin,
+  'Vary': 'Origin',
 });
 
 /** On-chain proxy CORS: read-only methods, no exchange or MCP headers. */
@@ -107,7 +111,7 @@ export const MCP_CORS = (origin: string): Record<string, string> => ({
 
 /** Script library CORS: mutating methods, no preflight caching hints. */
 export const SCRIPTS_CORS = (origin: string): Record<string, string> =>
-  corsHeaders(origin, { methods: WRITE_METHODS, maxAge: 0, vary: false });
+  corsHeaders(origin, { methods: WRITE_METHODS, maxAge: 0 });
 
 /** Top-level dispatcher CORS: every header the Worker understands. */
 export const API_CORS = (origin: string): Record<string, string> =>
@@ -171,13 +175,70 @@ export function preflight(cors: (origin: string) => Record<string, string>, orig
 /**
  * Best-effort caller IP for rate limiting.
  *
- * Uses Cloudflare's `CF-Connecting-IP` first, then the left-most
- * `X-Forwarded-For` entry, then `'unknown'`.
+ * Uses Cloudflare's `CF-Connecting-IP` only. `X-Forwarded-For` is
+ * client-spoofable and must not feed rate buckets (A18).
  */
 export function clientIp(req: Request): string {
-  return (
-    req.headers.get('cf-connecting-ip') ||
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    'unknown'
-  );
+  return req.headers.get('cf-connecting-ip')?.trim() || 'unknown';
+}
+
+/**
+ * Read a JSON body with a fail-closed byte cap.
+ *
+ * Checks `Content-Length` before touching the stream, then caps the buffered
+ * read — bodies are never fully parsed before the size check (A9).
+ * Parse failures resolve to `{ ok: true, value: null }` so callers keep their
+ * existing empty-body handling; over-cap resolves to `{ ok: false }` (413).
+ */
+export async function readCappedJson(
+  req: Request,
+  maxBytes: number,
+): Promise<{ ok: true; value: unknown } | { ok: false }> {
+  const cl = req.headers.get('content-length');
+  if (cl !== null && cl !== '') {
+    const n = Number(cl);
+    if (Number.isFinite(n) && n > maxBytes) return { ok: false };
+  }
+  let buf: ArrayBuffer;
+  try {
+    buf = await req.arrayBuffer();
+  } catch {
+    return { ok: true, value: null };
+  }
+  if (buf.byteLength > maxBytes) return { ok: false };
+  if (buf.byteLength === 0) return { ok: true, value: null };
+  try {
+    return { ok: true, value: JSON.parse(new TextDecoder().decode(buf)) };
+  } catch {
+    return { ok: true, value: null };
+  }
+}
+
+/** Binding presence flags for the shared `/health` body. */
+export interface HealthFlags {
+  db: boolean;
+  keys: boolean;
+  mcpBridge: boolean;
+}
+
+/**
+ * Single shared `/health` body builder (A22) — the entry `fetch` and the MCP
+ * `axis_request` proxy must not drift apart.
+ */
+export function buildHealthBody(flags: HealthFlags): unknown {
+  return {
+    status: 'healthy',
+    service: 'worker-axis',
+    version: WORKER_VERSION,
+    timestamp: Date.now(),
+    features: {
+      scripts: true,
+      d1: flags.db,
+      keys: flags.keys,
+      onchain: true,
+      market: true,
+      mcp: true,
+      mcpBridge: flags.mcpBridge,
+    },
+  };
 }

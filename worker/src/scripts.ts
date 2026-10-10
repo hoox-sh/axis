@@ -49,7 +49,14 @@
 
 import type { Env } from './index';
 import { requireApiKey } from './auth';
-import { SCRIPTS_CORS, jsonResponse } from './http';
+import { SCRIPTS_CORS, jsonResponse, readCappedJson } from './http';
+
+/** Fail closed before JSON.parse on script/draft writes (A9). */
+const SCRIPTS_MAX_BODY_BYTES = 8 * 1024 * 1024;
+
+/** Default / max page size for the collection list (A20 — list is bounded). */
+const LIST_DEFAULT_LIMIT = 100;
+const LIST_MAX_LIMIT = 500;
 
 /** Full D1 / memory row including Pine source text. */
 export interface ScriptRow {
@@ -232,8 +239,15 @@ async function archiveVersion(db: D1Database | undefined, userId: string, row: S
     try {
       await putVersionD1(db, userId, row);
       await trimVersionsD1(db, userId, row.id);
-    } catch {
-      /* missing script_versions table — live write still succeeds */
+    } catch (err) {
+      // Live write already succeeded — never fail the save, but never
+      // swallow the archive failure silently either (A20).
+      console.warn(JSON.stringify({
+        type: 'script_version_archive_failed',
+        id: row.id,
+        revision: row.revision,
+        error: err instanceof Error ? err.message : String(err),
+      }));
     }
   } else {
     archiveMemVersion(userId, row);
@@ -257,13 +271,13 @@ function newRevision(): string {
   return `rev_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function listD1(db: D1Database, userId: string): Promise<ScriptMeta[]> {
+async function listD1(db: D1Database, userId: string, limit: number): Promise<ScriptMeta[]> {
   const res = await db
     .prepare(
       `SELECT id, name, description, path, revision, created_at, updated_at
-       FROM scripts WHERE user_id = ? ORDER BY updated_at DESC`,
+       FROM scripts WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?`,
     )
-    .bind(userId)
+    .bind(userId, limit)
     .all<Omit<ScriptRow, 'content'>>();
   return (res.results || []).map((r) => {
     const meta: ScriptMeta = {
@@ -289,8 +303,7 @@ async function getD1(db: D1Database, userId: string, id: string): Promise<Script
     .first<ScriptRow>();
 }
 
-async function putD1(db: D1Database, userId: string, row: ScriptRow): Promise<void> {
-  await db
+async function putD1(db: D1Database, userId: string, row: ScriptRow): Promise<void> {  await db
     .prepare(
       `INSERT INTO scripts (user_id, id, name, description, path, content, revision, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -327,6 +340,24 @@ async function delD1(db: D1Database, userId: string, id: string): Promise<boolea
 /** JSON response with CORS headers required by the PWA (includes If-Match for revisions). */
 function corsJson(body: unknown, status: number, origin: string): Response {
   return jsonResponse(body, { status, origin, cors: SCRIPTS_CORS });
+}
+
+/** 413 envelope shared by the capped body reads below. */
+function tooLarge(origin: string): Response {
+  return corsJson(
+    { status: 'error', code: 'PAYLOAD_TOO_LARGE', message: 'script body too large' },
+    413,
+    origin,
+  );
+}
+
+/** Bounded `?limit=` for the collection list (default 100, hard cap 500). */
+function parseListLimit(url: URL): number {
+  const raw = url.searchParams.get('limit');
+  if (raw === null || raw === '') return LIST_DEFAULT_LIMIT;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1) return LIST_DEFAULT_LIMIT;
+  return Math.min(LIST_MAX_LIMIT, Math.floor(n));
 }
 
 /**
@@ -374,9 +405,11 @@ export async function handleScripts(
       );
     }
     if (req.method === 'PUT' || req.method === 'POST') {
-      const body = (await req.json().catch(() => ({}))) as { content?: string; name?: string };
-      const content = String(body.content ?? '');
-      const name = body.name ? String(body.name) : undefined;
+      const capped = await readCappedJson(req, SCRIPTS_MAX_BODY_BYTES);
+      if (!capped.ok) return tooLarge(origin);
+      const parsed = (capped.value ?? {}) as { content?: string; name?: string };
+      const content = String(parsed.content ?? '');
+      const name = parsed.name ? String(parsed.name) : undefined;
       const now = Date.now();
       if (db) {
         await db
@@ -405,7 +438,7 @@ export async function handleScripts(
     if (req.method === 'GET') {
       if (db) {
         try {
-          const items = await listD1(db, userId);
+          const items = await listD1(db, userId, parseListLimit(url));
           return corsJson({ status: 'success', scripts: items }, 200, origin);
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
@@ -425,12 +458,15 @@ export async function handleScripts(
       }
       const items = [...memUser(userId).values()]
         .sort((a, b) => b.updated_at - a.updated_at)
+        .slice(0, parseListLimit(url))
         .map(rowToMeta);
       return corsJson({ status: 'success', scripts: items, backend: 'memory' }, 200, origin);
     }
     if (req.method === 'POST') {
       // Create with server-generated id optional
-      const body = (await req.json().catch(() => ({}))) as Partial<ScriptRow> & { script?: string };
+      const capped = await readCappedJson(req, SCRIPTS_MAX_BODY_BYTES);
+      if (!capped.ok) return tooLarge(origin);
+      const body = (capped.value ?? {}) as Partial<ScriptRow> & { script?: string };
       const now = Date.now();
       const id = String(body.id || `s_${now.toString(36)}`);
       const row: ScriptRow = {
@@ -537,12 +573,76 @@ export async function handleScripts(
   }
 
   if (req.method === 'PUT' || req.method === 'POST') {
-    const body = (await req.json().catch(() => ({}))) as Partial<ScriptRow> & {
+    const capped = await readCappedJson(req, SCRIPTS_MAX_BODY_BYTES);
+    if (!capped.ok) return tooLarge(origin);
+    const body = (capped.value ?? {}) as Partial<ScriptRow> & {
       script?: string;
       revision?: string;
     };
     const ifMatch = req.headers.get('If-Match') || body.revision;
     const now = Date.now();
+
+    // D1 path uses a single conditional UPDATE (compare-and-swap) so two
+    // concurrent PUTs cannot both win silently (A12). The memory fallback is
+    // isolate-local with no await between check and write — already atomic.
+    if (db && ifMatch) {
+      const next: ScriptRow = {
+        id,
+        name: '',
+        description: body.description !== undefined ? body.description : null,
+        path: body.path !== undefined ? body.path : null,
+        content: '',
+        revision: newRevision(),
+        created_at: now,
+        updated_at: now,
+      };
+      const current = await getD1(db, userId, id);
+      if (!current) {
+        return corsJson({ status: 'error', code: 'NOT_FOUND', message: `script ${id} not found` }, 404, origin);
+      }
+      next.name = String(body.name || current.name || 'Untitled');
+      if (body.description === undefined) next.description = current.description ?? null;
+      if (body.path === undefined) next.path = current.path ?? null;
+      next.content = String(body.content ?? body.script ?? current.content ?? '');
+      next.created_at = current.created_at || now;
+      const r = await db
+        .prepare(
+          `UPDATE scripts SET name = ?, description = ?, path = ?, content = ?,
+            revision = ?, updated_at = ?
+           WHERE user_id = ? AND id = ? AND revision = ?`,
+        )
+        .bind(
+          next.name,
+          next.description,
+          next.path,
+          next.content,
+          next.revision,
+          next.updated_at,
+          userId,
+          id,
+          ifMatch,
+        )
+        .run();
+      if ((r.meta?.changes ?? 0) === 0) {
+        const remote = await getD1(db, userId, id);
+        return corsJson(
+          {
+            status: 'error',
+            code: 'CONFLICT',
+            message: 'revision mismatch',
+            remoteRevision: remote?.revision,
+          },
+          409,
+          origin,
+        );
+      }
+      await archiveVersion(db, userId, next);
+      return corsJson(
+        { status: 'success', script: { ...rowToMeta(next), content: next.content } },
+        200,
+        origin,
+      );
+    }
 
     let prev: ScriptRow | null = null;
     if (db) prev = await getD1(db, userId, id);

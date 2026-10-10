@@ -38,7 +38,8 @@
  * @module worker/proxy-router
  */
 
-import { methodNotAllowed, preflight } from './http';
+import { clientIp, methodNotAllowed, preflight } from './http';
+import { allowRate } from './rate-limit';
 
 export interface ProxyContext {
   req: Request;
@@ -87,6 +88,11 @@ export interface ProxyRouterOptions {
   routes: ProxyRoute[];
   /** Fallback for a path no entry claimed. */
   notFound: NotFoundBody;
+  /**
+   * Per-IP abuse budget for every route behind this prefix (A5). The public
+   * proxies have no auth, so a shared per-IP window is the only backstop.
+   */
+  ipLimit?: { limit: number; windowMs: number };
 }
 
 export interface ProxyRouter {
@@ -136,6 +142,20 @@ export function createProxyRouter(opts: ProxyRouterOptions): ProxyRouter {
       if (req.method !== 'GET') return Promise.resolve(methodNotAllowed('GET', { origin, cors }));
 
       const json = proxyJson(cors);
+
+      if (opts.ipLimit) {
+        const ip = clientIp(req);
+        if (!allowRate(`${prefix}:ip:${ip}`, opts.ipLimit.limit, opts.ipLimit.windowMs)) {
+          return Promise.resolve(
+            json(
+              { status: 'error', code: 'RATE_LIMIT', message: 'Too many proxy requests' },
+              origin,
+              429,
+              { 'Retry-After': String(Math.ceil(opts.ipLimit.windowMs / 1000)) },
+            ),
+          );
+        }
+      }
 
       if (rel === '/' || rel === '/health') return Promise.resolve(json(health(), origin));
 

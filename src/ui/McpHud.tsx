@@ -26,7 +26,8 @@
  * @module ui/McpHud
  */
 
-import { type Component, Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { type Component, Show, createSignal, onCleanup } from 'solid-js';
+import { useNow } from './clock';
 import { mcpBridgeState, onMcpBridge, type McpBridgeState } from '../mcp/bridge';
 import { requestMcpConnect } from '../mcp/host';
 import { mcpNeedsConnect } from './McpConnectCta';
@@ -90,13 +91,9 @@ function openSettings(): void {
 /** Status-bar MCP/session capsule with agent-activity dot. */
 export const McpHud: Component = () => {
   const [s, setS] = createSignal<McpBridgeState>(mcpBridgeState());
-  const [now, setNow] = createSignal(Date.now());
+  const now = useNow();
   const unsub = onMcpBridge(setS);
   onCleanup(unsub);
-  onMount(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    onCleanup(() => clearInterval(t));
-  });
 
   const active = () => {
     const at = s().lastInvokeAt;

@@ -101,6 +101,8 @@ export interface CommandActions {
   loadSymbol?: () => void | Promise<void>;
   reloadChart?: () => void | Promise<void>;
   toggleLive?: () => void;
+  /** Show / hide the floating chart settings panel. */
+  toggleChartSettings?: () => void;
   openSettings?: () => void;
   openPlugins?: () => void;
   /** Open Workers catalog (calc backends / edge / Pyodide). */
@@ -573,6 +575,12 @@ export const DEFAULT_COMMAND_SPECS: readonly CommandSpec[] = [
     keywords: ['parchment', 'paper', 'warm light', 'ivory', 'preset'],
   },
   // Chart grid
+  {
+    id: 'chart.settings',
+    title: 'Chart Settings',
+    category: 'chart',
+    keywords: ['chart settings', 'panel', 'interval', 'chart type', 'log', 'auto scale', 'labels', 'gear'],
+  },
   {
     id: 'chart.grid.1',
     title: 'Chart Layout: Single',
@@ -1085,6 +1093,7 @@ export function buildDefaultCommands(actions: CommandActions): CommandDef[] {
   if (actions.loadSymbol) byId.set('action.load-symbol', () => void actions.loadSymbol?.());
   if (actions.reloadChart) byId.set('action.reload-chart', () => void actions.reloadChart?.());
   if (actions.toggleLive) byId.set('action.toggle-live', actions.toggleLive);
+  if (actions.toggleChartSettings) byId.set('chart.settings', actions.toggleChartSettings);
   if (actions.openSettings) {
     byId.set('action.settings', actions.openSettings);
   }

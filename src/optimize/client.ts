@@ -13,6 +13,7 @@
 import { buildStrategyReport, type StrategyStats } from '../results/strategy';
 import { runScript } from '../indicators/runner';
 import { getActiveEngine, getActiveEngineConfig } from '../plugins/active';
+import { confirmEngineApiKeyTarget } from '../engines/catalog';
 import type { Bar } from '../store/types';
 import { beginStudy, endStudy } from './guard';
 import { randomAssignment, toPyneSpace } from './space';
@@ -64,6 +65,45 @@ function holdoutOk(n: number, frac: number): boolean {
 
 function sliceBars(bars: Bar[], start: number, end: number): Bar[] {
   return bars.slice(start, end);
+}
+
+/**
+ * Number of walk-forward windows for `nBars`, using the same clamps as
+ * {@link runClientStudy}. Each window costs two engine runs (IS + OOS).
+ */
+export function walkForwardWindowCount(
+  nBars: number,
+  trainBars: number,
+  testBars: number,
+  stepBars: number,
+): number {
+  const train = Math.max(2, trainBars);
+  const test = Math.max(1, testBars);
+  const step = Math.max(1, stepBars);
+  let windows = 0;
+  for (let start = train; start + test <= nBars; start += step) windows += 1;
+  return windows;
+}
+
+/**
+ * Exact engine-run budget for a study before any run starts. Walk-forward
+ * depends on the data length, so a fixed per-trial multiplier under-counts
+ * long series and the study then truncates silently.
+ */
+export function plannedEngineRuns(
+  nTrials: number,
+  nBars: number,
+  validation: ValidationSpec,
+): number {
+  if (validation.mode === 'in-sample') return nTrials;
+  if (validation.mode === 'holdout') return nTrials * 2;
+  const windows = walkForwardWindowCount(
+    nBars,
+    validation.trainBars,
+    validation.testBars,
+    validation.stepBars,
+  );
+  return nTrials * 2 * windows;
 }
 
 function engineEndpoint(): string {
@@ -158,9 +198,13 @@ async function tryPyneOptimize(opts: RunStudyOpts): Promise<StudySnapshot | null
     ...(libraries?.length ? { libraries } : {}),
   };
   try {
+    const headers = engineAuthHeaders();
+    // Never send the key to a fresh cross-origin backend without consent.
+    // Declined → fall back to the local client study (no secret leaves the app).
+    if (!confirmEngineApiKeyTarget(endpoint, String(headers['X-API-Key'] || ''))) return null;
     const res = await fetch(`${endpoint}/optimize`, {
       method: 'POST',
-      headers: engineAuthHeaders(),
+      headers,
       body: JSON.stringify(body),
       signal: opts.signal,
     });
@@ -286,8 +330,14 @@ async function runClientStudy(opts: RunStudyOpts): Promise<StudySnapshot> {
       const isRows: StrategyStats[] = [];
       const oosRows: StrategyStats[] = [];
       let start = train;
-      while (start + test <= nBars && engineRuns < MAX_ENGINE_RUNS) {
+      while (start + test <= nBars) {
         if (opts.signal?.aborted) break;
+        // runHpoStudy pre-checks the exact budget; this guard means a truncated
+        // trial is *reported* instead of quietly scored as "no windows".
+        if (engineRuns >= MAX_ENGINE_RUNS) {
+          error = 'walk-forward truncated at engine-run cap';
+          break;
+        }
         engineRuns += 2;
         const a = await evalWindow(opts.script, sliceBars(bars, 0, start), params, opts.signal);
         const b = await evalWindow(
@@ -309,6 +359,9 @@ async function runClientStudy(opts: RunStudyOpts): Promise<StudySnapshot> {
         oosStats = oosRows.length ? averageStats(oosRows) : null;
       }
       if (!isRows.length && !error) error = 'walk-forward produced no windows';
+      if (error?.startsWith('walk-forward truncated')) {
+        warning = `${error} — results are partial`;
+      }
     }
     const row: TrialRow = {
       index: i,
@@ -385,12 +438,9 @@ function averageStats(rows: StrategyStats[]): StrategyStats {
 
 export async function runHpoStudy(opts: RunStudyOpts): Promise<StudySnapshot> {
   const n = Math.min(MAX_TRIALS, Math.max(1, opts.nTrials));
-  const est =
-    opts.validation.mode === 'in-sample'
-      ? n
-      : opts.validation.mode === 'holdout'
-        ? n * 2
-        : n * 4;
+  // Exact budget up front: walk-forward depends on the data length, so the
+  // old fixed n*4 multiplier under-counted long series and truncated silently.
+  const est = plannedEngineRuns(n, opts.bars.length, opts.validation);
   if (est > MAX_ENGINE_RUNS) {
     return {
       status: 'error',

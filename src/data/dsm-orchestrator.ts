@@ -44,6 +44,7 @@ import {
   subscribeDatasets,
 } from './dataset-store';
 import { isHeavyBarLoad, isVeryHeavyBarLoad } from '../chart/heavy-data';
+import { getVisibleBars, isReplayActive } from '../chart/bar-replay';
 import {
   repairBars,
   validateDataset,
@@ -51,7 +52,7 @@ import {
 } from './dataset-validate';
 import { intervalToSec } from './bars-gaps';
 import { startBackfill } from './data-source-manager';
-import { exchangeForSource } from './load-symbol';
+import { exchangeForSource } from './symbol-exchange';
 import { getSource } from '../sources/catalog';
 import { announce } from '../ui/sr-announce';
 
@@ -87,6 +88,9 @@ let repaintPending = false;
 let paintGen = 0;
 /** Skip progressive setData when the series fingerprint is unchanged. */
 let lastRepaintSig = '';
+/** Append-only fast path: first bar time + painted length of the last repaint. */
+let lastRepaintLen = 0;
+let lastRepaintFirst = 0;
 
 function stopStreaming(): void {
   if (unsubscribe) {
@@ -100,6 +104,17 @@ function stopStreaming(): void {
   activeKey = null;
   repaintPending = false;
   lastRepaintSig = '';
+  lastRepaintLen = 0;
+  lastRepaintFirst = 0;
+}
+
+/**
+ * Stop the dataset-driven progressive repaint for the previously painted key.
+ * Call before any other source takes the chart (CSV upload, direct venue load)
+ * so a pending dataset repaint cannot overwrite the new series.
+ */
+export function stopProgressiveRepaint(): void {
+  stopStreaming();
 }
 
 /** Paint bars onto chart + store (full refresh semantics). */
@@ -148,19 +163,36 @@ function scheduleRepaint(sym: string, iv: string, srcId: string, gen: number): v
         return;
       }
       lastRepaintSig = sig;
+      // Append-only fast path: same first bar and the series only grew at the
+      // tail (typical backfill landing) — paint the new tail instead of a full
+      // setData. Replay still needs the visible-prefix full paint.
+      const first = bars[0]?.time ?? 0;
+      const tailN = bars.length - lastRepaintLen;
+      const appended =
+        lastRepaintLen > 0 && tailN > 0 && tailN <= 500 && first === lastRepaintFirst;
       setBarsQuiet(bars);
       const manager = getManager();
       if (manager) {
         try {
-          setDataToChart(bars, {
-            fit: false,
-            clearScriptState: false,
-            clearMarkers: false,
-          });
+          if (appended && !isReplayActive() && typeof manager.appendBar === 'function') {
+            for (let i = lastRepaintLen; i < bars.length; i++) {
+              const tail = bars[i];
+              if (tail) manager.appendBar(tail);
+            }
+          } else {
+            // Bar replay paints only the scrubbed prefix; the store keeps full history.
+            setDataToChart(isReplayActive() ? getVisibleBars(bars) : bars, {
+              fit: false,
+              clearScriptState: false,
+              clearMarkers: false,
+            });
+          }
         } catch {
           /* progressive paint is best-effort */
         }
       }
+      lastRepaintLen = bars.length;
+      lastRepaintFirst = first;
       if (repaintPending) {
         repaintPending = false;
         scheduleRepaint(sym, iv, srcId, gen);

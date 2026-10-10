@@ -7,7 +7,7 @@ tags: [code, mcp]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-27T03:35:42Z
+  at: 2026-10-10T20:32:38Z
 sources:
   - id: tree
     resource: "src/mcp"
@@ -21,15 +21,11 @@ okf_lock: generated
 * `bridge.ts` — McpBridgeState, McpBridgeStatus, connectMcpBridge, disconnectMcpBridge, isWellFormedWorkerApiKey, mcpBridgeState, onMcpBridge, refreshBridgeTabs, rotateMcpBridge
 * `catalog.ts` — APP_CAPABILITIES, SETTABLE_PATHS, findCapability
 * `commands.ts` — clearPaletteCommands, listPaletteCommandIds, runPaletteCommand, setPaletteCommand, setPaletteCommands
-* `dispatch.ts` — McpHostHooks, invokeCapability, setMcpHostHooks
+* `dispatch.ts` — InvokeCapabilityOpts, McpHostHooks, invokeCapability, setMcpHostHooks
 * `host.ts` — AxisMcpApi, McpPrefs, loadMcpPrefs, requestMcpConnect, saveMcpPrefs, startMcpHost
 * `index.ts` — APP_CAPABILITIES, McpInvokeError, SETTABLE_PATHS, buildAppSnapshot, connectMcpBridge, disconnectMcpBridge, findCapability, invokeCapability, loadMcpPrefs, mcpBridgeState, onMcpBridge, requestMcpConnect
 * `protocol.ts` — AppInvokeRequest, AppInvokeResponse, CapabilitySpec, McpInvokeError, getByPath, sessionIdFromApiKey
-* `snapshot.ts` — buildAppSnapshot, buildSettingsSnapshot
-
-# Packages
-
-`solid-js/store`
+* `snapshot.ts` — MCP_SNAPSHOT_BARS_MAX, barSummary, boundedBarRows, buildAppSnapshot, buildSettingsSnapshot
 
 # Depends on
 
@@ -47,6 +43,7 @@ okf_lock: generated
 * [src/ui/panels](/code/src/ui/panels.md)
 * [src/ui/shortcuts](/code/src/ui/shortcuts.md)
 * [src/update](/code/src/update.md)
+* [src/utils](/code/src/utils.md)
 
 # Used by
 

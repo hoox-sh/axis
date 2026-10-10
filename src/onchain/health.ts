@@ -29,6 +29,8 @@
  */
 
 import { store, setTelemetryPlane, setTelemetryState } from '../store';
+import { isAbortError } from '../utils/errors';
+import { fetchWithTimeout } from '../utils/fetch-timeout';
 import { normalizeEndpointBase, resolveOnchainWorkerBase } from './proxy';
 
 /** Worker path for on-chain proxy feature flags / provider list. */
@@ -88,22 +90,20 @@ export async function checkOnchainProxyHealth(
       ? Math.max(500, Math.floor(opts.timeoutMs))
       : 5000;
 
-  const ctrl = new AbortController();
-  const onAbort = () => ctrl.abort();
-  if (opts?.signal) {
-    if (opts.signal.aborted) {
-      return { ok: false, providers: [], detail: 'Aborted' };
-    }
-    opts.signal.addEventListener('abort', onAbort, { once: true });
+  if (opts?.signal?.aborted) {
+    return { ok: false, providers: [], detail: 'Aborted' };
   }
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
 
   try {
-    const res = await fetch(url, {
-      method: 'GET',
-      signal: ctrl.signal,
-      headers: { Accept: 'application/json' },
-    });
+    const res = await fetchWithTimeout(
+      url,
+      {
+        method: 'GET',
+        signal: opts?.signal,
+        headers: { Accept: 'application/json' },
+      },
+      { timeoutMs },
+    );
 
     if (!res.ok) {
       return {
@@ -123,7 +123,9 @@ export async function checkOnchainProxyHealth(
     const rec = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
     const status = String(rec.status || '').toLowerCase();
     const providers = parseProviderIds(rec.providers);
-    const healthy = status === 'healthy' || status === 'ok' || res.status === 200;
+    // A 2xx alone is not health: the body's own status decides when present
+    // (worker/src/onchain.ts reports `status: "healthy"`).
+    const healthy = status ? status === 'healthy' || status === 'ok' : true;
 
     if (!healthy) {
       return {
@@ -142,16 +144,14 @@ export async function checkOnchainProxyHealth(
 
     return { ok: true, providers, detail: label };
   } catch (err) {
-    const msg =
-      err instanceof Error && err.name === 'AbortError'
-        ? `On-chain health timeout (${timeoutMs}ms)`
-        : err instanceof Error && err.message
-          ? err.message
-          : 'On-chain health failed';
+    const msg = isAbortError(err)
+      ? opts?.signal?.aborted
+        ? 'Aborted'
+        : `On-chain health timeout (${timeoutMs}ms)`
+      : err instanceof Error && err.message
+        ? err.message
+        : 'On-chain health failed';
     return { ok: false, providers: [], detail: msg };
-  } finally {
-    clearTimeout(timer);
-    if (opts?.signal) opts.signal.removeEventListener('abort', onAbort);
   }
 }
 

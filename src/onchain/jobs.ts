@@ -29,6 +29,7 @@
 import { createStore, produce } from 'solid-js/store';
 import { normalizeProtocolSlug } from './adapters';
 import { kickOnchainHealthProbe } from './health';
+import { errMessage } from '../utils/errors';
 import {
   attachDefiLlamaTvl as attachDefiLlamaTvlImpl,
   getOnchainManagerState,
@@ -48,7 +49,7 @@ export type OnchainJobStatus =
 
 export interface OnchainJob {
   id: string;
-  kind: 'refresh_tvl' | 'batch_attach';
+  kind: 'refresh_tvl';
   label: string;
   status: OnchainJobStatus;
   /** 0–1 */
@@ -63,6 +64,8 @@ interface InternalJob extends OnchainJob {
   attachmentId?: string;
   protocolId?: string;
   protocolName?: string;
+  /** Aborts the in-flight fetch when the job is cancelled (F1). */
+  aborter?: AbortController | null;
   /** Resolvers for callers awaiting the job. */
   waiters: Array<{
     resolve: () => void;
@@ -90,12 +93,6 @@ const waitQueue: string[] = [];
 
 function jobId(): string {
   return `ocj_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function errMessage(err: unknown): string {
-  if (err instanceof Error && err.message) return err.message;
-  if (typeof err === 'string' && err) return err;
-  return 'Unknown error';
 }
 
 function isTerminalStatus(status: OnchainJobStatus): boolean {
@@ -239,8 +236,6 @@ async function runJob(j: InternalJob): Promise<void> {
   try {
     if (j.kind === 'refresh_tvl') {
       await runRefreshTvl(j);
-    } else if (j.kind === 'batch_attach') {
-      await runBatchRefresh(j);
     } else {
       throw new Error(`Unknown on-chain job kind: ${(j as OnchainJob).kind}`);
     }
@@ -270,60 +265,19 @@ async function runRefreshTvl(j: InternalJob): Promise<void> {
   }
   if ((j.status as OnchainJobStatus) === 'cancelled') return;
 
-  setJobFields(j, { progress: 0.15 });
-  await attachTvl(protocolId, j.protocolName);
+  // F1: per-job abort — cancelOnchainJob aborts the in-flight fetch so the
+  // concurrency slot is freed promptly instead of waiting out the timeout.
+  const aborter = new AbortController();
+  j.aborter = aborter;
+  try {
+    setJobFields(j, { progress: 0.15 });
+    await attachTvl(protocolId, j.protocolName, { signal: aborter.signal });
+  } finally {
+    if (j.aborter === aborter) j.aborter = null;
+  }
 
   if ((j.status as OnchainJobStatus) === 'cancelled') return;
   setJobFields(j, { progress: 1 });
-}
-
-/**
- * Refresh every attached series under one batch job (progress = done/total).
- * Used when a `batch_attach` job is enqueued (e.g. future multi-attach UI).
- */
-async function runBatchRefresh(j: InternalJob): Promise<void> {
-  const rows = getOnchainManagerState().attachments.slice();
-  if (!rows.length) {
-    setJobFields(j, { progress: 1 });
-    return;
-  }
-
-  let done = 0;
-  const total = rows.length;
-  const errors: string[] = [];
-
-  for (const row of rows) {
-    if (j.status === 'cancelled') return;
-
-    const protocolId = protocolIdFromRow(row);
-    if (!protocolId) {
-      done += 1;
-      setJobFields(j, { progress: done / total });
-      continue;
-    }
-
-    try {
-      await attachTvl(protocolId, displayNameFromRow(row));
-    } catch (err) {
-      if ((j.status as OnchainJobStatus) === 'cancelled') return;
-      errors.push(`${protocolId}: ${errMessage(err)}`);
-    }
-
-    done += 1;
-    setJobFields(j, { progress: done / total });
-  }
-
-  if (j.status === 'cancelled') return;
-
-  if (errors.length === total) {
-    throw new Error(errors[0] || 'All TVL refreshes failed');
-  }
-  if (errors.length) {
-    // Partial success — surface a note; status still completes unless all failed.
-    j.error = `${errors.length}/${total} failed: ${errors[0]}`;
-    j.updatedAt = Date.now();
-    syncJob(j);
-  }
 }
 
 function createRefreshTvlJob(row: OnchainSeriesRow): InternalJob {
@@ -414,6 +368,14 @@ export function cancelOnchainJob(id: string): void {
   const j = internals.get(jid);
   if (!j) return;
   if (isTerminalStatus(j.status)) return;
+
+  // F1: abort the in-flight fetch so the concurrency slot frees promptly.
+  try {
+    j.aborter?.abort(new Error('Job cancelled'));
+  } catch {
+    /* abort must not break cancel bookkeeping */
+  }
+  j.aborter = null;
 
   const qi = waitQueue.indexOf(jid);
   if (qi >= 0) waitQueue.splice(qi, 1);

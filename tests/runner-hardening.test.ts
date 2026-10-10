@@ -21,6 +21,8 @@ import { setStore, setActivePlugin, clearLogs, store, setLastRun } from '../src/
 import {
   runScript,
   runAndApply,
+  resolveInputPrecedence,
+  resolveStrategyPrecedence,
   _resetRunEpochForTests,
 } from '../src/indicators/runner';
 import { SAMPLE_BARS } from './fixtures/bars';
@@ -453,5 +455,27 @@ describe('lineSeriesToOverlayData hardening (plot-visuals)', () => {
     // Sample: first bar NaN → whitespace; second finite
     expect(data[0]).toEqual({ time: 1000 });
     expect(data[1]?.value).toBe(0.1);
+  });
+});
+
+describe('input/strategy precedence resolvers (single source of truth)', () => {
+  it('inputs: explicit beats saved beats editor draft; {} is not provided', () => {
+    expect(resolveInputPrecedence({ a: 1 }, { a: 2 }, { a: 3 }, true)).toEqual({ a: 1 });
+    expect(resolveInputPrecedence(undefined, { a: 2 }, { a: 3 }, true)).toEqual({ a: 2 });
+    expect(resolveInputPrecedence(undefined, undefined, { a: 3 }, true)).toEqual({ a: 3 });
+    expect(resolveInputPrecedence(undefined, undefined, { a: 3 }, false)).toBeUndefined();
+    expect(resolveInputPrecedence({}, undefined, { a: 3 }, true)).toEqual({ a: 3 });
+  });
+
+  it('strategy props: empty explicit wins only when asked', () => {
+    expect(
+      resolveStrategyPrecedence({}, { s: 1 }, { s: 2 }, { emptyExplicitWins: true }),
+    ).toEqual({});
+    expect(resolveStrategyPrecedence({}, { s: 1 }, { s: 2 }, {})).toEqual({ s: 1 });
+    expect(
+      resolveStrategyPrecedence(undefined, undefined, { s: 2 }, { allowEditorDraft: true }),
+    ).toEqual({ s: 2 });
+    expect(resolveStrategyPrecedence(undefined, { s: 1 }, { s: 2 }, {})).toEqual({ s: 1 });
+    expect(resolveStrategyPrecedence(undefined, undefined, undefined, {})).toBeUndefined();
   });
 });

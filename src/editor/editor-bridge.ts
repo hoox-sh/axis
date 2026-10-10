@@ -53,6 +53,14 @@ const handlers = new Set<Handler>();
 
 function dispatch(msg: BridgeMessage) {
   if (!msg || typeof msg !== 'object' || !('type' in msg)) return;
+  // Frames cross window boundaries — a foreign sender can post any shape.
+  // `doc` payloads must be strings before handlers touch them.
+  if (
+    (msg.type === 'doc' || msg.type === 'run') &&
+    typeof (msg as { doc?: unknown }).doc !== 'string'
+  ) {
+    return;
+  }
   for (const h of handlers) h(msg);
 }
 

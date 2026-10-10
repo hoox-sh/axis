@@ -67,6 +67,18 @@ const INITIAL_STATE: UpdateState = { status: 'current', update: null, lastChecke
 
 const [updateState, setUpdateState] = createSignal<UpdateState>(INITIAL_STATE);
 
+/**
+ * Versions dismissed via "Later" this session (D10). Poll/focus/online
+ * re-checks must not resurrect the banner for a dismissed version — only a
+ * *different* deployed version re-prompts. Resets on reload (session scope).
+ */
+let dismissedVersions = new Set<string>();
+
+/** Versions dismissed this session (test seam for D10). */
+export function getDismissedVersions(): string[] {
+  return [...dismissedVersions];
+}
+
 /** Reactive update state (banner reads this). */
 export function getUpdateState(): UpdateState {
   return updateState();
@@ -183,6 +195,9 @@ export function markUpdateAvailable(
   const next = normalizeVersion(latestVersion);
   const running = normalizeVersion(runningVersion);
   if (!next || next === running) return null;
+  // "Later" was chosen for this version — stay quiet until a newer deploy
+  // appears (poll/focus/online checks funnel through here too).
+  if (dismissedVersions.has(next)) return null;
   const prev = updateState();
   if (prev.status === 'update-available' && prev.update?.latestVersion === next) {
     return prev.update;
@@ -199,12 +214,17 @@ export function markUpdateAvailable(
 }
 
 /**
- * Dismiss the banner until the next detection (poll/SW re-fires on change).
+ * Dismiss the banner until a *different* version is detected. The dismissed
+ * version is remembered for this session so interval polls and
+ * focus/visibility/online re-checks cannot undo "Later" (D10).
  * Clears the payload so stale versions can't leak into later reloads.
  */
 export function dismissUpdate(): void {
   const prev = updateState();
   if (prev.status !== 'update-available') return;
+  if (prev.update?.latestVersion) {
+    dismissedVersions.add(normalizeVersion(prev.update.latestVersion));
+  }
   setUpdateState({ ...prev, status: 'current', update: null });
 }
 
@@ -438,4 +458,5 @@ export function startUpdatePolling(opts: StartPollingOptions = {}): PollHandle {
 export function _resetUpdateManagerForTests(): void {
   setUpdateState(INITIAL_STATE);
   waitingWorkerActivate = null;
+  dismissedVersions = new Set<string>();
 }

@@ -32,6 +32,8 @@ import { ChartContextMenu } from './ChartContextMenu';
 import { DrawingToolbar } from './DrawingToolbar';
 import { PyneTableHud } from './PyneTableHud';
 import { ChartScaleControls } from './ChartScaleControls';
+import { ChartSettingsPanel } from '../ui/ChartSettingsPanel';
+import { chartSettingsOpen, setChartSettingsOpen } from '../ui/chart-settings-state';
 import { VolumeProfileOverlay } from '../ui/VolumeProfileOverlay';
 import {
   store,
@@ -86,7 +88,7 @@ import {
 } from './onchain-events';
 import { onchainManagerState } from '../onchain/manager';
 import { seriesSeriesKey } from '../onchain/keys';
-import { PLOT_PALETTE } from './series-factory';
+import { PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH } from './series-factory';
 import { reportUiError } from '../ui/boot-errors';
 
 export {
@@ -808,6 +810,14 @@ export const ChartHost: Component<ChartHostProps> = (props) => {
         <DrawingToolbar />
         <VolumeProfileOverlay />
         <ChartScaleControls />
+        <Show when={chartSettingsOpen()}>
+          <div
+            class="absolute top-2 z-[16] pointer-events-auto"
+            style={{ right: `${RIGHT_PRICE_SCALE_WIDTH + 8}px` }}
+          >
+            <ChartSettingsPanel open onClose={() => setChartSettingsOpen(false)} />
+          </div>
+        </Show>
       </Show>
       <Show when={isActive() && bars().length > 0}>
         <PyneTableHud />

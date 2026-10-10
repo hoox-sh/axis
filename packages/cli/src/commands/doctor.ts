@@ -16,6 +16,7 @@ import {
   getTomlName,
   getTomlVar,
   hasTomlVar,
+  isOpenKeysEnabled,
   isPlaceholderId,
 } from "../services/wrangler-toml.js";
 import {
@@ -130,16 +131,17 @@ export async function collectDoctorChecks(options: {
         : "unset — axis setup oauth --github-client-id <id>",
     });
 
-    const allowOpen = getTomlVar(paths.wranglerToml, "ALLOW_OPEN_KEYS");
+    const allowOpenRaw = getTomlVar(paths.wranglerToml, "ALLOW_OPEN_KEYS");
+    const allowOpen = isOpenKeysEnabled(allowOpenRaw);
     checks.push({
       id: "allow-open-keys",
-      ok: allowOpen !== "1",
-      required: false,
+      ok: !allowOpen,
+      // Open keys with D1 bound let any Bearer partition the script library.
+      required: d1Ok && allowOpen,
       label: "ALLOW_OPEN_KEYS prod-safe",
-      detail:
-        allowOpen === "1"
-          ? 'currently "1" (dev open) — set "0" for prod'
-          : allowOpen ?? "(unset)",
+      detail: allowOpen
+        ? `currently "${allowOpenRaw}" (dev open) — set ALLOW_OPEN_KEYS = "" for prod`
+        : allowOpenRaw ?? '(unset — set ALLOW_OPEN_KEYS = "" for prod)',
     });
 
     const adminVar = hasTomlVar(paths.wranglerToml, "ADMIN_TOKEN");
@@ -155,11 +157,11 @@ export async function collectDoctorChecks(options: {
 
     const kvId = getKvBindingId(paths.wranglerToml, "API_KEYS");
     const kvOk = Boolean(kvId && !isPlaceholderId(kvId));
-    const d1NeedsKeys = d1Ok && allowOpen !== "1";
     checks.push({
       id: "api-keys-kv",
       ok: kvOk,
-      required: d1NeedsKeys,
+      // D1 bound without API_KEYS KV → /api/scripts 503 API_KEYS_REQUIRED.
+      required: d1Ok,
       label: "API_KEYS KV binding",
       detail: kvOk
         ? String(kvId)

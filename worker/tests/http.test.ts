@@ -28,6 +28,7 @@ import {
   MARKET_CORS,
   READ_CORS,
   WRITE_CORS,
+  buildHealthBody,
   clientIp,
   corsHeaders,
   errorBody,
@@ -35,6 +36,7 @@ import {
   jsonResponse,
   methodNotAllowed,
   preflight,
+  readCappedJson,
 } from '../src/http';
 
 describe('corsHeaders', () => {
@@ -142,15 +144,54 @@ describe('preflight', () => {
   });
 });
 
+describe('readCappedJson', () => {
+  const post = (body: string, headers: Record<string, string> = {}) =>
+    new Request('https://a.test/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body,
+    });
+
+  it('parses small bodies', async () => {
+    const r = await readCappedJson(post('{"a":1}'), 1024);
+    expect(r).toEqual({ ok: true, value: { a: 1 } });
+  });
+
+  it('fails closed on Content-Length before reading (A9)', async () => {
+    const r = await readCappedJson(post('{}', { 'Content-Length': '999999' }), 16);
+    expect(r).toEqual({ ok: false });
+  });
+
+  it('fails closed on buffered bytes over the cap', async () => {
+    const r = await readCappedJson(post(`{"a":"${'x'.repeat(100)}"}`), 16);
+    expect(r).toEqual({ ok: false });
+  });
+
+  it('maps unparseable bodies to null (caller empty-body handling)', async () => {
+    const r = await readCappedJson(post('not json'), 1024);
+    expect(r).toEqual({ ok: true, value: null });
+  });
+});
+
+describe('buildHealthBody', () => {
+  it('reports binding presence in one shared shape (A22)', () => {
+    const body = buildHealthBody({ db: true, keys: false, mcpBridge: true }) as Record<string, unknown>;
+    expect(body.status).toBe('healthy');
+    expect(body.service).toBe('worker-axis');
+    const features = body.features as Record<string, unknown>;
+    expect(features).toMatchObject({ scripts: true, d1: true, keys: false, mcpBridge: true });
+  });
+});
+
 describe('clientIp', () => {
   const req = (headers: Record<string, string>) => new Request('https://a.test/', { headers });
 
-  it('prefers cf-connecting-ip', () => {
+  it('uses cf-connecting-ip', () => {
     expect(clientIp(req({ 'cf-connecting-ip': '1.1.1.1', 'x-forwarded-for': '2.2.2.2' }))).toBe('1.1.1.1');
   });
 
-  it('falls back to the left-most x-forwarded-for entry', () => {
-    expect(clientIp(req({ 'x-forwarded-for': '2.2.2.2, 3.3.3.3' }))).toBe('2.2.2.2');
+  it('ignores spoofable x-forwarded-for (A18)', () => {
+    expect(clientIp(req({ 'x-forwarded-for': '2.2.2.2, 3.3.3.3' }))).toBe('unknown');
   });
 
   it('returns unknown when no proxy headers are present', () => {

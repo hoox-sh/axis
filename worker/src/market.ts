@@ -123,15 +123,20 @@ function putCached(key: string, entry: CacheEntry): void {
   }
 }
 
-async function fetchUpstream(url: string): Promise<Response> {
+async function fetchUpstream(url: string): Promise<{ status: number; text: string; contentType: string }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), UPSTREAM_TIMEOUT_MS);
   try {
-    return await fetch(url, {
+    const res = await fetch(url, {
       method: 'GET',
       signal: ctrl.signal,
+      // Never follow a cross-origin redirect with the caller's implied trust (A10).
+      redirect: 'error',
       headers: { Accept: 'application/json' },
     });
+    // Body read stays inside the abort window (A10).
+    const text = await res.text();
+    return { status: res.status, text, contentType: res.headers.get('Content-Type') || 'application/json' };
   } finally {
     clearTimeout(timer);
   }
@@ -160,22 +165,33 @@ async function hmacSha256Hex(secret: string, message: string): Promise<string> {
   return bytesToHex(sig);
 }
 
-async function fetchSignedBinance(url: string, apiKey: string): Promise<Response> {
+async function fetchSignedBinance(
+  url: string,
+  apiKey: string,
+): Promise<{ status: number; text: string; contentType: string }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), UPSTREAM_TIMEOUT_MS);
   try {
-    return await fetch(url, {
+    const res = await fetch(url, {
       method: 'GET',
       signal: ctrl.signal,
+      // Never follow a cross-origin redirect with the caller's implied trust (A10).
+      redirect: 'error',
       headers: {
         Accept: 'application/json',
         'X-MBX-APIKEY': apiKey,
       },
     });
+    // Body read stays inside the abort window (A10).
+    const text = await res.text();
+    return { status: res.status, text, contentType: res.headers.get('Content-Type') || 'application/json' };
   } finally {
     clearTimeout(timer);
   }
 }
+
+/** Coalesce concurrent identical public fetches (A5) — one flight per cache key. */
+const inflight = new Map<string, Promise<Response>>();
 
 async function proxyPublicPath(
   upstreams: readonly string[],
@@ -188,71 +204,82 @@ async function proxyPublicPath(
   const hit = getCached(cacheKey);
   if (hit) return cachedResponse(hit, origin, 'HIT');
 
-  let lastErr = 'unreachable';
-  let lastStatus = 502;
-  let lastBody = '';
-  let lastContentType = 'application/json';
-  for (const base of upstreams) {
-    const upstreamUrl = `${base}${pathAndQuery}`;
-    try {
-      const upstream = await fetchUpstream(upstreamUrl);
-      const text = await upstream.text();
-      const contentType = upstream.headers.get('Content-Type') || 'application/json';
-      // Geo / WAF blocks (403/451) and rate limits (429) on one host should
-      // fail over to the next upstream instead of surfacing HTML to the PWA.
-      if (upstream.status === 403 || upstream.status === 451 || upstream.status === 429) {
-        lastErr = `${base} → HTTP ${upstream.status}`;
-        lastStatus = upstream.status;
-        lastBody = text;
-        lastContentType = contentType;
-        continue;
-      }
-      if (upstream.ok || upstream.status === 400 || upstream.status === 404) {
-        putCached(cacheKey, {
-          body: text,
+  const pending = inflight.get(cacheKey);
+  if (pending) return (await pending).clone();
+
+  const task = (async (): Promise<Response> => {
+    let lastErr = 'unreachable';
+    let lastStatus = 502;
+    let lastBody = '';
+    let lastContentType = 'application/json';
+    for (const base of upstreams) {
+      const upstreamUrl = `${base}${pathAndQuery}`;
+      try {
+        const upstream = await fetchUpstream(upstreamUrl);
+        const text = upstream.text;
+        const contentType = upstream.contentType;
+        // Geo / WAF blocks (403/451) and rate limits (429) on one host should
+        // fail over to the next upstream instead of surfacing HTML to the PWA.
+        if (upstream.status === 403 || upstream.status === 451 || upstream.status === 429) {
+          lastErr = `${base} → HTTP ${upstream.status}`;
+          lastStatus = upstream.status;
+          lastBody = text;
+          lastContentType = contentType;
+          continue;
+        }
+        if ((upstream.status >= 200 && upstream.status < 300) || upstream.status === 400 || upstream.status === 404) {
+          putCached(cacheKey, {
+            body: text,
+            status: upstream.status,
+            contentType,
+            expiresAt: Date.now() + ttlMs,
+          });
+        }
+        return new Response(text, {
           status: upstream.status,
-          contentType,
-          expiresAt: Date.now() + ttlMs,
+          headers: {
+            'Content-Type': contentType,
+            'X-Axis-Market-Cache': 'MISS',
+            'X-Axis-Market-Upstream': base,
+            ...MARKET_CORS(origin),
+          },
         });
+      } catch (err) {
+        lastErr = err instanceof Error ? err.message : String(err);
       }
-      return new Response(text, {
-        status: upstream.status,
+    }
+
+    // All upstreams blocked — surface the last upstream body (usually Binance
+    // 403 HTML) with its status so callers can distinguish geo-block from
+    // network failure, plus a structured hint.
+    if (lastBody && (lastStatus === 403 || lastStatus === 451 || lastStatus === 429)) {
+      return new Response(lastBody, {
+        status: lastStatus,
         headers: {
-          'Content-Type': contentType,
+          'Content-Type': lastContentType,
           'X-Axis-Market-Cache': 'MISS',
-          'X-Axis-Market-Upstream': base,
+          'X-Axis-Market-Upstream': 'all-blocked',
           ...MARKET_CORS(origin),
         },
       });
-    } catch (err) {
-      lastErr = err instanceof Error ? err.message : String(err);
     }
-  }
 
-  // All upstreams blocked — surface the last upstream body (usually Binance
-  // 403 HTML) with its status so callers can distinguish geo-block from
-  // network failure, plus a structured hint.
-  if (lastBody && (lastStatus === 403 || lastStatus === 451 || lastStatus === 429)) {
-    return new Response(lastBody, {
-      status: lastStatus,
-      headers: {
-        'Content-Type': lastContentType,
-        'X-Axis-Market-Cache': 'MISS',
-        'X-Axis-Market-Upstream': 'all-blocked',
-        ...MARKET_CORS(origin),
+    return json(
+      {
+        status: 'error',
+        code: 'UPSTREAM_NETWORK',
+        message: `${venueLabel} upstream unreachable: ${lastErr}`,
       },
-    });
+      502,
+      origin,
+    );
+  })();
+  inflight.set(cacheKey, task);
+  try {
+    return (await task).clone();
+  } finally {
+    if (inflight.get(cacheKey) === task) inflight.delete(cacheKey);
   }
-
-  return json(
-    {
-      status: 'error',
-      code: 'UPSTREAM_NETWORK',
-      message: `${venueLabel} upstream unreachable: ${lastErr}`,
-    },
-    502,
-    origin,
-  );
 }
 
 function proxyBinancePath(
@@ -402,6 +429,7 @@ function parseMexcTickerQuery(url: URL): MexcTickerQuery {
 /** @internal test helper — clear the in-memory market cache between cases. */
 export function _resetMarketCacheForTests(): void {
   memCache.clear();
+  inflight.clear();
 }
 
 /** 400 envelope shared by every query-validation failure. */
@@ -441,12 +469,10 @@ async function signedKlines(req: Request, url: URL, origin: string): Promise<Res
   const upstreamUrl = `${BINANCE_SIGNED_UPSTREAM}/api/v3/klines?${qs}`;
   try {
     const upstream = await fetchSignedBinance(upstreamUrl, apiKey);
-    const text = await upstream.text();
-    const contentType = upstream.headers.get('Content-Type') || 'application/json';
-    return new Response(text, {
+    return new Response(upstream.text, {
       status: upstream.status,
       headers: {
-        'Content-Type': contentType,
+        'Content-Type': upstream.contentType,
         'X-Axis-Market-Cache': 'BYPASS',
         'X-Axis-Market-Upstream': BINANCE_SIGNED_UPSTREAM,
         ...MARKET_CORS(origin),
@@ -509,6 +535,8 @@ function binanceTicker(url: URL, origin: string): Promise<Response> {
 const ROUTER = createProxyRouter({
   prefix: '/api/market',
   cors: MARKET_CORS,
+  // Public, unauthenticated — per-IP window is the only abuse backstop (A5).
+  ipLimit: { limit: 120, windowMs: 60_000 },
   health: () => ({
     status: 'healthy',
     service: 'axis-market',

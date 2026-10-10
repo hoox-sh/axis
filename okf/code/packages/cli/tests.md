@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "packages/cli/tests"
-description: "CLI installation self-check: install-context detection, engine compliance, version drift vs the repo checkout, and the cli-install doctor row."
+description: "packages/cli/tests contains cli-entry.test.ts, doctor.test.ts, health.test.ts, and 8 more files."
 resource: "packages/cli/tests"
 tags: [cli, code, packages, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:06:45Z
+  at: 2026-10-10T20:32:38Z
 sources:
   - id: tree
     resource: "packages/cli/tests"
@@ -25,6 +25,7 @@ okf_lock: generated
 * `mcp.test.ts`
 * `paths.test.ts`
 * `preflight.test.ts`
+* `run.test.ts`
 * `secrets.test.ts`
 * `setup-d1.test.ts`
 * `wrangler-toml.test.ts`

@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 245 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 255 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-07T04:35:08Z
+  at: 2026-10-10T20:32:38Z
 sources:
   - id: tree
     resource: "tests"
@@ -23,6 +23,7 @@ okf_lock: generated
 * `alerts-format.test.ts`
 * `alerts-pine.test.ts`
 * `alerts-storage.test.ts`
+* `alerts-tick.test.ts`
 * `architecture-plan.test.ts`
 * `background-catchup.test.ts`
 * `bar-replay.test.ts`
@@ -84,6 +85,7 @@ okf_lock: generated
 * `drawings-trend-place.test.ts`
 * `drawings.test.ts`
 * `dsm-ui.test.ts`
+* `editor-bridge.test.ts`
 * `editor-chrome.test.ts`
 * `editor-default-width.test.ts`
 * `editor-diagnostics.test.ts`
@@ -148,6 +150,7 @@ okf_lock: generated
 * `onchain-jobs.test.ts`
 * `onchain-keys.test.ts`
 * `onchain-load-symbol.test.ts`
+* `onchain-manager-detach.test.ts`
 * `onchain-manager-events.test.ts`
 * `onchain-overlay.test.ts`
 * `onchain-presets.test.ts`
@@ -211,6 +214,7 @@ okf_lock: generated
 * `screenshot.test.ts`
 * `script-inputs.test.ts` — Calculation, Easing, Frequency, StartOn
 * `script-meta.test.ts`
+* `scripts-sync-versions.test.ts`
 * `series-factory.test.ts`
 * `settings-credentials.test.ts`
 * `setup.ts` — MemoryStorage, installAxisTestEnv, installDocumentStub, installMemoryLocalStorage, installWindowStub
@@ -241,6 +245,7 @@ okf_lock: generated
 * `streams-catalog.test.ts`
 * `streams-multiplex.test.ts`
 * `studio-json.test.ts`
+* `sw-parity.test.ts`
 * `sw-strategy.test.ts`
 * `symbol-catalog.test.ts`
 * `telemetry.test.ts`
@@ -251,6 +256,7 @@ okf_lock: generated
 * `tool-settings.test.ts`
 * `toolbar-drag.test.ts`
 * `topbar-field.test.ts`
+* `ui-clock.test.ts`
 * `ui-effects.test.ts`
 * `ui-scale.test.ts`
 * `update-manager.test.ts`
@@ -266,10 +272,14 @@ okf_lock: generated
 * `workers-probe-coverage.test.ts`
 * `workers-probe.test.ts`
 * `workspace-snapshot.test.ts`
+* `wsd-draft-serialize.test.ts`
+* `wsd-persist.test.ts`
+* `wsd-update-dismiss.test.ts`
+* `wsd-vault.test.ts`
 
 # Packages
 
-`@codemirror/language`, `@codemirror/state`, `@codemirror/view`, `bun:test`, `lightweight-charts`, `node:fs`, `node:path`, `node:url`, `solid-js/store`
+`@codemirror/language`, `@codemirror/state`, `@codemirror/view`, `bun:test`, `lightweight-charts`, `node:fs`, `node:path`, `node:url`, `solid-js`, `solid-js/store`
 
 # Depends on
 

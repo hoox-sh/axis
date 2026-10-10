@@ -257,8 +257,7 @@ describe('registerAxisServiceWorker', () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
-  it('reloads on controllerchange when already controlled even without waiting postMessage', async () => {
-    const swListeners: Record<string, Array<() => void>> = {};
+  it('reloads on controllerchange when already controlled even without waiting postMessage', async () => {    const swListeners: Record<string, Array<() => void>> = {};
     const registration = {
       waiting: null,
       addEventListener: mock(() => {}),
@@ -371,5 +370,47 @@ describe('registerAxisServiceWorker', () => {
     // reports false so the caller falls back to a plain reload.
     registration.waiting = null;
     expect(activate()).toBe(false);
+  });
+
+  it('D3 — automatic controllerchange reload keeps the close guard enabled', async () => {
+    const { _resetCloseGuardForTests, isCloseGuardEnabled } =
+      await import('../src/pwa/close-guard');
+    _resetCloseGuardForTests();
+    const swListeners: Record<string, Array<() => void>> = {};
+    const registration = {
+      waiting: null,
+      addEventListener: mock(() => {}),
+      update: mock(async () => {}),
+    };
+    const register = mock(() => Promise.resolve(registration));
+    const reload = mock(() => {});
+
+    // @ts-expect-error test stub
+    globalThis.window = {};
+    // @ts-expect-error test stub
+    globalThis.navigator = {
+      serviceWorker: {
+        controller: {}, // already controlled → auto reload path
+        register,
+        addEventListener: mock((type: string, fn: () => void) => {
+          if (!swListeners[type]) swListeners[type] = [];
+          swListeners[type].push(fn);
+        }),
+      },
+    };
+    // @ts-expect-error test stub
+    globalThis.location = {
+      protocol: 'https:',
+      hostname: 'example.com',
+      reload,
+    };
+
+    await registerAxisServiceWorker();
+
+    for (const fn of swListeners.controllerchange ?? []) fn();
+    expect(reload).toHaveBeenCalledTimes(1);
+    // The automatic path must not disable the guard: unsaved edits still prompt.
+    expect(isCloseGuardEnabled()).toBe(true);
+    _resetCloseGuardForTests();
   });
 });

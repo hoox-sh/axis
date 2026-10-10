@@ -412,7 +412,7 @@ describe('git-github stretch', () => {
 
 describe('cloud draft + prefix stretch', () => {
   const key = 'pn_' + 'b'.repeat(48);
-  const cfg = { endpoint: 'http://cloud.test', apiKey: key };
+  const cfg = { endpoint: 'https://cloud.test', apiKey: key };
 
   it('saveDraft/loadDraft and list prefix filter', async () => {
     setStore('pluginsConfig', 'storage:cloud', cfg);
