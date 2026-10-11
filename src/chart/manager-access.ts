@@ -31,6 +31,7 @@ import { DrawingLayer } from './drawing-layer';
 import { createPriceSeries, createVolumeSeries } from './series-factory';
 import {
   mapBarsToPriceData,
+  isOhlcChartType,
   lastBarDirection,
   normalizeChartType,
   resetHeikinAshiCache,
@@ -101,6 +102,71 @@ function onLayerDrawingsChange(list: Drawing[]) {
     { includeUntagged: true },
   ) as Drawing[];
   setDrawings(merged);
+}
+
+/**
+ * Boundary guard for chart-library `setData` payloads.
+ *
+ * Drops rows the library rejects or chokes on (non-finite time/values,
+ * non-ascending times) before they reach `setData`, and reports what was
+ * dropped so repeat offenders are visible in the log instead of surfacing
+ * as a bare library assertion (`Value is null`) on every redraw.
+ */
+export function sanitizeSeriesDataForSetData<T extends { time?: unknown }>(
+  data: readonly T[],
+  opts?: { requireOhlc?: boolean },
+): {
+  clean: T[];
+  dropped: number;
+  firstBadIndex: number;
+  firstBadReason: string;
+  nonIntegerTimes: number;
+} {
+  const clean: T[] = [];
+  let dropped = 0;
+  let firstBadIndex = -1;
+  let firstBadReason = '';
+  let nonIntegerTimes = 0;
+  let prevTime = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i]!;
+    const t = (row as { time?: unknown }).time;
+    let reason = '';
+    if (typeof t !== 'number' || !Number.isFinite(t)) {
+      reason = `bad-time:${String(t)}`;
+    } else {
+      if (!Number.isInteger(t)) nonIntegerTimes++;
+      if (t <= prevTime) {
+        reason = `non-ascending-time:${t}<=${prevTime}`;
+      } else if (opts?.requireOhlc) {
+        const o = row as unknown as Record<string, unknown>;
+        if (
+          !Number.isFinite(o.open as number) ||
+          !Number.isFinite(o.high as number) ||
+          !Number.isFinite(o.low as number) ||
+          !Number.isFinite(o.close as number)
+        ) {
+          reason = 'bad-ohlc';
+        }
+      } else {
+        const v = (row as unknown as Record<string, unknown>).value;
+        if (v !== undefined && !Number.isFinite(v as number)) {
+          reason = 'bad-value';
+        }
+      }
+    }
+    if (reason) {
+      dropped++;
+      if (firstBadIndex < 0) {
+        firstBadIndex = i;
+        firstBadReason = reason;
+      }
+      continue;
+    }
+    prevTime = t as number;
+    clean.push(row);
+  }
+  return { clean, dropped, firstBadIndex, firstBadReason, nonIntegerTimes };
 }
 
 /**
@@ -711,7 +777,28 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
       const data = mapBarsToPriceData(bars, chartType, holder);
       // Legacy global stays in sync for non-holder callers (tests / older doubles).
       if (chartType !== 'heikinashi') resetHeikinAshiCache();
-      pricePane.series['candle'].setData(data as never);
+      const checked = sanitizeSeriesDataForSetData(data, { requireOhlc: isOhlcChartType(chartType) });
+      if (checked.dropped > 0) {
+        reportUiError(
+          new Error(
+            `dropped ${checked.dropped}/${data.length} rows at index ${checked.firstBadIndex} (${checked.firstBadReason}, nonIntegerTimes=${checked.nonIntegerTimes})`,
+          ),
+          {
+            source: 'chart',
+            context: 'Candle series data sanitized',
+            status: false,
+          },
+        );
+      }
+      try {
+        pricePane.series['candle'].setData(checked.clean as never);
+      } catch (err: unknown) {
+        const inner = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `candle setData failed: ${inner} (rows=${checked.clean.length}, dropped=${checked.dropped})`,
+          { cause: err },
+        );
+      }
       // Re-detect decimals after history lands (auto uses symbol + bars)
       try {
         applyPriceScaleDecimals({ bars, symbol: store.symbol });
@@ -778,9 +865,29 @@ export function setDataToChart(bars: Bar[], opts: SetDataToChartOpts = {}) {
     }
     if (volPane?.series['volume']) {
       const volColors = getThemeManager().getVolumeColors();
-      volPane.series['volume'].setData(
-        mapBarsToVolumeData(bars, volColors) as never,
-      );
+      const volData = mapBarsToVolumeData(bars, volColors);
+      const volChecked = sanitizeSeriesDataForSetData(volData);
+      if (volChecked.dropped > 0) {
+        reportUiError(
+          new Error(
+            `dropped ${volChecked.dropped}/${volData.length} rows at index ${volChecked.firstBadIndex} (${volChecked.firstBadReason})`,
+          ),
+          {
+            source: 'chart',
+            context: 'Volume series data sanitized',
+            status: false,
+          },
+        );
+      }
+      try {
+        volPane.series['volume'].setData(volChecked.clean as never);
+      } catch (err: unknown) {
+        const inner = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `volume setData failed: ${inner} (rows=${volChecked.clean.length}, dropped=${volChecked.dropped})`,
+          { cause: err },
+        );
+      }
       try {
         volPane.series['volume'].applyOptions({
           lastValueVisible: store.lastValueLabelsVisible !== false,

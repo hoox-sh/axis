@@ -13,6 +13,12 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Chart `setData` boundary guard**: history apply now sanitizes candle/volume payloads (drops non-finite times/values and non-ascending times with a counted log line) and reports candle vs volume failures under distinct contexts, instead of surfacing a bare library assertion (`Value is null`) on every redraw after one poisoned row.
+
 ## [2.22.1] — 2026-10-11
 
 ### Fixed
