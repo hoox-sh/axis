@@ -20,6 +20,7 @@ import {
   getManager,
   clearScriptPaneLayer,
   clearScriptPaneLayers,
+  ensureScriptPaneLayer,
   getDrawingLayer,
   getActiveDrawingLayer,
 } from '../chart/manager-access';
@@ -59,11 +60,25 @@ export function clearScriptChartOverlays(id: string, paneId?: string): void {
   }
   try {
     if (isSubPane) {
-      clearScriptPaneLayer?.(pane);
+      // Clear only this script's geometry on the shared sub-pane layer.
+      // Destroying the whole layer wiped sibling scripts' fills/drawings
+      // until their next re-run.
+      try {
+        const paneLayer = ensureScriptPaneLayer(pane);
+        paneLayer?.clearScriptDrawings?.(id);
+        paneLayer?.clearPlotFills?.(id);
+      } catch {
+        /* pane layer optional */
+      }
       const stillOnPane = store.scripts.some(
         (s) => s.id !== id && (s.paneId || 'price') === pane,
       );
       if (!stillOnPane) {
+        try {
+          clearScriptPaneLayer?.(pane);
+        } catch {
+          /* optional */
+        }
         try {
           manager.destroyPane?.(pane);
         } catch {

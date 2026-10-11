@@ -165,8 +165,8 @@ function anchorsTooClose(a: Point, b: Point): boolean {
   return a.time === b.time && a.price === b.price;
 }
 
-/** Drag handle mode: whole-body move or endpoint resize (`price` reserved). */
-type DragMode = 'move' | 'p1' | 'p2' | 'p3' | 'price';
+/** Drag handle mode: whole-body move, `price` (hline), or `pN` vertex resize. */
+type DragMode = 'move' | 'price' | `p${number}`;
 
 type DragState = {
   id: string;
@@ -256,6 +256,8 @@ export class DrawingLayer {
   };
   /** Coalesce pan/zoom redraws — avoid thrashing gScript replace on every frame. */
   private redrawRaf = 0;
+  /** Coalesce drag-move repaints (one user-layer rebuild per frame). */
+  private dragRaf = 0;
   /** Resize storm: host RO firing faster than paints (window/panel drag). */
   private resizeStorm = false;
   /** Settle timer ending the storm with one full repaint at final geometry. */
@@ -850,6 +852,10 @@ export class DrawingLayer {
       cancelAnimationFrame(this.redrawRaf);
       this.redrawRaf = 0;
     }
+    if (this.dragRaf) {
+      cancelAnimationFrame(this.dragRaf);
+      this.dragRaf = 0;
+    }
     if (this.resizeSettleTimer) {
       clearTimeout(this.resizeSettleTimer);
       this.resizeSettleTimer = 0;
@@ -1309,6 +1315,11 @@ export class DrawingLayer {
     if (this.didDrag) this.emit();
     this.drag = null;
     this.svg.style.pointerEvents = this.tool === 'cursor' ? 'none' : 'auto';
+    // Flush any pending drag-frame so the final geometry paints immediately.
+    if (this.dragRaf) {
+      cancelAnimationFrame(this.dragRaf);
+      this.dragRaf = 0;
+    }
     // Geometry may have changed; user layer only (scales unchanged)
     this.redrawUser();
   }
@@ -1610,8 +1621,17 @@ export class DrawingLayer {
       const idx = this.drawings.findIndex((d) => d.id === this.drag!.id);
       if (idx >= 0) {
         this.drawings[idx] = next;
-        // Drag is user-only; never rebuild script/fills every mousemove
-        this.redrawUser();
+        // Drag is user-only; never rebuild script/fills every mousemove.
+        // Coalesce to one user-layer rebuild per frame so large fills and
+        // multi-point paths don't thrash the DOM on every pointermove.
+        if (this.dragRaf) return;
+        this.dragRaf = requestAnimationFrame(() => {
+          this.dragRaf = 0;
+          if (this.host.clientWidth <= 0 || this.host.clientHeight <= 0) return;
+          this.syncSize();
+          if (this.resizeStorm) return;
+          this.redrawUserInner();
+        });
       }
       return;
     }
@@ -1721,12 +1741,24 @@ export class DrawingLayer {
         return null;
       }
       if ('points' in d && Array.isArray(d.points) && d.points.length) {
-        const modes: DragMode[] = ['p1', 'p2', 'p3'];
-        for (let i = 0; i < d.points.length && i < modes.length; i++) {
+        // Freehand strokes (brush/highlighter) and long polylines: body-move
+        // only — per-vertex handles on hundreds of points thrash the DOM and
+        // make fills impossible to grab. Fixed 3–5pt tools (triangle, channel,
+        // pitchfork, fibext, fibchannel, fibWedge, xabcd, headShoulders) expose
+        // every vertex so fills relocate when any anchor moves.
+        if (d.kind === 'brush' || d.kind === 'highlighter') return null;
+        if (
+          (d.kind === 'polyline' || d.kind === 'path') &&
+          (d as { points?: unknown[] }).points!.length > 12
+        ) {
+          return null;
+        }
+        for (let i = 0; i < d.points.length; i++) {
           const p = d.points[i];
           if (!p || !isFinitePoint(p)) continue;
           const c = this.toXY(p);
-          if (c && Math.hypot(x - c.x, y - c.y) <= tol) return { id: d.id, mode: modes[i]! };
+          if (c && Math.hypot(x - c.x, y - c.y) <= tol)
+            return { id: d.id, mode: `p${i + 1}` as DragMode };
         }
         return null;
       }
@@ -2887,25 +2919,37 @@ function resizeDrawing(origin: Drawing, mode: DragMode, pt: Point): Drawing {
   }
   if ('points' in origin && Array.isArray(origin.points) && origin.points.length) {
     const points = origin.points.slice();
-    if (mode === 'p1' && points[0]) points[0] = { ...pt };
-    else if (mode === 'p2' && points[1]) points[1] = { ...pt };
-    else if (mode === 'p3' && points[2]) points[2] = { ...pt };
+    // Generic pN support (p1..pN) so 5-pt patterns (xabcd, headShoulders) can
+    // drag any vertex and fills relocate with it.
+    const m = /^p(\d+)$/.exec(String(mode));
+    if (m) {
+      const idx = Number(m[1]) - 1;
+      if (idx >= 0 && idx < points.length && points[idx]) {
+        points[idx] = { ...pt };
+      } else {
+        return origin;
+      }
+    } else {
+      return origin;
+    }
+    // Keep legacy mirrors in sync: p1=first, p3=third, p2=second for ≤3pts
+    // but =last for n-pt tools whose create() stamps first/last (polyline,
+    // brush, xabcd, headShoulders) so fills using p1/p2 don't desync.
+    const last = points[points.length - 1];
     return {
       ...origin,
       points,
       p1: points[0],
-      p2: points[1] ?? points[0],
+      p2: points.length > 3 ? last : (points[1] ?? points[0]),
       p3: points[2],
     } as Drawing;
   }
-  if (mode === 'p1' && 'p1' in origin) {
-    return { ...origin, p1: { ...pt } } as Drawing;
-  }
-  if (mode === 'p2' && 'p2' in origin) {
-    return { ...origin, p2: { ...pt } } as Drawing;
-  }
-  if (mode === 'p3' && 'p3' in origin) {
-    return { ...origin, p3: { ...pt } } as Drawing;
+  const m = /^p(\d+)$/.exec(String(mode));
+  if (m) {
+    const n = Number(m[1]);
+    if (n === 1 && 'p1' in origin) return { ...origin, p1: { ...pt } } as Drawing;
+    if (n === 2 && 'p2' in origin) return { ...origin, p2: { ...pt } } as Drawing;
+    if (n === 3 && 'p3' in origin) return { ...origin, p3: { ...pt } } as Drawing;
   }
   return origin;
 }
@@ -2971,11 +3015,12 @@ export function shiftDrawing(d: Drawing, dTime: number, dPrice: number): Drawing
     const points = d.points.map((p) =>
       isFinitePoint(p) ? shiftPoint(p, dTime, dPrice) : p,
     );
+    const last = points[points.length - 1];
     return {
       ...d,
       points,
       p1: points[0],
-      p2: points[1] ?? points[0],
+      p2: points.length > 3 ? last : (points[1] ?? points[0]),
       p3: points[2],
     } as Drawing;
   }
@@ -3120,8 +3165,10 @@ function scriptDrawingsSignature(list: ScriptDrawing[]): string {
 }
 
 /**
- * Cheap fingerprint for plot fill bands (name/len/tip times/values/color).
- * Full mid-history rewrites with same tips are rare on live silent re-runs.
+ * Cheap fingerprint for plot fill bands (name/len/tips/sampled interior/color).
+ * Samples up to 16 interior points so a historical rewrite that preserves
+ * first/last/mid still changes the signature and fills relocate instead of
+ * showing stale geometry on live silent re-runs. Bounded cost (≤19 samples).
  * Exported for unit tests.
  */
 export function plotFillsSignature(
@@ -3145,10 +3192,24 @@ export function plotFillsSignature(
     const fu = n ? f.upper[0] : null;
     const fl = n ? f.lower[0] : null;
     const lc = n && f.colors?.length ? f.colors[n - 1] : null;
-    const mid = n > 2 ? Math.floor(n / 2) : 0;
-    const mu = n > 2 ? f.upper[mid] : null;
+    const fc = n && f.colors?.length ? f.colors[0] : null;
+    // Sampled interior checksum: catches rewrites that keep tips identical.
+    let sample = '';
+    if (n > 4) {
+      const step = Math.max(1, Math.floor(n / 16));
+      const bits: string[] = [];
+      for (let i = step; i < n - 1 && bits.length < 16; i += step) {
+        const u = f.upper[i];
+        const l = f.lower[i];
+        bits.push(`${u ?? 'x'}:${l ?? 'x'}`);
+      }
+      sample = bits.join(',');
+    } else if (n > 2) {
+      const mid = Math.floor(n / 2);
+      sample = `${f.upper[mid] ?? 'x'}:${f.lower[mid] ?? 'x'}`;
+    }
     parts.push(
-      `${f.name}|${n}|${ft}|${lt}|${fu}|${fl}|${lu}|${ll}|${mu}|${lc || ''}|${f.color || ''}`,
+      `${f.name}|${n}|${ft}|${lt}|${fu}|${fl}|${lu}|${ll}|${sample}|${fc || ''}|${lc || ''}|${f.color || ''}`,
     );
   }
   return parts.join(';');

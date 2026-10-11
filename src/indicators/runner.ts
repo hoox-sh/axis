@@ -1410,10 +1410,20 @@ async function runAndApplyInner(
         plotDisplayHas(plotMeta[f.name]?.display, PLOT_DISPLAY.pane),
       );
       try {
-        const layer =
-          !overlay && paneId !== 'price'
-            ? ensureScriptPaneLayer(paneId) ?? getActiveDrawingLayer()
-            : getActiveDrawingLayer();
+        const priceLayer = getActiveDrawingLayer();
+        const paneLayer =
+          !overlay && paneId !== 'price' ? ensureScriptPaneLayer(paneId) : undefined;
+        const layer = paneLayer ?? priceLayer;
+        // The non-target layer may still hold this owner's fills from a prior
+        // overlay toggle — clear it so fills don't duplicate / stay stale.
+        const other = paneLayer ? priceLayer : undefined;
+        if (other && other !== layer) {
+          try {
+            other.clearPlotFills?.(indicatorId ?? EDITOR_RUN_KEY);
+          } catch {
+            /* optional */
+          }
+        }
         if (layer?.setPlotFills) {
           if (fillBands.length) {
             const times: number[] = new Array(ohlcvTimes.length);

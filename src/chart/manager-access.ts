@@ -256,18 +256,29 @@ export function ensureScriptPaneLayer(paneId: string): DrawingLayer | undefined 
   if (!paneId || paneId === 'price' || paneId === 'volume') {
     return getDrawingLayer();
   }
-  const existing = scriptPaneLayers.get(paneId);
-  if (existing) return existing;
   const mgr = getManager();
-  if (!mgr) return undefined;
+  if (!mgr) return scriptPaneLayers.get(paneId);
   const pane = mgr.getPane?.(paneId);
-  if (!pane?.chart) return undefined;
+  if (!pane?.chart) return scriptPaneLayers.get(paneId);
   // Prefer first line overlay series as Y reference; fall back to any series
   const seriesMap = pane.series || {};
   const seriesKey =
     Object.keys(seriesMap).find((k) => k && !k.startsWith('_')) ||
     Object.keys(seriesMap)[0];
   const series = seriesKey ? seriesMap[seriesKey] : undefined;
+  const existing = scriptPaneLayers.get(paneId);
+  if (existing) {
+    // Refresh the Y reference + bar clock: overlay lines are replaced on every
+    // full re-run (new series objects), so a cached layer would otherwise keep
+    // projecting fills with a removed series scale and mislocate them.
+    try {
+      if (series) existing.setSeries(series as never);
+      existing.setBarsProvider(() => store.bars as never);
+    } catch {
+      /* layer may be disposed */
+    }
+    return existing;
+  }
   if (!series) return undefined;
   const paneElId =
     typeof mgr.paneDomId === 'function' ? mgr.paneDomId(paneId) : `pane-${paneId}`;
@@ -278,6 +289,11 @@ export function ensureScriptPaneLayer(paneId: string): DrawingLayer | undefined 
       scriptOnly: true,
     });
     layer.setHideDrawings(!!store.drawingUi?.hideDrawings);
+    try {
+      layer.setBarsProvider(() => store.bars as never);
+    } catch {
+      /* optional */
+    }
     scriptPaneLayers.set(paneId, layer);
     return layer;
   } catch {

@@ -9,9 +9,20 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-10-10 · 528 commits · describe-tag: `v2.21.0`_
+_Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 
 ---
+
+## [2.22.1] — 2026-10-11
+
+### Fixed
+
+- **Fib circles / arcs respect X/Y ratio**: `fibCircles` and `fibArc` no longer force pixel-perfect circles from the hypotenuse. Radii are now independent `rx=|dx|·lvl`, `ry=|dy|·lvl` ellipses — round only at 45°, with circular fallback for horizontal/vertical trends so levels stay visible. Hit-testing uses normalized ellipse distance plus trend-guide hit; drafts preview ellipses; `create()` stamps dual-shape `points[]` so moves stay in sync.
+- **Fib circles background fills relocate with strokes**: nested ellipse fills (largest→smallest, `fillOpacity`, per-level colors) added to `fibCircles` and half-annulus fills to `fibArc`, matching the style dialog Background toggle. Fills derive from the same `rx/ry` as strokes so body-move/resize relocates them together.
+- **N-point drag + fill relocation**: `hitTestHandle` now exposes every vertex for fixed 3–5pt tools (channel, pitchfork, fibext, fibchannel, fibWedge, triangle, xabcd, headShoulders) instead of only the first three; freehand (brush/highlighter, long polylines) stays body-move-only to avoid DOM thrash. `resizeDrawing` handles generic `pN`, `shiftDrawing` keeps `p2=last` for n-pt tools so `p1/p2` mirrors no longer desync from `points[]` after a move.
+- **Drag perf**: pointermove drags coalesce to one user-layer rebuild per frame (`dragRaf`, flushed on pointerup) instead of a full SVG rebuild per event; pan/zoom path unchanged (script/fills never rebuild on drag).
+- **Long/short fills honor style**: profit/loss rects use `ctx.fillOpacity` instead of hardcoded `0.18`.
+- **Indicator `fill()` / `linefill` relocation**: `ensureScriptPaneLayer` refreshes its Y series + bar clock on every call (stale removed-series scale misplaced sub-pane fills); `runAndApply` clears this owner's fills on the non-target layer when overlay toggles so fills don't duplicate/linger; `clearScriptChartOverlays` clears only the hidden script's drawings/fills on shared sub-panes (previously destroyed the whole layer, wiping siblings); `plotFillsSignature` samples up to 16 interior points so historical rewrites with identical tips still invalidate the cache.
 
 ## [2.22.0] — 2026-10-10
 
@@ -1536,12 +1547,15 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-10 (47 commits)
+### 2026-10 (48 commits)
 
 #### Features
 
+- `8b587834` (2026-10-10) — feat(release): AXIS v2.22.0 — chart settings panel, review fix batch, hardening
 - `18d589fc` (2026-10-09) — feat(edge): live tenant verify + usage flush
 - `cc1e1b34` (2026-10-09) — feat(entitlements): tenant scope types + bearer classification (no enforcement)
 - `fa15352b` (2026-10-08) — feat(chart): pine tables in bottom panel (September 2026 parity)

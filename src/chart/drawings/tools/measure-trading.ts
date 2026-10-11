@@ -185,13 +185,16 @@ function paintPosition(
   const profitH = Math.abs(yTarget - yEntry);
   const lossTop = Math.min(yEntry, yStop);
   const lossH = Math.abs(yStop - yEntry);
+  // Respect the drawing's fillOpacity so fills relocate *and* restyle with the
+  // selection (previously hardcoded 0.18 ignored the style bar).
+  const fo = String(clampOpacity(ctx.fillOpacity, 0.18));
   ctx.el('rect', {
     x: String(x1),
     y: String(profitTop),
     width: String(w),
     height: String(Math.max(1, profitH)),
     fill: upColor,
-    'fill-opacity': '0.18',
+    'fill-opacity': fo,
     stroke: upColor,
     'stroke-width': '1',
     'pointer-events': 'all',
@@ -202,7 +205,7 @@ function paintPosition(
     width: String(w),
     height: String(Math.max(1, lossH)),
     fill: downColor,
-    'fill-opacity': '0.18',
+    'fill-opacity': fo,
     stroke: downColor,
     'stroke-width': '1',
     'pointer-events': 'all',
