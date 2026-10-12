@@ -63,6 +63,7 @@ flowchart TB
 | Config | `endpoint` (Worker URL — never the Pine engine host), `apiKey` (`pn_…`). Set in **Settings → Script storage** or Script Library. |
 | Concurrency | `If-Match` revision headers on write |
 | Partition | Worker hashes key → `userId`; rows scoped per user |
+| Git history | When the Worker binds `SCRIPT_ARTIFACTS` (`axis setup artifacts`), saves mirror as git commits and history serves real SHAs (`backend: 'artifacts-git'`); restore writes a version back as the new tip |
 
 ### git (`src/storage/git.ts`)
 

@@ -7,7 +7,7 @@ tags: [data-plane, doc, docs, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-12T19:30:37Z
 sources:
   - id: tree
     resource: "docs/worker/data-plane.mdx"
@@ -24,6 +24,7 @@ Repo path `docs/worker/data-plane.mdx`.
 
 * Abstract
 * Conceptual model
+* Git-native history (Cloudflare Artifacts, no GitHub creds)
 * Interface surface
   * Document fields
   * Concurrency

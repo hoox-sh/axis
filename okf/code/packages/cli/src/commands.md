@@ -7,7 +7,7 @@ tags: [cli, code, commands, packages]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-10T20:32:38Z
+  at: 2026-10-12T19:30:37Z
 sources:
   - id: tree
     resource: "packages/cli/src/commands"
@@ -26,7 +26,7 @@ okf_lock: generated
 * `keys.ts` — registerKeys, runKeysCreate, runKeysValidate
 * `mcp.ts` — mcpClientConfig, mcpEndpoint, postMcp, registerMcp, runStdioProxy
 * `secrets.ts` — KNOWN_SECRETS, dropPlaintextVarForSecret, isBindingNameInUse, registerSecrets, requiresDeployRetry, secretDelete, secretList, secretPut
-* `setup.ts` — SetupResult, applyScriptsSchema, d1ApplyPlan, kvTitleMatchesBinding, printCloudStorageNextSteps, prodBootstrapError, registerSetup, runSetupAll, setupKv
+* `setup.ts` — SetupResult, applyScriptsSchema, d1ApplyPlan, kvTitleMatchesBinding, printCloudStorageNextSteps, prodBootstrapError, registerSetup, runSetupAll, setupArtifacts, setupKv
 * `whoami.ts` — registerWhoami
 
 # Packages

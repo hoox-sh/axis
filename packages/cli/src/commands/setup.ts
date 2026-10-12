@@ -2,7 +2,7 @@
  * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
  * SPDX-License-Identifier: AGPL-3.0-only
  *
- * axis setup — worker config, D1, API_KEYS KV, OAuth client ids, full bootstrap
+ * axis setup — worker config, D1, API_KEYS KV, OAuth client ids, Artifacts binding, full bootstrap
  */
 
 import { existsSync } from "node:fs";
@@ -11,12 +11,15 @@ import { getPaths } from "../utils/paths.js";
 import { runWrangler } from "../utils/run.js";
 import {
   ensureWranglerToml,
+  getArtifactsBinding,
   getD1DatabaseId,
   getKvBindingId,
   isPlaceholderId,
+  isValidArtifactsNamespace,
   parseKvNamespaceId,
   setTomlVar,
   hasTomlVar,
+  upsertArtifactsBinding,
   upsertKvNamespace,
 } from "../services/wrangler-toml.js";
 import {
@@ -38,10 +41,13 @@ export type SetupResult = {
   d1Applied?: "local" | "remote" | "both" | false;
   kvBound?: { binding: string; id: string; created: boolean } | false;
   oauthSet?: boolean;
+  artifactsBound?: { binding: string; namespace: string; checked: boolean } | false;
 };
 
 const API_KEYS_BINDING = "API_KEYS";
 const USAGE_BINDING = "USAGE";
+const ARTIFACTS_BINDING = "SCRIPT_ARTIFACTS";
+const ARTIFACTS_NAMESPACE = "axis-scripts";
 
 async function setupWorkerToml(opts: GlobalOpts): Promise<boolean> {
   const paths = getPaths();
@@ -215,6 +221,81 @@ export async function setupKv(
   }
   printWarn("Redeploy the Worker so the binding goes live: axis deploy worker", opts.quiet);
   return { binding, id, created };
+}
+
+/**
+ * Bind Cloudflare Artifacts for git-native script storage (no GitHub creds).
+ * Writes `[[artifacts]]` to wrangler.toml, then verifies the namespace via
+ * `wrangler artifacts namespaces get` unless `skipCheck` (needs closed-beta
+ * access — without it, keep the toml edit and re-run after approval).
+ */
+export async function setupArtifacts(
+  opts: GlobalOpts,
+  flags: { namespace?: string; binding?: string; skipCheck?: boolean } = {}
+): Promise<{ binding: string; namespace: string; checked: boolean }> {
+  const paths = getPaths();
+  if (!existsSync(paths.wranglerToml)) {
+    throw new CLIError(
+      "wrangler.toml missing",
+      ExitCode.NOT_FOUND,
+      "Run: axis setup worker"
+    );
+  }
+  const binding = (flags.binding || ARTIFACTS_BINDING).trim() || ARTIFACTS_BINDING;
+  const namespace =
+    (flags.namespace || ARTIFACTS_NAMESPACE).trim() || ARTIFACTS_NAMESPACE;
+  if (!isValidArtifactsNamespace(namespace)) {
+    throw new CLIError(
+      `Invalid Artifacts namespace ${JSON.stringify(namespace)}`,
+      ExitCode.INVALID_USAGE,
+      "Use 1-64 chars without whitespace, quotes, or shell metacharacters"
+    );
+  }
+
+  const existing = getArtifactsBinding(paths.wranglerToml, binding);
+  if (existing === namespace) {
+    printOk(`Artifacts ${binding} already bound (namespace ${namespace})`, opts.quiet);
+  } else {
+    const wrote = upsertArtifactsBinding(paths.wranglerToml, binding, namespace);
+    if (wrote.changed) {
+      printOk(
+        existing
+          ? `wrangler.toml: ${binding} namespace ${existing} → ${namespace}`
+          : `wrangler.toml: bound ${binding} (namespace ${namespace})`,
+        opts.quiet
+      );
+    }
+  }
+
+  let checked = false;
+  if (!flags.skipCheck) {
+    printInfo(`Checking Artifacts namespace ${namespace}…`, opts.quiet);
+    const probed = await runWrangler(
+      paths.worker,
+      ["artifacts", "namespaces", "get", namespace],
+      { throwOnError: false }
+    );
+    if (probed.code !== 0) {
+      const out = `${probed.stdout}\n${probed.stderr}`.trim();
+      throw new CLIError(
+        `Artifacts namespace ${namespace} not reachable`,
+        ExitCode.ERROR,
+        `${out || "wrangler artifacts namespaces get failed"}\nArtifacts is in closed beta — request access, then re-run (or --skip-check to keep the wrangler.toml edit)`
+      );
+    }
+    printOk(`Artifacts namespace ${namespace} reachable`, opts.quiet);
+    checked = true;
+  }
+
+  printWarn(
+    "Redeploy the Worker so the binding goes live: axis deploy worker",
+    opts.quiet
+  );
+  printInfo(
+    "Binding types need wrangler >= 4.145.0: npx wrangler types (worker/)",
+    opts.quiet
+  );
+  return { binding, namespace, checked };
 }
 
 export function printCloudStorageNextSteps(
@@ -531,6 +612,29 @@ export function registerSetup(program: Command): void {
           asSecret: o.secret,
         });
         if (g.json) printJson({ ok: true, changed });
+      }).call(this);
+    });
+
+  setup
+    .command("artifacts")
+    .description("Bind Cloudflare Artifacts for git-native script storage (no GitHub creds)")
+    .option("--namespace <name>", "Artifacts namespace", ARTIFACTS_NAMESPACE)
+    .option("--binding <name>", "Binding name", ARTIFACTS_BINDING)
+    .option("--skip-check", "Only write wrangler.toml, skip namespace reachability check")
+    .action(async function (this: Command) {
+      const o = this.optsWithGlobals() as GlobalOpts & {
+        namespace?: string;
+        binding?: string;
+        skipCheck?: boolean;
+      };
+      await wrapAction(async (g) => {
+        printHeader("AXIS setup artifacts", g.quiet);
+        const bound = await setupArtifacts(g, {
+          namespace: o.namespace || ARTIFACTS_NAMESPACE,
+          binding: o.binding || ARTIFACTS_BINDING,
+          skipCheck: o.skipCheck,
+        });
+        if (g.json) printJson({ ok: true, artifacts: bound });
       }).call(this);
     });
 

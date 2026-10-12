@@ -57,6 +57,7 @@ Global flags: `--json`, `--quiet`, `-y/--yes`. `--json` is machine-only (no bann
 | `axis setup kv [--usage]` | Create and bind `API_KEYS` KV (required when D1 is on) |
 | `axis setup oauth --github-client-id Ov23li…` | Set OAuth client id in `[vars]` |
 | `axis setup oauth --github-client-id … --secret` | Or as Worker secret |
+| `axis setup artifacts [--namespace axis-scripts]` | Bind `SCRIPT_ARTIFACTS` for git-native script storage (closed beta) |
 | `axis keys create [--tier hobby]` | Mint a `pn_…` key (`ADMIN_TOKEN` required) |
 | `axis mcp [--key pn_…]` | Stdio MCP proxy to Worker `POST /mcp` |
 | `axis mcp config` | Print MCP client JSON (remote URL or `--stdio`) |

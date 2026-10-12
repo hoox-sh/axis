@@ -59,6 +59,13 @@ database_id = "REPLACE_WITH_D1_DATABASE_ID"
 # binding = "BUNDLES"
 # bucket_name = "indicator-bundles"
 
+# Artifacts — Git-native per-user Pine script repos (closed beta, no GitHub
+# credentials required). Setup: axis setup artifacts --namespace axis-scripts
+# (needs wrangler >= 4.145.0 for binding types). Unbound → D1/memory only.
+# [[artifacts]]
+# binding = "SCRIPT_ARTIFACTS"
+# namespace = "axis-scripts"
+
 # Durable Objects — the WebSocket session relay.
 # [[durable_objects.bindings]]
 # name = "SESSIONS"

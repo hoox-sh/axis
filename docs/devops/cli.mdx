@@ -93,6 +93,7 @@ When using `bun run axis setup -- --flag`, keep the `--` so Bun forwards flags t
 | `axis setup d1 --local\|--remote` [`--create`] | Apply `worker/schemas/scripts.sql` (scripts + version history) |
 | `axis setup kv [--usage]` | Create and bind `API_KEYS` KV (required when D1 is on) |
 | `axis setup oauth --github-client-id …` | Set public OAuth App id in `[vars]` (or `--secret`) |
+| `axis setup artifacts [--namespace axis-scripts] [--skip-check]` | Bind `SCRIPT_ARTIFACTS` in `wrangler.toml` + verify namespace (git-native script storage, closed beta) |
 | `axis keys create [--tier hobby]` | Mint a `pn_…` key via `POST /api/keys` (`ADMIN_TOKEN`) |
 | `axis keys validate --key pn_…` | Validate a key against the Worker |
 | `axis secret put\|list\|delete` | Wrangler secrets (`ADMIN_TOKEN`, `EXTERNAL_BACKEND`, …) |

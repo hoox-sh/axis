@@ -26,7 +26,7 @@ description: "Script library API: /api/scripts, D1 schema, drafts, revisions, an
 
 ## Abstract
 
-The Worker **data plane** for user scripts is `worker/src/scripts.ts` — REST under `/api/scripts` with Bearer auth ([auth](/axis/docs/worker/auth)). Persistence prefers **D1** (`env.DB`); without D1, per-isolate **in-memory** maps support local `wrangler dev`.
+The Worker **data plane** for user scripts is `worker/src/scripts.ts` — REST under `/api/scripts` with Bearer auth ([auth](/axis/docs/worker/auth)). Persistence prefers **D1** (`env.DB`); without D1, per-isolate **in-memory** maps support local `wrangler dev`. With the optional `SCRIPT_ARTIFACTS` binding, every save additionally mirrors as a git commit to a per-key Artifacts repo — full history and `git clone` with no GitHub credentials (see below).
 
 The PWA **cloud** storage plugin is the primary client.
 
@@ -39,7 +39,40 @@ flowchart TB
   SCR --> AUTH[requireApiKey → userId]
   AUTH --> D1[(D1 scripts)]
   AUTH --> MEM[(memScripts Map)]
+  AUTH --> GIT[(Artifacts per-user repo)]
 ```
+
+## Git-native history (Cloudflare Artifacts, no GitHub creds)
+
+When `SCRIPT_ARTIFACTS` is bound (`axis setup artifacts`), every save/delete
+mirrors as a git commit to a per-key repo (`axis-scripts-<id12>`):
+`scripts/<id>.pine` plus a meta sidecar. History endpoints serve from
+`repo.log()` with real SHAs and fall back to `script_versions` when git is
+empty or unbound; responses carry `backend: 'artifacts-git'` when served
+from git. Mirrors run via `ctx.waitUntil` and never fail the save; identical
+re-saves dedupe against HEAD (no clone+push, no history spam).
+
+Clone without any GitHub credential — the caller keeps using their AXIS API
+key while the Worker mints short-lived repo tokens:
+
+```bash
+REMOTE=$(curl -s $WORKER/api/scripts/_git -H "Authorization: Bearer $KEY" | jq -r .git.remote)
+TOKEN=$(curl -s -X POST $WORKER/api/scripts/_git/token -H "Authorization: Bearer $KEY" \
+  -H 'Content-Type: application/json' -d '{"scope":"read"}' | jq -r .git.token)
+git -c http.extraHeader="Authorization: Bearer $TOKEN" clone "$REMOTE" axis-scripts
+```
+
+Setup:
+
+```bash
+axis setup artifacts --namespace axis-scripts   # writes [[artifacts]], verifies access
+axis deploy worker
+```
+
+Artifacts is in closed beta: without access, `axis setup artifacts` fails the
+namespace check (re-run with `--skip-check` to keep the toml edit), and
+unbound Workers return `503 GIT_BACKEND_UNAVAILABLE` on `/_git` routes while
+CRUD keeps working on D1/memory.
 
 ## Interface surface
 
@@ -53,6 +86,11 @@ All routes require valid API key unless noted.
 | `/api/scripts/:id` | PUT | Upsert; honors `If-Match` revision |
 | `/api/scripts/:id` | DELETE | Remove |
 | `/api/scripts/_draft` | GET/PUT | Per-user draft buffer |
+| `/api/scripts/:id/versions` | GET | Version history, newest first (git log when Artifacts bound, else `script_versions`) |
+| `/api/scripts/:id/versions/:rev` | GET | Full document at a revision (git SHA or `rev_…`) |
+| `/api/scripts/:id/restore` | POST | Resurrect `{revision}` as the new tip (recreates deleted scripts) |
+| `/api/scripts/_git` | GET | Artifacts clone remote for the caller (503 when unbound) |
+| `/api/scripts/_git/token` | POST | Short-lived clone token (`read`/`write`, TTL 60s–24h) |
 
 ### Document fields
 
@@ -135,6 +173,7 @@ Binding name in `wrangler.toml` **must** be `DB` (code uses `env.DB`). Database 
 | 401 | Missing/invalid Bearer |
 | 404 | Unknown script id for user |
 | 409 | Revision conflict |
+| 503 `GIT_BACKEND_UNAVAILABLE` | `/_git` routes without the Artifacts binding (`axis setup artifacts`) |
 | Empty list after deploy | Schema not applied / wrong DB id |
 
 ## See also

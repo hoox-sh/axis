@@ -280,6 +280,79 @@ function kvBlock(binding: string, id: string): string {
 }
 
 /**
+ * Artifacts namespace allowlist for `axis setup artifacts --namespace`.
+ * Cloudflare namespace names are free-form, but whitespace/quotes/control
+ * characters would break the TOML we write — reject those, nothing more.
+ */
+export function isValidArtifactsNamespace(name: string): boolean {
+  const s = String(name || "");
+  if (!s || s.length > 64) return false;
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional — rejects control characters in namespace names
+  if (/[\s"'`\\<>&|;$(){}[\]\u0000-\u001f\u007f]/.test(s)) return false;
+  return true;
+}
+
+/** Read `namespace` from an uncommented `[[artifacts]]` block with the given binding. */
+export function getArtifactsBinding(tomlPath: string, binding: string): string | null {
+  const blocks = activeArrayTables(tomlPath, "artifacts");
+  for (const b of blocks) {
+    if (b.binding === binding && b.namespace) return b.namespace;
+  }
+  return null;
+}
+
+function artifactsBlock(binding: string, namespace: string): string {
+  return `[[artifacts]]\nbinding = "${binding}"\nnamespace = "${namespace}"\n`;
+}
+
+/**
+ * Uncomment or insert an `[[artifacts]]` binding with `namespace`.
+ * Replaces a commented example block when present (same shape as
+ * `worker/wrangler.toml.example`), else rewrites the namespace of an active
+ * block with the same binding, else appends a new block.
+ */
+export function upsertArtifactsBinding(
+  tomlPath: string,
+  binding: string,
+  namespace: string
+): { changed: boolean; previous?: string | null } {
+  const previous = getArtifactsBinding(tomlPath, binding);
+  if (previous === namespace) return { changed: false, previous };
+
+  let text = readTomlText(tomlPath);
+  const esc = escapeRegExp(binding);
+
+  // Commented example: # [[artifacts]] / # binding = "…" / # namespace = "…"
+  const commented = new RegExp(
+    `^#\\s*\\[\\[artifacts\\]\\]\\s*\\n#\\s*binding\\s*=\\s*"${esc}"\\s*\\n#\\s*namespace\\s*=\\s*"[^"]*"\\s*\\n?`,
+    "m"
+  );
+  if (commented.test(text)) {
+    text = text.replace(commented, artifactsBlock(binding, namespace));
+    writeFileSync(tomlPath, text, "utf-8");
+    return { changed: true, previous };
+  }
+
+  // Active block with this binding — replace namespace only.
+  const active = new RegExp(
+    `(^\\[\\[artifacts\\]\\]\\s*\\nbinding\\s*=\\s*"${esc}"\\s*\\nnamespace\\s*=\\s*")[^"]*(")`,
+    "m"
+  );
+  if (active.test(text)) {
+    text = text.replace(
+      active,
+      (_m, pre: string, post: string) => `${pre}${namespace}${post}`
+    );
+    writeFileSync(tomlPath, text, "utf-8");
+    return { changed: true, previous };
+  }
+
+  if (!text.endsWith("\n")) text += "\n";
+  writeFileSync(tomlPath, `${text}\n${artifactsBlock(binding, namespace)}`, "utf-8");
+  return { changed: true, previous };
+}
+
+/**
  * Uncomment or insert a `[[kv_namespaces]]` binding with `id`.
  * Replaces a commented example block when present.
  */

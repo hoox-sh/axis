@@ -17,7 +17,7 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 
 ### Added
 
-- **Git-native script storage on Cloudflare Artifacts (no GitHub creds)**: optional `SCRIPT_ARTIFACTS` binding mirrors every script save/delete as a git commit to a per-API-key repo (`scripts/<id>.pine` + meta sidecar via `isomorphic-git`), history endpoints serve from git log with D1/memory fallback, and `GET /api/scripts/_git` + `POST /api/scripts/_git/token` hand out clone remotes plus short-lived repo tokens for any standard git client. Unbound workers behave exactly as before. Identical re-saves dedupe against HEAD (no clone+push, no history spam); `POST /api/scripts/:id/restore` resurrects any version as the new tip, recreating deleted scripts.
+- **Git-native script storage on Cloudflare Artifacts (no GitHub creds)**: optional `SCRIPT_ARTIFACTS` binding mirrors every script save/delete as a git commit to a per-API-key repo (`scripts/<id>.pine` + meta sidecar via `isomorphic-git`), history endpoints serve from git log with D1/memory fallback, and `GET /api/scripts/_git` + `POST /api/scripts/_git/token` hand out clone remotes plus short-lived repo tokens for any standard git client. Unbound workers behave exactly as before. Identical re-saves dedupe against HEAD (no clone+push, no history spam); `POST /api/scripts/:id/restore` resurrects any version as the new tip, recreating deleted scripts. Setup: `axis setup artifacts [--namespace axis-scripts]` (writes `[[artifacts]]`, verifies namespace access); docs in `docs/worker/data-plane.mdx`.
 
 ### Fixed
 
