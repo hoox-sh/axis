@@ -28,7 +28,7 @@ description: "Open charting PWA — orthogonal sources, streams, engines, and st
 
 <img src="/images/app/workspace.png" alt="AXIS workspace with BTCUSDT daily candles, watchlist, volume, RSI, and Pine editor" />
 
-_Pine Script™ and TradingView® are trademarks of TradingView, Inc. Cloudflare® is a registered trademark of Cloudflare, Inc. This project is independent and not affiliated with or endorsed by TradingView, Inc. or Cloudflare, Inc._
+_Pine Script™ and TradingView® are trademarks of TradingView®, Inc. Cloudflare® is a registered trademark of Cloudflare®, Inc. This project is independent and not affiliated with or endorsed by TradingView®, Inc. or Cloudflare®, Inc._
 
 ## Abstract
 
@@ -74,7 +74,7 @@ flowchart TB
   end
   ENG -->|server| FLASK[Flask Pro API]
   ENG -->|pyodide| PY[In-browser pynescript]
-  ENG -->|worker proxy| CF[Cloudflare Worker]
+  ENG -->|worker proxy| CF[Cloudflare® Worker]
   DS -->|/api/onchain| CF
   CF --> FLASK
   CF --> LL[DefiLlama / GeckoTerminal]

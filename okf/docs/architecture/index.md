@@ -8,4 +8,4 @@
 * [Architecture](index.md) - AXIS system architecture: AXIS vs engine, plugin registry, topologies, ADRs, and state namespaces.
 * [Architecture overview](overview.md) - End-to-end AXIS architecture: Solid AXIS UI, unified registry, three built-in engines, chart apply pipeline, and optional edge plane.
 * [State namespaces](state-namespaces.md) - AXIS persistence keys, key migration, pluginsConfig, editor docs, library IDB, and URL hash state.
-* [Topologies](topologies.md) - AXIS deploy and dev topologies: Vite+Flask, static PWA, Cloudflare Pages+Worker, offline Pyodide lab, and local Bun sidecar.
+* [Topologies](topologies.md) - AXIS deploy and dev topologies: Vite+Flask, static PWA, Cloudflare® Pages+Worker, offline Pyodide lab, and local Bun sidecar.

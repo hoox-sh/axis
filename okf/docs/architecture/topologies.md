@@ -1,13 +1,13 @@
 ---
 type: "Document"
 title: "Topologies"
-description: "AXIS deploy and dev topologies: Vite+Flask, static PWA, Cloudflare Pages+Worker, offline Pyodide lab, and local Bun sidecar."
+description: "AXIS deploy and dev topologies: Vite+Flask, static PWA, Cloudflare® Pages+Worker, offline Pyodide lab, and local Bun sidecar."
 resource: "docs/architecture/topologies.mdx"
 tags: [architecture, doc, docs, topologies]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-12T23:06:14Z
 sources:
   - id: tree
     resource: "docs/architecture/topologies.mdx"
@@ -25,7 +25,7 @@ Repo path `docs/architecture/topologies.mdx`.
 * Abstract
 * Topology A — Dev desk
 * Topology B — Static PWA + Pro API
-* Topology C — Cloudflare AXIS at the edge
+* Topology C — Cloudflare® AXIS at the edge
 * Topology D — Offline lab
 * Topology E — Git-centric research
 * Topology F — Dev desk + Bun sidecar (CCXT Pro)

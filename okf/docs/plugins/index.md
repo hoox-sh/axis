@@ -11,4 +11,4 @@
 * [Plugin registry](registry.md) - PluginRegistry singleton: ordered maps per kind, listeners, built-in protection, and bootstrap wiring.
 * [Sources](sources.md) - Built-in historical data sources: venue REST, mock walk, CSV upload — contracts, config, and fallbacks.
 * [Storage](storage.md) - Script library backends: local (IndexedDB), cloud (Worker /api/scripts), and git (GitHub/GitLab).
-* [Streams](streams.md) - Live bar plugins: venue WebSockets, mock poll, and Cloudflare Durable Object relay example.
+* [Streams](streams.md) - Live bar plugins: venue WebSockets, mock poll, and Cloudflare® Durable Object relay example.

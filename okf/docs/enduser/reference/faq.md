@@ -1,13 +1,13 @@
 ---
 type: "Document"
 title: "FAQ"
-description: "Frequently asked questions about AXIS, engines, offline use, TradingView relation, and data privacy."
+description: "Frequently asked questions about AXIS, engines, offline use, TradingView® relation, and data privacy."
 resource: "docs/enduser/reference/faq.mdx"
 tags: [doc, docs, enduser, reference]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-12T23:06:14Z
 sources:
   - id: tree
     resource: "docs/enduser/reference/faq.mdx"
@@ -23,8 +23,8 @@ Repo path `docs/enduser/reference/faq.mdx`.
 # Outline
 
 * Product scope
-  * Is AXIS TradingView?
-  * Does AXIS implement Pine Script?
+  * Is AXIS TradingView®?
+  * Does AXIS implement Pine Script™?
   * AXIS vs engine?
 * Running & offline
   * Can I use AXIS fully offline?

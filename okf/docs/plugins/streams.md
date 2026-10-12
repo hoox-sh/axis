@@ -1,13 +1,13 @@
 ---
 type: "Document"
 title: "Streams"
-description: "Live bar plugins: venue WebSockets, mock poll, and Cloudflare Durable Object relay example."
+description: "Live bar plugins: venue WebSockets, mock poll, and Cloudflare® Durable Object relay example."
 resource: "docs/plugins/streams.mdx"
 tags: [doc, docs, plugins, streams]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-12T23:06:14Z
 sources:
   - id: tree
     resource: "docs/plugins/streams.mdx"
@@ -29,7 +29,7 @@ Repo path `docs/plugins/streams.mdx`.
 * Internals
   * Binance kline mapping
   * mock-poll behavior
-  * Cloudflare DO stream (example plugin)
+  * Cloudflare® DO stream (example plugin)
 * Reconnect & status honesty
 * Invariants & edge cases
 * Failure modes

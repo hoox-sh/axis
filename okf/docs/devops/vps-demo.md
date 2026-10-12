@@ -1,13 +1,13 @@
 ---
 type: "Document"
 title: "VPS demo topology"
-description: "Single-box demo: static AXIS dist + Flask Pro API (+ optional reverse proxy) without Cloudflare."
+description: "Single-box demo: static AXIS dist + Flask Pro API (+ optional reverse proxy) without Cloudflare®."
 resource: "docs/devops/vps-demo.mdx"
 tags: [devops, doc, docs, vps-demo]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-12T23:06:14Z
 sources:
   - id: tree
     resource: "docs/devops/vps-demo.mdx"

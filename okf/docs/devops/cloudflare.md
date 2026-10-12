@@ -1,13 +1,13 @@
 ---
 type: "Document"
-title: "Cloudflare deployment"
+title: "Cloudflare® deployment"
 description: "Pages + Worker for AXIS: Pages axis.hoox.sh (project axis), Worker worker.axis.hoox.sh, CLI deploy, bindings, security checklist."
 resource: "docs/devops/cloudflare.mdx"
 tags: [cloudflare, devops, doc, docs]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-10-12T23:06:14Z
 sources:
   - id: tree
     resource: "docs/devops/cloudflare.mdx"

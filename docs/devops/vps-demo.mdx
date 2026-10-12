@@ -19,7 +19,7 @@
 
 ---
 title: "VPS demo topology"
-description: "Single-box demo: static AXIS dist + Flask Pro API (+ optional reverse proxy) without Cloudflare."
+description: "Single-box demo: static AXIS dist + Flask Pro API (+ optional reverse proxy) without Cloudflare®."
 ---
 
 # VPS demo topology
@@ -70,12 +70,12 @@ Then PWA endpoint = `https://axis.example.com` and the **server** engine posts t
 
 ### Production (split: Pages PWA + Hetzner API)
 
-- **PWA** — Cloudflare Pages custom domain `https://axis.hoox.sh`
-- **PYNE Pro API** — Hetzner VPS `https://pynescript.online` (Cloudflare orange-cloud → origin
+- **PWA** — Cloudflare® Pages custom domain `https://axis.hoox.sh`
+- **PYNE Pro API** — Hetzner VPS `https://pynescript.online` (Cloudflare® orange-cloud → origin
   `204.168.138.51`). nginx `:443` reverse-proxies `/run`, `/optimize`, `/ws/`, `/health`,
   `/lsp/`, `/datafeed/`, … to gunicorn `127.0.0.1:5002`
 - PWA **Backend URL** = `https://pynescript.online` (cross-origin; product CORS regex)
-- Cloudflare Pages previews (`*.axis.pages.dev`) use the same Backend URL
+- Cloudflare® Pages previews (`*.axis.pages.dev`) use the same Backend URL
   — pyne must allow those Origins on `/health` and `/run` (always-on product regex;
   see [CORS](/axis/docs/devops/cors-and-origins))
 
@@ -107,7 +107,7 @@ Production VPS pattern (verified on `pynescript.online`):
 | **UFW** | `deny incoming` default; **allow 22/tcp, 80/tcp, 443/tcp** | — |
 | **nginx** | `0.0.0.0:443` TLS (+ `:80` ACME) | `https://pynescript.online/health` → proxy `127.0.0.1:5002/health` |
 | **Pro API (gunicorn)** | **`127.0.0.1:5002` only** | loopback; **not** public |
-| **PWA static** | Cloudflare Pages (`axis.hoox.sh`) | not on this VPS |
+| **PWA static** | Cloudflare® Pages (`axis.hoox.sh`) | not on this VPS |
 | **fail2ban** | `sshd` jail | — |
 
 **Do not** open UFW for `5002`, `80`, or `8787` on a public VPS. Direct probes to `http://<vps-ip>:5002/health` **must time out** if hardening is correct.
@@ -164,5 +164,5 @@ Pair with an existing `backend` unit for Flask.
 ## See also
 
 - [Build and serve](/axis/docs/devops/build-and-serve)
-- [Cloudflare](/axis/docs/devops/cloudflare)
+- [Cloudflare®](/axis/docs/devops/cloudflare)
 - [CORS](/axis/docs/devops/cors-and-origins)

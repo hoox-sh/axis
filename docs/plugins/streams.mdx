@@ -19,14 +19,14 @@
 
 ---
 title: "Streams"
-description: "Live bar plugins: venue WebSockets, mock poll, and Cloudflare Durable Object relay example."
+description: "Live bar plugins: venue WebSockets, mock poll, and Cloudflare® Durable Object relay example."
 ---
 
 # Streams
 
 ## Abstract
 
-A **stream** advances the chart’s present. It opens a connection (or timer), emits `onBar` updates, and returns a **stop** function. Built-ins live in `src/streams/catalog.ts`. An optional Cloudflare Durable Object relay lives as a loadable example (`example-cf-do-stream.js`) plus Worker `SessionDO`.
+A **stream** advances the chart’s present. It opens a connection (or timer), emits `onBar` updates, and returns a **stop** function. Built-ins live in `src/streams/catalog.ts`. An optional Cloudflare® Durable Object relay lives as a loadable example (`example-cf-do-stream.js`) plus Worker `SessionDO`.
 
 ## Conceptual model
 
@@ -101,7 +101,7 @@ Open bars may update repeatedly for the same `time` until the kline closes — c
 - Updates high/low/close within the open slot; advances on slot change.
 - Immediate first tick so live mode feels responsive offline.
 
-### Cloudflare DO stream (example plugin)
+### Cloudflare® DO stream (example plugin)
 
 Not built-in. After load:
 
