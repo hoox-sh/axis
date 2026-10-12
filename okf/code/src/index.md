@@ -18,7 +18,7 @@
 * [src/sources](sources.md) - src/sources contains catalog.ts, upload-store.ts.
 * [src/storage](storage.md) - src/storage contains catalog.ts, cloud-config.ts, cloud.ts, and 14 more files.
 * [src/store](store.md) - AXIS Solid store — createStore hydration, persistence, and mutation helpers.
-* [src/stories](stories.md) - Default store state — empty alert list + creation form.
+* [src/stories](stories.md) - Button designs showcase — three candidate app-button languages plus non-rectangular forms (pill / orb / cut / tab) and segmented groups.
 * [src/streams](streams.md) - src/streams contains catalog.ts, multiplex.ts, reconnect-ws.ts, and 1 more file.
 * [src/sw](sw.md) - Pure service-worker strategy helpers (unit-testable).
 * [src/theme](theme.md) - AXIS Theme Manager — public API.

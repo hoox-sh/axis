@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/stories"
-description: "Default store state — empty alert list + creation form."
+description: "Button designs showcase — three candidate app-button languages plus non-rectangular forms (pill / orb / cut / tab) and segmented groups."
 resource: "src/stories"
 tags: [code, stories]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-05T22:18:26Z
+  at: 2026-10-12T12:21:16Z
 sources:
   - id: tree
     resource: "src/stories"
@@ -20,10 +20,12 @@ okf_lock: generated
 
 * `AlertsPanel.stories.tsx` — Empty
 * `Brand.stories.tsx` — Loader, LogoSizes
+* `ButtonDesigns.stories.tsx` — InContext, Matrix, Shapes, Showcase, SpecSheet
 * `ContextMenu.stories.tsx` — ChartMenu
 * `DrawTools.stories.tsx` — RailButtons, States
 * `ErrorFallback.stories.tsx` — Inline, Page
 * `Icons.stories.tsx` — Gallery, Sizes
+* `Microfeedback.stories.tsx` — Concept, Contract, Playground
 * `PluginBadges.stories.tsx` — BuiltIn, Compact
 * `ResizeHandle.stories.tsx` — GrowDown, GrowRight
 * `StatusBar.stories.tsx` — EmptyState
