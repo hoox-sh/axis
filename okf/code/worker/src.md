@@ -7,7 +7,7 @@ tags: [code, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-10T20:32:38Z
+  at: 2026-10-12T18:12:11Z
 sources:
   - id: tree
     resource: "worker/src"
@@ -18,7 +18,9 @@ okf_lock: generated
 
 # Files
 
+* `artifacts-git.ts` — ArtifactsCommitMeta, ArtifactsCreatedRepo, ArtifactsNamespace, ArtifactsRepoHandle, ArtifactsRepoInfo, ArtifactsTokenResult, CLONE_TOKEN_DEFAULT_TTL, CLONE_TOKEN_MAX_TTL, CLONE_TOKEN_MIN_TTL, CloneCredential, GitScriptVersion, GitTreePusher
 * `auth.ts` — AuthContext, BearerClassification, BearerKind, classifyBearer, classifyBearerToken, extractBearer, requireApiKey
+* `git-memfs.ts` — MemoryFS
 * `git-oauth.ts` — GitOAuthEnv, GitOAuthProvider, handleGitOAuth
 * `http.ts` — API_CORS, CorsOptions, ErrorBody, ErrorResponseOptions, HealthFlags, JsonOptions, MARKET_CORS, MCP_CORS, ORIGIN_ONLY, READ_CORS, SCRIPTS_CORS, WRITE_CORS
 * `index.ts` — Env, McpBridgeDO, SessionDO, pickOrigin
@@ -32,6 +34,10 @@ okf_lock: generated
 * `scripts.ts` — ScriptMeta, ScriptRow, ScriptVersionRow, _clearMemScripts, handleScripts
 * `tenant.ts` — BILLING_UPGRADE_URL, FlushUsageOpts, QueueTenantUsageInput, TenantAllow, TenantDeny, TenantGate, TenantHttpError, TenantScope, TenantUsageEvent, TenantUsageUnits, USAGE_BATCH_MAX, USAGE_FLUSH_TIMEOUT_MS
 * `version.ts` — WORKER_VERSION
+
+# Packages
+
+`isomorphic-git`, `isomorphic-git/http/web`
 
 # Depends on
 

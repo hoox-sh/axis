@@ -93,6 +93,9 @@ Paste the returned IDs into your local `wrangler.toml` (from the example).
 | `/api/scripts`      | GET/POST | List / create scripts (Bearer key)   |
 | `/api/scripts/:id`  | GET/PUT/DELETE | Read / upsert / delete          |
 | `/api/scripts/_draft` | GET/PUT | Per-user draft buffer              |
+| `/api/scripts/_git` | GET | Artifacts repo remote for `git clone` (needs binding) |
+| `/api/scripts/_git/token` | POST | Short-lived clone token (`read`/`write`) |
+| `/api/scripts/:id/restore` | POST | Resurrect a version as the new tip (recreates deleted scripts) |
 | `/api/onchain/health` | GET  | On-chain proxy feature flags (public) |
 | `/api/market/health` | GET  | Market proxy feature flags (public) |
 | `/api/market/binance/klines` | GET | Allowlisted Binance klines proxy |
@@ -114,6 +117,19 @@ points at this Worker (CORS-safe DefiLlama / GeckoTerminal).
 **Script library auth:** `Authorization: Bearer <api_key>` (same Pro keys as `/api/keys`).
 Scripts are partitioned by a hash of the key. Without D1, an in-memory store is used
 (local `wrangler dev`). Apply D1 schema: `wrangler d1 execute pynescript --file=schemas/scripts.sql`.
+
+**Git-native script storage (Cloudflare Artifacts, closed beta, no GitHub creds):**
+bind `[[artifacts]] SCRIPT_ARTIFACTS` (namespace e.g. `axis-scripts`, wrangler
+≥ 4.145.0 for types) and every save mirrors as a git commit to a per-key repo
+(`scripts/<id>.pine` + meta sidecar). History endpoints serve from git log;
+`GET /api/scripts/_git` returns the clone remote and `POST
+/api/scripts/_git/token` mints short-lived repo tokens, so any standard git
+client works:
+`git -c http.extraHeader="Authorization: Bearer <token>" clone <remote>`.
+Unbound → D1/memory behavior only (mirror skipped, history falls back).
+Identical re-saves skip the clone+push (HEAD compare, no history spam), and
+`POST /api/scripts/:id/restore {revision}` resurrects any version — including
+deleted scripts — as the new tip.
 
 WebSocket: open `wss://<worker>/api/stream?session=…&symbol=BTCUSDT&interval=1m`
 and the Worker routes to a Durable Object instance that fans a single

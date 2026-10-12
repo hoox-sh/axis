@@ -28,6 +28,12 @@
  * - **D1** (`env.DB`) when bound — schema in `schemas/scripts.sql`.
  * - **In-memory** Maps when unbound — per-isolate only (wrangler dev / tests).
  *   Reset via {@link _clearMemScripts} in unit tests.
+ * - **Artifacts git mirror** (`env.SCRIPT_ARTIFACTS`) when bound — every
+ *   save/delete commits `scripts/<id>.pine` + sidecar meta to the user's
+ *   per-key repo (best-effort via `ctx.waitUntil`, never fails the save).
+ *   History endpoints prefer git log; `GET /_git` + `POST /_git/token`
+ *   hand out clone remotes and short-lived repo tokens — full git support
+ *   with no GitHub credentials. See `artifacts-git.ts`.
  *
  * ## Routes (after `/api/scripts`)
  * | Method | Path        | Behavior |
@@ -41,6 +47,9 @@
  * | PUT    | `/_draft`   | Upsert draft content/name |
  * | GET    | `/:id/versions` | Version history (newest first, no content) |
  * | GET    | `/:id/versions/:rev` | Full script at a historical revision |
+ * | POST   | `/:id/restore` | Resurrect a version as the new tip (recreates deleted scripts) |
+ * | GET    | `/_git`     | Artifacts repo remote for `git clone` (503 when unbound) |
+ * | POST   | `/_git/token` | Short-lived clone token (`read`/`write`, 503 when unbound) |
  *
  * Revisions are opaque (`rev_<time>_<rand>`). Optimistic concurrency uses
  * `If-Match` header or `revision` field; mismatch returns remote revision.
@@ -50,6 +59,14 @@
 import type { Env } from './index';
 import { requireApiKey } from './auth';
 import { SCRIPTS_CORS, jsonResponse, readCappedJson } from './http';
+import {
+  clampCloneTtl,
+  commitScriptSave,
+  ensureUserRepo,
+  listScriptHistory,
+  mintCloneToken,
+  readScriptAtCommit,
+} from './artifacts-git';
 
 /** Fail closed before JSON.parse on script/draft writes (A9). */
 const SCRIPTS_MAX_BODY_BYTES = 8 * 1024 * 1024;
@@ -361,6 +378,61 @@ function parseListLimit(url: URL): number {
 }
 
 /**
+ * Mirror a save/delete as a git commit on the user's Artifacts repo.
+ * Best-effort: failures are logged, never surfaced — the D1/memory tip is
+ * the source of truth for the API response. Runs via `ctx.waitUntil` when
+ * available so saves stay fast; awaited inline otherwise (tests, ctx-less).
+ */
+function mirrorGit(
+  env: Env,
+  ctx: ExecutionContext | undefined,
+  userId: string,
+  row: ScriptRow,
+  opts?: { delete?: boolean; restoreFrom?: string },
+): Promise<void> | void {
+  const ns = env.SCRIPT_ARTIFACTS;
+  if (!ns) return;
+  const task = commitScriptSave(
+    ns,
+    userId,
+    {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      path: row.path,
+      content: row.content,
+    },
+    opts,
+  ).then(
+    () => undefined,
+    (err: unknown) => {
+      console.warn(
+        JSON.stringify({
+          type: 'script_git_mirror_failed',
+          id: row.id,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    },
+  );
+  if (ctx?.waitUntil) {
+    ctx.waitUntil(task);
+    return;
+  }
+  return task;
+}
+
+function gitWarn(id: string, err: unknown): void {
+  console.warn(
+    JSON.stringify({
+      type: 'script_git_read_failed',
+      id,
+      error: err instanceof Error ? err.message : String(err),
+    }),
+  );
+}
+
+/**
  * Dispatch `/api/scripts` and subpaths. `path` is the URL pathname (not full URL).
  * Missing D1 schema surfaces as 503 `NO_SCHEMA` with a wrangler hint.
  */
@@ -369,6 +441,7 @@ export async function handleScripts(
   env: Env,
   origin: string,
   path: string,
+  ctx?: ExecutionContext,
 ): Promise<Response> {
   const auth = await requireApiKey(req, env);
   if (!auth.ok) {
@@ -433,6 +506,62 @@ export async function handleScripts(
     return corsJson({ status: 'error', code: 'METHOD', message: 'GET or PUT required' }, 405, origin);
   }
 
+  // --- Git-native history + clone credentials (Artifacts, no GitHub creds) ---
+  // `GET /_git` → repo remote for `git clone`; `POST /_git/token` → short-lived
+  // repo-scoped token (read for clone/pull, write for push). Callers keep
+  // using their AXIS API key — no GitHub OAuth involved.
+  if (parts[0] === '_git') {
+    const ns = env.SCRIPT_ARTIFACTS;
+    if (!ns) {
+      return corsJson(
+        {
+          status: 'error',
+          code: 'GIT_BACKEND_UNAVAILABLE',
+          message: 'Artifacts script repos not bound. Add [[artifacts]] SCRIPT_ARTIFACTS in wrangler.toml.',
+        },
+        503,
+        origin,
+      );
+    }
+    if (parts.length === 1 && req.method === 'GET') {
+      const repo = await ensureUserRepo(ns, userId);
+      return corsJson(
+        {
+          status: 'success',
+          git: { repo: repo.name, remote: repo.remote, defaultBranch: repo.defaultBranch || 'main' },
+        },
+        200,
+        origin,
+      );
+    }
+    if (parts.length === 2 && parts[1] === 'token' && req.method === 'POST') {
+      const capped = await readCappedJson(req, SCRIPTS_MAX_BODY_BYTES);
+      if (!capped.ok) return tooLarge(origin);
+      const parsed = (capped.value ?? {}) as { scope?: string; ttl?: number };
+      const scope = parsed.scope === 'write' ? 'write' : 'read';
+      const cred = await mintCloneToken(ns, userId, scope, clampCloneTtl(parsed.ttl));
+      return corsJson(
+        {
+          status: 'success',
+          git: {
+            repo: cred.repo,
+            remote: cred.remote,
+            scope: cred.scope,
+            token: cred.token,
+            expiresAt: cred.expiresAt,
+          },
+        },
+        200,
+        origin,
+      );
+    }
+    return corsJson(
+      { status: 'error', code: 'METHOD', message: 'GET /api/scripts/_git or POST /api/scripts/_git/token required' },
+      405,
+      origin,
+    );
+  }
+
   // --- Collection: list / create ---
   if (parts.length === 0) {
     if (req.method === 'GET') {
@@ -482,6 +611,7 @@ export async function handleScripts(
       if (db) await putD1(db, userId, row);
       else memUser(userId).set(id, row);
       await archiveVersion(db, userId, row);
+      await mirrorGit(env, ctx, userId, row);
       return corsJson({ status: 'success', script: { ...rowToMeta(row), content: row.content } }, 201, origin);
     }
     return corsJson({ status: 'error', code: 'METHOD', message: 'GET or POST required' }, 405, origin);
@@ -491,6 +621,90 @@ export async function handleScripts(
   // Reached after the parts.length === 0 and parts[0] === '_draft' guards above.
   const id = decodeURIComponent(parts[0]!);
 
+  // --- Restore: POST /api/scripts/:id/restore {revision} ---
+  // Resurrects any restorable version as the new tip — including versions of
+  // deleted scripts (recreates them). Resolves git-first, then D1/memory.
+  if (parts[1] === 'restore') {
+    if (req.method !== 'POST') {
+      return corsJson({ status: 'error', code: 'METHOD', message: 'POST required' }, 405, origin);
+    }
+    const capped = await readCappedJson(req, SCRIPTS_MAX_BODY_BYTES);
+    if (!capped.ok) return tooLarge(origin);
+    const rev = String(((capped.value ?? {}) as { revision?: string }).revision || '');
+    if (!rev) {
+      return corsJson(
+        { status: 'error', code: 'VALIDATION', message: 'revision required' },
+        400,
+        origin,
+      );
+    }
+    let found: {
+      content: string;
+      name: string;
+      description?: string | null | undefined;
+      path?: string | null | undefined;
+    } | null = null;
+    if (env.SCRIPT_ARTIFACTS) {
+      try {
+        found = await readScriptAtCommit(env.SCRIPT_ARTIFACTS, userId, id, rev);
+      } catch (err) {
+        gitWarn(id, err);
+      }
+    }
+    if (!found && db) {
+      try {
+        const v = await getVersionD1(db, userId, id, rev);
+        if (v) {
+          found = {
+            content: v.content,
+            name: v.name,
+            description: v.description || undefined,
+            path: v.path || undefined,
+          };
+        }
+      } catch {
+        found = null;
+      }
+    }
+    if (!found) {
+      found = (memUserVersions(userId).get(id) || []).find((v) => v.revision === rev) || null;
+    }
+    if (!found) {
+      return corsJson(
+        { status: 'error', code: 'NOT_FOUND', message: `version ${rev} not found for ${id}` },
+        404,
+        origin,
+      );
+    }
+    const now = Date.now();
+    let prev: ScriptRow | null = null;
+    if (db) prev = await getD1(db, userId, id);
+    else prev = memUser(userId).get(id) || null;
+    const row: ScriptRow = {
+      id,
+      name: String(found.name || prev?.name || 'Untitled'),
+      description: found.description ?? prev?.description ?? null,
+      path: found.path ?? prev?.path ?? null,
+      content: found.content,
+      revision: newRevision(),
+      created_at: prev?.created_at || now,
+      updated_at: now,
+    };
+    if (db) await putD1(db, userId, row);
+    else memUser(userId).set(id, row);
+    await archiveVersion(db, userId, row);
+    await mirrorGit(env, ctx, userId, row, { restoreFrom: rev });
+    return corsJson(
+      {
+        status: 'success',
+        script: { ...rowToMeta(row), content: row.content },
+        restoredFrom: rev,
+      },
+      prev ? 200 : 201,
+      origin,
+    );
+  }
+
   // --- Versions: /api/scripts/:id/versions[/:rev] ---
   if (parts[1] === 'versions') {
     if (req.method !== 'GET') {
@@ -498,6 +712,37 @@ export async function handleScripts(
     }
     const rev = parts[2] ? decodeURIComponent(parts[2]) : '';
     if (rev) {
+      if (env.SCRIPT_ARTIFACTS) {
+        try {
+          const at = await readScriptAtCommit(env.SCRIPT_ARTIFACTS, userId, id, rev);
+          if (at) {
+            const hist = await listScriptHistory(env.SCRIPT_ARTIFACTS, userId, id, 50).catch(
+              () => [],
+            );
+            const ts = hist.find((v) => v.sha === rev)?.committedAt ?? Date.now();
+            return corsJson(
+              {
+                status: 'success',
+                script: {
+                  id,
+                  name: at.name,
+                  description: at.description,
+                  path: at.path,
+                  revision: at.revision,
+                  createdAt: ts,
+                  updatedAt: ts,
+                  content: at.content,
+                },
+                backend: 'artifacts-git',
+              },
+              200,
+              origin,
+            );
+          }
+        } catch (err) {
+          gitWarn(id, err);
+        }
+      }
       let row: ScriptVersionRow | null = null;
       if (db) {
         try {
@@ -534,6 +779,20 @@ export async function handleScripts(
       );
     }
     let rows: ScriptVersionRow[] = [];
+    if (env.SCRIPT_ARTIFACTS) {
+      try {
+        const hist = await listScriptHistory(env.SCRIPT_ARTIFACTS, userId, id, 50);
+        if (hist.length > 0) {
+          return corsJson(
+            { status: 'success', versions: hist, backend: 'artifacts-git' },
+            200,
+            origin,
+          );
+        }
+      } catch (err) {
+        gitWarn(id, err);
+      }
+    }
     if (db) {
       try {
         rows = await listVersionsD1(db, userId, id);
@@ -637,6 +896,7 @@ export async function handleScripts(
         );
       }
       await archiveVersion(db, userId, next);
+      await mirrorGit(env, ctx, userId, next);
       return corsJson(
         { status: 'success', script: { ...rowToMeta(next), content: next.content } },
         200,
@@ -674,6 +934,7 @@ export async function handleScripts(
     if (db) await putD1(db, userId, row);
     else memUser(userId).set(id, row);
     await archiveVersion(db, userId, row);
+    await mirrorGit(env, ctx, userId, row);
     return corsJson(
       { status: 'success', script: { ...rowToMeta(row), content: row.content } },
       prev ? 200 : 201,
@@ -683,13 +944,18 @@ export async function handleScripts(
 
   if (req.method === 'DELETE') {
     let deleted = false;
-    if (db) deleted = await delD1(db, userId, id);
-    else {
+    let prev: ScriptRow | null = null;
+    if (db) {
+      prev = await getD1(db, userId, id);
+      deleted = await delD1(db, userId, id);
+    } else {
+      prev = memUser(userId).get(id) || null;
       deleted = memUser(userId).delete(id);
     }
     if (!deleted) {
       return corsJson({ status: 'error', code: 'NOT_FOUND', message: `script ${id} not found` }, 404, origin);
     }
+    if (prev) await mirrorGit(env, ctx, userId, prev, { delete: true });
     return corsJson({ status: 'success' }, 200, origin);
   }
 

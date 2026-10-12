@@ -133,7 +133,7 @@ export async function proxyWorkerRequest(
   } else if (path === '/api/usage') {
     res = jsonResponse({ status: 'success', usage: { calls_used: 0, calls_remaining: null } });
   } else if (path === '/api/scripts' || path.startsWith('/api/scripts/')) {
-    res = await handleScripts(req, env, origin, path);
+    res = await handleScripts(req, env, origin, path, ctx);
   } else if (path.startsWith('/api/onchain')) {
     const onchain = await handleOnchain(req, env, origin, path);
     res =

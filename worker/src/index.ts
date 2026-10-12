@@ -86,6 +86,12 @@ export interface Env {
   USAGE?: KVNamespace;
   /** D1: scripts + script_drafts tables. When unbound, scripts use process memory. */
   DB?: D1Database;
+  /**
+   * Artifacts: Git-native per-user Pine script repos (closed beta).
+   * When bound, saves mirror as git commits and history serves from git log;
+   * unbound → D1/memory behavior only. See `artifacts-git.ts`.
+   */
+  SCRIPT_ARTIFACTS?: import('./artifacts-git').ArtifactsNamespace;
   /** R2: future pynescript wheel / bundle storage for in-worker Pyodide. */
   BUNDLES?: R2Bucket;
   /** Durable Object namespace for `/api/stream` WebSocket sessions. */
@@ -397,7 +403,7 @@ export default {
     try {
       // Script library: /api/scripts, /api/scripts/:id, /api/scripts/_draft
       if (url.pathname === '/api/scripts' || url.pathname.startsWith('/api/scripts/')) {
-        return await handleScripts(req, env, origin, url.pathname);
+        return await handleScripts(req, env, origin, url.pathname, ctx);
       }
 
       // GitHub / GitLab device-flow OAuth proxy (no CORS on forge hosts)

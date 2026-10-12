@@ -26,6 +26,8 @@ const EXACT: ReadonlyArray<readonly [string, string]> = [
   ['POST', '/api/scripts'],
   ['GET', '/api/scripts/_draft'],
   ['PUT', '/api/scripts/_draft'],
+  ['GET', '/api/scripts/_git'],
+  ['POST', '/api/scripts/_git/token'],
   ['GET', '/api/onchain'],
   ['GET', '/api/onchain/health'],
   ['GET', '/api/market'],
@@ -38,8 +40,9 @@ const PREFIX_GET = [
 ] as const;
 
 /**
- * `/api/scripts/:id`, `/api/scripts/:id/versions`, `/api/scripts/:id/versions/:rev`
- * — ids are `s_<base36>` plus `_draft` (already exact).
+ * `/api/scripts/:id`, `/api/scripts/:id/versions`, `/api/scripts/:id/versions/:rev`,
+ * `/api/scripts/_git`, `/api/scripts/_git/token`
+ * — ids are `s_<base36>` plus `_draft` / `_git` (already exact).
  */
 const SCRIPT_ID = /^[A-Za-z0-9._-]{1,80}$/;
 
@@ -76,6 +79,9 @@ function scriptsAllowed(method: string, path: string): boolean {
   }
   if (parts.length === 2 && parts[1] === 'versions' && id0) {
     return SCRIPT_ID.test(id0) && method === 'GET';
+  }
+  if (parts.length === 2 && parts[1] === 'restore' && id0) {
+    return SCRIPT_ID.test(id0) && method === 'POST';
   }
   if (parts.length === 3 && parts[1] === 'versions' && id0 && id2) {
     return SCRIPT_ID.test(id0) && SCRIPT_ID.test(id2) && method === 'GET';
@@ -129,6 +135,6 @@ export function describeAllowlist(): {
     exact: EXACT.map(([method, path]) => ({ method, path })),
     prefixes: PREFIX_GET.map((pathPrefix) => ({ method: 'GET', pathPrefix })),
     scripts:
-      'GET|POST /api/scripts; GET|PUT /api/scripts/_draft; GET|PUT|DELETE /api/scripts/:id; GET /api/scripts/:id/versions[/:rev]',
+      'GET|POST /api/scripts; GET|PUT /api/scripts/_draft; GET|PUT|DELETE /api/scripts/:id; GET /api/scripts/:id/versions[/:rev]; POST /api/scripts/:id/restore; GET /api/scripts/_git; POST /api/scripts/_git/token',
   };
 }
