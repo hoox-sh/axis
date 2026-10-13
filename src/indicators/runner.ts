@@ -687,9 +687,13 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       // timer so WS→REST fallback is not killed mid-flight.
       signal: isolate ? opts.signal : undefined,
       // Genuine live tick over chart bars: remote engines with live sessions
-      // (PYNE 0.6.9+) may answer O(delta). Never set for bar-window overrides
-      // (HPO holdout / walk-forward), which are private slices, not the series.
-      ...(opts.liveTick === true && !opts.bars ? { liveTick: true } : {}),
+      // (PYNE 0.6.9+) may answer O(delta). `runAndApply` always forwards the
+      // bars it evaluated (chart `store.bars` by reference unless the caller
+      // overrode the window), so compare by reference: only a private slice
+      // (HPO holdout / walk-forward) opts out — it is not the live series.
+      ...(opts.liveTick === true && (!opts.bars || opts.bars === store.bars)
+        ? { liveTick: true }
+        : {}),
     });
 
     const ms =
