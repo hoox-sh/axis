@@ -112,14 +112,17 @@ describe('theme catalog', () => {
 });
 
 describe('theme presets', () => {
-  it('listPresets is 10 curated high-end presets', () => {
+  it('listPresets includes curated presets plus vendored community themes', () => {
     const list = listPresets();
-    expect(list.length).toBe(10);
     expect(list.length).toBe(THEME_PRESETS.length);
+    expect(list.length).toBeGreaterThanOrEqual(10);
     const ids = list.map((p) => p.id);
     expect(ids).toContain('void-dark');
     expect(ids).toContain('obsidian');
     expect(ids).toContain('porcelain');
+    // Vendored community palettes (hoox-themes) are registered too.
+    expect(ids).toContain('dracula');
+    expect(ids).toContain('catppuccin-mocha');
     // No neon high-contrast preset
     expect(ids).not.toContain('high-contrast');
   });

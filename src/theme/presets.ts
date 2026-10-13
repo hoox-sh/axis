@@ -28,7 +28,10 @@
  */
 
 import { catalogDefaults } from './catalog';
+import { COMMUNITY_PRESETS } from './community-presets';
 import type { ThemePreset, ThemeTokens } from './types';
+
+export { COMMUNITY_PRESETS };
 
 function withTokens(patch: ThemeTokens): ThemeTokens {
   return { ...catalogDefaults(), ...patch };
@@ -421,8 +424,9 @@ export const PRESET_PARCHMENT: ThemePreset = {
 };
 
 /**
- * All built-in presets in UI order (10 curated).
- * Foundations first, then dark boutique, then light boutique.
+ * All built-in presets in UI order.
+ * Foundations first, then the dark boutique, light boutique, and finally the
+ * vendored community palettes (hoox-themes).
  */
 export const THEME_PRESETS: readonly ThemePreset[] = [
   PRESET_VOID_DARK,
@@ -435,6 +439,7 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
   PRESET_DUSK,
   PRESET_PORCELAIN,
   PRESET_PARCHMENT,
+  ...COMMUNITY_PRESETS,
 ];
 
 const BY_ID = new Map(THEME_PRESETS.map((p) => [p.id, p]));

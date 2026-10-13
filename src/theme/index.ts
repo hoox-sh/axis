@@ -70,6 +70,7 @@ export {
   /** @deprecated alias of classic */
   PRESET_HIGH_CONTRAST,
   THEME_PRESETS,
+  COMMUNITY_PRESETS,
   getPreset,
   listPresets,
 } from './presets';
