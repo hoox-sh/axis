@@ -12,7 +12,26 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "public" / "pyodide" / "pynescript_runtime.py"
-WHEEL = ROOT / "vendor" / "pynescript-0.6.8-py3-none-any.whl"
+
+
+def _wheel() -> Path:
+    """Resolve the vendored pynescript wheel.
+
+    The filename carries the version (``pynescript-<ver>-py3-none-any.whl``)
+    and is rewritten by scripts/sync-pyne-wheel.sh, so pinning a literal here
+    meant every wheel bump broke this lock for no reason. Resolve the single
+    vendored wheel instead and fail loudly if there is not exactly one.
+    """
+    vendor = ROOT / "vendor"
+    wheels = sorted(vendor.glob("pynescript-*-py3-none-any.whl"))
+    if len(wheels) != 1:
+        names = ", ".join(w.name for w in wheels) or "none"
+        msg = f"expected exactly one vendored pynescript wheel in {vendor}, found: {names}"
+        raise SystemExit(msg)
+    return wheels[0]
+
+
+WHEEL = _wheel()
 
 
 def load_runtime():

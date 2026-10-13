@@ -15,6 +15,20 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 
 ## [Unreleased]
 
+## [2.23.1] — 2026-10-13
+
+### Changed
+
+- **The in-browser Pyodide engine now vendors the PYNE 0.6.9 wheel.** Rebuilt with `scripts/sync-pyne-wheel.sh` from the sister pyne repo (1.39 MB, verified byte-identical in `public/vendor/` and `vendor/`), which brings the browser engine up to parity with the Pro API:
+  - the `array.copy(na)` codegen no longer emits a dead `list(None)` into generated Python;
+  - `Runtime.create_session` / `append_bars` / `update_last_bar` are present in the wheel, so a Pyodide-backed session is possible without a second runtime.
+
+  The hard-coded wheel URLs in `src/engines/catalog.ts` (preload warm list and the `micropip.install` call) and the wheel references in `docs/plugins/engines.mdx` / `docs/architecture/evaluation.mdx` moved with the filename. `sync-pyne-wheel.sh` prints a warning when that path drifts; this time it was caught and followed rather than ignored.
+
+### Fixed
+
+- **The vendored-wheel lock test no longer breaks on every wheel bump.** `tests/pynescript-interpret-ta.py` pinned the literal filename `pynescript-0.6.8-py3-none-any.whl`, so it failed as soon as the wheel was rebuilt — a test that fails on a routine dependency bump is a test that gets deleted. It now resolves the single wheel in `vendor/` and fails with the actual set of filenames when there is not exactly one, which keeps the lock (the wheel must still import and evaluate `ta.sma` / `ta.stdev` in interpret mode) while removing the version coupling.
+
 ## [2.23.0] — 2026-10-13
 
 ### Added

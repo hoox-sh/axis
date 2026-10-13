@@ -456,7 +456,7 @@ Interface surface
 | Path | Implementation | Notes |
 | --- | --- | --- |
 | Engine server | src/engines/catalog.ts | Prefer WS ws(s)://{endpoint}/ws/run (preferWs default true), else POST {endpoint}/run?mode= with { script, data, mode, inputs?, profiler?, libraries? }. Modes interpret \| compile \| auto. Timeout scales with bar count (45–180s). Default endpoint http://localhost:5002. Strategy HPO uses POST {endpoint}/optimize. |
-| Engine pyodide | same file | Self-hosted Pyodide 0.29.5 (/pyodide/v0.29.5/, Python 3.13), wheels /vendor/pynescript-0.6.8-py3-none-any.whl + antlr4python3runtime-4.13.2, runtime /pyodide/pynescriptruntime.py. Numba is not in Wasm; compile / auto is object-mode. Cold load ~20–30s. |
+| Engine pyodide | same file | Self-hosted Pyodide 0.29.5 (/pyodide/v0.29.5/, Python 3.13), wheels /vendor/pynescript-0.6.9-py3-none-any.whl + antlr4python3runtime-4.13.2, runtime /pyodide/pynescriptruntime.py. Numba is not in Wasm; compile / auto is object-mode. Cold load ~20–30s. |
 | AXIS Worker /api/run | worker/src/runtime.ts | PYODIDEINWORKER=enabled scaffold; else proxy EXTERNALBACKEND/run; else 503 NOBACKEND. Caps: 512 KiB script, 50k bars, 30 req/min/IP, 60s upstream. |
 | Engine pyne-worker | src/engines/catalog.ts | Built-in (builtIn: true). POST /run to the HOOX edge worker. Default origin https://pyne-worker.cryptolinx.workers.dev. Distinct from engine server and from the AXIS Worker (worker-axis). |
 | PyneTS | — | TypeScript library. PYNE docs. Not referenced in AXIS source. |
@@ -473,7 +473,7 @@ Invariants & edge cases
 1. AXIS ≠ engine (ADR-002). The shell never embeds a closed interpreter.
 2. AXIS ≠ execution. Strategy events on the Results panel are not HOOX orders. See AXIS and HOOX.
 3. No none stream plugin in src/streams/catalog.ts. Pausing live data is stopLive(), not a plugin id.
-4. The vendored wheel is pynescript-0.6.8-py3-none-any.whl, built from the sister pyne repo with scripts/sync-pyne-wheel.sh. That script also prints a warning if the hard-coded path in src/engines/catalog.ts drifts from the wheel filename — update it when the version changes.
+4. The vendored wheel is pynescript-0.6.9-py3-none-any.whl, built from the sister pyne repo with scripts/sync-pyne-wheel.sh. That script also prints a warning if the hard-coded path in src/engines/catalog.ts drifts from the wheel filename — update it when the version changes.
 5. CORS: Worker allows localhost, .hoox.sh, .pynescript.online, .axis.pages.dev (plus legacy .pynescript-axis.pages.dev) only.
 Worked examples
 Local desk
@@ -4838,7 +4838,7 @@ Config
 Boot pipeline (ensure)
 1. Prefetch assets (prefetchPyodideAssets) — wasm, stdlib zip, micropip wheels.
 2. loadPyodide({ indexURL }).
-3. micropip.install same-origin /vendor/pynescript-0.6.8-py3-none-any.whl and the antlr4 4.13.2 wheel.
+3. micropip.install same-origin /vendor/pynescript-0.6.9-py3-none-any.whl and the antlr4 4.13.2 wheel.
 4. Fetch /pyodide/pynescriptruntime.py and runPythonAsync it.
 Refreshing the pyne wheel (after pyne compiler/runtime changes):
 `bash
