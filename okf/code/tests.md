@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 264 more files."
+description: "tests contains alerts-engine.test.ts, alerts-form.test.ts, alerts-format.test.ts, and 266 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-13T20:14:11Z
+  at: 2026-10-13T20:51:45Z
 sources:
   - id: tree
     resource: "tests"
@@ -35,6 +35,7 @@ okf_lock: generated
 * `builtin-scripts.test.ts`
 * `chart-boot.test.ts`
 * `chart-context-menu.test.ts`
+* `chart-data-session.test.ts`
 * `chart-layout.test.ts`
 * `chart-registry.test.ts`
 * `chart-series-sanitize.test.ts`
@@ -215,6 +216,7 @@ okf_lock: generated
 * `run-results-focus.test.ts`
 * `run-results-persist.test.ts`
 * `run-target.test.ts`
+* `runner-engine-owned.test.ts`
 * `runner-extra.test.ts`
 * `runner-hardening.test.ts`
 * `runner-livetick-session.test.ts`

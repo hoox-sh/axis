@@ -24,6 +24,7 @@ import {
 import { defaultStreamForSource } from '../src/streams/catalog';
 import { ensureStreamsRegistered, _resetStreamRegistrationFlag } from '../src/streams/catalog';
 import { setActivePlugin, setStore } from '../src/store';
+import { _setCachedEngineCapabilitiesForTests } from '../src/engines/catalog';
 import { registry } from '../src/plugins/registry';
 import type { SourcePlugin } from '../src/plugins/types';
 import type { Bar } from '../src/store/types';
@@ -35,6 +36,9 @@ function bar(t: number, c = 100): Bar {
 describe('expand-cache', () => {
   beforeEach(async () => {
     await _resetBarsCacheForTests();
+    // Module-level capability cache persists across files in one process;
+    // a dirty value would route live-bar writes through the ownership gate.
+    _setCachedEngineCapabilitiesForTests(null);
     clearDataManagerSelection();
     _resetSourceRegistrationFlag();
     _resetStreamRegistrationFlag();

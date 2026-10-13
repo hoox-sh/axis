@@ -72,6 +72,10 @@ import {
 } from './catalog';
 import { noteDataManagerLiveBar } from '../data/expand-cache';
 import { isEngineOwnedLive } from '../engines/ownership';
+import { tickChartDataSession, releaseChartDataSession } from '../engines/chart-data-session';
+import { getDataSeriesBars } from '../engines/data-sessions';
+import { getActiveEngineConfig } from '../plugins/active';
+import { exchangeForSource } from '../data/symbol-exchange';
 import { sanitizeBar } from '../data/parse-bars';
 import { pluginKey } from '../plugins/types';
 import { classifyTransport } from '../ui/telemetry';
@@ -115,6 +119,11 @@ let currentStop: (() => void) | null = null;
 let liveEpoch = 0;
 let rerunTimer: ReturnType<typeof setTimeout> | null = null;
 let rerunInFlight = false;
+/**
+ * Serializes engine-owned chart paints (tick the engine's store, then re-read
+ * its bars) so concurrent flushes never advance the store out of order.
+ */
+let enginePaintChain: Promise<unknown> = Promise.resolve();
 /** Test-only: increments each time a debounced live re-run is attempted. */
 let rerunAttemptCount = 0;
 /**
@@ -299,6 +308,13 @@ export function startLive(
         if (prev && prev.time === b.time) ordered[ordered.length - 1] = b;
         else ordered.push(b);
       }
+      // Engine-owned live mode: the venue WS is only a trigger. Advance the
+      // engine's store, paint the engine's bars (so candles and indicators
+      // align), then rerun indicators — each ticks its own engine session.
+      if (isEngineOwnedLive()) {
+        paintEngineOwned(ordered);
+        return;
+      }
       let shouldRerun = false;
       for (const bar of ordered) {
         if (!isCurrent()) break;
@@ -330,6 +346,40 @@ export function startLive(
     } catch {
       /* never let a single tick tear down the live session / UI */
     }
+  };
+
+  /**
+   * Engine-owned live mode. Alerts still evaluate against the venue tick, but
+   * the chart is painted from the engine's series: the venue stream triggers a
+   * tick of the chart's engine session (advancing the engine's store), then the
+   * engine's bars are re-read and painted. Indicator reruns tick their own
+   * per-script engine sessions against the same store.
+   */
+  const paintEngineOwned = (triggerBars: Bar[]) => {
+    for (const b of triggerBars) {
+      if (!isCurrent()) break;
+      noteTick(b.close, b.time, sym);
+      noteLiveBarForAlerts(b, { symbol: sym, interval: iv });
+    }
+    const cfg = getActiveEngineConfig() || {};
+    const endpoint = String(cfg.endpoint || '');
+    const apiKey = String(cfg.apiKey || '');
+    if (!endpoint) return;
+    const key = { exchange: exchangeForSource(store.source), symbol: sym, interval: iv };
+    const limit =
+      Number.isFinite(store.rollingWindowBars) && store.rollingWindowBars > 0
+        ? store.rollingWindowBars
+        : 2000;
+    const run = async (): Promise<void> => {
+      const t = await tickChartDataSession(endpoint, apiKey, key);
+      if (!t.ok || !isCurrent()) return;
+      const proBars = await getDataSeriesBars(endpoint, apiKey, key, limit);
+      if (isCurrent() && proBars.length) {
+        setDataToChart(proBars, { fit: false, clearMarkers: false });
+      }
+    };
+    enginePaintChain = enginePaintChain.then(run, run);
+    if (isCurrent()) scheduleRerun();
   };
 
   /** Schedule a queue flush: rAF while visible, timer fallback while hidden. */
@@ -541,6 +591,10 @@ export function stopLive(opts?: StopLiveOpts) {
   // Drop in-flight gate so the next startLive can schedule reruns
   // (a hung prior runAndApply must not block suite / restarts forever).
   rerunInFlight = false;
+  // Engine-owned mode: drop the serialized paint chain and release the
+  // chart's engine session so a symbol change / restart starts clean.
+  enginePaintChain = Promise.resolve();
+  releaseChartDataSession();
 }
 
 /**

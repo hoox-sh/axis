@@ -158,8 +158,10 @@ streaming multiplex and `expand-cache` writes are suppressed for that instrument
 1. **Capabilities** (done in round one, keys aligned to this contract in round two).
 2. **PYNE store + routes + health features** (`/home/jango/Git/pynescript`).
 3. **AXIS client + broker** (`src/engines/data-sessions.ts`), with unit tests.
-4. **Server-owned routing**: `serverEngine` takes a `dataSession` option when
-   `every-tick` is active and the engine reports `data_session`.
+4. **Server-owned routing** (done): `serverEngine` takes a `dataSession` option when
+   `every-tick` is active and the engine reports `data_session`; the runner
+   passes it with identity only, and the chart paints from
+   `GET /data/series/bars`.
 5. **No-persist in server-owned mode** (done): `isEngineOwnedLive()` in
    `src/engines/ownership.ts` gates both write paths — the multiplex's
    `noteDataManagerLiveBar` and `expand-cache`'s fetch/merge. Fail-open:

@@ -7,7 +7,7 @@ tags: [code, indicators]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-13T17:41:29Z
+  at: 2026-10-13T20:51:45Z
 sources:
   - id: tree
     resource: "src/indicators"
@@ -36,6 +36,7 @@ okf_lock: generated
 
 * [src/alerts](/code/src/alerts.md)
 * [src/chart](/code/src/chart.md)
+* [src/data](/code/src/data.md)
 * [src/editor](/code/src/editor.md)
 * [src/engines](/code/src/engines.md)
 * [src/indicators/builtins](/code/src/indicators/builtins.md)

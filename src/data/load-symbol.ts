@@ -102,6 +102,9 @@ function loadErrorSentence(msg: string): string {
 
 // Shared leaf helpers (also used by DSM modules without importing this file).
 import { exchangeForSource, normalizeLoadSymbol } from './symbol-exchange';
+import { isEngineOwnedLive } from '../engines/ownership';
+import { getDataSeriesBars } from '../engines/data-sessions';
+import { getActiveEngineConfig } from '../plugins/active';
 export { exchangeForSource, normalizeLoadSymbol };
 
 /**
@@ -198,6 +201,54 @@ export async function loadSymbolData(
       if (stillCurrent()) stopLive({ reason: 'restart' });
     } catch {
       /* ignore */
+    }
+  }
+
+  // ── Engine-owned live mode: the engine's feed paints the chart ──
+  // In every-tick Pro mode the engine's store owns the series. The Data
+  // Manager must not compete: no dataset paint, no venue backfill, no local
+  // persistence. The chart reads the engine's bars into memory only.
+  if (isEngineOwnedLive()) {
+    try {
+      const cfg = getActiveEngineConfig() || {};
+      const endpoint = String(cfg.endpoint || '');
+      const apiKey = String(cfg.apiKey || '');
+      const limit =
+        Number.isFinite(store.rollingWindowBars) && store.rollingWindowBars > 0
+          ? store.rollingWindowBars
+          : 2000;
+      const engineBars = await getDataSeriesBars(
+        endpoint,
+        apiKey,
+        { exchange: exchangeForSource(srcId), symbol: sym, interval: iv },
+        limit,
+        signal,
+      );
+      if (!stillCurrent()) return false;
+      if (engineBars.length) {
+        loadBars(engineBars, sym, iv, exchangeForSource(srcId));
+        const manager = getManager();
+        if (manager) setDataToChart(engineBars, { fit: true });
+        setTelemetryState('source', 'open', {
+          latencyMs: performance.now() - t0,
+          detail: `${engineBars.length} bars · ${label} (engine)`,
+          error: null,
+        });
+        if (restartLiveAfter && stillCurrent()) {
+          const streamId = store.live.streamId || defaultStreamForSource(srcId);
+          try {
+            const { startLive } = await import('../streams/multiplex');
+            if (stillCurrent()) startLive(streamId, sym, iv);
+          } catch {
+            /* ignore live restart failures */
+          }
+        }
+        return stillCurrent();
+      }
+      // No engine bars yet — fall through to the venue fetch so the chart is
+      // never empty; the engine's store is still the live source of truth.
+    } catch {
+      /* fall through to the venue fetch */
     }
   }
 

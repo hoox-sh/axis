@@ -99,6 +99,8 @@ import {
   resolveDrawingLimits,
 } from '../chart/pyne-drawings';
 import { getActiveEngine, getActiveEngineConfig } from '../plugins/active';
+import { isEngineOwnedLive } from '../engines/ownership';
+import { exchangeForSource } from '../data/symbol-exchange';
 import type { RunResult as EngineRunResult, PlotSample } from '../plugins/types';
 import { classifyTransport } from '../ui/telemetry';
 import { reportUiError } from '../ui/boot-errors';
@@ -578,7 +580,11 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
   }
 
   const bars = Array.isArray(opts.bars) && opts.bars.length ? opts.bars : store.bars;
-  if (!Array.isArray(bars) || bars.length === 0) {
+  // Engine-owned live mode (PYNE Pro every-tick): the engine's store provides
+  // the bars, so a local window is neither required nor sent. Isolate studies
+  // always keep the explicit-bars path.
+  const engineOwned = isEngineOwnedLive() && !isolate;
+  if (!engineOwned && (!Array.isArray(bars) || bars.length === 0)) {
     const msg = 'No bars loaded — load a symbol before running';
     // Only touch status if this generation is still current
     if (!isolate && (epoch == null || isRunEpochCurrent(epoch))) {
@@ -683,12 +689,25 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
     } catch {
       /* publish / resolve optional */
     }
+    const windowBars = applyRollingWindow(bars);
     const rawResult = await engine.run({
       script: scriptForEngine,
-      bars: applyRollingWindow(bars),
+      bars: engineOwned ? [] : windowBars,
       config,
       inputs,
       ...(engineLibraries?.length ? { libraries: engineLibraries } : {}),
+      // Engine-owned series: identity only, never bars. The engine's store and
+      // feed own the OHLCV; a live tick re-ticks the per-script session.
+      ...(engineOwned
+        ? {
+            dataSession: {
+              exchange: exchangeForSource(store.source),
+              symbol: store.symbol,
+              interval: store.interval,
+              historyBars: Math.max(1, windowBars.length || 5_000),
+            },
+          }
+        : {}),
       // Honour caller abort (HPO cancel). Interactive runs still omit a parent
       // timer so WS→REST fallback is not killed mid-flight.
       signal: isolate ? opts.signal : undefined,
