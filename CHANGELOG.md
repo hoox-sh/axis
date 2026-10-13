@@ -15,14 +15,14 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 
 ## [Unreleased]
 
+## [2.23.0] — 2026-10-13
+
 ### Added
 
 - **Rolling window (Settings → Historical bars, second field)**: caps how many bars reach the engine on every run, default **10,000** (`ROLLING_WINDOW_DEFAULT`, clamped 200–200,000). The chart keeps the entire dataset — this bounds only what is evaluated and shipped back. Added because the Data Source Manager can grow a dataset to `DSM_MAX_BARS_PER_JOB` (50k), and every extra bar costs evaluate time, encode time, and full-size response-envelope bytes on *every* run including each live tick. Explicit `opts.bars` (HPO holdout / walk-forward) is windowed too, so a trial cannot quietly exceed the user's budget.
 - **Dataset size in the status strip**: the existing `N bars` readout covers chart bars, which understates the dataset once a deep backfill has run. A `· dataset 20.0k` segment now appears whenever the DSM memory mirror holds more bars than the chart, sourced from `peekDataset` and kept reactive via `subscribeDatasets`. `formatBarCount` keeps the readout inside the monospace strip: exact below 10k, grouped above.
-
 - **`/health?deep=1` reports live upstream reachability**: shallow `/health` stays cheap and binding-only, but `?deep=1` pays one `HEAD` per egress peer (Binance, MEXC, DefiLlama, GeckoTerminal) and returns `status: "degraded"` plus a per-host `upstream` block, downgrading only the plane that failed. Probes use `HEAD` — DefiLlama's cheapest GET is ~9 MB / 2 s and would abort a shared timeout while proving nothing. Still returns HTTP 200: a third-party outage must not flap uptime probes.
 - **Git-native script storage on Cloudflare Artifacts (no GitHub creds)**: optional `SCRIPT_ARTIFACTS` binding mirrors every script save/delete as a git commit to a per-API-key repo (`scripts/<id>.pine` + meta sidecar via `isomorphic-git`), history endpoints serve from git log with D1/memory fallback, and `GET /api/scripts/_git` + `POST /api/scripts/_git/token` hand out clone remotes plus short-lived repo tokens for any standard git client. Unbound workers behave exactly as before. Identical re-saves dedupe against HEAD (no clone+push, no history spam); `POST /api/scripts/:id/restore` resurrects any version as the new tip, recreating deleted scripts. Setup: `axis setup artifacts [--namespace axis-scripts]` (writes `[[artifacts]]`, verifies namespace access); docs in `docs/worker/data-plane.mdx`.
-
 ### Fixed
 
 - **Market + on-chain proxies work again in production (100% failure rate fixed)**: both `fetchUpstream()` helpers passed `redirect: 'error'`, which **workerd rejects** (`Invalid redirect value, must be one of "follow" or "manual"`). Every `/api/market/*` and `/api/onchain/*` call returned 502 `UPSTREAM_NETWORK`, so DefiLlama TVL and GeckoTerminal DEX overlays were dead in the deployed Worker. Bun/undici *does* support `"error"`, which is why all 3,419 unit tests stayed green. Now a shared `fetchUpstreamJson()` in `worker/src/http.ts` uses `redirect: 'manual'` plus an explicit 3xx / `opaqueredirect` rejection — the original A10 intent preserved on every runtime. Regression guard added: `worker/tests/upstream-fetch.test.ts` pins the redirect mode and both proxy paths.
@@ -32,7 +32,6 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Unit suite is green again (`bun run test` exits 0)**: two independent causes. (1) `tests/helpers/mock-solid.ts` is preloaded so Bun's automatic JSX runtime resolves `solid-js/jsx-dev-runtime` to a runtime that actually implements `jsxDEV` — the package's own export map points that specifier at `dist/solid.js`, which has no `jsxDEV`, so every test whose import graph reached a `.tsx` died with `SyntaxError`. Root-level `conditions` in `bunfig.toml` does not affect Bun 1.4.3's runtime resolver, hence the preload. (2) `tests/pane-badge.test.ts` had a stale expected-button list from before the Pine tables button landed in v2.22.
 - **E2E no longer asserts against a UI that moved**: `loadMockBars` and the smoke spec seed `{ autoload: false }` so the manual Load button is actually rendered (it is hidden by default), and the seed merges on reload instead of resetting app state. `selectDrawingTool` targets `[data-drawing-group]` + the caret flyout instead of a group *label*, which the caret button shadowed. The Script Library spec switches to the **Personal** tab, where the storage picker and save form actually live. Drawings persistence reloads bars before asserting shapes.
 - **Chart `setData` boundary guard**: history apply now sanitizes candle/volume payloads (drops non-finite times/values and non-ascending times with a counted log line) and reports candle vs volume failures under distinct contexts, instead of surfacing a bare library assertion (`Value is null`) on every redraw after one poisoned row.
-
 ### Changed
 
 - **Bun is pinned to 1.4.3** across all workflows, plus a `packageManager` field in
@@ -56,7 +55,6 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Drag perf**: pointermove drags coalesce to one user-layer rebuild per frame (`dragRaf`, flushed on pointerup) instead of a full SVG rebuild per event; pan/zoom path unchanged (script/fills never rebuild on drag).
 - **Long/short fills honor style**: profit/loss rects use `ctx.fillOpacity` instead of hardcoded `0.18`.
 - **Indicator `fill()` / `linefill` relocation**: `ensureScriptPaneLayer` refreshes its Y series + bar clock on every call (stale removed-series scale misplaced sub-pane fills); `runAndApply` clears this owner's fills on the non-target layer when overlay toggles so fills don't duplicate/linger; `clearScriptChartOverlays` clears only the hidden script's drawings/fills on shared sub-panes (previously destroyed the whole layer, wiping siblings); `plotFillsSignature` samples up to 16 interior points so historical rewrites with identical tips still invalidate the cache.
-
 ## [2.22.0] — 2026-10-10
 
 ### Fixed
@@ -73,14 +71,12 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **MCP host**: `mutates` enforced in dispatch (same-origin page scripts are read-only; ticket-authenticated bridge traffic may mutate); `includeBars` returns bounded rows instead of `"[array N]"`; bridge replies on the originating socket; event allowlist of 22 real listeners.
 - **UI and design system**: shortcuts modal mounted; `--color-muted` defined (66 uses); extra price/alert cards use theme tokens; focus trap installed in settings/symbol/command modals with `focusin` containment; `ExtraMenu` is a dialog, not a menu; dead `SettingsDialog`/`AppDrawer`/`PluginManager`/`WorkersManager` deleted (live panels extracted to `settings/panels.tsx`); hardcoded hex replaced by tokens; off-palette fallbacks fixed; shared `.sc-popover` and `dismissOnOutside`; `FloatableShell` no longer builds `doc.write` HTML; shared 1 Hz clock; timers tracked and cleared; keyboard-recording pulse honors reduced-motion; non-null assertions narrowed.
 - **CLI, desktop, and CI**: `setup --prod` fails closed (exit 1) on D1/KV failure and writes `ALLOW_OPEN_KEYS=""`; deploy refuses open-keys configs with D1-but-no-KV; template ships the flag empty; doctor requires KV when D1 is bound; Tauri CSP added; Windows binary resolution and `.cmd` spawn fixed with tests; npm token scoped to publish steps; compose binds `127.0.0.1` with production Flask default; https enforced for admin/key traffic; secrets leave argv; `secret put` no longer redeploys by default; wrangler pinned with ENOENT-only fallback; Tauri read errors surfaced; nginx runs as non-root on 8080; pyodide downloads SHA-256-verified; workflow permissions scoped; `ref_name` via `env:`; e2e waits on state, not sleeps; unit coverage for CLI helpers and pure functions.
-
 ### Added
 
 - **Chart settings panel**: floating panel (chamfered SVG frame) opened from a new gear button in the price-scale cluster (`axis-chart-scale-settings`), anchored top-right of the active chart. Controls chart type, interval (reloads data), log / auto scale, and the last-value / plot-name / price-scale label toggles. Stays in sync with the scale cluster and chart context menu; closes on Escape. Open state is UI-only (`src/ui/chart-settings-state.ts`), not persisted.
 - **Chart settings entry points**: the chart context menu's “Chart settings” row now toggles this panel (id `chart.settings`, previously `app.settings`, which opened app Settings; app Settings stays reachable from the topbar and palette). New command-palette entry “Chart Settings”.
 - **Pine tables in the bottom panel (September 2026 parity)**: any script's `table.*` drawings can now move off the chart into a bottom Tables tab via “Move tables to bottom” (chart context menu, pane-badge table button), and back via “Move tables to chart” (same menus + Tables tab header). Bottom tables stack vertically in creation order regardless of `position` / `force_overlay`, stretch to the pane width with proportional `table.cell(width=…)` columns, never truncate text (scrollbars when needed), keep tooltips on hover, honor `merged_cells`, and allow text selection + per-table TSV copy — matching TradingView's bottom-panel rules. Placement persists per script (`pineTablesLocation`); chart HUD hides moved tables; new `Tables` bottom-docked panel, Topbar toggle, command-palette entry, and `panel.tables` chrome.
 - **Pine table model forward-fill**: `PineTableCell` now carries `width` / `height` / `tooltip` / border hints and `PineTable` carries `force_overlay` / `merged_cells`, parsed from either engine shape (interpret + compile) so proportional bottom sizing, tooltips, and merges work as soon as the engine emits them.
-
 ### Changed
 
 - **Studio UI elevation and motion**: layered shadow tokens (`--ax-shadow-ambient` / `-card` / `-raised`, `--ax-drop-shadow`) with light-theme variants; 150 ms transitions and focus rings on buttons, cards, chips, tabs, and rail items; press feedback on buttons and cards; all motion disabled under `prefers-reduced-motion`.
@@ -88,13 +84,11 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **pynescript wheel 0.5.0 → 0.6.8**: rebuilt from the sister pyne repo via `scripts/sync-pyne-wheel.sh` (85 commits, incl. September 2026 Pine release-notes parity); stale wheels dropped, hard-coded paths in `src/engines/catalog.ts` updated. Editor builtin metadata already in sync; interpret lock (`ta.sma` / `ta.stdev`) passes.
 - **Docs review vs last 20 commits**: fixed stale post-2.21.0 references (pre-Solid `state.js`/`main.js`/`server.ts`/root `sw.js` now past-tense across `ui/store`, `architecture/{overview,state-namespaces,adrs}`, `devops/build-and-serve`), bumped `docs/index.mdx` to v2.21.0, and documented previously uncovered changes — Pine tables bottom panel (enduser drawings guide + parity invariant), extras ticker controls / float-only time+price panels / big-price watchlist rows / panel motion (`ui-shell`), shared Worker plumbing `http.ts`/`proxy-router.ts`/`rate-limit.ts` + client `throttle.ts` (`worker/runtime`, `worker/index`, feature atlas), and Storybook lab (`local-dev`, `ci-and-testing`, atlas).
 - **Docs repo identity + voice**: `docs/llms.txt` Repository/Docs-tree links pointed at `hoox-sh/pyne` — now `hoox-sh/axis`; enduser builtin-scripts heading de-maintainer-voiced (`What AXIS does not ship`). No `jango_blockchained`-as-source clone instructions exist in docs body (only required AGPL author headers); all clone instructions already target `hoox-sh`.
-
 ## [2.21.0] — 2026-10-07
 
 ### Removed
 
 - **Pre-Solid static shell (~3,900 lines)**: deleted the legacy pre-Solid tree — `src/main.js`, `src/registry.js` + `registry.d.ts`, `src/registry-bootstrap.js`, `src/plugin-types.d.ts`, `src/chart.js`, `src/state.js` + `state-hash.js`, the `src/{sources,streams,engines}/index.js` builtin barrels, the eight `src/ui/*.js` legacy DOM modules, root `pyne-editor.js` / `style.css` / `storage.js` / `sw.js` / `server.ts`, and `tests/{registry,state,server}.test.ts`. Before deleting, the real import graph was traced from `src/index.tsx`: **no** legacy file was reachable and none shipped in `dist/` after a build — the only consumers were those three tests. This leaves exactly one plugin registry (`src/plugins/registry.ts`), one service worker (`public/sw.js`), and one state store (`src/store`). `LEGACY.md` and `docs/reference/legacy-shell.mdx` rewritten to record what was removed and why it was safe.
-
 ### Changed
 
 - **Legacy plugin registry disambiguated**: `src/registry.js` exported its singleton as `registry`, the same name as the shipping `src/plugins/registry.ts` — two unrelated classes under one identifier, so a wrong import registered into a dead store with no error. The legacy singleton is now `legacyRegistry` (updated in `main.js`, `registry-bootstrap.js`, `ui/manager.js`, `ui/legacy-topbar.js`, `registry.d.ts`, and `tests/registry.test.ts`). Traced the import graph from `src/index.tsx` and confirmed **no** legacy file is reachable and none ships in `dist/`; `LEGACY.md` now records the full legacy file list, that finding, and why deleting the tree is a product decision rather than a refactor.
@@ -108,7 +102,6 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Panel open/close motion**: dock columns snap instantly on open/close (no width/height/margin transitions, so the chart reflows exactly once); the shell plays a smooth clean slide + fade (`ease-out`, compositor-only transform/opacity, no flicker/brackets/blink). Hover-slide stays linear on layout props; `will-change` is compositor-side only.
 - **Datafeed WS hardening**: `/watch` sockets now clean up their ccxt watcher on disconnect (previously leaked one watcher per dropped client), with typed `Bun.serve` data, `perMessageDeflate: false`, and socket timeouts.
 - **Test runner**: `bun test --isolate --parallel` benchmarked at ~12.5s vs ~37.8s serial with an identical failure set (see `test:fast` proposal).
-
 ### Fixed
 
 - **Ticker drag handle**: listeners were only removed on `pointerup`, so unmounting mid-drag (emptying the symbol list) leaked `document`-level `pointermove`/`pointerup` against a detached node; added `pointercancel`, `onCleanup` teardown, and `user-select` suppression during the gesture. The drag offset is now persisted instead of being written straight to `style.transform` and lost on reload, and negative offsets are clamped so the band can't paint over the command/module bars.
@@ -117,7 +110,6 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Flaky UI tests**: `workspace-snapshot` sample now opens the editor chrome it asserts on; `editor-menu` matches the `<For each={DOCK_MENU…}>` prefix (source gained a floatOnly filter); `store` rapid-switch waits on condition instead of a fixed 50ms sleep. Full suite: 3272 pass, 0 fail.
 - **Datafeed version drift**: `/health` version now comes from `packages/datafeed/package.json` via static import (bundler-embedded, compile-safe — same pattern as CLI `own-package.ts`) instead of a hardcoded string.
 - **CI-only test pollution**: `mcp-bridge-tabs` resets cloud config in `beforeEach` (was `afterEach`-only — an earlier suite's stored key leaked into the no-key assertion); the offline `expand-cache` test uses a unique symbol instead of the shared `csv-upload/BTCUSDT/1h` key.
-
 ### Added
 
 - **Panel open effect**: `panel.open` Motion tune (Settings → Theme → Motion) — duration (40–200ms, default 180) and slide distance (0–100% of the panel, default full) for a smooth slide + fade; disabled or reduced-motion zeroes both to an instant snap.
@@ -136,13 +128,11 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Price-card trend on live ticks**: the Extra price-card arrow now heads the trailing-N trend with the stream-scoped live tick (falls back to the last bar close when no tick), so it reacts to every tick instead of only bar closes.
 - **Price-card countdown prefix**: the bar-close badge reads `-M:SS` (e.g. `-4:32`).
 - **Ticker marquee placement**: the marquee is a full-width band under the module bar (app top) — no longer a squeezed item on the right side of the topbar row.
-
 ## [2.20.0] — 2026-10-04
 
 ### Changed
 
 - **License headers**: unified all own-file headers to `Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)` / `part of axis` (was `pynescript`). Comment-only, no behavior change.
-
 ### Added
 
 - **Watchlist big-price rows**: `!` button after the alert bell toggles an expanded row — full-cell-width big price (auto-shrinks for long prices / extra decimals) with symbol, change, and prev close in a sub-row.
@@ -150,7 +140,6 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Float-only time + price panels**: compact Extras (normal width, ~2 rows, float only — no layout docks, title-drag moveable). Time shows the candle-close countdown + local/UTC clocks; Price shows the big last price + 24h change for the chart symbol. Both default side-by-side just under the topbar.
 - **Price-card time badge**: left name badge on the current-price overlay — bar-close countdown while bars load, live clock otherwise (tooltip: local + UTC).
 - **Quote dock panel**: full quote sheet (price + trend, 24h change/range, day open, last O/H/L/C, 24h volume, tick time, venue) as a right-dock panel with multirow stacking, toggled from the Extra menu.
-
 ### Fixed
 
 - **Extra chrome widgets (review hardening)**: ticker starts once per mount and REST-seeds underneath live quotes instead of wiping them; color pickers no longer sit inside the checkbox label so picking a color can't toggle the overlay; alert direction treats `0` levels as real levels; disabling the overlay clears any visible/stale alert; price card ignores ticks from a previous symbol; persisted ticker symbols are trimmed + deduped and overlay colors must be `#rrggbb`; alert-broadcast test now covers the firing path.
@@ -158,19 +147,16 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Price card alignment**: overlay sits top-right, clear of the 72px price-scale gutter.
 - **Extra menu polish**: dropdown rebuilt with Studio inputs — toggle switches with hints, `ax-range` sliders in labeled fields (controls appear only when their widget is on), `StudioColorInput` swatches for alert colors, `ax-chip` pills for ticker symbols.
 - **Quote sheet correctness**: day window anchored to an injectable clock (was date-sensitive in tests); 24h high/low loop instead of `Math.max(...spread)` which overflows the stack on large histories; live tick ignored when it belongs to a previous symbol.
-
 ## [2.19.0] — 2026-10-03
 
 ### Added
 
 - **Extra chrome widgets**: module-bar `Extra` button (after Results) with dropdown toggles for a current-price trend card (tick-length slider), a watchlist ticker marquee (symbol pick + speed), and a fullscreen direction-colored price-alert overlay.
-
 ## [2.18.2] — 2026-10-03
 
 ### Fixed
 
 - **Background-tab data gaps**: live ticks no longer depend on `requestAnimationFrame` alone — the multiplex queues every tick in order with a timer fallback, so hidden/throttled tabs keep every closed slot instead of only the newest. `mock-poll` emits each missed intermediate slot on wake. New `data/background-catchup` auto-detects trailing staleness / fillable holes on `visibilitychange` / `focus` / `online` (and after long WS outages), REST-expands the dataset toward now, repaints without viewport reset, and queues a DSM backfill — the chart always delivers correct data.
-
 ## [2.18.1] — 2026-10-03
 
 ### Fixed
@@ -182,14 +168,12 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Pre-eval typo checker**: comma-separated multi-declarations (`const string A = 'x', const string B = 'y'`, `var series bool L = na, var series bool S = na`) now index every name instead of only the first per line, and single-line function bodies after `=>` contribute their bindings too. Large scripts no longer drown in false `Unknown COL2 / __GRID / __MTG / ATS … did you mean …?` marks. `dayofweek.sunday` … `dayofweek.saturday` are known builtins, so `dayofweek == dayofweek.monday` is no longer flagged.
 - **Drawing tool menu**: the group flyout (Fib, Gann, and the rest) opens beside the rail with the full tool name. It is no longer clipped to the rail edge.
 - **Script delete**: removing a chart script owner-clears its Pine drawings, plot fills, and barcolor. Lines no longer stay on the chart when another script is still applied.
-
 ## [2.18.0] — 2026-09-28
 
 ### Added
 
 - **Drawing example**: AXIS Drawings places a line, linefill, box, label, polyline, and table. Open it from the editor Examples menu or apply it from Scripts.
 - **UI effect manager**: Settings → Theme → Motion tunes short chrome flashes. The watchlist price flash is the first effect (duration, up tint, down tint). Later effects register the same way. Reduced motion turns flashes off without forgetting the tune.
-
 ### Changed
 
 - **Future drawings**: Pine lines, boxes, polylines, linefills, and labels can sit up to 500 bars past the last candle. The right margin grows to fit that point.
@@ -198,42 +182,35 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Watchlist tick flash**: the watchlist toolbar bolt turns the quote flash on or off. The same switch is Settings → Theme → Motion.
 - **Watchlist add field**: the symbol browse control is a lens inside the input, matching the topbar symbol field.
 - **Data panel estimate**: the backfill form shows the span, dense bar count, and page count for the past date and timeframe. A job past 50,000 bars says how much of that timeframe one run keeps. Job cards show fetched versus expected bars and the window length. Dataset load preview includes the span of the bars that will load.
-
 ## [2.17.1] — 2026-09-27
 
 ### Added
 
 - **Editor function tree**: optional right-rail outline of Pine functions, methods, types, and enums (`editorRightRail: outline`). Click a name to jump. Mutually exclusive with the minimap; toggle from the editor overflow menu or command palette.
-
 ### Changed
 
 - **Quiet trader shell**: a new session opens on the chart. The status row is Live, last price, and a Compose chip. Diagnostics expands the raw engine, source, stream, and storage chips. Layouts can switch between Trader and Operator. The Data tab keeps the Data Source Manager name in its tooltip.
 - **Problems stay while typing**: the Problems list and underlines keep the last lint / run marks until idle re-lint (or a new run) replaces them. Optional Settings → Editor → **Clear marks while typing** still wipes mid-keystroke.
-
 ### Fixed
 
 - **Calm live state**: reconnect stays an amber dot and a tooltip. Routine loads and reconnects stay in the log. A toast fires when retries are exhausted or the stream recovers from a long outage.
 - **Chart failures**: an empty chart shows a title, one sentence, and one action. HTML from a venue is not printed as a token dump.
 - **Pre-eval UDT fields with spaced generics**: `array <label> labels` / `array <line> lines` (and tab-indented draft arrays) are indexed as declared names again, so Progressbar-style libraries no longer get false `Unknown labels` / `Unknown lines` typos.
-
 ## [2.17.0] — 2026-09-26
 
 ### Added
 
 - **Right-click menus**: the chart plot, price scale, time scale, volume and indicator panes, script names, and drawings each open a menu for the actions that already exist there (reset view, scale, chart type, screenshot, script settings, drawing edit). Right-click a panel title to open its dock menu at the pointer.
 - **HOOX favicon and live tab title**: the browser icon is the HOOX mark. The tab title leads with the last price and its change versus the previous bar, and follows live updates.
-
 ## [2.16.0] — 2026-09-26
 
 ### Added
 
 - **Named chart themes**: Settings → Theme can save the current chart under a name. Each theme keeps a bar coloring. That coloring can also be saved on its own, applied into the selected theme, and updated across every theme that uses it. Editing one color on a built-in preset keeps the rest of that preset.
-
 ### Changed
 
 - **Pattern dedupe**: new `src/utils/emitter.ts` (`createEmitter` + `createSingleton`) shared by `ThemeManager` and `PluginRegistry`; registry's 5 ordered kinds collapsed to generic helpers; venue `assertHttpOk`/`assertBars` helpers in `sources/catalog.ts`. No public API or message changes.
 - **Drawing toolbar press states**: tool-rail buttons, carets, width chips, and style-bar chips show an accent pressed state. The style bar has a thin divider.
-
 ### Fixed
 
 - **DEX backfill symbol case**: `startBackfill` and `expandCachedSeriesToNow` reuse `normalizeLoadSymbol` so background jobs no longer uppercase case-sensitive pool addresses (e.g. Solana base58 via `geckoterminal-ohlcv`). Fixes the order-dependent `onchain-load-symbol` full-suite failure.
@@ -242,27 +219,23 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Chart resize sync**: drawing layers no longer rebuild all SVG groups on every resize frame — the viewport tracks each frame while full repaints wait for resize settle (150ms), so overlays, indicator and drawing layers converge with the main chart instead of lagging it. Pane-manager resize paths batch rect reads before `applyOptions` writes, and the ChartHost reflow safety net dropped from double- to single-rAF.
 - **Toolbar drag tracking**: the tool rail and style bar track pointer deltas onto the live position, so a drag follows the pointer 1:1. Drop, dock, tap, and slop are unchanged.
 - **Editor pre-eval typos**: `format.inherit` is recognized, `to` / `by` are not flagged as bare calls, and `for`-loop variables, UDT declarations, and multi-line signature parameters count as bindings.
-
 ## [2.15.0] — 2026-09-24
 
 ### Changed
 
 - **Drawing toolbar polish**: extracted `drawings/toolbar/` primitives (`ToolRailButton`, `ToolCaret`, `ToolFlyout`, `DockMenu`, style controls, shared drag factory) so `DrawingToolbar` is a composition root. Unified 32px grid / 16px glyphs, 16px caret hit area, focus rings, pill count chip, and keyboard-nav flyouts. Settings popover uses matching field/check/level styles. No placement-math or glyph-path changes.
-
 ## [2.14.0] — 2026-09-24
 
 ### Added
 
 - **OKF bundle**: `okf/` is an Open Knowledge Format v0.2 cache of the repo (one concept per source directory and doc, imports already linked). The pre-commit hook drafts, links, and lints it from the git index and stages it into the commit. `bun run okf:query` and `bun run okf:context` read that cache. `bun run okf:check` fails CI when the bundle is stale. Curated notes in `okf/playbooks/` stay put (`okf_lock: human`).
 - **Connect MCP**: the chart loading splash and the status bar offer Connect MCP while the bridge is down. A saved Worker key attaches this tab. Without one, the button opens Settings → General.
-
 ### Changed
 
 - **PYNE Agent plugin 0.1.7**: same-origin `/plugins/axis-pine-agent.js` matches pyne-agent-worker. Chat reads the live Workers Manager endpoint, API key, and persona on each send. A non-http(s) endpoint is refused. Closing the panel aborts the request. Validation status is plain text. Add to editor confirms, and says so when the editor panel is closed. The launcher sits under dialogs.
 - **Studio Settings**: General splits chart chrome (appearance, labels, strategy marks, results) from live data, script storage, the Worker key, and MCP. UI scale presets preview until Save; Cancel, Escape, and the studio rail restore the saved scale. Topbar, keyboard, and theme use the same studio controls. Arrow keys move the settings tabs.
 - **Chart loading splash**: the HOOX mark, caption, and status line sit in the center of the chart on desktop and phone. The shared list empty-state style no longer pins them to the top-left.
 - **Drawing toolbar**: the select tool is a filled pointer. The menu arrow sits inside the tool button — the icon selects the tool, the arrow opens the menu. The magnet mark stays inside its button.
-
 ### Fixed
 
 - **ZigZag** plots confirmed pivots and the live extreme. It was holding the last confirmed pivot as a flat line, so a rally never left that price.
@@ -270,44 +243,36 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Pine `time` sent to the engine is milliseconds.** Chart bars are unix seconds. `hour()` / `minute()` / session highlights were reading a ~15 minute slice of the whole history, so AXIS Sessions never lit.
 - **Chart arrows behind Studio**: Left/Right no longer pan the chart while a modal is open, so the settings tab strip receives them.
 - **Script storage label**: the storage select is labeled Storage. It lists storage backends.
-
 ## [2.13.0] — 2026-09-23
 
 ### Added
 
 - **Movable drawing toolbar**: a grip docks the tool rail to the left or the top of the chart, or leaves it floating. Docked rails can slide in to the grip. The style bar has its own grip; double-click puts it back beside the rail.
-
 ### Changed
 
 - **Classic colors on Fibonacci and Gann drawings**: retracement, extension, time zones, channel, arcs, wedge, circles, Gann fan, box, square, and pitchfork paint each level in a fixed palette (0.618 teal, Gann 1×1 blue). Drawing settings can turn that off or recolor one level.
 - **Drawing tool icons** are separate silhouettes, so the Gann fan, box, square, and Fibonacci tools no longer share one glyph.
-
 ### Fixed
 
 - **AXIS Ultimate plots a value**: the built-in no longer calls `ta.uo` (the compiler emitted that as empty). It now plots the Williams Ultimate Oscillator from buying pressure and true range. The engine `ta.uo` compiles to the same formula.
-
 ## [2.12.0] — 2026-09-22
 
 ### Changed
 
 - **Script Library and Layers panels**: list chrome is split into `ui/library` and `ui/layers`. The library search covers built-ins and personal scripts (with a jump to matches on the other tab); Find across scripts and Recent scripts from the command palette now focus that search or show newest personal scripts. Personal scripts filter by kind. Layers sections show counts, drawing rows use labelled eye toggles instead of a nested button, and the drawing list can be filtered.
-
 ## [2.11.0] — 2026-09-21
 
 ### Added
 
 - **PYNE Agent persona** control on Workers Manager (auto / pine / axis / trader), same `writePluginField` path as the agent endpoint.
-
 ### Changed
 
 - **Large OHLCV histories stay interactive**: 10k–100k candle loads lower LWC `minBarSpacing` so fit-content can actually show the full series, precompute conflation on every pane (user-visible priority at 25k+), skip duplicate full `setData` (DSM paint + ChartHost), and throttle progressive backfill paints. Pan/zoom no longer walks the whole series for plot fills, line-break primitives, or volume profile (visible window only); time-scale sync is rAF-coalesced from the price pane; plotshape markers cap at 2,500 newest; Data Window / crosshair updates stop tracking the 45k-bar array identity.
 - **Data Source Manager panel + Dataset manager modal**: job card / coverage map / formatters split out; the panel inherits the chart symbol and interval, uses filter chips with counts (Issues instead of Error), and puts Dataset manager in the header. The modal gets a focus trap, two-step delete (no native confirm), sort-by-header, success banner, and arrow keys that no longer steal from date/search inputs.
-
 ### Docs
 
 - MCP setup/troubleshooting now points at **Settings → General → Worker (cloud + MCP)** (Data tab is exchange credentials only). PYNE Agent guide documents the Workers Manager persona/endpoint controls.
 - **Pyodide-in-Worker use case + test conventions**: `worker/RUNTIME.md` rewritten to match the actual scaffold (boot wired, wheel/`run_script` stubbed — enabling the flag currently breaks evaluation; completion checklist included); `docs/architecture/evaluation.mdx` gains the scaffold status and the `NO_BACKEND` consumer contract (don't retry); `TESTING.md` records mock-hygiene, staleness-guard, and generation-advance conventions.
-
 ### Fixed
 
 - **Dataset manager never throws and always delivers**: `startBackfill` clamps bad dates, remaps the cache-reader source, and always returns a job id. Venue failures retry with backoff then complete as **Partial** with whatever bars are already cached (jobs no longer die as `error`). Empty-cache loads subscribe for progressive paint and kick a background walk after the first page.
@@ -328,7 +293,6 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **MCP `drawings.tool` validates**: unknown tools now fail `BAD_TOOL`, missing tool fails `NO_TOOL` (previously set empty string).
 - **Market Binance failover**: `403/451/429` from `data-api.binance.vision` now tries `api.binance.com` before surfacing; geo-block HTML no longer sticks on first upstream.
 - **PYNE Agent endpoint dead-end**: installing the agent plugin from the same-origin `/plugins/axis-pine-agent.js` left `endpoint` empty with no UI to set it, so every chat failed with `Set plugin config: endpoint = your pyne-agent-worker HTTPS URL`. Remote installs now seed the endpoint from the install origin and same-origin installs fall back to the production worker origin (backfilled on boot for existing installs); Workers Manager → PYNE Agent gains an editable **Agent endpoint** section (worker URL + API key, `component:pyne-agent`). Self-hosters (local `wrangler dev` in the sister `pyne-agent-worker` repo) override the URL there.
-
 ## [2.10.0] — 2026-09-18
 
 ### Added
@@ -336,12 +300,10 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **MCP agent-activity dot**: the status-bar capsule gains a second dot that lights while an agent invoke is in flight (bridge tracks `lastInvokeAt`/`lastCapability`; tooltip names the last call). The first dot keeps showing socket state + tab count.
 - **Faster app-update prompts**: version poll tightened to every 2 minutes and now also fires (throttled) whenever the MCP bridge connects, so open tabs notice a deploy without a manual full reload.
 - **Toast notifications + Settings → Notifications**: transient bottom-right toasts for runs, data loads, DSM completion, stream connect, Pyodide ready, library save/delete/restore, layouts, workspace import/export, settings saves, screenshots, and git connect. Every toast is written to System Logs; warn/error log entries raise a toast automatically. New Notifications tab (modal dialog, studio Settings page, command palette) holds the master switch, severity floor, per-category toggles (run / data / stream / engine / scripts / workspace / system), and flood control (auto-dismiss duration, max visible, repeat-dedupe window collapsing repeats to ×N). Prefs persist; toasts stay in-memory only.
-
 ### Fixed
 
 - **MCP `indicators.remove` left ghost panes**: it deleted only the store row, so chart overlays and empty indicator sub-panes stayed painted (and the orphan panes persisted across reloads). It now uses the same detach path as the Layers panel (overlay cleanup, sub-pane destroy, orphan sweep). `indicators.update` routes `visible` through the chart-synced visibility path and rejects unknown ids.
 - **MCP activity in System Logs + filters**: bridge connects, disconnects, tab-count changes, and every agent invoke now log under source `mcp` (with outcome + duration). The System Logs strip gains source and level filters (count shows `shown/total`, copy follows the filter); `logs.get` accepts `{ source?, level? }`.
-
 ## [2.9.0] — 2026-09-17
 
 ### Added
@@ -349,20 +311,17 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **MCP drawings control**: new `app_invoke` capabilities `drawings.add` (place a drawing by kind + time/price points, validated through the same normalizer as the chart layer), `drawings.update` (patch points/style/meta/visible by id; kind is immutable), and `drawings.remove` (delete by id). `drawings.list` accepts an optional `symbol` filter.
 - **MCP settings control**: new `settings.get` (sanitized app settings — endpoint, engine, interval, history bars, live prefs, UI scale, label/strategy/telemetry prefs; secrets never exposed) and `settings.set` (allowlisted patch with the same clamps as the Settings dialog; interval/history changes reload the chart, unknown engines and secret keys rejected).
 - **MCP/session status-bar indicator**: new `McpHud` capsule (socket state + attached-tab count for the key's session, click opens Settings → MCP). Backed by `GET /api/mcp/bridge` without `Upgrade`, which now returns the `McpBridgeDO` `{ connected }` count instead of `426`; the app polls it every 20 s while the bridge is open.
-
 ## [2.8.0] — 2026-09-17
 
 ### Added
 
 - **Script Library tabs**: **Builtin** (110 first-party AXIS Pine scripts, searchable and grouped by category — Apply runs one onto the chart, Edit opens its source in the editor to fork under Personal) and **Personal** (the existing storage-backed user library: backend, save/import/export, published, version history).
 - **Unified Worker API key setting**: Settings → General → **Worker (cloud + MCP)** is now always visible (no longer hidden behind storage engine `cloud`). One `pn_…` Bearer unlocks both cloud script storage (`/api/scripts`) and the MCP server (`/mcp` + tab bridge); typing/generating/testing the key live-persists it and reconnects the bridge. MCP hints and the bridge idle error now point at this section instead of the stale “Data tab”.
-
 ## [2.7.2] — 2026-09-17
 
 ### Fixed
 
 - **Reload wiped all persisted state**: `parsePersistedState` threw during boot because `clampUiScale` read `UI_SCALE_STEP` before its declaration evaluated (TDZ); the blanket catch returned null and `loadPersisted` deleted the key, so every reload reset watchlist, settings, and everything else to defaults. Scale bounds moved above boot use; corrupt payloads are now backed up to `<key>.corrupt` with a console warning instead of silently deleted. Regression covered by `tests/persist-boot.test.ts` (fresh module-evaluation round-trip).
-
 ## [2.7.1] — 2026-09-17
 
 ### Fixed
@@ -379,7 +338,6 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - Pane script badge **load source** (file icon, second after settings) opens that script in the docked editor.
 - Topbar and editor **Add ▾** menus include **Add built-in script…** (same picker as ⌘K).
 - **Screenshot** (camera, module bar, before Studio): capture price / all panes / workspace, drawings overlay, watermark, 1×/2×, copy or download PNG. Session icons (theme, fullscreen, chart-only, screenshot, Studio) sit on the right of the second topbar row.
-
 ### Fixed
 
 - CI unit: SVG stub implements `replaceChildren`; on-chain health probe assertion no longer treats `worker.axis.hoox.sh` as the SPA host; Python runtime locks skip when numpy/antlr4 are missing on the runner.
@@ -393,7 +351,6 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Named watchlists**: create, rename, duplicate, and delete lists. Lists persist with the workspace (`watchlist.lists` + `activeId`); a legacy symbols-only payload becomes a **Main** list.
 - **Watchlist alerts**: row bell opens a compact price alert (cross / above / below) at last.
 - **Autoload chart** (Settings → General): when on (default), symbol / interval / venue changes fetch immediately and the topbar Load button is hidden; when off, Load is shown and field changes wait for an explicit load.
-
 ### Fixed
 
 - **Built-in studies:** Sessions uses `hour`/`minute` in the chosen timezone (PYNE `time()` ignores session args); VWAP / VWAP bands reset on the daily change; TRIX is triple-smoothed EMA (not TEMA); Rel Vol is Dorsey RVI; ZigZag plots confirmed pivots; pivot-reversal latches the last pivot for exits; applying a built-in no longer copies the editor input bag.
@@ -417,7 +374,6 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Workstation chrome polish**: two-bar command + module switch, 4/8px grid, 1px hairline, periwinkle `#8B9CFF` on `#07080C` / `#0C0E14`, Live as a 6px pulse, HUD capsules, 32px watchlist rows, 32×32 drawing rail, 26px status strip, tablet overlay drawers, mobile Chart/List/Editor/More. Same product — density and grouping only.
 - Engine picker is a 3-icon switch (server / edge worker / Pyodide). Run, Live, and Replay share one action cluster.
 - **Default history depth is 5000 bars** (`HISTORY_BARS_DEFAULT`). Existing saved `historyBars` values are unchanged.
-
 ## [2.6.7] — 2026-09-14
 
 ### Added
@@ -426,12 +382,10 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Alerts panel**: create form covers percent-change, drawing-touch, and indicator plot conditions (not only price / on-chain). Delivery is browser notifications, a compact HTTPS webhook, and an optional L2 webhook (`channel: "l2"` payload). Live stream ticks evaluate the book.
 - **Pine `alert()` / `alertcondition()`**: interpret runs export engine `alerts` into the book (`pine_alert`). Arm any/`alert()`/`alertcondition()` (optional title) on a strategy or indicator; last-bar watermark avoids backtest spam. Strategy `alert_message` fills are included. Pyodide interpret exports the same payload.
 - **Compile-path Pine alerts**: in-browser compile records `alert()` / `alertcondition()` in the object-mode bar loop (PYNE's compiler used to emit empty statements for Numba). Remote Flask/pyne-worker compile still cannot collect Python alert events, so AXIS sends **interpret** when the script calls those builtins.
-
 ### Fixed
 
 - Fold marker labels were inverted (expanded blocks announced “Unfold”). They now read **Fold block** / **Unfold block**.
 - **Convert to Pine v6** no longer prefixes UDF definitions, parameters, or unpack targets that collide with `ta.*` / `math.*` (set01–04 older scripts parse 323/323 after convert).
-
 ### Changed
 
 - **Cloudflare rename**: Worker script `pynescript-axis` → `worker-axis` (`https://worker.axis.hoox.sh`). Pages project `pynescript-axis` → `axis` (`https://axis.hoox.sh`; previews `*.axis.pages.dev`). Health JSON `service` is `worker-axis`. Legacy `pynescript-axis.pages.dev` and `pynescript-axis.*.workers.dev` hosts still match in CORS / client heuristics.
@@ -439,19 +393,16 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Server/Pyodide execution default is Auto** (try compiler, fall back to interpreter). Strict Compiler is not the default: Flask/Numba is not prewarmed, first compile JITs, and some Pine stays object-mode. HUD and first-run now follow the engine schema instead of showing Interpreter when mode was never saved.
 - **Editor fold gutter**: 14px Lucide chevrons replace the 10px `▾`/`▸` glyphs (down = expanded, right = folded), with a clickable `⋯` placeholder on folded blocks. Tab close/add and header Run/Library/Profiler use the same icon set and size.
 - **Editor color tools**: one working color (picker overlay + any-form input + transparency) instead of a disconnected converter that stayed on `#939fff`. Chip captions use `#RRGGBB tN` so `color.new(...)` is not truncated; formats list copies the draft; Replace / Replace all / Jump; checkerboard swatches show Pine transparency.
-
 ## [2.6.6] — 2026-09-12
 
 ### Fixed
 
 - **`axis secret put ADMIN_TOKEN` vs Cloudflare 10053** (`@hoox-sh/axis-cli` 0.3.2): empty `[vars] ADMIN_TOKEN = ""` is still a binding, so Wrangler refuses the secret. `axis secret put` now comments the plaintext var, deploys once to drop it, retries on 10053, then sets the secret. `axis keys create` prompts for the token (CLI cannot read Worker secrets) and doctor warns on a leftover `[vars]` stub.
-
 ## [2.6.5] — 2026-09-12
 
 ### Added
 
 - **AXIS CLI cloud-storage bootstrap** (`@hoox-sh/axis-cli` 0.3.1): `axis setup --prod` / `axis setup kv` create and bind `API_KEYS` KV; `axis keys create` / `validate` mint and check `pn_…` keys; `axis deploy` applies the remote D1 schema first; `axis health --scripts` and `axis doctor --remote` probe `/api/scripts` and `features.keys`. Typical prod path is now `setup --prod` → `secret put ADMIN_TOKEN` → `deploy all` → `keys create`.
-
 ### Changed
 
 - CLI `run()` now times out Wrangler (`wrangler whoami` in doctor) with SIGTERM then SIGKILL so `axis doctor --json` cannot hang.
@@ -463,7 +414,6 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Script version history on every storage engine**: local (IndexedDB/`localStorage` snapshots, FIFO 50) and cloud Worker (`script_versions` + `GET /api/scripts/:id/versions`) now implement the same `listVersions` / `readAtRevision` contract as git. The library history panel is no longer git-only.
 - **Worker URL + API key in Settings**: Script storage credentials for the cloud Worker (`endpoint` + `pn_…` key, generate demo key, test connection) live in Settings → General / Studio Settings as well as Script Library. Switching to Cloud no longer requires hunting the library panel first.
 - **Workers inventory skeleton**: while backends are probing, the Workers page shows pulse placeholder cards (and an inspector skeleton) instead of an empty grid.
-
 ### Fixed
 
 - **Cloud script storage used the Pine engine URL**: `resolveCloudConfig` no longer falls back to `store.endpoint` (`:5002` / `/api/run`). Worker base defaults to wrangler `:8787` on localhost or the production workers.dev host.
@@ -472,7 +422,6 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Update reload asks first**: Update now / Hard reload (and `hardReload` itself) open a confirm prompt with current → new version before the app reloads.
 - **Studio always opens Settings**: the topbar / palette Studio button lands on Settings every time (no longer restores the last rail page). Settings is the first Workspace rail item. The Studio click handler no longer falls through `??` into Runtime then Workers because those callbacks return `void`.
 - **Workers is a full-viewport studio page**: same overlay as Settings/Runtime/Wire/Plugins (not a half-width right sheet). Escape closes it.
-
 ### Changed
 
 - Storage-change dialog copy: “Copy scripts” / “Switch without copying” instead of migrate-and-delete / start fresh.
@@ -482,7 +431,6 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 ### Fixed
 
 - **Docker image build failed on `sync:versions`**: `bun run build` stamps Dockerfile/compose/bake VERSION fallbacks, but the image context did not copy those files → `ENOENT /app/Dockerfile` during GHCR bake. Missing stamp files are skipped, and the three files are copied into the build stage.
-
 ## [2.6.2] — 2026-09-12
 
 ### Added
@@ -492,13 +440,11 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Indent grid**: faint `·` dots for leading whitespace plus one vertical guide per completed 4-space indent level, width-preserving and viewport-scoped.
 - **Per-tab version/type badges + Save**: each editor tab shows `vN` (from `//@version=`, `–` fallback) and `STR`/`IND`/`LIB` (from the declaration call, `–` fallback) plus a Save button that persists that tab via the existing library/draft path.
 - **Workers stays a right-side non-modal sheet**: the Workers overlay remains a right-aligned sheet with a left scrim that click-throughs to the chart/editor (modality unchanged: no focus trap, no Escape-steal) — not a full-width page like Runtime/Wire/Settings/Plugins.
-
 - **Language Feature Bar above the editor status strip**: a chip row (Hover · Sig · Complete · Lint · Marks · Chips · Remote) where each chip is colored only while the feature is actually firing (open card / list / hint, running check, rendered marks) — dimmed while switched off — so the bar shows which features the current script uses and which could be disabled. Click toggles the master switch, long-press (~550ms) or right-click opens a popover with the group's full settings. The row itself is a persisted “Language Feature Bar” option (Settings → Editor intelligence → View, default on; `editorFeatureBarEnabled` in the store).
 - **Standalone CLI binaries (bun compile)**: `bun run build:binaries` (`packages/cli/scripts/build-binaries.ts`) cross-compiles the CLI into single-file executables for 7 targets — linux x64/arm64 (glibc + musl), macOS x64/arm64, Windows x64 — with a native `--version`/`--help` smoke test. Own package metadata is now embedded at bundle/compile time (`src/own-package.ts` static JSON import) and preflight recognizes a new `binary` install context (`$bunfs` → "standalone binary (bun compile)"), so version display, engine checks, and drift detection work without a package.json on disk. Binaries ship as `axis-cli-<version>-bun-<target>` release assets and are covered by `SHA256SUMS` (bare asset filenames — a flat download verifies with one `sha256sum -c`).
 - **`VERSION` single source of truth**: the repo-root `VERSION` file now owns the release number — `bun run sync:versions` (runs with `bun run build`) stamps `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `public/version.json` (served at `/version.json`), and the generated `src/version.ts` (`APP_VERSION`, also shown in About) + `worker/src/version.ts` (`WORKER_VERSION`, surfaced on `/` + `/health`). `bun run check:versions` asserts the whole set; the Makefile reads `VERSION` directly.
 - **Update manager + notification**: the app polls the deployed `/version.json` (5 min interval + focus/visibility/online, cache-busted) and a waiting service worker routes through the same state — a new deploy shows an `axis-update-banner` (Update now / Hard reload / Later), announces via screen-reader live region + status line, and fires a Browser Notification when permission was already granted (never prompts). Hard reload unregisters workers, deletes `axis-*` caches, and navigates cache-busted. Covered by `tests/update-manager.test.ts` + `tests/version.test.ts`.
 - **Window-close confirmation**: `src/pwa/close-guard.ts` installs one `beforeunload` listener per page and prompts only while a registered predicate reports unsaved work — the tabbed editor registers dirty-tab state (both chart and popout shells). Master switch + custom message APIs included; covered by `tests/close-guard.test.ts`.
-
 ### Fixed
 
 - **Pyodide engine crashed on bars containing null (`eval_code` traceback + empty drawings)**: the browser bridge interpolated raw `JSON.stringify(bars)` into Python source, so JSON `null`/`true`/`false` became Python `NameError`s before Pine ever ran — surfacing only as a truncated `_pyodide/_base.py` traceback with `drawings: []`. `src/engines/catalog.ts`, `src/engines/index.js`, and `worker/src/pyodide_runtime.ts` now pass JSON strings via `globals` + `json.loads`, return `drawings: []` on bridge failures, and surface the full Python traceback (new `callPyodideRunScript` / `formatPyodideBridgeError`, covered by `tests/pyodide-bridge.test.ts`). `pyodide/pynescript_runtime.py` re-synced with the deployed `public/pyodide` copy (drawing-registry reset + compile-path GC).
@@ -516,7 +462,6 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Minimap pointercancel + full-height hit target**: `pointercancel` ends a drag the same way `pointerup` does, and the hit area spans the editor height so clicks near the gutter register.
 - **Workers non-modal sheet restored**: Workers is a right-aligned sheet again (not full-width), with a left scrim that click-throughs to the chart/editor.
 - **`IndentWidget.eq` so guides don't rebuild on every scroll**: indent-grid widgets compare equal across viewport updates, so CodeMirror does not reconstruct guides on each scroll.
-
 ### Changed
 
 - **Coverage push toward 80/85%**: ~260 new unit tests across gateway, signed-fetch, pine-logs, watchlist tickers/live, symbol catalog, bars-cache, streams catalog, workers probe, git-oauth, dataset sinks/expand, data-source-manager, credentials, and drawing coords (`createCoordContext` with stub scales — coords 36% → ~100%) — scoped core gate up 82.8% → ~90% (passes the 80% and 85% floors), app lines 80.1% → 82.6%. Fixed 5 wrong expectations in the generated data-coverage tests (walk-loop `expanded` semantics, same-bucket merge conflicts, sink-merge unions) and 2 cross-suite leaks (probe teardown deleting the shared `window` stub, a real-timer device-flow poll). Overall lcov sits at ~79.3% — the remainder is browser/chart/worker-runtime code (drawing layer, pane manager, pyne-lsp, durable session) that needs E2E rather than unit tests.
@@ -524,13 +469,11 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **GitHub Release now carries CLI + worker artifacts**: a new `release-assets` job in `.github/workflows/release.yml` attaches, for every `v*` tag, the offline-install CLI tarball (`axis-cli-<cli-version>.tgz` via `npm pack` — verified with an offline `npm i -g` + `axis --version` smoke), a deployable worker source snapshot (`axis-worker-<tag-version>.tar.gz` — `LICENSE` + `worker/` minus `node_modules` / `.wrangler` / `.dev.vars`, sanity-checked for `wrangler.toml.example` + `src/index.ts`), and `SHA256SUMS-<tag-version>.txt`. The job waits for the desktop workflow to create the Release (creates it itself if desktop never does) and uploads with `--clobber`; existing tags can be backfilled via `gh workflow run release.yml --ref main -f tag=vX.Y.Z`.
 - **CLI binary smoke test runs on host-native targets**: `packages/cli/scripts/build-binaries.ts` no longer assumes a linux-x64 host — it smoke-tests whichever wanted target matches the running platform/arch (e.g. `bun-darwin-arm64`) and skips cleanly when none does, so `bun run build:binaries` cross-compiling on macOS/ARM64 dev machines no longer fails on the smoke step. Classic CI (ubuntu-x64) smoke is unchanged.
 - **Pyodide runtime surfaces drawing-GC failures instead of silently no-opping**: `pyodide/pynescript_runtime.py` (synced to `public/pyodide`) now warns once on stderr when `DrawingRegistry` export/limits or the compile-path `gc_exported_drawings` call fails (e.g. a pyne wheel API change/move) rather than swallowing the error while `meta` still advertises the caps. `max_*_count` declaration parsing now strips `//` and `/* */` comments so a cap mentioned in a comment isn't captured, and the redundant `"mode"` entry is dropped from `compile_meta`.
-
 ## [2.6.1] — 2026-09-08
 
 ### Fixed
 
 - **Desktop bundles carried the wrong version**: the v2.6.0 GitHub Release shipped desktop assets named `2.4.1` because `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock` were never bumped past v2.4.1 — `tauri-action` derives bundle versions from the Tauri config, not the git tag. All four version stamps are now `2.6.1`, and a new `bun run check:versions` guard (`scripts/check-versions.mjs`, enforced in CI + the desktop workflow) fails on any drift.
-
 ### Changed
 
 - **Script Logs moved into the editor**: the topbar `Script Logs` button and the shell-level `ScriptLogsPanel` (`src/ui/ScriptLogsPanel.tsx`, deleted) are gone — logs now live as an editor-local `ScriptLogsPane` (`src/editor/ScriptLogsPane.tsx`) above the editor statusbar, toggled by a `Logs` button beside `Symbols` (`axis-editor-logs-toggle` + `axis-editor-logs-badge`) and via the palette (`axis-editor-show-logs` event). Statusbar clusters now wrap as units (`flex-wrap`, actions `flex-shrink-0`) so buttons stay clickable in narrow docks instead of squeezing under each other. Guards: Playwright smoke `Script Logs lives in the editor bottom bar, not the topbar`.
@@ -538,31 +481,24 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 - **Studio opens on Settings**: `lastStudioPage` initial in `src/app.tsx` changed `runtime` → `settings` — the first Studio open (topbar button / palette) lands on Settings (subsequent opens still remember the last page).
 - **Workers page is non-modal**: `AppPage` (`src/ui/studio/AppPage.tsx`) gains a `modal` prop; `StudioHost` renders Workers non-modally — transparent click-through scrim (new `.ax-page-backdrop--nonmodal` sheet in `studio.css`), no focus trap, no Escape-steal — so the chart and editor stay interactive while Workers is open. Modality follows the active rail page; other pages are unchanged.
 - **Workers top status grid removed**: the aggregate Healthy / Health / Active backend summary deleted from `src/ui/workers/WorkersPage.tsx` — status now exists only per worker (inventory cards + detail pane + footer probe line). Guards: Playwright smoke `Workers page is non-modal` (scrim pointer-events, no top status, Escape does not close).
-
 ### Added
 
 - **Versioned git hooks** (`.githooks/`): **pre-commit** runs Biome (`check`) on staged files only (fast); **pre-push** runs `bun run typecheck` (tsc) + `bun run lint` (errors fail, warnings pass). Auto-configured via the root `prepare` script (`git config core.hooksPath .githooks`) on every `bun install`; bypass with `--no-verify`.
-
 - **CLI installation self-check** (`@hoox-sh/axis-cli` 0.3.0): every `axis` command self-verifies on start (`packages/cli/src/utils/preflight.ts`) — engine compliance (Node ≥ 20 / Bun ≥ 1.2), install context (npm install / npx cache / repo checkout), and **version drift** when a globally installed CLI is older than the repo checkout it operates on (warns `npm i -g @hoox-sh/axis-cli`). Warnings-only on stderr: skipped for `--version` / `--help`, silenced by `--quiet` / `--json`, never blocks or fails a command. `axis doctor` gains the optional **CLI installation** row (`cli-install` in `--json`). Tests: `packages/cli/tests/preflight.test.ts` (context detection, engines, drift, doctor row).
-
 ### Changed
 
 - **Docs are CLI-first**: all `bun run axis:*` invocations across `README.md`, `AGENTS.md`, `docs/**` (cloudflare, local-dev, index, topologies, vps-demo), `worker/README.md`, and `packages/cli/README.md` replaced with the primary `axis <command>` form; `bun run axis:*` is now documented as a repo-only alias (alias tables flipped in `docs/devops/cli.mdx` and `docs/enduser/getting-started/installation.mdx`). New **Installation self-check** section in the CLI docs.
-
 ## [2.6.0] — 2026-09-08
 
 ### Added
 
 - **Keypress feedback for consumed shortcuts**: `dispatchShortcut` now emits an `axis-shortcut-fired` CustomEvent (id / chord / description — `src/ui/shortcuts/runtime.ts`) and a transient bottom-center chip (`src/ui/shortcuts/Feedback.tsx`, `data-testid="axis-shortcut-feedback"`, `aria-live="polite"`, pointer-events none, ~1.2 s auto-hide, platform-correct chord glyphs via `formatChord`) confirms every consumed binding — main shortcut keys no longer feel dead even when the side effect is subtle.
-
 ### Changed
 
 - **Docs synced to v2.5.0**: `docs/index.mdx` + `docs/enduser/getting-started/installation.mdx` version stamps; `docs/ui/ui-shell.mdx` gains **Keyboard shortcuts** (dispatch hub, scopes, recorder, Shortcuts modal) and **Mobile shell (phones / tablets)** sections; `docs/ui/index.mdx` subsystem table mentions shortcuts + mobile shell; `docs/ui/results-and-strategy.mdx` and `docs/enduser/guides/strategy-and-results.mdx` document the v2.4.3 results overhaul (Events Stream/Open⇄Close position-cycle views, single-column strategy tab, saved-run stats snapshots, shared `walkStrategyEvents` walker).
-
 ### Fixed
 
 - **Keyboard shortcuts were dead: `ShortcutHub` was never mounted** (the component had zero importers, so the capture-phase keydown dispatcher in `src/ui/shortcuts/Hub.tsx` and the whole `src/ui/shortcuts/actions.ts` registration side effect never loaded) — `Ctrl/Cmd+K` / `Ctrl/Cmd+Shift+P` (command palette), `Shift+?` (shortcuts help), `Ctrl/Cmd+,` (settings), `Ctrl/Cmd+\` (toggle editor), `Esc`, and every `chart.*` binding (zoom / pan / tool letters / grid layouts) silently no-oped. The product shell (`src/app.tsx`) now mounts `<ShortcutHub />` (plus `<ShortcutFeedback />`). Only the parallel `Mod-S` / `Mod-G` handler in `src/editor/tabbed-editor.tsx` survived, which is why save worked while the palette was unreachable by keyboard. Guard tests: `tests/shortcut-feedback.test.ts` and the Playwright smoke `Mod-K opens and closes the command palette (shortcut hub guard)` in `e2e/smoke.spec.ts`.
-
 ## [2.5.0] — 2026-09-07
 
 ### Added
@@ -576,7 +512,6 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
   - **Dialogs → bottom sheets** on phones (`sc-dialog`), safe-area insets (`viewport-fit=cover`, `env(safe-area-inset-*)`), `100dvh` app root, `interactive-widget=resizes-content` for soft-keyboard handling, ≥44px touch targets in mobile chrome (`pointer: coarse`).
   - **Studio tables** wrap cells on phones instead of forcing horizontal overflow.
 - **PYNE runtime 0.5.0**: vendored `pynescript-0.5.0-py3-none-any.whl` (built from the sister pyne repo via `scripts/sync-pyne-wheel.sh`); stale 0.4.x wheels dropped; hard-coded wheel paths in `src/engines/catalog.ts` / `src/engines/index.js` updated (`hoox_pyne-0.4.2` / `pynescript-0.4.0` → `pynescript-0.5.0`). Pine language builtins unchanged.
-
 ### Changed
 
 - **Zero Biome lint errors** (368 → 0) across 641 checked files:
@@ -612,7 +547,6 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
   - **Node-only smoke test**: fetches the published tarball, installs it into a clean directory with `--ignore-scripts`, and asserts `axis --version` / `axis --help` on Node (no Bun, no repo).
   - step summary now reports tag kind, registry verify, and smoke results.
 - **`@hoox-sh/axis-cli` 0.2.2** — first CLI-only release via the new pipeline: `cli-v0.2.2` tag → `Release (npm)` workflow (provenance publish, registry verification, Node-only smoke test of the published tarball). Code identical to 0.2.1; release exercises the full publish path end-to-end.
-
 ### Fixed
 
 - **UI review findings (`/.opencode/review/`)** — 23 of the 25 consolidated findings (editor-audit + pass1/2/3) fixed across the editor, drawing chrome, panels, and themes:
@@ -657,20 +591,17 @@ No runtime behavior change; only type compliance so `worker tsc` matches the pre
 - **Dataset merge with conflict detection** (`src/data/merge-datasets.ts`): overlapping timestamps whose OHLCV disagree beyond a relative tolerance are conflicts, auto-resolved by policy (`newest-wins` default, `keep-current`, `prefer-incoming`); non-overlapping bars always union.
 - **Settings → Data → Dataset persistence** main switch: `Session | Local | Git | Worker` (default Local), persisted as `store.datasetPersistence` and synced to the DatasetStore on boot/change.
 - **Sliced-backfill progress chip** in the topbar Data group: live `loaded / expected` bar count while a DSM job completes the current dataset in the background.
-
 ### Fixed
 
 - **DatasetStore reads** are memory-first and never wipe the mirror on a sink miss; switching persistence copies in-memory series into the new sink.
 - **Git/Worker sinks** return pending bars from `get` (no empty merge during DSM walk-back), serialize per-key flushes so a retry cannot clobber a newer put, and write-through to IndexedDB as a durable front. `onSinkError` lands in system logs.
 - **Progressive paint** no longer goes through `loadBars` (that re-fitted the viewport every slice). `paintDataset` is generation-guarded so a slower prior load cannot paint over a newer symbol.
 - **DSM jobs** repair + `validateDataset` / fillable gaps (not raw `validateBarCoverage`); `ensureDatasetComplete` uses the source calendar class. In-flight jobs for the same key are reused; the progress chip counts bars in the target window.
-
 ### Changed
 
 - **Topbar order**: the Venue picker moved to the front of the Market group (Venue → Symbol → Interval → Type → Compare) since it determines valid symbols/intervals; the Data group keeps plugin config, upload, datasets, Load, and Reload.
 - **DSM job engine** reads and writes now route through the DatasetStore (session-mode safe, progressive repaints fire on every merged slice); `expand-cache` (cache→now + live ticks) and the Data Manager source do the same, with a repair pass on Data Manager resolves and CSV uploads.
 - **Reload** shows the same loading spinner / `loadSeq` as Load.
-
 ### Tests
 
 - `tests/dataset-validate.test.ts` — repair (corrupt rows, phase-aware snap, dedupe, sort), gap classification (24/7 vs session venues, maintenance windows), dataset reports.
@@ -690,7 +621,6 @@ No runtime behavior change; only type compliance so `worker tsc` matches the pre
 - **Static PWA server**: `GET /health` is `ok` (not SPA HTML); OPTIONS 204; favicon served.
 - **Versions**: product identity is 2.3.1 everywhere (About, Tauri, docs).
 - **Desk / PYNE path**: sibling repo is `../pyne` (fallback `../pynescript`).
-
 ### Added
 
 - Modest **Install app** chip on `beforeinstallprompt` (no nag).
@@ -702,21 +632,17 @@ No runtime behavior change; only type compliance so `worker tsc` matches the pre
 - **Default chart interval** is `15m` (was `1d`).
 - **Timeframes**: topbar / settings / DSM / watchlist interval list now includes `3m`, `30m`, `2h`, `6h`, `8h`, `12h`, `3d`, and `1M` alongside the previous set.
 - **Topbar Inputs**: removed the Inputs button and its Studio/Settings visibility toggle. Script inputs still open from the Scripts list, command palette, and the existing inputs modal.
-
 ## [2.3.0] — 2026-09-05
 
 ### Fixed
 
 - **CI unit tests**: plugin bootstrap now re-registers after `registry.clear()` (catalog flags reset together). Store/runner tests reset `resultsFocusId` so `setLastRun` is not skipped. Data-manager selection is cleared in stream catalog tests. CI pins Bun `1.3.14` (`latest` was racing global store/registry). `bun test --max-concurrency=1` for deterministic unit runs. Worker origin URL helpers live in `src/data/worker-origin.ts` so `store` → HTTP client → market-worker → on-chain proxy no longer hits a TDZ on import.
-
 ### Changed
 
 - **Repo description & tags**: GitHub / package / PWA / desktop copy no longer frames AXIS as “for Pine Script”. Tagline covers CEX OHLCV, drawings, on-chain overlays, and Pine Script™ via PYNE; extra GitHub topics and package keywords.
-
 ### Added
 
 - **Per-tool drawing settings**: style bar grows context chips (extend L/R, show price, lock, custom color) plus a gear popover for fib levels, text/font size, risk/reward, arrow caps, and stats toggles. Last-used extras persist per kind in `drawingPrefs.byKind`. Paint honors extend flags, custom fib ratios (including reverse), highlighter width, long/short RR, and double-click text re-edit.
-
 ### Tests
 
 - **Tool settings catalog** — `tests/tool-settings.test.ts`: every drawing kind has controls; ray/highlighter/long defaults; fib + RR helpers; normalize keeps `meta.fibLevels`.
@@ -729,7 +655,6 @@ No runtime behavior change; only type compliance so `worker tsc` matches the pre
 ### Added
 
 - **Results → Raw JSON tree**: collapsible VOID-colored viewer (keys / strings / numbers / bools) with key filter, Expand / Collapse, and Tree | Source. Large `plots` / `series` arrays page in (32 at a time) so a full run does not mount thousands of nodes. Click a primitive to copy it. Footer Copy / JSON still export the full payload.
-
 ### Changed
 
 - **Studio fullscreen canvas**: Runtime, Wire, Settings, Workers, and Plugins (plus nested tabs) now use the full overlay width instead of a reading-column cap. Wide layouts are two columns — Runtime (engine | endpoint), Settings General / Data / Topbar / Editor / Theme token grids, Workers inventory | inspector, Plugins catalog cards, Results strategy table. Legacy `sc-settings-*` chrome on Editor intelligence, exchange keys, and stacked plugin fields is replaced with studio `ax-*` primitives.
@@ -738,14 +663,12 @@ No runtime behavior change; only type compliance so `worker tsc` matches the pre
 - **Studio scroll**: nested panes, tables, code blocks, and library lists no longer scroll on their own. Only the modal canvas (`.ax-page-canvas`) scrolls.
 - **Studio primitives**: status pills stay compact (no longer stretch full-width inside cards); Idle/Skipped/Degraded get the same pill chrome as Healthy/Down; cards, stats, inline buttons, and feature rows tightened. Same language applied across Runtime, Wire, Settings (all tabs), Plugins (catalog / install / library), Workers, and Results: capability badges are `ax-cap`, catalog rows are entity lists, chips-as-tags stay small, and compact `sc-*` chrome hosted in the overlay is scaled up to studio density.
 - **Results overlay**: true fullscreen studio shell (`.ax-page-backdrop` + `.ax-page`, no dialog padding/blur). Header holds auto-open / script picker / saved-runs chip; Copy / JSON / CSV sit in the sticky footer. Canvas is the only scroller. Stacks above other studio pages (`z-index: 1050`) so a finished strategy is not trapped under Wire or Workers. Events, Strategy, Optimise, Plots, Metrics, Raw, and Saved use the same `ax-*` primitives as the rest of studio.
-
 ### Fixed
 
 - **Strategy Saved-runs loop**: live silent re-runs (every-tick / bar-close) were calling `setLastRun` without `persistence: 'skip'`, so local `saveResult` wrote a new IndexedDB row about once a second. Durable save is now user-initiated Run only; deferred / skipped / superseded payloads never persist. Fire-and-forget saves are serialized so FIFO trim cannot race.
 - **E2E smoke vs Studio overlay**: topbar Architecture / Runtime / Settings / Plugins hooks are `hidden` (Playwright no longer treats `sr-only` 1×1 clips as clickable, which hung behind the fullscreen button). Smoke, critical, and library journeys open those pages through the visible Studio button + rail (`axis-studio-rail-*`).
 - **Editor false typo on `syminfo.mintick`**: pre-eval “unknown built-in member” only knew `syminfo.prefix` / `syminfo.ticker` from `pyne-builtins.json` (the two callables). Host variables (`mintick`, `tickerid`, `timezone`, `currency`, …) are now allowlisted with the other Pine constants, matching pyne’s implemented `syminfo.*` surface.
 - **Market proxy (Worker)**: MEXC public REST is served through `/api/market/mexc/{klines,ticker/24hr,exchangeInfo}` because `api.mexc.com` does not send `Access-Control-Allow-Origin`. `fetchMexcJson` tries the Worker first and the direct host only as last-ditch fallback (offline lab, `skipWorkerProxy` tests, or Worker 5xx / network). Worker 4xx (allowlist / not found) is thrown immediately so the browser does not pay a CORS-blocked extra hop. Shared `resolveMarketWorkerBase` lives in `src/data/market-worker.ts` (re-exported from `binance-http.ts` / `mexc-http.ts`). Call sites: `watchlist-tickers.ts`, `sources/catalog.ts` (`mexcRest.fetchHistorical`), `symbol-catalog.ts` (exchangeInfo). Interval allowlist is AXIS TFs plus venue `1M` (`1h`→`60m`, `1w`→`1W`; no `1s`/`3m`/`2h`/`6h`/`8h`/`12h`/`3d`). `ticker/24hr` allowlists optional `symbol=` (single object, cached per symbol); there is no `symbols=` batch — omit the query for the full book. Watchlist uses per-symbol requests when the list is small (≤8), else the full book. No signed MEXC path yet.
-
 ### Tests
 
 - **Run-result persist** — `tests/run-results-persist.test.ts`: `persistence: 'skip'` and ephemeral meta do not write Saved runs; interactive Run writes once; three silent `liveTick` re-runs do not append.
@@ -763,7 +686,6 @@ No runtime behavior change; only type compliance so `worker tsc` matches the pre
 ### Fixed
 
 - **CORS product-host list**: retired the legacy `*.pynescript.ai` branch from `PRODUCT_ORIGIN_RE` (worker `pickOrigin`) — production URL is `pynescript.online`, not `.ai`. The fallback default in `env.ALLOWED_ORIGIN` (and the inline fallback when none is configured) now also points at `https://pynescript.online`. Legacy `.ai` requests fall through to the allowlist fallback instead of being echoed. `isOAuthProxyBase` (git-oauth client proxy allowlist) drops the `.ai` check for symmetry. Docs (README, `docs/devops/cors-and-origins.mdx`, `docs/worker/bindings.mdx`, `docs/architecture/evaluation.mdx`, `docs/llm.txt`) updated.
-
 ### Tests
 
 - **CORS regression**: `worker/tests/cors-origin.test.ts` adds a `does NOT echo the retired pynescript.ai product host` case that confirms `https://pynescript.ai` and `https://app.pynescript.ai` requests fall back to the configured `ALLOWED_ORIGIN` first entry (i.e. they're no longer auto-allowed as product hosts).
@@ -777,12 +699,10 @@ No runtime behavior change; only type compliance so `worker tsc` matches the pre
 - **Local storage: persisted run results**: `localStoragePlugin` now implements the optional `saveResult` / `loadResult` / `listResults` / `removeResult` methods so completed strategy/indicator runs can survive reloads. IndexedDB schema bumped from v1 → v2 — additive migration only, with a new `results` object store keyed by compound `[scriptId, runId]` and a `byScript` index on `meta.scriptId` for cheap per-script listing. FIFO trim keeps at most `MAX_RESULTS_PER_SCRIPT = 50` runs per script (oldest by `meta.startedAt` evicted; the just-saved run is always preserved). A `LOCAL_STORAGE_VERSION = 2` constant is exported for downstream schema detection, and the plugin now advertises `capabilities.results = true` so UI can render saved-runs affordances. localStorage JSON + in-memory `Map` fallbacks mirror the same semantics for SSR/tests (`pynescript.axis.results.v1` key + `_getMemResultsForTests` helper). Plugin contract extended in `src/plugins/types.ts` with a `results?: boolean` capability flag.
 - **Storage change confirmation dialog**: new `StorageChangePrompt` (`src/ui/StorageChangePrompt.tsx`) is mounted once at the app root and hosts the existing `StorageChangeDialog` whenever the user switches storage engines. A new `promptStorageChange(oldId, newId)` helper in `src/storage/service.ts` is the single entry point — short-circuits silently when the engine is unchanged or unset (first-time set), and otherwise opens the dialog so the user can pick *Migrate scripts* or *Start fresh* before the active plugin flips. The migration itself still runs through the existing dialog (it calls `getStorage(fromId)` / `getStorage(toId)` directly so the active plugin stays pinned to the source until commit). All four storage-change call sites now route through it — `ScriptLibraryPanel` dropdown, `SettingsDialog` general tab Save, `PluginsPage` catalog activate, `PluginManager` modal activate — so there is exactly one shared dialog state, not four duplicated ones.
 - **Per-panel icon in FloatableShell header**: `FloatableShell` now renders the panel-specific glyph next to the hamburger menu (testid `axis-panel-header-icon-{panelId}`), matching the Topbar panel toggle. Single source of truth is `PANEL_ICON: Record<PanelId, IconName>` in `src/ui/icon-map.ts`; TypeScript exhaustiveness guarantees every `PanelId` has an entry. Missing mappings fall back to the hamburger-only chrome without breaking the panel.
-
 ### Fixed
 
 - **Status bar chip 1px hover wobble**: `ConnectionHud` chips (`ChipShell`, `TickPulse`, `LiveBadge`) no longer shift pixels on hover/active. Locked border-width to `border-[1px]` (Tailwind v4 `border` no longer relies on theme indirection), added `transition-none` to prevent any color flicker, and pre-applied the `ring-1` outline on `LiveBadge` so only the ring color animates between `ring-transparent` and `ring-accent` (no box-shadow structure delta). `.sc-btn-ghost` gained an explicit `box-sizing: border-box` (defensive — Tailwind v4 preflight already sets it on `*`).
 - **Duplicate "Open in new tab" in editor dock menu**: the editor panel's dock menu showed both the generic DOCK_MENU "New tab" entry and an editor-specific "Open in new tab" entry passed via `menuExtra`. The `menuExtra` is now `undefined` (per the `FloatableShell` JSX usage in `EditorPane`), so the dock menu shows the generic "New tab" entry exactly once. The editor's own "Open in new tab" affordance lives only in the right-side `EditorOverflowMenu` (testid `axis-editor-btn-new-tab-overflow`), where it pops the editor out into a full browser tab instead of a docked window.
-
 ### Tests
 
 - **Storage result round-trip + FIFO + fallback** — `tests/storage-local-results.test.ts` covers the new IndexedDB v2 `results` object store: add / load / list / remove, FIFO trim at `MAX_RESULTS_PER_SCRIPT = 50`, the `byScript` index, SSR fallback (`pynescript.axis.results.v1` + `_getMemResultsForTests`), and additive schema migration from v1.
@@ -801,7 +721,6 @@ No runtime behavior change; only type compliance so `worker tsc` matches the pre
 - **Studio consistency**: `ThemePanel` (Settings → Theme) now uses the studio `ax-*` primitives (`StudioSection`, `StudioField`, `StudioInput`, `StudioToggle`, `StudioChip`, `StudioButton`, `StudioHint`) instead of legacy `sc-settings-*` classes, matching Runtime / Wire / Workers / Plugins. Studio `--ax-*` tokens promoted to `:root` so shared panels render correctly outside the modal.
 - **Theme color input**: each token uses a single color input (mono text field + non-interactive preview swatch) instead of a paired swatch picker and text box; number tokens use one number input.
 - **Studio modal radius**: added a scoped `--radius-surface` token (8px inside `.ax-page`, defaulting to 3px elsewhere). Studio modal surfaces — `.ax-card`, `.ax-btn`, rail nav items, color preview, equity tooltip, HPO chart wrap, results auto-open toggle, and the Results error box — now use the higher radius. Chart/panel `<input>`/`<select>` and small chips/badges keep their existing 2–3px radius for hierarchy.
-
 ### Added
 
 - **Results fullscreen studio modal**: replaced the docked Results panel (`FloatableShell`) with a focused fullscreen studio overlay (`ResultsModal`) opened via `store.resultsPanel.open`. Six restyled subpages — Events, Strategy, Optimise, Plots, Metrics, Raw — share one studio canvas (`ax-page` / `ax-*`) with `StudioStat`, `StudioTabs`, and `ax-list`/`ax-card` primitives. `StrategyReport` and `HpoPanel` rebuilt on studio classes (stat cards, equity card, ax-field controls, ax-list search space). Results auto-open only for `strategy()` scripts (indicators no longer auto-open).
@@ -812,7 +731,6 @@ No runtime behavior change; only type compliance so `worker tsc` matches the pre
 - **Topbar settings**: new 'Topbar' tab in Settings with toggles for each topbar group (brand, market, data, compute, layout, panels, system) and individual panel buttons (watchlist, editor, library, scripts, inputs, layers, DSM, on-chain, alerts, values, results, script logs, system logs, status). Settings are persisted via localStorage.
 - **HPO (Optimise) polish**: the search config (trials, sampler, objective, validation, holdout/walk-forward sizes, min trades, and per-param bounds) now persists across reloads; the trial chart pins its x-axis to the trial index (IS/OOS lines no longer desync when trials error), marks the best trial, and shows the score scale; the results header gained a status chip, best IS/OOS scores, and a Clear button; categorical params show their choices and the search-space list has an empty state.
 - **HPO tier gating**: added a persisted `tier` (`free` / `pro` / `self-hosted`) — the free tier disables walk-forward validation (shown as "(Pro)") with an upgrade hint, while Pro / Self-hosted show a tier badge and unlock it. The engine-runs cap was raised from 400 → 1000 so walk-forward fits within the trial ceiling.
-
 ### Fixed
 
 - **Workers probe non-blocking**: initial backend probe deferred past first paint (double `requestAnimationFrame`) and a non-blocking "Probing backends…" hint shows while the first snapshot loads — the Workers panel is ready and interactive immediately, regardless of slow/failed probes.
@@ -823,37 +741,31 @@ No runtime behavior change; only type compliance so `worker tsc` matches the pre
 - **Settings polish**: consolidated duplicate `sc-settings-*` CSS into single definitions, added `sc-settings-section--plain` and `sc-settings-content--compact` variants to replace `!important` overrides, added `color-mix` fallback, `focus-visible` on color swatches, and `prefers-reduced-motion` guard; replaced `!mt-0 !border-t-0 !pt-0` with semantic variant and fixed ThemePanel compact gap override.
 - **Workers probe**: fixed `requestAnimationFrame` leak — now cancels on unmount and removes dead `hasLoaded` signal; probe defers to next frame without blocking studio paint.
 - **Vendor**: removed obsolete `pynescript-0.4.0/0.4.1` wheels (replaced by `hoox_pyne-0.4.2`).
-
 ## [2.0.30] — 2026-08-26
 
 ### Fixed
 
 - **plot display= in compile mode**: `plot(..., display=display.data_window)` was not carried in `plot_meta` because the compiler didn't fold Pine `display.*` constants. Both axes now resolve `display.data_window`/`display.pane`/etc. to bitfield integers and pass them through to `plot_meta`.
 - **Pyne wheel** — vendor `pynescript-0.4.2` (was 0.4.1). Compiler display folding + server compile-path backfill.
-
 ## [2.0.29] — 2026-08-26
 
 ### Changed
 
 - **Engine default mode** — both Pro and Pyodide engines now default to `auto` (try compile, fall back to interpret) instead of `interpret`.
-
 ### Fixed
 
 - **hline linestyle in compile mode**: server-side compile path did not include `linestyle`/`color`/`price` in `plot_meta` because `plot_attrs` is empty for hline/fill. Backfill from `__drawings` now fills missing visual attrs.
 - **Pyne wheel** — vendor `pynescript-0.4.1` (was 0.4.0). Server compile-path backfill fix.
-
 ## [2.0.28] — 2026-08-26
 
 ### Fixed
 
 - **hline linestyle in interpret mode**: the interpret path (Pyodide default) did not synthesize `plot_meta` from `__drawings`, so LWC price lines for `hline()` always rendered solid regardless of `linestyle=`. Both interpret and compile paths now synthesize `plot_meta` with kind/linestyle/color/price for hline, fill, and plotshape drawing types.
-
 ## [2.0.27] — 2026-08-26
 
 ### Changed
 
 - **Pyodide PYNE wheel** — vendor `pynescript-0.4.0` (was 0.3.7). Engine catalog, legacy JS engine, SW cache test, and editor builtins synced from pyne 0.4.0.
-
 ### Fixed
 
 - **hline linestyle**: `hline(linestyle=hline.style_dashed)` rendered solid — the drawing path only checked `r.style` (never `r.linestyle`), and the compile-mode overlay path lacked `plot_meta` entirely so the LWC price-line never received the style. Both paths now covered: `pyne-drawings.ts` falls back to `r.linestyle`, and both Pyodide runtimes synthesize `plot_meta` from `__drawings` (hline/fill/plotshape kinds with linestyle, color, price).
@@ -861,190 +773,145 @@ No runtime behavior change; only type compliance so `worker tsc` matches the pre
 - **multi-chart**: switching to a 2×2 grid could overwrite the active chart with a sibling's symbol — ChartHost "prefetched" inactive slots via `loadSymbolData`, which always writes the active plane (last-mounted sibling won). Removed; empty cells load on focus instead.
 - **tables**: render Pine `table.cell` `text_valign` (top/middle/bottom) and `text_size` tokens/numeric points in the table HUD — parsed previously but rendered fixed 10px/middle; defaults unchanged when absent.
 - **bgcolor**: carry band titles into `syncBgcolorBands` and apply them as series titles on create/update, matching the offline `buildPlotVisuals` path.
-
 ## [2.0.26] — 2026-08-24
 
 ### Added
 
 - **Pages security headers** — `public/_headers` ships the nginx/server.ts hardening baseline to Cloudflare Pages deploys (CSP with self scripts + `wasm-unsafe-eval` for Pyodide, https/wss connect, plus nosniff / referrer / frame-deny), so axis.hoox.sh gets enforced headers instead of only Page Shield's Report-Only placeholder.
 - **Native MEXC CEX** — `mexc-rest` / `mexc-ws` as a built-in venue (public spot klines, no CCXT). Venue picker lists MEXC with Binance/OKX/Bybit; signed REST uses `X-MEXC-APIKEY`. MEXC was removed from the pinned CCXT shortlist.
-
 ### Fixed
 
 - **`hline()` levels vanished once `bgcolor()` rendered** — `priceLineHost` picked the first non-overlay series, which after the bgcolor fix could be a `bgcolor_*` histogram living on its own hidden 0–1 price scale; hlines attached there mapped far off-viewport. Host selection now skips bgcolor underlays (TradingView paints backgrounds *behind* panes — they never host price lines).
 - **`bgcolor()` / `barcolor()` drew nothing** — response normalization coerced every series sample through `Number()`, turning engine color arrays (`rgba(8, 153, 129, 0.298)` per bar) into all-`null`, so the histogram bands were filtered out before reaching the chart. CSS color samples now pass through normalization untouched (`coerceSeriesSample`); value plots still coerce as before.
 - **Workers status chips stayed “Unknown”** — `StudioStatus` closed over the first `props.status` (`unknown` while probes ran). The CSS class updated (green/red dot) but the word did not. Label is now read from props on each render.
-
 ### Changed
 
 - **Topbar Studio** — one **Studio** button replaces Wire, Runtime, and Settings. Those pages stay in the studio rail (and ⌘K). The button reopens the last studio page.
-
 - **Wire recipe grid** — the hatch is a behind-layer at lower opacity. The right-edge fade no longer masks preset names.
 
 - **PYNE Pro API origin is `https://pynescript.online`** — Hetzner VPS (nginx → gunicorn `:5002`). `axis.hoox.sh` is the Cloudflare Pages PWA, not same-origin with the API. Default Backend URL, Workers Manager probe, datafeed gateway, and Settings/Runtime presets follow the new origin; saved `axis.hoox.sh` / old VPS IP endpoints remap on load.
-
 ## [2.0.25] — 2026-08-23
 
 ### Fixed
 
 - **Script Settings inputs no longer lose to editor defaults** — re-running an applied script from the editor keeps per-instance `inputValues` / strategy properties. Empty `{}` bags no longer wipe saved settings. Overrides persist only when they differ from the script default and are keyed by title, id, and LHS var name so the engine actually applies them.
-
 ### Changed
 
 - **npm publish uses org secret `NPM_TOKEN_HOOXSH`** — `release.yml` no longer looks for a repo `NPM_TOKEN`. Root Bun tests ignore `packages/**` so `axis-cli` suites run only after `packages/cli` deps are installed. Authenticated skip detection treats an already-published version as success.
-
 ## [2.0.24] — 2026-08-23
 
 ### Added
 
 - **Production-grade `@hoox-sh/axis-cli` 0.2.0** — first npm publish of the AXIS CLI. Node-compatible `dist/` + `npm i -g @hoox-sh/axis-cli`, AGPL `LICENSE` in the tarball, provenance on tag publish, CI coverage for `packages/cli`.
-
 ### Fixed
 
 - **`plot(..., display=)` was ignored at apply time** — editor already knew `display.data_window` / `none` / `pane` / `price_scale` / `status_line` / `all`, but every series still painted on the pane and in the Data Window. AXIS now reads `plot_meta.display` (token or Pine bitfield): `none` hides everywhere, `data_window` keeps Data Window and skips the chart, `price_scale` / `status_line` gate last-value labels. PYNE packs `display=` on plot/hline/shape/fill/bgcolor.
-
 - **E2E smoke vs studio pages** — Plugins is opened from the Runtime rail (topbar hook is sr-only). Wire Apply waits for an exact `Wire · Offline Lab` title so a drifted `Offline Lab +N` plan is not applied as Live Crypto.
 
 - **`axis setup --remote-d1` skipped local D1** — `setup d1` treated `--remote` as exclusive of local even when `local: true` was passed, so bootstrap never applied the schema locally. `--remote` alone stays remote-only; `--local --remote` and `--remote-d1` apply both.
-
 - **Worker `/health` probe accepted any HTTP 2xx** — `probeHealth` OR'd the JSON `status === "healthy"` check with `res.ok`, so a 200 HTML page counted as healthy. Requires a JSON `status` of `healthy` or `ok`.
 
 - **Failed `axis deploy worker` ran wrangler deploy twice** — on inherit/quiet failure the CLI re-invoked deploy to capture stderr. Capture once, parse the workers.dev URL, never redeploy on error.
-
 - **`--json` mixed human banners into stdout** — `--json` now implies `--quiet` so doctor/health/deploy emit parseable JSON only.
 
 - **Docker GHCR version tags could skip on `v*`** — `docker.yml` path-filtered `push`, and GitHub applies that filter to tag pushes. Tag/main image builds no longer use a path filter (PRs still do).
-
 - **Unknown `axis` commands dumped a generic wrapper error** — Commander help/version/unknown-command now exit with Commander's own code instead of `handleError`.
-
 ### Changed
 
 - **npm release workflow** — pin Bun 1.3.14, `id-token: write` + `npm publish --provenance`, pack dry-run (LICENSE/dist/bin required), org secret `NPM_TOKEN_HOOXSH`. CI unit job now typechecks and tests `packages/cli`. Dead `@clack/prompts` dependency removed.
-
 ## [2.0.23] — 2026-08-23
 
 ### Changed
 
 - **Drawings / plot parity plan** — `docs/architecture/drawings-parity.mdx` lists P0–P3 work: user-tool move/handles, Pine pane routing, PYNE export gaps (tables, fill meta, plotshape Y, OHLC).
-
 ### Fixed
 
 - **Pre-eval treated `chart.fg_color` as a typo** — `pyne-builtins.json` only lists `chart.point.*` callables, so `chart.bg_color` / `chart.fg_color` (and the `color_background` / `color_foreground` aliases, plus viewport `left_visible_bar_time` / `right_visible_bar_time` / `is_standard`) were flagged “not a built-in member”. Allowlisted with the other Pine host constants.
-
 - **1-point drawings did not body-move** — `shiftDrawing` only special-cased `text` / `priceLabel`. Note, flag, crossline, anchored text, and arrow marks now shift `p1` (and `points[]` when present). Third-anchor `p3` handles hit-test and resize.
 
 - **Linefill GC was a no-op** — `garbageCollectScriptDrawings` ignored `skip.linefill` on the early-return. Overflowing linefill-only batches now trim oldest. Polyline/linefill copy `force_overlay`; polyline `fill_color` maps to fill.
-
 - **`overlay=false` bgcolor/fill always hit the price pane** — bgcolor bands take `paneId`; fills use the script-pane drawing layer when the indicator is not overlay. Empty `drawings: []` clears script SVG even on silent live re-runs.
 
 - **plotshape on oscillator panes** — `setShapeMarkers` takes a pane id; overlay=false scripts attach LWC markers to the first overlay series on `ind_*` instead of price candles. Trade markers stay on price.
-
 - **Drawing tool settings** — Fill slider covers channel, triangle, gann boxes, ranges, highlighter; highlighter stroke no longer multiplies width ×6; horizontal ray places on one click; XABCD / head-and-shoulders commit on the 5th point.
 
 - **Hide drawings hid only user tools** — the eye toggle now also clears Pine script SVG and `fill()` bands (every pane layer). `label.style_text_outline` paints outlined text; `yloc.abovebar` / `belowbar` sit 8px off the wick. First Add Indicator re-owns plotshape / fills / script drawings from `__editor__` to the script id. Histogram overlays honor `plot_meta.histbase` when the engine sends it.
-
 ## [2.0.22] — 2026-08-23
 
 ### Added
 
 - **Topbar Venue picker** — Data group is now Venue (native CEX / pinned CCXT / CCXT… / local) instead of a raw source-plugin list. Picking Bitget (CCXT) writes `ccxt-rest`+`ccxt-ws` and both `exchange` bags together; `store.provider.id` is `ccxt:bitget`. Exchange ID stays on the topbar only for **CCXT…**. Stream remains hidden while paired.
-
 - **CCXT symbol browse uses that exchange's markets** — with Source = CCXT (Gateway), the symbol modal loads `GET /markets?exchange=` and keeps unified `BTC/USDT` tickers (slash is no longer stripped). Stream is hidden on the topbar while it still matches the source pairing (Wire / HUD Fix if it drifts).
 
 - **CCXT session API keys** — Settings → Data can store a key + secret (+ passphrase / uid) per CCXT exchange id (`ccxt:bybit`, …) in the RAM vault (never `pluginsConfig` / localStorage). Save POSTs `POST /datafeed/session`; Load/Live then pass only `cred=` on OHLCV/watch. Public candles still work without a key. Topbar shows an **API key** chip next to the CCXT exchange picker. Gateway `auto|pyne|sidecar` moved to Settings (advanced). Sidecar accepts `/ohlcv` and `/datafeed/ohlcv`. PYNE `POST /datafeed/session` accepts `apiKey`/`secret`/`password` in the JSON body.
-
 - **npm release pipeline for the AXIS CLI** — `@hoox-sh/axis-cli` (`packages/cli`) is now publishable: dropped `"private"`, and a new `.github/workflows/release.yml` typechecks, tests, builds and publishes the package to npm on `v*` tags using an `NPM_TOKEN` repository secret. A registry-version guard skips cleanly when the version is already published (safe tag re-runs); run summary reports local vs registry versions.
 
 - **"What's in this repo" section in README** — table mapping every part of the repo to its role and paths: app/PWA, datafeed pipeline, calc engines + Workers Manager, vendored Pyodide runtime, on-chain plane, Cloudflare Worker (API/WS/D1/KV/R2), allowlisted `/api/onchain` proxy, Tauri desktop shell, npm-published CLI, tests/ops.
-
 - **Plugin config `advanced` fields + Settings section** — schema fields can now be marked `advanced` (API base URL, Bars, Synthesize on failure, …). They are hidden from the Topbar config row and rendered in Settings → "Source & stream plugins" with full descriptions, using the shared form classes.
 
 - **Full unified ccxt exchange dropdown** — the Exchange ID select is fed by the gateway's complete ccxt exchange list (`/health` → new `ccxt_exchanges`, mirrors `ccxt.exchanges`; ~103 venues) instead of only the native adapters. PYNE side: `backend/api/datafeed.py` health payload extended accordingly.
-
 ### Changed
 
 - **Studio full-page overlay** — Runtime, Wire, and Settings are no longer right-edge drawers. They share one full-viewport page (`src/ui/studio/`, `ax-*` classes) with a left rail, 16px type root, and large fields. Compact `sc-dialog` stays for Symbol / Script Settings / About / ⌘K.
-
 - **Runtime uncoupled from Workers and Plugins** — Topbar **Runtime** is the active engine / endpoint / exec mode / health. Workers (backend inventory) and Plugins (contract catalog) are sibling pages from the rail, ⌘K, or Runtime cards — not tabs inside Runtime. Engine/endpoint/mode moved out of Settings → General; storage stays a Wire slot.
 
 - **Workers studio restyle** — Backend inventory is a full `ax-*` studio page (`WorkersPage`): large health cards + inspector (probe features, numbered install steps, Use as calculation backend). No inner Overview/Detail/Install/Configure tabs and no `sc-btn` chrome. Engine writes go through `saveEngineConfig`. Open Plugins is a sibling cross-link, not a nested catalog.
-
 - **Plugins studio restyle** — Contract catalog is a full `ax-*` studio page (`PluginsPage`), sibling of Runtime. Catalog / Install / Script Library stay as `StudioTabs` (e2e tab name **Catalog**). Kind chips, large rows with Use + capability badges, URL install + example cards, Script Library embed, active src/eng/stm/stor footer + Done. Open Workers and Open Wire are sibling cross-links. Close stays on the AppPage shell (`axis-plugins-close`); `axis-manager` stays on the dialog only.
 
 - **Data tab no longer duplicates bar count or Binance API host** — how many bars to load lives only under General → Historical bars. Native CEX host URLs stay as fetch defaults (Binance already has host + Worker fallback). Gecko proxy/network, CCXT gateway, and synthesize-on-failure remain.
-
 - **Docker release images tagged by version, not sha** — `docker-bake.hcl` release targets now push `pwa-v<VERSION>` / `pwa-nginx-v<VERSION>` (e.g. `ghcr.io/hoox-sh/axis:pwa-v2.0.21`) instead of `pwa-sha-<sha>`. The git SHA remains on the image as the `org.opencontainers.image.revision` label and build arg; workflow docs updated to match.
-
 ### Fixed
 
 - **Plugin config row — first-save, apply, and exchange dropdown** — shared source/stream fields now (1) resolve a stored value from *any* target bag before falling back to a schema default (stream `exchange` is no longer hidden by a source default of `''`), (2) persist text/number keystrokes but only reload history on blur/Enter (selects/checkboxes still apply immediately), (3) treat the exchange control as a `<select>` only when the gateway list is actually populated, with a placeholder `Select exchange…` option and a free-text fallback when the fetch fails or returns empty, (4) cache the ccxt list per gateway mode, and (5) wire stacked-form `label for` to the control `id`. Gecko `baseUrl`/`network`, Coinbase granularity, and Mock Walk start price are Settings-only (`advanced`). Topbar Load no longer bails out while a previous fetch is in flight.
-
 - **Pre-eval scanners close paired typographic quotes** — `“…”` / `‘…’` now close on the matching right quote (not only the same code point), so a pasted title string no longer marks the rest of the file as an unclosed string and block Run. Shared `isQuoteClose` in `pine-scan-util.ts`.
 
 - **`array<string>` survived as `array` after Add types** — the declaration rewriter captured the collection token but dropped `<string>` when inserting a missing type1 qualifier. Generic args are preserved (`simple array<string> vals = …`).
-
 - **Type methods and `export enum` missed as user bindings** — indented `method profit(this) =>` inside a `type` body and `export enum Name` now register as declared names (same as `export type`).
 
 - **`const` (and line-leading keywords) colored inconsistently — green vs violet** — a float ending in a trailing dot (`2.`, `0.`) was split into number + lone `.`, leaving the tokenizer's `afterDot` state set at end-of-line. The state leaked across comments/blank lines, so the *next* code line's first word (`const`, `series`, …) rendered as a member property (green) instead of a keyword (violet accent). Number scanning now consumes trailing-dot floats and `afterDot` resets at every line start.
-
 - **Pre-eval typo checker round 3 — validated against the real 2222-line grid strategy** — found via local reproduction on `grid.pine`: generic typed declarations (`var series array<string> TP1 = …`) were not parsed by the assignment regex, so TP1/SL1/TRL1-class vars were never registered as declared; library import coordinates (`import cryptolinx/String/1 as strx`) leaked into both the declaration collector and ident scanner (`String`/`Hoox` flags); and dotted method calls (`.init()`, `.show()`, `.abs()`) were treated as bare-call typos. All three fixed; checker now reports **0** typos on grid.pine, grid.2.pine.
 
 - **Pre-eval typo checker round 2 — declaration coverage + copy-paste resilience** — remaining false positives addressed: `strategy(linktoseries=…)` whitelisted (pyne accepts arbitrary declaration kwargs); typographic/curly quotes (`“”‘’`) now treated as string delimiters in every scanner so pasted text no longer leaks as identifiers; `enum` members + enum/type names, `type` fields, and `for [i, v] in …` loop vars are collected as declared bindings; dotted-path roots (`Mode.SINGLE`) skipped by the ident scanner.
-
 - **Pre-eval typo checker flooded false positives (~260 per script)** — pyne's LSP metadata only lists functions/namespaces, so the pre-eval linter treated core built-in series variables (`close`, `high`, `low`, `open`, `volume`, `ohlc4`, `hl2`…), type qualifiers (`simple`/`series`/`const`) and `text.align_*` / `text.wrap_*` constants as unknown identifiers and suggested nonsense ("Unknown `close` — did you mean `CROSS`?"). Added a curated `PINE_BUILTIN_VARS` supplement (OHLCV + derived, time/bar state, calendar parts) plus the missing `text.*` members to the known-path index; qualifiers also join the bare-call skip set. Regression tests cover the reported failure pattern (now zero typos).
 
 - **Config row crash on first save** — `setField` wrote `pluginsConfig` through a deep Solid store path whose parent bag did not exist yet; solid-js/store does not auto-create intermediate nodes, so the first-ever config change threw `TypeError: can't access property "exchange"` and never persisted. Bag creation is now guarded (`writePluginField`), covered by regression tests and a browser e2e run.
-
 - **Gateway select had no choices** — the ccxt `gateway` schema fields lacked `options`, so the dropdown rendered only its current value. `auto | pyne | sidecar` are now declared on both `ccxt-rest` and `ccxt-ws`.
 
 - **Config row deduplication** — the Topbar renders one shared row for the union of active source/stream config fields (was: duplicated per picker); changes write through to all declaring plugins so ccxt-rest and ccxt-ws stay in sync.
-
 - **Gateway loopback on remote pages (hardened VPS)** — `gatewayBase` resolved `pyne`/`auto` to `http://127.0.0.1:5002/datafeed` even when the page was served from a remote host, so browsers on `axis.hoox.sh` fired doomed cross-origin requests at the *visitor's* machine (CORS NetworkError). Remote pages now resolve to same-origin `/datafeed` on product hosts (nginx) or the product API origin cross-origin (Pages previews); loopback behavior is unchanged for local dev. Explicit endpoint overrides still win.
 
 - **ccxt-ws `require()` actually removed** — v2.0.21 added the static `gatewayWs` import but left the shadowing CommonJS `require('../data/gateway')` call in place, so the browser bundle still threw on stream start. The `require` is now gone.
-
 ### Changed
 
 - **Plugin config moved to Settings → Data** — the "Source & stream plugins" section (with the advanced fields) now lives in the Data tab above Exchange API keys, with a note that CCXT Gateway venues serve public market data and need no keys. Native-source keys (Binance/OKX/Bybit/Coinbase/Kraken) remain session-only in the browser vault and sign requests client-side.
-
 - **Config row styled like the Source picker** — inline plugin config fields now render through `TopbarField` (integrated uppercase label, shared `axis-tb-field` chrome, focus-within ring), matching Symbol/Source/Interval exactly; the Settings variant keeps the dialog's stacked form classes.
 
 - **Stream config pass-through** — `multiplex.startLive` now passes `store.pluginsConfig[stream:<id>]` into `stream.start({ config })`, matching the source path, so ccxt-ws receives the configured exchange id.
-
 - **ccxt plugins: clear error for unconfigured exchange** — `ccxt-rest` / `ccxt-ws` no longer fire requests with an empty `exchange=` param; they surface "exchange id not configured" instead.
-
 ## [2.0.21] — 2026-08-21
 
 ### Fixed
 
 - **ccxt-ws stream: `require()` in browser ESM** — replaced CommonJS `require('../data/gateway')` with a static import. The `require` call threw `ReferenceError` in the Vite browser bundle when activating the `ccxt-ws` stream (Bun tests masked it since Bun honors `require` in ESM).
-
 - **ccxt-rest backfill window inversion** — `endTime` was forwarded as CCXT `since`, which pages *forward* from that timestamp, breaking the Data Source Manager walk-back contract (bars must end at/before `endTime`). Now derives `since = endTime − limit·timeframe` so each page covers `[endTime − limit·tf, endTime]` and gap-fill converges.
-
 ## [2.0.20] — 2026-08-21
 
 ### Added
 
 - **Datafeed gateway transport** (`src/data/gateway.ts`) — resolves gateway URL (auto/pyne/sidecar/direct), probes sidecar health with 30s TTL cache, and provides `gatewayFetch`/`gatewayWs` helpers for plugins that route through the PYNE datafeed gateway or local sidecar.
-
 - **ccxt-rest source plugin** — long-tail exchange OHLCV via the PYNE datafeed gateway or sidecar. Routes `ccxt:<exchange>` venues through `GET /datafeed/ohlcv`. Credentials stay server-side; browser never holds API keys.
 
 - **ccxt-ws stream plugin** — real-time klines via the datafeed gateway WebSocket. Routes through `WS /datafeed/watch` with exchange+symbol+timeframe params.
-
 - **Gateway-aware active resolution** — when provider gateway is not `direct` and the venue is a `ccxt:<exchange>` long-tail id, active source resolves to `ccxt-rest` and stream to `ccxt-ws`. Native venues (binance, okx, etc.) are never swapped.
-
 ## [2.0.19] — 2026-08-20
 
 ### Fixed
 
 - **Hex color lint false positive** — pre-eval `scanIdentRefs` no longer treats hex color tails (e.g. `d3ee` in `#22d3ee`) as unknown identifiers. Scans backward past hex digits to detect the `#` prefix and skips the entire literal.
-
 - **Pre-existing TypeScript errors** — resolved 23 type errors across 7 files: null barIndex guard, CSS `TextAlign` narrowing, `PineTable` camelCase property reads via `Record<string, unknown>`, `linefill` missing from `DrawingLimits` / drawing caps/counts/skip, `cancelled` status narrowed type assertions, `ParamValue` import + explicit typing, legacy `panelWindows`/`dockLayout` access on `AppState`.
-
 ### Changed
 
 - **CI typecheck gate** — added `bunx tsc --noEmit` as a first step in the CI workflow (runs before unit + security tests). Added `typecheck` script to `package.json`.
-
 ## [2.0.18] — 2026-08-20
 
 ### Added
@@ -1059,13 +926,11 @@ No runtime behavior change; only type compliance so `worker tsc` matches the pre
 - **SessionDO multi-venue** — Worker Durable Object relay now supports all 5 venues (Binance, OKX, Bybit, Coinbase, Kraken) via `venue` query param. Each venue's WS URL and subscribe message handled correctly. Browser → DO control messages accept `venue` for resubscribe.
 - **Shared venue WS builders** — `src/streams/ws-venues.ts` provides `buildVenueWs()` for both browser-side StreamPlugins and the Worker DO. Single source of truth for URL patterns and subscribe messages.
 - **`@hoox-sh/axis-datafeed`** — optional Bun sidecar (`packages/datafeed/`) using CCXT Pro for users who want local WS without running Flask. Mirrors the PYNE datafeed gateway contract: `GET /datafeed/ohlcv`, `GET /datafeed/markets`, `WS /datafeed/watch`, `POST /datafeed/session`. Run with `bun run dev:datafeed`.
-
 ### Fixed
 
 - **Mixed-provider quotes** — watchlist no longer falls back to Binance tickers for Kraken (or unknown venues).
 - **Coinbase live bars** — stream uses Advanced Trade venue candles folded into the chart interval, not ticker buckets.
 - **Binance synthetic fallback** — `fallback` defaults **off**, so a network error cannot look like real prices.
-
 ## [2.0.17] — 2026-08-19
 
 Visible pre-eval squiggles, Problems that drop on edit, and idle lint for named args and declared vars.
@@ -1074,12 +939,10 @@ Visible pre-eval squiggles, Problems that drop on edit, and idle lint for named 
 
 - **Named-arg typos** — idle lint flags unknown function/method parameters (`plot(..., coltor=color.green)` → `color=`) from curated signatures, builtin docs, and user-function parameter lists.
 - **User-var typos** — assignment / `var` / tuple-unpack / function-parameter names are added to the typo map (declaration is source of truth), so `length = 14` then `lenght` suggests `length`.
-
 ### Fixed
 
 - **Lint underlines** — pre-eval / error marks use a high-precedence squiggle (SVG + wavy underline + inset line), not CodeMirror `baseTheme`, so they stay visible against Tailwind. Empty decoration sets rebuild when underlines are on. The tab-switch effect no longer loops and cancel the idle lint timer, which left the buffer with Problems but no squiggles.
 - **Stale Problems** — pre-eval rows drop as soon as the buffer diverges from the last linted source. Idle lint no longer stamps the live buffer onto old diagnostics, and rescheduling the same buffer does not wipe a completed lint (fixing a typo no longer leaves the old error in the list).
-
 ## [2.0.16] — 2026-08-19
 
 Restore editor hover, lint underlines, and chips after a dead Settings bag and clipped hover cards.
@@ -1101,13 +964,11 @@ Restore editor hover, lint underlines, and chips after a dead Settings bag and c
 - **Last-bar drawings** — script paint no longer grows `rightOffset` up to 500 bars for wall-clock `timenow` (one-bar `bar_index+1` still maps).
 - **PYNE Agent seed** — same-origin plugin install no longer writes a hardcoded Worker URL; chat stays off until the operator sets the endpoint.
 - **Unstamped last-run marks** — engine underlines drop unless `meta.axisSource` (or `script`) still matches the buffer.
-
 ### Improved
 
 - **Hover facts** — `hl2` / `ohlc4` / `hlcc4` use midpoint / OHLC / HLCC wording (only `hlc3` is typical price).
 - **`plotshape` / `plotchar`** — curated params include `format`, `precision`, `force_overlay`; `series` is `int/bool`.
 - **Docs** — `areabr` is only on the broken-segment row; debugging mermaid includes pre-eval → Problems.
-
 ## [2.0.15] — 2026-08-19
 
 Editor intelligence settings, Supertrend `linebr` gaps, live script hide/run, and PYNE Agent chat markdown.
@@ -1117,7 +978,6 @@ Editor intelligence settings, Supertrend `linebr` gaps, live script hide/run, an
 - **Editor intelligence settings** — Settings → **Editor** (and command *Open Editor Settings*) exposes every lint / pre-eval / hover-card / signature-hint / autocomplete / underline / gutter / inline-chip option, plus idle / tab-switch / remote timeouts. Defaults match the previous hardcoded behavior; **Reset defaults** restores them.
 - **Strategy chart trade size** — entry/exit markers print `Long N` / `Short N` (and exit id + qty) so the filled amount is visible on the chart, not only the order id.
 - **Hide plot names on last-value labels** — Settings and chart **[T]** clear `RSI` / `Overbought` titles beside the last value; the numeric label stays. Independent of **[N]**.
-
 ### Improved
 
 - **Pre-eval timings** — idle lint stays **1s** after the last keystroke (configurable 200–3000 ms). Tab switch uses a separate **200 ms** beat (was a hardcoded 120 ms). Remote `/lsp/diagnostics` wait is **2s** (configurable) and only starts after idle; local marks still publish immediately. Stale “2s idle” editor comment removed.
@@ -1127,7 +987,6 @@ Editor intelligence settings, Supertrend `linebr` gaps, live script hide/run, an
 - **Live scripts auto-run** — starting a stream immediately re-runs every **visible** script on the chart (no extra Run). Hide pauses execution and clears that script’s plots (series, markers, drawings, fills, `barcolor` when it is the last visible script); show re-runs it. `library()` sources stay out of the live / reapply loop.
 - **Editor type highlighting** — `int` / `float` / `string` / … and declared UDTs / enums (`type Point`, `export enum Easing`, `m.Easing`) use the type token in **bold**. `series` / `simple` are bold only as type qualifiers; `m.SuperTrend(` stays a library member.
 - **Strategy Properties wiring** — Apply persists only changed `strategy()` kwargs (so leverage is not overwritten by default margin %). Leverage ↔ margin UI no longer writes the auto-filled sibling into the bag. Editor Properties apply on isolate/HPO runs. Execution flags are documented as not implemented in PYNE.
-
 ### Fixed
 
 - **`plot.style_linebr` / `steplinebr` / `areabr` on `na`** — Lightweight Charts Line/Area series drop whitespace points and connect the remaining samples, so Supertrend-style `bull ? st : na` plots drew a diagonal through inactive stretches. `*br` styles now hide the LWC connector and stroke each finite run (isolated samples stay a tick). `plot.style_line` still spans `na`.
@@ -1135,14 +994,12 @@ Editor intelligence settings, Supertrend `linebr` gaps, live script hide/run, an
 - **Last-value names** — compare / on-chain titles survive **[T]**; volume stays number-only unless a title was set. Default `exactOnCandle` puts `Long N` on the side arrow, not the in-bar circle.
 - **Isolate / HPO strategy bag** — explicit `strategyProps: {}` means no rewrite; isolate no longer merges leftover editor broker settings onto a baked study.
 - **Last-bar / `varip` drawings** — `line.new` / `box.new` / polylines / linefills that extend one bar past the series (`bar_index + 1`) are no longer snapped to the last candle (that flattened them into a vertical tick). Labels still clamp `timenow` onto the last bar. Historical `varip` **plots** already render as a normal 1-sample-per-bar series (AXIS does not send `realtime_last_bar`; enabling it would reset last-bar `varip` cells under pyne’s current re-init).
-
 - **Remote LSP cooldown** — aborting an in-flight `/lsp/*` request (typing, hover leave, pre-eval cancel) no longer starts the 30s failure cooldown, so idle parse diagnostics still reach pyne.
 - **Editor Problems / underlines** — a clean pre-eval no longer wipes last-run runtime errors. Pre-eval and last-run marks are unioned while the buffer still matches the run source.
 - **`plotshape` / `plotchar` / `plotarrow` `style=`** — completions offer `shape.*` instead of invalid `plot.style_*`.
 - **Pre-eval block comments** — `"/*"` and `https://` inside strings are no longer treated as comments (which could block Run).
 - **Inline debug line parse** — log values like `RSI: 55` no longer become a chip on line 55; structured `line` wins.
 - **`color=` completions** — `color.new` / `color.rgb` / `color.from_gradient` stay in the list (including after `color=color.`).
-
 ### See also
 
 - [Editor](docs/ui/editor.mdx)
@@ -1168,18 +1025,15 @@ Call-parameter intelligence, richer Pine highlighting, script input enums, and P
 ### Added
 
 - **Call parameter intelligence** — hover on `plot` / `input.int` / `ta.sma` (and other curated calls) shows parameter docs + an example. After `,` inside a call, completions offer remaining named args (`title=`, `minval=`) in a **Parameters** section and already-used ones under **Already used**. A signature hint below the cursor lists every parameter and marks used / current / unused.
-
 ### Improved
 
 - **Pine editor highlighting** — series builtins (`close`, `bar_index`, `time`, OHLC) use a cyan token distinct from user variables; `import … as` aliases and library export members (`m.Easing`) use a violet family; types get a warm token. New chrome vars `--color-cyan`, `--color-editor-builtin`, `--color-editor-lib`, `--color-editor-lib-member`, `--color-editor-type`.
-
 ### Fixed
 
 - **Script Inputs enum values** — `input.enum(m.Easing.linear)` no longer shows the import/Python path as a text field. Members are inferred from `enum` declarations (local + imported library source), values normalize to `Type.member`, and the modal seeds from that script’s `runResults` (not another indicator’s `lastRun`).
 - **Script display name** — applied scripts / pane badges always use the Pine `indicator()` / `strategy()` / `library()` title (not engine `"plot"` or a stale file name).
 - **Pine tables after delete** — table HUD only shows tables from still-applied scripts’ `runResults` (orphans / `__editor__` leftovers no longer stick). First-run migrates run cache to the real script id; last-script delete clears script drawings.
 - **Pine table layout** — grid size expands from cell extents when engine understates rows/columns; frame/border and cell align improved.
-
 ## [2.0.12] — 2026-08-17
 
 Editor color chips + type declarations, chart label/marker lifecycle, topbar icon map, debug UX.
@@ -1189,21 +1043,18 @@ Editor color chips + type declarations, chart label/marker lifecycle, topbar ico
 - **Editor inline color chips** — square swatches (line-height × line-height) before Pine color literals (`#hex`, `color.red`, `color.rgb(...)`, `color.new(...)`). Click selects the range.
 - **Add type declarations** (editor overflow → Source) — after a successful first run, inserts missing Pine **type1** (`series` / `simple` / `const`) and **type2** (`int` / `float` / `bool` / `string` / `color` / …) on untyped assignments.
 - **`ICON_MAP`** (`src/ui/icon-map.ts` + `Icons` in `icons.tsx`) — one Lucide glyph per product intent; topbar panel buttons each use a unique icon.
-
 ### Improved
 
 - **Panel hamburger menu** — consistent 12px label / 14px icons; **New window** → **New tab**.
 - **System Logs** — clear control uses trash icon instead of ×.
 - **Topbar panels** — reordered List → Editor → Library → Scripts → Inputs → Layers → DSM → On-Chain → Alerts → Values → Results → Script Logs → System Logs → Status.
 - **Inline debug / Chart pins** — overflow Debug items include full how-to on hover; toggle shows status-bar tips.
-
 ### Fixed
 
 - **Duplicate last-value labels** on indicator panes (editor owner + real script id stacked series).
 - **Strategy long/short labels** stayed after remove — trade markers are owner-scoped and cleared on detach.
 - **Chart chrome** — removed top-right fullscreen / chart-only icon buttons (F11 / Shift+F / Esc still work).
 - **Inline debug enable gate** — chips only when explicitly on; pin gutter class clears when empty.
-
 ## [2.0.11] — 2026-08-17
 
 Chart script lifecycle, per-script indicator panes, pyne-worker engine, panel drag UX.
@@ -1213,11 +1064,9 @@ Chart script lifecycle, per-script indicator panes, pyne-worker engine, panel dr
 - **Panel title bar** — a plain click no longer undocks the panel to float; undock/move starts only after the pointer is dragged past a small threshold (hamburger still: click = menu, hold/drag = move).
 - **Non-overlay indicators** — each `overlay=false` script gets its own sub-pane (`ind_<id>`) instead of stacking into a single shared `indicator` pane. Removing one script only clears that owner’s series and no longer destroys siblings’ full history (was left with 1–2 bars).
 - **Chart scripts lifecycle** — add/remove/reopen stays correct: owner-scoped detach (no leftover series/empty panes), ChartHost no longer wipes re-applied scripts after history paint, centralized `reapplyChartScripts` restores visible scripts (with saved inputs/strategy props) after symbol load / cache paint; applied scripts are sanitized on hydrate and re-run on reopen.
-
 ### Added
 
 - **Engine `pyne-worker`** — built-in edge evaluator plugin (default `https://pyne-worker.cryptolinx.workers.dev`), API key field, Workers Manager / Settings presets. Distinct from AXIS data-plane Worker and Flask `server`.
-
 ## [2.0.10] — 2026-08-16
 
 Market data resilience, Script Settings input layout, and local-first editor LSP.
@@ -1226,7 +1075,6 @@ Market data resilience, Script Settings input layout, and local-first editor LSP
 
 - **Script Settings → Inputs formatting** — Pine `group`, `inline`, `tooltip` (`\\n`), and `active` / `active=<ident>` layout in the modal (TV Settings-style sections, same-line clusters, `?` help, grayed inactive fields). `input.text_area` uses a multi-line control.
 - **Editor LSP hover + autocomplete** — local builtins/doc annotations show **immediately** (no wait on a dead Backend URL); remote Pro API is short-timeout + 30s cooldown after failure. **⌘/Ctrl-Space** triggers completion; tooltip z-index raised so hover/suggest stay above chart chrome.
-
 ### Fixed
 
 - **Browser market data / plugins (CORS “status null”)** — when the page cannot reach venue hosts or remote plugin modules (geo, firewall, port 9443, extensions), AXIS no longer hard-depends on a single cross-origin path:
@@ -1238,7 +1086,6 @@ Market data resilience, Script Settings input layout, and local-first editor LSP
 ### Added
 
 - **Worker market proxy** — `worker/src/market.ts` public allowlist for Binance klines / 24hr ticker / exchangeInfo (short isolate cache; not an open reverse proxy).
-
 ## [2.0.9] — 2026-08-15
 
 Editor symbol catalog, richer Pine highlighting, CORS for Pages previews, and CI greens.
@@ -1246,21 +1093,17 @@ Editor symbol catalog, richer Pine highlighting, CORS for Pages previews, and CI
 ### Added
 
 - **Editor symbol & emoji manager** — status-bar **Symbols** catalog of TV-editor-safe arrows, box drawing, blocks, marks, spaces, and chart emoji (IBM Plex Mono vs wide). Insert raw, quoted, or `plotchar(…)`.
-
 ### Improved
 
 - **Pine highlighting** — stateful multiline strings + `/* */` blocks, `\\n` / hex-color atoms, namespaces (`ta.`, `label.new`), types, control vs definition keywords, function names before `(`.
 - **Format** — leaves continuation lines of an unclosed string or block comment untouched.
-
 ### Fixed
 
 - **CORS** — Cloudflare Pages previews (`*.pynescript-axis.pages.dev`) can call `https://axis.hoox.sh`. Pyne always allowlists those product Origins and treats `GET /health` as a free CORS path (AXIS Settings probe). Worker `pickOrigin` already echoed the same hosts.
 - **CI** — library publish stays on the local cache when leftover/invalid git credentials fail remote (was `GitHub: Bad credentials` in the full unit suite). Smoke waits on `axis-status-message` and opens Plugins via Runtimes. Vite build on macOS/Windows resolves Solid `Topbar.tsx` / `Watchlist.tsx` instead of same-stem legacy JS. Docker push uses the `release` bake group (no `:local` docker.io tags) and bake-action v6 env overrides.
-
 ### Changed
 
 - **Pyodide PYNE wheel** — vendor `pynescript-0.3.7` (`Runtime.run(libraries=)` for `import ns/Name/ver`, ring-series skip, runtime hot path). Engine catalog, legacy JS engine, SW cache test, and editor builtins synced from pyne 0.3.7.
-
 ## [2.0.8] — 2026-08-15
 
 Architecture modal, library publish emulator, drawings/plot parity, and the post-2.0.7 hardening stack.
@@ -1268,7 +1111,6 @@ Architecture modal, library publish emulator, drawings/plot parity, and the post
 ### Changed
 
 - **Pyodide PYNE wheel** — vendor `pynescript-0.3.6` (UDT `array.binary_search*` `sort_field`, drawing export/delete/fold). Engine catalog, legacy JS engine, SW cache test, and editor builtin metadata synced from pyne 0.3.6.
-
 ### Added
 
 - **Library publish emulator** — `library()` scripts publish to git `{basePath}/published/{ns}/{Name}/{1,2,3…}/lib.pyne` (plus local cache). Library panel **Publish library**, or auto-publish on a successful Run. Consumers `import ns/Name/ver`; AXIS resolves the folder and sends sources to the engine (`register_library_source`).
@@ -1281,7 +1123,6 @@ Architecture modal, library publish emulator, drawings/plot parity, and the post
 - **plotshape multi-script** — shape markers are owner-scoped by script id so one run does not wipe another script’s shapes.
 - **Non-overlay drawings** — `overlay=false` scripts paint geometry on the indicator pane Y-scale; `force_overlay` still routes to price.
 - **Compile `line.set_*`** — pyne folds set events onto handles before export (final geometry for AXIS).
-
 ### Improved
 
 - **Editor default width** — factory / layout-reset docked editor width is **50vw** (was fixed 460px); existing persisted widths unchanged.
@@ -1312,7 +1153,6 @@ Architecture modal, library publish emulator, drawings/plot parity, and the post
 - **OHLCV bulk paint hardening** — `mapBarsToPriceData` / volume mapper drop non-finite rows so one NaN bar cannot blank LWC series.
 - **Plot styles** — distinct series kinds for `plot.style_columns` (vs histogram), `plot.style_cross` (discrete markers, no connector), and `plot.style_stepline_diamond` (stepline + vertex markers). plotshape diamond/cross map to square marks with optional `+`/`✕` glyphs. LWC still lacks column-width and native diamond/cross point markers — documented in charting docs.
 - **`line.style_arrow_*`** — script lines paint SVG arrow heads for `arrow_left` / `arrow_right` / `arrow_both` (were solid stroke only).
-
 ### Fixed
 
 - **Editor Problems panel close** — auto-open only when diagnostic count *increases*; no longer re-forces open on every pre-eval/store tick while problems remain (statusbar toggle can stay closed).
@@ -1322,7 +1162,6 @@ Architecture modal, library publish emulator, drawings/plot parity, and the post
 - **Legacy results event CSS class** — allowlist kind tokens before interpolating into `class` (attribute breakout).
 - **ResizeHandle multi-touch** — ignore non-primary pointer ids mid-drag.
 - **bars-cache IDB integrity** — `pagehide` / `beforeunload` flush pending debounced puts.
-
 ### Tests
 
 - **CI workflow** — `.github/workflows/ci.yml` runs `bun run test`, `test:security`, and Playwright `@smoke` (Chromium) on PR / main.
@@ -1334,7 +1173,6 @@ Architecture modal, library publish emulator, drawings/plot parity, and the post
 - **multiplex-heavy-rerun / sw-strategy / load-symbol** — heavy re-run mode, runtime cache FIFO cap, offline bars-cache fallback.
 - **register-sw** — pure update helpers (`shouldSoftReloadOnControllerChange`, skip-waiting) + controllerchange single-reload mocks.
 - **security / runner / fills** — remote plugin prod allowlist, webhook URL policy, OHLCV times cache, plot fill signature.
-
 ## [2.0.7] — 2026-08-12
 
 Pine drawings diagnostics and plotarrow direction; pairs with pyne 0.3.5 last-bar line export.
@@ -1343,7 +1181,6 @@ Pine drawings diagnostics and plotarrow direction; pairs with pyne 0.3.5 last-ba
 
 - **`line.new` / drawings apply** — prefer DrawingLayer fallback when applying Pine drawings; warn when the engine returns drawings that normalize to zero or when no layer is mounted (load bars first).
 - **`plotarrow`** — negative series samples render as down arrows (were always up).
-
 ## [2.0.6] — 2026-08-12
 
 Test suite isolation and store hydrate defaults hardening.
@@ -1352,7 +1189,6 @@ Test suite isolation and store hydrate defaults hardening.
 
 - **Tests** — isolate store/state defaults across suites; strategy-extra uses event prices (not bar fills); engine `isReady` mock returns JSON health; hydrate never restores plane telemetry from disk.
 - **Store seed** — createStore no longer aliases nested `DEFAULTS` objects (telemetry/panels/live), so path updates cannot poison factory defaults.
-
 ## [2.0.5] — 2026-08-12
 
 Panel manager defaults / reset / chart overlay; classic Status + System Logs chrome; editor open-in-new-tab.
@@ -1362,12 +1198,10 @@ Panel manager defaults / reset / chart overlay; classic Status + System Logs chr
 - **Panel manager** — per-panel **default position** (dock + size + float coords in `PANEL_META`); panel menu **Reset to default**.
 - **Chart overlay** — per-panel toggle and bulk **Chart overlay: all on/off** (`setAllPanelsChartOverlay`); edge-docked panels float over the chart without shrinking it.
 - **Editor** — **Open in new tab** in overflow panel options (and left dock menu).
-
 ### Changed
 
 - **Status bar** — restored classic fixed footer look (no panel title chrome).
 - **System Logs** — restored classic collapsible strip (expand/collapse body); topbar shows/hides the strip. Label **System Logs** (not bare “Logs”).
-
 ## [2.0.4] — 2026-08-11
 
 Script Logs / System Logs naming and Status / System Logs topbar toggles.
@@ -1376,7 +1210,6 @@ Script Logs / System Logs naming and Status / System Logs topbar toggles.
 
 - **Script Logs / System Logs** — Script `log.*` pane titled **Script Logs** (editor tool + panel); app telemetry titled **System Logs**.
 - **Status & System Logs** — topbar toggles for **Script Logs**, **System Logs**, **Status**.
-
 ## [2.0.3] — 2026-08-11
 
 Runtimes hub, editor save-before-run / idle lint, Workers Manager reliability, and hardened VPS probe routing.
@@ -1385,7 +1218,6 @@ Runtimes hub, editor save-before-run / idle lint, Workers Manager reliability, a
 
 - **Workers Manager endless probing** — open-effect no longer tracks `store.endpoint` (backend changes re-fired probes); every probe gets a hard timeout merged with the modal abort; Pyodide probe uses HEAD instead of downloading full `pyodide.js`; `probeAllWorkers` uses `allSettled`.
 - **Workers Manager / hardened VPS** — pyne Pro probes use same-origin `https://axis.hoox.sh/health` (nginx → loopback :5002) instead of client `127.0.0.1:5002`, which UFW correctly blocks on the public VPS.
-
 ### Changed
 
 - **Runtimes hub** — single dialog for **Status** (Workers Manager) and **Plugins** (catalog / install / library); topbar **Runtimes** entry; cross-links between sections; models remain separate.
@@ -1393,7 +1225,6 @@ Runtimes hub, editor save-before-run / idle lint, Workers Manager reliability, a
 - **Idle lint** — editor underlines (e.g. `plt()` → unknown) reappear after **2s** without typing, not only after Save/Run. Mid-keystroke marks stay cleared; bare call typos like `plt()` flagged locally.
 - **Workers Manager UX** — distinct icon per catalog worker; **Usage / When to use** copy on Detail + Install; docs updated.
 - **Editor line numbers** — gutter width follows digit count only (no fixed min-width / heavy padding).
-
 ## [2.0.2] — 2026-08-11
 
 Editor chrome polish and docked panel **hover slide**.
@@ -1401,16 +1232,13 @@ Editor chrome polish and docked panel **hover slide**.
 ### Added
 
 - **Panel hover slide** — docked panels can collapse to a peek strip and slide open/closed on pointer enter/leave. Toggle **Slide on hover** in the panel hamburger menu (left/right/bottom only). Store APIs: `setPanelHoverSlide`, `togglePanelHoverSlide`, `isPanelHoverSlide`. Preference persists on `panelChrome[id].hoverSlide`.
-
 ### Changed
 
 - **Editor chrome polish** — header tools always show **icon + label** (no hover slide-in); **Format** removed from the editor header and tab strip (still available via overflow **Format document** and `Shift+Alt+F` / `Mod+Shift+F`).
 - **Library from editor** — primary **Library** tool opens the script library panel; overflow menu also has **Open library**.
-
 ### Fixed
 
 - **Tab close / switch** — closing a tab left of the active one no longer jumps focus; CM buffer is snapshotted before add/close/switch; `setDoc` no-ops on identical content.
-
 ## [2.0.1] — 2026-08-11
 
 Security and performance release from the multi-agent **harden-perf** audit
