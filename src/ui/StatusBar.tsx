@@ -24,6 +24,10 @@
  * Classic fixed footer chrome (no FloatableShell title bar). Visibility is
  * gated by panel chrome `statusbar` (topbar **Status** / command palette).
  *
+ * Bar readouts: left is the chart window (click to edit the Rolling window
+ * display count); right is the DSM dataset depth (click opens the Dataset
+ * manager modal, not the DSM panel).
+ *
  * @module ui/StatusBar
  */
 
@@ -35,20 +39,30 @@ import {
   onCleanup,
   untrack,
 } from 'solid-js';
-import { store, isPanelOpen, setDataSourcePanelOpen } from '../store';
+import {
+  store,
+  isPanelOpen,
+  setStore,
+  persist,
+  clampRollingWindowBars,
+  ROLLING_WINDOW_MIN,
+  ROLLING_WINDOW_MAX,
+} from '../store';
 import { Icons } from './icons';
 import type { RunResult } from '../indicators/runner';
 import { buildStrategyReport, formatMoney } from '../results/strategy';
 import { ConnectionHud } from './ConnectionHud';
 import { HooxLoader } from './HooxLoader';
+import { CachedDatasetsModal } from './CachedDatasetsModal';
 import { peekDataset, subscribeDatasets } from '../data/dataset-store';
 import { formatBarCount } from './bar-count';
 
 /**
  * Bars in the active Data Source Manager dataset (memory mirror).
  *
- * The chart can hold far fewer bars than the dataset the DSM has grown via
- * deep backfill (`DSM_MAX_BARS_PER_JOB` is 50k), so `{store.bars.length}`
+ * The chart holds only the rolling window (Settings → Rolling window) while
+ * the DSM dataset can grow up to Settings → Historical bars via deep backfill
+ * (`DSM_MAX_BARS_PER_JOB` is 50k), so `{store.bars.length}`
  * alone understates how much data actually exists. Falls back to the chart
  * count whenever the mirror is cold, so the strip is never blank.
  */
@@ -84,6 +98,58 @@ const STATUS_COLORS: Record<string, string> = {
 export const StatusBar: Component = () => {
   const datasetBars = useDatasetBarCount();
   const color = () => STATUS_COLORS[store.status] || 'text-text-dim';
+  const [editingChart, setEditingChart] = createSignal(false);
+  const [draft, setDraft] = createSignal('');
+  const [datasetsOpen, setDatasetsOpen] = createSignal(false);
+  let inputEl: HTMLInputElement | undefined;
+
+  const beginEdit = () => {
+    setDraft(String(store.bars.length));
+    setEditingChart(true);
+    queueMicrotask(() => inputEl?.select());
+  };
+
+  const commitEdit = () => {
+    if (!editingChart()) return;
+    setEditingChart(false);
+    const raw = Number(String(draft()).trim());
+    if (!Number.isFinite(raw) || raw <= 0) return;
+    const next = clampRollingWindowBars(Math.floor(raw));
+    void (async () => {
+      try {
+        setStore('rollingWindowBars', next);
+        persist();
+        const { applyCachedToChart } = await import(
+          '../data/data-source-manager'
+        );
+        const ok = await applyCachedToChart(
+          store.source,
+          store.symbol,
+          store.interval,
+          { maxBars: next },
+        );
+        if (!ok && store.bars.length > next) {
+          // No dataset to slice from — trim the painted window in place.
+          const { loadBars } = await import('../store');
+          const { getManager, setDataToChart } = await import(
+            '../chart/manager-access'
+          );
+          const trimmed = store.bars.slice(store.bars.length - next);
+          loadBars(trimmed, store.symbol, store.interval, store.exchange);
+          const manager = getManager();
+          if (manager) {
+            try {
+              setDataToChart(trimmed, { fit: false });
+            } catch {
+              /* paint is best-effort */
+            }
+          }
+        }
+      } catch {
+        /* edit apply is best-effort */
+      }
+    })();
+  };
 
   const strategySummary = createMemo(() => {
     const r = store.lastRun as RunResult | null;
@@ -138,22 +204,62 @@ export const StatusBar: Component = () => {
         </Show>
 
         <span class="text-text-faint font-mono text-[11px] tracking-tight flex-shrink-0 tabular-nums inline-flex items-center gap-1">
-          <button
-            type="button"
-            class="hover:text-accent tabular-nums"
-            title="Open Data"
-            data-testid="axis-statusbar-bars"
-            onClick={() => setDataSourcePanelOpen(true)}
+          <Show
+            when={editingChart()}
+            fallback={
+              <button
+                type="button"
+                class="hover:text-accent tabular-nums"
+                title={`Chart bars — click to edit display count (Rolling window, ${ROLLING_WINDOW_MIN}–${ROLLING_WINDOW_MAX})`}
+                data-testid="axis-statusbar-bars"
+                onClick={beginEdit}
+              >
+                {store.bars.length} bars
+              </button>
+            }
           >
-            {store.bars.length} bars
-          </button>
+            <input
+              ref={(el) => {
+                inputEl = el;
+              }}
+              type="number"
+              class="sc-input h-5 w-20 px-1 py-0 text-[11px] font-mono tabular-nums"
+              min={ROLLING_WINDOW_MIN}
+              max={ROLLING_WINDOW_MAX}
+              step={100}
+              value={draft()}
+              aria-label="Chart bars to display (Rolling window)"
+              data-testid="axis-statusbar-bars-input"
+              onInput={(e) => setDraft(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitEdit();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setEditingChart(false);
+                }
+              }}
+              onBlur={() => commitEdit()}
+            />
+          </Show>
           <Show when={datasetBars() > 0 && datasetBars() !== store.bars.length}>
-            <span title="Bars in the Data Source Manager dataset (deeper than the chart holds)">
+            <button
+              type="button"
+              class="hover:text-accent tabular-nums"
+              title="Bars in the Data Source Manager dataset — click to open the Dataset manager"
+              data-testid="axis-statusbar-dataset"
+              onClick={() => setDatasetsOpen(true)}
+            >
               · dataset {formatBarCount(datasetBars())}
-            </span>
+            </button>
           </Show>
           <span>· {store.scripts.length} scripts · {store.panes.length} panes</span>
         </span>
+        <CachedDatasetsModal
+          open={datasetsOpen()}
+          onClose={() => setDatasetsOpen(false)}
+        />
       </div>
     </Show>
   );

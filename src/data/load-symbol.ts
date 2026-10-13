@@ -38,6 +38,7 @@
 
 import {
   clampHistoryBars,
+  clampRollingWindowBars,
   loadBars,
   setStatus,
   store,
@@ -45,7 +46,7 @@ import {
   setTelemetryState,
 } from '../store';
 import { getManager, setDataToChart } from '../chart/manager-access';
-import { getSource } from '../sources/catalog';
+import { getSource, sourcePageLimit } from '../sources/catalog';
 import { getUploadedFileName } from '../sources/upload-store';
 import { classifyTransport } from '../ui/telemetry';
 import { defaultStreamForSource } from '../streams/catalog';
@@ -247,25 +248,55 @@ export async function loadSymbolData(
   }
 
   try {
-    // Global history depth (Settings) wins over per-source plugin config for limit
-    const limit = clampHistoryBars(store.historyBars);
+    // Dataset target (Settings → Historical bars) wins over per-source plugin
+    // config. Venues cap a single response (e.g. Binance 1000), so walk back
+    // page-by-page until the target is covered — a single first page is what
+    // left Reload stuck at 1000 bars.
+    const target = clampHistoryBars(store.historyBars);
+    const chartCap = Math.max(1, clampRollingWindowBars(store.rollingWindowBars));
+    const pageSize = Math.max(1, sourcePageLimit(srcId));
     const configs = store.pluginsConfig || {};
     const sourceCfg =
       configs[pluginKey('source', srcId)] || configs[srcId] || {};
 
+    const fetchPage = async (args: {
+      endTime?: number;
+      limit: number;
+    }): Promise<unknown> => {
+      try {
+        return await source.fetchHistorical({
+          symbol: sym,
+          interval: iv,
+          config: {
+            ...sourceCfg,
+            limit: args.limit,
+          },
+          ...(args.endTime != null ? { endTime: args.endTime } : {}),
+          signal,
+        });
+      } catch (fetchErr: unknown) {
+        // Aborted by a newer load — silent success (caller no longer needs us)
+        if (
+          signal.aborted ||
+          (fetchErr instanceof Error && fetchErr.name === 'AbortError') ||
+          !stillCurrent()
+        ) {
+          // Signal the walker to stop quietly via a sentinel throw.
+          throw new DOMException('Aborted', 'AbortError');
+        }
+        // Plugin throw / network fail — rethrow into outer handler with clean message
+        throw fetchErr instanceof Error
+          ? fetchErr
+          : new Error(errMessage(fetchErr));
+      }
+    };
+
+    // First page carries the full clamped target in config (back-compat: the
+    // loader passes Settings through; venues clamp per-request internally).
     let raw: unknown;
     try {
-      raw = await source.fetchHistorical({
-        symbol: sym,
-        interval: iv,
-        config: {
-          ...sourceCfg,
-          limit,
-        },
-        signal,
-      });
+      raw = await fetchPage({ limit: target });
     } catch (fetchErr: unknown) {
-      // Aborted by a newer load — silent success (caller no longer needs us)
       if (
         signal.aborted ||
         (fetchErr instanceof Error && fetchErr.name === 'AbortError') ||
@@ -273,7 +304,6 @@ export async function loadSymbolData(
       ) {
         return false;
       }
-      // Plugin throw / network fail — rethrow into outer handler with clean message
       throw fetchErr instanceof Error
         ? fetchErr
         : new Error(errMessage(fetchErr));
@@ -285,8 +315,8 @@ export async function loadSymbolData(
     }
 
     // normalizeHistoricalBars never throws; unwraps envelopes + drops bad rows
-    const normalized = normalizeHistoricalBars(raw, { limit });
-    if (!normalized.length) {
+    const first = normalizeHistoricalBars(raw, { limit: target });
+    if (!first.length) {
       throw new Error(
         raw == null || (Array.isArray(raw) && raw.length === 0)
           ? 'Source returned no bars'
@@ -294,30 +324,99 @@ export async function loadSymbolData(
       );
     }
 
+    // Walk older pages until the dataset target is covered. Bounded so a
+    // 100k-bar depth on a 300-bar venue does not block the chart: the DSM
+    // background job (ensureDatasetComplete + progressive repaint below)
+    // finishes the tail.
+    const MAX_SYNC_PAGES = 12;
+    const byTime = new Map<number, (typeof first)[number]>();
+    for (const b of first) byTime.set(b.time, b);
+    let prevOldest = first[0]!.time;
+    let pages = 1;
+    while (byTime.size < target && pages < MAX_SYNC_PAGES) {
+      if (!stillCurrent() || signal.aborted) return false;
+      let oldest = Number.POSITIVE_INFINITY;
+      for (const t of byTime.keys()) if (t < oldest) oldest = t;
+      if (!Number.isFinite(oldest)) break;
+      let page: typeof first;
+      try {
+        const pageRaw = await fetchPage({
+          endTime: oldest - 1,
+          limit: Math.min(pageSize, target),
+        });
+        page = normalizeHistoricalBars(pageRaw, {
+          limit: Math.min(pageSize, target),
+        });
+      } catch (pageErr: unknown) {
+        if (
+          signal.aborted ||
+          (pageErr instanceof Error && pageErr.name === 'AbortError') ||
+          !stillCurrent()
+        ) {
+          return false;
+        }
+        // Page failure mid-walk: keep what we have, DSM completes the rest.
+        break;
+      }
+      if (!page.length) break;
+      const rawOldest = page[0]!.time;
+      // Stalled cursor (venue ignored endTime / repeated page) — stop.
+      if (rawOldest >= prevOldest) {
+        // Still merge — a repeated page adds nothing new, so break after.
+        let grew = false;
+        for (const b of page) {
+          if (!byTime.has(b.time)) {
+            byTime.set(b.time, b);
+            grew = true;
+          }
+        }
+        pages += 1;
+        void grew;
+        break;
+      }
+      prevOldest = rawOldest;
+      for (const b of page) {
+        if (!byTime.has(b.time)) byTime.set(b.time, b);
+      }
+      pages += 1;
+      if (rawOldest >= oldest) break;
+    }
+
+    const merged = [...byTime.values()].sort((a, b) => a.time - b.time);
+    const full = merged.length > target ? merged.slice(merged.length - target) : merged;
+    if (!full.length) {
+      throw new Error('Source returned no valid bars (empty / partial OHLCV / bad timestamps)');
+    }
+    // Chart shows the rolling window (newest N); the dataset keeps `target`.
+    const painted = full.length > chartCap ? full.slice(full.length - chartCap) : full;
+
     if (!stillCurrent()) return false;
 
     const exchange = exchangeForSource(srcId);
 
-    loadBars(normalized, sym, iv, exchange);
+    loadBars(painted, sym, iv, exchange);
     const manager = getManager();
     if (manager) {
       try {
         // fit:true → full chart refresh (markers, Pine drawings, overlays, per-symbol user drawings)
-        setDataToChart(normalized, { fit: true });
+        setDataToChart(painted, { fit: true });
       } catch (chartErr: unknown) {
         // Chart paint failure should not leave status as "loading" forever
         console.error('setDataToChart failed:', chartErr);
       }
     }
 
-    // Seed / merge into the dataset store (conflict-resolved) so the next
-    // load paints instantly and the DSM can complete the series.
+    // Seed / merge the FULL fetched window into the dataset store
+    // (conflict-resolved) so the next load paints instantly and the DSM can
+    // complete the series. Subscribe progressive repaints first so background
+    // slices extend the chart instead of stranding it at the sync pages.
     try {
-      const { seedDatasetFromBars, ensureDatasetComplete } = await import(
+      const { seedDatasetFromBars, ensureDatasetComplete, startProgressiveStream } = await import(
         './dsm-orchestrator'
       );
-      seedDatasetFromBars(srcId, sym, iv, normalized);
-      // First page is on the chart — DSM walks the rest in the background.
+      seedDatasetFromBars(srcId, sym, iv, full);
+      if (stillCurrent()) startProgressiveStream(sym, iv, srcId);
+      // First pages are on the chart — DSM walks the rest in the background.
       ensureDatasetComplete(sym, iv, srcId, { stillCurrent });
     } catch {
       /* seeding / background complete is best-effort */
@@ -326,16 +425,17 @@ export async function loadSymbolData(
     if (!stillCurrent()) return false;
 
     const ms = performance.now() - t0;
+    const datasetNote = full.length > painted.length ? ` (dataset ${full.length})` : '';
     setTelemetryState('source', 'open', {
       latencyMs: ms,
-      detail: `${normalized.length} bars · ${label}`,
+      detail: `${painted.length} bars · ${label}${datasetNote}`,
       error: null,
     });
-    setStatus('ready', `Loaded ${normalized.length} bars · ${source.name}`, {
+    setStatus('ready', `Loaded ${painted.length} bars · ${source.name}${datasetNote}`, {
       toast: false,
       source: 'data',
     });
-    announce(`Loaded ${normalized.length} bars ${sym} ${iv}`);
+    announce(`Loaded ${painted.length} bars ${sym} ${iv}`);
 
     // Restart / auto-start live on the new ticker after a full history paint
     if (restartLiveAfter) {
@@ -366,17 +466,21 @@ export async function loadSymbolData(
     if (!stillCurrent()) return false;
 
     // Offline / network fail: restore last DSM/venue series from the dataset
-    // store when warm (honours the active persistence sink)
+    // store when warm (honours the active persistence sink). Chart shows the
+    // rolling window; the full cache stays in the dataset store.
     try {
       const { getDataset } = await import('./dataset-store');
       const cached = await getDataset(srcId, sym, iv);
       if (cached.length && stillCurrent()) {
+        const { clampRollingWindowBars: clampRolling } = await import('../store');
+        const cap = Math.max(1, clampRolling(store.rollingWindowBars));
+        const view = cached.length > cap ? cached.slice(cached.length - cap) : cached;
         const exchange = exchangeForSource(srcId);
-        loadBars(cached, sym, iv, exchange);
+        loadBars(view, sym, iv, exchange);
         const manager = getManager();
         if (manager) {
           try {
-            setDataToChart(cached, { fit: true });
+            setDataToChart(view, { fit: true });
           } catch (chartErr: unknown) {
             console.error('setDataToChart failed (cached fallback):', chartErr);
           }
@@ -385,14 +489,14 @@ export async function loadSymbolData(
         const ms = performance.now() - t0;
         setTelemetryState('source', 'degraded', {
           latencyMs: ms,
-          detail: `cached ${cached.length} bars · ${label}`,
+          detail: `cached ${view.length} bars · ${label}`,
           error: null,
         });
         setStatus(
           'ready',
-          `Offline · ${cached.length} cached bars · ${source.name}`,
+          `Offline · ${view.length} cached bars · ${source.name}`,
         );
-        announce(`Offline cached ${cached.length} bars ${sym} ${iv}`);
+        announce(`Offline cached ${view.length} bars ${sym} ${iv}`);
         // Do not auto-start live on offline cache (no reliable venue stream)
         if (stillCurrent()) {
           try {

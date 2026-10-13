@@ -34,7 +34,14 @@
  */
 
 import type { Bar } from '../store/types';
-import { clampHistoryBars, loadBars, setBarsQuiet, setStatus, store } from '../store';
+import {
+  clampHistoryBars,
+  clampRollingWindowBars,
+  loadBars,
+  setBarsQuiet,
+  setStatus,
+  store,
+} from '../store';
 import { getManager, setDataToChart } from '../chart/manager-access';
 import {
   getDataset,
@@ -117,6 +124,17 @@ export function stopProgressiveRepaint(): void {
   stopStreaming();
 }
 
+/** How many bars the chart holds (Settings → Rolling window, newest N). */
+export function chartDisplayCap(): number {
+  return Math.max(1, clampRollingWindowBars(store.rollingWindowBars));
+}
+
+/** Slice a full dataset down to the newest chart window (no mutation). */
+export function sliceForChart(bars: Bar[]): Bar[] {
+  const cap = chartDisplayCap();
+  return bars.length > cap ? bars.slice(bars.length - cap) : bars;
+}
+
 /** Paint bars onto chart + store (full refresh semantics). */
 function paintFull(bars: Bar[], sym: string, iv: string, srcId: string): void {
   const exchange = exchangeForSource(srcId);
@@ -153,8 +171,10 @@ function scheduleRepaint(sym: string, iv: string, srcId: string, gen: number): v
         bars = await getDataset(sid, s, interval);
       }
       if (!bars.length || gen !== paintGen || activeKey !== keyFor(srcId, sym, iv)) return;
-      const n = bars.length;
-      const sig = `${n}|${bars[0]?.time ?? 0}|${bars[n - 1]?.time ?? 0}|${bars[n - 1]?.close ?? 0}`;
+      // Chart shows the rolling window (newest N); the dataset keeps everything.
+      const view = sliceForChart(bars);
+      const n = view.length;
+      const sig = `${n}|${view[0]?.time ?? 0}|${view[n - 1]?.time ?? 0}|${view[n - 1]?.close ?? 0}`;
       if (sig === lastRepaintSig) {
         if (repaintPending) {
           repaintPending = false;
@@ -166,22 +186,22 @@ function scheduleRepaint(sym: string, iv: string, srcId: string, gen: number): v
       // Append-only fast path: same first bar and the series only grew at the
       // tail (typical backfill landing) — paint the new tail instead of a full
       // setData. Replay still needs the visible-prefix full paint.
-      const first = bars[0]?.time ?? 0;
-      const tailN = bars.length - lastRepaintLen;
+      const first = view[0]?.time ?? 0;
+      const tailN = view.length - lastRepaintLen;
       const appended =
         lastRepaintLen > 0 && tailN > 0 && tailN <= 500 && first === lastRepaintFirst;
-      setBarsQuiet(bars);
+      setBarsQuiet(view);
       const manager = getManager();
       if (manager) {
         try {
           if (appended && !isReplayActive() && typeof manager.appendBar === 'function') {
-            for (let i = lastRepaintLen; i < bars.length; i++) {
-              const tail = bars[i];
+            for (let i = lastRepaintLen; i < view.length; i++) {
+              const tail = view[i];
               if (tail) manager.appendBar(tail);
             }
           } else {
             // Bar replay paints only the scrubbed prefix; the store keeps full history.
-            setDataToChart(isReplayActive() ? getVisibleBars(bars) : bars, {
+            setDataToChart(isReplayActive() ? getVisibleBars(view) : view, {
               fit: false,
               clearScriptState: false,
               clearMarkers: false,
@@ -191,7 +211,7 @@ function scheduleRepaint(sym: string, iv: string, srcId: string, gen: number): v
           /* progressive paint is best-effort */
         }
       }
-      lastRepaintLen = bars.length;
+      lastRepaintLen = view.length;
       lastRepaintFirst = first;
       if (repaintPending) {
         repaintPending = false;
@@ -206,6 +226,9 @@ function scheduleRepaint(sym: string, iv: string, srcId: string, gen: number): v
  * Paint the chart from the dataset store (repair pass included) and start
  * streaming progressive updates for this key. Returns the painted bars, or
  * `null` when nothing is cached (caller falls back to the venue fetch).
+ *
+ * The dataset keeps up to Settings → Historical bars; the chart paints only
+ * the newest Settings → Rolling window slice.
  */
 export async function paintDataset(
   symbol: string,
@@ -238,8 +261,43 @@ export async function paintDataset(
   const { bars } = repairBars(raw, iv);
   if (!bars.length) return null;
 
-  paintFull(bars, sym, iv, srcId);
-  return bars;
+  const view = sliceForChart(bars);
+  if (!view.length) return null;
+  paintFull(view, sym, iv, srcId);
+  lastRepaintSig = `${view.length}|${view[0]?.time ?? 0}|${view[view.length - 1]?.time ?? 0}|${view[view.length - 1]?.close ?? 0}`;
+  lastRepaintLen = view.length;
+  lastRepaintFirst = view[0]?.time ?? 0;
+  return view;
+}
+
+/**
+ * Subscribe progressive repaints for a dataset key without an immediate
+ * paint. Used after a direct venue load (Reload) so background DSM slices
+ * keep extending the chart instead of leaving it stuck at one page.
+ */
+export function startProgressiveStream(
+  symbol: string,
+  interval: string,
+  sourceId: string,
+): void {
+  const sym = String(symbol || '').trim();
+  const iv = String(interval || store.interval || '1d');
+  const srcId = String(sourceId || store.source || '');
+  const key = keyFor(srcId, sym, iv);
+  const gen = ++paintGen;
+
+  stopStreaming();
+  activeKey = key;
+  unsubscribe = subscribeDatasets((changedKey) => {
+    if (changedKey === activeKey) scheduleRepaint(sym, iv, srcId, gen);
+  });
+  // Seed the append fast-path from the just-painted chart window.
+  const cur = store.bars;
+  lastRepaintLen = cur.length;
+  lastRepaintFirst = cur.length ? (cur[0]?.time ?? 0) : 0;
+  lastRepaintSig = cur.length
+    ? `${cur.length}|${cur[0]?.time ?? 0}|${cur[cur.length - 1]?.time ?? 0}|${cur[cur.length - 1]?.close ?? 0}`
+    : '';
 }
 
 /**

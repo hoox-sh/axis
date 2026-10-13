@@ -15,6 +15,15 @@ _Generated/updated: 2026-10-11 · 529 commits · describe-tag: `v2.22.0`_
 
 ## [Unreleased]
 
+### Fixed
+
+- **Reload no longer strands the chart at one venue page (1000 bars).** `loadSymbolData` passed Settings → Historical bars as a single `fetchHistorical` limit, but venues cap one response (Binance/Bybit/MEXC 1000, Kraken 720, OKX 300), so Reload painted the first page and stopped. The venue path now walks back page-by-page (`endTime` cursor, stall/empty/abort guards, 12-page sync budget) up to Historical bars, seeds the full window into the dataset store, and subscribes the progressive repaint *before* the DSM background job runs — the chart keeps growing as backfill slices land instead of freezing at the first page.
+- **Dataset vs chart split is now Historical bars vs Rolling window.** The DSM target stays Settings → Historical bars (default 5000); every paint path (`paintDataset`, venue load, `applyCachedToChart`, offline fallback) now shows only the newest Settings → Rolling window slice (default 10,000) while the dataset keeps the full depth. `applyCachedToChart` also drops the inverted `max(history, 100k)` clamp — an explicit `maxBars` window wins, otherwise Rolling window, hard-capped at 100k.
+
+### Changed
+
+- **Status bar bars are interactive.** Left chart count is an editable input (Enter/blur commits to Rolling window and re-slices from the dataset; Escape cancels). Right `· dataset Nk` segment is a button that opens the Dataset manager modal instead of the DSM panel. Settings copy updated to match (Historical = dataset depth, Rolling = chart + engine window).
+
 ## [2.23.1] — 2026-10-13
 
 ### Changed

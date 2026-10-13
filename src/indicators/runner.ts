@@ -157,7 +157,7 @@ function pickOverlayColor(
  * Cap the bars handed to the engine to the most recent N
  * ({@link AppState.rollingWindowBars}).
  *
- * The chart keeps the entire dataset — this only bounds evaluate time, the
+ * The dataset keeps the full Historical bars depth — this only bounds evaluate time, the
  * encode payload, and the size of the response envelope. Plot apply is safe:
  * overlay points are keyed by **time**, not by index into `store.bars`
  * (`lineSeriesToOverlayData`), so a windowed run lands on its own axis and

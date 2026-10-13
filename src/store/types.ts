@@ -419,15 +419,16 @@ export interface AppState {
   interval: string;
   exchange: string;
   /**
-   * How many historical OHLCV bars to request on Load / symbol change.
-   * Persisted. Sources may clamp further to venue max (e.g. Binance 1000).
+   * How many historical OHLCV bars to download into the dataset on Load /
+   * Reload (DSM backfill target). The chart shows only the Rolling window
+   * slice. Persisted. Sources page per request (e.g. Binance 1000), so deep
+   * loads walk multiple pages.
    */
   historyBars: number;
   /**
-   * Rolling window: the most recent N bars handed to the engine on every run.
-   * The chart keeps the whole dataset — this caps only what is evaluated and
-   * shipped back. Distinct from `historyBars` (how much history to fetch) and
-   * from `DSM_MAX_BARS_PER_JOB` (how deep a backfill may grow the dataset).
+   * Rolling window: the newest N bars shown on the chart and handed to the
+   * engine on every run. The dataset keeps the full `historyBars` depth.
+   * Distinct from `DSM_MAX_BARS_PER_JOB` (how deep a backfill may grow the dataset).
    * Persisted. Default {@link ROLLING_WINDOW_DEFAULT}.
    */
   rollingWindowBars: number;

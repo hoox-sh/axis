@@ -491,7 +491,7 @@ export function SettingsPage(props: {
               <StudioField
                 label="Historical bars"
                 for="axis-history-bars"
-                hint={`Bars requested on Load (${HISTORY_BARS_MIN}–${HISTORY_BARS_MAX}). Default ${HISTORY_BARS_DEFAULT}. Venues may return fewer.`}
+                hint={`Bars downloaded into the dataset on Load / Reload (${HISTORY_BARS_MIN}–${HISTORY_BARS_MAX}). Default ${HISTORY_BARS_DEFAULT}. The DSM backfills up to this depth; venues page (e.g. 1000/request) so deep loads walk multiple pages.`}
               >
                 <StudioInput
                   id="axis-history-bars"
@@ -508,7 +508,7 @@ export function SettingsPage(props: {
               <StudioField
                 label="Rolling window"
                 for="axis-rolling-window-bars"
-                hint={`Most recent bars handed to the engine on every run (${ROLLING_WINDOW_MIN}–${ROLLING_WINDOW_MAX}). Default ${ROLLING_WINDOW_DEFAULT}. The chart keeps the whole dataset — this caps only what is evaluated and returned. Lower it to cut run time and payload size on deep histories; raise it if a study needs more lookback than the window.`}
+                hint={`Newest bars shown on the chart and handed to the engine on every run (${ROLLING_WINDOW_MIN}–${ROLLING_WINDOW_MAX}). Default ${ROLLING_WINDOW_DEFAULT}. The dataset keeps the full Historical bars depth — this caps only what is displayed, evaluated, and returned. Lower it to cut run time and payload size on deep histories; raise it if a study needs more lookback than the window. Click the status-bar bar count to edit inline.`}
               >
                 <StudioInput
                   id="axis-rolling-window-bars"

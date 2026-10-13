@@ -35,7 +35,12 @@
 
 import { createStore, produce } from 'solid-js/store';
 import type { Bar } from '../store/types';
-import { clampHistoryBars, HISTORY_BARS_MAX, loadBars, store } from '../store';
+import {
+  clampRollingWindowBars,
+  HISTORY_BARS_MAX,
+  loadBars,
+  store,
+} from '../store';
 import { pluginKey } from '../plugins/types';
 import type { SourcePlugin } from '../plugins/types';
 import { getManager, setDataToChart } from '../chart/manager-access';
@@ -1139,8 +1144,20 @@ async function applyCachedToChartInner(
   bars = sliceBarsForLoad(bars, loadWin);
   if (!bars.length) return false;
 
-  // Prefer full accumulated history; soft-clamp only if absurdly large for chart
-  const chartMax = Math.max(clampHistoryBars(store.historyBars), HISTORY_BARS_MAX);
+  // Chart shows an explicit maxBars window when the caller asked for one
+  // (dataset modal / job apply); otherwise the Settings → Rolling window
+  // default. The dataset keeps everything — this only bounds the paint.
+  // HISTORY_BARS_MAX stays the hard safety clamp.
+  const explicit =
+    loadWin?.maxBars != null &&
+    Number.isFinite(loadWin.maxBars) &&
+    loadWin.maxBars > 0
+      ? Math.floor(loadWin.maxBars)
+      : null;
+  const chartMax = Math.min(
+    explicit ?? Math.max(1, clampRollingWindowBars(store.rollingWindowBars)),
+    HISTORY_BARS_MAX,
+  );
   const painted = bars.length > chartMax ? bars.slice(bars.length - chartMax) : bars;
 
   const exchange = exchangeForSource(srcId);
