@@ -686,14 +686,12 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       // Honour caller abort (HPO cancel). Interactive runs still omit a parent
       // timer so WS→REST fallback is not killed mid-flight.
       signal: isolate ? opts.signal : undefined,
-      // Genuine live tick over chart bars: remote engines with live sessions
-      // (PYNE 0.6.9+) may answer O(delta). `runAndApply` always forwards the
-      // bars it evaluated (chart `store.bars` by reference unless the caller
-      // overrode the window), so compare by reference: only a private slice
-      // (HPO holdout / walk-forward) opts out — it is not the live series.
-      ...(opts.liveTick === true && (!opts.bars || opts.bars === store.bars)
-        ? { liveTick: true }
-        : {}),
+      // Genuine live tick over the chart series: remote engines with live
+      // sessions (PYNE 0.6.9+) may answer O(delta). `runAndApply` strips this
+      // flag for private bar windows, so by the time it arrives here it always
+      // means the live chart series (never an HPO holdout / walk-forward).
+      // Isolate studies keep the full path.
+      ...(opts.liveTick === true && !isolate ? { liveTick: true } : {}),
     });
 
     const ms =
@@ -955,6 +953,11 @@ async function runAndApplyInner(
   // align 1:1 with the time axis we build below. A live tick or an HPO
   // holdout slice must not desync series from bars (see getOhlcvTimesForApply).
   const bars = Array.isArray(opts.bars) && opts.bars.length ? opts.bars : store.bars || [];
+  // A live tick is only a chart-series tick when the caller did NOT override
+  // the window. Record that here: by the time `runScript` runs, `store.bars`
+  // may already be a different array (DSM progressive slices, live appends),
+  // so comparing references down there misfires on every turbulent tick.
+  const chartTick = opts.liveTick === true && !(Array.isArray(opts.bars) && opts.bars.length);
   // Pass epoch so nested runScript can skip status/telemetry if superseded mid-flight
   const raw = await runScript(script, {
     ...opts,
@@ -963,6 +966,7 @@ async function runAndApplyInner(
     strategyProps,
     claimEpoch: false,
     epoch,
+    ...(chartTick ? {} : { liveTick: false }),
   });
   const result = normalizeRunExtras(raw);
 

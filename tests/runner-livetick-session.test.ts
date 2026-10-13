@@ -169,4 +169,21 @@ describe('runAndApply liveTick session routing', () => {
     expect(calls.some((c) => c.includes('/session'))).toBe(false);
     expect(calls.some((c) => c.startsWith('POST /run'))).toBe(true);
   });
+
+  it('direct runScript live ticks on chart bars use sessions; isolate never does', async () => {
+    const { runScript } = await import('../src/indicators/runner');
+    const tick = await runScript(SCRIPT, { silent: true, liveTick: true });
+    expect(tick.status).toBe('success');
+    expect(calls).toEqual(['POST /session']);
+
+    const trial = await runScript(SCRIPT, {
+      isolate: true,
+      liveTick: true,
+      bars: store.bars.slice(-4),
+      signal: AbortSignal.timeout(30_000),
+    });
+    expect(trial.status).toBe('success');
+    expect(calls.some((c) => c.startsWith('POST /run'))).toBe(true);
+    expect(calls.filter((c) => c === 'POST /session').length).toBe(1);
+  });
 });
